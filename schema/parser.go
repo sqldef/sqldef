@@ -1,3 +1,5 @@
+// This package has SQL parser, its abstraction and SQL generator.
+// Never touch database.
 package schema
 
 import (

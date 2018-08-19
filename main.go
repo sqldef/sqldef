@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/k0kubun/schemasql/driver"
 	"github.com/k0kubun/schemasql/schema"
 )
 
@@ -17,8 +18,17 @@ func main() {
 		log.Fatal(err)
 	}
 
-	schema.ParseDDLs(string(sql))
+	ddls, err := schema.ParseDDLs(string(sql))
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	_ = database
+	db := driver.NewDatabase(driver.Config{
+		DbType:   options.dbType,
+		Database: database,
+	})
+	tables := db.TableNames()
+
+	ddls = schema.GenerateIdempotentDDLs(ddls, tables)
 	fmt.Println("success!")
 }

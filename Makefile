@@ -3,5 +3,6 @@ GOFLAGS := -tags netgo -installsuffix netgo -ldflags '-w -s --extldflags "-stati
 .PHONY: all
 all: schemasql
 
-schemasql: main.go
+.PHONY: schemasql
+schemasql:
 	go build -o $@ $(GOFLAGS)
