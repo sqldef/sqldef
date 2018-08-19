@@ -48,3 +48,19 @@ func (d *Database) TableNames() ([]string, error) {
 		panic("unexpected DbType: " + d.config.DbType)
 	}
 }
+
+func (d *Database) RunDDLs(ddls []string) error {
+	transaction, err := d.db.Begin()
+	if err != nil {
+		return err
+	}
+	for _, ddl := range ddls {
+		fmt.Printf("Run: '%s'\n", ddl)
+		if _, err := transaction.Exec(ddl); err != nil {
+			transaction.Rollback()
+			return err
+		}
+	}
+	transaction.Commit()
+	return nil
+}

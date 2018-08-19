@@ -12,7 +12,7 @@ import (
 
 // Parse DDL like `CREATE TABLE` or `ALTER TABLE`.
 // This doesn't support destructive DDL like `DROP TABLE`.
-func ParseDDL(ddl string) (DDL, error) {
+func parseDDL(ddl string) (DDL, error) {
 	stmt, err := sqlparser.Parse(ddl)
 	if err != nil {
 		log.Fatal(err)
@@ -21,8 +21,10 @@ func ParseDDL(ddl string) (DDL, error) {
 	switch stmt := stmt.(type) {
 	case *sqlparser.DDL:
 		if stmt.Action == "create" {
-			log.Printf("action: %s", stmt.Action)
-			return &CreateTable{statement: ddl}, nil
+			return &CreateTable{
+				statement: ddl,
+				tableName: stmt.NewName.Name.String(),
+			}, nil
 		} else {
 			return nil, fmt.Errorf("unsupported type of DDL action (only 'create' is supported): %s", stmt.Action)
 		}
@@ -33,9 +35,9 @@ func ParseDDL(ddl string) (DDL, error) {
 
 // Parse `ddls`, which is expected to `;`-concatenated DDLs
 // and not to include destructive DDL.
-func ParseDDLs(str string) ([]DDL, error) {
+func parseDDLs(str string) ([]DDL, error) {
 	ddls := strings.Split(str, ";")
-	result := make([]DDL, len(ddls))
+	result := []DDL{}
 
 	for _, ddl := range ddls {
 		ddl = strings.TrimSpace(ddl) // TODO: trim trailing comment as well?
@@ -43,7 +45,7 @@ func ParseDDLs(str string) ([]DDL, error) {
 			continue
 		}
 
-		parsed, err := ParseDDL(ddl)
+		parsed, err := parseDDL(ddl)
 		if err != nil {
 			return result, err
 		}

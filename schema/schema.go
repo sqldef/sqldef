@@ -6,6 +6,7 @@ type DDL interface {
 
 type CreateTable struct {
 	statement string
+	tableName string
 }
 
 func (c *CreateTable) Statement() string {

@@ -18,11 +18,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ddls, err := schema.ParseDDLs(string(sql))
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	db, err := driver.NewDatabase(driver.Config{
 		DbType: options.dbType,
 		DbName: database,
@@ -37,6 +32,17 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ddls = schema.GenerateIdempotentDDLs(ddls, tables)
-	fmt.Println("success!")
+	ddls, err := schema.GenerateIdempotentDDLs(string(sql), tables)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if len(ddls) == 0 {
+		fmt.Println("Nothing is modified") // TODO: print this only on --dry-run
+		return
+	}
+
+	err = db.RunDDLs(ddls)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
