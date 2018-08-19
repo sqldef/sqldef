@@ -4,6 +4,7 @@ import (
 	"fmt"
 )
 
+// This struct holds simulated schema states during GenerateIdempotentDDLs().
 type Generator struct {
 	tables []string
 }

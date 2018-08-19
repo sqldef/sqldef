@@ -28,7 +28,7 @@ func parseOptions(args []string) (string, *Options) {
 		cli.StringFlag{
 			Name:  "type",
 			Value: "mysql",
-			Usage: "Type of database (mysql, postgresql)",
+			Usage: "Type of database (mysql, postgres)",
 		},
 	}
 

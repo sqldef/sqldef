@@ -7,7 +7,7 @@ import (
 )
 
 type Config struct {
-	DbType string
+	DbType string // TODO: convert to enum?
 	DbName string
 }
 
@@ -18,16 +18,20 @@ type Database struct {
 }
 
 func NewDatabase(config Config) (*Database, error) {
-	var db *sql.DB
-	var err error
+	var dsn string
 
 	switch config.DbType {
 	case "mysql":
-		if db, err = sql.Open("mysql", mysqlBuildDSN(config)); err != nil {
-			return nil, err
-		}
+		dsn = mysqlBuildDSN(config)
+	case "postgres":
+		dsn = postgresBuildDSN(config)
 	default:
-		return nil, fmt.Errorf("database type must be 'mysql' or 'postgresql'")
+		return nil, fmt.Errorf("database type must be 'mysql' or 'postgres'")
+	}
+
+	db, err := sql.Open(config.DbType, dsn)
+	if err != nil {
+		return nil, err
 	}
 
 	return &Database{
@@ -44,6 +48,8 @@ func (d *Database) TableNames() ([]string, error) {
 	switch d.config.DbType {
 	case "mysql":
 		return d.mysqlTableNames()
+	case "postgres":
+		return d.postgresTableNames()
 	default:
 		panic("unexpected DbType: " + d.config.DbType)
 	}

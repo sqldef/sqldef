@@ -37,7 +37,7 @@ func main() {
 		log.Fatal(err)
 	}
 	if len(ddls) == 0 {
-		fmt.Println("Nothing is modified") // TODO: print this only on --dry-run
+		fmt.Println("Nothing is modified")
 		return
 	}
 
