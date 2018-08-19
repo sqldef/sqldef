@@ -21,17 +21,30 @@ func GenerateIdempotentDDLs(sql string, tables []string) ([]string, error) {
 }
 
 func (g *Generator) generateDDLs(destDdls []DDL) ([]string, error) {
+	desiredTables := []string{}
 	ddls := []string{}
+
 	for _, ddl := range destDdls {
 		switch ddl := ddl.(type) {
 		case *CreateTable:
+			desiredTables = append(desiredTables, ddl.tableName)
 			if !containsString(g.tables, ddl.tableName) {
+				g.tables = append(g.tables, ddl.tableName)
 				ddls = append(ddls, ddl.statement)
 			}
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", ddl)
 		}
 	}
+
+	// Clean up obsoleted tables
+	for _, table := range g.tables {
+		if !containsString(desiredTables, table) {
+			// TODO: support postgresql?
+			ddls = append(ddls, fmt.Sprintf("DROP TABLE %s;", table)) // TODO: escape table name
+		}
+	}
+
 	return ddls, nil
 }
 
