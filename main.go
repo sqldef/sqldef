@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 
 	"github.com/go-sql-driver/mysql"
@@ -17,15 +18,15 @@ func buildMysqlDSN() string {
 	return config.FormatDSN()
 }
 
-func main() {
+func runMySQLDDL() {
 	dsn := buildMysqlDSN()
-	db, err := sql.Open("mysql", dsn)
+	conn, err := sql.Open("mysql", dsn)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
+	defer conn.Close()
 
-	transaction, err := db.Begin()
+	transaction, err := conn.Begin()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -47,5 +48,25 @@ func main() {
 		log.Fatal(err)
 	}
 	transaction.Commit()
-	println("success!")
+	fmt.Println("success!")
+}
+
+func main() {
+	dsn := buildMysqlDSN()
+	conn, err := sql.Open("mysql", dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+
+	var table string
+	var ddl string
+	err = conn.QueryRow("show create table user;").Scan(&table, &ddl)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("table: %s\n", table)
+	fmt.Printf("ddl: %s\n", ddl)
+	fmt.Println("success!")
 }
