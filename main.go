@@ -6,6 +6,7 @@ import (
 	"log"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/k0kubun/schemasql/schema"
 )
 
 func buildMysqlDSN() string {
@@ -32,7 +33,7 @@ func runMySQLDDL() {
 	}
 
 	sql := `
-		CREATE TABLE user (
+		CREATE TABLE user2 (
 		  id BIGINT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
 		  name VARCHAR(191) UNIQUE,
 		  salt VARCHAR(20),
@@ -48,10 +49,9 @@ func runMySQLDDL() {
 		log.Fatal(err)
 	}
 	transaction.Commit()
-	fmt.Println("success!")
 }
 
-func main() {
+func parseTable() {
 	dsn := buildMysqlDSN()
 	conn, err := sql.Open("mysql", dsn)
 	if err != nil {
@@ -66,7 +66,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("table: %s\n", table)
-	fmt.Printf("ddl: %s\n", ddl)
+	var ddl2 string
+	err = conn.QueryRow("show create table user2;").Scan(&table, &ddl2)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	schema.ParseDDLs(fmt.Sprintf("-- hello\n%s;\n%s;", ddl, ddl2))
+}
+
+func main() {
+	parseTable()
 	fmt.Println("success!")
 }
