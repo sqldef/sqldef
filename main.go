@@ -1,81 +1,52 @@
 package main
 
 import (
-	"database/sql"
+	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"os"
 
-	"github.com/go-sql-driver/mysql"
 	"github.com/k0kubun/schemasql/schema"
 )
 
-func buildMysqlDSN() string {
-	config := mysql.NewConfig()
-	config.User = "root"
-	config.Passwd = ""
-	config.Net = "tcp"
-	config.Addr = "127.0.0.1:3306"
-	config.DBName = "test"
-	return config.FormatDSN()
+type Options struct {
+	dbType string
 }
 
-func runMySQLDDL() {
-	dsn := buildMysqlDSN()
-	conn, err := sql.Open("mysql", dsn)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer conn.Close()
+// Return parsed options and only one filename
+func parseOptions(args []string) (string, *Options) {
+	flags := flag.NewFlagSet(args[0], flag.ExitOnError)
+	var (
+		dbType = flags.String("type", "mysql", "Type of database")
+	)
 
-	transaction, err := conn.Begin()
-	if err != nil {
-		log.Fatal(err)
-	}
+	flags.Parse(args[1:])
+	files := flags.Args()
 
-	sql := `
-		CREATE TABLE user2 (
-		  id BIGINT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
-		  name VARCHAR(191) UNIQUE,
-		  salt VARCHAR(20),
-		  password VARCHAR(40),
-		  display_name TEXT,
-		  avatar_icon TEXT,
-		  created_at DATETIME NOT NULL
-		) Engine=InnoDB DEFAULT CHARSET=utf8mb4;
-	`
-
-	if _, err := transaction.Exec(sql); err != nil {
-		transaction.Rollback()
-		log.Fatal(err)
-	}
-	transaction.Commit()
-}
-
-func parseTable() {
-	dsn := buildMysqlDSN()
-	conn, err := sql.Open("mysql", dsn)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer conn.Close()
-
-	var table string
-	var ddl string
-	err = conn.QueryRow("show create table user;").Scan(&table, &ddl)
-	if err != nil {
-		log.Fatal(err)
+	if len(files) == 0 {
+		fmt.Println("No schema file argument is given!\n")
+		flags.Usage()
+		os.Exit(1)
+	} else if len(files) > 1 {
+		fmt.Println("Multiple schema file arguments are given!\n")
+		flags.Usage()
+		os.Exit(1)
 	}
 
-	var ddl2 string
-	err = conn.QueryRow("show create table user2;").Scan(&table, &ddl2)
-	if err != nil {
-		log.Fatal(err)
+	return files[0], &Options{
+		dbType: *dbType,
 	}
-
-	schema.ParseDDLs(fmt.Sprintf("-- hello\n%s;\n%s;", ddl, ddl2))
 }
 
 func main() {
-	parseTable()
+	filename, _ := parseOptions(os.Args)
+
+	sql, err := ioutil.ReadFile(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	schema.ParseDDLs(string(sql))
 	fmt.Println("success!")
 }
