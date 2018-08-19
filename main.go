@@ -23,11 +23,19 @@ func main() {
 		log.Fatal(err)
 	}
 
-	db := driver.NewDatabase(driver.Config{
-		DbType:   options.dbType,
-		Database: database,
+	db, err := driver.NewDatabase(driver.Config{
+		DbType: options.dbType,
+		DbName: database,
 	})
-	tables := db.TableNames()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	tables, err := db.TableNames()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	ddls = schema.GenerateIdempotentDDLs(ddls, tables)
 	fmt.Println("success!")

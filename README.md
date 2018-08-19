@@ -1,6 +1,6 @@
 # schemasql
 
-Idempotent management of MySQL/PostgreSQL schema in SQL, like [Ridgepole](https://github.com/winebarrel/ridgepole)
+[Ridgepole](https://github.com/winebarrel/ridgepole)-like idempotent MySQL/PostgreSQL schema management in SQL
 
 ## License
 
