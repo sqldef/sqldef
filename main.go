@@ -17,6 +17,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	desiredDDLs := string(sql)
 
 	db, err := driver.NewDatabase(driver.Config{
 		DbType: options.dbType,
@@ -27,12 +28,12 @@ func main() {
 	}
 	defer db.Close()
 
-	tables, err := db.TableNames()
+	currentDDLs, err := db.DumpDDLs()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	ddls, err := schema.GenerateIdempotentDDLs(string(sql), tables)
+	ddls, err := schema.GenerateIdempotentDDLs(desiredDDLs, currentDDLs)
 	if err != nil {
 		log.Fatal(err)
 	}

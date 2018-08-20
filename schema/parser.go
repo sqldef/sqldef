@@ -118,7 +118,7 @@ func parseDDLs(str string) ([]DDL, error) {
 	result := []DDL{}
 
 	for _, ddl := range ddls {
-		ddl = strings.TrimSpace(ddl) // TODO: trim trailing comment as well?
+		ddl = strings.TrimSpace(ddl) // TODO: trim trailing comment as well, or ignore it by parser somehow?
 		if len(ddl) == 0 {
 			continue
 		}

@@ -1,6 +1,8 @@
 package driver
 
 import (
+	"fmt"
+
 	"github.com/go-sql-driver/mysql"
 )
 
@@ -30,4 +32,16 @@ func (d *Database) mysqlTableNames() ([]string, error) {
 		tables = append(tables, table)
 	}
 	return tables, nil
+}
+
+func (d *Database) mysqlDumpTableDDL(table string) (string, error) {
+	var ddl string
+	sql := fmt.Sprintf("show create table %s;", table) // TODO: escape table name
+
+	err := d.db.QueryRow(sql).Scan(&table, &ddl)
+	if err != nil {
+		return "", err
+	}
+
+	return ddl, nil
 }

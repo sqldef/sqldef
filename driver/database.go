@@ -4,6 +4,7 @@ package driver
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 type Config struct {
@@ -44,7 +45,7 @@ func (d *Database) Close() error {
 	return d.db.Close()
 }
 
-func (d *Database) TableNames() ([]string, error) {
+func (d *Database) tableNames() ([]string, error) {
 	switch d.config.DbType {
 	case "mysql":
 		return d.mysqlTableNames()
@@ -53,6 +54,35 @@ func (d *Database) TableNames() ([]string, error) {
 	default:
 		panic("unexpected DbType: " + d.config.DbType)
 	}
+}
+
+func (d *Database) dumpTableDDL(table string) (string, error) {
+	switch d.config.DbType {
+	case "mysql":
+		return d.mysqlDumpTableDDL(table)
+	case "postgres":
+		return d.postgresDumpTableDDL(table)
+	default:
+		panic("unexpected DbType: " + d.config.DbType)
+	}
+}
+
+func (d *Database) DumpDDLs() (string, error) {
+	ddls := []string{}
+	tableNames, err := d.tableNames()
+	if err != nil {
+		return "", err
+	}
+
+	for _, tableName := range tableNames {
+		ddl, err := d.dumpTableDDL(tableName)
+		if err != nil {
+			return "", err
+		}
+
+		ddls = append(ddls, ddl)
+	}
+	return strings.Join(ddls, ";\n\n"), nil
 }
 
 func (d *Database) RunDDLs(ddls []string) error {

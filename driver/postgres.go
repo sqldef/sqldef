@@ -32,3 +32,7 @@ func (d *Database) postgresTableNames() ([]string, error) {
 	}
 	return tables, nil
 }
+
+func (d *Database) postgresDumpTableDDL(table string) (string, error) {
+	return "", nil // TODO
+}
