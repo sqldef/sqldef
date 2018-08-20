@@ -5,10 +5,88 @@ package schema
 import (
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 
 	"github.com/xwb1989/sqlparser"
 )
+
+// Convert back `type BoolVal bool`
+func castBool(val sqlparser.BoolVal) bool {
+	ret, _ := strconv.ParseBool(fmt.Sprint(val))
+	return ret
+}
+
+func parseValue(val *sqlparser.SQLVal) *Value {
+	if val == nil {
+		return nil
+	}
+
+	var valueType ValueType
+	if val.Type == sqlparser.StrVal {
+		valueType = ValueTypeStr
+	} else if val.Type == sqlparser.IntVal {
+		valueType = ValueTypeInt
+	} else if val.Type == sqlparser.FloatVal {
+		valueType = ValueTypeFloat
+	} else if val.Type == sqlparser.HexNum {
+		valueType = ValueTypeHexNum
+	} else if val.Type == sqlparser.HexVal {
+		valueType = ValueTypeHex
+	} else if val.Type == sqlparser.ValArg {
+		valueType = ValueTypeValArg
+	} else if val.Type == sqlparser.BitVal {
+		valueType = ValueTypeBit
+	} else {
+		return nil // TODO: Unreachable, but handle this properly...
+	}
+
+	ret := Value{
+		valueType: valueType,
+		raw:       val.Val,
+	}
+
+	switch valueType {
+	case ValueTypeStr:
+		ret.strVal = string(val.Val)
+	case ValueTypeInt:
+		intVal, _ := strconv.Atoi(string(val.Val)) // TODO: handle error
+		ret.intVal = intVal
+	case ValueTypeFloat:
+		floatVal, _ := strconv.ParseFloat(string(val.Val), 64) // TODO: handle error
+		ret.floatVal = floatVal
+	case ValueTypeBit:
+		if string(val.Val) == "1" {
+			ret.bitVal = true
+		} else {
+			ret.bitVal = false
+		}
+	}
+
+	return &ret
+}
+
+func parseTable(stmt *sqlparser.DDL) Table {
+	columns := []Column{}
+
+	for _, parsedCol := range stmt.TableSpec.Columns {
+		column := Column{
+			name:          parsedCol.Name.String(),
+			typeName:      parsedCol.Type.Type,
+			unsigned:      castBool(parsedCol.Type.Unsigned),
+			notNull:       castBool(parsedCol.Type.NotNull),
+			autoIncrement: castBool(parsedCol.Type.Autoincrement),
+			defaultVal:    parseValue(parsedCol.Type.Default),
+			length:        parseValue(parsedCol.Type.Length),
+		}
+		columns = append(columns, column)
+	}
+
+	return Table{
+		name:    stmt.NewName.Name.String(),
+		columns: columns,
+	}
+}
 
 // Parse DDL like `CREATE TABLE` or `ALTER TABLE`.
 // This doesn't support destructive DDL like `DROP TABLE`.
@@ -23,7 +101,7 @@ func parseDDL(ddl string) (DDL, error) {
 		if stmt.Action == "create" {
 			return &CreateTable{
 				statement: ddl,
-				tableName: stmt.NewName.Name.String(),
+				table:     parseTable(stmt),
 			}, nil
 		} else {
 			return nil, fmt.Errorf("unsupported type of DDL action (only 'create' is supported): %s", stmt.Action)

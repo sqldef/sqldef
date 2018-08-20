@@ -5,6 +5,7 @@ import (
 )
 
 // This struct holds simulated schema states during GenerateIdempotentDDLs().
+// TODO: This should have the "desired" state and "current" state
 type Generator struct {
 	tables []string
 }
@@ -28,9 +29,9 @@ func (g *Generator) generateDDLs(destDdls []DDL) ([]string, error) {
 	for _, ddl := range destDdls {
 		switch ddl := ddl.(type) {
 		case *CreateTable:
-			desiredTables = append(desiredTables, ddl.tableName)
-			if !containsString(g.tables, ddl.tableName) {
-				g.tables = append(g.tables, ddl.tableName)
+			desiredTables = append(desiredTables, ddl.table.name)
+			if !containsString(g.tables, ddl.table.name) {
+				g.tables = append(g.tables, ddl.table.name)
 				ddls = append(ddls, ddl.statement)
 			}
 		default:
