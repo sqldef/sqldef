@@ -152,8 +152,16 @@ func (g *Generator) generateColumnDefinition(column Column) string {
 		definition += "AUTO_INCREMENT "
 	}
 
-	// TODO: unique key
-	// TODO: primary key
+	switch column.keyOption {
+	case ColumnKeyUnique:
+		definition += "UNIQUE "
+	case ColumnKeyUniqueKey:
+		definition += "UNIQUE KEY "
+	case ColumnKeyPrimary:
+		definition += "PRIMARY KEY "
+	default:
+		// TODO: return error
+	}
 
 	return definition
 }

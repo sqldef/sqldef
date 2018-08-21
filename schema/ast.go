@@ -24,6 +24,7 @@ type Column struct {
 	defaultVal    *Value
 	length        *Value
 	scale         *Value
+	keyOption     ColumnKeyOption
 	// TODO: keyopt
 	// XXX: charset, collate, zerofill?
 }
@@ -49,6 +50,17 @@ const (
 	ValueTypeHex
 	ValueTypeValArg
 	ValueTypeBit
+)
+
+type ColumnKeyOption int
+
+const (
+	ColumnKeyNone = ColumnKeyOption(iota)
+	ColumnKeyPrimary
+	ColumnKeySpatialKey
+	ColumnKeyUnique
+	ColumnKeyUniqueKey
+	ColumnKey
 )
 
 func (c *CreateTable) Statement() string {
