@@ -8,10 +8,10 @@ import (
 
 func mysqlBuildDSN(config Config) string {
 	c := mysql.NewConfig()
-	c.User = "root"
-	c.Passwd = ""
+	c.User = config.User
+	c.Passwd = config.Password
 	c.Net = "tcp"
-	c.Addr = "127.0.0.1:3306"
+	c.Addr = fmt.Sprintf("%s:%d", config.Host, config.Port)
 	c.DBName = config.DbName
 	return c.FormatDSN()
 }

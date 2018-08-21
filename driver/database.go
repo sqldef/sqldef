@@ -8,8 +8,12 @@ import (
 )
 
 type Config struct {
-	DbType string // TODO: convert to enum?
-	DbName string
+	DbType   string // TODO: convert to enum?
+	DbName   string
+	User     string
+	Password string
+	Host     string
+	Port     int
 }
 
 // Abstraction layer for multiple kinds of databases

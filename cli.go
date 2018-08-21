@@ -8,9 +8,13 @@ import (
 )
 
 type Options struct {
-	sqlFile string
-	dbType  string
-	dryRun  bool
+	sqlFile    string
+	dbType     string
+	dbUser     string
+	dbPassword string
+	dbHost     string
+	dbPort     int
+	dryRun     bool
 }
 
 // Return parsed options and schema filename
@@ -27,9 +31,29 @@ func parseOptions(args []string) (string, *Options) {
 			Usage: "SQL file path to be applied",
 		},
 		cli.StringFlag{
+			Name:  "u, user",
+			Value: "root",
+			Usage: "Database user",
+		},
+		cli.StringFlag{
+			Name:  "p, password",
+			Value: "",
+			Usage: "Database password",
+		},
+		cli.StringFlag{
+			Name:  "H, host", // FIXME: -h is used by --help......
+			Value: "127.0.0.1",
+			Usage: "Database host",
+		},
+		cli.IntFlag{
+			Name:  "P, port",
+			Value: 3306,
+			Usage: "Database port",
+		},
+		cli.StringFlag{
 			Name:  "type",
 			Value: "mysql",
-			Usage: "Type of database (mysql, postgres)",
+			Usage: "mysql, postgres",
 		},
 		cli.BoolFlag{
 			Name:  "dry-run",
@@ -54,6 +78,10 @@ OPTIONS:
 		actionRun = true
 		options.sqlFile = c.String("file")
 		options.dbType = c.String("type")
+		options.dbUser = c.String("user")
+		options.dbPassword = c.String("password")
+		options.dbHost = c.String("host")
+		options.dbPort = c.Int("port")
 		options.dryRun = c.Bool("dry-run")
 
 		if len(c.Args()) == 0 {

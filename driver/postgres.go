@@ -6,9 +6,9 @@ import (
 )
 
 func postgresBuildDSN(config Config) string {
-	user := "postgres"
-	password := ""
-	host := "127.0.0.1:5432"
+	user := config.User
+	password := config.Password
+	host := fmt.Sprintf("%s:%d", config.Host, config.Port)
 	database := config.DbName
 
 	// TODO: uri escape

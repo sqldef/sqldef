@@ -20,8 +20,12 @@ func main() {
 	desiredDDLs := string(sql)
 
 	db, err := driver.NewDatabase(driver.Config{
-		DbType: options.dbType,
-		DbName: database,
+		DbType:   options.dbType,
+		DbName:   database,
+		User:     options.dbUser,
+		Password: options.dbPassword,
+		Host:     options.dbHost,
+		Port:     options.dbPort,
 	})
 	if err != nil {
 		log.Fatal(err)
