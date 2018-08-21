@@ -23,7 +23,9 @@ type Column struct {
 	autoIncrement bool
 	defaultVal    *Value
 	length        *Value
-	// XXX: charset, collate, zerofill, scale?
+	scale         *Value
+	// TODO: keyopt
+	// XXX: charset, collate, zerofill?
 }
 
 type Value struct {

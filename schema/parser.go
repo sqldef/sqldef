@@ -78,6 +78,7 @@ func parseTable(stmt *sqlparser.DDL) Table {
 			autoIncrement: castBool(parsedCol.Type.Autoincrement),
 			defaultVal:    parseValue(parsedCol.Type.Default),
 			length:        parseValue(parsedCol.Type.Length),
+			scale:         parseValue(parsedCol.Type.Scale),
 		}
 		columns = append(columns, column)
 	}
@@ -92,6 +93,7 @@ func parseTable(stmt *sqlparser.DDL) Table {
 // This doesn't support destructive DDL like `DROP TABLE`.
 func parseDDL(ddl string) (DDL, error) {
 	stmt, err := sqlparser.Parse(ddl)
+	// TODO: sqlparser says "ignoring error parsing DDL" but ignoring it causes SEGV.
 	if err != nil {
 		log.Fatal(err)
 	}
