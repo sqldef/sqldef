@@ -42,8 +42,20 @@ func main() {
 		return
 	}
 
+	if options.dryRun {
+		showDDLs(ddls)
+		return
+	}
+
 	err = db.RunDDLs(ddls)
 	if err != nil {
 		log.Fatal(err)
+	}
+}
+
+func showDDLs(ddls []string) {
+	fmt.Println("--- dry run ---")
+	for _, ddl := range ddls {
+		fmt.Printf("Run: '%s'\n", ddl)
 	}
 }

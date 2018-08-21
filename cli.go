@@ -10,6 +10,7 @@ import (
 type Options struct {
 	sqlFile string
 	dbType  string
+	dryRun  bool
 }
 
 // Return parsed options and schema filename
@@ -30,6 +31,10 @@ func parseOptions(args []string) (string, *Options) {
 			Value: "mysql",
 			Usage: "Type of database (mysql, postgres)",
 		},
+		cli.BoolFlag{
+			Name:  "dry-run",
+			Usage: "Don't run DDLs but show them",
+		},
 	}
 
 	cli.AppHelpTemplate = `USAGE:
@@ -49,6 +54,7 @@ OPTIONS:
 		actionRun = true
 		options.sqlFile = c.String("file")
 		options.dbType = c.String("type")
+		options.dryRun = c.Bool("dry-run")
 
 		if len(c.Args()) == 0 {
 			fmt.Println("No database is specified!\n")
