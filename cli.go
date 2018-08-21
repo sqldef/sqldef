@@ -15,6 +15,7 @@ type Options struct {
 	dbHost     string
 	dbPort     int
 	dryRun     bool
+	export     bool
 }
 
 // Return parsed options and schema filename
@@ -59,6 +60,10 @@ func parseOptions(args []string) (string, *Options) {
 			Name:  "dry-run",
 			Usage: "Don't run DDLs but show them",
 		},
+		cli.BoolFlag{
+			Name:  "export",
+			Usage: "Just dump the current DDLs to stdout",
+		},
 	}
 
 	cli.AppHelpTemplate = `USAGE:
@@ -83,6 +88,7 @@ OPTIONS:
 		options.dbHost = c.String("host")
 		options.dbPort = c.Int("port")
 		options.dryRun = c.Bool("dry-run")
+		options.export = c.Bool("export")
 
 		if len(c.Args()) == 0 {
 			fmt.Println("No database is specified!\n")

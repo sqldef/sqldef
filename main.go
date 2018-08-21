@@ -37,6 +37,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	if options.export {
+		fmt.Printf("%s;\n", currentDDLs)
+		return
+	}
+
 	ddls, err := schema.GenerateIdempotentDDLs(desiredDDLs, currentDDLs)
 	if err != nil {
 		log.Fatal(err)
