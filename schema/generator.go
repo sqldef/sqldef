@@ -172,6 +172,8 @@ func convertDDLsToTables(ddls []DDL) ([]Table, error) {
 		switch ddl := ddl.(type) {
 		case *CreateTable:
 			tables = append(tables, ddl.table)
+		case *AlterTable:
+			// TODO: Add column, etc.
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in convertDDLsToTables: %v", ddl)
 		}

@@ -106,6 +106,10 @@ func parseDDL(ddl string) (DDL, error) {
 				statement: ddl,
 				table:     parseTable(stmt),
 			}, nil
+		} else if stmt.Action == "alter" {
+			return &AlterTable{
+				statement: ddl,
+			}, nil
 		} else {
 			return nil, fmt.Errorf("unsupported type of DDL action (only 'create' is supported): %s", stmt.Action)
 		}

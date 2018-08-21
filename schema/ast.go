@@ -9,6 +9,10 @@ type CreateTable struct {
 	table     Table
 }
 
+type AlterTable struct {
+	statement string
+}
+
 type Table struct {
 	name    string
 	columns []Column
@@ -65,4 +69,8 @@ const (
 
 func (c *CreateTable) Statement() string {
 	return c.statement
+}
+
+func (a *AlterTable) Statement() string {
+	return a.statement
 }
