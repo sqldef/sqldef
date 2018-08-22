@@ -68,6 +68,7 @@ func parseValue(val *sqlparser.SQLVal) *Value {
 
 func parseTable(stmt *sqlparser.DDL) Table {
 	columns := []Column{}
+	indexes := []Index{}
 
 	for _, parsedCol := range stmt.TableSpec.Columns {
 		column := Column{
@@ -84,9 +85,32 @@ func parseTable(stmt *sqlparser.DDL) Table {
 		columns = append(columns, column)
 	}
 
+	for _, indexDef := range stmt.TableSpec.Indexes {
+		indexColumns := []IndexColumn{}
+		for _, column := range indexDef.Columns {
+			indexColumns = append(
+				indexColumns,
+				IndexColumn{
+					column: column.Column.String(),
+					length: parseValue(column.Length),
+				},
+			)
+		}
+
+		index := Index{
+			name:      indexDef.Info.Name.String(),
+			indexType: indexDef.Info.Type,
+			columns:   indexColumns,
+			primary:   indexDef.Info.Primary,
+			unique:    indexDef.Info.Unique,
+		}
+		indexes = append(indexes, index)
+	}
+
 	return Table{
 		name:    stmt.NewName.Name.String(),
 		columns: columns,
+		indexes: indexes,
 	}
 }
 

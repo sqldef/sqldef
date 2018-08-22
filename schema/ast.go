@@ -16,6 +16,7 @@ type AlterTable struct {
 type Table struct {
 	name    string
 	columns []Column
+	indexes []Index
 	// XXX: have options and alter on its change?
 }
 
@@ -31,6 +32,19 @@ type Column struct {
 	keyOption     ColumnKeyOption
 	// TODO: keyopt
 	// XXX: charset, collate, zerofill?
+}
+
+type Index struct {
+	name      string
+	indexType string
+	columns   []IndexColumn
+	primary   bool
+	unique    bool
+}
+
+type IndexColumn struct {
+	column string
+	length *Value
 }
 
 type Value struct {
