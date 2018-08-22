@@ -9,8 +9,9 @@ type CreateTable struct {
 	table     Table
 }
 
-type AlterTable struct {
+type AddIndex struct {
 	statement string
+	index     Index
 }
 
 type Table struct {
@@ -36,7 +37,7 @@ type Column struct {
 
 type Index struct {
 	name      string
-	indexType string
+	indexType string // Parsed in "create table" but not parsed in "add index". So actually not used yet. Just use primary/unique.
 	columns   []IndexColumn
 	primary   bool
 	unique    bool
@@ -44,7 +45,7 @@ type Index struct {
 
 type IndexColumn struct {
 	column string
-	length *Value
+	length *Value // Parsed in "create table" but not parsed in "add index". So actually not used yet.
 }
 
 type Value struct {
@@ -85,6 +86,6 @@ func (c *CreateTable) Statement() string {
 	return c.statement
 }
 
-func (a *AlterTable) Statement() string {
+func (a *AddIndex) Statement() string {
 	return a.statement
 }

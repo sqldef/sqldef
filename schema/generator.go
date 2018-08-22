@@ -64,6 +64,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				ddls = append(ddls, desired.statement)
 				g.currentTables = append(g.currentTables, desired.table)
 			}
+		case *AddIndex:
+			// TODO: simulate, examine and generate add index.
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", desired)
 		}
@@ -172,7 +174,7 @@ func convertDDLsToTables(ddls []DDL) ([]Table, error) {
 		switch ddl := ddl.(type) {
 		case *CreateTable:
 			tables = append(tables, ddl.table)
-		case *AlterTable:
+		case *AddIndex:
 			// TODO: Add column, etc.
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in convertDDLsToTables: %v", ddl)
