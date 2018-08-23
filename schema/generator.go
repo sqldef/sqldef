@@ -270,6 +270,8 @@ func mergeTable(table1 *Table, table2 Table) {
 }
 
 func convertDDLsToTables(ddls []DDL) ([]Table, error) {
+	// TODO: probably "add constraint primary key" support is needed for postgres here.
+
 	tables := []Table{}
 	for _, ddl := range ddls {
 		switch ddl := ddl.(type) {

@@ -162,8 +162,8 @@ func parseDDL(ddl string) (DDL, error) {
 			}, nil
 		} else {
 			return nil, fmt.Errorf(
-				"unsupported type of DDL action (only 'create table' and 'alter table ... add index' are supported): %s",
-				stmt.Action,
+				"unsupported type of DDL action (only 'create table' and 'alter table ... add index' are supported) '%s': %s",
+				stmt.Action, ddl,
 			)
 		}
 	default:
