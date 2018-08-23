@@ -17,7 +17,7 @@ func parseOptions(args []string) (string, *sqldef.Options) {
 		Password string `short:"p" long:"password" description:"MySQL user password" value-name:"password"`
 		Host     string `short:"h" long:"host" description:"Host to connect to the MySQL server" value-name:"host_name" default:"127.0.0.1"`
 		Port     uint   `short:"P" long:"port" description:"Port used for the connection" value-name:"port_num" default:"3306"`
-		Schema   string `long:"schema" description:"SQL file path to be applied, read stdin on \"-\"" value-name:"sql_file" default:"-"`
+		File     string `long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"sql_file" default:"-"`
 		DryRun   bool   `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export   bool   `long:"export" description:"Just dump the current schema to stdout"`
 		Help     bool   `long:"help" description:"Show this help"`
@@ -47,7 +47,7 @@ func parseOptions(args []string) (string, *sqldef.Options) {
 	database := args[0]
 
 	options := sqldef.Options{
-		SqlFile:    opts.Schema,
+		SqlFile:    opts.File,
 		DbType:     "mysql",
 		DbUser:     opts.User,
 		DbPassword: opts.Password,
