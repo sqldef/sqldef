@@ -1,31 +1,40 @@
-package main
+package sqldef
 
 import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
 
 	"github.com/k0kubun/sqldef/driver"
 	"github.com/k0kubun/sqldef/schema"
 )
 
-func main() {
-	database, options := parseOptions(os.Args)
+type Options struct {
+	SqlFile    string
+	DbType     string
+	DbUser     string
+	DbPassword string
+	DbHost     string
+	DbPort     int
+	DryRun     bool
+	Export     bool
+}
 
-	sql, err := ioutil.ReadFile(options.sqlFile)
+// Main function shared by `mysqldef` and `psqldef`
+func Run(database string, options *Options) {
+	sql, err := ioutil.ReadFile(options.SqlFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 	desiredDDLs := string(sql)
 
 	db, err := driver.NewDatabase(driver.Config{
-		DbType:   options.dbType,
+		DbType:   options.DbType,
 		DbName:   database,
-		User:     options.dbUser,
-		Password: options.dbPassword,
-		Host:     options.dbHost,
-		Port:     options.dbPort,
+		User:     options.DbUser,
+		Password: options.DbPassword,
+		Host:     options.DbHost,
+		Port:     options.DbPort,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -37,7 +46,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if options.export {
+	if options.Export {
 		fmt.Printf("%s;\n", currentDDLs)
 		return
 	}
@@ -51,7 +60,7 @@ func main() {
 		return
 	}
 
-	if options.dryRun {
+	if options.DryRun {
 		showDDLs(ddls)
 		return
 	}

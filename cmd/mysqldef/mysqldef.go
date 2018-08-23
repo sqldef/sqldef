@@ -4,25 +4,15 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/k0kubun/sqldef"
 	"github.com/urfave/cli"
 )
 
-type Options struct {
-	sqlFile    string
-	dbType     string
-	dbUser     string
-	dbPassword string
-	dbHost     string
-	dbPort     int
-	dryRun     bool
-	export     bool
-}
-
 // Return parsed options and schema filename
 // TODO: Support `sqldef schema.sql -opt val...`
-func parseOptions(args []string) (string, *Options) {
+func parseOptions(args []string) (string, *sqldef.Options) {
 	app := cli.NewApp()
-	app.HelpName = "sqldef"
+	app.HelpName = "mysqldef"
 	app.Version = "0.0.1"
 
 	app.Flags = []cli.Flag{
@@ -77,18 +67,18 @@ OPTIONS:
 
 	var database string
 	actionRun := false
-	options := Options{}
+	options := sqldef.Options{}
 
 	app.Action = func(c *cli.Context) error {
 		actionRun = true
-		options.sqlFile = c.String("file")
-		options.dbType = c.String("type")
-		options.dbUser = c.String("user")
-		options.dbPassword = c.String("password")
-		options.dbHost = c.String("host")
-		options.dbPort = c.Int("port")
-		options.dryRun = c.Bool("dry-run")
-		options.export = c.Bool("export")
+		options.SqlFile = c.String("file")
+		options.DbType = c.String("type")
+		options.DbUser = c.String("user")
+		options.DbPassword = c.String("password")
+		options.DbHost = c.String("host")
+		options.DbPort = c.Int("port")
+		options.DryRun = c.Bool("dry-run")
+		options.Export = c.Bool("export")
 
 		if len(c.Args()) == 0 {
 			fmt.Println("No database is specified!\n")
@@ -111,4 +101,9 @@ OPTIONS:
 	}
 
 	return database, &options
+}
+
+func main() {
+	database, options := parseOptions(os.Args)
+	sqldef.Run(database, options)
 }
