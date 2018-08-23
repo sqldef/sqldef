@@ -1,9 +1,12 @@
 package sqldef
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 
 	"github.com/k0kubun/sqldef/driver"
 	"github.com/k0kubun/sqldef/schema"
@@ -22,9 +25,9 @@ type Options struct {
 
 // Main function shared by `mysqldef` and `psqldef`
 func Run(database string, options *Options) {
-	sql, err := ioutil.ReadFile(options.SqlFile)
+	sql, err := readFile(options.SqlFile)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to read '%s': %s", options.SqlFile, err)
 	}
 	desiredDDLs := string(sql)
 
@@ -69,6 +72,33 @@ func Run(database string, options *Options) {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func readFile(filepath string) (string, error) {
+	var content string
+	var err error
+	if filepath == "-" {
+		stat, _ := os.Stdin.Stat()
+		if (stat.Mode() & os.ModeCharDevice) != 0 {
+			return "", fmt.Errorf("stdin is not piped")
+		}
+
+		var buffer bytes.Buffer
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			buffer.WriteString(scanner.Text())
+		}
+		content = buffer.String()
+	} else {
+		var buf []byte
+		buf, err = ioutil.ReadFile(filepath)
+		content = string(buf)
+	}
+
+	if err != nil {
+		return "", err
+	}
+	return content, nil
 }
 
 func showDDLs(ddls []string) {

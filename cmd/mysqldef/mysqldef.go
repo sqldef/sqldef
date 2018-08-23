@@ -2,104 +2,64 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 
+	"github.com/jessevdk/go-flags"
 	"github.com/k0kubun/sqldef"
-	"github.com/urfave/cli"
 )
 
 // Return parsed options and schema filename
 // TODO: Support `sqldef schema.sql -opt val...`
 func parseOptions(args []string) (string, *sqldef.Options) {
-	app := cli.NewApp()
-	app.HelpName = "mysqldef"
-	app.Version = "0.0.1"
-
-	app.Flags = []cli.Flag{
-		cli.StringFlag{
-			Name:  "f, file",
-			Value: "schema.sql",
-			Usage: "SQL file path to be applied",
-		},
-		cli.StringFlag{
-			Name:  "u, user",
-			Value: "root",
-			Usage: "Database user",
-		},
-		cli.StringFlag{
-			Name:  "p, password",
-			Value: "",
-			Usage: "Database password",
-		},
-		cli.StringFlag{
-			Name:  "H, host", // FIXME: -h is used by --help......
-			Value: "127.0.0.1",
-			Usage: "Database host",
-		},
-		cli.IntFlag{
-			Name:  "P, port",
-			Value: 3306,
-			Usage: "Database port",
-		},
-		cli.BoolFlag{
-			Name:  "dry-run",
-			Usage: "Don't run DDLs but show them",
-		},
-		cli.BoolFlag{
-			Name:  "export",
-			Usage: "Just dump the current DDLs to stdout",
-		},
+	var opts struct {
+		User     string `short:"u" long:"user" description:"MySQL user name" value-name:"user_name" default:"root"`
+		Password string `short:"p" long:"password" description:"MySQL user password" value-name:"password"`
+		Host     string `short:"h" long:"host" description:"Host to connect to the MySQL server" value-name:"host_name" default:"127.0.0.1"`
+		Port     uint   `short:"P" long:"port" description:"Port used for the connection" value-name:"port_num" default:"3306"`
+		Schema   string `long:"schema" description:"SQL file path to be applied, read stdin on \"-\"" value-name:"sql_file" default:"-"`
+		DryRun   bool   `long:"dry-run" description:"Don't run DDLs but just show them"`
+		Export   bool   `long:"export" description:"Just dump the current schema to stdout"`
+		Help     bool   `long:"help" description:"Show this help"`
 	}
 
-	cli.AppHelpTemplate = `USAGE:
-   {{if .UsageText}}{{.UsageText}}{{else}}{{.HelpName}} {{if .VisibleFlags}}[OPTIONS]{{end}} [database]{{end}}{{if .VisibleFlags}}
-
-OPTIONS:
-   {{range $index, $option := .VisibleFlags}}{{if $index}}
-   {{end}}{{$option}}{{end}}{{end}}
-
-`
-
-	var database string
-	actionRun := false
-	options := sqldef.Options{
-		DbType: "mysql",
+	parser := flags.NewParser(&opts, flags.None)
+	parser.Usage = "[options] db_name"
+	args, err := parser.ParseArgs(args)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	app.Action = func(c *cli.Context) error {
-		actionRun = true
-		options.SqlFile = c.String("file")
-		options.DbUser = c.String("user")
-		options.DbPassword = c.String("password")
-		options.DbHost = c.String("host")
-		options.DbPort = c.Int("port")
-		options.DryRun = c.Bool("dry-run")
-		options.Export = c.Bool("export")
-
-		if len(c.Args()) == 0 {
-			fmt.Println("No database is specified!\n")
-			cli.ShowAppHelp(c)
-			os.Exit(1)
-		} else if len(c.Args()) > 1 {
-			fmt.Printf("Multiple arguments are given: %v\n\n", c.Args())
-			cli.ShowAppHelp(c)
-			os.Exit(1)
-		}
-		database = c.Args()[0]
-		return nil
-	}
-	app.Run(args)
-
-	if len(database) == 0 && !actionRun {
-		// Help triggered or "" is specified
-		// TODO: Handle -h/--help case properly...
+	if opts.Help {
+		parser.WriteHelp(os.Stdout)
 		os.Exit(0)
 	}
 
+	if len(args) == 0 {
+		fmt.Println("No database is specified!\n")
+		parser.WriteHelp(os.Stdout)
+		os.Exit(1)
+	} else if len(args) > 1 {
+		fmt.Printf("Multiple databases are given: %v\n\n", args)
+		parser.WriteHelp(os.Stdout)
+		os.Exit(1)
+	}
+	database := args[0]
+
+	options := sqldef.Options{
+		SqlFile:    opts.Schema,
+		DbType:     "mysql",
+		DbUser:     opts.User,
+		DbPassword: opts.Password,
+		DbHost:     opts.Host,
+		DbPort:     int(opts.Port),
+		DryRun:     opts.DryRun,
+		Export:     opts.Export,
+	}
 	return database, &options
 }
 
 func main() {
-	database, options := parseOptions(os.Args)
+	database, options := parseOptions(os.Args[1:])
 	sqldef.Run(database, options)
 }
