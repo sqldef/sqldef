@@ -157,6 +157,7 @@ func parseDDL(ddl string) (DDL, error) {
 			// TODO: check null of index spec and return error
 			return &AddIndex{
 				statement: ddl,
+				tableName: stmt.Table.Name.String(),
 				index:     parseIndex(stmt),
 			}, nil
 		} else {

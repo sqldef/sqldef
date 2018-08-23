@@ -6,6 +6,7 @@ import (
 
 // This struct holds simulated schema states during GenerateIdempotentDDLs().
 type Generator struct {
+	desiredTables []Table
 	currentTables []Table
 }
 
@@ -27,7 +28,10 @@ func GenerateIdempotentDDLs(desiredSQL string, currentSQL string) ([]string, err
 		return nil, err
 	}
 
-	generator := Generator{currentTables: tables}
+	generator := Generator{
+		desiredTables: []Table{},
+		currentTables: tables,
+	}
 	return generator.generateDDLs(desiredDDLs)
 }
 
@@ -45,7 +49,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	currentTableNames := convertTablesToTableNames(g.currentTables)
 	for _, tableName := range currentTableNames {
 		if !containsString(desiredTableNames, tableName) {
-			ddls = append(ddls, fmt.Sprintf("DROP TABLE %s;", tableName)) // TODO: escape table name
+			ddls = append(ddls, fmt.Sprintf("DROP TABLE %s", tableName)) // TODO: escape table name
 			g.currentTables = removeTableByName(g.currentTables, tableName)
 		}
 	}
@@ -57,15 +61,35 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if currentTable := findTableByName(g.currentTables, desired.table.name); currentTable != nil {
 				// Table already exists, guess required DDLs.
 				ddls = append(ddls, g.generateDDLsForCreateTable(*currentTable, *desired)...)
-				g.currentTables = removeTableByName(g.currentTables, desired.table.name)
-				g.currentTables = append(g.currentTables, desired.table)
+				mergeTable(currentTable, desired.table)
 			} else {
 				// Table not found, create table.
 				ddls = append(ddls, desired.statement)
 				g.currentTables = append(g.currentTables, desired.table)
 			}
+			g.desiredTables = append(g.desiredTables, desired.table)
 		case *AddIndex:
-			// TODO: simulate, examine and generate add index.
+			currentTable := findTableByName(g.currentTables, desired.tableName)
+			if currentTable == nil {
+				return nil, fmt.Errorf("alter table is performed for inexistent table '%s': '%s'", desired.tableName, ddl.Statement())
+			}
+			if containsString(convertIndexesToIndexNames(currentTable.indexes), desired.index.name) {
+				// TODO: compare index definition and add/drop if necessary
+			} else {
+				// Index not found, add index.
+				ddls = append(ddls, ddl.Statement())
+				currentTable.indexes = append(currentTable.indexes, desired.index)
+			}
+
+			// Examine indexes in desiredTable to delete obsoleted indexes later
+			desiredTable := findTableByName(g.desiredTables, desired.tableName)
+			if desiredTable == nil {
+				return nil, fmt.Errorf("alter table is performed before create table '%s': '%s'", desired.tableName, ddl.Statement())
+			}
+			if containsString(convertIndexesToIndexNames(desiredTable.indexes), desired.index.name) {
+				return nil, fmt.Errorf("index '%s' is doubly created against table '%s': '%s'", desired.index.name, desired.tableName, ddl.Statement())
+			}
+			desiredTable.indexes = append(desiredTable.indexes, desired.index)
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", desired)
 		}
@@ -81,11 +105,12 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	// so this function does not need to update g.currentTables.
 
 	// Clean up unnecessary columns
+	// This can be examined here because sqldef doesn't allow add column DDL in schema.sql.
 	desiredColumnNames := convertColumnsToColumnNames(desired.table.columns)
 	currentColumnNames := convertColumnsToColumnNames(currentTable.columns)
 	for _, columnName := range currentColumnNames {
 		if !containsString(desiredColumnNames, columnName) {
-			ddl := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s;", desired.table.name, columnName) // TODO: escape
+			ddl := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", desired.table.name, columnName) // TODO: escape
 			ddls = append(ddls, ddl)
 		}
 	}
@@ -97,7 +122,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		} else {
 			// Column not found, add column.
 			ddl := fmt.Sprintf(
-				"ALTER TABLE %s ADD COLUMN %s;",
+				"ALTER TABLE %s ADD COLUMN %s",
 				desired.table.name, g.generateColumnDefinition(column),
 			) // TODO: escape
 			ddls = append(ddls, ddl)
@@ -168,6 +193,21 @@ func (g *Generator) generateColumnDefinition(column Column) string {
 	return definition
 }
 
+// Destructively modify table1 to have table2 columns/indexes
+func mergeTable(table1 *Table, table2 Table) {
+	for _, column := range table2.columns {
+		if containsString(convertColumnsToColumnNames(table1.columns), column.name) {
+			table1.columns = append(table1.columns, column)
+		}
+	}
+
+	for _, index := range table2.indexes {
+		if containsString(convertIndexesToIndexNames(table1.indexes), index.name) {
+			table1.indexes = append(table1.indexes, index)
+		}
+	}
+}
+
 func convertDDLsToTables(ddls []DDL) ([]Table, error) {
 	tables := []Table{}
 	for _, ddl := range ddls {
@@ -206,6 +246,14 @@ func convertColumnsToColumnNames(columns []Column) []string {
 		columnNames = append(columnNames, column.name)
 	}
 	return columnNames
+}
+
+func convertIndexesToIndexNames(indexes []Index) []string {
+	indexNames := []string{}
+	for _, index := range indexes {
+		indexNames = append(indexNames, index.name)
+	}
+	return indexNames
 }
 
 func containsString(strs []string, str string) bool {

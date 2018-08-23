@@ -65,6 +65,6 @@ func main() {
 func showDDLs(ddls []string) {
 	fmt.Println("--- dry run ---")
 	for _, ddl := range ddls {
-		fmt.Printf("Run: '%s'\n", ddl)
+		fmt.Printf("Run: '%s;'\n", ddl)
 	}
 }

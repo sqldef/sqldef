@@ -11,6 +11,7 @@ type CreateTable struct {
 
 type AddIndex struct {
 	statement string
+	tableName string
 	index     Index
 }
 
