@@ -90,8 +90,68 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return nil, fmt.Errorf("index '%s' is doubly created against table '%s': '%s'", desired.index.name, desired.tableName, ddl.Statement())
 			}
 			desiredTable.indexes = append(desiredTable.indexes, desired.index)
+			desiredTables := removeTableByName(g.desiredTables, desired.tableName)
+			g.desiredTables = append(desiredTables, *desiredTable) // To destructively modify []Table. TODO: there must be a better way...
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", desired)
+		}
+	}
+
+	// Clean up obsoleted indexes
+	for _, currentTable := range g.currentTables {
+		desiredTable := findTableByName(g.desiredTables, currentTable.name)
+		if desiredTable == nil {
+			// Obsoleted table found. Unreachable, for now.
+			// TODO: move the "Clean up unnecessary tables" logic to here.
+			continue
+		}
+
+		// Table is expected to exist. Check indexes. (Column is already examined in generateDDLsForCreateTable. TODO: move that to here)
+		for _, index := range currentTable.indexes {
+			if containsString(convertIndexesToIndexNames(desiredTable.indexes), index.name) {
+				// Index exists. TODO: check index type?
+				continue
+			}
+
+			// Index not found.
+			switch index.indexType {
+			case "primary key":
+				var primaryKeyColumn *Column
+				for _, column := range desiredTable.columns {
+					if column.keyOption == ColumnKeyPrimary {
+						primaryKeyColumn = &column
+						break
+					}
+				}
+
+				// If nil, it should be already `DROP COLUMN`-ed. Ignore it.
+				if primaryKeyColumn != nil && primaryKeyColumn.name != index.columns[0].column { // TODO: check length of index.columns
+					// TODO: handle this. Rename primary key column...?
+					return ddls, fmt.Errorf(
+						"primary key column name of '%s' should be '%s' but currently '%s'. This is not handled yet.",
+						currentTable.name, primaryKeyColumn.name, index.columns[0].column,
+					)
+				}
+			case "unique key":
+				var uniqueKeyColumn *Column
+				for _, column := range desiredTable.columns {
+					if column.name == index.columns[0].column && (column.keyOption == ColumnKeyUnique || column.keyOption == ColumnKeyUniqueKey) {
+						uniqueKeyColumn = &column
+						break
+					}
+				}
+
+				if uniqueKeyColumn == nil {
+					// No unique column. Drop unique key index.
+					ddl := fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", currentTable.name, index.name) // TODO: escape
+					ddls = append(ddls, ddl)
+				}
+			case "key":
+				ddl := fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", currentTable.name, index.name) // TODO: escape
+				ddls = append(ddls, ddl)
+			default:
+				return ddls, fmt.Errorf("unsupported indexType: '%s'", index.indexType)
+			}
 		}
 	}
 
@@ -119,6 +179,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	for _, column := range desired.table.columns {
 		if containsString(currentColumnNames, column.name) {
 			// TODO: Compare types and change column type!!!
+			// TODO: Add unique index if existing column does not have unique flag and there's no unique index!!!!
 		} else {
 			// Column not found, add column.
 			ddl := fmt.Sprintf(
