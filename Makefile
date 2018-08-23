@@ -2,8 +2,8 @@
 GOFLAGS := -tags netgo -installsuffix netgo -ldflags '-w -s --extldflags "-static"'
 
 .PHONY: all
-all: schemasql
+all: sqldef
 
-.PHONY: schemasql
-schemasql:
+.PHONY: sqldef
+sqldef:
 	go build -o $@ $(GOFLAGS)

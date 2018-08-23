@@ -19,10 +19,10 @@ type Options struct {
 }
 
 // Return parsed options and schema filename
-// TODO: Support `schemasql schema.sql -opt val...`
+// TODO: Support `sqldef schema.sql -opt val...`
 func parseOptions(args []string) (string, *Options) {
 	app := cli.NewApp()
-	app.HelpName = "schemasql"
+	app.HelpName = "sqldef"
 	app.Version = "0.0.1"
 
 	app.Flags = []cli.Flag{

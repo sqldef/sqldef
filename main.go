@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/k0kubun/schemasql/driver"
-	"github.com/k0kubun/schemasql/schema"
+	"github.com/k0kubun/sqldef/driver"
+	"github.com/k0kubun/sqldef/schema"
 )
 
 func main() {
