@@ -41,11 +41,6 @@ func parseOptions(args []string) (string, *sqldef.Options) {
 			Value: 3306,
 			Usage: "Database port",
 		},
-		cli.StringFlag{
-			Name:  "type",
-			Value: "mysql",
-			Usage: "mysql, postgres",
-		},
 		cli.BoolFlag{
 			Name:  "dry-run",
 			Usage: "Don't run DDLs but show them",
@@ -67,12 +62,13 @@ OPTIONS:
 
 	var database string
 	actionRun := false
-	options := sqldef.Options{}
+	options := sqldef.Options{
+		DbType: "postgres",
+	}
 
 	app.Action = func(c *cli.Context) error {
 		actionRun = true
 		options.SqlFile = c.String("file")
-		options.DbType = c.String("type")
 		options.DbUser = c.String("user")
 		options.DbPassword = c.String("password")
 		options.DbHost = c.String("host")
