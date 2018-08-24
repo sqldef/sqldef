@@ -11,7 +11,10 @@ TODO: diagram
 
 ## Project Status
 
-Proof of Concept. Not ready for production, but it's already playable.
+Proof of Concept.
+
+Not ready for production, but it's already playable with MySQL.
+PostgreSQL support is still work in progress.
 
 ## Installation
 
@@ -76,7 +79,7 @@ Update the schema.sql like (instead of `ADD INDEX`, you can just add `KEY index_
 +ALTER TABLE user ADD INDEX index_name(name);
 ```
 
-And then,
+And then run:
 
 ```sql
 # Check the auto-generated migration plan without execution
@@ -90,7 +93,7 @@ $ mysqldef -uroot test < schema.sql
 Run: 'ALTER TABLE user ADD COLUMN created_at datetime NOT NULL ;'
 Run: 'ALTER TABLE user ADD INDEX index_name(name);'
 
-# Operation is idempotent, safe for always running it
+# Operation is idempotent, safe for running it multiple times
 $ mysqldef -uroot test < schema.sql
 Nothing is modified
 ```
@@ -124,6 +127,54 @@ $ psql -U postgres test -c "select 1;"
 ----------
         1
 (1 row)
+
+# Dump current schema by adding `def` suffix and --export
+$ psqldef -U postgres test --export
+CREATE TABLE public.users (
+    id bigint NOT NULL,
+    name text,
+    age integer
+);
+
+CREATE TABLE public.bigdata (
+    data bigint
+);
+
+# Save it to edit
+$ psqldef -U postgres test --export > schema.sql
+```
+
+Update the schema.sql like:
+
+```diff
+ CREATE TABLE users (
+     id bigint NOT NULL PRIMARY KEY,
+-    name text,
+     age int
+ );
+
+-CREATE TABLE bigdata (
+-    data bigint
+-);
+```
+
+And then run:
+
+```sql
+# Check the auto-generated migration plan without execution
+$ psqldef -U postgres test --dry-run < schema.sql
+--- dry run ---
+Run: 'DROP TABLE bigdata;'
+Run: 'ALTER TABLE users DROP COLUMN name;'
+
+# Run the above DDLs
+$ psqldef -U postgres test < schema.sql
+Run: 'DROP TABLE bigdata;'
+Run: 'ALTER TABLE users DROP COLUMN name;'
+
+# Operation is idempotent, safe for running it multiple times
+$ psqldef -U postgres test < schema.sql
+Nothing is modified
 ```
 
 ## TODO
@@ -134,12 +185,16 @@ $ psql -U postgres test -c "select 1;"
   - Securer interface to set password
 - [ ] Better PostgreSQL support
   - Basically this tool is tested/developed against MySQL. So psqldef has more unfixed bugs than mysqldef.
+  - Looks like even basic index handling is not working for now... to be fixed soon
   - Drop `pg_dump` command dependency to dump schema?
+  - The SQL parser said below is not good at parsing SQL for PostgreSQL and causes unexpected parse errors.
 - [ ] Replace SQL parser
   - xwb1989/sqlparser was [not for parsing DDL](https://github.com/xwb1989/sqlparser/issues/35).
+  - Actual MySQL SQL parser is more flexible than its behavior
   - Parse error does not report an error, and sometimes results in SEGV
 - [ ] Drop dynamic link to libc from mysqldef binary
   - The golang library lib/pq is the cause, so psqldef can't be fixed
+- [ ] Unit tests and CI
 
 ## License
 
