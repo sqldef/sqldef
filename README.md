@@ -1,8 +1,9 @@
 # sqldef
 
-Idempotent MySQL/PostgreSQL schema management like [Ridgepole](https://github.com/winebarrel/ridgepole), but in SQL.
+The easiest idempotent MySQL/PostgreSQL schema management by SQL.
 
-TODO: demo gif
+This is inspired by [Ridgepole](https://github.com/winebarrel/ridgepole) but using SQL,
+so there's no need to remember Ruby DSL.
 
 ## How it works
 
@@ -22,6 +23,8 @@ https://github.com/k0kubun/sqldef/releases
 
 ### mysqldef
 
+`mysqldef` should work in the same way as `mysql` for setting connection information.
+
 ```
 $ mysqldef --help
 Usage:
@@ -36,6 +39,60 @@ Application Options:
       --dry-run              Don't run DDLs but just show them
       --export               Just dump the current schema to stdout
       --help                 Show this help
+```
+
+#### Example
+
+```sql
+# Make sure that it can be connected by mysql(1)
+$ mysql -uroot test -e "select 1;"
++---+
+| 1 |
++---+
+| 1 |
++---+
+
+# Dump current schema by adding `def` suffix and --export
+$ mysqldef -uroot test --export
+CREATE TABLE `user` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(191) DEFAULT 'k0kubun',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+# Save it to edit
+$ mysqldef -uroot test --export > schema.sql
+```
+
+Update the schema.sql like (instead of `ADD INDEX`, you can just add `KEY index_name (name)` in the `CREATE TABLE` as well):
+
+```diff
+ CREATE TABLE user (
+   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+   name VARCHAR(128) DEFAULT 'k0kubun',
++  created_at DATETIME NOT NULL
+ ) Engine=InnoDB DEFAULT CHARSET=utf8mb4;
++
++ALTER TABLE user ADD INDEX index_name(name);
+```
+
+And then,
+
+```sql
+# Check the auto-generated migration plan without execution
+$ mysqldef -uroot test --dry-run < schema.sql
+--- dry run ---
+Run: 'ALTER TABLE user ADD COLUMN created_at datetime NOT NULL ;'
+Run: 'ALTER TABLE user ADD INDEX index_name(name);'
+
+# Run the above DDLs
+$ mysqldef -uroot test < schema.sql
+Run: 'ALTER TABLE user ADD COLUMN created_at datetime NOT NULL ;'
+Run: 'ALTER TABLE user ADD INDEX index_name(name);'
+
+# Operation is idempotent, safe for always running it
+$ mysqldef -uroot test < schema.sql
+Nothing is modified
 ```
 
 ### psqldef
@@ -58,14 +115,16 @@ Application Options:
 
 ## TODO
 
-- [ ] Replace SQL parser
-  - xwb1989/sqlparser was [not for parsing DDL](https://github.com/xwb1989/sqlparser/issues/35).
 - [ ] Some important features
   - Changing type of column (including adding unique index) and type of index
   - Foreign key support
+  - Securer interface to set password
 - [ ] Better PostgreSQL support
   - Basically this tool is tested/developed against MySQL. So psqldef has more unfixed bugs than mysqldef.
   - Drop `pg_dump` command dependency to dump schema?
+- [ ] Replace SQL parser
+  - xwb1989/sqlparser was [not for parsing DDL](https://github.com/xwb1989/sqlparser/issues/35).
+  - Parse error does not report an error, and sometimes results in SEGV
 - [ ] Drop dynamic link to libc from mysqldef binary
   - The golang library lib/pq is the cause, so psqldef can't be fixed
 
