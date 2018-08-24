@@ -41,7 +41,7 @@ func (d *Database) postgresTableNames() ([]string, error) {
 // Due to PostgreSQL's limitation, depending on pb_dump(1) availability in client.
 // Possibly it can be solved by constructing the complex query, but it would be hacky anyway.
 func (d *Database) postgresDumpTableDDL(table string) (string, error) {
-	ddl, err := runPgDump(d.config)
+	ddl, err := runPgDump(d.config, table)
 	if err != nil {
 		return "", err
 	}
@@ -92,9 +92,9 @@ func (d *Database) postgresDumpTableDDL(table string) (string, error) {
 	return ddl, nil
 }
 
-func runPgDump(config Config) (string, error) {
+func runPgDump(config Config, table string) (string, error) {
 	cmd := exec.Command(
-		"pg_dump", config.DbName,
+		"pg_dump", config.DbName, "-t", table,
 		"-U", config.User, "-h", config.Host, "-p", fmt.Sprintf("%d", config.Port),
 	)
 	if len(config.Password) > 0 {

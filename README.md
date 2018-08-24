@@ -44,7 +44,7 @@ Application Options:
 #### Example
 
 ```sql
-# Make sure that it can be connected by mysql(1)
+# Make sure that MySQL server can be connected by mysql(1)
 $ mysql -uroot test -e "select 1;"
 +---+
 | 1 |
@@ -97,6 +97,8 @@ Nothing is modified
 
 ### psqldef
 
+`psqldef` should work in the same way as `psql` for setting connection information.
+
 ```
 $ psqldef --help
 Usage:
@@ -111,6 +113,17 @@ Application Options:
       --dry-run              Don't run DDLs but just show them
       --export               Just dump the current schema to stdout
       --help                 Show this help
+```
+
+#### Example
+
+```sql
+# Make sure that PostgreSQL server can be connected by psql(1)
+$ psql -U postgres test -c "select 1;"
+ ?column?
+----------
+        1
+(1 row)
 ```
 
 ## TODO
