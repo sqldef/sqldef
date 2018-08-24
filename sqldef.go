@@ -25,12 +25,6 @@ type Options struct {
 
 // Main function shared by `mysqldef` and `psqldef`
 func Run(database string, options *Options) {
-	sql, err := readFile(options.SqlFile)
-	if err != nil {
-		log.Fatalf("Failed to read '%s': %s", options.SqlFile, err)
-	}
-	desiredDDLs := string(sql)
-
 	db, err := driver.NewDatabase(driver.Config{
 		DbType:   options.DbType,
 		DbName:   database,
@@ -53,6 +47,12 @@ func Run(database string, options *Options) {
 		fmt.Printf("%s;\n", currentDDLs)
 		return
 	}
+
+	sql, err := readFile(options.SqlFile)
+	if err != nil {
+		log.Fatalf("Failed to read '%s': %s", options.SqlFile, err)
+	}
+	desiredDDLs := string(sql)
 
 	ddls, err := schema.GenerateIdempotentDDLs(desiredDDLs, currentDDLs)
 	if err != nil {
