@@ -89,6 +89,9 @@ func (d *Database) postgresDumpTableDDL(table string) (string, error) {
 		ddl = strings.Replace(ddl, "\n\n", "\n", -1)
 	}
 
+	ddl = strings.TrimSpace(ddl)
+	ddl = strings.TrimSuffix(ddl, ";") // XXX: caller should handle this better
+
 	return ddl, nil
 }
 
