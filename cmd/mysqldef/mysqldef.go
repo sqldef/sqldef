@@ -36,7 +36,7 @@ func parseOptions(args []string) (string, *sqldef.Options) {
 	}
 
 	if len(args) == 0 {
-		fmt.Println("No database is specified!\n")
+		fmt.Print("No database is specified!\n\n")
 		parser.WriteHelp(os.Stdout)
 		os.Exit(1)
 	} else if len(args) > 1 {

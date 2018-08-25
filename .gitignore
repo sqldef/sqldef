@@ -1,3 +1,5 @@
+/cmd/mysqldef/mysqldef
+/cmd/psqldef/psqldef
 /build/*/*
 /package/*
 *.sql

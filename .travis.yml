@@ -6,7 +6,7 @@ branches:
     - master
     - /\Av\d+\.\d+\.\d+\z/
 script:
-  - make all
+  - make test
 before_deploy:
   - make package
 deploy:
