@@ -44,7 +44,11 @@ func Run(database string, options *Options) {
 	}
 
 	if options.Export {
-		fmt.Printf("%s;\n", currentDDLs)
+		if currentDDLs == "" {
+			fmt.Printf("-- No table exists\n")
+		} else {
+			fmt.Printf("%s;\n", currentDDLs)
+		}
 		return
 	}
 

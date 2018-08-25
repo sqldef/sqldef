@@ -5,6 +5,8 @@ branches:
   only:
     - master
     - /\Av\d+\.\d+\.\d+\z/
+services:
+  - mysql
 script:
   - make test
 before_deploy:
