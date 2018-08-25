@@ -1,21 +1,42 @@
 # This actually doesn't work due to lib/pq
 # TODO: split drivers to different packages
 GOFLAGS := -tags netgo -installsuffix netgo -ldflags '-w -s --extldflags "-static"'
+GOVERSION=$(shell go version)
+GOOS=$(word 1,$(subst /, ,$(lastword $(GOVERSION))))
+GOARCH=$(word 2,$(subst /, ,$(lastword $(GOVERSION))))
+BUILD_DIR=build/$(GOOS)-$(GOARCH)
 
-.PHONY: all clean deps
-.PHONY: cmd/mysqldef/mysqldef cmd/psqldef/psqldef
+.PHONY: all build clean deps package package-zip package-targz
 
-all: cmd/mysqldef/mysqldef cmd/psqldef/psqldef
+all: build
 
-cmd/mysqldef/mysqldef: deps
-	cd cmd/mysqldef && go build $(GOFLAGS)
+build: deps
+	mkdir -p $(BUILD_DIR)
+	cd cmd/mysqldef && GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/mysqldef
+	cd cmd/psqldef && GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/psqldef
 
-cmd/psqldef/psqldef: deps
-	cd cmd/psqldef && go build $(GOFLAGS)
+clean:
+	rm -rf build package
 
 deps:
 	go get -t ./...
 
-clean:
-	rm -f cmd/mysqldef/mysqldef
-	rm -f cmd/psqldef/psqldef
+package:
+	$(MAKE) package-targz GOOS=linux GOARCH=amd64
+	$(MAKE) package-targz GOOS=linux GOARCH=386
+	$(MAKE) package-targz GOOS=linux GOARCH=arm64
+	$(MAKE) package-targz GOOS=linux GOARCH=arm
+	$(MAKE) package-zip GOOS=darwin GOARCH=amd64
+	$(MAKE) package-zip GOOS=darwin GOARCH=386
+	$(MAKE) package-zip GOOS=windows GOARCH=amd64
+	$(MAKE) package-zip GOOS=windows GOARCH=386
+
+package-zip: build
+	mkdir -p package
+	cd $(BUILD_DIR) && zip ../../package/mysqldef_$(GOOS)_$(GOARCH).zip mysqldef
+	cd $(BUILD_DIR) && zip ../../package/psqldef_$(GOOS)_$(GOARCH).zip psqldef
+
+package-targz: build
+	mkdir -p package
+	cd $(BUILD_DIR) && tar zcvf ../../package/mysqldef_$(GOOS)_$(GOARCH).tar.gz mysqldef
+	cd $(BUILD_DIR) && tar zcvf ../../package/psqldef_$(GOOS)_$(GOARCH).tar.gz psqldef
