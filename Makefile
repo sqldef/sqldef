@@ -2,18 +2,20 @@
 # TODO: split drivers to different packages
 GOFLAGS := -tags netgo -installsuffix netgo -ldflags '-w -s --extldflags "-static"'
 
-.PHONY: all
+.PHONY: all clean deps
+.PHONY: cmd/mysqldef/mysqldef cmd/psqldef/psqldef
+
 all: cmd/mysqldef/mysqldef cmd/psqldef/psqldef
 
-.PHONY: cmd/mysqldef/mysqldef
-cmd/mysqldef/mysqldef:
+cmd/mysqldef/mysqldef: deps
 	cd cmd/mysqldef && go build $(GOFLAGS)
 
-.PHONY: cmd/psqldef/psqldef
-cmd/psqldef/psqldef:
+cmd/psqldef/psqldef: deps
 	cd cmd/psqldef && go build $(GOFLAGS)
 
-.PHONY: clean
+deps:
+	go get -t ./...
+
 clean:
 	rm -f cmd/mysqldef/mysqldef
 	rm -f cmd/psqldef/psqldef
