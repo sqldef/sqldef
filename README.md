@@ -192,7 +192,6 @@ Nothing is modified
   - Parse error does not report an error, and sometimes results in SEGV
 - [ ] Drop dynamic link to libc from mysqldef binary
   - The golang library lib/pq is the cause, so psqldef can't be fixed
-- [ ] Unit tests and CI
 
 ## Implemented features
 
