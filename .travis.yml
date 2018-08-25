@@ -7,6 +7,7 @@ branches:
     - /\Av\d+\.\d+\.\d+\z/
 services:
   - mysql
+  - postgresql
 script:
   - make test
 before_deploy:
