@@ -1,4 +1,4 @@
-# sqldef
+# sqldef [![Build Status](https://travis-ci.org/k0kubun/sqldef.svg?branch=master)](https://travis-ci.org/k0kubun/sqldef)
 
 The easiest idempotent MySQL/PostgreSQL schema management by SQL.
 
