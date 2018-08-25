@@ -13,10 +13,38 @@ import (
 	"testing"
 )
 
+func TestMysqldefDryRun(t *testing.T) {
+	resetTestDatabase()
+	writeFile("schema.sql", `
+	  CREATE TABLE users (
+	    name varchar(40),
+	    created_at datetime NOT NULL
+	  );
+	`)
+
+	dryRun := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--dry-run", "--file", "schema.sql")
+	apply := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	assertEquals(t, dryRun, "--- dry run ---\n"+apply)
+}
+
 func TestMysqldefExport(t *testing.T) {
 	resetTestDatabase()
 	out := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--export")
 	assertEquals(t, out, "-- No table exists\n")
+
+	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", `
+	  CREATE TABLE users (
+	    name varchar(40),
+	    created_at datetime NOT NULL
+	  );
+	`)
+	out = assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--export")
+	assertEquals(t, out,
+		"CREATE TABLE `users` (\n"+
+			"  `name` varchar(40) DEFAULT NULL,\n"+
+			"  `created_at` datetime NOT NULL\n"+
+			") ENGINE=InnoDB DEFAULT CHARSET=latin1;\n",
+	)
 }
 
 func TestMysqldefHelp(t *testing.T) {
@@ -38,12 +66,14 @@ func TestMain(m *testing.M) {
 	os.Exit(status)
 }
 
-func mustExecute(command string, args ...string) {
+func mustExecute(command string, args ...string) string {
 	out, err := execute(command, args...)
 	if err != nil {
+		log.Printf("command: '%s %s'", command, strings.Join(args, " "))
 		log.Printf("out: '%s'", out)
 		log.Fatal(err)
 	}
+	return out
 }
 
 func assertedExecute(t *testing.T, command string, args ...string) string {
@@ -69,4 +99,14 @@ func execute(command string, args ...string) (string, error) {
 func resetTestDatabase() {
 	mustExecute("mysql", "-uroot", "-e", "DROP DATABASE IF EXISTS mysqldef_test;")
 	mustExecute("mysql", "-uroot", "-e", "CREATE DATABASE mysqldef_test;")
+}
+
+func writeFile(path string, content string) {
+	file, err := os.Create(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	file.Write(([]byte)(content))
 }

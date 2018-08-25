@@ -13,10 +13,38 @@ import (
 	"testing"
 )
 
+func TestPsqldefDryRun(t *testing.T) {
+	resetTestDatabase()
+	writeFile("schema.sql", `
+	    CREATE TABLE users (
+	        id bigint NOT NULL PRIMARY KEY,
+	        age int
+	    );
+	`)
+
+	dryRun := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--dry-run", "--file", "schema.sql")
+	apply := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+	assertEquals(t, dryRun, "--- dry run ---\n"+apply)
+}
+
 func TestPsqldefExport(t *testing.T) {
 	resetTestDatabase()
 	out := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--export")
 	assertEquals(t, out, "-- No table exists\n")
+
+	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", `
+	    CREATE TABLE users (
+	        id bigint NOT NULL PRIMARY KEY,
+	        age int
+	    );
+	`)
+	out = assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--export")
+	assertEquals(t, out,
+		"CREATE TABLE public.users (\n"+
+			"    id bigint NOT NULL,\n"+
+			"    age integer\n"+
+			");\n",
+	)
 }
 
 func TestPsqldefHelp(t *testing.T) {
@@ -41,6 +69,7 @@ func TestMain(m *testing.M) {
 func mustExecute(command string, args ...string) {
 	out, err := execute(command, args...)
 	if err != nil {
+		log.Printf("command: '%s %s'", command, strings.Join(args, " "))
 		log.Printf("out: '%s'", out)
 		log.Fatal(err)
 	}
@@ -69,4 +98,14 @@ func execute(command string, args ...string) (string, error) {
 func resetTestDatabase() {
 	mustExecute("psql", "-Upostgres", "-c", "DROP DATABASE IF EXISTS psqldef_test;")
 	mustExecute("psql", "-Upostgres", "-c", "CREATE DATABASE psqldef_test;")
+}
+
+func writeFile(path string, content string) {
+	file, err := os.Create(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	file.Write(([]byte)(content))
 }
