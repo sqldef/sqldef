@@ -5,6 +5,8 @@ The easiest idempotent MySQL/PostgreSQL schema management by SQL.
 This is inspired by [Ridgepole](https://github.com/winebarrel/ridgepole) but using SQL,
 so there's no need to remember Ruby DSL.
 
+![demo](./demo.gif)
+
 ## How it works
 
 TODO: diagram
