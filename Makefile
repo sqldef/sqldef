@@ -12,3 +12,8 @@ cmd/mysqldef/mysqldef:
 .PHONY: cmd/psqldef/psqldef
 cmd/psqldef/psqldef:
 	cd cmd/psqldef && go build $(GOFLAGS)
+
+.PHONY: clean
+clean:
+	rm -f cmd/mysqldef/mysqldef
+	rm -f cmd/psqldef/psqldef
