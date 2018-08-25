@@ -7,10 +7,6 @@ so there's no need to remember Ruby DSL.
 
 ![demo](./demo.gif)
 
-## How it works
-
-TODO: diagram
-
 ## Project Status
 
 Proof of Concept.
@@ -197,6 +193,18 @@ Nothing is modified
 - [ ] Drop dynamic link to libc from mysqldef binary
   - The golang library lib/pq is the cause, so psqldef can't be fixed
 - [ ] Unit tests and CI
+
+## Implemented features
+
+More to come...
+
+- MySQL
+  - Create table, drop table
+  - Add column, drop column
+  - Add index, drop index
+- PostgreSQL
+  - Create table, drop table
+  - Add column, drop column
 
 ## License
 
