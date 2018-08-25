@@ -3,3 +3,4 @@ go:
   - "1.10"
 script:
   - make all
+  - make package
