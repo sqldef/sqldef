@@ -39,8 +39,8 @@ func TestPsqldefExport(t *testing.T) {
 	    );
 	`)
 	out = assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--export")
-	assertEquals(t, out,
-		"CREATE TABLE public.users (\n"+
+	assertEquals(t, strings.Replace(out, "public.users", "users", 1), // workaround: local has `public.` but travis doesn't.
+		"CREATE TABLE users (\n"+
 			"    id bigint NOT NULL,\n"+
 			"    age integer\n"+
 			");\n",
