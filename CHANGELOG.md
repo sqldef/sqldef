@@ -1,3 +1,7 @@
+# unreleased
+
+- "-- No table exists" is printed when no table exists on `--export`
+
 # v0.1.1
 
 - Release binaries for more architectures

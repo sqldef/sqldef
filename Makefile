@@ -40,3 +40,7 @@ package-targz: build
 	mkdir -p package
 	cd $(BUILD_DIR) && tar zcvf ../../package/mysqldef_$(GOOS)_$(GOARCH).tar.gz mysqldef
 	cd $(BUILD_DIR) && tar zcvf ../../package/psqldef_$(GOOS)_$(GOARCH).tar.gz psqldef
+
+test: deps
+	cd cmd/mysqldef && go test
+	cd cmd/psqldef && go test

@@ -5,8 +5,11 @@ branches:
   only:
     - master
     - /\Av\d+\.\d+\.\d+\z/
+services:
+  - mysql
+  - postgresql
 script:
-  - make all
+  - make test
 before_deploy:
   - make package
 deploy:
