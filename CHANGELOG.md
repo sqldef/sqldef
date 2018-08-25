@@ -1,3 +1,9 @@
+# v0.1.1
+
+- Release binaries for more architectures
+  - New OS: Windows
+  - New arch: 386, arm, arm64
+
 # v0.1.0
 
 - Initial release
