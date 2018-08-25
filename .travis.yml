@@ -1,6 +1,10 @@
 language: go
 go:
   - '1.10'
+branches:
+  only:
+    - master
+    - /\Av\d+\.\d+\.\d+\z/
 script:
   - make all
 before_deploy:
