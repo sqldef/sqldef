@@ -63,6 +63,21 @@ func TestPsqldefAddColumn(t *testing.T) {
 	assertEquals(t, result, "Run: 'ALTER TABLE users DROP COLUMN name;'\n")
 }
 
+func TestPsqldefCharColumn(t *testing.T) {
+	t.Skip() // Double apply results in parse failure on `character varying(80)`
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE users (\n" +
+		"  id bigint NOT NULL,\n" +
+		"  name varchar(80),\n" +
+		"  age integer\n" +
+		");"
+
+	writeFile("schema.sql", createTable)
+	assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+	assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+}
+
 func TestPsqldefDryRun(t *testing.T) {
 	resetTestDatabase()
 	writeFile("schema.sql", `

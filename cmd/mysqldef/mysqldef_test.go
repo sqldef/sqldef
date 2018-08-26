@@ -107,6 +107,19 @@ func TestMysqldefCreateTableKey(t *testing.T) {
 	assertEquals(t, result, "Run: 'ALTER TABLE users ADD INDEX index_name(name);'\n")
 }
 
+func TestMysqldefCreateTableSyntaxError(t *testing.T) {
+	t.Skip() // invalid memory address or nil pointer dereference
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE users (\n" +
+		"  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n" +
+		"  name varchar(40) DEFAULT NULL,\n" +
+		"  created_at datetime NOT NULL,\n" +
+		");"
+	writeFile("schema.sql", createTable)
+	assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+}
+
 func TestMysqldefDryRun(t *testing.T) {
 	resetTestDatabase()
 	writeFile("schema.sql", `
