@@ -93,6 +93,31 @@ func TestMysqldefAddIndex(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefCreateIndex(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		  name varchar(40) DEFAULT NULL,
+		  created_at datetime NOT NULL
+		);`,
+	)
+	assertApply(t, createTable)
+
+	createIndex1 := "CREATE INDEX index_name ON users (name);"
+	createIndex2 := "CREATE UNIQUE INDEX index_created_at ON users (created_at);"
+	assertApplyOutput(t, createTable+createIndex1+createIndex2, "Run: '"+createIndex1+"'\nRun: '"+createIndex2+"'\n")
+	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
+
+	assertApplyOutput(t, createTable, stripHeredoc(`
+		Run: 'ALTER TABLE users DROP INDEX index_created_at;'
+		Run: 'ALTER TABLE users DROP INDEX index_name;'
+		`,
+	))
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefCreateTableKey(t *testing.T) {
 	resetTestDatabase()
 

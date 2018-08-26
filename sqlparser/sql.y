@@ -258,7 +258,8 @@ func forceEOF(yylex interface{}) {
 %type <byt> exists_opt
 %type <empty> not_exists_opt non_add_drop_or_rename_operation to_opt index_opt
 %type <bytes> reserved_keyword non_reserved_keyword
-%type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt using_opt
+%type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt
+%type <boolVal> unique_opt
 %type <expr> charset_value
 %type <tableIdent> table_id reserved_table_id table_alias as_opt_id
 %type <empty> as_opt
@@ -535,30 +536,48 @@ create_statement:
     $1.TableSpec = $2
     $$ = $1
   }
-| CREATE INDEX sql_id using_opt ON table_name '(' column_list ')'
+| CREATE unique_opt INDEX sql_id ON table_name '(' column_list ')'
   {
     $$ = &DDL{
         Action: CreateIndexStr,
         Table: $6,
         NewName: $6,
         IndexSpec: &IndexSpec{
-          Name: $3,
-          Unique: false,
+          Name: $4,
+          Type: NewColIdent(""),
+          Unique: bool($2),
         },
         IndexCols: $8,
       }
   }
-| CREATE UNIQUE INDEX sql_id using_opt ON table_name '(' column_list ')'
+/* For MySQL */
+| CREATE unique_opt INDEX sql_id USING sql_id ON table_name '(' column_list ')'
   {
     $$ = &DDL{
         Action: CreateIndexStr,
-        Table: $7,
-        NewName: $7,
+        Table: $8,
+        NewName: $8,
         IndexSpec: &IndexSpec{
           Name: $4,
-          Unique: true,
+          Type: $6,
+          Unique: bool($2),
         },
-        IndexCols: $9,
+        IndexCols: $10,
+      }
+  }
+/* For PostgreSQL */
+| CREATE unique_opt INDEX sql_id ON table_name USING sql_id '(' column_list ')'
+  {
+    $$ = &DDL{
+        Action: CreateIndexStr,
+        Table: $6,
+        NewName: $6,
+        IndexSpec: &IndexSpec{
+          Name: $4,
+          Type: $8,
+          Unique: bool($2),
+        },
+        IndexCols: $10,
       }
   }
 | CREATE VIEW table_name ddl_force_eof
@@ -584,6 +603,15 @@ create_statement:
 | CREATE SCHEMA not_exists_opt ID ddl_force_eof
   {
     $$ = &DBDDL{Action: CreateStr, DBName: string($4)}
+  }
+
+unique_opt:
+  {
+    $$ = BoolVal(false)
+  }
+| UNIQUE
+  {
+    $$ = BoolVal(true)
   }
 
 vindex_type_opt:
@@ -2922,11 +2950,6 @@ index_opt:
   { $$ = struct{}{} }
 | KEY
   { $$ = struct{}{} }
-
-using_opt:
-  { $$ = ColIdent{} }
-| USING sql_id
-  { $$ = $2 }
 
 sql_id:
   ID

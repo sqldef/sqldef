@@ -1205,6 +1205,7 @@ const (
 
 type IndexSpec struct {
 	Name   ColIdent
+	Type   ColIdent
 	Unique bool
 }
 
