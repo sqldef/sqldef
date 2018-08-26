@@ -113,7 +113,11 @@ func parseTable(stmt *sqlparser.DDL) Table {
 	}
 }
 
-func parseIndex(stmt *sqlparser.DDL) Index {
+func parseIndex(stmt *sqlparser.DDL) (Index, error) {
+	if stmt.IndexSpec == nil {
+		return Index{}, fmt.Errorf("stmt.IndexSpec was null on parseIndex: %#v", stmt)
+	}
+
 	indexColumns := []IndexColumn{}
 	for _, colIdent := range stmt.IndexCols {
 		indexColumns = append(
@@ -125,14 +129,13 @@ func parseIndex(stmt *sqlparser.DDL) Index {
 		)
 	}
 
-	// TODO: check null of indexspec (should be always non-null for now, though)
 	return Index{
 		name:      stmt.IndexSpec.Name.String(),
 		indexType: "", // not supported in parser yet
 		columns:   indexColumns,
 		primary:   false, // not supported in parser yet
 		unique:    stmt.IndexSpec.Unique,
-	}
+	}, nil
 }
 
 // Parse DDL like `CREATE TABLE` or `ALTER TABLE`.
@@ -151,16 +154,29 @@ func parseDDL(ddl string) (DDL, error) {
 				statement: ddl,
 				table:     parseTable(stmt),
 			}, nil
+		} else if stmt.Action == "create index" {
+			index, err := parseIndex(stmt)
+			if err != nil {
+				return nil, err
+			}
+			return &CreateIndex{
+				statement: ddl,
+				tableName: stmt.Table.Name.String(),
+				index:     index,
+			}, nil
 		} else if stmt.Action == "add index" {
-			// TODO: check null of index spec and return error
+			index, err := parseIndex(stmt)
+			if err != nil {
+				return nil, err
+			}
 			return &AddIndex{
 				statement: ddl,
 				tableName: stmt.Table.Name.String(),
-				index:     parseIndex(stmt),
+				index:     index,
 			}, nil
 		} else {
 			return nil, fmt.Errorf(
-				"unsupported type of DDL action (only 'create table' and 'alter table ... add index' are supported) '%s': %s",
+				"unsupported type of DDL action (only 'CREATE TABLE', 'CREATE INDEX' and 'ALTER TABLE ADD INDEX' are supported) '%s': %s",
 				stmt.Action, ddl,
 			)
 		}

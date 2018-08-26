@@ -73,6 +73,21 @@ func TestPsqldefAddColumn(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestPsqldefCreateIndex(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name text,
+		  age integer
+		);`,
+	)
+	createIndex := "CREATE INDEX index_name on users (name);"
+	assertApplyOutput(t, createTable+"\n"+createIndex, "Run: '"+createTable+"'\nRun: '"+createIndex+"'\n")
+	// assertApplyOutput(t, createTable+"\n"+createIndex, nothingModified)
+}
+
 func TestPsqldefDataTypes(t *testing.T) {
 	resetTestDatabase()
 

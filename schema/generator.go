@@ -61,28 +61,18 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 			table := desired.table // copy table
 			g.desiredTables = append(g.desiredTables, &table)
+		case *CreateIndex:
+			indexDDLs, err := g.generateDDLsForCreateIndex(desired.tableName, desired.index, "CREATE INDEX", ddl.Statement())
+			if err != nil {
+				return ddls, err
+			}
+			ddls = append(ddls, indexDDLs...)
 		case *AddIndex:
-			currentTable := findTableByName(g.currentTables, desired.tableName)
-			if currentTable == nil {
-				return nil, fmt.Errorf("alter table is performed for inexistent table '%s': '%s'", desired.tableName, ddl.Statement())
+			indexDDLs, err := g.generateDDLsForCreateIndex(desired.tableName, desired.index, "ALTER TABLE", ddl.Statement())
+			if err != nil {
+				return ddls, err
 			}
-			if containsString(convertIndexesToIndexNames(currentTable.indexes), desired.index.name) {
-				// TODO: compare index definition and change type if necessary
-			} else {
-				// Index not found, add index.
-				ddls = append(ddls, ddl.Statement())
-				currentTable.indexes = append(currentTable.indexes, desired.index)
-			}
-
-			// Examine indexes in desiredTable to delete obsoleted indexes later
-			desiredTable := findTableByName(g.desiredTables, desired.tableName)
-			if desiredTable == nil {
-				return nil, fmt.Errorf("alter table is performed before create table '%s': '%s'", desired.tableName, ddl.Statement())
-			}
-			if containsString(convertIndexesToIndexNames(desiredTable.indexes), desired.index.name) {
-				return nil, fmt.Errorf("index '%s' is doubly created against table '%s': '%s'", desired.index.name, desired.tableName, ddl.Statement())
-			}
-			desiredTable.indexes = append(desiredTable.indexes, desired.index)
+			ddls = append(ddls, indexDDLs...)
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", desired)
 		}
@@ -163,6 +153,36 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			ddls = append(ddls, ddl)
 		}
 	}
+
+	return ddls, nil
+}
+
+// Shared by `CREATE INDEX` and `ALTER TABLE ADD INDEX`.
+// This manages `g.currentTables` unlike `generateDDLsForCreateTable`...
+func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex Index, action string, statement string) ([]string, error) {
+	ddls := []string{}
+
+	currentTable := findTableByName(g.currentTables, tableName)
+	if currentTable == nil {
+		return nil, fmt.Errorf("%s is performed for inexistent table '%s': '%s'", action, tableName, statement)
+	}
+	if containsString(convertIndexesToIndexNames(currentTable.indexes), desiredIndex.name) {
+		// TODO: compare index definition and change type if necessary
+	} else {
+		// Index not found, add index.
+		ddls = append(ddls, statement)
+		currentTable.indexes = append(currentTable.indexes, desiredIndex)
+	}
+
+	// Examine indexes in desiredTable to delete obsoleted indexes later
+	desiredTable := findTableByName(g.desiredTables, tableName)
+	if desiredTable == nil {
+		return nil, fmt.Errorf("%s is performed before create table '%s': '%s'", action, tableName, statement)
+	}
+	if containsString(convertIndexesToIndexNames(desiredTable.indexes), desiredIndex.name) {
+		return nil, fmt.Errorf("index '%s' is doubly created against table '%s': '%s'", desiredIndex.name, tableName, statement)
+	}
+	desiredTable.indexes = append(desiredTable.indexes, desiredIndex)
 
 	return ddls, nil
 }

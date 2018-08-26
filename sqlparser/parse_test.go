@@ -1344,8 +1344,8 @@ func TestCaseSensitivity(t *testing.T) {
 		input:  "create table A (\n\t`B` int\n)",
 		output: "create table A (\n\tB int\n)",
 	}, {
-		input:  "create index b on A",
-		output: "alter table A",
+		input:  "create index b on A (c)",
+		output: "create index table A",
 	}, {
 		input:  "alter table A foo",
 		output: "alter table A",

@@ -9,6 +9,12 @@ type CreateTable struct {
 	table     Table
 }
 
+type CreateIndex struct {
+	statement string
+	tableName string
+	index     Index
+}
+
 type AddIndex struct {
 	statement string
 	tableName string
@@ -84,6 +90,10 @@ const (
 )
 
 func (c *CreateTable) Statement() string {
+	return c.statement
+}
+
+func (c *CreateIndex) Statement() string {
 	return c.statement
 }
 

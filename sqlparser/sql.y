@@ -256,7 +256,7 @@ func forceEOF(yylex interface{}) {
 %type <str> extended_opt full_opt from_database_opt tables_or_processlist
 %type <showFilter> like_or_where_opt
 %type <byt> exists_opt
-%type <empty> not_exists_opt non_add_drop_or_rename_operation to_opt index_opt constraint_opt
+%type <empty> not_exists_opt non_add_drop_or_rename_operation to_opt index_opt
 %type <bytes> reserved_keyword non_reserved_keyword
 %type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt using_opt
 %type <expr> charset_value
@@ -535,10 +535,31 @@ create_statement:
     $1.TableSpec = $2
     $$ = $1
   }
-| CREATE constraint_opt INDEX ID using_opt ON table_name ddl_force_eof
+| CREATE INDEX sql_id using_opt ON table_name '(' column_list ')'
   {
-    // Change this to an alter statement
-    $$ = &DDL{Action: AlterStr, Table: $7, NewName:$7}
+    $$ = &DDL{
+        Action: CreateIndexStr,
+        Table: $6,
+        NewName: $6,
+        IndexSpec: &IndexSpec{
+          Name: $3,
+          Unique: false,
+        },
+        IndexCols: $8,
+      }
+  }
+| CREATE UNIQUE INDEX sql_id using_opt ON table_name '(' column_list ')'
+  {
+    $$ = &DDL{
+        Action: CreateIndexStr,
+        Table: $7,
+        NewName: $7,
+        IndexSpec: &IndexSpec{
+          Name: $4,
+          Unique: true,
+        },
+        IndexCols: $9,
+      }
   }
 | CREATE VIEW table_name ddl_force_eof
   {
@@ -2900,13 +2921,6 @@ index_opt:
   INDEX
   { $$ = struct{}{} }
 | KEY
-  { $$ = struct{}{} }
-
-constraint_opt:
-  { $$ = struct{}{} }
-| UNIQUE
-  { $$ = struct{}{} }
-| sql_id
   { $$ = struct{}{} }
 
 using_opt:

@@ -674,6 +674,7 @@ const (
 	AddColVindexStr  = "add vindex"
 	DropColVindexStr = "drop vindex"
 	AddIndexStr      = "add index"
+	CreateIndexStr   = "create index"
 
 	// Vindex DDL param to specify the owner of a vindex
 	VindexOwnerStr = "owner"
