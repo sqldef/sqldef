@@ -1,6 +1,7 @@
 # unreleased
 
 - "-- No table exists" is printed when no table exists on `--export`
+- Improve error handling of unsupported features
 
 # v0.1.1
 
@@ -11,6 +12,8 @@
 # v0.1.0
 
 - Initial release
+  - OS: Linux, macOS
+  - arch: amd64
 - `mysqldef` for MySQL
   - Create table, drop table
   - Add column, drop column

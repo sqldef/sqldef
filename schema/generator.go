@@ -46,7 +46,11 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		case *CreateTable:
 			if currentTable := findTableByName(g.currentTables, desired.table.name); currentTable != nil {
 				// Table already exists, guess required DDLs.
-				ddls = append(ddls, g.generateDDLsForCreateTable(*currentTable, *desired)...)
+				tableDDLs, err := g.generateDDLsForCreateTable(*currentTable, *desired)
+				if err != nil {
+					return ddls, err
+				}
+				ddls = append(ddls, tableDDLs...)
 				mergeTable(currentTable, desired.table)
 			} else {
 				// Table not found, create table.
@@ -54,7 +58,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				table := desired.table // copy table
 				g.currentTables = append(g.currentTables, &table)
 			}
-			table := desired.table // copy
+			table := desired.table // copy table
 			g.desiredTables = append(g.desiredTables, &table)
 		case *AddIndex:
 			currentTable := findTableByName(g.currentTables, desired.tableName)
@@ -124,7 +128,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	return ddls, nil
 }
 
-func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired CreateTable) []string {
+func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired CreateTable) ([]string, error) {
 	ddls := []string{}
 	currentColumnNames := convertColumnsToColumnNames(currentTable.columns)
 
@@ -135,15 +139,16 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			// TODO: Add unique index if existing column does not have unique flag and there's no unique index!!!!
 		} else {
 			// Column not found, add column.
-			ddl := fmt.Sprintf(
-				"ALTER TABLE %s ADD COLUMN %s",
-				desired.table.name, g.generateColumnDefinition(column),
-			) // TODO: escape
+			definition, err := g.generateColumnDefinition(column)
+			if err != nil {
+				return ddls, err
+			}
+			ddl := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", desired.table.name, definition) // TODO: escape
 			ddls = append(ddls, ddl)
 		}
 	}
 
-	return ddls
+	return ddls, nil
 }
 
 // Even though simulated table doesn't have index, primary or unique could exist in column definitions.
@@ -161,7 +166,7 @@ func (g *Generator) generateDDLsForAbsentIndex(index Index, currentTable Table, 
 			}
 		}
 
-		// If nil, it should be already `DROP COLUMN`-ed. Ignore it.
+		// If nil, it will be `DROP COLUMN`-ed. Ignore it.
 		if primaryKeyColumn != nil && primaryKeyColumn.name != index.columns[0].column { // TODO: check length of index.columns
 			// TODO: handle this. Rename primary key column...?
 			return ddls, fmt.Errorf(
@@ -193,7 +198,7 @@ func (g *Generator) generateDDLsForAbsentIndex(index Index, currentTable Table, 
 	return ddls, nil
 }
 
-func (g *Generator) generateColumnDefinition(column Column) string {
+func (g *Generator) generateColumnDefinition(column Column) (string, error) {
 	// TODO: make string concatenation faster?
 	// TODO: consider escape?
 
@@ -231,8 +236,7 @@ func (g *Generator) generateColumnDefinition(column Column) string {
 				definition += "DEFAULT b'0' "
 			}
 		default:
-			// TODO: should this be an error?
-			definition += fmt.Sprintf("DEFAULT %s ", string(column.defaultVal.raw))
+			return "", fmt.Errorf("unsupported default value type (valueType: '%d') in column: %#v", column.defaultVal.valueType, column)
 		}
 	}
 
@@ -241,6 +245,8 @@ func (g *Generator) generateColumnDefinition(column Column) string {
 	}
 
 	switch column.keyOption {
+	case ColumnKeyNone:
+		// noop
 	case ColumnKeyUnique:
 		definition += "UNIQUE "
 	case ColumnKeyUniqueKey:
@@ -248,10 +254,10 @@ func (g *Generator) generateColumnDefinition(column Column) string {
 	case ColumnKeyPrimary:
 		definition += "PRIMARY KEY "
 	default:
-		// TODO: return error
+		return "", fmt.Errorf("unsupported column key (keyOption: '%d') in column: %#v", column.keyOption, column)
 	}
 
-	return definition
+	return definition, nil
 }
 
 // Destructively modify table1 to have table2 columns/indexes
