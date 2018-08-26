@@ -205,4 +205,6 @@ More to come...
 
 ## License
 
-MIT License
+Unless otherwise noted, the sqldef source files are distributed under the MIT License found in the LICENSE file.
+
+[sqlparser](./sqlparser) is distributed under the Apache Version 2.0 license found in the sqlparser/LICENSE.md file.
