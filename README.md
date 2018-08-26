@@ -185,9 +185,8 @@ Nothing is modified
   - Basically this tool is tested/developed against MySQL. So psqldef has more unfixed bugs than mysqldef.
   - Looks like even basic index handling is not working for now... to be fixed soon
   - Drop `pg_dump` command dependency to dump schema?
-  - The SQL parser said below is not good at parsing SQL for PostgreSQL and causes unexpected parse errors.
-- [ ] Replace SQL parser
-  - xwb1989/sqlparser was [not for parsing DDL](https://github.com/xwb1989/sqlparser/issues/35).
+- [ ] Improve SQL parser
+  - It's not good at parsing SQL for PostgreSQL and causes unexpected parse errors.
   - Actual MySQL SQL parser is more flexible than its behavior
   - Parse error does not report an error, and sometimes results in SEGV
 
@@ -205,4 +204,6 @@ More to come...
 
 ## License
 
-MIT License
+Unless otherwise noted, the sqldef source files are distributed under the MIT License found in the LICENSE file.
+
+[sqlparser](./sqlparser) is distributed under the Apache Version 2.0 license found in the sqlparser/LICENSE.md file.
