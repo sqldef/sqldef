@@ -82,7 +82,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		}
 	}
 
-	// Clean up obsoleted tables, indexes
+	// Clean up obsoleted tables, indexes, columns
 	for _, currentTable := range g.currentTables {
 		desiredTable := findTableByName(g.desiredTables, currentTable.name)
 		if desiredTable == nil {
@@ -92,7 +92,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			continue
 		}
 
-		// Table is expected to exist. Check indexes. (Column is already examined in generateDDLsForCreateTable. TODO: move that to here)
+		// Table is expected to exist. Check indexes.
 		for _, index := range currentTable.indexes {
 			if containsString(convertIndexesToIndexNames(desiredTable.indexes), index.name) {
 				// Index exists. TODO: check index type?
@@ -139,6 +139,16 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return ddls, fmt.Errorf("unsupported indexType: '%s'", index.indexType)
 			}
 		}
+
+		// Check columns.
+		for _, column := range currentTable.columns {
+			if !containsString(convertColumnsToColumnNames(desiredTable.columns), column.name) {
+				// Column is obsoleted. Drop column.
+				ddl := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", desiredTable.name, column.name) // TODO: escape
+				ddls = append(ddls, ddl)
+				// TODO: simulate to remove column from `currentTable.columns`?
+			}
+		}
 	}
 
 	return ddls, nil
@@ -146,20 +156,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired CreateTable) []string {
 	ddls := []string{}
-
-	// NOTE: g.generateDDLs replace the whole table in g.currentTables,
-	// so this function does not need to update g.currentTables.
-
-	// Clean up unnecessary columns
-	// This can be examined here because sqldef doesn't allow add column DDL in schema.sql.
-	desiredColumnNames := convertColumnsToColumnNames(desired.table.columns)
 	currentColumnNames := convertColumnsToColumnNames(currentTable.columns)
-	for _, columnName := range currentColumnNames {
-		if !containsString(desiredColumnNames, columnName) {
-			ddl := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", desired.table.name, columnName) // TODO: escape
-			ddls = append(ddls, ddl)
-		}
-	}
 
 	// Examine each columns
 	for _, column := range desired.table.columns {
