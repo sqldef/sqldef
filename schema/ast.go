@@ -38,7 +38,7 @@ type Column struct {
 
 type Index struct {
 	name      string
-	indexType string // Parsed in "create table" but not parsed in "add index". So actually not used yet. Just use primary/unique.
+	indexType string // Parsed only in "create table" but not parsed in "add index". Only used inside `generateDDLsForCreateTable`.
 	columns   []IndexColumn
 	primary   bool
 	unique    bool

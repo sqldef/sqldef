@@ -184,9 +184,6 @@ Nothing is modified
 - [ ] Better PostgreSQL support
   - Basic index handling is not working for now... to be fixed soon
   - Drop `pg_dump` command dependency to dump schema?
-- [ ] Improve SQL parser
-  - It's not good at parsing SQL for PostgreSQL and causes unexpected parse errors.
-  - Actual MySQL SQL parser is more flexible than its behavior
 
 ## Implemented features
 

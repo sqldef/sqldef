@@ -1,3 +1,7 @@
+# unreleased
+
+- Support `ADD INDEX` by modifying `CREATE TABLE` on MySQL
+
 # v0.1.4
 
 - Parse column definition more flexibly

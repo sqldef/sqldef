@@ -94,7 +94,6 @@ func TestMysqldefAddIndex(t *testing.T) {
 }
 
 func TestMysqldefCreateTableKey(t *testing.T) {
-	t.Skip() // Nothing is modified, for now.
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -111,10 +110,15 @@ func TestMysqldefCreateTableKey(t *testing.T) {
 		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
 		  name varchar(40) DEFAULT NULL,
 		  created_at datetime NOT NULL,
-		  KEY index_name(name)
+		  KEY index_name(name),
+		  UNIQUE KEY index_created_at(created_at)
 		);`,
 	)
-	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users ADD INDEX index_name(name);'\n")
+	assertApplyOutput(t, createTable, stripHeredoc(`
+		Run: 'ALTER TABLE users ADD key index_name(name);'
+		Run: 'ALTER TABLE users ADD unique key index_created_at(created_at);'
+		`,
+	))
 }
 
 func TestMysqldefCreateTableSyntaxError(t *testing.T) {

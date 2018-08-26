@@ -129,13 +129,13 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	return ddls, nil
 }
 
+// In the caller, `mergeTable` manages `g.currentTables`.
 func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired CreateTable) ([]string, error) {
 	ddls := []string{}
-	currentColumnNames := convertColumnsToColumnNames(currentTable.columns)
 
-	// Examine each columns
+	// Examine each column
 	for _, column := range desired.table.columns {
-		if containsString(currentColumnNames, column.name) {
+		if containsString(convertColumnsToColumnNames(currentTable.columns), column.name) {
 			// TODO: Compare types and change column type!!!
 			// TODO: Add unique index if existing column does not have unique flag and there's no unique index!!!!
 		} else {
@@ -145,6 +145,21 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				return ddls, err
 			}
 			ddl := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", desired.table.name, definition) // TODO: escape
+			ddls = append(ddls, ddl)
+		}
+	}
+
+	// Examine each index
+	for _, index := range desired.table.indexes {
+		if containsString(convertIndexesToIndexNames(currentTable.indexes), index.name) {
+			// TODO: Compare types and change column type!!!
+		} else {
+			// Index not found, add index.
+			definition, err := g.generateIndexDefinition(index)
+			if err != nil {
+				return ddls, err
+			}
+			ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", desired.table.name, definition) // TODO: escape
 			ddls = append(ddls, ddl)
 		}
 	}
@@ -259,6 +274,22 @@ func (g *Generator) generateColumnDefinition(column Column) (string, error) {
 	}
 
 	definition = strings.TrimSuffix(definition, " ")
+	return definition, nil
+}
+
+func (g *Generator) generateIndexDefinition(index Index) (string, error) {
+	definition := index.indexType
+
+	columns := []string{}
+	for _, indexColumn := range index.columns {
+		columns = append(columns, indexColumn.column)
+	}
+
+	definition += fmt.Sprintf(
+		" %s(%s)",
+		index.name,
+		strings.Join(columns, ", "), // TODO: escape
+	)
 	return definition, nil
 }
 
