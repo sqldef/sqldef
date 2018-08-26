@@ -39,21 +39,6 @@ func GenerateIdempotentDDLs(desiredSQL string, currentSQL string) ([]string, err
 func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	ddls := []string{}
 
-	desiredTables, err := convertDDLsToTables(desiredDDLs)
-	if err != nil {
-		return nil, err
-	}
-
-	// Clean up unnecessary tables
-	desiredTableNames := convertTablesToTableNames(desiredTables)
-	currentTableNames := convertTablesToTableNames(g.currentTables)
-	for _, tableName := range currentTableNames {
-		if !containsString(desiredTableNames, tableName) {
-			ddls = append(ddls, fmt.Sprintf("DROP TABLE %s", tableName)) // TODO: escape table name
-			g.currentTables = removeTableByName(g.currentTables, tableName)
-		}
-	}
-
 	// Incrementally examine desiredDDLs
 	for _, ddl := range desiredDDLs {
 		switch desired := ddl.(type) {
@@ -97,12 +82,13 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		}
 	}
 
-	// Clean up obsoleted indexes
+	// Clean up obsoleted tables, indexes
 	for _, currentTable := range g.currentTables {
 		desiredTable := findTableByName(g.desiredTables, currentTable.name)
 		if desiredTable == nil {
-			// Obsoleted table found. Unreachable, for now.
-			// TODO: move the "Clean up unnecessary tables" logic to here.
+			// Obsoleted table found. Drop table.
+			ddls = append(ddls, fmt.Sprintf("DROP TABLE %s", currentTable.name)) // TODO: escape table name
+			g.currentTables = removeTableByName(g.currentTables, currentTable.name)
 			continue
 		}
 
