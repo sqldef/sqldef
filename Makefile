@@ -1,5 +1,5 @@
 # This actually doesn't work due to lib/pq
-# TODO: split drivers to different packages
+# TODO: split adapters to different packages
 GOFLAGS := -tags netgo -installsuffix netgo -ldflags '-w -s --extldflags "-static"'
 GOVERSION=$(shell go version)
 GOOS=$(word 1,$(subst /, ,$(lastword $(GOVERSION))))

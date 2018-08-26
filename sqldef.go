@@ -8,13 +8,13 @@ import (
 	"log"
 	"os"
 
-	"github.com/k0kubun/sqldef/driver"
+	"github.com/k0kubun/sqldef/adapter"
 	"github.com/k0kubun/sqldef/schema"
 )
 
 type Options struct {
 	SqlFile    string
-	DbType     driver.DatabaseType
+	DbType     adapter.DatabaseType
 	DbUser     string
 	DbPassword string
 	DbHost     string
@@ -25,7 +25,7 @@ type Options struct {
 
 // Main function shared by `mysqldef` and `psqldef`
 func Run(database string, options *Options) {
-	db, err := driver.NewDatabase(driver.Config{
+	db, err := adapter.NewDatabase(adapter.Config{
 		DbType:   options.DbType,
 		DbName:   database,
 		User:     options.DbUser,

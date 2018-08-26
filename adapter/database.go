@@ -1,5 +1,5 @@
-// This package has database driver layer. Never deal with DDL construction.
-package driver
+// This package has database adapter layer. Never deal with DDL construction.
+package adapter
 
 import (
 	"database/sql"

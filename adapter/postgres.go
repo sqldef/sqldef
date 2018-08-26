@@ -1,4 +1,4 @@
-package driver
+package adapter
 
 import (
 	"fmt"

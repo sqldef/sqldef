@@ -7,7 +7,7 @@ import (
 
 	"github.com/jessevdk/go-flags"
 	"github.com/k0kubun/sqldef"
-	"github.com/k0kubun/sqldef/driver"
+	"github.com/k0kubun/sqldef/adapter"
 )
 
 // Return parsed options and schema filename
@@ -49,7 +49,7 @@ func parseOptions(args []string) (string, *sqldef.Options) {
 
 	options := sqldef.Options{
 		SqlFile:    opts.File,
-		DbType:     driver.DatabaseTypeMysql,
+		DbType:     adapter.DatabaseTypeMysql,
 		DbUser:     opts.User,
 		DbPassword: opts.Password,
 		DbHost:     opts.Host,
