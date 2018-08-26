@@ -55,7 +55,6 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	}
 
 	config := adapter.Config{
-		DbType:   adapter.DatabaseTypeMysql,
 		DbName:   database,
 		User:     opts.User,
 		Password: opts.Password,

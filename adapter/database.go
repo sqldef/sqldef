@@ -7,15 +7,7 @@ import (
 	"strings"
 )
 
-type DatabaseType int
-
-const (
-	DatabaseTypeMysql = DatabaseType(iota)
-	DatabaseTypePostgres
-)
-
 type Config struct {
-	DbType   DatabaseType
 	DbName   string
 	User     string
 	Password string
