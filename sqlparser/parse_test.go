@@ -1866,7 +1866,7 @@ func TestCreateTable(t *testing.T) {
 
 	sql := "create table t garbage"
 	tree, err := Parse(sql)
-	if err != nil {
+	if err == nil { // should return err
 		t.Errorf("input: %s, err: %v", sql, err)
 	}
 

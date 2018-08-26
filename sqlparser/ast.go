@@ -22,7 +22,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"strings"
 
 	"github.com/k0kubun/sqldef/sqlparser/dependency/querypb"
@@ -49,9 +48,10 @@ func Parse(sql string) (Statement, error) {
 	tokenizer := NewStringTokenizer(sql)
 	if yyParse(tokenizer) != 0 {
 		if tokenizer.partialDDL != nil {
-			log.Printf("ignoring error parsing DDL '%s': %v", sql, tokenizer.LastError)
 			tokenizer.ParseTree = tokenizer.partialDDL
-			return tokenizer.ParseTree, nil
+			return tokenizer.ParseTree, fmt.Errorf(
+				"found syntax error when parsing DDL \"%s\": %v", sql, tokenizer.LastError,
+			)
 		}
 		return nil, tokenizer.LastError
 	}

@@ -118,17 +118,7 @@ func TestMysqldefCreateTableKey(t *testing.T) {
 }
 
 func TestMysqldefCreateTableSyntaxError(t *testing.T) {
-	t.Skip() // invalid memory address or nil pointer dereference
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-		  name varchar(40) DEFAULT NULL,
-		  created_at datetime NOT NULL,
-		);`,
-	)
-	assertApply(t, createTable)
+	assertApplyFailure(t, "CREATE TABLE users (id bigint,);", `found syntax error when parsing DDL "CREATE TABLE users (id bigint,)": syntax error at position 32`+"\n")
 }
 
 //
@@ -196,6 +186,15 @@ func assertApply(t *testing.T, schema string) {
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	writeFile("schema.sql", schema)
 	actual := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	assertEquals(t, actual, expected)
+}
+
+func assertApplyFailure(t *testing.T, schema string, expected string) {
+	writeFile("schema.sql", schema)
+	actual, err := execute("mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	if err == nil {
+		t.Errorf("expected 'mysqldef -uroot mysqldef_test --file schema.sql' to fail but succeeded with: %s", actual)
+	}
 	assertEquals(t, actual, expected)
 }
 

@@ -42,7 +42,8 @@ func Run(db adapter.Database, options *Options) {
 
 	ddls, err := schema.GenerateIdempotentDDLs(desiredDDLs, currentDDLs)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 	if len(ddls) == 0 {
 		fmt.Println("Nothing is modified")

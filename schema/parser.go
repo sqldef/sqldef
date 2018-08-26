@@ -4,7 +4,6 @@ package schema
 
 import (
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 
@@ -140,9 +139,8 @@ func parseIndex(stmt *sqlparser.DDL) Index {
 // This doesn't support destructive DDL like `DROP TABLE`.
 func parseDDL(ddl string) (DDL, error) {
 	stmt, err := sqlparser.Parse(ddl)
-	// TODO: sqlparser says "ignoring error parsing DDL" but ignoring it causes SEGV.
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	switch stmt := stmt.(type) {
