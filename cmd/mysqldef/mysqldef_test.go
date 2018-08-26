@@ -171,6 +171,7 @@ func mustExecute(command string, args ...string) string {
 }
 
 func assertedExecute(t *testing.T, command string, args ...string) string {
+	// TODO: capture and report stdout/stderr properly
 	out, err := execute(command, args...)
 	if err != nil {
 		t.Errorf("failed to execute '%s %s' (out: '%s'): %s", command, strings.Join(args, " "), out, err)

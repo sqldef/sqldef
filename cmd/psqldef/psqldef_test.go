@@ -13,6 +13,56 @@ import (
 	"testing"
 )
 
+func TestPsqldefCreateTable(t *testing.T) {
+	resetTestDatabase()
+
+	createTable1 := "CREATE TABLE users (\n" +
+		"  id bigint NOT NULL,\n" +
+		"  name text,\n" +
+		"  age integer\n" +
+		");"
+	createTable2 := "CREATE TABLE bigdata (\n" +
+		"  data bigint\n" +
+		");"
+
+	writeFile("schema.sql", createTable1+"\n"+createTable2)
+	result := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+	assertEquals(t, result, "Run: '"+createTable1+"'\n"+"Run: '"+createTable2+"'\n")
+
+	writeFile("schema.sql", createTable1)
+	result = assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+	assertEquals(t, result, "Run: 'DROP TABLE bigdata;'\n")
+}
+
+func TestPsqldefAddColumn(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE users (\n" +
+		"  id bigint NOT NULL,\n" +
+		"  name text\n" +
+		");"
+	writeFile("schema.sql", createTable)
+	result := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+	assertEquals(t, result, "Run: '"+createTable+"'\n")
+
+	createTable = "CREATE TABLE users (\n" +
+		"  id bigint NOT NULL,\n" +
+		"  name text,\n" +
+		"  age integer\n" +
+		");"
+	writeFile("schema.sql", createTable)
+	result = assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+	assertEquals(t, result, "Run: 'ALTER TABLE users ADD COLUMN age integer ;'\n")
+
+	createTable = "CREATE TABLE users (\n" +
+		"  id bigint NOT NULL,\n" +
+		"  age integer\n" +
+		");"
+	writeFile("schema.sql", createTable)
+	result = assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+	assertEquals(t, result, "Run: 'ALTER TABLE users DROP COLUMN name;'\n")
+}
+
 func TestPsqldefDryRun(t *testing.T) {
 	resetTestDatabase()
 	writeFile("schema.sql", `
@@ -76,6 +126,7 @@ func mustExecute(command string, args ...string) {
 }
 
 func assertedExecute(t *testing.T, command string, args ...string) string {
+	// TODO: capture and report stdout/stderr properly
 	out, err := execute(command, args...)
 	if err != nil {
 		t.Errorf("failed to execute '%s %s' (out: '%s'): %s", command, strings.Join(args, " "), out, err)
