@@ -1,26 +1,35 @@
-package adapter
+package postgres
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
 
+	"github.com/k0kubun/sqldef/adapter"
 	_ "github.com/lib/pq"
 )
 
-func postgresBuildDSN(config Config) string {
-	user := config.User
-	password := config.Password
-	host := fmt.Sprintf("%s:%d", config.Host, config.Port)
-	database := config.DbName
-
-	// TODO: uri escape
-	return fmt.Sprintf("postgres://%s:%s@%s/%s", user, password, host, database)
+type PostgresDatabase struct {
+	config adapter.Config
+	db     *sql.DB
 }
 
-func (d *Database) postgresTableNames() ([]string, error) {
+func NewDatabase(config adapter.Config) (adapter.Database, error) {
+	db, err := sql.Open("postgres", postgresBuildDSN(config))
+	if err != nil {
+		return nil, err
+	}
+
+	return &PostgresDatabase{
+		db:     db,
+		config: config,
+	}, nil
+}
+
+func (d *PostgresDatabase) TableNames() ([]string, error) {
 	rows, err := d.db.Query("select table_name from information_schema.tables where table_schema='public';")
 	if err != nil {
 		return nil, err
@@ -40,7 +49,7 @@ func (d *Database) postgresTableNames() ([]string, error) {
 
 // Due to PostgreSQL's limitation, depending on pb_dump(1) availability in client.
 // Possibly it can be solved by constructing the complex query, but it would be hacky anyway.
-func (d *Database) postgresDumpTableDDL(table string) (string, error) {
+func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	ddl, err := runPgDump(d.config, table)
 	if err != nil {
 		return "", err
@@ -95,7 +104,15 @@ func (d *Database) postgresDumpTableDDL(table string) (string, error) {
 	return ddl, nil
 }
 
-func runPgDump(config Config, table string) (string, error) {
+func (d *PostgresDatabase) DB() *sql.DB {
+	return d.db
+}
+
+func (d *PostgresDatabase) Close() error {
+	return d.db.Close()
+}
+
+func runPgDump(config adapter.Config, table string) (string, error) {
 	cmd := exec.Command(
 		"pg_dump", config.DbName, "-t", table,
 		"-U", config.User, "-h", config.Host, "-p", fmt.Sprintf("%d", config.Port),
@@ -111,4 +128,14 @@ func runPgDump(config Config, table string) (string, error) {
 	}
 
 	return string(out), nil
+}
+
+func postgresBuildDSN(config adapter.Config) string {
+	user := config.User
+	password := config.Password
+	host := fmt.Sprintf("%s:%d", config.Host, config.Port)
+	database := config.DbName
+
+	// TODO: uri escape
+	return fmt.Sprintf("postgres://%s:%s@%s/%s", user, password, host, database)
 }

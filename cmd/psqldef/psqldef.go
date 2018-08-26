@@ -8,11 +8,12 @@ import (
 	"github.com/jessevdk/go-flags"
 	"github.com/k0kubun/sqldef"
 	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/adapter/postgres"
 )
 
 // Return parsed options and schema filename
 // TODO: Support `sqldef schema.sql -opt val...`
-func parseOptions(args []string) (string, *sqldef.Options) {
+func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	var opts struct {
 		User     string `short:"U" long:"user" description:"PostgreSQL user name" value-name:"username" default:"postgres"`
 		Password string `short:"W" long:"password" description:"PostgreSQL user password" value-name:"password"`
@@ -57,10 +58,26 @@ func parseOptions(args []string) (string, *sqldef.Options) {
 		DryRun:     opts.DryRun,
 		Export:     opts.Export,
 	}
-	return database, &options
+
+	config := adapter.Config{
+		DbType:   adapter.DatabaseTypeMysql,
+		DbName:   database,
+		User:     options.DbUser,
+		Password: options.DbPassword,
+		Host:     options.DbHost,
+		Port:     options.DbPort,
+	}
+	return config, &options
 }
 
 func main() {
-	database, options := parseOptions(os.Args[1:])
+	config, options := parseOptions(os.Args[1:])
+
+	database, err := postgres.NewDatabase(config)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer database.Close()
+
 	sqldef.Run(database, options)
 }

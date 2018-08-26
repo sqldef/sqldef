@@ -24,21 +24,8 @@ type Options struct {
 }
 
 // Main function shared by `mysqldef` and `psqldef`
-func Run(database string, options *Options) {
-	db, err := adapter.NewDatabase(adapter.Config{
-		DbType:   options.DbType,
-		DbName:   database,
-		User:     options.DbUser,
-		Password: options.DbPassword,
-		Host:     options.DbHost,
-		Port:     options.DbPort,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
-
-	currentDDLs, err := db.DumpDDLs()
+func Run(db adapter.Database, options *Options) {
+	currentDDLs, err := adapter.DumpDDLs(db)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -72,7 +59,7 @@ func Run(database string, options *Options) {
 		return
 	}
 
-	err = db.RunDDLs(ddls)
+	err = adapter.RunDDLs(db, ddls)
 	if err != nil {
 		log.Fatal(err)
 	}
