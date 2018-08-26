@@ -93,12 +93,12 @@ func TestPsqldefCharColumn(t *testing.T) {
 
 func TestPsqldefDryRun(t *testing.T) {
 	resetTestDatabase()
-	writeFile("schema.sql", `
+	writeFile("schema.sql", stripHeredoc(`
 	    CREATE TABLE users (
 	        id bigint NOT NULL PRIMARY KEY,
 	        age int
-	    );
-	`)
+	    );`,
+	))
 
 	dryRun := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--dry-run", "--file", "schema.sql")
 	apply := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
@@ -110,12 +110,12 @@ func TestPsqldefExport(t *testing.T) {
 	out := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--export")
 	assertEquals(t, out, "-- No table exists\n")
 
-	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", `
+	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", stripHeredoc(`
 	    CREATE TABLE users (
 	        id bigint NOT NULL PRIMARY KEY,
 	        age int
-	    );
-	`)
+	    );`,
+	))
 	out = assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--export")
 	assertEquals(t, strings.Replace(out, "public.users", "users", 1), // workaround: local has `public.` but travis doesn't.
 		"CREATE TABLE users (\n"+

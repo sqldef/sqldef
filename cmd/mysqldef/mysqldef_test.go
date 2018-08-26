@@ -141,12 +141,12 @@ func TestMysqldefCreateTableSyntaxError(t *testing.T) {
 
 func TestMysqldefDryRun(t *testing.T) {
 	resetTestDatabase()
-	writeFile("schema.sql", `
-	  CREATE TABLE users (
-	    name varchar(40),
-	    created_at datetime NOT NULL
-	  );
-	`)
+	writeFile("schema.sql", stripHeredoc(`
+		CREATE TABLE users (
+		  name varchar(40),
+		  created_at datetime NOT NULL
+		);`,
+	))
 
 	dryRun := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--dry-run", "--file", "schema.sql")
 	apply := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
@@ -158,12 +158,12 @@ func TestMysqldefExport(t *testing.T) {
 	out := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--export")
 	assertEquals(t, out, "-- No table exists\n")
 
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", `
-	  CREATE TABLE users (
-	    name varchar(40),
-	    created_at datetime NOT NULL
-	  );
-	`)
+	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", stripHeredoc(`
+		CREATE TABLE users (
+		  name varchar(40),
+		  created_at datetime NOT NULL
+		);`,
+	))
 	out = assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--export")
 	assertEquals(t, out,
 		"CREATE TABLE `users` (\n"+
