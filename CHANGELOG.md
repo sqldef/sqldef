@@ -1,3 +1,7 @@
+# v0.1.3
+
+- Fix SEGV and improve error message on parse error
+
 # v0.1.2
 
 - Drop all dynamic-link dependency from `mysqldef`

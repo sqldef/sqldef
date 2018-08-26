@@ -188,7 +188,6 @@ Nothing is modified
 - [ ] Improve SQL parser
   - It's not good at parsing SQL for PostgreSQL and causes unexpected parse errors.
   - Actual MySQL SQL parser is more flexible than its behavior
-  - Parse error does not report an error, and sometimes results in SEGV
 
 ## Implemented features
 
