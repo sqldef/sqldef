@@ -73,20 +73,76 @@ func TestPsqldefAddColumn(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
-func TestPsqldefCharColumn(t *testing.T) {
-	t.Skip() // Double apply results in parse failure on `character varying(80)`
+func TestPsqldefDataTypes(t *testing.T) {
 	resetTestDatabase()
 
+	// TODO:
+	//   - int8
+	//   - bigserial
+	//   - serial8
+	//   - bool
+	//   - boolean
+	//   - box
+	//   - bytea
+	//   - char
+	//   - character
+	//   - cidr
+	//   - circle
+	//   - double precision
+	//   - float8
+	//   - inet
+	//   - int4
+	//   - interval [ fields ] [ (p) ]
+	//   - json
+	//   - jsonb
+	//   - line
+	//   - lseg
+	//   - macaddr
+	//   - money
+	//   - numeric [ (p, s) ]
+	//   - decimal [ (p, s) ]
+	//   - path
+	//   - pg_lsn
+	//   - point
+	//   - polygon
+	//   - real
+	//   - float4
+	//   - smallint
+	//   - int2
+	//   - smallserial
+	//   - serial2
+	//   - serial
+	//   - serial4
+	//   - time [ (p) ] [ without time zone ]
+	//   - time [ (p) ] with time zone
+	//   - timetz
+	//   - timestamp [ (p) ] [ without time zone ]
+	//   - timestamp [ (p) ] with time zone
+	//   - timestamptz
+	//   - tsquer
+	//   - tsvector
+	//   - txid_snapshot
+	//   - uuid
+	//   - xml
+	//
+	// Remaining SQL spec: bit varying, boolean, char, character, double precision, interval, numeric, decimal, real,
+	//   smallint, time(with and without tz), timestamp(with and without tz), xml
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
-		  id bigint NOT NULL,
-		  name varchar(80),
-		  age integer
+		  c_bigint bigint,
+		  c_bit bit,
+		  c_bit_2 bit(2),
+		  c_character_varying_40 character varying(40),
+		  c_date date,
+		  c_int int,
+		  c_integer integer,
+		  c_text text,
+		  c_varchar_30 varchar(30)
 		);`,
 	)
 
-	assertApply(t, createTable)
-	assertApply(t, createTable) // column type change by double apply: varchar -> character varying(80)
+	assertApplyOutput(t, createTable, "Run: '"+createTable+"'\n")
+	assertApplyOutput(t, createTable, nothingModified) // Label for column type may change. Type will be examined.
 }
 
 //

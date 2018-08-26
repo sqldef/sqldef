@@ -374,7 +374,7 @@ var keywords = map[string]int{
 	"varbinary":           VARBINARY,
 	"varchar":             VARCHAR,
 	"varcharacter":        UNUSED,
-	"varying":             UNUSED,
+	"varying":             VARYING,
 	"virtual":             UNUSED,
 	"vindex":              VINDEX,
 	"vindexes":            VINDEXES,

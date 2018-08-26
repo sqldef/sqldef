@@ -182,8 +182,7 @@ Nothing is modified
   - Foreign key support
   - Securer interface to set password
 - [ ] Better PostgreSQL support
-  - Basically this tool is tested/developed against MySQL. So psqldef has more unfixed bugs than mysqldef.
-  - Looks like even basic index handling is not working for now... to be fixed soon
+  - Basic index handling is not working for now... to be fixed soon
   - Drop `pg_dump` command dependency to dump schema?
 - [ ] Improve SQL parser
   - It's not good at parsing SQL for PostgreSQL and causes unexpected parse errors.

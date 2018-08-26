@@ -166,7 +166,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> BIT TINYINT SMALLINT MEDIUMINT INT INTEGER BIGINT INTNUM
 %token <bytes> REAL DOUBLE FLOAT_TYPE DECIMAL NUMERIC
 %token <bytes> TIME TIMESTAMP DATETIME YEAR
-%token <bytes> CHAR VARCHAR BOOL CHARACTER VARBINARY NCHAR
+%token <bytes> CHAR VARCHAR VARYING BOOL CHARACTER VARBINARY NCHAR
 %token <bytes> TEXT TINYTEXT MEDIUMTEXT LONGTEXT
 %token <bytes> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON ENUM
 %token <bytes> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
@@ -761,6 +761,10 @@ char_type:
 | VARCHAR length_opt charset_opt collate_opt
   {
     $$ = ColumnType{Type: string($1), Length: $2, Charset: $3, Collate: $4}
+  }
+| CHARACTER VARYING length_opt charset_opt collate_opt
+  {
+    $$ = ColumnType{Type: string($1)+" "+string($2), Length: $3, Charset: $4, Collate: $5}
   }
 | BINARY length_opt
   {
@@ -3152,6 +3156,7 @@ non_reserved_keyword:
 | UNUSED
 | VARBINARY
 | VARCHAR
+| VARYING
 | VARIABLES
 | VIEW
 | VINDEX

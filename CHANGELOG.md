@@ -1,3 +1,7 @@
+# unreleased
+
+- Support parsing `character varying` for PostgreSQL
+
 # v0.1.3
 
 - Fix SEGV and improve error message on parse error
