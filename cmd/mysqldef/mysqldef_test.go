@@ -171,10 +171,9 @@ func mustExecute(command string, args ...string) string {
 }
 
 func assertedExecute(t *testing.T, command string, args ...string) string {
-	// TODO: capture and report stdout/stderr properly
 	out, err := execute(command, args...)
 	if err != nil {
-		t.Errorf("failed to execute '%s %s' (out: '%s'): %s", command, strings.Join(args, " "), out, err)
+		t.Errorf("failed to execute '%s %s' (error: '%s'): `%s`", command, strings.Join(args, " "), err, out)
 	}
 	return out
 }
@@ -187,7 +186,7 @@ func assertEquals(t *testing.T, actual string, expected string) {
 
 func execute(command string, args ...string) (string, error) {
 	cmd := exec.Command(command, args...)
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
 
