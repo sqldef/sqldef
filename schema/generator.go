@@ -6,14 +6,22 @@ import (
 	"strings"
 )
 
+type GeneratorMode int
+
+const (
+	GeneratorModeMysql = GeneratorMode(iota)
+	GeneratorModePostgres
+)
+
 // This struct holds simulated schema states during GenerateIdempotentDDLs().
 type Generator struct {
+	mode          GeneratorMode
 	desiredTables []*Table
 	currentTables []*Table
 }
 
 // Parse argument DDLs and call `generateDDLs()`
-func GenerateIdempotentDDLs(desiredSQL string, currentSQL string) ([]string, error) {
+func GenerateIdempotentDDLs(mode GeneratorMode, desiredSQL string, currentSQL string) ([]string, error) {
 	// TODO: invalidate duplicated tables, columns
 	desiredDDLs, err := parseDDLs(desiredSQL)
 	if err != nil {
@@ -31,6 +39,7 @@ func GenerateIdempotentDDLs(desiredSQL string, currentSQL string) ([]string, err
 	}
 
 	generator := Generator{
+		mode:          mode,
 		desiredTables: []*Table{},
 		currentTables: tables,
 	}
@@ -192,8 +201,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 func (g *Generator) generateDDLsForAbsentIndex(index Index, currentTable Table, desiredTable Table) ([]string, error) {
 	ddls := []string{}
 
-	switch index.indexType {
-	case "primary key":
+	if index.primary {
 		var primaryKeyColumn *Column
 		for _, column := range desiredTable.columns {
 			if column.keyOption == ColumnKeyPrimary {
@@ -210,7 +218,7 @@ func (g *Generator) generateDDLsForAbsentIndex(index Index, currentTable Table, 
 				currentTable.name, primaryKeyColumn.name, index.columns[0].column,
 			)
 		}
-	case "unique key":
+	} else if index.unique {
 		var uniqueKeyColumn *Column
 		for _, column := range desiredTable.columns {
 			if column.name == index.columns[0].column && (column.keyOption == ColumnKeyUnique || column.keyOption == ColumnKeyUniqueKey) {
@@ -221,14 +229,10 @@ func (g *Generator) generateDDLsForAbsentIndex(index Index, currentTable Table, 
 
 		if uniqueKeyColumn == nil {
 			// No unique column. Drop unique key index.
-			ddl := fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", currentTable.name, index.name) // TODO: escape
-			ddls = append(ddls, ddl)
+			ddls = append(ddls, g.generateDropIndex(currentTable.name, index.name))
 		}
-	case "key":
-		ddl := fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", currentTable.name, index.name) // TODO: escape
-		ddls = append(ddls, ddl)
-	default:
-		return ddls, fmt.Errorf("unsupported indexType: '%s'", index.indexType)
+	} else {
+		ddls = append(ddls, g.generateDropIndex(currentTable.name, index.name))
 	}
 
 	return ddls, nil
@@ -297,8 +301,9 @@ func (g *Generator) generateColumnDefinition(column Column) (string, error) {
 	return definition, nil
 }
 
+// For CREATE TABLE.
 func (g *Generator) generateIndexDefinition(index Index) (string, error) {
-	definition := index.indexType
+	definition := index.indexType // indexType is only available on `CREATE TABLE`, but only `generateDDLsForCreateTable` is using this
 
 	columns := []string{}
 	for _, indexColumn := range index.columns {
@@ -311,6 +316,14 @@ func (g *Generator) generateIndexDefinition(index Index) (string, error) {
 		strings.Join(columns, ", "), // TODO: escape
 	)
 	return definition, nil
+}
+
+func (g *Generator) generateDropIndex(tableName string, indexName string) string {
+	if g.mode == GeneratorModePostgres {
+		return fmt.Sprintf("DROP INDEX %s", indexName) // TODO: escape
+	} else {
+		return fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", tableName, indexName) // TODO: escape
+	}
 }
 
 // Destructively modify table1 to have table2 columns/indexes
@@ -329,18 +342,21 @@ func mergeTable(table1 *Table, table2 Table) {
 }
 
 func convertDDLsToTables(ddls []DDL) ([]*Table, error) {
-	// TODO: probably "add constraint primary key" support is needed for postgres here.
-
 	tables := []*Table{}
 	for _, ddl := range ddls {
-		switch ddl := ddl.(type) {
+		switch stmt := ddl.(type) {
 		case *CreateTable:
-			table := ddl.table // copy table
+			table := stmt.table // copy table
 			tables = append(tables, &table)
-		case *AddIndex:
-			// TODO: Add column, etc.
+		case *CreateIndex:
+			table := findTableByName(tables, stmt.tableName)
+			if table == nil {
+				return nil, fmt.Errorf("CREATE INDEX is performed before CREATE TABLE: %s", ddl.Statement())
+			}
+			// TODO: check duplicated creation
+			table.indexes = append(table.indexes, stmt.index)
 		default:
-			return nil, fmt.Errorf("unexpected ddl type in convertDDLsToTables: %v", ddl)
+			return nil, fmt.Errorf("unexpected ddl type in convertDDLsToTables: %v", stmt)
 		}
 	}
 	return tables, nil

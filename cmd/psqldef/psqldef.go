@@ -9,6 +9,7 @@ import (
 	"github.com/k0kubun/sqldef"
 	"github.com/k0kubun/sqldef/adapter"
 	"github.com/k0kubun/sqldef/adapter/postgres"
+	"github.com/k0kubun/sqldef/schema"
 )
 
 // Return parsed options and schema filename
@@ -73,5 +74,5 @@ func main() {
 	}
 	defer database.Close()
 
-	sqldef.Run(database, options)
+	sqldef.Run(schema.GeneratorModePostgres, database, options)
 }

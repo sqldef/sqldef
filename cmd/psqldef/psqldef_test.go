@@ -83,9 +83,13 @@ func TestPsqldefCreateIndex(t *testing.T) {
 		  age integer
 		);`,
 	)
-	createIndex := "CREATE INDEX index_name on users (name);"
-	assertApplyOutput(t, createTable+"\n"+createIndex, "Run: '"+createTable+"'\nRun: '"+createIndex+"'\n")
-	//assertApplyOutput(t, createTable+"\n"+createIndex, nothingModified)
+	createIndex1 := "CREATE INDEX index_name on users (name);"
+	createIndex2 := "CREATE UNIQUE INDEX index_age on users (age);"
+	assertApplyOutput(t, createTable+createIndex1+createIndex2, "Run: '"+createTable+"'\nRun: '"+createIndex1+"'\nRun: '"+createIndex2+"'\n")
+	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
+
+	assertApplyOutput(t, createTable, "Run: 'DROP INDEX index_age;'\nRun: 'DROP INDEX index_name;'\n")
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestPsqldefDataTypes(t *testing.T) {

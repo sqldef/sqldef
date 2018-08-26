@@ -182,7 +182,6 @@ Nothing is modified
   - Foreign key support
   - Securer interface to set password
 - [ ] Better PostgreSQL support
-  - Basic index handling is not working for now... to be fixed soon
   - Drop `pg_dump` command dependency to dump schema?
 
 ## Implemented features
@@ -196,6 +195,7 @@ More to come...
 - PostgreSQL
   - Create table, drop table
   - Add column, drop column
+  - Add index, drop index
 
 ## Development
 
