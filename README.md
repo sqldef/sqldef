@@ -11,8 +11,7 @@ so there's no need to remember Ruby DSL.
 
 Proof of Concept.
 
-Not ready for production, but it's already playable with MySQL.
-PostgreSQL support is still work in progress.
+Not ready for production, but it's already playable with both MySQL and PostgreSQL.
 
 ## Installation
 
