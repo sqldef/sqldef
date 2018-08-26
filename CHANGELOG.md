@@ -1,5 +1,7 @@
-# unreleased
+# v0.1.4
 
+- Parse column definition more flexibly
+  - ex) Both `NOT NULL AUTO_INCREMENT` and `AUTO_INCREMENT NOT NULL` are now valid
 - Support parsing `character varying` for PostgreSQL
 - Remove ` ` (space) before `;` on generated `ADD COLUMN`
 
