@@ -14,6 +14,10 @@ import (
 	"testing"
 )
 
+const (
+	nothingModified = "Nothing is modified\n"
+)
+
 func TestPsqldefCreateTable(t *testing.T) {
 	resetTestDatabase()
 
@@ -30,13 +34,11 @@ func TestPsqldefCreateTable(t *testing.T) {
 		);`,
 	)
 
-	writeFile("schema.sql", createTable1+"\n"+createTable2)
-	result := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
-	assertEquals(t, result, "Run: '"+createTable1+"'\n"+"Run: '"+createTable2+"'\n")
+	assertApplyOutput(t, createTable1+"\n"+createTable2, "Run: '"+createTable1+"'\n"+"Run: '"+createTable2+"'\n")
+	assertApplyOutput(t, createTable1+"\n"+createTable2, nothingModified)
 
-	writeFile("schema.sql", createTable1)
-	result = assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
-	assertEquals(t, result, "Run: 'DROP TABLE bigdata;'\n")
+	assertApplyOutput(t, createTable1, "Run: 'DROP TABLE bigdata;'\n")
+	assertApplyOutput(t, createTable1, nothingModified)
 }
 
 func TestPsqldefAddColumn(t *testing.T) {
@@ -48,9 +50,8 @@ func TestPsqldefAddColumn(t *testing.T) {
 		  name text
 		);`,
 	)
-	writeFile("schema.sql", createTable)
-	result := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
-	assertEquals(t, result, "Run: '"+createTable+"'\n")
+	assertApplyOutput(t, createTable, "Run: '"+createTable+"'\n")
+	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
 		CREATE TABLE users (
@@ -59,9 +60,8 @@ func TestPsqldefAddColumn(t *testing.T) {
 		  age integer
 		);`,
 	)
-	writeFile("schema.sql", createTable)
-	result = assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
-	assertEquals(t, result, "Run: 'ALTER TABLE users ADD COLUMN age integer ;'\n")
+	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users ADD COLUMN age integer ;'\n")
+	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
 		CREATE TABLE users (
@@ -69,9 +69,8 @@ func TestPsqldefAddColumn(t *testing.T) {
 		  age integer
 		);`,
 	)
-	writeFile("schema.sql", createTable)
-	result = assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
-	assertEquals(t, result, "Run: 'ALTER TABLE users DROP COLUMN name;'\n")
+	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users DROP COLUMN name;'\n")
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestPsqldefCharColumn(t *testing.T) {
@@ -86,10 +85,13 @@ func TestPsqldefCharColumn(t *testing.T) {
 		);`,
 	)
 
-	writeFile("schema.sql", createTable)
-	assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
-	assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+	assertApply(t, createTable)
+	assertApply(t, createTable) // column type change by double apply: varchar -> character varying(80)
 }
+
+//
+// ----------------------- following tests are for CLI -----------------------
+//
 
 func TestPsqldefDryRun(t *testing.T) {
 	resetTestDatabase()
@@ -144,11 +146,21 @@ func TestMain(m *testing.M) {
 	os.Exit(status)
 }
 
+func assertApply(t *testing.T, schema string) {
+	writeFile("schema.sql", schema)
+	assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+}
+
+func assertApplyOutput(t *testing.T, schema string, expected string) {
+	writeFile("schema.sql", schema)
+	actual := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+	assertEquals(t, actual, expected)
+}
+
 func mustExecute(command string, args ...string) {
 	out, err := execute(command, args...)
 	if err != nil {
-		log.Printf("command: '%s %s'", command, strings.Join(args, " "))
-		log.Printf("out: '%s'", out)
+		log.Printf("failed to execute '%s %s': `%s`", command, strings.Join(args, " "), out)
 		log.Fatal(err)
 	}
 }
@@ -156,7 +168,7 @@ func mustExecute(command string, args ...string) {
 func assertedExecute(t *testing.T, command string, args ...string) string {
 	out, err := execute(command, args...)
 	if err != nil {
-		t.Errorf("failed to execute '%s %s' (error: '%s'): %s", command, strings.Join(args, " "), err, out)
+		t.Errorf("failed to execute '%s %s' (error: '%s'): `%s`", command, strings.Join(args, " "), err, out)
 	}
 	return out
 }

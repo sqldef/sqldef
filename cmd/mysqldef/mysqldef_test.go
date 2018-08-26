@@ -14,6 +14,10 @@ import (
 	"testing"
 )
 
+const (
+	nothingModified = "Nothing is modified\n"
+)
+
 func TestMysqldefCreateTable(t *testing.T) {
 	resetTestDatabase()
 
@@ -30,13 +34,11 @@ func TestMysqldefCreateTable(t *testing.T) {
 		);`,
 	)
 
-	writeFile("schema.sql", createTable1+"\n"+createTable2)
-	result := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
-	assertEquals(t, result, "Run: '"+createTable1+"'\n"+"Run: '"+createTable2+"'\n")
+	assertApplyOutput(t, createTable1+"\n"+createTable2, "Run: '"+createTable1+"'\n"+"Run: '"+createTable2+"'\n")
+	assertApplyOutput(t, createTable1+"\n"+createTable2, nothingModified)
 
-	writeFile("schema.sql", createTable1)
-	result = assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
-	assertEquals(t, result, "Run: 'DROP TABLE bigdata;'\n")
+	assertApplyOutput(t, createTable1, "Run: 'DROP TABLE bigdata;'\n")
+	assertApplyOutput(t, createTable1, nothingModified)
 }
 
 func TestMysqldefAddColumn(t *testing.T) {
@@ -48,9 +50,8 @@ func TestMysqldefAddColumn(t *testing.T) {
 		  name varchar(40) DEFAULT NULL
 		);`,
 	)
-	writeFile("schema.sql", createTable)
-	result := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
-	assertEquals(t, result, "Run: '"+createTable+"'\n")
+	assertApplyOutput(t, createTable, "Run: '"+createTable+"'\n")
+	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
 		CREATE TABLE users (
@@ -59,9 +60,8 @@ func TestMysqldefAddColumn(t *testing.T) {
 		  created_at datetime NOT NULL
 		);`,
 	)
-	writeFile("schema.sql", createTable)
-	result = assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
-	assertEquals(t, result, "Run: 'ALTER TABLE users ADD COLUMN created_at datetime NOT NULL ;'\n")
+	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users ADD COLUMN created_at datetime NOT NULL ;'\n")
+	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
 		CREATE TABLE users (
@@ -69,9 +69,8 @@ func TestMysqldefAddColumn(t *testing.T) {
 		  created_at datetime NOT NULL
 		);`,
 	)
-	writeFile("schema.sql", createTable)
-	result = assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
-	assertEquals(t, result, "Run: 'ALTER TABLE users DROP COLUMN name;'\n")
+	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users DROP COLUMN name;'\n")
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestMysqldefAddIndex(t *testing.T) {
@@ -84,17 +83,14 @@ func TestMysqldefAddIndex(t *testing.T) {
 		  created_at datetime NOT NULL
 		);`,
 	)
-	writeFile("schema.sql", createTable)
-	assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	assertApply(t, createTable)
 
 	alterTable := "ALTER TABLE users ADD INDEX index_name(name);"
-	writeFile("schema.sql", createTable+"\n"+alterTable)
-	result := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
-	assertEquals(t, result, "Run: '"+alterTable+"'\n")
+	assertApplyOutput(t, createTable+"\n"+alterTable, "Run: '"+alterTable+"'\n")
+	assertApplyOutput(t, createTable+"\n"+alterTable, nothingModified)
 
-	writeFile("schema.sql", createTable)
-	result = assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
-	assertEquals(t, result, "Run: 'ALTER TABLE users DROP INDEX index_name;'\n")
+	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users DROP INDEX index_name;'\n")
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestMysqldefCreateTableKey(t *testing.T) {
@@ -108,8 +104,7 @@ func TestMysqldefCreateTableKey(t *testing.T) {
 		  created_at datetime NOT NULL
 		);`,
 	)
-	writeFile("schema.sql", createTable)
-	assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	assertApply(t, createTable)
 
 	createTable = stripHeredoc(`
 		CREATE TABLE users (
@@ -119,9 +114,7 @@ func TestMysqldefCreateTableKey(t *testing.T) {
 		  KEY index_name(name)
 		);`,
 	)
-	writeFile("schema.sql", createTable)
-	result := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
-	assertEquals(t, result, "Run: 'ALTER TABLE users ADD INDEX index_name(name);'\n")
+	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users ADD INDEX index_name(name);'\n")
 }
 
 func TestMysqldefCreateTableSyntaxError(t *testing.T) {
@@ -135,9 +128,12 @@ func TestMysqldefCreateTableSyntaxError(t *testing.T) {
 		  created_at datetime NOT NULL,
 		);`,
 	)
-	writeFile("schema.sql", createTable)
-	assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	assertApply(t, createTable)
 }
+
+//
+// ----------------------- following tests are for CLI -----------------------
+//
 
 func TestMysqldefDryRun(t *testing.T) {
 	resetTestDatabase()
@@ -192,11 +188,21 @@ func TestMain(m *testing.M) {
 	os.Exit(status)
 }
 
+func assertApply(t *testing.T, schema string) {
+	writeFile("schema.sql", schema)
+	assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+}
+
+func assertApplyOutput(t *testing.T, schema string, expected string) {
+	writeFile("schema.sql", schema)
+	actual := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	assertEquals(t, actual, expected)
+}
+
 func mustExecute(command string, args ...string) string {
 	out, err := execute(command, args...)
 	if err != nil {
-		log.Printf("command: '%s %s'", command, strings.Join(args, " "))
-		log.Printf("out: '%s'", out)
+		log.Printf("failed to execute '%s %s': `%s`", command, strings.Join(args, " "), out)
 		log.Fatal(err)
 	}
 	return out
