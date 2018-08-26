@@ -197,6 +197,27 @@ More to come...
   - Create table, drop table
   - Add column, drop column
 
+## Development
+
+Following settings could be dangerous. Please develop sqldef under a secure network.
+
+### mysqldef
+
+To run integration tests, `mysql -uroot` needs to succeed by following options:
+
+* Run: `sudo mysqladmin -u root -p password ''`
+* Login to mysql with adminitrator user somehow, and run `SET PASSWORD FOR root@localhost=PASSWORD('');`
+
+Then running `make test-mysqldef` will help your development.
+
+### psqldef
+
+To run integration tests, `psql -Upostgres` needs to succeed by:
+
+1. Open `pg_hba.conf` (ex: `/etc/postgresql/10/main/pg_hba.conf`)
+2. Change `local all postgres peer` to `local all postgres trust`
+3. Restart postgresql server (ex: `systemctl restart postgresql`)
+
 ## License
 
 Unless otherwise noted, the sqldef source files are distributed under the MIT License found in the LICENSE file.
