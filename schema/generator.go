@@ -59,7 +59,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return nil, fmt.Errorf("alter table is performed for inexistent table '%s': '%s'", desired.tableName, ddl.Statement())
 			}
 			if containsString(convertIndexesToIndexNames(currentTable.indexes), desired.index.name) {
-				// TODO: compare index definition and add/drop if necessary
+				// TODO: compare index definition and change type if necessary
 			} else {
 				// Index not found, add index.
 				ddls = append(ddls, ddl.Statement())
@@ -95,59 +95,28 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		// Table is expected to exist. Check indexes.
 		for _, index := range currentTable.indexes {
 			if containsString(convertIndexesToIndexNames(desiredTable.indexes), index.name) {
-				// Index exists. TODO: check index type?
-				continue
+				continue // Index is expected to exist.
 			}
 
-			// Index not found.
-			switch index.indexType {
-			case "primary key":
-				var primaryKeyColumn *Column
-				for _, column := range desiredTable.columns {
-					if column.keyOption == ColumnKeyPrimary {
-						primaryKeyColumn = &column
-						break
-					}
-				}
-
-				// If nil, it should be already `DROP COLUMN`-ed. Ignore it.
-				if primaryKeyColumn != nil && primaryKeyColumn.name != index.columns[0].column { // TODO: check length of index.columns
-					// TODO: handle this. Rename primary key column...?
-					return ddls, fmt.Errorf(
-						"primary key column name of '%s' should be '%s' but currently '%s'. This is not handled yet.",
-						currentTable.name, primaryKeyColumn.name, index.columns[0].column,
-					)
-				}
-			case "unique key":
-				var uniqueKeyColumn *Column
-				for _, column := range desiredTable.columns {
-					if column.name == index.columns[0].column && (column.keyOption == ColumnKeyUnique || column.keyOption == ColumnKeyUniqueKey) {
-						uniqueKeyColumn = &column
-						break
-					}
-				}
-
-				if uniqueKeyColumn == nil {
-					// No unique column. Drop unique key index.
-					ddl := fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", currentTable.name, index.name) // TODO: escape
-					ddls = append(ddls, ddl)
-				}
-			case "key":
-				ddl := fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", currentTable.name, index.name) // TODO: escape
-				ddls = append(ddls, ddl)
-			default:
-				return ddls, fmt.Errorf("unsupported indexType: '%s'", index.indexType)
+			// Index is obsoleted. Check and drop index as needed.
+			indexDDLs, err := g.generateDDLsForAbsentIndex(index, currentTable, *desiredTable)
+			if err != nil {
+				return ddls, err
 			}
+			ddls = append(ddls, indexDDLs...)
+			// TODO: simulate to remove index from `currentTable.indexes`?
 		}
 
 		// Check columns.
 		for _, column := range currentTable.columns {
-			if !containsString(convertColumnsToColumnNames(desiredTable.columns), column.name) {
-				// Column is obsoleted. Drop column.
-				ddl := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", desiredTable.name, column.name) // TODO: escape
-				ddls = append(ddls, ddl)
-				// TODO: simulate to remove column from `currentTable.columns`?
+			if containsString(convertColumnsToColumnNames(desiredTable.columns), column.name) {
+				continue // Column is expected to exist.
 			}
+
+			// Column is obsoleted. Drop column.
+			ddl := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", desiredTable.name, column.name) // TODO: escape
+			ddls = append(ddls, ddl)
+			// TODO: simulate to remove column from `currentTable.columns`?
 		}
 	}
 
@@ -174,6 +143,53 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	}
 
 	return ddls
+}
+
+// Even though simulated table doesn't have index, primary or unique could exist in column definitions.
+// This carefully generates DROP INDEX for such situations.
+func (g *Generator) generateDDLsForAbsentIndex(index Index, currentTable Table, desiredTable Table) ([]string, error) {
+	ddls := []string{}
+
+	switch index.indexType {
+	case "primary key":
+		var primaryKeyColumn *Column
+		for _, column := range desiredTable.columns {
+			if column.keyOption == ColumnKeyPrimary {
+				primaryKeyColumn = &column
+				break
+			}
+		}
+
+		// If nil, it should be already `DROP COLUMN`-ed. Ignore it.
+		if primaryKeyColumn != nil && primaryKeyColumn.name != index.columns[0].column { // TODO: check length of index.columns
+			// TODO: handle this. Rename primary key column...?
+			return ddls, fmt.Errorf(
+				"primary key column name of '%s' should be '%s' but currently '%s'. This is not handled yet.",
+				currentTable.name, primaryKeyColumn.name, index.columns[0].column,
+			)
+		}
+	case "unique key":
+		var uniqueKeyColumn *Column
+		for _, column := range desiredTable.columns {
+			if column.name == index.columns[0].column && (column.keyOption == ColumnKeyUnique || column.keyOption == ColumnKeyUniqueKey) {
+				uniqueKeyColumn = &column
+				break
+			}
+		}
+
+		if uniqueKeyColumn == nil {
+			// No unique column. Drop unique key index.
+			ddl := fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", currentTable.name, index.name) // TODO: escape
+			ddls = append(ddls, ddl)
+		}
+	case "key":
+		ddl := fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", currentTable.name, index.name) // TODO: escape
+		ddls = append(ddls, ddl)
+	default:
+		return ddls, fmt.Errorf("unsupported indexType: '%s'", index.indexType)
+	}
+
+	return ddls, nil
 }
 
 func (g *Generator) generateColumnDefinition(column Column) string {
