@@ -190,8 +190,6 @@ Nothing is modified
   - xwb1989/sqlparser was [not for parsing DDL](https://github.com/xwb1989/sqlparser/issues/35).
   - Actual MySQL SQL parser is more flexible than its behavior
   - Parse error does not report an error, and sometimes results in SEGV
-- [ ] Drop dynamic link to libc from mysqldef binary
-  - The golang library lib/pq is the cause, so psqldef can't be fixed
 
 ## Implemented features
 

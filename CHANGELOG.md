@@ -1,5 +1,6 @@
-# unreleased
+# v0.1.2
 
+- Drop all dynamic-link dependency from `mysqldef`
 - "-- No table exists" is printed when no table exists on `--export`
 - Improve error handling of unsupported features
 
