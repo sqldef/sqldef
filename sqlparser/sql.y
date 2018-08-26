@@ -115,7 +115,7 @@ func forceEOF(yylex interface{}) {
 %token LEX_ERROR
 %left <bytes> UNION
 %token <bytes> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER BY LIMIT OFFSET FOR
-%token <bytes> ALL DISTINCT AS EXISTS ASC DESC INTO DUPLICATE KEY DEFAULT SET LOCK KEYS
+%token <bytes> ALL DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SET LOCK KEYS
 %token <bytes> VALUES LAST_INSERT_ID
 %token <bytes> NEXT VALUE SHARE MODE
 %token <bytes> SQL_NO_CACHE SQL_CACHE
@@ -153,7 +153,8 @@ func forceEOF(yylex interface{}) {
 
 // DDL Tokens
 %token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD
-%token <bytes> SCHEMA TABLE INDEX VIEW TO IGNORE IF UNIQUE PRIMARY COLUMN CONSTRAINT SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE
+%token <bytes> SCHEMA TABLE INDEX VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE
+%right <bytes> UNIQUE KEY
 %token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE
 %token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER
 %token <bytes> VINDEX VINDEXES
@@ -267,14 +268,13 @@ func forceEOF(yylex interface{}) {
 %type <convertType> convert_type
 %type <columnType> column_type
 %type <columnType> int_type decimal_type numeric_type time_type char_type spatial_type
-%type <optVal> length_opt column_default_opt column_comment_opt on_update_opt
+%type <optVal> length_opt
 %type <str> charset_opt collate_opt
 %type <boolVal> unsigned_opt zero_fill_opt
 %type <LengthScaleOption> float_length_opt decimal_length_opt
-%type <boolVal> null_opt auto_increment_opt
-%type <colKeyOpt> column_key_opt
 %type <strs> enum_values
 %type <columnDefinition> column_definition
+%type <columnType> column_definition_type
 %type <indexDefinition> index_definition
 %type <str> index_or_key
 %type <str> equal_opt
@@ -637,14 +637,8 @@ table_column_list:
   }
 
 column_definition:
-  ID column_type null_opt column_default_opt on_update_opt auto_increment_opt column_key_opt column_comment_opt
+  ID column_definition_type
   {
-    $2.NotNull = $3
-    $2.Default = $4
-    $2.OnUpdate = $5
-    $2.Autoincrement = $6
-    $2.KeyOpt = $7
-    $2.Comment = $8
     $$ = &ColumnDefinition{Name: NewColIdent(string($1)), Type: $2}
   }
 column_type:
@@ -657,6 +651,92 @@ column_type:
 | char_type
 | time_type
 | spatial_type
+column_definition_type:
+  column_type
+  {
+    $1.NotNull = BoolVal(false)
+    $1.Default = nil
+    $1.OnUpdate = nil
+    $1.Autoincrement = BoolVal(false)
+    $1.KeyOpt = colKeyNone
+    $1.Comment = nil
+    $$ = $1
+  }
+| column_definition_type NULL
+  {
+    $1.NotNull = BoolVal(false)
+    $$ = $1
+  }
+| column_definition_type NOT NULL
+  {
+    $1.NotNull = BoolVal(true)
+    $$ = $1
+  }
+| column_definition_type DEFAULT STRING
+  {
+    $1.Default = NewStrVal($3)
+    $$ = $1
+  }
+| column_definition_type DEFAULT INTEGRAL
+  {
+    $1.Default = NewIntVal($3)
+    $$ = $1
+  }
+| column_definition_type DEFAULT FLOAT
+  {
+    $1.Default = NewFloatVal($3)
+    $$ = $1
+  }
+| column_definition_type DEFAULT NULL
+  {
+    $1.Default = NewValArg($3)
+    $$ = $1
+  }
+| column_definition_type DEFAULT CURRENT_TIMESTAMP
+  {
+    $1.Default = NewValArg($3)
+    $$ = $1
+  }
+| column_definition_type DEFAULT BIT_LITERAL
+  {
+    $1.Default = NewBitVal($3)
+    $$ = $1
+  }
+| column_definition_type ON UPDATE CURRENT_TIMESTAMP
+  {
+    $1.OnUpdate = NewValArg($4)
+    $$ = $1
+  }
+| column_definition_type AUTO_INCREMENT
+  {
+    $1.Autoincrement = BoolVal(true)
+    $$ = $1
+  }
+| column_definition_type PRIMARY KEY
+  {
+    $1.KeyOpt = colKeyPrimary
+    $$ = $1
+  }
+| column_definition_type KEY
+  {
+    $1.KeyOpt = colKey
+    $$ = $1
+  }
+| column_definition_type UNIQUE KEY
+  {
+    $1.KeyOpt = colKeyUniqueKey
+    $$ = $1
+  }
+| column_definition_type UNIQUE
+  {
+    $1.KeyOpt = colKeyUnique
+    $$ = $1
+  }
+| column_definition_type COMMENT_KEYWORD STRING
+  {
+    $1.Comment = NewStrVal($3)
+    $$ = $1
+  }
 
 numeric_type:
   int_type length_opt
@@ -922,67 +1002,6 @@ zero_fill_opt:
     $$ = BoolVal(true)
   }
 
-// Null opt returns false to mean NULL (i.e. the default) and true for NOT NULL
-null_opt:
-  {
-    $$ = BoolVal(false)
-  }
-| NULL
-  {
-    $$ = BoolVal(false)
-  }
-| NOT NULL
-  {
-    $$ = BoolVal(true)
-  }
-
-column_default_opt:
-  {
-    $$ = nil
-  }
-| DEFAULT STRING
-  {
-    $$ = NewStrVal($2)
-  }
-| DEFAULT INTEGRAL
-  {
-    $$ = NewIntVal($2)
-  }
-| DEFAULT FLOAT
-  {
-    $$ = NewFloatVal($2)
-  }
-| DEFAULT NULL
-  {
-    $$ = NewValArg($2)
-  }
-| DEFAULT CURRENT_TIMESTAMP
-  {
-    $$ = NewValArg($2)
-  }
-| DEFAULT BIT_LITERAL
-  {
-    $$ = NewBitVal($2)
-  }
-
-on_update_opt:
-  {
-    $$ = nil
-  }
-| ON UPDATE CURRENT_TIMESTAMP
-{
-  $$ = NewValArg($3)
-}
-
-auto_increment_opt:
-  {
-    $$ = BoolVal(false)
-  }
-| AUTO_INCREMENT
-  {
-    $$ = BoolVal(true)
-  }
-
 charset_opt:
   {
     $$ = ""
@@ -1003,36 +1022,6 @@ collate_opt:
 | COLLATE ID
   {
     $$ = string($2)
-  }
-
-column_key_opt:
-  {
-    $$ = colKeyNone
-  }
-| PRIMARY KEY
-  {
-    $$ = colKeyPrimary
-  }
-| KEY
-  {
-    $$ = colKey
-  }
-| UNIQUE KEY
-  {
-    $$ = colKeyUniqueKey
-  }
-| UNIQUE
-  {
-    $$ = colKeyUnique
-  }
-
-column_comment_opt:
-  {
-    $$ = nil
-  }
-| COMMENT_KEYWORD STRING
-  {
-    $$ = NewStrVal($2)
   }
 
 index_definition:

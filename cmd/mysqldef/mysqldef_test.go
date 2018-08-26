@@ -121,6 +121,22 @@ func TestMysqldefCreateTableSyntaxError(t *testing.T) {
 	assertApplyFailure(t, "CREATE TABLE users (id bigint,);", `found syntax error when parsing DDL "CREATE TABLE users (id bigint,)": syntax error at position 32`+"\n")
 }
 
+// Both `AUTO_INCREMENT NOT NULL` and `NOT NULL AUTO_INCREMENT` should work
+func TestMysqldefAutoIncrementNotNull(t *testing.T) {
+	resetTestDatabase()
+	createTable1 := stripHeredoc(`
+		CREATE TABLE users1 (
+		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY
+		);`,
+	)
+	createTable2 := stripHeredoc(`
+		CREATE TABLE users2 (
+		  id BIGINT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY
+		);`,
+	)
+	assertApplyOutput(t, createTable1+"\n"+createTable2, "Run: '"+createTable1+"'\nRun: '"+createTable2+"'\n")
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
