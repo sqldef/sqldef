@@ -2,12 +2,13 @@ package schema
 
 import (
 	"fmt"
+	"log"
 )
 
 // This struct holds simulated schema states during GenerateIdempotentDDLs().
 type Generator struct {
-	desiredTables []Table
-	currentTables []Table
+	desiredTables []*Table
+	currentTables []*Table
 }
 
 // Parse argument DDLs and call `generateDDLs()`
@@ -29,7 +30,7 @@ func GenerateIdempotentDDLs(desiredSQL string, currentSQL string) ([]string, err
 	}
 
 	generator := Generator{
-		desiredTables: []Table{},
+		desiredTables: []*Table{},
 		currentTables: tables,
 	}
 	return generator.generateDDLs(desiredDDLs)
@@ -50,9 +51,11 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			} else {
 				// Table not found, create table.
 				ddls = append(ddls, desired.statement)
-				g.currentTables = append(g.currentTables, desired.table)
+				table := desired.table // copy table
+				g.currentTables = append(g.currentTables, &table)
 			}
-			g.desiredTables = append(g.desiredTables, desired.table)
+			table := desired.table // copy
+			g.desiredTables = append(g.desiredTables, &table)
 		case *AddIndex:
 			currentTable := findTableByName(g.currentTables, desired.tableName)
 			if currentTable == nil {
@@ -75,8 +78,6 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return nil, fmt.Errorf("index '%s' is doubly created against table '%s': '%s'", desired.index.name, desired.tableName, ddl.Statement())
 			}
 			desiredTable.indexes = append(desiredTable.indexes, desired.index)
-			desiredTables := removeTableByName(g.desiredTables, desired.tableName)
-			g.desiredTables = append(desiredTables, *desiredTable) // To destructively modify []Table. TODO: there must be a better way...
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", desired)
 		}
@@ -99,7 +100,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 
 			// Index is obsoleted. Check and drop index as needed.
-			indexDDLs, err := g.generateDDLsForAbsentIndex(index, currentTable, *desiredTable)
+			indexDDLs, err := g.generateDDLsForAbsentIndex(index, *currentTable, *desiredTable)
 			if err != nil {
 				return ddls, err
 			}
@@ -268,14 +269,15 @@ func mergeTable(table1 *Table, table2 Table) {
 	}
 }
 
-func convertDDLsToTables(ddls []DDL) ([]Table, error) {
+func convertDDLsToTables(ddls []DDL) ([]*Table, error) {
 	// TODO: probably "add constraint primary key" support is needed for postgres here.
 
-	tables := []Table{}
+	tables := []*Table{}
 	for _, ddl := range ddls {
 		switch ddl := ddl.(type) {
 		case *CreateTable:
-			tables = append(tables, ddl.table)
+			table := ddl.table // copy table
+			tables = append(tables, &table)
 		case *AddIndex:
 			// TODO: Add column, etc.
 		default:
@@ -285,10 +287,10 @@ func convertDDLsToTables(ddls []DDL) ([]Table, error) {
 	return tables, nil
 }
 
-func findTableByName(tables []Table, name string) *Table {
+func findTableByName(tables []*Table, name string) *Table {
 	for _, table := range tables {
 		if table.name == name {
-			return &table
+			return table
 		}
 	}
 	return nil
@@ -327,14 +329,20 @@ func containsString(strs []string, str string) bool {
 	return false
 }
 
-// TODO: Is there more efficient way?
-func removeTableByName(tables []Table, name string) []Table {
-	ret := []Table{}
+func removeTableByName(tables []*Table, name string) []*Table {
+	removed := false
+	ret := []*Table{}
+
 	for _, table := range tables {
-		if name != table.name {
+		if name == table.name {
+			removed = true
+		} else {
 			ret = append(ret, table)
 		}
 	}
-	// TODO: no need to assert really removed one table?
+
+	if !removed {
+		log.Fatalf("Failed to removeTableByName: Table `%s` is not found in `%v`", name, tables)
+	}
 	return ret
 }
