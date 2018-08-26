@@ -7,13 +7,31 @@ import (
 	"strings"
 )
 
+type DatabaseType int
+
+const (
+	DatabaseTypeMysql = DatabaseType(iota)
+	DatabaseTypePostgres
+)
+
 type Config struct {
-	DbType   string // TODO: convert to enum?
+	DbType   DatabaseType
 	DbName   string
 	User     string
 	Password string
 	Host     string
 	Port     int
+}
+
+func (c *Config) databaseTypeName() string {
+	switch c.DbType {
+	case DatabaseTypeMysql:
+		return "mysql"
+	case DatabaseTypePostgres:
+		return "postgres"
+	default:
+		panic(fmt.Sprintf("unexpected DbType %d is used in databaseType", c.DbType))
+	}
 }
 
 // Abstraction layer for multiple kinds of databases
@@ -26,15 +44,15 @@ func NewDatabase(config Config) (*Database, error) {
 	var dsn string
 
 	switch config.DbType {
-	case "mysql":
+	case DatabaseTypeMysql:
 		dsn = mysqlBuildDSN(config)
-	case "postgres":
+	case DatabaseTypePostgres:
 		dsn = postgresBuildDSN(config)
 	default:
-		return nil, fmt.Errorf("database type must be 'mysql' or 'postgres'")
+		return nil, fmt.Errorf("unexpected database type %d in NewDatabase", config.DbType)
 	}
 
-	db, err := sql.Open(config.DbType, dsn)
+	db, err := sql.Open(config.databaseTypeName(), dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -51,23 +69,23 @@ func (d *Database) Close() error {
 
 func (d *Database) tableNames() ([]string, error) {
 	switch d.config.DbType {
-	case "mysql":
+	case DatabaseTypeMysql:
 		return d.mysqlTableNames()
-	case "postgres":
+	case DatabaseTypePostgres:
 		return d.postgresTableNames()
 	default:
-		panic("unexpected DbType: " + d.config.DbType)
+		return nil, fmt.Errorf("unexpected DbType %d in tableNames", d.config.DbType)
 	}
 }
 
 func (d *Database) dumpTableDDL(table string) (string, error) {
 	switch d.config.DbType {
-	case "mysql":
+	case DatabaseTypeMysql:
 		return d.mysqlDumpTableDDL(table)
-	case "postgres":
+	case DatabaseTypePostgres:
 		return d.postgresDumpTableDDL(table)
 	default:
-		panic("unexpected DbType: " + d.config.DbType)
+		return "", fmt.Errorf("unexpected DbType %d in dumpTableDDL", d.config.DbType)
 	}
 }
 

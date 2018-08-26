@@ -14,7 +14,7 @@ import (
 
 type Options struct {
 	SqlFile    string
-	DbType     string
+	DbType     driver.DatabaseType
 	DbUser     string
 	DbPassword string
 	DbHost     string
