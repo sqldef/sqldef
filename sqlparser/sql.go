@@ -3844,7 +3844,7 @@ yydefault:
 				NewName: yyDollar[4].tableName,
 				IndexSpec: &IndexSpec{
 					Name:   yyDollar[8].colIdent,
-					Unique: false,
+					Unique: true,
 				},
 				IndexCols: yyDollar[10].columns,
 			}
