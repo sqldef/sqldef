@@ -1,5 +1,6 @@
-# unreleased
+# v0.2.0
 
+- Support handling index on PostgreSQL
 - Support `ADD INDEX` by modifying `CREATE TABLE` on MySQL
 
 # v0.1.4
