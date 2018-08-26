@@ -1,6 +1,6 @@
-diff -u /Users/bramp/go/src/vitess.io/vitess/go//vt/proto/query/query.pb.go /Users/bramp/go/src/github.com/k0kubun/sqlparser//dependency/querypb/query.pb.go
+diff -u /Users/bramp/go/src/vitess.io/vitess/go//vt/proto/query/query.pb.go /Users/bramp/go/src/github.com/k0kubun/sqldef/sqlparser//dependency/querypb/query.pb.go
 --- /Users/bramp/go/src/vitess.io/vitess/go//vt/proto/query/query.pb.go	2018-06-05 08:45:47.000000000 -0700
-+++ /Users/bramp/go/src/github.com/k0kubun/sqlparser//dependency/querypb/query.pb.go	2017-10-18 18:06:33.000000000 -0700
++++ /Users/bramp/go/src/github.com/k0kubun/sqldef/sqlparser//dependency/querypb/query.pb.go	2017-10-18 18:06:33.000000000 -0700
 @@ -62,30 +62,24 @@
  	SplitQueryResponse
  	StreamHealthRequest

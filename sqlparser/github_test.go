@@ -45,7 +45,7 @@ func TestParsing(t *testing.T) {
 		}
 
 		if _, err := Parse(test.sql); err != nil {
-			t.Errorf("https://github.com/k0kubun/sqlparser/issues/%d:\nParse(%q) err = %s, want nil", test.id, test.sql, err)
+			t.Errorf("https://github.com/k0kubun/sqldef/sqlparser/issues/%d:\nParse(%q) err = %s, want nil", test.id, test.sql, err)
 		}
 	}
 }

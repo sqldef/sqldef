@@ -1,6 +1,6 @@
 package sqlparser
 
-import querypb "github.com/k0kubun/sqlparser/dependency/querypb"
+import querypb "github.com/k0kubun/sqldef/sqlparser/dependency/querypb"
 
 // RedactSQLQuery returns a sql string with the params stripped out for display
 func RedactSQLQuery(sql string) (string, error) {
