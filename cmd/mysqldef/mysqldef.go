@@ -49,23 +49,18 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	database := args[0]
 
 	options := sqldef.Options{
-		SqlFile:    opts.File,
-		DbType:     adapter.DatabaseTypeMysql,
-		DbUser:     opts.User,
-		DbPassword: opts.Password,
-		DbHost:     opts.Host,
-		DbPort:     int(opts.Port),
-		DryRun:     opts.DryRun,
-		Export:     opts.Export,
+		SqlFile: opts.File,
+		DryRun:  opts.DryRun,
+		Export:  opts.Export,
 	}
 
 	config := adapter.Config{
 		DbType:   adapter.DatabaseTypeMysql,
 		DbName:   database,
-		User:     options.DbUser,
-		Password: options.DbPassword,
-		Host:     options.DbHost,
-		Port:     options.DbPort,
+		User:     opts.User,
+		Password: opts.Password,
+		Host:     opts.Host,
+		Port:     int(opts.Port),
 	}
 	return config, &options
 }

@@ -13,14 +13,9 @@ import (
 )
 
 type Options struct {
-	SqlFile    string
-	DbType     adapter.DatabaseType
-	DbUser     string
-	DbPassword string
-	DbHost     string
-	DbPort     int
-	DryRun     bool
-	Export     bool
+	SqlFile string
+	DryRun  bool
+	Export  bool
 }
 
 // Main function shared by `mysqldef` and `psqldef`
