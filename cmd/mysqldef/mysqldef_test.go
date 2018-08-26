@@ -13,6 +13,100 @@ import (
 	"testing"
 )
 
+func TestMysqldefCreateTable(t *testing.T) {
+	resetTestDatabase()
+
+	createTable1 := "CREATE TABLE users (\n" +
+		"  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n" +
+		"  name varchar(40) DEFAULT NULL,\n" +
+		"  created_at datetime NOT NULL\n" +
+		");"
+	createTable2 := "CREATE TABLE bigdata (\n" +
+		"  data bigint\n" +
+		");"
+
+	writeFile("schema.sql", createTable1+"\n"+createTable2)
+	result := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	assertEquals(t, result, "Run: '"+createTable1+"'\n"+"Run: '"+createTable2+"'\n")
+
+	writeFile("schema.sql", createTable1)
+	result = assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	assertEquals(t, result, "Run: 'DROP TABLE bigdata;'\n")
+}
+
+func TestMysqldefAddColumn(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE users (\n" +
+		"  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n" +
+		"  name varchar(40) DEFAULT NULL\n" +
+		");"
+	writeFile("schema.sql", createTable)
+	result := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	assertEquals(t, result, "Run: '"+createTable+"'\n")
+
+	createTable = "CREATE TABLE users (\n" +
+		"  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n" +
+		"  name varchar(40) DEFAULT NULL,\n" +
+		"  created_at datetime NOT NULL\n" +
+		");"
+	writeFile("schema.sql", createTable)
+	result = assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	assertEquals(t, result, "Run: 'ALTER TABLE users ADD COLUMN created_at datetime NOT NULL ;'\n")
+
+	createTable = "CREATE TABLE users (\n" +
+		"  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n" +
+		"  created_at datetime NOT NULL\n" +
+		");"
+	writeFile("schema.sql", createTable)
+	result = assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	assertEquals(t, result, "Run: 'ALTER TABLE users DROP COLUMN name;'\n")
+}
+
+func TestMysqldefAddIndex(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE users (\n" +
+		"  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n" +
+		"  name varchar(40) DEFAULT NULL,\n" +
+		"  created_at datetime NOT NULL\n" +
+		");"
+	writeFile("schema.sql", createTable)
+	assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+
+	alterTable := "ALTER TABLE users ADD INDEX index_name(name);"
+	writeFile("schema.sql", createTable+"\n"+alterTable)
+	result := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	assertEquals(t, result, "Run: '"+alterTable+"'\n")
+
+	writeFile("schema.sql", createTable)
+	result = assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	assertEquals(t, result, "Run: 'ALTER TABLE users DROP INDEX index_name;'\n")
+}
+
+func TestMysqldefCreateTableKey(t *testing.T) {
+	t.Skip() // Nothing is modified, for now.
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE users (\n" +
+		"  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n" +
+		"  name varchar(40) DEFAULT NULL,\n" +
+		"  created_at datetime NOT NULL\n" +
+		");"
+	writeFile("schema.sql", createTable)
+	assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+
+	createTable = "CREATE TABLE users (\n" +
+		"  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n" +
+		"  name varchar(40) DEFAULT NULL,\n" +
+		"  created_at datetime NOT NULL,\n" +
+		"  KEY index_name(name)\n" +
+		");"
+	writeFile("schema.sql", createTable)
+	result := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	assertEquals(t, result, "Run: 'ALTER TABLE users ADD INDEX index_name(name);'\n")
+}
+
 func TestMysqldefDryRun(t *testing.T) {
 	resetTestDatabase()
 	writeFile("schema.sql", `
@@ -86,7 +180,7 @@ func assertedExecute(t *testing.T, command string, args ...string) string {
 
 func assertEquals(t *testing.T, actual string, expected string) {
 	if expected != actual {
-		t.Errorf("expected '%s' but got '%s'", expected, actual)
+		t.Errorf("expected `%s` but got `%s`", expected, actual)
 	}
 }
 
