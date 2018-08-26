@@ -60,7 +60,7 @@ func TestPsqldefAddColumn(t *testing.T) {
 		  age integer
 		);`,
 	)
-	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users ADD COLUMN age integer ;'\n")
+	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users ADD COLUMN age integer;'\n")
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`

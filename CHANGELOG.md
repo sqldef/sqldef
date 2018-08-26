@@ -1,6 +1,7 @@
 # unreleased
 
 - Support parsing `character varying` for PostgreSQL
+- Remove ` ` (space) before `;` on generated `ADD COLUMN`
 
 # v0.1.3
 

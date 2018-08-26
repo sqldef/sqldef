@@ -60,7 +60,7 @@ func TestMysqldefAddColumn(t *testing.T) {
 		  created_at datetime NOT NULL
 		);`,
 	)
-	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users ADD COLUMN created_at datetime NOT NULL ;'\n")
+	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users ADD COLUMN created_at datetime NOT NULL;'\n")
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`

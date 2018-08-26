@@ -3,6 +3,7 @@ package schema
 import (
 	"fmt"
 	"log"
+	"strings"
 )
 
 // This struct holds simulated schema states during GenerateIdempotentDDLs().
@@ -257,6 +258,7 @@ func (g *Generator) generateColumnDefinition(column Column) (string, error) {
 		return "", fmt.Errorf("unsupported column key (keyOption: '%d') in column: %#v", column.keyOption, column)
 	}
 
+	definition = strings.TrimSuffix(definition, " ")
 	return definition, nil
 }
 
