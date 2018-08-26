@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -16,14 +17,18 @@ import (
 func TestMysqldefCreateTable(t *testing.T) {
 	resetTestDatabase()
 
-	createTable1 := "CREATE TABLE users (\n" +
-		"  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n" +
-		"  name varchar(40) DEFAULT NULL,\n" +
-		"  created_at datetime NOT NULL\n" +
-		");"
-	createTable2 := "CREATE TABLE bigdata (\n" +
-		"  data bigint\n" +
-		");"
+	createTable1 := stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		  name varchar(40) DEFAULT NULL,
+		  created_at datetime NOT NULL
+		);`,
+	)
+	createTable2 := stripHeredoc(`
+		CREATE TABLE bigdata (
+		  data bigint
+		);`,
+	)
 
 	writeFile("schema.sql", createTable1+"\n"+createTable2)
 	result := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
@@ -37,27 +42,33 @@ func TestMysqldefCreateTable(t *testing.T) {
 func TestMysqldefAddColumn(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := "CREATE TABLE users (\n" +
-		"  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n" +
-		"  name varchar(40) DEFAULT NULL\n" +
-		");"
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		  name varchar(40) DEFAULT NULL
+		);`,
+	)
 	writeFile("schema.sql", createTable)
 	result := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
 	assertEquals(t, result, "Run: '"+createTable+"'\n")
 
-	createTable = "CREATE TABLE users (\n" +
-		"  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n" +
-		"  name varchar(40) DEFAULT NULL,\n" +
-		"  created_at datetime NOT NULL\n" +
-		");"
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		  name varchar(40) DEFAULT NULL,
+		  created_at datetime NOT NULL
+		);`,
+	)
 	writeFile("schema.sql", createTable)
 	result = assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
 	assertEquals(t, result, "Run: 'ALTER TABLE users ADD COLUMN created_at datetime NOT NULL ;'\n")
 
-	createTable = "CREATE TABLE users (\n" +
-		"  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n" +
-		"  created_at datetime NOT NULL\n" +
-		");"
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		  created_at datetime NOT NULL
+		);`,
+	)
 	writeFile("schema.sql", createTable)
 	result = assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
 	assertEquals(t, result, "Run: 'ALTER TABLE users DROP COLUMN name;'\n")
@@ -66,11 +77,13 @@ func TestMysqldefAddColumn(t *testing.T) {
 func TestMysqldefAddIndex(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := "CREATE TABLE users (\n" +
-		"  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n" +
-		"  name varchar(40) DEFAULT NULL,\n" +
-		"  created_at datetime NOT NULL\n" +
-		");"
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		  name varchar(40) DEFAULT NULL,
+		  created_at datetime NOT NULL
+		);`,
+	)
 	writeFile("schema.sql", createTable)
 	assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
 
@@ -88,20 +101,24 @@ func TestMysqldefCreateTableKey(t *testing.T) {
 	t.Skip() // Nothing is modified, for now.
 	resetTestDatabase()
 
-	createTable := "CREATE TABLE users (\n" +
-		"  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n" +
-		"  name varchar(40) DEFAULT NULL,\n" +
-		"  created_at datetime NOT NULL\n" +
-		");"
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		  name varchar(40) DEFAULT NULL,
+		  created_at datetime NOT NULL
+		);`,
+	)
 	writeFile("schema.sql", createTable)
 	assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
 
-	createTable = "CREATE TABLE users (\n" +
-		"  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n" +
-		"  name varchar(40) DEFAULT NULL,\n" +
-		"  created_at datetime NOT NULL,\n" +
-		"  KEY index_name(name)\n" +
-		");"
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		  name varchar(40) DEFAULT NULL,
+		  created_at datetime NOT NULL,
+		  KEY index_name(name)
+		);`,
+	)
 	writeFile("schema.sql", createTable)
 	result := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
 	assertEquals(t, result, "Run: 'ALTER TABLE users ADD INDEX index_name(name);'\n")
@@ -111,11 +128,13 @@ func TestMysqldefCreateTableSyntaxError(t *testing.T) {
 	t.Skip() // invalid memory address or nil pointer dereference
 	resetTestDatabase()
 
-	createTable := "CREATE TABLE users (\n" +
-		"  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n" +
-		"  name varchar(40) DEFAULT NULL,\n" +
-		"  created_at datetime NOT NULL,\n" +
-		");"
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		  name varchar(40) DEFAULT NULL,
+		  created_at datetime NOT NULL,
+		);`,
+	)
 	writeFile("schema.sql", createTable)
 	assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
 }
@@ -216,4 +235,10 @@ func writeFile(path string, content string) {
 	defer file.Close()
 
 	file.Write(([]byte)(content))
+}
+
+func stripHeredoc(heredoc string) string {
+	heredoc = strings.TrimPrefix(heredoc, "\n")
+	re := regexp.MustCompilePOSIX("^\t*")
+	return re.ReplaceAllLiteralString(heredoc, "")
 }

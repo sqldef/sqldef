@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -16,14 +17,18 @@ import (
 func TestPsqldefCreateTable(t *testing.T) {
 	resetTestDatabase()
 
-	createTable1 := "CREATE TABLE users (\n" +
-		"  id bigint NOT NULL,\n" +
-		"  name text,\n" +
-		"  age integer\n" +
-		");"
-	createTable2 := "CREATE TABLE bigdata (\n" +
-		"  data bigint\n" +
-		");"
+	createTable1 := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name text,
+		  age integer
+		);`,
+	)
+	createTable2 := stripHeredoc(`
+		CREATE TABLE bigdata (
+		  data bigint
+		);`,
+	)
 
 	writeFile("schema.sql", createTable1+"\n"+createTable2)
 	result := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
@@ -37,27 +42,33 @@ func TestPsqldefCreateTable(t *testing.T) {
 func TestPsqldefAddColumn(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := "CREATE TABLE users (\n" +
-		"  id bigint NOT NULL,\n" +
-		"  name text\n" +
-		");"
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name text
+		);`,
+	)
 	writeFile("schema.sql", createTable)
 	result := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
 	assertEquals(t, result, "Run: '"+createTable+"'\n")
 
-	createTable = "CREATE TABLE users (\n" +
-		"  id bigint NOT NULL,\n" +
-		"  name text,\n" +
-		"  age integer\n" +
-		");"
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name text,
+		  age integer
+		);`,
+	)
 	writeFile("schema.sql", createTable)
 	result = assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
 	assertEquals(t, result, "Run: 'ALTER TABLE users ADD COLUMN age integer ;'\n")
 
-	createTable = "CREATE TABLE users (\n" +
-		"  id bigint NOT NULL,\n" +
-		"  age integer\n" +
-		");"
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  age integer
+		);`,
+	)
 	writeFile("schema.sql", createTable)
 	result = assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
 	assertEquals(t, result, "Run: 'ALTER TABLE users DROP COLUMN name;'\n")
@@ -67,11 +78,13 @@ func TestPsqldefCharColumn(t *testing.T) {
 	t.Skip() // Double apply results in parse failure on `character varying(80)`
 	resetTestDatabase()
 
-	createTable := "CREATE TABLE users (\n" +
-		"  id bigint NOT NULL,\n" +
-		"  name varchar(80),\n" +
-		"  age integer\n" +
-		");"
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(80),
+		  age integer
+		);`,
+	)
 
 	writeFile("schema.sql", createTable)
 	assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
@@ -173,4 +186,10 @@ func writeFile(path string, content string) {
 	defer file.Close()
 
 	file.Write(([]byte)(content))
+}
+
+func stripHeredoc(heredoc string) string {
+	heredoc = strings.TrimPrefix(heredoc, "\n")
+	re := regexp.MustCompilePOSIX("^\t*")
+	return re.ReplaceAllLiteralString(heredoc, "")
 }
