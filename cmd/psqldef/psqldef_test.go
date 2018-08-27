@@ -15,7 +15,8 @@ import (
 )
 
 const (
-	nothingModified = "Nothing is modified\n"
+	applyPrefix     = "-- Apply --\n"
+	nothingModified = "-- Nothing is modified --\n"
 )
 
 func TestPsqldefCreateTable(t *testing.T) {
@@ -26,18 +27,20 @@ func TestPsqldefCreateTable(t *testing.T) {
 		  id bigint NOT NULL,
 		  name text,
 		  age integer
-		);`,
+		);
+		`,
 	)
 	createTable2 := stripHeredoc(`
 		CREATE TABLE bigdata (
 		  data bigint
-		);`,
+		);
+		`,
 	)
 
-	assertApplyOutput(t, createTable1+"\n"+createTable2, "Run: '"+createTable1+"'\n"+"Run: '"+createTable2+"'\n")
-	assertApplyOutput(t, createTable1+"\n"+createTable2, nothingModified)
+	assertApplyOutput(t, createTable1+createTable2, applyPrefix+createTable1+createTable2)
+	assertApplyOutput(t, createTable1+createTable2, nothingModified)
 
-	assertApplyOutput(t, createTable1, "Run: 'DROP TABLE bigdata;'\n")
+	assertApplyOutput(t, createTable1, applyPrefix+"DROP TABLE bigdata;\n")
 	assertApplyOutput(t, createTable1, nothingModified)
 }
 
@@ -48,9 +51,10 @@ func TestPsqldefAddColumn(t *testing.T) {
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name text
-		);`,
+		);
+		`,
 	)
-	assertApplyOutput(t, createTable, "Run: '"+createTable+"'\n")
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -60,7 +64,7 @@ func TestPsqldefAddColumn(t *testing.T) {
 		  age integer
 		);`,
 	)
-	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users ADD COLUMN age integer;'\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN age integer;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -69,7 +73,7 @@ func TestPsqldefAddColumn(t *testing.T) {
 		  age integer
 		);`,
 	)
-	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users DROP COLUMN name;'\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP COLUMN name;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -81,14 +85,15 @@ func TestPsqldefCreateIndex(t *testing.T) {
 		  id bigint NOT NULL,
 		  name text,
 		  age integer
-		);`,
+		);
+		`,
 	)
-	createIndex1 := "CREATE INDEX index_name on users (name);"
-	createIndex2 := "CREATE UNIQUE INDEX index_age on users (age);"
-	assertApplyOutput(t, createTable+createIndex1+createIndex2, "Run: '"+createTable+"'\nRun: '"+createIndex1+"'\nRun: '"+createIndex2+"'\n")
+	createIndex1 := "CREATE INDEX index_name on users (name);\n"
+	createIndex2 := "CREATE UNIQUE INDEX index_age on users (age);\n"
+	assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+createTable+createIndex1+createIndex2)
 	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
 
-	assertApplyOutput(t, createTable, "Run: 'DROP INDEX index_age;'\nRun: 'DROP INDEX index_name;'\n")
+	assertApplyOutput(t, createTable, applyPrefix+"DROP INDEX index_age;\nDROP INDEX index_name;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -157,10 +162,11 @@ func TestPsqldefDataTypes(t *testing.T) {
 		  c_integer integer,
 		  c_text text,
 		  c_varchar_30 varchar(30)
-		);`,
+		);
+		`,
 	)
 
-	assertApplyOutput(t, createTable, "Run: '"+createTable+"'\n")
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified) // Label for column type may change. Type will be examined.
 }
 
@@ -171,9 +177,10 @@ func TestPsqldefPrimaryKey(t *testing.T) {
 		CREATE TABLE users (
 		  id bigint NOT NULL PRIMARY KEY,
 		  name text
-		);`,
+		);
+		`,
 	)
-	assertApplyOutput(t, createTable, "Run: '"+createTable+"'\n")
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -181,7 +188,7 @@ func TestPsqldefPrimaryKey(t *testing.T) {
 		  name text
 		);`,
 	)
-	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users DROP COLUMN id;'\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP COLUMN id;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -190,7 +197,7 @@ func TestPsqldefPrimaryKey(t *testing.T) {
 		  name text
 		);`,
 	)
-	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users ADD COLUMN id bigint NOT NULL PRIMARY KEY;'\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN id bigint NOT NULL PRIMARY KEY;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -209,13 +216,13 @@ func TestPsqldefDryRun(t *testing.T) {
 
 	dryRun := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--dry-run", "--file", "schema.sql")
 	apply := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
-	assertEquals(t, dryRun, "--- dry run ---\n"+apply)
+	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 }
 
 func TestPsqldefExport(t *testing.T) {
 	resetTestDatabase()
 	out := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--export")
-	assertEquals(t, out, "-- No table exists\n")
+	assertEquals(t, out, "-- No table exists --\n")
 
 	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", stripHeredoc(`
 	    CREATE TABLE users (

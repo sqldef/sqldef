@@ -27,7 +27,7 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 
 	if options.Export {
 		if currentDDLs == "" {
-			fmt.Printf("-- No table exists\n")
+			fmt.Printf("-- No table exists --\n")
 		} else {
 			fmt.Printf("%s;\n", currentDDLs)
 		}
@@ -46,7 +46,7 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 		os.Exit(1)
 	}
 	if len(ddls) == 0 {
-		fmt.Println("Nothing is modified")
+		fmt.Println("-- Nothing is modified --")
 		return
 	}
 
@@ -89,8 +89,8 @@ func readFile(filepath string) (string, error) {
 }
 
 func showDDLs(ddls []string) {
-	fmt.Println("--- dry run ---")
+	fmt.Println("-- dry run --")
 	for _, ddl := range ddls {
-		fmt.Printf("Run: '%s;'\n", ddl)
+		fmt.Printf("%s;\n", ddl)
 	}
 }

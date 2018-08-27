@@ -15,7 +15,8 @@ import (
 )
 
 const (
-	nothingModified = "Nothing is modified\n"
+	nothingModified = "-- Nothing is modified --\n"
+	applyPrefix     = "-- Apply --\n"
 )
 
 func TestMysqldefCreateTable(t *testing.T) {
@@ -26,18 +27,20 @@ func TestMysqldefCreateTable(t *testing.T) {
 		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
 		  name varchar(40) DEFAULT NULL,
 		  created_at datetime NOT NULL
-		);`,
+		);
+		`,
 	)
 	createTable2 := stripHeredoc(`
 		CREATE TABLE bigdata (
 		  data bigint
-		);`,
+		);
+		`,
 	)
 
-	assertApplyOutput(t, createTable1+"\n"+createTable2, "Run: '"+createTable1+"'\n"+"Run: '"+createTable2+"'\n")
-	assertApplyOutput(t, createTable1+"\n"+createTable2, nothingModified)
+	assertApplyOutput(t, createTable1+createTable2, applyPrefix+createTable1+createTable2)
+	assertApplyOutput(t, createTable1+createTable2, nothingModified)
 
-	assertApplyOutput(t, createTable1, "Run: 'DROP TABLE bigdata;'\n")
+	assertApplyOutput(t, createTable1, applyPrefix+"DROP TABLE bigdata;\n")
 	assertApplyOutput(t, createTable1, nothingModified)
 }
 
@@ -48,9 +51,10 @@ func TestMysqldefAddColumn(t *testing.T) {
 		CREATE TABLE users (
 		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
 		  name varchar(40) DEFAULT NULL
-		);`,
+		);
+		`,
 	)
-	assertApplyOutput(t, createTable, "Run: '"+createTable+"'\n")
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -60,7 +64,7 @@ func TestMysqldefAddColumn(t *testing.T) {
 		  created_at datetime NOT NULL
 		);`,
 	)
-	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users ADD COLUMN created_at datetime NOT NULL;'\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN created_at datetime NOT NULL;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -69,7 +73,7 @@ func TestMysqldefAddColumn(t *testing.T) {
 		  created_at datetime NOT NULL
 		);`,
 	)
-	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users DROP COLUMN name;'\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP COLUMN name;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -85,11 +89,11 @@ func TestMysqldefAddIndex(t *testing.T) {
 	)
 	assertApply(t, createTable)
 
-	alterTable := "ALTER TABLE users ADD INDEX index_name(name);"
-	assertApplyOutput(t, createTable+"\n"+alterTable, "Run: '"+alterTable+"'\n")
-	assertApplyOutput(t, createTable+"\n"+alterTable, nothingModified)
+	alterTable := "ALTER TABLE users ADD INDEX index_name(name);\n"
+	assertApplyOutput(t, createTable+alterTable, applyPrefix+alterTable)
+	assertApplyOutput(t, createTable+alterTable, nothingModified)
 
-	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users DROP INDEX index_name;'\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP INDEX index_name;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -105,14 +109,14 @@ func TestMysqldefCreateIndex(t *testing.T) {
 	)
 	assertApply(t, createTable)
 
-	createIndex1 := "CREATE INDEX index_name ON users (name);"
-	createIndex2 := "CREATE UNIQUE INDEX index_created_at ON users (created_at);"
-	assertApplyOutput(t, createTable+createIndex1+createIndex2, "Run: '"+createIndex1+"'\nRun: '"+createIndex2+"'\n")
+	createIndex1 := "CREATE INDEX index_name ON users (name);\n"
+	createIndex2 := "CREATE UNIQUE INDEX index_created_at ON users (created_at);\n"
+	assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+createIndex1+createIndex2)
 	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
 
-	assertApplyOutput(t, createTable, stripHeredoc(`
-		Run: 'ALTER TABLE users DROP INDEX index_created_at;'
-		Run: 'ALTER TABLE users DROP INDEX index_name;'
+	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+		ALTER TABLE users DROP INDEX index_created_at;
+		ALTER TABLE users DROP INDEX index_name;
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)
@@ -139,9 +143,9 @@ func TestMysqldefCreateTableKey(t *testing.T) {
 		  UNIQUE KEY index_created_at(created_at)
 		);`,
 	)
-	assertApplyOutput(t, createTable, stripHeredoc(`
-		Run: 'ALTER TABLE users ADD key index_name(name);'
-		Run: 'ALTER TABLE users ADD unique key index_created_at(created_at);'
+	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+		ALTER TABLE users ADD key index_name(name);
+		ALTER TABLE users ADD unique key index_created_at(created_at);
 		`,
 	))
 }
@@ -156,14 +160,16 @@ func TestMysqldefAutoIncrementNotNull(t *testing.T) {
 	createTable1 := stripHeredoc(`
 		CREATE TABLE users1 (
 		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY
-		);`,
+		);
+		`,
 	)
 	createTable2 := stripHeredoc(`
 		CREATE TABLE users2 (
 		  id BIGINT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY
-		);`,
+		);
+		`,
 	)
-	assertApplyOutput(t, createTable1+"\n"+createTable2, "Run: '"+createTable1+"'\nRun: '"+createTable2+"'\n")
+	assertApplyOutput(t, createTable1+createTable2, applyPrefix+createTable1+createTable2)
 }
 
 //
@@ -181,13 +187,13 @@ func TestMysqldefDryRun(t *testing.T) {
 
 	dryRun := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--dry-run", "--file", "schema.sql")
 	apply := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
-	assertEquals(t, dryRun, "--- dry run ---\n"+apply)
+	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 }
 
 func TestMysqldefExport(t *testing.T) {
 	resetTestDatabase()
 	out := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--export")
-	assertEquals(t, out, "-- No table exists\n")
+	assertEquals(t, out, "-- No table exists --\n")
 
 	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", stripHeredoc(`
 		CREATE TABLE users (

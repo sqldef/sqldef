@@ -46,8 +46,9 @@ func RunDDLs(d Database, ddls []string) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("-- Apply --")
 	for _, ddl := range ddls {
-		fmt.Printf("Run: '%s;'\n", ddl)
+		fmt.Printf("%s;\n", ddl)
 		if _, err := transaction.Exec(ddl); err != nil {
 			transaction.Rollback()
 			return err
