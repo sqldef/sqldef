@@ -177,7 +177,6 @@ Nothing is modified
 ## TODO
 
 - [ ] Some important features
-  - Changing type of column (including adding unique index) and type of index
   - Foreign key support
   - Securer interface to set password
 - [ ] Better PostgreSQL support

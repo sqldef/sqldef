@@ -121,6 +121,10 @@ func TestMysqldefAddIndex(t *testing.T) {
 	assertApplyOutput(t, createTable+alterTable, applyPrefix+alterTable)
 	assertApplyOutput(t, createTable+alterTable, nothingModified)
 
+	alterTable = "ALTER TABLE users ADD INDEX index_name(name, created_at);\n"
+	assertApplyOutput(t, createTable+alterTable, applyPrefix+"ALTER TABLE users DROP INDEX index_name;\n"+alterTable)
+	assertApplyOutput(t, createTable+alterTable, nothingModified)
+
 	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP INDEX index_name;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }

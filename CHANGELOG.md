@@ -1,3 +1,9 @@
+# unreleased
+
+- Support changing index on both MySQL and PostgreSQL
+- Basic support of `CHANGE COLUMN` on MySQL
+- All non-SQL outputs on apply/dry-run/export are formatted like `-- comment --`
+
 # v0.2.0
 
 - Support handling index on PostgreSQL

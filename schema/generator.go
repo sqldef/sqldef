@@ -190,12 +190,28 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 	if currentTable == nil {
 		return nil, fmt.Errorf("%s is performed for inexistent table '%s': '%s'", action, tableName, statement)
 	}
-	if containsString(convertIndexesToIndexNames(currentTable.indexes), desiredIndex.name) {
-		// TODO: compare index definition and change type if necessary
-	} else {
+
+	currentIndex := findIndexByName(currentTable.indexes, desiredIndex.name)
+	if currentIndex == nil {
 		// Index not found, add index.
 		ddls = append(ddls, statement)
 		currentTable.indexes = append(currentTable.indexes, desiredIndex)
+	} else {
+		// Index found. If it's different, drop and add index.
+		if !areSameIndexes(*currentIndex, desiredIndex) {
+			ddls = append(ddls, g.generateDropIndex(currentTable.name, currentIndex.name))
+			ddls = append(ddls, statement)
+
+			newIndexes := []Index{}
+			for _, currentIndex := range currentTable.indexes {
+				if currentIndex.name == desiredIndex.name {
+					newIndexes = append(newIndexes, desiredIndex)
+				} else {
+					newIndexes = append(newIndexes, currentIndex)
+				}
+			}
+			currentTable.indexes = newIndexes // simulate index change. TODO: use []*Index in table and destructively modify it
+		}
 	}
 
 	// Examine indexes in desiredTable to delete obsoleted indexes later
@@ -395,6 +411,15 @@ func findColumnByName(columns []Column, name string) *Column {
 	return nil
 }
 
+func findIndexByName(indexes []Index, name string) *Index {
+	for _, index := range indexes {
+		if index.name == name {
+			return &index
+		}
+	}
+	return nil
+}
+
 func areSameColumns(colA Column, colB Column) bool {
 	return (colA.typeName == colB.typeName) &&
 		(colA.unsigned == colB.unsigned) &&
@@ -405,6 +430,25 @@ func areSameColumns(colA Column, colB Column) bool {
 
 	// TODO: Examine unique and primary properly with table indexes
 	//	(colA.keyOption == colB.keyOption)
+}
+
+func areSameIndexes(indexA Index, indexB Index) bool {
+	if indexA.unique != indexB.unique {
+		return false
+	}
+	if indexA.primary != indexB.primary {
+		return false
+	}
+	for len(indexA.columns) != len(indexB.columns) {
+		return false
+	}
+	for i, indexAColumn := range indexA.columns {
+		// TODO: check length?
+		if indexAColumn.column != indexB.columns[i].column {
+			return false
+		}
+	}
+	return true
 }
 
 func convertTablesToTableNames(tables []Table) []string {
