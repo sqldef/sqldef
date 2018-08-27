@@ -20,9 +20,9 @@ goyacc:
 	  go get golang.org/x/tools/cmd/goyacc; \
 	fi
 
-sql.go: goyacc sql.y
-	goyacc -o sql.go sql.y
-	gofmt -w sql.go
+parser.go: goyacc parser.y
+	goyacc -o parser.go parser.y
+	gofmt -w parser.go
 
 clean:
-	rm -f y.output sql.go
+	rm -f y.output parser.go
