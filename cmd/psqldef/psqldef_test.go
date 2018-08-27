@@ -164,6 +164,36 @@ func TestPsqldefDataTypes(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified) // Label for column type may change. Type will be examined.
 }
 
+func TestPsqldefPrimaryKey(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY,
+		  name text
+		);`,
+	)
+	assertApplyOutput(t, createTable, "Run: '"+createTable+"'\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  name text
+		);`,
+	)
+	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users DROP COLUMN id;'\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY,
+		  name text
+		);`,
+	)
+	assertApplyOutput(t, createTable, "Run: 'ALTER TABLE users ADD COLUMN id bigint NOT NULL PRIMARY KEY;'\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
