@@ -133,18 +133,33 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	ddls := []string{}
 
 	// Examine each column
-	for _, column := range desired.table.columns {
-		if containsString(convertColumnsToColumnNames(currentTable.columns), column.name) {
-			// TODO: Compare types and change column type!!!
-			// TODO: Add unique index if existing column does not have unique flag and there's no unique index!!!!
-		} else {
-			// Column not found, add column.
-			definition, err := g.generateColumnDefinition(column)
+	for _, desiredColumn := range desired.table.columns {
+
+		currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
+		if currentColumn == nil {
+			definition, err := g.generateColumnDefinition(desiredColumn) // TODO: Parse DEFAULt NULL and share this with else
 			if err != nil {
 				return ddls, err
 			}
+
+			// Column not found, add column.
 			ddl := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", desired.table.name, definition) // TODO: escape
 			ddls = append(ddls, ddl)
+		} else {
+			// Column is found. Change column if different.
+			if !areSameColumns(*currentColumn, desiredColumn) {
+				definition, err := g.generateColumnDefinition(desiredColumn) // TODO: Parse DEFAULt NULL and share this with else
+				if err != nil {
+					return ddls, err
+				}
+
+				if g.mode == GeneratorModeMysql {
+					ddl := fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", desired.table.name, currentColumn.name, definition) // TODO: escape
+					ddls = append(ddls, ddl)
+				}
+			}
+
+			// TODO: Add unique index if existing column does not have unique flag and there's no unique index!!!!
 		}
 	}
 
@@ -369,6 +384,27 @@ func findTableByName(tables []*Table, name string) *Table {
 		}
 	}
 	return nil
+}
+
+func findColumnByName(columns []Column, name string) *Column {
+	for _, column := range columns {
+		if column.name == name {
+			return &column
+		}
+	}
+	return nil
+}
+
+func areSameColumns(colA Column, colB Column) bool {
+	return (colA.typeName == colB.typeName) &&
+		(colA.unsigned == colB.unsigned) &&
+		(colA.notNull == colB.notNull) &&
+		(colA.autoIncrement == colB.autoIncrement)
+
+	// TODO: check defaultVal, length, scale
+
+	// TODO: Examine unique and primary properly with table indexes
+	//	(colA.keyOption == colB.keyOption)
 }
 
 func convertTablesToTableNames(tables []Table) []string {

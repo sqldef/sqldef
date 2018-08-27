@@ -189,12 +189,14 @@ More to come...
 
 - MySQL
   - Create table, drop table
-  - Add column, drop column
+  - Add column, change column, drop column
   - Add index, drop index
+     - KEY, UNIQUE KEY, PRIMARY KEY
 - PostgreSQL
   - Create table, drop table
   - Add column, drop column
   - Add index, drop index
+     - KEY, UNIQUE KEY, PRIMARY KEY
 
 ## Development
 
