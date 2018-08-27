@@ -17,7 +17,7 @@ import (
 func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	var opts struct {
 		User     string `short:"u" long:"user" description:"MySQL user name" value-name:"user_name" default:"root"`
-		Password string `short:"p" long:"password" description:"MySQL user password" value-name:"password"`
+		Password string `short:"p" long:"password" description:"MySQL user password, overridden by $MYSQL_PWD" value-name:"password"`
 		Host     string `short:"h" long:"host" description:"Host to connect to the MySQL server" value-name:"host_name" default:"127.0.0.1"`
 		Port     uint   `short:"P" long:"port" description:"Port used for the connection" value-name:"port_num" default:"3306"`
 		File     string `long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"sql_file" default:"-"`
@@ -55,10 +55,15 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		Export:  opts.Export,
 	}
 
+	password, ok := os.LookupEnv("MYSQL_PWD")
+	if !ok {
+		password = opts.Password
+	}
+
 	config := adapter.Config{
 		DbName:   database,
 		User:     opts.User,
-		Password: opts.Password,
+		Password: password,
 		Host:     opts.Host,
 		Port:     int(opts.Port),
 	}
