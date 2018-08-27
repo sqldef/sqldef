@@ -1,4 +1,4 @@
-# unreleased
+# v0.3.0
 
 - Support changing index on both MySQL and PostgreSQL
 - Basic support of `CHANGE COLUMN` on MySQL
