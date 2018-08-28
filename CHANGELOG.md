@@ -1,3 +1,8 @@
+## unreleased
+
+- Support `DROP PRIMARY KEY` in MySQL
+- Be aware of implicit `NOT NULL` on `PRIMARY KEY`
+
 ## v0.3.1
 
 - Support `$MYSQL_PWD` environment variable to set password on mysqldef

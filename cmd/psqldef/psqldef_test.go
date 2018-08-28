@@ -44,6 +44,58 @@ func TestPsqldefCreateTable(t *testing.T) {
 	assertApplyOutput(t, createTable1, nothingModified)
 }
 
+func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY,
+		  name text
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  name text
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP COLUMN id;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY,
+		  name text
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN id bigint NOT NULL PRIMARY KEY;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestPsqldefDropPrimaryKey(t *testing.T) {
+	t.Skip()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY,
+		  name text
+		);`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name text
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP PRIMARY KEY;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestPsqldefAddColumn(t *testing.T) {
 	resetTestDatabase()
 
@@ -172,37 +224,6 @@ func TestPsqldefDataTypes(t *testing.T) {
 
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified) // Label for column type may change. Type will be examined.
-}
-
-func TestPsqldefPrimaryKey(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint NOT NULL PRIMARY KEY,
-		  name text
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  name text
-		);`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP COLUMN id;\n")
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint NOT NULL PRIMARY KEY,
-		  name text
-		);`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN id bigint NOT NULL PRIMARY KEY;\n")
-	assertApplyOutput(t, createTable, nothingModified)
 }
 
 //

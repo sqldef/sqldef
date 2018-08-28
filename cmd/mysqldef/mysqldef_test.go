@@ -44,6 +44,21 @@ func TestMysqldefCreateTable(t *testing.T) {
 	assertApplyOutput(t, createTable1, nothingModified)
 }
 
+func TestMysqldefCreateTableWithImplicitNotNull(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint PRIMARY KEY,
+		  name varchar(40) DEFAULT NULL,
+		  created_at datetime NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified) // `NOT NULL` appears on `id`
+}
+
 func TestMysqldefAddColumn(t *testing.T) {
 	resetTestDatabase()
 

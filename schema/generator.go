@@ -134,7 +134,6 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	// Examine each column
 	for _, desiredColumn := range desired.table.columns {
-
 		currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
 		if currentColumn == nil {
 			definition, err := g.generateColumnDefinition(desiredColumn) // TODO: Parse DEFAULt NULL and share this with else
@@ -146,9 +145,16 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			ddl := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", desired.table.name, definition) // TODO: escape
 			ddls = append(ddls, ddl)
 		} else {
-			// Column is found. Change column if different.
-			if !areSameColumns(*currentColumn, desiredColumn) {
-				definition, err := g.generateColumnDefinition(desiredColumn) // TODO: Parse DEFAULt NULL and share this with else
+			// Column is found, change primary key as needed.
+			if isPrimaryKey(*currentColumn, currentTable) && !isPrimaryKey(desiredColumn, desired.table) {
+				// TODO: `DROP PRIMARY KEY` should always come earlier than `ADD PRIMARY KEY`
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", desired.table.name)) // TODO: escape
+				currentColumn.keyOption = desiredColumn.keyOption
+			}
+
+			// Change column as needed.
+			if !haveSameDataType(*currentColumn, desiredColumn) {
+				definition, err := g.generateColumnDefinition(desiredColumn) // TODO: Parse DEFAULT NULL and share this with else
 				if err != nil {
 					return ddls, err
 				}
@@ -229,10 +235,11 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 
 // Even though simulated table doesn't have index, primary or unique could exist in column definitions.
 // This carefully generates DROP INDEX for such situations.
-func (g *Generator) generateDDLsForAbsentIndex(index Index, currentTable Table, desiredTable Table) ([]string, error) {
+func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable Table, desiredTable Table) ([]string, error) {
 	ddls := []string{}
 
-	if index.primary {
+	if currentIndex.primary {
+		//pp(currentIndex)
 		var primaryKeyColumn *Column
 		for _, column := range desiredTable.columns {
 			if column.keyOption == ColumnKeyPrimary {
@@ -242,17 +249,17 @@ func (g *Generator) generateDDLsForAbsentIndex(index Index, currentTable Table, 
 		}
 
 		// If nil, it will be `DROP COLUMN`-ed. Ignore it.
-		if primaryKeyColumn != nil && primaryKeyColumn.name != index.columns[0].column { // TODO: check length of index.columns
+		if primaryKeyColumn != nil && primaryKeyColumn.name != currentIndex.columns[0].column { // TODO: check length of currentIndex.columns
 			// TODO: handle this. Rename primary key column...?
 			return ddls, fmt.Errorf(
 				"primary key column name of '%s' should be '%s' but currently '%s'. This is not handled yet.",
-				currentTable.name, primaryKeyColumn.name, index.columns[0].column,
+				currentTable.name, primaryKeyColumn.name, currentIndex.columns[0].column,
 			)
 		}
-	} else if index.unique {
+	} else if currentIndex.unique {
 		var uniqueKeyColumn *Column
 		for _, column := range desiredTable.columns {
-			if column.name == index.columns[0].column && (column.keyOption == ColumnKeyUnique || column.keyOption == ColumnKeyUniqueKey) {
+			if column.name == currentIndex.columns[0].column && (column.keyOption == ColumnKeyUnique || column.keyOption == ColumnKeyUniqueKey) {
 				uniqueKeyColumn = &column
 				break
 			}
@@ -260,10 +267,10 @@ func (g *Generator) generateDDLsForAbsentIndex(index Index, currentTable Table, 
 
 		if uniqueKeyColumn == nil {
 			// No unique column. Drop unique key index.
-			ddls = append(ddls, g.generateDropIndex(currentTable.name, index.name))
+			ddls = append(ddls, g.generateDropIndex(currentTable.name, currentIndex.name))
 		}
 	} else {
-		ddls = append(ddls, g.generateDropIndex(currentTable.name, index.name))
+		ddls = append(ddls, g.generateDropIndex(currentTable.name, currentIndex.name))
 	}
 
 	return ddls, nil
@@ -357,6 +364,19 @@ func (g *Generator) generateDropIndex(tableName string, indexName string) string
 	}
 }
 
+func isPrimaryKey(column Column, table Table) bool {
+	if column.keyOption == ColumnKeyPrimary {
+		return true
+	}
+
+	for _, index := range table.indexes {
+		if index.primary && index.columns[0].column == column.name {
+			return true
+		}
+	}
+	return false
+}
+
 // Destructively modify table1 to have table2 columns/indexes
 func mergeTable(table1 *Table, table2 Table) {
 	for _, column := range table2.columns {
@@ -420,16 +440,16 @@ func findIndexByName(indexes []Index, name string) *Index {
 	return nil
 }
 
-func areSameColumns(colA Column, colB Column) bool {
-	return (colA.typeName == colB.typeName) &&
-		(colA.unsigned == colB.unsigned) &&
-		(colA.notNull == colB.notNull) &&
-		(colA.autoIncrement == colB.autoIncrement)
+func haveSameDataType(current Column, desired Column) bool {
+	return (current.typeName == desired.typeName) &&
+		(current.unsigned == desired.unsigned) &&
+		(current.notNull == (desired.notNull || desired.keyOption == ColumnKeyPrimary)) && // `PRIMARY KEY` implies `NOT NULL`
+		(current.autoIncrement == desired.autoIncrement)
 
 	// TODO: check defaultVal, length, scale
 
-	// TODO: Examine unique and primary properly with table indexes
-	//	(colA.keyOption == colB.keyOption)
+	// TODO: Examine unique key properly with table indexes (primary key is already examined)
+	//	(current.keyOption == desired.keyOption)
 }
 
 func areSameIndexes(indexA Index, indexB Index) bool {

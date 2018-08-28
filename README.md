@@ -188,24 +188,23 @@ Nothing is modified
 More to come...
 
 - MySQL
-  - CREATE TABLE, DROP TABLE
-  - ADD COLUMN, CHANGE COLUMN, DROP COLUMN
-  - ADD INDEX, ADD UNIQUE INDEX
-  - CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX
+  - Table: CREATE TABLE, DROP TABLE
+  - Column: ADD COLUMN, CHANGE COLUMN, DROP COLUMN
+  - Index: ADD INDEX, ADD UNIQUE INDEX, CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX
 - PostgreSQL
-  - CREATE TABLE, DROP TABLE
-  - ADD COLUMN, DROP COLUMN
-  - CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX
+  - Table: CREATE TABLE, DROP TABLE
+  - Column: ADD COLUMN, DROP COLUMN
+  - Index: CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX
 
-### Limitations
+## Limitations
 
-Both mysqldef and psqldef do NOT support:
+Because sqldef distinguishes table/index/column by its name, sqldef does NOT support:
 
 - RENAME TABLE
 - RENAME INDEX
+  - DROP + ADD could be fine for index, though
 - CHANGE COLUMN for rename
 
-because sqldef distinguishes table/column/index by its name.
 To rename them, you would need to rename manually and use `--export` again.
 
 ## Development
