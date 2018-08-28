@@ -17,7 +17,7 @@ import (
 func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	var opts struct {
 		User     string `short:"U" long:"user" description:"PostgreSQL user name" value-name:"username" default:"postgres"`
-		Password string `short:"W" long:"password" description:"PostgreSQL user password" value-name:"password"`
+		Password string `short:"W" long:"password" description:"PostgreSQL user password, overridden by $PGPASS" value-name:"password"`
 		Host     string `short:"h" long:"host" description:"Host to connect to the PostgreSQL server" value-name:"hostname" default:"127.0.0.1"`
 		Port     uint   `short:"p" long:"port" description:"Port used for the connection" value-name:"port" default:"5432"`
 		File     string `short:"f" long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"filename" default:"-"`
@@ -55,10 +55,15 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		Export:  opts.Export,
 	}
 
+	password, ok := os.LookupEnv("PGPASS")
+	if !ok {
+		password = opts.Password
+	}
+
 	config := adapter.Config{
 		DbName:   database,
 		User:     opts.User,
-		Password: opts.Password,
+		Password: password,
 		Host:     opts.Host,
 		Port:     int(opts.Port),
 	}
