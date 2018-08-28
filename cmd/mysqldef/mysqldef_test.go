@@ -117,7 +117,7 @@ func TestMysqldefAddIndex(t *testing.T) {
 	)
 	assertApply(t, createTable)
 
-	alterTable := "ALTER TABLE users ADD INDEX index_name(name);\n"
+	alterTable := "ALTER TABLE users ADD UNIQUE INDEX index_name(name);\n"
 	assertApplyOutput(t, createTable+alterTable, applyPrefix+alterTable)
 	assertApplyOutput(t, createTable+alterTable, nothingModified)
 

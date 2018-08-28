@@ -177,25 +177,36 @@ Nothing is modified
 ## TODO
 
 - [ ] Some important features
+  - Some more basic data types support
   - Foreign key support
-  - Securer interface to set password
+- [ ] Fix a known bug: Parsing some types of default values
 - [ ] Better PostgreSQL support
   - Drop `pg_dump` command dependency to dump schema?
 
-## Implemented features
+## Supported features
 
 More to come...
 
 - MySQL
-  - Create table, drop table
-  - Add column, change column, drop column
-  - Add index, drop index
-     - KEY, UNIQUE KEY, PRIMARY KEY
+  - CREATE TABLE, DROP TABLE
+  - ADD COLUMN, CHANGE COLUMN, DROP COLUMN
+  - ADD INDEX, ADD UNIQUE INDEX
+  - CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX
 - PostgreSQL
-  - Create table, drop table
-  - Add column, drop column
-  - Add index, drop index
-     - KEY, UNIQUE KEY, PRIMARY KEY
+  - CREATE TABLE, DROP TABLE
+  - ADD COLUMN, DROP COLUMN
+  - CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX
+
+### Limitations
+
+Both mysqldef and psqldef do NOT support:
+
+- RENAME TABLE
+- RENAME INDEX
+- CHANGE COLUMN for rename
+
+because sqldef distinguishes table/column/index by its name.
+To rename them, you would need to rename manually and use `--export` again.
 
 ## Development
 
