@@ -1,4 +1,4 @@
-## unreleased
+## v0.3.1
 
 - Support `$MYSQL_PWD` environment variable to set password on mysqldef
 - Support `$PGPASS` environment variable to set password on psqldef
