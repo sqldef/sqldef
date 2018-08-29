@@ -1,4 +1,4 @@
-## unreleased
+## v0.3.2
 
 - Support `ADD PRIMARY KEY` / `DROP PRIMARY KEY` in MySQL
 - Support parsing more data types for PostgreSQL: boolean, character
