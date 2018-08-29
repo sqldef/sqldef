@@ -114,8 +114,12 @@ func (d *PostgresDatabase) Close() error {
 
 func runPgDump(config adapter.Config, table string) (string, error) {
 	cmd := exec.Command(
-		"pg_dump", config.DbName, "-t", table,
-		"-U", config.User, "-h", config.Host, "-p", fmt.Sprintf("%d", config.Port),
+		"pg_dump", config.DbName,
+		"--schema-only",
+		"-t", table,
+		"-U", config.User,
+		"-h", config.Host,
+		"-p", fmt.Sprintf("%d", config.Port),
 	)
 	if len(config.Password) > 0 {
 		cmd.Env = os.Environ()
