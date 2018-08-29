@@ -212,6 +212,8 @@ func TestPsqldefDataTypes(t *testing.T) {
 		  c_bigint bigint,
 		  c_bit bit,
 		  c_bit_2 bit(2),
+		  c_bool bool,
+		  c_boolean boolean,
 		  c_character_varying_40 character varying(40),
 		  c_date date,
 		  c_int int,

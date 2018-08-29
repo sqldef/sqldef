@@ -268,7 +268,7 @@ func forceEOF(yylex interface{}) {
 %type <str> set_session_or_global show_session_or_global
 %type <convertType> convert_type
 %type <columnType> column_type
-%type <columnType> int_type decimal_type numeric_type time_type char_type spatial_type
+%type <columnType> bool_type int_type decimal_type numeric_type time_type char_type spatial_type
 %type <optVal> length_opt
 %type <str> charset_opt collate_opt
 %type <boolVal> unsigned_opt zero_fill_opt
@@ -697,6 +697,7 @@ column_type:
     $$.Unsigned = $2
     $$.Zerofill = $3
   }
+| bool_type
 | char_type
 | time_type
 | spatial_type
@@ -878,6 +879,16 @@ time_type:
     $$ = ColumnType{Type: string($1), Length: $2}
   }
 | YEAR
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+
+bool_type:
+  BOOL
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| BOOLEAN
   {
     $$ = ColumnType{Type: string($1)}
   }

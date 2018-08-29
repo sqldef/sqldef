@@ -1,6 +1,7 @@
 ## unreleased
 
 - Support `ADD PRIMARY KEY` / `DROP PRIMARY KEY` in MySQL
+- Support parsing boolean column
 - Be aware of implicit `NOT NULL` on `PRIMARY KEY`
 
 ## v0.3.1
