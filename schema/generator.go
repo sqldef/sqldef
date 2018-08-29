@@ -151,7 +151,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", desired.table.name)) // TODO: escape
 				currentColumn.keyOption = desiredColumn.keyOption
 			}
-			if !isPrimaryKey(*currentColumn, currentTable) && isPrimaryKey(desiredColumn, desired.table) {
+			if g.mode == GeneratorModeMysql && !isPrimaryKey(*currentColumn, currentTable) && isPrimaryKey(desiredColumn, desired.table) { // TODO: support postgresql
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD PRIMARY KEY(%s)", desired.table.name, desiredColumn.name)) // TODO: escape, support multi-columns?
 				currentColumn.notNull = true
 				currentColumn.keyOption = ColumnKeyPrimary
