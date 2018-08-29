@@ -59,6 +59,34 @@ func TestMysqldefCreateTableWithImplicitNotNull(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified) // `NOT NULL` appears on `id`
 }
 
+func TestMysqldefCreateTableDropPrimaryKey(t *testing.T) {
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY,
+		  name varchar(20)
+		);`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20)
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP PRIMARY KEY;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20) PRIMARY KEY
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD PRIMARY KEY(name);\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefAddColumn(t *testing.T) {
 	resetTestDatabase()
 

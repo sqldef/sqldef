@@ -147,9 +147,14 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		} else {
 			// Column is found, change primary key as needed.
 			if isPrimaryKey(*currentColumn, currentTable) && !isPrimaryKey(desiredColumn, desired.table) {
-				// TODO: `DROP PRIMARY KEY` should always come earlier than `ADD PRIMARY KEY`
+				// TODO: `DROP PRIMARY KEY` should always come earlier than `ADD PRIMARY KEY` regardless of the order of columns
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", desired.table.name)) // TODO: escape
 				currentColumn.keyOption = desiredColumn.keyOption
+			}
+			if !isPrimaryKey(*currentColumn, currentTable) && isPrimaryKey(desiredColumn, desired.table) {
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD PRIMARY KEY(%s)", desired.table.name, desiredColumn.name)) // TODO: escape, support multi-columns?
+				currentColumn.notNull = true
+				currentColumn.keyOption = ColumnKeyPrimary
 			}
 
 			// Change column as needed.
