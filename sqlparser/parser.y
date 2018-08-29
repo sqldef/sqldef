@@ -1229,20 +1229,7 @@ alter_statement:
   {
     $$ = &DDL{Action: AlterStr, Table: $4, NewName: $4}
   }
-| ALTER ignore_opt TABLE table_name ADD alter_object_type_index sql_id '(' column_list ')'
-  {
-    $$ = &DDL{
-        Action: AddIndexStr,
-        Table: $4,
-        NewName: $4,
-        IndexSpec: &IndexSpec{
-          Name: $7,
-          Unique: false,
-        },
-        IndexCols: $9,
-      }
-  }
-| ALTER ignore_opt TABLE table_name ADD UNIQUE alter_object_type_index sql_id '(' column_list ')'
+| ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' column_list ')'
   {
     $$ = &DDL{
         Action: AddIndexStr,
@@ -1250,7 +1237,7 @@ alter_statement:
         NewName: $4,
         IndexSpec: &IndexSpec{
           Name: $8,
-          Unique: true,
+          Unique: bool($6),
         },
         IndexCols: $10,
       }
