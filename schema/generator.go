@@ -146,15 +146,17 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			ddls = append(ddls, ddl)
 		} else {
 			// Column is found, change primary key as needed.
-			if isPrimaryKey(*currentColumn, currentTable) && !isPrimaryKey(desiredColumn, desired.table) {
-				// TODO: `DROP PRIMARY KEY` should always come earlier than `ADD PRIMARY KEY` regardless of the order of columns
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", desired.table.name)) // TODO: escape
-				currentColumn.keyOption = desiredColumn.keyOption
-			}
-			if g.mode == GeneratorModeMysql && !isPrimaryKey(*currentColumn, currentTable) && isPrimaryKey(desiredColumn, desired.table) { // TODO: support postgresql
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD PRIMARY KEY(%s)", desired.table.name, desiredColumn.name)) // TODO: escape, support multi-columns?
-				currentColumn.notNull = true
-				currentColumn.keyOption = ColumnKeyPrimary
+			if g.mode == GeneratorModeMysql { // DDL is not compatible. TODO: support postgresql
+				if isPrimaryKey(*currentColumn, currentTable) && !isPrimaryKey(desiredColumn, desired.table) {
+					// TODO: `DROP PRIMARY KEY` should always come earlier than `ADD PRIMARY KEY` regardless of the order of columns
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", desired.table.name)) // TODO: escape
+					currentColumn.keyOption = desiredColumn.keyOption
+				}
+				if !isPrimaryKey(*currentColumn, currentTable) && isPrimaryKey(desiredColumn, desired.table) {
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD PRIMARY KEY(%s)", desired.table.name, desiredColumn.name)) // TODO: escape, support multi-columns?
+					currentColumn.notNull = true
+					currentColumn.keyOption = ColumnKeyPrimary
+				}
 			}
 
 			// Change column as needed.
@@ -411,6 +413,20 @@ func convertDDLsToTables(ddls []DDL) ([]*Table, error) {
 			}
 			// TODO: check duplicated creation
 			table.indexes = append(table.indexes, stmt.index)
+		case *AddPrimaryKey:
+			table := findTableByName(tables, stmt.tableName)
+			if table == nil {
+				return nil, fmt.Errorf("ADD PRIMARY KEY is performed before CREATE TABLE: %s", ddl.Statement())
+			}
+
+			newColumns := []Column{}
+			for _, column := range table.columns {
+				if column.name == stmt.index.columns[0].column { // TODO: multi-column primary key?
+					column.keyOption = ColumnKeyPrimary
+				}
+				newColumns = append(newColumns, column)
+			}
+			table.columns = newColumns
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in convertDDLsToTables: %v", stmt)
 		}

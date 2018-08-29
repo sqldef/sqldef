@@ -1,3 +1,7 @@
+## unreleased
+
+- Dump primary key with `--export` on PostgreSQL
+
 ## v0.3.2
 
 - Support `ADD PRIMARY KEY` / `DROP PRIMARY KEY` in MySQL

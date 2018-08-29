@@ -21,6 +21,12 @@ type AddIndex struct {
 	index     Index
 }
 
+type AddPrimaryKey struct {
+	statement string
+	tableName string
+	index     Index
+}
+
 type Table struct {
 	name    string
 	columns []Column
@@ -98,5 +104,9 @@ func (c *CreateIndex) Statement() string {
 }
 
 func (a *AddIndex) Statement() string {
+	return a.statement
+}
+
+func (a *AddPrimaryKey) Statement() string {
 	return a.statement
 }

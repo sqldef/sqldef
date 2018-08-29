@@ -174,6 +174,16 @@ func parseDDL(ddl string) (DDL, error) {
 				tableName: stmt.Table.Name.String(),
 				index:     index,
 			}, nil
+		} else if stmt.Action == "add primary key" {
+			index, err := parseIndex(stmt)
+			if err != nil {
+				return nil, err
+			}
+			return &AddPrimaryKey{
+				statement: ddl,
+				tableName: stmt.Table.Name.String(),
+				index:     index,
+			}, nil
 		} else {
 			return nil, fmt.Errorf(
 				"unsupported type of DDL action (only 'CREATE TABLE', 'CREATE INDEX' and 'ALTER TABLE ADD INDEX' are supported) '%s': %s",

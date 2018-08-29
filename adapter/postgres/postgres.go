@@ -87,11 +87,6 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	re = regexp.MustCompilePOSIX("^ALTER TABLE [^ ;]+ OWNER TO .+;$")
 	ddl = re.ReplaceAllLiteralString(ddl, "")
 
-	// Ignore ALTER TABLE xxx ADD CONSTRAINT TO yyy statements
-	// TODO: Why not parse this? Should this be considered as primary key?
-	re = regexp.MustCompilePOSIX("^ALTER TABLE ONLY [^ ;]+\n +ADD CONSTRAINT [^ ;]+ PRIMARY KEY \\([^)]+\\);$")
-	ddl = re.ReplaceAllLiteralString(ddl, "")
-
 	// Remove empty lines
 	// TODO: there should be a better way....
 	for strings.Replace(ddl, "\n\n", "\n", -1) != ddl {

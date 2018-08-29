@@ -675,6 +675,7 @@ const (
 	DropColVindexStr = "drop vindex"
 	AddIndexStr      = "add index"
 	CreateIndexStr   = "create index"
+	AddPrimaryKeyStr = "add primary key"
 
 	// Vindex DDL param to specify the owner of a vindex
 	VindexOwnerStr = "owner"
@@ -1204,9 +1205,10 @@ const (
 )
 
 type IndexSpec struct {
-	Name   ColIdent
-	Type   ColIdent
-	Unique bool
+	Name    ColIdent
+	Type    ColIdent
+	Unique  bool
+	Primary bool
 }
 
 // VindexSpec defines a vindex for a CREATE VINDEX or DROP VINDEX statement

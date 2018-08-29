@@ -256,12 +256,16 @@ func TestPsqldefExport(t *testing.T) {
 	    );`,
 	))
 	out = assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--export")
-	assertEquals(t, strings.Replace(out, "public.users", "users", 1), // workaround: local has `public.` but travis doesn't.
-		"CREATE TABLE users (\n"+
-			"    id bigint NOT NULL,\n"+
-			"    age integer\n"+
-			");\n",
-	)
+	// workaround: local has `public.` but travis doesn't.
+	assertEquals(t, strings.Replace(out, "public.users", "users", 1), stripHeredoc(`
+		CREATE TABLE users (
+		    id bigint NOT NULL,
+		    age integer
+		);
+		ALTER TABLE ONLY public.users
+		    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+		`,
+	))
 }
 
 func TestPsqldefHelp(t *testing.T) {

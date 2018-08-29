@@ -1238,8 +1238,23 @@ alter_statement:
         IndexSpec: &IndexSpec{
           Name: $8,
           Unique: bool($6),
+          Primary: false,
         },
         IndexCols: $10,
+      }
+  }
+| ALTER ignore_opt TABLE ONLY table_name ADD CONSTRAINT sql_id PRIMARY KEY '(' column_list ')'
+  {
+    $$ = &DDL{
+        Action: AddPrimaryKeyStr,
+        Table: $5,
+        NewName: $5,
+        IndexSpec: &IndexSpec{
+          Name: $8,
+          Unique: false,
+          Primary: true,
+        },
+        IndexCols: $12,
       }
   }
 | ALTER ignore_opt TABLE table_name ADD alter_object_type_rest force_eof
@@ -1311,7 +1326,6 @@ alter_object_type_index:
 
 alter_object_type_rest:
   COLUMN
-| CONSTRAINT
 | FOREIGN
 | FULLTEXT
 | ID
@@ -3060,6 +3074,7 @@ reserved_keyword:
 | NOT
 | NULL
 | ON
+| ONLY
 | OR
 | ORDER
 | OUTER
@@ -3104,12 +3119,14 @@ non_reserved_keyword:
 | BIT
 | BLOB
 | BOOL
+| BOOLEAN
 | CHAR
 | CHARACTER
 | CHARSET
 | COMMENT_KEYWORD
 | COMMIT
 | COMMITTED
+| CONSTRAINT
 | DATE
 | DATETIME
 | DECIMAL
@@ -3127,8 +3144,8 @@ non_reserved_keyword:
 | INTEGER
 | ISOLATION
 | JSON
-| KEY_BLOCK_SIZE
 | KEYS
+| KEY_BLOCK_SIZE
 | LANGUAGE
 | LAST_INSERT_ID
 | LESS
@@ -3147,7 +3164,6 @@ non_reserved_keyword:
 | NCHAR
 | NUMERIC
 | OFFSET
-| ONLY
 | OPTIMIZE
 | PARTITION
 | POINT
