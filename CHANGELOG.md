@@ -3,6 +3,7 @@
 - Support `ADD PRIMARY KEY` / `DROP PRIMARY KEY` in MySQL
 - Support parsing boolean column
 - Be aware of implicit `NOT NULL` on `PRIMARY KEY`
+- Use `--schema-only` on `pg_dump` in psqldef
 
 ## v0.3.1
 
