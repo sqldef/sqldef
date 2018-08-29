@@ -160,12 +160,8 @@ func TestPsqldefDataTypes(t *testing.T) {
 	//   - int8
 	//   - bigserial
 	//   - serial8
-	//   - bool
-	//   - boolean
 	//   - box
 	//   - bytea
-	//   - char
-	//   - character
 	//   - cidr
 	//   - circle
 	//   - double precision
@@ -205,7 +201,7 @@ func TestPsqldefDataTypes(t *testing.T) {
 	//   - uuid
 	//   - xml
 	//
-	// Remaining SQL spec: bit varying, boolean, char, character, double precision, interval, numeric, decimal, real,
+	// Remaining SQL spec: bit varying, double precision, interval, numeric, decimal, real,
 	//   smallint, time(with and without tz), timestamp(with and without tz), xml
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
@@ -214,12 +210,14 @@ func TestPsqldefDataTypes(t *testing.T) {
 		  c_bit_2 bit(2),
 		  c_bool bool,
 		  c_boolean boolean,
-		  c_character_varying_40 character varying(40),
+		  c_char_10 char(10),
+		  c_character_20 character(20),
+		  c_character_varying_30 character varying(30),
 		  c_date date,
 		  c_int int,
 		  c_integer integer,
 		  c_text text,
-		  c_varchar_30 varchar(30)
+		  c_varchar_40 varchar(40)
 		);
 		`,
 	)

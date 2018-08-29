@@ -1,7 +1,7 @@
 ## unreleased
 
 - Support `ADD PRIMARY KEY` / `DROP PRIMARY KEY` in MySQL
-- Support parsing boolean column
+- Support parsing more data types for PostgreSQL: boolean, character
 - Be aware of implicit `NOT NULL` on `PRIMARY KEY`
 - Use `--schema-only` on `pg_dump` in psqldef
 
