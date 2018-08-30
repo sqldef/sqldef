@@ -2,6 +2,7 @@
 
 - Parse PostgreSQL's `"column"` literal properly
 - Dump primary key with `--export` on PostgreSQL
+- Prevent unexpected DDLs caused by data type aliases (bool, integer, char, varchar)
 
 ## v0.3.2
 

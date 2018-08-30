@@ -13,6 +13,15 @@ const (
 	GeneratorModePostgres
 )
 
+var (
+	dataTypeAliases = map[string]string{
+		"bool":    "boolean",
+		"int":     "integer",
+		"char":    "character",
+		"varchar": "character varying",
+	}
+)
+
 // This struct holds simulated schema states during GenerateIdempotentDDLs().
 type Generator struct {
 	mode          GeneratorMode
@@ -145,7 +154,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			ddl := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", desired.table.name, definition) // TODO: escape
 			ddls = append(ddls, ddl)
 		} else {
-			// Column is found, change primary key as needed.
+			// Column is found, change primary key first as needed.
 			if g.mode == GeneratorModeMysql { // DDL is not compatible. TODO: support postgresql
 				if isPrimaryKey(*currentColumn, currentTable) && !isPrimaryKey(desiredColumn, desired.table) {
 					// TODO: `DROP PRIMARY KEY` should always come earlier than `ADD PRIMARY KEY` regardless of the order of columns
@@ -159,14 +168,14 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 			}
 
-			// Change column as needed.
+			// Change column data type as needed.
 			if !haveSameDataType(*currentColumn, desiredColumn) {
 				definition, err := g.generateColumnDefinition(desiredColumn) // TODO: Parse DEFAULT NULL and share this with else
 				if err != nil {
 					return ddls, err
 				}
 
-				if g.mode == GeneratorModeMysql {
+				if g.mode == GeneratorModeMysql { // DDL is not compatible. TODO: support PostgreSQL
 					ddl := fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", desired.table.name, currentColumn.name, definition) // TODO: escape
 					ddls = append(ddls, ddl)
 				}
@@ -462,7 +471,7 @@ func findIndexByName(indexes []Index, name string) *Index {
 }
 
 func haveSameDataType(current Column, desired Column) bool {
-	return (current.typeName == desired.typeName) &&
+	return (normalizeDataType(current.typeName) == normalizeDataType(desired.typeName)) &&
 		(current.unsigned == desired.unsigned) &&
 		(current.notNull == (desired.notNull || desired.keyOption == ColumnKeyPrimary)) && // `PRIMARY KEY` implies `NOT NULL`
 		(current.autoIncrement == desired.autoIncrement)
@@ -471,6 +480,15 @@ func haveSameDataType(current Column, desired Column) bool {
 
 	// TODO: Examine unique key properly with table indexes (primary key is already examined)
 	//	(current.keyOption == desired.keyOption)
+}
+
+func normalizeDataType(dataType string) string {
+	alias, ok := dataTypeAliases[dataType]
+	if ok {
+		return alias
+	} else {
+		return dataType
+	}
 }
 
 func areSameIndexes(indexA Index, indexB Index) bool {

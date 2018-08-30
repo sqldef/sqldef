@@ -259,13 +259,13 @@ func TestMysqldefColumnLiteral(t *testing.T) {
 }
 
 func TestMysqldefIntegerBug(t *testing.T) {
-	t.Skip()
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
-		  id bigint NOT NULL,
-		  age integer
+		  charv character(40),
+		  varcharv character varying(40),
+		  intv integer
 		);
 		`,
 	)
