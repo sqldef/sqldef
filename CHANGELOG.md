@@ -1,4 +1,4 @@
-## unreleased
+## v0.3.3
 
 - Parse PostgreSQL's `"column"` literal properly
 - Dump primary key with `--export` on PostgreSQL
