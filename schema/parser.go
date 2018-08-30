@@ -140,8 +140,15 @@ func parseIndex(stmt *sqlparser.DDL) (Index, error) {
 
 // Parse DDL like `CREATE TABLE` or `ALTER TABLE`.
 // This doesn't support destructive DDL like `DROP TABLE`.
-func parseDDL(ddl string) (DDL, error) {
-	stmt, err := sqlparser.Parse(ddl)
+func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
+	var parserMode sqlparser.ParserMode
+	if mode == GeneratorModePostgres {
+		parserMode = sqlparser.ParserModePostgres
+	} else {
+		parserMode = sqlparser.ParserModeMysql
+	}
+
+	stmt, err := sqlparser.ParseWithMode(ddl, parserMode)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +204,7 @@ func parseDDL(ddl string) (DDL, error) {
 
 // Parse `ddls`, which is expected to `;`-concatenated DDLs
 // and not to include destructive DDL.
-func parseDDLs(str string) ([]DDL, error) {
+func parseDDLs(mode GeneratorMode, str string) ([]DDL, error) {
 	ddls := strings.Split(str, ";")
 	result := []DDL{}
 
@@ -207,7 +214,7 @@ func parseDDLs(str string) ([]DDL, error) {
 			continue
 		}
 
-		parsed, err := parseDDL(ddl)
+		parsed, err := parseDDL(mode, ddl)
 		if err != nil {
 			return result, err
 		}

@@ -68,7 +68,7 @@ func TestParseNextErrors(t *testing.T) {
 		}
 
 		sql := tcase.input + "; select 1 from t"
-		tokens := NewStringTokenizer(sql)
+		tokens := NewStringTokenizer(sql, ParserModeMysql)
 
 		// The first statement should be an error
 		_, err := ParseNext(tokens)
@@ -137,7 +137,7 @@ func TestParseNextEdgeCases(t *testing.T) {
 	}}
 
 	for _, test := range tests {
-		tokens := NewStringTokenizer(test.input)
+		tokens := NewStringTokenizer(test.input, ParserModeMysql)
 
 		for i, want := range test.want {
 			tree, err := ParseNext(tokens)

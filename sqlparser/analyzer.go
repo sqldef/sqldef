@@ -300,7 +300,7 @@ func ExtractSetValues(sql string) (keyValues map[SetKey]interface{}, scope strin
 			if setStmt.Scope != "" && scope != "" {
 				return nil, "", fmt.Errorf("unsupported in set: mixed using of variable scope")
 			}
-			_, out := NewStringTokenizer(key).Scan()
+			_, out := NewStringTokenizer(key, ParserModeMysql).Scan() // TODO: Switch mode
 			key = string(out)
 		}
 

@@ -26,9 +26,14 @@ import (
 	"github.com/k0kubun/sqldef/sqlparser/dependency/sqltypes"
 )
 
+type ParserMode int
+
 const (
 	defaultBufSize = 4096
 	eofChar        = 0x100
+
+	ParserModeMysql = ParserMode(iota)
+	ParserModePostgres
 )
 
 // Tokenizer is the struct used to generate SQL
@@ -47,6 +52,7 @@ type Tokenizer struct {
 	nesting        int
 	multi          bool
 	specialComment *Tokenizer
+	mode           ParserMode
 
 	buf     []byte
 	bufPos  int
@@ -55,11 +61,12 @@ type Tokenizer struct {
 
 // NewStringTokenizer creates a new Tokenizer for the
 // sql string.
-func NewStringTokenizer(sql string) *Tokenizer {
+func NewStringTokenizer(sql string, mode ParserMode) *Tokenizer {
 	buf := []byte(sql)
 	return &Tokenizer{
 		buf:     buf,
 		bufSize: len(buf),
+		mode:    mode,
 	}
 }
 
@@ -595,11 +602,18 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 				return NE, nil
 			}
 			return int(ch), nil
-		case '\'', '"':
+		case '\'':
 			return tkn.scanString(ch, STRING)
-		case '`':
-			return tkn.scanLiteralIdentifier()
+		case '"':
+			if tkn.mode == ParserModePostgres {
+				return tkn.scanLiteralIdentifier()
+			} else {
+				return tkn.scanString(ch, STRING)
+			}
 		default:
+			if tkn.mode == ParserModeMysql && ch == '`' {
+				return tkn.scanLiteralIdentifier()
+			}
 			return LEX_ERROR, []byte{byte(ch)}
 		}
 	}
@@ -664,22 +678,30 @@ func (tkn *Tokenizer) scanBitLiteral() (int, []byte) {
 	return BIT_LITERAL, buffer.Bytes()
 }
 
+func (tkn *Tokenizer) literalSepChar() uint16 {
+	if tkn.mode == ParserModePostgres {
+		return '"'
+	} else {
+		return '`'
+	}
+}
+
 func (tkn *Tokenizer) scanLiteralIdentifier() (int, []byte) {
 	buffer := &bytes2.Buffer{}
 	backTickSeen := false
 	for {
 		if backTickSeen {
-			if tkn.lastChar != '`' {
+			if tkn.lastChar != tkn.literalSepChar() {
 				break
 			}
 			backTickSeen = false
-			buffer.WriteByte('`')
+			buffer.WriteByte(byte(tkn.literalSepChar()))
 			tkn.next()
 			continue
 		}
 		// The previous char was not a backtick.
 		switch tkn.lastChar {
-		case '`':
+		case tkn.literalSepChar():
 			backTickSeen = true
 		case eofChar:
 			// Premature EOF.
@@ -880,7 +902,7 @@ func (tkn *Tokenizer) scanMySQLSpecificComment() (int, []byte) {
 		tkn.consumeNext(buffer)
 	}
 	_, sql := ExtractMysqlComment(buffer.String())
-	tkn.specialComment = NewStringTokenizer(sql)
+	tkn.specialComment = NewStringTokenizer(sql, tkn.mode)
 	return tkn.Scan()
 }
 

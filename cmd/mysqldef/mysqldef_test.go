@@ -247,6 +247,17 @@ func TestMysqldefAutoIncrementNotNull(t *testing.T) {
 	assertApplyOutput(t, createTable1+createTable2, applyPrefix+createTable1+createTable2)
 }
 
+func TestMysqldefColumnLiteral(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE users (\n" +
+		"  `id` bigint NOT NULL,\n" +
+		"  `name` text\n" +
+		"  );\n"
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //

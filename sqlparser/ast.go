@@ -45,7 +45,11 @@ import (
 // is partially parsed but still contains a syntax error, the
 // error is ignored and the DDL is returned anyway.
 func Parse(sql string) (Statement, error) {
-	tokenizer := NewStringTokenizer(sql)
+	return ParseWithMode(sql, ParserModeMysql)
+}
+
+func ParseWithMode(sql string, mode ParserMode) (Statement, error) {
+	tokenizer := NewStringTokenizer(sql, mode)
 	if yyParse(tokenizer) != 0 {
 		if tokenizer.partialDDL != nil {
 			tokenizer.ParseTree = tokenizer.partialDDL
@@ -61,7 +65,7 @@ func Parse(sql string) (Statement, error) {
 // ParseStrictDDL is the same as Parse except it errors on
 // partially parsed DDL statements.
 func ParseStrictDDL(sql string) (Statement, error) {
-	tokenizer := NewStringTokenizer(sql)
+	tokenizer := NewStringTokenizer(sql, ParserModeMysql)
 	if yyParse(tokenizer) != 0 {
 		return nil, tokenizer.LastError
 	}
@@ -97,7 +101,7 @@ func ParseNext(tokenizer *Tokenizer) (Statement, error) {
 // SplitStatement returns the first sql statement up to either a ; or EOF
 // and the remainder from the given buffer
 func SplitStatement(blob string) (string, string, error) {
-	tokenizer := NewStringTokenizer(blob)
+	tokenizer := NewStringTokenizer(blob, ParserModeMysql) // TODO: Switch mode
 	tkn := 0
 	for {
 		tkn, _ = tokenizer.Scan()
@@ -118,7 +122,7 @@ func SplitStatement(blob string) (string, string, error) {
 // returns the sql pieces blob contains; or error if sql cannot be parsed
 func SplitStatementToPieces(blob string) (pieces []string, err error) {
 	pieces = make([]string, 0, 16)
-	tokenizer := NewStringTokenizer(blob)
+	tokenizer := NewStringTokenizer(blob, ParserModeMysql) // TODO: Switch mode
 
 	tkn := 0
 	var stmt string
