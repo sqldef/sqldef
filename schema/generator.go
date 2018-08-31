@@ -1,3 +1,4 @@
+// TODO: Normalize implicit things in input first, and then compare
 package schema
 
 import (
@@ -106,9 +107,23 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			continue
 		}
 
-		// Table is expected to exist. Check indexes.
+		// Table is expected to exist. Drop foreign keys prior to index deletion
+		for _, foreignKey := range currentTable.foreignKeys {
+			if containsString(convertForeignKeysToConstraintNames(desiredTable.foreignKeys), foreignKey.constraintName) {
+				continue // Foreign key is expected to exist.
+			}
+
+			if g.mode == GeneratorModeMysql { // DDL is not compatible. TODO: support postgresql
+				ddl := fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", currentTable.name, foreignKey.constraintName)
+				ddls = append(ddls, ddl)
+			}
+			// TODO: simulate to remove foreign key from `currentTable.foreignKeys`?
+		}
+
+		// Check indexes
 		for _, index := range currentTable.indexes {
-			if containsString(convertIndexesToIndexNames(desiredTable.indexes), index.name) {
+			if containsString(convertIndexesToIndexNames(desiredTable.indexes), index.name) ||
+				containsString(convertForeignKeysToIndexNames(desiredTable.foreignKeys), index.name) {
 				continue // Index is expected to exist.
 			}
 
@@ -145,7 +160,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	for _, desiredColumn := range desired.table.columns {
 		currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
 		if currentColumn == nil {
-			definition, err := g.generateColumnDefinition(desiredColumn) // TODO: Parse DEFAULt NULL and share this with else
+			definition, err := g.generateColumnDefinition(desiredColumn) // TODO: Parse DEFAULT NULL and share this with else
 			if err != nil {
 				return ddls, err
 			}
@@ -192,6 +207,29 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		} else {
 			// Index not found, add index.
 			definition, err := g.generateIndexDefinition(index)
+			if err != nil {
+				return ddls, err
+			}
+			ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", desired.table.name, definition) // TODO: escape
+			ddls = append(ddls, ddl)
+		}
+	}
+
+	// Examine each foreign key
+	for _, foreignKey := range desired.table.foreignKeys {
+		if len(foreignKey.constraintName) == 0 {
+			return ddls, fmt.Errorf(
+				"Foreign key without constraint symbol was found in table '%s' (index name: '%s', columns: %v). "+
+					"Specify the constraint symbol to identify the foreign key.",
+				desired.table.name, foreignKey.indexName, foreignKey.indexColumns,
+			)
+		}
+
+		if containsString(convertForeignKeysToConstraintNames(currentTable.foreignKeys), foreignKey.constraintName) {
+			// TODO: Compare foreign key columns/options and change foreign key!!!
+		} else {
+			// Foreign key not found, add foreign key.
+			definition, err := g.generateForeignKeyDefinition(foreignKey)
 			if err != nil {
 				return ddls, err
 			}
@@ -372,6 +410,26 @@ func (g *Generator) generateIndexDefinition(index Index) (string, error) {
 	return definition, nil
 }
 
+func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) (string, error) {
+	// TODO: make string concatenation faster?
+	// TODO: consider escape?
+
+	// Empty constraint name is already invalidated in generateDDLsForCreateIndex
+	definition := fmt.Sprintf("CONSTRAINT %s FOREIGN KEY ", foreignKey.constraintName)
+
+	if len(foreignKey.indexName) > 0 {
+		definition += fmt.Sprintf("%s ", foreignKey.indexName)
+	}
+
+	definition += fmt.Sprintf(
+		"(%s) REFERENCES %s (%s)",
+		strings.Join(foreignKey.indexColumns, ","), foreignKey.referenceName,
+		strings.Join(foreignKey.referenceColumns, ","),
+	)
+
+	return definition, nil
+}
+
 func (g *Generator) generateDropIndex(tableName string, indexName string) string {
 	if g.mode == GeneratorModePostgres {
 		return fmt.Sprintf("DROP INDEX %s", indexName) // TODO: escape
@@ -510,6 +568,8 @@ func areSameIndexes(indexA Index, indexB Index) bool {
 	return true
 }
 
+// TODO: Use interface to avoid defining following functions?
+
 func convertTablesToTableNames(tables []Table) []string {
 	tableNames := []string{}
 	for _, table := range tables {
@@ -530,6 +590,26 @@ func convertIndexesToIndexNames(indexes []Index) []string {
 	indexNames := []string{}
 	for _, index := range indexes {
 		indexNames = append(indexNames, index.name)
+	}
+	return indexNames
+}
+
+func convertForeignKeysToConstraintNames(foreignKeys []ForeignKey) []string {
+	constraintNames := []string{}
+	for _, foreignKey := range foreignKeys {
+		constraintNames = append(constraintNames, foreignKey.constraintName)
+	}
+	return constraintNames
+}
+
+func convertForeignKeysToIndexNames(foreignKeys []ForeignKey) []string {
+	indexNames := []string{}
+	for _, foreignKey := range foreignKeys {
+		if len(foreignKey.indexName) > 0 {
+			indexNames = append(indexNames, foreignKey.indexName)
+		} else if len(foreignKey.constraintName) > 0 {
+			indexNames = append(indexNames, foreignKey.constraintName)
+		} // unexpected to reach else (really?)
 	}
 	return indexNames
 }

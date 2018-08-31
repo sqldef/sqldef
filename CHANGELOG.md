@@ -1,3 +1,7 @@
+## unreleased
+
+- Add support for non-composite foreign key on MySQL
+
 ## v0.3.3
 
 - Parse PostgreSQL's `"column"` literal properly

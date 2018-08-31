@@ -28,9 +28,10 @@ type AddPrimaryKey struct {
 }
 
 type Table struct {
-	name    string
-	columns []Column
-	indexes []Index
+	name        string
+	columns     []Column
+	indexes     []Index
+	foreignKeys []ForeignKey
 	// XXX: have options and alter on its change?
 }
 
@@ -59,6 +60,14 @@ type Index struct {
 type IndexColumn struct {
 	column string
 	length *Value // Parsed in "create table" but not parsed in "add index". So actually not used yet.
+}
+
+type ForeignKey struct {
+	constraintName   string
+	indexName        string
+	indexColumns     []string
+	referenceName    string
+	referenceColumns []string
 }
 
 type Value struct {

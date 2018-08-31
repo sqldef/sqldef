@@ -89,6 +89,7 @@ func forceEOF(yylex interface{}) {
   updateExpr    *UpdateExpr
   setExpr       *SetExpr
   colIdent      ColIdent
+  colIdents     []ColIdent
   tableIdent    TableIdent
   convertType   *ConvertType
   aliasedTableName *AliasedTableExpr
@@ -104,6 +105,7 @@ func forceEOF(yylex interface{}) {
   indexOptions  []*IndexOption
   indexColumn   *IndexColumn
   indexColumns  []*IndexColumn
+  foreignKeyDefinition *ForeignKeyDefinition
   partDefs      []*PartitionDefinition
   partDef       *PartitionDefinition
   partSpec      *PartitionSpec
@@ -153,7 +155,7 @@ func forceEOF(yylex interface{}) {
 
 // DDL Tokens
 %token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD
-%token <bytes> SCHEMA TABLE INDEX VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE
+%token <bytes> SCHEMA TABLE INDEX VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE
 %right <bytes> UNIQUE KEY
 %token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE
 %token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER
@@ -277,6 +279,9 @@ func forceEOF(yylex interface{}) {
 %type <columnDefinition> column_definition
 %type <columnType> column_definition_type
 %type <indexDefinition> index_definition
+%type <foreignKeyDefinition> foreign_key_definition
+%type <colIdent> sql_id_opt
+%type <colIdents> sql_id_list
 %type <str> index_or_key
 %type <str> equal_opt
 %type <TableSpec> table_spec table_column_list
@@ -683,6 +688,10 @@ table_column_list:
 | table_column_list ',' index_definition
   {
     $$.AddIndex($3)
+  }
+| table_column_list ',' foreign_key_definition
+  {
+    $$.AddForeignKey($3)
   }
 
 column_definition:
@@ -1179,6 +1188,34 @@ index_column:
   sql_id length_opt
   {
       $$ = &IndexColumn{Column: $1, Length: $2}
+  }
+
+foreign_key_definition:
+  CONSTRAINT sql_id_opt FOREIGN KEY sql_id_opt '(' sql_id_list ')' REFERENCES sql_id '(' sql_id_list ')'
+  {
+    $$ = &ForeignKeyDefinition{
+      ConstraintName: $2,
+      IndexName: $5,
+      IndexColumns: $7,
+      ReferenceName: $10,
+      ReferenceColumns: $12,
+    }
+  }
+
+sql_id_opt:
+  {
+    $$ = NewColIdent("")
+  }
+| sql_id
+
+sql_id_list:
+  sql_id
+  {
+    $$ = []ColIdent{$1}
+  }
+| sql_id_list ',' sql_id
+  {
+    $$ = append($1, $3)
   }
 
 table_option_list:
@@ -3046,6 +3083,7 @@ reserved_keyword:
 | FALSE
 | FOR
 | FORCE
+| FOREIGN
 | FROM
 | GROUP
 | HAVING
@@ -3135,7 +3173,6 @@ non_reserved_keyword:
 | ENUM
 | EXPANSION
 | FLOAT_TYPE
-| FOREIGN
 | FULLTEXT
 | GEOMETRY
 | GEOMETRYCOLLECTION

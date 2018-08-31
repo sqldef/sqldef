@@ -813,9 +813,10 @@ func (node *PartitionDefinition) walkSubtree(visit Visit) error {
 
 // TableSpec describes the structure of a table from a CREATE TABLE statement
 type TableSpec struct {
-	Columns []*ColumnDefinition
-	Indexes []*IndexDefinition
-	Options string
+	Columns     []*ColumnDefinition
+	Indexes     []*IndexDefinition
+	ForeignKeys []*ForeignKeyDefinition
+	Options     string
 }
 
 // Format formats the node.
@@ -843,6 +844,10 @@ func (ts *TableSpec) AddColumn(cd *ColumnDefinition) {
 // AddIndex appends the given index to the list in the spec
 func (ts *TableSpec) AddIndex(id *IndexDefinition) {
 	ts.Indexes = append(ts.Indexes, id)
+}
+
+func (ts *TableSpec) AddForeignKey(foreignKey *ForeignKeyDefinition) {
+	ts.ForeignKeys = append(ts.ForeignKeys, foreignKey)
 }
 
 func (ts *TableSpec) walkSubtree(visit Visit) error {
@@ -1289,6 +1294,14 @@ func (node VindexParam) walkSubtree(visit Visit) error {
 	return Walk(visit,
 		node.Key,
 	)
+}
+
+type ForeignKeyDefinition struct {
+	ConstraintName   ColIdent
+	IndexName        ColIdent
+	IndexColumns     []ColIdent
+	ReferenceName    ColIdent
+	ReferenceColumns []ColIdent
 }
 
 // Show represents a show statement.
