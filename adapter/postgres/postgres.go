@@ -87,6 +87,14 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	re = regexp.MustCompilePOSIX("^ALTER TABLE [^ ;]+ OWNER TO .+;$")
 	ddl = re.ReplaceAllLiteralString(ddl, "")
 
+	// Ignore REVOKE statements
+	re = regexp.MustCompilePOSIX("^REVOKE .*;$")
+	ddl = re.ReplaceAllLiteralString(ddl, "")
+
+	// Ignore GRANT statements
+	re = regexp.MustCompilePOSIX("^GRANT .*;$")
+	ddl = re.ReplaceAllLiteralString(ddl, "")
+
 	// Remove empty lines
 	// TODO: there should be a better way....
 	for strings.Replace(ddl, "\n\n", "\n", -1) != ddl {
