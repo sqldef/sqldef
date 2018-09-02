@@ -44,18 +44,14 @@ import (
 // is the AST representation of the query. If a DDL statement
 // is partially parsed but still contains a syntax error, the
 // error is ignored and the DDL is returned anyway.
-func Parse(sql string) (Statement, error) {
-	return ParseWithMode(sql, ParserModeMysql)
-}
-
-func ParseWithMode(sql string, mode ParserMode) (Statement, error) {
-	tokenizer := NewStringTokenizer(sql, mode)
+func Parse(sql string) (Statement, error) { // NOTE: not used in sqldef anymore
+	tokenizer := NewStringTokenizer(sql, ParserModeMysql)
 	if yyParse(tokenizer) != 0 {
 		if tokenizer.partialDDL != nil {
+			// suppressing noisy log on tests
+			// log.Printf("ignoring error parsing DDL '%s': %v", sql, tokenizer.LastError)
 			tokenizer.ParseTree = tokenizer.partialDDL
-			return tokenizer.ParseTree, fmt.Errorf(
-				"found syntax error when parsing DDL \"%s\": %v", sql, tokenizer.LastError,
-			)
+			return tokenizer.ParseTree, nil
 		}
 		return nil, tokenizer.LastError
 	}
@@ -65,9 +61,15 @@ func ParseWithMode(sql string, mode ParserMode) (Statement, error) {
 // ParseStrictDDL is the same as Parse except it errors on
 // partially parsed DDL statements.
 func ParseStrictDDL(sql string) (Statement, error) {
-	tokenizer := NewStringTokenizer(sql, ParserModeMysql)
+	return ParseStrictDDLWithMode(sql, ParserModeMysql)
+}
+
+func ParseStrictDDLWithMode(sql string, mode ParserMode) (Statement, error) {
+	tokenizer := NewStringTokenizer(sql, mode)
 	if yyParse(tokenizer) != 0 {
-		return nil, tokenizer.LastError
+		return nil, fmt.Errorf(
+			"found syntax error when parsing DDL \"%s\": %v", sql, tokenizer.LastError,
+		)
 	}
 	return tokenizer.ParseTree, nil
 }

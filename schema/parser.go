@@ -171,7 +171,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 		parserMode = sqlparser.ParserModeMysql
 	}
 
-	stmt, err := sqlparser.ParseWithMode(ddl, parserMode)
+	stmt, err := sqlparser.ParseStrictDDLWithMode(ddl, parserMode)
 	if err != nil {
 		return nil, err
 	}
