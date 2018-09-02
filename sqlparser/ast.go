@@ -1304,6 +1304,8 @@ type ForeignKeyDefinition struct {
 	IndexColumns     []ColIdent
 	ReferenceName    ColIdent
 	ReferenceColumns []ColIdent
+	OnDelete         ColIdent
+	OnUpdate         ColIdent
 }
 
 // Show represents a show statement.

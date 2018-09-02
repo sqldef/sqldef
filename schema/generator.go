@@ -203,7 +203,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	// Examine each index
 	for _, index := range desired.table.indexes {
 		if containsString(convertIndexesToIndexNames(currentTable.indexes), index.name) {
-			// TODO: Compare types and change column type!!!
+			// TODO: Compare types and change index type!!!
 		} else {
 			// Index not found, add index.
 			definition, err := g.generateIndexDefinition(index)
@@ -422,11 +422,19 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) (string,
 	}
 
 	definition += fmt.Sprintf(
-		"(%s) REFERENCES %s (%s)",
+		"(%s) REFERENCES %s (%s) ",
 		strings.Join(foreignKey.indexColumns, ","), foreignKey.referenceName,
 		strings.Join(foreignKey.referenceColumns, ","),
 	)
 
+	if len(foreignKey.onDelete) > 0 {
+		definition += fmt.Sprintf("ON DELETE %s ", foreignKey.onDelete)
+	}
+	if len(foreignKey.onUpdate) > 0 {
+		definition += fmt.Sprintf("ON UPDATE %s ", foreignKey.onUpdate)
+	}
+
+	definition = strings.TrimSuffix(definition, " ")
 	return definition, nil
 }
 

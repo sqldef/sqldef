@@ -161,6 +161,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER
 %token <bytes> VINDEX VINDEXES
 %token <bytes> STATUS VARIABLES
+%token <bytes> RESTRICT CASCADE NO ACTION
 
 // Transaction Tokens
 %token <bytes> BEGIN START TRANSACTION COMMIT ROLLBACK
@@ -279,7 +280,8 @@ func forceEOF(yylex interface{}) {
 %type <columnDefinition> column_definition
 %type <columnType> column_definition_type
 %type <indexDefinition> index_definition
-%type <foreignKeyDefinition> foreign_key_definition
+%type <foreignKeyDefinition> foreign_key_definition foreign_key_without_options
+%type <colIdent> reference_option
 %type <colIdent> sql_id_opt
 %type <colIdents> sql_id_list
 %type <str> index_or_key
@@ -1191,6 +1193,33 @@ index_column:
   }
 
 foreign_key_definition:
+  foreign_key_without_options
+| foreign_key_without_options ON DELETE reference_option
+  {
+    $1.OnUpdate = NewColIdent("")
+    $1.OnDelete = $4
+    $$ = $1
+  }
+| foreign_key_without_options ON UPDATE reference_option
+  {
+    $1.OnUpdate = $4
+    $1.OnDelete = NewColIdent("")
+    $$ = $1
+  }
+| foreign_key_without_options ON DELETE reference_option ON UPDATE reference_option
+  {
+    $1.OnUpdate = $7
+    $1.OnDelete = $4
+    $$ = $1
+  }
+| foreign_key_without_options ON UPDATE reference_option ON DELETE reference_option
+  {
+    $1.OnUpdate = $4
+    $1.OnDelete = $7
+    $$ = $1
+  }
+
+foreign_key_without_options:
   CONSTRAINT sql_id_opt FOREIGN KEY sql_id_opt '(' sql_id_list ')' REFERENCES sql_id '(' sql_id_list ')'
   {
     $$ = &ForeignKeyDefinition{
@@ -1200,6 +1229,24 @@ foreign_key_definition:
       ReferenceName: $10,
       ReferenceColumns: $12,
     }
+  }
+
+reference_option:
+  RESTRICT
+  {
+    $$ = NewColIdent("RESTRICT")
+  }
+| CASCADE
+  {
+    $$ = NewColIdent("CASCADE")
+  }
+| SET NULL
+  {
+    $$ = NewColIdent("SET NULL")
+  }
+| NO ACTION
+  {
+    $$ = NewColIdent("NO ACTION")
   }
 
 sql_id_opt:
@@ -3151,13 +3198,15 @@ reserved_keyword:
   Sorted alphabetically
 */
 non_reserved_keyword:
-  AGAINST
+  ACTION
+| AGAINST
 | BEGIN
 | BIGINT
 | BIT
 | BLOB
 | BOOL
 | BOOLEAN
+| CASCADE
 | CHAR
 | CHARACTER
 | CHARSET
@@ -3199,6 +3248,7 @@ non_reserved_keyword:
 | MULTIPOLYGON
 | NAMES
 | NCHAR
+| NO
 | NUMERIC
 | OFFSET
 | OPTIMIZE
@@ -3213,6 +3263,7 @@ non_reserved_keyword:
 | REORGANIZE
 | REPAIR
 | REPEATABLE
+| RESTRICT
 | ROLLBACK
 | SESSION
 | SERIALIZABLE

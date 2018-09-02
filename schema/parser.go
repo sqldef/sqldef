@@ -124,6 +124,8 @@ func parseTable(stmt *sqlparser.DDL) Table {
 			indexColumns:     indexColumns,
 			referenceName:    foreignKeyDef.ReferenceName.String(),
 			referenceColumns: referenceColumns,
+			onDelete:         foreignKeyDef.OnDelete.String(),
+			onUpdate:         foreignKeyDef.OnUpdate.String(),
 		}
 		foreignKeys = append(foreignKeys, foreignKey)
 	}

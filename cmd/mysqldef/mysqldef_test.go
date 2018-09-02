@@ -263,6 +263,18 @@ func TestMysqldefCreateTableForeignKey(t *testing.T) {
 		`,
 	))
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+
+	createPosts = stripHeredoc(`
+			CREATE TABLE posts (
+			  content text,
+			  user_id bigint,
+			  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE RESTRICT
+			);
+			`,
+	)
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
+		"ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE RESTRICT;\n")
+	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 }
 
 func TestMysqldefCreateTableSyntaxError(t *testing.T) {

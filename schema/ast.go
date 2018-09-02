@@ -68,6 +68,8 @@ type ForeignKey struct {
 	indexColumns     []string
 	referenceName    string
 	referenceColumns []string
+	onDelete         string
+	onUpdate         string
 }
 
 type Value struct {
