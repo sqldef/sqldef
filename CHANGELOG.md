@@ -1,6 +1,6 @@
 ## unreleased
 
-- Support managing non-composite foreign key by changing CREATE TABLE on MySQL
+- Support managing non-composite foreign key by changing CREATE TABLE
 
 ## v0.3.3
 

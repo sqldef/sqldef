@@ -216,6 +216,29 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				tableName: stmt.Table.Name.String(),
 				index:     index,
 			}, nil
+		} else if stmt.Action == "add foreign key" {
+			indexColumns := []string{}
+			for _, indexColumn := range stmt.ForeignKey.IndexColumns {
+				indexColumns = append(indexColumns, indexColumn.String())
+			}
+			referenceColumns := []string{}
+			for _, referenceColumn := range stmt.ForeignKey.ReferenceColumns {
+				referenceColumns = append(referenceColumns, referenceColumn.String())
+			}
+
+			return &AddForeignKey{
+				statement: ddl,
+				tableName: stmt.Table.Name.String(),
+				foreignKey: ForeignKey{
+					constraintName:   stmt.ForeignKey.ConstraintName.String(),
+					indexName:        stmt.ForeignKey.IndexName.String(),
+					indexColumns:     indexColumns,
+					referenceName:    stmt.ForeignKey.ReferenceName.String(),
+					referenceColumns: referenceColumns,
+					onDelete:         stmt.ForeignKey.OnDelete.String(),
+					onUpdate:         stmt.ForeignKey.OnUpdate.String(),
+				},
+			}, nil
 		} else {
 			return nil, fmt.Errorf(
 				"unsupported type of DDL action (only 'CREATE TABLE', 'CREATE INDEX' and 'ALTER TABLE ADD INDEX' are supported) '%s': %s",

@@ -667,6 +667,7 @@ type DDL struct {
 	IndexCols     []ColIdent
 	VindexSpec    *VindexSpec
 	VindexCols    []ColIdent
+	ForeignKey    *ForeignKeyDefinition
 }
 
 // DDL strings.
@@ -682,6 +683,7 @@ const (
 	AddIndexStr      = "add index"
 	CreateIndexStr   = "create index"
 	AddPrimaryKeyStr = "add primary key"
+	AddForeignKeyStr = "add foreign key"
 
 	// Vindex DDL param to specify the owner of a vindex
 	VindexOwnerStr = "owner"

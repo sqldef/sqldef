@@ -75,6 +75,42 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestCreateTableForeignKey(t *testing.T) {
+	resetTestDatabase()
+
+	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY);\n"
+	createPosts := stripHeredoc(`
+			CREATE TABLE posts (
+			  content text,
+			  user_id bigint
+			);
+			`,
+	)
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
+	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+
+	createPosts = stripHeredoc(`
+			CREATE TABLE posts (
+			  content text,
+			  user_id bigint,
+			  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id)
+			);
+			`,
+	)
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id);\n")
+	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+
+	createPosts = stripHeredoc(`
+			CREATE TABLE posts (
+			  content text,
+			  user_id bigint
+			);
+			`,
+	)
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE posts DROP CONSTRAINT posts_ibfk_1;\n")
+	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+}
+
 func TestPsqldefDropPrimaryKey(t *testing.T) {
 	t.Skip()
 

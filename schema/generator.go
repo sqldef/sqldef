@@ -113,10 +113,13 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue // Foreign key is expected to exist.
 			}
 
-			if g.mode == GeneratorModeMysql { // DDL is not compatible. TODO: support postgresql
-				ddl := fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", currentTable.name, foreignKey.constraintName)
-				ddls = append(ddls, ddl)
+			var ddl string
+			if g.mode == GeneratorModePostgres {
+				ddl = fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", currentTable.name, foreignKey.constraintName)
+			} else {
+				ddl = fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", currentTable.name, foreignKey.constraintName)
 			}
+			ddls = append(ddls, ddl)
 			// TODO: simulate to remove foreign key from `currentTable.foreignKeys`?
 		}
 
@@ -502,6 +505,13 @@ func convertDDLsToTables(ddls []DDL) ([]*Table, error) {
 				newColumns = append(newColumns, column)
 			}
 			table.columns = newColumns
+		case *AddForeignKey:
+			table := findTableByName(tables, stmt.tableName)
+			if table == nil {
+				return nil, fmt.Errorf("ADD FOREIGN KEY is performed before CREATE TABLE: %s", ddl.Statement())
+			}
+
+			table.foreignKeys = append(table.foreignKeys, stmt.foreignKey)
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in convertDDLsToTables: %v", stmt)
 		}

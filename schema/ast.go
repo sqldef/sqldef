@@ -27,6 +27,12 @@ type AddPrimaryKey struct {
 	index     Index
 }
 
+type AddForeignKey struct {
+	statement  string
+	tableName  string
+	foreignKey ForeignKey
+}
+
 type Table struct {
 	name        string
 	columns     []Column
@@ -119,5 +125,9 @@ func (a *AddIndex) Statement() string {
 }
 
 func (a *AddPrimaryKey) Statement() string {
+	return a.statement
+}
+
+func (a *AddForeignKey) Statement() string {
 	return a.statement
 }

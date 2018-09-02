@@ -1341,6 +1341,21 @@ alter_statement:
         IndexCols: $12,
       }
   }
+| ALTER ignore_opt TABLE ONLY table_name ADD CONSTRAINT sql_id FOREIGN KEY '(' sql_id_list ')' REFERENCES table_name '(' sql_id_list ')'
+  {
+    $$ = &DDL{
+        Action: AddForeignKeyStr,
+        Table: $5,
+        NewName: $5,
+        ForeignKey: &ForeignKeyDefinition{
+          ConstraintName: $8,
+          IndexName: NewColIdent(""),
+          IndexColumns: $12,
+          ReferenceName: NewColIdent($15.Name.String()),
+          ReferenceColumns: $17,
+        },
+      }
+  }
 | ALTER ignore_opt TABLE table_name ADD alter_object_type_rest force_eof
   {
     $$ = &DDL{Action: AlterStr, Table: $4, NewName: $4}
