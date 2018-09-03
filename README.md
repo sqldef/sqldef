@@ -12,7 +12,6 @@ so there's no need to remember Ruby DSL.
 Beta.
 
 Most of the planned features are implemented. Ready for testing and feature requests are welcomed.
-Documentation in this README will be improved later.
 
 ## Installation
 
@@ -191,6 +190,141 @@ Some of them can also be used for input schema file.
   - Column: ADD COLUMN, DROP COLUMN
   - Index: CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX
   - Foreign Key: ADD FOREIGN KEY, DROP CONSTRAINT
+
+## MySQL examples
+### CREATE TABLE
+```diff
++CREATE TABLE users (
++  name VARCHAR(40) DEFAULT NULL
++);
+```
+
+Remove the statement to DROP TABLE.
+
+### ADD COLUMN
+```diff
+ CREATE TABLE users (
+   name VARCHAR(40) DEFAULT NULL,
++  created_at DATETIME NOT NULL
+ );
+```
+
+Remove the line to DROP COLUMN.
+
+### CHANGE COLUMN
+```diff
+ CREATE TABLE users (
+-  name VARCHAR(40) DEFAULT NULL,
++  name CHAR(40) DEFAULT NULL,
+   created_at DATETIME NOT NULL
+ );
+```
+
+### ADD INDEX
+
+```diff
+ CREATE TABLE users (
+   name CHAR(40) DEFAULT NULL,
+   created_at DATETIME NOT NULL,
++  UNIQUE KEY index_name(name)
+ );
+```
+
+or
+
+```diff
+ CREATE TABLE users (
+   name CHAR(40) DEFAULT NULL,
+   created_at DATETIME NOT NULL
+ );
++
++ALTER TABLE users ADD UNIQUE INDEX index_name(name);
+```
+
+Remove the line to DROP INDEX.
+
+### ADD PRIMARY KEY
+```diff
+ CREATE TABLE users (
++  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+   name CHAR(40) DEFAULT NULL,
+   created_at datetime NOT NULL,
+   UNIQUE KEY index_name(name)
+ );
+```
+
+Remove the line to DROP PRIMARY KEY.
+
+Composite primary key may not work for now.
+
+### ADD FOREIGN KEY
+
+```diff
+ CREATE TABLE users (
+   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+   name CHAR(40) DEFAULT NULL,
+   created_at datetime NOT NULL,
+   UNIQUE KEY index_name(name)
+ );
+
+ CREATE TABLE posts (
+   user_id BIGINT UNSIGNED NOT NULL,
++  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id)
+ );
+```
+
+Remove the line to DROP FOREIGN KEY.
+
+Composite foreign key may not work for now.
+
+## PostgreSQL examples
+### CREATE TABLE
+```diff
++CREATE TABLE users (
++  id BIGINT PRIMARY KEY
++);
+```
+
+Remove the statement to DROP TABLE.
+
+### ADD COLUMN
+```diff
+ CREATE TABLE users (
+   id BIGINT PRIMARY KEY,
++  name VARCHAR(40)
+ );
+```
+
+Remove the line to DROP COLUMN.
+
+### CREATE INDEX
+
+```diff
+ CREATE TABLE users (
+   id BIGINT PRIMARY KEY,
+   name VARCHAR(40)
+ );
++CREATE INDEX index_name on users (name);
+```
+
+Remove the line to DROP INDEX.
+
+### ADD FOREIGN KEY
+
+```diff
+ CREATE TABLE users (
+   id BIGINT PRIMARY KEY,
+   name VARCHAR(40)
+ );
+ CREATE INDEX index_name on users (name);
+
+ CREATE TABLE posts (
+   user_id BIGINT,
++  CONSTRAINT fk_posts_user_id FOREIGN KEY (user_id) REFERENCES users (id)
+ )
+```
+
+Remove the line to DROP CONSTRAINT.
 
 ## Limitations
 
