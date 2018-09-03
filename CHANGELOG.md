@@ -1,6 +1,10 @@
 ## unreleased
 
 - Support managing non-composite foreign key by changing CREATE TABLE
+  - Note: Use `CONSTRAINT xxx FOREIGN KEY (yyy) REFERENCES zzz (vvv)` for both MySQL and PostgreSQL.
+    In-column `REFERENCES` for PostgreSQL is not supported.
+  - Note: Always specify constraint name, which is needed to identify foreign key name.
+- Fix handling of DEFAULT NULL column
 
 ## v0.3.3
 

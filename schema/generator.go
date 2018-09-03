@@ -370,6 +370,8 @@ func (g *Generator) generateColumnDefinition(column Column) (string, error) {
 			} else {
 				definition += "DEFAULT b'0' "
 			}
+		case ValueTypeValArg: // NULL
+			definition += fmt.Sprintf("DEFAULT %s ", string(column.defaultVal.raw))
 		default:
 			return "", fmt.Errorf("unsupported default value type (valueType: '%d') in column: %#v", column.defaultVal.valueType, column)
 		}
