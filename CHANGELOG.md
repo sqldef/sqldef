@@ -1,4 +1,4 @@
-## unreleased
+## v0.4.0
 
 - Support managing non-composite foreign key by changing CREATE TABLE
   - Note: Use `CONSTRAINT xxx FOREIGN KEY (yyy) REFERENCES zzz (vvv)` for both MySQL and PostgreSQL.

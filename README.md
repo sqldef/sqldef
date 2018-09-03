@@ -9,9 +9,10 @@ so there's no need to remember Ruby DSL.
 
 ## Project Status
 
-Proof of Concept.
+Beta.
 
-Not ready for production, but it's already playable with both MySQL and PostgreSQL.
+Most of the planned features are implemented. Ready for testing and feature requests are welcomed.
+Documentation in this README will be improved later.
 
 ## Installation
 
