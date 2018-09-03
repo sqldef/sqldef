@@ -1220,13 +1220,13 @@ foreign_key_definition:
   }
 
 foreign_key_without_options:
-  CONSTRAINT sql_id_opt FOREIGN KEY sql_id_opt '(' sql_id_list ')' REFERENCES sql_id '(' sql_id_list ')'
+  CONSTRAINT sql_id_opt FOREIGN KEY sql_id_opt '(' sql_id_list ')' REFERENCES table_name '(' sql_id_list ')'
   {
     $$ = &ForeignKeyDefinition{
       ConstraintName: $2,
       IndexName: $5,
       IndexColumns: $7,
-      ReferenceName: $10,
+      ReferenceName: NewColIdent($10.Name.String()),
       ReferenceColumns: $12,
     }
   }
@@ -1341,19 +1341,13 @@ alter_statement:
         IndexCols: $12,
       }
   }
-| ALTER ignore_opt TABLE ONLY table_name ADD CONSTRAINT sql_id FOREIGN KEY '(' sql_id_list ')' REFERENCES table_name '(' sql_id_list ')'
+| ALTER ignore_opt TABLE ONLY table_name ADD foreign_key_definition
   {
     $$ = &DDL{
         Action: AddForeignKeyStr,
         Table: $5,
         NewName: $5,
-        ForeignKey: &ForeignKeyDefinition{
-          ConstraintName: $8,
-          IndexName: NewColIdent(""),
-          IndexColumns: $12,
-          ReferenceName: NewColIdent($15.Name.String()),
-          ReferenceColumns: $17,
-        },
+        ForeignKey: $7,
       }
   }
 | ALTER ignore_opt TABLE table_name ADD alter_object_type_rest force_eof
