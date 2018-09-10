@@ -115,6 +115,8 @@ Application Options:
       --help                 Show this help
 ```
 
+You can use `PGSSLMODE` environment variable to specify sslmode.
+
 #### Example
 
 ```sql
