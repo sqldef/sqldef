@@ -116,8 +116,13 @@ func (d *PostgresDatabase) Close() error {
 }
 
 func runPgDump(config adapter.Config, table string) (string, error) {
+	conninfo := fmt.Sprintf("dbname=%s", config.DbName)
+	if sslmode, ok := os.LookupEnv("PGSSLMODE"); ok { // TODO: have this in adapter.Config, or standardize config with DSN?
+		conninfo = fmt.Sprintf("%s sslmode=%s", conninfo, sslmode)
+	}
+
 	cmd := exec.Command(
-		"pg_dump", config.DbName,
+		"pg_dump", conninfo,
 		"--schema-only",
 		"-t", table,
 		"-U", config.User,
@@ -126,7 +131,7 @@ func runPgDump(config adapter.Config, table string) (string, error) {
 	)
 	if len(config.Password) > 0 {
 		cmd.Env = os.Environ()
-		cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSWORD=%s", config.Password))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSWORD=%s", config.Password)) // XXX: Can we pass this in DSN format in a safe way?
 	}
 
 	out, err := cmd.Output()
@@ -143,6 +148,11 @@ func postgresBuildDSN(config adapter.Config) string {
 	host := fmt.Sprintf("%s:%d", config.Host, config.Port)
 	database := config.DbName
 
+	options := ""
+	if sslmode, ok := os.LookupEnv("PGSSLMODE"); ok { // TODO: have this in adapter.Config, or standardize config with DSN?
+		options = fmt.Sprintf("?sslmode=%s", sslmode) // TODO: uri escape
+	}
+
 	// TODO: uri escape
-	return fmt.Sprintf("postgres://%s:%s@%s/%s", user, password, host, database)
+	return fmt.Sprintf("postgres://%s:%s@%s/%s%s", user, password, host, database, options)
 }
