@@ -1,3 +1,7 @@
+## v0.4.1
+
+- Support `$PGSSLMODE` environment variable to specify `sslmode` on psqldef
+
 ## v0.4.0
 
 - Support managing non-composite foreign key by changing CREATE TABLE
