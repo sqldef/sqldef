@@ -160,7 +160,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	ddls := []string{}
 
 	// Examine each column
-	for _, desiredColumn := range desired.table.columns {
+	for i, desiredColumn := range desired.table.columns {
 		currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
 		if currentColumn == nil {
 			definition, err := g.generateColumnDefinition(desiredColumn) // TODO: Parse DEFAULT NULL and share this with else
@@ -170,6 +170,15 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 			// Column not found, add column.
 			ddl := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", desired.table.name, definition) // TODO: escape
+
+			if g.mode == GeneratorModeMysql {
+				after := " FIRST"
+				if i > 0 {
+					after = " AFTER " + desired.table.columns[i-1].name
+				}
+				ddl += after
+			}
+
 			ddls = append(ddls, ddl)
 		} else {
 			// Column is found, change primary key first as needed.
