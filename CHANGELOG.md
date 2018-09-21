@@ -1,3 +1,7 @@
+## v0.4.2
+
+- Support generating `AFTER` or `FIRST` on `ADD COLUMN` on mysqldef
+
 ## v0.4.1
 
 - Support `$PGSSLMODE` environment variable to specify `sslmode` on psqldef
