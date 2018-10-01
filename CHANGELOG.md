@@ -1,3 +1,8 @@
+## v0.4.3
+
+- Do not fail when view exists but just ignore views on mysqldef
+  - Views may be supported later, but it's not managed by mysqldef for now.
+
 ## v0.4.2
 
 - Support generating `AFTER` or `FIRST` on `ADD COLUMN` on mysqldef
