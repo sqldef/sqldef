@@ -26,7 +26,7 @@ func NewDatabase(config adapter.Config) (adapter.Database, error) {
 }
 
 func (d *MysqlDatabase) TableNames() ([]string, error) {
-	rows, err := d.db.Query("show tables")
+	rows, err := d.db.Query("show full tables where Table_Type != 'VIEW'")
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +35,8 @@ func (d *MysqlDatabase) TableNames() ([]string, error) {
 	tables := []string{}
 	for rows.Next() {
 		var table string
-		if err := rows.Scan(&table); err != nil {
+		var tableType string
+		if err := rows.Scan(&table, &tableType); err != nil {
 			return nil, err
 		}
 		tables = append(tables, table)

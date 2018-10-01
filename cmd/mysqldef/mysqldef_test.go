@@ -372,6 +372,14 @@ func TestMysqldefDefaultNull(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefIgnoreView(t *testing.T) {
+	resetTestDatabase()
+
+	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", "CREATE VIEW foo AS SELECT 1;")
+	mustExecute("mysqldef", "-uroot", "mysqldef_test", "--export")
+	assertApplyOutput(t, "", nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
