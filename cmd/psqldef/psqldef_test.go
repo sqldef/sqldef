@@ -249,7 +249,6 @@ func TestPsqldefDataTypes(t *testing.T) {
 	//   - tsquer
 	//   - tsvector
 	//   - txid_snapshot
-	//   - uuid
 	//   - xml
 	//
 	// Remaining SQL spec: bit varying, double precision, interval, numeric, decimal, real,
@@ -268,6 +267,7 @@ func TestPsqldefDataTypes(t *testing.T) {
 		  c_int int,
 		  c_integer integer,
 		  c_text text,
+		  c_uuid uuid,
 		  c_varchar_40 varchar(40)
 		);
 		`,
