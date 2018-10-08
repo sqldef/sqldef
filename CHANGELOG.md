@@ -1,3 +1,7 @@
+## v0.4.4
+
+- Support UUID data type for PostgreSQL and MySQL 8+.
+
 ## v0.4.3
 
 - Do not fail when view exists but just ignore views on mysqldef
