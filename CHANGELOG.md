@@ -1,3 +1,7 @@
+## v0.4.5
+
+- Support including hyphen in table names.
+
 ## v0.4.4
 
 - Support UUID data type for PostgreSQL and MySQL 8+.
