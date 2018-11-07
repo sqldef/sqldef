@@ -102,7 +102,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		desiredTable := findTableByName(g.desiredTables, currentTable.name)
 		if desiredTable == nil {
 			// Obsoleted table found. Drop table.
-			ddls = append(ddls, fmt.Sprintf("DROP TABLE %s", currentTable.name)) // TODO: escape table name
+			ddls = append(ddls, fmt.Sprintf("DROP TABLE %s", g.escapeSQLName(currentTable.name)))
 			g.currentTables = removeTableByName(g.currentTables, currentTable.name)
 			continue
 		}
@@ -457,6 +457,14 @@ func (g *Generator) generateDropIndex(tableName string, indexName string) string
 		return fmt.Sprintf("DROP INDEX %s", indexName) // TODO: escape
 	} else {
 		return fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", tableName, indexName) // TODO: escape
+	}
+}
+
+func (g *Generator) escapeSQLName(name string) string {
+	if g.mode == GeneratorModePostgres {
+		return fmt.Sprintf("\"%s\"", name)
+	} else {
+		return fmt.Sprintf("`%s`", name)
 	}
 }
 

@@ -40,7 +40,7 @@ func TestPsqldefCreateTable(t *testing.T) {
 	assertApplyOutput(t, createTable1+createTable2, applyPrefix+createTable1+createTable2)
 	assertApplyOutput(t, createTable1+createTable2, nothingModified)
 
-	assertApplyOutput(t, createTable1, applyPrefix+"DROP TABLE bigdata;\n")
+	assertApplyOutput(t, createTable1, applyPrefix+"DROP TABLE \"bigdata\";\n")
 	assertApplyOutput(t, createTable1, nothingModified)
 }
 

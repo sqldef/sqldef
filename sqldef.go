@@ -22,7 +22,7 @@ type Options struct {
 func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Options) {
 	currentDDLs, err := adapter.DumpDDLs(db)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(fmt.Sprintf("Error on DumpDDLs: %s", err))
 	}
 
 	if options.Export {

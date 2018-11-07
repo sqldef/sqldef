@@ -40,7 +40,7 @@ func TestMysqldefCreateTable(t *testing.T) {
 	assertApplyOutput(t, createTable1+createTable2, applyPrefix+createTable1+createTable2)
 	assertApplyOutput(t, createTable1+createTable2, nothingModified)
 
-	assertApplyOutput(t, createTable1, applyPrefix+"DROP TABLE bigdata;\n")
+	assertApplyOutput(t, createTable1, applyPrefix+"DROP TABLE `bigdata`;\n")
 	assertApplyOutput(t, createTable1, nothingModified)
 }
 
@@ -334,6 +334,16 @@ func TestMysqldefColumnLiteral(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefHyphenNames(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE `foo-bar_baz` (\n" +
+		"  `id-bar_baz` bigint NOT NULL\n" +
+		");\n"
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefTypeAliases(t *testing.T) {
 	resetTestDatabase()
 
@@ -407,7 +417,7 @@ func TestMysqldefExport(t *testing.T) {
 		CREATE TABLE users (
 		  name varchar(40),
 		  created_at datetime NOT NULL
-		);`,
+		) DEFAULT CHARSET=latin1;`,
 	))
 	out = assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--export")
 	assertEquals(t, out,
