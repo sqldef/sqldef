@@ -344,6 +344,16 @@ func TestMysqldefHyphenNames(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefMysqlComment(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE users (\n" +
+		"  id bigint NOT NULL /* comment */\n" +
+		");\n"
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefTypeAliases(t *testing.T) {
 	resetTestDatabase()
 
