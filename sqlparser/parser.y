@@ -194,7 +194,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> GROUP_CONCAT SEPARATOR
 
 // Match
-%token <bytes> MATCH AGAINST BOOLEAN LANGUAGE WITH QUERY EXPANSION
+%token <bytes> MATCH AGAINST BOOLEAN LANGUAGE WITH PARSER QUERY EXPANSION
 
 // MySQL reserved words that are unused by this grammar will map to this token.
 %token <bytes> UNUSED
@@ -1136,6 +1136,10 @@ index_option:
 | COMMENT_KEYWORD STRING
   {
     $$ = &IndexOption{Name: string($1), Value: NewStrVal($2)}
+  }
+| WITH PARSER sql_id
+  {
+    $$ = &IndexOption{Name: string($2), Value: NewStrVal([]byte($3.String()))}
   }
 
 equal_opt:
