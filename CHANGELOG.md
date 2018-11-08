@@ -1,3 +1,7 @@
+## v0.4.6
+
+- Add support for fulltext index
+
 ## v0.4.5
 
 - Support including hyphen in table names.
