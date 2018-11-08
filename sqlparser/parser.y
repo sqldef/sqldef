@@ -1157,6 +1157,14 @@ index_info:
   {
     $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(string($3)), Spatial: true, Unique: false}
   }
+| FULLTEXT index_or_key ID
+  {
+    $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(string($3)), Fulltext: true}
+  }
+| FULLTEXT ID
+  {
+    $$ = &IndexInfo{Type: string($1), Name: NewColIdent(string($2)), Fulltext: true}
+  }
 | UNIQUE index_or_key ID
   {
     $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(string($3)), Unique: true}
