@@ -13,6 +13,7 @@ type Config struct {
 	Password string
 	Host     string
 	Port     int
+	Socket   string
 }
 
 // Abstraction layer for multiple kinds of databases
