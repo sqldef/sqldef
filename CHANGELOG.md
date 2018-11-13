@@ -1,3 +1,8 @@
+## v0.4.7
+
+- Add `-S`/`--socket` option of `mysqldef` to use unix domain socket
+- Change `-h` option of `psqldef` to allow using unix domain socket
+
 ## v0.4.6
 
 - Add support for fulltext index
