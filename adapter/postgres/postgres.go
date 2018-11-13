@@ -121,14 +121,18 @@ func runPgDump(config adapter.Config, table string) (string, error) {
 		conninfo = fmt.Sprintf("%s sslmode=%s", conninfo, sslmode)
 	}
 
-	cmd := exec.Command(
-		"pg_dump", conninfo,
+	args := []string{
+		conninfo,
 		"--schema-only",
 		"-t", table,
 		"-U", config.User,
 		"-h", config.Host,
-		"-p", fmt.Sprintf("%d", config.Port),
-	)
+	}
+	if config.Socket == "" {
+		args = append(args, "-p", fmt.Sprintf("%d", config.Port))
+	}
+	cmd := exec.Command("pg_dump", args...)
+
 	if len(config.Password) > 0 {
 		cmd.Env = os.Environ()
 		cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSWORD=%s", config.Password)) // XXX: Can we pass this in DSN format in a safe way?
@@ -145,8 +149,13 @@ func runPgDump(config adapter.Config, table string) (string, error) {
 func postgresBuildDSN(config adapter.Config) string {
 	user := config.User
 	password := config.Password
-	host := fmt.Sprintf("%s:%d", config.Host, config.Port)
 	database := config.DbName
+	host := ""
+	if config.Socket == "" {
+		host = fmt.Sprintf("%s:%d", config.Host, config.Port)
+	} else {
+		host = config.Socket
+	}
 
 	options := ""
 	if sslmode, ok := os.LookupEnv("PGSSLMODE"); ok { // TODO: have this in adapter.Config, or standardize config with DSN?

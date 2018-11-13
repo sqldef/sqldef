@@ -35,6 +35,7 @@ Application Options:
   -p, --password=password    MySQL user password, overridden by $MYSQL_PWD
   -h, --host=host_name       Host to connect to the MySQL server (default: 127.0.0.1)
   -P, --port=port_num        Port used for the connection (default: 3306)
+  -S, --socket=socket        The socket file to use for connection
       --file=sql_file        Read schema SQL from the file, rather than stdin (default: -)
       --dry-run              Don't run DDLs but just show them
       --export               Just dump the current schema to stdout
@@ -107,7 +108,7 @@ Usage:
 Application Options:
   -U, --user=username        PostgreSQL user name (default: postgres)
   -W, --password=password    PostgreSQL user password, overridden by $PGPASS
-  -h, --host=hostname        Host to connect to the PostgreSQL server (default: 127.0.0.1)
+  -h, --host=hostname        Host or socket directory to connect to the PostgreSQL server (default: 127.0.0.1)
   -p, --port=port            Port used for the connection (default: 5432)
   -f, --file=filename        Read schema SQL from the file, rather than stdin (default: -)
       --dry-run              Don't run DDLs but just show them

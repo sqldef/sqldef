@@ -68,8 +68,13 @@ func mysqlBuildDSN(config adapter.Config) string {
 	c := driver.NewConfig()
 	c.User = config.User
 	c.Passwd = config.Password
-	c.Net = "tcp"
-	c.Addr = fmt.Sprintf("%s:%d", config.Host, config.Port)
 	c.DBName = config.DbName
+	if config.Socket == "" {
+		c.Net = "tcp"
+		c.Addr = fmt.Sprintf("%s:%d", config.Host, config.Port)
+	} else {
+		c.Net = "unix"
+		c.Addr = config.Socket
+	}
 	return c.FormatDSN()
 }

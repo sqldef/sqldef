@@ -18,7 +18,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	var opts struct {
 		User     string `short:"U" long:"user" description:"PostgreSQL user name" value-name:"username" default:"postgres"`
 		Password string `short:"W" long:"password" description:"PostgreSQL user password, overridden by $PGPASS" value-name:"password"`
-		Host     string `short:"h" long:"host" description:"Host to connect to the PostgreSQL server" value-name:"hostname" default:"127.0.0.1"`
+		Host     string `short:"h" long:"host" description:"Host or socket directory to connect to the PostgreSQL server" value-name:"hostname" default:"127.0.0.1"`
 		Port     uint   `short:"p" long:"port" description:"Port used for the connection" value-name:"port" default:"5432"`
 		File     string `short:"f" long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"filename" default:"-"`
 		DryRun   bool   `long:"dry-run" description:"Don't run DDLs but just show them"`
@@ -66,6 +66,9 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		Password: password,
 		Host:     opts.Host,
 		Port:     int(opts.Port),
+	}
+	if _, err := os.Stat(config.Host); !os.IsNotExist(err) {
+		config.Socket = config.Host
 	}
 	return config, &options
 }
