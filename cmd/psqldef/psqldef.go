@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/howeyc/gopass"
 	"github.com/jessevdk/go-flags"
 	"github.com/k0kubun/sqldef"
 	"github.com/k0kubun/sqldef/adapter"
@@ -20,6 +21,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		Password string `short:"W" long:"password" description:"PostgreSQL user password, overridden by $PGPASS" value-name:"password"`
 		Host     string `short:"h" long:"host" description:"Host or socket directory to connect to the PostgreSQL server" value-name:"hostname" default:"127.0.0.1"`
 		Port     uint   `short:"p" long:"port" description:"Port used for the connection" value-name:"port" default:"5432"`
+		Prompt   bool   `long:"password-prompt" description:"Force PostgreSQL user password prompt"`
 		File     string `short:"f" long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"filename" default:"-"`
 		DryRun   bool   `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export   bool   `long:"export" description:"Just dump the current schema to stdout"`
@@ -58,6 +60,15 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	password, ok := os.LookupEnv("PGPASS")
 	if !ok {
 		password = opts.Password
+	}
+
+	if opts.Prompt {
+		fmt.Printf("Enter Password: ")
+		pass, err := gopass.GetPasswd()
+		if err != nil {
+			log.Fatal(err)
+		}
+		password = string(pass)
 	}
 
 	config := adapter.Config{
