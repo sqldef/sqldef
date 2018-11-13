@@ -1,3 +1,8 @@
+## v0.4.8
+
+- Add `--password-prompt` option to `mysqldef`/`psqldef`
+  - This may be deprecated later once `--password` without value is properly implemented
+
 ## v0.4.7
 
 - Add `-S`/`--socket` option of `mysqldef` to use unix domain socket
