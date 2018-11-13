@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/howeyc/gopass"
 	"github.com/jessevdk/go-flags"
 	"github.com/k0kubun/sqldef"
 	"github.com/k0kubun/sqldef/adapter"
@@ -21,6 +22,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		Host     string `short:"h" long:"host" description:"Host to connect to the MySQL server" value-name:"host_name" default:"127.0.0.1"`
 		Port     uint   `short:"P" long:"port" description:"Port used for the connection" value-name:"port_num" default:"3306"`
 		Socket   string `short:"S" long:"socket" description:"The socket file to use for connection" value-name:"socket"`
+		Prompt   bool   `long:"password-prompt" description:"Force MySQL user password prompt"`
 		File     string `long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"sql_file" default:"-"`
 		DryRun   bool   `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export   bool   `long:"export" description:"Just dump the current schema to stdout"`
@@ -59,6 +61,15 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	password, ok := os.LookupEnv("MYSQL_PWD")
 	if !ok {
 		password = opts.Password
+	}
+
+	if opts.Prompt {
+		fmt.Printf("Enter Password: ")
+		pass, err := gopass.GetPasswd()
+		if err != nil {
+			log.Fatal(err)
+		}
+		password = string(pass)
 	}
 
 	config := adapter.Config{
