@@ -55,11 +55,14 @@ func TestMysqldefCreateTableWithImplicitNotNull(t *testing.T) {
 		);
 		`,
 	)
+
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified) // `NOT NULL` appears on `id`
 }
 
 func TestMysqldefCreateTableDropPrimaryKey(t *testing.T) {
+	resetTestDatabase()
+
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL PRIMARY KEY,
@@ -83,8 +86,59 @@ func TestMysqldefCreateTableDropPrimaryKey(t *testing.T) {
 		  name varchar(20) PRIMARY KEY
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD PRIMARY KEY(name);\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users CHANGE COLUMN name name varchar(20) NOT NULL;\nALTER TABLE users ADD primary key (name);\n")
 	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMysqldefCreateTableAddPrimaryKey(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20)
+		);`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20),
+			PRIMARY KEY (id)
+		);`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+			ALTER TABLE users ADD primary key (id);
+		`,
+	))
+}
+
+func TestMysqldefCreateTableChangePrimaryKey(t *testing.T) {
+	createTable := stripHeredoc(`
+		CREATE TABLE friends (
+		  user_id bigint NOT NULL PRIMARY KEY,
+		  friend_id bigint NOT NULL,
+		  created_at datetime NOT NULL
+		);`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE friends (
+		  user_id bigint NOT NULL,
+		  friend_id bigint NOT NULL,
+		  created_at datetime NOT NULL,
+			PRIMARY KEY (user_id, friend_id)
+		);`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+			ALTER TABLE friends DROP PRIMARY KEY;
+			ALTER TABLE friends ADD primary key (user_id, friend_id);
+		`,
+	))
 }
 
 func TestMysqldefAddColumn(t *testing.T) {
