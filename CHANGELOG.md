@@ -1,3 +1,7 @@
+## v0.4.9
+
+- Fix issues on handling primary key [#21](https://github.com/k0kubun/sqldef/issues/21)
+
 ## v0.4.8
 
 - Add `--password-prompt` option to `mysqldef`/`psqldef`
@@ -14,16 +18,16 @@
 
 ## v0.4.5
 
-- Support including hyphen in table names.
+- Support including hyphen in table names
 
 ## v0.4.4
 
-- Support UUID data type for PostgreSQL and MySQL 8+.
+- Support UUID data type for PostgreSQL and MySQL 8+
 
 ## v0.4.3
 
 - Do not fail when view exists but just ignore views on mysqldef
-  - Views may be supported later, but it's not managed by mysqldef for now.
+  - Views may be supported later, but it's not managed by mysqldef for now
 
 ## v0.4.2
 
