@@ -181,20 +181,6 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 			ddls = append(ddls, ddl)
 		} else {
-			// Column is found, change primary key first as needed.
-			if g.mode == GeneratorModeMysql { // DDL is not compatible. TODO: support postgresql
-				if isPrimaryKey(*currentColumn, currentTable) && !isPrimaryKey(desiredColumn, desired.table) {
-					// TODO: `DROP PRIMARY KEY` should always come earlier than `ADD PRIMARY KEY` regardless of the order of columns
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", desired.table.name)) // TODO: escape
-					currentColumn.keyOption = desiredColumn.keyOption
-				}
-				if !isPrimaryKey(*currentColumn, currentTable) && isPrimaryKey(desiredColumn, desired.table) {
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD PRIMARY KEY(%s)", desired.table.name, desiredColumn.name)) // TODO: escape, support multi-columns?
-					currentColumn.notNull = true
-					currentColumn.keyOption = ColumnKeyPrimary
-				}
-			}
-
 			// Change column data type as needed.
 			if !haveSameDataType(*currentColumn, desiredColumn) {
 				definition, err := g.generateColumnDefinition(desiredColumn) // TODO: Parse DEFAULT NULL and share this with else
@@ -212,8 +198,34 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		}
 	}
 
+	// Examine primary key
+	currentKey := currentTable.PrimaryKey()
+	desiredKey := desired.table.PrimaryKey()
+	areSameKey := currentKey != nil && desiredKey != nil && areSameIndexes(*currentKey, *desiredKey)
+	areNilKey := currentKey == nil && desiredKey == nil
+	if !(areSameKey || areNilKey) {
+		if currentKey != nil {
+			if g.mode == GeneratorModeMysql {
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", desired.table.name)) // TODO: escape
+			} else {
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s_pkey", desired.table.name, desired.table.name)) // TODO: escape
+			}
+		}
+		if desiredKey != nil {
+			definition, err := g.generateIndexDefinition(*desiredKey)
+			if err != nil {
+				return ddls, err
+			}
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", desired.table.name, definition)) // TODO: escape
+		}
+	}
+
 	// Examine each index
 	for _, index := range desired.table.indexes {
+		if index.name == "PRIMARY" {
+			continue
+		}
+
 		if containsString(convertIndexesToIndexNames(currentTable.indexes), index.name) {
 			// TODO: Compare types and change index type!!!
 		} else {
@@ -361,7 +373,7 @@ func (g *Generator) generateColumnDefinition(column Column) (string, error) {
 	if column.unsigned {
 		definition += "UNSIGNED "
 	}
-	if column.notNull {
+	if column.notNull || column.keyOption == ColumnKeyPrimary {
 		definition += "NOT NULL "
 	}
 
@@ -398,7 +410,7 @@ func (g *Generator) generateColumnDefinition(column Column) (string, error) {
 	case ColumnKeyUniqueKey:
 		definition += "UNIQUE KEY "
 	case ColumnKeyPrimary:
-		definition += "PRIMARY KEY "
+		// noop
 	default:
 		return "", fmt.Errorf("unsupported column key (keyOption: '%d') in column: %#v", column.keyOption, column)
 	}
@@ -416,11 +428,18 @@ func (g *Generator) generateIndexDefinition(index Index) (string, error) {
 		columns = append(columns, indexColumn.column)
 	}
 
-	definition += fmt.Sprintf(
-		" %s(%s)",
-		index.name,
-		strings.Join(columns, ", "), // TODO: escape
-	)
+	if index.primary {
+		definition += fmt.Sprintf(
+			" (%s)",
+			strings.Join(columns, ", "), // TODO: escape
+		)
+	} else {
+		definition += fmt.Sprintf(
+			" %s(%s)",
+			index.name,
+			strings.Join(columns, ", "), // TODO: escape
+		)
+	}
 	return definition, nil
 }
 
@@ -559,6 +578,15 @@ func findColumnByName(columns []Column, name string) *Column {
 func findIndexByName(indexes []Index, name string) *Index {
 	for _, index := range indexes {
 		if index.name == name {
+			return &index
+		}
+	}
+	return nil
+}
+
+func findPrimaryKey(indexes []Index) *Index {
+	for _, index := range indexes {
+		if index.primary {
 			return &index
 		}
 	}

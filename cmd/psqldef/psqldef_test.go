@@ -62,7 +62,7 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 		  name text
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP COLUMN id;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP CONSTRAINT users_pkey;\nALTER TABLE users DROP COLUMN id;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -71,7 +71,7 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 		  name text
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN id bigint NOT NULL PRIMARY KEY;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN id bigint NOT NULL;\nALTER TABLE users ADD primary key (id);\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 

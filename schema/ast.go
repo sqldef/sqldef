@@ -131,3 +131,33 @@ func (a *AddPrimaryKey) Statement() string {
 func (a *AddForeignKey) Statement() string {
 	return a.statement
 }
+
+func (t *Table) PrimaryKey() *Index {
+	for _, index := range t.indexes {
+		if index.primary {
+			return &index
+		}
+	}
+
+	primaryColumns := []IndexColumn{}
+	for _, column := range t.columns {
+		if column.keyOption == ColumnKeyPrimary {
+			primaryColumns = append(primaryColumns, IndexColumn{
+				column: column.name,
+				length: column.length,
+			})
+		}
+	}
+
+	if len(primaryColumns) == 0 {
+		return nil
+	}
+
+	return &Index{
+		name:      "PRIMARY",
+		indexType: "primary key",
+		columns:   primaryColumns,
+		primary:   true,
+		unique:    true,
+	}
+}
