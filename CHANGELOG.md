@@ -1,3 +1,7 @@
+## v0.4.10
+
+- Support `ON UPDATE CURRENT_TIMESTAMP` on MySQL
+
 ## v0.4.9
 
 - Fix issues on handling primary key [#21](https://github.com/k0kubun/sqldef/issues/21)
