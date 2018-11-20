@@ -4,6 +4,7 @@ package schema
 import (
 	"fmt"
 	"log"
+	"reflect"
 	"strings"
 )
 
@@ -402,6 +403,10 @@ func (g *Generator) generateColumnDefinition(column Column) (string, error) {
 		definition += "AUTO_INCREMENT "
 	}
 
+	if column.onUpdate != nil {
+		definition += fmt.Sprintf("ON UPDATE %s ", string(column.onUpdate.raw))
+	}
+
 	switch column.keyOption {
 	case ColumnKeyNone:
 		// noop
@@ -597,7 +602,8 @@ func haveSameDataType(current Column, desired Column) bool {
 	return (normalizeDataType(current.typeName) == normalizeDataType(desired.typeName)) &&
 		(current.unsigned == desired.unsigned) &&
 		(current.notNull == (desired.notNull || desired.keyOption == ColumnKeyPrimary)) && // `PRIMARY KEY` implies `NOT NULL`
-		(current.autoIncrement == desired.autoIncrement)
+		(current.autoIncrement == desired.autoIncrement) &&
+		reflect.DeepEqual(current.onUpdate, desired.onUpdate)
 
 	// TODO: check defaultVal, length, scale
 

@@ -480,6 +480,43 @@ func TestMysqldefDefaultNull(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefOnUpdate(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  name varchar(40),
+		  updated_at datetime DEFAULT current_timestamp ON UPDATE current_timestamp,
+		  created_at datetime NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  name varchar(40),
+		  updated_at datetime DEFAULT current_timestamp,
+		  created_at datetime NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users CHANGE COLUMN updated_at updated_at datetime DEFAULT current_timestamp;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  name varchar(40),
+		  updated_at datetime DEFAULT current_timestamp ON UPDATE current_timestamp,
+		  created_at datetime NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users CHANGE COLUMN updated_at updated_at datetime DEFAULT current_timestamp ON UPDATE current_timestamp;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefIgnoreView(t *testing.T) {
 	resetTestDatabase()
 

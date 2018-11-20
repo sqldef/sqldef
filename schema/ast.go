@@ -51,6 +51,7 @@ type Column struct {
 	length        *Value
 	scale         *Value
 	keyOption     ColumnKeyOption
+	onUpdate      *Value
 	// TODO: keyopt
 	// XXX: charset, collate, zerofill?
 }
