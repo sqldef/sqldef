@@ -7,12 +7,6 @@ so there's no need to remember Ruby DSL.
 
 ![demo](./demo.gif)
 
-## Project Status
-
-Beta.
-
-Most of the planned features are implemented. Ready for testing and feature requests are welcomed.
-
 ## Installation
 
 Download the single-binary executable for your favorite database from:
