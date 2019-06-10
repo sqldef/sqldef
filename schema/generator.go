@@ -370,7 +370,7 @@ func (g *Generator) generateColumnDefinition(column Column) (string, error) {
 	} else {
 		switch column.typeName {
 		case "enum":
-			definition += fmt.Sprintf("%s(%s) ", column.typeName, strings.Join(column.enumValues, ","))
+			definition += fmt.Sprintf("%s(%s) ", column.typeName, strings.Join(column.enumValues, ", "))
 		default:
 			definition += fmt.Sprintf("%s ", column.typeName)
 		}
