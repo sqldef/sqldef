@@ -82,6 +82,7 @@ func parseTable(stmt *sqlparser.DDL) Table {
 			scale:         parseValue(parsedCol.Type.Scale),
 			keyOption:     ColumnKeyOption(parsedCol.Type.KeyOpt), // FIXME: tight coupling in enum order
 			onUpdate:      parseValue(parsedCol.Type.OnUpdate),
+			enumValues:    parsedCol.Type.EnumValues,
 		}
 		columns = append(columns, column)
 	}
