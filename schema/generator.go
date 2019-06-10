@@ -368,7 +368,12 @@ func (g *Generator) generateColumnDefinition(column Column) (string, error) {
 			definition += fmt.Sprintf("%s(%s) ", column.typeName, string(column.length.raw))
 		}
 	} else {
-		definition += fmt.Sprintf("%s ", column.typeName)
+		switch column.typeName {
+		case "enum":
+			definition += fmt.Sprintf("%s(%s) ", column.typeName, strings.Join(column.enumValues, ","))
+		default:
+			definition += fmt.Sprintf("%s ", column.typeName)
+		}
 	}
 
 	if column.unsigned {

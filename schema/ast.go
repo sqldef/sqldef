@@ -52,6 +52,7 @@ type Column struct {
 	scale         *Value
 	keyOption     ColumnKeyOption
 	onUpdate      *Value
+	enumValues    []string
 	// TODO: keyopt
 	// XXX: charset, collate, zerofill?
 }
