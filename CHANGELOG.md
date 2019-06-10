@@ -1,3 +1,7 @@
+## v0.4.11
+
+- Support enum [#25](https://github.com/k0kubun/sqldef/issues/25)
+
 ## v0.4.10
 
 - Support `ON UPDATE CURRENT_TIMESTAMP` on MySQL
