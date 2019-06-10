@@ -517,6 +517,29 @@ func TestMysqldefOnUpdate(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefEnumValues(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint(20) NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint(20) NOT NULL,
+		  authorities enum('normal', 'admin') NOT NULL DEFAULT 'normal'
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN authorities enum('normal', 'admin') NOT NULL DEFAULT 'normal' AFTER id;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefIgnoreView(t *testing.T) {
 	resetTestDatabase()
 
