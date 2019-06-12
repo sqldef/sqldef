@@ -182,8 +182,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 			ddls = append(ddls, ddl)
 		} else {
-			// Change column data type as needed.
-			if !haveSameDataType(*currentColumn, desiredColumn) {
+			// Change column data type or order as needed.
+			cp := currentColumn.position
+			dp := desiredColumn.position
+			changeOrder := cp > dp && cp - dp > len(currentTable.columns) - len(desired.table.columns)
+			if !haveSameDataType(*currentColumn, desiredColumn) || changeOrder {
 				definition, err := g.generateColumnDefinition(desiredColumn) // TODO: Parse DEFAULT NULL and share this with else
 				if err != nil {
 					return ddls, err
@@ -191,6 +194,15 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 				if g.mode == GeneratorModeMysql { // DDL is not compatible. TODO: support PostgreSQL
 					ddl := fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", desired.table.name, currentColumn.name, definition) // TODO: escape
+
+					if changeOrder {
+						after := " FIRST"
+						if i > 0 {
+							after = " AFTER " + desired.table.columns[i-1].name
+						}
+						ddl += after
+					}
+
 					ddls = append(ddls, ddl)
 				}
 			}

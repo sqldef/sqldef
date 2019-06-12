@@ -70,9 +70,10 @@ func parseTable(stmt *sqlparser.DDL) Table {
 	indexes := []Index{}
 	foreignKeys := []ForeignKey{}
 
-	for _, parsedCol := range stmt.TableSpec.Columns {
+	for i, parsedCol := range stmt.TableSpec.Columns {
 		column := Column{
 			name:          parsedCol.Name.String(),
+			position:      i,
 			typeName:      parsedCol.Type.Type,
 			unsigned:      castBool(parsedCol.Type.Unsigned),
 			notNull:       castBool(parsedCol.Type.NotNull),
