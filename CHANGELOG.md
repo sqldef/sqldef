@@ -1,3 +1,7 @@
+## v0.4.12
+
+- Support reordering columns with the same names [#27](https://github.com/k0kubun/sqldef/issues/27)
+
 ## v0.4.11
 
 - Support enum [#25](https://github.com/k0kubun/sqldef/issues/25)
