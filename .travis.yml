@@ -8,6 +8,7 @@ branches:
 services:
   - mysql
   - postgresql
+dist: trusty # TODO: use xenial
 addons:
   apt:
     sources:
