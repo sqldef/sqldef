@@ -43,6 +43,7 @@ type Table struct {
 
 type Column struct {
 	name          string
+	position      int
 	typeName      string
 	unsigned      bool
 	notNull       bool
