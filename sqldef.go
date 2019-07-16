@@ -1,8 +1,6 @@
 package sqldef
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -70,12 +68,9 @@ func readFile(filepath string) (string, error) {
 			return "", fmt.Errorf("stdin is not piped")
 		}
 
-		var buffer bytes.Buffer
-		scanner := bufio.NewScanner(os.Stdin)
-		for scanner.Scan() {
-			buffer.WriteString(scanner.Text())
-		}
-		content = buffer.String()
+		var buf []byte
+		buf, err = ioutil.ReadAll(os.Stdin)
+		content = string(buf)
 	} else {
 		var buf []byte
 		buf, err = ioutil.ReadFile(filepath)
