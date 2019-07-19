@@ -1,8 +1,6 @@
 package sqldef
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -62,30 +60,24 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 }
 
 func readFile(filepath string) (string, error) {
-	var content string
 	var err error
+	var buf []byte
+
 	if filepath == "-" {
 		stat, _ := os.Stdin.Stat()
 		if (stat.Mode() & os.ModeCharDevice) != 0 {
 			return "", fmt.Errorf("stdin is not piped")
 		}
 
-		var buffer bytes.Buffer
-		scanner := bufio.NewScanner(os.Stdin)
-		for scanner.Scan() {
-			buffer.WriteString(scanner.Text())
-		}
-		content = buffer.String()
+		buf, err = ioutil.ReadAll(os.Stdin)
 	} else {
-		var buf []byte
 		buf, err = ioutil.ReadFile(filepath)
-		content = string(buf)
 	}
 
 	if err != nil {
 		return "", err
 	}
-	return content, nil
+	return string(buf), nil
 }
 
 func showDDLs(ddls []string) {
