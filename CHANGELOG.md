@@ -1,3 +1,7 @@
+## v0.4.13
+
+- Preserve line feeds when using stdin [#28](https://github.com/k0kubun/sqldef/pull/28)
+
 ## v0.4.12
 
 - Support reordering columns with the same names [#27](https://github.com/k0kubun/sqldef/issues/27)
