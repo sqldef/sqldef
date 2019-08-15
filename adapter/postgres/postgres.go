@@ -140,7 +140,7 @@ func runPgDump(config adapter.Config, table string) (string, error) {
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("%s :\n\n  %s\n", err, out)
+		return "", fmt.Errorf("%s :\n%s\n", err, out)
 	}
 
 	return string(out), nil
