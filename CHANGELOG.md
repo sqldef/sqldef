@@ -1,3 +1,7 @@
+## v0.4.14
+
+- Show `pg_dump` error output on failure [#30](https://github.com/k0kubun/sqldef/pull/30)
+
 ## v0.4.13
 
 - Preserve line feeds when using stdin [#28](https://github.com/k0kubun/sqldef/pull/28)
