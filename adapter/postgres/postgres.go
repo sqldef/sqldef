@@ -138,9 +138,9 @@ func runPgDump(config adapter.Config, table string) (string, error) {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSWORD=%s", config.Password)) // XXX: Can we pass this in DSN format in a safe way?
 	}
 
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%s :\n%s\n", err, out)
 	}
 
 	return string(out), nil
