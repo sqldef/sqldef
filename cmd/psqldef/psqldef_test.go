@@ -209,7 +209,6 @@ func TestPsqldefDataTypes(t *testing.T) {
 
 	// TODO:
 	//   - int8
-	//   - bigserial
 	//   - serial8
 	//   - box
 	//   - bytea
@@ -256,6 +255,7 @@ func TestPsqldefDataTypes(t *testing.T) {
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
 		  c_bigint bigint,
+		  c_bigserial bigserial,
 		  c_bit bit,
 		  c_bit_2 bit(2),
 		  c_bool bool,

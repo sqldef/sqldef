@@ -106,6 +106,7 @@ var keywords = map[string]int{
 	"begin":               BEGIN,
 	"between":             BETWEEN,
 	"bigint":              BIGINT,
+	"bigserial":           BIGSERIAL,
 	"binary":              BINARY,
 	"_binary":             UNDERSCORE_BINARY,
 	"bit":                 BIT,
