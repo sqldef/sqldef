@@ -4,13 +4,14 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"os/exec"
-	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/k0kubun/sqldef/adapter"
 	_ "github.com/lib/pq"
 )
+
+const indent = "    "
 
 type PostgresDatabase struct {
 	config adapter.Config
@@ -47,64 +48,233 @@ func (d *PostgresDatabase) TableNames() ([]string, error) {
 	return tables, nil
 }
 
-// Due to PostgreSQL's limitation, depending on pb_dump(1) availability in client.
-// Possibly it can be solved by constructing the complex query, but it would be hacky anyway.
 func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
-	ddl, err := runPgDump(d.config, table)
+	cols, err := d.getColumns(table)
 	if err != nil {
 		return "", err
 	}
-
-	// Remove comments
-	re := regexp.MustCompilePOSIX("^--.*$")
-	ddl = re.ReplaceAllLiteralString(ddl, "")
-
-	// Drop "\." (what's this?)
-	re = regexp.MustCompilePOSIX("^\\\\\\.$")
-	ddl = re.ReplaceAllLiteralString(ddl, "")
-
-	// Ignore SET statements
-	re = regexp.MustCompilePOSIX("^SET .*;$")
-	ddl = re.ReplaceAllLiteralString(ddl, "")
-
-	// Ignore CREATE EXTENSION statements
-	re = regexp.MustCompilePOSIX("^CREATE EXTENSION .*;$")
-	ddl = re.ReplaceAllLiteralString(ddl, "")
-
-	// Ignore COMMENT ON EXTENSION statements
-	re = regexp.MustCompilePOSIX("^COMMENT ON .*;$")
-	ddl = re.ReplaceAllLiteralString(ddl, "")
-
-	// Ignore SELECT statements
-	re = regexp.MustCompilePOSIX("^SELECT .*;$")
-	ddl = re.ReplaceAllLiteralString(ddl, "")
-
-	// Ignore COPY statements
-	re = regexp.MustCompilePOSIX("^COPY .*;$")
-	ddl = re.ReplaceAllLiteralString(ddl, "")
-
-	// Ignore ALTER TABLE xxx OWNER TO yyy statements
-	re = regexp.MustCompilePOSIX("^ALTER TABLE [^ ;]+ OWNER TO .+;$")
-	ddl = re.ReplaceAllLiteralString(ddl, "")
-
-	// Ignore REVOKE statements
-	re = regexp.MustCompilePOSIX("^REVOKE .*;$")
-	ddl = re.ReplaceAllLiteralString(ddl, "")
-
-	// Ignore GRANT statements
-	re = regexp.MustCompilePOSIX("^GRANT .*;$")
-	ddl = re.ReplaceAllLiteralString(ddl, "")
-
-	// Remove empty lines
-	// TODO: there should be a better way....
-	for strings.Replace(ddl, "\n\n", "\n", -1) != ddl {
-		ddl = strings.Replace(ddl, "\n\n", "\n", -1)
+	primaryKeyDef, err := d.getPrimaryKeyDef(table)
+	if err != nil {
+		return "", err
 	}
+	indexDefs, err := d.getIndexDefs(table)
+	if err != nil {
+		return "", err
+	}
+	foreginDefs, err := d.getForeginDefs(table)
+	if err != nil {
+		return "", err
+	}
+	return buildDumpTableDDL(table, cols, primaryKeyDef, indexDefs, foreginDefs), nil
+}
 
-	ddl = strings.TrimSpace(ddl)
-	ddl = strings.TrimSuffix(ddl, ";") // XXX: caller should handle this better
+func buildDumpTableDDL(table string, columns []column, primaryKeyDef string, indexDefs, foreginDefs []string) string {
+	var queryBuilder strings.Builder
+	fmt.Fprintf(&queryBuilder, "CREATE TABLE public.%s (\n", table)
+	for i, col := range columns {
+		isLast := i == len(columns)-1
+		fmt.Fprint(&queryBuilder, indent)
+		fmt.Fprintf(&queryBuilder, "%s %s", col.Name, col.GetDataType())
+		if col.IsUnique {
+			fmt.Fprint(&queryBuilder, " UNIQUE")
+		}
+		if !col.Nullable {
+			fmt.Fprint(&queryBuilder, " NOT NULL")
+		}
+		if col.Default != "" && !col.IsAutoIncrement {
+			fmt.Fprintf(&queryBuilder, " DEFAULT %s", col.Default)
+		}
+		if isLast {
+			fmt.Fprintln(&queryBuilder, "")
+		} else {
+			fmt.Fprintln(&queryBuilder, ",")
+		}
+	}
+	fmt.Fprintf(&queryBuilder, ");\n")
+	if primaryKeyDef != "" {
+		fmt.Fprintf(&queryBuilder, "%s;\n", primaryKeyDef)
+	}
+	for _, v := range indexDefs {
+		fmt.Fprintf(&queryBuilder, "%s;\n", v)
+	}
+	for _, v := range foreginDefs {
+		fmt.Fprintf(&queryBuilder, "%s;\n", v)
+	}
+	return strings.TrimSuffix(queryBuilder.String(), ";\n")
+}
 
-	return ddl, nil
+type column struct {
+	Name            string
+	dataType        string
+	Length          int
+	Nullable        bool
+	Default         string
+	IsPrimaryKey    bool
+	IsAutoIncrement bool
+	IsUnique        bool
+}
+
+func (c *column) GetDataType() string {
+	if c.IsAutoIncrement {
+		switch c.dataType {
+		case "smallint":
+			return "smallserial"
+		case "integer":
+			return "serial"
+		case "bigint":
+			return "bigserial"
+		}
+	}
+	return c.dataType
+}
+
+func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
+	query := `SELECT column_name, column_default, is_nullable, data_type, character_maximum_length,
+	CASE WHEN p.contype = 'p' THEN true ELSE false END AS primarykey,
+	CASE WHEN p.contype = 'u' THEN true ELSE false END AS uniquekey
+FROM pg_attribute f
+	JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
+	LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
+	LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
+	LEFT JOIN pg_constraint p ON p.conrelid = c.oid AND f.attnum = ANY (p.conkey)
+	LEFT JOIN pg_class AS g ON p.confrelid = g.oid
+	LEFT JOIN INFORMATION_SCHEMA.COLUMNS s ON s.column_name=f.attname AND c.relname=s.table_name
+WHERE c.relkind = 'r'::char AND c.relname = $1 AND f.attnum > 0 ORDER BY f.attnum;`
+
+	rows, err := d.db.Query(query, table)
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer rows.Close()
+
+	cols := make([]column, 0)
+	for rows.Next() {
+		col := column{}
+		var colName, isNullable, dataType string
+		var maxLenStr, colDefault *string
+		var isPK, isUnique bool
+		err = rows.Scan(&colName, &colDefault, &isNullable, &dataType, &maxLenStr, &isPK, &isUnique)
+		if err != nil {
+			return nil, err
+		}
+		var maxLen int
+		if maxLenStr != nil {
+			maxLen, err = strconv.Atoi(*maxLenStr)
+			if err != nil {
+				return nil, err
+			}
+		}
+		col.Name = strings.Trim(colName, `" `)
+		if colDefault != nil || isPK {
+			if isPK {
+				col.IsPrimaryKey = true
+			} else {
+				col.Default = *colDefault
+			}
+		}
+		col.IsUnique = isUnique
+		if colDefault != nil && strings.HasPrefix(*colDefault, "nextval(") {
+			col.IsAutoIncrement = true
+		}
+		col.Nullable = (isNullable == "YES")
+		col.dataType = dataType
+		col.Length = maxLen
+
+		cols = append(cols, col)
+	}
+	return cols, nil
+}
+
+func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
+	query := "SELECT indexName, indexdef FROM pg_indexes WHERE tablename=$1"
+	rows, err := d.db.Query(query, table)
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer rows.Close()
+
+	indexes := make([]string, 0)
+	for rows.Next() {
+		var indexName, indexdef string
+		err = rows.Scan(&indexName, &indexdef)
+		if err != nil {
+			return nil, err
+		}
+		indexName = strings.Trim(indexName, `" `)
+		if strings.HasSuffix(indexName, "_pkey") {
+			continue
+		}
+		indexes = append(indexes, indexdef)
+	}
+	return indexes, nil
+}
+
+func (d *PostgresDatabase) getPrimaryKeyDef(table string) (string, error) {
+	query := `SELECT
+	tc.table_schema, tc.constraint_name, tc.table_name, kcu.column_name
+FROM 
+	information_schema.table_constraints AS tc 
+	JOIN information_schema.key_column_usage AS kcu
+		ON tc.constraint_name = kcu.constraint_name
+WHERE constraint_type = 'PRIMARY KEY' AND tc.table_name=$1 ORDER BY kcu.ordinal_position`
+	rows, err := d.db.Query(query, table)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	columnNames := make([]string, 0)
+	var tableSchema, constraintName, tableName string
+	for rows.Next() {
+		var columnName string
+		err = rows.Scan(&tableSchema, &constraintName, &tableName, &columnName)
+		if err != nil {
+			return "", err
+		}
+		columnNames = append(columnNames, columnName)
+	}
+	if len(columnNames) == 0 {
+		return "", nil
+	}
+	return fmt.Sprintf("ALTER TABLE ONLY %s.%s\n%sADD CONSTRAINT %s PRIMARY KEY (%s)",
+		tableSchema, tableName, indent, constraintName, strings.Join(columnNames, ","),
+	), nil
+}
+
+// refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d
+func (d *PostgresDatabase) getForeginDefs(table string) ([]string, error) {
+	query := `SELECT
+	tc.table_schema, tc.constraint_name, tc.table_name, kcu.column_name, 
+	ccu.table_schema AS foreign_table_schema,
+	ccu.table_name AS foreign_table_name,
+	ccu.column_name AS foreign_column_name 
+FROM 
+	information_schema.table_constraints AS tc 
+	JOIN information_schema.key_column_usage AS kcu
+		ON tc.constraint_name = kcu.constraint_name
+	JOIN information_schema.constraint_column_usage AS ccu
+		ON ccu.constraint_name = tc.constraint_name
+WHERE constraint_type = 'FOREIGN KEY' AND tc.table_name=$1`
+	rows, err := d.db.Query(query, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	defs := make([]string, 0)
+	for rows.Next() {
+		var tableSchema, constraintName, tableName, columnName, foreignTableSchema, foreignTableName, foreignColumnName string
+		err = rows.Scan(&tableSchema, &constraintName, &tableName, &columnName, &foreignTableSchema, &foreignTableName, &foreignColumnName)
+		if err != nil {
+			return nil, err
+		}
+		def := fmt.Sprintf(
+			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s(%s) ON UPDATE RESTRICT ON DELETE SET NULL",
+			tableSchema, tableName, constraintName, columnName, foreignTableSchema, foreignTableName, foreignColumnName,
+		)
+		defs = append(defs, def)
+	}
+	return defs, nil
 }
 
 func (d *PostgresDatabase) DB() *sql.DB {
@@ -113,37 +283,6 @@ func (d *PostgresDatabase) DB() *sql.DB {
 
 func (d *PostgresDatabase) Close() error {
 	return d.db.Close()
-}
-
-func runPgDump(config adapter.Config, table string) (string, error) {
-	conninfo := fmt.Sprintf("dbname=%s", config.DbName)
-	if sslmode, ok := os.LookupEnv("PGSSLMODE"); ok { // TODO: have this in adapter.Config, or standardize config with DSN?
-		conninfo = fmt.Sprintf("%s sslmode=%s", conninfo, sslmode)
-	}
-
-	args := []string{
-		conninfo,
-		"--schema-only",
-		"-t", table,
-		"-U", config.User,
-		"-h", config.Host,
-	}
-	if config.Socket == "" {
-		args = append(args, "-p", fmt.Sprintf("%d", config.Port))
-	}
-	cmd := exec.Command("pg_dump", args...)
-
-	if len(config.Password) > 0 {
-		cmd.Env = os.Environ()
-		cmd.Env = append(cmd.Env, fmt.Sprintf("PGPASSWORD=%s", config.Password)) // XXX: Can we pass this in DSN format in a safe way?
-	}
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("%s :\n%s\n", err, out)
-	}
-
-	return string(out), nil
 }
 
 func postgresBuildDSN(config adapter.Config) string {
