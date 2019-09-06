@@ -1,3 +1,7 @@
+## v0.5.0
+
+- Remove `pg_dump` dependency for psqldef  [#32](https://github.com/k0kubun/sqldef/pull/32)
+
 ## v0.4.14
 
 - Show `pg_dump` error output on failure [#30](https://github.com/k0kubun/sqldef/pull/30)
