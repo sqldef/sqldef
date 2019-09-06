@@ -115,17 +115,31 @@ type column struct {
 }
 
 func (c *column) GetDataType() string {
-	if c.IsAutoIncrement {
-		switch c.dataType {
-		case "smallint":
+	switch c.dataType {
+	case "smallint":
+		if c.IsAutoIncrement {
 			return "smallserial"
-		case "integer":
+		}
+		return c.dataType
+	case "integer":
+		if c.IsAutoIncrement {
 			return "serial"
-		case "bigint":
+		}
+		return c.dataType
+	case "bigint":
+		if c.IsAutoIncrement {
 			return "bigserial"
 		}
+		return c.dataType
+	case "timestamp without time zone":
+		// Note:
+		// The SQL standard requires that writing just timestamp be equivalent to timestamp without time zone, and PostgreSQL honors that behavior.
+		// timestamptz is accepted as an abbreviation for timestamp with time zone; this is a PostgreSQL extension.
+		// https://www.postgresql.org/docs/9.6/datatype-datetime.html
+		return "timestamp"
+	default:
+		return c.dataType
 	}
-	return c.dataType
 }
 
 func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
