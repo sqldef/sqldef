@@ -209,7 +209,6 @@ func TestPsqldefDataTypes(t *testing.T) {
 
 	// TODO:
 	//   - int8
-	//   - bigserial
 	//   - serial8
 	//   - box
 	//   - bytea
@@ -238,7 +237,6 @@ func TestPsqldefDataTypes(t *testing.T) {
 	//   - int2
 	//   - smallserial
 	//   - serial2
-	//   - serial
 	//   - serial4
 	//   - time [ (p) ] [ without time zone ]
 	//   - time [ (p) ] with time zone
@@ -256,6 +254,7 @@ func TestPsqldefDataTypes(t *testing.T) {
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
 		  c_bigint bigint,
+		  c_bigserial bigserial,
 		  c_bit bit,
 		  c_bit_2 bit(2),
 		  c_bool bool,
@@ -266,6 +265,7 @@ func TestPsqldefDataTypes(t *testing.T) {
 		  c_date date,
 		  c_int int,
 		  c_integer integer,
+		  c_serial serial,
 		  c_text text,
 		  c_uuid uuid,
 		  c_varchar_40 varchar(40)
