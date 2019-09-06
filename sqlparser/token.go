@@ -333,6 +333,7 @@ var keywords = map[string]int{
 	"signal":              UNUSED,
 	"signed":              SIGNED,
 	"smallint":            SMALLINT,
+	"smallserial":         SMALLSERIAL,
 	"spatial":             SPATIAL,
 	"specific":            UNUSED,
 	"sql":                 UNUSED,

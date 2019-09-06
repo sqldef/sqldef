@@ -250,7 +250,7 @@ func TestPsqldefDataTypes(t *testing.T) {
 	//   - xml
 	//
 	// Remaining SQL spec: bit varying, double precision, interval, numeric, decimal, real,
-	//   smallint, time(with and without tz), timestamp(with and without tz), xml
+	//   smallint, smallserial, time(with and without tz), timestamp(with and without tz), xml
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
 		  c_bigint bigint,
