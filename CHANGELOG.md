@@ -1,3 +1,7 @@
+## v0.5.1
+
+- Support `SMALLSERIAL`, `SERIAL`, `BIGSERIAL` for psqldef [#33](https://github.com/k0kubun/sqldef/pull/33)
+
 ## v0.5.0
 
 - Remove `pg_dump` dependency for psqldef  [#32](https://github.com/k0kubun/sqldef/pull/32)
