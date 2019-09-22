@@ -75,6 +75,9 @@ func buildDumpTableDDL(table string, columns []column, primaryKeyDef string, ind
 		isLast := i == len(columns)-1
 		fmt.Fprint(&queryBuilder, indent)
 		fmt.Fprintf(&queryBuilder, "%s %s", col.Name, col.GetDataType())
+		if col.Length > 0 {
+			fmt.Fprintf(&queryBuilder, "(%d)", col.Length)
+		}
 		if col.IsUnique {
 			fmt.Fprint(&queryBuilder, " UNIQUE")
 		}
