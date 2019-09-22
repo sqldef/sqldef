@@ -1,3 +1,7 @@
+## v0.5.3
+
+- Fix output length bug of psqldef since v0.5.0 [#36](https://github.com/k0kubun/sqldef/pull/36)
+
 ## v0.5.2
 
 - Support `timestamp` (without timezone) for psqldef [#34](https://github.com/k0kubun/sqldef/pull/34)
