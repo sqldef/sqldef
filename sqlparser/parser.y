@@ -194,7 +194,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> GROUP_CONCAT SEPARATOR
 
 // Match
-%token <bytes> MATCH AGAINST BOOLEAN LANGUAGE WITH PARSER QUERY EXPANSION
+%token <bytes> MATCH AGAINST BOOLEAN LANGUAGE WITH WITHOUT PARSER QUERY EXPANSION
 
 // MySQL reserved words that are unused by this grammar will map to this token.
 %token <bytes> UNUSED
@@ -1082,6 +1082,10 @@ time_zone_opt:
 | WITH TIME ZONE
   {
     $$ = BoolVal(true)
+  }
+| WITHOUT TIME ZONE
+  {
+    $$ = BoolVal(false)
   }
 
 unsigned_opt:
@@ -3348,6 +3352,7 @@ non_reserved_keyword:
 | VITESS_TABLETS
 | VSCHEMA_TABLES
 | WITH
+| WITHOUT
 | WRITE
 | YEAR
 | ZEROFILL

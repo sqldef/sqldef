@@ -401,6 +401,7 @@ var keywords = map[string]int{
 	"where":               WHERE,
 	"while":               UNUSED,
 	"with":                WITH,
+	"without":             WITHOUT,
 	"write":               WRITE,
 	"xor":                 UNUSED,
 	"year":                YEAR,
