@@ -1,3 +1,7 @@
+## v0.5.5
+
+- Support `time` with and without timezone for psqldef [#39](https://github.com/k0kubun/sqldef/pull/39)
+
 ## v0.5.4
 
 - Support `timestamp` with and without timezone for psqldef [#37](https://github.com/k0kubun/sqldef/pull/37)
