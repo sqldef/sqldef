@@ -919,6 +919,9 @@ type ColumnType struct {
 	Charset string
 	Collate string
 
+	// Timestamp field options
+	Timezone BoolVal
+
 	// Enum values
 	EnumValues []string
 
@@ -953,6 +956,9 @@ func (ct *ColumnType) Format(buf *TrackedBuffer) {
 	}
 	if ct.Collate != "" {
 		opts = append(opts, keywordStrings[COLLATE], ct.Collate)
+	}
+	if ct.Timezone {
+		opts = append(opts, keywordStrings[WITH], keywordStrings[TIME], keywordStrings[ZONE])
 	}
 	if ct.NotNull {
 		opts = append(opts, keywordStrings[NOT], keywordStrings[NULL])
@@ -1007,6 +1013,9 @@ func (ct *ColumnType) DescribeType() string {
 	}
 	if ct.Zerofill {
 		opts = append(opts, keywordStrings[ZEROFILL])
+	}
+	if ct.Timezone {
+		opts = append(opts, keywordStrings[WITH], keywordStrings[TIME], keywordStrings[ZONE])
 	}
 	if len(opts) != 0 {
 		buf.Myprintf(" %s", strings.Join(opts, " "))

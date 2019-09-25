@@ -176,7 +176,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
 
 // Type Modifiers
-%token <bytes> NULLX AUTO_INCREMENT APPROXNUM SIGNED UNSIGNED ZEROFILL
+%token <bytes> NULLX AUTO_INCREMENT APPROXNUM SIGNED UNSIGNED ZEROFILL ZONE
 
 // Supported SHOW tokens
 %token <bytes> DATABASES TABLES VITESS_KEYSPACES VITESS_SHARDS VITESS_TABLETS VSCHEMA_TABLES EXTENDED FULL PROCESSLIST
@@ -274,7 +274,7 @@ func forceEOF(yylex interface{}) {
 %type <columnType> bool_type int_type decimal_type numeric_type time_type char_type spatial_type
 %type <optVal> length_opt
 %type <str> charset_opt collate_opt
-%type <boolVal> unsigned_opt zero_fill_opt
+%type <boolVal> unsigned_opt zero_fill_opt time_zone_opt
 %type <LengthScaleOption> float_length_opt decimal_length_opt
 %type <strs> enum_values
 %type <columnDefinition> column_definition
@@ -893,9 +893,9 @@ time_type:
   {
     $$ = ColumnType{Type: string($1), Length: $2}
   }
-| TIMESTAMP length_opt
+| TIMESTAMP length_opt time_zone_opt
   {
-    $$ = ColumnType{Type: string($1), Length: $2}
+    $$ = ColumnType{Type: string($1), Length: $2, Timezone: $3}
   }
 | DATETIME length_opt
   {
@@ -1073,6 +1073,15 @@ decimal_length_opt:
         Length: NewIntVal($2),
         Scale: NewIntVal($4),
     }
+  }
+
+time_zone_opt:
+  {
+    $$ = BoolVal(false)
+  }
+| WITH TIME ZONE
+  {
+    $$ = BoolVal(true)
   }
 
 unsigned_opt:
@@ -3342,6 +3351,7 @@ non_reserved_keyword:
 | WRITE
 | YEAR
 | ZEROFILL
+| ZONE
 
 openb:
   '('

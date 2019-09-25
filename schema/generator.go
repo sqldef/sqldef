@@ -394,6 +394,9 @@ func (g *Generator) generateColumnDefinition(column Column) (string, error) {
 	if column.notNull || column.keyOption == ColumnKeyPrimary {
 		definition += "NOT NULL "
 	}
+	if column.timezone {
+		definition += "WITH TIME ZONE "
+	}
 
 	if column.defaultVal != nil {
 		switch column.defaultVal.valueType {
@@ -620,6 +623,7 @@ func haveSameDataType(current Column, desired Column) bool {
 		(current.unsigned == desired.unsigned) &&
 		(current.notNull == (desired.notNull || desired.keyOption == ColumnKeyPrimary)) && // `PRIMARY KEY` implies `NOT NULL`
 		(current.autoIncrement == desired.autoIncrement) &&
+		(current.timezone == desired.timezone) &&
 		reflect.DeepEqual(current.onUpdate, desired.onUpdate)
 
 	// TODO: check defaultVal, length, scale

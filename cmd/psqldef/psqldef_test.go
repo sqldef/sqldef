@@ -264,6 +264,7 @@ func TestPsqldefDataTypes(t *testing.T) {
 		  c_character_varying_30 character varying(30),
 		  c_date date,
 		  c_timestamp_without_tz timestamp,
+		  c_timestamp_with_tz timestamp with time zone,
 		  c_int int,
 		  c_integer integer,
 		  c_serial serial,
