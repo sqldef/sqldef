@@ -238,8 +238,6 @@ func TestPsqldefDataTypes(t *testing.T) {
 	//   - smallserial
 	//   - serial2
 	//   - serial4
-	//   - time [ (p) ] [ without time zone ]
-	//   - time [ (p) ] with time zone
 	//   - timetz
 	//   - timestamptz
 	//   - tsquer
@@ -248,7 +246,7 @@ func TestPsqldefDataTypes(t *testing.T) {
 	//   - xml
 	//
 	// Remaining SQL spec: bit varying, double precision, interval, numeric, decimal, real,
-	//   smallint, smallserial, time(with and without tz), xml
+	//   smallint, smallserial, xml
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
 		  c_bigint bigint,
@@ -263,6 +261,8 @@ func TestPsqldefDataTypes(t *testing.T) {
 		  c_date date,
 		  c_timestamp_without_tz timestamp,
 		  c_timestamp_with_tz timestamp with time zone,
+		  c_time_without_tz time,
+		  c_time_with_tz time with time zone,
 		  c_int int,
 		  c_integer integer,
 		  c_serial serial,

@@ -140,6 +140,8 @@ func (c *column) GetDataType() string {
 		// timestamptz is accepted as an abbreviation for timestamp with time zone; this is a PostgreSQL extension.
 		// https://www.postgresql.org/docs/9.6/datatype-datetime.html
 		return "timestamp"
+	case "time without time zone":
+		return "time"
 	default:
 		return c.dataType
 	}
