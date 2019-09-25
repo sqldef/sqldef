@@ -51,6 +51,7 @@ type Column struct {
 	defaultVal    *Value
 	length        *Value
 	scale         *Value
+	timezone      bool // for Postgres `with time zone`
 	keyOption     ColumnKeyOption
 	onUpdate      *Value
 	enumValues    []string

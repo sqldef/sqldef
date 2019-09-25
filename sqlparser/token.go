@@ -401,11 +401,13 @@ var keywords = map[string]int{
 	"where":               WHERE,
 	"while":               UNUSED,
 	"with":                WITH,
+	"without":             WITHOUT,
 	"write":               WRITE,
 	"xor":                 UNUSED,
 	"year":                YEAR,
 	"year_month":          UNUSED,
 	"zerofill":            ZEROFILL,
+	"zone":                ZONE,
 }
 
 // keywordStrings contains the reverse mapping of token to keyword strings
