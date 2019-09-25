@@ -889,9 +889,9 @@ time_type:
   {
     $$ = ColumnType{Type: string($1)}
   }
-| TIME length_opt
+| TIME length_opt time_zone_opt
   {
-    $$ = ColumnType{Type: string($1), Length: $2}
+    $$ = ColumnType{Type: string($1), Length: $2, Timezone: $3}
   }
 | TIMESTAMP length_opt time_zone_opt
   {
