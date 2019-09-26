@@ -391,11 +391,11 @@ func (g *Generator) generateColumnDefinition(column Column) (string, error) {
 	if column.unsigned {
 		definition += "UNSIGNED "
 	}
-	if column.notNull || column.keyOption == ColumnKeyPrimary {
-		definition += "NOT NULL "
-	}
 	if column.timezone {
 		definition += "WITH TIME ZONE "
+	}
+	if column.notNull || column.keyOption == ColumnKeyPrimary {
+		definition += "NOT NULL "
 	}
 
 	if column.defaultVal != nil {
