@@ -1,3 +1,8 @@
+## v0.5.6
+
+- Fix ordering between `NOT NULL` and `WITH TIME ZONE` for psqldef, related to v0.5.4 and v0.5.5
+  [#40](https://github.com/k0kubun/sqldef/pull/40)
+
 ## v0.5.5
 
 - Support `time` with and without timezone for psqldef [#39](https://github.com/k0kubun/sqldef/pull/39)
