@@ -65,7 +65,7 @@ type Index struct {
 	columns   []IndexColumn
 	primary   bool
 	unique    bool
-	where     string // for Postgres `constraint with where clause`
+	where     string // for Postgres `Partial Indexes`
 }
 
 type IndexColumn struct {
