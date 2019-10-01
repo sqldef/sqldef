@@ -158,12 +158,23 @@ func parseIndex(stmt *sqlparser.DDL) (Index, error) {
 		)
 	}
 
+	where := ""
+	if stmt.IndexSpec.Where != nil && stmt.IndexSpec.Where.Type == sqlparser.WhereStr {
+		expr := stmt.IndexSpec.Where.Expr
+		// remove root paren expression
+		if parenExpr, ok := expr.(*sqlparser.ParenExpr); ok {
+			expr = parenExpr.Expr
+		}
+		where = sqlparser.String(expr)
+	}
+
 	return Index{
 		name:      stmt.IndexSpec.Name.String(),
 		indexType: "", // not supported in parser yet
 		columns:   indexColumns,
 		primary:   false, // not supported in parser yet
 		unique:    stmt.IndexSpec.Unique,
+		where:     where,
 	}, nil
 }
 

@@ -657,6 +657,9 @@ func areSameIndexes(indexA Index, indexB Index) bool {
 			return false
 		}
 	}
+	if indexA.where != indexB.where {
+		return false
+	}
 	return true
 }
 

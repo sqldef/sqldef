@@ -185,6 +185,10 @@ func TestPsqldefCreateIndex(t *testing.T) {
 	assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+"DROP INDEX index_name;\n"+createIndex1)
 	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
 
+	createIndex1 = "CREATE UNIQUE INDEX index_name on users (name) WHERE age > 20;\n"
+	assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+"DROP INDEX index_name;\n"+createIndex1)
+	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
+
 	assertApplyOutput(t, createTable, applyPrefix+"DROP INDEX index_age;\nDROP INDEX index_name;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
