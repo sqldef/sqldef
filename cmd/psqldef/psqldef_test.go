@@ -214,7 +214,6 @@ func TestPsqldefDataTypes(t *testing.T) {
 	//   - bytea
 	//   - cidr
 	//   - circle
-	//   - double precision
 	//   - float8
 	//   - inet
 	//   - int4
@@ -245,7 +244,7 @@ func TestPsqldefDataTypes(t *testing.T) {
 	//   - txid_snapshot
 	//   - xml
 	//
-	// Remaining SQL spec: bit varying, double precision, interval, numeric, decimal, real,
+	// Remaining SQL spec: bit varying, interval, numeric, decimal, real,
 	//   smallint, smallserial, xml
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
@@ -259,6 +258,7 @@ func TestPsqldefDataTypes(t *testing.T) {
 		  c_character_20 character(20),
 		  c_character_varying_30 character varying(30),
 		  c_date date,
+		  c_double_precision double precision,
 		  c_timestamp timestamp,
 		  c_timestamp_6 timestamp(6),
 		  c_timestamp_tz timestamp with time zone,
