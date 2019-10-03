@@ -1,3 +1,8 @@
+## v0.5.7
+
+- Support `double precision` for psqldef [#42](https://github.com/k0kubun/sqldef/pull/42)
+- Support partial indexes syntax for psqldef [#41](https://github.com/k0kubun/sqldef/pull/41)
+
 ## v0.5.6
 
 - Fix ordering between `NOT NULL` and `WITH TIME ZONE` for psqldef, related to v0.5.4 and v0.5.5
