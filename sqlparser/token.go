@@ -291,7 +291,7 @@ var keywords = map[string]int{
 	"partition":           PARTITION,
 	"point":               POINT,
 	"polygon":             POLYGON,
-	"precision":           UNUSED,
+	"precision":           PRECISION,
 	"primary":             PRIMARY,
 	"processlist":         PROCESSLIST,
 	"procedure":           PROCEDURE,
