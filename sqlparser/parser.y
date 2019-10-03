@@ -168,7 +168,7 @@ func forceEOF(yylex interface{}) {
 
 // Type Tokens
 %token <bytes> BIT TINYINT SMALLINT SMALLSERIAL MEDIUMINT INT INTEGER SERIAL BIGINT BIGSERIAL INTNUM
-%token <bytes> REAL DOUBLE FLOAT_TYPE DECIMAL NUMERIC
+%token <bytes> REAL DOUBLE PRECISION FLOAT_TYPE DECIMAL NUMERIC
 %token <bytes> TIME TIMESTAMP DATETIME YEAR
 %token <bytes> CHAR VARCHAR VARYING BOOL CHARACTER VARBINARY NCHAR UUID
 %token <bytes> TEXT TINYTEXT MEDIUMTEXT LONGTEXT
@@ -858,6 +858,12 @@ REAL float_length_opt
     $$ = ColumnType{Type: string($1)}
     $$.Length = $2.Length
     $$.Scale = $2.Scale
+  }
+| DOUBLE PRECISION float_length_opt
+  {
+    $$ = ColumnType{Type: string($1)+" "+string($2)}
+    $$.Length = $3.Length
+    $$.Scale = $3.Scale
   }
 | DOUBLE float_length_opt
   {
@@ -3306,6 +3312,7 @@ non_reserved_keyword:
 | PARTITION
 | POINT
 | POLYGON
+| PRECISION
 | PRIMARY
 | PROCEDURE
 | QUERY
