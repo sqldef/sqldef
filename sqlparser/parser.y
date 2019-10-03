@@ -543,7 +543,7 @@ create_statement:
     $1.TableSpec = $2
     $$ = $1
   }
-| CREATE unique_opt INDEX sql_id ON table_name '(' column_list ')'
+| CREATE unique_opt INDEX sql_id ON table_name '(' column_list ')' where_expression_opt
   {
     $$ = &DDL{
         Action: CreateIndexStr,
@@ -553,6 +553,7 @@ create_statement:
           Name: $4,
           Type: NewColIdent(""),
           Unique: bool($2),
+          Where: NewWhere(WhereStr, $10),
         },
         IndexCols: $8,
       }
@@ -573,7 +574,7 @@ create_statement:
       }
   }
 /* For PostgreSQL */
-| CREATE unique_opt INDEX sql_id ON table_name USING sql_id '(' column_list ')'
+| CREATE unique_opt INDEX sql_id ON table_name USING sql_id '(' column_list ')' where_expression_opt
   {
     $$ = &DDL{
         Action: CreateIndexStr,
@@ -583,6 +584,7 @@ create_statement:
           Name: $4,
           Type: $8,
           Unique: bool($2),
+          Where: NewWhere(WhereStr, $12),
         },
         IndexCols: $10,
       }

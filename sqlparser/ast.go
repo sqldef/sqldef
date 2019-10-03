@@ -1232,6 +1232,7 @@ type IndexSpec struct {
 	Type    ColIdent
 	Unique  bool
 	Primary bool
+	Where   *Where
 }
 
 // VindexSpec defines a vindex for a CREATE VINDEX or DROP VINDEX statement
