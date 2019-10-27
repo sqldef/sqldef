@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/k0kubun/sqldef/adapter"
 	"github.com/k0kubun/sqldef/schema"
@@ -14,6 +15,7 @@ type Options struct {
 	SqlFile string
 	DryRun  bool
 	Export  bool
+	Safety  bool
 }
 
 // Main function shared by `mysqldef` and `psqldef`
@@ -49,11 +51,11 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 	}
 
 	if options.DryRun {
-		showDDLs(ddls)
+		showDDLs(ddls, options.Safety)
 		return
 	}
 
-	err = adapter.RunDDLs(db, ddls)
+	err = adapter.RunDDLs(db, ddls, options.Safety)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -80,9 +82,13 @@ func readFile(filepath string) (string, error) {
 	return string(buf), nil
 }
 
-func showDDLs(ddls []string) {
+func showDDLs(ddls []string, isSafety bool) {
 	fmt.Println("-- dry run --")
 	for _, ddl := range ddls {
+		if isSafety && strings.Contains(ddl, "DROP") {
+			fmt.Printf("Not executed: %s", ddl)
+			continue
+		}
 		fmt.Printf("%s;\n", ddl)
 	}
 }

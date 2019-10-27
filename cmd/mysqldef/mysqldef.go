@@ -26,6 +26,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		File     string `long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"sql_file" default:"-"`
 		DryRun   bool   `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export   bool   `long:"export" description:"Just dump the current schema to stdout"`
+		Safety   bool   `long:"safety" description:"Not make destructive changes such as Drop"`
 		Help     bool   `long:"help" description:"Show this help"`
 	}
 
@@ -56,6 +57,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		SqlFile: opts.File,
 		DryRun:  opts.DryRun,
 		Export:  opts.Export,
+		Safety:  opts.Safety,
 	}
 
 	password, ok := os.LookupEnv("MYSQL_PWD")
