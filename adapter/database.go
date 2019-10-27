@@ -50,7 +50,7 @@ func RunDDLs(d Database, ddls []string, isSafety bool) error {
 	fmt.Println("-- Apply --")
 	for _, ddl := range ddls {
 		if isSafety && strings.Contains(ddl, "DROP") {
-			fmt.Printf("Not executed: %s", ddl)
+			fmt.Printf("Not executed: %s;\n", ddl)
 			continue
 		}
 		fmt.Printf("%s;\n", ddl)

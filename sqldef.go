@@ -86,7 +86,7 @@ func showDDLs(ddls []string, isSafety bool) {
 	fmt.Println("-- dry run --")
 	for _, ddl := range ddls {
 		if isSafety && strings.Contains(ddl, "DROP") {
-			fmt.Printf("Not executed: %s", ddl)
+			fmt.Printf("Not executed: %s;\n", ddl)
 			continue
 		}
 		fmt.Printf("%s;\n", ddl)
