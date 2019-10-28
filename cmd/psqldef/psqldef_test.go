@@ -305,6 +305,26 @@ func TestPsqldefDryRun(t *testing.T) {
 	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 }
 
+func TestPsqldefSkipDrop(t *testing.T) {
+	resetTestDatabase()
+	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", stripHeredoc(`
+		CREATE TABLE users (
+		    id bigint NOT NULL PRIMARY KEY,
+		    age int,
+		    c_char_1 char,
+		    c_char_10 char(10),
+		    c_varchar_10 varchar(10),
+		    c_varchar_unlimited varchar
+		);`,
+	))
+
+	writeFile("schema.sql", "")
+
+	skipDrop := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--skip-drop", "--file", "schema.sql")
+	apply := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+	assertEquals(t, skipDrop, strings.Replace(apply, "DROP", "-- Skipped: DROP", 1))
+}
+
 func TestPsqldefExport(t *testing.T) {
 	resetTestDatabase()
 	out := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--export")

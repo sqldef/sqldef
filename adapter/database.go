@@ -42,13 +42,17 @@ func DumpDDLs(d Database) (string, error) {
 	return strings.Join(ddls, ";\n\n"), nil
 }
 
-func RunDDLs(d Database, ddls []string) error {
+func RunDDLs(d Database, ddls []string, skipDrop bool) error {
 	transaction, err := d.DB().Begin()
 	if err != nil {
 		return err
 	}
 	fmt.Println("-- Apply --")
 	for _, ddl := range ddls {
+		if skipDrop && strings.Contains(ddl, "DROP") {
+			fmt.Printf("-- Skipped: %s;\n", ddl)
+			continue
+		}
 		fmt.Printf("%s;\n", ddl)
 		if _, err := transaction.Exec(ddl); err != nil {
 			transaction.Rollback()

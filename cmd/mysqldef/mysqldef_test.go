@@ -614,6 +614,22 @@ func TestMysqldefExport(t *testing.T) {
 	)
 }
 
+func TestMysqldefSkipDrop(t *testing.T) {
+	resetTestDatabase()
+	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", stripHeredoc(`
+		CREATE TABLE users (
+		  name varchar(40),
+		  created_at datetime NOT NULL
+		) DEFAULT CHARSET=latin1;`,
+	))
+
+	writeFile("schema.sql", "")
+
+	skipDrop := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--skip-drop", "--file", "schema.sql")
+	apply := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	assertEquals(t, skipDrop, strings.Replace(apply, "DROP", "-- Skipped: DROP", 1))
+}
+
 func TestMysqldefHelp(t *testing.T) {
 	_, err := execute("mysqldef", "--help")
 	if err != nil {

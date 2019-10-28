@@ -5,15 +5,17 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/k0kubun/sqldef/adapter"
 	"github.com/k0kubun/sqldef/schema"
 )
 
 type Options struct {
-	SqlFile string
-	DryRun  bool
-	Export  bool
+	SqlFile  string
+	DryRun   bool
+	Export   bool
+	SkipDrop bool
 }
 
 // Main function shared by `mysqldef` and `psqldef`
@@ -49,11 +51,11 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 	}
 
 	if options.DryRun {
-		showDDLs(ddls)
+		showDDLs(ddls, options.SkipDrop)
 		return
 	}
 
-	err = adapter.RunDDLs(db, ddls)
+	err = adapter.RunDDLs(db, ddls, options.SkipDrop)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -80,9 +82,13 @@ func readFile(filepath string) (string, error) {
 	return string(buf), nil
 }
 
-func showDDLs(ddls []string) {
+func showDDLs(ddls []string, skipDrop bool) {
 	fmt.Println("-- dry run --")
 	for _, ddl := range ddls {
+		if skipDrop && strings.Contains(ddl, "DROP") {
+			fmt.Printf("-- Skipped: %s;\n", ddl)
+			continue
+		}
 		fmt.Printf("%s;\n", ddl)
 	}
 }
