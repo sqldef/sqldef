@@ -12,10 +12,10 @@ import (
 )
 
 type Options struct {
-	SqlFile string
-	DryRun  bool
-	Export  bool
-	Safety  bool
+	SqlFile  string
+	DryRun   bool
+	Export   bool
+	SkipDrop bool
 }
 
 // Main function shared by `mysqldef` and `psqldef`
@@ -51,11 +51,11 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 	}
 
 	if options.DryRun {
-		showDDLs(ddls, options.Safety)
+		showDDLs(ddls, options.SkipDrop)
 		return
 	}
 
-	err = adapter.RunDDLs(db, ddls, options.Safety)
+	err = adapter.RunDDLs(db, ddls, options.SkipDrop)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -82,10 +82,10 @@ func readFile(filepath string) (string, error) {
 	return string(buf), nil
 }
 
-func showDDLs(ddls []string, isSafety bool) {
+func showDDLs(ddls []string, skipDrop bool) {
 	fmt.Println("-- dry run --")
 	for _, ddl := range ddls {
-		if isSafety && strings.Contains(ddl, "DROP") {
+		if skipDrop && strings.Contains(ddl, "DROP") {
 			fmt.Printf("Not executed: %s;\n", ddl)
 			continue
 		}

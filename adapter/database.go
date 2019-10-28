@@ -42,14 +42,14 @@ func DumpDDLs(d Database) (string, error) {
 	return strings.Join(ddls, ";\n\n"), nil
 }
 
-func RunDDLs(d Database, ddls []string, isSafety bool) error {
+func RunDDLs(d Database, ddls []string, skipDrop bool) error {
 	transaction, err := d.DB().Begin()
 	if err != nil {
 		return err
 	}
 	fmt.Println("-- Apply --")
 	for _, ddl := range ddls {
-		if isSafety && strings.Contains(ddl, "DROP") {
+		if skipDrop && strings.Contains(ddl, "DROP") {
 			fmt.Printf("Not executed: %s;\n", ddl)
 			continue
 		}
