@@ -50,7 +50,7 @@ func RunDDLs(d Database, ddls []string, skipDrop bool) error {
 	fmt.Println("-- Apply --")
 	for _, ddl := range ddls {
 		if skipDrop && strings.Contains(ddl, "DROP") {
-			fmt.Printf("Not executed: %s;\n", ddl)
+			fmt.Printf("-- Skipped: %s;\n", ddl)
 			continue
 		}
 		fmt.Printf("%s;\n", ddl)

@@ -86,7 +86,7 @@ func showDDLs(ddls []string, skipDrop bool) {
 	fmt.Println("-- dry run --")
 	for _, ddl := range ddls {
 		if skipDrop && strings.Contains(ddl, "DROP") {
-			fmt.Printf("Not executed: %s;\n", ddl)
+			fmt.Printf("-- Skipped: %s;\n", ddl)
 			continue
 		}
 		fmt.Printf("%s;\n", ddl)
