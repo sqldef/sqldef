@@ -1,3 +1,7 @@
+## v0.5.8
+
+- Add `--skip-drop` option to skip `DROP` statements [#44](https://github.com/k0kubun/sqldef/pull/44)
+
 ## v0.5.7
 
 - Support `double precision` for psqldef [#42](https://github.com/k0kubun/sqldef/pull/42)
