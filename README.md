@@ -34,6 +34,7 @@ Application Options:
       --file=sql_file        Read schema SQL from the file, rather than stdin (default: -)
       --dry-run              Don't run DDLs but just show them
       --export               Just dump the current schema to stdout
+      --skip-drop            Skip destructive changes such as DROP
       --help                 Show this help
 ```
 
@@ -89,6 +90,10 @@ Run: 'ALTER TABLE user ADD INDEX index_name(name);'
 # Operation is idempotent, safe for running it multiple times
 $ mysqldef -uroot test < schema.sql
 Nothing is modified
+
+# Run without droping existing tables and columns
+$ mysqldef -uroot test --skip-drop < schema.sql
+Skipped: 'DROP TABLE users;'
 ```
 
 ### psqldef
@@ -109,6 +114,7 @@ Application Options:
   -f, --file=filename        Read schema SQL from the file, rather than stdin (default: -)
       --dry-run              Don't run DDLs but just show them
       --export               Just dump the current schema to stdout
+      --skip-drop            Skip destructive changes such as DROP
       --help                 Show this help
 ```
 
@@ -171,6 +177,10 @@ Run: 'ALTER TABLE users DROP COLUMN name;'
 # Operation is idempotent, safe for running it multiple times
 $ psqldef -U postgres test < schema.sql
 Nothing is modified
+
+# Run without droping existing tables and columns
+$ psqldef -U postgres test --skip-drop < schema.sql
+Skipped: 'DROP TABLE users;'
 ```
 
 ## Supported features
