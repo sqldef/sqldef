@@ -25,7 +25,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		File     string `short:"f" long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"filename" default:"-"`
 		DryRun   bool   `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export   bool   `long:"export" description:"Just dump the current schema to stdout"`
-		SkipDrop bool   `long:"skip-drop" description:"Not make destructive changes such as Drop"`
+		SkipDrop bool   `long:"skip-drop" description:"Skip destructive changes such as DROP"`
 		Help     bool   `long:"help" description:"Show this help"`
 	}
 
