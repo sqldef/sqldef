@@ -3,3 +3,4 @@
 /build/*/*
 /package/*
 *.sql
+.DS_Store
