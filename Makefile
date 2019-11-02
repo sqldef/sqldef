@@ -5,7 +5,7 @@ GOOS=$(word 1,$(subst /, ,$(lastword $(GOVERSION))))
 GOARCH=$(word 2,$(subst /, ,$(lastword $(GOVERSION))))
 BUILD_DIR=build/$(GOOS)-$(GOARCH)
 
-.PHONY: all build clean deps package package-zip package-targz
+.PHONY: all build wasm clean deps package package-zip package-targz
 
 all: build
 
@@ -13,6 +13,10 @@ build: deps
 	mkdir -p $(BUILD_DIR)
 	cd cmd/mysqldef && GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/mysqldef
 	cd cmd/psqldef && GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/psqldef
+
+wasm:
+	GOOS=js GOARCH=wasm go build $(GOFLAGS) -o web/sqldef.wasm ./web/sqldef-wasm.go
+	cp ${GOROOT}/misc/wasm/wasm_exec.js web
 
 clean:
 	rm -rf build package
