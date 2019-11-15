@@ -352,10 +352,16 @@ Following settings could be dangerous. Please develop sqldef under a secure netw
 
 ### mysqldef
 
-To run integration tests, `mysql -uroot` needs to succeed by following options:
+To run integration tests, `mysql -uroot` needs to succeed. One option is:
 
-* Run: `sudo mysqladmin -u root -p password ''`
-* Login to mysql with administrator user somehow, and run `SET PASSWORD FOR root@localhost=PASSWORD('');`
+```
+$ sudo mysql -uroot
+mysql> UNINSTALL PLUGIN validate_password;
+mysql> DROP USER 'root'@'localhost';
+mysql> CREATE USER 'root'@'%' identified by '';
+mysql> GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
+mysql> FLUSH PRIVILEGES;
+```
 
 Then running `make test-mysqldef` will help your development.
 
