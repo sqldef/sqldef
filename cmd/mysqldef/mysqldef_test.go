@@ -227,7 +227,7 @@ func TestMysqldefChangeColumn(t *testing.T) {
 }
 
 func TestMysqldefSwapColumn(t *testing.T) {
-    createTable := stripHeredoc(`
+	createTable := stripHeredoc(`
             CREATE TABLE users (
               id bigint NOT NULL,
               name varchar(40) NOT NULL,
@@ -235,10 +235,10 @@ func TestMysqldefSwapColumn(t *testing.T) {
               created_at datetime NOT NULL,
               PRIMARY KEY (id)
             );`,
-    )
-    assertApply(t, createTable)
+	)
+	assertApply(t, createTable)
 
-    createTable = stripHeredoc(`
+	createTable = stripHeredoc(`
             CREATE TABLE users (
               id bigint NOT NULL,
               nickname varchar(20) NOT NULL,
@@ -246,12 +246,12 @@ func TestMysqldefSwapColumn(t *testing.T) {
               created_at datetime NOT NULL,
               PRIMARY KEY (id)
             );`,
-    )
+	)
 
-    assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
 		ALTER TABLE users CHANGE COLUMN nickname nickname varchar(20) NOT NULL AFTER id;
 			`,
-    ))
+	))
 }
 
 func TestMysqldefAddIndex(t *testing.T) {
