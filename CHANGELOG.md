@@ -1,3 +1,7 @@
+## v0.5.9
+
+- Avoid unnecessarily generating diff for `BOOLEAN` type on mysqldef [#49](https://github.com/k0kubun/sqldef/pull/49)
+
 ## v0.5.8
 
 - Add `--skip-drop` option to skip `DROP` statements [#44](https://github.com/k0kubun/sqldef/pull/44)
