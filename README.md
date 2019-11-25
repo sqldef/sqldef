@@ -371,6 +371,7 @@ To run integration tests, `psql -Upostgres` needs to succeed by:
 
 1. Open `pg_hba.conf` (ex: `/etc/postgresql/10/main/pg_hba.conf`)
 2. Change `local all postgres peer` to `local all postgres trust`
+    * You may also need to take care of `host all all 127.0.0.1/32 md5`
 3. Restart postgresql server (ex: `systemctl restart postgresql`)
 
 ## License
