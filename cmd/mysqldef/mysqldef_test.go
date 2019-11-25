@@ -485,6 +485,20 @@ func TestMysqldefTypeAliases(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefBoolean(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  bool_flag BOOL,
+		  boolean_flag BOOLEAN
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefDefaultNull(t *testing.T) {
 	resetTestDatabase()
 

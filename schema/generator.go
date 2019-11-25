@@ -22,6 +22,9 @@ var (
 		"char":    "character",
 		"varchar": "character varying",
 	}
+	mysqlDataTypeAliases = map[string]string{
+		"boolean": "tinyint",
+	}
 )
 
 // This struct holds simulated schema states during GenerateIdempotentDDLs().
@@ -186,7 +189,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			cp := currentColumn.position
 			dp := desiredColumn.position
 			changeOrder := cp > dp && cp-dp > len(currentTable.columns)-len(desired.table.columns)
-			if !haveSameDataType(*currentColumn, desiredColumn) || changeOrder {
+			if !g.haveSameDataType(*currentColumn, desiredColumn) || changeOrder {
 				definition, err := g.generateColumnDefinition(desiredColumn) // TODO: Parse DEFAULT NULL and share this with else
 				if err != nil {
 					return ddls, err
@@ -618,8 +621,8 @@ func findPrimaryKey(indexes []Index) *Index {
 	return nil
 }
 
-func haveSameDataType(current Column, desired Column) bool {
-	return (normalizeDataType(current.typeName) == normalizeDataType(desired.typeName)) &&
+func (g *Generator) haveSameDataType(current Column, desired Column) bool {
+	return (g.normalizeDataType(current.typeName) == g.normalizeDataType(desired.typeName)) &&
 		(current.unsigned == desired.unsigned) &&
 		(current.notNull == (desired.notNull || desired.keyOption == ColumnKeyPrimary)) && // `PRIMARY KEY` implies `NOT NULL`
 		(current.autoIncrement == desired.autoIncrement) &&
@@ -632,13 +635,18 @@ func haveSameDataType(current Column, desired Column) bool {
 	//	(current.keyOption == desired.keyOption)
 }
 
-func normalizeDataType(dataType string) string {
+func (g *Generator) normalizeDataType(dataType string) string {
 	alias, ok := dataTypeAliases[dataType]
 	if ok {
-		return alias
-	} else {
-		return dataType
+		dataType = alias
 	}
+	if g.mode == GeneratorModeMysql {
+		alias, ok = mysqlDataTypeAliases[dataType]
+		if ok {
+			dataType = alias
+		}
+	}
+	return dataType
 }
 
 func areSameIndexes(indexA Index, indexB Index) bool {
