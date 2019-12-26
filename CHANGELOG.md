@@ -1,3 +1,7 @@
+## v0.5.10
+
+- Support adding/removing a default value to/from a column
+
 ## v0.5.9
 
 - Avoid unnecessarily generating diff for `BOOLEAN` type on mysqldef [#49](https://github.com/k0kubun/sqldef/pull/49)
