@@ -631,7 +631,7 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 		(current.timezone == desired.timezone) &&
 		reflect.DeepEqual(current.onUpdate, desired.onUpdate)
 
-	// TODO: check defaultVal, length, scale
+	// TODO: check length, scale
 
 	// TODO: Examine unique key properly with table indexes (primary key is already examined)
 	//	(current.keyOption == desired.keyOption)
