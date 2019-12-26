@@ -590,6 +590,53 @@ func TestMysqldefIgnoreView(t *testing.T) {
 	assertApplyOutput(t, "", nothingModified)
 }
 
+func TestMysqldefDefaultValue(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE tools (
+		  id int(10) unsigned NOT NULL AUTO_INCREMENT,
+		  name varchar(255) COLLATE utf8mb4_bin NOT NULL,
+		  created_at datetime NOT NULL,
+		  updated_at datetime NOT NULL,
+		  PRIMARY KEY (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE tools (
+		  id int(10) unsigned NOT NULL AUTO_INCREMENT,
+		  name varchar(255) COLLATE utf8mb4_bin NOT NULL,
+		  created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		  updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		  PRIMARY KEY (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE tools CHANGE COLUMN created_at created_at datetime NOT NULL DEFAULT current_timestamp;\n"+
+		"ALTER TABLE tools CHANGE COLUMN updated_at updated_at datetime NOT NULL DEFAULT current_timestamp ON UPDATE current_timestamp;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE tools (
+		  id int(10) unsigned NOT NULL AUTO_INCREMENT,
+		  name varchar(255) COLLATE utf8mb4_bin NOT NULL,
+		  created_at datetime NOT NULL,
+		  updated_at datetime NOT NULL,
+		  PRIMARY KEY (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE tools CHANGE COLUMN created_at created_at datetime NOT NULL;\n"+
+		"ALTER TABLE tools CHANGE COLUMN updated_at updated_at datetime NOT NULL;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //

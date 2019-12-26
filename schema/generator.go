@@ -189,7 +189,9 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			cp := currentColumn.position
 			dp := desiredColumn.position
 			changeOrder := cp > dp && cp-dp > len(currentTable.columns)-len(desired.table.columns)
-			if !g.haveSameDataType(*currentColumn, desiredColumn) || changeOrder {
+			if !g.haveSameDataType(*currentColumn, desiredColumn) ||
+				!haveSameValue(currentColumn.defaultVal, desiredColumn.defaultVal) || changeOrder {
+
 				definition, err := g.generateColumnDefinition(desiredColumn) // TODO: Parse DEFAULT NULL and share this with else
 				if err != nil {
 					return ddls, err
@@ -415,7 +417,7 @@ func (g *Generator) generateColumnDefinition(column Column) (string, error) {
 			} else {
 				definition += "DEFAULT b'0' "
 			}
-		case ValueTypeValArg: // NULL
+		case ValueTypeValArg: // NULL, CURRENT_TIMESTAMP, ...
 			definition += fmt.Sprintf("DEFAULT %s ", string(column.defaultVal.raw))
 		default:
 			return "", fmt.Errorf("unsupported default value type (valueType: '%d') in column: %#v", column.defaultVal.valueType, column)
@@ -633,6 +635,26 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 
 	// TODO: Examine unique key properly with table indexes (primary key is already examined)
 	//	(current.keyOption == desired.keyOption)
+}
+
+func haveSameValue(current *Value, desired *Value) bool {
+	// Normalize `DEFAULT NULL` to nil (missing DEFAULT)
+	if current != nil && current.valueType == ValueTypeValArg && string(current.raw) == "null" {
+		current = nil
+	}
+	if desired != nil && desired.valueType == ValueTypeValArg && string(desired.raw) == "null" {
+		desired = nil
+	}
+
+	if current == nil && desired == nil {
+		return true
+	}
+	if current == nil || desired == nil {
+		return false
+	}
+
+	// TODO: check values
+	return true
 }
 
 func (g *Generator) normalizeDataType(dataType string) string {
