@@ -1,6 +1,10 @@
+## v0.5.11
+
+- Escape index names generated in index DDLs [#51](https://github.com/k0kubun/sqldef/pull/51)
+
 ## v0.5.10
 
-- Support adding/removing a default value to/from a column
+- Support adding/removing a default value to/from a column [#50](https://github.com/k0kubun/sqldef/pull/50)
 
 ## v0.5.9
 
