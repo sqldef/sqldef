@@ -266,15 +266,15 @@ func TestMysqldefAddIndex(t *testing.T) {
 	)
 	assertApply(t, createTable)
 
-	alterTable := "ALTER TABLE users ADD UNIQUE INDEX index_name(name);\n"
+	alterTable := "ALTER TABLE users ADD UNIQUE INDEX `index_name`(name);\n"
 	assertApplyOutput(t, createTable+alterTable, applyPrefix+alterTable)
 	assertApplyOutput(t, createTable+alterTable, nothingModified)
 
-	alterTable = "ALTER TABLE users ADD INDEX index_name(name, created_at);\n"
-	assertApplyOutput(t, createTable+alterTable, applyPrefix+"ALTER TABLE users DROP INDEX index_name;\n"+alterTable)
+	alterTable = "ALTER TABLE users ADD INDEX `index_name`(name, created_at);\n"
+	assertApplyOutput(t, createTable+alterTable, applyPrefix+"ALTER TABLE users DROP INDEX `index_name`;\n"+alterTable)
 	assertApplyOutput(t, createTable+alterTable, nothingModified)
 
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP INDEX index_name;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP INDEX `index_name`;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -298,7 +298,7 @@ func TestMysqldefFulltextIndex(t *testing.T) {
 		  title varchar(40) DEFAULT NULL
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE posts DROP INDEX title_fulltext_index;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE posts DROP INDEX `title_fulltext_index`;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -308,7 +308,7 @@ func TestMysqldefFulltextIndex(t *testing.T) {
 		  FULLTEXT KEY title_fulltext_index (title) /*!50100 WITH PARSER ngram */
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE posts ADD fulltext key title_fulltext_index(title);\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE posts ADD fulltext key `title_fulltext_index`(title);\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -329,11 +329,10 @@ func TestMysqldefCreateIndex(t *testing.T) {
 	assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+createIndex1+createIndex2)
 	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
 
-	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
-		ALTER TABLE users DROP INDEX index_created_at;
-		ALTER TABLE users DROP INDEX index_name;
-		`,
-	))
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE users DROP INDEX `index_created_at`;\n"+
+		"ALTER TABLE users DROP INDEX `index_name`;\n",
+	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -358,11 +357,10 @@ func TestMysqldefCreateTableKey(t *testing.T) {
 		  UNIQUE KEY index_created_at(created_at)
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
-		ALTER TABLE users ADD key index_name(name);
-		ALTER TABLE users ADD unique key index_created_at(created_at);
-		`,
-	))
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE users ADD key `index_name`(name);\n"+
+		"ALTER TABLE users ADD unique key `index_created_at`(created_at);\n",
+	)
 }
 
 func TestMysqldefCreateTableForeignKey(t *testing.T) {
@@ -397,11 +395,10 @@ func TestMysqldefCreateTableForeignKey(t *testing.T) {
 			);
 			`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+stripHeredoc(`
-		ALTER TABLE posts DROP FOREIGN KEY posts_ibfk_1;
-		ALTER TABLE posts DROP INDEX posts_ibfk_1;
-		`,
-	))
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
+		"ALTER TABLE posts DROP FOREIGN KEY posts_ibfk_1;\n"+
+		"ALTER TABLE posts DROP INDEX `posts_ibfk_1`;\n",
+	)
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	createPosts = stripHeredoc(`
@@ -634,6 +631,26 @@ func TestMysqldefDefaultValue(t *testing.T) {
 	assertApplyOutput(t, createTable, applyPrefix+
 		"ALTER TABLE tools CHANGE COLUMN created_at created_at datetime NOT NULL;\n"+
 		"ALTER TABLE tools CHANGE COLUMN updated_at updated_at datetime NOT NULL;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMysqldefIndexWithDot(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE users (\n" +
+		"  `id` BIGINT,\n" +
+		"  `account_id` BIGINT\n" +
+		");\n"
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = "CREATE TABLE users (\n" +
+		"  `id` BIGINT,\n" +
+		"  `account_id` BIGINT,\n" +
+		"  KEY `account.id`(account_id)\n" +
+		");\n"
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE users ADD key `account.id`(account_id);\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 

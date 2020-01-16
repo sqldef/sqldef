@@ -176,20 +176,20 @@ func TestPsqldefCreateIndex(t *testing.T) {
 		);
 		`,
 	)
-	createIndex1 := "CREATE INDEX index_name on users (name);\n"
-	createIndex2 := "CREATE UNIQUE INDEX index_age on users (age);\n"
+	createIndex1 := `CREATE INDEX "index_name" on users (name);` + "\n"
+	createIndex2 := `CREATE UNIQUE INDEX "index_age" on users (age);` + "\n"
 	assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+createTable+createIndex1+createIndex2)
 	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
 
-	createIndex1 = "CREATE INDEX index_name on users (name, id);\n"
-	assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+"DROP INDEX index_name;\n"+createIndex1)
+	createIndex1 = `CREATE INDEX "index_name" on users (name, id);` + "\n"
+	assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+`DROP INDEX "index_name";`+"\n"+createIndex1)
 	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
 
-	createIndex1 = "CREATE UNIQUE INDEX index_name on users (name) WHERE age > 20;\n"
-	assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+"DROP INDEX index_name;\n"+createIndex1)
+	createIndex1 = `CREATE UNIQUE INDEX "index_name" on users (name) WHERE age > 20;` + "\n"
+	assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+`DROP INDEX "index_name";`+"\n"+createIndex1)
 	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
 
-	assertApplyOutput(t, createTable, applyPrefix+"DROP INDEX index_age;\nDROP INDEX index_name;\n")
+	assertApplyOutput(t, createTable, applyPrefix+`DROP INDEX "index_age";`+"\n"+`DROP INDEX "index_name";`+"\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 

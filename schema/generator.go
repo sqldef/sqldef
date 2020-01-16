@@ -466,7 +466,7 @@ func (g *Generator) generateIndexDefinition(index Index) (string, error) {
 	} else {
 		definition += fmt.Sprintf(
 			" %s(%s)",
-			index.name,
+			g.escapeSQLName(index.name),
 			strings.Join(columns, ", "), // TODO: escape
 		)
 	}
@@ -503,9 +503,9 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) (string,
 
 func (g *Generator) generateDropIndex(tableName string, indexName string) string {
 	if g.mode == GeneratorModePostgres {
-		return fmt.Sprintf("DROP INDEX %s", indexName) // TODO: escape
+		return fmt.Sprintf("DROP INDEX %s", g.escapeSQLName(indexName))
 	} else {
-		return fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", tableName, indexName) // TODO: escape
+		return fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", tableName, g.escapeSQLName(indexName))
 	}
 }
 
