@@ -654,6 +654,34 @@ func TestMysqldefIndexWithDot(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefChangeIndexCombination(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE users (\n" +
+		"  `id` BIGINT,\n" +
+		"  `name` varchar(255),\n" +
+		"  `account_id` BIGINT,\n" +
+		"  KEY `index_users1`(account_id),\n" +
+		"  KEY `index_users2`(account_id, name)\n" +
+		");\n"
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = "CREATE TABLE users (\n" +
+		"  `id` BIGINT,\n" +
+		"  `name` varchar(255),\n" +
+		"  `account_id` BIGINT,\n" +
+		"  KEY `index_users1`(account_id, name),\n" +
+		"  KEY `index_users2`(account_id)\n" +
+		");\n"
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE users DROP INDEX `index_users1`;\n"+
+		"ALTER TABLE users ADD key `index_users1`(account_id, name);\n"+
+		"ALTER TABLE users DROP INDEX `index_users2`;\n"+
+		"ALTER TABLE users ADD key `index_users2`(account_id);\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //

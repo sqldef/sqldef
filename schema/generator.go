@@ -230,30 +230,26 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 		}
 		if desiredKey != nil {
-			definition, err := g.generateIndexDefinition(*desiredKey)
-			if err != nil {
-				return ddls, err
-			}
+			definition := g.generateIndexDefinition(*desiredKey)
 			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", desired.table.name, definition)) // TODO: escape
 		}
 	}
 
 	// Examine each index
-	for _, index := range desired.table.indexes {
-		if index.name == "PRIMARY" {
+	for _, desiredIndex := range desired.table.indexes {
+		if desiredIndex.name == "PRIMARY" {
 			continue
 		}
 
-		if containsString(convertIndexesToIndexNames(currentTable.indexes), index.name) {
-			// TODO: Compare types and change index type!!!
+		if currentIndex := findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex != nil {
+			// Drop and add index as needed.
+			if !areSameIndexes(*currentIndex, desiredIndex) {
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", desired.table.name, g.escapeSQLName(currentIndex.name)))
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", desired.table.name, g.generateIndexDefinition(desiredIndex)))
+			}
 		} else {
 			// Index not found, add index.
-			definition, err := g.generateIndexDefinition(index)
-			if err != nil {
-				return ddls, err
-			}
-			ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", desired.table.name, definition) // TODO: escape
-			ddls = append(ddls, ddl)
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", desired.table.name, g.generateIndexDefinition(desiredIndex)))
 		}
 	}
 
@@ -450,7 +446,7 @@ func (g *Generator) generateColumnDefinition(column Column) (string, error) {
 }
 
 // For CREATE TABLE.
-func (g *Generator) generateIndexDefinition(index Index) (string, error) {
+func (g *Generator) generateIndexDefinition(index Index) string {
 	definition := index.indexType // indexType is only available on `CREATE TABLE`, but only `generateDDLsForCreateTable` is using this
 
 	columns := []string{}
@@ -470,7 +466,7 @@ func (g *Generator) generateIndexDefinition(index Index) (string, error) {
 			strings.Join(columns, ", "), // TODO: escape
 		)
 	}
-	return definition, nil
+	return definition
 }
 
 func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) (string, error) {
