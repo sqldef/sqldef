@@ -1,3 +1,7 @@
+## v0.5.12
+
+- DROP and ADD index if column combination is changed [#53](https://github.com/k0kubun/sqldef/issues/53)
+
 ## v0.5.11
 
 - Escape index names generated in index DDLs [#51](https://github.com/k0kubun/sqldef/pull/51)
