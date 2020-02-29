@@ -1,3 +1,7 @@
+## v0.5.13
+
+- Support JSONB type for psqldef [#55](https://github.com/k0kubun/sqldef/issues/55)
+
 ## v0.5.12
 
 - DROP and ADD index if column combination is changed [#53](https://github.com/k0kubun/sqldef/issues/53)
