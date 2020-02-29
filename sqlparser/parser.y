@@ -172,7 +172,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> TIME TIMESTAMP DATETIME YEAR
 %token <bytes> CHAR VARCHAR VARYING BOOL CHARACTER VARBINARY NCHAR UUID
 %token <bytes> TEXT TINYTEXT MEDIUMTEXT LONGTEXT
-%token <bytes> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON ENUM
+%token <bytes> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON JSONB ENUM
 %token <bytes> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
 
 // Type Modifiers
@@ -982,6 +982,10 @@ char_type:
     $$ = ColumnType{Type: string($1)}
   }
 | JSON
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| JSONB
   {
     $$ = ColumnType{Type: string($1)}
   }
@@ -2671,6 +2675,10 @@ convert_type:
     $$.Scale = $2.Scale
   }
 | JSON
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| JSONB
   {
     $$ = &ConvertType{Type: string($1)}
   }

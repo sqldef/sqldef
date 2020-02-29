@@ -222,8 +222,6 @@ func TestPsqldefDataTypes(t *testing.T) {
 	//   - inet
 	//   - int4
 	//   - interval [ fields ] [ (p) ]
-	//   - json
-	//   - jsonb
 	//   - line
 	//   - lseg
 	//   - macaddr
@@ -263,6 +261,8 @@ func TestPsqldefDataTypes(t *testing.T) {
 		  c_character_varying_30 character varying(30),
 		  c_date date,
 		  c_double_precision double precision,
+		  c_json json,
+		  c_jsonb jsonb,
 		  c_timestamp timestamp,
 		  c_timestamp_6 timestamp(6),
 		  c_timestamp_tz timestamp with time zone,
