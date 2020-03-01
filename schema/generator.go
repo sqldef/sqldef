@@ -254,23 +254,28 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	}
 
 	// Examine each foreign key
-	for _, foreignKey := range desired.table.foreignKeys {
-		if len(foreignKey.constraintName) == 0 {
+	for _, desiredForeignKey := range desired.table.foreignKeys {
+		if len(desiredForeignKey.constraintName) == 0 {
 			return ddls, fmt.Errorf(
 				"Foreign key without constraint symbol was found in table '%s' (index name: '%s', columns: %v). "+
 					"Specify the constraint symbol to identify the foreign key.",
-				desired.table.name, foreignKey.indexName, foreignKey.indexColumns,
+				desired.table.name, desiredForeignKey.indexName, desiredForeignKey.indexColumns,
 			)
 		}
 
-		if containsString(convertForeignKeysToConstraintNames(currentTable.foreignKeys), foreignKey.constraintName) {
-			// TODO: Compare foreign key columns/options and change foreign key!!!
+		if currentForeignKey := findForeignKeyByName(currentTable.foreignKeys, desiredForeignKey.constraintName); currentForeignKey != nil {
+			// Drop and add foreign key as needed.
+			if !g.areSameForeignKeys(*currentForeignKey, desiredForeignKey) {
+				if g.mode == GeneratorModePostgres {
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", desired.table.name, currentForeignKey.constraintName))
+				} else {
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", desired.table.name, currentForeignKey.constraintName))
+				}
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", desired.table.name, g.generateForeignKeyDefinition(desiredForeignKey)))
+			}
 		} else {
 			// Foreign key not found, add foreign key.
-			definition, err := g.generateForeignKeyDefinition(foreignKey)
-			if err != nil {
-				return ddls, err
-			}
+			definition := g.generateForeignKeyDefinition(desiredForeignKey)
 			ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", desired.table.name, definition) // TODO: escape
 			ddls = append(ddls, ddl)
 		}
@@ -468,7 +473,7 @@ func (g *Generator) generateIndexDefinition(index Index) string {
 	return definition
 }
 
-func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) (string, error) {
+func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 	// TODO: make string concatenation faster?
 	// TODO: consider escape?
 
@@ -492,8 +497,7 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) (string,
 		definition += fmt.Sprintf("ON UPDATE %s ", foreignKey.onUpdate)
 	}
 
-	definition = strings.TrimSuffix(definition, " ")
-	return definition, nil
+	return strings.TrimSuffix(definition, " ")
 }
 
 func (g *Generator) generateDropIndex(tableName string, indexName string) string {
@@ -609,6 +613,15 @@ func findIndexByName(indexes []Index, name string) *Index {
 	return nil
 }
 
+func findForeignKeyByName(foreignKeys []ForeignKey, constraintName string) *ForeignKey {
+	for _, foreignKey := range foreignKeys {
+		if foreignKey.constraintName == constraintName {
+			return &foreignKey
+		}
+	}
+	return nil
+}
+
 func findPrimaryKey(indexes []Index) *Index {
 	for _, index := range indexes {
 		if index.primary {
@@ -686,6 +699,33 @@ func areSameIndexes(indexA Index, indexB Index) bool {
 		return false
 	}
 	return true
+}
+
+func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB ForeignKey) bool {
+	if g.normalizeOnUpdate(foreignKeyA.onUpdate) != g.normalizeOnUpdate(foreignKeyB.onUpdate) {
+		return false
+	}
+	if g.normalizeOnDelete(foreignKeyA.onDelete) != g.normalizeOnDelete(foreignKeyB.onDelete) {
+		return false
+	}
+	// TODO: check index, reference
+	return true
+}
+
+func (g *Generator) normalizeOnUpdate(onUpdate string) string {
+	if g.mode == GeneratorModePostgres && onUpdate == "" {
+		return "NO ACTION"
+	} else {
+		return onUpdate
+	}
+}
+
+func (g *Generator) normalizeOnDelete(onDelete string) string {
+	if g.mode == GeneratorModePostgres && onDelete == "" {
+		return "NO ACTION"
+	} else {
+		return onDelete
+	}
 }
 
 // TODO: Use interface to avoid defining following functions?

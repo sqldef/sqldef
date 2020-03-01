@@ -231,8 +231,8 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 func (d *PostgresDatabase) getPrimaryKeyDef(table string) (string, error) {
 	query := `SELECT
 	tc.table_schema, tc.constraint_name, tc.table_name, kcu.column_name
-FROM 
-	information_schema.table_constraints AS tc 
+FROM
+	information_schema.table_constraints AS tc
 	JOIN information_schema.key_column_usage AS kcu
 		ON tc.constraint_name = kcu.constraint_name
 WHERE constraint_type = 'PRIMARY KEY' AND tc.table_name=$1 ORDER BY kcu.ordinal_position`
@@ -263,16 +263,20 @@ WHERE constraint_type = 'PRIMARY KEY' AND tc.table_name=$1 ORDER BY kcu.ordinal_
 // refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d
 func (d *PostgresDatabase) getForeginDefs(table string) ([]string, error) {
 	query := `SELECT
-	tc.table_schema, tc.constraint_name, tc.table_name, kcu.column_name, 
+	tc.table_schema, tc.constraint_name, tc.table_name, kcu.column_name,
 	ccu.table_schema AS foreign_table_schema,
 	ccu.table_name AS foreign_table_name,
-	ccu.column_name AS foreign_column_name 
-FROM 
-	information_schema.table_constraints AS tc 
+	ccu.column_name AS foreign_column_name,
+	rc.update_rule AS foreign_update_rule,
+	rc.delete_rule AS foreign_delete_rule
+FROM
+	information_schema.table_constraints AS tc
 	JOIN information_schema.key_column_usage AS kcu
 		ON tc.constraint_name = kcu.constraint_name
 	JOIN information_schema.constraint_column_usage AS ccu
-		ON ccu.constraint_name = tc.constraint_name
+		ON tc.constraint_name = ccu.constraint_name
+	JOIN information_schema.referential_constraints AS rc
+		ON tc.constraint_name = rc.constraint_name
 WHERE constraint_type = 'FOREIGN KEY' AND tc.table_name=$1`
 	rows, err := d.db.Query(query, table)
 	if err != nil {
@@ -282,14 +286,14 @@ WHERE constraint_type = 'FOREIGN KEY' AND tc.table_name=$1`
 
 	defs := make([]string, 0)
 	for rows.Next() {
-		var tableSchema, constraintName, tableName, columnName, foreignTableSchema, foreignTableName, foreignColumnName string
-		err = rows.Scan(&tableSchema, &constraintName, &tableName, &columnName, &foreignTableSchema, &foreignTableName, &foreignColumnName)
+		var tableSchema, constraintName, tableName, columnName, foreignTableSchema, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule string
+		err = rows.Scan(&tableSchema, &constraintName, &tableName, &columnName, &foreignTableSchema, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule)
 		if err != nil {
 			return nil, err
 		}
 		def := fmt.Sprintf(
-			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s(%s) ON UPDATE RESTRICT ON DELETE SET NULL",
-			tableSchema, tableName, constraintName, columnName, foreignTableSchema, foreignTableName, foreignColumnName,
+			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s(%s) ON UPDATE %s ON DELETE %s",
+			tableSchema, tableName, constraintName, columnName, foreignTableSchema, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule,
 		)
 		defs = append(defs, def)
 	}

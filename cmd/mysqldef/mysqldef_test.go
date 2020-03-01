@@ -377,6 +377,7 @@ func TestMysqldefCreateTableForeignKey(t *testing.T) {
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
+	// Add a foreign key without options
 	createPosts = stripHeredoc(`
 			CREATE TABLE posts (
 			  content text,
@@ -388,6 +389,19 @@ func TestMysqldefCreateTableForeignKey(t *testing.T) {
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id);\n")
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
+	// Add options to a foreign key
+	createPosts = stripHeredoc(`
+			CREATE TABLE posts (
+			  content text,
+			  user_id bigint,
+			  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+			);
+			`,
+	)
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE posts DROP FOREIGN KEY posts_ibfk_1;\nALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE;\n")
+	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+
+	// Drop a foreign key
 	createPosts = stripHeredoc(`
 			CREATE TABLE posts (
 			  content text,
@@ -401,16 +415,17 @@ func TestMysqldefCreateTableForeignKey(t *testing.T) {
 	)
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
+	// Add a foreign key with options
 	createPosts = stripHeredoc(`
 			CREATE TABLE posts (
 			  content text,
 			  user_id bigint,
-			  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE RESTRICT
+			  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
 			);
 			`,
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
-		"ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE RESTRICT;\n")
+		"ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;\n")
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 }
 

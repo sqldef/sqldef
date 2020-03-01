@@ -93,11 +93,22 @@ func TestCreateTableForeignKey(t *testing.T) {
 			CREATE TABLE posts (
 			  content text,
 			  user_id bigint,
-			  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE RESTRICT
+			  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id)
 			);
 			`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE RESTRICT;\n")
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id);\n")
+	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+
+	createPosts = stripHeredoc(`
+			CREATE TABLE posts (
+			  content text,
+			  user_id bigint,
+			  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+			);
+			`,
+	)
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE posts DROP CONSTRAINT posts_ibfk_1;\nALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;\n")
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	createPosts = stripHeredoc(`
