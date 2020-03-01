@@ -331,7 +331,6 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 	ddls := []string{}
 
 	if currentIndex.primary {
-		//pp(currentIndex)
 		var primaryKeyColumn *Column
 		for _, column := range desiredTable.columns {
 			if column.keyOption == ColumnKeyPrimary {
