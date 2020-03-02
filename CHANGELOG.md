@@ -1,3 +1,8 @@
+## v0.5.14
+
+- Support updating `ON UPDATE` / `ON DELETE` of foreign keys [#54](https://github.com/k0kubun/sqldef/issues/54)
+- Fix a bug that foreign key is always exported as `ON UPDATE RESTRICT ON DELETE SET NULL` in psqldef
+
 ## v0.5.13
 
 - Support JSONB type for psqldef [#55](https://github.com/k0kubun/sqldef/issues/55)
