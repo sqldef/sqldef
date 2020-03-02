@@ -217,20 +217,18 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	}
 
 	// Examine primary key
-	currentKey := currentTable.PrimaryKey()
-	desiredKey := desired.table.PrimaryKey()
-	areSameKey := currentKey != nil && desiredKey != nil && areSameIndexes(*currentKey, *desiredKey)
-	areNilKey := currentKey == nil && desiredKey == nil
-	if !(areSameKey || areNilKey) {
-		if currentKey != nil {
+	currentPrimaryKey := currentTable.PrimaryKey()
+	desiredPrimaryKey := desired.table.PrimaryKey()
+	if !areSamePrimaryKeys(currentPrimaryKey, desiredPrimaryKey) {
+		if currentPrimaryKey != nil {
 			if g.mode == GeneratorModeMysql {
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", desired.table.name)) // TODO: escape
 			} else {
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s_pkey", desired.table.name, desired.table.name)) // TODO: escape
 			}
 		}
-		if desiredKey != nil {
-			definition := g.generateIndexDefinition(*desiredKey)
+		if desiredPrimaryKey != nil {
+			definition := g.generateIndexDefinition(*desiredPrimaryKey)
 			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", desired.table.name, definition)) // TODO: escape
 		}
 	}
@@ -677,6 +675,14 @@ func (g *Generator) normalizeDataType(dataType string) string {
 		}
 	}
 	return dataType
+}
+
+func areSamePrimaryKeys(primaryKeyA *Index, primaryKeyB *Index) bool {
+	if primaryKeyA != nil && primaryKeyB != nil {
+		return areSameIndexes(*primaryKeyA, *primaryKeyB)
+	} else {
+		return primaryKeyA == nil && primaryKeyB == nil
+	}
 }
 
 func areSameIndexes(indexA Index, indexB Index) bool {
