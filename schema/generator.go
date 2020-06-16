@@ -453,19 +453,19 @@ func (g *Generator) generateIndexDefinition(index Index) string {
 
 	columns := []string{}
 	for _, indexColumn := range index.columns {
-		columns = append(columns, indexColumn.column)
+		columns = append(columns, g.escapeSQLName(indexColumn.column))
 	}
 
 	if index.primary {
 		definition += fmt.Sprintf(
 			" (%s)",
-			strings.Join(columns, ", "), // TODO: escape
+			strings.Join(columns, ", "),
 		)
 	} else {
 		definition += fmt.Sprintf(
 			" %s(%s)",
 			g.escapeSQLName(index.name),
-			strings.Join(columns, ", "), // TODO: escape
+			strings.Join(columns, ", "),
 		)
 	}
 	return definition

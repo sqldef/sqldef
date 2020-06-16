@@ -71,7 +71,11 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 		  name text
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN id bigint NOT NULL;\nALTER TABLE users ADD primary key (id);\n")
+	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+		ALTER TABLE users ADD COLUMN id bigint NOT NULL;
+		ALTER TABLE users ADD primary key ("id");
+		`),
+	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
 

@@ -86,7 +86,10 @@ func TestMysqldefCreateTableDropPrimaryKey(t *testing.T) {
 		  name varchar(20) PRIMARY KEY
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users CHANGE COLUMN name name varchar(20) NOT NULL;\nALTER TABLE users ADD primary key (name);\n")
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE users CHANGE COLUMN name name varchar(20) NOT NULL;\n"+
+		"ALTER TABLE users ADD primary key (`name`);\n",
+	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -109,10 +112,9 @@ func TestMysqldefCreateTableAddPrimaryKey(t *testing.T) {
 		);`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
-			ALTER TABLE users ADD primary key (id);
-		`,
-	))
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE users ADD primary key (`id`);\n",
+	)
 }
 
 func TestMysqldefCreateTableChangePrimaryKey(t *testing.T) {
@@ -134,11 +136,10 @@ func TestMysqldefCreateTableChangePrimaryKey(t *testing.T) {
 		);`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
-			ALTER TABLE friends DROP PRIMARY KEY;
-			ALTER TABLE friends ADD primary key (user_id, friend_id);
-		`,
-	))
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE friends DROP PRIMARY KEY;\n"+
+		"ALTER TABLE friends ADD primary key (`user_id`, `friend_id`);\n",
+	)
 }
 
 func TestMysqldefAddColumn(t *testing.T) {
@@ -308,7 +309,7 @@ func TestMysqldefFulltextIndex(t *testing.T) {
 		  FULLTEXT KEY title_fulltext_index (title) /*!50100 WITH PARSER ngram */
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE posts ADD fulltext key `title_fulltext_index`(title);\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE posts ADD fulltext key `title_fulltext_index`(`title`);\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -358,8 +359,8 @@ func TestMysqldefCreateTableKey(t *testing.T) {
 		);`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users ADD key `index_name`(name);\n"+
-		"ALTER TABLE users ADD unique key `index_created_at`(created_at);\n",
+		"ALTER TABLE users ADD key `index_name`(`name`);\n"+
+		"ALTER TABLE users ADD unique key `index_created_at`(`created_at`);\n",
 	)
 }
 
@@ -469,6 +470,24 @@ func TestMysqldefHyphenNames(t *testing.T) {
 		"  `id-bar_baz` bigint NOT NULL\n" +
 		");\n"
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMysqldefKeywordIndexColumns(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE tools (\n" +
+		"  `character` varchar(255) COLLATE utf8mb4_bin DEFAULT NULL\n" +
+		");\n"
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = "CREATE TABLE tools (\n" +
+		"  `character` varchar(255) COLLATE utf8mb4_bin DEFAULT NULL,\n" +
+		"  KEY `index_character`(`character`)\n" +
+		");\n"
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE tools ADD key `index_character`(`character`);\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -665,7 +684,7 @@ func TestMysqldefIndexWithDot(t *testing.T) {
 		"  KEY `account.id`(account_id)\n" +
 		");\n"
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users ADD key `account.id`(account_id);\n")
+		"ALTER TABLE users ADD key `account.id`(`account_id`);\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -691,9 +710,9 @@ func TestMysqldefChangeIndexCombination(t *testing.T) {
 		");\n"
 	assertApplyOutput(t, createTable, applyPrefix+
 		"ALTER TABLE users DROP INDEX `index_users1`;\n"+
-		"ALTER TABLE users ADD key `index_users1`(account_id, name);\n"+
+		"ALTER TABLE users ADD key `index_users1`(`account_id`, `name`);\n"+
 		"ALTER TABLE users DROP INDEX `index_users2`;\n"+
-		"ALTER TABLE users ADD key `index_users2`(account_id);\n")
+		"ALTER TABLE users ADD key `index_users2`(`account_id`);\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
