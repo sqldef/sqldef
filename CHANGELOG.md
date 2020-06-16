@@ -1,3 +1,7 @@
+## v0.5.15
+
+- Escape column names in index DDLs [#57](https://github.com/k0kubun/sqldef/issues/57)
+
 ## v0.5.14
 
 - Support updating `ON UPDATE` / `ON DELETE` of foreign keys [#54](https://github.com/k0kubun/sqldef/issues/54)
