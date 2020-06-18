@@ -2355,6 +2355,15 @@ func NewValArg(in []byte) *SQLVal {
 	return &SQLVal{Type: ValArg, Val: in}
 }
 
+func NewValArgWithOpt(in []byte, opt *SQLVal) *SQLVal {
+	if opt != nil {
+		combined := string(in) + "(" + string(opt.Val) + ")"
+		return NewValArg([]byte(combined))
+	} else {
+		return NewValArg(in)
+	}
+}
+
 // Format formats the node.
 func (node *SQLVal) Format(buf *TrackedBuffer) {
 	switch node.Type {

@@ -755,9 +755,9 @@ column_definition_type:
     $1.Default = NewValArg($3)
     $$ = $1
   }
-| column_definition_type DEFAULT CURRENT_TIMESTAMP
+| column_definition_type DEFAULT CURRENT_TIMESTAMP length_opt
   {
-    $1.Default = NewValArg($3)
+    $1.Default = NewValArgWithOpt($3, $4)
     $$ = $1
   }
 | column_definition_type DEFAULT BIT_LITERAL
@@ -765,9 +765,9 @@ column_definition_type:
     $1.Default = NewBitVal($3)
     $$ = $1
   }
-| column_definition_type ON UPDATE CURRENT_TIMESTAMP
+| column_definition_type ON UPDATE CURRENT_TIMESTAMP length_opt
   {
-    $1.OnUpdate = NewValArg($4)
+    $1.OnUpdate = NewValArgWithOpt($4, $5)
     $$ = $1
   }
 | column_definition_type AUTO_INCREMENT

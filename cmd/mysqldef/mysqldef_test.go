@@ -590,6 +590,29 @@ func TestMysqldefOnUpdate(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefCurrentTimestampWithPrecision(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  created_at datetime(6) DEFAULT current_timestamp(6)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  created_at datetime(6) DEFAULT current_timestamp(6),
+		  updated_at datetime(6) DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN updated_at datetime(6) DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6) AFTER created_at;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefEnumValues(t *testing.T) {
 	resetTestDatabase()
 
