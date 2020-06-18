@@ -1,3 +1,7 @@
+## v0.5.16
+
+- Support CURRENT\_TIMESTAMP with precision [#59](https://github.com/k0kubun/sqldef/issues/59)
+
 ## v0.5.15
 
 - Escape column names in index DDLs [#57](https://github.com/k0kubun/sqldef/issues/57)
