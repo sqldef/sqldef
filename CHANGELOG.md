@@ -1,3 +1,7 @@
+## v0.5.17
+
+- Support parsing a type with `ARRAY` or `[]` for psqldef [#58](https://github.com/k0kubun/sqldef/issues/58)
+
 ## v0.5.16
 
 - Support CURRENT\_TIMESTAMP with precision [#59](https://github.com/k0kubun/sqldef/issues/59)
