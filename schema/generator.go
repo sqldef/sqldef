@@ -376,18 +376,23 @@ func (g *Generator) generateColumnDefinition(column Column) (string, error) {
 
 	definition := fmt.Sprintf("%s ", column.name)
 
+	suffix := ""
+	if column.array {
+		suffix = "[]"
+	}
+
 	if column.length != nil {
 		if column.scale != nil {
-			definition += fmt.Sprintf("%s(%s, %s) ", column.typeName, string(column.length.raw), string(column.scale.raw))
+			definition += fmt.Sprintf("%s(%s, %s)%s ", column.typeName, string(column.length.raw), string(column.scale.raw), suffix)
 		} else {
-			definition += fmt.Sprintf("%s(%s) ", column.typeName, string(column.length.raw))
+			definition += fmt.Sprintf("%s(%s)%s ", column.typeName, string(column.length.raw), suffix)
 		}
 	} else {
 		switch column.typeName {
 		case "enum":
-			definition += fmt.Sprintf("%s(%s) ", column.typeName, strings.Join(column.enumValues, ", "))
+			definition += fmt.Sprintf("%s(%s)%s ", column.typeName, strings.Join(column.enumValues, ", "), suffix)
 		default:
-			definition += fmt.Sprintf("%s ", column.typeName)
+			definition += fmt.Sprintf("%s%s ", column.typeName, suffix)
 		}
 	}
 

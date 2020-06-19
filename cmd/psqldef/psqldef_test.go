@@ -180,6 +180,28 @@ func TestPsqldefAddColumn(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestPsqldefAddArrayColumn(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id integer
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id integer,
+		  name integer[]
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN name integer[];\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestPsqldefCreateIndex(t *testing.T) {
 	resetTestDatabase()
 
