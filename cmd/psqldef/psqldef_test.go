@@ -265,6 +265,8 @@ func TestPsqldefDataTypes(t *testing.T) {
 	//   smallint, smallserial, xml
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
+		  c_array integer array,
+		  c_array_bracket integer[],
 		  c_bigint bigint,
 		  c_bigserial bigserial,
 		  c_bit bit,

@@ -148,7 +148,8 @@ func (c *column) GetDataType() string {
 }
 
 func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
-	query := `SELECT column_name, column_default, is_nullable, data_type, character_maximum_length,
+	query := `SELECT column_name, column_default, is_nullable, character_maximum_length,
+	CASE WHEN data_type = 'ARRAY' THEN format_type(atttypid, atttypmod) ELSE data_type END,
 	CASE WHEN p.contype = 'p' THEN true ELSE false END AS primarykey,
 	CASE WHEN p.contype = 'u' THEN true ELSE false END AS uniquekey
 FROM pg_attribute f
@@ -172,7 +173,7 @@ WHERE c.relkind = 'r'::char AND c.relname = $1 AND f.attnum > 0 ORDER BY f.attnu
 		var colName, isNullable, dataType string
 		var maxLenStr, colDefault *string
 		var isPK, isUnique bool
-		err = rows.Scan(&colName, &colDefault, &isNullable, &dataType, &maxLenStr, &isPK, &isUnique)
+		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &dataType, &isPK, &isUnique)
 		if err != nil {
 			return nil, err
 		}

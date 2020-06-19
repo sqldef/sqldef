@@ -174,6 +174,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> TEXT TINYTEXT MEDIUMTEXT LONGTEXT
 %token <bytes> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON JSONB ENUM
 %token <bytes> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
+%token <bytes> ARRAY
 
 // Type Modifiers
 %token <bytes> NULLX AUTO_INCREMENT APPROXNUM SIGNED UNSIGNED ZEROFILL ZONE
@@ -274,7 +275,7 @@ func forceEOF(yylex interface{}) {
 %type <columnType> bool_type int_type decimal_type numeric_type time_type char_type spatial_type
 %type <optVal> length_opt
 %type <str> charset_opt collate_opt
-%type <boolVal> unsigned_opt zero_fill_opt time_zone_opt
+%type <boolVal> unsigned_opt zero_fill_opt array_opt time_zone_opt
 %type <LengthScaleOption> float_length_opt decimal_length_opt
 %type <strs> enum_values
 %type <columnDefinition> column_definition
@@ -715,7 +716,7 @@ column_type:
 | time_type
 | spatial_type
 column_definition_type:
-  column_type
+  column_type array_opt
   {
     $1.NotNull = BoolVal(false)
     $1.Default = nil
@@ -723,6 +724,7 @@ column_definition_type:
     $1.Autoincrement = BoolVal(false)
     $1.KeyOpt = colKeyNone
     $1.Comment = nil
+    $1.Array = $2
     $$ = $1
   }
 | column_definition_type NULL
@@ -1114,6 +1116,19 @@ zero_fill_opt:
     $$ = BoolVal(false)
   }
 | ZEROFILL
+  {
+    $$ = BoolVal(true)
+  }
+
+array_opt:
+  {
+    $$ = BoolVal(false)
+  }
+| '[' ']'
+  {
+    $$ = BoolVal(true)
+  }
+| ARRAY
   {
     $$ = BoolVal(true)
   }

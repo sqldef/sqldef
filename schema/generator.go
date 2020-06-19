@@ -635,6 +635,7 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 		(current.notNull == (desired.notNull || desired.keyOption == ColumnKeyPrimary)) && // `PRIMARY KEY` implies `NOT NULL`
 		(current.autoIncrement == desired.autoIncrement) &&
 		(current.timezone == desired.timezone) &&
+		(current.array == desired.array) &&
 		reflect.DeepEqual(current.onUpdate, desired.onUpdate)
 
 	// TODO: check length, scale

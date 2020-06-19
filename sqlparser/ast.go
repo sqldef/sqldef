@@ -908,6 +908,7 @@ type ColumnType struct {
 	Default       *SQLVal
 	OnUpdate      *SQLVal
 	Comment       *SQLVal
+	Array         BoolVal
 
 	// Numeric field options
 	Length   *SQLVal

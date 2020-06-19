@@ -98,6 +98,7 @@ var keywords = map[string]int{
 	"alter":               ALTER,
 	"analyze":             ANALYZE,
 	"and":                 AND,
+	"array":               ARRAY,
 	"as":                  AS,
 	"asc":                 ASC,
 	"asensitive":          UNUSED,
@@ -519,7 +520,7 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 		switch ch {
 		case eofChar:
 			return 0, nil
-		case '=', ',', ';', '(', ')', '+', '*', '%', '^', '~':
+		case '=', ',', ';', '(', ')', '[', ']', '+', '*', '%', '^', '~':
 			return int(ch), nil
 		case '&':
 			if tkn.lastChar == '&' {

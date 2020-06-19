@@ -78,6 +78,7 @@ func parseTable(stmt *sqlparser.DDL) Table {
 			unsigned:      castBool(parsedCol.Type.Unsigned),
 			notNull:       castBool(parsedCol.Type.NotNull),
 			autoIncrement: castBool(parsedCol.Type.Autoincrement),
+			array:         castBool(parsedCol.Type.Array),
 			defaultVal:    parseValue(parsedCol.Type.Default),
 			length:        parseValue(parsedCol.Type.Length),
 			scale:         parseValue(parsedCol.Type.Scale),

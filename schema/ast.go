@@ -48,6 +48,7 @@ type Column struct {
 	unsigned      bool
 	notNull       bool
 	autoIncrement bool
+	array         bool
 	defaultVal    *Value
 	length        *Value
 	scale         *Value
