@@ -1,3 +1,7 @@
+## v0.5.18
+
+- Fix array type definition of `ADD COLUMN` for psqldef (a bugfix for v0.5.17)
+
 ## v0.5.17
 
 - Support parsing a type with `ARRAY` or `[]` for psqldef [#58](https://github.com/k0kubun/sqldef/issues/58)
