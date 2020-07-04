@@ -118,6 +118,8 @@ func TestMysqldefCreateTableAddPrimaryKey(t *testing.T) {
 }
 
 func TestMysqldefCreateTableChangePrimaryKey(t *testing.T) {
+	resetTestDatabase()
+
 	createTable := stripHeredoc(`
 		CREATE TABLE friends (
 		  user_id bigint NOT NULL PRIMARY KEY,
@@ -228,31 +230,35 @@ func TestMysqldefChangeColumn(t *testing.T) {
 }
 
 func TestMysqldefSwapColumn(t *testing.T) {
+	resetTestDatabase()
+
 	createTable := stripHeredoc(`
-            CREATE TABLE users (
-              id bigint NOT NULL,
-              name varchar(40) NOT NULL,
-              nickname varchar(20) NOT NULL,
-              created_at datetime NOT NULL,
-              PRIMARY KEY (id)
-            );`,
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(40) NOT NULL,
+		  nickname varchar(20) NOT NULL,
+		  created_at datetime NOT NULL,
+		  PRIMARY KEY (id)
+		);
+		`,
 	)
-	assertApply(t, createTable)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
-            CREATE TABLE users (
-              id bigint NOT NULL,
-              nickname varchar(20) NOT NULL,
-              name varchar(40) NOT NULL,
-              created_at datetime NOT NULL,
-              PRIMARY KEY (id)
-            );`,
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  nickname varchar(20) NOT NULL,
+		  name varchar(40) NOT NULL,
+		  created_at datetime NOT NULL,
+		  PRIMARY KEY (id)
+		);`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
-		ALTER TABLE users CHANGE COLUMN nickname nickname varchar(20) NOT NULL AFTER id;
-			`,
-	))
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE users CHANGE COLUMN nickname nickname varchar(20) NOT NULL AFTER id;\n",
+	)
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestMysqldefAddIndex(t *testing.T) {
@@ -369,46 +375,46 @@ func TestMysqldefCreateTableForeignKey(t *testing.T) {
 
 	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY);\n"
 	createPosts := stripHeredoc(`
-			CREATE TABLE posts (
-			  content text,
-			  user_id bigint
-			);
-			`,
+		CREATE TABLE posts (
+		  content text,
+		  user_id bigint
+		);
+		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	// Add a foreign key without options
 	createPosts = stripHeredoc(`
-			CREATE TABLE posts (
-			  content text,
-			  user_id bigint,
-			  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id)
-			);
-			`,
+		CREATE TABLE posts (
+		  content text,
+		  user_id bigint,
+		  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id)
+		);
+		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id);\n")
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	// Add options to a foreign key
 	createPosts = stripHeredoc(`
-			CREATE TABLE posts (
-			  content text,
-			  user_id bigint,
-			  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-			);
-			`,
+		CREATE TABLE posts (
+		  content text,
+		  user_id bigint,
+		  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+		);
+		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE posts DROP FOREIGN KEY posts_ibfk_1;\nALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE;\n")
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	// Drop a foreign key
 	createPosts = stripHeredoc(`
-			CREATE TABLE posts (
-			  content text,
-			  user_id bigint
-			);
-			`,
+		CREATE TABLE posts (
+		  content text,
+		  user_id bigint
+		);
+		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
 		"ALTER TABLE posts DROP FOREIGN KEY posts_ibfk_1;\n"+
@@ -418,12 +424,12 @@ func TestMysqldefCreateTableForeignKey(t *testing.T) {
 
 	// Add a foreign key with options
 	createPosts = stripHeredoc(`
-			CREATE TABLE posts (
-			  content text,
-			  user_id bigint,
-			  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
-			);
-			`,
+		CREATE TABLE posts (
+		  content text,
+		  user_id bigint,
+		  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+		);
+		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
 		"ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;\n")
@@ -431,6 +437,7 @@ func TestMysqldefCreateTableForeignKey(t *testing.T) {
 }
 
 func TestMysqldefCreateTableSyntaxError(t *testing.T) {
+	resetTestDatabase()
 	assertApplyFailure(t, "CREATE TABLE users (id bigint,);", `found syntax error when parsing DDL "CREATE TABLE users (id bigint,)": syntax error at position 32`+"\n")
 }
 
