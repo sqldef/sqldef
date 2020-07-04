@@ -229,6 +229,30 @@ func TestMysqldefChangeColumn(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefChangeColumnCollate(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  password char(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  password char(128) CHARACTER SET latin1 COLLATE latin1_bin
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE users CHANGE COLUMN password password char(128) CHARACTER SET latin1 COLLATE latin1_bin;\n",
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefSwapColumn(t *testing.T) {
 	resetTestDatabase()
 

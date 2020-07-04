@@ -82,6 +82,8 @@ func parseTable(stmt *sqlparser.DDL) Table {
 			defaultVal:    parseValue(parsedCol.Type.Default),
 			length:        parseValue(parsedCol.Type.Length),
 			scale:         parseValue(parsedCol.Type.Scale),
+			charset:       parsedCol.Type.Charset,
+			collate:       parsedCol.Type.Collate,
 			timezone:      castBool(parsedCol.Type.Timezone),
 			keyOption:     ColumnKeyOption(parsedCol.Type.KeyOpt), // FIXME: tight coupling in enum order
 			onUpdate:      parseValue(parsedCol.Type.OnUpdate),

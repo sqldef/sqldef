@@ -167,7 +167,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	for i, desiredColumn := range desired.table.columns {
 		currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
 		if currentColumn == nil {
-			definition, err := g.generateColumnDefinition(desiredColumn) // TODO: Parse DEFAULT NULL and share this with else
+			definition, err := g.generateColumnDefinition(desiredColumn)
 			if err != nil {
 				return ddls, err
 			}
@@ -192,7 +192,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			if !g.haveSameDataType(*currentColumn, desiredColumn) ||
 				!haveSameValue(currentColumn.defaultVal, desiredColumn.defaultVal) || changeOrder {
 
-				definition, err := g.generateColumnDefinition(desiredColumn) // TODO: Parse DEFAULT NULL and share this with else
+				definition, err := g.generateColumnDefinition(desiredColumn)
 				if err != nil {
 					return ddls, err
 				}
@@ -404,6 +404,13 @@ func (g *Generator) generateColumnDefinition(column Column) (string, error) {
 	}
 	if column.notNull || column.keyOption == ColumnKeyPrimary {
 		definition += "NOT NULL "
+	}
+
+	if column.charset != "" {
+		definition += fmt.Sprintf("CHARACTER SET %s ", column.charset)
+	}
+	if column.collate != "" {
+		definition += fmt.Sprintf("COLLATE %s ", column.collate)
 	}
 
 	if column.defaultVal != nil {
@@ -641,6 +648,8 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 		(current.autoIncrement == desired.autoIncrement) &&
 		(current.timezone == desired.timezone) &&
 		(current.array == desired.array) &&
+		(desired.charset == "" || current.charset == desired.charset) && // detect change column only when set explicitly. TODO: can we calculate implicit charset?
+		(desired.collate == "" || current.collate == desired.collate) && // detect change column only when set explicitly. TODO: can we calculate implicit collate?
 		reflect.DeepEqual(current.onUpdate, desired.onUpdate)
 
 	// TODO: check length, scale

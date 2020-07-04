@@ -52,12 +52,14 @@ type Column struct {
 	defaultVal    *Value
 	length        *Value
 	scale         *Value
+	charset       string
+	collate       string
 	timezone      bool // for Postgres `with time zone`
 	keyOption     ColumnKeyOption
 	onUpdate      *Value
 	enumValues    []string
 	// TODO: keyopt
-	// XXX: charset, collate, zerofill?
+	// XXX: zerofill?
 }
 
 type Index struct {
