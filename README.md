@@ -17,10 +17,12 @@ https://github.com/k0kubun/sqldef/releases
 
 ```bash
 # mysqldef
-wget -O - https://github.com/k0kubun/sqldef/releases/latest/download/mysqldef_linux_amd64.tar.gz | tar xvz
+wget -O - https://github.com/k0kubun/sqldef/releases/latest/download/mysqldef_linux_amd64.tar.gz \
+  | tar xvz
 
 # psqldef
-wget -O - https://github.com/k0kubun/sqldef/releases/latest/download/psqldef_linux_amd64.tar.gz | tar xvz
+wget -O - https://github.com/k0kubun/sqldef/releases/latest/download/psqldef_linux_amd64.tar.gz \
+  | tar xvz
 ```
 
 ### macOS
