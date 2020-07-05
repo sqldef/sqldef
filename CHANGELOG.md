@@ -1,3 +1,7 @@
+## v0.6.0
+
+- Support changing types by `ALTER COLUMN` with psqldef
+
 ## v0.5.20
 
 - Add AUTO\_INCREMENT after adding index or primary key
