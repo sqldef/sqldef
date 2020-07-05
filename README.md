@@ -13,6 +13,26 @@ Download the single-binary executable for your favorite database from:
 
 https://github.com/k0kubun/sqldef/releases
 
+### Linux
+
+```bash
+# mysqldef
+wget -O - https://github.com/k0kubun/sqldef/releases/latest/download/mysqldef_linux_amd64.tar.gz | tar xvz
+
+# psqldef
+wget -O - https://github.com/k0kubun/sqldef/releases/latest/download/psqldef_linux_amd64.tar.gz | tar xvz
+```
+
+### macOS
+
+```bash
+# mysqldef
+brew install sqldef/sqldef/mysqldef
+
+# psqldef
+brew install sqldef/sqldef/psqldef
+```
+
 ## Usage
 
 ### mysqldef
