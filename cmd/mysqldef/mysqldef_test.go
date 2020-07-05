@@ -525,11 +525,28 @@ func TestMysqldefKeywordIndexColumns(t *testing.T) {
 func TestMysqldefMysqlComment(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := "CREATE TABLE users (\n" +
-		"  id bigint NOT NULL /* comment */\n" +
-		");\n"
+	createTable := stripHeredoc(`
+		CREATE TABLE users(
+		  id bigint NOT NULL /* comment */
+		);
+		`,
+	)
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMysqldefMysqlDoubleDashComment(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users(
+		  id bigint NOT NULL
+		);
+		`,
+	)
+	createTableWithComments := "-- comment 1\n" + createTable + "-- comment 2\n"
+	assertApplyOutput(t, createTableWithComments, applyPrefix+createTable)
+	assertApplyOutput(t, createTableWithComments, nothingModified)
 }
 
 func TestMysqldefTypeAliases(t *testing.T) {

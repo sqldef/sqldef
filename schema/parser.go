@@ -4,6 +4,7 @@ package schema
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -271,6 +272,9 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 // Parse `ddls`, which is expected to `;`-concatenated DDLs
 // and not to include destructive DDL.
 func parseDDLs(mode GeneratorMode, str string) ([]DDL, error) {
+	re := regexp.MustCompilePOSIX("^--.*")
+	str = re.ReplaceAllString(str, "")
+
 	ddls := strings.Split(str, ";")
 	result := []DDL{}
 

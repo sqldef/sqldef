@@ -1,3 +1,7 @@
+## Unreleased
+
+- Allow a comment in the end of input schema
+
 ## v0.5.19
 
 - Support altering a column for changing charset and collate [#60](https://github.com/k0kubun/sqldef/issues/60)
