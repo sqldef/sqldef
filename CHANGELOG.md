@@ -1,4 +1,4 @@
-## Unreleased
+## v0.5.20
 
 - Add AUTO\_INCREMENT after adding index or primary key
 - Remove AUTO\_INCREMENT before removing index or primary key
