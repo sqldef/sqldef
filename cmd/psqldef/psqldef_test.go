@@ -44,6 +44,33 @@ func TestPsqldefCreateTable(t *testing.T) {
 	assertApplyOutput(t, createTable1, nothingModified)
 }
 
+func TestPsqldefCreateTableAlterColumn(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name text
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(40)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+		ALTER TABLE users ALTER COLUMN name TYPE varchar(40);
+		`,
+	))
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 	resetTestDatabase()
 
@@ -74,8 +101,8 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
 		ALTER TABLE users ADD COLUMN id bigint NOT NULL;
 		ALTER TABLE users ADD primary key ("id");
-		`),
-	)
+		`,
+	))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -84,43 +111,43 @@ func TestCreateTableForeignKey(t *testing.T) {
 
 	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY);\n"
 	createPosts := stripHeredoc(`
-			CREATE TABLE posts (
-			  content text,
-			  user_id bigint
-			);
-			`,
+		CREATE TABLE posts (
+		  content text,
+		  user_id bigint
+		);
+		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	createPosts = stripHeredoc(`
-			CREATE TABLE posts (
-			  content text,
-			  user_id bigint,
-			  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id)
-			);
-			`,
+		CREATE TABLE posts (
+		  content text,
+		  user_id bigint,
+		  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id)
+		);
+		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id);\n")
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	createPosts = stripHeredoc(`
-			CREATE TABLE posts (
-			  content text,
-			  user_id bigint,
-			  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
-			);
-			`,
+		CREATE TABLE posts (
+		  content text,
+		  user_id bigint,
+		  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+		);
+		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE posts DROP CONSTRAINT posts_ibfk_1;\nALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;\n")
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	createPosts = stripHeredoc(`
-			CREATE TABLE posts (
-			  content text,
-			  user_id bigint
-			);
-			`,
+		CREATE TABLE posts (
+		  content text,
+		  user_id bigint
+		);
+		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE posts DROP CONSTRAINT posts_ibfk_1;\n")
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)

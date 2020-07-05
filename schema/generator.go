@@ -168,7 +168,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		desiredColumn.autoIncrement = false // We may not be able to add AUTO_INCREMENT yet. It will be added after adding keys (primary or not).
 		currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
 		if currentColumn == nil {
-			definition, err := g.generateColumnDefinition(desiredColumn)
+			definition, err := generateColumnDefinition(desiredColumn)
 			if err != nil {
 				return ddls, err
 			}
@@ -187,20 +187,17 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			ddls = append(ddls, ddl)
 		} else {
 			// Change column data type or order as needed.
-			cp := currentColumn.position
-			dp := desiredColumn.position
-			changeOrder := cp > dp && cp-dp > len(currentTable.columns)-len(desired.table.columns)
-			if !g.haveSameDataType(*currentColumn, desiredColumn) ||
-				!haveSameValue(currentColumn.defaultVal, desiredColumn.defaultVal) || changeOrder {
+			if g.mode == GeneratorModeMysql {
+				currentPos := currentColumn.position
+				desiredPos := desiredColumn.position
+				changeOrder := currentPos > desiredPos && currentPos-desiredPos > len(currentTable.columns)-len(desired.table.columns)
+				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) || !haveSameValue(currentColumn.defaultVal, desiredColumn.defaultVal) || changeOrder {
+					definition, err := generateColumnDefinition(desiredColumn)
+					if err != nil {
+						return ddls, err
+					}
 
-				definition, err := g.generateColumnDefinition(desiredColumn)
-				if err != nil {
-					return ddls, err
-				}
-
-				if g.mode == GeneratorModeMysql { // DDL is not compatible. TODO: support PostgreSQL
 					ddl := fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", desired.table.name, currentColumn.name, definition) // TODO: escape
-
 					if changeOrder {
 						after := " FIRST"
 						if i > 0 {
@@ -208,9 +205,15 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						}
 						ddl += after
 					}
-
 					ddls = append(ddls, ddl)
 				}
+			} else { // GeneratorModePostgres
+				if !g.haveSameDataType(*currentColumn, desiredColumn) {
+					ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s", desired.table.name, currentColumn.name, generateDataType(desiredColumn)) // TODO: escape
+					ddls = append(ddls, ddl)
+				}
+
+				// TODO: support SET/DROP NOT NULL and other properties
 			}
 
 			// TODO: Add unique index if existing column does not have unique flag and there's no unique index!!!!
@@ -223,7 +226,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			desiredColumn := findColumnByName(desired.table.columns, currentColumn.name)
 			if currentColumn.autoIncrement && (desiredColumn == nil || !desiredColumn.autoIncrement) {
 				currentColumn.autoIncrement = false
-				definition, err := g.generateColumnDefinition(currentColumn)
+				definition, err := generateColumnDefinition(currentColumn)
 				if err != nil {
 					return ddls, err
 				}
@@ -272,7 +275,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		for _, desiredColumn := range desired.table.columns {
 			currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
 			if desiredColumn.autoIncrement && (currentColumn == nil || !currentColumn.autoIncrement) {
-				definition, err := g.generateColumnDefinition(desiredColumn)
+				definition, err := generateColumnDefinition(desiredColumn)
 				if err != nil {
 					return ddls, err
 				}
@@ -400,12 +403,7 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 	return ddls, nil
 }
 
-func (g *Generator) generateColumnDefinition(column Column) (string, error) {
-	// TODO: make string concatenation faster?
-	// TODO: consider escape?
-
-	definition := fmt.Sprintf("%s ", column.name)
-
+func generateDataType(column Column) string {
 	suffix := ""
 	if column.array {
 		suffix = "[]"
@@ -413,18 +411,25 @@ func (g *Generator) generateColumnDefinition(column Column) (string, error) {
 
 	if column.length != nil {
 		if column.scale != nil {
-			definition += fmt.Sprintf("%s(%s, %s)%s ", column.typeName, string(column.length.raw), string(column.scale.raw), suffix)
+			return fmt.Sprintf("%s(%s, %s)%s", column.typeName, string(column.length.raw), string(column.scale.raw), suffix)
 		} else {
-			definition += fmt.Sprintf("%s(%s)%s ", column.typeName, string(column.length.raw), suffix)
+			return fmt.Sprintf("%s(%s)%s", column.typeName, string(column.length.raw), suffix)
 		}
 	} else {
 		switch column.typeName {
 		case "enum":
-			definition += fmt.Sprintf("%s(%s)%s ", column.typeName, strings.Join(column.enumValues, ", "), suffix)
+			return fmt.Sprintf("%s(%s)%s", column.typeName, strings.Join(column.enumValues, ", "), suffix)
 		default:
-			definition += fmt.Sprintf("%s%s ", column.typeName, suffix)
+			return fmt.Sprintf("%s%s", column.typeName, suffix)
 		}
 	}
+}
+
+func generateColumnDefinition(column Column) (string, error) {
+	// TODO: make string concatenation faster?
+	// TODO: consider escape?
+
+	definition := fmt.Sprintf("%s %s ", column.name, generateDataType(column))
 
 	if column.unsigned {
 		definition += "UNSIGNED "
@@ -671,21 +676,23 @@ func findPrimaryKey(indexes []Index) *Index {
 	return nil
 }
 
-func (g *Generator) haveSameDataType(current Column, desired Column) bool {
+func (g *Generator) haveSameColumnDefinition(current Column, desired Column) bool {
 	// Not examining autoIncrement because it'll be added in a later stage
-	return (g.normalizeDataType(current.typeName) == g.normalizeDataType(desired.typeName)) &&
+	return g.haveSameDataType(current, desired) &&
 		(current.unsigned == desired.unsigned) &&
 		(current.notNull == (desired.notNull || desired.keyOption == ColumnKeyPrimary)) && // `PRIMARY KEY` implies `NOT NULL`
 		(current.timezone == desired.timezone) &&
-		(current.array == desired.array) &&
 		(desired.charset == "" || current.charset == desired.charset) && // detect change column only when set explicitly. TODO: can we calculate implicit charset?
 		(desired.collate == "" || current.collate == desired.collate) && // detect change column only when set explicitly. TODO: can we calculate implicit collate?
 		reflect.DeepEqual(current.onUpdate, desired.onUpdate)
-
-	// TODO: check length, scale
-
 	// TODO: Examine unique key properly with table indexes (primary key is already examined)
 	//	(current.keyOption == desired.keyOption)
+}
+
+func (g *Generator) haveSameDataType(current Column, desired Column) bool {
+	return (g.normalizeDataType(current.typeName) == g.normalizeDataType(desired.typeName)) &&
+		(current.array == desired.array)
+	// TODO: check length, scale
 }
 
 func haveSameValue(current *Value, desired *Value) bool {
