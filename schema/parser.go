@@ -84,7 +84,7 @@ func parseTable(stmt *sqlparser.DDL) Table {
 			length:        parseValue(parsedCol.Type.Length),
 			scale:         parseValue(parsedCol.Type.Scale),
 			charset:       parsedCol.Type.Charset,
-			collate:       parsedCol.Type.Collate,
+			collate:       normalizeCollate(parsedCol.Type.Collate, *stmt.TableSpec),
 			timezone:      castBool(parsedCol.Type.Timezone),
 			keyOption:     ColumnKeyOption(parsedCol.Type.KeyOpt), // FIXME: tight coupling in enum order
 			onUpdate:      parseValue(parsedCol.Type.OnUpdate),
@@ -291,4 +291,24 @@ func parseDDLs(mode GeneratorMode, str string) ([]DDL, error) {
 		result = append(result, parsed)
 	}
 	return result, nil
+}
+
+// Replace pseudo collation "binary" with "{charset}_bin"
+func normalizeCollate(collate string, table sqlparser.TableSpec) string {
+	if collate == "binary" {
+		return detectCharset(table) + "_bin"
+	} else {
+		return collate
+	}
+}
+
+// TODO: parse charset in parser.y instead of "detecting" it
+func detectCharset(table sqlparser.TableSpec) string {
+	for _, option := range strings.Split(table.Options, " ") {
+		if strings.HasPrefix(option, "charset=") {
+			return strings.TrimLeft(option, "charset=")
+		}
+	}
+	// TODO: consider returning err when charset is missing
+	return ""
 }

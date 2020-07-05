@@ -333,6 +333,30 @@ func TestMysqldefChangeColumn(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefChangeColumnBinary(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  word varchar(64) NOT NULL
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  word varchar(64) BINARY NOT NULL
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE users CHANGE COLUMN word word varchar(64) NOT NULL COLLATE utf8mb4_bin;\n",
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefChangeColumnCollate(t *testing.T) {
 	resetTestDatabase()
 

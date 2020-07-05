@@ -1150,6 +1150,10 @@ collate_opt:
   {
     $$ = ""
   }
+| BINARY
+  {
+    $$ = string($1) // Set pseudo collation "binary" for BINARY attribute (deprecated in future MySQL versions)
+  }
 | COLLATE ID
   {
     $$ = string($2)
