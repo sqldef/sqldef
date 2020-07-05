@@ -165,6 +165,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	// Examine each column
 	for i, desiredColumn := range desired.table.columns {
+		desiredColumn.autoIncrement = false // We may not be able to add AUTO_INCREMENT yet. It will be added after adding keys (primary or not).
 		currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
 		if currentColumn == nil {
 			definition, err := g.generateColumnDefinition(desiredColumn)
@@ -216,6 +217,21 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		}
 	}
 
+	// Remove old AUTO_INCREMENT from deleted column before deleting key (primary or not)
+	if g.mode == GeneratorModeMysql {
+		for _, currentColumn := range currentTable.columns {
+			desiredColumn := findColumnByName(desired.table.columns, currentColumn.name)
+			if currentColumn.autoIncrement && (desiredColumn == nil || !desiredColumn.autoIncrement) {
+				currentColumn.autoIncrement = false
+				definition, err := g.generateColumnDefinition(currentColumn)
+				if err != nil {
+					return ddls, err
+				}
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", currentTable.name, currentColumn.name, definition)) // TODO: escape
+			}
+		}
+	}
+
 	// Examine primary key
 	currentPrimaryKey := currentTable.PrimaryKey()
 	desiredPrimaryKey := desired.table.PrimaryKey()
@@ -248,6 +264,20 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		} else {
 			// Index not found, add index.
 			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", desired.table.name, g.generateIndexDefinition(desiredIndex)))
+		}
+	}
+
+	// Add new AUTO_INCREMENT after adding index and primary key
+	if g.mode == GeneratorModeMysql {
+		for _, desiredColumn := range desired.table.columns {
+			currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
+			if desiredColumn.autoIncrement && (currentColumn == nil || !currentColumn.autoIncrement) {
+				definition, err := g.generateColumnDefinition(desiredColumn)
+				if err != nil {
+					return ddls, err
+				}
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", currentTable.name, desiredColumn.name, definition)) // TODO: escape
+			}
 		}
 	}
 
@@ -642,10 +672,10 @@ func findPrimaryKey(indexes []Index) *Index {
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
+	// Not examining autoIncrement because it'll be added in a later stage
 	return (g.normalizeDataType(current.typeName) == g.normalizeDataType(desired.typeName)) &&
 		(current.unsigned == desired.unsigned) &&
 		(current.notNull == (desired.notNull || desired.keyOption == ColumnKeyPrimary)) && // `PRIMARY KEY` implies `NOT NULL`
-		(current.autoIncrement == desired.autoIncrement) &&
 		(current.timezone == desired.timezone) &&
 		(current.array == desired.array) &&
 		(desired.charset == "" || current.charset == desired.charset) && // detect change column only when set explicitly. TODO: can we calculate implicit charset?

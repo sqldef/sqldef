@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Add AUTO\_INCREMENT after adding index or primary key
+- Remove AUTO\_INCREMENT before removing index or primary key
 - Allow a comment in the end of input schema
 
 ## v0.5.19

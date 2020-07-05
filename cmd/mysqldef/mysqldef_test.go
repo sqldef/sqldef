@@ -100,21 +100,25 @@ func TestMysqldefCreateTableAddPrimaryKey(t *testing.T) {
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20)
-		);`,
+		);
+		`,
 	)
-	assertApply(t, createTable)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
-			PRIMARY KEY (id)
-		);`,
+		  PRIMARY KEY (id)
+		);
+		`,
 	)
 
 	assertApplyOutput(t, createTable, applyPrefix+
 		"ALTER TABLE users ADD primary key (`id`);\n",
 	)
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestMysqldefCreateTableChangePrimaryKey(t *testing.T) {
@@ -125,23 +129,123 @@ func TestMysqldefCreateTableChangePrimaryKey(t *testing.T) {
 		  user_id bigint NOT NULL PRIMARY KEY,
 		  friend_id bigint NOT NULL,
 		  created_at datetime NOT NULL
-		);`,
+		);
+		`,
 	)
-	assertApply(t, createTable)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
 		CREATE TABLE friends (
 		  user_id bigint NOT NULL,
 		  friend_id bigint NOT NULL,
 		  created_at datetime NOT NULL,
-			PRIMARY KEY (user_id, friend_id)
-		);`,
+		  PRIMARY KEY (user_id, friend_id)
+		);
+		`,
 	)
 
 	assertApplyOutput(t, createTable, applyPrefix+
 		"ALTER TABLE friends DROP PRIMARY KEY;\n"+
 		"ALTER TABLE friends ADD primary key (`user_id`, `friend_id`);\n",
 	)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMysqldefCreateTableAddAutoIncrementPrimaryKey(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  name varchar(20)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL AUTO_INCREMENT,
+		  name varchar(20),
+		  PRIMARY KEY (id)
+		);
+		`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE users ADD COLUMN id bigint NOT NULL FIRST;\n"+
+		"ALTER TABLE users ADD primary key (`id`);\n"+
+		"ALTER TABLE users CHANGE COLUMN id id bigint NOT NULL AUTO_INCREMENT;\n",
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMysqldefCreateTableChangeAutoIncrement(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint(20) NOT NULL PRIMARY KEY,
+		  name varchar(20)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		  name varchar(20)
+		);
+		`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE users CHANGE COLUMN id id bigint(20) NOT NULL AUTO_INCREMENT;\n",
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint(20) NOT NULL PRIMARY KEY,
+		  name varchar(20)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE users CHANGE COLUMN id id bigint(20) NOT NULL;\n",
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMysqldefCreateTableRemoveAutoIncrementPrimaryKey(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE friends (
+		  id bigint NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		  created_at datetime NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE friends (
+		  created_at datetime NOT NULL
+		);
+		`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE friends CHANGE COLUMN id id bigint(20) NOT NULL;\n"+
+		"ALTER TABLE friends DROP PRIMARY KEY;\n"+
+		"ALTER TABLE friends DROP COLUMN id;\n",
+	)
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestMysqldefAddColumn(t *testing.T) {
