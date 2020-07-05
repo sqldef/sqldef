@@ -13,28 +13,6 @@ Download the single-binary executable for your favorite database from:
 
 https://github.com/k0kubun/sqldef/releases
 
-### Linux
-
-```bash
-# mysqldef
-wget -O - https://github.com/k0kubun/sqldef/releases/latest/download/mysqldef_linux_amd64.tar.gz \
-  | tar xvz
-
-# psqldef
-wget -O - https://github.com/k0kubun/sqldef/releases/latest/download/psqldef_linux_amd64.tar.gz \
-  | tar xvz
-```
-
-### macOS
-
-```bash
-# mysqldef
-brew install sqldef/sqldef/mysqldef
-
-# psqldef
-brew install sqldef/sqldef/psqldef
-```
-
 ## Usage
 
 ### mysqldef
@@ -356,6 +334,31 @@ Remove the line to DROP INDEX.
 ```
 
 Remove the line to DROP CONSTRAINT.
+
+## Distributions
+### Linux
+A debian package might be supported in the future, but for now it has not been implemented yet.
+
+```bash
+# mysqldef
+wget -O - https://github.com/k0kubun/sqldef/releases/latest/download/mysqldef_linux_amd64.tar.gz \
+  | tar xvz
+
+# psqldef
+wget -O - https://github.com/k0kubun/sqldef/releases/latest/download/psqldef_linux_amd64.tar.gz \
+  | tar xvz
+```
+
+### macOS
+[Homebrew tap](https://github.com/sqldef/homebrew-sqldef) is available.
+
+```
+# mysqldef
+brew install sqldef/sqldef/mysqldef
+
+# psqldef
+brew install sqldef/sqldef/psqldef
+```
 
 ## Limitations
 
