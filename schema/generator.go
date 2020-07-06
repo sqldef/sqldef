@@ -168,7 +168,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		desiredColumn.autoIncrement = false // We may not be able to add AUTO_INCREMENT yet. It will be added after adding keys (primary or not).
 		currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
 		if currentColumn == nil {
-			definition, err := generateColumnDefinition(desiredColumn)
+			definition, err := generateColumnDefinition(desiredColumn, true)
 			if err != nil {
 				return ddls, err
 			}
@@ -191,8 +191,10 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				currentPos := currentColumn.position
 				desiredPos := desiredColumn.position
 				changeOrder := currentPos > desiredPos && currentPos-desiredPos > len(currentTable.columns)-len(desired.table.columns)
+
+				// Change column type and orders, *except* AUTO_INCREMENT and UNIQUE KEY.
 				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) || !haveSameValue(currentColumn.defaultVal, desiredColumn.defaultVal) || changeOrder {
-					definition, err := generateColumnDefinition(desiredColumn)
+					definition, err := generateColumnDefinition(desiredColumn, false)
 					if err != nil {
 						return ddls, err
 					}
@@ -207,16 +209,22 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 					ddls = append(ddls, ddl)
 				}
+
+				// Add UNIQUE KEY. TODO: Probably it should be just normalized to an index after the parser phase.
+				currentIndex := findIndexByName(currentTable.indexes, desiredColumn.name)
+				if desiredColumn.keyOption.isUnique() && !currentColumn.keyOption.isUnique() && currentIndex == nil { // TODO: deal with a case that the index is not a UNIQUE KEY.
+					ddl := fmt.Sprintf("ALTER TABLE %s ADD UNIQUE KEY %s(%s)", desired.table.name, desiredColumn.name, desiredColumn.name) // TODO: escape
+					ddls = append(ddls, ddl)
+				}
 			} else { // GeneratorModePostgres
 				if !g.haveSameDataType(*currentColumn, desiredColumn) {
+					// Change type
 					ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s", desired.table.name, currentColumn.name, generateDataType(desiredColumn)) // TODO: escape
 					ddls = append(ddls, ddl)
 				}
 
 				// TODO: support SET/DROP NOT NULL and other properties
 			}
-
-			// TODO: Add unique index if existing column does not have unique flag and there's no unique index!!!!
 		}
 	}
 
@@ -226,7 +234,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			desiredColumn := findColumnByName(desired.table.columns, currentColumn.name)
 			if currentColumn.autoIncrement && (desiredColumn == nil || !desiredColumn.autoIncrement) {
 				currentColumn.autoIncrement = false
-				definition, err := generateColumnDefinition(currentColumn)
+				definition, err := generateColumnDefinition(currentColumn, false)
 				if err != nil {
 					return ddls, err
 				}
@@ -275,7 +283,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		for _, desiredColumn := range desired.table.columns {
 			currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
 			if desiredColumn.autoIncrement && (currentColumn == nil || !currentColumn.autoIncrement) {
-				definition, err := generateColumnDefinition(desiredColumn)
+				definition, err := generateColumnDefinition(desiredColumn, false)
 				if err != nil {
 					return ddls, err
 				}
@@ -386,7 +394,7 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 	} else if currentIndex.unique {
 		var uniqueKeyColumn *Column
 		for _, column := range desiredTable.columns {
-			if column.name == currentIndex.columns[0].column && (column.keyOption == ColumnKeyUnique || column.keyOption == ColumnKeyUniqueKey) {
+			if column.name == currentIndex.columns[0].column && column.keyOption.isUnique() {
 				uniqueKeyColumn = &column
 				break
 			}
@@ -425,7 +433,7 @@ func generateDataType(column Column) string {
 	}
 }
 
-func generateColumnDefinition(column Column) (string, error) {
+func generateColumnDefinition(column Column, enableUnique bool) (string, error) {
 	// TODO: make string concatenation faster?
 	// TODO: consider escape?
 
@@ -481,9 +489,13 @@ func generateColumnDefinition(column Column) (string, error) {
 	case ColumnKeyNone:
 		// noop
 	case ColumnKeyUnique:
-		definition += "UNIQUE "
+		if enableUnique {
+			definition += "UNIQUE "
+		}
 	case ColumnKeyUniqueKey:
-		definition += "UNIQUE KEY "
+		if enableUnique {
+			definition += "UNIQUE KEY "
+		}
 	case ColumnKeyPrimary:
 		// noop
 	default:
@@ -677,7 +689,7 @@ func findPrimaryKey(indexes []Index) *Index {
 }
 
 func (g *Generator) haveSameColumnDefinition(current Column, desired Column) bool {
-	// Not examining autoIncrement because it'll be added in a later stage
+	// Not examining AUTO_INCREMENT and UNIQUE KEY because it'll be added in a later stage
 	return g.haveSameDataType(current, desired) &&
 		(current.unsigned == desired.unsigned) &&
 		(current.notNull == (desired.notNull || desired.keyOption == ColumnKeyPrimary)) && // `PRIMARY KEY` implies `NOT NULL`
@@ -685,8 +697,6 @@ func (g *Generator) haveSameColumnDefinition(current Column, desired Column) boo
 		(desired.charset == "" || current.charset == desired.charset) && // detect change column only when set explicitly. TODO: can we calculate implicit charset?
 		(desired.collate == "" || current.collate == desired.collate) && // detect change column only when set explicitly. TODO: can we calculate implicit collate?
 		reflect.DeepEqual(current.onUpdate, desired.onUpdate)
-	// TODO: Examine unique key properly with table indexes (primary key is already examined)
-	//	(current.keyOption == desired.keyOption)
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {

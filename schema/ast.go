@@ -169,3 +169,7 @@ func (t *Table) PrimaryKey() *Index {
 		unique:    true,
 	}
 }
+
+func (keyOption ColumnKeyOption) isUnique() bool {
+	return keyOption == ColumnKeyUnique || keyOption == ColumnKeyUniqueKey
+}
