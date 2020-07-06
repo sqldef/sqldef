@@ -1,3 +1,7 @@
+## v0.6.1
+
+- Support BINARY attribute to specify collation in mysqldef [#47](https://github.com/k0kubun/sqldef/issues/47)
+
 ## v0.6.0
 
 - Support changing types by `ALTER COLUMN` with psqldef
