@@ -1,3 +1,7 @@
+## v0.6.2
+
+- Fully support having UNIQUE in a MySQL column [#60](https://github.com/k0kubun/sqldef/issues/60)
+
 ## v0.6.1
 
 - Support BINARY attribute to specify collation in mysqldef [#47](https://github.com/k0kubun/sqldef/issues/47)
