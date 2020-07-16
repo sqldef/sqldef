@@ -700,9 +700,10 @@ func (g *Generator) haveSameColumnDefinition(current Column, desired Column) boo
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
-	return (g.normalizeDataType(current.typeName) == g.normalizeDataType(desired.typeName)) &&
-		(current.array == desired.array)
-	// TODO: check length, scale
+	return g.normalizeDataType(current.typeName) == g.normalizeDataType(desired.typeName) &&
+		(current.length == nil || desired.length == nil || current.length.intVal == desired.length.intVal) && // detect change column only when both are set explicitly. TODO: maybe `current.length == nil` case needs another care
+		current.array == desired.array
+	// TODO: scale
 }
 
 func haveSameValue(current *Value, desired *Value) bool {
