@@ -1,3 +1,7 @@
+## v0.6.3
+
+- Support changing column length [#61](https://github.com/k0kubun/sqldef/issues/61)
+
 ## v0.6.2
 
 - Fully support having UNIQUE in a MySQL column [#60](https://github.com/k0kubun/sqldef/issues/60)
