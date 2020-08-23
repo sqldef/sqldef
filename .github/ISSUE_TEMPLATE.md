@@ -1,9 +1,8 @@
 ## Problem
 
 ## Expected
-### Current schema
+### Initial schema
 
 ### Input DDLs
 
 ### Output DDLs
-
