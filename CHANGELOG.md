@@ -1,3 +1,7 @@
+## v0.6.4
+
+- Support PostgreSQL schema in psqldef [#62](https://github.com/k0kubun/sqldef/issues/62)
+
 ## v0.6.3
 
 - Support changing column length [#61](https://github.com/k0kubun/sqldef/issues/61)
