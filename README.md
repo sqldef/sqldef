@@ -198,7 +198,7 @@ Some of them can also be used for input schema file.
   - Table: CREATE TABLE, DROP TABLE
   - Column: ADD COLUMN, ALTER COLUMN, DROP COLUMN
   - Index: CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX
-  - Foreign Key: ADD FOREIGN KEY, DROP CONSTRAINT
+  - Foreign / Primary Key: ADD FOREIGN KEY, DROP CONSTRAINT
 
 ## MySQL examples
 ### CREATE TABLE

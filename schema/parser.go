@@ -66,7 +66,7 @@ func parseValue(val *sqlparser.SQLVal) *Value {
 	return &ret
 }
 
-func parseTable(stmt *sqlparser.DDL) Table {
+func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) Table {
 	columns := []Column{}
 	indexes := []Index{}
 	foreignKeys := []ForeignKey{}
@@ -139,7 +139,7 @@ func parseTable(stmt *sqlparser.DDL) Table {
 	}
 
 	return Table{
-		name:        stmt.NewName.Name.String(),
+		name:        normalizedTableName(mode, stmt.NewName),
 		columns:     columns,
 		indexes:     indexes,
 		foreignKeys: foreignKeys,
@@ -203,7 +203,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 			// TODO: handle other create DDL as error?
 			return &CreateTable{
 				statement: ddl,
-				table:     parseTable(stmt),
+				table:     parseTable(mode, stmt),
 			}, nil
 		} else if stmt.Action == "create index" {
 			index, err := parseIndex(stmt)
@@ -212,7 +212,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 			}
 			return &CreateIndex{
 				statement: ddl,
-				tableName: stmt.Table.Name.String(),
+				tableName: normalizedTableName(mode, stmt.Table),
 				index:     index,
 			}, nil
 		} else if stmt.Action == "add index" {
@@ -222,7 +222,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 			}
 			return &AddIndex{
 				statement: ddl,
-				tableName: stmt.Table.Name.String(),
+				tableName: normalizedTableName(mode, stmt.Table),
 				index:     index,
 			}, nil
 		} else if stmt.Action == "add primary key" {
@@ -232,7 +232,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 			}
 			return &AddPrimaryKey{
 				statement: ddl,
-				tableName: stmt.Table.Name.String(),
+				tableName: normalizedTableName(mode, stmt.Table),
 				index:     index,
 			}, nil
 		} else if stmt.Action == "add foreign key" {
@@ -247,7 +247,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 
 			return &AddForeignKey{
 				statement: ddl,
-				tableName: stmt.Table.Name.String(),
+				tableName: normalizedTableName(mode, stmt.Table),
 				foreignKey: ForeignKey{
 					constraintName:   stmt.ForeignKey.ConstraintName.String(),
 					indexName:        stmt.ForeignKey.IndexName.String(),
@@ -300,6 +300,19 @@ func normalizeCollate(collate string, table sqlparser.TableSpec) string {
 	} else {
 		return collate
 	}
+}
+
+// Qualify Postgres schema
+func normalizedTableName(mode GeneratorMode, tableName sqlparser.TableName) string {
+	table := tableName.Name.String()
+	if mode == GeneratorModePostgres {
+		if len(tableName.Qualifier.String()) > 0 {
+			table = tableName.Qualifier.String() + "." + table
+		} else {
+			table = "public." + table
+		}
+	}
+	return table
 }
 
 // TODO: parse charset in parser.y instead of "detecting" it

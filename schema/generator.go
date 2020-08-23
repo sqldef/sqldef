@@ -106,7 +106,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		desiredTable := findTableByName(g.desiredTables, currentTable.name)
 		if desiredTable == nil {
 			// Obsoleted table found. Drop table.
-			ddls = append(ddls, fmt.Sprintf("DROP TABLE %s", g.escapeSQLName(currentTable.name)))
+			ddls = append(ddls, fmt.Sprintf("DROP TABLE %s", g.escapeTableName(currentTable.name)))
 			g.currentTables = removeTableByName(g.currentTables, currentTable.name)
 			continue
 		}
@@ -251,7 +251,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			if g.mode == GeneratorModeMysql {
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", desired.table.name)) // TODO: escape
 			} else {
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s_pkey", desired.table.name, desired.table.name)) // TODO: escape
+				tableName := strings.SplitN(desired.table.name, ".", 2)[1]                                                // without schema
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s_pkey", desired.table.name, tableName)) // TODO: escape
 			}
 		}
 		if desiredPrimaryKey != nil {
@@ -562,6 +563,15 @@ func (g *Generator) generateDropIndex(tableName string, indexName string) string
 		return fmt.Sprintf("DROP INDEX %s", g.escapeSQLName(indexName))
 	} else {
 		return fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", tableName, g.escapeSQLName(indexName))
+	}
+}
+
+func (g *Generator) escapeTableName(name string) string {
+	if g.mode == GeneratorModePostgres {
+		schemaTable := strings.SplitN(name, ".", 2)
+		return g.escapeSQLName(schemaTable[0]) + "." + g.escapeSQLName(schemaTable[1])
+	} else {
+		return g.escapeSQLName(name)
 	}
 }
 

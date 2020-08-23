@@ -31,7 +31,10 @@ func NewDatabase(config adapter.Config) (adapter.Database, error) {
 }
 
 func (d *PostgresDatabase) TableNames() ([]string, error) {
-	rows, err := d.db.Query("select table_name from information_schema.tables where table_schema='public';")
+	rows, err := d.db.Query(
+		`select table_schema, table_name from information_schema.tables
+		 where table_schema not in ('information_schema', 'pg_catalog');`,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -39,11 +42,11 @@ func (d *PostgresDatabase) TableNames() ([]string, error) {
 
 	tables := []string{}
 	for rows.Next() {
-		var table string
-		if err := rows.Scan(&table); err != nil {
+		var schema, name string
+		if err := rows.Scan(&schema, &name); err != nil {
 			return nil, err
 		}
-		tables = append(tables, table)
+		tables = append(tables, schema+"."+name)
 	}
 	return tables, nil
 }
@@ -70,7 +73,7 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 
 func buildDumpTableDDL(table string, columns []column, primaryKeyDef string, indexDefs, foreginDefs []string) string {
 	var queryBuilder strings.Builder
-	fmt.Fprintf(&queryBuilder, "CREATE TABLE public.%s (\n", table)
+	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (\n", table)
 	for i, col := range columns {
 		isLast := i == len(columns)-1
 		fmt.Fprint(&queryBuilder, indent)
@@ -158,10 +161,11 @@ FROM pg_attribute f
 	LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
 	LEFT JOIN pg_constraint p ON p.conrelid = c.oid AND f.attnum = ANY (p.conkey)
 	LEFT JOIN pg_class AS g ON p.confrelid = g.oid
-	LEFT JOIN INFORMATION_SCHEMA.COLUMNS s ON s.column_name=f.attname AND c.relname=s.table_name
-WHERE c.relkind = 'r'::char AND c.relname = $1 AND f.attnum > 0 ORDER BY f.attnum;`
+	LEFT JOIN information_schema.columns s ON s.column_name=f.attname AND s.table_name=c.relname
+WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum > 0 ORDER BY f.attnum;`
 
-	rows, err := d.db.Query(query, table)
+	schema, table := splitTableName(table)
+	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -206,8 +210,9 @@ WHERE c.relkind = 'r'::char AND c.relname = $1 AND f.attnum > 0 ORDER BY f.attnu
 }
 
 func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
-	query := "SELECT indexName, indexdef FROM pg_indexes WHERE tablename=$1"
-	rows, err := d.db.Query(query, table)
+	query := "SELECT indexName, indexdef FROM pg_indexes WHERE schemaname=$1 AND tablename=$2"
+	schema, table := splitTableName(table)
+	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -236,8 +241,9 @@ FROM
 	information_schema.table_constraints AS tc
 	JOIN information_schema.key_column_usage AS kcu
 		ON tc.constraint_name = kcu.constraint_name
-WHERE constraint_type = 'PRIMARY KEY' AND tc.table_name=$1 ORDER BY kcu.ordinal_position`
-	rows, err := d.db.Query(query, table)
+WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$2 ORDER BY kcu.ordinal_position`
+	schema, table := splitTableName(table)
+	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return "", err
 	}
@@ -278,8 +284,9 @@ FROM
 		ON tc.constraint_name = ccu.constraint_name
 	JOIN information_schema.referential_constraints AS rc
 		ON tc.constraint_name = rc.constraint_name
-WHERE constraint_type = 'FOREIGN KEY' AND tc.table_name=$1`
-	rows, err := d.db.Query(query, table)
+WHERE constraint_type = 'FOREIGN KEY' AND tc.table_schema=$1 AND tc.table_name=$2`
+	schema, table := splitTableName(table)
+	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
 	}
@@ -327,4 +334,14 @@ func postgresBuildDSN(config adapter.Config) string {
 
 	// TODO: uri escape
 	return fmt.Sprintf("postgres://%s:%s@%s/%s%s", user, password, host, database, options)
+}
+
+func splitTableName(table string) (string, string) {
+	schema := "public"
+	schemaTable := strings.SplitN(table, ".", 2)
+	if len(schemaTable) == 2 {
+		schema = schemaTable[0]
+		table = schemaTable[1]
+	}
+	return schema, table
 }

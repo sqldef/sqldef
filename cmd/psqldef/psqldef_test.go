@@ -40,7 +40,7 @@ func TestPsqldefCreateTable(t *testing.T) {
 	assertApplyOutput(t, createTable1+createTable2, applyPrefix+createTable1+createTable2)
 	assertApplyOutput(t, createTable1+createTable2, nothingModified)
 
-	assertApplyOutput(t, createTable1, applyPrefix+"DROP TABLE \"bigdata\";\n")
+	assertApplyOutput(t, createTable1, applyPrefix+"DROP TABLE \"public\".\"bigdata\";\n")
 	assertApplyOutput(t, createTable1, nothingModified)
 }
 
@@ -65,7 +65,7 @@ func TestPsqldefCreateTableAlterColumn(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
-		ALTER TABLE users ALTER COLUMN name TYPE varchar(40);
+		ALTER TABLE public.users ALTER COLUMN name TYPE varchar(40);
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)
@@ -89,7 +89,10 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 		  name text
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP CONSTRAINT users_pkey;\nALTER TABLE users DROP COLUMN id;\n")
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE public.users DROP CONSTRAINT users_pkey;\n"+
+		"ALTER TABLE public.users DROP COLUMN id;\n",
+	)
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -99,8 +102,8 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 		);`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
-		ALTER TABLE users ADD COLUMN id bigint NOT NULL;
-		ALTER TABLE users ADD primary key ("id");
+		ALTER TABLE public.users ADD COLUMN id bigint NOT NULL;
+		ALTER TABLE public.users ADD primary key ("id");
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)
@@ -128,7 +131,9 @@ func TestCreateTableForeignKey(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id);\n")
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
+		"ALTER TABLE public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id);\n",
+	)
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	createPosts = stripHeredoc(`
@@ -139,7 +144,10 @@ func TestCreateTableForeignKey(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE posts DROP CONSTRAINT posts_ibfk_1;\nALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;\n")
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
+		"ALTER TABLE public.posts DROP CONSTRAINT posts_ibfk_1;\n"+
+		"ALTER TABLE public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;\n",
+	)
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	createPosts = stripHeredoc(`
@@ -149,13 +157,11 @@ func TestCreateTableForeignKey(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE posts DROP CONSTRAINT posts_ibfk_1;\n")
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE public.posts DROP CONSTRAINT posts_ibfk_1;\n")
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 }
 
 func TestPsqldefDropPrimaryKey(t *testing.T) {
-	t.Skip()
-
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL PRIMARY KEY,
@@ -170,7 +176,7 @@ func TestPsqldefDropPrimaryKey(t *testing.T) {
 		  name text
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP PRIMARY KEY;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE public.users DROP CONSTRAINT users_pkey;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -194,7 +200,7 @@ func TestPsqldefAddColumn(t *testing.T) {
 		  age integer
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN age integer;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE public.users ADD COLUMN age integer;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -203,7 +209,7 @@ func TestPsqldefAddColumn(t *testing.T) {
 		  age integer
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP COLUMN name;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE public.users DROP COLUMN name;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -225,7 +231,7 @@ func TestPsqldefAddArrayColumn(t *testing.T) {
 		  name integer[]
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN name integer[];\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE public.users ADD COLUMN name integer[];\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
