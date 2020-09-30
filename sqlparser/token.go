@@ -34,6 +34,7 @@ const (
 
 	ParserModeMysql = ParserMode(iota)
 	ParserModePostgres
+	ParserModeSQLite3
 )
 
 // Tokenizer is the struct used to generate SQL

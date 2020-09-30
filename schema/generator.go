@@ -13,6 +13,7 @@ type GeneratorMode int
 const (
 	GeneratorModeMysql = GeneratorMode(iota)
 	GeneratorModePostgres
+	GeneratorModeSQLite3
 )
 
 var (
@@ -118,10 +119,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 
 			var ddl string
-			if g.mode == GeneratorModePostgres {
-				ddl = fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", currentTable.name, foreignKey.constraintName)
-			} else {
+			switch g.mode {
+			case GeneratorModeMysql:
 				ddl = fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", currentTable.name, foreignKey.constraintName)
+			case GeneratorModePostgres:
+				ddl = fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", currentTable.name, foreignKey.constraintName)
+			default:
 			}
 			ddls = append(ddls, ddl)
 			// TODO: simulate to remove foreign key from `currentTable.foreignKeys`?
@@ -187,7 +190,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			ddls = append(ddls, ddl)
 		} else {
 			// Change column data type or order as needed.
-			if g.mode == GeneratorModeMysql {
+			switch g.mode {
+			case GeneratorModeMysql:
 				currentPos := currentColumn.position
 				desiredPos := desiredColumn.position
 				changeOrder := currentPos > desiredPos && currentPos-desiredPos > len(currentTable.columns)-len(desired.table.columns)
@@ -216,7 +220,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					ddl := fmt.Sprintf("ALTER TABLE %s ADD UNIQUE KEY %s(%s)", desired.table.name, desiredColumn.name, desiredColumn.name) // TODO: escape
 					ddls = append(ddls, ddl)
 				}
-			} else { // GeneratorModePostgres
+			case GeneratorModePostgres:
 				if !g.haveSameDataType(*currentColumn, desiredColumn) {
 					// Change type
 					ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s", desired.table.name, currentColumn.name, generateDataType(desiredColumn)) // TODO: escape
@@ -224,6 +228,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				// TODO: support SET/DROP NOT NULL and other properties
+			default:
 			}
 		}
 	}
@@ -248,11 +253,13 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	desiredPrimaryKey := desired.table.PrimaryKey()
 	if !areSamePrimaryKeys(currentPrimaryKey, desiredPrimaryKey) {
 		if currentPrimaryKey != nil {
-			if g.mode == GeneratorModeMysql {
+			switch g.mode {
+			case GeneratorModeMysql:
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", desired.table.name)) // TODO: escape
-			} else {
+			case GeneratorModePostgres:
 				tableName := strings.SplitN(desired.table.name, ".", 2)[1]                                                // without schema
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s_pkey", desired.table.name, tableName)) // TODO: escape
+			default:
 			}
 		}
 		if desiredPrimaryKey != nil {
@@ -306,10 +313,12 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		if currentForeignKey := findForeignKeyByName(currentTable.foreignKeys, desiredForeignKey.constraintName); currentForeignKey != nil {
 			// Drop and add foreign key as needed.
 			if !g.areSameForeignKeys(*currentForeignKey, desiredForeignKey) {
-				if g.mode == GeneratorModePostgres {
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", desired.table.name, currentForeignKey.constraintName))
-				} else {
+				switch g.mode {
+				case GeneratorModeMysql:
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", desired.table.name, currentForeignKey.constraintName))
+				case GeneratorModePostgres:
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", desired.table.name, currentForeignKey.constraintName))
+				default:
 				}
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", desired.table.name, g.generateForeignKeyDefinition(desiredForeignKey)))
 			}
@@ -559,26 +568,31 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 }
 
 func (g *Generator) generateDropIndex(tableName string, indexName string) string {
-	if g.mode == GeneratorModePostgres {
-		return fmt.Sprintf("DROP INDEX %s", g.escapeSQLName(indexName))
-	} else {
+	switch g.mode {
+	case GeneratorModeMysql:
 		return fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", tableName, g.escapeSQLName(indexName))
+	case GeneratorModePostgres:
+		return fmt.Sprintf("DROP INDEX %s", g.escapeSQLName(indexName))
+	default:
+		return ""
 	}
 }
 
 func (g *Generator) escapeTableName(name string) string {
-	if g.mode == GeneratorModePostgres {
+	switch g.mode {
+	case GeneratorModeMysql:
 		schemaTable := strings.SplitN(name, ".", 2)
 		return g.escapeSQLName(schemaTable[0]) + "." + g.escapeSQLName(schemaTable[1])
-	} else {
+	default:
 		return g.escapeSQLName(name)
 	}
 }
 
 func (g *Generator) escapeSQLName(name string) string {
-	if g.mode == GeneratorModePostgres {
+	switch g.mode {
+	case GeneratorModePostgres:
 		return fmt.Sprintf("\"%s\"", name)
-	} else {
+	default:
 		return fmt.Sprintf("`%s`", name)
 	}
 }

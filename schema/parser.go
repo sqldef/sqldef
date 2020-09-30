@@ -186,10 +186,15 @@ func parseIndex(stmt *sqlparser.DDL) (Index, error) {
 // This doesn't support destructive DDL like `DROP TABLE`.
 func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 	var parserMode sqlparser.ParserMode
-	if mode == GeneratorModePostgres {
-		parserMode = sqlparser.ParserModePostgres
-	} else {
+	switch mode {
+	case GeneratorModeMysql:
 		parserMode = sqlparser.ParserModeMysql
+	case GeneratorModePostgres:
+		parserMode = sqlparser.ParserModePostgres
+	case GeneratorModeSQLite3:
+		parserMode = sqlparser.ParserModeSQLite3
+	default:
+		panic("unrecognized parser mode")
 	}
 
 	stmt, err := sqlparser.ParseStrictDDLWithMode(ddl, parserMode)
