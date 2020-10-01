@@ -580,7 +580,7 @@ func (g *Generator) generateDropIndex(tableName string, indexName string) string
 
 func (g *Generator) escapeTableName(name string) string {
 	switch g.mode {
-	case GeneratorModeMysql:
+	case GeneratorModePostgres:
 		schemaTable := strings.SplitN(name, ".", 2)
 		return g.escapeSQLName(schemaTable[0]) + "." + g.escapeSQLName(schemaTable[1])
 	default:
