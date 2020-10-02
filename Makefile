@@ -40,13 +40,16 @@ package-targz: build
 	cd $(BUILD_DIR) && tar zcvf ../../package/mysqldef_$(GOOS)_$(GOARCH).tar.gz mysqldef
 	cd $(BUILD_DIR) && tar zcvf ../../package/psqldef_$(GOOS)_$(GOARCH).tar.gz psqldef
 
-test: test-mysqldef test-psqldef test-sqlparser
+test: test-mysqldef test-psqldef test-sqlite3def test-sqlparser
 
 test-mysqldef: deps
 	cd cmd/mysqldef && go test
 
 test-psqldef: deps
 	cd cmd/psqldef && go test
+
+test-sqlite3def: deps
+	cd cmd/sqlite3def && go test
 
 test-sqlparser:
 	cd sqlparser && go test
