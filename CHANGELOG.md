@@ -1,3 +1,7 @@
+## v0.7.0
+
+- Support sqlite3 by sqlite3def [#64](https://github.com/k0kubun/sqldef/issues/64)
+
 ## v0.6.4
 
 - Support specifying non-public schema in psqldef [#62](https://github.com/k0kubun/sqldef/issues/62)
