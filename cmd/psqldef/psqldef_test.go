@@ -71,6 +71,25 @@ func TestPsqldefCreateTableAlterColumn(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestPsqldefIgnoreExtension(t *testing.T) {
+	resetTestDatabase()
+	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", "CREATE EXTENSION pg_buffercache;")
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name text,
+		  age integer
+		);
+		`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", "DROP EXTENSION pg_buffercache;")
+}
+
 func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 	resetTestDatabase()
 
