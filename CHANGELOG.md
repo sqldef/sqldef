@@ -1,3 +1,7 @@
+## v0.7.1
+
+- Ignore `public.pg_buffercache` on psqldef when the extension is enabled [#65](https://github.com/k0kubun/sqldef/issues/65)
+
 ## v0.7.0
 
 - Support sqlite3 by sqlite3def [#64](https://github.com/k0kubun/sqldef/issues/64)
