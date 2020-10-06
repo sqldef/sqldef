@@ -1,3 +1,7 @@
+## v0.7.2
+
+- Generate `NULL` flag on a column definition of `ALTER TABLE` when it's explicitly specified [#63](https://github.com/k0kubun/sqldef/issues/63)
+
 ## v0.7.1
 
 - Ignore `public.pg_buffercache` on psqldef when the extension is enabled [#65](https://github.com/k0kubun/sqldef/issues/65)
