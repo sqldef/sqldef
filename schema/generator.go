@@ -455,8 +455,10 @@ func generateColumnDefinition(column Column, enableUnique bool) (string, error) 
 	if column.timezone {
 		definition += "WITH TIME ZONE "
 	}
-	if column.notNull || column.keyOption == ColumnKeyPrimary {
+	if (column.notNull != nil && *column.notNull) || column.keyOption == ColumnKeyPrimary {
 		definition += "NOT NULL "
+	} else if column.notNull != nil && !*column.notNull {
+		definition += "NULL "
 	}
 
 	if column.charset != "" {
@@ -716,7 +718,7 @@ func (g *Generator) haveSameColumnDefinition(current Column, desired Column) boo
 	// Not examining AUTO_INCREMENT and UNIQUE KEY because it'll be added in a later stage
 	return g.haveSameDataType(current, desired) &&
 		(current.unsigned == desired.unsigned) &&
-		(current.notNull == (desired.notNull || desired.keyOption == ColumnKeyPrimary)) && // `PRIMARY KEY` implies `NOT NULL`
+		((current.notNull != nil && *current.notNull) == ((desired.notNull != nil && *current.notNull) || desired.keyOption == ColumnKeyPrimary)) && // `PRIMARY KEY` implies `NOT NULL`
 		(current.timezone == desired.timezone) &&
 		(desired.charset == "" || current.charset == desired.charset) && // detect change column only when set explicitly. TODO: can we calculate implicit charset?
 		(desired.collate == "" || current.collate == desired.collate) && // detect change column only when set explicitly. TODO: can we calculate implicit collate?

@@ -3335,7 +3335,7 @@ yydefault:
 		yyDollar = yyS[yypt-2 : yypt+1]
 //line parser.y:720
 		{
-			yyDollar[1].columnType.NotNull = BoolVal(false)
+			yyDollar[1].columnType.NotNull = nil
 			yyDollar[1].columnType.Default = nil
 			yyDollar[1].columnType.OnUpdate = nil
 			yyDollar[1].columnType.Autoincrement = BoolVal(false)
@@ -3348,14 +3348,14 @@ yydefault:
 		yyDollar = yyS[yypt-2 : yypt+1]
 //line parser.y:731
 		{
-			yyDollar[1].columnType.NotNull = BoolVal(false)
+			yyDollar[1].columnType.NotNull = NewBoolVal(false)
 			yyVAL.columnType = yyDollar[1].columnType
 		}
 	case 93:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser.y:736
 		{
-			yyDollar[1].columnType.NotNull = BoolVal(true)
+			yyDollar[1].columnType.NotNull = NewBoolVal(true)
 			yyVAL.columnType = yyDollar[1].columnType
 		}
 	case 94:
@@ -3925,7 +3925,7 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser.y:1154
 		{
-			yyVAL.str = string(yyDollar[1].bytes) // Set pseudo collation "BINARY" for BINARY attribute (deprecated in future MySQL versions)
+			yyVAL.str = string(yyDollar[1].bytes) // Set pseudo collation "binary" for BINARY attribute (deprecated in future MySQL versions)
 		}
 	case 183:
 		yyDollar = yyS[yypt-2 : yypt+1]

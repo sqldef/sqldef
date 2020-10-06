@@ -903,7 +903,7 @@ type ColumnType struct {
 	Type string
 
 	// Generic field options.
-	NotNull       BoolVal
+	NotNull       *BoolVal
 	Autoincrement BoolVal
 	Default       *SQLVal
 	OnUpdate      *SQLVal
@@ -961,7 +961,7 @@ func (ct *ColumnType) Format(buf *TrackedBuffer) {
 	if ct.Timezone {
 		opts = append(opts, keywordStrings[WITH], keywordStrings[TIME], keywordStrings[ZONE])
 	}
-	if ct.NotNull {
+	if ct.NotNull != nil && *ct.NotNull {
 		opts = append(opts, keywordStrings[NOT], keywordStrings[NULL])
 	}
 	if ct.Default != nil {
@@ -2419,6 +2419,11 @@ func (node *NullVal) replace(from, to Expr) bool {
 
 // BoolVal is true or false.
 type BoolVal bool
+
+func NewBoolVal(flag bool) *BoolVal {
+	val := BoolVal(flag)
+	return &val
+}
 
 // Format formats the node.
 func (node BoolVal) Format(buf *TrackedBuffer) {

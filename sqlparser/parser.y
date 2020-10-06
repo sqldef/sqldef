@@ -718,7 +718,7 @@ column_type:
 column_definition_type:
   column_type array_opt
   {
-    $1.NotNull = BoolVal(false)
+    $1.NotNull = nil
     $1.Default = nil
     $1.OnUpdate = nil
     $1.Autoincrement = BoolVal(false)
@@ -729,12 +729,12 @@ column_definition_type:
   }
 | column_definition_type NULL
   {
-    $1.NotNull = BoolVal(false)
+    $1.NotNull = NewBoolVal(false)
     $$ = $1
   }
 | column_definition_type NOT NULL
   {
-    $1.NotNull = BoolVal(true)
+    $1.NotNull = NewBoolVal(true)
     $$ = $1
   }
 | column_definition_type DEFAULT STRING

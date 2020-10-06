@@ -46,7 +46,7 @@ type Column struct {
 	position      int
 	typeName      string
 	unsigned      bool
-	notNull       bool
+	notNull       *bool
 	autoIncrement bool
 	array         bool
 	defaultVal    *Value

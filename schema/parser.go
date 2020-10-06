@@ -17,6 +17,14 @@ func castBool(val sqlparser.BoolVal) bool {
 	return ret
 }
 
+func castBoolPtr(val *sqlparser.BoolVal) *bool {
+	if val == nil {
+		return nil
+	}
+	ret := castBool(*val)
+	return &ret
+}
+
 func parseValue(val *sqlparser.SQLVal) *Value {
 	if val == nil {
 		return nil
@@ -77,7 +85,7 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) Table {
 			position:      i,
 			typeName:      parsedCol.Type.Type,
 			unsigned:      castBool(parsedCol.Type.Unsigned),
-			notNull:       castBool(parsedCol.Type.NotNull),
+			notNull:       castBoolPtr(parsedCol.Type.NotNull),
 			autoIncrement: castBool(parsedCol.Type.Autoincrement),
 			array:         castBool(parsedCol.Type.Array),
 			defaultVal:    parseValue(parsedCol.Type.Default),
