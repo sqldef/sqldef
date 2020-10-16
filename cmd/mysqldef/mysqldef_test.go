@@ -994,6 +994,19 @@ func TestMysqldefDefaultValue(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefNegativeDefault(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE items (
+		  position float DEFAULT -20
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefIndexWithDot(t *testing.T) {
 	resetTestDatabase()
 
