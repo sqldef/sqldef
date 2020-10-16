@@ -1005,6 +1005,16 @@ func TestMysqldefNegativeDefault(t *testing.T) {
 	)
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE items (
+		  position float DEFAULT 100
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE items CHANGE COLUMN position position float DEFAULT 100;\n")
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestMysqldefIndexWithDot(t *testing.T) {

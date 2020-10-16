@@ -748,8 +748,8 @@ func haveSameValue(current *Value, desired *Value) bool {
 		return false
 	}
 
-	// TODO: check values
-	return true
+	// NOTE: -1 can be changed to '-1' in show create table and valueType is not reliable
+	return string(current.raw) == string(desired.raw)
 }
 
 func (g *Generator) normalizeDataType(dataType string) string {
