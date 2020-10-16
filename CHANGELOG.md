@@ -1,3 +1,7 @@
+## v0.7.3
+
+- Allow a negative default value [#66](https://github.com/k0kubun/sqldef/issues/66)
+
 ## v0.7.2
 
 - Generate `NULL` flag on a column definition of `ALTER TABLE` when it's explicitly specified [#63](https://github.com/k0kubun/sqldef/issues/63)
