@@ -1,3 +1,7 @@
+## v0.7.4
+
+- Support changing a DEFAULT value [#67](https://github.com/k0kubun/sqldef/issues/67)
+
 ## v0.7.3
 
 - Allow a negative default value [#66](https://github.com/k0kubun/sqldef/issues/66)
