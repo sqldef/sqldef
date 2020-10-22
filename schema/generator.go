@@ -171,7 +171,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		desiredColumn.autoIncrement = false // We may not be able to add AUTO_INCREMENT yet. It will be added after adding keys (primary or not).
 		currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
 		if currentColumn == nil {
-			definition, err := g.generateColumnDefinition(desiredColumn, true)
+			definition, err := generateColumnDefinition(desiredColumn, true)
 			if err != nil {
 				return ddls, err
 			}
@@ -198,7 +198,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 				// Change column type and orders, *except* AUTO_INCREMENT and UNIQUE KEY.
 				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) || !haveSameValue(currentColumn.defaultVal, desiredColumn.defaultVal) || changeOrder {
-					definition, err := g.generateColumnDefinition(desiredColumn, false)
+					definition, err := generateColumnDefinition(desiredColumn, false)
 					if err != nil {
 						return ddls, err
 					}
@@ -239,7 +239,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			desiredColumn := findColumnByName(desired.table.columns, currentColumn.name)
 			if currentColumn.autoIncrement && (desiredColumn == nil || !desiredColumn.autoIncrement) {
 				currentColumn.autoIncrement = false
-				definition, err := g.generateColumnDefinition(currentColumn, false)
+				definition, err := generateColumnDefinition(currentColumn, false)
 				if err != nil {
 					return ddls, err
 				}
@@ -291,7 +291,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		for _, desiredColumn := range desired.table.columns {
 			currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
 			if desiredColumn.autoIncrement && (currentColumn == nil || !currentColumn.autoIncrement) {
-				definition, err := g.generateColumnDefinition(desiredColumn, false)
+				definition, err := generateColumnDefinition(desiredColumn, false)
 				if err != nil {
 					return ddls, err
 				}
@@ -443,7 +443,7 @@ func generateDataType(column Column) string {
 	}
 }
 
-func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (string, error) {
+func generateColumnDefinition(column Column, enableUnique bool) (string, error) {
 	// TODO: make string concatenation faster?
 	// TODO: consider escape?
 
@@ -457,32 +457,17 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 	}
 
 	// [CHARACTER SET] and [COLLATE] should be placed before [NOT NULL | NULL] on MySQL
-	if g.mode == GeneratorModeMysql {
-		if column.charset != "" {
-			definition += fmt.Sprintf("CHARACTER SET %s ", column.charset)
-		}
-		if column.collate != "" {
-			definition += fmt.Sprintf("COLLATE %s ", column.collate)
-		}
+	if column.charset != "" {
+		definition += fmt.Sprintf("CHARACTER SET %s ", column.charset)
+	}
+	if column.collate != "" {
+		definition += fmt.Sprintf("COLLATE %s ", column.collate)
+	}
 
-		if (column.notNull != nil && *column.notNull) || column.keyOption == ColumnKeyPrimary {
-			definition += "NOT NULL "
-		} else if column.notNull != nil && !*column.notNull {
-			definition += "NULL "
-		}
-	} else {
-		if (column.notNull != nil && *column.notNull) || column.keyOption == ColumnKeyPrimary {
-			definition += "NOT NULL "
-		} else if column.notNull != nil && !*column.notNull {
-			definition += "NULL "
-		}
-
-		if column.charset != "" {
-			definition += fmt.Sprintf("CHARACTER SET %s ", column.charset)
-		}
-		if column.collate != "" {
-			definition += fmt.Sprintf("COLLATE %s ", column.collate)
-		}
+	if (column.notNull != nil && *column.notNull) || column.keyOption == ColumnKeyPrimary {
+		definition += "NOT NULL "
+	} else if column.notNull != nil && !*column.notNull {
+		definition += "NULL "
 	}
 
 	if column.defaultVal != nil {
