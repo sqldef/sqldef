@@ -1,3 +1,7 @@
+## v0.7.5
+
+- Fix ALTER with CHARACTER SET, COLLATE, and NOT NULL in mysqldef [#68](https://github.com/k0kubun/sqldef/issues/68)
+
 ## v0.7.4
 
 - Support changing a DEFAULT value [#67](https://github.com/k0kubun/sqldef/issues/67)
