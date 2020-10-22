@@ -403,7 +403,7 @@ func TestMysqldefChangeColumnBinary(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users CHANGE COLUMN word word varchar(64) NOT NULL COLLATE utf8mb4_bin;\n",
+		"ALTER TABLE users CHANGE COLUMN word word varchar(64) COLLATE utf8mb4_bin NOT NULL;\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -853,6 +853,34 @@ func TestMysqldefDefaultNull(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN name varchar(40) DEFAULT null AFTER id;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMysqldefCreateTableAddColumnWithCharsetAndNotNull(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  PRIMARY KEY (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+		  PRIMARY KEY (id)
+		);
+		`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE users ADD COLUMN name varchar(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL AFTER id;\n",
+	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
