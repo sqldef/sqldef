@@ -1,3 +1,7 @@
+## v0.7.6
+
+- Preserve AUTO\_INCREMENT when changing the column's data type in mysqldef [#70](https://github.com/k0kubun/sqldef/issues/70)
+
 ## v0.7.5
 
 - Fix ALTER with CHARACTER SET, COLLATE, and NOT NULL in mysqldef [#68](https://github.com/k0kubun/sqldef/issues/68)
