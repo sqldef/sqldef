@@ -168,8 +168,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	// Examine each column
 	for i, desiredColumn := range desired.table.columns {
-		desiredColumn.autoIncrement = false // We may not be able to add AUTO_INCREMENT yet. It will be added after adding keys (primary or not).
 		currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
+		if currentColumn == nil || !currentColumn.autoIncrement {
+			// We may not be able to add AUTO_INCREMENT yet. It will be added after adding keys (primary or not) at the "Add new AUTO_INCREMENT" place.
+			desiredColumn.autoIncrement = false
+		}
 		if currentColumn == nil {
 			definition, err := generateColumnDefinition(desiredColumn, true)
 			if err != nil {
