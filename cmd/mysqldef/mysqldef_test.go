@@ -884,6 +884,30 @@ func TestMysqldefDefaultNull(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefAddNotNull(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  name varchar(255) DEFAULT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  name varchar(255) NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE users CHANGE COLUMN name name varchar(255) NOT NULL;\n",
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefCreateTableAddColumnWithCharsetAndNotNull(t *testing.T) {
 	resetTestDatabase()
 
@@ -905,7 +929,6 @@ func TestMysqldefCreateTableAddColumnWithCharsetAndNotNull(t *testing.T) {
 		);
 		`,
 	)
-
 	assertApplyOutput(t, createTable, applyPrefix+
 		"ALTER TABLE users ADD COLUMN name varchar(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL AFTER id;\n",
 	)
