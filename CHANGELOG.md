@@ -1,6 +1,12 @@
+## v0.7.7
+
+- Fix an error when adding `NOT NULL` [#71](https://github.com/k0kubun/sqldef/issues/71)
+  - This fixed a bug introduced at v0.7.2
+
 ## v0.7.6
 
 - Preserve AUTO\_INCREMENT when changing the column's data type in mysqldef [#70](https://github.com/k0kubun/sqldef/issues/70)
+  - This fixed a bug introduced at v0.5.20.
 
 ## v0.7.5
 
