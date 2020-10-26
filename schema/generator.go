@@ -723,11 +723,23 @@ func (g *Generator) haveSameColumnDefinition(current Column, desired Column) boo
 	// Not examining AUTO_INCREMENT and UNIQUE KEY because it'll be added in a later stage
 	return g.haveSameDataType(current, desired) &&
 		(current.unsigned == desired.unsigned) &&
-		((current.notNull != nil && *current.notNull) == ((desired.notNull != nil && *current.notNull) || desired.keyOption == ColumnKeyPrimary)) && // `PRIMARY KEY` implies `NOT NULL`
+		(isAcceptableNull(current) == isAcceptableNull(desired)) &&
 		(current.timezone == desired.timezone) &&
 		(desired.charset == "" || current.charset == desired.charset) && // detect change column only when set explicitly. TODO: can we calculate implicit charset?
 		(desired.collate == "" || current.collate == desired.collate) && // detect change column only when set explicitly. TODO: can we calculate implicit collate?
 		reflect.DeepEqual(current.onUpdate, desired.onUpdate)
+}
+
+func isAcceptableNull(c Column) bool {
+	// `PRIMARY KEY` implies `NOT NULL`
+	if c.keyOption == ColumnKeyPrimary {
+		return true
+	}
+
+	if c.notNull == nil {
+		return false
+	}
+	return *c.notNull
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
