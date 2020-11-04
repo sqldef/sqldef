@@ -1,4 +1,4 @@
-FROM golang:1.11.1-alpine3.8
+FROM golang:1.11.11-alpine3.8
 RUN apk add --no-cache build-base make gcc git
 
 COPY . /sqldef
