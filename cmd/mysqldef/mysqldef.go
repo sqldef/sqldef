@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"syscall"
 
-	"github.com/howeyc/gopass"
 	"github.com/jessevdk/go-flags"
 	"github.com/k0kubun/sqldef"
 	"github.com/k0kubun/sqldef/adapter"
@@ -67,7 +67,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 
 	if opts.Prompt {
 		fmt.Printf("Enter Password: ")
-		pass, err := gopass.GetPasswd()
+		pass, err := terminal.ReadPassword(syscall.Stdin)
 		if err != nil {
 			log.Fatal(err)
 		}

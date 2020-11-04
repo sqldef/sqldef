@@ -4,7 +4,6 @@ go 1.13
 
 require (
 	github.com/go-sql-driver/mysql v1.5.0
-	github.com/howeyc/gopass v0.0.0-20190910152052-7cb4b85ec19c
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/k0kubun/pp v3.0.1+incompatible
 	github.com/lib/pq v1.8.0
