@@ -11,6 +11,7 @@ import (
 	"github.com/k0kubun/sqldef/adapter"
 	"github.com/k0kubun/sqldef/adapter/postgres"
 	"github.com/k0kubun/sqldef/schema"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 // Return parsed options and schema filename
