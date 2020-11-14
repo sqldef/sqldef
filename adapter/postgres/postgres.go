@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -69,10 +70,14 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, primaryKeyDef, indexDefs, foreginDefs), nil
+	policyDefs, err := d.getPolicyDefs(table)
+	if err != nil {
+		return "", err
+	}
+	return buildDumpTableDDL(table, cols, primaryKeyDef, indexDefs, foreginDefs, policyDefs), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, primaryKeyDef string, indexDefs, foreginDefs []string) string {
+func buildDumpTableDDL(table string, columns []column, primaryKeyDef string, indexDefs, foreginDefs, policyDefs []string) string {
 	var queryBuilder strings.Builder
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (\n", table)
 	for i, col := range columns {
@@ -105,6 +110,9 @@ func buildDumpTableDDL(table string, columns []column, primaryKeyDef string, ind
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
 	for _, v := range foreginDefs {
+		fmt.Fprintf(&queryBuilder, "%s;\n", v)
+	}
+	for _, v := range policyDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
 	return strings.TrimSuffix(queryBuilder.String(), ";\n")
@@ -304,6 +312,44 @@ WHERE constraint_type = 'FOREIGN KEY' AND tc.table_schema=$1 AND tc.table_name=$
 			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s(%s) ON UPDATE %s ON DELETE %s",
 			tableSchema, tableName, constraintName, columnName, foreignTableSchema, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule,
 		)
+		defs = append(defs, def)
+	}
+	return defs, nil
+}
+
+var (
+	policyRolesPrefixRegex = regexp.MustCompile(`^{`)
+	policyRolesSuffixRegex = regexp.MustCompile(`}$`)
+)
+
+func (d *PostgresDatabase) getPolicyDefs(table string) ([]string, error) {
+	query := "SELECT policyname, permissive, roles, cmd, qual, with_check FROM pg_policies WHERE schemaname = $1 AND tablename = $2;"
+	schema, table := splitTableName(table)
+	rows, err := d.db.Query(query, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	defs := make([]string, 0)
+	for rows.Next() {
+		var (
+			policyName, permissive, roles, cmd, qual string
+			withCheck                                sql.NullString
+		)
+		err = rows.Scan(&policyName, &permissive, &roles, &cmd, &qual, &withCheck)
+		if err != nil {
+			return nil, err
+		}
+		roles = policyRolesPrefixRegex.ReplaceAllString(roles, "")
+		roles = policyRolesSuffixRegex.ReplaceAllString(roles, "")
+		def := fmt.Sprintf(
+			"CREATE POLICY %s ON %s AS %s FOR %s TO %s USING %s",
+			policyName, table, permissive, cmd, roles, qual,
+		)
+		if withCheck.Valid {
+			def += fmt.Sprintf(" WITH CHECK %s", withCheck.String)
+		}
 		defs = append(defs, def)
 	}
 	return defs, nil
