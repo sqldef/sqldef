@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"sort"
 	"strings"
 )
 
@@ -93,6 +94,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			ddls = append(ddls, indexDDLs...)
 		case *AddIndex:
 			indexDDLs, err := g.generateDDLsForCreateIndex(desired.tableName, desired.index, "ALTER TABLE", ddl.Statement())
+			if err != nil {
+				return ddls, err
+			}
+			ddls = append(ddls, indexDDLs...)
+		case *AddPolicy:
+			indexDDLs, err := g.generateDDLsForCreatePolicy(desired.tableName, desired.policy, "ALTER POLICY", ddl.Statement())
 			if err != nil {
 				return ddls, err
 			}
@@ -382,6 +389,49 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 	return ddls, nil
 }
 
+func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy Policy, action string, statement string) ([]string, error) {
+	var ddls []string
+
+	currentTable := findTableByName(g.currentTables, tableName)
+	if currentTable == nil {
+		return nil, fmt.Errorf("%s is performed for inexistent table '%s': '%s'", action, tableName, statement)
+	}
+
+	currentPolicy := findPolicyByName(currentTable.policies, desiredPolicy.name)
+	if currentPolicy == nil {
+		// Index not found, add index.
+		ddls = append(ddls, statement)
+		currentTable.policies = append(currentTable.policies, desiredPolicy)
+	} else {
+		// Index found. If it's different, drop and add index.
+		if !areSamePolicies(*currentPolicy, desiredPolicy) {
+			ddls = append(ddls, strings.Replace(statement, "CREATE", "ALTER", 1))
+
+			var newPolicies []Policy
+			for _, currentPolicy := range currentTable.policies {
+				if currentPolicy.name == desiredPolicy.name {
+					newPolicies = append(newPolicies, desiredPolicy)
+				} else {
+					newPolicies = append(newPolicies, currentPolicy)
+				}
+			}
+			currentTable.policies = newPolicies
+		}
+	}
+
+	// Examine indexes in desiredTable to delete obsoleted indexes later
+	desiredTable := findTableByName(g.desiredTables, tableName)
+	if desiredTable == nil {
+		return nil, fmt.Errorf("%s is performed before create table '%s': '%s'", action, tableName, statement)
+	}
+	if containsString(convertIndexesToIndexNames(desiredTable.indexes), desiredPolicy.name) {
+		return nil, fmt.Errorf("index '%s' is doubly created against table '%s': '%s'", desiredPolicy.name, tableName, statement)
+	}
+	desiredTable.policies = append(desiredTable.policies, desiredPolicy)
+
+	return ddls, nil
+}
+
 // Even though simulated table doesn't have index, primary or unique could exist in column definitions.
 // This carefully generates DROP INDEX for such situations.
 func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable Table, desiredTable Table) ([]string, error) {
@@ -667,6 +717,13 @@ func convertDDLsToTables(ddls []DDL) ([]*Table, error) {
 			}
 
 			table.foreignKeys = append(table.foreignKeys, stmt.foreignKey)
+		case *AddPolicy:
+			table := findTableByName(tables, stmt.tableName)
+			if table == nil {
+				return nil, fmt.Errorf("ADD POLICY performed before CREATE TABLE: %s", ddl.Statement())
+			}
+
+			table.policies = append(table.policies, stmt.policy)
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in convertDDLsToTables: %v", stmt)
 		}
@@ -710,10 +767,10 @@ func findForeignKeyByName(foreignKeys []ForeignKey, constraintName string) *Fore
 	return nil
 }
 
-func findPrimaryKey(indexes []Index) *Index {
-	for _, index := range indexes {
-		if index.primary {
-			return &index
+func findPolicyByName(policies []Policy, name string) *Policy {
+	for _, policy := range policies {
+		if policy.name == name {
+			return &policy
 		}
 	}
 	return nil
@@ -809,6 +866,35 @@ func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB Forei
 		return false
 	}
 	// TODO: check index, reference
+	return true
+}
+
+func areSamePolicies(policyA, policyB Policy) bool {
+	if policyA.name != policyB.name {
+		return false
+	}
+	if policyA.scope != policyB.scope {
+		return false
+	}
+	if policyA.permissive != policyB.permissive {
+		return false
+	}
+	if policyA.using != policyB.using {
+		return false
+	}
+	if len(policyA.roles) != len(policyB.roles) {
+		return false
+	}
+	less := func(i, j int) bool {
+		return i <= j
+	}
+	sort.Slice(policyA.roles, less)
+	sort.Slice(policyB.roles, less)
+	for i := range policyA.roles {
+		if policyA.roles[i] != policyB.roles[i] {
+			return false
+		}
+	}
 	return true
 }
 

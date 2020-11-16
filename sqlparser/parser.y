@@ -155,13 +155,14 @@ func forceEOF(yylex interface{}) {
 
 // DDL Tokens
 %token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD
-%token <bytes> SCHEMA TABLE INDEX VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE
+%token <bytes> SCHEMA TABLE INDEX VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY
 %right <bytes> UNIQUE KEY
 %token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE
 %token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER
 %token <bytes> VINDEX VINDEXES
 %token <bytes> STATUS VARIABLES
 %token <bytes> RESTRICT CASCADE NO ACTION
+%token <bytes> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
 
 // Transaction Tokens
 %token <bytes> BEGIN START TRANSACTION COMMIT ROLLBACK
@@ -175,6 +176,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON JSONB ENUM
 %token <bytes> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
 %token <bytes> ARRAY
+%token <bytes> NOW
 
 // Type Modifiers
 %token <bytes> NULLX AUTO_INCREMENT APPROXNUM SIGNED UNSIGNED ZEROFILL ZONE
@@ -270,7 +272,7 @@ func forceEOF(yylex interface{}) {
 %type <empty> force_eof ddl_force_eof
 %type <str> charset
 %type <str> set_session_or_global show_session_or_global
-%type <convertType> convert_type
+%type <convertType> convert_type simple_convert_type
 %type <columnType> column_type
 %type <columnType> bool_type int_type decimal_type numeric_type time_type char_type spatial_type
 %type <optVal> length_opt
@@ -301,6 +303,8 @@ func forceEOF(yylex interface{}) {
 %type <vindexParams> vindex_param_list vindex_params_opt
 %type <colIdent> vindex_type vindex_type_opt
 %type <bytes> alter_object_type
+%type <bytes> policy_as_opt policy_for_opt character_cast_opt
+%left <bytes> TYPECAST
 
 %start any_command
 
@@ -614,6 +618,33 @@ create_statement:
   {
     $$ = &DBDDL{Action: CreateStr, DBName: string($4)}
   }
+| CREATE POLICY sql_id ON table_name policy_as_opt policy_for_opt TO sql_id_list USING openb expression closeb
+  {
+    $$ = &DDL{Action: CreatePolicyStr, Table: $5, Policy: &Policy{
+        Name: $3,
+        Permissive: Permissive($6),
+        Scope: $7,
+        To: $9,
+        Using: NewWhere(WhereStr, $12),
+    }}
+  }
+
+policy_as_opt:
+  {
+    $$ = nil
+  }
+| AS PERMISSIVE
+| AS RESTRICTIVE
+
+policy_for_opt:
+  {
+    $$ = nil
+  }
+| FOR ALL
+| FOR SELECT
+| FOR INSERT
+| FOR UPDATE
+| FOR DELETE
 
 unique_opt:
   {
@@ -737,7 +768,7 @@ column_definition_type:
     $1.NotNull = NewBoolVal(true)
     $$ = $1
   }
-| column_definition_type DEFAULT STRING
+| column_definition_type DEFAULT STRING character_cast_opt
   {
     $1.Default = NewStrVal($3)
     $$ = $1
@@ -752,6 +783,11 @@ column_definition_type:
     $1.Default = NewFloatVal($3)
     $$ = $1
   }
+| column_definition_type DEFAULT boolean_value
+  {
+    $1.Default = NewBoolSQLVal(bool($3))
+    $$ = $1
+  }
 | column_definition_type DEFAULT NULL
   {
     $1.Default = NewValArg($3)
@@ -763,6 +799,11 @@ column_definition_type:
     $$ = $1
   }
 | column_definition_type DEFAULT BIT_LITERAL
+  {
+    $1.Default = NewBitVal($3)
+    $$ = $1
+  }
+| column_definition_type DEFAULT NOW openb closeb
   {
     $1.Default = NewBitVal($3)
     $$ = $1
@@ -801,6 +842,15 @@ column_definition_type:
   {
     $1.Comment = NewStrVal($3)
     $$ = $1
+  }
+
+character_cast_opt :
+  {
+    $$ = nil
+  }
+| TYPECAST CHARACTER VARYING
+  {
+    $$ = nil
   }
 
 numeric_type:
@@ -2192,6 +2242,10 @@ expression:
   {
     $$ = &Default{ColName: $2}
   }
+| expression TYPECAST simple_convert_type
+  {
+    $$ = &ConvertExpr{Expr: $1, Type: $3}
+  }
 
 default_opt:
   /* empty */
@@ -2427,10 +2481,6 @@ value_expression:
   {
     $$ = &BinaryExpr{Left: $1, Operator: JSONUnquoteExtractOp, Right: $3}
   }
-| value_expression COLLATE charset
-  {
-    $$ = &CollateExpr{Expr: $1, Charset: $3}
-  }
 | BINARY value_expression %prec UNARY
   {
     $$ = &UnaryExpr{Operator: BinaryStr, Expr: $2}
@@ -2607,6 +2657,10 @@ function_call_nonkeyword:
   {
     $$ = &FuncExpr{Name:NewColIdent("current_time")}
   }
+| TYPECAST INTEGER
+  {
+    $$ = &ConvertExpr{Type: &ConvertType{Type: string($2)}}
+  }
 
 func_datetime_precision_opt:
   /* empty */
@@ -2722,6 +2776,36 @@ convert_type:
     $$ = &ConvertType{Type: string($1)}
   }
 | UNSIGNED INTEGER
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+
+simple_convert_type:
+  BINARY
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| CHARACTER VARYING
+  {
+    $$ = &ConvertType{Type: string($1)+" "+string($2)}
+  }
+| DATE
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| DATETIME
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| INTEGER
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| BOOL
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| TEXT
   {
     $$ = &ConvertType{Type: string($1)}
   }
@@ -3248,6 +3332,7 @@ reserved_keyword:
 | OR
 | ORDER
 | OUTER
+| POLICY
 | REGEXP
 | RENAME
 | REPLACE
@@ -3285,6 +3370,7 @@ reserved_keyword:
 non_reserved_keyword:
   ACTION
 | AGAINST
+| ALL
 | BEGIN
 | BIGINT
 | BIGSERIAL
@@ -3335,6 +3421,7 @@ non_reserved_keyword:
 | NAMES
 | NCHAR
 | NO
+| NOW
 | NUMERIC
 | OFFSET
 | OPTIMIZE
@@ -3342,12 +3429,14 @@ non_reserved_keyword:
 | POINT
 | POLYGON
 | PRECISION
+| PERMISSIVE
 | PRIMARY
 | PROCEDURE
 | QUERY
 | READ
 | REAL
 | REORGANIZE
+| RESTRICTIVE
 | REPAIR
 | REPEATABLE
 | RESTRICT

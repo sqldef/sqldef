@@ -668,6 +668,7 @@ type DDL struct {
 	VindexSpec    *VindexSpec
 	VindexCols    []ColIdent
 	ForeignKey    *ForeignKeyDefinition
+	Policy        *Policy
 }
 
 // DDL strings.
@@ -684,6 +685,7 @@ const (
 	CreateIndexStr   = "create index"
 	AddPrimaryKeyStr = "add primary key"
 	AddForeignKeyStr = "add foreign key"
+	CreatePolicyStr  = "create policy"
 
 	// Vindex DDL param to specify the owner of a vindex
 	VindexOwnerStr = "owner"
@@ -1321,6 +1323,21 @@ type ForeignKeyDefinition struct {
 	OnDelete         ColIdent
 	OnUpdate         ColIdent
 }
+
+type Policy struct {
+	Name       ColIdent
+	Permissive Permissive
+	Scope      []byte
+	To         []ColIdent
+	Using      *Where
+}
+
+type Permissive string
+
+const (
+	PermissiveStr  Permissive = "permissive"
+	RestrictiveStr Permissive = "restrictive"
+)
 
 // Show represents a show statement.
 type Show struct {
@@ -2313,6 +2330,7 @@ const (
 	HexVal
 	ValArg
 	BitVal
+	ValBool
 )
 
 // SQLVal represents a single value.
@@ -2356,6 +2374,10 @@ func NewValArg(in []byte) *SQLVal {
 	return &SQLVal{Type: ValArg, Val: in}
 }
 
+func NewBoolSQLVal(in bool) *SQLVal {
+	return &SQLVal{Type: ValBool, Val: []byte(fmt.Sprintf("%t", in))}
+}
+
 func NewValArgWithOpt(in []byte, opt *SQLVal) *SQLVal {
 	if opt != nil {
 		combined := string(in) + "(" + string(opt.Val) + ")"
@@ -2378,6 +2400,8 @@ func (node *SQLVal) Format(buf *TrackedBuffer) {
 		buf.Myprintf("B'%s'", []byte(node.Val))
 	case ValArg:
 		buf.WriteArg(string(node.Val))
+	case ValBool:
+		buf.Myprintf("%t", node.Val)
 	default:
 		panic("unexpected")
 	}
@@ -3288,6 +3312,33 @@ func (node *SetExpr) Format(buf *TrackedBuffer) {
 }
 
 func (node *SetExpr) walkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Name,
+		node.Expr,
+	)
+}
+
+// CastExpr represents a cast expression.
+type CastExpr struct {
+	Name ColIdent
+	Expr Expr
+}
+
+// Format formats the node.
+func (node *CastExpr) Format(buf *TrackedBuffer) {
+	// We don't have to backtick set variable names.
+	if node.Name.EqualString("charset") || node.Name.EqualString("names") {
+		buf.Myprintf("%s %v", node.Name.String(), node.Expr)
+	} else {
+		buf.Myprintf("%s = %v", node.Name.String(), node.Expr)
+	}
+}
+
+func (node *CastExpr) walkSubtree(visit Visit) error {
 	if node == nil {
 		return nil
 	}

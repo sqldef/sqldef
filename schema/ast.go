@@ -1,5 +1,7 @@
 package schema
 
+import "github.com/k0kubun/sqldef/sqlparser"
+
 type DDL interface {
 	Statement() string
 }
@@ -33,11 +35,18 @@ type AddForeignKey struct {
 	foreignKey ForeignKey
 }
 
+type AddPolicy struct {
+	statement string
+	tableName string
+	policy    Policy
+}
+
 type Table struct {
 	name        string
 	columns     []Column
 	indexes     []Index
 	foreignKeys []ForeignKey
+	policies    []Policy
 	// XXX: have options and alter on its change?
 }
 
@@ -84,6 +93,15 @@ type ForeignKey struct {
 	referenceColumns []string
 	onDelete         string
 	onUpdate         string
+}
+
+type Policy struct {
+	name          string
+	referenceName string
+	permissive    sqlparser.Permissive
+	scope         string
+	roles         []string
+	using         string
 }
 
 type Value struct {
@@ -137,6 +155,10 @@ func (a *AddPrimaryKey) Statement() string {
 }
 
 func (a *AddForeignKey) Statement() string {
+	return a.statement
+}
+
+func (a *AddPolicy) Statement() string {
 	return a.statement
 }
 

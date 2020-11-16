@@ -121,6 +121,7 @@ var keywords = map[string]int{
 	"cascade":             CASCADE,
 	"case":                CASE,
 	"cast":                CAST,
+	"::":                  TYPECAST,
 	"change":              UNUSED,
 	"char":                CHAR,
 	"character":           CHARACTER,
@@ -275,6 +276,7 @@ var keywords = map[string]int{
 	"next":                NEXT,
 	"no":                  NO,
 	"not":                 NOT,
+	"now":                 NOW,
 	"no_write_to_binlog":  UNUSED,
 	"null":                NULL,
 	"numeric":             NUMERIC,
@@ -292,13 +294,16 @@ var keywords = map[string]int{
 	"outfile":             UNUSED,
 	"parser":              PARSER,
 	"partition":           PARTITION,
+	"permissive":          PERMISSIVE,
 	"point":               POINT,
+	"policy":              POLICY,
 	"polygon":             POLYGON,
 	"precision":           PRECISION,
 	"primary":             PRIMARY,
 	"processlist":         PROCESSLIST,
 	"procedure":           PROCEDURE,
 	"query":               QUERY,
+	"restrictive":         RESTRICTIVE,
 	"range":               UNUSED,
 	"read":                READ,
 	"reads":               UNUSED,
@@ -739,6 +744,11 @@ func (tkn *Tokenizer) scanBindVar() (int, []byte) {
 	token := VALUE_ARG
 	tkn.next()
 	if tkn.lastChar == ':' {
+		if tkn.mode == ParserModePostgres {
+			buffer.WriteByte(byte(tkn.lastChar))
+			tkn.next()
+			return TYPECAST, buffer.Bytes()
+		}
 		token = LIST_ARG
 		buffer.WriteByte(byte(tkn.lastChar))
 		tkn.next()
