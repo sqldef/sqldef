@@ -882,6 +882,9 @@ func areSamePolicies(policyA, policyB Policy) bool {
 	if policyA.using != policyB.using {
 		return false
 	}
+	if policyA.withCheck != policyB.withCheck {
+		return false
+	}
 	if len(policyA.roles) != len(policyB.roles) {
 		return false
 	}

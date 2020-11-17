@@ -1330,6 +1330,7 @@ type Policy struct {
 	Scope      []byte
 	To         []ColIdent
 	Using      *Where
+	WithCheck  *Where
 }
 
 type Permissive string

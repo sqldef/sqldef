@@ -102,6 +102,7 @@ type Policy struct {
 	scope         string
 	roles         []string
 	using         string
+	withCheck     string
 }
 
 type Value struct {

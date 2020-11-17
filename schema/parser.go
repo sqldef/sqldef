@@ -276,6 +276,10 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 			for i, to := range stmt.Policy.To {
 				scope[i] = to.String()
 			}
+			var withCheck string
+			if stmt.Policy.WithCheck != nil {
+				withCheck = sqlparser.String(stmt.Policy.WithCheck.Expr)
+			}
 			return &AddPolicy{
 				statement: ddl,
 				tableName: normalizedTableName(mode, stmt.Table),
@@ -285,6 +289,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 					scope:      string(stmt.Policy.Scope),
 					roles:      scope,
 					using:      sqlparser.String(stmt.Policy.Using.Expr),
+					withCheck:  withCheck,
 				},
 			}, nil
 		} else {
