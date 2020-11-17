@@ -276,7 +276,10 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 			for i, to := range stmt.Policy.To {
 				scope[i] = to.String()
 			}
-			var withCheck string
+			var using, withCheck string
+			if stmt.Policy.Using != nil {
+				using = sqlparser.String(stmt.Policy.Using.Expr)
+			}
 			if stmt.Policy.WithCheck != nil {
 				withCheck = sqlparser.String(stmt.Policy.WithCheck.Expr)
 			}
@@ -288,7 +291,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 					permissive: stmt.Policy.Permissive,
 					scope:      string(stmt.Policy.Scope),
 					roles:      scope,
-					using:      sqlparser.String(stmt.Policy.Using.Expr),
+					using:      using,
 					withCheck:  withCheck,
 				},
 			}, nil

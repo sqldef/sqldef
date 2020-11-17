@@ -330,19 +330,22 @@ func (d *PostgresDatabase) getPolicyDefs(table string) ([]string, error) {
 	defs := make([]string, 0)
 	for rows.Next() {
 		var (
-			policyName, permissive, roles, cmd, qual string
-			withCheck                                sql.NullString
+			policyName, permissive, roles, cmd string
+			using, withCheck                   sql.NullString
 		)
-		err = rows.Scan(&policyName, &permissive, &roles, &cmd, &qual, &withCheck)
+		err = rows.Scan(&policyName, &permissive, &roles, &cmd, &using, &withCheck)
 		if err != nil {
 			return nil, err
 		}
 		roles = policyRolesPrefixRegex.ReplaceAllString(roles, "")
 		roles = policyRolesSuffixRegex.ReplaceAllString(roles, "")
 		def := fmt.Sprintf(
-			"CREATE POLICY %s ON %s AS %s FOR %s TO %s USING %s",
-			policyName, table, permissive, cmd, roles, qual,
+			"CREATE POLICY %s ON %s AS %s FOR %s TO %s",
+			policyName, table, permissive, cmd, roles,
 		)
+		if using.Valid {
+			def += fmt.Sprintf(" USING %s", using.String)
+		}
 		if withCheck.Valid {
 			def += fmt.Sprintf(" WITH CHECK %s", withCheck.String)
 		}

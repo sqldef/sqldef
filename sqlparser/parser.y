@@ -304,7 +304,7 @@ func forceEOF(yylex interface{}) {
 %type <colIdent> vindex_type vindex_type_opt
 %type <bytes> alter_object_type
 %type <bytes> policy_as_opt policy_for_opt character_cast_opt
-%type <expr> with_check_opt
+%type <expr> using_opt with_check_opt
 %left <bytes> TYPECAST CHECK
 
 %start any_command
@@ -619,15 +619,15 @@ create_statement:
   {
     $$ = &DBDDL{Action: CreateStr, DBName: string($4)}
   }
-| CREATE POLICY sql_id ON table_name policy_as_opt policy_for_opt TO sql_id_list USING openb expression closeb with_check_opt
+| CREATE POLICY sql_id ON table_name policy_as_opt policy_for_opt TO sql_id_list using_opt with_check_opt
   {
     $$ = &DDL{Action: CreatePolicyStr, Table: $5, Policy: &Policy{
         Name: $3,
         Permissive: Permissive($6),
         Scope: $7,
         To: $9,
-        Using: NewWhere(WhereStr, $12),
-        WithCheck: NewWhere(WhereStr, $14),
+        Using: NewWhere(WhereStr, $10),
+        WithCheck: NewWhere(WhereStr, $11),
     }}
   }
 
@@ -647,6 +647,15 @@ policy_for_opt:
 | FOR INSERT
 | FOR UPDATE
 | FOR DELETE
+
+using_opt:
+  {
+    $$ = nil
+  }
+| USING openb expression closeb
+  {
+    $$ = $3
+  }
 
 with_check_opt:
   {
