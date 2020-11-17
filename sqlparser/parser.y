@@ -2681,9 +2681,9 @@ function_call_nonkeyword:
   {
     $$ = &FuncExpr{Name:NewColIdent("current_time")}
   }
-| TYPECAST INTEGER
+| TYPECAST simple_convert_type
   {
-    $$ = &ConvertExpr{Type: &ConvertType{Type: string($2)}}
+    $$ = &ConvertExpr{Type: $2}
   }
 
 func_datetime_precision_opt:
@@ -2821,13 +2821,13 @@ simple_convert_type:
   {
     $$ = &ConvertType{Type: string($1)}
   }
-| INTEGER
+| int_type
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1.Type}
   }
-| BOOL
+| bool_type
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1.Type}
   }
 | TEXT
   {
