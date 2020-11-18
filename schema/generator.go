@@ -888,11 +888,12 @@ func areSamePolicies(policyA, policyB Policy) bool {
 	if len(policyA.roles) != len(policyB.roles) {
 		return false
 	}
-	less := func(i, j int) bool {
-		return i <= j
-	}
-	sort.Slice(policyA.roles, less)
-	sort.Slice(policyB.roles, less)
+	sort.Slice(policyA.roles, func(i, j int) bool {
+		return policyA.roles[i] <= policyA.roles[j]
+	})
+	sort.Slice(policyB.roles, func(i, j int) bool {
+		return policyB.roles[i] <= policyB.roles[j]
+	})
 	for i := range policyA.roles {
 		if policyA.roles[i] != policyB.roles[i] {
 			return false
