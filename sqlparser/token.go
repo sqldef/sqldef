@@ -121,7 +121,6 @@ var keywords = map[string]int{
 	"cascade":             CASCADE,
 	"case":                CASE,
 	"cast":                CAST,
-	"::":                  TYPECAST,
 	"change":              UNUSED,
 	"char":                CHAR,
 	"character":           CHARACTER,
@@ -416,6 +415,7 @@ var keywords = map[string]int{
 	"year_month":          UNUSED,
 	"zerofill":            ZEROFILL,
 	"zone":                ZONE,
+	"::":                  TYPECAST,
 }
 
 // keywordStrings contains the reverse mapping of token to keyword strings
