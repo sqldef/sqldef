@@ -3323,33 +3323,6 @@ func (node *SetExpr) walkSubtree(visit Visit) error {
 	)
 }
 
-// CastExpr represents a cast expression.
-type CastExpr struct {
-	Name ColIdent
-	Expr Expr
-}
-
-// Format formats the node.
-func (node *CastExpr) Format(buf *TrackedBuffer) {
-	// We don't have to backtick set variable names.
-	if node.Name.EqualString("charset") || node.Name.EqualString("names") {
-		buf.Myprintf("%s %v", node.Name.String(), node.Expr)
-	} else {
-		buf.Myprintf("%s = %v", node.Name.String(), node.Expr)
-	}
-}
-
-func (node *CastExpr) walkSubtree(visit Visit) error {
-	if node == nil {
-		return nil
-	}
-	return Walk(
-		visit,
-		node.Name,
-		node.Expr,
-	)
-}
-
 // OnDup represents an ON DUPLICATE KEY clause.
 type OnDup UpdateExprs
 
