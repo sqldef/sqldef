@@ -1340,6 +1340,10 @@ const (
 	RestrictiveStr Permissive = "restrictive"
 )
 
+func (p Permissive) Raw() string {
+	return string(p)
+}
+
 // Show represents a show statement.
 type Show struct {
 	Type          string
@@ -1529,6 +1533,12 @@ func (node SelectExprs) walkSubtree(visit Visit) error {
 		}
 	}
 	return nil
+}
+
+type View struct {
+	Action     string
+	Name       string
+	Definition SelectStatement
 }
 
 // SelectExpr represents a SELECT expression.

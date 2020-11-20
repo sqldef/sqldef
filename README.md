@@ -350,6 +350,18 @@ Remove the line to DROP INDEX.
  )
 ```
 
+### ADD POLICY
+
+```diff
+ CREATE TABLE users (
+   id BIGINT PRIMARY KEY,
+   name VARCHAR(40)
+ );
+ CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((name)::text = current_user)
+
++CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((name)::text = current_user)
+```
+
 Remove the line to DROP CONSTRAINT.
 
 ## Distributions

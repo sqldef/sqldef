@@ -164,6 +164,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			ddls = append(ddls, ddl)
 			// TODO: simulate to remove column from `currentTable.columns`?
 		}
+
+		// Check policies.
+		for _, policy := range currentTable.policies {
+			if containsString(convertPolicyNames(desiredTable.policies), policy.name) {
+				continue
+			}
+			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", policy.name, currentTable.name))
+		}
 	}
 
 	return ddls, nil
@@ -403,29 +411,28 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy 
 		ddls = append(ddls, statement)
 		currentTable.policies = append(currentTable.policies, desiredPolicy)
 	} else {
-		// Index found. If it's different, drop and add index.
+		// policy found. If it's different, drop and add or alter policy.
 		if !areSamePolicies(*currentPolicy, desiredPolicy) {
-			ddls = append(ddls, strings.Replace(statement, "CREATE", "ALTER", 1))
-
-			var newPolicies []Policy
-			for _, currentPolicy := range currentTable.policies {
-				if currentPolicy.name == desiredPolicy.name {
-					newPolicies = append(newPolicies, desiredPolicy)
-				} else {
-					newPolicies = append(newPolicies, currentPolicy)
-				}
+			if currentPolicy.permissive == desiredPolicy.permissive &&
+				currentPolicy.scope == desiredPolicy.scope {
+				statement = strings.Replace(statement, "CREATE", "ALTER", 1)
+				statement = strings.Replace(statement, fmt.Sprintf("AS %s ", strings.ToUpper(currentPolicy.permissive.Raw())), "", 1)
+				statement = strings.Replace(statement, fmt.Sprintf("FOR %s ", strings.ToUpper(currentPolicy.scope)), "", 1)
+				ddls = append(ddls, statement)
+			} else {
+				ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", currentPolicy.name, currentTable.name))
+				ddls = append(ddls, statement)
 			}
-			currentTable.policies = newPolicies
 		}
 	}
 
-	// Examine indexes in desiredTable to delete obsoleted indexes later
+	// Examine policies in desiredTable to delete obsoleted policies later
 	desiredTable := findTableByName(g.desiredTables, tableName)
 	if desiredTable == nil {
 		return nil, fmt.Errorf("%s is performed before create table '%s': '%s'", action, tableName, statement)
 	}
-	if containsString(convertIndexesToIndexNames(desiredTable.indexes), desiredPolicy.name) {
-		return nil, fmt.Errorf("index '%s' is doubly created against table '%s': '%s'", desiredPolicy.name, tableName, statement)
+	if containsString(convertPolicyNames(desiredTable.policies), desiredPolicy.name) {
+		return nil, fmt.Errorf("policy '%s' is doubly created against table '%s': '%s'", desiredPolicy.name, tableName, statement)
 	}
 	desiredTable.policies = append(desiredTable.policies, desiredPolicy)
 
@@ -895,7 +902,7 @@ func areSamePolicies(policyA, policyB Policy) bool {
 		return policyB.roles[i] <= policyB.roles[j]
 	})
 	for i := range policyA.roles {
-		if policyA.roles[i] != policyB.roles[i] {
+		if strings.ToLower(policyA.roles[i]) != strings.ToLower(policyB.roles[i]) {
 			return false
 		}
 	}
@@ -962,6 +969,14 @@ func convertForeignKeysToIndexNames(foreignKeys []ForeignKey) []string {
 		} // unexpected to reach else (really?)
 	}
 	return indexNames
+}
+
+func convertPolicyNames(policies []Policy) []string {
+	policyNames := make([]string, len(policies))
+	for i, policy := range policies {
+		policyNames[i] = policy.name
+	}
+	return policyNames
 }
 
 func containsString(strs []string, str string) bool {

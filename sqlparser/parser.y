@@ -636,21 +636,46 @@ policy_as_opt:
     $$ = nil
   }
 | AS PERMISSIVE
+  {
+    $$ = $2
+  }
 | AS RESTRICTIVE
+  {
+    $$ = $2
+  }
 
 policy_for_opt:
   {
     $$ = nil
   }
 | FOR ALL
+  {
+    $$ = $2
+  }
 | FOR SELECT
+  {
+    $$ = $2
+  }
 | FOR INSERT
+  {
+    $$ = $2
+  }
 | FOR UPDATE
+  {
+    $$ = $2
+  }
 | FOR DELETE
+  {
+    $$ = $2
+  }
 
 using_opt:
   {
     $$ = nil
+  }
+| USING boolean_value
+  {
+    $$ = $2
   }
 | USING openb expression closeb
   {
@@ -869,6 +894,10 @@ character_cast_opt :
     $$ = nil
   }
 | TYPECAST CHARACTER VARYING
+  {
+    $$ = nil
+  }
+| TYPECAST TIMESTAMP time_zone_opt
   {
     $$ = nil
   }
@@ -2262,10 +2291,6 @@ expression:
   {
     $$ = &Default{ColName: $2}
   }
-| expression TYPECAST simple_convert_type
-  {
-    $$ = &ConvertExpr{Expr: $1, Type: $3}
-  }
 
 default_opt:
   /* empty */
@@ -2550,6 +2575,10 @@ value_expression:
     // we'll need to revisit this. The solution
     // will be non-trivial because of grammar conflicts.
     $$ = &IntervalExpr{Expr: $2, Unit: $3.String()}
+  }
+| value_expression TYPECAST simple_convert_type
+  {
+    $$ = &ConvertExpr{Expr: $1, Type: $3}
   }
 | function_call_generic
 | function_call_keyword
@@ -3411,6 +3440,7 @@ non_reserved_keyword:
 | COMMIT
 | COMMITTED
 | CONSTRAINT
+| CURRENT_USER
 | DATE
 | DATETIME
 | DECIMAL

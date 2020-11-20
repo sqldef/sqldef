@@ -180,6 +180,48 @@ func TestCreateTableForeignKey(t *testing.T) {
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 }
 
+func TestCreatePolicy(t *testing.T) {
+	resetTestDatabase()
+
+	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));\n"
+
+	assertApplyOutput(t, createUsers, applyPrefix+createUsers)
+	assertApplyOutput(t, createUsers, nothingModified)
+
+	createPolicy := stripHeredoc(`
+		CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((name)::text = current_user);
+		`,
+	)
+	assertApplyOutput(t, createUsers+createPolicy, applyPrefix+
+		"CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((name)::text = current_user);\n",
+	)
+	assertApplyOutput(t, createUsers+createPolicy, nothingModified)
+
+	createPolicy = stripHeredoc(`
+		CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (id = (current_user)::integer);
+		`,
+	)
+	assertApplyOutput(t, createUsers+createPolicy, applyPrefix+stripHeredoc(`
+		DROP POLICY p_users ON public.users;
+		CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (id = (current_user)::integer);
+		`,
+	))
+	assertApplyOutput(t, createUsers+createPolicy, nothingModified)
+
+	createPolicy = stripHeredoc(`
+		CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING(true);
+		`,
+	)
+	assertApplyOutput(t, createUsers+createPolicy, applyPrefix+stripHeredoc(`
+		ALTER POLICY p_users ON users TO postgres USING(true);
+		`,
+	))
+	assertApplyOutput(t, createUsers+createPolicy, nothingModified)
+
+	assertApplyOutput(t, createUsers, applyPrefix+"DROP POLICY p_users ON public.users;\n")
+	assertApplyOutput(t, createUsers, nothingModified)
+}
+
 func TestPsqldefDropPrimaryKey(t *testing.T) {
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
@@ -435,15 +477,13 @@ func TestPsqldefExport(t *testing.T) {
 	// workaround: local has `public.` but travis doesn't.
 	assertEquals(t, strings.Replace(out, "public.users", "users", 2), stripHeredoc(`
 		CREATE TABLE users (
-		    id bigint NOT NULL,
-		    age integer,
-		    c_char_1 character(1),
-		    c_char_10 character(10),
-		    c_varchar_10 character varying(10),
-		    c_varchar_unlimited character varying
+		    "id" bigint NOT NULL PRIMARY KEY,
+		    "age" integer,
+		    "c_char_1" character(1),
+		    "c_char_10" character(10),
+		    "c_varchar_10" character varying(10),
+		    "c_varchar_unlimited" character varying
 		);
-		ALTER TABLE ONLY users
-		    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
 		`,
 	))
 }
