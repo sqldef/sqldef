@@ -44,15 +44,15 @@ func (d *Sqlite3Database) TableNames() ([]string, error) {
 	return tables, nil
 }
 
-func (d *Sqlite3Database) Views() ([]string, error) {
-	return nil, nil
-}
-
 func (d *Sqlite3Database) DumpTableDDL(table string) (string, error) {
 	query := `select sql from sqlite_master where tbl_name = ?`
 	var sql string
 	err := d.db.QueryRow(query, table).Scan(&sql)
 	return sql, err
+}
+
+func (d *Sqlite3Database) Views() ([]string, error) {
+	return nil, nil
 }
 
 func (d *Sqlite3Database) DB() *sql.DB {

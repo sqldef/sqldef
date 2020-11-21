@@ -1018,12 +1018,27 @@ func TestMysqldefEnumValues(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
-func TestMysqldefIgnoreView(t *testing.T) {
+func TestMysqldefView(t *testing.T) {
 	resetTestDatabase()
 
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", "CREATE VIEW foo AS SELECT 1;")
-	mustExecute("mysqldef", "-uroot", "mysqldef_test", "--export")
-	assertApplyOutput(t, "", nothingModified)
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint(20) NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createView := "CREATE OR REPLACE VIEW foo AS select 1 as `1`;"
+	assertApplyOutput(t, createTable+createView, applyPrefix+createView+"\n")
+	assertApplyOutput(t, createTable+createView, nothingModified)
+
+	createView = "CREATE OR REPLACE VIEW foo AS select 2 as `2`;"
+	assertApplyOutput(t, createTable+createView, applyPrefix+createView+"\n")
+	assertApplyOutput(t, createTable+createView, nothingModified)
+
+	assertApplyOutput(t, "", applyPrefix+"DROP TABLE `users`;\nDROP VIEW foo;\n")
 }
 
 func TestMysqldefDefaultValue(t *testing.T) {
