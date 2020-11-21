@@ -600,7 +600,7 @@ create_statement:
   {
     $$ = &DDL{Action: CreateViewStr, View: &View{
         Action: CreateViewStr,
-        Name: $4,
+        Name: $4.ToViewName(),
         Definition: $6,
     }}
   }

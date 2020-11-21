@@ -2652,7 +2652,7 @@ var yyErrorMessages = [...]struct {
 /*	parser for yacc output	*/
 
 var (
-	yyDebug        = 10
+	yyDebug        = 0
 	yyErrorVerbose = false
 )
 
@@ -3307,7 +3307,7 @@ yydefault:
 		{
 			yyVAL.statement = &DDL{Action: CreateViewStr, View: &View{
 				Action:     CreateViewStr,
-				Name:       yyDollar[4].tableName,
+				Name:       yyDollar[4].tableName.ToViewName(),
 				Definition: yyDollar[6].selStmt,
 			}}
 		}

@@ -718,6 +718,8 @@ func (node *DDL) Format(buf *TrackedBuffer) {
 		}
 	case CreateVindexStr:
 		buf.Myprintf("%s %v %v", node.Action, node.VindexSpec.Name, node.VindexSpec)
+	case CreateViewStr:
+		buf.Myprintf("%s %v as %v", node.Action, node.View.Name, node.View.Definition)
 	case AddColVindexStr:
 		buf.Myprintf("alter table %v %s %v (", node.Table, node.Action, node.VindexSpec.Name)
 		for i, col := range node.VindexCols {
