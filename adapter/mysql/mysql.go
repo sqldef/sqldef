@@ -44,6 +44,10 @@ func (d *MysqlDatabase) TableNames() ([]string, error) {
 	return tables, nil
 }
 
+func (d *MysqlDatabase) Views() ([]string, error) {
+	return nil, nil
+}
+
 func (d *MysqlDatabase) DumpTableDDL(table string) (string, error) {
 	var ddl string
 	sql := fmt.Sprintf("show create table `%s`;", table) // TODO: escape table name

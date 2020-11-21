@@ -669,6 +669,7 @@ type DDL struct {
 	VindexCols    []ColIdent
 	ForeignKey    *ForeignKeyDefinition
 	Policy        *Policy
+	View          *View
 }
 
 // DDL strings.
@@ -686,6 +687,7 @@ const (
 	AddPrimaryKeyStr = "add primary key"
 	AddForeignKeyStr = "add foreign key"
 	CreatePolicyStr  = "create policy"
+	CreateViewStr    = "create view"
 
 	// Vindex DDL param to specify the owner of a vindex
 	VindexOwnerStr = "owner"
@@ -1537,7 +1539,7 @@ func (node SelectExprs) walkSubtree(visit Visit) error {
 
 type View struct {
 	Action     string
-	Name       string
+	Name       TableName
 	Definition SelectStatement
 }
 

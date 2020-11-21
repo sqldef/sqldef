@@ -222,6 +222,38 @@ func TestCreatePolicy(t *testing.T) {
 	assertApplyOutput(t, createUsers, nothingModified)
 }
 
+func TestCreateView(t *testing.T) {
+	resetTestDatabase()
+
+	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));\n"
+	createPosts := "CREATE TABLE posts (id BIGINT PRIMARY KEY, name character varying(100), user_id BIGINT, is_deleted boolean);\n"
+
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
+	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+
+	createView := stripHeredoc(`
+		CREATE OR REPLACE VIEW view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
+		`,
+	)
+	assertApplyOutput(t, createUsers+createPosts+createView, applyPrefix+
+		"CREATE OR REPLACE VIEW view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));\n",
+	)
+	assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
+
+	createView = stripHeredoc(`
+		CREATE OR REPLACE VIEW view_user_posts AS SELECT p.id from (posts p INNER JOIN users u ON ((p.user_id = u.id))) WHERE (p.is_deleted = FALSE);
+		`,
+	)
+	assertApplyOutput(t, createUsers+createPosts+createView, applyPrefix+stripHeredoc(`
+		CREATE OR REPLACE VIEW view_user_posts AS SELECT p.id from (posts p INNER JOIN users u ON ((p.user_id = u.id))) WHERE (p.is_deleted = FALSE);
+		`,
+	))
+	assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
+
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"DROP VIEW view_user_posts;\n")
+	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+}
+
 func TestPsqldefDropPrimaryKey(t *testing.T) {
 	createTable := stripHeredoc(`
 		CREATE TABLE users (

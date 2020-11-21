@@ -34,6 +34,9 @@ type Generator struct {
 	mode          GeneratorMode
 	desiredTables []*Table
 	currentTables []*Table
+
+	desiredViews []*View
+	currentViews []*View
 }
 
 // Parse argument DDLs and call `generateDDLs()`
@@ -54,10 +57,14 @@ func GenerateIdempotentDDLs(mode GeneratorMode, desiredSQL string, currentSQL st
 		return nil, err
 	}
 
+	views := convertDDLsToViews(currentDDLs)
+
 	generator := Generator{
 		mode:          mode,
 		desiredTables: []*Table{},
 		currentTables: tables,
+		desiredViews:  []*View{},
+		currentViews:  views,
 	}
 	return generator.generateDDLs(desiredDDLs)
 }
@@ -99,11 +106,17 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 			ddls = append(ddls, indexDDLs...)
 		case *AddPolicy:
-			indexDDLs, err := g.generateDDLsForCreatePolicy(desired.tableName, desired.policy, "ALTER POLICY", ddl.Statement())
+			policyDDLs, err := g.generateDDLsForCreatePolicy(desired.tableName, desired.policy, "ALTER POLICY", ddl.Statement())
 			if err != nil {
 				return ddls, err
 			}
-			ddls = append(ddls, indexDDLs...)
+			ddls = append(ddls, policyDDLs...)
+		case *View:
+			viewDDLs, err := g.generateDDLsForCreateView(desired.name, desired, "CREATE OR REPLACE VIEW", ddl.Statement())
+			if err != nil {
+				return ddls, err
+			}
+			ddls = append(ddls, viewDDLs...)
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", desired)
 		}
@@ -172,6 +185,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", policy.name, currentTable.name))
 		}
+	}
+
+	// Clean up obsoleted views
+	for _, currentView := range g.currentViews {
+		if containsString(convertViewNames(g.desiredViews), currentView.name) {
+			continue
+		}
+		ddls = append(ddls, fmt.Sprintf("DROP VIEW %s", currentView.name))
 	}
 
 	return ddls, nil
@@ -407,7 +428,7 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy 
 
 	currentPolicy := findPolicyByName(currentTable.policies, desiredPolicy.name)
 	if currentPolicy == nil {
-		// Index not found, add index.
+		// Policy not found, add policy.
 		ddls = append(ddls, statement)
 		currentTable.policies = append(currentTable.policies, desiredPolicy)
 	} else {
@@ -435,6 +456,29 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy 
 		return nil, fmt.Errorf("policy '%s' is doubly created against table '%s': '%s'", desiredPolicy.name, tableName, statement)
 	}
 	desiredTable.policies = append(desiredTable.policies, desiredPolicy)
+
+	return ddls, nil
+}
+
+func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View, action string, statement string) ([]string, error) {
+	var ddls []string
+
+	currentView := findViewByName(g.currentViews, viewName)
+	if currentView == nil {
+		// View not found, add view.
+		ddls = append(ddls, desiredView.statement)
+	} else {
+		// View found. If it's different, create or replace view.
+		if currentView.definition != desiredView.definition {
+			ddls = append(ddls, desiredView.statement)
+		}
+	}
+
+	// Examine policies in desiredTable to delete obsoleted policies later
+	if containsString(convertViewNames(g.desiredViews), desiredView.name) {
+		return nil, fmt.Errorf("view '%s' is doubly created: '%s'", desiredView.name, desiredView.statement)
+	}
+	g.desiredViews = append(g.desiredViews, desiredView)
 
 	return ddls, nil
 }
@@ -731,11 +775,23 @@ func convertDDLsToTables(ddls []DDL) ([]*Table, error) {
 			}
 
 			table.policies = append(table.policies, stmt.policy)
+		case *View:
+			// do nothing
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in convertDDLsToTables: %v", stmt)
 		}
 	}
 	return tables, nil
+}
+
+func convertDDLsToViews(ddls []DDL) []*View {
+	var views []*View
+	for _, ddl := range ddls {
+		if view, ok := ddl.(*View); ok {
+			views = append(views, view)
+		}
+	}
+	return views
 }
 
 func findTableByName(tables []*Table, name string) *Table {
@@ -778,6 +834,15 @@ func findPolicyByName(policies []Policy, name string) *Policy {
 	for _, policy := range policies {
 		if policy.name == name {
 			return &policy
+		}
+	}
+	return nil
+}
+
+func findViewByName(views []*View, name string) *View {
+	for _, view := range views {
+		if view.name == name {
+			return view
 		}
 	}
 	return nil
@@ -977,6 +1042,14 @@ func convertPolicyNames(policies []Policy) []string {
 		policyNames[i] = policy.name
 	}
 	return policyNames
+}
+
+func convertViewNames(views []*View) []string {
+	viewNames := make([]string, len(views))
+	for i, view := range views {
+		viewNames[i] = view.name
+	}
+	return viewNames
 }
 
 func containsString(strs []string, str string) bool {

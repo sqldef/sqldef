@@ -306,6 +306,7 @@ func forceEOF(yylex interface{}) {
 %type <bytes> policy_as_opt policy_for_opt character_cast_opt
 %type <expr> using_opt with_check_opt
 %left <bytes> TYPECAST CHECK
+%type <bytes> or_replace_opt
 
 %start any_command
 
@@ -595,13 +596,13 @@ create_statement:
         IndexCols: $10,
       }
   }
-| CREATE VIEW table_name ddl_force_eof
+| CREATE or_replace_opt VIEW table_name AS select_statement
   {
-    $$ = &DDL{Action: CreateStr, NewName: $3.ToViewName()}
-  }
-| CREATE OR REPLACE VIEW table_name ddl_force_eof
-  {
-    $$ = &DDL{Action: CreateStr, NewName: $5.ToViewName()}
+    $$ = &DDL{Action: CreateViewStr, View: &View{
+        Action: CreateViewStr,
+        Name: $4,
+        Definition: $6,
+    }}
   }
 | CREATE VINDEX sql_id vindex_type_opt vindex_params_opt
   {
@@ -629,6 +630,15 @@ create_statement:
         Using: NewWhere(WhereStr, $10),
         WithCheck: NewWhere(WhereStr, $11),
     }}
+  }
+
+or_replace_opt:
+  {
+    $$ = nil
+  }
+| OR REPLACE
+  {
+    $$ = nil
   }
 
 policy_as_opt:

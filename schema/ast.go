@@ -105,6 +105,12 @@ type Policy struct {
 	withCheck     string
 }
 
+type View struct {
+	statement  string
+	name       string
+	definition string
+}
+
 type Value struct {
 	valueType ValueType
 	raw       []byte
@@ -161,6 +167,10 @@ func (a *AddForeignKey) Statement() string {
 
 func (a *AddPolicy) Statement() string {
 	return a.statement
+}
+
+func (v *View) Statement() string {
+	return v.statement
 }
 
 func (t *Table) PrimaryKey() *Index {
