@@ -1025,20 +1025,35 @@ func TestMysqldefView(t *testing.T) {
 		CREATE TABLE users (
 		  id bigint(20) NOT NULL
 		);
+		CREATE TABLE posts (
+			id bigint(20) NOT NULL,
+			user_id bigint(20) NOT NULL,
+			is_deleted tinyint(1)
+		);
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createView := "CREATE OR REPLACE VIEW foo AS select 1 as `1`;"
-	assertApplyOutput(t, createTable+createView, applyPrefix+createView+"\n")
+	createView := stripHeredoc(`
+		CREATE OR REPLACE VIEW foo AS select u.id as id, p.id as post_id from  (mysqldef_test.users as u join mysqldef_test.posts as p on ((u.id = p.user_id)));
+		`,
+	)
+	assertApplyOutput(t, createTable+createView, applyPrefix+createView)
 	assertApplyOutput(t, createTable+createView, nothingModified)
 
-	createView = "CREATE OR REPLACE VIEW foo AS select 2 as `2`;"
-	assertApplyOutput(t, createTable+createView, applyPrefix+createView+"\n")
+	createView = stripHeredoc(`
+		CREATE OR REPLACE VIEW foo AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
+		`,
+	)
+	expected := stripHeredoc(`
+		CREATE OR REPLACE VIEW foo AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
+		`,
+	)
+	assertApplyOutput(t, createTable+createView, applyPrefix+expected)
 	assertApplyOutput(t, createTable+createView, nothingModified)
 
-	assertApplyOutput(t, "", applyPrefix+"DROP TABLE `users`;\nDROP VIEW foo;\n")
+	assertApplyOutput(t, "", applyPrefix+"DROP TABLE `posts`;\nDROP TABLE `users`;\nDROP VIEW foo;\n")
 }
 
 func TestMysqldefDefaultValue(t *testing.T) {

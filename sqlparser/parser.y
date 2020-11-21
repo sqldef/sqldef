@@ -683,22 +683,18 @@ using_opt:
   {
     $$ = nil
   }
-| USING boolean_value
+| USING expression
   {
     $$ = $2
-  }
-| USING openb expression closeb
-  {
-    $$ = $3
   }
 
 with_check_opt:
   {
     $$ = nil
   }
-| WITH CHECK openb expression closeb
+| WITH CHECK expression
   {
-    $$ = $4
+    $$ = $3
   }
 
 unique_opt:

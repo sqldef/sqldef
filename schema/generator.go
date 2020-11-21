@@ -112,7 +112,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 			ddls = append(ddls, policyDDLs...)
 		case *View:
-			viewDDLs, err := g.generateDDLsForCreateView(desired.name, desired, "CREATE OR REPLACE VIEW", ddl.Statement())
+			viewDDLs, err := g.generateDDLsForCreateView(desired.name, desired)
 			if err != nil {
 				return ddls, err
 			}
@@ -436,10 +436,14 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy 
 		if !areSamePolicies(*currentPolicy, desiredPolicy) {
 			if currentPolicy.permissive == desiredPolicy.permissive &&
 				currentPolicy.scope == desiredPolicy.scope {
-				statement = strings.Replace(statement, "CREATE", "ALTER", 1)
-				statement = strings.Replace(statement, fmt.Sprintf("AS %s ", strings.ToUpper(currentPolicy.permissive.Raw())), "", 1)
-				statement = strings.Replace(statement, fmt.Sprintf("FOR %s ", strings.ToUpper(currentPolicy.scope)), "", 1)
-				ddls = append(ddls, statement)
+				ddl := fmt.Sprintf("ALTER POLICY %s ON %s TO %s", desiredPolicy.name, tableName, strings.Join(desiredPolicy.roles, ","))
+				if desiredPolicy.using != "" {
+					ddl += fmt.Sprintf(" USING %s", desiredPolicy.using)
+				}
+				if desiredPolicy.withCheck != "" {
+					ddl += fmt.Sprintf(" WITH CHECK %s", desiredPolicy.withCheck)
+				}
+				ddls = append(ddls, ddl)
 			} else {
 				ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", currentPolicy.name, currentTable.name))
 				ddls = append(ddls, statement)
@@ -460,7 +464,7 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy 
 	return ddls, nil
 }
 
-func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View, action string, statement string) ([]string, error) {
+func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View) ([]string, error) {
 	var ddls []string
 
 	currentView := findViewByName(g.currentViews, viewName)
@@ -470,7 +474,7 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 	} else {
 		// View found. If it's different, create or replace view.
 		if currentView.definition != desiredView.definition {
-			ddls = append(ddls, desiredView.statement)
+			ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE VIEW %s AS %s", viewName, desiredView.definition))
 		}
 	}
 
@@ -942,20 +946,17 @@ func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB Forei
 }
 
 func areSamePolicies(policyA, policyB Policy) bool {
-	if policyA.name != policyB.name {
+	if strings.ToLower(policyA.scope) != strings.ToLower(policyB.scope) {
 		return false
 	}
-	if policyA.scope != policyB.scope {
+	if strings.ToLower(policyA.permissive.Raw()) != strings.ToLower(policyB.permissive.Raw()) {
 		return false
 	}
-	if policyA.permissive != policyB.permissive {
-		return false
+	if strings.ToLower(policyA.using) != strings.ToLower(policyB.using) {
+		return fmt.Sprintf("(%s)", policyA.using) == policyB.using
 	}
-	if policyA.using != policyB.using {
-		return false
-	}
-	if policyA.withCheck != policyB.withCheck {
-		return false
+	if strings.ToLower(policyA.withCheck) != strings.ToLower(policyB.withCheck) {
+		return fmt.Sprintf("(%s)", policyA.withCheck) == policyB.withCheck
 	}
 	if len(policyA.roles) != len(policyB.roles) {
 		return false

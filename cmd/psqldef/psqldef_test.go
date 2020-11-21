@@ -209,11 +209,11 @@ func TestCreatePolicy(t *testing.T) {
 	assertApplyOutput(t, createUsers+createPolicy, nothingModified)
 
 	createPolicy = stripHeredoc(`
-		CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING(true);
+		CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);
 		`,
 	)
 	assertApplyOutput(t, createUsers+createPolicy, applyPrefix+stripHeredoc(`
-		ALTER POLICY p_users ON users TO postgres USING(true);
+		ALTER POLICY p_users ON public.users TO postgres USING (true);
 		`,
 	))
 	assertApplyOutput(t, createUsers+createPolicy, nothingModified)
@@ -245,7 +245,7 @@ func TestCreateView(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts+createView, applyPrefix+stripHeredoc(`
-		CREATE OR REPLACE VIEW view_user_posts AS SELECT p.id from (posts p INNER JOIN users u ON ((p.user_id = u.id))) WHERE (p.is_deleted = FALSE);
+		CREATE OR REPLACE VIEW view_user_posts AS select p.id from (posts as p join users as u on ((p.user_id = u.id))) where (p.is_deleted = false);
 		`,
 	))
 	assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)

@@ -44,6 +44,35 @@ func TestSQLite3defCreateTable(t *testing.T) {
 	assertApplyOutput(t, createTable1, nothingModified)
 }
 
+func TestSQLite3defCreateView(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id integer NOT NULL,
+		  name text,
+		  age integer
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createView := stripHeredoc(`
+		CREATE VIEW view_users AS SELECT id FROM users WHERE age = 1;
+		`,
+	)
+	assertApplyOutput(t, createTable+createView, applyPrefix+createView)
+	assertApplyOutput(t, createTable+createView, nothingModified)
+
+	createView = stripHeredoc(`
+		CREATE VIEW view_users AS SELECT id FROM users WHERE age = 2;
+		`,
+	)
+	assertApplyOutput(t, createTable+createView, applyPrefix+createView)
+	assertApplyOutput(t, createTable+createView, nothingModified)
+}
+
 func TestSQLite3defColumnLiteral(t *testing.T) {
 	resetTestDatabase()
 
@@ -215,5 +244,3 @@ func stripHeredoc(heredoc string) string {
 	re := regexp.MustCompilePOSIX("^\t*")
 	return re.ReplaceAllLiteralString(heredoc, "")
 }
-
-//
