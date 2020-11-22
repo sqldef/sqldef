@@ -271,6 +271,12 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 					onUpdate:         stmt.ForeignKey.OnUpdate.String(),
 				},
 			}, nil
+		} else if stmt.Action == "create view" {
+			return &View{
+				statement:  ddl,
+				name:       stmt.View.Name.Name.String(),
+				definition: sqlparser.String(stmt.View.Definition),
+			}, nil
 		} else {
 			return nil, fmt.Errorf(
 				"unsupported type of DDL action (only 'CREATE TABLE', 'CREATE INDEX' and 'ALTER TABLE ADD INDEX' are supported) '%s': %s",

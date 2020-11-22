@@ -209,13 +209,16 @@ Some of them can also be used for input schema file.
   - Index: ADD INDEX, ADD UNIQUE INDEX, CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX
   - Primary key: ADD PRIMARY KEY, DROP PRIMARY KEY
   - Foreign Key: ADD FOREIGN KEY, DROP FOREIGN KEY
+  - View: CREATE VIEW, CREATE OR REPLACE VIEW, DROP VIEW
 - PostgreSQL
   - Table: CREATE TABLE, DROP TABLE
   - Column: ADD COLUMN, ALTER COLUMN, DROP COLUMN
   - Index: CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX
   - Foreign / Primary Key: ADD FOREIGN KEY, DROP CONSTRAINT
+  - View: CREATE VIEW, CREATE OR REPLACE VIEW, DROP VIEW
 - SQLite3
   - Table: CREATE TABLE, DROP TABLE
+  - View: CREATE VIEW, DROP VIEW
 
 ## MySQL examples
 ### CREATE TABLE
@@ -303,6 +306,21 @@ Remove the line to DROP FOREIGN KEY.
 
 Composite foreign key may not work for now.
 
+### CREATE (OR REPLACE) VIEW
+
+```diff
+ CREATE OR REPLACE VIEW foo AS
+   select u.id as id, p.id as post_id
+   from  (
+     mysqldef_test.users as u
+     join mysqldef_test.posts as p on ((u.id = p.user_id))
+   )
+ ;
++ CREATE OR REPLACE VIEW foo AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
+```
+
+Remove the line to DROP VIEW.
+
 ## PostgreSQL examples
 ### CREATE TABLE
 ```diff
@@ -351,6 +369,21 @@ Remove the line to DROP INDEX.
 ```
 
 Remove the line to DROP CONSTRAINT.
+
+### CREATE (OR REPLACE) VIEW
+
+```diff
+ CREATE OR REPLACE VIEW foo AS
+   select u.id as id, p.id as post_id
+   from  (
+     mysqldef_test.users as u
+     join mysqldef_test.posts as p on ((u.id = p.user_id))
+   )
+ ;
++ CREATE OR REPLACE VIEW foo AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
+```
+
+Remove the line to DROP VIEW.
 
 ## Distributions
 ### Linux

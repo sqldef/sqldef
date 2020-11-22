@@ -33,6 +33,9 @@ type Generator struct {
 	mode          GeneratorMode
 	desiredTables []*Table
 	currentTables []*Table
+
+	desiredViews []*View
+	currentViews []*View
 }
 
 // Parse argument DDLs and call `generateDDLs()`
@@ -53,10 +56,14 @@ func GenerateIdempotentDDLs(mode GeneratorMode, desiredSQL string, currentSQL st
 		return nil, err
 	}
 
+	views := convertDDLsToViews(currentDDLs)
+
 	generator := Generator{
 		mode:          mode,
 		desiredTables: []*Table{},
 		currentTables: tables,
+		desiredViews:  []*View{},
+		currentViews:  views,
 	}
 	return generator.generateDDLs(desiredDDLs)
 }
@@ -97,6 +104,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return ddls, err
 			}
 			ddls = append(ddls, indexDDLs...)
+		case *View:
+			viewDDLs, err := g.generateDDLsForCreateView(desired.name, desired)
+			if err != nil {
+				return ddls, err
+			}
+			ddls = append(ddls, viewDDLs...)
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", desired)
 		}
@@ -157,6 +170,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			ddls = append(ddls, ddl)
 			// TODO: simulate to remove column from `currentTable.columns`?
 		}
+	}
+
+	// Clean up obsoleted views
+	for _, currentView := range g.currentViews {
+		if containsString(convertViewNames(g.desiredViews), currentView.name) {
+			continue
+		}
+		ddls = append(ddls, fmt.Sprintf("DROP VIEW %s", currentView.name))
 	}
 
 	return ddls, nil
@@ -378,6 +399,34 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 		return nil, fmt.Errorf("index '%s' is doubly created against table '%s': '%s'", desiredIndex.name, tableName, statement)
 	}
 	desiredTable.indexes = append(desiredTable.indexes, desiredIndex)
+
+	return ddls, nil
+}
+
+func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View) ([]string, error) {
+	var ddls []string
+
+	currentView := findViewByName(g.currentViews, viewName)
+	if currentView == nil {
+		// View not found, add view.
+		ddls = append(ddls, desiredView.statement)
+	} else {
+		// View found. If it's different, create or replace view.
+		if strings.ToLower(currentView.definition) != strings.ToLower(desiredView.definition) {
+			if g.mode == GeneratorModeSQLite3 {
+				ddls = append(ddls, fmt.Sprintf("DROP VIEW %s", viewName))
+				ddls = append(ddls, fmt.Sprintf("CREATE VIEW %s AS %s", viewName, desiredView.definition))
+			} else {
+				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE VIEW %s AS %s", viewName, desiredView.definition))
+			}
+		}
+	}
+
+	// Examine policies in desiredTable to delete obsoleted policies later
+	if containsString(convertViewNames(g.desiredViews), desiredView.name) {
+		return nil, fmt.Errorf("view '%s' is doubly created: '%s'", desiredView.name, desiredView.statement)
+	}
+	g.desiredViews = append(g.desiredViews, desiredView)
 
 	return ddls, nil
 }
@@ -667,11 +716,23 @@ func convertDDLsToTables(ddls []DDL) ([]*Table, error) {
 			}
 
 			table.foreignKeys = append(table.foreignKeys, stmt.foreignKey)
+		case *View:
+			// do nothing
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in convertDDLsToTables: %v", stmt)
 		}
 	}
 	return tables, nil
+}
+
+func convertDDLsToViews(ddls []DDL) []*View {
+	var views []*View
+	for _, ddl := range ddls {
+		if view, ok := ddl.(*View); ok {
+			views = append(views, view)
+		}
+	}
+	return views
 }
 
 func findTableByName(tables []*Table, name string) *Table {
@@ -719,6 +780,14 @@ func findPrimaryKey(indexes []Index) *Index {
 	return nil
 }
 
+func findViewByName(views []*View, name string) *View {
+	for _, view := range views {
+		if view.name == name {
+			return view
+		}
+	}
+	return nil
+}
 func (g *Generator) haveSameColumnDefinition(current Column, desired Column) bool {
 	// Not examining AUTO_INCREMENT and UNIQUE KEY because it'll be added in a later stage
 	return g.haveSameDataType(current, desired) &&
@@ -872,6 +941,14 @@ func convertForeignKeysToIndexNames(foreignKeys []ForeignKey) []string {
 		} // unexpected to reach else (really?)
 	}
 	return indexNames
+}
+
+func convertViewNames(views []*View) []string {
+	viewNames := make([]string, len(views))
+	for i, view := range views {
+		viewNames[i] = view.name
+	}
+	return viewNames
 }
 
 func containsString(strs []string, str string) bool {

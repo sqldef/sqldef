@@ -668,6 +668,7 @@ type DDL struct {
 	VindexSpec    *VindexSpec
 	VindexCols    []ColIdent
 	ForeignKey    *ForeignKeyDefinition
+	View          *View
 }
 
 // DDL strings.
@@ -684,6 +685,7 @@ const (
 	CreateIndexStr   = "create index"
 	AddPrimaryKeyStr = "add primary key"
 	AddForeignKeyStr = "add foreign key"
+	CreateViewStr    = "create view"
 
 	// Vindex DDL param to specify the owner of a vindex
 	VindexOwnerStr = "owner"
@@ -714,6 +716,8 @@ func (node *DDL) Format(buf *TrackedBuffer) {
 		}
 	case CreateVindexStr:
 		buf.Myprintf("%s %v %v", node.Action, node.VindexSpec.Name, node.VindexSpec)
+	case CreateViewStr:
+		buf.Myprintf("%s %v as %v", node.Action, node.View.Name, node.View.Definition)
 	case AddColVindexStr:
 		buf.Myprintf("alter table %v %s %v (", node.Table, node.Action, node.VindexSpec.Name)
 		for i, col := range node.VindexCols {
@@ -1490,6 +1494,12 @@ func (node Comments) Format(buf *TrackedBuffer) {
 
 func (node Comments) walkSubtree(visit Visit) error {
 	return nil
+}
+
+type View struct {
+	Action     string
+	Name       TableName
+	Definition SelectStatement
 }
 
 // SelectExprs represents SELECT expressions.
