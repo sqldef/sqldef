@@ -192,11 +192,11 @@ func TestCreatePolicy(t *testing.T) {
 	assertApplyOutput(t, createUsers, nothingModified)
 
 	createPolicy := stripHeredoc(`
-		CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((name)::text = current_user);
+		CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((current_user)::integer = 1);
 		`,
 	)
 	assertApplyOutput(t, createUsers+createPolicy, applyPrefix+
-		"CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((name)::text = current_user);\n",
+		"CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((current_user)::integer = 1);\n",
 	)
 	assertApplyOutput(t, createUsers+createPolicy, nothingModified)
 
