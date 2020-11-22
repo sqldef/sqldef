@@ -209,13 +209,17 @@ Some of them can also be used for input schema file.
   - Index: ADD INDEX, ADD UNIQUE INDEX, CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX
   - Primary key: ADD PRIMARY KEY, DROP PRIMARY KEY
   - Foreign Key: ADD FOREIGN KEY, DROP FOREIGN KEY
+  - View: CREATE VIEW, CREATE OR REPLACE VIEW, DROP VIEW
 - PostgreSQL
   - Table: CREATE TABLE, DROP TABLE
   - Column: ADD COLUMN, ALTER COLUMN, DROP COLUMN
   - Index: CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX
   - Foreign / Primary Key: ADD FOREIGN KEY, DROP CONSTRAINT
+  - Policy: CREATE POLICY, ALTER POLICY, DROP POLICY
+  - View: CREATE VIEW, CREATE OR REPLACE VIEW, DROP VIEW
 - SQLite3
   - Table: CREATE TABLE, DROP TABLE
+  - View: CREATE VIEW, DROP VIEW
 
 ## MySQL examples
 ### CREATE TABLE
@@ -303,6 +307,22 @@ Remove the line to DROP FOREIGN KEY.
 
 Composite foreign key may not work for now.
 
+### CREATE (OR REPLACE) VIEW
+
+```diff
+ CREATE OR REPLACE VIEW foo AS
+   select u.id as id, p.id as post_id
+   from  (
+     mysqldef_test.users as u
+     join mysqldef_test.posts as p on ((u.id = p.user_id))
+   )
+ ;
+
++ CREATE OR REPLACE VIEW foo AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
+```
+
+Remove the line to DROP VIEW.
+
 ## PostgreSQL examples
 ### CREATE TABLE
 ```diff
@@ -362,7 +382,23 @@ Remove the line to DROP INDEX.
 +CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((name)::text = current_user)
 ```
 
-Remove the line to DROP CONSTRAINT.
+Remove the line to DROP POLICY.
+
+### CREATE (OR REPLACE) VIEW
+
+```diff
+ CREATE OR REPLACE VIEW foo AS
+   select u.id as id, p.id as post_id
+   from  (
+     mysqldef_test.users as u
+     join mysqldef_test.posts as p on ((u.id = p.user_id))
+   )
+ ;
+
++ CREATE OR REPLACE VIEW foo AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
+```
+
+Remove the line to DROP VIEW.
 
 ## Distributions
 ### Linux
