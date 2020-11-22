@@ -10,6 +10,7 @@ services:
   - postgresql
 dist: xenial
 addons:
+  postgresql: "10"
   apt:
     sources:
       - mysql-5.7-trusty
