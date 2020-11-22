@@ -473,8 +473,13 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 		ddls = append(ddls, desiredView.statement)
 	} else {
 		// View found. If it's different, create or replace view.
-		if currentView.definition != desiredView.definition {
-			ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE VIEW %s AS %s", viewName, desiredView.definition))
+		if strings.ToLower(currentView.definition) != strings.ToLower(desiredView.definition) {
+			if g.mode == GeneratorModeSQLite3 {
+				ddls = append(ddls, fmt.Sprintf("DROP VIEW %s", viewName))
+				ddls = append(ddls, fmt.Sprintf("CREATE VIEW %s AS %s", viewName, desiredView.definition))
+			} else {
+				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE VIEW %s AS %s", viewName, desiredView.definition))
+			}
 		}
 	}
 
