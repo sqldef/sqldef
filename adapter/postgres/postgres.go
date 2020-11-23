@@ -84,7 +84,7 @@ func (d *PostgresDatabase) Views() ([]string, error) {
 		definition = spaces.ReplaceAllString(definition, " ")
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE OR REPLACE VIEW %s AS %s", schema+"."+name, definition,
+				"CREATE VIEW %s AS %s", schema+"."+name, definition,
 			),
 		)
 	}
