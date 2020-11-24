@@ -1,3 +1,7 @@
+## v0.8.0
+
+- Support `CREATE VIEW` and `DROP VIEW` [#78](https://github.com/k0kubun/sqldef/issues/78)
+
 ## v0.7.7
 
 - Fix an error when adding `NOT NULL` [#71](https://github.com/k0kubun/sqldef/issues/71)
