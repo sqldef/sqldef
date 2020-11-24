@@ -10,15 +10,13 @@ on:
       - reopened
 jobs:
   build:
-    name: Build
+    name: build
     runs-on: ubuntu-latest
     steps:
-      - name: Setup Go
-        uses: actions/setup-go@v2
+      - uses: actions/setup-go@v2
         with:
           go-version: 1.13
+      - uses: actions/checkout@v2
 
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
-
+      - run: docker-compose up -d
       - run: make test
