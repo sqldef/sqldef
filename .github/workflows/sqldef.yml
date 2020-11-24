@@ -29,8 +29,6 @@ jobs:
 
   package:
     runs-on: ubuntu-latest
-    needs:
-      - test
     steps:
       - uses: actions/setup-go@v2
         with:
