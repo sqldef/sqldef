@@ -20,3 +20,7 @@ jobs:
 
       - run: docker-compose up -d
       - run: make test
+        env:
+          MYSQL_HOST: 127.0.0.1
+          PGHOST: 127.0.0.1
+          PGSSLMODE: disable
