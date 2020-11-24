@@ -27,6 +27,16 @@ jobs:
           PGHOST: 127.0.0.1
           PGSSLMODE: disable
 
+  package:
+    runs-on: ubuntu-latest
+    needs:
+      - test
+    steps:
+      - uses: actions/setup-go@v2
+        with:
+          go-version: 1.13
+      - uses: actions/checkout@v2
+
       - run: make package
 
   release:
