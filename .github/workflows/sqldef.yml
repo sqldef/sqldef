@@ -1,0 +1,24 @@
+name: sqldef
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.13
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - run: make test
