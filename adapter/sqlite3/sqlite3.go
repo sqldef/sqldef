@@ -26,7 +26,7 @@ func NewDatabase(config adapter.Config) (adapter.Database, error) {
 
 func (d *Sqlite3Database) TableNames() ([]string, error) {
 	rows, err := d.db.Query(
-		`select tbl_name from sqlite_master`,
+		`select tbl_name from sqlite_master where type = 'table'`,
 	)
 	if err != nil {
 		return nil, err
@@ -49,6 +49,26 @@ func (d *Sqlite3Database) DumpTableDDL(table string) (string, error) {
 	var sql string
 	err := d.db.QueryRow(query, table).Scan(&sql)
 	return sql, err
+}
+
+func (d *Sqlite3Database) Views() ([]string, error) {
+	var ddls []string
+	query := "select sql from sqlite_master where type = 'view';"
+	rows, err := d.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var sql string
+		if err = rows.Scan(&sql); err != nil {
+			return nil, err
+		}
+		ddls = append(ddls, sql)
+	}
+
+	return ddls, nil
 }
 
 func (d *Sqlite3Database) DB() *sql.DB {

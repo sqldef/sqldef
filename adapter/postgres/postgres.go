@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -34,7 +35,8 @@ func (d *PostgresDatabase) TableNames() ([]string, error) {
 	rows, err := d.db.Query(
 		`select table_schema, table_name from information_schema.tables
 		 where table_schema not in ('information_schema', 'pg_catalog')
-		 and (table_schema != 'public' or table_name != 'pg_buffercache');`,
+		 and (table_schema != 'public' or table_name != 'pg_buffercache')
+		 and table_type = 'BASE TABLE';`,
 	)
 	if err != nil {
 		return nil, err
@@ -50,6 +52,43 @@ func (d *PostgresDatabase) TableNames() ([]string, error) {
 		tables = append(tables, schema+"."+name)
 	}
 	return tables, nil
+}
+
+var (
+	suffixSemicolon = regexp.MustCompile(`;$`)
+	spaces          = regexp.MustCompile(`[ ]+`)
+)
+
+func (d *PostgresDatabase) Views() ([]string, error) {
+	rows, err := d.db.Query(
+		`select table_schema, table_name, definition from information_schema.tables
+		 inner join pg_views on table_name = viewname
+		 where table_schema not in ('information_schema', 'pg_catalog')
+		 and (table_schema != 'public' or table_name != 'pg_buffercache')
+		 and table_type = 'VIEW';`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ddls []string
+	for rows.Next() {
+		var schema, name, definition string
+		if err := rows.Scan(&schema, &name, &definition); err != nil {
+			return nil, err
+		}
+		definition = strings.TrimSpace(definition)
+		definition = strings.ReplaceAll(definition, "\n", "")
+		definition = suffixSemicolon.ReplaceAllString(definition, "")
+		definition = spaces.ReplaceAllString(definition, " ")
+		ddls = append(
+			ddls, fmt.Sprintf(
+				"CREATE VIEW %s AS %s", schema+"."+name, definition,
+			),
+		)
+	}
+	return ddls, nil
 }
 
 func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {

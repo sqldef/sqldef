@@ -301,6 +301,7 @@ func forceEOF(yylex interface{}) {
 %type <vindexParams> vindex_param_list vindex_params_opt
 %type <colIdent> vindex_type vindex_type_opt
 %type <bytes> alter_object_type
+%type <bytes> or_replace_opt
 
 %start any_command
 
@@ -590,13 +591,13 @@ create_statement:
         IndexCols: $10,
       }
   }
-| CREATE VIEW table_name ddl_force_eof
+| CREATE or_replace_opt VIEW table_name AS select_statement
   {
-    $$ = &DDL{Action: CreateStr, NewName: $3.ToViewName()}
-  }
-| CREATE OR REPLACE VIEW table_name ddl_force_eof
-  {
-    $$ = &DDL{Action: CreateStr, NewName: $5.ToViewName()}
+    $$ = &DDL{Action: CreateViewStr, View: &View{
+        Action: CreateViewStr,
+        Name: $4.ToViewName(),
+        Definition: $6,
+    }}
   }
 | CREATE VINDEX sql_id vindex_type_opt vindex_params_opt
   {
@@ -664,6 +665,15 @@ vindex_param:
   reserved_sql_id '=' table_opt_value
   {
     $$ = VindexParam{Key: $1, Val: $3}
+  }
+
+or_replace_opt:
+  {
+    $$ = nil
+  }
+| OR REPLACE
+  {
+    $$ = nil
   }
 
 create_table_prefix:
