@@ -309,7 +309,7 @@ Composite foreign key may not work for now.
 ### CREATE (OR REPLACE) VIEW
 
 ```diff
- CREATE OR REPLACE VIEW foo AS
+ CREATE VIEW foo AS
    select u.id as id, p.id as post_id
    from  (
      mysqldef_test.users as u
@@ -373,7 +373,7 @@ Remove the line to DROP CONSTRAINT.
 ### CREATE (OR REPLACE) VIEW
 
 ```diff
- CREATE OR REPLACE VIEW foo AS
+ CREATE VIEW foo AS
    select u.id as id, p.id as post_id
    from  (
      mysqldef_test.users as u

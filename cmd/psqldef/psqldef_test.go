@@ -190,16 +190,16 @@ func TestCreateView(t *testing.T) {
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	createView := stripHeredoc(`
-		CREATE OR REPLACE VIEW view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
+		CREATE VIEW view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
 		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts+createView, applyPrefix+
-		"CREATE OR REPLACE VIEW view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));\n",
+		"CREATE VIEW view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));\n",
 	)
 	assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
 
 	createView = stripHeredoc(`
-		CREATE OR REPLACE VIEW view_user_posts AS SELECT p.id from (posts p INNER JOIN users u ON ((p.user_id = u.id))) WHERE (p.is_deleted = FALSE);
+		CREATE VIEW view_user_posts AS SELECT p.id from (posts p INNER JOIN users u ON ((p.user_id = u.id))) WHERE (p.is_deleted = FALSE);
 		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts+createView, applyPrefix+stripHeredoc(`
