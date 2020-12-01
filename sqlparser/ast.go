@@ -2323,6 +2323,7 @@ const (
 	HexVal
 	ValArg
 	BitVal
+	ValBool
 )
 
 // SQLVal represents a single value.
@@ -2366,6 +2367,10 @@ func NewValArg(in []byte) *SQLVal {
 	return &SQLVal{Type: ValArg, Val: in}
 }
 
+func NewBoolSQLVal(in bool) *SQLVal {
+	return &SQLVal{Type: ValBool, Val: []byte(fmt.Sprintf("%t", in))}
+}
+
 func NewValArgWithOpt(in []byte, opt *SQLVal) *SQLVal {
 	if opt != nil {
 		combined := string(in) + "(" + string(opt.Val) + ")"
@@ -2388,6 +2393,8 @@ func (node *SQLVal) Format(buf *TrackedBuffer) {
 		buf.Myprintf("B'%s'", []byte(node.Val))
 	case ValArg:
 		buf.WriteArg(string(node.Val))
+	case ValBool:
+		buf.Myprintf("%t", node.Val)
 	default:
 		panic("unexpected")
 	}
