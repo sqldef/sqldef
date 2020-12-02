@@ -216,7 +216,8 @@ func TestCreatePolicy(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createUsers+createPolicy, applyPrefix+stripHeredoc(`
-		ALTER POLICY p_users ON public.users TO postgres USING (true);
+		DROP POLICY p_users ON public.users;
+		CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);
 		`,
 	))
 	assertApplyOutput(t, createUsers+createPolicy, nothingModified)

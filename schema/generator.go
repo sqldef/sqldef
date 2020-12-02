@@ -434,20 +434,8 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy 
 	} else {
 		// policy found. If it's different, drop and add or alter policy.
 		if !areSamePolicies(*currentPolicy, desiredPolicy) {
-			if strings.ToLower(currentPolicy.permissive.Raw()) == strings.ToLower(desiredPolicy.permissive.Raw()) &&
-				strings.ToLower(currentPolicy.scope) == strings.ToLower(desiredPolicy.scope) {
-				ddl := fmt.Sprintf("ALTER POLICY %s ON %s TO %s", desiredPolicy.name, tableName, strings.Join(desiredPolicy.roles, ","))
-				if desiredPolicy.using != "" {
-					ddl += fmt.Sprintf(" USING %s", desiredPolicy.using)
-				}
-				if desiredPolicy.withCheck != "" {
-					ddl += fmt.Sprintf(" WITH CHECK %s", desiredPolicy.withCheck)
-				}
-				ddls = append(ddls, ddl)
-			} else {
-				ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", currentPolicy.name, currentTable.name))
-				ddls = append(ddls, statement)
-			}
+			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", currentPolicy.name, currentTable.name))
+			ddls = append(ddls, statement)
 		}
 	}
 
