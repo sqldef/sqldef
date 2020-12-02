@@ -1,3 +1,7 @@
+## v0.8.1
+
+- Support more types of default values in psqldef [#80](https://github.com/k0kubun/sqldef/issues/80)
+
 ## v0.8.0
 
 - Support `CREATE VIEW` and `DROP VIEW` [#78](https://github.com/k0kubun/sqldef/issues/78)
