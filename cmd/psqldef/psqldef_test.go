@@ -26,7 +26,10 @@ func TestPsqldefCreateTable(t *testing.T) {
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name text,
-		  age integer
+		  age integer,
+		  profile character varying(50) NOT NULL DEFAULT ''::character varying,
+		  joined_at timestamp with time zone NOT NULL DEFAULT '0001-01-01 00:00:00'::timestamp without time zone,
+		  created_at timestamp with time zone DEFAULT now()
 		);
 		`,
 	)

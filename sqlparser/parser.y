@@ -175,6 +175,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON JSONB ENUM
 %token <bytes> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
 %token <bytes> ARRAY
+%token <bytes> NOW
 
 // Type Modifiers
 %token <bytes> NULLX AUTO_INCREMENT APPROXNUM SIGNED UNSIGNED ZEROFILL ZONE
@@ -270,7 +271,7 @@ func forceEOF(yylex interface{}) {
 %type <empty> force_eof ddl_force_eof
 %type <str> charset
 %type <str> set_session_or_global show_session_or_global
-%type <convertType> convert_type
+%type <convertType> convert_type simple_convert_type
 %type <columnType> column_type
 %type <columnType> bool_type int_type decimal_type numeric_type time_type char_type spatial_type
 %type <optVal> length_opt
@@ -301,6 +302,7 @@ func forceEOF(yylex interface{}) {
 %type <vindexParams> vindex_param_list vindex_params_opt
 %type <colIdent> vindex_type vindex_type_opt
 %type <bytes> alter_object_type
+%left <bytes> TYPECAST
 %type <bytes> or_replace_opt
 
 %start any_command
@@ -747,7 +749,7 @@ column_definition_type:
     $1.NotNull = NewBoolVal(true)
     $$ = $1
   }
-| column_definition_type DEFAULT STRING
+| column_definition_type DEFAULT STRING character_cast_opt
   {
     $1.Default = NewStrVal($3)
     $$ = $1
@@ -812,6 +814,20 @@ column_definition_type:
     $1.Comment = NewStrVal($3)
     $$ = $1
   }
+| column_definition_type DEFAULT boolean_value
+  {
+    $1.Default = NewBoolSQLVal(bool($3))
+    $$ = $1
+  }
+| column_definition_type DEFAULT NOW openb closeb
+  {
+    $1.Default = NewBitVal($3)
+    $$ = $1
+  }
+
+character_cast_opt:
+| TYPECAST CHARACTER VARYING
+| TYPECAST TIMESTAMP time_zone_opt
 
 numeric_type:
   int_type length_opt
@@ -2487,6 +2503,10 @@ value_expression:
     // will be non-trivial because of grammar conflicts.
     $$ = &IntervalExpr{Expr: $2, Unit: $3.String()}
   }
+| value_expression TYPECAST simple_convert_type
+  {
+    $$ = &ConvertExpr{Expr: $1, Type: $3}
+  }
 | function_call_generic
 | function_call_keyword
 | function_call_nonkeyword
@@ -2617,6 +2637,10 @@ function_call_nonkeyword:
   {
     $$ = &FuncExpr{Name:NewColIdent("current_time")}
   }
+| TYPECAST simple_convert_type
+  {
+    $$ = &ConvertExpr{Type: $2}
+  }
 
 func_datetime_precision_opt:
   /* empty */
@@ -2732,6 +2756,36 @@ convert_type:
     $$ = &ConvertType{Type: string($1)}
   }
 | UNSIGNED INTEGER
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+
+simple_convert_type:
+  BINARY
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| CHARACTER VARYING
+  {
+    $$ = &ConvertType{Type: string($1)+" "+string($2)}
+  }
+| DATE
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| DATETIME
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| int_type
+  {
+    $$ = &ConvertType{Type: $1.Type}
+  }
+| bool_type
+  {
+    $$ = &ConvertType{Type: $1.Type}
+  }
+| TEXT
   {
     $$ = &ConvertType{Type: string($1)}
   }
@@ -3345,6 +3399,7 @@ non_reserved_keyword:
 | NAMES
 | NCHAR
 | NO
+| NOW
 | NUMERIC
 | OFFSET
 | OPTIMIZE
