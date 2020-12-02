@@ -932,6 +932,9 @@ type ColumnType struct {
 
 	// Key specification
 	KeyOpt ColumnKeyOption
+
+	// ParserMode
+	ParserMode ParserMode
 }
 
 // Format returns a canonical string representation of the type and all relevant options
@@ -974,7 +977,7 @@ func (ct *ColumnType) Format(buf *TrackedBuffer) {
 	if ct.OnUpdate != nil {
 		opts = append(opts, keywordStrings[ON], keywordStrings[UPDATE], String(ct.OnUpdate))
 	}
-	if ct.Autoincrement {
+	if ct.Autoincrement && ct.ParserMode != ParserModeSQLite3 {
 		opts = append(opts, keywordStrings[AUTO_INCREMENT])
 	}
 	if ct.Comment != nil {
@@ -994,6 +997,9 @@ func (ct *ColumnType) Format(buf *TrackedBuffer) {
 	}
 	if ct.KeyOpt == colKey {
 		opts = append(opts, keywordStrings[KEY])
+	}
+	if ct.Autoincrement && ct.ParserMode == ParserModeSQLite3 {
+		opts = append(opts, keywordStrings[AUTOINCREMENT])
 	}
 
 	if len(opts) != 0 {

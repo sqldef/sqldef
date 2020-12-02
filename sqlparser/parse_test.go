@@ -1764,6 +1764,21 @@ func TestCreateTable(t *testing.T) {
 			"	time2 timestamp default current_timestamp on update current_timestamp\n" +
 			")",
 
+		// test sqlite auto increment
+		"create table t (\n" +
+			"	id integer primary key autoincrement\n" +
+			")",
+
+		// test postgres auto increment
+		"create table t (\n" +
+			"	id serial primary key\n" +
+			")",
+
+		// test mysql auto increment
+		"create table t (\n" +
+			"	id int auto_increment\n" +
+			")",
+
 		// test defining indexes separately
 		"create table t (\n" +
 			"	id int auto_increment,\n" +

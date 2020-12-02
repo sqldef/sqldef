@@ -178,7 +178,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> NOW
 
 // Type Modifiers
-%token <bytes> NULLX AUTO_INCREMENT APPROXNUM SIGNED UNSIGNED ZEROFILL ZONE
+%token <bytes> NULLX AUTO_INCREMENT APPROXNUM SIGNED UNSIGNED ZEROFILL ZONE AUTOINCREMENT
 
 // Supported SHOW tokens
 %token <bytes> DATABASES TABLES VITESS_KEYSPACES VITESS_SHARDS VITESS_TABLETS VSCHEMA_TABLES EXTENDED FULL PROCESSLIST
@@ -787,6 +787,12 @@ column_definition_type:
 | column_definition_type AUTO_INCREMENT
   {
     $1.Autoincrement = BoolVal(true)
+    $$ = $1
+  }
+| column_definition_type AUTOINCREMENT
+  {
+    $1.Autoincrement = BoolVal(true)
+    $1.ParserMode = ParserModeSQLite3
     $$ = $1
   }
 | column_definition_type PRIMARY KEY
@@ -3249,6 +3255,7 @@ reserved_keyword:
 | AS
 | ASC
 | AUTO_INCREMENT
+| AUTOINCREMENT
 | BETWEEN
 | BINARY
 | BY
