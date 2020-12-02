@@ -513,15 +513,13 @@ func TestPsqldefExport(t *testing.T) {
 	// workaround: local has `public.` but travis doesn't.
 	assertEquals(t, strings.Replace(out, "public.users", "users", 2), stripHeredoc(`
 		CREATE TABLE users (
-		    id bigint NOT NULL,
-		    age integer,
-		    c_char_1 character(1),
-		    c_char_10 character(10),
-		    c_varchar_10 character varying(10),
-		    c_varchar_unlimited character varying
+		    "id" bigint NOT NULL PRIMARY KEY,
+		    "age" integer,
+		    "c_char_1" character(1),
+		    "c_char_10" character(10),
+		    "c_varchar_10" character varying(10),
+		    "c_varchar_unlimited" character varying
 		);
-		ALTER TABLE ONLY users
-		    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
 		`,
 	))
 }

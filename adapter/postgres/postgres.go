@@ -96,10 +96,6 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	primaryKeyDef, err := d.getPrimaryKeyDef(table)
-	if err != nil {
-		return "", err
-	}
 	indexDefs, err := d.getIndexDefs(table)
 	if err != nil {
 		return "", err
@@ -112,16 +108,16 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, primaryKeyDef, indexDefs, foreginDefs, policyDefs), nil
+	return buildDumpTableDDL(table, cols, indexDefs, foreginDefs, policyDefs), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, primaryKeyDef string, indexDefs, foreginDefs, policyDefs []string) string {
+func buildDumpTableDDL(table string, columns []column, indexDefs, foreginDefs, policyDefs []string) string {
 	var queryBuilder strings.Builder
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (\n", table)
 	for i, col := range columns {
 		isLast := i == len(columns)-1
 		fmt.Fprint(&queryBuilder, indent)
-		fmt.Fprintf(&queryBuilder, "%s %s", col.Name, col.GetDataType())
+		fmt.Fprintf(&queryBuilder, "\"%s\" %s", col.Name, col.GetDataType())
 		if col.Length > 0 {
 			fmt.Fprintf(&queryBuilder, "(%d)", col.Length)
 		}
@@ -134,6 +130,9 @@ func buildDumpTableDDL(table string, columns []column, primaryKeyDef string, ind
 		if col.Default != "" && !col.IsAutoIncrement {
 			fmt.Fprintf(&queryBuilder, " DEFAULT %s", col.Default)
 		}
+		if col.IsPrimaryKey {
+			fmt.Fprint(&queryBuilder, " PRIMARY KEY")
+		}
 		if isLast {
 			fmt.Fprintln(&queryBuilder, "")
 		} else {
@@ -141,9 +140,6 @@ func buildDumpTableDDL(table string, columns []column, primaryKeyDef string, ind
 		}
 	}
 	fmt.Fprintf(&queryBuilder, ");\n")
-	if primaryKeyDef != "" {
-		fmt.Fprintf(&queryBuilder, "%s;\n", primaryKeyDef)
-	}
 	for _, v := range indexDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
