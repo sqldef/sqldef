@@ -632,15 +632,6 @@ create_statement:
     }}
   }
 
-or_replace_opt:
-  {
-    $$ = nil
-  }
-| OR REPLACE
-  {
-    $$ = nil
-  }
-
 policy_as_opt:
   {
     $$ = nil
@@ -746,6 +737,15 @@ vindex_param:
   reserved_sql_id '=' table_opt_value
   {
     $$ = VindexParam{Key: $1, Val: $3}
+  }
+
+or_replace_opt:
+  {
+    $$ = nil
+  }
+| OR REPLACE
+  {
+    $$ = nil
   }
 
 create_table_prefix:
@@ -896,6 +896,9 @@ column_definition_type:
   }
 
 character_cast_opt:
+  {
+    $$ = nil
+  }
 | TYPECAST CHARACTER VARYING
 | TYPECAST TIMESTAMP time_zone_opt
 

@@ -112,16 +112,16 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, primaryKeyDef, indexDefs, foreginDefs), nil
+	return buildDumpTableDDL(table, cols, primaryKeyDef, indexDefs, foreginDefs, policyDefs), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, primaryKeyDef string, indexDefs, foreginDefs []string) string {
+func buildDumpTableDDL(table string, columns []column, primaryKeyDef string, indexDefs, foreginDefs, policyDefs []string) string {
 	var queryBuilder strings.Builder
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (\n", table)
 	for i, col := range columns {
 		isLast := i == len(columns)-1
 		fmt.Fprint(&queryBuilder, indent)
-		fmt.Fprintf(&queryBuilder, "\"%s\" %s", col.Name, col.GetDataType())
+		fmt.Fprintf(&queryBuilder, "%s %s", col.Name, col.GetDataType())
 		if col.Length > 0 {
 			fmt.Fprintf(&queryBuilder, "(%d)", col.Length)
 		}

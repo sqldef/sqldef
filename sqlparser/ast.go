@@ -1518,6 +1518,12 @@ func (node Comments) walkSubtree(visit Visit) error {
 	return nil
 }
 
+type View struct {
+	Action     string
+	Name       TableName
+	Definition SelectStatement
+}
+
 // SelectExprs represents SELECT expressions.
 type SelectExprs []SelectExpr
 
@@ -1537,12 +1543,6 @@ func (node SelectExprs) walkSubtree(visit Visit) error {
 		}
 	}
 	return nil
-}
-
-type View struct {
-	Action     string
-	Name       TableName
-	Definition SelectStatement
 }
 
 // SelectExpr represents a SELECT expression.
