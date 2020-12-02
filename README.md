@@ -369,6 +369,8 @@ Remove the line to DROP INDEX.
  )
 ```
 
+Remove the line to DROP CONSTRAINT.
+
 ### ADD POLICY
 
 ```diff
