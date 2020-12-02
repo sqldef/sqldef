@@ -19,8 +19,8 @@ type Config struct {
 // Abstraction layer for multiple kinds of databases
 type Database interface {
 	TableNames() ([]string, error)
-	Views() ([]string, error)
 	DumpTableDDL(table string) (string, error)
+	Views() ([]string, error)
 	DB() *sql.DB
 	Close() error
 }
@@ -40,11 +40,13 @@ func DumpDDLs(d Database) (string, error) {
 
 		ddls = append(ddls, ddl)
 	}
+
 	viewDDLs, err := d.Views()
 	if err != nil {
 		return "", err
 	}
 	ddls = append(ddls, viewDDLs...)
+
 	return strings.Join(ddls, ";\n\n"), nil
 }
 

@@ -27,9 +27,9 @@ func TestPsqldefCreateTable(t *testing.T) {
 		  id bigint NOT NULL,
 		  name text,
 		  age integer,
-			profile character varying(50) NOT NULL DEFAULT ''::character varying,
-			joined_at timestamp with time zone NOT NULL DEFAULT '0001-01-01 00:00:00'::timestamp without time zone,
-			created_at timestamp with time zone DEFAULT now()
+		  profile character varying(50) NOT NULL DEFAULT ''::character varying,
+		  joined_at timestamp with time zone NOT NULL DEFAULT '0001-01-01 00:00:00'::timestamp without time zone,
+		  created_at timestamp with time zone DEFAULT now()
 		);
 		`,
 	)
@@ -235,16 +235,16 @@ func TestCreateView(t *testing.T) {
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	createView := stripHeredoc(`
-		CREATE OR REPLACE VIEW view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
+		CREATE VIEW view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
 		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts+createView, applyPrefix+
-		"CREATE OR REPLACE VIEW view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));\n",
+		"CREATE VIEW view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));\n",
 	)
 	assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
 
 	createView = stripHeredoc(`
-		CREATE OR REPLACE VIEW view_user_posts AS SELECT p.id from (posts p INNER JOIN users u ON ((p.user_id = u.id))) WHERE (p.is_deleted = FALSE);
+		CREATE VIEW view_user_posts AS SELECT p.id from (posts p INNER JOIN users u ON ((p.user_id = u.id))) WHERE (p.is_deleted = FALSE);
 		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts+createView, applyPrefix+stripHeredoc(`
@@ -512,13 +512,15 @@ func TestPsqldefExport(t *testing.T) {
 	// workaround: local has `public.` but travis doesn't.
 	assertEquals(t, strings.Replace(out, "public.users", "users", 2), stripHeredoc(`
 		CREATE TABLE users (
-		    "id" bigint NOT NULL PRIMARY KEY,
+		    "id" bigint NOT NULL,
 		    "age" integer,
 		    "c_char_1" character(1),
 		    "c_char_10" character(10),
 		    "c_varchar_10" character varying(10),
 		    "c_varchar_unlimited" character varying
 		);
+		ALTER TABLE ONLY users
+		    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
 		`,
 	))
 }

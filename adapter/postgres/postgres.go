@@ -84,7 +84,7 @@ func (d *PostgresDatabase) Views() ([]string, error) {
 		definition = spaces.ReplaceAllString(definition, " ")
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE OR REPLACE VIEW %s AS %s", schema+"."+name, definition,
+				"CREATE VIEW %s AS %s", schema+"."+name, definition,
 			),
 		)
 	}
@@ -93,6 +93,10 @@ func (d *PostgresDatabase) Views() ([]string, error) {
 
 func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	cols, err := d.getColumns(table)
+	if err != nil {
+		return "", err
+	}
+	primaryKeyDef, err := d.getPrimaryKeyDef(table)
 	if err != nil {
 		return "", err
 	}
@@ -108,10 +112,10 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, indexDefs, foreginDefs, policyDefs), nil
+	return buildDumpTableDDL(table, cols, primaryKeyDef, indexDefs, foreginDefs), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, indexDefs, foreginDefs, policyDefs []string) string {
+func buildDumpTableDDL(table string, columns []column, primaryKeyDef string, indexDefs, foreginDefs []string) string {
 	var queryBuilder strings.Builder
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (\n", table)
 	for i, col := range columns {
@@ -130,9 +134,6 @@ func buildDumpTableDDL(table string, columns []column, indexDefs, foreginDefs, p
 		if col.Default != "" && !col.IsAutoIncrement {
 			fmt.Fprintf(&queryBuilder, " DEFAULT %s", col.Default)
 		}
-		if col.IsPrimaryKey {
-			fmt.Fprintf(&queryBuilder, " PRIMARY KEY")
-		}
 		if isLast {
 			fmt.Fprintln(&queryBuilder, "")
 		} else {
@@ -140,6 +141,9 @@ func buildDumpTableDDL(table string, columns []column, indexDefs, foreginDefs, p
 		}
 	}
 	fmt.Fprintf(&queryBuilder, ");\n")
+	if primaryKeyDef != "" {
+		fmt.Fprintf(&queryBuilder, "%s;\n", primaryKeyDef)
+	}
 	for _, v := range indexDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}

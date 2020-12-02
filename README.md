@@ -310,14 +310,13 @@ Composite foreign key may not work for now.
 ### CREATE (OR REPLACE) VIEW
 
 ```diff
- CREATE OR REPLACE VIEW foo AS
+ CREATE VIEW foo AS
    select u.id as id, p.id as post_id
    from  (
      mysqldef_test.users as u
      join mysqldef_test.posts as p on ((u.id = p.user_id))
    )
  ;
-
 + CREATE OR REPLACE VIEW foo AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
 ```
 
@@ -387,7 +386,7 @@ Remove the line to DROP POLICY.
 ### CREATE (OR REPLACE) VIEW
 
 ```diff
- CREATE OR REPLACE VIEW foo AS
+ CREATE VIEW foo AS
    select u.id as id, p.id as post_id
    from  (
      mysqldef_test.users as u
@@ -438,31 +437,14 @@ To rename them, you would need to rename manually and use `--export` again.
 
 ## Development
 
-Following settings could be dangerous. Please develop sqldef under a secure network.
-
-### mysqldef
-
-To run integration tests, `mysql -uroot` needs to succeed. One option is:
+You can use the following command to prepare MySQL and PostgreSQL to be used for running tests.
 
 ```
-$ sudo mysql -uroot
-mysql> UNINSTALL PLUGIN validate_password;
-mysql> DROP USER 'root'@'localhost';
-mysql> CREATE USER 'root'@'%' identified by '';
-mysql> GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
-mysql> FLUSH PRIVILEGES;
+$ sudo apt install mysql-client postgresql-client
+$ docker-compose up
+$ make test-mysqldef MYSQL_HOST=127.0.0.1
+$ make test-psqldef PGHOST=127.0.0.1 PGSSLMODE=disable
 ```
-
-Then running `make test-mysqldef` will help your development.
-
-### psqldef
-
-To run integration tests, `psql -Upostgres` needs to succeed by:
-
-1. Open `pg_hba.conf` (ex: `/etc/postgresql/10/main/pg_hba.conf`)
-2. Change `local all postgres peer` to `local all postgres trust`
-    * You may also need to take care of `host all all 127.0.0.1/32 md5`
-3. Restart postgresql server (ex: `systemctl restart postgresql`)
 
 ## License
 

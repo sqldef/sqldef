@@ -68,7 +68,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 
 	if opts.Prompt {
 		fmt.Printf("Enter Password: ")
-		pass, err := terminal.ReadPassword(syscall.Stdin)
+		pass, err := terminal.ReadPassword(int(syscall.Stdin))
 		if err != nil {
 			log.Fatal(err)
 		}

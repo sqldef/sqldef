@@ -834,11 +834,6 @@ column_definition_type:
     $1.Default = NewFloatVal($3)
     $$ = $1
   }
-| column_definition_type DEFAULT boolean_value
-  {
-    $1.Default = NewBoolSQLVal(bool($3))
-    $$ = $1
-  }
 | column_definition_type DEFAULT NULL
   {
     $1.Default = NewValArg($3)
@@ -850,11 +845,6 @@ column_definition_type:
     $$ = $1
   }
 | column_definition_type DEFAULT BIT_LITERAL
-  {
-    $1.Default = NewBitVal($3)
-    $$ = $1
-  }
-| column_definition_type DEFAULT NOW openb closeb
   {
     $1.Default = NewBitVal($3)
     $$ = $1
@@ -894,19 +884,20 @@ column_definition_type:
     $1.Comment = NewStrVal($3)
     $$ = $1
   }
+| column_definition_type DEFAULT boolean_value
+  {
+    $1.Default = NewBoolSQLVal(bool($3))
+    $$ = $1
+  }
+| column_definition_type DEFAULT NOW openb closeb
+  {
+    $1.Default = NewBitVal($3)
+    $$ = $1
+  }
 
-character_cast_opt :
-  {
-    $$ = nil
-  }
+character_cast_opt:
 | TYPECAST CHARACTER VARYING
-  {
-    $$ = nil
-  }
 | TYPECAST TIMESTAMP time_zone_opt
-  {
-    $$ = nil
-  }
 
 numeric_type:
   int_type length_opt

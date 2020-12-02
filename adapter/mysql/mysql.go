@@ -73,7 +73,7 @@ func (d *MysqlDatabase) Views() ([]string, error) {
 		if err = d.db.QueryRow(query).Scan(&definition); err != nil {
 			return nil, err
 		}
-		ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE VIEW %s AS %s", viewName, definition))
+		ddls = append(ddls, fmt.Sprintf("CREATE VIEW %s AS %s", viewName, definition))
 	}
 	return ddls, nil
 }

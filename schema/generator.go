@@ -839,6 +839,15 @@ func findForeignKeyByName(foreignKeys []ForeignKey, constraintName string) *Fore
 	return nil
 }
 
+func findPrimaryKey(indexes []Index) *Index {
+	for _, index := range indexes {
+		if index.primary {
+			return &index
+		}
+	}
+	return nil
+}
+
 func findPolicyByName(policies []Policy, name string) *Policy {
 	for _, policy := range policies {
 		if policy.name == name {
@@ -856,7 +865,6 @@ func findViewByName(views []*View, name string) *View {
 	}
 	return nil
 }
-
 func (g *Generator) haveSameColumnDefinition(current Column, desired Column) bool {
 	// Not examining AUTO_INCREMENT and UNIQUE KEY because it'll be added in a later stage
 	return g.haveSameDataType(current, desired) &&
