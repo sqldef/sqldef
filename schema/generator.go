@@ -950,7 +950,7 @@ func areSamePolicies(policyA, policyB Policy) bool {
 	if strings.ToLower(policyA.scope) != strings.ToLower(policyB.scope) {
 		return false
 	}
-	if strings.ToLower(policyA.permissive.Raw()) != strings.ToLower(policyB.permissive.Raw()) {
+	if strings.ToLower(policyA.permissive) != strings.ToLower(policyB.permissive) {
 		return false
 	}
 	if strings.ToLower(policyA.using) != strings.ToLower(policyB.using) {

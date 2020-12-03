@@ -1,7 +1,5 @@
 package schema
 
-import "github.com/k0kubun/sqldef/sqlparser"
-
 type DDL interface {
 	Statement() string
 }
@@ -98,7 +96,7 @@ type ForeignKey struct {
 type Policy struct {
 	name          string
 	referenceName string
-	permissive    sqlparser.Permissive
+	permissive    string
 	scope         string
 	roles         []string
 	using         string

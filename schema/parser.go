@@ -288,7 +288,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				tableName: normalizedTableName(mode, stmt.Table),
 				policy: Policy{
 					name:       stmt.Policy.Name.String(),
-					permissive: stmt.Policy.Permissive,
+					permissive: stmt.Policy.Permissive.Raw(),
 					scope:      string(stmt.Policy.Scope),
 					roles:      scope,
 					using:      using,
