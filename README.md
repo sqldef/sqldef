@@ -215,6 +215,7 @@ Some of them can also be used for input schema file.
   - Column: ADD COLUMN, ALTER COLUMN, DROP COLUMN
   - Index: CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX
   - Foreign / Primary Key: ADD FOREIGN KEY, DROP CONSTRAINT
+  - Policy: CREATE POLICY, DROP POLICY
   - View: CREATE VIEW, CREATE OR REPLACE VIEW, DROP VIEW
 - SQLite3
   - Table: CREATE TABLE, DROP TABLE
@@ -369,6 +370,20 @@ Remove the line to DROP INDEX.
 ```
 
 Remove the line to DROP CONSTRAINT.
+
+### ADD POLICY
+
+```diff
+ CREATE TABLE users (
+   id BIGINT PRIMARY KEY,
+   name VARCHAR(40)
+ );
+ CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((name)::text = current_user)
+
++CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((name)::text = current_user)
+```
+
+Remove the line to DROP POLICY.
 
 ### CREATE (OR REPLACE) VIEW
 

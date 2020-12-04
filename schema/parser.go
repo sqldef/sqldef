@@ -271,6 +271,30 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 					onUpdate:         stmt.ForeignKey.OnUpdate.String(),
 				},
 			}, nil
+		} else if stmt.Action == "create policy" {
+			scope := make([]string, len(stmt.Policy.To))
+			for i, to := range stmt.Policy.To {
+				scope[i] = to.String()
+			}
+			var using, withCheck string
+			if stmt.Policy.Using != nil {
+				using = sqlparser.String(stmt.Policy.Using.Expr)
+			}
+			if stmt.Policy.WithCheck != nil {
+				withCheck = sqlparser.String(stmt.Policy.WithCheck.Expr)
+			}
+			return &AddPolicy{
+				statement: ddl,
+				tableName: normalizedTableName(mode, stmt.Table),
+				policy: Policy{
+					name:       stmt.Policy.Name.String(),
+					permissive: stmt.Policy.Permissive.Raw(),
+					scope:      string(stmt.Policy.Scope),
+					roles:      scope,
+					using:      using,
+					withCheck:  withCheck,
+				},
+			}, nil
 		} else if stmt.Action == "create view" {
 			return &View{
 				statement:  ddl,

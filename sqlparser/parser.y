@@ -155,13 +155,14 @@ func forceEOF(yylex interface{}) {
 
 // DDL Tokens
 %token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD
-%token <bytes> SCHEMA TABLE INDEX VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE
+%token <bytes> SCHEMA TABLE INDEX VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY
 %right <bytes> UNIQUE KEY
 %token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE
 %token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER
 %token <bytes> VINDEX VINDEXES
 %token <bytes> STATUS VARIABLES
 %token <bytes> RESTRICT CASCADE NO ACTION
+%token <bytes> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
 
 // Transaction Tokens
 %token <bytes> BEGIN START TRANSACTION COMMIT ROLLBACK
@@ -302,7 +303,9 @@ func forceEOF(yylex interface{}) {
 %type <vindexParams> vindex_param_list vindex_params_opt
 %type <colIdent> vindex_type vindex_type_opt
 %type <bytes> alter_object_type
-%left <bytes> TYPECAST
+%type <bytes> policy_as_opt policy_for_opt character_cast_opt
+%type <expr> using_opt with_check_opt
+%left <bytes> TYPECAST CHECK
 %type <bytes> or_replace_opt
 
 %start any_command
@@ -617,6 +620,73 @@ create_statement:
   {
     $$ = &DBDDL{Action: CreateStr, DBName: string($4)}
   }
+| CREATE POLICY sql_id ON table_name policy_as_opt policy_for_opt TO sql_id_list using_opt with_check_opt
+  {
+    $$ = &DDL{Action: CreatePolicyStr, Table: $5, Policy: &Policy{
+        Name: $3,
+        Permissive: Permissive($6),
+        Scope: $7,
+        To: $9,
+        Using: NewWhere(WhereStr, $10),
+        WithCheck: NewWhere(WhereStr, $11),
+    }}
+  }
+
+policy_as_opt:
+  {
+    $$ = nil
+  }
+| AS PERMISSIVE
+  {
+    $$ = $2
+  }
+| AS RESTRICTIVE
+  {
+    $$ = $2
+  }
+
+policy_for_opt:
+  {
+    $$ = nil
+  }
+| FOR ALL
+  {
+    $$ = $2
+  }
+| FOR SELECT
+  {
+    $$ = $2
+  }
+| FOR INSERT
+  {
+    $$ = $2
+  }
+| FOR UPDATE
+  {
+    $$ = $2
+  }
+| FOR DELETE
+  {
+    $$ = $2
+  }
+
+using_opt:
+  {
+    $$ = nil
+  }
+| USING expression
+  {
+    $$ = $2
+  }
+
+with_check_opt:
+  {
+    $$ = nil
+  }
+| WITH CHECK expression
+  {
+    $$ = $3
+  }
 
 unique_opt:
   {
@@ -826,6 +896,9 @@ column_definition_type:
   }
 
 character_cast_opt:
+  {
+    $$ = nil
+  }
 | TYPECAST CHARACTER VARYING
 | TYPECAST TIMESTAMP time_zone_opt
 
@@ -3312,6 +3385,7 @@ reserved_keyword:
 | OR
 | ORDER
 | OUTER
+| POLICY
 | REGEXP
 | RENAME
 | REPLACE
@@ -3349,6 +3423,7 @@ reserved_keyword:
 non_reserved_keyword:
   ACTION
 | AGAINST
+| ALL
 | BEGIN
 | BIGINT
 | BIGSERIAL
@@ -3360,10 +3435,12 @@ non_reserved_keyword:
 | CHAR
 | CHARACTER
 | CHARSET
+| CHECK
 | COMMENT_KEYWORD
 | COMMIT
 | COMMITTED
 | CONSTRAINT
+| CURRENT_USER
 | DATE
 | DATETIME
 | DECIMAL
@@ -3407,12 +3484,14 @@ non_reserved_keyword:
 | POINT
 | POLYGON
 | PRECISION
+| PERMISSIVE
 | PRIMARY
 | PROCEDURE
 | QUERY
 | READ
 | REAL
 | REORGANIZE
+| RESTRICTIVE
 | REPAIR
 | REPEATABLE
 | RESTRICT

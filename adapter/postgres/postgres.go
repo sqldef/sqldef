@@ -96,10 +96,6 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	primaryKeyDef, err := d.getPrimaryKeyDef(table)
-	if err != nil {
-		return "", err
-	}
 	indexDefs, err := d.getIndexDefs(table)
 	if err != nil {
 		return "", err
@@ -108,16 +104,20 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, primaryKeyDef, indexDefs, foreginDefs), nil
+	policyDefs, err := d.getPolicyDefs(table)
+	if err != nil {
+		return "", err
+	}
+	return buildDumpTableDDL(table, cols, indexDefs, foreginDefs, policyDefs), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, primaryKeyDef string, indexDefs, foreginDefs []string) string {
+func buildDumpTableDDL(table string, columns []column, indexDefs, foreginDefs, policyDefs []string) string {
 	var queryBuilder strings.Builder
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (\n", table)
 	for i, col := range columns {
 		isLast := i == len(columns)-1
 		fmt.Fprint(&queryBuilder, indent)
-		fmt.Fprintf(&queryBuilder, "%s %s", col.Name, col.GetDataType())
+		fmt.Fprintf(&queryBuilder, "\"%s\" %s", col.Name, col.GetDataType())
 		if col.Length > 0 {
 			fmt.Fprintf(&queryBuilder, "(%d)", col.Length)
 		}
@@ -130,6 +130,9 @@ func buildDumpTableDDL(table string, columns []column, primaryKeyDef string, ind
 		if col.Default != "" && !col.IsAutoIncrement {
 			fmt.Fprintf(&queryBuilder, " DEFAULT %s", col.Default)
 		}
+		if col.IsPrimaryKey {
+			fmt.Fprint(&queryBuilder, " PRIMARY KEY")
+		}
 		if isLast {
 			fmt.Fprintln(&queryBuilder, "")
 		} else {
@@ -137,13 +140,13 @@ func buildDumpTableDDL(table string, columns []column, primaryKeyDef string, ind
 		}
 	}
 	fmt.Fprintf(&queryBuilder, ");\n")
-	if primaryKeyDef != "" {
-		fmt.Fprintf(&queryBuilder, "%s;\n", primaryKeyDef)
-	}
 	for _, v := range indexDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
 	for _, v := range foreginDefs {
+		fmt.Fprintf(&queryBuilder, "%s;\n", v)
+	}
+	for _, v := range policyDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
 	return strings.TrimSuffix(queryBuilder.String(), ";\n")
@@ -343,6 +346,47 @@ WHERE constraint_type = 'FOREIGN KEY' AND tc.table_schema=$1 AND tc.table_name=$
 			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s(%s) ON UPDATE %s ON DELETE %s",
 			tableSchema, tableName, constraintName, columnName, foreignTableSchema, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule,
 		)
+		defs = append(defs, def)
+	}
+	return defs, nil
+}
+
+var (
+	policyRolesPrefixRegex = regexp.MustCompile(`^{`)
+	policyRolesSuffixRegex = regexp.MustCompile(`}$`)
+)
+
+func (d *PostgresDatabase) getPolicyDefs(table string) ([]string, error) {
+	query := "SELECT policyname, permissive, roles, cmd, qual, with_check FROM pg_policies WHERE schemaname = $1 AND tablename = $2;"
+	schema, table := splitTableName(table)
+	rows, err := d.db.Query(query, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	defs := make([]string, 0)
+	for rows.Next() {
+		var (
+			policyName, permissive, roles, cmd string
+			using, withCheck                   sql.NullString
+		)
+		err = rows.Scan(&policyName, &permissive, &roles, &cmd, &using, &withCheck)
+		if err != nil {
+			return nil, err
+		}
+		roles = policyRolesPrefixRegex.ReplaceAllString(roles, "")
+		roles = policyRolesSuffixRegex.ReplaceAllString(roles, "")
+		def := fmt.Sprintf(
+			"CREATE POLICY %s ON %s AS %s FOR %s TO %s",
+			policyName, table, permissive, cmd, roles,
+		)
+		if using.Valid {
+			def += fmt.Sprintf(" USING %s", using.String)
+		}
+		if withCheck.Valid {
+			def += fmt.Sprintf(" WITH CHECK %s", withCheck.String)
+		}
 		defs = append(defs, def)
 	}
 	return defs, nil

@@ -33,11 +33,18 @@ type AddForeignKey struct {
 	foreignKey ForeignKey
 }
 
+type AddPolicy struct {
+	statement string
+	tableName string
+	policy    Policy
+}
+
 type Table struct {
 	name        string
 	columns     []Column
 	indexes     []Index
 	foreignKeys []ForeignKey
+	policies    []Policy
 	// XXX: have options and alter on its change?
 }
 
@@ -84,6 +91,16 @@ type ForeignKey struct {
 	referenceColumns []string
 	onDelete         string
 	onUpdate         string
+}
+
+type Policy struct {
+	name          string
+	referenceName string
+	permissive    string
+	scope         string
+	roles         []string
+	using         string
+	withCheck     string
 }
 
 type View struct {
@@ -143,6 +160,10 @@ func (a *AddPrimaryKey) Statement() string {
 }
 
 func (a *AddForeignKey) Statement() string {
+	return a.statement
+}
+
+func (a *AddPolicy) Statement() string {
 	return a.statement
 }
 

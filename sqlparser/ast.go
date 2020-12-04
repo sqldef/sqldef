@@ -668,6 +668,7 @@ type DDL struct {
 	VindexSpec    *VindexSpec
 	VindexCols    []ColIdent
 	ForeignKey    *ForeignKeyDefinition
+	Policy        *Policy
 	View          *View
 }
 
@@ -685,6 +686,7 @@ const (
 	CreateIndexStr   = "create index"
 	AddPrimaryKeyStr = "add primary key"
 	AddForeignKeyStr = "add foreign key"
+	CreatePolicyStr  = "create policy"
 	CreateViewStr    = "create view"
 
 	// Vindex DDL param to specify the owner of a vindex
@@ -1324,6 +1326,26 @@ type ForeignKeyDefinition struct {
 	ReferenceColumns []ColIdent
 	OnDelete         ColIdent
 	OnUpdate         ColIdent
+}
+
+type Policy struct {
+	Name       ColIdent
+	Permissive Permissive
+	Scope      []byte
+	To         []ColIdent
+	Using      *Where
+	WithCheck  *Where
+}
+
+type Permissive string
+
+const (
+	PermissiveStr  Permissive = "permissive"
+	RestrictiveStr Permissive = "restrictive"
+)
+
+func (p Permissive) Raw() string {
+	return string(p)
 }
 
 // Show represents a show statement.

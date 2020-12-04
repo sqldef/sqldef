@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"sort"
 	"strings"
 )
 
@@ -104,6 +105,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return ddls, err
 			}
 			ddls = append(ddls, indexDDLs...)
+		case *AddPolicy:
+			policyDDLs, err := g.generateDDLsForCreatePolicy(desired.tableName, desired.policy, "ALTER POLICY", ddl.Statement())
+			if err != nil {
+				return ddls, err
+			}
+			ddls = append(ddls, policyDDLs...)
 		case *View:
 			viewDDLs, err := g.generateDDLsForCreateView(desired.name, desired)
 			if err != nil {
@@ -169,6 +176,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			ddl := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", desiredTable.name, column.name) // TODO: escape
 			ddls = append(ddls, ddl)
 			// TODO: simulate to remove column from `currentTable.columns`?
+		}
+
+		// Check policies.
+		for _, policy := range currentTable.policies {
+			if containsString(convertPolicyNames(desiredTable.policies), policy.name) {
+				continue
+			}
+			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", policy.name, currentTable.name))
 		}
 	}
 
@@ -399,6 +414,40 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 		return nil, fmt.Errorf("index '%s' is doubly created against table '%s': '%s'", desiredIndex.name, tableName, statement)
 	}
 	desiredTable.indexes = append(desiredTable.indexes, desiredIndex)
+
+	return ddls, nil
+}
+
+func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy Policy, action string, statement string) ([]string, error) {
+	var ddls []string
+
+	currentTable := findTableByName(g.currentTables, tableName)
+	if currentTable == nil {
+		return nil, fmt.Errorf("%s is performed for inexistent table '%s': '%s'", action, tableName, statement)
+	}
+
+	currentPolicy := findPolicyByName(currentTable.policies, desiredPolicy.name)
+	if currentPolicy == nil {
+		// Policy not found, add policy.
+		ddls = append(ddls, statement)
+		currentTable.policies = append(currentTable.policies, desiredPolicy)
+	} else {
+		// policy found. If it's different, drop and add or alter policy.
+		if !areSamePolicies(*currentPolicy, desiredPolicy) {
+			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", currentPolicy.name, currentTable.name))
+			ddls = append(ddls, statement)
+		}
+	}
+
+	// Examine policies in desiredTable to delete obsoleted policies later
+	desiredTable := findTableByName(g.desiredTables, tableName)
+	if desiredTable == nil {
+		return nil, fmt.Errorf("%s is performed before create table '%s': '%s'", action, tableName, statement)
+	}
+	if containsString(convertPolicyNames(desiredTable.policies), desiredPolicy.name) {
+		return nil, fmt.Errorf("policy '%s' is doubly created against table '%s': '%s'", desiredPolicy.name, tableName, statement)
+	}
+	desiredTable.policies = append(desiredTable.policies, desiredPolicy)
 
 	return ddls, nil
 }
@@ -716,6 +765,13 @@ func convertDDLsToTables(ddls []DDL) ([]*Table, error) {
 			}
 
 			table.foreignKeys = append(table.foreignKeys, stmt.foreignKey)
+		case *AddPolicy:
+			table := findTableByName(tables, stmt.tableName)
+			if table == nil {
+				return nil, fmt.Errorf("ADD POLICY performed before CREATE TABLE: %s", ddl.Statement())
+			}
+
+			table.policies = append(table.policies, stmt.policy)
 		case *View:
 			// do nothing
 		default:
@@ -775,6 +831,15 @@ func findPrimaryKey(indexes []Index) *Index {
 	for _, index := range indexes {
 		if index.primary {
 			return &index
+		}
+	}
+	return nil
+}
+
+func findPolicyByName(policies []Policy, name string) *Policy {
+	for _, policy := range policies {
+		if policy.name == name {
+			return &policy
 		}
 	}
 	return nil
@@ -881,6 +946,36 @@ func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB Forei
 	return true
 }
 
+func areSamePolicies(policyA, policyB Policy) bool {
+	if strings.ToLower(policyA.scope) != strings.ToLower(policyB.scope) {
+		return false
+	}
+	if strings.ToLower(policyA.permissive) != strings.ToLower(policyB.permissive) {
+		return false
+	}
+	if strings.ToLower(policyA.using) != strings.ToLower(policyB.using) {
+		return fmt.Sprintf("(%s)", policyA.using) == policyB.using
+	}
+	if strings.ToLower(policyA.withCheck) != strings.ToLower(policyB.withCheck) {
+		return fmt.Sprintf("(%s)", policyA.withCheck) == policyB.withCheck
+	}
+	if len(policyA.roles) != len(policyB.roles) {
+		return false
+	}
+	sort.Slice(policyA.roles, func(i, j int) bool {
+		return policyA.roles[i] <= policyA.roles[j]
+	})
+	sort.Slice(policyB.roles, func(i, j int) bool {
+		return policyB.roles[i] <= policyB.roles[j]
+	})
+	for i := range policyA.roles {
+		if strings.ToLower(policyA.roles[i]) != strings.ToLower(policyB.roles[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 func (g *Generator) normalizeOnUpdate(onUpdate string) string {
 	if g.mode == GeneratorModePostgres && onUpdate == "" {
 		return "NO ACTION"
@@ -941,6 +1036,14 @@ func convertForeignKeysToIndexNames(foreignKeys []ForeignKey) []string {
 		} // unexpected to reach else (really?)
 	}
 	return indexNames
+}
+
+func convertPolicyNames(policies []Policy) []string {
+	policyNames := make([]string, len(policies))
+	for i, policy := range policies {
+		policyNames[i] = policy.name
+	}
+	return policyNames
 }
 
 func convertViewNames(views []*View) []string {
