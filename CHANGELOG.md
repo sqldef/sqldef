@@ -1,3 +1,7 @@
+## v0.8.2
+
+- Support `CREATE POLICY` in psqldef [#77](https://github.com/k0kubun/sqldef/issues/77)
+
 ## v0.8.1
 
 - Support more types of default values in psqldef [#80](https://github.com/k0kubun/sqldef/issues/80)
