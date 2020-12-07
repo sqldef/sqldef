@@ -65,7 +65,7 @@ jobs:
       - name: Update homebrew
         run: |
           set -x
-          cd ./build
+          cd ./homebrew-sqldef
           VERSION=$(echo "$GITHUB_REF" | sed -e 's!refs/tags/!!')
           sed -i -e "s/tag: '.*'/tag: '$VERSION'/" mysqldef.rb psqldef.rb
           git add .
