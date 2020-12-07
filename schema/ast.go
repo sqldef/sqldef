@@ -65,6 +65,7 @@ type Column struct {
 	keyOption     ColumnKeyOption
 	onUpdate      *Value
 	enumValues    []string
+	references    string
 	// TODO: keyopt
 	// XXX: zerofill?
 }

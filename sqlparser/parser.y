@@ -894,6 +894,11 @@ column_definition_type:
     $1.Default = NewBitVal($3)
     $$ = $1
   }
+| column_definition_type REFERENCES table_id
+  {
+    $1.References = $3.v
+    $$ = $1
+  }
 
 character_cast_opt:
   {

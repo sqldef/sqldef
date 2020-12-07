@@ -97,6 +97,7 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) Table {
 			keyOption:     ColumnKeyOption(parsedCol.Type.KeyOpt), // FIXME: tight coupling in enum order
 			onUpdate:      parseValue(parsedCol.Type.OnUpdate),
 			enumValues:    parsedCol.Type.EnumValues,
+			references:    parsedCol.Type.References,
 		}
 		columns = append(columns, column)
 	}

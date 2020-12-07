@@ -138,15 +138,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue // Foreign key is expected to exist.
 			}
 
-			var ddl string
-			switch g.mode {
-			case GeneratorModeMysql:
-				ddl = fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", currentTable.name, foreignKey.constraintName)
-			case GeneratorModePostgres:
-				ddl = fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", currentTable.name, foreignKey.constraintName)
-			default:
-			}
-			ddls = append(ddls, ddl)
+			// The foreign key seems obsoleted. Check and drop it as needed.
+			foreignKeyDDLs := g.generateDDLsForAbsentForeignKey(foreignKey, *currentTable, *desiredTable)
+			ddls = append(ddls, foreignKeyDDLs...)
 			// TODO: simulate to remove foreign key from `currentTable.foreignKeys`?
 		}
 
@@ -157,7 +151,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue // Index is expected to exist.
 			}
 
-			// Index is obsoleted. Check and drop index as needed.
+			// The index seems obsoleted. Check and drop it as needed.
 			indexDDLs, err := g.generateDDLsForAbsentIndex(index, *currentTable, *desiredTable)
 			if err != nil {
 				return ddls, err
@@ -266,6 +260,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					ddls = append(ddls, ddl)
 				}
 
+				// TODO: support adding a column's `references`
 				// TODO: support SET/DROP NOT NULL and other properties
 			default:
 			}
@@ -480,7 +475,33 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 	return ddls, nil
 }
 
-// Even though simulated table doesn't have index, primary or unique could exist in column definitions.
+// Even though simulated table doesn't have a foreign key, references could exist in column definitions.
+// This carefully generates DROP CONSTRAINT for such situations.
+func (g *Generator) generateDDLsForAbsentForeignKey(currentForeignKey ForeignKey, currentTable Table, desiredTable Table) []string {
+	ddls := []string{}
+
+	switch g.mode {
+	case GeneratorModeMysql:
+		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", currentTable.name, currentForeignKey.constraintName))
+	case GeneratorModePostgres:
+		var referencesColumn *Column
+		for _, column := range desiredTable.columns {
+			if column.references == currentForeignKey.referenceName {
+				referencesColumn = &column
+				break
+			}
+		}
+
+		if referencesColumn == nil {
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", currentTable.name, currentForeignKey.constraintName))
+		}
+	default:
+	}
+
+	return ddls
+}
+
+// Even though simulated table doesn't have an index, primary or unique could exist in column definitions.
 // This carefully generates DROP INDEX for such situations.
 func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable Table, desiredTable Table) ([]string, error) {
 	ddls := []string{}

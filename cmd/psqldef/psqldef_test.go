@@ -55,7 +55,6 @@ func TestPsqldefCreateTableWithDefault(t *testing.T) {
 		);
 		`,
 	)
-
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -194,6 +193,36 @@ func TestCreateTableForeignKey(t *testing.T) {
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE public.posts DROP CONSTRAINT posts_ibfk_1;\n")
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+}
+
+func TestCreateTableWithReferences(t *testing.T) {
+	resetTestDatabase()
+
+	createTableA := stripHeredoc(`
+		CREATE TABLE a (
+		  a_id INTEGER PRIMARY KEY
+		);
+		`,
+	)
+	createTableB := stripHeredoc(`
+		CREATE TABLE b (
+		  b_id INTEGER PRIMARY KEY,
+		  a_id INTEGER REFERENCES a
+		);
+		`,
+	)
+	assertApplyOutput(t, createTableA+createTableB, applyPrefix+createTableA+createTableB)
+	assertApplyOutput(t, createTableA+createTableB, nothingModified)
+
+	createTableB = stripHeredoc(`
+		CREATE TABLE b (
+		  b_id INTEGER PRIMARY KEY,
+		  a_id INTEGER
+		);
+		`,
+	)
+	assertApplyOutput(t, createTableA+createTableB, applyPrefix+"ALTER TABLE public.b DROP CONSTRAINT b_a_id_fkey;\n")
+	assertApplyOutput(t, createTableA+createTableB, nothingModified)
 }
 
 func TestCreatePolicy(t *testing.T) {
