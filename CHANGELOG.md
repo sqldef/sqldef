@@ -1,3 +1,7 @@
+## v0.8.4
+
+- Support parsing columns names in a column's `REFERENCES` in psqldef [#84](https://github.com/k0kubun/sqldef/issues/84)
+
 ## v0.8.3
 
 - Support parsing a column's `REFERENCES` in psqldef [#82](https://github.com/k0kubun/sqldef/issues/82)
