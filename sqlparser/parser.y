@@ -899,6 +899,12 @@ column_definition_type:
     $1.References = $3.v
     $$ = $1
   }
+| column_definition_type REFERENCES table_id '(' column_list ')'
+  {
+    $1.References     = $3.v
+    $1.ReferenceNames = $5
+    $$ = $1
+  }
 
 character_cast_opt:
   {

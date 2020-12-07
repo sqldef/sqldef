@@ -200,14 +200,16 @@ func TestCreateTableWithReferences(t *testing.T) {
 
 	createTableA := stripHeredoc(`
 		CREATE TABLE a (
-		  a_id INTEGER PRIMARY KEY
+		  a_id INTEGER PRIMARY KEY,
+		  my_text TEXT UNIQUE NOT NULL
 		);
 		`,
 	)
 	createTableB := stripHeredoc(`
 		CREATE TABLE b (
 		  b_id INTEGER PRIMARY KEY,
-		  a_id INTEGER REFERENCES a
+		  a_id INTEGER REFERENCES a,
+		  a_my_text TEXT NOT NULL REFERENCES a (my_text)
 		);
 		`,
 	)
@@ -217,11 +219,14 @@ func TestCreateTableWithReferences(t *testing.T) {
 	createTableB = stripHeredoc(`
 		CREATE TABLE b (
 		  b_id INTEGER PRIMARY KEY,
-		  a_id INTEGER
+		  a_id INTEGER,
+		  a_my_text TEXT NOT NULL
 		);
 		`,
 	)
-	assertApplyOutput(t, createTableA+createTableB, applyPrefix+"ALTER TABLE public.b DROP CONSTRAINT b_a_id_fkey;\n")
+	assertApplyOutput(t, createTableA+createTableB, applyPrefix+
+		"ALTER TABLE public.b DROP CONSTRAINT b_a_id_fkey;\n"+
+		"ALTER TABLE public.b DROP CONSTRAINT b_a_my_text_fkey;\n")
 	assertApplyOutput(t, createTableA+createTableB, nothingModified)
 }
 

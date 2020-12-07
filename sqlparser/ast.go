@@ -935,7 +935,8 @@ type ColumnType struct {
 	// Key specification
 	KeyOpt ColumnKeyOption
 
-	References string
+	References     string
+	ReferenceNames Columns
 	// TODO: Allow specifying referenced column names
 }
 
