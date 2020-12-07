@@ -47,9 +47,8 @@ jobs:
         with:
           go-version: 1.13
       - uses: actions/checkout@v2
-
       - run: make package
-      - name: Release
+      - name: Release binaries
         run: |
           export VERSION=$(echo "$GITHUB_REF" | sed -e 's!refs/tags/!!')
           curl -L "https://github.com/tcnksm/ghr/releases/download/${GHR_VERSION}/ghr_${GHR_VERSION}_linux_amd64.tar.gz" | tar xvz
@@ -57,3 +56,22 @@ jobs:
         env:
           GHR_VERSION: v0.13.0
           GITHUB_TOKEN: ${{ secrets.githubtoken }}
+
+      - uses: actions/checkout@v2
+        with:
+          repository: sqldef/homebrew-sqldef
+          ssh-key: ${{ secrets.HOMEBREW_DEPLOY_KEY }}
+          path: ./homebrew-sqldef
+      - name: Update homebrew
+        run: |
+          set -x
+          cd ./build
+          VERSION=$(echo "$GITHUB_REF" | sed -e 's!refs/tags/!!')
+          sed -i -e "s/tag: '.*'/tag: '$VERSION'/" mysqldef.rb psqldef.rb
+          git add .
+          if ! git diff-index --quiet HEAD --; then
+            git config --global user.email "k0kubun@github.com"
+            git config --global user.name "sqldef"
+            git commit -m "Version $VERSION"
+            git push origin master
+          fi
