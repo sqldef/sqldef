@@ -1,3 +1,7 @@
+## v0.8.3
+
+- Support parsing a column's `REFERENCES` in psqldef [#82](https://github.com/k0kubun/sqldef/issues/82)
+
 ## v0.8.2
 
 - Support `CREATE POLICY` in psqldef [#77](https://github.com/k0kubun/sqldef/issues/77)
