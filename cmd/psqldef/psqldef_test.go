@@ -26,10 +26,7 @@ func TestPsqldefCreateTable(t *testing.T) {
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name text,
-		  age integer,
-		  profile character varying(50) NOT NULL DEFAULT ''::character varying,
-		  joined_at timestamp with time zone NOT NULL DEFAULT '0001-01-01 00:00:00'::timestamp without time zone,
-		  created_at timestamp with time zone DEFAULT now()
+		  age integer
 		);
 		`,
 	)
@@ -45,6 +42,22 @@ func TestPsqldefCreateTable(t *testing.T) {
 
 	assertApplyOutput(t, createTable1, applyPrefix+"DROP TABLE \"public\".\"bigdata\";\n")
 	assertApplyOutput(t, createTable1, nothingModified)
+}
+
+func TestPsqldefCreateTableWithDefault(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  profile character varying(50) NOT NULL DEFAULT ''::character varying,
+		  joined_at timestamp with time zone NOT NULL DEFAULT '0001-01-01 00:00:00'::timestamp without time zone,
+		  created_at timestamp with time zone DEFAULT now()
+		);
+		`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestPsqldefCreateTableAlterColumn(t *testing.T) {
