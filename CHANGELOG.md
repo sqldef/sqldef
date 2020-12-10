@@ -1,3 +1,7 @@
+## v0.8.5
+
+- Improve comparison of decimal default values [#85](https://github.com/k0kubun/sqldef/issues/85)
+
 ## v0.8.4
 
 - Support parsing columns names in a column's `REFERENCES` in psqldef [#84](https://github.com/k0kubun/sqldef/issues/84)
