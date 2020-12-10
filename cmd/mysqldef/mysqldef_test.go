@@ -1126,6 +1126,19 @@ func TestMysqldefNegativeDefault(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefDecimalDefault(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE some_table (
+		  some_value decimal(5, 2) DEFAULT 0.0
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefIndexWithDot(t *testing.T) {
 	resetTestDatabase()
 

@@ -909,7 +909,14 @@ func haveSameValue(current *Value, desired *Value) bool {
 	}
 
 	// NOTE: -1 can be changed to '-1' in show create table and valueType is not reliable
-	return string(current.raw) == string(desired.raw)
+	currentRaw := string(current.raw)
+	desiredRaw := string(desired.raw)
+	if desired.valueType == ValueTypeFloat && len(currentRaw) > len(desiredRaw) {
+		// Round "0.00" to "0.0" for comparison with desired.
+		// Ideally we should do this seeing precision in a data type.
+		currentRaw = currentRaw[0:len(desiredRaw)]
+	}
+	return currentRaw == desiredRaw
 }
 
 func (g *Generator) normalizeDataType(dataType string) string {
