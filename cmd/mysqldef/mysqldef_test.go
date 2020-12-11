@@ -487,7 +487,7 @@ func TestMysqldefSwapColumn(t *testing.T) {
 	)
 
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `users` CHANGE COLUMN `nickname` `nickname` varchar(20) NOT NULL AFTER id;\n",
+		"ALTER TABLE `users` CHANGE COLUMN `nickname` `nickname` varchar(20) NOT NULL AFTER `id`;\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
