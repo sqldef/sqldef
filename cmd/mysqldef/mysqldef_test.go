@@ -77,7 +77,7 @@ func TestMysqldefCreateTableDropPrimaryKey(t *testing.T) {
 		  name varchar(20)
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP PRIMARY KEY;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` DROP PRIMARY KEY;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -87,8 +87,8 @@ func TestMysqldefCreateTableDropPrimaryKey(t *testing.T) {
 		);`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users CHANGE COLUMN name name varchar(20) NOT NULL;\n"+
-		"ALTER TABLE users ADD primary key (`name`);\n",
+		"ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(20) NOT NULL;\n"+
+		"ALTER TABLE `users` ADD primary key (`name`);\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -116,7 +116,7 @@ func TestMysqldefCreateTableAddPrimaryKey(t *testing.T) {
 	)
 
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users ADD primary key (`id`);\n",
+		"ALTER TABLE `users` ADD primary key (`id`);\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -146,8 +146,8 @@ func TestMysqldefCreateTableChangePrimaryKey(t *testing.T) {
 	)
 
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE friends DROP PRIMARY KEY;\n"+
-		"ALTER TABLE friends ADD primary key (`user_id`, `friend_id`);\n",
+		"ALTER TABLE `friends` DROP PRIMARY KEY;\n"+
+		"ALTER TABLE `friends` ADD primary key (`user_id`, `friend_id`);\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -174,9 +174,9 @@ func TestMysqldefCreateTableAddAutoIncrementPrimaryKey(t *testing.T) {
 	)
 
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users ADD COLUMN id bigint NOT NULL FIRST;\n"+
-		"ALTER TABLE users ADD primary key (`id`);\n"+
-		"ALTER TABLE users CHANGE COLUMN id id bigint NOT NULL AUTO_INCREMENT;\n",
+		"ALTER TABLE `users` ADD COLUMN `id` bigint NOT NULL FIRST;\n"+
+		"ALTER TABLE `users` ADD primary key (`id`);\n"+
+		"ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -204,7 +204,7 @@ func TestMysqldefCreateTableKeepAutoIncrement(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users CHANGE COLUMN id id bigint NOT NULL AUTO_INCREMENT;\n",
+		"ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -231,7 +231,7 @@ func TestMysqldefCreateTableChangeAutoIncrement(t *testing.T) {
 	)
 
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users CHANGE COLUMN id id bigint(20) NOT NULL AUTO_INCREMENT;\n",
+		"ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 
@@ -243,7 +243,7 @@ func TestMysqldefCreateTableChangeAutoIncrement(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users CHANGE COLUMN id id bigint(20) NOT NULL;\n",
+		"ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -269,9 +269,9 @@ func TestMysqldefCreateTableRemoveAutoIncrementPrimaryKey(t *testing.T) {
 	)
 
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE friends CHANGE COLUMN id id bigint(20) NOT NULL;\n"+
-		"ALTER TABLE friends DROP PRIMARY KEY;\n"+
-		"ALTER TABLE friends DROP COLUMN id;\n",
+		"ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;\n"+
+		"ALTER TABLE `friends` DROP PRIMARY KEY;\n"+
+		"ALTER TABLE `friends` DROP COLUMN `id`;\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -296,7 +296,7 @@ func TestMysqldefAddColumn(t *testing.T) {
 		  created_at datetime NOT NULL
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN created_at datetime NOT NULL AFTER name;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `created_at` datetime NOT NULL AFTER `name`;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -305,7 +305,7 @@ func TestMysqldefAddColumn(t *testing.T) {
 		  created_at datetime NOT NULL
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP COLUMN name;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` DROP COLUMN `name`;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -329,7 +329,7 @@ func TestMysqldefAddColumnAfter(t *testing.T) {
 		  created_at datetime NOT NULL
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN name varchar(40) NOT NULL AFTER id;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `name` varchar(40) NOT NULL AFTER `id`;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -353,7 +353,7 @@ func TestMysqldefAddColumnWithNull(t *testing.T) {
 		  created_at timestamp NULL DEFAULT NULL
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN created_at timestamp NULL DEFAULT null AFTER name;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `created_at` timestamp NULL DEFAULT null AFTER `name`;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -378,8 +378,8 @@ func TestMysqldefChangeColumn(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
-		ALTER TABLE users CHANGE COLUMN id id bigint UNSIGNED NOT NULL;
-		ALTER TABLE users CHANGE COLUMN name name char(40);
+		ALTER TABLE `+"`users`"+` CHANGE COLUMN `+"`id` `id`"+` bigint UNSIGNED NOT NULL;
+		ALTER TABLE `+"`users`"+` CHANGE COLUMN `+"`name` `name`"+` char(40);
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)
@@ -406,7 +406,7 @@ func TestMysqldefChangeColumnLength(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
-		ALTER TABLE users CHANGE COLUMN name name varchar(1000) COLLATE utf8mb4_bin DEFAULT null;
+		ALTER TABLE `+"`users`"+` CHANGE COLUMN `+"`name` `name`"+` varchar(1000) COLLATE utf8mb4_bin DEFAULT null;
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)
@@ -431,7 +431,7 @@ func TestMysqldefChangeColumnBinary(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users CHANGE COLUMN word word varchar(64) COLLATE utf8mb4_bin NOT NULL;\n",
+		"ALTER TABLE `users` CHANGE COLUMN `word` `word` varchar(64) COLLATE utf8mb4_bin NOT NULL;\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -455,7 +455,7 @@ func TestMysqldefChangeColumnCollate(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users CHANGE COLUMN password password char(128) CHARACTER SET latin1 COLLATE latin1_bin;\n",
+		"ALTER TABLE `users` CHANGE COLUMN `password` `password` char(128) CHARACTER SET latin1 COLLATE latin1_bin;\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -487,7 +487,7 @@ func TestMysqldefSwapColumn(t *testing.T) {
 	)
 
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users CHANGE COLUMN nickname nickname varchar(20) NOT NULL AFTER id;\n",
+		"ALTER TABLE `users` CHANGE COLUMN `nickname` `nickname` varchar(20) NOT NULL AFTER id;\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -504,15 +504,15 @@ func TestMysqldefAddIndex(t *testing.T) {
 	)
 	assertApply(t, createTable)
 
-	alterTable := "ALTER TABLE users ADD UNIQUE INDEX `index_name`(name);\n"
+	alterTable := "ALTER TABLE `users` ADD UNIQUE INDEX `index_name`(`name`);\n"
 	assertApplyOutput(t, createTable+alterTable, applyPrefix+alterTable)
 	assertApplyOutput(t, createTable+alterTable, nothingModified)
 
-	alterTable = "ALTER TABLE users ADD INDEX `index_name`(name, created_at);\n"
-	assertApplyOutput(t, createTable+alterTable, applyPrefix+"ALTER TABLE users DROP INDEX `index_name`;\n"+alterTable)
+	alterTable = "ALTER TABLE `users` ADD INDEX `index_name`(`name`, `created_at`);\n"
+	assertApplyOutput(t, createTable+alterTable, applyPrefix+"ALTER TABLE `users` DROP INDEX `index_name`;\n"+alterTable)
 	assertApplyOutput(t, createTable+alterTable, nothingModified)
 
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users DROP INDEX `index_name`;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` DROP INDEX `index_name`;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -536,7 +536,7 @@ func TestMysqldefFulltextIndex(t *testing.T) {
 		  title varchar(40) DEFAULT NULL
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE posts DROP INDEX `title_fulltext_index`;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `posts` DROP INDEX `title_fulltext_index`;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -546,7 +546,7 @@ func TestMysqldefFulltextIndex(t *testing.T) {
 		  FULLTEXT KEY title_fulltext_index (title) /*!50100 WITH PARSER ngram */
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE posts ADD fulltext key `title_fulltext_index`(`title`);\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `posts` ADD fulltext key `title_fulltext_index`(`title`);\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -568,8 +568,8 @@ func TestMysqldefCreateIndex(t *testing.T) {
 	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
 
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users DROP INDEX `index_created_at`;\n"+
-		"ALTER TABLE users DROP INDEX `index_name`;\n",
+		"ALTER TABLE `users` DROP INDEX `index_created_at`;\n"+
+		"ALTER TABLE `users` DROP INDEX `index_name`;\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -599,8 +599,8 @@ func TestMysqldefCreateTableKey(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users ADD key `index_name`(`name`);\n"+
-		"ALTER TABLE users ADD unique key `index_created_at`(`created_at`);\n",
+		"ALTER TABLE `users` ADD key `index_name`(`name`);\n"+
+		"ALTER TABLE `users` ADD unique key `index_created_at`(`created_at`);\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -625,7 +625,7 @@ func TestMysqldefCreateTableWithUniqueColumn(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users ADD COLUMN name varchar(40) UNIQUE AFTER id;\n",
+		"ALTER TABLE `users` ADD COLUMN `name` varchar(40) UNIQUE AFTER `id`;\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 
@@ -636,8 +636,8 @@ func TestMysqldefCreateTableWithUniqueColumn(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users DROP INDEX `name`;\n"+
-		"ALTER TABLE users DROP COLUMN name;\n",
+		"ALTER TABLE `users` DROP INDEX `name`;\n"+
+		"ALTER TABLE `users` DROP COLUMN `name`;\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -661,7 +661,7 @@ func TestMysqldefCreateTableChangeUniqueColumn(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users ADD UNIQUE KEY name(name);\n",
+		"ALTER TABLE `users` ADD UNIQUE KEY `name`(`name`);\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 
@@ -672,7 +672,7 @@ func TestMysqldefCreateTableChangeUniqueColumn(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users DROP INDEX `name`;\n",
+		"ALTER TABLE `users` DROP INDEX `name`;\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -700,7 +700,7 @@ func TestMysqldefCreateTableForeignKey(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id);\n")
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE `posts` ADD CONSTRAINT `posts_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);\n")
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	// Add options to a foreign key
@@ -712,7 +712,7 @@ func TestMysqldefCreateTableForeignKey(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE posts DROP FOREIGN KEY posts_ibfk_1;\nALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE;\n")
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE `posts` DROP FOREIGN KEY `posts_ibfk_1`;\nALTER TABLE `posts` ADD CONSTRAINT `posts_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;\n")
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	// Drop a foreign key
@@ -724,8 +724,8 @@ func TestMysqldefCreateTableForeignKey(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
-		"ALTER TABLE posts DROP FOREIGN KEY posts_ibfk_1;\n"+
-		"ALTER TABLE posts DROP INDEX `posts_ibfk_1`;\n",
+		"ALTER TABLE `posts` DROP FOREIGN KEY `posts_ibfk_1`;\n"+
+		"ALTER TABLE `posts` DROP INDEX `posts_ibfk_1`;\n",
 	)
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
@@ -739,7 +739,7 @@ func TestMysqldefCreateTableForeignKey(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
-		"ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;\n")
+		"ALTER TABLE `posts` ADD CONSTRAINT `posts_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;\n")
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 }
 
@@ -801,7 +801,7 @@ func TestMysqldefKeywordIndexColumns(t *testing.T) {
 		"  KEY `index_character`(`character`)\n" +
 		");\n"
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE tools ADD key `index_character`(`character`);\n")
+		"ALTER TABLE `tools` ADD key `index_character`(`character`);\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -880,7 +880,7 @@ func TestMysqldefDefaultNull(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN name varchar(40) DEFAULT null AFTER id;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `name` varchar(40) DEFAULT null AFTER `id`;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -903,7 +903,7 @@ func TestMysqldefAddNotNull(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users CHANGE COLUMN name name varchar(255) NOT NULL;\n",
+		"ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(255) NOT NULL;\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -930,7 +930,7 @@ func TestMysqldefCreateTableAddColumnWithCharsetAndNotNull(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users ADD COLUMN name varchar(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL AFTER id;\n",
+		"ALTER TABLE `users` ADD COLUMN `name` varchar(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL AFTER `id`;\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -957,7 +957,7 @@ func TestMysqldefOnUpdate(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users CHANGE COLUMN updated_at updated_at datetime DEFAULT current_timestamp;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` CHANGE COLUMN `updated_at` `updated_at` datetime DEFAULT current_timestamp;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -968,7 +968,7 @@ func TestMysqldefOnUpdate(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users CHANGE COLUMN updated_at updated_at datetime DEFAULT current_timestamp ON UPDATE current_timestamp;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` CHANGE COLUMN `updated_at` `updated_at` datetime DEFAULT current_timestamp ON UPDATE current_timestamp;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -991,7 +991,7 @@ func TestMysqldefCurrentTimestampWithPrecision(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN updated_at datetime(6) DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6) AFTER created_at;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `updated_at` datetime(6) DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6) AFTER `created_at`;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1014,7 +1014,7 @@ func TestMysqldefEnumValues(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE users ADD COLUMN authorities enum('normal', 'admin') NOT NULL DEFAULT 'normal' AFTER id;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `authorities` enum('normal', 'admin') NOT NULL DEFAULT 'normal' AFTER `id`;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1047,13 +1047,13 @@ func TestMysqldefView(t *testing.T) {
 		`,
 	)
 	expected := stripHeredoc(`
-		CREATE OR REPLACE VIEW foo AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
+		CREATE OR REPLACE VIEW ` + "`foo`" + ` AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
 		`,
 	)
 	assertApplyOutput(t, createTable+createView, applyPrefix+expected)
 	assertApplyOutput(t, createTable+createView, nothingModified)
 
-	assertApplyOutput(t, "", applyPrefix+"DROP TABLE `posts`;\nDROP TABLE `users`;\nDROP VIEW foo;\n")
+	assertApplyOutput(t, "", applyPrefix+"DROP TABLE `posts`;\nDROP TABLE `users`;\nDROP VIEW `foo`;\n")
 }
 
 func TestMysqldefDefaultValue(t *testing.T) {
@@ -1083,8 +1083,8 @@ func TestMysqldefDefaultValue(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE tools CHANGE COLUMN created_at created_at datetime NOT NULL DEFAULT current_timestamp;\n"+
-		"ALTER TABLE tools CHANGE COLUMN updated_at updated_at datetime NOT NULL DEFAULT current_timestamp ON UPDATE current_timestamp;\n")
+		"ALTER TABLE `tools` CHANGE COLUMN `created_at` `created_at` datetime NOT NULL DEFAULT current_timestamp;\n"+
+		"ALTER TABLE `tools` CHANGE COLUMN `updated_at` `updated_at` datetime NOT NULL DEFAULT current_timestamp ON UPDATE current_timestamp;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -1098,8 +1098,8 @@ func TestMysqldefDefaultValue(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE tools CHANGE COLUMN created_at created_at datetime NOT NULL;\n"+
-		"ALTER TABLE tools CHANGE COLUMN updated_at updated_at datetime NOT NULL;\n")
+		"ALTER TABLE `tools` CHANGE COLUMN `created_at` `created_at` datetime NOT NULL;\n"+
+		"ALTER TABLE `tools` CHANGE COLUMN `updated_at` `updated_at` datetime NOT NULL;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1122,7 +1122,7 @@ func TestMysqldefNegativeDefault(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE items CHANGE COLUMN position position float DEFAULT 100;\n")
+		"ALTER TABLE `items` CHANGE COLUMN `position` `position` float DEFAULT 100;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1155,7 +1155,7 @@ func TestMysqldefIndexWithDot(t *testing.T) {
 		"  KEY `account.id`(account_id)\n" +
 		");\n"
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users ADD key `account.id`(`account_id`);\n")
+		"ALTER TABLE `users` ADD key `account.id`(`account_id`);\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1180,10 +1180,10 @@ func TestMysqldefChangeIndexCombination(t *testing.T) {
 		"  KEY `index_users2`(account_id)\n" +
 		");\n"
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE users DROP INDEX `index_users1`;\n"+
-		"ALTER TABLE users ADD key `index_users1`(`account_id`, `name`);\n"+
-		"ALTER TABLE users DROP INDEX `index_users2`;\n"+
-		"ALTER TABLE users ADD key `index_users2`(`account_id`);\n")
+		"ALTER TABLE `users` DROP INDEX `index_users1`;\n"+
+		"ALTER TABLE `users` ADD key `index_users1`(`account_id`, `name`);\n"+
+		"ALTER TABLE `users` DROP INDEX `index_users2`;\n"+
+		"ALTER TABLE `users` ADD key `index_users2`(`account_id`);\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
