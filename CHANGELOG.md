@@ -1,3 +1,7 @@
+## v0.8.6
+
+- All identifiers are escaped [#87](https://github.com/k0kubun/sqldef/issues/87)
+
 ## v0.8.5
 
 - Improve comparison of decimal default values [#85](https://github.com/k0kubun/sqldef/issues/85)
