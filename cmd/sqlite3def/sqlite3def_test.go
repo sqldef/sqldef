@@ -188,11 +188,13 @@ func TestMain(m *testing.M) {
 }
 
 func assertApply(t *testing.T, schema string) {
+	t.Helper()
 	writeFile("schema.sql", schema)
 	assertedExecute(t, "sqlite3def", "sqlite3def_test", "--file", "schema.sql")
 }
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
+	t.Helper()
 	writeFile("schema.sql", schema)
 	actual := assertedExecute(t, "sqlite3def", "sqlite3def_test", "--file", "schema.sql")
 	assertEquals(t, actual, expected)
@@ -207,6 +209,7 @@ func mustExecute(command string, args ...string) {
 }
 
 func assertedExecute(t *testing.T, command string, args ...string) string {
+	t.Helper()
 	out, err := execute(command, args...)
 	if err != nil {
 		t.Errorf("failed to execute '%s %s' (error: '%s'): `%s`", command, strings.Join(args, " "), err, out)
@@ -215,6 +218,7 @@ func assertedExecute(t *testing.T, command string, args ...string) string {
 }
 
 func assertEquals(t *testing.T, actual string, expected string) {
+	t.Helper()
 	if expected != actual {
 		t.Errorf("expected '%s' but got '%s'", expected, actual)
 	}
