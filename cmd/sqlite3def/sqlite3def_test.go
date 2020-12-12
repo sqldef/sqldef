@@ -40,7 +40,7 @@ func TestSQLite3defCreateTable(t *testing.T) {
 	assertApplyOutput(t, createTable1+createTable2, applyPrefix+createTable1+createTable2)
 	assertApplyOutput(t, createTable1+createTable2, nothingModified)
 
-	assertApplyOutput(t, createTable1, applyPrefix+`DROP TABLE "bigdata";`+"\n")
+	assertApplyOutput(t, createTable1, applyPrefix+"DROP TABLE `bigdata`;\n")
 	assertApplyOutput(t, createTable1, nothingModified)
 }
 
@@ -59,24 +59,24 @@ func TestSQLite3defCreateView(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createView := stripHeredoc(`
-		CREATE VIEW "view_users" AS select id from users where age = 1;
+		CREATE VIEW ` + "`view_users`" + ` AS select id from users where age = 1;
 		`,
 	)
 	assertApplyOutput(t, createTable+createView, applyPrefix+createView)
 	assertApplyOutput(t, createTable+createView, nothingModified)
 
 	createView = stripHeredoc(`
-		CREATE VIEW "view_users" AS select id from users where age = 2;
+		CREATE VIEW ` + "`view_users`" + ` AS select id from users where age = 2;
 		`,
 	)
 	dropView := stripHeredoc(`
-		DROP VIEW "view_users";
+		DROP VIEW ` + "`view_users`" + `;
 		`,
 	)
 	assertApplyOutput(t, createTable+createView, applyPrefix+dropView+createView)
 	assertApplyOutput(t, createTable+createView, nothingModified)
 
-	assertApplyOutput(t, "", applyPrefix+"DROP TABLE users;\n"+dropView)
+	assertApplyOutput(t, "", applyPrefix+"DROP TABLE `users`;\n"+dropView)
 	//assertApplyOutput(t, "", nothingModified)
 }
 
@@ -188,13 +188,11 @@ func TestMain(m *testing.M) {
 }
 
 func assertApply(t *testing.T, schema string) {
-	t.Helper()
 	writeFile("schema.sql", schema)
 	assertedExecute(t, "sqlite3def", "sqlite3def_test", "--file", "schema.sql")
 }
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
-	t.Helper()
 	writeFile("schema.sql", schema)
 	actual := assertedExecute(t, "sqlite3def", "sqlite3def_test", "--file", "schema.sql")
 	assertEquals(t, actual, expected)
@@ -209,7 +207,6 @@ func mustExecute(command string, args ...string) {
 }
 
 func assertedExecute(t *testing.T, command string, args ...string) string {
-	t.Helper()
 	out, err := execute(command, args...)
 	if err != nil {
 		t.Errorf("failed to execute '%s %s' (error: '%s'): `%s`", command, strings.Join(args, " "), err, out)
@@ -218,7 +215,6 @@ func assertedExecute(t *testing.T, command string, args ...string) string {
 }
 
 func assertEquals(t *testing.T, actual string, expected string) {
-	t.Helper()
 	if expected != actual {
 		t.Errorf("expected '%s' but got '%s'", expected, actual)
 	}
