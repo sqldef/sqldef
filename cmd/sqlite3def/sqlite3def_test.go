@@ -59,18 +59,18 @@ func TestSQLite3defCreateView(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createView := stripHeredoc(`
-		CREATE VIEW view_users AS select id from users where age = 1;
+		CREATE VIEW ` + "`view_users`" + ` AS select id from users where age = 1;
 		`,
 	)
 	assertApplyOutput(t, createTable+createView, applyPrefix+createView)
 	assertApplyOutput(t, createTable+createView, nothingModified)
 
 	createView = stripHeredoc(`
-		CREATE VIEW view_users AS select id from users where age = 2;
+		CREATE VIEW ` + "`view_users`" + ` AS select id from users where age = 2;
 		`,
 	)
 	dropView := stripHeredoc(`
-		DROP VIEW view_users;
+		DROP VIEW ` + "`view_users`" + `;
 		`,
 	)
 	assertApplyOutput(t, createTable+createView, applyPrefix+dropView+createView)

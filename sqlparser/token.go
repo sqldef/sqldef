@@ -632,7 +632,7 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 				return tkn.scanString(ch, STRING)
 			}
 		default:
-			if tkn.mode == ParserModeMysql && ch == '`' {
+			if tkn.mode != ParserModePostgres && ch == '`' {
 				return tkn.scanLiteralIdentifier()
 			}
 			return LEX_ERROR, []byte{byte(ch)}
