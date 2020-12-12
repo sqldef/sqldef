@@ -80,7 +80,7 @@ func TestPsqldefCreateTableAlterColumn(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
-		ALTER TABLE public.users ALTER COLUMN name TYPE varchar(40);
+		ALTER TABLE "public"."users" ALTER COLUMN "name" TYPE varchar(40);
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)
@@ -124,8 +124,8 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 		);`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE public.users DROP CONSTRAINT users_pkey;\n"+
-		"ALTER TABLE public.users DROP COLUMN id;\n",
+		`ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";`+"\n"+
+		`ALTER TABLE "public"."users" DROP COLUMN "id";`+"\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 
@@ -136,8 +136,8 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 		);`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
-		ALTER TABLE public.users ADD COLUMN id bigint NOT NULL;
-		ALTER TABLE public.users ADD primary key ("id");
+		ALTER TABLE "public"."users" ADD COLUMN "id" bigint NOT NULL;
+		ALTER TABLE "public"."users" ADD primary key ("id");
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)
@@ -166,7 +166,7 @@ func TestCreateTableForeignKey(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
-		"ALTER TABLE public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id);\n",
+		`ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "users" ("id");`+"\n",
 	)
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
@@ -179,8 +179,8 @@ func TestCreateTableForeignKey(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
-		"ALTER TABLE public.posts DROP CONSTRAINT posts_ibfk_1;\n"+
-		"ALTER TABLE public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;\n",
+		`ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";`+"\n"+
+		`ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON DELETE SET NULL ON UPDATE CASCADE;`+"\n",
 	)
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
@@ -191,7 +191,7 @@ func TestCreateTableForeignKey(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE public.posts DROP CONSTRAINT posts_ibfk_1;\n")
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+`ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";`+"\n")
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 }
 
@@ -225,8 +225,8 @@ func TestCreateTableWithReferences(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTableA+createTableB, applyPrefix+
-		"ALTER TABLE public.b DROP CONSTRAINT b_a_id_fkey;\n"+
-		"ALTER TABLE public.b DROP CONSTRAINT b_a_my_text_fkey;\n")
+		`ALTER TABLE "public"."b" DROP CONSTRAINT "b_a_id_fkey";`+"\n"+
+		`ALTER TABLE "public"."b" DROP CONSTRAINT "b_a_my_text_fkey";`+"\n")
 	assertApplyOutput(t, createTableA+createTableB, nothingModified)
 }
 
@@ -252,7 +252,7 @@ func TestCreatePolicy(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createUsers+createPolicy, applyPrefix+stripHeredoc(`
-		DROP POLICY p_users ON public.users;
+		DROP POLICY "p_users" ON "public"."users";
 		CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (id = (current_user)::integer);
 		`,
 	))
@@ -263,13 +263,13 @@ func TestCreatePolicy(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createUsers+createPolicy, applyPrefix+stripHeredoc(`
-		DROP POLICY p_users ON public.users;
+		DROP POLICY "p_users" ON "public"."users";
 		CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);
 		`,
 	))
 	assertApplyOutput(t, createUsers+createPolicy, nothingModified)
 
-	assertApplyOutput(t, createUsers, applyPrefix+"DROP POLICY p_users ON public.users;\n")
+	assertApplyOutput(t, createUsers, applyPrefix+`DROP POLICY "p_users" ON "public"."users";`+"\n")
 	assertApplyOutput(t, createUsers, nothingModified)
 }
 
@@ -296,12 +296,12 @@ func TestCreateView(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts+createView, applyPrefix+stripHeredoc(`
-		CREATE OR REPLACE VIEW view_user_posts AS select p.id from (posts as p join users as u on ((p.user_id = u.id))) where (p.is_deleted = false);
+		CREATE OR REPLACE VIEW "public"."view_user_posts" AS select p.id from (posts as p join users as u on ((p.user_id = u.id))) where (p.is_deleted = false);
 		`,
 	))
 	assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
 
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"DROP VIEW view_user_posts;\n")
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+`DROP VIEW "public"."view_user_posts";`+"\n")
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 }
 
@@ -320,7 +320,7 @@ func TestPsqldefDropPrimaryKey(t *testing.T) {
 		  name text
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE public.users DROP CONSTRAINT users_pkey;\n")
+	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";`+"\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -344,7 +344,7 @@ func TestPsqldefAddColumn(t *testing.T) {
 		  age integer
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE public.users ADD COLUMN age integer;\n")
+	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."users" ADD COLUMN "age" integer;`+"\n")
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -353,7 +353,7 @@ func TestPsqldefAddColumn(t *testing.T) {
 		  age integer
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE public.users DROP COLUMN name;\n")
+	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."users" DROP COLUMN name;`+"\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -375,7 +375,7 @@ func TestPsqldefAddArrayColumn(t *testing.T) {
 		  name integer[]
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE public.users ADD COLUMN name integer[];\n")
+	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."users" ADD COLUMN "name" integer[];`+"\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
