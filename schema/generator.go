@@ -714,7 +714,14 @@ func (g *Generator) escapeTableName(name string) string {
 	switch g.mode {
 	case GeneratorModePostgres:
 		schemaTable := strings.SplitN(name, ".", 2)
-		return g.escapeSQLName(schemaTable[0]) + "." + g.escapeSQLName(schemaTable[1])
+		var schemaName, tableName string
+		if len(schemaTable) == 1 {
+			schemaName, tableName = "public", schemaTable[0]
+		} else {
+			schemaName, tableName = schemaTable[0], schemaTable[1]
+		}
+
+		return g.escapeSQLName(schemaName) + "." + g.escapeSQLName(tableName)
 	default:
 		return g.escapeSQLName(name)
 	}
