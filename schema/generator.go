@@ -292,7 +292,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", g.escapeTableName(desired.table.name)))
 			case GeneratorModePostgres:
 				tableName := strings.SplitN(desired.table.name, ".", 2)[1] // without schema
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s_pkey", g.escapeTableName(desired.table.name), tableName))
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(tableName+"_pkey")))
 			default:
 			}
 		}
