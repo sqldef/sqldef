@@ -62,12 +62,14 @@ func TestStringArena(t *testing.T) {
 }
 
 func checkstring(t *testing.T, actual, expected string) {
+	t.Helper()
 	if actual != expected {
 		t.Errorf("received %s, expecting %s", actual, expected)
 	}
 }
 
 func checkint(t *testing.T, actual, expected int) {
+	t.Helper()
 	if actual != expected {
 		t.Errorf("received %d, expecting %d", actual, expected)
 	}
