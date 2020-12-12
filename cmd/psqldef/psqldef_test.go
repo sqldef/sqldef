@@ -353,7 +353,7 @@ func TestPsqldefAddColumn(t *testing.T) {
 		  age integer
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."users" DROP COLUMN name;`+"\n")
+	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."users" DROP COLUMN "name";`+"\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
