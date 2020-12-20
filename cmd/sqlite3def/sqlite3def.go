@@ -12,6 +12,8 @@ import (
 	"github.com/k0kubun/sqldef/schema"
 )
 
+var version string
+
 // Return parsed options and schema filename
 // TODO: Support `sqldef schema.sql -opt val...`
 func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
@@ -21,6 +23,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		Export   bool   `long:"export" description:"Just dump the current schema to stdout"`
 		SkipDrop bool   `long:"skip-drop" description:"Skip destructive changes such as DROP"`
 		Help     bool   `long:"help" description:"Show this help"`
+		Version  bool   `long:"version" description:"Show this version"`
 	}
 
 	parser := flags.NewParser(&opts, flags.None)
@@ -32,6 +35,11 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 
 	if opts.Help {
 		parser.WriteHelp(os.Stdout)
+		os.Exit(0)
+	}
+
+	if opts.Version {
+		fmt.Println(version)
 		os.Exit(0)
 	}
 
