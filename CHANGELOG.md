@@ -1,3 +1,7 @@
+## v0.8.7
+
+- Make `CONSTRAINT foo PRIMARY KEY (bar)` work like `PRIMARY KEY (bar)` in psqldef [#88](https://github.com/k0kubun/sqldef/issues/88)
+
 ## v0.8.6
 
 - All identifiers are escaped [#87](https://github.com/k0kubun/sqldef/issues/87)
