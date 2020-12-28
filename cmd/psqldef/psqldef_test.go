@@ -143,6 +143,21 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestCreateTableConstraintPrimaryKey(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  a integer,
+		  b integer,
+		  CONSTRAINT a_b_pkey PRIMARY KEY (a, b)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestCreateTableForeignKey(t *testing.T) {
 	resetTestDatabase()
 

@@ -282,7 +282,7 @@ func forceEOF(yylex interface{}) {
 %type <strs> enum_values
 %type <columnDefinition> column_definition
 %type <columnType> column_definition_type
-%type <indexDefinition> index_definition
+%type <indexDefinition> index_definition primary_key_definition
 %type <foreignKeyDefinition> foreign_key_definition foreign_key_without_options
 %type <colIdent> reference_option
 %type <colIdent> sql_id_opt
@@ -779,6 +779,10 @@ table_column_list:
 | table_column_list ',' foreign_key_definition
   {
     $$.AddForeignKey($3)
+  }
+| table_column_list ',' primary_key_definition
+  {
+    $$.AddIndex($3)
   }
 
 column_definition:
@@ -1429,6 +1433,15 @@ reference_option:
 | NO ACTION
   {
     $$ = NewColIdent("NO ACTION")
+  }
+
+primary_key_definition:
+  CONSTRAINT sql_id PRIMARY KEY '(' index_column_list ')'
+  {
+    $$ = &IndexDefinition{
+      Info: &IndexInfo{Type: string($3) + " " + string($4), Name: NewColIdent("PRIMARY"), Primary: true, Unique: true},
+      Columns: $6,
+    }
   }
 
 sql_id_opt:
