@@ -1,3 +1,7 @@
+## v0.8.8
+
+- Generate composite primary keys properly in psqldef [#96](https://github.com/k0kubun/sqldef/issues/96)
+
 ## v0.8.7
 
 - Make `CONSTRAINT foo PRIMARY KEY (bar)` work like `PRIMARY KEY (bar)` in psqldef [#88](https://github.com/k0kubun/sqldef/issues/88)
