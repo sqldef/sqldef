@@ -96,6 +96,10 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	pkeyCols, err := d.getPrimaryKeyColumns(table)
+	if err != nil {
+		return "", err
+	}
 	indexDefs, err := d.getIndexDefs(table)
 	if err != nil {
 		return "", err
@@ -108,15 +112,17 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, indexDefs, foreginDefs, policyDefs), nil
+	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreginDefs, policyDefs), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, indexDefs, foreginDefs, policyDefs []string) string {
+func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreginDefs, policyDefs []string) string {
 	var queryBuilder strings.Builder
-	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (\n", table)
+	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (", table)
 	for i, col := range columns {
-		isLast := i == len(columns)-1
-		fmt.Fprint(&queryBuilder, indent)
+		if i > 0 {
+			fmt.Fprint(&queryBuilder, ",")
+		}
+		fmt.Fprint(&queryBuilder, "\n"+indent)
 		fmt.Fprintf(&queryBuilder, "\"%s\" %s", col.Name, col.GetDataType())
 		if col.Length > 0 {
 			fmt.Fprintf(&queryBuilder, "(%d)", col.Length)
@@ -130,16 +136,12 @@ func buildDumpTableDDL(table string, columns []column, indexDefs, foreginDefs, p
 		if col.Default != "" && !col.IsAutoIncrement {
 			fmt.Fprintf(&queryBuilder, " DEFAULT %s", col.Default)
 		}
-		if col.IsPrimaryKey {
-			fmt.Fprint(&queryBuilder, " PRIMARY KEY")
-		}
-		if isLast {
-			fmt.Fprintln(&queryBuilder, "")
-		} else {
-			fmt.Fprintln(&queryBuilder, ",")
-		}
 	}
-	fmt.Fprintf(&queryBuilder, ");\n")
+	if len(pkeyCols) > 0 {
+		fmt.Fprint(&queryBuilder, ",\n"+indent)
+		fmt.Fprintf(&queryBuilder, "PRIMARY KEY (\"%s\")", strings.Join(pkeyCols, "\", \""))
+	}
+	fmt.Fprintf(&queryBuilder, "\n);\n")
 	for _, v := range indexDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
@@ -158,7 +160,6 @@ type column struct {
 	Length          int
 	Nullable        bool
 	Default         string
-	IsPrimaryKey    bool
 	IsAutoIncrement bool
 	IsUnique        bool
 }
@@ -196,7 +197,6 @@ func (c *column) GetDataType() string {
 func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	query := `SELECT column_name, column_default, is_nullable, character_maximum_length,
 	CASE WHEN data_type = 'ARRAY' THEN format_type(atttypid, atttypmod) ELSE data_type END,
-	CASE WHEN p.contype = 'p' THEN true ELSE false END AS primarykey,
 	CASE WHEN p.contype = 'u' THEN true ELSE false END AS uniquekey
 FROM pg_attribute f
 	JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
@@ -219,8 +219,8 @@ WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum >
 		col := column{}
 		var colName, isNullable, dataType string
 		var maxLenStr, colDefault *string
-		var isPK, isUnique bool
-		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &dataType, &isPK, &isUnique)
+		var isUnique bool
+		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &dataType, &isUnique)
 		if err != nil {
 			return nil, err
 		}
@@ -232,12 +232,8 @@ WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum >
 			}
 		}
 		col.Name = strings.Trim(colName, `" `)
-		if colDefault != nil || isPK {
-			if isPK {
-				col.IsPrimaryKey = true
-			} else {
-				col.Default = *colDefault
-			}
+		if colDefault != nil {
+			col.Default = *colDefault
 		}
 		col.IsUnique = isUnique
 		if colDefault != nil && strings.HasPrefix(*colDefault, "nextval(") {
@@ -277,7 +273,7 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 	return indexes, nil
 }
 
-func (d *PostgresDatabase) getPrimaryKeyDef(table string) (string, error) {
+func (d *PostgresDatabase) getPrimaryKeyColumns(table string) ([]string, error) {
 	query := `SELECT
 	tc.table_schema, tc.constraint_name, tc.table_name, kcu.column_name
 FROM
@@ -288,7 +284,7 @@ WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$
 	schema, table := splitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -298,16 +294,11 @@ WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$
 		var columnName string
 		err = rows.Scan(&tableSchema, &constraintName, &tableName, &columnName)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		columnNames = append(columnNames, columnName)
 	}
-	if len(columnNames) == 0 {
-		return "", nil
-	}
-	return fmt.Sprintf("ALTER TABLE ONLY %s.%s\n%sADD CONSTRAINT %s PRIMARY KEY (%s)",
-		tableSchema, tableName, indent, constraintName, strings.Join(columnNames, ","),
-	), nil
+	return columnNames, nil
 }
 
 // refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d

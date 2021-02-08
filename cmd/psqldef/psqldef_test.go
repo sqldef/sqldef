@@ -575,12 +575,39 @@ func TestPsqldefExport(t *testing.T) {
 	// workaround: local has `public.` but travis doesn't.
 	assertEquals(t, strings.Replace(out, "public.users", "users", 2), stripHeredoc(`
 		CREATE TABLE users (
-		    "id" bigint NOT NULL PRIMARY KEY,
+		    "id" bigint NOT NULL,
 		    "age" integer,
 		    "c_char_1" character(1),
 		    "c_char_10" character(10),
 		    "c_varchar_10" character varying(10),
-		    "c_varchar_unlimited" character varying
+		    "c_varchar_unlimited" character varying,
+		    PRIMARY KEY ("id")
+		);
+		`,
+	))
+}
+
+func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
+	resetTestDatabase()
+	out := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--export")
+	assertEquals(t, out, "-- No table exists --\n")
+
+	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", stripHeredoc(`
+		CREATE TABLE users (
+		    col1 character varying(40) NOT NULL,
+		    col2 character varying(6) NOT NULL,
+		    created_at timestamp NOT NULL,
+		    PRIMARY KEY (col1, col2)
+		);`,
+	))
+	out = assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--export")
+	// workaround: local has `public.` but travis doesn't.
+	assertEquals(t, strings.Replace(out, "public.users", "users", 2), stripHeredoc(`
+		CREATE TABLE users (
+		    "col1" character varying(40) NOT NULL,
+		    "col2" character varying(6) NOT NULL,
+		    "created_at" timestamp NOT NULL,
+		    PRIMARY KEY ("col1", "col2")
 		);
 		`,
 	))
