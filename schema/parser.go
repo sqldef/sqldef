@@ -99,6 +99,10 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) Table {
 			enumValues:    parsedCol.Type.EnumValues,
 			references:    parsedCol.Type.References,
 		}
+		if parsedCol.Type.Check != nil {
+			column.check = sqlparser.String(parsedCol.Type.Check.Expr)
+		}
+		column.checkNoInherit = castBool(parsedCol.Type.CheckNoInherit)
 		columns = append(columns, column)
 	}
 
