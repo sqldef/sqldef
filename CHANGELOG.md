@@ -1,3 +1,7 @@
+## v0.8.9
+
+- Support CHECK option of CREATE TABLE for psqldef [#97](https://github.com/k0kubun/sqldef/issues/97)
+
 ## v0.8.8
 
 - Generate composite primary keys properly in psqldef [#96](https://github.com/k0kubun/sqldef/issues/96)
