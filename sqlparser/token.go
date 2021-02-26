@@ -225,6 +225,7 @@ var keywords = map[string]int{
 	"io_after_gtids":      UNUSED,
 	"is":                  IS,
 	"isolation":           ISOLATION,
+	"inherit":             INHERIT,
 	"iterate":             UNUSED,
 	"join":                JOIN,
 	"json":                JSON,

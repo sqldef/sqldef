@@ -195,6 +195,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> CONVERT CAST
 %token <bytes> SUBSTR SUBSTRING
 %token <bytes> GROUP_CONCAT SEPARATOR
+%token <bytes> INHERIT
 
 // Match
 %token <bytes> MATCH AGAINST BOOLEAN LANGUAGE WITH WITHOUT PARSER QUERY EXPANSION
@@ -307,6 +308,7 @@ func forceEOF(yylex interface{}) {
 %type <expr> using_opt with_check_opt
 %left <bytes> TYPECAST CHECK
 %type <bytes> or_replace_opt
+%type <boolVal> no_inherit_opt
 
 %start any_command
 
@@ -883,6 +885,12 @@ column_definition_type:
     $1.KeyOpt = colKeyUnique
     $$ = $1
   }
+| column_definition_type CHECK openb expression closeb no_inherit_opt
+  {
+    $1.Check = NewWhere(WhereStr, $4)
+    $1.CheckNoInherit = $6
+    $$ = $1
+  }
 | column_definition_type COMMENT_KEYWORD STRING
   {
     $1.Comment = NewStrVal($3)
@@ -908,6 +916,15 @@ column_definition_type:
     $1.References     = $3.v
     $1.ReferenceNames = $5
     $$ = $1
+  }
+
+no_inherit_opt:
+  {
+    $$ = BoolVal(false)
+  }
+| NO INHERIT
+  {
+    $$ = BoolVal(true)
   }
 
 character_cast_opt:
@@ -3477,6 +3494,7 @@ non_reserved_keyword:
 | GEOMETRY
 | GEOMETRYCOLLECTION
 | GLOBAL
+| INHERIT
 | INT
 | INTEGER
 | ISOLATION

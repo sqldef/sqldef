@@ -909,12 +909,14 @@ type ColumnType struct {
 	Type string
 
 	// Generic field options.
-	NotNull       *BoolVal
-	Autoincrement BoolVal
-	Default       *SQLVal
-	OnUpdate      *SQLVal
-	Comment       *SQLVal
-	Array         BoolVal
+	NotNull        *BoolVal
+	Autoincrement  BoolVal
+	Default        *SQLVal
+	OnUpdate       *SQLVal
+	Comment        *SQLVal
+	Check          *Where
+	CheckNoInherit BoolVal
+	Array          BoolVal
 
 	// Numeric field options
 	Length   *SQLVal
@@ -985,6 +987,12 @@ func (ct *ColumnType) Format(buf *TrackedBuffer) {
 	}
 	if ct.Comment != nil {
 		opts = append(opts, keywordStrings[COMMENT_KEYWORD], String(ct.Comment))
+	}
+	if ct.Check != nil {
+		opts = append(opts, keywordStrings[CHECK], String(ct.Check))
+	}
+	if ct.CheckNoInherit {
+		opts = append(opts, keywordStrings[NO], keywordStrings[INHERIT])
 	}
 	if ct.KeyOpt == colKeyPrimary {
 		opts = append(opts, keywordStrings[PRIMARY], keywordStrings[KEY])

@@ -136,6 +136,12 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 		if col.Default != "" && !col.IsAutoIncrement {
 			fmt.Fprintf(&queryBuilder, " DEFAULT %s", col.Default)
 		}
+		if col.Check != "" {
+			fmt.Fprintf(&queryBuilder, " CHECK %s", col.Check)
+			if col.CheckNoInherit {
+				fmt.Fprint(&queryBuilder, " NO INHERIT")
+			}
+		}
 	}
 	if len(pkeyCols) > 0 {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
@@ -162,6 +168,8 @@ type column struct {
 	Default         string
 	IsAutoIncrement bool
 	IsUnique        bool
+	Check           string
+	CheckNoInherit  bool
 }
 
 func (c *column) GetDataType() string {
@@ -195,16 +203,18 @@ func (c *column) GetDataType() string {
 }
 
 func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
-	query := `SELECT column_name, column_default, is_nullable, character_maximum_length,
-	CASE WHEN data_type = 'ARRAY' THEN format_type(atttypid, atttypmod) ELSE data_type END,
-	CASE WHEN p.contype = 'u' THEN true ELSE false END AS uniquekey
+	query := `SELECT s.column_name, s.column_default, s.is_nullable, s.character_maximum_length,
+	CASE WHEN s.data_type = 'ARRAY' THEN format_type(f.atttypid, f.atttypmod) ELSE s.data_type END,
+	CASE WHEN p.contype = 'u' THEN true ELSE false END AS uniquekey,
+	CASE WHEN pc.contype = 'c' THEN pc.consrc ELSE NULL END AS check,
+	CASE WHEN pc.connoinherit = 't' THEN true ELSE false END AS no_inherit
 FROM pg_attribute f
 	JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
 	LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
 	LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
-	LEFT JOIN pg_constraint p ON p.conrelid = c.oid AND f.attnum = ANY (p.conkey)
-	LEFT JOIN pg_class AS g ON p.confrelid = g.oid
-	LEFT JOIN information_schema.columns s ON s.column_name=f.attname AND s.table_name=c.relname
+	LEFT JOIN pg_constraint p ON p.conrelid = c.oid AND f.attnum = ANY (p.conkey) AND p.contype = 'u'
+	LEFT JOIN pg_constraint pc ON pc.conrelid = c.oid AND f.attnum = ANY (pc.conkey) AND pc.contype = 'c'
+	LEFT JOIN information_schema.columns s ON s.column_name=f.attname AND s.table_name = c.relname
 WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum > 0 ORDER BY f.attnum;`
 
 	schema, table := splitTableName(table)
@@ -218,9 +228,9 @@ WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum >
 	for rows.Next() {
 		col := column{}
 		var colName, isNullable, dataType string
-		var maxLenStr, colDefault *string
-		var isUnique bool
-		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &dataType, &isUnique)
+		var maxLenStr, colDefault, check *string
+		var isUnique, noInherit bool
+		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &dataType, &isUnique, &check, &noInherit)
 		if err != nil {
 			return nil, err
 		}
@@ -239,10 +249,13 @@ WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum >
 		if colDefault != nil && strings.HasPrefix(*colDefault, "nextval(") {
 			col.IsAutoIncrement = true
 		}
-		col.Nullable = (isNullable == "YES")
+		col.Nullable = isNullable == "YES"
 		col.dataType = dataType
 		col.Length = maxLen
-
+		if check != nil {
+			col.Check = *check
+			col.CheckNoInherit = noInherit
+		}
 		cols = append(cols, col)
 	}
 	return cols, nil

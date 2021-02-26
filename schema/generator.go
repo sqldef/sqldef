@@ -260,6 +260,21 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					ddls = append(ddls, ddl)
 				}
 
+				if currentColumn.check != desiredColumn.check || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
+					constraintName := fmt.Sprintf("%s_%s_check", strings.Replace(desired.table.name, "public.", "", 1), desiredColumn.name)
+					if currentColumn.check != "" {
+						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), constraintName)
+						ddls = append(ddls, ddl)
+					}
+					if desiredColumn.check != "" {
+						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), constraintName, desiredColumn.check)
+						if desiredColumn.checkNoInherit {
+							ddl += " NO INHERIT"
+						}
+						ddls = append(ddls, ddl)
+					}
+				}
+
 				// TODO: support adding a column's `references`
 				// TODO: support SET/DROP NOT NULL and other properties
 			default:
@@ -620,6 +635,13 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		definition += fmt.Sprintf("ON UPDATE %s ", string(column.onUpdate.raw))
 	}
 
+	if column.check != "" {
+		definition += fmt.Sprintf("CHECK (%s) ", column.check)
+	}
+	if column.checkNoInherit {
+		definition += "NO INHERIT "
+	}
+
 	switch column.keyOption {
 	case ColumnKeyNone:
 		// noop
@@ -893,6 +915,7 @@ func (g *Generator) haveSameColumnDefinition(current Column, desired Column) boo
 		(current.unsigned == desired.unsigned) &&
 		((current.notNull != nil && *current.notNull) == ((desired.notNull != nil && *desired.notNull) || desired.keyOption == ColumnKeyPrimary)) && // `PRIMARY KEY` implies `NOT NULL`
 		(current.timezone == desired.timezone) &&
+		(current.check == desired.check) &&
 		(desired.charset == "" || current.charset == desired.charset) && // detect change column only when set explicitly. TODO: can we calculate implicit charset?
 		(desired.collate == "" || current.collate == desired.collate) && // detect change column only when set explicitly. TODO: can we calculate implicit collate?
 		reflect.DeepEqual(current.onUpdate, desired.onUpdate)

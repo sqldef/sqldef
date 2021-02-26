@@ -245,6 +245,66 @@ func TestCreateTableWithReferences(t *testing.T) {
 	assertApplyOutput(t, createTableA+createTableB, nothingModified)
 }
 
+func TestCreateTableWithCheck(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE a (
+		  a_id INTEGER PRIMARY KEY CHECK (a_id > 0),
+		  my_text TEXT UNIQUE NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE a (
+		  a_id INTEGER PRIMARY KEY CHECK (a_id > 1),
+		  my_text TEXT UNIQUE NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+
+		`ALTER TABLE "public"."a" DROP CONSTRAINT a_a_id_check;`+"\n"+
+		`ALTER TABLE "public"."a" ADD CONSTRAINT a_a_id_check CHECK (a_id > 1);`+"\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE a (
+		  a_id INTEGER PRIMARY KEY,
+		  my_text TEXT UNIQUE NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+
+		`ALTER TABLE "public"."a" DROP CONSTRAINT a_a_id_check;`+"\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE a (
+		  a_id INTEGER PRIMARY KEY CHECK (a_id > 2) NO INHERIT,
+		  my_text TEXT UNIQUE NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+
+		`ALTER TABLE "public"."a" ADD CONSTRAINT a_a_id_check CHECK (a_id > 2) NO INHERIT;`+"\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE a (
+		  a_id INTEGER PRIMARY KEY CHECK (a_id > 3) NO INHERIT,
+		  my_text TEXT UNIQUE NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+
+		`ALTER TABLE "public"."a" DROP CONSTRAINT a_a_id_check;`+"\n"+
+		`ALTER TABLE "public"."a" ADD CONSTRAINT a_a_id_check CHECK (a_id > 3) NO INHERIT;`+"\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestCreatePolicy(t *testing.T) {
 	resetTestDatabase()
 

@@ -49,23 +49,25 @@ type Table struct {
 }
 
 type Column struct {
-	name          string
-	position      int
-	typeName      string
-	unsigned      bool
-	notNull       *bool
-	autoIncrement bool
-	array         bool
-	defaultVal    *Value
-	length        *Value
-	scale         *Value
-	charset       string
-	collate       string
-	timezone      bool // for Postgres `with time zone`
-	keyOption     ColumnKeyOption
-	onUpdate      *Value
-	enumValues    []string
-	references    string
+	name           string
+	position       int
+	typeName       string
+	unsigned       bool
+	notNull        *bool
+	autoIncrement  bool
+	array          bool
+	defaultVal     *Value
+	length         *Value
+	scale          *Value
+	check          string
+	checkNoInherit bool
+	charset        string
+	collate        string
+	timezone       bool // for Postgres `with time zone`
+	keyOption      ColumnKeyOption
+	onUpdate       *Value
+	enumValues     []string
+	references     string
 	// TODO: keyopt
 	// XXX: zerofill?
 }
