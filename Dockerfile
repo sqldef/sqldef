@@ -1,4 +1,4 @@
-FROM golang:1.15-alpine
+FROM golang:alpine
 RUN apk add --no-cache build-base make gcc git
 
 COPY . /sqldef
