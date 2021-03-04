@@ -44,6 +44,22 @@ func TestSQLite3defCreateTable(t *testing.T) {
 	assertApplyOutput(t, createTable1, nothingModified)
 }
 
+func TestSQLite3defCreateTableWithAutoincrement(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id integer PRIMARY KEY AUTOINCREMENT,
+		  name text,
+		  age integer
+		);
+		`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestSQLite3defCreateView(t *testing.T) {
 	resetTestDatabase()
 
