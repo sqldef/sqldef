@@ -26,7 +26,7 @@ func NewDatabase(config adapter.Config) (adapter.Database, error) {
 
 func (d *Sqlite3Database) TableNames() ([]string, error) {
 	rows, err := d.db.Query(
-		`select tbl_name from sqlite_master where type = 'table'`,
+		`select tbl_name from sqlite_master where type = 'table' and tbl_name not like 'sqlite_%'`,
 	)
 	if err != nil {
 		return nil, err
