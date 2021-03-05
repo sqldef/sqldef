@@ -1,3 +1,7 @@
+## v0.8.10
+
+- Support AUTOINCREMENT for sqlite3def [#99](https://github.com/k0kubun/sqldef/issues/99)
+
 ## v0.8.9
 
 - Support CHECK option of CREATE TABLE for psqldef [#97](https://github.com/k0kubun/sqldef/issues/97)
