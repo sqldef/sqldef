@@ -137,10 +137,7 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 			fmt.Fprintf(&queryBuilder, " DEFAULT %s", col.Default)
 		}
 		if col.Check != "" {
-			fmt.Fprintf(&queryBuilder, " CHECK %s", col.Check)
-			if col.CheckNoInherit {
-				fmt.Fprint(&queryBuilder, " NO INHERIT")
-			}
+			fmt.Fprintf(&queryBuilder, " %s", col.Check)
 		}
 	}
 	if len(pkeyCols) > 0 {
@@ -169,7 +166,6 @@ type column struct {
 	IsAutoIncrement bool
 	IsUnique        bool
 	Check           string
-	CheckNoInherit  bool
 }
 
 func (c *column) GetDataType() string {
@@ -206,8 +202,7 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	query := `SELECT s.column_name, s.column_default, s.is_nullable, s.character_maximum_length,
 	CASE WHEN s.data_type = 'ARRAY' THEN format_type(f.atttypid, f.atttypmod) ELSE s.data_type END,
 	CASE WHEN p.contype = 'u' THEN true ELSE false END AS uniquekey,
-	CASE WHEN pc.contype = 'c' THEN pc.consrc ELSE NULL END AS check,
-	CASE WHEN pc.connoinherit = 't' THEN true ELSE false END AS no_inherit
+	CASE WHEN pc.contype = 'c' THEN pg_get_constraintdef(pc.oid, true) ELSE NULL END AS check
 FROM pg_attribute f
 	JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
 	LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
@@ -229,8 +224,8 @@ WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum >
 		col := column{}
 		var colName, isNullable, dataType string
 		var maxLenStr, colDefault, check *string
-		var isUnique, noInherit bool
-		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &dataType, &isUnique, &check, &noInherit)
+		var isUnique bool
+		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &dataType, &isUnique, &check)
 		if err != nil {
 			return nil, err
 		}
@@ -254,7 +249,6 @@ WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum >
 		col.Length = maxLen
 		if check != nil {
 			col.Check = *check
-			col.CheckNoInherit = noInherit
 		}
 		cols = append(cols, col)
 	}
