@@ -86,6 +86,23 @@ func TestPsqldefCreateTableAlterColumn(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestPsqldefCitextExtension(t *testing.T) {
+	resetTestDatabase()
+	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", "CREATE EXTENSION citext;")
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  name citext
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", "DROP TABLE users;")
+	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", "DROP EXTENSION citext;")
+}
+
 func TestPsqldefIgnoreExtension(t *testing.T) {
 	resetTestDatabase()
 	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", "CREATE EXTENSION pg_buffercache;")

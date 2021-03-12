@@ -200,7 +200,7 @@ func (c *column) GetDataType() string {
 
 func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	query := `SELECT s.column_name, s.column_default, s.is_nullable, s.character_maximum_length,
-	CASE WHEN s.data_type = 'ARRAY' THEN format_type(f.atttypid, f.atttypmod) ELSE s.data_type END,
+	CASE WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod) ELSE s.data_type END,
 	CASE WHEN p.contype = 'u' THEN true ELSE false END AS uniquekey,
 	CASE WHEN pc.contype = 'c' THEN pg_get_constraintdef(pc.oid, true) ELSE NULL END AS check
 FROM pg_attribute f

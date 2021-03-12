@@ -127,6 +127,7 @@ var keywords = map[string]int{
 	"character":           CHARACTER,
 	"charset":             CHARSET,
 	"check":               CHECK,
+	"citext":              CITEXT,
 	"collate":             COLLATE,
 	"column":              COLUMN,
 	"comment":             COMMENT_KEYWORD,
