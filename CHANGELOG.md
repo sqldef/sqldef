@@ -1,3 +1,7 @@
+## v0.8.11
+
+- Fix CHECK handling of v0.8.9 to support PostgreSQL 12
+
 ## v0.8.10
 
 - Support AUTOINCREMENT for sqlite3def [#99](https://github.com/k0kubun/sqldef/issues/99)
