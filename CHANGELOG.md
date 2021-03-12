@@ -1,3 +1,7 @@
+## v0.8.12
+
+- Support `CITEXT` data type for psqldef
+
 ## v0.8.11
 
 - Fix CHECK handling of v0.8.9 to support PostgreSQL 12
