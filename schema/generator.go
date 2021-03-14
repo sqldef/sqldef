@@ -260,6 +260,14 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					ddls = append(ddls, ddl)
 				}
 
+				if !isPrimaryKey(*currentColumn, currentTable) { // Primary Key implies NOT NULL
+					if g.notNull(*currentColumn) && !g.notNull(desiredColumn) {
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name)))
+					} else if !g.notNull(*currentColumn) && g.notNull(desiredColumn) {
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name)))
+					}
+				}
+
 				if currentColumn.check != desiredColumn.check || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
 					constraintName := fmt.Sprintf("%s_%s_check", strings.Replace(desired.table.name, "public.", "", 1), desiredColumn.name)
 					if currentColumn.check != "" {
@@ -276,7 +284,6 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				// TODO: support adding a column's `references`
-				// TODO: support SET/DROP NOT NULL and other properties
 			default:
 			}
 		}
@@ -758,14 +765,31 @@ func (g *Generator) escapeSQLName(name string) string {
 	}
 }
 
+func (g *Generator) notNull(column Column) bool {
+	if column.notNull == nil {
+		switch g.mode {
+		case GeneratorModePostgres:
+			return column.typeName == "serial" || column.typeName == "bigserial"
+		default:
+			return false
+		}
+	} else {
+		return *column.notNull
+	}
+}
+
 func isPrimaryKey(column Column, table Table) bool {
 	if column.keyOption == ColumnKeyPrimary {
 		return true
 	}
 
 	for _, index := range table.indexes {
-		if index.primary && index.columns[0].column == column.name {
-			return true
+		if index.primary {
+			for _, indexColumn := range index.columns {
+				if indexColumn.column == column.name {
+					return true
+				}
+			}
 		}
 	}
 	return false
