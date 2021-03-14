@@ -1,3 +1,7 @@
+## v0.8.13
+
+- Support `SET NOT NULL` and `DROP NOT NULL` for psqldef `ALTER COLUMN`
+
 ## v0.8.12
 
 - Support `CITEXT` data type for psqldef
