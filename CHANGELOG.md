@@ -1,3 +1,8 @@
+## v0.8.14
+
+- Allow parsing index with non-escaped column name `key` for psqldef [#100](https://github.com/k0kubun/sqldef/issues/100)
+- Prevent errors on `ADD CONSTRAINT FOREIGN KEY` for psqldef
+
 ## v0.8.13
 
 - Support `SET NOT NULL` and `DROP NOT NULL` for psqldef `ALTER COLUMN`
