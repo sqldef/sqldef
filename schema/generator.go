@@ -105,8 +105,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return ddls, err
 			}
 			ddls = append(ddls, indexDDLs...)
+		case *AddForeignKey:
+			fkeyDDLs, err := g.generateDDLsForAddForeignKey(desired.tableName, desired.foreignKey, "ALTER TABLE", ddl.Statement())
+			if err != nil {
+				return ddls, err
+			}
+			ddls = append(ddls, fkeyDDLs...)
 		case *AddPolicy:
-			policyDDLs, err := g.generateDDLsForCreatePolicy(desired.tableName, desired.policy, "ALTER POLICY", ddl.Statement())
+			policyDDLs, err := g.generateDDLsForCreatePolicy(desired.tableName, desired.policy, "CREATE POLICY", ddl.Statement())
 			if err != nil {
 				return ddls, err
 			}
@@ -431,6 +437,24 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 		return nil, fmt.Errorf("index '%s' is doubly created against table '%s': '%s'", desiredIndex.name, tableName, statement)
 	}
 	desiredTable.indexes = append(desiredTable.indexes, desiredIndex)
+
+	return ddls, nil
+}
+
+func (g *Generator) generateDDLsForAddForeignKey(tableName string, desiredForeignKey ForeignKey, action string, statement string) ([]string, error) {
+	var ddls []string
+
+	// TODO: Simulate currentTable.foreignKeys too
+
+	// Examine indexes in desiredTable to delete obsoleted indexes later
+	desiredTable := findTableByName(g.desiredTables, tableName)
+	if desiredTable == nil {
+		return nil, fmt.Errorf("%s is performed before create table '%s': '%s'", action, tableName, statement)
+	}
+	if containsString(convertForeignKeysToConstraintNames(desiredTable.foreignKeys), desiredForeignKey.constraintName) {
+		return nil, fmt.Errorf("index '%s' is doubly created against table '%s': '%s'", desiredForeignKey.constraintName, tableName, statement)
+	}
+	desiredTable.foreignKeys = append(desiredTable.foreignKeys, desiredForeignKey)
 
 	return ddls, nil
 }

@@ -197,7 +197,7 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
-func TestCreateTableConstraintPrimaryKey(t *testing.T) {
+func TestPsqldefCreateTableConstraintPrimaryKey(t *testing.T) {
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -212,7 +212,7 @@ func TestCreateTableConstraintPrimaryKey(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
-func TestCreateTableForeignKey(t *testing.T) {
+func TestPsqldefCreateTableForeignKey(t *testing.T) {
 	resetTestDatabase()
 
 	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY);\n"
@@ -264,7 +264,34 @@ func TestCreateTableForeignKey(t *testing.T) {
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 }
 
-func TestCreateTableWithReferences(t *testing.T) {
+func TestPsqldefAddForeignKey(t *testing.T) {
+	resetTestDatabase()
+
+	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY);\n"
+	createPosts := stripHeredoc(`
+		CREATE TABLE posts (
+		  content text,
+		  user_id bigint,
+		  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+		);
+		`,
+	)
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
+	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+
+	createPosts = stripHeredoc(`
+		CREATE TABLE posts (
+		  content text,
+		  user_id bigint
+		);
+		`,
+	)
+	addForeignKey := "ALTER TABLE ONLY public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;\n"
+	assertApplyOutput(t, createUsers+createPosts+addForeignKey, nothingModified)
+
+}
+
+func TestPsqldefCreateTableWithReferences(t *testing.T) {
 	resetTestDatabase()
 
 	createTableA := stripHeredoc(`
@@ -299,7 +326,7 @@ func TestCreateTableWithReferences(t *testing.T) {
 	assertApplyOutput(t, createTableA+createTableB, nothingModified)
 }
 
-func TestCreateTableWithCheck(t *testing.T) {
+func TestPsqldefCreateTableWithCheck(t *testing.T) {
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -359,7 +386,7 @@ func TestCreateTableWithCheck(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
-func TestCreatePolicy(t *testing.T) {
+func TestPsqlddefCreatePolicy(t *testing.T) {
 	resetTestDatabase()
 
 	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));\n"
@@ -402,7 +429,7 @@ func TestCreatePolicy(t *testing.T) {
 	assertApplyOutput(t, createUsers, nothingModified)
 }
 
-func TestCreateView(t *testing.T) {
+func TestPsqldefCreateView(t *testing.T) {
 	resetTestDatabase()
 
 	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));\n"
