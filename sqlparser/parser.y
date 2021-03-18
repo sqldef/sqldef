@@ -2131,6 +2131,11 @@ column_list:
   {
     $$ = Columns{$1}
   }
+/* For PostgreSQL */
+| KEY
+  {
+    $$ = Columns{NewColIdent(string($1))}
+  }
 | column_list ',' sql_id
   {
     $$ = append($$, $3)

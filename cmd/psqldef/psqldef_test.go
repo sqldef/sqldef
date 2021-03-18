@@ -536,6 +536,20 @@ func TestPsqldefCreateIndex(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestPsqldefCreateIndexWithKey(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  "key" text
+		);
+		`,
+	)
+	createIndex := `CREATE INDEX "index_name" on users (key);`
+	assertApplyOutput(t, createTable+createIndex, applyPrefix+createTable+createIndex+"\n")
+	assertApplyOutput(t, createTable+createIndex, nothingModified)
+}
+
 func TestPsqldefColumnLiteral(t *testing.T) {
 	resetTestDatabase()
 
