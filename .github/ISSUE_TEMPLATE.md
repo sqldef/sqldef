@@ -1,8 +1,7 @@
-## Problem
+## Initial `--export`
 
-## Expected
-### Initial schema
+## Input SQL
 
-### Input DDLs
+## Current output
 
-### Output DDLs
+## Expected output
