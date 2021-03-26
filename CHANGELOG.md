@@ -1,3 +1,7 @@
+## v0.8.15
+
+- Allow parsing `CURRENT_TIMESTAMP()` in addition to `CURRENT_TIMESTAMP` for MySQL [#59](https://github.com/k0kubun/sqldef/issues/59)
+
 ## v0.8.14
 
 - Allow parsing index with non-escaped column name `key` for psqldef [#100](https://github.com/k0kubun/sqldef/issues/100)
