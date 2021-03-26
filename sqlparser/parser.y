@@ -276,7 +276,7 @@ func forceEOF(yylex interface{}) {
 %type <convertType> convert_type simple_convert_type
 %type <columnType> column_type
 %type <columnType> bool_type int_type decimal_type numeric_type time_type char_type spatial_type
-%type <optVal> length_opt
+%type <optVal> length_opt current_timestamp
 %type <str> charset_opt collate_opt
 %type <boolVal> unsigned_opt zero_fill_opt array_opt time_zone_opt
 %type <LengthScaleOption> float_length_opt decimal_length_opt
@@ -845,9 +845,9 @@ column_definition_type:
     $1.Default = NewValArg($3)
     $$ = $1
   }
-| column_definition_type DEFAULT CURRENT_TIMESTAMP length_opt
+| column_definition_type DEFAULT current_timestamp
   {
-    $1.Default = NewValArgWithOpt($3, $4)
+    $1.Default = $3
     $$ = $1
   }
 | column_definition_type DEFAULT BIT_LITERAL
@@ -855,9 +855,9 @@ column_definition_type:
     $1.Default = NewBitVal($3)
     $$ = $1
   }
-| column_definition_type ON UPDATE CURRENT_TIMESTAMP length_opt
+| column_definition_type ON UPDATE current_timestamp
   {
-    $1.OnUpdate = NewValArgWithOpt($4, $5)
+    $1.OnUpdate = $4
     $$ = $1
   }
 | column_definition_type AUTO_INCREMENT
@@ -921,6 +921,16 @@ column_definition_type:
     $1.References     = $3.v
     $1.ReferenceNames = $5
     $$ = $1
+  }
+
+current_timestamp:
+  CURRENT_TIMESTAMP length_opt
+  {
+    $$ = NewValArgWithOpt($1, $2)
+  }
+| CURRENT_TIMESTAMP '(' ')'
+  {
+    $$ = NewValArgWithOpt($1, nil)
   }
 
 no_inherit_opt:

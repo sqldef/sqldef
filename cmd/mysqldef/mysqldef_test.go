@@ -970,6 +970,16 @@ func TestMysqldefOnUpdate(t *testing.T) {
 	)
 	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` CHANGE COLUMN `updated_at` `updated_at` datetime DEFAULT current_timestamp ON UPDATE current_timestamp;\n")
 	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  name varchar(40),
+		  updated_at datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+		  created_at datetime NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestMysqldefCurrentTimestampWithPrecision(t *testing.T) {
