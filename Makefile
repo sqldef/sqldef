@@ -21,6 +21,7 @@ clean:
 deps:
 	go mod tidy
 	go mod download
+	go install ./...
 
 package:
 	$(MAKE) package-targz GOOS=linux GOARCH=amd64
