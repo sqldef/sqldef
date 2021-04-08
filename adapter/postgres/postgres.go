@@ -199,7 +199,7 @@ func (c *column) GetDataType() string {
 }
 
 func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
-	query := `SELECT s.column_name, s.column_default, s.is_nullable, s.character_maximum_length,
+	const query = `SELECT s.column_name, s.column_default, s.is_nullable, s.character_maximum_length,
 	CASE WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod) ELSE s.data_type END,
 	CASE WHEN p.contype = 'u' THEN true ELSE false END AS uniquekey,
 	CASE WHEN pc.contype = 'c' THEN pg_get_constraintdef(pc.oid, true) ELSE NULL END AS check
@@ -256,7 +256,7 @@ WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum >
 }
 
 func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
-	query := "SELECT indexName, indexdef FROM pg_indexes WHERE schemaname=$1 AND tablename=$2"
+	const query = "SELECT indexName, indexdef FROM pg_indexes WHERE schemaname=$1 AND tablename=$2"
 	schema, table := splitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
@@ -281,7 +281,7 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 }
 
 func (d *PostgresDatabase) getPrimaryKeyColumns(table string) ([]string, error) {
-	query := `SELECT
+	const query = `SELECT
 	tc.table_schema, tc.constraint_name, tc.table_name, kcu.column_name
 FROM
 	information_schema.table_constraints AS tc
@@ -310,7 +310,7 @@ WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$
 
 // refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d
 func (d *PostgresDatabase) getForeginDefs(table string) ([]string, error) {
-	query := `SELECT
+	const query = `SELECT
 	tc.table_schema, tc.constraint_name, tc.table_name, kcu.column_name,
 	ccu.table_schema AS foreign_table_schema,
 	ccu.table_name AS foreign_table_name,
@@ -355,7 +355,7 @@ var (
 )
 
 func (d *PostgresDatabase) getPolicyDefs(table string) ([]string, error) {
-	query := "SELECT policyname, permissive, roles, cmd, qual, with_check FROM pg_policies WHERE schemaname = $1 AND tablename = $2;"
+	const query = "SELECT policyname, permissive, roles, cmd, qual, with_check FROM pg_policies WHERE schemaname = $1 AND tablename = $2;"
 	schema, table := splitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
