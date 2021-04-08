@@ -45,7 +45,7 @@ func (d *Sqlite3Database) TableNames() ([]string, error) {
 }
 
 func (d *Sqlite3Database) DumpTableDDL(table string) (string, error) {
-	query := `select sql from sqlite_master where tbl_name = ?`
+	const query = `select sql from sqlite_master where tbl_name = ?`
 	var sql string
 	err := d.db.QueryRow(query, table).Scan(&sql)
 	return sql, err
@@ -53,7 +53,7 @@ func (d *Sqlite3Database) DumpTableDDL(table string) (string, error) {
 
 func (d *Sqlite3Database) Views() ([]string, error) {
 	var ddls []string
-	query := "select sql from sqlite_master where type = 'view';"
+	const query = "select sql from sqlite_master where type = 'view';"
 	rows, err := d.db.Query(query)
 	if err != nil {
 		return nil, err
