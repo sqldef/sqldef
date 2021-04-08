@@ -19,7 +19,8 @@ clean:
 	rm -rf build package
 
 deps:
-	go get -t ./...
+	go mod tidy
+	go mod download
 
 package:
 	$(MAKE) package-targz GOOS=linux GOARCH=amd64
