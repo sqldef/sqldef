@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/jessevdk/go-flags"
 	"github.com/k0kubun/sqldef"
@@ -79,5 +82,8 @@ func main() {
 	}
 	defer database.Close()
 
-	sqldef.Run(schema.GeneratorModeSQLite3, database, options)
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	sqldef.Run(ctx, schema.GeneratorModeSQLite3, database, options)
 }

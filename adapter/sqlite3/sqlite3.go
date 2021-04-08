@@ -1,6 +1,7 @@
 package sqlite3
 
 import (
+	"context"
 	"database/sql"
 
 	"github.com/k0kubun/sqldef/adapter"
@@ -24,8 +25,9 @@ func NewDatabase(config adapter.Config) (adapter.Database, error) {
 	}, nil
 }
 
-func (d *Sqlite3Database) TableNames() ([]string, error) {
-	rows, err := d.db.Query(
+func (d *Sqlite3Database) TableNames(ctx context.Context) ([]string, error) {
+	rows, err := d.db.QueryContext(
+		ctx,
 		`select tbl_name from sqlite_master where type = 'table' and tbl_name not like 'sqlite_%'`,
 	)
 	if err != nil {
@@ -44,17 +46,17 @@ func (d *Sqlite3Database) TableNames() ([]string, error) {
 	return tables, nil
 }
 
-func (d *Sqlite3Database) DumpTableDDL(table string) (string, error) {
+func (d *Sqlite3Database) DumpTableDDL(ctx context.Context, table string) (string, error) {
 	const query = `select sql from sqlite_master where tbl_name = ?`
 	var sql string
-	err := d.db.QueryRow(query, table).Scan(&sql)
+	err := d.db.QueryRowContext(ctx, query, table).Scan(&sql)
 	return sql, err
 }
 
-func (d *Sqlite3Database) Views() ([]string, error) {
+func (d *Sqlite3Database) Views(ctx context.Context) ([]string, error) {
 	var ddls []string
 	const query = "select sql from sqlite_master where type = 'view';"
-	rows, err := d.db.Query(query)
+	rows, err := d.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}

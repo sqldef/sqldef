@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"syscall"
 
 	"github.com/jessevdk/go-flags"
@@ -104,5 +106,8 @@ func main() {
 	}
 	defer database.Close()
 
-	sqldef.Run(schema.GeneratorModePostgres, database, options)
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	sqldef.Run(ctx, schema.GeneratorModePostgres, database, options)
 }

@@ -1,6 +1,7 @@
 package sqldef
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -19,8 +20,8 @@ type Options struct {
 }
 
 // Main function shared by `mysqldef` and `psqldef`
-func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Options) {
-	currentDDLs, err := adapter.DumpDDLs(db)
+func Run(ctx context.Context, generatorMode schema.GeneratorMode, db adapter.Database, options *Options) {
+	currentDDLs, err := adapter.DumpDDLs(ctx, db)
 	if err != nil {
 		log.Fatal(fmt.Sprintf("Error on DumpDDLs: %s", err))
 	}
@@ -55,7 +56,7 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 		return
 	}
 
-	err = adapter.RunDDLs(db, ddls, options.SkipDrop)
+	err = adapter.RunDDLs(ctx, db, ddls, options.SkipDrop)
 	if err != nil {
 		log.Fatal(err)
 	}

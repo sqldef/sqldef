@@ -2,6 +2,7 @@
 package adapter
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -18,22 +19,22 @@ type Config struct {
 
 // Abstraction layer for multiple kinds of databases
 type Database interface {
-	TableNames() ([]string, error)
-	DumpTableDDL(table string) (string, error)
-	Views() ([]string, error)
+	TableNames(ctx context.Context) ([]string, error)
+	DumpTableDDL(ctx context.Context, table string) (string, error)
+	Views(ctx context.Context) ([]string, error)
 	DB() *sql.DB
 	Close() error
 }
 
-func DumpDDLs(d Database) (string, error) {
+func DumpDDLs(ctx context.Context, d Database) (string, error) {
 	ddls := []string{}
-	tableNames, err := d.TableNames()
+	tableNames, err := d.TableNames(ctx)
 	if err != nil {
 		return "", err
 	}
 
 	for _, tableName := range tableNames {
-		ddl, err := d.DumpTableDDL(tableName)
+		ddl, err := d.DumpTableDDL(ctx, tableName)
 		if err != nil {
 			return "", err
 		}
@@ -41,7 +42,7 @@ func DumpDDLs(d Database) (string, error) {
 		ddls = append(ddls, ddl)
 	}
 
-	viewDDLs, err := d.Views()
+	viewDDLs, err := d.Views(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -50,8 +51,8 @@ func DumpDDLs(d Database) (string, error) {
 	return strings.Join(ddls, ";\n\n"), nil
 }
 
-func RunDDLs(d Database, ddls []string, skipDrop bool) error {
-	transaction, err := d.DB().Begin()
+func RunDDLs(ctx context.Context, d Database, ddls []string, skipDrop bool) error {
+	transaction, err := d.DB().BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -62,7 +63,7 @@ func RunDDLs(d Database, ddls []string, skipDrop bool) error {
 			continue
 		}
 		fmt.Printf("%s;\n", ddl)
-		if _, err := transaction.Exec(ddl); err != nil {
+		if _, err := transaction.ExecContext(ctx, ddl); err != nil {
 			transaction.Rollback()
 			return err
 		}

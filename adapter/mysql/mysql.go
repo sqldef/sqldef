@@ -1,6 +1,7 @@
 package mysql
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -25,8 +26,8 @@ func NewDatabase(config adapter.Config) (adapter.Database, error) {
 	}, nil
 }
 
-func (d *MysqlDatabase) TableNames() ([]string, error) {
-	rows, err := d.db.Query("show full tables where Table_Type != 'VIEW'")
+func (d *MysqlDatabase) TableNames(ctx context.Context) ([]string, error) {
+	rows, err := d.db.QueryContext(ctx, "show full tables where Table_Type != 'VIEW'")
 	if err != nil {
 		return nil, err
 	}
@@ -44,11 +45,11 @@ func (d *MysqlDatabase) TableNames() ([]string, error) {
 	return tables, nil
 }
 
-func (d *MysqlDatabase) DumpTableDDL(table string) (string, error) {
+func (d *MysqlDatabase) DumpTableDDL(ctx context.Context, table string) (string, error) {
 	var ddl string
 	sql := fmt.Sprintf("show create table `%s`;", table) // TODO: escape table name
 
-	err := d.db.QueryRow(sql).Scan(&table, &ddl)
+	err := d.db.QueryRowContext(ctx, sql).Scan(&table, &ddl)
 	if err != nil {
 		return "", err
 	}
@@ -56,8 +57,8 @@ func (d *MysqlDatabase) DumpTableDDL(table string) (string, error) {
 	return ddl, nil
 }
 
-func (d *MysqlDatabase) Views() ([]string, error) {
-	rows, err := d.db.Query("show full tables where TABLE_TYPE = 'VIEW'")
+func (d *MysqlDatabase) Views(ctx context.Context) ([]string, error) {
+	rows, err := d.db.QueryContext(ctx, "show full tables where TABLE_TYPE = 'VIEW'")
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +71,7 @@ func (d *MysqlDatabase) Views() ([]string, error) {
 			return nil, err
 		}
 		query := fmt.Sprintf("select VIEW_DEFINITION from INFORMATION_SCHEMA.VIEWS where TABLE_NAME = '%s';", viewName)
-		if err = d.db.QueryRow(query).Scan(&definition); err != nil {
+		if err = d.db.QueryRowContext(ctx, query).Scan(&definition); err != nil {
 			return nil, err
 		}
 		ddls = append(ddls, fmt.Sprintf("CREATE VIEW %s AS %s", viewName, definition))

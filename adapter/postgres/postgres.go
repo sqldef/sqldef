@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -31,8 +32,9 @@ func NewDatabase(config adapter.Config) (adapter.Database, error) {
 	}, nil
 }
 
-func (d *PostgresDatabase) TableNames() ([]string, error) {
-	rows, err := d.db.Query(
+func (d *PostgresDatabase) TableNames(ctx context.Context) ([]string, error) {
+	rows, err := d.db.QueryContext(
+		ctx,
 		`select table_schema, table_name from information_schema.tables
 		 where table_schema not in ('information_schema', 'pg_catalog')
 		 and (table_schema != 'public' or table_name != 'pg_buffercache')
@@ -59,8 +61,9 @@ var (
 	spaces          = regexp.MustCompile(`[ ]+`)
 )
 
-func (d *PostgresDatabase) Views() ([]string, error) {
-	rows, err := d.db.Query(
+func (d *PostgresDatabase) Views(ctx context.Context) ([]string, error) {
+	rows, err := d.db.QueryContext(
+		ctx,
 		`select table_schema, table_name, definition from information_schema.tables
 		 inner join pg_views on table_name = viewname
 		 where table_schema not in ('information_schema', 'pg_catalog')
@@ -91,24 +94,24 @@ func (d *PostgresDatabase) Views() ([]string, error) {
 	return ddls, nil
 }
 
-func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
-	cols, err := d.getColumns(table)
+func (d *PostgresDatabase) DumpTableDDL(ctx context.Context, table string) (string, error) {
+	cols, err := d.getColumns(ctx, table)
 	if err != nil {
 		return "", err
 	}
-	pkeyCols, err := d.getPrimaryKeyColumns(table)
+	pkeyCols, err := d.getPrimaryKeyColumns(ctx, table)
 	if err != nil {
 		return "", err
 	}
-	indexDefs, err := d.getIndexDefs(table)
+	indexDefs, err := d.getIndexDefs(ctx, table)
 	if err != nil {
 		return "", err
 	}
-	foreginDefs, err := d.getForeginDefs(table)
+	foreginDefs, err := d.getForeginDefs(ctx, table)
 	if err != nil {
 		return "", err
 	}
-	policyDefs, err := d.getPolicyDefs(table)
+	policyDefs, err := d.getPolicyDefs(ctx, table)
 	if err != nil {
 		return "", err
 	}
@@ -198,7 +201,7 @@ func (c *column) GetDataType() string {
 	}
 }
 
-func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
+func (d *PostgresDatabase) getColumns(ctx context.Context, table string) ([]column, error) {
 	const query = `SELECT s.column_name, s.column_default, s.is_nullable, s.character_maximum_length,
 	CASE WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod) ELSE s.data_type END,
 	CASE WHEN p.contype = 'u' THEN true ELSE false END AS uniquekey,
@@ -213,7 +216,7 @@ FROM pg_attribute f
 WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum > 0 ORDER BY f.attnum;`
 
 	schema, table := splitTableName(table)
-	rows, err := d.db.Query(query, schema, table)
+	rows, err := d.db.QueryContext(ctx, query, schema, table)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -255,10 +258,10 @@ WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum >
 	return cols, nil
 }
 
-func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
+func (d *PostgresDatabase) getIndexDefs(ctx context.Context, table string) ([]string, error) {
 	const query = "SELECT indexName, indexdef FROM pg_indexes WHERE schemaname=$1 AND tablename=$2"
 	schema, table := splitTableName(table)
-	rows, err := d.db.Query(query, schema, table)
+	rows, err := d.db.QueryContext(ctx, query, schema, table)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -280,7 +283,7 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 	return indexes, nil
 }
 
-func (d *PostgresDatabase) getPrimaryKeyColumns(table string) ([]string, error) {
+func (d *PostgresDatabase) getPrimaryKeyColumns(ctx context.Context, table string) ([]string, error) {
 	const query = `SELECT
 	tc.table_schema, tc.constraint_name, tc.table_name, kcu.column_name
 FROM
@@ -289,7 +292,7 @@ FROM
 		ON tc.constraint_name = kcu.constraint_name
 WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$2 ORDER BY kcu.ordinal_position`
 	schema, table := splitTableName(table)
-	rows, err := d.db.Query(query, schema, table)
+	rows, err := d.db.QueryContext(ctx, query, schema, table)
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +312,7 @@ WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$
 }
 
 // refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d
-func (d *PostgresDatabase) getForeginDefs(table string) ([]string, error) {
+func (d *PostgresDatabase) getForeginDefs(ctx context.Context, table string) ([]string, error) {
 	const query = `SELECT
 	tc.table_schema, tc.constraint_name, tc.table_name, kcu.column_name,
 	ccu.table_schema AS foreign_table_schema,
@@ -327,7 +330,7 @@ FROM
 		ON tc.constraint_name = rc.constraint_name
 WHERE constraint_type = 'FOREIGN KEY' AND tc.table_schema=$1 AND tc.table_name=$2`
 	schema, table := splitTableName(table)
-	rows, err := d.db.Query(query, schema, table)
+	rows, err := d.db.QueryContext(ctx, query, schema, table)
 	if err != nil {
 		return nil, err
 	}
@@ -354,10 +357,10 @@ var (
 	policyRolesSuffixRegex = regexp.MustCompile(`}$`)
 )
 
-func (d *PostgresDatabase) getPolicyDefs(table string) ([]string, error) {
+func (d *PostgresDatabase) getPolicyDefs(ctx context.Context, table string) ([]string, error) {
 	const query = "SELECT policyname, permissive, roles, cmd, qual, with_check FROM pg_policies WHERE schemaname = $1 AND tablename = $2;"
 	schema, table := splitTableName(table)
-	rows, err := d.db.Query(query, schema, table)
+	rows, err := d.db.QueryContext(ctx, query, schema, table)
 	if err != nil {
 		return nil, err
 	}
