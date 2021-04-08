@@ -11,7 +11,7 @@ import (
 	"github.com/k0kubun/sqldef/adapter"
 	"github.com/k0kubun/sqldef/adapter/postgres"
 	"github.com/k0kubun/sqldef/schema"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 )
 
 var version string
@@ -75,7 +75,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 
 	if opts.Prompt {
 		fmt.Printf("Enter Password: ")
-		pass, err := terminal.ReadPassword(int(syscall.Stdin))
+		pass, err := term.ReadPassword(int(syscall.Stdin))
 		if err != nil {
 			log.Fatal(err)
 		}
