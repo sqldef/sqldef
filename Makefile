@@ -27,6 +27,7 @@ package:
 	$(MAKE) package-targz GOOS=linux GOARCH=arm64
 	$(MAKE) package-targz GOOS=linux GOARCH=arm
 	$(MAKE) package-zip GOOS=darwin GOARCH=amd64
+	$(MAKE) package-zip GOOS=darwin GOARCH=arm64
 	$(MAKE) package-zip GOOS=windows GOARCH=amd64
 	$(MAKE) package-zip GOOS=windows GOARCH=386
 
