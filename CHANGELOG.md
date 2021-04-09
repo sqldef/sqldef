@@ -1,3 +1,7 @@
+## v0.9.0
+
+- Drop darwin-i386 support to upgrade Go version
+
 ## v0.8.15
 
 - Allow parsing `CURRENT_TIMESTAMP()` in addition to `CURRENT_TIMESTAMP` for MySQL [#59](https://github.com/k0kubun/sqldef/issues/59)
