@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v2
         with:
-          go-version: 1.13
+          go-version: 1.16
       - uses: actions/checkout@v2
 
       - run: docker-compose up -d
@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v2
         with:
-          go-version: 1.13
+          go-version: 1.16
       - uses: actions/checkout@v2
 
       - run: make package
@@ -45,7 +45,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v2
         with:
-          go-version: 1.13
+          go-version: 1.16
       - uses: actions/checkout@v2
       - run: make package
       - name: Release binaries
