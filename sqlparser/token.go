@@ -629,14 +629,14 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 		case '\'':
 			return tkn.scanString(ch, STRING)
 		case '"':
-			if tkn.mode == ParserModePostgres {
-				return tkn.scanLiteralIdentifier()
+			if tkn.mode != ParserModeMysql {
+				return tkn.scanLiteralIdentifier('"')
 			} else {
 				return tkn.scanString(ch, STRING)
 			}
 		default:
 			if tkn.mode != ParserModePostgres && ch == '`' {
-				return tkn.scanLiteralIdentifier()
+				return tkn.scanLiteralIdentifier('`')
 			}
 			return LEX_ERROR, []byte{byte(ch)}
 		}
@@ -702,30 +702,22 @@ func (tkn *Tokenizer) scanBitLiteral() (int, []byte) {
 	return BIT_LITERAL, buffer.Bytes()
 }
 
-func (tkn *Tokenizer) literalSepChar() uint16 {
-	if tkn.mode == ParserModePostgres {
-		return '"'
-	} else {
-		return '`'
-	}
-}
-
-func (tkn *Tokenizer) scanLiteralIdentifier() (int, []byte) {
+func (tkn *Tokenizer) scanLiteralIdentifier(sepChar uint16) (int, []byte) {
 	buffer := &bytes2.Buffer{}
 	backTickSeen := false
 	for {
 		if backTickSeen {
-			if tkn.lastChar != tkn.literalSepChar() {
+			if tkn.lastChar != sepChar {
 				break
 			}
 			backTickSeen = false
-			buffer.WriteByte(byte(tkn.literalSepChar()))
+			buffer.WriteByte(byte(sepChar))
 			tkn.next()
 			continue
 		}
 		// The previous char was not a backtick.
 		switch tkn.lastChar {
-		case tkn.literalSepChar():
+		case sepChar:
 			backTickSeen = true
 		case eofChar:
 			// Premature EOF.
