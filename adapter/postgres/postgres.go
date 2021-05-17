@@ -136,6 +136,9 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 		if col.Default != "" && !col.IsAutoIncrement {
 			fmt.Fprintf(&queryBuilder, " DEFAULT %s", col.Default)
 		}
+		if col.IdentityGeneration != "" {
+			fmt.Fprintf(&queryBuilder, " GENERATED %s AS IDENTITY", col.IdentityGeneration)
+		}
 		if col.Check != "" {
 			fmt.Fprintf(&queryBuilder, " %s", col.Check)
 		}
@@ -158,14 +161,15 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 }
 
 type column struct {
-	Name            string
-	dataType        string
-	Length          int
-	Nullable        bool
-	Default         string
-	IsAutoIncrement bool
-	IsUnique        bool
-	Check           string
+	Name               string
+	dataType           string
+	Length             int
+	Nullable           bool
+	Default            string
+	IsAutoIncrement    bool
+	IsUnique           bool
+	Check              string
+	IdentityGeneration string
 }
 
 func (c *column) GetDataType() string {
@@ -202,7 +206,8 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	const query = `SELECT s.column_name, s.column_default, s.is_nullable, s.character_maximum_length,
 	CASE WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod) ELSE s.data_type END,
 	CASE WHEN p.contype = 'u' THEN true ELSE false END AS uniquekey,
-	CASE WHEN pc.contype = 'c' THEN pg_get_constraintdef(pc.oid, true) ELSE NULL END AS check
+	CASE WHEN pc.contype = 'c' THEN pg_get_constraintdef(pc.oid, true) ELSE NULL END AS check,
+	s.identity_generation
 FROM pg_attribute f
 	JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
 	LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
@@ -223,9 +228,9 @@ WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum >
 	for rows.Next() {
 		col := column{}
 		var colName, isNullable, dataType string
-		var maxLenStr, colDefault, check *string
+		var maxLenStr, colDefault, check, idGen *string
 		var isUnique bool
-		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &dataType, &isUnique, &check)
+		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &dataType, &isUnique, &check, &idGen)
 		if err != nil {
 			return nil, err
 		}
@@ -249,6 +254,9 @@ WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum >
 		col.Length = maxLen
 		if check != nil {
 			col.Check = *check
+		}
+		if idGen != nil {
+			col.IdentityGeneration = *idGen
 		}
 		cols = append(cols, col)
 	}
