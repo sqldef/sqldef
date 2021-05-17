@@ -902,6 +902,33 @@ func (col *ColumnDefinition) walkSubtree(visit Visit) error {
 	)
 }
 
+type Sequence struct {
+	Name        string
+	IfNotExists bool
+	Type        string
+
+	IncrementBy *SQLVal
+	MinValue    *SQLVal
+	NoMinValue  *BoolVal
+	MaxValue    *SQLVal
+	NoMaxValue  *BoolVal
+	StartWith   *SQLVal
+	Cache       *SQLVal
+	Cycle       *BoolVal
+	NoCycle     *BoolVal
+	OwnedBy     string
+}
+
+const (
+	IdentityAlwaysStr    = "always"
+	IdentityByDefaultStr = "by default"
+)
+
+type IdentityOpt struct {
+	Behavior string
+	Sequence *Sequence
+}
+
 // ColumnType represents a sql type in a CREATE TABLE statement
 // All optional fields are nil if not specified
 type ColumnType struct {
@@ -940,6 +967,9 @@ type ColumnType struct {
 	References     string
 	ReferenceNames Columns
 	// TODO: Allow specifying referenced column names
+
+	// GENERATED AS IDENTITY
+	Identity *IdentityOpt
 }
 
 // Format returns a canonical string representation of the type and all relevant options
