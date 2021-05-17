@@ -274,6 +274,29 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 				}
 
+				// GENERATED AS IDENTITY
+				if !hasSameIdentity(currentColumn.identity, desiredColumn.identity) {
+					if currentColumn.identity == nil {
+						// add
+						alter := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s ADD GENERATED %s AS IDENTITY", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredColumn.name), desiredColumn.identity.Behavior)
+						if desiredColumn.identity.Sequence != "" {
+							alter += "(" + desiredColumn.identity.Sequence + ")"
+						}
+						ddls = append(ddls, alter)
+					} else if desiredColumn.identity == nil {
+						// remove
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP IDENTITY IF EXISTS", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.name)))
+					} else {
+						// set
+						// not support changing sequence
+						if currentColumn.identity.Behavior != desiredColumn.identity.Behavior {
+							alter := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET GENERATED %s", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredColumn.name), desiredColumn.identity.Behavior)
+							ddls = append(ddls, alter)
+						}
+						ddls = append(ddls)
+					}
+				}
+
 				if currentColumn.check != desiredColumn.check || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
 					constraintName := fmt.Sprintf("%s_%s_check", strings.Replace(desired.table.name, "public.", "", 1), desiredColumn.name)
 					if currentColumn.check != "" {
@@ -688,6 +711,13 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		// noop
 	default:
 		return "", fmt.Errorf("unsupported column key (keyOption: '%d') in column: %#v", column.keyOption, column)
+	}
+
+	if column.identity != nil {
+		definition += "GENERATED " + column.identity.Behavior + " AS IDENTITY "
+		if column.identity.Sequence != "" {
+			definition += "(" + column.identity.Sequence + ")"
+		}
 	}
 
 	definition = strings.TrimSuffix(definition, " ")
@@ -1191,4 +1221,21 @@ func removeTableByName(tables []*Table, name string) []*Table {
 		log.Fatalf("Failed to removeTableByName: Table `%s` is not found in `%v`", name, tables)
 	}
 	return ret
+}
+
+
+func hasSameIdentity(a, b *IdentityOpt) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+
+	// not support sequence
+	if a.Behavior != b.Behavior {
+		return false
+	}
+
+	return true
 }

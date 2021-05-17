@@ -98,6 +98,7 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) Table {
 			onUpdate:      parseValue(parsedCol.Type.OnUpdate),
 			enumValues:    parsedCol.Type.EnumValues,
 			references:    parsedCol.Type.References,
+			identity:      parseIdentityOpt(parsedCol.Type.Identity),
 		}
 		if parsedCol.Type.Check != nil {
 			column.check = sqlparser.String(parsedCol.Type.Check.Expr)
@@ -372,4 +373,54 @@ func detectCharset(table sqlparser.TableSpec) string {
 	}
 	// TODO: consider returning err when charset is missing
 	return ""
+}
+
+type IdentityOpt struct {
+	Behavior string
+	Sequence string
+}
+
+func parseIdentityOpt(opt *sqlparser.IdentityOpt) *IdentityOpt {
+	if opt == nil {
+		return nil
+	}
+	dest := &IdentityOpt{
+		Behavior: strings.ToUpper(opt.Behavior),
+	}
+	if opt.Sequence != nil {
+		seq := ""
+		if opt.Sequence.StartWith != nil {
+			seq += fmt.Sprintf("START WITH %d ", parseValue(opt.Sequence.StartWith).intVal)
+		}
+		if opt.Sequence.IncrementBy != nil {
+			seq += fmt.Sprintf("INCREMENT BY %d ", parseValue(opt.Sequence.IncrementBy).intVal)
+		}
+		if opt.Sequence.MinValue != nil {
+			seq += fmt.Sprintf("MINVALUE %d ", parseValue(opt.Sequence.MinValue).intVal)
+		}
+		if opt.Sequence.NoMinValue != nil {
+			seq += "NO MINVALUE "
+		}
+		if opt.Sequence.MaxValue != nil {
+			seq += fmt.Sprintf("MAXVALUE %d ", parseValue(opt.Sequence.MaxValue).intVal)
+		}
+		if opt.Sequence.NoMaxValue != nil {
+			seq += "NO MAXVALUE "
+		}
+		if opt.Sequence.Cache != nil {
+			seq += fmt.Sprintf("CACHE %d ", parseValue(opt.Sequence.Cache).intVal)
+		}
+		if opt.Sequence.Cycle != nil {
+			seq += "CYCLE "
+		}
+		if opt.Sequence.NoCycle != nil {
+			seq += "NO CYCLE "
+		}
+		if opt.Sequence.OwnedBy != "" {
+			seq += fmt.Sprintf("OWNED BY %s ", opt.Sequence.OwnedBy)
+		}
+
+		dest.Sequence = strings.TrimSpace(seq)
+	}
+	return dest
 }

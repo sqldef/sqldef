@@ -68,6 +68,7 @@ type Column struct {
 	onUpdate       *Value
 	enumValues     []string
 	references     string
+	identity       *IdentityOpt
 	// TODO: keyopt
 	// XXX: zerofill?
 }
