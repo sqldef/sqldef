@@ -275,25 +275,21 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				// GENERATED AS IDENTITY
-				if !hasSameIdentity(currentColumn.identity, desiredColumn.identity) {
-					if currentColumn.identity == nil {
+				if currentColumn.identity != desiredColumn.identity {
+					if currentColumn.identity == "" {
 						// add
-						alter := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s ADD GENERATED %s AS IDENTITY", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredColumn.name), desiredColumn.identity.Behavior)
-						if desiredColumn.identity.Sequence != "" {
-							alter += "(" + desiredColumn.identity.Sequence + ")"
+						alter := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s ADD GENERATED %s AS IDENTITY", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredColumn.name), desiredColumn.identity)
+						if desiredColumn.sequence != nil {
+							alter += "(" + generateSequenceClause(desiredColumn.sequence) + ")"
 						}
 						ddls = append(ddls, alter)
-					} else if desiredColumn.identity == nil {
+					} else if desiredColumn.identity == "" {
 						// remove
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP IDENTITY IF EXISTS", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.name)))
 					} else {
 						// set
 						// not support changing sequence
-						if currentColumn.identity.Behavior != desiredColumn.identity.Behavior {
-							alter := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET GENERATED %s", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredColumn.name), desiredColumn.identity.Behavior)
-							ddls = append(ddls, alter)
-						}
-						ddls = append(ddls)
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET GENERATED %s", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredColumn.name), desiredColumn.identity))
 					}
 				}
 
@@ -713,10 +709,10 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		return "", fmt.Errorf("unsupported column key (keyOption: '%d') in column: %#v", column.keyOption, column)
 	}
 
-	if column.identity != nil {
-		definition += "GENERATED " + column.identity.Behavior + " AS IDENTITY "
-		if column.identity.Sequence != "" {
-			definition += "(" + column.identity.Sequence + ")"
+	if column.identity != "" {
+		definition += "GENERATED " + column.identity + " AS IDENTITY "
+		if column.sequence != nil {
+			definition += "(" + generateSequenceClause(column.sequence) + ") "
 		}
 	}
 
@@ -1223,19 +1219,38 @@ func removeTableByName(tables []*Table, name string) []*Table {
 	return ret
 }
 
-
-func hasSameIdentity(a, b *IdentityOpt) bool {
-	if a == nil && b == nil {
-		return true
+func generateSequenceClause(sequence *Sequence) string {
+	ddl := ""
+	if sequence.Name != "" {
+		ddl += fmt.Sprintf("SEQUENCE NAME %s ", sequence.Name)
 	}
-	if a == nil || b == nil {
-		return false
+	if sequence.StartWith != nil {
+		ddl += fmt.Sprintf("START WITH %d ", *sequence.StartWith)
+	}
+	if sequence.IncrementBy != nil {
+		ddl += fmt.Sprintf("INCREMENT BY %d ", *sequence.IncrementBy)
+	}
+	if sequence.MinValue != nil {
+		ddl += fmt.Sprintf("MINVALUE %d ", *sequence.MinValue)
+	}
+	if sequence.NoMinValue {
+		ddl += "NO MINVALUE "
+	}
+	if sequence.MaxValue != nil {
+		ddl += fmt.Sprintf("MAXVALUE %d ", sequence.MaxValue)
+	}
+	if sequence.NoMaxValue {
+		ddl += "NO MAXVALUE "
+	}
+	if sequence.Cache != nil {
+		ddl += fmt.Sprintf("CACHE %d ", sequence.Cache)
+	}
+	if sequence.Cycle {
+		ddl += "CYCLE "
+	}
+	if sequence.NoCycle {
+		ddl += "NO CYCLE "
 	}
 
-	// not support sequence
-	if a.Behavior != b.Behavior {
-		return false
-	}
-
-	return true
+	return strings.TrimSpace(ddl)
 }
