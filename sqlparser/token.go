@@ -118,6 +118,7 @@ var keywords = map[string]int{
 	"bool":                BOOL,
 	"boolean":             BOOLEAN,
 	"both":                UNUSED,
+	"bpchar":              BPCHAR,
 	"by":                  BY,
 	"cache":               CACHE,
 	"call":                UNUSED,

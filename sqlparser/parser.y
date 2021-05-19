@@ -178,6 +178,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
 %token <bytes> ARRAY
 %token <bytes> NOW
+%token <bytes> BPCHAR
 
 // Type Modifiers
 %token <bytes> NULLX AUTO_INCREMENT APPROXNUM SIGNED UNSIGNED ZEROFILL ZONE AUTOINCREMENT
@@ -1033,6 +1034,18 @@ current_timestamp:
   {
     $$ = NewValArgWithOpt($1, nil)
   }
+| CURRENT_TIME length_opt
+  {
+    $$ = NewValArgWithOpt($1, $2)
+  }
+| CURRENT_TIME '(' ')'
+  {
+    $$ = NewValArgWithOpt($1, nil)
+  }
+| CURRENT_DATE
+  {
+    $$ = NewValArgWithOpt($1, nil)
+  }
 
 no_inherit_opt:
   {
@@ -1049,6 +1062,8 @@ character_cast_opt:
   }
 | TYPECAST CHARACTER VARYING
 | TYPECAST TIMESTAMP time_zone_opt
+| TYPECAST BPCHAR
+| TYPECAST TEXT
 
 numeric_type:
   int_type length_opt
