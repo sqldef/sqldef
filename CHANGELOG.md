@@ -1,3 +1,7 @@
+## v0.9.2
+
+- Support PostgreSQL Identity columns [#114](https://github.com/k0kubun/sqldef/issues/114)
+
 ## v0.9.1
 
 - Support `"` to escape SQL identifiers in sqlite3def [#111](https://github.com/k0kubun/sqldef/issues/111)
