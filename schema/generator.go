@@ -293,6 +293,21 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 				}
 
+				// default
+				if !haveSameValue(currentColumn.defaultVal, desiredColumn.defaultVal) {
+					if desiredColumn.defaultVal == nil {
+						// drop
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.name)))
+					} else {
+						// set
+						definition, err := generateDefaultDefinition(*desiredColumn.defaultVal)
+						if err != nil {
+							return ddls, err
+						}
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.name), definition))
+					}
+				}
+
 				if currentColumn.check != desiredColumn.check || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
 					constraintName := fmt.Sprintf("%s_%s_check", strings.Replace(desired.table.name, "public.", "", 1), desiredColumn.name)
 					if currentColumn.check != "" {
@@ -657,24 +672,11 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 	}
 
 	if column.defaultVal != nil {
-		switch column.defaultVal.valueType {
-		case ValueTypeStr:
-			definition += fmt.Sprintf("DEFAULT '%s' ", column.defaultVal.strVal)
-		case ValueTypeInt:
-			definition += fmt.Sprintf("DEFAULT %d ", column.defaultVal.intVal)
-		case ValueTypeFloat:
-			definition += fmt.Sprintf("DEFAULT %f ", column.defaultVal.floatVal)
-		case ValueTypeBit:
-			if column.defaultVal.bitVal {
-				definition += "DEFAULT b'1' "
-			} else {
-				definition += "DEFAULT b'0' "
-			}
-		case ValueTypeValArg: // NULL, CURRENT_TIMESTAMP, ...
-			definition += fmt.Sprintf("DEFAULT %s ", string(column.defaultVal.raw))
-		default:
-			return "", fmt.Errorf("unsupported default value type (valueType: '%d') in column: %#v", column.defaultVal.valueType, column)
+		def, err := generateDefaultDefinition(*column.defaultVal)
+		if err != nil {
+			return "", fmt.Errorf("%s in column: %#v", err.Error(), column)
 		}
+		definition += def + " "
 	}
 
 	if column.autoIncrement {
@@ -1253,4 +1255,25 @@ func generateSequenceClause(sequence *Sequence) string {
 	}
 
 	return strings.TrimSpace(ddl)
+}
+
+func generateDefaultDefinition(defaultVal Value) (string, error) {
+	switch defaultVal.valueType {
+	case ValueTypeStr:
+		return fmt.Sprintf("DEFAULT '%s'", defaultVal.strVal), nil
+	case ValueTypeInt:
+		return fmt.Sprintf("DEFAULT %d", defaultVal.intVal), nil
+	case ValueTypeFloat:
+		return fmt.Sprintf("DEFAULT %f", defaultVal.floatVal), nil
+	case ValueTypeBit:
+		if defaultVal.bitVal {
+			return "DEFAULT b'1'", nil
+		} else {
+			return "DEFAULT b'0'", nil
+		}
+	case ValueTypeValArg: // NULL, CURRENT_TIMESTAMP, ...
+		return fmt.Sprintf("DEFAULT %s", string(defaultVal.raw)), nil
+	default:
+		return "", fmt.Errorf("unsupported default value type (valueType: '%d')", defaultVal.valueType)
+	}
 }
