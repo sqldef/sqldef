@@ -68,6 +68,8 @@ type Column struct {
 	onUpdate       *Value
 	enumValues     []string
 	references     string
+	identity       string
+	sequence       *Sequence
 	// TODO: keyopt
 	// XXX: zerofill?
 }
@@ -145,6 +147,22 @@ const (
 	ColumnKeyUniqueKey
 	ColumnKey
 )
+
+type Sequence struct {
+	Name        string
+	IfNotExists bool
+	Type        string
+	IncrementBy *int
+	MinValue    *int
+	NoMinValue  bool
+	MaxValue    *int
+	NoMaxValue  bool
+	StartWith   *int
+	Cache       *int
+	Cycle       bool
+	NoCycle     bool
+	OwnedBy     string
+}
 
 func (c *CreateTable) Statement() string {
 	return c.statement

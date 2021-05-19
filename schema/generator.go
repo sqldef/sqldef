@@ -274,6 +274,25 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 				}
 
+				// GENERATED AS IDENTITY
+				if currentColumn.identity != desiredColumn.identity {
+					if currentColumn.identity == "" {
+						// add
+						alter := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s ADD GENERATED %s AS IDENTITY", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredColumn.name), desiredColumn.identity)
+						if desiredColumn.sequence != nil {
+							alter += " (" + generateSequenceClause(desiredColumn.sequence) + ")"
+						}
+						ddls = append(ddls, alter)
+					} else if desiredColumn.identity == "" {
+						// remove
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP IDENTITY IF EXISTS", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.name)))
+					} else {
+						// set
+						// not support changing sequence
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET GENERATED %s", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredColumn.name), desiredColumn.identity))
+					}
+				}
+
 				if currentColumn.check != desiredColumn.check || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
 					constraintName := fmt.Sprintf("%s_%s_check", strings.Replace(desired.table.name, "public.", "", 1), desiredColumn.name)
 					if currentColumn.check != "" {
@@ -631,7 +650,7 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		definition += fmt.Sprintf("COLLATE %s ", column.collate)
 	}
 
-	if (column.notNull != nil && *column.notNull) || column.keyOption == ColumnKeyPrimary {
+	if column.identity == "" && ((column.notNull != nil && *column.notNull) || column.keyOption == ColumnKeyPrimary) {
 		definition += "NOT NULL "
 	} else if column.notNull != nil && !*column.notNull {
 		definition += "NULL "
@@ -688,6 +707,13 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		// noop
 	default:
 		return "", fmt.Errorf("unsupported column key (keyOption: '%d') in column: %#v", column.keyOption, column)
+	}
+
+	if column.identity != "" {
+		definition += "GENERATED " + column.identity + " AS IDENTITY "
+		if column.sequence != nil {
+			definition += "(" + generateSequenceClause(column.sequence) + ") "
+		}
 	}
 
 	definition = strings.TrimSuffix(definition, " ")
@@ -1191,4 +1217,40 @@ func removeTableByName(tables []*Table, name string) []*Table {
 		log.Fatalf("Failed to removeTableByName: Table `%s` is not found in `%v`", name, tables)
 	}
 	return ret
+}
+
+func generateSequenceClause(sequence *Sequence) string {
+	ddl := ""
+	if sequence.Name != "" {
+		ddl += fmt.Sprintf("SEQUENCE NAME %s ", sequence.Name)
+	}
+	if sequence.StartWith != nil {
+		ddl += fmt.Sprintf("START WITH %d ", *sequence.StartWith)
+	}
+	if sequence.IncrementBy != nil {
+		ddl += fmt.Sprintf("INCREMENT BY %d ", *sequence.IncrementBy)
+	}
+	if sequence.MinValue != nil {
+		ddl += fmt.Sprintf("MINVALUE %d ", *sequence.MinValue)
+	}
+	if sequence.NoMinValue {
+		ddl += "NO MINVALUE "
+	}
+	if sequence.MaxValue != nil {
+		ddl += fmt.Sprintf("MAXVALUE %d ", *sequence.MaxValue)
+	}
+	if sequence.NoMaxValue {
+		ddl += "NO MAXVALUE "
+	}
+	if sequence.Cache != nil {
+		ddl += fmt.Sprintf("CACHE %d ", *sequence.Cache)
+	}
+	if sequence.Cycle {
+		ddl += "CYCLE "
+	}
+	if sequence.NoCycle {
+		ddl += "NO CYCLE "
+	}
+
+	return strings.TrimSpace(ddl)
 }

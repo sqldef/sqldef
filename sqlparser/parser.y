@@ -112,6 +112,7 @@ func forceEOF(yylex interface{}) {
   vindexParam   VindexParam
   vindexParams  []VindexParam
   showFilter    *ShowFilter
+  sequence      *Sequence
 }
 
 %token LEX_ERROR
@@ -202,6 +203,11 @@ func forceEOF(yylex interface{}) {
 
 // MySQL reserved words that are unused by this grammar will map to this token.
 %token <bytes> UNUSED
+
+// Postgres GENERATED AS IDENTITY
+%token <bytes> GENERATED ALWAYS IDENTITY
+// sequence
+%token <bytes> SEQUENCE INCREMENT MINVALUE CACHE CYCLE OWNED NONE
 
 %type <statement> command
 %type <selStmt> select_statement base_select union_lhs union_rhs
@@ -309,6 +315,8 @@ func forceEOF(yylex interface{}) {
 %left <bytes> TYPECAST CHECK
 %type <bytes> or_replace_opt
 %type <boolVal> no_inherit_opt
+%type <str> identity_behavior
+%type <sequence> sequence_opt
 
 %start any_command
 
@@ -812,6 +820,7 @@ column_definition_type:
     $1.Autoincrement = BoolVal(false)
     $1.KeyOpt = colKeyNone
     $1.Comment = nil
+    $1.Identity = nil
     $1.Array = $2
     $$ = $1
   }
@@ -920,6 +929,98 @@ column_definition_type:
   {
     $1.References     = $3.v
     $1.ReferenceNames = $5
+    $$ = $1
+  }
+| column_definition_type GENERATED identity_behavior AS IDENTITY
+  {
+    $1.Identity = &IdentityOpt{Behavior: $3}
+    $1.NotNull = NewBoolVal(true)
+    $$ = $1
+  }
+| column_definition_type GENERATED identity_behavior AS IDENTITY '(' sequence_opt ')'
+  {
+    $1.Identity = &IdentityOpt{Behavior: $3, Sequence: $7}
+    $1.NotNull = NewBoolVal(true)
+    $$ = $1
+  }
+
+identity_behavior:
+  ALWAYS
+  {
+    $$ = string($1)
+  }
+| BY DEFAULT
+  {
+    $$ = string($1)+" "+string($2)
+  }
+
+sequence_opt:
+  {
+    $$ = &Sequence{}
+  }
+| sequence_opt START WITH INTEGRAL
+  {
+    $1.StartWith = NewIntVal($4)
+    $$ = $1
+  }
+| sequence_opt START INTEGRAL
+  {
+    $1.StartWith = NewIntVal($3)
+    $$ = $1
+  }
+| sequence_opt INCREMENT BY INTEGRAL
+  {
+    $1.IncrementBy = NewIntVal($4)
+    $$ = $1
+  }
+| sequence_opt INCREMENT INTEGRAL
+  {
+    $1.IncrementBy = NewIntVal($3)
+    $$ = $1
+  }
+| sequence_opt MINVALUE INTEGRAL
+  {
+    $1.MinValue = NewIntVal($3)
+    $$ = $1
+  }
+| sequence_opt MAXVALUE INTEGRAL
+  {
+    $1.MaxValue = NewIntVal($3)
+    $$ = $1
+  }
+| sequence_opt CACHE INTEGRAL
+  {
+    $1.Cache = NewIntVal($3)
+    $$ = $1
+  }
+| sequence_opt NO MINVALUE
+  {
+    $1.NoMinValue = NewBoolVal(true)
+    $$ = $1
+  }
+| sequence_opt NO MAXVALUE
+  {
+    $1.NoMaxValue = NewBoolVal(true)
+    $$ = $1
+  }
+| sequence_opt NO CYCLE
+  {
+    $1.NoCycle = NewBoolVal(true)
+    $$ = $1
+  }
+| sequence_opt CYCLE
+  {
+    $1.Cycle = NewBoolVal(true)
+    $$ = $1
+  }
+| sequence_opt OWNED BY NONE
+  {
+    $1.OwnedBy = "NONE"
+    $$ = $1
+  }
+| sequence_opt OWNED BY table_id '.' reserved_sql_id
+  {
+    $1.OwnedBy = string($4.v)+"."+string($6.val)
     $$ = $1
   }
 
@@ -3383,6 +3484,7 @@ reserved_table_id:
 */
 reserved_keyword:
   ADD
+| ALWAYS
 | AND
 | AS
 | ASC
@@ -3420,8 +3522,10 @@ reserved_keyword:
 | FORCE
 | FOREIGN
 | FROM
+| GENERATED
 | GROUP
 | HAVING
+| IDENTITY
 | IF
 | IGNORE
 | IN
