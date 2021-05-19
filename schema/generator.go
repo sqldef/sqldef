@@ -280,7 +280,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						// add
 						alter := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s ADD GENERATED %s AS IDENTITY", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredColumn.name), desiredColumn.identity)
 						if desiredColumn.sequence != nil {
-							alter += "(" + generateSequenceClause(desiredColumn.sequence) + ")"
+							alter += " (" + generateSequenceClause(desiredColumn.sequence) + ")"
 						}
 						ddls = append(ddls, alter)
 					} else if desiredColumn.identity == "" {
