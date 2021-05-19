@@ -650,7 +650,7 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		definition += fmt.Sprintf("COLLATE %s ", column.collate)
 	}
 
-	if (column.notNull != nil && *column.notNull) || column.keyOption == ColumnKeyPrimary {
+	if column.identity == "" && ((column.notNull != nil && *column.notNull) || column.keyOption == ColumnKeyPrimary) {
 		definition += "NOT NULL "
 	} else if column.notNull != nil && !*column.notNull {
 		definition += "NULL "
