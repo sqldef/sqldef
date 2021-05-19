@@ -1237,13 +1237,13 @@ func generateSequenceClause(sequence *Sequence) string {
 		ddl += "NO MINVALUE "
 	}
 	if sequence.MaxValue != nil {
-		ddl += fmt.Sprintf("MAXVALUE %d ", sequence.MaxValue)
+		ddl += fmt.Sprintf("MAXVALUE %d ", *sequence.MaxValue)
 	}
 	if sequence.NoMaxValue {
 		ddl += "NO MAXVALUE "
 	}
 	if sequence.Cache != nil {
-		ddl += fmt.Sprintf("CACHE %d ", sequence.Cache)
+		ddl += fmt.Sprintf("CACHE %d ", *sequence.Cache)
 	}
 	if sequence.Cycle {
 		ddl += "CYCLE "
