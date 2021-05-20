@@ -107,7 +107,7 @@ Usage:
 
 Application Options:
   -U, --user=username        PostgreSQL user name (default: postgres)
-  -W, --password=password    PostgreSQL user password, overridden by $PGPASS
+  -W, --password=password    PostgreSQL user password, overridden by $PGPASSWORD
   -h, --host=hostname        Host or socket directory to connect to the PostgreSQL server (default: 127.0.0.1)
   -p, --port=port            Port used for the connection (default: 5432)
       --password-prompt      Force PostgreSQL user password prompt
