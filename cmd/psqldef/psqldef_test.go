@@ -67,6 +67,33 @@ func TestPsqldefCreateTableWithDefault(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestPsqldefCreateTableChangeDefault(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE timestamps (
+		  created_at timestamp default current_timestamp
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTableDropDefault := stripHeredoc(`
+		CREATE TABLE timestamps (
+		  created_at timestamp
+		);
+		`,
+	)
+	alter1 := `ALTER TABLE "public"."timestamps" ALTER COLUMN "created_at" DROP DEFAULT;`
+	assertApplyOutput(t, createTableDropDefault, applyPrefix+alter1+"\n")
+	assertApplyOutput(t, createTableDropDefault, nothingModified)
+
+	alter2 := `ALTER TABLE "public"."timestamps" ALTER COLUMN "created_at" SET DEFAULT current_timestamp;`
+	assertApplyOutput(t, createTable, applyPrefix+alter2+"\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestPsqldefCreateTableAlterColumn(t *testing.T) {
 	resetTestDatabase()
 
