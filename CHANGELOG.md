@@ -1,3 +1,13 @@
+## v0.10.0
+
+- Accept `PGPASSWORD` instead of `PGPASS` in psqldef [#117](https://github.com/k0kubun/sqldef/issues/117)
+- Support changing column defaults in psqldef [#116](https://github.com/k0kubun/sqldef/pull/116)
+- Support more default values for psqldef: `CURRENT_DATE`, `CURRENT_TIME`, `text`, `bpchar` [#115](https://github.com/k0kubun/sqldef/pull/115)
+
+## v0.9.2
+
+- Support PostgreSQL Identity columns [#114](https://github.com/k0kubun/sqldef/issues/114)
+
 ## v0.9.1
 
 - Support `"` to escape SQL identifiers in sqlite3def [#111](https://github.com/k0kubun/sqldef/issues/111)
