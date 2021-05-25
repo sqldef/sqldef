@@ -1529,6 +1529,11 @@ index_column:
   {
       $$ = IndexColumn{Column: $1, Length: $2}
   }
+/* For PostgreSQL */
+| KEY length_opt
+  {
+    $$ = IndexColumn{Column: NewColIdent(string($1)), Length: $2}
+  }
 
 foreign_key_definition:
   foreign_key_without_options
