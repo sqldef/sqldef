@@ -276,6 +276,30 @@ func TestMysqldefCreateTableRemoveAutoIncrementPrimaryKey(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefCreateTableAddIndexWithKeyLength(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+		  name TEXT NOT NULL,
+		  PRIMARY KEY (id)
+		);`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+		  name TEXT NOT NULL,
+		  PRIMARY KEY (id),
+		  INDEX index_name(name(255))
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD index `index_name`(`name`(255));\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefAddColumn(t *testing.T) {
 	resetTestDatabase()
 
@@ -528,16 +552,9 @@ func TestMysqldefAddIndexWithKeyLength(t *testing.T) {
 	)
 	assertApply(t, createTable)
 
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-		  name TEXT NOT NULL,
-		  PRIMARY KEY (id),
-		  INDEX index_name(name(255))
-		);`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD index `index_name`(`name`(255));\n")
-	assertApplyOutput(t, createTable, nothingModified)
+	alterTable := "ALTER TABLE `users` ADD INDEX `index_name`(`name`(255));\n"
+	assertApplyOutput(t, createTable+alterTable, applyPrefix+alterTable)
+	assertApplyOutput(t, createTable+alterTable, nothingModified)
 }
 
 func TestMysqldefFulltextIndex(t *testing.T) {

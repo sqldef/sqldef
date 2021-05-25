@@ -85,7 +85,7 @@ type Index struct {
 
 type IndexColumn struct {
 	column string
-	length *int // Parsed in "create table" but not parsed in "add index".
+	length *int
 }
 
 type ForeignKey struct {

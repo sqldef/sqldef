@@ -103,8 +103,8 @@ func forceEOF(yylex interface{}) {
   indexInfo     *IndexInfo
   indexOption   *IndexOption
   indexOptions  []*IndexOption
-  indexColumn   *IndexColumn
-  indexColumns  []*IndexColumn
+  indexColumn   IndexColumn
+  indexColumns  []IndexColumn
   foreignKeyDefinition *ForeignKeyDefinition
   partDefs      []*PartitionDefinition
   partDef       *PartitionDefinition
@@ -561,7 +561,7 @@ create_statement:
     $1.TableSpec = $2
     $$ = $1
   }
-| CREATE unique_opt INDEX sql_id ON table_name '(' column_list ')' where_expression_opt
+| CREATE unique_opt INDEX sql_id ON table_name '(' index_column_list ')' where_expression_opt
   {
     $$ = &DDL{
         Action: CreateIndexStr,
@@ -577,7 +577,7 @@ create_statement:
       }
   }
 /* For MySQL */
-| CREATE unique_opt INDEX sql_id USING sql_id ON table_name '(' column_list ')'
+| CREATE unique_opt INDEX sql_id USING sql_id ON table_name '(' index_column_list ')'
   {
     $$ = &DDL{
         Action: CreateIndexStr,
@@ -592,7 +592,7 @@ create_statement:
       }
   }
 /* For PostgreSQL */
-| CREATE unique_opt INDEX sql_id ON table_name USING sql_id '(' column_list ')' where_expression_opt
+| CREATE unique_opt INDEX sql_id ON table_name USING sql_id '(' index_column_list ')' where_expression_opt
   {
     $$ = &DDL{
         Action: CreateIndexStr,
@@ -1517,7 +1517,7 @@ index_or_key:
 index_column_list:
   index_column
   {
-    $$ = []*IndexColumn{$1}
+    $$ = []IndexColumn{$1}
   }
 | index_column_list ',' index_column
   {
@@ -1527,7 +1527,7 @@ index_column_list:
 index_column:
   sql_id length_opt
   {
-      $$ = &IndexColumn{Column: $1, Length: $2}
+      $$ = IndexColumn{Column: $1, Length: $2}
   }
 
 foreign_key_definition:
@@ -1660,7 +1660,7 @@ alter_statement:
   {
     $$ = &DDL{Action: AlterStr, Table: $4, NewName: $4}
   }
-| ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' column_list ')'
+| ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')'
   {
     $$ = &DDL{
         Action: AddIndexStr,
@@ -1674,7 +1674,7 @@ alter_statement:
         IndexCols: $10,
       }
   }
-| ALTER ignore_opt TABLE ONLY table_name ADD CONSTRAINT sql_id PRIMARY KEY '(' column_list ')'
+| ALTER ignore_opt TABLE ONLY table_name ADD CONSTRAINT sql_id PRIMARY KEY '(' index_column_list ')'
   {
     $$ = &DDL{
         Action: AddPrimaryKeyStr,

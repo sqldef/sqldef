@@ -75,6 +75,7 @@ func parseValue(val *sqlparser.SQLVal) *Value {
 }
 
 // Assume an integer length. Maybe useful only for index lengths.
+// TODO: Change IndexColumn.Length in parser.y to integer in the first place
 func parseLength(val *sqlparser.SQLVal) (*int, error) {
 	if val == nil {
 		return nil, nil
@@ -186,12 +187,16 @@ func parseIndex(stmt *sqlparser.DDL) (Index, error) {
 	}
 
 	indexColumns := []IndexColumn{}
-	for _, colIdent := range stmt.IndexCols {
+	for _, column := range stmt.IndexCols {
+		length, err := parseLength(column.Length)
+		if err != nil {
+			return Index{}, err
+		}
 		indexColumns = append(
 			indexColumns,
 			IndexColumn{
-				column: colIdent.String(),
-				length: nil,
+				column: column.Column.String(),
+				length: length,
 			},
 		)
 	}
