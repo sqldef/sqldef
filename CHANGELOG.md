@@ -1,3 +1,7 @@
+## v0.10.1
+
+- Support parsing and generating index lengths [#118](https://github.com/k0kubun/sqldef/issues/118)
+
 ## v0.10.0
 
 - Accept `PGPASSWORD` instead of `PGPASS` in psqldef [#117](https://github.com/k0kubun/sqldef/issues/117)
