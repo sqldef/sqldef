@@ -85,7 +85,7 @@ type Index struct {
 
 type IndexColumn struct {
 	column string
-	length *Value // Parsed in "create table" but not parsed in "add index". So actually not used yet.
+	length *int // Parsed in "create table" but not parsed in "add index".
 }
 
 type ForeignKey struct {
@@ -204,7 +204,6 @@ func (t *Table) PrimaryKey() *Index {
 		if column.keyOption == ColumnKeyPrimary {
 			primaryColumns = append(primaryColumns, IndexColumn{
 				column: column.name,
-				length: column.length,
 			})
 		}
 	}
