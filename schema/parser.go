@@ -208,6 +208,8 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 		parserMode = sqlparser.ParserModePostgres
 	case GeneratorModeSQLite3:
 		parserMode = sqlparser.ParserModeSQLite3
+	case GeneratorModeMssql:
+		parserMode = sqlparser.ParserModeMssql
 	default:
 		panic("unrecognized parser mode")
 	}
