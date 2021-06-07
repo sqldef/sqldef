@@ -210,6 +210,9 @@ func forceEOF(yylex interface{}) {
 // sequence
 %token <bytes> SEQUENCE INCREMENT MINVALUE CACHE CYCLE OWNED NONE
 
+// SQL Server PRIMARY KEY CLUSTERED
+%token <bytes> CLUSTERED NONCLUSTERED
+
 %type <statement> command
 %type <selStmt> select_statement base_select union_lhs union_rhs
 %type <statement> stream_statement insert_statement update_statement delete_statement set_statement
@@ -318,6 +321,7 @@ func forceEOF(yylex interface{}) {
 %type <boolVal> no_inherit_opt
 %type <str> identity_behavior
 %type <sequence> sequence_opt
+%type <boolVal> clustered_opt
 
 %start any_command
 
@@ -942,6 +946,11 @@ column_definition_type:
   {
     $1.Identity = &IdentityOpt{Behavior: $3, Sequence: $7}
     $1.NotNull = NewBoolVal(true)
+    $$ = $1
+  }
+| column_definition_type IDENTITY '(' INTEGRAL ',' INTEGRAL ')'
+  {
+    $1.Identity = &IdentityOpt{Sequence: &Sequence{StartWith: NewIntVal($4), IncrementBy: NewIntVal($6)}}
     $$ = $1
   }
 
@@ -1588,12 +1597,26 @@ reference_option:
   }
 
 primary_key_definition:
-  CONSTRAINT sql_id PRIMARY KEY '(' index_column_list ')'
+  CONSTRAINT sql_id PRIMARY KEY clustered_opt '(' index_column_list ')'
   {
     $$ = &IndexDefinition{
-      Info: &IndexInfo{Type: string($3) + " " + string($4), Name: NewColIdent("PRIMARY"), Primary: true, Unique: true},
-      Columns: $6,
+      Info: &IndexInfo{Type: string($3) + " " + string($4), Name: NewColIdent("PRIMARY"), Primary: true, Unique: true, Clustered: $5},
+      Columns: $7,
     }
+  }
+
+/* For SQL Server */
+clustered_opt:
+  {
+    $$ = BoolVal(true)
+  }
+| CLUSTERED
+  {
+    $$ = BoolVal(true)
+  }
+| NONCLUSTERED
+  {
+    $$ = BoolVal(false)
   }
 
 sql_id_opt:
@@ -3509,6 +3532,8 @@ reserved_keyword:
 | BINARY
 | BY
 | CASE
+| CLUSTERED
+| NONCLUSTERED
 | COLLATE
 | CONVERT
 | CREATE

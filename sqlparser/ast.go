@@ -1222,12 +1222,13 @@ func (idx *IndexDefinition) walkSubtree(visit Visit) error {
 
 // IndexInfo describes the name and type of an index in a CREATE TABLE statement
 type IndexInfo struct {
-	Type     string
-	Name     ColIdent
-	Primary  bool
-	Spatial  bool
-	Unique   bool
-	Fulltext bool
+	Type      string
+	Name      ColIdent
+	Primary   bool
+	Spatial   bool
+	Unique    bool
+	Fulltext  bool
+	Clustered BoolVal
 }
 
 // Format formats the node.
