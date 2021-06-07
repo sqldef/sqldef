@@ -18,3 +18,12 @@ services:
       - ./docker/postgresql/data:/var/lib/postgresql/data
     ports:
       - '5432:5432'
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2017-latest
+    environment:
+      ACCEPT_EULA: Y
+      SA_PASSWORD: Passw0rd
+    volumes:
+      - ./docker/mssql/data:/var/opt/mssql/data
+    ports:
+      - '1433:1433'
