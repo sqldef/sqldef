@@ -729,7 +729,11 @@ func (g *Generator) generateIndexDefinition(index Index) string {
 
 	columns := []string{}
 	for _, indexColumn := range index.columns {
-		columns = append(columns, g.escapeSQLName(indexColumn.column))
+		column := g.escapeSQLName(indexColumn.column)
+		if indexColumn.length != nil {
+			column += fmt.Sprintf("(%d)", *indexColumn.length)
+		}
+		columns = append(columns, column)
 	}
 
 	if index.primary {

@@ -664,7 +664,7 @@ type DDL struct {
 	TableSpec     *TableSpec
 	PartitionSpec *PartitionSpec
 	IndexSpec     *IndexSpec
-	IndexCols     []ColIdent
+	IndexCols     []IndexColumn
 	VindexSpec    *VindexSpec
 	VindexCols    []ColIdent
 	ForeignKey    *ForeignKeyDefinition
@@ -1177,7 +1177,7 @@ func (ct *ColumnType) walkSubtree(visit Visit) error {
 // IndexDefinition describes an index in a CREATE TABLE statement
 type IndexDefinition struct {
 	Info    *IndexInfo
-	Columns []*IndexColumn
+	Columns []IndexColumn
 	Options []*IndexOption
 }
 
