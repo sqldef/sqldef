@@ -1,6 +1,6 @@
 # sqldef [![Build Status](https://travis-ci.org/k0kubun/sqldef.svg?branch=master)](https://travis-ci.org/k0kubun/sqldef)
 
-The easiest idempotent MySQL/PostgreSQL/SQLite3 schema management by SQL.
+The easiest idempotent MySQL/PostgreSQL/SQLite3/SQL Server schema management by SQL.
 
 This is inspired by [Ridgepole](https://github.com/winebarrel/ridgepole) but using SQL,
 so there's no need to remember Ruby DSL.
