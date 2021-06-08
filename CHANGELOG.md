@@ -1,7 +1,3 @@
-## v0.10.2
-
-- Add SQL Server support as `mssqldef` [#120](https://github.com/k0kubun/sqldef/issues/120)
-
 ## v0.10.1
 
 - Support parsing and generating index lengths [#118](https://github.com/k0kubun/sqldef/issues/118)
