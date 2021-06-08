@@ -240,7 +240,7 @@ Some of them can also be used for input schema file.
 - SQLite3
   - Table: CREATE TABLE, DROP TABLE
   - View: CREATE VIEW, DROP VIEW
-- SQLServer
+- SQL Server
   - Table: CREATE TABLE, DROP TABLE
   - VIEW: CREATE VIEW, DROP VIEW
 
@@ -461,7 +461,7 @@ To rename them, you would need to rename manually and use `--export` again.
 
 ## Development
 
-You can use the following command to prepare MySQL, PostgreSQL and SQLServer to be used for running tests.
+You can use the following command to prepare MySQL, PostgreSQL and SQL Server to be used for running tests.
 
 ```
 $ sudo apt install mysql-client postgresql-client
