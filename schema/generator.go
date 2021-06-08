@@ -15,6 +15,7 @@ const (
 	GeneratorModeMysql = GeneratorMode(iota)
 	GeneratorModePostgres
 	GeneratorModeSQLite3
+	GeneratorModeMssql
 )
 
 var (
@@ -537,7 +538,7 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 	} else {
 		// View found. If it's different, create or replace view.
 		if strings.ToLower(currentView.definition) != strings.ToLower(desiredView.definition) {
-			if g.mode == GeneratorModeSQLite3 {
+			if g.mode == GeneratorModeSQLite3 || g.mode == GeneratorModeMssql {
 				ddls = append(ddls, fmt.Sprintf("DROP VIEW %s", g.escapeTableName(viewName)))
 				ddls = append(ddls, fmt.Sprintf("CREATE VIEW %s AS %s", g.escapeTableName(viewName), desiredView.definition))
 			} else {
@@ -797,11 +798,16 @@ func (g *Generator) generateDropIndex(tableName string, indexName string) string
 
 func (g *Generator) escapeTableName(name string) string {
 	switch g.mode {
-	case GeneratorModePostgres:
+	case GeneratorModePostgres, GeneratorModeMssql:
 		schemaTable := strings.SplitN(name, ".", 2)
 		var schemaName, tableName string
 		if len(schemaTable) == 1 {
-			schemaName, tableName = "public", schemaTable[0]
+			switch g.mode {
+			case GeneratorModePostgres:
+				schemaName, tableName = "public", schemaTable[0]
+			case GeneratorModeMssql:
+				schemaName, tableName = "dbo", schemaTable[0]
+			}
 		} else {
 			schemaName, tableName = schemaTable[0], schemaTable[1]
 		}
@@ -816,6 +822,8 @@ func (g *Generator) escapeSQLName(name string) string {
 	switch g.mode {
 	case GeneratorModePostgres:
 		return fmt.Sprintf("\"%s\"", name)
+	case GeneratorModeMssql:
+		return fmt.Sprintf("[%s]", name)
 	default:
 		return fmt.Sprintf("`%s`", name)
 	}

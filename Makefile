@@ -14,6 +14,7 @@ build: deps
 	cd cmd/mysqldef && GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/mysqldef
 	cd cmd/psqldef && GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/psqldef
 	cd cmd/sqlite3def && GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/sqlite3def
+	cd cmd/mssqldef && GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/mssqldef
 
 clean:
 	rm -rf build package
@@ -43,7 +44,7 @@ package-targz: build
 	cd $(BUILD_DIR) && tar zcvf ../../package/psqldef_$(GOOS)_$(GOARCH).tar.gz psqldef
 	cd $(BUILD_DIR) && tar zcvf ../../package/sqlite3def_$(GOOS)_$(GOARCH).tar.gz sqlite3def
 
-test: test-mysqldef test-psqldef test-sqlite3def test-sqlparser
+test: test-mysqldef test-psqldef test-sqlite3def test-mssqldef test-sqlparser
 
 test-mysqldef: deps
 	cd cmd/mysqldef && MYSQL_HOST=127.0.0.1 go test
@@ -53,6 +54,9 @@ test-psqldef: deps
 
 test-sqlite3def: deps
 	cd cmd/sqlite3def && go test
+
+test-mssqldef: deps
+	cd cmd/mssqldef && go test
 
 test-sqlparser:
 	cd sqlparser && go test
