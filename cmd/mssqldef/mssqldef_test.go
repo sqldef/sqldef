@@ -165,6 +165,39 @@ func TestMssqldefCreateView(t *testing.T) {
 	assertApplyOutput(t, "", applyPrefix+"DROP TABLE [dbo].[users];\n"+dropView)
 }
 
+func TestMysqldefAddColumn(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT NOT NULL PRIMARY KEY,
+		  name varchar(40)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT NOT NULL PRIMARY KEY,
+		  name varchar(40),
+		  count int IDENTITY(1,1)
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] ADD [count] int IDENTITY(1,1);\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+		  count int IDENTITY(1,1)
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
