@@ -103,8 +103,8 @@ func forceEOF(yylex interface{}) {
   indexInfo     *IndexInfo
   indexOption   *IndexOption
   indexOptions  []*IndexOption
-  indexColumn   *IndexColumn
-  indexColumns  []*IndexColumn
+  indexColumn   IndexColumn
+  indexColumns  []IndexColumn
   foreignKeyDefinition *ForeignKeyDefinition
   partDefs      []*PartitionDefinition
   partDef       *PartitionDefinition
@@ -209,6 +209,9 @@ func forceEOF(yylex interface{}) {
 %token <bytes> GENERATED ALWAYS IDENTITY
 // sequence
 %token <bytes> SEQUENCE INCREMENT MINVALUE CACHE CYCLE OWNED NONE
+
+// SQL Server PRIMARY KEY CLUSTERED
+%token <bytes> CLUSTERED NONCLUSTERED
 
 %type <statement> command
 %type <selStmt> select_statement base_select union_lhs union_rhs
@@ -318,6 +321,7 @@ func forceEOF(yylex interface{}) {
 %type <boolVal> no_inherit_opt
 %type <str> identity_behavior
 %type <sequence> sequence_opt
+%type <boolVal> clustered_opt
 
 %start any_command
 
@@ -561,7 +565,7 @@ create_statement:
     $1.TableSpec = $2
     $$ = $1
   }
-| CREATE unique_opt INDEX sql_id ON table_name '(' column_list ')' where_expression_opt
+| CREATE unique_opt INDEX sql_id ON table_name '(' index_column_list ')' where_expression_opt
   {
     $$ = &DDL{
         Action: CreateIndexStr,
@@ -577,7 +581,7 @@ create_statement:
       }
   }
 /* For MySQL */
-| CREATE unique_opt INDEX sql_id USING sql_id ON table_name '(' column_list ')'
+| CREATE unique_opt INDEX sql_id USING sql_id ON table_name '(' index_column_list ')'
   {
     $$ = &DDL{
         Action: CreateIndexStr,
@@ -592,7 +596,7 @@ create_statement:
       }
   }
 /* For PostgreSQL */
-| CREATE unique_opt INDEX sql_id ON table_name USING sql_id '(' column_list ')' where_expression_opt
+| CREATE unique_opt INDEX sql_id ON table_name USING sql_id '(' index_column_list ')' where_expression_opt
   {
     $$ = &DDL{
         Action: CreateIndexStr,
@@ -942,6 +946,11 @@ column_definition_type:
   {
     $1.Identity = &IdentityOpt{Behavior: $3, Sequence: $7}
     $1.NotNull = NewBoolVal(true)
+    $$ = $1
+  }
+| column_definition_type IDENTITY '(' INTEGRAL ',' INTEGRAL ')'
+  {
+    $1.Identity = &IdentityOpt{Sequence: &Sequence{StartWith: NewIntVal($4), IncrementBy: NewIntVal($6)}}
     $$ = $1
   }
 
@@ -1517,7 +1526,7 @@ index_or_key:
 index_column_list:
   index_column
   {
-    $$ = []*IndexColumn{$1}
+    $$ = []IndexColumn{$1}
   }
 | index_column_list ',' index_column
   {
@@ -1527,7 +1536,12 @@ index_column_list:
 index_column:
   sql_id length_opt
   {
-      $$ = &IndexColumn{Column: $1, Length: $2}
+      $$ = IndexColumn{Column: $1, Length: $2}
+  }
+/* For PostgreSQL */
+| KEY length_opt
+  {
+    $$ = IndexColumn{Column: NewColIdent(string($1)), Length: $2}
   }
 
 foreign_key_definition:
@@ -1588,12 +1602,26 @@ reference_option:
   }
 
 primary_key_definition:
-  CONSTRAINT sql_id PRIMARY KEY '(' index_column_list ')'
+  CONSTRAINT sql_id PRIMARY KEY clustered_opt '(' index_column_list ')'
   {
     $$ = &IndexDefinition{
-      Info: &IndexInfo{Type: string($3) + " " + string($4), Name: NewColIdent("PRIMARY"), Primary: true, Unique: true},
-      Columns: $6,
+      Info: &IndexInfo{Type: string($3) + " " + string($4), Name: NewColIdent("PRIMARY"), Primary: true, Unique: true, Clustered: $5},
+      Columns: $7,
     }
+  }
+
+/* For SQL Server */
+clustered_opt:
+  {
+    $$ = BoolVal(true)
+  }
+| CLUSTERED
+  {
+    $$ = BoolVal(true)
+  }
+| NONCLUSTERED
+  {
+    $$ = BoolVal(false)
   }
 
 sql_id_opt:
@@ -1660,7 +1688,7 @@ alter_statement:
   {
     $$ = &DDL{Action: AlterStr, Table: $4, NewName: $4}
   }
-| ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' column_list ')'
+| ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')'
   {
     $$ = &DDL{
         Action: AddIndexStr,
@@ -1674,7 +1702,7 @@ alter_statement:
         IndexCols: $10,
       }
   }
-| ALTER ignore_opt TABLE ONLY table_name ADD CONSTRAINT sql_id PRIMARY KEY '(' column_list ')'
+| ALTER ignore_opt TABLE ONLY table_name ADD CONSTRAINT sql_id PRIMARY KEY '(' index_column_list ')'
   {
     $$ = &DDL{
         Action: AddPrimaryKeyStr,
@@ -3509,6 +3537,8 @@ reserved_keyword:
 | BINARY
 | BY
 | CASE
+| CLUSTERED
+| NONCLUSTERED
 | COLLATE
 | CONVERT
 | CREATE

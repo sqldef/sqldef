@@ -14,6 +14,7 @@ build: deps
 	cd cmd/mysqldef && GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/mysqldef
 	cd cmd/psqldef && GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/psqldef
 	cd cmd/sqlite3def && GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/sqlite3def
+	cd cmd/mssqldef && GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/mssqldef
 
 clean:
 	rm -rf build package
@@ -33,26 +34,31 @@ package:
 
 package-zip: build
 	mkdir -p package
+	cd $(BUILD_DIR) && zip ../../package/mssqldef_$(GOOS)_$(GOARCH).zip mssqldef
 	cd $(BUILD_DIR) && zip ../../package/mysqldef_$(GOOS)_$(GOARCH).zip mysqldef
 	cd $(BUILD_DIR) && zip ../../package/psqldef_$(GOOS)_$(GOARCH).zip psqldef
 	cd $(BUILD_DIR) && zip ../../package/sqlite3def_$(GOOS)_$(GOARCH).zip sqlite3def
 
 package-targz: build
 	mkdir -p package
+	cd $(BUILD_DIR) && tar zcvf ../../package/mssqldef_$(GOOS)_$(GOARCH).tar.gz mssqldef
 	cd $(BUILD_DIR) && tar zcvf ../../package/mysqldef_$(GOOS)_$(GOARCH).tar.gz mysqldef
 	cd $(BUILD_DIR) && tar zcvf ../../package/psqldef_$(GOOS)_$(GOARCH).tar.gz psqldef
 	cd $(BUILD_DIR) && tar zcvf ../../package/sqlite3def_$(GOOS)_$(GOARCH).tar.gz sqlite3def
 
-test: test-mysqldef test-psqldef test-sqlite3def test-sqlparser
+test: test-mysqldef test-psqldef test-sqlite3def test-mssqldef test-sqlparser
 
 test-mysqldef: deps
-	cd cmd/mysqldef && go test
+	cd cmd/mysqldef && MYSQL_HOST=127.0.0.1 go test
 
 test-psqldef: deps
-	cd cmd/psqldef && go test
+	cd cmd/psqldef && PGHOST=127.0.0.1 PGSSLMODE=disable go test
 
 test-sqlite3def: deps
 	cd cmd/sqlite3def && go test
+
+test-mssqldef: deps
+	cd cmd/mssqldef && go test
 
 test-sqlparser:
 	cd sqlparser && go test

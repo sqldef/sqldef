@@ -35,6 +35,7 @@ const (
 	ParserModeMysql = ParserMode(iota)
 	ParserModePostgres
 	ParserModeSQLite3
+	ParserModeMssql
 )
 
 // Tokenizer is the struct used to generate SQL
@@ -131,6 +132,8 @@ var keywords = map[string]int{
 	"charset":             CHARSET,
 	"check":               CHECK,
 	"citext":              CITEXT,
+	"clustered":           CLUSTERED,
+	"nonclustered":        NONCLUSTERED,
 	"collate":             COLLATE,
 	"column":              COLUMN,
 	"comment":             COMMENT_KEYWORD,
@@ -540,6 +543,9 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 		case eofChar:
 			return 0, nil
 		case '=', ',', ';', '(', ')', '[', ']', '+', '*', '%', '^', '~':
+			if tkn.mode == ParserModeMssql && ch == '[' {
+				return tkn.scanLiteralIdentifier(']')
+			}
 			return int(ch), nil
 		case '&':
 			if tkn.lastChar == '&' {

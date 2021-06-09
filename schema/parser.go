@@ -74,7 +74,23 @@ func parseValue(val *sqlparser.SQLVal) *Value {
 	return &ret
 }
 
-func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) Table {
+// Assume an integer length. Maybe useful only for index lengths.
+// TODO: Change IndexColumn.Length in parser.y to integer in the first place
+func parseLength(val *sqlparser.SQLVal) (*int, error) {
+	if val == nil {
+		return nil, nil
+	}
+	if val.Type != sqlparser.IntVal {
+		return nil, fmt.Errorf("Expected a length to be int, but got ValType: %d (%#v)", val.Type, val.Val)
+	}
+	intVal, err := strconv.Atoi(string(val.Val)) // TODO: handle error
+	if err != nil {
+		return nil, err
+	}
+	return &intVal, nil
+}
+
+func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 	columns := []Column{}
 	indexes := []Index{}
 	foreignKeys := []ForeignKey{}
@@ -111,11 +127,15 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) Table {
 	for _, indexDef := range stmt.TableSpec.Indexes {
 		indexColumns := []IndexColumn{}
 		for _, column := range indexDef.Columns {
+			length, err := parseLength(column.Length)
+			if err != nil {
+				return Table{}, err
+			}
 			indexColumns = append(
 				indexColumns,
 				IndexColumn{
 					column: column.Column.String(),
-					length: parseValue(column.Length),
+					length: length,
 				},
 			)
 		}
@@ -158,7 +178,7 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) Table {
 		columns:     columns,
 		indexes:     indexes,
 		foreignKeys: foreignKeys,
-	}
+	}, nil
 }
 
 func parseIndex(stmt *sqlparser.DDL) (Index, error) {
@@ -167,12 +187,16 @@ func parseIndex(stmt *sqlparser.DDL) (Index, error) {
 	}
 
 	indexColumns := []IndexColumn{}
-	for _, colIdent := range stmt.IndexCols {
+	for _, column := range stmt.IndexCols {
+		length, err := parseLength(column.Length)
+		if err != nil {
+			return Index{}, err
+		}
 		indexColumns = append(
 			indexColumns,
 			IndexColumn{
-				column: colIdent.String(),
-				length: nil,
+				column: column.Column.String(),
+				length: length,
 			},
 		)
 	}
@@ -208,6 +232,8 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 		parserMode = sqlparser.ParserModePostgres
 	case GeneratorModeSQLite3:
 		parserMode = sqlparser.ParserModeSQLite3
+	case GeneratorModeMssql:
+		parserMode = sqlparser.ParserModeMssql
 	default:
 		panic("unrecognized parser mode")
 	}
@@ -221,9 +247,13 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 	case *sqlparser.DDL:
 		if stmt.Action == "create" {
 			// TODO: handle other create DDL as error?
+			table, err := parseTable(mode, stmt)
+			if err != nil {
+				return nil, err
+			}
 			return &CreateTable{
 				statement: ddl,
-				table:     parseTable(mode, stmt),
+				table:     table,
 			}, nil
 		} else if stmt.Action == "create index" {
 			index, err := parseIndex(stmt)
