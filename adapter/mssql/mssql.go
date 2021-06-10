@@ -241,8 +241,41 @@ INNER JOIN sys.sql_modules
 }
 
 func (d *MssqlDatabase) Constraints(table string) ([]*adapter.ColumnConstraints, error) {
-	_, tableName := splitTableName(table)
-	query := fmt.Sprintf(`Select
+	schemaName, tableName := splitTableName(table)
+	query := fmt.Sprintf(`SELECT
+	column_name = c.name,
+	pk_name = kc.name
+FROM sys.key_constraints kc WITH(NOLOCK)
+JOIN sys.index_columns ic WITH(NOLOCK) ON
+	kc.parent_object_id = ic.object_id
+AND ic.index_id = kc.unique_index_id
+JOIN sys.columns c WITH(NOLOCK) ON
+	ic.[object_id] = c.[object_id]
+AND ic.column_id = c.column_id
+WHERE kc.parent_object_id = OBJECT_ID('[%s].[%s]', 'U')
+AND kc.[type] = 'PK'`, schemaName, tableName)
+
+	rows, err := d.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	constraintMap := make(map[string][]string)
+	for rows.Next() {
+		var columnName, constraintName string
+		err = rows.Scan(&columnName, &constraintName)
+		if err != nil {
+			return nil, err
+		}
+		_, ok := constraintMap[columnName]
+		if !ok {
+			constraintMap[columnName] = make([]string, 0)
+		}
+		constraintMap[columnName] = append(constraintMap[columnName], constraintName)
+	}
+
+	query = fmt.Sprintf(`Select
 	c.Name,
 	dc.Name
 FROM sys.tables t
@@ -253,13 +286,12 @@ INNER JOIN sys.columns c ON
 AND c.column_id = dc.parent_column_id
 WHERE t.Name = '%s'`, tableName)
 
-	rows, err := d.db.Query(query)
+	rows, err = d.db.Query(query)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	constraintMap := make(map[string][]string)
 	for rows.Next() {
 		var columnName, constraintName string
 		err = rows.Scan(&columnName, &constraintName)

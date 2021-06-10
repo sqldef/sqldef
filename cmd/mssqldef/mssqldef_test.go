@@ -198,7 +198,7 @@ func TestMssqldefAddColumn(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
-func TestMssqldefCreateTableDropColumnWithConstraints(t *testing.T) {
+func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -216,6 +216,27 @@ func TestMssqldefCreateTableDropColumnWithConstraints(t *testing.T) {
 	)
 
 	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_constraint_name];\n"+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefCreateTableDropColumnWithPK(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY,
+		  name varchar(20) DEFAULT NULL
+		);`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  name varchar(20) DEFAULT NULL
+		);`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [PK_constraint_name];\n"+"ALTER TABLE [dbo].[users] DROP COLUMN [id];\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -349,6 +370,9 @@ func resetTestDatabase() {
 func replaceAutoNamed(actual string) string {
 	re := regexp.MustCompile(`\[DF__.*__.*__.*\]`)
 	replaced := re.ReplaceAllLiteralString(actual, "[DF_constraint_name]")
+
+	re = regexp.MustCompile(`\[PK__.*__.*\]`)
+	replaced = re.ReplaceAllLiteralString(replaced, "[PK_constraint_name]")
 
 	return replaced
 }
