@@ -261,7 +261,7 @@ AND kc.[type] = 'PK'`, schemaName, tableName)
 	}
 	defer rows.Close()
 
-	constraintMap := make(map[string][]string)
+	constraintMap := make(map[string][]*adapter.Constraint)
 	for rows.Next() {
 		var columnName, constraintName string
 		err = rows.Scan(&columnName, &constraintName)
@@ -270,9 +270,9 @@ AND kc.[type] = 'PK'`, schemaName, tableName)
 		}
 		_, ok := constraintMap[columnName]
 		if !ok {
-			constraintMap[columnName] = make([]string, 0)
+			constraintMap[columnName] = make([]*adapter.Constraint, 0)
 		}
-		constraintMap[columnName] = append(constraintMap[columnName], constraintName)
+		constraintMap[columnName] = append(constraintMap[columnName], &adapter.Constraint{Name: constraintName, Type: adapter.ConstraintTypePK})
 	}
 
 	query = fmt.Sprintf(`Select
@@ -300,9 +300,9 @@ WHERE t.Name = '%s'`, tableName)
 		}
 		_, ok := constraintMap[columnName]
 		if !ok {
-			constraintMap[columnName] = make([]string, 0)
+			constraintMap[columnName] = make([]*adapter.Constraint, 0)
 		}
-		constraintMap[columnName] = append(constraintMap[columnName], constraintName)
+		constraintMap[columnName] = append(constraintMap[columnName], &adapter.Constraint{Name: constraintName, Type: adapter.ConstraintTypeDF})
 	}
 
 	tableConstraints := make([]*adapter.ColumnConstraints, 0)

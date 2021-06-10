@@ -28,8 +28,20 @@ type Database interface {
 
 type ColumnConstraints struct {
 	Name        string
-	Constraints []string
+	Constraints []*Constraint
 }
+
+type Constraint struct {
+	Name string
+	Type ConstraintType
+}
+
+type ConstraintType int
+
+const (
+	ConstraintTypePK ConstraintType = iota
+	ConstraintTypeDF
+)
 
 func DumpDDLs(d Database) (string, map[string][]*ColumnConstraints, error) {
 	ddls := []string{}

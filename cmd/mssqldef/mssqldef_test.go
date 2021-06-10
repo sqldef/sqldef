@@ -211,7 +211,7 @@ func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
 
 	createTable = stripHeredoc(`
 		CREATE TABLE users (
-		  id bigint NOT NULL
+		  id bigint NOT NULL PRIMARY KEY
 		);`,
 	)
 
@@ -225,14 +225,14 @@ func TestMssqldefCreateTableDropColumnWithPK(t *testing.T) {
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL PRIMARY KEY,
-		  name varchar(20) DEFAULT NULL
+		  name varchar(20) NOT NULL
 		);`,
 	)
 	assertApply(t, createTable)
 
 	createTable = stripHeredoc(`
 		CREATE TABLE users (
-		  name varchar(20) DEFAULT NULL
+		  name varchar(20) NOT NULL
 		);`,
 	)
 
@@ -265,6 +265,27 @@ func TestMssqldefCreateTableAddPrimaryKey(t *testing.T) {
 	assertApplyOutput(t, createTable, applyPrefix+
 		"ALTER TABLE [dbo].[users] ADD primary key CLUSTERED ([id]);\n",
 	)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefCreateTableDropPrimaryKey(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY,
+		  name varchar(20)
+		);`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20)
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [PK_constraint_name];\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 

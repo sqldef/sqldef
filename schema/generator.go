@@ -371,6 +371,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			case GeneratorModePostgres:
 				tableName := strings.SplitN(desired.table.name, ".", 2)[1] // without schema
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(tableName+"_pkey")))
+			case GeneratorModeMssql:
+				ddls = g.dropConstraintWithType(ddls, currentTable.name, adapter.ConstraintTypePK)
 			default:
 			}
 		}
@@ -877,7 +879,7 @@ func (g *Generator) notNull(column Column) bool {
 	}
 }
 
-func (g *Generator) dropColumnConstraints(ddls []string, table, column string) []string {
+func (g *Generator) tableConstraints(table string) []*adapter.ColumnConstraints {
 	schemaName, tableName := g.splitTableName(table)
 	var constraintKey string
 	if schemaName == "" {
@@ -888,16 +890,64 @@ func (g *Generator) dropColumnConstraints(ddls []string, table, column string) [
 
 	tableConstraints, ok := g.constraints[constraintKey]
 	if !ok {
+		return nil
+	}
+	return tableConstraints
+}
+
+func (g *Generator) setTableConstraints(table string, constraints []*adapter.ColumnConstraints) {
+	schemaName, tableName := g.splitTableName(table)
+	var constraintKey string
+	if schemaName == "" {
+		constraintKey = tableName
+	} else {
+		constraintKey = schemaName + "." + tableName
+	}
+
+	g.constraints[constraintKey] = constraints
+}
+
+func (g *Generator) dropColumnConstraints(ddls []string, table, column string) []string {
+	tableConstraints := g.tableConstraints(table)
+	if tableConstraints == nil {
 		return ddls
 	}
+
+	updatedTableConstraints := make([]*adapter.ColumnConstraints, 0)
 	for _, columnConstraints := range tableConstraints {
 		if columnConstraints.Name == column {
 			for _, constraint := range columnConstraints.Constraints {
-				ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(table), g.escapeSQLName(constraint))
+				ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(table), g.escapeSQLName(constraint.Name))
 				ddls = append(ddls, ddl)
 			}
+			continue
 		}
+		updatedTableConstraints = append(updatedTableConstraints, columnConstraints)
 	}
+	g.setTableConstraints(table, updatedTableConstraints)
+	return ddls
+}
+
+func (g *Generator) dropConstraintWithType(ddls []string, table string, constraintType adapter.ConstraintType) []string {
+	tableConstraints := g.tableConstraints(table)
+	if tableConstraints == nil {
+		return ddls
+	}
+
+	updatedTableConstraints := make([]*adapter.ColumnConstraints, 0)
+	for _, columnConstraints := range tableConstraints {
+		updatedColumnConstraints := &adapter.ColumnConstraints{Name: columnConstraints.Name}
+		for _, constraint := range columnConstraints.Constraints {
+			if constraint.Type == constraintType {
+				ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(table), g.escapeSQLName(constraint.Name))
+				ddls = append(ddls, ddl)
+				continue
+			}
+			updatedColumnConstraints.Constraints = append(updatedColumnConstraints.Constraints, constraint)
+		}
+		updatedTableConstraints = append(updatedTableConstraints, updatedColumnConstraints)
+	}
+	g.setTableConstraints(table, updatedTableConstraints)
 	return ddls
 }
 
