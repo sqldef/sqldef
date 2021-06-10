@@ -21,33 +21,46 @@ type Database interface {
 	TableNames() ([]string, error)
 	DumpTableDDL(table string) (string, error)
 	Views() ([]string, error)
+	Constraints(table string) ([]*ColumnConstraints, error)
 	DB() *sql.DB
 	Close() error
 }
 
-func DumpDDLs(d Database) (string, error) {
+type ColumnConstraints struct {
+	Name        string
+	Constraints []string
+}
+
+func DumpDDLs(d Database) (string, map[string][]*ColumnConstraints, error) {
 	ddls := []string{}
 	tableNames, err := d.TableNames()
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
+	constraints := make(map[string][]*ColumnConstraints)
 	for _, tableName := range tableNames {
 		ddl, err := d.DumpTableDDL(tableName)
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
+
+		columnConstraints, err := d.Constraints(tableName)
+		if err != nil {
+			return "", nil, err
+		}
+		constraints[tableName] = columnConstraints
 
 		ddls = append(ddls, ddl)
 	}
 
 	viewDDLs, err := d.Views()
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	ddls = append(ddls, viewDDLs...)
 
-	return strings.Join(ddls, ";\n\n"), nil
+	return strings.Join(ddls, ";\n\n"), constraints, nil
 }
 
 func RunDDLs(d Database, ddls []string, skipDrop bool) error {

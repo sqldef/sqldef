@@ -78,6 +78,10 @@ func (d *MysqlDatabase) Views() ([]string, error) {
 	return ddls, nil
 }
 
+func (d *MysqlDatabase) Constraints(table string) ([]*adapter.ColumnConstraints, error) {
+	return nil, nil
+}
+
 func (d *MysqlDatabase) DB() *sql.DB {
 	return d.db
 }

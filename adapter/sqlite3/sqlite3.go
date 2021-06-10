@@ -71,6 +71,10 @@ func (d *Sqlite3Database) Views() ([]string, error) {
 	return ddls, nil
 }
 
+func (d *Sqlite3Database) Constraints(table string) ([]*adapter.ColumnConstraints, error) {
+	return nil, nil
+}
+
 func (d *Sqlite3Database) DB() *sql.DB {
 	return d.db
 }

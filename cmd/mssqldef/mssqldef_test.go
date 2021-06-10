@@ -165,7 +165,7 @@ func TestMssqldefCreateView(t *testing.T) {
 	assertApplyOutput(t, "", applyPrefix+"DROP TABLE [dbo].[users];\n"+dropView)
 }
 
-func TestMysqldefAddColumn(t *testing.T) {
+func TestMssqldefAddColumn(t *testing.T) {
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -195,6 +195,27 @@ func TestMysqldefAddColumn(t *testing.T) {
 		);`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefCreateTableDropColumnWithConstraints(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY,
+		  name varchar(20) DEFAULT NULL
+		);`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL
+		);`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_constraint_name];\n"+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -305,6 +326,9 @@ func assertedExecute(t *testing.T, command string, args ...string) string {
 
 func assertEquals(t *testing.T, actual string, expected string) {
 	t.Helper()
+
+	actual = replaceAutoNamed(actual)
+
 	if expected != actual {
 		t.Errorf("expected '%s' but got '%s'", expected, actual)
 	}
@@ -319,6 +343,14 @@ func execute(command string, args ...string) (string, error) {
 func resetTestDatabase() {
 	mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "DROP DATABASE IF EXISTS mssqldef_test;")
 	mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "CREATE DATABASE mssqldef_test;")
+}
+
+// replaceAutoNamed replaces the name of the constraint object automatically named by SQL Server with a unique name
+func replaceAutoNamed(actual string) string {
+	re := regexp.MustCompile(`\[DF__.*__.*__.*\]`)
+	replaced := re.ReplaceAllLiteralString(actual, "[DF_constraint_name]")
+
+	return replaced
 }
 
 func writeFile(path string, content string) {

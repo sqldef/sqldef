@@ -20,7 +20,7 @@ type Options struct {
 
 // Main function shared by `mysqldef` and `psqldef`
 func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Options) {
-	currentDDLs, err := adapter.DumpDDLs(db)
+	currentDDLs, constraints, err := adapter.DumpDDLs(db)
 	if err != nil {
 		log.Fatal(fmt.Sprintf("Error on DumpDDLs: %s", err))
 	}
@@ -40,7 +40,7 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 	}
 	desiredDDLs := string(sql)
 
-	ddls, err := schema.GenerateIdempotentDDLs(generatorMode, desiredDDLs, currentDDLs)
+	ddls, err := schema.GenerateIdempotentDDLs(generatorMode, desiredDDLs, currentDDLs, constraints)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

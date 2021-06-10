@@ -240,6 +240,48 @@ INNER JOIN sys.sql_modules
 	return ddls, nil
 }
 
+func (d *MssqlDatabase) Constraints(table string) ([]*adapter.ColumnConstraints, error) {
+	_, tableName := splitTableName(table)
+	query := fmt.Sprintf(`Select
+	c.Name,
+	dc.Name
+FROM sys.tables t
+INNER JOIN sys.default_constraints dc ON
+	t.object_id = dc.parent_object_id
+INNER JOIN sys.columns c ON
+	dc.parent_object_id = c.object_id
+AND c.column_id = dc.parent_column_id
+WHERE t.Name = '%s'`, tableName)
+
+	rows, err := d.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	constraintMap := make(map[string][]string)
+	for rows.Next() {
+		var columnName, constraintName string
+		err = rows.Scan(&columnName, &constraintName)
+		if err != nil {
+			return nil, err
+		}
+		_, ok := constraintMap[columnName]
+		if !ok {
+			constraintMap[columnName] = make([]string, 0)
+		}
+		constraintMap[columnName] = append(constraintMap[columnName], constraintName)
+	}
+
+	tableConstraints := make([]*adapter.ColumnConstraints, 0)
+	for columnName, constraints := range constraintMap {
+		columnConstraints := &adapter.ColumnConstraints{Name: columnName, Constraints: constraints}
+		tableConstraints = append(tableConstraints, columnConstraints)
+	}
+
+	return tableConstraints, nil
+}
+
 func (d *MssqlDatabase) DB() *sql.DB {
 	return d.db
 }

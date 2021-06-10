@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+
+	"github.com/k0kubun/sqldef/adapter"
 )
 
 type GeneratorMode int
@@ -38,10 +40,12 @@ type Generator struct {
 
 	desiredViews []*View
 	currentViews []*View
+
+	constraints map[string][]*adapter.ColumnConstraints
 }
 
 // Parse argument DDLs and call `generateDDLs()`
-func GenerateIdempotentDDLs(mode GeneratorMode, desiredSQL string, currentSQL string) ([]string, error) {
+func GenerateIdempotentDDLs(mode GeneratorMode, desiredSQL string, currentSQL string, constraints map[string][]*adapter.ColumnConstraints) ([]string, error) {
 	// TODO: invalidate duplicated tables, columns
 	desiredDDLs, err := parseDDLs(mode, desiredSQL)
 	if err != nil {
@@ -66,6 +70,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, desiredSQL string, currentSQL st
 		currentTables: tables,
 		desiredViews:  []*View{},
 		currentViews:  views,
+		constraints:   constraints,
 	}
 	return generator.generateDDLs(desiredDDLs)
 }
@@ -171,6 +176,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		for _, column := range currentTable.columns {
 			if containsString(convertColumnsToColumnNames(desiredTable.columns), column.name) {
 				continue // Column is expected to exist.
+			}
+
+			if g.mode == GeneratorModeMssql {
+				ddls = g.dropColumnConstraints(ddls, currentTable.name, column.name)
 			}
 
 			// Column is obsoleted. Drop column.
@@ -804,7 +813,7 @@ func (g *Generator) generateDropIndex(tableName string, indexName string) string
 	}
 }
 
-func (g *Generator) escapeTableName(name string) string {
+func (g *Generator) splitTableName(name string) (string, string) {
 	switch g.mode {
 	case GeneratorModePostgres, GeneratorModeMssql:
 		schemaTable := strings.SplitN(name, ".", 2)
@@ -820,9 +829,18 @@ func (g *Generator) escapeTableName(name string) string {
 			schemaName, tableName = schemaTable[0], schemaTable[1]
 		}
 
-		return g.escapeSQLName(schemaName) + "." + g.escapeSQLName(tableName)
+		return schemaName, tableName
 	default:
+		return "", name
+	}
+}
+
+func (g *Generator) escapeTableName(name string) string {
+	schemaName, tableName := g.splitTableName(name)
+	if schemaName == "" {
 		return g.escapeSQLName(name)
+	} else {
+		return g.escapeSQLName(schemaName) + "." + g.escapeSQLName(tableName)
 	}
 }
 
@@ -848,6 +866,30 @@ func (g *Generator) notNull(column Column) bool {
 	} else {
 		return *column.notNull
 	}
+}
+
+func (g *Generator) dropColumnConstraints(ddls []string, table, column string) []string {
+	schemaName, tableName := g.splitTableName(table)
+	var constraintKey string
+	if schemaName == "" {
+		constraintKey = tableName
+	} else {
+		constraintKey = schemaName + "." + tableName
+	}
+
+	tableConstraints, ok := g.constraints[constraintKey]
+	if !ok {
+		return ddls
+	}
+	for _, columnConstraints := range tableConstraints {
+		if columnConstraints.Name == column {
+			for _, constraint := range columnConstraints.Constraints {
+				ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(table), g.escapeSQLName(constraint))
+				ddls = append(ddls, ddl)
+			}
+		}
+	}
+	return ddls
 }
 
 func isPrimaryKey(column Column, table Table) bool {

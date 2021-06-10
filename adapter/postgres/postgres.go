@@ -91,6 +91,10 @@ func (d *PostgresDatabase) Views() ([]string, error) {
 	return ddls, nil
 }
 
+func (d *PostgresDatabase) Constraints(table string) ([]*adapter.ColumnConstraints, error) {
+	return nil, nil
+}
+
 func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	cols, err := d.getColumns(table)
 	if err != nil {
