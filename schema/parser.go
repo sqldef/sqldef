@@ -146,6 +146,7 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 			columns:   indexColumns,
 			primary:   indexDef.Info.Primary,
 			unique:    indexDef.Info.Unique,
+			clustered: bool(indexDef.Info.Clustered),
 		}
 		indexes = append(indexes, index)
 	}

@@ -754,6 +754,15 @@ func (g *Generator) generateIndexDefinition(index Index) string {
 	}
 
 	if index.primary {
+		switch g.mode {
+		case GeneratorModeMssql:
+			if !index.clustered {
+				definition += " NONCLUSTERED"
+			} else {
+				definition += " CLUSTERED"
+			}
+		}
+
 		definition += fmt.Sprintf(
 			" (%s)",
 			strings.Join(columns, ", "),

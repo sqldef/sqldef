@@ -81,6 +81,7 @@ type Index struct {
 	primary   bool
 	unique    bool
 	where     string // for Postgres `Partial Indexes`
+	clustered bool   // for SQL Server
 }
 
 type IndexColumn struct {
