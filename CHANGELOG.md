@@ -1,3 +1,7 @@
+## v0.10.3
+
+- Support `ADD COLUMN` for mssqldef [#122](https://github.com/k0kubun/sqldef/issues/122)
+
 ## v0.10.2
 
 - Add SQL Server support as `mssqldef` [#120](https://github.com/k0kubun/sqldef/issues/120)
