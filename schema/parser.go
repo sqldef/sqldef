@@ -104,7 +104,7 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 			notNull:       castBoolPtr(parsedCol.Type.NotNull),
 			autoIncrement: castBool(parsedCol.Type.Autoincrement),
 			array:         castBool(parsedCol.Type.Array),
-			defaultVal:    parseValue(parsedCol.Type.Default),
+			defaultDef:    parseDefaultDefinition(parsedCol.Type.Default),
 			length:        parseValue(parsedCol.Type.Length),
 			scale:         parseValue(parsedCol.Type.Scale),
 			charset:       parsedCol.Type.Charset,
@@ -411,6 +411,19 @@ func parseIdentity(opt *sqlparser.IdentityOpt) string {
 		return ""
 	}
 	return strings.ToUpper(opt.Behavior)
+}
+
+func parseDefaultDefinition(opt *sqlparser.DefaultDefinition) *DefaultDefinition {
+	if opt == nil || opt.Value == nil {
+		return nil
+	}
+	defaultVal := parseValue(opt.Value)
+
+	name := "DEFAULT"
+	if opt.Name.String() != "" {
+		name = opt.Name.String()
+	}
+	return &DefaultDefinition{name: name, value: defaultVal}
 }
 
 func parseIdentitySequence(opt *sqlparser.IdentityOpt) *Sequence {

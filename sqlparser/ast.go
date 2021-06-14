@@ -938,7 +938,7 @@ type ColumnType struct {
 	// Generic field options.
 	NotNull        *BoolVal
 	Autoincrement  BoolVal
-	Default        *SQLVal
+	Default        *DefaultDefinition
 	OnUpdate       *SQLVal
 	Comment        *SQLVal
 	Check          *Where
@@ -970,6 +970,11 @@ type ColumnType struct {
 
 	// GENERATED AS IDENTITY
 	Identity *IdentityOpt
+}
+
+type DefaultDefinition struct {
+	Name  ColIdent
+	Value *SQLVal
 }
 
 // Format returns a canonical string representation of the type and all relevant options
@@ -1007,7 +1012,7 @@ func (ct *ColumnType) Format(buf *TrackedBuffer) {
 		opts = append(opts, keywordStrings[NOT], keywordStrings[NULL])
 	}
 	if ct.Default != nil {
-		opts = append(opts, keywordStrings[DEFAULT], String(ct.Default))
+		opts = append(opts, keywordStrings[DEFAULT], String(ct.Default.Value))
 	}
 	if ct.OnUpdate != nil {
 		opts = append(opts, keywordStrings[ON], keywordStrings[UPDATE], String(ct.OnUpdate))

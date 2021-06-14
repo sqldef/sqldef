@@ -77,8 +77,8 @@ func buildDumpTableDDL(table string, columns []column, pkeyDef *pkeyDef) string 
 		if !col.Nullable {
 			fmt.Fprint(&queryBuilder, " NOT NULL")
 		}
-		if col.Default != "" {
-			fmt.Fprintf(&queryBuilder, " DEFAULT %s", col.Default)
+		if col.DefaultName != "" {
+			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s DEFAULT %s", col.DefaultName, col.DefaultVal)
 		}
 		if col.IsIdentity {
 			fmt.Fprintf(&queryBuilder, " IDENTITY(%s,%s)", col.SeedValue, col.IncrementValue)
@@ -106,7 +106,8 @@ type column struct {
 	IsIdentity     bool
 	SeedValue      string
 	IncrementValue string
-	Default        string
+	DefaultName    string
+	DefaultVal     string
 }
 
 func (d *MssqlDatabase) getColumns(table string) ([]column, error) {
@@ -119,6 +120,8 @@ func (d *MssqlDatabase) getColumns(table string) ([]column, error) {
 	c.is_identity,
 	seed_value = CASE WHEN c.is_identity = 1 THEN IDENTITYPROPERTY(c.[object_id], 'SeedValue') END,
 	increment_value = CASE WHEN c.is_identity = 1 THEN IDENTITYPROPERTY(c.[object_id], 'IncrementValue') END,
+	c.default_object_id,
+	default_name = OBJECT_NAME(c.default_object_id),
 	default_definition = OBJECT_DEFINITION(c.default_object_id)
 FROM sys.columns c WITH(NOLOCK)
 	JOIN sys.types tp WITH(NOLOCK) ON c.user_type_id = tp.user_type_id
@@ -133,17 +136,18 @@ WHERE c.[object_id] = OBJECT_ID('%s.%s', 'U')`, schema, table)
 	cols := []column{}
 	for rows.Next() {
 		col := column{}
-		var colName, dataType, maxLen string
-		var seedValue, incrementValue, colDefault *string
+		var colName, dataType, maxLen, defaultId string
+		var seedValue, incrementValue, defaultName, defaultVal *string
 		var isNullable, isIdentity bool
-		err = rows.Scan(&colName, &dataType, &maxLen, &isNullable, &isIdentity, &seedValue, &incrementValue, &colDefault)
+		err = rows.Scan(&colName, &dataType, &maxLen, &isNullable, &isIdentity, &seedValue, &incrementValue, &defaultId, &defaultName, &defaultVal)
 		if err != nil {
 			return nil, err
 		}
 		col.Name = colName
 		col.Length = maxLen
-		if colDefault != nil {
-			col.Default = removeBrace(*colDefault)
+		if defaultId != "0" {
+			col.DefaultName = *defaultName
+			col.DefaultVal = removeBrace(*defaultVal)
 		}
 		col.Nullable = isNullable
 		col.dataType = dataType
