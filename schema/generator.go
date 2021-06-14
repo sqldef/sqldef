@@ -213,6 +213,18 @@ func (g *Generator) removeColumnConstraints(currentTable *Table, columnName stri
 			ddls = append(ddls, ddl)
 		}
 	}
+
+	for _, index := range currentTable.indexes {
+		if index.primary {
+			for _, indexColumn := range index.columns {
+				if indexColumn.column == columnName {
+					ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(index.name))
+					ddls = append(ddls, ddl)
+				}
+			}
+		}
+	}
+
 	return ddls
 }
 
@@ -384,7 +396,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	// Examine each index
 	for _, desiredIndex := range desired.table.indexes {
-		if desiredIndex.name == "PRIMARY" {
+		if desiredIndex.primary {
 			continue
 		}
 

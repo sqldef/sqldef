@@ -1610,7 +1610,7 @@ primary_key_definition:
   CONSTRAINT sql_id PRIMARY KEY clustered_opt '(' index_column_list ')'
   {
     $$ = &IndexDefinition{
-      Info: &IndexInfo{Type: string($3) + " " + string($4), Name: NewColIdent("PRIMARY"), Primary: true, Unique: true, Clustered: $5},
+      Info: &IndexInfo{Type: string($3) + " " + string($4), Name: $2, Primary: true, Unique: true, Clustered: $5},
       Columns: $7,
     }
   }

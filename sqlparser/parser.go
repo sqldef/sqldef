@@ -4807,7 +4807,7 @@ yydefault:
 //line sqlparser/parser.y:1611
 		{
 			yyVAL.indexDefinition = &IndexDefinition{
-				Info:    &IndexInfo{Type: string(yyDollar[3].bytes) + " " + string(yyDollar[4].bytes), Name: NewColIdent("PRIMARY"), Primary: true, Unique: true, Clustered: yyDollar[5].boolVal},
+				Info:    &IndexInfo{Type: string(yyDollar[3].bytes) + " " + string(yyDollar[4].bytes), Name: yyDollar[2].colIdent, Primary: true, Unique: true, Clustered: yyDollar[5].boolVal},
 				Columns: yyDollar[7].indexColumns,
 			}
 		}
