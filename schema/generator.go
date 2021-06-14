@@ -217,7 +217,13 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 
 			// Column not found, add column.
-			ddl := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableName(desired.table.name), definition)
+			var ddl string
+			switch g.mode {
+			case GeneratorModeMssql:
+				ddl = fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), definition)
+			default:
+				ddl = fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableName(desired.table.name), definition)
+			}
 
 			if g.mode == GeneratorModeMysql {
 				after := " FIRST"
@@ -717,6 +723,8 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		if column.sequence != nil {
 			definition += "(" + generateSequenceClause(column.sequence) + ") "
 		}
+	} else if g.mode == GeneratorModeMssql && column.sequence != nil {
+		definition += fmt.Sprintf("IDENTITY(%d,%d)", *column.sequence.StartWith, *column.sequence.IncrementBy)
 	}
 
 	definition = strings.TrimSuffix(definition, " ")

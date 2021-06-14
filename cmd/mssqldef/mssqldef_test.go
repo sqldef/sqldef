@@ -165,6 +165,50 @@ func TestMssqldefCreateView(t *testing.T) {
 	assertApplyOutput(t, "", applyPrefix+"DROP TABLE [dbo].[users];\n"+dropView)
 }
 
+func TestMssqldefAddColumn(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT NOT NULL PRIMARY KEY
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT NOT NULL PRIMARY KEY,
+		  name varchar(40)
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] ADD [name] varchar(40);\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefAddColumnWithIDENTITY(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT NOT NULL PRIMARY KEY
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT NOT NULL PRIMARY KEY,
+		  membership_id int IDENTITY(1,1)
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] ADD [membership_id] int IDENTITY(1,1);\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
