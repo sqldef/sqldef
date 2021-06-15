@@ -463,12 +463,16 @@ To rename them, you would need to rename manually and use `--export` again.
 
 You can use the following command to prepare MySQL, PostgreSQL and SQL Server to be used for running tests.
 
-```
+```bash
+# Linux
 $ sudo apt install mysql-client postgresql-client
+
+# macOS
+$ brew install libpq && brew link --force libpq
+$ brew install microsoft/mssql-release/mssql-tools
+
 $ docker-compose up
-$ make test-mysqldef MYSQL_HOST=127.0.0.1
-$ make test-psqldef PGHOST=127.0.0.1 PGSSLMODE=disable
-$ make test-mssqldef
+$ make test
 ```
 
 ## License
