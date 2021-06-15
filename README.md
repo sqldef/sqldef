@@ -461,7 +461,7 @@ To rename them, you would need to rename manually and use `--export` again.
 
 ## Development
 
-You can use the following command to prepare MySQL, PostgreSQL and SQL Server to be used for running tests.
+You can use the following command to prepare command line tools and DB servers for running tests.
 
 ```bash
 # Linux
