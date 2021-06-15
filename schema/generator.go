@@ -175,13 +175,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 			// Column is obsoleted. Drop column.
 			var ddl string
-			switch g.mode {
-			case GeneratorModeMssql:
+			if g.mode == GeneratorModeMssql {
 				ddls = g.removeColumnConstraints(currentTable, column.name, ddls)
-				ddl = fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableName(desiredTable.name), g.escapeSQLName(column.name))
-			default:
-				ddl = fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableName(desiredTable.name), g.escapeSQLName(column.name))
 			}
+			ddl = fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableName(desiredTable.name), g.escapeSQLName(column.name))
 			ddls = append(ddls, ddl)
 			// TODO: simulate to remove column from `currentTable.columns`?
 		}
@@ -211,17 +208,6 @@ func (g *Generator) removeColumnConstraints(currentTable *Table, columnName stri
 		if column.name == columnName && column.defaultDef != nil && column.defaultDef.constraintName != "" {
 			ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(column.defaultDef.constraintName))
 			ddls = append(ddls, ddl)
-		}
-	}
-
-	for _, index := range currentTable.indexes {
-		if index.primary {
-			for _, indexColumn := range index.columns {
-				if indexColumn.column == columnName {
-					ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(index.name))
-					ddls = append(ddls, ddl)
-				}
-			}
 		}
 	}
 
@@ -638,6 +624,8 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 				"primary key column name of '%s' should be '%s' but currently '%s'. This is not handled yet.",
 				currentTable.name, primaryKeyColumn.name, currentIndex.columns[0].column,
 			)
+		} else if g.mode == GeneratorModeMssql && (primaryKeyColumn == nil || primaryKeyColumn.name != currentIndex.columns[0].column) {
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentIndex.name)))
 		}
 	} else if currentIndex.unique {
 		var uniqueKeyColumn *Column
