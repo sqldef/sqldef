@@ -1043,13 +1043,14 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 	// TODO: scale
 }
 
-func haveSameValue(current *Value, desired *Value) bool {
-	// Normalize `DEFAULT NULL` to nil (missing DEFAULT)
-	if isNullValue(current) {
-		current = nil
+func areSameDefaultValue(currentDefault *DefaultDefinition, desiredDefault *DefaultDefinition) bool {
+	var current *Value
+	var desired *Value
+	if currentDefault != nil && !isNullValue(currentDefault.value) {
+		current = currentDefault.value
 	}
-	if isNullValue(desired) {
-		desired = nil
+	if desiredDefault != nil && !isNullValue(desiredDefault.value) {
+		desired = desiredDefault.value
 	}
 
 	if current == nil && desired == nil {
@@ -1157,23 +1158,6 @@ func areSamePolicies(policyA, policyB Policy) bool {
 		}
 	}
 	return true
-}
-
-func areSameDefaultValue(defaultA, defaultB *DefaultDefinition) bool {
-	if defaultA == nil && defaultB == nil {
-		return true
-	}
-	if defaultA != nil && defaultB == nil && isNullValue(defaultA.value) {
-		return true
-	}
-	if defaultA == nil && defaultB != nil && isNullValue(defaultB.value) {
-		return true
-	}
-	if defaultA == nil || defaultB == nil {
-		return false
-	}
-
-	return haveSameValue(defaultA.value, defaultB.value)
 }
 
 func (g *Generator) normalizeOnUpdate(onUpdate string) string {
