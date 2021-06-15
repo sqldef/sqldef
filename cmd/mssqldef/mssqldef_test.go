@@ -6,6 +6,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -229,7 +230,7 @@ func TestMssqldefCreateTableDropColumn(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
-func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
+func TestMssqldefCreateTableDropColumnWithDefaultConstraint(t *testing.T) {
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -246,6 +247,37 @@ func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
 		);`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [df_name];\n"+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY,
+		  name varchar(20) DEFAULT NULL
+		);`,
+	)
+	assertApply(t, createTable)
+
+	// extract name of default constraint from sql server
+	out, err := execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
+		SELECT OBJECT_NAME(c.default_object_id) FROM sys.columns c WHERE c.object_id = OBJECT_ID('dbo.users', 'U') AND c.default_object_id != 0;
+		`,
+	))
+	if err != nil {
+		t.Error("failed to extract default object id")
+	}
+	dfConstraintName := strings.Replace((strings.Split(out, "\n")[0]), " ", "", -1)
+	dropConstraint := fmt.Sprintf("ALTER TABLE [dbo].[users] DROP CONSTRAINT [%s];\n", dfConstraintName)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+dropConstraint+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
