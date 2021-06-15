@@ -1,3 +1,7 @@
+## v0.10.4
+
+- Support `DROP COLUMN` for mssqldef [#123](https://github.com/k0kubun/sqldef/issues/123)
+
 ## v0.10.3
 
 - Support `ADD COLUMN` for mssqldef [#122](https://github.com/k0kubun/sqldef/issues/122)

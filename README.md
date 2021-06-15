@@ -242,6 +242,7 @@ Some of them can also be used for input schema file.
   - View: CREATE VIEW, DROP VIEW
 - SQL Server
   - Table: CREATE TABLE, DROP TABLE
+  - Column: ADD COLUMN, DROP COLUMN, DROP CONSTRAINT
   - VIEW: CREATE VIEW, DROP VIEW
 
 ## MySQL examples
