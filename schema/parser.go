@@ -419,11 +419,11 @@ func parseDefaultDefinition(opt *sqlparser.DefaultDefinition) *DefaultDefinition
 	}
 	defaultVal := parseValue(opt.Value)
 
-	name := "DEFAULT"
-	if opt.Name.String() != "" {
-		name = opt.Name.String()
+	constraintName := "DEFAULT"
+	if opt.ConstraintName.String() != "" {
+		constraintName = opt.ConstraintName.String()
 	}
-	return &DefaultDefinition{name: name, value: defaultVal}
+	return &DefaultDefinition{constraintName: constraintName, value: defaultVal}
 }
 
 func parseIdentitySequence(opt *sqlparser.IdentityOpt) *Sequence {

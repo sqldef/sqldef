@@ -847,7 +847,7 @@ column_definition_type:
   }
 | column_definition_type CONSTRAINT sql_id default_definition
   {
-    $1.Default = &DefaultDefinition{Name: $3, Value: $4}
+    $1.Default = &DefaultDefinition{ConstraintName: $3, Value: $4}
     $$ = $1
   }
 | column_definition_type ON UPDATE current_timestamp

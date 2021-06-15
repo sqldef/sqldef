@@ -165,8 +165,8 @@ type Sequence struct {
 }
 
 type DefaultDefinition struct {
-	name  string
-	value *Value
+	value          *Value
+	constraintName string // only for MSSQL
 }
 
 func (c *CreateTable) Statement() string {

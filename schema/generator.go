@@ -208,8 +208,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 func (g *Generator) removeColumnConstraints(currentTable *Table, columnName string, ddls []string) []string {
 	for _, column := range currentTable.columns {
-		if column.name == columnName && column.defaultDef != nil && column.defaultDef.name != "" {
-			ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(column.defaultDef.name))
+		if column.name == columnName && column.defaultDef != nil && column.defaultDef.constraintName != "" {
+			ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(column.defaultDef.constraintName))
 			ddls = append(ddls, ddl)
 		}
 	}

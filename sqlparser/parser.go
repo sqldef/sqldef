@@ -3795,7 +3795,7 @@ yydefault:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line sqlparser/parser.y:849
 		{
-			yyDollar[1].columnType.Default = &DefaultDefinition{Name: yyDollar[3].colIdent, Value: yyDollar[4].optVal}
+			yyDollar[1].columnType.Default = &DefaultDefinition{ConstraintName: yyDollar[3].colIdent, Value: yyDollar[4].optVal}
 			yyVAL.columnType = yyDollar[1].columnType
 		}
 	case 112:

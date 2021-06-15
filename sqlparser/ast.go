@@ -973,8 +973,8 @@ type ColumnType struct {
 }
 
 type DefaultDefinition struct {
-	Name  ColIdent
-	Value *SQLVal
+	Value          *SQLVal
+	ConstraintName ColIdent // only for MSSQL
 }
 
 // Format returns a canonical string representation of the type and all relevant options
