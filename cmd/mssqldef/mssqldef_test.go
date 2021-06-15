@@ -235,7 +235,7 @@ func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL PRIMARY KEY,
-		  name varchar(20) DEFAULT NULL
+		  name varchar(20) CONSTRAINT df_name DEFAULT NULL
 		);`,
 	)
 	assertApply(t, createTable)
@@ -245,7 +245,7 @@ func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
 		  id bigint NOT NULL PRIMARY KEY
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_constraint_name];\n"+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [df_name];\n"+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -254,8 +254,9 @@ func TestMssqldefCreateTableDropColumnWithPK(t *testing.T) {
 
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
-		  id bigint NOT NULL PRIMARY KEY,
-		  name varchar(20) DEFAULT NULL
+		  id bigint NOT NULL,
+		  name varchar(20) DEFAULT NULL,
+			CONSTRAINT pk_id PRIMARY KEY (id)
 		);`,
 	)
 	assertApply(t, createTable)
@@ -265,7 +266,7 @@ func TestMssqldefCreateTableDropColumnWithPK(t *testing.T) {
 		  name varchar(20) DEFAULT NULL
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [PK_constraint_name];\n"+"ALTER TABLE [dbo].[users] DROP COLUMN [id];\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [pk_id];\n"+"ALTER TABLE [dbo].[users] DROP COLUMN [id];\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -377,8 +378,6 @@ func assertedExecute(t *testing.T, command string, args ...string) string {
 func assertEquals(t *testing.T, actual string, expected string) {
 	t.Helper()
 
-	actual = replaceAutoNamedConstraint(actual)
-
 	if expected != actual {
 		t.Errorf("expected '%s' but got '%s'", expected, actual)
 	}
@@ -388,17 +387,6 @@ func execute(command string, args ...string) (string, error) {
 	cmd := exec.Command(command, args...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
-}
-
-// replaceAutoNamedConstraint replaces the name of the constraint object automatically named by SQL Server with a unique name
-func replaceAutoNamedConstraint(actual string) string {
-	re := regexp.MustCompile(`\[DF__.*__.*__.*\]`)
-	replaced := re.ReplaceAllLiteralString(actual, "[DF_constraint_name]")
-
-	re = regexp.MustCompile(`\[PK__.*__.*\]`)
-	replaced = re.ReplaceAllLiteralString(replaced, "[PK_constraint_name]")
-
-	return replaced
 }
 
 func resetTestDatabase() {
