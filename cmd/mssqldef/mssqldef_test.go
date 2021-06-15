@@ -6,6 +6,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -209,6 +210,98 @@ func TestMssqldefAddColumnWithIDENTITY(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMssqldefCreateTableDropColumn(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY,
+		  name varchar(20)
+		);`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefCreateTableDropColumnWithDefaultConstraint(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY,
+		  name varchar(20) CONSTRAINT df_name DEFAULT NULL
+		);`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [df_name];\n"+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY,
+		  name varchar(20) DEFAULT NULL
+		);`,
+	)
+	assertApply(t, createTable)
+
+	// extract name of default constraint from sql server
+	out, err := execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
+		SELECT OBJECT_NAME(c.default_object_id) FROM sys.columns c WHERE c.object_id = OBJECT_ID('dbo.users', 'U') AND c.default_object_id != 0;
+		`,
+	))
+	if err != nil {
+		t.Error("failed to extract default object id")
+	}
+	dfConstraintName := strings.Replace((strings.Split(out, "\n")[0]), " ", "", -1)
+	dropConstraint := fmt.Sprintf("ALTER TABLE [dbo].[users] DROP CONSTRAINT [%s];\n", dfConstraintName)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+dropConstraint+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefCreateTableDropColumnWithPK(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20) DEFAULT NULL,
+			CONSTRAINT pk_id PRIMARY KEY (id)
+		);`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  name varchar(20) DEFAULT NULL
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [pk_id];\n"+"ALTER TABLE [dbo].[users] DROP COLUMN [id];\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
@@ -316,6 +409,7 @@ func assertedExecute(t *testing.T, command string, args ...string) string {
 
 func assertEquals(t *testing.T, actual string, expected string) {
 	t.Helper()
+
 	if expected != actual {
 		t.Errorf("expected '%s' but got '%s'", expected, actual)
 	}

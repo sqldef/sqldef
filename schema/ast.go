@@ -56,7 +56,7 @@ type Column struct {
 	notNull        *bool
 	autoIncrement  bool
 	array          bool
-	defaultVal     *Value
+	defaultDef     *DefaultDefinition
 	length         *Value
 	scale          *Value
 	check          string
@@ -162,6 +162,11 @@ type Sequence struct {
 	Cycle       bool
 	NoCycle     bool
 	OwnedBy     string
+}
+
+type DefaultDefinition struct {
+	value          *Value
+	constraintName string // only for MSSQL
 }
 
 func (c *CreateTable) Statement() string {

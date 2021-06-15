@@ -322,6 +322,7 @@ func forceEOF(yylex interface{}) {
 %type <str> identity_behavior
 %type <sequence> sequence_opt
 %type <boolVal> clustered_opt
+%type <optVal> default_definition
 
 %start any_command
 
@@ -839,34 +840,14 @@ column_definition_type:
     $1.NotNull = NewBoolVal(true)
     $$ = $1
   }
-| column_definition_type DEFAULT STRING character_cast_opt
+| column_definition_type default_definition
   {
-    $1.Default = NewStrVal($3)
+    $1.Default = &DefaultDefinition{Value: $2}
     $$ = $1
   }
-| column_definition_type DEFAULT INTEGRAL
+| column_definition_type CONSTRAINT sql_id default_definition
   {
-    $1.Default = NewIntVal($3)
-    $$ = $1
-  }
-| column_definition_type DEFAULT FLOAT
-  {
-    $1.Default = NewFloatVal($3)
-    $$ = $1
-  }
-| column_definition_type DEFAULT NULL
-  {
-    $1.Default = NewValArg($3)
-    $$ = $1
-  }
-| column_definition_type DEFAULT current_timestamp
-  {
-    $1.Default = $3
-    $$ = $1
-  }
-| column_definition_type DEFAULT BIT_LITERAL
-  {
-    $1.Default = NewBitVal($3)
+    $1.Default = &DefaultDefinition{ConstraintName: $3, Value: $4}
     $$ = $1
   }
 | column_definition_type ON UPDATE current_timestamp
@@ -915,16 +896,6 @@ column_definition_type:
     $1.Comment = NewStrVal($3)
     $$ = $1
   }
-| column_definition_type DEFAULT boolean_value
-  {
-    $1.Default = NewBoolSQLVal(bool($3))
-    $$ = $1
-  }
-| column_definition_type DEFAULT NOW openb closeb
-  {
-    $1.Default = NewBitVal($3)
-    $$ = $1
-  }
 | column_definition_type REFERENCES table_id
   {
     $1.References = $3.v
@@ -952,6 +923,40 @@ column_definition_type:
   {
     $1.Identity = &IdentityOpt{Sequence: &Sequence{StartWith: NewIntVal($4), IncrementBy: NewIntVal($6)}}
     $$ = $1
+  }
+
+default_definition:
+  DEFAULT STRING character_cast_opt
+  {
+    $$ = NewStrVal($2)
+  }
+| DEFAULT INTEGRAL
+  {
+    $$ = NewIntVal($2)
+  }
+| DEFAULT FLOAT
+  {
+    $$ = NewFloatVal($2)
+  }
+| DEFAULT NULL
+  {
+    $$ = NewValArg($2)
+  }
+| DEFAULT current_timestamp
+  {
+    $$ = $2
+  }
+| DEFAULT BIT_LITERAL
+  {
+    $$ = NewBitVal($2)
+  }
+| DEFAULT boolean_value
+  {
+    $$ = NewBoolSQLVal(bool($2))
+  }
+| DEFAULT NOW openb closeb
+  {
+    $$ = NewBitVal($2)
   }
 
 identity_behavior:
@@ -1605,7 +1610,7 @@ primary_key_definition:
   CONSTRAINT sql_id PRIMARY KEY clustered_opt '(' index_column_list ')'
   {
     $$ = &IndexDefinition{
-      Info: &IndexInfo{Type: string($3) + " " + string($4), Name: NewColIdent("PRIMARY"), Primary: true, Unique: true, Clustered: $5},
+      Info: &IndexInfo{Type: string($3) + " " + string($4), Name: $2, Primary: true, Unique: true, Clustered: $5},
       Columns: $7,
     }
   }

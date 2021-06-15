@@ -174,7 +174,11 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 
 			// Column is obsoleted. Drop column.
-			ddl := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableName(desiredTable.name), g.escapeSQLName(column.name))
+			var ddl string
+			if g.mode == GeneratorModeMssql {
+				ddls = g.removeColumnConstraints(currentTable, column.name, ddls)
+			}
+			ddl = fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableName(desiredTable.name), g.escapeSQLName(column.name))
 			ddls = append(ddls, ddl)
 			// TODO: simulate to remove column from `currentTable.columns`?
 		}
@@ -197,6 +201,17 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	}
 
 	return ddls, nil
+}
+
+func (g *Generator) removeColumnConstraints(currentTable *Table, columnName string, ddls []string) []string {
+	for _, column := range currentTable.columns {
+		if column.name == columnName && column.defaultDef != nil && column.defaultDef.constraintName != "" {
+			ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(column.defaultDef.constraintName))
+			ddls = append(ddls, ddl)
+		}
+	}
+
+	return ddls
 }
 
 // In the caller, `mergeTable` manages `g.currentTables`.
@@ -243,7 +258,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				changeOrder := currentPos > desiredPos && currentPos-desiredPos > len(currentTable.columns)-len(desired.table.columns)
 
 				// Change column type and orders, *except* AUTO_INCREMENT and UNIQUE KEY.
-				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) || !haveSameValue(currentColumn.defaultVal, desiredColumn.defaultVal) || changeOrder {
+				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) || !areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef) || changeOrder {
 					definition, err := g.generateColumnDefinition(desiredColumn, false)
 					if err != nil {
 						return ddls, err
@@ -301,13 +316,13 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				// default
-				if !haveSameValue(currentColumn.defaultVal, desiredColumn.defaultVal) {
-					if desiredColumn.defaultVal == nil {
+				if !areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef) {
+					if desiredColumn.defaultDef == nil {
 						// drop
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.name)))
 					} else {
 						// set
-						definition, err := generateDefaultDefinition(*desiredColumn.defaultVal)
+						definition, err := generateDefaultDefinition(*desiredColumn.defaultDef.value)
 						if err != nil {
 							return ddls, err
 						}
@@ -373,7 +388,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	// Examine each index
 	for _, desiredIndex := range desired.table.indexes {
-		if desiredIndex.name == "PRIMARY" {
+		if desiredIndex.primary {
 			continue
 		}
 
@@ -609,6 +624,8 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 				"primary key column name of '%s' should be '%s' but currently '%s'. This is not handled yet.",
 				currentTable.name, primaryKeyColumn.name, currentIndex.columns[0].column,
 			)
+		} else if g.mode == GeneratorModeMssql && (primaryKeyColumn == nil || primaryKeyColumn.name != currentIndex.columns[0].column) {
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentIndex.name)))
 		}
 	} else if currentIndex.unique {
 		var uniqueKeyColumn *Column
@@ -678,8 +695,8 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		definition += "NULL "
 	}
 
-	if column.defaultVal != nil {
-		def, err := generateDefaultDefinition(*column.defaultVal)
+	if column.defaultDef != nil && column.defaultDef.value != nil {
+		def, err := generateDefaultDefinition(*column.defaultDef.value)
 		if err != nil {
 			return "", fmt.Errorf("%s in column: %#v", err.Error(), column)
 		}
@@ -1026,10 +1043,10 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 
 func haveSameValue(current *Value, desired *Value) bool {
 	// Normalize `DEFAULT NULL` to nil (missing DEFAULT)
-	if current != nil && current.valueType == ValueTypeValArg && string(current.raw) == "null" {
+	if isNullValue(current) {
 		current = nil
 	}
-	if desired != nil && desired.valueType == ValueTypeValArg && string(desired.raw) == "null" {
+	if isNullValue(desired) {
 		desired = nil
 	}
 
@@ -1049,6 +1066,10 @@ func haveSameValue(current *Value, desired *Value) bool {
 		currentRaw = currentRaw[0:len(desiredRaw)]
 	}
 	return currentRaw == desiredRaw
+}
+
+func isNullValue(value *Value) bool {
+	return value != nil && value.valueType == ValueTypeValArg && string(value.raw) == "null"
 }
 
 func (g *Generator) normalizeDataType(dataType string) string {
@@ -1134,6 +1155,23 @@ func areSamePolicies(policyA, policyB Policy) bool {
 		}
 	}
 	return true
+}
+
+func areSameDefaultValue(defaultA, defaultB *DefaultDefinition) bool {
+	if defaultA == nil && defaultB == nil {
+		return true
+	}
+	if defaultA != nil && defaultB == nil && isNullValue(defaultA.value) {
+		return true
+	}
+	if defaultA == nil && defaultB != nil && isNullValue(defaultB.value) {
+		return true
+	}
+	if defaultA == nil || defaultB == nil {
+		return false
+	}
+
+	return haveSameValue(defaultA.value, defaultB.value)
 }
 
 func (g *Generator) normalizeOnUpdate(onUpdate string) string {
