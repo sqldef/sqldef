@@ -174,12 +174,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 
 			// Column is obsoleted. Drop column.
-			var ddl string
-			if g.mode == GeneratorModeMssql {
-				ddls = g.removeColumnConstraints(currentTable, column.name, ddls)
-			}
-			ddl = fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableName(desiredTable.name), g.escapeSQLName(column.name))
-			ddls = append(ddls, ddl)
+			columnDDLs := g.generateDDLsForAbsentColumn(currentTable, column.name)
+			ddls = append(ddls, columnDDLs...)
 			// TODO: simulate to remove column from `currentTable.columns`?
 		}
 
@@ -203,15 +199,21 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	return ddls, nil
 }
 
-func (g *Generator) removeColumnConstraints(currentTable *Table, columnName string, ddls []string) []string {
-	for _, column := range currentTable.columns {
-		if column.name == columnName && column.defaultDef != nil && column.defaultDef.constraintName != "" {
-			ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(column.defaultDef.constraintName))
-			ddls = append(ddls, ddl)
+func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, columnName string) []string {
+	ddls := []string{}
+
+	// Only MSSQL has column default constraints. They need to be deleted before dropping the column.
+	if g.mode == GeneratorModeMssql {
+		for _, column := range currentTable.columns {
+			if column.name == columnName && column.defaultDef != nil && column.defaultDef.constraintName != "" {
+				ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(column.defaultDef.constraintName))
+				ddls = append(ddls, ddl)
+			}
 		}
 	}
 
-	return ddls
+	ddl := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableName(currentTable.name), g.escapeSQLName(columnName))
+	return append(ddls, ddl)
 }
 
 // In the caller, `mergeTable` manages `g.currentTables`.
