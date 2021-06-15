@@ -619,15 +619,18 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 			}
 		}
 
-		// If nil, it will be `DROP COLUMN`-ed. Ignore it.
-		if primaryKeyColumn != nil && primaryKeyColumn.name != currentIndex.columns[0].column { // TODO: check length of currentIndex.columns
+		if primaryKeyColumn == nil {
+			// If nil, it will be `DROP COLUMN`-ed and we can usually ignore it.
+			// However, it seems like you need to explicitly drop it first for MSSQL.
+			if g.mode == GeneratorModeMssql && (primaryKeyColumn == nil || primaryKeyColumn.name != currentIndex.columns[0].column) {
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentIndex.name)))
+			}
+		} else if primaryKeyColumn.name != currentIndex.columns[0].column { // TODO: check length of currentIndex.columns
 			// TODO: handle this. Rename primary key column...?
 			return ddls, fmt.Errorf(
 				"primary key column name of '%s' should be '%s' but currently '%s'. This is not handled yet.",
 				currentTable.name, primaryKeyColumn.name, currentIndex.columns[0].column,
 			)
-		} else if g.mode == GeneratorModeMssql && (primaryKeyColumn == nil || primaryKeyColumn.name != currentIndex.columns[0].column) {
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentIndex.name)))
 		}
 	} else if currentIndex.unique {
 		var uniqueKeyColumn *Column
