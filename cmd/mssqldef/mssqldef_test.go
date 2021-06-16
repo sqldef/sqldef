@@ -263,8 +263,8 @@ func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
 
 	// extract name of default constraint from sql server
 	out, err := execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
-	SELECT OBJECT_NAME(c.default_object_id) FROM sys.columns c WHERE c.object_id = OBJECT_ID('dbo.users', 'U') AND c.default_object_id != 0;
-	`,
+		SELECT OBJECT_NAME(c.default_object_id) FROM sys.columns c WHERE c.object_id = OBJECT_ID('dbo.users', 'U') AND c.default_object_id != 0;
+		`,
 	))
 	if err != nil {
 		t.Error("failed to extract default object id")
