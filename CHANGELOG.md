@@ -1,3 +1,7 @@
+## v0.10.5
+
+- Support PRIMARY KEY for mssqldef [#124](https://github.com/k0kubun/sqldef/issues/124)
+
 ## v0.10.4
 
 - Support `DROP COLUMN` for mssqldef [#123](https://github.com/k0kubun/sqldef/issues/123)
