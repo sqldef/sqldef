@@ -81,6 +81,7 @@ type Index struct {
 	primary   bool
 	unique    bool
 	where     string // for Postgres `Partial Indexes`
+	clustered bool   // for MSSQL
 }
 
 type IndexColumn struct {
@@ -223,6 +224,7 @@ func (t *Table) PrimaryKey() *Index {
 		columns:   primaryColumns,
 		primary:   true,
 		unique:    true,
+		clustered: true,
 	}
 }
 
