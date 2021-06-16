@@ -302,6 +302,115 @@ func TestMssqldefCreateTableDropColumnWithPK(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMssqldefCreateTableAddPrimaryKey(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY,
+		  name varchar(20)
+		);
+		`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE [dbo].[users] ADD primary key CLUSTERED ([id]);\n",
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefCreateTableAddPrimaryKeyConstraint(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20),
+		  CONSTRAINT [pk_users] PRIMARY KEY CLUSTERED ([id])
+		);
+		`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE [dbo].[users] ADD CONSTRAINT [pk_users] primary key CLUSTERED ([id]);\n",
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefCreateTableDropPrimaryKey(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL PRIMARY KEY,
+		  name varchar(20)
+		);`,
+	)
+	assertApply(t, createTable)
+
+	// extract name of primary key constraint from sql server
+	out, err := execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
+		SELECT kc.name FROM sys.key_constraints kc WHERE kc.parent_object_id=OBJECT_ID('users', 'U') AND kc.[type]='PK';
+		`,
+	))
+	if err != nil {
+		t.Error("failed to extract primary key id")
+	}
+	pkConstraintName := strings.Replace((strings.Split(out, "\n")[0]), " ", "", -1)
+	dropConstraint := fmt.Sprintf("ALTER TABLE [dbo].[users] DROP CONSTRAINT [%s];\n", pkConstraintName)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20)
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+dropConstraint)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefCreateTableDropPrimaryKeyConstraint(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20),
+			CONSTRAINT [pk_users] PRIMARY KEY ([id])
+		);`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20)
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [pk_users];\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
