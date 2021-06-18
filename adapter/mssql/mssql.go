@@ -55,18 +55,14 @@ func (d *MssqlDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	pkeyDef, err := d.getPrimaryKeyColumns(table)
-	if err != nil {
-		return "", err
-	}
 	indexDefs, err := d.getIndexDefs(table)
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, pkeyDef, indexDefs), nil
+	return buildDumpTableDDL(table, cols, indexDefs), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, pkeyDef *pkeyDef, indexDefs []*indexDef) string {
+func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef) string {
 	var queryBuilder strings.Builder
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (", table)
 	for i, col := range columns {
@@ -88,22 +84,16 @@ func buildDumpTableDDL(table string, columns []column, pkeyDef *pkeyDef, indexDe
 			fmt.Fprintf(&queryBuilder, " IDENTITY(%s,%s)", col.SeedValue, col.IncrementValue)
 		}
 	}
-	if len(pkeyDef.columnNames) > 0 {
-		var clusterDef string
-		if pkeyDef.indexID == "1" {
-			clusterDef = "CLUSTERED"
-		} else {
-			clusterDef = "NONCLUSTERED"
-		}
-		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY %s ([%s])", pkeyDef.constraintName, clusterDef, strings.Join(pkeyDef.columnNames, ", "))
-	}
 
 	for _, indexDef := range indexDefs {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "INDEX [%s]", indexDef.name)
-		if indexDef.isUnique {
-			fmt.Fprint(&queryBuilder, " UNIQUE")
+		if indexDef.primary {
+			fmt.Fprintf(&queryBuilder, "CONSTRAINT [%s] PRIMARY KEY", indexDef.name)
+		} else {
+			fmt.Fprintf(&queryBuilder, "INDEX [%s]", indexDef.name)
+			if indexDef.unique {
+				fmt.Fprint(&queryBuilder, " UNIQUE")
+			}
 		}
 		if indexDef.indexType == "CLUSTERED" || indexDef.indexType == "NONCLUSTERED" {
 			fmt.Fprintf(&queryBuilder, " %s", indexDef.indexType)
@@ -188,54 +178,11 @@ WHERE c.[object_id] = OBJECT_ID('%s.%s', 'U')`, schema, table)
 	return cols, nil
 }
 
-type pkeyDef struct {
-	constraintName string
-	columnNames    []string
-	indexID        string
-}
-
-func (d *MssqlDatabase) getPrimaryKeyColumns(table string) (*pkeyDef, error) {
-	schema, table := splitTableName(table)
-	query := fmt.Sprintf(`SELECT
-	pk_name = kc.name,
-	column_name = c.name,
-	ic.index_id,
-	ic.is_descending_key
-FROM sys.key_constraints kc WITH(NOLOCK)
-JOIN sys.index_columns ic WITH(NOLOCK) ON
-	kc.parent_object_id = ic.object_id
-AND ic.index_id = kc.unique_index_id
-JOIN sys.columns c WITH(NOLOCK) ON
-	ic.[object_id] = c.[object_id]
-AND ic.column_id = c.column_id
-WHERE kc.parent_object_id = OBJECT_ID('[%s].[%s]', 'U')
-AND kc.[type] = 'PK'`, schema, table)
-
-	rows, err := d.db.Query(query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	columnNames := make([]string, 0)
-	var constraintName, indexID string
-	var isDescending bool
-	for rows.Next() {
-		var columnName string
-		err = rows.Scan(&constraintName, &columnName, &indexID, &isDescending)
-		if err != nil {
-			return nil, err
-		}
-		columnNames = append(columnNames, columnName)
-	}
-
-	return &pkeyDef{constraintName: constraintName, columnNames: columnNames, indexID: indexID}, nil
-}
-
 type indexDef struct {
 	name      string
 	columns   []string
-	isUnique  bool
+	primary   bool
+	unique    bool
 	indexType string
 	options   []indexOption
 }
@@ -280,9 +227,7 @@ WHERE ind.object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 			return nil, err
 		}
 
-		if isPrimary {
-			continue
-		} else if _, ok := indexDefMap[indexName]; !ok {
+		if _, ok := indexDefMap[indexName]; !ok {
 			options := []indexOption{
 				{name: "PAD_INDEX", value: boolToOnOff(padIndex)},
 				{name: "FILLFACTOR", value: fillfactor},
@@ -293,7 +238,7 @@ WHERE ind.object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 				{name: "ALLOW_PAGE_LOCKS", value: boolToOnOff(pageLocks)},
 			}
 
-			definition := &indexDef{name: indexName, columns: []string{columnName}, isUnique: isUnique, indexType: typeDesc, options: options}
+			definition := &indexDef{name: indexName, columns: []string{columnName}, primary: isPrimary, unique: isUnique, indexType: typeDesc, options: options}
 			indexDefMap[indexName] = definition
 		} else {
 			indexDefMap[indexName].columns = append(indexDefMap[indexName].columns, columnName)
