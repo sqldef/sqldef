@@ -127,6 +127,7 @@ func forceEOF(yylex interface{}) {
 %token <empty> '(' ',' ')'
 %token <bytes> ID HEX STRING INTEGRAL FLOAT HEXNUM VALUE_ARG LIST_ARG COMMENT COMMENT_KEYWORD BIT_LITERAL
 %token <bytes> NULL TRUE FALSE
+%token <bytes> OFF
 
 // Precedence dictated by mysql. But the vitess grammar is simplified.
 // Some of these operators don't conflict in our situation. Nevertheless,
@@ -164,6 +165,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> STATUS VARIABLES
 %token <bytes> RESTRICT CASCADE NO ACTION
 %token <bytes> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
+%token <bytes> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS
 
 // Transaction Tokens
 %token <bytes> BEGIN START TRANSACTION COMMIT ROLLBACK
@@ -306,7 +308,7 @@ func forceEOF(yylex interface{}) {
 %type <indexColumn> index_column
 %type <indexColumns> index_column_list
 %type <indexOption> index_option
-%type <indexOptions> index_option_list
+%type <indexOptions> index_option_list mssql_index_option_list
 %type <partDefs> partition_definitions
 %type <partDef> partition_definition
 %type <partSpec> partition_operation
@@ -323,6 +325,7 @@ func forceEOF(yylex interface{}) {
 %type <sequence> sequence_opt
 %type <boolVal> clustered_opt
 %type <optVal> default_definition
+%type <optVal> on_off
 
 %start any_command
 
@@ -1444,6 +1447,10 @@ index_definition:
   {
     $$ = &IndexDefinition{Info: $1, Columns: $3, Options: $5}
   }
+| index_info '(' index_column_list ')' WITH '(' mssql_index_option_list ')'
+  {
+    $$ = &IndexDefinition{Info: $1, Columns: $3, Options: $7}
+  }
 | index_info '(' index_column_list ')'
   {
     $$ = &IndexDefinition{Info: $1, Columns: $3}
@@ -1457,6 +1464,16 @@ index_option_list:
 | index_option_list index_option
   {
     $$ = append($$, $2)
+  }
+
+mssql_index_option_list:
+  index_option
+  {
+    $$ = []*IndexOption{$1}
+  }
+| mssql_index_option_list ',' index_option
+  {
+    $$ = append($$, $3)
   }
 
 index_option:
@@ -1477,6 +1494,34 @@ index_option:
   {
     $$ = &IndexOption{Name: string($2), Value: NewStrVal([]byte($3.String()))}
   }
+| PAD_INDEX '=' on_off
+  {
+    $$ = &IndexOption{Name: string($1), Value: $3}
+  }
+| FILLFACTOR '=' INTEGRAL
+  {
+    $$ = &IndexOption{Name: string($1), Value: NewIntVal($3)}
+  }
+| IGNORE_DUP_KEY '=' on_off
+  {
+    $$ = &IndexOption{Name: string($1), Value: $3}
+  }
+| STATISTICS_NORECOMPUTE '=' on_off
+  {
+    $$ = &IndexOption{Name: string($1), Value: $3}
+  }
+| STATISTICS_INCREMENTAL '=' on_off
+  {
+    $$ = &IndexOption{Name: string($1), Value: $3}
+  }
+| ALLOW_ROW_LOCKS '=' on_off
+  {
+    $$ = &IndexOption{Name: string($1), Value: $3}
+  }
+| ALLOW_PAGE_LOCKS '=' on_off
+  {
+    $$ = &IndexOption{Name: string($1), Value: $3}
+  }
 
 equal_opt:
   /* empty */
@@ -1486,6 +1531,16 @@ equal_opt:
 | '='
   {
     $$ = string($1)
+  }
+
+on_off:
+  ON
+  {
+    $$ = NewBoolSQLVal(true)
+  }
+| OFF
+  {
+    $$ = NewBoolSQLVal(false)
   }
 
 index_info:
@@ -1513,9 +1568,13 @@ index_info:
   {
     $$ = &IndexInfo{Type: string($1), Name: NewColIdent(string($2)), Unique: true}
   }
-| index_or_key ID
+| index_or_key ID clustered_opt
   {
-    $$ = &IndexInfo{Type: string($1), Name: NewColIdent(string($2)), Unique: false}
+    $$ = &IndexInfo{Type: string($1), Name: NewColIdent(string($2)), Unique: false, Clustered: $3}
+  }
+| index_or_key ID UNIQUE clustered_opt
+  {
+    $$ = &IndexInfo{Type: string($1), Name: NewColIdent(string($2)), Unique: true, Clustered: $4}
   }
 
 index_or_key:
@@ -1612,6 +1671,13 @@ primary_key_definition:
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: string($3) + " " + string($4), Name: $2, Primary: true, Unique: true, Clustered: $5},
       Columns: $7,
+    }
+  }
+| CONSTRAINT sql_id PRIMARY KEY clustered_opt '(' index_column_list ')'  WITH '(' mssql_index_option_list ')'
+  {
+    $$ = &IndexDefinition{
+      Info: &IndexInfo{Type: string($3) + " " + string($4), Name: $2, Primary: true, Unique: true, Clustered: $5},
+      Columns: $7, Options: $11,
     }
   }
 
@@ -3402,6 +3468,10 @@ set_expression:
   {
     $$ = &SetExpr{Name: $1, Expr: NewStrVal([]byte("on"))}
   }
+| reserved_sql_id '=' OFF
+  {
+    $$ = &SetExpr{Name: $1, Expr: NewStrVal([]byte("off"))}
+  }
 | reserved_sql_id '=' expression
   {
     $$ = &SetExpr{Name: $1, Expr: $3}
@@ -3632,6 +3702,7 @@ reserved_keyword:
 | VALUES
 | WHEN
 | WHERE
+| OFF
 
 /*
   These are non-reserved Vitess, because they don't cause conflicts in the grammar.
@@ -3758,6 +3829,13 @@ non_reserved_keyword:
 | YEAR
 | ZEROFILL
 | ZONE
+| PAD_INDEX
+| FILLFACTOR
+| IGNORE_DUP_KEY
+| STATISTICS_NORECOMPUTE
+| STATISTICS_INCREMENTAL
+| ALLOW_ROW_LOCKS
+| ALLOW_PAGE_LOCKS
 
 openb:
   '('

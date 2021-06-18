@@ -55,14 +55,14 @@ func (d *MssqlDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	pkeyDef, err := d.getPrimaryKeyColumns(table)
+	indexDefs, err := d.getIndexDefs(table)
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, pkeyDef), nil
+	return buildDumpTableDDL(table, cols, indexDefs), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, pkeyDef *pkeyDef) string {
+func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef) string {
 	var queryBuilder strings.Builder
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (", table)
 	for i, col := range columns {
@@ -84,16 +84,33 @@ func buildDumpTableDDL(table string, columns []column, pkeyDef *pkeyDef) string 
 			fmt.Fprintf(&queryBuilder, " IDENTITY(%s,%s)", col.SeedValue, col.IncrementValue)
 		}
 	}
-	if len(pkeyDef.columnNames) > 0 {
-		var clusterDef string
-		if pkeyDef.indexID == "1" {
-			clusterDef = "CLUSTERED"
-		} else {
-			clusterDef = "NONCLUSTERED"
-		}
+
+	for _, indexDef := range indexDefs {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY %s ([%s])", pkeyDef.constraintName, clusterDef, strings.Join(pkeyDef.columnNames, ", "))
+		if indexDef.primary {
+			fmt.Fprintf(&queryBuilder, "CONSTRAINT [%s] PRIMARY KEY", indexDef.name)
+		} else {
+			fmt.Fprintf(&queryBuilder, "INDEX [%s]", indexDef.name)
+			if indexDef.unique {
+				fmt.Fprint(&queryBuilder, " UNIQUE")
+			}
+		}
+		if indexDef.indexType == "CLUSTERED" || indexDef.indexType == "NONCLUSTERED" {
+			fmt.Fprintf(&queryBuilder, " %s", indexDef.indexType)
+		}
+		fmt.Fprintf(&queryBuilder, " ([%s])", strings.Join(indexDef.columns, ", "))
+		if len(indexDef.options) > 0 {
+			fmt.Fprint(&queryBuilder, " WITH (")
+			for i, option := range indexDef.options {
+				if i > 0 {
+					fmt.Fprint(&queryBuilder, ",")
+				}
+				fmt.Fprintf(&queryBuilder, " %s", fmt.Sprintf("%s = %s", option.name, option.value))
+			}
+			fmt.Fprint(&queryBuilder, " )")
+		}
 	}
+
 	fmt.Fprintf(&queryBuilder, "\n);\n")
 	return strings.TrimSuffix(queryBuilder.String(), ";\n")
 }
@@ -161,28 +178,39 @@ WHERE c.[object_id] = OBJECT_ID('%s.%s', 'U')`, schema, table)
 	return cols, nil
 }
 
-type pkeyDef struct {
-	constraintName string
-	columnNames    []string
-	indexID        string
+type indexDef struct {
+	name      string
+	columns   []string
+	primary   bool
+	unique    bool
+	indexType string
+	options   []indexOption
 }
 
-func (d *MssqlDatabase) getPrimaryKeyColumns(table string) (*pkeyDef, error) {
+type indexOption struct {
+	name  string
+	value string
+}
+
+func (d *MssqlDatabase) getIndexDefs(table string) ([]*indexDef, error) {
 	schema, table := splitTableName(table)
 	query := fmt.Sprintf(`SELECT
-	pk_name = kc.name,
-	column_name = c.name,
-	ic.index_id,
-	ic.is_descending_key
-FROM sys.key_constraints kc WITH(NOLOCK)
-JOIN sys.index_columns ic WITH(NOLOCK) ON
-	kc.parent_object_id = ic.object_id
-AND ic.index_id = kc.unique_index_id
-JOIN sys.columns c WITH(NOLOCK) ON
-	ic.[object_id] = c.[object_id]
-AND ic.column_id = c.column_id
-WHERE kc.parent_object_id = OBJECT_ID('[%s].[%s]', 'U')
-AND kc.[type] = 'PK'`, schema, table)
+	ind.name AS index_name,
+	COL_NAME(ic.object_id, ic.column_id) AS column_name,
+	ind.is_primary_key,
+	ind.is_unique,
+	ind.type_desc,
+	ind.is_padded,
+	ind.fill_factor,
+	ind.ignore_dup_key,
+	st.no_recompute,
+	st.is_incremental,
+	ind.allow_row_locks,
+	ind.allow_page_locks
+FROM sys.indexes ind
+INNER JOIN sys.index_columns ic ON ind.object_id = ic.object_id AND ind.index_id = ic.index_id
+INNER JOIN sys.stats st ON ind.object_id = st.object_id AND ind.index_id = st.stats_id
+WHERE ind.object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 
 	rows, err := d.db.Query(query)
 	if err != nil {
@@ -190,19 +218,46 @@ AND kc.[type] = 'PK'`, schema, table)
 	}
 	defer rows.Close()
 
-	columnNames := make([]string, 0)
-	var constraintName, indexID string
-	var isDescending bool
+	indexDefMap := make(map[string]*indexDef)
+	var indexName, columnName, typeDesc, fillfactor string
+	var isPrimary, isUnique, padIndex, ignoreDupKey, noRecompute, incremental, rowLocks, pageLocks bool
 	for rows.Next() {
-		var columnName string
-		err = rows.Scan(&constraintName, &columnName, &indexID, &isDescending)
+		err = rows.Scan(&indexName, &columnName, &isPrimary, &isUnique, &typeDesc, &padIndex, &fillfactor, &ignoreDupKey, &noRecompute, &incremental, &rowLocks, &pageLocks)
 		if err != nil {
 			return nil, err
 		}
-		columnNames = append(columnNames, columnName)
+
+		if _, ok := indexDefMap[indexName]; !ok {
+			options := []indexOption{
+				{name: "PAD_INDEX", value: boolToOnOff(padIndex)},
+				{name: "FILLFACTOR", value: fillfactor},
+				{name: "IGNORE_DUP_KEY", value: boolToOnOff(ignoreDupKey)},
+				{name: "STATISTICS_NORECOMPUTE", value: boolToOnOff(noRecompute)},
+				{name: "STATISTICS_INCREMENTAL", value: boolToOnOff(incremental)},
+				{name: "ALLOW_ROW_LOCKS", value: boolToOnOff(rowLocks)},
+				{name: "ALLOW_PAGE_LOCKS", value: boolToOnOff(pageLocks)},
+			}
+
+			definition := &indexDef{name: indexName, columns: []string{columnName}, primary: isPrimary, unique: isUnique, indexType: typeDesc, options: options}
+			indexDefMap[indexName] = definition
+		} else {
+			indexDefMap[indexName].columns = append(indexDefMap[indexName].columns, columnName)
+		}
 	}
 
-	return &pkeyDef{constraintName: constraintName, columnNames: columnNames, indexID: indexID}, nil
+	indexDefs := make([]*indexDef, 0)
+	for _, definition := range indexDefMap {
+		indexDefs = append(indexDefs, definition)
+	}
+	return indexDefs, nil
+}
+
+func boolToOnOff(in bool) string {
+	if in {
+		return "ON"
+	} else {
+		return "OFF"
+	}
 }
 
 var (

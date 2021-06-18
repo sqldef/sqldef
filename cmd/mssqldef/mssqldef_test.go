@@ -411,6 +411,50 @@ func TestMssqldefCreateTableDropPrimaryKeyConstraint(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMssqldefCreateTableWithIndexOption(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20),
+			INDEX [ix_users_id] UNIQUE CLUSTERED ([id]) WITH (
+				PAD_INDEX = ON,
+				FILLFACTOR = 10,
+				IGNORE_DUP_KEY = ON,
+				STATISTICS_NORECOMPUTE = ON,
+				STATISTICS_INCREMENTAL = OFF,
+				ALLOW_ROW_LOCKS = ON,
+				ALLOW_PAGE_LOCKS = ON
+			)
+		);
+		`)
+
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefCreateTablePrimaryKeyWithIndexOption(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20),
+			CONSTRAINT [pk_users] PRIMARY KEY CLUSTERED ([id]) WITH (
+				PAD_INDEX = OFF,
+				STATISTICS_NORECOMPUTE = OFF,
+				IGNORE_DUP_KEY = OFF,
+				ALLOW_ROW_LOCKS = ON,
+				ALLOW_PAGE_LOCKS = ON
+			)
+		);
+		`)
+
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
