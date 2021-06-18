@@ -45,6 +45,8 @@ func parseValue(val *sqlparser.SQLVal) *Value {
 		valueType = ValueTypeValArg
 	} else if val.Type == sqlparser.BitVal {
 		valueType = ValueTypeBit
+	} else if val.Type == sqlparser.ValBool {
+		valueType = ValueTypeBool
 	} else {
 		return nil // TODO: Unreachable, but handle this properly...
 	}
@@ -140,6 +142,17 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 			)
 		}
 
+		indexOptions := []IndexOption{}
+		for _, option := range indexDef.Options {
+			indexOptions = append(
+				indexOptions,
+				IndexOption{
+					optionName: option.Name,
+					value:      parseValue(option.Value),
+				},
+			)
+		}
+
 		index := Index{
 			name:      indexDef.Info.Name.String(),
 			indexType: indexDef.Info.Type,
@@ -147,6 +160,7 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 			primary:   indexDef.Info.Primary,
 			unique:    indexDef.Info.Unique,
 			clustered: bool(indexDef.Info.Clustered),
+			options:   indexOptions,
 		}
 		indexes = append(indexes, index)
 	}

@@ -82,11 +82,17 @@ type Index struct {
 	unique    bool
 	where     string // for Postgres `Partial Indexes`
 	clustered bool   // for MSSQL
+	options   []IndexOption
 }
 
 type IndexColumn struct {
 	column string
 	length *int
+}
+
+type IndexOption struct {
+	optionName string
+	value      *Value
 }
 
 type ForeignKey struct {
@@ -136,6 +142,7 @@ const (
 	ValueTypeHex
 	ValueTypeValArg
 	ValueTypeBit
+	ValueTypeBool
 )
 
 type ColumnKeyOption int
