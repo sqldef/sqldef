@@ -1,3 +1,7 @@
+## v0.10.6
+
+- Support index options for mssqldef [#125](https://github.com/k0kubun/sqldef/issues/125)
+
 ## v0.10.5
 
 - Support PRIMARY KEY for mssqldef [#124](https://github.com/k0kubun/sqldef/issues/124)
