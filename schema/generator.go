@@ -402,7 +402,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 		} else {
 			// Index not found, add index.
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), g.generateIndexDefinition(desiredIndex)))
+			if g.mode == GeneratorModeMssql && !desiredIndex.primary {
+				ddls = append(ddls, g.generateDDLForCreateIndex(desired.table.name, desiredIndex))
+			} else {
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), g.generateIndexDefinition(desiredIndex)))
+			}
 		}
 	}
 
@@ -790,6 +794,57 @@ func (g *Generator) generateIndexDefinition(index Index) string {
 			strings.Join(columns, ", "),
 		)
 	}
+	return definition
+}
+
+func (g *Generator) generateDDLForCreateIndex(table string, index Index) string {
+	definition := "CREATE"
+
+	columns := []string{}
+	for _, indexColumn := range index.columns {
+		column := g.escapeSQLName(indexColumn.column)
+		if indexColumn.length != nil {
+			column += fmt.Sprintf("(%d)", *indexColumn.length)
+		}
+		columns = append(columns, column)
+	}
+
+	if index.unique {
+		definition += " UNIQUE"
+	}
+	if index.clustered {
+		definition += " CLUSTERED"
+	} else {
+		definition += " NONCLUSTERED"
+	}
+
+	definition += fmt.Sprintf(
+		" INDEX %s ON %s (%s)",
+		g.escapeSQLName(index.name),
+		g.escapeTableName(table),
+		strings.Join(columns, ", "),
+	)
+
+	if len(index.options) > 0 {
+		options := []string{}
+		for _, indexOption := range index.options {
+			var optionValue string
+			switch indexOption.value.valueType {
+			case ValueTypeBool:
+				if string(indexOption.value.raw) == "true" {
+					optionValue = "ON"
+				} else {
+					optionValue = "OFF"
+				}
+			default:
+				optionValue = string(indexOption.value.raw)
+			}
+			option := fmt.Sprintf("%s = %s", indexOption.optionName, optionValue)
+			options = append(options, option)
+		}
+		definition += fmt.Sprintf(" WITH (%s)", strings.Join(options, ", "))
+	}
+
 	return definition
 }
 

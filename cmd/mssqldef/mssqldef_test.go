@@ -455,6 +455,38 @@ func TestMssqldefCreateTablePrimaryKeyWithIndexOption(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMssqldefCreateTableAddIndex(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20),
+			INDEX [ix_users_id] UNIQUE CLUSTERED ([id]) WITH (
+				PAD_INDEX = ON,
+				FILLFACTOR = 10,
+				STATISTICS_NORECOMPUTE = ON
+			)
+		);
+		`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+
+		"CREATE UNIQUE CLUSTERED INDEX [ix_users_id] ON [dbo].[users] ([id]) WITH (pad_index = ON, fillfactor = 10, statistics_norecompute = ON);\n",
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
