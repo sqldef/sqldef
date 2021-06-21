@@ -517,6 +517,38 @@ func TestMssqldefCreateTableDropIndex(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMssqldefCreateTableChangeIndexOption(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20),
+			INDEX [ix_users_id] UNIQUE CLUSTERED ([id]) WITH (
+				PAD_INDEX = ON
+			)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20),
+			INDEX [ix_users_id] UNIQUE CLUSTERED ([id]) WITH (
+				PAD_INDEX = ON,
+				FILLFACTOR = 10
+			)
+		);
+		`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+"DROP INDEX [ix_users_id] ON [dbo].[users];\n"+"CREATE UNIQUE CLUSTERED INDEX [ix_users_id] ON [dbo].[users] ([id]) WITH (pad_index = ON, fillfactor = 10);\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //

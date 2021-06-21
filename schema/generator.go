@@ -397,14 +397,21 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		if currentIndex := findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex != nil {
 			// Drop and add index as needed.
 			if !areSameIndexes(*currentIndex, desiredIndex) {
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentIndex.name)))
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), g.generateIndexDefinition(desiredIndex)))
+				switch g.mode {
+				case GeneratorModeMssql:
+					ddls = append(ddls, g.generateDropIndex(desired.table.name, desiredIndex.name))
+					ddls = append(ddls, g.generateDDLForCreateIndex(desired.table.name, desiredIndex))
+				default:
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentIndex.name)))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), g.generateIndexDefinition(desiredIndex)))
+				}
 			}
 		} else {
 			// Index not found, add index.
-			if g.mode == GeneratorModeMssql && !desiredIndex.primary {
+			switch g.mode {
+			case GeneratorModeMssql:
 				ddls = append(ddls, g.generateDDLForCreateIndex(desired.table.name, desiredIndex))
-			} else {
+			default:
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), g.generateIndexDefinition(desiredIndex)))
 			}
 		}
@@ -1061,6 +1068,15 @@ func findIndexByName(indexes []Index, name string) *Index {
 	return nil
 }
 
+func findIndexOptionByName(options []IndexOption, name string) *IndexOption {
+	for _, option := range options {
+		if option.optionName == name {
+			return &option
+		}
+	}
+	return nil
+}
+
 func findForeignKeyByName(foreignKeys []ForeignKey, constraintName string) *ForeignKey {
 	for _, foreignKey := range foreignKeys {
 		if foreignKey.constraintName == constraintName {
@@ -1125,6 +1141,10 @@ func areSameDefaultValue(currentDefault *DefaultDefinition, desiredDefault *Defa
 		desired = desiredDefault.value
 	}
 
+	return areSameValue(current, desired)
+}
+
+func areSameValue(current, desired *Value) bool {
 	if current == nil && desired == nil {
 		return true
 	}
@@ -1188,6 +1208,17 @@ func areSameIndexes(indexA Index, indexB Index) bool {
 	if indexA.where != indexB.where {
 		return false
 	}
+
+	for _, optionB := range indexB.options {
+		if optionA := findIndexOptionByName(indexA.options, optionB.optionName); optionA != nil {
+			if !areSameValue(optionA.value, optionB.value) {
+				return false
+			}
+		} else {
+			return false
+		}
+	}
+
 	return true
 }
 
