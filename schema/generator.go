@@ -396,12 +396,14 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 		if currentIndex := findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex != nil {
 			// Drop and add index as needed.
-			if !areSameIndexes(*currentIndex, desiredIndex) {
-				switch g.mode {
-				case GeneratorModeMssql:
+			switch g.mode {
+			case GeneratorModeMssql:
+				if !areSameIndexes(*currentIndex, desiredIndex) || !areSameIndexOptions(currentIndex.options, desiredIndex.options) {
 					ddls = append(ddls, g.generateDropIndex(desired.table.name, desiredIndex.name))
 					ddls = append(ddls, g.generateDDLForCreateIndex(desired.table.name, desiredIndex))
-				default:
+				}
+			default:
+				if !areSameIndexes(*currentIndex, desiredIndex) {
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentIndex.name)))
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), g.generateIndexDefinition(desiredIndex)))
 				}
@@ -1209,9 +1211,13 @@ func areSameIndexes(indexA Index, indexB Index) bool {
 		return false
 	}
 
-	for _, optionB := range indexB.options {
-		if optionA := findIndexOptionByName(indexA.options, optionB.optionName); optionA != nil {
-			if !areSameValue(optionA.value, optionB.value) {
+	return true
+}
+
+func areSameIndexOptions(currentOptions []IndexOption, desiredOptions []IndexOption) bool {
+	for _, desiredOption := range desiredOptions {
+		if currentOption := findIndexOptionByName(currentOptions, desiredOption.optionName); currentOption != nil {
+			if !areSameValue(currentOption.value, desiredOption.value) {
 				return false
 			}
 		} else {
