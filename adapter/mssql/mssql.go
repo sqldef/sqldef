@@ -59,10 +59,14 @@ func (d *MssqlDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, indexDefs), nil
+	foreignDefs, err := d.getForeignDefs(table)
+	if err != nil {
+		return "", err
+	}
+	return buildDumpTableDDL(table, cols, indexDefs, foreignDefs), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef) string {
+func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, foreignDefs []string) string {
 	var queryBuilder strings.Builder
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (", table)
 	for i, col := range columns {
@@ -109,6 +113,11 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef) st
 			}
 			fmt.Fprint(&queryBuilder, " )")
 		}
+	}
+
+	for _, v := range foreignDefs {
+		fmt.Fprint(&queryBuilder, ",\n"+indent)
+		fmt.Fprint(&queryBuilder, v)
 	}
 
 	fmt.Fprintf(&queryBuilder, "\n);\n")
@@ -250,6 +259,40 @@ WHERE ind.object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 		indexDefs = append(indexDefs, definition)
 	}
 	return indexDefs, nil
+}
+
+func (d *MssqlDatabase) getForeignDefs(table string) ([]string, error) {
+	schema, table := splitTableName(table)
+	query := fmt.Sprintf(`SELECT
+	f.name,
+	COL_NAME(f.parent_object_id, fc.parent_column_id),
+	OBJECT_NAME(f.referenced_object_id)_id,
+	COL_NAME(f.referenced_object_id, fc.referenced_column_id),
+	f.update_referential_action_desc,
+	f.delete_referential_action_desc
+FROM sys.foreign_keys f INNER JOIN sys.foreign_key_columns fc ON f.OBJECT_ID = fc.constraint_object_id
+WHERE f.parent_object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
+
+	rows, err := d.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	defs := make([]string, 0)
+	for rows.Next() {
+		var constraintName, columnName, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule string
+		err = rows.Scan(&constraintName, &columnName, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule)
+		if err != nil {
+			return nil, err
+		}
+		foreignUpdateRule = strings.Replace(foreignUpdateRule, "_", " ", -1)
+		foreignDeleteRule = strings.Replace(foreignDeleteRule, "_", " ", -1)
+		def := fmt.Sprintf("CONSTRAINT [%s] FOREIGN KEY ([%s]) REFERENCES [%s] ([%s]) ON UPDATE %s ON DELETE %s", constraintName, columnName, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule)
+		defs = append(defs, def)
+	}
+
+	return defs, nil
 }
 
 func boolToOnOff(in bool) string {
