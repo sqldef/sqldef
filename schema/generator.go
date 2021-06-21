@@ -888,6 +888,8 @@ func (g *Generator) generateDropIndex(tableName string, indexName string) string
 		return fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", g.escapeTableName(tableName), g.escapeSQLName(indexName))
 	case GeneratorModePostgres:
 		return fmt.Sprintf("DROP INDEX %s", g.escapeSQLName(indexName))
+	case GeneratorModeMssql:
+		return fmt.Sprintf("DROP INDEX %s ON %s", g.escapeSQLName(indexName), g.escapeTableName(tableName))
 	default:
 		return ""
 	}
