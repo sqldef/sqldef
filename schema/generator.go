@@ -436,7 +436,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				switch g.mode {
 				case GeneratorModeMysql:
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentForeignKey.constraintName)))
-				case GeneratorModePostgres:
+				case GeneratorModePostgres, GeneratorModeMssql:
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentForeignKey.constraintName)))
 				default:
 				}
@@ -587,7 +587,7 @@ func (g *Generator) generateDDLsForAbsentForeignKey(currentForeignKey ForeignKey
 	switch g.mode {
 	case GeneratorModeMysql:
 		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentForeignKey.constraintName)))
-	case GeneratorModePostgres:
+	case GeneratorModePostgres, GeneratorModeMssql:
 		var referencesColumn *Column
 		for _, column := range desiredTable.columns {
 			if column.references == currentForeignKey.referenceName {
@@ -1176,7 +1176,7 @@ func areSamePolicies(policyA, policyB Policy) bool {
 }
 
 func (g *Generator) normalizeOnUpdate(onUpdate string) string {
-	if g.mode == GeneratorModePostgres && onUpdate == "" {
+	if (g.mode == GeneratorModePostgres || g.mode == GeneratorModeMssql) && onUpdate == "" {
 		return "NO ACTION"
 	} else {
 		return onUpdate
@@ -1184,7 +1184,7 @@ func (g *Generator) normalizeOnUpdate(onUpdate string) string {
 }
 
 func (g *Generator) normalizeOnDelete(onDelete string) string {
-	if g.mode == GeneratorModePostgres && onDelete == "" {
+	if (g.mode == GeneratorModePostgres || g.mode == GeneratorModeMssql) && onDelete == "" {
 		return "NO ACTION"
 	} else {
 		return onDelete
