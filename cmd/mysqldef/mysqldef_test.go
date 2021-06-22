@@ -587,7 +587,7 @@ func TestMysqldefFulltextIndex(t *testing.T) {
 		  FULLTEXT KEY title_fulltext_index (title) /*!50100 WITH PARSER ngram */
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `posts` ADD fulltext key `title_fulltext_index`(`title`);\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `posts` ADD fulltext key `title_fulltext_index`(`title`) WITH parser ngram;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
