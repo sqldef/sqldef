@@ -549,6 +549,56 @@ func TestMssqldefCreateTableChangeIndexOption(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMssqldefCreateTableForeignKey(t *testing.T) {
+	resetTestDatabase()
+
+	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY);\n"
+	createPosts := stripHeredoc(`
+		CREATE TABLE posts (
+		  content text,
+		  user_id bigint
+		);
+		`,
+	)
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
+	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+
+	createPosts = stripHeredoc(`
+		CREATE TABLE posts (
+		  content text,
+		  user_id bigint,
+		  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [users] ([id]);\n")
+	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+
+	createPosts = stripHeredoc(`
+		CREATE TABLE posts (
+		  content text,
+		  user_id bigint,
+		  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+		);
+		`,
+	)
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
+		"ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_ibfk_1];\n"+
+		"ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [users] ([id]) ON DELETE SET NULL ON UPDATE CASCADE;\n",
+	)
+	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+
+	createPosts = stripHeredoc(`
+		CREATE TABLE posts (
+		  content text,
+		  user_id bigint
+		);
+		`,
+	)
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_ibfk_1];\n")
+	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
