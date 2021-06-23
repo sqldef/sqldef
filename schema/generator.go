@@ -383,8 +383,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 		}
 		if desiredPrimaryKey != nil {
-			definition := g.generateIndexDefinition(*desiredPrimaryKey)
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), definition))
+			ddls = append(ddls, g.generateAddIndex(desired.table.name, *desiredPrimaryKey))
 		}
 	}
 
@@ -396,26 +395,13 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 		if currentIndex := findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex != nil {
 			// Drop and add index as needed.
-			switch g.mode {
-			case GeneratorModeMssql:
-				if !areSameIndexes(*currentIndex, desiredIndex) {
-					ddls = append(ddls, g.generateDropIndex(desired.table.name, desiredIndex.name))
-					ddls = append(ddls, g.generateDDLForCreateIndex(desired.table.name, desiredIndex))
-				}
-			default:
-				if !areSameIndexes(*currentIndex, desiredIndex) {
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentIndex.name)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), g.generateIndexDefinition(desiredIndex)))
-				}
+			if !areSameIndexes(*currentIndex, desiredIndex) {
+				ddls = append(ddls, g.generateDropIndex(desired.table.name, desiredIndex.name))
+				ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
 			}
 		} else {
 			// Index not found, add index.
-			switch g.mode {
-			case GeneratorModeMssql:
-				ddls = append(ddls, g.generateDDLForCreateIndex(desired.table.name, desiredIndex))
-			default:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), g.generateIndexDefinition(desiredIndex)))
-			}
+			ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
 		}
 	}
 
@@ -766,9 +752,17 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 	return definition, nil
 }
 
-// For CREATE TABLE.
-func (g *Generator) generateIndexDefinition(index Index) string {
-	definition := index.indexType // indexType is only available on `CREATE TABLE`, but only `generateDDLsForCreateTable` is using this
+func (g *Generator) generateAddIndex(table string, index Index) string {
+	var uniqueOption string
+	var clusteredOption string
+	if index.unique {
+		uniqueOption = " UNIQUE"
+	}
+	if index.clustered {
+		clusteredOption = " CLUSTERED"
+	} else {
+		clusteredOption = " NONCLUSTERED"
+	}
 
 	columns := []string{}
 	for _, indexColumn := range index.columns {
@@ -779,94 +773,76 @@ func (g *Generator) generateIndexDefinition(index Index) string {
 		columns = append(columns, column)
 	}
 
-	if index.primary {
-		switch g.mode {
-		case GeneratorModeMssql:
+	optionDefinition := g.generateIndexOptionDefinition(index.options)
+
+	switch g.mode {
+	case GeneratorModeMssql:
+		var ddl string
+		if !index.primary {
+			ddl = fmt.Sprintf(
+				"CREATE%s%s INDEX %s ON %s",
+				uniqueOption,
+				clusteredOption,
+				g.escapeSQLName(index.name),
+				g.escapeTableName(table),
+			)
+		} else {
+			ddl = fmt.Sprintf("ALTER TABLE %s ADD", g.escapeTableName(table))
+
 			if index.name != "PRIMARY" {
-				definition = fmt.Sprintf("CONSTRAINT %s %s", g.escapeSQLName(index.name), definition)
+				ddl += fmt.Sprintf(" CONSTRAINT %s", g.escapeSQLName(index.name))
 			}
 
-			if !index.clustered {
-				definition += " NONCLUSTERED"
-			} else {
-				definition += " CLUSTERED"
-			}
+			ddl += fmt.Sprintf(" %s%s", index.indexType, clusteredOption)
 		}
-		definition += fmt.Sprintf(
-			" (%s)",
-			strings.Join(columns, ", "),
+		ddl += fmt.Sprintf(" (%s)%s", strings.Join(columns, ", "), optionDefinition)
+		return ddl
+	default:
+		ddl := fmt.Sprintf(
+			"ALTER TABLE %s ADD %s",
+			g.escapeTableName(table),
+			index.indexType,
 		)
-	} else {
-		definition += fmt.Sprintf(
-			" %s(%s)",
-			g.escapeSQLName(index.name),
-			strings.Join(columns, ", "),
-		)
-	}
 
-	if len(index.options) > 0 {
+		if !index.primary {
+			ddl += fmt.Sprintf(" %s", g.escapeSQLName(index.name))
+		}
+		ddl += fmt.Sprintf(" (%s)%s", strings.Join(columns, ", "), optionDefinition)
+		return ddl
+	}
+}
+
+func (g *Generator) generateIndexOptionDefinition(indexOptions []IndexOption) string {
+	var optionDefinition string
+	if len(indexOptions) > 0 {
 		switch g.mode {
 		case GeneratorModeMysql:
-			indexOption := index.options[0]
+			indexOption := indexOptions[0]
 			if indexOption.optionName == "parser" {
 				indexOption.optionName = "WITH " + indexOption.optionName
 			}
-			definition += fmt.Sprintf(" %s %s", indexOption.optionName, string(indexOption.value.raw))
-		}
-	}
-
-	return definition
-}
-
-func (g *Generator) generateDDLForCreateIndex(table string, index Index) string {
-	definition := "CREATE"
-
-	columns := []string{}
-	for _, indexColumn := range index.columns {
-		column := g.escapeSQLName(indexColumn.column)
-		if indexColumn.length != nil {
-			column += fmt.Sprintf("(%d)", *indexColumn.length)
-		}
-		columns = append(columns, column)
-	}
-
-	if index.unique {
-		definition += " UNIQUE"
-	}
-	if index.clustered {
-		definition += " CLUSTERED"
-	} else {
-		definition += " NONCLUSTERED"
-	}
-
-	definition += fmt.Sprintf(
-		" INDEX %s ON %s (%s)",
-		g.escapeSQLName(index.name),
-		g.escapeTableName(table),
-		strings.Join(columns, ", "),
-	)
-
-	if len(index.options) > 0 {
-		options := []string{}
-		for _, indexOption := range index.options {
-			var optionValue string
-			switch indexOption.value.valueType {
-			case ValueTypeBool:
-				if string(indexOption.value.raw) == "true" {
-					optionValue = "ON"
-				} else {
-					optionValue = "OFF"
+			optionDefinition = fmt.Sprintf(" %s %s", indexOption.optionName, string(indexOption.value.raw))
+		case GeneratorModeMssql:
+			options := []string{}
+			for _, indexOption := range indexOptions {
+				var optionValue string
+				switch indexOption.value.valueType {
+				case ValueTypeBool:
+					if string(indexOption.value.raw) == "true" {
+						optionValue = "ON"
+					} else {
+						optionValue = "OFF"
+					}
+				default:
+					optionValue = string(indexOption.value.raw)
 				}
-			default:
-				optionValue = string(indexOption.value.raw)
+				option := fmt.Sprintf("%s = %s", indexOption.optionName, optionValue)
+				options = append(options, option)
 			}
-			option := fmt.Sprintf("%s = %s", indexOption.optionName, optionValue)
-			options = append(options, option)
+			optionDefinition = fmt.Sprintf(" WITH (%s)", strings.Join(options, ", "))
 		}
-		definition += fmt.Sprintf(" WITH (%s)", strings.Join(options, ", "))
 	}
-
-	return definition
+	return optionDefinition
 }
 
 func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
