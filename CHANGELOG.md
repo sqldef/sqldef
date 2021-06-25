@@ -1,3 +1,7 @@
+## v0.10.8
+
+- Support indexes for mssqldef [#126](https://github.com/k0kubun/sqldef/issues/126)
+
 ## v0.10.7
 
 - Support foreign keys for mssqldef [#127](https://github.com/k0kubun/sqldef/issues/127)
