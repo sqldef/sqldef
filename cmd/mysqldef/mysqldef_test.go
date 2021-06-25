@@ -296,7 +296,7 @@ func TestMysqldefCreateTableAddIndexWithKeyLength(t *testing.T) {
 		  INDEX index_name(name(255))
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD index `index_name`(`name`(255));\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD index `index_name` (`name`(255));\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -587,7 +587,7 @@ func TestMysqldefFulltextIndex(t *testing.T) {
 		  FULLTEXT KEY title_fulltext_index (title) /*!50100 WITH PARSER ngram */
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `posts` ADD fulltext key `title_fulltext_index`(`title`);\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `posts` ADD fulltext key `title_fulltext_index` (`title`) WITH parser ngram;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -640,8 +640,8 @@ func TestMysqldefCreateTableKey(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `users` ADD key `index_name`(`name`);\n"+
-		"ALTER TABLE `users` ADD unique key `index_created_at`(`created_at`);\n",
+		"ALTER TABLE `users` ADD key `index_name` (`name`);\n"+
+		"ALTER TABLE `users` ADD unique key `index_created_at` (`created_at`);\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -842,7 +842,7 @@ func TestMysqldefKeywordIndexColumns(t *testing.T) {
 		"  KEY `index_character`(`character`)\n" +
 		");\n"
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `tools` ADD key `index_character`(`character`);\n")
+		"ALTER TABLE `tools` ADD key `index_character` (`character`);\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1206,7 +1206,7 @@ func TestMysqldefIndexWithDot(t *testing.T) {
 		"  KEY `account.id`(account_id)\n" +
 		");\n"
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `users` ADD key `account.id`(`account_id`);\n")
+		"ALTER TABLE `users` ADD key `account.id` (`account_id`);\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1232,9 +1232,9 @@ func TestMysqldefChangeIndexCombination(t *testing.T) {
 		");\n"
 	assertApplyOutput(t, createTable, applyPrefix+
 		"ALTER TABLE `users` DROP INDEX `index_users1`;\n"+
-		"ALTER TABLE `users` ADD key `index_users1`(`account_id`, `name`);\n"+
+		"ALTER TABLE `users` ADD key `index_users1` (`account_id`, `name`);\n"+
 		"ALTER TABLE `users` DROP INDEX `index_users2`;\n"+
-		"ALTER TABLE `users` ADD key `index_users2`(`account_id`);\n")
+		"ALTER TABLE `users` ADD key `index_users2` (`account_id`);\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 

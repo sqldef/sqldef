@@ -383,8 +383,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 		}
 		if desiredPrimaryKey != nil {
-			definition := g.generateIndexDefinition(*desiredPrimaryKey)
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), definition))
+			ddls = append(ddls, g.generateAddIndex(desired.table.name, *desiredPrimaryKey))
 		}
 	}
 
@@ -397,12 +396,12 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		if currentIndex := findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex != nil {
 			// Drop and add index as needed.
 			if !areSameIndexes(*currentIndex, desiredIndex) {
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentIndex.name)))
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), g.generateIndexDefinition(desiredIndex)))
+				ddls = append(ddls, g.generateDropIndex(desired.table.name, desiredIndex.name))
+				ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
 			}
 		} else {
 			// Index not found, add index.
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), g.generateIndexDefinition(desiredIndex)))
+			ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
 		}
 	}
 
@@ -753,9 +752,17 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 	return definition, nil
 }
 
-// For CREATE TABLE.
-func (g *Generator) generateIndexDefinition(index Index) string {
-	definition := index.indexType // indexType is only available on `CREATE TABLE`, but only `generateDDLsForCreateTable` is using this
+func (g *Generator) generateAddIndex(table string, index Index) string {
+	var uniqueOption string
+	var clusteredOption string
+	if index.unique {
+		uniqueOption = " UNIQUE"
+	}
+	if index.clustered {
+		clusteredOption = " CLUSTERED"
+	} else {
+		clusteredOption = " NONCLUSTERED"
+	}
 
 	columns := []string{}
 	for _, indexColumn := range index.columns {
@@ -766,31 +773,76 @@ func (g *Generator) generateIndexDefinition(index Index) string {
 		columns = append(columns, column)
 	}
 
-	if index.primary {
-		switch g.mode {
-		case GeneratorModeMssql:
+	optionDefinition := g.generateIndexOptionDefinition(index.options)
+
+	switch g.mode {
+	case GeneratorModeMssql:
+		var ddl string
+		if !index.primary {
+			ddl = fmt.Sprintf(
+				"CREATE%s%s INDEX %s ON %s",
+				uniqueOption,
+				clusteredOption,
+				g.escapeSQLName(index.name),
+				g.escapeTableName(table),
+			)
+		} else {
+			ddl = fmt.Sprintf("ALTER TABLE %s ADD", g.escapeTableName(table))
+
 			if index.name != "PRIMARY" {
-				definition = fmt.Sprintf("CONSTRAINT %s %s", g.escapeSQLName(index.name), definition)
+				ddl += fmt.Sprintf(" CONSTRAINT %s", g.escapeSQLName(index.name))
 			}
 
-			if !index.clustered {
-				definition += " NONCLUSTERED"
-			} else {
-				definition += " CLUSTERED"
-			}
+			ddl += fmt.Sprintf(" %s%s", index.indexType, clusteredOption)
 		}
-		definition += fmt.Sprintf(
-			" (%s)",
-			strings.Join(columns, ", "),
+		ddl += fmt.Sprintf(" (%s)%s", strings.Join(columns, ", "), optionDefinition)
+		return ddl
+	default:
+		ddl := fmt.Sprintf(
+			"ALTER TABLE %s ADD %s",
+			g.escapeTableName(table),
+			index.indexType,
 		)
-	} else {
-		definition += fmt.Sprintf(
-			" %s(%s)",
-			g.escapeSQLName(index.name),
-			strings.Join(columns, ", "),
-		)
+
+		if !index.primary {
+			ddl += fmt.Sprintf(" %s", g.escapeSQLName(index.name))
+		}
+		ddl += fmt.Sprintf(" (%s)%s", strings.Join(columns, ", "), optionDefinition)
+		return ddl
 	}
-	return definition
+}
+
+func (g *Generator) generateIndexOptionDefinition(indexOptions []IndexOption) string {
+	var optionDefinition string
+	if len(indexOptions) > 0 {
+		switch g.mode {
+		case GeneratorModeMysql:
+			indexOption := indexOptions[0]
+			if indexOption.optionName == "parser" {
+				indexOption.optionName = "WITH " + indexOption.optionName
+			}
+			optionDefinition = fmt.Sprintf(" %s %s", indexOption.optionName, string(indexOption.value.raw))
+		case GeneratorModeMssql:
+			options := []string{}
+			for _, indexOption := range indexOptions {
+				var optionValue string
+				switch indexOption.value.valueType {
+				case ValueTypeBool:
+					if string(indexOption.value.raw) == "true" {
+						optionValue = "ON"
+					} else {
+						optionValue = "OFF"
+					}
+				default:
+					optionValue = string(indexOption.value.raw)
+				}
+				option := fmt.Sprintf("%s = %s", indexOption.optionName, optionValue)
+				options = append(options, option)
+			}
+			optionDefinition = fmt.Sprintf(" WITH (%s)", strings.Join(options, ", "))
+		}
+	}
+	return optionDefinition
 }
 
 func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
@@ -833,6 +885,8 @@ func (g *Generator) generateDropIndex(tableName string, indexName string) string
 		return fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", g.escapeTableName(tableName), g.escapeSQLName(indexName))
 	case GeneratorModePostgres:
 		return fmt.Sprintf("DROP INDEX %s", g.escapeSQLName(indexName))
+	case GeneratorModeMssql:
+		return fmt.Sprintf("DROP INDEX %s ON %s", g.escapeSQLName(indexName), g.escapeTableName(tableName))
 	default:
 		return ""
 	}
@@ -1004,6 +1058,15 @@ func findIndexByName(indexes []Index, name string) *Index {
 	return nil
 }
 
+func findIndexOptionByName(options []IndexOption, name string) *IndexOption {
+	for _, option := range options {
+		if option.optionName == name {
+			return &option
+		}
+	}
+	return nil
+}
+
 func findForeignKeyByName(foreignKeys []ForeignKey, constraintName string) *ForeignKey {
 	for _, foreignKey := range foreignKeys {
 		if foreignKey.constraintName == constraintName {
@@ -1068,6 +1131,10 @@ func areSameDefaultValue(currentDefault *DefaultDefinition, desiredDefault *Defa
 		desired = desiredDefault.value
 	}
 
+	return areSameValue(current, desired)
+}
+
+func areSameValue(current, desired *Value) bool {
 	if current == nil && desired == nil {
 		return true
 	}
@@ -1131,6 +1198,17 @@ func areSameIndexes(indexA Index, indexB Index) bool {
 	if indexA.where != indexB.where {
 		return false
 	}
+
+	for _, optionB := range indexB.options {
+		if optionA := findIndexOptionByName(indexA.options, optionB.optionName); optionA != nil {
+			if !areSameValue(optionA.value, optionB.value) {
+				return false
+			}
+		} else {
+			return false
+		}
+	}
+
 	return true
 }
 
