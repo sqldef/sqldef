@@ -87,6 +87,9 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 		if col.IsIdentity {
 			fmt.Fprintf(&queryBuilder, " IDENTITY(%s,%s)", col.SeedValue, col.IncrementValue)
 		}
+		if col.CheckName != "" {
+			fmt.Fprintf(&queryBuilder, " CONSTRAINT [%s] CHECK %s", col.CheckName, col.CheckDefinition)
+		}
 	}
 
 	for _, indexDef := range indexDefs {
@@ -125,15 +128,17 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 }
 
 type column struct {
-	Name           string
-	dataType       string
-	Length         string
-	Nullable       bool
-	IsIdentity     bool
-	SeedValue      string
-	IncrementValue string
-	DefaultName    string
-	DefaultVal     string
+	Name            string
+	dataType        string
+	Length          string
+	Nullable        bool
+	IsIdentity      bool
+	SeedValue       string
+	IncrementValue  string
+	DefaultName     string
+	DefaultVal      string
+	CheckName       string
+	CheckDefinition string
 }
 
 func (d *MssqlDatabase) getColumns(table string) ([]column, error) {
@@ -148,9 +153,13 @@ func (d *MssqlDatabase) getColumns(table string) ([]column, error) {
 	increment_value = CASE WHEN c.is_identity = 1 THEN IDENTITYPROPERTY(c.[object_id], 'IncrementValue') END,
 	c.default_object_id,
 	default_name = OBJECT_NAME(c.default_object_id),
-	default_definition = OBJECT_DEFINITION(c.default_object_id)
+	default_definition = OBJECT_DEFINITION(c.default_object_id),
+	cc.name,
+	cc.definition
 FROM sys.columns c WITH(NOLOCK)
 	JOIN sys.types tp WITH(NOLOCK) ON c.user_type_id = tp.user_type_id
+	LEFT JOIN sys.check_constraints cc WITH(NOLOCK) ON c.[object_id] = cc.parent_object_id
+		AND cc.parent_column_id = c.column_id
 WHERE c.[object_id] = OBJECT_ID('%s.%s', 'U')`, schema, table)
 
 	rows, err := d.db.Query(query)
@@ -163,9 +172,9 @@ WHERE c.[object_id] = OBJECT_ID('%s.%s', 'U')`, schema, table)
 	for rows.Next() {
 		col := column{}
 		var colName, dataType, maxLen, defaultId string
-		var seedValue, incrementValue, defaultName, defaultVal *string
+		var seedValue, incrementValue, defaultName, defaultVal, checkName, checkDefinition *string
 		var isNullable, isIdentity bool
-		err = rows.Scan(&colName, &dataType, &maxLen, &isNullable, &isIdentity, &seedValue, &incrementValue, &defaultId, &defaultName, &defaultVal)
+		err = rows.Scan(&colName, &dataType, &maxLen, &isNullable, &isIdentity, &seedValue, &incrementValue, &defaultId, &defaultName, &defaultVal, &checkName, &checkDefinition)
 		if err != nil {
 			return nil, err
 		}
@@ -181,6 +190,10 @@ WHERE c.[object_id] = OBJECT_ID('%s.%s', 'U')`, schema, table)
 		if isIdentity {
 			col.SeedValue = *seedValue
 			col.IncrementValue = *incrementValue
+		}
+		if checkName != nil {
+			col.CheckName = *checkName
+			col.CheckDefinition = *checkDefinition
 		}
 		cols = append(cols, col)
 	}

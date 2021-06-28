@@ -332,14 +332,14 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 				}
 
-				if currentColumn.check != desiredColumn.check || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
+				if !areSameCheckDefinition(currentColumn.check, desiredColumn.check) || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
 					constraintName := fmt.Sprintf("%s_%s_check", strings.Replace(desired.table.name, "public.", "", 1), desiredColumn.name)
-					if currentColumn.check != "" {
+					if currentColumn.check != nil {
 						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), constraintName)
 						ddls = append(ddls, ddl)
 					}
-					if desiredColumn.check != "" {
-						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), constraintName, desiredColumn.check)
+					if desiredColumn.check != nil {
+						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), constraintName, desiredColumn.check.definition)
 						if desiredColumn.checkNoInherit {
 							ddl += " NO INHERIT"
 						}
@@ -348,6 +348,23 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				// TODO: support adding a column's `references`
+			case GeneratorModeMssql:
+				if !areSameCheckDefinition(currentColumn.check, desiredColumn.check) || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
+					constraintName := fmt.Sprintf("%s_%s_check", strings.Replace(desired.table.name, "dbo.", "", 1), desiredColumn.name)
+					if currentColumn.check != nil {
+						currentConstraintName := currentColumn.check.constraintName
+						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), currentConstraintName)
+						ddls = append(ddls, ddl)
+					}
+					if desiredColumn.check != nil {
+						desiredConstraintName := desiredColumn.check.constraintName
+						if desiredConstraintName == "" {
+							desiredConstraintName = constraintName
+						}
+						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), desiredConstraintName, desiredColumn.check.definition)
+						ddls = append(ddls, ddl)
+					}
+				}
 			default:
 			}
 		}
@@ -715,8 +732,8 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		definition += fmt.Sprintf("ON UPDATE %s ", string(column.onUpdate.raw))
 	}
 
-	if column.check != "" {
-		definition += fmt.Sprintf("CHECK (%s) ", column.check)
+	if column.check != nil {
+		definition += fmt.Sprintf("CHECK (%s) ", column.check.definition)
 	}
 	if column.checkNoInherit {
 		definition += "NO INHERIT "
@@ -1119,6 +1136,16 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 		(current.length == nil || desired.length == nil || current.length.intVal == desired.length.intVal) && // detect change column only when both are set explicitly. TODO: maybe `current.length == nil` case needs another care
 		current.array == desired.array
 	// TODO: scale
+}
+
+func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bool {
+	if checkA == nil && checkB == nil {
+		return true
+	}
+	if checkA == nil || checkB == nil {
+		return false
+	}
+	return checkA.definition == checkB.definition
 }
 
 func areSameDefaultValue(currentDefault *DefaultDefinition, desiredDefault *DefaultDefinition) bool {

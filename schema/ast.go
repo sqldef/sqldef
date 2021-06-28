@@ -59,7 +59,7 @@ type Column struct {
 	defaultDef     *DefaultDefinition
 	length         *Value
 	scale          *Value
-	check          string
+	check          *CheckDefinition
 	checkNoInherit bool
 	charset        string
 	collate        string
@@ -175,6 +175,11 @@ type Sequence struct {
 type DefaultDefinition struct {
 	value          *Value
 	constraintName string // only for MSSQL
+}
+
+type CheckDefinition struct {
+	definition     string
+	constraintName string
 }
 
 func (c *CreateTable) Statement() string {
