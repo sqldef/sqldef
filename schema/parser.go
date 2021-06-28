@@ -120,7 +120,10 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 			sequence:      parseIdentitySequence(parsedCol.Type.Identity),
 		}
 		if parsedCol.Type.Check != nil {
-			column.check = sqlparser.String(parsedCol.Type.Check.Expr)
+			column.check = &CheckDefinition{
+				definition:     sqlparser.String(parsedCol.Type.Check.Where.Expr),
+				constraintName: sqlparser.String(parsedCol.Type.Check.ConstraintName),
+			}
 		}
 		column.checkNoInherit = castBool(parsedCol.Type.CheckNoInherit)
 		columns = append(columns, column)

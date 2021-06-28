@@ -941,7 +941,7 @@ type ColumnType struct {
 	Default        *DefaultDefinition
 	OnUpdate       *SQLVal
 	Comment        *SQLVal
-	Check          *Where
+	Check          *CheckDefinition
 	CheckNoInherit BoolVal
 	Array          BoolVal
 
@@ -975,6 +975,11 @@ type ColumnType struct {
 type DefaultDefinition struct {
 	Value          *SQLVal
 	ConstraintName ColIdent // only for MSSQL
+}
+
+type CheckDefinition struct {
+	Where          Where
+	ConstraintName ColIdent
 }
 
 // Format returns a canonical string representation of the type and all relevant options
@@ -1024,7 +1029,7 @@ func (ct *ColumnType) Format(buf *TrackedBuffer) {
 		opts = append(opts, keywordStrings[COMMENT_KEYWORD], String(ct.Comment))
 	}
 	if ct.Check != nil {
-		opts = append(opts, keywordStrings[CHECK], String(ct.Check))
+		opts = append(opts, keywordStrings[CHECK], String(&ct.Check.Where))
 	}
 	if ct.CheckNoInherit {
 		opts = append(opts, keywordStrings[NO], keywordStrings[INHERIT])

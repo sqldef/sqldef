@@ -890,8 +890,13 @@ column_definition_type:
   }
 | column_definition_type CHECK openb expression closeb no_inherit_opt
   {
-    $1.Check = NewWhere(WhereStr, $4)
+    $1.Check = &CheckDefinition{Where: *NewWhere(WhereStr, $4)}
     $1.CheckNoInherit = $6
+    $$ = $1
+  }
+| column_definition_type CONSTRAINT sql_id CHECK openb expression closeb
+  {
+    $1.Check = &CheckDefinition{Where: *NewWhere(WhereStr, $6), ConstraintName: $3}
     $$ = $1
   }
 | column_definition_type COMMENT_KEYWORD STRING

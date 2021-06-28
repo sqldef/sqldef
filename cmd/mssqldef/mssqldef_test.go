@@ -599,6 +599,80 @@ func TestMssqldefCreateTableForeignKey(t *testing.T) {
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 }
 
+func TestMssqldefCreateTableWithCheck(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE a (
+		  a_id INTEGER PRIMARY KEY CONSTRAINT [a_a_id_check] CHECK ([a_id]>(0)),
+		  my_text TEXT NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE a (
+		  a_id INTEGER PRIMARY KEY CONSTRAINT [a_a_id_check] CHECK ([a_id]>(1)),
+		  my_text TEXT NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE [dbo].[a] DROP CONSTRAINT a_a_id_check;\n"+
+		"ALTER TABLE [dbo].[a] ADD CONSTRAINT a_a_id_check CHECK (a_id > (1));\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE a (
+		  a_id INTEGER PRIMARY KEY,
+		  my_text TEXT NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE [dbo].[a] DROP CONSTRAINT a_a_id_check;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefCreateTableWithCheckWithoutName(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE a (
+		  a_id INTEGER PRIMARY KEY CHECK ([a_id]>(0)),
+		  my_text TEXT NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE a (
+		  a_id INTEGER PRIMARY KEY CHECK ([a_id]>(1)),
+		  my_text TEXT NOT NULL
+		);
+		`,
+	)
+
+	// extract name of check constraint from sql server
+	out, err := execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
+		SELECT name FROM sys.check_constraints cc WHERE cc.parent_object_id = OBJECT_ID('dbo.a', 'U');
+		`,
+	))
+	if err != nil {
+		t.Error("failed to extract check constraint name")
+	}
+	checkConstraintName := strings.Replace((strings.Split(out, "\n")[0]), " ", "", -1)
+	dropConstraint := fmt.Sprintf("ALTER TABLE [dbo].[a] DROP CONSTRAINT %s;\n", checkConstraintName)
+
+	assertApplyOutput(t, createTable, applyPrefix+
+		dropConstraint+"ALTER TABLE [dbo].[a] ADD CONSTRAINT a_a_id_check CHECK (a_id > (1));\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
