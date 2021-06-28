@@ -1,3 +1,7 @@
+## v0.10.9
+
+- Support CHECK for mssqldef [#128](https://github.com/k0kubun/sqldef/issues/128)
+
 ## v0.10.8
 
 - Support indexes for mssqldef [#126](https://github.com/k0kubun/sqldef/issues/126)
