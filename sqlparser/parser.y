@@ -172,9 +172,9 @@ func forceEOF(yylex interface{}) {
 
 // Type Tokens
 %token <bytes> BIT TINYINT SMALLINT SMALLSERIAL MEDIUMINT INT INTEGER SERIAL BIGINT BIGSERIAL INTNUM
-%token <bytes> REAL DOUBLE PRECISION FLOAT_TYPE DECIMAL NUMERIC
-%token <bytes> TIME TIMESTAMP DATETIME YEAR
-%token <bytes> CHAR VARCHAR VARYING BOOL CHARACTER VARBINARY NCHAR UUID
+%token <bytes> REAL DOUBLE PRECISION FLOAT_TYPE DECIMAL NUMERIC SMALLMONEY MONEY
+%token <bytes> TIME TIMESTAMP DATETIME YEAR DATETIMEOFFSET DATETIME2 SMALLDATETIME
+%token <bytes> CHAR VARCHAR VARYING BOOL CHARACTER VARBINARY NCHAR NVARCHAR NTEXT UUID
 %token <bytes> TEXT TINYTEXT MEDIUMTEXT LONGTEXT CITEXT
 %token <bytes> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON JSONB ENUM
 %token <bytes> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
@@ -1177,6 +1177,14 @@ REAL float_length_opt
     $$.Length = $2.Length
     $$.Scale = $2.Scale
   }
+| MONEY
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| SMALLMONEY
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
 
 time_type:
   DATE
@@ -1194,6 +1202,18 @@ time_type:
 | DATETIME length_opt
   {
     $$ = ColumnType{Type: string($1), Length: $2}
+  }
+| DATETIME2
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| DATETIMEOFFSET length_opt
+  {
+    $$ = ColumnType{Type: string($1), Length: $2}
+  }
+| SMALLDATETIME
+  {
+    $$ = ColumnType{Type: string($1)}
   }
 | YEAR
   {
@@ -1222,6 +1242,18 @@ char_type:
 | VARCHAR length_opt charset_opt collate_opt
   {
     $$ = ColumnType{Type: string($1), Length: $2, Charset: $3, Collate: $4}
+  }
+| NCHAR length_opt charset_opt collate_opt
+  {
+    $$ = ColumnType{Type: string($1), Length: $2, Charset: $3, Collate: $4}
+  }
+| NVARCHAR length_opt charset_opt collate_opt
+  {
+    $$ = ColumnType{Type: string($1), Length: $2, Charset: $3, Collate: $4}
+  }
+| NTEXT
+  {
+    $$ = ColumnType{Type: string($1)}
   }
 | CHARACTER VARYING length_opt charset_opt collate_opt
   {
@@ -3739,6 +3771,8 @@ non_reserved_keyword:
 | CURRENT_USER
 | DATE
 | DATETIME
+| DATETIME2
+| DATETIMEOFFSET
 | DECIMAL
 | DOUBLE
 | DUPLICATE
@@ -3767,6 +3801,7 @@ non_reserved_keyword:
 | MEDIUMINT
 | MEDIUMTEXT
 | MODE
+| MONEY
 | MULTILINESTRING
 | MULTIPOINT
 | MULTIPOLYGON
@@ -3774,7 +3809,9 @@ non_reserved_keyword:
 | NCHAR
 | NO
 | NOW
+| NTEXT
 | NUMERIC
+| NVARCHAR
 | OFFSET
 | OPTIMIZE
 | PARTITION
@@ -3798,7 +3835,9 @@ non_reserved_keyword:
 | SERIALIZABLE
 | SHARE
 | SIGNED
+| SMALLDATETIME
 | SMALLINT
+| SMALLMONEY
 | SMALLSERIAL
 | SPATIAL
 | START
