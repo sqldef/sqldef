@@ -24,10 +24,16 @@ func TestMssqldefColumnLiteral(t *testing.T) {
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id integer NOT NULL,
-		  name text,
-		  age integer
+		CREATE TABLE v (
+		  v_integer integer NOT NULL,
+		  v_text text,
+		  v_smallmoney smallmoney,
+			v_money money,
+			v_datetimeoffset datetimeoffset(1),
+			v_datetime2 datetime2,
+			v_smalldatetime smalldatetime,
+			v_nvarchar nvarchar(30),
+			v_ntext ntext
 		);
 		`,
 	)
