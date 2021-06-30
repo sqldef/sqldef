@@ -293,10 +293,10 @@ func TestMysqldefCreateTableAddIndexWithKeyLength(t *testing.T) {
 		  id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 		  name TEXT NOT NULL,
 		  PRIMARY KEY (id),
-		  INDEX index_name(name(255))
+		  INDEX index_name(name(255) desc)
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD index `index_name` (`name`(255));\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD index `index_name` (`name`(255) desc);\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 

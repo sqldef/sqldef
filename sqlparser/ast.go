@@ -1256,8 +1256,9 @@ func (ii *IndexInfo) walkSubtree(visit Visit) error {
 
 // IndexColumn describes a column in an index definition with optional length
 type IndexColumn struct {
-	Column ColIdent
-	Length *SQLVal
+	Column    ColIdent
+	Length    *SQLVal
+	Direction string
 }
 
 // LengthScaleOption is used for types that have an optional length

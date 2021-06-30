@@ -139,8 +139,9 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 			indexColumns = append(
 				indexColumns,
 				IndexColumn{
-					column: column.Column.String(),
-					length: length,
+					column:    column.Column.String(),
+					length:    length,
+					direction: column.Direction,
 				},
 			)
 		}
@@ -213,8 +214,9 @@ func parseIndex(stmt *sqlparser.DDL) (Index, error) {
 		indexColumns = append(
 			indexColumns,
 			IndexColumn{
-				column: column.Column.String(),
-				length: length,
+				column:    column.Column.String(),
+				length:    length,
+				direction: column.Direction,
 			},
 		)
 	}

@@ -86,8 +86,9 @@ type Index struct {
 }
 
 type IndexColumn struct {
-	column string
-	length *int
+	column    string
+	length    *int
+	direction string
 }
 
 type IndexOption struct {

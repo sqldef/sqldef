@@ -1635,9 +1635,9 @@ index_column_list:
   }
 
 index_column:
-  sql_id length_opt
+  sql_id length_opt asc_desc_opt
   {
-      $$ = IndexColumn{Column: $1, Length: $2}
+      $$ = IndexColumn{Column: $1, Length: $2, Direction: $3}
   }
 /* For PostgreSQL */
 | KEY length_opt

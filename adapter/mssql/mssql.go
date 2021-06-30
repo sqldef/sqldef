@@ -105,7 +105,7 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 		if indexDef.indexType == "CLUSTERED" || indexDef.indexType == "NONCLUSTERED" {
 			fmt.Fprintf(&queryBuilder, " %s", indexDef.indexType)
 		}
-		fmt.Fprintf(&queryBuilder, " ([%s])", strings.Join(indexDef.columns, ", "))
+		fmt.Fprintf(&queryBuilder, " (%s)", strings.Join(indexDef.columns, ", "))
 		if len(indexDef.options) > 0 {
 			fmt.Fprint(&queryBuilder, " WITH (")
 			for i, option := range indexDef.options {
@@ -222,6 +222,7 @@ func (d *MssqlDatabase) getIndexDefs(table string) ([]*indexDef, error) {
 	ind.is_primary_key,
 	ind.is_unique,
 	ind.type_desc,
+	ic.is_descending_key,
 	ind.is_padded,
 	ind.fill_factor,
 	ind.ignore_dup_key,
@@ -242,11 +243,16 @@ WHERE ind.object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 
 	indexDefMap := make(map[string]*indexDef)
 	var indexName, columnName, typeDesc, fillfactor string
-	var isPrimary, isUnique, padIndex, ignoreDupKey, noRecompute, incremental, rowLocks, pageLocks bool
+	var isPrimary, isUnique, isDescending, padIndex, ignoreDupKey, noRecompute, incremental, rowLocks, pageLocks bool
 	for rows.Next() {
-		err = rows.Scan(&indexName, &columnName, &isPrimary, &isUnique, &typeDesc, &padIndex, &fillfactor, &ignoreDupKey, &noRecompute, &incremental, &rowLocks, &pageLocks)
+		err = rows.Scan(&indexName, &columnName, &isPrimary, &isUnique, &typeDesc, &isDescending, &padIndex, &fillfactor, &ignoreDupKey, &noRecompute, &incremental, &rowLocks, &pageLocks)
 		if err != nil {
 			return nil, err
+		}
+
+		columnDefinition := fmt.Sprintf("[%s]", columnName)
+		if isDescending {
+			columnDefinition += " DESC"
 		}
 
 		if _, ok := indexDefMap[indexName]; !ok {
@@ -260,10 +266,10 @@ WHERE ind.object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 				{name: "ALLOW_PAGE_LOCKS", value: boolToOnOff(pageLocks)},
 			}
 
-			definition := &indexDef{name: indexName, columns: []string{columnName}, primary: isPrimary, unique: isUnique, indexType: typeDesc, options: options}
+			definition := &indexDef{name: indexName, columns: []string{columnDefinition}, primary: isPrimary, unique: isUnique, indexType: typeDesc, options: options}
 			indexDefMap[indexName] = definition
 		} else {
-			indexDefMap[indexName].columns = append(indexDefMap[indexName].columns, columnName)
+			indexDefMap[indexName].columns = append(indexDefMap[indexName].columns, columnDefinition)
 		}
 	}
 
