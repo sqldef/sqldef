@@ -1289,11 +1289,14 @@ const (
 )
 
 type IndexSpec struct {
-	Name    ColIdent
-	Type    ColIdent
-	Unique  bool
-	Primary bool
-	Where   *Where
+	Name      ColIdent
+	Type      ColIdent
+	Unique    bool
+	Primary   bool
+	Clustered bool
+	Included  []ColIdent
+	Where     *Where
+	Options   []*IndexOption
 }
 
 // VindexSpec defines a vindex for a CREATE VINDEX or DROP VINDEX statement

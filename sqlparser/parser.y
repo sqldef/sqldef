@@ -214,6 +214,8 @@ func forceEOF(yylex interface{}) {
 
 // SQL Server PRIMARY KEY CLUSTERED
 %token <bytes> CLUSTERED NONCLUSTERED
+// index
+%token <bytes> INCLUDE
 
 %type <statement> command
 %type <selStmt> select_statement base_select union_lhs union_rhs
@@ -263,6 +265,7 @@ func forceEOF(yylex interface{}) {
 %type <limit> limit_opt
 %type <str> lock_opt
 %type <columns> ins_column_list column_list
+%type <columns> include_columns_opt
 %type <partitions> opt_partition_clause partition_list
 %type <updateExprs> on_dup_opt
 %type <updateExprs> update_list
@@ -307,6 +310,7 @@ func forceEOF(yylex interface{}) {
 %type <indexInfo> index_info
 %type <indexColumn> index_column
 %type <indexColumns> index_column_list
+%type <indexOptions> index_option_opt
 %type <indexOption> index_option
 %type <indexOptions> index_option_list mssql_index_option_list
 %type <partDefs> partition_definitions
@@ -569,50 +573,54 @@ create_statement:
     $1.TableSpec = $2
     $$ = $1
   }
-| CREATE unique_opt INDEX sql_id ON table_name '(' index_column_list ')' where_expression_opt
+| CREATE unique_opt clustered_opt INDEX sql_id ON table_name '(' index_column_list ')' include_columns_opt where_expression_opt index_option_opt
   {
     $$ = &DDL{
         Action: CreateIndexStr,
-        Table: $6,
-        NewName: $6,
+        Table: $7,
+        NewName: $7,
         IndexSpec: &IndexSpec{
-          Name: $4,
+          Name: $5,
           Type: NewColIdent(""),
           Unique: bool($2),
-          Where: NewWhere(WhereStr, $10),
+          Clustered: bool($3),
+          Included: $11,
+          Where: NewWhere(WhereStr, $12),
+          Options: $13,
         },
-        IndexCols: $8,
+        IndexCols: $9,
       }
   }
 /* For MySQL */
-| CREATE unique_opt INDEX sql_id USING sql_id ON table_name '(' index_column_list ')'
+| CREATE unique_opt clustered_opt INDEX sql_id USING sql_id ON table_name '(' index_column_list ')' index_option_opt
   {
     $$ = &DDL{
         Action: CreateIndexStr,
-        Table: $8,
-        NewName: $8,
+        Table: $9,
+        NewName: $9,
         IndexSpec: &IndexSpec{
-          Name: $4,
-          Type: $6,
+          Name: $5,
+          Type: $7,
           Unique: bool($2),
+          Options: $13,
         },
-        IndexCols: $10,
+        IndexCols: $11,
       }
   }
 /* For PostgreSQL */
-| CREATE unique_opt INDEX sql_id ON table_name USING sql_id '(' index_column_list ')' where_expression_opt
+| CREATE unique_opt clustered_opt INDEX sql_id ON table_name USING sql_id '(' index_column_list ')' where_expression_opt index_option_opt
   {
     $$ = &DDL{
         Action: CreateIndexStr,
-        Table: $6,
-        NewName: $6,
+        Table: $7,
+        NewName: $7,
         IndexSpec: &IndexSpec{
-          Name: $4,
-          Type: $8,
+          Name: $5,
+          Type: $9,
           Unique: bool($2),
-          Where: NewWhere(WhereStr, $12),
+          Where: NewWhere(WhereStr, $13),
         },
-        IndexCols: $10,
+        IndexCols: $11,
       }
   }
 | CREATE or_replace_opt VIEW table_name AS select_statement
@@ -1480,18 +1488,23 @@ collate_opt:
   }
 
 index_definition:
-  index_info '(' index_column_list ')' index_option_list
+  index_info '(' index_column_list ')' index_option_opt
   {
     $$ = &IndexDefinition{Info: $1, Columns: $3, Options: $5}
   }
-| index_info '(' index_column_list ')' WITH '(' mssql_index_option_list ')'
+
+index_option_opt:
   {
-    $$ = &IndexDefinition{Info: $1, Columns: $3, Options: $7}
+    $$ = []*IndexOption{}
   }
-| index_info '(' index_column_list ')'
+| index_option_list
   {
-    $$ = &IndexDefinition{Info: $1, Columns: $3}
+    $$ = $1
   }
+| WITH '(' mssql_index_option_list ')'
+ {
+   $$ = $3
+ }
 
 index_option_list:
   index_option
@@ -2577,6 +2590,15 @@ where_expression_opt:
 | WHERE expression
   {
     $$ = $2
+  }
+
+include_columns_opt:
+  {
+    $$ = nil
+  }
+| INCLUDE '(' column_list ')'
+  {
+    $$ = $3
   }
 
 expression:
@@ -3686,6 +3708,7 @@ reserved_keyword:
 | IF
 | IGNORE
 | IN
+| INCLUDE
 | INDEX
 | INNER
 | INSERT

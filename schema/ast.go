@@ -80,8 +80,9 @@ type Index struct {
 	columns   []IndexColumn
 	primary   bool
 	unique    bool
-	where     string // for Postgres `Partial Indexes`
-	clustered bool   // for MSSQL
+	where     string   // for Postgres `Partial Indexes`
+	included  []string // for MSSQL
+	clustered bool     // for MSSQL
 	options   []IndexOption
 }
 

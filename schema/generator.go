@@ -1235,6 +1235,15 @@ func areSameIndexes(indexA Index, indexB Index) bool {
 		return false
 	}
 
+	if len(indexA.included) != len(indexB.included) {
+		return false
+	}
+	for i, indexAIncluded := range indexA.included {
+		if indexAIncluded != indexB.included[i] {
+			return false
+		}
+	}
+
 	for _, optionB := range indexB.options {
 		if optionA := findIndexOptionByName(indexA.options, optionB.optionName); optionA != nil {
 			if !areSameValue(optionA.value, optionB.value) {

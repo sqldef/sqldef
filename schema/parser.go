@@ -231,13 +231,32 @@ func parseIndex(stmt *sqlparser.DDL) (Index, error) {
 		where = sqlparser.String(expr)
 	}
 
+	includedColumns := []string{}
+	for _, includedColumn := range stmt.IndexSpec.Included {
+		includedColumns = append(includedColumns, includedColumn.String())
+	}
+
+	indexOptions := []IndexOption{}
+	for _, option := range stmt.IndexSpec.Options {
+		indexOptions = append(
+			indexOptions,
+			IndexOption{
+				optionName: option.Name,
+				value:      parseValue(option.Value),
+			},
+		)
+	}
+
 	return Index{
 		name:      stmt.IndexSpec.Name.String(),
 		indexType: "", // not supported in parser yet
 		columns:   indexColumns,
 		primary:   false, // not supported in parser yet
 		unique:    stmt.IndexSpec.Unique,
+		clustered: stmt.IndexSpec.Clustered,
 		where:     where,
+		included:  includedColumns,
+		options:   indexOptions,
 	}, nil
 }
 
