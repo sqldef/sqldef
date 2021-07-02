@@ -542,7 +542,7 @@ func TestMssqldefCreateTableChangeIndexDefinition(t *testing.T) {
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
-			INDEX [ix_users_id] UNIQUE CLUSTERED ([id] asc)
+		  INDEX [ix_users_id] UNIQUE CLUSTERED ([id] asc)
 		);
 		`,
 	)
