@@ -1,3 +1,7 @@
+## v0.10.10
+
+- Support more value types for mssqldef [#129](https://github.com/k0kubun/sqldef/issues/129)
+
 ## v0.10.9
 
 - Support CHECK for mssqldef [#128](https://github.com/k0kubun/sqldef/issues/128)

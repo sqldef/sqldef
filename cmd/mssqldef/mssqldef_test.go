@@ -28,13 +28,13 @@ func TestMssqldefColumnLiteral(t *testing.T) {
 		  v_integer integer NOT NULL,
 		  v_text text,
 		  v_smallmoney smallmoney,
-			v_money money,
-			v_datetimeoffset datetimeoffset(1),
-			v_datetime2 datetime2,
-			v_smalldatetime smalldatetime,
-			v_nchar nchar(30),
-			v_nvarchar nvarchar(30),
-			v_ntext ntext
+		  v_money money,
+		  v_datetimeoffset datetimeoffset(1),
+		  v_datetime2 datetime2,
+		  v_smalldatetime smalldatetime,
+		  v_nchar nchar(30),
+		  v_nvarchar nvarchar(30),
+		  v_ntext ntext
 		);
 		`,
 	)
@@ -129,7 +129,7 @@ func TestMssqldefCreateTableWithCLUSTERED(t *testing.T) {
 		  id integer,
 		  name text,
 		  age integer,
-			CONSTRAINT PK_users PRIMARY KEY CLUSTERED (id)
+		  CONSTRAINT PK_users PRIMARY KEY CLUSTERED (id)
 		);
 		`,
 	)
@@ -425,15 +425,15 @@ func TestMssqldefCreateTableWithIndexOption(t *testing.T) {
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
-			INDEX [ix_users_id] UNIQUE CLUSTERED ([id]) WITH (
-				PAD_INDEX = ON,
-				FILLFACTOR = 10,
-				IGNORE_DUP_KEY = ON,
-				STATISTICS_NORECOMPUTE = ON,
-				STATISTICS_INCREMENTAL = OFF,
-				ALLOW_ROW_LOCKS = ON,
-				ALLOW_PAGE_LOCKS = ON
-			)
+		    INDEX [ix_users_id] UNIQUE CLUSTERED ([id]) WITH (
+		      PAD_INDEX = ON,
+		      FILLFACTOR = 10,
+		      IGNORE_DUP_KEY = ON,
+		      STATISTICS_NORECOMPUTE = ON,
+		      STATISTICS_INCREMENTAL = OFF,
+		      ALLOW_ROW_LOCKS = ON,
+		      ALLOW_PAGE_LOCKS = ON
+		  )
 		);
 		`)
 
@@ -448,13 +448,13 @@ func TestMssqldefCreateTablePrimaryKeyWithIndexOption(t *testing.T) {
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
-			CONSTRAINT [pk_users] PRIMARY KEY CLUSTERED ([id]) WITH (
-				PAD_INDEX = OFF,
-				STATISTICS_NORECOMPUTE = OFF,
-				IGNORE_DUP_KEY = OFF,
-				ALLOW_ROW_LOCKS = ON,
-				ALLOW_PAGE_LOCKS = ON
-			)
+		  CONSTRAINT [pk_users] PRIMARY KEY CLUSTERED ([id]) WITH (
+		    PAD_INDEX = OFF,
+		    STATISTICS_NORECOMPUTE = OFF,
+		    IGNORE_DUP_KEY = OFF,
+		    ALLOW_ROW_LOCKS = ON,
+		    ALLOW_PAGE_LOCKS = ON
+		  )
 		);
 		`)
 
@@ -501,11 +501,11 @@ func TestMssqldefCreateTableDropIndex(t *testing.T) {
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
-			INDEX [ix_users_id] UNIQUE CLUSTERED ([id]) WITH (
-				PAD_INDEX = ON,
-				FILLFACTOR = 10,
-				STATISTICS_NORECOMPUTE = ON
-			)
+		  INDEX [ix_users_id] UNIQUE CLUSTERED ([id]) WITH (
+		    PAD_INDEX = ON,
+		    FILLFACTOR = 10,
+		    STATISTICS_NORECOMPUTE = ON
+		  )
 		);
 		`,
 	)
@@ -557,10 +557,10 @@ func TestMssqldefCreateTableChangeIndexDefinition(t *testing.T) {
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
-			INDEX [ix_users_id] UNIQUE CLUSTERED ([id]) WITH (
-				PAD_INDEX = ON,
-				FILLFACTOR = 10
-			)
+		  INDEX [ix_users_id] UNIQUE CLUSTERED ([id]) WITH (
+		    PAD_INDEX = ON,
+		    FILLFACTOR = 10
+		  )
 		);
 		`,
 	)
@@ -747,10 +747,10 @@ func TestMssqldefCreateIndexChangeIndexDefinition(t *testing.T) {
 func TestMssqldefDryRun(t *testing.T) {
 	resetTestDatabase()
 	writeFile("schema.sql", stripHeredoc(`
-	    CREATE TABLE users (
-	        id integer NOT NULL PRIMARY KEY,
-	        age integer
-	    );`,
+		CREATE TABLE users (
+		  id integer NOT NULL PRIMARY KEY,
+		  age integer
+		);`,
 	))
 
 	dryRun := assertedExecute(t, "mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--dry-run", "--file", "schema.sql")
