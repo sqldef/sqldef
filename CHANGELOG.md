@@ -1,3 +1,7 @@
+## v0.10.12
+
+- Support more index options for mssqldef [#131](https://github.com/k0kubun/sqldef/issues/131)
+
 ## v0.10.11
 
 - Escape DSN for psqldef properly [#130](https://github.com/k0kubun/sqldef/issues/130)
