@@ -219,6 +219,7 @@ var keywords = map[string]int{
 	"if":                     IF,
 	"ignore":                 IGNORE,
 	"in":                     IN,
+	"include":                INCLUDE,
 	"increment":              INCREMENT,
 	"index":                  INDEX,
 	"infile":                 UNUSED,

@@ -353,13 +353,13 @@ func TestMssqldefCreateTableAddPrimaryKeyConstraint(t *testing.T) {
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
-		  CONSTRAINT [pk_users] PRIMARY KEY CLUSTERED ([id])
+		  CONSTRAINT [pk_users] PRIMARY KEY CLUSTERED ([id] desc)
 		);
 		`,
 	)
 
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE [dbo].[users] ADD CONSTRAINT [pk_users] primary key CLUSTERED ([id]);\n",
+		"ALTER TABLE [dbo].[users] ADD CONSTRAINT [pk_users] primary key CLUSTERED ([id] desc);\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -479,17 +479,17 @@ func TestMssqldefCreateTableAddIndex(t *testing.T) {
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
-		  INDEX [ix_users_id] UNIQUE CLUSTERED ([id]) WITH (
+		  INDEX [ix_users_id] UNIQUE CLUSTERED ([id] desc) WITH (
 		    PAD_INDEX = ON,
 		    FILLFACTOR = 10,
 		    STATISTICS_NORECOMPUTE = ON
-		  )
+		  ) ON [PRIMARY]
 		);
 		`,
 	)
 
 	assertApplyOutput(t, createTable, applyPrefix+
-		"CREATE UNIQUE CLUSTERED INDEX [ix_users_id] ON [dbo].[users] ([id]) WITH (pad_index = ON, fillfactor = 10, statistics_norecompute = ON);\n",
+		"CREATE UNIQUE CLUSTERED INDEX [ix_users_id] ON [dbo].[users] ([id] desc) WITH (pad_index = ON, fillfactor = 10, statistics_norecompute = ON) ON [PRIMARY];\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -524,20 +524,33 @@ func TestMssqldefCreateTableDropIndex(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
-func TestMssqldefCreateTableChangeIndexOption(t *testing.T) {
+func TestMssqldefCreateTableChangeIndexDefinition(t *testing.T) {
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
-		  INDEX [ix_users_id] UNIQUE CLUSTERED ([id]) WITH (
-		    PAD_INDEX = ON
-		  )
+		  INDEX [ix_users_id] UNIQUE CLUSTERED ([id] desc)
 		);
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20),
+		  INDEX [ix_users_id] UNIQUE CLUSTERED ([id] asc)
+		);
+		`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+
+		"DROP INDEX [ix_users_id] ON [dbo].[users];\n"+
+		"CREATE UNIQUE CLUSTERED INDEX [ix_users_id] ON [dbo].[users] ([id]);\n",
+	)
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -552,7 +565,10 @@ func TestMssqldefCreateTableChangeIndexOption(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+"DROP INDEX [ix_users_id] ON [dbo].[users];\n"+"CREATE UNIQUE CLUSTERED INDEX [ix_users_id] ON [dbo].[users] ([id]) WITH (pad_index = ON, fillfactor = 10);\n")
+	assertApplyOutput(t, createTable, applyPrefix+
+		"DROP INDEX [ix_users_id] ON [dbo].[users];\n"+
+		"CREATE UNIQUE CLUSTERED INDEX [ix_users_id] ON [dbo].[users] ([id]) WITH (pad_index = ON, fillfactor = 10);\n",
+	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -678,6 +694,57 @@ func TestMssqldefCreateTableWithCheckWithoutName(t *testing.T) {
 	assertApplyOutput(t, createTable, applyPrefix+
 		dropConstraint+"ALTER TABLE [dbo].[a] ADD CONSTRAINT a_a_id_check CHECK (a_id > (1));\n")
 	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefCreateIndex(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT NOT NULL IDENTITY(1,1) PRIMARY KEY,
+		  name varchar(40) DEFAULT NULL,
+		  created_at datetime NOT NULL
+		);`,
+	)
+	assertApply(t, createTable)
+
+	createIndex := "CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at]) WITH (PAD_INDEX = ON) ON [PRIMARY];\n"
+	assertApplyOutput(t, createTable+createIndex, applyPrefix+createIndex)
+	assertApplyOutput(t, createTable+createIndex, nothingModified)
+
+	assertApplyOutput(t, createTable, applyPrefix+"DROP INDEX [index_name] ON [dbo].[users];\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefCreateIndexChangeIndexDefinition(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT NOT NULL IDENTITY(1,1) PRIMARY KEY,
+		  name varchar(40) DEFAULT NULL,
+		  created_at datetime NOT NULL,
+		  updated_at datetime NOT NULL
+		);`,
+	)
+
+	createIndex := "CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at]) WITH (PAD_INDEX = ON);\n"
+	assertApplyOutput(t, createTable+createIndex, applyPrefix+createTable+"\n"+createIndex)
+	assertApplyOutput(t, createTable+createIndex, nothingModified)
+
+	createIndex = "CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at], [updated_at]) WITH (PAD_INDEX = ON);\n"
+	assertApplyOutput(t, createTable+createIndex, applyPrefix+
+		"DROP INDEX [index_name] ON [dbo].[users];\n"+
+		"CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at], [updated_at]) WITH (PAD_INDEX = ON);\n",
+	)
+	assertApplyOutput(t, createTable+createIndex, nothingModified)
+
+	createIndex = "CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at], [updated_at]) WITH (PAD_INDEX = ON, FILLFACTOR = 10);\n"
+	assertApplyOutput(t, createTable+createIndex, applyPrefix+
+		"DROP INDEX [index_name] ON [dbo].[users];\n"+
+		"CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at], [updated_at]) WITH (PAD_INDEX = ON, FILLFACTOR = 10);\n",
+	)
+	assertApplyOutput(t, createTable+createIndex, nothingModified)
 }
 
 //

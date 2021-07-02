@@ -139,8 +139,9 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 			indexColumns = append(
 				indexColumns,
 				IndexColumn{
-					column: column.Column.String(),
-					length: length,
+					column:    column.Column.String(),
+					length:    length,
+					direction: column.Direction,
 				},
 			)
 		}
@@ -156,6 +157,12 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 			)
 		}
 
+		indexPartition := IndexPartition{}
+		if indexDef.Partition != nil {
+			indexPartition.partitionName = indexDef.Partition.Name
+			indexPartition.column = indexDef.Partition.Column
+		}
+
 		index := Index{
 			name:      indexDef.Info.Name.String(),
 			indexType: indexDef.Info.Type,
@@ -164,6 +171,7 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 			unique:    indexDef.Info.Unique,
 			clustered: bool(indexDef.Info.Clustered),
 			options:   indexOptions,
+			partition: indexPartition,
 		}
 		indexes = append(indexes, index)
 	}
@@ -213,8 +221,9 @@ func parseIndex(stmt *sqlparser.DDL) (Index, error) {
 		indexColumns = append(
 			indexColumns,
 			IndexColumn{
-				column: column.Column.String(),
-				length: length,
+				column:    column.Column.String(),
+				length:    length,
+				direction: column.Direction,
 			},
 		)
 	}
@@ -229,13 +238,39 @@ func parseIndex(stmt *sqlparser.DDL) (Index, error) {
 		where = sqlparser.String(expr)
 	}
 
+	includedColumns := []string{}
+	for _, includedColumn := range stmt.IndexSpec.Included {
+		includedColumns = append(includedColumns, includedColumn.String())
+	}
+
+	indexOptions := []IndexOption{}
+	for _, option := range stmt.IndexSpec.Options {
+		indexOptions = append(
+			indexOptions,
+			IndexOption{
+				optionName: option.Name,
+				value:      parseValue(option.Value),
+			},
+		)
+	}
+
+	indexParition := IndexPartition{}
+	if stmt.IndexSpec.Partition != nil {
+		indexParition.partitionName = stmt.IndexSpec.Partition.Name
+		indexParition.column = stmt.IndexSpec.Partition.Column
+	}
+
 	return Index{
 		name:      stmt.IndexSpec.Name.String(),
 		indexType: "", // not supported in parser yet
 		columns:   indexColumns,
 		primary:   false, // not supported in parser yet
 		unique:    stmt.IndexSpec.Unique,
+		clustered: stmt.IndexSpec.Clustered,
 		where:     where,
+		included:  includedColumns,
+		options:   indexOptions,
+		partition: indexParition,
 	}, nil
 }
 

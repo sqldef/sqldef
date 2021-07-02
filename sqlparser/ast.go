@@ -1186,9 +1186,10 @@ func (ct *ColumnType) walkSubtree(visit Visit) error {
 
 // IndexDefinition describes an index in a CREATE TABLE statement
 type IndexDefinition struct {
-	Info    *IndexInfo
-	Columns []IndexColumn
-	Options []*IndexOption
+	Info      *IndexInfo
+	Columns   []IndexColumn
+	Options   []*IndexOption
+	Partition *IndexPartition
 }
 
 // Format formats the node.
@@ -1256,8 +1257,9 @@ func (ii *IndexInfo) walkSubtree(visit Visit) error {
 
 // IndexColumn describes a column in an index definition with optional length
 type IndexColumn struct {
-	Column ColIdent
-	Length *SQLVal
+	Column    ColIdent
+	Length    *SQLVal
+	Direction string
 }
 
 // LengthScaleOption is used for types that have an optional length
@@ -1274,6 +1276,11 @@ type IndexOption struct {
 	Using string
 }
 
+type IndexPartition struct {
+	Name   string
+	Column string
+}
+
 // ColumnKeyOption indicates whether or not the given column is defined as an
 // index element and contains the type of the option
 type ColumnKeyOption int
@@ -1288,11 +1295,15 @@ const (
 )
 
 type IndexSpec struct {
-	Name    ColIdent
-	Type    ColIdent
-	Unique  bool
-	Primary bool
-	Where   *Where
+	Name      ColIdent
+	Type      ColIdent
+	Unique    bool
+	Primary   bool
+	Clustered bool // for MSSQL
+	Included  []ColIdent
+	Where     *Where
+	Options   []*IndexOption
+	Partition *IndexPartition // for MSSQL
 }
 
 // VindexSpec defines a vindex for a CREATE VINDEX or DROP VINDEX statement
@@ -3218,7 +3229,7 @@ type Order struct {
 	Direction string
 }
 
-// Order.Direction
+// Order.Direction and IndexColumn.Direction
 const (
 	AscScr  = "asc"
 	DescScr = "desc"

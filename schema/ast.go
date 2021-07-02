@@ -80,19 +80,33 @@ type Index struct {
 	columns   []IndexColumn
 	primary   bool
 	unique    bool
-	where     string // for Postgres `Partial Indexes`
-	clustered bool   // for MSSQL
+	where     string         // for Postgres `Partial Indexes`
+	included  []string       // for MSSQL
+	clustered bool           // for MSSQL
+	partition IndexPartition // for MSSQL
 	options   []IndexOption
 }
 
 type IndexColumn struct {
-	column string
-	length *int
+	column    string
+	length    *int
+	direction string
 }
+
+// IndexColumn.direction
+const (
+	AscScr  = "asc"
+	DescScr = "desc"
+)
 
 type IndexOption struct {
 	optionName string
 	value      *Value
+}
+
+type IndexPartition struct {
+	partitionName string
+	column        string
 }
 
 type ForeignKey struct {
