@@ -3,6 +3,7 @@ package postgres
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -422,8 +423,8 @@ func postgresBuildDSN(config adapter.Config) string {
 		options = fmt.Sprintf("?sslmode=%s", sslmode) // TODO: uri escape
 	}
 
-	// TODO: uri escape
-	return fmt.Sprintf("postgres://%s:%s@%s/%s%s", user, password, host, database, options)
+	// `QueryEscape` instead of `PathEscape` so that colon can be escaped.
+	return fmt.Sprintf("postgres://%s:%s@%s/%s%s", url.QueryEscape(user), url.QueryEscape(password), host, database, options)
 }
 
 func splitTableName(table string) (string, string) {
