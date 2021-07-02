@@ -1,3 +1,8 @@
+## v0.10.11
+
+- Escape DSN for psqldef properly [#130](https://github.com/k0kubun/sqldef/issues/130)
+- Support PGSSLPROTOCOL [#130](https://github.com/k0kubun/sqldef/issues/130)
+
 ## v0.10.10
 
 - Support more value types for mssqldef [#129](https://github.com/k0kubun/sqldef/issues/129)
