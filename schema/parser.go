@@ -157,6 +157,12 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 			)
 		}
 
+		indexPartition := IndexPartition{}
+		if indexDef.Partition != nil {
+			indexPartition.partitionName = indexDef.Partition.Name
+			indexPartition.column = indexDef.Partition.Column
+		}
+
 		index := Index{
 			name:      indexDef.Info.Name.String(),
 			indexType: indexDef.Info.Type,
@@ -165,6 +171,7 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 			unique:    indexDef.Info.Unique,
 			clustered: bool(indexDef.Info.Clustered),
 			options:   indexOptions,
+			partition: indexPartition,
 		}
 		indexes = append(indexes, index)
 	}
@@ -247,6 +254,12 @@ func parseIndex(stmt *sqlparser.DDL) (Index, error) {
 		)
 	}
 
+	indexParition := IndexPartition{}
+	if stmt.IndexSpec.Partition != nil {
+		indexParition.partitionName = stmt.IndexSpec.Partition.Name
+		indexParition.column = stmt.IndexSpec.Partition.Column
+	}
+
 	return Index{
 		name:      stmt.IndexSpec.Name.String(),
 		indexType: "", // not supported in parser yet
@@ -257,6 +270,7 @@ func parseIndex(stmt *sqlparser.DDL) (Index, error) {
 		where:     where,
 		included:  includedColumns,
 		options:   indexOptions,
+		partition: indexParition,
 	}, nil
 }
 

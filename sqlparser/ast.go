@@ -1186,9 +1186,10 @@ func (ct *ColumnType) walkSubtree(visit Visit) error {
 
 // IndexDefinition describes an index in a CREATE TABLE statement
 type IndexDefinition struct {
-	Info    *IndexInfo
-	Columns []IndexColumn
-	Options []*IndexOption
+	Info      *IndexInfo
+	Columns   []IndexColumn
+	Options   []*IndexOption
+	Partition *IndexPartition
 }
 
 // Format formats the node.
@@ -1275,6 +1276,11 @@ type IndexOption struct {
 	Using string
 }
 
+type IndexPartition struct {
+	Name   string
+	Column string
+}
+
 // ColumnKeyOption indicates whether or not the given column is defined as an
 // index element and contains the type of the option
 type ColumnKeyOption int
@@ -1293,10 +1299,11 @@ type IndexSpec struct {
 	Type      ColIdent
 	Unique    bool
 	Primary   bool
-	Clustered bool
+	Clustered bool // for MSSQL
 	Included  []ColIdent
 	Where     *Where
 	Options   []*IndexOption
+	Partition *IndexPartition // for MSSQL
 }
 
 // VindexSpec defines a vindex for a CREATE VINDEX or DROP VINDEX statement

@@ -798,6 +798,7 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 	switch g.mode {
 	case GeneratorModeMssql:
 		var ddl string
+		var partition string
 		if !index.primary {
 			ddl = fmt.Sprintf(
 				"CREATE%s%s INDEX %s ON %s",
@@ -806,6 +807,14 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 				g.escapeSQLName(index.name),
 				g.escapeTableName(table),
 			)
+
+			// definition of partition is valid only in the syntax `CREATE INDEX ...`
+			if index.partition.partitionName != "" {
+				partition += fmt.Sprintf(" ON %s", g.escapeSQLName(index.partition.partitionName))
+				if index.partition.column != "" {
+					partition += fmt.Sprintf(" (%s)", g.escapeSQLName(index.partition.column))
+				}
+			}
 		} else {
 			ddl = fmt.Sprintf("ALTER TABLE %s ADD", g.escapeTableName(table))
 
@@ -816,6 +825,7 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 			ddl += fmt.Sprintf(" %s%s", index.indexType, clusteredOption)
 		}
 		ddl += fmt.Sprintf(" (%s)%s", strings.Join(columns, ", "), optionDefinition)
+		ddl += partition
 		return ddl
 	default:
 		ddl := fmt.Sprintf(

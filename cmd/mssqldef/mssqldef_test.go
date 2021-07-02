@@ -483,13 +483,13 @@ func TestMssqldefCreateTableAddIndex(t *testing.T) {
 				PAD_INDEX = ON,
 				FILLFACTOR = 10,
 				STATISTICS_NORECOMPUTE = ON
-			)
+			) ON [PRIMARY]
 		);
 		`,
 	)
 
 	assertApplyOutput(t, createTable, applyPrefix+
-		"CREATE UNIQUE CLUSTERED INDEX [ix_users_id] ON [dbo].[users] ([id] desc) WITH (pad_index = ON, fillfactor = 10, statistics_norecompute = ON);\n",
+		"CREATE UNIQUE CLUSTERED INDEX [ix_users_id] ON [dbo].[users] ([id] desc) WITH (pad_index = ON, fillfactor = 10, statistics_norecompute = ON) ON [PRIMARY];\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -708,7 +708,7 @@ func TestMssqldefCreateIndex(t *testing.T) {
 	)
 	assertApply(t, createTable)
 
-	createIndex := "CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at]) WITH (PAD_INDEX = ON);\n"
+	createIndex := "CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at]) WITH (PAD_INDEX = ON) ON [PRIMARY];\n"
 	assertApplyOutput(t, createTable+createIndex, applyPrefix+createIndex)
 	assertApplyOutput(t, createTable+createIndex, nothingModified)
 

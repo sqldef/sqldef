@@ -103,6 +103,7 @@ func forceEOF(yylex interface{}) {
   indexInfo     *IndexInfo
   indexOption   *IndexOption
   indexOptions  []*IndexOption
+  indexPartition *IndexPartition
   indexColumn   IndexColumn
   indexColumns  []IndexColumn
   foreignKeyDefinition *ForeignKeyDefinition
@@ -310,6 +311,7 @@ func forceEOF(yylex interface{}) {
 %type <indexInfo> index_info
 %type <indexColumn> index_column
 %type <indexColumns> index_column_list
+%type <indexPartition> index_partition_opt
 %type <indexOptions> index_option_opt
 %type <indexOption> index_option
 %type <indexOptions> index_option_list mssql_index_option_list
@@ -573,7 +575,7 @@ create_statement:
     $1.TableSpec = $2
     $$ = $1
   }
-| CREATE unique_opt clustered_opt INDEX sql_id ON table_name '(' index_column_list ')' include_columns_opt where_expression_opt index_option_opt
+| CREATE unique_opt clustered_opt INDEX sql_id ON table_name '(' index_column_list ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
         Action: CreateIndexStr,
@@ -587,6 +589,7 @@ create_statement:
           Included: $11,
           Where: NewWhere(WhereStr, $12),
           Options: $13,
+          Partition: $14,
         },
         IndexCols: $9,
       }
@@ -1488,9 +1491,9 @@ collate_opt:
   }
 
 index_definition:
-  index_info '(' index_column_list ')' index_option_opt
+  index_info '(' index_column_list ')' index_option_opt index_partition_opt
   {
-    $$ = &IndexDefinition{Info: $1, Columns: $3, Options: $5}
+    $$ = &IndexDefinition{Info: $1, Columns: $3, Options: $5, Partition: $6}
   }
 
 index_option_opt:
@@ -1592,6 +1595,20 @@ on_off:
   {
     $$ = NewBoolSQLVal(false)
   }
+
+// for MSSQL
+index_partition_opt:
+  {
+    $$ = nil
+  }
+| ON sql_id
+ {
+   $$ = &IndexPartition{Name: $2.String()}
+ }
+| ON sql_id openb sql_id closeb
+ {
+   $$ = &IndexPartition{Name: $2.String(), Column: $4.String()}
+ }
 
 index_info:
   PRIMARY KEY
@@ -1716,18 +1733,13 @@ reference_option:
   }
 
 primary_key_definition:
-  CONSTRAINT sql_id PRIMARY KEY clustered_opt '(' index_column_list ')'
+  CONSTRAINT sql_id PRIMARY KEY clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
   {
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: string($3) + " " + string($4), Name: $2, Primary: true, Unique: true, Clustered: $5},
       Columns: $7,
-    }
-  }
-| CONSTRAINT sql_id PRIMARY KEY clustered_opt '(' index_column_list ')'  WITH '(' mssql_index_option_list ')'
-  {
-    $$ = &IndexDefinition{
-      Info: &IndexInfo{Type: string($3) + " " + string($4), Name: $2, Primary: true, Unique: true, Clustered: $5},
-      Columns: $7, Options: $11,
+      Options: $9,
+      Partition: $10,
     }
   }
 
