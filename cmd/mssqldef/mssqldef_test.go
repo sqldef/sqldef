@@ -480,10 +480,10 @@ func TestMssqldefCreateTableAddIndex(t *testing.T) {
 		  id bigint NOT NULL,
 		  name varchar(20),
 		  INDEX [ix_users_id] UNIQUE CLUSTERED ([id] desc) WITH (
-        PAD_INDEX = ON,
-        FILLFACTOR = 10,
-        STATISTICS_NORECOMPUTE = ON
-      ) ON [PRIMARY]
+		    PAD_INDEX = ON,
+		    FILLFACTOR = 10,
+		    STATISTICS_NORECOMPUTE = ON
+		  ) ON [PRIMARY]
 		);
 		`,
 	)
