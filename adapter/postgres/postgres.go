@@ -418,13 +418,17 @@ func postgresBuildDSN(config adapter.Config) string {
 		host = config.Socket
 	}
 
-	options := ""
+	var options []string
 	if sslmode, ok := os.LookupEnv("PGSSLMODE"); ok { // TODO: have this in adapter.Config, or standardize config with DSN?
-		options = fmt.Sprintf("?sslmode=%s", sslmode) // TODO: uri escape
+		options = append(options, fmt.Sprintf("sslmode=%s", sslmode)) // TODO: uri escape
+	}
+
+	if sslrootcert, ok := os.LookupEnv("PGSSLROOTCERT"); ok { // TODO: have this in adapter.Config, or standardize config with DSN?
+		options = append(options, fmt.Sprintf("sslrootcert=%s", sslrootcert))
 	}
 
 	// `QueryEscape` instead of `PathEscape` so that colon can be escaped.
-	return fmt.Sprintf("postgres://%s:%s@%s/%s%s", url.QueryEscape(user), url.QueryEscape(password), host, database, options)
+	return fmt.Sprintf("postgres://%s:%s@%s/%s?%s", url.QueryEscape(user), url.QueryEscape(password), host, database, strings.Join(options, "&"))
 }
 
 func splitTableName(table string) (string, string) {
