@@ -93,6 +93,12 @@ type IndexColumn struct {
 	direction string
 }
 
+// IndexColumn.direction
+const (
+	AscScr  = "asc"
+	DescScr = "desc"
+)
+
 type IndexOption struct {
 	optionName string
 	value      *Value

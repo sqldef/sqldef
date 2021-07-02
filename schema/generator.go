@@ -787,7 +787,7 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 		if indexColumn.length != nil {
 			column += fmt.Sprintf("(%d)", *indexColumn.length)
 		}
-		if indexColumn.direction == "desc" {
+		if indexColumn.direction == DescScr {
 			column += fmt.Sprintf(" %s", indexColumn.direction)
 		}
 		columns = append(columns, column)
@@ -1231,10 +1231,10 @@ func areSameIndexes(indexA Index, indexB Index) bool {
 	}
 	for i, indexAColumn := range indexA.columns {
 		if indexAColumn.direction == "" {
-			indexAColumn.direction = "asc"
+			indexAColumn.direction = AscScr
 		}
 		if indexB.columns[i].direction == "" {
-			indexB.columns[i].direction = "asc"
+			indexB.columns[i].direction = AscScr
 		}
 		// TODO: check length?
 		if indexAColumn.column != indexB.columns[i].column || indexAColumn.direction != indexB.columns[i].direction {

@@ -3229,7 +3229,7 @@ type Order struct {
 	Direction string
 }
 
-// Order.Direction
+// Order.Direction and IndexColumn.Direction
 const (
 	AscScr  = "asc"
 	DescScr = "desc"
