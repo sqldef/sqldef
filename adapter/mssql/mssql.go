@@ -271,12 +271,6 @@ WHERE ind.object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 			return nil, err
 		}
 
-		// columnDefinition := fmt.Sprintf("[%s]", columnName)
-		// if isDescending {
-		// 	columnDefinition += " DESC"
-		// }
-
-		// if _, ok := indexDefMap[indexName]; !ok {
 		options := []indexOption{
 			{name: "PAD_INDEX", value: boolToOnOff(padIndex)},
 			{name: "FILLFACTOR", value: fillfactor},
@@ -289,9 +283,6 @@ WHERE ind.object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 
 		definition := &indexDef{name: indexName, columns: []string{}, primary: isPrimary, unique: isUnique, indexType: typeDesc, included: []string{}, options: options}
 		indexDefMap[indexName] = definition
-		// } else {
-		// 	indexDefMap[indexName].columns = append(indexDefMap[indexName].columns, columnDefinition)
-		// }
 	}
 
 	rows.Close()
