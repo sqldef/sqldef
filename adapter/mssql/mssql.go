@@ -225,7 +225,7 @@ WHERE c.[object_id] = OBJECT_ID('%s.%s', 'U')`, schema, table)
 		col.Length = maxLen
 		if defaultId != "0" {
 			col.DefaultName = *defaultName
-			col.DefaultVal = removeBrace(*defaultVal)
+			col.DefaultVal = *defaultVal
 		}
 		col.Nullable = isNullable
 		col.dataType = dataType
@@ -468,8 +468,4 @@ func splitTableName(table string) (string, string) {
 		table = schemaTable[1]
 	}
 	return schema, table
-}
-
-func removeBrace(str string) string {
-	return strings.Replace(strings.Replace(str, "(", "", -1), ")", "", -1)
 }

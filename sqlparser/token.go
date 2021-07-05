@@ -206,6 +206,7 @@ var keywords = map[string]int{
 	"geometry":               GEOMETRY,
 	"geometrycollection":     GEOMETRYCOLLECTION,
 	"get":                    UNUSED,
+	"getdate":                GETDATE,
 	"global":                 GLOBAL,
 	"grant":                  UNUSED,
 	"group":                  GROUP,

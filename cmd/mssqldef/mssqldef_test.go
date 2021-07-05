@@ -92,12 +92,13 @@ func TestMssqldefCreateTableWithDefault(t *testing.T) {
 
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
-		  profile varchar(50) NOT NULL DEFAULT '',
-		  default_int int default 20,
-		  default_bool bit default 1,
-		  default_numeric numeric(5) default 42.195,
-		  default_fixed_char varchar(3) default 'JPN',
-		  default_text text default ''
+		  profile varchar(50) NOT NULL DEFAULT (''),
+		  default_int int default ((20)),
+		  default_bool bit default ((1)),
+		  default_numeric numeric(5) default ((42.195)),
+		  default_fixed_char varchar(3) default ('JPN'),
+		  default_text text default (''),
+		  default_date datetimeoffset default (getdate())
 		);
 		`,
 	)

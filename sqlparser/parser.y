@@ -180,7 +180,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON JSONB ENUM
 %token <bytes> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
 %token <bytes> ARRAY
-%token <bytes> NOW
+%token <bytes> NOW GETDATE
 %token <bytes> BPCHAR
 
 // Type Modifiers
@@ -332,7 +332,7 @@ func forceEOF(yylex interface{}) {
 %type <str> identity_behavior
 %type <sequence> sequence_opt
 %type <boolVal> clustered_opt not_for_replication_opt
-%type <optVal> default_definition
+%type <optVal> default_definition default_val
 %type <optVal> on_off
 
 %start any_command
@@ -953,37 +953,51 @@ column_definition_type:
   }
 
 default_definition:
-  DEFAULT STRING character_cast_opt
-  {
-    $$ = NewStrVal($2)
-  }
-| DEFAULT INTEGRAL
-  {
-    $$ = NewIntVal($2)
-  }
-| DEFAULT FLOAT
-  {
-    $$ = NewFloatVal($2)
-  }
-| DEFAULT NULL
-  {
-    $$ = NewValArg($2)
-  }
-| DEFAULT current_timestamp
+  DEFAULT default_val
   {
     $$ = $2
   }
-| DEFAULT BIT_LITERAL
+| DEFAULT '(' default_val ')'
   {
-    $$ = NewBitVal($2)
+    $$ = $3
   }
-| DEFAULT boolean_value
+| DEFAULT '(' '(' default_val ')' ')'
   {
-    $$ = NewBoolSQLVal(bool($2))
+    $$ = $4
   }
-| DEFAULT NOW openb closeb
+
+default_val:
+  STRING character_cast_opt
   {
-    $$ = NewBitVal($2)
+    $$ = NewStrVal($1)
+  }
+| INTEGRAL
+  {
+    $$ = NewIntVal($1)
+  }
+| FLOAT
+  {
+    $$ = NewFloatVal($1)
+  }
+| NULL
+  {
+    $$ = NewValArg($1)
+  }
+| current_timestamp
+  {
+    $$ = $1
+  }
+| BIT_LITERAL
+  {
+    $$ = NewBitVal($1)
+  }
+| boolean_value
+  {
+    $$ = NewBoolSQLVal(bool($1))
+  }
+| NOW openb closeb
+  {
+    $$ = NewBitVal($1)
   }
 
 identity_behavior:
@@ -1084,6 +1098,10 @@ current_timestamp:
     $$ = NewValArgWithOpt($1, nil)
   }
 | CURRENT_DATE
+  {
+    $$ = NewValArgWithOpt($1, nil)
+  }
+| GETDATE '(' ')'
   {
     $$ = NewValArgWithOpt($1, nil)
   }
@@ -3843,6 +3861,7 @@ non_reserved_keyword:
 | FULLTEXT
 | GEOMETRY
 | GEOMETRYCOLLECTION
+| GETDATE
 | GLOBAL
 | INHERIT
 | INT
