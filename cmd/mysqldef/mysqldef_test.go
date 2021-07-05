@@ -484,7 +484,6 @@ func TestMysqldefChangeColumnCollate(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
-
 func TestMysqldefChangeEnumColumn(t *testing.T) {
 	resetTestDatabase()
 
