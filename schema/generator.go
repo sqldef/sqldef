@@ -1146,6 +1146,7 @@ func (g *Generator) haveSameColumnDefinition(current Column, desired Column) boo
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 	return g.normalizeDataType(current.typeName) == g.normalizeDataType(desired.typeName) &&
+		reflect.DeepEqual(current.enumValues, desired.enumValues) &&
 		(current.length == nil || desired.length == nil || current.length.intVal == desired.length.intVal) && // detect change column only when both are set explicitly. TODO: maybe `current.length == nil` case needs another care
 		current.array == desired.array
 	// TODO: scale
