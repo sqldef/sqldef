@@ -925,8 +925,9 @@ const (
 )
 
 type IdentityOpt struct {
-	Behavior string
-	Sequence *Sequence
+	Behavior          string
+	Sequence          *Sequence
+	NotForReplication bool
 }
 
 // ColumnType represents a sql type in a CREATE TABLE statement
@@ -978,8 +979,9 @@ type DefaultDefinition struct {
 }
 
 type CheckDefinition struct {
-	Where          Where
-	ConstraintName ColIdent
+	Where             Where
+	ConstraintName    ColIdent
+	NotForReplication bool
 }
 
 // Format returns a canonical string representation of the type and all relevant options
@@ -1383,13 +1385,14 @@ func (node VindexParam) walkSubtree(visit Visit) error {
 }
 
 type ForeignKeyDefinition struct {
-	ConstraintName   ColIdent
-	IndexName        ColIdent
-	IndexColumns     []ColIdent
-	ReferenceName    ColIdent
-	ReferenceColumns []ColIdent
-	OnDelete         ColIdent
-	OnUpdate         ColIdent
+	ConstraintName    ColIdent
+	IndexName         ColIdent
+	IndexColumns      []ColIdent
+	ReferenceName     ColIdent
+	ReferenceColumns  []ColIdent
+	OnDelete          ColIdent
+	OnUpdate          ColIdent
+	NotForReplication bool
 }
 
 type Policy struct {

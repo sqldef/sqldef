@@ -68,7 +68,7 @@ type Column struct {
 	onUpdate       *Value
 	enumValues     []string
 	references     string
-	identity       string
+	identity       *Identity
 	sequence       *Sequence
 	// TODO: keyopt
 	// XXX: zerofill?
@@ -110,13 +110,14 @@ type IndexPartition struct {
 }
 
 type ForeignKey struct {
-	constraintName   string
-	indexName        string
-	indexColumns     []string
-	referenceName    string
-	referenceColumns []string
-	onDelete         string
-	onUpdate         string
+	constraintName    string
+	indexName         string
+	indexColumns      []string
+	referenceName     string
+	referenceColumns  []string
+	onDelete          string
+	onUpdate          string
+	notForReplication bool
 }
 
 type Policy struct {
@@ -170,6 +171,11 @@ const (
 	ColumnKey
 )
 
+type Identity struct {
+	behavior          string
+	notForReplication bool
+}
+
 type Sequence struct {
 	Name        string
 	IfNotExists bool
@@ -192,8 +198,9 @@ type DefaultDefinition struct {
 }
 
 type CheckDefinition struct {
-	definition     string
-	constraintName string
+	definition        string
+	constraintName    string
+	notForReplication bool
 }
 
 func (c *CreateTable) Statement() string {

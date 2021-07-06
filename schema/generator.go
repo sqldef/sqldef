@@ -299,21 +299,21 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				// GENERATED AS IDENTITY
-				if currentColumn.identity != desiredColumn.identity {
-					if currentColumn.identity == "" {
+				if !areSameIdentityDefinition(currentColumn.identity, desiredColumn.identity) {
+					if currentColumn.identity == nil {
 						// add
-						alter := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s ADD GENERATED %s AS IDENTITY", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredColumn.name), desiredColumn.identity)
+						alter := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s ADD GENERATED %s AS IDENTITY", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredColumn.name), desiredColumn.identity.behavior)
 						if desiredColumn.sequence != nil {
 							alter += " (" + generateSequenceClause(desiredColumn.sequence) + ")"
 						}
 						ddls = append(ddls, alter)
-					} else if desiredColumn.identity == "" {
+					} else if desiredColumn.identity == nil {
 						// remove
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP IDENTITY IF EXISTS", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.name)))
 					} else {
 						// set
 						// not support changing sequence
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET GENERATED %s", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredColumn.name), desiredColumn.identity))
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET GENERATED %s", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredColumn.name), desiredColumn.identity.behavior))
 					}
 				}
 
@@ -361,8 +361,27 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						if desiredConstraintName == "" {
 							desiredConstraintName = constraintName
 						}
-						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), desiredConstraintName, desiredColumn.check.definition)
+						replicationDefinition := ""
+						if desiredColumn.check.notForReplication {
+							replicationDefinition = " NOT FOR REPLICATION"
+						}
+						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableName(desired.table.name), desiredConstraintName, replicationDefinition, desiredColumn.check.definition)
 						ddls = append(ddls, ddl)
+					}
+				}
+
+				// IDENTITY
+				if !areSameIdentityDefinition(currentColumn.identity, desiredColumn.identity) {
+					if currentColumn.identity != nil {
+						// remove
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.name)))
+					}
+					if desiredColumn.identity != nil {
+						definition, err := g.generateColumnDefinition(desiredColumn, true)
+						if err != nil {
+							return ddls, err
+						}
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), definition))
 					}
 				}
 			default:
@@ -710,7 +729,7 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		definition += fmt.Sprintf("COLLATE %s ", column.collate)
 	}
 
-	if column.identity == "" && ((column.notNull != nil && *column.notNull) || column.keyOption == ColumnKeyPrimary) {
+	if column.identity == nil && ((column.notNull != nil && *column.notNull) || column.keyOption == ColumnKeyPrimary) {
 		definition += "NOT NULL "
 	} else if column.notNull != nil && !*column.notNull {
 		definition += "NULL "
@@ -756,13 +775,16 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		return "", fmt.Errorf("unsupported column key (keyOption: '%d') in column: %#v", column.keyOption, column)
 	}
 
-	if column.identity != "" {
-		definition += "GENERATED " + column.identity + " AS IDENTITY "
+	if column.identity != nil && column.identity.behavior != "" {
+		definition += "GENERATED " + column.identity.behavior + " AS IDENTITY "
 		if column.sequence != nil {
 			definition += "(" + generateSequenceClause(column.sequence) + ") "
 		}
 	} else if g.mode == GeneratorModeMssql && column.sequence != nil {
 		definition += fmt.Sprintf("IDENTITY(%d,%d)", *column.sequence.StartWith, *column.sequence.IncrementBy)
+		if column.identity.notForReplication {
+			definition += " NOT FOR REPLICATION"
+		}
 	}
 
 	definition = strings.TrimSuffix(definition, " ")
@@ -904,6 +926,10 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 	}
 	if len(foreignKey.onUpdate) > 0 {
 		definition += fmt.Sprintf("ON UPDATE %s ", foreignKey.onUpdate)
+	}
+
+	if foreignKey.notForReplication {
+		definition += "NOT FOR REPLICATION "
 	}
 
 	return strings.TrimSuffix(definition, " ")
@@ -1158,7 +1184,17 @@ func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bo
 	if checkA == nil || checkB == nil {
 		return false
 	}
-	return checkA.definition == checkB.definition
+	return checkA.definition == checkB.definition && checkA.notForReplication == checkB.notForReplication
+}
+
+func areSameIdentityDefinition(identityA *Identity, identityB *Identity) bool {
+	if identityA == nil && identityB == nil {
+		return true
+	}
+	if identityA == nil || identityB == nil {
+		return false
+	}
+	return identityA.behavior == identityB.behavior && identityA.notForReplication == identityB.notForReplication
 }
 
 func areSameDefaultValue(currentDefault *DefaultDefinition, desiredDefault *DefaultDefinition) bool {
@@ -1272,6 +1308,9 @@ func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB Forei
 		return false
 	}
 	if g.normalizeOnDelete(foreignKeyA.onDelete) != g.normalizeOnDelete(foreignKeyB.onDelete) {
+		return false
+	}
+	if foreignKeyA.notForReplication != foreignKeyB.notForReplication {
 		return false
 	}
 	// TODO: check index, reference

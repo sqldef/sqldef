@@ -338,6 +338,7 @@ var keywords = map[string]int{
 	"repeat":                 UNUSED,
 	"repeatable":             REPEATABLE,
 	"replace":                REPLACE,
+	"replication":            REPLICATION,
 	"require":                UNUSED,
 	"resignal":               UNUSED,
 	"restrict":               RESTRICT,
