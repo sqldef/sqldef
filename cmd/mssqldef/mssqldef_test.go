@@ -210,10 +210,32 @@ func TestMssqldefAddColumnWithIDENTITY(t *testing.T) {
 	createTable = stripHeredoc(`
 		CREATE TABLE users (
 		  id BIGINT NOT NULL PRIMARY KEY,
-		  membership_id int IDENTITY(1,1)
+		  membership_id int IDENTITY(1,1) NOT FOR REPLICATION
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] ADD [membership_id] int IDENTITY(1,1);\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] ADD [membership_id] int IDENTITY(1,1) NOT FOR REPLICATION;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefAddColumnWithCheck(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT NOT NULL PRIMARY KEY
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT NOT NULL PRIMARY KEY,
+		  membership_id int CHECK NOT FOR REPLICATION (membership_id>(0))
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] ADD [membership_id] int CHECK NOT FOR REPLICATION (membership_id > (0));\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 

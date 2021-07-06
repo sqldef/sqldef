@@ -752,7 +752,11 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 	}
 
 	if column.check != nil {
-		definition += fmt.Sprintf("CHECK (%s) ", column.check.definition)
+		definition += "CHECK "
+		if column.check.notForReplication {
+			definition += "NOT FOR REPLICATION "
+		}
+		definition += fmt.Sprintf("(%s) ", column.check.definition)
 	}
 	if column.checkNoInherit {
 		definition += "NO INHERIT "
