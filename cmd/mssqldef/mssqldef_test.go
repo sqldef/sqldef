@@ -210,10 +210,32 @@ func TestMssqldefAddColumnWithIDENTITY(t *testing.T) {
 	createTable = stripHeredoc(`
 		CREATE TABLE users (
 		  id BIGINT NOT NULL PRIMARY KEY,
-		  membership_id int IDENTITY(1,1)
+		  membership_id int IDENTITY(1,1) NOT FOR REPLICATION
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] ADD [membership_id] int IDENTITY(1,1);\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] ADD [membership_id] int IDENTITY(1,1) NOT FOR REPLICATION;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefAddColumnWithCheck(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT NOT NULL PRIMARY KEY
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT NOT NULL PRIMARY KEY,
+		  membership_id int CHECK NOT FOR REPLICATION (membership_id>(0))
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] ADD [membership_id] int CHECK NOT FOR REPLICATION (membership_id > (0));\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -745,6 +767,62 @@ func TestMssqldefCreateIndexChangeIndexDefinition(t *testing.T) {
 		"CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at], [updated_at]) WITH (PAD_INDEX = ON, FILLFACTOR = 10);\n",
 	)
 	assertApplyOutput(t, createTable+createIndex, nothingModified)
+}
+
+func TestMssqldefCreateTableNotForReplication(t *testing.T) {
+	resetTestDatabase()
+
+	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY);\n"
+	createPosts := stripHeredoc(`
+		CREATE TABLE posts (
+		  post_id BIGINT IDENTITY(1,1) NOT FOR REPLICATION,
+		  user_id BIGINT,
+		  content TEXT,
+		  views INTEGER CHECK NOT FOR REPLICATION ([views]>(-1)),
+		  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) NOT FOR REPLICATION
+		);
+		`,
+	)
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
+	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+}
+
+func TestMssqldefCreateTableAddNotForReplication(t *testing.T) {
+	resetTestDatabase()
+
+	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY);\n"
+	createPosts := stripHeredoc(`
+		CREATE TABLE posts (
+		  post_id BIGINT IDENTITY(1,1),
+		  user_id BIGINT,
+		  content TEXT,
+		  views INTEGER CONSTRAINT posts_view_check CHECK ([views]>(-1)),
+		  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
+	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+
+	createPosts = stripHeredoc(`
+		CREATE TABLE posts (
+		  post_id BIGINT IDENTITY(1,1) NOT FOR REPLICATION,
+		  user_id BIGINT,
+		  content TEXT,
+		  views INTEGER CONSTRAINT posts_view_check CHECK NOT FOR REPLICATION ([views]>(-1)),
+		  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) NOT FOR REPLICATION
+		);
+		`,
+	)
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
+		"ALTER TABLE [dbo].[posts] DROP COLUMN [post_id];\n"+
+		"ALTER TABLE [dbo].[posts] ADD [post_id] bigint IDENTITY(1,1) NOT FOR REPLICATION;\n"+
+		"ALTER TABLE [dbo].[posts] DROP CONSTRAINT posts_view_check;\n"+
+		"ALTER TABLE [dbo].[posts] ADD CONSTRAINT posts_view_check CHECK NOT FOR REPLICATION (views > (-1));\n"+
+		"ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_ibfk_1];\n"+
+		"ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [users] ([id]) NOT FOR REPLICATION;\n",
+	)
+	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 }
 
 //

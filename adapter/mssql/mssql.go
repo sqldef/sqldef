@@ -84,11 +84,18 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 		if col.DefaultName != "" {
 			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s DEFAULT %s", col.DefaultName, col.DefaultVal)
 		}
-		if col.IsIdentity {
-			fmt.Fprintf(&queryBuilder, " IDENTITY(%s,%s)", col.SeedValue, col.IncrementValue)
+		if col.Identity != nil {
+			fmt.Fprintf(&queryBuilder, " IDENTITY(%s,%s)", col.Identity.SeedValue, col.Identity.IncrementValue)
+			if col.Identity.NotForReplication {
+				fmt.Fprint(&queryBuilder, " NOT FOR REPLICATION")
+			}
 		}
-		if col.CheckName != "" {
-			fmt.Fprintf(&queryBuilder, " CONSTRAINT [%s] CHECK %s", col.CheckName, col.CheckDefinition)
+		if col.Check != nil {
+			fmt.Fprintf(&queryBuilder, " CONSTRAINT [%s] CHECK", col.Check.Name)
+			if col.Check.NotForReplication {
+				fmt.Fprint(&queryBuilder, " NOT FOR REPLICATION")
+			}
+			fmt.Fprintf(&queryBuilder, " %s", col.Check.Definition)
 		}
 	}
 
@@ -152,17 +159,26 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 }
 
 type column struct {
-	Name            string
-	dataType        string
-	Length          string
-	Nullable        bool
-	IsIdentity      bool
-	SeedValue       string
-	IncrementValue  string
-	DefaultName     string
-	DefaultVal      string
-	CheckName       string
-	CheckDefinition string
+	Name        string
+	dataType    string
+	Length      string
+	Nullable    bool
+	Identity    *identity
+	DefaultName string
+	DefaultVal  string
+	Check       *check
+}
+
+type identity struct {
+	SeedValue         string
+	IncrementValue    string
+	NotForReplication bool
+}
+
+type check struct {
+	Name              string
+	Definition        string
+	NotForReplication bool
 }
 
 func (d *MssqlDatabase) getColumns(table string) ([]column, error) {
@@ -173,17 +189,19 @@ func (d *MssqlDatabase) getColumns(table string) ([]column, error) {
 	c.max_length,
 	c.is_nullable,
 	c.is_identity,
-	seed_value = CASE WHEN c.is_identity = 1 THEN IDENTITYPROPERTY(c.[object_id], 'SeedValue') END,
-	increment_value = CASE WHEN c.is_identity = 1 THEN IDENTITYPROPERTY(c.[object_id], 'IncrementValue') END,
+	ic.seed_value,
+	ic.increment_value,
+	ic.is_not_for_replication,
 	c.default_object_id,
 	default_name = OBJECT_NAME(c.default_object_id),
 	default_definition = OBJECT_DEFINITION(c.default_object_id),
 	cc.name,
-	cc.definition
+	cc.definition,
+	cc.is_not_for_replication
 FROM sys.columns c WITH(NOLOCK)
-	JOIN sys.types tp WITH(NOLOCK) ON c.user_type_id = tp.user_type_id
-	LEFT JOIN sys.check_constraints cc WITH(NOLOCK) ON c.[object_id] = cc.parent_object_id
-		AND cc.parent_column_id = c.column_id
+JOIN sys.types tp WITH(NOLOCK) ON c.user_type_id = tp.user_type_id
+LEFT JOIN sys.check_constraints cc WITH(NOLOCK) ON c.[object_id] = cc.parent_object_id AND cc.parent_column_id = c.column_id
+LEFT JOIN sys.identity_columns ic WITH(NOLOCK) ON c.[object_id] = ic.[object_id] AND ic.[column_id] = c.[column_id]
 WHERE c.[object_id] = OBJECT_ID('%s.%s', 'U')`, schema, table)
 
 	rows, err := d.db.Query(query)
@@ -198,7 +216,8 @@ WHERE c.[object_id] = OBJECT_ID('%s.%s', 'U')`, schema, table)
 		var colName, dataType, maxLen, defaultId string
 		var seedValue, incrementValue, defaultName, defaultVal, checkName, checkDefinition *string
 		var isNullable, isIdentity bool
-		err = rows.Scan(&colName, &dataType, &maxLen, &isNullable, &isIdentity, &seedValue, &incrementValue, &defaultId, &defaultName, &defaultVal, &checkName, &checkDefinition)
+		var identityNotForReplication, checkNotForReplication *bool
+		err = rows.Scan(&colName, &dataType, &maxLen, &isNullable, &isIdentity, &seedValue, &incrementValue, &identityNotForReplication, &defaultId, &defaultName, &defaultVal, &checkName, &checkDefinition, &checkNotForReplication)
 		if err != nil {
 			return nil, err
 		}
@@ -210,14 +229,19 @@ WHERE c.[object_id] = OBJECT_ID('%s.%s', 'U')`, schema, table)
 		}
 		col.Nullable = isNullable
 		col.dataType = dataType
-		col.IsIdentity = isIdentity
 		if isIdentity {
-			col.SeedValue = *seedValue
-			col.IncrementValue = *incrementValue
+			col.Identity = &identity{
+				SeedValue:         *seedValue,
+				IncrementValue:    *incrementValue,
+				NotForReplication: *identityNotForReplication,
+			}
 		}
 		if checkName != nil {
-			col.CheckName = *checkName
-			col.CheckDefinition = *checkDefinition
+			col.Check = &check{
+				Name:              *checkName,
+				Definition:        *checkDefinition,
+				NotForReplication: *checkNotForReplication,
+			}
 		}
 		cols = append(cols, col)
 	}
@@ -337,7 +361,8 @@ func (d *MssqlDatabase) getForeignDefs(table string) ([]string, error) {
 	OBJECT_NAME(f.referenced_object_id)_id,
 	COL_NAME(f.referenced_object_id, fc.referenced_column_id),
 	f.update_referential_action_desc,
-	f.delete_referential_action_desc
+	f.delete_referential_action_desc,
+	f.is_not_for_replication
 FROM sys.foreign_keys f INNER JOIN sys.foreign_key_columns fc ON f.OBJECT_ID = fc.constraint_object_id
 WHERE f.parent_object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 
@@ -350,13 +375,17 @@ WHERE f.parent_object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 	defs := make([]string, 0)
 	for rows.Next() {
 		var constraintName, columnName, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule string
-		err = rows.Scan(&constraintName, &columnName, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule)
+		var notForReplication bool
+		err = rows.Scan(&constraintName, &columnName, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule, &notForReplication)
 		if err != nil {
 			return nil, err
 		}
 		foreignUpdateRule = strings.Replace(foreignUpdateRule, "_", " ", -1)
 		foreignDeleteRule = strings.Replace(foreignDeleteRule, "_", " ", -1)
 		def := fmt.Sprintf("CONSTRAINT [%s] FOREIGN KEY ([%s]) REFERENCES [%s] ([%s]) ON UPDATE %s ON DELETE %s", constraintName, columnName, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule)
+		if notForReplication {
+			def += " NOT FOR REPLICATION"
+		}
 		defs = append(defs, def)
 	}
 

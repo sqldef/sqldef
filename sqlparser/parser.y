@@ -215,6 +215,8 @@ func forceEOF(yylex interface{}) {
 
 // SQL Server PRIMARY KEY CLUSTERED
 %token <bytes> CLUSTERED NONCLUSTERED
+// SQL Server NOT FOR REPLICATION
+%token <bytes> REPLICATION
 // index
 %token <bytes> INCLUDE
 
@@ -329,7 +331,7 @@ func forceEOF(yylex interface{}) {
 %type <boolVal> no_inherit_opt
 %type <str> identity_behavior
 %type <sequence> sequence_opt
-%type <boolVal> clustered_opt
+%type <boolVal> clustered_opt not_for_replication_opt
 %type <optVal> default_definition
 %type <optVal> on_off
 
@@ -899,15 +901,15 @@ column_definition_type:
     $1.KeyOpt = colKeyUnique
     $$ = $1
   }
-| column_definition_type CHECK openb expression closeb no_inherit_opt
+| column_definition_type CHECK not_for_replication_opt openb expression closeb no_inherit_opt
   {
-    $1.Check = &CheckDefinition{Where: *NewWhere(WhereStr, $4)}
-    $1.CheckNoInherit = $6
+    $1.Check = &CheckDefinition{Where: *NewWhere(WhereStr, $5), NotForReplication: bool($3)}
+    $1.CheckNoInherit = $7
     $$ = $1
   }
-| column_definition_type CONSTRAINT sql_id CHECK openb expression closeb
+| column_definition_type CONSTRAINT sql_id CHECK not_for_replication_opt openb expression closeb
   {
-    $1.Check = &CheckDefinition{Where: *NewWhere(WhereStr, $6), ConstraintName: $3}
+    $1.Check = &CheckDefinition{Where: *NewWhere(WhereStr, $7), ConstraintName: $3, NotForReplication: bool($5)}
     $$ = $1
   }
 | column_definition_type COMMENT_KEYWORD STRING
@@ -940,7 +942,13 @@ column_definition_type:
   }
 | column_definition_type IDENTITY '(' INTEGRAL ',' INTEGRAL ')'
   {
-    $1.Identity = &IdentityOpt{Sequence: &Sequence{StartWith: NewIntVal($4), IncrementBy: NewIntVal($6)}}
+    $1.Identity = &IdentityOpt{Sequence: &Sequence{StartWith: NewIntVal($4), IncrementBy: NewIntVal($6)}, NotForReplication: false}
+    $$ = $1
+  }
+// for MSSQL: IDENTITY(N,M) NOT FOR REPLICATION
+| column_definition_type NOT FOR REPLICATION
+  {
+    $1.Identity.NotForReplication = true
     $$ = $1
   }
 
@@ -1676,29 +1684,37 @@ index_column:
   }
 
 foreign_key_definition:
-  foreign_key_without_options
-| foreign_key_without_options ON DELETE reference_option
+  foreign_key_without_options not_for_replication_opt
+  {
+    $1.NotForReplication = bool($2)
+    $$ = $1
+  }
+| foreign_key_without_options ON DELETE reference_option not_for_replication_opt
   {
     $1.OnUpdate = NewColIdent("")
     $1.OnDelete = $4
+    $1.NotForReplication = bool($5)
     $$ = $1
   }
-| foreign_key_without_options ON UPDATE reference_option
+| foreign_key_without_options ON UPDATE reference_option not_for_replication_opt
   {
     $1.OnUpdate = $4
     $1.OnDelete = NewColIdent("")
+    $1.NotForReplication = bool($5)
     $$ = $1
   }
-| foreign_key_without_options ON DELETE reference_option ON UPDATE reference_option
+| foreign_key_without_options ON DELETE reference_option ON UPDATE reference_option not_for_replication_opt
   {
     $1.OnUpdate = $7
     $1.OnDelete = $4
+    $1.NotForReplication = bool($8)
     $$ = $1
   }
-| foreign_key_without_options ON UPDATE reference_option ON DELETE reference_option
+| foreign_key_without_options ON UPDATE reference_option ON DELETE reference_option not_for_replication_opt
   {
     $1.OnUpdate = $4
     $1.OnDelete = $7
+    $1.NotForReplication = bool($8)
     $$ = $1
   }
 
@@ -1755,6 +1771,16 @@ clustered_opt:
 | NONCLUSTERED
   {
     $$ = BoolVal(false)
+  }
+
+/* For SQL Server */
+not_for_replication_opt:
+  {
+    $$ = BoolVal(false)
+  }
+| NOT FOR REPLICATION
+  {
+    $$ = BoolVal(true)
   }
 
 sql_id_opt:
@@ -3863,6 +3889,7 @@ non_reserved_keyword:
 | RESTRICTIVE
 | REPAIR
 | REPEATABLE
+| REPLICATION
 | RESTRICT
 | ROLLBACK
 | SESSION

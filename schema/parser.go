@@ -121,8 +121,9 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 		}
 		if parsedCol.Type.Check != nil {
 			column.check = &CheckDefinition{
-				definition:     sqlparser.String(parsedCol.Type.Check.Where.Expr),
-				constraintName: sqlparser.String(parsedCol.Type.Check.ConstraintName),
+				definition:        sqlparser.String(parsedCol.Type.Check.Where.Expr),
+				constraintName:    sqlparser.String(parsedCol.Type.Check.ConstraintName),
+				notForReplication: parsedCol.Type.Check.NotForReplication,
 			}
 		}
 		column.checkNoInherit = castBool(parsedCol.Type.CheckNoInherit)
@@ -188,13 +189,14 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 		}
 
 		foreignKey := ForeignKey{
-			constraintName:   foreignKeyDef.ConstraintName.String(),
-			indexName:        foreignKeyDef.IndexName.String(),
-			indexColumns:     indexColumns,
-			referenceName:    foreignKeyDef.ReferenceName.String(),
-			referenceColumns: referenceColumns,
-			onDelete:         foreignKeyDef.OnDelete.String(),
-			onUpdate:         foreignKeyDef.OnUpdate.String(),
+			constraintName:    foreignKeyDef.ConstraintName.String(),
+			indexName:         foreignKeyDef.IndexName.String(),
+			indexColumns:      indexColumns,
+			referenceName:     foreignKeyDef.ReferenceName.String(),
+			referenceColumns:  referenceColumns,
+			onDelete:          foreignKeyDef.OnDelete.String(),
+			onUpdate:          foreignKeyDef.OnUpdate.String(),
+			notForReplication: foreignKeyDef.NotForReplication,
 		}
 		foreignKeys = append(foreignKeys, foreignKey)
 	}
@@ -352,13 +354,14 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				statement: ddl,
 				tableName: normalizedTableName(mode, stmt.Table),
 				foreignKey: ForeignKey{
-					constraintName:   stmt.ForeignKey.ConstraintName.String(),
-					indexName:        stmt.ForeignKey.IndexName.String(),
-					indexColumns:     indexColumns,
-					referenceName:    stmt.ForeignKey.ReferenceName.String(),
-					referenceColumns: referenceColumns,
-					onDelete:         stmt.ForeignKey.OnDelete.String(),
-					onUpdate:         stmt.ForeignKey.OnUpdate.String(),
+					constraintName:    stmt.ForeignKey.ConstraintName.String(),
+					indexName:         stmt.ForeignKey.IndexName.String(),
+					indexColumns:      indexColumns,
+					referenceName:     stmt.ForeignKey.ReferenceName.String(),
+					referenceColumns:  referenceColumns,
+					onDelete:          stmt.ForeignKey.OnDelete.String(),
+					onUpdate:          stmt.ForeignKey.OnUpdate.String(),
+					notForReplication: stmt.ForeignKey.NotForReplication,
 				},
 			}, nil
 		} else if stmt.Action == "create policy" {
@@ -459,11 +462,11 @@ func detectCharset(table sqlparser.TableSpec) string {
 	return ""
 }
 
-func parseIdentity(opt *sqlparser.IdentityOpt) string {
+func parseIdentity(opt *sqlparser.IdentityOpt) *Identity {
 	if opt == nil {
-		return ""
+		return nil
 	}
-	return strings.ToUpper(opt.Behavior)
+	return &Identity{behavior: strings.ToUpper(opt.Behavior), notForReplication: opt.NotForReplication}
 }
 
 func parseDefaultDefinition(opt *sqlparser.DefaultDefinition) *DefaultDefinition {
