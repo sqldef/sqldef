@@ -1,3 +1,7 @@
+## v0.10.14
+
+- Support `NOT FOR REPLICATION` for mssqldef [#133](https://github.com/k0kubun/sqldef/issues/133)
+
 ## v0.10.13
 
 - Support enum definition changes [#132](https://github.com/k0kubun/sqldef/issues/132)
