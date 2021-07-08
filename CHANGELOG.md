@@ -1,3 +1,10 @@
+## v0.10.15
+
+- Support more `DEFAULT`-related features for mssqldef [#134](https://github.com/k0kubun/sqldef/issues/134)
+  - Add and drop a default when the default constraint is changed
+  - Support `GETDATE()`
+  - Parse parenthesis in default constraints properly
+
 ## v0.10.14
 
 - Support `NOT FOR REPLICATION` for mssqldef [#133](https://github.com/k0kubun/sqldef/issues/133)
