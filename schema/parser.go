@@ -475,7 +475,7 @@ func parseDefaultDefinition(opt *sqlparser.DefaultDefinition) *DefaultDefinition
 	}
 	defaultVal := parseValue(opt.Value)
 
-	constraintName := "DEFAULT"
+	var constraintName string
 	if opt.ConstraintName.String() != "" {
 		constraintName = opt.ConstraintName.String()
 	}

@@ -826,6 +826,44 @@ func TestMssqldefCreateTableAddNotForReplication(t *testing.T) {
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 }
 
+func TestMssqldefCreateTableAddDefaultChangeDefault(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE messages (
+		  id BIGINT NOT NULL PRIMARY KEY,
+		  content TEXT NOT NULL
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE messages (
+		  id BIGINT NOT NULL PRIMARY KEY,
+		  content TEXT NOT NULL CONSTRAINT [df_messages_content] DEFAULT ''
+		);`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE [dbo].[messages] ADD CONSTRAINT [df_messages_content] DEFAULT '' FOR [content];\n",
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE messages (
+		  id BIGINT NOT NULL PRIMARY KEY,
+		  content TEXT NOT NULL DEFAULT 'hello'
+		);`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE [dbo].[messages] DROP CONSTRAINT [df_messages_content];\n"+
+		"ALTER TABLE [dbo].[messages] ADD DEFAULT 'hello' FOR [content];\n",
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //

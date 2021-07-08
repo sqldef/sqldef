@@ -384,6 +384,28 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), definition))
 					}
 				}
+
+				// DEFAULT
+				if !areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef) {
+					if currentColumn.defaultDef != nil {
+						// drop
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.defaultDef.constraintName)))
+					}
+					if desiredColumn.defaultDef != nil {
+						// set
+						definition, err := generateDefaultDefinition(*desiredColumn.defaultDef.value)
+						if err != nil {
+							return ddls, err
+						}
+						var ddl string
+						if desiredColumn.defaultDef.constraintName != "" {
+							ddl = fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s %s FOR %s", g.escapeTableName(currentTable.name), g.escapeSQLName(desiredColumn.defaultDef.constraintName), definition, g.escapeSQLName(currentColumn.name))
+						} else {
+							ddl = fmt.Sprintf("ALTER TABLE %s ADD %s FOR %s", g.escapeTableName(currentTable.name), definition, g.escapeSQLName(currentColumn.name))
+						}
+						ddls = append(ddls, ddl)
+					}
+				}
 			default:
 			}
 		}
