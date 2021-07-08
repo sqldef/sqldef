@@ -92,12 +92,13 @@ func TestMssqldefCreateTableWithDefault(t *testing.T) {
 
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
-		  profile varchar(50) NOT NULL DEFAULT '',
-		  default_int int default 20,
-		  default_bool bit default 1,
-		  default_numeric numeric(5) default 42.195,
-		  default_fixed_char varchar(3) default 'JPN',
-		  default_text text default ''
+		  profile varchar(50) NOT NULL DEFAULT (''),
+		  default_int int default ((20)),
+		  default_bool bit default ((1)),
+		  default_numeric numeric(5) default ((42.195)),
+		  default_fixed_char varchar(3) default ('JPN'),
+		  default_text text default (''),
+		  default_date datetimeoffset default (getdate())
 		);
 		`,
 	)
@@ -823,6 +824,44 @@ func TestMssqldefCreateTableAddNotForReplication(t *testing.T) {
 		"ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [users] ([id]) NOT FOR REPLICATION;\n",
 	)
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+}
+
+func TestMssqldefCreateTableAddDefaultChangeDefault(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE messages (
+		  id BIGINT NOT NULL PRIMARY KEY,
+		  content TEXT NOT NULL
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE messages (
+		  id BIGINT NOT NULL PRIMARY KEY,
+		  content TEXT NOT NULL CONSTRAINT [df_messages_content] DEFAULT ''
+		);`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE [dbo].[messages] ADD CONSTRAINT [df_messages_content] DEFAULT '' FOR [content];\n",
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE messages (
+		  id BIGINT NOT NULL PRIMARY KEY,
+		  content TEXT NOT NULL DEFAULT 'hello'
+		);`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+
+		"ALTER TABLE [dbo].[messages] DROP CONSTRAINT [df_messages_content];\n"+
+		"ALTER TABLE [dbo].[messages] ADD DEFAULT 'hello' FOR [content];\n",
+	)
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 //
