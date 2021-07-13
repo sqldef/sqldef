@@ -439,6 +439,10 @@ INNER JOIN sys.sql_modules
 	return ddls, nil
 }
 
+func (d *MssqlDatabase) Triggers() ([]string, error) {
+	return nil, nil
+}
+
 func (d *MssqlDatabase) DB() *sql.DB {
 	return d.db
 }

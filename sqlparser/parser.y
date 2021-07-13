@@ -167,6 +167,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> RESTRICT CASCADE NO ACTION
 %token <bytes> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
 %token <bytes> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS
+%token <bytes> BEFORE AFTER EACH ROW
 
 // Transaction Tokens
 %token <bytes> BEGIN START TRANSACTION COMMIT ROLLBACK
@@ -334,6 +335,8 @@ func forceEOF(yylex interface{}) {
 %type <boolVal> clustered_opt not_for_replication_opt
 %type <optVal> default_definition default_val
 %type <optVal> on_off
+%type <bytes> trigger_time trigger_event
+%type <statement> trigger_statement
 
 %start any_command
 
@@ -663,6 +666,42 @@ create_statement:
         WithCheck: NewWhere(WhereStr, $11),
     }}
   }
+| CREATE TRIGGER sql_id trigger_time trigger_event ON table_name FOR EACH ROW trigger_statement
+  {
+    $$ = &DDL{Action: CreateTriggerStr, Trigger: $3}
+  }
+
+trigger_time:
+  BEFORE
+  {
+    $$ = $1
+  }
+| AFTER
+  {
+    $$ = $1
+  }
+
+trigger_event:
+  INSERT
+  {
+    $$ = $1
+  }
+| UPDATE
+  {
+    $$ = $1
+  }
+| DELETE
+  {
+    $$ = $1
+  }
+
+trigger_statement:
+  insert_statement
+  {
+    $$ = $1
+  }
+| delete_statement
+| update_statement
 
 policy_as_opt:
   {
@@ -3717,12 +3756,14 @@ reserved_table_id:
 */
 reserved_keyword:
   ADD
+| AFTER
 | ALWAYS
 | AND
 | AS
 | ASC
 | AUTO_INCREMENT
 | AUTOINCREMENT
+| BEFORE
 | BETWEEN
 | BINARY
 | BY
@@ -3747,6 +3788,7 @@ reserved_keyword:
 | DISTINCT
 | DIV
 | DROP
+| EACH
 | ELSE
 | END
 | ESCAPE
@@ -3796,6 +3838,7 @@ reserved_keyword:
 | RENAME
 | REPLACE
 | RIGHT
+| ROW
 | SCHEMA
 | SELECT
 | SEPARATOR

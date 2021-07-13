@@ -394,6 +394,11 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				name:       stmt.View.Name.Name.String(),
 				definition: sqlparser.String(stmt.View.Definition),
 			}, nil
+		} else if stmt.Action == "create trigger" {
+			return &Trigger{
+				statement: ddl,
+				name:      stmt.Trigger.String(),
+			}, nil
 		} else {
 			return nil, fmt.Errorf(
 				"unsupported type of DDL action (only 'CREATE TABLE', 'CREATE INDEX' and 'ALTER TABLE ADD INDEX' are supported) '%s': %s",

@@ -670,6 +670,7 @@ type DDL struct {
 	ForeignKey    *ForeignKeyDefinition
 	Policy        *Policy
 	View          *View
+	Trigger       ColIdent
 }
 
 // DDL strings.
@@ -688,6 +689,7 @@ const (
 	AddForeignKeyStr = "add foreign key"
 	CreatePolicyStr  = "create policy"
 	CreateViewStr    = "create view"
+	CreateTriggerStr = "create trigger"
 
 	// Vindex DDL param to specify the owner of a vindex
 	VindexOwnerStr = "owner"

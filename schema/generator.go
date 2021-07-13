@@ -38,6 +38,9 @@ type Generator struct {
 
 	desiredViews []*View
 	currentViews []*View
+
+	desiredTriggers []*Trigger
+	currentTriggers []*Trigger
 }
 
 // Parse argument DDLs and call `generateDDLs()`
@@ -59,13 +62,16 @@ func GenerateIdempotentDDLs(mode GeneratorMode, desiredSQL string, currentSQL st
 	}
 
 	views := convertDDLsToViews(currentDDLs)
+	triggers := convertDDLsToTriggers(currentDDLs)
 
 	generator := Generator{
-		mode:          mode,
-		desiredTables: []*Table{},
-		currentTables: tables,
-		desiredViews:  []*View{},
-		currentViews:  views,
+		mode:            mode,
+		desiredTables:   []*Table{},
+		currentTables:   tables,
+		desiredViews:    []*View{},
+		currentViews:    views,
+		desiredTriggers: []*Trigger{},
+		currentTriggers: triggers,
 	}
 	return generator.generateDDLs(desiredDDLs)
 }
@@ -124,6 +130,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return ddls, err
 			}
 			ddls = append(ddls, viewDDLs...)
+		case *Trigger:
+			triggerDDLs, err := g.generateDDLsForCreateTrigger(desired.name, desired)
+			if err != nil {
+				return ddls, err
+			}
+			ddls = append(ddls, triggerDDLs...)
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", desired)
 		}
@@ -636,6 +648,26 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 	return ddls, nil
 }
 
+func (g *Generator) generateDDLsForCreateTrigger(triggerName string, desiredTrigger *Trigger) ([]string, error) {
+	var ddls []string
+
+	currentTrigger := findTriggerByName(g.currentTriggers, triggerName)
+	if currentTrigger == nil {
+		// Trigger not found, add trigger.
+		ddls = append(ddls, desiredTrigger.statement)
+	} else {
+		// Trigger found. If it's different, create or replace trigger.
+		if strings.ToLower(currentTrigger.statement) != strings.ToLower(desiredTrigger.statement) {
+			ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeSQLName(triggerName)))
+			ddls = append(ddls, desiredTrigger.statement)
+		}
+	}
+
+	g.desiredTriggers = append(g.desiredTriggers, desiredTrigger)
+
+	return ddls, nil
+}
+
 // Even though simulated table doesn't have a foreign key, references could exist in column definitions.
 // This carefully generates DROP CONSTRAINT for such situations.
 func (g *Generator) generateDDLsForAbsentForeignKey(currentForeignKey ForeignKey, currentTable Table, desiredTable Table) []string {
@@ -1096,6 +1128,8 @@ func convertDDLsToTables(ddls []DDL) ([]*Table, error) {
 			table.policies = append(table.policies, stmt.policy)
 		case *View:
 			// do nothing
+		case *Trigger:
+			// do nothing
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in convertDDLsToTables: %v", stmt)
 		}
@@ -1111,6 +1145,16 @@ func convertDDLsToViews(ddls []DDL) []*View {
 		}
 	}
 	return views
+}
+
+func convertDDLsToTriggers(ddls []DDL) []*Trigger {
+	var triggers []*Trigger
+	for _, ddl := range ddls {
+		if trigger, ok := ddl.(*Trigger); ok {
+			triggers = append(triggers, trigger)
+		}
+	}
+	return triggers
 }
 
 func findTableByName(tables []*Table, name string) *Table {
@@ -1184,6 +1228,16 @@ func findViewByName(views []*View, name string) *View {
 	}
 	return nil
 }
+
+func findTriggerByName(triggers []*Trigger, name string) *Trigger {
+	for _, trigger := range triggers {
+		if trigger.name == name {
+			return trigger
+		}
+	}
+	return nil
+}
+
 func (g *Generator) haveSameColumnDefinition(current Column, desired Column) bool {
 	// Not examining AUTO_INCREMENT and UNIQUE KEY because it'll be added in a later stage
 	return g.haveSameDataType(current, desired) &&

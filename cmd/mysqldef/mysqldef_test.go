@@ -1131,6 +1131,41 @@ func TestMysqldefView(t *testing.T) {
 	assertApplyOutput(t, "", applyPrefix+"DROP TABLE `posts`;\nDROP TABLE `users`;\nDROP VIEW `foo`;\n")
 }
 
+func TestMysqldefTrigger(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+			id bigint NOT NULL,
+			name text
+		);
+		CREATE TABLE logs (
+			id bigint NOT NULL,
+			log varchar(20),
+			dt datetime
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTrigger := stripHeredoc(`
+		CREATE TRIGGER insert_log AFTER INSERT ON users FOR EACH ROW INSERT INTO log (log, dt) VALUES ('insert', NOW());
+		`,
+	)
+	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTrigger)
+	assertApplyOutput(t, createTable+createTrigger, nothingModified)
+
+	createTrigger = stripHeredoc(`
+		CREATE TRIGGER insert_log AFTER INSERT ON users FOR EACH ROW INSERT INTO log (log, dt) VALUES ('insert_user', NOW());
+		`,
+	)
+	assertApplyOutput(t, createTable+createTrigger, applyPrefix+
+		"DROP TRIGGER `insert_log`;\n"+
+		"CREATE TRIGGER insert_log AFTER INSERT ON users FOR EACH ROW INSERT INTO log (log, dt) VALUES ('insert_user', NOW());\n")
+	assertApplyOutput(t, createTable+createTrigger, nothingModified)
+}
+
 func TestMysqldefDefaultValue(t *testing.T) {
 	resetTestDatabase()
 

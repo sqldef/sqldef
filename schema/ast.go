@@ -136,6 +136,11 @@ type View struct {
 	definition string
 }
 
+type Trigger struct {
+	statement string
+	name      string
+}
+
 type Value struct {
 	valueType ValueType
 	raw       []byte
@@ -229,6 +234,10 @@ func (a *AddPolicy) Statement() string {
 
 func (v *View) Statement() string {
 	return v.statement
+}
+
+func (t *Trigger) Statement() string {
+	return t.statement
 }
 
 func (t *Table) PrimaryKey() *Index {
