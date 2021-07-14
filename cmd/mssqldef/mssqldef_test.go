@@ -174,6 +174,44 @@ func TestMssqldefCreateView(t *testing.T) {
 	assertApplyOutput(t, "", applyPrefix+"DROP TABLE [dbo].[users];\n"+dropView)
 }
 
+func TestMssqldefTrigger(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+			id bigint NOT NULL,
+			name text
+		);
+		CREATE TABLE logs (
+			id bigint NOT NULL,
+			log varchar(20),
+			dt datetime
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTrigger := stripHeredoc(`
+		CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS insert into logs(log, dt) values ('insert', getdate());
+		`,
+	)
+	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTrigger)
+	assertApplyOutput(t, createTable+createTrigger, nothingModified)
+
+	createTrigger = stripHeredoc(`
+		CREATE TRIGGER [insert_log] ON [dbo].[users] after insert
+		AS
+			delete from logs
+			insert into logs(log, dt) values ('insert', getdate());
+		`,
+	)
+
+	assertApplyOutput(t, createTable+createTrigger, applyPrefix+
+		"CREATE OR ALTER TRIGGER [insert_log] ON [dbo].[users] after insert AS delete from logs insert into logs(log, dt) values ('insert', getdate());\n")
+	assertApplyOutput(t, createTable+createTrigger, nothingModified)
+}
+
 func TestMssqldefAddColumn(t *testing.T) {
 	resetTestDatabase()
 

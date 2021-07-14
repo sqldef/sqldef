@@ -670,6 +670,7 @@ type DDL struct {
 	ForeignKey    *ForeignKeyDefinition
 	Policy        *Policy
 	View          *View
+	Trigger       *Trigger
 }
 
 // DDL strings.
@@ -688,6 +689,7 @@ const (
 	AddForeignKeyStr = "add foreign key"
 	CreatePolicyStr  = "create policy"
 	CreateViewStr    = "create view"
+	CreateTriggerStr = "create trigger"
 
 	// Vindex DDL param to specify the owner of a vindex
 	VindexOwnerStr = "owner"
@@ -1589,6 +1591,14 @@ type View struct {
 	Action     string
 	Name       TableName
 	Definition SelectStatement
+}
+
+type Trigger struct {
+	Name      ColIdent
+	TableName TableName
+	Time      string
+	Event     string
+	Body      []Statement
 }
 
 // SelectExprs represents SELECT expressions.

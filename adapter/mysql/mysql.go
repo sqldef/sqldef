@@ -78,6 +78,24 @@ func (d *MysqlDatabase) Views() ([]string, error) {
 	return ddls, nil
 }
 
+func (d *MysqlDatabase) Triggers() ([]string, error) {
+	rows, err := d.db.Query("show triggers")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ddls []string
+	for rows.Next() {
+		var trigger, event, table, statement, timing, created, sqlMode, definer, characterSetClient, collationConnection, databaseCollation string
+		if err = rows.Scan(&trigger, &event, &table, &statement, &timing, &created, &sqlMode, &definer, &characterSetClient, &collationConnection, &databaseCollation); err != nil {
+			return nil, err
+		}
+		ddls = append(ddls, fmt.Sprintf("CREATE TRIGGER %s %s %s ON %s FOR EACH ROW %s;", trigger, timing, event, table, statement))
+	}
+	return ddls, nil
+}
+
 func (d *MysqlDatabase) DB() *sql.DB {
 	return d.db
 }

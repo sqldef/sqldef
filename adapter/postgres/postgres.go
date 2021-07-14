@@ -92,6 +92,10 @@ func (d *PostgresDatabase) Views() ([]string, error) {
 	return ddls, nil
 }
 
+func (d *PostgresDatabase) Triggers() ([]string, error) {
+	return nil, nil
+}
+
 func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	cols, err := d.getColumns(table)
 	if err != nil {

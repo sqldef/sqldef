@@ -439,6 +439,31 @@ INNER JOIN sys.sql_modules
 	return ddls, nil
 }
 
+func (d *MssqlDatabase) Triggers() ([]string, error) {
+	query := `SELECT
+	s.definition
+FROM sys.triggers tr
+INNER JOIN sys.all_sql_modules s ON s.object_id = tr.object_id`
+
+	rows, err := d.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	triggers := make([]string, 0)
+	for rows.Next() {
+		var definition string
+		err = rows.Scan(&definition)
+		if err != nil {
+			return nil, err
+		}
+		triggers = append(triggers, definition)
+	}
+
+	return triggers, nil
+}
+
 func (d *MssqlDatabase) DB() *sql.DB {
 	return d.db
 }

@@ -114,6 +114,7 @@ func forceEOF(yylex interface{}) {
   vindexParams  []VindexParam
   showFilter    *ShowFilter
   sequence      *Sequence
+  triggerBody   []Statement
 }
 
 %token LEX_ERROR
@@ -167,6 +168,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> RESTRICT CASCADE NO ACTION
 %token <bytes> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
 %token <bytes> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS
+%token <bytes> BEFORE AFTER EACH ROW
 
 // Transaction Tokens
 %token <bytes> BEGIN START TRANSACTION COMMIT ROLLBACK
@@ -334,6 +336,9 @@ func forceEOF(yylex interface{}) {
 %type <boolVal> clustered_opt not_for_replication_opt
 %type <optVal> default_definition default_val
 %type <optVal> on_off
+%type <str> trigger_time trigger_event
+%type <triggerBody> trigger_body
+%type <statement> trigger_statement
 
 %start any_command
 
@@ -663,6 +668,68 @@ create_statement:
         WithCheck: NewWhere(WhereStr, $11),
     }}
   }
+| CREATE TRIGGER sql_id trigger_time trigger_event ON table_name FOR EACH ROW trigger_statement
+  {
+    $$ = &DDL{Action: CreateTriggerStr, Trigger: &Trigger{
+        Name: $3,
+        TableName: $7,
+        Time: $4,
+        Event: $5,
+        Body: []Statement{$11},
+    }}
+  }
+| CREATE TRIGGER sql_id ON table_name trigger_time trigger_event AS trigger_body
+  {
+    $$ = &DDL{Action: CreateTriggerStr, Trigger: &Trigger{
+        Name: $3,
+        TableName: $5,
+        Time: $6,
+        Event: $7,
+        Body: $9,
+    }}
+  }
+
+trigger_time:
+  BEFORE
+  {
+    $$ = string($1)
+  }
+| AFTER
+  {
+    $$ = string($1)
+  }
+
+trigger_event:
+  INSERT
+  {
+    $$ = string($1)
+  }
+| UPDATE
+  {
+    $$ = string($1)
+  }
+| DELETE
+  {
+    $$ = string($1)
+  }
+
+trigger_body:
+  trigger_statement
+  {
+    $$ = []Statement{$1}
+  }
+| trigger_body trigger_statement
+  {
+    $$ = append($$, $2)
+  }
+
+trigger_statement:
+  insert_statement
+  {
+    $$ = $1
+  }
+| delete_statement
+| update_statement
 
 policy_as_opt:
   {
@@ -3717,12 +3784,14 @@ reserved_table_id:
 */
 reserved_keyword:
   ADD
+| AFTER
 | ALWAYS
 | AND
 | AS
 | ASC
 | AUTO_INCREMENT
 | AUTOINCREMENT
+| BEFORE
 | BETWEEN
 | BINARY
 | BY
@@ -3747,6 +3816,7 @@ reserved_keyword:
 | DISTINCT
 | DIV
 | DROP
+| EACH
 | ELSE
 | END
 | ESCAPE
@@ -3796,6 +3866,7 @@ reserved_keyword:
 | RENAME
 | REPLACE
 | RIGHT
+| ROW
 | SCHEMA
 | SELECT
 | SEPARATOR

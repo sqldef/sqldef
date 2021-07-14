@@ -21,6 +21,7 @@ type Database interface {
 	TableNames() ([]string, error)
 	DumpTableDDL(table string) (string, error)
 	Views() ([]string, error)
+	Triggers() ([]string, error)
 	DB() *sql.DB
 	Close() error
 }
@@ -46,6 +47,12 @@ func DumpDDLs(d Database) (string, error) {
 		return "", err
 	}
 	ddls = append(ddls, viewDDLs...)
+
+	triggerDDLs, err := d.Triggers()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, triggerDDLs...)
 
 	return strings.Join(ddls, ";\n\n"), nil
 }
