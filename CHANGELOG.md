@@ -1,3 +1,7 @@
+## v0.10.16
+
+- Support `TRIGGER` for mssqldef and mysqldef [#135](https://github.com/k0kubun/sqldef/pull/135)
+
 ## v0.10.15
 
 - Support more `DEFAULT`-related features for mssqldef [#134](https://github.com/k0kubun/sqldef/issues/134)
