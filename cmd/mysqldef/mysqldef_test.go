@@ -1150,19 +1150,19 @@ func TestMysqldefTrigger(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTrigger := stripHeredoc(`
-		CREATE TRIGGER insert_log AFTER INSERT ON users FOR EACH ROW INSERT INTO log (log, dt) VALUES ('insert', NOW());
+		CREATE TRIGGER ` + "`insert_log`" + ` after insert ON ` + "`users`" + ` FOR EACH ROW insert into log(log, dt) values ('insert', now());
 		`,
 	)
 	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTrigger)
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 
 	createTrigger = stripHeredoc(`
-		CREATE TRIGGER insert_log AFTER INSERT ON users FOR EACH ROW INSERT INTO log (log, dt) VALUES ('insert_user', NOW());
+		CREATE TRIGGER ` + "`insert_log`" + ` after insert ON ` + "`users`" + ` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());
 		`,
 	)
 	assertApplyOutput(t, createTable+createTrigger, applyPrefix+
 		"DROP TRIGGER `insert_log`;\n"+
-		"CREATE TRIGGER insert_log AFTER INSERT ON users FOR EACH ROW INSERT INTO log (log, dt) VALUES ('insert_user', NOW());\n")
+		"CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());\n")
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 }
 

@@ -139,6 +139,10 @@ type View struct {
 type Trigger struct {
 	statement string
 	name      string
+	tableName string
+	time      string
+	event     string
+	body      []string
 }
 
 type Value struct {

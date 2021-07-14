@@ -650,16 +650,31 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 
 func (g *Generator) generateDDLsForCreateTrigger(triggerName string, desiredTrigger *Trigger) ([]string, error) {
 	var ddls []string
-
 	currentTrigger := findTriggerByName(g.currentTriggers, triggerName)
+
+	var triggerDefinition string
+	switch g.mode {
+	case GeneratorModeMssql:
+		triggerDefinition += fmt.Sprintf("TRIGGER %s ON %s %s %s AS %s", g.escapeSQLName(desiredTrigger.name), g.escapeTableName(desiredTrigger.tableName), desiredTrigger.time, desiredTrigger.event, strings.Join(desiredTrigger.body, " "))
+	case GeneratorModeMysql:
+		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeSQLName(desiredTrigger.name), desiredTrigger.time, desiredTrigger.event, g.escapeTableName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, " "))
+	default:
+		return ddls, nil
+	}
+
 	if currentTrigger == nil {
 		// Trigger not found, add trigger.
-		ddls = append(ddls, desiredTrigger.statement)
+		ddls = append(ddls, fmt.Sprintf("CREATE %s", triggerDefinition))
 	} else {
 		// Trigger found. If it's different, create or replace trigger.
-		if strings.ToLower(currentTrigger.statement) != strings.ToLower(desiredTrigger.statement) {
-			ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeSQLName(triggerName)))
-			ddls = append(ddls, desiredTrigger.statement)
+		if !areSameTriggerDefinition(currentTrigger, desiredTrigger) {
+			createPrefix := "CREATE "
+			if g.mode == GeneratorModeMssql {
+				createPrefix += "OR ALTER "
+			} else {
+				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeSQLName(triggerName)))
+			}
+			ddls = append(ddls, createPrefix+triggerDefinition)
 		}
 	}
 
@@ -1308,6 +1323,29 @@ func areSameValue(current, desired *Value) bool {
 		currentRaw = currentRaw[0:len(desiredRaw)]
 	}
 	return currentRaw == desiredRaw
+}
+
+func areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
+	if triggerA.time != triggerB.time {
+		return false
+	}
+	if triggerA.event != triggerB.event {
+		return false
+	}
+	if triggerA.tableName != triggerB.tableName {
+		return false
+	}
+	if len(triggerA.body) != len(triggerB.body) {
+		return false
+	}
+	for i := 0; i < len(triggerA.body); i++ {
+		bodyA := strings.ToLower(strings.Replace(triggerA.body[i], " ", "", -1))
+		bodyB := strings.ToLower(strings.Replace(triggerB.body[i], " ", "", -1))
+		if bodyA != bodyB {
+			return false
+		}
+	}
+	return true
 }
 
 func isNullValue(value *Value) bool {

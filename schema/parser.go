@@ -395,9 +395,18 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				definition: sqlparser.String(stmt.View.Definition),
 			}, nil
 		} else if stmt.Action == "create trigger" {
+			body := []string{}
+			for _, triggerStatement := range stmt.Trigger.Body {
+				body = append(body, sqlparser.String(triggerStatement))
+			}
+
 			return &Trigger{
 				statement: ddl,
-				name:      stmt.Trigger.String(),
+				name:      stmt.Trigger.Name.String(),
+				tableName: stmt.Trigger.TableName.Name.String(),
+				time:      stmt.Trigger.Time,
+				event:     stmt.Trigger.Event,
+				body:      body,
 			}, nil
 		} else {
 			return nil, fmt.Errorf(

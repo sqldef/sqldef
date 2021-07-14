@@ -114,6 +114,7 @@ func forceEOF(yylex interface{}) {
   vindexParams  []VindexParam
   showFilter    *ShowFilter
   sequence      *Sequence
+  triggerBody   []Statement
 }
 
 %token LEX_ERROR
@@ -335,7 +336,8 @@ func forceEOF(yylex interface{}) {
 %type <boolVal> clustered_opt not_for_replication_opt
 %type <optVal> default_definition default_val
 %type <optVal> on_off
-%type <bytes> trigger_time trigger_event
+%type <str> trigger_time trigger_event
+%type <triggerBody> trigger_body
 %type <statement> trigger_statement
 
 %start any_command
@@ -668,31 +670,57 @@ create_statement:
   }
 | CREATE TRIGGER sql_id trigger_time trigger_event ON table_name FOR EACH ROW trigger_statement
   {
-    $$ = &DDL{Action: CreateTriggerStr, Trigger: $3}
+    $$ = &DDL{Action: CreateTriggerStr, Trigger: &Trigger{
+        Name: $3,
+        TableName: $7,
+        Time: $4,
+        Event: $5,
+        Body: []Statement{$11},
+    }}
+  }
+| CREATE TRIGGER sql_id ON table_name trigger_time trigger_event AS trigger_body
+  {
+    $$ = &DDL{Action: CreateTriggerStr, Trigger: &Trigger{
+        Name: $3,
+        TableName: $5,
+        Time: $6,
+        Event: $7,
+        Body: $9,
+    }}
   }
 
 trigger_time:
   BEFORE
   {
-    $$ = $1
+    $$ = string($1)
   }
 | AFTER
   {
-    $$ = $1
+    $$ = string($1)
   }
 
 trigger_event:
   INSERT
   {
-    $$ = $1
+    $$ = string($1)
   }
 | UPDATE
   {
-    $$ = $1
+    $$ = string($1)
   }
 | DELETE
   {
-    $$ = $1
+    $$ = string($1)
+  }
+
+trigger_body:
+  trigger_statement
+  {
+    $$ = []Statement{$1}
+  }
+| trigger_body trigger_statement
+  {
+    $$ = append($$, $2)
   }
 
 trigger_statement:

@@ -670,7 +670,7 @@ type DDL struct {
 	ForeignKey    *ForeignKeyDefinition
 	Policy        *Policy
 	View          *View
-	Trigger       ColIdent
+	Trigger       *Trigger
 }
 
 // DDL strings.
@@ -1591,6 +1591,14 @@ type View struct {
 	Action     string
 	Name       TableName
 	Definition SelectStatement
+}
+
+type Trigger struct {
+	Name      ColIdent
+	TableName TableName
+	Time      string
+	Event     string
+	Body      []Statement
 }
 
 // SelectExprs represents SELECT expressions.
