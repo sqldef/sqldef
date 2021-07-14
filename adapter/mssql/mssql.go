@@ -63,14 +63,10 @@ func (d *MssqlDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	triggerDefs, err := d.getTriggerDefs(table)
-	if err != nil {
-		return "", err
-	}
-	return buildDumpTableDDL(table, cols, indexDefs, foreignDefs, triggerDefs), nil
+	return buildDumpTableDDL(table, cols, indexDefs, foreignDefs), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, foreignDefs, triggerDefs []string) string {
+func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, foreignDefs []string) string {
 	var queryBuilder strings.Builder
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (", table)
 	for i, col := range columns {
@@ -158,11 +154,6 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 			}
 			fmt.Fprint(&queryBuilder, " )")
 		}
-		fmt.Fprintf(&queryBuilder, ";\n")
-	}
-
-	for _, triggerDef := range triggerDefs {
-		fmt.Fprintf(&queryBuilder, "%s;\n", triggerDef)
 	}
 	return strings.TrimSuffix(queryBuilder.String(), ";\n")
 }
@@ -401,33 +392,6 @@ WHERE f.parent_object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 	return defs, nil
 }
 
-func (d *MssqlDatabase) getTriggerDefs(table string) ([]string, error) {
-	schema, table := splitTableName(table)
-	query := fmt.Sprintf(`SELECT
-	s.definition
-FROM sys.triggers tr
-INNER JOIN sys.all_sql_modules s ON s.object_id = tr.object_id
-WHERE tr.parent_id = OBJECT_ID('[%s].[%s]')`, schema, table)
-
-	rows, err := d.db.Query(query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	triggers := make([]string, 0)
-	for rows.Next() {
-		var definition string
-		err = rows.Scan(&definition)
-		if err != nil {
-			return nil, err
-		}
-		triggers = append(triggers, definition)
-	}
-
-	return triggers, nil
-}
-
 func boolToOnOff(in bool) string {
 	if in {
 		return "ON"
@@ -476,7 +440,28 @@ INNER JOIN sys.sql_modules
 }
 
 func (d *MssqlDatabase) Triggers() ([]string, error) {
-	return nil, nil
+	query := `SELECT
+	s.definition
+FROM sys.triggers tr
+INNER JOIN sys.all_sql_modules s ON s.object_id = tr.object_id`
+
+	rows, err := d.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	triggers := make([]string, 0)
+	for rows.Next() {
+		var definition string
+		err = rows.Scan(&definition)
+		if err != nil {
+			return nil, err
+		}
+		triggers = append(triggers, definition)
+	}
+
+	return triggers, nil
 }
 
 func (d *MssqlDatabase) DB() *sql.DB {
