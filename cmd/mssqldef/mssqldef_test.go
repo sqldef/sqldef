@@ -193,22 +193,25 @@ func TestMssqldefTrigger(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTrigger := stripHeredoc(`
-		CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS insert into logs(log, dt) values ('insert', getdate());
+		CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
+			insert into logs(log, dt) values ('insert', getdate());
 		`,
 	)
 	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTrigger)
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 
 	createTrigger = stripHeredoc(`
-		CREATE TRIGGER [insert_log] ON [dbo].[users] after insert
-		AS
+		CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
 			delete from logs
-			insert into logs(log, dt) values ('insert', getdate());
+			insert into logs(log, dt) values ('insert', getdate())
 		`,
 	)
 
 	assertApplyOutput(t, createTable+createTrigger, applyPrefix+
-		"CREATE OR ALTER TRIGGER [insert_log] ON [dbo].[users] after insert AS delete from logs insert into logs(log, dt) values ('insert', getdate());\n")
+		"CREATE OR ALTER TRIGGER [insert_log] ON [dbo].[users] after insert AS\n"+
+		"delete from logs\n"+
+		"insert into logs(log, dt) values ('insert', getdate());\n",
+	)
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 }
 
