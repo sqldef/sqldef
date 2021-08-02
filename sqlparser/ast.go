@@ -220,6 +220,7 @@ func (*Insert) iStatement()     {}
 func (*Update) iStatement()     {}
 func (*Delete) iStatement()     {}
 func (*Set) iStatement()        {}
+func (*Declare) iStatement()    {}
 func (*DBDDL) iStatement()      {}
 func (*DDL) iStatement()        {}
 func (*Show) iStatement()       {}
@@ -3453,6 +3454,48 @@ func (node ColIdent) Format(buf *TrackedBuffer) {
 
 func (node ColIdent) walkSubtree(visit Visit) error {
 	return nil
+}
+
+type Declare struct {
+	Definitions []*DeclareDefinition
+}
+
+func (node *Declare) Format(buf *TrackedBuffer) {
+	var prefix string
+	buf.Myprintf("declare\n")
+	for _, n := range node.Definitions {
+		buf.Myprintf("%s%v", prefix, n)
+		prefix = ",\n"
+	}
+}
+
+func (node *Declare) walkSubtree(visit Visit) error {
+	for _, n := range node.Definitions {
+		if err := Walk(visit, n); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type DeclareDefinition struct {
+	Name     ColIdent
+	DataType ColumnType
+}
+
+func (node *DeclareDefinition) Format(buf *TrackedBuffer) {
+	buf.Myprintf("%v %v", node.Name, &node.DataType)
+}
+
+func (node *DeclareDefinition) walkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Name,
+		&node.DataType,
+	)
 }
 
 // IsEmpty returns true if the name is empty.

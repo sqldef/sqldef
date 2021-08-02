@@ -194,6 +194,8 @@ func TestMssqldefTrigger(t *testing.T) {
 
 	createTrigger := stripHeredoc(`
 		CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
+			declare
+				@event varchar(20)
 			insert into logs(log, dt) values ('insert', getdate());
 		`,
 	)
@@ -202,14 +204,18 @@ func TestMssqldefTrigger(t *testing.T) {
 
 	createTrigger = stripHeredoc(`
 		CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
-			delete from logs
+			declare
+				@event varchar(20),
+				@log varchar(20)
 			insert into logs(log, dt) values ('insert', getdate())
 		`,
 	)
 
 	assertApplyOutput(t, createTable+createTrigger, applyPrefix+
 		"CREATE OR ALTER TRIGGER [insert_log] ON [dbo].[users] after insert AS\n"+
-		"delete from logs\n"+
+		"declare\n"+
+		"@event varchar(20),\n"+
+		"@log varchar(20)\n"+
 		"insert into logs(log, dt) values ('insert', getdate());\n",
 	)
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
