@@ -3456,38 +3456,59 @@ func (node ColIdent) walkSubtree(visit Visit) error {
 	return nil
 }
 
+type DeclareType int
+
+const (
+	declareVariable DeclareType = iota
+	declareCursor
+)
+
 type Declare struct {
-	Definitions []*DeclareDefinition
+	Type      DeclareType
+	Variables []*LocalVariable
+	Cursor    *Cursor
 }
 
 func (node *Declare) Format(buf *TrackedBuffer) {
 	var prefix string
 	buf.Myprintf("declare\n")
-	for _, n := range node.Definitions {
-		buf.Myprintf("%s%v", prefix, n)
-		prefix = ",\n"
+	switch node.Type {
+	case declareVariable:
+		for _, n := range node.Variables {
+			buf.Myprintf("%s%v", prefix, n)
+			prefix = ",\n"
+		}
+	case declareCursor:
+		buf.Myprintf("%v", node.Cursor)
 	}
 }
 
 func (node *Declare) walkSubtree(visit Visit) error {
-	for _, n := range node.Definitions {
-		if err := Walk(visit, n); err != nil {
+	switch node.Type {
+	case declareVariable:
+		for _, n := range node.Variables {
+			if err := Walk(visit, n); err != nil {
+				return err
+			}
+		}
+	case declareCursor:
+		if err := Walk(visit, node.Cursor); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-type DeclareDefinition struct {
+type LocalVariable struct {
 	Name     ColIdent
 	DataType ColumnType
 }
 
-func (node *DeclareDefinition) Format(buf *TrackedBuffer) {
+func (node *LocalVariable) Format(buf *TrackedBuffer) {
 	buf.Myprintf("%v %v", node.Name, &node.DataType)
 }
 
-func (node *DeclareDefinition) walkSubtree(visit Visit) error {
+func (node *LocalVariable) walkSubtree(visit Visit) error {
 	if node == nil {
 		return nil
 	}
@@ -3495,6 +3516,31 @@ func (node *DeclareDefinition) walkSubtree(visit Visit) error {
 		visit,
 		node.Name,
 		&node.DataType,
+	)
+}
+
+type Cursor struct {
+	Name   ColIdent
+	Scroll bool
+	Select SelectStatement
+}
+
+func (node *Cursor) Format(buf *TrackedBuffer) {
+	var scrollStr string
+	if node.Scroll {
+		scrollStr = " scroll"
+	}
+	buf.Myprintf("%v%s cursor for\n%v", node.Name, scrollStr, node.Select)
+}
+
+func (node *Cursor) walkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Name,
+		node.Select.(*Select),
 	)
 }
 

@@ -194,8 +194,6 @@ func TestMssqldefTrigger(t *testing.T) {
 
 	createTrigger := stripHeredoc(`
 		CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
-			declare
-				@event varchar(20)
 			insert into logs(log, dt) values ('insert', getdate());
 		`,
 	)
@@ -204,20 +202,51 @@ func TestMssqldefTrigger(t *testing.T) {
 
 	createTrigger = stripHeredoc(`
 		CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
-			declare
-				@event varchar(20),
-				@log varchar(20)
-			insert into logs(log, dt) values ('insert', getdate())
+			delete from logs
+			insert into logs(log, dt) values ('insert', getdate());
 		`,
 	)
 
 	assertApplyOutput(t, createTable+createTrigger, applyPrefix+
 		"CREATE OR ALTER TRIGGER [insert_log] ON [dbo].[users] after insert AS\n"+
-		"declare\n"+
-		"@event varchar(20),\n"+
-		"@log varchar(20)\n"+
+		"delete from logs\n"+
 		"insert into logs(log, dt) values ('insert', getdate());\n",
 	)
+	assertApplyOutput(t, createTable+createTrigger, nothingModified)
+}
+
+func TestMssqldefTriggerWithRichSyntax(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+			id bigint NOT NULL,
+			name text
+		);
+		CREATE TABLE logs (
+			id bigint NOT NULL,
+			log varchar(20),
+			dt datetime
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTrigger := stripHeredoc(`
+		CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
+			declare
+				@event varchar(20),
+				@date datetime
+			set @event = 'insert_user'
+			set @date = getdate()
+			declare
+				users_cursor scroll cursor for
+					select name from users order by id asc
+			insert into logs(log, dt) values (@event, @date);
+		`,
+	)
+	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTrigger)
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 }
 

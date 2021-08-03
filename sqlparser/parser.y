@@ -115,8 +115,8 @@ func forceEOF(yylex interface{}) {
   showFilter    *ShowFilter
   sequence      *Sequence
   triggerBody   []Statement
-  declareDefinition *DeclareDefinition
-  declareDefinitions []*DeclareDefinition
+  localVariable *LocalVariable
+  localVariables []*LocalVariable
 }
 
 %token LEX_ERROR
@@ -170,7 +170,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> RESTRICT CASCADE NO ACTION
 %token <bytes> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
 %token <bytes> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS
-%token <bytes> BEFORE AFTER EACH ROW
+%token <bytes> BEFORE AFTER EACH ROW SCROLL CURSOR
 
 // Transaction Tokens
 %token <bytes> BEGIN START TRANSACTION COMMIT ROLLBACK
@@ -341,8 +341,9 @@ func forceEOF(yylex interface{}) {
 %type <str> trigger_time trigger_event
 %type <triggerBody> trigger_body
 %type <statement> trigger_statement
-%type <declareDefinition> declare_definition
-%type <declareDefinitions> declare_list
+%type <localVariable> local_variable
+%type <localVariables> declare_variable_list
+%type <boolVal> scroll_opt
 
 %start any_command
 
@@ -529,25 +530,45 @@ set_statement:
   }
 
 declare_statement:
-  DECLARE declare_list
+  DECLARE declare_variable_list
   {
-    $$ = &Declare{Definitions: $2}
+    $$ = &Declare{Type: declareVariable, Variables: $2}
+  }
+| DECLARE sql_id scroll_opt CURSOR FOR select_statement
+  {
+    $$ = &Declare{
+      Type: declareCursor,
+      Cursor: &Cursor{
+        Name: $2,
+        Scroll: bool($3),
+        Select: $6,
+      },
+    }
   }
 
-declare_list:
-  declare_definition
+declare_variable_list:
+  local_variable
   {
-    $$ = []*DeclareDefinition{$1}
+    $$ = []*LocalVariable{$1}
   }
-| declare_list ',' declare_definition
+| declare_variable_list ',' local_variable
   {
     $$ = append($$, $3)
   }
 
-declare_definition:
+local_variable:
   sql_id column_type
   {
-    $$ = &DeclareDefinition{Name: $1, DataType: $2}
+    $$ = &LocalVariable{Name: $1, DataType: $2}
+  }
+
+scroll_opt:
+  {
+    $$ = BoolVal(false)
+  }
+| SCROLL
+  {
+    $$ = BoolVal(true)
   }
 
 transaction_chars:
@@ -757,6 +778,7 @@ trigger_statement:
 | delete_statement
 | update_statement
 | declare_statement
+| set_statement
 
 policy_as_opt:
   {
@@ -3832,6 +3854,7 @@ reserved_keyword:
 | CURRENT_DATE
 | CURRENT_TIME
 | CURRENT_TIMESTAMP
+| CURSOR
 | SUBSTR
 | SUBSTRING
 | DATABASE
@@ -3896,6 +3919,7 @@ reserved_keyword:
 | RIGHT
 | ROW
 | SCHEMA
+| SCROLL
 | SELECT
 | SEPARATOR
 | SET
