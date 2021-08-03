@@ -276,6 +276,33 @@ func parseIndex(stmt *sqlparser.DDL) (Index, error) {
 	}, nil
 }
 
+func parseTriggerStatement(stmt sqlparser.Statement) (TriggerStatement, error) {
+	switch stmt := stmt.(type) {
+	case *sqlparser.Insert:
+		return Insert{
+			statement: sqlparser.String(stmt),
+		}, nil
+	case *sqlparser.Delete:
+		return Delete{
+			statement: sqlparser.String(stmt),
+		}, nil
+	case *sqlparser.Update:
+		return Update{
+			statement: sqlparser.String(stmt),
+		}, nil
+	case *sqlparser.Declare:
+		return Declare{
+			statement: sqlparser.String(stmt),
+		}, nil
+	case *sqlparser.Set:
+		return Set{
+			statement: sqlparser.String(stmt),
+		}, nil
+	default:
+		return nil, fmt.Errorf("%T was not defined as TriggerStatement", stmt)
+	}
+}
+
 // Parse DDL like `CREATE TABLE` or `ALTER TABLE`.
 // This doesn't support destructive DDL like `DROP TABLE`.
 func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
@@ -395,9 +422,13 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				definition: sqlparser.String(stmt.View.Definition),
 			}, nil
 		} else if stmt.Action == "create trigger" {
-			body := []string{}
-			for _, triggerStatement := range stmt.Trigger.Body {
-				body = append(body, sqlparser.String(triggerStatement))
+			body := []TriggerStatement{}
+			for _, statement := range stmt.Trigger.Body {
+				triggerStatement, err := parseTriggerStatement(statement)
+				if err != nil {
+					return nil, err
+				}
+				body = append(body, triggerStatement)
 			}
 
 			return &Trigger{
