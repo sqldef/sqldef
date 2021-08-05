@@ -142,37 +142,7 @@ type Trigger struct {
 	tableName string
 	time      string
 	event     string
-	body      []TriggerStatement
-}
-
-type TriggerStatement interface {
-	tStatement()
-}
-
-func (insert Insert) tStatement()   {}
-func (delete Delete) tStatement()   {}
-func (update Update) tStatement()   {}
-func (declare Declare) tStatement() {}
-func (set Set) tStatement()         {}
-
-type Insert struct {
-	statement string
-}
-
-type Delete struct {
-	statement string
-}
-
-type Update struct {
-	statement string
-}
-
-type Declare struct {
-	statement string
-}
-
-type Set struct {
-	statement string
+	body      []string
 }
 
 type Value struct {

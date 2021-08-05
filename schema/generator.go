@@ -655,9 +655,9 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName string, desiredTrig
 	var triggerDefinition string
 	switch g.mode {
 	case GeneratorModeMssql:
-		triggerDefinition += fmt.Sprintf("TRIGGER %s ON %s %s %s AS\n%s", g.escapeSQLName(desiredTrigger.name), g.escapeTableName(desiredTrigger.tableName), desiredTrigger.time, desiredTrigger.event, g.generateTriggerBody(desiredTrigger.body))
+		triggerDefinition += fmt.Sprintf("TRIGGER %s ON %s %s %s AS\n%s", g.escapeSQLName(desiredTrigger.name), g.escapeTableName(desiredTrigger.tableName), desiredTrigger.time, desiredTrigger.event, strings.Join(desiredTrigger.body, "\n"))
 	case GeneratorModeMysql:
-		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeSQLName(desiredTrigger.name), desiredTrigger.time, desiredTrigger.event, g.escapeTableName(desiredTrigger.tableName), g.generateTriggerBody(desiredTrigger.body))
+		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeSQLName(desiredTrigger.name), desiredTrigger.time, desiredTrigger.event, g.escapeTableName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, "\n"))
 	default:
 		return ddls, nil
 	}
@@ -681,28 +681,6 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName string, desiredTrig
 	g.desiredTriggers = append(g.desiredTriggers, desiredTrigger)
 
 	return ddls, nil
-}
-
-func (g *Generator) generateTriggerBody(statements []TriggerStatement) string {
-	var body string
-	for i, stmt := range statements {
-		if i != 0 {
-			body += "\n"
-		}
-		switch tstmt := stmt.(type) {
-		case Insert:
-			body += tstmt.statement
-		case Delete:
-			body += tstmt.statement
-		case Update:
-			body += tstmt.statement
-		case Declare:
-			body += tstmt.statement
-		case Set:
-			body += tstmt.statement
-		}
-	}
-	return body
 }
 
 // Even though simulated table doesn't have a foreign key, references could exist in column definitions.
@@ -1361,51 +1339,13 @@ func areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 		return false
 	}
 	for i := 0; i < len(triggerA.body); i++ {
-		if !areSameTriggerStatement(triggerA.body[i], triggerB.body[i]) {
+		bodyA := strings.ToLower(strings.Replace(triggerA.body[i], " ", "", -1))
+		bodyB := strings.ToLower(strings.Replace(triggerB.body[i], " ", "", -1))
+		if bodyA != bodyB {
 			return false
 		}
 	}
 	return true
-}
-
-func areSameTriggerStatement(stmtA, stmtB TriggerStatement) bool {
-	switch stmtA := stmtA.(type) {
-	case Insert:
-		stmtB, ok := stmtB.(Insert)
-		if !ok {
-			return false
-		}
-		return normalizeStatement(stmtA.statement) == normalizeStatement(stmtB.statement)
-	case Delete:
-		stmtB, ok := stmtB.(Delete)
-		if !ok {
-			return false
-		}
-		return normalizeStatement(stmtA.statement) == normalizeStatement(stmtB.statement)
-	case Update:
-		stmtB, ok := stmtB.(Update)
-		if !ok {
-			return false
-		}
-		return normalizeStatement(stmtA.statement) == normalizeStatement(stmtB.statement)
-	case Declare:
-		stmtB, ok := stmtB.(Declare)
-		if !ok {
-			return false
-		}
-		return normalizeStatement(stmtA.statement) == normalizeStatement(stmtB.statement)
-	case Set:
-		stmtB, ok := stmtB.(Set)
-		if !ok {
-			return false
-		}
-		return normalizeStatement(stmtA.statement) == normalizeStatement(stmtB.statement)
-	}
-	return true
-}
-
-func normalizeStatement(stmt string) string {
-	return strings.ToLower(strings.Replace(stmt, " ", "", -1))
 }
 
 func isNullValue(value *Value) bool {
