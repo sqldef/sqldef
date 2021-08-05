@@ -170,7 +170,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> RESTRICT CASCADE NO ACTION
 %token <bytes> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
 %token <bytes> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS
-%token <bytes> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST
+%token <bytes> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE
 
 // Transaction Tokens
 %token <bytes> BEGIN START TRANSACTION COMMIT ROLLBACK
@@ -583,6 +583,13 @@ cursor_statement:
   {
     $$ = &Cursor{
       Action: CloseStr,
+      CursorName: $2,
+    }
+  }
+| DEALLOCATE sql_id
+  {
+    $$ = &Cursor{
+      Action: DeallocateStr,
       CursorName: $2,
     }
   }
@@ -3915,6 +3922,7 @@ reserved_keyword:
 | SUBSTRING
 | DATABASE
 | DATABASES
+| DEALLOCATE
 | DECLARE
 | DEFAULT
 | DELETE

@@ -165,6 +165,7 @@ var keywords = map[string]int{
 	"datetime":               DATETIME,
 	"datetime2":              DATETIME2,
 	"datetimeoffset":         DATETIMEOFFSET,
+	"deallocate":             DEALLOCATE,
 	"dec":                    UNUSED,
 	"decimal":                DECIMAL,
 	"declare":                DECLARE,

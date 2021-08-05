@@ -3546,9 +3546,10 @@ func (node *CursorDefinition) walkSubtree(visit Visit) error {
 }
 
 const (
-	OpenStr  = "open"
-	CloseStr = "close"
-	FetchStr = "fetch"
+	OpenStr       = "open"
+	CloseStr      = "close"
+	DeallocateStr = "deallocate"
+	FetchStr      = "fetch"
 )
 
 type Cursor struct {
