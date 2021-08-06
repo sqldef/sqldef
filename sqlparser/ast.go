@@ -222,6 +222,7 @@ func (*Delete) iStatement()     {}
 func (*Set) iStatement()        {}
 func (*Declare) iStatement()    {}
 func (*Cursor) iStatement()     {}
+func (*While) iStatement()      {}
 func (*DBDDL) iStatement()      {}
 func (*DDL) iStatement()        {}
 func (*Show) iStatement()       {}
@@ -3583,6 +3584,38 @@ func (node *Cursor) walkSubtree(visit Visit) error {
 		visit,
 		node.CursorName,
 	)
+}
+
+type While struct {
+	Condition  Expr
+	Statements []Statement
+	Keyword    string
+}
+
+func (node *While) Format(buf *TrackedBuffer) {
+	buf.Myprintf("while %v", node.Condition)
+	var endKeyword string
+	switch node.Keyword {
+	case "begin":
+		buf.Myprintf("\nbegin")
+		endKeyword = "\nend"
+	}
+	for _, stmt := range node.Statements {
+		buf.Myprintf("\n%v", stmt)
+	}
+	buf.Myprintf(endKeyword)
+}
+
+func (node *While) walkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	for _, n := range node.Statements {
+		if err := Walk(visit, n); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // IsEmpty returns true if the name is empty.

@@ -114,7 +114,7 @@ func forceEOF(yylex interface{}) {
   vindexParams  []VindexParam
   showFilter    *ShowFilter
   sequence      *Sequence
-  triggerBody   []Statement
+  blockStatement []Statement
   localVariable *LocalVariable
   localVariables []*LocalVariable
 }
@@ -161,7 +161,7 @@ func forceEOF(yylex interface{}) {
 
 // DDL Tokens
 %token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD
-%token <bytes> SCHEMA TABLE INDEX VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY
+%token <bytes> SCHEMA TABLE INDEX VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE
 %right <bytes> UNIQUE KEY
 %token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE
 %token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER
@@ -226,7 +226,7 @@ func forceEOF(yylex interface{}) {
 
 %type <statement> command
 %type <selStmt> select_statement base_select union_lhs union_rhs
-%type <statement> stream_statement insert_statement update_statement delete_statement set_statement declare_statement cursor_statement
+%type <statement> stream_statement insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement
 %type <statement> create_statement alter_statement rename_statement drop_statement truncate_statement
 %type <ddl> create_table_prefix
 %type <statement> analyze_statement show_statement use_statement other_statement
@@ -339,7 +339,7 @@ func forceEOF(yylex interface{}) {
 %type <optVal> default_definition default_val
 %type <optVal> on_off
 %type <str> trigger_time trigger_event fetch_opt
-%type <triggerBody> trigger_body
+%type <blockStatement> trigger_body statement_block
 %type <statement> trigger_statement
 %type <localVariable> local_variable
 %type <localVariables> declare_variable_list
@@ -632,6 +632,34 @@ fetch_opt:
     $$ = string($1)
   }
 
+while_statement:
+  WHILE condition trigger_statement
+  {
+    $$ = &While{
+      Condition: $2,
+      Statements: []Statement{$3},
+    }
+  }
+| WHILE condition BEGIN statement_block END
+  {
+    $$ = &While{
+      Condition: $2,
+      Statements: $4,
+      Keyword: string($3),
+    }
+  }
+
+statement_block:
+  trigger_statement
+  {
+    $$ = []Statement{$1}
+  }
+| statement_block trigger_statement
+  {
+    $$ = append($$, $2)
+  }
+
+
 transaction_chars:
   transaction_char
   {
@@ -841,6 +869,7 @@ trigger_statement:
 | declare_statement
 | set_statement
 | cursor_statement
+| while_statement
 
 policy_as_opt:
   {
@@ -4010,6 +4039,7 @@ reserved_keyword:
 | VALUES
 | WHEN
 | WHERE
+| WHILE
 | OFF
 
 /*
