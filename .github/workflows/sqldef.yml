@@ -12,7 +12,6 @@ on:
       - reopened
 jobs:
   test:
-    name: build
     runs-on: ubuntu-latest
     strategy:
       matrix:
