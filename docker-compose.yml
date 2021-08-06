@@ -10,7 +10,7 @@ services:
     ports:
       - '3306:3306'
   postgres:
-    image: postgres:12
+    image: postgres:${POSTGRES_VERSION:-12}
     environment:
       POSTGRES_USER: postgres
       POSTGRES_HOST_AUTH_METHOD: trust
