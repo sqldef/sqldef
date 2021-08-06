@@ -12,16 +12,31 @@ on:
       - reopened
 jobs:
   test:
-    name: build
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        database:
+          - mysql
+          - sqlite3
+          - mssql
+        include:
+          - database: psql
+            version: 10
+          - database: psql
+            version: 11
+          - database: psql
+            version: 12
+      fail-fast: false
     steps:
       - uses: actions/setup-go@v2
         with:
           go-version: 1.16
       - uses: actions/checkout@v2
 
-      - run: docker-compose up -d
-      - run: make test
+      - run: POSTGRES_VERSION="${POSTGRES_VERSION:-12}" docker-compose up -d
+        env:
+          POSTGRES_VERSION: ${{ matrix.version }}
+      - run: make test-${{ matrix.database }}def
 
   package:
     runs-on: ubuntu-latest
