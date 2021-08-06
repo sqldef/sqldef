@@ -245,7 +245,15 @@ func TestMssqldefTriggerWithRichSyntax(t *testing.T) {
 			open users_cursor
 			while @@FETCH_STATUS = 0
 			begin
-			fetch first from users_cursor into @username
+				fetch first from users_cursor into @username
+				if @username = 'test'
+				begin
+					insert into logs(log, dt) values (@username, @date)
+				end
+				else
+				begin
+					insert into logs(log, dt) values ('insert user', @date)
+				end
 			end
 			close users_cursor
 			deallocate users_cursor
