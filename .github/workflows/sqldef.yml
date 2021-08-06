@@ -21,8 +21,6 @@ jobs:
           - mssql
         include:
           - database: psql
-            version: 9
-          - database: psql
             version: 10
           - database: psql
             version: 11
