@@ -1601,7 +1601,7 @@ type Trigger struct {
 	Name      ColIdent
 	TableName TableName
 	Time      string
-	Event     string
+	Event     []string
 	Body      []Statement
 }
 

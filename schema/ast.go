@@ -141,7 +141,7 @@ type Trigger struct {
 	name      string
 	tableName string
 	time      string
-	event     string
+	event     []string
 	body      []string
 }
 

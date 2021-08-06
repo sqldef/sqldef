@@ -339,6 +339,7 @@ func forceEOF(yylex interface{}) {
 %type <optVal> default_definition default_val
 %type <optVal> on_off
 %type <str> trigger_time trigger_event fetch_opt
+%type <strs> trigger_event_list
 %type <blockStatement> trigger_body statement_block
 %type <statement> trigger_statement
 %type <localVariable> local_variable
@@ -822,7 +823,7 @@ create_statement:
         WithCheck: NewWhere(WhereStr, $11),
     }}
   }
-| CREATE TRIGGER sql_id trigger_time trigger_event ON table_name FOR EACH ROW trigger_statement
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW trigger_statement
   {
     $$ = &DDL{Action: CreateTriggerStr, Trigger: &Trigger{
         Name: $3,
@@ -832,7 +833,7 @@ create_statement:
         Body: []Statement{$11},
     }}
   }
-| CREATE TRIGGER sql_id ON table_name trigger_time trigger_event AS trigger_body
+| CREATE TRIGGER sql_id ON table_name trigger_time trigger_event_list AS trigger_body
   {
     $$ = &DDL{Action: CreateTriggerStr, Trigger: &Trigger{
         Name: $3,
@@ -867,6 +868,16 @@ trigger_event:
     $$ = string($1)
   }
 
+trigger_event_list:
+  trigger_event
+  {
+    $$ = []string{string($1)}
+  }
+| trigger_event_list ',' trigger_event
+  {
+    $$ = append($$, string($3))
+  }
+
 trigger_body:
   trigger_statement
   {
@@ -889,6 +900,14 @@ trigger_statement:
 | cursor_statement
 | while_statement
 | if_statement
+| base_select order_by_opt limit_opt lock_opt
+  {
+    sel := $1.(*Select)
+    sel.OrderBy = $2
+    sel.Limit = $3
+    sel.Lock = $4
+    $$ = sel
+  }
 
 policy_as_opt:
   {
