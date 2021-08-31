@@ -1,6 +1,11 @@
-## v0.10.16
+## v0.11.0
 
 - Support `TRIGGER` for mssqldef and mysqldef [#135](https://github.com/k0kubun/sqldef/pull/135)
+  - Support `DECLARE` [#137](https://github.com/k0kubun/sqldef/pull/137)
+  - Support `CURSOR` [#138](https://github.com/k0kubun/sqldef/pull/138)
+  - Support `WHILE` [#139](https://github.com/k0kubun/sqldef/pull/139)
+  - Support `IF` [#141](https://github.com/k0kubun/sqldef/pull/141)
+  - Support `SELECT` [#142](https://github.com/k0kubun/sqldef/pull/142)
 
 ## v0.10.15
 
