@@ -223,6 +223,7 @@ func (*Set) iStatement()        {}
 func (*Declare) iStatement()    {}
 func (*Cursor) iStatement()     {}
 func (*While) iStatement()      {}
+func (*If) iStatement()         {}
 func (*DBDDL) iStatement()      {}
 func (*DDL) iStatement()        {}
 func (*Show) iStatement()       {}
@@ -3613,6 +3614,55 @@ func (node *While) walkSubtree(visit Visit) error {
 	for _, n := range node.Statements {
 		if err := Walk(visit, n); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+type If struct {
+	Condition      Expr
+	IfStatements   []Statement
+	ElseStatements []Statement
+	Keyword        string
+}
+
+func (node *If) Format(buf *TrackedBuffer) {
+	buf.Myprintf("if %v", node.Condition)
+	var beginKeyword string
+	var endKeyword string
+	switch node.Keyword {
+	case "begin":
+		beginKeyword = "\nbegin"
+		endKeyword = "\nend"
+	}
+	buf.Myprintf(beginKeyword)
+	for _, stmt := range node.IfStatements {
+		buf.Myprintf("\n%v", stmt)
+	}
+	buf.Myprintf(endKeyword)
+	if node.ElseStatements != nil {
+		buf.Myprintf("\nelse%s", beginKeyword)
+		for _, stmt := range node.ElseStatements {
+			buf.Myprintf("\n%v", stmt)
+		}
+		buf.Myprintf(endKeyword)
+	}
+}
+
+func (node *If) walkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	for _, n := range node.IfStatements {
+		if err := Walk(visit, n); err != nil {
+			return err
+		}
+	}
+	if node.ElseStatements != nil {
+		for _, n := range node.ElseStatements {
+			if err := Walk(visit, n); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
