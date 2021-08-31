@@ -115,11 +115,13 @@ func forceEOF(yylex interface{}) {
   showFilter    *ShowFilter
   sequence      *Sequence
   triggerBody   []Statement
+  localVariable *LocalVariable
+  localVariables []*LocalVariable
 }
 
 %token LEX_ERROR
 %left <bytes> UNION
-%token <bytes> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER BY LIMIT OFFSET FOR
+%token <bytes> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER BY LIMIT OFFSET FOR DECLARE
 %token <bytes> ALL DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SET LOCK KEYS
 %token <bytes> VALUES LAST_INSERT_ID
 %token <bytes> NEXT VALUE SHARE MODE
@@ -168,7 +170,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> RESTRICT CASCADE NO ACTION
 %token <bytes> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
 %token <bytes> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS
-%token <bytes> BEFORE AFTER EACH ROW
+%token <bytes> BEFORE AFTER EACH ROW SCROLL CURSOR
 
 // Transaction Tokens
 %token <bytes> BEGIN START TRANSACTION COMMIT ROLLBACK
@@ -224,7 +226,7 @@ func forceEOF(yylex interface{}) {
 
 %type <statement> command
 %type <selStmt> select_statement base_select union_lhs union_rhs
-%type <statement> stream_statement insert_statement update_statement delete_statement set_statement
+%type <statement> stream_statement insert_statement update_statement delete_statement set_statement declare_statement
 %type <statement> create_statement alter_statement rename_statement drop_statement truncate_statement
 %type <ddl> create_table_prefix
 %type <statement> analyze_statement show_statement use_statement other_statement
@@ -339,6 +341,9 @@ func forceEOF(yylex interface{}) {
 %type <str> trigger_time trigger_event
 %type <triggerBody> trigger_body
 %type <statement> trigger_statement
+%type <localVariable> local_variable
+%type <localVariables> declare_variable_list
+%type <boolVal> scroll_opt
 
 %start any_command
 
@@ -522,6 +527,48 @@ set_statement:
 | SET comment_opt TRANSACTION transaction_chars
   {
     $$ = &Set{Comments: Comments($2), Exprs: $4}
+  }
+
+declare_statement:
+  DECLARE declare_variable_list
+  {
+    $$ = &Declare{Type: declareVariable, Variables: $2}
+  }
+| DECLARE sql_id scroll_opt CURSOR FOR select_statement
+  {
+    $$ = &Declare{
+      Type: declareCursor,
+      Cursor: &Cursor{
+        Name: $2,
+        Scroll: bool($3),
+        Select: $6,
+      },
+    }
+  }
+
+declare_variable_list:
+  local_variable
+  {
+    $$ = []*LocalVariable{$1}
+  }
+| declare_variable_list ',' local_variable
+  {
+    $$ = append($$, $3)
+  }
+
+local_variable:
+  sql_id column_type
+  {
+    $$ = &LocalVariable{Name: $1, DataType: $2}
+  }
+
+scroll_opt:
+  {
+    $$ = BoolVal(false)
+  }
+| SCROLL
+  {
+    $$ = BoolVal(true)
   }
 
 transaction_chars:
@@ -730,6 +777,8 @@ trigger_statement:
   }
 | delete_statement
 | update_statement
+| declare_statement
+| set_statement
 
 policy_as_opt:
   {
@@ -3805,10 +3854,12 @@ reserved_keyword:
 | CURRENT_DATE
 | CURRENT_TIME
 | CURRENT_TIMESTAMP
+| CURSOR
 | SUBSTR
 | SUBSTRING
 | DATABASE
 | DATABASES
+| DECLARE
 | DEFAULT
 | DELETE
 | DESC
@@ -3868,6 +3919,7 @@ reserved_keyword:
 | RIGHT
 | ROW
 | SCHEMA
+| SCROLL
 | SELECT
 | SEPARATOR
 | SET

@@ -220,6 +220,7 @@ func (*Insert) iStatement()     {}
 func (*Update) iStatement()     {}
 func (*Delete) iStatement()     {}
 func (*Set) iStatement()        {}
+func (*Declare) iStatement()    {}
 func (*DBDDL) iStatement()      {}
 func (*DDL) iStatement()        {}
 func (*Show) iStatement()       {}
@@ -3453,6 +3454,94 @@ func (node ColIdent) Format(buf *TrackedBuffer) {
 
 func (node ColIdent) walkSubtree(visit Visit) error {
 	return nil
+}
+
+type DeclareType int
+
+const (
+	declareVariable DeclareType = iota
+	declareCursor
+)
+
+type Declare struct {
+	Type      DeclareType
+	Variables []*LocalVariable
+	Cursor    *Cursor
+}
+
+func (node *Declare) Format(buf *TrackedBuffer) {
+	var prefix string
+	buf.Myprintf("declare\n")
+	switch node.Type {
+	case declareVariable:
+		for _, n := range node.Variables {
+			buf.Myprintf("%s%v", prefix, n)
+			prefix = ",\n"
+		}
+	case declareCursor:
+		buf.Myprintf("%v", node.Cursor)
+	}
+}
+
+func (node *Declare) walkSubtree(visit Visit) error {
+	switch node.Type {
+	case declareVariable:
+		for _, n := range node.Variables {
+			if err := Walk(visit, n); err != nil {
+				return err
+			}
+		}
+	case declareCursor:
+		if err := Walk(visit, node.Cursor); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type LocalVariable struct {
+	Name     ColIdent
+	DataType ColumnType
+}
+
+func (node *LocalVariable) Format(buf *TrackedBuffer) {
+	buf.Myprintf("%v %v", node.Name, &node.DataType)
+}
+
+func (node *LocalVariable) walkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Name,
+		&node.DataType,
+	)
+}
+
+type Cursor struct {
+	Name   ColIdent
+	Scroll bool
+	Select SelectStatement
+}
+
+func (node *Cursor) Format(buf *TrackedBuffer) {
+	var scrollStr string
+	if node.Scroll {
+		scrollStr = " scroll"
+	}
+	buf.Myprintf("%v%s cursor for\n%v", node.Name, scrollStr, node.Select)
+}
+
+func (node *Cursor) walkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Name,
+		node.Select.(*Select),
+	)
 }
 
 // IsEmpty returns true if the name is empty.
