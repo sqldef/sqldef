@@ -221,6 +221,7 @@ func (*Update) iStatement()     {}
 func (*Delete) iStatement()     {}
 func (*Set) iStatement()        {}
 func (*Declare) iStatement()    {}
+func (*Cursor) iStatement()     {}
 func (*DBDDL) iStatement()      {}
 func (*DDL) iStatement()        {}
 func (*Show) iStatement()       {}
@@ -3466,7 +3467,7 @@ const (
 type Declare struct {
 	Type      DeclareType
 	Variables []*LocalVariable
-	Cursor    *Cursor
+	Cursor    *CursorDefinition
 }
 
 func (node *Declare) Format(buf *TrackedBuffer) {
@@ -3519,18 +3520,59 @@ func (node *LocalVariable) walkSubtree(visit Visit) error {
 	)
 }
 
-type Cursor struct {
+type CursorDefinition struct {
 	Name   ColIdent
 	Scroll bool
 	Select SelectStatement
 }
 
-func (node *Cursor) Format(buf *TrackedBuffer) {
+func (node *CursorDefinition) Format(buf *TrackedBuffer) {
 	var scrollStr string
 	if node.Scroll {
 		scrollStr = " scroll"
 	}
 	buf.Myprintf("%v%s cursor for\n%v", node.Name, scrollStr, node.Select)
+}
+
+func (node *CursorDefinition) walkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Name,
+		node.Select.(*Select),
+	)
+}
+
+const (
+	OpenStr       = "open"
+	CloseStr      = "close"
+	DeallocateStr = "deallocate"
+	FetchStr      = "fetch"
+)
+
+type Cursor struct {
+	Action     string
+	Fetch      string
+	CursorName ColIdent
+	Into       ColIdent
+}
+
+func (node *Cursor) Format(buf *TrackedBuffer) {
+	if node.Action == FetchStr {
+		fetch := " "
+		if node.Fetch != "" {
+			fetch = fmt.Sprintf(" %s from", node.Fetch)
+		}
+		var into string
+		if !node.Into.IsEmpty() {
+			into = fmt.Sprintf(" into %s", node.Into.Lowered())
+		}
+		buf.Myprintf("%s%s %v%s", node.Action, fetch, node.CursorName, into)
+	} else {
+		buf.Myprintf("%s %v", node.Action, node.CursorName)
+	}
 }
 
 func (node *Cursor) walkSubtree(visit Visit) error {
@@ -3539,8 +3581,7 @@ func (node *Cursor) walkSubtree(visit Visit) error {
 	}
 	return Walk(
 		visit,
-		node.Name,
-		node.Select.(*Select),
+		node.CursorName,
 	)
 }
 

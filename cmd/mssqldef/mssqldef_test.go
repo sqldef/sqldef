@@ -236,14 +236,17 @@ func TestMssqldefTriggerWithRichSyntax(t *testing.T) {
 	createTrigger := stripHeredoc(`
 		CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
 			declare
-				@event varchar(20),
+				@username varchar(20),
 				@date datetime
-			set @event = 'insert_user'
 			set @date = getdate()
 			declare
 				users_cursor scroll cursor for
 					select name from users order by id asc
-			insert into logs(log, dt) values (@event, @date);
+			open users_cursor
+			fetch first from users_cursor into @username
+			close users_cursor
+			deallocate users_cursor
+			insert into logs(log, dt) values (@username, @date);
 		`,
 	)
 	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTrigger)

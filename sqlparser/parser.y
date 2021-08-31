@@ -170,7 +170,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> RESTRICT CASCADE NO ACTION
 %token <bytes> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
 %token <bytes> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS
-%token <bytes> BEFORE AFTER EACH ROW SCROLL CURSOR
+%token <bytes> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE
 
 // Transaction Tokens
 %token <bytes> BEGIN START TRANSACTION COMMIT ROLLBACK
@@ -226,7 +226,7 @@ func forceEOF(yylex interface{}) {
 
 %type <statement> command
 %type <selStmt> select_statement base_select union_lhs union_rhs
-%type <statement> stream_statement insert_statement update_statement delete_statement set_statement declare_statement
+%type <statement> stream_statement insert_statement update_statement delete_statement set_statement declare_statement cursor_statement
 %type <statement> create_statement alter_statement rename_statement drop_statement truncate_statement
 %type <ddl> create_table_prefix
 %type <statement> analyze_statement show_statement use_statement other_statement
@@ -338,7 +338,7 @@ func forceEOF(yylex interface{}) {
 %type <boolVal> clustered_opt not_for_replication_opt
 %type <optVal> default_definition default_val
 %type <optVal> on_off
-%type <str> trigger_time trigger_event
+%type <str> trigger_time trigger_event fetch_opt
 %type <triggerBody> trigger_body
 %type <statement> trigger_statement
 %type <localVariable> local_variable
@@ -538,7 +538,7 @@ declare_statement:
   {
     $$ = &Declare{
       Type: declareCursor,
-      Cursor: &Cursor{
+      Cursor: &CursorDefinition{
         Name: $2,
         Scroll: bool($3),
         Select: $6,
@@ -569,6 +569,67 @@ scroll_opt:
 | SCROLL
   {
     $$ = BoolVal(true)
+  }
+
+cursor_statement:
+  OPEN sql_id
+  {
+    $$ = &Cursor{
+      Action: OpenStr,
+      CursorName: $2,
+    }
+  }
+| CLOSE sql_id
+  {
+    $$ = &Cursor{
+      Action: CloseStr,
+      CursorName: $2,
+    }
+  }
+| DEALLOCATE sql_id
+  {
+    $$ = &Cursor{
+      Action: DeallocateStr,
+      CursorName: $2,
+    }
+  }
+| FETCH fetch_opt sql_id
+  {
+    $$ = &Cursor{
+      Action: FetchStr,
+      Fetch: $2,
+      CursorName: $3,
+    }
+  }
+| FETCH fetch_opt sql_id INTO sql_id
+  {
+    $$ = &Cursor{
+      Action: FetchStr,
+      Fetch: $2,
+      CursorName: $3,
+      Into: $5,
+    }
+  }
+
+fetch_opt:
+  {
+    $$ = ""
+  }
+| NEXT FROM
+  {
+    $$ = string($1)
+  }
+| PRIOR FROM
+  {
+    $$ = string($1)
+  }
+| FIRST FROM
+  {
+    $$ = string($1)
+  }
+| LAST FROM
+  {
+    $$ = string($1)
   }
 
 transaction_chars:
@@ -779,6 +840,7 @@ trigger_statement:
 | update_statement
 | declare_statement
 | set_statement
+| cursor_statement
 
 policy_as_opt:
   {
@@ -3845,6 +3907,7 @@ reserved_keyword:
 | BINARY
 | BY
 | CASE
+| CLOSE
 | CLUSTERED
 | NONCLUSTERED
 | COLLATE
@@ -3859,6 +3922,7 @@ reserved_keyword:
 | SUBSTRING
 | DATABASE
 | DATABASES
+| DEALLOCATE
 | DECLARE
 | DEFAULT
 | DELETE
@@ -3874,6 +3938,8 @@ reserved_keyword:
 | EXISTS
 | EXPLAIN
 | FALSE
+| FETCH
+| FIRST
 | FOR
 | FORCE
 | FOREIGN
@@ -3894,6 +3960,7 @@ reserved_keyword:
 | IS
 | JOIN
 | KEY
+| LAST
 | LEFT
 | LIKE
 | LIMIT
@@ -3909,10 +3976,12 @@ reserved_keyword:
 | NULL
 | ON
 | ONLY
+| OPEN
 | OR
 | ORDER
 | OUTER
 | POLICY
+| PRIOR
 | REGEXP
 | RENAME
 | REPLACE
