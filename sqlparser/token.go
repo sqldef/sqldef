@@ -441,7 +441,7 @@ var keywords = map[string]int{
 	"vschema_tables":         VSCHEMA_TABLES,
 	"when":                   WHEN,
 	"where":                  WHERE,
-	"while":                  UNUSED,
+	"while":                  WHILE,
 	"with":                   WITH,
 	"without":                WITHOUT,
 	"write":                  WRITE,

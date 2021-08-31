@@ -243,7 +243,10 @@ func TestMssqldefTriggerWithRichSyntax(t *testing.T) {
 				users_cursor scroll cursor for
 					select name from users order by id asc
 			open users_cursor
+			while @@FETCH_STATUS = 0
+			begin
 			fetch first from users_cursor into @username
+			end
 			close users_cursor
 			deallocate users_cursor
 			insert into logs(log, dt) values (@username, @date);
