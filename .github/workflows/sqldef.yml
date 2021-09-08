@@ -36,6 +36,7 @@ jobs:
       - run: POSTGRES_VERSION="${POSTGRES_VERSION:-12}" docker-compose up -d
         env:
           POSTGRES_VERSION: ${{ matrix.version }}
+      - run: make deps
       - run: make test-${{ matrix.database }}def
 
   package:
