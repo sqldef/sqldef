@@ -1,3 +1,8 @@
+## v0.11.1
+
+- Support `USING INDEX` for mysqldef properly [#150](https://github.com/k0kubun/sqldef/issues/150)
+  - It has been crashing since v0.10.8
+
 ## v0.11.0
 
 - Support `TRIGGER` for mssqldef and mysqldef [#135](https://github.com/k0kubun/sqldef/pull/135)
