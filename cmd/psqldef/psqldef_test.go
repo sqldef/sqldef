@@ -721,8 +721,8 @@ func TestPsqldefDryRun(t *testing.T) {
 	    );`,
 	))
 
-	dryRun := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--dry-run", "--file", "schema.sql")
-	apply := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+	dryRun := assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--dry-run", "--file", "schema.sql")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
 	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 }
 
@@ -741,14 +741,14 @@ func TestPsqldefSkipDrop(t *testing.T) {
 
 	writeFile("schema.sql", "")
 
-	skipDrop := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--skip-drop", "--file", "schema.sql")
-	apply := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+	skipDrop := assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--skip-drop", "--file", "schema.sql")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
 	assertEquals(t, skipDrop, strings.Replace(apply, "DROP", "-- Skipped: DROP", 1))
 }
 
 func TestPsqldefExport(t *testing.T) {
 	resetTestDatabase()
-	out := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--export")
+	out := assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--export")
 	assertEquals(t, out, "-- No table exists --\n")
 
 	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", stripHeredoc(`
@@ -761,7 +761,7 @@ func TestPsqldefExport(t *testing.T) {
 		    c_varchar_unlimited varchar
 		);`,
 	))
-	out = assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--export")
+	out = assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--export")
 	// workaround: local has `public.` but travis doesn't.
 	assertEquals(t, strings.Replace(out, "public.users", "users", 2), stripHeredoc(`
 		CREATE TABLE users (
@@ -779,7 +779,7 @@ func TestPsqldefExport(t *testing.T) {
 
 func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 	resetTestDatabase()
-	out := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--export")
+	out := assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--export")
 	assertEquals(t, out, "-- No table exists --\n")
 
 	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", stripHeredoc(`
@@ -790,7 +790,7 @@ func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 		    PRIMARY KEY (col1, col2)
 		);`,
 	))
-	out = assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--export")
+	out = assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--export")
 	// workaround: local has `public.` but travis doesn't.
 	assertEquals(t, strings.Replace(out, "public.users", "users", 2), stripHeredoc(`
 		CREATE TABLE users (
@@ -989,12 +989,12 @@ func TestPsqldefAddIdentityColumnWithSequenceOption(t *testing.T) {
 }
 
 func TestPsqldefHelp(t *testing.T) {
-	_, err := execute("psqldef", "--help")
+	_, err := execute("./psqldef", "--help")
 	if err != nil {
 		t.Errorf("failed to run --help: %s", err)
 	}
 
-	out, err := execute("psqldef")
+	out, err := execute("./psqldef")
 	if err == nil {
 		t.Errorf("no database must be error, but successfully got: %s", out)
 	}
@@ -1010,13 +1010,13 @@ func TestMain(m *testing.M) {
 func assertApply(t *testing.T, schema string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+	assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
 }
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	actual := assertedExecute(t, "psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+	actual := assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
 	assertEquals(t, actual, expected)
 }
 

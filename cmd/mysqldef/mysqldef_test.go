@@ -1330,14 +1330,14 @@ func TestMysqldefDryRun(t *testing.T) {
 		);`,
 	))
 
-	dryRun := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--dry-run", "--file", "schema.sql")
-	apply := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	dryRun := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--dry-run", "--file", "schema.sql")
+	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
 	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 }
 
 func TestMysqldefExport(t *testing.T) {
 	resetTestDatabase()
-	out := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--export")
+	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export")
 	assertEquals(t, out, "-- No table exists --\n")
 
 	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", stripHeredoc(`
@@ -1346,7 +1346,7 @@ func TestMysqldefExport(t *testing.T) {
 		  created_at datetime NOT NULL
 		) DEFAULT CHARSET=latin1;`,
 	))
-	out = assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--export")
+	out = assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export")
 	assertEquals(t, out,
 		"CREATE TABLE `users` (\n"+
 			"  `name` varchar(40) DEFAULT NULL,\n"+
@@ -1366,18 +1366,18 @@ func TestMysqldefSkipDrop(t *testing.T) {
 
 	writeFile("schema.sql", "")
 
-	skipDrop := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--skip-drop", "--file", "schema.sql")
-	apply := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	skipDrop := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--skip-drop", "--file", "schema.sql")
+	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
 	assertEquals(t, skipDrop, strings.Replace(apply, "DROP", "-- Skipped: DROP", 1))
 }
 
 func TestMysqldefHelp(t *testing.T) {
-	_, err := execute("mysqldef", "--help")
+	_, err := execute("./mysqldef", "--help")
 	if err != nil {
 		t.Errorf("failed to run --help: %s", err)
 	}
 
-	out, err := execute("mysqldef")
+	out, err := execute("./mysqldef")
 	if err == nil {
 		t.Errorf("no database must be error, but successfully got: %s", out)
 	}
@@ -1393,20 +1393,20 @@ func TestMain(m *testing.M) {
 func assertApply(t *testing.T, schema string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
 }
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	actual := assertedExecute(t, "mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	actual := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
 	assertEquals(t, actual, expected)
 }
 
 func assertApplyFailure(t *testing.T, schema string, expected string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	actual, err := execute("mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	actual, err := execute("./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
 	if err == nil {
 		t.Errorf("expected 'mysqldef -uroot mysqldef_test --file schema.sql' to fail but succeeded with: %s", actual)
 	}

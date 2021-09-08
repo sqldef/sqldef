@@ -162,8 +162,8 @@ func TestSQLite3defDryRun(t *testing.T) {
 	    );`,
 	))
 
-	dryRun := assertedExecute(t, "sqlite3def", "sqlite3def_test", "--dry-run", "--file", "schema.sql")
-	apply := assertedExecute(t, "sqlite3def", "sqlite3def_test", "--file", "schema.sql")
+	dryRun := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--dry-run", "--file", "schema.sql")
+	apply := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--file", "schema.sql")
 	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 }
 
@@ -178,14 +178,14 @@ func TestSQLite3defSkipDrop(t *testing.T) {
 
 	writeFile("schema.sql", "")
 
-	skipDrop := assertedExecute(t, "sqlite3def", "sqlite3def_test", "--skip-drop", "--file", "schema.sql")
-	apply := assertedExecute(t, "sqlite3def", "sqlite3def_test", "--file", "schema.sql")
+	skipDrop := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--skip-drop", "--file", "schema.sql")
+	apply := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--file", "schema.sql")
 	assertEquals(t, skipDrop, strings.Replace(apply, "DROP", "-- Skipped: DROP", 1))
 }
 
 func TestSQLite3defExport(t *testing.T) {
 	resetTestDatabase()
-	out := assertedExecute(t, "sqlite3def", "sqlite3def_test", "--export")
+	out := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--export")
 	assertEquals(t, out, "-- No table exists --\n")
 
 	mustExecute("sqlite3", "sqlite3def_test", stripHeredoc(`
@@ -194,7 +194,7 @@ func TestSQLite3defExport(t *testing.T) {
 		    age integer
 		);`,
 	))
-	out = assertedExecute(t, "sqlite3def", "sqlite3def_test", "--export")
+	out = assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--export")
 	assertEquals(t, out, stripHeredoc(`
 		CREATE TABLE users (
 		    id integer NOT NULL PRIMARY KEY,
@@ -205,12 +205,12 @@ func TestSQLite3defExport(t *testing.T) {
 }
 
 func TestSQLite3defHelp(t *testing.T) {
-	_, err := execute("sqlite3def", "--help")
+	_, err := execute("./sqlite3def", "--help")
 	if err != nil {
 		t.Errorf("failed to run --help: %s", err)
 	}
 
-	out, err := execute("sqlite3def")
+	out, err := execute("./sqlite3def")
 	if err == nil {
 		t.Errorf("no database must be error, but successfully got: %s", out)
 	}
@@ -226,13 +226,13 @@ func TestMain(m *testing.M) {
 func assertApply(t *testing.T, schema string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	assertedExecute(t, "sqlite3def", "sqlite3def_test", "--file", "schema.sql")
+	assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--file", "schema.sql")
 }
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	actual := assertedExecute(t, "sqlite3def", "sqlite3def_test", "--file", "schema.sql")
+	actual := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--file", "schema.sql")
 	assertEquals(t, actual, expected)
 }
 
