@@ -1217,8 +1217,8 @@ func (idx *IndexDefinition) Format(buf *TrackedBuffer) {
 
 	for _, opt := range idx.Options {
 		buf.Myprintf(" %s", opt.Name)
-		if opt.Using != "" {
-			buf.Myprintf(" %s", opt.Using)
+		if opt.Name == "using" {
+			buf.Myprintf(" %s", opt.Value.Val)
 		} else {
 			buf.Myprintf(" %v", opt.Value)
 		}
@@ -1281,7 +1281,6 @@ type LengthScaleOption struct {
 type IndexOption struct {
 	Name  string
 	Value *SQLVal
-	Using string
 }
 
 type IndexPartition struct {

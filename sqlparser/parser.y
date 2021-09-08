@@ -1803,7 +1803,7 @@ mssql_index_option_list:
 index_option:
   USING ID
   {
-    $$ = &IndexOption{Name: string($1), Using: string($2)}
+    $$ = &IndexOption{Name: string($1), Value: NewStrVal($2)}
   }
 | KEY_BLOCK_SIZE equal_opt INTEGRAL
   {

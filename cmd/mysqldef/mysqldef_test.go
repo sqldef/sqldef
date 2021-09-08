@@ -581,6 +581,26 @@ func TestMysqldefAddIndexWithKeyLength(t *testing.T) {
 	assertApplyOutput(t, createTable+alterTable, nothingModified)
 }
 
+func TestMysqldefIndexOption(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id int(11) NOT NULL
+		);`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id int(11) NOT NULL,
+		  KEY index_id (id) USING BTREE
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD key `index_id` (`id`) using BTREE;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefFulltextIndex(t *testing.T) {
 	resetTestDatabase()
 
