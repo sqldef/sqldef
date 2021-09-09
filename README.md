@@ -1,4 +1,4 @@
-# sqldef [![Build Status](https://travis-ci.org/k0kubun/sqldef.svg?branch=master)](https://travis-ci.org/k0kubun/sqldef)
+# sqldef [![sqldef](https://github.com/k0kubun/sqldef/actions/workflows/sqldef.yml/badge.svg)](https://github.com/k0kubun/sqldef/actions/workflows/sqldef.yml)
 
 The easiest idempotent MySQL/PostgreSQL/SQLite3/SQL Server schema management by SQL.
 
