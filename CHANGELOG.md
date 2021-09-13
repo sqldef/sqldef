@@ -1,3 +1,7 @@
+## v0.11.2
+
+- Fix mssqldef's parser for TRIGGER time [#152](https://github.com/k0kubun/sqldef/pull/152)
+
 ## v0.11.1
 
 - Support `USING INDEX` for mysqldef properly [#150](https://github.com/k0kubun/sqldef/issues/150)
