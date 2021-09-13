@@ -845,7 +845,7 @@ create_statement:
   }
 
 trigger_time:
-  BEFORE
+  FOR
   {
     $$ = string($1)
   }
