@@ -154,14 +154,14 @@ func TestMssqldefCreateView(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createView := stripHeredoc(`
-		CREATE VIEW [dbo].[view_users] AS select id from dbo.users where age = 1;
+		CREATE VIEW [dbo].[view_users] AS select id from dbo.users with(nolock) where age = 1;
 		`,
 	)
 	assertApplyOutput(t, createTable+createView, applyPrefix+createView)
 	assertApplyOutput(t, createTable+createView, nothingModified)
 
 	createView = stripHeredoc(`
-		CREATE VIEW [dbo].[view_users] AS select id from dbo.users where age = 2;
+		CREATE VIEW [dbo].[view_users] AS select id from dbo.users with(nolock) where age = 2;
 		`,
 	)
 	dropView := stripHeredoc(`
