@@ -1,3 +1,7 @@
+## v0.11.3
+
+- Support parsing `GENERATED ALWAYS AS` for mysqldef [#153](https://github.com/k0kubun/sqldef/pull/153)
+
 ## v0.11.2
 
 - Fix mssqldef's parser for TRIGGER time [#152](https://github.com/k0kubun/sqldef/pull/152)
