@@ -431,7 +431,7 @@ var keywords = map[string]int{
 	"varchar":                VARCHAR,
 	"varcharacter":           UNUSED,
 	"varying":                VARYING,
-	"virtual":                UNUSED,
+	"virtual":                VIRTUAL,
 	"vindex":                 VINDEX,
 	"vindexes":               VINDEXES,
 	"view":                   VIEW,

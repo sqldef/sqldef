@@ -930,6 +930,10 @@ const (
 	IdentityByDefaultStr = "by default"
 )
 
+type GeneratedColumn struct {
+	Expr Expr
+}
+
 type IdentityOpt struct {
 	Behavior          string
 	Sequence          *Sequence
@@ -975,7 +979,10 @@ type ColumnType struct {
 	ReferenceNames Columns
 	// TODO: Allow specifying referenced column names
 
-	// GENERATED AS IDENTITY
+	// MySQL: GENERATED ALWAYS AS (expr)
+	Generated *GeneratedColumn
+
+	// PostgreSQL: GENERATED AS IDENTITY
 	Identity *IdentityOpt
 }
 

@@ -212,6 +212,8 @@ func forceEOF(yylex interface{}) {
 // MySQL reserved words that are unused by this grammar will map to this token.
 %token <bytes> UNUSED
 
+// MySQL GENERATED ALWAYS AS
+%token <bytes> VIRTUAL
 // Postgres GENERATED AS IDENTITY
 %token <bytes> GENERATED ALWAYS IDENTITY
 // sequence
@@ -1173,6 +1175,13 @@ column_definition_type:
     $1.ReferenceNames = $5
     $$ = $1
   }
+// for MySQL (TODO: support STORED and abbreviation)
+| column_definition_type GENERATED identity_behavior AS '(' value ')' VIRTUAL
+  {
+    $1.Generated = &GeneratedColumn{Expr: $6}
+    $$ = $1
+  }
+// for PostgreSQL
 | column_definition_type GENERATED identity_behavior AS IDENTITY
   {
     $1.Identity = &IdentityOpt{Behavior: $3}

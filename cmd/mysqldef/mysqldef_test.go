@@ -300,6 +300,21 @@ func TestMysqldefCreateTableAddIndexWithKeyLength(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefCreateTableGeneratedAlwaysAs(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE test_table (
+		  id int(11) NOT NULL AUTO_INCREMENT,
+		  test_column varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
+		  PRIMARY KEY (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefAddColumn(t *testing.T) {
 	resetTestDatabase()
 
