@@ -851,6 +851,10 @@ trigger_time:
   {
     $$ = string($1)
   }
+| BEFORE
+  {
+    $$ = string($1)
+  }
 | AFTER
   {
     $$ = string($1)
