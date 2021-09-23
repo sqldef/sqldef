@@ -1199,6 +1199,22 @@ func TestMysqldefTrigger(t *testing.T) {
 		"DROP TRIGGER `insert_log`;\n"+
 		"CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());\n")
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
+
+	createTriggerForBeforeUpdate := stripHeredoc(`
+		CREATE TRIGGER ` + "`insert_log_before_update`" + ` before update ON ` + "`users`" + ` FOR EACH ROW insert into log(log, dt) values ('insert', now());
+		`,
+	)
+	assertApplyOutput(t, createTable+createTriggerForBeforeUpdate, applyPrefix+createTriggerForBeforeUpdate)
+	assertApplyOutput(t, createTable+createTriggerForBeforeUpdate, nothingModified)
+
+	createTriggerForBeforeUpdate = stripHeredoc(`
+		CREATE TRIGGER ` + "`insert_log_before_update`" + ` before update ON ` + "`users`" + ` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());
+		`,
+	)
+	assertApplyOutput(t, createTable+createTriggerForBeforeUpdate, applyPrefix+
+		"DROP TRIGGER `insert_log_before_update`;\n"+
+		"CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());\n")
+	assertApplyOutput(t, createTable+createTriggerForBeforeUpdate, nothingModified)
 }
 
 func TestMysqldefDefaultValue(t *testing.T) {
