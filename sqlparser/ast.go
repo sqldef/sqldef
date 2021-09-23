@@ -1803,7 +1803,8 @@ type AliasedTableExpr struct {
 	Expr       SimpleTableExpr
 	Partitions Partitions
 	As         TableIdent
-	Hints      *IndexHints
+	TableHints []string
+	IndexHints *IndexHints
 }
 
 // Format formats the node.
@@ -1812,9 +1813,12 @@ func (node *AliasedTableExpr) Format(buf *TrackedBuffer) {
 	if !node.As.IsEmpty() {
 		buf.Myprintf(" as %v", node.As)
 	}
-	if node.Hints != nil {
+	if len(node.TableHints) != 0 {
+		buf.Myprintf(" with(%s)", strings.Join(node.TableHints, ", "))
+	}
+	if node.IndexHints != nil {
 		// Hint node provides the space padding.
-		buf.Myprintf("%v", node.Hints)
+		buf.Myprintf("%v", node.IndexHints)
 	}
 }
 
@@ -1826,14 +1830,14 @@ func (node *AliasedTableExpr) walkSubtree(visit Visit) error {
 		visit,
 		node.Expr,
 		node.As,
-		node.Hints,
+		node.IndexHints,
 	)
 }
 
 // RemoveHints returns a new AliasedTableExpr with the hints removed.
 func (node *AliasedTableExpr) RemoveHints() *AliasedTableExpr {
 	noHints := *node
-	noHints.Hints = nil
+	noHints.IndexHints = nil
 	return &noHints
 }
 

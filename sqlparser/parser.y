@@ -226,6 +226,9 @@ func forceEOF(yylex interface{}) {
 // index
 %token <bytes> INCLUDE
 
+// table hint
+%token <bytes> HOLDLOCK NOLOCK NOWAIT PAGLOCK ROWLOCK TABLELOCK
+
 %type <statement> command
 %type <selStmt> select_statement base_select union_lhs union_rhs
 %type <statement> stream_statement insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement if_statement
@@ -347,6 +350,8 @@ func forceEOF(yylex interface{}) {
 %type <localVariable> local_variable
 %type <localVariables> declare_variable_list
 %type <boolVal> scroll_opt
+%type <strs> table_hint_list table_hint_opt
+%type <str> table_hint
 
 %start any_command
 
@@ -2705,14 +2710,59 @@ table_factor:
     $$ = &ParenTableExpr{Exprs: $2}
   }
 
-aliased_table_name:
-table_name as_opt_id index_hint_list
+table_hint_opt:
   {
-    $$ = &AliasedTableExpr{Expr:$1, As: $2, Hints: $3}
+    $$ = []string{}
   }
-| table_name PARTITION openb partition_list closeb as_opt_id index_hint_list
+| WITH '(' table_hint_list ')'
   {
-    $$ = &AliasedTableExpr{Expr:$1, Partitions: $4, As: $6, Hints: $7}
+    $$ = $3
+  }
+
+table_hint_list:
+  table_hint
+  {
+    $$ = []string{$1}
+  }
+| table_hint_list ',' table_hint
+  {
+    $$ = append($1, $3)
+  }
+
+table_hint:
+  HOLDLOCK
+  {
+    $$ = string($1)
+  }
+| NOLOCK
+  {
+    $$ = string($1)
+  }
+| NOWAIT
+  {
+    $$ = string($1)
+  }
+| PAGLOCK
+  {
+    $$ = string($1)
+  }
+| ROWLOCK
+  {
+    $$ = string($1)
+  }
+| TABLELOCK
+  {
+    $$ = string($1)
+  }
+
+aliased_table_name:
+table_name as_opt_id index_hint_list table_hint_opt
+  {
+    $$ = &AliasedTableExpr{Expr:$1, As: $2, IndexHints: $3, TableHints: $4}
+  }
+| table_name PARTITION openb partition_list closeb as_opt_id index_hint_list table_hint_opt
+  {
+    $$ = &AliasedTableExpr{Expr:$1, Partitions: $4, As: $6, IndexHints: $7, TableHints: $8}
   }
 
 column_list:
@@ -4027,6 +4077,7 @@ reserved_keyword:
 | GENERATED
 | GROUP
 | HAVING
+| HOLDLOCK
 | IDENTITY
 | IF
 | IGNORE
@@ -4052,7 +4103,9 @@ reserved_keyword:
 | MOD
 | NATURAL
 | NEXT // next should be doable as non-reserved, but is not due to the special `select next num_val` query that vitess supports
+| NOLOCK
 | NOT
+| NOWAIT
 | NULL
 | ON
 | ONLY
@@ -4060,6 +4113,7 @@ reserved_keyword:
 | OR
 | ORDER
 | OUTER
+| PAGLOCK
 | POLICY
 | PRIOR
 | REGEXP
@@ -4067,6 +4121,7 @@ reserved_keyword:
 | REPLACE
 | RIGHT
 | ROW
+| ROWLOCK
 | SCHEMA
 | SCROLL
 | SELECT
@@ -4091,6 +4146,7 @@ reserved_keyword:
 | WHEN
 | WHERE
 | WHILE
+| WITH
 | OFF
 
 /*
@@ -4221,7 +4277,6 @@ non_reserved_keyword:
 | VITESS_SHARDS
 | VITESS_TABLETS
 | VSCHEMA_TABLES
-| WITH
 | WITHOUT
 | WRITE
 | YEAR
