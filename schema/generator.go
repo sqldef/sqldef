@@ -820,6 +820,10 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		definition += fmt.Sprintf("ON UPDATE %s ", string(column.onUpdate.raw))
 	}
 
+	if column.comment != nil {
+		definition += fmt.Sprintf("COMMENT '%s' ", string(column.comment.raw))
+	}
+
 	if column.check != nil {
 		definition += "CHECK "
 		if column.check.notForReplication {

@@ -332,10 +332,10 @@ func TestMysqldefAddColumn(t *testing.T) {
 		CREATE TABLE users (
 		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
 		  name varchar(40) DEFAULT NULL,
-		  created_at datetime NOT NULL
+		  created_at datetime NOT NULL COMMENT 'created time'
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `created_at` datetime NOT NULL AFTER `name`;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `created_at` datetime NOT NULL COMMENT 'created time' AFTER `name`;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
