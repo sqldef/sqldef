@@ -1,89 +1,15 @@
 name: sqldef
 on:
   push:
-    branches:
-      - master
-    tags:
-      - v*
   pull_request:
     types:
       - opened
       - synchronize
       - reopened
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        database:
-          - mysql
-          - sqlite3
-          - mssql
-        include:
-          - database: psql
-            version: 10
-          - database: psql
-            version: 11
-          - database: psql
-            version: 12
-      fail-fast: false
-    steps:
-      - uses: actions/setup-go@v2
-        with:
-          go-version: 1.16
-      - uses: actions/checkout@v2
-
-      - run: POSTGRES_VERSION="${POSTGRES_VERSION:-12}" docker-compose up -d
-        env:
-          POSTGRES_VERSION: ${{ matrix.version }}
-      - run: make deps
-      - run: make test-${{ matrix.database }}def
-
-  package:
+  echo:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v2
-        with:
-          go-version: 1.16
       - uses: actions/checkout@v2
-
-      - run: make package
-
-  release:
-    runs-on: ubuntu-latest
-    needs:
-      - test
-    if: startsWith(github.ref, 'refs/tags/')
-    steps:
-      - uses: actions/setup-go@v2
-        with:
-          go-version: 1.16
-      - uses: actions/checkout@v2
-      - run: make package
-      - name: Release binaries
-        run: |
-          export VERSION=$(echo "$GITHUB_REF" | sed -e 's!refs/tags/!!')
-          curl -L "https://github.com/tcnksm/ghr/releases/download/${GHR_VERSION}/ghr_${GHR_VERSION}_linux_amd64.tar.gz" | tar xvz
-          "ghr_${GHR_VERSION}_linux_amd64/ghr" -u k0kubun -r sqldef -replace -n "$VERSION" "$VERSION" package/
-        env:
-          GHR_VERSION: v0.13.0
-          GITHUB_TOKEN: ${{ secrets.githubtoken }}
-
-      - uses: actions/checkout@v2
-        with:
-          repository: sqldef/homebrew-sqldef
-          ssh-key: ${{ secrets.HOMEBREW_DEPLOY_KEY }}
-          path: ./homebrew-sqldef
-      - name: Update homebrew
-        run: |
-          set -x
-          cd ./homebrew-sqldef
-          VERSION=$(echo "$GITHUB_REF" | sed -e 's!refs/tags/!!')
-          sed -i -e "s/tag: '.*'/tag: '$VERSION'/" mysqldef.rb psqldef.rb
-          git add .
-          if ! git diff-index --quiet HEAD --; then
-            git config --global user.email "k0kubun@github.com"
-            git config --global user.name "sqldef"
-            git commit -m "Version $VERSION"
-            git push origin master
-          fi
+      - run: echo ${{ github.event }}
+      - run: echo ${{ github.event_name }}
