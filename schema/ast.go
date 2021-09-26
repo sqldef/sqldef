@@ -66,6 +66,7 @@ type Column struct {
 	timezone       bool // for Postgres `with time zone`
 	keyOption      ColumnKeyOption
 	onUpdate       *Value
+	comment        *Value
 	enumValues     []string
 	references     string
 	identity       *Identity

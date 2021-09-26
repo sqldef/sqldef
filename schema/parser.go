@@ -114,6 +114,7 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 			timezone:      castBool(parsedCol.Type.Timezone),
 			keyOption:     ColumnKeyOption(parsedCol.Type.KeyOpt), // FIXME: tight coupling in enum order
 			onUpdate:      parseValue(parsedCol.Type.OnUpdate),
+			comment:       parseValue(parsedCol.Type.Comment),
 			enumValues:    parsedCol.Type.EnumValues,
 			references:    parsedCol.Type.References,
 			identity:      parseIdentity(parsedCol.Type.Identity),
