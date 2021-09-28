@@ -1266,7 +1266,8 @@ func (g *Generator) haveSameColumnDefinition(current Column, desired Column) boo
 		(current.check == desired.check) &&
 		(desired.charset == "" || current.charset == desired.charset) && // detect change column only when set explicitly. TODO: can we calculate implicit charset?
 		(desired.collate == "" || current.collate == desired.collate) && // detect change column only when set explicitly. TODO: can we calculate implicit collate?
-		reflect.DeepEqual(current.onUpdate, desired.onUpdate)
+		reflect.DeepEqual(current.onUpdate, desired.onUpdate) &&
+		reflect.DeepEqual(current.comment, desired.comment)
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
