@@ -55,6 +55,7 @@ func TestPsqldefCreateTableWithDefault(t *testing.T) {
 		  default_numeric numeric(5) default 42.195,
 		  default_fixed_char character(3) default 'JPN'::bpchar,
 		  default_text text default ''::text,
+		  default_json json default '[]'::json,
 		  default_current_timestamp timestamp default CURRENT_TIMESTAMP,
 		  default_current_date date default CURRENT_DATE,
 		  default_current_time time default CURRENT_TIME,

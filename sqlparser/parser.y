@@ -1386,6 +1386,7 @@ character_cast_opt:
 | TYPECAST TIMESTAMP time_zone_opt
 | TYPECAST BPCHAR
 | TYPECAST TEXT
+| TYPECAST JSON
 
 numeric_type:
   int_type length_opt
