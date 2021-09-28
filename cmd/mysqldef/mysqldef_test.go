@@ -1160,9 +1160,9 @@ func TestMysqldefView(t *testing.T) {
 		  id bigint(20) NOT NULL
 		);
 		CREATE TABLE posts (
-			id bigint(20) NOT NULL,
-			user_id bigint(20) NOT NULL,
-			is_deleted tinyint(1)
+		  id bigint(20) NOT NULL,
+		  user_id bigint(20) NOT NULL,
+		  is_deleted tinyint(1)
 		);
 		`,
 	)
@@ -1195,46 +1195,34 @@ func TestMysqldefTriggerInsert(t *testing.T) {
 
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
-			id bigint NOT NULL,
-			name text
+		  id bigint NOT NULL,
+		  name text
 		);
 		CREATE TABLE logs (
-			id bigint NOT NULL,
-			log varchar(20),
-			dt datetime
+		  id bigint NOT NULL,
+		  log varchar(20),
+		  dt datetime
 		);
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTrigger := stripHeredoc(`
-		CREATE TRIGGER ` + "`insert_log`" + ` after insert ON ` + "`users`" + ` FOR EACH ROW insert into log(log, dt) values ('insert', now());
-		`,
-	)
+	createTrigger := "CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());\n"
 	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTrigger)
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 
-	createTrigger = stripHeredoc(`
-		CREATE TRIGGER ` + "`insert_log`" + ` after insert ON ` + "`users`" + ` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());
-		`,
-	)
+	createTrigger = "CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());\n"
 	assertApplyOutput(t, createTable+createTrigger, applyPrefix+
 		"DROP TRIGGER `insert_log`;\n"+
 		"CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());\n")
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 
-	createTriggerForBeforeUpdate := stripHeredoc(`
-		CREATE TRIGGER ` + "`insert_log_before_update`" + ` before update ON ` + "`users`" + ` FOR EACH ROW insert into log(log, dt) values ('insert', now());
-		`,
-	)
+	createTriggerForBeforeUpdate := "CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());\n"
 	assertApplyOutput(t, createTable+createTriggerForBeforeUpdate, applyPrefix+createTriggerForBeforeUpdate)
 	assertApplyOutput(t, createTable+createTriggerForBeforeUpdate, nothingModified)
 
-	createTriggerForBeforeUpdate = stripHeredoc(`
-		CREATE TRIGGER ` + "`insert_log_before_update`" + ` before update ON ` + "`users`" + ` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());
-		`,
-	)
+	createTriggerForBeforeUpdate = "CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());\n"
 	assertApplyOutput(t, createTable+createTriggerForBeforeUpdate, applyPrefix+
 		"DROP TRIGGER `insert_log_before_update`;\n"+
 		"CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());\n")
