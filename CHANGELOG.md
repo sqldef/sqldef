@@ -1,3 +1,9 @@
+## v0.11.5
+
+- Remove Windows and macOS binaries of sqlite3def releases that haven't been working
+  [#149](https://github.com/k0kubun/sqldef/pull/149)
+- Support updating comments of columns [#159](https://github.com/k0kubun/sqldef/pull/159)
+
 ## v0.11.4
 
 - Support parsing table hint like `WITH(NOLOCK)` for mssqldef [#156](https://github.com/k0kubun/sqldef/pull/156)
