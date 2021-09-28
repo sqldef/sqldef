@@ -1190,7 +1190,7 @@ func TestMysqldefView(t *testing.T) {
 	assertApplyOutput(t, "", applyPrefix+"DROP TABLE `posts`;\nDROP TABLE `users`;\nDROP VIEW `foo`;\n")
 }
 
-func TestMysqldefTrigger(t *testing.T) {
+func TestMysqldefTriggerInsert(t *testing.T) {
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1239,6 +1239,27 @@ func TestMysqldefTrigger(t *testing.T) {
 		"DROP TRIGGER `insert_log_before_update`;\n"+
 		"CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());\n")
 	assertApplyOutput(t, createTable+createTriggerForBeforeUpdate, nothingModified)
+}
+
+func TestMysqldefTriggerSetNew(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id int unsigned NOT NULL AUTO_INCREMENT,
+		  name varchar(255) NOT NULL,
+		  logical_uniqueness tinyint(1) DEFAULT '1',
+		  PRIMARY KEY (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTrigger := "CREATE TRIGGER `set_logical_uniqueness_on_users` " +
+		"before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = 1;\n"
+	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTrigger)
+	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 }
 
 func TestMysqldefDefaultValue(t *testing.T) {

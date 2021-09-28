@@ -194,7 +194,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> DATABASES TABLES VITESS_KEYSPACES VITESS_SHARDS VITESS_TABLETS VSCHEMA_TABLES EXTENDED FULL PROCESSLIST
 
 // SET tokens
-%token <bytes> NAMES CHARSET GLOBAL SESSION ISOLATION LEVEL READ WRITE ONLY REPEATABLE COMMITTED UNCOMMITTED SERIALIZABLE
+%token <bytes> NAMES CHARSET GLOBAL SESSION ISOLATION LEVEL READ WRITE ONLY REPEATABLE COMMITTED UNCOMMITTED SERIALIZABLE NEW
 
 // Functions
 %token <bytes> CURRENT_TIMESTAMP DATABASE CURRENT_DATE
@@ -3899,6 +3899,11 @@ set_expression:
 | reserved_sql_id '=' expression
   {
     $$ = &SetExpr{Name: $1, Expr: $3}
+  }
+// MySQL extension of triggers
+| NEW '.' reserved_sql_id '=' expression
+  {
+    $$ = &SetExpr{Name: NewColIdent("NEW." + $3.val), Expr: $5}
   }
 | charset_or_character_set charset_value collate_opt
   {

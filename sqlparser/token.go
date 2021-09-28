@@ -296,6 +296,7 @@ var keywords = map[string]int{
 	"names":                  NAMES,
 	"natural":                NATURAL,
 	"nchar":                  NCHAR,
+	"new":                    NEW,
 	"next":                   NEXT,
 	"no":                     NO,
 	"nolock":                 NOLOCK,
