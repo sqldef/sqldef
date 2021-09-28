@@ -54,10 +54,11 @@ func TestMssqldefCreateTableQuotes(t *testing.T) {
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTable = stripHeredoc(
-		"CREATE TABLE test_table (\n" +
-			"  id integer\n" +
-			");\n",
+	createTable = stripHeredoc(`
+		CREATE TABLE test_table (
+		  id integer
+		);
+		`,
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -153,21 +154,12 @@ func TestMssqldefCreateView(t *testing.T) {
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createView := stripHeredoc(`
-		CREATE VIEW [dbo].[view_users] AS select id from dbo.users with(nolock) where age = 1;
-		`,
-	)
+	createView := "CREATE VIEW [dbo].[view_users] AS select id from dbo.users with(nolock) where age = 1;\n"
 	assertApplyOutput(t, createTable+createView, applyPrefix+createView)
 	assertApplyOutput(t, createTable+createView, nothingModified)
 
-	createView = stripHeredoc(`
-		CREATE VIEW [dbo].[view_users] AS select id from dbo.users with(nolock) where age = 2;
-		`,
-	)
-	dropView := stripHeredoc(`
-		DROP VIEW [dbo].[view_users];
-		`,
-	)
+	createView = "CREATE VIEW [dbo].[view_users] AS select id from dbo.users with(nolock) where age = 2;\n"
+	dropView := "DROP VIEW [dbo].[view_users];\n"
 	assertApplyOutput(t, createTable+createView, applyPrefix+dropView+createView)
 	assertApplyOutput(t, createTable+createView, nothingModified)
 
@@ -179,13 +171,13 @@ func TestMssqldefTrigger(t *testing.T) {
 
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
-			id bigint NOT NULL,
-			name text
+		  id bigint NOT NULL,
+		  name text
 		);
 		CREATE TABLE logs (
-			id bigint NOT NULL,
-			log varchar(20),
-			dt datetime
+		  id bigint NOT NULL,
+		  log varchar(20),
+		  dt datetime
 		);
 		`,
 	)
@@ -194,7 +186,7 @@ func TestMssqldefTrigger(t *testing.T) {
 
 	createTrigger := stripHeredoc(`
 		CREATE TRIGGER [insert_log] ON [dbo].[users] for insert AS
-			insert into logs(log, dt) values ('insert', getdate());
+		insert into logs(log, dt) values ('insert', getdate());
 		`,
 	)
 	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTrigger)
@@ -202,16 +194,17 @@ func TestMssqldefTrigger(t *testing.T) {
 
 	createTrigger = stripHeredoc(`
 		CREATE TRIGGER [insert_log] ON [dbo].[users] for insert AS
-			delete from logs
-			insert into logs(log, dt) values ('insert', getdate());
+		  delete from logs
+		  insert into logs(log, dt) values ('insert', getdate());
 		`,
 	)
 
-	assertApplyOutput(t, createTable+createTrigger, applyPrefix+
-		"CREATE OR ALTER TRIGGER [insert_log] ON [dbo].[users] for insert AS\n"+
-		"delete from logs\n"+
-		"insert into logs(log, dt) values ('insert', getdate());\n",
-	)
+	assertApplyOutput(t, createTable+createTrigger, applyPrefix+stripHeredoc(`
+		CREATE OR ALTER TRIGGER [insert_log] ON [dbo].[users] for insert AS
+		delete from logs
+		insert into logs(log, dt) values ('insert', getdate());
+		`,
+	))
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 }
 
@@ -220,13 +213,13 @@ func TestMssqldefTriggerWithRichSyntax(t *testing.T) {
 
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
-			id bigint NOT NULL,
-			name text
+		  id bigint NOT NULL,
+		  name text
 		);
 		CREATE TABLE logs (
-			id bigint NOT NULL,
-			log varchar(20),
-			dt datetime
+		  id bigint NOT NULL,
+		  log varchar(20),
+		  dt datetime
 		);
 		`,
 	)
@@ -518,7 +511,7 @@ func TestMssqldefCreateTableDropPrimaryKeyConstraint(t *testing.T) {
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
-			CONSTRAINT [pk_users] PRIMARY KEY ([id])
+		  CONSTRAINT [pk_users] PRIMARY KEY ([id])
 		);`,
 	)
 	assertApply(t, createTable)
@@ -540,14 +533,14 @@ func TestMssqldefCreateTableWithIndexOption(t *testing.T) {
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
-		    INDEX [ix_users_id] UNIQUE CLUSTERED ([id]) WITH (
-		      PAD_INDEX = ON,
-		      FILLFACTOR = 10,
-		      IGNORE_DUP_KEY = ON,
-		      STATISTICS_NORECOMPUTE = ON,
-		      STATISTICS_INCREMENTAL = OFF,
-		      ALLOW_ROW_LOCKS = ON,
-		      ALLOW_PAGE_LOCKS = ON
+		  INDEX [ix_users_id] UNIQUE CLUSTERED ([id]) WITH (
+		    PAD_INDEX = ON,
+		    FILLFACTOR = 10,
+		    IGNORE_DUP_KEY = ON,
+		    STATISTICS_NORECOMPUTE = ON,
+		    STATISTICS_INCREMENTAL = OFF,
+		    ALLOW_ROW_LOCKS = ON,
+		    ALLOW_PAGE_LOCKS = ON
 		  )
 		);
 		`)
