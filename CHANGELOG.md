@@ -1,3 +1,7 @@
+## v0.11.6
+
+- Support a default value for JSON columns in psqldef [#161](https://github.com/k0kubun/sqldef/pull/161)
+
 ## v0.11.5
 
 - Remove Windows and macOS binaries of sqlite3def releases that haven't been working
