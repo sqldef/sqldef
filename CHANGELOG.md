@@ -1,3 +1,7 @@
+## v0.11.7
+
+- Support trigger assignment with `NEW` keyword in mysqldef [#158](https://github.com/k0kubun/sqldef/pull/158)
+
 ## v0.11.6
 
 - Support a default value for JSON columns in psqldef [#161](https://github.com/k0kubun/sqldef/pull/161)
