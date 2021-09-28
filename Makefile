@@ -5,6 +5,10 @@ GOOS=$(word 1,$(subst /, ,$(lastword $(GOVERSION))))
 GOARCH=$(word 2,$(subst /, ,$(lastword $(GOVERSION))))
 BUILD_DIR=build/$(GOOS)-$(GOARCH)
 
+# Because ghr doesn't support cross-compiling, cgo cross-build of mattn/go-sqlite3 is failing.
+# We should use https://github.com/karalabe/xgo or something to support sqlite3def in non-Linux OSes.
+SQLITE3_OS=linux
+
 .PHONY: all build clean deps package package-zip package-targz
 
 all: build
@@ -37,14 +41,18 @@ package-zip: build
 	cd $(BUILD_DIR) && zip ../../package/mssqldef_$(GOOS)_$(GOARCH).zip mssqldef
 	cd $(BUILD_DIR) && zip ../../package/mysqldef_$(GOOS)_$(GOARCH).zip mysqldef
 	cd $(BUILD_DIR) && zip ../../package/psqldef_$(GOOS)_$(GOARCH).zip psqldef
-	[ "$(GOOS)" = linux ] && cd $(BUILD_DIR) && zip ../../package/sqlite3def_$(GOOS)_$(GOARCH).zip sqlite3def
+	if [ "$(GOOS)" = "$(SQLITE3_OS)" ]; then \
+		cd $(BUILD_DIR) && zip ../../package/sqlite3def_$(GOOS)_$(GOARCH).zip sqlite3def; \
+	fi
 
 package-targz: build
 	mkdir -p package
 	cd $(BUILD_DIR) && tar zcvf ../../package/mssqldef_$(GOOS)_$(GOARCH).tar.gz mssqldef
 	cd $(BUILD_DIR) && tar zcvf ../../package/mysqldef_$(GOOS)_$(GOARCH).tar.gz mysqldef
 	cd $(BUILD_DIR) && tar zcvf ../../package/psqldef_$(GOOS)_$(GOARCH).tar.gz psqldef
-	[ "$(GOOS)" = linux ] && cd $(BUILD_DIR) && tar zcvf ../../package/sqlite3def_$(GOOS)_$(GOARCH).tar.gz sqlite3def
+	if [ "$(GOOS)" = "$(SQLITE3_OS)" ]; then \
+		cd $(BUILD_DIR) && tar zcvf ../../package/sqlite3def_$(GOOS)_$(GOARCH).tar.gz sqlite3def; \
+	fi
 
 test: test-mysqldef test-psqldef test-sqlite3def test-mssqldef test-sqlparser
 
