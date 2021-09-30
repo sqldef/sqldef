@@ -2618,8 +2618,7 @@ func (node *ColName) Equal(c *ColName) bool {
 
 // NewQualifierColName represents a column name with NEW qualifier.
 type NewQualifierColName struct {
-	Metadata interface{}
-	Name     ColIdent
+	Name ColIdent
 }
 
 // Format formats the node.
