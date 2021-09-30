@@ -66,7 +66,7 @@ func forceEOF(yylex interface{}) {
   columns       Columns
   partitions    Partitions
   colName       *ColName
-  NewQualifierColName    *NewQualifierColName
+  newQualifierColName    *NewQualifierColName
   tableExprs    TableExprs
   tableExpr     TableExpr
   joinCondition JoinCondition
@@ -353,7 +353,7 @@ func forceEOF(yylex interface{}) {
 %type <boolVal> scroll_opt
 %type <strs> table_hint_list table_hint_opt
 %type <str> table_hint
-%type <NewQualifierColName> new_column_name
+%type <newQualifierColName> new_qualifier_column_name
 
 %start any_command
 
@@ -3168,7 +3168,7 @@ value_expression:
   {
     $$ = $1
   }
-| new_column_name
+| new_qualifier_column_name
   {
     $$ = $1
   }
@@ -3630,7 +3630,7 @@ column_name:
     $$ = &ColName{Qualifier: TableName{Qualifier: $1, Name: $3}, Name: $5}
   }
 
-new_column_name:
+new_qualifier_column_name:
   NEW '.' reserved_sql_id
   {
     $$ = &NewQualifierColName{Name: $3}
