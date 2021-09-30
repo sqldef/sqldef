@@ -1236,6 +1236,7 @@ func TestMysqldefTriggerSetNew(t *testing.T) {
 		CREATE TABLE users (
 		  id int unsigned NOT NULL AUTO_INCREMENT,
 		  name varchar(255) NOT NULL,
+		  deleted_at timestamp NULL DEFAULT NULL,
 		  logical_uniqueness tinyint(1) DEFAULT '1',
 		  PRIMARY KEY (id)
 		);
@@ -1246,6 +1247,10 @@ func TestMysqldefTriggerSetNew(t *testing.T) {
 
 	createTrigger := "CREATE TRIGGER `set_logical_uniqueness_on_users` " +
 		"before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = 1;\n"
+	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTrigger)
+	assertApplyOutput(t, createTable+createTrigger, nothingModified)
+
+	createTrigger = "CREATE TRIGGER `set_logical_uniqueness_on_users2` before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = case when NEW.deleted_at is null then 1 when NEW.deleted_at is not null then null end;\n"
 	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTrigger)
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 }

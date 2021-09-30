@@ -2093,6 +2093,7 @@ func (*SQLVal) iExpr()           {}
 func (*NullVal) iExpr()          {}
 func (BoolVal) iExpr()           {}
 func (*ColName) iExpr()          {}
+func (*NewColName) iExpr()       {}
 func (ValTuple) iExpr()          {}
 func (*Subquery) iExpr()         {}
 func (ListArg) iExpr()           {}
@@ -2613,6 +2614,39 @@ func (node *ColName) Equal(c *ColName) bool {
 		return false
 	}
 	return node.Name.Equal(c.Name) && node.Qualifier == c.Qualifier
+}
+
+type NewColName struct {
+	Metadata interface{}
+	Name     ColIdent
+}
+
+// Format formats the node.
+func (node *NewColName) Format(buf *TrackedBuffer) {
+	buf.Myprintf("NEW.%s", node.Name.String())
+}
+
+func (node *NewColName) walkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Name,
+	)
+}
+
+func (node *NewColName) replace(from, to Expr) bool {
+	return false
+}
+
+// Equal returns true if the column names match.
+func (node *NewColName) Equal(c *ColName) bool {
+	// Failsafe: ColName should not be empty.
+	if node == nil || c == nil {
+		return false
+	}
+	return node.Name.Equal(c.Name)
 }
 
 // ColTuple represents a list of column values.
