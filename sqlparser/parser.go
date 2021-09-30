@@ -56,7 +56,7 @@ type yySymType struct {
 	columns              Columns
 	partitions           Partitions
 	colName              *ColName
-	newColName           *NewColName
+	NewQualifierColName  *NewQualifierColName
 	tableExprs           TableExprs
 	tableExpr            TableExpr
 	joinCondition        JoinCondition
@@ -7133,7 +7133,7 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser.y:3172
 		{
-			yyVAL.expr = yyDollar[1].newColName
+			yyVAL.expr = yyDollar[1].NewQualifierColName
 		}
 	case 602:
 		yyDollar = yyS[yypt-1 : yypt+1]
@@ -7735,7 +7735,7 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser.y:3635
 		{
-			yyVAL.newColName = &NewColName{Name: yyDollar[3].colIdent}
+			yyVAL.NewQualifierColName = &NewQualifierColName{Name: yyDollar[3].colIdent}
 		}
 	case 705:
 		yyDollar = yyS[yypt-1 : yypt+1]
