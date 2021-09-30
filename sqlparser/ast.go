@@ -2081,34 +2081,35 @@ type Expr interface {
 	SQLNode
 }
 
-func (*AndExpr) iExpr()          {}
-func (*OrExpr) iExpr()           {}
-func (*NotExpr) iExpr()          {}
-func (*ParenExpr) iExpr()        {}
-func (*ComparisonExpr) iExpr()   {}
-func (*RangeCond) iExpr()        {}
-func (*IsExpr) iExpr()           {}
-func (*ExistsExpr) iExpr()       {}
-func (*SQLVal) iExpr()           {}
-func (*NullVal) iExpr()          {}
-func (BoolVal) iExpr()           {}
-func (*ColName) iExpr()          {}
-func (ValTuple) iExpr()          {}
-func (*Subquery) iExpr()         {}
-func (ListArg) iExpr()           {}
-func (*BinaryExpr) iExpr()       {}
-func (*UnaryExpr) iExpr()        {}
-func (*IntervalExpr) iExpr()     {}
-func (*CollateExpr) iExpr()      {}
-func (*FuncExpr) iExpr()         {}
-func (*CaseExpr) iExpr()         {}
-func (*ValuesFuncExpr) iExpr()   {}
-func (*ConvertExpr) iExpr()      {}
-func (*SubstrExpr) iExpr()       {}
-func (*ConvertUsingExpr) iExpr() {}
-func (*MatchExpr) iExpr()        {}
-func (*GroupConcatExpr) iExpr()  {}
-func (*Default) iExpr()          {}
+func (*AndExpr) iExpr()             {}
+func (*OrExpr) iExpr()              {}
+func (*NotExpr) iExpr()             {}
+func (*ParenExpr) iExpr()           {}
+func (*ComparisonExpr) iExpr()      {}
+func (*RangeCond) iExpr()           {}
+func (*IsExpr) iExpr()              {}
+func (*ExistsExpr) iExpr()          {}
+func (*SQLVal) iExpr()              {}
+func (*NullVal) iExpr()             {}
+func (BoolVal) iExpr()              {}
+func (*ColName) iExpr()             {}
+func (*NewQualifierColName) iExpr() {}
+func (ValTuple) iExpr()             {}
+func (*Subquery) iExpr()            {}
+func (ListArg) iExpr()              {}
+func (*BinaryExpr) iExpr()          {}
+func (*UnaryExpr) iExpr()           {}
+func (*IntervalExpr) iExpr()        {}
+func (*CollateExpr) iExpr()         {}
+func (*FuncExpr) iExpr()            {}
+func (*CaseExpr) iExpr()            {}
+func (*ValuesFuncExpr) iExpr()      {}
+func (*ConvertExpr) iExpr()         {}
+func (*SubstrExpr) iExpr()          {}
+func (*ConvertUsingExpr) iExpr()    {}
+func (*MatchExpr) iExpr()           {}
+func (*GroupConcatExpr) iExpr()     {}
+func (*Default) iExpr()             {}
 
 // ReplaceExpr finds the from expression from root
 // and replaces it with to. If from matches root,
@@ -2613,6 +2614,40 @@ func (node *ColName) Equal(c *ColName) bool {
 		return false
 	}
 	return node.Name.Equal(c.Name) && node.Qualifier == c.Qualifier
+}
+
+// NewQualifierColName represents a column name with NEW qualifier.
+type NewQualifierColName struct {
+	Name ColIdent
+}
+
+// Format formats the node.
+func (node *NewQualifierColName) Format(buf *TrackedBuffer) {
+	// We don't have to backtick NEW qualifier.
+	buf.Myprintf("NEW.%s", node.Name.String())
+}
+
+func (node *NewQualifierColName) walkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Name,
+	)
+}
+
+func (node *NewQualifierColName) replace(from, to Expr) bool {
+	return false
+}
+
+// Equal returns true if the column names match.
+func (node *NewQualifierColName) Equal(c *ColName) bool {
+	// Failsafe: ColName should not be empty.
+	if node == nil || c == nil {
+		return false
+	}
+	return node.Name.Equal(c.Name)
 }
 
 // ColTuple represents a list of column values.
