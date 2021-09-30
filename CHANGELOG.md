@@ -1,3 +1,7 @@
+## v0.11.8
+
+- Support `NEW` keyword in an expression of triggers [#162](https://github.com/k0kubun/sqldef/pull/162)
+
 ## v0.11.7
 
 - Support trigger assignment with `NEW` keyword in mysqldef [#158](https://github.com/k0kubun/sqldef/pull/158)
