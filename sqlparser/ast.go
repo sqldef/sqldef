@@ -2616,6 +2616,7 @@ func (node *ColName) Equal(c *ColName) bool {
 	return node.Name.Equal(c.Name) && node.Qualifier == c.Qualifier
 }
 
+// NewQualifierColName represents a column name with NEW qualifier.
 type NewQualifierColName struct {
 	Metadata interface{}
 	Name     ColIdent
@@ -2623,6 +2624,7 @@ type NewQualifierColName struct {
 
 // Format formats the node.
 func (node *NewQualifierColName) Format(buf *TrackedBuffer) {
+	// We don't have to backtick NEW qualifier.
 	buf.Myprintf("NEW.%s", node.Name.String())
 }
 
