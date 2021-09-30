@@ -66,7 +66,7 @@ func forceEOF(yylex interface{}) {
   columns       Columns
   partitions    Partitions
   colName       *ColName
-  newQualifierColName    *NewQualifierColName
+  newQualifierColName *NewQualifierColName
   tableExprs    TableExprs
   tableExpr     TableExpr
   joinCondition JoinCondition
