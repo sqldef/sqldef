@@ -155,7 +155,7 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 			fmt.Fprint(&queryBuilder, " )")
 		}
 	}
-	return strings.TrimSuffix(queryBuilder.String(), ";\n")
+	return strings.TrimSuffix(queryBuilder.String(), "\n")
 }
 
 type column struct {

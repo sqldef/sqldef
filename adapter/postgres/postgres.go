@@ -85,7 +85,7 @@ func (d *PostgresDatabase) Views() ([]string, error) {
 		definition = spaces.ReplaceAllString(definition, " ")
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE VIEW %s AS %s", schema+"."+name, definition,
+				"CREATE VIEW %s AS %s;", schema+"."+name, definition,
 			),
 		)
 	}
@@ -162,7 +162,7 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 	for _, v := range policyDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
-	return strings.TrimSuffix(queryBuilder.String(), ";\n")
+	return strings.TrimSuffix(queryBuilder.String(), "\n")
 }
 
 type column struct {
@@ -398,7 +398,7 @@ func (d *PostgresDatabase) getPolicyDefs(table string) ([]string, error) {
 		if withCheck.Valid {
 			def += fmt.Sprintf(" WITH CHECK %s", withCheck.String)
 		}
-		defs = append(defs, def)
+		defs = append(defs, def + ";")
 	}
 	return defs, nil
 }

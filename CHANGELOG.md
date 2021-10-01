@@ -1,3 +1,7 @@
+## Unreleased
+
+- Fix duplicated `;`s of triggers in `mysqldef --export`
+
 ## v0.11.8
 
 - Support `NEW` keyword in an expression of triggers [#162](https://github.com/k0kubun/sqldef/pull/162)

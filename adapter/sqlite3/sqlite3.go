@@ -48,7 +48,7 @@ func (d *Sqlite3Database) DumpTableDDL(table string) (string, error) {
 	const query = `select sql from sqlite_master where tbl_name = ?`
 	var sql string
 	err := d.db.QueryRow(query, table).Scan(&sql)
-	return sql, err
+	return sql + ";", err
 }
 
 func (d *Sqlite3Database) Views() ([]string, error) {
@@ -65,7 +65,7 @@ func (d *Sqlite3Database) Views() ([]string, error) {
 		if err = rows.Scan(&sql); err != nil {
 			return nil, err
 		}
-		ddls = append(ddls, sql)
+		ddls = append(ddls, sql + ";")
 	}
 
 	return ddls, nil

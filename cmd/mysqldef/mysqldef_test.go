@@ -1411,8 +1411,10 @@ func TestMysqldefExport(t *testing.T) {
 
 	ddls := "CREATE TABLE `users` (\n" +
 		"  `name` varchar(40) DEFAULT NULL,\n" +
-		"  `created_at` datetime NOT NULL\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=latin1;\n"
+		"  `updated_at` datetime NOT NULL\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=latin1;\n" +
+		"\n" +
+		"CREATE TRIGGER test AFTER INSERT ON users FOR EACH ROW UPDATE users SET updated_at = current_timestamp();\n"
 	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", ddls)
 	out = assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export")
 	assertEquals(t, out, ddls)

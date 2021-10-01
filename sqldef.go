@@ -29,7 +29,7 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 		if currentDDLs == "" {
 			fmt.Printf("-- No table exists --\n")
 		} else {
-			fmt.Printf("%s;\n", currentDDLs)
+			fmt.Printf("%s\n", currentDDLs)
 		}
 		return
 	}

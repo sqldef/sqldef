@@ -54,7 +54,7 @@ func DumpDDLs(d Database) (string, error) {
 	}
 	ddls = append(ddls, triggerDDLs...)
 
-	return strings.Join(ddls, ";\n\n"), nil
+	return strings.Join(ddls, "\n\n"), nil
 }
 
 func RunDDLs(d Database, ddls []string, skipDrop bool) error {
