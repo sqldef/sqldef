@@ -1,4 +1,4 @@
-## Unreleased
+## v0.11.9
 
 - Support triggers migrated from MySQL 5.6 to 5.7 in mysqldef [#157](https://github.com/k0kubun/sqldef/pull/157)
 - Fix duplicated `;`s of triggers in `mysqldef --export`
