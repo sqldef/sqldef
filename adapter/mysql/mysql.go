@@ -87,7 +87,8 @@ func (d *MysqlDatabase) Triggers() ([]string, error) {
 
 	var ddls []string
 	for rows.Next() {
-		var trigger, event, table, statement, timing, created, sqlMode, definer, characterSetClient, collationConnection, databaseCollation string
+		var trigger, event, table, statement, timing, sqlMode, definer, characterSetClient, collationConnection, databaseCollation string
+		var created *string // can be NULL when the trigger is migrated from MySQL 5.6 to 5.7
 		if err = rows.Scan(&trigger, &event, &table, &statement, &timing, &created, &sqlMode, &definer, &characterSetClient, &collationConnection, &databaseCollation); err != nil {
 			return nil, err
 		}
