@@ -1409,19 +1409,13 @@ func TestMysqldefExport(t *testing.T) {
 	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export")
 	assertEquals(t, out, "-- No table exists --\n")
 
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", stripHeredoc(`
-		CREATE TABLE users (
-		  name varchar(40),
-		  created_at datetime NOT NULL
-		) DEFAULT CHARSET=latin1;`,
-	))
+	ddls := "CREATE TABLE `users` (\n" +
+		"  `name` varchar(40) DEFAULT NULL,\n" +
+		"  `created_at` datetime NOT NULL\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=latin1;\n"
+	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", ddls)
 	out = assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export")
-	assertEquals(t, out,
-		"CREATE TABLE `users` (\n"+
-			"  `name` varchar(40) DEFAULT NULL,\n"+
-			"  `created_at` datetime NOT NULL\n"+
-			") ENGINE=InnoDB DEFAULT CHARSET=latin1;\n",
-	)
+	assertEquals(t, out, ddls)
 }
 
 func TestMysqldefSkipDrop(t *testing.T) {
