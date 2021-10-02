@@ -3,7 +3,7 @@ module github.com/k0kubun/sqldef
 go 1.16
 
 require (
-	github.com/denisenkom/go-mssqldb v0.10.0
+	github.com/denisenkom/go-mssqldb v0.11.0
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/lib/pq v1.10.2
