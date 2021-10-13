@@ -110,6 +110,7 @@ func mysqlBuildDSN(config adapter.Config) string {
 	c.User = config.User
 	c.Passwd = config.Password
 	c.DBName = config.DbName
+	c.AllowCleartextPasswords = config.MySQLEnableCleartextPlugin
 	if config.Socket == "" {
 		c.Net = "tcp"
 		c.Addr = fmt.Sprintf("%s:%d", config.Host, config.Port)

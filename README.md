@@ -25,17 +25,19 @@ Usage:
   mysqldef [options] db_name
 
 Application Options:
-  -u, --user=user_name       MySQL user name (default: root)
-  -p, --password=password    MySQL user password, overridden by $MYSQL_PWD
-  -h, --host=host_name       Host to connect to the MySQL server (default: 127.0.0.1)
-  -P, --port=port_num        Port used for the connection (default: 3306)
-  -S, --socket=socket        The socket file to use for connection
-      --password-prompt      Force MySQL user password prompt
-      --file=sql_file        Read schema SQL from the file, rather than stdin (default: -)
-      --dry-run              Don't run DDLs but just show them
-      --export               Just dump the current schema to stdout
-      --skip-drop            Skip destructive changes such as DROP
-      --help                 Show this help
+  -u, --user=user_name              MySQL user name (default: root)
+  -p, --password=password           MySQL user password, overridden by $MYSQL_PWD
+  -h, --host=host_name              Host to connect to the MySQL server (default: 127.0.0.1)
+  -P, --port=port_num               Port used for the connection (default: 3306)
+  -S, --socket=socket               The socket file to use for connection
+      --password-prompt             Force MySQL user password prompt
+      --enable-cleartext-plugin     Enable/disable the clear text authentication plugin
+      --file=sql_file               Read schema SQL from the file, rather than stdin (default: -)
+      --dry-run                     Don't run DDLs but just show them
+      --export                      Just dump the current schema to stdout
+      --skip-drop                   Skip destructive changes such as DROP
+      --help                        Show this help
+      --version                     Show this version
 ```
 
 #### Example
