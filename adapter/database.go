@@ -14,6 +14,9 @@ type Config struct {
 	Host     string
 	Port     int
 	Socket   string
+
+	// Only MySQL
+	MySQLEnableCleartextPlugin bool
 }
 
 // Abstraction layer for multiple kinds of databases

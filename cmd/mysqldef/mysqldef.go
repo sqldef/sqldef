@@ -20,18 +20,19 @@ var version string
 // TODO: Support `sqldef schema.sql -opt val...`
 func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	var opts struct {
-		User     string `short:"u" long:"user" description:"MySQL user name" value-name:"user_name" default:"root"`
-		Password string `short:"p" long:"password" description:"MySQL user password, overridden by $MYSQL_PWD" value-name:"password"`
-		Host     string `short:"h" long:"host" description:"Host to connect to the MySQL server" value-name:"host_name" default:"127.0.0.1"`
-		Port     uint   `short:"P" long:"port" description:"Port used for the connection" value-name:"port_num" default:"3306"`
-		Socket   string `short:"S" long:"socket" description:"The socket file to use for connection" value-name:"socket"`
-		Prompt   bool   `long:"password-prompt" description:"Force MySQL user password prompt"`
-		File     string `long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"sql_file" default:"-"`
-		DryRun   bool   `long:"dry-run" description:"Don't run DDLs but just show them"`
-		Export   bool   `long:"export" description:"Just dump the current schema to stdout"`
-		SkipDrop bool   `long:"skip-drop" description:"Skip destructive changes such as DROP"`
-		Help     bool   `long:"help" description:"Show this help"`
-		Version  bool   `long:"version" description:"Show this version"`
+		User                  string `short:"u" long:"user" description:"MySQL user name" value-name:"user_name" default:"root"`
+		Password              string `short:"p" long:"password" description:"MySQL user password, overridden by $MYSQL_PWD" value-name:"password"`
+		Host                  string `short:"h" long:"host" description:"Host to connect to the MySQL server" value-name:"host_name" default:"127.0.0.1"`
+		Port                  uint   `short:"P" long:"port" description:"Port used for the connection" value-name:"port_num" default:"3306"`
+		Socket                string `short:"S" long:"socket" description:"The socket file to use for connection" value-name:"socket"`
+		Prompt                bool   `long:"password-prompt" description:"Force MySQL user password prompt"`
+		EnableCleartextPlugin bool   `long:"enable-cleartext-plugin" description:"Enable/disable the clear text authentication plugin"`
+		File                  string `long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"sql_file" default:"-"`
+		DryRun                bool   `long:"dry-run" description:"Don't run DDLs but just show them"`
+		Export                bool   `long:"export" description:"Just dump the current schema to stdout"`
+		SkipDrop              bool   `long:"skip-drop" description:"Skip destructive changes such as DROP"`
+		Help                  bool   `long:"help" description:"Show this help"`
+		Version               bool   `long:"version" description:"Show this version"`
 	}
 
 	parser := flags.NewParser(&opts, flags.None)
@@ -84,12 +85,13 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	}
 
 	config := adapter.Config{
-		DbName:   database,
-		User:     opts.User,
-		Password: password,
-		Host:     opts.Host,
-		Port:     int(opts.Port),
-		Socket:   opts.Socket,
+		DbName:                     database,
+		User:                       opts.User,
+		Password:                   password,
+		Host:                       opts.Host,
+		Port:                       int(opts.Port),
+		Socket:                     opts.Socket,
+		MySQLEnableCleartextPlugin: opts.EnableCleartextPlugin,
 	}
 	return config, &options
 }
