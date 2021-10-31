@@ -756,7 +756,7 @@ func TestPsqldefExport(t *testing.T) {
 		CREATE TABLE users (
 		    id bigint NOT NULL PRIMARY KEY,
 		    age int,
-		    c_char_1 char,
+		    c_char_1 char unique,
 		    c_char_10 char(10),
 		    c_varchar_10 varchar(10),
 		    c_varchar_unlimited varchar
@@ -774,6 +774,7 @@ func TestPsqldefExport(t *testing.T) {
 		    "c_varchar_unlimited" character varying,
 		    PRIMARY KEY ("id")
 		);
+		CREATE UNIQUE INDEX users_c_char_1_key ON users USING btree (c_char_1);
 		`,
 	))
 }

@@ -132,9 +132,6 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 		if col.Length > 0 {
 			fmt.Fprintf(&queryBuilder, "(%d)", col.Length)
 		}
-		if col.IsUnique {
-			fmt.Fprint(&queryBuilder, " UNIQUE")
-		}
 		if !col.Nullable {
 			fmt.Fprint(&queryBuilder, " NOT NULL")
 		}
@@ -172,7 +169,6 @@ type column struct {
 	Nullable           bool
 	Default            string
 	IsAutoIncrement    bool
-	IsUnique           bool
 	Check              string
 	IdentityGeneration string
 }
@@ -210,7 +206,6 @@ func (c *column) GetDataType() string {
 func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	const query = `SELECT s.column_name, s.column_default, s.is_nullable, s.character_maximum_length,
 	CASE WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod) ELSE s.data_type END,
-	CASE WHEN p.contype = 'u' THEN true ELSE false END AS uniquekey,
 	CASE WHEN pc.contype = 'c' THEN pg_get_constraintdef(pc.oid, true) ELSE NULL END AS check,
 	s.identity_generation
 FROM pg_attribute f
@@ -234,8 +229,7 @@ WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum >
 		col := column{}
 		var colName, isNullable, dataType string
 		var maxLenStr, colDefault, check, idGen *string
-		var isUnique bool
-		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &dataType, &isUnique, &check, &idGen)
+		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &dataType, &check, &idGen)
 		if err != nil {
 			return nil, err
 		}
@@ -250,7 +244,6 @@ WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum >
 		if colDefault != nil {
 			col.Default = *colDefault
 		}
-		col.IsUnique = isUnique
 		if colDefault != nil && strings.HasPrefix(*colDefault, "nextval(") {
 			col.IsAutoIncrement = true
 		}
