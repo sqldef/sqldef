@@ -1,3 +1,7 @@
+## v0.11.11
+
+- Avoid duplicating unique key definitions in psqldef [#167](https://github.com/k0kubun/sqldef/pull/167)
+
 ## v0.11.10
 
 - Add `--enable-cleartext-plugin` option to in mysqldef [#166](https://github.com/k0kubun/sqldef/pull/166)
