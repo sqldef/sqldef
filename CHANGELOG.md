@@ -1,6 +1,6 @@
 ## v0.11.11
 
-- Avoid duplicating unique key definitions in psqldef [#167](https://github.com/k0kubun/sqldef/pull/167)
+- Avoid duplicating unique key definitions in `psqldef --export` [#167](https://github.com/k0kubun/sqldef/pull/167)
 
 ## v0.11.10
 
