@@ -1,3 +1,7 @@
+## v0.11.12
+
+- Support expressions for generated columns in mysqldef [#169](https://github.com/k0kubun/sqldef/pull/169)
+
 ## v0.11.11
 
 - Avoid duplicating unique key definitions in `psqldef --export` [#167](https://github.com/k0kubun/sqldef/pull/167)
