@@ -1187,7 +1187,7 @@ column_definition_type:
     $$ = $1
   }
 // for MySQL (TODO: support STORED and abbreviation)
-| column_definition_type GENERATED identity_behavior AS '(' value ')' VIRTUAL
+| column_definition_type GENERATED identity_behavior AS '(' value_expression ')' VIRTUAL
   {
     $1.Generated = &GeneratedColumn{Expr: $6}
     $$ = $1

@@ -306,7 +306,8 @@ func TestMysqldefCreateTableGeneratedAlwaysAs(t *testing.T) {
 	createTable := stripHeredoc(`
 		CREATE TABLE test_table (
 		  id int(11) NOT NULL AUTO_INCREMENT,
-		  test_column varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
+		  test_value varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
+		  test_expr varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL,
 		  PRIMARY KEY (id)
 		);
 		`,
