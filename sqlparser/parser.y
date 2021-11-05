@@ -347,7 +347,7 @@ func forceEOF(yylex interface{}) {
 %type <str> trigger_time trigger_event fetch_opt
 %type <strs> trigger_event_list
 %type <blockStatement> trigger_statements statement_block
-%type <statement> trigger_statement
+%type <statement> trigger_statement trigger_statement_start
 %type <localVariable> local_variable
 %type <localVariables> declare_variable_list
 %type <boolVal> scroll_opt
@@ -833,7 +833,7 @@ create_statement:
     }}
   }
 /* For MySQL */
-| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW trigger_statement
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW trigger_statement_start
   {
     $$ = &DDL{Action: CreateTriggerStr, Trigger: &Trigger{
         Name: $3,
@@ -922,6 +922,16 @@ trigger_statement:
     sel.Limit = $3
     sel.Lock = $4
     $$ = sel
+  }
+
+/* TODO: should be a part of trigger_statement */
+trigger_statement_start:
+  trigger_statement
+  | BEGIN trigger_statement ';' END
+  {
+    $$ = &BeginEnd{
+      Statements: []Statement{$2},
+    }
   }
 
 policy_as_opt:

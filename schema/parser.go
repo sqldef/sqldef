@@ -429,17 +429,39 @@ func parseDDLs(mode GeneratorMode, str string) ([]DDL, error) {
 	ddls := strings.Split(str, ";")
 	result := []DDL{}
 
-	for _, ddl := range ddls {
-		ddl = strings.TrimSpace(ddl) // TODO: trim trailing comment as well, or ignore it by parser somehow?
-		if len(ddl) == 0 {
-			continue
+	for len(ddls) > 0 {
+		// Unfortunately, there's no easy way to let sqlparser recognize which ';' is the end of a DDL.
+		// So we just attempt parsing until it succeeds. I'll let the parser do it in the future.
+		var parsed DDL
+		var err error
+		i := 1
+		for {
+			ddl := strings.Join(ddls[0:i], ";")
+			ddl = strings.TrimSpace(ddl)
+			ddl = strings.TrimSuffix(ddl, ";")
+			if ddl == "" {
+				break
+			}
+
+			parsed, err = parseDDL(mode, ddl)
+			if err == nil || i == len(ddls) {
+				break
+			}
+			i++
 		}
 
-		parsed, err := parseDDL(mode, ddl)
 		if err != nil {
 			return result, err
 		}
-		result = append(result, parsed)
+		if parsed != nil {
+			result = append(result, parsed)
+		}
+
+		if i < len(ddls) {
+			ddls = ddls[i:]
+		} else {
+			break
+		}
 	}
 	return result, nil
 }

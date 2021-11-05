@@ -1256,6 +1256,26 @@ func TestMysqldefTriggerSetNew(t *testing.T) {
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 }
 
+func TestMysqldefTriggerBeginEnd(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE test_trigger (
+		  id int(11) NOT NULL AUTO_INCREMENT,
+		  PRIMARY KEY (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTrigger := "CREATE TRIGGER `BEFORE_UPDATE_test_trigger` before insert ON `test_trigger` FOR EACH ROW begin\n" +
+		"set NEW.id = NEW.id + 10;\n" +
+		"end;\n"
+	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTrigger)
+	assertApplyOutput(t, createTable+createTrigger, nothingModified)
+}
+
 func TestMysqldefDefaultValue(t *testing.T) {
 	resetTestDatabase()
 

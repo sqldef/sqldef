@@ -222,6 +222,7 @@ func (*Delete) iStatement()     {}
 func (*Set) iStatement()        {}
 func (*Declare) iStatement()    {}
 func (*Cursor) iStatement()     {}
+func (*BeginEnd) iStatement()   {}
 func (*While) iStatement()      {}
 func (*If) iStatement()         {}
 func (*DBDDL) iStatement()      {}
@@ -3630,6 +3631,30 @@ func (node *Cursor) walkSubtree(visit Visit) error {
 		visit,
 		node.CursorName,
 	)
+}
+
+type BeginEnd struct {
+	Statements []Statement
+}
+
+func (node *BeginEnd) Format(buf *TrackedBuffer) {
+	buf.Myprintf("begin")
+	for _, stmt := range node.Statements {
+		buf.Myprintf("\n%v;", stmt)
+	}
+	buf.Myprintf("\nend")
+}
+
+func (node *BeginEnd) walkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	for _, n := range node.Statements {
+		if err := Walk(visit, n); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type While struct {
