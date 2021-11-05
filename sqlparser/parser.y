@@ -346,7 +346,7 @@ func forceEOF(yylex interface{}) {
 %type <optVal> on_off
 %type <str> trigger_time trigger_event fetch_opt
 %type <strs> trigger_event_list
-%type <blockStatement> trigger_body statement_block
+%type <blockStatement> trigger_statements statement_block
 %type <statement> trigger_statement
 %type <localVariable> local_variable
 %type <localVariables> declare_variable_list
@@ -832,6 +832,7 @@ create_statement:
         WithCheck: NewWhere(WhereStr, $11),
     }}
   }
+/* For MySQL */
 | CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW trigger_statement
   {
     $$ = &DDL{Action: CreateTriggerStr, Trigger: &Trigger{
@@ -842,7 +843,8 @@ create_statement:
         Body: []Statement{$11},
     }}
   }
-| CREATE TRIGGER sql_id ON table_name trigger_time trigger_event_list AS trigger_body
+/* For MSSQL */
+| CREATE TRIGGER sql_id ON table_name trigger_time trigger_event_list AS trigger_statements
   {
     $$ = &DDL{Action: CreateTriggerStr, Trigger: &Trigger{
         Name: $3,
@@ -891,12 +893,12 @@ trigger_event_list:
     $$ = append($$, string($3))
   }
 
-trigger_body:
+trigger_statements:
   trigger_statement
   {
     $$ = []Statement{$1}
   }
-| trigger_body trigger_statement
+| trigger_statements trigger_statement
   {
     $$ = append($$, $2)
   }
