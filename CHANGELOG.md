@@ -1,3 +1,7 @@
+## v0.11.13
+
+- Initial support of `BEGIN END` in TRIGGER for mysqldef [#170](https://github.com/k0kubun/sqldef/pull/170)
+
 ## v0.11.12
 
 - Support expressions for generated columns in mysqldef [#169](https://github.com/k0kubun/sqldef/pull/169)
