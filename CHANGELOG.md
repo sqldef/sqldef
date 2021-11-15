@@ -1,3 +1,7 @@
+## v0.11.14
+
+- Initial support of `CREATE TYPE` for psqldef [#171](https://github.com/k0kubun/sqldef/pull/171)
+
 ## v0.11.13
 
 - Initial support of `BEGIN END` in TRIGGER for mysqldef [#170](https://github.com/k0kubun/sqldef/pull/170)
