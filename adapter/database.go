@@ -25,17 +25,24 @@ type Database interface {
 	DumpTableDDL(table string) (string, error)
 	Views() ([]string, error)
 	Triggers() ([]string, error)
+	Types() ([]string, error)
 	DB() *sql.DB
 	Close() error
 }
 
 func DumpDDLs(d Database) (string, error) {
 	ddls := []string{}
+
+	typeDDLs, err := d.Types()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, typeDDLs...)
+
 	tableNames, err := d.TableNames()
 	if err != nil {
 		return "", err
 	}
-
 	for _, tableName := range tableNames {
 		ddl, err := d.DumpTableDDL(tableName)
 		if err != nil {

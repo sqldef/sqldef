@@ -676,6 +676,7 @@ type DDL struct {
 	Policy        *Policy
 	View          *View
 	Trigger       *Trigger
+	Type          *Type
 }
 
 // DDL strings.
@@ -695,6 +696,7 @@ const (
 	CreatePolicyStr  = "create policy"
 	CreateViewStr    = "create view"
 	CreateTriggerStr = "create trigger"
+	CreateTypeStr    = "create type"
 
 	// Vindex DDL param to specify the owner of a vindex
 	VindexOwnerStr = "owner"
@@ -1610,6 +1612,11 @@ type Trigger struct {
 	Time      string
 	Event     []string
 	Body      []Statement
+}
+
+type Type struct {
+	Name TableName // workaround: using TableName to handle schema
+	Type ColumnType
 }
 
 // SelectExprs represents SELECT expressions.

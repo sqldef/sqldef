@@ -613,6 +613,14 @@ func TestPsqldefCreateIndexWithKey(t *testing.T) {
 	assertApplyOutput(t, createTable+createIndex, nothingModified)
 }
 
+func TestPsqldefCreateType(t *testing.T) {
+	resetTestDatabase()
+
+	createType := stripHeredoc("CREATE TYPE public.output_status AS ENUM ('reading', 'finished');\n")
+	assertApplyOutput(t, createType, applyPrefix+createType)
+	assertApplyOutput(t, createType, nothingModified)
+}
+
 func TestPsqldefColumnLiteral(t *testing.T) {
 	resetTestDatabase()
 

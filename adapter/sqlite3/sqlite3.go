@@ -75,6 +75,10 @@ func (d *Sqlite3Database) Triggers() ([]string, error) {
 	return nil, nil
 }
 
+func (d *Sqlite3Database) Types() ([]string, error) {
+	return nil, nil
+}
+
 func (d *Sqlite3Database) DB() *sql.DB {
 	return d.db
 }

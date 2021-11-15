@@ -213,6 +213,12 @@ type CheckDefinition struct {
 	notForReplication bool
 }
 
+// TODO: include type information
+type Type struct {
+	name      string
+	statement string
+}
+
 func (c *CreateTable) Statement() string {
 	return c.statement
 }
@@ -242,6 +248,10 @@ func (v *View) Statement() string {
 }
 
 func (t *Trigger) Statement() string {
+	return t.statement
+}
+
+func (t *Type) Statement() string {
 	return t.statement
 }
 

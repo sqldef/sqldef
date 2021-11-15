@@ -96,6 +96,37 @@ func (d *PostgresDatabase) Triggers() ([]string, error) {
 	return nil, nil
 }
 
+func (d *PostgresDatabase) Types() ([]string, error) {
+	rows, err := d.db.Query(
+		`select t.typname, string_agg(e.enumlabel, ' ')
+		 from pg_enum e
+		 join pg_type t on e.enumtypid = t.oid
+		 group by t.typname;`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ddls []string
+	for rows.Next() {
+		var typeName, labels string
+		if err := rows.Scan(&typeName, &labels); err != nil {
+			return nil, err
+		}
+		enumLabels := []string{}
+		for _, label := range strings.Split(labels, " ") {
+			enumLabels = append(enumLabels, fmt.Sprintf("'%s'", label))
+		}
+		ddls = append(
+			ddls, fmt.Sprintf(
+				"CREATE TYPE %s AS ENUM (%s);", typeName, strings.Join(enumLabels, ", "),
+			),
+		)
+	}
+	return ddls, nil
+}
+
 func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	cols, err := d.getColumns(table)
 	if err != nil {

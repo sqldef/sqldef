@@ -417,6 +417,7 @@ var keywords = map[string]int{
 	"trigger":                TRIGGER,
 	"true":                   TRUE,
 	"truncate":               TRUNCATE,
+	"type":                   TYPE,
 	"uncommitted":            UNCOMMITTED,
 	"undo":                   UNUSED,
 	"union":                  UNION,

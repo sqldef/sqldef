@@ -464,6 +464,10 @@ INNER JOIN sys.all_sql_modules s ON s.object_id = tr.object_id`
 	return triggers, nil
 }
 
+func (d *MssqlDatabase) Types() ([]string, error) {
+	return nil, nil
+}
+
 func (d *MssqlDatabase) DB() *sql.DB {
 	return d.db
 }

@@ -41,6 +41,9 @@ type Generator struct {
 
 	desiredTriggers []*Trigger
 	currentTriggers []*Trigger
+
+	desiredTypes []*Type
+	currentTypes []*Type
 }
 
 // Parse argument DDLs and call `generateDDLs()`
@@ -63,6 +66,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, desiredSQL string, currentSQL st
 
 	views := convertDDLsToViews(currentDDLs)
 	triggers := convertDDLsToTriggers(currentDDLs)
+	types := convertDDLsToTypes(currentDDLs)
 
 	generator := Generator{
 		mode:            mode,
@@ -72,6 +76,8 @@ func GenerateIdempotentDDLs(mode GeneratorMode, desiredSQL string, currentSQL st
 		currentViews:    views,
 		desiredTriggers: []*Trigger{},
 		currentTriggers: triggers,
+		desiredTypes:    []*Type{},
+		currentTypes:    types,
 	}
 	return generator.generateDDLs(desiredDDLs)
 }
@@ -136,6 +142,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return ddls, err
 			}
 			ddls = append(ddls, triggerDDLs...)
+		case *Type:
+			typeDDLs, err := g.generateDDLsForCreateType(desired)
+			if err != nil {
+				return ddls, err
+			}
+			ddls = append(ddls, typeDDLs...)
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", desired)
 		}
@@ -683,6 +695,19 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName string, desiredTrig
 	return ddls, nil
 }
 
+func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
+	ddls := []string{}
+
+	currentType := findTypeByName(g.currentTypes, desired.name)
+	if currentType == nil {
+		// Type not found, add type.
+		ddls = append(ddls, desired.statement)
+	}
+	g.desiredTypes = append(g.desiredTypes, desired)
+
+	return ddls, nil
+}
+
 // Even though simulated table doesn't have a foreign key, references could exist in column definitions.
 // This carefully generates DROP CONSTRAINT for such situations.
 func (g *Generator) generateDDLsForAbsentForeignKey(currentForeignKey ForeignKey, currentTable Table, desiredTable Table) []string {
@@ -1149,6 +1174,8 @@ func convertDDLsToTables(ddls []DDL) ([]*Table, error) {
 			// do nothing
 		case *Trigger:
 			// do nothing
+		case *Type:
+			// do nothing
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in convertDDLsToTables: %v", stmt)
 		}
@@ -1174,6 +1201,16 @@ func convertDDLsToTriggers(ddls []DDL) []*Trigger {
 		}
 	}
 	return triggers
+}
+
+func convertDDLsToTypes(ddls []DDL) []*Type {
+	var types []*Type
+	for _, ddl := range ddls {
+		if createType, ok := ddl.(*Type); ok {
+			types = append(types, createType)
+		}
+	}
+	return types
 }
 
 func findTableByName(tables []*Table, name string) *Table {
@@ -1252,6 +1289,15 @@ func findTriggerByName(triggers []*Trigger, name string) *Trigger {
 	for _, trigger := range triggers {
 		if trigger.name == name {
 			return trigger
+		}
+	}
+	return nil
+}
+
+func findTypeByName(types []*Type, name string) *Type {
+	for _, createType := range types {
+		if createType.name == name {
+			return createType
 		}
 	}
 	return nil

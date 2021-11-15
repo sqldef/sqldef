@@ -97,6 +97,10 @@ func (d *MysqlDatabase) Triggers() ([]string, error) {
 	return ddls, nil
 }
 
+func (d *MysqlDatabase) Types() ([]string, error) {
+	return nil, nil
+}
+
 func (d *MysqlDatabase) DB() *sql.DB {
 	return d.db
 }

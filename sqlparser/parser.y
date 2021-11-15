@@ -165,7 +165,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> SCHEMA TABLE INDEX VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE
 %right <bytes> UNIQUE KEY
 %token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE
-%token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER
+%token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE
 %token <bytes> VINDEX VINDEXES
 %token <bytes> STATUS VARIABLES
 %token <bytes> RESTRICT CASCADE NO ACTION
@@ -854,6 +854,17 @@ create_statement:
         Body: $9,
     }}
   }
+/* For PostgreSQL */
+| CREATE TYPE table_name AS column_type
+  {
+    $$ = &DDL{
+      Action: CreateTypeStr,
+      Type: &Type{
+        Name: $3,
+        Type: $5,
+      },
+    }
+  }
 
 trigger_time:
   FOR
@@ -1092,6 +1103,7 @@ column_definition:
   {
     $$ = &ColumnDefinition{Name: NewColIdent(string($1)), Type: $2}
   }
+
 column_type:
   numeric_type unsigned_opt zero_fill_opt
   {

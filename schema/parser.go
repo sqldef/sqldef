@@ -409,6 +409,11 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				event:     stmt.Trigger.Event,
 				body:      body,
 			}, nil
+		} else if stmt.Action == "create type" {
+			return &Type{
+				name:      normalizedTableName(mode, stmt.Type.Name),
+				statement: ddl,
+			}, nil
 		} else {
 			return nil, fmt.Errorf(
 				"unsupported type of DDL action (only 'CREATE TABLE', 'CREATE INDEX' and 'ALTER TABLE ADD INDEX' are supported) '%s': %s",
