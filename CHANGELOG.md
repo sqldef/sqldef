@@ -1,3 +1,7 @@
+## v0.11.15
+
+- Fix a bug for retrieving views in mysqldef when there are multiple databases [#175](https://github.com/k0kubun/sqldef/pull/171)
+
 ## v0.11.14
 
 - Initial support of `CREATE TYPE` for psqldef [#171](https://github.com/k0kubun/sqldef/pull/171)
