@@ -69,7 +69,7 @@ func (d *MysqlDatabase) Views() ([]string, error) {
 		if err = rows.Scan(&viewName, &viewType); err != nil {
 			return nil, err
 		}
-		query := fmt.Sprintf("select VIEW_DEFINITION from INFORMATION_SCHEMA.VIEWS where TABLE_NAME = '%s';", viewName)
+		query := fmt.Sprintf("select VIEW_DEFINITION from INFORMATION_SCHEMA.VIEWS where TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s';", d.config.DbName, viewName)
 		if err = d.db.QueryRow(query).Scan(&definition); err != nil {
 			return nil, err
 		}
