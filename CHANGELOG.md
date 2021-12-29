@@ -1,6 +1,10 @@
+## v0.11.16
+
+- Support altering a column with a boolean default value [#177](https://github.com/k0kubun/sqldef/pull/177)
+
 ## v0.11.15
 
-- Fix a bug for retrieving views in mysqldef when there are multiple databases [#175](https://github.com/k0kubun/sqldef/pull/171)
+- Fix a bug for retrieving views in mysqldef when there are multiple databases [#175](https://github.com/k0kubun/sqldef/pull/175)
 
 ## v0.11.14
 
