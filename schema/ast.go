@@ -151,7 +151,7 @@ type Value struct {
 	raw       []byte
 
 	// ValueType-specific. Should be union?
-	strVal   string  // ValueTypeStr
+	strVal   string  // ValueTypeStr, ValueTypeBool
 	intVal   int     // ValueTypeInt
 	floatVal float64 // ValueTypeFloat
 	bitVal   bool    // ValueTypeBit

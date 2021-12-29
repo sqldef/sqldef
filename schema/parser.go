@@ -57,7 +57,7 @@ func parseValue(val *sqlparser.SQLVal) *Value {
 	}
 
 	switch valueType {
-	case ValueTypeStr:
+	case ValueTypeStr, ValueTypeBool:
 		ret.strVal = string(val.Val)
 	case ValueTypeInt:
 		intVal, _ := strconv.Atoi(string(val.Val)) // TODO: handle error

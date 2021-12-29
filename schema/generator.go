@@ -1667,6 +1667,8 @@ func generateDefaultDefinition(defaultVal Value) (string, error) {
 	switch defaultVal.valueType {
 	case ValueTypeStr:
 		return fmt.Sprintf("DEFAULT '%s'", defaultVal.strVal), nil
+	case ValueTypeBool:
+		return fmt.Sprintf("DEFAULT %s", defaultVal.strVal), nil
 	case ValueTypeInt:
 		return fmt.Sprintf("DEFAULT %d", defaultVal.intVal), nil
 	case ValueTypeFloat:
