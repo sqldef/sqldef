@@ -30,6 +30,7 @@ type Database interface {
 	Close() error
 }
 
+// TODO: This should probably be part of the Database interface
 func DumpDDLs(d Database) (string, error) {
 	ddls := []string{}
 

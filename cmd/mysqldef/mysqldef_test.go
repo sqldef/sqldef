@@ -1411,6 +1411,19 @@ func TestMysqldefChangeIndexCombination(t *testing.T) {
 // ----------------------- following tests are for CLI -----------------------
 //
 
+func TestMysqldefFileComparison(t *testing.T) {
+	resetTestDatabase()
+	writeFile("schema.sql", stripHeredoc(`
+		CREATE TABLE users (
+		  name varchar(40),
+		  created_at datetime NOT NULL
+		);`,
+	))
+
+	output := assertedExecute(t, "./mysqldef", "--file", "schema.sql", "--file", "schema.sql")
+	assertEquals(t, output, nothingModified)
+}
+
 func TestMysqldefDryRun(t *testing.T) {
 	resetTestDatabase()
 	writeFile("schema.sql", stripHeredoc(`
