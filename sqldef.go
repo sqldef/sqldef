@@ -12,10 +12,11 @@ import (
 )
 
 type Options struct {
-	SqlFile  string
-	DryRun   bool
-	Export   bool
-	SkipDrop bool
+	DesiredFile string
+	CurrentFile string
+	DryRun      bool
+	Export      bool
+	SkipDrop    bool
 }
 
 // Main function shared by `mysqldef` and `psqldef`
@@ -34,9 +35,9 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 		return
 	}
 
-	sql, err := readFile(options.SqlFile)
+	sql, err := ReadFile(options.DesiredFile)
 	if err != nil {
-		log.Fatalf("Failed to read '%s': %s", options.SqlFile, err)
+		log.Fatalf("Failed to read '%s': %s", options.DesiredFile, err)
 	}
 	desiredDDLs := string(sql)
 
@@ -50,7 +51,7 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 		return
 	}
 
-	if options.DryRun {
+	if options.DryRun || len(options.CurrentFile) > 0 {
 		showDDLs(ddls, options.SkipDrop)
 		return
 	}
@@ -61,7 +62,25 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 	}
 }
 
-func readFile(filepath string) (string, error) {
+// TODO: Warn if both the second --file and database options are specified
+func ParseFiles(files []string) (string, string) {
+	if len(files) == 0 {
+		panic("ParseFiles got empty files") // assume default:"-"
+	}
+
+	desiredFile := files[0]
+	currentFile := ""
+	if len(files) == 2 {
+		desiredFile = files[1]
+		currentFile = files[0]
+	} else if len(files) > 2 {
+		fmt.Printf("Expected only one or two --file options, but got: %v\n", files)
+		os.Exit(1)
+	}
+	return desiredFile, currentFile
+}
+
+func ReadFile(filepath string) (string, error) {
 	var err error
 	var buf []byte
 

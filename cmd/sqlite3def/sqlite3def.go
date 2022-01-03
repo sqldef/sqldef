@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/k0kubun/sqldef/adapter/file"
 	"log"
 	"os"
 
@@ -18,12 +19,12 @@ var version string
 // TODO: Support `sqldef schema.sql -opt val...`
 func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	var opts struct {
-		File     string `short:"f" long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"filename" default:"-"`
-		DryRun   bool   `long:"dry-run" description:"Don't run DDLs but just show them"`
-		Export   bool   `long:"export" description:"Just dump the current schema to stdout"`
-		SkipDrop bool   `long:"skip-drop" description:"Skip destructive changes such as DROP"`
-		Help     bool   `long:"help" description:"Show this help"`
-		Version  bool   `long:"version" description:"Show this version"`
+		File     []string `short:"f" long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"filename" default:"-"`
+		DryRun   bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
+		Export   bool     `long:"export" description:"Just dump the current schema to stdout"`
+		SkipDrop bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
+		Help     bool     `long:"help" description:"Show this help"`
+		Version  bool     `long:"version" description:"Show this version"`
 	}
 
 	parser := flags.NewParser(&opts, flags.None)
@@ -43,22 +44,27 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		os.Exit(0)
 	}
 
-	if len(args) == 0 {
-		fmt.Print("No database is specified!\n\n")
-		parser.WriteHelp(os.Stdout)
-		os.Exit(1)
-	} else if len(args) > 1 {
-		fmt.Printf("Multiple databases are given: %v\n\n", args)
-		parser.WriteHelp(os.Stdout)
-		os.Exit(1)
-	}
-	database := args[0]
-
+	desiredFile, currentFile := sqldef.ParseFiles(opts.File)
 	options := sqldef.Options{
-		SqlFile:  opts.File,
-		DryRun:   opts.DryRun,
-		Export:   opts.Export,
-		SkipDrop: opts.SkipDrop,
+		DesiredFile: desiredFile,
+		CurrentFile: currentFile,
+		DryRun:      opts.DryRun,
+		Export:      opts.Export,
+		SkipDrop:    opts.SkipDrop,
+	}
+
+	database := ""
+	if len(currentFile) == 0 {
+		if len(args) == 0 {
+			fmt.Print("No database is specified!\n\n")
+			parser.WriteHelp(os.Stdout)
+			os.Exit(1)
+		} else if len(args) > 1 {
+			fmt.Printf("Multiple databases are given: %v\n\n", args)
+			parser.WriteHelp(os.Stdout)
+			os.Exit(1)
+		}
+		database = args[0]
 	}
 
 	config := adapter.Config{
@@ -73,11 +79,17 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 func main() {
 	config, options := parseOptions(os.Args[1:])
 
-	database, err := sqlite3.NewDatabase(config)
-	if err != nil {
-		log.Fatal(err)
+	var database adapter.Database
+	if len(options.CurrentFile) > 0 {
+		database = file.NewDatabase(options.CurrentFile)
+	} else {
+		var err error
+		database, err = sqlite3.NewDatabase(config)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer database.Close()
 	}
-	defer database.Close()
 
 	sqldef.Run(schema.GeneratorModeSQLite3, database, options)
 }
