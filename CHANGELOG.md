@@ -1,3 +1,7 @@
+## v0.11.17
+
+- Support comparing two `--file` options [#179](https://github.com/k0kubun/sqldef/pull/179)
+
 ## v0.11.16
 
 - Support altering a column with a boolean default value [#177](https://github.com/k0kubun/sqldef/pull/177)
