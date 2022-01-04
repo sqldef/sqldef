@@ -1,3 +1,7 @@
+## v0.11.19
+
+- Initial support of `ALTER TABLE ADD CONSTRAINT UNIQUE` for psqldef [#173](https://github.com/k0kubun/sqldef/pull/173)
+
 ## v0.11.18
 
 - Support column types defined by `CREATE TYPE` for psqldef [#176](https://github.com/k0kubun/sqldef/pull/176)
