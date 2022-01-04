@@ -624,6 +624,22 @@ func TestPsqldefCreateIndex(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestPsqldefAddConstraintUnique(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		create table dummy(
+		  column_a int not null,
+		  column_b int not null,
+		  column_c int not null
+		);
+		alter table dummy add constraint dummy_uniq unique (column_a, column_b);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestPsqldefCreateIndexWithKey(t *testing.T) {
 	resetTestDatabase()
 
