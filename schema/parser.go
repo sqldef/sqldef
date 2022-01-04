@@ -341,6 +341,16 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				tableName: normalizedTableName(mode, stmt.Table),
 				index:     index,
 			}, nil
+		} else if stmt.Action == "add unique" {
+			index, err := parseIndex(stmt)
+			if err != nil {
+				return nil, err
+			}
+			return &CreateIndex{
+				statement: ddl,
+				tableName: normalizedTableName(mode, stmt.Table),
+				index:     index,
+			}, nil
 		} else if stmt.Action == "add foreign key" {
 			indexColumns := []string{}
 			for _, indexColumn := range stmt.ForeignKey.IndexColumns {
@@ -416,7 +426,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 			}, nil
 		} else {
 			return nil, fmt.Errorf(
-				"unsupported type of DDL action (only 'CREATE TABLE', 'CREATE INDEX' and 'ALTER TABLE ADD INDEX' are supported) '%s': %s",
+				"unsupported type of DDL action '%s': %s",
 				stmt.Action, ddl,
 			)
 		}

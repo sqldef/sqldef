@@ -2189,6 +2189,20 @@ alter_statement:
         IndexCols: $12,
       }
   }
+| ALTER ignore_opt TABLE table_name ADD CONSTRAINT sql_id UNIQUE '(' index_column_list ')'
+  {
+    $$ = &DDL{
+        Action: AddIndexStr,
+        Table: $4,
+        NewName: $4,
+        IndexSpec: &IndexSpec{
+          Name: $7,
+          Unique: true,
+          Primary: false,
+        },
+        IndexCols: $10,
+      }
+  }
 | ALTER ignore_opt TABLE ONLY table_name ADD foreign_key_definition
   {
     $$ = &DDL{
