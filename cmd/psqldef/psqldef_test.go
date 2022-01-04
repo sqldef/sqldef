@@ -641,9 +641,16 @@ func TestPsqldefCreateIndexWithKey(t *testing.T) {
 func TestPsqldefCreateType(t *testing.T) {
 	resetTestDatabase()
 
-	createType := stripHeredoc("CREATE TYPE public.output_status AS ENUM ('reading', 'finished');\n")
-	assertApplyOutput(t, createType, applyPrefix+createType)
-	assertApplyOutput(t, createType, nothingModified)
+	createTable := stripHeredoc(`
+		CREATE TYPE country AS ENUM ('us', 'jp');
+		CREATE TABLE users (
+		  id SERIAL PRIMARY KEY,
+		  country country NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestPsqldefColumnLiteral(t *testing.T) {

@@ -1115,6 +1115,12 @@ column_type:
 | char_type
 | time_type
 | spatial_type
+// TODO: avoid reduce-reduce conflicts here
+| sql_id
+  {
+    $$ = ColumnType{Type: $1.val}
+  }
+
 column_definition_type:
   column_type array_opt
   {
