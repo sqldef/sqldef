@@ -1294,6 +1294,10 @@ default_val:
   {
     $$ = NewBitVal($1)
   }
+| STRING TYPECAST sql_id
+  {
+    $$ = NewStrVal($1)
+  }
 
 identity_behavior:
   ALWAYS

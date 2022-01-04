@@ -661,7 +661,7 @@ func TestPsqldefCreateType(t *testing.T) {
 		CREATE TYPE country AS ENUM ('us', 'jp');
 		CREATE TABLE users (
 		  id SERIAL PRIMARY KEY,
-		  country country NOT NULL
+		  country country NOT NULL DEFAULT 'jp'::country
 		);
 		`,
 	)
