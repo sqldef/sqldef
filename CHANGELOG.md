@@ -1,3 +1,7 @@
+## v0.11.18
+
+- Support column types defined by `CREATE TYPE` for psqldef [#176](https://github.com/k0kubun/sqldef/pull/176)
+
 ## v0.11.17
 
 - Support comparing two `--file` options [#179](https://github.com/k0kubun/sqldef/pull/179)
