@@ -1,3 +1,7 @@
+## v0.11.20
+
+- Support enum default values for psqldef [#180](https://github.com/k0kubun/sqldef/pull/180)
+
 ## v0.11.19
 
 - Initial support of `ALTER TABLE ADD CONSTRAINT UNIQUE` for psqldef [#173](https://github.com/k0kubun/sqldef/pull/173)
