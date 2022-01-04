@@ -58,8 +58,8 @@ func TestSQLite3defCreateTableQuotes(t *testing.T) {
 
 	createTable = stripHeredoc(
 		"CREATE TABLE `test_table` (\n" +
-		"  id integer primary key\n" +
-		");\n",
+			"  id integer primary key\n" +
+			");\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -220,13 +220,10 @@ func TestMain(m *testing.M) {
 	resetTestDatabase()
 	mustExecute("go", "build")
 	status := m.Run()
+	_ = os.Remove("sqlite3def")
+	_ = os.Remove("sqlite3def_test")
+	_ = os.Remove("schema.sql")
 	os.Exit(status)
-}
-
-func assertApply(t *testing.T, schema string) {
-	t.Helper()
-	writeFile("schema.sql", schema)
-	assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--file", "schema.sql")
 }
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {

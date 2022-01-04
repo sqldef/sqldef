@@ -1021,6 +1021,8 @@ func TestMain(m *testing.M) {
 	resetTestDatabase()
 	mustExecute("go", "build")
 	status := m.Run()
+	_ = os.Remove("mssqldef")
+	_ = os.Remove("schema.sql")
 	os.Exit(status)
 }
 

@@ -1039,6 +1039,8 @@ func TestMain(m *testing.M) {
 	resetTestDatabase()
 	mustExecute("go", "build")
 	status := m.Run()
+	_ = os.Remove("psqldef")
+	_ = os.Remove("schema.sql")
 	os.Exit(status)
 }
 
