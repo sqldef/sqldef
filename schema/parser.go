@@ -264,16 +264,17 @@ func parseIndex(stmt *sqlparser.DDL) (Index, error) {
 	}
 
 	return Index{
-		name:      stmt.IndexSpec.Name.String(),
-		indexType: "", // not supported in parser yet
-		columns:   indexColumns,
-		primary:   false, // not supported in parser yet
-		unique:    stmt.IndexSpec.Unique,
-		clustered: stmt.IndexSpec.Clustered,
-		where:     where,
-		included:  includedColumns,
-		options:   indexOptions,
-		partition: indexParition,
+		name:       stmt.IndexSpec.Name.String(),
+		indexType:  "", // not supported in parser yet
+		columns:    indexColumns,
+		primary:    false, // not supported in parser yet
+		unique:     stmt.IndexSpec.Unique,
+		constraint: stmt.IndexSpec.Constraint,
+		clustered:  stmt.IndexSpec.Clustered,
+		where:      where,
+		included:   includedColumns,
+		options:    indexOptions,
+		partition:  indexParition,
 	}, nil
 }
 
@@ -337,16 +338,6 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				return nil, err
 			}
 			return &AddPrimaryKey{
-				statement: ddl,
-				tableName: normalizedTableName(mode, stmt.Table),
-				index:     index,
-			}, nil
-		} else if stmt.Action == "add unique" {
-			index, err := parseIndex(stmt)
-			if err != nil {
-				return nil, err
-			}
-			return &CreateIndex{
 				statement: ddl,
 				tableName: normalizedTableName(mode, stmt.Table),
 				index:     index,

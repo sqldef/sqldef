@@ -484,7 +484,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		if currentIndex := findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex != nil {
 			// Drop and add index as needed.
 			if !areSameIndexes(*currentIndex, desiredIndex) {
-				ddls = append(ddls, g.generateDropIndex(desired.table.name, desiredIndex.name))
+				ddls = append(ddls, g.generateDropIndex(desired.table.name, desiredIndex.name, desiredIndex.constraint))
 				ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
 			}
 		} else {
@@ -558,7 +558,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 	} else {
 		// Index found. If it's different, drop and add index.
 		if !areSameIndexes(*currentIndex, desiredIndex) {
-			ddls = append(ddls, g.generateDropIndex(currentTable.name, currentIndex.name))
+			ddls = append(ddls, g.generateDropIndex(currentTable.name, currentIndex.name, currentIndex.constraint))
 			ddls = append(ddls, statement)
 
 			newIndexes := []Index{}
@@ -796,10 +796,10 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 
 		if uniqueKeyColumn == nil {
 			// No unique column. Drop unique key index.
-			ddls = append(ddls, g.generateDropIndex(currentTable.name, currentIndex.name))
+			ddls = append(ddls, g.generateDropIndex(currentTable.name, currentIndex.name, currentIndex.constraint))
 		}
 	} else {
-		ddls = append(ddls, g.generateDropIndex(currentTable.name, currentIndex.name))
+		ddls = append(ddls, g.generateDropIndex(currentTable.name, currentIndex.name, currentIndex.constraint))
 	}
 
 	return ddls, nil
@@ -1061,12 +1061,16 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 	return strings.TrimSuffix(definition, " ")
 }
 
-func (g *Generator) generateDropIndex(tableName string, indexName string) string {
+func (g *Generator) generateDropIndex(tableName string, indexName string, constraint bool) string {
 	switch g.mode {
 	case GeneratorModeMysql:
 		return fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", g.escapeTableName(tableName), g.escapeSQLName(indexName))
 	case GeneratorModePostgres:
-		return fmt.Sprintf("DROP INDEX %s", g.escapeSQLName(indexName))
+		if constraint {
+			return fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(tableName), g.escapeSQLName(indexName))
+		} else {
+			return fmt.Sprintf("DROP INDEX %s", g.escapeSQLName(indexName))
+		}
 	case GeneratorModeMssql:
 		return fmt.Sprintf("DROP INDEX %s ON %s", g.escapeSQLName(indexName), g.escapeTableName(tableName))
 	default:
@@ -1166,6 +1170,13 @@ func convertDDLsToTables(ddls []DDL) ([]*Table, error) {
 			}
 			// TODO: check duplicated creation
 			table.indexes = append(table.indexes, stmt.index)
+		case *AddIndex:
+			table := findTableByName(tables, stmt.tableName)
+			if table == nil {
+				return nil, fmt.Errorf("ADD INDEX is performed before CREATE TABLE: %s", ddl.Statement())
+			}
+			// TODO: check duplicated creation
+			table.indexes = append(table.indexes, stmt.index)
 		case *AddPrimaryKey:
 			table := findTableByName(tables, stmt.tableName)
 			if table == nil {
@@ -1201,7 +1212,7 @@ func convertDDLsToTables(ddls []DDL) ([]*Table, error) {
 		case *Type:
 			// do nothing
 		default:
-			return nil, fmt.Errorf("unexpected ddl type in convertDDLsToTables: %v", stmt)
+			return nil, fmt.Errorf("unexpected ddl type in convertDDLsToTables: %#v", stmt)
 		}
 	}
 	return tables, nil

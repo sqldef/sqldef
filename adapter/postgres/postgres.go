@@ -251,7 +251,7 @@ WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum >
 	schema, table := splitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
-		fmt.Println(err)
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -297,9 +297,14 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 	schema, table := splitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
-		fmt.Println(err)
+		return nil, err
 	}
 	defer rows.Close()
+
+	uniqueConstraints, err := d.getUniqueConstraints(table)
+	if err != nil {
+		return nil, err
+	}
 
 	indexes := make([]string, 0)
 	for rows.Next() {
@@ -312,9 +317,42 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 		if strings.HasSuffix(indexName, "_pkey") {
 			continue
 		}
+
+		// A unique constraint is also observed as a unique index. We have to replace it here.
+		if uniqueConstraint, ok := uniqueConstraints[indexName]; ok {
+			indexdef = uniqueConstraint
+		}
 		indexes = append(indexes, indexdef)
 	}
 	return indexes, nil
+}
+
+func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]string, error) {
+	const query = `SELECT conname, pg_get_constraintdef(c.oid)
+	FROM   pg_constraint c
+	JOIN   pg_namespace n ON n.oid = c.connamespace
+	WHERE  contype = 'u'
+	AND    n.nspname = $1
+	AND    conrelid::regclass = $2::regclass;`
+
+	result := map[string]string{}
+	schema, table := splitTableName(tableName)
+	rows, err := d.db.Query(query, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var constraintName, constraintDef string
+		err = rows.Scan(&constraintName, &constraintDef)
+		if err != nil {
+			return nil, err
+		}
+		result[constraintName] = fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s %s", tableName, constraintName, constraintDef)
+	}
+
+	return result, nil
 }
 
 func (d *PostgresDatabase) getPrimaryKeyColumns(table string) ([]string, error) {
@@ -422,7 +460,7 @@ func (d *PostgresDatabase) getPolicyDefs(table string) ([]string, error) {
 		if withCheck.Valid {
 			def += fmt.Sprintf(" WITH CHECK %s", withCheck.String)
 		}
-		defs = append(defs, def + ";")
+		defs = append(defs, def+";")
 	}
 	return defs, nil
 }

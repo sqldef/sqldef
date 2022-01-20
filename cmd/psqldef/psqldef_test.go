@@ -646,6 +646,17 @@ func TestPsqldefAddConstraintUnique(t *testing.T) {
 	)
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		create table dummy(
+		  column_a int not null,
+		  column_b int not null,
+		  column_c int not null
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";`+"\n")
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestPsqldefCreateIndexWithKey(t *testing.T) {
@@ -838,7 +849,7 @@ func TestPsqldefExport(t *testing.T) {
 		    "c_varchar_unlimited" character varying,
 		    PRIMARY KEY ("id")
 		);
-		CREATE UNIQUE INDEX users_c_char_1_key ON users USING btree (c_char_1);
+		ALTER TABLE users ADD CONSTRAINT users_c_char_1_key UNIQUE (c_char_1);
 		`,
 	))
 }

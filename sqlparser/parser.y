@@ -2206,6 +2206,7 @@ alter_statement:
           Name: $7,
           Unique: true,
           Primary: false,
+          Constraint: true,
         },
         IndexCols: $10,
       }

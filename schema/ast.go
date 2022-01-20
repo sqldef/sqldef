@@ -16,9 +16,10 @@ type CreateIndex struct {
 }
 
 type AddIndex struct {
-	statement string
-	tableName string
-	index     Index
+	statement  string
+	tableName  string
+	constraint bool
+	index      Index
 }
 
 type AddPrimaryKey struct {
@@ -82,16 +83,17 @@ type Column struct {
 }
 
 type Index struct {
-	name      string
-	indexType string // Parsed only in "create table" but not parsed in "add index". Only used inside `generateDDLsForCreateTable`.
-	columns   []IndexColumn
-	primary   bool
-	unique    bool
-	where     string         // for Postgres `Partial Indexes`
-	included  []string       // for MSSQL
-	clustered bool           // for MSSQL
-	partition IndexPartition // for MSSQL
-	options   []IndexOption
+	name       string
+	indexType  string // Parsed only in "create table" but not parsed in "add index". Only used inside `generateDDLsForCreateTable`.
+	columns    []IndexColumn
+	primary    bool
+	unique     bool
+	constraint bool           // for Postgres `ADD CONSTRAINT UNIQUE`
+	where      string         // for Postgres `Partial Indexes`
+	included   []string       // for MSSQL
+	clustered  bool           // for MSSQL
+	partition  IndexPartition // for MSSQL
+	options    []IndexOption
 }
 
 type IndexColumn struct {

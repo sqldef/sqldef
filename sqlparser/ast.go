@@ -1312,15 +1312,16 @@ const (
 )
 
 type IndexSpec struct {
-	Name      ColIdent
-	Type      ColIdent
-	Unique    bool
-	Primary   bool
-	Clustered bool // for MSSQL
-	Included  []ColIdent
-	Where     *Where
-	Options   []*IndexOption
-	Partition *IndexPartition // for MSSQL
+	Name       ColIdent
+	Type       ColIdent
+	Unique     bool
+	Primary    bool
+	Constraint bool
+	Clustered  bool // for MSSQL
+	Included   []ColIdent
+	Where      *Where
+	Options    []*IndexOption
+	Partition  *IndexPartition // for MSSQL
 }
 
 // VindexSpec defines a vindex for a CREATE VINDEX or DROP VINDEX statement
