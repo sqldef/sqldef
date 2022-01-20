@@ -44,6 +44,14 @@ func TestPsqldefCreateTable(t *testing.T) {
 	assertApplyOutput(t, createTable1, nothingModified)
 }
 
+func TestPsqldefCreateEmptyTable(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE public.test ();\n"
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestPsqldefCreateTableWithDefault(t *testing.T) {
 	resetTestDatabase()
 

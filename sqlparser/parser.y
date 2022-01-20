@@ -1076,7 +1076,10 @@ table_spec:
   }
 
 table_column_list:
-  column_definition
+  {
+    $$ = &TableSpec{}
+  }
+| column_definition
   {
     $$ = &TableSpec{}
     $$.AddColumn($1)
