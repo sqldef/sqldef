@@ -1,3 +1,7 @@
+## v0.11.22
+
+- Support dropping unique constraints for psqldef [#182](https://github.com/k0kubun/sqldef/pull/182)
+
 ## v0.11.21
 
 - Allow an empty CREATE TABLE [#181](https://github.com/k0kubun/sqldef/pull/181)
