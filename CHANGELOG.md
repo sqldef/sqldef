@@ -1,3 +1,7 @@
+## v0.11.21
+
+- Allow an empty CREATE TABLE [#181](https://github.com/k0kubun/sqldef/pull/181)
+
 ## v0.11.20
 
 - Support enum default values for psqldef [#180](https://github.com/k0kubun/sqldef/pull/180)
