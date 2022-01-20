@@ -28,12 +28,6 @@ type AddPrimaryKey struct {
 	index     Index
 }
 
-type AddUnique struct {
-	statement string
-	tableName string
-	index     Index
-}
-
 type AddForeignKey struct {
 	statement  string
 	tableName  string
@@ -240,10 +234,6 @@ func (a *AddIndex) Statement() string {
 }
 
 func (a *AddPrimaryKey) Statement() string {
-	return a.statement
-}
-
-func (a *AddUnique) Statement() string {
 	return a.statement
 }
 

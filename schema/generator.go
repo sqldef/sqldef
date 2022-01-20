@@ -118,12 +118,6 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return ddls, err
 			}
 			ddls = append(ddls, indexDDLs...)
-		case *AddUnique:
-			uniqueDDLs, err := g.generateDDLsForAddUnique(desired.tableName, desired.index, "ALTER TABLE", ddl.Statement())
-			if err != nil {
-				return ddls, err
-			}
-			ddls = append(ddls, uniqueDDLs...)
 		case *AddForeignKey:
 			fkeyDDLs, err := g.generateDDLsForAddForeignKey(desired.tableName, desired.foreignKey, "ALTER TABLE", ddl.Statement())
 			if err != nil {
@@ -582,24 +576,6 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 		return nil, fmt.Errorf("index '%s' is doubly created against table '%s': '%s'", desiredIndex.name, tableName, statement)
 	}
 	desiredTable.indexes = append(desiredTable.indexes, desiredIndex)
-
-	return ddls, nil
-}
-
-func (g *Generator) generateDDLsForAddUnique(tableName string, desiredIndex Index, action string, statement string) ([]string, error) {
-	var ddls []string
-
-	currentTable := findTableByName(g.currentTables, tableName)
-	if currentTable == nil {
-		return nil, fmt.Errorf("%s is performed for inexistent table '%s': '%s'", action, tableName, statement)
-	}
-
-	currentIndex := findIndexByName(currentTable.indexes, desiredIndex.name)
-	if currentIndex == nil {
-		// Index not found, add index.
-		ddls = append(ddls, statement)
-		currentTable.indexes = append(currentTable.indexes, desiredIndex)
-	}
 
 	return ddls, nil
 }
