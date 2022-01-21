@@ -1,3 +1,7 @@
+## v0.11.23
+
+- Initial support of multi-column CHECK for psqldef [#183](https://github.com/k0kubun/sqldef/pull/183)
+
 ## v0.11.22
 
 - Support dropping unique constraints for psqldef [#182](https://github.com/k0kubun/sqldef/pull/182)
