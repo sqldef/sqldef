@@ -44,34 +44,34 @@ type Table struct {
 	name        string
 	columns     []Column
 	indexes     []Index
+	checks      []CheckDefinition
 	foreignKeys []ForeignKey
 	policies    []Policy
 	// XXX: have options and alter on its change?
 }
 
 type Column struct {
-	name           string
-	position       int
-	typeName       string
-	unsigned       bool
-	notNull        *bool
-	autoIncrement  bool
-	array          bool
-	defaultDef     *DefaultDefinition
-	length         *Value
-	scale          *Value
-	check          *CheckDefinition
-	checkNoInherit bool
-	charset        string
-	collate        string
-	timezone       bool // for Postgres `with time zone`
-	keyOption      ColumnKeyOption
-	onUpdate       *Value
-	comment        *Value
-	enumValues     []string
-	references     string
-	identity       *Identity
-	sequence       *Sequence
+	name          string
+	position      int
+	typeName      string
+	unsigned      bool
+	notNull       *bool
+	autoIncrement bool
+	array         bool
+	defaultDef    *DefaultDefinition
+	length        *Value
+	scale         *Value
+	check         *CheckDefinition
+	charset       string
+	collate       string
+	timezone      bool // for Postgres `with time zone`
+	keyOption     ColumnKeyOption
+	onUpdate      *Value
+	comment       *Value
+	enumValues    []string
+	references    string
+	identity      *Identity
+	sequence      *Sequence
 	// TODO: keyopt
 	// XXX: zerofill?
 }
@@ -213,6 +213,7 @@ type CheckDefinition struct {
 	definition        string
 	constraintName    string
 	notForReplication bool
+	noInherit         bool
 }
 
 // TODO: include type information

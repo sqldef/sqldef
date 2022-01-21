@@ -455,6 +455,23 @@ func TestPsqldefCreateTableWithCheck(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestPsqldefMultiColumnCheck(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE orders (
+		  id UUID NOT NULL PRIMARY KEY,
+		  order_number VARCHAR(255) NOT NULL,
+		  customer VARCHAR(255),
+		  store_table VARCHAR(255),
+		  CONSTRAINT check_customer_or_table CHECK ((store_table is not null and customer is null) or (store_table is null and customer is not null))
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestPsqlddefCreatePolicy(t *testing.T) {
 	resetTestDatabase()
 

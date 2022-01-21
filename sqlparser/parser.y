@@ -100,6 +100,7 @@ func forceEOF(yylex interface{}) {
   optVal        *SQLVal
   LengthScaleOption LengthScaleOption
   columnDefinition *ColumnDefinition
+  checkDefinition *CheckDefinition
   indexDefinition *IndexDefinition
   indexInfo     *IndexInfo
   indexOption   *IndexOption
@@ -312,6 +313,7 @@ func forceEOF(yylex interface{}) {
 %type <columnDefinition> column_definition
 %type <columnType> column_definition_type
 %type <indexDefinition> index_definition primary_key_definition
+%type <checkDefinition> check_definition
 %type <foreignKeyDefinition> foreign_key_definition foreign_key_without_options
 %type <colIdent> reference_option
 %type <colIdent> sql_id_opt
@@ -1100,6 +1102,10 @@ table_column_list:
   {
     $$.AddIndex($3)
   }
+| table_column_list ',' check_definition
+  {
+    $$.AddCheck($3)
+  }
 
 column_definition:
   ID column_definition_type
@@ -1194,13 +1200,21 @@ column_definition_type:
   }
 | column_definition_type CHECK not_for_replication_opt openb expression closeb no_inherit_opt
   {
-    $1.Check = &CheckDefinition{Where: *NewWhere(WhereStr, $5), NotForReplication: bool($3)}
-    $1.CheckNoInherit = $7
+    $1.Check = &CheckDefinition{
+      Where: *NewWhere(WhereStr, $5),
+      NotForReplication: bool($3),
+      NoInherit: $7,
+    }
     $$ = $1
   }
-| column_definition_type CONSTRAINT sql_id CHECK not_for_replication_opt openb expression closeb
+| column_definition_type CONSTRAINT sql_id CHECK not_for_replication_opt openb expression closeb no_inherit_opt
   {
-    $1.Check = &CheckDefinition{Where: *NewWhere(WhereStr, $7), ConstraintName: $3, NotForReplication: bool($5)}
+    $1.Check = &CheckDefinition{
+      ConstraintName: $3,
+      Where: *NewWhere(WhereStr, $7),
+      NotForReplication: bool($5),
+      NoInherit: $9,
+    }
     $$ = $1
   }
 | column_definition_type COMMENT_KEYWORD STRING
@@ -2077,6 +2091,16 @@ primary_key_definition:
       Columns: $7,
       Options: $9,
       Partition: $10,
+    }
+  }
+
+check_definition:
+  CONSTRAINT sql_id CHECK openb expression closeb no_inherit_opt
+  {
+    $$ = &CheckDefinition{
+      ConstraintName: $2,
+      Where: *NewWhere(WhereStr, $5),
+      NoInherit: $7,
     }
   }
 

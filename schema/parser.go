@@ -93,9 +93,10 @@ func parseLength(val *sqlparser.SQLVal) (*int, error) {
 }
 
 func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
-	columns := []Column{}
-	indexes := []Index{}
-	foreignKeys := []ForeignKey{}
+	var columns []Column
+	var indexes []Index
+	var checks []CheckDefinition
+	var foreignKeys []ForeignKey
 
 	for i, parsedCol := range stmt.TableSpec.Columns {
 		column := Column{
@@ -125,9 +126,9 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 				definition:        sqlparser.String(parsedCol.Type.Check.Where.Expr),
 				constraintName:    sqlparser.String(parsedCol.Type.Check.ConstraintName),
 				notForReplication: parsedCol.Type.Check.NotForReplication,
+				noInherit:         castBool(parsedCol.Type.Check.NoInherit),
 			}
 		}
-		column.checkNoInherit = castBool(parsedCol.Type.CheckNoInherit)
 		columns = append(columns, column)
 	}
 
@@ -178,6 +179,16 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 		indexes = append(indexes, index)
 	}
 
+	for _, checkDef := range stmt.TableSpec.Checks {
+		check := CheckDefinition{
+			definition:        sqlparser.String(checkDef.Where.Expr),
+			constraintName:    sqlparser.String(checkDef.ConstraintName),
+			notForReplication: checkDef.NotForReplication,
+			noInherit:         castBool(checkDef.NoInherit),
+		}
+		checks = append(checks, check)
+	}
+
 	for _, foreignKeyDef := range stmt.TableSpec.ForeignKeys {
 		indexColumns := []string{}
 		for _, indexColumn := range foreignKeyDef.IndexColumns {
@@ -206,6 +217,7 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 		name:        normalizedTableName(mode, stmt.NewName),
 		columns:     columns,
 		indexes:     indexes,
+		checks:      checks,
 		foreignKeys: foreignKeys,
 	}, nil
 }

@@ -148,10 +148,14 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreginDefs, policyDefs), nil
+	checkConstraints, err := d.getCheckConstraints(table)
+	if err != nil {
+		return "", err
+	}
+	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreginDefs, policyDefs, checkConstraints), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreginDefs, policyDefs []string) string {
+func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreginDefs, policyDefs []string, checkConstraints map[string]string) string {
 	var queryBuilder strings.Builder
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (", table)
 	for i, col := range columns {
@@ -172,13 +176,14 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 		if col.IdentityGeneration != "" {
 			fmt.Fprintf(&queryBuilder, " GENERATED %s AS IDENTITY", col.IdentityGeneration)
 		}
-		if col.Check != "" {
-			fmt.Fprintf(&queryBuilder, " %s", col.Check)
-		}
 	}
 	if len(pkeyCols) > 0 {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
 		fmt.Fprintf(&queryBuilder, "PRIMARY KEY (\"%s\")", strings.Join(pkeyCols, "\", \""))
+	}
+	for constraintName, constraintDef := range checkConstraints {
+		fmt.Fprint(&queryBuilder, ",\n"+indent)
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", constraintName, constraintDef)
 	}
 	fmt.Fprintf(&queryBuilder, "\n);\n")
 	for _, v := range indexDefs {
@@ -200,7 +205,6 @@ type column struct {
 	Nullable           bool
 	Default            string
 	IsAutoIncrement    bool
-	Check              string
 	IdentityGeneration string
 }
 
@@ -237,14 +241,11 @@ func (c *column) GetDataType() string {
 func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	const query = `SELECT s.column_name, s.column_default, s.is_nullable, s.character_maximum_length,
 	CASE WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod) ELSE s.data_type END,
-	CASE WHEN pc.contype = 'c' THEN pg_get_constraintdef(pc.oid, true) ELSE NULL END AS check,
 	s.identity_generation
 FROM pg_attribute f
 	JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
 	LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
 	LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
-	LEFT JOIN pg_constraint p ON p.conrelid = c.oid AND f.attnum = ANY (p.conkey) AND p.contype = 'u'
-	LEFT JOIN pg_constraint pc ON pc.conrelid = c.oid AND f.attnum = ANY (pc.conkey) AND pc.contype = 'c'
 	LEFT JOIN information_schema.columns s ON s.column_name=f.attname AND s.table_name = c.relname
 WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum > 0 ORDER BY f.attnum;`
 
@@ -259,8 +260,8 @@ WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum >
 	for rows.Next() {
 		col := column{}
 		var colName, isNullable, dataType string
-		var maxLenStr, colDefault, check, idGen *string
-		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &dataType, &check, &idGen)
+		var maxLenStr, colDefault, idGen *string
+		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &dataType, &idGen)
 		if err != nil {
 			return nil, err
 		}
@@ -281,9 +282,6 @@ WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum >
 		col.Nullable = isNullable == "YES"
 		col.dataType = dataType
 		col.Length = maxLen
-		if check != nil {
-			col.Check = *check
-		}
 		if idGen != nil {
 			col.IdentityGeneration = *idGen
 		}
@@ -325,6 +323,34 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 		indexes = append(indexes, indexdef)
 	}
 	return indexes, nil
+}
+
+func (d *PostgresDatabase) getCheckConstraints(tableName string) (map[string]string, error) {
+	const query = `SELECT conname, pg_get_constraintdef(c.oid, true)
+	FROM   pg_constraint c
+	JOIN   pg_namespace n ON n.oid = c.connamespace
+	WHERE  contype = 'c'
+	AND    n.nspname = $1
+	AND    conrelid::regclass = $2::regclass;`
+
+	result := map[string]string{}
+	schema, table := splitTableName(tableName)
+	rows, err := d.db.Query(query, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var constraintName, constraintDef string
+		err = rows.Scan(&constraintName, &constraintDef)
+		if err != nil {
+			return nil, err
+		}
+		result[constraintName] = constraintDef
+	}
+
+	return result, nil
 }
 
 func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]string, error) {

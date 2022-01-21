@@ -356,15 +356,16 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 				}
 
-				if !areSameCheckDefinition(currentColumn.check, desiredColumn.check) || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
-					constraintName := fmt.Sprintf("%s_%s_check", strings.Replace(desired.table.name, "public.", "", 1), desiredColumn.name)
-					if currentColumn.check != nil {
+				constraintName := fmt.Sprintf("%s_%s_check", strings.Replace(desired.table.name, "public.", "", 1), desiredColumn.name)
+				currentCheck := findCheckByName(currentTable.checks, constraintName)
+				if !areSameCheckDefinition(currentCheck, desiredColumn.check) { // || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
+					if currentCheck != nil {
 						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), constraintName)
 						ddls = append(ddls, ddl)
 					}
 					if desiredColumn.check != nil {
 						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), constraintName, desiredColumn.check.definition)
-						if desiredColumn.checkNoInherit {
+						if desiredColumn.check.noInherit {
 							ddl += " NO INHERIT"
 						}
 						ddls = append(ddls, ddl)
@@ -373,7 +374,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 				// TODO: support adding a column's `references`
 			case GeneratorModeMssql:
-				if !areSameCheckDefinition(currentColumn.check, desiredColumn.check) || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
+				if !areSameCheckDefinition(currentColumn.check, desiredColumn.check) {
 					constraintName := fmt.Sprintf("%s_%s_check", strings.Replace(desired.table.name, "dbo.", "", 1), desiredColumn.name)
 					if currentColumn.check != nil {
 						currentConstraintName := currentColumn.check.constraintName
@@ -855,9 +856,9 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 			definition += "NOT FOR REPLICATION "
 		}
 		definition += fmt.Sprintf("(%s) ", column.check.definition)
-	}
-	if column.checkNoInherit {
-		definition += "NO INHERIT "
+		if column.check.noInherit {
+			definition += "NO INHERIT "
+		}
 	}
 
 	switch column.keyOption {
@@ -1260,6 +1261,15 @@ func findIndexOptionByName(options []IndexOption, name string) *IndexOption {
 	return nil
 }
 
+func findCheckByName(checks []CheckDefinition, name string) *CheckDefinition {
+	for _, check := range checks {
+		if check.constraintName == name {
+			return &check
+		}
+	}
+	return nil
+}
+
 func findForeignKeyByName(foreignKeys []ForeignKey, constraintName string) *ForeignKey {
 	for _, foreignKey := range foreignKeys {
 		if foreignKey.constraintName == constraintName {
@@ -1342,7 +1352,9 @@ func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bo
 	if checkA == nil || checkB == nil {
 		return false
 	}
-	return checkA.definition == checkB.definition && checkA.notForReplication == checkB.notForReplication
+	return checkA.definition == checkB.definition &&
+		checkA.notForReplication == checkB.notForReplication &&
+		checkA.noInherit == checkB.noInherit
 }
 
 func areSameIdentityDefinition(identityA *Identity, identityB *Identity) bool {

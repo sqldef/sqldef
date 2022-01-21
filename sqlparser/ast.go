@@ -835,6 +835,7 @@ type TableSpec struct {
 	Columns     []*ColumnDefinition
 	Indexes     []*IndexDefinition
 	ForeignKeys []*ForeignKeyDefinition
+	Checks      []*CheckDefinition
 	Options     string
 }
 
@@ -863,6 +864,10 @@ func (ts *TableSpec) AddColumn(cd *ColumnDefinition) {
 // AddIndex appends the given index to the list in the spec
 func (ts *TableSpec) AddIndex(id *IndexDefinition) {
 	ts.Indexes = append(ts.Indexes, id)
+}
+
+func (ts *TableSpec) AddCheck(check *CheckDefinition) {
+	ts.Checks = append(ts.Checks, check)
 }
 
 func (ts *TableSpec) AddForeignKey(foreignKey *ForeignKeyDefinition) {
@@ -950,14 +955,13 @@ type ColumnType struct {
 	Type string
 
 	// Generic field options.
-	NotNull        *BoolVal
-	Autoincrement  BoolVal
-	Default        *DefaultDefinition
-	OnUpdate       *SQLVal
-	Comment        *SQLVal
-	Check          *CheckDefinition
-	CheckNoInherit BoolVal
-	Array          BoolVal
+	NotNull       *BoolVal
+	Autoincrement BoolVal
+	Default       *DefaultDefinition
+	OnUpdate      *SQLVal
+	Comment       *SQLVal
+	Check         *CheckDefinition
+	Array         BoolVal
 
 	// Numeric field options
 	Length   *SQLVal
@@ -998,6 +1002,7 @@ type CheckDefinition struct {
 	Where             Where
 	ConstraintName    ColIdent
 	NotForReplication bool
+	NoInherit         BoolVal
 }
 
 // Format returns a canonical string representation of the type and all relevant options
@@ -1048,9 +1053,6 @@ func (ct *ColumnType) Format(buf *TrackedBuffer) {
 	}
 	if ct.Check != nil {
 		opts = append(opts, keywordStrings[CHECK], String(&ct.Check.Where))
-	}
-	if ct.CheckNoInherit {
-		opts = append(opts, keywordStrings[NO], keywordStrings[INHERIT])
 	}
 	if ct.KeyOpt == colKeyPrimary {
 		opts = append(opts, keywordStrings[PRIMARY], keywordStrings[KEY])
