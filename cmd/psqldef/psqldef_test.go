@@ -658,21 +658,29 @@ func TestPsqldefAddConstraintUnique(t *testing.T) {
 		  column_b int not null,
 		  column_c int not null
 		);
-		alter table dummy add constraint dummy_uniq unique (column_a, column_b);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
+	alterTable := "alter table dummy add constraint dummy_uniq unique (column_a, column_b);"
+	assertApplyOutput(t, createTable+alterTable, applyPrefix+createTable+alterTable+"\n")
+	assertApplyOutput(t, createTable+alterTable, nothingModified)
 
-	createTable = stripHeredoc(`
-		create table dummy(
-		  column_a int not null,
-		  column_b int not null,
-		  column_c int not null
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";`+"\n")
+	alterTable = "alter table dummy add constraint dummy_uniq unique (column_a, column_b) not deferrable initially immediate;"
+	assertApplyOutput(t, createTable+alterTable, nothingModified)
+
+	alterTable = "alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable;"
+	dropConstraint := `ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";`
+	assertApplyOutput(t, createTable+alterTable, applyPrefix+dropConstraint+"\n"+alterTable+"\n")
+
+	alterTable = "alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable initially deferred;"
+	assertApplyOutput(t, createTable+alterTable, applyPrefix+dropConstraint+"\n"+alterTable+"\n")
+
+	alterTable = "alter table dummy add constraint dummy_uniq unique (column_a, column_b) not deferrable initially deferred;"
+	assertApplyOutput(t, createTable+alterTable, applyPrefix+dropConstraint+"\n"+alterTable+"\n")
+
+	alterTable = "alter table dummy add constraint dummy_uniq unique (column_a, column_b);"
+	assertApplyOutput(t, createTable+alterTable, applyPrefix+dropConstraint+"\n"+alterTable+"\n")
+
+	assertApplyOutput(t, createTable, applyPrefix+dropConstraint+"\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
