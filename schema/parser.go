@@ -302,7 +302,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 
 	switch stmt := stmt.(type) {
 	case *sqlparser.DDL:
-		if stmt.Action == "create" {
+		if stmt.Action == sqlparser.CreateStr {
 			// TODO: handle other create DDL as error?
 			table, err := parseTable(mode, stmt)
 			if err != nil {
@@ -312,7 +312,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				statement: ddl,
 				table:     table,
 			}, nil
-		} else if stmt.Action == "create index" {
+		} else if stmt.Action == sqlparser.CreateIndexStr {
 			index, err := parseIndex(stmt)
 			if err != nil {
 				return nil, err
@@ -322,7 +322,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				tableName: normalizedTableName(mode, stmt.Table),
 				index:     index,
 			}, nil
-		} else if stmt.Action == "add index" {
+		} else if stmt.Action == sqlparser.AddIndexStr {
 			index, err := parseIndex(stmt)
 			if err != nil {
 				return nil, err
@@ -332,7 +332,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				tableName: normalizedTableName(mode, stmt.Table),
 				index:     index,
 			}, nil
-		} else if stmt.Action == "add primary key" {
+		} else if stmt.Action == sqlparser.AddPrimaryKeyStr {
 			index, err := parseIndex(stmt)
 			if err != nil {
 				return nil, err
@@ -342,7 +342,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				tableName: normalizedTableName(mode, stmt.Table),
 				index:     index,
 			}, nil
-		} else if stmt.Action == "add foreign key" {
+		} else if stmt.Action == sqlparser.AddForeignKeyStr {
 			indexColumns := []string{}
 			for _, indexColumn := range stmt.ForeignKey.IndexColumns {
 				indexColumns = append(indexColumns, indexColumn.String())
@@ -366,7 +366,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 					notForReplication: stmt.ForeignKey.NotForReplication,
 				},
 			}, nil
-		} else if stmt.Action == "create policy" {
+		} else if stmt.Action == sqlparser.CreatePolicyStr {
 			scope := make([]string, len(stmt.Policy.To))
 			for i, to := range stmt.Policy.To {
 				scope[i] = to.String()
@@ -390,13 +390,13 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 					withCheck:  withCheck,
 				},
 			}, nil
-		} else if stmt.Action == "create view" {
+		} else if stmt.Action == sqlparser.CreateViewStr {
 			return &View{
 				statement:  ddl,
 				name:       stmt.View.Name.Name.String(),
 				definition: sqlparser.String(stmt.View.Definition),
 			}, nil
-		} else if stmt.Action == "create trigger" {
+		} else if stmt.Action == sqlparser.CreateTriggerStr {
 			body := []string{}
 			for _, triggerStatement := range stmt.Trigger.Body {
 				body = append(body, sqlparser.String(triggerStatement))
@@ -410,7 +410,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				event:     stmt.Trigger.Event,
 				body:      body,
 			}, nil
-		} else if stmt.Action == "create type" {
+		} else if stmt.Action == sqlparser.CreateTypeStr {
 			return &Type{
 				name:      normalizedTableName(mode, stmt.Type.Name),
 				statement: ddl,
