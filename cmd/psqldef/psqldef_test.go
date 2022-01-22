@@ -6,6 +6,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -17,6 +18,7 @@ import (
 const (
 	applyPrefix     = "-- Apply --\n"
 	nothingModified = "-- Nothing is modified --\n"
+	database        = "psqldef_test"
 )
 
 func TestPsqldefCreateTable(t *testing.T) {
@@ -194,7 +196,7 @@ func TestPsqldefCreateTableNotNull(t *testing.T) {
 
 func TestPsqldefCitextExtension(t *testing.T) {
 	resetTestDatabase()
-	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", "CREATE EXTENSION citext;")
+	mustExecuteSQL("CREATE EXTENSION citext;")
 
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
@@ -205,13 +207,13 @@ func TestPsqldefCitextExtension(t *testing.T) {
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
 
-	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", "DROP TABLE users;")
-	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", "DROP EXTENSION citext;")
+	mustExecuteSQL("DROP TABLE users;")
+	mustExecuteSQL("DROP EXTENSION citext;")
 }
 
 func TestPsqldefIgnoreExtension(t *testing.T) {
 	resetTestDatabase()
-	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", "CREATE EXTENSION pg_buffercache;")
+	mustExecuteSQL("CREATE EXTENSION pg_buffercache;")
 
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
@@ -225,7 +227,7 @@ func TestPsqldefIgnoreExtension(t *testing.T) {
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
 
-	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", "DROP EXTENSION pg_buffercache;")
+	mustExecuteSQL("DROP EXTENSION pg_buffercache;")
 }
 
 func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
@@ -806,6 +808,15 @@ func TestPsqldefDataTypes(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified) // Label for column type may change. Type will be examined.
 }
 
+func TestPsqldefCreateTableInSchema(t *testing.T) {
+	resetTestDatabase()
+	mustExecuteSQL("CREATE SCHEMA test;")
+
+	createTable := "CREATE TABLE test.users (id serial primary key);"
+	assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
@@ -819,14 +830,14 @@ func TestPsqldefDryRun(t *testing.T) {
 	    );`,
 	))
 
-	dryRun := assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--dry-run", "--file", "schema.sql")
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+	dryRun := assertedExecute(t, "./psqldef", "-Upostgres", database, "--dry-run", "--file", "schema.sql")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", database, "--file", "schema.sql")
 	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 }
 
 func TestPsqldefSkipDrop(t *testing.T) {
 	resetTestDatabase()
-	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", stripHeredoc(`
+	mustExecuteSQL(stripHeredoc(`
 		CREATE TABLE users (
 		    id bigint NOT NULL PRIMARY KEY,
 		    age int,
@@ -839,17 +850,17 @@ func TestPsqldefSkipDrop(t *testing.T) {
 
 	writeFile("schema.sql", "")
 
-	skipDrop := assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--skip-drop", "--file", "schema.sql")
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+	skipDrop := assertedExecute(t, "./psqldef", "-Upostgres", database, "--skip-drop", "--file", "schema.sql")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", database, "--file", "schema.sql")
 	assertEquals(t, skipDrop, strings.Replace(apply, "DROP", "-- Skipped: DROP", 1))
 }
 
 func TestPsqldefExport(t *testing.T) {
 	resetTestDatabase()
-	out := assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--export")
+	out := assertedExecute(t, "./psqldef", "-Upostgres", database, "--export")
 	assertEquals(t, out, "-- No table exists --\n")
 
-	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", stripHeredoc(`
+	mustExecuteSQL(stripHeredoc(`
 		CREATE TABLE users (
 		    id bigint NOT NULL PRIMARY KEY,
 		    age int,
@@ -859,7 +870,7 @@ func TestPsqldefExport(t *testing.T) {
 		    c_varchar_unlimited varchar
 		);`,
 	))
-	out = assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--export")
+	out = assertedExecute(t, "./psqldef", "-Upostgres", database, "--export")
 	// workaround: local has `public.` but travis doesn't.
 	assertEquals(t, strings.Replace(out, "public.users", "users", 2), stripHeredoc(`
 		CREATE TABLE users (
@@ -878,10 +889,10 @@ func TestPsqldefExport(t *testing.T) {
 
 func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 	resetTestDatabase()
-	out := assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--export")
+	out := assertedExecute(t, "./psqldef", "-Upostgres", database, "--export")
 	assertEquals(t, out, "-- No table exists --\n")
 
-	mustExecute("psql", "-Upostgres", "psqldef_test", "-c", stripHeredoc(`
+	mustExecuteSQL(stripHeredoc(`
 		CREATE TABLE users (
 		    col1 character varying(40) NOT NULL,
 		    col2 character varying(6) NOT NULL,
@@ -889,7 +900,7 @@ func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 		    PRIMARY KEY (col1, col2)
 		);`,
 	))
-	out = assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--export")
+	out = assertedExecute(t, "./psqldef", "-Upostgres", database, "--export")
 	// workaround: local has `public.` but travis doesn't.
 	assertEquals(t, strings.Replace(out, "public.users", "users", 2), stripHeredoc(`
 		CREATE TABLE users (
@@ -1111,13 +1122,13 @@ func TestMain(m *testing.M) {
 func assertApply(t *testing.T, schema string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+	assertedExecute(t, "./psqldef", "-Upostgres", database, "--file", "schema.sql")
 }
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	actual := assertedExecute(t, "./psqldef", "-Upostgres", "psqldef_test", "--file", "schema.sql")
+	actual := assertedExecute(t, "./psqldef", "-Upostgres", database, "--file", "schema.sql")
 	assertEquals(t, actual, expected)
 }
 
@@ -1127,6 +1138,10 @@ func mustExecute(command string, args ...string) {
 		log.Printf("failed to execute '%s %s': `%s`", command, strings.Join(args, " "), out)
 		log.Fatal(err)
 	}
+}
+
+func mustExecuteSQL(sql string) {
+	mustExecute("psql", "-Upostgres", database, "-c", sql)
 }
 
 func assertedExecute(t *testing.T, command string, args ...string) string {
@@ -1152,8 +1167,8 @@ func execute(command string, args ...string) (string, error) {
 }
 
 func resetTestDatabase() {
-	mustExecute("psql", "-Upostgres", "-c", "DROP DATABASE IF EXISTS psqldef_test;")
-	mustExecute("psql", "-Upostgres", "-c", "CREATE DATABASE psqldef_test;")
+	mustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("DROP DATABASE IF EXISTS %s;", database))
+	mustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("CREATE DATABASE %s;", database))
 }
 
 func writeFile(path string, content string) {

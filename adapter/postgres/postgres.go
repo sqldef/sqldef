@@ -140,7 +140,7 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	foreginDefs, err := d.getForeginDefs(table)
+	foreignDefs, err := d.getForeignDefs(table)
 	if err != nil {
 		return "", err
 	}
@@ -152,10 +152,10 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreginDefs, policyDefs, checkConstraints), nil
+	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreignDefs, policyDefs, checkConstraints), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreginDefs, policyDefs []string, checkConstraints map[string]string) string {
+func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreignDefs, policyDefs []string, checkConstraints map[string]string) string {
 	var queryBuilder strings.Builder
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (", table)
 	for i, col := range columns {
@@ -189,7 +189,7 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 	for _, v := range indexDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
-	for _, v := range foreginDefs {
+	for _, v := range foreignDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
 	for _, v := range policyDefs {
@@ -326,12 +326,13 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 }
 
 func (d *PostgresDatabase) getCheckConstraints(tableName string) (map[string]string, error) {
-	const query = `SELECT conname, pg_get_constraintdef(c.oid, true)
-	FROM   pg_constraint c
-	JOIN   pg_namespace n ON n.oid = c.connamespace
-	WHERE  contype = 'c'
-	AND    n.nspname = $1
-	AND    conrelid::regclass = $2::regclass;`
+	const query = `SELECT con.conname, pg_get_constraintdef(con.oid, true)
+	FROM   pg_constraint con
+	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+	JOIN   pg_class cls ON cls.oid = con.conrelid
+	WHERE  con.contype = 'c'
+	AND    nsp.nspname = $1
+	AND    cls.relname = $2;`
 
 	result := map[string]string{}
 	schema, table := splitTableName(tableName)
@@ -354,12 +355,13 @@ func (d *PostgresDatabase) getCheckConstraints(tableName string) (map[string]str
 }
 
 func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]string, error) {
-	const query = `SELECT conname, pg_get_constraintdef(c.oid)
-	FROM   pg_constraint c
-	JOIN   pg_namespace n ON n.oid = c.connamespace
-	WHERE  contype = 'u'
-	AND    n.nspname = $1
-	AND    conrelid::regclass = $2::regclass;`
+	const query = `SELECT con.conname, pg_get_constraintdef(con.oid)
+	FROM   pg_constraint con
+	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+	JOIN   pg_class cls ON cls.oid = con.conrelid
+	WHERE  con.contype = 'u'
+	AND    nsp.nspname = $1
+	AND    cls.relname = $2;`
 
 	result := map[string]string{}
 	schema, table := splitTableName(tableName)
@@ -410,7 +412,7 @@ WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$
 }
 
 // refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d
-func (d *PostgresDatabase) getForeginDefs(table string) ([]string, error) {
+func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 	const query = `SELECT
 	tc.table_schema, tc.constraint_name, tc.table_name, kcu.column_name,
 	ccu.table_schema AS foreign_table_schema,
