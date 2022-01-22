@@ -140,7 +140,7 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	foreginDefs, err := d.getForeginDefs(table)
+	foreignDefs, err := d.getForeignDefs(table)
 	if err != nil {
 		return "", err
 	}
@@ -152,10 +152,10 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreginDefs, policyDefs, checkConstraints), nil
+	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreignDefs, policyDefs, checkConstraints), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreginDefs, policyDefs []string, checkConstraints map[string]string) string {
+func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreignDefs, policyDefs []string, checkConstraints map[string]string) string {
 	var queryBuilder strings.Builder
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (", table)
 	for i, col := range columns {
@@ -189,7 +189,7 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 	for _, v := range indexDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
-	for _, v := range foreginDefs {
+	for _, v := range foreignDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
 	for _, v := range policyDefs {
@@ -410,7 +410,7 @@ WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$
 }
 
 // refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d
-func (d *PostgresDatabase) getForeginDefs(table string) ([]string, error) {
+func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 	const query = `SELECT
 	tc.table_schema, tc.constraint_name, tc.table_name, kcu.column_name,
 	ccu.table_schema AS foreign_table_schema,
