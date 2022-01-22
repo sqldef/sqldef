@@ -1,3 +1,7 @@
+## v0.11.24
+
+- Support `DEFERRABLE` options for psqldef [#186](https://github.com/k0kubun/sqldef/pull/186)
+
 ## v0.11.23
 
 - Initial support of multi-column CHECK for psqldef [#183](https://github.com/k0kubun/sqldef/pull/183)
