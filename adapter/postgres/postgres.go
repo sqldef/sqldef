@@ -329,7 +329,7 @@ func (d *PostgresDatabase) getCheckConstraints(tableName string) (map[string]str
 	const query = `SELECT con.conname, pg_get_constraintdef(con.oid, true)
 	FROM   pg_constraint con
 	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
-  JOIN   pg_class cls ON cls.oid = con.conrelid
+	JOIN   pg_class cls ON cls.oid = con.conrelid
 	WHERE  con.contype = 'c'
 	AND    nsp.nspname = $1
 	AND    cls.relname = $2;`
@@ -358,7 +358,7 @@ func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]st
 	const query = `SELECT con.conname, pg_get_constraintdef(con.oid)
 	FROM   pg_constraint con
 	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
-  JOIN   pg_class cls ON cls.oid = con.conrelid
+	JOIN   pg_class cls ON cls.oid = con.conrelid
 	WHERE  con.contype = 'u'
 	AND    nsp.nspname = $1
 	AND    cls.relname = $2;`
