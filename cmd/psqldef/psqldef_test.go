@@ -674,9 +674,6 @@ func TestPsqldefAddConstraintUnique(t *testing.T) {
 	alterTable = "alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable initially deferred;"
 	assertApplyOutput(t, createTable+alterTable, applyPrefix+dropConstraint+"\n"+alterTable+"\n")
 
-	alterTable = "alter table dummy add constraint dummy_uniq unique (column_a, column_b) not deferrable initially deferred;"
-	assertApplyOutput(t, createTable+alterTable, applyPrefix+dropConstraint+"\n"+alterTable+"\n")
-
 	alterTable = "alter table dummy add constraint dummy_uniq unique (column_a, column_b);"
 	assertApplyOutput(t, createTable+alterTable, applyPrefix+dropConstraint+"\n"+alterTable+"\n")
 

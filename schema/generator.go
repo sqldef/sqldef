@@ -1279,15 +1279,6 @@ func findForeignKeyByName(foreignKeys []ForeignKey, constraintName string) *Fore
 	return nil
 }
 
-func findPrimaryKey(indexes []Index) *Index {
-	for _, index := range indexes {
-		if index.primary {
-			return &index
-		}
-	}
-	return nil
-}
-
 func findPolicyByName(policies []Policy, name string) *Policy {
 	for _, policy := range policies {
 		if policy.name == name {
@@ -1498,6 +1489,19 @@ func areSameIndexes(indexA Index, indexB Index) bool {
 		}
 	}
 
+	// Specific to unique constraints
+	if indexA.constraint != indexB.constraint {
+		return false
+	}
+	if indexA.constraintOptions != nil && indexB.constraintOptions != nil {
+		if indexA.constraintOptions.deferrable != indexB.constraintOptions.deferrable {
+			return false
+		}
+		if indexA.constraintOptions.initiallyDeferred != indexB.constraintOptions.initiallyDeferred {
+			return false
+		}
+	}
+
 	return true
 }
 
@@ -1562,14 +1566,6 @@ func (g *Generator) normalizeOnDelete(onDelete string) string {
 }
 
 // TODO: Use interface to avoid defining following functions?
-
-func convertTablesToTableNames(tables []Table) []string {
-	tableNames := []string{}
-	for _, table := range tables {
-		tableNames = append(tableNames, table.name)
-	}
-	return tableNames
-}
 
 func convertColumnsToColumnNames(columns []Column) []string {
 	columnNames := []string{}

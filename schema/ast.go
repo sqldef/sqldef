@@ -77,17 +77,18 @@ type Column struct {
 }
 
 type Index struct {
-	name       string
-	indexType  string // Parsed only in "create table" but not parsed in "add index". Only used inside `generateDDLsForCreateTable`.
-	columns    []IndexColumn
-	primary    bool
-	unique     bool
-	constraint bool           // for Postgres `ADD CONSTRAINT UNIQUE`
-	where      string         // for Postgres `Partial Indexes`
-	included   []string       // for MSSQL
-	clustered  bool           // for MSSQL
-	partition  IndexPartition // for MSSQL
-	options    []IndexOption
+	name              string
+	indexType         string // Parsed only in "create table" but not parsed in "add index". Only used inside `generateDDLsForCreateTable`.
+	columns           []IndexColumn
+	primary           bool
+	unique            bool
+	constraint        bool // for Postgres `ADD CONSTRAINT UNIQUE`
+	constraintOptions *ConstraintOptions
+	where             string         // for Postgres `Partial Indexes`
+	included          []string       // for MSSQL
+	clustered         bool           // for MSSQL
+	partition         IndexPartition // for MSSQL
+	options           []IndexOption
 }
 
 type IndexColumn struct {
@@ -110,6 +111,11 @@ type IndexOption struct {
 type IndexPartition struct {
 	partitionName string
 	column        string
+}
+
+type ConstraintOptions struct {
+	deferrable        bool
+	initiallyDeferred bool
 }
 
 type ForeignKey struct {
