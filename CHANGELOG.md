@@ -1,3 +1,7 @@
+## v0.11.25
+
+- Fix schema handling of CREATE TABLE for psqldef [#187](https://github.com/k0kubun/sqldef/pull/187)
+
 ## v0.11.24
 
 - Support `DEFERRABLE` options for psqldef [#186](https://github.com/k0kubun/sqldef/pull/186)
