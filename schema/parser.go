@@ -275,18 +275,27 @@ func parseIndex(stmt *sqlparser.DDL) (Index, error) {
 		indexParition.column = stmt.IndexSpec.Partition.Column
 	}
 
+	var constraintOptions *ConstraintOptions
+	if stmt.IndexSpec.ConstraintOptions != nil {
+		constraintOptions = &ConstraintOptions{
+			deferrable:        stmt.IndexSpec.ConstraintOptions.Deferrable,
+			initiallyDeferred: stmt.IndexSpec.ConstraintOptions.InitiallyDeferred,
+		}
+	}
+
 	return Index{
-		name:       stmt.IndexSpec.Name.String(),
-		indexType:  "", // not supported in parser yet
-		columns:    indexColumns,
-		primary:    false, // not supported in parser yet
-		unique:     stmt.IndexSpec.Unique,
-		constraint: stmt.IndexSpec.Constraint,
-		clustered:  stmt.IndexSpec.Clustered,
-		where:      where,
-		included:   includedColumns,
-		options:    indexOptions,
-		partition:  indexParition,
+		name:              stmt.IndexSpec.Name.String(),
+		indexType:         "", // not supported in parser yet
+		columns:           indexColumns,
+		primary:           false, // not supported in parser yet
+		unique:            stmt.IndexSpec.Unique,
+		constraint:        stmt.IndexSpec.Constraint,
+		constraintOptions: constraintOptions,
+		clustered:         stmt.IndexSpec.Clustered,
+		where:             where,
+		included:          includedColumns,
+		options:           indexOptions,
+		partition:         indexParition,
 	}, nil
 }
 
