@@ -808,6 +808,15 @@ func TestPsqldefDataTypes(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified) // Label for column type may change. Type will be examined.
 }
 
+func TestPsqldefCreateTableInSchema(t *testing.T) {
+	resetTestDatabase()
+	mustExecuteSQL("CREATE SCHEMA test;")
+
+	createTable := "CREATE TABLE test.users (id serial primary key);"
+	assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
