@@ -249,7 +249,7 @@ FROM pg_attribute f
 	LEFT JOIN information_schema.columns s ON s.column_name=f.attname AND s.table_name = c.relname
 WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum > 0 ORDER BY f.attnum;`
 
-	schema, table := splitTableName(table)
+	schema, table := SplitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -292,7 +292,7 @@ WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum >
 
 func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 	const query = "SELECT indexName, indexdef FROM pg_indexes WHERE schemaname=$1 AND tablename=$2"
-	schema, table := splitTableName(table)
+	schema, table := SplitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -335,7 +335,7 @@ func (d *PostgresDatabase) getCheckConstraints(tableName string) (map[string]str
 	AND    cls.relname = $2;`
 
 	result := map[string]string{}
-	schema, table := splitTableName(tableName)
+	schema, table := SplitTableName(tableName)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -364,7 +364,7 @@ func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]st
 	AND    cls.relname = $2;`
 
 	result := map[string]string{}
-	schema, table := splitTableName(tableName)
+	schema, table := SplitTableName(tableName)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -391,7 +391,7 @@ FROM
 	JOIN information_schema.key_column_usage AS kcu
 		ON tc.constraint_name = kcu.constraint_name
 WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$2 ORDER BY kcu.ordinal_position`
-	schema, table := splitTableName(table)
+	schema, table := SplitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -429,7 +429,7 @@ FROM
 	JOIN information_schema.referential_constraints AS rc
 		ON tc.constraint_name = rc.constraint_name
 WHERE constraint_type = 'FOREIGN KEY' AND tc.table_schema=$1 AND tc.table_name=$2`
-	schema, table := splitTableName(table)
+	schema, table := SplitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -459,7 +459,7 @@ var (
 
 func (d *PostgresDatabase) getPolicyDefs(table string) ([]string, error) {
 	const query = "SELECT policyname, permissive, roles, cmd, qual, with_check FROM pg_policies WHERE schemaname = $1 AND tablename = $2;"
-	schema, table := splitTableName(table)
+	schema, table := SplitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -525,7 +525,7 @@ func postgresBuildDSN(config adapter.Config) string {
 	return fmt.Sprintf("postgres://%s:%s@%s/%s?%s", url.QueryEscape(user), url.QueryEscape(password), host, database, strings.Join(options, "&"))
 }
 
-func splitTableName(table string) (string, string) {
+func SplitTableName(table string) (string, string) {
 	schema := "public"
 	schemaTable := strings.SplitN(table, ".", 2)
 	if len(schemaTable) == 2 {

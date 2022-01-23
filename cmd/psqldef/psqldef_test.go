@@ -850,6 +850,20 @@ func TestPsqldefCreateTableInSchema(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestPsqldefCheckConstraintInSchema(t *testing.T) {
+	resetTestDatabase()
+	mustExecuteSQL("CREATE SCHEMA test;")
+
+	createTable := stripHeredoc(`
+		CREATE TABLE test.dummy (
+		  min_value INT CHECK (min_value > 0),
+		  max_value INT CHECK (max_value > 0),
+		  CONSTRAINT min_max CHECK (min_value < max_value)
+		);`)
+	assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
