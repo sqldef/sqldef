@@ -1,3 +1,7 @@
+## v0.11.29
+
+- Handle constraints on the same table name but with different schema names for psqldef [#190](https://github.com/k0kubun/sqldef/pull/190)
+
 ## v0.11.28
 
 - Support CHECK constraints on a table in a non-public schema [#188](https://github.com/k0kubun/sqldef/pull/188)
