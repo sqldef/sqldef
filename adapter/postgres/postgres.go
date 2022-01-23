@@ -389,7 +389,7 @@ func (d *PostgresDatabase) getPrimaryKeyColumns(table string) ([]string, error) 
 FROM
 	information_schema.table_constraints AS tc
 	JOIN information_schema.key_column_usage AS kcu
-		ON tc.constraint_name = kcu.constraint_name
+		USING (table_schema, table_name, constraint_name)
 WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$2 ORDER BY kcu.ordinal_position`
 	schema, table := SplitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
