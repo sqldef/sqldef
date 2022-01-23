@@ -397,6 +397,25 @@ func TestPsqldefCreateTableWithReferences(t *testing.T) {
 	assertApplyOutput(t, createTableA+createTableB, nothingModified)
 }
 
+func TestPsqldefCreateTableWithReferencesOnDelete(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE customers (
+		  id UUID NOT NULL PRIMARY KEY,
+		  customer_name VARCHAR(255) NOT NULL
+		);
+		CREATE TABLE orders (
+		  id UUID NOT NULL PRIMARY KEY,
+		  order_number VARCHAR(255) NOT NULL,
+		  customer UUID REFERENCES customers(id) ON DELETE CASCADE
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestPsqldefCreateTableWithCheck(t *testing.T) {
 	resetTestDatabase()
 

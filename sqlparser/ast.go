@@ -982,9 +982,10 @@ type ColumnType struct {
 	// Key specification
 	KeyOpt ColumnKeyOption
 
-	References     string
-	ReferenceNames Columns
-	// TODO: Allow specifying referenced column names
+	References        string
+	ReferenceNames    Columns
+	ReferenceOnDelete ColIdent
+	ReferenceOnUpdate ColIdent
 
 	// MySQL: GENERATED ALWAYS AS (expr)
 	Generated *GeneratedColumn

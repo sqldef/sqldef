@@ -1235,6 +1235,20 @@ column_definition_type:
     $1.ReferenceNames = $5
     $$ = $1
   }
+| column_definition_type REFERENCES table_id '(' column_list ')' ON DELETE reference_option
+  {
+    $1.References     = $3.v
+    $1.ReferenceNames = $5
+    $1.ReferenceOnDelete = $9
+    $$ = $1
+  }
+| column_definition_type REFERENCES table_id '(' column_list ')' ON UPDATE reference_option
+  {
+    $1.References     = $3.v
+    $1.ReferenceNames = $5
+    $1.ReferenceOnUpdate = $9
+    $$ = $1
+  }
 // for MySQL (TODO: support STORED and abbreviation)
 | column_definition_type GENERATED identity_behavior AS '(' value_expression ')' VIRTUAL
   {
