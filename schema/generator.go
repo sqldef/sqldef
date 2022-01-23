@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+
+	"github.com/k0kubun/sqldef/adapter/postgres"
 )
 
 type GeneratorMode int
@@ -356,7 +358,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 				}
 
-				constraintName := fmt.Sprintf("%s_%s_check", strings.Replace(desired.table.name, "public.", "", 1), desiredColumn.name)
+				_, tableName := postgres.SplitTableName(desired.table.name)
+				constraintName := fmt.Sprintf("%s_%s_check", tableName, desiredColumn.name)
 				currentCheck := findCheckByName(currentTable.checks, constraintName)
 				if !areSameCheckDefinition(currentCheck, desiredColumn.check) { // || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
 					if currentCheck != nil {
