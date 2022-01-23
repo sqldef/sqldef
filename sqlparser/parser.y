@@ -190,6 +190,9 @@ func forceEOF(yylex interface{}) {
 %token <bytes> NOW GETDATE
 %token <bytes> BPCHAR
 
+// Operator Class Tokens
+%right <bytes> TEXT_PATTERN_OPS
+
 // Type Modifiers
 %token <bytes> NULLX AUTO_INCREMENT APPROXNUM SIGNED UNSIGNED ZEROFILL ZONE AUTOINCREMENT
 
@@ -215,9 +218,9 @@ func forceEOF(yylex interface{}) {
 // MySQL reserved words that are unused by this grammar will map to this token.
 %token <bytes> UNUSED
 
-// MySQL GENERATED ALWAYS AS
-%token <bytes> VIRTUAL
-// Postgres GENERATED AS IDENTITY
+// MySQL PostgreSQL GENERATED ALWAYS AS
+%token <bytes> VIRTUAL STORED
+// PostgreSQL GENERATED AS IDENTITY
 %token <bytes> GENERATED ALWAYS IDENTITY
 // sequence
 %token <bytes> SEQUENCE INCREMENT MINVALUE CACHE CYCLE OWNED NONE
@@ -325,6 +328,7 @@ func forceEOF(yylex interface{}) {
 %type <str> table_option_list table_option table_opt_value
 %type <indexInfo> index_info
 %type <indexColumn> index_column
+%type <bytes> operator_class
 %type <indexColumns> index_column_list
 %type <indexPartition> index_partition_opt
 %type <indexOptions> index_option_opt
@@ -1235,8 +1239,28 @@ column_definition_type:
     $1.ReferenceNames = $5
     $$ = $1
   }
-// for MySQL (TODO: support STORED and abbreviation)
-| column_definition_type GENERATED identity_behavior AS '(' value_expression ')' VIRTUAL
+// TODO: avoid a shfit/reduce conflict here
+| column_definition_type REFERENCES table_id '(' column_list ')' ON DELETE reference_option
+  {
+    $1.References     = $3.v
+    $1.ReferenceNames = $5
+    $1.ReferenceOnDelete = $9
+    $$ = $1
+  }
+| column_definition_type REFERENCES table_id '(' column_list ')' ON UPDATE reference_option
+  {
+    $1.References     = $3.v
+    $1.ReferenceNames = $5
+    $1.ReferenceOnUpdate = $9
+    $$ = $1
+  }
+// for MySQL and PostgreSQL (TODO: support abbreviation)
+| column_definition_type GENERATED identity_behavior AS '(' expression ')' VIRTUAL
+  {
+    $1.Generated = &GeneratedColumn{Expr: $6}
+    $$ = $1
+  }
+| column_definition_type GENERATED identity_behavior AS '(' expression ')' STORED
   {
     $1.Generated = &GeneratedColumn{Expr: $6}
     $$ = $1
@@ -2012,13 +2036,21 @@ index_column_list:
 index_column:
   sql_id length_opt asc_desc_opt
   {
-      $$ = IndexColumn{Column: $1, Length: $2, Direction: $3}
+    $$ = IndexColumn{Column: $1, Length: $2, Direction: $3}
   }
 /* For PostgreSQL */
 | KEY length_opt
   {
     $$ = IndexColumn{Column: NewColIdent(string($1)), Length: $2}
   }
+| sql_id operator_class
+  {
+    $$ = IndexColumn{Column: $1, OperatorClass: string($2)}
+  }
+
+// https://www.postgresql.org/docs/9.5/brin-builtin-opclasses.html
+operator_class:
+  TEXT_PATTERN_OPS
 
 foreign_key_definition:
   foreign_key_without_options not_for_replication_opt

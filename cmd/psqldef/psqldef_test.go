@@ -397,6 +397,25 @@ func TestPsqldefCreateTableWithReferences(t *testing.T) {
 	assertApplyOutput(t, createTableA+createTableB, nothingModified)
 }
 
+func TestPsqldefCreateTableWithReferencesOnDelete(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE customers (
+		  id UUID NOT NULL PRIMARY KEY,
+		  customer_name VARCHAR(255) NOT NULL
+		);
+		CREATE TABLE orders (
+		  id UUID NOT NULL PRIMARY KEY,
+		  order_number VARCHAR(255) NOT NULL,
+		  customer UUID REFERENCES customers(id) ON DELETE CASCADE
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestPsqldefCreateTableWithCheck(t *testing.T) {
 	resetTestDatabase()
 
@@ -697,6 +716,20 @@ func TestPsqldefCreateIndexWithKey(t *testing.T) {
 	assertApplyOutput(t, createTable+createIndex, nothingModified)
 }
 
+func TestPsqldefCreateIndexWithOperatorClass(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE products (
+		  name VARCHAR(255)
+		);
+		CREATE INDEX product_name_autocomplete_index ON products(name text_pattern_ops);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestPsqldefCreateType(t *testing.T) {
 	resetTestDatabase()
 
@@ -941,6 +974,28 @@ func TestPsqldefCreateTableWithIdentityColumn(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestPsqldefCreateTableWithExpressionStored(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE products (
+		  name VARCHAR(255),
+		  description VARCHAR(255),
+		  tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', name) || to_tsvector('english',description)) STORED
+		);
+		`,
+	)
+	_, err := executeSQL(createTable)
+	if err != nil {
+		t.Skipf("PostgreSQL doesn't support the test: %s", err)
+	}
+
+	resetTestDatabase()
+
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestPsqldefAddingIdentityColumn(t *testing.T) {
 	resetTestDatabase()
 
@@ -1156,6 +1211,10 @@ func mustExecute(command string, args ...string) {
 
 func mustExecuteSQL(sql string) {
 	mustExecute("psql", "-Upostgres", database, "-c", sql)
+}
+
+func executeSQL(sql string) (string, error) {
+	return execute("psql", "-Upostgres", database, "-c", sql)
 }
 
 func assertedExecute(t *testing.T, command string, args ...string) string {

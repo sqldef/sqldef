@@ -982,9 +982,10 @@ type ColumnType struct {
 	// Key specification
 	KeyOpt ColumnKeyOption
 
-	References     string
-	ReferenceNames Columns
-	// TODO: Allow specifying referenced column names
+	References        string
+	ReferenceNames    Columns
+	ReferenceOnDelete ColIdent
+	ReferenceOnUpdate ColIdent
 
 	// MySQL: GENERATED ALWAYS AS (expr)
 	Generated *GeneratedColumn
@@ -1277,9 +1278,10 @@ func (ii *IndexInfo) walkSubtree(visit Visit) error {
 
 // IndexColumn describes a column in an index definition with optional length
 type IndexColumn struct {
-	Column    ColIdent
-	Length    *SQLVal
-	Direction string
+	Column        ColIdent
+	Length        *SQLVal
+	Direction     string
+	OperatorClass string
 }
 
 // LengthScaleOption is used for types that have an optional length
