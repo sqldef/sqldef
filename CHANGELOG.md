@@ -1,8 +1,3 @@
-## v0.11.27
-
-- Support parsing `GENERATED ALWAYS AS expr STORED` for psqldef [#184](https://github.com/k0kubun/sqldef/pull/184)
-- Support parsing `text_pattern_ops` for psqldef [#184](https://github.com/k0kubun/sqldef/pull/184)
-
 ## v0.11.26
 
 - Support parsing REFERENCES .. ON DELETE/UPDATE on a column for psqldef [#184](https://github.com/k0kubun/sqldef/pull/184)
