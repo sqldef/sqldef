@@ -971,6 +971,11 @@ func TestPsqldefCreateTableWithExpressionStored(t *testing.T) {
 		);
 		`,
 	)
+	_, err := executeSQL(createTable)
+	if err != nil {
+		t.Skipf("PostgreSQL doesn't support the test: %s", err)
+	}
+
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -1190,6 +1195,10 @@ func mustExecute(command string, args ...string) {
 
 func mustExecuteSQL(sql string) {
 	mustExecute("psql", "-Upostgres", database, "-c", sql)
+}
+
+func executeSQL(sql string) (string, error) {
+	return execute("psql", "-Upostgres", database, "-c", sql)
 }
 
 func assertedExecute(t *testing.T, command string, args ...string) string {
