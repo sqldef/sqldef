@@ -1,3 +1,7 @@
+## v0.11.28
+
+- Support CHECK constraints on a table in a non-public schema [#188](https://github.com/k0kubun/sqldef/pull/188)
+
 ## v0.11.27
 
 - Support parsing `GENERATED ALWAYS AS expr STORED` for psqldef [#184](https://github.com/k0kubun/sqldef/pull/184)
