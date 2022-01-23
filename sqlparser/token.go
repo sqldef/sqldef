@@ -408,6 +408,7 @@ var keywords = map[string]int{
 	"tables":                 TABLES,
 	"terminated":             UNUSED,
 	"text":                   TEXT,
+	"text_pattern_ops":       TEXT_PATTERN_OPS,
 	"than":                   THAN,
 	"then":                   THEN,
 	"time":                   TIME,

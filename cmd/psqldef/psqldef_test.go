@@ -716,6 +716,20 @@ func TestPsqldefCreateIndexWithKey(t *testing.T) {
 	assertApplyOutput(t, createTable+createIndex, nothingModified)
 }
 
+func TestPsqldefCreateIndexWithOperatorClass(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE products (
+		  name VARCHAR(255)
+		);
+		CREATE INDEX product_name_autocomplete_index ON products(name text_pattern_ops);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestPsqldefCreateType(t *testing.T) {
 	resetTestDatabase()
 
