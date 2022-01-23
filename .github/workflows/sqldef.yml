@@ -26,6 +26,10 @@ jobs:
             version: 11
           - database: psql
             version: 12
+          - database: psql
+            version: 13
+          - database: psql
+            version: 14
       fail-fast: false
     steps:
       - uses: actions/setup-go@v2
