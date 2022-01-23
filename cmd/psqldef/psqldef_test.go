@@ -864,6 +864,17 @@ func TestPsqldefCheckConstraintInSchema(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestPsqldefSameTableNameAmongSchemas(t *testing.T) {
+	resetTestDatabase()
+	mustExecuteSQL("CREATE SCHEMA test;")
+
+	createTable := stripHeredoc(`
+		CREATE TABLE dummy (id int primary key);
+		CREATE TABLE test.dummy (id int primary key);`)
+	assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
