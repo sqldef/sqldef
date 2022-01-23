@@ -960,6 +960,21 @@ func TestPsqldefCreateTableWithIdentityColumn(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestPsqldefCreateTableWithExpressionStored(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE products (
+		  name VARCHAR(255),
+		  description VARCHAR(255),
+		  tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', name) || to_tsvector('english',description)) STORED
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestPsqldefAddingIdentityColumn(t *testing.T) {
 	resetTestDatabase()
 
