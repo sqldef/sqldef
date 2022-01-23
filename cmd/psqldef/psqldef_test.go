@@ -976,6 +976,8 @@ func TestPsqldefCreateTableWithExpressionStored(t *testing.T) {
 		t.Skipf("PostgreSQL doesn't support the test: %s", err)
 	}
 
+	resetTestDatabase()
+
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
 }
