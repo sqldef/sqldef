@@ -869,9 +869,15 @@ func TestPsqldefSameTableNameAmongSchemas(t *testing.T) {
 	mustExecuteSQL("CREATE SCHEMA test;")
 
 	createTable := stripHeredoc(`
-		CREATE TABLE dummy (id int primary key);
-		CREATE TABLE test.dummy (id int primary key);`)
+		CREATE TABLE dummy (id int);
+		CREATE TABLE test.dummy (id int);`)
 	assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE dummy (id int);
+		CREATE TABLE test.dummy ();`)
+	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "test"."dummy" DROP COLUMN "id";`+"\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
