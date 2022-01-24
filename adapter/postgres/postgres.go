@@ -246,7 +246,7 @@ FROM pg_attribute f
 	JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
 	LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
 	LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
-	LEFT JOIN information_schema.columns s ON s.column_name=f.attname AND s.table_name = c.relname
+	LEFT JOIN information_schema.columns s ON s.column_name=f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
 WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum > 0 ORDER BY f.attnum;`
 
 	schema, table := SplitTableName(table)
