@@ -57,10 +57,10 @@ package-targz: build
 test: test-mysqldef test-psqldef test-sqlite3def test-mssqldef test-sqlparser
 
 test-mysqldef:
-	cd cmd/mysqldef && MYSQL_HOST=127.0.0.1 go test
+	cd cmd/mysqldef && go test
 
 test-psqldef:
-	cd cmd/psqldef && PGHOST=127.0.0.1 PGSSLMODE=disable go test
+	cd cmd/psqldef && go test
 
 test-sqlite3def:
 	cd cmd/sqlite3def && go test
