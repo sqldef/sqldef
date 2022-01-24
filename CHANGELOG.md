@@ -1,3 +1,7 @@
+## v0.11.30
+
+- Handle the same table/column names in different schema names properly [#193](https://github.com/k0kubun/sqldef/pull/193)
+
 ## v0.11.29
 
 - Handle constraints on the same table name but with different schema names for psqldef [#190](https://github.com/k0kubun/sqldef/pull/190)
