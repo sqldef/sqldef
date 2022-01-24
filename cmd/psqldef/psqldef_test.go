@@ -1191,6 +1191,13 @@ func TestPsqldefHelp(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
+	if _, ok := os.LookupEnv("PGHOST"); !ok {
+		os.Setenv("PGHOST", "127.0.0.1")
+	}
+	if _, ok := os.LookupEnv("PGSSLMODE"); !ok {
+		os.Setenv("PGSSLMODE", "disable")
+	}
+
 	resetTestDatabase()
 	mustExecute("go", "build")
 	status := m.Run()

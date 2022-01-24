@@ -1483,6 +1483,10 @@ func TestMysqldefHelp(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
+	if _, ok := os.LookupEnv("MYSQL_HOST"); !ok {
+		os.Setenv("MYSQL_HOST", "127.0.0.1")
+	}
+
 	resetTestDatabase()
 	mustExecute("go", "build")
 	status := m.Run()
