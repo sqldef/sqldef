@@ -1184,6 +1184,29 @@ func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 	))
 }
 
+func TestPsqldefBeforeApply(t *testing.T) {
+	resetTestDatabase()
+
+	// Setup
+	mustExecuteSQL("DROP ROLE IF EXISTS dummy_owner_role;")
+	mustExecuteSQL("CREATE ROLE dummy_owner_role;")
+
+	beforeApply := "SET ROLE dummy_owner_role;"
+	createTable := "CREATE TABLE dummy (id int);"
+	writeFile("schema.sql", createTable)
+
+	dryRun := assertedExecute(t, "./psqldef", "-Upostgres", database, "-f", "schema.sql", "--before-apply", beforeApply, "--dry-run")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", database, "-f", "schema.sql", "--before-apply", beforeApply)
+	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
+	assertEquals(t, apply, applyPrefix+beforeApply+"\n"+createTable+"\n")
+
+	apply = assertedExecute(t, "./psqldef", "-Upostgres", database, "-f", "schema.sql", "--before-apply", beforeApply)
+	assertEquals(t, apply, nothingModified)
+
+	owner := assertedExecute(t, "psql", "-Upostgres", database, "-tAc", "SELECT tableowner FROM pg_tables WHERE tablename = 'dummy'")
+	assertEquals(t, owner, "dummy_owner_role\n")
+}
+
 func TestPsqldefHelp(t *testing.T) {
 	_, err := execute("./psqldef", "--help")
 	if err != nil {
