@@ -1023,7 +1023,7 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 
 	definition += fmt.Sprintf(
 		"(%s) REFERENCES %s (%s) ",
-		strings.Join(indexColumns, ","), g.escapeSQLName(foreignKey.referenceName),
+		strings.Join(indexColumns, ","), g.escapeTableName(foreignKey.referenceName),
 		strings.Join(referenceColumns, ","),
 	)
 

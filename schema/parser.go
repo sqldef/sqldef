@@ -4,6 +4,7 @@ package schema
 
 import (
 	"fmt"
+	"github.com/k0kubun/sqldef/adapter/postgres"
 	"regexp"
 	"strconv"
 	"strings"
@@ -117,7 +118,7 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 			onUpdate:      parseValue(parsedCol.Type.OnUpdate),
 			comment:       parseValue(parsedCol.Type.Comment),
 			enumValues:    parsedCol.Type.EnumValues,
-			references:    parsedCol.Type.References,
+			references:    normalizedTable(mode, parsedCol.Type.References),
 			identity:      parseIdentity(parsedCol.Type.Identity),
 			sequence:      parseIdentitySequence(parsedCol.Type.Identity),
 		}
@@ -513,6 +514,15 @@ func normalizedTableName(mode GeneratorMode, tableName sqlparser.TableName) stri
 		}
 	}
 	return table
+}
+
+func normalizedTable(mode GeneratorMode, tableName string) string {
+	if mode == GeneratorModePostgres {
+		schema, table := postgres.SplitTableName(tableName)
+		return fmt.Sprintf("%s.%s", schema, table)
+	} else {
+		return tableName
+	}
 }
 
 // TODO: parse charset in parser.y instead of "detecting" it

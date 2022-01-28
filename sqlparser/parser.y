@@ -1228,28 +1228,28 @@ column_definition_type:
     $1.Comment = NewStrVal($3)
     $$ = $1
   }
-| column_definition_type REFERENCES table_id
+| column_definition_type REFERENCES table_name
   {
-    $1.References = $3.v
+    $1.References = String($3)
     $$ = $1
   }
-| column_definition_type REFERENCES table_id '(' column_list ')'
+| column_definition_type REFERENCES table_name '(' column_list ')'
   {
-    $1.References     = $3.v
+    $1.References     = String($3)
     $1.ReferenceNames = $5
     $$ = $1
   }
 // TODO: avoid a shfit/reduce conflict here
-| column_definition_type REFERENCES table_id '(' column_list ')' ON DELETE reference_option
+| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option
   {
-    $1.References     = $3.v
+    $1.References     = String($3)
     $1.ReferenceNames = $5
     $1.ReferenceOnDelete = $9
     $$ = $1
   }
-| column_definition_type REFERENCES table_id '(' column_list ')' ON UPDATE reference_option
+| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option
   {
-    $1.References     = $3.v
+    $1.References     = String($3)
     $1.ReferenceNames = $5
     $1.ReferenceOnUpdate = $9
     $$ = $1
@@ -2094,7 +2094,7 @@ foreign_key_without_options:
       ConstraintName: $2,
       IndexName: $5,
       IndexColumns: $7,
-      ReferenceName: NewColIdent($10.Name.String()),
+      ReferenceName: NewColIdent(String($10)),
       ReferenceColumns: $12,
     }
   }

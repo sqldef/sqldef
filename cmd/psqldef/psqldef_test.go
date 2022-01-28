@@ -306,7 +306,7 @@ func TestPsqldefCreateTableForeignKey(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
-		`ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "users" ("id");`+"\n",
+		`ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id");`+"\n",
 	)
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
@@ -320,7 +320,7 @@ func TestPsqldefCreateTableForeignKey(t *testing.T) {
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
 		`ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";`+"\n"+
-		`ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON DELETE SET NULL ON UPDATE CASCADE;`+"\n",
+		`ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id") ON DELETE SET NULL ON UPDATE CASCADE;`+"\n",
 	)
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
@@ -413,6 +413,37 @@ func TestPsqldefCreateTableWithReferencesOnDelete(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestPsqldefCreateTableWithConstraintReferences(t *testing.T) {
+	resetTestDatabase()
+	mustExecuteSQL("CREATE SCHEMA a;")
+	mustExecuteSQL("CREATE SCHEMA c;")
+
+	createTable := stripHeredoc(`
+		CREATE TABLE a.b (
+		  "id" serial PRIMARY KEY
+		);
+		CREATE TABLE c.d (
+		  "id" serial PRIMARY KEY
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE a.b (
+		  "id" serial PRIMARY KEY
+		);
+		CREATE TABLE c.d (
+		  "id" serial PRIMARY KEY,
+		  CONSTRAINT d_id_fkey FOREIGN KEY (id) REFERENCES "a"."b" (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "c"."d" ADD CONSTRAINT "d_id_fkey" FOREIGN KEY ("id") REFERENCES "a"."b" ("id");`+"\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
