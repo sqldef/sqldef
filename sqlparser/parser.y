@@ -108,6 +108,7 @@ func forceEOF(yylex interface{}) {
   indexPartition *IndexPartition
   indexColumn   IndexColumn
   indexColumns  []IndexColumn
+  indexColumnsOrExpression IndexColumnsOrExpression
   foreignKeyDefinition *ForeignKeyDefinition
   partDefs      []*PartitionDefinition
   partDef       *PartitionDefinition
@@ -332,6 +333,7 @@ func forceEOF(yylex interface{}) {
 %type <indexInfo> index_info
 %type <indexColumn> index_column
 %type <bytes> operator_class
+%type <indexColumnsOrExpression> index_column_list_or_expression
 %type <indexColumns> index_column_list
 %type <indexPartition> index_partition_opt
 %type <indexOptions> index_option_opt
@@ -761,7 +763,7 @@ create_statement:
     $1.TableSpec = $2
     $$ = $1
   }
-| CREATE unique_opt clustered_opt INDEX sql_id ON table_name '(' index_column_list ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+| CREATE unique_opt clustered_opt INDEX sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
         Action: CreateIndexStr,
@@ -777,7 +779,8 @@ create_statement:
           Options: $13,
           Partition: $14,
         },
-        IndexCols: $9,
+        IndexCols: $9.IndexCols,
+        IndexExpr: $9.IndexExpr,
       }
   }
 /* For MySQL */
@@ -797,7 +800,7 @@ create_statement:
       }
   }
 /* For PostgreSQL */
-| CREATE unique_opt clustered_opt INDEX sql_id ON table_name USING sql_id '(' index_column_list ')' where_expression_opt index_option_opt
+| CREATE unique_opt clustered_opt INDEX sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' where_expression_opt index_option_opt
   {
     $$ = &DDL{
         Action: CreateIndexStr,
@@ -809,7 +812,8 @@ create_statement:
           Unique: bool($2),
           Where: NewWhere(WhereStr, $13),
         },
-        IndexCols: $11,
+        IndexCols: $11.IndexCols,
+        IndexExpr: $11.IndexExpr,
       }
   }
 | CREATE or_replace_opt VIEW table_name AS select_statement
@@ -2028,6 +2032,17 @@ index_or_key:
   | KEY
   {
     $$ = string($1)
+  }
+
+index_column_list_or_expression:
+  index_column_list
+  {
+    $$ = IndexColumnsOrExpression{IndexCols: $1}
+  }
+/* For PostgreSQL: https://www.postgresql.org/docs/14/indexes-expressional.html */
+| function_call_generic
+  {
+    $$ = IndexColumnsOrExpression{IndexExpr: $1}
   }
 
 index_column_list:

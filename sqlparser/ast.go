@@ -670,6 +670,7 @@ type DDL struct {
 	PartitionSpec *PartitionSpec
 	IndexSpec     *IndexSpec
 	IndexCols     []IndexColumn
+	IndexExpr     Expr
 	VindexSpec    *VindexSpec
 	VindexCols    []ColIdent
 	ForeignKey    *ForeignKeyDefinition
@@ -1274,6 +1275,11 @@ func (ii *IndexInfo) Format(buf *TrackedBuffer) {
 
 func (ii *IndexInfo) walkSubtree(visit Visit) error {
 	return Walk(visit, ii.Name)
+}
+
+type IndexColumnsOrExpression struct {
+	IndexCols []IndexColumn
+	IndexExpr Expr
 }
 
 // IndexColumn describes a column in an index definition with optional length

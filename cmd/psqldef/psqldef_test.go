@@ -1217,6 +1217,35 @@ func TestPsqldefAddUniqueConstraintToTableInNonpublicSchema(t *testing.T) {
 	assertApplyOutput(t, createTable+"\n"+alterTable, nothingModified)
 }
 
+func TestPsqldefIndexesOnExpressions(t *testing.T) {
+	for _, tc := range publicAndNonPublicSchemaTestCases {
+		resetTestDatabase()
+		mustExecuteSQL(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
+
+		createTable := fmt.Sprintf("CREATE TABLE %s.test (col JSONB);", tc.Schema)
+		assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+		assertApplyOutput(t, createTable, nothingModified)
+
+		createIndex := fmt.Sprintf("CREATE UNIQUE INDEX function_index ON %s.test (jsonb_extract_path_text(col, 'foo', 'bar'));", tc.Schema)
+		assertApplyOutput(t, createTable+createIndex, applyPrefix+createIndex+"\n")
+		assertExportOutput(t, fmt.Sprintf(stripHeredoc(`
+			CREATE TABLE %s.test (
+			    "col" jsonb
+			);
+			CREATE UNIQUE INDEX function_index ON %s.test USING btree (jsonb_extract_path_text(col, VARIADIC ARRAY['foo'::text, 'bar'::text]));
+			`), tc.Schema, tc.Schema))
+		assertApplyOutput(t, createTable+createIndex, nothingModified)
+
+		createIndex = fmt.Sprintf("CREATE UNIQUE INDEX function_index ON %s.test (jsonb_extract_path_text(col, 'foo'));", tc.Schema)
+		// not support changing expression
+		assertApplyOutput(t, createTable+createIndex, nothingModified)
+
+		assertApplyOutput(t, createTable, applyPrefix+
+			fmt.Sprintf(`DROP INDEX "%s"."function_index";`+"\n", tc.Schema))
+		assertApplyOutput(t, createTable, nothingModified)
+	}
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //

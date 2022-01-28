@@ -802,10 +802,13 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 		}
 	} else if currentIndex.unique {
 		var uniqueKeyColumn *Column
-		for _, column := range desiredTable.columns {
-			if column.name == currentIndex.columns[0].column && column.keyOption.isUnique() {
-				uniqueKeyColumn = &column
-				break
+		// Columns become empty if the index is a PostgreSQL's expression index.
+		if len(currentIndex.columns) > 0 {
+			for _, column := range desiredTable.columns {
+				if column.name == currentIndex.columns[0].column && column.keyOption.isUnique() {
+					uniqueKeyColumn = &column
+					break
+				}
 			}
 		}
 
