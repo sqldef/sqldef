@@ -1,3 +1,7 @@
+## v0.11.31
+
+- Fix issues in schema name handling on CONSTRAINT FOREIGN KEY REFERENCES for psqldef [#194](https://github.com/k0kubun/sqldef/pull/194)
+
 ## v0.11.30
 
 - Handle the same table/column names in different schema names properly [#193](https://github.com/k0kubun/sqldef/pull/193)
