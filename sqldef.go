@@ -17,6 +17,7 @@ type Options struct {
 	DryRun      bool
 	Export      bool
 	SkipDrop    bool
+	BeforeApply string
 }
 
 // Main function shared by `mysqldef` and `psqldef`
@@ -51,12 +52,20 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 		return
 	}
 
+	beforeApply := []string{}
+	for _, query := range strings.Split(options.BeforeApply, ";") {
+		query = strings.TrimSpace(query)
+		if len(query) > 0 {
+			beforeApply = append(beforeApply, query)
+		}
+	}
+
 	if options.DryRun || len(options.CurrentFile) > 0 {
-		showDDLs(ddls, options.SkipDrop)
+		showDDLs(ddls, options.SkipDrop, beforeApply)
 		return
 	}
 
-	err = adapter.RunDDLs(db, ddls, options.SkipDrop)
+	err = adapter.RunDDLs(db, ddls, options.SkipDrop, beforeApply)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -101,8 +110,11 @@ func ReadFile(filepath string) (string, error) {
 	return string(buf), nil
 }
 
-func showDDLs(ddls []string, skipDrop bool) {
+func showDDLs(ddls []string, skipDrop bool, beforeApply []string) {
 	fmt.Println("-- dry run --")
+	for _, query := range beforeApply {
+		fmt.Printf("%s;\n", query)
+	}
 	for _, ddl := range ddls {
 		if skipDrop && strings.Contains(ddl, "DROP") {
 			fmt.Printf("-- Skipped: %s;\n", ddl)
