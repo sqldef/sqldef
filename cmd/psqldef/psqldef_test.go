@@ -484,12 +484,35 @@ func TestPsqldefMultiColumnCheck(t *testing.T) {
 		  id UUID NOT NULL PRIMARY KEY,
 		  order_number VARCHAR(255) NOT NULL,
 		  customer VARCHAR(255),
-		  store_table VARCHAR(255),
-		  CONSTRAINT check_customer_or_table CHECK ((store_table is not null and customer is null) or (store_table is null and customer is not null))
+		  store_table VARCHAR(255)
 		);
-		`,
-	)
+		`)
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE orders (
+		  id UUID NOT NULL PRIMARY KEY,
+		  order_number VARCHAR(255) NOT NULL,
+		  customer VARCHAR(255),
+		  store_table VARCHAR(255),
+		  CONSTRAINT check_customer_or_table CHECK (store_table is not null and customer is null or store_table is null and customer is not null)
+		);
+		`)
+	assertApplyOutput(t, createTable, applyPrefix+
+		`ALTER TABLE "public"."orders" ADD CONSTRAINT "check_customer_or_table" CHECK (store_table is not null and customer is null or store_table is null and customer is not null);`+"\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE orders (
+		  id UUID NOT NULL PRIMARY KEY,
+		  order_number VARCHAR(255) NOT NULL,
+		  customer VARCHAR(255),
+		  store_table VARCHAR(255)
+		);
+		`)
+	assertApplyOutput(t, createTable, applyPrefix+
+		`ALTER TABLE "public"."orders" DROP CONSTRAINT "check_customer_or_table";`+"\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -857,10 +880,31 @@ func TestPsqldefCheckConstraintInSchema(t *testing.T) {
 	createTable := stripHeredoc(`
 		CREATE TABLE test.dummy (
 		  min_value INT CHECK (min_value > 0),
+		  max_value INT
+		);`)
+	assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE test.dummy (
+		  min_value INT CONSTRAINT min_value_check CHECK (min_value > 0),
 		  max_value INT CHECK (max_value > 0),
 		  CONSTRAINT min_max CHECK (min_value < max_value)
 		);`)
-	assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+	assertApplyOutput(t, createTable, applyPrefix+
+		`ALTER TABLE "test"."dummy" ADD CONSTRAINT min_value_check CHECK (min_value > 0);`+"\n"+
+		`ALTER TABLE "test"."dummy" ADD CONSTRAINT dummy_max_value_check CHECK (max_value > 0);`+"\n"+
+		`ALTER TABLE "test"."dummy" ADD CONSTRAINT "min_max" CHECK (min_value < max_value);`+"\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE test.dummy (
+		  min_value INT CONSTRAINT min_value_check CHECK (min_value > 0),
+		  max_value INT
+		);`)
+	assertApplyOutput(t, createTable, applyPrefix+
+		`ALTER TABLE "test"."dummy" DROP CONSTRAINT dummy_max_value_check;`+"\n"+
+		`ALTER TABLE "test"."dummy" DROP CONSTRAINT "min_max";`+"\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
