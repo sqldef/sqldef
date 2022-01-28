@@ -68,15 +68,15 @@ func DumpDDLs(d Database) (string, error) {
 	return strings.Join(ddls, "\n\n"), nil
 }
 
-func RunDDLs(d Database, ddls []string, skipDrop bool, beforeApply []string) error {
+func RunDDLs(d Database, ddls []string, skipDrop bool, beforeApply string) error {
 	transaction, err := d.DB().Begin()
 	if err != nil {
 		return err
 	}
 	fmt.Println("-- Apply --")
-	for _, query := range beforeApply {
-		fmt.Printf("%s;\n", query)
-		if _, err := transaction.Exec(query); err != nil {
+	if len(beforeApply) > 0 {
+		fmt.Println(beforeApply)
+		if _, err := transaction.Exec(beforeApply); err != nil {
 			transaction.Rollback()
 			return err
 		}

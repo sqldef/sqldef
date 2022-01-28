@@ -52,20 +52,12 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 		return
 	}
 
-	beforeApply := []string{}
-	for _, query := range strings.Split(options.BeforeApply, ";") {
-		query = strings.TrimSpace(query)
-		if len(query) > 0 {
-			beforeApply = append(beforeApply, query)
-		}
-	}
-
 	if options.DryRun || len(options.CurrentFile) > 0 {
-		showDDLs(ddls, options.SkipDrop, beforeApply)
+		showDDLs(ddls, options.SkipDrop, options.BeforeApply)
 		return
 	}
 
-	err = adapter.RunDDLs(db, ddls, options.SkipDrop, beforeApply)
+	err = adapter.RunDDLs(db, ddls, options.SkipDrop, options.BeforeApply)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -110,10 +102,10 @@ func ReadFile(filepath string) (string, error) {
 	return string(buf), nil
 }
 
-func showDDLs(ddls []string, skipDrop bool, beforeApply []string) {
+func showDDLs(ddls []string, skipDrop bool, beforeApply string) {
 	fmt.Println("-- dry run --")
-	for _, query := range beforeApply {
-		fmt.Printf("%s;\n", query)
+	if len(beforeApply) > 0 {
+		fmt.Println(beforeApply)
 	}
 	for _, ddl := range ddls {
 		if skipDrop && strings.Contains(ddl, "DROP") {
