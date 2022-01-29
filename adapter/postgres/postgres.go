@@ -274,7 +274,11 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	  column_constraints AS (
 	    SELECT att.attname column_name, tmp.name, tmp.type , tmp.definition
 	    FROM (
-	      SELECT unnest(con.conkey) conkey, pg_get_constraintdef(con.oid, true) definition, cls.oid relid, con.conname name, con.contype type
+	      SELECT unnest(con.conkey) AS conkey,
+	             pg_get_constraintdef(con.oid, true) AS definition,
+	             cls.oid AS relid,
+	             con.conname AS name,
+	             con.contype AS type
 	      FROM   pg_constraint con
 	      JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
 	      JOIN   pg_class cls ON cls.oid = con.conrelid
