@@ -1,3 +1,7 @@
+## v0.11.32
+
+- Add `--before-apply` option to psqldef to run commands before apply [#195](https://github.com/k0kubun/sqldef/pull/195)
+
 ## v0.11.31
 
 - Fix issues in schema name handling on CONSTRAINT FOREIGN KEY REFERENCES for psqldef [#194](https://github.com/k0kubun/sqldef/pull/194)
