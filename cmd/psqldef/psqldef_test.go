@@ -306,7 +306,7 @@ func TestPsqldefCreateTableForeignKey(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
-		`ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "users" ("id");`+"\n",
+		`ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id");`+"\n",
 	)
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
@@ -320,7 +320,7 @@ func TestPsqldefCreateTableForeignKey(t *testing.T) {
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
 		`ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";`+"\n"+
-		`ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON DELETE SET NULL ON UPDATE CASCADE;`+"\n",
+		`ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id") ON DELETE SET NULL ON UPDATE CASCADE;`+"\n",
 	)
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
@@ -413,6 +413,37 @@ func TestPsqldefCreateTableWithReferencesOnDelete(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestPsqldefCreateTableWithConstraintReferences(t *testing.T) {
+	resetTestDatabase()
+	mustExecuteSQL("CREATE SCHEMA a;")
+	mustExecuteSQL("CREATE SCHEMA c;")
+
+	createTable := stripHeredoc(`
+		CREATE TABLE a.b (
+		  "id" serial PRIMARY KEY
+		);
+		CREATE TABLE c.d (
+		  "id" serial PRIMARY KEY
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE a.b (
+		  "id" serial PRIMARY KEY
+		);
+		CREATE TABLE c.d (
+		  "id" serial PRIMARY KEY,
+		  CONSTRAINT d_id_fkey FOREIGN KEY (id) REFERENCES "a"."b" (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "c"."d" ADD CONSTRAINT "d_id_fkey" FOREIGN KEY ("id") REFERENCES "a"."b" ("id");`+"\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -925,102 +956,6 @@ func TestPsqldefSameTableNameAmongSchemas(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
-//
-// ----------------------- following tests are for CLI -----------------------
-//
-
-func TestPsqldefDryRun(t *testing.T) {
-	resetTestDatabase()
-	writeFile("schema.sql", stripHeredoc(`
-	    CREATE TABLE users (
-	        id bigint NOT NULL PRIMARY KEY,
-	        age int
-	    );`,
-	))
-
-	dryRun := assertedExecute(t, "./psqldef", "-Upostgres", database, "--dry-run", "--file", "schema.sql")
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", database, "--file", "schema.sql")
-	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
-}
-
-func TestPsqldefSkipDrop(t *testing.T) {
-	resetTestDatabase()
-	mustExecuteSQL(stripHeredoc(`
-		CREATE TABLE users (
-		    id bigint NOT NULL PRIMARY KEY,
-		    age int,
-		    c_char_1 char,
-		    c_char_10 char(10),
-		    c_varchar_10 varchar(10),
-		    c_varchar_unlimited varchar
-		);`,
-	))
-
-	writeFile("schema.sql", "")
-
-	skipDrop := assertedExecute(t, "./psqldef", "-Upostgres", database, "--skip-drop", "--file", "schema.sql")
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", database, "--file", "schema.sql")
-	assertEquals(t, skipDrop, strings.Replace(apply, "DROP", "-- Skipped: DROP", 1))
-}
-
-func TestPsqldefExport(t *testing.T) {
-	resetTestDatabase()
-	out := assertedExecute(t, "./psqldef", "-Upostgres", database, "--export")
-	assertEquals(t, out, "-- No table exists --\n")
-
-	mustExecuteSQL(stripHeredoc(`
-		CREATE TABLE users (
-		    id bigint NOT NULL PRIMARY KEY,
-		    age int,
-		    c_char_1 char unique,
-		    c_char_10 char(10),
-		    c_varchar_10 varchar(10),
-		    c_varchar_unlimited varchar
-		);`,
-	))
-	out = assertedExecute(t, "./psqldef", "-Upostgres", database, "--export")
-	// workaround: local has `public.` but travis doesn't.
-	assertEquals(t, strings.Replace(out, "public.users", "users", 2), stripHeredoc(`
-		CREATE TABLE users (
-		    "id" bigint NOT NULL,
-		    "age" integer,
-		    "c_char_1" character(1),
-		    "c_char_10" character(10),
-		    "c_varchar_10" character varying(10),
-		    "c_varchar_unlimited" character varying,
-		    PRIMARY KEY ("id")
-		);
-		ALTER TABLE users ADD CONSTRAINT users_c_char_1_key UNIQUE (c_char_1);
-		`,
-	))
-}
-
-func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
-	resetTestDatabase()
-	out := assertedExecute(t, "./psqldef", "-Upostgres", database, "--export")
-	assertEquals(t, out, "-- No table exists --\n")
-
-	mustExecuteSQL(stripHeredoc(`
-		CREATE TABLE users (
-		    col1 character varying(40) NOT NULL,
-		    col2 character varying(6) NOT NULL,
-		    created_at timestamp NOT NULL,
-		    PRIMARY KEY (col1, col2)
-		);`,
-	))
-	out = assertedExecute(t, "./psqldef", "-Upostgres", database, "--export")
-	// workaround: local has `public.` but travis doesn't.
-	assertEquals(t, strings.Replace(out, "public.users", "users", 2), stripHeredoc(`
-		CREATE TABLE users (
-		    "col1" character varying(40) NOT NULL,
-		    "col2" character varying(6) NOT NULL,
-		    "created_at" timestamp NOT NULL,
-		    PRIMARY KEY ("col1", "col2")
-		);
-		`,
-	))
-}
-
 func TestPsqldefCreateTableWithIdentityColumn(t *testing.T) {
 	resetTestDatabase()
 
@@ -1226,6 +1161,125 @@ func TestPsqldefAddIdentityColumnWithSequenceOption(t *testing.T) {
 
 	// not support changing sequence option
 	assertApplyOutput(t, createTableWithoutSequence, nothingModified)
+}
+
+//
+// ----------------------- following tests are for CLI -----------------------
+//
+
+func TestPsqldefDryRun(t *testing.T) {
+	resetTestDatabase()
+	writeFile("schema.sql", stripHeredoc(`
+	    CREATE TABLE users (
+	        id bigint NOT NULL PRIMARY KEY,
+	        age int
+	    );`,
+	))
+
+	dryRun := assertedExecute(t, "./psqldef", "-Upostgres", database, "--dry-run", "--file", "schema.sql")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", database, "--file", "schema.sql")
+	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
+}
+
+func TestPsqldefSkipDrop(t *testing.T) {
+	resetTestDatabase()
+	mustExecuteSQL(stripHeredoc(`
+		CREATE TABLE users (
+		    id bigint NOT NULL PRIMARY KEY,
+		    age int,
+		    c_char_1 char,
+		    c_char_10 char(10),
+		    c_varchar_10 varchar(10),
+		    c_varchar_unlimited varchar
+		);`,
+	))
+
+	writeFile("schema.sql", "")
+
+	skipDrop := assertedExecute(t, "./psqldef", "-Upostgres", database, "--skip-drop", "--file", "schema.sql")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", database, "--file", "schema.sql")
+	assertEquals(t, skipDrop, strings.Replace(apply, "DROP", "-- Skipped: DROP", 1))
+}
+
+func TestPsqldefExport(t *testing.T) {
+	resetTestDatabase()
+	out := assertedExecute(t, "./psqldef", "-Upostgres", database, "--export")
+	assertEquals(t, out, "-- No table exists --\n")
+
+	mustExecuteSQL(stripHeredoc(`
+		CREATE TABLE users (
+		    id bigint NOT NULL PRIMARY KEY,
+		    age int,
+		    c_char_1 char unique,
+		    c_char_10 char(10),
+		    c_varchar_10 varchar(10),
+		    c_varchar_unlimited varchar
+		);`,
+	))
+	out = assertedExecute(t, "./psqldef", "-Upostgres", database, "--export")
+	// workaround: local has `public.` but travis doesn't.
+	assertEquals(t, strings.Replace(out, "public.users", "users", 2), stripHeredoc(`
+		CREATE TABLE users (
+		    "id" bigint NOT NULL,
+		    "age" integer,
+		    "c_char_1" character(1),
+		    "c_char_10" character(10),
+		    "c_varchar_10" character varying(10),
+		    "c_varchar_unlimited" character varying,
+		    PRIMARY KEY ("id")
+		);
+		ALTER TABLE users ADD CONSTRAINT users_c_char_1_key UNIQUE (c_char_1);
+		`,
+	))
+}
+
+func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
+	resetTestDatabase()
+	out := assertedExecute(t, "./psqldef", "-Upostgres", database, "--export")
+	assertEquals(t, out, "-- No table exists --\n")
+
+	mustExecuteSQL(stripHeredoc(`
+		CREATE TABLE users (
+		    col1 character varying(40) NOT NULL,
+		    col2 character varying(6) NOT NULL,
+		    created_at timestamp NOT NULL,
+		    PRIMARY KEY (col1, col2)
+		);`,
+	))
+	out = assertedExecute(t, "./psqldef", "-Upostgres", database, "--export")
+	// workaround: local has `public.` but travis doesn't.
+	assertEquals(t, strings.Replace(out, "public.users", "users", 2), stripHeredoc(`
+		CREATE TABLE users (
+		    "col1" character varying(40) NOT NULL,
+		    "col2" character varying(6) NOT NULL,
+		    "created_at" timestamp NOT NULL,
+		    PRIMARY KEY ("col1", "col2")
+		);
+		`,
+	))
+}
+
+func TestPsqldefBeforeApply(t *testing.T) {
+	resetTestDatabase()
+
+	// Setup
+	mustExecuteSQL("DROP ROLE IF EXISTS dummy_owner_role;")
+	mustExecuteSQL("CREATE ROLE dummy_owner_role;")
+
+	beforeApply := "SET ROLE dummy_owner_role; SET TIME ZONE LOCAL;"
+	createTable := "CREATE TABLE dummy (id int);"
+	writeFile("schema.sql", createTable)
+
+	dryRun := assertedExecute(t, "./psqldef", "-Upostgres", database, "-f", "schema.sql", "--before-apply", beforeApply, "--dry-run")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", database, "-f", "schema.sql", "--before-apply", beforeApply)
+	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
+	assertEquals(t, apply, applyPrefix+beforeApply+"\n"+createTable+"\n")
+
+	apply = assertedExecute(t, "./psqldef", "-Upostgres", database, "-f", "schema.sql", "--before-apply", beforeApply)
+	assertEquals(t, apply, nothingModified)
+
+	owner := assertedExecute(t, "psql", "-Upostgres", database, "-tAc", "SELECT tableowner FROM pg_tables WHERE tablename = 'dummy'")
+	assertEquals(t, owner, "dummy_owner_role\n")
 }
 
 func TestPsqldefHelp(t *testing.T) {

@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/adapter/file"
 	"log"
 	"os"
 	"syscall"
+
+	"github.com/k0kubun/sqldef/adapter/file"
 
 	"github.com/jessevdk/go-flags"
 	"github.com/k0kubun/sqldef"
@@ -21,17 +22,18 @@ var version string
 // TODO: Support `sqldef schema.sql -opt val...`
 func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	var opts struct {
-		User     string   `short:"U" long:"user" description:"PostgreSQL user name" value-name:"username" default:"postgres"`
-		Password string   `short:"W" long:"password" description:"PostgreSQL user password, overridden by $PGPASSWORD" value-name:"password"`
-		Host     string   `short:"h" long:"host" description:"Host or socket directory to connect to the PostgreSQL server" value-name:"hostname" default:"127.0.0.1"`
-		Port     uint     `short:"p" long:"port" description:"Port used for the connection" value-name:"port" default:"5432"`
-		Prompt   bool     `long:"password-prompt" description:"Force PostgreSQL user password prompt"`
-		File     []string `short:"f" long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"filename" default:"-"`
-		DryRun   bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
-		Export   bool     `long:"export" description:"Just dump the current schema to stdout"`
-		SkipDrop bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
-		Help     bool     `long:"help" description:"Show this help"`
-		Version  bool     `long:"version" description:"Show this version"`
+		User        string   `short:"U" long:"user" description:"PostgreSQL user name" value-name:"username" default:"postgres"`
+		Password    string   `short:"W" long:"password" description:"PostgreSQL user password, overridden by $PGPASSWORD" value-name:"password"`
+		Host        string   `short:"h" long:"host" description:"Host or socket directory to connect to the PostgreSQL server" value-name:"hostname" default:"127.0.0.1"`
+		Port        uint     `short:"p" long:"port" description:"Port used for the connection" value-name:"port" default:"5432"`
+		Prompt      bool     `long:"password-prompt" description:"Force PostgreSQL user password prompt"`
+		File        []string `short:"f" long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"filename" default:"-"`
+		DryRun      bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
+		Export      bool     `long:"export" description:"Just dump the current schema to stdout"`
+		SkipDrop    bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
+		BeforeApply string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs"`
+		Help        bool     `long:"help" description:"Show this help"`
+		Version     bool     `long:"version" description:"Show this version"`
 	}
 
 	parser := flags.NewParser(&opts, flags.None)
@@ -58,6 +60,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		DryRun:      opts.DryRun,
 		Export:      opts.Export,
 		SkipDrop:    opts.SkipDrop,
+		BeforeApply: opts.BeforeApply,
 	}
 
 	database := ""
