@@ -1,3 +1,7 @@
+## v0.11.34
+
+- Enable to add a unique constraint to tables in non-public schema [#197](https://github.com/k0kubun/sqldef/pull/197)
+
 ## v0.11.33
 
 - Enable to drop and add CHECK constraints correctly for psqldef [#196](https://github.com/k0kubun/sqldef/pull/196)
