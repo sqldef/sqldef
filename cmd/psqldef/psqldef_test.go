@@ -1169,6 +1169,39 @@ func TestPsqldefAddIdentityColumnWithSequenceOption(t *testing.T) {
 	assertApplyOutput(t, createTableWithoutSequence, nothingModified)
 }
 
+func TestPsqldefAddUniqueConstraintToTableInNonpublicSchema(t *testing.T) {
+	resetTestDatabase()
+	mustExecuteSQL("CREATE SCHEMA test;")
+
+	createTable := "CREATE TABLE test.dummy (a int, b int);"
+	assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	alterTable := "ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);"
+	assertApplyOutput(t, createTable+"\n"+alterTable, applyPrefix+alterTable+"\n")
+	assertExportOutput(t, stripHeredoc(`
+		CREATE TABLE test.dummy (
+		    "a" integer,
+		    "b" integer
+		);
+		ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);
+		`))
+	assertApplyOutput(t, createTable+"\n"+alterTable, nothingModified)
+
+	alterTable = "ALTER TABLE test.dummy ADD CONSTRAINT a_uniq UNIQUE (a) DEFERRABLE INITIALLY DEFERRED;"
+	assertApplyOutput(t, createTable+"\n"+alterTable, applyPrefix+
+		alterTable+"\n"+
+		`ALTER TABLE "test"."dummy" DROP CONSTRAINT "a_b_uniq";`+"\n")
+	assertExportOutput(t, stripHeredoc(`
+		CREATE TABLE test.dummy (
+		    "a" integer,
+		    "b" integer
+		);
+		ALTER TABLE test.dummy ADD CONSTRAINT a_uniq UNIQUE (a) DEFERRABLE INITIALLY DEFERRED;
+		`))
+	assertApplyOutput(t, createTable+"\n"+alterTable, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
