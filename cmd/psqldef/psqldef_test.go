@@ -918,19 +918,25 @@ func TestPsqldefCheckConstraintInSchema(t *testing.T) {
 
 	createTable = stripHeredoc(`
 		CREATE TABLE test.dummy (
-		  min_value INT CONSTRAINT min_value_check CHECK (min_value > 0),
+		  min_value INT CHECK (min_value > 0),
 		  max_value INT CHECK (max_value > 0),
 		  CONSTRAINT min_max CHECK (min_value < max_value)
 		);`)
 	assertApplyOutput(t, createTable, applyPrefix+
-		`ALTER TABLE "test"."dummy" ADD CONSTRAINT min_value_check CHECK (min_value > 0);`+"\n"+
 		`ALTER TABLE "test"."dummy" ADD CONSTRAINT dummy_max_value_check CHECK (max_value > 0);`+"\n"+
 		`ALTER TABLE "test"."dummy" ADD CONSTRAINT "min_max" CHECK (min_value < max_value);`+"\n")
+	assertExportOutput(t, stripHeredoc(`
+		CREATE TABLE test.dummy (
+		    "min_value" integer CONSTRAINT dummy_min_value_check CHECK (min_value > 0),
+		    "max_value" integer CONSTRAINT dummy_max_value_check CHECK (max_value > 0),
+		    CONSTRAINT min_max CHECK (min_value < max_value)
+		);
+		`))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
 		CREATE TABLE test.dummy (
-		  min_value INT CONSTRAINT min_value_check CHECK (min_value > 0),
+		  min_value INT CHECK (min_value > 0),
 		  max_value INT
 		);`)
 	assertApplyOutput(t, createTable, applyPrefix+
