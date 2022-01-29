@@ -152,10 +152,14 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreignDefs, policyDefs, checkConstraints), nil
+	uniqueConstraints, err := d.getUniqueConstraints(table)
+	if err != nil {
+		return "", err
+	}
+	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreignDefs, policyDefs, checkConstraints, uniqueConstraints), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreignDefs, policyDefs []string, checkConstraints map[string]string) string {
+func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreignDefs, policyDefs []string, checkConstraints, uniqueConstraints map[string]string) string {
 	var queryBuilder strings.Builder
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (", table)
 	for i, col := range columns {
@@ -197,6 +201,9 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 	}
 	for _, v := range policyDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
+	}
+	for _, constraintDef := range uniqueConstraints {
+		fmt.Fprintf(&queryBuilder, "%s;\n", constraintDef)
 	}
 	return strings.TrimSuffix(queryBuilder.String(), "\n")
 }
@@ -345,18 +352,29 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 }
 
 func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
-	const query = "SELECT indexName, indexdef FROM pg_indexes WHERE schemaname=$1 AND tablename=$2"
+	// Exclude indexes that are implicitly created for primary keys or unique constraints.
+	const query = `WITH
+	  unique_and_pk_constraints AS (
+	    SELECT con.conname AS name
+	    FROM   pg_constraint con
+	    JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+	    JOIN   pg_class cls ON cls.oid = con.conrelid
+	    WHERE  con.contype IN ('p', 'u')
+	    AND    nsp.nspname = $1
+	    AND    cls.relname = $2
+	  )
+	SELECT indexName, indexdef
+	FROM   pg_indexes
+	WHERE  schemaname = $1
+	AND    tablename = $2
+	AND    indexName NOT IN (SELECT name FROM unique_and_pk_constraints)
+	`
 	schema, table := SplitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
-	uniqueConstraints, err := d.getUniqueConstraints(table)
-	if err != nil {
-		return nil, err
-	}
 
 	indexes := make([]string, 0)
 	for rows.Next() {
@@ -366,14 +384,7 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 			return nil, err
 		}
 		indexName = strings.Trim(indexName, `" `)
-		if strings.HasSuffix(indexName, "_pkey") {
-			continue
-		}
 
-		// A unique constraint is also observed as a unique index. We have to replace it here.
-		if uniqueConstraint, ok := uniqueConstraints[indexName]; ok {
-			indexdef = uniqueConstraint
-		}
 		indexes = append(indexes, indexdef)
 	}
 	return indexes, nil
