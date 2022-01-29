@@ -489,7 +489,7 @@ If you have multiple issues or pull requests to be filed,
 it'd be greatly appreciated if you can prepare all of the contents beforehand and file all issues or pull requests at once.
 
 That way, I'd like to predict the amount of effort required to make it possible for you to start using sqldef.
-If you incrementally contribute to the project everyday,
+If you incrementally contribute to the project every day,
 it would make my time management for OSS development hard and ultimately slow down the sqldef development.
 
 ## License
