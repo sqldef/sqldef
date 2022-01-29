@@ -212,6 +212,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLName(policy.name), g.escapeTableName(currentTable.name)))
 		}
+
+		// Check checks.
+		for _, check := range currentTable.checks {
+			if containsString(convertCheckConstraintNames(desiredTable.checks), check.constraintName) {
+				continue
+			}
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(check.constraintName)))
+		}
 	}
 
 	// Clean up obsoleted views
@@ -360,7 +368,18 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 				_, tableName := postgres.SplitTableName(desired.table.name)
 				constraintName := fmt.Sprintf("%s_%s_check", tableName, desiredColumn.name)
-				currentCheck := findCheckByName(currentTable.checks, constraintName)
+				if desiredColumn.check != nil && desiredColumn.check.constraintName != "" {
+					constraintName = desiredColumn.check.constraintName
+				}
+
+				columnChecks := []CheckDefinition{}
+				for _, column := range currentTable.columns {
+					if column.check != nil {
+						columnChecks = append(columnChecks, *column.check)
+					}
+				}
+
+				currentCheck := findCheckByName(columnChecks, constraintName)
 				if !areSameCheckDefinition(currentCheck, desiredColumn.check) { // || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
 					if currentCheck != nil {
 						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), constraintName)
@@ -532,6 +551,22 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			definition := g.generateForeignKeyDefinition(desiredForeignKey)
 			ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), definition)
 			ddls = append(ddls, ddl)
+		}
+	}
+
+	// Examine each check
+	for _, desiredCheck := range desired.table.checks {
+		if currentCheck := findCheckByName(currentTable.checks, desiredCheck.constraintName); currentCheck != nil {
+			if !areSameCheckDefinition(currentCheck, &desiredCheck) {
+				switch g.mode {
+				case GeneratorModePostgres:
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
+				default:
+				}
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), desiredCheck.definition))
+			}
+		} else {
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), desiredCheck.definition))
 		}
 	}
 
@@ -1612,6 +1647,14 @@ func convertPolicyNames(policies []Policy) []string {
 		policyNames[i] = policy.name
 	}
 	return policyNames
+}
+
+func convertCheckConstraintNames(checks []CheckDefinition) []string {
+	checkConstraintNames := make([]string, len(checks))
+	for i, check := range checks {
+		checkConstraintNames[i] = check.constraintName
+	}
+	return checkConstraintNames
 }
 
 func convertViewNames(views []*View) []string {

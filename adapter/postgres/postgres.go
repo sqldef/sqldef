@@ -148,7 +148,7 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	checkConstraints, err := d.getCheckConstraints(table)
+	checkConstraints, err := d.getTableCheckConstraints(table)
 	if err != nil {
 		return "", err
 	}
@@ -176,6 +176,9 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 		if col.IdentityGeneration != "" {
 			fmt.Fprintf(&queryBuilder, " GENERATED %s AS IDENTITY", col.IdentityGeneration)
 		}
+		if col.Check != nil {
+			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s %s", col.Check.name, col.Check.definition)
+		}
 	}
 	if len(pkeyCols) > 0 {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
@@ -198,6 +201,11 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 	return strings.TrimSuffix(queryBuilder.String(), "\n")
 }
 
+type columnConstraint struct {
+	definition string
+	name       string
+}
+
 type column struct {
 	Name               string
 	dataType           string
@@ -206,6 +214,7 @@ type column struct {
 	Default            string
 	IsAutoIncrement    bool
 	IdentityGeneration string
+	Check              *columnConstraint
 }
 
 func (c *column) GetDataType() string {
@@ -239,15 +248,54 @@ func (c *column) GetDataType() string {
 }
 
 func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
-	const query = `SELECT s.column_name, s.column_default, s.is_nullable, s.character_maximum_length,
-	CASE WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod) ELSE s.data_type END,
-	s.identity_generation
-FROM pg_attribute f
-	JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
-	LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
-	LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
-	LEFT JOIN information_schema.columns s ON s.column_name=f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
-WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum > 0 ORDER BY f.attnum;`
+	const query = `WITH
+	  columns AS (
+	    SELECT
+	      s.column_name,
+	      s.column_default,
+	      s.is_nullable,
+	      s.character_maximum_length,
+	      CASE
+	      WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod)
+	      ELSE s.data_type
+	      END,
+	      s.identity_generation
+	    FROM pg_attribute f
+	    JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
+	    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
+	    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
+	    LEFT JOIN information_schema.columns s ON s.column_name = f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
+	    WHERE c.relkind = 'r'::char
+	    AND n.nspname = $1
+	    AND c.relname = $2
+	    AND f.attnum > 0
+	    ORDER BY f.attnum
+	  ),
+	  column_constraints AS (
+	    SELECT att.attname column_name, tmp.name, tmp.type , tmp.definition
+	    FROM (
+	      SELECT unnest(con.conkey) AS conkey,
+	             pg_get_constraintdef(con.oid, true) AS definition,
+	             cls.oid AS relid,
+	             con.conname AS name,
+	             con.contype AS type
+	      FROM   pg_constraint con
+	      JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+	      JOIN   pg_class cls ON cls.oid = con.conrelid
+	      WHERE  nsp.nspname = $1
+	      AND    cls.relname = $2
+	      AND    array_length(con.conkey, 1) = 1
+	    ) tmp
+	    JOIN pg_attribute att ON tmp.conkey = att.attnum AND tmp.relid = att.attrelid
+	  ),
+	  check_constraints AS (
+	    SELECT column_name, name, definition
+	    FROM   column_constraints
+	    WHERE  type = 'c'
+	  )
+	SELECT    columns.*, checks.name, checks.definition
+	FROM      columns
+	LEFT JOIN check_constraints checks USING (column_name);`
 
 	schema, table := SplitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
@@ -260,8 +308,8 @@ WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum >
 	for rows.Next() {
 		col := column{}
 		var colName, isNullable, dataType string
-		var maxLenStr, colDefault, idGen *string
-		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &dataType, &idGen)
+		var maxLenStr, colDefault, idGen, checkName, checkDefinition *string
+		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &dataType, &idGen, &checkName, &checkDefinition)
 		if err != nil {
 			return nil, err
 		}
@@ -284,6 +332,12 @@ WHERE c.relkind = 'r'::char AND n.nspname = $1 AND c.relname = $2 AND f.attnum >
 		col.Length = maxLen
 		if idGen != nil {
 			col.IdentityGeneration = *idGen
+		}
+		if checkName != nil && checkDefinition != nil {
+			col.Check = &columnConstraint{
+				definition: *checkDefinition,
+				name:       *checkName,
+			}
 		}
 		cols = append(cols, col)
 	}
@@ -325,14 +379,15 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 	return indexes, nil
 }
 
-func (d *PostgresDatabase) getCheckConstraints(tableName string) (map[string]string, error) {
+func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[string]string, error) {
 	const query = `SELECT con.conname, pg_get_constraintdef(con.oid, true)
 	FROM   pg_constraint con
 	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
 	JOIN   pg_class cls ON cls.oid = con.conrelid
 	WHERE  con.contype = 'c'
 	AND    nsp.nspname = $1
-	AND    cls.relname = $2;`
+	AND    cls.relname = $2
+	AND    array_length(con.conkey, 1) > 1;`
 
 	result := map[string]string{}
 	schema, table := SplitTableName(tableName)
