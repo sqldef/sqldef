@@ -1,3 +1,7 @@
+## v0.11.33
+
+- Enable to drop and add CHECK constraints correctly for psqldef [#196](https://github.com/k0kubun/sqldef/pull/196)
+
 ## v0.11.32
 
 - Add `--before-apply` option to psqldef to run commands before apply [#195](https://github.com/k0kubun/sqldef/pull/195)
