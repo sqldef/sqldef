@@ -1203,8 +1203,8 @@ func TestPsqldefSkipDrop(t *testing.T) {
 
 func TestPsqldefExport(t *testing.T) {
 	resetTestDatabase()
-	out := assertedExecute(t, "./psqldef", "-Upostgres", database, "--export")
-	assertEquals(t, out, "-- No table exists --\n")
+
+	assertExportOutput(t, "-- No table exists --\n")
 
 	mustExecuteSQL(stripHeredoc(`
 		CREATE TABLE users (
@@ -1216,10 +1216,9 @@ func TestPsqldefExport(t *testing.T) {
 		    c_varchar_unlimited varchar
 		);`,
 	))
-	out = assertedExecute(t, "./psqldef", "-Upostgres", database, "--export")
-	// workaround: local has `public.` but travis doesn't.
-	assertEquals(t, strings.Replace(out, "public.users", "users", 2), stripHeredoc(`
-		CREATE TABLE users (
+
+	assertExportOutput(t, stripHeredoc(`
+		CREATE TABLE public.users (
 		    "id" bigint NOT NULL,
 		    "age" integer,
 		    "c_char_1" character(1),
@@ -1228,15 +1227,15 @@ func TestPsqldefExport(t *testing.T) {
 		    "c_varchar_unlimited" character varying,
 		    PRIMARY KEY ("id")
 		);
-		ALTER TABLE users ADD CONSTRAINT users_c_char_1_key UNIQUE (c_char_1);
+		ALTER TABLE public.users ADD CONSTRAINT users_c_char_1_key UNIQUE (c_char_1);
 		`,
 	))
 }
 
 func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 	resetTestDatabase()
-	out := assertedExecute(t, "./psqldef", "-Upostgres", database, "--export")
-	assertEquals(t, out, "-- No table exists --\n")
+
+	assertExportOutput(t, "-- No table exists --\n")
 
 	mustExecuteSQL(stripHeredoc(`
 		CREATE TABLE users (
@@ -1246,10 +1245,9 @@ func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 		    PRIMARY KEY (col1, col2)
 		);`,
 	))
-	out = assertedExecute(t, "./psqldef", "-Upostgres", database, "--export")
-	// workaround: local has `public.` but travis doesn't.
-	assertEquals(t, strings.Replace(out, "public.users", "users", 2), stripHeredoc(`
-		CREATE TABLE users (
+
+	assertExportOutput(t, stripHeredoc(`
+		CREATE TABLE public.users (
 		    "col1" character varying(40) NOT NULL,
 		    "col2" character varying(6) NOT NULL,
 		    "created_at" timestamp NOT NULL,
@@ -1320,6 +1318,12 @@ func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
 	actual := assertedExecute(t, "./psqldef", "-Upostgres", database, "--file", "schema.sql")
+	assertEquals(t, actual, expected)
+}
+
+func assertExportOutput(t *testing.T, expected string) {
+	t.Helper()
+	actual := assertedExecute(t, "./psqldef", "-Upostgres", database, "--export")
 	assertEquals(t, actual, expected)
 }
 
