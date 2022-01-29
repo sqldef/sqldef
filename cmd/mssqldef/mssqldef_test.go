@@ -702,7 +702,7 @@ func TestMssqldefCreateTableForeignKey(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [users] ([id]);\n")
+	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [dbo].[users] ([id]);\n")
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	createPosts = stripHeredoc(`
@@ -715,7 +715,7 @@ func TestMssqldefCreateTableForeignKey(t *testing.T) {
 	)
 	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
 		"ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_ibfk_1];\n"+
-		"ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [users] ([id]) ON DELETE SET NULL ON UPDATE CASCADE;\n",
+		"ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [dbo].[users] ([id]) ON DELETE SET NULL ON UPDATE CASCADE;\n",
 	)
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
@@ -906,7 +906,7 @@ func TestMssqldefCreateTableAddNotForReplication(t *testing.T) {
 		"ALTER TABLE [dbo].[posts] DROP CONSTRAINT posts_view_check;\n"+
 		"ALTER TABLE [dbo].[posts] ADD CONSTRAINT posts_view_check CHECK NOT FOR REPLICATION (views > (-1));\n"+
 		"ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_ibfk_1];\n"+
-		"ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [users] ([id]) NOT FOR REPLICATION;\n",
+		"ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [dbo].[users] ([id]) NOT FOR REPLICATION;\n",
 	)
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 }
