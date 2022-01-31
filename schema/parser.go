@@ -4,10 +4,11 @@ package schema
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/adapter/postgres"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/k0kubun/sqldef/adapter/postgres"
 
 	"github.com/k0kubun/sqldef/sqlparser"
 )
