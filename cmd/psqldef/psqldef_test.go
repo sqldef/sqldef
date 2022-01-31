@@ -1246,6 +1246,37 @@ func TestPsqldefIndexesOnExpressions(t *testing.T) {
 	}
 }
 
+func TestPsqldefFunctionAsDefault(t *testing.T) {
+	for _, tc := range publicAndNonPublicSchemaTestCases {
+		resetTestDatabase()
+		mustExecuteSQL(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
+
+		mustExecuteSQL(fmt.Sprintf(stripHeredoc(`
+			CREATE FUNCTION %s.my_func()
+			RETURNS int
+			AS $$
+			DECLARE
+			  result int = 1;
+			BEGIN
+			  RETURN result;
+			END
+			$$
+			LANGUAGE plpgsql
+			VOLATILE;`), tc.Schema))
+
+		createTable := fmt.Sprintf(stripHeredoc(`
+			CREATE TABLE %s.test (
+			  pk timestamp primary key default now(),
+			  col timestamp default now(),
+			  uniq timestamp unique default now(),
+			  not_null timestamp not null default now(),
+			  same_schema int default %s.my_func()
+			);`), tc.Schema, tc.Schema)
+		assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+		assertApplyOutput(t, createTable, nothingModified)
+	}
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
