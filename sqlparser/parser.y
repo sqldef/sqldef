@@ -119,6 +119,9 @@ func forceEOF(yylex interface{}) {
   blockStatement []Statement
   localVariable *LocalVariable
   localVariables []*LocalVariable
+  arrayConstructor *ArrayConstructor
+  arrayElements ArrayElements
+  arrayElement  ArrayElement
 }
 
 %token LEX_ERROR
@@ -186,7 +189,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> TEXT TINYTEXT MEDIUMTEXT LONGTEXT CITEXT
 %token <bytes> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON JSONB ENUM
 %token <bytes> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
-%token <bytes> ARRAY
+%token <bytes> VARIADIC ARRAY
 %token <bytes> NOW GETDATE
 %token <bytes> BPCHAR
 
@@ -362,6 +365,10 @@ func forceEOF(yylex interface{}) {
 %type <str> table_hint
 %type <newQualifierColName> new_qualifier_column_name
 %type <boolVal> deferrable_opt initially_deferred_opt
+%type <boolVal> variadic_opt
+%type <arrayConstructor> array_constructor
+%type <arrayElements> array_element_list
+%type <arrayElement> array_element
 
 %start any_command
 
@@ -3408,6 +3415,10 @@ value_expression:
 | function_call_keyword
 | function_call_nonkeyword
 | function_call_conflict
+| variadic_opt array_constructor
+  {
+    $$ = $2
+  }
 
 /*
   Regular function calls without special token or syntax, guaranteed to not
@@ -4172,6 +4183,41 @@ initially_deferred_opt:
 | INITIALLY IMMEDIATE
   {
     $$ = BoolVal(false)
+  }
+
+variadic_opt:
+  /* empty */
+  {
+    $$ = BoolVal(false)
+  }
+| VARIADIC
+  {
+    $$ =BoolVal(true)
+  }
+
+/* For PostgreSQL. https://www.postgresql.org/docs/14/sql-expressions.html#SQL-SYNTAX-ARRAY-CONSTRUCTORS */
+array_constructor:
+  ARRAY '[' array_element_list ']'
+  {
+    $$ = &ArrayConstructor{Elements: $3}
+  }
+
+/* For PostgreSQL */
+array_element_list:
+  array_element
+  {
+    $$ = ArrayElements{$1}
+  }
+| array_element_list ',' array_element
+  {
+    $$ = append($$, $3)
+  }
+
+/* For PostgreSQL */
+array_element:
+  STRING character_cast_opt
+  {
+    $$ = NewStrVal($1)
   }
 
 /*
