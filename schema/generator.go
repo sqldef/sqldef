@@ -1084,7 +1084,8 @@ func (g *Generator) generateDropIndex(tableName string, indexName string, constr
 		if constraint {
 			return fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(tableName), g.escapeSQLName(indexName))
 		} else {
-			return fmt.Sprintf("DROP INDEX %s", g.escapeSQLName(indexName))
+			schema, _ := postgres.SplitTableName(tableName)
+			return fmt.Sprintf("DROP INDEX %s.%s", g.escapeSQLName(schema), g.escapeSQLName(indexName))
 		}
 	case GeneratorModeMssql:
 		return fmt.Sprintf("DROP INDEX %s ON %s", g.escapeSQLName(indexName), g.escapeTableName(tableName))

@@ -697,31 +697,46 @@ func TestPsqldefAddArrayColumn(t *testing.T) {
 }
 
 func TestPsqldefCreateIndex(t *testing.T) {
-	resetTestDatabase()
+	for _, tc := range publicAndNonPublicSchemaTestCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			resetTestDatabase()
+			mustExecuteSQL(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
 
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint NOT NULL,
-		  name text,
-		  age integer
-		);
-		`,
-	)
-	createIndex1 := `CREATE INDEX "index_name" on users (name);` + "\n"
-	createIndex2 := `CREATE UNIQUE INDEX "index_age" on users (age);` + "\n"
-	assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+createTable+createIndex1+createIndex2)
-	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
+			createTable := stripHeredoc(fmt.Sprintf(`
+				CREATE TABLE %s.users (
+				  id bigint NOT NULL,
+				  name text,
+				  age integer
+				);`, tc.Schema))
+			createIndex1 := fmt.Sprintf(`CREATE INDEX index_name on %s.users (name);`, tc.Schema)
+			createIndex2 := fmt.Sprintf(`CREATE UNIQUE INDEX index_age on %s.users (age);`, tc.Schema)
+			createIndex3 := fmt.Sprintf(`CREATE INDEX index_name on %s.users (name, id);`, tc.Schema)
+			createIndex4 := fmt.Sprintf(`CREATE UNIQUE INDEX index_name on %s.users (name) WHERE age > 20;`, tc.Schema)
+			dropIndex1 := fmt.Sprintf(`DROP INDEX "%s"."index_name";`, tc.Schema)
+			dropIndex2 := fmt.Sprintf(`DROP INDEX "%s"."index_age";`, tc.Schema)
 
-	createIndex1 = `CREATE INDEX "index_name" on users (name, id);` + "\n"
-	assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+`DROP INDEX "index_name";`+"\n"+createIndex1)
-	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
+			assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+
+				createTable+"\n"+
+				createIndex1+"\n"+
+				createIndex2+"\n")
+			assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
 
-	createIndex1 = `CREATE UNIQUE INDEX "index_name" on users (name) WHERE age > 20;` + "\n"
-	assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+`DROP INDEX "index_name";`+"\n"+createIndex1)
-	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
+			assertApplyOutput(t, createTable+createIndex2+createIndex3, applyPrefix+
+				dropIndex1+"\n"+
+				createIndex3+"\n")
+			assertApplyOutput(t, createTable+createIndex2+createIndex3, nothingModified)
 
-	assertApplyOutput(t, createTable, applyPrefix+`DROP INDEX "index_age";`+"\n"+`DROP INDEX "index_name";`+"\n")
-	assertApplyOutput(t, createTable, nothingModified)
+			assertApplyOutput(t, createTable+createIndex2+createIndex4, applyPrefix+
+				dropIndex1+"\n"+
+				createIndex4+"\n")
+			assertApplyOutput(t, createTable+createIndex2+createIndex4, nothingModified)
+
+			assertApplyOutput(t, createTable, applyPrefix+
+				dropIndex2+"\n"+
+				dropIndex1+"\n")
+			assertApplyOutput(t, createTable, nothingModified)
+		})
+	}
 }
 
 func TestPsqldefAddConstraintUnique(t *testing.T) {
@@ -1423,4 +1438,12 @@ func stripHeredoc(heredoc string) string {
 	heredoc = strings.TrimPrefix(heredoc, "\n")
 	re := regexp.MustCompilePOSIX("^\t*")
 	return re.ReplaceAllLiteralString(heredoc, "")
+}
+
+var publicAndNonPublicSchemaTestCases = []struct {
+	Name   string
+	Schema string
+}{
+	{Name: "in public schema", Schema: "public"},
+	{Name: "in non-public schema", Schema: "test"},
 }
