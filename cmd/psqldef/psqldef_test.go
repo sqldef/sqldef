@@ -591,35 +591,37 @@ func TestPsqlddefCreatePolicy(t *testing.T) {
 }
 
 func TestPsqldefCreateView(t *testing.T) {
-	resetTestDatabase()
+	for _, tc := range publicAndNonPublicSchemaTestCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			resetTestDatabase()
+			mustExecuteSQL(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
 
-	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));\n"
-	createPosts := "CREATE TABLE posts (id BIGINT PRIMARY KEY, name character varying(100), user_id BIGINT, is_deleted boolean);\n"
+			createUsers := fmt.Sprintf("CREATE TABLE %s.users (id BIGINT PRIMARY KEY, name character varying(100));\n", tc.Schema)
+			createPosts := fmt.Sprintf("CREATE TABLE %s.posts (id BIGINT PRIMARY KEY, name character varying(100), user_id BIGINT, is_deleted boolean);\n", tc.Schema)
+			assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
+			assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
-	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+			posts := "posts"
+			users := "users"
+			if tc.Schema != "public" {
+				posts = fmt.Sprintf("%s.posts", tc.Schema)
+				users = fmt.Sprintf("%s.users", tc.Schema)
+			}
 
-	createView := stripHeredoc(`
-		CREATE VIEW view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
-		`,
-	)
-	assertApplyOutput(t, createUsers+createPosts+createView, applyPrefix+
-		"CREATE VIEW view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));\n",
-	)
-	assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
+			createView := fmt.Sprintf("CREATE VIEW %s.view_user_posts AS SELECT p.id FROM (%s as p JOIN %s as u ON ((p.user_id = u.id)));\n", tc.Schema, posts, users)
+			assertApplyOutput(t, createUsers+createPosts+createView, applyPrefix+
+				fmt.Sprintf("CREATE VIEW %s.view_user_posts AS SELECT p.id FROM (%s as p JOIN %s as u ON ((p.user_id = u.id)));\n", tc.Schema, posts, users))
+			assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
 
-	createView = stripHeredoc(`
-		CREATE VIEW view_user_posts AS SELECT p.id from (posts p INNER JOIN users u ON ((p.user_id = u.id))) WHERE (p.is_deleted = FALSE);
-		`,
-	)
-	assertApplyOutput(t, createUsers+createPosts+createView, applyPrefix+stripHeredoc(`
-		CREATE OR REPLACE VIEW "public"."view_user_posts" AS select p.id from (posts as p join users as u on ((p.user_id = u.id))) where (p.is_deleted = false);
-		`,
-	))
-	assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
+			createView = fmt.Sprintf("CREATE VIEW %s.view_user_posts AS SELECT p.id from (%s p INNER JOIN %s u ON ((p.user_id = u.id))) WHERE (p.is_deleted = FALSE);\n", tc.Schema, posts, users)
+			assertApplyOutput(t, createUsers+createPosts+createView, applyPrefix+
+				fmt.Sprintf(`CREATE OR REPLACE VIEW "%s"."view_user_posts" AS select p.id from (%s as p join %s as u on ((p.user_id = u.id))) where (p.is_deleted = false);`+"\n", tc.Schema, posts, users))
+			assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
 
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+`DROP VIEW "public"."view_user_posts";`+"\n")
-	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+			assertApplyOutput(t, createUsers+createPosts, applyPrefix+fmt.Sprintf(`DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n")
+			assertApplyOutput(t, createUsers+createPosts, nothingModified)
+		})
+	}
 }
 
 func TestPsqldefDropPrimaryKey(t *testing.T) {

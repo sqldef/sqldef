@@ -416,7 +416,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 		} else if stmt.Action == sqlparser.CreateViewStr {
 			return &View{
 				statement:  ddl,
-				name:       stmt.View.Name.Name.String(),
+				name:       normalizedTableName(mode, stmt.View.Name),
 				definition: sqlparser.String(stmt.View.Definition),
 			}, nil
 		} else if stmt.Action == sqlparser.CreateTriggerStr {
