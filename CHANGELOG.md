@@ -1,3 +1,7 @@
+## v0.11.35
+
+- Support creating indexes on expressions and using function as default [#199](https://github.com/k0kubun/sqldef/pull/199)
+
 ## v0.11.34
 
 - Enable to add a unique constraint to tables in non-public schema [#197](https://github.com/k0kubun/sqldef/pull/197)
