@@ -670,6 +670,7 @@ type DDL struct {
 	PartitionSpec *PartitionSpec
 	IndexSpec     *IndexSpec
 	IndexCols     []IndexColumn
+	IndexExpr     Expr
 	VindexSpec    *VindexSpec
 	VindexCols    []ColIdent
 	ForeignKey    *ForeignKeyDefinition
@@ -1274,6 +1275,11 @@ func (ii *IndexInfo) Format(buf *TrackedBuffer) {
 
 func (ii *IndexInfo) walkSubtree(visit Visit) error {
 	return Walk(visit, ii.Name)
+}
+
+type IndexColumnsOrExpression struct {
+	IndexCols []IndexColumn
+	IndexExpr Expr
 }
 
 // IndexColumn describes a column in an index definition with optional length
@@ -2129,6 +2135,7 @@ func (*ConvertUsingExpr) iExpr()    {}
 func (*MatchExpr) iExpr()           {}
 func (*GroupConcatExpr) iExpr()     {}
 func (*Default) iExpr()             {}
+func (*ArrayConstructor) iExpr()    {}
 
 // ReplaceExpr finds the from expression from root
 // and replaces it with to. If from matches root,
@@ -3926,3 +3933,50 @@ func compliantName(in string) string {
 	}
 	return buf.String()
 }
+
+type ArrayConstructor struct {
+	Elements ArrayElements
+}
+
+func (node *ArrayConstructor) Format(buf *TrackedBuffer) {
+	buf.Myprintf("ARRAY[%v]", node.Elements)
+}
+
+func (node *ArrayConstructor) walkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(visit, node.Elements)
+}
+
+func (node *ArrayConstructor) replace(from, to Expr) bool {
+	return false
+}
+
+type ArrayElements []ArrayElement
+
+func (node ArrayElements) Format(buf *TrackedBuffer) {
+	for i, n := range node {
+		if i == 0 {
+			buf.Myprintf("%v", n)
+		} else {
+			buf.Myprintf(", %v", n)
+		}
+	}
+}
+
+func (node ArrayElements) walkSubtree(visit Visit) error {
+	for _, n := range node {
+		if err := Walk(visit, n); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type ArrayElement interface {
+	iArrayElement()
+	SQLNode
+}
+
+func (*SQLVal) iArrayElement() {}

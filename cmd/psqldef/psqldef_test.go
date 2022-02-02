@@ -591,35 +591,37 @@ func TestPsqlddefCreatePolicy(t *testing.T) {
 }
 
 func TestPsqldefCreateView(t *testing.T) {
-	resetTestDatabase()
+	for _, tc := range publicAndNonPublicSchemaTestCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			resetTestDatabase()
+			mustExecuteSQL(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
 
-	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));\n"
-	createPosts := "CREATE TABLE posts (id BIGINT PRIMARY KEY, name character varying(100), user_id BIGINT, is_deleted boolean);\n"
+			createUsers := fmt.Sprintf("CREATE TABLE %s.users (id BIGINT PRIMARY KEY, name character varying(100));\n", tc.Schema)
+			createPosts := fmt.Sprintf("CREATE TABLE %s.posts (id BIGINT PRIMARY KEY, name character varying(100), user_id BIGINT, is_deleted boolean);\n", tc.Schema)
+			assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
+			assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
-	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+			posts := "posts"
+			users := "users"
+			if tc.Schema != "public" {
+				posts = fmt.Sprintf("%s.posts", tc.Schema)
+				users = fmt.Sprintf("%s.users", tc.Schema)
+			}
 
-	createView := stripHeredoc(`
-		CREATE VIEW view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
-		`,
-	)
-	assertApplyOutput(t, createUsers+createPosts+createView, applyPrefix+
-		"CREATE VIEW view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));\n",
-	)
-	assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
+			createView := fmt.Sprintf("CREATE VIEW %s.view_user_posts AS SELECT p.id FROM (%s as p JOIN %s as u ON ((p.user_id = u.id)));\n", tc.Schema, posts, users)
+			assertApplyOutput(t, createUsers+createPosts+createView, applyPrefix+
+				fmt.Sprintf("CREATE VIEW %s.view_user_posts AS SELECT p.id FROM (%s as p JOIN %s as u ON ((p.user_id = u.id)));\n", tc.Schema, posts, users))
+			assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
 
-	createView = stripHeredoc(`
-		CREATE VIEW view_user_posts AS SELECT p.id from (posts p INNER JOIN users u ON ((p.user_id = u.id))) WHERE (p.is_deleted = FALSE);
-		`,
-	)
-	assertApplyOutput(t, createUsers+createPosts+createView, applyPrefix+stripHeredoc(`
-		CREATE OR REPLACE VIEW "public"."view_user_posts" AS select p.id from (posts as p join users as u on ((p.user_id = u.id))) where (p.is_deleted = false);
-		`,
-	))
-	assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
+			createView = fmt.Sprintf("CREATE VIEW %s.view_user_posts AS SELECT p.id from (%s p INNER JOIN %s u ON ((p.user_id = u.id))) WHERE (p.is_deleted = FALSE);\n", tc.Schema, posts, users)
+			assertApplyOutput(t, createUsers+createPosts+createView, applyPrefix+
+				fmt.Sprintf(`CREATE OR REPLACE VIEW "%s"."view_user_posts" AS select p.id from (%s as p join %s as u on ((p.user_id = u.id))) where (p.is_deleted = false);`+"\n", tc.Schema, posts, users))
+			assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
 
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+`DROP VIEW "public"."view_user_posts";`+"\n")
-	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+			assertApplyOutput(t, createUsers+createPosts, applyPrefix+fmt.Sprintf(`DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n")
+			assertApplyOutput(t, createUsers+createPosts, nothingModified)
+		})
+	}
 }
 
 func TestPsqldefDropPrimaryKey(t *testing.T) {
@@ -697,31 +699,46 @@ func TestPsqldefAddArrayColumn(t *testing.T) {
 }
 
 func TestPsqldefCreateIndex(t *testing.T) {
-	resetTestDatabase()
+	for _, tc := range publicAndNonPublicSchemaTestCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			resetTestDatabase()
+			mustExecuteSQL(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
 
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint NOT NULL,
-		  name text,
-		  age integer
-		);
-		`,
-	)
-	createIndex1 := `CREATE INDEX "index_name" on users (name);` + "\n"
-	createIndex2 := `CREATE UNIQUE INDEX "index_age" on users (age);` + "\n"
-	assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+createTable+createIndex1+createIndex2)
-	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
+			createTable := stripHeredoc(fmt.Sprintf(`
+				CREATE TABLE %s.users (
+				  id bigint NOT NULL,
+				  name text,
+				  age integer
+				);`, tc.Schema))
+			createIndex1 := fmt.Sprintf(`CREATE INDEX index_name on %s.users (name);`, tc.Schema)
+			createIndex2 := fmt.Sprintf(`CREATE UNIQUE INDEX index_age on %s.users (age);`, tc.Schema)
+			createIndex3 := fmt.Sprintf(`CREATE INDEX index_name on %s.users (name, id);`, tc.Schema)
+			createIndex4 := fmt.Sprintf(`CREATE UNIQUE INDEX index_name on %s.users (name) WHERE age > 20;`, tc.Schema)
+			dropIndex1 := fmt.Sprintf(`DROP INDEX "%s"."index_name";`, tc.Schema)
+			dropIndex2 := fmt.Sprintf(`DROP INDEX "%s"."index_age";`, tc.Schema)
 
-	createIndex1 = `CREATE INDEX "index_name" on users (name, id);` + "\n"
-	assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+`DROP INDEX "index_name";`+"\n"+createIndex1)
-	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
+			assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+
+				createTable+"\n"+
+				createIndex1+"\n"+
+				createIndex2+"\n")
+			assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
 
-	createIndex1 = `CREATE UNIQUE INDEX "index_name" on users (name) WHERE age > 20;` + "\n"
-	assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+`DROP INDEX "index_name";`+"\n"+createIndex1)
-	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
+			assertApplyOutput(t, createTable+createIndex2+createIndex3, applyPrefix+
+				dropIndex1+"\n"+
+				createIndex3+"\n")
+			assertApplyOutput(t, createTable+createIndex2+createIndex3, nothingModified)
 
-	assertApplyOutput(t, createTable, applyPrefix+`DROP INDEX "index_age";`+"\n"+`DROP INDEX "index_name";`+"\n")
-	assertApplyOutput(t, createTable, nothingModified)
+			assertApplyOutput(t, createTable+createIndex2+createIndex4, applyPrefix+
+				dropIndex1+"\n"+
+				createIndex4+"\n")
+			assertApplyOutput(t, createTable+createIndex2+createIndex4, nothingModified)
+
+			assertApplyOutput(t, createTable, applyPrefix+
+				dropIndex2+"\n"+
+				dropIndex1+"\n")
+			assertApplyOutput(t, createTable, nothingModified)
+		})
+	}
 }
 
 func TestPsqldefAddConstraintUnique(t *testing.T) {
@@ -1202,6 +1219,66 @@ func TestPsqldefAddUniqueConstraintToTableInNonpublicSchema(t *testing.T) {
 	assertApplyOutput(t, createTable+"\n"+alterTable, nothingModified)
 }
 
+func TestPsqldefIndexesOnExpressions(t *testing.T) {
+	for _, tc := range publicAndNonPublicSchemaTestCases {
+		resetTestDatabase()
+		mustExecuteSQL(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
+
+		createTable := fmt.Sprintf("CREATE TABLE %s.test (col JSONB);", tc.Schema)
+		assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+		assertApplyOutput(t, createTable, nothingModified)
+
+		createIndex := fmt.Sprintf("CREATE UNIQUE INDEX function_index ON %s.test (jsonb_extract_path_text(col, 'foo', 'bar'));", tc.Schema)
+		assertApplyOutput(t, createTable+createIndex, applyPrefix+createIndex+"\n")
+		assertExportOutput(t, fmt.Sprintf(stripHeredoc(`
+			CREATE TABLE %s.test (
+			    "col" jsonb
+			);
+			CREATE UNIQUE INDEX function_index ON %s.test USING btree (jsonb_extract_path_text(col, VARIADIC ARRAY['foo'::text, 'bar'::text]));
+			`), tc.Schema, tc.Schema))
+		assertApplyOutput(t, createTable+createIndex, nothingModified)
+
+		createIndex = fmt.Sprintf("CREATE UNIQUE INDEX function_index ON %s.test (jsonb_extract_path_text(col, 'foo'));", tc.Schema)
+		// not support changing expression
+		assertApplyOutput(t, createTable+createIndex, nothingModified)
+
+		assertApplyOutput(t, createTable, applyPrefix+
+			fmt.Sprintf(`DROP INDEX "%s"."function_index";`+"\n", tc.Schema))
+		assertApplyOutput(t, createTable, nothingModified)
+	}
+}
+
+func TestPsqldefFunctionAsDefault(t *testing.T) {
+	for _, tc := range publicAndNonPublicSchemaTestCases {
+		resetTestDatabase()
+		mustExecuteSQL(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
+
+		mustExecuteSQL(fmt.Sprintf(stripHeredoc(`
+			CREATE FUNCTION %s.my_func()
+			RETURNS int
+			AS $$
+			DECLARE
+			  result int = 1;
+			BEGIN
+			  RETURN result;
+			END
+			$$
+			LANGUAGE plpgsql
+			VOLATILE;`), tc.Schema))
+
+		createTable := fmt.Sprintf(stripHeredoc(`
+			CREATE TABLE %s.test (
+			  pk timestamp primary key default now(),
+			  col timestamp default now(),
+			  uniq timestamp unique default now(),
+			  not_null timestamp not null default now(),
+			  same_schema int default %s.my_func()
+			);`), tc.Schema, tc.Schema)
+		assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+		assertApplyOutput(t, createTable, nothingModified)
+	}
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
@@ -1423,4 +1500,12 @@ func stripHeredoc(heredoc string) string {
 	heredoc = strings.TrimPrefix(heredoc, "\n")
 	re := regexp.MustCompilePOSIX("^\t*")
 	return re.ReplaceAllLiteralString(heredoc, "")
+}
+
+var publicAndNonPublicSchemaTestCases = []struct {
+	Name   string
+	Schema string
+}{
+	{Name: "in public schema", Schema: "public"},
+	{Name: "in non-public schema", Schema: "test"},
 }

@@ -108,6 +108,7 @@ func forceEOF(yylex interface{}) {
   indexPartition *IndexPartition
   indexColumn   IndexColumn
   indexColumns  []IndexColumn
+  indexColumnsOrExpression IndexColumnsOrExpression
   foreignKeyDefinition *ForeignKeyDefinition
   partDefs      []*PartitionDefinition
   partDef       *PartitionDefinition
@@ -119,6 +120,9 @@ func forceEOF(yylex interface{}) {
   blockStatement []Statement
   localVariable *LocalVariable
   localVariables []*LocalVariable
+  arrayConstructor *ArrayConstructor
+  arrayElements ArrayElements
+  arrayElement  ArrayElement
 }
 
 %token LEX_ERROR
@@ -186,7 +190,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> TEXT TINYTEXT MEDIUMTEXT LONGTEXT CITEXT
 %token <bytes> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON JSONB ENUM
 %token <bytes> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
-%token <bytes> ARRAY
+%token <bytes> VARIADIC ARRAY
 %token <bytes> NOW GETDATE
 %token <bytes> BPCHAR
 
@@ -329,6 +333,7 @@ func forceEOF(yylex interface{}) {
 %type <indexInfo> index_info
 %type <indexColumn> index_column
 %type <bytes> operator_class
+%type <indexColumnsOrExpression> index_column_list_or_expression
 %type <indexColumns> index_column_list
 %type <indexPartition> index_partition_opt
 %type <indexOptions> index_option_opt
@@ -362,6 +367,10 @@ func forceEOF(yylex interface{}) {
 %type <str> table_hint
 %type <newQualifierColName> new_qualifier_column_name
 %type <boolVal> deferrable_opt initially_deferred_opt
+%type <boolVal> variadic_opt
+%type <arrayConstructor> array_constructor
+%type <arrayElements> array_element_list
+%type <arrayElement> array_element
 
 %start any_command
 
@@ -754,7 +763,7 @@ create_statement:
     $1.TableSpec = $2
     $$ = $1
   }
-| CREATE unique_opt clustered_opt INDEX sql_id ON table_name '(' index_column_list ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+| CREATE unique_opt clustered_opt INDEX sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
         Action: CreateIndexStr,
@@ -770,7 +779,8 @@ create_statement:
           Options: $13,
           Partition: $14,
         },
-        IndexCols: $9,
+        IndexCols: $9.IndexCols,
+        IndexExpr: $9.IndexExpr,
       }
   }
 /* For MySQL */
@@ -790,7 +800,7 @@ create_statement:
       }
   }
 /* For PostgreSQL */
-| CREATE unique_opt clustered_opt INDEX sql_id ON table_name USING sql_id '(' index_column_list ')' where_expression_opt index_option_opt
+| CREATE unique_opt clustered_opt INDEX sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' where_expression_opt index_option_opt
   {
     $$ = &DDL{
         Action: CreateIndexStr,
@@ -802,7 +812,8 @@ create_statement:
           Unique: bool($2),
           Where: NewWhere(WhereStr, $13),
         },
-        IndexCols: $11,
+        IndexCols: $11.IndexCols,
+        IndexExpr: $11.IndexExpr,
       }
   }
 | CREATE or_replace_opt VIEW table_name AS select_statement
@@ -1340,6 +1351,10 @@ default_val:
 | STRING TYPECAST sql_id
   {
     $$ = NewStrVal($1)
+  }
+| function_call_generic
+  {
+    $$ = NewStrVal([]byte($1.(*FuncExpr).Name.val))
   }
 
 identity_behavior:
@@ -2021,6 +2036,17 @@ index_or_key:
   | KEY
   {
     $$ = string($1)
+  }
+
+index_column_list_or_expression:
+  index_column_list
+  {
+    $$ = IndexColumnsOrExpression{IndexCols: $1}
+  }
+/* For PostgreSQL: https://www.postgresql.org/docs/14/indexes-expressional.html */
+| function_call_generic
+  {
+    $$ = IndexColumnsOrExpression{IndexExpr: $1}
   }
 
 index_column_list:
@@ -3408,6 +3434,10 @@ value_expression:
 | function_call_keyword
 | function_call_nonkeyword
 | function_call_conflict
+| variadic_opt array_constructor
+  {
+    $$ = $2
+  }
 
 /*
   Regular function calls without special token or syntax, guaranteed to not
@@ -4172,6 +4202,41 @@ initially_deferred_opt:
 | INITIALLY IMMEDIATE
   {
     $$ = BoolVal(false)
+  }
+
+variadic_opt:
+  /* empty */
+  {
+    $$ = BoolVal(false)
+  }
+| VARIADIC
+  {
+    $$ =BoolVal(true)
+  }
+
+/* For PostgreSQL. https://www.postgresql.org/docs/14/sql-expressions.html#SQL-SYNTAX-ARRAY-CONSTRUCTORS */
+array_constructor:
+  ARRAY '[' array_element_list ']'
+  {
+    $$ = &ArrayConstructor{Elements: $3}
+  }
+
+/* For PostgreSQL */
+array_element_list:
+  array_element
+  {
+    $$ = ArrayElements{$1}
+  }
+| array_element_list ',' array_element
+  {
+    $$ = append($$, $3)
+  }
+
+/* For PostgreSQL */
+array_element:
+  STRING character_cast_opt
+  {
+    $$ = NewStrVal($1)
   }
 
 /*

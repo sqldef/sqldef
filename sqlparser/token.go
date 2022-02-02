@@ -439,6 +439,7 @@ var keywords = map[string]int{
 	"uuid":                   UUID,
 	"values":                 VALUES,
 	"variables":              VARIABLES,
+	"variadic":               VARIADIC,
 	"varbinary":              VARBINARY,
 	"varchar":                VARCHAR,
 	"varcharacter":           UNUSED,

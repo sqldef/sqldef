@@ -802,10 +802,13 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 		}
 	} else if currentIndex.unique {
 		var uniqueKeyColumn *Column
-		for _, column := range desiredTable.columns {
-			if column.name == currentIndex.columns[0].column && column.keyOption.isUnique() {
-				uniqueKeyColumn = &column
-				break
+		// Columns become empty if the index is a PostgreSQL's expression index.
+		if len(currentIndex.columns) > 0 {
+			for _, column := range desiredTable.columns {
+				if column.name == currentIndex.columns[0].column && column.keyOption.isUnique() {
+					uniqueKeyColumn = &column
+					break
+				}
 			}
 		}
 
@@ -1084,7 +1087,8 @@ func (g *Generator) generateDropIndex(tableName string, indexName string, constr
 		if constraint {
 			return fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(tableName), g.escapeSQLName(indexName))
 		} else {
-			return fmt.Sprintf("DROP INDEX %s", g.escapeSQLName(indexName))
+			schema, _ := postgres.SplitTableName(tableName)
+			return fmt.Sprintf("DROP INDEX %s.%s", g.escapeSQLName(schema), g.escapeSQLName(indexName))
 		}
 	case GeneratorModeMssql:
 		return fmt.Sprintf("DROP INDEX %s ON %s", g.escapeSQLName(indexName), g.escapeTableName(tableName))
