@@ -52,7 +52,11 @@ func TestApply(t *testing.T) {
 			}
 
 			// Main test
-			ddls, err := schema.GenerateIdempotentDDLs(schema.GeneratorModeSQLite3, test.Desired, test.Current)
+			dumpDDLs, err := adapter.DumpDDLs(db)
+			if err != nil {
+				log.Fatal(err)
+			}
+			ddls, err := schema.GenerateIdempotentDDLs(schema.GeneratorModeSQLite3, test.Desired, dumpDDLs)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -67,7 +71,7 @@ func TestApply(t *testing.T) {
 			}
 
 			// Test idempotency
-			dumpDDLs, err := adapter.DumpDDLs(db)
+			dumpDDLs, err = adapter.DumpDDLs(db)
 			if err != nil {
 				log.Fatal(err)
 			}

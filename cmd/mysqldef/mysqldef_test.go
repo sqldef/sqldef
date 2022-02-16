@@ -171,73 +171,6 @@ func TestMysqldefCreateTableKeepAutoIncrement(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
-func TestMysqldefCreateTableChangeAutoIncrement(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint(20) NOT NULL PRIMARY KEY,
-		  name varchar(20)
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-		  name varchar(20)
-		);
-		`,
-	)
-
-	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;\n",
-	)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint(20) NOT NULL PRIMARY KEY,
-		  name varchar(20)
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;\n",
-	)
-	assertApplyOutput(t, createTable, nothingModified)
-}
-
-func TestMysqldefCreateTableRemoveAutoIncrementPrimaryKey(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE friends (
-		  id bigint NOT NULL AUTO_INCREMENT PRIMARY KEY,
-		  created_at datetime NOT NULL
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE friends (
-		  created_at datetime NOT NULL
-		);
-		`,
-	)
-
-	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;\n"+
-		"ALTER TABLE `friends` DROP PRIMARY KEY;\n"+
-		"ALTER TABLE `friends` DROP COLUMN `id`;\n",
-	)
-	assertApplyOutput(t, createTable, nothingModified)
-}
-
 func TestMysqldefCreateTableAddIndexWithKeyLength(t *testing.T) {
 	resetTestDatabase()
 
@@ -259,22 +192,6 @@ func TestMysqldefCreateTableAddIndexWithKeyLength(t *testing.T) {
 		);`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD index `index_name` (`name`(255));\n")
-	assertApplyOutput(t, createTable, nothingModified)
-}
-
-func TestMysqldefCreateTableGeneratedAlwaysAs(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE test_table (
-		  id int(11) NOT NULL AUTO_INCREMENT,
-		  test_value varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
-		  test_expr varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL,
-		  PRIMARY KEY (id)
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
 }
 

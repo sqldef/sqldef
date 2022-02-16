@@ -74,3 +74,51 @@ CreateTableAddPrimaryKey:
     );
   output: |
     ALTER TABLE `users` ADD primary key (`id`);
+CreateTableAddAutoIncrement:
+  current: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL PRIMARY KEY,
+      name varchar(20)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name varchar(20)
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
+CreateTableRemoveAutoIncrement:
+  current: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name varchar(20)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL PRIMARY KEY,
+      name varchar(20)
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
+CreateTableRemoveAutoIncrementPrimaryKey:
+  current: |
+    CREATE TABLE friends (
+      id bigint NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      created_at datetime NOT NULL
+    );
+  desired: |
+    CREATE TABLE friends (
+      created_at datetime NOT NULL
+    );
+  output: |
+    ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
+    ALTER TABLE `friends` DROP PRIMARY KEY;
+    ALTER TABLE `friends` DROP COLUMN `id`;
+CreateTableGeneratedAlwaysAs:
+  desired: |
+    CREATE TABLE test_table (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      test_value varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
+      test_expr varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL,
+      PRIMARY KEY (id)
+    );
