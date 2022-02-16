@@ -2302,6 +2302,8 @@ const (
 	GreaterEqualStr      = ">="
 	NotEqualStr          = "!="
 	NullSafeEqualStr     = "<=>"
+	IsStr                = "is"
+	IsNotStr             = "is not"
 	InStr                = "in"
 	NotInStr             = "not in"
 	LikeStr              = "like"
@@ -2310,6 +2312,7 @@ const (
 	NotRegexpStr         = "not regexp"
 	JSONExtractOp        = "->"
 	JSONUnquoteExtractOp = "->>"
+	OrStr                = "or"
 )
 
 // Format formats the node.
@@ -3729,6 +3732,9 @@ func (node *If) Format(buf *TrackedBuffer) {
 	case "begin":
 		beginKeyword = "\nbegin"
 		endKeyword = "\nend"
+	case "then":
+		beginKeyword = " then"
+		endKeyword = ";\nend if"
 	}
 	buf.Myprintf(beginKeyword)
 	for _, stmt := range node.IfStatements {
