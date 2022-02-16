@@ -40,7 +40,7 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 	if err != nil {
 		log.Fatalf("Failed to read '%s': %s", options.DesiredFile, err)
 	}
-	desiredDDLs := string(sql)
+	desiredDDLs := sql
 
 	ddls, err := schema.GenerateIdempotentDDLs(generatorMode, desiredDDLs, currentDDLs)
 	if err != nil {

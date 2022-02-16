@@ -6,6 +6,10 @@
 package main
 
 import (
+	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/adapter/sqlite3"
+	"github.com/k0kubun/sqldef/cmd/testutils"
+	"github.com/k0kubun/sqldef/schema"
 	"log"
 	"os"
 	"os/exec"
@@ -18,6 +22,61 @@ const (
 	applyPrefix     = "-- Apply --\n"
 	nothingModified = "-- Nothing is modified --\n"
 )
+
+func TestApply(t *testing.T) {
+	defer testutils.MustExecute("rm", "-f", "sqlite3def_test") // after-test cleanup
+
+	tests, err := testutils.ReadTests("tests/*.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			// Initialize the database with test.Current
+			testutils.MustExecute("rm", "-f", "sqlite3def_test")
+			db, err := connectDatabase() // re-connection seems needed after rm
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			if test.Current != "" {
+				_, err := db.DB().Exec(test.Current)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Main test
+			ddls, err := schema.GenerateIdempotentDDLs(schema.GeneratorModeSQLite3, test.Desired, test.Current)
+			if err != nil {
+				t.Fatal(err)
+			}
+			expected := test.Output
+			actual := testutils.JoinDDLs(ddls)
+			if expected != actual {
+				t.Errorf("\nexpected:\n```\n%s```\n\nactual:\n```\n%s```", expected, actual)
+			}
+			err = testutils.RunDDLs(db, ddls)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Test idempotency
+			dumpDDLs, err := adapter.DumpDDLs(db)
+			if err != nil {
+				log.Fatal(err)
+			}
+			ddls, err = schema.GenerateIdempotentDDLs(schema.GeneratorModeSQLite3, test.Desired, dumpDDLs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(ddls) > 0 {
+				t.Errorf("expected nothing is modifed, but got:\n```\n%s```", testutils.JoinDDLs(ddls))
+			}
+		})
+	}
+}
 
 func TestSQLite3defCreateTable(t *testing.T) {
 	resetTestDatabase()
@@ -287,4 +346,9 @@ func stripHeredoc(heredoc string) string {
 	heredoc = strings.TrimPrefix(heredoc, "\n")
 	re := regexp.MustCompilePOSIX("^\t*")
 	return re.ReplaceAllLiteralString(heredoc, "")
+}
+func connectDatabase() (adapter.Database, error) {
+	return sqlite3.NewDatabase(adapter.Config{
+		DbName: "sqlite3def_test",
+	})
 }

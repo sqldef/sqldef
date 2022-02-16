@@ -1,0 +1,12 @@
+CreateTable:
+  desired: |
+    CREATE TABLE bigdata (
+      data bigint
+    );
+DropTable:
+  current: |
+    CREATE TABLE bigdata (
+      data bigint
+    );
+  output: |
+    DROP TABLE [dbo].[bigdata];

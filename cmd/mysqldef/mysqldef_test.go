@@ -6,6 +6,10 @@
 package main
 
 import (
+	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/adapter/mysql"
+	"github.com/k0kubun/sqldef/cmd/testutils"
+	"github.com/k0kubun/sqldef/schema"
 	"log"
 	"os"
 	"os/exec"
@@ -18,6 +22,60 @@ const (
 	nothingModified = "-- Nothing is modified --\n"
 	applyPrefix     = "-- Apply --\n"
 )
+
+func TestApply(t *testing.T) {
+	db, err := connectDatabase()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	tests, err := testutils.ReadTests("tests/*.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			// Initialize the database with test.Current
+			testutils.MustExecute("mysql", "-uroot", "-h", "127.0.0.1", "-e", "DROP DATABASE IF EXISTS mysqldef_test; CREATE DATABASE mysqldef_test;")
+			if test.Current != "" {
+				_, err := db.DB().Exec(test.Current)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Main test
+			ddls, err := schema.GenerateIdempotentDDLs(schema.GeneratorModeMysql, test.Desired, test.Current)
+			if err != nil {
+				t.Fatal(err)
+			}
+			expected := test.Output
+			actual := testutils.JoinDDLs(ddls)
+			if expected != actual {
+				t.Errorf("\nexpected:\n```\n%s```\n\nactual:\n```\n%s```", expected, actual)
+			}
+			err = testutils.RunDDLs(db, ddls)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Test idempotency
+			dumpDDLs, err := adapter.DumpDDLs(db)
+			if err != nil {
+				log.Fatal(err)
+			}
+			ddls, err = schema.GenerateIdempotentDDLs(schema.GeneratorModeMysql, test.Desired, dumpDDLs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(ddls) > 0 {
+				t.Errorf("expected nothing is modifed, but got:\n```\n%s```", testutils.JoinDDLs(ddls))
+			}
+		})
+	}
+}
 
 func TestMysqldefCreateTable(t *testing.T) {
 	resetTestDatabase()
@@ -1589,4 +1647,13 @@ func stripHeredoc(heredoc string) string {
 	heredoc = strings.TrimPrefix(heredoc, "\n")
 	re := regexp.MustCompilePOSIX("^\t*")
 	return re.ReplaceAllLiteralString(heredoc, "")
+}
+
+func connectDatabase() (adapter.Database, error) {
+	return mysql.NewDatabase(adapter.Config{
+		User:   "root",
+		Host:   "127.0.0.1",
+		Port:   3306,
+		DbName: "mysqldef_test",
+	})
 }

@@ -7,6 +7,10 @@ package main
 
 import (
 	"fmt"
+	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/adapter/mssql"
+	"github.com/k0kubun/sqldef/cmd/testutils"
+	"github.com/k0kubun/sqldef/schema"
 	"log"
 	"os"
 	"os/exec"
@@ -19,6 +23,59 @@ const (
 	applyPrefix     = "-- Apply --\n"
 	nothingModified = "-- Nothing is modified --\n"
 )
+
+func TestApply(t *testing.T) {
+	tests, err := testutils.ReadTests("tests/*.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			// Initialize the database with test.Current
+			testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "DROP DATABASE IF EXISTS mssqldef_test; CREATE DATABASE mssqldef_test;")
+			db, err := connectDatabase() // DROP DATABASE hangs when there's a connection
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			if test.Current != "" {
+				_, err := db.DB().Exec(test.Current)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Main test
+			ddls, err := schema.GenerateIdempotentDDLs(schema.GeneratorModeMssql, test.Desired, test.Current)
+			if err != nil {
+				t.Fatal(err)
+			}
+			expected := test.Output
+			actual := testutils.JoinDDLs(ddls)
+			if expected != actual {
+				t.Errorf("\nexpected:\n```\n%s```\n\nactual:\n```\n%s```", expected, actual)
+			}
+			err = testutils.RunDDLs(db, ddls)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Test idempotency
+			dumpDDLs, err := adapter.DumpDDLs(db)
+			if err != nil {
+				log.Fatal(err)
+			}
+			ddls, err = schema.GenerateIdempotentDDLs(schema.GeneratorModeMssql, test.Desired, dumpDDLs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(ddls) > 0 {
+				t.Errorf("expected nothing is modifed, but got:\n```\n%s```", testutils.JoinDDLs(ddls))
+			}
+		})
+	}
+}
 
 func TestMssqldefColumnLiteral(t *testing.T) {
 	resetTestDatabase()
@@ -1089,4 +1146,14 @@ func stripHeredoc(heredoc string) string {
 	heredoc = strings.TrimPrefix(heredoc, "\n")
 	re := regexp.MustCompilePOSIX("^\t*")
 	return re.ReplaceAllLiteralString(heredoc, "")
+}
+
+func connectDatabase() (adapter.Database, error) {
+	return mssql.NewDatabase(adapter.Config{
+		User:     "sa",
+		Password: "Passw0rd",
+		Host:     "127.0.0.1",
+		Port:     1433,
+		DbName:   "mssqldef_test",
+	})
 }
