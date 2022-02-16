@@ -83,6 +83,8 @@ func TestApply(t *testing.T) {
 	}
 }
 
+// TODO: Most of the following tests should be migrated to TestApply
+
 func TestPsqldefCreateTable(t *testing.T) {
 	resetTestDatabase()
 

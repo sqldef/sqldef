@@ -82,6 +82,8 @@ func TestApply(t *testing.T) {
 	}
 }
 
+// TODO: Most of the following tests should be migrated to TestApply
+
 func TestSQLite3defCreateTable(t *testing.T) {
 	resetTestDatabase()
 

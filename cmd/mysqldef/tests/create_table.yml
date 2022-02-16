@@ -26,3 +26,51 @@ DropTable:
     );
   output: |
     DROP TABLE `bigdata`;
+CreateTableWithImplicitNotNull:
+  desired: |
+    CREATE TABLE users (
+      id bigint PRIMARY KEY,
+      name varchar(40) DEFAULT NULL,
+      created_at datetime NOT NULL
+    );
+CreateTableDropPrimaryKey:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name varchar(20)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(20)
+    );
+  output: |
+    ALTER TABLE `users` DROP PRIMARY KEY;
+CreateTableAddPrimaryKeyInColumn:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(20)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(20) PRIMARY KEY
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(20) NOT NULL;
+    ALTER TABLE `users` ADD primary key (`name`);
+CreateTableAddPrimaryKey:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(20)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(20),
+      PRIMARY KEY (id)
+    );
+  output: |
+    ALTER TABLE `users` ADD primary key (`id`);

@@ -81,6 +81,8 @@ func TestApply(t *testing.T) {
 	}
 }
 
+// TODO: Most of the following tests should be migrated to TestApply
+
 func TestMssqldefColumnLiteral(t *testing.T) {
 	resetTestDatabase()
 
