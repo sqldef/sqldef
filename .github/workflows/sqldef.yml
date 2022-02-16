@@ -15,20 +15,21 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        database:
-          - mysql
-          - sqlite3
-          - mssql
+        target:
+          - mysqldef
+          - sqlite3def
+          - mssqldef
+          - sqlparser
         include:
-          - database: psql
+          - target: psqldef
             version: 10
-          - database: psql
+          - target: psqldef
             version: 11
-          - database: psql
+          - target: psqldef
             version: 12
-          - database: psql
+          - target: psqldef
             version: 13
-          - database: psql
+          - target: psqldef
             version: 14
       fail-fast: false
     steps:
@@ -41,7 +42,7 @@ jobs:
         env:
           POSTGRES_VERSION: ${{ matrix.version }}
       - run: make deps
-      - run: make test-${{ matrix.database }}def
+      - run: make test-${{ matrix.target }}
 
   package:
     runs-on: ubuntu-latest
