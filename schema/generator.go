@@ -51,12 +51,12 @@ type Generator struct {
 // Parse argument DDLs and call `generateDDLs()`
 func GenerateIdempotentDDLs(mode GeneratorMode, desiredSQL string, currentSQL string) ([]string, error) {
 	// TODO: invalidate duplicated tables, columns
-	desiredDDLs, err := parseDDLs(mode, desiredSQL)
+	desiredDDLs, err := ParseDDLs(mode, desiredSQL)
 	if err != nil {
 		return nil, err
 	}
 
-	currentDDLs, err := parseDDLs(mode, currentSQL)
+	currentDDLs, err := ParseDDLs(mode, currentSQL)
 	if err != nil {
 		return nil, err
 	}

@@ -42,7 +42,11 @@ func TestApply(t *testing.T) {
 			}
 			defer db.Close()
 			if test.Current != "" {
-				_, err := db.DB().Exec(test.Current)
+				ddls, err := testutils.SplitDDLs(schema.GeneratorModePostgres, test.Current)
+				if err != nil {
+					t.Fatal(err)
+				}
+				err = testutils.RunDDLs(db, ddls)
 				if err != nil {
 					t.Fatal(err)
 				}

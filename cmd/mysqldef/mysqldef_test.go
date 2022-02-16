@@ -40,7 +40,11 @@ func TestApply(t *testing.T) {
 			// Initialize the database with test.Current
 			testutils.MustExecute("mysql", "-uroot", "-h", "127.0.0.1", "-e", "DROP DATABASE IF EXISTS mysqldef_test; CREATE DATABASE mysqldef_test;")
 			if test.Current != "" {
-				_, err := db.DB().Exec(test.Current)
+				ddls, err := testutils.SplitDDLs(schema.GeneratorModeMysql, test.Current)
+				if err != nil {
+					t.Fatal(err)
+				}
+				err = testutils.RunDDLs(db, ddls)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -75,31 +79,6 @@ func TestApply(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestMysqldefCreateTable(t *testing.T) {
-	resetTestDatabase()
-
-	createTable1 := stripHeredoc(`
-		CREATE TABLE users (
-		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-		  name varchar(40) DEFAULT NULL,
-		  created_at datetime NOT NULL
-		);
-		`,
-	)
-	createTable2 := stripHeredoc(`
-		CREATE TABLE bigdata (
-		  data bigint
-		);
-		`,
-	)
-
-	assertApplyOutput(t, createTable1+createTable2, applyPrefix+createTable1+createTable2)
-	assertApplyOutput(t, createTable1+createTable2, nothingModified)
-
-	assertApplyOutput(t, createTable1, applyPrefix+"DROP TABLE `bigdata`;\n")
-	assertApplyOutput(t, createTable1, nothingModified)
 }
 
 func TestMysqldefCreateTableWithImplicitNotNull(t *testing.T) {

@@ -1,14 +1,28 @@
 CreateTable:
   desired: |
     CREATE TABLE users (
-      id bigint UNSIGNED NOT NULL,
-      name varchar(40) DEFAULT null,
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name varchar(40) DEFAULT NULL,
       created_at datetime NOT NULL
+    );
+    CREATE TABLE bigdata (
+      data bigint
     );
 DropTable:
   current: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name varchar(40) DEFAULT NULL,
+      created_at datetime NOT NULL
+    );
     CREATE TABLE bigdata (
-      data bigint(20)
+      data bigint
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name varchar(40) DEFAULT NULL,
+      created_at datetime NOT NULL
     );
   output: |
     DROP TABLE `bigdata`;

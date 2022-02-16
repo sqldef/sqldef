@@ -4,6 +4,7 @@ package testutils
 import (
 	"fmt"
 	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/schema"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
@@ -50,6 +51,19 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 	}
 
 	return ret, nil
+}
+
+func SplitDDLs(mode schema.GeneratorMode, str string) ([]string, error) {
+	statements, err := schema.ParseDDLs(mode, str)
+	if err != nil {
+		return nil, err
+	}
+
+	var ddls []string
+	for _, statement := range statements {
+		ddls = append(ddls, statement.Statement())
+	}
+	return ddls, nil
 }
 
 func RunDDLs(db adapter.Database, ddls []string) error {
