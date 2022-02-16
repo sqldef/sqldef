@@ -1,3 +1,7 @@
+## v0.11.36
+
+- Support parsing IF THEN ... END IF for mysqldef [#203](https://github.com/k0kubun/sqldef/pull/203)
+
 ## v0.11.35
 
 - Support creating indexes on expressions and using function as default [#199](https://github.com/k0kubun/sqldef/pull/199)
