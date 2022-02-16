@@ -688,7 +688,7 @@ statement_block:
 
 if_statement:
 // For MySQL
-  IF condition THEN trigger_statements ';' END IF
+  IF expression THEN trigger_statements ';' END IF
   {
     $$ = &If{
       Condition: $2,
@@ -3173,14 +3173,6 @@ condition:
   {
     $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $3}
   }
-| value_expression IS NULL
-  {
-    $$ = &ComparisonExpr{Left: $1, Operator: IsStr, Right: &NullVal{}}
-  }
-| value_expression IS NOT NULL
-  {
-    $$ = &ComparisonExpr{Left: $1, Operator: IsNotStr, Right: &NullVal{}}
-  }
 | value_expression IN col_tuple
   {
     $$ = &ComparisonExpr{Left: $1, Operator: InStr, Right: $3}
@@ -3216,10 +3208,6 @@ condition:
 | EXISTS subquery
   {
     $$ = &ExistsExpr{Subquery: $2}
-  }
-| condition OR condition
-  {
-    $$ = &ComparisonExpr{Left: $1, Operator: OrStr, Right: $3}
   }
 
 is_suffix:

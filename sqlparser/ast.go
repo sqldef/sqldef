@@ -2302,8 +2302,6 @@ const (
 	GreaterEqualStr      = ">="
 	NotEqualStr          = "!="
 	NullSafeEqualStr     = "<=>"
-	IsStr                = "is"
-	IsNotStr             = "is not"
 	InStr                = "in"
 	NotInStr             = "not in"
 	LikeStr              = "like"
