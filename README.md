@@ -489,7 +489,7 @@ $ make test
 $ go test ./cmd/*def
 
 # Run a single test
-$ go test ./cmd/mysqldef -run=TestGenerate/CreateTable
+$ go test ./cmd/mysqldef -run=TestApply/CreateTable
 ```
 
 ## Contributing
