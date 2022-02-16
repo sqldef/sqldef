@@ -16,21 +16,24 @@ jobs:
     strategy:
       matrix:
         target:
-          - mysqldef
           - sqlite3def
           - mssqldef
           - sqlparser
         include:
+          - target: mysqldef
+            mysql_version: '5.7'
+          - target: mysqldef
+            mysql_version: '8.0'
           - target: psqldef
-            version: 10
+            postgres_version: 10
           - target: psqldef
-            version: 11
+            postgres_version: 11
           - target: psqldef
-            version: 12
+            postgres_version: 12
           - target: psqldef
-            version: 13
+            postgres_version: 13
           - target: psqldef
-            version: 14
+            postgres_version: 14
       fail-fast: false
     steps:
       - uses: actions/setup-go@v2
@@ -38,9 +41,10 @@ jobs:
           go-version: 1.16
       - uses: actions/checkout@v2
 
-      - run: POSTGRES_VERSION="${POSTGRES_VERSION:-12}" docker-compose up -d
+      - run: docker-compose up -d
         env:
-          POSTGRES_VERSION: ${{ matrix.version }}
+          MYSQL_VERSION: ${{ matrix.mysql_version }}
+          POSTGRES_VERSION: ${{ matrix.postgres_version }}
       - run: make deps
       - run: make test-${{ matrix.target }}
 
