@@ -7,6 +7,10 @@ package main
 
 import (
 	"fmt"
+	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/adapter/postgres"
+	"github.com/k0kubun/sqldef/cmd/testutils"
+	"github.com/k0kubun/sqldef/schema"
 	"log"
 	"os"
 	"os/exec"
@@ -20,6 +24,60 @@ const (
 	nothingModified = "-- Nothing is modified --\n"
 	database        = "psqldef_test"
 )
+
+func TestApply(t *testing.T) {
+	tests, err := testutils.ReadTests("tests/*.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			// Initialize the database with test.Current
+			testutils.MustExecute("psql", "-Upostgres", "-h", "127.0.0.1", "-c", "DROP DATABASE IF EXISTS psqldef_test;")
+			testutils.MustExecute("psql", "-Upostgres", "-h", "127.0.0.1", "-c", "CREATE DATABASE psqldef_test;")
+			db, err := connectDatabase() // PostgreSQL doesn't allow DROP DATABASE when there's a connection
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			if test.Current != "" {
+				_, err := db.DB().Exec(test.Current)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Main test
+			ddls, err := schema.GenerateIdempotentDDLs(schema.GeneratorModePostgres, test.Desired, test.Current)
+			if err != nil {
+				t.Fatal(err)
+			}
+			expected := test.Output
+			actual := testutils.JoinDDLs(ddls)
+			if expected != actual {
+				t.Errorf("\nexpected:\n```\n%s```\n\nactual:\n```\n%s```", expected, actual)
+			}
+			err = testutils.RunDDLs(db, ddls)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Test idempotency
+			dumpDDLs, err := adapter.DumpDDLs(db)
+			if err != nil {
+				log.Fatal(err)
+			}
+			ddls, err = schema.GenerateIdempotentDDLs(schema.GeneratorModePostgres, test.Desired, dumpDDLs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(ddls) > 0 {
+				t.Errorf("expected nothing is modifed, but got:\n```\n%s```", testutils.JoinDDLs(ddls))
+			}
+		})
+	}
+}
 
 func TestPsqldefCreateTable(t *testing.T) {
 	resetTestDatabase()
@@ -1508,4 +1566,18 @@ var publicAndNonPublicSchemaTestCases = []struct {
 }{
 	{Name: "in public schema", Schema: "public"},
 	{Name: "in non-public schema", Schema: "test"},
+}
+
+func connectDatabase() (adapter.Database, error) {
+	err := os.Setenv("PGSSLMODE", "disable")
+	if err != nil {
+		return nil, err
+	}
+
+	return postgres.NewDatabase(adapter.Config{
+		User:   "postgres",
+		Host:   "127.0.0.1",
+		Port:   5432,
+		DbName: "psqldef_test",
+	})
 }

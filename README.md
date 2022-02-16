@@ -479,8 +479,17 @@ $ sudo apt-get update && sudo apt-get install mssql-tools # then add: export PAT
 $ brew install libpq && brew link --force libpq
 $ brew install microsoft/mssql-release/mssql-tools
 
+# Start database
 $ docker-compose up
+
+# Run all tests
 $ make test
+
+# Run *def tests
+$ go test ./cmd/*def
+
+# Run a single test
+$ go test ./cmd/mysqldef -run=TestGenerate/CreateTable
 ```
 
 ## Contributing

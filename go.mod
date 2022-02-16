@@ -10,4 +10,5 @@ require (
 	github.com/lib/pq v1.10.4
 	github.com/mattn/go-sqlite3 v1.14.11
 	golang.org/x/term v0.0.0-20210406210042-72f3dc4e9b72
+	gopkg.in/yaml.v2 v2.4.0
 )

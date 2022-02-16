@@ -1,0 +1,12 @@
+CreateTable:
+  desired: |
+    CREATE TABLE public.bigdata (
+      data bigint
+    );
+DropTable:
+  current: |
+    CREATE TABLE public.bigdata (
+      data bigint
+    );
+  output: |
+    DROP TABLE "public"."bigdata";

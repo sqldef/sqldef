@@ -1,0 +1,14 @@
+CreateTable:
+  desired: |
+    CREATE TABLE users (
+      id bigint UNSIGNED NOT NULL,
+      name varchar(40) DEFAULT null,
+      created_at datetime NOT NULL
+    );
+DropTable:
+  current: |
+    CREATE TABLE bigdata (
+      data bigint(20)
+    );
+  output: |
+    DROP TABLE `bigdata`;
