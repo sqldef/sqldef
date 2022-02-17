@@ -130,7 +130,22 @@ CreateTableRemoveAutoIncrementPrimaryKey57:
     ALTER TABLE `friends` DROP PRIMARY KEY;
     ALTER TABLE `friends` DROP COLUMN `id`;
   max_version: '5.7'
-CreateTableGeneratedAlwaysAs57:
+CreateTableRemoveAutoIncrementPrimaryKey80:
+  current: |
+    CREATE TABLE friends (
+      id bigint NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      created_at datetime NOT NULL
+    );
+  desired: |
+    CREATE TABLE friends (
+      created_at datetime NOT NULL
+    );
+  output: |
+    ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint NOT NULL;
+    ALTER TABLE `friends` DROP PRIMARY KEY;
+    ALTER TABLE `friends` DROP COLUMN `id`;
+  min_version: '8.0'
+CreateTableGeneratedAlwaysAs:
   desired: |
     CREATE TABLE test_table (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -138,4 +153,4 @@ CreateTableGeneratedAlwaysAs57:
       test_expr varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL,
       PRIMARY KEY (id)
     );
-  max_version: '5.7'
+  max_version: '5.7' # TODO: Make it work with 8.0
