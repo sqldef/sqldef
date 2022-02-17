@@ -1,3 +1,8 @@
+## v0.11.37
+
+- Parse string literal with character set for mysqldef [#204](https://github.com/k0kubun/sqldef/pull/204)
+- Avoid unnecessary CHECK modification for mysqldef [#204](https://github.com/k0kubun/sqldef/pull/204)
+
 ## v0.11.36
 
 - Support parsing IF THEN ... END IF for mysqldef [#203](https://github.com/k0kubun/sqldef/pull/203)
