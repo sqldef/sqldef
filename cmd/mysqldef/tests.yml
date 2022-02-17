@@ -175,3 +175,14 @@ ColumnCheck:
       `deleted_at` datetime DEFAULT null
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
   min_version: '8.0'
+ForeignKey:
+  desired: |
+    CREATE TABLE `groups` (
+      `id` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY
+    );
+    CREATE TABLE `users` (
+      `id` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      `group_id` BIGINT NOT NULL,
+      KEY `fk_users_groups` (`group_id`),
+      CONSTRAINT `fk_users_groups` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+    );

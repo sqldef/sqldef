@@ -539,14 +539,17 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		if currentForeignKey := findForeignKeyByName(currentTable.foreignKeys, desiredForeignKey.constraintName); currentForeignKey != nil {
 			// Drop and add foreign key as needed.
 			if !g.areSameForeignKeys(*currentForeignKey, desiredForeignKey) {
+				var dropDDL string
 				switch g.mode {
 				case GeneratorModeMysql:
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentForeignKey.constraintName)))
+					dropDDL = fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentForeignKey.constraintName))
 				case GeneratorModePostgres, GeneratorModeMssql:
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentForeignKey.constraintName)))
+					dropDDL = fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentForeignKey.constraintName))
 				default:
 				}
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), g.generateForeignKeyDefinition(desiredForeignKey)))
+				if dropDDL != "" {
+					ddls = append(ddls, dropDDL, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), g.generateForeignKeyDefinition(desiredForeignKey)))
+				}
 			}
 		} else {
 			// Foreign key not found, add foreign key.
@@ -1550,10 +1553,10 @@ func areSameIndexes(indexA Index, indexB Index) bool {
 }
 
 func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB ForeignKey) bool {
-	if g.normalizeOnUpdate(foreignKeyA.onUpdate) != g.normalizeOnUpdate(foreignKeyB.onUpdate) {
+	if g.normalizeReferenceOption(foreignKeyA.onUpdate) != g.normalizeReferenceOption(foreignKeyB.onUpdate) {
 		return false
 	}
-	if g.normalizeOnDelete(foreignKeyA.onDelete) != g.normalizeOnDelete(foreignKeyB.onDelete) {
+	if g.normalizeReferenceOption(foreignKeyA.onDelete) != g.normalizeReferenceOption(foreignKeyB.onDelete) {
 		return false
 	}
 	if foreignKeyA.notForReplication != foreignKeyB.notForReplication {
@@ -1593,19 +1596,13 @@ func areSamePolicies(policyA, policyB Policy) bool {
 	return true
 }
 
-func (g *Generator) normalizeOnUpdate(onUpdate string) string {
-	if (g.mode == GeneratorModePostgres || g.mode == GeneratorModeMssql) && onUpdate == "" {
+func (g *Generator) normalizeReferenceOption(action string) string {
+	if g.mode == GeneratorModeMysql && action == "" {
+		return "RESTRICT"
+	} else if (g.mode == GeneratorModePostgres || g.mode == GeneratorModeMssql) && action == "" {
 		return "NO ACTION"
 	} else {
-		return onUpdate
-	}
-}
-
-func (g *Generator) normalizeOnDelete(onDelete string) string {
-	if (g.mode == GeneratorModePostgres || g.mode == GeneratorModeMssql) && onDelete == "" {
-		return "NO ACTION"
-	} else {
-		return onDelete
+		return action
 	}
 }
 
