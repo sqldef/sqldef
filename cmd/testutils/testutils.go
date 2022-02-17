@@ -15,9 +15,9 @@ import (
 )
 
 type TestCase struct {
-	Current string // default: empty schema
-	Desired string // default: empty schema
-	Output  string // default: use Desired as Output
+	Current string  // default: empty schema
+	Desired string  // default: empty schema
+	Output  *string // default: use Desired as Output
 }
 
 func ReadTests(pattern string) (map[string]TestCase, error) {
@@ -41,8 +41,8 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 		}
 
 		for name, test := range tests {
-			if test.Output == "" {
-				test.Output = test.Desired
+			if test.Output == nil {
+				test.Output = &test.Desired
 			}
 			if _, ok := ret[name]; ok {
 				log.Fatal(fmt.Sprintf("There are multiple test cases named '%s'", name))
@@ -89,7 +89,7 @@ func RunTest(t *testing.T, db adapter.Database, test TestCase, mode schema.Gener
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := test.Output
+	expected := *test.Output
 	actual := JoinDDLs(ddls)
 	if expected != actual {
 		t.Errorf("\nexpected:\n```\n%s```\n\nactual:\n```\n%s```", expected, actual)

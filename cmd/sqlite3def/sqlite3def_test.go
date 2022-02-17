@@ -46,141 +46,19 @@ func TestApply(t *testing.T) {
 	}
 }
 
-// TODO: Most of the following tests should be migrated to TestApply
-
-func TestSQLite3defCreateTable(t *testing.T) {
+func TestSQLite3defApply(t *testing.T) {
 	resetTestDatabase()
 
-	createTable1 := stripHeredoc(`
-		CREATE TABLE users (
-		  id integer NOT NULL,
-		  name text,
-		  age integer
-		);
-		`,
-	)
-	createTable2 := stripHeredoc(`
+	createTable := stripHeredoc(`
 		CREATE TABLE bigdata (
 		  data integer
 		);
 		`,
 	)
 
-	assertApplyOutput(t, createTable1+createTable2, applyPrefix+createTable1+createTable2)
-	assertApplyOutput(t, createTable1+createTable2, nothingModified)
-
-	assertApplyOutput(t, createTable1, applyPrefix+"DROP TABLE `bigdata`;\n")
-	assertApplyOutput(t, createTable1, nothingModified)
-}
-
-func TestSQLite3defCreateTableQuotes(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE "test_table" (
-		  id integer primary key
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(
-		"CREATE TABLE `test_table` (\n" +
-			"  id integer primary key\n" +
-			");\n",
-	)
-	assertApplyOutput(t, createTable, nothingModified)
-}
-
-func TestSQLite3defCreateTableWithAutoincrement(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id integer PRIMARY KEY AUTOINCREMENT,
-		  name text,
-		  age integer
-		);
-		`,
-	)
-
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
 }
-
-func TestSQLite3defCreateView(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id integer NOT NULL,
-		  name text,
-		  age integer
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createView := stripHeredoc(`
-		CREATE VIEW ` + "`view_users`" + ` AS select id from users where age = 1;
-		`,
-	)
-	assertApplyOutput(t, createTable+createView, applyPrefix+createView)
-	assertApplyOutput(t, createTable+createView, nothingModified)
-
-	createView = stripHeredoc(`
-		CREATE VIEW ` + "`view_users`" + ` AS select id from users where age = 2;
-		`,
-	)
-	dropView := stripHeredoc(`
-		DROP VIEW ` + "`view_users`" + `;
-		`,
-	)
-	assertApplyOutput(t, createTable+createView, applyPrefix+dropView+createView)
-	assertApplyOutput(t, createTable+createView, nothingModified)
-
-	assertApplyOutput(t, "", applyPrefix+"DROP TABLE `users`;\n"+dropView)
-	//assertApplyOutput(t, "", nothingModified)
-}
-
-func TestSQLite3defColumnLiteral(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id integer NOT NULL,
-		  name text,
-		  age integer
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-}
-
-func TestSQLite3defDataTypes(t *testing.T) {
-	resetTestDatabase()
-
-	// Remaining SQL spec: bit varying, interval, numeric, decimal, real,
-	//   smallint, smallserial, xml
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  c_timestamp timestamp,
-		  c_integer integer,
-		  c_text text
-		);
-		`,
-	)
-
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified) // Label for column type may change. Type will be examined.
-}
-
-//
-// ----------------------- following tests are for CLI -----------------------
-//
 
 func TestSQLite3defDryRun(t *testing.T) {
 	resetTestDatabase()
@@ -317,6 +195,7 @@ func stripHeredoc(heredoc string) string {
 	re := regexp.MustCompilePOSIX("^\t*")
 	return re.ReplaceAllLiteralString(heredoc, "")
 }
+
 func connectDatabase() (adapter.Database, error) {
 	return sqlite3.NewDatabase(adapter.Config{
 		DbName: "sqlite3def_test",
