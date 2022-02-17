@@ -129,28 +129,23 @@ func RunTest(t *testing.T, db adapter.Database, test TestCase, mode schema.Gener
 func compareVersion(t *testing.T, leftVersion string, rightVersion string) int {
 	leftVersions := strings.Split(leftVersion, ".")
 	rightVersions := strings.Split(rightVersion, ".")
-	length := len(leftVersion)
-	if length < len(rightVersion) {
-		length = len(rightVersion)
+
+	// Compare only specified segments
+	length := len(leftVersions)
+	if length > len(rightVersions) {
+		length = len(rightVersions)
 	}
+
 	for i := 0; i < length; i++ {
-		left := 0
-		if i < len(leftVersions) {
-			var err error
-			left, err = strconv.Atoi(leftVersions[i])
-			if err != nil {
-				t.Fatal(err)
-			}
+		left, err := strconv.Atoi(leftVersions[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+		right, err := strconv.Atoi(rightVersions[i])
+		if err != nil {
+			t.Fatal(err)
 		}
 
-		right := 0
-		if i < len(rightVersions) {
-			var err error
-			right, err = strconv.Atoi(rightVersions[i])
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
 		if left < right {
 			return -1
 		} else if left > right {
