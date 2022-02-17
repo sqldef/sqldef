@@ -10,14 +10,16 @@ import (
 	"log"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
 
 type TestCase struct {
-	Current string  // default: empty schema
-	Desired string  // default: empty schema
-	Output  *string // default: use Desired as Output
+	Current    string  // default: empty schema
+	Desired    string  // default: empty schema
+	Output     *string // default: use Desired as Output
+	MaxVersion string  `yaml:"max_version"`
 }
 
 func ReadTests(pattern string) (map[string]TestCase, error) {
@@ -54,7 +56,11 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 	return ret, nil
 }
 
-func RunTest(t *testing.T, db adapter.Database, test TestCase, mode schema.GeneratorMode) {
+func RunTest(t *testing.T, db adapter.Database, test TestCase, mode schema.GeneratorMode, version string) {
+	if test.MaxVersion != "" && compareVersion(t, version, test.MaxVersion) > 0 {
+		t.Skipf("Version '%s' is larger than max_version '%s'", version, test.MaxVersion)
+	}
+
 	// Prepare current
 	if test.Current != "" {
 		ddls, err := splitDDLs(mode, test.Current)
@@ -111,6 +117,43 @@ func RunTest(t *testing.T, db adapter.Database, test TestCase, mode schema.Gener
 	if len(ddls) > 0 {
 		t.Errorf("expected nothing is modifed, but got:\n```\n%s```", joinDDLs(ddls))
 	}
+}
+
+// left < right: compareVersion() < 0
+// left = right: compareVersion() = 0
+// left > right: compareVersion() > 0
+func compareVersion(t *testing.T, leftVersion string, rightVersion string) int {
+	leftVersions := strings.Split(leftVersion, ".")
+	rightVersions := strings.Split(rightVersion, ".")
+	length := len(leftVersion)
+	if length < len(rightVersion) {
+		length = len(rightVersion)
+	}
+	for i := 0; i < length; i++ {
+		left := 0
+		if i < len(leftVersions) {
+			var err error
+			left, err = strconv.Atoi(leftVersions[i])
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		right := 0
+		if i < len(rightVersions) {
+			var err error
+			right, err = strconv.Atoi(rightVersions[i])
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if left < right {
+			return -1
+		} else if left > right {
+			return 1
+		}
+	}
+	return 0
 }
 
 func splitDDLs(mode schema.GeneratorMode, str string) ([]string, error) {

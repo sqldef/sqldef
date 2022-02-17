@@ -22,8 +22,8 @@ jobs:
         include:
           - target: mysqldef
             mysql_version: '5.7'
-          # - target: mysqldef
-          #   mysql_version: '8.0'
+          - target: mysqldef
+            mysql_version: '8.0'
           - target: psqldef
             postgres_version: 10
           - target: psqldef

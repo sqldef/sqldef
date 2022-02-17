@@ -35,12 +35,13 @@ func TestApply(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	version := strings.TrimSpace(testutils.MustExecute("mysql", "-uroot", "-h", "127.0.0.1", "-sN", "-e", "select version();"))
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Initialize the database with test.Current
 			testutils.MustExecute("mysql", "-uroot", "-h", "127.0.0.1", "-e", "DROP DATABASE IF EXISTS mysqldef_test; CREATE DATABASE mysqldef_test;")
 
-			testutils.RunTest(t, db, test, schema.GeneratorModeMysql)
+			testutils.RunTest(t, db, test, schema.GeneratorModeMysql, version)
 		})
 	}
 }

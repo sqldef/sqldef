@@ -100,6 +100,7 @@ CreateTableRemoveAutoIncrement:
     );
   output: |
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
+  max_version: '5.7'
 CreateTableRemoveAutoIncrementPrimaryKey:
   current: |
     CREATE TABLE friends (
@@ -114,6 +115,7 @@ CreateTableRemoveAutoIncrementPrimaryKey:
     ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
     ALTER TABLE `friends` DROP PRIMARY KEY;
     ALTER TABLE `friends` DROP COLUMN `id`;
+  max_version: '5.7'
 CreateTableGeneratedAlwaysAs:
   desired: |
     CREATE TABLE test_table (
@@ -122,3 +124,4 @@ CreateTableGeneratedAlwaysAs:
       test_expr varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL,
       PRIMARY KEY (id)
     );
+  max_version: '5.7'
