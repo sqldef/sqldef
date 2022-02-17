@@ -90,12 +90,12 @@ CreateTableAddAutoIncrement:
 CreateTableRemoveAutoIncrement57:
   current: |
     CREATE TABLE users (
-      id bigint NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      id bigint(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
       name varchar(20)
     );
   desired: |
     CREATE TABLE users (
-      id bigint NOT NULL PRIMARY KEY,
+      id bigint(20) NOT NULL PRIMARY KEY,
       name varchar(20)
     );
   output: |
@@ -104,12 +104,12 @@ CreateTableRemoveAutoIncrement57:
 CreateTableRemoveAutoIncrement80:
   current: |
     CREATE TABLE users (
-      id bigint(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      id bigint NOT NULL AUTO_INCREMENT PRIMARY KEY,
       name varchar(20)
     );
   desired: |
     CREATE TABLE users (
-      id bigint(20) NOT NULL PRIMARY KEY,
+      id bigint NOT NULL PRIMARY KEY,
       name varchar(20)
     );
   output: |
