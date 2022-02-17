@@ -1,12 +1,92 @@
 CreateTable:
   desired: |
-    CREATE TABLE bigdata (
-      data bigint
+    CREATE TABLE users (
+      id integer NOT NULL,
+      name text,
+      age integer
     );
 DropTable:
   current: |
+    CREATE TABLE users (
+      id integer NOT NULL,
+      name text,
+      age integer
+    );
     CREATE TABLE bigdata (
-      data bigint
+      data integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL,
+      name text,
+      age integer
     );
   output: |
     DROP TABLE `bigdata`;
+CreateTableQuotes:
+  current: |
+    CREATE TABLE "test_table" (
+      id integer primary key
+    );
+  desired: |
+    CREATE TABLE `test_table` (
+      id integer primary key
+    );
+  output: ''
+CreateTableWithAutoincrement:
+  desired: |
+    CREATE TABLE users (
+      id integer PRIMARY KEY AUTOINCREMENT,
+      name text,
+      age integer
+    );
+CreateView:
+  current: |
+    CREATE TABLE users (
+      id integer NOT NULL,
+      name text,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL,
+      name text,
+      age integer
+    );
+    CREATE VIEW `view_users` AS select id from users where age = 1;
+  output: |
+    CREATE VIEW `view_users` AS select id from users where age = 1;
+DropAndCreateView:
+  current: |
+    CREATE TABLE users (
+      id integer NOT NULL,
+      name text,
+      age integer
+    );
+    CREATE VIEW `view_users` AS select id from users where age = 1;
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL,
+      name text,
+      age integer
+    );
+    CREATE VIEW `view_users` AS select id from users where age = 2;
+  output: |
+    DROP VIEW `view_users`;
+    CREATE VIEW `view_users` AS select id from users where age = 2;
+ColumnLiteral:
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL,
+      name text,
+      age integer
+    );
+DataTypes:
+  # Remaining SQL spec: bit varying, interval, numeric, decimal, real,
+  # smallint, smallserial, xml
+  desired: |
+    CREATE TABLE users (
+      c_timestamp timestamp,
+      c_integer integer,
+      c_text text
+    );

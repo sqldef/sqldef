@@ -15,9 +15,9 @@ import (
 )
 
 type TestCase struct {
-	Current string // default: empty schema
-	Desired string // default: empty schema
-	Output  string // default: use Desired as Output
+	Current string  // default: empty schema
+	Desired string  // default: empty schema
+	Output  *string // default: use Desired as Output
 }
 
 func ReadTests(pattern string) (map[string]TestCase, error) {
@@ -41,8 +41,8 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 		}
 
 		for name, test := range tests {
-			if test.Output == "" {
-				test.Output = test.Desired
+			if test.Output == nil {
+				test.Output = &test.Desired
 			}
 			if _, ok := ret[name]; ok {
 				log.Fatal(fmt.Sprintf("There are multiple test cases named '%s'", name))
@@ -57,11 +57,11 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 func RunTest(t *testing.T, db adapter.Database, test TestCase, mode schema.GeneratorMode) {
 	// Prepare current
 	if test.Current != "" {
-		ddls, err := SplitDDLs(mode, test.Current)
+		ddls, err := splitDDLs(mode, test.Current)
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = RunDDLs(db, ddls)
+		err = runDDLs(db, ddls)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -77,7 +77,7 @@ func RunTest(t *testing.T, db adapter.Database, test TestCase, mode schema.Gener
 		t.Fatal(err)
 	}
 	if len(ddls) > 0 {
-		t.Errorf("expected nothing is modifed, but got:\n```\n%s```", JoinDDLs(ddls))
+		t.Errorf("expected nothing is modifed, but got:\n```\n%s```", joinDDLs(ddls))
 	}
 
 	// Main test
@@ -89,12 +89,12 @@ func RunTest(t *testing.T, db adapter.Database, test TestCase, mode schema.Gener
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := test.Output
-	actual := JoinDDLs(ddls)
+	expected := *test.Output
+	actual := joinDDLs(ddls)
 	if expected != actual {
 		t.Errorf("\nexpected:\n```\n%s```\n\nactual:\n```\n%s```", expected, actual)
 	}
-	err = RunDDLs(db, ddls)
+	err = runDDLs(db, ddls)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,11 +109,11 @@ func RunTest(t *testing.T, db adapter.Database, test TestCase, mode schema.Gener
 		t.Fatal(err)
 	}
 	if len(ddls) > 0 {
-		t.Errorf("expected nothing is modifed, but got:\n```\n%s```", JoinDDLs(ddls))
+		t.Errorf("expected nothing is modifed, but got:\n```\n%s```", joinDDLs(ddls))
 	}
 }
 
-func SplitDDLs(mode schema.GeneratorMode, str string) ([]string, error) {
+func splitDDLs(mode schema.GeneratorMode, str string) ([]string, error) {
 	statements, err := schema.ParseDDLs(mode, str)
 	if err != nil {
 		return nil, err
@@ -126,7 +126,7 @@ func SplitDDLs(mode schema.GeneratorMode, str string) ([]string, error) {
 	return ddls, nil
 }
 
-func RunDDLs(db adapter.Database, ddls []string) error {
+func runDDLs(db adapter.Database, ddls []string) error {
 	transaction, err := db.DB().Begin()
 	if err != nil {
 		return err
@@ -143,7 +143,7 @@ func RunDDLs(db adapter.Database, ddls []string) error {
 	return transaction.Commit()
 }
 
-func JoinDDLs(ddls []string) string {
+func joinDDLs(ddls []string) string {
 	var builder strings.Builder
 	for _, ddl := range ddls {
 		builder.WriteString(ddl)

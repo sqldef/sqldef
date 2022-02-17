@@ -45,7 +45,7 @@ func TestApply(t *testing.T) {
 	}
 }
 
-// TODO: Most of the following tests should be migrated to TestApply
+// TODO: non-CLI tests should be migrated to TestApply
 
 func TestMysqldefCreateTableChangePrimaryKey(t *testing.T) {
 	resetTestDatabase()
@@ -1286,6 +1286,19 @@ func TestMysqldefFileComparison(t *testing.T) {
 
 	output := assertedExecute(t, "./mysqldef", "--file", "schema.sql", "--file", "schema.sql")
 	assertEquals(t, output, nothingModified)
+}
+
+func TestMysqldefApply(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE friends (
+		  data bigint
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestMysqldefDryRun(t *testing.T) {

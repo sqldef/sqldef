@@ -47,89 +47,7 @@ func TestApply(t *testing.T) {
 	}
 }
 
-// TODO: Most of the following tests should be migrated to TestApply
-
-func TestPsqldefCreateTable(t *testing.T) {
-	resetTestDatabase()
-
-	createTable1 := stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint NOT NULL,
-		  name text,
-		  age integer
-		);
-		`,
-	)
-	createTable2 := stripHeredoc(`
-		CREATE TABLE bigdata (
-		  data bigint
-		);
-		`,
-	)
-
-	assertApplyOutput(t, createTable1+createTable2, applyPrefix+createTable1+createTable2)
-	assertApplyOutput(t, createTable1+createTable2, nothingModified)
-
-	assertApplyOutput(t, createTable1, applyPrefix+"DROP TABLE \"public\".\"bigdata\";\n")
-	assertApplyOutput(t, createTable1, nothingModified)
-}
-
-func TestPsqldefCreateEmptyTable(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := "CREATE TABLE public.test ();\n"
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-}
-
-func TestPsqldefCreateTableWithDefault(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  profile character varying(50) NOT NULL DEFAULT ''::character varying,
-		  default_int int default 20,
-		  default_bool bool default true,
-		  default_numeric numeric(5) default 42.195,
-		  default_fixed_char character(3) default 'JPN'::bpchar,
-		  default_text text default ''::text,
-		  default_json json default '[]'::json,
-		  default_current_timestamp timestamp default CURRENT_TIMESTAMP,
-		  default_current_date date default CURRENT_DATE,
-		  default_current_time time default CURRENT_TIME,
-		  joined_at timestamp with time zone NOT NULL DEFAULT '0001-01-01 00:00:00'::timestamp without time zone,
-		  created_at timestamp with time zone DEFAULT now()
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-}
-
-func TestPsqldefCreateTableChangeDefaultBoolean(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE test (
-		  col boolean default true
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE test (
-		  col boolean default false
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
-		ALTER TABLE "public"."test" ALTER COLUMN "col" SET DEFAULT false;
-		`,
-	))
-	assertApplyOutput(t, createTable, nothingModified)
-}
+// TODO: non-CLI tests should be migrated to TestApply
 
 func TestPsqldefCreateTableChangeDefaultTimestamp(t *testing.T) {
 	resetTestDatabase()
@@ -1310,6 +1228,20 @@ func TestPsqldefFunctionAsDefault(t *testing.T) {
 //
 // ----------------------- following tests are for CLI -----------------------
 //
+
+func TestPsqldefApply(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE bigdata (
+		  data bigint
+		);
+		`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
 
 func TestPsqldefDryRun(t *testing.T) {
 	resetTestDatabase()
