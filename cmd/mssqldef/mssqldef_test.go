@@ -45,7 +45,7 @@ func TestApply(t *testing.T) {
 	}
 }
 
-// TODO: Most of the following tests should be migrated to TestApply
+// TODO: non-CLI tests should be migrated to TestApply
 
 func TestMssqldefColumnLiteral(t *testing.T) {
 	resetTestDatabase()
@@ -979,6 +979,19 @@ func TestMssqldefCreateTableAddDefaultChangeDefault(t *testing.T) {
 //
 // ----------------------- following tests are for CLI -----------------------
 //
+
+func TestMssqldefApply(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE bigdata (
+		  data bigint
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
 
 func TestMssqldefDryRun(t *testing.T) {
 	resetTestDatabase()
