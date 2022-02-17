@@ -6,7 +6,7 @@ services:
       MYSQL_ALLOW_EMPTY_PASSWORD: 'true'
       MYSQL_ROOT_HOST: '%'
     volumes:
-      - ./docker/mysql/data:/var/lib/mysql
+      - ./.docker/mysql/data:/var/lib/mysql
     ports:
       - '3306:3306'
   postgres:
@@ -15,7 +15,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
-      - ./docker/postgresql/data:/var/lib/postgresql/data
+      - ./.docker/postgresql/data:/var/lib/postgresql/data
     ports:
       - '5432:5432'
   mssql:
@@ -24,6 +24,6 @@ services:
       ACCEPT_EULA: Y
       SA_PASSWORD: Passw0rd
     volumes:
-      - ./docker/mssql/data:/var/opt/mssql/data
+      - ./.docker/mssql/data:/var/opt/mssql/data
     ports:
       - '1433:1433'
