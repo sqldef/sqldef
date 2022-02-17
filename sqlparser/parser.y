@@ -3795,6 +3795,12 @@ value:
   {
     $$ = NewStrVal($1)
   }
+// For MySQL
+| sql_id STRING
+  {
+    // Ignoring _charset_name as a workaround
+    $$ = NewStrVal($2)
+  }
 | HEX
   {
     $$ = NewHexVal($1)

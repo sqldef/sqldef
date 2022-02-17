@@ -154,3 +154,24 @@ CreateTableGeneratedAlwaysAs:
       PRIMARY KEY (id)
     );
   max_version: '5.7' # TODO: Make it work with 8.0
+CheckConstraint:
+  desired: |
+    CREATE TABLE `books` (
+      `id` int(10) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      `type` VARCHAR(255) NOT NULL COMMENT 'manga, novel',
+      `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      `deleted_at` datetime DEFAULT null,
+      CONSTRAINT `books_type_chk` CHECK (`type` IN ('manga', 'novel'))
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
+  min_version: '8.0'
+ColumnCheck:
+  desired: |
+    CREATE TABLE `books` (
+      `id` int(10) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      `type` VARCHAR(255) NOT NULL CONSTRAINT `books_type_chk` CHECK (`type` REGEXP '^(manga|novel)$') COMMENT 'manga, novel',
+      `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      `deleted_at` datetime DEFAULT null
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
+  min_version: '8.0'
