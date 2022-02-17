@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"testing"
 )
 
 type TestCase struct {
@@ -51,6 +52,52 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 	}
 
 	return ret, nil
+}
+
+func RunTest(t *testing.T, db adapter.Database, test TestCase, mode schema.GeneratorMode) {
+	// Prepare current
+	if test.Current != "" {
+		ddls, err := SplitDDLs(mode, test.Current)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = RunDDLs(db, ddls)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Main test
+	dumpDDLs, err := adapter.DumpDDLs(db)
+	if err != nil {
+		log.Fatal(err)
+	}
+	ddls, err := schema.GenerateIdempotentDDLs(mode, test.Desired, dumpDDLs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := test.Output
+	actual := JoinDDLs(ddls)
+	if expected != actual {
+		t.Errorf("\nexpected:\n```\n%s```\n\nactual:\n```\n%s```", expected, actual)
+	}
+	err = RunDDLs(db, ddls)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Test idempotency
+	dumpDDLs, err = adapter.DumpDDLs(db)
+	if err != nil {
+		log.Fatal(err)
+	}
+	ddls, err = schema.GenerateIdempotentDDLs(mode, test.Desired, dumpDDLs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ddls) > 0 {
+		t.Errorf("expected nothing is modifed, but got:\n```\n%s```", JoinDDLs(ddls))
+	}
 }
 
 func SplitDDLs(mode schema.GeneratorMode, str string) ([]string, error) {

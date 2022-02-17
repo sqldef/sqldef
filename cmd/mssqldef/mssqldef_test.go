@@ -39,48 +39,8 @@ func TestApply(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer db.Close()
-			if test.Current != "" {
-				ddls, err := testutils.SplitDDLs(schema.GeneratorModeMssql, test.Current)
-				if err != nil {
-					t.Fatal(err)
-				}
-				err = testutils.RunDDLs(db, ddls)
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
 
-			// Main test
-			dumpDDLs, err := adapter.DumpDDLs(db)
-			if err != nil {
-				log.Fatal(err)
-			}
-			ddls, err := schema.GenerateIdempotentDDLs(schema.GeneratorModeMssql, test.Desired, dumpDDLs)
-			if err != nil {
-				t.Fatal(err)
-			}
-			expected := test.Output
-			actual := testutils.JoinDDLs(ddls)
-			if expected != actual {
-				t.Errorf("\nexpected:\n```\n%s```\n\nactual:\n```\n%s```", expected, actual)
-			}
-			err = testutils.RunDDLs(db, ddls)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			// Test idempotency
-			dumpDDLs, err = adapter.DumpDDLs(db)
-			if err != nil {
-				log.Fatal(err)
-			}
-			ddls, err = schema.GenerateIdempotentDDLs(schema.GeneratorModeMssql, test.Desired, dumpDDLs)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(ddls) > 0 {
-				t.Errorf("expected nothing is modifed, but got:\n```\n%s```", testutils.JoinDDLs(ddls))
-			}
+			testutils.RunTest(t, db, test, schema.GeneratorModeMssql)
 		})
 	}
 }
