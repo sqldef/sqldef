@@ -67,12 +67,25 @@ func RunTest(t *testing.T, db adapter.Database, test TestCase, mode schema.Gener
 		}
 	}
 
-	// Main test
+	// Test idempotency
 	dumpDDLs, err := adapter.DumpDDLs(db)
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err := schema.GenerateIdempotentDDLs(mode, test.Desired, dumpDDLs)
+	ddls, err := schema.GenerateIdempotentDDLs(mode, test.Current, dumpDDLs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ddls) > 0 {
+		t.Errorf("expected nothing is modifed, but got:\n```\n%s```", JoinDDLs(ddls))
+	}
+
+	// Main test
+	dumpDDLs, err = adapter.DumpDDLs(db)
+	if err != nil {
+		log.Fatal(err)
+	}
+	ddls, err = schema.GenerateIdempotentDDLs(mode, test.Desired, dumpDDLs)
 	if err != nil {
 		t.Fatal(err)
 	}
