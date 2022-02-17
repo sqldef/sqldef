@@ -1,3 +1,7 @@
+## v0.11.38
+
+- Consider ON RESTRICT and missing it as the same thing in mysqldef [#205](https://github.com/k0kubun/sqldef/pull/205)
+
 ## v0.11.37
 
 - Parse string literal with character set for mysqldef [#204](https://github.com/k0kubun/sqldef/pull/204)
