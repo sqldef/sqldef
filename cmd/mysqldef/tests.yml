@@ -175,7 +175,7 @@ ColumnCheck:
       `deleted_at` datetime DEFAULT null
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
   min_version: '8.0'
-ForeignKey:
+ForeignKeyNormalizeRestrict:
   desired: |
     CREATE TABLE `groups` (
       `id` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY
