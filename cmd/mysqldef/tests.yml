@@ -87,7 +87,7 @@ CreateTableAddAutoIncrement:
     );
   output: |
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
-CreateTableRemoveAutoIncrement:
+CreateTableRemoveAutoIncrement57:
   current: |
     CREATE TABLE users (
       id bigint(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -101,7 +101,21 @@ CreateTableRemoveAutoIncrement:
   output: |
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
   max_version: '5.7'
-CreateTableRemoveAutoIncrementPrimaryKey:
+CreateTableRemoveAutoIncrement80:
+  current: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name varchar(20)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL PRIMARY KEY,
+      name varchar(20)
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
+  min_version: '8.0'
+CreateTableRemoveAutoIncrementPrimaryKey57:
   current: |
     CREATE TABLE friends (
       id bigint NOT NULL AUTO_INCREMENT PRIMARY KEY,

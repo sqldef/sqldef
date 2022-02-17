@@ -19,6 +19,7 @@ type TestCase struct {
 	Current    string  // default: empty schema
 	Desired    string  // default: empty schema
 	Output     *string // default: use Desired as Output
+	MinVersion string  `yaml:"min_version"`
 	MaxVersion string  `yaml:"max_version"`
 }
 
@@ -57,6 +58,9 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 }
 
 func RunTest(t *testing.T, db adapter.Database, test TestCase, mode schema.GeneratorMode, version string) {
+	if test.MinVersion != "" && compareVersion(t, version, test.MinVersion) < 0 {
+		t.Skipf("Version '%s' is smaller than min_version '%s'", version, test.MaxVersion)
+	}
 	if test.MaxVersion != "" && compareVersion(t, version, test.MaxVersion) > 0 {
 		t.Skipf("Version '%s' is larger than max_version '%s'", version, test.MaxVersion)
 	}
