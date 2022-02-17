@@ -111,7 +111,7 @@ CreateTableRemoveAutoIncrementPrimaryKey:
       created_at datetime NOT NULL
     );
   output: |
-    ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint NOT NULL;
+    ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
     ALTER TABLE `friends` DROP PRIMARY KEY;
     ALTER TABLE `friends` DROP COLUMN `id`;
 CreateTableGeneratedAlwaysAs:
