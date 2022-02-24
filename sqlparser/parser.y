@@ -3795,6 +3795,10 @@ value:
   {
     $$ = NewStrVal($1)
   }
+| STRING TYPECAST BPCHAR
+  {
+    $$ = NewStrVal($1)
+  }
 // For MySQL
 | sql_id STRING
   {
