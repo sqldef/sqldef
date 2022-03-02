@@ -1,3 +1,7 @@
+## v0.11.40
+
+- Fix issues for nvarchar without size [#209](https://github.com/k0kubun/sqldef/issues/209)
+
 ## v0.11.39
 
 - Parse `'string'::bpchar` for psqldef [#208](https://github.com/k0kubun/sqldef/pull/208)
