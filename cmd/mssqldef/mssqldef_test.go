@@ -7,16 +7,17 @@ package main
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/adapter"
-	"github.com/k0kubun/sqldef/adapter/mssql"
-	"github.com/k0kubun/sqldef/cmd/testutils"
-	"github.com/k0kubun/sqldef/schema"
 	"log"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/adapter/mssql"
+	"github.com/k0kubun/sqldef/cmd/testutils"
+	"github.com/k0kubun/sqldef/schema"
 )
 
 const (
@@ -1029,17 +1030,31 @@ func TestMssqldefExport(t *testing.T) {
 	assertEquals(t, out, "-- No table exists --\n")
 
 	mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", stripHeredoc(`
-		CREATE TABLE dbo.users (
-		    id int NOT NULL,
-		    age int
+		CREATE TABLE dbo.v (
+		    v_int int NOT NULL,
+		    v_smallmoney smallmoney,
+		    v_money money,
+		    v_datetimeoffset datetimeoffset(1),
+		    v_datetime2 datetime2,
+		    v_smalldatetime smalldatetime,
+		    v_nchar nchar(30),
+		    v_varchar varchar(30),
+		    v_nvarchar nvarchar(50)
 		);
 		`,
 	))
 	out = assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")
 	assertEquals(t, out, stripHeredoc(`
-		CREATE TABLE dbo.users (
-		    id int NOT NULL,
-		    age int
+		CREATE TABLE dbo.v (
+		    v_int int NOT NULL,
+		    v_smallmoney smallmoney,
+		    v_money money,
+		    v_datetimeoffset datetimeoffset(1),
+		    v_datetime2 datetime2,
+		    v_smalldatetime smalldatetime,
+		    v_nchar nchar(30),
+		    v_varchar varchar(30),
+		    v_nvarchar nvarchar(50)
 		);
 		`,
 	))

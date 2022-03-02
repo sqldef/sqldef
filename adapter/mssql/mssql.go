@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
 	_ "github.com/denisenkom/go-mssqldb"
@@ -75,8 +76,8 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 		}
 		fmt.Fprint(&queryBuilder, "\n"+indent)
 		fmt.Fprintf(&queryBuilder, "%s %s", col.Name, col.dataType)
-		if col.dataType == "char" || col.dataType == "varchar" || col.dataType == "binary" || col.dataType == "varbinary" {
-			fmt.Fprintf(&queryBuilder, "(%s)", col.Length)
+		if length, ok := col.getLength(); ok {
+			fmt.Fprintf(&queryBuilder, "(%s)", length)
 		}
 		if !col.Nullable {
 			fmt.Fprint(&queryBuilder, " NOT NULL")
@@ -161,12 +162,38 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 type column struct {
 	Name        string
 	dataType    string
-	Length      string
+	MaxLength   string
+	Scale       string
 	Nullable    bool
 	Identity    *identity
 	DefaultName string
 	DefaultVal  string
 	Check       *check
+}
+
+func (c column) getLength() (string, bool) {
+	switch c.dataType {
+	case "char", "varchar", "binary", "varbinary":
+		if c.MaxLength == "-1" {
+			return "max", true
+		}
+		return c.MaxLength, true
+	case "nvarchar", "nchar":
+		if c.MaxLength == "-1" {
+			return "max", true
+		}
+		maxLength, err := strconv.Atoi(c.MaxLength)
+		if err != nil {
+			return "", false
+		}
+		return strconv.Itoa(int(maxLength / 2)), true
+	case "datetimeoffset":
+		if c.Scale == "7" {
+			return "", false
+		}
+		return c.Scale, true
+	}
+	return "", false
 }
 
 type identity struct {
@@ -187,6 +214,7 @@ func (d *MssqlDatabase) getColumns(table string) ([]column, error) {
 	c.name,
 	[type_name] = tp.name,
 	c.max_length,
+	c.scale,
 	c.is_nullable,
 	c.is_identity,
 	ic.seed_value,
@@ -213,16 +241,17 @@ WHERE c.[object_id] = OBJECT_ID('%s.%s', 'U')`, schema, table)
 	cols := []column{}
 	for rows.Next() {
 		col := column{}
-		var colName, dataType, maxLen, defaultId string
+		var colName, dataType, maxLen, scale, defaultId string
 		var seedValue, incrementValue, defaultName, defaultVal, checkName, checkDefinition *string
 		var isNullable, isIdentity bool
 		var identityNotForReplication, checkNotForReplication *bool
-		err = rows.Scan(&colName, &dataType, &maxLen, &isNullable, &isIdentity, &seedValue, &incrementValue, &identityNotForReplication, &defaultId, &defaultName, &defaultVal, &checkName, &checkDefinition, &checkNotForReplication)
+		err = rows.Scan(&colName, &dataType, &maxLen, &scale, &isNullable, &isIdentity, &seedValue, &incrementValue, &identityNotForReplication, &defaultId, &defaultName, &defaultVal, &checkName, &checkDefinition, &checkNotForReplication)
 		if err != nil {
 			return nil, err
 		}
 		col.Name = colName
-		col.Length = maxLen
+		col.MaxLength = maxLen
+		col.Scale = scale
 		if defaultId != "0" {
 			col.DefaultName = *defaultName
 			col.DefaultVal = *defaultVal
