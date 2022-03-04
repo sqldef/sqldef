@@ -838,10 +838,6 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 		if len(indexDef.options) > 0 {
 			fmt.Fprint(&queryBuilder, " WITH (")
 			for i, option := range indexDef.options {
-				// skip FILLFACTOR if value equal 0
-				if option.name == "FILLFACTOR" && option.value == "0" {
-					continue
-				}
 				if i > 0 {
 					fmt.Fprint(&queryBuilder, ",")
 				}
@@ -883,10 +879,6 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 		if len(indexDef.options) > 0 {
 			fmt.Fprint(&queryBuilder, " WITH (")
 			for i, option := range indexDef.options {
-				// skip FILLFACTOR if value equal 0
-				if option.name == "FILLFACTOR" && option.value == "0" {
-					continue
-				}
 				if i > 0 {
 					fmt.Fprint(&queryBuilder, ",")
 				}
@@ -1069,12 +1061,16 @@ WHERE ind.object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 
 		options := []indexOption{
 			{name: "PAD_INDEX", value: boolToOnOff(padIndex)},
-			{name: "FILLFACTOR", value: fillfactor},
 			{name: "IGNORE_DUP_KEY", value: boolToOnOff(ignoreDupKey)},
 			{name: "STATISTICS_NORECOMPUTE", value: boolToOnOff(noRecompute)},
 			{name: "STATISTICS_INCREMENTAL", value: boolToOnOff(incremental)},
 			{name: "ALLOW_ROW_LOCKS", value: boolToOnOff(rowLocks)},
 			{name: "ALLOW_PAGE_LOCKS", value: boolToOnOff(pageLocks)},
+		}
+
+		// add FILLFACTOR only if it's not 0
+		if fillfactor != "0" {
+			options = append(options, indexOption{name: "FILLFACTOR", value: fillfactor})
 		}
 
 		definition := &indexDef{name: indexName, columns: []string{}, primary: isPrimary, unique: isUnique, indexType: typeDesc, included: []string{}, options: options}
