@@ -52,7 +52,7 @@ func NewDatabase(config adapter.Config) (adapter.Database, error) {
 
 func (d *MssqlDatabase) TableNames() ([]string, error) {
 	rows, err := d.db.Query(
-		`select schema_name(schema_id) as table_schema, name from sys.objects where type = 'U';`,
+		`select schema_name(schema_id) as table_schema, name from sys.objects where type = 'U' ORDER BY sys.objects.name;`,
 	)
 	if err != nil {
 		return nil, err
@@ -67,7 +67,52 @@ func (d *MssqlDatabase) TableNames() ([]string, error) {
 		}
 		tables = append(tables, schema+"."+name)
 	}
-	return tables, nil
+
+	// order table by reference dependency
+	// it may have cyclic dependency if fk created later
+	// TODO: perfect solution is creating fk later but current dumptable interface don't allow it
+	// so try our bests and adds cyclic dependency tables later
+	foreignTableMap := make(map[string][]string)
+	for _, tableName := range tables {
+		_, foreignTableNames, err := d.getForeignDefs(tableName)
+		if err != nil {
+			return nil, err
+		}
+		foreignTableMap[tableName] = foreignTableNames
+	}
+
+	dependencyOrderedTables := []string{}
+	addedTables := make(map[string]bool)
+	for len(tables) > 0 {
+		var lastTableLen = len(tables)
+		for i := 0; i < len(tables); {
+			tableName := tables[i]
+			noDeps := true
+			fTableNames := foreignTableMap[tableName]
+			for _, fTableName := range fTableNames {
+				if _, added := addedTables[fTableName]; !added {
+					noDeps = false
+					break
+				}
+			}
+			if noDeps {
+				addedTables[tableName] = true
+				dependencyOrderedTables = append(dependencyOrderedTables, tableName)
+				tables[i] = tables[len(tables)-1]
+				tables = tables[:len(tables)-1]
+			} else {
+				i = i + 1
+			}
+		}
+		if lastTableLen == len(tables) {
+			break
+		}
+	}
+
+	// leftover 'tables' have cyclic dependencies
+	dependencyOrderedTables = append(dependencyOrderedTables, tables...)
+
+	return dependencyOrderedTables, nil
 }
 
 func (d *MssqlDatabase) DumpTableDDL(table string) (string, error) {
@@ -79,7 +124,7 @@ func (d *MssqlDatabase) DumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	foreignDefs, err := d.getForeignDefs(table)
+	foreignDefs, _, err := d.getForeignDefs(table)
 	if err != nil {
 		return "", err
 	}
@@ -455,7 +500,7 @@ WHERE ind.object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 	return indexDefs, nil
 }
 
-func (d *MssqlDatabase) getForeignDefs(table string) ([]string, error) {
+func (d *MssqlDatabase) getForeignDefs(table string) ([]string, []string, error) {
 	schema, table := splitTableName(table)
 	query := fmt.Sprintf(`SELECT
 	f.name,
@@ -470,9 +515,11 @@ WHERE f.parent_object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 
 	rows, err := d.db.Query(query)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
+
+	foreignTableNames := make([]string, 0)
 
 	defs := make([]string, 0)
 	for rows.Next() {
@@ -480,18 +527,20 @@ WHERE f.parent_object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 		var notForReplication bool
 		err = rows.Scan(&constraintName, &columnName, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule, &notForReplication)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
+		foreignTableName = schema + "." + foreignTableName
 		foreignUpdateRule = strings.Replace(foreignUpdateRule, "_", " ", -1)
 		foreignDeleteRule = strings.Replace(foreignDeleteRule, "_", " ", -1)
-		def := fmt.Sprintf("CONSTRAINT [%s] FOREIGN KEY ([%s]) REFERENCES [%s] ([%s]) ON UPDATE %s ON DELETE %s", constraintName, columnName, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule)
+		def := fmt.Sprintf("CONSTRAINT [%s] FOREIGN KEY ([%s]) REFERENCES %s ([%s]) ON UPDATE %s ON DELETE %s", constraintName, columnName, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule)
 		if notForReplication {
 			def += " NOT FOR REPLICATION"
 		}
+		foreignTableNames = append(foreignTableNames, foreignTableName)
 		defs = append(defs, def)
 	}
 
-	return defs, nil
+	return defs, foreignTableNames, nil
 }
 
 func boolToOnOff(in bool) string {

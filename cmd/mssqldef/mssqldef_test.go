@@ -1157,6 +1157,74 @@ func TestMssqldefExportWithIndex(t *testing.T) {
 	))
 }
 
+func TestMssqldefExportWithDependency(t *testing.T) {
+	resetTestDatabase()
+	out := assertedExecute(t, "./mssqldef", "-Usa", "-P"+saPassword, "mssqldef_test", "--export")
+	assertEquals(t, out, "-- No table exists --\n")
+
+	mustExecute("sqlcmd", "-Usa", "-P"+saPassword, "-dmssqldef_test", "-Q", stripHeredoc(`
+		CREATE TABLE dbo.c (
+            id int NOT NULL,
+            CONSTRAINT [PK__c] PRIMARY KEY CLUSTERED ([id]) WITH ( PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = OFF, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON )
+        );
+        
+        CREATE TABLE dbo.d (
+            id int NOT NULL,
+            f_id int,
+            CONSTRAINT [PK__d] PRIMARY KEY CLUSTERED ([id]) WITH ( PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = OFF, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON ),
+            CONSTRAINT [FK_d] FOREIGN KEY ([f_id]) REFERENCES dbo.c ([id]) ON UPDATE NO ACTION ON DELETE NO ACTION
+        );
+        
+        CREATE TABLE dbo.a (
+            id int NOT NULL,
+            f_id int,
+            CONSTRAINT [PK__a] PRIMARY KEY CLUSTERED ([id]) WITH ( PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = OFF, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON ),
+            CONSTRAINT [FK_a] FOREIGN KEY ([f_id]) REFERENCES dbo.d ([id]) ON UPDATE NO ACTION ON DELETE NO ACTION
+        );
+        
+        CREATE TABLE dbo.b (
+            id int NOT NULL,
+            f_id int,
+            f2_id int,
+            CONSTRAINT [PK__b] PRIMARY KEY CLUSTERED ([id]) WITH ( PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = OFF, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON ),
+            CONSTRAINT [FK_b] FOREIGN KEY ([f_id]) REFERENCES dbo.c ([id]) ON UPDATE NO ACTION ON DELETE NO ACTION,
+            CONSTRAINT [FK_b2] FOREIGN KEY ([f2_id]) REFERENCES dbo.a ([id]) ON UPDATE NO ACTION ON DELETE NO ACTION
+        );
+		`,
+	))
+	out = assertedExecute(t, "./mssqldef", "-Usa", "-P"+saPassword, "mssqldef_test", "--export")
+	assertEquals(t, out, stripHeredoc(`
+		CREATE TABLE dbo.c (
+		    id int NOT NULL,
+		    CONSTRAINT [PK__c] PRIMARY KEY CLUSTERED ([id]) WITH ( PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = OFF, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON )
+		);
+			
+		CREATE TABLE dbo.d (
+		    id int NOT NULL,
+		    f_id int,
+		    CONSTRAINT [PK__d] PRIMARY KEY CLUSTERED ([id]) WITH ( PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = OFF, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON ),
+		    CONSTRAINT [FK_d] FOREIGN KEY ([f_id]) REFERENCES dbo.c ([id]) ON UPDATE NO ACTION ON DELETE NO ACTION
+		);
+
+		CREATE TABLE dbo.a (
+		    id int NOT NULL,
+		    f_id int,
+		    CONSTRAINT [PK__a] PRIMARY KEY CLUSTERED ([id]) WITH ( PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = OFF, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON ),
+		    CONSTRAINT [FK_a] FOREIGN KEY ([f_id]) REFERENCES dbo.d ([id]) ON UPDATE NO ACTION ON DELETE NO ACTION
+		);
+				
+		CREATE TABLE dbo.b (
+		    id int NOT NULL,
+		    f_id int,
+		    f2_id int,
+		    CONSTRAINT [PK__b] PRIMARY KEY CLUSTERED ([id]) WITH ( PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = OFF, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON ),
+		    CONSTRAINT [FK_b] FOREIGN KEY ([f_id]) REFERENCES dbo.c ([id]) ON UPDATE NO ACTION ON DELETE NO ACTION,
+		    CONSTRAINT [FK_b2] FOREIGN KEY ([f2_id]) REFERENCES dbo.a ([id]) ON UPDATE NO ACTION ON DELETE NO ACTION
+		);
+		`,
+	))
+}
+
 func TestMssqldefHelp(t *testing.T) {
 	_, err := execute("./mssqldef", "--help")
 	if err != nil {
