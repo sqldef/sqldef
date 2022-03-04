@@ -1178,12 +1178,13 @@ var (
 )
 
 func (d *MssqlDatabase) Views() ([]string, error) {
+	// azure sql server has some system view only distinguished by 'is_ms_shipped = 0' check
 	const sql = `SELECT
 	sys.views.name as name,
 	sys.sql_modules.definition as definition
 FROM sys.views
 INNER JOIN sys.objects ON
-	sys.objects.object_id = sys.views.object_id
+	sys.objects.object_id = sys.views.object_id and sys.objects.is_ms_shipped = 0
 INNER JOIN sys.schemas ON
 	sys.schemas.schema_id = sys.objects.schema_id
 INNER JOIN sys.sql_modules
@@ -1206,7 +1207,7 @@ INNER JOIN sys.sql_modules
 		definition = strings.ReplaceAll(definition, "\n", "")
 		definition = suffixSemicolon.ReplaceAllString(definition, "")
 		definition = spaces.ReplaceAllString(definition, " ")
-		ddls = append(ddls, definition)
+		ddls = append(ddls, definition+";")
 	}
 	return ddls, nil
 }
