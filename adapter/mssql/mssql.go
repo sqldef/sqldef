@@ -1071,7 +1071,7 @@ func (d *MssqlDatabase) getIndexDefs(table string) ([]*indexDef, error) {
 	ind.allow_page_locks
 FROM sys.indexes ind
 INNER JOIN sys.stats st ON ind.object_id = st.object_id AND ind.index_id = st.stats_id
-WHERE ind.object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
+WHERE ind.object_id = OBJECT_ID('[%s].[%s]') ORDER BY ind.name ASC`, schema, table)
 
 	rows, err := d.db.Query(query)
 	if err != nil {
