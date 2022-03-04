@@ -861,10 +861,6 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 		if indexDef.primary {
 			continue
 		}
-
-		if indexDef.primary {
-			continue
-		}
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
 
 		fmt.Fprintf(&queryBuilder, "INDEX [%s]", indexDef.name)
