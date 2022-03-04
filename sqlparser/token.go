@@ -477,6 +477,8 @@ var keywords = map[string]int{
 // keywordStrings contains the reverse mapping of token to keyword strings
 var keywordStrings = map[int]string{}
 
+func Keywords() map[string]int { return keywords }
+
 func init() {
 	for str, id := range keywords {
 		if id == UNUSED {
