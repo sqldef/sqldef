@@ -1061,6 +1061,52 @@ func TestMssqldefExport(t *testing.T) {
 	))
 }
 
+func TestMssqldefExportWithView(t *testing.T) {
+	resetTestDatabase()
+	out := assertedExecute(t, "./mssqldef", "-Usa", "-P"+saPassword, "mssqldef_test", "--export")
+	assertEquals(t, out, "-- No table exists --\n")
+
+	mustExecute("sqlcmd", "-Usa", "-P"+saPassword, "-dmssqldef_test", "-Q", stripHeredoc(`
+		CREATE TABLE dbo.v (
+		    v_int int NOT NULL,
+		    v_smallmoney smallmoney,
+		    v_money money,
+		    v_datetimeoffset datetimeoffset(1),
+		    v_datetime2 datetime2,
+		    v_smalldatetime smalldatetime,
+		    v_nchar nchar(30),
+		    v_varchar varchar(30),
+		    v_nvarchar nvarchar(50)
+		);
+		GO
+		CREATE VIEW [dbo].[view_v1] AS select v_money from dbo.v with(nolock) where v_int = 1;
+		GO
+		CREATE VIEW [dbo].[view_v2] AS select v_smallmoney from dbo.v with(nolock) where v_int = 1;
+		GO
+		`,
+	))
+
+	out = assertedExecute(t, "./mssqldef", "-Usa", "-P"+saPassword, "mssqldef_test", "--export")
+	assertEquals(t, out, stripHeredoc(`
+		CREATE TABLE dbo.v (
+		    v_int int NOT NULL,
+		    v_smallmoney smallmoney,
+		    v_money money,
+		    v_datetimeoffset datetimeoffset(1),
+		    v_datetime2 datetime2,
+		    v_smalldatetime smalldatetime,
+		    v_nchar nchar(30),
+		    v_varchar varchar(30),
+		    v_nvarchar nvarchar(50)
+		);
+
+		CREATE VIEW [dbo].[view_v1] AS select v_money from dbo.v with(nolock) where v_int = 1;
+
+		CREATE VIEW [dbo].[view_v2] AS select v_smallmoney from dbo.v with(nolock) where v_int = 1;
+		`,
+	))
+}
+
 func TestMssqldefExportWithIndex(t *testing.T) {
 	resetTestDatabase()
 	out := assertedExecute(t, "./mssqldef", "-Usa", "-P"+saPassword, "mssqldef_test", "--export")
@@ -1068,6 +1114,7 @@ func TestMssqldefExportWithIndex(t *testing.T) {
 
 	mustExecute("sqlcmd", "-Usa", "-P"+saPassword, "-dmssqldef_test", "-Q", stripHeredoc(`
 		CREATE TABLE dbo.v (
+		    id int NOT NULL IDENTITY(1,1),
 		    v_int int NOT NULL,
 		    no smallmoney,
 		    type money,
@@ -1077,6 +1124,7 @@ func TestMssqldefExportWithIndex(t *testing.T) {
 		    v_nchar nchar(30),
 		    v_varchar varchar(30),
 		    v_nvarchar nvarchar(50),
+		    CONSTRAINT [PK_v_id] PRIMARY KEY CLUSTERED ([id]) WITH ( PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = OFF, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON ),
 		    INDEX [IX_Test1] NONCLUSTERED ([v_int]) WITH ( PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = ON, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON ),
 		    INDEX [IX_Test2] NONCLUSTERED ([v_nvarchar]) WITH ( PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = ON, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON )
 		);
@@ -1084,6 +1132,7 @@ func TestMssqldefExportWithIndex(t *testing.T) {
 	out = assertedExecute(t, "./mssqldef", "-Usa", "-P"+saPassword, "mssqldef_test", "--export")
 	assertEquals(t, out, stripHeredoc(`
 		CREATE TABLE dbo.v (
+		    id int NOT NULL IDENTITY(1,1),
 		    v_int int NOT NULL,
 		    [no] smallmoney,
 		    [type] money,
@@ -1093,6 +1142,7 @@ func TestMssqldefExportWithIndex(t *testing.T) {
 		    v_nchar nchar(30),
 		    v_varchar varchar(30),
 		    v_nvarchar nvarchar(50),
+		    CONSTRAINT [PK_v_id] PRIMARY KEY CLUSTERED ([id]) WITH ( PAD_INDEX = OFF, FILLFACTOR = 0, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = OFF, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON ),
 		    INDEX [IX_Test1] NONCLUSTERED ([v_int]) WITH ( PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = ON, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON ),
 		    INDEX [IX_Test2] NONCLUSTERED ([v_nvarchar]) WITH ( PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = ON, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON )
 		);
