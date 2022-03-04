@@ -838,6 +838,10 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 		if len(indexDef.options) > 0 {
 			fmt.Fprint(&queryBuilder, " WITH (")
 			for i, option := range indexDef.options {
+				// skip FILLFACTOR if value equal 0
+				if option.name == "FILLFACTOR" && option.value == "0" {
+					continue
+				}
 				if i > 0 {
 					fmt.Fprint(&queryBuilder, ",")
 				}
