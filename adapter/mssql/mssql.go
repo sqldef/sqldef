@@ -852,15 +852,14 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 		fmt.Fprint(&queryBuilder, v)
 	}
 
-	// FIXME: reverse iteration for index
-	// index comes reverse way, i dont know why
-	var i int
-	for i = len(indexDefs) - 1; i >= 0; i = i - 1 {
-		var indexDef *indexDef = indexDefs[i]
-
+	for _, indexDef := range indexDefs {
 		if indexDef.primary {
 			continue
 		}
+		if len(indexDef.included) > 0 {
+			continue
+		}
+
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
 
 		fmt.Fprintf(&queryBuilder, "INDEX [%s]", indexDef.name)
@@ -871,11 +870,8 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 			fmt.Fprintf(&queryBuilder, " %s", indexDef.indexType)
 		}
 
-		// TODO: we don't have index ASC or DESC now
 		fmt.Fprintf(&queryBuilder, " (%s)", strings.Join(indexDef.columns, ", "))
-		if len(indexDef.included) > 0 {
-			fmt.Fprintf(&queryBuilder, " INCLUDE (%s)", strings.Join(indexDef.included, ", "))
-		}
+
 		if len(indexDef.options) > 0 {
 			fmt.Fprint(&queryBuilder, " WITH (")
 			for i, option := range indexDef.options {
@@ -890,6 +886,38 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 	}
 
 	fmt.Fprintf(&queryBuilder, "\n);\n")
+
+	// export index with include here
+	for _, indexDef := range indexDefs {
+		if len(indexDef.included) == 0 {
+			continue
+		}
+		if indexDef.primary {
+			continue
+		}
+		fmt.Fprint(&queryBuilder, "\nCREATE")
+		if indexDef.unique {
+			fmt.Fprint(&queryBuilder, " UNIQUE")
+		}
+		if indexDef.indexType == "CLUSTERED" || indexDef.indexType == "NONCLUSTERED" {
+			fmt.Fprintf(&queryBuilder, " %s", indexDef.indexType)
+		}
+		fmt.Fprintf(&queryBuilder, " INDEX [%s] ON %s (%s)", indexDef.name, table, strings.Join(indexDef.columns, ", "))
+		if len(indexDef.included) > 0 {
+			fmt.Fprintf(&queryBuilder, " INCLUDE (%s)", strings.Join(indexDef.included, ", "))
+		}
+		if len(indexDef.options) > 0 {
+			fmt.Fprint(&queryBuilder, " WITH (")
+			for i, option := range indexDef.options {
+				if i > 0 {
+					fmt.Fprint(&queryBuilder, ",")
+				}
+				fmt.Fprintf(&queryBuilder, " %s", fmt.Sprintf("%s = %s", option.name, option.value))
+			}
+			fmt.Fprint(&queryBuilder, " )")
+		}
+		fmt.Fprint(&queryBuilder, ";")
+	}
 
 	return strings.TrimSuffix(queryBuilder.String(), "\n")
 }
