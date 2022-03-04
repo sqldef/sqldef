@@ -21,6 +21,7 @@ import (
 )
 
 const (
+	saPassword      = "Passw0rd"
 	applyPrefix     = "-- Apply --\n"
 	nothingModified = "-- Nothing is modified --\n"
 )
@@ -34,7 +35,7 @@ func TestApply(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Initialize the database with test.Current
-			testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "DROP DATABASE IF EXISTS mssqldef_test; CREATE DATABASE mssqldef_test;")
+			testutils.MustExecute("sqlcmd", "-Usa", "-P"+saPassword, "-Q", "DROP DATABASE IF EXISTS mssqldef_test; CREATE DATABASE mssqldef_test;")
 			db, err := connectDatabase() // DROP DATABASE hangs when there's a connection
 			if err != nil {
 				t.Fatal(err)
@@ -405,7 +406,7 @@ func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
 	assertApply(t, createTable)
 
 	// extract name of default constraint from sql server
-	out, err := execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
+	out, err := execute("sqlcmd", "-Usa", "-P"+saPassword, "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
 		SELECT OBJECT_NAME(c.default_object_id) FROM sys.columns c WHERE c.object_id = OBJECT_ID('dbo.users', 'U') AND c.default_object_id != 0;
 		`,
 	))
@@ -512,7 +513,7 @@ func TestMssqldefCreateTableDropPrimaryKey(t *testing.T) {
 	assertApply(t, createTable)
 
 	// extract name of primary key constraint from sql server
-	out, err := execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
+	out, err := execute("sqlcmd", "-Usa", "-P"+saPassword, "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
 		SELECT kc.name FROM sys.key_constraints kc WHERE kc.parent_object_id=OBJECT_ID('users', 'U') AND kc.[type]='PK';
 		`,
 	))
@@ -817,7 +818,7 @@ func TestMssqldefCreateTableWithCheckWithoutName(t *testing.T) {
 	)
 
 	// extract name of check constraint from sql server
-	out, err := execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
+	out, err := execute("sqlcmd", "-Usa", "-P"+saPassword, "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
 		SELECT name FROM sys.check_constraints cc WHERE cc.parent_object_id = OBJECT_ID('dbo.a', 'U');
 		`,
 	))
@@ -1003,14 +1004,14 @@ func TestMssqldefDryRun(t *testing.T) {
 		);`,
 	))
 
-	dryRun := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--dry-run", "--file", "schema.sql")
-	apply := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql")
+	dryRun := assertedExecute(t, "./mssqldef", "-Usa", "-P"+saPassword, "mssqldef_test", "--dry-run", "--file", "schema.sql")
+	apply := assertedExecute(t, "./mssqldef", "-Usa", "-P"+saPassword, "mssqldef_test", "--file", "schema.sql")
 	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 }
 
 func TestMssqldefSkipDrop(t *testing.T) {
 	resetTestDatabase()
-	mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", stripHeredoc(`
+	mustExecute("sqlcmd", "-Usa", "-P"+saPassword, "-dmssqldef_test", "-Q", stripHeredoc(`
 		CREATE TABLE users (
 		    id integer NOT NULL PRIMARY KEY,
 		    age integer
@@ -1019,17 +1020,17 @@ func TestMssqldefSkipDrop(t *testing.T) {
 
 	writeFile("schema.sql", "")
 
-	skipDrop := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--skip-drop", "--file", "schema.sql")
-	apply := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql")
+	skipDrop := assertedExecute(t, "./mssqldef", "-Usa", "-P"+saPassword, "mssqldef_test", "--skip-drop", "--file", "schema.sql")
+	apply := assertedExecute(t, "./mssqldef", "-Usa", "-P"+saPassword, "mssqldef_test", "--file", "schema.sql")
 	assertEquals(t, skipDrop, strings.Replace(apply, "DROP", "-- Skipped: DROP", 1))
 }
 
 func TestMssqldefExport(t *testing.T) {
 	resetTestDatabase()
-	out := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")
+	out := assertedExecute(t, "./mssqldef", "-Usa", "-P"+saPassword, "mssqldef_test", "--export")
 	assertEquals(t, out, "-- No table exists --\n")
 
-	mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", stripHeredoc(`
+	mustExecute("sqlcmd", "-Usa", "-P"+saPassword, "-dmssqldef_test", "-Q", stripHeredoc(`
 		CREATE TABLE dbo.v (
 		    v_int int NOT NULL,
 		    v_smallmoney smallmoney,
@@ -1043,7 +1044,7 @@ func TestMssqldefExport(t *testing.T) {
 		);
 		`,
 	))
-	out = assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")
+	out = assertedExecute(t, "./mssqldef", "-Usa", "-P"+saPassword, "mssqldef_test", "--export")
 	assertEquals(t, out, stripHeredoc(`
 		CREATE TABLE dbo.v (
 		    v_int int NOT NULL,
@@ -1055,6 +1056,45 @@ func TestMssqldefExport(t *testing.T) {
 		    v_nchar nchar(30),
 		    v_varchar varchar(30),
 		    v_nvarchar nvarchar(50)
+		);
+		`,
+	))
+}
+
+func TestMssqldefExportWithIndex(t *testing.T) {
+	resetTestDatabase()
+	out := assertedExecute(t, "./mssqldef", "-Usa", "-P"+saPassword, "mssqldef_test", "--export")
+	assertEquals(t, out, "-- No table exists --\n")
+
+	mustExecute("sqlcmd", "-Usa", "-P"+saPassword, "-dmssqldef_test", "-Q", stripHeredoc(`
+		CREATE TABLE dbo.v (
+		    v_int int NOT NULL,
+		    no smallmoney,
+		    type money,
+		    v_datetimeoffset datetimeoffset(1),
+		    v_datetime2 datetime2,
+		    v_smalldatetime smalldatetime,
+		    v_nchar nchar(30),
+		    v_varchar varchar(30),
+		    v_nvarchar nvarchar(50),
+		    INDEX [IX_Test1] NONCLUSTERED ([v_int]) WITH ( PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = ON, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON ),
+		    INDEX [IX_Test2] NONCLUSTERED ([v_nvarchar]) WITH ( PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = ON, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON )
+		);
+	`))
+	out = assertedExecute(t, "./mssqldef", "-Usa", "-P"+saPassword, "mssqldef_test", "--export")
+	assertEquals(t, out, stripHeredoc(`
+		CREATE TABLE dbo.v (
+		    v_int int NOT NULL,
+		    [no] smallmoney,
+		    [type] money,
+		    v_datetimeoffset datetimeoffset(1),
+		    v_datetime2 datetime2,
+		    v_smalldatetime smalldatetime,
+		    v_nchar nchar(30),
+		    v_varchar varchar(30),
+		    v_nvarchar nvarchar(50),
+		    INDEX [IX_Test1] NONCLUSTERED ([v_int]) WITH ( PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = ON, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON ),
+		    INDEX [IX_Test2] NONCLUSTERED ([v_nvarchar]) WITH ( PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = ON, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON )
 		);
 		`,
 	))
@@ -1084,13 +1124,13 @@ func TestMain(m *testing.M) {
 func assertApply(t *testing.T, schema string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql")
+	assertedExecute(t, "./mssqldef", "-Usa", "-P"+saPassword, "mssqldef_test", "--file", "schema.sql")
 }
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	actual := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql")
+	actual := assertedExecute(t, "./mssqldef", "-Usa", "-P"+saPassword, "mssqldef_test", "--file", "schema.sql")
 	assertEquals(t, actual, expected)
 }
 
@@ -1100,6 +1140,7 @@ func mustExecute(command string, args ...string) {
 		log.Printf("failed to execute '%s %s': `%s`", command, strings.Join(args, " "), out)
 		log.Fatal(err)
 	}
+	log.Printf(out)
 }
 
 func assertedExecute(t *testing.T, command string, args ...string) string {
@@ -1126,8 +1167,8 @@ func execute(command string, args ...string) (string, error) {
 }
 
 func resetTestDatabase() {
-	mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "DROP DATABASE IF EXISTS mssqldef_test;")
-	mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "CREATE DATABASE mssqldef_test;")
+	mustExecute("sqlcmd", "-Usa", "-P"+saPassword, "-Q", "DROP DATABASE IF EXISTS mssqldef_test;")
+	mustExecute("sqlcmd", "-Usa", "-P"+saPassword, "-Q", "CREATE DATABASE mssqldef_test;")
 }
 
 func writeFile(path string, content string) {
@@ -1149,7 +1190,7 @@ func stripHeredoc(heredoc string) string {
 func connectDatabase() (adapter.Database, error) {
 	return mssql.NewDatabase(adapter.Config{
 		User:     "sa",
-		Password: "Passw0rd",
+		Password: saPassword,
 		Host:     "127.0.0.1",
 		Port:     1433,
 		DbName:   "mssqldef_test",
