@@ -1,3 +1,7 @@
+## v0.11.41
+
+- Emulate psql's `sslmode=prefer` when `PGSSLMODE` isn't explicitly set
+
 ## v0.11.40
 
 - Fix issues for nvarchar without size [#209](https://github.com/k0kubun/sqldef/issues/209)
