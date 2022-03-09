@@ -36,6 +36,7 @@ Application Options:
       --dry-run                     Don't run DDLs but just show them
       --export                      Just dump the current schema to stdout
       --skip-drop                   Skip destructive changes such as DROP
+      --without-partition-range     Without the specific code of PARTITION BY RANGE
       --help                        Show this help
       --version                     Show this version
 ```
@@ -96,6 +97,39 @@ Nothing is modified
 # Run without droping existing tables and columns
 $ mysqldef -uroot test --skip-drop < schema.sql
 Skipped: 'DROP TABLE users;'
+```
+
+#### Options to avoid environment dependence
+
+##### --without-partition-range
+```sql
+# original schema
+CREATE TABLE user (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(128) DEFAULT 'k0kubun',
+) Engine=InnoDB DEFAULT CHARSET=utf8mb4
+/*!50100 PARTITION BY RANGE (`id`)
+(PARTITION p0 VALUES LESS THAN (5) ENGINE = InnoDB,
+ PARTITION p1 VALUES LESS THAN (10) ENGINE = InnoDB,
+ PARTITION p2 VALUES LESS THAN MAXVALUE ENGINE = InnoDB) */;
+```
+
+```sql
+$ mysqldef -uroot test --export --without-partition-range > schema.sql
+CREATE TABLE user (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(128) DEFAULT 'k0kubun',
+) Engine=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+```sql
+$ mysqldef -uroot test --export > schema.sql
+$ mysqldef -uroot test --dry-run --without-partition-range < schema.sql
+Run: 
+CREATE TABLE user (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(128) DEFAULT 'k0kubun',
+) Engine=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
 ### psqldef

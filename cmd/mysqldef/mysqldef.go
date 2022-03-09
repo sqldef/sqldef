@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/adapter/file"
 	"log"
 	"os"
 	"syscall"
@@ -10,6 +9,7 @@ import (
 	"github.com/jessevdk/go-flags"
 	"github.com/k0kubun/sqldef"
 	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/adapter/file"
 	"github.com/k0kubun/sqldef/adapter/mysql"
 	"github.com/k0kubun/sqldef/schema"
 	"golang.org/x/term"
@@ -32,6 +32,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		DryRun                bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export                bool     `long:"export" description:"Just dump the current schema to stdout"`
 		SkipDrop              bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
+		WithoutPartitionRange bool     `long:"without-partition-range" description:"Without the specific code of PARTITION BY RANGE"`
 		Help                  bool     `long:"help" description:"Show this help"`
 		Version               bool     `long:"version" description:"Show this version"`
 	}
@@ -55,11 +56,12 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 
 	desiredFile, currentFile := sqldef.ParseFiles(opts.File)
 	options := sqldef.Options{
-		DesiredFile: desiredFile,
-		CurrentFile: currentFile,
-		DryRun:      opts.DryRun,
-		Export:      opts.Export,
-		SkipDrop:    opts.SkipDrop,
+		DesiredFile:           desiredFile,
+		CurrentFile:           currentFile,
+		DryRun:                opts.DryRun,
+		Export:                opts.Export,
+		SkipDrop:              opts.SkipDrop,
+		WithoutPartitionRange: opts.WithoutPartitionRange,
 	}
 
 	database := ""

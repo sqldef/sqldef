@@ -6,16 +6,17 @@
 package main
 
 import (
-	"github.com/k0kubun/sqldef/adapter"
-	"github.com/k0kubun/sqldef/adapter/mysql"
-	"github.com/k0kubun/sqldef/cmd/testutils"
-	"github.com/k0kubun/sqldef/schema"
 	"log"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/adapter/mysql"
+	"github.com/k0kubun/sqldef/cmd/testutils"
+	"github.com/k0kubun/sqldef/schema"
 )
 
 const (
@@ -1346,6 +1347,57 @@ func TestMysqldefSkipDrop(t *testing.T) {
 	skipDrop := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--skip-drop", "--file", "schema.sql")
 	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
 	assertEquals(t, skipDrop, strings.Replace(apply, "DROP", "-- Skipped: DROP", 1))
+}
+
+func TestMysqldefExportWithoutPartitionRange(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE `users` (\n" +
+		"  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+		"  `name` varchar(255) DEFAULT NULL,\n" +
+		"  `account_id` bigint DEFAULT NULL,\n" +
+		"  PRIMARY KEY (`id`)\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci"
+	partitions := "/*!50100 PARTITION BY RANGE (`id`)\n" +
+		"(PARTITION p0 VALUES LESS THAN (5) ENGINE = InnoDB,\n" +
+		" PARTITION p1 VALUES LESS THAN (10) ENGINE = InnoDB,\n" +
+		" PARTITION p2 VALUES LESS THAN (15) ENGINE = InnoDB,\n" +
+		" PARTITION p3 VALUES LESS THAN MAXVALUE ENGINE = InnoDB) */"
+
+	createTableDDL := createTable + ";\n"
+	createTableWithPartitionDDL := createTable + "\n" + partitions + ";\n"
+	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", stripHeredoc(createTableWithPartitionDDL))
+
+	writeFile("schema.sql", "")
+
+	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export", "--file", "schema.sql")
+	assertEquals(t, out, createTableWithPartitionDDL)
+
+	out = assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--without-partition-range", "--export", "--file", "schema.sql")
+	assertEquals(t, out, createTableDDL)
+}
+
+func TestMysqldefWithoutPartitionRange(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE `users` (\n" +
+		"  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+		"  `name` varchar(255) DEFAULT NULL,\n" +
+		"  `account_id` bigint DEFAULT NULL,\n" +
+		"  PRIMARY KEY (`id`)\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci"
+	partitions := "/*!50100 PARTITION BY RANGE (`id`)\n" +
+		"(PARTITION p0 VALUES LESS THAN (5) ENGINE = InnoDB,\n" +
+		" PARTITION p1 VALUES LESS THAN (10) ENGINE = InnoDB,\n" +
+		" PARTITION p2 VALUES LESS THAN (15) ENGINE = InnoDB,\n" +
+		" PARTITION p3 VALUES LESS THAN MAXVALUE ENGINE = InnoDB) */"
+
+	createTableDDL := createTable + ";\n"
+	createTableWithPartitionDDL := createTable + "\n" + partitions + ";\n"
+	writeFile("schema.sql", createTableWithPartitionDDL)
+
+	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--without-partition-range", "--file", "schema.sql")
+	assertEquals(t, apply, applyPrefix+createTableDDL)
 }
 
 func TestMysqldefHelp(t *testing.T) {
