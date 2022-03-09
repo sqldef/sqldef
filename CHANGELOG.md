@@ -1,6 +1,6 @@
 ## v0.11.41
 
-- Emulate psql's `sslmode=prefer` when `PGSSLMODE` isn't explicitly set
+- Emulate psql's `sslmode=prefer` in psqldef when `PGSSLMODE` isn't explicitly set
 
 ## v0.11.40
 
