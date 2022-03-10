@@ -1,7 +1,13 @@
+## v0.11.43
+
+- Add `--skip-view` option to mysqldef as a temporary feature
+  [#214](https://github.com/k0kubun/sqldef/issues/214)
+  - This is expected to be removed once the view support is improved.
+
 ## v0.11.42
 
 - Emulate mysql 5.7+'s TLS behavior by `tls=preferred` in mysqldef
-  [#216](https://github.com/k0kubun/sqldef/issues/209)
+  [#216](https://github.com/k0kubun/sqldef/issues/216)
 
 ## v0.11.41
 
