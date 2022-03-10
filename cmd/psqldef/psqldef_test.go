@@ -33,6 +33,12 @@ func TestApply(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
+			// This is implemented in the psqldef command layer, so it's needed for TestApply
+			if _, ok := os.LookupEnv("PGSSLMODE"); !ok {
+				os.Setenv("PGSSLMODE", "disable")
+				defer os.Unsetenv("PGSSLMODE")
+			}
+
 			// Initialize the database with test.Current
 			testutils.MustExecute("psql", "-Upostgres", "-h", "127.0.0.1", "-c", "DROP DATABASE IF EXISTS psqldef_test;")
 			testutils.MustExecute("psql", "-Upostgres", "-h", "127.0.0.1", "-c", "CREATE DATABASE psqldef_test;")
@@ -1371,9 +1377,6 @@ func TestPsqldefHelp(t *testing.T) {
 func TestMain(m *testing.M) {
 	if _, ok := os.LookupEnv("PGHOST"); !ok {
 		os.Setenv("PGHOST", "127.0.0.1")
-	}
-	if _, ok := os.LookupEnv("PGSSLMODE"); !ok {
-		os.Setenv("PGSSLMODE", "disable")
 	}
 
 	resetTestDatabase()
