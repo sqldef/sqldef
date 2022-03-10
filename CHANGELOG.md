@@ -1,3 +1,8 @@
+## v0.11.42
+
+- Emulate mysql 5.7+'s TLS behavior by `tls=preferred` in mysqldef
+  [#216](https://github.com/k0kubun/sqldef/issues/209)
+
 ## v0.11.41
 
 - Emulate psql's `sslmode=prefer` in psqldef when `PGSSLMODE` isn't explicitly set
