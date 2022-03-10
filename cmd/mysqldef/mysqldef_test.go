@@ -6,16 +6,17 @@
 package main
 
 import (
-	"github.com/k0kubun/sqldef/adapter"
-	"github.com/k0kubun/sqldef/adapter/mysql"
-	"github.com/k0kubun/sqldef/cmd/testutils"
-	"github.com/k0kubun/sqldef/schema"
 	"log"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/adapter/mysql"
+	"github.com/k0kubun/sqldef/cmd/testutils"
+	"github.com/k0kubun/sqldef/schema"
 )
 
 const (
@@ -1360,6 +1361,30 @@ func TestMysqldefSkipView(t *testing.T) {
 
 	output := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--skip-view", "--file", "schema.sql")
 	assertEquals(t, output, nothingModified)
+}
+
+func TestMysqldefBeforeApply(t *testing.T) {
+	resetTestDatabase()
+
+	beforeApply := "SET FOREIGN_KEY_CHECKS = 0;"
+	createTable := stripHeredoc(`
+	CREATE TABLE a (
+		id int(11) NOT NULL AUTO_INCREMENT,
+		b_id int(11) NOT NULL,
+		PRIMARY KEY (id),
+		CONSTRAINT a FOREIGN KEY (b_id) REFERENCES b (id)
+	) ENGINE = InnoDB DEFAULT CHARSET = utf8;
+	CREATE TABLE b (
+		id int(11) NOT NULL AUTO_INCREMENT,
+		a_id int(11) NOT NULL,
+		PRIMARY KEY (id)
+	) ENGINE = InnoDB DEFAULT CHARSET = utf8;`,
+	)
+	writeFile("schema.sql", createTable)
+	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql", "--before-apply", beforeApply)
+	assertEquals(t, apply, applyPrefix+beforeApply+"\n"+createTable+"\n")
+	apply = assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql", "--before-apply", beforeApply)
+	assertEquals(t, apply, nothingModified)
 }
 
 func TestMysqldefHelp(t *testing.T) {
