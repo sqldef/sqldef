@@ -33,6 +33,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		Export                bool     `long:"export" description:"Just dump the current schema to stdout"`
 		SkipDrop              bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
 		WithoutPartitionRange bool     `long:"without-partition-range" description:"Without the specific code of PARTITION BY RANGE"`
+		InitAutoIncrement     bool     `long:"init-auto-increment" description:"Initialize AUTO_INCREMENT for CREATE TABLE"`
 		Help                  bool     `long:"help" description:"Show this help"`
 		Version               bool     `long:"version" description:"Show this version"`
 	}
@@ -62,6 +63,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		Export:                opts.Export,
 		SkipDrop:              opts.SkipDrop,
 		WithoutPartitionRange: opts.WithoutPartitionRange,
+		InitAutoIncrement:     opts.InitAutoIncrement,
 	}
 
 	database := ""

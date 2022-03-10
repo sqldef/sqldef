@@ -20,6 +20,7 @@ type Options struct {
 	SkipDrop              bool
 	BeforeApply           string
 	WithoutPartitionRange bool
+	InitAutoIncrement     bool
 }
 
 // Main function shared by `mysqldef` and `psqldef`
@@ -123,6 +124,9 @@ func filterDDLs(sql string, options *Options) string {
 	if options.WithoutPartitionRange {
 		sql = filterPartitionRange(sql)
 	}
+	if options.InitAutoIncrement {
+		sql = initAutoIncrement(sql)
+	}
 	return sql
 }
 
@@ -130,4 +134,10 @@ func filterDDLs(sql string, options *Options) string {
 // Filter specific code for environment-dependent `PARTITION BY RANGE`
 func filterPartitionRange(sql string) string {
 	return regexp.MustCompile(`\n\/\*![0-9]* PARTITION BY RANGE[\s\S]*?\*\/`).ReplaceAllString(sql, "")
+}
+
+// For MySQL
+// Initialize count of environment-dependent `AUTO_INCREMENT`
+func initAutoIncrement(sql string) string {
+	return regexp.MustCompile(`AUTO_INCREMENT=[0-9]* `).ReplaceAllString(sql, "")
 }

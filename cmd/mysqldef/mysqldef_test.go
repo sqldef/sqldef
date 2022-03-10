@@ -6,6 +6,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -1400,6 +1401,48 @@ func TestMysqldefWithoutPartitionRange(t *testing.T) {
 	assertEquals(t, apply, applyPrefix+createTableDDL)
 }
 
+func TestMysqldefExportInitAutoIncrement(t *testing.T) {
+	resetTestDatabase()
+
+	autoIncrement := "AUTO_INCREMENT=123 "
+	createTable := "CREATE TABLE `users` (\n" +
+		"  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+		"  `name` varchar(255) DEFAULT NULL,\n" +
+		"  `account_id` bigint DEFAULT NULL,\n" +
+		"  PRIMARY KEY (`id`)\n" +
+		") ENGINE=InnoDB %sDEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;\n"
+
+	createTableDDL := fmt.Sprintf(createTable, autoIncrement)
+	createTableWithoutAutoIncrementDDL := fmt.Sprintf(createTable, "")
+	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", stripHeredoc(createTableDDL))
+
+	writeFile("schema.sql", "")
+
+	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export")
+	assertEquals(t, out, createTableDDL)
+
+	out = assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--init-auto-increment", "--export")
+	assertEquals(t, out, createTableWithoutAutoIncrementDDL)
+}
+
+func TestMysqldefInitAutoIncrement(t *testing.T) {
+	resetTestDatabase()
+
+	autoIncrement := "AUTO_INCREMENT=123 "
+	createTable := "CREATE TABLE `users` (\n" +
+		"  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+		"  `name` varchar(255) DEFAULT NULL,\n" +
+		"  `account_id` bigint DEFAULT NULL,\n" +
+		"  PRIMARY KEY (`id`)\n" +
+		") ENGINE=InnoDB %sDEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;\n"
+
+	createTableDDL := fmt.Sprintf(createTable, autoIncrement)
+	createTableWithoutAutoIncrementDDL := fmt.Sprintf(createTable, "")
+	writeFile("schema.sql", createTableDDL)
+
+	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--init-auto-increment", "--file", "schema.sql")
+	assertEquals(t, apply, applyPrefix+createTableWithoutAutoIncrementDDL)
+}
 func TestMysqldefHelp(t *testing.T) {
 	_, err := execute("./mysqldef", "--help")
 	if err != nil {

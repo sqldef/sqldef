@@ -37,6 +37,7 @@ Application Options:
       --export                      Just dump the current schema to stdout
       --skip-drop                   Skip destructive changes such as DROP
       --without-partition-range     Without the specific code of PARTITION BY RANGE
+      --init-auto-increment         Initialize AUTO_INCREMENT for CREATE TABLE
       --help                        Show this help
       --version                     Show this version
 ```
@@ -125,6 +126,33 @@ CREATE TABLE user (
 ```sql
 $ mysqldef -uroot test --export > schema.sql
 $ mysqldef -uroot test --dry-run --without-partition-range < schema.sql
+Run: 
+CREATE TABLE user (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(128) DEFAULT 'k0kubun',
+) Engine=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+##### --init-auto-increment
+```sql
+# original schema
+CREATE TABLE user (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(128) DEFAULT 'k0kubun',
+) Engine=InnoDB AUTO_INCREMENT=123 DEFAULT CHARSET=utf8mb4;
+```
+
+```sql
+$ mysqldef -uroot test --export --init-auto-increment > schema.sql
+CREATE TABLE user (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(128) DEFAULT 'k0kubun',
+) Engine=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+```sql
+$ mysqldef -uroot test --export > schema.sql
+$ mysqldef -uroot test --dry-run --init-auto-increment < schema.sql
 Run: 
 CREATE TABLE user (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
