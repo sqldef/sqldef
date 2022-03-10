@@ -1474,11 +1474,6 @@ var publicAndNonPublicSchemaTestCases = []struct {
 }
 
 func connectDatabase() (adapter.Database, error) {
-	err := os.Setenv("PGSSLMODE", "disable")
-	if err != nil {
-		return nil, err
-	}
-
 	return postgres.NewDatabase(adapter.Config{
 		User:   "postgres",
 		Host:   "127.0.0.1",
