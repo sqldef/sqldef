@@ -1,3 +1,7 @@
+## v0.11.44
+
+- Add `--before-apply` to mysqldef [#217](https://github.com/k0kubun/sqldef/issues/217)
+
 ## v0.11.43
 
 - Add `--skip-view` option to mysqldef as a temporary feature
