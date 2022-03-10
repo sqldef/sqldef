@@ -32,6 +32,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		DryRun                bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export                bool     `long:"export" description:"Just dump the current schema to stdout"`
 		SkipDrop              bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
+		SkipView              bool     `long:"skip-view" description:"Skip managing views (temporary feature, to be removed later)"`
 		Help                  bool     `long:"help" description:"Show this help"`
 		Version               bool     `long:"version" description:"Show this version"`
 	}
@@ -98,6 +99,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		Port:                       int(opts.Port),
 		Socket:                     opts.Socket,
 		MySQLEnableCleartextPlugin: opts.EnableCleartextPlugin,
+		SkipView:                   opts.SkipView,
 	}
 	return config, &options
 }

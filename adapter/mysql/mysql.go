@@ -57,6 +57,10 @@ func (d *MysqlDatabase) DumpTableDDL(table string) (string, error) {
 }
 
 func (d *MysqlDatabase) Views() ([]string, error) {
+	if d.config.SkipView {
+		return []string{}, nil
+	}
+
 	rows, err := d.db.Query("show full tables where TABLE_TYPE = 'VIEW'")
 	if err != nil {
 		return nil, err

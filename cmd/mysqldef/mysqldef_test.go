@@ -1348,6 +1348,20 @@ func TestMysqldefSkipDrop(t *testing.T) {
 	assertEquals(t, skipDrop, strings.Replace(apply, "DROP", "-- Skipped: DROP", 1))
 }
 
+func TestMysqldefSkipView(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE users (id bigint(20));\n"
+	createView := "CREATE VIEW user_views AS SELECT id from users;\n"
+
+	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", createTable+createView)
+
+	writeFile("schema.sql", createTable)
+
+	output := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--skip-view", "--file", "schema.sql")
+	assertEquals(t, output, nothingModified)
+}
+
 func TestMysqldefHelp(t *testing.T) {
 	_, err := execute("./mysqldef", "--help")
 	if err != nil {
