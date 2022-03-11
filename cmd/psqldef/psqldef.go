@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"syscall"
 
 	"github.com/jessevdk/go-flags"
@@ -116,6 +117,18 @@ func main() {
 	} else {
 		var err error
 		database, err = postgres.NewDatabase(config)
+
+		// Emulate the default behavior (sslmode=prefer) of psql when PGSSLMODE is not set,
+		// which is not supported by Go's lib/pq.
+		if _, ok := os.LookupEnv("PGSSLMODE"); !ok && err == nil {
+			e := database.DB().Ping()
+			if e != nil && strings.Contains(fmt.Sprintf("%s", e), "SSL is not enabled") {
+				database.Close()
+				os.Setenv("PGSSLMODE", "disable")
+				database, err = postgres.NewDatabase(config)
+			}
+		}
+
 		if err != nil {
 			log.Fatal(err)
 		}

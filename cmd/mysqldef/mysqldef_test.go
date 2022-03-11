@@ -1537,6 +1537,44 @@ func TestMysqldefTargetFile(t *testing.T) {
 			"DROP TABLE `users2`;\n")
 }
 
+func TestMysqldefSkipView(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE users (id bigint(20));\n"
+	createView := "CREATE VIEW user_views AS SELECT id from users;\n"
+
+	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", createTable+createView)
+
+	writeFile("schema.sql", createTable)
+
+	output := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--skip-view", "--file", "schema.sql")
+	assertEquals(t, output, nothingModified)
+}
+
+func TestMysqldefBeforeApply(t *testing.T) {
+	resetTestDatabase()
+
+	beforeApply := "SET FOREIGN_KEY_CHECKS = 0;"
+	createTable := stripHeredoc(`
+	CREATE TABLE a (
+		id int(11) NOT NULL AUTO_INCREMENT,
+		b_id int(11) NOT NULL,
+		PRIMARY KEY (id),
+		CONSTRAINT a FOREIGN KEY (b_id) REFERENCES b (id)
+	) ENGINE = InnoDB DEFAULT CHARSET = utf8;
+	CREATE TABLE b (
+		id int(11) NOT NULL AUTO_INCREMENT,
+		a_id int(11) NOT NULL,
+		PRIMARY KEY (id)
+	) ENGINE = InnoDB DEFAULT CHARSET = utf8;`,
+	)
+	writeFile("schema.sql", createTable)
+	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql", "--before-apply", beforeApply)
+	assertEquals(t, apply, applyPrefix+beforeApply+"\n"+createTable+"\n")
+	apply = assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql", "--before-apply", beforeApply)
+	assertEquals(t, apply, nothingModified)
+}
+
 func TestMysqldefHelp(t *testing.T) {
 	_, err := execute("./mysqldef", "--help")
 	if err != nil {

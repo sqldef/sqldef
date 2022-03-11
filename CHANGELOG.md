@@ -1,3 +1,22 @@
+## v0.11.44
+
+- Add `--before-apply` to mysqldef [#217](https://github.com/k0kubun/sqldef/issues/217)
+
+## v0.11.43
+
+- Add `--skip-view` option to mysqldef as a temporary feature
+  [#214](https://github.com/k0kubun/sqldef/issues/214)
+  - This is expected to be removed once the view support is improved.
+
+## v0.11.42
+
+- Emulate mysql 5.7+'s TLS behavior by `tls=preferred` in mysqldef
+  [#216](https://github.com/k0kubun/sqldef/issues/216)
+
+## v0.11.41
+
+- Emulate psql's `sslmode=prefer` in psqldef when `PGSSLMODE` isn't explicitly set
+
 ## v0.11.40
 
 - Fix issues for nvarchar without size [#209](https://github.com/k0kubun/sqldef/issues/209)

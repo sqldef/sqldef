@@ -32,10 +32,12 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		DryRun                bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export                bool     `long:"export" description:"Just dump the current schema to stdout"`
 		SkipDrop              bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
+		SkipView              bool     `long:"skip-view" description:"Skip managing views (temporary feature, to be removed later)"`
 		WithoutPartitionRange bool     `long:"without-partition-range" description:"Without the specific code of PARTITION BY RANGE"`
 		InitAutoIncrement     bool     `long:"init-auto-increment" description:"Initialize AUTO_INCREMENT for CREATE TABLE"`
 		Targets               string   `long:"targets" description:"Manage the target name (Table, View, Type, Trigger)"`
 		TargetFile            string   `long:"target-file" description:"File management of --targets option"`
+		BeforeApply           string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs"`
 		Help                  bool     `long:"help" description:"Show this help"`
 		Version               bool     `long:"version" description:"Show this version"`
 	}
@@ -68,6 +70,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		WithoutPartitionRange: opts.WithoutPartitionRange,
 		InitAutoIncrement:     opts.InitAutoIncrement,
 		Targets:               targets,
+		BeforeApply:           opts.BeforeApply,
 	}
 
 	database := ""
@@ -106,6 +109,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		Port:                       int(opts.Port),
 		Socket:                     opts.Socket,
 		MySQLEnableCleartextPlugin: opts.EnableCleartextPlugin,
+		SkipView:                   opts.SkipView,
 	}
 	return config, &options
 }

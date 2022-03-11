@@ -17,6 +17,7 @@ type Config struct {
 
 	// Only MySQL
 	MySQLEnableCleartextPlugin bool
+	SkipView                   bool
 }
 
 // Abstraction layer for multiple kinds of databases

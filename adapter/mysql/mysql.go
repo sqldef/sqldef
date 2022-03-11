@@ -57,6 +57,10 @@ func (d *MysqlDatabase) DumpTableDDL(table string) (string, error) {
 }
 
 func (d *MysqlDatabase) Views() ([]string, error) {
+	if d.config.SkipView {
+		return []string{}, nil
+	}
+
 	rows, err := d.db.Query("show full tables where TABLE_TYPE = 'VIEW'")
 	if err != nil {
 		return nil, err
@@ -115,6 +119,7 @@ func mysqlBuildDSN(config adapter.Config) string {
 	c.Passwd = config.Password
 	c.DBName = config.DbName
 	c.AllowCleartextPasswords = config.MySQLEnableCleartextPlugin
+	c.TLSConfig = "preferred"
 	if config.Socket == "" {
 		c.Net = "tcp"
 		c.Addr = fmt.Sprintf("%s:%d", config.Host, config.Port)
