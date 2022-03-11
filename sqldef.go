@@ -21,6 +21,7 @@ type Options struct {
 	BeforeApply           string
 	WithoutPartitionRange bool
 	InitAutoIncrement     bool
+	Targets               []string
 }
 
 // Main function shared by `mysqldef` and `psqldef`
@@ -30,6 +31,7 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 		log.Fatal(fmt.Sprintf("Error on DumpDDLs: %s", err))
 	}
 	currentDDLs = filterDDLs(currentDDLs, options)
+	currentDDLs = filterTargets(generatorMode, currentDDLs, options.Targets)
 
 	if options.Export {
 		if currentDDLs == "" {
@@ -46,7 +48,7 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 	}
 	desiredDDLs := filterDDLs(sql, options)
 
-	ddls, err := schema.GenerateIdempotentDDLs(generatorMode, desiredDDLs, currentDDLs)
+	ddls, err := schema.GenerateIdempotentTargetedDDLs(generatorMode, desiredDDLs, currentDDLs, options.Targets)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -140,4 +142,52 @@ func filterPartitionRange(sql string) string {
 // Initialize count of environment-dependent `AUTO_INCREMENT`
 func initAutoIncrement(sql string) string {
 	return regexp.MustCompile(`AUTO_INCREMENT=[0-9]* `).ReplaceAllString(sql, "")
+}
+
+func filterTargets(mode schema.GeneratorMode, currentDDLs string, targets []string) string {
+
+	if len(targets) <= 0 {
+		return currentDDLs
+	}
+
+	ddls, err := schema.ParseDDLs(mode, currentDDLs)
+	if err != nil {
+		return currentDDLs
+	}
+
+	filtered := []string{}
+	for _, ddl := range ddls {
+		if containsString(targets, ddl.Name()) {
+			filtered = append(filtered, ddl.Statement()+";")
+		}
+	}
+
+	return strings.Join(filtered, "\n\n")
+}
+
+func containsString(strs []string, str string) bool {
+	for _, s := range strs {
+		if s == str {
+			return true
+		}
+	}
+	return false
+}
+
+func MargeTargets(targets string, targetFile string) []string {
+	result := []string{}
+
+	t1 := strings.Split(strings.TrimSpace(targets), ",")
+	if len(t1) <= 0 || t1[0] != "" {
+		result = append(result, t1...)
+	}
+
+	if raw, err := ReadFile(targetFile); err == nil {
+		t2 := strings.Split(strings.Trim(strings.TrimSpace(raw), "\n"), "\n")
+		if len(t2) <= 0 || t2[0] != "" {
+			result = append(result, t2...)
+		}
+	}
+
+	return result
 }

@@ -6,16 +6,18 @@
 package main
 
 import (
-	"github.com/k0kubun/sqldef/adapter"
-	"github.com/k0kubun/sqldef/adapter/sqlite3"
-	"github.com/k0kubun/sqldef/cmd/testutils"
-	"github.com/k0kubun/sqldef/schema"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/adapter/sqlite3"
+	"github.com/k0kubun/sqldef/cmd/testutils"
+	"github.com/k0kubun/sqldef/schema"
 )
 
 const (
@@ -111,6 +113,110 @@ func TestSQLite3defExport(t *testing.T) {
 	))
 }
 
+func TestSQLite3defExportLimitedTargets(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(
+		`CREATE TABLE users%d (
+		    id integer NOT NULL
+		);
+		`)
+	for i := 1; i <= 3; i++ {
+		mustExecute("sqlite3", "sqlite3def_test", fmt.Sprintf(createTable, i))
+	}
+
+	out := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--export", "--targets", "users1,users3")
+	assertEquals(t, out, fmt.Sprintf(createTable, 1)+"\n"+fmt.Sprintf(createTable, 3))
+}
+
+func TestSQLite3defLimitedTargets(t *testing.T) {
+
+	createTable := stripHeredoc(
+		`CREATE TABLE users%d (
+		    id integer NOT NULL
+		);`)
+	modifiedCreateTable := stripHeredoc(
+		`CREATE TABLE users%d (
+		    id integer NOT NULL,
+		    name text
+		);`)
+
+	// Prepare the modified schema.sql
+	resetTestDatabase()
+	for i := 3; i <= 7; i++ {
+		mustExecute("sqlite3", "sqlite3def_test", fmt.Sprintf(modifiedCreateTable, i))
+	}
+	out := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--export", "--file", "schema.sql")
+	writeFile("schema.sql", out)
+
+	// Run test
+	resetTestDatabase()
+	for i := 1; i <= 5; i++ {
+		mustExecute("sqlite3", "sqlite3def_test", fmt.Sprintf(createTable, i))
+	}
+
+	apply := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--targets", "users1,users3,users7", "--file", "schema.sql")
+	assertEquals(t, apply,
+		applyPrefix+
+			"ALTER TABLE `users3` ADD COLUMN `name` text;\n"+
+			fmt.Sprintf(modifiedCreateTable, 7)+"\n"+
+			"DROP TABLE `users1`;\n")
+}
+
+func TestSQLite3defExportTargetFile(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(
+		`CREATE TABLE users%d (
+		    id integer NOT NULL
+		);
+		`)
+	for i := 1; i <= 5; i++ {
+		mustExecute("sqlite3", "sqlite3def_test", fmt.Sprintf(createTable, i))
+	}
+
+	writeFile("target-list", "users2\nusers4\nusers5")
+
+	out := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--export", "--target-file", "target-list")
+	assertEquals(t, out, fmt.Sprintf(createTable, 2)+"\n"+fmt.Sprintf(createTable, 4)+"\n"+fmt.Sprintf(createTable, 5))
+}
+
+func TestSQLite3defTargetFile(t *testing.T) {
+
+	createTable := stripHeredoc(
+		`CREATE TABLE users%d (
+		    id integer NOT NULL
+		);`)
+	modifiedCreateTable := stripHeredoc(
+		`CREATE TABLE users%d (
+		    id integer NOT NULL,
+		    name text
+		);`)
+
+	// Prepare the modified schema.sql
+	resetTestDatabase()
+	for i := 3; i <= 6; i++ {
+		mustExecute("sqlite3", "sqlite3def_test", fmt.Sprintf(modifiedCreateTable, i))
+	}
+	out := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--export", "--file", "schema.sql")
+	writeFile("schema.sql", out)
+
+	// Run test
+	resetTestDatabase()
+	for i := 1; i <= 4; i++ {
+		mustExecute("sqlite3", "sqlite3def_test", fmt.Sprintf(createTable, i))
+	}
+
+	writeFile("target-list", "users2\nusers4\nusers6")
+
+	apply := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--target-file", "target-list", "--file", "schema.sql")
+	assertEquals(t, apply,
+		applyPrefix+
+			"ALTER TABLE `users4` ADD COLUMN `name` text;\n"+
+			fmt.Sprintf(modifiedCreateTable, 6)+"\n"+
+			"DROP TABLE `users2`;\n")
+}
+
 func TestSQLite3defHelp(t *testing.T) {
 	_, err := execute("./sqlite3def", "--help")
 	if err != nil {
@@ -130,6 +236,7 @@ func TestMain(m *testing.M) {
 	_ = os.Remove("sqlite3def")
 	_ = os.Remove("sqlite3def_test")
 	_ = os.Remove("schema.sql")
+	_ = os.Remove("target-list")
 	os.Exit(status)
 }
 

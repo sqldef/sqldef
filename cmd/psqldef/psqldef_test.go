@@ -7,16 +7,17 @@ package main
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/adapter"
-	"github.com/k0kubun/sqldef/adapter/postgres"
-	"github.com/k0kubun/sqldef/cmd/testutils"
-	"github.com/k0kubun/sqldef/schema"
 	"log"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/adapter/postgres"
+	"github.com/k0kubun/sqldef/cmd/testutils"
+	"github.com/k0kubun/sqldef/schema"
 )
 
 const (
@@ -1356,6 +1357,110 @@ func TestPsqldefBeforeApply(t *testing.T) {
 	assertEquals(t, owner, "dummy_owner_role\n")
 }
 
+func TestPsqldefExportLimitedTargets(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(
+		`CREATE TABLE public.users%d (
+		    "id" bigint NOT NULL
+		);
+		`)
+	for i := 1; i <= 3; i++ {
+		mustExecute("psql", "-Upostgres", database, "-tAc", fmt.Sprintf(createTable, i))
+	}
+
+	out := assertedExecute(t, "./psqldef", "-Upostgres", database, "--export", "--targets", "public.users1,public.users3")
+	assertEquals(t, out, fmt.Sprintf(createTable, 1)+"\n"+fmt.Sprintf(createTable, 3))
+}
+
+func TestPsqldefLimitedTargets(t *testing.T) {
+
+	createTable := stripHeredoc(
+		`CREATE TABLE public.users%d (
+		    "id" bigint NOT NULL
+		);`)
+	modifiedCreateTable := stripHeredoc(
+		`CREATE TABLE public.users%d (
+		    "id" bigint NOT NULL,
+		    "name" character varying(30)
+		);`)
+
+	// Prepare the modified schema.sql
+	resetTestDatabase()
+	for i := 3; i <= 7; i++ {
+		mustExecute("psql", "-Upostgres", database, "-tAc", fmt.Sprintf(modifiedCreateTable, i))
+	}
+	out := assertedExecute(t, "./psqldef", "-Upostgres", database, "--export", "--file", "schema.sql")
+	writeFile("schema.sql", out)
+
+	// Run test
+	resetTestDatabase()
+	for i := 1; i <= 5; i++ {
+		mustExecute("psql", "-Upostgres", database, "-tAc", fmt.Sprintf(createTable, i))
+	}
+
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", database, "--targets", "public.users1,public.users3,public.users7", "--file", "schema.sql")
+	assertEquals(t, apply,
+		applyPrefix+
+			`ALTER TABLE "public"."users3" ADD COLUMN "name" character varying(30);`+"\n"+
+			fmt.Sprintf(modifiedCreateTable, 7)+"\n"+
+			`DROP TABLE "public"."users1";`+"\n")
+}
+
+func TestPsqldefExportTargetFile(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(
+		`CREATE TABLE public.users%d (
+		    "id" bigint NOT NULL
+		);
+		`)
+	for i := 1; i <= 5; i++ {
+		mustExecute("psql", "-Upostgres", database, "-tAc", fmt.Sprintf(createTable, i))
+	}
+
+	writeFile("target-list", "public.users2\npublic.users4\npublic.users5")
+
+	out := assertedExecute(t, "./psqldef", "-Upostgres", database, "--export", "--target-file", "target-list")
+	assertEquals(t, out, fmt.Sprintf(createTable, 2)+"\n"+fmt.Sprintf(createTable, 4)+"\n"+fmt.Sprintf(createTable, 5))
+}
+
+func TestPsqldefTargetFile(t *testing.T) {
+
+	createTable := stripHeredoc(
+		`CREATE TABLE public.users%d (
+		    "id" bigint NOT NULL
+		);`)
+	modifiedCreateTable := stripHeredoc(
+		`CREATE TABLE public.users%d (
+		    "id" bigint NOT NULL,
+		    "name" character varying(30)
+		);`)
+
+	// Prepare the modified schema.sql
+	resetTestDatabase()
+	for i := 3; i <= 7; i++ {
+		mustExecute("psql", "-Upostgres", database, "-tAc", fmt.Sprintf(modifiedCreateTable, i))
+	}
+	out := assertedExecute(t, "./psqldef", "-Upostgres", database, "--export", "--file", "schema.sql")
+	writeFile("schema.sql", out)
+
+	// Run test
+	resetTestDatabase()
+	for i := 1; i <= 5; i++ {
+		mustExecute("psql", "-Upostgres", database, "-tAc", fmt.Sprintf(createTable, i))
+	}
+
+	writeFile("target-list", "public.users2\npublic.users4\npublic.users6")
+
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", database, "--target-file", "target-list", "--file", "schema.sql")
+	assertEquals(t, apply,
+		applyPrefix+
+			`ALTER TABLE "public"."users4" ADD COLUMN "name" character varying(30);`+"\n"+
+			fmt.Sprintf(modifiedCreateTable, 6)+"\n"+
+			`DROP TABLE "public"."users2";`+"\n")
+}
+
 func TestPsqldefHelp(t *testing.T) {
 	_, err := execute("./psqldef", "--help")
 	if err != nil {
@@ -1381,6 +1486,7 @@ func TestMain(m *testing.M) {
 	status := m.Run()
 	_ = os.Remove("psqldef")
 	_ = os.Remove("schema.sql")
+	_ = os.Remove("target-list")
 	os.Exit(status)
 }
 

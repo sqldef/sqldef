@@ -1060,6 +1060,110 @@ func TestMssqldefExport(t *testing.T) {
 	))
 }
 
+func TestMssqldefExportLimitedTargets(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(
+		`CREATE TABLE dbo.users%d (
+		    id int NOT NULL
+		);
+		`)
+	for i := 1; i <= 3; i++ {
+		mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", fmt.Sprintf(createTable, i))
+	}
+
+	out := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export", "--targets", "users1,users3")
+	assertEquals(t, out, fmt.Sprintf(createTable, 1)+"\n"+fmt.Sprintf(createTable, 3))
+}
+
+func TestMssqldefLimitedTargets(t *testing.T) {
+
+	createTable := stripHeredoc(
+		`CREATE TABLE dbo.users%d (
+		    id int NOT NULL
+		);`)
+	modifiedCreateTable := stripHeredoc(
+		`CREATE TABLE dbo.users%d (
+		    id int NOT NULL,
+		    name varchar(30)
+		);`)
+
+	// Prepare the modified schema.sql
+	resetTestDatabase()
+	for i := 3; i <= 7; i++ {
+		mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", fmt.Sprintf(modifiedCreateTable, i))
+	}
+	out := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export", "--file", "schema.sql")
+	writeFile("schema.sql", out)
+
+	// Run test
+	resetTestDatabase()
+	for i := 1; i <= 5; i++ {
+		mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", fmt.Sprintf(createTable, i))
+	}
+
+	apply := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--targets", "users1,users3,users7", "--file", "schema.sql")
+	assertEquals(t, apply,
+		applyPrefix+
+			"ALTER TABLE [dbo].[users3] ADD [name] varchar(30);\n"+
+			fmt.Sprintf(modifiedCreateTable, 7)+"\n"+
+			"DROP TABLE [dbo].[users1];\n")
+}
+
+func TestMssqldefExportTargetFile(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(
+		`CREATE TABLE dbo.users%d (
+		    id int NOT NULL
+		);
+		`)
+	for i := 1; i <= 5; i++ {
+		mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", fmt.Sprintf(createTable, i))
+	}
+
+	writeFile("target-list", "users2\nusers4\nusers5")
+
+	out := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export", "--target-file", "target-list")
+	assertEquals(t, out, fmt.Sprintf(createTable, 2)+"\n"+fmt.Sprintf(createTable, 4)+"\n"+fmt.Sprintf(createTable, 5))
+}
+
+func TestMssqldefTargetFile(t *testing.T) {
+
+	createTable := stripHeredoc(
+		`CREATE TABLE dbo.users%d (
+		    id int NOT NULL
+		);`)
+	modifiedCreateTable := stripHeredoc(
+		`CREATE TABLE dbo.users%d (
+		    id int NOT NULL,
+		    name varchar(30)
+		);`)
+
+	// Prepare the modified schema.sql
+	resetTestDatabase()
+	for i := 3; i <= 7; i++ {
+		mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", fmt.Sprintf(modifiedCreateTable, i))
+	}
+	out := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export", "--file", "schema.sql")
+	writeFile("schema.sql", out)
+
+	// Run test
+	resetTestDatabase()
+	for i := 1; i <= 5; i++ {
+		mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", fmt.Sprintf(createTable, i))
+	}
+
+	writeFile("target-list", "users2\nusers4\nusers6")
+
+	apply := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--target-file", "target-list", "--file", "schema.sql")
+	assertEquals(t, apply,
+		applyPrefix+
+			"ALTER TABLE [dbo].[users4] ADD [name] varchar(30);\n"+
+			fmt.Sprintf(modifiedCreateTable, 6)+"\n"+
+			"DROP TABLE [dbo].[users2];\n")
+}
+
 func TestMssqldefHelp(t *testing.T) {
 	_, err := execute("./mssqldef", "--help")
 	if err != nil {
@@ -1078,6 +1182,7 @@ func TestMain(m *testing.M) {
 	status := m.Run()
 	_ = os.Remove("mssqldef")
 	_ = os.Remove("schema.sql")
+	_ = os.Remove("target-list")
 	os.Exit(status)
 }
 

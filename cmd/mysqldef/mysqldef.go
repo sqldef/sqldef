@@ -34,6 +34,8 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		SkipDrop              bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
 		WithoutPartitionRange bool     `long:"without-partition-range" description:"Without the specific code of PARTITION BY RANGE"`
 		InitAutoIncrement     bool     `long:"init-auto-increment" description:"Initialize AUTO_INCREMENT for CREATE TABLE"`
+		Targets               string   `long:"targets" description:"Manage the target name (Table, View, Type, Trigger)"`
+		TargetFile            string   `long:"target-file" description:"File management of --targets option"`
 		Help                  bool     `long:"help" description:"Show this help"`
 		Version               bool     `long:"version" description:"Show this version"`
 	}
@@ -56,6 +58,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	}
 
 	desiredFile, currentFile := sqldef.ParseFiles(opts.File)
+	targets := sqldef.MargeTargets(opts.Targets, opts.TargetFile)
 	options := sqldef.Options{
 		DesiredFile:           desiredFile,
 		CurrentFile:           currentFile,
@@ -64,6 +67,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		SkipDrop:              opts.SkipDrop,
 		WithoutPartitionRange: opts.WithoutPartitionRange,
 		InitAutoIncrement:     opts.InitAutoIncrement,
+		Targets:               targets,
 	}
 
 	database := ""
