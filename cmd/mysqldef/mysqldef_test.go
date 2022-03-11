@@ -1355,10 +1355,10 @@ func TestMysqldefExportWithoutPartitionRange(t *testing.T) {
 
 	createTable := "CREATE TABLE `users` (\n" +
 		"  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
-		"  `name` varchar(255) DEFAULT NULL,\n" +
+		"  `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,\n" +
 		"  `account_id` bigint DEFAULT NULL,\n" +
 		"  PRIMARY KEY (`id`)\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci"
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci"
 	partitions := "/*!50100 PARTITION BY RANGE (`id`)\n" +
 		"(PARTITION p0 VALUES LESS THAN (5) ENGINE = InnoDB,\n" +
 		" PARTITION p1 VALUES LESS THAN (10) ENGINE = InnoDB,\n" +
@@ -1383,10 +1383,10 @@ func TestMysqldefWithoutPartitionRange(t *testing.T) {
 
 	createTable := "CREATE TABLE `users` (\n" +
 		"  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
-		"  `name` varchar(255) DEFAULT NULL,\n" +
+		"  `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,\n" +
 		"  `account_id` bigint DEFAULT NULL,\n" +
 		"  PRIMARY KEY (`id`)\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci"
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci"
 	partitions := "/*!50100 PARTITION BY RANGE (`id`)\n" +
 		"(PARTITION p0 VALUES LESS THAN (5) ENGINE = InnoDB,\n" +
 		" PARTITION p1 VALUES LESS THAN (10) ENGINE = InnoDB,\n" +
@@ -1407,10 +1407,10 @@ func TestMysqldefExportInitAutoIncrement(t *testing.T) {
 	autoIncrement := "AUTO_INCREMENT=123 "
 	createTable := "CREATE TABLE `users` (\n" +
 		"  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
-		"  `name` varchar(255) DEFAULT NULL,\n" +
+		"  `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,\n" +
 		"  `account_id` bigint DEFAULT NULL,\n" +
 		"  PRIMARY KEY (`id`)\n" +
-		") ENGINE=InnoDB %sDEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;\n"
+		") ENGINE=InnoDB %sDEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;\n"
 
 	createTableDDL := fmt.Sprintf(createTable, autoIncrement)
 	createTableWithoutAutoIncrementDDL := fmt.Sprintf(createTable, "")
@@ -1429,10 +1429,10 @@ func TestMysqldefInitAutoIncrement(t *testing.T) {
 	autoIncrement := "AUTO_INCREMENT=123 "
 	createTable := "CREATE TABLE `users` (\n" +
 		"  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
-		"  `name` varchar(255) DEFAULT NULL,\n" +
+		"  `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,\n" +
 		"  `account_id` bigint DEFAULT NULL,\n" +
 		"  PRIMARY KEY (`id`)\n" +
-		") ENGINE=InnoDB %sDEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;\n"
+		") ENGINE=InnoDB %sDEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;\n"
 
 	createTableDDL := fmt.Sprintf(createTable, autoIncrement)
 	createTableWithoutAutoIncrementDDL := fmt.Sprintf(createTable, "")
@@ -1447,7 +1447,7 @@ func TestMysqldefExportLimitedTargets(t *testing.T) {
 
 	createTable := "CREATE TABLE `users%d` (\n" +
 		"  `id` bigint NOT NULL\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;\n"
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;\n"
 	for i := 1; i <= 3; i++ {
 		mustExecute("mysql", "-uroot", "mysqldef_test", "-e", fmt.Sprintf(createTable, i))
 	}
@@ -1460,11 +1460,11 @@ func TestMysqldefLimitedTargets(t *testing.T) {
 
 	createTable := "CREATE TABLE `users%d` (\n" +
 		"  `id` bigint NOT NULL\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;"
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;"
 	modifiedCreateTable := "CREATE TABLE `users%d` (\n" +
 		"  `id` bigint NOT NULL,\n" +
-		"  `name` varchar(40) DEFAULT NULL\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;"
+		"  `name` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;"
 
 	// Prepare the modified schema.sql
 	resetTestDatabase()
@@ -1483,7 +1483,7 @@ func TestMysqldefLimitedTargets(t *testing.T) {
 	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--targets", "users1,users3,users7", "--file", "schema.sql")
 	assertEquals(t, apply,
 		applyPrefix+
-			"ALTER TABLE `users3` ADD COLUMN `name` varchar(40) DEFAULT null AFTER `id`;\n"+
+			"ALTER TABLE `users3` ADD COLUMN `name` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT null AFTER `id`;\n"+
 			fmt.Sprintf(modifiedCreateTable, 7)+"\n"+
 			"DROP TABLE `users1`;\n")
 }
@@ -1493,7 +1493,7 @@ func TestMysqldefExportTargetFile(t *testing.T) {
 
 	createTable := "CREATE TABLE `users%d` (\n" +
 		"  `id` bigint NOT NULL\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;\n"
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;\n"
 	for i := 1; i <= 5; i++ {
 		mustExecute("mysql", "-uroot", "mysqldef_test", "-e", fmt.Sprintf(createTable, i))
 	}
@@ -1507,11 +1507,11 @@ func TestMysqldefTargetFile(t *testing.T) {
 
 	createTable := "CREATE TABLE `users%d` (\n" +
 		"  `id` bigint NOT NULL\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;"
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;"
 	modifiedCreateTable := "CREATE TABLE `users%d` (\n" +
 		"  `id` bigint NOT NULL,\n" +
-		"  `name` varchar(40) DEFAULT NULL\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;"
+		"  `name` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;"
 
 	// Prepare the modified schema.sql
 	resetTestDatabase()
@@ -1532,7 +1532,7 @@ func TestMysqldefTargetFile(t *testing.T) {
 	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--target-file", "target-list", "--file", "schema.sql")
 	assertEquals(t, apply,
 		applyPrefix+
-			"ALTER TABLE `users4` ADD COLUMN `name` varchar(40) DEFAULT null AFTER `id`;\n"+
+			"ALTER TABLE `users4` ADD COLUMN `name` varchar(40) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT null AFTER `id`;\n"+
 			fmt.Sprintf(modifiedCreateTable, 6)+"\n"+
 			"DROP TABLE `users2`;\n")
 }
