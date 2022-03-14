@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/k0kubun/sqldef/adapter"
@@ -12,13 +13,14 @@ import (
 )
 
 type Options struct {
-	DesiredFile string
-	CurrentFile string
-	DryRun      bool
-	Export      bool
-	SkipDrop    bool
-	BeforeApply string
-	Targets     []string
+	DesiredFile          string
+	CurrentFile          string
+	DryRun               bool
+	Export               bool
+	SkipDrop             bool
+	BeforeApply          string
+	IgnorePartitionRange bool
+	Targets              []string
 }
 
 // Main function shared by `mysqldef` and `psqldef`
@@ -27,6 +29,7 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 	if err != nil {
 		log.Fatal(fmt.Sprintf("Error on DumpDDLs: %s", err))
 	}
+	currentDDLs = filterDDLs(currentDDLs, options)
 	currentDDLs = filterTargets(generatorMode, currentDDLs, options.Targets)
 
 	if options.Export {
@@ -42,7 +45,7 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 	if err != nil {
 		log.Fatalf("Failed to read '%s': %s", options.DesiredFile, err)
 	}
-	desiredDDLs := sql
+	desiredDDLs := filterDDLs(sql, options)
 
 	ddls, err := schema.GenerateIdempotentTargetedDDLs(generatorMode, desiredDDLs, currentDDLs, options.Targets)
 	if err != nil {
@@ -116,6 +119,19 @@ func showDDLs(ddls []string, skipDrop bool, beforeApply string) {
 		}
 		fmt.Printf("%s;\n", ddl)
 	}
+}
+
+func filterDDLs(sql string, options *Options) string {
+	if options.IgnorePartitionRange {
+		sql = filterPartitionRange(sql)
+	}
+	return sql
+}
+
+// For MySQL
+// Filter specific code for environment-dependent `PARTITION BY RANGE`
+func filterPartitionRange(sql string) string {
+	return regexp.MustCompile(`\n\/\*![0-9]* PARTITION BY RANGE[\s\S]*?\*\/`).ReplaceAllString(sql, "")
 }
 
 func filterTargets(mode schema.GeneratorMode, currentDDLs string, targets []string) string {

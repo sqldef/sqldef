@@ -35,6 +35,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		SkipDrop              bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
 		SkipView              bool     `long:"skip-view" description:"Skip managing views (temporary feature, to be removed later)"`
 		BeforeApply           string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs"`
+		IgnorePartitionRange  bool     `long:"ignore-partition-range" description:"Ignore the specific code of PARTITION BY RANGE"`
 		Targets               string   `long:"targets" description:"Manage the target name (Table, View, Type, Trigger)"`
 		TargetFile            string   `long:"target-file" description:"File management of --targets option"`
 		Help                  bool     `long:"help" description:"Show this help"`
@@ -61,13 +62,14 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	desiredFile, currentFile := sqldef.ParseFiles(opts.File)
 	targets := sqldef.MargeTargets(opts.Targets, opts.TargetFile)
 	options := sqldef.Options{
-		DesiredFile: desiredFile,
-		CurrentFile: currentFile,
-		DryRun:      opts.DryRun,
-		Export:      opts.Export,
-		SkipDrop:    opts.SkipDrop,
-		BeforeApply: opts.BeforeApply,
-		Targets:     targets,
+		DesiredFile:          desiredFile,
+		CurrentFile:          currentFile,
+		DryRun:               opts.DryRun,
+		Export:               opts.Export,
+		SkipDrop:             opts.SkipDrop,
+		BeforeApply:          opts.BeforeApply,
+		IgnorePartitionRange: opts.IgnorePartitionRange,
+		Targets:              targets,
 	}
 
 	database := ""

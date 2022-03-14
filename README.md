@@ -36,6 +36,7 @@ Application Options:
       --dry-run                     Don't run DDLs but just show them
       --export                      Just dump the current schema to stdout
       --skip-drop                   Skip destructive changes such as DROP
+      --without-partition-range     Without the specific code of PARTITION BY RANGE
       --targets                     Manage the target name (Table, View, Type, Trigger)
       --target-file                 File management of --targets option
       --help                        Show this help
@@ -125,6 +126,37 @@ mails
 ```sql
 $ mysqldef -uroot test --target-file tables_file --export > schema.sql
 $ mysqldef -uroot test --target-file tables_file < schema.sql
+```
+
+##### --ignore-partition-range
+```sql
+# original schema
+CREATE TABLE user (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(128) DEFAULT 'user1',
+) Engine=InnoDB DEFAULT CHARSET=utf8mb4
+/*!50100 PARTITION BY RANGE (`id`)
+(PARTITION p0 VALUES LESS THAN (5) ENGINE = InnoDB,
+ PARTITION p1 VALUES LESS THAN (10) ENGINE = InnoDB,
+ PARTITION p2 VALUES LESS THAN MAXVALUE ENGINE = InnoDB) */;
+```
+
+```sql
+$ mysqldef -uroot test --export --ignore-partition-range > schema.sql
+CREATE TABLE user (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(128) DEFAULT 'user1',
+) Engine=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+```sql
+$ mysqldef -uroot test --export > schema.sql
+$ mysqldef -uroot test --dry-run --ignore-partition-range < schema.sql
+Run: 
+CREATE TABLE user (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(128) DEFAULT 'user1',
+) Engine=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
 ### psqldef
