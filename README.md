@@ -36,6 +36,8 @@ Application Options:
       --dry-run                     Don't run DDLs but just show them
       --export                      Just dump the current schema to stdout
       --skip-drop                   Skip destructive changes such as DROP
+      --targets                     Manage the target name (Table, View, Type, Trigger)
+      --target-file                 File management of --targets option
       --help                        Show this help
       --version                     Show this version
 ```
@@ -98,6 +100,33 @@ $ mysqldef -uroot test --skip-drop < schema.sql
 Skipped: 'DROP TABLE users;'
 ```
 
+#### Options to avoid environment dependence
+
+These options may be useful when running in different environments (e.g. stg <->prod)
+
+##### --targets, --target-file
+
+Tables other than users, orders, mails are ignored
+
+```sql
+$ mysqldef -uroot test --targets users,orders,mails --export > schema.sql
+$ mysqldef -uroot test --targets users,orders,mails < schema.sql
+```
+
+The following works the same as the command above
+
+```plaintext
+# Save as file with the name `tables_file`
+users
+orders
+mails
+```
+
+```sql
+$ mysqldef -uroot test --target-file tables_file --export > schema.sql
+$ mysqldef -uroot test --target-file tables_file < schema.sql
+```
+
 ### psqldef
 
 `psqldef` should work in the same way as `psql` for setting connection information.
@@ -117,6 +146,8 @@ Application Options:
       --dry-run              Don't run DDLs but just show them
       --export               Just dump the current schema to stdout
       --skip-drop            Skip destructive changes such as DROP
+      --targets              Manage the target name (Table, View, Type, Trigger)
+      --target-file          File management of --targets option
       --help                 Show this help
 ```
 
@@ -197,6 +228,8 @@ Application Options:
       --dry-run          Don't run DDLs but just show them
       --export           Just dump the current schema to stdout
       --skip-drop        Skip destructive changes such as DROP
+      --targets          Manage the target name (Table, View, Type, Trigger)
+      --target-file      File management of --targets option
       --help             Show this help
 ```
 
@@ -216,6 +249,8 @@ Application Options:
       --dry-run              Don't run DDLs but just show them
       --export               Just dump the current schema to stdout
       --skip-drop            Skip destructive changes such as DROP
+      --targets              Manage the target name (Table, View, Type, Trigger)
+      --target-file          File management of --targets option
       --help                 Show this help
       --version              Show this version
 ```

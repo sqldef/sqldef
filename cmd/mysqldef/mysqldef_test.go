@@ -6,6 +6,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -1387,6 +1388,101 @@ func TestMysqldefBeforeApply(t *testing.T) {
 	assertEquals(t, apply, nothingModified)
 }
 
+func TestMysqldefExportLimitedTargets(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE `users%d` (\n" +
+		"  `uuid` varchar(37) NOT NULL\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=latin1;\n"
+	for i := 1; i <= 3; i++ {
+		mustExecute("mysql", "-uroot", "mysqldef_test", "-e", fmt.Sprintf(createTable, i))
+	}
+
+	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export", "--targets", "users1,users3")
+	assertEquals(t, out, fmt.Sprintf(createTable, 1)+"\n"+fmt.Sprintf(createTable, 3))
+}
+
+func TestMysqldefLimitedTargets(t *testing.T) {
+
+	createTable := "CREATE TABLE `users%d` (\n" +
+		"  `uuid` varchar(37) NOT NULL\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=latin1;"
+	modifiedCreateTable := "CREATE TABLE `users%d` (\n" +
+		"  `uuid` varchar(37) NOT NULL,\n" +
+		"  `name` varchar(40) DEFAULT NULL\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=latin1;"
+
+	// Prepare the modified schema.sql
+	resetTestDatabase()
+	for i := 3; i <= 7; i++ {
+		mustExecute("mysql", "-uroot", "mysqldef_test", "-e", fmt.Sprintf(modifiedCreateTable, i))
+	}
+	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export", "--file", "schema.sql")
+	writeFile("schema.sql", out)
+
+	// Run test
+	resetTestDatabase()
+	for i := 1; i <= 5; i++ {
+		mustExecute("mysql", "-uroot", "mysqldef_test", "-e", fmt.Sprintf(createTable, i))
+	}
+
+	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--targets", "users1,users3,users7", "--file", "schema.sql")
+	assertEquals(t, apply,
+		applyPrefix+
+			"ALTER TABLE `users3` ADD COLUMN `name` varchar(40) DEFAULT null AFTER `uuid`;\n"+
+			fmt.Sprintf(modifiedCreateTable, 7)+"\n"+
+			"DROP TABLE `users1`;\n")
+}
+
+func TestMysqldefExportTargetFile(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE `users%d` (\n" +
+		"  `uuid` varchar(37) NOT NULL\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=latin1;\n"
+	for i := 1; i <= 5; i++ {
+		mustExecute("mysql", "-uroot", "mysqldef_test", "-e", fmt.Sprintf(createTable, i))
+	}
+	writeFile("target-list", "users2\nusers4\nusers5")
+
+	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export", "--target-file", "target-list")
+	assertEquals(t, out, fmt.Sprintf(createTable, 2)+"\n"+fmt.Sprintf(createTable, 4)+"\n"+fmt.Sprintf(createTable, 5))
+}
+
+func TestMysqldefTargetFile(t *testing.T) {
+
+	createTable := "CREATE TABLE `users%d` (\n" +
+		"  `uuid` varchar(37) NOT NULL\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=latin1;"
+	modifiedCreateTable := "CREATE TABLE `users%d` (\n" +
+		"  `uuid` varchar(37) NOT NULL,\n" +
+		"  `name` varchar(40) DEFAULT NULL\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=latin1;"
+
+	// Prepare the modified schema.sql
+	resetTestDatabase()
+	for i := 3; i <= 7; i++ {
+		mustExecute("mysql", "-uroot", "mysqldef_test", "-e", fmt.Sprintf(modifiedCreateTable, i))
+	}
+	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export", "--file", "schema.sql")
+	writeFile("schema.sql", out)
+
+	// Run test
+	resetTestDatabase()
+	for i := 1; i <= 5; i++ {
+		mustExecute("mysql", "-uroot", "mysqldef_test", "-e", fmt.Sprintf(createTable, i))
+	}
+
+	writeFile("target-list", "users2\nusers4\nusers6")
+
+	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--target-file", "target-list", "--file", "schema.sql")
+	assertEquals(t, apply,
+		applyPrefix+
+			"ALTER TABLE `users4` ADD COLUMN `name` varchar(40) DEFAULT null AFTER `uuid`;\n"+
+			fmt.Sprintf(modifiedCreateTable, 6)+"\n"+
+			"DROP TABLE `users2`;\n")
+}
+
 func TestMysqldefHelp(t *testing.T) {
 	_, err := execute("./mysqldef", "--help")
 	if err != nil {
@@ -1409,6 +1505,7 @@ func TestMain(m *testing.M) {
 	status := m.Run()
 	_ = os.Remove("mysqldef")
 	_ = os.Remove("schema.sql")
+	_ = os.Remove("target-list")
 	os.Exit(status)
 }
 

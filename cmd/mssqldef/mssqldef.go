@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/adapter/file"
 	"log"
 	"os"
 	"syscall"
@@ -10,6 +9,7 @@ import (
 	"github.com/jessevdk/go-flags"
 	"github.com/k0kubun/sqldef"
 	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/adapter/file"
 	"github.com/k0kubun/sqldef/adapter/mssql"
 	"github.com/k0kubun/sqldef/schema"
 	"golang.org/x/term"
@@ -21,17 +21,19 @@ var version string
 // TODO: Support `sqldef schema.sql -opt val...`
 func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	var opts struct {
-		User     string   `short:"U" long:"user" description:"MSSQL user name" value-name:"user_name" default:"sa"`
-		Password string   `short:"P" long:"password" description:"MSSQL user password, overridden by $MSSQL_PWD" value-name:"password"`
-		Host     string   `short:"h" long:"host" description:"Host to connect to the MSSQL server" value-name:"host_name" default:"127.0.0.1"`
-		Port     uint     `short:"p" long:"port" description:"Port used for the connection" value-name:"port_num" default:"1433"`
-		Prompt   bool     `long:"password-prompt" description:"Force MSSQL user password prompt"`
-		File     []string `long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"sql_file" default:"-"`
-		DryRun   bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
-		Export   bool     `long:"export" description:"Just dump the current schema to stdout"`
-		SkipDrop bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
-		Help     bool     `long:"help" description:"Show this help"`
-		Version  bool     `long:"version" description:"Show this version"`
+		User       string   `short:"U" long:"user" description:"MSSQL user name" value-name:"user_name" default:"sa"`
+		Password   string   `short:"P" long:"password" description:"MSSQL user password, overridden by $MSSQL_PWD" value-name:"password"`
+		Host       string   `short:"h" long:"host" description:"Host to connect to the MSSQL server" value-name:"host_name" default:"127.0.0.1"`
+		Port       uint     `short:"p" long:"port" description:"Port used for the connection" value-name:"port_num" default:"1433"`
+		Prompt     bool     `long:"password-prompt" description:"Force MSSQL user password prompt"`
+		File       []string `long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"sql_file" default:"-"`
+		DryRun     bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
+		Export     bool     `long:"export" description:"Just dump the current schema to stdout"`
+		SkipDrop   bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
+		Targets    string   `long:"targets" description:"Manage the target name (Table, View, Type, Trigger)"`
+		TargetFile string   `long:"target-file" description:"File management of --targets option"`
+		Help       bool     `long:"help" description:"Show this help"`
+		Version    bool     `long:"version" description:"Show this version"`
 	}
 
 	parser := flags.NewParser(&opts, flags.None)
@@ -52,12 +54,14 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	}
 
 	desiredFile, currentFile := sqldef.ParseFiles(opts.File)
+	targets := sqldef.MargeTargets(opts.Targets, opts.TargetFile)
 	options := sqldef.Options{
 		DesiredFile: desiredFile,
 		CurrentFile: currentFile,
 		DryRun:      opts.DryRun,
 		Export:      opts.Export,
 		SkipDrop:    opts.SkipDrop,
+		Targets:     targets,
 	}
 
 	database := ""

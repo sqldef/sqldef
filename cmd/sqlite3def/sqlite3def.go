@@ -2,13 +2,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/adapter/file"
 	"log"
 	"os"
 
 	"github.com/jessevdk/go-flags"
 	"github.com/k0kubun/sqldef"
 	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/adapter/file"
 	"github.com/k0kubun/sqldef/adapter/sqlite3"
 	"github.com/k0kubun/sqldef/schema"
 )
@@ -19,12 +19,14 @@ var version string
 // TODO: Support `sqldef schema.sql -opt val...`
 func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	var opts struct {
-		File     []string `short:"f" long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"filename" default:"-"`
-		DryRun   bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
-		Export   bool     `long:"export" description:"Just dump the current schema to stdout"`
-		SkipDrop bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
-		Help     bool     `long:"help" description:"Show this help"`
-		Version  bool     `long:"version" description:"Show this version"`
+		File       []string `short:"f" long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"filename" default:"-"`
+		DryRun     bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
+		Export     bool     `long:"export" description:"Just dump the current schema to stdout"`
+		SkipDrop   bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
+		Targets    string   `long:"targets" description:"Manage the target name (Table, View, Type, Trigger)"`
+		TargetFile string   `long:"target-file" description:"File management of --targets option"`
+		Help       bool     `long:"help" description:"Show this help"`
+		Version    bool     `long:"version" description:"Show this version"`
 	}
 
 	parser := flags.NewParser(&opts, flags.None)
@@ -45,12 +47,14 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	}
 
 	desiredFile, currentFile := sqldef.ParseFiles(opts.File)
+	targets := sqldef.MargeTargets(opts.Targets, opts.TargetFile)
 	options := sqldef.Options{
 		DesiredFile: desiredFile,
 		CurrentFile: currentFile,
 		DryRun:      opts.DryRun,
 		Export:      opts.Export,
 		SkipDrop:    opts.SkipDrop,
+		Targets:     targets,
 	}
 
 	database := ""

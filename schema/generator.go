@@ -48,18 +48,25 @@ type Generator struct {
 	currentTypes []*Type
 }
 
-// Parse argument DDLs and call `generateDDLs()`
+// Parse aLL argument DDLs and call `generateDDLs()`
 func GenerateIdempotentDDLs(mode GeneratorMode, desiredSQL string, currentSQL string) ([]string, error) {
+	return GenerateIdempotentTargetedDDLs(mode, desiredSQL, currentSQL, []string{})
+}
+
+// Parse targeted argument DDLs and call `generateDDLs()`
+func GenerateIdempotentTargetedDDLs(mode GeneratorMode, desiredSQL string, currentSQL string, targets []string) ([]string, error) {
 	// TODO: invalidate duplicated tables, columns
 	desiredDDLs, err := ParseDDLs(mode, desiredSQL)
 	if err != nil {
 		return nil, err
 	}
+	desiredDDLs = filterTargets(desiredDDLs, targets)
 
 	currentDDLs, err := ParseDDLs(mode, currentSQL)
 	if err != nil {
 		return nil, err
 	}
+	currentDDLs = filterTargets(currentDDLs, targets)
 
 	tables, err := convertDDLsToTables(currentDDLs)
 	if err != nil {
@@ -82,6 +89,21 @@ func GenerateIdempotentDDLs(mode GeneratorMode, desiredSQL string, currentSQL st
 		currentTypes:    types,
 	}
 	return generator.generateDDLs(desiredDDLs)
+}
+
+func filterTargets(ddls []DDL, targets []string) (filteredDDLs []DDL) {
+
+	if len(targets) <= 0 {
+		return ddls
+	}
+
+	filtered := []DDL{}
+	for _, ddl := range ddls {
+		if containsString(targets, ddl.Name()) {
+			filtered = append(filtered, ddl)
+		}
+	}
+	return filtered
 }
 
 // Main part of DDL genearation

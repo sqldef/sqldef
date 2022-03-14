@@ -1,6 +1,7 @@
 package schema
 
 type DDL interface {
+	Name() string
 	Statement() string
 }
 
@@ -262,6 +263,42 @@ func (t *Trigger) Statement() string {
 
 func (t *Type) Statement() string {
 	return t.statement
+}
+
+func (c *CreateTable) Name() string {
+	return c.table.name
+}
+
+func (c *CreateIndex) Name() string {
+	return c.tableName
+}
+
+func (a *AddIndex) Name() string {
+	return a.tableName
+}
+
+func (a *AddPrimaryKey) Name() string {
+	return a.tableName
+}
+
+func (a *AddForeignKey) Name() string {
+	return a.tableName
+}
+
+func (a *AddPolicy) Name() string {
+	return a.tableName
+}
+
+func (v *View) Name() string {
+	return v.name
+}
+
+func (t *Trigger) Name() string {
+	return t.tableName
+}
+
+func (t *Type) Name() string {
+	return t.name
 }
 
 func (t *Table) PrimaryKey() *Index {

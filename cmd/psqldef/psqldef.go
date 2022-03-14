@@ -7,11 +7,10 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/k0kubun/sqldef/adapter/file"
-
 	"github.com/jessevdk/go-flags"
 	"github.com/k0kubun/sqldef"
 	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/adapter/file"
 	"github.com/k0kubun/sqldef/adapter/postgres"
 	"github.com/k0kubun/sqldef/schema"
 	"golang.org/x/term"
@@ -33,6 +32,8 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		Export      bool     `long:"export" description:"Just dump the current schema to stdout"`
 		SkipDrop    bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
 		BeforeApply string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs"`
+		Targets     string   `long:"targets" description:"Manage the target name (Table, View, Type, Trigger)"`
+		TargetFile  string   `long:"target-file" description:"File management of --targets option"`
 		Help        bool     `long:"help" description:"Show this help"`
 		Version     bool     `long:"version" description:"Show this version"`
 	}
@@ -55,6 +56,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	}
 
 	desiredFile, currentFile := sqldef.ParseFiles(opts.File)
+	targets := sqldef.MargeTargets(opts.Targets, opts.TargetFile)
 	options := sqldef.Options{
 		DesiredFile: desiredFile,
 		CurrentFile: currentFile,
@@ -62,6 +64,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		Export:      opts.Export,
 		SkipDrop:    opts.SkipDrop,
 		BeforeApply: opts.BeforeApply,
+		Targets:     targets,
 	}
 
 	database := ""
