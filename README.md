@@ -36,7 +36,7 @@ Application Options:
       --dry-run                     Don't run DDLs but just show them
       --export                      Just dump the current schema to stdout
       --skip-drop                   Skip destructive changes such as DROP
-      --without-partition-range     Without the specific code of PARTITION BY RANGE
+      --ignore-partition-range      Ignore the specific code of PARTITION BY RANGE
       --targets                     Manage the target name (Table, View, Type, Trigger)
       --target-file                 File management of --targets option
       --help                        Show this help
