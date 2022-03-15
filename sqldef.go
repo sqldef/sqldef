@@ -30,7 +30,6 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 	if err != nil {
 		log.Fatal(fmt.Sprintf("Error on DumpDDLs: %s", err))
 	}
-	currentDDLs = filterDDLs(currentDDLs, options)
 	currentDDLs = filterTargets(generatorMode, currentDDLs, options.Targets)
 
 	if options.Export {
@@ -41,6 +40,7 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 		}
 		return
 	}
+	currentDDLs = filterDDLs(currentDDLs, options)
 
 	sql, err := ReadFile(options.DesiredFile)
 	if err != nil {
