@@ -62,3 +62,15 @@ CastBpchar:
       "col" character(30)
     );
     CREATE VIEW public.dummy_view AS SELECT dummy_table.col FROM dummy_table WHERE (dummy_table.col <> 'dummy value'::bpchar);
+
+ParseTextCheckConstraint:
+  current: |
+    CREATE TABLE test (
+      col text NOT NULL CHECK (col <> ''::text)
+    );
+  desired: |
+    CREATE TABLE test (
+      col text NOT NULL
+    );
+  output: |
+    ALTER TABLE "public"."test" DROP CONSTRAINT test_col_check;

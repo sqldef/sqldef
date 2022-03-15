@@ -3795,7 +3795,7 @@ value:
   {
     $$ = NewStrVal($1)
   }
-| STRING TYPECAST BPCHAR
+| STRING character_cast_opt
   {
     $$ = NewStrVal($1)
   }
