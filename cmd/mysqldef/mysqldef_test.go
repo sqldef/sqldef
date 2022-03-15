@@ -1510,34 +1510,6 @@ func TestMysqldefTargetFile(t *testing.T) {
 			"DROP TABLE `users2`;\n")
 }
 
-func TestMysqldefExportInitAutoIncrement(t *testing.T) {
-	resetTestDatabase()
-	version := getMySqlVersion()
-
-	autoIncrement := "AUTO_INCREMENT=123 "
-	createTable := "CREATE TABLE `users` (\n" +
-		"  `id` bigint(20) NOT NULL AUTO_INCREMENT,\n" +
-		"  `name` varchar(255) DEFAULT NULL,\n" +
-		"  `account_id` bigint(20) DEFAULT NULL,\n" +
-		"  PRIMARY KEY (`id`)\n" +
-		") ENGINE=InnoDB %sDEFAULT CHARSET=latin1;\n"
-	if testutils.CompareVersion(t, version, "5.7") > 0 {
-		createTable = strings.Replace(createTable, "bigint(20)", "bigint", -1)
-	}
-
-	createTableDDL := fmt.Sprintf(createTable, autoIncrement)
-	createTableWithoutAutoIncrementDDL := fmt.Sprintf(createTable, "")
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", stripHeredoc(createTableDDL))
-
-	writeFile("schema.sql", "")
-
-	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export")
-	assertEquals(t, out, createTableDDL)
-
-	out = assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--init-auto-increment", "--export")
-	assertEquals(t, out, createTableWithoutAutoIncrementDDL)
-}
-
 func TestMysqldefInitAutoIncrement(t *testing.T) {
 	resetTestDatabase()
 	version := getMySqlVersion()
