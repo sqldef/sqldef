@@ -3,9 +3,6 @@ package testutils
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/adapter"
-	"github.com/k0kubun/sqldef/schema"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
 	"os/exec"
@@ -13,6 +10,10 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/schema"
+	"gopkg.in/yaml.v2"
 )
 
 type TestCase struct {
@@ -58,10 +59,10 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 }
 
 func RunTest(t *testing.T, db adapter.Database, test TestCase, mode schema.GeneratorMode, version string) {
-	if test.MinVersion != "" && compareVersion(t, version, test.MinVersion) < 0 {
+	if test.MinVersion != "" && CompareVersion(t, version, test.MinVersion) < 0 {
 		t.Skipf("Version '%s' is smaller than min_version '%s'", version, test.MaxVersion)
 	}
-	if test.MaxVersion != "" && compareVersion(t, version, test.MaxVersion) > 0 {
+	if test.MaxVersion != "" && CompareVersion(t, version, test.MaxVersion) > 0 {
 		t.Skipf("Version '%s' is larger than max_version '%s'", version, test.MaxVersion)
 	}
 
@@ -123,10 +124,10 @@ func RunTest(t *testing.T, db adapter.Database, test TestCase, mode schema.Gener
 	}
 }
 
-// left < right: compareVersion() < 0
-// left = right: compareVersion() = 0
-// left > right: compareVersion() > 0
-func compareVersion(t *testing.T, leftVersion string, rightVersion string) int {
+// left < right: CompareVersion() < 0
+// left = right: CompareVersion() = 0
+// left > right: CompareVersion() > 0
+func CompareVersion(t *testing.T, leftVersion string, rightVersion string) int {
 	leftVersions := strings.Split(leftVersion, ".")
 	rightVersions := strings.Split(rightVersion, ".")
 

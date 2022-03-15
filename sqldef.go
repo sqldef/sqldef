@@ -20,6 +20,7 @@ type Options struct {
 	SkipDrop             bool
 	BeforeApply          string
 	IgnorePartitionRange bool
+	InitAutoIncrement    bool
 	Targets              []string
 }
 
@@ -125,6 +126,9 @@ func filterDDLs(sql string, options *Options) string {
 	if options.IgnorePartitionRange {
 		sql = filterPartitionRange(sql)
 	}
+	if options.InitAutoIncrement {
+		sql = initAutoIncrement(sql)
+	}
 	return sql
 }
 
@@ -132,6 +136,12 @@ func filterDDLs(sql string, options *Options) string {
 // Filter specific code for environment-dependent `PARTITION BY RANGE`
 func filterPartitionRange(sql string) string {
 	return regexp.MustCompile(`\n\/\*![0-9]* PARTITION BY RANGE[\s\S]*?\*\/`).ReplaceAllString(sql, "")
+}
+
+// For MySQL
+// Initialize count of environment-dependent `AUTO_INCREMENT`
+func initAutoIncrement(sql string) string {
+	return regexp.MustCompile(`AUTO_INCREMENT=[0-9]* `).ReplaceAllString(sql, "")
 }
 
 func filterTargets(mode schema.GeneratorMode, currentDDLs string, targets []string) string {

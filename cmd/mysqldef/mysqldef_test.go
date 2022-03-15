@@ -36,8 +36,7 @@ func TestApply(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	version := strings.TrimSpace(testutils.MustExecute("mysql", "-uroot", "-h", "127.0.0.1", "-sN", "-e", "select version();"))
+	version := getMySqlVersion()
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Initialize the database with test.Current
@@ -1534,6 +1533,57 @@ func TestMysqldefTargetFile(t *testing.T) {
 			"DROP TABLE `users2`;\n")
 }
 
+func TestMysqldefExportInitAutoIncrement(t *testing.T) {
+	resetTestDatabase()
+	version := getMySqlVersion()
+
+	autoIncrement := "AUTO_INCREMENT=123 "
+	createTable := "CREATE TABLE `users` (\n" +
+		"  `id` bigint(20) NOT NULL AUTO_INCREMENT,\n" +
+		"  `name` varchar(255) DEFAULT NULL,\n" +
+		"  `account_id` bigint(20) DEFAULT NULL,\n" +
+		"  PRIMARY KEY (`id`)\n" +
+		") ENGINE=InnoDB %sDEFAULT CHARSET=latin1;\n"
+	if testutils.CompareVersion(t, version, "5.7") > 0 {
+		createTable = strings.Replace(createTable, "bigint(20)", "bigint", -1)
+	}
+
+	createTableDDL := fmt.Sprintf(createTable, autoIncrement)
+	createTableWithoutAutoIncrementDDL := fmt.Sprintf(createTable, "")
+	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", stripHeredoc(createTableDDL))
+
+	writeFile("schema.sql", "")
+
+	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export")
+	assertEquals(t, out, createTableDDL)
+
+	out = assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--init-auto-increment", "--export")
+	assertEquals(t, out, createTableWithoutAutoIncrementDDL)
+}
+
+func TestMysqldefInitAutoIncrement(t *testing.T) {
+	resetTestDatabase()
+	version := getMySqlVersion()
+
+	autoIncrement := "AUTO_INCREMENT=123 "
+	createTable := "CREATE TABLE `users` (\n" +
+		"  `id` bigint(20) NOT NULL AUTO_INCREMENT,\n" +
+		"  `name` varchar(255) DEFAULT NULL,\n" +
+		"  `account_id` bigint(20) DEFAULT NULL,\n" +
+		"  PRIMARY KEY (`id`)\n" +
+		") ENGINE=InnoDB %sDEFAULT CHARSET=latin1;\n"
+	if testutils.CompareVersion(t, version, "5.7") > 0 {
+		createTable = strings.Replace(createTable, "bigint(20)", "bigint", -1)
+	}
+
+	createTableDDL := fmt.Sprintf(createTable, autoIncrement)
+	createTableWithoutAutoIncrementDDL := fmt.Sprintf(createTable, "")
+	writeFile("schema.sql", createTableDDL)
+
+	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--init-auto-increment", "--file", "schema.sql")
+	assertEquals(t, apply, applyPrefix+createTableWithoutAutoIncrementDDL)
+}
+
 func TestMysqldefHelp(t *testing.T) {
 	_, err := execute("./mysqldef", "--help")
 	if err != nil {
@@ -1642,4 +1692,8 @@ func connectDatabase() (adapter.Database, error) {
 		Port:   3306,
 		DbName: "mysqldef_test",
 	})
+}
+
+func getMySqlVersion() string {
+	return strings.TrimSpace(testutils.MustExecute("mysql", "-uroot", "-h", "127.0.0.1", "-sN", "-e", "select version();"))
 }
