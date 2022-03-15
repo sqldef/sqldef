@@ -1,3 +1,7 @@
+## v0.11.45
+
+- Improve cast handling of CHECK constraints in psqldef [#219](https://github.com/k0kubun/sqldef/issues/219)
+
 ## v0.11.44
 
 - Add `--before-apply` to mysqldef [#217](https://github.com/k0kubun/sqldef/issues/217)
