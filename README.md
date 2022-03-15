@@ -142,14 +142,6 @@ CREATE TABLE user (
 ```
 
 ```sql
-$ mysqldef -uroot test --export --ignore-partition-range > schema.sql
-CREATE TABLE user (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(128) DEFAULT 'user1',
-) Engine=InnoDB DEFAULT CHARSET=utf8mb4;
-```
-
-```sql
 $ mysqldef -uroot test --export > schema.sql
 $ mysqldef -uroot test --dry-run --ignore-partition-range < schema.sql
 Run: 

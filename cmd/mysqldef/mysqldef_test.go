@@ -1388,34 +1388,6 @@ func TestMysqldefBeforeApply(t *testing.T) {
 	assertEquals(t, apply, nothingModified)
 }
 
-func TestMysqldefExportIgnorePartitionRange(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := "CREATE TABLE `users` (\n" +
-		"  `uuid` varchar(37) NOT NULL,\n" +
-		"  `name` varchar(255) DEFAULT NULL,\n" +
-		"  `joined` date NOT NULL,\n" +
-		"  PRIMARY KEY (`uuid`,`joined`)\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=latin1"
-	partitions := "/*!50100 PARTITION BY RANGE (year(`joined`))\n" +
-		"(PARTITION p0 VALUES LESS THAN (1960) ENGINE = InnoDB,\n" +
-		" PARTITION p1 VALUES LESS THAN (1970) ENGINE = InnoDB,\n" +
-		" PARTITION p2 VALUES LESS THAN (1980) ENGINE = InnoDB,\n" +
-		" PARTITION p3 VALUES LESS THAN MAXVALUE ENGINE = InnoDB) */"
-
-	createTableDDL := createTable + ";\n"
-	createTableWithPartitionDDL := createTable + "\n" + partitions + ";\n"
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", stripHeredoc(createTableWithPartitionDDL))
-
-	writeFile("schema.sql", "")
-
-	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export", "--file", "schema.sql")
-	assertEquals(t, out, createTableWithPartitionDDL)
-
-	out = assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--ignore-partition-range", "--export", "--file", "schema.sql")
-	assertEquals(t, out, createTableDDL)
-}
-
 func TestMysqldefIgnorePartitionRange(t *testing.T) {
 	resetTestDatabase()
 
@@ -1428,15 +1400,20 @@ func TestMysqldefIgnorePartitionRange(t *testing.T) {
 	partitions := "/*!50100 PARTITION BY RANGE (year(`joined`))\n" +
 		"(PARTITION p0 VALUES LESS THAN (1960) ENGINE = InnoDB,\n" +
 		" PARTITION p1 VALUES LESS THAN (1970) ENGINE = InnoDB,\n" +
-		" PARTITION p2 VALUES LESS THAN (1980) ENGINE = InnoDB,\n" +
-		" PARTITION p3 VALUES LESS THAN MAXVALUE ENGINE = InnoDB) */"
+		" PARTITION p2 VALUES LESS THAN MAXVALUE ENGINE = InnoDB) */"
 
 	createTableDDL := createTable + ";\n"
 	createTableWithPartitionDDL := createTable + "\n" + partitions + ";\n"
 	writeFile("schema.sql", createTableWithPartitionDDL)
-
 	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--ignore-partition-range", "--file", "schema.sql")
 	assertEquals(t, apply, applyPrefix+createTableDDL)
+
+	addRange := "ALTER TABLE `users` PARTITION BY RANGE (year(`joined`))\n" +
+		"(PARTITION p0 VALUES LESS THAN (1960) ENGINE = InnoDB,\n" +
+		" PARTITION p1 VALUES LESS THAN MAXVALUE ENGINE = InnoDB);"
+	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", addRange)
+	apply = assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--ignore-partition-range", "--file", "schema.sql")
+	assertEquals(t, apply, nothingModified)
 }
 
 func TestMysqldefExportLimitedTargets(t *testing.T) {
