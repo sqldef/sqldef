@@ -1363,57 +1363,7 @@ func TestPsqldefBeforeApply(t *testing.T) {
 	assertEquals(t, owner, "dummy_owner_role\n")
 }
 
-func TestPsqldefExportLimitedTargets(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(
-		`CREATE TABLE public.users%d (
-		    "id" bigint NOT NULL
-		);
-		`)
-	for i := 1; i <= 3; i++ {
-		mustExecute("psql", "-Upostgres", database, "-tAc", fmt.Sprintf(createTable, i))
-	}
-
-	out := assertedExecute(t, "./psqldef", "-Upostgres", database, "--export", "--targets", "public.users1,public.users3")
-	assertEquals(t, out, fmt.Sprintf(createTable, 1)+"\n"+fmt.Sprintf(createTable, 3))
-}
-
-func TestPsqldefLimitedTargets(t *testing.T) {
-
-	createTable := stripHeredoc(
-		`CREATE TABLE public.users%d (
-		    "id" bigint NOT NULL
-		);`)
-	modifiedCreateTable := stripHeredoc(
-		`CREATE TABLE public.users%d (
-		    "id" bigint NOT NULL,
-		    "name" character varying(30)
-		);`)
-
-	// Prepare the modified schema.sql
-	resetTestDatabase()
-	for i := 3; i <= 7; i++ {
-		mustExecute("psql", "-Upostgres", database, "-tAc", fmt.Sprintf(modifiedCreateTable, i))
-	}
-	out := assertedExecute(t, "./psqldef", "-Upostgres", database, "--export", "--file", "schema.sql")
-	writeFile("schema.sql", out)
-
-	// Run test
-	resetTestDatabase()
-	for i := 1; i <= 5; i++ {
-		mustExecute("psql", "-Upostgres", database, "-tAc", fmt.Sprintf(createTable, i))
-	}
-
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", database, "--targets", "public.users1,public.users3,public.users7", "--file", "schema.sql")
-	assertEquals(t, apply,
-		applyPrefix+
-			`ALTER TABLE "public"."users3" ADD COLUMN "name" character varying(30);`+"\n"+
-			fmt.Sprintf(modifiedCreateTable, 7)+"\n"+
-			`DROP TABLE "public"."users1";`+"\n")
-}
-
-func TestPsqldefExportTargetFile(t *testing.T) {
+func TestPsqldefExportWithTargetFile(t *testing.T) {
 	resetTestDatabase()
 
 	createTable := stripHeredoc(
@@ -1425,7 +1375,7 @@ func TestPsqldefExportTargetFile(t *testing.T) {
 		mustExecute("psql", "-Upostgres", database, "-tAc", fmt.Sprintf(createTable, i))
 	}
 
-	writeFile("target-list", "public.users2\npublic.users4\npublic.users5")
+	writeFile("target-list", "public.users2\npublic.users4\npublic.users5\n")
 
 	out := assertedExecute(t, "./psqldef", "-Upostgres", database, "--export", "--target-file", "target-list")
 	assertEquals(t, out, fmt.Sprintf(createTable, 2)+"\n"+fmt.Sprintf(createTable, 4)+"\n"+fmt.Sprintf(createTable, 5))
@@ -1457,7 +1407,7 @@ func TestPsqldefTargetFile(t *testing.T) {
 		mustExecute("psql", "-Upostgres", database, "-tAc", fmt.Sprintf(createTable, i))
 	}
 
-	writeFile("target-list", "public.users2\npublic.users4\npublic.users6")
+	writeFile("target-list", "public.users2\npublic.users4\npublic.users6\n")
 
 	apply := assertedExecute(t, "./psqldef", "-Upostgres", database, "--target-file", "target-list", "--file", "schema.sql")
 	assertEquals(t, apply,

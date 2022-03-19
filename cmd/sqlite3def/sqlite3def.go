@@ -23,8 +23,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		DryRun     bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export     bool     `long:"export" description:"Just dump the current schema to stdout"`
 		SkipDrop   bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
-		Targets    string   `long:"targets" description:"Manage the target name (Table, View, Type, Trigger)"`
-		TargetFile string   `long:"target-file" description:"File management of --targets option"`
+		TargetFile string   `long:"target-file" description:"Manage the target name (Table, View, Type, Trigger)"`
 		Help       bool     `long:"help" description:"Show this help"`
 		Version    bool     `long:"version" description:"Show this version"`
 	}
@@ -47,14 +46,13 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 	}
 
 	desiredFile, currentFile := sqldef.ParseFiles(opts.File)
-	targets := sqldef.MargeTargets(opts.Targets, opts.TargetFile)
 	options := sqldef.Options{
 		DesiredFile: desiredFile,
 		CurrentFile: currentFile,
 		DryRun:      opts.DryRun,
 		Export:      opts.Export,
 		SkipDrop:    opts.SkipDrop,
-		Targets:     targets,
+		Targets:     sqldef.ParseTargets(opts.TargetFile),
 	}
 
 	database := ""

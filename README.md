@@ -36,8 +36,7 @@ Application Options:
       --dry-run                     Don't run DDLs but just show them
       --export                      Just dump the current schema to stdout
       --skip-drop                   Skip destructive changes such as DROP
-      --targets                     Manage the target name (Table, View, Type, Trigger)
-      --target-file                 File management of --targets option
+      --target-file                 Manage the target name (Table, View, Type, Trigger)
       --help                        Show this help
       --version                     Show this version
 ```
@@ -104,16 +103,9 @@ Skipped: 'DROP TABLE users;'
 
 These options may be useful when running in different environments (e.g. stg <->prod)
 
-##### --targets, --target-file
+##### --target-file
 
 Tables other than users, orders, mails are ignored
-
-```sql
-$ mysqldef -uroot test --targets users,orders,mails --export > schema.sql
-$ mysqldef -uroot test --targets users,orders,mails < schema.sql
-```
-
-The following works the same as the command above
 
 ```plaintext
 # Save as file with the name `tables_file`
@@ -146,8 +138,7 @@ Application Options:
       --dry-run              Don't run DDLs but just show them
       --export               Just dump the current schema to stdout
       --skip-drop            Skip destructive changes such as DROP
-      --targets              Manage the target name (Table, View, Type, Trigger)
-      --target-file          File management of --targets option
+      --target-file          Manage the target name (Table, View, Type, Trigger)
       --help                 Show this help
 ```
 
@@ -228,8 +219,7 @@ Application Options:
       --dry-run          Don't run DDLs but just show them
       --export           Just dump the current schema to stdout
       --skip-drop        Skip destructive changes such as DROP
-      --targets          Manage the target name (Table, View, Type, Trigger)
-      --target-file      File management of --targets option
+      --target-file      Manage the target name (Table, View, Type, Trigger)
       --help             Show this help
 ```
 
@@ -249,8 +239,7 @@ Application Options:
       --dry-run              Don't run DDLs but just show them
       --export               Just dump the current schema to stdout
       --skip-drop            Skip destructive changes such as DROP
-      --targets              Manage the target name (Table, View, Type, Trigger)
-      --target-file          File management of --targets option
+      --target-file          Manage the target name (Table, View, Type, Trigger)
       --help                 Show this help
       --version              Show this version
 ```

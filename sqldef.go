@@ -148,20 +148,15 @@ func containsString(strs []string, str string) bool {
 	return false
 }
 
-func MargeTargets(targets string, targetFile string) []string {
-	result := []string{}
-
-	t1 := strings.Split(strings.TrimSpace(targets), ",")
-	if len(t1) <= 0 || t1[0] != "" {
-		result = append(result, t1...)
-	}
-
+func ParseTargets(targetFile string) []string {
+	targets := []string{}
 	if raw, err := ReadFile(targetFile); err == nil {
-		t2 := strings.Split(strings.Trim(strings.TrimSpace(raw), "\n"), "\n")
-		if len(t2) <= 0 || t2[0] != "" {
-			result = append(result, t2...)
+		trimmedRaw := strings.TrimSpace(raw)
+		if trimmedRaw == "" {
+			return []string{}
 		}
+		targets = strings.Split(strings.Trim(trimmedRaw, "\n"), "\n")
 	}
 
-	return result
+	return targets
 }
