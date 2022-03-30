@@ -1,3 +1,7 @@
+## v0.11.47
+
+- Ignore `repack` schema in psqldef for `pg_repack` extension [#224](https://github.com/k0kubun/sqldef/issues/224)
+
 ## v0.11.46
 
 - Support parsing UNIQUE INDEX in CREATE TABLE for mysqldef [#225](https://github.com/k0kubun/sqldef/issues/225)
