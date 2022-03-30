@@ -11,6 +11,7 @@ services:
       - '3306:3306'
   postgres:
     image: postgres:${POSTGRES_VERSION:-14}
+    # image: hartmutcouk/pg-repack-docker:1.4.6
     environment:
       POSTGRES_USER: postgres
       POSTGRES_HOST_AUTH_METHOD: trust

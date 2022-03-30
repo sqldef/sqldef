@@ -64,7 +64,7 @@ func (d *PostgresDatabase) Views() ([]string, error) {
 	rows, err := d.db.Query(
 		`select table_schema, table_name, definition from information_schema.tables
 		 inner join pg_views on table_name = viewname
-		 where table_schema not in ('information_schema', 'pg_catalog')
+		 where table_schema not in ('information_schema', 'pg_catalog', 'repack')
 		 and (table_schema != 'public' or table_name != 'pg_buffercache')
 		 and table_type = 'VIEW';`,
 	)
