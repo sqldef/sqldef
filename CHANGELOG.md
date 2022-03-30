@@ -1,3 +1,7 @@
+## v0.11.46
+
+- Support parsing UNIQUE INDEX in CREATE TABLE for mysqldef [#225](https://github.com/k0kubun/sqldef/issues/225)
+
 ## v0.11.45
 
 - Improve cast handling of CHECK constraints in psqldef [#219](https://github.com/k0kubun/sqldef/issues/219)
