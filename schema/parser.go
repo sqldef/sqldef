@@ -168,8 +168,13 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 			indexPartition.column = indexDef.Partition.Column
 		}
 
+		name := indexDef.Info.Name.String()
+		if name == "" { // For MySQL
+			name = indexColumns[0].column
+		}
+
 		index := Index{
-			name:      indexDef.Info.Name.String(),
+			name:      name,
 			indexType: indexDef.Info.Type,
 			columns:   indexColumns,
 			primary:   indexDef.Info.Primary,

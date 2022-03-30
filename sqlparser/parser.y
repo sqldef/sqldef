@@ -2029,6 +2029,10 @@ index_info:
   {
     $$ = &IndexInfo{Type: string($1), Name: NewColIdent(string($2)), Unique: true}
   }
+| UNIQUE INDEX
+  {
+    $$ = &IndexInfo{Type: string($1), Name: NewColIdent(""), Unique: true}
+  }
 | index_or_key ID clustered_opt
   {
     $$ = &IndexInfo{Type: string($1), Name: NewColIdent(string($2)), Unique: false, Clustered: $3}
