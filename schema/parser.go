@@ -460,6 +460,9 @@ func ParseDDLs(mode GeneratorMode, str string) ([]DDL, error) {
 	re := regexp.MustCompilePOSIX("^--.*")
 	str = re.ReplaceAllString(str, "")
 
+	re = regexp.MustCompile("(?s)/\\*.*?\\*/")
+	str = re.ReplaceAllString(str, "")
+
 	ddls := strings.Split(str, ";")
 	result := []DDL{}
 
