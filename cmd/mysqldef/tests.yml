@@ -214,3 +214,12 @@ PartitionByRange:
       `joined` date NOT NULL,
       PRIMARY KEY (`uuid`,`joined`)
     ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+MysqlComment:
+  desired: |
+    CREATE TABLE users(
+      id bigint NOT NULL /* comment */
+    );
+  output: |
+    CREATE TABLE users(
+      id bigint NOT NULL 
+    );
