@@ -1,3 +1,7 @@
+## v0.11.48
+
+- Skip MySQL `/* */` comments [#222](https://github.com/k0kubun/sqldef/issues/222)
+
 ## v0.11.47
 
 - Ignore `repack` schema in psqldef for `pg_repack` extension [#224](https://github.com/k0kubun/sqldef/issues/224)
