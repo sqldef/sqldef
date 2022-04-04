@@ -73,3 +73,8 @@ ParseTextCheckConstraint:
     );
   output: |
     ALTER TABLE "public"."test" DROP CONSTRAINT test_col_check;
+NullCast:
+  desired: |
+    CREATE TABLE public.test (
+      "item" character varying(16) DEFAULT NULL
+    );

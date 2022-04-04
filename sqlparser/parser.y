@@ -1338,7 +1338,7 @@ default_val:
   {
     $$ = NewFloatVal($1)
   }
-| NULL
+| NULL character_cast_opt
   {
     $$ = NewValArg($1)
   }
