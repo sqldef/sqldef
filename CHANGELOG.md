@@ -1,3 +1,7 @@
+## v0.11.49
+
+- Support parsing `DEFAULT NULL` with cast for psqldef [#226](https://github.com/k0kubun/sqldef/issues/226)
+
 ## v0.11.48
 
 - Skip MySQL `/* */` comments [#222](https://github.com/k0kubun/sqldef/issues/222)
