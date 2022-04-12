@@ -3394,6 +3394,10 @@ value_expression:
   {
     $$ = &CollateExpr{Expr: $1, Charset: $3}
   }
+| value_expression TYPECAST numeric_type
+  {
+    $$ = &CollateExpr{Expr: $1}
+  }
 | BINARY value_expression %prec UNARY
   {
     $$ = &UnaryExpr{Operator: BinaryStr, Expr: $2}

@@ -78,3 +78,9 @@ NullCast:
     CREATE TABLE public.test (
       "item" character varying(16) DEFAULT NULL
     );
+NumericCast:
+  desired: |
+    CREATE TABLE public.test_table (
+      "item" numeric
+    );
+    CREATE VIEW public.test_view AS SELECT t.item FROM test_table t WHERE (t.item = (0)::numeric);
