@@ -1,3 +1,7 @@
+## v0.11.50
+
+- Support parsing `::numeric` after an expression for psqldef [#227](https://github.com/k0kubun/sqldef/issues/227)
+
 ## v0.11.49
 
 - Support parsing `DEFAULT NULL` with cast for psqldef [#226](https://github.com/k0kubun/sqldef/issues/226)
