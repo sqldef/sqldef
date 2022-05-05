@@ -1,3 +1,7 @@
+## v0.11.52
+
+- Support `ALTER TABLE ADD VALUE` for psqldef [#228](https://github.com/k0kubun/sqldef/issues/228)
+
 ## v0.11.51
 
 - Support parsing `CREATE INDEX CONCURRENTLY` for psqldef [#231](https://github.com/k0kubun/sqldef/issues/231)
