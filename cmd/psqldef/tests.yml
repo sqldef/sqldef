@@ -124,3 +124,4 @@ AlterTypeAddValue:
   output: |
     ALTER TYPE public.eventtype ADD VALUE 'send_meeting_options';
     ALTER TYPE public.eventtype ADD VALUE 'update_reactionslot';
+  min_version: '12'

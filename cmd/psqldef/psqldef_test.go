@@ -31,6 +31,8 @@ func TestApply(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	serverVersion := strings.TrimSpace(testutils.MustExecute("psql", "-Upostgres", "-h", "127.0.0.1", "-t", "-c", "show server_version;"))
+	version := strings.Split(serverVersion, " ")[0]
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// This is implemented in the psqldef command layer, so it's needed for TestApply
@@ -48,7 +50,7 @@ func TestApply(t *testing.T) {
 			}
 			defer db.Close()
 
-			testutils.RunTest(t, db, test, schema.GeneratorModePostgres, "")
+			testutils.RunTest(t, db, test, schema.GeneratorModePostgres, version)
 		})
 	}
 }
