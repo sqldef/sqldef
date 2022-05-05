@@ -1,3 +1,8 @@
+## v0.11.51
+
+- Support parsing `CREATE INDEX CONCURRENTLY` for psqldef [#231](https://github.com/k0kubun/sqldef/issues/231)
+- Run DDLs containing `CONCURRENTLY` outside a transaction
+
 ## v0.11.50
 
 - Support parsing `::numeric` after an expression for psqldef [#227](https://github.com/k0kubun/sqldef/issues/227)
