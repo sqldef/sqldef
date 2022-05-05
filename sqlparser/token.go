@@ -141,6 +141,7 @@ var keywords = map[string]int{
 	"comment":                COMMENT_KEYWORD,
 	"committed":              COMMITTED,
 	"commit":                 COMMIT,
+	"concurrently":           CONCURRENTLY,
 	"condition":              UNUSED,
 	"constraint":             CONSTRAINT,
 	"continue":               UNUSED,

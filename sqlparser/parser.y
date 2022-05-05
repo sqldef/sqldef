@@ -178,6 +178,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS
 %token <bytes> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE
 %token <bytes> DEFERRABLE INITIALLY IMMEDIATE DEFERRED
+%token <bytes> CONCURRENTLY
 
 // Transaction Tokens
 %token <bytes> BEGIN START TRANSACTION COMMIT ROLLBACK
@@ -791,6 +792,26 @@ create_statement:
         },
         IndexCols: $9.IndexCols,
         IndexExpr: $9.IndexExpr,
+      }
+  }
+| CREATE unique_opt clustered_opt INDEX CONCURRENTLY sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+  {
+    $$ = &DDL{
+        Action: CreateIndexStr,
+        Table: $8,
+        NewName: $8,
+        IndexSpec: &IndexSpec{
+          Name: $6,
+          Type: NewColIdent(""),
+          Unique: bool($2),
+          Clustered: bool($3),
+          Included: $12,
+          Where: NewWhere(WhereStr, $13),
+          Options: $14,
+          Partition: $15,
+        },
+        IndexCols: $10.IndexCols,
+        IndexExpr: $10.IndexExpr,
       }
   }
 /* For MySQL */

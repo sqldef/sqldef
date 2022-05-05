@@ -174,7 +174,13 @@ func runDDLs(db adapter.Database, ddls []string) error {
 		return err
 	}
 	for _, ddl := range ddls {
-		if _, err := transaction.Exec(ddl); err != nil {
+		var err error
+		if adapter.TransactionSupported(ddl) {
+			_, err = transaction.Exec(ddl)
+		} else {
+			_, err = db.DB().Exec(ddl)
+		}
+		if err != nil {
 			rollbackErr := transaction.Rollback()
 			if rollbackErr != nil {
 				return rollbackErr

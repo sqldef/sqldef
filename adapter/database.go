@@ -88,11 +88,21 @@ func RunDDLs(d Database, ddls []string, skipDrop bool, beforeApply string) error
 			continue
 		}
 		fmt.Printf("%s;\n", ddl)
-		if _, err := transaction.Exec(ddl); err != nil {
+		var err error
+		if TransactionSupported(ddl) {
+			_, err = transaction.Exec(ddl)
+		} else {
+			_, err = d.DB().Exec(ddl)
+		}
+		if err != nil {
 			transaction.Rollback()
 			return err
 		}
 	}
 	transaction.Commit()
 	return nil
+}
+
+func TransactionSupported(ddl string) bool {
+	return !strings.Contains(strings.ToLower(ddl), "concurrently")
 }
