@@ -440,8 +440,9 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 			}, nil
 		} else if stmt.Action == sqlparser.CreateTypeStr {
 			return &Type{
-				name:      normalizedTableName(mode, stmt.Type.Name),
-				statement: ddl,
+				name:       normalizedTableName(mode, stmt.Type.Name),
+				statement:  ddl,
+				enumValues: stmt.Type.Type.EnumValues,
 			}, nil
 		} else {
 			return nil, fmt.Errorf(

@@ -98,3 +98,29 @@ CreateIndexConcurrently:
     CREATE INDEX CONCURRENTLY username on users (name);
   output: |
     CREATE INDEX CONCURRENTLY username on users (name);
+AlterTypeAddValue:
+  current: |
+    CREATE TYPE eventtype AS ENUM (
+      'example',
+      'send_message'
+    );
+
+    CREATE TABLE events (
+      id UUID NOT NULL PRIMARY KEY,
+      event_type eventtype NOT NULL
+    );
+  desired: |
+    CREATE TYPE eventtype AS ENUM (
+      'example',
+      'send_message',
+      'send_meeting_options',
+      'update_reactionslot'
+    );
+
+    CREATE TABLE events (
+      id UUID NOT NULL PRIMARY KEY,
+      event_type eventtype NOT NULL
+    );
+  output: |
+    ALTER TYPE public.eventtype ADD VALUE 'send_meeting_options';
+    ALTER TYPE public.eventtype ADD VALUE 'update_reactionslot';

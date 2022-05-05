@@ -742,8 +742,17 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName string, desiredTrig
 func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 	ddls := []string{}
 
-	currentType := findTypeByName(g.currentTypes, desired.name)
-	if currentType == nil {
+	if currentType := findTypeByName(g.currentTypes, desired.name); currentType != nil {
+		// Type found. Add values if not present.
+		if currentType.enumValues != nil && len(currentType.enumValues) < len(desired.enumValues) {
+			for _, enumValue := range desired.enumValues {
+				if !containsString(currentType.enumValues, enumValue) {
+					ddl := fmt.Sprintf("ALTER TYPE %s ADD VALUE %s", currentType.name, enumValue)
+					ddls = append(ddls, ddl)
+				}
+			}
+		}
+	} else {
 		// Type not found, add type.
 		ddls = append(ddls, desired.statement)
 	}

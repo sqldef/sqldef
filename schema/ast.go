@@ -224,8 +224,9 @@ type CheckDefinition struct {
 
 // TODO: include type information
 type Type struct {
-	name      string
-	statement string
+	name       string
+	statement  string
+	enumValues []string
 }
 
 func (c *CreateTable) Statement() string {
