@@ -2136,6 +2136,7 @@ func (*MatchExpr) iExpr()           {}
 func (*GroupConcatExpr) iExpr()     {}
 func (*Default) iExpr()             {}
 func (*ArrayConstructor) iExpr()    {}
+func (*FuncCallExpr) iExpr()        {}
 
 // ReplaceExpr finds the from expression from root
 // and replaces it with to. If from matches root,
@@ -2879,7 +2880,7 @@ func (node *CollateExpr) replace(from, to Expr) bool {
 	return replaceExprs(from, to, &node.Expr)
 }
 
-// FuncExpr represents a function call.
+// FuncExpr represents a function call that takes SelectExprs.
 type FuncExpr struct {
 	Qualifier TableIdent
 	Name      ColIdent
@@ -2921,6 +2922,39 @@ func (node *FuncExpr) replace(from, to Expr) bool {
 			continue
 		}
 		if replaceExprs(from, to, &aliased.Expr) {
+			return true
+		}
+	}
+	return false
+}
+
+// FuncCallExpr represents a function call that takes Exprs.
+type FuncCallExpr struct {
+	Name  ColIdent
+	Exprs Exprs
+}
+
+func (node *FuncCallExpr) Format(buf *TrackedBuffer) {
+	// Function names should not be back-quoted even
+	// if they match a reserved word. So, print the
+	// name as is.
+	buf.Myprintf("%s(%v)", node.Name.String(), node.Exprs)
+}
+
+func (node *FuncCallExpr) walkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Name,
+		node.Exprs,
+	)
+}
+
+func (node *FuncCallExpr) replace(from, to Expr) bool {
+	for _, expr := range node.Exprs {
+		if replaceExprs(from, to, &expr) {
 			return true
 		}
 	}

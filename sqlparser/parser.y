@@ -3495,6 +3495,10 @@ function_call_generic:
   {
     $$ = &FuncExpr{Qualifier: $1, Name: $3, Exprs: $5}
   }
+| sql_id openb expression_list closeb
+  {
+    $$ = &FuncCallExpr{Name: $1, Exprs: $3}
+  }
 
 /*
   Function calls using reserved keywords, with dedicated grammar rules
@@ -3752,6 +3756,10 @@ simple_convert_type:
     $$ = &ConvertType{Type: $1.Type}
   }
 | TEXT
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| UUID
   {
     $$ = &ConvertType{Type: string($1)}
   }

@@ -125,3 +125,12 @@ AlterTypeAddValue:
     ALTER TYPE public.eventtype ADD VALUE 'send_meeting_options';
     ALTER TYPE public.eventtype ADD VALUE 'update_reactionslot';
   min_version: '12'
+UUIDCast:
+  desired: |
+    CREATE TABLE public.test_table (
+      "id" uuid NOT NULL,
+      "tenant_id" uuid NOT NULL,
+      PRIMARY KEY ("id", "tenant_id")
+    );
+    CREATE POLICY tenant_isolation_policy ON test_table AS PERMISSIVE FOR ALL TO public
+    USING (current_schema()::uuid = current_database()::uuid);

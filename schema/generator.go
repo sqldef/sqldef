@@ -1582,7 +1582,7 @@ func areSamePolicies(policyA, policyB Policy) bool {
 	if strings.ToLower(policyA.permissive) != strings.ToLower(policyB.permissive) {
 		return false
 	}
-	if strings.ToLower(policyA.using) != strings.ToLower(policyB.using) {
+	if normalizeUsing(policyA.using) != normalizeUsing(policyB.using) {
 		return fmt.Sprintf("(%s)", policyA.using) == policyB.using
 	}
 	if strings.ToLower(policyA.withCheck) != strings.ToLower(policyB.withCheck) {
@@ -1603,6 +1603,14 @@ func areSamePolicies(policyA, policyB Policy) bool {
 		}
 	}
 	return true
+}
+
+// Workaround: (convert((current_schema()), uuid) -> (convert(current_schema(), uuid)
+func normalizeUsing(expr string) string {
+	expr = strings.ToLower(expr)
+	expr = strings.ReplaceAll(expr, "((", "(")
+	expr = strings.ReplaceAll(expr, "))", ")")
+	return expr
 }
 
 func (g *Generator) normalizeReferenceOption(action string) string {
