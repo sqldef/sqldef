@@ -897,7 +897,7 @@ func TestPsqldefCheckConstraintInSchema(t *testing.T) {
 		`ALTER TABLE "test"."dummy" ADD CONSTRAINT dummy_max_value_check CHECK (max_value > 0);`+"\n"+
 		`ALTER TABLE "test"."dummy" ADD CONSTRAINT "min_max" CHECK (min_value < max_value);`+"\n")
 	assertExportOutput(t, stripHeredoc(`
-		CREATE TABLE test.dummy (
+		CREATE TABLE "test"."dummy" (
 		    "min_value" integer CONSTRAINT dummy_min_value_check CHECK (min_value > 0),
 		    "max_value" integer CONSTRAINT dummy_max_value_check CHECK (max_value > 0),
 		    CONSTRAINT min_max CHECK (min_value < max_value)
@@ -1151,7 +1151,7 @@ func TestPsqldefAddUniqueConstraintToTableInNonpublicSchema(t *testing.T) {
 	alterTable := "ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);"
 	assertApplyOutput(t, createTable+"\n"+alterTable, applyPrefix+alterTable+"\n")
 	assertExportOutput(t, stripHeredoc(`
-		CREATE TABLE test.dummy (
+		CREATE TABLE "test"."dummy" (
 		    "a" integer,
 		    "b" integer
 		);
@@ -1164,7 +1164,7 @@ func TestPsqldefAddUniqueConstraintToTableInNonpublicSchema(t *testing.T) {
 		alterTable+"\n"+
 		`ALTER TABLE "test"."dummy" DROP CONSTRAINT "a_b_uniq";`+"\n")
 	assertExportOutput(t, stripHeredoc(`
-		CREATE TABLE test.dummy (
+		CREATE TABLE "test"."dummy" (
 		    "a" integer,
 		    "b" integer
 		);
@@ -1185,7 +1185,7 @@ func TestPsqldefIndexesOnExpressions(t *testing.T) {
 		createIndex := fmt.Sprintf("CREATE UNIQUE INDEX function_index ON %s.test (jsonb_extract_path_text(col, 'foo', 'bar'));", tc.Schema)
 		assertApplyOutput(t, createTable+createIndex, applyPrefix+createIndex+"\n")
 		assertExportOutput(t, fmt.Sprintf(stripHeredoc(`
-			CREATE TABLE %s.test (
+			CREATE TABLE "%s"."test" (
 			    "col" jsonb
 			);
 			CREATE UNIQUE INDEX function_index ON %s.test USING btree (jsonb_extract_path_text(col, VARIADIC ARRAY['foo'::text, 'bar'::text]));
@@ -1302,7 +1302,7 @@ func TestPsqldefExport(t *testing.T) {
 	))
 
 	assertExportOutput(t, stripHeredoc(`
-		CREATE TABLE public.users (
+		CREATE TABLE "public"."users" (
 		    "id" bigint NOT NULL,
 		    "age" integer,
 		    "c_char_1" character(1),
@@ -1331,7 +1331,7 @@ func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 	))
 
 	assertExportOutput(t, stripHeredoc(`
-		CREATE TABLE public.users (
+		CREATE TABLE "public"."users" (
 		    "col1" character varying(40) NOT NULL,
 		    "col2" character varying(6) NOT NULL,
 		    "created_at" timestamp NOT NULL,

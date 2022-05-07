@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"unicode"
 
 	"github.com/k0kubun/sqldef/adapter"
 	_ "github.com/lib/pq"
@@ -121,7 +120,7 @@ func (d *PostgresDatabase) Types() ([]string, error) {
 		}
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE TYPE %s AS ENUM (%s);", QuoteIdentifer(typeName), strings.Join(enumLabels, ", "),
+				"CREATE TYPE %s AS ENUM (%s);", EscapeSQLName(typeName), strings.Join(enumLabels, ", "),
 			),
 		)
 	}
@@ -163,7 +162,7 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreignDefs, policyDefs []string, checkConstraints, uniqueConstraints map[string]string) string {
 	var queryBuilder strings.Builder
 	schema, table := SplitTableName(table)
-	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (", schema + "." + QuoteIdentifer(table))
+	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", EscapeSQLName(schema), EscapeSQLName(table))
 	for i, col := range columns {
 		if i > 0 {
 			fmt.Fprint(&queryBuilder, ",")
@@ -513,7 +512,8 @@ WHERE constraint_type = 'FOREIGN KEY' AND tc.table_schema=$1 AND tc.table_name=$
 		}
 		def := fmt.Sprintf(
 			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s(%s) ON UPDATE %s ON DELETE %s",
-			tableSchema, QuoteIdentifer(tableName), QuoteIdentifer(constraintName), QuoteIdentifer(columnName), foreignTableSchema, QuoteIdentifer(foreignTableName), QuoteIdentifer(foreignColumnName), foreignUpdateRule, foreignDeleteRule,
+			EscapeSQLName(tableSchema), EscapeSQLName(tableName), EscapeSQLName(constraintName), EscapeSQLName(columnName),
+			EscapeSQLName(foreignTableSchema), EscapeSQLName(foreignTableName), EscapeSQLName(foreignColumnName), foreignUpdateRule, foreignDeleteRule,
 		)
 		defs = append(defs, def)
 	}
@@ -593,6 +593,10 @@ func postgresBuildDSN(config adapter.Config) string {
 	return fmt.Sprintf("postgres://%s:%s@%s/%s?%s", url.QueryEscape(user), url.QueryEscape(password), host, database, strings.Join(options, "&"))
 }
 
+func EscapeSQLName(name string) string {
+	return fmt.Sprintf("\"%s\"", name)
+}
+
 func SplitTableName(table string) (string, string) {
 	schema := "public"
 	schemaTable := strings.SplitN(table, ".", 2)
@@ -601,20 +605,4 @@ func SplitTableName(table string) (string, string) {
 		table = schemaTable[1]
 	}
 	return schema, table
-}
-
-func QuoteIdentifer(name string) string {
-	var upper = false
-	for _, c := range name {
-		if unicode.IsUpper(c) {
-			upper = true
-			break
-		}
-	}
-
-	if upper {
-		return "\"" + name + "\""
-	} else {
-		return name
-	}
 }

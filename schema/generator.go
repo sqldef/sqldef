@@ -1136,7 +1136,7 @@ func (g *Generator) escapeTableName(name string) string {
 func (g *Generator) escapeSQLName(name string) string {
 	switch g.mode {
 	case GeneratorModePostgres:
-		return fmt.Sprintf("\"%s\"", name)
+		return postgres.EscapeSQLName(name)
 	case GeneratorModeMssql:
 		return fmt.Sprintf("[%s]", name)
 	default:
