@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/k0kubun/sqldef/adapter"
 	_ "github.com/lib/pq"
@@ -120,7 +121,7 @@ func (d *PostgresDatabase) Types() ([]string, error) {
 		}
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE TYPE %s AS ENUM (%s);", typeName, strings.Join(enumLabels, ", "),
+				"CREATE TYPE %s AS ENUM (%s);", QuoteIdentifer(typeName), strings.Join(enumLabels, ", "),
 			),
 		)
 	}
@@ -161,7 +162,8 @@ func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
 
 func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreignDefs, policyDefs []string, checkConstraints, uniqueConstraints map[string]string) string {
 	var queryBuilder strings.Builder
-	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (", table)
+	schema, table := SplitTableName(table)
+	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (", schema + "." + QuoteIdentifer(table))
 	for i, col := range columns {
 		if i > 0 {
 			fmt.Fprint(&queryBuilder, ",")
@@ -511,7 +513,7 @@ WHERE constraint_type = 'FOREIGN KEY' AND tc.table_schema=$1 AND tc.table_name=$
 		}
 		def := fmt.Sprintf(
 			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s(%s) ON UPDATE %s ON DELETE %s",
-			tableSchema, tableName, constraintName, columnName, foreignTableSchema, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule,
+			tableSchema, QuoteIdentifer(tableName), QuoteIdentifer(constraintName), QuoteIdentifer(columnName), foreignTableSchema, QuoteIdentifer(foreignTableName), QuoteIdentifer(foreignColumnName), foreignUpdateRule, foreignDeleteRule,
 		)
 		defs = append(defs, def)
 	}
@@ -599,4 +601,20 @@ func SplitTableName(table string) (string, string) {
 		table = schemaTable[1]
 	}
 	return schema, table
+}
+
+func QuoteIdentifer(name string) string {
+	var upper = false
+	for _, c := range name {
+		if unicode.IsUpper(c) {
+			upper = true
+			break
+		}
+	}
+
+	if upper {
+		return "\"" + name + "\""
+	} else {
+		return name
+	}
 }
