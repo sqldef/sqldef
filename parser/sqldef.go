@@ -46,13 +46,11 @@ func splitDDLs(str string, mode ParserMode) ([]string, error) {
 		i := 1
 		for {
 			ddl = strings.Join(ddls[0:i], ";")
-			ddl = strings.TrimSpace(ddl)
+			ddl, _ = SplitMarginComments(ddl)
 			ddl = strings.TrimSuffix(ddl, ";")
 			if ddl == "" {
 				break
 			}
-
-			ddl, _ = SplitMarginComments(ddl)
 			_, err = ParseStrictDDLWithMode(ddl, mode)
 			if err == nil || i == len(ddls) {
 				break
@@ -68,7 +66,7 @@ func splitDDLs(str string, mode ParserMode) ([]string, error) {
 		}
 
 		if i < len(ddls) {
-			ddls = ddls[i:]
+			ddls = ddls[i:] // remove scanned tokens
 		} else {
 			break
 		}
