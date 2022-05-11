@@ -4,7 +4,6 @@ package schema
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -460,70 +459,18 @@ func ParseDDLs(mode GeneratorMode, str string) ([]DDL, error) {
 	default:
 		panic("unrecognized parser mode")
 	}
-	ddls, err := splitDDLs(parserMode, str)
+	ddls, err := parser.Parse(str, parserMode)
 	if err != nil {
 		return nil, err
 	}
 
 	var result []DDL
 	for _, ddl := range ddls {
-		stmt, err := parser.ParseStrictDDLWithMode(ddl, parserMode)
-		if err != nil {
-			return result, err
-		}
-
-		parsed, err := parseDDL(mode, ddl, stmt)
+		parsed, err := parseDDL(mode, ddl.DDL, ddl.Statement)
 		if err != nil {
 			return result, err
 		}
 		result = append(result, parsed)
-	}
-	return result, nil
-}
-
-func splitDDLs(mode parser.ParserMode, str string) ([]string, error) {
-	re := regexp.MustCompilePOSIX("^--.*")
-	str = re.ReplaceAllString(str, "")
-
-	re = regexp.MustCompile("(?s)/\\*.*?\\*/")
-	str = re.ReplaceAllString(str, "")
-
-	ddls := strings.Split(str, ";")
-	var result []string
-
-	for len(ddls) > 0 {
-		// Unfortunately, there's no easy way to let parser recognize which ';' is the end of a DDL.
-		// So we just attempt parsing until it succeeds. I'll let the parser do it in the future.
-		var ddl string
-		var err error
-		i := 1
-		for {
-			ddl = strings.Join(ddls[0:i], ";")
-			ddl = strings.TrimSpace(ddl)
-			ddl = strings.TrimSuffix(ddl, ";")
-			if ddl == "" {
-				break
-			}
-
-			_, err = parser.ParseStrictDDLWithMode(ddl, mode)
-			if err == nil || i == len(ddls) {
-				break
-			}
-			i++
-		}
-
-		if err != nil {
-			return result, err
-		}
-		if ddl != "" {
-			result = append(result, ddl)
-		}
-
-		if i < len(ddls) {
-			ddls = ddls[i:]
-		} else {
-			break
-		}
 	}
 	return result, nil
 }
