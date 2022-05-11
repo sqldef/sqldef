@@ -794,6 +794,26 @@ create_statement:
         IndexExpr: $9.IndexExpr,
       }
   }
+| CREATE unique_opt clustered_opt INDEX ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+  {
+    $$ = &DDL{
+        Action: CreateIndexStr,
+        Table: $6,
+        NewName: $6,
+        IndexSpec: &IndexSpec{
+          Name: NewColIdent(""),
+          Type: NewColIdent(""),
+          Unique: bool($2),
+          Clustered: bool($3),
+          Included: $10,
+          Where: NewWhere(WhereStr, $11),
+          Options: $12,
+          Partition: $13,
+        },
+        IndexCols: $8.IndexCols,
+        IndexExpr: $8.IndexExpr,
+      }
+  }
 | CREATE unique_opt clustered_opt INDEX CONCURRENTLY sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{

@@ -290,8 +290,16 @@ func parseIndex(stmt *sqlparser.DDL) (Index, error) {
 		}
 	}
 
+	name := stmt.IndexSpec.Name.String()
+	if name == "" {
+		name = stmt.Table.Name.String()
+		for _, indexColumn := range indexColumns {
+			name += fmt.Sprintf("_%s", indexColumn.column)
+		}
+		name += "_idx"
+	}
 	return Index{
-		name:              stmt.IndexSpec.Name.String(),
+		name:              name,
 		indexType:         "", // not supported in parser yet
 		columns:           indexColumns,
 		primary:           false, // not supported in parser yet

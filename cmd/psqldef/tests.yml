@@ -134,3 +134,7 @@ UUIDCast:
     );
     CREATE POLICY tenant_isolation_policy ON test_table AS PERMISSIVE FOR ALL TO public
     USING (current_schema()::uuid = current_database()::uuid);
+CreateIndexWithoutName:
+  desired: |
+    CREATE TABLE "user" (id BIGINT NOT NULL);
+    CREATE INDEX ON "user" (id);
