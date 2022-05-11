@@ -717,11 +717,6 @@ type Sequence struct {
 	OwnedBy     string
 }
 
-const (
-	IdentityAlwaysStr    = "always"
-	IdentityByDefaultStr = "by default"
-)
-
 type GeneratedColumn struct {
 	Expr Expr
 }
@@ -1173,11 +1168,6 @@ type Policy struct {
 }
 
 type Permissive string
-
-const (
-	PermissiveStr  Permissive = "permissive"
-	RestrictiveStr Permissive = "restrictive"
-)
 
 func (p Permissive) Raw() string {
 	return string(p)
@@ -1826,24 +1816,6 @@ type ExistsExpr struct {
 // Format formats the node.
 func (node *ExistsExpr) Format(buf *TrackedBuffer) {
 	buf.Myprintf("exists %v", node.Subquery)
-}
-
-// ExprFromValue converts the given Value into an Expr or returns an error.
-func ExprFromValue(value sqltypes.Value) (Expr, error) {
-	// The type checks here follow the rules defined in sqltypes/types.go.
-	switch {
-	case value.Type() == sqltypes.Null:
-		return &NullVal{}, nil
-	case value.IsIntegral():
-		return NewIntVal(value.ToBytes()), nil
-	case value.IsFloat() || value.Type() == sqltypes.Decimal:
-		return NewFloatVal(value.ToBytes()), nil
-	case value.IsQuoted():
-		return NewStrVal(value.ToBytes()), nil
-	default:
-		// We cannot support sqltypes.Expression, or any other invalid type.
-		return nil, fmt.Errorf("cannot convert value %v to AST", value)
-	}
 }
 
 // ValType specifies the type for SQLVal.
@@ -2769,20 +2741,6 @@ func (node *TableIdent) UnmarshalJSON(b []byte) error {
 	}
 	node.v = result
 	return nil
-}
-
-// Backtick produces a backticked literal given an input string.
-func Backtick(in string) string {
-	var buf bytes.Buffer
-	buf.WriteByte('`')
-	for _, c := range in {
-		buf.WriteRune(c)
-		if c == '`' {
-			buf.WriteByte('`')
-		}
-	}
-	buf.WriteByte('`')
-	return buf.String()
 }
 
 func formatID(buf *TrackedBuffer, original, lowered string) {
