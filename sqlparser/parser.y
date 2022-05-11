@@ -4436,6 +4436,7 @@ reserved_keyword:
 | THEN
 | TO
 | TRUE
+| TYPE
 | UNION
 | UNIQUE
 | UPDATE

@@ -138,3 +138,10 @@ CreateIndexWithoutName:
   desired: |
     CREATE TABLE "user" (id BIGINT NOT NULL);
     CREATE INDEX ON "user" (id);
+TypeColumn:
+  desired: |
+    CREATE TABLE "public"."test_table" (
+      "id" bigint NOT NULL,
+      "type" character varying(10)
+    );
+    CREATE VIEW public.test_view AS SELECT test_table.id, test_table."type" FROM test_table;
