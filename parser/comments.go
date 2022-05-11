@@ -14,22 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package sqlparser
+package parser
 
 import (
 	"strconv"
 	"strings"
 	"unicode"
-)
-
-const (
-	// DirectiveMultiShardAutocommit is the query comment directive to allow
-	// single round trip autocommit with a multi-shard statement.
-	DirectiveMultiShardAutocommit = "MULTI_SHARD_AUTOCOMMIT"
-	// DirectiveSkipQueryPlanCache skips query plan cache when set.
-	DirectiveSkipQueryPlanCache = "SKIP_QUERY_PLAN_CACHE"
-	// DirectiveQueryTimeout sets a query timeout in vtgate. Only supported for SELECTS.
-	DirectiveQueryTimeout = "QUERY_TIMEOUT_MS"
 )
 
 func isNonSpace(r rune) bool {
@@ -259,35 +249,6 @@ func (d CommentDirectives) IsSet(key string) bool {
 	intVal, ok := val.(int)
 	if ok {
 		return intVal == 1
-	}
-	return false
-}
-
-// SkipQueryPlanCacheDirective returns true if skip query plan cache directive is set to true in query.
-func SkipQueryPlanCacheDirective(stmt Statement) bool {
-	switch stmt := stmt.(type) {
-	case *Select:
-		directives := ExtractCommentDirectives(stmt.Comments)
-		if directives.IsSet(DirectiveSkipQueryPlanCache) {
-			return true
-		}
-	case *Insert:
-		directives := ExtractCommentDirectives(stmt.Comments)
-		if directives.IsSet(DirectiveSkipQueryPlanCache) {
-			return true
-		}
-	case *Update:
-		directives := ExtractCommentDirectives(stmt.Comments)
-		if directives.IsSet(DirectiveSkipQueryPlanCache) {
-			return true
-		}
-	case *Delete:
-		directives := ExtractCommentDirectives(stmt.Comments)
-		if directives.IsSet(DirectiveSkipQueryPlanCache) {
-			return true
-		}
-	default:
-		return false
 	}
 	return false
 }

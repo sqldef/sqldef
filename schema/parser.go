@@ -10,16 +10,16 @@ import (
 
 	"github.com/k0kubun/sqldef/database/postgres"
 
-	"github.com/k0kubun/sqldef/sqlparser"
+	"github.com/k0kubun/sqldef/parser"
 )
 
 // Convert back `type BoolVal bool`
-func castBool(val sqlparser.BoolVal) bool {
+func castBool(val parser.BoolVal) bool {
 	ret, _ := strconv.ParseBool(fmt.Sprint(val))
 	return ret
 }
 
-func castBoolPtr(val *sqlparser.BoolVal) *bool {
+func castBoolPtr(val *parser.BoolVal) *bool {
 	if val == nil {
 		return nil
 	}
@@ -27,27 +27,27 @@ func castBoolPtr(val *sqlparser.BoolVal) *bool {
 	return &ret
 }
 
-func parseValue(val *sqlparser.SQLVal) *Value {
+func parseValue(val *parser.SQLVal) *Value {
 	if val == nil {
 		return nil
 	}
 
 	var valueType ValueType
-	if val.Type == sqlparser.StrVal {
+	if val.Type == parser.StrVal {
 		valueType = ValueTypeStr
-	} else if val.Type == sqlparser.IntVal {
+	} else if val.Type == parser.IntVal {
 		valueType = ValueTypeInt
-	} else if val.Type == sqlparser.FloatVal {
+	} else if val.Type == parser.FloatVal {
 		valueType = ValueTypeFloat
-	} else if val.Type == sqlparser.HexNum {
+	} else if val.Type == parser.HexNum {
 		valueType = ValueTypeHexNum
-	} else if val.Type == sqlparser.HexVal {
+	} else if val.Type == parser.HexVal {
 		valueType = ValueTypeHex
-	} else if val.Type == sqlparser.ValArg {
+	} else if val.Type == parser.ValArg {
 		valueType = ValueTypeValArg
-	} else if val.Type == sqlparser.BitVal {
+	} else if val.Type == parser.BitVal {
 		valueType = ValueTypeBit
-	} else if val.Type == sqlparser.ValBool {
+	} else if val.Type == parser.ValBool {
 		valueType = ValueTypeBool
 	} else {
 		return nil // TODO: Unreachable, but handle this properly...
@@ -80,11 +80,11 @@ func parseValue(val *sqlparser.SQLVal) *Value {
 
 // Assume an integer length. Maybe useful only for index lengths.
 // TODO: Change IndexColumn.Length in parser.y to integer in the first place
-func parseLength(val *sqlparser.SQLVal) (*int, error) {
+func parseLength(val *parser.SQLVal) (*int, error) {
 	if val == nil {
 		return nil, nil
 	}
-	if val.Type != sqlparser.IntVal {
+	if val.Type != parser.IntVal {
 		return nil, fmt.Errorf("Expected a length to be int, but got ValType: %d (%#v)", val.Type, val.Val)
 	}
 	intVal, err := strconv.Atoi(string(val.Val)) // TODO: handle error
@@ -94,7 +94,7 @@ func parseLength(val *sqlparser.SQLVal) (*int, error) {
 	return &intVal, nil
 }
 
-func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
+func parseTable(mode GeneratorMode, stmt *parser.DDL) (Table, error) {
 	var columns []Column
 	var indexes []Index
 	var checks []CheckDefinition
@@ -125,8 +125,8 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 		}
 		if parsedCol.Type.Check != nil {
 			column.check = &CheckDefinition{
-				definition:        sqlparser.String(parsedCol.Type.Check.Where.Expr),
-				constraintName:    sqlparser.String(parsedCol.Type.Check.ConstraintName),
+				definition:        parser.String(parsedCol.Type.Check.Where.Expr),
+				constraintName:    parser.String(parsedCol.Type.Check.ConstraintName),
 				notForReplication: parsedCol.Type.Check.NotForReplication,
 				noInherit:         castBool(parsedCol.Type.Check.NoInherit),
 			}
@@ -188,8 +188,8 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 
 	for _, checkDef := range stmt.TableSpec.Checks {
 		check := CheckDefinition{
-			definition:        sqlparser.String(checkDef.Where.Expr),
-			constraintName:    sqlparser.String(checkDef.ConstraintName),
+			definition:        parser.String(checkDef.Where.Expr),
+			constraintName:    parser.String(checkDef.ConstraintName),
 			notForReplication: checkDef.NotForReplication,
 			noInherit:         castBool(checkDef.NoInherit),
 		}
@@ -229,7 +229,7 @@ func parseTable(mode GeneratorMode, stmt *sqlparser.DDL) (Table, error) {
 	}, nil
 }
 
-func parseIndex(stmt *sqlparser.DDL) (Index, error) {
+func parseIndex(stmt *parser.DDL) (Index, error) {
 	if stmt.IndexSpec == nil {
 		return Index{}, fmt.Errorf("stmt.IndexSpec was null on parseIndex: %#v", stmt)
 	}
@@ -251,13 +251,13 @@ func parseIndex(stmt *sqlparser.DDL) (Index, error) {
 	}
 
 	where := ""
-	if stmt.IndexSpec.Where != nil && stmt.IndexSpec.Where.Type == sqlparser.WhereStr {
+	if stmt.IndexSpec.Where != nil && stmt.IndexSpec.Where.Type == parser.WhereStr {
 		expr := stmt.IndexSpec.Where.Expr
 		// remove root paren expression
-		if parenExpr, ok := expr.(*sqlparser.ParenExpr); ok {
+		if parenExpr, ok := expr.(*parser.ParenExpr); ok {
 			expr = parenExpr.Expr
 		}
-		where = sqlparser.String(expr)
+		where = parser.String(expr)
 	}
 
 	includedColumns := []string{}
@@ -317,28 +317,28 @@ func parseIndex(stmt *sqlparser.DDL) (Index, error) {
 // Parse DDL like `CREATE TABLE` or `ALTER TABLE`.
 // This doesn't support destructive DDL like `DROP TABLE`.
 func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
-	var parserMode sqlparser.ParserMode
+	var parserMode parser.ParserMode
 	switch mode {
 	case GeneratorModeMysql:
-		parserMode = sqlparser.ParserModeMysql
+		parserMode = parser.ParserModeMysql
 	case GeneratorModePostgres:
-		parserMode = sqlparser.ParserModePostgres
+		parserMode = parser.ParserModePostgres
 	case GeneratorModeSQLite3:
-		parserMode = sqlparser.ParserModeSQLite3
+		parserMode = parser.ParserModeSQLite3
 	case GeneratorModeMssql:
-		parserMode = sqlparser.ParserModeMssql
+		parserMode = parser.ParserModeMssql
 	default:
 		panic("unrecognized parser mode")
 	}
 
-	stmt, err := sqlparser.ParseStrictDDLWithMode(ddl, parserMode)
+	stmt, err := parser.ParseStrictDDLWithMode(ddl, parserMode)
 	if err != nil {
 		return nil, err
 	}
 
 	switch stmt := stmt.(type) {
-	case *sqlparser.DDL:
-		if stmt.Action == sqlparser.CreateStr {
+	case *parser.DDL:
+		if stmt.Action == parser.CreateStr {
 			// TODO: handle other create DDL as error?
 			table, err := parseTable(mode, stmt)
 			if err != nil {
@@ -348,7 +348,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				statement: ddl,
 				table:     table,
 			}, nil
-		} else if stmt.Action == sqlparser.CreateIndexStr {
+		} else if stmt.Action == parser.CreateIndexStr {
 			index, err := parseIndex(stmt)
 			if err != nil {
 				return nil, err
@@ -358,7 +358,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				tableName: normalizedTableName(mode, stmt.Table),
 				index:     index,
 			}, nil
-		} else if stmt.Action == sqlparser.AddIndexStr {
+		} else if stmt.Action == parser.AddIndexStr {
 			index, err := parseIndex(stmt)
 			if err != nil {
 				return nil, err
@@ -368,7 +368,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				tableName: normalizedTableName(mode, stmt.Table),
 				index:     index,
 			}, nil
-		} else if stmt.Action == sqlparser.AddPrimaryKeyStr {
+		} else if stmt.Action == parser.AddPrimaryKeyStr {
 			index, err := parseIndex(stmt)
 			if err != nil {
 				return nil, err
@@ -378,7 +378,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				tableName: normalizedTableName(mode, stmt.Table),
 				index:     index,
 			}, nil
-		} else if stmt.Action == sqlparser.AddForeignKeyStr {
+		} else if stmt.Action == parser.AddForeignKeyStr {
 			indexColumns := []string{}
 			for _, indexColumn := range stmt.ForeignKey.IndexColumns {
 				indexColumns = append(indexColumns, indexColumn.String())
@@ -402,17 +402,17 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 					notForReplication: stmt.ForeignKey.NotForReplication,
 				},
 			}, nil
-		} else if stmt.Action == sqlparser.CreatePolicyStr {
+		} else if stmt.Action == parser.CreatePolicyStr {
 			scope := make([]string, len(stmt.Policy.To))
 			for i, to := range stmt.Policy.To {
 				scope[i] = to.String()
 			}
 			var using, withCheck string
 			if stmt.Policy.Using != nil {
-				using = sqlparser.String(stmt.Policy.Using.Expr)
+				using = parser.String(stmt.Policy.Using.Expr)
 			}
 			if stmt.Policy.WithCheck != nil {
-				withCheck = sqlparser.String(stmt.Policy.WithCheck.Expr)
+				withCheck = parser.String(stmt.Policy.WithCheck.Expr)
 			}
 			return &AddPolicy{
 				statement: ddl,
@@ -426,16 +426,16 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 					withCheck:  withCheck,
 				},
 			}, nil
-		} else if stmt.Action == sqlparser.CreateViewStr {
+		} else if stmt.Action == parser.CreateViewStr {
 			return &View{
 				statement:  ddl,
 				name:       normalizedTableName(mode, stmt.View.Name),
-				definition: sqlparser.String(stmt.View.Definition),
+				definition: parser.String(stmt.View.Definition),
 			}, nil
-		} else if stmt.Action == sqlparser.CreateTriggerStr {
+		} else if stmt.Action == parser.CreateTriggerStr {
 			body := []string{}
 			for _, triggerStatement := range stmt.Trigger.Body {
-				body = append(body, sqlparser.String(triggerStatement))
+				body = append(body, parser.String(triggerStatement))
 			}
 
 			return &Trigger{
@@ -446,7 +446,7 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 				event:     stmt.Trigger.Event,
 				body:      body,
 			}, nil
-		} else if stmt.Action == sqlparser.CreateTypeStr {
+		} else if stmt.Action == parser.CreateTypeStr {
 			return &Type{
 				name:       normalizedTableName(mode, stmt.Type.Name),
 				statement:  ddl,
@@ -476,7 +476,7 @@ func ParseDDLs(mode GeneratorMode, str string) ([]DDL, error) {
 	result := []DDL{}
 
 	for len(ddls) > 0 {
-		// Unfortunately, there's no easy way to let sqlparser recognize which ';' is the end of a DDL.
+		// Unfortunately, there's no easy way to let parser recognize which ';' is the end of a DDL.
 		// So we just attempt parsing until it succeeds. I'll let the parser do it in the future.
 		var parsed DDL
 		var err error
@@ -513,7 +513,7 @@ func ParseDDLs(mode GeneratorMode, str string) ([]DDL, error) {
 }
 
 // Replace pseudo collation "binary" with "{charset}_bin"
-func normalizeCollate(collate string, table sqlparser.TableSpec) string {
+func normalizeCollate(collate string, table parser.TableSpec) string {
 	if collate == "binary" {
 		return detectCharset(table) + "_bin"
 	} else {
@@ -522,7 +522,7 @@ func normalizeCollate(collate string, table sqlparser.TableSpec) string {
 }
 
 // Qualify Postgres schema
-func normalizedTableName(mode GeneratorMode, tableName sqlparser.TableName) string {
+func normalizedTableName(mode GeneratorMode, tableName parser.TableName) string {
 	table := tableName.Name.String()
 	if mode == GeneratorModePostgres {
 		if len(tableName.Qualifier.String()) > 0 {
@@ -544,7 +544,7 @@ func normalizedTable(mode GeneratorMode, tableName string) string {
 }
 
 // TODO: parse charset in parser.y instead of "detecting" it
-func detectCharset(table sqlparser.TableSpec) string {
+func detectCharset(table parser.TableSpec) string {
 	for _, option := range strings.Split(table.Options, " ") {
 		if strings.HasPrefix(option, "charset=") {
 			return strings.TrimLeft(option, "charset=")
@@ -554,14 +554,14 @@ func detectCharset(table sqlparser.TableSpec) string {
 	return ""
 }
 
-func parseIdentity(opt *sqlparser.IdentityOpt) *Identity {
+func parseIdentity(opt *parser.IdentityOpt) *Identity {
 	if opt == nil {
 		return nil
 	}
 	return &Identity{behavior: strings.ToUpper(opt.Behavior), notForReplication: opt.NotForReplication}
 }
 
-func parseDefaultDefinition(opt *sqlparser.DefaultDefinition) *DefaultDefinition {
+func parseDefaultDefinition(opt *parser.DefaultDefinition) *DefaultDefinition {
 	if opt == nil || opt.Value == nil {
 		return nil
 	}
@@ -574,7 +574,7 @@ func parseDefaultDefinition(opt *sqlparser.DefaultDefinition) *DefaultDefinition
 	return &DefaultDefinition{constraintName: constraintName, value: defaultVal}
 }
 
-func parseIdentitySequence(opt *sqlparser.IdentityOpt) *Sequence {
+func parseIdentitySequence(opt *parser.IdentityOpt) *Sequence {
 	if opt == nil || opt.Sequence == nil {
 		return nil
 	}

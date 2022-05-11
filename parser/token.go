@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package sqlparser
+package parser
 
 import (
 	"bytes"
@@ -22,8 +22,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/k0kubun/sqldef/sqlparser/dependency/bytes2"
-	"github.com/k0kubun/sqldef/sqlparser/dependency/sqltypes"
+	"github.com/k0kubun/sqldef/parser/dependency/bytes2"
+	"github.com/k0kubun/sqldef/parser/dependency/sqltypes"
 )
 
 type ParserMode int

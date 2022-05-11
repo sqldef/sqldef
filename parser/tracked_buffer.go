@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package sqlparser
+package parser
 
 import (
 	"bytes"
@@ -121,20 +121,11 @@ func (buf *TrackedBuffer) WriteArg(arg string) {
 	buf.WriteString(arg)
 }
 
-// ParsedQuery returns a ParsedQuery that contains bind
-// locations for easy substitution.
-func (buf *TrackedBuffer) ParsedQuery() *ParsedQuery {
-	return &ParsedQuery{Query: buf.String(), bindLocations: buf.bindLocations}
-}
-
 // HasBindVars returns true if the parsed query uses bind vars.
 func (buf *TrackedBuffer) HasBindVars() bool {
 	return len(buf.bindLocations) != 0
 }
 
-// BuildParsedQuery builds a ParsedQuery from the input.
-func BuildParsedQuery(in string, vars ...interface{}) *ParsedQuery {
-	buf := NewTrackedBuffer(nil)
-	buf.Myprintf(in, vars...)
-	return buf.ParsedQuery()
+type bindLocation struct {
+	offset, length int
 }
