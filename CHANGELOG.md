@@ -1,3 +1,7 @@
+## v0.11.55
+
+- Parse `CREATE INDEX` without an index name correctly [#234](https://github.com/k0kubun/sqldef/issues/234)
+
 ## v0.11.54
 
 - Support parsing function calls for psqldef [#233](https://github.com/k0kubun/sqldef/issues/233)
