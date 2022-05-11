@@ -157,10 +157,6 @@ type SQLNode interface {
 	Format(buf *TrackedBuffer)
 }
 
-// Visit defines the signature of a function that
-// can be used to visit all nodes of a parse tree.
-type Visit func(node SQLNode) (kontinue bool, err error)
-
 // String returns a string representation of an SQLNode.
 func String(node SQLNode) string {
 	if node == nil {
@@ -170,14 +166,6 @@ func String(node SQLNode) string {
 	buf := NewTrackedBuffer(nil)
 	buf.Myprintf("%v", node)
 	return buf.String()
-}
-
-// Append appends the SQLNode to the buffer.
-func Append(buf *bytes.Buffer, node SQLNode) {
-	tbuf := &TrackedBuffer{
-		Buffer: buf,
-	}
-	node.Format(tbuf)
 }
 
 // Statement represents a statement.
