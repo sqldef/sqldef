@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/k0kubun/sqldef/sqlparser/dependency/querypb"
+	"github.com/k0kubun/sqldef/parser/dependency/querypb"
 )
 
 func TestPlanValueIsNull(t *testing.T) {

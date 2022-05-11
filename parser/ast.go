@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package sqlparser
+package parser
 
 import (
 	"bytes"
@@ -24,8 +24,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/k0kubun/sqldef/sqlparser/dependency/querypb"
-	"github.com/k0kubun/sqldef/sqlparser/dependency/sqltypes"
+	"github.com/k0kubun/sqldef/parser/dependency/querypb"
+	"github.com/k0kubun/sqldef/parser/dependency/sqltypes"
 )
 
 // Instructions for creating new types: If a type
@@ -2640,7 +2640,7 @@ func (node ColIdent) IsEmpty() bool {
 }
 
 // String returns the unescaped column name. It must
-// not be used for SQL generation. Use sqlparser.String
+// not be used for SQL generation. Use parser.String
 // instead. The Stringer conformance is for usage
 // in templates.
 func (node ColIdent) String() string {
@@ -2714,7 +2714,7 @@ func (node TableIdent) IsEmpty() bool {
 }
 
 // String returns the unescaped table name. It must
-// not be used for SQL generation. Use sqlparser.String
+// not be used for SQL generation. Use parser.String
 // instead. The Stringer conformance is for usage
 // in templates.
 func (node TableIdent) String() string {
