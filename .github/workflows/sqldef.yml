@@ -18,7 +18,6 @@ jobs:
         target:
           - sqlite3def
           - mssqldef
-          - sqlparser
         include:
           - target: mysqldef
             mysql_version: '5.7'

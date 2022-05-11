@@ -54,7 +54,7 @@ package-targz: build
 		cd $(BUILD_DIR) && tar zcvf ../../package/sqlite3def_$(GOOS)_$(GOARCH).tar.gz sqlite3def; \
 	fi
 
-test: test-mysqldef test-psqldef test-sqlite3def test-mssqldef test-sqlparser
+test: test-mysqldef test-psqldef test-sqlite3def test-mssqldef
 
 test-mysqldef:
 	cd cmd/mysqldef && go test
@@ -67,6 +67,3 @@ test-sqlite3def:
 
 test-mssqldef:
 	cd cmd/mssqldef && go test
-
-test-sqlparser:
-	cd sqlparser && go test
