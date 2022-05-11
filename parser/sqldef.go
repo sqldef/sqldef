@@ -21,6 +21,7 @@ func Parse(str string, mode ParserMode) ([]DDLStatement, error) {
 
 	var result []DDLStatement
 	for _, ddl := range ddls {
+		ddl, _ = SplitMarginComments(ddl)
 		stmt, err := ParseStrictDDLWithMode(ddl, mode)
 		if err != nil {
 			return result, err
@@ -32,9 +33,6 @@ func Parse(str string, mode ParserMode) ([]DDLStatement, error) {
 
 func splitDDLs(str string, mode ParserMode) ([]string, error) {
 	re := regexp.MustCompilePOSIX("^--.*")
-	str = re.ReplaceAllString(str, "")
-
-	re = regexp.MustCompile("(?s)/\\*.*?\\*/")
 	str = re.ReplaceAllString(str, "")
 
 	ddls := strings.Split(str, ";")
@@ -54,6 +52,7 @@ func splitDDLs(str string, mode ParserMode) ([]string, error) {
 				break
 			}
 
+			ddl, _ = SplitMarginComments(ddl)
 			_, err = ParseStrictDDLWithMode(ddl, mode)
 			if err == nil || i == len(ddls) {
 				break
