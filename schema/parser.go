@@ -316,26 +316,7 @@ func parseIndex(stmt *parser.DDL) (Index, error) {
 
 // Parse DDL like `CREATE TABLE` or `ALTER TABLE`.
 // This doesn't support destructive DDL like `DROP TABLE`.
-func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
-	var parserMode parser.ParserMode
-	switch mode {
-	case GeneratorModeMysql:
-		parserMode = parser.ParserModeMysql
-	case GeneratorModePostgres:
-		parserMode = parser.ParserModePostgres
-	case GeneratorModeSQLite3:
-		parserMode = parser.ParserModeSQLite3
-	case GeneratorModeMssql:
-		parserMode = parser.ParserModeMssql
-	default:
-		panic("unrecognized parser mode")
-	}
-
-	stmt, err := parser.ParseStrictDDLWithMode(ddl, parserMode)
-	if err != nil {
-		return nil, err
-	}
-
+func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement) (DDL, error) {
 	switch stmt := stmt.(type) {
 	case *parser.DDL:
 		if stmt.Action == parser.CreateStr {
@@ -478,18 +459,33 @@ func ParseDDLs(mode GeneratorMode, str string) ([]DDL, error) {
 	for len(ddls) > 0 {
 		// Unfortunately, there's no easy way to let parser recognize which ';' is the end of a DDL.
 		// So we just attempt parsing until it succeeds. I'll let the parser do it in the future.
-		var parsed DDL
+		var ddl string
+		var stmt parser.Statement
 		var err error
 		i := 1
 		for {
-			ddl := strings.Join(ddls[0:i], ";")
+			ddl = strings.Join(ddls[0:i], ";")
 			ddl = strings.TrimSpace(ddl)
 			ddl = strings.TrimSuffix(ddl, ";")
 			if ddl == "" {
 				break
 			}
 
-			parsed, err = parseDDL(mode, ddl)
+			var parserMode parser.ParserMode
+			switch mode {
+			case GeneratorModeMysql:
+				parserMode = parser.ParserModeMysql
+			case GeneratorModePostgres:
+				parserMode = parser.ParserModePostgres
+			case GeneratorModeSQLite3:
+				parserMode = parser.ParserModeSQLite3
+			case GeneratorModeMssql:
+				parserMode = parser.ParserModeMssql
+			default:
+				panic("unrecognized parser mode")
+			}
+
+			stmt, err = parser.ParseStrictDDLWithMode(ddl, parserMode)
 			if err == nil || i == len(ddls) {
 				break
 			}
@@ -499,7 +495,11 @@ func ParseDDLs(mode GeneratorMode, str string) ([]DDL, error) {
 		if err != nil {
 			return result, err
 		}
-		if parsed != nil {
+		if ddl != "" && stmt != nil {
+			parsed, err := parseDDL(mode, ddl, stmt)
+			if err != nil {
+				return result, err
+			}
 			result = append(result, parsed)
 		}
 
