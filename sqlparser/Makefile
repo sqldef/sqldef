@@ -14,7 +14,10 @@
 
 MAKEFLAGS = -s
 
-.PYONY: goyacc
+.PYONY: all goyacc
+
+all: parser.go
+
 goyacc:
 	@if ! which goyacc > /dev/null; then \
 	  go get golang.org/x/tools/cmd/goyacc; \
