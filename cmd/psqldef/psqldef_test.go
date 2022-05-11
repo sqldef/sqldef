@@ -7,9 +7,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/adapter"
-	"github.com/k0kubun/sqldef/adapter/postgres"
 	"github.com/k0kubun/sqldef/cmd/testutils"
+	"github.com/k0kubun/sqldef/database"
+	"github.com/k0kubun/sqldef/database/postgres"
 	"github.com/k0kubun/sqldef/schema"
 	"log"
 	"os"
@@ -22,7 +22,7 @@ import (
 const (
 	applyPrefix     = "-- Apply --\n"
 	nothingModified = "-- Nothing is modified --\n"
-	database        = "psqldef_test"
+	databaseName    = "psqldef_test"
 )
 
 func TestApply(t *testing.T) {
@@ -1260,8 +1260,8 @@ func TestPsqldefDryRun(t *testing.T) {
 	    );`,
 	))
 
-	dryRun := assertedExecute(t, "./psqldef", "-Upostgres", database, "--dry-run", "--file", "schema.sql")
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", database, "--file", "schema.sql")
+	dryRun := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--dry-run", "--file", "schema.sql")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--file", "schema.sql")
 	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 }
 
@@ -1280,8 +1280,8 @@ func TestPsqldefSkipDrop(t *testing.T) {
 
 	writeFile("schema.sql", "")
 
-	skipDrop := assertedExecute(t, "./psqldef", "-Upostgres", database, "--skip-drop", "--file", "schema.sql")
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", database, "--file", "schema.sql")
+	skipDrop := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--skip-drop", "--file", "schema.sql")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--file", "schema.sql")
 	assertEquals(t, skipDrop, strings.Replace(apply, "DROP", "-- Skipped: DROP", 1))
 }
 
@@ -1352,15 +1352,15 @@ func TestPsqldefBeforeApply(t *testing.T) {
 	createTable := "CREATE TABLE dummy (id int);"
 	writeFile("schema.sql", createTable)
 
-	dryRun := assertedExecute(t, "./psqldef", "-Upostgres", database, "-f", "schema.sql", "--before-apply", beforeApply, "--dry-run")
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", database, "-f", "schema.sql", "--before-apply", beforeApply)
+	dryRun := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--before-apply", beforeApply, "--dry-run")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--before-apply", beforeApply)
 	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 	assertEquals(t, apply, applyPrefix+beforeApply+"\n"+createTable+"\n")
 
-	apply = assertedExecute(t, "./psqldef", "-Upostgres", database, "-f", "schema.sql", "--before-apply", beforeApply)
+	apply = assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--before-apply", beforeApply)
 	assertEquals(t, apply, nothingModified)
 
-	owner := assertedExecute(t, "psql", "-Upostgres", database, "-tAc", "SELECT tableowner FROM pg_tables WHERE tablename = 'dummy'")
+	owner := assertedExecute(t, "psql", "-Upostgres", databaseName, "-tAc", "SELECT tableowner FROM pg_tables WHERE tablename = 'dummy'")
 	assertEquals(t, owner, "dummy_owner_role\n")
 }
 
@@ -1392,19 +1392,19 @@ func TestMain(m *testing.M) {
 func assertApply(t *testing.T, schema string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	assertedExecute(t, "./psqldef", "-Upostgres", database, "--file", "schema.sql")
+	assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--file", "schema.sql")
 }
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	actual := assertedExecute(t, "./psqldef", "-Upostgres", database, "--file", "schema.sql")
+	actual := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--file", "schema.sql")
 	assertEquals(t, actual, expected)
 }
 
 func assertExportOutput(t *testing.T, expected string) {
 	t.Helper()
-	actual := assertedExecute(t, "./psqldef", "-Upostgres", database, "--export")
+	actual := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--export")
 	assertEquals(t, actual, expected)
 }
 
@@ -1417,11 +1417,11 @@ func mustExecute(command string, args ...string) {
 }
 
 func mustExecuteSQL(sql string) {
-	mustExecute("psql", "-Upostgres", database, "-c", sql)
+	mustExecute("psql", "-Upostgres", databaseName, "-c", sql)
 }
 
 func executeSQL(sql string) (string, error) {
-	return execute("psql", "-Upostgres", database, "-c", sql)
+	return execute("psql", "-Upostgres", databaseName, "-c", sql)
 }
 
 func assertedExecute(t *testing.T, command string, args ...string) string {
@@ -1447,8 +1447,8 @@ func execute(command string, args ...string) (string, error) {
 }
 
 func resetTestDatabase() {
-	mustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("DROP DATABASE IF EXISTS %s;", database))
-	mustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("CREATE DATABASE %s;", database))
+	mustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("DROP DATABASE IF EXISTS %s;", databaseName))
+	mustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("CREATE DATABASE %s;", databaseName))
 }
 
 func writeFile(path string, content string) {
@@ -1475,8 +1475,8 @@ var publicAndNonPublicSchemaTestCases = []struct {
 	{Name: "in non-public schema", Schema: "test"},
 }
 
-func connectDatabase() (adapter.Database, error) {
-	return postgres.NewDatabase(adapter.Config{
+func connectDatabase() (database.Database, error) {
+	return postgres.NewDatabase(database.Config{
 		User:   "postgres",
 		Host:   "127.0.0.1",
 		Port:   5432,

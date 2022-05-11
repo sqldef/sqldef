@@ -3,16 +3,16 @@ package sqlite3
 import (
 	"database/sql"
 
-	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/database"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 type Sqlite3Database struct {
-	config adapter.Config
+	config database.Config
 	db     *sql.DB
 }
 
-func NewDatabase(config adapter.Config) (adapter.Database, error) {
+func NewDatabase(config database.Config) (database.Database, error) {
 	db, err := sql.Open("sqlite3", config.DbName)
 	if err != nil {
 		return nil, err
@@ -65,7 +65,7 @@ func (d *Sqlite3Database) Views() ([]string, error) {
 		if err = rows.Scan(&sql); err != nil {
 			return nil, err
 		}
-		ddls = append(ddls, sql + ";")
+		ddls = append(ddls, sql+";")
 	}
 
 	return ddls, nil

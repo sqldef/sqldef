@@ -6,12 +6,12 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/k0kubun/sqldef/adapter/file"
+	"github.com/k0kubun/sqldef/database/file"
 
 	"github.com/jessevdk/go-flags"
 	"github.com/k0kubun/sqldef"
-	"github.com/k0kubun/sqldef/adapter"
-	"github.com/k0kubun/sqldef/adapter/mysql"
+	"github.com/k0kubun/sqldef/database"
+	"github.com/k0kubun/sqldef/database/mysql"
 	"github.com/k0kubun/sqldef/schema"
 	"golang.org/x/term"
 )
@@ -20,7 +20,7 @@ var version string
 
 // Return parsed options and schema filename
 // TODO: Support `sqldef schema.sql -opt val...`
-func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
+func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	var opts struct {
 		User                  string   `short:"u" long:"user" description:"MySQL user name" value-name:"user_name" default:"root"`
 		Password              string   `short:"p" long:"password" description:"MySQL user password, overridden by $MYSQL_PWD" value-name:"password"`
@@ -66,7 +66,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		BeforeApply: opts.BeforeApply,
 	}
 
-	database := ""
+	databaseName := ""
 	if len(currentFile) == 0 {
 		if len(args) == 0 {
 			fmt.Print("No database is specified!\n\n")
@@ -77,7 +77,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 			parser.WriteHelp(os.Stdout)
 			os.Exit(1)
 		}
-		database = args[0]
+		databaseName = args[0]
 	}
 
 	password, ok := os.LookupEnv("MYSQL_PWD")
@@ -94,8 +94,8 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		password = string(pass)
 	}
 
-	config := adapter.Config{
-		DbName:                     database,
+	config := database.Config{
+		DbName:                     databaseName,
 		User:                       opts.User,
 		Password:                   password,
 		Host:                       opts.Host,
@@ -110,7 +110,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 func main() {
 	config, options := parseOptions(os.Args[1:])
 
-	var database adapter.Database
+	var database database.Database
 	if len(options.CurrentFile) > 0 {
 		database = file.NewDatabase(options.CurrentFile)
 	} else {

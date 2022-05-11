@@ -9,18 +9,18 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/database"
 	_ "github.com/lib/pq"
 )
 
 const indent = "    "
 
 type PostgresDatabase struct {
-	config adapter.Config
+	config database.Config
 	db     *sql.DB
 }
 
-func NewDatabase(config adapter.Config) (adapter.Database, error) {
+func NewDatabase(config database.Config) (database.Database, error) {
 	db, err := sql.Open("postgres", postgresBuildDSN(config))
 	if err != nil {
 		return nil, err
@@ -569,7 +569,7 @@ func (d *PostgresDatabase) Close() error {
 	return d.db.Close()
 }
 
-func postgresBuildDSN(config adapter.Config) string {
+func postgresBuildDSN(config database.Config) string {
 	user := config.User
 	password := config.Password
 	database := config.DbName
@@ -581,11 +581,11 @@ func postgresBuildDSN(config adapter.Config) string {
 	}
 
 	var options []string
-	if sslmode, ok := os.LookupEnv("PGSSLMODE"); ok { // TODO: have this in adapter.Config, or standardize config with DSN?
+	if sslmode, ok := os.LookupEnv("PGSSLMODE"); ok { // TODO: have this in database.Config, or standardize config with DSN?
 		options = append(options, fmt.Sprintf("sslmode=%s", sslmode)) // TODO: uri escape
 	}
 
-	if sslrootcert, ok := os.LookupEnv("PGSSLROOTCERT"); ok { // TODO: have this in adapter.Config, or standardize config with DSN?
+	if sslrootcert, ok := os.LookupEnv("PGSSLROOTCERT"); ok { // TODO: have this in database.Config, or standardize config with DSN?
 		options = append(options, fmt.Sprintf("sslrootcert=%s", sslrootcert))
 	}
 

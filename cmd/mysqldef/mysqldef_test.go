@@ -13,9 +13,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/k0kubun/sqldef/adapter"
-	"github.com/k0kubun/sqldef/adapter/mysql"
 	"github.com/k0kubun/sqldef/cmd/testutils"
+	"github.com/k0kubun/sqldef/database"
+	"github.com/k0kubun/sqldef/database/mysql"
 	"github.com/k0kubun/sqldef/schema"
 )
 
@@ -1482,8 +1482,8 @@ func stripHeredoc(heredoc string) string {
 	return re.ReplaceAllLiteralString(heredoc, "")
 }
 
-func connectDatabase() (adapter.Database, error) {
-	return mysql.NewDatabase(adapter.Config{
+func connectDatabase() (database.Database, error) {
+	return mysql.NewDatabase(database.Config{
 		User:   "root",
 		Host:   "127.0.0.1",
 		Port:   3306,

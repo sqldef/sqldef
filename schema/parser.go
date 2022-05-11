@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/k0kubun/sqldef/adapter/postgres"
+	"github.com/k0kubun/sqldef/database/postgres"
 
 	"github.com/k0kubun/sqldef/sqlparser"
 )

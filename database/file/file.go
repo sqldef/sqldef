@@ -5,7 +5,7 @@ import (
 	"github.com/k0kubun/sqldef"
 )
 
-// Pseudo adapter for comparison between files
+// Pseudo database for comparison between files
 type FileDatabase struct {
 	file string
 }

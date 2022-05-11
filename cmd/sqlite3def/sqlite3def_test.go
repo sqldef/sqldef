@@ -6,9 +6,9 @@
 package main
 
 import (
-	"github.com/k0kubun/sqldef/adapter"
-	"github.com/k0kubun/sqldef/adapter/sqlite3"
 	"github.com/k0kubun/sqldef/cmd/testutils"
+	"github.com/k0kubun/sqldef/database"
+	"github.com/k0kubun/sqldef/database/sqlite3"
 	"github.com/k0kubun/sqldef/schema"
 	"log"
 	"os"
@@ -196,8 +196,8 @@ func stripHeredoc(heredoc string) string {
 	return re.ReplaceAllLiteralString(heredoc, "")
 }
 
-func connectDatabase() (adapter.Database, error) {
-	return sqlite3.NewDatabase(adapter.Config{
+func connectDatabase() (database.Database, error) {
+	return sqlite3.NewDatabase(database.Config{
 		DbName: "sqlite3def_test",
 	})
 }

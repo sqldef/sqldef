@@ -9,17 +9,17 @@ import (
 	"strings"
 
 	_ "github.com/denisenkom/go-mssqldb"
-	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/database"
 )
 
 const indent = "    "
 
 type MssqlDatabase struct {
-	config adapter.Config
+	config database.Config
 	db     *sql.DB
 }
 
-func NewDatabase(config adapter.Config) (adapter.Database, error) {
+func NewDatabase(config database.Config) (database.Database, error) {
 	db, err := sql.Open("sqlserver", mssqlBuildDSN(config))
 	if err != nil {
 		return nil, err
@@ -505,7 +505,7 @@ func (d *MssqlDatabase) Close() error {
 	return d.db.Close()
 }
 
-func mssqlBuildDSN(config adapter.Config) string {
+func mssqlBuildDSN(config database.Config) string {
 	query := url.Values{}
 	query.Add("database", config.DbName)
 

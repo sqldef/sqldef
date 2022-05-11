@@ -5,15 +5,15 @@ import (
 	"fmt"
 
 	driver "github.com/go-sql-driver/mysql"
-	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/database"
 )
 
 type MysqlDatabase struct {
-	config adapter.Config
+	config database.Config
 	db     *sql.DB
 }
 
-func NewDatabase(config adapter.Config) (adapter.Database, error) {
+func NewDatabase(config database.Config) (database.Database, error) {
 	db, err := sql.Open("mysql", mysqlBuildDSN(config))
 	if err != nil {
 		return nil, err
@@ -113,7 +113,7 @@ func (d *MysqlDatabase) Close() error {
 	return d.db.Close()
 }
 
-func mysqlBuildDSN(config adapter.Config) string {
+func mysqlBuildDSN(config database.Config) string {
 	c := driver.NewConfig()
 	c.User = config.User
 	c.Passwd = config.Password

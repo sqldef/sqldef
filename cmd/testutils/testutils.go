@@ -3,7 +3,7 @@ package testutils
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/database"
 	"github.com/k0kubun/sqldef/schema"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
@@ -57,7 +57,7 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 	return ret, nil
 }
 
-func RunTest(t *testing.T, db adapter.Database, test TestCase, mode schema.GeneratorMode, version string) {
+func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.GeneratorMode, version string) {
 	if test.MinVersion != "" && compareVersion(t, version, test.MinVersion) < 0 {
 		t.Skipf("Version '%s' is smaller than min_version '%s'", version, test.MaxVersion)
 	}
@@ -78,7 +78,7 @@ func RunTest(t *testing.T, db adapter.Database, test TestCase, mode schema.Gener
 	}
 
 	// Test idempotency
-	dumpDDLs, err := adapter.DumpDDLs(db)
+	dumpDDLs, err := database.DumpDDLs(db)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func RunTest(t *testing.T, db adapter.Database, test TestCase, mode schema.Gener
 	}
 
 	// Main test
-	dumpDDLs, err = adapter.DumpDDLs(db)
+	dumpDDLs, err = database.DumpDDLs(db)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func RunTest(t *testing.T, db adapter.Database, test TestCase, mode schema.Gener
 	}
 
 	// Test idempotency
-	dumpDDLs, err = adapter.DumpDDLs(db)
+	dumpDDLs, err = database.DumpDDLs(db)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -168,14 +168,14 @@ func splitDDLs(mode schema.GeneratorMode, str string) ([]string, error) {
 	return ddls, nil
 }
 
-func runDDLs(db adapter.Database, ddls []string) error {
+func runDDLs(db database.Database, ddls []string) error {
 	transaction, err := db.DB().Begin()
 	if err != nil {
 		return err
 	}
 	for _, ddl := range ddls {
 		var err error
-		if adapter.TransactionSupported(ddl) {
+		if database.TransactionSupported(ddl) {
 			_, err = transaction.Exec(ddl)
 		} else {
 			_, err = db.DB().Exec(ddl)

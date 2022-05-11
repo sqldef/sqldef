@@ -2,14 +2,14 @@ package main
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/adapter/file"
+	"github.com/k0kubun/sqldef/database/file"
 	"log"
 	"os"
 
 	"github.com/jessevdk/go-flags"
 	"github.com/k0kubun/sqldef"
-	"github.com/k0kubun/sqldef/adapter"
-	"github.com/k0kubun/sqldef/adapter/sqlite3"
+	"github.com/k0kubun/sqldef/database"
+	"github.com/k0kubun/sqldef/database/sqlite3"
 	"github.com/k0kubun/sqldef/schema"
 )
 
@@ -17,7 +17,7 @@ var version string
 
 // Return parsed options and schema filename
 // TODO: Support `sqldef schema.sql -opt val...`
-func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
+func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	var opts struct {
 		File     []string `short:"f" long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"filename" default:"-"`
 		DryRun   bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
@@ -53,7 +53,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 		SkipDrop:    opts.SkipDrop,
 	}
 
-	database := ""
+	databaseName := ""
 	if len(currentFile) == 0 {
 		if len(args) == 0 {
 			fmt.Print("No database is specified!\n\n")
@@ -64,11 +64,11 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 			parser.WriteHelp(os.Stdout)
 			os.Exit(1)
 		}
-		database = args[0]
+		databaseName = args[0]
 	}
 
-	config := adapter.Config{
-		DbName: database,
+	config := database.Config{
+		DbName: databaseName,
 	}
 	if _, err := os.Stat(config.Host); !os.IsNotExist(err) {
 		config.Socket = config.Host
@@ -79,7 +79,7 @@ func parseOptions(args []string) (adapter.Config, *sqldef.Options) {
 func main() {
 	config, options := parseOptions(os.Args[1:])
 
-	var database adapter.Database
+	var database database.Database
 	if len(options.CurrentFile) > 0 {
 		database = file.NewDatabase(options.CurrentFile)
 	} else {

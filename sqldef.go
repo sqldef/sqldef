@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/k0kubun/sqldef/adapter"
+	"github.com/k0kubun/sqldef/database"
 	"github.com/k0kubun/sqldef/schema"
 )
 
@@ -21,8 +21,8 @@ type Options struct {
 }
 
 // Main function shared by `mysqldef` and `psqldef`
-func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Options) {
-	currentDDLs, err := adapter.DumpDDLs(db)
+func Run(generatorMode schema.GeneratorMode, db database.Database, options *Options) {
+	currentDDLs, err := database.DumpDDLs(db)
 	if err != nil {
 		log.Fatal(fmt.Sprintf("Error on DumpDDLs: %s", err))
 	}
@@ -57,7 +57,7 @@ func Run(generatorMode schema.GeneratorMode, db adapter.Database, options *Optio
 		return
 	}
 
-	err = adapter.RunDDLs(db, ddls, options.SkipDrop, options.BeforeApply)
+	err = database.RunDDLs(db, ddls, options.SkipDrop, options.BeforeApply)
 	if err != nil {
 		log.Fatal(err)
 	}

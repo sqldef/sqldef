@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/k0kubun/sqldef/adapter/postgres"
+	"github.com/k0kubun/sqldef/database/postgres"
 )
 
 type GeneratorMode int
