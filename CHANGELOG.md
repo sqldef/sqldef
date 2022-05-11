@@ -1,6 +1,10 @@
+## v0.11.56
+
+- Parse `type` columns in VIEW definitions for psqldef [#235](https://github.com/k0kubun/sqldef/issues/235)
+
 ## v0.11.55
 
-- Parse `CREATE INDEX` without an index name correctly [#234](https://github.com/k0kubun/sqldef/issues/234)
+- Parse `CREATE INDEX` without an index name correctly for psqldef [#234](https://github.com/k0kubun/sqldef/issues/234)
 
 ## v0.11.54
 
