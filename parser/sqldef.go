@@ -39,7 +39,7 @@ func splitDDLs(str string, mode ParserMode) ([]string, error) {
 	var result []string
 
 	for len(ddls) > 0 {
-		// Unfortunately, there's no easy way to let parser recognize which ';' is the end of a DDL.
+		// SplitStatementToPieces() doesn't work well when there's a nested statement for a trigger.
 		// So we just attempt parsing until it succeeds. I'll let the parser do it in the future.
 		var ddl string
 		var err error
