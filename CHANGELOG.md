@@ -1,3 +1,7 @@
+## v0.11.57
+
+- Improve handling of SQL comments a little
+
 ## v0.11.56
 
 - Parse `type` columns in VIEW definitions for psqldef [#235](https://github.com/k0kubun/sqldef/issues/235)
