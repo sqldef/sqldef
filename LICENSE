@@ -1,4 +1,4 @@
-For everything except parser:
+For everything except parser and parser/sqldef.go:
 
 The MIT License (MIT)
 
@@ -23,7 +23,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ------------------------------------------------------------------------------
-For parser:
+For parser except parser/sqldef.go:
 
                                  Apache License
                            Version 2.0, January 2004

@@ -4,7 +4,6 @@ package schema
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -316,26 +315,7 @@ func parseIndex(stmt *parser.DDL) (Index, error) {
 
 // Parse DDL like `CREATE TABLE` or `ALTER TABLE`.
 // This doesn't support destructive DDL like `DROP TABLE`.
-func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
-	var parserMode parser.ParserMode
-	switch mode {
-	case GeneratorModeMysql:
-		parserMode = parser.ParserModeMysql
-	case GeneratorModePostgres:
-		parserMode = parser.ParserModePostgres
-	case GeneratorModeSQLite3:
-		parserMode = parser.ParserModeSQLite3
-	case GeneratorModeMssql:
-		parserMode = parser.ParserModeMssql
-	default:
-		panic("unrecognized parser mode")
-	}
-
-	stmt, err := parser.ParseStrictDDLWithMode(ddl, parserMode)
-	if err != nil {
-		return nil, err
-	}
-
+func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement) (DDL, error) {
 	switch stmt := stmt.(type) {
 	case *parser.DDL:
 		if stmt.Action == parser.CreateStr {
@@ -466,48 +446,31 @@ func parseDDL(mode GeneratorMode, ddl string) (DDL, error) {
 // Parse `ddls`, which is expected to `;`-concatenated DDLs
 // and not to include destructive DDL.
 func ParseDDLs(mode GeneratorMode, str string) ([]DDL, error) {
-	re := regexp.MustCompilePOSIX("^--.*")
-	str = re.ReplaceAllString(str, "")
+	var parserMode parser.ParserMode
+	switch mode {
+	case GeneratorModeMysql:
+		parserMode = parser.ParserModeMysql
+	case GeneratorModePostgres:
+		parserMode = parser.ParserModePostgres
+	case GeneratorModeSQLite3:
+		parserMode = parser.ParserModeSQLite3
+	case GeneratorModeMssql:
+		parserMode = parser.ParserModeMssql
+	default:
+		panic("unrecognized parser mode")
+	}
+	ddls, err := parser.Parse(str, parserMode)
+	if err != nil {
+		return nil, err
+	}
 
-	re = regexp.MustCompile("(?s)/\\*.*?\\*/")
-	str = re.ReplaceAllString(str, "")
-
-	ddls := strings.Split(str, ";")
-	result := []DDL{}
-
-	for len(ddls) > 0 {
-		// Unfortunately, there's no easy way to let parser recognize which ';' is the end of a DDL.
-		// So we just attempt parsing until it succeeds. I'll let the parser do it in the future.
-		var parsed DDL
-		var err error
-		i := 1
-		for {
-			ddl := strings.Join(ddls[0:i], ";")
-			ddl = strings.TrimSpace(ddl)
-			ddl = strings.TrimSuffix(ddl, ";")
-			if ddl == "" {
-				break
-			}
-
-			parsed, err = parseDDL(mode, ddl)
-			if err == nil || i == len(ddls) {
-				break
-			}
-			i++
-		}
-
+	var result []DDL
+	for _, ddl := range ddls {
+		parsed, err := parseDDL(mode, ddl.DDL, ddl.Statement)
 		if err != nil {
 			return result, err
 		}
-		if parsed != nil {
-			result = append(result, parsed)
-		}
-
-		if i < len(ddls) {
-			ddls = ddls[i:]
-		} else {
-			break
-		}
+		result = append(result, parsed)
 	}
 	return result, nil
 }

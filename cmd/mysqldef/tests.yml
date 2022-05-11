@@ -219,7 +219,3 @@ MysqlComment:
     CREATE TABLE users(
       id bigint NOT NULL /* comment */
     );
-  output: |
-    CREATE TABLE users(
-      id bigint NOT NULL 
-    );
