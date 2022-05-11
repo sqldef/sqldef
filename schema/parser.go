@@ -447,6 +447,41 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement) (DDL, error
 // Parse `ddls`, which is expected to `;`-concatenated DDLs
 // and not to include destructive DDL.
 func ParseDDLs(mode GeneratorMode, str string) ([]DDL, error) {
+	var parserMode parser.ParserMode
+	switch mode {
+	case GeneratorModeMysql:
+		parserMode = parser.ParserModeMysql
+	case GeneratorModePostgres:
+		parserMode = parser.ParserModePostgres
+	case GeneratorModeSQLite3:
+		parserMode = parser.ParserModeSQLite3
+	case GeneratorModeMssql:
+		parserMode = parser.ParserModeMssql
+	default:
+		panic("unrecognized parser mode")
+	}
+	ddls, err := splitDDLs(parserMode, str)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []DDL
+	for _, ddl := range ddls {
+		stmt, err := parser.ParseStrictDDLWithMode(ddl, parserMode)
+		if err != nil {
+			return result, err
+		}
+
+		parsed, err := parseDDL(mode, ddl, stmt)
+		if err != nil {
+			return result, err
+		}
+		result = append(result, parsed)
+	}
+	return result, nil
+}
+
+func splitDDLs(mode parser.ParserMode, str string) ([]string, error) {
 	re := regexp.MustCompilePOSIX("^--.*")
 	str = re.ReplaceAllString(str, "")
 
@@ -454,13 +489,12 @@ func ParseDDLs(mode GeneratorMode, str string) ([]DDL, error) {
 	str = re.ReplaceAllString(str, "")
 
 	ddls := strings.Split(str, ";")
-	result := []DDL{}
+	var result []string
 
 	for len(ddls) > 0 {
 		// Unfortunately, there's no easy way to let parser recognize which ';' is the end of a DDL.
 		// So we just attempt parsing until it succeeds. I'll let the parser do it in the future.
 		var ddl string
-		var stmt parser.Statement
 		var err error
 		i := 1
 		for {
@@ -471,21 +505,7 @@ func ParseDDLs(mode GeneratorMode, str string) ([]DDL, error) {
 				break
 			}
 
-			var parserMode parser.ParserMode
-			switch mode {
-			case GeneratorModeMysql:
-				parserMode = parser.ParserModeMysql
-			case GeneratorModePostgres:
-				parserMode = parser.ParserModePostgres
-			case GeneratorModeSQLite3:
-				parserMode = parser.ParserModeSQLite3
-			case GeneratorModeMssql:
-				parserMode = parser.ParserModeMssql
-			default:
-				panic("unrecognized parser mode")
-			}
-
-			stmt, err = parser.ParseStrictDDLWithMode(ddl, parserMode)
+			_, err = parser.ParseStrictDDLWithMode(ddl, mode)
 			if err == nil || i == len(ddls) {
 				break
 			}
@@ -495,12 +515,8 @@ func ParseDDLs(mode GeneratorMode, str string) ([]DDL, error) {
 		if err != nil {
 			return result, err
 		}
-		if ddl != "" && stmt != nil {
-			parsed, err := parseDDL(mode, ddl, stmt)
-			if err != nil {
-				return result, err
-			}
-			result = append(result, parsed)
+		if ddl != "" {
+			result = append(result, ddl)
 		}
 
 		if i < len(ddls) {
