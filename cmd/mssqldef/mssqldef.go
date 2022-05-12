@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/k0kubun/sqldef/database/file"
+	"github.com/k0kubun/sqldef/parser"
 	"log"
 	"os"
 	"syscall"
@@ -101,17 +102,18 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 func main() {
 	config, options := parseOptions(os.Args[1:])
 
-	var database database.Database
+	var db database.Database
 	if len(options.CurrentFile) > 0 {
-		database = file.NewDatabase(options.CurrentFile)
+		db = file.NewDatabase(options.CurrentFile)
 	} else {
 		var err error
-		database, err = mssql.NewDatabase(config)
+		db, err = mssql.NewDatabase(config)
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer database.Close()
+		defer db.Close()
 	}
 
-	sqldef.Run(schema.GeneratorModeMssql, database, options)
+	sqlParser := database.NewParser(parser.ParserModeMssql)
+	sqldef.Run(schema.GeneratorModeMssql, db, sqlParser, options)
 }

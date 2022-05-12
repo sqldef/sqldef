@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/k0kubun/sqldef/parser"
 	"log"
 	"os"
 	"strings"
@@ -108,29 +109,30 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 func main() {
 	config, options := parseOptions(os.Args[1:])
 
-	var database database.Database
+	var db database.Database
 	if len(options.CurrentFile) > 0 {
-		database = file.NewDatabase(options.CurrentFile)
+		db = file.NewDatabase(options.CurrentFile)
 	} else {
 		var err error
-		database, err = postgres.NewDatabase(config)
+		db, err = postgres.NewDatabase(config)
 
 		// Emulate the default behavior (sslmode=prefer) of psql when PGSSLMODE is not set,
 		// which is not supported by Go's lib/pq.
 		if _, ok := os.LookupEnv("PGSSLMODE"); !ok && err == nil {
-			e := database.DB().Ping()
+			e := db.DB().Ping()
 			if e != nil && strings.Contains(fmt.Sprintf("%s", e), "SSL is not enabled") {
-				database.Close()
+				db.Close()
 				os.Setenv("PGSSLMODE", "disable")
-				database, err = postgres.NewDatabase(config)
+				db, err = postgres.NewDatabase(config)
 			}
 		}
 
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer database.Close()
+		defer db.Close()
 	}
 
-	sqldef.Run(schema.GeneratorModePostgres, database, options)
+	sqlParser := database.NewParser(parser.ParserModePostgres)
+	sqldef.Run(schema.GeneratorModePostgres, db, sqlParser, options)
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/k0kubun/sqldef/cmd/testutils"
 	"github.com/k0kubun/sqldef/database"
 	"github.com/k0kubun/sqldef/database/sqlite3"
+	"github.com/k0kubun/sqldef/parser"
 	"github.com/k0kubun/sqldef/schema"
 	"log"
 	"os"
@@ -31,6 +32,7 @@ func TestApply(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	sqlParser := database.NewParser(parser.ParserModeSQLite3)
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Initialize the database with test.Current
@@ -41,7 +43,7 @@ func TestApply(t *testing.T) {
 			}
 			defer db.Close()
 
-			testutils.RunTest(t, db, test, schema.GeneratorModeSQLite3, "")
+			testutils.RunTest(t, db, test, schema.GeneratorModeSQLite3, sqlParser, "")
 		})
 	}
 }

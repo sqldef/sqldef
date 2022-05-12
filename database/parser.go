@@ -1,41 +1,43 @@
-// sqldef.go: sqldef's original code under the parser pacakge
-// This file is subject to sqldef's own MIT lisence and NOT part of sqlparser's Apache License.
-package parser
+package database
 
 import (
+	"github.com/k0kubun/sqldef/parser"
 	"regexp"
 	"strings"
 )
 
-// A tuple of an original DDL and a Statement
-type DDLStatement struct {
-	DDL       string
-	Statement Statement
+type Parser interface {
+	Parse(sql string) ([]parser.DDLStatement, error)
 }
 
-func Parse(str string, mode ParserMode) ([]DDLStatement, error) {
-	if mode == ParserModePostgres {
-		// postgres.Parse("SELECT 1;")
-	}
+type GenericParser struct {
+	mode parser.ParserMode
+}
 
-	ddls, err := splitDDLs(str, mode)
+func NewParser(mode parser.ParserMode) GenericParser {
+	return GenericParser{
+		mode: mode,
+	}
+}
+
+func (p GenericParser) Parse(sql string) ([]parser.DDLStatement, error) {
+	ddls, err := p.splitDDLs(sql)
 	if err != nil {
 		return nil, err
 	}
 
-	var result []DDLStatement
+	var result []parser.DDLStatement
 	for _, ddl := range ddls {
-		ddl, _ = SplitMarginComments(ddl)
-		stmt, err := ParseStrictDDLWithMode(ddl, mode)
+		ddl, _ = parser.SplitMarginComments(ddl)
+		stmt, err := parser.ParseStrictDDLWithMode(ddl, p.mode)
 		if err != nil {
 			return result, err
 		}
-		result = append(result, DDLStatement{DDL: ddl, Statement: stmt})
+		result = append(result, parser.DDLStatement{DDL: ddl, Statement: stmt})
 	}
 	return result, nil
 }
-
-func splitDDLs(str string, mode ParserMode) ([]string, error) {
+func (p GenericParser) splitDDLs(str string) ([]string, error) {
 	re := regexp.MustCompilePOSIX("^--.*")
 	str = re.ReplaceAllString(str, "")
 
@@ -50,12 +52,12 @@ func splitDDLs(str string, mode ParserMode) ([]string, error) {
 		i := 1
 		for {
 			ddl = strings.Join(ddls[0:i], ";")
-			ddl, _ = SplitMarginComments(ddl)
+			ddl, _ = parser.SplitMarginComments(ddl)
 			ddl = strings.TrimSuffix(ddl, ";")
 			if ddl == "" {
 				break
 			}
-			_, err = ParseStrictDDLWithMode(ddl, mode)
+			_, err = parser.ParseStrictDDLWithMode(ddl, p.mode)
 			if err == nil || i == len(ddls) {
 				break
 			}

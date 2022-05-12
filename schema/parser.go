@@ -4,6 +4,7 @@ package schema
 
 import (
 	"fmt"
+	"github.com/k0kubun/sqldef/database"
 	"strconv"
 	"strings"
 
@@ -445,21 +446,8 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement) (DDL, error
 
 // Parse `ddls`, which is expected to `;`-concatenated DDLs
 // and not to include destructive DDL.
-func ParseDDLs(mode GeneratorMode, str string) ([]DDL, error) {
-	var parserMode parser.ParserMode
-	switch mode {
-	case GeneratorModeMysql:
-		parserMode = parser.ParserModeMysql
-	case GeneratorModePostgres:
-		parserMode = parser.ParserModePostgres
-	case GeneratorModeSQLite3:
-		parserMode = parser.ParserModeSQLite3
-	case GeneratorModeMssql:
-		parserMode = parser.ParserModeMssql
-	default:
-		panic("unrecognized parser mode")
-	}
-	ddls, err := parser.Parse(str, parserMode)
+func ParseDDLs(mode GeneratorMode, sqlParser database.Parser, sql string) ([]DDL, error) {
+	ddls, err := sqlParser.Parse(sql)
 	if err != nil {
 		return nil, err
 	}

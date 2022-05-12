@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/k0kubun/sqldef/parser"
 	"log"
 	"os"
 	"syscall"
@@ -110,17 +111,18 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 func main() {
 	config, options := parseOptions(os.Args[1:])
 
-	var database database.Database
+	var db database.Database
 	if len(options.CurrentFile) > 0 {
-		database = file.NewDatabase(options.CurrentFile)
+		db = file.NewDatabase(options.CurrentFile)
 	} else {
 		var err error
-		database, err = mysql.NewDatabase(config)
+		db, err = mysql.NewDatabase(config)
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer database.Close()
+		defer db.Close()
 	}
 
-	sqldef.Run(schema.GeneratorModeMysql, database, options)
+	sqlParser := database.NewParser(parser.ParserModeMysql)
+	sqldef.Run(schema.GeneratorModeMysql, db, sqlParser, options)
 }
