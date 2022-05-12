@@ -3,6 +3,7 @@ package mysql
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	driver "github.com/go-sql-driver/mysql"
 	"github.com/k0kubun/sqldef/database"
@@ -25,7 +26,38 @@ func NewDatabase(config database.Config) (database.Database, error) {
 	}, nil
 }
 
-func (d *MysqlDatabase) TableNames() ([]string, error) {
+func (d *MysqlDatabase) DumpDDLs() (string, error) {
+	var ddls []string
+
+	tableNames, err := d.tableNames()
+	if err != nil {
+		return "", err
+	}
+	for _, tableName := range tableNames {
+		ddl, err := d.dumpTableDDL(tableName)
+		if err != nil {
+			return "", err
+		}
+
+		ddls = append(ddls, ddl)
+	}
+
+	viewDDLs, err := d.views()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, viewDDLs...)
+
+	triggerDDLs, err := d.triggers()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, triggerDDLs...)
+
+	return strings.Join(ddls, "\n\n"), nil
+}
+
+func (d *MysqlDatabase) tableNames() ([]string, error) {
 	rows, err := d.db.Query("show full tables where Table_Type != 'VIEW'")
 	if err != nil {
 		return nil, err
@@ -44,7 +76,7 @@ func (d *MysqlDatabase) TableNames() ([]string, error) {
 	return tables, nil
 }
 
-func (d *MysqlDatabase) DumpTableDDL(table string) (string, error) {
+func (d *MysqlDatabase) dumpTableDDL(table string) (string, error) {
 	var ddl string
 	sql := fmt.Sprintf("show create table `%s`;", table) // TODO: escape table name
 
@@ -56,7 +88,7 @@ func (d *MysqlDatabase) DumpTableDDL(table string) (string, error) {
 	return ddl + ";", nil
 }
 
-func (d *MysqlDatabase) Views() ([]string, error) {
+func (d *MysqlDatabase) views() ([]string, error) {
 	if d.config.SkipView {
 		return []string{}, nil
 	}
@@ -82,7 +114,7 @@ func (d *MysqlDatabase) Views() ([]string, error) {
 	return ddls, nil
 }
 
-func (d *MysqlDatabase) Triggers() ([]string, error) {
+func (d *MysqlDatabase) triggers() ([]string, error) {
 	rows, err := d.db.Query("show triggers")
 	if err != nil {
 		return nil, err
@@ -99,10 +131,6 @@ func (d *MysqlDatabase) Triggers() ([]string, error) {
 		ddls = append(ddls, fmt.Sprintf("CREATE TRIGGER %s %s %s ON %s FOR EACH ROW %s;", trigger, timing, event, table, statement))
 	}
 	return ddls, nil
-}
-
-func (d *MysqlDatabase) Types() ([]string, error) {
-	return nil, nil
 }
 
 func (d *MysqlDatabase) DB() *sql.DB {

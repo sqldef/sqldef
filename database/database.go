@@ -22,51 +22,9 @@ type Config struct {
 
 // Abstraction layer for multiple kinds of databases
 type Database interface {
-	TableNames() ([]string, error)
-	DumpTableDDL(table string) (string, error)
-	Views() ([]string, error)
-	Triggers() ([]string, error)
-	Types() ([]string, error)
+	DumpDDLs() (string, error)
 	DB() *sql.DB
 	Close() error
-}
-
-// TODO: This should probably be part of the Database interface
-func DumpDDLs(d Database) (string, error) {
-	ddls := []string{}
-
-	typeDDLs, err := d.Types()
-	if err != nil {
-		return "", err
-	}
-	ddls = append(ddls, typeDDLs...)
-
-	tableNames, err := d.TableNames()
-	if err != nil {
-		return "", err
-	}
-	for _, tableName := range tableNames {
-		ddl, err := d.DumpTableDDL(tableName)
-		if err != nil {
-			return "", err
-		}
-
-		ddls = append(ddls, ddl)
-	}
-
-	viewDDLs, err := d.Views()
-	if err != nil {
-		return "", err
-	}
-	ddls = append(ddls, viewDDLs...)
-
-	triggerDDLs, err := d.Triggers()
-	if err != nil {
-		return "", err
-	}
-	ddls = append(ddls, triggerDDLs...)
-
-	return strings.Join(ddls, "\n\n"), nil
 }
 
 func RunDDLs(d Database, ddls []string, skipDrop bool, beforeApply string) error {

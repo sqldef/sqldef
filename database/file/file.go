@@ -16,24 +16,8 @@ func NewDatabase(file string) FileDatabase {
 	}
 }
 
-func (f FileDatabase) TableNames() ([]string, error) {
-	return []string{f.file}, nil
-}
-
-func (f FileDatabase) DumpTableDDL(file string) (string, error) {
-	return sqldef.ReadFile(file)
-}
-
-func (f FileDatabase) Views() ([]string, error) {
-	return nil, nil
-}
-
-func (f FileDatabase) Triggers() ([]string, error) {
-	return nil, nil
-}
-
-func (f FileDatabase) Types() ([]string, error) {
-	return nil, nil
+func (f FileDatabase) DumpDDLs() (string, error) {
+	return sqldef.ReadFile(f.file)
 }
 
 func (f FileDatabase) DB() *sql.DB {

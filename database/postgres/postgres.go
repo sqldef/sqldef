@@ -32,7 +32,38 @@ func NewDatabase(config database.Config) (database.Database, error) {
 	}, nil
 }
 
-func (d *PostgresDatabase) TableNames() ([]string, error) {
+func (d *PostgresDatabase) DumpDDLs() (string, error) {
+	var ddls []string
+
+	typeDDLs, err := d.types()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, typeDDLs...)
+
+	tableNames, err := d.tableNames()
+	if err != nil {
+		return "", err
+	}
+	for _, tableName := range tableNames {
+		ddl, err := d.dumpTableDDL(tableName)
+		if err != nil {
+			return "", err
+		}
+
+		ddls = append(ddls, ddl)
+	}
+
+	viewDDLs, err := d.views()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, viewDDLs...)
+
+	return strings.Join(ddls, "\n\n"), nil
+}
+
+func (d *PostgresDatabase) tableNames() ([]string, error) {
 	rows, err := d.db.Query(
 		`select table_schema, table_name from information_schema.tables
 		 where table_schema not in ('information_schema', 'pg_catalog')
@@ -60,7 +91,7 @@ var (
 	spaces          = regexp.MustCompile(`[ ]+`)
 )
 
-func (d *PostgresDatabase) Views() ([]string, error) {
+func (d *PostgresDatabase) views() ([]string, error) {
 	rows, err := d.db.Query(
 		`select table_schema, table_name, definition from information_schema.tables
 		 inner join pg_views on table_name = viewname
@@ -92,11 +123,7 @@ func (d *PostgresDatabase) Views() ([]string, error) {
 	return ddls, nil
 }
 
-func (d *PostgresDatabase) Triggers() ([]string, error) {
-	return nil, nil
-}
-
-func (d *PostgresDatabase) Types() ([]string, error) {
+func (d *PostgresDatabase) types() ([]string, error) {
 	rows, err := d.db.Query(
 		`select t.typname, string_agg(e.enumlabel, ' ')
 		 from pg_enum e
@@ -127,7 +154,7 @@ func (d *PostgresDatabase) Types() ([]string, error) {
 	return ddls, nil
 }
 
-func (d *PostgresDatabase) DumpTableDDL(table string) (string, error) {
+func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
 	cols, err := d.getColumns(table)
 	if err != nil {
 		return "", err

@@ -31,7 +31,38 @@ func NewDatabase(config database.Config) (database.Database, error) {
 	}, nil
 }
 
-func (d *MssqlDatabase) TableNames() ([]string, error) {
+func (d *MssqlDatabase) DumpDDLs() (string, error) {
+	var ddls []string
+
+	tableNames, err := d.tableNames()
+	if err != nil {
+		return "", err
+	}
+	for _, tableName := range tableNames {
+		ddl, err := d.dumpTableDDL(tableName)
+		if err != nil {
+			return "", err
+		}
+
+		ddls = append(ddls, ddl)
+	}
+
+	viewDDLs, err := d.views()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, viewDDLs...)
+
+	triggerDDLs, err := d.triggers()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, triggerDDLs...)
+
+	return strings.Join(ddls, "\n\n"), nil
+}
+
+func (d *MssqlDatabase) tableNames() ([]string, error) {
 	rows, err := d.db.Query(
 		`select schema_name(schema_id) as table_schema, name from sys.objects where type = 'U';`,
 	)
@@ -51,7 +82,7 @@ func (d *MssqlDatabase) TableNames() ([]string, error) {
 	return tables, nil
 }
 
-func (d *MssqlDatabase) DumpTableDDL(table string) (string, error) {
+func (d *MssqlDatabase) dumpTableDDL(table string) (string, error) {
 	cols, err := d.getColumns(table)
 	if err != nil {
 		return "", err
@@ -434,7 +465,7 @@ var (
 	spaces          = regexp.MustCompile(`[ ]+`)
 )
 
-func (d *MssqlDatabase) Views() ([]string, error) {
+func (d *MssqlDatabase) views() ([]string, error) {
 	const sql = `SELECT
 	sys.views.name as name,
 	sys.sql_modules.definition as definition
@@ -468,7 +499,7 @@ INNER JOIN sys.sql_modules
 	return ddls, nil
 }
 
-func (d *MssqlDatabase) Triggers() ([]string, error) {
+func (d *MssqlDatabase) triggers() ([]string, error) {
 	query := `SELECT
 	s.definition
 FROM sys.triggers tr
@@ -491,10 +522,6 @@ INNER JOIN sys.all_sql_modules s ON s.object_id = tr.object_id`
 	}
 
 	return triggers, nil
-}
-
-func (d *MssqlDatabase) Types() ([]string, error) {
-	return nil, nil
 }
 
 func (d *MssqlDatabase) DB() *sql.DB {

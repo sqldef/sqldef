@@ -2,6 +2,7 @@ package sqlite3
 
 import (
 	"database/sql"
+	"strings"
 
 	"github.com/k0kubun/sqldef/database"
 	_ "github.com/mattn/go-sqlite3"
@@ -24,7 +25,32 @@ func NewDatabase(config database.Config) (database.Database, error) {
 	}, nil
 }
 
-func (d *Sqlite3Database) TableNames() ([]string, error) {
+func (d *Sqlite3Database) DumpDDLs() (string, error) {
+	var ddls []string
+
+	tableNames, err := d.tableNames()
+	if err != nil {
+		return "", err
+	}
+	for _, tableName := range tableNames {
+		ddl, err := d.DumpTableDDL(tableName)
+		if err != nil {
+			return "", err
+		}
+
+		ddls = append(ddls, ddl)
+	}
+
+	viewDDLs, err := d.views()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, viewDDLs...)
+
+	return strings.Join(ddls, "\n\n"), nil
+}
+
+func (d *Sqlite3Database) tableNames() ([]string, error) {
 	rows, err := d.db.Query(
 		`select tbl_name from sqlite_master where type = 'table' and tbl_name not like 'sqlite_%'`,
 	)
@@ -51,7 +77,7 @@ func (d *Sqlite3Database) DumpTableDDL(table string) (string, error) {
 	return sql + ";", err
 }
 
-func (d *Sqlite3Database) Views() ([]string, error) {
+func (d *Sqlite3Database) views() ([]string, error) {
 	var ddls []string
 	const query = "select sql from sqlite_master where type = 'view';"
 	rows, err := d.db.Query(query)
@@ -69,14 +95,6 @@ func (d *Sqlite3Database) Views() ([]string, error) {
 	}
 
 	return ddls, nil
-}
-
-func (d *Sqlite3Database) Triggers() ([]string, error) {
-	return nil, nil
-}
-
-func (d *Sqlite3Database) Types() ([]string, error) {
-	return nil, nil
 }
 
 func (d *Sqlite3Database) DB() *sql.DB {
