@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/parser"
 	"log"
 	"os"
 	"strings"
@@ -133,6 +132,6 @@ func main() {
 		defer db.Close()
 	}
 
-	sqlParser := database.NewParser(parser.ParserModePostgres)
+	sqlParser := postgres.NewParser()
 	sqldef.Run(schema.GeneratorModePostgres, db, sqlParser, options)
 }

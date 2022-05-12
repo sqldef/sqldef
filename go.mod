@@ -8,6 +8,7 @@ require (
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/k0kubun/pp/v3 v3.1.0
 	github.com/lib/pq v1.10.6
+	github.com/pganalyze/pg_query_go/v2 v2.1.0
 	golang.org/x/term v0.0.0-20210406210042-72f3dc4e9b72
 	gopkg.in/yaml.v2 v2.4.0
 	modernc.org/sqlite v1.18.0
@@ -37,4 +38,9 @@ require (
 	modernc.org/opt v0.1.1 // indirect
 	modernc.org/strutil v1.1.1 // indirect
 	modernc.org/token v1.0.0 // indirect
+)
+
+require (
+	github.com/golang/protobuf v1.4.2 // indirect
+	google.golang.org/protobuf v1.23.0 // indirect
 )
