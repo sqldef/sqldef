@@ -6,8 +6,14 @@ import (
 	"strings"
 )
 
+// A tuple of an original DDL and a Statement
+type DDLStatement struct {
+	DDL       string
+	Statement parser.Statement
+}
+
 type Parser interface {
-	Parse(sql string) ([]parser.DDLStatement, error)
+	Parse(sql string) ([]DDLStatement, error)
 }
 
 type GenericParser struct {
@@ -20,20 +26,20 @@ func NewParser(mode parser.ParserMode) GenericParser {
 	}
 }
 
-func (p GenericParser) Parse(sql string) ([]parser.DDLStatement, error) {
+func (p GenericParser) Parse(sql string) ([]DDLStatement, error) {
 	ddls, err := p.splitDDLs(sql)
 	if err != nil {
 		return nil, err
 	}
 
-	var result []parser.DDLStatement
+	var result []DDLStatement
 	for _, ddl := range ddls {
 		ddl, _ = parser.SplitMarginComments(ddl)
 		stmt, err := parser.ParseStrictDDLWithMode(ddl, p.mode)
 		if err != nil {
 			return result, err
 		}
-		result = append(result, parser.DDLStatement{DDL: ddl, Statement: stmt})
+		result = append(result, DDLStatement{DDL: ddl, Statement: stmt})
 	}
 	return result, nil
 }
