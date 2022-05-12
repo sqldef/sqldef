@@ -3,6 +3,7 @@ package mysql
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	driver "github.com/go-sql-driver/mysql"
 	"github.com/k0kubun/sqldef/database"
@@ -23,6 +24,43 @@ func NewDatabase(config database.Config) (database.Database, error) {
 		db:     db,
 		config: config,
 	}, nil
+}
+
+func (d *MysqlDatabase) DumpDDLs() (string, error) {
+	var ddls []string
+
+	typeDDLs, err := d.Types()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, typeDDLs...)
+
+	tableNames, err := d.TableNames()
+	if err != nil {
+		return "", err
+	}
+	for _, tableName := range tableNames {
+		ddl, err := d.DumpTableDDL(tableName)
+		if err != nil {
+			return "", err
+		}
+
+		ddls = append(ddls, ddl)
+	}
+
+	viewDDLs, err := d.Views()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, viewDDLs...)
+
+	triggerDDLs, err := d.Triggers()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, triggerDDLs...)
+
+	return strings.Join(ddls, "\n\n"), nil
 }
 
 func (d *MysqlDatabase) TableNames() ([]string, error) {

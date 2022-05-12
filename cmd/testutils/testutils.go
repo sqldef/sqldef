@@ -78,7 +78,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	}
 
 	// Test idempotency
-	dumpDDLs, err := database.DumpDDLs(db)
+	dumpDDLs, err := db.DumpDDLs()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	}
 
 	// Main test
-	dumpDDLs, err = database.DumpDDLs(db)
+	dumpDDLs, err = db.DumpDDLs()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	}
 
 	// Test idempotency
-	dumpDDLs, err = database.DumpDDLs(db)
+	dumpDDLs, err = db.DumpDDLs()
 	if err != nil {
 		log.Fatal(err)
 	}

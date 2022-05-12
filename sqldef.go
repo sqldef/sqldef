@@ -22,7 +22,7 @@ type Options struct {
 
 // Main function shared by `mysqldef` and `psqldef`
 func Run(generatorMode schema.GeneratorMode, db database.Database, options *Options) {
-	currentDDLs, err := database.DumpDDLs(db)
+	currentDDLs, err := db.DumpDDLs()
 	if err != nil {
 		log.Fatal(fmt.Sprintf("Error on DumpDDLs: %s", err))
 	}

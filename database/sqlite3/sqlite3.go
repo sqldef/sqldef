@@ -2,6 +2,7 @@ package sqlite3
 
 import (
 	"database/sql"
+	"strings"
 
 	"github.com/k0kubun/sqldef/database"
 	_ "github.com/mattn/go-sqlite3"
@@ -22,6 +23,43 @@ func NewDatabase(config database.Config) (database.Database, error) {
 		db:     db,
 		config: config,
 	}, nil
+}
+
+func (d *Sqlite3Database) DumpDDLs() (string, error) {
+	var ddls []string
+
+	typeDDLs, err := d.Types()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, typeDDLs...)
+
+	tableNames, err := d.TableNames()
+	if err != nil {
+		return "", err
+	}
+	for _, tableName := range tableNames {
+		ddl, err := d.DumpTableDDL(tableName)
+		if err != nil {
+			return "", err
+		}
+
+		ddls = append(ddls, ddl)
+	}
+
+	viewDDLs, err := d.Views()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, viewDDLs...)
+
+	triggerDDLs, err := d.Triggers()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, triggerDDLs...)
+
+	return strings.Join(ddls, "\n\n"), nil
 }
 
 func (d *Sqlite3Database) TableNames() ([]string, error) {
