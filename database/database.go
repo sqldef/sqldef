@@ -23,11 +23,6 @@ type Config struct {
 // Abstraction layer for multiple kinds of databases
 type Database interface {
 	DumpDDLs() (string, error)
-	TableNames() ([]string, error)
-	DumpTableDDL(table string) (string, error)
-	Views() ([]string, error)
-	Triggers() ([]string, error)
-	Types() ([]string, error)
 	DB() *sql.DB
 	Close() error
 }

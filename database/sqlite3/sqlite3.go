@@ -28,13 +28,7 @@ func NewDatabase(config database.Config) (database.Database, error) {
 func (d *Sqlite3Database) DumpDDLs() (string, error) {
 	var ddls []string
 
-	typeDDLs, err := d.Types()
-	if err != nil {
-		return "", err
-	}
-	ddls = append(ddls, typeDDLs...)
-
-	tableNames, err := d.TableNames()
+	tableNames, err := d.tableNames()
 	if err != nil {
 		return "", err
 	}
@@ -47,22 +41,16 @@ func (d *Sqlite3Database) DumpDDLs() (string, error) {
 		ddls = append(ddls, ddl)
 	}
 
-	viewDDLs, err := d.Views()
+	viewDDLs, err := d.views()
 	if err != nil {
 		return "", err
 	}
 	ddls = append(ddls, viewDDLs...)
 
-	triggerDDLs, err := d.Triggers()
-	if err != nil {
-		return "", err
-	}
-	ddls = append(ddls, triggerDDLs...)
-
 	return strings.Join(ddls, "\n\n"), nil
 }
 
-func (d *Sqlite3Database) TableNames() ([]string, error) {
+func (d *Sqlite3Database) tableNames() ([]string, error) {
 	rows, err := d.db.Query(
 		`select tbl_name from sqlite_master where type = 'table' and tbl_name not like 'sqlite_%'`,
 	)
@@ -89,7 +77,7 @@ func (d *Sqlite3Database) DumpTableDDL(table string) (string, error) {
 	return sql + ";", err
 }
 
-func (d *Sqlite3Database) Views() ([]string, error) {
+func (d *Sqlite3Database) views() ([]string, error) {
 	var ddls []string
 	const query = "select sql from sqlite_master where type = 'view';"
 	rows, err := d.db.Query(query)
@@ -107,14 +95,6 @@ func (d *Sqlite3Database) Views() ([]string, error) {
 	}
 
 	return ddls, nil
-}
-
-func (d *Sqlite3Database) Triggers() ([]string, error) {
-	return nil, nil
-}
-
-func (d *Sqlite3Database) Types() ([]string, error) {
-	return nil, nil
 }
 
 func (d *Sqlite3Database) DB() *sql.DB {
