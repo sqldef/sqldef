@@ -57,7 +57,7 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 	return ret, nil
 }
 
-func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.GeneratorMode, version string) {
+func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.GeneratorMode, sqlParser database.Parser, version string) {
 	if test.MinVersion != "" && compareVersion(t, version, test.MinVersion) < 0 {
 		t.Skipf("Version '%s' is smaller than min_version '%s'", version, test.MaxVersion)
 	}
@@ -67,7 +67,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 
 	// Prepare current
 	if test.Current != "" {
-		ddls, err := splitDDLs(mode, test.Current)
+		ddls, err := splitDDLs(mode, sqlParser, test.Current)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -82,7 +82,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err := schema.GenerateIdempotentDDLs(mode, test.Current, dumpDDLs)
+	ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, dumpDDLs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err = schema.GenerateIdempotentDDLs(mode, test.Desired, dumpDDLs)
+	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err = schema.GenerateIdempotentDDLs(mode, test.Desired, dumpDDLs)
+	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,8 +155,8 @@ func compareVersion(t *testing.T, leftVersion string, rightVersion string) int {
 	return 0
 }
 
-func splitDDLs(mode schema.GeneratorMode, str string) ([]string, error) {
-	statements, err := schema.ParseDDLs(mode, str)
+func splitDDLs(mode schema.GeneratorMode, sqlParser database.Parser, str string) ([]string, error) {
+	statements, err := schema.ParseDDLs(mode, sqlParser, str)
 	if err != nil {
 		return nil, err
 	}

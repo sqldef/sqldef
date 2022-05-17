@@ -3,6 +3,7 @@ package schema
 
 import (
 	"fmt"
+	"github.com/k0kubun/sqldef/database"
 	"log"
 	"reflect"
 	"sort"
@@ -49,14 +50,14 @@ type Generator struct {
 }
 
 // Parse argument DDLs and call `generateDDLs()`
-func GenerateIdempotentDDLs(mode GeneratorMode, desiredSQL string, currentSQL string) ([]string, error) {
+func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desiredSQL string, currentSQL string) ([]string, error) {
 	// TODO: invalidate duplicated tables, columns
-	desiredDDLs, err := ParseDDLs(mode, desiredSQL)
+	desiredDDLs, err := ParseDDLs(mode, sqlParser, desiredSQL)
 	if err != nil {
 		return nil, err
 	}
 
-	currentDDLs, err := ParseDDLs(mode, currentSQL)
+	currentDDLs, err := ParseDDLs(mode, sqlParser, currentSQL)
 	if err != nil {
 		return nil, err
 	}

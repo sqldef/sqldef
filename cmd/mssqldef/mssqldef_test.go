@@ -7,6 +7,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/k0kubun/sqldef/parser"
 	"log"
 	"os"
 	"os/exec"
@@ -31,6 +32,7 @@ func TestApply(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	sqlParser := database.NewParser(parser.ParserModeMssql)
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Initialize the database with test.Current
@@ -41,7 +43,7 @@ func TestApply(t *testing.T) {
 			}
 			defer db.Close()
 
-			testutils.RunTest(t, db, test, schema.GeneratorModeMssql, "")
+			testutils.RunTest(t, db, test, schema.GeneratorModeMssql, sqlParser, "")
 		})
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/k0kubun/sqldef/cmd/testutils"
 	"github.com/k0kubun/sqldef/database"
 	"github.com/k0kubun/sqldef/database/postgres"
+	"github.com/k0kubun/sqldef/parser"
 	"github.com/k0kubun/sqldef/schema"
 	"log"
 	"os"
@@ -33,6 +34,7 @@ func TestApply(t *testing.T) {
 
 	serverVersion := strings.TrimSpace(testutils.MustExecute("psql", "-Upostgres", "-h", "127.0.0.1", "-t", "-c", "show server_version;"))
 	version := strings.Split(serverVersion, " ")[0]
+	sqlParser := database.NewParser(parser.ParserModePostgres)
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// This is implemented in the psqldef command layer, so it's needed for TestApply
@@ -50,7 +52,7 @@ func TestApply(t *testing.T) {
 			}
 			defer db.Close()
 
-			testutils.RunTest(t, db, test, schema.GeneratorModePostgres, version)
+			testutils.RunTest(t, db, test, schema.GeneratorModePostgres, sqlParser, version)
 		})
 	}
 }

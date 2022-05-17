@@ -6,6 +6,7 @@
 package main
 
 import (
+	"github.com/k0kubun/sqldef/parser"
 	"log"
 	"os"
 	"os/exec"
@@ -37,12 +38,13 @@ func TestApply(t *testing.T) {
 	}
 
 	version := strings.TrimSpace(testutils.MustExecute("mysql", "-uroot", "-h", "127.0.0.1", "-sN", "-e", "select version();"))
+	sqlParser := database.NewParser(parser.ParserModeMysql)
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Initialize the database with test.Current
 			testutils.MustExecute("mysql", "-uroot", "-h", "127.0.0.1", "-e", "DROP DATABASE IF EXISTS mysqldef_test; CREATE DATABASE mysqldef_test;")
 
-			testutils.RunTest(t, db, test, schema.GeneratorModeMysql, version)
+			testutils.RunTest(t, db, test, schema.GeneratorModeMysql, sqlParser, version)
 		})
 	}
 }
