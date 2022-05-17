@@ -68,7 +68,8 @@ func (d *PostgresDatabase) tableNames() ([]string, error) {
 		`select table_schema, table_name from information_schema.tables
 		 where table_schema not in ('information_schema', 'pg_catalog')
 		 and (table_schema != 'public' or table_name != 'pg_buffercache')
-		 and table_type = 'BASE TABLE';`,
+		 and table_type = 'BASE TABLE'
+		 order by table_name asc;`,
 	)
 	if err != nil {
 		return nil, err
