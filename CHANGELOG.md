@@ -1,3 +1,7 @@
+## v0.11.58
+
+- Sort table names in `psqldef --export` [#240](https://github.com/k0kubun/sqldef/issues/240)
+
 ## v0.11.57
 
 - Improve handling of SQL comments a little
