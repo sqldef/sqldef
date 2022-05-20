@@ -36,6 +36,7 @@ Application Options:
       --dry-run                     Don't run DDLs but just show them
       --export                      Just dump the current schema to stdout
       --skip-drop                   Skip destructive changes such as DROP
+      --skip-file                   Skip file-managed specified tables
       --help                        Show this help
       --version                     Show this version
 ```
@@ -96,6 +97,11 @@ Nothing is modified
 # Run without droping existing tables and columns
 $ mysqldef -uroot test --skip-drop < schema.sql
 Skipped: 'DROP TABLE users;'
+
+# Run using file with skip tables
+# Tables in 'skip-tables' are ignored (can use Regexp)
+$ echo "user\n.*_bk\n.*_[0-9]{8}" > skip-tables
+$ mysqldef -uroot test --skip-file skip-tables < schema.sql
 ```
 
 ### psqldef

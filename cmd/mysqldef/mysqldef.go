@@ -2,12 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/parser"
 	"log"
 	"os"
 	"syscall"
 
 	"github.com/k0kubun/sqldef/database/file"
+	"github.com/k0kubun/sqldef/parser"
 
 	"github.com/jessevdk/go-flags"
 	"github.com/k0kubun/sqldef"
@@ -35,6 +35,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		Export                bool     `long:"export" description:"Just dump the current schema to stdout"`
 		SkipDrop              bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
 		SkipView              bool     `long:"skip-view" description:"Skip managing views (temporary feature, to be removed later)"`
+		SkipFile              string   `long:"skip-file" description:"Skip file-managed specified tables"`
 		BeforeApply           string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs"`
 		Help                  bool     `long:"help" description:"Show this help"`
 		Version               bool     `long:"version" description:"Show this version"`
@@ -64,6 +65,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		DryRun:      opts.DryRun,
 		Export:      opts.Export,
 		SkipDrop:    opts.SkipDrop,
+		SkipTables:  sqldef.ParseSkipTables(opts.SkipFile),
 		BeforeApply: opts.BeforeApply,
 	}
 

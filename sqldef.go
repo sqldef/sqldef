@@ -17,6 +17,7 @@ type Options struct {
 	DryRun      bool
 	Export      bool
 	SkipDrop    bool
+	SkipTables  []string
 	BeforeApply string
 }
 
@@ -42,7 +43,7 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 	}
 	desiredDDLs := sql
 
-	ddls, err := schema.GenerateIdempotentDDLs(generatorMode, sqlParser, desiredDDLs, currentDDLs)
+	ddls, err := schema.GenerateIdempotentDDLs(generatorMode, sqlParser, desiredDDLs, currentDDLs, options.SkipTables)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -114,4 +115,17 @@ func showDDLs(ddls []string, skipDrop bool, beforeApply string) {
 		}
 		fmt.Printf("%s;\n", ddl)
 	}
+}
+
+func ParseSkipTables(skipFile string) []string {
+	skipTables := []string{}
+	if raw, err := ReadFile(skipFile); err == nil {
+		trimmedRaw := strings.TrimSpace(raw)
+		if trimmedRaw == "" {
+			return []string{}
+		}
+		skipTables = strings.Split(strings.Trim(trimmedRaw, "\n"), "\n")
+	}
+
+	return skipTables
 }

@@ -3,9 +3,6 @@ package testutils
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/database"
-	"github.com/k0kubun/sqldef/schema"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
 	"os/exec"
@@ -13,6 +10,10 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/k0kubun/sqldef/database"
+	"github.com/k0kubun/sqldef/schema"
+	"gopkg.in/yaml.v2"
 )
 
 type TestCase struct {
@@ -82,7 +83,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, dumpDDLs)
+	ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, dumpDDLs, []string{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +96,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs)
+	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, []string{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +115,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs)
+	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, []string{})
 	if err != nil {
 		t.Fatal(err)
 	}

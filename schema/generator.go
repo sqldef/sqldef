@@ -3,12 +3,13 @@ package schema
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/database"
 	"log"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/k0kubun/sqldef/database"
 	"github.com/k0kubun/sqldef/database/postgres"
 )
 
@@ -50,17 +51,19 @@ type Generator struct {
 }
 
 // Parse argument DDLs and call `generateDDLs()`
-func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desiredSQL string, currentSQL string) ([]string, error) {
+func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desiredSQL string, currentSQL string, skipTables []string) ([]string, error) {
 	// TODO: invalidate duplicated tables, columns
 	desiredDDLs, err := ParseDDLs(mode, sqlParser, desiredSQL)
 	if err != nil {
 		return nil, err
 	}
+	desiredDDLs = filterTables(desiredDDLs, skipTables)
 
 	currentDDLs, err := ParseDDLs(mode, sqlParser, currentSQL)
 	if err != nil {
 		return nil, err
 	}
+	currentDDLs = filterTables(currentDDLs, skipTables)
 
 	tables, err := convertDDLsToTables(currentDDLs)
 	if err != nil {
@@ -1770,4 +1773,33 @@ func generateDefaultDefinition(defaultVal Value) (string, error) {
 	default:
 		return "", fmt.Errorf("unsupported default value type (valueType: '%d')", defaultVal.valueType)
 	}
+}
+
+func filterTables(ddls []DDL, skipTables []string) []DDL {
+
+	if len(skipTables) <= 0 {
+		return ddls
+	}
+
+	filtered := []DDL{}
+	for _, ddl := range ddls {
+		switch desired := ddl.(type) {
+		case *CreateTable:
+			if !containsRegexpString(skipTables, desired.table.name) {
+				filtered = append(filtered, ddl)
+			}
+		default:
+			filtered = append(filtered, ddl)
+		}
+	}
+	return filtered
+}
+
+func containsRegexpString(strs []string, str string) bool {
+	for _, s := range strs {
+		if regexp.MustCompile("^" + s + "$").MatchString(str) {
+			return true
+		}
+	}
+	return false
 }
