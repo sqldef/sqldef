@@ -1,3 +1,8 @@
+## v0.11.59
+
+- Add `--skip-file` option to `mysqldef` to skip tables specified with regexp
+  [#242](https://github.com/k0kubun/sqldef/issues/242)
+
 ## v0.11.58
 
 - Sort table names in `psqldef --export` [#240](https://github.com/k0kubun/sqldef/issues/240)
