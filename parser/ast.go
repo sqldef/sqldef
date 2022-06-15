@@ -1735,6 +1735,10 @@ const (
 	NotRegexpStr         = "not regexp"
 	JSONExtractOp        = "->"
 	JSONUnquoteExtractOp = "->>"
+	PosixRegexStr        = "~"
+	PosixRegexCiStr      = "~*"
+	PosixNotRegexStr     = "!~"
+	PosixNotRegexCiStr   = "!~*"
 )
 
 // Format formats the node.

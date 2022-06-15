@@ -145,3 +145,27 @@ TypeColumn:
       "type" character varying(10)
     );
     CREATE VIEW public.test_view AS SELECT test_table.id, test_table."type" FROM test_table;
+PosixRegexCheckConstraint:
+  current: |
+    CREATE TABLE test (
+      posix_regex        text NOT NULL CHECK (posix_regex        ~   '[0-9]'),
+      posix_regex_ci     text NOT NULL CHECK (posix_regex_ci     ~*  '[0-9]'),
+      posix_not_regex    text NOT NULL CHECK (posix_not_regex    !~  '[0-9]'),
+      posix_not_regex_ci text NOT NULL CHECK (posix_not_regex_ci !~* '[0-9]')
+    );
+  desired: |
+    CREATE TABLE test (
+      posix_regex        text NOT NULL CHECK (posix_regex        ~   '[a-z]'),
+      posix_regex_ci     text NOT NULL CHECK (posix_regex_ci     ~*  '[a-z]'),
+      posix_not_regex    text NOT NULL CHECK (posix_not_regex    !~  '[a-z]'),
+      posix_not_regex_ci text NOT NULL CHECK (posix_not_regex_ci !~* '[a-z]')
+    );
+  output: |
+    ALTER TABLE "public"."test" DROP CONSTRAINT test_posix_regex_check;
+    ALTER TABLE "public"."test" ADD CONSTRAINT test_posix_regex_check CHECK (posix_regex ~ '[a-z]');
+    ALTER TABLE "public"."test" DROP CONSTRAINT test_posix_regex_ci_check;
+    ALTER TABLE "public"."test" ADD CONSTRAINT test_posix_regex_ci_check CHECK (posix_regex_ci ~* '[a-z]');
+    ALTER TABLE "public"."test" DROP CONSTRAINT test_posix_not_regex_check;
+    ALTER TABLE "public"."test" ADD CONSTRAINT test_posix_not_regex_check CHECK (posix_not_regex !~ '[a-z]');
+    ALTER TABLE "public"."test" DROP CONSTRAINT test_posix_not_regex_ci_check;
+    ALTER TABLE "public"."test" ADD CONSTRAINT test_posix_not_regex_ci_check CHECK (posix_not_regex_ci !~* '[a-z]');
