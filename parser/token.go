@@ -587,6 +587,13 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 			if tkn.mode == ParserModeMssql && ch == '[' {
 				return tkn.scanLiteralIdentifier(']')
 			}
+			if tkn.mode == ParserModePostgres && ch == '~' {
+				if tkn.lastChar == '*' {
+					tkn.next()
+					return POSIX_REGEX_CI, nil
+				}
+				return POSIX_REGEX, nil
+			}
 			return int(ch), nil
 		case '&':
 			if tkn.lastChar == '&' {
@@ -678,6 +685,16 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 				return int(ch), nil
 			}
 		case '!':
+			if tkn.mode == ParserModePostgres {
+				if tkn.lastChar == '~' {
+					tkn.next()
+					if tkn.lastChar == '*' {
+						tkn.next()
+						return POSIX_NOT_REGEX_CI, nil
+					}
+					return POSIX_NOT_REGEX, nil
+				}
+			}
 			if tkn.lastChar == '=' {
 				tkn.next()
 				return NE, nil
