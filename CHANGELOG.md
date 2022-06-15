@@ -1,3 +1,7 @@
+## v0.11.60
+
+- Support posix regexp on psqldef [#248](https://github.com/k0kubun/sqldef/issues/248)
+
 ## v0.11.59
 
 - Add `--skip-file` option to `mysqldef` to skip tables specified with regexp
