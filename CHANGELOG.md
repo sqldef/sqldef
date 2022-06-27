@@ -1,3 +1,7 @@
+## v0.11.61
+
+- Fix the parser on reserved keywords for psqldef [#249](https://github.com/k0kubun/sqldef/issues/249)
+
 ## v0.11.60
 
 - Support posix regexp on psqldef [#248](https://github.com/k0kubun/sqldef/issues/248)
