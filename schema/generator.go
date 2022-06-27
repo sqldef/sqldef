@@ -51,19 +51,19 @@ type Generator struct {
 }
 
 // Parse argument DDLs and call `generateDDLs()`
-func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desiredSQL string, currentSQL string, skipTables []string) ([]string, error) {
+func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desiredSQL string, currentSQL string, skipTables []string, config database.GeneratorConfig) ([]string, error) {
 	// TODO: invalidate duplicated tables, columns
 	desiredDDLs, err := ParseDDLs(mode, sqlParser, desiredSQL)
 	if err != nil {
 		return nil, err
 	}
-	desiredDDLs = filterTables(desiredDDLs, skipTables)
+	desiredDDLs = filterTables(desiredDDLs, skipTables, config)
 
 	currentDDLs, err := ParseDDLs(mode, sqlParser, currentSQL)
 	if err != nil {
 		return nil, err
 	}
-	currentDDLs = filterTables(currentDDLs, skipTables)
+	currentDDLs = filterTables(currentDDLs, skipTables, config)
 
 	tables, err := convertDDLsToTables(currentDDLs)
 	if err != nil {
@@ -1775,19 +1775,18 @@ func generateDefaultDefinition(defaultVal Value) (string, error) {
 	}
 }
 
-func filterTables(ddls []DDL, skipTables []string) []DDL {
-
-	if len(skipTables) <= 0 {
-		return ddls
-	}
-
+func filterTables(ddls []DDL, skipTables []string, config database.GeneratorConfig) []DDL {
 	filtered := []DDL{}
 	for _, ddl := range ddls {
-		switch desired := ddl.(type) {
+		switch stmt := ddl.(type) {
 		case *CreateTable:
-			if !containsRegexpString(skipTables, desired.table.name) {
-				filtered = append(filtered, ddl)
+			if config.TargetTables != nil && !containsRegexpString(config.TargetTables, stmt.table.name) {
+				continue
 			}
+			if len(skipTables) > 0 && containsRegexpString(skipTables, stmt.table.name) {
+				continue
+			}
+			filtered = append(filtered, ddl)
 		default:
 			filtered = append(filtered, ddl)
 		}

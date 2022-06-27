@@ -1362,10 +1362,11 @@ func TestMysqldefSkipView(t *testing.T) {
 }
 
 func TestMysqldefSkipFile(t *testing.T) {
-
-	createTable := "CREATE TABLE `users_%s` (\n" +
-		"  `uuid` varchar(36) NOT NULL\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=latin1;"
+	createTable := stripHeredoc(`
+		CREATE TABLE users_%s (
+		  uuid varchar(36) NOT NULL
+		) ENGINE=InnoDB DEFAULT CHARSET=latin1;`,
+	)
 	modifiedCreateTable := "CREATE TABLE `users_%s` (\n" +
 		"  `uuid` varchar(36) NOT NULL,\n" +
 		"  `name` varchar(255) DEFAULT NULL\n" +
@@ -1429,6 +1430,21 @@ func TestMysqldefBeforeApply(t *testing.T) {
 	assertEquals(t, apply, nothingModified)
 }
 
+func TestMysqldefConfigIncludesTables(t *testing.T) {
+	resetTestDatabase()
+
+	usersTable := "CREATE TABLE users (id bigint);"
+	users1Table := "CREATE TABLE users_1 (id bigint);"
+	users10Table := "CREATE TABLE users_10 (id bigint);"
+	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", usersTable+users1Table+users10Table)
+
+	writeFile("schema.sql", usersTable+users1Table)
+	writeFile("config.yml", "target_tables: |\n  users\n  users_\\d\n")
+
+	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	assertEquals(t, apply, nothingModified)
+}
+
 func TestMysqldefHelp(t *testing.T) {
 	_, err := execute("./mysqldef", "--help")
 	if err != nil {
@@ -1449,9 +1465,10 @@ func TestMain(m *testing.M) {
 	resetTestDatabase()
 	mustExecute("go", "build")
 	status := m.Run()
-	_ = os.Remove("mysqldef")
-	_ = os.Remove("schema.sql")
-	_ = os.Remove("skip-tables")
+	os.Remove("mysqldef")
+	os.Remove("schema.sql")
+	os.Remove("skip-tables")
+	os.Remove("config.yml")
 	os.Exit(status)
 }
 

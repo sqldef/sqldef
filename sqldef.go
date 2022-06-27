@@ -19,6 +19,7 @@ type Options struct {
 	SkipDrop    bool
 	SkipTables  []string
 	BeforeApply string
+	Config      database.GeneratorConfig
 }
 
 // Main function shared by all commands
@@ -43,7 +44,7 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 	}
 	desiredDDLs := sql
 
-	ddls, err := schema.GenerateIdempotentDDLs(generatorMode, sqlParser, desiredDDLs, currentDDLs, options.SkipTables)
+	ddls, err := schema.GenerateIdempotentDDLs(generatorMode, sqlParser, desiredDDLs, currentDDLs, options.SkipTables, options.Config)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

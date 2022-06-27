@@ -83,7 +83,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, dumpDDLs, []string{})
+	ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, dumpDDLs, []string{}, database.GeneratorConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, []string{})
+	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, []string{}, database.GeneratorConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, []string{})
+	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, []string{}, database.GeneratorConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
