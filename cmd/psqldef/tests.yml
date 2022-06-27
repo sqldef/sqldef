@@ -169,3 +169,31 @@ PosixRegexCheckConstraint:
     ALTER TABLE "public"."test" ADD CONSTRAINT test_posix_not_regex_check CHECK (posix_not_regex !~ '[a-z]');
     ALTER TABLE "public"."test" DROP CONSTRAINT test_posix_not_regex_ci_check;
     ALTER TABLE "public"."test" ADD CONSTRAINT test_posix_not_regex_ci_check CHECK (posix_not_regex_ci !~* '[a-z]');
+ForeignKeyOnReservedName:
+  current: |
+    CREATE TABLE "public"."variables" (
+      "id" character varying(100) NOT NULL,
+      "compaby_id" character varying(100) NOT NULL,
+      PRIMARY KEY ("id")
+    );
+
+    CREATE TABLE "public"."users" (
+      "id" character varying(100) NOT NULL,
+      "variable_id" character varying(100) NOT NULL,
+      "name" character varying(100),
+      PRIMARY KEY ("id")
+    );
+  desired: |
+    CREATE TABLE IF NOT EXISTS variables (
+      id VARCHAR(100) PRIMARY KEY,
+      compaby_id VARCHAR(100) NOT NULL REFERENCES companies(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+        id VARCHAR(100) PRIMARY KEY,
+        variable_id VARCHAR(100) NOT NULL,
+        name VARCHAR(100),
+        CONSTRAINT users_variable_id_fk FOREIGN KEY (variable_id) REFERENCES variables(id)
+    );
+  output: |
+    ALTER TABLE "public"."users" ADD CONSTRAINT "users_variable_id_fk" FOREIGN KEY ("variable_id") REFERENCES "public"."variables" ("id");

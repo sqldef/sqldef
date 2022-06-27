@@ -2736,9 +2736,6 @@ func formatID(buf *TrackedBuffer, original, lowered string) {
 			}
 		}
 	}
-	if _, ok := keywords[lowered]; ok {
-		goto mustEscape
-	}
 	buf.Myprintf("%s", original)
 	return
 
