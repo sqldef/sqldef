@@ -1533,6 +1533,7 @@ character_cast_opt:
 | TYPECAST BPCHAR
 | TYPECAST TEXT
 | TYPECAST JSON
+| TYPECAST JSONB
 
 numeric_type:
   int_type length_opt
