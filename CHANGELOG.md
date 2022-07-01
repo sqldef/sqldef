@@ -1,3 +1,7 @@
+## v0.11.62
+
+- Support casting a default value to jsonb [#251](https://github.com/k0kubun/sqldef/issues/251)
+
 ## v0.11.61
 
 - Fix the parser on reserved keywords for psqldef [#249](https://github.com/k0kubun/sqldef/issues/249)
