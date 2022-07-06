@@ -26,14 +26,24 @@ type Options struct {
 func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser database.Parser, options *Options) {
 	currentDDLs, err := db.DumpDDLs()
 	if err != nil {
-		log.Fatal(fmt.Sprintf("Error on DumpDDLs: %s", err))
+		log.Fatalf("Error on DumpDDLs: %s", err)
 	}
 
 	if options.Export {
 		if currentDDLs == "" {
 			fmt.Printf("-- No table exists --\n")
 		} else {
-			fmt.Printf("%s\n", currentDDLs)
+			ddls, err := schema.ParseDDLs(generatorMode, sqlParser, currentDDLs)
+			if err != nil {
+				log.Fatal(err)
+			}
+			ddls = schema.FilterTables(ddls, options.SkipTables, options.Config)
+			for i, ddl := range ddls {
+				if i > 0 {
+					fmt.Println()
+				}
+				fmt.Printf("%s;\n", ddl.Statement())
+			}
 		}
 		return
 	}

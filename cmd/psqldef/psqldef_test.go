@@ -7,17 +7,18 @@ package main
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/cmd/testutils"
-	"github.com/k0kubun/sqldef/database"
-	"github.com/k0kubun/sqldef/database/postgres"
-	"github.com/k0kubun/sqldef/parser"
-	"github.com/k0kubun/sqldef/schema"
 	"log"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/k0kubun/sqldef/cmd/testutils"
+	"github.com/k0kubun/sqldef/database"
+	"github.com/k0kubun/sqldef/database/postgres"
+	"github.com/k0kubun/sqldef/parser"
+	"github.com/k0kubun/sqldef/schema"
 )
 
 const (
@@ -1157,6 +1158,7 @@ func TestPsqldefAddUniqueConstraintToTableInNonpublicSchema(t *testing.T) {
 		    "a" integer,
 		    "b" integer
 		);
+
 		ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);
 		`))
 	assertApplyOutput(t, createTable+"\n"+alterTable, nothingModified)
@@ -1170,6 +1172,7 @@ func TestPsqldefAddUniqueConstraintToTableInNonpublicSchema(t *testing.T) {
 		    "a" integer,
 		    "b" integer
 		);
+
 		ALTER TABLE test.dummy ADD CONSTRAINT a_uniq UNIQUE (a) DEFERRABLE INITIALLY DEFERRED;
 		`))
 	assertApplyOutput(t, createTable+"\n"+alterTable, nothingModified)
@@ -1190,6 +1193,7 @@ func TestPsqldefIndexesOnExpressions(t *testing.T) {
 			CREATE TABLE "%s"."test" (
 			    "col" jsonb
 			);
+
 			CREATE UNIQUE INDEX function_index ON %s.test USING btree (jsonb_extract_path_text(col, VARIADIC ARRAY['foo'::text, 'bar'::text]));
 			`), tc.Schema, tc.Schema))
 		assertApplyOutput(t, createTable+createIndex, nothingModified)
@@ -1313,6 +1317,7 @@ func TestPsqldefExport(t *testing.T) {
 		    "c_varchar_unlimited" character varying,
 		    PRIMARY KEY ("id")
 		);
+
 		ALTER TABLE public.users ADD CONSTRAINT users_c_char_1_key UNIQUE (c_char_1);
 		`,
 	))

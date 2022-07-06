@@ -57,13 +57,13 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	if err != nil {
 		return nil, err
 	}
-	desiredDDLs = filterTables(desiredDDLs, skipTables, config)
+	desiredDDLs = FilterTables(desiredDDLs, skipTables, config)
 
 	currentDDLs, err := ParseDDLs(mode, sqlParser, currentSQL)
 	if err != nil {
 		return nil, err
 	}
-	currentDDLs = filterTables(currentDDLs, skipTables, config)
+	currentDDLs = FilterTables(currentDDLs, skipTables, config)
 
 	tables, err := convertDDLsToTables(currentDDLs)
 	if err != nil {
@@ -1775,7 +1775,7 @@ func generateDefaultDefinition(defaultVal Value) (string, error) {
 	}
 }
 
-func filterTables(ddls []DDL, skipTables []string, config database.GeneratorConfig) []DDL {
+func FilterTables(ddls []DDL, skipTables []string, config database.GeneratorConfig) []DDL {
 	filtered := []DDL{}
 	for _, ddl := range ddls {
 		switch stmt := ddl.(type) {
