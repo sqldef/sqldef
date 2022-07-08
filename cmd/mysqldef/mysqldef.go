@@ -35,7 +35,6 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		Export                bool     `long:"export" description:"Just dump the current schema to stdout"`
 		SkipDrop              bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
 		SkipView              bool     `long:"skip-view" description:"Skip managing views (temporary feature, to be removed later)"`
-		SkipFile              string   `long:"skip-file" description:"Skip file-managed specified tables"`
 		BeforeApply           string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs"`
 		Config                string   `long:"config" description:"YAML file to specify other options"`
 		Help                  bool     `long:"help" description:"Show this help"`
@@ -66,7 +65,6 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		DryRun:      opts.DryRun,
 		Export:      opts.Export,
 		SkipDrop:    opts.SkipDrop,
-		SkipTables:  sqldef.ParseSkipTables(opts.SkipFile),
 		BeforeApply: opts.BeforeApply,
 		Config:      database.ParseGeneratorConfig(opts.Config),
 	}
