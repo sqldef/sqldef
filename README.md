@@ -36,7 +36,9 @@ Application Options:
       --dry-run                     Don't run DDLs but just show them
       --export                      Just dump the current schema to stdout
       --skip-drop                   Skip destructive changes such as DROP
-      --skip-file                   Skip file-managed specified tables
+      --skip-view                   Skip managing views (temporary feature, to be removed later)
+      --before-apply=               Execute the given string before applying the regular DDLs
+      --config=                     YAML file to specify: target_tables
       --help                        Show this help
       --version                     Show this version
 ```
