@@ -6,7 +6,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -1361,50 +1360,6 @@ func TestMysqldefSkipView(t *testing.T) {
 	assertEquals(t, output, nothingModified)
 }
 
-func TestMysqldefSkipFile(t *testing.T) {
-
-	createTable := "CREATE TABLE `users_%s` (\n" +
-		"  `uuid` varchar(36) NOT NULL\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=latin1;"
-	modifiedCreateTable := "CREATE TABLE `users_%s` (\n" +
-		"  `uuid` varchar(36) NOT NULL,\n" +
-		"  `name` varchar(255) DEFAULT NULL\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=latin1;"
-
-	// Prepare the modified schema.sql
-	resetTestDatabase()
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", fmt.Sprintf(modifiedCreateTable, "1"))
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", fmt.Sprintf(modifiedCreateTable, "2"))
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", fmt.Sprintf(modifiedCreateTable, "10"))
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", fmt.Sprintf(modifiedCreateTable, "11"))
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", fmt.Sprintf(modifiedCreateTable, "bk"))
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", fmt.Sprintf(modifiedCreateTable, "20220101"))
-	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export", "--file", "schema.sql")
-	writeFile("schema.sql", out)
-
-	// Run test
-	resetTestDatabase()
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", fmt.Sprintf(createTable, "10"))
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", fmt.Sprintf(createTable, "11"))
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", fmt.Sprintf(createTable, "A"))
-
-	// users_1         skip (exact match)
-	// users_2         valid
-	// users_10        skip (exact match)
-	// users_11        valid
-	// users_bk        skip (regexp match)
-	// users_20220101  skip (regexp match)
-	// users_A         valid
-	writeFile("skip-tables", "users_1\nusers_10\n.*_bk\n.*_[0-9]{8}\n")
-
-	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--skip-file", "skip-tables", "--file", "schema.sql")
-	assertEquals(t, apply,
-		applyPrefix+
-			"ALTER TABLE `users_11` ADD COLUMN `name` varchar(255) DEFAULT null AFTER `uuid`;\n"+
-			fmt.Sprintf(modifiedCreateTable, "2")+"\n"+
-			"DROP TABLE `users_A`;\n")
-}
-
 func TestMysqldefBeforeApply(t *testing.T) {
 	resetTestDatabase()
 
@@ -1429,6 +1384,21 @@ func TestMysqldefBeforeApply(t *testing.T) {
 	assertEquals(t, apply, nothingModified)
 }
 
+func TestMysqldefConfigIncludesTables(t *testing.T) {
+	resetTestDatabase()
+
+	usersTable := "CREATE TABLE users (id bigint);"
+	users1Table := "CREATE TABLE users_1 (id bigint);"
+	users10Table := "CREATE TABLE users_10 (id bigint);"
+	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", usersTable+users1Table+users10Table)
+
+	writeFile("schema.sql", usersTable+users1Table)
+	writeFile("config.yml", "target_tables: |\n  users\n  users_\\d\n")
+
+	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	assertEquals(t, apply, nothingModified)
+}
+
 func TestMysqldefHelp(t *testing.T) {
 	_, err := execute("./mysqldef", "--help")
 	if err != nil {
@@ -1449,9 +1419,9 @@ func TestMain(m *testing.M) {
 	resetTestDatabase()
 	mustExecute("go", "build")
 	status := m.Run()
-	_ = os.Remove("mysqldef")
-	_ = os.Remove("schema.sql")
-	_ = os.Remove("skip-tables")
+	os.Remove("mysqldef")
+	os.Remove("schema.sql")
+	os.Remove("config.yml")
 	os.Exit(status)
 }
 

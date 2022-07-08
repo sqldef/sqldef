@@ -4,7 +4,11 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"strings"
+
+	"gopkg.in/yaml.v2"
 )
 
 type Config struct {
@@ -18,6 +22,10 @@ type Config struct {
 	// Only MySQL
 	MySQLEnableCleartextPlugin bool
 	SkipView                   bool
+}
+
+type GeneratorConfig struct {
+	TargetTables []string
 }
 
 // Abstraction layer for multiple kinds of databases
@@ -63,4 +71,32 @@ func RunDDLs(d Database, ddls []string, skipDrop bool, beforeApply string) error
 
 func TransactionSupported(ddl string) bool {
 	return !strings.Contains(strings.ToLower(ddl), "concurrently")
+}
+
+func ParseGeneratorConfig(configFile string) GeneratorConfig {
+	if configFile == "" {
+		return GeneratorConfig{}
+	}
+
+	buf, err := ioutil.ReadFile(configFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var config struct {
+		TargetTables string `yaml:"target_tables"`
+	}
+	err = yaml.UnmarshalStrict(buf, &config)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var targetTables []string
+	if config.TargetTables != "" {
+		targetTables = strings.Split(strings.Trim(config.TargetTables, "\n"), "\n")
+	}
+
+	return GeneratorConfig{
+		TargetTables: targetTables,
+	}
 }
