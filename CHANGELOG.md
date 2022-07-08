@@ -1,3 +1,8 @@
+## v0.12.0
+
+- Drop `--skip-file` option from mysqldef
+- Add `--config` option to mysqldef to specify `target_tables` [#250](https://github.com/k0kubun/sqldef/issues/250)
+
 ## v0.11.62
 
 - Support casting a default value to jsonb [#251](https://github.com/k0kubun/sqldef/issues/251)
