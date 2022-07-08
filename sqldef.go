@@ -17,7 +17,6 @@ type Options struct {
 	DryRun      bool
 	Export      bool
 	SkipDrop    bool
-	SkipTables  []string
 	BeforeApply string
 	Config      database.GeneratorConfig
 }
@@ -37,7 +36,7 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 			if err != nil {
 				log.Fatal(err)
 			}
-			ddls = schema.FilterTables(ddls, options.SkipTables, options.Config)
+			ddls = schema.FilterTables(ddls, options.Config)
 			for i, ddl := range ddls {
 				if i > 0 {
 					fmt.Println()
@@ -54,7 +53,7 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 	}
 	desiredDDLs := sql
 
-	ddls, err := schema.GenerateIdempotentDDLs(generatorMode, sqlParser, desiredDDLs, currentDDLs, options.SkipTables, options.Config)
+	ddls, err := schema.GenerateIdempotentDDLs(generatorMode, sqlParser, desiredDDLs, currentDDLs, options.Config)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
