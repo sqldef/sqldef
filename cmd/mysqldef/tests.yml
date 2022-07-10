@@ -219,3 +219,6 @@ MysqlComment:
     CREATE TABLE users(
       id bigint NOT NULL /* comment */
     );
+SubstrExpression:
+  desired: |
+    CREATE VIEW modelstart_end AS select substr(min(202006),1,4) AS `c`;

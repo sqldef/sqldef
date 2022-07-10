@@ -3567,7 +3567,7 @@ function_call_keyword:
   {
     $$ = &SubstrExpr{Name: $3, From: $5, To: nil}
   }
-| SUBSTR openb column_name ',' value_expression ',' value_expression closeb
+| SUBSTR openb value_expression ',' value_expression ',' value_expression closeb
   {
     $$ = &SubstrExpr{Name: $3, From: $5, To: $7}
   }

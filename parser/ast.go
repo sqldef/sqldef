@@ -2171,14 +2171,13 @@ func (node *ValuesFuncExpr) Format(buf *TrackedBuffer) {
 // SubstrExpr represents a call to SubstrExpr(column, value_expression) or SubstrExpr(column, value_expression,value_expression)
 // also supported syntax SubstrExpr(column from value_expression for value_expression)
 type SubstrExpr struct {
-	Name *ColName
+	Name Expr
 	From Expr
 	To   Expr
 }
 
 // Format formats the node.
 func (node *SubstrExpr) Format(buf *TrackedBuffer) {
-
 	if node.To == nil {
 		buf.Myprintf("substr(%v, %v)", node.Name, node.From)
 	} else {
