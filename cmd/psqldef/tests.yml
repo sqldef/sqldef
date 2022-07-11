@@ -198,3 +198,14 @@ ForeignKeyOnReservedName:
     );
   output: |
     ALTER TABLE "public"."users" ADD CONSTRAINT "users_variable_id_fk" FOREIGN KEY ("variable_id") REFERENCES "public"."variables" ("id");
+NumericChangePrecisionAndScale:
+  current: |
+    CREATE TABLE test (
+      num numeric (10, 3)
+    );
+  desired: |
+    CREATE TABLE test (
+      num numeric (10, 2)
+    );
+  output: |
+    ALTER TABLE "public"."test" ALTER COLUMN "num" TYPE numeric(10, 2);
