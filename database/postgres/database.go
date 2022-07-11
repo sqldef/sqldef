@@ -198,7 +198,11 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 		fmt.Fprint(&queryBuilder, "\n"+indent)
 		fmt.Fprintf(&queryBuilder, "\"%s\" %s", col.Name, col.GetDataType())
 		if col.Length > 0 {
-			fmt.Fprintf(&queryBuilder, "(%d)", col.Length)
+			if col.Scale > 0 {
+				fmt.Fprintf(&queryBuilder, "(%d,%d)", col.Length, col.Scale)
+			} else {
+				fmt.Fprintf(&queryBuilder, "(%d)", col.Length)
+			}
 		}
 		if !col.Nullable {
 			fmt.Fprint(&queryBuilder, " NOT NULL")
@@ -246,6 +250,7 @@ type column struct {
 	Name               string
 	dataType           string
 	Length             int
+	Scale              int
 	Nullable           bool
 	Default            string
 	IsAutoIncrement    bool
@@ -291,6 +296,9 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	      s.column_default,
 	      s.is_nullable,
 	      s.character_maximum_length,
+	      s.numeric_precision,
+	      s.numeric_precision_radix,
+	      s.numeric_scale,
 	      CASE
 	      WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod)
 	      ELSE s.data_type
@@ -345,7 +353,8 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 		col := column{}
 		var colName, isNullable, dataType string
 		var maxLenStr, colDefault, idGen, checkName, checkDefinition *string
-		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &dataType, &idGen, &checkName, &checkDefinition)
+		var numericPrecision, numericPrecisionRadix, numericScale *int
+		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &numericPrecision, &numericPrecisionRadix, &numericScale, &dataType, &idGen, &checkName, &checkDefinition)
 		if err != nil {
 			return nil, err
 		}
@@ -373,6 +382,14 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 			col.Check = &columnConstraint{
 				definition: *checkDefinition,
 				name:       *checkName,
+			}
+		}
+		if numericPrecisionRadix != nil && *numericPrecisionRadix == 10 {
+			if numericPrecision != nil {
+				col.Length = *numericPrecision
+			}
+			if numericScale != nil {
+				col.Scale = *numericScale
 			}
 		}
 		cols = append(cols, col)
