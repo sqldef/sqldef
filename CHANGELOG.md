@@ -1,3 +1,7 @@
+## v0.12.2
+
+- Support changing precision and scale of numeric types [#256](https://github.com/k0kubun/sqldef/issues/256)
+
 ## v0.12.1
 
 - Parse an expression in the first argument of `substr` for mysqldef [#254](https://github.com/k0kubun/sqldef/issues/254)
