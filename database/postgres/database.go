@@ -297,6 +297,7 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	      s.is_nullable,
 	      s.character_maximum_length,
 	      s.numeric_precision,
+	      s.numeric_precision_radix,
 	      s.numeric_scale,
 	      CASE
 	      WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod)
@@ -352,8 +353,8 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 		col := column{}
 		var colName, isNullable, dataType string
 		var maxLenStr, colDefault, idGen, checkName, checkDefinition *string
-		var numericPrecision, numericScale *int
-		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &numericPrecision, &numericScale, &dataType, &idGen, &checkName, &checkDefinition)
+		var numericPrecision, numericPrecisionRadix, numericScale *int
+		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &numericPrecision, &numericPrecisionRadix, &numericScale, &dataType, &idGen, &checkName, &checkDefinition)
 		if err != nil {
 			return nil, err
 		}
@@ -383,11 +384,13 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 				name:       *checkName,
 			}
 		}
-		if numericPrecision != nil {
-			col.Length = *numericPrecision
-		}
-		if numericScale != nil {
-			col.Scale = *numericScale
+		if numericPrecisionRadix != nil && *numericPrecisionRadix == 10 {
+			if numericPrecision != nil {
+				col.Length = *numericPrecision
+			}
+			if numericScale != nil {
+				col.Scale = *numericScale
+			}
 		}
 		cols = append(cols, col)
 	}
