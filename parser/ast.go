@@ -1649,6 +1649,7 @@ func (*CollateExpr) iExpr()         {}
 func (*FuncExpr) iExpr()            {}
 func (*CaseExpr) iExpr()            {}
 func (*ValuesFuncExpr) iExpr()      {}
+func (*CastExpr) iExpr()            {}
 func (*ConvertExpr) iExpr()         {}
 func (*SubstrExpr) iExpr()          {}
 func (*ConvertUsingExpr) iExpr()    {}
@@ -2185,6 +2186,16 @@ func (node *SubstrExpr) Format(buf *TrackedBuffer) {
 	}
 }
 
+// CastExpr represents expr::type
+type CastExpr struct {
+	Expr Expr
+	Type *ConvertType
+}
+
+func (node *CastExpr) Format(buf *TrackedBuffer) {
+	buf.Myprintf("%v::%v", node.Expr, node.Type)
+}
+
 // ConvertExpr represents a call to CONVERT(expr, type)
 // or it's equivalent CAST(expr AS type). Both are rewritten to the former.
 type ConvertExpr struct {
@@ -2192,7 +2203,6 @@ type ConvertExpr struct {
 	Type *ConvertType
 }
 
-// Format formats the node.
 func (node *ConvertExpr) Format(buf *TrackedBuffer) {
 	buf.Myprintf("convert(%v, %v)", node.Expr, node.Type)
 }
@@ -2203,7 +2213,6 @@ type ConvertUsingExpr struct {
 	Type string
 }
 
-// Format formats the node.
 func (node *ConvertUsingExpr) Format(buf *TrackedBuffer) {
 	buf.Myprintf("convert(%v using %s)", node.Expr, node.Type)
 }

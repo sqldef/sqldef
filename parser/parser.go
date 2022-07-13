@@ -7991,7 +7991,7 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser.y:3507
 		{
-			yyVAL.expr = &ConvertExpr{Expr: yyDollar[1].expr, Type: yyDollar[3].convertType}
+			yyVAL.expr = &CastExpr{Expr: yyDollar[1].expr, Type: yyDollar[3].convertType}
 		}
 	case 658:
 		yyDollar = yyS[yypt-2 : yypt+1]

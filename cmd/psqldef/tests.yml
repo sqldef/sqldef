@@ -209,3 +209,14 @@ NumericChangePrecisionAndScale:
     );
   output: |
     ALTER TABLE "public"."test" ALTER COLUMN "num" TYPE numeric(10, 2);
+CheckTypeCast:
+  current: |
+    CREATE TABLE test (
+      v varchar(10) NOT NULL
+    );
+  desired: |
+    CREATE TABLE test (
+      v varchar(10) NOT NULL CHECK (v::text ~ '[0-9]')
+    );
+  output: |
+    ALTER TABLE "public"."test" ADD CONSTRAINT test_v_check CHECK (v::text ~ '[0-9]');

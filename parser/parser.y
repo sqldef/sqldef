@@ -3505,7 +3505,7 @@ value_expression:
   }
 | value_expression TYPECAST simple_convert_type
   {
-    $$ = &ConvertExpr{Expr: $1, Type: $3}
+    $$ = &CastExpr{Expr: $1, Type: $3}
   }
 | function_call_generic
 | function_call_keyword
