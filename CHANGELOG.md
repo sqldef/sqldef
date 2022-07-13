@@ -1,3 +1,7 @@
+## v0.12.3
+
+- Fix the type cast parser for psqldef [#257](https://github.com/k0kubun/sqldef/issues/257)
+
 ## v0.12.2
 
 - Support changing precision and scale of numeric types [#256](https://github.com/k0kubun/sqldef/issues/256)
