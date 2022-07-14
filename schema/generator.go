@@ -464,11 +464,17 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		}
 	}
 
+	currentPrimaryKey := currentTable.PrimaryKey()
+	desiredPrimaryKey := desired.table.PrimaryKey()
+
+	primaryKeysChanged := !areSamePrimaryKeys(currentPrimaryKey, desiredPrimaryKey)
+
 	// Remove old AUTO_INCREMENT from deleted column before deleting key (primary or not)
+	// and if primary key changed
 	if g.mode == GeneratorModeMysql {
 		for _, currentColumn := range currentTable.columns {
 			desiredColumn := findColumnByName(desired.table.columns, currentColumn.name)
-			if currentColumn.autoIncrement && (desiredColumn == nil || !desiredColumn.autoIncrement) {
+			if currentColumn.autoIncrement && (primaryKeysChanged || desiredColumn == nil || !desiredColumn.autoIncrement) {
 				currentColumn.autoIncrement = false
 				definition, err := g.generateColumnDefinition(currentColumn, false)
 				if err != nil {
@@ -480,9 +486,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	}
 
 	// Examine primary key
-	currentPrimaryKey := currentTable.PrimaryKey()
-	desiredPrimaryKey := desired.table.PrimaryKey()
-	if !areSamePrimaryKeys(currentPrimaryKey, desiredPrimaryKey) {
+	if primaryKeysChanged {
 		if currentPrimaryKey != nil {
 			switch g.mode {
 			case GeneratorModeMysql:
@@ -520,7 +524,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	if g.mode == GeneratorModeMysql {
 		for _, desiredColumn := range desired.table.columns {
 			currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
-			if desiredColumn.autoIncrement && (currentColumn == nil || !currentColumn.autoIncrement) {
+			if desiredColumn.autoIncrement && (primaryKeysChanged || currentColumn == nil || !currentColumn.autoIncrement) {
 				definition, err := g.generateColumnDefinition(desiredColumn, false)
 				if err != nil {
 					return ddls, err
