@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -526,20 +527,22 @@ WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$
 // refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d
 func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 	const query = `SELECT
-	tc.table_schema, tc.constraint_name, tc.table_name, kcu.column_name,
-	ccu.table_schema AS foreign_table_schema,
-	ccu.table_name AS foreign_table_name,
-	ccu.column_name AS foreign_column_name,
+	tc.constraint_schema, tc.table_schema, tc.constraint_name, tc.table_name, kcu.column_name,
+	kcu2.table_schema AS foreign_table_schema,
+	kcu2.table_name AS foreign_table_name,
+	kcu2.column_name AS foreign_column_name,
 	rc.update_rule AS foreign_update_rule,
 	rc.delete_rule AS foreign_delete_rule
 FROM
 	information_schema.table_constraints AS tc
 	JOIN information_schema.key_column_usage AS kcu
 		ON tc.constraint_name = kcu.constraint_name
-	JOIN information_schema.constraint_column_usage AS ccu
-		ON tc.constraint_name = ccu.constraint_name
 	JOIN information_schema.referential_constraints AS rc
 		ON tc.constraint_name = rc.constraint_name
+	JOIN information_schema.key_column_usage AS kcu2
+		ON kcu2.constraint_schema = rc.unique_constraint_schema
+		AND kcu2.constraint_name = rc.unique_constraint_name
+		AND kcu2.ordinal_position = kcu.position_in_unique_constraint
 WHERE constraint_type = 'FOREIGN KEY' AND tc.table_schema=$1 AND tc.table_name=$2`
 	schema, table := SplitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
@@ -548,17 +551,58 @@ WHERE constraint_type = 'FOREIGN KEY' AND tc.table_schema=$1 AND tc.table_name=$
 	}
 	defer rows.Close()
 
-	defs := make([]string, 0)
+	type identifier struct {
+		schema, name string
+	}
+	type constraint struct {
+		tableSchema, constraintName, tableName, foreignTableSchema, foreignTableName, foreignUpdateRule, foreignDeleteRule string
+		columns, foreignColumns                                                                                            []string
+	}
+
+	constraints := make(map[identifier]constraint)
+
 	for rows.Next() {
-		var tableSchema, constraintName, tableName, columnName, foreignTableSchema, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule string
-		err = rows.Scan(&tableSchema, &constraintName, &tableName, &columnName, &foreignTableSchema, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule)
+		var constraintSchema, tableSchema, constraintName, tableName, columnName, foreignTableSchema, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule string
+		err = rows.Scan(&constraintSchema, &tableSchema, &constraintName, &tableName, &columnName, &foreignTableSchema, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule)
 		if err != nil {
 			return nil, err
 		}
+		key := identifier{constraintSchema, constraintName}
+		if _, exist := constraints[key]; !exist {
+			constraints[key] = constraint{
+				tableSchema, constraintName, tableName, foreignTableSchema, foreignTableName, foreignUpdateRule, foreignDeleteRule,
+				[]string{}, []string{},
+			}
+		}
+		c := constraints[key]
+		c.columns = append(c.columns, columnName)
+		c.foreignColumns = append(c.foreignColumns, foreignColumnName)
+		constraints[key] = c
+	}
+
+	var keys []identifier
+	for key := range constraints {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i].schema < keys[j].schema || keys[i].name < keys[j].name
+	})
+
+	defs := make([]string, 0)
+	for _, key := range keys {
+		c := constraints[key]
+		var escapedColumns []string
+		for i := range c.columns {
+			escapedColumns = append(escapedColumns, EscapeSQLName(c.columns[i]))
+		}
+		var escapedForeignColumns []string
+		for i := range c.foreignColumns {
+			escapedForeignColumns = append(escapedForeignColumns, EscapeSQLName(c.foreignColumns[i]))
+		}
 		def := fmt.Sprintf(
-			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s(%s) ON UPDATE %s ON DELETE %s",
-			EscapeSQLName(tableSchema), EscapeSQLName(tableName), EscapeSQLName(constraintName), EscapeSQLName(columnName),
-			EscapeSQLName(foreignTableSchema), EscapeSQLName(foreignTableName), EscapeSQLName(foreignColumnName), foreignUpdateRule, foreignDeleteRule,
+			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s (%s) ON UPDATE %s ON DELETE %s",
+			EscapeSQLName(c.tableSchema), EscapeSQLName(c.tableName), EscapeSQLName(c.constraintName), strings.Join(escapedColumns, ", "),
+			EscapeSQLName(c.foreignTableSchema), EscapeSQLName(c.foreignTableName), strings.Join(escapedForeignColumns, ", "), c.foreignUpdateRule, c.foreignDeleteRule,
 		)
 		defs = append(defs, def)
 	}
