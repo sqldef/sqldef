@@ -220,3 +220,29 @@ CheckTypeCast:
     );
   output: |
     ALTER TABLE "public"."test" ADD CONSTRAINT test_v_check CHECK (v::text ~ '[0-9]');
+CompositeForeignKeyConstraint:
+  current: |
+    CREATE TABLE t1 (
+      id1 int not null,
+      id2 int not null,
+      PRIMARY KEY (id1, id2)
+    );
+    CREATE TABLE t2 (
+      id1 int not null,
+      id2 int not null,
+      PRIMARY KEY (id1, id2)
+    );
+  desired: |
+    CREATE TABLE t1 (
+      id1 int not null,
+      id2 int not null,
+      PRIMARY KEY (id1, id2)
+    );
+    CREATE TABLE t2 (
+      id1 int not null,
+      id2 int not null,
+      PRIMARY KEY (id1, id2),
+      CONSTRAINT fk FOREIGN KEY (id1, id2) REFERENCES t1 (id1, id2)
+    );
+  output: |
+    ALTER TABLE "public"."t2" ADD CONSTRAINT "fk" FOREIGN KEY ("id1","id2") REFERENCES "public"."t1" ("id1","id2");
