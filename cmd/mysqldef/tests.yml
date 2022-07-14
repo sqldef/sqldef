@@ -145,6 +145,27 @@ CreateTableRemoveAutoIncrementPrimaryKey80:
     ALTER TABLE `friends` DROP PRIMARY KEY;
     ALTER TABLE `friends` DROP COLUMN `id`;
   min_version: '8.0'
+CreateTableWithAutoIncrementPrimaryKeyAndAddMorePrimaryKey:
+  current: |
+    CREATE TABLE friends (
+      id bigint NOT NULL AUTO_INCREMENT,
+      other_id bigint NOT NULL,
+      created_at datetime NOT NULL,
+      PRIMARY KEY (`id`)
+    );
+  desired: |
+    CREATE TABLE friends (
+      id bigint NOT NULL AUTO_INCREMENT,
+      other_id bigint NOT NULL,
+      created_at datetime NOT NULL,
+      PRIMARY KEY (`id`, `other_id`)
+    );
+  output: |
+    ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint NOT NULL;
+    ALTER TABLE `friends` DROP PRIMARY KEY;
+    ALTER TABLE `friends` ADD primary key (`id`, `other_id`);
+    ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
+  min_version: '8.0'
 CreateTableGeneratedAlwaysAs:
   desired: |
     CREATE TABLE test_table (
