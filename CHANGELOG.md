@@ -1,3 +1,8 @@
+## v0.12.4
+
+- Fix an error when a primary key with AUTO\_INCREMENT is modified [#258](https://github.com/k0kubun/sqldef/issues/258)
+- Fix the output of composite foreign keys on `psqldef --export` [#260](https://github.com/k0kubun/sqldef/issues/260)
+
 ## v0.12.3
 
 - Fix the type cast parser for psqldef [#257](https://github.com/k0kubun/sqldef/issues/257)
