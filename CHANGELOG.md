@@ -1,3 +1,7 @@
+## v0.12.5
+
+- Initial support of materialized views for psqldef [#262](https://github.com/k0kubun/sqldef/issues/262)
+
 ## v0.12.4
 
 - Fix an error when a primary key with AUTO\_INCREMENT is modified [#258](https://github.com/k0kubun/sqldef/issues/258)
