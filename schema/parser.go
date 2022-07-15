@@ -4,9 +4,10 @@ package schema
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/database"
 	"strconv"
 	"strings"
+
+	"github.com/k0kubun/sqldef/database"
 
 	"github.com/k0kubun/sqldef/database/postgres"
 
@@ -410,6 +411,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement) (DDL, error
 		} else if stmt.Action == parser.CreateViewStr {
 			return &View{
 				statement:  ddl,
+				viewType:   strings.ToUpper(strings.TrimPrefix(stmt.View.Action, "create ")),
 				name:       normalizedTableName(mode, stmt.View.Name),
 				definition: parser.String(stmt.View.Definition),
 			}, nil

@@ -246,3 +246,7 @@ CompositeForeignKeyConstraint:
     );
   output: |
     ALTER TABLE "public"."t2" ADD CONSTRAINT "fk" FOREIGN KEY ("id1","id2") REFERENCES "public"."t1" ("id1","id2");
+MaterializedView:
+  desired: |
+    CREATE TABLE points (id bigint);
+    CREATE MATERIALIZED VIEW IF NOT EXISTS points_view AS SELECT id FROM points;

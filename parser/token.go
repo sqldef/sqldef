@@ -283,6 +283,7 @@ var keywords = map[string]int{
 	"low_priority":           UNUSED,
 	"master_bind":            UNUSED,
 	"match":                  MATCH,
+	"materialized":           MATERIALIZED,
 	"maxvalue":               MAXVALUE,
 	"mediumblob":             MEDIUMBLOB,
 	"mediumint":              MEDIUMINT,

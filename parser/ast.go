@@ -523,6 +523,7 @@ const (
 	AddForeignKeyStr = "add foreign key"
 	CreatePolicyStr  = "create policy"
 	CreateViewStr    = "create view"
+	CreateMatViewStr = "create materialized view"
 	CreateTriggerStr = "create trigger"
 	CreateTypeStr    = "create type"
 

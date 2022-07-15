@@ -61,6 +61,12 @@ func (d *PostgresDatabase) DumpDDLs() (string, error) {
 	}
 	ddls = append(ddls, viewDDLs...)
 
+	matViewDDLs, err := d.materializedViews()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, matViewDDLs...)
+
 	return strings.Join(ddls, "\n\n"), nil
 }
 
@@ -119,6 +125,32 @@ func (d *PostgresDatabase) views() ([]string, error) {
 		ddls = append(
 			ddls, fmt.Sprintf(
 				"CREATE VIEW %s AS %s;", schema+"."+name, definition,
+			),
+		)
+	}
+	return ddls, nil
+}
+
+func (d *PostgresDatabase) materializedViews() ([]string, error) {
+	rows, err := d.db.Query("select schemaname, matviewname, definition from pg_matviews;")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ddls []string
+	for rows.Next() {
+		var schema, name, definition string
+		if err := rows.Scan(&schema, &name, &definition); err != nil {
+			return nil, err
+		}
+		definition = strings.TrimSpace(definition)
+		definition = strings.ReplaceAll(definition, "\n", "")
+		definition = suffixSemicolon.ReplaceAllString(definition, "")
+		definition = spaces.ReplaceAllString(definition, " ")
+		ddls = append(
+			ddls, fmt.Sprintf(
+				"CREATE MATERIALIZED VIEW %s AS %s;", schema+"."+name, definition,
 			),
 		)
 	}

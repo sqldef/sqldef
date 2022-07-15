@@ -168,7 +168,7 @@ func forceEOF(yylex interface{}) {
 
 // DDL Tokens
 %token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD
-%token <bytes> SCHEMA TABLE INDEX VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE
+%token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE
 %right <bytes> UNIQUE KEY
 %token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE
 %token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE
@@ -868,12 +868,20 @@ create_statement:
         IndexExpr: $11.IndexExpr,
       }
   }
-| CREATE or_replace_opt VIEW table_name AS select_statement
+| CREATE or_replace_opt VIEW not_exists_opt table_name AS select_statement
   {
     $$ = &DDL{Action: CreateViewStr, View: &View{
         Action: CreateViewStr,
-        Name: $4.ToViewName(),
-        Definition: $6,
+        Name: $5.ToViewName(),
+        Definition: $7,
+    }}
+  }
+| CREATE MATERIALIZED VIEW not_exists_opt table_name AS select_statement
+  {
+    $$ = &DDL{Action: CreateViewStr, View: &View{
+        Action: CreateMatViewStr,
+        Name: $5.ToViewName(),
+        Definition: $7,
     }}
   }
 | CREATE VINDEX sql_id vindex_type_opt vindex_params_opt
@@ -4527,6 +4535,7 @@ non_reserved_keyword:
 | LINESTRING
 | LONGBLOB
 | LONGTEXT
+| MATERIALIZED
 | MEDIUMBLOB
 | MEDIUMINT
 | MEDIUMTEXT

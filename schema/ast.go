@@ -141,6 +141,7 @@ type Policy struct {
 
 type View struct {
 	statement  string
+	viewType   string
 	name       string
 	definition string
 }

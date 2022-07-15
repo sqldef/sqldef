@@ -691,14 +691,14 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 	if currentView == nil {
 		// View not found, add view.
 		ddls = append(ddls, desiredView.statement)
-	} else {
+	} else if desiredView.viewType == "VIEW" { // TODO: Fix the definition comparison for materialized views and enable this
 		// View found. If it's different, create or replace view.
 		if strings.ToLower(currentView.definition) != strings.ToLower(desiredView.definition) {
 			if g.mode == GeneratorModeSQLite3 || g.mode == GeneratorModeMssql {
-				ddls = append(ddls, fmt.Sprintf("DROP VIEW %s", g.escapeTableName(viewName)))
-				ddls = append(ddls, fmt.Sprintf("CREATE VIEW %s AS %s", g.escapeTableName(viewName), desiredView.definition))
+				ddls = append(ddls, fmt.Sprintf("DROP %s %s", desiredView.viewType, g.escapeTableName(viewName)))
+				ddls = append(ddls, fmt.Sprintf("CREATE %s %s AS %s", desiredView.viewType, g.escapeTableName(viewName), desiredView.definition))
 			} else {
-				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE VIEW %s AS %s", g.escapeTableName(viewName), desiredView.definition))
+				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE %s %s AS %s", desiredView.viewType, g.escapeTableName(viewName), desiredView.definition))
 			}
 		}
 	}
