@@ -1539,6 +1539,7 @@ character_cast_opt:
 | TYPECAST CHARACTER VARYING
 | TYPECAST TIMESTAMP time_zone_opt
 | TYPECAST BPCHAR
+| TYPECAST INTERVAL
 | TYPECAST TEXT
 | TYPECAST JSON
 | TYPECAST JSONB
@@ -3465,6 +3466,10 @@ value_expression:
   {
     $$ = &CollateExpr{Expr: $1}
   }
+| value_expression TYPECAST TIMESTAMP WITH TIME ZONE
+  {
+    $$ = &CollateExpr{Expr: $1}
+  }
 | BINARY value_expression %prec UNARY
   {
     $$ = &UnaryExpr{Operator: BinaryStr, Expr: $2}
@@ -3502,6 +3507,14 @@ value_expression:
 | '!' value_expression %prec UNARY
   {
     $$ = &UnaryExpr{Operator: BangStr, Expr: $2}
+  }
+| INTERVAL value_expression
+  {
+    // This rule prevents the usage of INTERVAL
+    // as a function. If support is needed for that,
+    // we'll need to revisit this. The solution
+    // will be non-trivial because of grammar conflicts.
+    $$ = &IntervalExpr{Expr: $2}
   }
 | INTERVAL value_expression sql_id
   {
