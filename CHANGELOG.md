@@ -1,3 +1,7 @@
+## v0.12.6
+
+- Parse INTERVAL and :: TIMESTAMP WITH TIME ZONE for psqldef [#263](https://github.com/k0kubun/sqldef/issues/263)
+
 ## v0.12.5
 
 - Initial support of materialized views for psqldef [#262](https://github.com/k0kubun/sqldef/issues/262)
