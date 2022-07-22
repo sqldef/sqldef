@@ -144,6 +144,7 @@ type View struct {
 	viewType   string
 	name       string
 	definition string
+	indexes    []Index
 }
 
 type Trigger struct {

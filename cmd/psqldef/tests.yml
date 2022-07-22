@@ -262,3 +262,21 @@ IntervalExpression:
       AND created_at <= to_timestamp(concat(to_char(current_date, 'YYYY-MM-DD'), ' 23:59:59'), 'YYYY-MM-DD HH24:MI:SS')
       GROUP BY main_type, sub_type, user_id
     );
+MaterializedViewIndex:
+  desired: |
+    CREATE TABLE IF NOT EXISTS points (
+        id          BIGINT        PRIMARY KEY,
+        tenant_id   BIGINT        NOT NULL,
+        user_id     VARCHAR(100)  NOT NULL,
+        point_type  SMALLINT      NOT NULL,
+        point_value SMALLINT      NOT NULL,
+        created_at  TIMESTAMP     NOT NULL,
+        updated_at  TIMESTAMP     NOT NULL
+    );
+    CREATE INDEX points_idx ON points (tenant_id, user_id, point_type);
+    CREATE MATERIALIZED VIEW IF NOT EXISTS points_view AS
+        SELECT * FROM points
+        WHERE id IN (SELECT MAX(id) AS id
+            FROM points
+            GROUP BY point_type, user_id);
+    CREATE INDEX points_view_idx ON points_view (tenant_id);

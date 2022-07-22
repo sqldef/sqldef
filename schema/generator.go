@@ -65,12 +65,11 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	}
 	currentDDLs = FilterTables(currentDDLs, config)
 
-	tables, err := convertDDLsToTables(currentDDLs)
+	tables, views, err := convertDDLsToTablesAndViews(currentDDLs)
 	if err != nil {
 		return nil, err
 	}
 
-	views := convertDDLsToViews(currentDDLs)
 	triggers := convertDDLsToTriggers(currentDDLs)
 	types := convertDDLsToTypes(currentDDLs)
 
@@ -592,8 +591,19 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 	ddls := []string{}
 
 	currentTable := findTableByName(g.currentTables, tableName)
-	if currentTable == nil {
-		return nil, fmt.Errorf("%s is performed for inexistent table '%s': '%s'", action, tableName, statement)
+	if currentTable == nil { // Views
+		currentView := findViewByName(g.currentViews, tableName)
+		if currentView == nil {
+			return nil, fmt.Errorf("%s is performed for inexistent table '%s': '%s'", action, tableName, statement)
+		}
+
+		currentIndex := findIndexByName(currentView.indexes, desiredIndex.name)
+		if currentIndex == nil {
+			// Index not found, add index.
+			ddls = append(ddls, statement)
+			currentView.indexes = append(currentView.indexes, desiredIndex)
+		}
+		return ddls, nil
 	}
 
 	currentIndex := findIndexByName(currentTable.indexes, desiredIndex.name)
@@ -691,6 +701,8 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 	if currentView == nil {
 		// View not found, add view.
 		ddls = append(ddls, desiredView.statement)
+		view := *desiredView // copy view
+		g.currentViews = append(g.currentViews, &view)
 	} else if desiredView.viewType == "VIEW" { // TODO: Fix the definition comparison for materialized views and enable this
 		// View found. If it's different, create or replace view.
 		if strings.ToLower(currentView.definition) != strings.ToLower(desiredView.definition) {
@@ -1197,8 +1209,9 @@ func mergeTable(table1 *Table, table2 Table) {
 	}
 }
 
-func convertDDLsToTables(ddls []DDL) ([]*Table, error) {
+func convertDDLsToTablesAndViews(ddls []DDL) ([]*Table, []*View, error) {
 	tables := []*Table{}
+	views := []*View{}
 	for _, ddl := range ddls {
 		switch stmt := ddl.(type) {
 		case *CreateTable:
@@ -1207,21 +1220,27 @@ func convertDDLsToTables(ddls []DDL) ([]*Table, error) {
 		case *CreateIndex:
 			table := findTableByName(tables, stmt.tableName)
 			if table == nil {
-				return nil, fmt.Errorf("CREATE INDEX is performed before CREATE TABLE: %s", ddl.Statement())
+				view := findViewByName(views, stmt.tableName)
+				if view == nil {
+					return nil, nil, fmt.Errorf("CREATE INDEX is performed before CREATE TABLE: %s", ddl.Statement())
+				}
+				// TODO: check duplicated creation
+				view.indexes = append(view.indexes, stmt.index)
+			} else {
+				// TODO: check duplicated creation
+				table.indexes = append(table.indexes, stmt.index)
 			}
-			// TODO: check duplicated creation
-			table.indexes = append(table.indexes, stmt.index)
 		case *AddIndex:
 			table := findTableByName(tables, stmt.tableName)
 			if table == nil {
-				return nil, fmt.Errorf("ADD INDEX is performed before CREATE TABLE: %s", ddl.Statement())
+				return nil, nil, fmt.Errorf("ADD INDEX is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 			// TODO: check duplicated creation
 			table.indexes = append(table.indexes, stmt.index)
 		case *AddPrimaryKey:
 			table := findTableByName(tables, stmt.tableName)
 			if table == nil {
-				return nil, fmt.Errorf("ADD PRIMARY KEY is performed before CREATE TABLE: %s", ddl.Statement())
+				return nil, nil, fmt.Errorf("ADD PRIMARY KEY is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			newColumns := []Column{}
@@ -1235,38 +1254,28 @@ func convertDDLsToTables(ddls []DDL) ([]*Table, error) {
 		case *AddForeignKey:
 			table := findTableByName(tables, stmt.tableName)
 			if table == nil {
-				return nil, fmt.Errorf("ADD FOREIGN KEY is performed before CREATE TABLE: %s", ddl.Statement())
+				return nil, nil, fmt.Errorf("ADD FOREIGN KEY is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			table.foreignKeys = append(table.foreignKeys, stmt.foreignKey)
 		case *AddPolicy:
 			table := findTableByName(tables, stmt.tableName)
 			if table == nil {
-				return nil, fmt.Errorf("ADD POLICY performed before CREATE TABLE: %s", ddl.Statement())
+				return nil, nil, fmt.Errorf("ADD POLICY performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			table.policies = append(table.policies, stmt.policy)
 		case *View:
-			// do nothing
+			views = append(views, stmt)
 		case *Trigger:
 			// do nothing
 		case *Type:
 			// do nothing
 		default:
-			return nil, fmt.Errorf("unexpected ddl type in convertDDLsToTables: %#v", stmt)
+			return nil, nil, fmt.Errorf("unexpected ddl type in convertDDLsToTablesAndViews: %#v", stmt)
 		}
 	}
-	return tables, nil
-}
-
-func convertDDLsToViews(ddls []DDL) []*View {
-	var views []*View
-	for _, ddl := range ddls {
-		if view, ok := ddl.(*View); ok {
-			views = append(views, view)
-		}
-	}
-	return views
+	return tables, views, nil
 }
 
 func convertDDLsToTriggers(ddls []DDL) []*Trigger {

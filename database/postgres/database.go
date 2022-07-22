@@ -153,6 +153,12 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 				"CREATE MATERIALIZED VIEW %s AS %s;", schema+"."+name, definition,
 			),
 		)
+
+		indexDefs, err := d.getIndexDefs(schema + "." + name)
+		if err != nil {
+			return ddls, err
+		}
+		ddls = append(ddls, indexDefs...)
 	}
 	return ddls, nil
 }
