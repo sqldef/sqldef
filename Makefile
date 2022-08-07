@@ -23,18 +23,6 @@ clean:
 deps:
 	go get -t ./...
 
-package: deps
-	pids=(); \
-	$(MAKE) package-targz GOOS=linux   GOARCH=amd64 & pids+=($$!); \
-	$(MAKE) package-targz GOOS=linux   GOARCH=386   & pids+=($$!); \
-	$(MAKE) package-targz GOOS=linux   GOARCH=arm64 & pids+=($$!); \
-	$(MAKE) package-targz GOOS=linux   GOARCH=arm   & pids+=($$!); \
-	$(MAKE) package-zip   GOOS=darwin  GOARCH=amd64 & pids+=($$!); \
-	$(MAKE) package-zip   GOOS=darwin  GOARCH=arm64 & pids+=($$!); \
-	$(MAKE) package-zip   GOOS=windows GOARCH=amd64 & pids+=($$!); \
-	$(MAKE) package-zip   GOOS=windows GOARCH=386   & pids+=($$!); \
-	wait $${pids[@]}
-
 package-zip: build
 	mkdir -p package
 	cd $(BUILD_DIR) && zip ../../package/mssqldef_$(GOOS)_$(GOARCH).zip mssqldef
@@ -42,7 +30,7 @@ package-zip: build
 	cd $(BUILD_DIR) && zip ../../package/psqldef_$(GOOS)_$(GOARCH).zip psqldef
 	cd $(BUILD_DIR) && zip ../../package/sqlite3def_$(GOOS)_$(GOARCH).zip sqlite3def
 
-package-targz: build
+package-tar.gz: build
 	mkdir -p package
 	cd $(BUILD_DIR) && tar zcvf ../../package/mssqldef_$(GOOS)_$(GOARCH).tar.gz mssqldef
 	cd $(BUILD_DIR) && tar zcvf ../../package/mysqldef_$(GOOS)_$(GOARCH).tar.gz mysqldef

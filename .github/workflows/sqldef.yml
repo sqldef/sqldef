@@ -49,13 +49,31 @@ jobs:
 
   package:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { GOOS: linux,   GOARCH: amd64, extension: tar.gz }
+          - { GOOS: linux,   GOARCH: '386', extension: tar.gz }
+          - { GOOS: linux,   GOARCH: arm64, extension: tar.gz }
+          - { GOOS: linux,   GOARCH: arm,   extension: tar.gz }
+          - { GOOS: darwin,  GOARCH: amd64, extension: zip }
+          - { GOOS: darwin,  GOARCH: arm64, extension: zip }
+          - { GOOS: windows, GOARCH: amd64, extension: zip }
+          - { GOOS: windows, GOARCH: '386', extension: zip }
     steps:
       - uses: actions/setup-go@v3
         with:
           go-version: 1.19
       - uses: actions/checkout@v3
 
-      - run: make package
+      - run: make package-${{ matrix.extension }} GOOS=${{ matrix.GOOS }} GOARCH=${{ matrix.GOARCH }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: sqldef-${{ matrix.GOOS }}-${{ matrix.GOARCH }}
+          path: package/*def_${{ matrix.GOOS }}_${{ matrix.GOARCH }}.${{ matrix.extension }}
 
   release:
     runs-on: ubuntu-latest
@@ -63,11 +81,17 @@ jobs:
       - test
     if: startsWith(github.ref, 'refs/tags/')
     steps:
-      - uses: actions/setup-go@v3
-        with:
-          go-version: 1.19
       - uses: actions/checkout@v3
-      - run: make package
+
+      - { uses: actions/download-artifact@v3, with: { name: sqldef-linux-amd64,   path: package/ } }
+      - { uses: actions/download-artifact@v3, with: { name: sqldef-linux-386,     path: package/ } }
+      - { uses: actions/download-artifact@v3, with: { name: sqldef-linux-arm64,   path: package/ } }
+      - { uses: actions/download-artifact@v3, with: { name: sqldef-linux-arm,     path: package/ } }
+      - { uses: actions/download-artifact@v3, with: { name: sqldef-darwin-amd64,  path: package/ } }
+      - { uses: actions/download-artifact@v3, with: { name: sqldef-darwin-arm64,  path: package/ } }
+      - { uses: actions/download-artifact@v3, with: { name: sqldef-windows-amd64, path: package/ } }
+      - { uses: actions/download-artifact@v3, with: { name: sqldef-windows-386,   path: package/ } }
+
       - name: Release binaries
         run: |
           export VERSION=$(echo "$GITHUB_REF" | sed -e 's!refs/tags/!!')
