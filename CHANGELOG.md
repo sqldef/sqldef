@@ -1,3 +1,8 @@
+## v0.13.1
+
+- Switch the SQL parser of psqldef per statement
+- Fix `psqldef --export` for policies
+
 ## v0.13.0
 
 - Introduce a new SQL parser for psqldef [#241](https://github.com/k0kubun/sqldef/issues/241)
