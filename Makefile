@@ -4,6 +4,7 @@ GOVERSION=$(shell go version)
 GOOS=$(word 1,$(subst /, ,$(lastword $(GOVERSION))))
 GOARCH=$(word 2,$(subst /, ,$(lastword $(GOVERSION))))
 BUILD_DIR=build/$(GOOS)-$(GOARCH)
+SHELL=/bin/bash
 
 # Because ghr doesn't support cross-compiling, cgo cross-build of mattn/go-sqlite3 is failing.
 # We should use https://github.com/karalabe/xgo or something to support sqlite3def in non-Linux OSes.
@@ -27,14 +28,16 @@ deps:
 	go get -t ./...
 
 package:
-	$(MAKE) package-targz GOOS=linux GOARCH=amd64
-	$(MAKE) package-targz GOOS=linux GOARCH=386
-	$(MAKE) package-targz GOOS=linux GOARCH=arm64
-	$(MAKE) package-targz GOOS=linux GOARCH=arm
-	$(MAKE) package-zip GOOS=darwin GOARCH=amd64
-	$(MAKE) package-zip GOOS=darwin GOARCH=arm64
-	$(MAKE) package-zip GOOS=windows GOARCH=amd64
-	$(MAKE) package-zip GOOS=windows GOARCH=386
+	pids=(); \
+	$(MAKE) package-targz GOOS=linux   GOARCH=amd64 & pids+=($$!); \
+	$(MAKE) package-targz GOOS=linux   GOARCH=386   & pids+=($$!); \
+	$(MAKE) package-targz GOOS=linux   GOARCH=arm64 & pids+=($$!); \
+	$(MAKE) package-targz GOOS=linux   GOARCH=arm   & pids+=($$!); \
+	$(MAKE) package-zip   GOOS=darwin  GOARCH=amd64 & pids+=($$!); \
+	$(MAKE) package-zip   GOOS=darwin  GOARCH=arm64 & pids+=($$!); \
+	$(MAKE) package-zip   GOOS=windows GOARCH=amd64 & pids+=($$!); \
+	$(MAKE) package-zip   GOOS=windows GOARCH=386   & pids+=($$!); \
+	wait $${pids[@]}
 
 package-zip: build
 	mkdir -p package
