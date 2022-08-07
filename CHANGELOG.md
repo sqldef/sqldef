@@ -1,3 +1,7 @@
+## v0.13.0
+
+- Introduce a new SQL parser for psqldef [#241](https://github.com/k0kubun/sqldef/issues/241)
+
 ## v0.12.8
 
 - Support non-Linux operating systems in sqlite3def releases [#149](https://github.com/k0kubun/sqldef/issues/149)
