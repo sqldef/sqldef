@@ -78,7 +78,8 @@ jobs:
       - uses: goto-bus-stop/setup-zig@v1
         with:
           version: 0.9.1
-      - run: |
+      - name: make package-${{ matrix.EXT }}
+        run: |
           make package-${{ matrix.EXT }} GOOS=${{ matrix.GOOS }} GOARCH=${{ matrix.GOARCH }} \
             "ZIG_CFLAGS=${{ matrix.ZIG_CFLAGS }}" "CGO_LDFLAGS=${{ matrix.CGO_LDFLAGS }}"
 
