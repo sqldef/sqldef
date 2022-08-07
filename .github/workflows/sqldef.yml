@@ -53,21 +53,34 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { GOOS: linux,   GOARCH: amd64, extension: tar.gz }
-          - { GOOS: linux,   GOARCH: '386', extension: tar.gz }
-          - { GOOS: linux,   GOARCH: arm64, extension: tar.gz }
-          - { GOOS: linux,   GOARCH: arm,   extension: tar.gz }
-          - { GOOS: darwin,  GOARCH: amd64, extension: zip }
-          - { GOOS: darwin,  GOARCH: arm64, extension: zip }
-          - { GOOS: windows, GOARCH: amd64, extension: zip }
-          - { GOOS: windows, GOARCH: '386', extension: zip }
+          - { GOOS: linux,   GOARCH: amd64, ZIG_TARGET: x86_64-linux,       extension: tar.gz }
+          - { GOOS: linux,   GOARCH: '386', ZIG_TARGET: i386-linux,         extension: tar.gz }
+          - { GOOS: linux,   GOARCH: arm64, ZIG_TARGET: aarch64-linux,      extension: tar.gz }
+          - { GOOS: linux,   GOARCH: arm,   ZIG_TARGET: arm-linux-musleabi, extension: tar.gz }
+          - { GOOS: windows, GOARCH: amd64, ZIG_TARGET: x86_64-windows,     extension: zip }
+          - { GOOS: windows, GOARCH: '386', ZIG_TARGET: i386-windows,       extension: zip }
+          - { GOOS: darwin,  GOARCH: amd64, ZIG_TARGET: x86_64-macos,       extension: zip,
+              CGO_LDFLAGS: '-mmacosx-version-min=10.14 --sysroot /home/runner/work/sqldef/sqldef/MacOSX.sdk -F/System/Library/Frameworks -L/usr/lib',
+              ZIG_CFLAGS:  '-mmacosx-version-min=10.14 -isysroot /home/runner/work/sqldef/sqldef/MacOSX.sdk -iwithsysroot /usr/include -iframeworkwithsysroot /System/Library/Frameworks' }
+          - { GOOS: darwin,  GOARCH: arm64, ZIG_TARGET: aarch64-macos,      extension: zip,
+              CGO_LDFLAGS: '-mmacosx-version-min=11.1  --sysroot /home/runner/work/sqldef/sqldef/MacOSX.sdk -F/System/Library/Frameworks -L/usr/lib',
+              ZIG_CFLAGS:  '-mmacosx-version-min=11.1  -isysroot /home/runner/work/sqldef/sqldef/MacOSX.sdk -iwithsysroot /usr/include -iframeworkwithsysroot /System/Library/Frameworks' }
     steps:
       - uses: actions/setup-go@v3
         with:
           go-version: 1.19
       - uses: actions/checkout@v3
 
-      - run: make package-${{ matrix.extension }} GOOS=${{ matrix.GOOS }} GOARCH=${{ matrix.GOARCH }}
+      - name: Download MacOSX SDK
+        run: make MacOSX.sdk
+        if: ${{ matrix.GOOS == 'darwin' }}
+
+      - uses: goto-bus-stop/setup-zig@v1
+        with:
+          version: 0.9.1
+      - run: |
+          make package-${{ matrix.extension }} GOOS=${{ matrix.GOOS }} GOARCH=${{ matrix.GOARCH }} \
+            ZIG_TARGET=${{ matrix.ZIG_TARGET }} "ZIG_CFLAGS=${{ matrix.ZIG_CFLAGS }}" "CGO_LDFLAGS=${{ matrix.CGO_LDFLAGS }}"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
