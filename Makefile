@@ -14,7 +14,7 @@ SQLITE3_OS=linux
 
 all: build
 
-build: deps
+build:
 	mkdir -p $(BUILD_DIR)
 	cd cmd/mysqldef && GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/mysqldef
 	cd cmd/psqldef && GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/psqldef
@@ -27,7 +27,7 @@ clean:
 deps:
 	go get -t ./...
 
-package:
+package: deps
 	pids=(); \
 	$(MAKE) package-targz GOOS=linux   GOARCH=amd64 & pids+=($$!); \
 	$(MAKE) package-targz GOOS=linux   GOARCH=386   & pids+=($$!); \
