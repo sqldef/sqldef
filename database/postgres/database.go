@@ -678,7 +678,7 @@ func (d *PostgresDatabase) getPolicyDefs(table string) ([]string, error) {
 			policyName, table, permissive, cmd, roles,
 		)
 		if using.Valid {
-			def += fmt.Sprintf(" USING %s", using.String)
+			def += fmt.Sprintf(" USING (%s)", using.String)
 		}
 		if withCheck.Valid {
 			def += fmt.Sprintf(" WITH CHECK %s", withCheck.String)
