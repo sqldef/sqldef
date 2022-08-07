@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/k0kubun/sqldef/database"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 type Sqlite3Database struct {
@@ -14,7 +14,7 @@ type Sqlite3Database struct {
 }
 
 func NewDatabase(config database.Config) (database.Database, error) {
-	db, err := sql.Open("sqlite3", config.DbName)
+	db, err := sql.Open("sqlite", config.DbName)
 	if err != nil {
 		return nil, err
 	}
