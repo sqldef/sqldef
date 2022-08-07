@@ -32,7 +32,7 @@ func TestApply(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	serverVersion := strings.TrimSpace(testutils.MustExecute("psql", "-Upostgres", "-h", "127.0.0.1", "-t", "-c", "show server_version;"))
+	serverVersion := strings.TrimSpace(testutils.MustExecute("psql", "-X", "-Upostgres", "-h", "127.0.0.1", "-t", "-c", "show server_version;"))
 	version := strings.Split(serverVersion, " ")[0]
 	sqlParser := postgres.NewParser()
 	for name, test := range tests {
@@ -1366,7 +1366,7 @@ func TestPsqldefBeforeApply(t *testing.T) {
 	apply = assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--before-apply", beforeApply)
 	assertEquals(t, apply, nothingModified)
 
-	owner := assertedExecute(t, "psql", "-Upostgres", databaseName, "-tAc", "SELECT tableowner FROM pg_tables WHERE tablename = 'dummy'")
+	owner := assertedExecute(t, "psql", "-X", "-Upostgres", databaseName, "-tAc", "SELECT tableowner FROM pg_tables WHERE tablename = 'dummy'")
 	assertEquals(t, owner, "dummy_owner_role\n")
 }
 

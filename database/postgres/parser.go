@@ -35,7 +35,7 @@ func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
 		}
 		ddl = strings.TrimSpace(ddl)
 
-		// First, attempt to parse sql with the wrapper of PostgreSQL's parser. If it works, use the result.
+		// First, attempt to parse it with the wrapper of PostgreSQL's parser. If it works, use the result.
 		stmt, err := p.parseStmt(rawStmt.Stmt)
 		if err != nil {
 			// Otherwise, fallback to the generic parser. We intend to deprecate this path in the future.
@@ -61,6 +61,8 @@ func (p PostgresParser) parseStmt(node *pgquery.Node) (parser.Statement, error) 
 	switch stmt := node.Node.(type) {
 	case *pgquery.Node_CreateStmt:
 		return p.parseCreateStmt(stmt.CreateStmt)
+	case *pgquery.Node_CommentStmt:
+		return p.parseCommentStmt(stmt.CommentStmt)
 	default:
 		return nil, fmt.Errorf("unknown node in parseStmt: %#v", stmt)
 	}
@@ -97,6 +99,29 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 		},
 		TableSpec: &parser.TableSpec{
 			Columns: columns,
+		},
+	}, nil
+}
+
+func (p PostgresParser) parseCommentStmt(stmt *pgquery.CommentStmt) (parser.Statement, error) {
+	var object string
+	switch node := stmt.Object.Node.(type) {
+	case *pgquery.Node_List:
+		var err error
+		object, err = p.parseStringList(node.List)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("unknown node in parseColumnStmt: %#v", node)
+	}
+
+	return &parser.DDL{
+		Action: parser.CommentStr,
+		Comment: &parser.Comment{
+			ObjectType: pgquery.ObjectType_name[int32(stmt.Objtype)],
+			Object:     object,
+			Comment:    stmt.Comment,
 		},
 	}, nil
 }
@@ -149,4 +174,15 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (string, error) {
 	} else {
 		return "", fmt.Errorf("unexpected length in parseTypeName: %d", len(typeNames))
 	}
+}
+
+func (p PostgresParser) parseStringList(list *pgquery.List) (string, error) {
+	var objects []string
+	for _, node := range list.Items {
+		switch n := node.Node.(type) {
+		case *pgquery.Node_String_:
+			objects = append(objects, n.String_.Str)
+		}
+	}
+	return strings.Join(objects, "."), nil
 }

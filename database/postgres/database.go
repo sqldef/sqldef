@@ -71,13 +71,13 @@ func (d *PostgresDatabase) DumpDDLs() (string, error) {
 }
 
 func (d *PostgresDatabase) tableNames() ([]string, error) {
-	rows, err := d.db.Query(
-		`select table_schema, table_name from information_schema.tables
-		 where table_schema not in ('information_schema', 'pg_catalog')
-		 and (table_schema != 'public' or table_name != 'pg_buffercache')
-		 and table_type = 'BASE TABLE'
-		 order by table_name asc;`,
-	)
+	rows, err := d.db.Query(`
+		select table_schema, table_name from information_schema.tables
+		where table_schema not in ('information_schema', 'pg_catalog')
+		and (table_schema != 'public' or table_name != 'pg_buffercache')
+		and table_type = 'BASE TABLE'
+		order by table_name asc;
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -100,13 +100,13 @@ var (
 )
 
 func (d *PostgresDatabase) views() ([]string, error) {
-	rows, err := d.db.Query(
-		`select table_schema, table_name, definition from information_schema.tables
-		 inner join pg_views on table_name = viewname
-		 where table_schema not in ('information_schema', 'pg_catalog', 'repack')
-		 and (table_schema != 'public' or table_name != 'pg_buffercache')
-		 and table_type = 'VIEW';`,
-	)
+	rows, err := d.db.Query(`
+		select table_schema, table_name, definition from information_schema.tables
+		inner join pg_views on table_name = viewname
+		where table_schema not in ('information_schema', 'pg_catalog', 'repack')
+		and (table_schema != 'public' or table_name != 'pg_buffercache')
+		and table_type = 'VIEW';
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -164,12 +164,12 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 }
 
 func (d *PostgresDatabase) types() ([]string, error) {
-	rows, err := d.db.Query(
-		`select t.typname, string_agg(e.enumlabel, ' ')
-		 from pg_enum e
-		 join pg_type t on e.enumtypid = t.oid
-		 group by t.typname;`,
-	)
+	rows, err := d.db.Query(`
+		select t.typname, string_agg(e.enumlabel, ' ')
+		from pg_enum e
+		join pg_type t on e.enumtypid = t.oid
+		group by t.typname;
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -223,10 +223,14 @@ func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreignDefs, policyDefs, checkConstraints, uniqueConstraints), nil
+	comments, err := d.getComments(table)
+	if err != nil {
+		return "", err
+	}
+	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreignDefs, policyDefs, comments, checkConstraints, uniqueConstraints), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreignDefs, policyDefs []string, checkConstraints, uniqueConstraints map[string]string) string {
+func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreignDefs, policyDefs, comments []string, checkConstraints, uniqueConstraints map[string]string) string {
 	var queryBuilder strings.Builder
 	schema, table := splitTableName(table)
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", escapeSQLName(schema), escapeSQLName(table))
@@ -276,6 +280,9 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 	}
 	for _, constraintDef := range uniqueConstraints {
 		fmt.Fprintf(&queryBuilder, "%s;\n", constraintDef)
+	}
+	for _, v := range comments {
+		fmt.Fprintf(&queryBuilder, "%s\n", v)
 	}
 	return strings.TrimSuffix(queryBuilder.String(), "\n")
 }
@@ -686,6 +693,59 @@ func (d *PostgresDatabase) getPolicyDefs(table string) ([]string, error) {
 		defs = append(defs, def+";")
 	}
 	return defs, nil
+}
+
+func (d *PostgresDatabase) getComments(table string) ([]string, error) {
+	_, table = splitTableName(table) // supporting only public schema for now
+	var ddls []string
+
+	// Table comments
+	tableRows, err := d.db.Query(`
+		SELECT obj_description(oid)
+		FROM pg_class
+		WHERE relkind = 'r'
+		AND obj_description(oid) IS NOT NULL
+		AND relname = $1;
+	`, table)
+	if err != nil {
+		return nil, err
+	}
+	defer tableRows.Close()
+	for tableRows.Next() {
+		var comment string
+		if err := tableRows.Scan(&comment); err != nil {
+			return nil, err
+		}
+		ddls = append(ddls, fmt.Sprintf("COMMENT ON TABLE %s IS '%s';", table, comment))
+	}
+
+	// Column comments
+	columnRows, err := d.db.Query(`
+		select
+			c.column_name, pgd.description
+		from pg_catalog.pg_statio_all_tables as st
+		inner join pg_catalog.pg_description pgd on (
+			pgd.objoid = st.relid
+		)
+		inner join information_schema.columns c on (
+			pgd.objsubid   = c.ordinal_position and
+			c.table_schema = st.schemaname and
+			c.table_name   = st.relname
+		);
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer columnRows.Close()
+	for columnRows.Next() {
+		var columnName, comment string
+		if err := columnRows.Scan(&columnName, &comment); err != nil {
+			return nil, err
+		}
+		ddls = append(ddls, fmt.Sprintf("COMMENT ON COLUMN %s.%s IS '%s';", table, columnName, comment))
+	}
+
+	return ddls, nil
 }
 
 func (d *PostgresDatabase) DB() *sql.DB {

@@ -47,6 +47,8 @@ type Generator struct {
 
 	desiredTypes []*Type
 	currentTypes []*Type
+
+	currentComments []*Comment
 }
 
 // Parse argument DDLs and call `generateDDLs()`
@@ -64,13 +66,10 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	}
 	currentDDLs = FilterTables(currentDDLs, config)
 
-	tables, views, err := convertDDLsToTablesAndViews(currentDDLs)
+	tables, views, triggers, types, comments, err := convertDDLsToSchema(currentDDLs)
 	if err != nil {
 		return nil, err
 	}
-
-	triggers := convertDDLsToTriggers(currentDDLs)
-	types := convertDDLsToTypes(currentDDLs)
 
 	generator := Generator{
 		mode:            mode,
@@ -82,6 +81,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		currentTriggers: triggers,
 		desiredTypes:    []*Type{},
 		currentTypes:    types,
+		currentComments: comments,
 	}
 	return generator.generateDDLs(desiredDDLs)
 }
@@ -152,6 +152,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return ddls, err
 			}
 			ddls = append(ddls, typeDDLs...)
+		case *Comment:
+			commentDDLs, err := g.generateDDLsForComment(desired)
+			if err != nil {
+				return ddls, err
+			}
+			ddls = append(ddls, commentDDLs...)
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", desired)
 		}
@@ -780,6 +786,17 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 	return ddls, nil
 }
 
+func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
+	ddls := []string{}
+
+	if currentComment := findCommentByObject(g.currentComments, desired.comment.Object); currentComment == nil {
+		// Comment not found, add comment.
+		ddls = append(ddls, desired.statement)
+	}
+
+	return ddls, nil
+}
+
 // Even though simulated table doesn't have a foreign key, references could exist in column definitions.
 // This carefully generates DROP CONSTRAINT for such situations.
 func (g *Generator) generateDDLsForAbsentForeignKey(currentForeignKey ForeignKey, currentTable Table, desiredTable Table) []string {
@@ -1208,9 +1225,12 @@ func mergeTable(table1 *Table, table2 Table) {
 	}
 }
 
-func convertDDLsToTablesAndViews(ddls []DDL) ([]*Table, []*View, error) {
-	tables := []*Table{}
-	views := []*View{}
+func convertDDLsToSchema(ddls []DDL) ([]*Table, []*View, []*Trigger, []*Type, []*Comment, error) {
+	var tables []*Table
+	var views []*View
+	var triggers []*Trigger
+	var types []*Type
+	var comments []*Comment
 	for _, ddl := range ddls {
 		switch stmt := ddl.(type) {
 		case *CreateTable:
@@ -1221,7 +1241,7 @@ func convertDDLsToTablesAndViews(ddls []DDL) ([]*Table, []*View, error) {
 			if table == nil {
 				view := findViewByName(views, stmt.tableName)
 				if view == nil {
-					return nil, nil, fmt.Errorf("CREATE INDEX is performed before CREATE TABLE: %s", ddl.Statement())
+					return nil, nil, nil, nil, nil, fmt.Errorf("CREATE INDEX is performed before CREATE TABLE: %s", ddl.Statement())
 				}
 				// TODO: check duplicated creation
 				view.indexes = append(view.indexes, stmt.index)
@@ -1232,14 +1252,14 @@ func convertDDLsToTablesAndViews(ddls []DDL) ([]*Table, []*View, error) {
 		case *AddIndex:
 			table := findTableByName(tables, stmt.tableName)
 			if table == nil {
-				return nil, nil, fmt.Errorf("ADD INDEX is performed before CREATE TABLE: %s", ddl.Statement())
+				return nil, nil, nil, nil, nil, fmt.Errorf("ADD INDEX is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 			// TODO: check duplicated creation
 			table.indexes = append(table.indexes, stmt.index)
 		case *AddPrimaryKey:
 			table := findTableByName(tables, stmt.tableName)
 			if table == nil {
-				return nil, nil, fmt.Errorf("ADD PRIMARY KEY is performed before CREATE TABLE: %s", ddl.Statement())
+				return nil, nil, nil, nil, nil, fmt.Errorf("ADD PRIMARY KEY is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			newColumns := []Column{}
@@ -1253,48 +1273,30 @@ func convertDDLsToTablesAndViews(ddls []DDL) ([]*Table, []*View, error) {
 		case *AddForeignKey:
 			table := findTableByName(tables, stmt.tableName)
 			if table == nil {
-				return nil, nil, fmt.Errorf("ADD FOREIGN KEY is performed before CREATE TABLE: %s", ddl.Statement())
+				return nil, nil, nil, nil, nil, fmt.Errorf("ADD FOREIGN KEY is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			table.foreignKeys = append(table.foreignKeys, stmt.foreignKey)
 		case *AddPolicy:
 			table := findTableByName(tables, stmt.tableName)
 			if table == nil {
-				return nil, nil, fmt.Errorf("ADD POLICY performed before CREATE TABLE: %s", ddl.Statement())
+				return nil, nil, nil, nil, nil, fmt.Errorf("ADD POLICY performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			table.policies = append(table.policies, stmt.policy)
 		case *View:
 			views = append(views, stmt)
 		case *Trigger:
-			// do nothing
+			triggers = append(triggers, stmt)
 		case *Type:
-			// do nothing
+			types = append(types, stmt)
+		case *Comment:
+			comments = append(comments, stmt)
 		default:
-			return nil, nil, fmt.Errorf("unexpected ddl type in convertDDLsToTablesAndViews: %#v", stmt)
+			return nil, nil, nil, nil, nil, fmt.Errorf("unexpected ddl type in convertDDLsToTablesAndViews: %#v", stmt)
 		}
 	}
-	return tables, views, nil
-}
-
-func convertDDLsToTriggers(ddls []DDL) []*Trigger {
-	var triggers []*Trigger
-	for _, ddl := range ddls {
-		if trigger, ok := ddl.(*Trigger); ok {
-			triggers = append(triggers, trigger)
-		}
-	}
-	return triggers
-}
-
-func convertDDLsToTypes(ddls []DDL) []*Type {
-	var types []*Type
-	for _, ddl := range ddls {
-		if createType, ok := ddl.(*Type); ok {
-			types = append(types, createType)
-		}
-	}
-	return types
+	return tables, views, triggers, types, comments, nil
 }
 
 func findTableByName(tables []*Table, name string) *Table {
@@ -1382,6 +1384,15 @@ func findTypeByName(types []*Type, name string) *Type {
 	for _, createType := range types {
 		if createType.name == name {
 			return createType
+		}
+	}
+	return nil
+}
+
+func findCommentByObject(comments []*Comment, object string) *Comment {
+	for _, comment := range comments {
+		if comment.comment.Object == object {
+			return comment
 		}
 	}
 	return nil

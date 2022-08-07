@@ -432,6 +432,11 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement) (DDL, error
 				statement:  ddl,
 				enumValues: stmt.Type.Type.EnumValues,
 			}, nil
+		} else if stmt.Action == parser.CommentStr {
+			return &Comment{
+				statement: ddl,
+				comment:   *stmt.Comment,
+			}, nil
 		} else {
 			return nil, fmt.Errorf(
 				"unsupported type of DDL action '%s': %s",

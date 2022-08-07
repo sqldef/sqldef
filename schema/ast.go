@@ -1,5 +1,7 @@
 package schema
 
+import "github.com/k0kubun/sqldef/parser"
+
 type DDL interface {
 	Statement() string
 }
@@ -231,6 +233,11 @@ type Type struct {
 	enumValues []string
 }
 
+type Comment struct {
+	statement string
+	comment   parser.Comment
+}
+
 func (c *CreateTable) Statement() string {
 	return c.statement
 }
@@ -264,6 +271,10 @@ func (t *Trigger) Statement() string {
 }
 
 func (t *Type) Statement() string {
+	return t.statement
+}
+
+func (t *Comment) Statement() string {
 	return t.statement
 }
 

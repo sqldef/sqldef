@@ -505,6 +505,7 @@ type DDL struct {
 	View          *View
 	Trigger       *Trigger
 	Type          *Type
+	Comment       *Comment
 }
 
 // DDL strings.
@@ -526,9 +527,7 @@ const (
 	CreateMatViewStr = "create materialized view"
 	CreateTriggerStr = "create trigger"
 	CreateTypeStr    = "create type"
-
-	// Vindex DDL param to specify the owner of a vindex
-	VindexOwnerStr = "owner"
+	CommentStr       = "comment"
 )
 
 // Format formats the node.
@@ -1086,7 +1085,7 @@ func (node *VindexSpec) ParseParams() (string, map[string]string) {
 	var owner string
 	params := map[string]string{}
 	for _, p := range node.Params {
-		if p.Key.Lowered() == VindexOwnerStr {
+		if p.Key.Lowered() == "owner" { // Vindex DDL param to specify the owner of a vindex
 			owner = p.Val
 		} else {
 			params[p.Key.String()] = p.Val
@@ -1301,6 +1300,12 @@ type Trigger struct {
 type Type struct {
 	Name TableName // workaround: using TableName to handle schema
 	Type ColumnType
+}
+
+type Comment struct {
+	ObjectType string
+	Object     string
+	Comment    string
 }
 
 // SelectExprs represents SELECT expressions.
