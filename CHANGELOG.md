@@ -1,3 +1,7 @@
+## v0.13.2
+
+- Initial support of comments for psqldef [#266](https://github.com/k0kubun/sqldef/issues/266)
+
 ## v0.13.1
 
 - Switch the SQL parser of psqldef per statement
