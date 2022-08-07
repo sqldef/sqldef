@@ -2,10 +2,11 @@ package postgres
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/k0kubun/sqldef/database"
 	"github.com/k0kubun/sqldef/parser"
 	pgquery "github.com/pganalyze/pg_query_go/v2"
-	"strings"
 )
 
 type PostgresParser struct {
@@ -19,38 +20,41 @@ func NewParser() PostgresParser {
 }
 
 func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
-	// Attempt to parse sql with PostgreSQL's parser first. If it works, use the result.
-	stmts, err := p.parseStmts(sql)
-	if err == nil {
-		return stmts, nil
-	}
-
-	// Otherwise, use the generic parser. We intend to deprecate this path in the future.
-	return p.parser.Parse(sql)
-}
-
-func (p PostgresParser) parseStmts(sql string) ([]database.DDLStatement, error) {
 	result, err := pgquery.Parse(sql)
 	if err != nil {
 		return nil, err
 	}
 
-	var stmts []database.DDLStatement
+	var statements []database.DDLStatement
 	for _, rawStmt := range result.Stmts {
+		var ddl string
+		if rawStmt.StmtLen == 0 {
+			ddl = sql[rawStmt.StmtLocation:]
+		} else {
+			ddl = sql[rawStmt.StmtLocation : rawStmt.StmtLocation+rawStmt.StmtLen]
+		}
+		ddl = strings.TrimSpace(ddl)
+
+		// First, attempt to parse sql with the wrapper of PostgreSQL's parser. If it works, use the result.
 		stmt, err := p.parseStmt(rawStmt.Stmt)
 		if err != nil {
-			return nil, err
+			// Otherwise, fallback to the generic parser. We intend to deprecate this path in the future.
+			stmts, err := p.parser.Parse(ddl)
+			if err != nil {
+				return nil, err
+			}
+
+			statements = append(statements, stmts...)
+			continue
 		}
 
-		ddl := sql[rawStmt.StmtLocation : rawStmt.StmtLocation+rawStmt.StmtLen]
-		ddl = strings.TrimSpace(ddl)
-		stmts = append(stmts, database.DDLStatement{
+		statements = append(statements, database.DDLStatement{
 			DDL:       ddl,
 			Statement: stmt,
 		})
 	}
 
-	return stmts, nil
+	return statements, nil
 }
 
 func (p PostgresParser) parseStmt(node *pgquery.Node) (parser.Statement, error) {
