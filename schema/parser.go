@@ -8,9 +8,6 @@ import (
 	"strings"
 
 	"github.com/k0kubun/sqldef/database"
-
-	"github.com/k0kubun/sqldef/database/postgres"
-
 	"github.com/k0kubun/sqldef/parser"
 )
 
@@ -489,7 +486,7 @@ func normalizedTableName(mode GeneratorMode, tableName parser.TableName) string 
 
 func normalizedTable(mode GeneratorMode, tableName string) string {
 	if mode == GeneratorModePostgres {
-		schema, table := postgres.SplitTableName(tableName)
+		schema, table := postgresSplitTableName(tableName)
 		return fmt.Sprintf("%s.%s", schema, table)
 	} else {
 		return tableName

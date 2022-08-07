@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/k0kubun/sqldef/database"
-	"github.com/k0kubun/sqldef/database/postgres"
 )
 
 type GeneratorMode int
@@ -371,7 +370,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 				}
 
-				_, tableName := postgres.SplitTableName(desired.table.name)
+				_, tableName := postgresSplitTableName(desired.table.name)
 				constraintName := fmt.Sprintf("%s_%s_check", tableName, desiredColumn.name)
 				if desiredColumn.check != nil && desiredColumn.check.constraintName != "" {
 					constraintName = desiredColumn.check.constraintName
@@ -1121,7 +1120,7 @@ func (g *Generator) generateDropIndex(tableName string, indexName string, constr
 		if constraint {
 			return fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(tableName), g.escapeSQLName(indexName))
 		} else {
-			schema, _ := postgres.SplitTableName(tableName)
+			schema, _ := postgresSplitTableName(tableName)
 			return fmt.Sprintf("DROP INDEX %s.%s", g.escapeSQLName(schema), g.escapeSQLName(indexName))
 		}
 	case GeneratorModeMssql:
@@ -1156,7 +1155,7 @@ func (g *Generator) escapeTableName(name string) string {
 func (g *Generator) escapeSQLName(name string) string {
 	switch g.mode {
 	case GeneratorModePostgres:
-		return postgres.EscapeSQLName(name)
+		return fmt.Sprintf("\"%s\"", name)
 	case GeneratorModeMssql:
 		return fmt.Sprintf("[%s]", name)
 	default:
@@ -1813,4 +1812,14 @@ func containsRegexpString(strs []string, str string) bool {
 		}
 	}
 	return false
+}
+
+func postgresSplitTableName(table string) (string, string) {
+	schema := "public"
+	schemaTable := strings.SplitN(table, ".", 2)
+	if len(schemaTable) == 2 {
+		schema = schemaTable[0]
+		table = schemaTable[1]
+	}
+	return schema, table
 }

@@ -187,7 +187,7 @@ func (d *PostgresDatabase) types() ([]string, error) {
 		}
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE TYPE %s AS ENUM (%s);", EscapeSQLName(typeName), strings.Join(enumLabels, ", "),
+				"CREATE TYPE %s AS ENUM (%s);", escapeSQLName(typeName), strings.Join(enumLabels, ", "),
 			),
 		)
 	}
@@ -228,8 +228,8 @@ func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
 
 func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreignDefs, policyDefs []string, checkConstraints, uniqueConstraints map[string]string) string {
 	var queryBuilder strings.Builder
-	schema, table := SplitTableName(table)
-	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", EscapeSQLName(schema), EscapeSQLName(table))
+	schema, table := splitTableName(table)
+	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", escapeSQLName(schema), escapeSQLName(table))
 	for i, col := range columns {
 		if i > 0 {
 			fmt.Fprint(&queryBuilder, ",")
@@ -380,7 +380,7 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	FROM      columns
 	LEFT JOIN check_constraints checks USING (column_name);`
 
-	schema, table := SplitTableName(table)
+	schema, table := splitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -454,7 +454,7 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 	AND    tablename = $2
 	AND    indexName NOT IN (SELECT name FROM unique_and_pk_constraints)
 	`
-	schema, table := SplitTableName(table)
+	schema, table := splitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -486,7 +486,7 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[strin
 	AND    array_length(con.conkey, 1) > 1;`
 
 	result := map[string]string{}
-	schema, table := SplitTableName(tableName)
+	schema, table := splitTableName(tableName)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -515,7 +515,7 @@ func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]st
 	AND    cls.relname = $2;`
 
 	result := map[string]string{}
-	schema, table := SplitTableName(tableName)
+	schema, table := splitTableName(tableName)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -542,7 +542,7 @@ FROM
 	JOIN information_schema.key_column_usage AS kcu
 		USING (table_schema, table_name, constraint_name)
 WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$2 ORDER BY kcu.ordinal_position`
-	schema, table := SplitTableName(table)
+	schema, table := splitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -582,7 +582,7 @@ FROM
 		AND kcu2.constraint_name = rc.unique_constraint_name
 		AND kcu2.ordinal_position = kcu.position_in_unique_constraint
 WHERE constraint_type = 'FOREIGN KEY' AND tc.table_schema=$1 AND tc.table_name=$2`
-	schema, table := SplitTableName(table)
+	schema, table := splitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -631,16 +631,16 @@ WHERE constraint_type = 'FOREIGN KEY' AND tc.table_schema=$1 AND tc.table_name=$
 		c := constraints[key]
 		var escapedColumns []string
 		for i := range c.columns {
-			escapedColumns = append(escapedColumns, EscapeSQLName(c.columns[i]))
+			escapedColumns = append(escapedColumns, escapeSQLName(c.columns[i]))
 		}
 		var escapedForeignColumns []string
 		for i := range c.foreignColumns {
-			escapedForeignColumns = append(escapedForeignColumns, EscapeSQLName(c.foreignColumns[i]))
+			escapedForeignColumns = append(escapedForeignColumns, escapeSQLName(c.foreignColumns[i]))
 		}
 		def := fmt.Sprintf(
 			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s (%s) ON UPDATE %s ON DELETE %s",
-			EscapeSQLName(c.tableSchema), EscapeSQLName(c.tableName), EscapeSQLName(c.constraintName), strings.Join(escapedColumns, ", "),
-			EscapeSQLName(c.foreignTableSchema), EscapeSQLName(c.foreignTableName), strings.Join(escapedForeignColumns, ", "), c.foreignUpdateRule, c.foreignDeleteRule,
+			escapeSQLName(c.tableSchema), escapeSQLName(c.tableName), escapeSQLName(c.constraintName), strings.Join(escapedColumns, ", "),
+			escapeSQLName(c.foreignTableSchema), escapeSQLName(c.foreignTableName), strings.Join(escapedForeignColumns, ", "), c.foreignUpdateRule, c.foreignDeleteRule,
 		)
 		defs = append(defs, def)
 	}
@@ -654,7 +654,7 @@ var (
 
 func (d *PostgresDatabase) getPolicyDefs(table string) ([]string, error) {
 	const query = "SELECT policyname, permissive, roles, cmd, qual, with_check FROM pg_policies WHERE schemaname = $1 AND tablename = $2;"
-	schema, table := SplitTableName(table)
+	schema, table := splitTableName(table)
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -720,11 +720,11 @@ func postgresBuildDSN(config database.Config) string {
 	return fmt.Sprintf("postgres://%s:%s@%s/%s?%s", url.QueryEscape(user), url.QueryEscape(password), host, database, strings.Join(options, "&"))
 }
 
-func EscapeSQLName(name string) string {
+func escapeSQLName(name string) string {
 	return fmt.Sprintf("\"%s\"", name)
 }
 
-func SplitTableName(table string) (string, string) {
+func splitTableName(table string) (string, string) {
 	schema := "public"
 	schemaTable := strings.SplitN(table, ".", 2)
 	if len(schemaTable) == 2 {
