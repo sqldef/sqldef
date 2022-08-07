@@ -60,7 +60,7 @@ jobs:
           - { GOOS: windows, GOARCH: amd64, EXT: zip,    ZIG_CFLAGS: '-target x86_64-windows' }
           - { GOOS: windows, GOARCH: '386', EXT: zip,    ZIG_CFLAGS: '-target i386-windows' }
           - { GOOS: darwin,  GOARCH: amd64, EXT: zip,    ZIG_CFLAGS: '-target x86_64-macos
-                            -mmacosx-version-min=10.14 -isysroot /home/runner/work/sqldef/sqldef/MacOSX.sdk /usr/include -iframeworkwithsysroot /System/Library/Frameworks',
+                            -mmacosx-version-min=10.14 -isysroot /home/runner/work/sqldef/sqldef/MacOSX.sdk -iwithsysroot /usr/include -iframeworkwithsysroot /System/Library/Frameworks',
               CGO_LDFLAGS: '-mmacosx-version-min=10.14 --sysroot /home/runner/work/sqldef/sqldef/MacOSX.sdk -F/System/Library/Frameworks -L/usr/lib' }
           - { GOOS: darwin,  GOARCH: arm64, EXT: zip,    ZIG_CFLAGS: '-target aarch64-macos
                             -mmacosx-version-min=11.1  -isysroot /home/runner/work/sqldef/sqldef/MacOSX.sdk -iwithsysroot /usr/include -iframeworkwithsysroot /System/Library/Frameworks',
