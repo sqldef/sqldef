@@ -1,3 +1,7 @@
+## v0.12.8
+
+- Support non-Linux operating systems in sqlite3def releases [#149](https://github.com/k0kubun/sqldef/issues/149)
+
 ## v0.12.7
 
 - Initial support of materialized view indexes [#265](https://github.com/k0kubun/sqldef/issues/265)
