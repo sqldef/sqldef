@@ -1,0 +1,4 @@
+CreateTable: |
+  CREATE TABLE bigdata (
+    data bigint
+  );

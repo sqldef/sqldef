@@ -7,3 +7,5 @@
 /package/*
 *.sql
 /.docker
+/MacOSX.sdk.tar.xz
+/MacOSX.sdk
