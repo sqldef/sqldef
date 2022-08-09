@@ -1,3 +1,7 @@
+## v0.13.3
+
+- Cross-compile psqldef releases for macOS using osxcross instead of Zig
+
 ## v0.13.2
 
 - Initial support of comments for psqldef [#266](https://github.com/k0kubun/sqldef/issues/266)
@@ -10,6 +14,7 @@
 ## v0.13.0
 
 - Introduce a new SQL parser for psqldef [#241](https://github.com/k0kubun/sqldef/issues/241)
+  - psqldef releases are now cross-compiled using Zig
 
 ## v0.12.8
 
