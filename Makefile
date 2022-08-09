@@ -1,5 +1,5 @@
 # This doesn't work for psqldef due to lib/pq
-GOFLAGS := -tags netgo -installsuffix netgo -ldflags '-w -s --extldflags "-static" -X main.version=$(shell git describe --tags --abbrev=0)'
+GOFLAGS := -tags netgo -installsuffix netgo -ldflags '-w -s -X main.version=$(shell git describe --tags --abbrev=0)'
 GOVERSION=$(shell go version)
 GOOS=$(word 1,$(subst /, ,$(lastword $(GOVERSION))))
 GOARCH=$(word 2,$(subst /, ,$(lastword $(GOVERSION))))
@@ -8,6 +8,7 @@ SHELL=/bin/bash
 SQLDEF=$(shell pwd)
 MACOS_VERSION := 11.3
 ZIG_CFLAGS := -target $(shell uname -m)-$(shell uname -s | tr '[:upper:]' '[:lower:]')
+CC := zig cc $(ZIG_CFLAGS)
 CGO_LDFLAGS :=
 
 .PHONY: all build clean deps package package-zip package-targz
@@ -28,7 +29,7 @@ build:
 	cd cmd/sqlite3def  && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/sqlite3def
 	cd cmd/mssqldef    && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/mssqldef
 	if [[ $(GOOS) != windows ]]; then \
-		cd cmd/psqldef && CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) CC="zig cc $(ZIG_CFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" \
+		cd cmd/psqldef && CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) CC="$(CC)" CGO_LDFLAGS="$(CGO_LDFLAGS)" \
 			go build $(GOFLAGS) -o ../../$(BUILD_DIR)/psqldef; \
 	fi;
 
