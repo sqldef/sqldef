@@ -77,8 +77,7 @@ jobs:
           version: 0.9.1
       - name: make package-${{ matrix.EXT }}
         run: |
-          make package-${{ matrix.EXT }} GOOS=${{ matrix.GOOS }} GOARCH=${{ matrix.GOARCH }} \
-            "ZIG_CFLAGS=${{ matrix.ZIG_CFLAGS }}" "CGO_LDFLAGS=${{ matrix.CGO_LDFLAGS }}"
+          make package-${{ matrix.EXT }} GOOS=${{ matrix.GOOS }} GOARCH=${{ matrix.GOARCH }} "ZIG_CFLAGS=${{ matrix.ZIG_CFLAGS }}"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
