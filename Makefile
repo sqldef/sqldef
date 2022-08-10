@@ -7,8 +7,6 @@ BUILD_DIR=build/$(GOOS)-$(GOARCH)
 SHELL=/bin/bash
 SQLDEF=$(shell pwd)
 MACOS_VERSION := 11.3
-ZIG_CFLAGS := -target $(shell uname -m)-$(shell uname -s | tr '[:upper:]' '[:lower:]')
-CC := zig cc $(ZIG_CFLAGS)
 
 .PHONY: all build clean deps package package-zip package-targz
 
@@ -28,7 +26,7 @@ build:
 	cd cmd/sqlite3def  && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/sqlite3def
 	cd cmd/mssqldef    && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/mssqldef
 	if [[ $(GOOS) != windows ]]; then \
-		cd cmd/psqldef && CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) CC="$(CC)" go build $(GOFLAGS) -o ../../$(BUILD_DIR)/psqldef; \
+		cd cmd/psqldef && CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/psqldef; \
 	fi;
 
 clean:
