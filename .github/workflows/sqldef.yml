@@ -10,9 +10,6 @@ on:
       - opened
       - synchronize
       - reopened
-env:
-  OSXCROSS_REVISION: 4287300a5c96397a2ee9ab3942e66578a1982031
-  XCODE_VERSION: '12.4'
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -56,12 +53,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { GOOS: linux,   GOARCH: amd64, EXT: tar.gz, ZIG_CFLAGS: '-target x86_64-linux' }
-          - { GOOS: linux,   GOARCH: '386', EXT: tar.gz, ZIG_CFLAGS: '-target i386-linux' }
-          - { GOOS: linux,   GOARCH: arm64, EXT: tar.gz, ZIG_CFLAGS: '-target aarch64-linux' }
-          - { GOOS: linux,   GOARCH: arm,   EXT: tar.gz, ZIG_CFLAGS: '-target arm-linux-musleabi' }
-          - { GOOS: windows, GOARCH: amd64, EXT: zip,    ZIG_CFLAGS: '-target x86_64-windows' }
-          - { GOOS: windows, GOARCH: '386', EXT: zip,    ZIG_CFLAGS: '-target i386-windows' }
+          - { GOOS: linux,   GOARCH: amd64, EXT: tar.gz, ZIG_TARGET: x86_64-linux }
+          - { GOOS: linux,   GOARCH: '386', EXT: tar.gz, ZIG_TARGET: i386-linux }
+          - { GOOS: linux,   GOARCH: arm64, EXT: tar.gz, ZIG_TARGET: aarch64-linux }
+          - { GOOS: linux,   GOARCH: arm,   EXT: tar.gz, ZIG_TARGET: arm-linux-musleabi }
+          - { GOOS: windows, GOARCH: amd64, EXT: zip,    ZIG_TARGET: x86_64-windows }
+          - { GOOS: windows, GOARCH: '386', EXT: zip,    ZIG_TARGET: i386-windows }
     steps:
       - uses: actions/setup-go@v3
         with:
@@ -77,7 +74,8 @@ jobs:
           version: 0.9.1
       - name: make package-${{ matrix.EXT }}
         run: |
-          make package-${{ matrix.EXT }} GOOS=${{ matrix.GOOS }} GOARCH=${{ matrix.GOARCH }} "ZIG_CFLAGS=${{ matrix.ZIG_CFLAGS }}"
+          export "CC=zig cc -target ${{ matrix.ZIG_TARGET }}"
+          make package-${{ matrix.EXT }} GOOS=${{ matrix.GOOS }} GOARCH=${{ matrix.GOARCH }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
@@ -85,72 +83,22 @@ jobs:
           name: sqldef-${{ matrix.GOOS }}-${{ matrix.GOARCH }}
           path: package/*def_${{ matrix.GOOS }}_${{ matrix.GOARCH }}.${{ matrix.EXT }}
 
-  macos-sdk:
+  package-macos:
     runs-on: macos-latest
-    steps:
-      - uses: actions/cache@v2
-        id: macos-sdk-cache
-        with:
-          key: macos-sdk-${{ env.OSXCROSS_REVISION }}-${{ env.XCODE_VERSION }}
-          path: osxcross/tarballs
-      - name: Package MacOSX SDK
-        if: steps.macos-sdk-cache.outputs.cache-hit != 'true'
-        run: |
-          curl -sSLf https://github.com/tpoechtrager/osxcross/archive/${OSXCROSS_REVISION}.tar.gz | tar zxf -
-          mv osxcross-${OSXCROSS_REVISION} osxcross
-          cd osxcross
-          XCODEDIR=/Applications/Xcode_${XCODE_VERSION}.app tools/gen_sdk_package.sh
-          mv MacOSX*.sdk.tar.xz tarballs/
-
-  osxcross:
-    runs-on: ubuntu-latest
-    needs:
-      - macos-sdk
-    steps:
-      - name: Download osxcross
-        run: |
-          curl -sSLf https://github.com/tpoechtrager/osxcross/archive/${OSXCROSS_REVISION}.tar.gz | tar zxf -
-          mv osxcross-${OSXCROSS_REVISION} osxcross
-      - uses: actions/cache@v2
-        with:
-          key: macos-sdk-${{ env.OSXCROSS_REVISION }}-${{ env.XCODE_VERSION }}
-          path: osxcross/tarballs
-      - uses: actions/cache@v2
-        id: osxcross-cache
-        with:
-          key: osxcross-${{ runner.os }}-${{ env.OSXCROSS_REVISION }}-${{ env.XCODE_VERSION }}
-          path: osxcross/target
-      - name: Build osxcross
-        if: steps.osxcross-cache.outputs.cache-hit != 'true'
-        run: UNATTENDED=1 ./build.sh
-        working-directory: osxcross
-
-  osxcross-build:
-    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
-          - { GOOS: darwin, GOARCH: amd64, EXT: zip, CC: x86_64-apple-darwin20.2-clang }
-          - { GOOS: darwin, GOARCH: arm64, EXT: zip, CC: aarch64-apple-darwin20.2-clang }
+          - { GOOS: darwin, GOARCH: amd64, EXT: zip }
+          - { GOOS: darwin, GOARCH: arm64, EXT: zip }
       fail-fast: false
-    needs:
-      - osxcross
     steps:
+      - uses: actions/setup-go@v3
+        with:
+          go-version: 1.19
       - uses: actions/checkout@v2
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.0'
-          bundler-cache: true
-      - uses: actions/cache@v2
-        id: osxcross-cache
-        with:
-          key: osxcross-${{ runner.os }}-${{ env.OSXCROSS_REVISION }}-${{ env.XCODE_VERSION }}
-          path: osxcross/target
 
       - name: make package-${{ matrix.EXT }}
-        run: |
-          export PATH="$PWD/osxcross/target/bin:$PATH"
-          make package-${{ matrix.EXT }} GOOS=${{ matrix.GOOS }} GOARCH=${{ matrix.GOARCH }} CC=${{ matrix.CC }}
+        run: make package-${{ matrix.EXT }} GOOS=${{ matrix.GOOS }} GOARCH=${{ matrix.GOARCH }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
@@ -163,7 +111,7 @@ jobs:
     needs:
       - test
       - package
-      - osxcross-build
+      - package-macos
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/checkout@v3
