@@ -1,3 +1,7 @@
+## v0.13.4
+
+- Cross-compile psqldef releases for macOS using Xcode on the macOS runner of GitHub Actions
+
 ## v0.13.3
 
 - Cross-compile psqldef releases for macOS using osxcross instead of Zig
