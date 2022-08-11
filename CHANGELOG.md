@@ -1,3 +1,7 @@
+## v0.13.5
+
+- Handle default values of "boolean" correctly [#274](https://github.com/k0kubun/sqldef/issues/274)
+
 ## v0.13.4
 
 - Cross-compile psqldef releases for macOS using Xcode on the macOS runner of GitHub Actions
