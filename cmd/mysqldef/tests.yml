@@ -243,3 +243,27 @@ MysqlComment:
 SubstrExpression:
   desired: |
     CREATE VIEW modelstart_end AS select substr(min(202006),1,4) AS `c`;
+BooleanValue:
+  current: |
+    CREATE TABLE bools (
+      value1 boolean DEFAULT false,
+      value2 boolean DEFAULT False,
+      value3 boolean DEFAULT true,
+      value4 boolean DEFAULT True,
+      value5 TINYINT(1) DEFAULT 0,
+      value6 TINYINT(1) DEFAULT 0,
+      value7 TINYINT(1) DEFAULT 1,
+      value8 TINYINT(1) DEFAULT 1
+    );
+  desired: |
+    CREATE TABLE bools (
+      value1 boolean DEFAULT false,
+      value2 boolean DEFAULT False,
+      value3 boolean DEFAULT true,
+      value4 boolean DEFAULT True,
+      value5 TINYINT(1) DEFAULT 0,
+      value6 TINYINT(1) DEFAULT 0,
+      value7 TINYINT(1) DEFAULT 1,
+      value8 TINYINT(1) DEFAULT 1
+    );
+  output: |
