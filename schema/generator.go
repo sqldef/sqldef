@@ -304,7 +304,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				changeOrder := currentPos > desiredPos && currentPos-desiredPos > len(currentTable.columns)-len(desired.table.columns)
 
 				// Change column type and orders, *except* AUTO_INCREMENT and UNIQUE KEY.
-				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) || !areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef) || changeOrder {
+				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) || !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef) || changeOrder {
 					definition, err := g.generateColumnDefinition(desiredColumn, false)
 					if err != nil {
 						return ddls, err
@@ -362,7 +362,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				// default
-				if !areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef) {
+				if !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef) {
 					if desiredColumn.defaultDef == nil {
 						// drop
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.name)))
@@ -443,7 +443,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				// DEFAULT
-				if !areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef) {
+				if !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef) {
 					if currentColumn.defaultDef != nil {
 						// drop
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.defaultDef.constraintName)))
@@ -471,7 +471,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	currentPrimaryKey := currentTable.PrimaryKey()
 	desiredPrimaryKey := desired.table.PrimaryKey()
 
-	primaryKeysChanged := !areSamePrimaryKeys(currentPrimaryKey, desiredPrimaryKey)
+	primaryKeysChanged := !g.areSamePrimaryKeys(currentPrimaryKey, desiredPrimaryKey)
 
 	// Remove old AUTO_INCREMENT from deleted column before deleting key (primary or not)
 	// and if primary key changed
@@ -514,7 +514,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 		if currentIndex := findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex != nil {
 			// Drop and add index as needed.
-			if !areSameIndexes(*currentIndex, desiredIndex) {
+			if !g.areSameIndexes(*currentIndex, desiredIndex) {
 				ddls = append(ddls, g.generateDropIndex(desired.table.name, desiredIndex.name, desiredIndex.constraint))
 				ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
 			}
@@ -618,7 +618,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 		currentTable.indexes = append(currentTable.indexes, desiredIndex)
 	} else {
 		// Index found. If it's different, drop and add index.
-		if !areSameIndexes(*currentIndex, desiredIndex) {
+		if !g.areSameIndexes(*currentIndex, desiredIndex) {
 			ddls = append(ddls, g.generateDropIndex(currentTable.name, currentIndex.name, currentIndex.constraint))
 			ddls = append(ddls, statement)
 
@@ -1442,7 +1442,7 @@ func areSameIdentityDefinition(identityA *Identity, identityB *Identity) bool {
 	return identityA.behavior == identityB.behavior && identityA.notForReplication == identityB.notForReplication
 }
 
-func areSameDefaultValue(currentDefault *DefaultDefinition, desiredDefault *DefaultDefinition) bool {
+func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desiredDefault *DefaultDefinition) bool {
 	var current *Value
 	var desired *Value
 	if currentDefault != nil && !isNullValue(currentDefault.value) {
@@ -1452,10 +1452,10 @@ func areSameDefaultValue(currentDefault *DefaultDefinition, desiredDefault *Defa
 		desired = desiredDefault.value
 	}
 
-	return areSameValue(current, desired)
+	return g.areSameValue(current, desired)
 }
 
-func areSameValue(current, desired *Value) bool {
+func (g *Generator) areSameValue(current, desired *Value) bool {
 	if current == nil && desired == nil {
 		return true
 	}
@@ -1471,6 +1471,18 @@ func areSameValue(current, desired *Value) bool {
 		// Ideally we should do this seeing precision in a data type.
 		currentRaw = currentRaw[0:len(desiredRaw)]
 	}
+
+	// NOTE: Boolean constants is evaluated as TINYINT(1) value in MySQL.
+	if g.mode == GeneratorModeMysql {
+		if desired.valueType == ValueTypeBool {
+			if strings.ToLower(string(desired.raw)) == "false" {
+				desiredRaw = "0"
+			} else if strings.ToLower(string(desired.raw)) == "true" {
+				desiredRaw = "1"
+			}
+		}
+	}
+
 	return currentRaw == desiredRaw
 }
 
@@ -1520,15 +1532,15 @@ func (g *Generator) normalizeDataType(dataType string) string {
 	return dataType
 }
 
-func areSamePrimaryKeys(primaryKeyA *Index, primaryKeyB *Index) bool {
+func (g *Generator) areSamePrimaryKeys(primaryKeyA *Index, primaryKeyB *Index) bool {
 	if primaryKeyA != nil && primaryKeyB != nil {
-		return areSameIndexes(*primaryKeyA, *primaryKeyB)
+		return g.areSameIndexes(*primaryKeyA, *primaryKeyB)
 	} else {
 		return primaryKeyA == nil && primaryKeyB == nil
 	}
 }
 
-func areSameIndexes(indexA Index, indexB Index) bool {
+func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 	if indexA.unique != indexB.unique {
 		return false
 	}
@@ -1565,7 +1577,7 @@ func areSameIndexes(indexA Index, indexB Index) bool {
 
 	for _, optionB := range indexB.options {
 		if optionA := findIndexOptionByName(indexA.options, optionB.optionName); optionA != nil {
-			if !areSameValue(optionA.value, optionB.value) {
+			if !g.areSameValue(optionA.value, optionB.value) {
 				return false
 			}
 		} else {
