@@ -12,14 +12,6 @@ MACOS_VERSION := 11.3
 
 all: build
 
-MacOSX.sdk.tar.xz:
-	wget https://github.com/phracker/MacOSX-SDKs/releases/download/$(MACOS_VERSION)/MacOSX$(MACOS_VERSION).sdk.tar.xz
-	mv MacOSX$(MACOS_VERSION).sdk.tar.xz $@
-
-MacOSX.sdk: MacOSX.sdk.tar.xz
-	tar xf $<
-	mv MacOSX$(MACOS_VERSION).sdk $@
-
 build:
 	mkdir -p $(BUILD_DIR)
 	cd cmd/mysqldef    && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/mysqldef
