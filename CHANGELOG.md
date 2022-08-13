@@ -1,7 +1,3 @@
-## v0.13.7
-
-- Stabilize default value comparison for mysqldef [#275](https://github.com/k0kubun/sqldef/issues/275)
-
 ## v0.13.6
 
 - Support altering table comments for mysqldef [#271](https://github.com/k0kubun/sqldef/issues/271)
