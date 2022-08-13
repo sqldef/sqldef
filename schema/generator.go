@@ -1469,8 +1469,8 @@ func (g *Generator) areSameValue(current, desired *Value) bool {
 	}
 
 	// NOTE: -1 can be changed to '-1' in show create table and valueType is not reliable
-	currentRaw := string(current.raw)
-	desiredRaw := string(desired.raw)
+	currentRaw := strings.ToLower(string(current.raw))
+	desiredRaw := strings.ToLower(string(desired.raw))
 	if desired.valueType == ValueTypeFloat && len(currentRaw) > len(desiredRaw) {
 		// Round "0.00" to "0.0" for comparison with desired.
 		// Ideally we should do this seeing precision in a data type.

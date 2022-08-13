@@ -282,3 +282,9 @@ TableComment:
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='都道府県マスター';
   output: |
     ALTER TABLE `prefecture` COMMENT = '都道府県マスター';
+UUIDToBin:
+  desired: |
+    CREATE TABLE users (
+      id BINARY(16) NOT NULL DEFAULT (UUID_TO_BIN(UUID())),
+      PRIMARY KEY (id)
+    );
