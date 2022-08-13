@@ -7,7 +7,6 @@ import (
 	"syscall"
 
 	"github.com/k0kubun/sqldef/database/file"
-	"github.com/k0kubun/sqldef/parser"
 
 	"github.com/jessevdk/go-flags"
 	"github.com/k0kubun/sqldef"
@@ -125,6 +124,6 @@ func main() {
 		defer db.Close()
 	}
 
-	sqlParser := database.NewParser(parser.ParserModeMysql)
+	sqlParser := mysql.NewParser()
 	sqldef.Run(schema.GeneratorModeMysql, db, sqlParser, options)
 }
