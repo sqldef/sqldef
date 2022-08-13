@@ -288,3 +288,4 @@ UUIDToBin:
       id BINARY(16) NOT NULL DEFAULT (UUID_TO_BIN(UUID())),
       PRIMARY KEY (id)
     );
+  min_version: '8.0'
