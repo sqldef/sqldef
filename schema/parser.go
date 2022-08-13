@@ -224,6 +224,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL) (Table, error) {
 		indexes:     indexes,
 		checks:      checks,
 		foreignKeys: foreignKeys,
+		options:     stmt.TableSpec.Options,
 	}, nil
 }
 
@@ -470,7 +471,7 @@ func ParseDDLs(mode GeneratorMode, sqlParser database.Parser, sql string) ([]DDL
 // Replace pseudo collation "binary" with "{charset}_bin"
 func normalizeCollate(collate string, table parser.TableSpec) string {
 	if collate == "binary" {
-		return detectCharset(table) + "_bin"
+		return table.Options["default charset"] + "_bin"
 	} else {
 		return collate
 	}
@@ -496,17 +497,6 @@ func normalizedTable(mode GeneratorMode, tableName string) string {
 	} else {
 		return tableName
 	}
-}
-
-// TODO: parse charset in parser.y instead of "detecting" it
-func detectCharset(table parser.TableSpec) string {
-	for _, option := range strings.Split(table.Options, " ") {
-		if strings.HasPrefix(option, "charset=") {
-			return strings.TrimLeft(option, "charset=")
-		}
-	}
-	// TODO: consider returning err when charset is missing
-	return ""
 }
 
 func parseIdentity(opt *parser.IdentityOpt) *Identity {

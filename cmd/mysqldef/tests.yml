@@ -267,3 +267,18 @@ BooleanValue:
       value8 TINYINT(1) DEFAULT 1
     );
   output: |
+TableComment:
+  current: |
+    CREATE TABLE `prefecture` (
+      `id` int(11) unsigned NOT NULL COMMENT 'ID',
+      `name` varchar(50) NOT NULL COMMENT '都道府県名',
+      PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+  desired: |
+    CREATE TABLE `prefecture` (
+      `id` int(11) unsigned NOT NULL COMMENT 'ID',
+      `name` varchar(50) NOT NULL COMMENT '都道府県名',
+      PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='都道府県マスター';
+  output: |
+    ALTER TABLE `prefecture` COMMENT = '都道府県マスター';

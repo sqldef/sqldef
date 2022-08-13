@@ -49,7 +49,7 @@ type Table struct {
 	checks      []CheckDefinition
 	foreignKeys []ForeignKey
 	policies    []Policy
-	// XXX: have options and alter on its change?
+	options     map[string]string
 }
 
 type Column struct {

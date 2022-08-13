@@ -66,7 +66,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	}
 	currentDDLs = FilterTables(currentDDLs, config)
 
-	tables, views, triggers, types, comments, err := convertDDLsToSchema(currentDDLs)
+	tables, views, triggers, types, comments, err := aggregateDDLsToSchema(currentDDLs)
 	if err != nil {
 		return nil, err
 	}
@@ -585,6 +585,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		} else {
 			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), desiredCheck.definition))
 		}
+	}
+
+	// Examine table comment
+	if currentTable.options["comment"] != desired.table.options["comment"] {
+		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s COMMENT = %s", g.escapeTableName(desired.table.name), desired.table.options["comment"]))
 	}
 
 	return ddls, nil
@@ -1225,7 +1230,7 @@ func mergeTable(table1 *Table, table2 Table) {
 	}
 }
 
-func convertDDLsToSchema(ddls []DDL) ([]*Table, []*View, []*Trigger, []*Type, []*Comment, error) {
+func aggregateDDLsToSchema(ddls []DDL) ([]*Table, []*View, []*Trigger, []*Type, []*Comment, error) {
 	var tables []*Table
 	var views []*View
 	var triggers []*Trigger

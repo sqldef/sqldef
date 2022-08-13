@@ -123,6 +123,7 @@ func forceEOF(yylex interface{}) {
   arrayConstructor *ArrayConstructor
   arrayElements ArrayElements
   arrayElement  ArrayElement
+  tableOptions  map[string]string
 }
 
 %token LEX_ERROR
@@ -331,7 +332,8 @@ func forceEOF(yylex interface{}) {
 %type <str> index_or_key
 %type <str> equal_opt
 %type <TableSpec> table_spec table_column_list
-%type <str> table_option_list table_option table_opt_value
+%type <str> table_opt_name table_opt_value
+%type <tableOptions> table_option_list
 %type <indexInfo> index_info
 %type <indexColumn> index_column
 %type <bytes> operator_class
@@ -2270,33 +2272,26 @@ sql_id_list:
     $$ = append($1, $3)
   }
 
-table_option_list:
-  {
-    $$ = ""
-  }
-| table_option
-  {
-    $$ = " " + string($1)
-  }
-| table_option_list ',' table_option
-  {
-    $$ = string($1) + ", " + string($3)
-  }
-
 // rather than explicitly parsing the various keywords for table options,
 // just accept any number of keywords, IDs, strings, numbers, and '='
-table_option:
-  table_opt_value
+table_option_list:
+  {
+    $$ = map[string]string{}
+  }
+| table_option_list table_opt_name '=' table_opt_value
   {
     $$ = $1
+    $$[string($2)] = string($4)
   }
-| table_option table_opt_value
+
+table_opt_name:
+  reserved_sql_id
   {
-    $$ = $1 + " " + $2
+    $$ = $1.String()
   }
-| table_option '=' table_opt_value
+| table_opt_name reserved_sql_id
   {
-    $$ = $1 + "=" + $3
+    $$ = $1 + " " + $2.String()
   }
 
 table_opt_value:

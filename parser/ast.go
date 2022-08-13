@@ -627,7 +627,7 @@ type TableSpec struct {
 	Indexes     []*IndexDefinition
 	ForeignKeys []*ForeignKeyDefinition
 	Checks      []*CheckDefinition
-	Options     string
+	Options     map[string]string
 }
 
 // Format formats the node.
@@ -644,7 +644,11 @@ func (ts *TableSpec) Format(buf *TrackedBuffer) {
 		buf.Myprintf(",\n\t%v", idx)
 	}
 
-	buf.Myprintf("\n)%s", strings.Replace(ts.Options, ", ", ",\n  ", -1))
+	options := ""
+	for key, value := range ts.Options {
+		options += " " + key + "=" + value
+	}
+	buf.Myprintf("\n)%s", strings.Replace(options, ", ", ",\n  ", -1))
 }
 
 // AddColumn appends the given column to the list in the spec
