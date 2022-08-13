@@ -1,3 +1,7 @@
+## v0.13.6
+
+- Support altering table comments for mysqldef [#271](https://github.com/k0kubun/sqldef/issues/271)
+
 ## v0.13.5
 
 - Handle default values of "boolean" correctly [#274](https://github.com/k0kubun/sqldef/issues/274)
