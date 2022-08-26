@@ -147,7 +147,7 @@ func mysqlBuildDSN(config database.Config) string {
 	c.Passwd = config.Password
 	c.DBName = config.DbName
 	c.AllowCleartextPasswords = config.MySQLEnableCleartextPlugin
-	c.TLSConfig = "preferred"
+	c.TLSConfig = config.SslMode
 	if config.Socket == "" {
 		c.Net = "tcp"
 		c.Addr = fmt.Sprintf("%s:%d", config.Host, config.Port)

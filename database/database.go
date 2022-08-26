@@ -22,6 +22,7 @@ type Config struct {
 	// Only MySQL
 	MySQLEnableCleartextPlugin bool
 	SkipView                   bool
+	SslMode                    string
 }
 
 type GeneratorConfig struct {
