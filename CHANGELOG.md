@@ -1,3 +1,7 @@
+## v0.13.8
+
+- Add --ssl-mode option for mysqldef [#277](https://github.com/k0kubun/sqldef/issues/277)
+
 ## v0.13.7
 
 - Stabilize default value comparison for mysqldef [#275](https://github.com/k0kubun/sqldef/issues/275)
