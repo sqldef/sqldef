@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"syscall"
 
 	"github.com/k0kubun/sqldef/database/file"
@@ -28,6 +29,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		Host                  string   `short:"h" long:"host" description:"Host to connect to the MySQL server" value-name:"host_name" default:"127.0.0.1"`
 		Port                  uint     `short:"P" long:"port" description:"Port used for the connection" value-name:"port_num" default:"3306"`
 		Socket                string   `short:"S" long:"socket" description:"The socket file to use for connection" value-name:"socket"`
+		SslMode               string   `long:"ssl-mode" description:"SSL connection mode(PREFERRED,REQUIRED,DISABLED)." value-name:"ssl_mode" default:"PREFERRED"`
 		Prompt                bool     `long:"password-prompt" description:"Force MySQL user password prompt"`
 		EnableCleartextPlugin bool     `long:"enable-cleartext-plugin" description:"Enable/disable the clear text authentication plugin"`
 		File                  []string `long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"sql_file" default:"-"`
@@ -83,6 +85,19 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		databaseName = args[0]
 	}
 
+	switch strings.ToLower(opts.SslMode) {
+	case "disabled":
+		opts.SslMode = "false"
+	case "preferred":
+		opts.SslMode = "preferred"
+	case "required":
+		opts.SslMode = "true"
+	default:
+		fmt.Printf("Wrong value for ssl-mode is given: %v\n\n", opts.SslMode)
+		parser.WriteHelp(os.Stdout)
+		os.Exit(1)
+	}
+
 	password, ok := os.LookupEnv("MYSQL_PWD")
 	if !ok {
 		password = opts.Password
@@ -106,6 +121,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		Socket:                     opts.Socket,
 		MySQLEnableCleartextPlugin: opts.EnableCleartextPlugin,
 		SkipView:                   opts.SkipView,
+		SslMode:                    opts.SslMode,
 	}
 	return config, &options
 }
