@@ -301,3 +301,30 @@ Comment:
     COMMENT ON TABLE hoge is 'hoge table';
     COMMENT ON COLUMN hoge.id is 'hoge id';
     COMMENT ON COLUMN hoge.foo is 'foo comment';
+
+MultipleComments:
+  current: |
+    CREATE TABLE "public"."hoge" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+    CREATE TABLE "public"."bar" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+
+    COMMENT ON COLUMN hoge.id is 'hoge id';
+  desired: |
+    CREATE TABLE "public"."hoge" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+    CREATE TABLE "public"."bar" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+
+    COMMENT ON COLUMN hoge.id is 'hoge id';
+    COMMENT ON COLUMN bar.id is 'bar id';
+  output: |
+    COMMENT ON COLUMN bar.id is 'bar id';
