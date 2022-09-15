@@ -11,7 +11,7 @@ require (
 	github.com/pganalyze/pg_query_go/v2 v2.1.2
 	golang.org/x/term v0.0.0-20210406210042-72f3dc4e9b72
 	gopkg.in/yaml.v2 v2.4.0
-	modernc.org/sqlite v1.18.0
+	modernc.org/sqlite v1.18.1
 )
 
 require (
@@ -21,7 +21,6 @@ require (
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
-	github.com/mattn/go-sqlite3 v1.14.14 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897 // indirect
 	golang.org/x/mod v0.3.0 // indirect
@@ -31,8 +30,8 @@ require (
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	lukechampine.com/uint128 v1.1.1 // indirect
 	modernc.org/cc/v3 v3.36.0 // indirect
-	modernc.org/ccgo/v3 v3.16.6 // indirect
-	modernc.org/libc v1.16.7 // indirect
+	modernc.org/ccgo/v3 v3.16.8 // indirect
+	modernc.org/libc v1.16.19 // indirect
 	modernc.org/mathutil v1.4.1 // indirect
 	modernc.org/memory v1.1.1 // indirect
 	modernc.org/opt v0.1.1 // indirect
