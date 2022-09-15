@@ -730,9 +730,10 @@ func (d *PostgresDatabase) getComments(table string) ([]string, error) {
 		inner join information_schema.columns c on (
 			pgd.objsubid   = c.ordinal_position and
 			c.table_schema = st.schemaname and
-			c.table_name   = st.relname
+			c.table_name   = st.relname and
+			st.relname = $1
 		);
-	`)
+	`, table)
 	if err != nil {
 		return nil, err
 	}
