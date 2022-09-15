@@ -1,3 +1,7 @@
+## v0.13.9
+
+- Separate comment schema for each table for psqldef [#281](https://github.com/k0kubun/sqldef/issues/281)
+
 ## v0.13.8
 
 - Add --ssl-mode option for mysqldef [#277](https://github.com/k0kubun/sqldef/issues/277)
