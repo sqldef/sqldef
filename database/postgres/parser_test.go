@@ -1,9 +1,10 @@
 package postgres
 
 import (
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"testing"
+
+	"gopkg.in/yaml.v2"
 )
 
 func TestParse(t *testing.T) {
@@ -15,7 +16,7 @@ func TestParse(t *testing.T) {
 	sqlParser := NewParser()
 	for name, sql := range tests {
 		t.Run(name, func(t *testing.T) {
-			_, err = sqlParser.parseStmts(sql)
+			_, err = sqlParser.Parse(sql)
 			if err != nil {
 				t.Fatal(err)
 			}

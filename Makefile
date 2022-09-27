@@ -48,13 +48,13 @@ package-tar.gz: build
 test: test-mysqldef test-psqldef test-sqlite3def test-mssqldef
 
 test-mysqldef:
-	cd cmd/mysqldef && go test
+	go test -v ./cmd/mysqldef
 
 test-psqldef:
-	cd cmd/psqldef && go test
+	go test -v ./cmd/psqldef ./database/postgres
 
 test-sqlite3def:
-	cd cmd/sqlite3def && go test
+	go test -v ./cmd/sqlite3def
 
 test-mssqldef:
-	cd cmd/mssqldef && go test
+	go test -v ./cmd/mssqldef
