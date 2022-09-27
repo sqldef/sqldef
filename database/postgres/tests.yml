@@ -2,3 +2,7 @@ CreateTable: |
   CREATE TABLE bigdata (
     data bigint
   );
+CreateTableSchema: |
+  CREATE TABLE public.bigdata (
+    data bigint
+  );
