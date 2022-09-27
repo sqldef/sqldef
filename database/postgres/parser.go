@@ -61,6 +61,8 @@ func (p PostgresParser) parseStmt(node *pgquery.Node) (parser.Statement, error) 
 	switch stmt := node.Node.(type) {
 	case *pgquery.Node_CreateStmt:
 		return p.parseCreateStmt(stmt.CreateStmt)
+	case *pgquery.Node_ViewStmt:
+		return p.parseViewStmt(stmt.ViewStmt)
 	case *pgquery.Node_CommentStmt:
 		return p.parseCommentStmt(stmt.CommentStmt)
 	default:
@@ -102,6 +104,105 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 			Columns: columns,
 		},
 	}, nil
+}
+
+func (p PostgresParser) parseViewStmt(stmt *pgquery.ViewStmt) (parser.Statement, error) {
+	schemaName, viewName, err := p.parseTableName(stmt.View)
+	if err != nil {
+		return nil, err
+	}
+
+	var definition parser.SelectStatement
+	switch node := stmt.Query.Node.(type) {
+	case *pgquery.Node_SelectStmt:
+		definition, err = p.parseSelectStmt(node.SelectStmt)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("unknown node in parseViewStmt: %#v", node)
+	}
+
+	return &parser.DDL{
+		Action: parser.CreateViewStr,
+		View: &parser.View{
+			Action: parser.CreateViewStr,
+			Name: parser.TableName{
+				Qualifier: parser.NewTableIdent(schemaName),
+				Name:      parser.NewTableIdent(viewName),
+			},
+			Definition: definition,
+		},
+	}, nil
+}
+
+func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.SelectStatement, error) {
+	if stmt.DistinctClause != nil || stmt.IntoClause != nil || stmt.WhereClause != nil || stmt.GroupClause != nil || stmt.HavingClause != nil ||
+		stmt.WindowClause != nil || stmt.ValuesLists != nil || stmt.SortClause != nil || stmt.LimitOffset != nil || stmt.LimitCount != nil ||
+		stmt.LimitOption != 1 || stmt.LockingClause != nil || stmt.WithClause != nil || stmt.Op != 1 || stmt.All != false || stmt.Larg != nil || stmt.Rarg != nil {
+		return nil, fmt.Errorf("unhandled node in parseSelectStmt: %#v", stmt)
+	}
+
+	var selectExprs parser.SelectExprs
+	for _, target := range stmt.TargetList {
+		switch node := target.Node.(type) {
+		case *pgquery.Node_ResTarget:
+			selectExpr, err := p.parseResTarget(node.ResTarget)
+			if err != nil {
+				return nil, err
+			}
+			selectExprs = append(selectExprs, selectExpr)
+		default:
+			return nil, fmt.Errorf("unknown node in parseSelectStmt: %#v", node)
+		}
+	}
+
+	var fromSchema, fromTable string
+	var err error
+	switch node := stmt.FromClause[0].Node.(type) {
+	case *pgquery.Node_RangeVar:
+		fromSchema, fromTable, err = p.parseTableName(node.RangeVar)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("unknown node in parseSelectStmt: %#v", node)
+	}
+
+	return &parser.Select{
+		SelectExprs: selectExprs,
+		From: parser.TableExprs{
+			&parser.AliasedTableExpr{
+				Expr: parser.TableName{
+					Qualifier: parser.NewTableIdent(fromSchema),
+					Name:      parser.NewTableIdent(fromTable),
+				},
+			},
+		},
+	}, nil
+}
+
+func (p PostgresParser) parseResTarget(stmt *pgquery.ResTarget) (parser.SelectExpr, error) {
+	expr, err := p.parseExpr(stmt.Val)
+	if err != nil {
+		return nil, err
+	}
+
+	return &parser.AliasedExpr{
+		Expr: expr,
+		As:   parser.NewColIdent(stmt.Name),
+	}, nil
+}
+
+func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
+	switch node := stmt.Node.(type) {
+	case *pgquery.Node_ColumnRef:
+		return &parser.ColName{
+			Name: parser.NewColIdent(node.ColumnRef.Fields[0].Node.(*pgquery.Node_String_).String_.Str),
+		}, nil
+	default:
+		return nil, fmt.Errorf("unknown node in parseExpr: %#v", node)
+	}
 }
 
 func (p PostgresParser) parseCommentStmt(stmt *pgquery.CommentStmt) (parser.Statement, error) {

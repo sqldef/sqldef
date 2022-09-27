@@ -6,3 +6,6 @@ CreateTableSchema: |
   CREATE TABLE public.bigdata (
     data bigint
   );
+CreateView: |
+  create view hoge_view as
+  select amount from hoge;
