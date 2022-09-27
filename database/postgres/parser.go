@@ -73,7 +73,7 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 		return nil, fmt.Errorf("unhandled node in parseCreateStmt: %#v", stmt)
 	}
 
-	tableName, err := p.parseTableName(stmt.Relation)
+	schemaName, tableName, err := p.parseTableName(stmt.Relation)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,8 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 	return &parser.DDL{
 		Action: parser.CreateStr,
 		NewName: parser.TableName{
-			Name: parser.NewTableIdent(tableName),
+			Qualifier: parser.NewTableIdent(schemaName),
+			Name:      parser.NewTableIdent(tableName),
 		},
 		TableSpec: &parser.TableSpec{
 			Columns: columns,
@@ -126,11 +127,11 @@ func (p PostgresParser) parseCommentStmt(stmt *pgquery.CommentStmt) (parser.Stat
 	}, nil
 }
 
-func (p PostgresParser) parseTableName(relation *pgquery.RangeVar) (string, error) {
-	if relation.Schemaname != "" || relation.Catalogname != "" {
-		return "", fmt.Errorf("unhandled node in parseTableName: %#v", relation)
+func (p PostgresParser) parseTableName(relation *pgquery.RangeVar) (string, string, error) {
+	if relation.Catalogname != "" {
+		return "", "", fmt.Errorf("unhandled node in parseTableName: %#v", relation)
 	}
-	return relation.Relname, nil
+	return relation.Schemaname, relation.Relname, nil
 }
 
 func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef) (*parser.ColumnDefinition, error) {
