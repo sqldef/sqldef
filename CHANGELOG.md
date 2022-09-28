@@ -1,3 +1,7 @@
+## v0.13.10
+
+- Stabilize create view comparison for psqldef [#278](https://github.com/k0kubun/sqldef/issues/278)
+
 ## v0.13.9
 
 - Separate comment schema for each table for psqldef [#281](https://github.com/k0kubun/sqldef/issues/281)
