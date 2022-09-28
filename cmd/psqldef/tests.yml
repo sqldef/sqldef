@@ -301,7 +301,6 @@ Comment:
     COMMENT ON TABLE hoge is 'hoge table';
     COMMENT ON COLUMN hoge.id is 'hoge id';
     COMMENT ON COLUMN hoge.foo is 'foo comment';
-
 MultipleComments:
   current: |
     CREATE TABLE "public"."hoge" (
@@ -328,3 +327,19 @@ MultipleComments:
     COMMENT ON COLUMN bar.id is 'bar id';
   output: |
     COMMENT ON COLUMN bar.id is 'bar id';
+CreateViewCast:
+  current: |
+    CREATE TABLE "public"."hoge" (
+      "amount" text
+    );
+    CREATE VIEW public.hoge_view AS SELECT (hoge.amount)::numeric(10,2) AS amount_num FROM hoge;
+  desired: |
+    create table hoge (
+      amount text
+    );
+
+    create view hoge_view as
+    select
+      amount::numeric(10,2) as amount_num
+    from hoge;
+  output: ''

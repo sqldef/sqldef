@@ -202,8 +202,9 @@ func (p PostgresParser) parseResTarget(stmt *pgquery.ResTarget) (parser.SelectEx
 func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 	switch node := stmt.Node.(type) {
 	case *pgquery.Node_ColumnRef:
+		field := node.ColumnRef.Fields[len(node.ColumnRef.Fields)-1] // Ignore table name for easy comparison
 		return &parser.ColName{
-			Name: parser.NewColIdent(node.ColumnRef.Fields[0].Node.(*pgquery.Node_String_).String_.Str),
+			Name: parser.NewColIdent(field.Node.(*pgquery.Node_String_).String_.Str),
 		}, nil
 	case *pgquery.Node_TypeCast:
 		expr, err := p.parseExpr(node.TypeCast.Arg)

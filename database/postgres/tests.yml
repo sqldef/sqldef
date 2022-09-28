@@ -12,3 +12,6 @@ CreateView: |
 CreateViewWithCast: |
   create view hoge_view as
   select amount::numeric(10,2) from hoge;
+CreateViewWithFullColumn: |
+  CREATE VIEW public.hoge_view
+  AS SELECT (hoge.amount)::numeric(10,2) AS amount_num FROM hoge;
