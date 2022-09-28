@@ -9,3 +9,6 @@ CreateTableSchema: |
 CreateView: |
   create view hoge_view as
   select amount from hoge;
+CreateViewWithCast: |
+  create view hoge_view as
+  select amount::numeric(10,2) from hoge;

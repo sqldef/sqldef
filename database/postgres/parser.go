@@ -39,12 +39,12 @@ func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
 
 		// First, attempt to parse it with the wrapper of PostgreSQL's parser. If it works, use the result.
 		stmt, err := p.parseStmt(rawStmt.Stmt)
-		if p.testing && err != nil {
-			return nil, err
-		}
 		if err != nil {
 			// Otherwise, fallback to the generic parser. We intend to deprecate this path in the future.
-			stmts, err := p.parser.Parse(ddl)
+			var stmts []database.DDLStatement
+			if !p.testing { // Disable fallback in parser tests
+				stmts, err = p.parser.Parse(ddl)
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -204,6 +204,14 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 	case *pgquery.Node_ColumnRef:
 		return &parser.ColName{
 			Name: parser.NewColIdent(node.ColumnRef.Fields[0].Node.(*pgquery.Node_String_).String_.Str),
+		}, nil
+	case *pgquery.Node_TypeCast:
+		expr, err := p.parseExpr(node.TypeCast.Arg)
+		if err != nil {
+			return nil, err
+		}
+		return &parser.CollateExpr{ // TODO: is this appropriate?
+			Expr: expr,
 		}, nil
 	default:
 		return nil, fmt.Errorf("unknown node in parseExpr: %#v", node)
