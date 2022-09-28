@@ -1,12 +1,14 @@
 package mysql
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"fmt"
-	"strings"
-
 	driver "github.com/go-sql-driver/mysql"
 	"github.com/k0kubun/sqldef/database"
+	"io/ioutil"
+	"strings"
 )
 
 type MysqlDatabase struct {
@@ -15,6 +17,13 @@ type MysqlDatabase struct {
 }
 
 func NewDatabase(config database.Config) (database.Database, error) {
+	if config.SslMode == "custom" {
+		err := registerTLSConfig(config.SslCa)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	db, err := sql.Open("mysql", mysqlBuildDSN(config))
 	if err != nil {
 		return nil, err
@@ -156,4 +165,22 @@ func mysqlBuildDSN(config database.Config) string {
 		c.Addr = config.Socket
 	}
 	return c.FormatDSN()
+}
+
+func registerTLSConfig(pemPath string) error {
+	rootCertPool := x509.NewCertPool()
+	pem, err := ioutil.ReadFile(pemPath)
+	if err != nil {
+		return err
+	}
+
+	if ok := rootCertPool.AppendCertsFromPEM(pem); !ok {
+		return fmt.Errorf("failed to append PEM")
+	}
+
+	driver.RegisterTLSConfig("custom", &tls.Config{
+		RootCAs: rootCertPool,
+	})
+
+	return nil
 }
