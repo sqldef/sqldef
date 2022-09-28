@@ -30,6 +30,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		Port                  uint     `short:"P" long:"port" description:"Port used for the connection" value-name:"port_num" default:"3306"`
 		Socket                string   `short:"S" long:"socket" description:"The socket file to use for connection" value-name:"socket"`
 		SslMode               string   `long:"ssl-mode" description:"SSL connection mode(PREFERRED,REQUIRED,DISABLED)." value-name:"ssl_mode" default:"PREFERRED"`
+		SslCa                 string   `long:"ssl-ca" description:"File that contains list of trusted SSL Certificate Authorities" value-name:"ssl_ca"`
 		Prompt                bool     `long:"password-prompt" description:"Force MySQL user password prompt"`
 		EnableCleartextPlugin bool     `long:"enable-cleartext-plugin" description:"Enable/disable the clear text authentication plugin"`
 		File                  []string `long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"sql_file" default:"-"`
@@ -92,6 +93,8 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		opts.SslMode = "preferred"
 	case "required":
 		opts.SslMode = "true"
+	case "custom":
+		opts.SslMode = "custom"
 	default:
 		fmt.Printf("Wrong value for ssl-mode is given: %v\n\n", opts.SslMode)
 		parser.WriteHelp(os.Stdout)
@@ -122,6 +125,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		MySQLEnableCleartextPlugin: opts.EnableCleartextPlugin,
 		SkipView:                   opts.SkipView,
 		SslMode:                    opts.SslMode,
+		SslCa:                      opts.SslCa,
 	}
 	return config, &options
 }
