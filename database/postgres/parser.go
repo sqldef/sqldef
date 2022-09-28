@@ -10,12 +10,14 @@ import (
 )
 
 type PostgresParser struct {
-	parser database.GenericParser
+	parser  database.GenericParser
+	testing bool
 }
 
 func NewParser() PostgresParser {
 	return PostgresParser{
-		parser: database.NewParser(parser.ParserModePostgres),
+		parser:  database.NewParser(parser.ParserModePostgres),
+		testing: false,
 	}
 }
 
@@ -37,6 +39,9 @@ func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
 
 		// First, attempt to parse it with the wrapper of PostgreSQL's parser. If it works, use the result.
 		stmt, err := p.parseStmt(rawStmt.Stmt)
+		if p.testing && err != nil {
+			return nil, err
+		}
 		if err != nil {
 			// Otherwise, fallback to the generic parser. We intend to deprecate this path in the future.
 			stmts, err := p.parser.Parse(ddl)

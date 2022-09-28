@@ -14,6 +14,7 @@ func TestParse(t *testing.T) {
 	}
 
 	sqlParser := NewParser()
+	sqlParser.testing = true
 	for name, sql := range tests {
 		t.Run(name, func(t *testing.T) {
 			_, err = sqlParser.Parse(sql)
