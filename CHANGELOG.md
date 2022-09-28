@@ -1,3 +1,7 @@
+## v0.13.11
+
+- Add --ssl-ca option for mysqldef [#283](https://github.com/k0kubun/sqldef/issues/283)
+
 ## v0.13.10
 
 - Stabilize create view comparison for psqldef [#278](https://github.com/k0kubun/sqldef/issues/278)
