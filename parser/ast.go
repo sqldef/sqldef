@@ -506,28 +506,30 @@ type DDL struct {
 	Trigger       *Trigger
 	Type          *Type
 	Comment       *Comment
+	Extension     *Extension
 }
 
 // DDL strings.
 const (
-	CreateStr        = "create"
-	AlterStr         = "alter"
-	DropStr          = "drop"
-	RenameStr        = "rename"
-	TruncateStr      = "truncate"
-	CreateVindexStr  = "create vindex"
-	AddColVindexStr  = "add vindex"
-	DropColVindexStr = "drop vindex"
-	AddIndexStr      = "add index"
-	CreateIndexStr   = "create index"
-	AddPrimaryKeyStr = "add primary key"
-	AddForeignKeyStr = "add foreign key"
-	CreatePolicyStr  = "create policy"
-	CreateViewStr    = "create view"
-	CreateMatViewStr = "create materialized view"
-	CreateTriggerStr = "create trigger"
-	CreateTypeStr    = "create type"
-	CommentStr       = "comment"
+	CreateStr          = "create"
+	AlterStr           = "alter"
+	DropStr            = "drop"
+	RenameStr          = "rename"
+	TruncateStr        = "truncate"
+	CreateVindexStr    = "create vindex"
+	AddColVindexStr    = "add vindex"
+	DropColVindexStr   = "drop vindex"
+	AddIndexStr        = "add index"
+	CreateIndexStr     = "create index"
+	AddPrimaryKeyStr   = "add primary key"
+	AddForeignKeyStr   = "add foreign key"
+	CreatePolicyStr    = "create policy"
+	CreateViewStr      = "create view"
+	CreateMatViewStr   = "create materialized view"
+	CreateTriggerStr   = "create trigger"
+	CreateTypeStr      = "create type"
+	CommentStr         = "comment"
+	CreateExtensionStr = "create extension"
 )
 
 // Format formats the node.
@@ -1145,6 +1147,10 @@ type Policy struct {
 	To         []ColIdent
 	Using      *Where
 	WithCheck  *Where
+}
+
+type Extension struct {
+	Name string
 }
 
 type Permissive string

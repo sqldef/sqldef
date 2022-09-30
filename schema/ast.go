@@ -238,6 +238,11 @@ type Comment struct {
 	comment   parser.Comment
 }
 
+type Extension struct {
+	statement string
+	extension parser.Extension
+}
+
 func (c *CreateTable) Statement() string {
 	return c.statement
 }
@@ -275,6 +280,10 @@ func (t *Type) Statement() string {
 }
 
 func (t *Comment) Statement() string {
+	return t.statement
+}
+
+func (t *Extension) Statement() string {
 	return t.statement
 }
 

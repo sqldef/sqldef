@@ -152,9 +152,9 @@ func TestPsqldefCreateTableNotNull(t *testing.T) {
 
 func TestPsqldefCitextExtension(t *testing.T) {
 	resetTestDatabase()
-	mustExecuteSQL("CREATE EXTENSION citext;")
 
 	createTable := stripHeredoc(`
+		CREATE EXTENSION citext;
 		CREATE TABLE users (
 		  name citext
 		);
@@ -169,9 +169,9 @@ func TestPsqldefCitextExtension(t *testing.T) {
 
 func TestPsqldefIgnoreExtension(t *testing.T) {
 	resetTestDatabase()
-	mustExecuteSQL("CREATE EXTENSION pg_buffercache;")
 
 	createTable := stripHeredoc(`
+		CREATE EXTENSION pg_buffercache;
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name text,
