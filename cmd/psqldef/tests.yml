@@ -343,7 +343,6 @@ CreateViewCast:
       amount::numeric(10,2) as amount_num
     from hoge;
   output: ''
-
 CreateExtension:
   current: |
     CREATE EXTENSION pgcrypto;
@@ -352,7 +351,6 @@ CreateExtension:
     CREATE EXTENSION btree_gist;
   output: |
     CREATE EXTENSION btree_gist;
-
 DropExtension:
   current: |
     CREATE EXTENSION pgcrypto;
@@ -361,9 +359,44 @@ DropExtension:
     CREATE EXTENSION btree_gist;
   output: |
     DROP EXTENSION "pgcrypto";
-
 CreateExtensionIfNotExists:
   desired: |
     CREATE EXTENSION IF NOT EXISTS pgcrypto;
   output: |
     CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CreateViewWithCaseWhen:
+  desired: |
+    create table hoge (
+      amount  text,
+      hoge_type text,
+      payload jsonb
+    );
+    create view hoge_view as
+    select
+      -- pattern 1
+      amount::numeric(10,2) as amount_num1,
+      -- pattern 2
+      (
+        jsonb_extract_path_text(payload, 'amount')
+      )::numeric(10,2) as amount_num2,
+      -- pattern 3
+      (
+        case hoge_type
+          when 'hoge' then jsonb_extract_path_text(payload, 'hoge', 'amount')
+        end
+      )::numeric(10,2) as amount_num3,
+      -- pattern 4
+      (
+        to_timestamp(
+          jsonb_extract_path_text(payload, 'created')::bigint
+        )
+      ) as created,
+      -- pattern 5
+      (
+        cast(
+          to_timestamp(
+            jsonb_extract_path_text(payload, 'created')::bigint
+          ) as date
+        )
+      ) as created_date
+    from hoge;

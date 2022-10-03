@@ -22,6 +22,10 @@ func NewParser() PostgresParser {
 }
 
 func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
+	// Workaround for comments (not needed?)
+	//re := regexp.MustCompilePOSIX("^ *--.*")
+	//sql = re.ReplaceAllString(sql, "")
+
 	result, err := pgquery.Parse(sql)
 	if err != nil {
 		return nil, err
@@ -203,21 +207,117 @@ func (p PostgresParser) parseResTarget(stmt *pgquery.ResTarget) (parser.SelectEx
 
 func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 	switch node := stmt.Node.(type) {
+	case *pgquery.Node_AArrayExpr:
+		var elements parser.ArrayElements
+		for _, element := range node.AArrayExpr.Elements {
+			node, err := p.parseExpr(element)
+			if err != nil {
+				return nil, err
+			}
+
+			elem, err := p.parseArrayElement(node)
+			if err != nil {
+				return nil, err
+			}
+			elements = append(elements, elem)
+		}
+		return &parser.ArrayConstructor{
+			Elements: elements,
+		}, nil
+	case *pgquery.Node_AConst:
+		return p.parseExpr(node.AConst.Val)
+	case *pgquery.Node_CaseExpr:
+		caseStmt := stmt.GetCaseExpr()
+
+		caseExpr, err := p.parseExpr(caseStmt.Arg)
+		if err != nil {
+			return nil, err
+		}
+
+		var whenExprs []*parser.When
+		for _, arg := range caseStmt.Args {
+			caseWhen := arg.Node.(*pgquery.Node_CaseWhen).CaseWhen
+
+			cond, err := p.parseExpr(caseWhen.Expr)
+			if err != nil {
+				return nil, err
+			}
+
+			result, err := p.parseExpr(caseWhen.Result)
+			if err != nil {
+				return nil, err
+			}
+
+			whenExpr := &parser.When{
+				Cond: cond,
+				Val:  result,
+			}
+			whenExprs = append(whenExprs, whenExpr)
+		}
+
+		var elseExpr parser.Expr
+		if caseStmt.Defresult == nil {
+			elseExpr = &parser.NullVal{} // normalize
+		} else {
+			elseExpr, err = p.parseExpr(caseStmt.Defresult)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return &parser.CaseExpr{
+			Expr:  caseExpr,
+			Whens: whenExprs,
+			Else:  elseExpr,
+		}, nil
 	case *pgquery.Node_ColumnRef:
 		field := node.ColumnRef.Fields[len(node.ColumnRef.Fields)-1] // Ignore table name for easy comparison
 		return &parser.ColName{
 			Name: parser.NewColIdent(field.Node.(*pgquery.Node_String_).String_.Str),
 		}, nil
+	case *pgquery.Node_FuncCall:
+		var exprs parser.SelectExprs
+
+		for _, arg := range stmt.GetFuncCall().Args {
+			expr, err := p.parseExpr(arg)
+			if err != nil {
+				return nil, err
+			}
+
+			exprs = append(exprs, &parser.AliasedExpr{
+				Expr: expr,
+			})
+		}
+
+		return &parser.FuncExpr{
+			Name:  parser.NewColIdent(node.FuncCall.Funcname[0].Node.(*pgquery.Node_String_).String_.Str),
+			Exprs: exprs,
+		}, nil
+	case *pgquery.Node_Null:
+		return &parser.NullVal{}, nil
+	case *pgquery.Node_String_:
+		return parser.NewStrVal([]byte(node.String_.Str)), nil
 	case *pgquery.Node_TypeCast:
 		expr, err := p.parseExpr(node.TypeCast.Arg)
 		if err != nil {
 			return nil, err
 		}
-		return &parser.CollateExpr{ // TODO: is this appropriate?
+		return &parser.CollateExpr{ // compatibility with the legacy parser, but there'd be a better node
 			Expr: expr,
 		}, nil
 	default:
 		return nil, fmt.Errorf("unknown node in parseExpr: %#v", node)
+	}
+}
+
+func (p PostgresParser) parseArrayElement(node parser.Expr) (parser.ArrayElement, error) {
+	switch node := node.(type) {
+	case *parser.SQLVal:
+		return node, nil
+	case *parser.CollateExpr:
+		return p.parseArrayElement(node.Expr)
+	default:
+		return nil, fmt.Errorf("unknown expr in parseArrayElement: %#v", node)
 	}
 }
 

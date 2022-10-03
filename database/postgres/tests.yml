@@ -15,3 +15,33 @@ CreateViewWithCast: |
 CreateViewWithFullColumn: |
   CREATE VIEW public.hoge_view
   AS SELECT (hoge.amount)::numeric(10,2) AS amount_num FROM hoge;
+CreateViewWithCaseWhen: |
+  create view hoge_view as
+  select
+    -- pattern 1
+    amount::numeric(10,2) as amount_num1,
+    -- pattern 2
+    (
+      jsonb_extract_path_text(payload, 'amount')
+    )::numeric(10,2) as amount_num2,
+    -- pattern 3
+    (
+      case hoge_type
+        when 'hoge' then jsonb_extract_path_text(payload, 'hoge', 'amount')
+      end
+    )::numeric(10,2) as amount_num3,
+    -- pattern 4
+    (
+      to_timestamp(
+        jsonb_extract_path_text(payload, 'created')::bigint
+      )
+    ) as created,
+    -- pattern 5
+    (
+      cast(
+        to_timestamp(
+          jsonb_extract_path_text(payload, 'created')::bigint
+        ) as date
+      )
+    ) as created_date
+  from hoge;
