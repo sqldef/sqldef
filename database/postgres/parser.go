@@ -70,6 +70,8 @@ func (p PostgresParser) parseStmt(node *pgquery.Node) (parser.Statement, error) 
 		return p.parseViewStmt(stmt.ViewStmt)
 	case *pgquery.Node_CommentStmt:
 		return p.parseCommentStmt(stmt.CommentStmt)
+	case *pgquery.Node_CreateExtensionStmt:
+		return p.parseExtensionStmt(stmt.CreateExtensionStmt)
 	default:
 		return nil, fmt.Errorf("unknown node in parseStmt: %#v", stmt)
 	}
@@ -247,6 +249,15 @@ func (p PostgresParser) parseTableName(relation *pgquery.RangeVar) (string, stri
 		return "", "", fmt.Errorf("unhandled node in parseTableName: %#v", relation)
 	}
 	return relation.Schemaname, relation.Relname, nil
+}
+
+func (p PostgresParser) parseExtensionStmt(stmt *pgquery.CreateExtensionStmt) (parser.Statement, error) {
+	return &parser.DDL{
+		Action: parser.CreateExtensionStr,
+		Extension: &parser.Extension{
+			Name: stmt.Extname,
+		},
+	}, nil
 }
 
 func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef) (*parser.ColumnDefinition, error) {

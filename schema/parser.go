@@ -438,6 +438,11 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement) (DDL, error
 				statement: ddl,
 				comment:   *stmt.Comment,
 			}, nil
+		} else if stmt.Action == parser.CreateExtensionStr {
+			return &Extension{
+				statement: ddl,
+				extension: *stmt.Extension,
+			}, nil
 		} else {
 			return nil, fmt.Errorf(
 				"unsupported type of DDL action '%s': %s",

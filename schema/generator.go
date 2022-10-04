@@ -49,6 +49,9 @@ type Generator struct {
 	currentTypes []*Type
 
 	currentComments []*Comment
+
+	desiredExtensions []*Extension
+	currentExtensions []*Extension
 }
 
 // Parse argument DDLs and call `generateDDLs()`
@@ -66,22 +69,24 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	}
 	currentDDLs = FilterTables(currentDDLs, config)
 
-	tables, views, triggers, types, comments, err := aggregateDDLsToSchema(currentDDLs)
+	tables, views, triggers, types, comments, extensions, err := aggregateDDLsToSchema(currentDDLs)
 	if err != nil {
 		return nil, err
 	}
 
 	generator := Generator{
-		mode:            mode,
-		desiredTables:   []*Table{},
-		currentTables:   tables,
-		desiredViews:    []*View{},
-		currentViews:    views,
-		desiredTriggers: []*Trigger{},
-		currentTriggers: triggers,
-		desiredTypes:    []*Type{},
-		currentTypes:    types,
-		currentComments: comments,
+		mode:              mode,
+		desiredTables:     []*Table{},
+		currentTables:     tables,
+		desiredViews:      []*View{},
+		currentViews:      views,
+		desiredTriggers:   []*Trigger{},
+		currentTriggers:   triggers,
+		desiredTypes:      []*Type{},
+		currentTypes:      types,
+		currentComments:   comments,
+		desiredExtensions: []*Extension{},
+		currentExtensions: extensions,
 	}
 	return generator.generateDDLs(desiredDDLs)
 }
@@ -158,6 +163,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return ddls, err
 			}
 			ddls = append(ddls, commentDDLs...)
+		case *Extension:
+			extensionDDLs, err := g.generateDDLsForExtension(desired)
+			if err != nil {
+				return ddls, err
+			}
+			ddls = append(ddls, extensionDDLs...)
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", desired)
 		}
@@ -238,6 +249,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			continue
 		}
 		ddls = append(ddls, fmt.Sprintf("DROP VIEW %s", g.escapeTableName(currentView.name)))
+	}
+
+	// Clean up obsoleted extensions
+	for _, currentExtension := range g.currentExtensions {
+		if containsString(convertExtensionNames(g.desiredExtensions), currentExtension.extension.Name) {
+			continue
+		}
+		ddls = append(ddls, fmt.Sprintf("DROP EXTENSION %s", g.escapeSQLName(currentExtension.extension.Name)))
 	}
 
 	return ddls, nil
@@ -802,6 +821,21 @@ func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 	return ddls, nil
 }
 
+func (g *Generator) generateDDLsForExtension(desired *Extension) ([]string, error) {
+	ddls := []string{}
+
+	if currentExtension := findExtensionByName(g.currentExtensions, desired.extension.Name); currentExtension == nil {
+		// Extension not found, add extension.
+		ddls = append(ddls, desired.statement)
+		extension := *desired // copy extension
+		g.currentExtensions = append(g.currentExtensions, &extension)
+	}
+
+	g.desiredExtensions = append(g.desiredExtensions, desired)
+
+	return ddls, nil
+}
+
 // Even though simulated table doesn't have a foreign key, references could exist in column definitions.
 // This carefully generates DROP CONSTRAINT for such situations.
 func (g *Generator) generateDDLsForAbsentForeignKey(currentForeignKey ForeignKey, currentTable Table, desiredTable Table) []string {
@@ -1230,12 +1264,13 @@ func mergeTable(table1 *Table, table2 Table) {
 	}
 }
 
-func aggregateDDLsToSchema(ddls []DDL) ([]*Table, []*View, []*Trigger, []*Type, []*Comment, error) {
+func aggregateDDLsToSchema(ddls []DDL) ([]*Table, []*View, []*Trigger, []*Type, []*Comment, []*Extension, error) {
 	var tables []*Table
 	var views []*View
 	var triggers []*Trigger
 	var types []*Type
 	var comments []*Comment
+	var extensions []*Extension
 	for _, ddl := range ddls {
 		switch stmt := ddl.(type) {
 		case *CreateTable:
@@ -1246,7 +1281,7 @@ func aggregateDDLsToSchema(ddls []DDL) ([]*Table, []*View, []*Trigger, []*Type, 
 			if table == nil {
 				view := findViewByName(views, stmt.tableName)
 				if view == nil {
-					return nil, nil, nil, nil, nil, fmt.Errorf("CREATE INDEX is performed before CREATE TABLE: %s", ddl.Statement())
+					return nil, nil, nil, nil, nil, nil, fmt.Errorf("CREATE INDEX is performed before CREATE TABLE: %s", ddl.Statement())
 				}
 				// TODO: check duplicated creation
 				view.indexes = append(view.indexes, stmt.index)
@@ -1257,14 +1292,14 @@ func aggregateDDLsToSchema(ddls []DDL) ([]*Table, []*View, []*Trigger, []*Type, 
 		case *AddIndex:
 			table := findTableByName(tables, stmt.tableName)
 			if table == nil {
-				return nil, nil, nil, nil, nil, fmt.Errorf("ADD INDEX is performed before CREATE TABLE: %s", ddl.Statement())
+				return nil, nil, nil, nil, nil, nil, fmt.Errorf("ADD INDEX is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 			// TODO: check duplicated creation
 			table.indexes = append(table.indexes, stmt.index)
 		case *AddPrimaryKey:
 			table := findTableByName(tables, stmt.tableName)
 			if table == nil {
-				return nil, nil, nil, nil, nil, fmt.Errorf("ADD PRIMARY KEY is performed before CREATE TABLE: %s", ddl.Statement())
+				return nil, nil, nil, nil, nil, nil, fmt.Errorf("ADD PRIMARY KEY is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			newColumns := []Column{}
@@ -1278,14 +1313,14 @@ func aggregateDDLsToSchema(ddls []DDL) ([]*Table, []*View, []*Trigger, []*Type, 
 		case *AddForeignKey:
 			table := findTableByName(tables, stmt.tableName)
 			if table == nil {
-				return nil, nil, nil, nil, nil, fmt.Errorf("ADD FOREIGN KEY is performed before CREATE TABLE: %s", ddl.Statement())
+				return nil, nil, nil, nil, nil, nil, fmt.Errorf("ADD FOREIGN KEY is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			table.foreignKeys = append(table.foreignKeys, stmt.foreignKey)
 		case *AddPolicy:
 			table := findTableByName(tables, stmt.tableName)
 			if table == nil {
-				return nil, nil, nil, nil, nil, fmt.Errorf("ADD POLICY performed before CREATE TABLE: %s", ddl.Statement())
+				return nil, nil, nil, nil, nil, nil, fmt.Errorf("ADD POLICY performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			table.policies = append(table.policies, stmt.policy)
@@ -1297,11 +1332,13 @@ func aggregateDDLsToSchema(ddls []DDL) ([]*Table, []*View, []*Trigger, []*Type, 
 			types = append(types, stmt)
 		case *Comment:
 			comments = append(comments, stmt)
+		case *Extension:
+			extensions = append(extensions, stmt)
 		default:
-			return nil, nil, nil, nil, nil, fmt.Errorf("unexpected ddl type in convertDDLsToTablesAndViews: %#v", stmt)
+			return nil, nil, nil, nil, nil, nil, fmt.Errorf("unexpected ddl type in convertDDLsToTablesAndViews: %#v", stmt)
 		}
 	}
-	return tables, views, triggers, types, comments, nil
+	return tables, views, triggers, types, comments, extensions, nil
 }
 
 func findTableByName(tables []*Table, name string) *Table {
@@ -1398,6 +1435,15 @@ func findCommentByObject(comments []*Comment, object string) *Comment {
 	for _, comment := range comments {
 		if comment.comment.Object == object {
 			return comment
+		}
+	}
+	return nil
+}
+
+func findExtensionByName(extensions []*Extension, name string) *Extension {
+	for _, extension := range extensions {
+		if extension.extension.Name == name {
+			return extension
 		}
 	}
 	return nil
@@ -1729,6 +1775,14 @@ func convertViewNames(views []*View) []string {
 		viewNames[i] = view.name
 	}
 	return viewNames
+}
+
+func convertExtensionNames(extensions []*Extension) []string {
+	extensionNames := make([]string, len(extensions))
+	for i, extension := range extensions {
+		extensionNames[i] = extension.extension.Name
+	}
+	return extensionNames
 }
 
 func containsString(strs []string, str string) bool {

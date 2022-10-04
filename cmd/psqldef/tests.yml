@@ -343,3 +343,27 @@ CreateViewCast:
       amount::numeric(10,2) as amount_num
     from hoge;
   output: ''
+
+CreateExtension:
+  current: |
+    CREATE EXTENSION pgcrypto;
+  desired: |
+    CREATE EXTENSION pgcrypto;
+    CREATE EXTENSION btree_gist;
+  output: |
+    CREATE EXTENSION btree_gist;
+
+DropExtension:
+  current: |
+    CREATE EXTENSION pgcrypto;
+    CREATE EXTENSION btree_gist;
+  desired:
+    CREATE EXTENSION btree_gist;
+  output: |
+    DROP EXTENSION "pgcrypto";
+
+CreateExtensionIfNotExists:
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+  output: |
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;

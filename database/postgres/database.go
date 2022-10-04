@@ -36,6 +36,12 @@ func NewDatabase(config database.Config) (database.Database, error) {
 func (d *PostgresDatabase) DumpDDLs() (string, error) {
 	var ddls []string
 
+	extensionDDLs, err := d.extensions()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, extensionDDLs...)
+
 	typeDDLs, err := d.types()
 	if err != nil {
 		return "", err
@@ -159,6 +165,31 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 			return ddls, err
 		}
 		ddls = append(ddls, indexDefs...)
+	}
+	return ddls, nil
+}
+
+func (d *PostgresDatabase) extensions() ([]string, error) {
+	rows, err := d.db.Query(`
+		SELECT extname FROM pg_extension
+		WHERE extname != 'plpgsql';
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ddls []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		ddls = append(
+			ddls, fmt.Sprintf(
+				"CREATE EXTENSION %s;", escapeSQLName(name),
+			),
+		)
 	}
 	return ddls, nil
 }
