@@ -1,3 +1,7 @@
+## v0.13.12
+
+- Support extension for psqldef [#288](https://github.com/k0kubun/sqldef/issues/288)
+
 ## v0.13.11
 
 - Add --ssl-ca option for mysqldef [#283](https://github.com/k0kubun/sqldef/issues/283)
