@@ -1370,6 +1370,24 @@ func TestPsqldefBeforeApply(t *testing.T) {
 	assertEquals(t, owner, "dummy_owner_role\n")
 }
 
+func TestPsqldefConfigIncludesTables(t *testing.T) {
+	resetTestDatabase()
+
+	usersTable := "CREATE TABLE users (id bigint);"
+	users1Table := "CREATE TABLE users_1 (id bigint);"
+	users10Table := "CREATE TABLE users_10 (id bigint);"
+
+	mustExecuteSQL(usersTable)
+	mustExecuteSQL(users1Table)
+	mustExecuteSQL(users10Table)
+
+	writeFile("schema.sql", usersTable+users1Table)
+	writeFile("config.yml", "target_tables: |\n  public\\.users\n  public\\.users_\\d\n")
+
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--config", "config.yml")
+	assertEquals(t, apply, nothingModified)
+}
+
 func TestPsqldefHelp(t *testing.T) {
 	_, err := execute("./psqldef", "--help")
 	if err != nil {
@@ -1392,6 +1410,7 @@ func TestMain(m *testing.M) {
 	status := m.Run()
 	_ = os.Remove("psqldef")
 	_ = os.Remove("schema.sql")
+	_ = os.Remove("config.yml")
 	os.Exit(status)
 }
 

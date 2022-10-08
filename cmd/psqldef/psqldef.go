@@ -33,6 +33,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		Export      bool     `long:"export" description:"Just dump the current schema to stdout"`
 		SkipDrop    bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
 		BeforeApply string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs"`
+		Config      string   `long:"config" description:"YAML file to specify: target_tables"`
 		Help        bool     `long:"help" description:"Show this help"`
 		Version     bool     `long:"version" description:"Show this version"`
 	}
@@ -62,6 +63,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		Export:      opts.Export,
 		SkipDrop:    opts.SkipDrop,
 		BeforeApply: opts.BeforeApply,
+		Config:      database.ParseGeneratorConfig(opts.Config),
 	}
 
 	databaseName := ""
