@@ -1,3 +1,7 @@
+## v0.13.13
+
+- Add --config option to psqldef as well [#289](https://github.com/k0kubun/sqldef/issues/289)
+
 ## v0.13.12
 
 - Support extension for psqldef [#288](https://github.com/k0kubun/sqldef/issues/288)
