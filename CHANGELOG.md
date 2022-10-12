@@ -1,3 +1,8 @@
+## v0.13.14
+
+- Filter primary keys, foreign keys, and indexes with `target_tables` of --config for psqldef
+  [#290](https://github.com/k0kubun/sqldef/issues/290)
+
 ## v0.13.13
 
 - Add --config option to psqldef as well [#289](https://github.com/k0kubun/sqldef/issues/289)
