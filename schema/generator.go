@@ -1873,17 +1873,40 @@ func generateDefaultDefinition(defaultVal Value) (string, error) {
 
 func FilterTables(ddls []DDL, config database.GeneratorConfig) []DDL {
 	filtered := []DDL{}
+
 	for _, ddl := range ddls {
+		tables := []string{}
+
 		switch stmt := ddl.(type) {
 		case *CreateTable:
-			if config.TargetTables != nil && !containsRegexpString(config.TargetTables, stmt.table.name) {
+			tables = append(tables, stmt.table.name)
+		case *CreateIndex:
+			tables = append(tables, stmt.tableName)
+		case *AddPrimaryKey:
+			tables = append(tables, stmt.tableName)
+		case *AddForeignKey:
+			tables = append(tables, stmt.tableName)
+			tables = append(tables, stmt.foreignKey.referenceName)
+		case *AddIndex:
+			tables = append(tables, stmt.tableName)
+		}
+
+		if config.TargetTables != nil {
+			skip := false
+			for _, t := range tables {
+				if !containsRegexpString(config.TargetTables, t) {
+					skip = true
+					break
+				}
+			}
+			if skip {
 				continue
 			}
-			filtered = append(filtered, ddl)
-		default:
-			filtered = append(filtered, ddl)
 		}
+
+		filtered = append(filtered, ddl)
 	}
+
 	return filtered
 }
 

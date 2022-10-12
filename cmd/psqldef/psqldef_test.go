@@ -1373,15 +1373,24 @@ func TestPsqldefBeforeApply(t *testing.T) {
 func TestPsqldefConfigIncludesTables(t *testing.T) {
 	resetTestDatabase()
 
-	usersTable := "CREATE TABLE users (id bigint);"
-	users1Table := "CREATE TABLE users_1 (id bigint);"
-	users10Table := "CREATE TABLE users_10 (id bigint);"
+	mustExecuteSQL(`
+        CREATE TABLE users (id bigint PRIMARY KEY);
+        CREATE TABLE users_1 (id bigint PRIMARY KEY);
 
-	mustExecuteSQL(usersTable)
-	mustExecuteSQL(users1Table)
-	mustExecuteSQL(users10Table)
+        CREATE TABLE users_10 (id bigint);
+        ALTER TABLE users_10 ADD CONSTRAINT pkey PRIMARY KEY (id);
+        ALTER TABLE users_10 ADD CONSTRAINT fkey FOREIGN KEY (id) REFERENCES users (id);
+        ALTER TABLE users_10 ADD CONSTRAINT ukey UNIQUE (id);
+        CREATE INDEX idx_10_1 ON users_10 (id);
 
-	writeFile("schema.sql", usersTable+users1Table)
+        ALTER TABLE users_1 ADD CONSTRAINT fkey_1 FOREIGN KEY (id) REFERENCES users_10 (id);
+    `)
+
+	writeFile("schema.sql", `
+        CREATE TABLE users (id bigint PRIMARY KEY);
+        CREATE TABLE users_1 (id bigint PRIMARY KEY);
+    `)
+
 	writeFile("config.yml", "target_tables: |\n  public\\.users\n  public\\.users_\\d\n")
 
 	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--config", "config.yml")
