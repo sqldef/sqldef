@@ -1,3 +1,8 @@
+## v0.13.15
+
+- Parse CREATE VIEW with CASE WHEN and function calls for psqldef
+  [#285](https://github.com/k0kubun/sqldef/issues/285)
+
 ## v0.13.14
 
 - Filter primary keys, foreign keys, and indexes with `target_tables` of --config for psqldef
