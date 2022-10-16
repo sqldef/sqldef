@@ -86,33 +86,6 @@ func TestPsqldefCreateTableChangeDefaultTimestamp(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
-func TestPsqldefCreateTableAlterColumn(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint NOT NULL,
-		  name text
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint NOT NULL,
-		  name varchar(40)
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
-		ALTER TABLE "public"."users" ALTER COLUMN "name" TYPE varchar(40);
-		`,
-	))
-	assertApplyOutput(t, createTable, nothingModified)
-}
-
 func TestPsqldefCreateTableNotNull(t *testing.T) {
 	resetTestDatabase()
 
@@ -596,61 +569,6 @@ func TestPsqldefDropPrimaryKey(t *testing.T) {
 		);`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";`+"\n")
-	assertApplyOutput(t, createTable, nothingModified)
-}
-
-func TestPsqldefAddColumn(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint NOT NULL,
-		  name text
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint NOT NULL,
-		  name text,
-		  age integer
-		);`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."users" ADD COLUMN "age" integer;`+"\n")
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint NOT NULL,
-		  age integer
-		);`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."users" DROP COLUMN "name";`+"\n")
-	assertApplyOutput(t, createTable, nothingModified)
-}
-
-func TestPsqldefAddArrayColumn(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id integer
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  id integer,
-		  name integer[]
-		);`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."users" ADD COLUMN "name" integer[];`+"\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1175,36 +1093,6 @@ func TestPsqldefAddUniqueConstraintToTableInNonpublicSchema(t *testing.T) {
 		ALTER TABLE test.dummy ADD CONSTRAINT a_uniq UNIQUE (a) DEFERRABLE INITIALLY DEFERRED;
 		`))
 	assertApplyOutput(t, createTable+"\n"+alterTable, nothingModified)
-}
-
-func TestPsqldefIndexesOnExpressions(t *testing.T) {
-	for _, tc := range publicAndNonPublicSchemaTestCases {
-		resetTestDatabase()
-		mustExecuteSQL(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
-
-		createTable := fmt.Sprintf("CREATE TABLE %s.test (col JSONB);", tc.Schema)
-		assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
-		assertApplyOutput(t, createTable, nothingModified)
-
-		createIndex := fmt.Sprintf("CREATE UNIQUE INDEX function_index ON %s.test (jsonb_extract_path_text(col, 'foo', 'bar'));", tc.Schema)
-		assertApplyOutput(t, createTable+createIndex, applyPrefix+createIndex+"\n")
-		assertExportOutput(t, fmt.Sprintf(stripHeredoc(`
-			CREATE TABLE "%s"."test" (
-			    "col" jsonb
-			);
-
-			CREATE UNIQUE INDEX function_index ON %s.test USING btree (jsonb_extract_path_text(col, VARIADIC ARRAY['foo'::text, 'bar'::text]));
-			`), tc.Schema, tc.Schema))
-		assertApplyOutput(t, createTable+createIndex, nothingModified)
-
-		createIndex = fmt.Sprintf("CREATE UNIQUE INDEX function_index ON %s.test (jsonb_extract_path_text(col, 'foo'));", tc.Schema)
-		// not support changing expression
-		assertApplyOutput(t, createTable+createIndex, nothingModified)
-
-		assertApplyOutput(t, createTable, applyPrefix+
-			fmt.Sprintf(`DROP INDEX "%s"."function_index";`+"\n", tc.Schema))
-		assertApplyOutput(t, createTable, nothingModified)
-	}
 }
 
 func TestPsqldefFunctionAsDefault(t *testing.T) {

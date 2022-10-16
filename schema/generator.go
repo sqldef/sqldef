@@ -1623,7 +1623,8 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 			indexB.columns[i].direction = AscScr
 		}
 		// TODO: check length?
-		if indexAColumn.column != indexB.columns[i].column || indexAColumn.direction != indexB.columns[i].direction {
+		if g.normalizeIndexColumn(indexA.columns[i].column) != g.normalizeIndexColumn(indexB.columns[i].column) ||
+			indexAColumn.direction != indexB.columns[i].direction {
 			return false
 		}
 	}
@@ -1664,6 +1665,16 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 	}
 
 	return true
+}
+
+// jsonb_extract_path_text(col, ARRAY['foo', 'bar']) => jsonb_extract_path_text(col, 'foo', 'bar')
+func (g *Generator) normalizeIndexColumn(column string) string {
+	column = strings.ToLower(column)
+	if g.mode == GeneratorModePostgres {
+		column = strings.ReplaceAll(column, "array[", "")
+		column = strings.ReplaceAll(column, "]", "")
+	}
+	return column
 }
 
 func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB ForeignKey) bool {

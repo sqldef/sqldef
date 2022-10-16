@@ -400,3 +400,82 @@ CreateViewWithCaseWhen:
         )
       ) as created_date
     from hoge;
+CreateTableAlterColumn:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(40)
+    );
+  output: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" TYPE varchar(40);
+CreateTableAddColumn:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      age integer
+    );
+  output: |
+    ALTER TABLE "public"."users" ADD COLUMN "age" integer;
+CreateTableDropColumn:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      age integer
+    );
+  output: |
+    ALTER TABLE "public"."users" DROP COLUMN "name";
+IndexesOnExpressions:
+  current: |
+    CREATE TABLE public.test (
+      col JSONB
+    );
+  desired: |
+    CREATE TABLE public.test (
+      col JSONB
+    );
+    CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo', 'bar'));
+  output: |
+    CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo', 'bar'));
+IndexesOnChangedExpressions:
+  current: |
+    CREATE TABLE public.test (
+      col JSONB
+    );
+    CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo', 'bar'));
+  desired: |
+    CREATE TABLE public.test (
+      col JSONB
+    );
+    CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo'));
+  output: |
+    DROP INDEX "public"."function_index";
+    CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo'));
+AddArrayColumn:
+  current: |
+    CREATE TABLE users (
+      id integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id integer,
+      name integer[]
+    );
+  output: |
+    ALTER TABLE "public"."users" ADD COLUMN "name" integer[];

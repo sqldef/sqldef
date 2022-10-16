@@ -2,9 +2,15 @@ CreateTable: |
   CREATE TABLE bigdata (
     data bigint
   );
-CreateTableSchema: |
+CreateTableWithSchema: |
   CREATE TABLE public.bigdata (
     data bigint
+  );
+CreateTableWithNotNull: |
+  CREATE TABLE public.airline_confirmation (
+    airline_id bigint,
+    code character varying(512),
+    booking_id bigint NOT NULL
   );
 CreateView: |
   create view hoge_view as
@@ -45,3 +51,10 @@ CreateViewWithCaseWhen: |
       )
     ) as created_date
   from hoge;
+CreateIndexWithFuncCall: |
+  CREATE UNIQUE INDEX airline_confirmation_code_unique_idx
+  ON public.airline_confirmation
+  USING btree (airline_id, booking_id, lower((code)::text))
+  WHERE ((code IS NOT NULL) AND (airline_id IS NOT NULL));
+CreateIndexConcurrently: |
+  CREATE INDEX CONCURRENTLY username on users (name);
