@@ -6,7 +6,7 @@ require (
 	github.com/denisenkom/go-mssqldb v0.12.2
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/jessevdk/go-flags v1.4.0
-	github.com/k0kubun/pp/v3 v3.1.0
+	github.com/k0kubun/pp/v3 v3.2.0
 	github.com/lib/pq v1.10.7
 	github.com/pganalyze/pg_query_go/v2 v2.1.2
 	golang.org/x/term v0.0.0-20210406210042-72f3dc4e9b72
@@ -19,7 +19,7 @@ require (
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
-	github.com/mattn/go-colorable v0.1.12 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.16 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897 // indirect
