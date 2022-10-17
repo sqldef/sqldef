@@ -1,3 +1,8 @@
+## v0.13.16
+
+- Parse CREATE INDEX with cast expression for psqldef
+  [#284](https://github.com/k0kubun/sqldef/issues/284)
+
 ## v0.13.15
 
 - Parse CREATE VIEW with CASE WHEN and function calls for psqldef
