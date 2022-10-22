@@ -1,3 +1,7 @@
+## v0.13.17
+
+- Add .exe extension to Windows executables [#294](https://github.com/k0kubun/sqldef/issues/294)
+
 ## v0.13.16
 
 - Parse CREATE INDEX with cast expression for psqldef
