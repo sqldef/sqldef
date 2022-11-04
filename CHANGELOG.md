@@ -1,3 +1,7 @@
+## v0.13.18
+
+- Update golang.org/x/text to v0.3.8 [#298](https://github.com/k0kubun/sqldef/issues/298)
+
 ## v0.13.17
 
 - Add .exe extension to Windows executables [#294](https://github.com/k0kubun/sqldef/issues/294)
