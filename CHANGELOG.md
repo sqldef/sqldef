@@ -1,3 +1,7 @@
+## v0.13.19
+
+- Add `skip_tables` option to `--config` for mysqldef and psqldef [#304](https://github.com/k0kubun/sqldef/issues/304)
+
 ## v0.13.18
 
 - Update golang.org/x/text to v0.3.8 [#298](https://github.com/k0kubun/sqldef/issues/298)
