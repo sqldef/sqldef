@@ -28,6 +28,7 @@ type Config struct {
 
 type GeneratorConfig struct {
 	TargetTables []string
+	SkipTables   []string
 }
 
 // Abstraction layer for multiple kinds of databases
@@ -87,6 +88,7 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 
 	var config struct {
 		TargetTables string `yaml:"target_tables"`
+		SkipTables   string `yaml:"skip_tables"`
 	}
 	err = yaml.UnmarshalStrict(buf, &config)
 	if err != nil {
@@ -98,7 +100,13 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 		targetTables = strings.Split(strings.Trim(config.TargetTables, "\n"), "\n")
 	}
 
+	var skipTables []string
+	if config.SkipTables != "" {
+		skipTables = strings.Split(strings.Trim(config.SkipTables, "\n"), "\n")
+	}
+
 	return GeneratorConfig{
 		TargetTables: targetTables,
+		SkipTables:   skipTables,
 	}
 }

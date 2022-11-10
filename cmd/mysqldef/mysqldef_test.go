@@ -1384,7 +1384,7 @@ func TestMysqldefBeforeApply(t *testing.T) {
 	assertEquals(t, apply, nothingModified)
 }
 
-func TestMysqldefConfigIncludesTables(t *testing.T) {
+func TestMysqldefConfigIncludesTargetTables(t *testing.T) {
 	resetTestDatabase()
 
 	usersTable := "CREATE TABLE users (id bigint);"
@@ -1394,6 +1394,21 @@ func TestMysqldefConfigIncludesTables(t *testing.T) {
 
 	writeFile("schema.sql", usersTable+users1Table)
 	writeFile("config.yml", "target_tables: |\n  users\n  users_\\d\n")
+
+	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	assertEquals(t, apply, nothingModified)
+}
+
+func TestMysqldefConfigIncludesSkipTables(t *testing.T) {
+	resetTestDatabase()
+
+	usersTable := "CREATE TABLE users (id bigint);"
+	users1Table := "CREATE TABLE users_1 (id bigint);"
+	users10Table := "CREATE TABLE users_10 (id bigint);"
+	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", usersTable+users1Table+users10Table)
+
+	writeFile("schema.sql", usersTable+users1Table)
+	writeFile("config.yml", "skip_tables: |\n  users_10\n")
 
 	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
 	assertEquals(t, apply, nothingModified)
