@@ -1916,23 +1916,31 @@ func FilterTables(ddls []DDL, config database.GeneratorConfig) []DDL {
 			tables = append(tables, stmt.tableName)
 		}
 
-		if config.TargetTables != nil {
-			skip := false
-			for _, t := range tables {
-				if !containsRegexpString(config.TargetTables, t) {
-					skip = true
-					break
-				}
-			}
-			if skip {
-				continue
-			}
+		if skipTables(tables, config) {
+			continue
 		}
 
 		filtered = append(filtered, ddl)
 	}
 
 	return filtered
+}
+
+func skipTables(tables []string, config database.GeneratorConfig) bool {
+	if config.TargetTables != nil {
+		for _, t := range tables {
+			if !containsRegexpString(config.TargetTables, t) {
+				return true
+			}
+		}
+	}
+
+	for _, t := range tables {
+		if containsRegexpString(config.SkipTables, t) {
+			return true
+		}
+	}
+	return false
 }
 
 func containsRegexpString(strs []string, str string) bool {
