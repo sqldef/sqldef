@@ -1,3 +1,7 @@
+## v0.13.20
+
+- Add `--config` option to sqlite3def [#305](https://github.com/k0kubun/sqldef/issues/305)
+
 ## v0.13.19
 
 - Add `skip_tables` option to `--config` for mysqldef and psqldef [#304](https://github.com/k0kubun/sqldef/issues/304)
