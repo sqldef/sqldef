@@ -113,6 +113,36 @@ func TestSQLite3defExport(t *testing.T) {
 	))
 }
 
+func TestSQLite3defConfigIncludesTargetTables(t *testing.T) {
+	resetTestDatabase()
+
+	usersTable := "CREATE TABLE users (id bigint);"
+	users1Table := "CREATE TABLE users_1 (id bigint);"
+	users10Table := "CREATE TABLE users_10 (id bigint);"
+	mustExecute("sqlite3", "sqlite3def_test", usersTable+users1Table+users10Table)
+
+	writeFile("schema.sql", usersTable+users1Table)
+	writeFile("config.yml", "target_tables: |\n  users\n  users_\\d\n")
+
+	apply := assertedExecute(t, "./sqlite3def", "--config", "config.yml", "--file", "schema.sql", "sqlite3def_test")
+	assertEquals(t, apply, nothingModified)
+}
+
+func TestSQLite3defConfigIncludesSkipTables(t *testing.T) {
+	resetTestDatabase()
+
+	usersTable := "CREATE TABLE users (id bigint);"
+	users1Table := "CREATE TABLE users_1 (id bigint);"
+	users10Table := "CREATE TABLE users_10 (id bigint);"
+	mustExecute("sqlite3", "sqlite3def_test", usersTable+users1Table+users10Table)
+
+	writeFile("schema.sql", usersTable+users1Table)
+	writeFile("config.yml", "skip_tables: |\n  users_10\n")
+
+	apply := assertedExecute(t, "./sqlite3def", "--config", "config.yml", "--file", "schema.sql", "sqlite3def_test")
+	assertEquals(t, apply, nothingModified)
+}
+
 func TestSQLite3defHelp(t *testing.T) {
 	_, err := execute("./sqlite3def", "--help")
 	if err != nil {
@@ -132,6 +162,7 @@ func TestMain(m *testing.M) {
 	_ = os.Remove("sqlite3def")
 	_ = os.Remove("sqlite3def_test")
 	_ = os.Remove("schema.sql")
+	_ = os.Remove("config.yml")
 	os.Exit(status)
 }
 

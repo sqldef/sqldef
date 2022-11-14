@@ -208,7 +208,9 @@ Application Options:
       --dry-run          Don't run DDLs but just show them
       --export           Just dump the current schema to stdout
       --skip-drop        Skip destructive changes such as DROP
+      --config=          YAML file to specify: target_tables
       --help             Show this help
+      --version
 ```
 
 ### mssqldef
