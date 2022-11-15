@@ -143,6 +143,20 @@ func TestSQLite3defConfigIncludesSkipTables(t *testing.T) {
 	assertEquals(t, apply, nothingModified)
 }
 
+func TestSQLite3defBlobType(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE bigdata (
+		  data
+		);
+		`,
+	)
+
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestSQLite3defHelp(t *testing.T) {
 	_, err := execute("./sqlite3def", "--help")
 	if err != nil {
