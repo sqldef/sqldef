@@ -1,3 +1,7 @@
+## v0.13.21
+
+- Support blob type for sqlite3def [#306](https://github.com/k0kubun/sqldef/issues/306)
+
 ## v0.13.20
 
 - Add `--config` option to sqlite3def [#305](https://github.com/k0kubun/sqldef/issues/305)
