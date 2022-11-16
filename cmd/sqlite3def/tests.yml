@@ -90,3 +90,8 @@ DataTypes:
       c_integer integer,
       c_text text
     );
+BlobType:
+  desired: |
+    CREATE TABLE bigdata (
+      data
+    );
