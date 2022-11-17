@@ -1191,6 +1191,11 @@ column_definition:
   {
     $$ = &ColumnDefinition{Name: $1, Type: $2}
   }
+/* For SQLite3 https://www.sqlite.org/lang_keywords.html */
+| STRING column_definition_type
+  {
+    $$ = &ColumnDefinition{Name: NewColIdent(string($1)), Type: $2}
+  }
 
 column_type:
   numeric_type unsigned_opt zero_fill_opt
@@ -4281,6 +4286,11 @@ table_id:
     $$ = NewTableIdent(string($1))
   }
 | non_reserved_keyword
+  {
+    $$ = NewTableIdent(string($1))
+  }
+/* For SQLite3 https://www.sqlite.org/lang_keywords.html */
+| STRING
   {
     $$ = NewTableIdent(string($1))
   }
