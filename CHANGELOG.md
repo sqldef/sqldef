@@ -1,3 +1,7 @@
+## v0.13.23
+
+- Support single-quoted ID for sqlite3def [#308](https://github.com/k0kubun/sqldef/issues/308)
+
 ## v0.13.22
 
 - Allow non-reserved keywords as column names for sqlite3def [#307](https://github.com/k0kubun/sqldef/issues/307)
