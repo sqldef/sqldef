@@ -1,3 +1,7 @@
+## v0.13.22
+
+- Allow non-reserved keywords as column names for sqlite3def [#307](https://github.com/k0kubun/sqldef/issues/307)
+
 ## v0.13.21
 
 - Support blob type for sqlite3def [#306](https://github.com/k0kubun/sqldef/issues/306)
