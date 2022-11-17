@@ -289,3 +289,10 @@ UUIDToBin:
       PRIMARY KEY (id)
     );
   min_version: '8.0'
+NonReservedColumnName:
+  desired: |
+    CREATE TABLE global (
+      money INT,
+      language TEXT,
+      json TEXT
+    );

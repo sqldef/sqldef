@@ -1187,9 +1187,9 @@ table_column_list:
   }
 
 column_definition:
-  ID column_definition_type
+  sql_id column_definition_type
   {
-    $$ = &ColumnDefinition{Name: NewColIdent(string($1)), Type: $2}
+    $$ = &ColumnDefinition{Name: $1, Type: $2}
   }
 
 column_type:
