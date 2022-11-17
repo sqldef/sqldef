@@ -95,3 +95,8 @@ BlobType:
     CREATE TABLE bigdata (
       data
     );
+SingleQuotedID:
+  desired: |
+    CREATE TABLE 'bigdata' (
+      'data' integer
+    );
