@@ -1,3 +1,8 @@
+## v0.14.0
+
+- Drop support of Windows i386 [#310](https://github.com/k0kubun/sqldef/issues/310)
+- Support virtual tables for sqlite3def [#310](https://github.com/k0kubun/sqldef/issues/310)
+
 ## v0.13.22
 
 - Allow non-reserved keywords as column names for sqlite3def [#307](https://github.com/k0kubun/sqldef/issues/307)
