@@ -50,6 +50,7 @@ type Table struct {
 	foreignKeys []ForeignKey
 	policies    []Policy
 	options     map[string]string
+	virtual     bool
 }
 
 type Column struct {

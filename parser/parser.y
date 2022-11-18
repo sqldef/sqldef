@@ -946,6 +946,25 @@ create_statement:
       },
     }
   }
+/* For SQLite3, only to parse because the feature is not supported // Virtual table support/example (#26) · Issues · cznic / sqlite · GitLab https://gitlab.com/cznic/sqlite/-/issues/26 */
+| CREATE VIRTUAL TABLE not_exists_opt table_name USING ID module_arguments_opt
+  {
+    $$ = &DDL{Action: CreateStr, NewName: $5, TableSpec: &TableSpec{Virtual: true}}
+  }
+
+module_arguments_opt:
+  {}
+| '(' module_arguments ')' {}
+
+/* mod */
+module_arguments:
+  {}
+| sql_id module_arguments {}
+| '+' module_arguments {}
+| '=' module_arguments {}
+| STRING module_arguments {}
+| column_definition module_arguments {}
+| ',' module_arguments {}
 
 trigger_time:
   FOR

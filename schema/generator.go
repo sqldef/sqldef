@@ -99,6 +99,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	for _, ddl := range desiredDDLs {
 		switch desired := ddl.(type) {
 		case *CreateTable:
+			if desired.table.virtual {
+				return ddls, fmt.Errorf("virtual table feature is not supported by modernc.org/sqlite package: %#v", desired.table.name)
+			}
 			if currentTable := findTableByName(g.currentTables, desired.table.name); currentTable != nil {
 				// Table already exists, guess required DDLs.
 				tableDDLs, err := g.generateDDLsForCreateTable(*currentTable, *desired)
