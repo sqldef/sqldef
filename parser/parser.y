@@ -946,7 +946,7 @@ create_statement:
       },
     }
   }
-/* For SQLite3, only to parse because the feature is not supported // Virtual table support/example (#26) · Issues · cznic / sqlite · GitLab https://gitlab.com/cznic/sqlite/-/issues/26 */
+/* For SQLite3, only to parse because alternation is not supported. // The Virtual Table Mechanism Of SQLite https://www.sqlite.org/vtab.html */
 | CREATE VIRTUAL TABLE not_exists_opt table_name USING sql_id module_arguments_opt
   {
     $$ = &DDL{Action: CreateStr, NewName: $5, TableSpec: &TableSpec{Virtual: true}}

@@ -173,21 +173,17 @@ func TestSQLite3defVirtualTable(t *testing.T) {
 	`)
 
 	writeFile("schema.sql", createTableFtsA+createTableFtsB+createTableRtreeA)
-	actual, err := execute("./sqlite3def", "--file", "schema.sql", "sqlite3def_test")
-	if err == nil {
-		t.Errorf("succeeded to execute")
-	}
-	assertEquals(t, actual, `virtual table feature is not supported by modernc.org/sqlite package: "fts_a"`+"\n")
-
+	// FTS is not available in modernc.org/sqlite v1.19.4 package
 	writeFile("config.yml", stripHeredoc(`
 		skip_tables: |
 		  fts_a
 		  fts_a_\w+
 		  fts_b
 		  fts_b_\w+
-		  rtree_a
 		  rtree_a_\w+
 	`))
+	actual := assertedExecute(t, "./sqlite3def", "--config", "config.yml", "--file", "schema.sql", "sqlite3def_test")
+	assertEquals(t, actual, applyPrefix+createTableRtreeA)
 	actual = assertedExecute(t, "./sqlite3def", "--config", "config.yml", "--file", "schema.sql", "sqlite3def_test")
 	assertEquals(t, actual, nothingModified)
 }
