@@ -58,7 +58,6 @@ jobs:
           - { GOOS: linux,   GOARCH: arm64, EXT: tar.gz, ZIG_TARGET: aarch64-linux }
           - { GOOS: linux,   GOARCH: arm,   EXT: tar.gz, ZIG_TARGET: arm-linux-musleabi }
           - { GOOS: windows, GOARCH: amd64, EXT: zip,    ZIG_TARGET: x86_64-windows }
-          - { GOOS: windows, GOARCH: '386', EXT: zip,    ZIG_TARGET: i386-windows }
     steps:
       - uses: actions/setup-go@v3
         with:
@@ -119,7 +118,6 @@ jobs:
       - { uses: actions/download-artifact@v3, with: { name: sqldef-darwin-amd64,  path: package/ } }
       - { uses: actions/download-artifact@v3, with: { name: sqldef-darwin-arm64,  path: package/ } }
       - { uses: actions/download-artifact@v3, with: { name: sqldef-windows-amd64, path: package/ } }
-      - { uses: actions/download-artifact@v3, with: { name: sqldef-windows-386,   path: package/ } }
 
       - name: Release binaries
         run: |

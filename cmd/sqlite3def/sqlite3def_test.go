@@ -143,6 +143,51 @@ func TestSQLite3defConfigIncludesSkipTables(t *testing.T) {
 	assertEquals(t, apply, nothingModified)
 }
 
+func TestSQLite3defVirtualTable(t *testing.T) {
+	resetTestDatabase()
+
+	// SQLite FTS3 and FTS4 Extensions https://www.sqlite.org/fts3.html
+	createTableFtsA := stripHeredoc(`
+		CREATE VIRTUAL TABLE fts_a USING fts4(
+		  body TEXT,
+		  tokenize=unicode61 "tokenchars=.=" "separators=X"
+		);
+	`)
+	createTableFtsB := stripHeredoc(`
+		CREATE VIRTUAL TABLE fts_b USING fts3(
+		  subject VARCHAR(256) NOT NULL,
+		  body TEXT CHECK(length(body) < 10240),
+		  tokenize=icu en_AU
+		);
+	`)
+	// The SQLite R*Tree Module https://www.sqlite.org/rtree.html
+	createTableRtreeA := stripHeredoc(`
+		CREATE VIRTUAL TABLE rtree_a USING rtree(
+		  id,            -- Integer primary key
+		  minX, maxX,    -- Minimum and maximum X coordinate
+		  minY, maxY,    -- Minimum and maximum Y coordinate
+		  +objname TEXT, -- name of the object
+		  +objtype TEXT, -- object type
+		  +boundary BLOB -- detailed boundary of object
+		);
+	`)
+
+	writeFile("schema.sql", createTableFtsA+createTableFtsB+createTableRtreeA)
+	// FTS is not available in modernc.org/sqlite v1.19.4 package
+	writeFile("config.yml", stripHeredoc(`
+		skip_tables: |
+		  fts_a
+		  fts_a_\w+
+		  fts_b
+		  fts_b_\w+
+		  rtree_a_\w+
+	`))
+	actual := assertedExecute(t, "./sqlite3def", "--config", "config.yml", "--file", "schema.sql", "sqlite3def_test")
+	assertEquals(t, actual, applyPrefix+createTableRtreeA)
+	actual = assertedExecute(t, "./sqlite3def", "--config", "config.yml", "--file", "schema.sql", "sqlite3def_test")
+	assertEquals(t, actual, nothingModified)
+}
+
 func TestSQLite3defHelp(t *testing.T) {
 	_, err := execute("./sqlite3def", "--help")
 	if err != nil {

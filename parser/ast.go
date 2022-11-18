@@ -630,6 +630,7 @@ type TableSpec struct {
 	ForeignKeys []*ForeignKeyDefinition
 	Checks      []*CheckDefinition
 	Options     map[string]string
+	Virtual     bool
 }
 
 // Format formats the node.
