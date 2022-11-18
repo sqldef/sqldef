@@ -20,7 +20,7 @@ all: parser.go
 
 goyacc:
 	@if ! which goyacc > /dev/null; then \
-	  go get golang.org/x/tools/cmd/goyacc; \
+	  go install golang.org/x/tools/cmd/goyacc; \
 	fi
 
 parser.go: goyacc parser.y
