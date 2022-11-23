@@ -2,6 +2,7 @@ package sqldef
 
 import (
 	"fmt"
+	"io/fs"
 	"io/ioutil"
 	"log"
 	"os"
@@ -12,6 +13,7 @@ import (
 )
 
 type Options struct {
+	FileSystem  fs.FS
 	DesiredFile string
 	CurrentFile string
 	DryRun      bool
@@ -47,9 +49,18 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 		return
 	}
 
-	sql, err := ReadFile(options.DesiredFile)
-	if err != nil {
-		log.Fatalf("Failed to read '%s': %s", options.DesiredFile, err)
+	var sql string
+	if options.FileSystem == nil {
+		sql, err = ReadFile(options.DesiredFile)
+		if err != nil {
+			log.Fatalf("Failed to read '%s': %s", options.DesiredFile, err)
+		}
+	} else {
+		data, err := fs.ReadFile(options.FileSystem, options.DesiredFile)
+		if err != nil {
+			log.Fatalf("Failed to fs.ReadFile '%s': %s", options.DesiredFile, err)
+		}
+		sql = string(data)
 	}
 	desiredDDLs := sql
 
