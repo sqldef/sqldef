@@ -1,3 +1,7 @@
+## v0.14.1
+
+- sqlite3def: Add index support [#312](https://github.com/k0kubun/sqldef/issues/312)
+
 ## v0.14.0
 
 - Drop support of Windows i386 [#310](https://github.com/k0kubun/sqldef/issues/310)
