@@ -47,6 +47,12 @@ func (d *Sqlite3Database) DumpDDLs() (string, error) {
 	}
 	ddls = append(ddls, viewDDLs...)
 
+	indexDDLs, err := d.indexes()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, indexDDLs...)
+
 	return strings.Join(ddls, "\n\n"), nil
 }
 
@@ -71,7 +77,7 @@ func (d *Sqlite3Database) tableNames() ([]string, error) {
 }
 
 func (d *Sqlite3Database) DumpTableDDL(table string) (string, error) {
-	const query = `select sql from sqlite_master where tbl_name = ?`
+	const query = `select sql from sqlite_master where tbl_name = ? and type = 'table'`
 	var sql string
 	err := d.db.QueryRow(query, table).Scan(&sql)
 	return sql + ";", err
@@ -80,6 +86,27 @@ func (d *Sqlite3Database) DumpTableDDL(table string) (string, error) {
 func (d *Sqlite3Database) views() ([]string, error) {
 	var ddls []string
 	const query = "select sql from sqlite_master where type = 'view';"
+	rows, err := d.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var sql string
+		if err = rows.Scan(&sql); err != nil {
+			return nil, err
+		}
+		ddls = append(ddls, sql+";")
+	}
+
+	return ddls, nil
+}
+
+func (d *Sqlite3Database) indexes() ([]string, error) {
+	var ddls []string
+	// Exclude automatically generated indexes for unique constraint
+	const query = "select sql from sqlite_master where type = 'index' and sql is not null;"
 	rows, err := d.db.Query(query)
 	if err != nil {
 		return nil, err
