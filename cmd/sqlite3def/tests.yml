@@ -100,3 +100,11 @@ SingleQuotedID:
     CREATE TABLE 'bigdata' (
       'data' integer
     );
+Index:
+  desired: |
+    CREATE TABLE bigdata (
+      -- unique constraint generates an index entry automatically in sqlite_master table
+      path text UNIQUE,
+      data integer
+    );
+    CREATE INDEX index_bigdata ON bigdata(data);
