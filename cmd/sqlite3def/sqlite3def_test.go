@@ -6,6 +6,7 @@
 package main
 
 import (
+	"github.com/k0kubun/sqldef"
 	"github.com/k0kubun/sqldef/cmd/testutils"
 	"github.com/k0kubun/sqldef/database"
 	"github.com/k0kubun/sqldef/database/sqlite3"
@@ -186,6 +187,40 @@ func TestSQLite3defVirtualTable(t *testing.T) {
 	assertEquals(t, actual, applyPrefix+createTableRtreeA)
 	actual = assertedExecute(t, "./sqlite3def", "--config", "config.yml", "--file", "schema.sql", "sqlite3def_test")
 	assertEquals(t, actual, nothingModified)
+}
+
+func TestSQLite3defFileSystem(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE bigdata (
+		  data integer
+		);
+		`,
+	)
+	writeFile("schema.sql", createTable)
+
+	createTable2 := stripHeredoc(`
+		CREATE TABLE bigdata2 (
+		  data integer
+		);
+		`,
+	)
+
+	db, err := connectDatabase()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqldef.Run(
+		schema.GeneratorModeSQLite3,
+		db,
+		database.NewParser(parser.ParserModeSQLite3),
+		&sqldef.Options{
+			DesiredFile: "schema.sql",
+			DesiredDDLs: createTable2,
+		},
+	)
+	assertApplyOutput(t, createTable+createTable2, nothingModified)
 }
 
 func TestSQLite3defHelp(t *testing.T) {

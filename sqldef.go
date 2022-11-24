@@ -13,6 +13,7 @@ import (
 
 type Options struct {
 	DesiredFile string
+	DesiredDDLs string
 	CurrentFile string
 	DryRun      bool
 	Export      bool
@@ -51,7 +52,7 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 	if err != nil {
 		log.Fatalf("Failed to read '%s': %s", options.DesiredFile, err)
 	}
-	desiredDDLs := sql
+	desiredDDLs := sql + options.DesiredDDLs
 
 	ddls, err := schema.GenerateIdempotentDDLs(generatorMode, sqlParser, desiredDDLs, currentDDLs, options.Config)
 	if err != nil {
@@ -93,6 +94,10 @@ func ParseFiles(files []string) (string, string) {
 }
 
 func ReadFile(filepath string) (string, error) {
+	if filepath == "" {
+		return "", nil
+	}
+
 	var err error
 	var buf []byte
 
