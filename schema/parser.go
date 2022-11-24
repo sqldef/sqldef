@@ -225,7 +225,6 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL) (Table, error) {
 		checks:      checks,
 		foreignKeys: foreignKeys,
 		options:     stmt.TableSpec.Options,
-		virtual:     stmt.TableSpec.Virtual,
 	}, nil
 }
 
