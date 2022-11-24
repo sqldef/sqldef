@@ -5131,7 +5131,7 @@ yydefault:
 		yyDollar = yyS[yypt-8 : yypt+1]
 //line parser.y:951
 		{
-			yyVAL.statement = &DDL{Action: CreateStr, NewName: yyDollar[5].tableName, TableSpec: &TableSpec{Virtual: true}}
+			yyVAL.statement = &DDL{Action: CreateStr, NewName: yyDollar[5].tableName, TableSpec: &TableSpec{}}
 		}
 	case 100:
 		yyDollar = yyS[yypt-0 : yypt+1]

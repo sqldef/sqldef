@@ -949,7 +949,7 @@ create_statement:
 /* For SQLite3, only to parse because alternation is not supported. // The Virtual Table Mechanism Of SQLite https://www.sqlite.org/vtab.html */
 | CREATE VIRTUAL TABLE not_exists_opt table_name USING sql_id module_arguments_opt
   {
-    $$ = &DDL{Action: CreateStr, NewName: $5, TableSpec: &TableSpec{Virtual: true}}
+    $$ = &DDL{Action: CreateStr, NewName: $5, TableSpec: &TableSpec{}}
   }
 
 module_arguments_opt:
