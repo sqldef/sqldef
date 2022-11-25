@@ -108,6 +108,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL) (Table, error) {
 			autoIncrement: castBool(parsedCol.Type.Autoincrement),
 			array:         castBool(parsedCol.Type.Array),
 			defaultDef:    parseDefaultDefinition(parsedCol.Type.Default),
+			sridDef:       parseSridDefinition(parsedCol.Type.Srid),
 			length:        parseValue(parsedCol.Type.Length),
 			scale:         parseValue(parsedCol.Type.Scale),
 			charset:       parsedCol.Type.Charset,
@@ -522,6 +523,14 @@ func parseDefaultDefinition(opt *parser.DefaultDefinition) *DefaultDefinition {
 		constraintName = opt.ConstraintName.String()
 	}
 	return &DefaultDefinition{constraintName: constraintName, value: defaultVal}
+}
+
+func parseSridDefinition(opt *parser.SridDefinition) *SridDefinition {
+	if opt == nil || opt.Value == nil {
+		return nil
+	}
+	srid := parseValue(opt.Value)
+	return &SridDefinition{value: srid}
 }
 
 func parseIdentitySequence(opt *parser.IdentityOpt) *Sequence {

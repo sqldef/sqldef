@@ -719,6 +719,7 @@ type ColumnType struct {
 	NotNull       *BoolVal
 	Autoincrement BoolVal
 	Default       *DefaultDefinition
+	Srid          *SridDefinition
 	OnUpdate      *SQLVal
 	Comment       *SQLVal
 	Check         *CheckDefinition
@@ -758,6 +759,10 @@ type ColumnType struct {
 type DefaultDefinition struct {
 	Value          *SQLVal
 	ConstraintName ColIdent // only for MSSQL
+}
+
+type SridDefinition struct {
+	Value          *SQLVal
 }
 
 type CheckDefinition struct {

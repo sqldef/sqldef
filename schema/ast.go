@@ -61,6 +61,7 @@ type Column struct {
 	autoIncrement bool
 	array         bool
 	defaultDef    *DefaultDefinition
+	sridDef       *SridDefinition
 	length        *Value
 	scale         *Value
 	check         *CheckDefinition
@@ -217,6 +218,10 @@ type Sequence struct {
 type DefaultDefinition struct {
 	value          *Value
 	constraintName string // only for MSSQL
+}
+
+type SridDefinition struct {
+	value          *Value
 }
 
 type CheckDefinition struct {
