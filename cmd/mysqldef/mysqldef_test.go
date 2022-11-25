@@ -995,6 +995,40 @@ func TestMysqldefEnumValues(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefSpatialValuesWithSRIDAndIndex(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint(20) NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint(20) NOT NULL,
+		  location point NOT NULL SRID 4326
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `location` point NOT NULL /*!80003 SRID 4326 */ AFTER `id`;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint(20) NOT NULL,
+		  location point NOT NULL /*!80003 SRID 4326 */,
+		  SPATIAL KEY index_users_location (location)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD SPATIAL KEY `index_users_location` (`location`);\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefView(t *testing.T) {
 	resetTestDatabase()
 
