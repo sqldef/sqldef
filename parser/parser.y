@@ -129,7 +129,7 @@ func forceEOF(yylex interface{}) {
 %token LEX_ERROR
 %left <bytes> UNION
 %token <bytes> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER BY LIMIT OFFSET FOR DECLARE
-%token <bytes> ALL DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SET LOCK KEYS
+%token <bytes> ALL DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SRID SET LOCK KEYS
 %token <bytes> VALUES LAST_INSERT_ID
 %token <bytes> NEXT VALUE SHARE MODE
 %token <bytes> SQL_NO_CACHE SQL_CACHE
@@ -359,6 +359,7 @@ func forceEOF(yylex interface{}) {
 %type <sequence> sequence_opt
 %type <boolVal> clustered_opt not_for_replication_opt
 %type <optVal> default_definition default_val
+%type <optVal> srid_definition srid_val
 %type <optVal> on_off
 %type <str> trigger_time trigger_event fetch_opt
 %type <strs> trigger_event_list
@@ -1243,6 +1244,7 @@ column_definition_type:
   {
     $1.NotNull = nil
     $1.Default = nil
+    $1.Srid = nil
     $1.OnUpdate = nil
     $1.Autoincrement = BoolVal(false)
     $1.KeyOpt = colKeyNone
@@ -1269,6 +1271,12 @@ column_definition_type:
 | column_definition_type CONSTRAINT sql_id default_definition
   {
     $1.Default = &DefaultDefinition{ConstraintName: $3, Value: $4}
+    $$ = $1
+  }
+// for MySQL: Spatial data option
+| column_definition_type srid_definition
+  {
+    $1.Srid = &SridDefinition{Value: $2}
     $$ = $1
   }
 | column_definition_type ON UPDATE current_timestamp
@@ -1446,6 +1454,18 @@ default_val:
 | function_call_generic
   {
     $$ = NewStrVal([]byte($1.(*FuncExpr).Name.val))
+  }
+
+srid_definition:
+  SRID srid_val
+  {
+    $$ = $2
+  }
+
+srid_val:
+  INTEGRAL
+  {
+    $$ = NewIntVal($1)
   }
 
 identity_behavior:
