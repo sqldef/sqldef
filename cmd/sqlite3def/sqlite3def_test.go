@@ -198,14 +198,6 @@ func TestSQLite3defFileSystem(t *testing.T) {
 		);
 		`,
 	)
-	writeFile("schema.sql", createTable)
-
-	createTable2 := stripHeredoc(`
-		CREATE TABLE bigdata2 (
-		  data integer
-		);
-		`,
-	)
 
 	db, err := connectDatabase()
 	if err != nil {
@@ -216,11 +208,11 @@ func TestSQLite3defFileSystem(t *testing.T) {
 		db,
 		database.NewParser(parser.ParserModeSQLite3),
 		&sqldef.Options{
-			DesiredFile: "schema.sql",
-			DesiredDDLs: createTable2,
+			DesiredDDLs: createTable,
 		},
 	)
-	assertApplyOutput(t, createTable+createTable2, nothingModified)
+	writeFile("schema.sql", createTable)
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestSQLite3defHelp(t *testing.T) {
