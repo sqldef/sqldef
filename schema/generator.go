@@ -1099,7 +1099,7 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 				ddl += fmt.Sprintf(" CONSTRAINT %s", g.escapeSQLName(index.name))
 			}
 
-			ddl += fmt.Sprintf(" %s%s", index.indexType, clusteredOption)
+			ddl += fmt.Sprintf(" %s%s", strings.ToUpper(index.indexType), clusteredOption)
 		}
 		ddl += fmt.Sprintf(" (%s)%s", strings.Join(columns, ", "), optionDefinition)
 		ddl += partition
