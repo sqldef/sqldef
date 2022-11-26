@@ -399,6 +399,7 @@ var keywords = map[string]int{
 	"sql_calc_found_rows":    UNUSED,
 	"sql_no_cache":           SQL_NO_CACHE,
 	"sql_small_result":       UNUSED,
+	"srid":                   SRID,
 	"ssl":                    UNUSED,
 	"start":                  START,
 	"starting":               UNUSED,
