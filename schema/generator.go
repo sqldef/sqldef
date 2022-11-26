@@ -1108,7 +1108,7 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 		ddl := fmt.Sprintf(
 			"ALTER TABLE %s ADD %s",
 			g.escapeTableName(table),
-			index.indexType,
+			strings.ToUpper(index.indexType),
 		)
 
 		if !index.primary {
