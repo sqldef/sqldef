@@ -469,7 +469,7 @@ func TestMssqldefCreateTableAddPrimaryKey(t *testing.T) {
 	)
 
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE [dbo].[users] ADD primary key CLUSTERED ([id]);\n",
+		"ALTER TABLE [dbo].[users] ADD PRIMARY KEY CLUSTERED ([id]);\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
