@@ -191,7 +191,7 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 	)
 	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
 		ALTER TABLE "public"."users" ADD COLUMN "id" bigint NOT NULL;
-		ALTER TABLE "public"."users" ADD primary key ("id");
+		ALTER TABLE "public"."users" ADD PRIMARY KEY ("id");
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)
