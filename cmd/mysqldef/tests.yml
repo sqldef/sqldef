@@ -166,6 +166,32 @@ CreateTableWithAutoIncrementPrimaryKeyAndAddMorePrimaryKey:
     ALTER TABLE `friends` ADD primary key (`id`, `other_id`);
     ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
   min_version: '8.0'
+CreateTableWithSpatialTypesAndSpatialKey:
+  current: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL,
+      location point NOT NULL,
+      SPATIAL KEY index_users_location (location)
+    );
+  output: |
+    ALTER TABLE `users` ADD COLUMN `location` point NOT NULL AFTER `id`;
+    ALTER TABLE `users` ADD spatial key `index_users_location` (`location`);
+CreateTableWithSpatialTypesSRIDSpecified:
+  current: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL,
+      location point NOT NULL /*!80003 SRID 4326 */
+    );
+  output: |
+    ALTER TABLE `users` ADD COLUMN `location` point NOT NULL /*!80003 SRID 4326 */ AFTER `id`;
 CreateTableGeneratedAlwaysAs:
   desired: |
     CREATE TABLE test_table (
