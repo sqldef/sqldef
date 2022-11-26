@@ -314,7 +314,7 @@ func (t *Table) PrimaryKey() *Index {
 
 	return &Index{
 		name:      "PRIMARY",
-		indexType: "PRIMARY KEY",
+		indexType: "primary key",
 		columns:   primaryColumns,
 		primary:   true,
 		unique:    true,
