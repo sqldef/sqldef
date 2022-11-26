@@ -1,3 +1,7 @@
+## v0.14.3
+
+- Use upper-case index types in ALTER TABLE [#319](https://github.com/k0kubun/sqldef/issues/319)
+
 ## v0.14.2
 
 - mysqldef: Support SRID column attribute [#317](https://github.com/k0kubun/sqldef/issues/317)
