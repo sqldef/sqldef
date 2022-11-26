@@ -59,7 +59,7 @@ CreateTableAddPrimaryKeyInColumn:
     );
   output: |
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(20) NOT NULL;
-    ALTER TABLE `users` ADD primary key (`name`);
+    ALTER TABLE `users` ADD PRIMARY KEY (`name`);
 CreateTableAddPrimaryKey:
   current: |
     CREATE TABLE users (
@@ -73,7 +73,7 @@ CreateTableAddPrimaryKey:
       PRIMARY KEY (id)
     );
   output: |
-    ALTER TABLE `users` ADD primary key (`id`);
+    ALTER TABLE `users` ADD PRIMARY KEY (`id`);
 CreateTableAddAutoIncrement:
   current: |
     CREATE TABLE users (
@@ -163,7 +163,7 @@ CreateTableWithAutoIncrementPrimaryKeyAndAddMorePrimaryKey:
   output: |
     ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint NOT NULL;
     ALTER TABLE `friends` DROP PRIMARY KEY;
-    ALTER TABLE `friends` ADD primary key (`id`, `other_id`);
+    ALTER TABLE `friends` ADD PRIMARY KEY (`id`, `other_id`);
     ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
   min_version: '8.0'
 CreateTableWithSpatialTypesAndSpatialKey:
@@ -179,7 +179,7 @@ CreateTableWithSpatialTypesAndSpatialKey:
     );
   output: |
     ALTER TABLE `users` ADD COLUMN `location` point NOT NULL AFTER `id`;
-    ALTER TABLE `users` ADD spatial key `index_users_location` (`location`);
+    ALTER TABLE `users` ADD SPATIAL KEY `index_users_location` (`location`);
 CreateTableWithSpatialTypesSRIDSpecified:
   current: |
     CREATE TABLE users (

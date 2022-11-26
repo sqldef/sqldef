@@ -1099,7 +1099,7 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 				ddl += fmt.Sprintf(" CONSTRAINT %s", g.escapeSQLName(index.name))
 			}
 
-			ddl += fmt.Sprintf(" %s%s", index.indexType, clusteredOption)
+			ddl += fmt.Sprintf(" %s%s", strings.ToUpper(index.indexType), clusteredOption)
 		}
 		ddl += fmt.Sprintf(" (%s)%s", strings.Join(columns, ", "), optionDefinition)
 		ddl += partition
@@ -1108,7 +1108,7 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 		ddl := fmt.Sprintf(
 			"ALTER TABLE %s ADD %s",
 			g.escapeTableName(table),
-			index.indexType,
+			strings.ToUpper(index.indexType),
 		)
 
 		if !index.primary {
