@@ -1025,7 +1025,7 @@ func TestMysqldefSpatialValuesWithSRIDAndIndex(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD SPATIAL KEY `index_users_location` (`location`);\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD spatial key `index_users_location` (`location`);\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
