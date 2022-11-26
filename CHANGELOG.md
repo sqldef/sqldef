@@ -1,3 +1,7 @@
+## v0.14.2
+
+- mysqldef: Support SRID column attribute [#317](https://github.com/k0kubun/sqldef/issues/317)
+
 ## v0.14.1
 
 - sqlite3def: Add index support [#312](https://github.com/k0kubun/sqldef/issues/312)
