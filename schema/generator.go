@@ -974,6 +974,14 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		definition += "NULL "
 	}
 
+	if column.sridDef != nil && column.sridDef.value != nil {
+		def, err := generateSridDefinition(*column.sridDef.value)
+		if err != nil {
+			return "", fmt.Errorf("%s in column: %#v", err.Error(), column)
+		}
+		definition += def + " "
+	}
+
 	if column.defaultDef != nil && column.defaultDef.value != nil {
 		def, err := generateDefaultDefinition(*column.defaultDef.value)
 		if err != nil {
@@ -1895,6 +1903,16 @@ func generateDefaultDefinition(defaultVal Value) (string, error) {
 		return fmt.Sprintf("DEFAULT %s", string(defaultVal.raw)), nil
 	default:
 		return "", fmt.Errorf("unsupported default value type (valueType: '%d')", defaultVal.valueType)
+	}
+}
+
+func generateSridDefinition(sridVal Value) (string, error) {
+	switch sridVal.valueType {
+	case ValueTypeInt:
+		// SRID option is only for MySQL 8.0.3 or later
+		return fmt.Sprintf("/*!80003 SRID %d */", sridVal.intVal), nil
+	default:
+		return "", fmt.Errorf("unsupported SRID value type (valueType: '%d')", sridVal.valueType)
 	}
 }
 
