@@ -1,3 +1,8 @@
+## v0.14.4
+
+- sqlite3def: Add fts5 test
+- sqlite3def: Add table-options support
+
 ## v0.14.3
 
 - Use upper-case index types in ALTER TABLE [#319](https://github.com/k0kubun/sqldef/issues/319)
