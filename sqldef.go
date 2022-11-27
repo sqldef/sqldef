@@ -12,7 +12,6 @@ import (
 )
 
 type Options struct {
-	DesiredFile string
 	DesiredDDLs string
 	CurrentFile string
 	DryRun      bool
@@ -24,10 +23,6 @@ type Options struct {
 
 // Main function shared by all commands
 func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser database.Parser, options *Options) {
-	if options.DesiredFile != "" && options.DesiredDDLs != "" {
-		log.Fatalf("The options are exclusive - DesiredFile: %s, DesiredDDLs: %s", options.DesiredFile, options.DesiredDDLs)
-	}
-
 	currentDDLs, err := db.DumpDDLs()
 	if err != nil {
 		log.Fatalf("Error on DumpDDLs: %s", err)
@@ -52,18 +47,7 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 		return
 	}
 
-	var desiredDDLs string
-	if options.DesiredFile != "" {
-		sql, err := ReadFile(options.DesiredFile)
-		if err != nil {
-			log.Fatalf("Failed to read '%s': %s", options.DesiredFile, err)
-		}
-		desiredDDLs = sql
-	} else if options.DesiredDDLs != "" {
-		desiredDDLs = options.DesiredDDLs
-	}
-
-	ddls, err := schema.GenerateIdempotentDDLs(generatorMode, sqlParser, desiredDDLs, currentDDLs, options.Config)
+	ddls, err := schema.GenerateIdempotentDDLs(generatorMode, sqlParser, options.DesiredDDLs, currentDDLs, options.Config)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

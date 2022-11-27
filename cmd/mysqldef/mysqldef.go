@@ -62,8 +62,17 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 
 	desiredFile, currentFile := sqldef.ParseFiles(opts.File)
+
+	var desiredDDLs string
+	if !opts.Export {
+		desiredDDLs, err = sqldef.ReadFile(desiredFile)
+		if err != nil {
+			log.Fatalf("Failed to read '%s': %s", desiredFile, err)
+		}
+	}
+
 	options := sqldef.Options{
-		DesiredFile: desiredFile,
+		DesiredDDLs: desiredDDLs,
 		CurrentFile: currentFile,
 		DryRun:      opts.DryRun,
 		Export:      opts.Export,
