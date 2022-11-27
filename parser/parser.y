@@ -130,6 +130,7 @@ func forceEOF(yylex interface{}) {
 %left <bytes> UNION
 %token <bytes> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER BY LIMIT OFFSET FOR DECLARE
 %token <bytes> ALL DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SRID SET LOCK KEYS
+%token <bytes> ROWID STRICT
 %token <bytes> VALUES LAST_INSERT_ID
 %token <bytes> NEXT VALUE SHARE MODE
 %token <bytes> SQL_NO_CACHE SQL_CACHE
@@ -2332,6 +2333,19 @@ table_option_list:
     $$ = $1
     $$[string($2)] = string($4)
   }
+/* For SQLite3 // SQLite Syntax: table-options https://www.sqlite.org/syntax/table-options.html */
+| sqlite3_table_opt
+  {
+    $$ = map[string]string{}
+  }
+| sqlite3_table_opt ',' table_option_list
+  {
+    $$ = $3
+  }
+
+sqlite3_table_opt:
+  WITHOUT ROWID {}
+| STRICT {}
 
 table_opt_name:
   reserved_sql_id
@@ -4681,6 +4695,8 @@ non_reserved_keyword:
 | STATISTICS_INCREMENTAL
 | ALLOW_ROW_LOCKS
 | ALLOW_PAGE_LOCKS
+| ROWID
+| STRICT
 
 openb:
   '('

@@ -108,3 +108,9 @@ Index:
       data integer
     );
     CREATE INDEX index_bigdata ON bigdata(data);
+TableOptions:
+  desired: |
+    CREATE TABLE bigdata(
+      id integer PRIMARY KEY,
+      data text
+    ) STRICT, WITHOUT ROWID;
