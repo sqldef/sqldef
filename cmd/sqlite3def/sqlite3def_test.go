@@ -160,6 +160,13 @@ func TestSQLite3defVirtualTable(t *testing.T) {
 		  tokenize=icu en_AU
 		);
 	`)
+	// SQLite FTS5 Extension https://www.sqlite.org/fts5.html
+	createTableFts5 := stripHeredoc(`
+		CREATE VIRTUAL TABLE fts5tbl USING fts5(
+			x,
+			tokenize = 'porter ascii'
+		);
+	`)
 	// The SQLite R*Tree Module https://www.sqlite.org/rtree.html
 	createTableRtreeA := stripHeredoc(`
 		CREATE VIRTUAL TABLE rtree_a USING rtree(
@@ -172,7 +179,7 @@ func TestSQLite3defVirtualTable(t *testing.T) {
 		);
 	`)
 
-	writeFile("schema.sql", createTableFtsA+createTableFtsB+createTableRtreeA)
+	writeFile("schema.sql", createTableFtsA+createTableFtsB+createTableFts5+createTableRtreeA)
 	// FTS is not available in modernc.org/sqlite v1.19.4 package
 	writeFile("config.yml", stripHeredoc(`
 		skip_tables: |
@@ -181,9 +188,10 @@ func TestSQLite3defVirtualTable(t *testing.T) {
 		  fts_b
 		  fts_b_\w+
 		  rtree_a_\w+
+		  fts5tbl_\w+
 	`))
 	actual := assertedExecute(t, "./sqlite3def", "--config", "config.yml", "--file", "schema.sql", "sqlite3def_test")
-	assertEquals(t, actual, applyPrefix+createTableRtreeA)
+	assertEquals(t, actual, applyPrefix+createTableFts5+createTableRtreeA)
 	actual = assertedExecute(t, "./sqlite3def", "--config", "config.yml", "--file", "schema.sql", "sqlite3def_test")
 	assertEquals(t, actual, nothingModified)
 }
