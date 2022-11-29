@@ -1,3 +1,7 @@
+## v0.14.5
+
+- Add DesiredDDLs option to pass DDLs as string [#315](https://github.com/k0kubun/sqldef/issues/315)
+
 ## v0.14.4
 
 - sqlite3def: Add fts5 test
