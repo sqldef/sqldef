@@ -61,19 +61,18 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		os.Exit(0)
 	}
 
-	desiredFile, currentFile := sqldef.ParseFiles(opts.File)
+	desiredFiles := sqldef.ParseFiles(opts.File)
 
 	var desiredDDLs string
 	if !opts.Export {
-		desiredDDLs, err = sqldef.ReadFile(desiredFile)
+		desiredDDLs, err = sqldef.ReadFiles(desiredFiles)
 		if err != nil {
-			log.Fatalf("Failed to read '%s': %s", desiredFile, err)
+			log.Fatalf("Failed to read '%v': %s", desiredFiles, err)
 		}
 	}
 
 	options := sqldef.Options{
 		DesiredDDLs: desiredDDLs,
-		CurrentFile: currentFile,
 		DryRun:      opts.DryRun,
 		Export:      opts.Export,
 		SkipDrop:    opts.SkipDrop,
@@ -81,17 +80,19 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		Config:      database.ParseGeneratorConfig(opts.Config),
 	}
 
-	databaseName := ""
-	if len(currentFile) == 0 {
-		if len(args) == 0 {
-			fmt.Print("No database is specified!\n\n")
-			parser.WriteHelp(os.Stdout)
-			os.Exit(1)
-		} else if len(args) > 1 {
-			fmt.Printf("Multiple databases are given: %v\n\n", args)
-			parser.WriteHelp(os.Stdout)
-			os.Exit(1)
-		}
+	if len(args) == 0 {
+		fmt.Print("No database is specified!\n\n")
+		parser.WriteHelp(os.Stdout)
+		os.Exit(1)
+	} else if len(args) > 1 {
+		fmt.Printf("Multiple databases are given: %v\n\n", args)
+		parser.WriteHelp(os.Stdout)
+		os.Exit(1)
+	}
+	var databaseName string
+	if strings.HasSuffix(args[0], ".sql") {
+		options.CurrentFile = args[0]
+	} else {
 		databaseName = args[0]
 	}
 
