@@ -1,3 +1,10 @@
+## v0.15.0
+
+- `--file` accepts a comma-separated input to pass multiple SQL files [#325](https://github.com/k0kubun/sqldef/issues/325)
+  - Comparing two `--file` options introduced in v0.11.17 is removed.
+    Instead, you can specify an SQL file in the place of the database name.
+    e.g. `mysqldef current.sql < desired.sql`
+
 ## v0.14.5
 
 - Add DesiredDDLs option to pass DDLs as string [#315](https://github.com/k0kubun/sqldef/issues/315)
