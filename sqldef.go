@@ -68,22 +68,34 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 	}
 }
 
-// TODO: Warn if both the second --file and database options are specified
-func ParseFiles(files []string) (string, string) {
+func ParseFiles(files []string) []string {
 	if len(files) == 0 {
 		panic("ParseFiles got empty files") // assume default:"-"
 	}
 
-	desiredFile := files[0]
-	currentFile := ""
-	if len(files) == 2 {
-		desiredFile = files[1]
-		currentFile = files[0]
-	} else if len(files) > 2 {
-		fmt.Printf("Expected only one or two --file options, but got: %v\n", files)
-		os.Exit(1)
+	result := make([]string, 0, len(files))
+	for _, f := range files {
+		result = append(result, strings.Split(f, ",")...)
 	}
-	return desiredFile, currentFile
+	for i, r := range result {
+		result[i] = strings.TrimSpace(r)
+	}
+	return result
+}
+
+func ReadFiles(filepaths []string) (string, error) {
+	var result strings.Builder
+	for _, filepath := range filepaths {
+		f, err := ReadFile(filepath)
+		if err != nil {
+			return "", err
+		}
+		_, err = result.WriteString(f)
+		if err != nil {
+			return "", err
+		}
+	}
+	return result.String(), nil
 }
 
 func ReadFile(filepath string) (string, error) {

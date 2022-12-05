@@ -1283,7 +1283,7 @@ func TestMysqldefFileComparison(t *testing.T) {
 		);`,
 	))
 
-	output := assertedExecute(t, "./mysqldef", "--file", "schema.sql", "--file", "schema.sql")
+	output := assertedExecute(t, "./mysqldef", "--file", "schema.sql", "schema.sql")
 	assertEquals(t, output, nothingModified)
 }
 

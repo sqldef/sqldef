@@ -2,16 +2,17 @@ package main
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/database/file"
-	"github.com/k0kubun/sqldef/parser"
 	"log"
 	"os"
+	"strings"
 	"syscall"
 
 	"github.com/jessevdk/go-flags"
 	"github.com/k0kubun/sqldef"
 	"github.com/k0kubun/sqldef/database"
+	"github.com/k0kubun/sqldef/database/file"
 	"github.com/k0kubun/sqldef/database/mssql"
+	"github.com/k0kubun/sqldef/parser"
 	"github.com/k0kubun/sqldef/schema"
 	"golang.org/x/term"
 )
@@ -52,35 +53,36 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		os.Exit(0)
 	}
 
-	desiredFile, currentFile := sqldef.ParseFiles(opts.File)
+	desiredFiles := sqldef.ParseFiles(opts.File)
 
 	var desiredDDLs string
 	if !opts.Export {
-		desiredDDLs, err = sqldef.ReadFile(desiredFile)
+		desiredDDLs, err = sqldef.ReadFiles(desiredFiles)
 		if err != nil {
-			log.Fatalf("Failed to read '%s': %s", desiredFile, err)
+			log.Fatalf("Failed to read '%v': %s", desiredFiles, err)
 		}
 	}
 
 	options := sqldef.Options{
 		DesiredDDLs: desiredDDLs,
-		CurrentFile: currentFile,
 		DryRun:      opts.DryRun,
 		Export:      opts.Export,
 		SkipDrop:    opts.SkipDrop,
 	}
 
-	databaseName := ""
-	if len(currentFile) == 0 {
-		if len(args) == 0 {
-			fmt.Print("No database is specified!\n\n")
-			parser.WriteHelp(os.Stdout)
-			os.Exit(1)
-		} else if len(args) > 1 {
-			fmt.Printf("Multiple databases are given: %v\n\n", args)
-			parser.WriteHelp(os.Stdout)
-			os.Exit(1)
-		}
+	if len(args) == 0 {
+		fmt.Print("No database is specified!\n\n")
+		parser.WriteHelp(os.Stdout)
+		os.Exit(1)
+	} else if len(args) > 1 {
+		fmt.Printf("Multiple databases are given: %v\n\n", args)
+		parser.WriteHelp(os.Stdout)
+		os.Exit(1)
+	}
+	var databaseName string
+	if strings.HasSuffix(args[0], ".sql") {
+		options.CurrentFile = args[0]
+	} else {
 		databaseName = args[0]
 	}
 
