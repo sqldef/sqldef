@@ -1712,9 +1712,9 @@ time_type:
   {
     $$ = ColumnType{Type: string($1), Length: $2}
   }
-| DATETIME2
+| DATETIME2 length_opt
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: string($1), Length: $2}
   }
 | DATETIMEOFFSET length_opt
   {

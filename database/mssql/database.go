@@ -218,7 +218,7 @@ func (c column) getLength() (string, bool) {
 			return "", false
 		}
 		return strconv.Itoa(int(maxLength / 2)), true
-	case "datetimeoffset":
+	case "datetimeoffset", "datetime2":
 		if c.Scale == "7" {
 			return "", false
 		}

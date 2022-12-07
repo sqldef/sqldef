@@ -61,6 +61,7 @@ func TestMssqldefColumnLiteral(t *testing.T) {
 		  v_money money,
 		  v_datetimeoffset datetimeoffset(1),
 		  v_datetime2 datetime2,
+		  v_datetime2_with_precision datetime2(3),
 		  v_smalldatetime smalldatetime,
 		  v_nchar nchar(30),
 		  v_nvarchar nvarchar(30),
