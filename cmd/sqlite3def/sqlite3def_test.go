@@ -253,7 +253,7 @@ func assertEquals(t *testing.T, actual string, expected string) {
 func execute(command string, args ...string) (string, error) {
 	cmd := exec.Command(command, args...)
 	out, err := cmd.CombinedOutput()
-	return string(out), err
+	return strings.ReplaceAll(string(out), "\r\n", "\n"), err
 }
 
 func resetTestDatabase() {
