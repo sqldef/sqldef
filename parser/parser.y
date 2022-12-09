@@ -140,6 +140,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> ID HEX STRING INTEGRAL FLOAT HEXNUM VALUE_ARG LIST_ARG COMMENT COMMENT_KEYWORD BIT_LITERAL
 %token <bytes> NULL TRUE FALSE
 %token <bytes> OFF
+%token <bytes> MAX
 
 // Precedence dictated by mysql. But the vitess grammar is simplified.
 // Some of these operators don't conflict in our situation. Nevertheless,
@@ -317,7 +318,7 @@ func forceEOF(yylex interface{}) {
 %type <convertType> convert_type simple_convert_type
 %type <columnType> column_type
 %type <columnType> bool_type int_type decimal_type numeric_type time_type char_type spatial_type
-%type <optVal> length_opt current_timestamp
+%type <optVal> length_opt max_length_opt current_timestamp
 %type <str> charset_opt collate_opt
 %type <boolVal> unsigned_opt zero_fill_opt array_opt time_zone_opt
 %type <LengthScaleOption> float_length_opt decimal_length_opt
@@ -1748,7 +1749,7 @@ char_type:
   {
     $$ = ColumnType{Type: string($1), Length: $2, Charset: $3, Collate: $4}
   }
-| VARCHAR length_opt charset_opt collate_opt
+| VARCHAR max_length_opt charset_opt collate_opt
   {
     $$ = ColumnType{Type: string($1), Length: $2, Charset: $3, Collate: $4}
   }
@@ -1756,7 +1757,7 @@ char_type:
   {
     $$ = ColumnType{Type: string($1), Length: $2, Charset: $3, Collate: $4}
   }
-| NVARCHAR length_opt charset_opt collate_opt
+| NVARCHAR max_length_opt charset_opt collate_opt
   {
     $$ = ColumnType{Type: string($1), Length: $2, Charset: $3, Collate: $4}
   }
@@ -1772,7 +1773,7 @@ char_type:
   {
     $$ = ColumnType{Type: string($1), Length: $2}
   }
-| VARBINARY length_opt
+| VARBINARY max_length_opt
   {
     $$ = ColumnType{Type: string($1), Length: $2}
   }
@@ -1917,6 +1918,20 @@ decimal_length_opt:
         Scale: NewIntVal($4),
     }
   }
+
+max_length_opt:
+  {
+    $$ = nil
+  }
+| '(' INTEGRAL ')'
+  {
+    $$ = NewIntVal($2)
+  }
+| '(' MAX ')'
+  {
+    $$ = NewIntVal($2)
+  }
+
 
 time_zone_opt:
   {
