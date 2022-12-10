@@ -6879,7 +6879,7 @@ yydefault:
 				ConstraintName:   yyDollar[2].colIdent,
 				IndexName:        yyDollar[5].colIdent,
 				IndexColumns:     yyDollar[7].colIdents,
-				ReferenceName:    NewColIdent(String(yyDollar[10].tableName)),
+				ReferenceName:    yyDollar[10].tableName,
 				ReferenceColumns: yyDollar[12].colIdents,
 			}
 		}
