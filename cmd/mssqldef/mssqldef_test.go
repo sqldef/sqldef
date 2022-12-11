@@ -1011,7 +1011,7 @@ func TestMssqldefDryRun(t *testing.T) {
 
 func TestMssqldefSkipDrop(t *testing.T) {
 	resetTestDatabase()
-	mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", stripHeredoc(`
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", stripHeredoc(`
 		CREATE TABLE users (
 		    id integer NOT NULL PRIMARY KEY,
 		    age integer
@@ -1030,7 +1030,7 @@ func TestMssqldefExport(t *testing.T) {
 	out := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")
 	assertEquals(t, out, "-- No table exists --\n")
 
-	mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", stripHeredoc(`
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", stripHeredoc(`
 		CREATE TABLE dbo.v (
 		    v_int int NOT NULL,
 		    v_smallmoney smallmoney,
@@ -1075,7 +1075,7 @@ func TestMssqldefHelp(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	resetTestDatabase()
-	mustExecute("go", "build")
+	testutils.MustExecute("go", "build")
 	status := m.Run()
 	_ = os.Remove("mssqldef")
 	_ = os.Remove("schema.sql")
@@ -1093,14 +1093,6 @@ func assertApplyOutput(t *testing.T, schema string, expected string) {
 	writeFile("schema.sql", schema)
 	actual := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql")
 	assertEquals(t, actual, expected)
-}
-
-func mustExecute(command string, args ...string) {
-	out, err := testutils.Execute(command, args...)
-	if err != nil {
-		log.Printf("failed to execute '%s %s': `%s`", command, strings.Join(args, " "), out)
-		log.Fatal(err)
-	}
 }
 
 func assertedExecute(t *testing.T, command string, args ...string) string {
@@ -1121,8 +1113,8 @@ func assertEquals(t *testing.T, actual string, expected string) {
 }
 
 func resetTestDatabase() {
-	mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "DROP DATABASE IF EXISTS mssqldef_test;")
-	mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "CREATE DATABASE mssqldef_test;")
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "DROP DATABASE IF EXISTS mssqldef_test;")
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "CREATE DATABASE mssqldef_test;")
 }
 
 func writeFile(path string, content string) {

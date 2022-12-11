@@ -1328,7 +1328,7 @@ func TestMain(m *testing.M) {
 	}
 
 	resetTestDatabase()
-	mustExecute("go", "build")
+	testutils.MustExecute("go", "build")
 	status := m.Run()
 	_ = os.Remove("psqldef")
 	_ = os.Remove("schema.sql")
@@ -1355,16 +1355,8 @@ func assertExportOutput(t *testing.T, expected string) {
 	assertEquals(t, actual, expected)
 }
 
-func mustExecute(command string, args ...string) {
-	out, err := testutils.Execute(command, args...)
-	if err != nil {
-		log.Printf("failed to execute '%s %s': `%s`", command, strings.Join(args, " "), out)
-		log.Fatal(err)
-	}
-}
-
 func mustExecuteSQL(sql string) {
-	mustExecute("psql", "-Upostgres", databaseName, "-c", sql)
+	testutils.MustExecute("psql", "-Upostgres", databaseName, "-c", sql)
 }
 
 func executeSQL(sql string) (string, error) {
@@ -1388,8 +1380,8 @@ func assertEquals(t *testing.T, actual string, expected string) {
 }
 
 func resetTestDatabase() {
-	mustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("DROP DATABASE IF EXISTS %s;", databaseName))
-	mustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("CREATE DATABASE %s;", databaseName))
+	testutils.MustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("DROP DATABASE IF EXISTS %s;", databaseName))
+	testutils.MustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("CREATE DATABASE %s;", databaseName))
 }
 
 func writeFile(path string, content string) {
