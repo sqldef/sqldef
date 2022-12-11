@@ -202,7 +202,7 @@ func joinDDLs(ddls []string) string {
 }
 
 func MustExecute(command string, args ...string) string {
-	out, err := execute(command, args...)
+	out, err := Execute(command, args...)
 	if err != nil {
 		log.Printf("failed to execute '%s %s': `%s`", command, strings.Join(args, " "), out)
 		log.Fatal(err)
@@ -210,7 +210,7 @@ func MustExecute(command string, args ...string) string {
 	return out
 }
 
-func execute(command string, args ...string) (string, error) {
+func Execute(command string, args ...string) (string, error) {
 	cmd := exec.Command(command, args...)
 	out, err := cmd.CombinedOutput()
 	return strings.ReplaceAll(string(out), "\r\n", "\n"), err

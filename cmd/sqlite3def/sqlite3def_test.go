@@ -6,17 +6,17 @@
 package main
 
 import (
+	"log"
+	"os"
+	"regexp"
+	"strings"
+	"testing"
+
 	"github.com/k0kubun/sqldef/cmd/testutils"
 	"github.com/k0kubun/sqldef/database"
 	"github.com/k0kubun/sqldef/database/sqlite3"
 	"github.com/k0kubun/sqldef/parser"
 	"github.com/k0kubun/sqldef/schema"
-	"log"
-	"os"
-	"os/exec"
-	"regexp"
-	"strings"
-	"testing"
 )
 
 const (
@@ -197,12 +197,12 @@ func TestSQLite3defVirtualTable(t *testing.T) {
 }
 
 func TestSQLite3defHelp(t *testing.T) {
-	_, err := execute("./sqlite3def", "--help")
+	_, err := testutils.Execute("./sqlite3def", "--help")
 	if err != nil {
 		t.Errorf("failed to run --help: %s", err)
 	}
 
-	out, err := execute("./sqlite3def")
+	out, err := testutils.Execute("./sqlite3def")
 	if err == nil {
 		t.Errorf("no database must be error, but successfully got: %s", out)
 	}
@@ -227,7 +227,7 @@ func assertApplyOutput(t *testing.T, schema string, expected string) {
 }
 
 func mustExecute(command string, args ...string) {
-	out, err := execute(command, args...)
+	out, err := testutils.Execute(command, args...)
 	if err != nil {
 		log.Printf("failed to execute '%s %s': `%s`", command, strings.Join(args, " "), out)
 		log.Fatal(err)
@@ -236,7 +236,7 @@ func mustExecute(command string, args ...string) {
 
 func assertedExecute(t *testing.T, command string, args ...string) string {
 	t.Helper()
-	out, err := execute(command, args...)
+	out, err := testutils.Execute(command, args...)
 	if err != nil {
 		t.Errorf("failed to execute '%s %s' (error: '%s'): `%s`", command, strings.Join(args, " "), err, out)
 	}
@@ -248,12 +248,6 @@ func assertEquals(t *testing.T, actual string, expected string) {
 	if expected != actual {
 		t.Errorf("expected '%s' but got '%s'", expected, actual)
 	}
-}
-
-func execute(command string, args ...string) (string, error) {
-	cmd := exec.Command(command, args...)
-	out, err := cmd.CombinedOutput()
-	return strings.ReplaceAll(string(out), "\r\n", "\n"), err
 }
 
 func resetTestDatabase() {
