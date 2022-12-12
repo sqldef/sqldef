@@ -8,7 +8,6 @@ package main
 import (
 	"log"
 	"os"
-	"os/exec"
 	"regexp"
 	"strings"
 	"testing"
@@ -1325,14 +1324,14 @@ func TestMysqldefExport(t *testing.T) {
 		") ENGINE=InnoDB DEFAULT CHARSET=latin1;\n" +
 		"\n" +
 		"CREATE TRIGGER test AFTER INSERT ON users FOR EACH ROW UPDATE users SET updated_at = current_timestamp();\n"
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", ddls)
+	testutils.MustExecute("mysql", "-uroot", "mysqldef_test", "-e", ddls)
 	out = assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export")
 	assertEquals(t, out, ddls)
 }
 
 func TestMysqldefSkipDrop(t *testing.T) {
 	resetTestDatabase()
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", stripHeredoc(`
+	testutils.MustExecute("mysql", "-uroot", "mysqldef_test", "-e", stripHeredoc(`
 		CREATE TABLE users (
 		  name varchar(40),
 		  created_at datetime NOT NULL
@@ -1352,7 +1351,7 @@ func TestMysqldefSkipView(t *testing.T) {
 	createTable := "CREATE TABLE users (id bigint(20));\n"
 	createView := "CREATE VIEW user_views AS SELECT id from users;\n"
 
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", createTable+createView)
+	testutils.MustExecute("mysql", "-uroot", "mysqldef_test", "-e", createTable+createView)
 
 	writeFile("schema.sql", createTable)
 
@@ -1390,7 +1389,7 @@ func TestMysqldefConfigIncludesTargetTables(t *testing.T) {
 	usersTable := "CREATE TABLE users (id bigint);"
 	users1Table := "CREATE TABLE users_1 (id bigint);"
 	users10Table := "CREATE TABLE users_10 (id bigint);"
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", usersTable+users1Table+users10Table)
+	testutils.MustExecute("mysql", "-uroot", "mysqldef_test", "-e", usersTable+users1Table+users10Table)
 
 	writeFile("schema.sql", usersTable+users1Table)
 	writeFile("config.yml", "target_tables: |\n  users\n  users_\\d\n")
@@ -1405,7 +1404,7 @@ func TestMysqldefConfigIncludesSkipTables(t *testing.T) {
 	usersTable := "CREATE TABLE users (id bigint);"
 	users1Table := "CREATE TABLE users_1 (id bigint);"
 	users10Table := "CREATE TABLE users_10 (id bigint);"
-	mustExecute("mysql", "-uroot", "mysqldef_test", "-e", usersTable+users1Table+users10Table)
+	testutils.MustExecute("mysql", "-uroot", "mysqldef_test", "-e", usersTable+users1Table+users10Table)
 
 	writeFile("schema.sql", usersTable+users1Table)
 	writeFile("config.yml", "skip_tables: |\n  users_10\n")
@@ -1415,12 +1414,12 @@ func TestMysqldefConfigIncludesSkipTables(t *testing.T) {
 }
 
 func TestMysqldefHelp(t *testing.T) {
-	_, err := execute("./mysqldef", "--help")
+	_, err := testutils.Execute("./mysqldef", "--help")
 	if err != nil {
 		t.Errorf("failed to run --help: %s", err)
 	}
 
-	out, err := execute("./mysqldef")
+	out, err := testutils.Execute("./mysqldef")
 	if err == nil {
 		t.Errorf("no database must be error, but successfully got: %s", out)
 	}
@@ -1432,7 +1431,7 @@ func TestMain(m *testing.M) {
 	}
 
 	resetTestDatabase()
-	mustExecute("go", "build")
+	testutils.MustExecute("go", "build")
 	status := m.Run()
 	os.Remove("mysqldef")
 	os.Remove("schema.sql")
@@ -1456,25 +1455,16 @@ func assertApplyOutput(t *testing.T, schema string, expected string) {
 func assertApplyFailure(t *testing.T, schema string, expected string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	actual, err := execute("./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	actual, err := testutils.Execute("./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
 	if err == nil {
 		t.Errorf("expected 'mysqldef -uroot mysqldef_test --file schema.sql' to fail but succeeded with: %s", actual)
 	}
 	assertEquals(t, actual, expected)
 }
 
-func mustExecute(command string, args ...string) string {
-	out, err := execute(command, args...)
-	if err != nil {
-		log.Printf("failed to execute '%s %s': `%s`", command, strings.Join(args, " "), out)
-		log.Fatal(err)
-	}
-	return out
-}
-
 func assertedExecute(t *testing.T, command string, args ...string) string {
 	t.Helper()
-	out, err := execute(command, args...)
+	out, err := testutils.Execute(command, args...)
 	if err != nil {
 		t.Errorf("failed to execute '%s %s' (error: '%s'): `%s`", command, strings.Join(args, " "), err, out)
 	}
@@ -1488,15 +1478,9 @@ func assertEquals(t *testing.T, actual string, expected string) {
 	}
 }
 
-func execute(command string, args ...string) (string, error) {
-	cmd := exec.Command(command, args...)
-	out, err := cmd.CombinedOutput()
-	return string(out), err
-}
-
 func resetTestDatabase() {
-	mustExecute("mysql", "-uroot", "-e", "DROP DATABASE IF EXISTS mysqldef_test;")
-	mustExecute("mysql", "-uroot", "-e", "CREATE DATABASE mysqldef_test;")
+	testutils.MustExecute("mysql", "-uroot", "-e", "DROP DATABASE IF EXISTS mysqldef_test;")
+	testutils.MustExecute("mysql", "-uroot", "-e", "CREATE DATABASE mysqldef_test;")
 }
 
 func writeFile(path string, content string) {

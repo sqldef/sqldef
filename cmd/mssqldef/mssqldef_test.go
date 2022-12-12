@@ -7,10 +7,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/k0kubun/sqldef/parser"
 	"log"
 	"os"
-	"os/exec"
 	"regexp"
 	"strings"
 	"testing"
@@ -18,6 +16,7 @@ import (
 	"github.com/k0kubun/sqldef/cmd/testutils"
 	"github.com/k0kubun/sqldef/database"
 	"github.com/k0kubun/sqldef/database/mssql"
+	"github.com/k0kubun/sqldef/parser"
 	"github.com/k0kubun/sqldef/schema"
 )
 
@@ -407,7 +406,7 @@ func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
 	assertApply(t, createTable)
 
 	// extract name of default constraint from sql server
-	out, err := execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
+	out, err := testutils.Execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
 		SELECT OBJECT_NAME(c.default_object_id) FROM sys.columns c WHERE c.object_id = OBJECT_ID('dbo.users', 'U') AND c.default_object_id != 0;
 		`,
 	))
@@ -514,7 +513,7 @@ func TestMssqldefCreateTableDropPrimaryKey(t *testing.T) {
 	assertApply(t, createTable)
 
 	// extract name of primary key constraint from sql server
-	out, err := execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
+	out, err := testutils.Execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
 		SELECT kc.name FROM sys.key_constraints kc WHERE kc.parent_object_id=OBJECT_ID('users', 'U') AND kc.[type]='PK';
 		`,
 	))
@@ -819,7 +818,7 @@ func TestMssqldefCreateTableWithCheckWithoutName(t *testing.T) {
 	)
 
 	// extract name of check constraint from sql server
-	out, err := execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
+	out, err := testutils.Execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
 		SELECT name FROM sys.check_constraints cc WHERE cc.parent_object_id = OBJECT_ID('dbo.a', 'U');
 		`,
 	))
@@ -1012,7 +1011,7 @@ func TestMssqldefDryRun(t *testing.T) {
 
 func TestMssqldefSkipDrop(t *testing.T) {
 	resetTestDatabase()
-	mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", stripHeredoc(`
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", stripHeredoc(`
 		CREATE TABLE users (
 		    id integer NOT NULL PRIMARY KEY,
 		    age integer
@@ -1031,7 +1030,7 @@ func TestMssqldefExport(t *testing.T) {
 	out := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")
 	assertEquals(t, out, "-- No table exists --\n")
 
-	mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", stripHeredoc(`
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", stripHeredoc(`
 		CREATE TABLE dbo.v (
 		    v_int int NOT NULL,
 		    v_smallmoney smallmoney,
@@ -1063,12 +1062,12 @@ func TestMssqldefExport(t *testing.T) {
 }
 
 func TestMssqldefHelp(t *testing.T) {
-	_, err := execute("./mssqldef", "--help")
+	_, err := testutils.Execute("./mssqldef", "--help")
 	if err != nil {
 		t.Errorf("failed to run --help: %s", err)
 	}
 
-	out, err := execute("./mssqldef")
+	out, err := testutils.Execute("./mssqldef")
 	if err == nil {
 		t.Errorf("no database must be error, but successfully got: %s", out)
 	}
@@ -1076,7 +1075,7 @@ func TestMssqldefHelp(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	resetTestDatabase()
-	mustExecute("go", "build")
+	testutils.MustExecute("go", "build")
 	status := m.Run()
 	_ = os.Remove("mssqldef")
 	_ = os.Remove("schema.sql")
@@ -1096,17 +1095,9 @@ func assertApplyOutput(t *testing.T, schema string, expected string) {
 	assertEquals(t, actual, expected)
 }
 
-func mustExecute(command string, args ...string) {
-	out, err := execute(command, args...)
-	if err != nil {
-		log.Printf("failed to execute '%s %s': `%s`", command, strings.Join(args, " "), out)
-		log.Fatal(err)
-	}
-}
-
 func assertedExecute(t *testing.T, command string, args ...string) string {
 	t.Helper()
-	out, err := execute(command, args...)
+	out, err := testutils.Execute(command, args...)
 	if err != nil {
 		t.Errorf("failed to execute '%s %s' (error: '%s'): `%s`", command, strings.Join(args, " "), err, out)
 	}
@@ -1121,15 +1112,9 @@ func assertEquals(t *testing.T, actual string, expected string) {
 	}
 }
 
-func execute(command string, args ...string) (string, error) {
-	cmd := exec.Command(command, args...)
-	out, err := cmd.CombinedOutput()
-	return string(out), err
-}
-
 func resetTestDatabase() {
-	mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "DROP DATABASE IF EXISTS mssqldef_test;")
-	mustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "CREATE DATABASE mssqldef_test;")
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "DROP DATABASE IF EXISTS mssqldef_test;")
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "CREATE DATABASE mssqldef_test;")
 }
 
 func writeFile(path string, content string) {
