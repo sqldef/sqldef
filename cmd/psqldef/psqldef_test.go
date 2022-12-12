@@ -290,41 +290,6 @@ func TestPsqldefAddForeignKey(t *testing.T) {
 	assertApplyOutput(t, createUsers+createPosts+addForeignKey, nothingModified)
 }
 
-func TestPsqldefAddForeignKeyWithAlter(t *testing.T) {
-	resetTestDatabase()
-
-	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY);\n"
-	createPosts := stripHeredoc(`
-		CREATE TABLE posts (
-		  content text,
-		  user_id bigint
-		);
-		`,
-	)
-	addForeignKey := "ALTER TABLE ONLY public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;\n"
-	assertApplyOutput(t, createUsers+createPosts+addForeignKey, applyPrefix+createUsers+createPosts+addForeignKey)
-}
-
-func TestPsqldefAddDifferentForeignKeyWithSameName(t *testing.T) {
-	resetTestDatabase()
-
-	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY);\n"
-	createPosts := stripHeredoc(`
-		CREATE TABLE posts (
-		  content text,
-		  user_id bigint
-		);
-		`,
-	)
-	addForeignKey := "ALTER TABLE ONLY public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;\n"
-	assertApplyOutput(t, createUsers+createPosts+addForeignKey, applyPrefix+createUsers+createPosts+addForeignKey)
-
-	addForeignKey = "ALTER TABLE ONLY public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON UPDATE CASCADE;\n"
-	assertApplyOutput(t, createUsers+createPosts+addForeignKey, applyPrefix+
-		`ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";`+"\n"+
-		addForeignKey)
-}
-
 func TestPsqldefCreateTableWithReferences(t *testing.T) {
 	resetTestDatabase()
 
