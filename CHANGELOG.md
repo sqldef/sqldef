@@ -1,3 +1,7 @@
+## v0.15.1
+
+- Support ADD CONSTRAINT after CREATE TABLE for psqldef [#331](https://github.com/k0kubun/sqldef/issues/331)
+
 ## v0.15.0
 
 - `--file` accepts a comma-separated input to pass multiple SQL files [#325](https://github.com/k0kubun/sqldef/issues/325)
