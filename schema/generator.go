@@ -674,7 +674,28 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 func (g *Generator) generateDDLsForAddForeignKey(tableName string, desiredForeignKey ForeignKey, action string, statement string) ([]string, error) {
 	var ddls []string
 
-	// TODO: Simulate currentTable.foreignKeys too
+	currentTable := findTableByName(g.currentTables, tableName)
+	if currentTable == nil {
+		return nil, fmt.Errorf("%s is performed for inexistent table '%s': '%s'", action, tableName, statement)
+	}
+
+	referenceTable := findTableByName(g.currentTables, desiredForeignKey.referenceName)
+	if referenceTable == nil {
+		return nil, fmt.Errorf("%s is performed before create table '%s': '%s'", action, desiredForeignKey.referenceName, statement)
+	}
+
+	currentForeignKey := findForeignKeyByName(currentTable.foreignKeys, desiredForeignKey.constraintName)
+	if currentForeignKey == nil {
+		// Foreign Key not found, add foreign key
+		ddls = append(ddls, statement)
+		currentTable.foreignKeys = append(currentTable.foreignKeys, desiredForeignKey)
+	} else {
+		// Foreign key found, If it's different, drop and add or alter foreign key.
+		if !g.areSameForeignKeys(*currentForeignKey, desiredForeignKey) {
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentForeignKey.constraintName)))
+			ddls = append(ddls, statement)
+		}
+	}
 
 	// Examine indexes in desiredTable to delete obsoleted indexes later
 	desiredTable := findTableByName(g.desiredTables, tableName)

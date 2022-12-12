@@ -2238,7 +2238,7 @@ foreign_key_without_options:
       ConstraintName: $2,
       IndexName: $5,
       IndexColumns: $7,
-      ReferenceName: NewColIdent(String($10)),
+      ReferenceName: $10,
       ReferenceColumns: $12,
     }
   }

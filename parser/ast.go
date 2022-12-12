@@ -1138,7 +1138,7 @@ type ForeignKeyDefinition struct {
 	ConstraintName    ColIdent
 	IndexName         ColIdent
 	IndexColumns      []ColIdent
-	ReferenceName     ColIdent
+	ReferenceName     TableName
 	ReferenceColumns  []ColIdent
 	OnDelete          ColIdent
 	OnUpdate          ColIdent
