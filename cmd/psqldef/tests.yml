@@ -262,6 +262,11 @@ IntervalExpression:
       AND created_at <= to_timestamp(concat(to_char(current_date, 'YYYY-MM-DD'), ' 23:59:59'), 'YYYY-MM-DD HH24:MI:SS')
       GROUP BY main_type, sub_type, user_id
     );
+IntervalType:
+  desired: |
+    CREATE TABLE public.test (
+      col interval
+    );
 MaterializedViewIndex:
   desired: |
     CREATE TABLE IF NOT EXISTS points (

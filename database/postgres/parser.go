@@ -523,7 +523,7 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType
 				columnType.Type = "integer"
 			case "int8":
 				columnType.Type = "bigint"
-			case "varchar": // TODO: use this pattern more, fixing failed tests as well
+			case "varchar", "interval": // TODO: use this pattern more, fixing failed tests as well
 				columnType.Type = typeNames[1]
 			default:
 				return columnType, fmt.Errorf("unhandled type in parseTypeName: %s", typeNames[1])
