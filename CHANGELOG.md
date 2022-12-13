@@ -1,3 +1,7 @@
+## v0.15.2
+
+- Support `INTERVAL` type for psqldef [#335](https://github.com/k0kubun/sqldef/issues/335)
+
 ## v0.15.1
 
 - Support ADD CONSTRAINT after CREATE TABLE for psqldef [#331](https://github.com/k0kubun/sqldef/issues/331)
