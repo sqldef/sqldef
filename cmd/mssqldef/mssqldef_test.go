@@ -49,28 +49,6 @@ func TestApply(t *testing.T) {
 
 // TODO: non-CLI tests should be migrated to TestApply
 
-func TestMssqldefColumnLiteral(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE v (
-		  v_integer integer NOT NULL,
-		  v_text text,
-		  v_smallmoney smallmoney,
-		  v_money money,
-		  v_datetimeoffset datetimeoffset(1),
-		  v_datetime2 datetime2,
-		  v_smalldatetime smalldatetime,
-		  v_nchar nchar(30),
-		  v_nvarchar nvarchar(30),
-		  v_ntext ntext
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-}
-
 func TestMssqldefCreateTableQuotes(t *testing.T) {
 	resetTestDatabase()
 
