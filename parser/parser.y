@@ -1718,9 +1718,9 @@ time_type:
   {
     $$ = ColumnType{Type: string($1), Length: $2}
   }
-| DATETIME2
+| DATETIME2 length_opt
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: string($1), Length: $2}
   }
 | DATETIMEOFFSET length_opt
   {
@@ -2261,7 +2261,7 @@ foreign_key_without_options:
       ConstraintName: $2,
       IndexName: $5,
       IndexColumns: $7,
-      ReferenceName: NewColIdent(String($10)),
+      ReferenceName: $10,
       ReferenceColumns: $12,
     }
   }

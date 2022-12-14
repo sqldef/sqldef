@@ -10,3 +10,21 @@ DropTable:
     );
   output: |
     DROP TABLE [dbo].[bigdata];
+TestMssqldefColumnLiteral:
+  desired: |
+    CREATE TABLE v (
+      v_integer integer NOT NULL,
+      v_text text,
+      v_smallmoney smallmoney,
+      v_money money,
+      v_datetimeoffset datetimeoffset(1),
+      v_datetime2 datetime2,
+      v_datetime2_with_precision datetime2(3),
+      v_smalldatetime smalldatetime,
+      v_nchar nchar(30),
+      v_nvarchar nvarchar(30),
+      v_nvarchar_max nvarchar(max),
+      v_varchar_max varchar(max),
+      v_varbinary_max varbinary(max),
+      v_ntext ntext
+    );
