@@ -1,3 +1,7 @@
+## v0.15.3
+
+- Support `DATETIME2` type for mssqldef [#329](https://github.com/k0kubun/sqldef/issues/329)
+
 ## v0.15.2
 
 - Support `INTERVAL` type for psqldef [#335](https://github.com/k0kubun/sqldef/issues/335)
