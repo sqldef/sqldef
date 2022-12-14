@@ -17,6 +17,11 @@ limitations under the License.
 %{
 package parser
 
+import (
+  "fmt"
+  "strings"
+)
+
 func setParseTree(yylex interface{}, stmt Statement) {
   yylex.(*Tokenizer).ParseTree = stmt
 }
@@ -1927,8 +1932,11 @@ max_length_opt:
   {
     $$ = NewIntVal($2)
   }
-| '(' MAX ')'
+| '(' ID ')'
   {
+    if strings.ToLower(string($2)) != "max" {
+      yylex.Error(fmt.Sprintf("syntax error around '%s'", string($2)))
+    }
     $$ = NewIntVal($2)
   }
 
