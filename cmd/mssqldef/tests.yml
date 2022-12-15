@@ -23,5 +23,8 @@ TestMssqldefColumnLiteral:
       v_smalldatetime smalldatetime,
       v_nchar nchar(30),
       v_nvarchar nvarchar(30),
+      v_nvarchar_max nvarchar(max),
+      v_varchar_max varchar(max),
+      v_varbinary_max varbinary(max),
       v_ntext ntext
     );
