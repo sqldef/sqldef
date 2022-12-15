@@ -1,3 +1,7 @@
+## v0.15.4
+
+- Support max length option for mssqldef [#330](https://github.com/k0kubun/sqldef/issues/330)
+
 ## v0.15.3
 
 - Support `DATETIME2` type for mssqldef [#329](https://github.com/k0kubun/sqldef/issues/329)
