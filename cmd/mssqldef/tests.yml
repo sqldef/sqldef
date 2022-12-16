@@ -28,3 +28,11 @@ TestMssqldefColumnLiteral:
       v_varbinary_max varbinary(max),
       v_ntext ntext
     );
+TestMssqldefMultipleIndex:
+  desired: |
+    CREATE TABLE v (
+      v_integer integer NOT NULL,
+      v_nchar nchar(30)
+    );
+    CREATE NONCLUSTERED INDEX idx1_v ON v (v_integer);
+    CREATE NONCLUSTERED INDEX idx2_v ON v (v_nchar);

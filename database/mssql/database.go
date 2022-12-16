@@ -186,6 +186,7 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 			}
 			fmt.Fprint(&queryBuilder, " )")
 		}
+		fmt.Fprintf(&queryBuilder, ";")
 	}
 	return strings.TrimSuffix(queryBuilder.String(), "\n")
 }
