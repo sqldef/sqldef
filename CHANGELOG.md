@@ -1,3 +1,7 @@
+## v0.15.5
+
+- Fix --export of multiple indexes for mssqldef [#338](https://github.com/k0kubun/sqldef/issues/338)
+
 ## v0.15.4
 
 - Support max length option for mssqldef [#330](https://github.com/k0kubun/sqldef/issues/330)
