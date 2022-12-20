@@ -36,3 +36,25 @@ TestMssqldefMultipleIndex:
     );
     CREATE NONCLUSTERED INDEX idx1_v ON v (v_integer);
     CREATE NONCLUSTERED INDEX idx2_v ON v (v_nchar);
+CreateIndexWithFilter:
+  desired: |
+    CREATE TABLE v (
+      v_int int
+    );
+    CREATE INDEX idx_v ON v (v_int) WHERE (v_int IS NOT NULL);
+IndexesOnChangedFilter:
+  current: |
+    CREATE TABLE v (
+      v_int int,
+      v_nvarchar nvarchar(30)
+    );
+    CREATE INDEX idx_v ON v (v_int, v_nvarchar) WHERE (v_int IS NOT NULL);
+  desired: |
+    CREATE TABLE v (
+      v_int int,
+      v_nvarchar nvarchar(30)
+    );
+    CREATE INDEX idx_v ON v (v_int, v_nvarchar) WHERE (v_int IS NOT NULL AND v_nvarchar IS NOT NULL);
+  output: |
+    DROP INDEX [idx_v] ON [dbo].[v];
+    CREATE INDEX idx_v ON v (v_int, v_nvarchar) WHERE (v_int IS NOT NULL AND v_nvarchar IS NOT NULL);

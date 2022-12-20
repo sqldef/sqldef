@@ -176,6 +176,9 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 		if len(indexDef.included) > 0 {
 			fmt.Fprintf(&queryBuilder, " INCLUDE (%s)", strings.Join(indexDef.included, ", "))
 		}
+		if indexDef.filter != nil {
+			fmt.Fprintf(&queryBuilder, " WHERE %s", *indexDef.filter)
+		}
 		if len(indexDef.options) > 0 {
 			fmt.Fprint(&queryBuilder, " WITH (")
 			for i, option := range indexDef.options {
@@ -315,6 +318,7 @@ type indexDef struct {
 	primary   bool
 	unique    bool
 	indexType string
+	filter    *string
 	included  []string
 	options   []indexOption
 }
@@ -331,6 +335,7 @@ func (d *MssqlDatabase) getIndexDefs(table string) ([]*indexDef, error) {
 	ind.is_primary_key,
 	ind.is_unique,
 	ind.type_desc,
+	ind.filter_definition,
 	ind.is_padded,
 	ind.fill_factor,
 	ind.ignore_dup_key,
@@ -349,9 +354,10 @@ WHERE ind.object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 
 	indexDefMap := make(map[string]*indexDef)
 	var indexName, typeDesc, fillfactor string
+	var filter *string
 	var isPrimary, isUnique, padIndex, ignoreDupKey, noRecompute, incremental, rowLocks, pageLocks bool
 	for rows.Next() {
-		err = rows.Scan(&indexName, &isPrimary, &isUnique, &typeDesc, &padIndex, &fillfactor, &ignoreDupKey, &noRecompute, &incremental, &rowLocks, &pageLocks)
+		err = rows.Scan(&indexName, &isPrimary, &isUnique, &typeDesc, &filter, &padIndex, &fillfactor, &ignoreDupKey, &noRecompute, &incremental, &rowLocks, &pageLocks)
 		if err != nil {
 			return nil, err
 		}
@@ -366,7 +372,7 @@ WHERE ind.object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 			{name: "ALLOW_PAGE_LOCKS", value: boolToOnOff(pageLocks)},
 		}
 
-		definition := &indexDef{name: indexName, columns: []string{}, primary: isPrimary, unique: isUnique, indexType: typeDesc, included: []string{}, options: options}
+		definition := &indexDef{name: indexName, columns: []string{}, primary: isPrimary, unique: isUnique, indexType: typeDesc, filter: filter, included: []string{}, options: options}
 		indexDefMap[indexName] = definition
 	}
 
