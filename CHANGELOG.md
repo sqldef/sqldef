@@ -1,3 +1,7 @@
+## v0.15.6
+
+- Support filtered indexes for mssqldef [#341](https://github.com/k0kubun/sqldef/issues/341)
+
 ## v0.15.5
 
 - Fix --export of multiple indexes for mssqldef [#338](https://github.com/k0kubun/sqldef/issues/338)
