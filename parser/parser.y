@@ -188,6 +188,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE
 %token <bytes> DEFERRABLE INITIALLY IMMEDIATE DEFERRED
 %token <bytes> CONCURRENTLY
+%token <bytes> SQL SECURITY
 
 // Transaction Tokens
 %token <bytes> BEGIN START TRANSACTION COMMIT ROLLBACK
@@ -248,6 +249,9 @@ func forceEOF(yylex interface{}) {
 
 // table hint
 %token <bytes> HOLDLOCK NOLOCK NOWAIT PAGLOCK ROWLOCK TABLELOCK
+
+// SQL SECURITY
+%token <bytes> DEFINER INVOKER
 
 %type <statement> command
 %type <selStmt> select_statement base_select union_lhs union_rhs
@@ -383,6 +387,7 @@ func forceEOF(yylex interface{}) {
 %type <arrayConstructor> array_constructor
 %type <arrayElements> array_element_list
 %type <arrayElement> array_element
+%type <str> sql_security sql_security_opt
 
 %start any_command
 
@@ -769,6 +774,25 @@ isolation_level:
     $$ = &SetExpr{Name: NewColIdent("tx_isolation"), Expr: NewStrVal([]byte("serializable"))}
   }
 
+sql_security_opt:
+  {
+    $$ = ""
+  }
+| SQL SECURITY sql_security
+  {
+    $$ = $3
+  }
+
+sql_security:
+ DEFINER
+  {
+    $$ = string($1)
+  }
+| INVOKER
+  {
+    $$ = string($1)
+  }
+
 set_session_or_global:
   SESSION
   {
@@ -884,6 +908,15 @@ create_statement:
         Action: CreateViewStr,
         Name: $5.ToViewName(),
         Definition: $7,
+    }}
+  }
+| CREATE or_replace_opt sql_security_opt VIEW not_exists_opt table_name AS select_statement
+  {
+    $$ = &DDL{Action: CreateViewStr, View: &View{
+        Action: CreateSqlSecurityStr,
+        SecurityType: $3,
+        Name: $6.ToViewName(),
+        Definition: $8,
     }}
   }
 | CREATE MATERIALIZED VIEW not_exists_opt table_name AS select_statement
@@ -4482,6 +4515,7 @@ reserved_keyword:
 | DEALLOCATE
 | DECLARE
 | DEFAULT
+| DEFINER
 | DELETE
 | DESC
 | DESCRIBE
@@ -4515,6 +4549,7 @@ reserved_keyword:
 | INSERT
 | INTERVAL
 | INTO
+| INVOKER
 | IS
 | JOIN
 | KEY
@@ -4672,6 +4707,8 @@ non_reserved_keyword:
 | SESSION
 | SERIAL
 | SERIALIZABLE
+| SECURITY
+| SQL
 | SHARE
 | SIGNED
 | SMALLDATETIME

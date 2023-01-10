@@ -143,11 +143,12 @@ type Policy struct {
 }
 
 type View struct {
-	statement  string
-	viewType   string
-	name       string
-	definition string
-	indexes    []Index
+	statement    string
+	viewType     string
+	securityType string
+	name         string
+	definition   string
+	indexes      []Index
 }
 
 type Trigger struct {
@@ -221,7 +222,7 @@ type DefaultDefinition struct {
 }
 
 type SridDefinition struct {
-	value          *Value
+	value *Value
 }
 
 type CheckDefinition struct {

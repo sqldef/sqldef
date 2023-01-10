@@ -5,10 +5,11 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"fmt"
-	driver "github.com/go-sql-driver/mysql"
-	"github.com/k0kubun/sqldef/database"
 	"io/ioutil"
 	"strings"
+
+	driver "github.com/go-sql-driver/mysql"
+	"github.com/k0kubun/sqldef/database"
 )
 
 type MysqlDatabase struct {
@@ -110,15 +111,15 @@ func (d *MysqlDatabase) views() ([]string, error) {
 
 	var ddls []string
 	for rows.Next() {
-		var viewName, viewType, definition string
+		var viewName, viewType, definition, security_type string
 		if err = rows.Scan(&viewName, &viewType); err != nil {
 			return nil, err
 		}
-		query := fmt.Sprintf("select VIEW_DEFINITION from INFORMATION_SCHEMA.VIEWS where TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s';", d.config.DbName, viewName)
-		if err = d.db.QueryRow(query).Scan(&definition); err != nil {
+		query := fmt.Sprintf("select VIEW_DEFINITION,SECURITY_TYPE from INFORMATION_SCHEMA.VIEWS where TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s';", d.config.DbName, viewName)
+		if err = d.db.QueryRow(query).Scan(&definition, &security_type); err != nil {
 			return nil, err
 		}
-		ddls = append(ddls, fmt.Sprintf("CREATE VIEW %s AS %s;", viewName, definition))
+		ddls = append(ddls, fmt.Sprintf("CREATE SQL SECURITY %s VIEW %s AS %s;", security_type, viewName, definition))
 	}
 	return ddls, nil
 }
