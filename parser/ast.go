@@ -559,9 +559,9 @@ func (node *DDL) Format(buf *TrackedBuffer) {
 		buf.Myprintf("%s %v %v", node.Action, node.VindexSpec.Name, node.VindexSpec)
 	case CreateViewStr:
 		if node.View.SqlSecurity != "" {
-			buf.Myprintf("%s %v as %v", node.Action, node.View.Name, node.View.Definition)
-		} else {
 			buf.Myprintf("%s sql security %v %v as %v", node.Action, node.View.SqlSecurity, node.View.Name, node.View.Definition)
+		} else {
+			buf.Myprintf("%s %v as %v", node.Action, node.View.Name, node.View.Definition)
 		}
 	case AddColVindexStr:
 		buf.Myprintf("alter table %v %s %v (", node.Table, node.Action, node.VindexSpec.Name)
