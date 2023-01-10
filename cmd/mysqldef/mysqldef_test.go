@@ -1012,7 +1012,7 @@ func TestMysqldefView(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createView := stripHeredoc(`
-		CREATE VIEW foo AS select u.id as id, p.id as post_id from  (mysqldef_test.users as u join mysqldef_test.posts as p on ((u.id = p.user_id)));
+		CREATE SQL SECURITY INVOKER VIEW foo AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on ((u.id = p.user_id)));
 		`,
 	)
 	assertApplyOutput(t, createTable+createView, applyPrefix+createView)

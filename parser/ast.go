@@ -558,7 +558,11 @@ func (node *DDL) Format(buf *TrackedBuffer) {
 	case CreateVindexStr:
 		buf.Myprintf("%s %v %v", node.Action, node.VindexSpec.Name, node.VindexSpec)
 	case CreateViewStr:
-		buf.Myprintf("%s %v as %v", node.Action, node.View.Name, node.View.Definition)
+		if node.View.SqlSecurity != "" {
+			buf.Myprintf("%s %v as %v", node.Action, node.View.Name, node.View.Definition)
+		} else {
+			buf.Myprintf("%s sql security %v %v as %v", node.Action, node.View.SqlSecurity, node.View.Name, node.View.Definition)
+		}
 	case AddColVindexStr:
 		buf.Myprintf("alter table %v %s %v (", node.Table, node.Action, node.VindexSpec.Name)
 		for i, col := range node.VindexCols {
@@ -762,7 +766,7 @@ type DefaultDefinition struct {
 }
 
 type SridDefinition struct {
-	Value          *SQLVal
+	Value *SQLVal
 }
 
 type CheckDefinition struct {
@@ -1299,9 +1303,10 @@ func (node Comments) Format(buf *TrackedBuffer) {
 }
 
 type View struct {
-	Action     string
-	Name       TableName
-	Definition SelectStatement
+	Action      string
+	SqlSecurity string
+	Name        TableName
+	Definition  SelectStatement
 }
 
 type Trigger struct {
