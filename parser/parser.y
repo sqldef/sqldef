@@ -386,6 +386,7 @@ func forceEOF(yylex interface{}) {
 %type <arrayConstructor> array_constructor
 %type <arrayElements> array_element_list
 %type <arrayElement> array_element
+%type <strs> sql_security_opt
 %type <str> sql_security
 
 %start any_command
