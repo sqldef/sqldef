@@ -763,6 +763,11 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE %s %s AS %s", desiredView.viewType, g.escapeTableName(viewName), desiredView.definition))
 			}
 		}
+	} else if desiredView.viewType == "SQL SECURITY" {
+		// VIEW with the specified security type found. If it's different, create or replace view.
+		if g.normalizeViewDefinition(currentView.securityType) != g.normalizeViewDefinition(desiredView.securityType) {
+			ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE SQL SECURITY %s VIEW %s AS %s", desiredView.securityType, g.escapeTableName(viewName), desiredView.definition))
+		}
 	}
 
 	// Examine policies in desiredTable to delete obsoleted policies later

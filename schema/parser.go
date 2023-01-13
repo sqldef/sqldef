@@ -409,10 +409,11 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement) (DDL, error
 			}, nil
 		} else if stmt.Action == parser.CreateViewStr {
 			return &View{
-				statement:  ddl,
-				viewType:   strings.ToUpper(strings.TrimPrefix(stmt.View.Action, "create ")),
-				name:       normalizedTableName(mode, stmt.View.Name),
-				definition: parser.String(stmt.View.Definition),
+				statement:    ddl,
+				viewType:     strings.ToUpper(strings.TrimPrefix(stmt.View.Action, "create ")),
+				securityType: strings.ToUpper(stmt.View.SecurityType),
+				name:         normalizedTableName(mode, stmt.View.Name),
+				definition:   parser.String(stmt.View.Definition),
 			}, nil
 		} else if stmt.Action == parser.CreateTriggerStr {
 			body := []string{}
