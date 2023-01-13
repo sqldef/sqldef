@@ -1,3 +1,7 @@
+## v0.15.7
+
+- Support SECURITY DEFINER/INVOKER VIEW for mysqldef [#349](https://github.com/k0kubun/sqldef/issues/349)
+
 ## v0.15.6
 
 - Support filtered indexes for mssqldef [#341](https://github.com/k0kubun/sqldef/issues/341)
