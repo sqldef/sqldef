@@ -370,3 +370,4 @@ MysqlViewUsingWindowFunction:
     , sum(p.price) over(partition by i.id order by i.id) as sum_price3
     , coalesce(lead(p.start_at,1) over(partition by i.id order by p.start_at),'9999-12-31 00:00:00') AS end_at
     from (mysqldef_test.items as i join mysqldef_test.prices as p on ((i.id = p.item_id)));
+  min_version: '8.0'
