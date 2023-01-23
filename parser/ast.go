@@ -511,26 +511,26 @@ type DDL struct {
 
 // DDL strings.
 const (
-	CreateStr                 = "create"
-	AlterStr                  = "alter"
-	DropStr                   = "drop"
-	RenameStr                 = "rename"
-	TruncateStr               = "truncate"
-	CreateVindexStr           = "create vindex"
-	AddColVindexStr           = "add vindex"
-	DropColVindexStr          = "drop vindex"
-	AddIndexStr               = "add index"
-	CreateIndexStr            = "create index"
-	AddPrimaryKeyStr          = "add primary key"
-	AddForeignKeyStr          = "add foreign key"
-	CreatePolicyStr           = "create policy"
-	CreateViewStr             = "create view"
-	CreateMatViewStr          = "create materialized view"
+	CreateStr            = "create"
+	AlterStr             = "alter"
+	DropStr              = "drop"
+	RenameStr            = "rename"
+	TruncateStr          = "truncate"
+	CreateVindexStr      = "create vindex"
+	AddColVindexStr      = "add vindex"
+	DropColVindexStr     = "drop vindex"
+	AddIndexStr          = "add index"
+	CreateIndexStr       = "create index"
+	AddPrimaryKeyStr     = "add primary key"
+	AddForeignKeyStr     = "add foreign key"
+	CreatePolicyStr      = "create policy"
+	CreateViewStr        = "create view"
+	CreateMatViewStr     = "create materialized view"
 	CreateSqlSecurityStr = "create sql security"
-	CreateTriggerStr          = "create trigger"
-	CreateTypeStr             = "create type"
-	CommentStr                = "comment"
-	CreateExtensionStr        = "create extension"
+	CreateTriggerStr     = "create trigger"
+	CreateTypeStr        = "create type"
+	CommentStr           = "comment"
+	CreateExtensionStr   = "create extension"
 )
 
 // Format formats the node.
@@ -1682,6 +1682,7 @@ func (*SubstrExpr) iExpr()          {}
 func (*ConvertUsingExpr) iExpr()    {}
 func (*MatchExpr) iExpr()           {}
 func (*GroupConcatExpr) iExpr()     {}
+func (*OverExpr) iExpr()            {}
 func (*Default) iExpr()             {}
 func (*ArrayConstructor) iExpr()    {}
 func (*FuncCallExpr) iExpr()        {}
@@ -2118,6 +2119,7 @@ type FuncExpr struct {
 	Name      ColIdent
 	Distinct  bool
 	Exprs     SelectExprs
+	Over      *OverExpr
 }
 
 // Format formats the node.
@@ -2185,6 +2187,15 @@ type GroupConcatExpr struct {
 func (node *GroupConcatExpr) Format(buf *TrackedBuffer) {
 	buf.Myprintf("group_concat(%s%v%v%s)", node.Distinct, node.Exprs, node.OrderBy, node.Separator)
 }
+
+// OverExpr represents a call to OVER
+type OverExpr struct {
+	PartitionBy PartitionBy
+	OrderBy     OrderBy
+}
+
+// Format formats the node
+func (node *OverExpr) Format(buf *TrackedBuffer) {}
 
 // ValuesFuncExpr represents a function call.
 type ValuesFuncExpr struct {
@@ -2389,6 +2400,18 @@ func (node *Order) Format(buf *TrackedBuffer) {
 	}
 
 	buf.Myprintf("%v %s", node.Expr, node.Direction)
+}
+
+// PartitionBy represents a PARTITON BY clause.
+type PartitionBy []Expr
+
+// Format formats the node.
+func (node PartitionBy) Format(buf *TrackedBuffer) {
+	prefix := " partition by "
+	for _, n := range node {
+		buf.Myprintf("%s%v", prefix, n)
+		prefix = ", "
+	}
 }
 
 // Limit represents a LIMIT clause.

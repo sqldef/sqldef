@@ -347,3 +347,26 @@ MysqlSecurityTypeView:
     CREATE SQL SECURITY INVOKER VIEW `foo` AS select u.id as id, p.id as post_id, 'xxx' as name from (mysqldef_test.users as u join mysqldef_test.posts as p on ((u.id = p.user_id)));
   output: |
     CREATE OR REPLACE SQL SECURITY INVOKER VIEW `foo` AS select u.id as id, p.id as post_id, 'xxx' as name from (mysqldef_test.users as u join mysqldef_test.posts as p on ((u.id = p.user_id)));
+MysqlViewUsingWindowFunction:
+  desired: |
+    CREATE TABLE items (
+      id bigint(20) NOT NULL
+    );
+    CREATE TABLE prices (
+      id bigint(20) NOT NULL,
+      item_id bigint(20) NOT NULL,
+      price int NOT NULL,
+      start_at datetime
+    );
+    CREATE OR REPLACE VIEW foo AS
+    select
+    i.id as id
+    , p.id as price_id
+    , count(i.id) over() as total_count
+    , lead(p.start_at,1) over() as price_start_at
+    , lag(p.start_at,1) over() as price_start_at_2
+    , sum(p.price) over() as sum_price
+    , sum(p.price) over(partition by i.id) as sum_price2
+    , sum(p.price) over(partition by i.id order by i.id) as sum_price3
+    , coalesce(lead(p.start_at,1) over(partition by i.id order by p.start_at),'9999-12-31 00:00:00') AS end_at
+    from (mysqldef_test.items as i join mysqldef_test.prices as p on ((i.id = p.item_id)));

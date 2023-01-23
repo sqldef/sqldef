@@ -129,6 +129,7 @@ func forceEOF(yylex interface{}) {
   arrayElements ArrayElements
   arrayElement  ArrayElement
   tableOptions  map[string]string
+  overExpr   *OverExpr
 }
 
 %token LEX_ERROR
@@ -388,6 +389,9 @@ func forceEOF(yylex interface{}) {
 %type <arrayElements> array_element_list
 %type <arrayElement> array_element
 %type <str> sql_security sql_security_opt
+%type <overExpr> over_expression
+%token <bytes> OVER
+%type <exprs> partition_by_opt
 
 %start any_command
 
@@ -2996,6 +3000,23 @@ col_alias:
     $$ = NewColIdent(string($1))
   }
 
+over_expression:
+  {
+    $$ = nil
+  }
+| OVER openb closeb
+  {
+    $$ = &OverExpr{}
+  }
+| OVER openb partition_by_opt closeb
+  {
+    $$ = &OverExpr{}
+  }
+| OVER openb partition_by_opt order_by_opt closeb
+  {
+    $$ = &OverExpr{}
+  }
+
 from_opt:
   {
     $$ = TableExprs{&AliasedTableExpr{Expr:TableName{Name: NewTableIdent("dual")}}}
@@ -3664,6 +3685,10 @@ function_call_generic:
   {
     $$ = &FuncExpr{Name: $1, Distinct: true, Exprs: $4}
   }
+| sql_id openb select_expression_list closeb over_expression
+  {
+    $$ = &FuncExpr{Name: $1, Exprs: $3, Over: $5}
+  }
 | table_id '.' reserved_sql_id openb select_expression_list_opt closeb
   {
     $$ = &FuncExpr{Qualifier: $1, Name: $3, Exprs: $5}
@@ -4079,6 +4104,15 @@ having_opt:
 | HAVING expression
   {
     $$ = $2
+  }
+
+partition_by_opt:
+  {
+    $$ = nil
+  }
+| PARTITION BY expression_list
+  {
+    $$ = $3
   }
 
 order_by_opt:

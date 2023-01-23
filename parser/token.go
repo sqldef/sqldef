@@ -330,6 +330,7 @@ var keywords = map[string]int{
 	"out":                    UNUSED,
 	"outer":                  OUTER,
 	"outfile":                UNUSED,
+	"over":                   OVER,
 	"owned":                  OWNED,
 	"paglock":                PAGLOCK,
 	"parser":                 PARSER,
