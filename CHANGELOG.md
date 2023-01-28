@@ -1,3 +1,7 @@
+## v0.15.8
+
+- Support window functions for mysqldef [#350](https://github.com/k0kubun/sqldef/issues/350)
+
 ## v0.15.7
 
 - Support SECURITY DEFINER/INVOKER VIEW for mysqldef [#349](https://github.com/k0kubun/sqldef/issues/349)
