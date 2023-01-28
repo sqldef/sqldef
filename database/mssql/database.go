@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	_ "github.com/denisenkom/go-mssqldb"
+	_ "github.com/microsoft/go-mssqldb"
 	"github.com/k0kubun/sqldef/database"
 )
 
