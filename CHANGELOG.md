@@ -1,3 +1,7 @@
+## v0.15.9
+
+- Accept ALTER TABLE without ONLY for mysqldef [#352](https://github.com/k0kubun/sqldef/issues/352)
+
 ## v0.15.8
 
 - Support window functions for mysqldef [#350](https://github.com/k0kubun/sqldef/issues/350)
