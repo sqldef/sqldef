@@ -2483,6 +2483,15 @@ alter_statement:
         IndexCols: $10,
       }
   }
+| ALTER ignore_opt TABLE table_name ADD foreign_key_definition
+  {
+    $$ = &DDL{
+        Action: AddForeignKeyStr,
+        Table: $4,
+        NewName: $4,
+        ForeignKey: $6,
+      }
+  }
 | ALTER ignore_opt TABLE ONLY table_name ADD foreign_key_definition
   {
     $$ = &DDL{
