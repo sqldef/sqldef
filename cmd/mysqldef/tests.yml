@@ -371,3 +371,19 @@ MysqlViewUsingWindowFunction:
     , coalesce(lead(p.start_at,1) over(partition by i.id order by p.start_at),'9999-12-31 00:00:00') AS end_at
     from (mysqldef_test.items as i join mysqldef_test.prices as p on ((i.id = p.item_id)));
   min_version: '8.0'
+AddForeignKeyWithAlter:
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint
+    );
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint
+    );
+    ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;
+  output: |
+    ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;
