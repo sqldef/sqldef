@@ -11,7 +11,7 @@ require (
 	github.com/pganalyze/pg_query_go/v2 v2.2.0
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
 	gopkg.in/yaml.v2 v2.4.0
-	modernc.org/sqlite v1.20.1
+	modernc.org/sqlite v1.20.3
 )
 
 require (
