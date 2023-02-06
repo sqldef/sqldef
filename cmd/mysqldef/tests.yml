@@ -347,29 +347,105 @@ MysqlSecurityTypeView:
     CREATE SQL SECURITY INVOKER VIEW `foo` AS select u.id as id, p.id as post_id, 'xxx' as name from (mysqldef_test.users as u join mysqldef_test.posts as p on ((u.id = p.user_id)));
   output: |
     CREATE OR REPLACE SQL SECURITY INVOKER VIEW `foo` AS select u.id as id, p.id as post_id, 'xxx' as name from (mysqldef_test.users as u join mysqldef_test.posts as p on ((u.id = p.user_id)));
-MysqlViewUsingWindowFunction:
-  desired: |
-    CREATE TABLE items (
-      id bigint(20) NOT NULL
-    );
+MysqlViewUsingWindowFuncOnlyOver:
+  current: |
     CREATE TABLE prices (
       id bigint(20) NOT NULL,
       item_id bigint(20) NOT NULL,
       price int NOT NULL,
       start_at datetime
     );
-    CREATE OR REPLACE VIEW foo AS
-    select
-    i.id as id
-    , p.id as price_id
-    , count(i.id) over() as total_count
-    , lead(p.start_at,1) over() as price_start_at
-    , lag(p.start_at,1) over() as price_start_at_2
-    , sum(p.price) over() as sum_price
-    , sum(p.price) over(partition by i.id) as sum_price2
-    , sum(p.price) over(partition by i.id order by i.id) as sum_price3
-    , coalesce(lead(p.start_at,1) over(partition by i.id order by p.start_at),'9999-12-31 00:00:00') AS end_at
-    from (mysqldef_test.items as i join mysqldef_test.prices as p on ((i.id = p.item_id)));
+    CREATE OR REPLACE VIEW `foo2` AS select p.start_at as end_at from mysqldef_test.prices as p;
+  desired: |
+    CREATE TABLE prices (
+      id bigint(20) NOT NULL,
+      item_id bigint(20) NOT NULL,
+      price int NOT NULL,
+      start_at datetime
+    );
+    CREATE OR REPLACE VIEW `foo2` AS select p.start_at as end_at0, lead(p.start_at) over() as end_at1, lag(p.start_at) over() as end_at2 from mysqldef_test.prices as p;
+  output: |
+    CREATE OR REPLACE VIEW `foo2` AS select p.start_at as end_at0, lead(p.start_at) over() as end_at1, lag(p.start_at) over() as end_at2 from mysqldef_test.prices as p;
+  min_version: '8.0'
+MysqlViewUsingWindowFuncPartitionBy:
+  current: |
+    CREATE TABLE prices (
+      id bigint(20) NOT NULL,
+      item_id bigint(20) NOT NULL,
+      price int NOT NULL,
+      start_at datetime
+    );
+    CREATE OR REPLACE VIEW `foo2` AS select p.start_at as end_at from mysqldef_test.prices as p;
+  desired: |
+    CREATE TABLE prices (
+      id bigint(20) NOT NULL,
+      item_id bigint(20) NOT NULL,
+      price int NOT NULL,
+      start_at datetime
+    );
+    CREATE OR REPLACE VIEW `foo2` AS select lead(p.start_at) over(partition by p.start_at) as end_at from mysqldef_test.prices as p;
+  output: |
+    CREATE OR REPLACE VIEW `foo2` AS select lead(p.start_at) over(partition by p.start_at) as end_at from mysqldef_test.prices as p;
+  min_version: '8.0'
+MysqlViewUsingWindowFuncOrderBy:
+  current: |
+    CREATE TABLE prices (
+      id bigint(20) NOT NULL,
+      item_id bigint(20) NOT NULL,
+      price int NOT NULL,
+      start_at datetime
+    );
+    CREATE OR REPLACE VIEW `foo2` AS select p.start_at as end_at from mysqldef_test.prices as p;
+  desired: |
+    CREATE TABLE prices (
+      id bigint(20) NOT NULL,
+      item_id bigint(20) NOT NULL,
+      price int NOT NULL,
+      start_at datetime
+    );
+    CREATE OR REPLACE VIEW `foo2` AS select lead(p.start_at) over( order by p.start_at asc) as end_at, lead(p.start_at) over( order by p.start_at desc) as end_at2 from mysqldef_test.prices as p;
+  output: |
+    CREATE OR REPLACE VIEW `foo2` AS select lead(p.start_at) over( order by p.start_at asc) as end_at, lead(p.start_at) over( order by p.start_at desc) as end_at2 from mysqldef_test.prices as p;
+  min_version: '8.0'
+MysqlViewUsingWindowFuncPartitionByAndOrderBy:
+  current: |
+    CREATE TABLE prices (
+      id bigint(20) NOT NULL,
+      item_id bigint(20) NOT NULL,
+      price int NOT NULL,
+      start_at datetime
+    );
+    CREATE OR REPLACE VIEW `foo2` AS select p.start_at as end_at from mysqldef_test.prices as p;
+  desired: |
+    CREATE TABLE prices (
+      id bigint(20) NOT NULL,
+      item_id bigint(20) NOT NULL,
+      price int NOT NULL,
+      start_at datetime
+    );
+    CREATE OR REPLACE VIEW `foo2` AS select lead(p.start_at, 1) over(partition by p.start_at order by p.start_at asc) as end_at from mysqldef_test.prices as p;
+  output: |
+    CREATE OR REPLACE VIEW `foo2` AS select lead(p.start_at, 1) over(partition by p.start_at order by p.start_at asc) as end_at from mysqldef_test.prices as p;
+  min_version: '8.0'
+MysqlViewUsingWindowFuncPartitionByAndOrderByAndCoalesce:
+  current: |
+    CREATE TABLE prices (
+      id bigint(20) NOT NULL,
+      item_id bigint(20) NOT NULL,
+      price int NOT NULL,
+      start_at datetime
+    );
+    CREATE OR REPLACE VIEW `foo2` AS select p.start_at as end_at from mysqldef_test.prices as p;
+  desired: |
+    CREATE TABLE prices (
+      id bigint(20) NOT NULL,
+      item_id bigint(20) NOT NULL,
+      price int NOT NULL,
+      start_at datetime
+    );
+    CREATE OR REPLACE VIEW `foo2` AS select coalesce(lead(p.start_at, 1) over(partition by p.start_at order by p.start_at asc), '9999-12-31 00:00:00')  as end_at from mysqldef_test.prices as p;
+  output: |
+    CREATE OR REPLACE VIEW `foo2` AS select coalesce(lead(p.start_at, 1) over(partition by p.start_at order by p.start_at asc), '9999-12-31 00:00:00')  as end_at from mysqldef_test.prices as p;
   min_version: '8.0'
 AddForeignKeyWithAlter:
   current: |
