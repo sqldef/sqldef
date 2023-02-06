@@ -443,9 +443,9 @@ MysqlViewUsingWindowFuncPartitionByAndOrderByAndCoalesce:
       price int NOT NULL,
       start_at datetime
     );
-    CREATE OR REPLACE VIEW `foo2` AS select coalesce(lead(p.start_at, 1) over(partition by p.start_at order by p.start_at asc), '9999-12-31 00:00:00')  as end_at from mysqldef_test.prices as p;
+    CREATE OR REPLACE VIEW `foo2` AS select coalesce(lead(p.start_at, 1) over(partition by p.start_at order by p.start_at asc), '9999-12-31 00:00:00') as end_at from mysqldef_test.prices as p;
   output: |
-    CREATE OR REPLACE VIEW `foo2` AS select coalesce(lead(p.start_at, 1) over(partition by p.start_at order by p.start_at asc), '9999-12-31 00:00:00')  as end_at from mysqldef_test.prices as p;
+    CREATE OR REPLACE VIEW `foo2` AS select coalesce(lead(p.start_at, 1) over(partition by p.start_at order by p.start_at asc), '9999-12-31 00:00:00') as end_at from mysqldef_test.prices as p;
   min_version: '8.0'
 AddForeignKeyWithAlter:
   current: |
