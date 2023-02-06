@@ -2134,7 +2134,7 @@ func (node *FuncExpr) Format(buf *TrackedBuffer) {
 	// Function names should not be back-quoted even
 	// if they match a reserved word. So, print the
 	// name as is.
-	buf.Myprintf("%s(%s%v)", node.Name.String(), distinct, node.Exprs)
+	buf.Myprintf("%s(%s%v) %v", node.Name.String(), distinct, node.Exprs, node.Over)
 }
 
 // FuncCallExpr represents a function call that takes Exprs.
@@ -2168,6 +2168,8 @@ var Aggregates = map[string]bool{
 	"var_pop":      true,
 	"var_samp":     true,
 	"variance":     true,
+	"lead":         true,
+	"lag":          true,
 }
 
 // IsAggregate returns true if the function is an aggregate.
@@ -2195,7 +2197,12 @@ type OverExpr struct {
 }
 
 // Format formats the node
-func (node *OverExpr) Format(buf *TrackedBuffer) {}
+func (node *OverExpr) Format(buf *TrackedBuffer) {
+	if node == nil {
+		return
+	}
+	buf.Myprintf("over(%v%v)", node.PartitionBy, node.OrderBy)
+}
 
 // ValuesFuncExpr represents a function call.
 type ValuesFuncExpr struct {
@@ -2403,15 +2410,29 @@ func (node *Order) Format(buf *TrackedBuffer) {
 }
 
 // PartitionBy represents a PARTITON BY clause.
-type PartitionBy []Expr
+type PartitionBy []*Partition
 
 // Format formats the node.
 func (node PartitionBy) Format(buf *TrackedBuffer) {
-	prefix := " partition by "
+	prefix := "partition by "
 	for _, n := range node {
 		buf.Myprintf("%s%v", prefix, n)
 		prefix = ", "
 	}
+}
+
+// Partition represents an partitions expression.
+type Partition struct {
+	Expr Expr
+}
+
+// Format formats the node.
+func (node *Partition) Format(buf *TrackedBuffer) {
+	if node, ok := node.Expr.(*NullVal); ok {
+		buf.Myprintf("%v", node)
+		return
+	}
+	buf.Myprintf("%v", node.Expr)
 }
 
 // Limit represents a LIMIT clause.
