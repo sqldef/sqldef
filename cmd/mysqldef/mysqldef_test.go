@@ -346,6 +346,90 @@ func TestMysqldefChangeColumnCollate(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+  		  data json NOT NULL,
+  		  name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name1')) VIRTUAL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+  		  data json NOT NULL,
+  		  name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) VIRTUAL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+		ALTER TABLE `+"`users`"+` DROP COLUMN `+"`name`"+`;
+		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(json_data,'$.name2')) VIRTUAL;
+		`,
+	))
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+  		  data json NOT NULL,
+  		  name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) STORED
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+		ALTER TABLE `+"`users`"+` DROP COLUMN `+"`name`"+`;
+		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(json_data,'$.name2')) STORED;
+		`,
+	))
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMysqldefChangeGenerateColumnAs(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+  		  data json NOT NULL,
+  		  name varchar(20) AS (json_extract(data,'$.name1')) VIRTUAL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+  		  data json NOT NULL,
+  		  name varchar(20) AS (json_extract(data,'$.name2')) VIRTUAL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+		ALTER TABLE `+"`users`"+` DROP COLUMN `+"`name`"+`;
+		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) AS (json_extract(json_data,'$.name2')) VIRTUAL;
+		`,
+	))
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+  		  data json NOT NULL,
+  		  name varchar(20) AS (json_extract(data,'$.name2')) STORED
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+		ALTER TABLE `+"`users`"+` DROP COLUMN `+"`name`"+`;
+		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) AS (json_extract(json_data,'$.name2')) STORED;
+		`,
+	))
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefChangeEnumColumn(t *testing.T) {
 	resetTestDatabase()
 
