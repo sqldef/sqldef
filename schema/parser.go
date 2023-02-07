@@ -121,6 +121,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL) (Table, error) {
 			references:    normalizedTable(mode, parsedCol.Type.References),
 			identity:      parseIdentity(parsedCol.Type.Identity),
 			sequence:      parseIdentitySequence(parsedCol.Type.Identity),
+			generated:     parseGenerated(parsedCol.Type.Generated),
 		}
 		if parsedCol.Type.Check != nil {
 			column.check = &CheckDefinition{
@@ -572,4 +573,16 @@ func parseIdentitySequence(opt *parser.IdentityOpt) *Sequence {
 		seq.NoCycle = true
 	}
 	return seq
+}
+
+func parseGenerated(genc *parser.GeneratedColumn) *Generated {
+	if genc == nil {
+		return nil
+	}
+	var typ GeneratedType
+	// TODO: Check GeneratedType
+	return &Generated{
+		expr:          parser.String(genc.Expr),
+		generatedType: typ,
+	}
 }

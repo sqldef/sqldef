@@ -371,7 +371,7 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 	)
 	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
 		ALTER TABLE `+"`users`"+` DROP COLUMN `+"`name`"+`;
-		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(json_data,'$.name2')) VIRTUAL;
+		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) VIRTUAL;
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)
@@ -385,7 +385,7 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 	)
 	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
 		ALTER TABLE `+"`users`"+` DROP COLUMN `+"`name`"+`;
-		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(json_data,'$.name2')) STORED;
+		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) STORED;
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)
@@ -416,7 +416,7 @@ func TestMysqldefChangeGenerateColumnAs(t *testing.T) {
 	)
 	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
 		ALTER TABLE `+"`users`"+` DROP COLUMN `+"`name`"+`;
-		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) AS (json_extract(json_data,'$.name2')) VIRTUAL;
+		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) AS (json_extract(data,'$.name2')) VIRTUAL;
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)
@@ -430,7 +430,7 @@ func TestMysqldefChangeGenerateColumnAs(t *testing.T) {
 	)
 	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
 		ALTER TABLE `+"`users`"+` DROP COLUMN `+"`name`"+`;
-		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) AS (json_extract(json_data,'$.name2')) STORED;
+		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) AS (json_extract(data,'$.name2')) STORED;
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)

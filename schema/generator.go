@@ -351,6 +351,19 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					ddls = append(ddls, ddl)
 				}
 
+				if g.version == GeneratorVersionMysql80 {
+					if !g.areSameGenerated(currentColumn.generated, desiredColumn.generated) {
+						definition, err := g.generateColumnDefinition(desiredColumn, false)
+						if err != nil {
+							return ddls, err
+						}
+
+						ddl1 := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name))
+						ddl2 := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableName(desired.table.name), definition)
+						ddls = append(ddls, ddl1, ddl2)
+					}
+				}
+
 				// Add UNIQUE KEY. TODO: Probably it should be just normalized to an index after the parser phase.
 				currentIndex := findIndexByName(currentTable.indexes, desiredColumn.name)
 				if desiredColumn.keyOption.isUnique() && !currentColumn.keyOption.isUnique() && currentIndex == nil { // TODO: deal with a case that the index is not a UNIQUE KEY.
@@ -997,6 +1010,16 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		definition += "WITH TIME ZONE "
 	}
 
+	if column.generated != nil {
+		definition += "GENERATED ALWAYS AS (" + column.generated.expr + ") "
+		switch column.generated.generatedType {
+		case GeneratedTypeVirtual:
+			definition += "VIRTUAL"
+		case GeneratedTypeStored:
+			definition += "STORED"
+		}
+	}
+
 	// [CHARACTER SET] and [COLLATE] should be placed before [NOT NULL | NULL] on MySQL
 	if column.charset != "" {
 		definition += fmt.Sprintf("CHARACTER SET %s ", column.charset)
@@ -1521,6 +1544,17 @@ func (g *Generator) haveSameColumnDefinition(current Column, desired Column) boo
 		(desired.collate == "" || current.collate == desired.collate) && // detect change column only when set explicitly. TODO: can we calculate implicit collate?
 		reflect.DeepEqual(current.onUpdate, desired.onUpdate) &&
 		reflect.DeepEqual(current.comment, desired.comment)
+}
+
+func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
+	if generatedA == nil && generatedB == nil {
+		return true
+	}
+	if generatedA == nil || generatedB == nil {
+		return false
+	}
+
+	return generatedA.expr == generatedB.expr && generatedA.generatedType == generatedB.generatedType
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
