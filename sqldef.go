@@ -22,7 +22,7 @@ type Options struct {
 }
 
 // Main function shared by all commands
-func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser database.Parser, options *Options) {
+func Run(generatorMode schema.GeneratorMode, version schema.GeneratorVersion, db database.Database, sqlParser database.Parser, options *Options) {
 	currentDDLs, err := db.DumpDDLs()
 	if err != nil {
 		log.Fatalf("Error on DumpDDLs: %s", err)
@@ -47,7 +47,7 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 		return
 	}
 
-	ddls, err := schema.GenerateIdempotentDDLs(generatorMode, sqlParser, options.DesiredDDLs, currentDDLs, options.Config)
+	ddls, err := schema.GenerateIdempotentDDLs(generatorMode, version, sqlParser, options.DesiredDDLs, currentDDLs, options.Config)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

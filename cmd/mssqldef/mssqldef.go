@@ -126,5 +126,5 @@ func main() {
 	}
 
 	sqlParser := database.NewParser(parser.ParserModeMssql)
-	sqldef.Run(schema.GeneratorModeMssql, db, sqlParser, options)
+	sqldef.Run(schema.GeneratorModeMssql, schema.GeneratorVersionUnknown, db, sqlParser, options)
 }

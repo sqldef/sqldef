@@ -145,5 +145,5 @@ func main() {
 	}
 
 	sqlParser := postgres.NewParser()
-	sqldef.Run(schema.GeneratorModePostgres, db, sqlParser, options)
+	sqldef.Run(schema.GeneratorModePostgres, schema.GeneratorVersionUnknown, db, sqlParser, options)
 }

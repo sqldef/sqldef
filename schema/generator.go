@@ -21,6 +21,15 @@ const (
 	GeneratorModeMssql
 )
 
+type GeneratorVersion int
+
+const (
+	GeneratorVersionUnknown = GeneratorVersion(iota)
+	GeneratorVersionMysql80
+	GeneratorVersionMysql57
+	GeneratorVersionMysqlOlder
+)
+
 var (
 	dataTypeAliases = map[string]string{
 		"bool":    "boolean",
@@ -36,6 +45,7 @@ var (
 // This struct holds simulated schema states during GenerateIdempotentDDLs().
 type Generator struct {
 	mode          GeneratorMode
+	version       GeneratorVersion
 	desiredTables []*Table
 	currentTables []*Table
 
@@ -55,7 +65,7 @@ type Generator struct {
 }
 
 // Parse argument DDLs and call `generateDDLs()`
-func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desiredSQL string, currentSQL string, config database.GeneratorConfig) ([]string, error) {
+func GenerateIdempotentDDLs(mode GeneratorMode, version GeneratorVersion, sqlParser database.Parser, desiredSQL string, currentSQL string, config database.GeneratorConfig) ([]string, error) {
 	// TODO: invalidate duplicated tables, columns
 	desiredDDLs, err := ParseDDLs(mode, sqlParser, desiredSQL)
 	if err != nil {
@@ -76,6 +86,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 
 	generator := Generator{
 		mode:              mode,
+		version:           version,
 		desiredTables:     []*Table{},
 		currentTables:     tables,
 		desiredViews:      []*View{},

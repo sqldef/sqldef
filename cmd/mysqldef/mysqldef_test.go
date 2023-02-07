@@ -43,7 +43,7 @@ func TestApply(t *testing.T) {
 			// Initialize the database with test.Current
 			testutils.MustExecute("mysql", "-uroot", "-h", "127.0.0.1", "-e", "DROP DATABASE IF EXISTS mysqldef_test; CREATE DATABASE mysqldef_test;")
 
-			testutils.RunTest(t, db, test, schema.GeneratorModeMysql, sqlParser, version)
+			testutils.RunTest(t, db, test, schema.GeneratorModeMysql, schema.GeneratorVersionMysql80, sqlParser, version)
 		})
 	}
 }

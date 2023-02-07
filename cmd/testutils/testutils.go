@@ -58,7 +58,7 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 	return ret, nil
 }
 
-func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.GeneratorMode, sqlParser database.Parser, version string) {
+func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.GeneratorMode, dbVersion schema.GeneratorVersion, sqlParser database.Parser, version string) {
 	if test.MinVersion != "" && compareVersion(t, version, test.MinVersion) < 0 {
 		t.Skipf("Version '%s' is smaller than min_version '%s'", version, test.MaxVersion)
 	}
@@ -83,7 +83,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, dumpDDLs, database.GeneratorConfig{})
+	ddls, err := schema.GenerateIdempotentDDLs(mode, dbVersion, sqlParser, test.Current, dumpDDLs, database.GeneratorConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, database.GeneratorConfig{})
+	ddls, err = schema.GenerateIdempotentDDLs(mode, dbVersion, sqlParser, test.Desired, dumpDDLs, database.GeneratorConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, database.GeneratorConfig{})
+	ddls, err = schema.GenerateIdempotentDDLs(mode, dbVersion, sqlParser, test.Desired, dumpDDLs, database.GeneratorConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
