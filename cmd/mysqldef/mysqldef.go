@@ -165,6 +165,10 @@ func main() {
 }
 
 func getVersion(db database.Database) (schema.GeneratorVersion, error) {
+	if db.DB() == nil {
+		return schema.GeneratorVersionMysql80, nil
+	}
+
 	var dbVersion string
 	if err := db.DB().QueryRow(`SELECT version();`).Scan(&dbVersion); err != nil {
 		return schema.GeneratorVersionUnknown, err

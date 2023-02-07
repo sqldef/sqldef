@@ -347,6 +347,9 @@ func TestMysqldefChangeColumnCollate(t *testing.T) {
 }
 
 func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
+	if os.Getenv("MYSQL_VERSION") != "8.0" {
+		t.Skip("This test is only run on MySQL 8.0 or higher.")
+	}
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -389,6 +392,9 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 }
 
 func TestMysqldefChangeGenerateColumnAs(t *testing.T) {
+	if os.Getenv("MYSQL_VERSION") != "8.0" {
+		t.Skip("This test is only run on MySQL 8.0 or higher.")
+	}
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
