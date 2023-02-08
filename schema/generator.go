@@ -21,15 +21,6 @@ const (
 	GeneratorModeMssql
 )
 
-type GeneratorVersion int
-
-const (
-	GeneratorVersionUnknown = GeneratorVersion(iota)
-	GeneratorVersionMysql80
-	GeneratorVersionMysql57
-	GeneratorVersionMysqlOlder
-)
-
 var (
 	dataTypeAliases = map[string]string{
 		"bool":    "boolean",
@@ -45,7 +36,6 @@ var (
 // This struct holds simulated schema states during GenerateIdempotentDDLs().
 type Generator struct {
 	mode          GeneratorMode
-	version       GeneratorVersion
 	desiredTables []*Table
 	currentTables []*Table
 
@@ -65,7 +55,7 @@ type Generator struct {
 }
 
 // Parse argument DDLs and call `generateDDLs()`
-func GenerateIdempotentDDLs(mode GeneratorMode, version GeneratorVersion, sqlParser database.Parser, desiredSQL string, currentSQL string, config database.GeneratorConfig) ([]string, error) {
+func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desiredSQL string, currentSQL string, config database.GeneratorConfig) ([]string, error) {
 	// TODO: invalidate duplicated tables, columns
 	desiredDDLs, err := ParseDDLs(mode, sqlParser, desiredSQL)
 	if err != nil {
@@ -86,7 +76,6 @@ func GenerateIdempotentDDLs(mode GeneratorMode, version GeneratorVersion, sqlPar
 
 	generator := Generator{
 		mode:              mode,
-		version:           version,
 		desiredTables:     []*Table{},
 		currentTables:     tables,
 		desiredViews:      []*View{},
@@ -334,7 +323,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				changeOrder := currentPos > desiredPos && currentPos-desiredPos > len(currentTable.columns)-len(desired.table.columns)
 
 				// Change column type and orders, *except* AUTO_INCREMENT and UNIQUE KEY.
-				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) || !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef) || !g.areSameGenerated(g.version, currentColumn.generated, desiredColumn.generated) || changeOrder {
+				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) || !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef) || !g.areSameGenerated(currentColumn.generated, desiredColumn.generated) || changeOrder {
 					definition, err := g.generateColumnDefinition(desiredColumn, false)
 					if err != nil {
 						return ddls, err
@@ -343,13 +332,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					if desiredColumn.generated != nil {
 						ddl1 := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name))
 						ddl2 := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableName(desired.table.name), definition)
-						if changeOrder {
-							after := " FIRST"
-							if i > 0 {
-								after = " AFTER " + g.escapeSQLName(desired.table.columns[i-1].name)
-							}
-							ddl2 += after
+						after := " FIRST"
+						if i > 0 {
+							after = " AFTER " + g.escapeSQLName(desired.table.columns[i-1].name)
 						}
+						ddl2 += after
 						ddls = append(ddls, ddl1, ddl2)
 					} else {
 						ddl := fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name), definition)
@@ -1565,17 +1552,15 @@ func (g *Generator) haveSameColumnDefinition(current Column, desired Column) boo
 		reflect.DeepEqual(current.comment, desired.comment)
 }
 
-func (g *Generator) areSameGenerated(dbVersion GeneratorVersion, generatedA, generatedB *Generated) bool {
-	if dbVersion != GeneratorVersionMysql80 {
-		return true
-	}
+func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 	if generatedA == nil && generatedB == nil {
 		return true
 	}
 	if generatedA == nil || generatedB == nil {
 		return false
 	}
-	return generatedA.expr == generatedB.expr && generatedA.generatedType == generatedB.generatedType
+	return (generatedA.expr == generatedB.expr || generatedA.expr == "("+generatedB.expr+")") &&
+		generatedA.generatedType == generatedB.generatedType
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {

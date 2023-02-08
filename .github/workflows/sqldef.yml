@@ -46,8 +46,6 @@ jobs:
           POSTGRES_VERSION: ${{ matrix.postgres_version }}
       - run: make deps
       - run: make test-${{ matrix.target }}
-        env:
-          MYSQL_VERSION: ${{ matrix.mysql_version }}
 
   package:
     runs-on: ubuntu-latest

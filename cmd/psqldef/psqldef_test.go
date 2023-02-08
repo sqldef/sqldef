@@ -51,7 +51,7 @@ func TestApply(t *testing.T) {
 			}
 			defer db.Close()
 
-			testutils.RunTest(t, db, test, schema.GeneratorModePostgres, schema.GeneratorVersionUnknown, sqlParser, version)
+			testutils.RunTest(t, db, test, schema.GeneratorModePostgres, sqlParser, version)
 		})
 	}
 }

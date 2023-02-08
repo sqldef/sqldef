@@ -10,7 +10,6 @@ import (
 	"github.com/k0kubun/sqldef/database/file"
 	"github.com/k0kubun/sqldef/parser"
 
-	goversion "github.com/hashicorp/go-version"
 	"github.com/jessevdk/go-flags"
 	"github.com/k0kubun/sqldef"
 	"github.com/k0kubun/sqldef/database"
@@ -157,42 +156,5 @@ func main() {
 	}
 
 	sqlParser := database.NewParser(parser.ParserModeMysql)
-	dbVersion, err := getVersion(db)
-	if err != nil {
-		log.Fatal(err)
-	}
-	sqldef.Run(schema.GeneratorModeMysql, dbVersion, db, sqlParser, options)
-}
-
-func getVersion(db database.Database) (schema.GeneratorVersion, error) {
-	if db.DB() == nil {
-		return schema.GeneratorVersionMysql80, nil
-	}
-
-	var dbVersion string
-	if err := db.DB().QueryRow(`SELECT version();`).Scan(&dbVersion); err != nil {
-		return schema.GeneratorVersionUnknown, err
-	}
-
-	v, err := goversion.NewVersion(dbVersion)
-	if err != nil {
-		return schema.GeneratorVersionUnknown, err
-	}
-	v80, err := goversion.NewVersion("8.0")
-	if err != nil {
-		return schema.GeneratorVersionUnknown, err
-	}
-	v57, err := goversion.NewVersion("5.7")
-	if err != nil {
-		return schema.GeneratorVersionUnknown, err
-	}
-
-	switch {
-	case v.GreaterThanOrEqual(v80):
-		return schema.GeneratorVersionMysql80, nil
-	case v.GreaterThanOrEqual(v57):
-		return schema.GeneratorVersionMysql57, nil
-	default:
-		return schema.GeneratorVersionMysqlOlder, nil
-	}
+	sqldef.Run(schema.GeneratorModeMysql, db, sqlParser, options)
 }
