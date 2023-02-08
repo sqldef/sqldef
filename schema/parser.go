@@ -580,7 +580,12 @@ func parseGenerated(genc *parser.GeneratedColumn) *Generated {
 		return nil
 	}
 	var typ GeneratedType
-	// TODO: Check GeneratedType
+	switch genc.GeneratedType {
+	case "VIRTUAL":
+		typ = GeneratedTypeVirtual
+	case "STORED":
+		typ = GeneratedTypeStored
+	}
 	return &Generated{
 		expr:          parser.String(genc.Expr),
 		generatedType: typ,

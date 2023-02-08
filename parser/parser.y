@@ -1411,12 +1411,12 @@ column_definition_type:
 // for MySQL and PostgreSQL (TODO: support abbreviation)
 | column_definition_type GENERATED identity_behavior AS '(' expression ')' VIRTUAL
   {
-    $1.Generated = &GeneratedColumn{Expr: $6}
+    $1.Generated = &GeneratedColumn{Expr: $6, GeneratedType: "VIRTUAL"}
     $$ = $1
   }
 | column_definition_type GENERATED identity_behavior AS '(' expression ')' STORED
   {
-    $1.Generated = &GeneratedColumn{Expr: $6}
+    $1.Generated = &GeneratedColumn{Expr: $6, GeneratedType: "STORED"}
     $$ = $1
   }
 // for PostgreSQL

@@ -194,13 +194,39 @@ CreateTableWithSpatialTypesSRIDSpecified:
     ALTER TABLE `users` ADD COLUMN `location` point NOT NULL /*!80003 SRID 4326 */ AFTER `id`;
 CreateTableGeneratedAlwaysAs80:
   desired: |
-    CREATE TABLE test_table (
+    CREATE TABLE `test_table` (
       id int(11) NOT NULL AUTO_INCREMENT,
       test_value varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
       test_expr varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL,
       PRIMARY KEY (id)
     );
-  min_version: '8.0' # TODO: Make it work with 8.0
+  output: |
+    CREATE TABLE `test_table` (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      test_value varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
+      test_expr varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL,
+      PRIMARY KEY (id)
+    );
+  min_version: '8.0'
+CreateTableGeneratedAlwaysAsChangeExpr80:
+  current: |
+    CREATE TABLE `test_table` (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      test_value varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
+      test_expr varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE `test_table` (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      test_value varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
+      test_expr varchar(45) GENERATED ALWAYS AS (test_value_2 / test_value) VIRTUAL,
+      PRIMARY KEY (id)
+    );
+  output: |
+    ALTER TABLE `users` DROP COLUMN `test_expr`;
+    ALTER TABLE `users` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS (test_value_2 / test_value) VIRTUAL AFTER `test_value`;
+  min_version: '8.0'
 ConstraintCheck:
   desired: |
     CREATE TABLE `books` (

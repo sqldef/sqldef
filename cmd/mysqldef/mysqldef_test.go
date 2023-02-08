@@ -371,7 +371,7 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 	)
 	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
 		ALTER TABLE `+"`users`"+` DROP COLUMN `+"`name`"+`;
-		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) VIRTUAL;
+		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) VIRTUAL;
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)
@@ -385,38 +385,7 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 	)
 	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
 		ALTER TABLE `+"`users`"+` DROP COLUMN `+"`name`"+`;
-		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) STORED;
-		`,
-	))
-	assertApplyOutput(t, createTable, nothingModified)
-}
-
-func TestMysqldefChangeGenerateColumnAs(t *testing.T) {
-	if os.Getenv("MYSQL_VERSION") != "8.0" {
-		t.Skip("This test is only run on MySQL 8.0 or higher.")
-	}
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-  		  data json NOT NULL,
-  		  name varchar(20) AS (json_extract(data,'$.name1')) VIRTUAL
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-  		  data json NOT NULL,
-  		  name varchar(20) AS (json_extract(data,'$.name2')) VIRTUAL
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
-		ALTER TABLE `+"`users`"+` DROP COLUMN `+"`name`"+`;
-		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) AS (json_extract(data,'$.name2')) VIRTUAL;
+		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED;
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)
@@ -424,13 +393,22 @@ func TestMysqldefChangeGenerateColumnAs(t *testing.T) {
 	createTable = stripHeredoc(`
 		CREATE TABLE users (
   		  data json NOT NULL,
-  		  name varchar(20) AS (json_extract(data,'$.name2')) STORED
+  		  name varchar(20) GENERATED ALWAYS AS (json_extract(data,    '$.name2')) STORED
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+  		  data json NOT NULL,
+  		  name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) STORED NOT NULL
 		);
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
 		ALTER TABLE `+"`users`"+` DROP COLUMN `+"`name`"+`;
-		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) AS (json_extract(data,'$.name2')) STORED;
+		ALTER TABLE `+"`users`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED NOT NULL;
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)

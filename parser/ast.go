@@ -705,7 +705,8 @@ type Sequence struct {
 }
 
 type GeneratedColumn struct {
-	Expr Expr
+	Expr          Expr
+	GeneratedType string
 }
 
 type IdentityOpt struct {

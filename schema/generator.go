@@ -334,33 +334,33 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				changeOrder := currentPos > desiredPos && currentPos-desiredPos > len(currentTable.columns)-len(desired.table.columns)
 
 				// Change column type and orders, *except* AUTO_INCREMENT and UNIQUE KEY.
-				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) || !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef) || changeOrder {
+				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) || !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef) || !g.areSameGenerated(g.version, currentColumn.generated, desiredColumn.generated) || changeOrder {
 					definition, err := g.generateColumnDefinition(desiredColumn, false)
 					if err != nil {
 						return ddls, err
 					}
 
-					ddl := fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name), definition)
-					if changeOrder {
-						after := " FIRST"
-						if i > 0 {
-							after = " AFTER " + g.escapeSQLName(desired.table.columns[i-1].name)
-						}
-						ddl += after
-					}
-					ddls = append(ddls, ddl)
-				}
-
-				if g.version == GeneratorVersionMysql80 {
-					if !g.areSameGenerated(currentColumn.generated, desiredColumn.generated) {
-						definition, err := g.generateColumnDefinition(desiredColumn, false)
-						if err != nil {
-							return ddls, err
-						}
-
+					if desiredColumn.generated != nil {
 						ddl1 := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name))
 						ddl2 := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableName(desired.table.name), definition)
+						if changeOrder {
+							after := " FIRST"
+							if i > 0 {
+								after = " AFTER " + g.escapeSQLName(desired.table.columns[i-1].name)
+							}
+							ddl2 += after
+						}
 						ddls = append(ddls, ddl1, ddl2)
+					} else {
+						ddl := fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name), definition)
+						if changeOrder {
+							after := " FIRST"
+							if i > 0 {
+								after = " AFTER " + g.escapeSQLName(desired.table.columns[i-1].name)
+							}
+							ddl += after
+						}
+						ddls = append(ddls, ddl)
 					}
 				}
 
@@ -1010,16 +1010,6 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		definition += "WITH TIME ZONE "
 	}
 
-	if column.generated != nil {
-		definition += "GENERATED ALWAYS AS (" + column.generated.expr + ") "
-		switch column.generated.generatedType {
-		case GeneratedTypeVirtual:
-			definition += "VIRTUAL"
-		case GeneratedTypeStored:
-			definition += "STORED"
-		}
-	}
-
 	// [CHARACTER SET] and [COLLATE] should be placed before [NOT NULL | NULL] on MySQL
 	if column.charset != "" {
 		definition += fmt.Sprintf("CHARACTER SET %s ", column.charset)
@@ -1028,10 +1018,12 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		definition += fmt.Sprintf("COLLATE %s ", column.collate)
 	}
 
-	if column.identity == nil && ((column.notNull != nil && *column.notNull) || column.keyOption == ColumnKeyPrimary) {
-		definition += "NOT NULL "
-	} else if column.notNull != nil && !*column.notNull {
-		definition += "NULL "
+	if column.generated == nil {
+		if column.identity == nil && ((column.notNull != nil && *column.notNull) || column.keyOption == ColumnKeyPrimary) {
+			definition += "NOT NULL "
+		} else if column.notNull != nil && !*column.notNull {
+			definition += "NULL "
+		}
 	}
 
 	if column.sridDef != nil && column.sridDef.value != nil {
@@ -1050,7 +1042,34 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		definition += def + " "
 	}
 
+	if column.generated != nil {
+		// Generated column definitions have this syntax on MySQL
+		// col_name data_type [GENERATED ALWAYS] AS (expr)
+		//  [VIRTUAL | STORED] [NOT NULL | NULL]
+		//  [UNIQUE [KEY]] [[PRIMARY] KEY]
+		//  [COMMENT 'string']
+		if column.autoIncrement {
+			return "", fmt.Errorf("%s in column: %#v", "The AUTO_INCREMENT attribute cannot be used in a generated column definition.", column)
+		}
+		definition += "GENERATED ALWAYS AS (" + column.generated.expr + ") "
+		switch column.generated.generatedType {
+		case GeneratedTypeVirtual:
+			definition += "VIRTUAL "
+		case GeneratedTypeStored:
+			definition += "STORED "
+		}
+
+		if column.identity == nil && ((column.notNull != nil && *column.notNull) || column.keyOption == ColumnKeyPrimary) {
+			definition += "NOT NULL "
+		} else if column.notNull != nil && !*column.notNull {
+			definition += "NULL "
+		}
+	}
+
 	if column.autoIncrement {
+		if column.generated != nil {
+			return "", fmt.Errorf("%s in column: %#v", "The AUTO_INCREMENT attribute cannot be used in a generated column definition.", column)
+		}
 		definition += "AUTO_INCREMENT "
 	}
 
@@ -1546,14 +1565,16 @@ func (g *Generator) haveSameColumnDefinition(current Column, desired Column) boo
 		reflect.DeepEqual(current.comment, desired.comment)
 }
 
-func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
+func (g *Generator) areSameGenerated(dbVersion GeneratorVersion, generatedA, generatedB *Generated) bool {
+	if dbVersion != GeneratorVersionMysql80 {
+		return true
+	}
 	if generatedA == nil && generatedB == nil {
 		return true
 	}
 	if generatedA == nil || generatedB == nil {
 		return false
 	}
-
 	return generatedA.expr == generatedB.expr && generatedA.generatedType == generatedB.generatedType
 }
 
