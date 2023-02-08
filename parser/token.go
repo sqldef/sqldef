@@ -481,6 +481,8 @@ var keywords = map[string]int{
 	"pad_index":              PAD_INDEX,
 	"statistics_incremental": STATISTICS_INCREMENTAL,
 	"statistics_norecompute": STATISTICS_NORECOMPUTE,
+	"lead":                   LEAD,
+	"lag":                    LAG,
 }
 
 // keywordStrings contains the reverse mapping of token to keyword strings

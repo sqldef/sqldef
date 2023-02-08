@@ -130,6 +130,8 @@ func forceEOF(yylex interface{}) {
   arrayElement  ArrayElement
   tableOptions  map[string]string
   overExpr   *OverExpr
+  partitionBy       PartitionBy
+  partition         *Partition
 }
 
 %token LEX_ERROR
@@ -227,6 +229,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> SUBSTR SUBSTRING
 %token <bytes> GROUP_CONCAT SEPARATOR
 %token <bytes> INHERIT
+%token <bytes> LEAD LAG
 
 // Match
 %token <bytes> MATCH AGAINST BOOLEAN LANGUAGE WITH WITHOUT PARSER QUERY EXPANSION
@@ -391,7 +394,8 @@ func forceEOF(yylex interface{}) {
 %type <str> sql_security sql_security_opt
 %type <overExpr> over_expression
 %token <bytes> OVER
-%type <exprs> partition_by_opt
+%type <partitionBy> partition_by_opt partition_by_list
+%type <partition> partition
 
 %start any_command
 
@@ -3019,11 +3023,15 @@ over_expression:
   }
 | OVER openb partition_by_opt closeb
   {
-    $$ = &OverExpr{}
+    $$ = &OverExpr{PartitionBy: $3}
+  }
+| OVER openb order_by_opt closeb
+  {
+    $$ = &OverExpr{OrderBy: $3}
   }
 | OVER openb partition_by_opt order_by_opt closeb
   {
-    $$ = &OverExpr{}
+    $$ = &OverExpr{PartitionBy: $3, OrderBy: $4}
   }
 
 from_opt:
@@ -4119,9 +4127,25 @@ partition_by_opt:
   {
     $$ = nil
   }
-| PARTITION BY expression_list
+| PARTITION BY partition_by_list
   {
     $$ = $3
+  }
+
+partition_by_list:
+  partition
+  {
+    $$ = PartitionBy{$1}
+  }
+| partition_by_list ',' partition
+  {
+    $$ = append($1, $3)
+  }
+
+partition:
+  expression
+  {
+    $$ = &Partition{Expr: $1}
   }
 
 order_by_opt:
@@ -4618,6 +4642,7 @@ reserved_keyword:
 | OR
 | ORDER
 | OUTER
+| PARTITION
 | PAGLOCK
 | POLICY
 | PRIOR
@@ -4800,6 +4825,8 @@ non_reserved_keyword:
 | ALLOW_PAGE_LOCKS
 | ROWID
 | STRICT
+| LEAD
+| LAG
 
 openb:
   '('
