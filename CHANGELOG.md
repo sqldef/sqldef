@@ -1,3 +1,8 @@
+## v0.15.10
+
+- Use window function on view replace for mysqldef [#354](https://github.com/k0kubun/sqldef/pull/354)
+- Support MySQL 8.0 Generated Column [#355](https://github.com/k0kubun/sqldef/pull/355)
+
 ## v0.15.9
 
 - Accept ALTER TABLE without ONLY for mysqldef [#352](https://github.com/k0kubun/sqldef/issues/352)
