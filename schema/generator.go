@@ -1559,6 +1559,7 @@ func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 	if generatedA == nil || generatedB == nil {
 		return false
 	}
+	// TODO: Difference between bracketed and unbracketed, as Expr values are not fully comparable.
 	return (generatedA.expr == generatedB.expr || generatedA.expr == "("+generatedB.expr+")") &&
 		generatedA.generatedType == generatedB.generatedType
 }
