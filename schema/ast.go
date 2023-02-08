@@ -75,6 +75,7 @@ type Column struct {
 	references    string
 	identity      *Identity
 	sequence      *Sequence
+	generated     *Generated
 	// TODO: keyopt
 	// XXX: zerofill?
 }
@@ -238,6 +239,18 @@ type Type struct {
 	statement  string
 	enumValues []string
 }
+
+type Generated struct {
+	expr          string
+	generatedType GeneratedType
+}
+
+type GeneratedType int
+
+const (
+	GeneratedTypeVirtual = GeneratedType(iota)
+	GeneratedTypeStored
+)
 
 type Comment struct {
 	statement string

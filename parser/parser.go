@@ -5824,14 +5824,14 @@ yydefault:
 		yyDollar = yyS[yypt-8 : yypt+1]
 //line parser.y:1413
 		{
-			yyDollar[1].columnType.Generated = &GeneratedColumn{Expr: yyDollar[6].expr}
+			yyDollar[1].columnType.Generated = &GeneratedColumn{Expr: yyDollar[6].expr, GeneratedType: "VIRTUAL"}
 			yyVAL.columnType = yyDollar[1].columnType
 		}
 	case 199:
 		yyDollar = yyS[yypt-8 : yypt+1]
 //line parser.y:1418
 		{
-			yyDollar[1].columnType.Generated = &GeneratedColumn{Expr: yyDollar[6].expr}
+			yyDollar[1].columnType.Generated = &GeneratedColumn{Expr: yyDollar[6].expr, GeneratedType: "STORED"}
 			yyVAL.columnType = yyDollar[1].columnType
 		}
 	case 200:

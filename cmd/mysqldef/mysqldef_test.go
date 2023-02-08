@@ -346,6 +346,113 @@ func TestMysqldefChangeColumnCollate(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE test_table (
+		  id int(11) NOT NULL AUTO_INCREMENT,
+		  test_value varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
+		  test_expr varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL,
+  		  data json NOT NULL,
+  		  name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name1')) VIRTUAL,
+		  PRIMARY KEY (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE test_table (
+		  id int(11) NOT NULL AUTO_INCREMENT,
+		  test_value varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
+		  test_expr varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL,
+  		  data json NOT NULL,
+  		  name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) VIRTUAL,
+		  PRIMARY KEY (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`name`"+`;
+		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) VIRTUAL AFTER `+"`data`"+`;
+		`,
+	))
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE test_table (
+		  id int(11) NOT NULL AUTO_INCREMENT,
+		  test_value varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
+		  test_expr varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED,
+  		  data json NOT NULL,
+  		  name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) STORED,
+		  PRIMARY KEY (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`test_expr`"+`;
+		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`test_expr`"+` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED AFTER `+"`test_value`"+`;
+		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`name`"+`;
+		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED AFTER `+"`data`"+`;
+		`,
+	))
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE test_table (
+		  id int(11) NOT NULL AUTO_INCREMENT,
+		  test_value varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
+		  test_expr varchar(45) GENERATED ALWAYS AS ( test_value / test_value ) STORED,
+  		  data json NOT NULL,
+  		  name varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED,
+		  PRIMARY KEY (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE test_table (
+		  id int(11) NOT NULL AUTO_INCREMENT,
+		  test_value varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
+		  test_expr varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED NOT NULL,
+  		  data json NOT NULL,
+  		  name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) STORED NOT NULL,
+		  PRIMARY KEY (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`test_expr`"+`;
+		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`test_expr`"+` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED NOT NULL AFTER `+"`test_value`"+`;
+		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`name`"+`;
+		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED NOT NULL AFTER `+"`data`"+`;
+		`,
+	))
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE test_table (
+		  id int(11) NOT NULL AUTO_INCREMENT,
+		  test_value varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
+		  test_expr varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) STORED NOT NULL,
+  		  data json NOT NULL,
+  		  name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) STORED NOT NULL,
+		  PRIMARY KEY (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`test_expr`"+`;
+		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`test_expr`"+` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) STORED NOT NULL AFTER `+"`test_value`"+`;
+		`,
+	))
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMysqldefChangeEnumColumn(t *testing.T) {
 	resetTestDatabase()
 
