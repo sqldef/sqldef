@@ -138,6 +138,7 @@ var keywords = map[string]int{
 	"nonclustered":           NONCLUSTERED,
 	"collate":                COLLATE,
 	"column":                 COLUMN,
+	"columnstore":            COLUMNSTORE,
 	"comment":                COMMENT_KEYWORD,
 	"committed":              COMMITTED,
 	"commit":                 COMMIT,
