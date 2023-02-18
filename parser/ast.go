@@ -1077,6 +1077,7 @@ type IndexSpec struct {
 	Primary           bool
 	Constraint        bool
 	Clustered         bool // for MSSQL
+	ColumnStore       bool // for MSSQL
 	Included          []ColIdent
 	Where             *Where
 	Options           []*IndexOption

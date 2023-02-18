@@ -58,3 +58,46 @@ IndexesOnChangedFilter:
   output: |
     DROP INDEX [idx_v] ON [dbo].[v];
     CREATE INDEX idx_v ON v (v_int, v_nvarchar) WHERE (v_int IS NOT NULL AND v_nvarchar IS NOT NULL);
+CreateColumnStoreIndex:
+  current: |
+    CREATE TABLE v (
+      v_int int,
+      v_nvarchar nvarchar(30)
+    );
+  desired: |
+    CREATE TABLE v (
+      v_int int,
+      v_nvarchar nvarchar(30)
+    );
+    CREATE NONCLUSTERED COLUMNSTORE INDEX idx_v ON v (v_int, v_nvarchar);
+  output: |
+    CREATE NONCLUSTERED COLUMNSTORE INDEX idx_v ON v (v_int, v_nvarchar);
+CreateColumnStoreIndexWithoutKeyword:
+  current:
+    CREATE TABLE v (
+      v_int int,
+      v_nvarchar nvarchar(30)
+    );
+  desired: |
+    CREATE TABLE v (
+      v_int int,
+      v_nvarchar nvarchar(30)
+    );
+    CREATE COLUMNSTORE INDEX idx_v ON v (v_int, v_nvarchar);
+  output: |
+    CREATE COLUMNSTORE INDEX idx_v ON v (v_int, v_nvarchar);
+DropColumnStoreIndex:
+  current: |
+    CREATE TABLE v (
+      v_int int,
+      v_nvarchar nvarchar(30)
+    );
+    CREATE NONCLUSTERED COLUMNSTORE INDEX idx_v ON v (v_int, v_nvarchar);
+  desired: |
+    CREATE TABLE v (
+      v_int int,
+      v_nvarchar nvarchar(30)
+    );
+  output: |
+    DROP INDEX [idx_v] ON [dbo].[v];
+    
