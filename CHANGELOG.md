@@ -1,3 +1,7 @@
+## v0.15.12
+
+- Fix schema name normalizer to use `dbo` for mssqldef [#357](https://github.com/k0kubun/sqldef/pull/357)
+
 ## v0.15.11
 
 - Support NONCLUSTERD COLUMNSTORE index for mssqldef [#356](https://github.com/k0kubun/sqldef/pull/356)
