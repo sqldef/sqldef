@@ -52,18 +52,20 @@ type Generator struct {
 
 	desiredExtensions []*Extension
 	currentExtensions []*Extension
+
+	defaultSchema string
 }
 
 // Parse argument DDLs and call `generateDDLs()`
-func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desiredSQL string, currentSQL string, config database.GeneratorConfig) ([]string, error) {
+func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desiredSQL string, currentSQL string, config database.GeneratorConfig, defaultSchema string) ([]string, error) {
 	// TODO: invalidate duplicated tables, columns
-	desiredDDLs, err := ParseDDLs(mode, sqlParser, desiredSQL)
+	desiredDDLs, err := ParseDDLs(mode, sqlParser, desiredSQL, defaultSchema)
 	if err != nil {
 		return nil, err
 	}
 	desiredDDLs = FilterTables(desiredDDLs, config)
 
-	currentDDLs, err := ParseDDLs(mode, sqlParser, currentSQL)
+	currentDDLs, err := ParseDDLs(mode, sqlParser, currentSQL, defaultSchema)
 	if err != nil {
 		return nil, err
 	}
@@ -87,6 +89,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		currentComments:   comments,
 		desiredExtensions: []*Extension{},
 		currentExtensions: extensions,
+		defaultSchema:     defaultSchema,
 	}
 	return generator.generateDDLs(desiredDDLs)
 }
@@ -406,7 +409,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 				}
 
-				_, tableName := postgresSplitTableName(desired.table.name)
+				_, tableName := splitTableName(desired.table.name, g.defaultSchema)
 				constraintName := fmt.Sprintf("%s_%s_check", tableName, desiredColumn.name)
 				if desiredColumn.check != nil && desiredColumn.check.constraintName != "" {
 					constraintName = desiredColumn.check.constraintName
@@ -437,7 +440,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				// TODO: support adding a column's `references`
 			case GeneratorModeMssql:
 				if !areSameCheckDefinition(currentColumn.check, desiredColumn.check) {
-					constraintName := fmt.Sprintf("%s_%s_check", strings.Replace(desired.table.name, "dbo.", "", 1), desiredColumn.name)
+					_, tableName := splitTableName(desired.table.name, g.defaultSchema)
+					constraintName := fmt.Sprintf("%s_%s_check", tableName, desiredColumn.name)
 					if currentColumn.check != nil {
 						currentConstraintName := currentColumn.check.constraintName
 						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), currentConstraintName)
@@ -1264,7 +1268,7 @@ func (g *Generator) generateDropIndex(tableName string, indexName string, constr
 		if constraint {
 			return fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(tableName), g.escapeSQLName(indexName))
 		} else {
-			schema, _ := postgresSplitTableName(tableName)
+			schema, _ := splitTableName(tableName, g.defaultSchema)
 			return fmt.Sprintf("DROP INDEX %s.%s", g.escapeSQLName(schema), g.escapeSQLName(indexName))
 		}
 	case GeneratorModeMssql:
@@ -1282,12 +1286,7 @@ func (g *Generator) escapeTableName(name string) string {
 		schemaTable := strings.SplitN(name, ".", 2)
 		var schemaName, tableName string
 		if len(schemaTable) == 1 {
-			switch g.mode {
-			case GeneratorModePostgres:
-				schemaName, tableName = "public", schemaTable[0]
-			case GeneratorModeMssql:
-				schemaName, tableName = "dbo", schemaTable[0]
-			}
+			schemaName, tableName = g.defaultSchema, schemaTable[0]
 		} else {
 			schemaName, tableName = schemaTable[0], schemaTable[1]
 		}
@@ -2050,12 +2049,11 @@ func containsRegexpString(strs []string, str string) bool {
 	return false
 }
 
-func postgresSplitTableName(table string) (string, string) {
-	schema := "public"
+func splitTableName(table string, defaultSchema string) (string, string) {
 	schemaTable := strings.SplitN(table, ".", 2)
 	if len(schemaTable) == 2 {
-		schema = schemaTable[0]
-		table = schemaTable[1]
+		return schemaTable[0], schemaTable[1]
+	} else {
+		return defaultSchema, table
 	}
-	return schema, table
 }

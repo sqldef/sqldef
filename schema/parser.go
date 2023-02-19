@@ -92,7 +92,7 @@ func parseLength(val *parser.SQLVal) (*int, error) {
 	return &intVal, nil
 }
 
-func parseTable(mode GeneratorMode, stmt *parser.DDL) (Table, error) {
+func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Table, error) {
 	var columns []Column
 	var indexes []Index
 	var checks []CheckDefinition
@@ -118,7 +118,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL) (Table, error) {
 			onUpdate:      parseValue(parsedCol.Type.OnUpdate),
 			comment:       parseValue(parsedCol.Type.Comment),
 			enumValues:    parsedCol.Type.EnumValues,
-			references:    normalizedTable(mode, parsedCol.Type.References),
+			references:    normalizedTable(mode, parsedCol.Type.References, defaultSchema),
 			identity:      parseIdentity(parsedCol.Type.Identity),
 			sequence:      parseIdentitySequence(parsedCol.Type.Identity),
 			generated:     parseGenerated(parsedCol.Type.Generated),
@@ -211,7 +211,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL) (Table, error) {
 			constraintName:    foreignKeyDef.ConstraintName.String(),
 			indexName:         foreignKeyDef.IndexName.String(),
 			indexColumns:      indexColumns,
-			referenceName:     normalizedTableName(mode, foreignKeyDef.ReferenceName),
+			referenceName:     normalizedTableName(mode, foreignKeyDef.ReferenceName, defaultSchema),
 			referenceColumns:  referenceColumns,
 			onDelete:          foreignKeyDef.OnDelete.String(),
 			onUpdate:          foreignKeyDef.OnUpdate.String(),
@@ -221,7 +221,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL) (Table, error) {
 	}
 
 	return Table{
-		name:        normalizedTableName(mode, stmt.NewName),
+		name:        normalizedTableName(mode, stmt.NewName, defaultSchema),
 		columns:     columns,
 		indexes:     indexes,
 		checks:      checks,
@@ -317,12 +317,12 @@ func parseIndex(stmt *parser.DDL) (Index, error) {
 
 // Parse DDL like `CREATE TABLE` or `ALTER TABLE`.
 // This doesn't support destructive DDL like `DROP TABLE`.
-func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement) (DDL, error) {
+func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSchema string) (DDL, error) {
 	switch stmt := stmt.(type) {
 	case *parser.DDL:
 		if stmt.Action == parser.CreateStr {
 			// TODO: handle other create DDL as error?
-			table, err := parseTable(mode, stmt)
+			table, err := parseTable(mode, stmt, defaultSchema)
 			if err != nil {
 				return nil, err
 			}
@@ -337,7 +337,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement) (DDL, error
 			}
 			return &CreateIndex{
 				statement: ddl,
-				tableName: normalizedTableName(mode, stmt.Table),
+				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
 				index:     index,
 			}, nil
 		} else if stmt.Action == parser.AddIndexStr {
@@ -347,7 +347,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement) (DDL, error
 			}
 			return &AddIndex{
 				statement: ddl,
-				tableName: normalizedTableName(mode, stmt.Table),
+				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
 				index:     index,
 			}, nil
 		} else if stmt.Action == parser.AddPrimaryKeyStr {
@@ -357,7 +357,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement) (DDL, error
 			}
 			return &AddPrimaryKey{
 				statement: ddl,
-				tableName: normalizedTableName(mode, stmt.Table),
+				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
 				index:     index,
 			}, nil
 		} else if stmt.Action == parser.AddForeignKeyStr {
@@ -372,12 +372,12 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement) (DDL, error
 
 			return &AddForeignKey{
 				statement: ddl,
-				tableName: normalizedTableName(mode, stmt.Table),
+				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
 				foreignKey: ForeignKey{
 					constraintName:    stmt.ForeignKey.ConstraintName.String(),
 					indexName:         stmt.ForeignKey.IndexName.String(),
 					indexColumns:      indexColumns,
-					referenceName:     normalizedTableName(mode, stmt.ForeignKey.ReferenceName),
+					referenceName:     normalizedTableName(mode, stmt.ForeignKey.ReferenceName, defaultSchema),
 					referenceColumns:  referenceColumns,
 					onDelete:          stmt.ForeignKey.OnDelete.String(),
 					onUpdate:          stmt.ForeignKey.OnUpdate.String(),
@@ -398,7 +398,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement) (DDL, error
 			}
 			return &AddPolicy{
 				statement: ddl,
-				tableName: normalizedTableName(mode, stmt.Table),
+				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
 				policy: Policy{
 					name:       stmt.Policy.Name.String(),
 					permissive: stmt.Policy.Permissive.Raw(),
@@ -413,7 +413,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement) (DDL, error
 				statement:    ddl,
 				viewType:     strings.ToUpper(strings.TrimPrefix(stmt.View.Action, "create ")),
 				securityType: strings.ToUpper(stmt.View.SecurityType),
-				name:         normalizedTableName(mode, stmt.View.Name),
+				name:         normalizedTableName(mode, stmt.View.Name, defaultSchema),
 				definition:   parser.String(stmt.View.Definition),
 			}, nil
 		} else if stmt.Action == parser.CreateTriggerStr {
@@ -432,7 +432,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement) (DDL, error
 			}, nil
 		} else if stmt.Action == parser.CreateTypeStr {
 			return &Type{
-				name:       normalizedTableName(mode, stmt.Type.Name),
+				name:       normalizedTableName(mode, stmt.Type.Name, defaultSchema),
 				statement:  ddl,
 				enumValues: stmt.Type.Type.EnumValues,
 			}, nil
@@ -459,7 +459,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement) (DDL, error
 
 // Parse `ddls`, which is expected to `;`-concatenated DDLs
 // and not to include destructive DDL.
-func ParseDDLs(mode GeneratorMode, sqlParser database.Parser, sql string) ([]DDL, error) {
+func ParseDDLs(mode GeneratorMode, sqlParser database.Parser, sql string, defaultSchema string) ([]DDL, error) {
 	ddls, err := sqlParser.Parse(sql)
 	if err != nil {
 		return nil, err
@@ -467,7 +467,7 @@ func ParseDDLs(mode GeneratorMode, sqlParser database.Parser, sql string) ([]DDL
 
 	var result []DDL
 	for _, ddl := range ddls {
-		parsed, err := parseDDL(mode, ddl.DDL, ddl.Statement)
+		parsed, err := parseDDL(mode, ddl.DDL, ddl.Statement, defaultSchema)
 		if err != nil {
 			return result, err
 		}
@@ -485,29 +485,25 @@ func normalizeCollate(collate string, table parser.TableSpec) string {
 	}
 }
 
-// Qualify Postgres/MSSQL schema
-func normalizedTableName(mode GeneratorMode, tableName parser.TableName) string {
+// Qualify Postgres/Mssql schema
+func normalizedTableName(mode GeneratorMode, tableName parser.TableName, defaultSchema string) string {
 	table := tableName.Name.String()
-	switch mode {
-	case GeneratorModePostgres, GeneratorModeMssql:
+	if mode == GeneratorModePostgres || mode == GeneratorModeMssql {
 		if len(tableName.Qualifier.String()) > 0 {
 			table = tableName.Qualifier.String() + "." + table
 		} else {
-			if mode == GeneratorModePostgres {
-				table = "public." + table
-			} else if mode == GeneratorModeMssql {
-				table = "dbo." + table
-			}
+			table = defaultSchema + "." + table
 		}
 	}
 	return table
 }
 
-func normalizedTable(mode GeneratorMode, tableName string) string {
-	if mode == GeneratorModePostgres {
-		schema, table := postgresSplitTableName(tableName)
+func normalizedTable(mode GeneratorMode, tableName string, defaultSchema string) string {
+	switch mode {
+	case GeneratorModePostgres, GeneratorModeMssql:
+		schema, table := splitTableName(tableName, defaultSchema)
 		return fmt.Sprintf("%s.%s", schema, table)
-	} else {
+	default:
 		return tableName
 	}
 }

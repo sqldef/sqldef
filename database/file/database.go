@@ -27,3 +27,7 @@ func (f FileDatabase) DB() *sql.DB {
 func (f FileDatabase) Close() error {
 	return nil
 }
+
+func (f FileDatabase) GetDefaultSchema() string {
+	return ""
+}

@@ -17,8 +17,9 @@ import (
 const indent = "    "
 
 type PostgresDatabase struct {
-	config database.Config
-	db     *sql.DB
+	config        database.Config
+	db            *sql.DB
+	defaultSchema *string
 }
 
 func NewDatabase(config database.Config) (database.Database, error) {
@@ -258,12 +259,12 @@ func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreignDefs, policyDefs, comments, checkConstraints, uniqueConstraints), nil
+	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreignDefs, policyDefs, comments, checkConstraints, uniqueConstraints, d.GetDefaultSchema()), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreignDefs, policyDefs, comments []string, checkConstraints, uniqueConstraints map[string]string) string {
+func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreignDefs, policyDefs, comments []string, checkConstraints, uniqueConstraints map[string]string, defaultSchema string) string {
 	var queryBuilder strings.Builder
-	schema, table := splitTableName(table)
+	schema, table := splitTableName(table, defaultSchema)
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", escapeSQLName(schema), escapeSQLName(table))
 	for i, col := range columns {
 		if i > 0 {
@@ -418,7 +419,7 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	FROM      columns
 	LEFT JOIN check_constraints checks USING (column_name);`
 
-	schema, table := splitTableName(table)
+	schema, table := splitTableName(table, d.GetDefaultSchema())
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -492,7 +493,7 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 	AND    tablename = $2
 	AND    indexName NOT IN (SELECT name FROM unique_and_pk_constraints)
 	`
-	schema, table := splitTableName(table)
+	schema, table := splitTableName(table, d.GetDefaultSchema())
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -524,7 +525,7 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[strin
 	AND    array_length(con.conkey, 1) > 1;`
 
 	result := map[string]string{}
-	schema, table := splitTableName(tableName)
+	schema, table := splitTableName(tableName, d.GetDefaultSchema())
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -553,7 +554,7 @@ func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]st
 	AND    cls.relname = $2;`
 
 	result := map[string]string{}
-	schema, table := splitTableName(tableName)
+	schema, table := splitTableName(tableName, d.GetDefaultSchema())
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -580,7 +581,7 @@ FROM
 	JOIN information_schema.key_column_usage AS kcu
 		USING (table_schema, table_name, constraint_name)
 WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$2 ORDER BY kcu.ordinal_position`
-	schema, table := splitTableName(table)
+	schema, table := splitTableName(table, d.GetDefaultSchema())
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -620,7 +621,7 @@ FROM
 		AND kcu2.constraint_name = rc.unique_constraint_name
 		AND kcu2.ordinal_position = kcu.position_in_unique_constraint
 WHERE constraint_type = 'FOREIGN KEY' AND tc.table_schema=$1 AND tc.table_name=$2`
-	schema, table := splitTableName(table)
+	schema, table := splitTableName(table, d.GetDefaultSchema())
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -692,7 +693,7 @@ var (
 
 func (d *PostgresDatabase) getPolicyDefs(table string) ([]string, error) {
 	const query = "SELECT policyname, permissive, roles, cmd, qual, with_check FROM pg_policies WHERE schemaname = $1 AND tablename = $2;"
-	schema, table := splitTableName(table)
+	schema, table := splitTableName(table, d.GetDefaultSchema())
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
 		return nil, err
@@ -727,7 +728,7 @@ func (d *PostgresDatabase) getPolicyDefs(table string) ([]string, error) {
 }
 
 func (d *PostgresDatabase) getComments(table string) ([]string, error) {
-	_, table = splitTableName(table) // supporting only public schema for now
+	_, table = splitTableName(table, d.GetDefaultSchema()) // supporting only public schema for now
 	var ddls []string
 
 	// Table comments
@@ -788,6 +789,24 @@ func (d *PostgresDatabase) Close() error {
 	return d.db.Close()
 }
 
+func (d *PostgresDatabase) GetDefaultSchema() string {
+	if d.defaultSchema != nil {
+		return *d.defaultSchema
+	}
+
+	var defaultSchema string
+	query := "SELECT current_schema();"
+
+	err := d.db.QueryRow(query).Scan(&defaultSchema)
+	if err != nil {
+		return ""
+	}
+
+	d.defaultSchema = &defaultSchema
+
+	return defaultSchema
+}
+
 func postgresBuildDSN(config database.Config) string {
 	user := config.User
 	password := config.Password
@@ -816,8 +835,8 @@ func escapeSQLName(name string) string {
 	return fmt.Sprintf("\"%s\"", name)
 }
 
-func splitTableName(table string) (string, string) {
-	schema := "public"
+func splitTableName(table string, defaultSchema string) (string, string) {
+	schema := defaultSchema
 	schemaTable := strings.SplitN(table, ".", 2)
 	if len(schemaTable) == 2 {
 		schema = schemaTable[0]

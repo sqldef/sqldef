@@ -15,8 +15,9 @@ import (
 const indent = "    "
 
 type MssqlDatabase struct {
-	config database.Config
-	db     *sql.DB
+	config        database.Config
+	db            *sql.DB
+	defaultSchema *string
 }
 
 func NewDatabase(config database.Config) (database.Database, error) {
@@ -249,7 +250,7 @@ type check struct {
 }
 
 func (d *MssqlDatabase) getColumns(table string) ([]column, error) {
-	schema, table := splitTableName(table)
+	schema, table := splitTableName(table, d.GetDefaultSchema())
 	query := fmt.Sprintf(`SELECT
 	c.name,
 	[type_name] = tp.name,
@@ -334,7 +335,7 @@ type indexOption struct {
 }
 
 func (d *MssqlDatabase) getIndexDefs(table string) ([]*indexDef, error) {
-	schema, table := splitTableName(table)
+	schema, table := splitTableName(table, d.GetDefaultSchema())
 	query := fmt.Sprintf(`SELECT
 	ind.name AS index_name,
 	ind.is_primary_key,
@@ -426,7 +427,7 @@ WHERE ind.object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 }
 
 func (d *MssqlDatabase) getForeignDefs(table string) ([]string, error) {
-	schema, table := splitTableName(table)
+	schema, table := splitTableName(table, d.GetDefaultSchema())
 	query := fmt.Sprintf(`SELECT
 	f.name,
 	COL_NAME(f.parent_object_id, fc.parent_column_id),
@@ -544,6 +545,24 @@ func (d *MssqlDatabase) Close() error {
 	return d.db.Close()
 }
 
+func (d *MssqlDatabase) GetDefaultSchema() string {
+	if d.defaultSchema != nil {
+		return *d.defaultSchema
+	}
+
+	var defaultSchema string
+	query := "SELECT schema_name();"
+
+	err := d.db.QueryRow(query).Scan(&defaultSchema)
+	if err != nil {
+		return ""
+	}
+
+	d.defaultSchema = &defaultSchema
+
+	return defaultSchema
+}
+
 func mssqlBuildDSN(config database.Config) string {
 	query := url.Values{}
 	query.Add("database", config.DbName)
@@ -557,8 +576,8 @@ func mssqlBuildDSN(config database.Config) string {
 	return u.String()
 }
 
-func splitTableName(table string) (string, string) {
-	schema := "dbo"
+func splitTableName(table string, defaultSchmea string) (string, string) {
+	schema := defaultSchmea
 	schemaTable := strings.SplitN(table, ".", 2)
 	if len(schemaTable) == 2 {
 		schema = schemaTable[0]

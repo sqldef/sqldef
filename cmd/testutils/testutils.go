@@ -68,7 +68,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 
 	// Prepare current
 	if test.Current != "" {
-		ddls, err := splitDDLs(mode, sqlParser, test.Current)
+		ddls, err := splitDDLs(mode, sqlParser, test.Current, db.GetDefaultSchema())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -83,7 +83,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, dumpDDLs, database.GeneratorConfig{})
+	ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, dumpDDLs, database.GeneratorConfig{}, db.GetDefaultSchema())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, database.GeneratorConfig{})
+	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, database.GeneratorConfig{}, db.GetDefaultSchema())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, database.GeneratorConfig{})
+	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, database.GeneratorConfig{}, db.GetDefaultSchema())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,8 +156,8 @@ func compareVersion(t *testing.T, leftVersion string, rightVersion string) int {
 	return 0
 }
 
-func splitDDLs(mode schema.GeneratorMode, sqlParser database.Parser, str string) ([]string, error) {
-	statements, err := schema.ParseDDLs(mode, sqlParser, str)
+func splitDDLs(mode schema.GeneratorMode, sqlParser database.Parser, str string, defaultSchema string) ([]string, error) {
+	statements, err := schema.ParseDDLs(mode, sqlParser, str, defaultSchema)
 	if err != nil {
 		return nil, err
 	}

@@ -36,6 +36,7 @@ type Database interface {
 	DumpDDLs() (string, error)
 	DB() *sql.DB
 	Close() error
+	GetDefaultSchema() string
 }
 
 func RunDDLs(d Database, ddls []string, skipDrop bool, beforeApply string) error {
