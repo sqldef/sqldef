@@ -58,6 +58,7 @@ IndexesOnChangedFilter:
   output: |
     DROP INDEX [idx_v] ON [dbo].[v];
     CREATE INDEX idx_v ON v (v_int, v_nvarchar) WHERE (v_int IS NOT NULL AND v_nvarchar IS NOT NULL);
+
 CreateColumnStoreIndex:
   current: |
     CREATE TABLE v (
@@ -100,4 +101,19 @@ DropColumnStoreIndex:
     );
   output: |
     DROP INDEX [idx_v] ON [dbo].[v];
+    
+DropTableOnNonDefaultSchema:
+  current: |
+    CREATE TABLE FOO.bigdata1 (
+      data bigint
+    );
+    CREATE TABLE FOO.bigdata2 (
+      data bigint
+    );
+  desired: |
+    CREATE TABLE FOO.bigdata1 (
+      data bigint
+    );
+  output: |
+    DROP TABLE [FOO].[bigdata2];
     

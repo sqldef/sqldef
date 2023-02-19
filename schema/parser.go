@@ -485,14 +485,19 @@ func normalizeCollate(collate string, table parser.TableSpec) string {
 	}
 }
 
-// Qualify Postgres schema
+// Qualify Postgres/MSSQL schema
 func normalizedTableName(mode GeneratorMode, tableName parser.TableName) string {
 	table := tableName.Name.String()
-	if mode == GeneratorModePostgres {
+	switch mode {
+	case GeneratorModePostgres, GeneratorModeMssql:
 		if len(tableName.Qualifier.String()) > 0 {
 			table = tableName.Qualifier.String() + "." + table
 		} else {
-			table = "public." + table
+			if mode == GeneratorModePostgres {
+				table = "public." + table
+			} else if mode == GeneratorModeMssql {
+				table = "dbo." + table
+			}
 		}
 	}
 	return table
