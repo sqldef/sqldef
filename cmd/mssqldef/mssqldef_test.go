@@ -36,6 +36,7 @@ func TestApply(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			// Initialize the database with test.Current
 			testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "DROP DATABASE IF EXISTS mssqldef_test; CREATE DATABASE mssqldef_test;")
+			testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", "CREATE SCHEMA FOO;")
 			db, err := connectDatabase() // DROP DATABASE hangs when there's a connection
 			if err != nil {
 				t.Fatal(err)
@@ -1093,6 +1094,7 @@ func assertEquals(t *testing.T, actual string, expected string) {
 func resetTestDatabase() {
 	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "DROP DATABASE IF EXISTS mssqldef_test;")
 	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "CREATE DATABASE mssqldef_test;")
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", "CREAE SCHEMA FOO;")
 }
 
 func writeFile(path string, content string) {
