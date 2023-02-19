@@ -169,12 +169,17 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 		if indexDef.unique {
 			fmt.Fprint(&queryBuilder, " UNIQUE")
 		}
-		if indexDef.indexType == "CLUSTERED" || indexDef.indexType == "NONCLUSTERED" {
+		switch indexDef.indexType {
+		case "CLUSTERED", "NONCLUSTERED", "NONCLUSTERED COLUMNSTORE":
 			fmt.Fprintf(&queryBuilder, " %s", indexDef.indexType)
 		}
-		fmt.Fprintf(&queryBuilder, " INDEX [%s] ON %s (%s)", indexDef.name, table, strings.Join(indexDef.columns, ", "))
-		if len(indexDef.included) > 0 {
-			fmt.Fprintf(&queryBuilder, " INCLUDE (%s)", strings.Join(indexDef.included, ", "))
+		if indexDef.indexType == "NONCLUSTERED COLUMNSTORE" {
+			fmt.Fprintf(&queryBuilder, " INDEX [%s] ON %s (%s)", indexDef.name, table, strings.Join(indexDef.included, ", "))
+		} else {
+			fmt.Fprintf(&queryBuilder, " INDEX [%s] ON %s (%s)", indexDef.name, table, strings.Join(indexDef.columns, ", "))
+			if len(indexDef.included) > 0 {
+				fmt.Fprintf(&queryBuilder, " INCLUDE (%s)", strings.Join(indexDef.included, ", "))
+			}
 		}
 		if indexDef.filter != nil {
 			fmt.Fprintf(&queryBuilder, " WHERE %s", *indexDef.filter)

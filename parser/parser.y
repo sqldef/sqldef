@@ -81,6 +81,7 @@ func forceEOF(yylex interface{}) {
   expr          Expr
   exprs         Exprs
   boolVal       BoolVal
+  boolVals      []BoolVal
   colTuple      ColTuple
   values        Values
   valTuple      ValTuple
@@ -248,6 +249,8 @@ func forceEOF(yylex interface{}) {
 %token <bytes> CLUSTERED NONCLUSTERED
 // SQL Server NOT FOR REPLICATION
 %token <bytes> REPLICATION
+// SQL SERVER COLUMNSTORE
+%token <bytes> COLUMNSTORE
 // index
 %token <bytes> INCLUDE
 
@@ -396,6 +399,8 @@ func forceEOF(yylex interface{}) {
 %token <bytes> OVER
 %type <partitionBy> partition_by_opt partition_by_list
 %type <partition> partition
+%type <boolVals> unique_clustered_opt
+%type <empty> nonclustered_columnstore
 
 %start any_command
 
@@ -817,37 +822,17 @@ create_statement:
     $1.TableSpec = $2
     $$ = $1
   }
-| CREATE unique_opt clustered_opt INDEX sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
-  {
-    $$ = &DDL{
-        Action: CreateIndexStr,
-        Table: $7,
-        NewName: $7,
-        IndexSpec: &IndexSpec{
-          Name: $5,
-          Type: NewColIdent(""),
-          Unique: bool($2),
-          Clustered: bool($3),
-          Included: $11,
-          Where: NewWhere(WhereStr, $12),
-          Options: $13,
-          Partition: $14,
-        },
-        IndexCols: $9.IndexCols,
-        IndexExpr: $9.IndexExpr,
-      }
-  }
-| CREATE unique_opt clustered_opt INDEX ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+| CREATE unique_clustered_opt INDEX sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
         Action: CreateIndexStr,
         Table: $6,
         NewName: $6,
         IndexSpec: &IndexSpec{
-          Name: NewColIdent(""),
+          Name: $4,
           Type: NewColIdent(""),
-          Unique: bool($2),
-          Clustered: bool($3),
+          Unique: bool($2[0]),
+          Clustered: bool($2[0]),
           Included: $10,
           Where: NewWhere(WhereStr, $11),
           Options: $12,
@@ -857,44 +842,27 @@ create_statement:
         IndexExpr: $8.IndexExpr,
       }
   }
-| CREATE unique_opt clustered_opt INDEX CONCURRENTLY sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+| CREATE unique_clustered_opt INDEX ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
         Action: CreateIndexStr,
-        Table: $8,
-        NewName: $8,
+        Table: $5,
+        NewName: $5,
         IndexSpec: &IndexSpec{
-          Name: $6,
+          Name: NewColIdent(""),
           Type: NewColIdent(""),
-          Unique: bool($2),
-          Clustered: bool($3),
-          Included: $12,
-          Where: NewWhere(WhereStr, $13),
-          Options: $14,
-          Partition: $15,
+          Unique: bool($2[0]),
+          Clustered: bool($2[1]),
+          Included: $9,
+          Where: NewWhere(WhereStr, $10),
+          Options: $11,
+          Partition: $12,
         },
-        IndexCols: $10.IndexCols,
-        IndexExpr: $10.IndexExpr,
+        IndexCols: $7.IndexCols,
+        IndexExpr: $7.IndexExpr,
       }
   }
-/* For MySQL */
-| CREATE unique_opt clustered_opt INDEX sql_id USING sql_id ON table_name '(' index_column_list ')' index_option_opt
-  {
-    $$ = &DDL{
-        Action: CreateIndexStr,
-        Table: $9,
-        NewName: $9,
-        IndexSpec: &IndexSpec{
-          Name: $5,
-          Type: $7,
-          Unique: bool($2),
-          Options: $13,
-        },
-        IndexCols: $11,
-      }
-  }
-/* For PostgreSQL */
-| CREATE unique_opt clustered_opt INDEX sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' where_expression_opt index_option_opt
+| CREATE unique_clustered_opt INDEX CONCURRENTLY sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
         Action: CreateIndexStr,
@@ -902,12 +870,69 @@ create_statement:
         NewName: $7,
         IndexSpec: &IndexSpec{
           Name: $5,
-          Type: $9,
-          Unique: bool($2),
-          Where: NewWhere(WhereStr, $13),
+          Type: NewColIdent(""),
+          Unique: bool($2[0]),
+          Clustered: bool($2[1]),
+          Included: $11,
+          Where: NewWhere(WhereStr, $12),
+          Options: $13,
+          Partition: $14,
         },
-        IndexCols: $11.IndexCols,
-        IndexExpr: $11.IndexExpr,
+        IndexCols: $9.IndexCols,
+        IndexExpr: $9.IndexExpr,
+      }
+  }
+/* For MySQL */
+| CREATE unique_clustered_opt INDEX sql_id USING sql_id ON table_name '(' index_column_list ')' index_option_opt
+  {
+    $$ = &DDL{
+        Action: CreateIndexStr,
+        Table: $8,
+        NewName: $8,
+        IndexSpec: &IndexSpec{
+          Name: $4,
+          Type: $6,
+          Unique: bool($2[0]),
+          Options: $12,
+        },
+        IndexCols: $10,
+      }
+  }
+/* For PostgreSQL */
+| CREATE unique_clustered_opt INDEX sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' where_expression_opt index_option_opt
+  {
+    $$ = &DDL{
+        Action: CreateIndexStr,
+        Table: $6,
+        NewName: $6,
+        IndexSpec: &IndexSpec{
+          Name: $4,
+          Type: $8,
+          Unique: bool($2[0]),
+          Where: NewWhere(WhereStr, $12),
+        },
+        IndexCols: $10.IndexCols,
+        IndexExpr: $10.IndexExpr,
+      }
+  }
+/* For SQL Server */
+| CREATE nonclustered_columnstore INDEX sql_id ON table_name '(' column_list ')' where_expression_opt index_option_opt index_partition_opt
+  {
+    $$ = &DDL{
+        Action: CreateIndexStr,
+        Table: $6,
+        NewName: $6,
+        IndexSpec: &IndexSpec{
+          Name: $4,
+          Type: NewColIdent(""),
+          Unique: false,
+          Clustered: false,
+          ColumnStore: true,
+          Included: $8,
+          Where: NewWhere(WhereStr, $10),
+          Options: $11,
+          Partition: $12,
+        },
       }
   }
 | CREATE or_replace_opt VIEW not_exists_opt table_name AS select_statement
@@ -2359,6 +2384,37 @@ clustered_opt:
   {
     $$ = BoolVal(false)
   }
+
+/* For SQL Server */
+unique_clustered_opt:
+  {
+    $$ = []BoolVal { false, true }
+  }
+| CLUSTERED
+  {
+    $$ = []BoolVal { false, true }
+  }
+| NONCLUSTERED
+  {
+    $$ = []BoolVal { false, false }
+  }
+| UNIQUE
+  {
+    $$ = []BoolVal { true, true }
+  }
+| UNIQUE CLUSTERED
+  {
+    $$ = []BoolVal { true, true }
+  }
+| UNIQUE NONCLUSTERED
+  {
+    $$ = []BoolVal { true, false, }
+  }
+
+/* For SQL Server */
+nonclustered_columnstore:
+  COLUMNSTORE {}
+| NONCLUSTERED COLUMNSTORE {}
 
 /* For SQL Server */
 not_for_replication_opt:

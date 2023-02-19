@@ -1,3 +1,7 @@
+## v0.15.11
+
+- Support NONCLUSTERD COLUMNSTORE index for mssqldef [#356](https://github.com/k0kubun/sqldef/pull/356)
+
 ## v0.15.10
 
 - Use window function on view replace for mysqldef [#354](https://github.com/k0kubun/sqldef/pull/354)
