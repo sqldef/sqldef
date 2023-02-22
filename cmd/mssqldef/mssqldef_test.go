@@ -35,9 +35,16 @@ func TestApply(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Initialize the database with test.Current
-			testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "DROP DATABASE IF EXISTS mssqldef_test; CREATE DATABASE mssqldef_test;")
-			testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", "CREATE SCHEMA FOO;")
-			db, err := connectDatabase() // DROP DATABASE hangs when there's a connection
+			resetTestDatabase()
+			var db database.Database
+			var err error
+			fmt.Printf("User = %v\n", test.User)
+			if test.User != "" {
+				db, err = connectDatabaseByUser(test.User)
+			} else {
+				db, err = connectDatabase() // DROP DATABASE hangs when there's a connection
+			}
+			fmt.Printf("default_schema = %v\n", db.GetDefaultSchema())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1092,9 +1099,13 @@ func assertEquals(t *testing.T, actual string, expected string) {
 }
 
 func resetTestDatabase() {
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "IF NOT EXISTS (SELECT name FROM sys.database_principals WHERE name = 'mssqldef_user') BEGIN CREATE LOGIN mssqldef_user WITH PASSWORD = N'Passw0rd' END;")
 	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "DROP DATABASE IF EXISTS mssqldef_test;")
 	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "CREATE DATABASE mssqldef_test;")
-	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", "CREAE SCHEMA FOO;")
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", "CREATE SCHEMA FOO;")
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", "CREATE USER mssqldef_user FOR LOGIN mssqldef_user WITH DEFAULT_SCHEMA = FOO;")
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", "ALTER ROLE db_owner ADD MEMBER mssqldef_user;")
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", "ALTER AUTHORIZATION ON SCHEMA::FOO TO mssqldef_user;")
 }
 
 func writeFile(path string, content string) {
@@ -1116,6 +1127,16 @@ func stripHeredoc(heredoc string) string {
 func connectDatabase() (database.Database, error) {
 	return mssql.NewDatabase(database.Config{
 		User:     "sa",
+		Password: "Passw0rd",
+		Host:     "127.0.0.1",
+		Port:     1433,
+		DbName:   "mssqldef_test",
+	})
+}
+
+func connectDatabaseByUser(user string) (database.Database, error) {
+	return mssql.NewDatabase(database.Config{
+		User:     user,
 		Password: "Passw0rd",
 		Host:     "127.0.0.1",
 		Port:     1433,

@@ -22,6 +22,7 @@ type TestCase struct {
 	Output     *string // default: use Desired as Output
 	MinVersion string  `yaml:"min_version"`
 	MaxVersion string  `yaml:"max_version"`
+	User       string
 }
 
 func ReadTests(pattern string) (map[string]TestCase, error) {
