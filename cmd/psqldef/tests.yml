@@ -518,3 +518,33 @@ AddDifferentForeignKeyWithSameName:
   output: |
     ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";
     ALTER TABLE ONLY public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON UPDATE CASCADE;
+CreateTableOnNonStandardDefaultSchema:
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      age integer
+    );
+    CREATE TABLE bigdata (
+      data bigint
+    );
+  user: psqldef_user
+DropTableOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      age integer
+    );
+    CREATE TABLE bigdata (
+      data bigint
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      age integer
+    );
+  output: |
+    DROP TABLE "foo"."bigdata";
+  user: psqldef_user

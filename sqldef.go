@@ -28,11 +28,13 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 		log.Fatalf("Error on DumpDDLs: %s", err)
 	}
 
+	defaultSchema := db.GetDefaultSchema()
+
 	if options.Export {
 		if currentDDLs == "" {
 			fmt.Printf("-- No table exists --\n")
 		} else {
-			ddls, err := schema.ParseDDLs(generatorMode, sqlParser, currentDDLs)
+			ddls, err := schema.ParseDDLs(generatorMode, sqlParser, currentDDLs, defaultSchema)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -47,7 +49,7 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 		return
 	}
 
-	ddls, err := schema.GenerateIdempotentDDLs(generatorMode, sqlParser, options.DesiredDDLs, currentDDLs, options.Config)
+	ddls, err := schema.GenerateIdempotentDDLs(generatorMode, sqlParser, options.DesiredDDLs, currentDDLs, options.Config, defaultSchema)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

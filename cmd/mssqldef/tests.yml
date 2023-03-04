@@ -117,3 +117,19 @@ DropTableOnNonDefaultSchema:
   output: |
     DROP TABLE [FOO].[bigdata2];
     
+CreateTableOnNonStandardDefaultSchema:
+  desired: |
+    CREATE TABLE v (
+      v_int int,
+      v_nvarchar nvarchar(30)
+    );
+  user: "mssqldef_user"
+DropTableOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE v (
+      v_int int,
+      v_nvarchar nvarchar(30)
+    );
+  output: |
+    DROP TABLE [FOO].[v];
+  user: "mssqldef_user"

@@ -43,9 +43,15 @@ func TestApply(t *testing.T) {
 			}
 
 			// Initialize the database with test.Current
-			testutils.MustExecute("psql", "-Upostgres", "-h", "127.0.0.1", "-c", "DROP DATABASE IF EXISTS psqldef_test;")
-			testutils.MustExecute("psql", "-Upostgres", "-h", "127.0.0.1", "-c", "CREATE DATABASE psqldef_test;")
-			db, err := connectDatabase() // PostgreSQL doesn't allow DROP DATABASE when there's a connection
+			resetTestDatabase()
+			var db database.Database
+			var err error
+			// PostgreSQL doesn't allow DROP DATABASE when there's a connection
+			if test.User != "" {
+				db, err = connectDatabaseByUser(test.User)
+			} else {
+				db, err = connectDatabase()
+			}
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1380,8 +1386,12 @@ func assertEquals(t *testing.T, actual string, expected string) {
 }
 
 func resetTestDatabase() {
+	testutils.MustExecute("psql", "-Upostgres", "-c", "DO $$ BEGIN IF NOT EXISTS (SELECT * FROM pg_roles WHERE rolname = 'psqldef_user') THEN CREATE ROLE psqldef_user WITH LOGIN; END IF; END $$;")
+	testutils.MustExecute("psql", "-Upostgres", "-c", "ALTER ROLE psqldef_user SET search_path TO foo, public")
 	testutils.MustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("DROP DATABASE IF EXISTS %s;", databaseName))
 	testutils.MustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("CREATE DATABASE %s;", databaseName))
+	testutils.MustExecute("psql", "-Upostgres", "-dpsqldef_test", "-c", "GRANT ALL ON DATABASE psqldef_test TO psqldef_user")
+	testutils.MustExecute("psql", "-Upsqldef_user", "-dpsqldef_test", "-c", "CREATE SCHEMA foo")
 }
 
 func writeFile(path string, content string) {
@@ -1411,6 +1421,15 @@ var publicAndNonPublicSchemaTestCases = []struct {
 func connectDatabase() (database.Database, error) {
 	return postgres.NewDatabase(database.Config{
 		User:   "postgres",
+		Host:   "127.0.0.1",
+		Port:   5432,
+		DbName: "psqldef_test",
+	})
+}
+
+func connectDatabaseByUser(user string) (database.Database, error) {
+	return postgres.NewDatabase(database.Config{
+		User:   user,
 		Host:   "127.0.0.1",
 		Port:   5432,
 		DbName: "psqldef_test",

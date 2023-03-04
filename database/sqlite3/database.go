@@ -131,3 +131,7 @@ func (d *Sqlite3Database) DB() *sql.DB {
 func (d *Sqlite3Database) Close() error {
 	return d.db.Close()
 }
+
+func (d *Sqlite3Database) GetDefaultSchema() string {
+	return ""
+}

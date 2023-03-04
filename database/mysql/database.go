@@ -151,6 +151,10 @@ func (d *MysqlDatabase) Close() error {
 	return d.db.Close()
 }
 
+func (d *MysqlDatabase) GetDefaultSchema() string {
+	return ""
+}
+
 func mysqlBuildDSN(config database.Config) string {
 	c := driver.NewConfig()
 	c.User = config.User
