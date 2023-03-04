@@ -1,3 +1,7 @@
+## v0.15.13
+
+- Support non-standard default schema for mssqldef [#364](https://github.com/k0kubun/sqldef/pull/364)
+
 ## v0.15.12
 
 - Fix schema name normalizer to use `dbo` for mssqldef [#357](https://github.com/k0kubun/sqldef/pull/357)
