@@ -38,13 +38,11 @@ func TestApply(t *testing.T) {
 			resetTestDatabase()
 			var db database.Database
 			var err error
-			fmt.Printf("User = %v\n", test.User)
 			if test.User != "" {
 				db, err = connectDatabaseByUser(test.User)
 			} else {
 				db, err = connectDatabase() // DROP DATABASE hangs when there's a connection
 			}
-			fmt.Printf("default_schema = %v\n", db.GetDefaultSchema())
 			if err != nil {
 				t.Fatal(err)
 			}
