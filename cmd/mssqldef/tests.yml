@@ -133,3 +133,10 @@ DropTableOnNonStandardDefaultSchema:
   output: |
     DROP TABLE [FOO].[v];
   user: "mssqldef_user"
+MultipleView:
+  current: |
+    CREATE VIEW v1 AS SELECT 1 AS N;
+    CREATE VIEW v2 AS SELECT 2 AS N;
+  output: |
+    DROP VIEW [dbo].[v1];
+    DROP VIEW [dbo].[v2];

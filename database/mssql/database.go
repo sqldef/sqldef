@@ -507,7 +507,7 @@ INNER JOIN sys.sql_modules
 		definition = strings.ReplaceAll(definition, "\n", "")
 		definition = suffixSemicolon.ReplaceAllString(definition, "")
 		definition = spaces.ReplaceAllString(definition, " ")
-		ddls = append(ddls, definition)
+		ddls = append(ddls, definition+";")
 	}
 	return ddls, nil
 }
