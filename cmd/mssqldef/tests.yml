@@ -140,3 +140,6 @@ MultipleView:
   output: |
     DROP VIEW [dbo].[v1];
     DROP VIEW [dbo].[v2];
+UnicodeString:
+  desired: |
+    CREATE VIEW v AS SELECT Session_Context(N'key') AS x;

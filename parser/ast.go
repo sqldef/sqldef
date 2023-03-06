@@ -1846,6 +1846,7 @@ const (
 	ValArg
 	BitVal
 	ValBool
+	UnicodeStrVal
 )
 
 // SQLVal represents a single value.
@@ -1893,6 +1894,11 @@ func NewBoolSQLVal(in bool) *SQLVal {
 	return &SQLVal{Type: ValBool, Val: []byte(fmt.Sprintf("%t", in))}
 }
 
+// NewUnicode bulds a new UniodeStrVal.
+func NewUnicodeStrVal(in []byte) *SQLVal {
+	return &SQLVal{Type: UnicodeStrVal, Val: in}
+}
+
 func NewValArgWithOpt(in []byte, opt *SQLVal) *SQLVal {
 	if opt != nil {
 		combined := string(in) + "(" + string(opt.Val) + ")"
@@ -1906,6 +1912,9 @@ func NewValArgWithOpt(in []byte, opt *SQLVal) *SQLVal {
 func (node *SQLVal) Format(buf *TrackedBuffer) {
 	switch node.Type {
 	case StrVal:
+		sqltypes.MakeTrusted(sqltypes.VarBinary, node.Val).EncodeSQL(buf)
+	case UnicodeStrVal:
+		buf.WriteRune('N')
 		sqltypes.MakeTrusted(sqltypes.VarBinary, node.Val).EncodeSQL(buf)
 	case IntVal, FloatVal, HexNum:
 		buf.Myprintf("%s", []byte(node.Val))
