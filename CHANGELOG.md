@@ -1,3 +1,7 @@
+## v0.15.14
+
+- Fix exported VIEW definition for mssqldef [#367](https://github.com/k0kubun/sqldef/pull/367)
+
 ## v0.15.13
 
 - Support non-standard default schema for mssqldef [#364](https://github.com/k0kubun/sqldef/pull/364)
