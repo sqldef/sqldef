@@ -578,6 +578,14 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 				return tkn.scanBitLiteral()
 			}
 		}
+		if ch == 'N' {
+			if tkn.lastChar == '\'' {
+				if tkn.mode == ParserModeMssql {
+					tkn.next()
+					return tkn.scanString('\'', UNICODE_STRING)
+				}
+			}
+		}
 		isDbSystemVariable := false
 		if ch == '@' && tkn.lastChar == '@' {
 			isDbSystemVariable = true

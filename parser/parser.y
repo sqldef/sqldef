@@ -146,7 +146,7 @@ func forceEOF(yylex interface{}) {
 %left <bytes> JOIN STRAIGHT_JOIN LEFT RIGHT INNER OUTER CROSS NATURAL USE FORCE
 %left <bytes> ON USING
 %token <empty> '(' ',' ')'
-%token <bytes> ID HEX STRING INTEGRAL FLOAT HEXNUM VALUE_ARG LIST_ARG COMMENT COMMENT_KEYWORD BIT_LITERAL
+%token <bytes> ID HEX STRING UNICODE_STRING INTEGRAL FLOAT HEXNUM VALUE_ARG LIST_ARG COMMENT COMMENT_KEYWORD BIT_LITERAL
 %token <bytes> NULL TRUE FALSE
 %token <bytes> OFF
 %token <bytes> MAX
@@ -1491,6 +1491,10 @@ default_val:
   STRING character_cast_opt
   {
     $$ = NewStrVal($1)
+  }
+| UNICODE_STRING
+  {
+    $$ = NewUnicodeStrVal($1)
   }
 | INTEGRAL
   {
@@ -4106,6 +4110,10 @@ value:
 | STRING character_cast_opt
   {
     $$ = NewStrVal($1)
+  }
+| UNICODE_STRING
+  {
+    $$ = NewUnicodeStrVal($1)
   }
 // For MySQL
 | sql_id STRING
