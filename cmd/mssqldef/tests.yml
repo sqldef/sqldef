@@ -153,3 +153,26 @@ InsteadOfTrigger:
     );
     CREATE TRIGGER [insert_users] ON [dbo].[users] instead of insert AS
     insert into users(id, name, age) select id + 1, name, age from INSERTED;
+ConvertMssqlTypes:
+  desired: |
+    CREATE VIEW v AS
+      SELECT
+        Convert(bigint, 0) as v_bigint,
+        Convert(bit, 0) as v_bit,
+        Convert(int, 2) as v_int,
+        Convert(money, 3) as v_money,
+        Convert(numeric(9, 3), 4) as v_numeric,
+        Convert(smallint, 5) as v_smallint,
+        Convert(smallmoney, 6) as v_smallmoney,
+        Convert(tinyint, 7) as v_tinyint,
+        Convert(float, 8) as v_float,
+        Convert(real, 9) as v_real,
+        Convert(datetime2(0), '2023-03-11 23:50:00') as v_datetime2,
+        Convert(datetimeoffset(0), '2023-03-11 23:50:00+0900') as v_datetimeoffset,
+        Convert(smalldatetime, '2023-03-11 23:50') as v_smalldatetime,
+        Convert(text, 'Hello, World') as v_text,
+        Convert(varchar(20), 'Hello, World') as v_varchar,
+        Convert(nchar, N'H') as v_nchar,
+        Convert(ntext, N'Hello, World') as v_ntext,
+        Convert(nvarchar(20), N'Hello, World') as v_nvarchar,
+        Convert(varbinary(20), 123456) as v_varbinary;

@@ -3796,6 +3796,10 @@ function_call_keyword:
   {
     $$ = &ConvertExpr{Expr: $3, Type: $5}
   }
+| CONVERT openb convert_type ',' expression closeb
+  {
+    $$ = &ConvertExpr{Expr: $5, Type: $3}
+  }
 | CAST openb expression AS convert_type closeb
   {
     $$ = &ConvertExpr{Expr: $3, Type: $5}
@@ -4007,6 +4011,82 @@ convert_type:
 | UNSIGNED INTEGER
   {
     $$ = &ConvertType{Type: string($1)}
+  }
+| BIGINT
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| BIT
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| INT
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| MONEY
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| NUMERIC decimal_length_opt
+  {
+    $$ = &ConvertType{Type: string($1), Length: $2.Length, Scale: $2.Scale}
+  }
+| SMALLINT
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| SMALLMONEY
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| TINYINT
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| FLOAT_TYPE
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| REAL
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| DATETIME2 length_opt
+  {
+    $$ = &ConvertType{Type: string($1), Length: $2}
+  }
+| DATETIMEOFFSET length_opt
+  {
+    $$ = &ConvertType{Type: string($1), Length: $2}
+  }
+| SMALLDATETIME
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| TEXT
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| VARCHAR length_opt
+  {
+    $$ = &ConvertType{Type: string($1), Length: $2}
+  }
+| NCHAR length_opt
+  {
+    $$ = &ConvertType{Type: string($1), Length: $2}
+  }
+| NTEXT
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| NVARCHAR length_opt
+  {
+    $$ = &ConvertType{Type: string($1), Length: $2}
+  }
+| VARBINARY length_opt
+  {
+    $$ = &ConvertType{Type: string($1), Length: $2}
   }
 
 simple_convert_type:
