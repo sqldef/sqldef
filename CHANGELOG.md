@@ -1,3 +1,7 @@
+## v0.15.16
+
+- Support "INSTEAD OF" trigger for mssqldef [#369](https://github.com/k0kubun/sqldef/pull/369)
+
 ## v0.15.15
 
 - Support Unicode string literal for mssqldef [#368](https://github.com/k0kubun/sqldef/pull/368)
