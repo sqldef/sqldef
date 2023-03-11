@@ -143,3 +143,13 @@ MultipleView:
 UnicodeString:
   desired: |
     CREATE VIEW v AS SELECT Session_Context(N'key') AS x;
+InsteadOfTrigger:
+  desired: |
+    CREATE TABLE users (
+      id integer,
+      name text,
+      age integer,
+      CONSTRAINT PK_users PRIMARY KEY CLUSTERED (id)
+    );
+    CREATE TRIGGER [insert_users] ON [dbo].[users] instead of insert AS
+    insert into users(id, name, age) select id + 1, name, age from INSERTED;
