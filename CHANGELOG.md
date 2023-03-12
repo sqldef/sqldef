@@ -1,3 +1,7 @@
+## v0.15.17
+
+- Add available types in convert/cast function for mssqldef
+
 ## v0.15.16
 
 - Support "INSTEAD OF" trigger for mssqldef [#369](https://github.com/k0kubun/sqldef/pull/369)
