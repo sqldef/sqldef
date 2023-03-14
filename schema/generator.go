@@ -1728,8 +1728,19 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		}
 	}
 
-	for _, optionB := range indexB.options {
-		if optionA := findIndexOptionByName(indexA.options, optionB.optionName); optionA != nil {
+	indexAOptions := indexA.options
+	indexBOptions := indexB.options
+	// Mysql: Default Index B-Tree
+	if g.mode == GeneratorModeMysql {
+		if len(indexAOptions) == 0 {
+			indexAOptions = []IndexOption{{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: []byte("btree"), strVal: "btree"}}}
+		}
+		if len(indexBOptions) == 0 {
+			indexBOptions = []IndexOption{{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: []byte("btree"), strVal: "btree"}}}
+		}
+	}
+	for _, optionB := range indexBOptions {
+		if optionA := findIndexOptionByName(indexAOptions, optionB.optionName); optionA != nil {
 			if !g.areSameValue(optionA.value, optionB.value) {
 				return false
 			}

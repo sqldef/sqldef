@@ -592,6 +592,138 @@ func TestMysqldefIndexOption(t *testing.T) {
 	)
 	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD KEY `index_id` (`id`) using BTREE;\n")
 	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id int(11) NOT NULL,
+		  KEY index_id (id) using btree
+		);`,
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id int(11) NOT NULL,
+		  KEY index_id (id)
+		);`,
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	resetTestDatabase()
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id int(11) NOT NULL
+		);`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id int(11) NOT NULL,
+		  KEY index_id (id)
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD KEY `index_id` (`id`);\n")
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id int(11) NOT NULL,
+		  KEY index_id (id) USING BTREE
+		);`,
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id int(11) NOT NULL,
+		  KEY index_id (id) using btree
+		);`,
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMysqldefMultipleColumnIndexesOption(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id int(11) NOT NULL,
+		  registered_at datetime(6) NOT NULL,
+		  role_type int(1) NOT NULL
+		);`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id int(11) NOT NULL,
+		  registered_at datetime(6) NOT NULL,
+		  role_type int(1) NOT NULL,
+		  INDEX index_id (registered_at, role_type) USING BTREE
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD INDEX `index_id` (`registered_at`, `role_type`) using BTREE;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id int(11) NOT NULL,
+		  registered_at datetime(6) NOT NULL,
+		  role_type int(1) NOT NULL,
+		  INDEX index_id (registered_at, role_type) using btree
+		);`,
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id int(11) NOT NULL,
+		  registered_at datetime(6) NOT NULL,
+		  role_type int(1) NOT NULL,
+		  INDEX index_id (registered_at, role_type)
+		);`,
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	resetTestDatabase()
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id int(11) NOT NULL,
+		  registered_at datetime(6) NOT NULL,
+		  role_type int(1) NOT NULL
+		);`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id int(11) NOT NULL,
+		  registered_at datetime(6) NOT NULL,
+		  role_type int(1) NOT NULL,
+		  INDEX index_id (registered_at, role_type)
+		);`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD INDEX `index_id` (`registered_at`, `role_type`);\n")
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id int(11) NOT NULL,
+		  registered_at datetime(6) NOT NULL,
+		  role_type int(1) NOT NULL,
+		  INDEX index_id (registered_at, role_type) USING BTREE
+		);`,
+	)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id int(11) NOT NULL,
+		  registered_at datetime(6) NOT NULL,
+		  role_type int(1) NOT NULL,
+		  INDEX index_id (registered_at, role_type) using btree
+		);`,
+	)
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestMysqldefFulltextIndex(t *testing.T) {
