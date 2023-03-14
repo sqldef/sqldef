@@ -1,3 +1,7 @@
+## v0.15.18
+
+- Make MySQL's default index B-Tree on comparison for mysqldef [#370](https://github.com/k0kubun/sqldef/pull/370)
+
 ## v0.15.17
 
 - Add available types in convert/cast function for mssqldef
