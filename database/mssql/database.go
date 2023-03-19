@@ -391,7 +391,8 @@ WHERE ind.object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 	ic.is_included_column
 FROM sys.indexes ind
 INNER JOIN sys.index_columns ic ON ind.object_id = ic.object_id AND ind.index_id = ic.index_id
-WHERE ind.object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
+WHERE ind.object_id = OBJECT_ID('[%s].[%s]')
+ORDER BY ic.key_ordinal`, schema, table)
 
 	rows, err = d.db.Query(query)
 	if err != nil {
