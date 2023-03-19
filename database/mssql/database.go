@@ -107,7 +107,7 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 			fmt.Fprint(&queryBuilder, ",")
 		}
 		fmt.Fprint(&queryBuilder, "\n"+indent)
-		fmt.Fprintf(&queryBuilder, "%s %s", col.Name, col.dataType)
+		fmt.Fprintf(&queryBuilder, "%s %s", quoteName(col.Name), col.dataType)
 		if length, ok := col.getLength(); ok {
 			fmt.Fprintf(&queryBuilder, "(%s)", length)
 		}
@@ -585,4 +585,8 @@ func splitTableName(table string, defaultSchmea string) (string, string) {
 		table = schemaTable[1]
 	}
 	return schema, table
+}
+
+func quoteName(name string) string {
+	return "[" + strings.ReplaceAll(name, "]", "]]") + "]"
 }

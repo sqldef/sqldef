@@ -1031,15 +1031,15 @@ func TestMssqldefExport(t *testing.T) {
 	out = assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")
 	assertEquals(t, out, stripHeredoc(`
 		CREATE TABLE dbo.v (
-		    v_int int NOT NULL,
-		    v_smallmoney smallmoney,
-		    v_money money,
-		    v_datetimeoffset datetimeoffset(1),
-		    v_datetime2 datetime2,
-		    v_smalldatetime smalldatetime,
-		    v_nchar nchar(30),
-		    v_varchar varchar(30),
-		    v_nvarchar nvarchar(50)
+		    [v_int] int NOT NULL,
+		    [v_smallmoney] smallmoney,
+		    [v_money] money,
+		    [v_datetimeoffset] datetimeoffset(1),
+		    [v_datetime2] datetime2,
+		    [v_smalldatetime] smalldatetime,
+		    [v_nchar] nchar(30),
+		    [v_varchar] varchar(30),
+		    [v_nvarchar] nvarchar(50)
 		);
 		`,
 	))

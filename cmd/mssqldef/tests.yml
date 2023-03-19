@@ -203,3 +203,15 @@ IndexColumnOrder:
       CONSTRAINT [v_pk] PRIMARY KEY CLUSTERED ([v2] ASC, [v1] ASC)
     );
   output: ""
+ReservedWordColumnName:
+  current: |
+    CREATE TABLE v(
+      [V_INT] int,
+      [TIMESTAMP] datetime
+    );
+  desired: |
+    CREATE TABLE v(
+      [V_INT] int,
+      [TIMESTAMP] datetime
+    );
+  output: ""
