@@ -176,3 +176,16 @@ ConvertMssqlTypes:
         Convert(ntext, N'Hello, World') as v_ntext,
         Convert(nvarchar(20), N'Hello, World') as v_nvarchar,
         Convert(varbinary(20), 123456) as v_varbinary;
+SetOptionInTrigger:
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text
+    );
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      dt datetime
+    );
+    CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
+    set nocount on
+    insert into logs select id, getdate() from inserted;

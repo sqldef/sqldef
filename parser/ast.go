@@ -150,27 +150,28 @@ type Statement interface {
 	SQLNode
 }
 
-func (*Union) iStatement()      {}
-func (*Select) iStatement()     {}
-func (*Stream) iStatement()     {}
-func (*Insert) iStatement()     {}
-func (*Update) iStatement()     {}
-func (*Delete) iStatement()     {}
-func (*Set) iStatement()        {}
-func (*Declare) iStatement()    {}
-func (*Cursor) iStatement()     {}
-func (*BeginEnd) iStatement()   {}
-func (*While) iStatement()      {}
-func (*If) iStatement()         {}
-func (*DBDDL) iStatement()      {}
-func (*DDL) iStatement()        {}
-func (*Show) iStatement()       {}
-func (*Use) iStatement()        {}
-func (*Begin) iStatement()      {}
-func (*Commit) iStatement()     {}
-func (*Rollback) iStatement()   {}
-func (*OtherRead) iStatement()  {}
-func (*OtherAdmin) iStatement() {}
+func (*Union) iStatement()         {}
+func (*Select) iStatement()        {}
+func (*Stream) iStatement()        {}
+func (*Insert) iStatement()        {}
+func (*Update) iStatement()        {}
+func (*Delete) iStatement()        {}
+func (*Set) iStatement()           {}
+func (*Declare) iStatement()       {}
+func (*Cursor) iStatement()        {}
+func (*BeginEnd) iStatement()      {}
+func (*While) iStatement()         {}
+func (*If) iStatement()            {}
+func (*DBDDL) iStatement()         {}
+func (*DDL) iStatement()           {}
+func (*Show) iStatement()          {}
+func (*Use) iStatement()           {}
+func (*Begin) iStatement()         {}
+func (*Commit) iStatement()        {}
+func (*Rollback) iStatement()      {}
+func (*OtherRead) iStatement()     {}
+func (*OtherAdmin) iStatement()    {}
+func (*SetBoolOption) iStatement() {}
 
 // ParenSelect can actually not be a top level statement,
 // but we have to allow it because it's a requirement
@@ -1293,6 +1294,22 @@ type OtherAdmin struct{}
 // Format formats the node.
 func (node *OtherAdmin) Format(buf *TrackedBuffer) {
 	buf.WriteString("otheradmin")
+}
+
+// SetOption represents a SET statement that specifies option in SQL Server.
+type SetBoolOption struct {
+	OptionNames []string
+	Value       *SQLVal
+}
+
+// Format formats the node.
+func (node *SetBoolOption) Format(buf *TrackedBuffer) {
+	buf.Myprintf("set %s", strings.Join(node.OptionNames, ", "))
+	if node.Value.Val[0] == 't' {
+		buf.WriteString(" on")
+	} else {
+		buf.WriteString(" off")
+	}
 }
 
 // Comments represents a list of comments.

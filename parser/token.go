@@ -486,6 +486,28 @@ var keywords = map[string]int{
 	"statistics_norecompute": STATISTICS_NORECOMPUTE,
 	"lead":                   LEAD,
 	"lag":                    LAG,
+	// SET options
+	"concat_null_yields_null":  CONCAT_NULL_YIELDS_NULL,
+	"cursor_close_on_commit":   CURSOR_CLOSE_ON_COMMIT,
+	"quoted_identifier":        QUOTED_IDENTIFIER,
+	"arithabort":               ARITHABORT,
+	"fmtonly":                  FMTONLY,
+	"nocount":                  NOCOUNT,
+	"noexec":                   NOEXEC,
+	"numeric_roundabort":       NUMERIC_ROUNDABORT,
+	"ansi_defaults":            ANSI_DEFAULTS,
+	"ansi_null_dflt_off":       ANSI_NULL_DFLT_OFF,
+	"ansi_null_dflt_on":        ANSI_NULL_DFLT_ON,
+	"ansi_nulls":               ANSI_NULLS,
+	"ansi_padding":             ANSI_PADDING,
+	"ansi_warnings":            ANSI_WARNINGS,
+	"forceplan":                FORCEPLAN,
+	"showplan_all":             SHOWPLAN_ALL,
+	"showplan_text":            SHOWPLAN_TEXT,
+	"showplan_xml":             SHOWPLAN_XML,
+	"implicit_transactions":    IMPLICIT_TRANSACTIONS,
+	"remote_proc_transactions": REMOTE_PROC_TRANSACTIONS,
+	"xact_abort":               XACT_ABORT,
 }
 
 // keywordStrings contains the reverse mapping of token to keyword strings

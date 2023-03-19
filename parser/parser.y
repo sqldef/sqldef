@@ -221,6 +221,11 @@ func forceEOF(yylex interface{}) {
 // SET tokens
 %token <bytes> NAMES CHARSET GLOBAL SESSION ISOLATION LEVEL READ WRITE ONLY REPEATABLE COMMITTED UNCOMMITTED SERIALIZABLE NEW
 
+// SET option tokens
+%token <bytes> CONCAT_NULL_YIELDS_NULL CURSOR_CLOSE_ON_COMMIT QUOTED_IDENTIFIER ARITHABORT FMTONLY NOCOUNT NOEXEC
+%token <bytes> NUMERIC_ROUNDABORT ANSI_DEFAULTS ANSI_NULL_DFLT_OFF ANSI_NULL_DFLT_ON ANSI_NULLS ANSI_PADDING ANSI_WARNINGS
+%token <bytes> FORCEPLAN SHOWPLAN_ALL SHOWPLAN_TEXT SHOWPLAN_XML IMPLICIT_TRANSACTIONS REMOTE_PROC_TRANSACTIONS XACT_ABORT
+
 // Functions
 %token <bytes> CURRENT_TIMESTAMP DATABASE CURRENT_DATE
 %token <bytes> CURRENT_TIME LOCALTIME LOCALTIMESTAMP
@@ -264,6 +269,7 @@ func forceEOF(yylex interface{}) {
 %type <selStmt> select_statement base_select union_lhs union_rhs
 %type <statement> stream_statement insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement if_statement
 %type <statement> create_statement alter_statement rename_statement drop_statement truncate_statement
+%type <statement> set_option_statement set_bool_option_statement
 %type <ddl> create_table_prefix
 %type <statement> analyze_statement show_statement use_statement other_statement
 %type <statement> begin_statement commit_statement rollback_statement
@@ -401,6 +407,8 @@ func forceEOF(yylex interface{}) {
 %type <partition> partition
 %type <boolVals> unique_clustered_opt
 %type <empty> nonclustered_columnstore
+%type <bytes> bool_option_name
+%type <strs> bool_option_name_list
 
 %start any_command
 
@@ -1104,6 +1112,7 @@ trigger_statement:
 | cursor_statement
 | while_statement
 | if_statement
+| set_option_statement
 | base_select order_by_opt limit_opt lock_opt
   {
     sel := $1.(*Select)
@@ -4511,6 +4520,18 @@ set_expression:
     $$ = &SetExpr{Name: NewColIdent(string($1)), Expr: $2}
   }
 
+set_option_statement:
+  set_bool_option_statement
+  {
+    $$ = $1
+  }
+
+set_bool_option_statement:
+  SET bool_option_name_list on_off
+  {
+    $$ = &SetBoolOption{OptionNames: $2, Value: $3}
+  }
+
 charset_or_character_set:
   CHARSET
 | CHARACTER SET
@@ -4688,6 +4709,39 @@ array_element:
   {
     $$ = NewStrVal($1)
   }
+
+bool_option_name_list:
+  bool_option_name
+  {
+    $$ = []string{string($1)}
+  }
+| bool_option_name_list ',' bool_option_name
+  {
+    $$ = append($$, string($3))
+  }
+
+bool_option_name:
+  CONCAT_NULL_YIELDS_NULL
+| CURSOR_CLOSE_ON_COMMIT
+| QUOTED_IDENTIFIER
+| ARITHABORT
+| FMTONLY
+| NOCOUNT
+| NOEXEC
+| NUMERIC_ROUNDABORT
+| ANSI_DEFAULTS
+| ANSI_NULL_DFLT_OFF
+| ANSI_NULL_DFLT_ON
+| ANSI_NULLS
+| ANSI_PADDING
+| ANSI_WARNINGS
+| FORCEPLAN
+| SHOWPLAN_ALL
+| SHOWPLAN_TEXT
+| SHOWPLAN_XML
+| IMPLICIT_TRANSACTIONS
+| REMOTE_PROC_TRANSACTIONS
+| XACT_ABORT
 
 /*
   These are not all necessarily reserved in MySQL, but some are.
