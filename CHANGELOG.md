@@ -1,3 +1,10 @@
+## v0.15.19
+
+- Support set statement in trigger for mssqldef
+  - Currently only boolean options are supported.
+- Fix order of index columns in exporting for mssqldef [#372](https://github.com/k0kubun/sqldef/issues/372)
+- Quote all column names in exporting for mssqldef [#374](https://github.com/k0kubun/sqldef/issues/374)
+
 ## v0.15.18
 
 - Make MySQL's default index B-Tree on comparison for mysqldef [#370](https://github.com/k0kubun/sqldef/pull/370)
