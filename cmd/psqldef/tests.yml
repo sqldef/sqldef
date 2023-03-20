@@ -548,3 +548,35 @@ DropTableOnNonStandardDefaultSchema:
   output: |
     DROP TABLE "foo"."bigdata";
   user: psqldef_user
+ChangeTimezone:
+  current: |
+    CREATE TABLE test (
+      timestamp_at1 timestamp with time zone NOT NULL,
+      timestamp_at2 timestamp with time zone NOT NULL,
+      timestamp_at3 timestamp NOT NULL,
+      timestamp_at4 timestamp WITHOUT TIME ZONE NOT NULL,
+      time_at1 time WITH TIME ZONE NOT NULL,
+      time_at2 time WITH TIME ZONE NOT NULL,
+      time_at3 time NOT NULL,
+      time_at4 time WITHOUT TIME ZONE NOT NULL
+    );
+  desired: |
+    CREATE TABLE test (
+      timestamp_at1 timestamp WITHOUT TIME ZONE NOT NULL,
+      timestamp_at2 timestamp NOT NULL,
+      timestamp_at3 timestamp WITH TIME ZONE NOT NULL,
+      timestamp_at4 timestamp WITH TIME ZONE NOT NULL,
+      time_at1 time WITHOUT TIME ZONE NOT NULL,
+      time_at2 time NOT NULL,
+      time_at3 time WITH TIME ZONE NOT NULL,
+      time_at4 time WITH TIME ZONE NOT NULL
+    );
+  output: |
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at1" TYPE timestamp;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at2" TYPE timestamp;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at3" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at4" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "time_at1" TYPE time;
+    ALTER TABLE "public"."test" ALTER COLUMN "time_at2" TYPE time;
+    ALTER TABLE "public"."test" ALTER COLUMN "time_at3" TYPE time WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "time_at4" TYPE time WITH TIME ZONE;

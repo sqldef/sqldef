@@ -969,8 +969,11 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 
 func generateDataType(column Column) string {
 	suffix := ""
+	if column.timezone {
+		suffix += " WITH TIME ZONE"
+	}
 	if column.array {
-		suffix = "[]"
+		suffix += "[]"
 	}
 
 	if column.length != nil {
@@ -1568,7 +1571,7 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 		reflect.DeepEqual(current.enumValues, desired.enumValues) &&
 		(current.length == nil || desired.length == nil || current.length.intVal == desired.length.intVal) && // detect change column only when both are set explicitly. TODO: maybe `current.length == nil` case needs another care
 		(current.scale == nil || desired.scale == nil || current.scale.intVal == desired.scale.intVal) &&
-		current.array == desired.array
+		(current.array == desired.array) && (current.timezone == desired.timezone)
 	// TODO: scale
 }
 
