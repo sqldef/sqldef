@@ -1245,6 +1245,7 @@ func TestPsqldefBeforeApply(t *testing.T) {
 	// Setup
 	mustExecuteSQL("DROP ROLE IF EXISTS dummy_owner_role;")
 	mustExecuteSQL("CREATE ROLE dummy_owner_role;")
+	mustExecuteSQL("GRANT ALL ON SCHEMA public TO dummy_owner_role;")
 
 	beforeApply := "SET ROLE dummy_owner_role; SET TIME ZONE LOCAL;"
 	createTable := "CREATE TABLE dummy (id int);"
