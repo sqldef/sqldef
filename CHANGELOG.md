@@ -1,3 +1,8 @@
+## v0.15.21
+
+- Support `next value for` expression for mssqldef [#377](https://github.com/k0kubun/sqldef/issues/377)
+- Fix fillfactor index option output for mssqldef [#371](https://github.com/k0kubun/sqldef/issues/371)
+
 ## v0.15.20
 
 - Detect `WITH TIME ZONE` changes for psqldef [#376](https://github.com/k0kubun/sqldef/issues/376)
