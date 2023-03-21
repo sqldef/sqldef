@@ -962,6 +962,31 @@ func TestMssqldefCreateTableAddDefaultChangeDefault(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMssqldefUseSequenceInTrigger(t *testing.T) {
+	resetTestDatabase()
+
+	// Prepare sequence, becase "CREATE SEQUENCE" is currently unavailable in mssqldef.
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", stripHeredoc(`
+        CREATE SEQUENCE seq_user_id AS int START WITH 1;
+	`))
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id int NOT NULL PRIMARY KEY,
+		  name text,
+		  age int
+		);
+	`)
+	createTrigger := stripHeredoc(`
+		CREATE TRIGGER [insert_users_trigger] ON [dbo].[users] instead of insert AS
+		set nocount on
+		insert into dbo.users(id, name, age) select next value for seq_user_id, name, age from inserted;
+	`)
+
+	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTable+createTrigger)
+	assertApplyOutput(t, createTable+createTrigger, nothingModified)
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //

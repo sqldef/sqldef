@@ -293,7 +293,7 @@ func forceEOF(yylex interface{}) {
 %type <boolVal> boolean_value
 %type <str> compare
 %type <ins> insert_data
-%type <expr> value value_expression num_val
+%type <expr> value value_expression
 %type <expr> function_call_keyword function_call_nonkeyword function_call_generic function_call_conflict
 %type <str> is_suffix
 %type <colTuple> col_tuple
@@ -322,7 +322,6 @@ func forceEOF(yylex interface{}) {
 %type <bytes> charset_or_character_set
 %type <updateExpr> update_expression
 %type <setExpr> set_expression transaction_char isolation_level
-%type <bytes> for_from
 %type <str> ignore_opt default_opt
 %type <str> extended_opt full_opt from_database_opt tables_or_processlist
 %type <showFilter> like_or_where_opt
@@ -459,10 +458,6 @@ select_statement:
 | union_lhs union_op union_rhs order_by_opt limit_opt lock_opt
   {
     $$ = &Union{Type: $2, Left: $1, Right: $3, OrderBy: $4, Limit: $5, Lock: $6}
-  }
-| SELECT comment_opt cache_opt NEXT num_val for_from table_name
-  {
-    $$ = &Select{Comments: Comments($2), Cache: $3, SelectExprs: SelectExprs{Nextval{Expr: $5}}, From: TableExprs{&AliasedTableExpr{Expr: $7}}}
   }
 
 stream_statement:
@@ -3857,6 +3852,11 @@ function_call_keyword:
   {
     $$ = &ValuesFuncExpr{Name: $3}
   }
+/* SQL Server */
+| NEXT VALUE FOR table_id
+  {
+    $$ = &NextSeqValExpr{SequenceName: $4}
+  }
 
 /*
   Function calls using non reserved keywords but with special syntax forms.
@@ -4243,25 +4243,6 @@ value:
     $$ = &NullVal{}
   }
 
-num_val:
-  sql_id
-  {
-    // TODO(sougou): Deprecate this construct.
-    if $1.Lowered() != "value" {
-      yylex.Error("expecting value after next")
-      return 1
-    }
-    $$ = NewIntVal([]byte("1"))
-  }
-| INTEGRAL VALUES
-  {
-    $$ = NewIntVal($1)
-  }
-| VALUE_ARG VALUES
-  {
-    $$ = NewValArg($1)
-  }
-
 group_by_opt:
   {
     $$ = nil
@@ -4553,10 +4534,6 @@ charset_value:
   {
     $$ = &Default{}
   }
-
-for_from:
-  FOR
-| FROM
 
 exists_opt:
   { $$ = 0 }

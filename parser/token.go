@@ -449,6 +449,7 @@ var keywords = map[string]int{
 	"utc_time":               UTC_TIME,
 	"utc_timestamp":          UTC_TIMESTAMP,
 	"uuid":                   UUID,
+	"value":                  VALUE,
 	"values":                 VALUES,
 	"variables":              VARIABLES,
 	"variadic":               VARIADIC,

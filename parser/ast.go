@@ -1368,7 +1368,6 @@ type SelectExpr interface {
 
 func (*StarExpr) iSelectExpr()    {}
 func (*AliasedExpr) iSelectExpr() {}
-func (Nextval) iSelectExpr()      {}
 
 // StarExpr defines a '*' or 'table.*' expression.
 type StarExpr struct {
@@ -1395,16 +1394,6 @@ func (node *AliasedExpr) Format(buf *TrackedBuffer) {
 	if !node.As.IsEmpty() {
 		buf.Myprintf(" as %v", node.As)
 	}
-}
-
-// Nextval defines the NEXT VALUE expression.
-type Nextval struct {
-	Expr Expr
-}
-
-// Format formats the node.
-func (node Nextval) Format(buf *TrackedBuffer) {
-	buf.Myprintf("next %v values", node.Expr)
 }
 
 // Columns represents an insert column list.
@@ -1705,6 +1694,7 @@ func (*OverExpr) iExpr()            {}
 func (*Default) iExpr()             {}
 func (*ArrayConstructor) iExpr()    {}
 func (*FuncCallExpr) iExpr()        {}
+func (*NextSeqValExpr) iExpr()      {}
 
 // Exprs represents a list of value expressions.
 // It's not a valid expression because it's not parenthesized.
@@ -2372,6 +2362,16 @@ func (node *Default) Format(buf *TrackedBuffer) {
 	if node.ColName != "" {
 		buf.Myprintf("(%s)", node.ColName)
 	}
+}
+
+// NextSeqVal represents a NEXT VALUE FOR expression in SQL Server.
+type NextSeqValExpr struct {
+	SequenceName TableIdent
+}
+
+// Format formats the node.
+func (node *NextSeqValExpr) Format(buf *TrackedBuffer) {
+	buf.Myprintf("next value for %v", node.SequenceName)
 }
 
 // When represents a WHEN sub-expression.
