@@ -215,3 +215,19 @@ ReservedWordColumnName:
       [TIMESTAMP] datetime
     );
   output: ""
+ChangePrimaryKey:
+  current: |
+    CREATE TABLE v (
+      v1 int NOT NULL,
+      v2 int NOT NULL,
+      CONSTRAINT [v_pk] PRIMARY KEY CLUSTERED ([v1])
+    )
+  desired: |
+    CREATE TABLE v (
+      v1 int NOT NULL,
+      v2 int NOT NULL,
+      CONSTRAINT [v_pk] PRIMARY KEY CLUSTERED ([v2])
+    )
+  output: |
+    ALTER TABLE [dbo].[v] DROP CONSTRAINT [v_pk];
+    ALTER TABLE [dbo].[v] ADD CONSTRAINT [v_pk] PRIMARY KEY CLUSTERED ([v2]);
