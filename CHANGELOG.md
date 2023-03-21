@@ -1,3 +1,8 @@
+# v0.15.22
+
+- Fix exported TRIGGER definition for mssqldef [#380](https://github.com/k0kubun/sqldef/issues/380)
+- Support changing primary key for mssqldef [#373](https://github.com/k0kubun/sqldef/issues/373)
+
 ## v0.15.21
 
 - Support `next value for` expression for mssqldef [#377](https://github.com/k0kubun/sqldef/issues/377)
