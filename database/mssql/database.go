@@ -538,7 +538,7 @@ INNER JOIN sys.all_sql_modules s ON s.object_id = tr.object_id`
 		if err != nil {
 			return nil, err
 		}
-		triggers = append(triggers, definition)
+		triggers = append(triggers, definition+";")
 	}
 
 	return triggers, nil
