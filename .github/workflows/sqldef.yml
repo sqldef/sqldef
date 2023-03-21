@@ -33,6 +33,8 @@ jobs:
             postgres_version: 13
           - target: psqldef
             postgres_version: 14
+          - target: psqldef
+            postgres_version: 15
       fail-fast: false
     steps:
       - uses: actions/setup-go@v3
