@@ -57,7 +57,11 @@ test-mysqldef:
 	go test -v ./cmd/mysqldef
 
 test-psqldef:
-	go test -v ./cmd/psqldef ./database/postgres
+	if [[ $(GOOS) != windows ]]; then \
+		CGO_ENABLED=1 go test -v ./cmd/psqldef ./database/postgres; \
+	else \
+		go test -v ./cmd/psqldef ./database/postgres; \
+	fi
 
 test-sqlite3def:
 	go test -v ./cmd/sqlite3def
