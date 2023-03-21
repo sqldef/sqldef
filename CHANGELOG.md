@@ -1,3 +1,7 @@
+## v0.15.20
+
+- Detect `WITH TIME ZONE` changes for psqldef [#376](https://github.com/k0kubun/sqldef/issues/376)
+
 ## v0.15.19
 
 - Support set statement in trigger for mssqldef
