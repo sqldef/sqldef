@@ -370,13 +370,19 @@ WHERE ind.object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
 
 		options := []indexOption{
 			{name: "PAD_INDEX", value: boolToOnOff(padIndex)},
-			{name: "FILLFACTOR", value: fillfactor},
+		}
+
+		if padIndex {
+			options = append(options, indexOption{name: "FILLFACTOR", value: fillfactor})
+		}
+
+		options = append(options, []indexOption{
 			{name: "IGNORE_DUP_KEY", value: boolToOnOff(ignoreDupKey)},
 			{name: "STATISTICS_NORECOMPUTE", value: boolToOnOff(noRecompute)},
 			{name: "STATISTICS_INCREMENTAL", value: boolToOnOff(incremental)},
 			{name: "ALLOW_ROW_LOCKS", value: boolToOnOff(rowLocks)},
 			{name: "ALLOW_PAGE_LOCKS", value: boolToOnOff(pageLocks)},
-		}
+		}...)
 
 		definition := &indexDef{name: indexName, columns: []string{}, primary: isPrimary, unique: isUnique, indexType: typeDesc, filter: filter, included: []string{}, options: options}
 		indexDefMap[indexName] = definition

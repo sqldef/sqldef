@@ -1070,6 +1070,24 @@ func TestMssqldefExport(t *testing.T) {
 	))
 }
 
+func TestMssqldefExportConstraint(t *testing.T) {
+	resetTestDatabase()
+
+	sql := stripHeredoc(`
+		CREATE TABLE dbo.v (
+		    [v1] int NOT NULL,
+		    [v2] int NOT NULL,
+		    CONSTRAINT [v_pk] PRIMARY KEY CLUSTERED ([v1], [v2]) WITH ( PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = OFF, STATISTICS_INCREMENTAL = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON )
+		);
+	`,
+	)
+
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", sql)
+
+	out := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")
+	assertEquals(t, out, sql)
+}
+
 func TestMssqldefHelp(t *testing.T) {
 	_, err := testutils.Execute("./mssqldef", "--help")
 	if err != nil {
