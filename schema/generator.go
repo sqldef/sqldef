@@ -201,6 +201,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Check indexes
 		for _, index := range currentTable.indexes {
+
+			// Alter statement for primary key index should be generated above.
+			if index.primary {
+				continue
+			}
+
 			if containsString(convertIndexesToIndexNames(desiredTable.indexes), index.name) ||
 				containsString(convertForeignKeysToIndexNames(desiredTable.foreignKeys), index.name) {
 				continue // Index is expected to exist.
