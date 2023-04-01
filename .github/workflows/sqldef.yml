@@ -37,7 +37,7 @@ jobs:
             postgres_version: 15
       fail-fast: false
     steps:
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         with:
           go-version: 1.19
       - uses: actions/checkout@v3
@@ -61,7 +61,7 @@ jobs:
           - { GOOS: linux,   GOARCH: arm,   EXT: tar.gz, ZIG_TARGET: arm-linux-musleabi }
           - { GOOS: windows, GOARCH: amd64, EXT: zip,    ZIG_TARGET: x86_64-windows }
     steps:
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         with:
           go-version: 1.19
       - uses: actions/checkout@v3
@@ -89,7 +89,7 @@ jobs:
           - { GOOS: darwin, GOARCH: arm64, EXT: zip }
       fail-fast: false
     steps:
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         with:
           go-version: 1.19
       - uses: actions/checkout@v3
