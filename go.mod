@@ -7,7 +7,7 @@ require (
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/k0kubun/pp/v3 v3.2.0
 	github.com/lib/pq v1.10.7
-	github.com/microsoft/go-mssqldb v0.20.0
+	github.com/microsoft/go-mssqldb v0.21.0
 	github.com/pganalyze/pg_query_go/v2 v2.2.0
 	golang.org/x/term v0.5.0
 	gopkg.in/yaml.v2 v2.4.0
