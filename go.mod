@@ -9,7 +9,7 @@ require (
 	github.com/lib/pq v1.10.7
 	github.com/microsoft/go-mssqldb v0.21.0
 	github.com/pganalyze/pg_query_go/v2 v2.2.0
-	golang.org/x/term v0.5.0
+	golang.org/x/term v0.6.0
 	gopkg.in/yaml.v2 v2.4.0
 	modernc.org/sqlite v1.20.3
 )
@@ -24,7 +24,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20220927061507-ef77025ab5aa // indirect
 	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d // indirect
 	golang.org/x/mod v0.7.0 // indirect
-	golang.org/x/sys v0.5.0 // indirect
+	golang.org/x/sys v0.6.0 // indirect
 	golang.org/x/text v0.3.8 // indirect
 	golang.org/x/tools v0.3.0 // indirect
 	lukechampine.com/uint128 v1.2.0 // indirect
