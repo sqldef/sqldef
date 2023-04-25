@@ -161,6 +161,17 @@ func TestPsqldefIgnoreExtension(t *testing.T) {
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
 
+	// pg_buffercache extension creates a view on public schema, but it should not be exported.
+	assertExportOutput(t, stripHeredoc(`
+		CREATE EXTENSION "pg_buffercache";
+
+		CREATE TABLE "public"."users" (
+		    "id" bigint NOT NULL,
+		    "name" text,
+		    "age" integer
+		);
+		`))
+
 	mustExecuteSQL("DROP EXTENSION pg_buffercache;")
 }
 
