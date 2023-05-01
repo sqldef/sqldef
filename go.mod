@@ -11,7 +11,7 @@ require (
 	github.com/pganalyze/pg_query_go/v2 v2.2.0
 	golang.org/x/term v0.6.0
 	gopkg.in/yaml.v2 v2.4.0
-	modernc.org/sqlite v1.21.1
+	modernc.org/sqlite v1.22.1
 )
 
 require (
@@ -30,7 +30,7 @@ require (
 	lukechampine.com/uint128 v1.2.0 // indirect
 	modernc.org/cc/v3 v3.40.0 // indirect
 	modernc.org/ccgo/v3 v3.16.13 // indirect
-	modernc.org/libc v1.22.3 // indirect
+	modernc.org/libc v1.22.5 // indirect
 	modernc.org/mathutil v1.5.0 // indirect
 	modernc.org/memory v1.5.0 // indirect
 	modernc.org/opt v0.1.3 // indirect
@@ -39,7 +39,7 @@ require (
 )
 
 require (
-	github.com/dustin/go-humanize v1.0.0 // indirect
+	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/golang/protobuf v1.4.2 // indirect
 	google.golang.org/protobuf v1.23.0 // indirect
 )
