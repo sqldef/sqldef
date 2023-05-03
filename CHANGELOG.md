@@ -1,3 +1,7 @@
+# v0.15.23
+
+- Do not export extension dependent objects for psqldef [#389](https://github.com/k0kubun/sqldef/issues/389)
+
 # v0.15.22
 
 - Fix exported TRIGGER definition for mssqldef [#380](https://github.com/k0kubun/sqldef/issues/380)
