@@ -79,11 +79,12 @@ func (d *PostgresDatabase) DumpDDLs() (string, error) {
 
 func (d *PostgresDatabase) tableNames() ([]string, error) {
 	rows, err := d.db.Query(`
-		select table_schema, table_name from information_schema.tables
-		where table_schema not in ('information_schema', 'pg_catalog')
-		and (table_schema != 'public' or table_name != 'pg_buffercache')
-		and table_type = 'BASE TABLE'
-		order by table_name asc;
+		select n.nspname as table_schema, relname as table_name from pg_catalog.pg_class c
+		inner join pg_catalog.pg_namespace n on c.relnamespace = n.oid
+		where n.nspname not in ('information_schema', 'pg_catalog')
+		and c.relkind in ('r', 'p')
+		and not exists (select * from pg_catalog.pg_depend d where c.oid = d.objid and d.deptype = 'e')
+		order by relname asc;
 	`)
 	if err != nil {
 		return nil, err
@@ -108,11 +109,11 @@ var (
 
 func (d *PostgresDatabase) views() ([]string, error) {
 	rows, err := d.db.Query(`
-		select table_schema, table_name, definition from information_schema.tables
-		inner join pg_views on table_name = viewname
-		where table_schema not in ('information_schema', 'pg_catalog', 'repack')
-		and (table_schema != 'public' or table_name != 'pg_buffercache')
-		and table_type = 'VIEW';
+		select n.nspname as table_schema, c.relname as table_name, pg_get_viewdef(c.oid) as definition
+		from pg_catalog.pg_class c inner join pg_catalog.pg_namespace n on c.relnamespace = n.oid
+		where n.nspname not in ('information_schema', 'pg_catalog')
+		and c.relkind = 'v'
+		and not exists (select * from pg_catalog.pg_depend d where c.oid = d.objid and d.deptype = 'e')
 	`)
 	if err != nil {
 		return nil, err
@@ -139,7 +140,12 @@ func (d *PostgresDatabase) views() ([]string, error) {
 }
 
 func (d *PostgresDatabase) materializedViews() ([]string, error) {
-	rows, err := d.db.Query("select schemaname, matviewname, definition from pg_matviews;")
+	rows, err := d.db.Query(`
+		select n.nspname as schemaname, c.relname as matviewname, pg_get_viewdef(c.oid) as definition
+		from pg_catalog.pg_class c inner join pg_catalog.pg_namespace n on c.relnamespace = n.oid
+		where c.relkind = 'm'
+		and not exists (select * from pg_catalog.pg_depend d where c.oid = d.objid and d.deptype = 'e')
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -200,6 +206,7 @@ func (d *PostgresDatabase) types() ([]string, error) {
 		select t.typname, string_agg(e.enumlabel, ' ')
 		from pg_enum e
 		join pg_type t on e.enumtypid = t.oid
+		where not exists (select * from pg_depend d where d.objid = t.oid and d.deptype = 'e')
 		group by t.typname;
 	`)
 	if err != nil {
