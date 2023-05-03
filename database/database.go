@@ -39,7 +39,7 @@ type Database interface {
 	GetDefaultSchema() string
 }
 
-func RunDDLs(d Database, ddls []string, skipDrop bool, beforeApply string) error {
+func RunDDLs(d Database, ddls []string, skipDrop bool, beforeApply string, ddlSuffix string) error {
 	transaction, err := d.DB().Begin()
 	if err != nil {
 		return err
@@ -58,6 +58,7 @@ func RunDDLs(d Database, ddls []string, skipDrop bool, beforeApply string) error
 			continue
 		}
 		fmt.Printf("%s;\n", ddl)
+		fmt.Print(ddlSuffix)
 		var err error
 		if TransactionSupported(ddl) {
 			_, err = transaction.Exec(ddl)

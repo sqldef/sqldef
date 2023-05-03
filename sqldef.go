@@ -30,6 +30,13 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 
 	defaultSchema := db.GetDefaultSchema()
 
+	var ddlSuffix string
+	if generatorMode == schema.GeneratorModeMssql {
+		ddlSuffix = "GO\n"
+	} else {
+		ddlSuffix = ""
+	}
+
 	if options.Export {
 		if currentDDLs == "" {
 			fmt.Printf("-- No table exists --\n")
@@ -44,6 +51,7 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 					fmt.Println()
 				}
 				fmt.Printf("%s;\n", ddl.Statement())
+				fmt.Print(ddlSuffix)
 			}
 		}
 		return
@@ -60,11 +68,11 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 	}
 
 	if options.DryRun || len(options.CurrentFile) > 0 {
-		showDDLs(ddls, options.SkipDrop, options.BeforeApply)
+		showDDLs(ddls, options.SkipDrop, options.BeforeApply, ddlSuffix)
 		return
 	}
 
-	err = database.RunDDLs(db, ddls, options.SkipDrop, options.BeforeApply)
+	err = database.RunDDLs(db, ddls, options.SkipDrop, options.BeforeApply, ddlSuffix)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -121,7 +129,7 @@ func ReadFile(filepath string) (string, error) {
 	return string(buf), nil
 }
 
-func showDDLs(ddls []string, skipDrop bool, beforeApply string) {
+func showDDLs(ddls []string, skipDrop bool, beforeApply string, ddlSuffix string) {
 	fmt.Println("-- dry run --")
 	if len(beforeApply) > 0 {
 		fmt.Println(beforeApply)
@@ -132,6 +140,7 @@ func showDDLs(ddls []string, skipDrop bool, beforeApply string) {
 			continue
 		}
 		fmt.Printf("%s;\n", ddl)
+		fmt.Print(ddlSuffix)
 	}
 }
 

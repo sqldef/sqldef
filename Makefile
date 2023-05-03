@@ -67,4 +67,4 @@ test-sqlite3def:
 	go test -v ./cmd/sqlite3def
 
 test-mssqldef:
-	go test -v ./cmd/mssqldef
+	go test -v ./cmd/mssqldef ./database/mssql

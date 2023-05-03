@@ -1,0 +1,13 @@
+SingleStatementWithoutGo: |
+  CREATE TABLE bigdata (
+    data integer
+  );
+MultiStatementWithGo: |
+  -- First Statement
+  CREATE VIEW v1 AS SELECT 1
+  GO
+  -- Second statement
+  CREATE VIEW v2 AS SELECT 2
+  GO
+GoKeywordInStringLiteral: |
+  CREATE VIEW v AS SELECT 'GO in string literal';

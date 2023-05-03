@@ -12,7 +12,6 @@ import (
 	"github.com/k0kubun/sqldef/database"
 	"github.com/k0kubun/sqldef/database/file"
 	"github.com/k0kubun/sqldef/database/mssql"
-	"github.com/k0kubun/sqldef/parser"
 	"github.com/k0kubun/sqldef/schema"
 	"golang.org/x/term"
 )
@@ -125,6 +124,6 @@ func main() {
 		defer db.Close()
 	}
 
-	sqlParser := database.NewParser(parser.ParserModeMssql)
+	sqlParser := mssql.NewParser()
 	sqldef.Run(schema.GeneratorModeMssql, db, sqlParser, options)
 }
