@@ -511,7 +511,7 @@ INNER JOIN sys.sql_modules
 			return nil, err
 		}
 		definition = strings.TrimSpace(definition)
-		definition = strings.ReplaceAll(definition, "\n", "")
+		definition = strings.ReplaceAll(definition, "\n", " ")
 		definition = suffixSemicolon.ReplaceAllString(definition, "")
 		definition = spaces.ReplaceAllString(definition, " ")
 		ddls = append(ddls, definition+";")

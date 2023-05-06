@@ -231,3 +231,8 @@ ChangePrimaryKey:
   output: |
     ALTER TABLE [dbo].[v] DROP CONSTRAINT [v_pk];
     ALTER TABLE [dbo].[v] ADD CONSTRAINT [v_pk] PRIMARY KEY CLUSTERED ([v2]);
+CreateViewWithMultiline:
+  desired: |
+    CREATE VIEW v AS
+    SELECT
+    10 as N;
