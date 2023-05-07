@@ -1,3 +1,9 @@
+# v0.15.24
+
+- Support GO keyword for mssqldef [#382](https://github.com/k0kubun/sqldef/issues/382)
+  - GO keyword will be output by mssqldef
+- Fix a bug in mssqldef when view definition has newline character [#381](https://github.com/k0kubun/sqldef/issues/381)
+
 # v0.15.23
 
 - Do not export extension dependent objects for psqldef [#389](https://github.com/k0kubun/sqldef/issues/389)
