@@ -574,7 +574,11 @@ func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]st
 		if err != nil {
 			return nil, err
 		}
-		result[constraintName] = fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s %s", tableName, constraintName, constraintDef)
+
+		result[constraintName] = fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s",
+			escapeSQLName(schema), escapeSQLName(table),
+			escapeSQLName(constraintName), constraintDef,
+		)
 	}
 
 	return result, nil
