@@ -99,9 +99,7 @@ func TestMssqldefCreateTable(t *testing.T) {
 
 	assertApplyOutput(t, createTable1+createTable2, applyPrefix+createTable1+createTable2)
 	assertApplyOutput(t, createTable1+createTable2, nothingModified)
-
-	assertApplyOutput(t, createTable1, applyPrefix+"DROP TABLE [dbo].[bigdata];\nGO\n")
-	assertApplyOutput(t, createTable1, nothingModified)
+	assertApplyOutput(t, createTable1, applyPrefix+"-- Skipped: DROP TABLE [dbo].[bigdata];\n")
 }
 
 func TestMssqldefCreateTableWithDefault(t *testing.T) {
@@ -182,8 +180,7 @@ func TestMssqldefCreateView(t *testing.T) {
 	dropView := "DROP VIEW [dbo].[view_users];\nGO\n"
 	assertApplyOutput(t, createTable+createView, applyPrefix+dropView+createView)
 	assertApplyOutput(t, createTable+createView, nothingModified)
-
-	assertApplyOutput(t, "", applyPrefix+"DROP TABLE [dbo].[users];\nGO\n"+dropView)
+	assertApplyOutput(t, "", applyPrefix+"-- Skipped: DROP TABLE [dbo].[users];\n"+dropView)
 }
 
 func TestMssqldefTrigger(t *testing.T) {
@@ -1104,7 +1101,7 @@ func TestMssqldefSkipDrop(t *testing.T) {
 	skipDrop := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql")
 	apply := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql")
 	apply = strings.TrimSuffix(apply, "GO\n")
-	assertEquals(t, skipDrop, strings.Replace(apply, "DROP", "-- Skipped: DROP", 1))
+	assertEquals(t, skipDrop, apply)
 }
 
 func TestMssqldefExport(t *testing.T) {

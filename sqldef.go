@@ -135,7 +135,7 @@ func showDDLs(ddls []string, enableDrop bool, beforeApply string, ddlSuffix stri
 		fmt.Println(beforeApply)
 	}
 	for _, ddl := range ddls {
-		if !enableDrop && strings.Contains(ddl, "DROP") {
+		if !enableDrop && strings.Contains(ddl, "DROP TABLE") {
 			fmt.Printf("-- Skipped: %s;\n", ddl)
 			continue
 		}

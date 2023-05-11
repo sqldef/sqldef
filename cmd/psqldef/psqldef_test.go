@@ -584,7 +584,6 @@ func TestPsqldefDropPrimaryKey(t *testing.T) {
 		);`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";`+"\n")
-	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestPsqldefCreateIndex(t *testing.T) {

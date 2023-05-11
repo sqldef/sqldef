@@ -53,7 +53,7 @@ func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddl
 		}
 	}
 	for _, ddl := range ddls {
-		if !enableDrop && strings.Contains(ddl, "DROP") {
+		if !enableDrop && strings.Contains(ddl, "DROP TABLE") {
 			fmt.Printf("-- Skipped: %s;\n", ddl)
 			continue
 		}
