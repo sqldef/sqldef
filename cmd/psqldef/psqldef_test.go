@@ -1188,7 +1188,7 @@ func TestPsqldefSkipDrop(t *testing.T) {
 
 	writeFile("schema.sql", "")
 
-	skipDrop := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--skip-drop", "--file", "schema.sql")
+	skipDrop := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--file", "schema.sql")
 	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--file", "schema.sql")
 	assertEquals(t, skipDrop, strings.Replace(apply, "DROP", "-- Skipped: DROP", 1))
 }

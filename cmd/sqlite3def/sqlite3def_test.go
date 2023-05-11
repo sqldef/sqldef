@@ -87,7 +87,7 @@ func TestSQLite3defSkipDrop(t *testing.T) {
 
 	writeFile("schema.sql", "")
 
-	skipDrop := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--skip-drop", "--file", "schema.sql")
+	skipDrop := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--file", "schema.sql")
 	apply := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--file", "schema.sql")
 	assertEquals(t, skipDrop, strings.Replace(apply, "DROP", "-- Skipped: DROP", 1))
 }

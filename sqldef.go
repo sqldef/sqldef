@@ -16,7 +16,7 @@ type Options struct {
 	CurrentFile string
 	DryRun      bool
 	Export      bool
-	SkipDrop    bool
+	EnableDrop  bool
 	BeforeApply string
 	Config      database.GeneratorConfig
 }
@@ -68,11 +68,11 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 	}
 
 	if options.DryRun || len(options.CurrentFile) > 0 {
-		showDDLs(ddls, options.SkipDrop, options.BeforeApply, ddlSuffix)
+		showDDLs(ddls, options.EnableDrop, options.BeforeApply, ddlSuffix)
 		return
 	}
 
-	err = database.RunDDLs(db, ddls, options.SkipDrop, options.BeforeApply, ddlSuffix)
+	err = database.RunDDLs(db, ddls, options.EnableDrop, options.BeforeApply, ddlSuffix)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -129,13 +129,13 @@ func ReadFile(filepath string) (string, error) {
 	return string(buf), nil
 }
 
-func showDDLs(ddls []string, skipDrop bool, beforeApply string, ddlSuffix string) {
+func showDDLs(ddls []string, enableDrop bool, beforeApply string, ddlSuffix string) {
 	fmt.Println("-- dry run --")
 	if len(beforeApply) > 0 {
 		fmt.Println(beforeApply)
 	}
 	for _, ddl := range ddls {
-		if skipDrop && strings.Contains(ddl, "DROP") {
+		if !enableDrop && strings.Contains(ddl, "DROP") {
 			fmt.Printf("-- Skipped: %s;\n", ddl)
 			continue
 		}

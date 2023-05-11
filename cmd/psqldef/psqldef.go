@@ -31,7 +31,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		File        []string `short:"f" long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"filename" default:"-"`
 		DryRun      bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export      bool     `long:"export" description:"Just dump the current schema to stdout"`
-		SkipDrop    bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
+		EnableDrop  bool     `long:"enable-drop" description:"Enable destructive changes such as DROP"`
 		BeforeApply string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs"`
 		Config      string   `long:"config" description:"YAML file to specify: target_tables, skip_tables"`
 		Help        bool     `long:"help" description:"Show this help"`
@@ -69,7 +69,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		DesiredDDLs: desiredDDLs,
 		DryRun:      opts.DryRun,
 		Export:      opts.Export,
-		SkipDrop:    opts.SkipDrop,
+		EnableDrop:  opts.EnableDrop,
 		BeforeApply: opts.BeforeApply,
 		Config:      database.ParseGeneratorConfig(opts.Config),
 	}
