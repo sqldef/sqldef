@@ -1,14 +1,18 @@
-# v0.15.24
+## v0.15.25
+
+- Escape parameters in unique constraints for psqldef [#398](https://github.com/k0kubun/sqldef/issues/398)
+
+## v0.15.24
 
 - Support GO keyword for mssqldef [#382](https://github.com/k0kubun/sqldef/issues/382)
   - GO keyword will be output by mssqldef
 - Fix a bug in mssqldef when view definition has newline character [#381](https://github.com/k0kubun/sqldef/issues/381)
 
-# v0.15.23
+## v0.15.23
 
 - Do not export extension dependent objects for psqldef [#389](https://github.com/k0kubun/sqldef/issues/389)
 
-# v0.15.22
+## v0.15.22
 
 - Fix exported TRIGGER definition for mssqldef [#380](https://github.com/k0kubun/sqldef/issues/380)
 - Support changing primary key for mssqldef [#373](https://github.com/k0kubun/sqldef/issues/373)
