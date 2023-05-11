@@ -1091,7 +1091,7 @@ func TestPsqldefAddUniqueConstraintToTableInNonpublicSchema(t *testing.T) {
 		    "b" integer
 		);
 
-		ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);
+		ALTER TABLE "test"."dummy" ADD CONSTRAINT "a_b_uniq" UNIQUE (a, b);
 		`))
 	assertApplyOutput(t, createTable+"\n"+alterTable, nothingModified)
 
@@ -1105,7 +1105,7 @@ func TestPsqldefAddUniqueConstraintToTableInNonpublicSchema(t *testing.T) {
 		    "b" integer
 		);
 
-		ALTER TABLE test.dummy ADD CONSTRAINT a_uniq UNIQUE (a) DEFERRABLE INITIALLY DEFERRED;
+		ALTER TABLE "test"."dummy" ADD CONSTRAINT "a_uniq" UNIQUE (a) DEFERRABLE INITIALLY DEFERRED;
 		`))
 	assertApplyOutput(t, createTable+"\n"+alterTable, nothingModified)
 }
@@ -1220,7 +1220,7 @@ func TestPsqldefExport(t *testing.T) {
 		    PRIMARY KEY ("id")
 		);
 
-		ALTER TABLE public.users ADD CONSTRAINT users_c_char_1_key UNIQUE (c_char_1);
+		ALTER TABLE "public"."users" ADD CONSTRAINT "users_c_char_1_key" UNIQUE (c_char_1);
 		`,
 	))
 }
