@@ -1085,7 +1085,7 @@ func TestMssqldefDryRun(t *testing.T) {
 	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 }
 
-func TestMssqldefSkipDrop(t *testing.T) {
+func TestMssqldefDrop(t *testing.T) {
 	resetTestDatabase()
 	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", stripHeredoc(`
 		CREATE TABLE users (
@@ -1098,10 +1098,13 @@ func TestMssqldefSkipDrop(t *testing.T) {
 
 	writeFile("schema.sql", "")
 
-	skipDrop := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql")
-	apply := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql")
-	apply = strings.TrimSuffix(apply, "GO\n")
-	assertEquals(t, skipDrop, apply)
+	dropTable := stripHeredoc(`
+		DROP TABLE [dbo].[users];
+		GO
+		`,
+	)
+	out := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--enable-drop", "--file", "schema.sql")
+	assertEquals(t, out, applyPrefix+dropTable)
 }
 
 func TestMssqldefExport(t *testing.T) {
