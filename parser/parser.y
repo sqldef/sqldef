@@ -1679,6 +1679,7 @@ character_cast_opt:
 | TYPECAST TEXT
 | TYPECAST JSON
 | TYPECAST JSONB
+| TYPECAST column_type array_opt
 
 numeric_type:
   int_type length_opt
