@@ -1,3 +1,7 @@
+## v0.15.26
+
+- Support casting a default value to array for psqldef [#400](https://github.com/k0kubun/sqldef/issues/400)
+
 ## v0.15.25
 
 - Escape parameters in unique constraints for psqldef [#398](https://github.com/k0kubun/sqldef/issues/398)
