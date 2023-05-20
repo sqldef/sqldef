@@ -171,7 +171,9 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 		if err != nil {
 			return ddls, err
 		}
-		ddls = append(ddls, indexDefs...)
+		for _, indexDef := range indexDefs {
+			ddls = append(ddls, fmt.Sprintf("%s;", indexDef))
+		}
 	}
 	return ddls, nil
 }
