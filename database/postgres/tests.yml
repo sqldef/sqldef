@@ -1,9 +1,11 @@
 CreateTable:
+  compare_with_generic_parser: true
   sql: |
     CREATE TABLE bigdata (
       data bigint
     );
 CreateTableWithSchema:
+  compare_with_generic_parser: true
   sql: |
     CREATE TABLE public.bigdata (
       data bigint

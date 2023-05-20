@@ -112,6 +112,7 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 		NewName: tableName,
 		TableSpec: &parser.TableSpec{
 			Columns: columns,
+			Options: map[string]string{},
 		},
 	}, nil
 }
