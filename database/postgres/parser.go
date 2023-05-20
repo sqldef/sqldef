@@ -222,7 +222,8 @@ func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.Select
 		SelectExprs: selectExprs,
 		From: parser.TableExprs{
 			&parser.AliasedTableExpr{
-				Expr: fromTable,
+				Expr:       fromTable,
+				TableHints: []string{},
 			},
 		},
 	}, nil

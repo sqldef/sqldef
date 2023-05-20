@@ -18,10 +18,12 @@ CreateTableWithNotNull:
       booking_id bigint NOT NULL
     );
 CreateView:
+  compare_with_generic_parser: true
   sql: |
     create view hoge_view as
     select amount from hoge;
 CreateViewWithCast:
+  compare_with_generic_parser: true
   sql: |
     create view hoge_view as
     select amount::numeric(10,2) from hoge;
