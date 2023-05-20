@@ -1,60 +1,73 @@
-CreateTable: |
-  CREATE TABLE bigdata (
-    data bigint
-  );
-CreateTableWithSchema: |
-  CREATE TABLE public.bigdata (
-    data bigint
-  );
-CreateTableWithNotNull: |
-  CREATE TABLE public.airline_confirmation (
-    airline_id bigint,
-    code character varying(512),
-    booking_id bigint NOT NULL
-  );
-CreateView: |
-  create view hoge_view as
-  select amount from hoge;
-CreateViewWithCast: |
-  create view hoge_view as
-  select amount::numeric(10,2) from hoge;
-CreateViewWithFullColumn: |
-  CREATE VIEW public.hoge_view
-  AS SELECT (hoge.amount)::numeric(10,2) AS amount_num FROM hoge;
-CreateViewWithCaseWhen: |
-  create view hoge_view as
-  select
-    -- pattern 1
-    amount::numeric(10,2) as amount_num1,
-    -- pattern 2
-    (
-      jsonb_extract_path_text(payload, 'amount')
-    )::numeric(10,2) as amount_num2,
-    -- pattern 3
-    (
-      case hoge_type
-        when 'hoge' then jsonb_extract_path_text(payload, 'hoge', 'amount')
-      end
-    )::numeric(10,2) as amount_num3,
-    -- pattern 4
-    (
-      to_timestamp(
-        jsonb_extract_path_text(payload, 'created')::bigint
-      )
-    ) as created,
-    -- pattern 5
-    (
-      cast(
+CreateTable:
+  sql: |
+    CREATE TABLE bigdata (
+      data bigint
+    );
+CreateTableWithSchema:
+  sql: |
+    CREATE TABLE public.bigdata (
+      data bigint
+    );
+CreateTableWithNotNull:
+  sql: |
+    CREATE TABLE public.airline_confirmation (
+      airline_id bigint,
+      code character varying(512),
+      booking_id bigint NOT NULL
+    );
+CreateView:
+  sql: |
+    create view hoge_view as
+    select amount from hoge;
+CreateViewWithCast:
+  sql: |
+    create view hoge_view as
+    select amount::numeric(10,2) from hoge;
+CreateViewWithFullColumn:
+  sql: |
+    CREATE VIEW public.hoge_view
+    AS SELECT (hoge.amount)::numeric(10,2) AS amount_num FROM hoge;
+CreateViewWithCaseWhen:
+  sql: |
+    create view hoge_view as
+    select
+      -- pattern 1
+      amount::numeric(10,2) as amount_num1,
+      -- pattern 2
+      (
+        jsonb_extract_path_text(payload, 'amount')
+      )::numeric(10,2) as amount_num2,
+      -- pattern 3
+      (
+        case hoge_type
+          when 'hoge' then jsonb_extract_path_text(payload, 'hoge', 'amount')
+        end
+      )::numeric(10,2) as amount_num3,
+      -- pattern 4
+      (
         to_timestamp(
           jsonb_extract_path_text(payload, 'created')::bigint
-        ) as date
-      )
-    ) as created_date
-  from hoge;
-CreateIndexWithFuncCall: |
-  CREATE UNIQUE INDEX airline_confirmation_code_unique_idx
-  ON public.airline_confirmation
-  USING btree (airline_id, booking_id, lower((code)::text))
-  WHERE ((code IS NOT NULL) AND (airline_id IS NOT NULL));
-CreateIndexConcurrently: |
-  CREATE INDEX CONCURRENTLY username on users (name);
+        )
+      ) as created,
+      -- pattern 5
+      (
+        cast(
+          to_timestamp(
+            jsonb_extract_path_text(payload, 'created')::bigint
+          ) as date
+        )
+      ) as created_date
+    from hoge;
+CreateIndex:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE INDEX username on users using btree (name asc);
+CreateIndexWithFuncCall:
+  sql: |
+    CREATE UNIQUE INDEX airline_confirmation_code_unique_idx
+    ON public.airline_confirmation
+    USING btree (airline_id, booking_id, lower((code)::text))
+    WHERE ((code IS NOT NULL) AND (airline_id IS NOT NULL));
+CreateIndexConcurrently:
+  sql: |
+    CREATE INDEX CONCURRENTLY username on users (name);
