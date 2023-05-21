@@ -78,6 +78,8 @@ func (p PostgresParser) parseStmt(node *pgquery.Node) (parser.Statement, error) 
 		return p.parseCommentStmt(stmt.CommentStmt)
 	case *pgquery.Node_CreateExtensionStmt:
 		return p.parseExtensionStmt(stmt.CreateExtensionStmt)
+	case *pgquery.Node_AlterTableStmt:
+		return p.parseAlterTableStmt(stmt.AlterTableStmt)
 	default:
 		return nil, fmt.Errorf("unknown node in parseStmt: %#v", stmt)
 	}
@@ -473,6 +475,54 @@ func (p PostgresParser) parseExtensionStmt(stmt *pgquery.CreateExtensionStmt) (p
 			Name: stmt.Extname,
 		},
 	}, nil
+}
+
+func (p PostgresParser) parseAlterTableStmt(stmt *pgquery.AlterTableStmt) (parser.Statement, error) {
+	tableName, err := p.parseTableName(stmt.Relation)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(stmt.Cmds) > 1 {
+		return nil, fmt.Errorf("multiple actions are not supported in parseAlterTableStmt")
+	}
+
+	switch node := stmt.Cmds[0].Node.(*pgquery.Node_AlterTableCmd).AlterTableCmd.Def.Node.(type) {
+	case *pgquery.Node_Constraint:
+		return p.parseConstraint(node.Constraint, tableName)
+	default:
+		return nil, fmt.Errorf("unhandled node in parseAlterTableStmt: %#v", node)
+	}
+}
+
+func (p PostgresParser) parseConstraint(constraint *pgquery.Constraint, tableName parser.TableName) (parser.Statement, error) {
+	switch constraint.Contype {
+	case pgquery.ConstrType_CONSTR_UNIQUE:
+		cols := make([]parser.IndexColumn, len(constraint.Keys))
+		for i, key := range constraint.Keys {
+			cols[i] = parser.IndexColumn{
+				Column:    parser.NewColIdent(key.Node.(*pgquery.Node_String_).String_.Str),
+				Direction: "asc",
+			}
+		}
+		return &parser.DDL{
+			Action:  parser.AddIndexStr,
+			Table:   tableName,
+			NewName: tableName,
+			IndexSpec: &parser.IndexSpec{
+				Name:       parser.NewColIdent(constraint.Conname),
+				Constraint: true,
+				Unique:     true,
+				ConstraintOptions: &parser.ConstraintOptions{
+					Deferrable:        constraint.Deferrable,
+					InitiallyDeferred: constraint.Initdeferred,
+				},
+			},
+			IndexCols: cols,
+		}, nil
+	default:
+		return nil, fmt.Errorf("unhandled constraint type in parseAlterTableStmt: %d", constraint.Contype)
+	}
 }
 
 func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef) (*parser.ColumnDefinition, error) {

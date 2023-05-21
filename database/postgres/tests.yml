@@ -75,3 +75,7 @@ CreateIndexWithFuncCall:
 CreateIndexConcurrently:
   sql: |
     CREATE INDEX CONCURRENTLY username on users (name);
+AlterTableUnique:
+  compare_with_generic_parser: true
+  sql: |
+    ALTER TABLE users ADD CONSTRAINT username UNIQUE (name, age);
