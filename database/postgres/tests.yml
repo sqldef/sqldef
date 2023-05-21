@@ -79,3 +79,7 @@ AlterTableUnique:
   compare_with_generic_parser: true
   sql: |
     ALTER TABLE users ADD CONSTRAINT username UNIQUE (name, age);
+AlterTableAddForeignKey:
+  compare_with_generic_parser: true
+  sql: |
+    ALTER TABLE ONLY public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE RESTRICT;

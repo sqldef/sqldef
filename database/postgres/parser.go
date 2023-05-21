@@ -520,8 +520,55 @@ func (p PostgresParser) parseConstraint(constraint *pgquery.Constraint, tableNam
 			},
 			IndexCols: cols,
 		}, nil
+	case pgquery.ConstrType_CONSTR_FOREIGN:
+		idxCols := make([]parser.ColIdent, len(constraint.FkAttrs))
+		for i, fkAttr := range constraint.FkAttrs {
+			v := fkAttr.Node.(*pgquery.Node_String_).String_.Str
+			idxCols[i] = parser.NewColIdent(v)
+		}
+		refCols := make([]parser.ColIdent, len(constraint.PkAttrs))
+		for i, pkAttr := range constraint.PkAttrs {
+			v := pkAttr.Node.(*pgquery.Node_String_).String_.Str
+			refCols[i] = parser.NewColIdent(v)
+		}
+
+		refName, err := p.parseTableName(constraint.Pktable)
+		if err != nil {
+			return nil, err
+		}
+		return &parser.DDL{
+			Action:  parser.AddForeignKeyStr,
+			Table:   tableName,
+			NewName: tableName,
+			ForeignKey: &parser.ForeignKeyDefinition{
+				ConstraintName:   parser.NewColIdent(constraint.Conname),
+				IndexColumns:     idxCols,
+				ReferenceColumns: refCols,
+				ReferenceName:    refName,
+				OnDelete:         p.parseFkAction(constraint.FkDelAction),
+				OnUpdate:         p.parseFkAction(constraint.FkUpdAction),
+			},
+		}, nil
 	default:
 		return nil, fmt.Errorf("unhandled constraint type in parseAlterTableStmt: %d", constraint.Contype)
+	}
+}
+
+func (p PostgresParser) parseFkAction(action string) parser.ColIdent {
+	// https://github.com/pganalyze/pg_query_go/blob/v2.2.0/parser/include/nodes/parsenodes.h#L2145-L2149C23
+	switch action {
+	case "a":
+		return parser.NewColIdent("NO ACTION")
+	case "r":
+		return parser.NewColIdent("RESTRICT")
+	case "c":
+		return parser.NewColIdent("CASCADE")
+	case "n":
+		return parser.NewColIdent("SET NULL")
+	case "d":
+		return parser.NewColIdent("SET DEFAULT")
+	default:
+		return parser.NewColIdent("NO ACTION")
 	}
 }
 
