@@ -66,6 +66,11 @@ CreateViewWithCaseWhen:
 CreateViewWithoutFrom:
   sql: |
     create view v as select 10 as n;
+CreateViewWithStarExpr:
+  compare_with_generic_parser: true
+  sql: |
+    create view hoge_view as
+    select t.* from hoge t;
 CreateIndex:
   compare_with_generic_parser: true
   sql: |
