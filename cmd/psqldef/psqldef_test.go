@@ -569,6 +569,8 @@ func TestPsqldefCreateView(t *testing.T) {
 }
 
 func TestPsqldefDropPrimaryKey(t *testing.T) {
+	resetTestDatabase()
+
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL PRIMARY KEY,
@@ -583,9 +585,7 @@ func TestPsqldefDropPrimaryKey(t *testing.T) {
 		  name text
 		);`,
 	)
-	testPosts := `DROP TABLE "test"."posts";`
-	testUsers := `DROP TABLE "test"."users";`
-	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";`+"\n"+"-- Skipped: "+testPosts+"\n"+"-- Skipped: "+testUsers+"\n")
+	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";`+"\n")
 }
 
 func TestPsqldefCreateIndex(t *testing.T) {
