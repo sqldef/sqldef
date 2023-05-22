@@ -1,3 +1,8 @@
+## v0.15.27
+
+- Fix an error in materialized views with multiple indices [#401](https://github.com/k0kubun/sqldef/issues/401)
+- Support updating comments for psqldef [#403](https://github.com/k0kubun/sqldef/issues/403)
+
 ## v0.15.26
 
 - Support casting a default value to array for psqldef [#400](https://github.com/k0kubun/sqldef/issues/400)
