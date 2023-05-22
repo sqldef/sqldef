@@ -333,6 +333,38 @@ MultipleComments:
     COMMENT ON COLUMN bar.id is 'bar id';
   output: |
     COMMENT ON COLUMN bar.id is 'bar id';
+UpdateComment:
+  current: |
+    CREATE TABLE "public"."hoge" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+    CREATE TABLE "public"."bar" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+
+    COMMENT ON TABLE hoge is 'hoge table';
+    COMMENT ON COLUMN hoge.id is 'hoge id';
+    COMMENT ON TABLE bar is 'bar table';
+    COMMENT ON COLUMN bar.id is 'bar id';
+  desired: |
+    CREATE TABLE "public"."hoge" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+    CREATE TABLE "public"."bar" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+
+    COMMENT ON TABLE hoge is 'hoge table updated';
+    COMMENT ON COLUMN hoge.id is 'hoge id updated';
+    COMMENT ON TABLE bar is 'bar table';
+    COMMENT ON COLUMN bar.id is 'bar id';
+  output: |
+    COMMENT ON TABLE hoge is 'hoge table updated';
+    COMMENT ON COLUMN hoge.id is 'hoge id updated';
 CreateViewCast:
   current: |
     CREATE TABLE "public"."hoge" (

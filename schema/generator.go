@@ -876,7 +876,8 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 	ddls := []string{}
 
-	if currentComment := findCommentByObject(g.currentComments, desired.comment.Object); currentComment == nil {
+	currentComment := findCommentByObject(g.currentComments, desired.comment.Object)
+	if currentComment == nil || currentComment.comment.Comment != desired.comment.Comment {
 		// Comment not found, add comment.
 		ddls = append(ddls, desired.statement)
 	}
