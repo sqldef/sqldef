@@ -43,6 +43,7 @@ CreateTableWithDefault:
       default_current_timestamp timestamp default CURRENT_TIMESTAMP,
       default_current_date date default CURRENT_DATE,
       default_current_time time default CURRENT_TIME,
+      default_array_int int[] default '{}'::int[],
       joined_at timestamp with time zone NOT NULL DEFAULT '0001-01-01 00:00:00'::timestamp without time zone,
       created_at timestamp with time zone DEFAULT now()
     );
@@ -332,6 +333,38 @@ MultipleComments:
     COMMENT ON COLUMN bar.id is 'bar id';
   output: |
     COMMENT ON COLUMN bar.id is 'bar id';
+UpdateComment:
+  current: |
+    CREATE TABLE "public"."hoge" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+    CREATE TABLE "public"."bar" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+
+    COMMENT ON TABLE hoge is 'hoge table';
+    COMMENT ON COLUMN hoge.id is 'hoge id';
+    COMMENT ON TABLE bar is 'bar table';
+    COMMENT ON COLUMN bar.id is 'bar id';
+  desired: |
+    CREATE TABLE "public"."hoge" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+    CREATE TABLE "public"."bar" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+
+    COMMENT ON TABLE hoge is 'hoge table updated';
+    COMMENT ON COLUMN hoge.id is 'hoge id updated';
+    COMMENT ON TABLE bar is 'bar table';
+    COMMENT ON COLUMN bar.id is 'bar id';
+  output: |
+    COMMENT ON TABLE hoge is 'hoge table updated';
+    COMMENT ON COLUMN hoge.id is 'hoge id updated';
 CreateViewCast:
   current: |
     CREATE TABLE "public"."hoge" (
@@ -472,6 +505,22 @@ IndexesOnChangedExpressions:
   output: |
     DROP INDEX "public"."function_index";
     CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo'));
+EscapeUniqueIndexQuery:
+  current: |
+    CREATE TABLE "userTable" (
+        id uuid NOT NULL,
+        "firstName" text,
+        "lastName" text
+    );
+  desired: |
+    CREATE TABLE "userTable" (
+        id uuid NOT NULL,
+        "firstName" text,
+        "lastName" text
+    );
+    ALTER TABLE "public"."userTable" ADD CONSTRAINT "uq:fullName" UNIQUE ("firstName", "lastName");
+  output: |
+    ALTER TABLE "public"."userTable" ADD CONSTRAINT "uq:fullName" UNIQUE ("firstName", "lastName");
 AddArrayColumn:
   current: |
     CREATE TABLE users (

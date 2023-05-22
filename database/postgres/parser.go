@@ -112,6 +112,7 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 		NewName: tableName,
 		TableSpec: &parser.TableSpec{
 			Columns: columns,
+			Options: map[string]string{},
 		},
 	}, nil
 }
@@ -221,7 +222,8 @@ func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.Select
 		SelectExprs: selectExprs,
 		From: parser.TableExprs{
 			&parser.AliasedTableExpr{
-				Expr: fromTable,
+				Expr:       fromTable,
+				TableHints: []string{},
 			},
 		},
 	}, nil

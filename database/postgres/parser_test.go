@@ -4,6 +4,9 @@ import (
 	"io/ioutil"
 	"testing"
 
+	"github.com/k0kubun/sqldef/database"
+	"github.com/k0kubun/sqldef/parser"
+	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v2"
 )
 
@@ -13,25 +16,42 @@ func TestParse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sqlParser := NewParser()
-	sqlParser.testing = true
-	for name, sql := range tests {
+	genericParser := database.NewParser(parser.ParserModePostgres)
+	postgresParser := NewParser()
+	postgresParser.testing = true
+	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			_, err = sqlParser.Parse(sql)
+			psqlResult, err := postgresParser.Parse(test.SQL)
 			if err != nil {
 				t.Fatal(err)
 			}
+
+			if !test.CompareWithGenericParser {
+				return
+			}
+
+			genericResult, err := genericParser.Parse(test.SQL)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			assert.Equal(t, genericResult, psqlResult)
 		})
 	}
 }
 
-func readTests(file string) (map[string]string, error) {
+type TestCase struct {
+	SQL                      string
+	CompareWithGenericParser bool `yaml:"compare_with_generic_parser"`
+}
+
+func readTests(file string) (map[string]TestCase, error) {
 	buf, err := ioutil.ReadFile(file)
 	if err != nil {
 		return nil, err
 	}
 
-	var tests map[string]string
+	var tests map[string]TestCase
 	err = yaml.UnmarshalStrict(buf, &tests)
 	if err != nil {
 		return nil, err
