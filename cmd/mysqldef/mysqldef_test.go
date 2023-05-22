@@ -1568,7 +1568,7 @@ func TestMysqldefExport(t *testing.T) {
 	assertEquals(t, out, ddls)
 }
 
-func TestMysqldefDrop(t *testing.T) {
+func TestMysqldefDropTable(t *testing.T) {
 	resetTestDatabase()
 	testutils.MustExecute("mysql", "-uroot", "mysqldef_test", "-e", stripHeredoc(`
                CREATE TABLE users (
@@ -1580,7 +1580,7 @@ func TestMysqldefDrop(t *testing.T) {
 	writeFile("schema.sql", "")
 
 	dropTable := "DROP TABLE `users`;\n"
-	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--enable-drop", "--file", "schema.sql")
+	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--enable-drop-table", "--file", "schema.sql")
 	assertEquals(t, out, applyPrefix+dropTable)
 }
 

@@ -35,7 +35,7 @@ Application Options:
       --file=sql_file               Read schema SQL from the file, rather than stdin (default: -)
       --dry-run                     Don't run DDLs but just show them
       --export                      Just dump the current schema to stdout
-      --enable-drop                 Ebale destructive changes such as DROP
+      --enable-drop-table           Enable destructive changes such as DROP (skip only table drops)
       --skip-view                   Skip managing views (temporary feature, to be removed later)
       --before-apply=               Execute the given string before applying the regular DDLs
       --config=                     YAML file to specify: target_tables
@@ -101,7 +101,7 @@ $ mysqldef -uroot test < schema.sql
 Skipped: 'DROP TABLE users;'
 
 # Run droping existing tables and columns
-$ mysqldef -uroot test --enable-drop < schema.sql
+$ mysqldef -uroot test --enable-drop-table < schema.sql
 Run: 'DROP TABLE users;'
 
 # Run using file with skip tables
@@ -128,7 +128,7 @@ Application Options:
   -f, --file=filename        Read schema SQL from the file, rather than stdin (default: -)
       --dry-run              Don't run DDLs but just show them
       --export               Just dump the current schema to stdout
-      --enable-drop          Enable destructive changes such as DROP
+      --enable-drop-table    Enable destructive changes such as DROP (skip only table drops)
       --before-apply=        Execute the given string before applying the regular DDLs
       --config=              YAML file to specify: target_tables
       --help                 Show this help
@@ -200,7 +200,7 @@ $ psqldef -U postgres test < schema.sql
 Skipped: 'DROP TABLE users;'
 
 # Run droping existing tables and columns
-$ psqldef -U postgres test --enable-drop < schema.sql
+$ psqldef -U postgres test --enable-drop-table < schema.sql
 Run: 'DROP TABLE users;'
 ```
 
@@ -212,12 +212,12 @@ Usage:
   sqlite3def [option...] db_name
 
 Application Options:
-  -f, --file=filename    Read schema SQL from the file, rather than stdin (default: -)
-      --dry-run          Don't run DDLs but just show them
-      --export           Just dump the current schema to stdout
-      --enable-drop      Enable destructive changes such as DROP
-      --config=          YAML file to specify: target_tables
-      --help             Show this help
+  -f, --file=filename     Read schema SQL from the file, rather than stdin (default: -)
+      --dry-run           Don't run DDLs but just show them
+      --export            Just dump the current schema to stdout
+      --enable-drop-table Enable destructive changes such as DROP (skip only table drops)
+      --config=           YAML file to specify: target_tables
+      --help              Show this help
       --version
 ```
 
@@ -236,7 +236,7 @@ Application Options:
       --file=sql_file        Read schema SQL from the file, rather than stdin (default: -)
       --dry-run              Don't run DDLs but just show them
       --export               Just dump the current schema to stdout
-      --enable-drop          Enable destructive changes such as DROP
+      --enable-drop-table    Enable destructive changes such as DROP (skip only table drops)
       --help                 Show this help
       --version              Show this version
 ```

@@ -39,7 +39,7 @@ type Database interface {
 	GetDefaultSchema() string
 }
 
-func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddlSuffix string) error {
+func RunDDLs(d Database, ddls []string, enableDropTable bool, beforeApply string, ddlSuffix string) error {
 	transaction, err := d.DB().Begin()
 	if err != nil {
 		return err
@@ -53,7 +53,7 @@ func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddl
 		}
 	}
 	for _, ddl := range ddls {
-		if !enableDrop && strings.Contains(ddl, "DROP TABLE") {
+		if !enableDropTable && strings.Contains(ddl, "DROP TABLE") {
 			fmt.Printf("-- Skipped: %s;\n", ddl)
 			continue
 		}

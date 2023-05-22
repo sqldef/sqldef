@@ -76,7 +76,7 @@ func TestSQLite3defDryRun(t *testing.T) {
 	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 }
 
-func TestSQLite3defDrop(t *testing.T) {
+func TestSQLite3defDropTable(t *testing.T) {
 	resetTestDatabase()
 	testutils.MustExecute("sqlite3", "sqlite3def_test", stripHeredoc(`
 		CREATE TABLE users (
@@ -88,7 +88,7 @@ func TestSQLite3defDrop(t *testing.T) {
 	writeFile("schema.sql", "")
 
 	dropTable := "DROP TABLE `users`;\n"
-	out := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--enable-drop", "--file", "schema.sql")
+	out := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--enable-drop-table", "--file", "schema.sql")
 	assertEquals(t, out, applyPrefix+dropTable)
 }
 

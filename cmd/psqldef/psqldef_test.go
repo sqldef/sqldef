@@ -1174,7 +1174,7 @@ func TestPsqldefDryRun(t *testing.T) {
 	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 }
 
-func TestPsqldefDrop(t *testing.T) {
+func TestPsqldefDropTable(t *testing.T) {
 	resetTestDatabase()
 	mustExecuteSQL(stripHeredoc(`
 		CREATE TABLE users (
@@ -1190,7 +1190,7 @@ func TestPsqldefDrop(t *testing.T) {
 	writeFile("schema.sql", "")
 
 	dropTable := `DROP TABLE "public"."users";`
-	out := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--enable-drop", "--file", "schema.sql")
+	out := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--enable-drop-table", "--file", "schema.sql")
 	assertEquals(t, out, applyPrefix+dropTable+"\n")
 }
 
