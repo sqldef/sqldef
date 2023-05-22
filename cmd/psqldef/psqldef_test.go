@@ -596,10 +596,7 @@ func TestPsqldefCreateMaterializedView(t *testing.T) {
 
 func TestPsqldefDropPrimaryKey(t *testing.T) {
 	resetTestDatabase()
-<<<<<<< HEAD
 
-=======
->>>>>>> 1d3e1f675ed0dc90e232d35a936ac5163e5d3df4
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL PRIMARY KEY,
