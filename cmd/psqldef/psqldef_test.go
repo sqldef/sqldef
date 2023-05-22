@@ -568,7 +568,34 @@ func TestPsqldefCreateView(t *testing.T) {
 	}
 }
 
+func TestPsqldefCreateMaterializedView(t *testing.T) {
+	for _, tc := range publicAndNonPublicSchemaTestCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			resetTestDatabase()
+			mustExecuteSQL(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
+
+			createUsers := fmt.Sprintf("CREATE TABLE %s.users (id BIGINT PRIMARY KEY, name character varying(100));\n", tc.Schema)
+			createPosts := fmt.Sprintf("CREATE TABLE %s.posts (id BIGINT PRIMARY KEY, name character varying(100), user_id BIGINT, is_deleted boolean);\n", tc.Schema)
+			assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
+			assertApplyOutput(t, createUsers+createPosts, nothingModified)
+
+			posts := "posts"
+			users := "users"
+			if tc.Schema != "public" {
+				posts = fmt.Sprintf("%s.posts", tc.Schema)
+				users = fmt.Sprintf("%s.users", tc.Schema)
+			}
+
+			createMaterializedView := fmt.Sprintf("CREATE MATERIALIZED VIEW %s.view_user_posts AS SELECT p.id FROM (%s as p JOIN %s as u ON ((p.user_id = u.id)));\n", tc.Schema, posts, users)
+			assertApplyOutput(t, createUsers+createPosts+createMaterializedView, applyPrefix+
+				fmt.Sprintf("CREATE MATERIALIZED VIEW %s.view_user_posts AS SELECT p.id FROM (%s as p JOIN %s as u ON ((p.user_id = u.id)));\n", tc.Schema, posts, users))
+			assertApplyOutput(t, createUsers+createPosts+createMaterializedView, nothingModified)
+		})
+	}
+}
+
 func TestPsqldefDropPrimaryKey(t *testing.T) {
+	resetTestDatabase()
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL PRIMARY KEY,
@@ -626,6 +653,38 @@ func TestPsqldefCreateIndex(t *testing.T) {
 				dropIndex2+"\n"+
 				dropIndex1+"\n")
 			assertApplyOutput(t, createTable, nothingModified)
+		})
+	}
+}
+
+func TestPsqldefCreateMaterializedViewIndex(t *testing.T) {
+	for _, tc := range publicAndNonPublicSchemaTestCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			resetTestDatabase()
+			mustExecuteSQL(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
+
+			createTable := stripHeredoc(fmt.Sprintf(`
+				CREATE TABLE %s.users (
+				  id bigint NOT NULL,
+				  name text,
+				  age integer
+				);`, tc.Schema))
+			users := "users"
+			if tc.Schema != "public" {
+				users = fmt.Sprintf("%s.users", tc.Schema)
+			}
+			createMaterializedView := fmt.Sprintf("CREATE MATERIALIZED VIEW %s.view_users AS SELECT * FROM %s;\n", tc.Schema, users)
+			assertApplyOutput(t, createTable+createMaterializedView, applyPrefix+
+				createTable+"\n"+
+				fmt.Sprintf("CREATE MATERIALIZED VIEW %s.view_users AS SELECT * FROM %s;\n", tc.Schema, users))
+			assertApplyOutput(t, createTable+createMaterializedView, nothingModified)
+
+			createIndex1 := fmt.Sprintf(`CREATE INDEX index_name on %s.view_users (name);`, tc.Schema)
+			createIndex2 := fmt.Sprintf(`CREATE UNIQUE INDEX index_age on %s.view_users (age);`, tc.Schema)
+			assertApplyOutput(t, createTable+createMaterializedView+createIndex1+createIndex2, applyPrefix+
+				createIndex1+"\n"+
+				createIndex2+"\n")
+			assertApplyOutput(t, createTable+createMaterializedView+createIndex1+createIndex2, nothingModified)
 		})
 	}
 }
