@@ -272,6 +272,8 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 			return parser.NewStrVal([]byte(cNode.Sval.Sval)), nil
 		case *pgquery.A_Const_Bsval:
 			return parser.NewBitVal([]byte(cNode.Bsval.Bsval)), nil
+		case nil:
+			return &parser.NullVal{}, nil
 		default:
 			return nil, fmt.Errorf("unknown AConst val type in parseExpr: %#v", cNode)
 		}
