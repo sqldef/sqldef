@@ -6,7 +6,7 @@ import (
 
 	"github.com/k0kubun/sqldef/database"
 	"github.com/k0kubun/sqldef/parser"
-	pgquery "github.com/pganalyze/pg_query_go/v2"
+	pgquery "github.com/pganalyze/pg_query_go/v4"
 )
 
 type PostgresParser struct {
@@ -261,7 +261,20 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 			Elements: elements,
 		}, nil
 	case *pgquery.Node_AConst:
-		return p.parseExpr(node.AConst.Val)
+		switch cNode := node.AConst.Val.(type) {
+		case *pgquery.A_Const_Ival:
+			return parser.NewIntVal([]byte(fmt.Sprint(cNode.Ival.Ival))), nil
+		case *pgquery.A_Const_Fval:
+			return parser.NewFloatVal([]byte(fmt.Sprint(cNode.Fval.Fval))), nil
+		case *pgquery.A_Const_Boolval:
+			return parser.NewBoolVal(cNode.Boolval.Boolval), nil
+		case *pgquery.A_Const_Sval:
+			return parser.NewStrVal([]byte(cNode.Sval.Sval)), nil
+		case *pgquery.A_Const_Bsval:
+			return parser.NewBitVal([]byte(cNode.Bsval.Bsval)), nil
+		default:
+			return nil, fmt.Errorf("unknown AConst val type in parseExpr: %#v", cNode)
+		}
 	case *pgquery.Node_BoolExpr:
 		arg1, err := p.parseExpr(node.BoolExpr.Args[0])
 		if err != nil {
@@ -329,7 +342,7 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 	case *pgquery.Node_ColumnRef:
 		field := node.ColumnRef.Fields[len(node.ColumnRef.Fields)-1] // Ignore table name for easy comparison
 		return &parser.ColName{
-			Name: parser.NewColIdent(field.Node.(*pgquery.Node_String_).String_.Str),
+			Name: parser.NewColIdent(field.Node.(*pgquery.Node_String_).String_.Sval),
 		}, nil
 	case *pgquery.Node_FuncCall:
 		var exprs parser.SelectExprs
@@ -346,13 +359,11 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 		}
 
 		return &parser.FuncExpr{
-			Name:  parser.NewColIdent(node.FuncCall.Funcname[0].Node.(*pgquery.Node_String_).String_.Str),
+			Name:  parser.NewColIdent(node.FuncCall.Funcname[0].Node.(*pgquery.Node_String_).String_.Sval),
 			Exprs: exprs,
 		}, nil
 	case *pgquery.Node_Integer:
 		return parser.NewIntVal([]byte(fmt.Sprint(node.Integer.Ival))), nil
-	case *pgquery.Node_Null:
-		return &parser.NullVal{}, nil
 	case *pgquery.Node_NullTest:
 		expr, err := p.parseExpr(node.NullTest.Arg)
 		if err != nil {
@@ -374,7 +385,7 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 			return nil, fmt.Errorf("unexpected nulltesttype: %d", node.NullTest.Nulltesttype)
 		}
 	case *pgquery.Node_String_:
-		return parser.NewStrVal([]byte(node.String_.Str)), nil
+		return parser.NewStrVal([]byte(node.String_.Sval)), nil
 	case *pgquery.Node_TypeCast:
 		expr, err := p.parseExpr(node.TypeCast.Arg)
 		if err != nil {
@@ -510,7 +521,7 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType
 	var typeNames []string
 	for _, name := range node.Names {
 		if n, ok := name.Node.(*pgquery.Node_String_); ok {
-			typeNames = append(typeNames, n.String_.Str)
+			typeNames = append(typeNames, n.String_.Sval)
 		} else {
 			return columnType, fmt.Errorf("non-Node_String_ name in parseCreateStmt: %#v", name)
 		}
@@ -565,7 +576,7 @@ func (p PostgresParser) parseStringList(list *pgquery.List) (string, error) {
 	for _, node := range list.Items {
 		switch n := node.Node.(type) {
 		case *pgquery.Node_String_:
-			objects = append(objects, n.String_.Str)
+			objects = append(objects, n.String_.Sval)
 		}
 	}
 	return strings.Join(objects, "."), nil

@@ -11,10 +11,11 @@ CreateTableWithSchema:
       data bigint
     );
 CreateTableWithNotNull:
+  compare_with_generic_parser: true
   sql: |
     CREATE TABLE public.airline_confirmation (
       airline_id bigint,
-      code character varying(512),
+      code varchar(512),
       booking_id bigint NOT NULL
     );
 CreateView:
