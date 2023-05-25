@@ -21,13 +21,13 @@ var version string
 // TODO: Support `sqldef schema.sql -opt val...`
 func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	var opts struct {
-		File     []string `short:"f" long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"filename" default:"-"`
-		DryRun   bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
-		Export   bool     `long:"export" description:"Just dump the current schema to stdout"`
-		SkipDrop bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
-		Config   string   `long:"config" description:"YAML file to specify: target_tables, skip_tables"`
-		Help     bool     `long:"help" description:"Show this help"`
-		Version  bool     `long:"version" description:"Show this version"`
+		File            []string `short:"f" long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"filename" default:"-"`
+		DryRun          bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
+		Export          bool     `long:"export" description:"Just dump the current schema to stdout"`
+		EnableDropTable bool     `long:"enable-drop-table" description:"Enable destructive changes such as DROP (skip only table drops)"`
+		Config          string   `long:"config" description:"YAML file to specify: target_tables, skip_tables"`
+		Help            bool     `long:"help" description:"Show this help"`
+		Version         bool     `long:"version" description:"Show this version"`
 	}
 
 	parser := flags.NewParser(&opts, flags.None)
@@ -58,11 +58,11 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 
 	options := sqldef.Options{
-		DesiredDDLs: desiredDDLs,
-		DryRun:      opts.DryRun,
-		Export:      opts.Export,
-		SkipDrop:    opts.SkipDrop,
-		Config:      database.ParseGeneratorConfig(opts.Config),
+		DesiredDDLs:     desiredDDLs,
+		DryRun:          opts.DryRun,
+		Export:          opts.Export,
+		EnableDropTable: opts.EnableDropTable,
+		Config:          database.ParseGeneratorConfig(opts.Config),
 	}
 
 	if len(args) == 0 {

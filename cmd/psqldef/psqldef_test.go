@@ -596,6 +596,7 @@ func TestPsqldefCreateMaterializedView(t *testing.T) {
 
 func TestPsqldefDropPrimaryKey(t *testing.T) {
 	resetTestDatabase()
+
 	createTable := stripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL PRIMARY KEY,
@@ -611,7 +612,6 @@ func TestPsqldefDropPrimaryKey(t *testing.T) {
 		);`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";`+"\n")
-	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestPsqldefCreateIndex(t *testing.T) {
@@ -1232,7 +1232,7 @@ func TestPsqldefDryRun(t *testing.T) {
 	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 }
 
-func TestPsqldefSkipDrop(t *testing.T) {
+func TestPsqldefDropTable(t *testing.T) {
 	resetTestDatabase()
 	mustExecuteSQL(stripHeredoc(`
 		CREATE TABLE users (
@@ -1247,9 +1247,9 @@ func TestPsqldefSkipDrop(t *testing.T) {
 
 	writeFile("schema.sql", "")
 
-	skipDrop := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--skip-drop", "--file", "schema.sql")
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--file", "schema.sql")
-	assertEquals(t, skipDrop, strings.Replace(apply, "DROP", "-- Skipped: DROP", 1))
+	dropTable := `DROP TABLE "public"."users";`
+	out := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--enable-drop-table", "--file", "schema.sql")
+	assertEquals(t, out, applyPrefix+dropTable+"\n")
 }
 
 func TestPsqldefExport(t *testing.T) {

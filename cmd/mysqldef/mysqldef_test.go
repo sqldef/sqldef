@@ -1268,7 +1268,7 @@ func TestMysqldefView(t *testing.T) {
 	assertApplyOutput(t, createTable+createView, applyPrefix+expected)
 	assertApplyOutput(t, createTable+createView, nothingModified)
 
-	assertApplyOutput(t, "", applyPrefix+"DROP TABLE `posts`;\nDROP TABLE `users`;\nDROP VIEW `foo`;\n")
+	assertApplyOutput(t, "", applyPrefix+"-- Skipped: DROP TABLE `posts`;\n-- Skipped: DROP TABLE `users`;\nDROP VIEW `foo`;\n")
 }
 
 func TestMysqldefTriggerInsert(t *testing.T) {
@@ -1568,20 +1568,20 @@ func TestMysqldefExport(t *testing.T) {
 	assertEquals(t, out, ddls)
 }
 
-func TestMysqldefSkipDrop(t *testing.T) {
+func TestMysqldefDropTable(t *testing.T) {
 	resetTestDatabase()
 	testutils.MustExecute("mysql", "-uroot", "mysqldef_test", "-e", stripHeredoc(`
-		CREATE TABLE users (
-		  name varchar(40),
-		  created_at datetime NOT NULL
-		) DEFAULT CHARSET=latin1;`,
+               CREATE TABLE users (
+                 name varchar(40),
+                 created_at datetime NOT NULL
+               ) DEFAULT CHARSET=latin1;`,
 	))
 
 	writeFile("schema.sql", "")
 
-	skipDrop := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--skip-drop", "--file", "schema.sql")
-	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
-	assertEquals(t, skipDrop, strings.Replace(apply, "DROP", "-- Skipped: DROP", 1))
+	dropTable := "DROP TABLE `users`;\n"
+	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--enable-drop-table", "--file", "schema.sql")
+	assertEquals(t, out, applyPrefix+dropTable)
 }
 
 func TestMysqldefSkipView(t *testing.T) {

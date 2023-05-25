@@ -36,7 +36,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		File                  []string `long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"sql_file" default:"-"`
 		DryRun                bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export                bool     `long:"export" description:"Just dump the current schema to stdout"`
-		SkipDrop              bool     `long:"skip-drop" description:"Skip destructive changes such as DROP"`
+		EnableDropTable       bool     `long:"enable-drop-table" description:"Enable destructive changes such as DROP (skip only table drops)"`
 		SkipView              bool     `long:"skip-view" description:"Skip managing views (temporary feature, to be removed later)"`
 		BeforeApply           string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs"`
 		Config                string   `long:"config" description:"YAML file to specify: target_tables, skip_tables"`
@@ -72,12 +72,12 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 
 	options := sqldef.Options{
-		DesiredDDLs: desiredDDLs,
-		DryRun:      opts.DryRun,
-		Export:      opts.Export,
-		SkipDrop:    opts.SkipDrop,
-		BeforeApply: opts.BeforeApply,
-		Config:      database.ParseGeneratorConfig(opts.Config),
+		DesiredDDLs:     desiredDDLs,
+		DryRun:          opts.DryRun,
+		Export:          opts.Export,
+		EnableDropTable: opts.EnableDropTable,
+		BeforeApply:     opts.BeforeApply,
+		Config:          database.ParseGeneratorConfig(opts.Config),
 	}
 
 	if len(args) == 0 {
