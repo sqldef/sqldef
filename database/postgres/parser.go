@@ -514,7 +514,7 @@ func (p PostgresParser) parseConstraint(constraint *pgquery.Constraint, tableNam
 		cols := make([]parser.IndexColumn, len(constraint.Keys))
 		for i, key := range constraint.Keys {
 			cols[i] = parser.IndexColumn{
-				Column:    parser.NewColIdent(key.Node.(*pgquery.Node_String_).String_.Str),
+				Column:    parser.NewColIdent(key.Node.(*pgquery.Node_String_).String_.Sval),
 				Direction: "asc",
 			}
 		}
@@ -536,12 +536,12 @@ func (p PostgresParser) parseConstraint(constraint *pgquery.Constraint, tableNam
 	case pgquery.ConstrType_CONSTR_FOREIGN:
 		idxCols := make([]parser.ColIdent, len(constraint.FkAttrs))
 		for i, fkAttr := range constraint.FkAttrs {
-			v := fkAttr.Node.(*pgquery.Node_String_).String_.Str
+			v := fkAttr.Node.(*pgquery.Node_String_).String_.Sval
 			idxCols[i] = parser.NewColIdent(v)
 		}
 		refCols := make([]parser.ColIdent, len(constraint.PkAttrs))
 		for i, pkAttr := range constraint.PkAttrs {
-			v := pkAttr.Node.(*pgquery.Node_String_).String_.Str
+			v := pkAttr.Node.(*pgquery.Node_String_).String_.Sval
 			refCols[i] = parser.NewColIdent(v)
 		}
 
