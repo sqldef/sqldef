@@ -1,3 +1,8 @@
+## v0.16.0
+
+- Remove `--skip-drop` and disable `DROP TABLE` statements by default [#399](https://github.com/k0kubun/sqldef/issues/399)
+  - You need to use `--enable-drop-table` to run `DROP TABLE`
+
 ## v0.15.27
 
 - Fix an error in materialized views with multiple indices [#401](https://github.com/k0kubun/sqldef/issues/401)
