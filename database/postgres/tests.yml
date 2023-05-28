@@ -63,6 +63,9 @@ CreateViewWithCaseWhen:
         )
       ) as created_date
     from hoge;
+CreateViewWithoutFrom:
+  sql: |
+    create view v as select 10 as n;
 CreateIndex:
   compare_with_generic_parser: true
   sql: |

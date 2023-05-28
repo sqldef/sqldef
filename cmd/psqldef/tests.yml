@@ -438,6 +438,9 @@ CreateViewWithCaseWhen:
         )
       ) as created_date
     from hoge;
+CreateViewWithoutFrom:
+  desired: |
+    create view v as select 10 as n;
 CreateTableAlterColumn:
   current: |
     CREATE TABLE users (
