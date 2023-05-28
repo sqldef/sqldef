@@ -209,15 +209,22 @@ func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.Select
 	}
 
 	var fromTable parser.TableName
-	var err error
-	switch node := stmt.FromClause[0].Node.(type) {
-	case *pgquery.Node_RangeVar:
-		fromTable, err = p.parseTableName(node.RangeVar)
-		if err != nil {
-			return nil, err
+	if len(stmt.FromClause) == 0 {
+		fromTable = parser.TableName{
+			Name:      parser.NewTableIdent(""),
+			Qualifier: parser.NewTableIdent(""),
 		}
-	default:
-		return nil, fmt.Errorf("unknown node in parseSelectStmt: %#v", node)
+	} else {
+		var err error
+		switch node := stmt.FromClause[0].Node.(type) {
+		case *pgquery.Node_RangeVar:
+			fromTable, err = p.parseTableName(node.RangeVar)
+			if err != nil {
+				return nil, err
+			}
+		default:
+			return nil, fmt.Errorf("unknown node in parseSelectStmt: %#v", node)
+		}
 	}
 
 	return &parser.Select{
