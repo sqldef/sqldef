@@ -10,7 +10,7 @@ require (
 	github.com/microsoft/go-mssqldb v0.21.0
 	github.com/pganalyze/pg_query_go/v4 v4.2.0
 	github.com/stretchr/testify v1.8.4
-	golang.org/x/term v0.7.0
+	golang.org/x/term v0.8.0
 	gopkg.in/yaml.v2 v2.4.0
 	modernc.org/sqlite v1.22.1
 )
@@ -25,7 +25,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d // indirect
 	golang.org/x/mod v0.7.0 // indirect
-	golang.org/x/sys v0.7.0 // indirect
+	golang.org/x/sys v0.8.0 // indirect
 	golang.org/x/text v0.3.8 // indirect
 	golang.org/x/tools v0.3.0 // indirect
 	lukechampine.com/uint128 v1.2.0 // indirect
