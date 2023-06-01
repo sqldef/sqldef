@@ -9,7 +9,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/microsoft/go-mssqldb v0.21.0
 	github.com/pganalyze/pg_query_go/v4 v4.2.0
-	github.com/stretchr/testify v1.8.3
+	github.com/stretchr/testify v1.8.4
 	golang.org/x/term v0.7.0
 	gopkg.in/yaml.v2 v2.4.0
 	modernc.org/sqlite v1.22.1
