@@ -1009,9 +1009,6 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 	if column.unsigned {
 		definition += "UNSIGNED "
 	}
-	if column.timezone {
-		definition += "WITH TIME ZONE "
-	}
 
 	// [CHARACTER SET] and [COLLATE] should be placed before [NOT NULL | NULL] on MySQL
 	if column.charset != "" {

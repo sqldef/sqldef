@@ -632,3 +632,21 @@ ChangeTimezone:
     ALTER TABLE "public"."test" ALTER COLUMN "time_at2" TYPE time;
     ALTER TABLE "public"."test" ALTER COLUMN "time_at3" TYPE time WITH TIME ZONE;
     ALTER TABLE "public"."test" ALTER COLUMN "time_at4" TYPE time WITH TIME ZONE;
+CreateTableAddTimestampColumn:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      age integer,
+      timestamp_with_tz timestamp WITH TIME ZONE,
+      timestamp_without_tz timestamp WITHOUT TIME ZONE
+    );
+  output: |
+    ALTER TABLE "public"."users" ADD COLUMN "timestamp_with_tz" timestamp WITH TIME ZONE;
+    ALTER TABLE "public"."users" ADD COLUMN "timestamp_without_tz" timestamp;
