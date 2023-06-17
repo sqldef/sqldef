@@ -1,3 +1,12 @@
+## v0.16.2
+
+- Fix duplicate `WITH TIME ZONE` for psqldef [#416](https://github.com/k0kubun/sqldef/issues/416)
+
+## v0.16.1
+
+- Support ALTER TABLE FOREIGN KEY for psqldef
+- Support ALTER TABLE UNIQUE for psqldef
+
 ## v0.16.0
 
 - Remove `--skip-drop` and disable `DROP TABLE` statements by default [#399](https://github.com/k0kubun/sqldef/issues/399)
