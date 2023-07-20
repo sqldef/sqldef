@@ -2,7 +2,7 @@ package sqldef
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -118,9 +118,9 @@ func ReadFile(filepath string) (string, error) {
 			return "", fmt.Errorf("stdin is not piped")
 		}
 
-		buf, err = ioutil.ReadAll(os.Stdin)
+		buf, err = io.ReadAll(os.Stdin)
 	} else {
-		buf, err = ioutil.ReadFile(filepath)
+		buf, err = os.ReadFile(filepath)
 	}
 
 	if err != nil {
