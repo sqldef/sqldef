@@ -1,3 +1,8 @@
+## v0.16.3
+
+- Fix the description of `--enable-drop-table` in help [#424](https://github.com/k0kubun/sqldef/issues/424)
+- Support parsing `SELECT *` for psqldef [#423](https://github.com/k0kubun/sqldef/issues/423)
+
 ## v0.16.2
 
 - Fix duplicate `WITH TIME ZONE` for psqldef [#416](https://github.com/k0kubun/sqldef/issues/416)
