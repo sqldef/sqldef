@@ -24,7 +24,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		File            []string `short:"f" long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"filename" default:"-"`
 		DryRun          bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export          bool     `long:"export" description:"Just dump the current schema to stdout"`
-		EnableDropTable bool     `long:"enable-drop-table" description:"Enable destructive changes such as DROP (skip only table drops)"`
+		EnableDropTable bool     `long:"enable-drop-table" description:"Enable destructive changes such as DROP (enable only table drops)"`
 		Config          string   `long:"config" description:"YAML file to specify: target_tables, skip_tables"`
 		Help            bool     `long:"help" description:"Show this help"`
 		Version         bool     `long:"version" description:"Show this version"`

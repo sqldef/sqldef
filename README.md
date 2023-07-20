@@ -35,7 +35,7 @@ Application Options:
       --file=sql_file               Read schema SQL from the file, rather than stdin (default: -)
       --dry-run                     Don't run DDLs but just show them
       --export                      Just dump the current schema to stdout
-      --enable-drop-table           Enable destructive changes such as DROP (skip only table drops)
+      --enable-drop-table           Enable destructive changes such as DROP (enable only table drops)
       --skip-view                   Skip managing views (temporary feature, to be removed later)
       --before-apply=               Execute the given string before applying the regular DDLs
       --config=                     YAML file to specify: target_tables
@@ -128,7 +128,7 @@ Application Options:
   -f, --file=filename        Read schema SQL from the file, rather than stdin (default: -)
       --dry-run              Don't run DDLs but just show them
       --export               Just dump the current schema to stdout
-      --enable-drop-table    Enable destructive changes such as DROP (skip only table drops)
+      --enable-drop-table    Enable destructive changes such as DROP (enable only table drops)
       --before-apply=        Execute the given string before applying the regular DDLs
       --config=              YAML file to specify: target_tables
       --help                 Show this help
@@ -215,7 +215,7 @@ Application Options:
   -f, --file=filename     Read schema SQL from the file, rather than stdin (default: -)
       --dry-run           Don't run DDLs but just show them
       --export            Just dump the current schema to stdout
-      --enable-drop-table Enable destructive changes such as DROP (skip only table drops)
+      --enable-drop-table Enable destructive changes such as DROP (enable only table drops)
       --config=           YAML file to specify: target_tables
       --help              Show this help
       --version
@@ -236,7 +236,7 @@ Application Options:
       --file=sql_file        Read schema SQL from the file, rather than stdin (default: -)
       --dry-run              Don't run DDLs but just show them
       --export               Just dump the current schema to stdout
-      --enable-drop-table    Enable destructive changes such as DROP (skip only table drops)
+      --enable-drop-table    Enable destructive changes such as DROP (enable only table drops)
       --help                 Show this help
       --version              Show this version
 ```
