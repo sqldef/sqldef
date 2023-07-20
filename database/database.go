@@ -4,8 +4,8 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"io/ioutil"
 	"log"
+	"os"
 	"strings"
 
 	"gopkg.in/yaml.v2"
@@ -83,7 +83,7 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 		return GeneratorConfig{}
 	}
 
-	buf, err := ioutil.ReadFile(configFile)
+	buf, err := os.ReadFile(configFile)
 	if err != nil {
 		log.Fatal(err)
 	}

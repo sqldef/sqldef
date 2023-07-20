@@ -1,7 +1,7 @@
 package postgres
 
 import (
-	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/k0kubun/sqldef/database"
@@ -46,7 +46,7 @@ type TestCase struct {
 }
 
 func readTests(file string) (map[string]TestCase, error) {
-	buf, err := ioutil.ReadFile(file)
+	buf, err := os.ReadFile(file)
 	if err != nil {
 		return nil, err
 	}

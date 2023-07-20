@@ -3,8 +3,8 @@ package testutils
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -35,7 +35,7 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 	for _, file := range files {
 		var tests map[string]*TestCase
 
-		buf, err := ioutil.ReadFile(file)
+		buf, err := os.ReadFile(file)
 		if err != nil {
 			return nil, err
 		}
