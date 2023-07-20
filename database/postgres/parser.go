@@ -209,6 +209,7 @@ func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.Select
 	}
 
 	var fromTable parser.TableName
+	var aliasName string
 	if len(stmt.FromClause) == 0 {
 		fromTable = parser.TableName{
 			Name:      parser.NewTableIdent(""),
@@ -222,6 +223,9 @@ func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.Select
 			if err != nil {
 				return nil, err
 			}
+			if node.RangeVar.Alias != nil {
+				aliasName = node.RangeVar.Alias.Aliasname
+			}
 		default:
 			return nil, fmt.Errorf("unknown node in parseSelectStmt: %#v", node)
 		}
@@ -233,12 +237,47 @@ func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.Select
 			&parser.AliasedTableExpr{
 				Expr:       fromTable,
 				TableHints: []string{},
+				As:         parser.NewTableIdent(aliasName),
 			},
 		},
 	}, nil
 }
 
 func (p PostgresParser) parseResTarget(stmt *pgquery.ResTarget) (parser.SelectExpr, error) {
+	if node, ok := stmt.Val.Node.(*pgquery.Node_ColumnRef); ok {
+		fields := node.ColumnRef.Fields
+		fieldsLen := len(fields)
+		column := fields[fieldsLen-1]
+		if _, ok := column.Node.(*pgquery.Node_AStar); ok {
+			var tableName string
+			var schemaName string
+			if fieldsLen >= 2 {
+				tableField := fields[fieldsLen-2]
+				tableNode, ok := tableField.Node.(*pgquery.Node_String_)
+				if !ok {
+					return nil, fmt.Errorf("Invalid table field node type: %#v", tableField)
+				}
+				tableName = tableNode.String_.Sval
+
+				if fieldsLen >= 3 {
+					schemaField := fields[fieldsLen-3]
+					schemaNode, ok := schemaField.Node.(*pgquery.Node_String_)
+					if !ok {
+						return nil, fmt.Errorf("Invalid schema field node type: %#v", schemaField)
+					}
+					schemaName = schemaNode.String_.Sval
+				}
+			}
+
+			return &parser.StarExpr{
+				TableName: parser.TableName{
+					Name:      parser.NewTableIdent(tableName),
+					Qualifier: parser.NewTableIdent(schemaName),
+				},
+			}, nil
+		}
+	}
+
 	expr, err := p.parseExpr(stmt.Val)
 	if err != nil {
 		return nil, err
