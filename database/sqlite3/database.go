@@ -53,6 +53,12 @@ func (d *Sqlite3Database) DumpDDLs() (string, error) {
 	}
 	ddls = append(ddls, indexDDLs...)
 
+	triggerDDLs, err := d.triggers()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, triggerDDLs...)
+
 	return strings.Join(ddls, "\n\n"), nil
 }
 
@@ -107,6 +113,26 @@ func (d *Sqlite3Database) indexes() ([]string, error) {
 	var ddls []string
 	// Exclude automatically generated indexes for unique constraint
 	const query = "select sql from sqlite_master where type = 'index' and sql is not null;"
+	rows, err := d.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var sql string
+		if err = rows.Scan(&sql); err != nil {
+			return nil, err
+		}
+		ddls = append(ddls, sql+";")
+	}
+
+	return ddls, nil
+}
+
+func (d *Sqlite3Database) triggers() ([]string, error) {
+	var ddls []string
+	const query = "select sql from sqlite_master where type = 'trigger' and sql is not null;"
 	rows, err := d.db.Query(query)
 	if err != nil {
 		return nil, err
