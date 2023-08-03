@@ -196,6 +196,106 @@ func TestSQLite3defVirtualTable(t *testing.T) {
 	assertEquals(t, actual, nothingModified)
 }
 
+func TestSQLite3defCreateTrigger(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id integer NOT NULL PRIMARY KEY,
+		  age integer NOT NULL
+		);
+		CREATE TABLE logs (
+		  id integer NOT NULL PRIMARY KEY,
+		  typ TEXT NOT NULL,
+		  typ_id integer NOT NULL,
+		  body TEXT NOT NULL,
+		  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+	`)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTrigger := stripHeredoc(`
+		CREATE TRIGGER ` + "`users_insert`" + ` after insert ON ` + "`users`" + `
+		BEGIN
+			insert into logs(typ, typ_id, body) values ('user', NEW.id, 'inserted user');
+		END;
+		CREATE TRIGGER ` + "`users_update`" + ` after update ON ` + "`users`" + `
+		BEGIN
+			delete from logs where typ = 'user' and typ_id = OLD.id;
+			insert into logs(typ, typ_id, body) values ('user', NEW.id, 'updated user');
+		END;
+		CREATE TRIGGER ` + "`users_delete`" + ` before delete ON ` + "`users`" + `
+		BEGIN
+			delete from logs where typ = 'user' and typ_id = OLD.id;
+		END;
+	`)
+	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTrigger)
+	assertApplyOutput(t, createTable+createTrigger, nothingModified)
+}
+
+func TestSQLite3defDropTrigger(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id integer NOT NULL PRIMARY KEY,
+		  age integer NOT NULL
+		);
+		CREATE TABLE logs (
+		  id integer NOT NULL PRIMARY KEY,
+		  body TEXT NOT NULL,
+		  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+	`)
+	createTrigger := stripHeredoc(`
+		CREATE TRIGGER ` + "`users_insert`" + ` after insert ON ` + "`users`" + `
+		BEGIN
+			insert into logs(typ, typ_id, body) values ('user', NEW.id, 'inserted user');
+		END;
+	`)
+	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTable+createTrigger)
+	assertApplyOutput(t, createTable+createTrigger, nothingModified)
+
+	assertApplyOutput(t, createTable, applyPrefix+"DROP TRIGGER `users_insert`;\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestSQLite3defChangeTrigger(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE IF NOT EXISTS users (
+		  id integer NOT NULL PRIMARY KEY,
+		  age integer NOT NULL
+		);
+		CREATE TABLE logs (
+		  id integer NOT NULL PRIMARY KEY,
+		  typ TEXT NOT NULL,
+		  typ_id integer NOT NULL,
+		  body TEXT NOT NULL,
+		  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+	`)
+	createTrigger := stripHeredoc(`
+		CREATE TRIGGER ` + "`users_insert`" + ` after insert ON ` + "`users`" + `
+		BEGIN
+			insert into logs(typ, typ_id, body) values ('user', NEW.id, 'inserted user');
+		END;
+	`)
+	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTable+createTrigger)
+	assertApplyOutput(t, createTable+createTrigger, nothingModified)
+
+	changeTrigger := stripHeredoc(`
+		CREATE TRIGGER ` + "`users_insert`" + ` after insert ON ` + "`users`" + `
+		BEGIN
+			insert into logs(typ, typ_id, body) values ('user', NEW.id, 'user inserted');
+		END;
+	`)
+	assertApplyOutput(t, createTable+changeTrigger, applyPrefix+"DROP TRIGGER `users_insert`;\n"+changeTrigger)
+	assertApplyOutput(t, createTable+changeTrigger, nothingModified)
+}
+
 func TestSQLite3defHelp(t *testing.T) {
 	_, err := testutils.Execute("./sqlite3def", "--help")
 	if err != nil {
