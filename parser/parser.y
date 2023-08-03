@@ -721,6 +721,10 @@ statement_block:
   {
     $$ = append($$, $2)
   }
+| statement_block ';' trigger_statement
+  {
+    $$ = append($$, $3)
+  }
 
 if_statement:
 // For MySQL
@@ -1012,6 +1016,17 @@ create_statement:
         TableName: $5,
         Time: $6,
         Event: $7,
+        Body: $9,
+    }}
+  }
+/* For SQLite3 */
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name BEGIN statement_block ';' END
+  {
+    $$ = &DDL{Action: CreateTriggerStr, Trigger: &Trigger{
+        Name: $3,
+        TableName: $7,
+        Time: $4,
+        Event: $5,
         Body: $9,
     }}
   }
