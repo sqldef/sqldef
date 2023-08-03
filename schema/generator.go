@@ -268,6 +268,15 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		ddls = append(ddls, fmt.Sprintf("DROP EXTENSION %s", g.escapeSQLName(currentExtension.extension.Name)))
 	}
 
+	// Clean up obsoleted triggers
+	for _, currentTrigger := range g.currentTriggers {
+		desitedTrigger := findTriggerByName(g.desiredTriggers, currentTrigger.name)
+		if desitedTrigger == nil {
+			ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeSQLName(currentTrigger.name)))
+			continue
+		}
+	}
+
 	return ddls, nil
 }
 
