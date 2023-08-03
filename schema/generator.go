@@ -826,6 +826,8 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName string, desiredTrig
 		triggerDefinition += fmt.Sprintf("TRIGGER %s ON %s %s %s AS\n%s", g.escapeSQLName(desiredTrigger.name), g.escapeTableName(desiredTrigger.tableName), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), strings.Join(desiredTrigger.body, "\n"))
 	case GeneratorModeMysql:
 		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeSQLName(desiredTrigger.name), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), g.escapeTableName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, "\n"))
+	case GeneratorModeSQLite3:
+		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s\nBEGIN\n%s;\nEND", g.escapeSQLName(desiredTrigger.name), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), g.escapeTableName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, ";\n"))
 	default:
 		return ddls, nil
 	}
