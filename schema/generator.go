@@ -833,23 +833,25 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName string, desiredTrig
 	switch g.mode {
 	case GeneratorModeMssql:
 		triggerDefinition += fmt.Sprintf("TRIGGER %s ON %s %s %s AS\n%s", g.escapeSQLName(desiredTrigger.name), g.escapeTableName(desiredTrigger.tableName), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), strings.Join(desiredTrigger.body, "\n"))
-	case GeneratorModeMysql:
-		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeSQLName(desiredTrigger.name), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), g.escapeTableName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, "\n"))
-	case GeneratorModeSQLite3:
-		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s\nBEGIN\n%s;\nEND", g.escapeSQLName(desiredTrigger.name), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), g.escapeTableName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, ";\n"))
+	case GeneratorModeMysql, GeneratorModeSQLite3:
+		triggerDefinition = desiredTrigger.statement
 	default:
 		return ddls, nil
 	}
 
 	if currentTrigger == nil {
 		// Trigger not found, add trigger.
-		ddls = append(ddls, fmt.Sprintf("CREATE %s", triggerDefinition))
+		var createPrefix string
+		if g.mode == GeneratorModeMssql {
+			createPrefix = "CREATE "
+		}
+		ddls = append(ddls, createPrefix+triggerDefinition)
 	} else {
 		// Trigger found. If it's different, create or replace trigger.
 		if !areSameTriggerDefinition(currentTrigger, desiredTrigger) {
-			createPrefix := "CREATE "
+			var createPrefix string
 			if g.mode == GeneratorModeMssql {
-				createPrefix += "OR ALTER "
+				createPrefix = "CREATE OR ALTER "
 			} else {
 				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeSQLName(triggerName)))
 			}
