@@ -115,7 +115,7 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 			fmt.Fprint(&queryBuilder, " NOT NULL")
 		}
 		if col.DefaultName != "" {
-			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s DEFAULT %s", col.DefaultName, col.DefaultVal)
+			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s DEFAULT %s", quoteName(col.DefaultName), col.DefaultVal)
 		}
 		if col.Identity != nil {
 			fmt.Fprintf(&queryBuilder, " IDENTITY(%s,%s)", col.Identity.SeedValue, col.Identity.IncrementValue)
@@ -124,7 +124,7 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 			}
 		}
 		if col.Check != nil {
-			fmt.Fprintf(&queryBuilder, " CONSTRAINT [%s] CHECK", col.Check.Name)
+			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s CHECK", quoteName(col.Check.Name))
 			if col.Check.NotForReplication {
 				fmt.Fprint(&queryBuilder, " NOT FOR REPLICATION")
 			}
@@ -138,7 +138,7 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 			continue
 		}
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "CONSTRAINT [%s] PRIMARY KEY", indexDef.name)
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY", quoteName(indexDef.name))
 
 		if indexDef.indexType == "CLUSTERED" || indexDef.indexType == "NONCLUSTERED" {
 			fmt.Fprintf(&queryBuilder, " %s", indexDef.indexType)
