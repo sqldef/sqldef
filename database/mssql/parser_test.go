@@ -1,7 +1,7 @@
 package mssql
 
 import (
-	"io/ioutil"
+	"os"
 	"testing"
 
 	"gopkg.in/yaml.v2"
@@ -25,7 +25,7 @@ func TestParse(t *testing.T) {
 }
 
 func readTests(file string) (map[string]string, error) {
-	buf, err := ioutil.ReadFile(file)
+	buf, err := os.ReadFile(file)
 	if err != nil {
 		return nil, err
 	}

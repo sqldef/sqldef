@@ -5,7 +5,7 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 
 	driver "github.com/go-sql-driver/mysql"
@@ -174,7 +174,7 @@ func mysqlBuildDSN(config database.Config) string {
 
 func registerTLSConfig(pemPath string) error {
 	rootCertPool := x509.NewCertPool()
-	pem, err := ioutil.ReadFile(pemPath)
+	pem, err := os.ReadFile(pemPath)
 	if err != nil {
 		return err
 	}
