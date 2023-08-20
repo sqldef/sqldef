@@ -14,10 +14,18 @@ import (
 
 const indent = "    "
 
+type databaseInfo struct {
+	tableName   []string
+	columns     map[string][]column
+	indexDefs   map[string][]*indexDef
+	foreignDefs map[string][]string
+}
+
 type MssqlDatabase struct {
 	config        database.Config
 	db            *sql.DB
 	defaultSchema *string
+	info          databaseInfo
 }
 
 func NewDatabase(config database.Config) (database.Database, error) {
@@ -35,10 +43,12 @@ func NewDatabase(config database.Config) (database.Database, error) {
 func (d *MssqlDatabase) DumpDDLs() (string, error) {
 	var ddls []string
 
-	tableNames, err := d.tableNames()
+	err := d.updateDatabaesInfo()
 	if err != nil {
 		return "", err
 	}
+
+	tableNames := d.tableNames()
 	for _, tableName := range tableNames {
 		ddl, err := d.dumpTableDDL(tableName)
 		if err != nil {
@@ -63,12 +73,35 @@ func (d *MssqlDatabase) DumpDDLs() (string, error) {
 	return strings.Join(ddls, "\n\n"), nil
 }
 
-func (d *MssqlDatabase) tableNames() ([]string, error) {
+func (d *MssqlDatabase) updateDatabaesInfo() error {
+	var err error
+
+	err = d.updateTableNames()
+	if err != nil {
+		return err
+	}
+	err = d.updateColumns()
+	if err != nil {
+		return err
+	}
+	err = d.updateIndexDefs()
+	if err != nil {
+		return err
+	}
+	err = d.updateForeignDefs()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (d *MssqlDatabase) updateTableNames() error {
 	rows, err := d.db.Query(
 		`select schema_name(schema_id) as table_schema, name from sys.objects where type = 'U';`,
 	)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer rows.Close()
 
@@ -76,26 +109,22 @@ func (d *MssqlDatabase) tableNames() ([]string, error) {
 	for rows.Next() {
 		var schema, name string
 		if err := rows.Scan(&schema, &name); err != nil {
-			return nil, err
+			return err
 		}
 		tables = append(tables, schema+"."+name)
 	}
-	return tables, nil
+	d.info.tableName = tables
+	return nil
+}
+
+func (d *MssqlDatabase) tableNames() []string {
+	return d.info.tableName
 }
 
 func (d *MssqlDatabase) dumpTableDDL(table string) (string, error) {
-	cols, err := d.getColumns(table)
-	if err != nil {
-		return "", err
-	}
-	indexDefs, err := d.getIndexDefs(table)
-	if err != nil {
-		return "", err
-	}
-	foreignDefs, err := d.getForeignDefs(table)
-	if err != nil {
-		return "", err
-	}
+	cols := d.getColumns(table)
+	indexDefs := d.getIndexDefs(table)
+	foreignDefs := d.getForeignDefs(table)
 	return buildDumpTableDDL(table, cols, indexDefs, foreignDefs), nil
 }
 
@@ -249,9 +278,10 @@ type check struct {
 	NotForReplication bool
 }
 
-func (d *MssqlDatabase) getColumns(table string) ([]column, error) {
-	schema, table := splitTableName(table, d.GetDefaultSchema())
-	query := fmt.Sprintf(`SELECT
+func (d *MssqlDatabase) updateColumns() error {
+	query := `SELECT
+	schema_name = SCHEMA_NAME(o.schema_id),
+	table_name = OBJECT_NAME(o.object_id),
 	c.name,
 	[type_name] = tp.name,
 	c.max_length,
@@ -267,28 +297,32 @@ func (d *MssqlDatabase) getColumns(table string) ([]column, error) {
 	cc.name,
 	cc.definition,
 	cc.is_not_for_replication
-FROM sys.columns c WITH(NOLOCK)
+FROM sys.objects o WITH(NOLOCK)
+JOIN sys.columns c WITH(NOLOCK) on o.object_id = c.object_id
 JOIN sys.types tp WITH(NOLOCK) ON c.user_type_id = tp.user_type_id
 LEFT JOIN sys.check_constraints cc WITH(NOLOCK) ON c.[object_id] = cc.parent_object_id AND cc.parent_column_id = c.column_id
 LEFT JOIN sys.identity_columns ic WITH(NOLOCK) ON c.[object_id] = ic.[object_id] AND ic.[column_id] = c.[column_id]
-WHERE c.[object_id] = OBJECT_ID('%s.%s', 'U')`, schema, table)
+WHERE o.type = 'U'
+ORDER BY c.object_id, COLUMNPROPERTY(c.object_id, c.name, 'ordinal')
+`
 
 	rows, err := d.db.Query(query)
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
 	defer rows.Close()
 
-	cols := []column{}
+	allCols := make(map[string][]column)
 	for rows.Next() {
 		col := column{}
 		var colName, dataType, maxLen, scale, defaultId string
 		var seedValue, incrementValue, defaultName, defaultVal, checkName, checkDefinition *string
+		var schemaName, tableName *string
 		var isNullable, isIdentity bool
 		var identityNotForReplication, checkNotForReplication *bool
-		err = rows.Scan(&colName, &dataType, &maxLen, &scale, &isNullable, &isIdentity, &seedValue, &incrementValue, &identityNotForReplication, &defaultId, &defaultName, &defaultVal, &checkName, &checkDefinition, &checkNotForReplication)
+		err = rows.Scan(&schemaName, &tableName, &colName, &dataType, &maxLen, &scale, &isNullable, &isIdentity, &seedValue, &incrementValue, &identityNotForReplication, &defaultId, &defaultName, &defaultVal, &checkName, &checkDefinition, &checkNotForReplication)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		col.Name = colName
 		col.MaxLength = maxLen
@@ -313,9 +347,27 @@ WHERE c.[object_id] = OBJECT_ID('%s.%s', 'U')`, schema, table)
 				NotForReplication: *checkNotForReplication,
 			}
 		}
-		cols = append(cols, col)
+		key := *schemaName + "." + *tableName
+		_, ok := allCols[key]
+		if !ok {
+			allCols[key] = []column{}
+		}
+		allCols[key] = append(allCols[key], col)
 	}
-	return cols, nil
+
+	d.info.columns = allCols
+	return nil
+}
+
+func (d *MssqlDatabase) getColumns(table string) []column {
+	schema, table := splitTableName(table, d.GetDefaultSchema())
+	cols, ok := d.info.columns[schema+"."+table]
+
+	if ok {
+		return cols
+	} else {
+		return []column{}
+	}
 }
 
 type indexDef struct {
@@ -334,9 +386,10 @@ type indexOption struct {
 	value string
 }
 
-func (d *MssqlDatabase) getIndexDefs(table string) ([]*indexDef, error) {
-	schema, table := splitTableName(table, d.GetDefaultSchema())
-	query := fmt.Sprintf(`SELECT
+func (d *MssqlDatabase) updateIndexDefs() error {
+	query := `SELECT
+	SCHEMA_NAME(obj.schema_id) as schema_name,
+    obj.name as table_name,
 	ind.name AS index_name,
 	ind.is_primary_key,
 	ind.is_unique,
@@ -348,128 +401,160 @@ func (d *MssqlDatabase) getIndexDefs(table string) ([]*indexDef, error) {
 	st.no_recompute,
 	st.is_incremental,
 	ind.allow_row_locks,
-	ind.allow_page_locks
-FROM sys.indexes ind
+	ind.allow_page_locks,
+    COL_NAME(ic.object_id, ic.column_id) as column_name,
+    ic.is_descending_key,
+    ic.is_included_column
+FROM sys.objects obj
+INNER JOIN sys.indexes ind ON obj.object_id = ind.object_id
 INNER JOIN sys.stats st ON ind.object_id = st.object_id AND ind.index_id = st.stats_id
-WHERE ind.object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
+INNER JOIN sys.index_columns ic ON ind.index_id = ic.index_id AND ind.object_id = ic.object_id
+WHERE obj.type = 'U'
+ORDER BY obj.object_id, ind.index_id, ic.key_ordinal
+`
 
 	rows, err := d.db.Query(query)
 	if err != nil {
-		return nil, err
+		return nil
 	}
 
-	indexDefMap := make(map[string]*indexDef)
-	var indexName, typeDesc, fillfactor string
+	indexMap := make(map[string]map[string]*indexDef)
+	var schemaName, tableName, columnName, indexName, typeDesc, fillfactor string
 	var filter *string
-	var isPrimary, isUnique, padIndex, ignoreDupKey, noRecompute, incremental, rowLocks, pageLocks bool
+	var isPrimary, isUnique, padIndex, ignoreDupKey, noRecompute, incremental, rowLocks, pageLocks, isDescending, isIncluded bool
+
 	for rows.Next() {
-		err = rows.Scan(&indexName, &isPrimary, &isUnique, &typeDesc, &filter, &padIndex, &fillfactor, &ignoreDupKey, &noRecompute, &incremental, &rowLocks, &pageLocks)
+		err = rows.Scan(&schemaName, &tableName, &indexName, &isPrimary, &isUnique, &typeDesc, &filter, &padIndex, &fillfactor, &ignoreDupKey, &noRecompute, &incremental, &rowLocks, &pageLocks, &columnName, &isDescending, &isIncluded)
 		if err != nil {
-			return nil, err
+			return err
+		}
+		defer rows.Close()
+
+		indexes, ok := indexMap[schemaName+"."+tableName]
+		if !ok {
+			indexes = make(map[string]*indexDef)
+			indexMap[schemaName+"."+tableName] = indexes
 		}
 
-		options := []indexOption{
-			{name: "PAD_INDEX", value: boolToOnOff(padIndex)},
+		definition, ok := indexes[indexName]
+
+		if !ok {
+			options := []indexOption{
+				{name: "PAD_INDEX", value: boolToOnOff((padIndex))},
+			}
+
+			if padIndex {
+				options = append(options, indexOption{name: "FILLFACTOR", value: fillfactor})
+			}
+
+			options = append(options, []indexOption{
+				{name: "IGNORE_DUP_KEY", value: boolToOnOff(ignoreDupKey)},
+				{name: "STATISTICS_NORECOMPUTE", value: boolToOnOff(noRecompute)},
+				{name: "STATISTICS_INCREMENTAL", value: boolToOnOff(incremental)},
+				{name: "ALLOW_ROW_LOCKS", value: boolToOnOff(rowLocks)},
+				{name: "ALLOW_PAGE_LOCKS", value: boolToOnOff(pageLocks)},
+			}...)
+
+			definition = &indexDef{name: indexName, columns: []string{}, primary: isPrimary, unique: isUnique, indexType: typeDesc, filter: filter, included: []string{}, options: options}
+			indexes[indexName] = definition
 		}
 
-		if padIndex {
-			options = append(options, indexOption{name: "FILLFACTOR", value: fillfactor})
-		}
-
-		options = append(options, []indexOption{
-			{name: "IGNORE_DUP_KEY", value: boolToOnOff(ignoreDupKey)},
-			{name: "STATISTICS_NORECOMPUTE", value: boolToOnOff(noRecompute)},
-			{name: "STATISTICS_INCREMENTAL", value: boolToOnOff(incremental)},
-			{name: "ALLOW_ROW_LOCKS", value: boolToOnOff(rowLocks)},
-			{name: "ALLOW_PAGE_LOCKS", value: boolToOnOff(pageLocks)},
-		}...)
-
-		definition := &indexDef{name: indexName, columns: []string{}, primary: isPrimary, unique: isUnique, indexType: typeDesc, filter: filter, included: []string{}, options: options}
-		indexDefMap[indexName] = definition
-	}
-
-	rows.Close()
-
-	query = fmt.Sprintf(`SELECT
-	ind.name AS index_name,
-	COL_NAME(ic.object_id, ic.column_id) AS column_name,
-	ic.is_descending_key,
-	ic.is_included_column
-FROM sys.indexes ind
-INNER JOIN sys.index_columns ic ON ind.object_id = ic.object_id AND ind.index_id = ic.index_id
-WHERE ind.object_id = OBJECT_ID('[%s].[%s]')
-ORDER BY ic.key_ordinal`, schema, table)
-
-	rows, err = d.db.Query(query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var columnName string
-	var isDescending, isIncluded bool
-	for rows.Next() {
-		err = rows.Scan(&indexName, &columnName, &isDescending, &isIncluded)
-		if err != nil {
-			return nil, err
-		}
-
-		columnDefinition := fmt.Sprintf("[%s]", columnName)
+		columnDefinition := quoteName(columnName)
 
 		if isIncluded {
-			indexDefMap[indexName].included = append(indexDefMap[indexName].included, columnDefinition)
+			definition.included = append(definition.included, columnDefinition)
 		} else {
 			if isDescending {
 				columnDefinition += " DESC"
 			}
-			indexDefMap[indexName].columns = append(indexDefMap[indexName].columns, columnDefinition)
+			definition.columns = append(definition.columns, columnDefinition)
 		}
 	}
 
-	indexDefs := make([]*indexDef, 0)
-	for _, definition := range indexDefMap {
-		indexDefs = append(indexDefs, definition)
+	indexDefs := make(map[string][]*indexDef)
+
+	for tableName, indexes := range indexMap {
+		tableIndexes := []*indexDef{}
+
+		for _, definition := range indexes {
+			tableIndexes = append(tableIndexes, definition)
+		}
+
+		indexDefs[tableName] = tableIndexes
 	}
-	return indexDefs, nil
+
+	d.info.indexDefs = indexDefs
+
+	return nil
 }
 
-func (d *MssqlDatabase) getForeignDefs(table string) ([]string, error) {
+func (d *MssqlDatabase) getIndexDefs(table string) []*indexDef {
 	schema, table := splitTableName(table, d.GetDefaultSchema())
-	query := fmt.Sprintf(`SELECT
-	f.name,
-	COL_NAME(f.parent_object_id, fc.parent_column_id),
-	OBJECT_NAME(f.referenced_object_id)_id,
-	COL_NAME(f.referenced_object_id, fc.referenced_column_id),
-	f.update_referential_action_desc,
+
+	indexDefs, ok := d.info.indexDefs[schema+"."+table]
+	if ok {
+		return indexDefs
+	} else {
+		return []*indexDef{}
+	}
+}
+
+func (d *MssqlDatabase) updateForeignDefs() error {
+	query := `SELECT
+	SCHEMA_NAME(obj.schema_id),
+    obj.name as table_name,
+    f.name as constraint_name,
+    COL_NAME(obj.object_id, fc.parent_column_id) as column_name,
+    OBJECT_NAME(f.referenced_object_id) as ref_table_name,
+    COL_NAME(f.referenced_object_id, fc.referenced_column_id) as ref_column_name,
+    f.update_referential_action_desc,
 	f.delete_referential_action_desc,
 	f.is_not_for_replication
-FROM sys.foreign_keys f INNER JOIN sys.foreign_key_columns fc ON f.OBJECT_ID = fc.constraint_object_id
-WHERE f.parent_object_id = OBJECT_ID('[%s].[%s]')`, schema, table)
+FROM sys.objects obj
+INNER JOIN sys.foreign_keys f ON f.parent_object_id = obj.object_id
+INNER JOIN sys.foreign_key_columns fc ON f.object_id = fc.constraint_object_id
+WHERE obj.type = 'U'`
 
 	rows, err := d.db.Query(query)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer rows.Close()
 
-	defs := make([]string, 0)
+	defs := make(map[string][]string)
+
 	for rows.Next() {
-		var constraintName, columnName, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule string
+		var schemaName, tableName, constraintName, columnName, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule string
 		var notForReplication bool
-		err = rows.Scan(&constraintName, &columnName, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule, &notForReplication)
+
+		err = rows.Scan(&schemaName, &tableName, &constraintName, &columnName, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule, &notForReplication)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		foreignUpdateRule = strings.Replace(foreignUpdateRule, "_", " ", -1)
 		foreignDeleteRule = strings.Replace(foreignDeleteRule, "_", " ", -1)
+
 		def := fmt.Sprintf("CONSTRAINT [%s] FOREIGN KEY ([%s]) REFERENCES [%s] ([%s]) ON UPDATE %s ON DELETE %s", constraintName, columnName, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule)
 		if notForReplication {
 			def += " NOT FOR REPLICATION"
 		}
-		defs = append(defs, def)
+
+		defs[schemaName+"."+tableName] = append(defs[schemaName+"."+tableName], def)
 	}
 
-	return defs, nil
+	d.info.foreignDefs = defs
+
+	return nil
+}
+
+func (d *MssqlDatabase) getForeignDefs(table string) []string {
+	schema, table := splitTableName(table, d.GetDefaultSchema())
+
+	if defs, ok := d.info.foreignDefs[schema+"."+table]; ok {
+		return defs
+	} else {
+		return make([]string, 0)
+	}
 }
 
 func boolToOnOff(in bool) string {
