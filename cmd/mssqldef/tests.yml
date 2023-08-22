@@ -236,3 +236,13 @@ CreateViewWithMultiline:
     CREATE VIEW v AS
     SELECT
     10 as N;
+PercentConstraintName:
+  current: |
+    CREATE TABLE [dbo].[percent_test] (
+      [test%] int CONSTRAINT [DF_percent_test_test%] DEFAULT (NULL)
+    );
+  desired: |
+    CREATE TABLE [dbo].[percent_test] (
+      [test%] int CONSTRAINT [DF_percent_test_test%] DEFAULT (NULL)
+    );
+  output: ""
