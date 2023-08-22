@@ -1,3 +1,9 @@
+## v0.16.4
+
+- mssqldef: Quote constraint name [#429](https://github.com/k0kubun/sqldef/issues/429)
+- mssqldef: Improve performance [#430](https://github.com/k0kubun/sqldef/issues/430)
+- Migrate from deprecated ioutil to compatible functions [#431](https://github.com/k0kubun/sqldef/issues/431)
+
 ## v0.16.3
 
 - Fix the description of `--enable-drop-table` in help [#424](https://github.com/k0kubun/sqldef/issues/424)
