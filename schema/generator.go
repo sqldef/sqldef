@@ -1612,17 +1612,19 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 	if desiredDefault != nil && !isNullValue(desiredDefault.value) {
 		desiredVal = desiredDefault.value
 	}
+	if !g.areSameValue(currentVal, desiredVal) {
+		return false
+	}
 
-	var currentExpr string
-	var desiredExpr string
+	var currentExprSchema, currentExpr string
+	var desiredExprSchema, desiredExpr string
 	if currentDefault != nil {
-		currentExpr = currentDefault.expression
+		currentExprSchema, currentExpr = splitTableName(currentDefault.expression, g.defaultSchema)
 	}
 	if desiredDefault != nil {
-		desiredExpr = desiredDefault.expression
+		desiredExprSchema, desiredExpr = splitTableName(desiredDefault.expression, g.defaultSchema)
 	}
-
-	return g.areSameValue(currentVal, desiredVal) && strings.ToLower(currentExpr) == strings.ToLower(desiredExpr)
+	return strings.ToLower(currentExprSchema) == strings.ToLower(desiredExprSchema) && strings.ToLower(currentExpr) == strings.ToLower(desiredExpr)
 }
 
 func (g *Generator) areSameValue(current, desired *Value) bool {
