@@ -219,6 +219,7 @@ type Sequence struct {
 
 type DefaultDefinition struct {
 	value          *Value
+	expression     string
 	constraintName string // only for MSSQL
 }
 

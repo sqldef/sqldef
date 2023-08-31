@@ -407,7 +407,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.name)))
 					} else {
 						// set
-						definition, err := generateDefaultDefinition(*desiredColumn.defaultDef.value)
+						definition, err := generateDefaultDefinition(*desiredColumn.defaultDef)
 						if err != nil {
 							return ddls, err
 						}
@@ -490,7 +490,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 					if desiredColumn.defaultDef != nil {
 						// set
-						definition, err := generateDefaultDefinition(*desiredColumn.defaultDef.value)
+						definition, err := generateDefaultDefinition(*desiredColumn.defaultDef)
 						if err != nil {
 							return ddls, err
 						}
@@ -1034,8 +1034,8 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		definition += def + " "
 	}
 
-	if column.defaultDef != nil && column.defaultDef.value != nil {
-		def, err := generateDefaultDefinition(*column.defaultDef.value)
+	if column.defaultDef != nil {
+		def, err := generateDefaultDefinition(*column.defaultDef)
 		if err != nil {
 			return "", fmt.Errorf("%s in column: %#v", err.Error(), column)
 		}
@@ -1604,16 +1604,25 @@ func areSameIdentityDefinition(identityA *Identity, identityB *Identity) bool {
 }
 
 func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desiredDefault *DefaultDefinition) bool {
-	var current *Value
-	var desired *Value
+	var currentVal *Value
+	var desiredVal *Value
 	if currentDefault != nil && !isNullValue(currentDefault.value) {
-		current = currentDefault.value
+		currentVal = currentDefault.value
 	}
 	if desiredDefault != nil && !isNullValue(desiredDefault.value) {
-		desired = desiredDefault.value
+		desiredVal = desiredDefault.value
 	}
 
-	return g.areSameValue(current, desired)
+	var currentExpr string
+	var desiredExpr string
+	if currentDefault != nil {
+		currentExpr = currentDefault.expression
+	}
+	if desiredDefault != nil {
+		desiredExpr = desiredDefault.expression
+	}
+
+	return g.areSameValue(currentVal, desiredVal) && strings.ToLower(currentExpr) == strings.ToLower(desiredExpr)
 }
 
 func (g *Generator) areSameValue(current, desired *Value) bool {
@@ -1980,27 +1989,33 @@ func generateSequenceClause(sequence *Sequence) string {
 	return strings.TrimSpace(ddl)
 }
 
-func generateDefaultDefinition(defaultVal Value) (string, error) {
-	switch defaultVal.valueType {
-	case ValueTypeStr:
-		return fmt.Sprintf("DEFAULT '%s'", defaultVal.strVal), nil
-	case ValueTypeBool:
-		return fmt.Sprintf("DEFAULT %s", defaultVal.strVal), nil
-	case ValueTypeInt:
-		return fmt.Sprintf("DEFAULT %d", defaultVal.intVal), nil
-	case ValueTypeFloat:
-		return fmt.Sprintf("DEFAULT %f", defaultVal.floatVal), nil
-	case ValueTypeBit:
-		if defaultVal.bitVal {
-			return "DEFAULT b'1'", nil
-		} else {
-			return "DEFAULT b'0'", nil
+func generateDefaultDefinition(defaultDefinition DefaultDefinition) (string, error) {
+	if defaultDefinition.value != nil {
+		defaultVal := defaultDefinition.value
+		switch defaultVal.valueType {
+		case ValueTypeStr:
+			return fmt.Sprintf("DEFAULT '%s'", defaultVal.strVal), nil
+		case ValueTypeBool:
+			return fmt.Sprintf("DEFAULT %s", defaultVal.strVal), nil
+		case ValueTypeInt:
+			return fmt.Sprintf("DEFAULT %d", defaultVal.intVal), nil
+		case ValueTypeFloat:
+			return fmt.Sprintf("DEFAULT %f", defaultVal.floatVal), nil
+		case ValueTypeBit:
+			if defaultVal.bitVal {
+				return "DEFAULT b'1'", nil
+			} else {
+				return "DEFAULT b'0'", nil
+			}
+		case ValueTypeValArg: // NULL, CURRENT_TIMESTAMP, ...
+			return fmt.Sprintf("DEFAULT %s", string(defaultVal.raw)), nil
+		default:
+			return "", fmt.Errorf("unsupported default value type (valueType: '%d')", defaultVal.valueType)
 		}
-	case ValueTypeValArg: // NULL, CURRENT_TIMESTAMP, ...
-		return fmt.Sprintf("DEFAULT %s", string(defaultVal.raw)), nil
-	default:
-		return "", fmt.Errorf("unsupported default value type (valueType: '%d')", defaultVal.valueType)
+	} else if defaultDefinition.expression != "" {
+		return fmt.Sprintf("DEFAULT(%s)", defaultDefinition.expression), nil
 	}
+	return "", fmt.Errorf("default value is not set")
 }
 
 func generateSridDefinition(sridVal Value) (string, error) {

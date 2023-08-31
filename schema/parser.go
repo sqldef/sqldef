@@ -516,16 +516,23 @@ func parseIdentity(opt *parser.IdentityOpt) *Identity {
 }
 
 func parseDefaultDefinition(opt *parser.DefaultDefinition) *DefaultDefinition {
-	if opt == nil || opt.Value == nil {
+	if opt == nil || (opt.ValueOrExpression.Value == nil && opt.ValueOrExpression.Expr == nil) {
 		return nil
 	}
-	defaultVal := parseValue(opt.Value)
 
 	var constraintName string
 	if opt.ConstraintName.String() != "" {
 		constraintName = opt.ConstraintName.String()
 	}
-	return &DefaultDefinition{constraintName: constraintName, value: defaultVal}
+
+	if opt.ValueOrExpression.Value != nil {
+		defaultVal := parseValue(opt.ValueOrExpression.Value)
+		return &DefaultDefinition{constraintName: constraintName, value: defaultVal}
+	} else {
+		buf := parser.NewTrackedBuffer(nil)
+		opt.ValueOrExpression.Expr.Format(buf)
+		return &DefaultDefinition{constraintName: constraintName, expression: buf.String()}
+	}
 }
 
 func parseSridDefinition(opt *parser.SridDefinition) *SridDefinition {
