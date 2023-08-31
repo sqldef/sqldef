@@ -652,34 +652,40 @@ CreateTableAddTimestampColumn:
     ALTER TABLE "public"."users" ADD COLUMN "timestamp_without_tz" timestamp;
 AddColumnWithDefaultExpression:
   current: |
+    CREATE EXTENSION "uuid-ossp";
     CREATE TABLE users (id bigint NOT NULL);
   desired: |
+    CREATE EXTENSION "uuid-ossp";
     CREATE TABLE users (
       id bigint NOT NULL,
-      "key" uuid NOT NULL DEFAULT gen_random_uuid()
+      "key" uuid NOT NULL DEFAULT uuid_generate_v4()
     );
   output: |
-    ALTER TABLE "public"."users" ADD COLUMN "key" uuid NOT NULL DEFAULT gen_random_uuid();
+    ALTER TABLE "public"."users" ADD COLUMN "key" uuid NOT NULL DEFAULT uuid_generate_v4();
 AddDefaultExpression:
   current: |
+    CREATE EXTENSION "uuid-ossp";
     CREATE TABLE users (
       id bigint NOT NULL,
       "key" uuid NOT NULL
     );
   desired: |
+    CREATE EXTENSION "uuid-ossp";
     CREATE TABLE users (
       id bigint NOT NULL,
-      "key" uuid NOT NULL DEFAULT gen_random_uuid()
+      "key" uuid NOT NULL DEFAULT uuid_generate_v4()
     );
   output: |
-    ALTER TABLE "public"."users" ALTER COLUMN "key" SET DEFAULT gen_random_uuid();
+    ALTER TABLE "public"."users" ALTER COLUMN "key" SET DEFAULT uuid_generate_v4();
 RemoveDefaultExpression:
   current: |
+    CREATE EXTENSION "uuid-ossp";
     CREATE TABLE users (
       id bigint NOT NULL,
-      "key" uuid NOT NULL DEFAULT gen_random_uuid()
+      "key" uuid NOT NULL DEFAULT uuid_generate_v4()
     );
   desired: |
+    CREATE EXTENSION "uuid-ossp";
     CREATE TABLE users (
       id bigint NOT NULL,
       "key" uuid NOT NULL
