@@ -482,3 +482,39 @@ AddForeignKeyWithAlter:
     ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;
   output: |
     ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;
+AddColumnWithDefaultExpression:
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      friend_ids JSON DEFAULT(JSON_ARRAY())  
+    );
+  output: |
+    ALTER TABLE `users` ADD COLUMN `friend_ids` json DEFAULT(JSON_ARRAY()) AFTER `id`;
+AddDefaultExpression:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      friend_ids JSON
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      friend_ids JSON DEFAULT(JSON_ARRAY())
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json DEFAULT(JSON_ARRAY());
+RemoveDefaultExpression:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      friend_ids JSON DEFAULT(JSON_ARRAY())
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      friend_ids JSON
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json;
