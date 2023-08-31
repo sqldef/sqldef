@@ -492,6 +492,7 @@ AddColumnWithDefaultExpression:
     );
   output: |
     ALTER TABLE `users` ADD COLUMN `friend_ids` json DEFAULT(JSON_ARRAY()) AFTER `id`;
+  min_version: '8.0'
 AddDefaultExpression:
   current: |
     CREATE TABLE users (
@@ -505,6 +506,7 @@ AddDefaultExpression:
     );
   output: |
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json DEFAULT(JSON_ARRAY());
+  min_version: '8.0'
 RemoveDefaultExpression:
   current: |
     CREATE TABLE users (
@@ -518,3 +520,4 @@ RemoveDefaultExpression:
     );
   output: |
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json;
+  min_version: '8.0'
