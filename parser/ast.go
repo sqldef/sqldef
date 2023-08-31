@@ -764,8 +764,13 @@ type ColumnType struct {
 }
 
 type DefaultDefinition struct {
-	Value          *SQLVal
-	ConstraintName ColIdent // only for MSSQL
+	ValueOrExpression DefaultValueOrExpression
+	ConstraintName    ColIdent // only for MSSQL
+}
+
+type DefaultValueOrExpression struct {
+	Value *SQLVal
+	Expr  Expr
 }
 
 type SridDefinition struct {
