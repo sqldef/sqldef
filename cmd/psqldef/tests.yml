@@ -650,3 +650,39 @@ CreateTableAddTimestampColumn:
   output: |
     ALTER TABLE "public"."users" ADD COLUMN "timestamp_with_tz" timestamp WITH TIME ZONE;
     ALTER TABLE "public"."users" ADD COLUMN "timestamp_without_tz" timestamp;
+AddColumnWithDefaultExpression:
+  current: |
+    CREATE TABLE users (id bigint NOT NULL);
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      "key" uuid NOT NULL DEFAULT gen_random_uuid()
+    );
+  output: |
+    ALTER TABLE "public"."users" ADD COLUMN "key" uuid NOT NULL DEFAULT gen_random_uuid();
+AddDefaultExpression:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      "key" uuid NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      "key" uuid NOT NULL DEFAULT gen_random_uuid()
+    );
+  output: |
+    ALTER TABLE "public"."users" ALTER COLUMN "key" SET DEFAULT gen_random_uuid();
+RemoveDefaultExpression:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      "key" uuid NOT NULL DEFAULT gen_random_uuid()
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      "key" uuid NOT NULL
+    );
+  output: |
+    ALTER TABLE "public"."users" ALTER COLUMN "key" DROP DEFAULT;
