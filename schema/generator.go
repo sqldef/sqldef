@@ -993,7 +993,7 @@ func generateDataType(column Column) string {
 		}
 	} else {
 		switch column.typeName {
-		case "enum":
+		case "enum", "set":
 			return fmt.Sprintf("%s(%s)%s", column.typeName, strings.Join(column.enumValues, ", "), suffix)
 		default:
 			return fmt.Sprintf("%s%s", column.typeName, suffix)
