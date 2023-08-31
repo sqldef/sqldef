@@ -407,7 +407,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.name)))
 					} else {
 						// set
-						definition, err := generateDefaultDefinition(*desiredColumn.defaultDef)
+						definition, err := g.generateDefaultDefinition(*desiredColumn.defaultDef)
 						if err != nil {
 							return ddls, err
 						}
@@ -490,7 +490,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 					if desiredColumn.defaultDef != nil {
 						// set
-						definition, err := generateDefaultDefinition(*desiredColumn.defaultDef)
+						definition, err := g.generateDefaultDefinition(*desiredColumn.defaultDef)
 						if err != nil {
 							return ddls, err
 						}
@@ -1035,7 +1035,7 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 	}
 
 	if column.defaultDef != nil {
-		def, err := generateDefaultDefinition(*column.defaultDef)
+		def, err := g.generateDefaultDefinition(*column.defaultDef)
 		if err != nil {
 			return "", fmt.Errorf("%s in column: %#v", err.Error(), column)
 		}
@@ -1989,7 +1989,7 @@ func generateSequenceClause(sequence *Sequence) string {
 	return strings.TrimSpace(ddl)
 }
 
-func generateDefaultDefinition(defaultDefinition DefaultDefinition) (string, error) {
+func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinition) (string, error) {
 	if defaultDefinition.value != nil {
 		defaultVal := defaultDefinition.value
 		switch defaultVal.valueType {
@@ -2013,7 +2013,13 @@ func generateDefaultDefinition(defaultDefinition DefaultDefinition) (string, err
 			return "", fmt.Errorf("unsupported default value type (valueType: '%d')", defaultVal.valueType)
 		}
 	} else if defaultDefinition.expression != "" {
-		return fmt.Sprintf("DEFAULT(%s)", defaultDefinition.expression), nil
+		if g.mode == GeneratorModeMysql {
+			// Enclose expression with parentheses to avoid syntax error
+			// https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html#data-type-defaults-explicit
+			return fmt.Sprintf("DEFAULT(%s)", defaultDefinition.expression), nil
+		} else {
+			return fmt.Sprintf("DEFAULT %s", defaultDefinition.expression), nil
+		}
 	}
 	return "", fmt.Errorf("default value is not set")
 }
