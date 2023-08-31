@@ -2015,9 +2015,10 @@ func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinitio
 			return "", fmt.Errorf("unsupported default value type (valueType: '%d')", defaultVal.valueType)
 		}
 	} else if defaultDefinition.expression != "" {
-		if g.mode == GeneratorModeMysql {
+		if g.mode == GeneratorModeMysql || g.mode == GeneratorModeSQLite3 {
 			// Enclose expression with parentheses to avoid syntax error
 			// https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html#data-type-defaults-explicit
+			// https://www.sqlite.org/syntax/column-constraint.html
 			return fmt.Sprintf("DEFAULT(%s)", defaultDefinition.expression), nil
 		} else {
 			return fmt.Sprintf("DEFAULT %s", defaultDefinition.expression), nil
