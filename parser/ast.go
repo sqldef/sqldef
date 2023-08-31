@@ -818,7 +818,12 @@ func (ct *ColumnType) Format(buf *TrackedBuffer) {
 		buf.Myprintf(" %s %s", keywordStrings[NOT], keywordStrings[NULL])
 	}
 	if ct.Default != nil {
-		buf.Myprintf(" %s %s", keywordStrings[DEFAULT], String(ct.Default.Value))
+		buf.Myprintf(" %s", keywordStrings[DEFAULT])
+		if ct.Default.ValueOrExpression.Value != nil {
+			buf.Myprintf(" %s", String(ct.Default.ValueOrExpression.Value))
+		} else {
+			buf.Myprintf("(%v)", ct.Default.ValueOrExpression.Expr)
+		}
 	}
 	if ct.OnUpdate != nil {
 		buf.Myprintf(" %s %s %s", keywordStrings[ON], keywordStrings[UPDATE], String(ct.OnUpdate))
