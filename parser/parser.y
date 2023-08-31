@@ -1497,6 +1497,10 @@ default_definition:
   {
     $$ = DefaultValueOrExpression{Value: $4}
   }
+| DEFAULT default_expression
+  {
+    $$ = DefaultValueOrExpression{Expr: $2}
+  }
 | DEFAULT '(' default_expression ')'
   {
     $$ = DefaultValueOrExpression{Expr: $3}
