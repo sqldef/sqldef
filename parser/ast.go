@@ -794,58 +794,53 @@ func (ct *ColumnType) Format(buf *TrackedBuffer) {
 		buf.Myprintf("(%s)", strings.Join(ct.EnumValues, ", "))
 	}
 
-	opts := make([]string, 0, 16)
 	if ct.Unsigned {
-		opts = append(opts, keywordStrings[UNSIGNED])
+		buf.Myprintf(" %s", keywordStrings[UNSIGNED])
 	}
 	if ct.Zerofill {
-		opts = append(opts, keywordStrings[ZEROFILL])
+		buf.Myprintf(" %s", keywordStrings[ZEROFILL])
 	}
 	if ct.Charset != "" {
-		opts = append(opts, keywordStrings[CHARACTER], keywordStrings[SET], ct.Charset)
+		buf.Myprintf(" %s %s %s", keywordStrings[CHARACTER], keywordStrings[SET], ct.Charset)
 	}
 	if ct.Collate != "" {
-		opts = append(opts, keywordStrings[COLLATE], ct.Collate)
+		buf.Myprintf(" %s %s", keywordStrings[COLLATE], ct.Collate)
 	}
 	if ct.Timezone {
-		opts = append(opts, keywordStrings[WITH], keywordStrings[TIME], keywordStrings[ZONE])
+		buf.Myprintf(" %s %s %s", keywordStrings[WITH], keywordStrings[TIME], keywordStrings[ZONE])
 	}
 	if ct.NotNull != nil && *ct.NotNull {
-		opts = append(opts, keywordStrings[NOT], keywordStrings[NULL])
+		buf.Myprintf(" %s %s", keywordStrings[NOT], keywordStrings[NULL])
 	}
 	if ct.Default != nil {
-		opts = append(opts, keywordStrings[DEFAULT], String(ct.Default.Value))
+		buf.Myprintf(" %s %s", keywordStrings[DEFAULT], String(ct.Default.Value))
 	}
 	if ct.OnUpdate != nil {
-		opts = append(opts, keywordStrings[ON], keywordStrings[UPDATE], String(ct.OnUpdate))
+		buf.Myprintf(" %s %s %s", keywordStrings[ON], keywordStrings[UPDATE], String(ct.OnUpdate))
 	}
 	if ct.Autoincrement {
-		opts = append(opts, keywordStrings[AUTO_INCREMENT])
+		buf.Myprintf(" %s", keywordStrings[AUTO_INCREMENT])
 	}
 	if ct.Comment != nil {
-		opts = append(opts, keywordStrings[COMMENT_KEYWORD], String(ct.Comment))
+		buf.Myprintf(" %s %s", keywordStrings[COMMENT_KEYWORD], String(ct.Comment))
 	}
 	if ct.Check != nil {
-		opts = append(opts, keywordStrings[CHECK], String(&ct.Check.Where))
+		buf.Myprintf(" %s %s", keywordStrings[CHECK], String(&ct.Check.Where))
 	}
 	if ct.KeyOpt == colKeyPrimary {
-		opts = append(opts, keywordStrings[PRIMARY], keywordStrings[KEY])
+		buf.Myprintf(" %s %s", keywordStrings[PRIMARY], keywordStrings[KEY])
 	}
 	if ct.KeyOpt == colKeyUnique {
-		opts = append(opts, keywordStrings[UNIQUE])
+		buf.Myprintf(" %s", keywordStrings[UNIQUE])
 	}
 	if ct.KeyOpt == colKeyUniqueKey {
-		opts = append(opts, keywordStrings[UNIQUE], keywordStrings[KEY])
+		buf.Myprintf(" %s %s", keywordStrings[UNIQUE], keywordStrings[KEY])
 	}
 	if ct.KeyOpt == colKeySpatialKey {
-		opts = append(opts, keywordStrings[SPATIAL], keywordStrings[KEY])
+		buf.Myprintf(" %s %s", keywordStrings[SPATIAL], keywordStrings[KEY])
 	}
 	if ct.KeyOpt == colKey {
-		opts = append(opts, keywordStrings[KEY])
-	}
-
-	if len(opts) != 0 {
-		buf.Myprintf(" %s", strings.Join(opts, " "))
+		buf.Myprintf(" %s", keywordStrings[KEY])
 	}
 }
 
