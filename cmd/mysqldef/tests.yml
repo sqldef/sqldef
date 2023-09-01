@@ -327,6 +327,16 @@ TableComment:
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='都道府県マスター';
   output: |
     ALTER TABLE `prefecture` COMMENT = '都道府県マスター';
+AlterTableAddSetTypeColumn:
+  current: |
+    CREATE TABLE alarm (id BIGINT PRIMARY KEY);
+  desired: |
+    CREATE TABLE alarm (
+      id BIGINT PRIMARY KEY,
+      dayOfWeek SET('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun') NOT NULL
+    );
+  output: |
+    ALTER TABLE `alarm` ADD COLUMN `dayOfWeek` set('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun') NOT NULL AFTER `id`;
 UUIDToBin:
   desired: |
     CREATE TABLE users (
