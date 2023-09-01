@@ -1,3 +1,8 @@
+## v0.16.5
+
+- Support function calls as default expressions [#432](https://github.com/k0kubun/sqldef/issues/432)
+- mysqldef: Fix missing `SET` type members [#433](https://github.com/k0kubun/sqldef/issues/433)
+
 ## v0.16.4
 
 - mssqldef: Quote constraint name [#429](https://github.com/k0kubun/sqldef/issues/429)
