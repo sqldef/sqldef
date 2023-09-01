@@ -8,7 +8,7 @@ require (
 	github.com/k0kubun/pp/v3 v3.2.0
 	github.com/lib/pq v1.10.9
 	github.com/microsoft/go-mssqldb v1.4.0
-	github.com/pganalyze/pg_query_go/v4 v4.2.1
+	github.com/pganalyze/pg_query_go/v4 v4.2.3
 	github.com/stretchr/testify v1.8.4
 	golang.org/x/term v0.10.0
 	gopkg.in/yaml.v2 v2.4.0
