@@ -327,7 +327,7 @@ func forceEOF(yylex interface{}) {
 %type <str> extended_opt full_opt from_database_opt tables_or_processlist
 %type <showFilter> like_or_where_opt
 %type <byt> exists_opt
-%type <empty> not_exists_opt non_add_drop_or_rename_operation to_opt index_opt
+%type <empty> not_exists_opt non_add_drop_or_rename_operation to_opt index_opt when_expression_opt for_each_row_opt
 %type <bytes> reserved_keyword non_reserved_keyword
 %type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt
 %type <boolVal> unique_opt
@@ -1020,14 +1020,24 @@ create_statement:
     }}
   }
 /* For SQLite3 */
-| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name BEGIN statement_block ';' END
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt BEGIN statement_block ';' END
   {
     $$ = &DDL{Action: CreateTriggerStr, Trigger: &Trigger{
         Name: $3,
         TableName: $7,
         Time: $4,
         Event: $5,
-        Body: $9,
+        Body: $11,
+    }}
+  }
+| CREATE TRIGGER not_exists_opt sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt BEGIN statement_block ';' END
+  {
+    $$ = &DDL{Action: CreateTriggerStr, Trigger: &Trigger{
+        Name: $4,
+        TableName: $8,
+        Time: $5,
+        Event: $6,
+        Body: $12,
     }}
   }
 /* For PostgreSQL */
@@ -1092,6 +1102,11 @@ trigger_event:
   {
     $$ = string($1)
   }
+/* For SQLite3 */
+| UPDATE OF column_list
+  {
+    $$ = string($1)
+  }
 
 trigger_event_list:
   trigger_event
@@ -1144,6 +1159,11 @@ trigger_statement_start:
       Statements: []Statement{$2},
     }
   }
+
+for_each_row_opt:
+  { $$ = struct{}{} }
+  | FOR EACH ROW
+  { $$ = struct{}{} }
 
 policy_as_opt:
   {
@@ -4194,6 +4214,11 @@ when_expression:
   {
     $$ = &When{Cond: $2, Val: $4}
   }
+
+when_expression_opt:
+  { $$ = struct{}{} }
+  | WHEN expression
+  { $$ = struct{}{} }
 
 else_expression_opt:
   {
