@@ -196,6 +196,7 @@ func TestSQLite3defVirtualTable(t *testing.T) {
 	assertEquals(t, actual, nothingModified)
 }
 
+// https://www.sqlite.org/lang_createtrigger.html
 func TestSQLite3defCreateTrigger(t *testing.T) {
 	resetTestDatabase()
 
@@ -211,25 +212,81 @@ func TestSQLite3defCreateTrigger(t *testing.T) {
 		  body TEXT NOT NULL,
 		  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);
+		create view user_view as select * from users;
 	`)
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTrigger := stripHeredoc(`
-		CREATE TRIGGER ` + "`users_insert`" + ` after insert ON ` + "`users`" + `
+	queries := map[string]string{
+		"before, delete": `
+			CREATE TRIGGER users_delete BEFORE DELETE ON users
+			BEGIN
+				delete from logs where typ = 'user' and typ_id = OLD.id;
+			END;
+		`,
+		"after, update": `
+			CREATE TRIGGER users_update AFTER UPDATE ON users
+			BEGIN
+				delete from logs where typ = 'user' and typ_id = OLD.id;
+				insert into logs(typ, typ_id, body) values ('user', NEW.id, 'updated user');
+			END;
+		`,
+		"instead of, insert": `
+			CREATE TRIGGER user_view_update INSTEAD OF INSERT ON user_view
+			BEGIN
+				insert into users(id, age) values (NEW.id, NEW.age);
+			END;
+		`,
+		"update of the single column": `
+			CREATE TRIGGER users_update_of_id AFTER UPDATE OF id ON users
+			BEGIN
+				delete from logs where typ = 'user' and typ_id = OLD.id;
+				insert into logs(typ, typ_id, body) values ('user', NEW.id, 'updated user');
+			END;
+		`,
+		"update of multiple columns": `
+			CREATE TRIGGER users_update_of_id_and_age AFTER UPDATE OF id,age ON users
+			BEGIN
+				delete from logs where typ = 'user' and typ_id = OLD.id;
+				insert into logs(typ, typ_id, body) values ('user', NEW.id, 'updated user');
+			END;
+		`,
+		"for each row": `
+			CREATE TRIGGER users_delete_for_each_row BEFORE DELETE ON users FOR EACH ROW
+			BEGIN
+				delete from logs where typ = 'user' and typ_id = OLD.id;
+			END;
+		`,
+		"when": `
+			CREATE TRIGGER users_delete_when BEFORE DELETE ON users
+			WHEN OLD.age > 20
+			BEGIN
+				delete from logs where typ = 'user' and typ_id = OLD.id;
+			END;
+		`,
+		"for each row, when": `
+			CREATE TRIGGER users_delete_for_each_row_and_when BEFORE DELETE ON users FOR EACH ROW
+			WHEN OLD.age > 20
+			BEGIN
+				delete from logs where typ = 'user' and typ_id = OLD.id;
+			END;
+		`,
+	}
+
+	var createTrigger string
+	for _, q := range queries {
+		createTrigger += stripHeredoc(q)
+	}
+
+	// The iteration order of a map is random,
+	// so SQL that needs guaranteed order should be written separately.
+	createTrigger += stripHeredoc(`
+		CREATE TRIGGER IF NOT EXISTS users_insert after insert ON users
 		BEGIN
 			insert into logs(typ, typ_id, body) values ('user', NEW.id, 'inserted user');
 		END;
-		CREATE TRIGGER ` + "`users_update`" + ` after update ON ` + "`users`" + `
-		BEGIN
-			delete from logs where typ = 'user' and typ_id = OLD.id;
-			insert into logs(typ, typ_id, body) values ('user', NEW.id, 'updated user');
-		END;
-		CREATE TRIGGER ` + "`users_delete`" + ` before delete ON ` + "`users`" + `
-		BEGIN
-			delete from logs where typ = 'user' and typ_id = OLD.id;
-		END;
 	`)
+
 	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTrigger)
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 }
