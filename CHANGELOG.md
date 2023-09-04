@@ -1,3 +1,7 @@
+## v0.16.6
+
+- sqlite3def: Support creating and deleting triggers [#438](https://github.com/k0kubun/sqldef/issues/438)
+
 ## v0.16.5
 
 - Support function calls as default expressions [#432](https://github.com/k0kubun/sqldef/issues/432)
