@@ -1733,7 +1733,7 @@ numeric_type:
   int_type length_opt
   {
     $$ = $1
-    $$.Length = $2
+    $$.DisplayWidth = $2
   }
 | decimal_type
   {
