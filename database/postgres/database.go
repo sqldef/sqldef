@@ -7,7 +7,6 @@ import (
 	"os"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/k0kubun/sqldef/database"
@@ -281,13 +280,6 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 		}
 		fmt.Fprint(&queryBuilder, "\n"+indent)
 		fmt.Fprintf(&queryBuilder, "\"%s\" %s", col.Name, col.GetDataType())
-		if col.Length > 0 {
-			if col.Scale > 0 {
-				fmt.Fprintf(&queryBuilder, "(%d,%d)", col.Length, col.Scale)
-			} else {
-				fmt.Fprintf(&queryBuilder, "(%d)", col.Length)
-			}
-		}
 		if !col.Nullable {
 			fmt.Fprint(&queryBuilder, " NOT NULL")
 		}
@@ -336,8 +328,7 @@ type columnConstraint struct {
 type column struct {
 	Name               string
 	dataType           string
-	Length             int
-	Scale              int
+	formattedDataType  string
 	Nullable           bool
 	Default            string
 	IsAutoIncrement    bool
@@ -349,17 +340,17 @@ func (c *column) GetDataType() string {
 	switch c.dataType {
 	case "smallint":
 		if c.IsAutoIncrement {
-			return "smallserial"
+			return "smallserial" + strings.TrimPrefix(c.formattedDataType, "smallint")
 		}
 		return c.dataType
 	case "integer":
 		if c.IsAutoIncrement {
-			return "serial"
+			return "serial" + strings.TrimPrefix(c.formattedDataType, "integer")
 		}
 		return c.dataType
 	case "bigint":
 		if c.IsAutoIncrement {
-			return "bigserial"
+			return "bigserial" + strings.TrimPrefix(c.formattedDataType, "bigint")
 		}
 		return c.dataType
 	case "timestamp without time zone":
@@ -367,11 +358,11 @@ func (c *column) GetDataType() string {
 		// The SQL standard requires that writing just timestamp be equivalent to timestamp without time zone, and PostgreSQL honors that behavior.
 		// timestamptz is accepted as an abbreviation for timestamp with time zone; this is a PostgreSQL extension.
 		// https://www.postgresql.org/docs/9.6/datatype-datetime.html
-		return "timestamp"
+		return strings.TrimSuffix(c.formattedDataType, " without time zone")
 	case "time without time zone":
-		return "time"
+		return strings.TrimSuffix(c.formattedDataType, " without time zone")
 	default:
-		return c.dataType
+		return c.formattedDataType
 	}
 }
 
@@ -382,14 +373,11 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	      s.column_name,
 	      s.column_default,
 	      s.is_nullable,
-	      s.character_maximum_length,
-	      s.numeric_precision,
-	      s.numeric_precision_radix,
-	      s.numeric_scale,
 	      CASE
 	      WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod)
 	      ELSE s.data_type
 	      END,
+	      format_type(f.atttypid, f.atttypmod),
 	      s.identity_generation
 	    FROM pg_attribute f
 	    JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
@@ -438,19 +426,11 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	cols := make([]column, 0)
 	for rows.Next() {
 		col := column{}
-		var colName, isNullable, dataType string
-		var maxLenStr, colDefault, idGen, checkName, checkDefinition *string
-		var numericPrecision, numericPrecisionRadix, numericScale *int
-		err = rows.Scan(&colName, &colDefault, &isNullable, &maxLenStr, &numericPrecision, &numericPrecisionRadix, &numericScale, &dataType, &idGen, &checkName, &checkDefinition)
+		var colName, isNullable, dataType, formattedDataType string
+		var colDefault, idGen, checkName, checkDefinition *string
+		err = rows.Scan(&colName, &colDefault, &isNullable, &dataType, &formattedDataType, &idGen, &checkName, &checkDefinition)
 		if err != nil {
 			return nil, err
-		}
-		var maxLen int
-		if maxLenStr != nil {
-			maxLen, err = strconv.Atoi(*maxLenStr)
-			if err != nil {
-				return nil, err
-			}
 		}
 		col.Name = strings.Trim(colName, `" `)
 		if colDefault != nil {
@@ -461,7 +441,7 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 		}
 		col.Nullable = isNullable == "YES"
 		col.dataType = dataType
-		col.Length = maxLen
+		col.formattedDataType = formattedDataType
 		if idGen != nil {
 			col.IdentityGeneration = *idGen
 		}
@@ -469,14 +449,6 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 			col.Check = &columnConstraint{
 				definition: *checkDefinition,
 				name:       *checkName,
-			}
-		}
-		if numericPrecisionRadix != nil && *numericPrecisionRadix == 10 {
-			if numericPrecision != nil {
-				col.Length = *numericPrecision
-			}
-			if numericScale != nil {
-				col.Scale = *numericScale
 			}
 		}
 		cols = append(cols, col)
