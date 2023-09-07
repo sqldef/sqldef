@@ -1006,7 +1006,9 @@ func generateDataType(column Column) string {
 		suffix += "[]"
 	}
 
-	if column.length != nil {
+	if column.displayWidth != nil {
+		return fmt.Sprintf("%s(%s)%s", column.typeName, string(column.displayWidth.raw), suffix)
+	} else if column.length != nil {
 		if column.scale != nil {
 			return fmt.Sprintf("%s(%s, %s)%s", column.typeName, string(column.length.raw), string(column.scale.raw), suffix)
 		} else {
