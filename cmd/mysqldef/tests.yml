@@ -531,3 +531,16 @@ RemoveDefaultExpression:
   output: |
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json;
   min_version: '8.0'
+AlterTableColumnFractionalSecondsPart:
+  current: |
+    CREATE TABLE users (
+      id bigint(20) PRIMARY KEY,
+      created_at datetime NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint(20) PRIMARY KEY,
+      created_at datetime(3) NOT NULL
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `created_at` `created_at` datetime(3) NOT NULL;
