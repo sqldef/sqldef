@@ -64,6 +64,7 @@ type Column struct {
 	sridDef       *SridDefinition
 	length        *Value
 	scale         *Value
+	displayWidth  *Value
 	check         *CheckDefinition
 	charset       string
 	collate       string

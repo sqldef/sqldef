@@ -111,6 +111,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Tab
 			sridDef:       parseSridDefinition(parsedCol.Type.Srid),
 			length:        parseValue(parsedCol.Type.Length),
 			scale:         parseValue(parsedCol.Type.Scale),
+			displayWidth:  parseValue(parsedCol.Type.DisplayWidth),
 			charset:       parsedCol.Type.Charset,
 			collate:       normalizeCollate(parsedCol.Type.Collate, *stmt.TableSpec),
 			timezone:      castBool(parsedCol.Type.Timezone),
