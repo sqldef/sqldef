@@ -733,10 +733,11 @@ type ColumnType struct {
 	Array         BoolVal
 
 	// Numeric field options
-	Length   *SQLVal
-	Unsigned BoolVal
-	Zerofill BoolVal
-	Scale    *SQLVal
+	Length       *SQLVal
+	Unsigned     BoolVal
+	Zerofill     BoolVal
+	Scale        *SQLVal
+	DisplayWidth *SQLVal
 
 	// Text field options
 	Charset string

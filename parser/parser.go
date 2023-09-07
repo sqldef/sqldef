@@ -6481,7 +6481,7 @@ yydefault:
 //line parser.y:1734
 		{
 			yyVAL.columnType = yyDollar[1].columnType
-			yyVAL.columnType.Length = yyDollar[2].optVal
+			yyVAL.columnType.DisplayWidth = yyDollar[2].optVal
 		}
 	case 264:
 		yyDollar = yyS[yypt-1 : yypt+1]
