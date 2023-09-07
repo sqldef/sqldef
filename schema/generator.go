@@ -1594,12 +1594,31 @@ func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
-	return g.normalizeDataType(current.typeName) == g.normalizeDataType(desired.typeName) &&
-		reflect.DeepEqual(current.enumValues, desired.enumValues) &&
-		(current.length == nil || desired.length == nil || current.length.intVal == desired.length.intVal) && // detect change column only when both are set explicitly. TODO: maybe `current.length == nil` case needs another care
-		(current.scale == nil || desired.scale == nil || current.scale.intVal == desired.scale.intVal) &&
-		(current.array == desired.array) && (current.timezone == desired.timezone)
-	// TODO: scale
+	if g.normalizeDataType(current.typeName) != g.normalizeDataType(desired.typeName) {
+		return false
+	}
+	if !reflect.DeepEqual(current.enumValues, desired.enumValues) {
+		return false
+	}
+	if current.length == nil && desired.length != nil || current.length != nil && desired.length == nil {
+		return false
+	}
+	if current.length != nil && desired.length != nil && current.length.intVal != desired.length.intVal {
+		return false
+	}
+	if current.scale == nil && (desired.scale != nil && desired.scale.intVal != 0) || (current.scale != nil && current.scale.intVal != 0) && desired.scale == nil {
+		return false
+	}
+	if current.scale != nil && desired.scale != nil && current.scale.intVal != desired.scale.intVal {
+		return false
+	}
+	if current.array != desired.array {
+		return false
+	}
+	if current.timezone != desired.timezone {
+		return false
+	}
+	return true
 }
 
 func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bool {
