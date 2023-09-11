@@ -1,3 +1,7 @@
+## v0.16.7
+
+- Support DATETIME fractional seconds [#440](https://github.com/k0kubun/sqldef/issues/440)
+
 ## v0.16.6
 
 - sqlite3def: Support creating and deleting triggers [#438](https://github.com/k0kubun/sqldef/issues/438)
