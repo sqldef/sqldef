@@ -812,6 +812,14 @@ func postgresBuildDSN(config database.Config) string {
 		options = append(options, fmt.Sprintf("sslrootcert=%s", sslrootcert))
 	}
 
+	if sslcert, ok := os.LookupEnv("PGSSLCERT"); ok { // TODO: have this in database.Config, or standardize config with DSN?
+		options = append(options, fmt.Sprintf("sslcert=%s", sslcert))
+	}
+
+	if sslkey, ok := os.LookupEnv("PGSSLKEY"); ok { // TODO: have this in database.Config, or standardize config with DSN?
+		options = append(options, fmt.Sprintf("sslkey=%s", sslkey))
+	}
+
 	// `QueryEscape` instead of `PathEscape` so that colon can be escaped.
 	return fmt.Sprintf("postgres://%s:%s@%s/%s?%s", url.QueryEscape(user), url.QueryEscape(password), host, database, strings.Join(options, "&"))
 }
