@@ -1,3 +1,7 @@
+## v0.16.8
+
+- Support `PGSSLCERT` & `PGSSLKEY` for psqldef [#446](https://github.com/k0kubun/sqldef/issues/446)
+
 ## v0.16.7
 
 - Support DATETIME fractional seconds [#440](https://github.com/k0kubun/sqldef/issues/440)
