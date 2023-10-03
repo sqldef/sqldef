@@ -1483,7 +1483,17 @@ column_definition_type:
     $1.ReferenceOnUpdate = $9
     $$ = $1
   }
-// for MySQL and PostgreSQL (TODO: support abbreviation)
+// for MySQL and PostgreSQL
+| column_definition_type AS '(' expression ')' VIRTUAL
+  {
+    $1.Generated = &GeneratedColumn{Expr: $4, GeneratedType: "VIRTUAL"}
+    $$ = $1
+  }
+| column_definition_type AS '(' expression ')' STORED
+  {
+    $1.Generated = &GeneratedColumn{Expr: $4, GeneratedType: "STORED"}
+    $$ = $1
+  }
 | column_definition_type GENERATED identity_behavior AS '(' expression ')' VIRTUAL
   {
     $1.Generated = &GeneratedColumn{Expr: $6, GeneratedType: "VIRTUAL"}

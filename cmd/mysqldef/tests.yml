@@ -220,6 +220,34 @@ CreateTableGeneratedAlwaysAsChangeExpr80:
     ALTER TABLE `test_table` DROP COLUMN `test_expr`;
     ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) VIRTUAL AFTER `test_value`;
   min_version: '8.0'
+CreateTableGeneratedAlwaysAsAbbreviation80:
+  desired: |
+    CREATE TABLE `test_table` (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      test_value varchar(45) AS ('test') STORED NOT NULL,
+      test_expr varchar(45) AS (test_value / test_value) STORED NOT NULL,
+      PRIMARY KEY (id)
+    );
+  min_version: '8.0'
+CreateTableGeneratedAlwaysAsAbbreviationChangeExpr80:
+  current: |
+    CREATE TABLE `test_table` (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      test_value varchar(45) GENERATED ALWAYS AS ('test') STORED NOT NULL,
+      test_expr varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED NOT NULL,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE `test_table` (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      test_value varchar(45) AS ('test') STORED NOT NULL,
+      test_expr varchar(45) AS ((test_value / test_value) * 2) STORED NOT NULL,
+      PRIMARY KEY (id)
+    );
+  output: |
+    ALTER TABLE `test_table` DROP COLUMN `test_expr`;
+    ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) STORED NOT NULL AFTER `test_value`;
+  min_version: '8.0'
 ConstraintCheck:
   desired: |
     CREATE TABLE `books` (
