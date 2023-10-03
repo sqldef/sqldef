@@ -1,6 +1,10 @@
+## v0.16.9
+
+- mysqldef: Support abbreviation of generated columns [#450](https://github.com/k0kubun/sqldef/issues/450)
+
 ## v0.16.8
 
-- Support `PGSSLCERT` & `PGSSLKEY` for psqldef [#446](https://github.com/k0kubun/sqldef/issues/446)
+- psqldef: Support `PGSSLCERT` & `PGSSLKEY` [#446](https://github.com/k0kubun/sqldef/issues/446)
 
 ## v0.16.7
 
