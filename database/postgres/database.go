@@ -589,23 +589,44 @@ WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$
 // refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d
 func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 	const query = `SELECT
-	tc.constraint_schema, tc.table_schema, tc.constraint_name, tc.table_name, kcu.column_name,
-	kcu2.table_schema AS foreign_table_schema,
-	kcu2.table_name AS foreign_table_name,
-	kcu2.column_name AS foreign_column_name,
-	rc.update_rule AS foreign_update_rule,
-	rc.delete_rule AS foreign_delete_rule
-FROM
-	information_schema.table_constraints AS tc
-	JOIN information_schema.key_column_usage AS kcu
-		ON tc.constraint_name = kcu.constraint_name
-	JOIN information_schema.referential_constraints AS rc
-		ON tc.constraint_name = rc.constraint_name
-	JOIN information_schema.key_column_usage AS kcu2
-		ON kcu2.constraint_schema = rc.unique_constraint_schema
-		AND kcu2.constraint_name = rc.unique_constraint_name
-		AND kcu2.ordinal_position = kcu.position_in_unique_constraint
-WHERE constraint_type = 'FOREIGN KEY' AND tc.table_schema=$1 AND tc.table_name=$2`
+		nc.nspname AS constraint_schema,
+		n1.nspname AS table_schema,
+		c.conname  AS constraint_name,
+		r1.relname AS table_name,
+		a1.attname AS column_name,
+		n2.nspname AS foreign_table_schema,
+		r2.relname AS foreign_table_name,
+		a2.attname AS foreign_column_name,
+		CASE c.confupdtype
+			WHEN 'c' THEN 'CASCADE'
+			WHEN 'n' THEN 'SET NULL'
+			WHEN 'd' THEN 'SET DEFAULT'
+			WHEN 'r' THEN 'RESTRICT'
+			WHEN 'a' THEN 'NO ACTION'
+		END AS foreign_update_rule,
+		CASE c.confdeltype
+			WHEN 'c' THEN 'CASCADE'
+			WHEN 'n' THEN 'SET NULL'
+			WHEN 'd' THEN 'SET DEFAULT'
+			WHEN 'r' THEN 'RESTRICT'
+			WHEN 'a' THEN 'NO ACTION'
+		END AS foreign_delete_rule
+	FROM pg_constraint      AS c
+	INNER JOIN pg_namespace AS nc ON nc.oid = c.connamespace
+	INNER JOIN pg_class     AS r1 ON r1.oid = c.conrelid
+	INNER JOIN pg_class     AS r2 ON r2.oid = c.confrelid
+	INNER JOIN pg_namespace AS n1 ON n1.oid = r1.relnamespace
+	INNER JOIN pg_namespace AS n2 ON n2.oid = r2.relnamespace
+	CROSS JOIN UNNEST(c.conkey, c.confkey) with ordinality AS k(key1, key2, ordinality)
+	INNER JOIN pg_attribute AS a1
+		ON  a1.attrelid = c.conrelid
+		AND a1.attnum   = k.key1
+	INNER JOIN pg_attribute AS a2
+		ON  a2.attrelid = c.confrelid
+		AND a2.attnum   = k.key2
+	WHERE c.contype = 'f' AND n1.nspname = $1 AND r1.relname = $2
+	ORDER BY constraint_schema, constraint_name, k.ordinality
+	`
 	schema, table := splitTableName(table, d.GetDefaultSchema())
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
