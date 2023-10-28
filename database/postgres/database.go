@@ -107,6 +107,10 @@ var (
 )
 
 func (d *PostgresDatabase) views() ([]string, error) {
+	if d.config.SkipView {
+		return []string{}, nil
+	}
+
 	rows, err := d.db.Query(`
 		select n.nspname as table_schema, c.relname as table_name, pg_get_viewdef(c.oid) as definition
 		from pg_catalog.pg_class c inner join pg_catalog.pg_namespace n on c.relnamespace = n.oid
@@ -139,6 +143,10 @@ func (d *PostgresDatabase) views() ([]string, error) {
 }
 
 func (d *PostgresDatabase) materializedViews() ([]string, error) {
+	if d.config.SkipView {
+		return []string{}, nil
+	}
+
 	rows, err := d.db.Query(`
 		select n.nspname as schemaname, c.relname as matviewname, pg_get_viewdef(c.oid) as definition
 		from pg_catalog.pg_class c inner join pg_catalog.pg_namespace n on c.relnamespace = n.oid
