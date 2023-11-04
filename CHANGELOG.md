@@ -1,3 +1,8 @@
+## v0.16.10
+
+- psqdef: Add --skip-view option [#456](https://github.com/k0kubun/sqldef/issues/456)
+- psqdef: Optimize queries used by --export [#457](https://github.com/k0kubun/sqldef/issues/457)
+
 ## v0.16.9
 
 - mysqldef: Support abbreviation of generated columns [#450](https://github.com/k0kubun/sqldef/issues/450)
