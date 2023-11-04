@@ -1309,6 +1309,21 @@ func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 	))
 }
 
+func TestPsqldefSkipView(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := "CREATE TABLE users (id bigint);\n"
+	createView := "CREATE VIEW user_views AS SELECT id from users;\n"
+	createMaterializedView := "CREATE MATERIALIZED VIEW user_materialized_views AS SELECT id from users;\n"
+
+	mustExecuteSQL(createTable+createView+createMaterializedView)
+
+	writeFile("schema.sql", createTable)
+
+	output := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--skip-view", "-f", "schema.sql")
+	assertEquals(t, output, nothingModified)
+}
+
 func TestPsqldefBeforeApply(t *testing.T) {
 	resetTestDatabase()
 

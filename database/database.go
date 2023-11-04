@@ -18,10 +18,10 @@ type Config struct {
 	Host     string
 	Port     int
 	Socket   string
+	SkipView bool
 
 	// Only MySQL
 	MySQLEnableCleartextPlugin bool
-	SkipView                   bool
 	SslMode                    string
 	SslCa                      string
 }
