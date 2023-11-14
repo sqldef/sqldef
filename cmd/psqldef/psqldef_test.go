@@ -1316,11 +1316,24 @@ func TestPsqldefSkipView(t *testing.T) {
 	createView := "CREATE VIEW user_views AS SELECT id from users;\n"
 	createMaterializedView := "CREATE MATERIALIZED VIEW user_materialized_views AS SELECT id from users;\n"
 
-	mustExecuteSQL(createTable+createView+createMaterializedView)
+	mustExecuteSQL(createTable + createView + createMaterializedView)
 
 	writeFile("schema.sql", createTable)
 
 	output := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--skip-view", "-f", "schema.sql")
+	assertEquals(t, output, nothingModified)
+}
+
+func TestPsqldefSkipExtension(t *testing.T) {
+	resetTestDatabase()
+
+	createExtension := "CREATE EXTENSION pgcrypto;\n"
+
+	mustExecuteSQL(createExtension)
+
+	writeFile("schema.sql", "")
+
+	output := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--skip-extension", "-f", "schema.sql")
 	assertEquals(t, output, nothingModified)
 }
 

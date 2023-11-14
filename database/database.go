@@ -12,13 +12,14 @@ import (
 )
 
 type Config struct {
-	DbName   string
-	User     string
-	Password string
-	Host     string
-	Port     int
-	Socket   string
-	SkipView bool
+	DbName        string
+	User          string
+	Password      string
+	Host          string
+	Port          int
+	Socket        string
+	SkipView      bool
+	SkipExtension bool
 
 	// Only MySQL
 	MySQLEnableCleartextPlugin bool
