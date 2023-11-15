@@ -186,6 +186,10 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 }
 
 func (d *PostgresDatabase) extensions() ([]string, error) {
+	if d.config.SkipExtension {
+		return []string{}, nil
+	}
+
 	rows, err := d.db.Query(`
 		SELECT extname FROM pg_extension
 		WHERE extname != 'plpgsql';
