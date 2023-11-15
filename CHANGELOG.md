@@ -1,3 +1,7 @@
+## v0.16.11
+
+- psqdef: Add --skip-extension option [#460](https://github.com/k0kubun/sqldef/pull/460)
+
 ## v0.16.10
 
 - psqdef: Add --skip-view option [#456](https://github.com/k0kubun/sqldef/issues/456)
