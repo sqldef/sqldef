@@ -1,3 +1,7 @@
+## v0.16.12
+
+- Replace org name [#464](https://github.com/sqldef/sqldef/pull/464)
+
 ## v0.16.11
 
 - psqdef: Add --skip-extension option [#460](https://github.com/sqldef/sqldef/pull/460)
