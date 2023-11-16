@@ -125,7 +125,7 @@ jobs:
         run: |
           export VERSION=$(echo "$GITHUB_REF" | sed -e 's!refs/tags/!!')
           curl -L "https://github.com/tcnksm/ghr/releases/download/${GHR_VERSION}/ghr_${GHR_VERSION}_linux_amd64.tar.gz" | tar xvz
-          "ghr_${GHR_VERSION}_linux_amd64/ghr" -u k0kubun -r sqldef -replace -n "$VERSION" "$VERSION" package/
+          "ghr_${GHR_VERSION}_linux_amd64/ghr" -u sqldef -r sqldef -replace -n "$VERSION" "$VERSION" package/
         env:
           GHR_VERSION: v0.13.0
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
