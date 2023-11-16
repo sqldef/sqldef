@@ -2,7 +2,7 @@ package file
 
 import (
 	"database/sql"
-	"github.com/k0kubun/sqldef"
+	"github.com/sqldef/sqldef"
 )
 
 // Pseudo database for comparison between files

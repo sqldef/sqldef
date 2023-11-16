@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/k0kubun/sqldef/database"
 	_ "github.com/lib/pq"
+	"github.com/sqldef/sqldef/database"
 )
 
 const indent = "    "

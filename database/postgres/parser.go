@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/k0kubun/sqldef/database"
-	"github.com/k0kubun/sqldef/parser"
 	pgquery "github.com/pganalyze/pg_query_go/v4"
+	"github.com/sqldef/sqldef/database"
+	"github.com/sqldef/sqldef/parser"
 )
 
 type PostgresParser struct {

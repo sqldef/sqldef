@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/k0kubun/sqldef/database"
+	"github.com/sqldef/sqldef/database"
 )
 
 type GeneratorMode int

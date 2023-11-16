@@ -12,11 +12,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/k0kubun/sqldef/cmd/testutils"
-	"github.com/k0kubun/sqldef/database"
-	"github.com/k0kubun/sqldef/database/mysql"
-	"github.com/k0kubun/sqldef/parser"
-	"github.com/k0kubun/sqldef/schema"
+	"github.com/sqldef/sqldef/cmd/testutils"
+	"github.com/sqldef/sqldef/database"
+	"github.com/sqldef/sqldef/database/mysql"
+	"github.com/sqldef/sqldef/parser"
+	"github.com/sqldef/sqldef/schema"
 )
 
 const (

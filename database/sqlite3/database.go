@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"strings"
 
-	"github.com/k0kubun/sqldef/database"
+	"github.com/sqldef/sqldef/database"
 	_ "modernc.org/sqlite"
 )
 

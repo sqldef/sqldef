@@ -7,14 +7,14 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/k0kubun/sqldef/database/file"
-	"github.com/k0kubun/sqldef/parser"
+	"github.com/sqldef/sqldef/database/file"
+	"github.com/sqldef/sqldef/parser"
 
 	"github.com/jessevdk/go-flags"
-	"github.com/k0kubun/sqldef"
-	"github.com/k0kubun/sqldef/database"
-	"github.com/k0kubun/sqldef/database/mysql"
-	"github.com/k0kubun/sqldef/schema"
+	"github.com/sqldef/sqldef"
+	"github.com/sqldef/sqldef/database"
+	"github.com/sqldef/sqldef/database/mysql"
+	"github.com/sqldef/sqldef/schema"
 	"golang.org/x/term"
 )
 

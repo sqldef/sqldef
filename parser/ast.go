@@ -24,8 +24,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/k0kubun/sqldef/parser/dependency/querypb"
-	"github.com/k0kubun/sqldef/parser/dependency/sqltypes"
+	"github.com/sqldef/sqldef/parser/dependency/querypb"
+	"github.com/sqldef/sqldef/parser/dependency/sqltypes"
 )
 
 // Instructions for creating new types: If a type

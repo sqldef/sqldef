@@ -4,8 +4,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/k0kubun/sqldef/database"
-	"github.com/k0kubun/sqldef/parser"
+	"github.com/sqldef/sqldef/database"
+	"github.com/sqldef/sqldef/parser"
 )
 
 type MssqlParser struct {
