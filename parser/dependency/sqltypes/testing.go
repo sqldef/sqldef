@@ -17,7 +17,7 @@ limitations under the License.
 package sqltypes
 
 import (
-	querypb "github.com/k0kubun/sqldef/parser/dependency/querypb"
+	querypb "github.com/sqldef/sqldef/parser/dependency/querypb"
 )
 
 // Functions in this file should only be used for testing.

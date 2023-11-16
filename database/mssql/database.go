@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	_ "github.com/microsoft/go-mssqldb"
-	"github.com/k0kubun/sqldef/database"
+	"github.com/sqldef/sqldef/database"
 )
 
 const indent = "    "

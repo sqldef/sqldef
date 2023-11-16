@@ -13,10 +13,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/k0kubun/sqldef/cmd/testutils"
-	"github.com/k0kubun/sqldef/database"
-	"github.com/k0kubun/sqldef/database/mssql"
-	"github.com/k0kubun/sqldef/schema"
+	"github.com/sqldef/sqldef/cmd/testutils"
+	"github.com/sqldef/sqldef/database"
+	"github.com/sqldef/sqldef/database/mssql"
+	"github.com/sqldef/sqldef/schema"
 )
 
 const (

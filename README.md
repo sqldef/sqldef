@@ -1,4 +1,4 @@
-# sqldef [![sqldef](https://github.com/k0kubun/sqldef/actions/workflows/sqldef.yml/badge.svg)](https://github.com/k0kubun/sqldef/actions/workflows/sqldef.yml)
+# sqldef [![sqldef](https://github.com/sqldef/sqldef/actions/workflows/sqldef.yml/badge.svg)](https://github.com/sqldef/sqldef/actions/workflows/sqldef.yml)
 
 The easiest idempotent MySQL/PostgreSQL/SQLite3/SQL Server schema management by SQL.
 
@@ -11,7 +11,7 @@ so there's no need to remember Ruby DSL.
 
 Download the single-binary executable for your favorite database from:
 
-https://github.com/k0kubun/sqldef/releases
+https://github.com/sqldef/sqldef/releases
 
 ## Usage
 
@@ -459,11 +459,11 @@ A debian package might be supported in the future, but for now it has not been i
 
 ```bash
 # mysqldef
-wget -O - https://github.com/k0kubun/sqldef/releases/latest/download/mysqldef_linux_amd64.tar.gz \
+wget -O - https://github.com/sqldef/sqldef/releases/latest/download/mysqldef_linux_amd64.tar.gz \
   | tar xvz
 
 # psqldef
-wget -O - https://github.com/k0kubun/sqldef/releases/latest/download/psqldef_linux_amd64.tar.gz \
+wget -O - https://github.com/sqldef/sqldef/releases/latest/download/psqldef_linux_amd64.tar.gz \
   | tar xvz
 ```
 

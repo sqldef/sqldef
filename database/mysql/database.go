@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	driver "github.com/go-sql-driver/mysql"
-	"github.com/k0kubun/sqldef/database"
+	"github.com/sqldef/sqldef/database"
 )
 
 type MysqlDatabase struct {

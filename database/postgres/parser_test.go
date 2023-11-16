@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/k0kubun/sqldef/database"
-	"github.com/k0kubun/sqldef/parser"
+	"github.com/sqldef/sqldef/database"
+	"github.com/sqldef/sqldef/parser"
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v2"
 )

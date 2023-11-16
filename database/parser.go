@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/k0kubun/sqldef/parser"
+	"github.com/sqldef/sqldef/parser"
 )
 
 // A tuple of an original DDL and a Statement

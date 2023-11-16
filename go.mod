@@ -1,4 +1,4 @@
-module github.com/k0kubun/sqldef
+module github.com/sqldef/sqldef
 
 go 1.19
 
