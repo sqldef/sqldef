@@ -25,6 +25,9 @@ type Config struct {
 	MySQLEnableCleartextPlugin bool
 	SslMode                    string
 	SslCa                      string
+
+	// Only PostgreSQL
+	TargetSchema string
 }
 
 type GeneratorConfig struct {

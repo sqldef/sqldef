@@ -1361,6 +1361,24 @@ func TestPsqldefBeforeApply(t *testing.T) {
 	assertEquals(t, owner, "dummy_owner_role\n")
 }
 
+func TestPsqldefTargetSchema(t *testing.T) {
+	resetTestDatabase()
+
+	mustExecuteSQL(`
+				CREATE SCHEMA schema_a;	
+				CREATE TABLE schema_a.users (id bigint PRIMARY KEY);
+				CREATE SCHEMA schema_b;
+				CREATE TABLE schema_b.users (id bigint PRIMARY KEY);
+    `)
+
+	writeFile("schema.sql", `
+        CREATE TABLE schema_a.users (id bigint PRIMARY KEY);
+    `)
+
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--target-schema", "schema_a")
+	assertEquals(t, apply, nothingModified)
+}
+
 func TestPsqldefConfigIncludesTargetTables(t *testing.T) {
 	resetTestDatabase()
 
