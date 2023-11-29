@@ -96,6 +96,9 @@ func (d *PostgresDatabase) tableNames() ([]string, error) {
 		if err := rows.Scan(&schema, &name); err != nil {
 			return nil, err
 		}
+		if d.config.TargetSchema != "" && d.config.TargetSchema != schema {
+			continue
+		}
 		tables = append(tables, schema+"."+name)
 	}
 	return tables, nil

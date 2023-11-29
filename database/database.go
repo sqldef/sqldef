@@ -25,11 +25,15 @@ type Config struct {
 	MySQLEnableCleartextPlugin bool
 	SslMode                    string
 	SslCa                      string
+
+	// Only PostgreSQL
+	TargetSchema string
 }
 
 type GeneratorConfig struct {
 	TargetTables []string
 	SkipTables   []string
+	TargetSchema string
 }
 
 // Abstraction layer for multiple kinds of databases
@@ -92,6 +96,7 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 	var config struct {
 		TargetTables string `yaml:"target_tables"`
 		SkipTables   string `yaml:"skip_tables"`
+		TargetSchema string `yaml:"target_schema"`
 	}
 	err = yaml.UnmarshalStrict(buf, &config)
 	if err != nil {
@@ -108,8 +113,14 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 		skipTables = strings.Split(strings.Trim(config.SkipTables, "\n"), "\n")
 	}
 
+	var targetSchema string
+	if config.TargetSchema != "" {
+		targetSchema = strings.Trim(config.TargetSchema, "\n")
+	}
+
 	return GeneratorConfig{
 		TargetTables: targetTables,
 		SkipTables:   skipTables,
+		TargetSchema: targetSchema,
 	}
 }
