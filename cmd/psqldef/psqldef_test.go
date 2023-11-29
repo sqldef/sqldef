@@ -1392,10 +1392,10 @@ func TestPsqldefConfigIncludesTargetSchema(t *testing.T) {
 	resetTestDatabase()
 
 	mustExecuteSQL(`
-				CREATE SCHEMA schema_a;
-				CREATE TABLE schema_a.users (id bigint PRIMARY KEY);
-				CREATE SCHEMA schema_b;
-				CREATE TABLE schema_b.users (id bigint PRIMARY KEY);
+        CREATE SCHEMA schema_a;
+        CREATE TABLE schema_a.users (id bigint PRIMARY KEY);
+        CREATE SCHEMA schema_b;
+        CREATE TABLE schema_b.users (id bigint PRIMARY KEY);
     `)
 
 	writeFile("schema.sql", `
