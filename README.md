@@ -132,7 +132,7 @@ Application Options:
       --skip-view            Skip managing views/materialized views
       --skip-extension       Skip managing extensions
       --before-apply=        Execute the given string before applying the regular DDLs
-      --config=              YAML file to specify: target_tables
+      --config=              YAML file to specify: target_tables, target_schema
       --help                 Show this help
       --version              Show this version
 ```
