@@ -1,3 +1,7 @@
+## v0.16.13
+
+- psqldef: Add `target_schema` to `--config` [#469](https://github.com/sqldef/sqldef/pull/469)
+
 ## v0.16.12
 
 - Replace org name [#464](https://github.com/sqldef/sqldef/pull/464)
