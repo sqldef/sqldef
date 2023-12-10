@@ -444,6 +444,26 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 		return &parser.CollateExpr{ // compatibility with the legacy parser, but there'd be a better node
 			Expr: expr,
 		}, nil
+	case *pgquery.Node_SqlvalueFunction:
+		switch node.SqlvalueFunction.Op {
+		case pgquery.SQLValueFunctionOp_SVFOP_CURRENT_TIMESTAMP:
+			return &parser.SQLVal{
+				Type: parser.ValArg,
+				Val:  []byte("current_timestamp"),
+			}, nil
+		case pgquery.SQLValueFunctionOp_SVFOP_CURRENT_TIME:
+			return &parser.SQLVal{
+				Type: parser.ValArg,
+				Val:  []byte("current_time"),
+			}, nil
+		case pgquery.SQLValueFunctionOp_SVFOP_CURRENT_DATE:
+			return &parser.SQLVal{
+				Type: parser.ValArg,
+				Val:  []byte("current_date"),
+			}, nil
+		default:
+			return nil, fmt.Errorf("unexpected SqlvalueFunction: %#v", node)
+		}
 	default:
 		return nil, fmt.Errorf("unknown node in parseExpr: %#v", node)
 	}
@@ -646,6 +666,12 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef) (*parser.Co
 		switch constraint.Contype {
 		case pgquery.ConstrType_CONSTR_NOTNULL:
 			columnType.NotNull = parser.NewBoolVal(true)
+		case pgquery.ConstrType_CONSTR_DEFAULT:
+			defaultValue, err := p.parseDefaultValue(constraint.RawExpr)
+			if err != nil {
+				return nil, err
+			}
+			columnType.Default = defaultValue
 		default:
 			return nil, fmt.Errorf("unhandled contype: %d", constraint.Contype)
 		}
@@ -657,10 +683,72 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef) (*parser.Co
 	}, nil
 }
 
+func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.DefaultDefinition, error) {
+	node, err := p.parseExpr(rawExpr)
+	if err != nil {
+		return nil, err
+	}
+	switch expr := node.(type) {
+	case *parser.NullVal:
+		return &parser.DefaultDefinition{
+			ValueOrExpression: parser.DefaultValueOrExpression{
+				Value: parser.NewValArg([]byte("null")),
+			},
+		}, nil
+	case *parser.SQLVal:
+		return &parser.DefaultDefinition{
+			ValueOrExpression: parser.DefaultValueOrExpression{
+				Value: expr,
+			},
+		}, nil
+	case *parser.BoolVal:
+		return &parser.DefaultDefinition{
+			ValueOrExpression: parser.DefaultValueOrExpression{
+				Value: parser.NewBoolSQLVal(bool(*expr)),
+			},
+		}, nil
+	case *parser.ArrayConstructor:
+		return &parser.DefaultDefinition{
+			ValueOrExpression: parser.DefaultValueOrExpression{
+				Expr: expr,
+			},
+		}, nil
+	case *parser.CollateExpr:
+		switch expr := expr.Expr.(type) {
+		case *parser.SQLVal:
+			return &parser.DefaultDefinition{
+				ValueOrExpression: parser.DefaultValueOrExpression{
+					Value: expr,
+				},
+			}, nil
+		case *parser.ArrayConstructor:
+			return &parser.DefaultDefinition{
+				ValueOrExpression: parser.DefaultValueOrExpression{
+					Expr: expr,
+				},
+			}, nil
+		default:
+			return nil, fmt.Errorf("unhandled default CollateExpr node: %#v", expr)
+		}
+	case *parser.FuncExpr:
+		return &parser.DefaultDefinition{
+			ValueOrExpression: parser.DefaultValueOrExpression{
+				Expr: expr,
+			},
+		}, nil
+	default:
+		return nil, fmt.Errorf("unhandled default node: %#v", expr)
+	}
+}
+
 func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType, error) {
 	columnType := parser.ColumnType{}
-	if node.TypeOid != 0 || node.Setof != false || node.PctType != false || node.Typemod != -1 || node.ArrayBounds != nil {
+	if node.TypeOid != 0 || node.Setof != false || node.PctType != false || node.Typemod != -1 {
 		return columnType, fmt.Errorf("unhandled node in parseTypeName: %#v", node)
+	}
+
+	if node.ArrayBounds != nil {
+		columnType.Array = true
 	}
 
 	var typeNames []string
@@ -681,8 +769,16 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType
 				columnType.Type = "integer"
 			case "int8":
 				columnType.Type = "bigint"
-			case "varchar", "interval": // TODO: use this pattern more, fixing failed tests as well
+			case "bpchar":
+				columnType.Type = "character"
+			case "bool", "varchar", "interval", "numeric", "timestamp", "time": // TODO: use this pattern more, fixing failed tests as well
 				columnType.Type = typeNames[1]
+			case "timetz":
+				columnType.Type = "time"
+				columnType.Timezone = true
+			case "timestamptz":
+				columnType.Type = "timestamp"
+				columnType.Timezone = true
 			default:
 				return columnType, fmt.Errorf("unhandled type in parseTypeName: %s", typeNames[1])
 			}
@@ -693,27 +789,46 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType
 		return columnType, fmt.Errorf("unexpected length in parseTypeName: %d", len(typeNames))
 	}
 
-	if node.Typmods != nil {
-		for _, mod := range node.Typmods {
-			modExpr, err := p.parseExpr(mod)
-			if err != nil {
-				return columnType, err
-			}
-
-			switch expr := modExpr.(type) {
-			case *parser.SQLVal:
-				if expr.Type == parser.IntVal {
-					columnType.Length = expr
-				} else {
-					return columnType, fmt.Errorf("unexpected SQLVal type in parseTypeName: %d", expr.Type)
-				}
-			default:
-				return columnType, fmt.Errorf("unexpected typmod type in parseTypeName: %#v", expr)
-			}
-		}
+	typmods, err := p.parseTypmods(node.Typmods)
+	if err != nil {
+		return columnType, err
+	}
+	switch len(typmods) {
+	case 1:
+		columnType.Length = typmods[0]
+	case 2:
+		columnType.Length = typmods[0]
+		columnType.Scale = typmods[1]
 	}
 
 	return columnType, nil
+}
+
+func (p PostgresParser) parseTypmods(typmods []*pgquery.Node) ([]*parser.SQLVal, error) {
+	if typmods == nil {
+		return []*parser.SQLVal{}, nil
+	}
+
+	values := make([]*parser.SQLVal, len(typmods))
+	for i, mod := range typmods {
+		modExpr, err := p.parseExpr(mod)
+		if err != nil {
+			return nil, err
+		}
+
+		switch expr := modExpr.(type) {
+		case *parser.SQLVal:
+			if expr.Type == parser.IntVal {
+				values[i] = expr
+			} else {
+				return nil, fmt.Errorf("unexpected SQLVal type in parseTypeName: %d", expr.Type)
+			}
+		default:
+			return nil, fmt.Errorf("unexpected typmod type in parseTypeName: %#v", expr)
+		}
+	}
+
+	return values, nil
 }
 
 func (p PostgresParser) parseStringList(list *pgquery.List) (string, error) {
