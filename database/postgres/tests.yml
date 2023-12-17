@@ -2,7 +2,39 @@ CreateTable:
   compare_with_generic_parser: true
   sql: |
     CREATE TABLE bigdata (
-      data bigint
+      id bigint,
+      created_at timestamp with time zone,
+      created_date time with time zone
+    );
+CreateTableWithDefault:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE TABLE users (
+      default_null integer default null,
+      default_int integer default 20,
+      default_bool bool default true,
+      default_numeric numeric(5, 0) default 42.195,
+      default_fixed_char character(3) default 'JPN'::bpchar,
+      default_json json default '[]',
+      default_json_with_cast json default '[]'::json,
+      default_jsonb jsonb default '[]'::jsonb,
+      default_current_timestamp timestamp default CURRENT_TIMESTAMP,
+      default_current_date date default CURRENT_DATE,
+      default_current_time time default CURRENT_TIME,
+      default_array_int integer[] default '{}'::integer[],
+      joined_at timestamp with time zone NOT NULL DEFAULT '0001-01-01 00:00:00'::timestamp without time zone
+    );
+CreateTableWithDefaultWithoutCompare:
+  # Queries that cannot be parsed with generic parse OR results do not match
+  sql: |
+    CREATE TABLE users (
+      default_int int default true,
+      default_bool boolean default true,
+      default_text text default '',
+      default_now timestamp default now(),
+      default_text_with_cast text default ''::text,
+      default_array_constructor int[] DEFAULT ARRAY[],
+      default_array_constructor_with_cast int[] DEFAULT ARRAY[]::int[]
     );
 CreateTableWithSchema:
   compare_with_generic_parser: true
