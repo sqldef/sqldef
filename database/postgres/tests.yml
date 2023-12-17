@@ -4,7 +4,26 @@ CreateTable:
     CREATE TABLE bigdata (
       id bigint,
       created_at timestamp with time zone,
-      created_date time with time zone
+      created_date time with time zone,
+      fn integer default foo.my_func()
+    );
+CreateTableWithConstrant:
+  sql: |
+    CREATE TABLE tbl (
+      id bigint,
+      user_id bigint,
+      email text,
+      PRIMARY KEY (id),
+      CONSTRAINT uniq_email UNIQUE (email),
+      CONSTRAINT user_id_fk FOREIGN KEY (user_id) REFERENCES users(id, name)
+    );
+CreateTableWithConstrantInlineColumn:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE TABLE tbl (
+      id bigint PRIMARY KEY,
+      user_id bigint REFERENCES users(id, name),
+      email text UNIQUE
     );
 CreateTableWithDefault:
   compare_with_generic_parser: true
