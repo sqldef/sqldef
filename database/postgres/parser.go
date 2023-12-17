@@ -96,6 +96,8 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 	}
 
 	var columns []*parser.ColumnDefinition
+	var indexes []*parser.IndexDefinition
+	var foreignKeys []*parser.ForeignKeyDefinition
 	for _, elt := range stmt.TableElts {
 		switch node := elt.Node.(type) {
 		case *pgquery.Node_ColumnDef:
@@ -104,6 +106,49 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 				return nil, err
 			}
 			columns = append(columns, column)
+		case *pgquery.Node_Constraint:
+			var indexCols []parser.IndexColumn
+			for _, key := range node.Constraint.Keys {
+				indexCol := parser.IndexColumn{
+					Column:    parser.NewColIdent(key.Node.(*pgquery.Node_String_).String_.Sval),
+					Direction: "asc",
+				}
+				indexCols = append(indexCols, indexCol)
+			}
+			switch node.Constraint.Contype {
+			case pgquery.ConstrType_CONSTR_PRIMARY:
+				index := &parser.IndexDefinition{
+					Info: &parser.IndexInfo{
+						Type:      "primary key",
+						Name:      parser.NewColIdent(node.Constraint.Conname),
+						Unique:    true,
+						Primary:   true,
+						Clustered: true,
+					},
+					Columns: indexCols,
+					Options: []*parser.IndexOption{},
+				}
+				indexes = append(indexes, index)
+			case pgquery.ConstrType_CONSTR_UNIQUE:
+				index := &parser.IndexDefinition{
+					Info: &parser.IndexInfo{
+						Type:   "unique key",
+						Name:   parser.NewColIdent(node.Constraint.Conname),
+						Unique: true,
+					},
+					Columns: indexCols,
+					Options: []*parser.IndexOption{},
+				}
+				indexes = append(indexes, index)
+			case pgquery.ConstrType_CONSTR_FOREIGN:
+				fk, err := p.parseForeignKey(node.Constraint)
+				if err != nil {
+					return nil, err
+				}
+				foreignKeys = append(foreignKeys, fk)
+			default:
+				return nil, fmt.Errorf("unknown Constraint type: %#v", node)
+			}
 		default:
 			return nil, fmt.Errorf("unknown node in parseCreateStmt: %#v", node)
 		}
@@ -113,8 +158,10 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 		Action:  parser.CreateStr,
 		NewName: tableName,
 		TableSpec: &parser.TableSpec{
-			Columns: columns,
-			Options: map[string]string{},
+			Columns:     columns,
+			Indexes:     indexes,
+			ForeignKeys: foreignKeys,
+			Options:     map[string]string{},
 		},
 	}, nil
 }
@@ -407,10 +454,23 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 				Expr: expr,
 			})
 		}
+		var tableName string
+		var funcName string
+		switch len(node.FuncCall.Funcname) {
+		case 1:
+			tableName = ""
+			funcName = node.FuncCall.Funcname[0].Node.(*pgquery.Node_String_).String_.Sval
+		case 2:
+			tableName = node.FuncCall.Funcname[0].Node.(*pgquery.Node_String_).String_.Sval
+			funcName = node.FuncCall.Funcname[1].Node.(*pgquery.Node_String_).String_.Sval
+		default:
+			return nil, fmt.Errorf("unexpected number of funcname: %#v", node.FuncCall.Funcname)
+		}
 
 		return &parser.FuncExpr{
-			Name:  parser.NewColIdent(node.FuncCall.Funcname[0].Node.(*pgquery.Node_String_).String_.Sval),
-			Exprs: exprs,
+			Qualifier: parser.NewTableIdent(tableName),
+			Name:      parser.NewColIdent(funcName),
+			Exprs:     exprs,
 		}, nil
 	case *pgquery.Node_Integer:
 		return parser.NewIntVal([]byte(fmt.Sprint(node.Integer.Ival))), nil
@@ -600,44 +660,54 @@ func (p PostgresParser) parseConstraint(constraint *pgquery.Constraint, tableNam
 			IndexCols: cols,
 		}, nil
 	case pgquery.ConstrType_CONSTR_FOREIGN:
-		idxCols := make([]parser.ColIdent, len(constraint.FkAttrs))
-		for i, fkAttr := range constraint.FkAttrs {
-			v := fkAttr.Node.(*pgquery.Node_String_).String_.Sval
-			idxCols[i] = parser.NewColIdent(v)
-		}
-		refCols := make([]parser.ColIdent, len(constraint.PkAttrs))
-		for i, pkAttr := range constraint.PkAttrs {
-			v := pkAttr.Node.(*pgquery.Node_String_).String_.Sval
-			refCols[i] = parser.NewColIdent(v)
-		}
-
-		refName, err := p.parseTableName(constraint.Pktable)
+		fk, err := p.parseForeignKey(constraint)
 		if err != nil {
 			return nil, err
 		}
 		return &parser.DDL{
-			Action:  parser.AddForeignKeyStr,
-			Table:   tableName,
-			NewName: tableName,
-			ForeignKey: &parser.ForeignKeyDefinition{
-				ConstraintName:   parser.NewColIdent(constraint.Conname),
-				IndexColumns:     idxCols,
-				ReferenceColumns: refCols,
-				ReferenceName:    refName,
-				OnDelete:         p.parseFkAction(constraint.FkDelAction),
-				OnUpdate:         p.parseFkAction(constraint.FkUpdAction),
-			},
+			Action:     parser.AddForeignKeyStr,
+			Table:      tableName,
+			NewName:    tableName,
+			ForeignKey: fk,
 		}, nil
 	default:
 		return nil, fmt.Errorf("unhandled constraint type in parseAlterTableStmt: %d", constraint.Contype)
 	}
 }
 
+func (p PostgresParser) parseForeignKey(constraint *pgquery.Constraint) (*parser.ForeignKeyDefinition, error) {
+	idxCols := make([]parser.ColIdent, len(constraint.FkAttrs))
+	for i, fkAttr := range constraint.FkAttrs {
+		v := fkAttr.Node.(*pgquery.Node_String_).String_.Sval
+		idxCols[i] = parser.NewColIdent(v)
+	}
+	refCols := make([]parser.ColIdent, len(constraint.PkAttrs))
+	for i, pkAttr := range constraint.PkAttrs {
+		v := pkAttr.Node.(*pgquery.Node_String_).String_.Sval
+		refCols[i] = parser.NewColIdent(v)
+	}
+
+	refName, err := p.parseTableName(constraint.Pktable)
+	if err != nil {
+		return nil, err
+	}
+	return &parser.ForeignKeyDefinition{
+		ConstraintName:   parser.NewColIdent(constraint.Conname),
+		IndexColumns:     idxCols,
+		ReferenceColumns: refCols,
+		ReferenceName:    refName,
+		OnDelete:         p.parseFkAction(constraint.FkDelAction),
+		OnUpdate:         p.parseFkAction(constraint.FkUpdAction),
+	}, nil
+}
+
 func (p PostgresParser) parseFkAction(action string) parser.ColIdent {
 	// https://github.com/pganalyze/pg_query_go/blob/v2.2.0/parser/include/nodes/parsenodes.h#L2145-L2149C23
 	switch action {
 	case "a":
-		return parser.NewColIdent("NO ACTION")
+		// pgquery cannot distinguish between unspecified action and no action.
+		// Empty for no action to match existing behavior.
+		return parser.NewColIdent("")
 	case "r":
 		return parser.NewColIdent("RESTRICT")
 	case "c":
@@ -647,7 +717,7 @@ func (p PostgresParser) parseFkAction(action string) parser.ColIdent {
 	case "d":
 		return parser.NewColIdent("SET DEFAULT")
 	default:
-		return parser.NewColIdent("NO ACTION")
+		return parser.NewColIdent("")
 	}
 }
 
@@ -672,6 +742,18 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef) (*parser.Co
 				return nil, err
 			}
 			columnType.Default = defaultValue
+		case pgquery.ConstrType_CONSTR_PRIMARY:
+			columnType.KeyOpt = parser.ColumnKeyOption(1)
+		case pgquery.ConstrType_CONSTR_UNIQUE:
+			columnType.KeyOpt = parser.ColumnKeyOption(3)
+		case pgquery.ConstrType_CONSTR_FOREIGN:
+			columnType.References = constraint.Pktable.Relname
+			for _, attr := range constraint.PkAttrs {
+				if node, ok := attr.Node.(*pgquery.Node_String_); ok {
+					column := parser.NewColIdent(node.String_.Sval)
+					columnType.ReferenceNames = append(columnType.ReferenceNames, column)
+				}
+			}
 		default:
 			return nil, fmt.Errorf("unhandled contype: %d", constraint.Contype)
 		}
