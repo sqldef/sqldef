@@ -212,17 +212,39 @@ NumericChangePrecisionAndScale:
     );
   output: |
     ALTER TABLE "public"."test" ALTER COLUMN "num" TYPE numeric(10, 2);
-CheckTypeCast:
+CheckConstraint:
   current: |
     CREATE TABLE test (
-      v varchar(10) NOT NULL
+      n1 integer,
+      n2 integer,
+      n3 integer,
+      t1 text,
+      t2 text,
+      t3 text,
+      t4 varchar(10),
+      d date
     );
   desired: |
     CREATE TABLE test (
-      v varchar(10) NOT NULL CHECK (v::text ~ '[0-9]')
+      n1 integer CHECK (n1 = 0 or not n1 > 10 and n1 IS NOT NULL),
+      n2 integer CONSTRAINT chk CHECK (n2 > 0),
+      n3 integer CHECK (n3 > 0) NO INHERIT,
+      t1 text CHECK (t1 like 'x'),
+      t2 text CHECK (t2 not like 'x'),
+      t3 text CHECK (t3 <> ''::text),
+      t4 varchar(10) CHECK (t4::text ~ '[0-9]'),
+      d date CHECK (d >= '2022-01-01'::date)
     );
   output: |
-    ALTER TABLE "public"."test" ADD CONSTRAINT test_v_check CHECK (v::text ~ '[0-9]');
+    ALTER TABLE "public"."test" ADD CONSTRAINT test_n1_check CHECK (n1 = 0 or not n1 > 10 and n1 is not null);
+    ALTER TABLE "public"."test" ADD CONSTRAINT chk CHECK (n2 > 0);
+    ALTER TABLE "public"."test" ADD CONSTRAINT test_n3_check CHECK (n3 > 0) NO INHERIT;
+    ALTER TABLE "public"."test" ADD CONSTRAINT test_t1_check CHECK (t1 ~~ 'x');
+    ALTER TABLE "public"."test" ADD CONSTRAINT test_t2_check CHECK (t2 !~~ 'x');
+    ALTER TABLE "public"."test" ADD CONSTRAINT test_t3_check CHECK (t3 <> '');
+    ALTER TABLE "public"."test" ADD CONSTRAINT test_t4_check CHECK (t4::text ~ '[0-9]');
+    ALTER TABLE "public"."test" ADD CONSTRAINT test_d_check CHECK (d >= '2022-01-01');
+
 CompositeForeignKeyConstraint:
   current: |
     CREATE TABLE t1 (
@@ -404,6 +426,16 @@ CreateExtensionIfNotExists:
     CREATE EXTENSION IF NOT EXISTS pgcrypto;
   output: |
     CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CreateViewWithCastCase:
+  desired: |
+    create table hoge (amount text);
+    create view hoge_view as
+    select
+      '1'::numeric as n,
+      ''::text as t,
+      2::bigint as i,
+      amount::numeric(10,2) as amount_num
+    from hoge;
 CreateViewWithCaseWhen:
   desired: |
     create table hoge (
