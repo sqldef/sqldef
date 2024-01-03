@@ -996,7 +996,8 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType
 				return columnType, fmt.Errorf("unhandled type in parseTypeName: %s", typeNames[1])
 			}
 		} else {
-			return columnType, fmt.Errorf("unknown schema in parseTypeName: %#v", typeNames)
+			columnType.References = typeNames[0] + "."
+			columnType.Type = typeNames[1]
 		}
 	} else {
 		return columnType, fmt.Errorf("unexpected length in parseTypeName: %d", len(typeNames))

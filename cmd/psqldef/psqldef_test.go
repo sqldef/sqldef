@@ -753,10 +753,10 @@ func TestPsqldefCreateType(t *testing.T) {
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
-		CREATE TYPE country AS ENUM ('us', 'jp');
+		CREATE TYPE "public"."country" AS ENUM ('us', 'jp');
 		CREATE TABLE users (
 		  id SERIAL PRIMARY KEY,
-		  country country NOT NULL DEFAULT 'jp'::country
+		  country "public"."country" NOT NULL DEFAULT 'jp'::country
 		);
 		`,
 	)
