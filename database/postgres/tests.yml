@@ -71,7 +71,8 @@ CreateTableWithDefaultWithoutCompare:
       default_text_with_cast text default ''::text,
       default_date_text text DEFAULT CURRENT_TIMESTAMP::date::text,
       default_array_constructor int[] DEFAULT ARRAY[],
-      default_array_constructor_with_cast int[] DEFAULT ARRAY[]::int[]
+      default_array_constructor_with_cast int[] DEFAULT ARRAY[]::int[],
+      default_array_element_typecast text[] DEFAULT ARRAY[current_date::text]::text[]
     );
 CreateTableWithSchema:
   compare_with_generic_parser: true

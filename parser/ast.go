@@ -2908,4 +2908,5 @@ type ArrayElement interface {
 	SQLNode
 }
 
-func (*SQLVal) iArrayElement() {}
+func (*SQLVal) iArrayElement()   {}
+func (*CastExpr) iArrayElement() {}

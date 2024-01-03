@@ -669,6 +669,8 @@ func (p PostgresParser) parseArrayElement(node parser.Expr) (parser.ArrayElement
 		return node, nil
 	case *parser.CollateExpr:
 		return p.parseArrayElement(node.Expr)
+	case *parser.CastExpr:
+		return node, nil
 	default:
 		return nil, fmt.Errorf("unknown expr in parseArrayElement: %#v", node)
 	}
