@@ -1,3 +1,9 @@
+## v0.16.14
+
+- psqldef: Support check constraint in postgres parser [#478](https://github.com/sqldef/sqldef/pull/478)
+- psqldef: Support constraint in create table for postgres parser [#472](https://github.com/sqldef/sqldef/pull/472)
+- psqldef: Support default value in postgres parser [#471](https://github.com/sqldef/sqldef/pull/471)
+
 ## v0.16.13
 
 - psqldef: Add `target_schema` to `--config` [#469](https://github.com/sqldef/sqldef/pull/469)
