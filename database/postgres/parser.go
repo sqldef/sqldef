@@ -902,21 +902,28 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 			},
 		}, nil
 	case *parser.CastExpr:
-		switch expr := expr.Expr.(type) {
+		switch castExpr := expr.Expr.(type) {
 		case *parser.SQLVal:
 			return &parser.DefaultDefinition{
 				ValueOrExpression: parser.DefaultValueOrExpression{
-					Value: expr,
+					Value: castExpr,
 				},
 			}, nil
 		case *parser.ArrayConstructor:
 			return &parser.DefaultDefinition{
 				ValueOrExpression: parser.DefaultValueOrExpression{
-					Expr: expr,
+					Expr: castExpr,
+				},
+			}, nil
+		case *parser.CastExpr:
+			// nested typecast: e.g. '1'::character varying::text
+			return &parser.DefaultDefinition{
+				ValueOrExpression: parser.DefaultValueOrExpression{
+					Expr: castExpr,
 				},
 			}, nil
 		default:
-			return nil, fmt.Errorf("unhandled default CastExpr node: %#v", expr)
+			return nil, fmt.Errorf("unhandled default CastExpr node: %#v", castExpr)
 		}
 	case *parser.CollateExpr:
 		switch expr := expr.Expr.(type) {
