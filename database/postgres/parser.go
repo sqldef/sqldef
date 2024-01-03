@@ -533,12 +533,17 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 			columnType.Type == "smallint" ||
 			columnType.Type == "numeric" ||
 			columnType.Type == "real" ||
-			columnType.Type == "double precision" {
+			columnType.Type == "double precision" ||
+			columnType.Array {
 			switch node.TypeCast.Arg.Node.(type) {
 			case *pgquery.Node_AConst:
+				typeName := columnType.Type
+				if columnType.Array {
+					typeName += "[]"
+				}
 				return &parser.CastExpr{
 					Type: &parser.ConvertType{
-						Type:    columnType.Type,
+						Type:    typeName,
 						Length:  columnType.Length,
 						Scale:   columnType.Scale,
 						Charset: columnType.Charset,
@@ -596,7 +601,11 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 		op := strings.ToLower(opNode.String_.Sval)
 
 		switch node.AExpr.Kind {
-		case pgquery.A_Expr_Kind_AEXPR_OP, pgquery.A_Expr_Kind_AEXPR_LIKE, pgquery.A_Expr_Kind_AEXPR_ILIKE:
+		case pgquery.A_Expr_Kind_AEXPR_OP,
+			pgquery.A_Expr_Kind_AEXPR_LIKE,
+			pgquery.A_Expr_Kind_AEXPR_ILIKE,
+			pgquery.A_Expr_Kind_AEXPR_OP_ALL,
+			pgquery.A_Expr_Kind_AEXPR_OP_ANY:
 			left, err := p.parseExpr(node.AExpr.GetLexpr())
 			if err != nil {
 				return nil, err
@@ -609,6 +618,8 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 				Operator: op,
 				Left:     left,
 				Right:    right,
+				All:      node.AExpr.Kind == pgquery.A_Expr_Kind_AEXPR_OP_ALL,
+				Any:      node.AExpr.Kind == pgquery.A_Expr_Kind_AEXPR_OP_ANY,
 			}, nil
 		default:
 			return nil, fmt.Errorf("unknown AExpr kind in parseExpr: %#v", node.AExpr)

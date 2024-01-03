@@ -1760,6 +1760,7 @@ type ComparisonExpr struct {
 	Operator    string
 	Left, Right Expr
 	Escape      Expr
+	All, Any    bool
 }
 
 // ComparisonExpr.Operator
@@ -1787,7 +1788,13 @@ const (
 
 // Format formats the node.
 func (node *ComparisonExpr) Format(buf *TrackedBuffer) {
-	buf.Myprintf("%v %s %v", node.Left, node.Operator, node.Right)
+	if node.All {
+		buf.Myprintf("%v %s ALL (%v)", node.Left, node.Operator, node.Right)
+	} else if node.Any {
+		buf.Myprintf("%v %s ANY (%v)", node.Left, node.Operator, node.Right)
+	} else {
+		buf.Myprintf("%v %s %v", node.Left, node.Operator, node.Right)
+	}
 	if node.Escape != nil {
 		buf.Myprintf(" escape %v", node.Escape)
 	}

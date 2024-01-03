@@ -97,6 +97,13 @@ CheckConstraint:
       quantity integer,
       CONSTRAINT chk CHECK (quantity > 0 AND price > 0)
     );
+CheckConstraintAllAny:
+  sql: |
+    CREATE TABLE test (
+      n1 int CHECK (n1 = ANY (ARRAY[1, 2, 3])),
+      n2 int CHECK (n2 = ALL ('{1, 2, 3}'::integer[])),
+      t1 text CHECK (t1 = SOME ('{x, y}'::text[]))
+    );
 CheckConstraintPosixRegex:
   compare_with_generic_parser: true
   sql: |
