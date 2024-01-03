@@ -1,3 +1,20 @@
+TestCasting:
+  compare_with_generic_parser: true
+  sql: |
+    create view hoge_view as
+    select
+      b::bool,
+      b2::boolean,
+      s::smallint,
+      i::integer,
+      bi::bigint,
+      r::real,
+      d::double precision,
+      n::numeric,
+      t::text,
+      dt::date,
+      uu::uuid
+    from hoge;
 CreateTable:
   compare_with_generic_parser: true
   sql: |
@@ -68,6 +85,26 @@ CreateTableWithNotNull:
       airline_id bigint,
       code varchar(512),
       booking_id bigint NOT NULL
+    );
+CheckConstraint:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE TABLE test (
+      v varchar(10) CHECK (v::text ~ '[0-9]'::text),
+      price integer CHECK (price = 0 OR NOT price <= -1 AND price IS NULL),
+      min_value integer CONSTRAINT test_min_value_check CHECK (min_value > 0),
+      max_value integer CHECK (max_value > 0) NO INHERIT,
+      quantity integer,
+      CONSTRAINT chk CHECK (quantity > 0 AND price > 0)
+    );
+CheckConstraintPosixRegex:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE TABLE test (
+      posix_regex        text NOT NULL CHECK (posix_regex        ~   '[0-9]'),
+      posix_regex_ci     text NOT NULL CHECK (posix_regex_ci     ~*  '[0-9]'),
+      posix_not_regex    text NOT NULL CHECK (posix_not_regex    !~  '[0-9]'),
+      posix_not_regex_ci text NOT NULL CHECK (posix_not_regex_ci !~* '[0-9]')
     );
 CreateView:
   compare_with_generic_parser: true
