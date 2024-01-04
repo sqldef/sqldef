@@ -69,10 +69,12 @@ test-mysqldef:
 	go test -v ./cmd/mysqldef
 
 test-psqldef:
-	$(PSQLDEF_CGO) go test -v ./cmd/psqldef ./database/postgres
+	$(PSQLDEF_CGO) go test -v ./cmd/psqldef
+	$(PSQLDEF_CGO) go test -v ./database/postgres
 
 test-sqlite3def:
 	go test -v ./cmd/sqlite3def
 
 test-mssqldef:
-	go test -v ./cmd/mssqldef ./database/mssql
+	go test -v ./cmd/mssqldef
+	go test -v ./database/mssql
