@@ -14,7 +14,7 @@ else
   SUFFIX=
 endif
 
-.PHONY: all build clean deps package package-zip package-targz
+.PHONY: all build clean deps goyacc package package-zip package-targz parser
 
 all: build
 
@@ -33,6 +33,11 @@ clean:
 deps:
 	go get -t ./...
 
+goyacc:
+	@if ! which goyacc > /dev/null; then \
+	  go install golang.org/x/tools/cmd/goyacc; \
+	fi
+
 package-zip: build
 	mkdir -p package
 	cd $(BUILD_DIR) && zip ../../package/mssqldef_$(GOOS)_$(GOARCH).zip mssqldef$(SUFFIX)
@@ -50,6 +55,12 @@ package-tar.gz: build
 	if [[ $(GOOS) != windows ]]; then \
 		cd $(BUILD_DIR) && tar zcvf ../../package/psqldef_$(GOOS)_$(GOARCH).tar.gz psqldef$(SUFFIX); \
 	fi
+
+parser: goyacc parser/parser.go
+
+parser/parser.go: parser/parser.y
+	goyacc -o parser/parser.go parser/parser.y
+	gofmt -w parser/parser.go
 
 test: test-mysqldef test-psqldef test-sqlite3def test-mssqldef
 

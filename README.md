@@ -494,8 +494,7 @@ To rename them, you would need to rename manually and use `--export` again.
 If you update parser/parser.y, run:
 
 ```
-$ go install golang.org/x/tools/cmd/goyacc
-$ make -C parser
+$ make parser
 ```
 
 You can use the following command to prepare command line tools and DB servers for running tests.
