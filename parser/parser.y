@@ -3113,11 +3113,11 @@ select_expression:
   }
 | table_id '.' '*'
   {
-    $$ = &StarExpr{TableName: TableName{Name: $1}}
+    $$ = &StarExpr{TableName: TableName{Name: $1.v}}
   }
 | table_id '.' reserved_table_id '.' '*'
   {
-    $$ = &StarExpr{TableName: TableName{Schema: $1, Name: $3}}
+    $$ = &StarExpr{TableName: TableName{Schema: $1.v, Name: $3.v}}
   }
 
 as_ci_opt:
@@ -3163,7 +3163,7 @@ over_expression:
 
 from_opt:
   {
-    $$ = TableExprs{&AliasedTableExpr{Expr:TableName{Name: NewTableIdent("dual")}}}
+    $$ = TableExprs{&AliasedTableExpr{Expr:TableName{Name: "dual"}}}
   }
 | FROM table_references
   {
@@ -3411,11 +3411,11 @@ into_table_name:
 table_name:
   table_id
   {
-    $$ = TableName{Name: $1}
+    $$ = TableName{Name: $1.v}
   }
 | table_id '.' reserved_table_id
   {
-    $$ = TableName{Schema: $1, Name: $3}
+    $$ = TableName{Schema: $1.v, Name: $3.v}
   }
 
 index_hint_list:
@@ -4246,11 +4246,11 @@ column_name:
   }
 | table_id '.' reserved_sql_id
   {
-    $$ = &ColName{Qualifier: TableName{Name: $1}, Name: $3}
+    $$ = &ColName{Qualifier: TableName{Name: $1.v}, Name: $3}
   }
 | table_id '.' reserved_table_id '.' reserved_sql_id
   {
-    $$ = &ColName{Qualifier: TableName{Schema: $1, Name: $3}, Name: $5}
+    $$ = &ColName{Qualifier: TableName{Schema: $1.v, Name: $3.v}, Name: $5}
   }
 
 new_qualifier_column_name:

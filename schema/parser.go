@@ -294,7 +294,7 @@ func parseIndex(stmt *parser.DDL) (Index, error) {
 
 	name := stmt.IndexSpec.Name.String()
 	if name == "" {
-		name = stmt.Table.Name.String()
+		name = stmt.Table.Name
 		for _, indexColumn := range indexColumns {
 			name += fmt.Sprintf("_%s", indexColumn.column)
 		}
@@ -426,7 +426,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			return &Trigger{
 				statement: ddl,
 				name:      stmt.Trigger.Name.String(),
-				tableName: stmt.Trigger.TableName.Name.String(),
+				tableName: stmt.Trigger.TableName.Name,
 				time:      stmt.Trigger.Time,
 				event:     stmt.Trigger.Event,
 				body:      body,
@@ -488,10 +488,10 @@ func normalizeCollate(collate string, table parser.TableSpec) string {
 
 // Qualify Postgres/Mssql schema
 func normalizedTableName(mode GeneratorMode, tableName parser.TableName, defaultSchema string) string {
-	table := tableName.Name.String()
+	table := tableName.Name
 	if mode == GeneratorModePostgres || mode == GeneratorModeMssql {
-		if len(tableName.Schema.String()) > 0 {
-			table = tableName.Schema.String() + "." + table
+		if len(tableName.Schema) > 0 {
+			table = tableName.Schema + "." + table
 		} else {
 			table = defaultSchema + "." + table
 		}

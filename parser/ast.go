@@ -1217,7 +1217,7 @@ func (node *Show) Format(buf *TrackedBuffer) {
 
 // HasOnTable returns true if the show statement has an "on" clause
 func (node *Show) HasOnTable() bool {
-	return node.OnTable.Name.v != ""
+	return node.OnTable.Name != ""
 }
 
 // ShowTablesOpt is show tables option
@@ -1523,8 +1523,8 @@ func (node TableNames) Format(buf *TrackedBuffer) {
 
 // TableName represents a table name: [Name] or [Schema].[Name]
 type TableName struct {
-	Schema TableIdent
-	Name   TableIdent
+	Schema string
+	Name   string
 }
 
 // Format formats the node.
@@ -1532,25 +1532,25 @@ func (node TableName) Format(buf *TrackedBuffer) {
 	if node.IsEmpty() {
 		return
 	}
-	if !node.Schema.IsEmpty() {
-		buf.Myprintf("%v.", node.Schema)
+	if node.Schema != "" {
+		buf.Myprintf("%s.", node.Schema)
 	}
-	buf.Myprintf("%v", node.Name)
+	buf.Myprintf("%s", node.Name)
 }
 
 // IsEmpty returns true if TableName is nil or empty.
 func (node TableName) IsEmpty() bool {
 	// If Name is empty, Schema is also empty.
-	return node.Name.IsEmpty()
+	return node.Name == ""
 }
 
 // ToViewName returns a TableName acceptable for use as a VIEW. VIEW names are
 // always lowercase, so ToViewName lowercasese the name. Databases are case-sensitive
-// so Qualifier is left untouched.
+// so Schema is left untouched.
 func (node TableName) ToViewName() TableName {
 	return TableName{
 		Schema: node.Schema,
-		Name:   NewTableIdent(strings.ToLower(node.Name.v)),
+		Name:   strings.ToLower(node.Name),
 	}
 }
 
