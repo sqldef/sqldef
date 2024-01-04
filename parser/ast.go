@@ -24,7 +24,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/sqldef/sqldef/parser/dependency/querypb"
 	"github.com/sqldef/sqldef/parser/dependency/sqltypes"
 )
 
@@ -853,104 +852,6 @@ func (ct *ColumnType) Format(buf *TrackedBuffer) {
 	if ct.KeyOpt == colKey {
 		buf.Myprintf(" %s", keywordStrings[KEY])
 	}
-}
-
-// SQLType returns the sqltypes type code for the given column
-func (ct *ColumnType) SQLType() querypb.Type {
-	switch ct.Type {
-	case keywordStrings[TINYINT]:
-		if ct.Unsigned {
-			return sqltypes.Uint8
-		}
-		return sqltypes.Int8
-	case keywordStrings[SMALLINT]:
-		if ct.Unsigned {
-			return sqltypes.Uint16
-		}
-		return sqltypes.Int16
-	case keywordStrings[MEDIUMINT]:
-		if ct.Unsigned {
-			return sqltypes.Uint24
-		}
-		return sqltypes.Int24
-	case keywordStrings[INT]:
-		fallthrough
-	case keywordStrings[INTEGER]:
-		if ct.Unsigned {
-			return sqltypes.Uint32
-		}
-		return sqltypes.Int32
-	case keywordStrings[BIGINT]:
-		if ct.Unsigned {
-			return sqltypes.Uint64
-		}
-		return sqltypes.Int64
-	case keywordStrings[TEXT]:
-		return sqltypes.Text
-	case keywordStrings[TINYTEXT]:
-		return sqltypes.Text
-	case keywordStrings[MEDIUMTEXT]:
-		return sqltypes.Text
-	case keywordStrings[LONGTEXT]:
-		return sqltypes.Text
-	case keywordStrings[BLOB]:
-		return sqltypes.Blob
-	case keywordStrings[TINYBLOB]:
-		return sqltypes.Blob
-	case keywordStrings[MEDIUMBLOB]:
-		return sqltypes.Blob
-	case keywordStrings[LONGBLOB]:
-		return sqltypes.Blob
-	case keywordStrings[CHAR]:
-		return sqltypes.Char
-	case keywordStrings[VARCHAR]:
-		return sqltypes.VarChar
-	case keywordStrings[BINARY]:
-		return sqltypes.Binary
-	case keywordStrings[VARBINARY]:
-		return sqltypes.VarBinary
-	case keywordStrings[DATE]:
-		return sqltypes.Date
-	case keywordStrings[TIME]:
-		return sqltypes.Time
-	case keywordStrings[DATETIME]:
-		return sqltypes.Datetime
-	case keywordStrings[TIMESTAMP]:
-		return sqltypes.Timestamp
-	case keywordStrings[YEAR]:
-		return sqltypes.Year
-	case keywordStrings[FLOAT_TYPE]:
-		return sqltypes.Float32
-	case keywordStrings[DOUBLE]:
-		return sqltypes.Float64
-	case keywordStrings[DECIMAL]:
-		return sqltypes.Decimal
-	case keywordStrings[BIT]:
-		return sqltypes.Bit
-	case keywordStrings[ENUM]:
-		return sqltypes.Enum
-	case keywordStrings[SET]:
-		return sqltypes.Set
-	case keywordStrings[JSON]:
-		return sqltypes.TypeJSON
-	case keywordStrings[GEOMETRY]:
-		return sqltypes.Geometry
-	case keywordStrings[POINT]:
-		return sqltypes.Geometry
-	case keywordStrings[LINESTRING]:
-		return sqltypes.Geometry
-	case keywordStrings[POLYGON]:
-		return sqltypes.Geometry
-	case keywordStrings[GEOMETRYCOLLECTION]:
-		return sqltypes.Geometry
-	case keywordStrings[MULTIPOINT]:
-		return sqltypes.Geometry
-	case keywordStrings[MULTILINESTRING]:
-		return sqltypes.Geometry
-	case keywordStrings[MULTIPOLYGON]:
-		return sqltypes.Geometry
-	}
-	panic("unimplemented type " + ct.Type)
 }
 
 // IndexDefinition describes an index in a CREATE TABLE statement
