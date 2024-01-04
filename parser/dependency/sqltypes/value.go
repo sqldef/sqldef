@@ -211,28 +211,8 @@ func (v Value) String() string {
 	return fmt.Sprintf("%v(%s)", v.typ, v.val)
 }
 
-// EncodeSQL encodes the value into an SQL statement. Can be binary.
 func (v Value) EncodeSQL(b BinWriter) {
-	switch {
-	case v.typ == Null:
-		b.Write(nullstr)
-	case v.IsQuoted():
-		encodeBytesSQL(v.val, b)
-	default:
-		b.Write(v.val)
-	}
-}
-
-// EncodeASCII encodes the value using 7-bit clean ascii bytes.
-func (v Value) EncodeASCII(b BinWriter) {
-	switch {
-	case v.typ == Null:
-		b.Write(nullstr)
-	case v.IsQuoted():
-		encodeBytesASCII(v.val, b)
-	default:
-		b.Write(v.val)
-	}
+	encodeBytesSQL(v.val, b)
 }
 
 // IsNull returns true if Value is null.
