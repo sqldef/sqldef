@@ -3117,7 +3117,7 @@ select_expression:
   }
 | table_id '.' reserved_table_id '.' '*'
   {
-    $$ = &StarExpr{TableName: TableName{Qualifier: $1, Name: $3}}
+    $$ = &StarExpr{TableName: TableName{Schema: $1, Name: $3}}
   }
 
 as_ci_opt:
@@ -3415,7 +3415,7 @@ table_name:
   }
 | table_id '.' reserved_table_id
   {
-    $$ = TableName{Qualifier: $1, Name: $3}
+    $$ = TableName{Schema: $1, Name: $3}
   }
 
 index_hint_list:
@@ -4250,7 +4250,7 @@ column_name:
   }
 | table_id '.' reserved_table_id '.' reserved_sql_id
   {
-    $$ = &ColName{Qualifier: TableName{Qualifier: $1, Name: $3}, Name: $5}
+    $$ = &ColName{Qualifier: TableName{Schema: $1, Name: $3}, Name: $5}
   }
 
 new_qualifier_column_name:

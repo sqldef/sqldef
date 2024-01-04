@@ -271,8 +271,8 @@ func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.Select
 	var aliasName string
 	if len(stmt.FromClause) == 0 {
 		fromTable = parser.TableName{
-			Name:      parser.NewTableIdent(""),
-			Qualifier: parser.NewTableIdent(""),
+			Name:   parser.NewTableIdent(""),
+			Schema: parser.NewTableIdent(""),
 		}
 	} else {
 		var err error
@@ -330,8 +330,8 @@ func (p PostgresParser) parseResTarget(stmt *pgquery.ResTarget) (parser.SelectEx
 
 			return &parser.StarExpr{
 				TableName: parser.TableName{
-					Name:      parser.NewTableIdent(tableName),
-					Qualifier: parser.NewTableIdent(schemaName),
+					Name:   parser.NewTableIdent(tableName),
+					Schema: parser.NewTableIdent(schemaName),
 				},
 			}, nil
 		}
@@ -678,8 +678,8 @@ func (p PostgresParser) parseTableName(relation *pgquery.RangeVar) (parser.Table
 		return parser.TableName{}, fmt.Errorf("unhandled node in parseTableName: %#v", relation)
 	}
 	return parser.TableName{
-		Qualifier: parser.NewTableIdent(relation.Schemaname),
-		Name:      parser.NewTableIdent(relation.Relname),
+		Schema: parser.NewTableIdent(relation.Schemaname),
+		Name:   parser.NewTableIdent(relation.Relname),
 	}, nil
 }
 

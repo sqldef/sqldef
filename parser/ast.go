@@ -1521,13 +1521,10 @@ func (node TableNames) Format(buf *TrackedBuffer) {
 	}
 }
 
-// TableName represents a table  name.
-// Qualifier, if specified, represents a database or keyspace.
-// TableName is a value struct whose fields are case sensitive.
-// This means two TableName vars can be compared for equality
-// and a TableName can also be used as key in a map.
+// TableName represents a table name: [Name] or [Schema].[Name]
 type TableName struct {
-	Name, Qualifier TableIdent
+	Schema TableIdent
+	Name   TableIdent
 }
 
 // Format formats the node.
@@ -1535,15 +1532,15 @@ func (node TableName) Format(buf *TrackedBuffer) {
 	if node.IsEmpty() {
 		return
 	}
-	if !node.Qualifier.IsEmpty() {
-		buf.Myprintf("%v.", node.Qualifier)
+	if !node.Schema.IsEmpty() {
+		buf.Myprintf("%v.", node.Schema)
 	}
 	buf.Myprintf("%v", node.Name)
 }
 
 // IsEmpty returns true if TableName is nil or empty.
 func (node TableName) IsEmpty() bool {
-	// If Name is empty, Qualifer is also empty.
+	// If Name is empty, Schema is also empty.
 	return node.Name.IsEmpty()
 }
 
@@ -1552,8 +1549,8 @@ func (node TableName) IsEmpty() bool {
 // so Qualifier is left untouched.
 func (node TableName) ToViewName() TableName {
 	return TableName{
-		Qualifier: node.Qualifier,
-		Name:      NewTableIdent(strings.ToLower(node.Name.v)),
+		Schema: node.Schema,
+		Name:   NewTableIdent(strings.ToLower(node.Name.v)),
 	}
 }
 

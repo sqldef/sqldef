@@ -8234,7 +8234,7 @@ yydefault:
 		yyDollar = yyS[yypt-5 : yypt+1]
 //line parser.y:3119
 		{
-			yyVAL.selectExpr = &StarExpr{TableName: TableName{Qualifier: yyDollar[1].tableIdent, Name: yyDollar[3].tableIdent}}
+			yyVAL.selectExpr = &StarExpr{TableName: TableName{Schema: yyDollar[1].tableIdent, Name: yyDollar[3].tableIdent}}
 		}
 	case 558:
 		yyDollar = yyS[yypt-0 : yypt+1]
@@ -8616,7 +8616,7 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser.y:3417
 		{
-			yyVAL.tableName = TableName{Qualifier: yyDollar[1].tableIdent, Name: yyDollar[3].tableIdent}
+			yyVAL.tableName = TableName{Schema: yyDollar[1].tableIdent, Name: yyDollar[3].tableIdent}
 		}
 	case 625:
 		yyDollar = yyS[yypt-0 : yypt+1]
@@ -9744,7 +9744,7 @@ yydefault:
 		yyDollar = yyS[yypt-5 : yypt+1]
 //line parser.y:4252
 		{
-			yyVAL.colName = &ColName{Qualifier: TableName{Qualifier: yyDollar[1].tableIdent, Name: yyDollar[3].tableIdent}, Name: yyDollar[5].colIdent}
+			yyVAL.colName = &ColName{Qualifier: TableName{Schema: yyDollar[1].tableIdent, Name: yyDollar[3].tableIdent}, Name: yyDollar[5].colIdent}
 		}
 	case 815:
 		yyDollar = yyS[yypt-3 : yypt+1]

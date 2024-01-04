@@ -490,8 +490,8 @@ func normalizeCollate(collate string, table parser.TableSpec) string {
 func normalizedTableName(mode GeneratorMode, tableName parser.TableName, defaultSchema string) string {
 	table := tableName.Name.String()
 	if mode == GeneratorModePostgres || mode == GeneratorModeMssql {
-		if len(tableName.Qualifier.String()) > 0 {
-			table = tableName.Qualifier.String() + "." + table
+		if len(tableName.Schema.String()) > 0 {
+			table = tableName.Schema.String() + "." + table
 		} else {
 			table = defaultSchema + "." + table
 		}
