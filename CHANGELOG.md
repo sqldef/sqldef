@@ -1,3 +1,9 @@
+## v0.16.15
+
+- psqldef: Fix type cast errors [#481](https://github.com/sqldef/sqldef/pull/481)
+- psqldef: Fix error when specifying a schema for user-defined type [#480](https://github.com/sqldef/sqldef/pull/480)
+- psqldef: Support ALL/ANY operation in postgres parser [#479](https://github.com/sqldef/sqldef/pull/479)
+
 ## v0.16.14
 
 - psqldef: Support check constraint in postgres parser [#478](https://github.com/sqldef/sqldef/pull/478)
