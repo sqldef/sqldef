@@ -21,25 +21,15 @@ import (
 	"fmt"
 )
 
-// NodeFormatter defines the signature of a custom node formatter
-// function that can be given to TrackedBuffer for code generation.
-type NodeFormatter func(buf *TrackedBuffer, node SQLNode)
-
 // TrackedBuffer is used to rebuild a query from the ast.
-// nodeFormatter is the formatting function the buffer will
-// use to format a node. By default(nil), it's FormatNode.
-// But you can supply a different formatting function if you
-// want to generate a query that's different from the default.
 type TrackedBuffer struct {
 	*bytes.Buffer
-	nodeFormatter NodeFormatter
 }
 
 // NewTrackedBuffer creates a new TrackedBuffer.
-func NewTrackedBuffer(nodeFormatter NodeFormatter) *TrackedBuffer {
+func NewTrackedBuffer() *TrackedBuffer {
 	return &TrackedBuffer{
-		Buffer:        new(bytes.Buffer),
-		nodeFormatter: nodeFormatter,
+		Buffer: new(bytes.Buffer),
 	}
 }
 
@@ -92,11 +82,7 @@ func (buf *TrackedBuffer) Myprintf(format string, values ...interface{}) {
 			}
 		case 'v':
 			node := values[fieldnum].(SQLNode)
-			if buf.nodeFormatter == nil {
-				node.Format(buf)
-			} else {
-				buf.nodeFormatter(buf, node)
-			}
+			node.Format(buf)
 		case 'a':
 			buf.WriteString(values[fieldnum].(string))
 		default:

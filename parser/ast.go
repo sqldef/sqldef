@@ -139,7 +139,7 @@ func String(node SQLNode) string {
 		return "<nil>"
 	}
 
-	buf := NewTrackedBuffer(nil)
+	buf := NewTrackedBuffer()
 	buf.Myprintf("%v", node)
 	return buf.String()
 }
@@ -853,33 +853,6 @@ func (ct *ColumnType) Format(buf *TrackedBuffer) {
 	if ct.KeyOpt == colKey {
 		buf.Myprintf(" %s", keywordStrings[KEY])
 	}
-}
-
-// DescribeType returns the abbreviated type information as required for
-// describe table
-func (ct *ColumnType) DescribeType() string {
-	buf := NewTrackedBuffer(nil)
-	buf.Myprintf("%s", ct.Type)
-	if ct.Length != nil && ct.Scale != nil {
-		buf.Myprintf("(%v,%v)", ct.Length, ct.Scale)
-	} else if ct.Length != nil {
-		buf.Myprintf("(%v)", ct.Length)
-	}
-
-	opts := make([]string, 0, 16)
-	if ct.Unsigned {
-		opts = append(opts, keywordStrings[UNSIGNED])
-	}
-	if ct.Zerofill {
-		opts = append(opts, keywordStrings[ZEROFILL])
-	}
-	if ct.Timezone {
-		opts = append(opts, keywordStrings[WITH], keywordStrings[TIME], keywordStrings[ZONE])
-	}
-	if len(opts) != 0 {
-		buf.Myprintf(" %s", strings.Join(opts, " "))
-	}
-	return buf.String()
 }
 
 // SQLType returns the sqltypes type code for the given column

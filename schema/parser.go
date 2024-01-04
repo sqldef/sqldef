@@ -530,9 +530,8 @@ func parseDefaultDefinition(opt *parser.DefaultDefinition) *DefaultDefinition {
 		defaultVal := parseValue(opt.ValueOrExpression.Value)
 		return &DefaultDefinition{constraintName: constraintName, value: defaultVal}
 	} else {
-		buf := parser.NewTrackedBuffer(nil)
-		opt.ValueOrExpression.Expr.Format(buf)
-		return &DefaultDefinition{constraintName: constraintName, expression: buf.String()}
+		defaultExpr := parser.String(opt.ValueOrExpression.Expr)
+		return &DefaultDefinition{constraintName: constraintName, expression: defaultExpr}
 	}
 }
 
