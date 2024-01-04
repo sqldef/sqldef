@@ -7,6 +7,7 @@ BUILD_DIR=build/$(GOOS)-$(GOARCH)
 SHELL=/bin/bash
 SQLDEF=$(shell pwd)
 MACOS_VERSION := 11.3
+PSQLDEF_CGO=$(shell if [[ $(GOOS) != "windows" ]]; then echo CGO_ENABLED=1; fi)
 
 ifeq ($(GOOS), windows)
   SUFFIX=.exe
@@ -68,11 +69,7 @@ test-mysqldef:
 	go test -v ./cmd/mysqldef
 
 test-psqldef:
-	if [[ $(GOOS) != windows ]]; then \
-		CGO_ENABLED=1 go test -v ./cmd/psqldef ./database/postgres; \
-	else \
-		go test -v ./cmd/psqldef ./database/postgres; \
-	fi
+	$(PSQLDEF_CGO) go test -v ./cmd/psqldef ./database/postgres
 
 test-sqlite3def:
 	go test -v ./cmd/sqlite3def
