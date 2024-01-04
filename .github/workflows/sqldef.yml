@@ -75,7 +75,7 @@ jobs:
           make package-${{ matrix.EXT }} GOOS=${{ matrix.GOOS }} GOARCH=${{ matrix.GOARCH }}
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: sqldef-${{ matrix.GOOS }}-${{ matrix.GOARCH }}
           path: package/*def_${{ matrix.GOOS }}_${{ matrix.GOARCH }}.${{ matrix.EXT }}
@@ -98,7 +98,7 @@ jobs:
         run: make package-${{ matrix.EXT }} GOOS=${{ matrix.GOOS }} GOARCH=${{ matrix.GOARCH }}
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: sqldef-${{ matrix.GOOS }}-${{ matrix.GOARCH }}
           path: package/*def_${{ matrix.GOOS }}_${{ matrix.GOARCH }}.${{ matrix.EXT }}
