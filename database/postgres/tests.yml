@@ -1,20 +1,3 @@
-TestCasting:
-  compare_with_generic_parser: true
-  sql: |
-    create view hoge_view as
-    select
-      b::bool,
-      b2::boolean,
-      s::smallint,
-      i::integer,
-      bi::bigint,
-      r::real,
-      d::double precision,
-      n::numeric,
-      t::text,
-      dt::date,
-      uu::uuid
-    from hoge;
 CreateTable:
   compare_with_generic_parser: true
   sql: |
@@ -121,10 +104,21 @@ CreateView:
     create view hoge_view as
     select amount from hoge;
 CreateViewWithCast:
-  compare_with_generic_parser: true
   sql: |
     create view hoge_view as
-    select amount::numeric(10,2) from hoge;
+    select
+      b::bool,
+      b2::boolean,
+      s::smallint,
+      i::integer,
+      bi::bigint,
+      r::real,
+      d::double precision,
+      n::numeric(10,2),
+      t::text,
+      dt::date,
+      uu::uuid
+    from hoge;
 CreateViewWithFullColumn:
   sql: |
     CREATE VIEW public.hoge_view
