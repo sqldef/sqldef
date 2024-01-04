@@ -26,15 +26,12 @@ import (
 type NodeFormatter func(buf *TrackedBuffer, node SQLNode)
 
 // TrackedBuffer is used to rebuild a query from the ast.
-// bindLocations keeps track of locations in the buffer that
-// use bind variables for efficient future substitutions.
 // nodeFormatter is the formatting function the buffer will
 // use to format a node. By default(nil), it's FormatNode.
 // But you can supply a different formatting function if you
 // want to generate a query that's different from the default.
 type TrackedBuffer struct {
 	*bytes.Buffer
-	bindLocations []bindLocation
 	nodeFormatter NodeFormatter
 }
 
@@ -101,31 +98,11 @@ func (buf *TrackedBuffer) Myprintf(format string, values ...interface{}) {
 				buf.nodeFormatter(buf, node)
 			}
 		case 'a':
-			buf.WriteArg(values[fieldnum].(string))
+			buf.WriteString(values[fieldnum].(string))
 		default:
 			panic("unexpected")
 		}
 		fieldnum++
 		i++
 	}
-}
-
-// WriteArg writes a value argument into the buffer along with
-// tracking information for future substitutions. arg must contain
-// the ":" or "::" prefix.
-func (buf *TrackedBuffer) WriteArg(arg string) {
-	buf.bindLocations = append(buf.bindLocations, bindLocation{
-		offset: buf.Len(),
-		length: len(arg),
-	})
-	buf.WriteString(arg)
-}
-
-// HasBindVars returns true if the parsed query uses bind vars.
-func (buf *TrackedBuffer) HasBindVars() bool {
-	return len(buf.bindLocations) != 0
-}
-
-type bindLocation struct {
-	offset, length int
 }

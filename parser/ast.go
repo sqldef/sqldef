@@ -1940,7 +1940,7 @@ func (node *SQLVal) Format(buf *TrackedBuffer) {
 	case BitVal:
 		buf.Myprintf("B'%s'", []byte(node.Val))
 	case ValArg:
-		buf.WriteArg(string(node.Val))
+		buf.WriteString(string(node.Val))
 	case ValBool:
 		buf.Myprintf("%t", node.Val)
 	default:
@@ -2065,7 +2065,7 @@ type ListArg []byte
 
 // Format formats the node.
 func (node ListArg) Format(buf *TrackedBuffer) {
-	buf.WriteArg(string(node))
+	buf.WriteString(string(node))
 }
 
 // BinaryExpr represents a binary value expression.
