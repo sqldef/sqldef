@@ -20,12 +20,12 @@
 
 ## v0.16.11
 
-- psqdef: Add --skip-extension option [#460](https://github.com/sqldef/sqldef/pull/460)
+- psqldef: Add --skip-extension option [#460](https://github.com/sqldef/sqldef/pull/460)
 
 ## v0.16.10
 
-- psqdef: Add --skip-view option [#456](https://github.com/sqldef/sqldef/issues/456)
-- psqdef: Optimize queries used by --export [#457](https://github.com/sqldef/sqldef/issues/457)
+- psqldef: Add --skip-view option [#456](https://github.com/sqldef/sqldef/issues/456)
+- psqldef: Optimize queries used by --export [#457](https://github.com/sqldef/sqldef/issues/457)
 
 ## v0.16.9
 
