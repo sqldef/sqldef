@@ -43,9 +43,11 @@ CreateTableWithDefault:
       default_current_timestamp timestamp default CURRENT_TIMESTAMP,
       default_current_date date default CURRENT_DATE,
       default_current_time time default CURRENT_TIME,
+      default_date_text text DEFAULT CURRENT_TIMESTAMP::date::text,
       default_now timestamp default now(),
       default_array_int int[] default '{}'::int[],
       default_array_constructor int[] DEFAULT ARRAY[]::int[],
+      default_array_element_typecast text[] DEFAULT ARRAY[current_date::text]::text[],
       joined_at timestamp with time zone NOT NULL DEFAULT '0001-01-01 00:00:00'::timestamp without time zone,
       created_at timestamp with time zone DEFAULT now()
     );
@@ -239,7 +241,8 @@ CheckConstraint:
       t2 text,
       t3 text,
       t4 varchar(10),
-      d date
+      d1 date,
+      d2 date
     );
   desired: |
     CREATE TABLE test (
@@ -250,7 +253,8 @@ CheckConstraint:
       t2 text CHECK (t2 not like 'x'),
       t3 text CHECK (t3 <> ''::text),
       t4 varchar(10) CHECK (t4::text ~ '[0-9]'),
-      d date CHECK (d >= '2022-01-01'::date)
+      d1 date CHECK (d1 >= '2022-01-01'::date),
+      d2 date CHECK (d2 >= date '2022-01-01')
     );
   output: |
     ALTER TABLE "public"."test" ADD CONSTRAINT test_n1_check CHECK (n1 = 0 or not n1 > 10 and n1 is not null);
@@ -260,7 +264,8 @@ CheckConstraint:
     ALTER TABLE "public"."test" ADD CONSTRAINT test_t2_check CHECK (t2 !~~ 'x');
     ALTER TABLE "public"."test" ADD CONSTRAINT test_t3_check CHECK (t3 <> '');
     ALTER TABLE "public"."test" ADD CONSTRAINT test_t4_check CHECK (t4::text ~ '[0-9]');
-    ALTER TABLE "public"."test" ADD CONSTRAINT test_d_check CHECK (d >= '2022-01-01');
+    ALTER TABLE "public"."test" ADD CONSTRAINT test_d1_check CHECK (d1 >= '2022-01-01');
+    ALTER TABLE "public"."test" ADD CONSTRAINT test_d2_check CHECK (d2 >= '2022-01-01');
 
 CompositeForeignKeyConstraint:
   current: |

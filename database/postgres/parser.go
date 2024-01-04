@@ -528,48 +528,22 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		if columnType.Type == "integer" ||
-			columnType.Type == "bigint" ||
-			columnType.Type == "smallint" ||
-			columnType.Type == "numeric" ||
-			columnType.Type == "real" ||
-			columnType.Type == "double precision" ||
-			columnType.Array {
-			switch node.TypeCast.Arg.Node.(type) {
-			case *pgquery.Node_AConst:
-				typeName := columnType.Type
-				if columnType.Array {
-					typeName += "[]"
-				}
-				return &parser.CastExpr{
-					Type: &parser.ConvertType{
-						Type:    typeName,
-						Length:  columnType.Length,
-						Scale:   columnType.Scale,
-						Charset: columnType.Charset,
-					},
-					Expr: expr,
-				}, nil
-			default:
-				return &parser.CollateExpr{
-					Expr: expr,
-				}, nil
-			}
+		if shouldDeleteTypeCast(node.TypeCast.Arg, columnType) {
+			return expr, nil
 		} else {
-			switch node.TypeCast.Arg.Node.(type) {
-			case *pgquery.Node_AConst:
-				return expr, nil
-			default:
-				return &parser.CastExpr{
-					Type: &parser.ConvertType{
-						Type:    columnType.Type,
-						Length:  columnType.Length,
-						Scale:   columnType.Scale,
-						Charset: columnType.Charset,
-					},
-					Expr: expr,
-				}, nil
+			typeName := columnType.Type
+			if columnType.Array {
+				typeName += "[]"
 			}
+			return &parser.CastExpr{
+				Type: &parser.ConvertType{
+					Type:    typeName,
+					Length:  columnType.Length,
+					Scale:   columnType.Scale,
+					Charset: columnType.Charset,
+				},
+				Expr: expr,
+			}, nil
 		}
 	case *pgquery.Node_SqlvalueFunction:
 		switch node.SqlvalueFunction.Op {
@@ -669,6 +643,8 @@ func (p PostgresParser) parseArrayElement(node parser.Expr) (parser.ArrayElement
 		return node, nil
 	case *parser.CollateExpr:
 		return p.parseArrayElement(node.Expr)
+	case *parser.CastExpr:
+		return node, nil
 	default:
 		return nil, fmt.Errorf("unknown expr in parseArrayElement: %#v", node)
 	}
@@ -902,21 +878,21 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 			},
 		}, nil
 	case *parser.CastExpr:
-		switch expr := expr.Expr.(type) {
+		switch castExpr := expr.Expr.(type) {
 		case *parser.SQLVal:
 			return &parser.DefaultDefinition{
 				ValueOrExpression: parser.DefaultValueOrExpression{
-					Value: expr,
+					Value: castExpr,
 				},
 			}, nil
-		case *parser.ArrayConstructor:
+		case *parser.CastExpr, *parser.ArrayConstructor:
 			return &parser.DefaultDefinition{
 				ValueOrExpression: parser.DefaultValueOrExpression{
-					Expr: expr,
+					Expr: castExpr,
 				},
 			}, nil
 		default:
-			return nil, fmt.Errorf("unhandled default CastExpr node: %#v", expr)
+			return nil, fmt.Errorf("unhandled default CastExpr node: %#v", castExpr)
 		}
 	case *parser.CollateExpr:
 		switch expr := expr.Expr.(type) {
@@ -1068,4 +1044,48 @@ func (p PostgresParser) parseCheckConstraint(constraint *pgquery.Constraint) (*p
 		ConstraintName: parser.NewColIdent(constraint.Conname),
 		NoInherit:      parser.BoolVal(constraint.IsNoInherit),
 	}, nil
+}
+
+// This is a workaround to handle cases where PostgreSQL automatically adds or removes type casting.
+//
+// Example:
+//
+// ```
+// $ cat schema.sql
+// CREATE TABLE test (
+// t text CHECK (t ~ '[0-9]'),
+// i integer CHECK (i = ANY (ARRAY[1,2,3]::integer[]))
+// );
+//
+// $ psql sandbox < schema.sql
+// $ psqldef sandbox --export
+// CREATE TABLE "public"."test" (
+// "t" text CONSTRAINT test_t_check CHECK (t ~ '[0-9]'::text),
+// "i" integer CONSTRAINT test_i_check CHECK (i = ANY (ARRAY[1, 2, 3]))
+// );
+// ```
+//
+// Looking at the export result, PostgreSQL automatically adds `::text` type casting to '[0-9]',
+// and removes `::integer[]` from `ARRAY[1,2,3]`. In such cases, if you don't remove the type casting,
+// the generator will fail to calculate the diff.
+//
+// Ideally, the generator should be smart enough to handle the calculation of diff while keeping the type casting.
+// However, as a workaround, it is handled by the parser.
+//
+// Since this function's support is not complete, updates will be necessary in the future.
+func shouldDeleteTypeCast(sourceNode *pgquery.Node, targetType parser.ColumnType) bool {
+	switch sourceNode.Node.(type) {
+	case *pgquery.Node_AConst:
+		if targetType.Array {
+			// Do not delete type cast from '{1,2,3}'::integer[]
+			return false
+		}
+		// Delete type cast from '[0-9]'::text
+		return true
+	case *pgquery.Node_AArrayExpr, *pgquery.Node_TypeCast:
+		// Delete type cast from ARRAY[1,2,3]::integer[]
+		return true
+	default:
+		return false
+	}
 }
