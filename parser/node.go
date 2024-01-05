@@ -2261,7 +2261,7 @@ type SetExpr struct {
 // Format formats the node.
 func (node *SetExpr) Format(buf *stringBuilder) {
 	// We don't have to backtick set variable names.
-	if node.Name.EqualString("charset") || node.Name.EqualString("names") {
+	if node.Name.equalString("charset") || node.Name.equalString("names") {
 		buf.Printf("%s %v", node.Name.String(), node.Expr)
 	} else {
 		buf.Printf("%s = %v", node.Name.String(), node.Expr)
@@ -2328,13 +2328,8 @@ func (node ColIdent) lowered() string {
 	return node.loweredCache
 }
 
-// Equal performs a case-insensitive compare.
-func (node ColIdent) Equal(in ColIdent) bool {
-	return node.lowered() == in.lowered()
-}
-
-// EqualString performs a case-insensitive compare with str.
-func (node ColIdent) EqualString(str string) bool {
+// equalString performs a case-insensitive compare with str.
+func (node ColIdent) equalString(str string) bool {
 	return node.lowered() == strings.ToLower(str)
 }
 
