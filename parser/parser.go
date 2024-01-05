@@ -5470,7 +5470,7 @@ yydefault:
 		{
 			yyVAL.statement = &DDL{Action: CreateViewStr, View: &View{
 				Action:     CreateViewStr,
-				Name:       yyDollar[5].tableName.ToViewName(),
+				Name:       yyDollar[5].tableName.toViewName(),
 				Definition: yyDollar[7].selStmt,
 			}}
 		}
@@ -5481,7 +5481,7 @@ yydefault:
 			yyVAL.statement = &DDL{Action: CreateViewStr, View: &View{
 				Action:       CreateSqlSecurityStr,
 				SecurityType: yyDollar[3].str,
-				Name:         yyDollar[6].tableName.ToViewName(),
+				Name:         yyDollar[6].tableName.toViewName(),
 				Definition:   yyDollar[8].selStmt,
 			}}
 		}
@@ -5491,7 +5491,7 @@ yydefault:
 		{
 			yyVAL.statement = &DDL{Action: CreateViewStr, View: &View{
 				Action:     CreateMatViewStr,
-				Name:       yyDollar[5].tableName.ToViewName(),
+				Name:       yyDollar[5].tableName.toViewName(),
 				Definition: yyDollar[7].selStmt,
 			}}
 		}
@@ -5926,37 +5926,37 @@ yydefault:
 //line parser/parser.y:1303
 		{
 			yyVAL.TableSpec = &TableSpec{}
-			yyVAL.TableSpec.AddColumn(yyDollar[1].columnDefinition)
+			yyVAL.TableSpec.addColumn(yyDollar[1].columnDefinition)
 		}
 	case 172:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:1308
 		{
-			yyVAL.TableSpec.AddColumn(yyDollar[3].columnDefinition)
+			yyVAL.TableSpec.addColumn(yyDollar[3].columnDefinition)
 		}
 	case 173:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:1312
 		{
-			yyVAL.TableSpec.AddIndex(yyDollar[3].indexDefinition)
+			yyVAL.TableSpec.addIndex(yyDollar[3].indexDefinition)
 		}
 	case 174:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:1316
 		{
-			yyVAL.TableSpec.AddForeignKey(yyDollar[3].foreignKeyDefinition)
+			yyVAL.TableSpec.addForeignKey(yyDollar[3].foreignKeyDefinition)
 		}
 	case 175:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:1320
 		{
-			yyVAL.TableSpec.AddIndex(yyDollar[3].indexDefinition)
+			yyVAL.TableSpec.addIndex(yyDollar[3].indexDefinition)
 		}
 	case 176:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:1324
 		{
-			yyVAL.TableSpec.AddCheck(yyDollar[3].checkDefinition)
+			yyVAL.TableSpec.addCheck(yyDollar[3].checkDefinition)
 		}
 	case 177:
 		yyDollar = yyS[yypt-2 : yypt+1]
@@ -7702,7 +7702,7 @@ yydefault:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line parser/parser.y:2677
 		{
-			yyVAL.statement = &DDL{Action: AlterStr, Table: yyDollar[3].tableName.ToViewName(), NewName: yyDollar[3].tableName.ToViewName()}
+			yyVAL.statement = &DDL{Action: AlterStr, Table: yyDollar[3].tableName.toViewName(), NewName: yyDollar[3].tableName.toViewName()}
 		}
 	case 452:
 		yyDollar = yyS[yypt-5 : yypt+1]
@@ -7771,7 +7771,7 @@ yydefault:
 			if yyDollar[3].byt != 0 {
 				exists = true
 			}
-			yyVAL.statement = &DDL{Action: DropStr, Table: yyDollar[4].tableName.ToViewName(), IfExists: exists}
+			yyVAL.statement = &DDL{Action: DropStr, Table: yyDollar[4].tableName.toViewName(), IfExists: exists}
 		}
 	case 482:
 		yyDollar = yyS[yypt-4 : yypt+1]

@@ -402,7 +402,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
 				policy: Policy{
 					name:       stmt.Policy.Name.String(),
-					permissive: stmt.Policy.Permissive.Raw(),
+					permissive: string(stmt.Policy.Permissive),
 					scope:      string(stmt.Policy.Scope),
 					roles:      scope,
 					using:      using,

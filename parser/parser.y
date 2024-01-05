@@ -949,7 +949,7 @@ create_statement:
   {
     $$ = &DDL{Action: CreateViewStr, View: &View{
         Action: CreateViewStr,
-        Name: $5.ToViewName(),
+        Name: $5.toViewName(),
         Definition: $7,
     }}
   }
@@ -958,7 +958,7 @@ create_statement:
     $$ = &DDL{Action: CreateViewStr, View: &View{
         Action: CreateSqlSecurityStr,
         SecurityType: $3,
-        Name: $6.ToViewName(),
+        Name: $6.toViewName(),
         Definition: $8,
     }}
   }
@@ -966,7 +966,7 @@ create_statement:
   {
     $$ = &DDL{Action: CreateViewStr, View: &View{
         Action: CreateMatViewStr,
-        Name: $5.ToViewName(),
+        Name: $5.toViewName(),
         Definition: $7,
     }}
   }
@@ -1302,27 +1302,27 @@ table_column_list:
 | column_definition
   {
     $$ = &TableSpec{}
-    $$.AddColumn($1)
+    $$.addColumn($1)
   }
 | table_column_list ',' column_definition
   {
-    $$.AddColumn($3)
+    $$.addColumn($3)
   }
 | table_column_list ',' index_definition
   {
-    $$.AddIndex($3)
+    $$.addIndex($3)
   }
 | table_column_list ',' foreign_key_definition
   {
-    $$.AddForeignKey($3)
+    $$.addForeignKey($3)
   }
 | table_column_list ',' primary_key_definition
   {
-    $$.AddIndex($3)
+    $$.addIndex($3)
   }
 | table_column_list ',' check_definition
   {
-    $$.AddCheck($3)
+    $$.addCheck($3)
   }
 
 column_definition:
@@ -2675,7 +2675,7 @@ alter_statement:
   }
 | ALTER VIEW table_name ddl_force_eof
   {
-    $$ = &DDL{Action: AlterStr, Table: $3.ToViewName(), NewName: $3.ToViewName()}
+    $$ = &DDL{Action: AlterStr, Table: $3.toViewName(), NewName: $3.toViewName()}
   }
 | ALTER ignore_opt TABLE table_name partition_operation
   {
@@ -2760,7 +2760,7 @@ drop_statement:
         if $3 != 0 {
           exists = true
         }
-    $$ = &DDL{Action: DropStr, Table: $4.ToViewName(), IfExists: exists}
+    $$ = &DDL{Action: DropStr, Table: $4.toViewName(), IfExists: exists}
   }
 | DROP DATABASE exists_opt ID
   {
