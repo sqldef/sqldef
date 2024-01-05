@@ -1720,7 +1720,7 @@ func (node *SQLVal) Format(buf *nodeBuffer) {
 func encodeSQLBytes(val []byte, buf *nodeBuffer) {
 	buf.WriteByte('\'')
 	for _, ch := range val {
-		if encodedChar := SQLEncodeMap[ch]; encodedChar == DontEscape {
+		if encodedChar := sqlEncodeMap[ch]; encodedChar == dontEscape {
 			buf.WriteByte(ch)
 		} else {
 			buf.WriteByte('\\')

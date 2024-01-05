@@ -523,15 +523,15 @@ func init() {
 		keywordStrings[id] = str
 	}
 
-	// Convert encodeRef to SQLEncodeMap and SQLDecodeMap
-	for i := range SQLEncodeMap {
-		SQLEncodeMap[i] = DontEscape
-		SQLDecodeMap[i] = DontEscape
+	// Convert encodeRef to sqlEncodeMap and sqlDecodeMap
+	for i := range sqlEncodeMap {
+		sqlEncodeMap[i] = dontEscape
+		sqlDecodeMap[i] = dontEscape
 	}
-	for i := range SQLEncodeMap {
+	for i := range sqlEncodeMap {
 		if to, ok := encodeRef[byte(i)]; ok {
-			SQLEncodeMap[byte(i)] = to
-			SQLDecodeMap[to] = byte(i)
+			sqlEncodeMap[byte(i)] = to
+			sqlDecodeMap[to] = byte(i)
 		}
 	}
 }
@@ -548,15 +548,15 @@ var encodeRef = map[byte]byte{
 	'\\':   '\\',
 }
 
-// SQLEncodeMap specifies how to escape binary data with '\'.
+// sqlEncodeMap specifies how to escape binary data with '\'.
 // Complies to http://dev.mysql.com/doc/refman/5.1/en/string-syntax.html
-var SQLEncodeMap [256]byte
+var sqlEncodeMap [256]byte
 
-// SQLDecodeMap is the reverse of SQLEncodeMap
-var SQLDecodeMap [256]byte
+// sqlDecodeMap is the reverse of sqlEncodeMap
+var sqlDecodeMap [256]byte
 
-// DontEscape tells you if a character should not be escaped.
-var DontEscape = byte(255)
+// dontEscape tells you if a character should not be escaped.
+var dontEscape = byte(255)
 
 // Lex returns the next token form the Tokenizer.
 // This function is used by go yacc.
@@ -997,7 +997,7 @@ func (tkn *Tokenizer) scanString(delim uint16, typ int) (int, []byte) {
 				// String terminates mid escape character.
 				return LEX_ERROR, buffer.Bytes()
 			}
-			if decodedChar := SQLDecodeMap[byte(tkn.lastChar)]; decodedChar == DontEscape {
+			if decodedChar := sqlDecodeMap[byte(tkn.lastChar)]; decodedChar == dontEscape {
 				ch = tkn.lastChar
 			} else {
 				ch = uint16(decodedChar)
