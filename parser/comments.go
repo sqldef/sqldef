@@ -114,42 +114,6 @@ func SplitMarginComments(sql string) (query string, comments MarginComments) {
 	return strings.TrimFunc(sql[leadingEnd:trailingStart], unicode.IsSpace), comments
 }
 
-// StripLeadingComments trims the SQL string and removes any leading comments
-func StripLeadingComments(sql string) string {
-	sql = strings.TrimFunc(sql, unicode.IsSpace)
-
-	for hasCommentPrefix(sql) {
-		switch sql[0] {
-		case '/':
-			// Multi line comment
-			index := strings.Index(sql, "*/")
-			if index <= 1 {
-				return sql
-			}
-			// don't strip /*! ... */ or /*!50700 ... */
-			if len(sql) > 2 && sql[2] == '!' {
-				return sql
-			}
-			sql = sql[index+2:]
-		case '-':
-			// Single line comment
-			index := strings.Index(sql, "\n")
-			if index == -1 {
-				return sql
-			}
-			sql = sql[index+1:]
-		}
-
-		sql = strings.TrimFunc(sql, unicode.IsSpace)
-	}
-
-	return sql
-}
-
-func hasCommentPrefix(sql string) bool {
-	return len(sql) > 1 && ((sql[0] == '/' && sql[1] == '*') || (sql[0] == '-' && sql[1] == '-'))
-}
-
 // ExtractMysqlComment extracts the version and SQL from a comment-only query
 // such as /*!50708 sql here */
 func ExtractMysqlComment(sql string) (version string, innerSQL string) {
