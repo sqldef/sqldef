@@ -36,7 +36,7 @@ func (p GenericParser) Parse(sql string) ([]DDLStatement, error) {
 	var result []DDLStatement
 	for _, ddl := range ddls {
 		ddl, _ = parser.SplitMarginComments(ddl)
-		stmt, err := parser.ParseStrictDDLWithMode(ddl, p.mode)
+		stmt, err := parser.ParseDDL(ddl, p.mode)
 		if err != nil {
 			return result, err
 		}
@@ -52,7 +52,7 @@ func (p GenericParser) splitDDLs(str string) ([]string, error) {
 	var result []string
 
 	for len(ddls) > 0 {
-		// SplitStatementToPieces() doesn't work well when there's a nested statement for a trigger.
+		// Right now, the parser isn't capable of splitting statements by itself.
 		// So we just attempt parsing until it succeeds. I'll let the parser do it in the future.
 		var ddl string
 		var err error
@@ -64,7 +64,7 @@ func (p GenericParser) splitDDLs(str string) ([]string, error) {
 			if ddl == "" {
 				break
 			}
-			_, err = parser.ParseStrictDDLWithMode(ddl, p.mode)
+			_, err = parser.ParseDDL(ddl, p.mode)
 			if err == nil || i == len(ddls) {
 				break
 			}
