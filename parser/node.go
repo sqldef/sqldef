@@ -17,9 +17,6 @@ limitations under the License.
 package parser
 
 import (
-	"bytes"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -920,21 +917,6 @@ type VindexSpec struct {
 	Params []VindexParam
 }
 
-// ParseParams parses the vindex parameter list, pulling out the special-case
-// "owner" parameter
-func (node *VindexSpec) ParseParams() (string, map[string]string) {
-	var owner string
-	params := map[string]string{}
-	for _, p := range node.Params {
-		if p.Key.Lowered() == "owner" { // Vindex DDL param to specify the owner of a vindex
-			owner = p.Val
-		} else {
-			params[p.Key.String()] = p.Val
-		}
-	}
-	return owner, params
-}
-
 // Format formats the node. The "CREATE VINDEX" preamble was formatted in
 // the containing DDL node Format, so this just prints the type, any
 // parameters, and optionally the owner
@@ -1026,14 +1008,9 @@ func (node *Show) Format(buf *StringBuilder) {
 	} else {
 		buf.Printf("show %s %s", node.Scope, node.Type)
 	}
-	if node.HasOnTable() {
+	if node.OnTable.Name != "" {
 		buf.Printf(" on %v", node.OnTable)
 	}
-}
-
-// HasOnTable returns true if the show statement has an "on" clause
-func (node *Show) HasOnTable() bool {
-	return node.OnTable.Name != ""
 }
 
 // ShowTablesOpt is show tables option
@@ -1234,17 +1211,6 @@ func (node Columns) Format(buf *StringBuilder) {
 	buf.WriteString(")")
 }
 
-// FindColumn finds a column in the column list, returning
-// the index if it exists or -1 otherwise
-func (node Columns) FindColumn(col ColIdent) int {
-	for i, colName := range node {
-		if colName.Equal(col) {
-			return i
-		}
-	}
-	return -1
-}
-
 // Partitions is a type alias for Columns so we can handle printing efficiently
 type Partitions Columns
 
@@ -1307,13 +1273,6 @@ func (node *AliasedTableExpr) Format(buf *StringBuilder) {
 		// Hint node provides the space padding.
 		buf.Printf("%v", node.IndexHints)
 	}
-}
-
-// RemoveHints returns a new AliasedTableExpr with the hints removed.
-func (node *AliasedTableExpr) RemoveHints() *AliasedTableExpr {
-	noHints := *node
-	noHints.IndexHints = nil
-	return &noHints
 }
 
 // SimpleTableExpr represents a simple table expression.
@@ -1764,16 +1723,6 @@ func (node *SQLVal) Format(buf *StringBuilder) {
 	}
 }
 
-// HexDecode decodes the hexval into bytes.
-func (node *SQLVal) HexDecode() ([]byte, error) {
-	dst := make([]byte, hex.DecodedLen(len([]byte(node.Val))))
-	_, err := hex.Decode(dst, []byte(node.Val))
-	if err != nil {
-		return nil, err
-	}
-	return dst, err
-}
-
 // NullVal represents a NULL value.
 type NullVal struct{}
 
@@ -1818,15 +1767,6 @@ func (node *ColName) Format(buf *StringBuilder) {
 	buf.Printf("%v", node.Name)
 }
 
-// Equal returns true if the column names match.
-func (node *ColName) Equal(c *ColName) bool {
-	// Failsafe: ColName should not be empty.
-	if node == nil || c == nil {
-		return false
-	}
-	return node.Name.Equal(c.Name) && node.Qualifier == c.Qualifier
-}
-
 // NewQualifierColName represents a column name with NEW qualifier.
 type NewQualifierColName struct {
 	Name ColIdent
@@ -1836,15 +1776,6 @@ type NewQualifierColName struct {
 func (node *NewQualifierColName) Format(buf *StringBuilder) {
 	// We don't have to backtick NEW qualifier.
 	buf.Printf("NEW.%s", node.Name.String())
-}
-
-// Equal returns true if the column names match.
-func (node *NewQualifierColName) Equal(c *ColName) bool {
-	// Failsafe: ColName should not be empty.
-	if node == nil || c == nil {
-		return false
-	}
-	return node.Name.Equal(c.Name)
 }
 
 // ColTuple represents a list of column values.
@@ -1992,33 +1923,6 @@ func (node *FuncCallExpr) Format(buf *StringBuilder) {
 	// if they match a reserved word. So, print the
 	// name as is.
 	buf.Printf("%s(%v)", node.Name.String(), node.Exprs)
-}
-
-// Aggregates is a map of all aggregate functions.
-var Aggregates = map[string]bool{
-	"avg":          true,
-	"bit_and":      true,
-	"bit_or":       true,
-	"bit_xor":      true,
-	"count":        true,
-	"group_concat": true,
-	"max":          true,
-	"min":          true,
-	"std":          true,
-	"stddev_pop":   true,
-	"stddev_samp":  true,
-	"stddev":       true,
-	"sum":          true,
-	"var_pop":      true,
-	"var_samp":     true,
-	"variance":     true,
-	"lead":         true,
-	"lag":          true,
-}
-
-// IsAggregate returns true if the function is an aggregate.
-func (node *FuncExpr) IsAggregate() bool {
-	return Aggregates[node.Name.Lowered()]
 }
 
 // GroupConcatExpr represents a call to GROUP_CONCAT
@@ -2559,12 +2463,6 @@ func (node ColIdent) String() string {
 	return node.val
 }
 
-// CompliantName returns a compliant id name
-// that can be used for a bind var.
-func (node ColIdent) CompliantName() string {
-	return compliantName(node.val)
-}
-
 // Lowered returns a lower-cased column name.
 // This function should generally be used only for optimizing
 // comparisons.
@@ -2586,22 +2484,6 @@ func (node ColIdent) Equal(in ColIdent) bool {
 // EqualString performs a case-insensitive compare with str.
 func (node ColIdent) EqualString(str string) bool {
 	return node.Lowered() == strings.ToLower(str)
-}
-
-// MarshalJSON marshals into JSON.
-func (node ColIdent) MarshalJSON() ([]byte, error) {
-	return json.Marshal(node.val)
-}
-
-// UnmarshalJSON unmarshals from JSON.
-func (node *ColIdent) UnmarshalJSON(b []byte) error {
-	var result string
-	err := json.Unmarshal(b, &result)
-	if err != nil {
-		return err
-	}
-	node.val = result
-	return nil
 }
 
 // TableIdent is a case sensitive SQL identifier. It will be escaped with
@@ -2633,28 +2515,6 @@ func (node TableIdent) String() string {
 	return node.v
 }
 
-// CompliantName returns a compliant id name
-// that can be used for a bind var.
-func (node TableIdent) CompliantName() string {
-	return compliantName(node.v)
-}
-
-// MarshalJSON marshals into JSON.
-func (node TableIdent) MarshalJSON() ([]byte, error) {
-	return json.Marshal(node.v)
-}
-
-// UnmarshalJSON unmarshals from JSON.
-func (node *TableIdent) UnmarshalJSON(b []byte) error {
-	var result string
-	err := json.Unmarshal(b, &result)
-	if err != nil {
-		return err
-	}
-	node.v = result
-	return nil
-}
-
 func formatID(buf *StringBuilder, original, lowered string) {
 	isDbSystemVariable := false
 	if len(original) > 1 && original[:2] == "@@" {
@@ -2680,20 +2540,6 @@ mustEscape:
 		}
 	}
 	buf.WriteByte('`')
-}
-
-func compliantName(in string) string {
-	var buf bytes.Buffer
-	for i, c := range in {
-		if !isLetter(uint16(c)) {
-			if i == 0 || !isDigit(uint16(c)) {
-				buf.WriteByte('_')
-				continue
-			}
-		}
-		buf.WriteRune(c)
-	}
-	return buf.String()
 }
 
 type ArrayConstructor struct {
