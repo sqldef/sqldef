@@ -23,8 +23,6 @@ import (
 	"io"
 	"strings"
 	"unicode"
-
-	"github.com/sqldef/sqldef/parser/dependency/bytes2"
 )
 
 type ParserMode int
@@ -542,11 +540,11 @@ func (tkn *Tokenizer) Lex(lval *yySymType) int {
 
 // Error is called by go yacc if there's a parsing error.
 func (tkn *Tokenizer) Error(err string) {
-	buf := &bytes2.Buffer{}
+	var buf tokenBuffer
 	if tkn.lastToken != nil {
-		fmt.Fprintf(buf, "%s at position %v near '%s'", err, tkn.Position, tkn.lastToken)
+		fmt.Fprintf(&buf, "%s at position %v near '%s'", err, tkn.Position, tkn.lastToken)
 	} else {
-		fmt.Fprintf(buf, "%s at position %v", err, tkn.Position)
+		fmt.Fprintf(&buf, "%s at position %v", err, tkn.Position)
 	}
 	tkn.LastError = errors.New(buf.String())
 
@@ -646,8 +644,8 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 			return int(ch), nil
 		case '?':
 			tkn.posVarIndex++
-			buf := new(bytes2.Buffer)
-			fmt.Fprintf(buf, ":v%d", tkn.posVarIndex)
+			var buf tokenBuffer
+			fmt.Fprintf(&buf, ":v%d", tkn.posVarIndex)
 			return VALUE_ARG, buf.Bytes()
 		case '.':
 			if isDigit(tkn.lastChar) {
@@ -772,7 +770,7 @@ func (tkn *Tokenizer) skipBlank() {
 }
 
 func (tkn *Tokenizer) scanIdentifier(firstByte byte, isDbSystemVariable bool) (int, []byte) {
-	buffer := &bytes2.Buffer{}
+	var buffer tokenBuffer
 	buffer.WriteByte(firstByte)
 	for isLetter(tkn.lastChar) || isDigit(tkn.lastChar) || (isDbSystemVariable && isCarat(tkn.lastChar)) {
 		buffer.WriteByte(byte(tkn.lastChar))
@@ -791,8 +789,8 @@ func (tkn *Tokenizer) scanIdentifier(firstByte byte, isDbSystemVariable bool) (i
 }
 
 func (tkn *Tokenizer) scanHex() (int, []byte) {
-	buffer := &bytes2.Buffer{}
-	tkn.scanMantissa(16, buffer)
+	var buffer tokenBuffer
+	tkn.scanMantissa(16, &buffer)
 	if tkn.lastChar != '\'' {
 		return LEX_ERROR, buffer.Bytes()
 	}
@@ -804,8 +802,8 @@ func (tkn *Tokenizer) scanHex() (int, []byte) {
 }
 
 func (tkn *Tokenizer) scanBitLiteral() (int, []byte) {
-	buffer := &bytes2.Buffer{}
-	tkn.scanMantissa(2, buffer)
+	var buffer tokenBuffer
+	tkn.scanMantissa(2, &buffer)
 	if tkn.lastChar != '\'' {
 		return LEX_ERROR, buffer.Bytes()
 	}
@@ -814,7 +812,7 @@ func (tkn *Tokenizer) scanBitLiteral() (int, []byte) {
 }
 
 func (tkn *Tokenizer) scanLiteralIdentifier(sepChar uint16) (int, []byte) {
-	buffer := &bytes2.Buffer{}
+	var buffer tokenBuffer
 	backTickSeen := false
 	for {
 		if backTickSeen {
@@ -845,7 +843,7 @@ func (tkn *Tokenizer) scanLiteralIdentifier(sepChar uint16) (int, []byte) {
 }
 
 func (tkn *Tokenizer) scanBindVar() (int, []byte) {
-	buffer := &bytes2.Buffer{}
+	var buffer tokenBuffer
 	buffer.WriteByte(byte(tkn.lastChar))
 	token := VALUE_ARG
 	tkn.next()
@@ -869,7 +867,7 @@ func (tkn *Tokenizer) scanBindVar() (int, []byte) {
 	return token, buffer.Bytes()
 }
 
-func (tkn *Tokenizer) scanMantissa(base int, buffer *bytes2.Buffer) {
+func (tkn *Tokenizer) scanMantissa(base int, buffer *tokenBuffer) {
 	for digitVal(tkn.lastChar) < base {
 		tkn.consumeNext(buffer)
 	}
@@ -877,41 +875,41 @@ func (tkn *Tokenizer) scanMantissa(base int, buffer *bytes2.Buffer) {
 
 func (tkn *Tokenizer) scanNumber(seenDecimalPoint bool) (int, []byte) {
 	token := INTEGRAL
-	buffer := &bytes2.Buffer{}
+	var buffer tokenBuffer
 	if seenDecimalPoint {
 		token = FLOAT
 		buffer.WriteByte('.')
-		tkn.scanMantissa(10, buffer)
+		tkn.scanMantissa(10, &buffer)
 		goto exponent
 	}
 
 	// 0x construct.
 	if tkn.lastChar == '0' {
-		tkn.consumeNext(buffer)
+		tkn.consumeNext(&buffer)
 		if tkn.lastChar == 'x' || tkn.lastChar == 'X' {
 			token = HEXNUM
-			tkn.consumeNext(buffer)
-			tkn.scanMantissa(16, buffer)
+			tkn.consumeNext(&buffer)
+			tkn.scanMantissa(16, &buffer)
 			goto exit
 		}
 	}
 
-	tkn.scanMantissa(10, buffer)
+	tkn.scanMantissa(10, &buffer)
 
 	if tkn.lastChar == '.' {
 		token = FLOAT
-		tkn.consumeNext(buffer)
-		tkn.scanMantissa(10, buffer)
+		tkn.consumeNext(&buffer)
+		tkn.scanMantissa(10, &buffer)
 	}
 
 exponent:
 	if tkn.lastChar == 'e' || tkn.lastChar == 'E' {
 		token = FLOAT
-		tkn.consumeNext(buffer)
+		tkn.consumeNext(&buffer)
 		if tkn.lastChar == '+' || tkn.lastChar == '-' {
-			tkn.consumeNext(buffer)
+			tkn.consumeNext(&buffer)
 		}
-		tkn.scanMantissa(10, buffer)
+		tkn.scanMantissa(10, &buffer)
 	}
 
 exit:
@@ -924,7 +922,7 @@ exit:
 }
 
 func (tkn *Tokenizer) scanString(delim uint16, typ int) (int, []byte) {
-	var buffer bytes2.Buffer
+	var buffer tokenBuffer
 	for {
 		ch := tkn.lastChar
 		if ch == eofChar {
@@ -983,26 +981,26 @@ func (tkn *Tokenizer) scanString(delim uint16, typ int) (int, []byte) {
 }
 
 func (tkn *Tokenizer) scanCommentType1(prefix string) (int, []byte) {
-	buffer := &bytes2.Buffer{}
+	var buffer tokenBuffer
 	buffer.WriteString(prefix)
 	for tkn.lastChar != eofChar {
 		if tkn.lastChar == '\n' {
-			tkn.consumeNext(buffer)
+			tkn.consumeNext(&buffer)
 			break
 		}
-		tkn.consumeNext(buffer)
+		tkn.consumeNext(&buffer)
 	}
 	return COMMENT, buffer.Bytes()
 }
 
 func (tkn *Tokenizer) scanCommentType2() (int, []byte) {
-	buffer := &bytes2.Buffer{}
+	var buffer tokenBuffer
 	buffer.WriteString("/*")
 	for {
 		if tkn.lastChar == '*' {
-			tkn.consumeNext(buffer)
+			tkn.consumeNext(&buffer)
 			if tkn.lastChar == '/' {
-				tkn.consumeNext(buffer)
+				tkn.consumeNext(&buffer)
 				break
 			}
 			continue
@@ -1010,20 +1008,20 @@ func (tkn *Tokenizer) scanCommentType2() (int, []byte) {
 		if tkn.lastChar == eofChar {
 			return LEX_ERROR, buffer.Bytes()
 		}
-		tkn.consumeNext(buffer)
+		tkn.consumeNext(&buffer)
 	}
 	return COMMENT, buffer.Bytes()
 }
 
 func (tkn *Tokenizer) scanMySQLSpecificComment() (int, []byte) {
-	buffer := &bytes2.Buffer{}
+	var buffer tokenBuffer
 	buffer.WriteString("/*!")
 	tkn.next()
 	for {
 		if tkn.lastChar == '*' {
-			tkn.consumeNext(buffer)
+			tkn.consumeNext(&buffer)
 			if tkn.lastChar == '/' {
-				tkn.consumeNext(buffer)
+				tkn.consumeNext(&buffer)
 				break
 			}
 			continue
@@ -1031,14 +1029,14 @@ func (tkn *Tokenizer) scanMySQLSpecificComment() (int, []byte) {
 		if tkn.lastChar == eofChar {
 			return LEX_ERROR, buffer.Bytes()
 		}
-		tkn.consumeNext(buffer)
+		tkn.consumeNext(&buffer)
 	}
 	_, sql := extractMysqlComment(buffer.String())
 	tkn.specialComment = NewTokenizer(sql, tkn.mode)
 	return tkn.Scan()
 }
 
-func (tkn *Tokenizer) consumeNext(buffer *bytes2.Buffer) {
+func (tkn *Tokenizer) consumeNext(buffer *tokenBuffer) {
 	if tkn.lastChar == eofChar {
 		// This should never happen.
 		panic("unexpected EOF")
@@ -1117,4 +1115,14 @@ func digitVal(ch uint16) int {
 
 func isDigit(ch uint16) bool {
 	return '0' <= ch && ch <= '9'
+}
+
+// tokenBuffer extends strings.Builder to provide Bytes() shorthand
+type tokenBuffer struct {
+	strings.Builder
+}
+
+// Shorthand API like bytes.Buffer
+func (buf *tokenBuffer) Bytes() []byte {
+	return []byte(buf.String())
 }
