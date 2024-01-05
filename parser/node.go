@@ -19,8 +19,6 @@ package parser
 import (
 	"fmt"
 	"strings"
-
-	"github.com/sqldef/sqldef/parser/dependency/sqltypes"
 )
 
 // SQLNode defines the interface for all nodes
@@ -1700,10 +1698,10 @@ func NewValArgWithOpt(in []byte, opt *SQLVal) *SQLVal {
 func (node *SQLVal) Format(buf *stringBuilder) {
 	switch node.Type {
 	case StrVal:
-		sqltypes.MakeTrusted(sqltypes.VarBinary, node.Val).EncodeSQL(buf)
+		buf.WriteString(encodeSQLBytes(node.Val))
 	case UnicodeStrVal:
 		buf.WriteRune('N')
-		sqltypes.MakeTrusted(sqltypes.VarBinary, node.Val).EncodeSQL(buf)
+		buf.WriteString(encodeSQLBytes(node.Val))
 	case IntVal, FloatVal, HexNum:
 		buf.Printf("%s", []byte(node.Val))
 	case HexVal:
