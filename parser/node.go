@@ -1698,10 +1698,10 @@ func NewValArgWithOpt(in []byte, opt *SQLVal) *SQLVal {
 func (node *SQLVal) Format(buf *nodeBuffer) {
 	switch node.Type {
 	case StrVal:
-		buf.WriteString(encodeSQLBytes(node.Val))
+		encodeSQLBytes(node.Val, buf)
 	case UnicodeStrVal:
 		buf.WriteRune('N')
-		buf.WriteString(encodeSQLBytes(node.Val))
+		encodeSQLBytes(node.Val, buf)
 	case IntVal, FloatVal, HexNum:
 		buf.Printf("%s", []byte(node.Val))
 	case HexVal:
@@ -1715,6 +1715,19 @@ func (node *SQLVal) Format(buf *nodeBuffer) {
 	default:
 		panic("unexpected")
 	}
+}
+
+func encodeSQLBytes(val []byte, buf *nodeBuffer) {
+	buf.WriteByte('\'')
+	for _, ch := range val {
+		if encodedChar := SQLEncodeMap[ch]; encodedChar == DontEscape {
+			buf.WriteByte(ch)
+		} else {
+			buf.WriteByte('\\')
+			buf.WriteByte(encodedChar)
+		}
+	}
+	buf.WriteByte('\'')
 }
 
 // NullVal represents a NULL value.
