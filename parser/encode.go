@@ -29,6 +29,9 @@ var (
 // Complies to http://dev.mysql.com/doc/refman/5.1/en/string-syntax.html
 var SQLEncodeMap [256]byte
 
+// SQLDecodeMap is the reverse of SQLEncodeMap
+var SQLDecodeMap [256]byte
+
 var encodeRef = map[byte]byte{
 	'\x00': '0',
 	'\'':   '\'',
@@ -44,10 +47,12 @@ var encodeRef = map[byte]byte{
 func init() {
 	for i := range SQLEncodeMap {
 		SQLEncodeMap[i] = DontEscape
+		SQLDecodeMap[i] = DontEscape
 	}
 	for i := range SQLEncodeMap {
 		if to, ok := encodeRef[byte(i)]; ok {
 			SQLEncodeMap[byte(i)] = to
+			SQLDecodeMap[to] = byte(i)
 		}
 	}
 }

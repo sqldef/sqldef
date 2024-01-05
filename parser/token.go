@@ -25,7 +25,6 @@ import (
 	"unicode"
 
 	"github.com/sqldef/sqldef/parser/dependency/bytes2"
-	"github.com/sqldef/sqldef/parser/dependency/sqltypes"
 )
 
 type ParserMode int
@@ -965,7 +964,7 @@ func (tkn *Tokenizer) scanString(delim uint16, typ int) (int, []byte) {
 				// String terminates mid escape character.
 				return LEX_ERROR, buffer.Bytes()
 			}
-			if decodedChar := sqltypes.SQLDecodeMap[byte(tkn.lastChar)]; decodedChar == sqltypes.DontEscape {
+			if decodedChar := SQLDecodeMap[byte(tkn.lastChar)]; decodedChar == DontEscape {
 				ch = tkn.lastChar
 			} else {
 				ch = uint16(decodedChar)
