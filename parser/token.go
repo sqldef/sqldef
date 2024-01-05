@@ -38,6 +38,94 @@ const (
 	ParserModeMssql
 )
 
+// The main parser function for sqldef.
+func ParseStrictDDLWithMode(sql string, mode ParserMode) (Statement, error) {
+	tokenizer := NewStringTokenizer(sql, mode)
+	if yyParse(tokenizer) != 0 {
+		return nil, fmt.Errorf(
+			"found syntax error when parsing DDL \"%s\": %v", sql, tokenizer.LastError,
+		)
+	}
+	return tokenizer.ParseTree, nil
+}
+
+// ParseNext parses a single SQL statement from the tokenizer
+// returning a Statement which is the AST representation of the query.
+// The tokenizer will always read up to the end of the statement, allowing for
+// the next call to ParseNext to parse any subsequent SQL statements. When
+// there are no more statements to parse, a error of io.EOF is returned.
+func ParseNext(tokenizer *Tokenizer) (Statement, error) {
+	if tokenizer.lastChar == ';' {
+		tokenizer.next()
+		tokenizer.skipBlank()
+	}
+	if tokenizer.lastChar == eofChar {
+		return nil, io.EOF
+	}
+
+	tokenizer.reset()
+	tokenizer.multi = true
+	if yyParse(tokenizer) != 0 {
+		if tokenizer.partialDDL != nil {
+			tokenizer.ParseTree = tokenizer.partialDDL
+			return tokenizer.ParseTree, nil
+		}
+		return nil, tokenizer.LastError
+	}
+	return tokenizer.ParseTree, nil
+}
+
+// SplitStatement returns the first sql statement up to either a ; or EOF
+// and the remainder from the given buffer
+func SplitStatement(blob string) (string, string, error) {
+	tokenizer := NewStringTokenizer(blob, ParserModeMysql) // TODO: Switch mode
+	tkn := 0
+	for {
+		tkn, _ = tokenizer.Scan()
+		if tkn == 0 || tkn == ';' || tkn == eofChar {
+			break
+		}
+	}
+	if tokenizer.LastError != nil {
+		return "", "", tokenizer.LastError
+	}
+	if tkn == ';' {
+		return blob[:tokenizer.Position-2], blob[tokenizer.Position-1:], nil
+	}
+	return blob, "", nil
+}
+
+// SplitStatementToPieces split raw sql statement that may have multi sql pieces to sql pieces
+// returns the sql pieces blob contains; or error if sql cannot be parsed
+func SplitStatementToPieces(blob string) (pieces []string, err error) {
+	pieces = make([]string, 0, 16)
+	tokenizer := NewStringTokenizer(blob, ParserModeMysql) // TODO: Switch mode
+
+	tkn := 0
+	var stmt string
+	stmtBegin := 0
+	for {
+		tkn, _ = tokenizer.Scan()
+		if tkn == ';' {
+			stmt = blob[stmtBegin : tokenizer.Position-2]
+			pieces = append(pieces, stmt)
+			stmtBegin = tokenizer.Position - 1
+
+		} else if tkn == 0 || tkn == eofChar {
+			blobTail := tokenizer.Position - 2
+
+			if stmtBegin < blobTail {
+				stmt = blob[stmtBegin : blobTail+1]
+				pieces = append(pieces, stmt)
+			}
+			break
+		}
+	}
+
+	err = tokenizer.LastError
+	return
+}
+
 // Tokenizer is the struct used to generate SQL
 // tokens for the parser.
 type Tokenizer struct {
