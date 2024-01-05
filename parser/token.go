@@ -524,15 +524,6 @@ func init() {
 	}
 }
 
-// KeywordString returns the string corresponding to the given keyword
-func KeywordString(id int) string {
-	str, ok := keywordStrings[id]
-	if !ok {
-		return ""
-	}
-	return str
-}
-
 // Lex returns the next token form the Tokenizer.
 // This function is used by go yacc.
 func (tkn *Tokenizer) Lex(lval *yySymType) int {
