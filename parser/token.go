@@ -72,23 +72,13 @@ type Tokenizer struct {
 	bufSize int
 }
 
-// NewStringTokenizer creates a new Tokenizer for the
-// sql string.
+// NewStringTokenizer creates a new Tokenizer for a given SQL string.
 func NewStringTokenizer(sql string, mode ParserMode) *Tokenizer {
 	buf := []byte(sql)
 	return &Tokenizer{
 		buf:     buf,
 		bufSize: len(buf),
 		mode:    mode,
-	}
-}
-
-// NewTokenizer creates a new Tokenizer reading a sql
-// string from the io.Reader.
-func NewTokenizer(r io.Reader) *Tokenizer {
-	return &Tokenizer{
-		InStream: r,
-		buf:      make([]byte, defaultBufSize),
 	}
 }
 
