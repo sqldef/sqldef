@@ -40,7 +40,7 @@ const (
 
 // The main parser function for sqldef.
 func ParseDDL(sql string, mode ParserMode) (Statement, error) {
-	tokenizer := NewStringTokenizer(sql, mode)
+	tokenizer := NewTokenizer(sql, mode)
 	if yyParse(tokenizer) != 0 {
 		return nil, fmt.Errorf(
 			"found syntax error when parsing DDL \"%s\": %v", sql, tokenizer.LastError,
@@ -72,8 +72,8 @@ type Tokenizer struct {
 	bufSize int
 }
 
-// NewStringTokenizer creates a new Tokenizer for a given SQL string.
-func NewStringTokenizer(sql string, mode ParserMode) *Tokenizer {
+// NewTokenizer creates a new Tokenizer for a given SQL string.
+func NewTokenizer(sql string, mode ParserMode) *Tokenizer {
 	buf := []byte(sql)
 	return &Tokenizer{
 		buf:     buf,
@@ -1042,7 +1042,7 @@ func (tkn *Tokenizer) scanMySQLSpecificComment() (int, []byte) {
 		tkn.consumeNext(buffer)
 	}
 	_, sql := ExtractMysqlComment(buffer.String())
-	tkn.specialComment = NewStringTokenizer(sql, tkn.mode)
+	tkn.specialComment = NewTokenizer(sql, tkn.mode)
 	return tkn.Scan()
 }
 
