@@ -21,6 +21,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
+	"unicode"
 
 	"github.com/sqldef/sqldef/parser/dependency/bytes2"
 	"github.com/sqldef/sqldef/parser/dependency/sqltypes"
@@ -1032,7 +1034,7 @@ func (tkn *Tokenizer) scanMySQLSpecificComment() (int, []byte) {
 		}
 		tkn.consumeNext(buffer)
 	}
-	_, sql := ExtractMysqlComment(buffer.String())
+	_, sql := extractMysqlComment(buffer.String())
 	tkn.specialComment = NewTokenizer(sql, tkn.mode)
 	return tkn.Scan()
 }
@@ -1076,6 +1078,22 @@ func (tkn *Tokenizer) reset() {
 	tkn.posVarIndex = 0
 	tkn.nesting = 0
 	tkn.ForceEOF = false
+}
+
+// extractMysqlComment extracts the version and SQL from a comment-only query
+// such as /*!50708 sql here */
+func extractMysqlComment(sql string) (version string, innerSQL string) {
+	sql = sql[3 : len(sql)-2]
+
+	digitCount := 0
+	endOfVersionIndex := strings.IndexFunc(sql, func(c rune) bool {
+		digitCount++
+		return !unicode.IsDigit(c) || digitCount == 6
+	})
+	version = sql[0:endOfVersionIndex]
+	innerSQL = strings.TrimFunc(sql[endOfVersionIndex:], unicode.IsSpace)
+
+	return version, innerSQL
 }
 
 func isLetter(ch uint16) bool {

@@ -3,6 +3,7 @@ package database
 import (
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/sqldef/sqldef/parser"
 )
@@ -35,7 +36,7 @@ func (p GenericParser) Parse(sql string) ([]DDLStatement, error) {
 
 	var result []DDLStatement
 	for _, ddl := range ddls {
-		ddl, _ = parser.SplitMarginComments(ddl)
+		ddl = trimMarginComments(ddl)
 		stmt, err := parser.ParseDDL(ddl, p.mode)
 		if err != nil {
 			return result, err
@@ -44,6 +45,7 @@ func (p GenericParser) Parse(sql string) ([]DDLStatement, error) {
 	}
 	return result, nil
 }
+
 func (p GenericParser) splitDDLs(str string) ([]string, error) {
 	re := regexp.MustCompilePOSIX("^--.*")
 	str = re.ReplaceAllString(str, "")
@@ -59,7 +61,7 @@ func (p GenericParser) splitDDLs(str string) ([]string, error) {
 		i := 1
 		for {
 			ddl = strings.Join(ddls[0:i], ";")
-			ddl, _ = parser.SplitMarginComments(ddl)
+			ddl = trimMarginComments(ddl)
 			ddl = strings.TrimSuffix(ddl, ";")
 			if ddl == "" {
 				break
@@ -85,4 +87,86 @@ func (p GenericParser) splitDDLs(str string) ([]string, error) {
 		}
 	}
 	return result, nil
+}
+
+// trimMarginComments pulls out any leading or trailing comments from a raw sql query.
+// This function also trims leading (if there's a comment) and trailing whitespace.
+func trimMarginComments(sql string) string {
+	trailingStart := trailingCommentStart(sql)
+	leadingEnd := leadingCommentEnd(sql[:trailingStart])
+	return strings.TrimFunc(sql[leadingEnd:trailingStart], unicode.IsSpace)
+}
+
+// trailingCommentStart returns the first index of trailing comments.
+// If there are no trailing comments, returns the length of the input string.
+func trailingCommentStart(text string) (start int) {
+	hasComment := false
+	reducedLen := len(text)
+	for reducedLen > 0 {
+		// Eat up any whitespace. Leading whitespace will be considered part of
+		// the trailing comments.
+		nextReducedLen := strings.LastIndexFunc(text[:reducedLen], isNonSpace) + 1
+		if nextReducedLen == 0 {
+			break
+		}
+		reducedLen = nextReducedLen
+		if reducedLen < 4 || text[reducedLen-2:reducedLen] != "*/" {
+			break
+		}
+
+		// Find the beginning of the comment
+		startCommentPos := strings.LastIndex(text[:reducedLen-2], "/*")
+		if startCommentPos < 0 {
+			// Badly formatted sql :/
+			break
+		}
+
+		hasComment = true
+		reducedLen = startCommentPos
+	}
+
+	if hasComment {
+		return reducedLen
+	}
+	return len(text)
+}
+
+// leadingCommentEnd returns the first index after all leading comments, or
+// 0 if there are no leading comments.
+func leadingCommentEnd(text string) (end int) {
+	hasComment := false
+	pos := 0
+	for pos < len(text) {
+		// Eat up any whitespace. Trailing whitespace will be considered part of
+		// the leading comments.
+		nextVisibleOffset := strings.IndexFunc(text[pos:], isNonSpace)
+		if nextVisibleOffset < 0 {
+			break
+		}
+		pos += nextVisibleOffset
+		remainingText := text[pos:]
+
+		// Found visible characters. Look for '/*' at the beginning
+		// and '*/' somewhere after that.
+		if len(remainingText) < 4 || remainingText[:2] != "/*" {
+			break
+		}
+		commentLength := 4 + strings.Index(remainingText[2:], "*/")
+		if commentLength < 4 {
+			// Missing end comment :/
+			break
+		}
+
+		hasComment = true
+		pos += commentLength
+	}
+
+	if hasComment {
+		return pos
+	}
+	return 0
+}
+
+func isNonSpace(r rune) bool {
+	return !unicode.IsSpace(r)
 }
