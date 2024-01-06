@@ -152,7 +152,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> OFF
 %token <bytes> MAX
 
-// Precedence dictated by mysql. But the vitess grammar is simplified.
+// Precedence dictated by databases. But the sqldef grammar is simplified.
 // Some of these operators don't conflict in our situation. Nevertheless,
 // it's better to have these listed in the correct order. Also, we don't
 // support all operators yet.
@@ -217,7 +217,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> NULLX AUTO_INCREMENT APPROXNUM SIGNED UNSIGNED ZEROFILL ZONE AUTOINCREMENT
 
 // Supported SHOW tokens
-%token <bytes> DATABASES TABLES VITESS_KEYSPACES VITESS_SHARDS VITESS_TABLETS VSCHEMA_TABLES EXTENDED FULL PROCESSLIST
+%token <bytes> DATABASES TABLES VSCHEMA_TABLES EXTENDED FULL PROCESSLIST
 
 // SET tokens
 %token <bytes> NAMES CHARSET GLOBAL SESSION ISOLATION LEVEL READ WRITE ONLY REPEATABLE COMMITTED UNCOMMITTED SERIALIZABLE NEW
@@ -953,7 +953,7 @@ create_statement:
         Action: CreateViewStr,
         Name: $5.toViewName(),
         Definition: $7,
-      }
+      },
     }
   }
 | CREATE or_replace_opt sql_security_opt VIEW not_exists_opt table_name AS select_statement
@@ -965,7 +965,7 @@ create_statement:
         SecurityType: $3,
         Name: $6.toViewName(),
         Definition: $8,
-      }
+      },
     }
   }
 | CREATE MATERIALIZED VIEW not_exists_opt table_name AS select_statement
@@ -976,7 +976,7 @@ create_statement:
         Action: CreateMatViewStr,
         Name: $5.toViewName(),
         Definition: $7,
-      }
+      },
     }
   }
 | CREATE VINDEX sql_id vindex_type_opt vindex_params_opt
@@ -987,7 +987,7 @@ create_statement:
         Name: $3,
         Type: $4,
         Params: $5,
-      }
+      },
     }
   }
 | CREATE DATABASE not_exists_opt ID ddl_force_eof
@@ -1010,7 +1010,7 @@ create_statement:
         To: $9,
         Using: NewWhere(WhereStr, $10),
         WithCheck: NewWhere(WhereStr, $11),
-      }
+      },
     }
   }
 /* For MySQL */
@@ -1024,7 +1024,7 @@ create_statement:
         Time: $4,
         Event: $5,
         Body: []Statement{$11},
-      }
+      },
     }
   }
 /* For MSSQL */
@@ -1038,7 +1038,7 @@ create_statement:
         Time: $6,
         Event: $7,
         Body: $9,
-      }
+      },
     }
   }
 /* For SQLite3 */
@@ -1052,7 +1052,7 @@ create_statement:
         Time: $4,
         Event: $5,
         Body: $11,
-      }
+      },
     }
   }
 | CREATE TRIGGER not_exists_opt sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt BEGIN statement_block ';' END
@@ -1065,7 +1065,7 @@ create_statement:
         Time: $5,
         Event: $6,
         Body: $12,
-      }
+      },
     }
   }
 /* For PostgreSQL */
@@ -2894,29 +2894,7 @@ show_statement:
   {
     $$ = &Show{Type: string($2), OnTable: $4}
   }
-| SHOW VITESS_KEYSPACES
-  {
-    $$ = &Show{Type: string($2)}
-  }
-| SHOW VITESS_SHARDS
-  {
-    $$ = &Show{Type: string($2)}
-  }
-| SHOW VITESS_TABLETS
-  {
-    $$ = &Show{Type: string($2)}
-  }
 | SHOW VSCHEMA_TABLES
-  {
-    $$ = &Show{Type: string($2)}
-  }
-/*
- * Catch-all for show statements without vitess keywords:
- *
- *  SHOW BINARY LOGS
- *  SHOW INVALID
- */
-| SHOW ID ddl_force_eof
   {
     $$ = &Show{Type: string($2)}
   }
@@ -4902,7 +4880,7 @@ reserved_keyword:
 | MAXVALUE
 | MOD
 | NATURAL
-| NEXT // next should be doable as non-reserved, but is not due to the special `select next num_val` query that vitess supports
+| NEXT // next should be doable as non-reserved, but is not due to the special `select next num_val` query that the original parser supports
 | NOLOCK
 | NOT
 | NOWAIT
@@ -4952,7 +4930,7 @@ reserved_keyword:
 | OFF
 
 /*
- * These are non-reserved Vitess, because they don't cause conflicts in the grammar.
+ * These are non-reserved in sqldef because they don't cause conflicts in the grammar.
  * Some of them may be reserved in MySQL. The good news is we backtick quote them
  * when we rewrite the query, so no issue should arise.
  *
@@ -5078,9 +5056,6 @@ non_reserved_keyword:
 | VIEW
 | VINDEX
 | VINDEXES
-| VITESS_KEYSPACES
-| VITESS_SHARDS
-| VITESS_TABLETS
 | VSCHEMA_TABLES
 | WITHOUT
 | WRITE
