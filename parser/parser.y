@@ -4249,11 +4249,7 @@ new_qualifier_column_name:
   }
 
 value:
-  STRING
-  {
-    $$ = NewStrVal($1)
-  }
-| STRING character_cast_opt
+  STRING character_cast_opt
   {
     $$ = NewStrVal($1)
   }
