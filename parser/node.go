@@ -1009,7 +1009,7 @@ func (node *Show) Format(buf *nodeBuffer) {
 	} else {
 		buf.Printf("show %s %s", node.Scope, node.Type)
 	}
-	if node.OnTable.Name != "" {
+	if !node.OnTable.Name.isEmpty() {
 		buf.Printf(" on %v", node.OnTable)
 	}
 }
@@ -1299,8 +1299,8 @@ func (node TableNames) Format(buf *nodeBuffer) {
 
 // TableName represents a table name: [Name] or [Schema].[Name]
 type TableName struct {
-	Schema string
-	Name   string
+	Schema TableIdent
+	Name   TableIdent
 }
 
 // Format formats the node.
@@ -1308,16 +1308,16 @@ func (node TableName) Format(buf *nodeBuffer) {
 	if node.isEmpty() {
 		return
 	}
-	if node.Schema != "" {
-		buf.Printf("%s.", node.Schema)
+	if !node.Schema.isEmpty() {
+		buf.Printf("%v.", node.Schema)
 	}
-	buf.Printf("%s", node.Name)
+	buf.Printf("%v", node.Name)
 }
 
 // isEmpty returns true if TableName is nil or empty.
 func (node TableName) isEmpty() bool {
 	// If Name is empty, Schema is also empty.
-	return node.Name == ""
+	return node.Name.isEmpty()
 }
 
 // toViewName returns a TableName acceptable for use as a VIEW. VIEW names are
@@ -1326,7 +1326,7 @@ func (node TableName) isEmpty() bool {
 func (node TableName) toViewName() TableName {
 	return TableName{
 		Schema: node.Schema,
-		Name:   strings.ToLower(node.Name),
+		Name:   NewTableIdent(strings.ToLower(node.Name.v)),
 	}
 }
 
@@ -2496,8 +2496,8 @@ func (node *If) Format(buf *nodeBuffer) {
 	}
 }
 
-// TableIdent is a case sensitive SQL identifier. It will be escaped with
-// backquotes if necessary.
+// TableIdent is a case sensitive SQL identifier.
+// Escaped by Format() if necessary.
 type TableIdent struct {
 	v string
 }

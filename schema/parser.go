@@ -140,7 +140,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			return &Trigger{
 				statement: ddl,
 				name:      stmt.Trigger.Name.String(),
-				tableName: stmt.Trigger.TableName.Name,
+				tableName: stmt.Trigger.TableName.Name.String(),
 				time:      stmt.Trigger.Time,
 				event:     stmt.Trigger.Event,
 				body:      body,
@@ -374,7 +374,7 @@ func parseIndex(stmt *parser.DDL) (Index, error) {
 
 	name := stmt.IndexSpec.Name.String()
 	if name == "" {
-		name = stmt.Table.Name
+		name = stmt.Table.Name.String()
 		for _, indexColumn := range indexColumns {
 			name += fmt.Sprintf("_%s", indexColumn.column)
 		}
@@ -556,10 +556,10 @@ func parseGenerated(genc *parser.GeneratedColumn) *Generated {
 
 // Qualify Postgres/Mssql schema
 func normalizedTableName(mode GeneratorMode, tableName parser.TableName, defaultSchema string) string {
-	table := tableName.Name
+	table := tableName.Name.String()
 	if mode == GeneratorModePostgres || mode == GeneratorModeMssql {
-		if len(tableName.Schema) > 0 {
-			table = tableName.Schema + "." + table
+		if len(tableName.Schema.String()) > 0 {
+			table = tableName.Schema.String() + "." + table
 		} else {
 			table = defaultSchema + "." + table
 		}

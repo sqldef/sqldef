@@ -8213,13 +8213,13 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:3121
 		{
-			yyVAL.selectExpr = &StarExpr{TableName: TableName{Name: yyDollar[1].tableIdent.v}}
+			yyVAL.selectExpr = &StarExpr{TableName: TableName{Name: yyDollar[1].tableIdent}}
 		}
 	case 553:
 		yyDollar = yyS[yypt-5 : yypt+1]
 //line parser/parser.y:3125
 		{
-			yyVAL.selectExpr = &StarExpr{TableName: TableName{Schema: yyDollar[1].tableIdent.v, Name: yyDollar[3].tableIdent.v}}
+			yyVAL.selectExpr = &StarExpr{TableName: TableName{Schema: yyDollar[1].tableIdent, Name: yyDollar[3].tableIdent}}
 		}
 	case 554:
 		yyDollar = yyS[yypt-0 : yypt+1]
@@ -8279,7 +8279,7 @@ yydefault:
 		yyDollar = yyS[yypt-0 : yypt+1]
 //line parser/parser.y:3171
 		{
-			yyVAL.tableExprs = TableExprs{&AliasedTableExpr{Expr: TableName{Name: "dual"}}}
+			yyVAL.tableExprs = TableExprs{&AliasedTableExpr{Expr: TableName{Name: NewTableIdent("dual")}}}
 		}
 	case 565:
 		yyDollar = yyS[yypt-2 : yypt+1]
@@ -8595,13 +8595,13 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser/parser.y:3419
 		{
-			yyVAL.tableName = TableName{Name: yyDollar[1].tableIdent.v}
+			yyVAL.tableName = TableName{Name: yyDollar[1].tableIdent}
 		}
 	case 620:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:3423
 		{
-			yyVAL.tableName = TableName{Schema: yyDollar[1].tableIdent.v, Name: yyDollar[3].tableIdent.v}
+			yyVAL.tableName = TableName{Schema: yyDollar[1].tableIdent, Name: yyDollar[3].tableIdent}
 		}
 	case 621:
 		yyDollar = yyS[yypt-0 : yypt+1]
@@ -9723,13 +9723,13 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:4254
 		{
-			yyVAL.colName = &ColName{Qualifier: TableName{Name: yyDollar[1].tableIdent.v}, Name: yyDollar[3].colIdent}
+			yyVAL.colName = &ColName{Qualifier: TableName{Name: yyDollar[1].tableIdent}, Name: yyDollar[3].colIdent}
 		}
 	case 810:
 		yyDollar = yyS[yypt-5 : yypt+1]
 //line parser/parser.y:4258
 		{
-			yyVAL.colName = &ColName{Qualifier: TableName{Schema: yyDollar[1].tableIdent.v, Name: yyDollar[3].tableIdent.v}, Name: yyDollar[5].colIdent}
+			yyVAL.colName = &ColName{Qualifier: TableName{Schema: yyDollar[1].tableIdent, Name: yyDollar[3].tableIdent}, Name: yyDollar[5].colIdent}
 		}
 	case 811:
 		yyDollar = yyS[yypt-3 : yypt+1]
