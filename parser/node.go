@@ -98,7 +98,6 @@ func (*Cursor) iStatement()        {}
 func (*BeginEnd) iStatement()      {}
 func (*While) iStatement()         {}
 func (*If) iStatement()            {}
-func (*DBDDL) iStatement()         {}
 func (*DDL) iStatement()           {}
 func (*Show) iStatement()          {}
 func (*Use) iStatement()           {}
@@ -397,29 +396,6 @@ func (node *Set) Format(buf *nodeBuffer) {
 	}
 }
 
-// DBDDL represents a CREATE, DROP database statement.
-type DBDDL struct {
-	Action   DDLAction
-	DBName   string
-	IfExists bool
-	Collate  string
-	Charset  string
-}
-
-// Format formats the node.
-func (node *DBDDL) Format(buf *nodeBuffer) {
-	switch node.Action {
-	case Create:
-		buf.WriteString(fmt.Sprintf("%s database %s", node.Action, node.DBName))
-	case Drop:
-		exists := ""
-		if node.IfExists {
-			exists = " if exists"
-		}
-		buf.WriteString(fmt.Sprintf("%s database%s %v", node.Action, exists, node.DBName))
-	}
-}
-
 // DDL represents a CREATE, ALTER, DROP, RENAME or TRUNCATE statement.
 // Table is set for AlterStr, DropStr, RenameStr, TruncateTable
 // NewName is set for AlterStr, CreateStr, RenameStr.
@@ -458,9 +434,6 @@ const (
 	CreateTrigger
 	CreateType
 	CreateView
-	Drop
-	RenameTable
-	TruncateTable
 )
 
 // View types
@@ -479,14 +452,6 @@ func (node *DDL) Format(buf *nodeBuffer) {
 		} else {
 			buf.Printf("create table %v %v", node.NewName, node.TableSpec)
 		}
-	case Drop:
-		exists := ""
-		if node.IfExists {
-			exists = " if exists"
-		}
-		buf.Printf("drop table%s %v", exists, node.Table)
-	case RenameTable:
-		buf.Printf("rename table %v to %v", node.Table, node.NewName)
 	case Alter:
 		if node.PartitionSpec != nil {
 			buf.Printf("alter table %v %v", node.Table, node.PartitionSpec)

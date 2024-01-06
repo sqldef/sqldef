@@ -265,12 +265,10 @@ func forceEOF(yylex interface{}) {
 
 %type <statement> statement
 %type <selStmt> select_statement base_select union_lhs union_rhs
-%type <statement> stream_statement insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement if_statement
-%type <statement> create_statement alter_statement rename_statement drop_statement truncate_statement
+%type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement if_statement
+%type <statement> create_statement alter_statement
 %type <statement> set_option_statement set_bool_option_statement
 %type <ddl> create_table_prefix
-%type <statement> analyze_statement show_statement use_statement other_statement
-%type <statement> begin_statement commit_statement rollback_statement
 %type <bytes2> comment_opt comment_list
 %type <str> union_op insert_or_replace
 %type <str> distinct_opt straight_join_opt cache_opt match_option separator_opt
@@ -321,10 +319,7 @@ func forceEOF(yylex interface{}) {
 %type <updateExpr> update_expression
 %type <setExpr> set_expression transaction_char isolation_level
 %type <str> ignore_opt default_opt
-%type <str> extended_opt full_opt from_database_opt tables_or_processlist
-%type <showFilter> like_or_where_opt
-%type <byt> exists_opt
-%type <empty> not_exists_opt non_add_drop_or_rename_operation to_opt index_opt when_expression_opt for_each_row_opt
+%type <empty> not_exists_opt non_add_drop_or_rename_operation when_expression_opt for_each_row_opt
 %type <bytes> reserved_keyword non_reserved_keyword
 %type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt
 %type <boolVal> unique_opt
@@ -333,7 +328,7 @@ func forceEOF(yylex interface{}) {
 %type <empty> as_opt
 %type <empty> force_eof ddl_force_eof
 %type <str> charset
-%type <str> set_session_or_global show_session_or_global
+%type <str> set_session_or_global
 %type <convertType> convert_type simple_convert_type
 %type <columnType> column_type
 %type <columnType> bool_type int_type decimal_type numeric_type time_type char_type spatial_type
@@ -421,27 +416,8 @@ semicolon_opt:
 | ';' {}
 
 statement:
-  select_statement
-  {
-    $$ = $1
-  }
-| stream_statement
-| insert_statement
-| update_statement
-| delete_statement
-| set_statement
-| create_statement
+  create_statement
 | alter_statement
-| rename_statement
-| drop_statement
-| truncate_statement
-| analyze_statement
-| show_statement
-| use_statement
-| begin_statement
-| commit_statement
-| rollback_statement
-| other_statement
 
 select_statement:
   base_select order_by_opt limit_opt lock_opt
@@ -455,12 +431,6 @@ select_statement:
 | union_lhs union_op union_rhs order_by_opt limit_opt lock_opt
   {
     $$ = &Union{Type: $2, Left: $1, Right: $3, OrderBy: $4, Limit: $5, Lock: $6}
-  }
-
-stream_statement:
-  STREAM comment_opt select_expression FROM table_name
-  {
-    $$ = &Stream{Comments: Comments($2), SelectExpr: $3, Table: $5}
   }
 
 // base_select is an unparenthesized SELECT with no order by clause or beyond.
@@ -963,14 +933,6 @@ create_statement:
         Definition: $7,
       },
     }
-  }
-| CREATE DATABASE not_exists_opt ID ddl_force_eof
-  {
-    $$ = &DBDDL{Action: Create, DBName: string($4)}
-  }
-| CREATE SCHEMA not_exists_opt ID ddl_force_eof
-  {
-    $$ = &DBDDL{Action: Create, DBName: string($4)}
   }
 | CREATE POLICY sql_id ON table_name policy_as_opt policy_for_opt TO sql_id_list using_opt with_check_opt
   {
@@ -2596,16 +2558,6 @@ alter_statement:
   {
     $$ = &DDL{Action: Alter, Table: $4, NewName: $4}
   }
-| ALTER ignore_opt TABLE table_name RENAME to_opt table_name
-  {
-    // Change this to a rename statement
-    $$ = &DDL{Action: RenameTable, Table: $4, NewName: $7}
-  }
-| ALTER ignore_opt TABLE table_name RENAME index_opt force_eof
-  {
-    // Rename an index can just be an alter
-    $$ = &DDL{Action: Alter, Table: $4, NewName: $4}
-  }
 | ALTER VIEW table_name ddl_force_eof
   {
     $$ = &DDL{Action: Alter, Table: $3.toViewName(), NewName: $3.toViewName()}
@@ -2665,261 +2617,6 @@ partition_definition:
 | PARTITION sql_id VALUES LESS THAN openb MAXVALUE closeb
   {
     $$ = &PartitionDefinition{Name: $2, Maxvalue: true}
-  }
-
-rename_statement:
-  RENAME TABLE table_name TO table_name
-  {
-    $$ = &DDL{Action: RenameTable, Table: $3, NewName: $5}
-  }
-
-drop_statement:
-  DROP TABLE exists_opt table_name
-  {
-    var exists bool
-    if $3 != 0 {
-      exists = true
-    }
-    $$ = &DDL{Action: Drop, Table: $4, IfExists: exists}
-  }
-| DROP INDEX ID ON table_name ddl_force_eof
-  {
-    // Change this to an alter statement
-    $$ = &DDL{Action: Alter, Table: $5, NewName: $5}
-  }
-| DROP VIEW exists_opt table_name ddl_force_eof
-  {
-    var exists bool
-    if $3 != 0 {
-      exists = true
-    }
-    $$ = &DDL{Action: Drop, Table: $4.toViewName(), IfExists: exists}
-  }
-| DROP DATABASE exists_opt ID
-  {
-    $$ = &DBDDL{Action: Drop, DBName: string($4)}
-  }
-| DROP SCHEMA exists_opt ID
-  {
-    $$ = &DBDDL{Action: Drop, DBName: string($4)}
-  }
-
-truncate_statement:
-  TRUNCATE TABLE table_name
-  {
-    $$ = &DDL{Action: TruncateTable, Table: $3}
-  }
-| TRUNCATE table_name
-  {
-    $$ = &DDL{Action: TruncateTable, Table: $2}
-  }
-analyze_statement:
-  ANALYZE TABLE table_name
-  {
-    $$ = &DDL{Action: Alter, Table: $3, NewName: $3}
-  }
-
-show_statement:
-  SHOW BINARY ID ddl_force_eof /* SHOW BINARY LOGS */
-  {
-    $$ = &Show{Type: string($2) + " " + string($3)}
-  }
-| SHOW CHARACTER SET ddl_force_eof
-  {
-    $$ = &Show{Type: string($2) + " " + string($3)}
-  }
-| SHOW CREATE DATABASE ddl_force_eof
-  {
-    $$ = &Show{Type: string($2) + " " + string($3)}
-  }
-/* Rule to handle SHOW CREATE EVENT, SHOW CREATE FUNCTION, etc. */
-| SHOW CREATE ID ddl_force_eof
-  {
-    $$ = &Show{Type: string($2) + " " + string($3)}
-  }
-| SHOW CREATE PROCEDURE ddl_force_eof
-  {
-    $$ = &Show{Type: string($2) + " " + string($3)}
-  }
-| SHOW CREATE TABLE ddl_force_eof
-  {
-    $$ = &Show{Type: string($2) + " " + string($3)}
-  }
-| SHOW CREATE TRIGGER ddl_force_eof
-  {
-    $$ = &Show{Type: string($2) + " " + string($3)}
-  }
-| SHOW CREATE VIEW ddl_force_eof
-  {
-    $$ = &Show{Type: string($2) + " " + string($3)}
-  }
-| SHOW DATABASES ddl_force_eof
-  {
-    $$ = &Show{Type: string($2)}
-  }
-| SHOW INDEX ddl_force_eof
-  {
-    $$ = &Show{Type: string($2)}
-  }
-| SHOW KEYS ddl_force_eof
-  {
-    $$ = &Show{Type: string($2)}
-  }
-| SHOW PROCEDURE ddl_force_eof
-  {
-    $$ = &Show{Type: string($2)}
-  }
-| SHOW show_session_or_global STATUS ddl_force_eof
-  {
-    $$ = &Show{Scope: $2, Type: string($3)}
-  }
-| SHOW TABLE ddl_force_eof
-  {
-    $$ = &Show{Type: string($2)}
-  }
-| SHOW extended_opt full_opt tables_or_processlist from_database_opt like_or_where_opt
-  {
-    // this is ugly, but I couldn't find a better way for now
-    if $4 == "processlist" {
-      $$ = &Show{Type: $4}
-    } else {
-      showTablesOpt := &ShowTablesOpt{Extended: $2, Full:$3, DbName:$5, Filter:$6}
-      $$ = &Show{Type: $4, ShowTablesOpt: showTablesOpt}
-    }
-  }
-| SHOW show_session_or_global VARIABLES ddl_force_eof
-  {
-    $$ = &Show{Scope: $2, Type: string($3)}
-  }
-| SHOW VSCHEMA_TABLES
-  {
-    $$ = &Show{Type: string($2)}
-  }
-
-tables_or_processlist:
-  TABLES
-  {
-    $$ = string($1)
-  }
-| PROCESSLIST
-  {
-    $$ = string($1)
-  }
-
-extended_opt:
-  /* empty */
-  {
-    $$ = ""
-  }
-| EXTENDED
-  {
-    $$ = "extended "
-  }
-
-full_opt:
-  /* empty */
-  {
-    $$ = ""
-  }
-| FULL
-  {
-    $$ = "full "
-  }
-
-from_database_opt:
-  /* empty */
-  {
-    $$ = ""
-  }
-| FROM table_id
-  {
-    $$ = $2.v
-  }
-| IN table_id
-  {
-    $$ = $2.v
-  }
-
-like_or_where_opt:
-  /* empty */
-  {
-    $$ = nil
-  }
-| LIKE STRING
-  {
-    $$ = &ShowFilter{Like:string($2)}
-  }
-| WHERE expression
-  {
-    $$ = &ShowFilter{Filter:$2}
-  }
-
-show_session_or_global:
-  /* empty */
-  {
-    $$ = ""
-  }
-| SESSION
-  {
-    $$ = SessionStr
-  }
-| GLOBAL
-  {
-    $$ = GlobalStr
-  }
-
-use_statement:
-  USE table_id
-  {
-    $$ = &Use{DBName: $2}
-  }
-| USE
-  {
-    $$ = &Use{DBName:TableIdent{v:""}}
-  }
-
-begin_statement:
-  BEGIN
-  {
-    $$ = &Begin{}
-  }
-| START TRANSACTION
-  {
-    $$ = &Begin{}
-  }
-
-commit_statement:
-  COMMIT
-  {
-    $$ = &Commit{}
-  }
-
-rollback_statement:
-  ROLLBACK
-  {
-    $$ = &Rollback{}
-  }
-
-other_statement:
-  DESC force_eof
-  {
-    $$ = &OtherRead{}
-  }
-| DESCRIBE force_eof
-  {
-    $$ = &OtherRead{}
-  }
-| EXPLAIN force_eof
-  {
-    $$ = &OtherRead{}
-  }
-| REPAIR force_eof
-  {
-    $$ = &OtherAdmin{}
-  }
-| OPTIMIZE force_eof
-  {
-    $$ = &OtherAdmin{}
   }
 
 comment_opt:
@@ -4485,11 +4182,6 @@ charset_value:
     $$ = &Default{}
   }
 
-exists_opt:
-  { $$ = 0 }
-| IF EXISTS
-  { $$ = 1 }
-
 not_exists_opt:
   { $$ = struct{}{} }
 | IF NOT EXISTS
@@ -4520,19 +4212,6 @@ non_add_drop_or_rename_operation:
 | UNUSED
   { $$ = struct{}{} }
 | ID
-  { $$ = struct{}{} }
-
-to_opt:
-  { $$ = struct{}{} }
-| TO
-  { $$ = struct{}{} }
-| AS
-  { $$ = struct{}{} }
-
-index_opt:
-  INDEX
-  { $$ = struct{}{} }
-| KEY
   { $$ = struct{}{} }
 
 sql_id:
