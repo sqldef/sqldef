@@ -399,7 +399,7 @@ func (node *Set) Format(buf *nodeBuffer) {
 
 // DBDDL represents a CREATE, DROP database statement.
 type DBDDL struct {
-	Action   string
+	Action   DDLAction
 	DBName   string
 	IfExists bool
 	Collate  string
@@ -409,9 +409,9 @@ type DBDDL struct {
 // Format formats the node.
 func (node *DBDDL) Format(buf *nodeBuffer) {
 	switch node.Action {
-	case CreateStr:
+	case Create:
 		buf.WriteString(fmt.Sprintf("%s database %s", node.Action, node.DBName))
-	case DropStr:
+	case Drop:
 		exists := ""
 		if node.IfExists {
 			exists = " if exists"
@@ -421,12 +421,12 @@ func (node *DBDDL) Format(buf *nodeBuffer) {
 }
 
 // DDL represents a CREATE, ALTER, DROP, RENAME or TRUNCATE statement.
-// Table is set for AlterStr, DropStr, RenameStr, TruncateStr
+// Table is set for AlterStr, DropStr, RenameStr, TruncateTable
 // NewName is set for AlterStr, CreateStr, RenameStr.
 // VindexSpec is set for CreateVindexStr, DropVindexStr, AddColVindexStr, DropColVindexStr
 // VindexCols is set for AddColVindexStr
 type DDL struct {
-	Action        string
+	Action        DDLAction
 	Table         TableName
 	NewName       TableName
 	IfExists      bool
@@ -446,62 +446,69 @@ type DDL struct {
 	Extension     *Extension
 }
 
-// DDL strings.
+type DDLAction int
+
+// DDL actions
 const (
-	CreateStr            = "create"
-	AlterStr             = "alter"
-	DropStr              = "drop"
-	RenameStr            = "rename"
-	TruncateStr          = "truncate"
-	CreateVindexStr      = "create vindex"
-	AddColVindexStr      = "add vindex"
-	DropColVindexStr     = "drop vindex"
-	AddIndexStr          = "add index"
-	CreateIndexStr       = "create index"
-	AddPrimaryKeyStr     = "add primary key"
-	AddForeignKeyStr     = "add foreign key"
-	CreatePolicyStr      = "create policy"
-	CreateViewStr        = "create view"
-	CreateMatViewStr     = "create materialized view"
-	CreateSqlSecurityStr = "create sql security"
-	CreateTriggerStr     = "create trigger"
-	CreateTypeStr        = "create type"
-	CommentStr           = "comment"
-	CreateExtensionStr   = "create extension"
+	AddColVindex = DDLAction(iota)
+	AddForeignKey
+	AddIndex
+	AddPrimaryKey
+	Alter
+	CommentOn
+	Create
+	CreateExtension
+	CreateIndex
+	CreatePolicy
+	CreateTrigger
+	CreateType
+	CreateView
+	CreateVindex
+	Drop
+	DropColVindex
+	RenameTable
+	TruncateTable
+)
+
+// View types
+const (
+	ViewStr             = "view"
+	MaterializedViewStr = "materialized view"
+	SqlSecurityStr      = "sql security"
 )
 
 // Format formats the node.
 func (node *DDL) Format(buf *nodeBuffer) {
 	switch node.Action {
-	case CreateStr:
+	case Create:
 		if node.TableSpec == nil {
 			buf.Printf("%s table %v", node.Action, node.NewName)
 		} else {
 			buf.Printf("%s table %v %v", node.Action, node.NewName, node.TableSpec)
 		}
-	case DropStr:
+	case Drop:
 		exists := ""
 		if node.IfExists {
 			exists = " if exists"
 		}
 		buf.Printf("%s table%s %v", node.Action, exists, node.Table)
-	case RenameStr:
+	case RenameTable:
 		buf.Printf("%s table %v to %v", node.Action, node.Table, node.NewName)
-	case AlterStr:
+	case Alter:
 		if node.PartitionSpec != nil {
 			buf.Printf("%s table %v %v", node.Action, node.Table, node.PartitionSpec)
 		} else {
 			buf.Printf("%s table %v", node.Action, node.Table)
 		}
-	case CreateVindexStr:
+	case CreateVindex:
 		buf.Printf("%s %v %v", node.Action, node.VindexSpec.Name, node.VindexSpec)
-	case CreateViewStr:
+	case CreateView:
 		if node.View.SecurityType != "" {
 			buf.Printf("%s %v view %v as %v", node.Action, node.View.SecurityType, node.View.Name, node.View.Definition)
 		} else {
 			buf.Printf("%s %v as %v", node.Action, node.View.Name, node.View.Definition)
 		}
-	case AddColVindexStr:
+	case AddColVindex:
 		buf.Printf("alter table %v %s %v (", node.Table, node.Action, node.VindexSpec.Name)
 		for i, col := range node.VindexCols {
 			if i != 0 {
@@ -514,7 +521,7 @@ func (node *DDL) Format(buf *nodeBuffer) {
 		if node.VindexSpec.Type.String() != "" {
 			buf.Printf(" %v", node.VindexSpec)
 		}
-	case DropColVindexStr:
+	case DropColVindex:
 		buf.Printf("alter table %v %s %v", node.Table, node.Action, node.VindexSpec.Name)
 	default:
 		buf.Printf("%s table %v", node.Action, node.Table)
@@ -1116,7 +1123,7 @@ func (node Comments) Format(buf *nodeBuffer) {
 }
 
 type View struct {
-	Action       string
+	Type         string
 	SecurityType string
 	Name         TableName
 	Definition   SelectStatement

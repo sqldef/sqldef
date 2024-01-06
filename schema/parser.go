@@ -35,7 +35,7 @@ func ParseDDLs(mode GeneratorMode, sqlParser database.Parser, sql string, defaul
 func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSchema string) (DDL, error) {
 	switch stmt := stmt.(type) {
 	case *parser.DDL:
-		if stmt.Action == parser.CreateStr {
+		if stmt.Action == parser.Create {
 			// TODO: handle other create DDL as error?
 			table, err := parseTable(mode, stmt, defaultSchema)
 			if err != nil {
@@ -45,7 +45,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				statement: ddl,
 				table:     table,
 			}, nil
-		} else if stmt.Action == parser.CreateIndexStr {
+		} else if stmt.Action == parser.CreateIndex {
 			index, err := parseIndex(stmt)
 			if err != nil {
 				return nil, err
@@ -55,7 +55,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
 				index:     index,
 			}, nil
-		} else if stmt.Action == parser.AddIndexStr {
+		} else if stmt.Action == parser.AddIndex {
 			index, err := parseIndex(stmt)
 			if err != nil {
 				return nil, err
@@ -65,7 +65,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
 				index:     index,
 			}, nil
-		} else if stmt.Action == parser.AddPrimaryKeyStr {
+		} else if stmt.Action == parser.AddPrimaryKey {
 			index, err := parseIndex(stmt)
 			if err != nil {
 				return nil, err
@@ -75,7 +75,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
 				index:     index,
 			}, nil
-		} else if stmt.Action == parser.AddForeignKeyStr {
+		} else if stmt.Action == parser.AddForeignKey {
 			indexColumns := []string{}
 			for _, indexColumn := range stmt.ForeignKey.IndexColumns {
 				indexColumns = append(indexColumns, indexColumn.String())
@@ -99,7 +99,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 					notForReplication: stmt.ForeignKey.NotForReplication,
 				},
 			}, nil
-		} else if stmt.Action == parser.CreatePolicyStr {
+		} else if stmt.Action == parser.CreatePolicy {
 			scope := make([]string, len(stmt.Policy.To))
 			for i, to := range stmt.Policy.To {
 				scope[i] = to.String()
@@ -123,15 +123,15 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 					withCheck:  withCheck,
 				},
 			}, nil
-		} else if stmt.Action == parser.CreateViewStr {
+		} else if stmt.Action == parser.CreateView {
 			return &View{
 				statement:    ddl,
-				viewType:     strings.ToUpper(strings.TrimPrefix(stmt.View.Action, "create ")),
+				viewType:     strings.ToUpper(stmt.View.Type),
 				securityType: strings.ToUpper(stmt.View.SecurityType),
 				name:         normalizedTableName(mode, stmt.View.Name, defaultSchema),
 				definition:   parser.String(stmt.View.Definition),
 			}, nil
-		} else if stmt.Action == parser.CreateTriggerStr {
+		} else if stmt.Action == parser.CreateTrigger {
 			body := []string{}
 			for _, triggerStatement := range stmt.Trigger.Body {
 				body = append(body, parser.String(triggerStatement))
@@ -145,18 +145,18 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				event:     stmt.Trigger.Event,
 				body:      body,
 			}, nil
-		} else if stmt.Action == parser.CreateTypeStr {
+		} else if stmt.Action == parser.CreateType {
 			return &Type{
 				name:       normalizedTableName(mode, stmt.Type.Name, defaultSchema),
 				statement:  ddl,
 				enumValues: stmt.Type.Type.EnumValues,
 			}, nil
-		} else if stmt.Action == parser.CommentStr {
+		} else if stmt.Action == parser.CommentOn {
 			return &Comment{
 				statement: ddl,
 				comment:   *stmt.Comment,
 			}, nil
-		} else if stmt.Action == parser.CreateExtensionStr {
+		} else if stmt.Action == parser.CreateExtension {
 			return &Extension{
 				statement: ddl,
 				extension: *stmt.Extension,

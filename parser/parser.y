@@ -835,7 +835,7 @@ create_statement:
 | CREATE unique_clustered_opt INDEX sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
-      Action: CreateIndexStr,
+      Action: CreateIndex,
       Table: $6,
       NewName: $6,
       IndexSpec: &IndexSpec{
@@ -855,7 +855,7 @@ create_statement:
 | CREATE unique_clustered_opt INDEX ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
-      Action: CreateIndexStr,
+      Action: CreateIndex,
       Table: $5,
       NewName: $5,
       IndexSpec: &IndexSpec{
@@ -875,7 +875,7 @@ create_statement:
 | CREATE unique_clustered_opt INDEX CONCURRENTLY sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
-      Action: CreateIndexStr,
+      Action: CreateIndex,
       Table: $7,
       NewName: $7,
       IndexSpec: &IndexSpec{
@@ -896,7 +896,7 @@ create_statement:
 | CREATE unique_clustered_opt INDEX sql_id USING sql_id ON table_name '(' index_column_list ')' index_option_opt
   {
     $$ = &DDL{
-      Action: CreateIndexStr,
+      Action: CreateIndex,
       Table: $8,
       NewName: $8,
       IndexSpec: &IndexSpec{
@@ -912,7 +912,7 @@ create_statement:
 | CREATE unique_clustered_opt INDEX sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' where_expression_opt index_option_opt
   {
     $$ = &DDL{
-      Action: CreateIndexStr,
+      Action: CreateIndex,
       Table: $6,
       NewName: $6,
       IndexSpec: &IndexSpec{
@@ -929,7 +929,7 @@ create_statement:
 | CREATE nonclustered_columnstore INDEX sql_id ON table_name '(' column_list ')' where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
-      Action: CreateIndexStr,
+      Action: CreateIndex,
       Table: $6,
       NewName: $6,
       IndexSpec: &IndexSpec{
@@ -948,9 +948,9 @@ create_statement:
 | CREATE or_replace_opt VIEW not_exists_opt table_name AS select_statement
   {
     $$ = &DDL{
-      Action: CreateViewStr,
+      Action: CreateView,
       View: &View{
-        Action: CreateViewStr,
+        Type: ViewStr,
         Name: $5.toViewName(),
         Definition: $7,
       },
@@ -959,9 +959,9 @@ create_statement:
 | CREATE or_replace_opt sql_security_opt VIEW not_exists_opt table_name AS select_statement
   {
     $$ = &DDL{
-      Action: CreateViewStr,
+      Action: CreateView,
       View: &View{
-        Action: CreateSqlSecurityStr,
+        Type: SqlSecurityStr,
         SecurityType: $3,
         Name: $6.toViewName(),
         Definition: $8,
@@ -971,9 +971,9 @@ create_statement:
 | CREATE MATERIALIZED VIEW not_exists_opt table_name AS select_statement
   {
     $$ = &DDL{
-      Action: CreateViewStr,
+      Action: CreateView,
       View: &View{
-        Action: CreateMatViewStr,
+        Type: MaterializedViewStr,
         Name: $5.toViewName(),
         Definition: $7,
       },
@@ -982,7 +982,7 @@ create_statement:
 | CREATE VINDEX sql_id vindex_type_opt vindex_params_opt
   {
     $$ = &DDL{
-      Action: CreateVindexStr,
+      Action: CreateVindex,
       VindexSpec: &VindexSpec{
         Name: $3,
         Type: $4,
@@ -992,16 +992,16 @@ create_statement:
   }
 | CREATE DATABASE not_exists_opt ID ddl_force_eof
   {
-    $$ = &DBDDL{Action: CreateStr, DBName: string($4)}
+    $$ = &DBDDL{Action: Create, DBName: string($4)}
   }
 | CREATE SCHEMA not_exists_opt ID ddl_force_eof
   {
-    $$ = &DBDDL{Action: CreateStr, DBName: string($4)}
+    $$ = &DBDDL{Action: Create, DBName: string($4)}
   }
 | CREATE POLICY sql_id ON table_name policy_as_opt policy_for_opt TO sql_id_list using_opt with_check_opt
   {
     $$ = &DDL{
-      Action: CreatePolicyStr,
+      Action: CreatePolicy,
       Table: $5,
       Policy: &Policy{
         Name: $3,
@@ -1017,7 +1017,7 @@ create_statement:
 | CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW trigger_statement_start
   {
     $$ = &DDL{
-      Action: CreateTriggerStr,
+      Action: CreateTrigger,
       Trigger: &Trigger{
         Name: $3,
         TableName: $7,
@@ -1031,7 +1031,7 @@ create_statement:
 | CREATE TRIGGER sql_id ON table_name trigger_time trigger_event_list AS trigger_statements
   {
     $$ = &DDL{
-      Action: CreateTriggerStr,
+      Action: CreateTrigger,
       Trigger: &Trigger{
         Name: $3,
         TableName: $5,
@@ -1045,7 +1045,7 @@ create_statement:
 | CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt BEGIN statement_block ';' END
   {
     $$ = &DDL{
-      Action: CreateTriggerStr,
+      Action: CreateTrigger,
       Trigger: &Trigger{
         Name: $3,
         TableName: $7,
@@ -1058,7 +1058,7 @@ create_statement:
 | CREATE TRIGGER not_exists_opt sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt BEGIN statement_block ';' END
   {
     $$ = &DDL{
-      Action: CreateTriggerStr,
+      Action: CreateTrigger,
       Trigger: &Trigger{
         Name: $4,
         TableName: $8,
@@ -1072,7 +1072,7 @@ create_statement:
 | CREATE TYPE table_name AS column_type
   {
     $$ = &DDL{
-      Action: CreateTypeStr,
+      Action: CreateType,
       Type: &Type{
         Name: $3,
         Type: $5,
@@ -1082,7 +1082,7 @@ create_statement:
 /* For SQLite3, only to parse because alternation is not supported. // The Virtual Table Mechanism Of SQLite https://www.sqlite.org/vtab.html */
 | CREATE VIRTUAL TABLE not_exists_opt table_name USING sql_id module_arguments_opt
   {
-    $$ = &DDL{Action: CreateStr, NewName: $5, TableSpec: &TableSpec{}}
+    $$ = &DDL{Action: Create, NewName: $5, TableSpec: &TableSpec{}}
   }
 
 module_arguments_opt:
@@ -1312,7 +1312,7 @@ or_replace_opt:
 create_table_prefix:
   CREATE TABLE not_exists_opt table_name
   {
-    $$ = &DDL{Action: CreateStr, NewName: $4}
+    $$ = &DDL{Action: Create, NewName: $4}
     setDDL(yylex, $$)
   }
 
@@ -2593,12 +2593,12 @@ table_opt_value:
 alter_statement:
   ALTER ignore_opt TABLE table_name non_add_drop_or_rename_operation force_eof
   {
-    $$ = &DDL{Action: AlterStr, Table: $4, NewName: $4}
+    $$ = &DDL{Action: Alter, Table: $4, NewName: $4}
   }
 | ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')'
   {
     $$ = &DDL{
-      Action: AddIndexStr,
+      Action: AddIndex,
       Table: $4,
       NewName: $4,
       IndexSpec: &IndexSpec{
@@ -2612,7 +2612,7 @@ alter_statement:
 | ALTER ignore_opt TABLE ONLY table_name ADD CONSTRAINT sql_id PRIMARY KEY '(' index_column_list ')'
   {
     $$ = &DDL{
-      Action: AddPrimaryKeyStr,
+      Action: AddPrimaryKey,
       Table: $5,
       NewName: $5,
       IndexSpec: &IndexSpec{
@@ -2626,7 +2626,7 @@ alter_statement:
 | ALTER ignore_opt TABLE table_name ADD CONSTRAINT sql_id UNIQUE '(' index_column_list ')' deferrable_opt initially_deferred_opt
   {
     $$ = &DDL{
-      Action: AddIndexStr,
+      Action: AddIndex,
       Table: $4,
       NewName: $4,
       IndexSpec: &IndexSpec{
@@ -2645,7 +2645,7 @@ alter_statement:
 | ALTER ignore_opt TABLE table_name ADD foreign_key_definition
   {
     $$ = &DDL{
-      Action: AddForeignKeyStr,
+      Action: AddForeignKey,
       Table: $4,
       NewName: $4,
       ForeignKey: $6,
@@ -2654,7 +2654,7 @@ alter_statement:
 | ALTER ignore_opt TABLE ONLY table_name ADD foreign_key_definition
   {
     $$ = &DDL{
-      Action: AddForeignKeyStr,
+      Action: AddForeignKey,
       Table: $5,
       NewName: $5,
       ForeignKey: $7,
@@ -2662,16 +2662,16 @@ alter_statement:
   }
 | ALTER ignore_opt TABLE table_name ADD alter_object_type_rest force_eof
   {
-    $$ = &DDL{Action: AlterStr, Table: $4, NewName: $4}
+    $$ = &DDL{Action: Alter, Table: $4, NewName: $4}
   }
 | ALTER ignore_opt TABLE table_name DROP alter_object_type force_eof
   {
-    $$ = &DDL{Action: AlterStr, Table: $4, NewName: $4}
+    $$ = &DDL{Action: Alter, Table: $4, NewName: $4}
   }
 | ALTER ignore_opt TABLE table_name ADD VINDEX sql_id '(' column_list ')' vindex_type_opt vindex_params_opt
   {
     $$ = &DDL{
-      Action: AddColVindexStr,
+      Action: AddColVindex,
       Table: $4,
       VindexSpec: &VindexSpec{
         Name: $7,
@@ -2684,7 +2684,7 @@ alter_statement:
 | ALTER ignore_opt TABLE table_name DROP VINDEX sql_id
   {
     $$ = &DDL{
-      Action: DropColVindexStr,
+      Action: DropColVindex,
       Table: $4,
       VindexSpec: &VindexSpec{
         Name: $7,
@@ -2694,20 +2694,20 @@ alter_statement:
 | ALTER ignore_opt TABLE table_name RENAME to_opt table_name
   {
     // Change this to a rename statement
-    $$ = &DDL{Action: RenameStr, Table: $4, NewName: $7}
+    $$ = &DDL{Action: RenameTable, Table: $4, NewName: $7}
   }
 | ALTER ignore_opt TABLE table_name RENAME index_opt force_eof
   {
     // Rename an index can just be an alter
-    $$ = &DDL{Action: AlterStr, Table: $4, NewName: $4}
+    $$ = &DDL{Action: Alter, Table: $4, NewName: $4}
   }
 | ALTER VIEW table_name ddl_force_eof
   {
-    $$ = &DDL{Action: AlterStr, Table: $3.toViewName(), NewName: $3.toViewName()}
+    $$ = &DDL{Action: Alter, Table: $3.toViewName(), NewName: $3.toViewName()}
   }
 | ALTER ignore_opt TABLE table_name partition_operation
   {
-    $$ = &DDL{Action: AlterStr, Table: $4, PartitionSpec: $5}
+    $$ = &DDL{Action: Alter, Table: $4, PartitionSpec: $5}
   }
 
 alter_object_type:
@@ -2765,7 +2765,7 @@ partition_definition:
 rename_statement:
   RENAME TABLE table_name TO table_name
   {
-    $$ = &DDL{Action: RenameStr, Table: $3, NewName: $5}
+    $$ = &DDL{Action: RenameTable, Table: $3, NewName: $5}
   }
 
 drop_statement:
@@ -2775,12 +2775,12 @@ drop_statement:
     if $3 != 0 {
       exists = true
     }
-    $$ = &DDL{Action: DropStr, Table: $4, IfExists: exists}
+    $$ = &DDL{Action: Drop, Table: $4, IfExists: exists}
   }
 | DROP INDEX ID ON table_name ddl_force_eof
   {
     // Change this to an alter statement
-    $$ = &DDL{Action: AlterStr, Table: $5, NewName: $5}
+    $$ = &DDL{Action: Alter, Table: $5, NewName: $5}
   }
 | DROP VIEW exists_opt table_name ddl_force_eof
   {
@@ -2788,30 +2788,30 @@ drop_statement:
     if $3 != 0 {
       exists = true
     }
-    $$ = &DDL{Action: DropStr, Table: $4.toViewName(), IfExists: exists}
+    $$ = &DDL{Action: Drop, Table: $4.toViewName(), IfExists: exists}
   }
 | DROP DATABASE exists_opt ID
   {
-    $$ = &DBDDL{Action: DropStr, DBName: string($4)}
+    $$ = &DBDDL{Action: Drop, DBName: string($4)}
   }
 | DROP SCHEMA exists_opt ID
   {
-    $$ = &DBDDL{Action: DropStr, DBName: string($4)}
+    $$ = &DBDDL{Action: Drop, DBName: string($4)}
   }
 
 truncate_statement:
   TRUNCATE TABLE table_name
   {
-    $$ = &DDL{Action: TruncateStr, Table: $3}
+    $$ = &DDL{Action: TruncateTable, Table: $3}
   }
 | TRUNCATE table_name
   {
-    $$ = &DDL{Action: TruncateStr, Table: $2}
+    $$ = &DDL{Action: TruncateTable, Table: $2}
   }
 analyze_statement:
   ANALYZE TABLE table_name
   {
-    $$ = &DDL{Action: AlterStr, Table: $3, NewName: $3}
+    $$ = &DDL{Action: Alter, Table: $3, NewName: $3}
   }
 
 show_statement:

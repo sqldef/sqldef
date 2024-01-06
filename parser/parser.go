@@ -5328,7 +5328,7 @@ yydefault:
 //line parser/parser.y:836
 		{
 			yyVAL.statement = &DDL{
-				Action:  CreateIndexStr,
+				Action:  CreateIndex,
 				Table:   yyDollar[6].tableName,
 				NewName: yyDollar[6].tableName,
 				IndexSpec: &IndexSpec{
@@ -5350,7 +5350,7 @@ yydefault:
 //line parser/parser.y:856
 		{
 			yyVAL.statement = &DDL{
-				Action:  CreateIndexStr,
+				Action:  CreateIndex,
 				Table:   yyDollar[5].tableName,
 				NewName: yyDollar[5].tableName,
 				IndexSpec: &IndexSpec{
@@ -5372,7 +5372,7 @@ yydefault:
 //line parser/parser.y:876
 		{
 			yyVAL.statement = &DDL{
-				Action:  CreateIndexStr,
+				Action:  CreateIndex,
 				Table:   yyDollar[7].tableName,
 				NewName: yyDollar[7].tableName,
 				IndexSpec: &IndexSpec{
@@ -5394,7 +5394,7 @@ yydefault:
 //line parser/parser.y:897
 		{
 			yyVAL.statement = &DDL{
-				Action:  CreateIndexStr,
+				Action:  CreateIndex,
 				Table:   yyDollar[8].tableName,
 				NewName: yyDollar[8].tableName,
 				IndexSpec: &IndexSpec{
@@ -5411,7 +5411,7 @@ yydefault:
 //line parser/parser.y:913
 		{
 			yyVAL.statement = &DDL{
-				Action:  CreateIndexStr,
+				Action:  CreateIndex,
 				Table:   yyDollar[6].tableName,
 				NewName: yyDollar[6].tableName,
 				IndexSpec: &IndexSpec{
@@ -5429,7 +5429,7 @@ yydefault:
 //line parser/parser.y:930
 		{
 			yyVAL.statement = &DDL{
-				Action:  CreateIndexStr,
+				Action:  CreateIndex,
 				Table:   yyDollar[6].tableName,
 				NewName: yyDollar[6].tableName,
 				IndexSpec: &IndexSpec{
@@ -5450,9 +5450,9 @@ yydefault:
 //line parser/parser.y:949
 		{
 			yyVAL.statement = &DDL{
-				Action: CreateViewStr,
+				Action: CreateView,
 				View: &View{
-					Action:     CreateViewStr,
+					Type:       ViewStr,
 					Name:       yyDollar[5].tableName.toViewName(),
 					Definition: yyDollar[7].selStmt,
 				},
@@ -5463,9 +5463,9 @@ yydefault:
 //line parser/parser.y:960
 		{
 			yyVAL.statement = &DDL{
-				Action: CreateViewStr,
+				Action: CreateView,
 				View: &View{
-					Action:       CreateSqlSecurityStr,
+					Type:         SqlSecurityStr,
 					SecurityType: yyDollar[3].str,
 					Name:         yyDollar[6].tableName.toViewName(),
 					Definition:   yyDollar[8].selStmt,
@@ -5477,9 +5477,9 @@ yydefault:
 //line parser/parser.y:972
 		{
 			yyVAL.statement = &DDL{
-				Action: CreateViewStr,
+				Action: CreateView,
 				View: &View{
-					Action:     CreateMatViewStr,
+					Type:       MaterializedViewStr,
 					Name:       yyDollar[5].tableName.toViewName(),
 					Definition: yyDollar[7].selStmt,
 				},
@@ -5490,7 +5490,7 @@ yydefault:
 //line parser/parser.y:983
 		{
 			yyVAL.statement = &DDL{
-				Action: CreateVindexStr,
+				Action: CreateVindex,
 				VindexSpec: &VindexSpec{
 					Name:   yyDollar[3].colIdent,
 					Type:   yyDollar[4].colIdent,
@@ -5502,20 +5502,20 @@ yydefault:
 		yyDollar = yyS[yypt-5 : yypt+1]
 //line parser/parser.y:994
 		{
-			yyVAL.statement = &DBDDL{Action: CreateStr, DBName: string(yyDollar[4].bytes)}
+			yyVAL.statement = &DBDDL{Action: Create, DBName: string(yyDollar[4].bytes)}
 		}
 	case 100:
 		yyDollar = yyS[yypt-5 : yypt+1]
 //line parser/parser.y:998
 		{
-			yyVAL.statement = &DBDDL{Action: CreateStr, DBName: string(yyDollar[4].bytes)}
+			yyVAL.statement = &DBDDL{Action: Create, DBName: string(yyDollar[4].bytes)}
 		}
 	case 101:
 		yyDollar = yyS[yypt-11 : yypt+1]
 //line parser/parser.y:1002
 		{
 			yyVAL.statement = &DDL{
-				Action: CreatePolicyStr,
+				Action: CreatePolicy,
 				Table:  yyDollar[5].tableName,
 				Policy: &Policy{
 					Name:       yyDollar[3].colIdent,
@@ -5532,7 +5532,7 @@ yydefault:
 //line parser/parser.y:1018
 		{
 			yyVAL.statement = &DDL{
-				Action: CreateTriggerStr,
+				Action: CreateTrigger,
 				Trigger: &Trigger{
 					Name:      yyDollar[3].colIdent,
 					TableName: yyDollar[7].tableName,
@@ -5547,7 +5547,7 @@ yydefault:
 //line parser/parser.y:1032
 		{
 			yyVAL.statement = &DDL{
-				Action: CreateTriggerStr,
+				Action: CreateTrigger,
 				Trigger: &Trigger{
 					Name:      yyDollar[3].colIdent,
 					TableName: yyDollar[5].tableName,
@@ -5562,7 +5562,7 @@ yydefault:
 //line parser/parser.y:1046
 		{
 			yyVAL.statement = &DDL{
-				Action: CreateTriggerStr,
+				Action: CreateTrigger,
 				Trigger: &Trigger{
 					Name:      yyDollar[3].colIdent,
 					TableName: yyDollar[7].tableName,
@@ -5577,7 +5577,7 @@ yydefault:
 //line parser/parser.y:1059
 		{
 			yyVAL.statement = &DDL{
-				Action: CreateTriggerStr,
+				Action: CreateTrigger,
 				Trigger: &Trigger{
 					Name:      yyDollar[4].colIdent,
 					TableName: yyDollar[8].tableName,
@@ -5592,7 +5592,7 @@ yydefault:
 //line parser/parser.y:1073
 		{
 			yyVAL.statement = &DDL{
-				Action: CreateTypeStr,
+				Action: CreateType,
 				Type: &Type{
 					Name: yyDollar[3].tableName,
 					Type: yyDollar[5].columnType,
@@ -5603,7 +5603,7 @@ yydefault:
 		yyDollar = yyS[yypt-8 : yypt+1]
 //line parser/parser.y:1084
 		{
-			yyVAL.statement = &DDL{Action: CreateStr, NewName: yyDollar[5].tableName, TableSpec: &TableSpec{}}
+			yyVAL.statement = &DDL{Action: Create, NewName: yyDollar[5].tableName, TableSpec: &TableSpec{}}
 		}
 	case 108:
 		yyDollar = yyS[yypt-0 : yypt+1]
@@ -5914,7 +5914,7 @@ yydefault:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line parser/parser.y:1314
 		{
-			yyVAL.ddl = &DDL{Action: CreateStr, NewName: yyDollar[4].tableName}
+			yyVAL.ddl = &DDL{Action: Create, NewName: yyDollar[4].tableName}
 			setDDL(yylex, yyVAL.ddl)
 		}
 	case 169:
@@ -7577,14 +7577,14 @@ yydefault:
 		yyDollar = yyS[yypt-6 : yypt+1]
 //line parser/parser.y:2595
 		{
-			yyVAL.statement = &DDL{Action: AlterStr, Table: yyDollar[4].tableName, NewName: yyDollar[4].tableName}
+			yyVAL.statement = &DDL{Action: Alter, Table: yyDollar[4].tableName, NewName: yyDollar[4].tableName}
 		}
 	case 440:
 		yyDollar = yyS[yypt-11 : yypt+1]
 //line parser/parser.y:2599
 		{
 			yyVAL.statement = &DDL{
-				Action:  AddIndexStr,
+				Action:  AddIndex,
 				Table:   yyDollar[4].tableName,
 				NewName: yyDollar[4].tableName,
 				IndexSpec: &IndexSpec{
@@ -7600,7 +7600,7 @@ yydefault:
 //line parser/parser.y:2613
 		{
 			yyVAL.statement = &DDL{
-				Action:  AddPrimaryKeyStr,
+				Action:  AddPrimaryKey,
 				Table:   yyDollar[5].tableName,
 				NewName: yyDollar[5].tableName,
 				IndexSpec: &IndexSpec{
@@ -7616,7 +7616,7 @@ yydefault:
 //line parser/parser.y:2627
 		{
 			yyVAL.statement = &DDL{
-				Action:  AddIndexStr,
+				Action:  AddIndex,
 				Table:   yyDollar[4].tableName,
 				NewName: yyDollar[4].tableName,
 				IndexSpec: &IndexSpec{
@@ -7637,7 +7637,7 @@ yydefault:
 //line parser/parser.y:2646
 		{
 			yyVAL.statement = &DDL{
-				Action:     AddForeignKeyStr,
+				Action:     AddForeignKey,
 				Table:      yyDollar[4].tableName,
 				NewName:    yyDollar[4].tableName,
 				ForeignKey: yyDollar[6].foreignKeyDefinition,
@@ -7648,7 +7648,7 @@ yydefault:
 //line parser/parser.y:2655
 		{
 			yyVAL.statement = &DDL{
-				Action:     AddForeignKeyStr,
+				Action:     AddForeignKey,
 				Table:      yyDollar[5].tableName,
 				NewName:    yyDollar[5].tableName,
 				ForeignKey: yyDollar[7].foreignKeyDefinition,
@@ -7658,20 +7658,20 @@ yydefault:
 		yyDollar = yyS[yypt-7 : yypt+1]
 //line parser/parser.y:2664
 		{
-			yyVAL.statement = &DDL{Action: AlterStr, Table: yyDollar[4].tableName, NewName: yyDollar[4].tableName}
+			yyVAL.statement = &DDL{Action: Alter, Table: yyDollar[4].tableName, NewName: yyDollar[4].tableName}
 		}
 	case 446:
 		yyDollar = yyS[yypt-7 : yypt+1]
 //line parser/parser.y:2668
 		{
-			yyVAL.statement = &DDL{Action: AlterStr, Table: yyDollar[4].tableName, NewName: yyDollar[4].tableName}
+			yyVAL.statement = &DDL{Action: Alter, Table: yyDollar[4].tableName, NewName: yyDollar[4].tableName}
 		}
 	case 447:
 		yyDollar = yyS[yypt-12 : yypt+1]
 //line parser/parser.y:2672
 		{
 			yyVAL.statement = &DDL{
-				Action: AddColVindexStr,
+				Action: AddColVindex,
 				Table:  yyDollar[4].tableName,
 				VindexSpec: &VindexSpec{
 					Name:   yyDollar[7].colIdent,
@@ -7686,7 +7686,7 @@ yydefault:
 //line parser/parser.y:2685
 		{
 			yyVAL.statement = &DDL{
-				Action: DropColVindexStr,
+				Action: DropColVindex,
 				Table:  yyDollar[4].tableName,
 				VindexSpec: &VindexSpec{
 					Name: yyDollar[7].colIdent,
@@ -7698,26 +7698,26 @@ yydefault:
 //line parser/parser.y:2695
 		{
 			// Change this to a rename statement
-			yyVAL.statement = &DDL{Action: RenameStr, Table: yyDollar[4].tableName, NewName: yyDollar[7].tableName}
+			yyVAL.statement = &DDL{Action: RenameTable, Table: yyDollar[4].tableName, NewName: yyDollar[7].tableName}
 		}
 	case 450:
 		yyDollar = yyS[yypt-7 : yypt+1]
 //line parser/parser.y:2700
 		{
 			// Rename an index can just be an alter
-			yyVAL.statement = &DDL{Action: AlterStr, Table: yyDollar[4].tableName, NewName: yyDollar[4].tableName}
+			yyVAL.statement = &DDL{Action: Alter, Table: yyDollar[4].tableName, NewName: yyDollar[4].tableName}
 		}
 	case 451:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line parser/parser.y:2705
 		{
-			yyVAL.statement = &DDL{Action: AlterStr, Table: yyDollar[3].tableName.toViewName(), NewName: yyDollar[3].tableName.toViewName()}
+			yyVAL.statement = &DDL{Action: Alter, Table: yyDollar[3].tableName.toViewName(), NewName: yyDollar[3].tableName.toViewName()}
 		}
 	case 452:
 		yyDollar = yyS[yypt-5 : yypt+1]
 //line parser/parser.y:2709
 		{
-			yyVAL.statement = &DDL{Action: AlterStr, Table: yyDollar[4].tableName, PartitionSpec: yyDollar[5].partSpec}
+			yyVAL.statement = &DDL{Action: Alter, Table: yyDollar[4].tableName, PartitionSpec: yyDollar[5].partSpec}
 		}
 	case 473:
 		yyDollar = yyS[yypt-7 : yypt+1]
@@ -7753,7 +7753,7 @@ yydefault:
 		yyDollar = yyS[yypt-5 : yypt+1]
 //line parser/parser.y:2767
 		{
-			yyVAL.statement = &DDL{Action: RenameStr, Table: yyDollar[3].tableName, NewName: yyDollar[5].tableName}
+			yyVAL.statement = &DDL{Action: RenameTable, Table: yyDollar[3].tableName, NewName: yyDollar[5].tableName}
 		}
 	case 479:
 		yyDollar = yyS[yypt-4 : yypt+1]
@@ -7763,14 +7763,14 @@ yydefault:
 			if yyDollar[3].byt != 0 {
 				exists = true
 			}
-			yyVAL.statement = &DDL{Action: DropStr, Table: yyDollar[4].tableName, IfExists: exists}
+			yyVAL.statement = &DDL{Action: Drop, Table: yyDollar[4].tableName, IfExists: exists}
 		}
 	case 480:
 		yyDollar = yyS[yypt-6 : yypt+1]
 //line parser/parser.y:2781
 		{
 			// Change this to an alter statement
-			yyVAL.statement = &DDL{Action: AlterStr, Table: yyDollar[5].tableName, NewName: yyDollar[5].tableName}
+			yyVAL.statement = &DDL{Action: Alter, Table: yyDollar[5].tableName, NewName: yyDollar[5].tableName}
 		}
 	case 481:
 		yyDollar = yyS[yypt-5 : yypt+1]
@@ -7780,37 +7780,37 @@ yydefault:
 			if yyDollar[3].byt != 0 {
 				exists = true
 			}
-			yyVAL.statement = &DDL{Action: DropStr, Table: yyDollar[4].tableName.toViewName(), IfExists: exists}
+			yyVAL.statement = &DDL{Action: Drop, Table: yyDollar[4].tableName.toViewName(), IfExists: exists}
 		}
 	case 482:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line parser/parser.y:2794
 		{
-			yyVAL.statement = &DBDDL{Action: DropStr, DBName: string(yyDollar[4].bytes)}
+			yyVAL.statement = &DBDDL{Action: Drop, DBName: string(yyDollar[4].bytes)}
 		}
 	case 483:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line parser/parser.y:2798
 		{
-			yyVAL.statement = &DBDDL{Action: DropStr, DBName: string(yyDollar[4].bytes)}
+			yyVAL.statement = &DBDDL{Action: Drop, DBName: string(yyDollar[4].bytes)}
 		}
 	case 484:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:2804
 		{
-			yyVAL.statement = &DDL{Action: TruncateStr, Table: yyDollar[3].tableName}
+			yyVAL.statement = &DDL{Action: TruncateTable, Table: yyDollar[3].tableName}
 		}
 	case 485:
 		yyDollar = yyS[yypt-2 : yypt+1]
 //line parser/parser.y:2808
 		{
-			yyVAL.statement = &DDL{Action: TruncateStr, Table: yyDollar[2].tableName}
+			yyVAL.statement = &DDL{Action: TruncateTable, Table: yyDollar[2].tableName}
 		}
 	case 486:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:2813
 		{
-			yyVAL.statement = &DDL{Action: AlterStr, Table: yyDollar[3].tableName, NewName: yyDollar[3].tableName}
+			yyVAL.statement = &DDL{Action: Alter, Table: yyDollar[3].tableName, NewName: yyDollar[3].tableName}
 		}
 	case 487:
 		yyDollar = yyS[yypt-4 : yypt+1]

@@ -166,7 +166,7 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 	}
 
 	return &parser.DDL{
-		Action:  parser.CreateStr,
+		Action:  parser.Create,
 		NewName: tableName,
 		TableSpec: &parser.TableSpec{
 			Columns:     columns,
@@ -206,7 +206,7 @@ func (p PostgresParser) parseIndexStmt(stmt *pgquery.IndexStmt) (parser.Statemen
 	}
 
 	return &parser.DDL{
-		Action:  parser.CreateIndexStr,
+		Action:  parser.CreateIndex,
 		Table:   table,
 		NewName: table,
 		IndexSpec: &parser.IndexSpec{
@@ -237,9 +237,9 @@ func (p PostgresParser) parseViewStmt(stmt *pgquery.ViewStmt) (parser.Statement,
 	}
 
 	return &parser.DDL{
-		Action: parser.CreateViewStr,
+		Action: parser.CreateView,
 		View: &parser.View{
-			Action:     parser.CreateViewStr,
+			Type:       parser.ViewStr,
 			Name:       viewName,
 			Definition: definition,
 		},
@@ -664,7 +664,7 @@ func (p PostgresParser) parseCommentStmt(stmt *pgquery.CommentStmt) (parser.Stat
 	}
 
 	return &parser.DDL{
-		Action: parser.CommentStr,
+		Action: parser.CommentOn,
 		Comment: &parser.Comment{
 			ObjectType: pgquery.ObjectType_name[int32(stmt.Objtype)],
 			Object:     object,
@@ -685,7 +685,7 @@ func (p PostgresParser) parseTableName(relation *pgquery.RangeVar) (parser.Table
 
 func (p PostgresParser) parseExtensionStmt(stmt *pgquery.CreateExtensionStmt) (parser.Statement, error) {
 	return &parser.DDL{
-		Action: parser.CreateExtensionStr,
+		Action: parser.CreateExtension,
 		Extension: &parser.Extension{
 			Name: stmt.Extname,
 		},
@@ -721,7 +721,7 @@ func (p PostgresParser) parseConstraint(constraint *pgquery.Constraint, tableNam
 			}
 		}
 		return &parser.DDL{
-			Action:  parser.AddIndexStr,
+			Action:  parser.AddIndex,
 			Table:   tableName,
 			NewName: tableName,
 			IndexSpec: &parser.IndexSpec{
@@ -741,7 +741,7 @@ func (p PostgresParser) parseConstraint(constraint *pgquery.Constraint, tableNam
 			return nil, err
 		}
 		return &parser.DDL{
-			Action:     parser.AddForeignKeyStr,
+			Action:     parser.AddForeignKey,
 			Table:      tableName,
 			NewName:    tableName,
 			ForeignKey: fk,
