@@ -4049,10 +4049,6 @@ convert_type:
   {
     $$ = &ConvertType{Type: string($1)}
   }
-| NCHAR length_opt
-  {
-    $$ = &ConvertType{Type: string($1), Length: $2}
-  }
 | SIGNED
   {
     $$ = &ConvertType{Type: string($1)}
