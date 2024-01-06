@@ -423,7 +423,7 @@ any_command:
   }
 
 semicolon_opt:
-/*empty*/ {}
+/* empty */ {}
 | ';' {}
 
 command:
@@ -3817,9 +3817,9 @@ value_expression:
   }
 
 /*
-  Regular function calls without special token or syntax, guaranteed to not
-  introduce side effects due to being a simple identifier
-*/
+ * Regular function calls without special token or syntax, guaranteed to not
+ * introduce side effects due to being a simple identifier
+ */
 function_call_generic:
   sql_id openb select_expression_list_opt closeb
   {
@@ -3843,9 +3843,9 @@ function_call_generic:
   }
 
 /*
-  Function calls using reserved keywords, with dedicated grammar rules
-  as a result
-*/
+ * Function calls using reserved keywords, with dedicated grammar rules
+ * as a result
+ */
 function_call_keyword:
   LEFT openb select_expression_list closeb
   {
@@ -3918,9 +3918,9 @@ function_call_keyword:
   }
 
 /*
-  Function calls using non reserved keywords but with special syntax forms.
-  Dedicated grammar rules are needed because of the special syntax
-*/
+ * Function calls using non reserved keywords but with special syntax forms.
+ * Dedicated grammar rules are needed because of the special syntax
+ */
 function_call_nonkeyword:
   CURRENT_TIMESTAMP func_datetime_precision_opt
   {
@@ -3968,9 +3968,9 @@ func_datetime_precision_opt:
 | openb closeb
 
 /*
-  Function calls using non reserved keywords with *normal* syntax forms. Because
-  the names are non-reserved, they need a dedicated rule so as not to conflict
-*/
+ * Function calls using non reserved keywords with *normal* syntax forms. Because
+ * the names are non-reserved, they need a dedicated rule so as not to conflict
+ */
 function_call_conflict:
   IF openb select_expression_list closeb
   {
@@ -3990,7 +3990,7 @@ function_call_conflict:
   }
 
 match_option:
-/*empty*/
+/* empty */
   {
     $$ = ""
   }
@@ -4785,14 +4785,14 @@ bool_option_name:
 | XACT_ABORT
 
 /*
-  These are not all necessarily reserved in MySQL, but some are.
+ * These are not all necessarily reserved in MySQL, but some are.
 
-  These are more importantly reserved because they may conflict with our grammar.
-  If you want to move one that is not reserved in MySQL (i.e. ESCAPE) to the
-  non_reserved_keywords, you'll need to deal with any conflicts.
+ * These are more importantly reserved because they may conflict with our grammar.
+ * If you want to move one that is not reserved in MySQL (i.e. ESCAPE) to the
+ * non_reserved_keywords, you'll need to deal with any conflicts.
 
-  Sorted alphabetically
-*/
+ * Sorted alphabetically
+ */
 reserved_keyword:
   ADD
 | AFTER
@@ -4924,12 +4924,12 @@ reserved_keyword:
 | OFF
 
 /*
-  These are non-reserved Vitess, because they don't cause conflicts in the grammar.
-  Some of them may be reserved in MySQL. The good news is we backtick quote them
-  when we rewrite the query, so no issue should arise.
+ * These are non-reserved Vitess, because they don't cause conflicts in the grammar.
+ * Some of them may be reserved in MySQL. The good news is we backtick quote them
+ * when we rewrite the query, so no issue should arise.
 
-  Sorted alphabetically
-*/
+ * Sorted alphabetically
+ */
 non_reserved_keyword:
   ACTION
 | AGAINST
