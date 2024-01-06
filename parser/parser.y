@@ -1607,10 +1607,6 @@ default_val:
   {
     $$ = NewBitVal($1)
   }
-| STRING TYPECAST sql_id
-  {
-    $$ = NewStrVal($1)
-  }
 
 default_expression:
   function_call_generic
