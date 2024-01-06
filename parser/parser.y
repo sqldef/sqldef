@@ -120,8 +120,6 @@ func forceEOF(yylex interface{}) {
   partDefs                 []*PartitionDefinition
   partDef                  *PartitionDefinition
   partSpec                 *PartitionSpec
-  vindexParam              VindexParam
-  vindexParams             []VindexParam
   showFilter               *ShowFilter
   sequence                 *Sequence
   blockStatement           []Statement
@@ -185,7 +183,6 @@ func forceEOF(yylex interface{}) {
 %right <bytes> UNIQUE KEY
 %token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE
 %token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE
-%token <bytes> VINDEX VINDEXES
 %token <bytes> STATUS VARIABLES
 %token <bytes> RESTRICT CASCADE NO ACTION
 %token <bytes> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
@@ -370,9 +367,6 @@ func forceEOF(yylex interface{}) {
 %type <partDefs> partition_definitions
 %type <partDef> partition_definition
 %type <partSpec> partition_operation
-%type <vindexParam> vindex_param
-%type <vindexParams> vindex_param_list vindex_params_opt
-%type <colIdent> vindex_type vindex_type_opt
 %type <bytes> alter_object_type
 %type <bytes> policy_as_opt policy_for_opt character_cast_opt
 %type <expr> using_opt with_check_opt
@@ -970,17 +964,6 @@ create_statement:
       },
     }
   }
-| CREATE VINDEX sql_id vindex_type_opt vindex_params_opt
-  {
-    $$ = &DDL{
-      Action: CreateVindex,
-      VindexSpec: &VindexSpec{
-        Name: $3,
-        Type: $4,
-        Params: $5,
-      },
-    }
-  }
 | CREATE DATABASE not_exists_opt ID ddl_force_eof
   {
     $$ = &DBDDL{Action: Create, DBName: string($4)}
@@ -1247,48 +1230,6 @@ unique_opt:
 | UNIQUE
   {
     $$ = BoolVal(true)
-  }
-
-vindex_type_opt:
-  {
-    $$ = NewColIdent("")
-  }
-| USING vindex_type
-  {
-    $$ = $2
-  }
-
-vindex_type:
-  ID
-  {
-    $$ = NewColIdent(string($1))
-  }
-
-vindex_params_opt:
-  {
-    var v []VindexParam
-    $$ = v
-  }
-| WITH vindex_param_list
-  {
-    $$ = $2
-  }
-
-vindex_param_list:
-  vindex_param
-  {
-    $$ = make([]VindexParam, 0, 4)
-    $$ = append($$, $1)
-  }
-| vindex_param_list ',' vindex_param
-  {
-    $$ = append($$, $3)
-  }
-
-vindex_param:
-  reserved_sql_id '=' table_opt_value
-  {
-    $$ = VindexParam{Key: $1, Val: $3}
   }
 
 or_replace_opt:
@@ -2655,29 +2596,6 @@ alter_statement:
   {
     $$ = &DDL{Action: Alter, Table: $4, NewName: $4}
   }
-| ALTER ignore_opt TABLE table_name ADD VINDEX sql_id '(' column_list ')' vindex_type_opt vindex_params_opt
-  {
-    $$ = &DDL{
-      Action: AddColVindex,
-      Table: $4,
-      VindexSpec: &VindexSpec{
-        Name: $7,
-        Type: $11,
-        Params: $12,
-      },
-      VindexCols: $9,
-    }
-  }
-| ALTER ignore_opt TABLE table_name DROP VINDEX sql_id
-  {
-    $$ = &DDL{
-      Action: DropColVindex,
-      Table: $4,
-      VindexSpec: &VindexSpec{
-        Name: $7,
-      },
-    }
-  }
 | ALTER ignore_opt TABLE table_name RENAME to_opt table_name
   {
     // Change this to a rename statement
@@ -2872,14 +2790,6 @@ show_statement:
 | SHOW show_session_or_global VARIABLES ddl_force_eof
   {
     $$ = &Show{Scope: $2, Type: string($3)}
-  }
-| SHOW VINDEXES
-  {
-    $$ = &Show{Type: string($2)}
-  }
-| SHOW VINDEXES ON table_name
-  {
-    $$ = &Show{Type: string($2), OnTable: $4}
   }
 | SHOW VSCHEMA_TABLES
   {
@@ -5024,8 +4934,6 @@ non_reserved_keyword:
 | VARYING
 | VARIABLES
 | VIEW
-| VINDEX
-| VINDEXES
 | VSCHEMA_TABLES
 | WITHOUT
 | WRITE

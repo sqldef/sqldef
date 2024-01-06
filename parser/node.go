@@ -298,7 +298,7 @@ func (node *Stream) Format(buf *nodeBuffer) {
 // normal INSERT except if the row exists. In that case it first deletes
 // the row and re-inserts with new values. For that reason we keep it as an Insert struct.
 // Replaces are currently disallowed in sharded schemas because
-// of the implications the deletion part may have on vindexes.
+// of the implications the deletion part may have on the original parser.
 // If you add fields here, consider adding them to calls to validateSubquerySamePlan.
 type Insert struct {
 	Action     string
@@ -423,8 +423,6 @@ func (node *DBDDL) Format(buf *nodeBuffer) {
 // DDL represents a CREATE, ALTER, DROP, RENAME or TRUNCATE statement.
 // Table is set for AlterStr, DropStr, RenameStr, TruncateTable
 // NewName is set for AlterStr, CreateStr, RenameStr.
-// VindexSpec is set for CreateVindexStr, DropVindexStr, AddColVindexStr, DropColVindexStr
-// VindexCols is set for AddColVindexStr
 type DDL struct {
 	Action        DDLAction
 	Table         TableName
@@ -435,8 +433,6 @@ type DDL struct {
 	IndexSpec     *IndexSpec
 	IndexCols     []IndexColumn
 	IndexExpr     Expr
-	VindexSpec    *VindexSpec
-	VindexCols    []ColIdent
 	ForeignKey    *ForeignKeyDefinition
 	Policy        *Policy
 	View          *View
@@ -450,8 +446,7 @@ type DDLAction int
 
 // DDL actions
 const (
-	AddColVindex = DDLAction(iota)
-	AddForeignKey
+	AddForeignKey = DDLAction(iota)
 	AddIndex
 	AddPrimaryKey
 	Alter
@@ -463,9 +458,7 @@ const (
 	CreateTrigger
 	CreateType
 	CreateView
-	CreateVindex
 	Drop
-	DropColVindex
 	RenameTable
 	TruncateTable
 )
@@ -482,49 +475,32 @@ func (node *DDL) Format(buf *nodeBuffer) {
 	switch node.Action {
 	case Create:
 		if node.TableSpec == nil {
-			buf.Printf("%s table %v", node.Action, node.NewName)
+			buf.Printf("create table %v", node.NewName)
 		} else {
-			buf.Printf("%s table %v %v", node.Action, node.NewName, node.TableSpec)
+			buf.Printf("create table %v %v", node.NewName, node.TableSpec)
 		}
 	case Drop:
 		exists := ""
 		if node.IfExists {
 			exists = " if exists"
 		}
-		buf.Printf("%s table%s %v", node.Action, exists, node.Table)
+		buf.Printf("drop table%s %v", exists, node.Table)
 	case RenameTable:
-		buf.Printf("%s table %v to %v", node.Action, node.Table, node.NewName)
+		buf.Printf("rename table %v to %v", node.Table, node.NewName)
 	case Alter:
 		if node.PartitionSpec != nil {
-			buf.Printf("%s table %v %v", node.Action, node.Table, node.PartitionSpec)
+			buf.Printf("alter table %v %v", node.Table, node.PartitionSpec)
 		} else {
-			buf.Printf("%s table %v", node.Action, node.Table)
+			buf.Printf("alter table %v", node.Table)
 		}
-	case CreateVindex:
-		buf.Printf("%s %v %v", node.Action, node.VindexSpec.Name, node.VindexSpec)
 	case CreateView:
 		if node.View.SecurityType != "" {
-			buf.Printf("%s %v view %v as %v", node.Action, node.View.SecurityType, node.View.Name, node.View.Definition)
+			buf.Printf("alter %v view %v as %v", node.View.SecurityType, node.View.Name, node.View.Definition)
 		} else {
-			buf.Printf("%s %v as %v", node.Action, node.View.Name, node.View.Definition)
+			buf.Printf("alter %v as %v", node.View.Name, node.View.Definition)
 		}
-	case AddColVindex:
-		buf.Printf("alter table %v %s %v (", node.Table, node.Action, node.VindexSpec.Name)
-		for i, col := range node.VindexCols {
-			if i != 0 {
-				buf.Printf(", %v", col)
-			} else {
-				buf.Printf("%v", col)
-			}
-		}
-		buf.Printf(")")
-		if node.VindexSpec.Type.String() != "" {
-			buf.Printf(" %v", node.VindexSpec)
-		}
-	case DropColVindex:
-		buf.Printf("alter table %v %s %v", node.Table, node.Action, node.VindexSpec.Name)
 	default:
-		buf.Printf("%s table %v", node.Action, node.Table)
+		panic(fmt.Sprintf("unexpected action: %v", node.Action))
 	}
 }
 
@@ -913,42 +889,6 @@ type IndexSpec struct {
 type ConstraintOptions struct {
 	Deferrable        bool // for Postgres
 	InitiallyDeferred bool // for Postgres
-}
-
-// VindexSpec defines a vindex for a CREATE VINDEX or DROP VINDEX statement
-type VindexSpec struct {
-	Name   ColIdent
-	Type   ColIdent
-	Params []VindexParam
-}
-
-// Format formats the node. The "CREATE VINDEX" preamble was formatted in
-// the containing DDL node Format, so this just prints the type, any
-// parameters, and optionally the owner
-func (node *VindexSpec) Format(buf *nodeBuffer) {
-	buf.Printf("using %v", node.Type)
-
-	numParams := len(node.Params)
-	if numParams != 0 {
-		buf.Printf(" with ")
-		for i, p := range node.Params {
-			if i != 0 {
-				buf.Printf(", ")
-			}
-			buf.Printf("%v", p)
-		}
-	}
-}
-
-// VindexParam defines a key/value parameter for a CREATE VINDEX statement
-type VindexParam struct {
-	Key ColIdent
-	Val string
-}
-
-// Format formats the node.
-func (node VindexParam) Format(buf *nodeBuffer) {
-	buf.Printf("%s=%s", node.Key.String(), node.Val)
 }
 
 type ForeignKeyDefinition struct {

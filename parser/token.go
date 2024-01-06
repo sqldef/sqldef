@@ -458,8 +458,6 @@ var keywords = map[string]int{
 	"varcharacter":           UNUSED,
 	"varying":                VARYING,
 	"virtual":                VIRTUAL,
-	"vindex":                 VINDEX,
-	"vindexes":               VINDEXES,
 	"view":                   VIEW,
 	"vschema_tables":         VSCHEMA_TABLES,
 	"when":                   WHEN,
