@@ -1,0 +1,52 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+def comment?(line)
+  line.start_with?("//") || line.start_with?("/*") || line.start_with?("*") || line.end_with?("*/\n")
+end
+
+def no_indent?(lines, index)
+  line = lines[index]
+  return false if line.nil?
+
+  line.start_with?("|") ||
+    (line.end_with?(":\n") && !line.start_with?("*") && !line.start_with?("//")) ||
+    (comment?(line) && no_indent?(lines, index + 1))
+end
+
+file_path = File.expand_path("parser.y", __dir__)
+parser = File.read(file_path)
+prefix, parser = parser.split("%%", 2)
+
+indent = 0
+lines = parser.lines.each { |line| line.sub!(/^[ \t]*/, '') }
+new_lines = lines.map.with_index do |line, index|
+  open_count = line.count("{")
+  close_count = line.count("}")
+  if open_count == 0 && close_count > 0
+    indent -= close_count; close_count = 0
+  elsif open_count == 1 && close_count == 1 && line.start_with?("}") && line.end_with?("{\n") # } else {
+    indent -= 1
+    open_count = 1
+    close_count = 0
+  end
+
+  if no_indent?(lines, index)
+    extra_indent = 0
+  else
+    extra_indent = 1
+  end
+
+  texts = []
+  (indent + extra_indent).times { texts << "  " } if line != "\n"
+  texts << " " if line.start_with?("*") && lines[index - 1].start_with?(%r[/\*|\*])
+  texts << line
+
+  indent += open_count
+  indent -= close_count
+
+  texts.join
+end
+parser = new_lines.join
+
+File.write(file_path, "#{prefix}%%#{parser}")

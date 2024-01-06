@@ -571,7 +571,7 @@ opt_partition_clause:
   }
 | PARTITION openb partition_list closeb
   {
-  $$ = $3
+    $$ = $3
   }
 
 set_statement:
@@ -727,7 +727,7 @@ statement_block:
   }
 
 if_statement:
-// For MySQL
+  // For MySQL
   IF expression THEN trigger_statements ';' END IF
   {
     $$ = &If{
@@ -807,7 +807,7 @@ sql_security_opt:
   }
 
 sql_security:
- DEFINER
+  DEFINER
   {
     $$ = string($1)
   }
@@ -835,115 +835,115 @@ create_statement:
 | CREATE unique_clustered_opt INDEX sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
-        Action: CreateIndexStr,
-        Table: $6,
-        NewName: $6,
-        IndexSpec: &IndexSpec{
-          Name: $4,
-          Type: NewColIdent(""),
-          Unique: bool($2[0]),
-          Clustered: bool($2[0]),
-          Included: $10,
-          Where: NewWhere(WhereStr, $11),
-          Options: $12,
-          Partition: $13,
-        },
-        IndexCols: $8.IndexCols,
-        IndexExpr: $8.IndexExpr,
-      }
+      Action: CreateIndexStr,
+      Table: $6,
+      NewName: $6,
+      IndexSpec: &IndexSpec{
+        Name: $4,
+        Type: NewColIdent(""),
+        Unique: bool($2[0]),
+        Clustered: bool($2[0]),
+        Included: $10,
+        Where: NewWhere(WhereStr, $11),
+        Options: $12,
+        Partition: $13,
+      },
+      IndexCols: $8.IndexCols,
+      IndexExpr: $8.IndexExpr,
+    }
   }
 | CREATE unique_clustered_opt INDEX ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
-        Action: CreateIndexStr,
-        Table: $5,
-        NewName: $5,
-        IndexSpec: &IndexSpec{
-          Name: NewColIdent(""),
-          Type: NewColIdent(""),
-          Unique: bool($2[0]),
-          Clustered: bool($2[1]),
-          Included: $9,
-          Where: NewWhere(WhereStr, $10),
-          Options: $11,
-          Partition: $12,
-        },
-        IndexCols: $7.IndexCols,
-        IndexExpr: $7.IndexExpr,
-      }
+      Action: CreateIndexStr,
+      Table: $5,
+      NewName: $5,
+      IndexSpec: &IndexSpec{
+        Name: NewColIdent(""),
+        Type: NewColIdent(""),
+        Unique: bool($2[0]),
+        Clustered: bool($2[1]),
+        Included: $9,
+        Where: NewWhere(WhereStr, $10),
+        Options: $11,
+        Partition: $12,
+      },
+      IndexCols: $7.IndexCols,
+      IndexExpr: $7.IndexExpr,
+    }
   }
 | CREATE unique_clustered_opt INDEX CONCURRENTLY sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
-        Action: CreateIndexStr,
-        Table: $7,
-        NewName: $7,
-        IndexSpec: &IndexSpec{
-          Name: $5,
-          Type: NewColIdent(""),
-          Unique: bool($2[0]),
-          Clustered: bool($2[1]),
-          Included: $11,
-          Where: NewWhere(WhereStr, $12),
-          Options: $13,
-          Partition: $14,
-        },
-        IndexCols: $9.IndexCols,
-        IndexExpr: $9.IndexExpr,
-      }
+      Action: CreateIndexStr,
+      Table: $7,
+      NewName: $7,
+      IndexSpec: &IndexSpec{
+        Name: $5,
+        Type: NewColIdent(""),
+        Unique: bool($2[0]),
+        Clustered: bool($2[1]),
+        Included: $11,
+        Where: NewWhere(WhereStr, $12),
+        Options: $13,
+        Partition: $14,
+      },
+      IndexCols: $9.IndexCols,
+      IndexExpr: $9.IndexExpr,
+    }
   }
 /* For MySQL */
 | CREATE unique_clustered_opt INDEX sql_id USING sql_id ON table_name '(' index_column_list ')' index_option_opt
   {
     $$ = &DDL{
-        Action: CreateIndexStr,
-        Table: $8,
-        NewName: $8,
-        IndexSpec: &IndexSpec{
-          Name: $4,
-          Type: $6,
-          Unique: bool($2[0]),
-          Options: $12,
-        },
-        IndexCols: $10,
-      }
+      Action: CreateIndexStr,
+      Table: $8,
+      NewName: $8,
+      IndexSpec: &IndexSpec{
+        Name: $4,
+        Type: $6,
+        Unique: bool($2[0]),
+        Options: $12,
+      },
+      IndexCols: $10,
+    }
   }
 /* For PostgreSQL */
 | CREATE unique_clustered_opt INDEX sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' where_expression_opt index_option_opt
   {
     $$ = &DDL{
-        Action: CreateIndexStr,
-        Table: $6,
-        NewName: $6,
-        IndexSpec: &IndexSpec{
-          Name: $4,
-          Type: $8,
-          Unique: bool($2[0]),
-          Where: NewWhere(WhereStr, $12),
-        },
-        IndexCols: $10.IndexCols,
-        IndexExpr: $10.IndexExpr,
-      }
+      Action: CreateIndexStr,
+      Table: $6,
+      NewName: $6,
+      IndexSpec: &IndexSpec{
+        Name: $4,
+        Type: $8,
+        Unique: bool($2[0]),
+        Where: NewWhere(WhereStr, $12),
+      },
+      IndexCols: $10.IndexCols,
+      IndexExpr: $10.IndexExpr,
+    }
   }
 /* For SQL Server */
 | CREATE nonclustered_columnstore INDEX sql_id ON table_name '(' column_list ')' where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
-        Action: CreateIndexStr,
-        Table: $6,
-        NewName: $6,
-        IndexSpec: &IndexSpec{
-          Name: $4,
-          Type: NewColIdent(""),
-          Unique: false,
-          Clustered: false,
-          ColumnStore: true,
-          Included: $8,
-          Where: NewWhere(WhereStr, $10),
-          Options: $11,
-          Partition: $12,
-        },
-      }
+      Action: CreateIndexStr,
+      Table: $6,
+      NewName: $6,
+      IndexSpec: &IndexSpec{
+        Name: $4,
+        Type: NewColIdent(""),
+        Unique: false,
+        Clustered: false,
+        ColumnStore: true,
+        Included: $8,
+        Where: NewWhere(WhereStr, $10),
+        Options: $11,
+        Partition: $12,
+      },
+    }
   }
 | CREATE or_replace_opt VIEW not_exists_opt table_name AS select_statement
   {
@@ -1153,7 +1153,7 @@ trigger_statement:
 /* TODO: should be a part of trigger_statement */
 trigger_statement_start:
   trigger_statement
-  | BEGIN trigger_statement ';' END
+| BEGIN trigger_statement ';' END
   {
     $$ = &BeginEnd{
       Statements: []Statement{$2},
@@ -1162,7 +1162,7 @@ trigger_statement_start:
 
 for_each_row_opt:
   { $$ = struct{}{} }
-  | FOR EACH ROW
+| FOR EACH ROW
   { $$ = struct{}{} }
 
 policy_as_opt:
@@ -1793,7 +1793,7 @@ int_type:
   }
 
 decimal_type:
-REAL float_length_opt
+  REAL float_length_opt
   {
     $$ = ColumnType{Type: string($1)}
     $$.Length = $2.Length
@@ -2038,8 +2038,8 @@ float_length_opt:
 | '(' INTEGRAL ',' INTEGRAL ')'
   {
     $$ = LengthScaleOption{
-        Length: NewIntVal($2),
-        Scale: NewIntVal($4),
+      Length: NewIntVal($2),
+      Scale: NewIntVal($4),
     }
   }
 
@@ -2050,14 +2050,14 @@ decimal_length_opt:
 | '(' INTEGRAL ')'
   {
     $$ = LengthScaleOption{
-        Length: NewIntVal($2),
+      Length: NewIntVal($2),
     }
   }
 | '(' INTEGRAL ',' INTEGRAL ')'
   {
     $$ = LengthScaleOption{
-        Length: NewIntVal($2),
-        Scale: NewIntVal($4),
+      Length: NewIntVal($2),
+      Scale: NewIntVal($4),
     }
   }
 
@@ -2163,9 +2163,9 @@ index_option_opt:
     $$ = $1
   }
 | WITH '(' mssql_index_option_list ')'
- {
-   $$ = $3
- }
+  {
+    $$ = $3
+  }
 
 index_option_list:
   index_option
@@ -2260,13 +2260,13 @@ index_partition_opt:
     $$ = nil
   }
 | ON sql_id
- {
-   $$ = &IndexPartition{Name: $2.String()}
- }
+  {
+    $$ = &IndexPartition{Name: $2.String()}
+  }
 | ON sql_id openb sql_id closeb
- {
-   $$ = &IndexPartition{Name: $2.String(), Column: $4.String()}
- }
+  {
+    $$ = &IndexPartition{Name: $2.String(), Column: $4.String()}
+  }
 
 index_info:
   PRIMARY KEY
@@ -2307,11 +2307,11 @@ index_info:
   }
 
 index_or_key:
-    INDEX
+  INDEX
   {
     $$ = string($1)
   }
-  | KEY
+| KEY
   {
     $$ = string($1)
   }
@@ -2570,67 +2570,67 @@ alter_statement:
 | ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')'
   {
     $$ = &DDL{
-        Action: AddIndexStr,
-        Table: $4,
-        NewName: $4,
-        IndexSpec: &IndexSpec{
-          Name: $8,
-          Unique: bool($6),
-          Primary: false,
-        },
-        IndexCols: $10,
-      }
+      Action: AddIndexStr,
+      Table: $4,
+      NewName: $4,
+      IndexSpec: &IndexSpec{
+        Name: $8,
+        Unique: bool($6),
+        Primary: false,
+      },
+      IndexCols: $10,
+    }
   }
 | ALTER ignore_opt TABLE ONLY table_name ADD CONSTRAINT sql_id PRIMARY KEY '(' index_column_list ')'
   {
     $$ = &DDL{
-        Action: AddPrimaryKeyStr,
-        Table: $5,
-        NewName: $5,
-        IndexSpec: &IndexSpec{
-          Name: $8,
-          Unique: false,
-          Primary: true,
-        },
-        IndexCols: $12,
-      }
+      Action: AddPrimaryKeyStr,
+      Table: $5,
+      NewName: $5,
+      IndexSpec: &IndexSpec{
+        Name: $8,
+        Unique: false,
+        Primary: true,
+      },
+      IndexCols: $12,
+    }
   }
 | ALTER ignore_opt TABLE table_name ADD CONSTRAINT sql_id UNIQUE '(' index_column_list ')' deferrable_opt initially_deferred_opt
   {
     $$ = &DDL{
-        Action: AddIndexStr,
-        Table: $4,
-        NewName: $4,
-        IndexSpec: &IndexSpec{
-          Name: $7,
-          Unique: true,
-          Primary: false,
-          Constraint: true,
-          ConstraintOptions: &ConstraintOptions{
-            Deferrable: bool($12),
-            InitiallyDeferred: bool($13),
-          },
+      Action: AddIndexStr,
+      Table: $4,
+      NewName: $4,
+      IndexSpec: &IndexSpec{
+        Name: $7,
+        Unique: true,
+        Primary: false,
+        Constraint: true,
+        ConstraintOptions: &ConstraintOptions{
+          Deferrable: bool($12),
+          InitiallyDeferred: bool($13),
         },
-        IndexCols: $10,
-      }
+      },
+      IndexCols: $10,
+    }
   }
 | ALTER ignore_opt TABLE table_name ADD foreign_key_definition
   {
     $$ = &DDL{
-        Action: AddForeignKeyStr,
-        Table: $4,
-        NewName: $4,
-        ForeignKey: $6,
-      }
+      Action: AddForeignKeyStr,
+      Table: $4,
+      NewName: $4,
+      ForeignKey: $6,
+    }
   }
 | ALTER ignore_opt TABLE ONLY table_name ADD foreign_key_definition
   {
     $$ = &DDL{
-        Action: AddForeignKeyStr,
-        Table: $5,
-        NewName: $5,
-        ForeignKey: $7,
-      }
+      Action: AddForeignKeyStr,
+      Table: $5,
+      NewName: $5,
+      ForeignKey: $7,
+    }
   }
 | ALTER ignore_opt TABLE table_name ADD alter_object_type_rest force_eof
   {
@@ -2643,25 +2643,25 @@ alter_statement:
 | ALTER ignore_opt TABLE table_name ADD VINDEX sql_id '(' column_list ')' vindex_type_opt vindex_params_opt
   {
     $$ = &DDL{
-        Action: AddColVindexStr,
-        Table: $4,
-        VindexSpec: &VindexSpec{
-            Name: $7,
-            Type: $11,
-            Params: $12,
-        },
-        VindexCols: $9,
-      }
+      Action: AddColVindexStr,
+      Table: $4,
+      VindexSpec: &VindexSpec{
+        Name: $7,
+        Type: $11,
+        Params: $12,
+      },
+      VindexCols: $9,
+    }
   }
 | ALTER ignore_opt TABLE table_name DROP VINDEX sql_id
   {
     $$ = &DDL{
-        Action: DropColVindexStr,
-        Table: $4,
-        VindexSpec: &VindexSpec{
-            Name: $7,
-        },
-      }
+      Action: DropColVindexStr,
+      Table: $4,
+      VindexSpec: &VindexSpec{
+        Name: $7,
+      },
+    }
   }
 | ALTER ignore_opt TABLE table_name RENAME to_opt table_name
   {
@@ -2757,9 +2757,9 @@ drop_statement:
 | DROP VIEW exists_opt table_name ddl_force_eof
   {
     var exists bool
-        if $3 != 0 {
-          exists = true
-        }
+    if $3 != 0 {
+      exists = true
+    }
     $$ = &DDL{Action: DropStr, Table: $4.toViewName(), IfExists: exists}
   }
 | DROP DATABASE exists_opt ID
@@ -3053,17 +3053,17 @@ union_op:
   }
 
 cache_opt:
-{
-  $$ = ""
-}
+  {
+    $$ = ""
+  }
 | SQL_NO_CACHE
-{
-  $$ = SQLNoCacheStr
-}
+  {
+    $$ = SQLNoCacheStr
+  }
 | SQL_CACHE
-{
-  $$ = SQLCacheStr
-}
+  {
+    $$ = SQLCacheStr
+  }
 
 distinct_opt:
   {
@@ -3244,7 +3244,7 @@ table_hint:
   }
 
 aliased_table_name:
-table_name as_opt_id index_hint_list table_hint_opt
+  table_name as_opt_id index_hint_list table_hint_opt
   {
     $$ = &AliasedTableExpr{Expr:$1, As: $2, IndexHints: $3, TableHints: $4}
   }
@@ -3310,13 +3310,13 @@ join_condition:
   { $$ = JoinCondition{Using: $3} }
 
 join_condition_opt:
-%prec JOIN
+  %prec JOIN
   { $$ = JoinCondition{} }
 | join_condition
   { $$ = $1 }
 
 on_expression_opt:
-%prec JOIN
+  %prec JOIN
   { $$ = JoinCondition{} }
 | ON expression
   { $$ = JoinCondition{On: $2} }
@@ -3385,7 +3385,7 @@ outer_join:
   }
 
 natural_join:
- NATURAL JOIN
+  NATURAL JOIN
   {
     $$ = NaturalJoinStr
   }
@@ -3897,7 +3897,7 @@ function_call_keyword:
   }
 | MATCH openb select_expression_list closeb AGAINST openb value_expression match_option closeb
   {
-  $$ = &MatchExpr{Columns: $3, Expr: $7, Option: $8}
+    $$ = &MatchExpr{Columns: $3, Expr: $7, Option: $8}
   }
 | GROUP_CONCAT openb distinct_opt select_expression_list order_by_opt separator_opt closeb
   {
@@ -3938,22 +3938,22 @@ function_call_nonkeyword:
   {
     $$ = &FuncExpr{Name:NewColIdent("utc_date")}
   }
-  // now
+// now
 | LOCALTIME func_datetime_precision_opt
   {
     $$ = &FuncExpr{Name:NewColIdent("localtime")}
   }
-  // now
+// now
 | LOCALTIMESTAMP func_datetime_precision_opt
   {
     $$ = &FuncExpr{Name:NewColIdent("localtimestamp")}
   }
-  // curdate
+// curdate
 | CURRENT_DATE func_datetime_precision_opt
   {
     $$ = &FuncExpr{Name:NewColIdent("current_date")}
   }
-  // curtime
+// curtime
 | CURRENT_TIME func_datetime_precision_opt
   {
     $$ = &FuncExpr{Name:NewColIdent("current_time")}
@@ -3964,7 +3964,7 @@ function_call_nonkeyword:
   }
 
 func_datetime_precision_opt:
-  /* empty */
+/* empty */
 | openb closeb
 
 /*
@@ -3990,7 +3990,7 @@ function_call_conflict:
   }
 
 match_option:
-/* empty */
+  /* empty */
   {
     $$ = ""
   }
@@ -3999,27 +3999,27 @@ match_option:
     $$ = BooleanModeStr
   }
 | IN NATURAL LANGUAGE MODE
- {
+  {
     $$ = NaturalLanguageModeStr
- }
+  }
 | IN NATURAL LANGUAGE MODE WITH QUERY EXPANSION
- {
+  {
     $$ = NaturalLanguageModeWithQueryExpansionStr
- }
+  }
 | WITH QUERY EXPANSION
- {
+  {
     $$ = QueryExpansionStr
- }
+  }
 
 charset:
   ID
-{
+  {
     $$ = string($1)
-}
+  }
 | STRING
-{
+  {
     $$ = string($1)
-}
+  }
 
 convert_type:
   BINARY length_opt
@@ -4227,7 +4227,7 @@ when_expression:
 
 when_expression_opt:
   { $$ = struct{}{} }
-  | WHEN expression
+| WHEN expression
   { $$ = struct{}{} }
 
 else_expression_opt:
@@ -5087,9 +5087,9 @@ closeb:
   }
 
 force_eof:
-{
-  forceEOF(yylex)
-}
+  {
+    forceEOF(yylex)
+  }
 
 ddl_force_eof:
   {
