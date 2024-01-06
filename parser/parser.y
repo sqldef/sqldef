@@ -4786,11 +4786,11 @@ bool_option_name:
 
 /*
  * These are not all necessarily reserved in MySQL, but some are.
-
+ *
  * These are more importantly reserved because they may conflict with our grammar.
  * If you want to move one that is not reserved in MySQL (i.e. ESCAPE) to the
  * non_reserved_keywords, you'll need to deal with any conflicts.
-
+ *
  * Sorted alphabetically
  */
 reserved_keyword:
@@ -4927,7 +4927,7 @@ reserved_keyword:
  * These are non-reserved Vitess, because they don't cause conflicts in the grammar.
  * Some of them may be reserved in MySQL. The good news is we backtick quote them
  * when we rewrite the query, so no issue should arise.
-
+ *
  * Sorted alphabetically
  */
 non_reserved_keyword:
