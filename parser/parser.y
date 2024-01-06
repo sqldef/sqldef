@@ -402,7 +402,7 @@ func forceEOF(yylex interface{}) {
 %type <arrayConstructor> array_constructor
 %type <arrayElements> array_element_list
 %type <arrayElement> array_element
-%type <str> sql_security sql_security_opt
+%type <str> sql_security
 %type <overExpr> over_expression
 %token <bytes> OVER
 %type <partitionBy> partition_by_opt partition_by_list
@@ -797,15 +797,6 @@ isolation_level:
     $$ = &SetExpr{Name: NewColIdent("tx_isolation"), Expr: NewStrVal([]byte("serializable"))}
   }
 
-sql_security_opt:
-  {
-    $$ = ""
-  }
-| SQL SECURITY sql_security
-  {
-    $$ = $3
-  }
-
 sql_security:
   DEFINER
   {
@@ -956,15 +947,15 @@ create_statement:
       },
     }
   }
-| CREATE or_replace_opt sql_security_opt VIEW not_exists_opt table_name AS select_statement
+| CREATE or_replace_opt SQL SECURITY sql_security VIEW not_exists_opt table_name AS select_statement
   {
     $$ = &DDL{
       Action: CreateView,
       View: &View{
         Type: SqlSecurityStr,
-        SecurityType: $3,
-        Name: $6.toViewName(),
-        Definition: $8,
+        SecurityType: $5,
+        Name: $8.toViewName(),
+        Definition: $10,
       },
     }
   }
