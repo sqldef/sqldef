@@ -419,6 +419,359 @@ statement:
   create_statement
 | alter_statement
 
+create_statement:
+  create_table_prefix table_spec
+  {
+    $1.TableSpec = $2
+    $$ = $1
+  }
+| CREATE unique_clustered_opt INDEX sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+  {
+    $$ = &DDL{
+      Action: CreateIndex,
+      Table: $6,
+      NewName: $6,
+      IndexSpec: &IndexSpec{
+        Name: $4,
+        Type: NewColIdent(""),
+        Unique: bool($2[0]),
+        Clustered: bool($2[0]),
+        Included: $10,
+        Where: NewWhere(WhereStr, $11),
+        Options: $12,
+        Partition: $13,
+      },
+      IndexCols: $8.IndexCols,
+      IndexExpr: $8.IndexExpr,
+    }
+  }
+| CREATE unique_clustered_opt INDEX ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+  {
+    $$ = &DDL{
+      Action: CreateIndex,
+      Table: $5,
+      NewName: $5,
+      IndexSpec: &IndexSpec{
+        Name: NewColIdent(""),
+        Type: NewColIdent(""),
+        Unique: bool($2[0]),
+        Clustered: bool($2[1]),
+        Included: $9,
+        Where: NewWhere(WhereStr, $10),
+        Options: $11,
+        Partition: $12,
+      },
+      IndexCols: $7.IndexCols,
+      IndexExpr: $7.IndexExpr,
+    }
+  }
+| CREATE unique_clustered_opt INDEX CONCURRENTLY sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+  {
+    $$ = &DDL{
+      Action: CreateIndex,
+      Table: $7,
+      NewName: $7,
+      IndexSpec: &IndexSpec{
+        Name: $5,
+        Type: NewColIdent(""),
+        Unique: bool($2[0]),
+        Clustered: bool($2[1]),
+        Included: $11,
+        Where: NewWhere(WhereStr, $12),
+        Options: $13,
+        Partition: $14,
+      },
+      IndexCols: $9.IndexCols,
+      IndexExpr: $9.IndexExpr,
+    }
+  }
+/* For MySQL */
+| CREATE unique_clustered_opt INDEX sql_id USING sql_id ON table_name '(' index_column_list ')' index_option_opt
+  {
+    $$ = &DDL{
+      Action: CreateIndex,
+      Table: $8,
+      NewName: $8,
+      IndexSpec: &IndexSpec{
+        Name: $4,
+        Type: $6,
+        Unique: bool($2[0]),
+        Options: $12,
+      },
+      IndexCols: $10,
+    }
+  }
+/* For PostgreSQL */
+| CREATE unique_clustered_opt INDEX sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' where_expression_opt index_option_opt
+  {
+    $$ = &DDL{
+      Action: CreateIndex,
+      Table: $6,
+      NewName: $6,
+      IndexSpec: &IndexSpec{
+        Name: $4,
+        Type: $8,
+        Unique: bool($2[0]),
+        Where: NewWhere(WhereStr, $12),
+      },
+      IndexCols: $10.IndexCols,
+      IndexExpr: $10.IndexExpr,
+    }
+  }
+/* For SQL Server */
+| CREATE nonclustered_columnstore INDEX sql_id ON table_name '(' column_list ')' where_expression_opt index_option_opt index_partition_opt
+  {
+    $$ = &DDL{
+      Action: CreateIndex,
+      Table: $6,
+      NewName: $6,
+      IndexSpec: &IndexSpec{
+        Name: $4,
+        Type: NewColIdent(""),
+        Unique: false,
+        Clustered: false,
+        ColumnStore: true,
+        Included: $8,
+        Where: NewWhere(WhereStr, $10),
+        Options: $11,
+        Partition: $12,
+      },
+    }
+  }
+| CREATE or_replace_opt VIEW not_exists_opt table_name AS select_statement
+  {
+    $$ = &DDL{
+      Action: CreateView,
+      View: &View{
+        Type: ViewStr,
+        Name: $5.toViewName(),
+        Definition: $7,
+      },
+    }
+  }
+| CREATE or_replace_opt SQL SECURITY sql_security VIEW not_exists_opt table_name AS select_statement
+  {
+    $$ = &DDL{
+      Action: CreateView,
+      View: &View{
+        Type: SqlSecurityStr,
+        SecurityType: $5,
+        Name: $8.toViewName(),
+        Definition: $10,
+      },
+    }
+  }
+| CREATE MATERIALIZED VIEW not_exists_opt table_name AS select_statement
+  {
+    $$ = &DDL{
+      Action: CreateView,
+      View: &View{
+        Type: MaterializedViewStr,
+        Name: $5.toViewName(),
+        Definition: $7,
+      },
+    }
+  }
+| CREATE POLICY sql_id ON table_name policy_as_opt policy_for_opt TO sql_id_list using_opt with_check_opt
+  {
+    $$ = &DDL{
+      Action: CreatePolicy,
+      Table: $5,
+      Policy: &Policy{
+        Name: $3,
+        Permissive: Permissive($6),
+        Scope: $7,
+        To: $9,
+        Using: NewWhere(WhereStr, $10),
+        WithCheck: NewWhere(WhereStr, $11),
+      },
+    }
+  }
+/* For MySQL */
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW trigger_statement_start
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: $3,
+        TableName: $7,
+        Time: $4,
+        Event: $5,
+        Body: []Statement{$11},
+      },
+    }
+  }
+/* For MSSQL */
+| CREATE TRIGGER sql_id ON table_name trigger_time trigger_event_list AS trigger_statements
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: $3,
+        TableName: $5,
+        Time: $6,
+        Event: $7,
+        Body: $9,
+      },
+    }
+  }
+/* For SQLite3 */
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt BEGIN statement_block ';' END
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: $3,
+        TableName: $7,
+        Time: $4,
+        Event: $5,
+        Body: $11,
+      },
+    }
+  }
+| CREATE TRIGGER not_exists_opt sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt BEGIN statement_block ';' END
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: $4,
+        TableName: $8,
+        Time: $5,
+        Event: $6,
+        Body: $12,
+      },
+    }
+  }
+/* For PostgreSQL */
+| CREATE TYPE table_name AS column_type
+  {
+    $$ = &DDL{
+      Action: CreateType,
+      Type: &Type{
+        Name: $3,
+        Type: $5,
+      },
+    }
+  }
+/* For SQLite3, only to parse because alternation is not supported. // The Virtual Table Mechanism Of SQLite https://www.sqlite.org/vtab.html */
+| CREATE VIRTUAL TABLE not_exists_opt table_name USING sql_id module_arguments_opt
+  {
+    $$ = &DDL{Action: Create, NewName: $5, TableSpec: &TableSpec{}}
+  }
+
+alter_statement:
+  ALTER ignore_opt TABLE table_name non_add_drop_or_rename_operation force_eof
+  {
+    $$ = &DDL{Action: Alter, Table: $4, NewName: $4}
+  }
+| ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')'
+  {
+    $$ = &DDL{
+      Action: AddIndex,
+      Table: $4,
+      NewName: $4,
+      IndexSpec: &IndexSpec{
+        Name: $8,
+        Unique: bool($6),
+        Primary: false,
+      },
+      IndexCols: $10,
+    }
+  }
+| ALTER ignore_opt TABLE ONLY table_name ADD CONSTRAINT sql_id PRIMARY KEY '(' index_column_list ')'
+  {
+    $$ = &DDL{
+      Action: AddPrimaryKey,
+      Table: $5,
+      NewName: $5,
+      IndexSpec: &IndexSpec{
+        Name: $8,
+        Unique: false,
+        Primary: true,
+      },
+      IndexCols: $12,
+    }
+  }
+| ALTER ignore_opt TABLE table_name ADD CONSTRAINT sql_id UNIQUE '(' index_column_list ')' deferrable_opt initially_deferred_opt
+  {
+    $$ = &DDL{
+      Action: AddIndex,
+      Table: $4,
+      NewName: $4,
+      IndexSpec: &IndexSpec{
+        Name: $7,
+        Unique: true,
+        Primary: false,
+        Constraint: true,
+        ConstraintOptions: &ConstraintOptions{
+          Deferrable: bool($12),
+          InitiallyDeferred: bool($13),
+        },
+      },
+      IndexCols: $10,
+    }
+  }
+| ALTER ignore_opt TABLE table_name ADD foreign_key_definition
+  {
+    $$ = &DDL{
+      Action: AddForeignKey,
+      Table: $4,
+      NewName: $4,
+      ForeignKey: $6,
+    }
+  }
+| ALTER ignore_opt TABLE ONLY table_name ADD foreign_key_definition
+  {
+    $$ = &DDL{
+      Action: AddForeignKey,
+      Table: $5,
+      NewName: $5,
+      ForeignKey: $7,
+    }
+  }
+| ALTER ignore_opt TABLE table_name ADD alter_object_type_rest force_eof
+  {
+    $$ = &DDL{Action: Alter, Table: $4, NewName: $4}
+  }
+| ALTER ignore_opt TABLE table_name DROP alter_object_type force_eof
+  {
+    $$ = &DDL{Action: Alter, Table: $4, NewName: $4}
+  }
+| ALTER VIEW table_name ddl_force_eof
+  {
+    $$ = &DDL{Action: Alter, Table: $3.toViewName(), NewName: $3.toViewName()}
+  }
+| ALTER ignore_opt TABLE table_name partition_operation
+  {
+    $$ = &DDL{Action: Alter, Table: $4, PartitionSpec: $5}
+  }
+
+alter_object_type:
+  COLUMN
+| CONSTRAINT
+| FOREIGN
+| FULLTEXT
+| ID
+| INDEX
+| KEY
+| PRIMARY
+| SPATIAL
+| PARTITION
+| UNIQUE
+
+alter_object_type_index:
+  INDEX
+| KEY
+
+alter_object_type_rest:
+  COLUMN
+| FOREIGN
+| FULLTEXT
+| ID
+| PRIMARY
+| SPATIAL
+| PARTITION
+
 select_statement:
   base_select order_by_opt limit_opt lock_opt
   {
@@ -779,246 +1132,6 @@ set_session_or_global:
 | GLOBAL
   {
     $$ = GlobalStr
-  }
-
-create_statement:
-  create_table_prefix table_spec
-  {
-    $1.TableSpec = $2
-    $$ = $1
-  }
-| CREATE unique_clustered_opt INDEX sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
-  {
-    $$ = &DDL{
-      Action: CreateIndex,
-      Table: $6,
-      NewName: $6,
-      IndexSpec: &IndexSpec{
-        Name: $4,
-        Type: NewColIdent(""),
-        Unique: bool($2[0]),
-        Clustered: bool($2[0]),
-        Included: $10,
-        Where: NewWhere(WhereStr, $11),
-        Options: $12,
-        Partition: $13,
-      },
-      IndexCols: $8.IndexCols,
-      IndexExpr: $8.IndexExpr,
-    }
-  }
-| CREATE unique_clustered_opt INDEX ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
-  {
-    $$ = &DDL{
-      Action: CreateIndex,
-      Table: $5,
-      NewName: $5,
-      IndexSpec: &IndexSpec{
-        Name: NewColIdent(""),
-        Type: NewColIdent(""),
-        Unique: bool($2[0]),
-        Clustered: bool($2[1]),
-        Included: $9,
-        Where: NewWhere(WhereStr, $10),
-        Options: $11,
-        Partition: $12,
-      },
-      IndexCols: $7.IndexCols,
-      IndexExpr: $7.IndexExpr,
-    }
-  }
-| CREATE unique_clustered_opt INDEX CONCURRENTLY sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
-  {
-    $$ = &DDL{
-      Action: CreateIndex,
-      Table: $7,
-      NewName: $7,
-      IndexSpec: &IndexSpec{
-        Name: $5,
-        Type: NewColIdent(""),
-        Unique: bool($2[0]),
-        Clustered: bool($2[1]),
-        Included: $11,
-        Where: NewWhere(WhereStr, $12),
-        Options: $13,
-        Partition: $14,
-      },
-      IndexCols: $9.IndexCols,
-      IndexExpr: $9.IndexExpr,
-    }
-  }
-/* For MySQL */
-| CREATE unique_clustered_opt INDEX sql_id USING sql_id ON table_name '(' index_column_list ')' index_option_opt
-  {
-    $$ = &DDL{
-      Action: CreateIndex,
-      Table: $8,
-      NewName: $8,
-      IndexSpec: &IndexSpec{
-        Name: $4,
-        Type: $6,
-        Unique: bool($2[0]),
-        Options: $12,
-      },
-      IndexCols: $10,
-    }
-  }
-/* For PostgreSQL */
-| CREATE unique_clustered_opt INDEX sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' where_expression_opt index_option_opt
-  {
-    $$ = &DDL{
-      Action: CreateIndex,
-      Table: $6,
-      NewName: $6,
-      IndexSpec: &IndexSpec{
-        Name: $4,
-        Type: $8,
-        Unique: bool($2[0]),
-        Where: NewWhere(WhereStr, $12),
-      },
-      IndexCols: $10.IndexCols,
-      IndexExpr: $10.IndexExpr,
-    }
-  }
-/* For SQL Server */
-| CREATE nonclustered_columnstore INDEX sql_id ON table_name '(' column_list ')' where_expression_opt index_option_opt index_partition_opt
-  {
-    $$ = &DDL{
-      Action: CreateIndex,
-      Table: $6,
-      NewName: $6,
-      IndexSpec: &IndexSpec{
-        Name: $4,
-        Type: NewColIdent(""),
-        Unique: false,
-        Clustered: false,
-        ColumnStore: true,
-        Included: $8,
-        Where: NewWhere(WhereStr, $10),
-        Options: $11,
-        Partition: $12,
-      },
-    }
-  }
-| CREATE or_replace_opt VIEW not_exists_opt table_name AS select_statement
-  {
-    $$ = &DDL{
-      Action: CreateView,
-      View: &View{
-        Type: ViewStr,
-        Name: $5.toViewName(),
-        Definition: $7,
-      },
-    }
-  }
-| CREATE or_replace_opt SQL SECURITY sql_security VIEW not_exists_opt table_name AS select_statement
-  {
-    $$ = &DDL{
-      Action: CreateView,
-      View: &View{
-        Type: SqlSecurityStr,
-        SecurityType: $5,
-        Name: $8.toViewName(),
-        Definition: $10,
-      },
-    }
-  }
-| CREATE MATERIALIZED VIEW not_exists_opt table_name AS select_statement
-  {
-    $$ = &DDL{
-      Action: CreateView,
-      View: &View{
-        Type: MaterializedViewStr,
-        Name: $5.toViewName(),
-        Definition: $7,
-      },
-    }
-  }
-| CREATE POLICY sql_id ON table_name policy_as_opt policy_for_opt TO sql_id_list using_opt with_check_opt
-  {
-    $$ = &DDL{
-      Action: CreatePolicy,
-      Table: $5,
-      Policy: &Policy{
-        Name: $3,
-        Permissive: Permissive($6),
-        Scope: $7,
-        To: $9,
-        Using: NewWhere(WhereStr, $10),
-        WithCheck: NewWhere(WhereStr, $11),
-      },
-    }
-  }
-/* For MySQL */
-| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW trigger_statement_start
-  {
-    $$ = &DDL{
-      Action: CreateTrigger,
-      Trigger: &Trigger{
-        Name: $3,
-        TableName: $7,
-        Time: $4,
-        Event: $5,
-        Body: []Statement{$11},
-      },
-    }
-  }
-/* For MSSQL */
-| CREATE TRIGGER sql_id ON table_name trigger_time trigger_event_list AS trigger_statements
-  {
-    $$ = &DDL{
-      Action: CreateTrigger,
-      Trigger: &Trigger{
-        Name: $3,
-        TableName: $5,
-        Time: $6,
-        Event: $7,
-        Body: $9,
-      },
-    }
-  }
-/* For SQLite3 */
-| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt BEGIN statement_block ';' END
-  {
-    $$ = &DDL{
-      Action: CreateTrigger,
-      Trigger: &Trigger{
-        Name: $3,
-        TableName: $7,
-        Time: $4,
-        Event: $5,
-        Body: $11,
-      },
-    }
-  }
-| CREATE TRIGGER not_exists_opt sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt BEGIN statement_block ';' END
-  {
-    $$ = &DDL{
-      Action: CreateTrigger,
-      Trigger: &Trigger{
-        Name: $4,
-        TableName: $8,
-        Time: $5,
-        Event: $6,
-        Body: $12,
-      },
-    }
-  }
-/* For PostgreSQL */
-| CREATE TYPE table_name AS column_type
-  {
-    $$ = &DDL{
-      Action: CreateType,
-      Type: &Type{
-        Name: $3,
-        Type: $5,
-      },
-    }
-  }
-/* For SQLite3, only to parse because alternation is not supported. // The Virtual Table Mechanism Of SQLite https://www.sqlite.org/vtab.html */
-| CREATE VIRTUAL TABLE not_exists_opt table_name USING sql_id module_arguments_opt
-  {
-    $$ = &DDL{Action: Create, NewName: $5, TableSpec: &TableSpec{}}
   }
 
 module_arguments_opt:
@@ -2479,119 +2592,6 @@ table_opt_value:
   {
     $$ = string($1)
   }
-
-alter_statement:
-  ALTER ignore_opt TABLE table_name non_add_drop_or_rename_operation force_eof
-  {
-    $$ = &DDL{Action: Alter, Table: $4, NewName: $4}
-  }
-| ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')'
-  {
-    $$ = &DDL{
-      Action: AddIndex,
-      Table: $4,
-      NewName: $4,
-      IndexSpec: &IndexSpec{
-        Name: $8,
-        Unique: bool($6),
-        Primary: false,
-      },
-      IndexCols: $10,
-    }
-  }
-| ALTER ignore_opt TABLE ONLY table_name ADD CONSTRAINT sql_id PRIMARY KEY '(' index_column_list ')'
-  {
-    $$ = &DDL{
-      Action: AddPrimaryKey,
-      Table: $5,
-      NewName: $5,
-      IndexSpec: &IndexSpec{
-        Name: $8,
-        Unique: false,
-        Primary: true,
-      },
-      IndexCols: $12,
-    }
-  }
-| ALTER ignore_opt TABLE table_name ADD CONSTRAINT sql_id UNIQUE '(' index_column_list ')' deferrable_opt initially_deferred_opt
-  {
-    $$ = &DDL{
-      Action: AddIndex,
-      Table: $4,
-      NewName: $4,
-      IndexSpec: &IndexSpec{
-        Name: $7,
-        Unique: true,
-        Primary: false,
-        Constraint: true,
-        ConstraintOptions: &ConstraintOptions{
-          Deferrable: bool($12),
-          InitiallyDeferred: bool($13),
-        },
-      },
-      IndexCols: $10,
-    }
-  }
-| ALTER ignore_opt TABLE table_name ADD foreign_key_definition
-  {
-    $$ = &DDL{
-      Action: AddForeignKey,
-      Table: $4,
-      NewName: $4,
-      ForeignKey: $6,
-    }
-  }
-| ALTER ignore_opt TABLE ONLY table_name ADD foreign_key_definition
-  {
-    $$ = &DDL{
-      Action: AddForeignKey,
-      Table: $5,
-      NewName: $5,
-      ForeignKey: $7,
-    }
-  }
-| ALTER ignore_opt TABLE table_name ADD alter_object_type_rest force_eof
-  {
-    $$ = &DDL{Action: Alter, Table: $4, NewName: $4}
-  }
-| ALTER ignore_opt TABLE table_name DROP alter_object_type force_eof
-  {
-    $$ = &DDL{Action: Alter, Table: $4, NewName: $4}
-  }
-| ALTER VIEW table_name ddl_force_eof
-  {
-    $$ = &DDL{Action: Alter, Table: $3.toViewName(), NewName: $3.toViewName()}
-  }
-| ALTER ignore_opt TABLE table_name partition_operation
-  {
-    $$ = &DDL{Action: Alter, Table: $4, PartitionSpec: $5}
-  }
-
-alter_object_type:
-  COLUMN
-| CONSTRAINT
-| FOREIGN
-| FULLTEXT
-| ID
-| INDEX
-| KEY
-| PRIMARY
-| SPATIAL
-| PARTITION
-| UNIQUE
-
-alter_object_type_index:
-  INDEX
-| KEY
-
-alter_object_type_rest:
-  COLUMN
-| FOREIGN
-| FULLTEXT
-| ID
-| PRIMARY
-| SPATIAL
-| PARTITION
 
 partition_operation:
   REORGANIZE PARTITION sql_id INTO openb partition_definitions closeb
