@@ -405,7 +405,7 @@ func forceEOF(yylex interface{}) {
 %type <str> sql_security
 %type <overExpr> over_expression
 %token <bytes> OVER
-%type <partitionBy> partition_by_opt partition_by_list
+%type <partitionBy> partition_by_list
 %type <partition> partition
 %type <boolVals> unique_clustered_opt
 %type <empty> nonclustered_columnstore
@@ -3141,17 +3141,17 @@ over_expression:
   {
     $$ = &OverExpr{}
   }
-| OVER openb partition_by_opt closeb
+| OVER openb PARTITION BY partition_by_list closeb
   {
-    $$ = &OverExpr{PartitionBy: $3}
+    $$ = &OverExpr{PartitionBy: $5}
   }
 | OVER openb order_by_opt closeb
   {
     $$ = &OverExpr{OrderBy: $3}
   }
-| OVER openb partition_by_opt order_by_opt closeb
+| OVER openb PARTITION BY partition_by_list order_by_opt closeb
   {
-    $$ = &OverExpr{PartitionBy: $3, OrderBy: $4}
+    $$ = &OverExpr{PartitionBy: $5, OrderBy: $6}
   }
 
 from_opt:
@@ -4308,15 +4308,6 @@ having_opt:
 | HAVING expression
   {
     $$ = $2
-  }
-
-partition_by_opt:
-  {
-    $$ = nil
-  }
-| PARTITION BY partition_by_list
-  {
-    $$ = $3
   }
 
 partition_by_list:
