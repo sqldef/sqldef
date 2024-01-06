@@ -266,7 +266,7 @@ func forceEOF(yylex interface{}) {
 // SQL SECURITY
 %token <bytes> DEFINER INVOKER
 
-%type <statement> command
+%type <statement> statement
 %type <selStmt> select_statement base_select union_lhs union_rhs
 %type <statement> stream_statement insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement if_statement
 %type <statement> create_statement alter_statement rename_statement drop_statement truncate_statement
@@ -412,12 +412,12 @@ func forceEOF(yylex interface{}) {
 %type <bytes> bool_option_name
 %type <strs> bool_option_name_list
 
-%start any_command
+%start program
 
 %%
 
-any_command:
-  command semicolon_opt
+program:
+  statement semicolon_opt
   {
     setParseTree(yylex, $1)
   }
@@ -426,7 +426,7 @@ semicolon_opt:
 /* empty */ {}
 | ';' {}
 
-command:
+statement:
   select_statement
   {
     $$ = $1
