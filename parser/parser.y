@@ -947,36 +947,48 @@ create_statement:
   }
 | CREATE or_replace_opt VIEW not_exists_opt table_name AS select_statement
   {
-    $$ = &DDL{Action: CreateViewStr, View: &View{
+    $$ = &DDL{
+      Action: CreateViewStr,
+      View: &View{
         Action: CreateViewStr,
         Name: $5.toViewName(),
         Definition: $7,
-    }}
+      }
+    }
   }
 | CREATE or_replace_opt sql_security_opt VIEW not_exists_opt table_name AS select_statement
   {
-    $$ = &DDL{Action: CreateViewStr, View: &View{
+    $$ = &DDL{
+      Action: CreateViewStr,
+      View: &View{
         Action: CreateSqlSecurityStr,
         SecurityType: $3,
         Name: $6.toViewName(),
         Definition: $8,
-    }}
+      }
+    }
   }
 | CREATE MATERIALIZED VIEW not_exists_opt table_name AS select_statement
   {
-    $$ = &DDL{Action: CreateViewStr, View: &View{
+    $$ = &DDL{
+      Action: CreateViewStr,
+      View: &View{
         Action: CreateMatViewStr,
         Name: $5.toViewName(),
         Definition: $7,
-    }}
+      }
+    }
   }
 | CREATE VINDEX sql_id vindex_type_opt vindex_params_opt
   {
-    $$ = &DDL{Action: CreateVindexStr, VindexSpec: &VindexSpec{
+    $$ = &DDL{
+      Action: CreateVindexStr,
+      VindexSpec: &VindexSpec{
         Name: $3,
         Type: $4,
         Params: $5,
-    }}
+      }
+    }
   }
 | CREATE DATABASE not_exists_opt ID ddl_force_eof
   {
@@ -988,57 +1000,73 @@ create_statement:
   }
 | CREATE POLICY sql_id ON table_name policy_as_opt policy_for_opt TO sql_id_list using_opt with_check_opt
   {
-    $$ = &DDL{Action: CreatePolicyStr, Table: $5, Policy: &Policy{
+    $$ = &DDL{
+      Action: CreatePolicyStr,
+      Table: $5,
+      Policy: &Policy{
         Name: $3,
         Permissive: Permissive($6),
         Scope: $7,
         To: $9,
         Using: NewWhere(WhereStr, $10),
         WithCheck: NewWhere(WhereStr, $11),
-    }}
+      }
+    }
   }
 /* For MySQL */
 | CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW trigger_statement_start
   {
-    $$ = &DDL{Action: CreateTriggerStr, Trigger: &Trigger{
+    $$ = &DDL{
+      Action: CreateTriggerStr,
+      Trigger: &Trigger{
         Name: $3,
         TableName: $7,
         Time: $4,
         Event: $5,
         Body: []Statement{$11},
-    }}
+      }
+    }
   }
 /* For MSSQL */
 | CREATE TRIGGER sql_id ON table_name trigger_time trigger_event_list AS trigger_statements
   {
-    $$ = &DDL{Action: CreateTriggerStr, Trigger: &Trigger{
+    $$ = &DDL{
+      Action: CreateTriggerStr,
+      Trigger: &Trigger{
         Name: $3,
         TableName: $5,
         Time: $6,
         Event: $7,
         Body: $9,
-    }}
+      }
+    }
   }
 /* For SQLite3 */
 | CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt BEGIN statement_block ';' END
   {
-    $$ = &DDL{Action: CreateTriggerStr, Trigger: &Trigger{
+    $$ = &DDL{
+      Action: CreateTriggerStr,
+      Trigger: &Trigger{
         Name: $3,
         TableName: $7,
         Time: $4,
         Event: $5,
         Body: $11,
-    }}
+      }
+    }
   }
 | CREATE TRIGGER not_exists_opt sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt BEGIN statement_block ';' END
   {
-    $$ = &DDL{Action: CreateTriggerStr, Trigger: &Trigger{
+    $$ = &DDL{
+      Action: CreateTriggerStr,
+      Trigger: &Trigger{
         Name: $4,
         TableName: $8,
         Time: $5,
         Event: $6,
         Body: $12,
-    }}
+      }
+    }
   }
 /* For PostgreSQL */
 | CREATE TYPE table_name AS column_type
