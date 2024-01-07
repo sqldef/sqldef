@@ -35,7 +35,7 @@ func ParseDDLs(mode GeneratorMode, sqlParser database.Parser, sql string, defaul
 func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSchema string) (DDL, error) {
 	switch stmt := stmt.(type) {
 	case *parser.DDL:
-		if stmt.Action == parser.Create {
+		if stmt.Action == parser.CreateTable {
 			// TODO: handle other create DDL as error?
 			table, err := parseTable(mode, stmt, defaultSchema)
 			if err != nil {

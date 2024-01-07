@@ -656,13 +656,13 @@ create_statement:
 /* For SQLite3, only to parse because alternation is not supported. // The Virtual Table Mechanism Of SQLite https://www.sqlite.org/vtab.html */
 | CREATE VIRTUAL TABLE not_exists_opt table_name USING sql_id module_arguments_opt
   {
-    $$ = &DDL{Action: Create, NewName: $5, TableSpec: &TableSpec{}}
+    $$ = &DDL{Action: CreateTable, NewName: $5, TableSpec: &TableSpec{}}
   }
 
 alter_statement:
   ALTER ignore_opt TABLE table_name non_add_drop_or_rename_operation force_eof
   {
-    $$ = &DDL{Action: Alter, Table: $4, NewName: $4}
+    $$ = &DDL{Action: AlterTable, Table: $4, NewName: $4}
   }
 | ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')'
   {
@@ -731,19 +731,19 @@ alter_statement:
   }
 | ALTER ignore_opt TABLE table_name ADD alter_object_type_rest force_eof
   {
-    $$ = &DDL{Action: Alter, Table: $4, NewName: $4}
+    $$ = &DDL{Action: AlterTable, Table: $4, NewName: $4}
   }
 | ALTER ignore_opt TABLE table_name DROP alter_object_type force_eof
   {
-    $$ = &DDL{Action: Alter, Table: $4, NewName: $4}
+    $$ = &DDL{Action: AlterTable, Table: $4, NewName: $4}
   }
 | ALTER VIEW table_name ddl_force_eof
   {
-    $$ = &DDL{Action: Alter, Table: $3.toViewName(), NewName: $3.toViewName()}
+    $$ = &DDL{Action: AlterTable, Table: $3.toViewName(), NewName: $3.toViewName()}
   }
 | ALTER ignore_opt TABLE table_name partition_operation
   {
-    $$ = &DDL{Action: Alter, Table: $4, PartitionSpec: $5}
+    $$ = &DDL{Action: AlterTable, Table: $4, PartitionSpec: $5}
   }
 
 alter_object_type:
@@ -1319,7 +1319,7 @@ or_replace_opt:
 create_table_prefix:
   CREATE TABLE not_exists_opt table_name
   {
-    $$ = &DDL{Action: Create, NewName: $4}
+    $$ = &DDL{Action: CreateTable, NewName: $4}
     setDDL(yylex, $$)
   }
 

@@ -166,7 +166,7 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 	}
 
 	return &parser.DDL{
-		Action:  parser.Create,
+		Action:  parser.CreateTable,
 		NewName: tableName,
 		TableSpec: &parser.TableSpec{
 			Columns:     columns,

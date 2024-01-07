@@ -4930,13 +4930,13 @@ yydefault:
 		yyDollar = yyS[yypt-8 : yypt+1]
 //line parser/parser.y:658
 		{
-			yyVAL.statement = &DDL{Action: Create, NewName: yyDollar[5].tableName, TableSpec: &TableSpec{}}
+			yyVAL.statement = &DDL{Action: CreateTable, NewName: yyDollar[5].tableName, TableSpec: &TableSpec{}}
 		}
 	case 23:
 		yyDollar = yyS[yypt-6 : yypt+1]
 //line parser/parser.y:664
 		{
-			yyVAL.statement = &DDL{Action: Alter, Table: yyDollar[4].tableName, NewName: yyDollar[4].tableName}
+			yyVAL.statement = &DDL{Action: AlterTable, Table: yyDollar[4].tableName, NewName: yyDollar[4].tableName}
 		}
 	case 24:
 		yyDollar = yyS[yypt-11 : yypt+1]
@@ -5017,25 +5017,25 @@ yydefault:
 		yyDollar = yyS[yypt-7 : yypt+1]
 //line parser/parser.y:733
 		{
-			yyVAL.statement = &DDL{Action: Alter, Table: yyDollar[4].tableName, NewName: yyDollar[4].tableName}
+			yyVAL.statement = &DDL{Action: AlterTable, Table: yyDollar[4].tableName, NewName: yyDollar[4].tableName}
 		}
 	case 30:
 		yyDollar = yyS[yypt-7 : yypt+1]
 //line parser/parser.y:737
 		{
-			yyVAL.statement = &DDL{Action: Alter, Table: yyDollar[4].tableName, NewName: yyDollar[4].tableName}
+			yyVAL.statement = &DDL{Action: AlterTable, Table: yyDollar[4].tableName, NewName: yyDollar[4].tableName}
 		}
 	case 31:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line parser/parser.y:741
 		{
-			yyVAL.statement = &DDL{Action: Alter, Table: yyDollar[3].tableName.toViewName(), NewName: yyDollar[3].tableName.toViewName()}
+			yyVAL.statement = &DDL{Action: AlterTable, Table: yyDollar[3].tableName.toViewName(), NewName: yyDollar[3].tableName.toViewName()}
 		}
 	case 32:
 		yyDollar = yyS[yypt-5 : yypt+1]
 //line parser/parser.y:745
 		{
-			yyVAL.statement = &DDL{Action: Alter, Table: yyDollar[4].tableName, PartitionSpec: yyDollar[5].partSpec}
+			yyVAL.statement = &DDL{Action: AlterTable, Table: yyDollar[4].tableName, PartitionSpec: yyDollar[5].partSpec}
 		}
 	case 53:
 		yyDollar = yyS[yypt-4 : yypt+1]
@@ -5735,7 +5735,7 @@ yydefault:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line parser/parser.y:1321
 		{
-			yyVAL.ddl = &DDL{Action: Create, NewName: yyDollar[4].tableName}
+			yyVAL.ddl = &DDL{Action: CreateTable, NewName: yyDollar[4].tableName}
 			setDDL(yylex, yyVAL.ddl)
 		}
 	case 169:

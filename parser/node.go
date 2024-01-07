@@ -425,9 +425,9 @@ const (
 	AddForeignKey = DDLAction(iota)
 	AddIndex
 	AddPrimaryKey
-	Alter
+	AlterTable
 	CommentOn
-	Create
+	CreateTable
 	CreateExtension
 	CreateIndex
 	CreatePolicy
@@ -446,13 +446,13 @@ const (
 // Format formats the node.
 func (node *DDL) Format(buf *nodeBuffer) {
 	switch node.Action {
-	case Create:
+	case CreateTable:
 		if node.TableSpec == nil {
 			buf.Printf("create table %v", node.NewName)
 		} else {
 			buf.Printf("create table %v %v", node.NewName, node.TableSpec)
 		}
-	case Alter:
+	case AlterTable:
 		if node.PartitionSpec != nil {
 			buf.Printf("alter table %v %v", node.Table, node.PartitionSpec)
 		} else {
