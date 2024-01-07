@@ -319,14 +319,13 @@ func forceEOF(yylex interface{}) {
 %type <updateExpr> update_expression
 %type <setExpr> set_expression transaction_char isolation_level
 %type <str> ignore_opt default_opt
-%type <empty> not_exists_opt non_add_drop_or_rename_operation when_expression_opt for_each_row_opt
+%type <empty> not_exists_opt when_expression_opt for_each_row_opt
 %type <bytes> reserved_keyword non_reserved_keyword
 %type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt
 %type <boolVal> unique_opt
 %type <expr> charset_value
 %type <tableIdent> table_id reserved_table_id table_alias as_opt_id
 %type <empty> as_opt
-%type <empty> force_eof ddl_force_eof
 %type <str> charset
 %type <str> set_session_or_global
 %type <convertType> convert_type simple_convert_type
@@ -359,10 +358,6 @@ func forceEOF(yylex interface{}) {
 %type <indexOptions> index_option_opt
 %type <indexOption> index_option
 %type <indexOptions> index_option_list mssql_index_option_list
-%type <partDefs> partition_definitions
-%type <partDef> partition_definition
-%type <partSpec> partition_operation
-%type <bytes> alter_object_type
 %type <bytes> policy_as_opt policy_for_opt character_cast_opt
 %type <expr> using_opt with_check_opt
 %left <bytes> TYPECAST CHECK
@@ -660,11 +655,7 @@ create_statement:
   }
 
 alter_statement:
-  ALTER ignore_opt TABLE table_name non_add_drop_or_rename_operation force_eof
-  {
-    $$ = &DDL{Action: AlterTable, Table: $4, NewName: $4}
-  }
-| ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')'
+  ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')'
   {
     $$ = &DDL{
       Action: AddIndex,
@@ -729,48 +720,10 @@ alter_statement:
       ForeignKey: $7,
     }
   }
-| ALTER ignore_opt TABLE table_name ADD alter_object_type_rest force_eof
-  {
-    $$ = &DDL{Action: AlterTable, Table: $4, NewName: $4}
-  }
-| ALTER ignore_opt TABLE table_name DROP alter_object_type force_eof
-  {
-    $$ = &DDL{Action: AlterTable, Table: $4, NewName: $4}
-  }
-| ALTER VIEW table_name ddl_force_eof
-  {
-    $$ = &DDL{Action: AlterTable, Table: $3.toViewName(), NewName: $3.toViewName()}
-  }
-| ALTER ignore_opt TABLE table_name partition_operation
-  {
-    $$ = &DDL{Action: AlterTable, Table: $4, PartitionSpec: $5}
-  }
-
-alter_object_type:
-  COLUMN
-| CONSTRAINT
-| FOREIGN
-| FULLTEXT
-| ID
-| INDEX
-| KEY
-| PRIMARY
-| SPATIAL
-| PARTITION
-| UNIQUE
 
 alter_object_type_index:
   INDEX
 | KEY
-
-alter_object_type_rest:
-  COLUMN
-| FOREIGN
-| FULLTEXT
-| ID
-| PRIMARY
-| SPATIAL
-| PARTITION
 
 select_statement:
   base_select order_by_opt limit_opt lock_opt
@@ -2593,32 +2546,6 @@ table_opt_value:
     $$ = string($1)
   }
 
-partition_operation:
-  REORGANIZE PARTITION sql_id INTO openb partition_definitions closeb
-  {
-    $$ = &PartitionSpec{Action: ReorganizeStr, Name: $3, Definitions: $6}
-  }
-
-partition_definitions:
-  partition_definition
-  {
-    $$ = []*PartitionDefinition{$1}
-  }
-| partition_definitions ',' partition_definition
-  {
-    $$ = append($1, $3)
-  }
-
-partition_definition:
-  PARTITION sql_id VALUES LESS THAN openb value_expression closeb
-  {
-    $$ = &PartitionDefinition{Name: $2, Limit: $7}
-  }
-| PARTITION sql_id VALUES LESS THAN openb MAXVALUE closeb
-  {
-    $$ = &PartitionDefinition{Name: $2, Maxvalue: true}
-  }
-
 comment_opt:
   {
     setAllowComments(yylex, true)
@@ -4192,28 +4119,6 @@ ignore_opt:
 | IGNORE
   { $$ = IgnoreStr }
 
-non_add_drop_or_rename_operation:
-  ALTER
-  { $$ = struct{}{} }
-| AUTO_INCREMENT
-  { $$ = struct{}{} }
-| CHARACTER
-  { $$ = struct{}{} }
-| COMMENT_KEYWORD
-  { $$ = struct{}{} }
-| DEFAULT
-  { $$ = struct{}{} }
-| ORDER
-  { $$ = struct{}{} }
-| CONVERT
-  { $$ = struct{}{} }
-| PARTITION
-  { $$ = struct{}{} }
-| UNUSED
-  { $$ = struct{}{} }
-| ID
-  { $$ = struct{}{} }
-
 sql_id:
   ID
   {
@@ -4644,22 +4549,4 @@ closeb:
   ')'
   {
     decNesting(yylex)
-  }
-
-force_eof:
-  {
-    forceEOF(yylex)
-  }
-
-ddl_force_eof:
-  {
-    forceEOF(yylex)
-  }
-| openb
-  {
-    forceEOF(yylex)
-  }
-| reserved_sql_id
-  {
-    forceEOF(yylex)
   }

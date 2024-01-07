@@ -425,7 +425,6 @@ const (
 	AddForeignKey = DDLAction(iota)
 	AddIndex
 	AddPrimaryKey
-	AlterTable
 	CommentOn
 	CreateTable
 	CreateExtension
@@ -451,12 +450,6 @@ func (node *DDL) Format(buf *nodeBuffer) {
 			buf.Printf("create table %v", node.NewName)
 		} else {
 			buf.Printf("create table %v %v", node.NewName, node.TableSpec)
-		}
-	case AlterTable:
-		if node.PartitionSpec != nil {
-			buf.Printf("alter table %v %v", node.Table, node.PartitionSpec)
-		} else {
-			buf.Printf("alter table %v", node.Table)
 		}
 	case CreateView:
 		if node.View.SecurityType != "" {
