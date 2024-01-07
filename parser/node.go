@@ -426,10 +426,10 @@ const (
 	AddIndex
 	AddPrimaryKey
 	CommentOn
-	CreateTable
 	CreateExtension
 	CreateIndex
 	CreatePolicy
+	CreateTable
 	CreateTrigger
 	CreateType
 	CreateView
