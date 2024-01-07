@@ -611,19 +611,6 @@ create_statement:
     }
   }
 /* For SQLite3 */
-| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt BEGIN statement_block ';' END
-  {
-    $$ = &DDL{
-      Action: CreateTrigger,
-      Trigger: &Trigger{
-        Name: $3,
-        TableName: $7,
-        Time: $4,
-        Event: $5,
-        Body: $11,
-      },
-    }
-  }
 | CREATE TRIGGER not_exists_opt sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt BEGIN statement_block ';' END
   {
     $$ = &DDL{
