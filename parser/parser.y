@@ -4492,7 +4492,6 @@ non_reserved_keyword:
 | VARIABLES
 | VIEW
 | VSCHEMA_TABLES
-| WITHOUT
 | WRITE
 | YEAR
 | ZEROFILL
@@ -4505,7 +4504,6 @@ non_reserved_keyword:
 | ALLOW_ROW_LOCKS
 | ALLOW_PAGE_LOCKS
 | ROWID
-| STRICT
 | LEAD
 | LAG
 
