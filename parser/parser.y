@@ -2531,6 +2531,10 @@ table_opt_name:
   {
     $$ = $1 + " " + $2.String()
   }
+| COMMENT_KEYWORD
+  {
+    $$ = string($1)
+  }
 
 table_opt_value:
   reserved_sql_id
@@ -4412,11 +4416,8 @@ non_reserved_keyword:
 | CASCADE
 | CHARACTER
 | CHARSET
-| CHECK
-| COMMENT_KEYWORD
 | COMMIT
 | COMMITTED
-| CONSTRAINT
 | CURRENT_USER
 | DOUBLE
 | DUPLICATE
@@ -4457,7 +4458,6 @@ non_reserved_keyword:
 | POLYGON
 | PRECISION
 | PERMISSIVE
-| PRIMARY
 | PROCEDURE
 | QUERY
 | READ
