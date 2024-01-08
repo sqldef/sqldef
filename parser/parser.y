@@ -2517,9 +2517,9 @@ table_option_list:
   {
     $$ = map[string]string{}
   }
-| sqlite3_table_opt ',' table_option_list
+| table_option_list ',' sqlite3_table_opt
   {
-    $$ = $3
+    $$ = $1
   }
 
 sqlite3_table_opt:

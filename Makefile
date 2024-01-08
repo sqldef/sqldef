@@ -57,6 +57,7 @@ package-tar.gz: build
 		cd $(BUILD_DIR) && tar zcvf ../../package/psqldef_$(GOOS)_$(GOARCH).tar.gz psqldef$(SUFFIX); \
 	fi
 
+# Cached
 parser: goyacc parser/parser.go
 
 parser/parser.go: parser/parser.y
@@ -78,3 +79,6 @@ test-sqlite3def:
 test-mssqldef:
 	go test -v ./cmd/mssqldef
 	go test -v ./database/mssql
+
+touch:
+	touch parser/parser.y
