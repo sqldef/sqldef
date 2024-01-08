@@ -1715,12 +1715,8 @@ character_cast_opt:
   {
     $$ = nil
   }
-| TYPECAST TIMESTAMP time_zone_opt
 | TYPECAST BPCHAR
 | TYPECAST INTERVAL
-| TYPECAST TEXT
-| TYPECAST JSON
-| TYPECAST JSONB
 | TYPECAST column_type array_opt
 
 numeric_type:
