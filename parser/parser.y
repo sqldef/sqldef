@@ -331,7 +331,7 @@ func forceEOF(yylex interface{}) {
 %type <convertType> convert_type simple_convert_type
 %type <columnType> column_type
 %type <columnType> bool_type int_type decimal_type numeric_type time_type char_type spatial_type
-%type <str> varying_opt
+%type <str> precision_opt varying_opt
 %type <optVal> length_opt max_length_opt current_timestamp
 %type <str> charset_opt collate_opt
 %type <boolVal> unsigned_opt zero_fill_opt array_opt time_zone_opt
@@ -1779,17 +1779,11 @@ decimal_type:
     $$.Length = $2.Length
     $$.Scale = $2.Scale
   }
-| DOUBLE PRECISION float_length_opt
+| DOUBLE precision_opt float_length_opt
   {
-    $$ = ColumnType{Type: string($1)+" "+string($2)}
+    $$ = ColumnType{Type: string($1)+$2}
     $$.Length = $3.Length
     $$.Scale = $3.Scale
-  }
-| DOUBLE float_length_opt
-  {
-    $$ = ColumnType{Type: string($1)}
-    $$.Length = $2.Length
-    $$.Scale = $2.Scale
   }
 | FLOAT_TYPE float_length_opt
   {
@@ -1816,6 +1810,15 @@ decimal_type:
 | SMALLMONEY
   {
     $$ = ColumnType{Type: string($1)}
+  }
+
+precision_opt:
+  {
+    $$ = ""
+  }
+| VARYING
+  {
+    $$ = " " + string($1)
   }
 
 time_type:
