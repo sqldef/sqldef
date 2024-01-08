@@ -1346,11 +1346,6 @@ column_type:
   {
     $$ = ColumnType{Type: $1.val}
   }
-// for SQLite3: Blob type (empty string)
-|
-  {
-    $$ = ColumnType{Type: ""}
-  }
 
 column_definition_type:
   column_type array_opt
@@ -1521,6 +1516,11 @@ column_definition_type:
   {
     $1.Identity.NotForReplication = true
     $$ = $1
+  }
+/* for SQLite3: Blob type */
+| /* empty */
+  {
+    $$ = ColumnType{Type: ""}
   }
 
 default_definition:

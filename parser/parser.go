@@ -915,19 +915,16 @@ var yyExca = [...]int16{
 	-2, 428,
 	-1, 1062,
 	58, 95,
-	-2, 163,
+	-2, 191,
 	-1, 1065,
 	58, 95,
-	-2, 163,
+	-2, 191,
 	-1, 1114,
 	5, 34,
 	-2, 554,
 	-1, 1186,
 	5, 33,
 	-2, 14,
-	-1, 1199,
-	187, 60,
-	-2, 163,
 	-1, 1240,
 	58, 95,
 	-2, 162,
@@ -2066,7 +2063,7 @@ var yyR1 = [...]uint8{
 	166, 167, 167, 167, 167, 167, 167, 169, 169, 170,
 	170, 106, 106, 171, 171, 18, 151, 152, 152, 152,
 	152, 152, 152, 152, 139, 139, 139, 117, 117, 117,
-	117, 117, 117, 117, 140, 140, 140, 140, 140, 140,
+	117, 117, 117, 140, 140, 140, 140, 140, 140, 140,
 	140, 140, 140, 140, 140, 140, 140, 140, 140, 140,
 	140, 140, 140, 140, 140, 140, 140, 140, 140, 140,
 	140, 140, 177, 177, 177, 177, 177, 178, 178, 178,
@@ -2164,10 +2161,10 @@ var yyR2 = [...]int8{
 	2, 0, 2, 2, 2, 2, 2, 0, 2, 0,
 	3, 0, 1, 0, 2, 4, 4, 0, 1, 3,
 	3, 3, 3, 3, 2, 2, 2, 3, 1, 1,
-	1, 1, 1, 0, 2, 2, 3, 2, 4, 2,
-	4, 2, 2, 3, 2, 3, 2, 7, 9, 3,
-	3, 6, 9, 9, 6, 6, 8, 8, 5, 8,
-	7, 4, 2, 4, 6, 2, 4, 2, 1, 1,
+	1, 1, 1, 2, 2, 3, 2, 4, 2, 4,
+	2, 2, 3, 2, 3, 2, 7, 9, 3, 3,
+	6, 9, 9, 6, 6, 8, 8, 5, 8, 7,
+	4, 0, 2, 4, 6, 2, 4, 2, 1, 1,
 	1, 2, 1, 1, 1, 3, 1, 2, 1, 1,
 	2, 0, 4, 3, 4, 3, 3, 3, 3, 3,
 	3, 3, 2, 4, 6, 2, 3, 2, 3, 1,
@@ -2428,7 +2425,7 @@ var yyDef = [...]int16{
 	0, -2, 2, 4, 5, 0, -2, 769, 1, 3,
 	6, 147, 0, 0, 0, 0, 0, 0, 0, 0,
 	767, 389, 390, 391, 394, 0, 0, 770, 0, 148,
-	163, 163, 163, 771, 0, 0, 767, 0, 767, 0,
+	191, 191, 191, 771, 0, 0, 767, 0, 767, 0,
 	0, 0, 0, 501, 775, 776, 767, 0, 0, 395,
 	392, 393, 144, 0, 402, 0, 154, 319, 315, 158,
 	159, 160, 161, 162, 302, 238, 266, 267, 302, 290,
@@ -2439,11 +2436,11 @@ var yyDef = [...]int16{
 	243, 244, 245, 246, 247, 248, 304, 256, 304, 306,
 	306, 254, 255, 155, 156, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 102, 103, 104, 0, 0,
-	163, 0, 0, 145, 0, 0, 0, 146, 404, 0,
+	0, 0, 0, 145, 0, 0, 0, 146, 404, 0,
 	407, 149, 150, 151, 152, 153, 0, 396, 398, 0,
-	0, 0, 0, 0, 363, 364, 165, 0, 167, 0,
-	169, 0, 171, 172, 0, 174, 176, 396, 0, 0,
-	0, 0, 0, 0, 0, 164, 0, 321, 317, 316,
+	0, 0, 0, 0, 363, 364, 164, 0, 166, 0,
+	168, 0, 170, 171, 0, 173, 175, 396, 0, 0,
+	0, 0, 0, 0, 0, 163, 0, 321, 317, 316,
 	237, 0, 322, 302, 291, 322, 0, 322, 322, 274,
 	275, 325, 0, 325, 325, 325, 325, 0, 0, 312,
 	312, 261, 262, 263, 249, 0, 304, 257, 251, 252,
@@ -2464,8 +2461,8 @@ var yyDef = [...]int16{
 	929, 930, 931, 932, 933, 934, 935, 936, 937, 938,
 	939, 940, 941, 0, 768, 141, 0, 0, 0, 408,
 	410, 772, 773, 774, 406, 0, 373, 0, 0, 0,
-	399, 354, 0, 0, 357, 0, 359, -2, 385, 166,
-	0, 0, 0, 173, 175, 0, 179, 180, 785, 0,
+	399, 354, 0, 0, 357, 0, 359, -2, 385, 165,
+	0, 0, 0, 172, 174, 0, 178, 179, 785, 0,
 	209, 0, 0, 192, 0, 195, -2, 198, 199, 200,
 	233, 202, 203, 204, 0, 206, 302, 302, 229, 0,
 	520, 521, 0, 0, 0, 0, -2, 207, 208, 320,
@@ -2475,8 +2472,8 @@ var yyDef = [...]int16{
 	0, 0, 0, 0, 767, 0, 131, 0, 0, 0,
 	0, 0, 0, 0, 0, 398, 26, 142, 0, 0,
 	409, 405, 0, 367, 302, 302, 0, 0, 0, 0,
-	0, 0, 355, 356, 358, 361, 385, 386, 387, 191,
-	168, 396, 170, 785, 942, 0, 0, 511, 785, 516,
+	0, 0, 355, 356, 358, 361, 385, 386, 387, 190,
+	167, 396, 169, 785, 942, 0, 0, 511, 785, 516,
 	518, 0, 557, 558, 559, 560, 561, 562, 785, 785,
 	785, 785, 785, 785, 785, 589, 590, 591, 592, 0,
 	594, -2, 700, 695, 702, 703, 704, 705, 706, 707,
@@ -2484,7 +2481,7 @@ var yyDef = [...]int16{
 	0, 0, 0, -2, 0, 0, 0, 0, 0, 631,
 	631, 631, 631, 631, 631, 631, 631, 0, 0, 0,
 	0, 0, 786, 0, 210, 0, 0, 0, 0, 197,
-	163, 201, 0, 225, 0, 227, 0, 0, -2, 785,
+	0, 201, 0, 225, 0, 227, 0, 0, -2, 785,
 	785, 0, 303, 268, 325, 270, 310, 311, 271, 272,
 	327, 323, 324, 322, 0, 322, 0, 0, 0, 307,
 	0, 0, 0, 0, 0, 365, 366, 302, 0, 0,
@@ -2502,7 +2499,7 @@ var yyDef = [...]int16{
 	785, 785, 785, 0, 785, 424, 0, 685, 0, 0,
 	0, 0, 0, 622, 0, 623, 624, 625, 626, 627,
 	628, 629, 630, 676, 0, 678, 679, 680, 681, 682,
-	683, 785, -2, 785, 785, 785, 188, 0, 193, 0,
+	683, 785, -2, 785, 785, 785, 187, 0, 193, 0,
 	233, 196, 234, 235, 319, 205, 943, 226, 228, 230,
 	0, 785, 0, 0, 430, 436, 432, 0, 0, 436,
 	0, 0, 269, 325, 301, 325, 313, 314, 0, 0,
@@ -2512,7 +2509,7 @@ var yyDef = [...]int16{
 	399, 351, 330, 0, 332, 0, 347, 0, 0, 0,
 	0, 0, 0, 0, 0, 368, 369, 722, 723, 374,
 	0, 381, 382, 375, 0, 0, 399, 0, 0, 785,
-	231, 181, 184, 185, 512, 513, 515, 532, 0, 534,
+	231, 180, 183, 184, 512, 513, 515, 532, 0, 534,
 	536, 522, 523, 551, 552, 553, 0, 785, 785, 785,
 	549, 527, 0, 563, 564, 565, 566, 567, 568, 569,
 	570, 571, 572, 573, 574, 577, 642, 643, 578, 0,
@@ -2534,17 +2531,17 @@ var yyDef = [...]int16{
 	0, 0, -2, 95, 95, -2, 95, 95, 0, 0,
 	0, 328, 0, 333, 0, 0, 0, 336, 0, 348,
 	338, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 231, 0, 177, 0, 0, 533, 535, 537,
+	0, 0, 231, 0, 176, 0, 0, 533, 535, 537,
 	524, 549, 528, 0, 525, 785, 785, 0, 519, 0,
 	788, 233, 0, 556, -2, 602, 603, 0, 0, 785,
 	644, 322, 648, 649, 653, 654, 656, 661, 667, 668,
 	671, 672, 674, 675, 0, 785, 785, 785, 785, 785,
 	0, 0, 716, 0, 689, 785, 0, 617, 618, 633,
-	634, 635, 636, 0, 0, 190, 194, 596, 431, 597,
+	634, 635, 636, 0, 0, 189, 194, 596, 431, 597,
 	0, 438, 434, 0, 598, 599, 0, 507, 0, 0,
 	329, 785, 0, 509, 329, 30, 0, 0, 725, 717,
 	718, 721, 724, 33, 426, 417, -2, 139, 0, 785,
-	127, 0, 692, 113, 724, 769, 0, 0, 55, -2,
+	127, 0, 692, 113, 724, 769, 0, 0, 55, 60,
 	57, 0, 0, 791, 793, 794, 795, 796, 797, 798,
 	799, 800, 801, 802, 803, 804, 805, 806, 807, 808,
 	809, 810, 811, 812, 813, 62, 63, 64, 0, 0,
@@ -2554,8 +2551,8 @@ var yyDef = [...]int16{
 	344, 345, 346, 396, 396, 0, 0, 384, 231, 232,
 	0, 0, 526, 785, 550, 529, 0, 787, 0, 790,
 	697, 0, 302, 0, 0, 645, 646, 0, 0, 0,
-	0, 0, 0, 696, 0, 686, 616, 694, 785, 186,
-	187, 189, 0, 0, 0, 0, 0, 0, 222, 0,
+	0, 0, 0, 696, 0, 686, 616, 694, 785, 185,
+	186, 188, 0, 0, 0, 0, 0, 0, 222, 0,
 	0, 0, 600, 329, 507, 329, 351, 508, 0, 507,
 	351, 729, 0, 785, 785, 785, 720, 728, 36, 785,
 	427, 16, 0, 401, 138, 17, 124, 0, 0, 74,
@@ -2564,7 +2561,7 @@ var yyDef = [...]int16{
 	752, 91, 92, 0, 0, 0, -2, 0, 763, 760,
 	0, 65, 68, 69, 70, 71, 72, 0, 0, 0,
 	691, 0, 23, 779, 0, 0, 331, 0, 376, 377,
-	0, 329, 178, 182, 183, 530, 579, 789, 604, 607,
+	0, 329, 177, 181, 182, 530, 579, 789, 604, 607,
 	605, 606, 608, 785, 785, 611, 785, 785, 785, 0,
 	0, 690, 0, 213, 0, 215, 216, 217, 218, 219,
 	220, 221, 0, 442, 0, 0, 435, 351, 329, 10,
@@ -2572,7 +2569,7 @@ var yyDef = [...]int16{
 	785, 0, 0, 75, 123, 49, 0, 500, -2, 0,
 	0, 0, 45, 46, 0, 0, 0, 0, 0, 0,
 	489, 0, 0, 492, 0, 0, 0, 0, 483, 0,
-	0, 503, 0, 485, 0, 487, 488, 58, 163, 0,
+	0, 503, 0, 485, 0, 487, 488, 58, 0, 0,
 	0, 52, 0, 54, 80, 0, 0, 785, 0, 325,
 	764, 765, 766, 762, 792, 0, 0, 0, 0, 0,
 	0, 782, 780, 0, 0, 0, 335, 0, 351, 0,
@@ -4148,14 +4145,8 @@ yydefault:
 			yyVAL.columnType = ColumnType{Type: yyDollar[1].colIdent.val}
 		}
 	case 163:
-		yyDollar = yyS[yypt-0 : yypt+1]
-//line parser/parser.y:1351
-		{
-			yyVAL.columnType = ColumnType{Type: ""}
-		}
-	case 164:
 		yyDollar = yyS[yypt-2 : yypt+1]
-//line parser/parser.y:1357
+//line parser/parser.y:1352
 		{
 			yyDollar[1].columnType.NotNull = nil
 			yyDollar[1].columnType.Default = nil
@@ -4168,46 +4159,53 @@ yydefault:
 			yyDollar[1].columnType.Array = yyDollar[2].boolVal
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 165:
+	case 164:
 		yyDollar = yyS[yypt-2 : yypt+1]
-//line parser/parser.y:1370
+//line parser/parser.y:1365
 		{
 			yyDollar[1].columnType.NotNull = NewBoolVal(false)
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 166:
+	case 165:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line parser/parser.y:1375
+//line parser/parser.y:1370
 		{
 			yyDollar[1].columnType.NotNull = NewBoolVal(true)
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 167:
+	case 166:
 		yyDollar = yyS[yypt-2 : yypt+1]
-//line parser/parser.y:1380
+//line parser/parser.y:1375
 		{
 			yyDollar[1].columnType.Default = &DefaultDefinition{ValueOrExpression: yyDollar[2].defaultValueOrExpression}
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 168:
+	case 167:
 		yyDollar = yyS[yypt-4 : yypt+1]
-//line parser/parser.y:1385
+//line parser/parser.y:1380
 		{
 			yyDollar[1].columnType.Default = &DefaultDefinition{ConstraintName: yyDollar[3].colIdent, ValueOrExpression: yyDollar[4].defaultValueOrExpression}
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 169:
+	case 168:
 		yyDollar = yyS[yypt-2 : yypt+1]
-//line parser/parser.y:1391
+//line parser/parser.y:1386
 		{
 			yyDollar[1].columnType.Srid = &SridDefinition{Value: yyDollar[2].optVal}
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 170:
+	case 169:
 		yyDollar = yyS[yypt-4 : yypt+1]
-//line parser/parser.y:1396
+//line parser/parser.y:1391
 		{
 			yyDollar[1].columnType.OnUpdate = yyDollar[4].optVal
+			yyVAL.columnType = yyDollar[1].columnType
+		}
+	case 170:
+		yyDollar = yyS[yypt-2 : yypt+1]
+//line parser/parser.y:1396
+		{
+			yyDollar[1].columnType.Autoincrement = BoolVal(true)
 			yyVAL.columnType = yyDollar[1].columnType
 		}
 	case 171:
@@ -4218,43 +4216,36 @@ yydefault:
 			yyVAL.columnType = yyDollar[1].columnType
 		}
 	case 172:
-		yyDollar = yyS[yypt-2 : yypt+1]
-//line parser/parser.y:1406
-		{
-			yyDollar[1].columnType.Autoincrement = BoolVal(true)
-			yyVAL.columnType = yyDollar[1].columnType
-		}
-	case 173:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line parser/parser.y:1411
+//line parser/parser.y:1406
 		{
 			yyDollar[1].columnType.KeyOpt = colKeyPrimary
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 174:
+	case 173:
 		yyDollar = yyS[yypt-2 : yypt+1]
-//line parser/parser.y:1416
+//line parser/parser.y:1411
 		{
 			yyDollar[1].columnType.KeyOpt = colKey
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 175:
+	case 174:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line parser/parser.y:1421
+//line parser/parser.y:1416
 		{
 			yyDollar[1].columnType.KeyOpt = colKeyUniqueKey
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 176:
+	case 175:
 		yyDollar = yyS[yypt-2 : yypt+1]
-//line parser/parser.y:1426
+//line parser/parser.y:1421
 		{
 			yyDollar[1].columnType.KeyOpt = colKeyUnique
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 177:
+	case 176:
 		yyDollar = yyS[yypt-7 : yypt+1]
-//line parser/parser.y:1431
+//line parser/parser.y:1426
 		{
 			yyDollar[1].columnType.Check = &CheckDefinition{
 				Where:             *NewWhere(WhereStr, yyDollar[5].expr),
@@ -4263,9 +4254,9 @@ yydefault:
 			}
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 178:
+	case 177:
 		yyDollar = yyS[yypt-9 : yypt+1]
-//line parser/parser.y:1440
+//line parser/parser.y:1435
 		{
 			yyDollar[1].columnType.Check = &CheckDefinition{
 				ConstraintName:    yyDollar[3].colIdent,
@@ -4275,103 +4266,109 @@ yydefault:
 			}
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 179:
+	case 178:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line parser/parser.y:1450
+//line parser/parser.y:1445
 		{
 			yyDollar[1].columnType.Comment = NewStrVal(yyDollar[3].bytes)
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 180:
+	case 179:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line parser/parser.y:1455
+//line parser/parser.y:1450
 		{
 			yyDollar[1].columnType.References = String(yyDollar[3].tableName)
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 181:
+	case 180:
 		yyDollar = yyS[yypt-6 : yypt+1]
-//line parser/parser.y:1460
+//line parser/parser.y:1455
 		{
 			yyDollar[1].columnType.References = String(yyDollar[3].tableName)
 			yyDollar[1].columnType.ReferenceNames = yyDollar[5].columns
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 182:
+	case 181:
 		yyDollar = yyS[yypt-9 : yypt+1]
-//line parser/parser.y:1467
+//line parser/parser.y:1462
 		{
 			yyDollar[1].columnType.References = String(yyDollar[3].tableName)
 			yyDollar[1].columnType.ReferenceNames = yyDollar[5].columns
 			yyDollar[1].columnType.ReferenceOnDelete = yyDollar[9].colIdent
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 183:
+	case 182:
 		yyDollar = yyS[yypt-9 : yypt+1]
-//line parser/parser.y:1474
+//line parser/parser.y:1469
 		{
 			yyDollar[1].columnType.References = String(yyDollar[3].tableName)
 			yyDollar[1].columnType.ReferenceNames = yyDollar[5].columns
 			yyDollar[1].columnType.ReferenceOnUpdate = yyDollar[9].colIdent
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 184:
+	case 183:
 		yyDollar = yyS[yypt-6 : yypt+1]
-//line parser/parser.y:1482
+//line parser/parser.y:1477
 		{
 			yyDollar[1].columnType.Generated = &GeneratedColumn{Expr: yyDollar[4].expr, GeneratedType: "VIRTUAL"}
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 185:
+	case 184:
 		yyDollar = yyS[yypt-6 : yypt+1]
-//line parser/parser.y:1487
+//line parser/parser.y:1482
 		{
 			yyDollar[1].columnType.Generated = &GeneratedColumn{Expr: yyDollar[4].expr, GeneratedType: "STORED"}
+			yyVAL.columnType = yyDollar[1].columnType
+		}
+	case 185:
+		yyDollar = yyS[yypt-8 : yypt+1]
+//line parser/parser.y:1487
+		{
+			yyDollar[1].columnType.Generated = &GeneratedColumn{Expr: yyDollar[6].expr, GeneratedType: "VIRTUAL"}
 			yyVAL.columnType = yyDollar[1].columnType
 		}
 	case 186:
 		yyDollar = yyS[yypt-8 : yypt+1]
 //line parser/parser.y:1492
 		{
-			yyDollar[1].columnType.Generated = &GeneratedColumn{Expr: yyDollar[6].expr, GeneratedType: "VIRTUAL"}
-			yyVAL.columnType = yyDollar[1].columnType
-		}
-	case 187:
-		yyDollar = yyS[yypt-8 : yypt+1]
-//line parser/parser.y:1497
-		{
 			yyDollar[1].columnType.Generated = &GeneratedColumn{Expr: yyDollar[6].expr, GeneratedType: "STORED"}
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 188:
+	case 187:
 		yyDollar = yyS[yypt-5 : yypt+1]
-//line parser/parser.y:1503
+//line parser/parser.y:1498
 		{
 			yyDollar[1].columnType.Identity = &IdentityOpt{Behavior: yyDollar[3].str}
 			yyDollar[1].columnType.NotNull = NewBoolVal(true)
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 189:
+	case 188:
 		yyDollar = yyS[yypt-8 : yypt+1]
-//line parser/parser.y:1509
+//line parser/parser.y:1504
 		{
 			yyDollar[1].columnType.Identity = &IdentityOpt{Behavior: yyDollar[3].str, Sequence: yyDollar[7].sequence}
 			yyDollar[1].columnType.NotNull = NewBoolVal(true)
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 190:
+	case 189:
 		yyDollar = yyS[yypt-7 : yypt+1]
-//line parser/parser.y:1515
+//line parser/parser.y:1510
 		{
 			yyDollar[1].columnType.Identity = &IdentityOpt{Sequence: &Sequence{StartWith: NewIntVal(yyDollar[4].bytes), IncrementBy: NewIntVal(yyDollar[6].bytes)}, NotForReplication: false}
 			yyVAL.columnType = yyDollar[1].columnType
 		}
-	case 191:
+	case 190:
 		yyDollar = yyS[yypt-4 : yypt+1]
-//line parser/parser.y:1521
+//line parser/parser.y:1516
 		{
 			yyDollar[1].columnType.Identity.NotForReplication = true
 			yyVAL.columnType = yyDollar[1].columnType
+		}
+	case 191:
+		yyDollar = yyS[yypt-0 : yypt+1]
+//line parser/parser.y:1522
+		{
+			yyVAL.columnType = ColumnType{Type: ""}
 		}
 	case 192:
 		yyDollar = yyS[yypt-2 : yypt+1]
