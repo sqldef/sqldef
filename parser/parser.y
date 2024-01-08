@@ -1715,7 +1715,6 @@ character_cast_opt:
   {
     $$ = nil
   }
-| TYPECAST CHARACTER VARYING
 | TYPECAST TIMESTAMP time_zone_opt
 | TYPECAST BPCHAR
 | TYPECAST INTERVAL
