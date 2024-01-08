@@ -1816,7 +1816,7 @@ precision_opt:
   {
     $$ = ""
   }
-| VARYING
+| PRECISION
   {
     $$ = " " + string($1)
   }
