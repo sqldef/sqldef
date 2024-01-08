@@ -320,7 +320,7 @@ func forceEOF(yylex interface{}) {
 %type <setExpr> set_expression transaction_char isolation_level
 %type <str> ignore_opt default_opt
 %type <empty> not_exists_opt when_expression_opt for_each_row_opt
-%type <bytes> reserved_keyword non_reserved_keyword
+%type <bytes> reserved_keyword
 %type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt
 %type <boolVal> unique_opt
 %type <expr> charset_value
@@ -1321,6 +1321,11 @@ column_definition:
   }
 /* For SQLite3 https://www.sqlite.org/lang_keywords.html */
 | STRING column_definition_type
+  {
+    $$ = &ColumnDefinition{Name: NewColIdent(string($1)), Type: $2}
+  }
+/* SQLite3 */
+| ROWID column_definition_type
   {
     $$ = &ColumnDefinition{Name: NewColIdent(string($1)), Type: $2}
   }
@@ -3350,6 +3355,10 @@ value_expression:
   {
     $$ = $2
   }
+| CURRENT_USER
+  {
+    $$ = &ColName{Name: NewColIdent(string($1))}
+  }
 
 /*
  * Regular function calls without special token or syntax, guaranteed to not
@@ -3367,6 +3376,14 @@ function_call_generic:
 | sql_id openb select_expression_list closeb over_expression
   {
     $$ = &FuncExpr{Name: $1, Exprs: $3, Over: $5}
+  }
+| LAG openb select_expression_list closeb over_expression
+  {
+    $$ = &FuncExpr{Name: NewColIdent(string($1)), Exprs: $3, Over: $5}
+  }
+| LEAD openb select_expression_list closeb over_expression
+  {
+    $$ = &FuncExpr{Name: NewColIdent(string($1)), Exprs: $3, Over: $5}
   }
 | table_id '.' reserved_sql_id openb select_expression_list_opt closeb
   {
@@ -4144,13 +4161,13 @@ sql_id:
   {
     $$ = NewColIdent(string($1))
   }
-| non_reserved_keyword
-  {
-    $$ = NewColIdent(string($1))
-  }
 
 reserved_sql_id:
   sql_id
+| CHARSET
+  {
+    $$ = NewColIdent(string($1))
+  }
 | reserved_keyword
   {
     $$ = NewColIdent(string($1))
@@ -4158,10 +4175,6 @@ reserved_sql_id:
 
 table_id:
   ID
-  {
-    $$ = NewTableIdent(string($1))
-  }
-| non_reserved_keyword
   {
     $$ = NewTableIdent(string($1))
   }
@@ -4278,8 +4291,6 @@ bool_option_name:
  * These are not all necessarily reserved in MySQL, but some are.
  *
  * These are more importantly reserved because they may conflict with our grammar.
- * If you want to move one that is not reserved in MySQL (i.e. ESCAPE) to the
- * non_reserved_keywords, you'll need to deal with any conflicts.
  *
  * Sorted alphabetically
  */
@@ -4412,79 +4423,6 @@ reserved_keyword:
 | WHILE
 | WITH
 | OFF
-
-/*
- * These are non-reserved in sqldef because they don't cause conflicts in the grammar.
- * Some of them may be reserved in MySQL. The good news is we backtick quote them
- * when we rewrite the query, so no issue should arise.
- *
- * Sorted alphabetically
- */
-non_reserved_keyword:
-  ACTION
-| AGAINST
-| ALL
-| BEGIN
-| CASCADE
-| CHARSET
-| COMMIT
-| COMMITTED
-| CURRENT_USER
-| DUPLICATE
-| ENUM
-| EXPANSION
-| GLOBAL
-| INHERIT
-| ISOLATION
-| KEYS
-| KEY_BLOCK_SIZE
-| LANGUAGE
-| LAST_INSERT_ID
-| LESS
-| LEVEL
-| MATERIALIZED
-| MODE
-| NO
-| OFFSET
-| OPTIMIZE
-| PERMISSIVE
-| PROCEDURE
-| QUERY
-| READ
-| REORGANIZE
-| RESTRICTIVE
-| REPAIR
-| REPEATABLE
-| REPLICATION
-| RESTRICT
-| ROLLBACK
-| SERIALIZABLE
-| SECURITY
-| SQL
-| SHARE
-| START
-| STATUS
-| THAN
-| TRIGGER
-| TRUNCATE
-| UNCOMMITTED
-| UNUSED
-| VARIABLES
-| VIEW
-| VSCHEMA_TABLES
-| WRITE
-| ZEROFILL
-| ZONE
-| PAD_INDEX
-| FILLFACTOR
-| IGNORE_DUP_KEY
-| STATISTICS_NORECOMPUTE
-| STATISTICS_INCREMENTAL
-| ALLOW_ROW_LOCKS
-| ALLOW_PAGE_LOCKS
-| ROWID
-| LEAD
-| LAG
 
 openb:
   '('

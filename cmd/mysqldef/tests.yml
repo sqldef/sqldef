@@ -373,11 +373,11 @@ UUIDToBin:
     );
   min_version: '8.0'
 NonReservedColumnName:
-  # TODO: money and json could probably be non-reserved once we split parsers for each database
+  # TODO: broken. they could be non-reserved once we split parsers for each database
   desired: |
-    CREATE TABLE global (
+    CREATE TABLE `global` (
       `money` INT,
-      language TEXT,
+      `language` TEXT,
       `json` TEXT
     );
 MysqlSecurityTypeView:
