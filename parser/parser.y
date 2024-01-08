@@ -3447,6 +3447,18 @@ function_call_keyword:
   {
     $$ = &NextSeqValExpr{SequenceName: $4}
   }
+| UUID openb closeb
+  {
+    $$ = &FuncExpr{Name: NewColIdent(string($1))}
+  }
+| NOW openb closeb
+  {
+    $$ = &FuncExpr{Name: NewColIdent(string($1))}
+  }
+| GETDATE openb closeb
+  {
+    $$ = &FuncExpr{Name: NewColIdent(string($1))}
+  }
 
 /*
  * Function calls using non reserved keywords but with special syntax forms.
@@ -4409,27 +4421,16 @@ non_reserved_keyword:
 | AGAINST
 | ALL
 | BEGIN
-| BIGSERIAL
-| BLOB
-| BOOL
-| BOOLEAN
 | CASCADE
-| CHARACTER
 | CHARSET
 | COMMIT
 | COMMITTED
 | CURRENT_USER
-| DOUBLE
 | DUPLICATE
 | ENUM
 | EXPANSION
-| FULLTEXT
-| GEOMETRY
-| GEOMETRYCOLLECTION
-| GETDATE
 | GLOBAL
 | INHERIT
-| INTEGER
 | ISOLATION
 | KEYS
 | KEY_BLOCK_SIZE
@@ -4437,25 +4438,11 @@ non_reserved_keyword:
 | LAST_INSERT_ID
 | LESS
 | LEVEL
-| LINESTRING
-| LONGBLOB
-| LONGTEXT
 | MATERIALIZED
-| MEDIUMBLOB
-| MEDIUMINT
-| MEDIUMTEXT
 | MODE
-| MULTILINESTRING
-| MULTIPOINT
-| MULTIPOLYGON
-| NAMES
 | NO
-| NOW
 | OFFSET
 | OPTIMIZE
-| PARTITION
-| POINT
-| POLYGON
 | PRECISION
 | PERMISSIVE
 | PROCEDURE
@@ -4468,32 +4455,22 @@ non_reserved_keyword:
 | REPLICATION
 | RESTRICT
 | ROLLBACK
-| SESSION
-| SERIAL
 | SERIALIZABLE
 | SECURITY
 | SQL
 | SHARE
-| SMALLSERIAL
-| SPATIAL
 | START
 | STATUS
 | THAN
-| TIMESTAMP
-| TINYBLOB
-| TINYTEXT
-| TRANSACTION
 | TRIGGER
 | TRUNCATE
 | UNCOMMITTED
 | UNUSED
-| UUID
 | VARYING
 | VARIABLES
 | VIEW
 | VSCHEMA_TABLES
 | WRITE
-| YEAR
 | ZEROFILL
 | ZONE
 | PAD_INDEX
