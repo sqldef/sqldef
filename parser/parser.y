@@ -3277,10 +3277,6 @@ value_expression:
   {
     $$ = &BinaryExpr{Left: $1, Operator: JSONUnquoteExtractOp, Right: $3}
   }
-| value_expression COLLATE charset
-  {
-    $$ = &CollateExpr{Expr: $1, Charset: $3}
-  }
 | value_expression TYPECAST numeric_type
   {
     $$ = &CollateExpr{Expr: $1}
