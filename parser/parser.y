@@ -4447,7 +4447,6 @@ non_reserved_keyword:
 | NO
 | OFFSET
 | OPTIMIZE
-| PRECISION
 | PERMISSIVE
 | PROCEDURE
 | QUERY
