@@ -331,6 +331,7 @@ func forceEOF(yylex interface{}) {
 %type <convertType> convert_type simple_convert_type
 %type <columnType> column_type
 %type <columnType> bool_type int_type decimal_type numeric_type time_type char_type spatial_type
+%type <str> varying_opt
 %type <optVal> length_opt max_length_opt current_timestamp
 %type <str> charset_opt collate_opt
 %type <boolVal> unsigned_opt zero_fill_opt array_opt time_zone_opt
@@ -1871,9 +1872,9 @@ char_type:
   {
     $$ = ColumnType{Type: string($1), Length: $2, Charset: $3, Collate: $4}
   }
-| CHARACTER length_opt charset_opt collate_opt
+| CHARACTER varying_opt length_opt charset_opt collate_opt
   {
-    $$ = ColumnType{Type: string($1), Length: $2, Charset: $3, Collate: $4}
+    $$ = ColumnType{Type: string($1)+$2, Length: $3, Charset: $4, Collate: $5}
   }
 | VARCHAR max_length_opt charset_opt collate_opt
   {
@@ -1890,10 +1891,6 @@ char_type:
 | NTEXT
   {
     $$ = ColumnType{Type: string($1)}
-  }
-| CHARACTER VARYING length_opt charset_opt collate_opt
-  {
-    $$ = ColumnType{Type: string($1)+" "+string($2), Length: $3, Charset: $4, Collate: $5}
   }
 | BINARY length_opt
   {
@@ -1959,6 +1956,15 @@ char_type:
 | SET '(' enum_values ')' charset_opt collate_opt
   {
     $$ = ColumnType{Type: string($1), EnumValues: $3, Charset: $5, Collate: $6}
+  }
+
+varying_opt:
+  {
+    $$ = ""
+  }
+| VARYING
+  {
+    $$ = " " + string($1)
   }
 
 spatial_type:
@@ -4466,7 +4472,6 @@ non_reserved_keyword:
 | TRUNCATE
 | UNCOMMITTED
 | UNUSED
-| VARYING
 | VARIABLES
 | VIEW
 | VSCHEMA_TABLES
