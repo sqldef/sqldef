@@ -226,7 +226,7 @@ Application Options:
 
 ```
 Usage:
-  mssqldef [OPTIONS] [database|schema.sql] < desired.sql
+  mssqldef [OPTIONS] [database|current.sql] < desired.sql
 
 Application Options:
   -U, --user=user_name        MSSQL user name (default: sa)

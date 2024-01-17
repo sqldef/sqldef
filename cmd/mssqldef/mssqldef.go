@@ -36,7 +36,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 
 	parser := flags.NewParser(&opts, flags.None)
-	parser.Usage = "[OPTIONS] [database|schema.sql] < desired.sql"
+	parser.Usage = "[OPTIONS] [database|current.sql] < desired.sql"
 	args, err := parser.ParseArgs(args)
 	if err != nil {
 		log.Fatal(err)
