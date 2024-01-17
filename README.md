@@ -15,6 +15,9 @@ https://github.com/sqldef/sqldef/releases
 
 ## Usage
 
+If you don't want to connect to the database, you can specify an SQL file in the place of the database name.
+e.g. `sqldef current_schema.sql < desired_schema.sql`
+
 ### mysqldef
 
 `mysqldef` should work in the same way as `mysql` for setting connection information.
@@ -22,7 +25,7 @@ https://github.com/sqldef/sqldef/releases
 ```
 $ mysqldef --help
 Usage:
-  mysqldef [options] db_name
+  mysqldef [options] db_name/schema.sql
 
 Application Options:
   -u, --user=user_name              MySQL user name (default: root)
@@ -117,7 +120,7 @@ $ mysqldef -uroot test --skip-file skip-tables < schema.sql
 ```
 $ psqldef --help
 Usage:
-  psqldef [option...] db_name
+  psqldef [option...] db_name/schema.sql
 
 Application Options:
   -U, --user=username        PostgreSQL user name (default: postgres)
@@ -211,7 +214,7 @@ Run: 'DROP TABLE users;'
 ```
 $ sqlite3def --help
 Usage:
-  sqlite3def [option...] db_name
+  sqlite3def [option...] db_name/schema.sql
 
 Application Options:
   -f, --file=filename     Read schema SQL from the file, rather than stdin (default: -)
@@ -227,7 +230,7 @@ Application Options:
 
 ```
 Usage:
-  mssqldef [options] db_name
+  mssqldef [options] db_name/schema.sql
 
 Application Options:
   -U, --user=user_name       MSSQL user name (default: sa)

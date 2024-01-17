@@ -41,7 +41,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 
 	parser := flags.NewParser(&opts, flags.None)
-	parser.Usage = "[option...] db_name"
+	parser.Usage = "[option...] db_name/schema.sql"
 	args, err := parser.ParseArgs(args)
 	if err != nil {
 		log.Fatal(err)
