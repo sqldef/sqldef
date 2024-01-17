@@ -15,17 +15,13 @@ https://github.com/sqldef/sqldef/releases
 
 ## Usage
 
-If you don't want to connect to the database, you can specify an SQL file in the place of the database name.
-e.g. `sqldef current_schema.sql < desired_schema.sql`
-
 ### mysqldef
 
 `mysqldef` should work in the same way as `mysql` for setting connection information.
 
 ```
-$ mysqldef --help
 Usage:
-  mysqldef [options] db_name/schema.sql
+  mysqldef [OPTIONS] [database|current.sql] < desired.sql
 
 Application Options:
   -u, --user=user_name              MySQL user name (default: root)
@@ -33,15 +29,17 @@ Application Options:
   -h, --host=host_name              Host to connect to the MySQL server (default: 127.0.0.1)
   -P, --port=port_num               Port used for the connection (default: 3306)
   -S, --socket=socket               The socket file to use for connection
+      --ssl-mode=ssl_mode           SSL connection mode(PREFERRED,REQUIRED,DISABLED). (default: PREFERRED)
+      --ssl-ca=ssl_ca               File that contains list of trusted SSL Certificate Authorities
       --password-prompt             Force MySQL user password prompt
       --enable-cleartext-plugin     Enable/disable the clear text authentication plugin
-      --file=sql_file               Read schema SQL from the file, rather than stdin (default: -)
+      --file=sql_file               Read desired SQL from the file, rather than stdin (default: -)
       --dry-run                     Don't run DDLs but just show them
       --export                      Just dump the current schema to stdout
       --enable-drop-table           Enable destructive changes such as DROP (enable only table drops)
       --skip-view                   Skip managing views (temporary feature, to be removed later)
       --before-apply=               Execute the given string before applying the regular DDLs
-      --config=                     YAML file to specify: target_tables
+      --config=                     YAML file to specify: target_tables, skip_tables
       --help                        Show this help
       --version                     Show this version
 ```
@@ -118,26 +116,25 @@ $ mysqldef -uroot test --skip-file skip-tables < schema.sql
 `psqldef` should work in the same way as `psql` for setting connection information.
 
 ```
-$ psqldef --help
 Usage:
-  psqldef [option...] db_name/schema.sql
+  psqldef [OPTION]... [DBNAME|current.sql] < desired.sql
 
 Application Options:
-  -U, --user=username        PostgreSQL user name (default: postgres)
-  -W, --password=password    PostgreSQL user password, overridden by $PGPASSWORD
-  -h, --host=hostname        Host or socket directory to connect to the PostgreSQL server (default: 127.0.0.1)
-  -p, --port=port            Port used for the connection (default: 5432)
-      --password-prompt      Force PostgreSQL user password prompt
-  -f, --file=filename        Read schema SQL from the file, rather than stdin (default: -)
-      --dry-run              Don't run DDLs but just show them
-      --export               Just dump the current schema to stdout
-      --enable-drop-table    Enable destructive changes such as DROP (enable only table drops)
-      --skip-view            Skip managing views/materialized views
-      --skip-extension       Skip managing extensions
-      --before-apply=        Execute the given string before applying the regular DDLs
-      --config=              YAML file to specify: target_tables, target_schema
-      --help                 Show this help
-      --version              Show this version
+  -U, --user=username         PostgreSQL user name (default: postgres)
+  -W, --password=password     PostgreSQL user password, overridden by $PGPASSWORD
+  -h, --host=hostname         Host or socket directory to connect to the PostgreSQL server (default: 127.0.0.1)
+  -p, --port=port             Port used for the connection (default: 5432)
+      --password-prompt       Force PostgreSQL user password prompt
+  -f, --file=filename         Read desired SQL from the file, rather than stdin (default: -)
+      --dry-run               Don't run DDLs but just show them
+      --export                Just dump the current schema to stdout
+      --enable-drop-table     Enable destructive changes such as DROP (enable only table drops)
+      --skip-view             Skip managing views/materialized views
+      --skip-extension        Skip managing extensions
+      --before-apply=         Execute the given string before applying the regular DDLs
+      --config=               YAML file to specify: target_tables, skip_tables, target_schema
+      --help                  Show this help
+      --version               Show this version
 ```
 
 You can use `PGSSLMODE` environment variable to specify sslmode.
@@ -212,38 +209,37 @@ Run: 'DROP TABLE users;'
 ### sqlite3def
 
 ```
-$ sqlite3def --help
 Usage:
-  sqlite3def [option...] db_name/schema.sql
+  sqlite3def [OPTIONS] [FILENAME|current.sql] < desired.sql
 
 Application Options:
-  -f, --file=filename     Read schema SQL from the file, rather than stdin (default: -)
-      --dry-run           Don't run DDLs but just show them
-      --export            Just dump the current schema to stdout
-      --enable-drop-table Enable destructive changes such as DROP (enable only table drops)
-      --config=           YAML file to specify: target_tables
-      --help              Show this help
-      --version
+  -f, --file=filename         Read desired SQL from the file, rather than stdin (default: -)
+      --dry-run               Don't run DDLs but just show them
+      --export                Just dump the current schema to stdout
+      --enable-drop-table     Enable destructive changes such as DROP (enable only table drops)
+      --config=               YAML file to specify: target_tables, skip_tables
+      --help                  Show this help
+      --version               Show this version
 ```
 
 ### mssqldef
 
 ```
 Usage:
-  mssqldef [options] db_name/schema.sql
+  mssqldef [OPTIONS] [database|schema.sql] < desired.sql
 
 Application Options:
-  -U, --user=user_name       MSSQL user name (default: sa)
-  -P, --password=password    MSSQL user password, overridden by $MSSQL_PWD
-  -h, --host=host_name       Host to connect to the MSSQL server (default: 127.0.0.1)
-  -p, --port=port_num        Port used for the connection (default: 1433)
-      --password-prompt      Force MSSQL user password prompt
-      --file=sql_file        Read schema SQL from the file, rather than stdin (default: -)
-      --dry-run              Don't run DDLs but just show them
-      --export               Just dump the current schema to stdout
-      --enable-drop-table    Enable destructive changes such as DROP (enable only table drops)
-      --help                 Show this help
-      --version              Show this version
+  -U, --user=user_name        MSSQL user name (default: sa)
+  -P, --password=password     MSSQL user password, overridden by $MSSQL_PWD
+  -h, --host=host_name        Host to connect to the MSSQL server (default: 127.0.0.1)
+  -p, --port=port_num         Port used for the connection (default: 1433)
+      --password-prompt       Force MSSQL user password prompt
+      --file=sql_file         Read desired SQL from the file, rather than stdin (default: -)
+      --dry-run               Don't run DDLs but just show them
+      --export                Just dump the current schema to stdout
+      --enable-drop-table     Enable destructive changes such as DROP (enable only table drops)
+      --help                  Show this help
+      --version               Show this version
 ```
 
 ## Supported features

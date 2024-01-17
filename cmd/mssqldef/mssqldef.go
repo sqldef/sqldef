@@ -27,7 +27,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		Host            string   `short:"h" long:"host" description:"Host to connect to the MSSQL server" value-name:"host_name" default:"127.0.0.1"`
 		Port            uint     `short:"p" long:"port" description:"Port used for the connection" value-name:"port_num" default:"1433"`
 		Prompt          bool     `long:"password-prompt" description:"Force MSSQL user password prompt"`
-		File            []string `long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"sql_file" default:"-"`
+		File            []string `long:"file" description:"Read desired SQL from the file, rather than stdin" value-name:"sql_file" default:"-"`
 		DryRun          bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export          bool     `long:"export" description:"Just dump the current schema to stdout"`
 		EnableDropTable bool     `long:"enable-drop-table" description:"Enable destructive changes such as DROP (enable only table drops)"`
@@ -36,7 +36,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 
 	parser := flags.NewParser(&opts, flags.None)
-	parser.Usage = "[OPTIONS] [database|schema.sql]"
+	parser.Usage = "[OPTIONS] [database|schema.sql] < desired.sql"
 	args, err := parser.ParseArgs(args)
 	if err != nil {
 		log.Fatal(err)

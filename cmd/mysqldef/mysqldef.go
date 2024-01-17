@@ -33,7 +33,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		SslCa                 string   `long:"ssl-ca" description:"File that contains list of trusted SSL Certificate Authorities" value-name:"ssl_ca"`
 		Prompt                bool     `long:"password-prompt" description:"Force MySQL user password prompt"`
 		EnableCleartextPlugin bool     `long:"enable-cleartext-plugin" description:"Enable/disable the clear text authentication plugin"`
-		File                  []string `long:"file" description:"Read schema SQL from the file, rather than stdin" value-name:"sql_file" default:"-"`
+		File                  []string `long:"file" description:"Read desired SQL from the file, rather than stdin" value-name:"sql_file" default:"-"`
 		DryRun                bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export                bool     `long:"export" description:"Just dump the current schema to stdout"`
 		EnableDropTable       bool     `long:"enable-drop-table" description:"Enable destructive changes such as DROP (enable only table drops)"`
@@ -45,7 +45,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 
 	parser := flags.NewParser(&opts, flags.None)
-	parser.Usage = "[OPTIONS] [database|schema.sql]"
+	parser.Usage = "[OPTIONS] [database|current.sql] < desired.sql"
 	args, err := parser.ParseArgs(args)
 	if err != nil {
 		log.Fatal(err)
