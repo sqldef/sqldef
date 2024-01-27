@@ -73,7 +73,7 @@ Update the schema.sql like (instead of `ADD INDEX`, you can just add `KEY index_
  CREATE TABLE user (
    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
    name VARCHAR(128) DEFAULT 'k0kubun',
-+  created_at DATETIME NOT NULL
++  created_at DATETIME NOT NULL,
  ) Engine=InnoDB DEFAULT CHARSET=utf8mb4;
 +
 +ALTER TABLE user ADD INDEX index_name(name);
