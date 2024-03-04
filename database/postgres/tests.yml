@@ -7,7 +7,7 @@ CreateTable:
       created_date time with time zone,
       fn integer default foo.my_func()
     );
-CreateTableWithConstrant:
+CreateTableWithConstraint:
   sql: |
     CREATE TABLE tbl (
       id bigint,
@@ -17,7 +17,7 @@ CreateTableWithConstrant:
       CONSTRAINT uniq_email UNIQUE (email),
       CONSTRAINT user_id_fk FOREIGN KEY (user_id) REFERENCES users(id, name)
     );
-CreateTableWithConstrantInlineColumn:
+CreateTableWithConstraintInlineColumn:
   compare_with_generic_parser: true
   sql: |
     CREATE TABLE tbl (
