@@ -749,17 +749,19 @@ func (d *PostgresDatabase) getPolicyDefs(table string) ([]string, error) {
 }
 
 func (d *PostgresDatabase) getComments(table string) ([]string, error) {
-	_, table = splitTableName(table, d.GetDefaultSchema()) // supporting only public schema for now
+	schema, table := splitTableName(table, d.GetDefaultSchema())
 	var ddls []string
 
 	// Table comments
 	tableRows, err := d.db.Query(`
-		SELECT obj_description(oid)
-		FROM pg_class
-		WHERE relkind = 'r'
-		AND obj_description(oid) IS NOT NULL
-		AND relname = $1;
-	`, table)
+		SELECT obj_description(c.oid)
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'r'
+		AND obj_description(c.oid) IS NOT NULL
+		AND n.nspname = $1
+		AND c.relname = $2
+	`, schema, table)
 	if err != nil {
 		return nil, err
 	}
@@ -769,7 +771,7 @@ func (d *PostgresDatabase) getComments(table string) ([]string, error) {
 		if err := tableRows.Scan(&comment); err != nil {
 			return nil, err
 		}
-		ddls = append(ddls, fmt.Sprintf("COMMENT ON TABLE %s IS '%s';", table, comment))
+		ddls = append(ddls, fmt.Sprintf("COMMENT ON TABLE \"%s\".\"%s\" IS '%s';", schema, table, comment))
 	}
 
 	// Column comments
@@ -784,9 +786,10 @@ func (d *PostgresDatabase) getComments(table string) ([]string, error) {
 			pgd.objsubid   = c.ordinal_position and
 			c.table_schema = st.schemaname and
 			c.table_name   = st.relname and
-			st.relname = $1
+			c.table_schema = $1 and
+			st.relname = $2
 		);
-	`, table)
+	`, schema, table)
 	if err != nil {
 		return nil, err
 	}
@@ -796,7 +799,7 @@ func (d *PostgresDatabase) getComments(table string) ([]string, error) {
 		if err := columnRows.Scan(&columnName, &comment); err != nil {
 			return nil, err
 		}
-		ddls = append(ddls, fmt.Sprintf("COMMENT ON COLUMN %s.%s IS '%s';", table, columnName, comment))
+		ddls = append(ddls, fmt.Sprintf("COMMENT ON COLUMN \"%s\".\"%s\".\"%s\" IS '%s';", schema, table, columnName, comment))
 	}
 
 	return ddls, nil
