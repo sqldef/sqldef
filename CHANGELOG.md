@@ -2,7 +2,7 @@
 
 - psqldef: Support multiple schema for comment [#495](https://github.com/sqldef/sqldef/pull/495)
 - Remove some syntax ambiguities in the parser
-  - mysqldef: Some non-reserved keywords (`money`, `language`, `json`) for MySQL became reserved for now.
+  - mysqldef: Some non-reserved keywords (e.g. `money`, `language`, `json`, ...) for MySQL became reserved for now.
     This will be fixed to non-reserved keywords in future versions.
 
 ## v0.16.15
