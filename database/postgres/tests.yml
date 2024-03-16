@@ -189,3 +189,13 @@ UserDefinedType:
         tag "public"."tags",
         tags "public"."tags"[]
     )
+CreateTableWithConstraintOptions:
+  sql: |
+    CREATE TABLE image_bindings (
+      image_id INT REFERENCES images(id) ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE,
+      image_order INT NOT NULL,
+      image_owner_type VARCHAR(20) NOT NULL,
+      image_owner_id INT NOT NULL,
+      CONSTRAINT image_owner_fk FOREIGN KEY (image_owner_type, image_owner_id) REFERENCES image_owners(type, id) ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE,
+      CONSTRAINT image_order_unique UNIQUE (image_owner_type, image_owner_id, image_order) DEFERRABLE INITIALLY DEFERRED
+    );
