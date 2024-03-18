@@ -132,6 +132,7 @@ type ForeignKey struct {
 	onDelete          string
 	onUpdate          string
 	notForReplication bool
+	constraintOptions *ConstraintOptions
 }
 
 type Policy struct {

@@ -625,7 +625,9 @@ func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 			WHEN 'd' THEN 'SET DEFAULT'
 			WHEN 'r' THEN 'RESTRICT'
 			WHEN 'a' THEN 'NO ACTION'
-		END AS foreign_delete_rule
+		END AS foreign_delete_rule,
+		c.condeferrable AS deferrable,
+		c.condeferred AS initially_deferred
 	FROM pg_constraint      AS c
 	INNER JOIN pg_namespace AS nc ON nc.oid = c.connamespace
 	INNER JOIN pg_class     AS r1 ON r1.oid = c.conrelid
@@ -655,13 +657,15 @@ func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 	type constraint struct {
 		tableSchema, constraintName, tableName, foreignTableSchema, foreignTableName, foreignUpdateRule, foreignDeleteRule string
 		columns, foreignColumns                                                                                            []string
+		deferrable, initiallyDeferred                                                                                      bool
 	}
 
 	constraints := make(map[identifier]constraint)
 
 	for rows.Next() {
 		var constraintSchema, tableSchema, constraintName, tableName, columnName, foreignTableSchema, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule string
-		err = rows.Scan(&constraintSchema, &tableSchema, &constraintName, &tableName, &columnName, &foreignTableSchema, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule)
+		var deferrable, initiallyDeferred bool
+		err = rows.Scan(&constraintSchema, &tableSchema, &constraintName, &tableName, &columnName, &foreignTableSchema, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule, &deferrable, &initiallyDeferred)
 		if err != nil {
 			return nil, err
 		}
@@ -670,6 +674,7 @@ func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 			constraints[key] = constraint{
 				tableSchema, constraintName, tableName, foreignTableSchema, foreignTableName, foreignUpdateRule, foreignDeleteRule,
 				[]string{}, []string{},
+				deferrable, initiallyDeferred,
 			}
 		}
 		c := constraints[key]
@@ -697,10 +702,19 @@ func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 		for i := range c.foreignColumns {
 			escapedForeignColumns = append(escapedForeignColumns, escapeSQLName(c.foreignColumns[i]))
 		}
+		var constraintOptions string
+		if c.deferrable {
+			if c.initiallyDeferred {
+				constraintOptions = " DEFERRABLE INITIALLY DEFERRED"
+			} else {
+				constraintOptions = " DEFERRABLE INITIALLY IMMEDIATE"
+			}
+		}
 		def := fmt.Sprintf(
-			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s (%s) ON UPDATE %s ON DELETE %s",
+			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s (%s) ON UPDATE %s ON DELETE %s%s",
 			escapeSQLName(c.tableSchema), escapeSQLName(c.tableName), escapeSQLName(c.constraintName), strings.Join(escapedColumns, ", "),
 			escapeSQLName(c.foreignTableSchema), escapeSQLName(c.foreignTableName), strings.Join(escapedForeignColumns, ", "), c.foreignUpdateRule, c.foreignDeleteRule,
+			constraintOptions,
 		)
 		defs = append(defs, def)
 	}
