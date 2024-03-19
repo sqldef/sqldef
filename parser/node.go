@@ -734,10 +734,11 @@ func (ct *ColumnType) Format(buf *nodeBuffer) {
 
 // IndexDefinition describes an index in a CREATE TABLE statement
 type IndexDefinition struct {
-	Info      *IndexInfo
-	Columns   []IndexColumn
-	Options   []*IndexOption
-	Partition *IndexPartition
+	Info              *IndexInfo
+	Columns           []IndexColumn
+	Options           []*IndexOption
+	Partition         *IndexPartition
+	ConstraintOptions *ConstraintOptions
 }
 
 // Format formats the node.
@@ -858,6 +859,7 @@ type ForeignKeyDefinition struct {
 	OnDelete          ColIdent
 	OnUpdate          ColIdent
 	NotForReplication bool
+	ConstraintOptions *ConstraintOptions
 }
 
 type Policy struct {

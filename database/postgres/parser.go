@@ -102,11 +102,14 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 	for _, elt := range stmt.TableElts {
 		switch node := elt.Node.(type) {
 		case *pgquery.Node_ColumnDef:
-			column, err := p.parseColumnDef(node.ColumnDef)
+			column, foreignKey, err := p.parseColumnDef(node.ColumnDef, tableName)
 			if err != nil {
 				return nil, err
 			}
 			columns = append(columns, column)
+			if foreignKey != nil {
+				foreignKeys = append(foreignKeys, foreignKey)
+			}
 		case *pgquery.Node_Constraint:
 			var indexCols []parser.IndexColumn
 			for _, key := range node.Constraint.Keys {
@@ -139,6 +142,10 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 					},
 					Columns: indexCols,
 					Options: []*parser.IndexOption{},
+					ConstraintOptions: &parser.ConstraintOptions{
+						Deferrable:        node.Constraint.Deferrable,
+						InitiallyDeferred: node.Constraint.Initdeferred,
+					},
 				}
 				indexes = append(indexes, index)
 			case pgquery.ConstrType_CONSTR_FOREIGN:
@@ -774,6 +781,10 @@ func (p PostgresParser) parseForeignKey(constraint *pgquery.Constraint) (*parser
 		ReferenceName:    refName,
 		OnDelete:         p.parseFkAction(constraint.FkDelAction),
 		OnUpdate:         p.parseFkAction(constraint.FkUpdAction),
+		ConstraintOptions: &parser.ConstraintOptions{
+			Deferrable:        constraint.Deferrable,
+			InitiallyDeferred: constraint.Initdeferred,
+		},
 	}, nil
 }
 
@@ -797,15 +808,17 @@ func (p PostgresParser) parseFkAction(action string) parser.ColIdent {
 	}
 }
 
-func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef) (*parser.ColumnDefinition, error) {
+func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName parser.TableName) (*parser.ColumnDefinition, *parser.ForeignKeyDefinition, error) {
 	if columnDef.Inhcount != 0 || columnDef.Identity != "" || columnDef.Generated != "" || columnDef.Storage != "" || columnDef.CollClause != nil {
-		return nil, fmt.Errorf("unhandled node in parseColumnDef: %#v", columnDef)
+		return nil, nil, fmt.Errorf("unhandled node in parseColumnDef: %#v", columnDef)
 	}
 
 	columnType, err := p.parseTypeName(columnDef.TypeName)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
+	var foreignKey *parser.ForeignKeyDefinition
 
 	for _, columnConstraint := range columnDef.Constraints {
 		constraint := columnConstraint.Node.(*pgquery.Node_Constraint).Constraint
@@ -815,13 +828,13 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef) (*parser.Co
 		case pgquery.ConstrType_CONSTR_DEFAULT:
 			defaultValue, err := p.parseDefaultValue(constraint.RawExpr)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			columnType.Default = defaultValue
 		case pgquery.ConstrType_CONSTR_CHECK:
 			check, err := p.parseCheckConstraint(constraint)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			columnType.Check = check
 		case pgquery.ConstrType_CONSTR_PRIMARY:
@@ -829,22 +842,31 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef) (*parser.Co
 		case pgquery.ConstrType_CONSTR_UNIQUE:
 			columnType.KeyOpt = parser.ColumnKeyOption(3)
 		case pgquery.ConstrType_CONSTR_FOREIGN:
-			columnType.References = constraint.Pktable.Relname
-			for _, attr := range constraint.PkAttrs {
-				if node, ok := attr.Node.(*pgquery.Node_String_); ok {
-					column := parser.NewColIdent(node.String_.Sval)
-					columnType.ReferenceNames = append(columnType.ReferenceNames, column)
-				}
+			foreignKey, err = p.parseForeignKey(constraint)
+			if err != nil {
+				return nil, nil, err
 			}
+			foreignKey.IndexColumns = []parser.ColIdent{parser.NewColIdent(columnDef.Colname)}
+			if constraint.Conname == "" {
+				foreignKey.ConstraintName = parser.NewColIdent(fmt.Sprintf("%s_%s_fkey", tableName.Name, columnDef.Colname))
+			}
+		case pgquery.ConstrType_CONSTR_ATTR_DEFERRABLE:
+			foreignKey.ConstraintOptions.Deferrable = true
+		case pgquery.ConstrType_CONSTR_ATTR_NOT_DEFERRABLE:
+			foreignKey.ConstraintOptions.Deferrable = false
+		case pgquery.ConstrType_CONSTR_ATTR_DEFERRED:
+			foreignKey.ConstraintOptions.InitiallyDeferred = true
+		case pgquery.ConstrType_CONSTR_ATTR_IMMEDIATE:
+			foreignKey.ConstraintOptions.InitiallyDeferred = false
 		default:
-			return nil, fmt.Errorf("unhandled contype: %d", constraint.Contype)
+			return nil, nil, fmt.Errorf("unhandled contype: %d", constraint.Contype)
 		}
 	}
 
 	return &parser.ColumnDefinition{
 		Name: parser.NewColIdent(columnDef.Colname),
 		Type: columnType,
-	}, nil
+	}, foreignKey, nil
 }
 
 func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.DefaultDefinition, error) {

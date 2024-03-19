@@ -7,7 +7,7 @@ CreateTable:
       created_date time with time zone,
       fn integer default foo.my_func()
     );
-CreateTableWithConstrant:
+CreateTableWithConstraint:
   sql: |
     CREATE TABLE tbl (
       id bigint,
@@ -17,8 +17,7 @@ CreateTableWithConstrant:
       CONSTRAINT uniq_email UNIQUE (email),
       CONSTRAINT user_id_fk FOREIGN KEY (user_id) REFERENCES users(id, name)
     );
-CreateTableWithConstrantInlineColumn:
-  compare_with_generic_parser: true
+CreateTableWithConstraintInlineColumn:
   sql: |
     CREATE TABLE tbl (
       id bigint PRIMARY KEY,
@@ -180,7 +179,6 @@ AlterTableUnique:
   sql: |
     ALTER TABLE users ADD CONSTRAINT username UNIQUE (name, age);
 AlterTableAddForeignKey:
-  compare_with_generic_parser: true
   sql: |
     ALTER TABLE ONLY public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE RESTRICT;
 UserDefinedType:
@@ -189,3 +187,13 @@ UserDefinedType:
         tag "public"."tags",
         tags "public"."tags"[]
     )
+CreateTableWithConstraintOptions:
+  sql: |
+    CREATE TABLE image_bindings (
+      image_id INT REFERENCES images(id) ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE,
+      image_order INT NOT NULL,
+      image_owner_type VARCHAR(20) NOT NULL,
+      image_owner_id INT NOT NULL,
+      CONSTRAINT image_owner_fk FOREIGN KEY (image_owner_type, image_owner_id) REFERENCES image_owners(type, id) ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE,
+      CONSTRAINT image_order_unique UNIQUE (image_owner_type, image_owner_id, image_order) DEFERRABLE INITIALLY DEFERRED
+    );

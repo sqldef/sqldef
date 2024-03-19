@@ -84,6 +84,13 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			for _, referenceColumn := range stmt.ForeignKey.ReferenceColumns {
 				referenceColumns = append(referenceColumns, referenceColumn.String())
 			}
+			var constraintOptions *ConstraintOptions
+			if stmt.ForeignKey.ConstraintOptions != nil {
+				constraintOptions = &ConstraintOptions{
+					deferrable:        stmt.ForeignKey.ConstraintOptions.Deferrable,
+					initiallyDeferred: stmt.ForeignKey.ConstraintOptions.InitiallyDeferred,
+				}
+			}
 
 			return &AddForeignKey{
 				statement: ddl,
@@ -97,6 +104,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 					onDelete:          stmt.ForeignKey.OnDelete.String(),
 					onUpdate:          stmt.ForeignKey.OnUpdate.String(),
 					notForReplication: stmt.ForeignKey.NotForReplication,
+					constraintOptions: constraintOptions,
 				},
 			}, nil
 		} else if stmt.Action == parser.CreatePolicy {
@@ -254,6 +262,14 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Tab
 			name = indexColumns[0].column
 		}
 
+		var constraintOptions *ConstraintOptions
+		if indexDef.ConstraintOptions != nil {
+			constraintOptions = &ConstraintOptions{
+				deferrable:        indexDef.ConstraintOptions.Deferrable,
+				initiallyDeferred: indexDef.ConstraintOptions.InitiallyDeferred,
+			}
+		}
+
 		index := Index{
 			name:      name,
 			indexType: indexDef.Info.Type,
@@ -263,6 +279,12 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Tab
 			clustered: bool(indexDef.Info.Clustered),
 			options:   indexOptions,
 			partition: indexPartition,
+
+			// FIXME: existence of constraintOptions doesn't mean it's a
+			// constraint but other parts of the code doesn't mark it as a
+			// constraint so we have to leave it as is for now.
+			constraint:        constraintOptions != nil,
+			constraintOptions: constraintOptions,
 		}
 		indexes = append(indexes, index)
 	}
@@ -288,6 +310,14 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Tab
 			referenceColumns = append(referenceColumns, referenceColumn.String())
 		}
 
+		var constraintOptions *ConstraintOptions
+		if foreignKeyDef.ConstraintOptions != nil {
+			constraintOptions = &ConstraintOptions{
+				deferrable:        foreignKeyDef.ConstraintOptions.Deferrable,
+				initiallyDeferred: foreignKeyDef.ConstraintOptions.InitiallyDeferred,
+			}
+		}
+
 		foreignKey := ForeignKey{
 			constraintName:    foreignKeyDef.ConstraintName.String(),
 			indexName:         foreignKeyDef.IndexName.String(),
@@ -297,6 +327,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Tab
 			onDelete:          foreignKeyDef.OnDelete.String(),
 			onUpdate:          foreignKeyDef.OnUpdate.String(),
 			notForReplication: foreignKeyDef.NotForReplication,
+			constraintOptions: constraintOptions,
 		}
 		foreignKeys = append(foreignKeys, foreignKey)
 	}

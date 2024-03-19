@@ -194,9 +194,14 @@ PosixRegexCheckConstraint:
     ALTER TABLE "public"."test" ADD CONSTRAINT test_posix_not_regex_ci_check CHECK (posix_not_regex_ci !~* '[a-z]');
 ForeignKeyOnReservedName:
   current: |
+    CREATE TABLE "public"."companies" (
+      "id" character varying(100) NOT NULL,
+      PRIMARY KEY ("id")
+    );
+
     CREATE TABLE "public"."variables" (
       "id" character varying(100) NOT NULL,
-      "compaby_id" character varying(100) NOT NULL,
+      "company_id" character varying(100) NOT NULL,
       PRIMARY KEY ("id")
     );
 
@@ -207,18 +212,23 @@ ForeignKeyOnReservedName:
       PRIMARY KEY ("id")
     );
   desired: |
+    CREATE TABLE IF NOT EXISTS companies (
+      id VARCHAR(100) PRIMARY KEY
+    );
+
     CREATE TABLE IF NOT EXISTS variables (
       id VARCHAR(100) PRIMARY KEY,
-      compaby_id VARCHAR(100) NOT NULL REFERENCES companies(id)
+      company_id VARCHAR(100) NOT NULL REFERENCES companies(id)
     );
 
     CREATE TABLE IF NOT EXISTS users (
-        id VARCHAR(100) PRIMARY KEY,
-        variable_id VARCHAR(100) NOT NULL,
-        name VARCHAR(100),
-        CONSTRAINT users_variable_id_fk FOREIGN KEY (variable_id) REFERENCES variables(id)
+      id VARCHAR(100) PRIMARY KEY,
+      variable_id VARCHAR(100) NOT NULL,
+      name VARCHAR(100),
+      CONSTRAINT users_variable_id_fk FOREIGN KEY (variable_id) REFERENCES variables(id)
     );
   output: |
+    ALTER TABLE "public"."variables" ADD CONSTRAINT "variables_company_id_fkey" FOREIGN KEY ("company_id") REFERENCES "public"."companies" ("id");
     ALTER TABLE "public"."users" ADD CONSTRAINT "users_variable_id_fk" FOREIGN KEY ("variable_id") REFERENCES "public"."variables" ("id");
 NumericChangePrecisionAndScale:
   current: |
@@ -763,3 +773,64 @@ RemoveDefaultExpression:
     );
   output: |
     ALTER TABLE "public"."users" ALTER COLUMN "key" DROP DEFAULT;
+CreateTableAddAbsentForeignKey:
+  current: |
+    CREATE TABLE users (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE posts (
+      content TEXT,
+      user_id INT
+    );
+  desired: |
+    CREATE TABLE users (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE posts (
+      content TEXT,
+      user_id INT REFERENCES users(id)
+    );
+  output: |
+    ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id");
+CreateTableWithConstraintOptions:
+  current: |
+    CREATE TABLE images (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE image_owners (
+      id INT,
+      type VARCHAR(20) NOT NULL,
+      PRIMARY KEY (type, id)
+    );
+    CREATE TABLE image_bindings (
+      image_id INT REFERENCES images(id) ON DELETE CASCADE,
+      image_order INT NOT NULL,
+      image_owner_type VARCHAR(20) NOT NULL,
+      image_owner_id INT NOT NULL,
+      CONSTRAINT image_owner_fk FOREIGN KEY (image_owner_type, image_owner_id) REFERENCES image_owners(type, id) ON DELETE CASCADE,
+      CONSTRAINT image_order_unique UNIQUE (image_owner_type, image_owner_id, image_order)
+    );
+  desired: |
+    CREATE TABLE images (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE image_owners (
+      id INT,
+      type VARCHAR(20) NOT NULL,
+      PRIMARY KEY (type, id)
+    );
+    CREATE TABLE image_bindings (
+      image_id INT REFERENCES images(id) ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE,
+      image_order INT NOT NULL,
+      image_owner_type VARCHAR(20) NOT NULL,
+      image_owner_id INT NOT NULL,
+      CONSTRAINT image_owner_fk FOREIGN KEY (image_owner_type, image_owner_id) REFERENCES image_owners(type, id) ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE,
+      CONSTRAINT image_order_unique UNIQUE (image_owner_type, image_owner_id, image_order) DEFERRABLE INITIALLY DEFERRED
+    );
+  output: |
+    ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_order_unique";
+    ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_order_unique" UNIQUE ("image_owner_type", "image_owner_id", "image_order") DEFERRABLE INITIALLY DEFERRED;
+    ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_bindings_image_id_fkey";
+    ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_bindings_image_id_fkey" FOREIGN KEY ("image_id") REFERENCES "public"."images" ("id") ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE;
+    ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_owner_fk";
+    ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_owner_fk" FOREIGN KEY ("image_owner_type","image_owner_id") REFERENCES "public"."image_owners" ("type","id") ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE;

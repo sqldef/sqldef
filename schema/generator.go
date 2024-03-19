@@ -614,7 +614,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				default:
 				}
 				if dropDDL != "" {
-					ddls = append(ddls, dropDDL, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), g.generateForeignKeyDefinition(desiredForeignKey)))
+					ddls = append(ddls, dropDDL, fmt.Sprintf("ALTER TABLE %s ADD %s%s", g.escapeTableName(desired.table.name), g.generateForeignKeyDefinition(desiredForeignKey), g.generateConstraintOptions(desiredForeignKey.constraintOptions)))
 				}
 			}
 		} else {
@@ -1206,6 +1206,25 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 		ddl += fmt.Sprintf(" (%s)%s", strings.Join(columns, ", "), optionDefinition)
 		ddl += partition
 		return ddl
+	case GeneratorModePostgres:
+		ddl := fmt.Sprintf(
+			"ALTER TABLE %s ADD ",
+			g.escapeTableName(table),
+		)
+		if strings.ToUpper(index.indexType) == "UNIQUE KEY" {
+			ddl += "CONSTRAINT"
+		} else {
+			ddl += strings.ToUpper(index.indexType)
+		}
+		if !index.primary {
+			ddl += fmt.Sprintf(" %s", g.escapeSQLName(index.name))
+		}
+		if strings.ToUpper(index.indexType) == "UNIQUE KEY" {
+			ddl += " UNIQUE"
+		}
+		constraintOptions := g.generateConstraintOptions(index.constraintOptions)
+		ddl += fmt.Sprintf(" (%s)%s%s", strings.Join(columns, ", "), optionDefinition, constraintOptions)
+		return ddl
 	default:
 		ddl := fmt.Sprintf(
 			"ALTER TABLE %s ADD %s",
@@ -1216,7 +1235,8 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 		if !index.primary {
 			ddl += fmt.Sprintf(" %s", g.escapeSQLName(index.name))
 		}
-		ddl += fmt.Sprintf(" (%s)%s", strings.Join(columns, ", "), optionDefinition)
+		constraintOptions := g.generateConstraintOptions(index.constraintOptions)
+		ddl += fmt.Sprintf(" (%s)%s%s", strings.Join(columns, ", "), optionDefinition, constraintOptions)
 		return ddl
 	}
 }
@@ -1252,6 +1272,17 @@ func (g *Generator) generateIndexOptionDefinition(indexOptions []IndexOption) st
 		}
 	}
 	return optionDefinition
+}
+
+func (g *Generator) generateConstraintOptions(ConstraintOptions *ConstraintOptions) string {
+	if ConstraintOptions != nil && ConstraintOptions.deferrable {
+		if ConstraintOptions.initiallyDeferred {
+			return " DEFERRABLE INITIALLY DEFERRED"
+		} else {
+			return " DEFERRABLE INITIALLY IMMEDIATE"
+		}
+	}
+	return ""
 }
 
 func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
@@ -1815,6 +1846,9 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 	if indexA.constraint != indexB.constraint {
 		return false
 	}
+	if (indexA.constraintOptions != nil) != (indexB.constraintOptions != nil) {
+		return false
+	}
 	if indexA.constraintOptions != nil && indexB.constraintOptions != nil {
 		if indexA.constraintOptions.deferrable != indexB.constraintOptions.deferrable {
 			return false
@@ -1846,6 +1880,17 @@ func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB Forei
 	}
 	if foreignKeyA.notForReplication != foreignKeyB.notForReplication {
 		return false
+	}
+	if (foreignKeyA.constraintOptions != nil) != (foreignKeyB.constraintOptions != nil) {
+		return false
+	}
+	if foreignKeyA.constraintOptions != nil && foreignKeyB.constraintOptions != nil {
+		if foreignKeyA.constraintOptions.deferrable != foreignKeyB.constraintOptions.deferrable {
+			return false
+		}
+		if foreignKeyA.constraintOptions.initiallyDeferred != foreignKeyB.constraintOptions.initiallyDeferred {
+			return false
+		}
 	}
 	// TODO: check index, reference
 	return true
