@@ -113,13 +113,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - { uses: actions/download-artifact@v3, with: { name: sqldef-linux-amd64,   path: package/ } }
-      - { uses: actions/download-artifact@v3, with: { name: sqldef-linux-386,     path: package/ } }
-      - { uses: actions/download-artifact@v3, with: { name: sqldef-linux-arm64,   path: package/ } }
-      - { uses: actions/download-artifact@v3, with: { name: sqldef-linux-arm,     path: package/ } }
-      - { uses: actions/download-artifact@v3, with: { name: sqldef-darwin-amd64,  path: package/ } }
-      - { uses: actions/download-artifact@v3, with: { name: sqldef-darwin-arm64,  path: package/ } }
-      - { uses: actions/download-artifact@v3, with: { name: sqldef-windows-amd64, path: package/ } }
+      - { uses: actions/download-artifact@v4, with: { name: sqldef-linux-amd64,   path: package/ } }
+      - { uses: actions/download-artifact@v4, with: { name: sqldef-linux-386,     path: package/ } }
+      - { uses: actions/download-artifact@v4, with: { name: sqldef-linux-arm64,   path: package/ } }
+      - { uses: actions/download-artifact@v4, with: { name: sqldef-linux-arm,     path: package/ } }
+      - { uses: actions/download-artifact@v4, with: { name: sqldef-darwin-amd64,  path: package/ } }
+      - { uses: actions/download-artifact@v4, with: { name: sqldef-darwin-arm64,  path: package/ } }
+      - { uses: actions/download-artifact@v4, with: { name: sqldef-windows-amd64, path: package/ } }
 
       - name: Release binaries
         run: |
