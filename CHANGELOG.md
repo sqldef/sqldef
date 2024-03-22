@@ -1,8 +1,3 @@
-## v0.17.1
-
-- psqldef: Enable adding an absent foreign key
-- psqldef: Enhance `DEFERRABLE` support
-
 ## v0.17.0
 
 - psqldef: Support multiple schema for comment [#495](https://github.com/sqldef/sqldef/pull/495)
