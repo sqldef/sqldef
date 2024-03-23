@@ -834,3 +834,60 @@ CreateTableWithConstraintOptions:
     ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_bindings_image_id_fkey" FOREIGN KEY ("image_id") REFERENCES "public"."images" ("id") ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE;
     ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_owner_fk";
     ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_owner_fk" FOREIGN KEY ("image_owner_type","image_owner_id") REFERENCES "public"."image_owners" ("type","id") ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE;
+CreateTableWithForeignKeyAndGeneratedColumn:
+  desired: |
+    CREATE TABLE users (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE emails (
+      user_id INT NOT NULL,
+      local_part VARCHAR(100) NOT NULL,
+      domain VARCHAR(100) NOT NULL,
+      lower_address TEXT GENERATED ALWAYS AS (LOWER(local_part || '@' || domain)) STORED NOT NULL,
+      PRIMARY KEY (domain, local_part),
+      CONSTRAINT user_fk FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+ViewWithNullableColumn:
+  desired: |
+    CREATE TABLE users (
+      id INT PRIMARY KEY,
+      name TEXT NULL,
+      deleted BOOLEAN NOT NULL
+    );
+    CREATE VIEW active_users AS
+    SELECT id, name FROM users WHERE NOT deleted;
+CaseWithoutArgument:
+  desired: |
+    CREATE TABLE permissions (
+      name TEXT NOT NULL,
+      admin BOOLEAN NOT NULL,
+      CONSTRAINT admin_name CHECK (
+        CASE
+          WHEN admin THEN name LIKE 'admin%'
+          ELSE true
+        END
+      )
+    );
+ViewWithDistinct:
+  desired: |
+    CREATE TABLE users (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE taggings (
+      user_id INT NOT NULL REFERENCES users(id),
+      tag TEXT NOT NULL
+    );
+    CREATE VIEW tags AS
+    SELECT DISTINCT tag FROM taggings;
+ViewWithGroupByAndHaving:
+  desired: |
+    CREATE TABLE users (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE taggings (
+      user_id INT NOT NULL REFERENCES users(id),
+      tag TEXT NOT NULL
+    );
+    CREATE VIEW tag_counts AS
+    SELECT tag, COUNT(*) AS count
+    FROM taggings GROUP BY tag HAVING COUNT(*) > 1;
