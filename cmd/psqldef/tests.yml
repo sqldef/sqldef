@@ -835,6 +835,7 @@ CreateTableWithConstraintOptions:
     ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_owner_fk";
     ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_owner_fk" FOREIGN KEY ("image_owner_type","image_owner_id") REFERENCES "public"."image_owners" ("type","id") ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE;
 CreateTableWithForeignKeyAndGeneratedColumn:
+  min_version: '12'
   desired: |
     CREATE TABLE users (
       id INT PRIMARY KEY
