@@ -254,9 +254,20 @@ func (p PostgresParser) parseViewStmt(stmt *pgquery.ViewStmt) (parser.Statement,
 }
 
 func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.SelectStatement, error) {
-	if stmt.DistinctClause != nil || stmt.IntoClause != nil || stmt.WhereClause != nil || stmt.GroupClause != nil || stmt.HavingClause != nil ||
-		stmt.WindowClause != nil || stmt.ValuesLists != nil || stmt.SortClause != nil || stmt.LimitOffset != nil || stmt.LimitCount != nil ||
-		stmt.LimitOption != 1 || stmt.LockingClause != nil || stmt.WithClause != nil || stmt.Op != 1 || stmt.All != false || stmt.Larg != nil || stmt.Rarg != nil {
+	unhandled := stmt.IntoClause != nil ||
+		stmt.WindowClause != nil ||
+		stmt.SortClause != nil ||
+		stmt.ValuesLists != nil ||
+		stmt.LimitOffset != nil ||
+		stmt.LimitCount != nil ||
+		stmt.LimitOption != 1 ||
+		stmt.LockingClause != nil ||
+		stmt.WithClause != nil ||
+		stmt.Op != 1 ||
+		stmt.All ||
+		stmt.Larg != nil ||
+		stmt.Rarg != nil
+	if unhandled {
 		return nil, fmt.Errorf("unhandled node in parseSelectStmt: %#v", stmt)
 	}
 
@@ -297,8 +308,49 @@ func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.Select
 		}
 	}
 
+	var distinct string
+	if stmt.DistinctClause != nil {
+		distinct = parser.DistinctStr
+	}
+
+	var where *parser.Where
+	if stmt.WhereClause != nil {
+		expr, err := p.parseExpr(stmt.WhereClause)
+		if err != nil {
+			return nil, err
+		}
+		where = &parser.Where{
+			Type: parser.WhereStr,
+			Expr: expr,
+		}
+	}
+
+	var groupBy parser.GroupBy
+	if stmt.GroupClause != nil {
+		for _, group := range stmt.GroupClause {
+			expr, err := p.parseExpr(group)
+			if err != nil {
+				return nil, err
+			}
+			groupBy = append(groupBy, expr)
+		}
+	}
+
+	var having *parser.Where
+	if stmt.HavingClause != nil {
+		expr, err := p.parseExpr(stmt.HavingClause)
+		if err != nil {
+			return nil, err
+		}
+		having = &parser.Where{
+			Type: parser.HavingStr,
+			Expr: expr,
+		}
+	}
+
 	return &parser.Select{
 		SelectExprs: selectExprs,
+		Distinct:    distinct,
 		From: parser.TableExprs{
 			&parser.AliasedTableExpr{
 				Expr:       fromTable,
@@ -306,6 +358,9 @@ func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.Select
 				As:         parser.NewTableIdent(aliasName),
 			},
 		},
+		Where:   where,
+		GroupBy: groupBy,
+		Having:  having,
 	}, nil
 }
 
@@ -425,9 +480,13 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 	case *pgquery.Node_CaseExpr:
 		caseStmt := stmt.GetCaseExpr()
 
-		caseExpr, err := p.parseExpr(caseStmt.Arg)
-		if err != nil {
-			return nil, err
+		var caseExpr parser.Expr
+		var err error
+		if caseStmt.Arg != nil {
+			caseExpr, err = p.parseExpr(caseStmt.Arg)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		var whenExprs []*parser.When
@@ -823,6 +882,8 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 	for _, columnConstraint := range columnDef.Constraints {
 		constraint := columnConstraint.Node.(*pgquery.Node_Constraint).Constraint
 		switch constraint.Contype {
+		case pgquery.ConstrType_CONSTR_NULL:
+			columnType.NotNull = parser.NewBoolVal(false)
 		case pgquery.ConstrType_CONSTR_NOTNULL:
 			columnType.NotNull = parser.NewBoolVal(true)
 		case pgquery.ConstrType_CONSTR_DEFAULT:
@@ -858,6 +919,16 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 			foreignKey.ConstraintOptions.InitiallyDeferred = true
 		case pgquery.ConstrType_CONSTR_ATTR_IMMEDIATE:
 			foreignKey.ConstraintOptions.InitiallyDeferred = false
+		case pgquery.ConstrType_CONSTR_GENERATED:
+			expr, err := p.parseExpr(constraint.RawExpr)
+			if err != nil {
+				return nil, nil, err
+			}
+			columnType.Generated = &parser.GeneratedColumn{
+				Expr: expr,
+				// Postgres only supports stored generated column
+				GeneratedType: "STORED",
+			}
 		default:
 			return nil, nil, fmt.Errorf("unhandled contype: %d", constraint.Contype)
 		}
