@@ -1,7 +1,11 @@
+## v0.17.2
+
+- psqldef: Fix parser bugs introduced in v0.17.1 [#498](https://github.com/sqldef/sqldef/pull/498)
+
 ## v0.17.1
 
-- psqldef: Enable adding an absent foreign key
-- psqldef: Enhance `DEFERRABLE` support
+- psqldef: Enable adding an absent foreign key [#497](https://github.com/sqldef/sqldef/pull/497)
+- psqldef: Enhance `DEFERRABLE` support [#497](https://github.com/sqldef/sqldef/pull/497)
 
 ## v0.17.0
 
