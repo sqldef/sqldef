@@ -297,6 +297,40 @@ MaterializedView:
   desired: |
     CREATE TABLE points (id bigint);
     CREATE MATERIALIZED VIEW IF NOT EXISTS points_view AS SELECT id FROM points;
+CreateMaterializedView:
+  current: |
+    CREATE TABLE public.users (
+      id BIGINT PRIMARY KEY,
+      name character varying(100)
+    );
+    CREATE TABLE public.posts (
+      id BIGINT PRIMARY KEY,
+      name character varying(100),
+      user_id BIGINT,
+      is_deleted boolean
+    );
+  desired: |
+    CREATE TABLE public.users (
+      id BIGINT PRIMARY KEY,
+      name character varying(100)
+    );
+    CREATE TABLE public.posts (
+      id BIGINT PRIMARY KEY,
+      name character varying(100),
+      user_id BIGINT,
+      is_deleted boolean
+    );
+    CREATE MATERIALIZED VIEW public.view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
+  output: | 
+    CREATE MATERIALIZED VIEW public.view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
+DropMaterializedView:
+  current: |
+    CREATE TABLE "public"."points" (id bigint);
+    CREATE MATERIALIZED VIEW IF NOT EXISTS "public"."points_view" AS SELECT id FROM points; 
+  desired: |
+    CREATE TABLE "public"."points" (id bigint);
+  output: | 
+    DROP MATERIALIZED VIEW "public"."points_view";
 IntervalExpression:
   desired: |
     CREATE TABLE points (id bigint, created_at timestamp, main_type text, sub_type text, user_id bigint);
