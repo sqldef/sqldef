@@ -192,6 +192,29 @@ PosixRegexCheckConstraint:
     ALTER TABLE "public"."test" ADD CONSTRAINT test_posix_not_regex_check CHECK (posix_not_regex !~ '[a-z]');
     ALTER TABLE "public"."test" DROP CONSTRAINT test_posix_not_regex_ci_check;
     ALTER TABLE "public"."test" ADD CONSTRAINT test_posix_not_regex_ci_check CHECK (posix_not_regex_ci !~* '[a-z]');
+IndexAndForeignOrder:
+  desired: |
+    CREATE TABLE posts (
+      id bigint NOT NULL,
+      user_id bigint NOT NULL,
+      PRIMARY KEY ("id")
+    );
+    ALTER TABLE posts ADD CONSTRAINT "user_id_key" FOREIGN KEY ("user_id") REFERENCES users ("id");
+    CREATE TABLE users (
+      id bigint NOT NULL
+    );
+    CREATE UNIQUE INDEX uniq_idx ON users (id);
+  output: |
+    CREATE TABLE posts (
+      id bigint NOT NULL,
+      user_id bigint NOT NULL,
+      PRIMARY KEY ("id")
+    );
+    CREATE TABLE users (
+      id bigint NOT NULL
+    );
+    CREATE UNIQUE INDEX uniq_idx ON users (id);
+    ALTER TABLE posts ADD CONSTRAINT "user_id_key" FOREIGN KEY ("user_id") REFERENCES users ("id");
 ForeignKeyOnReservedName:
   current: |
     CREATE TABLE "public"."companies" (
@@ -341,6 +364,23 @@ MaterializedViewIndex:
         WHERE id IN (SELECT MAX(id) AS id
             FROM points
             GROUP BY point_type, user_id);
+    CREATE INDEX points_view_idx ON points_view (tenant_id);
+  output: |
+    CREATE TABLE IF NOT EXISTS points (
+        id          BIGINT        PRIMARY KEY,
+        tenant_id   BIGINT        NOT NULL,
+        user_id     VARCHAR(100)  NOT NULL,
+        point_type  SMALLINT      NOT NULL,
+        point_value SMALLINT      NOT NULL,
+        created_at  TIMESTAMP     NOT NULL,
+        updated_at  TIMESTAMP     NOT NULL
+    );
+    CREATE MATERIALIZED VIEW IF NOT EXISTS points_view AS
+        SELECT * FROM points
+        WHERE id IN (SELECT MAX(id) AS id
+            FROM points
+            GROUP BY point_type, user_id);
+    CREATE INDEX points_idx ON points (tenant_id, user_id, point_type);
     CREATE INDEX points_view_idx ON points_view (tenant_id);
 Comment:
   current: |
