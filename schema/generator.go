@@ -97,6 +97,8 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 // Main part of DDL genearation
 func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	ddls := []string{}
+	indexDDLs := []string{}
+	foreignKeyDDLs := []string{}
 
 	// Incrementally examine desiredDDLs
 	for _, ddl := range desiredDDLs {
@@ -119,23 +121,23 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			table := desired.table // copy table
 			g.desiredTables = append(g.desiredTables, &table)
 		case *CreateIndex:
-			indexDDLs, err := g.generateDDLsForCreateIndex(desired.tableName, desired.index, "CREATE INDEX", ddl.Statement())
+			idxDDLs, err := g.generateDDLsForCreateIndex(desired.tableName, desired.index, "CREATE INDEX", ddl.Statement())
 			if err != nil {
 				return ddls, err
 			}
-			ddls = append(ddls, indexDDLs...)
+			indexDDLs = append(indexDDLs, idxDDLs...)
 		case *AddIndex:
-			indexDDLs, err := g.generateDDLsForCreateIndex(desired.tableName, desired.index, "ALTER TABLE", ddl.Statement())
+			idxDDLs, err := g.generateDDLsForCreateIndex(desired.tableName, desired.index, "ALTER TABLE", ddl.Statement())
 			if err != nil {
 				return ddls, err
 			}
-			ddls = append(ddls, indexDDLs...)
+			indexDDLs = append(indexDDLs, idxDDLs...)
 		case *AddForeignKey:
 			fkeyDDLs, err := g.generateDDLsForAddForeignKey(desired.tableName, desired.foreignKey, "ALTER TABLE", ddl.Statement())
 			if err != nil {
 				return ddls, err
 			}
-			ddls = append(ddls, fkeyDDLs...)
+			foreignKeyDDLs = append(foreignKeyDDLs, fkeyDDLs...)
 		case *AddPolicy:
 			policyDDLs, err := g.generateDDLsForCreatePolicy(desired.tableName, desired.policy, "CREATE POLICY", ddl.Statement())
 			if err != nil {
@@ -176,6 +178,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", desired)
 		}
 	}
+
+	ddls = append(ddls, indexDDLs...)
+	ddls = append(ddls, foreignKeyDDLs...)
 
 	// Clean up obsoleted tables, indexes, columns
 	for _, currentTable := range g.currentTables {
@@ -661,10 +666,6 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 	currentTable := findTableByName(g.currentTables, tableName)
 	if currentTable == nil { // Views
 		currentView := findViewByName(g.currentViews, tableName)
-		if currentView == nil {
-			return nil, fmt.Errorf("%s is performed for inexistent table '%s': '%s'", action, tableName, statement)
-		}
-
 		currentIndex := findIndexByName(currentView.indexes, desiredIndex.name)
 		if currentIndex == nil {
 			// Index not found, add index.
@@ -697,14 +698,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 		}
 	}
 
-	// Examine indexes in desiredTable to delete obsoleted indexes later
 	desiredTable := findTableByName(g.desiredTables, tableName)
-	if desiredTable == nil {
-		return nil, fmt.Errorf("%s is performed before create table '%s': '%s'", action, tableName, statement)
-	}
-	if containsString(convertIndexesToIndexNames(desiredTable.indexes), desiredIndex.name) {
-		return nil, fmt.Errorf("index '%s' is doubly created against table '%s': '%s'", desiredIndex.name, tableName, statement)
-	}
 	desiredTable.indexes = append(desiredTable.indexes, desiredIndex)
 
 	return ddls, nil
@@ -714,15 +708,6 @@ func (g *Generator) generateDDLsForAddForeignKey(tableName string, desiredForeig
 	var ddls []string
 
 	currentTable := findTableByName(g.currentTables, tableName)
-	if currentTable == nil {
-		return nil, fmt.Errorf("%s is performed for inexistent table '%s': '%s'", action, tableName, statement)
-	}
-
-	referenceTable := findTableByName(g.currentTables, desiredForeignKey.referenceName)
-	if referenceTable == nil {
-		return nil, fmt.Errorf("%s is performed before create table '%s': '%s'", action, desiredForeignKey.referenceName, statement)
-	}
-
 	currentForeignKey := findForeignKeyByName(currentTable.foreignKeys, desiredForeignKey.constraintName)
 	if currentForeignKey == nil {
 		// Foreign Key not found, add foreign key
@@ -738,9 +723,6 @@ func (g *Generator) generateDDLsForAddForeignKey(tableName string, desiredForeig
 
 	// Examine indexes in desiredTable to delete obsoleted indexes later
 	desiredTable := findTableByName(g.desiredTables, tableName)
-	if desiredTable == nil {
-		return nil, fmt.Errorf("%s is performed before create table '%s': '%s'", action, tableName, statement)
-	}
 	if containsString(convertForeignKeysToConstraintNames(desiredTable.foreignKeys), desiredForeignKey.constraintName) {
 		return nil, fmt.Errorf("index '%s' is doubly created against table '%s': '%s'", desiredForeignKey.constraintName, tableName, statement)
 	}
