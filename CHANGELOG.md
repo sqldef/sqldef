@@ -1,3 +1,7 @@
+## v0.17.4
+
+- Put the alter foreign key and index at the end of DDLs [#500](https://github.com/sqldef/sqldef/pull/500)
+
 ## v0.17.3
 
 - psqldef: Support dropping MATERIALIZED VIEW [#499](https://github.com/sqldef/sqldef/pull/499)
