@@ -1,3 +1,7 @@
+## v0.17.3
+
+- psqldef: Support dropping MATERIALIZED VIEW [#499](https://github.com/sqldef/sqldef/pull/499)
+
 ## v0.17.2
 
 - psqldef: Fix parser bugs introduced in v0.17.1 [#498](https://github.com/sqldef/sqldef/pull/498)
