@@ -590,6 +590,9 @@ func TestPsqldefCreateMaterializedView(t *testing.T) {
 			assertApplyOutput(t, createUsers+createPosts+createMaterializedView, applyPrefix+
 				fmt.Sprintf("CREATE MATERIALIZED VIEW %s.view_user_posts AS SELECT p.id FROM (%s as p JOIN %s as u ON ((p.user_id = u.id)));\n", tc.Schema, posts, users))
 			assertApplyOutput(t, createUsers+createPosts+createMaterializedView, nothingModified)
+
+			assertApplyOutput(t, createUsers+createPosts, applyPrefix+fmt.Sprintf(`DROP MATERIALIZED VIEW "%s"."view_user_posts";`, tc.Schema)+"\n")
+			assertApplyOutput(t, createUsers+createPosts, nothingModified)
 		})
 	}
 }

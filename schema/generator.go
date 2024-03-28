@@ -257,6 +257,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		if containsString(convertViewNames(g.desiredViews), currentView.name) {
 			continue
 		}
+		if currentView.viewType == "MATERIALIZED VIEW" {
+			ddls = append(ddls, fmt.Sprintf("DROP MATERIALIZED VIEW %s", g.escapeTableName(currentView.name)))
+			continue
+		}
 		ddls = append(ddls, fmt.Sprintf("DROP VIEW %s", g.escapeTableName(currentView.name)))
 	}
 
