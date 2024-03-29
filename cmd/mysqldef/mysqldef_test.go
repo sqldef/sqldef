@@ -217,6 +217,18 @@ func TestMysqldefAddColumnAfter(t *testing.T) {
 	)
 	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `name` varchar(40) NOT NULL AFTER `id`;\n")
 	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		  name varchar(40) NOT NULL,
+		  created_at datetime NOT NULL,
+		  updated_at datetime NOT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `updated_at` datetime NOT NULL;\n")
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestMysqldefAddColumnWithNull(t *testing.T) {

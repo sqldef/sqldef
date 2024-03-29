@@ -336,8 +336,13 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 
 			if g.mode == GeneratorModeMysql {
-				after := " FIRST"
-				if i > 0 {
+				var after string
+				switch {
+				case i == 0:
+					after = " FIRST"
+				case i > 0 && i < len(desired.table.columns)-1:
+					// To add columns other than the first and last, write AFTER.
+					// But, Do not write AFTER when adding to the last column.
 					after = " AFTER " + g.escapeSQLName(desired.table.columns[i-1].name)
 				}
 				ddl += after
@@ -351,7 +356,6 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				currentPos := currentColumn.position
 				desiredPos := desiredColumn.position
 				changeOrder := currentPos > desiredPos && currentPos-desiredPos > len(currentTable.columns)-len(desired.table.columns)
-
 				// Change column type and orders, *except* AUTO_INCREMENT and UNIQUE KEY.
 				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) || !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef) || !g.areSameGenerated(currentColumn.generated, desiredColumn.generated) || changeOrder {
 					definition, err := g.generateColumnDefinition(desiredColumn, false)
@@ -362,8 +366,13 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					if desiredColumn.generated != nil {
 						ddl1 := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name))
 						ddl2 := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableName(desired.table.name), definition)
-						after := " FIRST"
-						if i > 0 {
+						var after string
+						switch {
+						case i == 0:
+							after = " FIRST"
+						case i > 0 && i < len(desired.table.columns)-1:
+							// To add columns other than the first and last, write AFTER.
+							// But, Do not write AFTER when adding to the last column.
 							after = " AFTER " + g.escapeSQLName(desired.table.columns[i-1].name)
 						}
 						ddl2 += after
@@ -371,8 +380,13 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					} else {
 						ddl := fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name), definition)
 						if changeOrder {
-							after := " FIRST"
-							if i > 0 {
+							var after string
+							switch {
+							case i == 0:
+								after = " FIRST"
+							case i > 0 && i < len(desired.table.columns)-1:
+								// To add columns other than the first and last, write AFTER.
+								// But, Do not write AFTER when adding to the last column.
 								after = " AFTER " + g.escapeSQLName(desired.table.columns[i-1].name)
 							}
 							ddl += after
