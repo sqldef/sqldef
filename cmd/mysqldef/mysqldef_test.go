@@ -182,7 +182,7 @@ func TestMysqldefAddColumn(t *testing.T) {
 		  created_at datetime NOT NULL
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `created_at` datetime NOT NULL AFTER `name`;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `created_at` datetime NOT NULL;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -229,6 +229,20 @@ func TestMysqldefAddColumnAfter(t *testing.T) {
 	)
 	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `updated_at` datetime NOT NULL;\n")
 	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+		  name varchar(40) NOT NULL,
+		  created_at datetime NOT NULL,
+		  updated_at datetime NOT NULL,
+		  deleted_at datetime NOT NULL,
+		  INDEX index_1 (name)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `deleted_at` datetime NOT NULL;\nALTER TABLE `users` ADD INDEX `index_1` (`name`);\n")
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestMysqldefAddColumnWithNull(t *testing.T) {
@@ -251,7 +265,7 @@ func TestMysqldefAddColumnWithNull(t *testing.T) {
 		  created_at timestamp NULL DEFAULT NULL
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `created_at` timestamp NULL DEFAULT null AFTER `name`;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `created_at` timestamp NULL DEFAULT null;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -388,7 +402,7 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 	)
 	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
 		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`name`"+`;
-		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) VIRTUAL AFTER `+"`data`"+`;
+		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) VIRTUAL;
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)
@@ -408,7 +422,7 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`test_expr`"+`;
 		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`test_expr`"+` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED AFTER `+"`test_value`"+`;
 		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`name`"+`;
-		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED AFTER `+"`data`"+`;
+		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED;
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)
@@ -441,7 +455,7 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`test_expr`"+`;
 		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`test_expr`"+` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED NOT NULL AFTER `+"`test_value`"+`;
 		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`name`"+`;
-		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED NOT NULL AFTER `+"`data`"+`;
+		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED NOT NULL;
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)
@@ -855,7 +869,7 @@ func TestMysqldefCreateTableWithUniqueColumn(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `users` ADD COLUMN `name` varchar(40) UNIQUE AFTER `id`;\n",
+		"ALTER TABLE `users` ADD COLUMN `name` varchar(40) UNIQUE;\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 
@@ -1097,7 +1111,7 @@ func TestMysqldefDefaultNull(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `name` varchar(40) DEFAULT null AFTER `id`;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `name` varchar(40) DEFAULT null;\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1147,7 +1161,7 @@ func TestMysqldefCreateTableAddColumnWithCharsetAndNotNull(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `users` ADD COLUMN `name` varchar(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL AFTER `id`;\n",
+		"ALTER TABLE `users` ADD COLUMN `name` varchar(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL;\n",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -1218,7 +1232,7 @@ func TestMysqldefCurrentTimestampWithPrecision(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `updated_at` datetime(6) DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6) AFTER `created_at`;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `updated_at` datetime(6) DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6);\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1241,7 +1255,7 @@ func TestMysqldefEnumValues(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `authorities` enum('normal', 'admin') NOT NULL DEFAULT 'normal' AFTER `id`;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `authorities` enum('normal', 'admin') NOT NULL DEFAULT 'normal';\n")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 

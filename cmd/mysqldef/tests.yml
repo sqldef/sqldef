@@ -178,7 +178,7 @@ CreateTableWithSpatialTypesAndSpatialKey:
       SPATIAL KEY index_users_location (location)
     );
   output: |
-    ALTER TABLE `users` ADD COLUMN `location` point NOT NULL AFTER `id`;
+    ALTER TABLE `users` ADD COLUMN `location` point NOT NULL;
     ALTER TABLE `users` ADD SPATIAL KEY `index_users_location` (`location`);
 CreateTableWithSpatialTypesSRIDSpecified:
   current: |
@@ -191,7 +191,7 @@ CreateTableWithSpatialTypesSRIDSpecified:
       location point NOT NULL /*!80003 SRID 4326 */
     );
   output: |
-    ALTER TABLE `users` ADD COLUMN `location` point NOT NULL /*!80003 SRID 4326 */ AFTER `id`;
+    ALTER TABLE `users` ADD COLUMN `location` point NOT NULL /*!80003 SRID 4326 */;
 CreateTableGeneratedAlwaysAs80:
   desired: |
     CREATE TABLE `test_table` (
@@ -218,7 +218,7 @@ CreateTableGeneratedAlwaysAsChangeExpr80:
     );
   output: |
     ALTER TABLE `test_table` DROP COLUMN `test_expr`;
-    ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) VIRTUAL AFTER `test_value`;
+    ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) VIRTUAL;
   min_version: '8.0'
 CreateTableGeneratedAlwaysAsAbbreviation80:
   desired: |
@@ -246,7 +246,7 @@ CreateTableGeneratedAlwaysAsAbbreviationChangeExpr80:
     );
   output: |
     ALTER TABLE `test_table` DROP COLUMN `test_expr`;
-    ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) STORED NOT NULL AFTER `test_value`;
+    ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) STORED NOT NULL;
   min_version: '8.0'
 ConstraintCheck:
   desired: |
@@ -364,7 +364,7 @@ AlterTableAddSetTypeColumn:
       dayOfWeek SET('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun') NOT NULL
     );
   output: |
-    ALTER TABLE `alarm` ADD COLUMN `dayOfWeek` set('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun') NOT NULL AFTER `id`;
+    ALTER TABLE `alarm` ADD COLUMN `dayOfWeek` set('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun') NOT NULL;
 UUIDToBin:
   desired: |
     CREATE TABLE users (
@@ -530,7 +530,7 @@ AddColumnWithDefaultExpression:
       friend_ids JSON DEFAULT(JSON_ARRAY())  
     );
   output: |
-    ALTER TABLE `users` ADD COLUMN `friend_ids` json DEFAULT(JSON_ARRAY()) AFTER `id`;
+    ALTER TABLE `users` ADD COLUMN `friend_ids` json DEFAULT(JSON_ARRAY());
   min_version: '8.0'
 AddDefaultExpression:
   current: |
