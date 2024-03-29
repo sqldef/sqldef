@@ -909,7 +909,7 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 			}
 			foreignKey.IndexColumns = []parser.ColIdent{parser.NewColIdent(columnDef.Colname)}
 			if constraint.Conname == "" {
-				foreignKey.ConstraintName = parser.NewColIdent(fmt.Sprintf("%s_%s_fkey", tableName.Name, columnDef.Colname))
+				foreignKey.ConstraintName = parser.NewColIdent(p.absentConstraintName(tableName.Name.String(), columnDef.Colname))
 			}
 		case pgquery.ConstrType_CONSTR_ATTR_DEFERRABLE:
 			foreignKey.ConstraintOptions.Deferrable = true
@@ -938,6 +938,26 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 		Name: parser.NewColIdent(columnDef.Colname),
 		Type: columnType,
 	}, foreignKey, nil
+}
+
+func (p PostgresParser) absentConstraintName(tableName, columnName string) string {
+	if name := fmt.Sprintf("%s_%s_fkey", tableName, columnName); len(name) <= 63 {
+		return name
+	}
+
+	const tableThreshold, columnThreshold = 29, 28
+	const maxSum = tableThreshold + columnThreshold
+
+	if len(tableName) <= tableThreshold {
+		columnName = columnName[:maxSum-len(tableName)]
+	} else if len(columnName) <= columnThreshold {
+		tableName = tableName[:maxSum-len(columnName)]
+	} else {
+		tableName = tableName[:tableThreshold-1]
+		columnName = columnName[:columnThreshold-1]
+	}
+
+	return fmt.Sprintf("%s_%s_fkey", tableName, columnName)
 }
 
 func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.DefaultDefinition, error) {
