@@ -1,3 +1,7 @@
+## v0.17.5
+
+- Handle truncated auto generated constraint name correctly [#502](https://github.com/sqldef/sqldef/pull/502)
+
 ## v0.17.4
 
 - Put the alter foreign key and index at the end of DDLs [#500](https://github.com/sqldef/sqldef/pull/500)
