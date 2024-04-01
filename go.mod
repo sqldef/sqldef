@@ -12,7 +12,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/term v0.17.0
 	gopkg.in/yaml.v2 v2.4.0
-	modernc.org/sqlite v1.29.2
+	modernc.org/sqlite v1.29.5
 )
 
 require (
