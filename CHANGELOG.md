@@ -1,3 +1,15 @@
+## v0.17.6
+
+- psqldef: Fix error for index with coalesce [#508](https://github.com/sqldef/sqldef/pull/508)
+
+## v0.17.5
+
+- Handle truncated auto generated constraint name correctly [#502](https://github.com/sqldef/sqldef/pull/502)
+
+## v0.17.4
+
+- Put the alter foreign key and index at the end of DDLs [#500](https://github.com/sqldef/sqldef/pull/500)
+
 ## v0.17.3
 
 - psqldef: Support dropping MATERIALIZED VIEW [#499](https://github.com/sqldef/sqldef/pull/499)
