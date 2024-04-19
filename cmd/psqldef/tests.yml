@@ -121,6 +121,20 @@ CreateIndexConcurrently:
     CREATE INDEX CONCURRENTLY username on users (name);
   output: |
     CREATE INDEX CONCURRENTLY username on users (name);
+CreateIndexWithCoalesce:
+  current: |
+    CREATE TABLE users (
+      name TEXT,
+      user_name TEXT
+    );
+  desired: |
+    CREATE TABLE users (
+      name TEXT,
+      user_name TEXT
+    );
+    CREATE INDEX create_index_with_function_call ON users (name, COALESCE(user_name, 'NO_NAME'::TEXT));
+  output: |
+    CREATE INDEX create_index_with_function_call ON users (name, COALESCE(user_name, 'NO_NAME'::TEXT));
 AlterTypeAddValue:
   current: |
     CREATE TYPE eventtype AS ENUM (
@@ -354,15 +368,15 @@ CreateMaterializedView:
       is_deleted boolean
     );
     CREATE MATERIALIZED VIEW public.view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
-  output: | 
+  output: |
     CREATE MATERIALIZED VIEW public.view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
 DropMaterializedView:
   current: |
     CREATE TABLE "public"."points" (id bigint);
-    CREATE MATERIALIZED VIEW IF NOT EXISTS "public"."points_view" AS SELECT id FROM points; 
+    CREATE MATERIALIZED VIEW IF NOT EXISTS "public"."points_view" AS SELECT id FROM points;
   desired: |
     CREATE TABLE "public"."points" (id bigint);
-  output: | 
+  output: |
     DROP MATERIALIZED VIEW "public"."points_view";
 IntervalExpression:
   desired: |

@@ -664,6 +664,21 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 		default:
 			return nil, fmt.Errorf("unknown AExpr kind in parseExpr: %#v", node.AExpr)
 		}
+	case *pgquery.Node_CoalesceExpr:
+		var selectExprs parser.SelectExprs
+		for _, arg := range node.CoalesceExpr.Args {
+			expr, err := p.parseExpr(arg)
+			if err != nil {
+				return nil, err
+			}
+			selectExprs = append(selectExprs, &parser.AliasedExpr{
+				Expr: expr,
+			})
+		}
+		return &parser.FuncExpr{
+			Name:  parser.NewColIdent("coalesce"),
+			Exprs: selectExprs,
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown node in parseExpr: %#v", node)
 	}
