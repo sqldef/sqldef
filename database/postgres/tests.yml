@@ -197,3 +197,10 @@ CreateTableWithConstraintOptions:
       CONSTRAINT image_owner_fk FOREIGN KEY (image_owner_type, image_owner_id) REFERENCES image_owners(type, id) ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE,
       CONSTRAINT image_order_unique UNIQUE (image_owner_type, image_owner_id, image_order) DEFERRABLE INITIALLY DEFERRED
     );
+CreateIndexWithCoalesce:
+  sql: |
+    CREATE TABLE users (
+      name TEXT,
+      user_name TEXT
+    );
+    CREATE INDEX create_index_with_function_call ON users (name, COALESCE(user_name, 'NO_NAME'::TEXT));
