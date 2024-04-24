@@ -2,13 +2,14 @@
 package database
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"log"
 	"os"
 	"strings"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
@@ -98,7 +99,10 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 		SkipTables   string `yaml:"skip_tables"`
 		TargetSchema string `yaml:"target_schema"`
 	}
-	err = yaml.UnmarshalStrict(buf, &config)
+
+	dec := yaml.NewDecoder(bytes.NewReader(buf))
+	dec.KnownFields(true)
+	err = dec.Decode(&config)
 	if err != nil {
 		log.Fatal(err)
 	}

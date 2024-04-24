@@ -1,13 +1,14 @@
 package postgres
 
 import (
+	"bytes"
 	"os"
 	"testing"
 
 	"github.com/sqldef/sqldef/database"
 	"github.com/sqldef/sqldef/parser"
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 func TestParse(t *testing.T) {
@@ -52,7 +53,9 @@ func readTests(file string) (map[string]TestCase, error) {
 	}
 
 	var tests map[string]TestCase
-	err = yaml.UnmarshalStrict(buf, &tests)
+	dec := yaml.NewDecoder(bytes.NewReader(buf))
+	dec.KnownFields(true)
+	err = dec.Decode(&tests)
 	if err != nil {
 		return nil, err
 	}
