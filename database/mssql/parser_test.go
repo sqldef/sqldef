@@ -1,10 +1,11 @@
 package mssql
 
 import (
+	"bytes"
 	"os"
 	"testing"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 func TestParse(t *testing.T) {
@@ -31,7 +32,9 @@ func readTests(file string) (map[string]string, error) {
 	}
 
 	var tests map[string]string
-	err = yaml.UnmarshalStrict(buf, &tests)
+	dec := yaml.NewDecoder(bytes.NewReader(buf))
+	dec.KnownFields(true)
+	err = dec.Decode(&tests)
 	if err != nil {
 		return nil, err
 	}
