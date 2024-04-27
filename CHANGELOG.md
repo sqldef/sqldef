@@ -1,3 +1,7 @@
+## v0.17.7
+
+- psqldef: Exclude temporary tables on export [#512](https://github.com/sqldef/sqldef/pull/512)
+
 ## v0.17.6
 
 - psqldef: Fix error for index with coalesce [#508](https://github.com/sqldef/sqldef/pull/508)
