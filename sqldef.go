@@ -67,14 +67,6 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 		return
 	}
 
-	if isValidAlgorithm(options.Config.Algorithm) {
-		for _, ddl := range ddls {
-			if strings.HasPrefix(ddl, "ALTER TABLE") {
-				ddl += ", ALGORITHM=" + strings.ToUpper(options.Config.Algorithm)
-			}
-		}
-	}
-
 	if options.DryRun || len(options.CurrentFile) > 0 {
 		showDDLs(ddls, options.EnableDropTable, options.BeforeApply, ddlSuffix)
 		return
@@ -163,13 +155,4 @@ func ParseSkipTables(skipFile string) []string {
 	}
 
 	return skipTables
-}
-
-func isValidAlgorithm(algorithm string) bool {
-	switch strings.ToUpper(algorithm) {
-	case "INPLACE", "COPY", "INSTANT":
-		return true
-	default:
-		return false
-	}
 }

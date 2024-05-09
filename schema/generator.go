@@ -54,6 +54,8 @@ type Generator struct {
 	currentExtensions []*Extension
 
 	defaultSchema string
+
+	algorithm string
 }
 
 // Parse argument DDLs and call `generateDDLs()`
@@ -90,6 +92,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		desiredExtensions: []*Extension{},
 		currentExtensions: extensions,
 		defaultSchema:     defaultSchema,
+		algorithm:         config.Algorithm,
 	}
 	return generator.generateDDLs(desiredDDLs)
 }
@@ -286,6 +289,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		if desitedTrigger == nil {
 			ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeSQLName(currentTrigger.name)))
 			continue
+		}
+	}
+
+	if isValidAlgorithm(g.algorithm) {
+		for i := range ddls {
+			if strings.HasPrefix(ddls[i], "ALTER TABLE") {
+				ddls[i] += ", ALGORITHM=" + strings.ToUpper(g.algorithm)
+			}
 		}
 	}
 
@@ -2172,5 +2183,14 @@ func splitTableName(table string, defaultSchema string) (string, string) {
 		return schemaTable[0], schemaTable[1]
 	} else {
 		return defaultSchema, table
+	}
+}
+
+func isValidAlgorithm(algorithm string) bool {
+	switch strings.ToUpper(algorithm) {
+	case "INPLACE", "COPY", "INSTANT":
+		return true
+	default:
+		return false
 	}
 }
