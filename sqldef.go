@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/sqldef/sqldef/database"
@@ -65,6 +66,16 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 	if len(ddls) == 0 {
 		fmt.Println("-- Nothing is modified --")
 		return
+	}
+
+	// TODO: アルゴリズム妥当性チェック
+	if len(options.Config.Algorithm) != 0 {
+		for _, ddl := range ddls {
+			if regexp.MustCompile("^ALTER TABLE").MatchString(ddl) {
+				ddl += ", ALGORITHM="
+				ddl += options.Config.Algorithm
+			}
+		}
 	}
 
 	if options.DryRun || len(options.CurrentFile) > 0 {
