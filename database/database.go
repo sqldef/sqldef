@@ -35,6 +35,7 @@ type GeneratorConfig struct {
 	TargetTables []string
 	SkipTables   []string
 	TargetSchema string
+	Algorithm    string
 }
 
 // Abstraction layer for multiple kinds of databases
@@ -98,6 +99,7 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 		TargetTables string `yaml:"target_tables"`
 		SkipTables   string `yaml:"skip_tables"`
 		TargetSchema string `yaml:"target_schema"`
+		Algorithm    string `yaml:"algorithm"`
 	}
 
 	dec := yaml.NewDecoder(bytes.NewReader(buf))
@@ -122,9 +124,15 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 		targetSchema = strings.Trim(config.TargetSchema, "\n")
 	}
 
+	var algorithm string
+	if config.Algorithm != "" {
+		algorithm = strings.Trim(config.Algorithm, "\n")
+	}
+
 	return GeneratorConfig{
 		TargetTables: targetTables,
 		SkipTables:   skipTables,
 		TargetSchema: targetSchema,
+		Algorithm:    algorithm,
 	}
 }
