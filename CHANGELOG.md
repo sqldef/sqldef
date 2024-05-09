@@ -1,3 +1,7 @@
+## v0.17.8
+
+- mysqldef: Add `algorith` option to `--config` [#519](https://github.com/sqldef/sqldef/pull/519)
+
 ## v0.17.7
 
 - psqldef: Exclude temporary tables on export [#512](https://github.com/sqldef/sqldef/pull/512)
