@@ -1678,7 +1678,7 @@ func TestMysqldefConfigIncludesAlgorithm(t *testing.T) {
 
 	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
 	assertEquals(t, apply, applyPrefix+stripHeredoc(`
-	ALTER TABLE `+"`users`"+` CHANGE COLUMN `+"`name` `name`"+` varchar(1000) COLLATE utf8mb4_bin DEFAULT null;
+	ALTER TABLE `+"`users`"+` CHANGE COLUMN `+"`name` `name`"+` varchar(1000) COLLATE utf8mb4_bin DEFAULT null, ALGORITHM=INPLACE;
 	`,
 	))
 }

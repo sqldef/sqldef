@@ -5,7 +5,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"regexp"
 	"strings"
 
 	"github.com/sqldef/sqldef/database"
@@ -68,12 +67,10 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 		return
 	}
 
-	// TODO: アルゴリズム妥当性チェック
-	if len(options.Config.Algorithm) != 0 {
+	if isValidAlgorithm(options.Config.Algorithm) {
 		for _, ddl := range ddls {
-			if regexp.MustCompile("^ALTER TABLE").MatchString(ddl) {
-				ddl += ", ALGORITHM="
-				ddl += options.Config.Algorithm
+			if strings.HasPrefix(ddl, "ALTER TABLE") {
+				ddl += ", ALGORITHM=" + strings.ToUpper(options.Config.Algorithm)
 			}
 		}
 	}
@@ -166,4 +163,13 @@ func ParseSkipTables(skipFile string) []string {
 	}
 
 	return skipTables
+}
+
+func isValidAlgorithm(algorithm string) bool {
+	switch strings.ToUpper(algorithm) {
+	case "INPLACE", "COPY", "INSTANT":
+		return true
+	default:
+		return false
+	}
 }
