@@ -1587,7 +1587,7 @@ func NewBoolSQLVal(in bool) *SQLVal {
 	return &SQLVal{Type: ValBool, Val: []byte(fmt.Sprintf("%t", in))}
 }
 
-// NewUnicode bulds a new UniodeStrVal.
+// NewUnicode builds a new UnicodeStrVal.
 func NewUnicodeStrVal(in []byte) *SQLVal {
 	return &SQLVal{Type: UnicodeStrVal, Val: in}
 }
@@ -2081,7 +2081,7 @@ func (node *Order) Format(buf *nodeBuffer) {
 	buf.Printf("%v %s", node.Expr, node.Direction)
 }
 
-// PartitionBy represents a PARTITON BY clause.
+// PartitionBy represents a PARTITION BY clause.
 type PartitionBy []*Partition
 
 // Format formats the node.
