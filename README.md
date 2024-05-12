@@ -97,11 +97,11 @@ Run: 'ALTER TABLE user ADD INDEX index_name(name);'
 $ mysqldef -uroot test < schema.sql
 Nothing is modified
 
-# Run without droping existing tables and columns
+# Run without dropping existing tables and columns
 $ mysqldef -uroot test < schema.sql
 Skipped: 'DROP TABLE users;'
 
-# Run droping existing tables and columns
+# Run dropping existing tables and columns
 $ mysqldef -uroot test --enable-drop-table < schema.sql
 Run: 'DROP TABLE users;'
 
@@ -197,11 +197,11 @@ Run: 'ALTER TABLE users DROP COLUMN name;'
 $ psqldef -U postgres test < schema.sql
 Nothing is modified
 
-# Run without droping existing tables and columns
+# Run without dropping existing tables and columns
 $ psqldef -U postgres test < schema.sql
 Skipped: 'DROP TABLE users;'
 
-# Run droping existing tables and columns
+# Run dropping existing tables and columns
 $ psqldef -U postgres test --enable-drop-table < schema.sql
 Run: 'DROP TABLE users;'
 ```
