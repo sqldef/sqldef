@@ -92,7 +92,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		t.Fatal(err)
 	}
 	if len(ddls) > 0 {
-		t.Errorf("expected nothing is modifed, but got:\n```\n%s```", joinDDLs(ddls))
+		t.Errorf("expected nothing is modified, but got:\n```\n%s```", joinDDLs(ddls))
 	}
 
 	// Main test
@@ -124,7 +124,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		t.Fatal(err)
 	}
 	if len(ddls) > 0 {
-		t.Errorf("expected nothing is modifed, but got:\n```\n%s```", joinDDLs(ddls))
+		t.Errorf("expected nothing is modified, but got:\n```\n%s```", joinDDLs(ddls))
 	}
 }
 

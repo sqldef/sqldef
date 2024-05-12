@@ -1026,7 +1026,7 @@ func TestMssqldefCreateTableAddDefaultChangeDefault(t *testing.T) {
 func TestMssqldefUseSequenceInTrigger(t *testing.T) {
 	resetTestDatabase()
 
-	// Prepare sequence, becase "CREATE SEQUENCE" is currently unavailable in mssqldef.
+	// Prepare sequence, because "CREATE SEQUENCE" is currently unavailable in mssqldef.
 	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", stripHeredoc(`
 		CREATE SEQUENCE seq_user_id AS int START WITH 1;
 		GO
