@@ -152,6 +152,7 @@ type View struct {
 	name         string
 	definition   string
 	indexes      []Index
+	columns      []string
 }
 
 type Trigger struct {
