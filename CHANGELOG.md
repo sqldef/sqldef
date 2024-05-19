@@ -1,3 +1,7 @@
+## v0.17.9
+
+- psqldef: Fix the error when deleting columns from view [#523](https://github.com/sqldef/sqldef/pull/523)
+
 ## v0.17.8
 
 - mysqldef: Add `algorith` option to `--config` [#519](https://github.com/sqldef/sqldef/pull/519)
