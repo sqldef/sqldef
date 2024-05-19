@@ -540,6 +540,26 @@ CreateViewCast:
       amount::numeric(10,2) as amount_num
     from hoge;
   output: ''
+ReplaceView:
+  current: |
+    CREATE TABLE "public"."hoge" (
+      "foo" text,
+      "bar" text
+    );
+    CREATE VIEW v AS
+    SELECT foo, bar FROM hoge;
+  desired: |
+    CREATE TABLE "public"."hoge" (
+      "foo" text,
+      "bar" text
+    );
+
+    CREATE VIEW v AS
+    SELECT foo FROM hoge;
+  output: |
+    DROP VIEW "public"."v";
+    CREATE VIEW "public"."v" AS select foo from hoge;
+
 CreateExtension:
   current: |
     CREATE EXTENSION pgcrypto;

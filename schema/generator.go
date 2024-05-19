@@ -776,6 +776,22 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy 
 	return ddls, nil
 }
 
+func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View) bool {
+	if g.mode == GeneratorModeSQLite3 || g.mode == GeneratorModeMssql {
+		return true
+	}
+
+	// In the case of PostgreSQL, if there are any deletions or changes to columns,
+	// you cannot use REPLACE VIEW, so you need to DROP and CREATE VIEW.
+	// Therefore, it is necessary to check if currentView.columns is a subset
+	// of desiredView.columns, and if it is not a subset, return true.
+	if g.mode == GeneratorModePostgres {
+		return !isSubset(currentView.columns, desiredView.columns)
+	}
+
+	return false
+}
+
 func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View) ([]string, error) {
 	var ddls []string
 
@@ -788,7 +804,7 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 	} else if desiredView.viewType == "VIEW" { // TODO: Fix the definition comparison for materialized views and enable this
 		// View found. If it's different, create or replace view.
 		if g.normalizeViewDefinition(currentView.definition) != g.normalizeViewDefinition(desiredView.definition) {
-			if g.mode == GeneratorModeSQLite3 || g.mode == GeneratorModeMssql {
+			if g.shouldDropAndCreateView(currentView, desiredView) {
 				ddls = append(ddls, fmt.Sprintf("DROP %s %s", desiredView.viewType, g.escapeTableName(viewName)))
 				ddls = append(ddls, fmt.Sprintf("CREATE %s %s AS %s", desiredView.viewType, g.escapeTableName(viewName), desiredView.definition))
 			} else {
@@ -2175,6 +2191,15 @@ func containsRegexpString(strs []string, str string) bool {
 		}
 	}
 	return false
+}
+
+func isSubset(a, b []string) bool {
+	for _, element := range a {
+		if !containsString(b, element) {
+			return false
+		}
+	}
+	return true
 }
 
 func splitTableName(table string, defaultSchema string) (string, string) {

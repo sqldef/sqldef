@@ -132,12 +132,19 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				},
 			}, nil
 		} else if stmt.Action == parser.CreateView {
+			columns := []string{}
+			if expr, ok := stmt.View.Definition.(*parser.Select); ok {
+				for _, s := range expr.SelectExprs {
+					columns = append(columns, parser.String(s))
+				}
+			}
 			return &View{
 				statement:    ddl,
 				viewType:     strings.ToUpper(stmt.View.Type),
 				securityType: strings.ToUpper(stmt.View.SecurityType),
 				name:         normalizedTableName(mode, stmt.View.Name, defaultSchema),
 				definition:   parser.String(stmt.View.Definition),
+				columns:      columns,
 			}, nil
 		} else if stmt.Action == parser.CreateTrigger {
 			body := []string{}
