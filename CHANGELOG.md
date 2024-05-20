@@ -1,3 +1,7 @@
+## v0.17.10
+
+- psqldef: Fix the conditions for issuing REPLACE VIEW [#525](https://github.com/sqldef/sqldef/pull/525)
+
 ## v0.17.9
 
 - psqldef: Fix the error when deleting columns from view [#523](https://github.com/sqldef/sqldef/pull/523)
