@@ -36,6 +36,7 @@ type GeneratorConfig struct {
 	SkipTables   []string
 	TargetSchema string
 	Algorithm    string
+	Lock         string
 }
 
 // Abstraction layer for multiple kinds of databases
@@ -100,6 +101,7 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 		SkipTables   string `yaml:"skip_tables"`
 		TargetSchema string `yaml:"target_schema"`
 		Algorithm    string `yaml:"algorithm"`
+		Lock         string `yaml:"lock"`
 	}
 
 	dec := yaml.NewDecoder(bytes.NewReader(buf))
@@ -129,10 +131,14 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 		algorithm = strings.Trim(config.Algorithm, "\n")
 	}
 
+	if config.Lock != "" {
+		algorithm = strings.Trim(config.Lock, "\n")
+	}
 	return GeneratorConfig{
 		TargetTables: targetTables,
 		SkipTables:   skipTables,
 		TargetSchema: targetSchema,
 		Algorithm:    algorithm,
+		Lock:         config.Lock,
 	}
 }
