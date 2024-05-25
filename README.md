@@ -39,7 +39,7 @@ Application Options:
       --enable-drop-table           Enable destructive changes such as DROP (enable only table drops)
       --skip-view                   Skip managing views (temporary feature, to be removed later)
       --before-apply=               Execute the given string before applying the regular DDLs
-      --config=                     YAML file to specify: target_tables, skip_tables, algorithm
+      --config=                     YAML file to specify: target_tables, skip_tables, algorithm, lock
       --help                        Show this help
       --version                     Show this version
 ```
