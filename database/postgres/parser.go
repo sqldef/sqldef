@@ -167,9 +167,6 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 				}
 				checks = append(checks, check)
 			case pgquery.ConstrType_CONSTR_EXCLUSION:
-				if node.Constraint.GetWhereClause() != nil {
-					return nil, fmt.Errorf("unhandled where: %#v", node.Constraint)
-				}
 				var exs []parser.ExclusionPair
 				for _, ex := range node.Constraint.Exclusions {
 					nl := ex.GetList()
@@ -202,9 +199,18 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 						Operator: opItems[0].Node.(*pgquery.Node_String_).String_.Sval},
 					)
 				}
+				var whereExpr parser.Expr
+				if whereClause := node.Constraint.GetWhereClause(); whereClause != nil {
+					expr, err := p.parseExpr(whereClause)
+					if err != nil {
+						return nil, err
+					}
+					whereExpr = expr
+				}
 				exclusion := &parser.ExclusionDefinition{
 					AccessMethod: node.Constraint.GetAccessMethod(),
 					Exclusions:   exs,
+					Where:        parser.NewWhere(parser.WhereStr, whereExpr),
 				}
 				exclusions = append(exclusions, exclusion)
 			default:

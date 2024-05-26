@@ -211,6 +211,6 @@ ExcludeConstraint:
       event_start tstzrange NOT NULL,
       event_end tstzrange NOT NULL,
       EXCLUDE (name WITH =),
-      EXCLUDE (lower(name) WITH =),
+      EXCLUDE (lower(name) WITH =) where (name <> ''),
       EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&)
     );
