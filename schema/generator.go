@@ -56,6 +56,7 @@ type Generator struct {
 	defaultSchema string
 
 	algorithm string
+	lock      string
 }
 
 // Parse argument DDLs and call `generateDDLs()`
@@ -93,6 +94,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		currentExtensions: extensions,
 		defaultSchema:     defaultSchema,
 		algorithm:         config.Algorithm,
+		lock:              config.Lock,
 	}
 	return generator.generateDDLs(desiredDDLs)
 }
@@ -296,6 +298,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		for i := range ddls {
 			if strings.HasPrefix(ddls[i], "ALTER TABLE") {
 				ddls[i] += ", ALGORITHM=" + strings.ToUpper(g.algorithm)
+			}
+		}
+	}
+
+	if isValidLock(g.lock) {
+		for i := range ddls {
+			if strings.HasPrefix(ddls[i], "ALTER TABLE") {
+				ddls[i] += ", LOCK=" + strings.ToUpper(g.lock)
 			}
 		}
 	}
@@ -2216,6 +2226,15 @@ func splitTableName(table string, defaultSchema string) (string, string) {
 func isValidAlgorithm(algorithm string) bool {
 	switch strings.ToUpper(algorithm) {
 	case "INPLACE", "COPY", "INSTANT":
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidLock(lock string) bool {
+	switch strings.ToUpper(lock) {
+	case "DEFAULT", "NONE", "SHARED", "EXCLUSIVE":
 		return true
 	default:
 		return false

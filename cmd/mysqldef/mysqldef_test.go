@@ -1683,6 +1683,37 @@ func TestMysqldefConfigIncludesAlgorithm(t *testing.T) {
 	))
 }
 
+func TestMysqldefConfigIncludesLock(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id int UNSIGNED NOT NULL,
+		  name varchar(255) COLLATE utf8mb4_bin DEFAULT NULL
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id int UNSIGNED NOT NULL,
+		  name varchar(255) COLLATE utf8mb4_bin DEFAULT NULL,
+		  new_column varchar(255) COLLATE utf8mb4_bin DEFAULT NULL
+		);
+		`,
+	)
+
+	writeFile("schema.sql", createTable)
+	writeFile("config.yml", "lock: none")
+
+	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	assertEquals(t, apply, applyPrefix+stripHeredoc(`
+	ALTER TABLE `+"`users`"+` ADD COLUMN `+"`new_column` "+`varchar(255) COLLATE utf8mb4_bin DEFAULT null `+"AFTER `name`, "+`LOCK=NONE;
+`))
+}
+
 func TestMysqldefHelp(t *testing.T) {
 	_, err := testutils.Execute("./mysqldef", "--help")
 	if err != nil {
