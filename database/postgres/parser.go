@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -99,6 +100,7 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 	var indexes []*parser.IndexDefinition
 	var foreignKeys []*parser.ForeignKeyDefinition
 	var checks []*parser.CheckDefinition
+	var exclusions []*parser.ExclusionDefinition
 	for _, elt := range stmt.TableElts {
 		switch node := elt.Node.(type) {
 		case *pgquery.Node_ColumnDef:
@@ -164,6 +166,47 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 					ConstraintName: parser.NewColIdent(node.Constraint.Conname),
 				}
 				checks = append(checks, check)
+			case pgquery.ConstrType_CONSTR_EXCLUSION:
+				if node.Constraint.GetWhereClause() != nil {
+					return nil, fmt.Errorf("unhandled where: %#v", node.Constraint)
+				}
+				var exs []parser.ExclusionPair
+				for _, ex := range node.Constraint.Exclusions {
+					nl := ex.GetList()
+					if nl == nil {
+						return nil, fmt.Errorf("require node list on exclusion: %#v", ex)
+					}
+					nItems := nl.GetItems()
+					if nItems == nil {
+						return nil, fmt.Errorf("require items on node list: %#v", nl)
+					}
+					excludeElement := nItems[0].GetIndexElem()
+					if excludeElement == nil {
+						return nil, errors.New("require exclude element")
+					}
+					var col parser.ColIdent
+					if n := excludeElement.GetExpr(); n != nil {
+						expr, err := p.parseExpr(n)
+						if err != nil {
+							return nil, err
+						}
+						col = parser.NewColIdent(parser.String(expr))
+					} else {
+						col = parser.NewColIdent(excludeElement.Name)
+					}
+
+					opList := nItems[1].GetList()
+					opItems := opList.GetItems()
+					exs = append(exs, parser.ExclusionPair{
+						Column:   col,
+						Operator: opItems[0].Node.(*pgquery.Node_String_).String_.Sval},
+					)
+				}
+				exclusion := &parser.ExclusionDefinition{
+					AccessMethod: node.Constraint.GetAccessMethod(),
+					Exclusions:   exs,
+				}
+				exclusions = append(exclusions, exclusion)
 			default:
 				return nil, fmt.Errorf("unknown Constraint type: %#v", node)
 			}
