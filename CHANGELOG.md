@@ -1,3 +1,7 @@
+## v0.17.11
+
+- mysqldef: Add `lock` option to `--config` [#527](https://github.com/sqldef/sqldef/pull/527)
+
 ## v0.17.10
 
 - psqldef: Fix the conditions for issuing REPLACE VIEW [#525](https://github.com/sqldef/sqldef/pull/525)
@@ -8,7 +12,7 @@
 
 ## v0.17.8
 
-- mysqldef: Add `algorith` option to `--config` [#519](https://github.com/sqldef/sqldef/pull/519)
+- mysqldef: Add `algorithm` option to `--config` [#519](https://github.com/sqldef/sqldef/pull/519)
 
 ## v0.17.7
 
