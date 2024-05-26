@@ -579,7 +579,31 @@ func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]st
 }
 
 func (d *PostgresDatabase) getTableExclusionConstraints(tableName string) (map[string]string, error) {
+	const query = `SELECT con.conname, pg_get_constraintdef(con.oid, true)
+	FROM   pg_constraint con
+	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+	JOIN   pg_class cls ON cls.oid = con.conrelid
+	WHERE  con.contype = 'x'
+	AND    nsp.nspname = $1
+	AND    cls.relname = $2;`
+
 	result := map[string]string{}
+	schema, table := splitTableName(tableName, d.GetDefaultSchema())
+	rows, err := d.db.Query(query, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var constraintName, constraintDef string
+		err = rows.Scan(&constraintName, &constraintDef)
+		if err != nil {
+			return nil, err
+		}
+		result[constraintName] = constraintDef
+	}
+
 	return result, nil
 }
 
