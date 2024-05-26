@@ -279,7 +279,7 @@ func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	exclusionConstraints, err := d.getTableExclusionConstraints(table)
+	tableExclusionConstraints, err := d.getTableExclusionConstraints(table)
 	if err != nil {
 		return "", err
 	}
@@ -287,10 +287,10 @@ func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreignDefs, policyDefs, comments, checkConstraints, uniqueConstraints, exclusionConstraints, d.GetDefaultSchema()), nil
+	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreignDefs, policyDefs, comments, checkConstraints, uniqueConstraints, tableExclusionConstraints, d.GetDefaultSchema()), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreignDefs, policyDefs, comments []string, checkConstraints, uniqueConstraints, exclusionConstraints map[string]string, defaultSchema string) string {
+func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreignDefs, policyDefs, comments []string, checkConstraints, uniqueConstraints, tableExclusionConstraints map[string]string, defaultSchema string) string {
 	var queryBuilder strings.Builder
 	schema, table := splitTableName(table, defaultSchema)
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", escapeSQLName(schema), escapeSQLName(table))
@@ -318,6 +318,10 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 		fmt.Fprintf(&queryBuilder, "PRIMARY KEY (\"%s\")", strings.Join(pkeyCols, "\", \""))
 	}
 	for constraintName, constraintDef := range checkConstraints {
+		fmt.Fprint(&queryBuilder, ",\n"+indent)
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", constraintName, constraintDef)
+	}
+	for constraintName, constraintDef := range tableExclusionConstraints {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
 		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", constraintName, constraintDef)
 	}
