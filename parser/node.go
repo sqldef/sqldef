@@ -514,6 +514,7 @@ type TableSpec struct {
 	Indexes     []*IndexDefinition
 	ForeignKeys []*ForeignKeyDefinition
 	Checks      []*CheckDefinition
+	Exclusions  []*ExclusionDefinition // for Postgres
 	Options     map[string]string
 }
 
@@ -662,6 +663,17 @@ type CheckDefinition struct {
 	ConstraintName    ColIdent
 	NotForReplication bool
 	NoInherit         BoolVal
+}
+
+type ExclusionPair struct {
+	Column   ColIdent
+	Operator string
+}
+
+type ExclusionDefinition struct {
+	AccessMethod string
+	Exclusions   []ExclusionPair
+	Where        *Where
 }
 
 // Format returns a canonical string representation of the type and all relevant options
