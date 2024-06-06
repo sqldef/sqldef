@@ -1203,6 +1203,20 @@ func TestPsqldefFunctionAsDefault(t *testing.T) {
 	}
 }
 
+func TestPsqldefAlterType(t *testing.T) {
+	resetTestDatabase()
+
+	mustExecuteSQL(`
+				CREATE SCHEMA schema_a;
+				CREATE TYPE public.lang AS ENUM ('en', 'ja', 'fr');
+				CREATE TYPE schema_a.lang AS ENUM ('en', 'ja');
+    `)
+
+	createType := `CREATE TYPE schema_a.lang AS ENUM ('en', 'ja', 'de');`
+
+	assertApplyOutput(t, createType, applyPrefix+"ALTER TYPE schema_a.lang ADD VALUE 'de';\n")
+}
+
 //
 // ----------------------- following tests are for CLI -----------------------
 //
