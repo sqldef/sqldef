@@ -1203,7 +1203,7 @@ func TestPsqldefFunctionAsDefault(t *testing.T) {
 	}
 }
 
-func TestPsqldefAlterType(t *testing.T) {
+func TestPsqldefAlterTypeAddValueWithSameTypeNameInDifferentSchema(t *testing.T) {
 	resetTestDatabase()
 
 	mustExecuteSQL(`
