@@ -18,7 +18,7 @@ import (
 )
 
 type TestCase struct {
-	Init       string  // default: empty schema
+	Init       string  // default: no initialization
 	Current    string  // default: empty schema
 	Desired    string  // default: empty schema
 	Output     *string // default: use Desired as Output
