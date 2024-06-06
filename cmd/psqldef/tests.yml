@@ -167,26 +167,26 @@ AlterTypeAddValueWithSameTypeNameInDifferentSchema:
     CREATE SCHEMA schema1;
     CREATE SCHEMA schema2;
   current: |
-    CREATE TYPE public.lang AS ENUM (
+    CREATE TYPE schema1.lang AS ENUM (
       'ja',
       'en'
     );
-    CREATE TYPE schema1.lang AS ENUM (
+    CREATE TYPE schema2.lang AS ENUM (
       'ja',
       'en'
     );
   desired: |
-    CREATE TYPE public.lang AS ENUM (
+    CREATE TYPE schema1.lang AS ENUM (
       'ja',
       'en'
     );
-    CREATE TYPE schema1.lang AS ENUM (
+    CREATE TYPE schema2.lang AS ENUM (
       'ja',
       'en',
       'de'
     );
   output: |
-    ALTER TYPE schema1.lang ADD VALUE 'de';
+    ALTER TYPE schema2.lang ADD VALUE 'de';
   min_version: '12'
 UUIDCast:
   desired: |
