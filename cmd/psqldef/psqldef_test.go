@@ -1411,6 +1411,29 @@ func TestPsqldefConfigIncludesTargetSchema(t *testing.T) {
 	assertEquals(t, apply, nothingModified)
 }
 
+func TestPsqldefConfigIncludesTargetSchemaWithEnum(t *testing.T) {
+	resetTestDatabase()
+
+	mustExecuteSQL(`
+        CREATE SCHEMA schema_a;
+        CREATE SCHEMA schema_b;
+    `)
+
+	createTypeA := `CREATE TYPE schema_a.LANG AS ENUM ('en', 'ja');`
+	writeFile("schema.sql", createTypeA)
+
+	writeFile("config_a.yml", "target_schema: schema_a\n")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--config", "config_a.yml")
+	assertEquals(t, apply, applyPrefix+createTypeA+"\n")
+
+	createTypeB := `CREATE TYPE schema_b.LANG AS ENUM ('en', 'ja');`
+	writeFile("schema.sql", createTypeB)
+
+	writeFile("config_b.yml", "target_schema: schema_b\n")
+	apply = assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--config", "config_b.yml")
+	assertEquals(t, apply, applyPrefix+createTypeB+"\n")
+}
+
 func TestPsqldefConfigIncludesSkipTables(t *testing.T) {
 	resetTestDatabase()
 
