@@ -114,3 +114,28 @@ TableOptions:
       id integer PRIMARY KEY,
       data text
     ) STRICT, WITHOUT ROWID;
+ForeignKeyConstraint:
+  desired: |
+    CREATE TABLE artist(
+      artistid    INTEGER PRIMARY KEY,
+      artistname  TEXT
+    );
+    CREATE TABLE track(
+      trackid     INTEGER,
+      trackname   TEXT,
+      trackartist INTEGER REFERENCES artist(artistid)
+    );
+IndependentConstraintDefinition:
+  desired: |
+    CREATE TABLE artist(
+      artistid    INTEGER,
+      artistname  TEXT,
+      PRIMARY KEY(artistid)
+    );
+    CREATE TABLE track(
+      trackid     INTEGER,
+      trackname   TEXT,
+      trackartist INTEGER,
+      CHECK (trackid > 0),
+      FOREIGN KEY(trackartist) REFERENCES artist(artistid)
+    );
