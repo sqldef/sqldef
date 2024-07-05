@@ -624,7 +624,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	// Examine each foreign key
 	for _, desiredForeignKey := range desired.table.foreignKeys {
-		if len(desiredForeignKey.constraintName) == 0 {
+		if len(desiredForeignKey.constraintName) == 0 && g.mode != GeneratorModeSQLite3 {
 			return ddls, fmt.Errorf(
 				"Foreign key without constraint symbol was found in table '%s' (index name: '%s', columns: %v). "+
 					"Specify the constraint symbol to identify the foreign key.",
