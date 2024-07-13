@@ -196,12 +196,12 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 }
 
 func (d *PostgresDatabase) schemas() ([]string, error) {
-	rows, err := d.db.Query(fmt.Sprintf(`
+	rows, err := d.db.Query(`
 		SELECT schema_name
 		FROM information_schema.schemata
 		WHERE schema_name NOT LIKE 'pg_%%'
-		AND schema_name not in ('information_schema', '%s');
-	`, d.GetDefaultSchema()))
+		AND schema_name not in ('information_schema', 'public');
+	`)
 	if err != nil {
 		return nil, err
 	}
