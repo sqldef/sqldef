@@ -43,7 +43,7 @@ func TestApply(t *testing.T) {
 			}
 
 			// Initialize the database with test.Current
-			resetTestDatabase()
+			resetTestDatabaseWithUser(test.User)
 			var db database.Database
 			var err error
 			// PostgreSQL doesn't allow DROP DATABASE when there's a connection
@@ -894,6 +894,8 @@ func TestPsqldefCheckConstraintInSchema(t *testing.T) {
 		`ALTER TABLE "test"."dummy" ADD CONSTRAINT dummy_max_value_check CHECK (max_value > 0);`+"\n"+
 		`ALTER TABLE "test"."dummy" ADD CONSTRAINT "min_max" CHECK (min_value < max_value);`+"\n")
 	assertExportOutput(t, stripHeredoc(`
+		CREATE SCHEMA "test";
+
 		CREATE TABLE "test"."dummy" (
 		    "min_value" integer CONSTRAINT dummy_min_value_check CHECK (min_value > 0),
 		    "max_value" integer CONSTRAINT dummy_max_value_check CHECK (max_value > 0),
@@ -1148,6 +1150,8 @@ func TestPsqldefAddUniqueConstraintToTableInNonpublicSchema(t *testing.T) {
 	alterTable := "ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);"
 	assertApplyOutput(t, createTable+"\n"+alterTable, applyPrefix+alterTable+"\n")
 	assertExportOutput(t, stripHeredoc(`
+		CREATE SCHEMA "test";
+
 		CREATE TABLE "test"."dummy" (
 		    "a" integer,
 		    "b" integer
@@ -1162,6 +1166,8 @@ func TestPsqldefAddUniqueConstraintToTableInNonpublicSchema(t *testing.T) {
 		alterTable+"\n"+
 		`ALTER TABLE "test"."dummy" DROP CONSTRAINT "a_b_uniq";`+"\n")
 	assertExportOutput(t, stripHeredoc(`
+		CREATE SCHEMA "test";
+
 		CREATE TABLE "test"."dummy" (
 		    "a" integer,
 		    "b" integer
@@ -1526,12 +1532,18 @@ func assertEquals(t *testing.T, actual string, expected string) {
 }
 
 func resetTestDatabase() {
-	testutils.MustExecute("psql", "-Upostgres", "-c", "DO $$ BEGIN IF NOT EXISTS (SELECT * FROM pg_roles WHERE rolname = 'psqldef_user') THEN CREATE ROLE psqldef_user WITH LOGIN; END IF; END $$;")
-	testutils.MustExecute("psql", "-Upostgres", "-c", "ALTER ROLE psqldef_user SET search_path TO foo, public")
 	testutils.MustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("DROP DATABASE IF EXISTS %s;", databaseName))
 	testutils.MustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("CREATE DATABASE %s;", databaseName))
-	testutils.MustExecute("psql", "-Upostgres", "-dpsqldef_test", "-c", "GRANT ALL ON DATABASE psqldef_test TO psqldef_user")
-	testutils.MustExecute("psql", "-Upsqldef_user", "-dpsqldef_test", "-c", "CREATE SCHEMA foo")
+}
+
+func resetTestDatabaseWithUser(user string) {
+	resetTestDatabase()
+	if user != "" {
+		testutils.MustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("DO $$ BEGIN IF NOT EXISTS (SELECT * FROM pg_roles WHERE rolname = '%s') THEN CREATE ROLE %s WITH LOGIN; END IF; END $$;", user, user))
+		testutils.MustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("ALTER ROLE %s SET search_path TO foo, public", user))
+		testutils.MustExecute("psql", "-Upostgres", "-dpsqldef_test", "-c", fmt.Sprintf("GRANT ALL ON DATABASE psqldef_test TO %s", user))
+		testutils.MustExecute("psql", fmt.Sprintf("-U%s", user), "-dpsqldef_test", "-c", "CREATE SCHEMA foo")
+	}
 }
 
 func writeFile(path string, content string) {

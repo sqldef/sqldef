@@ -80,6 +80,8 @@ func (p PostgresParser) parseStmt(node *pgquery.Node) (parser.Statement, error) 
 		return p.parseExtensionStmt(stmt.CreateExtensionStmt)
 	case *pgquery.Node_AlterTableStmt:
 		return p.parseAlterTableStmt(stmt.AlterTableStmt)
+	case *pgquery.Node_CreateSchemaStmt:
+		return p.parseCreateSchemaStmt(stmt.CreateSchemaStmt)
 	default:
 		return nil, fmt.Errorf("unknown node in parseStmt: %#v", stmt)
 	}
@@ -1171,6 +1173,15 @@ func (p PostgresParser) parseCheckConstraint(constraint *pgquery.Constraint) (*p
 		Where:          *parser.NewWhere(parser.WhereStr, expr),
 		ConstraintName: parser.NewColIdent(constraint.Conname),
 		NoInherit:      parser.BoolVal(constraint.IsNoInherit),
+	}, nil
+}
+
+func (p PostgresParser) parseCreateSchemaStmt(stmt *pgquery.CreateSchemaStmt) (parser.Statement, error) {
+	return &parser.DDL{
+		Action: parser.CreateSchema,
+		Schema: &parser.Schema{
+			Name: stmt.Schemaname,
+		},
 	}, nil
 }
 

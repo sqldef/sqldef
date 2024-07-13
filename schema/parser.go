@@ -176,6 +176,11 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				statement: ddl,
 				extension: *stmt.Extension,
 			}, nil
+		} else if stmt.Action == parser.CreateSchema {
+			return &Schema{
+				statement: ddl,
+				schema:    *stmt.Schema,
+			}, nil
 		} else {
 			return nil, fmt.Errorf(
 				"unsupported type of DDL action '%s': %s",
