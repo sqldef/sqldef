@@ -36,6 +36,12 @@ func NewDatabase(config database.Config) (database.Database, error) {
 func (d *PostgresDatabase) DumpDDLs() (string, error) {
 	var ddls []string
 
+	schemaDDLs, err := d.schemas()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, schemaDDLs...)
+
 	extensionDDLs, err := d.extensions()
 	if err != nil {
 		return "", err
@@ -185,6 +191,33 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 		for _, indexDef := range indexDefs {
 			ddls = append(ddls, fmt.Sprintf("%s;", indexDef))
 		}
+	}
+	return ddls, nil
+}
+
+func (d *PostgresDatabase) schemas() ([]string, error) {
+	rows, err := d.db.Query(fmt.Sprintf(`
+		SELECT schema_name
+		FROM information_schema.schemata
+		WHERE schema_name NOT LIKE 'pg_%%'
+		AND schema_name not in ('information_schema', '%s');
+	`, d.GetDefaultSchema()))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ddls []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		ddls = append(
+			ddls, fmt.Sprintf(
+				"CREATE SCHEMA %s;", escapeSQLName(name),
+			),
+		)
 	}
 	return ddls, nil
 }
