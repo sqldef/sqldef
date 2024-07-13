@@ -279,14 +279,18 @@ func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	tableExclusionConstraints, err := d.getTableExclusionConstraints(table)
+	if err != nil {
+		return "", err
+	}
 	comments, err := d.getComments(table)
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreignDefs, policyDefs, comments, checkConstraints, uniqueConstraints, d.GetDefaultSchema()), nil
+	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreignDefs, policyDefs, comments, checkConstraints, uniqueConstraints, tableExclusionConstraints, d.GetDefaultSchema()), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreignDefs, policyDefs, comments []string, checkConstraints, uniqueConstraints map[string]string, defaultSchema string) string {
+func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreignDefs, policyDefs, comments []string, checkConstraints, uniqueConstraints, tableExclusionConstraints map[string]string, defaultSchema string) string {
 	var queryBuilder strings.Builder
 	schema, table := splitTableName(table, defaultSchema)
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", escapeSQLName(schema), escapeSQLName(table))
@@ -314,6 +318,10 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 		fmt.Fprintf(&queryBuilder, "PRIMARY KEY (\"%s\")", strings.Join(pkeyCols, "\", \""))
 	}
 	for constraintName, constraintDef := range checkConstraints {
+		fmt.Fprint(&queryBuilder, ",\n"+indent)
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", constraintName, constraintDef)
+	}
+	for constraintName, constraintDef := range tableExclusionConstraints {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
 		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", constraintName, constraintDef)
 	}
@@ -569,6 +577,35 @@ func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]st
 			escapeSQLName(schema), escapeSQLName(table),
 			escapeSQLName(constraintName), constraintDef,
 		)
+	}
+
+	return result, nil
+}
+
+func (d *PostgresDatabase) getTableExclusionConstraints(tableName string) (map[string]string, error) {
+	const query = `SELECT con.conname, pg_get_constraintdef(con.oid, true)
+	FROM   pg_constraint con
+	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+	JOIN   pg_class cls ON cls.oid = con.conrelid
+	WHERE  con.contype = 'x'
+	AND    nsp.nspname = $1
+	AND    cls.relname = $2;`
+
+	result := map[string]string{}
+	schema, table := splitTableName(tableName, d.GetDefaultSchema())
+	rows, err := d.db.Query(query, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var constraintName, constraintDef string
+		err = rows.Scan(&constraintName, &constraintDef)
+		if err != nil {
+			return nil, err
+		}
+		result[constraintName] = constraintDef
 	}
 
 	return result, nil
