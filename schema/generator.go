@@ -106,7 +106,11 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 
 // Main part of DDL genearation
 func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
-	ddls := []string{}
+	// These variables are used to control the output order of the DDL.
+	// `CREATE SCHEMA` should execute first, and DDLs that add indexes and foreign keys should execute last.
+	// Other ddls are stored in interDDLs.
+	createSchemaDDLs := []string{}
+	interDDLs := []string{}
 	indexDDLs := []string{}
 	foreignKeyDDLs := []string{}
 
@@ -118,13 +122,13 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				// Table already exists, guess required DDLs.
 				tableDDLs, err := g.generateDDLsForCreateTable(*currentTable, *desired)
 				if err != nil {
-					return ddls, err
+					return nil, err
 				}
-				ddls = append(ddls, tableDDLs...)
+				interDDLs = append(interDDLs, tableDDLs...)
 				mergeTable(currentTable, desired.table)
 			} else {
 				// Table not found, create table.
-				ddls = append(ddls, desired.statement)
+				interDDLs = append(interDDLs, desired.statement)
 				table := desired.table // copy table
 				g.currentTables = append(g.currentTables, &table)
 			}
@@ -133,68 +137,71 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		case *CreateIndex:
 			idxDDLs, err := g.generateDDLsForCreateIndex(desired.tableName, desired.index, "CREATE INDEX", ddl.Statement())
 			if err != nil {
-				return ddls, err
+				return nil, err
 			}
 			indexDDLs = append(indexDDLs, idxDDLs...)
 		case *AddIndex:
 			idxDDLs, err := g.generateDDLsForCreateIndex(desired.tableName, desired.index, "ALTER TABLE", ddl.Statement())
 			if err != nil {
-				return ddls, err
+				return nil, err
 			}
 			indexDDLs = append(indexDDLs, idxDDLs...)
 		case *AddForeignKey:
 			fkeyDDLs, err := g.generateDDLsForAddForeignKey(desired.tableName, desired.foreignKey, "ALTER TABLE", ddl.Statement())
 			if err != nil {
-				return ddls, err
+				return nil, err
 			}
 			foreignKeyDDLs = append(foreignKeyDDLs, fkeyDDLs...)
 		case *AddPolicy:
 			policyDDLs, err := g.generateDDLsForCreatePolicy(desired.tableName, desired.policy, "CREATE POLICY", ddl.Statement())
 			if err != nil {
-				return ddls, err
+				return nil, err
 			}
-			ddls = append(ddls, policyDDLs...)
+			interDDLs = append(interDDLs, policyDDLs...)
 		case *View:
 			viewDDLs, err := g.generateDDLsForCreateView(desired.name, desired)
 			if err != nil {
-				return ddls, err
+				return nil, err
 			}
-			ddls = append(ddls, viewDDLs...)
+			interDDLs = append(interDDLs, viewDDLs...)
 		case *Trigger:
 			triggerDDLs, err := g.generateDDLsForCreateTrigger(desired.name, desired)
 			if err != nil {
-				return ddls, err
+				return nil, err
 			}
-			ddls = append(ddls, triggerDDLs...)
+			interDDLs = append(interDDLs, triggerDDLs...)
 		case *Type:
 			typeDDLs, err := g.generateDDLsForCreateType(desired)
 			if err != nil {
-				return ddls, err
+				return nil, err
 			}
-			ddls = append(ddls, typeDDLs...)
+			interDDLs = append(interDDLs, typeDDLs...)
 		case *Comment:
 			commentDDLs, err := g.generateDDLsForComment(desired)
 			if err != nil {
-				return ddls, err
+				return nil, err
 			}
-			ddls = append(ddls, commentDDLs...)
+			interDDLs = append(interDDLs, commentDDLs...)
 		case *Extension:
 			extensionDDLs, err := g.generateDDLsForExtension(desired)
 			if err != nil {
-				return ddls, err
+				return nil, err
 			}
-			ddls = append(ddls, extensionDDLs...)
+			interDDLs = append(interDDLs, extensionDDLs...)
 		case *Schema:
 			schemaDDLs, err := g.generateDDLsForSchema(desired)
 			if err != nil {
-				return ddls, err
+				return nil, err
 			}
-			ddls = append(ddls, schemaDDLs...)
+			createSchemaDDLs = append(createSchemaDDLs, schemaDDLs...)
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", desired)
 		}
 	}
 
+	ddls := []string{}
+	ddls = append(ddls, createSchemaDDLs...)
+	ddls = append(ddls, interDDLs...)
 	ddls = append(ddls, indexDDLs...)
 	ddls = append(ddls, foreignKeyDDLs...)
 
