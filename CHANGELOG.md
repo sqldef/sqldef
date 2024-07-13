@@ -1,3 +1,7 @@
+## v0.17.13
+
+- psqldef: Fix create schema conditions [#543](https://github.com/sqldef/sqldef/pull/543)
+
 ## v0.17.12
 
 - Allow multiple targets for target_schema config [#540](https://github.com/sqldef/sqldef/pull/540)
