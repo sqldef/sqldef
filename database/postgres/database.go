@@ -97,7 +97,7 @@ func (d *PostgresDatabase) tableNames() ([]string, error) {
 		if err := rows.Scan(&schema, &name); err != nil {
 			return nil, err
 		}
-		if d.config.TargetSchema != "" && d.config.TargetSchema != schema {
+		if d.config.TargetSchema != nil && !containsString(d.config.TargetSchema, schema) {
 			continue
 		}
 		tables = append(tables, schema+"."+name)
@@ -890,4 +890,13 @@ func splitTableName(table string, defaultSchema string) (string, string) {
 		table = schemaTable[1]
 	}
 	return schema, table
+}
+
+func containsString(strs []string, str string) bool {
+	for _, s := range strs {
+		if s == str {
+			return true
+		}
+	}
+	return false
 }

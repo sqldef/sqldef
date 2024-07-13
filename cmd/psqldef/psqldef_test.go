@@ -1409,6 +1409,24 @@ func TestPsqldefConfigIncludesTargetSchema(t *testing.T) {
 
 	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--config", "config.yml")
 	assertEquals(t, apply, nothingModified)
+
+	// multiple targets
+	mustExecuteSQL(`
+        CREATE SCHEMA schema_c;
+        CREATE TABLE schema_c.users (id bigint PRIMARY KEY);
+    `)
+
+	writeFile("schema.sql", `
+        CREATE TABLE schema_a.users (id bigint PRIMARY KEY);
+        CREATE TABLE schema_b.users (id bigint PRIMARY KEY);
+    `)
+
+	writeFile("config.yml", `target_schema: |
+  schema_a
+  schema_b`)
+
+	apply = assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--config", "config.yml")
+	assertEquals(t, apply, nothingModified)
 }
 
 func TestPsqldefConfigIncludesSkipTables(t *testing.T) {
