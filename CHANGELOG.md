@@ -1,3 +1,9 @@
+## v0.17.12
+
+- Allow multiple targets for target_schema config [#540](https://github.com/sqldef/sqldef/pull/540)
+- psqldef: Support CREATE SCHEMA [#541](https://github.com/sqldef/sqldef/pull/541)
+- psqldef: Output CREATE SCHEMA first of DDL [#542](https://github.com/sqldef/sqldef/pull/542)
+
 ## v0.17.11
 
 - mysqldef: Add `lock` option to `--config` [#527](https://github.com/sqldef/sqldef/pull/527)
