@@ -1041,7 +1041,7 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 		default:
 			return nil, fmt.Errorf("unhandled default CollateExpr node: %#v", expr)
 		}
-	case *parser.FuncExpr:
+	case *parser.ComparisonExpr, *parser.FuncExpr:
 		return &parser.DefaultDefinition{
 			ValueOrExpression: parser.DefaultValueOrExpression{
 				Expr: expr,
@@ -1220,7 +1220,15 @@ func shouldDeleteTypeCast(sourceNode *pgquery.Node, targetType parser.ColumnType
 			return false
 		}
 		// Delete type cast from '[0-9]'::text
-		return true
+		if targetType.Type == "text" {
+			return true
+		}
+		// Delete type cast from '2022-01-01'::date
+		if targetType.Type == "date" {
+			return true
+		}
+		// Do not delete type cast from '1 day'::interval
+		return false
 	case *pgquery.Node_AArrayExpr, *pgquery.Node_TypeCast:
 		// Delete type cast from ARRAY[1,2,3]::integer[]
 		return true

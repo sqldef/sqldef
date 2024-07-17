@@ -984,6 +984,17 @@ RemoveDefaultExpression:
     );
   output: |
     ALTER TABLE "public"."users" ALTER COLUMN "key" DROP DEFAULT;
+ChangeDefaultExpressionWithAddition:
+  current: |
+    CREATE TABLE public.foo (
+      expires_at timestamp with time zone NOT NULL DEFAULT (CURRENT_TIMESTAMP + '1 day'::interval)
+    );
+  desired: |
+    CREATE TABLE public.foo (
+      expires_at timestamp with time zone NOT NULL DEFAULT (CURRENT_TIMESTAMP + '3 days'::interval)
+    );
+  output: |
+    ALTER TABLE "public"."foo" ALTER COLUMN "expires_at" SET DEFAULT current_timestamp + '3 days'::interval;
 CreateTableAddAbsentForeignKey:
   current: |
     CREATE TABLE users (
