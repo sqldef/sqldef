@@ -1,3 +1,8 @@
+## v0.17.14
+
+- psqldef: Treat 'timestamptz' the same as 'timestamp with time zone' [#545](https://github.com/sqldef/sqldef/pull/545)
+- psqldef: Support '+' operator with intervals in column DEFAULT expressions [#544](https://github.com/sqldef/sqldef/pull/544)
+
 ## v0.17.13
 
 - psqldef: Fix create schema conditions [#543](https://github.com/sqldef/sqldef/pull/543)
