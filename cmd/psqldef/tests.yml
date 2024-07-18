@@ -924,6 +924,36 @@ ChangeTimezone:
     ALTER TABLE "public"."test" ALTER COLUMN "time_at2" TYPE time;
     ALTER TABLE "public"."test" ALTER COLUMN "time_at3" TYPE time WITH TIME ZONE;
     ALTER TABLE "public"."test" ALTER COLUMN "time_at4" TYPE time WITH TIME ZONE;
+ChangeTimezoneSyntax:
+  current: |
+    CREATE TABLE test (
+      timestamp_wtz_wtz     timestamp with time zone,
+      timestamp_wtz_tz      timestamp with time zone,
+      timestamp_wtz_plain   timestamp with time zone,
+      timestamp_tz_wtz      timestamptz,
+      timestamp_tz_tz       timestamptz,
+      timestamp_tz_plain    timestamptz,
+      timestamp_plain_wtz   timestamp,
+      timestamp_plain_tz    timestamp,
+      timestamp_plain_plain timestamp
+    );
+  desired: |
+    CREATE TABLE test (
+      timestamp_wtz_wtz     timestamp with time zone,
+      timestamp_wtz_tz      timestamptz,
+      timestamp_wtz_plain   timestamp,
+      timestamp_tz_wtz      timestamp with time zone,
+      timestamp_tz_tz       timestamptz,
+      timestamp_tz_plain    timestamp,
+      timestamp_plain_wtz   timestamp with time zone,
+      timestamp_plain_tz    timestamptz,
+      timestamp_plain_plain timestamp
+    );
+  output: |
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_wtz_plain" TYPE timestamp;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_tz_plain" TYPE timestamp;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_plain_wtz" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_plain_tz" TYPE timestamp WITH TIME ZONE;
 CreateTableAddTimestampColumn:
   current: |
     CREATE TABLE users (
