@@ -51,6 +51,15 @@ CreateTableWithDefault:
       joined_at timestamp with time zone NOT NULL DEFAULT '0001-01-01 00:00:00'::timestamp without time zone,
       created_at timestamp with time zone DEFAULT now()
     );
+CreateTableWithDefaultContainingQuote:
+  current: |
+    CREATE TABLE test ();
+  desired: |
+    CREATE TABLE test (
+      thing text default 'it''s free real estate'
+    );
+  output: |
+    ALTER TABLE "public"."test" ADD COLUMN "thing" text DEFAULT 'it''s free real estate';
 CreateTableChangeDefaultBoolean:
   current: |
     CREATE TABLE test (
@@ -524,6 +533,20 @@ CommentOnNonStandardDefaultSchema:
     COMMENT ON TABLE foo.users is 'users table updated';
     COMMENT ON COLUMN foo.users.id is 'users id';
   user: psqldef_user
+CommentContainingQuote:
+  current: |
+    CREATE TABLE public.test (
+      email text
+    );
+  desired: |
+    CREATE TABLE public.test (
+      email text
+    );
+    COMMENT ON TABLE public.test is 'World''s best table';
+    COMMENT ON COLUMN public.test.email is 'The user''s contact email address.';
+  output: |
+    COMMENT ON TABLE public.test is 'World''s best table';
+    COMMENT ON COLUMN public.test.email is 'The user''s contact email address.';
 CreateViewCast:
   current: |
     CREATE TABLE "public"."hoge" (
