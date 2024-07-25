@@ -18,7 +18,6 @@ import (
 )
 
 type TestCase struct {
-	Init       string  // default: no initialization
 	Current    string  // default: empty schema
 	Desired    string  // default: empty schema
 	Output     *string // default: use Desired as Output
@@ -69,13 +68,6 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	}
 	if test.MaxVersion != "" && compareVersion(t, version, test.MaxVersion) > 0 {
 		t.Skipf("Version '%s' is larger than max_version '%s'", version, test.MaxVersion)
-	}
-
-	if test.Init != "" {
-		_, err := db.DB().Exec(test.Init)
-		if err != nil {
-			t.Fatal(err)
-		}
 	}
 
 	// Prepare current
