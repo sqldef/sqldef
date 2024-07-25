@@ -416,6 +416,7 @@ type DDL struct {
 	Type          *Type
 	Comment       *Comment
 	Extension     *Extension
+	Schema        *Schema
 }
 
 type DDLAction int
@@ -433,6 +434,7 @@ const (
 	CreateTrigger
 	CreateType
 	CreateView
+	CreateSchema
 )
 
 // View types
@@ -872,6 +874,10 @@ type Policy struct {
 }
 
 type Extension struct {
+	Name string
+}
+
+type Schema struct {
 	Name string
 }
 

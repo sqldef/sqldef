@@ -80,6 +80,8 @@ func (p PostgresParser) parseStmt(node *pgquery.Node) (parser.Statement, error) 
 		return p.parseExtensionStmt(stmt.CreateExtensionStmt)
 	case *pgquery.Node_AlterTableStmt:
 		return p.parseAlterTableStmt(stmt.AlterTableStmt)
+	case *pgquery.Node_CreateSchemaStmt:
+		return p.parseCreateSchemaStmt(stmt.CreateSchemaStmt)
 	default:
 		return nil, fmt.Errorf("unknown node in parseStmt: %#v", stmt)
 	}
@@ -1039,7 +1041,7 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 		default:
 			return nil, fmt.Errorf("unhandled default CollateExpr node: %#v", expr)
 		}
-	case *parser.FuncExpr:
+	case *parser.ComparisonExpr, *parser.FuncExpr:
 		return &parser.DefaultDefinition{
 			ValueOrExpression: parser.DefaultValueOrExpression{
 				Expr: expr,
@@ -1069,40 +1071,48 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType
 		}
 	}
 
-	if len(typeNames) == 1 {
-		columnType.Type = typeNames[0]
-	} else if len(typeNames) == 2 {
-		if typeNames[0] == "pg_catalog" {
-			switch typeNames[1] {
-			case "int2":
-				columnType.Type = "smallint"
-			case "int4":
-				columnType.Type = "integer"
-			case "int8":
-				columnType.Type = "bigint"
-			case "float4":
-				columnType.Type = "real"
-			case "float8":
-				columnType.Type = "double precision"
-			case "bool":
+	if len(typeNames) == 1 || (len(typeNames) == 2 && typeNames[0] == "pg_catalog") {
+		typeName := typeNames[len(typeNames)-1]
+		switch typeName {
+		case "int2":
+			columnType.Type = "smallint"
+		case "int4":
+			columnType.Type = "integer"
+		case "int8":
+			columnType.Type = "bigint"
+		case "float4":
+			columnType.Type = "real"
+		case "float8":
+			columnType.Type = "double precision"
+		case "bool":
+			if len(typeNames) == 1 {
+				// For test compatibility, keep bool as bool.
+				// TODO: Delete this exception.
+				columnType.Type = typeName
+			} else {
 				columnType.Type = "boolean"
-			case "bpchar":
-				columnType.Type = "character"
-			case "boolean", "varchar", "interval", "numeric", "timestamp", "time": // TODO: use this pattern more, fixing failed tests as well
-				columnType.Type = typeNames[1]
-			case "timetz":
-				columnType.Type = "time"
-				columnType.Timezone = true
-			case "timestamptz":
-				columnType.Type = "timestamp"
-				columnType.Timezone = true
-			default:
-				return columnType, fmt.Errorf("unhandled type in parseTypeName: %s", typeNames[1])
 			}
-		} else {
-			columnType.References = typeNames[0] + "."
-			columnType.Type = typeNames[1]
+		case "bpchar":
+			columnType.Type = "character"
+		case "boolean", "varchar", "interval", "numeric", "timestamp", "time": // TODO: use this pattern more, fixing failed tests as well
+			columnType.Type = typeName
+		case "timetz":
+			columnType.Type = "time"
+			columnType.Timezone = true
+		case "timestamptz":
+			columnType.Type = "timestamp"
+			columnType.Timezone = true
+		default:
+			if len(typeNames) == 2 {
+				return columnType, fmt.Errorf("unhandled type in parseTypeName: %s", typeName)
+			} else {
+				// TODO: Whitelist types explicitly. We're missing 'json' and 'text' at least.
+				columnType.Type = typeName
+			}
 		}
+	} else if len(typeNames) == 2 {
+		columnType.References = typeNames[0] + "."
+		columnType.Type = typeNames[1]
 	} else {
 		return columnType, fmt.Errorf("unexpected length in parseTypeName: %d", len(typeNames))
 	}
@@ -1174,6 +1184,15 @@ func (p PostgresParser) parseCheckConstraint(constraint *pgquery.Constraint) (*p
 	}, nil
 }
 
+func (p PostgresParser) parseCreateSchemaStmt(stmt *pgquery.CreateSchemaStmt) (parser.Statement, error) {
+	return &parser.DDL{
+		Action: parser.CreateSchema,
+		Schema: &parser.Schema{
+			Name: stmt.Schemaname,
+		},
+	}, nil
+}
+
 // This is a workaround to handle cases where PostgreSQL automatically adds or removes type casting.
 //
 // Example:
@@ -1209,7 +1228,15 @@ func shouldDeleteTypeCast(sourceNode *pgquery.Node, targetType parser.ColumnType
 			return false
 		}
 		// Delete type cast from '[0-9]'::text
-		return true
+		if targetType.Type == "text" {
+			return true
+		}
+		// Delete type cast from '2022-01-01'::date
+		if targetType.Type == "date" {
+			return true
+		}
+		// Do not delete type cast from '1 day'::interval
+		return false
 	case *pgquery.Node_AArrayExpr, *pgquery.Node_TypeCast:
 		// Delete type cast from ARRAY[1,2,3]::integer[]
 		return true

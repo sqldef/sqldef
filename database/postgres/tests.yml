@@ -204,3 +204,14 @@ CreateIndexWithCoalesce:
       user_name TEXT
     );
     CREATE INDEX create_index_with_function_call ON users (name, COALESCE(user_name, 'NO_NAME'::TEXT));
+
+CreateSchema:
+  sql: |
+    CREATE SCHEMA foo;
+    CREATE SCHEMA IF NOT EXISTS bar;
+
+MathInDefault:
+  sql: |
+    CREATE TABLE public.foo (
+      expires_at timestamp with time zone NOT NULL DEFAULT (CURRENT_TIMESTAMP + '1 day'::interval)
+    )

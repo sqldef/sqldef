@@ -36,6 +36,12 @@ func NewDatabase(config database.Config) (database.Database, error) {
 func (d *PostgresDatabase) DumpDDLs() (string, error) {
 	var ddls []string
 
+	schemaDDLs, err := d.schemas()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, schemaDDLs...)
+
 	extensionDDLs, err := d.extensions()
 	if err != nil {
 		return "", err
@@ -97,7 +103,7 @@ func (d *PostgresDatabase) tableNames() ([]string, error) {
 		if err := rows.Scan(&schema, &name); err != nil {
 			return nil, err
 		}
-		if d.config.TargetSchema != "" && d.config.TargetSchema != schema {
+		if d.config.TargetSchema != nil && !containsString(d.config.TargetSchema, schema) {
 			continue
 		}
 		tables = append(tables, schema+"."+name)
@@ -185,6 +191,33 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 		for _, indexDef := range indexDefs {
 			ddls = append(ddls, fmt.Sprintf("%s;", indexDef))
 		}
+	}
+	return ddls, nil
+}
+
+func (d *PostgresDatabase) schemas() ([]string, error) {
+	rows, err := d.db.Query(`
+		SELECT schema_name
+		FROM information_schema.schemata
+		WHERE schema_name NOT LIKE 'pg_%%'
+		AND schema_name not in ('information_schema', 'public');
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ddls []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		ddls = append(
+			ddls, fmt.Sprintf(
+				"CREATE SCHEMA %s;", escapeSQLName(name),
+			),
+		)
 	}
 	return ddls, nil
 }
@@ -894,4 +927,13 @@ func splitTableName(table string, defaultSchema string) (string, string) {
 		table = schemaTable[1]
 	}
 	return schema, table
+}
+
+func containsString(strs []string, str string) bool {
+	for _, s := range strs {
+		if s == str {
+			return true
+		}
+	}
+	return false
 }

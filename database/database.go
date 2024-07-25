@@ -28,13 +28,13 @@ type Config struct {
 	SslCa                      string
 
 	// Only PostgreSQL
-	TargetSchema string
+	TargetSchema []string
 }
 
 type GeneratorConfig struct {
 	TargetTables []string
 	SkipTables   []string
-	TargetSchema string
+	TargetSchema []string
 	Algorithm    string
 	Lock         string
 }
@@ -121,9 +121,9 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 		skipTables = strings.Split(strings.Trim(config.SkipTables, "\n"), "\n")
 	}
 
-	var targetSchema string
+	var targetSchema []string
 	if config.TargetSchema != "" {
-		targetSchema = strings.Trim(config.TargetSchema, "\n")
+		targetSchema = strings.Split(strings.Trim(config.TargetSchema, "\n"), "\n")
 	}
 
 	var algorithm string
