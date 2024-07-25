@@ -163,10 +163,9 @@ AlterTypeAddValue:
     ALTER TYPE public.eventtype ADD VALUE 'update_reactionslot';
   min_version: '12'
 AlterTypeAddValueWithSameTypeNameInDifferentSchema:
-  init: |
+  current: |
     CREATE SCHEMA schema1;
     CREATE SCHEMA schema2;
-  current: |
     CREATE TYPE schema1.lang AS ENUM (
       'ja',
       'en'
