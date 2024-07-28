@@ -1,3 +1,8 @@
+## v0.17.15
+
+- psqldef: Escape ' in strings [#546](https://github.com/sqldef/sqldef/pull/546)
+- psqldef: Recognize schema for types [#532](https://github.com/sqldef/sqldef/pull/532)
+
 ## v0.17.14
 
 - psqldef: Treat 'timestamptz' the same as 'timestamp with time zone' [#545](https://github.com/sqldef/sqldef/pull/545)
