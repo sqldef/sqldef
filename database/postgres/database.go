@@ -11,6 +11,7 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/sqldef/sqldef/database"
+	schemaLib "github.com/sqldef/sqldef/schema"
 )
 
 const indent = "    "
@@ -823,7 +824,7 @@ func (d *PostgresDatabase) getComments(table string) ([]string, error) {
 		if err := tableRows.Scan(&comment); err != nil {
 			return nil, err
 		}
-		ddls = append(ddls, fmt.Sprintf("COMMENT ON TABLE \"%s\".\"%s\" IS '%s';", schema, table, comment))
+		ddls = append(ddls, fmt.Sprintf("COMMENT ON TABLE \"%s\".\"%s\" IS %s;", schema, table, schemaLib.StringConstant(comment)))
 	}
 
 	// Column comments
@@ -851,7 +852,7 @@ func (d *PostgresDatabase) getComments(table string) ([]string, error) {
 		if err := columnRows.Scan(&columnName, &comment); err != nil {
 			return nil, err
 		}
-		ddls = append(ddls, fmt.Sprintf("COMMENT ON COLUMN \"%s\".\"%s\".\"%s\" IS '%s';", schema, table, columnName, comment))
+		ddls = append(ddls, fmt.Sprintf("COMMENT ON COLUMN \"%s\".\"%s\".\"%s\" IS %s;", schema, table, columnName, schemaLib.StringConstant(comment)))
 	}
 
 	return ddls, nil

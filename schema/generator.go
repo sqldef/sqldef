@@ -1168,6 +1168,7 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 	}
 
 	if column.comment != nil {
+		// TODO: Should this use StringConstant?
 		definition += fmt.Sprintf("COMMENT '%s' ", string(column.comment.raw))
 	}
 
@@ -2162,7 +2163,7 @@ func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinitio
 		defaultVal := defaultDefinition.value
 		switch defaultVal.valueType {
 		case ValueTypeStr:
-			return fmt.Sprintf("DEFAULT '%s'", defaultVal.strVal), nil
+			return fmt.Sprintf("DEFAULT %s", StringConstant(defaultVal.strVal)), nil
 		case ValueTypeBool:
 			return fmt.Sprintf("DEFAULT %s", defaultVal.strVal), nil
 		case ValueTypeInt:
@@ -2284,4 +2285,9 @@ func isValidLock(lock string) bool {
 	default:
 		return false
 	}
+}
+
+// Escape a string and add quotes to form a legal SQL string constant.
+func StringConstant(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
