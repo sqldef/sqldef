@@ -42,7 +42,7 @@ jobs:
           go-version: 1.19
       - uses: actions/checkout@v4
 
-      - run: docker-compose up -d
+      - run: docker compose up -d
         env:
           MYSQL_VERSION: ${{ matrix.mysql_version }}
           POSTGRES_VERSION: ${{ matrix.postgres_version }}
