@@ -1,3 +1,7 @@
+## v0.17.16
+
+- psqldef: Handle truncated auto-generated check constraint names correctly [#547](https://github.com/sqldef/sqldef/pull/547)
+
 ## v0.17.15
 
 - psqldef: Escape ' in strings [#546](https://github.com/sqldef/sqldef/pull/546)
