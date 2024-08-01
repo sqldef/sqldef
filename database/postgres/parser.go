@@ -915,6 +915,12 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 				return nil, nil, err
 			}
 			columnType.Check = check
+			if constraint.Conname == "" {
+				name, truncated := p.absentConstraintName(tableName.Name.String(), columnDef.Colname, "check")
+				if truncated {
+					check.ConstraintName = parser.NewColIdent(name)
+				}
+			}
 		case pgquery.ConstrType_CONSTR_PRIMARY:
 			columnType.KeyOpt = parser.ColumnKeyOption(1)
 		case pgquery.ConstrType_CONSTR_UNIQUE:
@@ -926,7 +932,8 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 			}
 			foreignKey.IndexColumns = []parser.ColIdent{parser.NewColIdent(columnDef.Colname)}
 			if constraint.Conname == "" {
-				foreignKey.ConstraintName = parser.NewColIdent(p.absentConstraintName(tableName.Name.String(), columnDef.Colname))
+				name, _ := p.absentConstraintName(tableName.Name.String(), columnDef.Colname, "fkey")
+				foreignKey.ConstraintName = parser.NewColIdent(name)
 			}
 		case pgquery.ConstrType_CONSTR_ATTR_DEFERRABLE:
 			foreignKey.ConstraintOptions.Deferrable = true
@@ -957,24 +964,24 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 	}, foreignKey, nil
 }
 
-func (p PostgresParser) absentConstraintName(tableName, columnName string) string {
-	if name := fmt.Sprintf("%s_%s_fkey", tableName, columnName); len(name) <= 63 {
-		return name
+func (p PostgresParser) absentConstraintName(tableName, columnName, suffix string) (string, bool) {
+	if name := fmt.Sprintf("%s_%s_%s", tableName, columnName, suffix); len(name) <= 63 {
+		return name, false
 	}
 
-	const tableThreshold, columnThreshold = 29, 28
-	const maxSum = tableThreshold + columnThreshold
+	var tableThreshold, columnThreshold = 33 - len(suffix), 28
+	var maxSum = tableThreshold + columnThreshold
 
 	if len(tableName) <= tableThreshold {
 		columnName = columnName[:maxSum-len(tableName)]
 	} else if len(columnName) <= columnThreshold {
 		tableName = tableName[:maxSum-len(columnName)]
 	} else {
-		tableName = tableName[:tableThreshold-1]
-		columnName = columnName[:columnThreshold-1]
+		tableName = tableName[:tableThreshold]
+		columnName = columnName[:columnThreshold]
 	}
 
-	return fmt.Sprintf("%s_%s_fkey", tableName, columnName)
+	return fmt.Sprintf("%s_%s_%s", tableName, columnName, suffix), true
 }
 
 func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.DefaultDefinition, error) {
