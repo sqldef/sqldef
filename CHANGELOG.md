@@ -1,3 +1,7 @@
+## v0.17.17
+
+- psqldef: Fix target schema condition [#552](https://github.com/sqldef/sqldef/pull/552)
+
 ## v0.17.16
 
 - psqldef: Handle truncated auto-generated check constraint names correctly [#547](https://github.com/sqldef/sqldef/pull/547)
