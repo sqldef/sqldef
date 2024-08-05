@@ -272,7 +272,7 @@ func (d *PostgresDatabase) types() ([]string, error) {
 		if err := rows.Scan(&typeSchema, &typeName, &labels); err != nil {
 			return nil, err
 		}
-		if containsString(d.config.TargetSchema, typeSchema) {
+		if d.config.TargetSchema != nil && !containsString(d.config.TargetSchema, typeSchema) {
 			continue
 		}
 		enumLabels := []string{}
