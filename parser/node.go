@@ -1885,7 +1885,7 @@ func (node *ValuesFuncExpr) Format(buf *nodeBuffer) {
 // SubstrExpr represents a call to SubstrExpr(column, value_expression) or SubstrExpr(column, value_expression,value_expression)
 // also supported syntax SubstrExpr(column from value_expression for value_expression)
 type SubstrExpr struct {
-	Name Expr
+	Name SelectExpr
 	From Expr
 	To   Expr
 }

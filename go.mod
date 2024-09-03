@@ -13,6 +13,7 @@ require (
 	golang.org/x/term v0.23.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.29.5
+	golang.org/x/tools v0.17.0
 )
 
 require (

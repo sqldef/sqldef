@@ -3447,27 +3447,35 @@ function_call_keyword:
   {
     $$ = &ConvertUsingExpr{Expr: $3, Type: $5}
   }
-| SUBSTR openb column_name ',' value_expression closeb
+| SUBSTR openb select_expression ',' value_expression closeb
   {
     $$ = &SubstrExpr{Name: $3, From: $5, To: nil}
   }
-| SUBSTR openb value_expression ',' value_expression ',' value_expression closeb
+| SUBSTR openb select_expression ',' value_expression ',' value_expression closeb
   {
     $$ = &SubstrExpr{Name: $3, From: $5, To: $7}
   }
-| SUBSTR openb column_name FROM value_expression FOR value_expression closeb
-  {
-    $$ = &SubstrExpr{Name: $3, From: $5, To: $7}
-  }
-| SUBSTRING openb column_name ',' value_expression closeb
+| SUBSTR openb select_expression FROM value_expression closeb
   {
     $$ = &SubstrExpr{Name: $3, From: $5, To: nil}
   }
-| SUBSTRING openb column_name ',' value_expression ',' value_expression closeb
+| SUBSTR openb select_expression FROM value_expression FOR value_expression closeb
   {
     $$ = &SubstrExpr{Name: $3, From: $5, To: $7}
   }
-| SUBSTRING openb column_name FROM value_expression FOR value_expression closeb
+| SUBSTRING openb select_expression ',' value_expression closeb
+  {
+    $$ = &SubstrExpr{Name: $3, From: $5, To: nil}
+  }
+| SUBSTRING openb select_expression ',' value_expression ',' value_expression closeb
+  {
+    $$ = &SubstrExpr{Name: $3, From: $5, To: $7}
+  }
+| SUBSTRING openb select_expression FROM value_expression closeb
+  {
+    $$ = &SubstrExpr{Name: $3, From: $5, To: nil}
+  }
+| SUBSTRING openb select_expression FROM value_expression FOR value_expression closeb
   {
     $$ = &SubstrExpr{Name: $3, From: $5, To: $7}
   }
