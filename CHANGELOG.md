@@ -1,3 +1,7 @@
+## v0.17.18
+
+- mysqldef: Fix the parser for substr and substring [#555](https://github.com/sqldef/sqldef/pull/555)
+
 ## v0.17.17
 
 - psqldef: Fix target schema condition [#552](https://github.com/sqldef/sqldef/pull/552)
