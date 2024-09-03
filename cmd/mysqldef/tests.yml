@@ -316,6 +316,15 @@ MysqlComment:
 SubstrExpression:
   desired: |
     CREATE VIEW modelstart_end AS select substr(min(202006),1,4) AS `c`;
+    CREATE VIEW modelstart_end2 AS select substr(min(202006),1) AS `c`;
+    CREATE VIEW modelstart_end3 AS select substr(min(202006) from 1) AS `c`;
+    CREATE VIEW modelstart_end4 AS select substr(min(202006) from 1 for 4) AS `c`;
+SubstringExpression:
+  desired: |
+    CREATE VIEW modelstart_end11 AS select substring(min(202006),1,4) AS `c`;
+    CREATE VIEW modelstart_end12 AS select substring(min(202006),1) AS `c`;
+    CREATE VIEW modelstart_end13 AS select substring(min(202006) from 1) AS `c`;
+    CREATE VIEW modelstart_end14 AS select substring(min(202006) from 1 for 4) AS `c`;
 BooleanValue:
   current: |
     CREATE TABLE bools (

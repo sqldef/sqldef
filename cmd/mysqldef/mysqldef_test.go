@@ -451,6 +451,42 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 		`,
 	))
 	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE test_table (
+		  id int(11) NOT NULL AUTO_INCREMENT,
+		  test_value varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
+		  test_expr varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) STORED NOT NULL,
+  		  data json NOT NULL,
+  		  name varchar(20) GENERATED ALWAYS AS (substr(` + "'" + `test_value` + "'" + `, 1, 2)) STORED NOT NULL,
+		  PRIMARY KEY (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`name`"+`;
+		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (substr(`+"'"+`test_value`+"'"+`, 1, 2)) STORED NOT NULL AFTER `+"`data`"+`;
+		`,
+	))
+	assertApplyOutput(t, createTable, nothingModified)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE test_table (
+		  id int(11) NOT NULL AUTO_INCREMENT,
+		  test_value varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
+		  test_expr varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) STORED NOT NULL,
+  		  data json NOT NULL,
+  		  name varchar(20) GENERATED ALWAYS AS (substring(` + "'" + `test_value` + "'" + `, 2, 2)) STORED NOT NULL,
+		  PRIMARY KEY (id)
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`name`"+`;
+		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (substr(`+"'"+`test_value`+"'"+`, 2, 2)) STORED NOT NULL AFTER `+"`data`"+`;
+		`,
+	))
+	assertApplyOutput(t, createTable, nothingModified)
 }
 
 func TestMysqldefChangeEnumColumn(t *testing.T) {
