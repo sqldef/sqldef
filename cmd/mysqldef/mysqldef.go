@@ -39,6 +39,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		EnableDropTable       bool     `long:"enable-drop-table" description:"Enable destructive changes such as DROP (enable only table drops)"`
 		SkipView              bool     `long:"skip-view" description:"Skip managing views (temporary feature, to be removed later)"`
 		BeforeApply           string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs"`
+		DumpConcurrency       int      `long:"dump-concurrency" description:"Number of concurrent DDL dump queries"`
 		Config                string   `long:"config" description:"YAML file to specify: target_tables, skip_tables, algorithm, lock"`
 		Help                  bool     `long:"help" description:"Show this help"`
 		Version               bool     `long:"version" description:"Show this version"`
@@ -136,6 +137,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		SkipView:                   opts.SkipView,
 		SslMode:                    opts.SslMode,
 		SslCa:                      opts.SslCa,
+		DumpConcurrency:            opts.DumpConcurrency,
 	}
 	return config, &options
 }

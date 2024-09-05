@@ -35,6 +35,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		SkipView        bool     `long:"skip-view" description:"Skip managing views/materialized views"`
 		SkipExtension   bool     `long:"skip-extension" description:"Skip managing extensions"`
 		BeforeApply     string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs"`
+		DumpConcurrency int      `long:"dump-concurrency" description:"Number of concurrent DDL dump queries"`
 		Config          string   `long:"config" description:"YAML file to specify: target_tables, skip_tables, target_schema"`
 		Help            bool     `long:"help" description:"Show this help"`
 		Version         bool     `long:"version" description:"Show this version"`
@@ -107,14 +108,15 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 
 	config := database.Config{
-		DbName:        databaseName,
-		User:          opts.User,
-		Password:      password,
-		Host:          opts.Host,
-		Port:          int(opts.Port),
-		SkipView:      opts.SkipView,
-		SkipExtension: opts.SkipExtension,
-		TargetSchema:  options.Config.TargetSchema,
+		DbName:          databaseName,
+		User:            opts.User,
+		Password:        password,
+		Host:            opts.Host,
+		Port:            int(opts.Port),
+		SkipView:        opts.SkipView,
+		SkipExtension:   opts.SkipExtension,
+		TargetSchema:    options.Config.TargetSchema,
+		DumpConcurrency: opts.DumpConcurrency,
 	}
 	if _, err := os.Stat(config.Host); !os.IsNotExist(err) {
 		config.Socket = config.Host
