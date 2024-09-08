@@ -13,15 +13,14 @@ import (
 )
 
 type Config struct {
-	DbName          string
-	User            string
-	Password        string
-	Host            string
-	Port            int
-	Socket          string
-	SkipView        bool
-	SkipExtension   bool
-	DumpConcurrency int
+	DbName        string
+	User          string
+	Password      string
+	Host          string
+	Port          int
+	Socket        string
+	SkipView      bool
+	SkipExtension bool
 
 	// Only MySQL
 	MySQLEnableCleartextPlugin bool
@@ -30,14 +29,18 @@ type Config struct {
 
 	// Only PostgreSQL
 	TargetSchema []string
+
+	// Only MySQL and PostgreSQL
+	DumpConcurrency int
 }
 
 type GeneratorConfig struct {
-	TargetTables []string
-	SkipTables   []string
-	TargetSchema []string
-	Algorithm    string
-	Lock         string
+	TargetTables    []string
+	SkipTables      []string
+	TargetSchema    []string
+	Algorithm       string
+	Lock            string
+	DumpConcurrency int
 }
 
 // Abstraction layer for multiple kinds of databases
@@ -98,11 +101,12 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 	}
 
 	var config struct {
-		TargetTables string `yaml:"target_tables"`
-		SkipTables   string `yaml:"skip_tables"`
-		TargetSchema string `yaml:"target_schema"`
-		Algorithm    string `yaml:"algorithm"`
-		Lock         string `yaml:"lock"`
+		TargetTables    string `yaml:"target_tables"`
+		SkipTables      string `yaml:"skip_tables"`
+		TargetSchema    string `yaml:"target_schema"`
+		Algorithm       string `yaml:"algorithm"`
+		Lock            string `yaml:"lock"`
+		DumpConcurrency int    `yaml:"dump_concurrency"`
 	}
 
 	dec := yaml.NewDecoder(bytes.NewReader(buf))
@@ -136,10 +140,11 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 		algorithm = strings.Trim(config.Lock, "\n")
 	}
 	return GeneratorConfig{
-		TargetTables: targetTables,
-		SkipTables:   skipTables,
-		TargetSchema: targetSchema,
-		Algorithm:    algorithm,
-		Lock:         config.Lock,
+		TargetTables:    targetTables,
+		SkipTables:      skipTables,
+		TargetSchema:    targetSchema,
+		Algorithm:       algorithm,
+		Lock:            config.Lock,
+		DumpConcurrency: config.DumpConcurrency,
 	}
 }

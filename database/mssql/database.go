@@ -10,7 +10,6 @@ import (
 
 	_ "github.com/microsoft/go-mssqldb"
 	"github.com/sqldef/sqldef/database"
-	"github.com/sqldef/sqldef/util"
 )
 
 const indent = "    "
@@ -50,16 +49,14 @@ func (d *MssqlDatabase) DumpDDLs() (string, error) {
 	}
 
 	tableNames := d.tableNames()
-	tableDDLs, err := util.ConcurrentMapFuncWithError(
-		tableNames,
-		d.config.DumpConcurrency,
-		func(tableName string) (string, error) {
-			return d.dumpTableDDL(tableName)
-		})
-	if err != nil {
-		return "", err
+	for _, tableName := range tableNames {
+		ddl, err := d.dumpTableDDL(tableName)
+		if err != nil {
+			return "", err
+		}
+
+		ddls = append(ddls, ddl)
 	}
-	ddls = append(ddls, tableDDLs...)
 
 	viewDDLs, err := d.views()
 	if err != nil {
