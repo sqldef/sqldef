@@ -10,7 +10,6 @@ import (
 
 	driver "github.com/go-sql-driver/mysql"
 	"github.com/sqldef/sqldef/database"
-	"github.com/sqldef/sqldef/util"
 )
 
 type MysqlDatabase struct {
@@ -44,7 +43,7 @@ func (d *MysqlDatabase) DumpDDLs() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	tableDDLs, err := util.ConcurrentMapFuncWithError(
+	tableDDLs, err := database.ConcurrentMapFuncWithError(
 		tableNames,
 		d.config.DumpConcurrency,
 		func(tableName string) (string, error) {

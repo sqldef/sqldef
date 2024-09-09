@@ -12,7 +12,6 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/sqldef/sqldef/database"
 	schemaLib "github.com/sqldef/sqldef/schema"
-	"github.com/sqldef/sqldef/util"
 )
 
 const indent = "    "
@@ -61,7 +60,7 @@ func (d *PostgresDatabase) DumpDDLs() (string, error) {
 		return "", err
 	}
 
-	tableDDLs, err := util.ConcurrentMapFuncWithError(
+	tableDDLs, err := database.ConcurrentMapFuncWithError(
 		tableNames,
 		d.config.DumpConcurrency,
 		func(tableName string) (string, error) {
