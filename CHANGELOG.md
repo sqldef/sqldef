@@ -1,3 +1,7 @@
+## v0.17.19
+
+* mysqldef, psqldef: Add `dump_concurrency` option to `--config` [#556](https://github.com/sqldef/sqldef/pull/556)
+
 ## v0.17.18
 
 - mysqldef: Fix the parser for substr and substring [#555](https://github.com/sqldef/sqldef/pull/555)
