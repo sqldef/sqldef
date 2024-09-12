@@ -1318,6 +1318,60 @@ func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 	))
 }
 
+func TestPsqldefExportConcurrency(t *testing.T) {
+	resetTestDatabase()
+
+	mustExecuteSQL(stripHeredoc(`
+		CREATE TABLE users_1 (
+		    id bigint NOT NULL PRIMARY KEY
+		);
+		CREATE TABLE users_2 (
+		    id bigint NOT NULL PRIMARY KEY
+		);
+		CREATE TABLE users_3 (
+		    id bigint NOT NULL PRIMARY KEY
+		);
+		`,
+	))
+
+	outputDefault := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--export")
+
+	writeFile("config.yml", "dump_concurrency: 0")
+	outputNoConcurrency := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--export", "--config", "config.yml")
+
+	writeFile("config.yml", "dump_concurrency: 1")
+	outputConcurrency1 := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--export", "--config", "config.yml")
+
+	writeFile("config.yml", "dump_concurrency: 10")
+	outputConcurrency10 := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--export", "--config", "config.yml")
+
+	writeFile("config.yml", "dump_concurrency: -1")
+	outputConcurrencyNoLimit := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--export", "--config", "config.yml")
+
+	assertEquals(t, outputDefault, stripHeredoc(`
+		CREATE TABLE "public"."users_1" (
+		    "id" bigint NOT NULL,
+		    PRIMARY KEY ("id")
+		);
+	
+		CREATE TABLE "public"."users_2" (
+		    "id" bigint NOT NULL,
+		    PRIMARY KEY ("id")
+		);
+	
+		CREATE TABLE "public"."users_3" (
+		    "id" bigint NOT NULL,
+		    PRIMARY KEY ("id")
+		);
+		`,
+	))
+
+	assertEquals(t, outputNoConcurrency, outputDefault)
+	assertEquals(t, outputConcurrency1, outputDefault)
+	assertEquals(t, outputConcurrency10, outputDefault)
+	assertEquals(t, outputConcurrencyNoLimit, outputDefault)
+}
+
 func TestPsqldefSkipView(t *testing.T) {
 	resetTestDatabase()
 

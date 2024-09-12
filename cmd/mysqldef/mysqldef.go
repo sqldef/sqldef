@@ -136,6 +136,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		SkipView:                   opts.SkipView,
 		SslMode:                    opts.SslMode,
 		SslCa:                      opts.SslCa,
+		DumpConcurrency:            options.Config.DumpConcurrency,
 	}
 	return config, &options
 }

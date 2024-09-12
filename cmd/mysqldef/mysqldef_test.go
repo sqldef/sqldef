@@ -1604,6 +1604,43 @@ func TestMysqldefExport(t *testing.T) {
 	assertEquals(t, out, ddls)
 }
 
+func TestMysqldefExportConcurrently(t *testing.T) {
+	resetTestDatabase()
+
+	ddls := "CREATE TABLE `users_1` (\n" +
+		"  `name` varchar(40) DEFAULT NULL\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=latin1;\n" +
+		"\n" +
+		"CREATE TABLE `users_2` (\n" +
+		"  `name` varchar(40) DEFAULT NULL\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=latin1;\n" +
+		"\n" +
+		"CREATE TABLE `users_3` (\n" +
+		"  `name` varchar(40) DEFAULT NULL\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=latin1;\n"
+	testutils.MustExecute("mysql", "-uroot", "mysqldef_test", "-e", ddls)
+
+	outputDefault := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export")
+
+	writeFile("config.yml", "dump_concurrency: 0")
+	outputNoConcurrency := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export", "--config", "config.yml")
+
+	writeFile("config.yml", "dump_concurrency: 1")
+	outputConcurrency1 := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export", "--config", "config.yml")
+
+	writeFile("config.yml", "dump_concurrency: 10")
+	outputConcurrency10 := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export", "--config", "config.yml")
+
+	writeFile("config.yml", "dump_concurrency: -1")
+	outputConcurrencyNoLimit := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export", "--config", "config.yml")
+
+	assertEquals(t, outputDefault, ddls)
+	assertEquals(t, outputNoConcurrency, outputDefault)
+	assertEquals(t, outputConcurrency1, outputDefault)
+	assertEquals(t, outputConcurrency10, outputDefault)
+	assertEquals(t, outputConcurrencyNoLimit, outputDefault)
+}
+
 func TestMysqldefDropTable(t *testing.T) {
 	resetTestDatabase()
 	testutils.MustExecute("mysql", "-uroot", "mysqldef_test", "-e", stripHeredoc(`

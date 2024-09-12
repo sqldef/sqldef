@@ -43,14 +43,16 @@ func (d *MysqlDatabase) DumpDDLs() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for _, tableName := range tableNames {
-		ddl, err := d.dumpTableDDL(tableName)
-		if err != nil {
-			return "", err
-		}
-
-		ddls = append(ddls, ddl)
+	tableDDLs, err := database.ConcurrentMapFuncWithError(
+		tableNames,
+		d.config.DumpConcurrency,
+		func(tableName string) (string, error) {
+			return d.dumpTableDDL(tableName)
+		})
+	if err != nil {
+		return "", err
 	}
+	ddls = append(ddls, tableDDLs...)
 
 	viewDDLs, err := d.views()
 	if err != nil {

@@ -107,14 +107,15 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 
 	config := database.Config{
-		DbName:        databaseName,
-		User:          opts.User,
-		Password:      password,
-		Host:          opts.Host,
-		Port:          int(opts.Port),
-		SkipView:      opts.SkipView,
-		SkipExtension: opts.SkipExtension,
-		TargetSchema:  options.Config.TargetSchema,
+		DbName:          databaseName,
+		User:            opts.User,
+		Password:        password,
+		Host:            opts.Host,
+		Port:            int(opts.Port),
+		SkipView:        opts.SkipView,
+		SkipExtension:   opts.SkipExtension,
+		TargetSchema:    options.Config.TargetSchema,
+		DumpConcurrency: options.Config.DumpConcurrency,
 	}
 	if _, err := os.Stat(config.Host); !os.IsNotExist(err) {
 		config.Socket = config.Host
