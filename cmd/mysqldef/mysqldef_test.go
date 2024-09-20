@@ -1784,7 +1784,25 @@ func TestMysqldefConfigIncludesLock(t *testing.T) {
 	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
 	assertEquals(t, apply, applyPrefix+stripHeredoc(`
 	ALTER TABLE `+"`users`"+` ADD COLUMN `+"`new_column` "+`varchar(255) COLLATE utf8mb4_bin DEFAULT null `+"AFTER `name`, "+`LOCK=NONE;
-`))
+	`))
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id int UNSIGNED NOT NULL,
+		  name varchar(255) COLLATE utf8mb4_bin DEFAULT NULL,
+		  new_column varchar(1000) COLLATE utf8mb4_bin DEFAULT NULL
+		);
+		`,
+	)
+
+	writeFile("schema.sql", createTable)
+	writeFile("config.yml", "algorithm: inplace\nlock: none")
+
+	apply = assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	assertEquals(t, apply, applyPrefix+stripHeredoc(`
+	ALTER TABLE `+"`users`"+` CHANGE COLUMN `+"`new_column` `new_column` "+`varchar(1000) COLLATE utf8mb4_bin DEFAULT null, ALGORITHM=INPLACE, LOCK=NONE;
+	`))
+
 }
 
 func TestMysqldefHelp(t *testing.T) {
