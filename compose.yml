@@ -10,9 +10,10 @@ services:
       - '3306:3306'
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 3s
+      interval: 5s
       timeout: 5s
       retries: 5
+      start_period: 5s
   postgres:
     image: postgres:${POSTGRES_VERSION:-14}
     # image: hartmutcouk/pg-repack-docker:1.4.6
@@ -25,9 +26,10 @@ services:
       - '5432:5432'
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 3s
+      interval: 5s
       timeout: 5s
       retries: 5
+      start_period: 5s
   mssql:
     image: mcr.microsoft.com/mssql/server:2017-latest
     environment:
@@ -38,7 +40,8 @@ services:
     ports:
       - '1433:1433'
     healthcheck:
-      test: ["CMD-SHELL", "sqlcmd -S localhost -U sa -P Passw0rd -Q 'SELECT 1' || exit 1"]
-      interval: 3s
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P 'Passw0rd' -Q 'SELECT 1' || exit 1"]
+      interval: 5s
       timeout: 5s
       retries: 5
+      start_period: 5s
