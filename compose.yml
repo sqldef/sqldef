@@ -40,7 +40,7 @@ services:
     ports:
       - '1433:1433'
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P 'Passw0rd' -Q 'SELECT 1' || exit 1"]
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Passw0rd' -Q 'SELECT 1' || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 5
