@@ -55,23 +55,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { GOOS: linux,   GOARCH: amd64, EXT: tar.gz, ZIG_TARGET: x86_64-linux }
-          - { GOOS: linux,   GOARCH: '386', EXT: tar.gz, ZIG_TARGET: i386-linux }
-          - { GOOS: linux,   GOARCH: arm64, EXT: tar.gz, ZIG_TARGET: aarch64-linux }
-          - { GOOS: linux,   GOARCH: arm,   EXT: tar.gz, ZIG_TARGET: arm-linux-musleabi }
-          - { GOOS: windows, GOARCH: amd64, EXT: zip,    ZIG_TARGET: x86_64-windows }
+          - { GOOS: linux,   GOARCH: amd64, EXT: tar.gz }
+          - { GOOS: linux,   GOARCH: '386', EXT: tar.gz }
+          - { GOOS: linux,   GOARCH: arm64, EXT: tar.gz }
+          - { GOOS: linux,   GOARCH: arm,   EXT: tar.gz }
+          - { GOOS: windows, GOARCH: amd64, EXT: zip }
     steps:
       - uses: actions/setup-go@v5
         with:
           go-version: 1.19
       - uses: actions/checkout@v4
 
-      - uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.9.1
       - name: make package-${{ matrix.EXT }}
         run: |
-          export "CC=zig cc -target ${{ matrix.ZIG_TARGET }}"
           make package-${{ matrix.EXT }} GOOS=${{ matrix.GOOS }} GOARCH=${{ matrix.GOARCH }}
 
       - name: Upload artifacts
