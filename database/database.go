@@ -136,15 +136,16 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 		algorithm = strings.Trim(config.Algorithm, "\n")
 	}
 
+	var lock string
 	if config.Lock != "" {
-		algorithm = strings.Trim(config.Lock, "\n")
+		lock = strings.Trim(config.Lock, "\n")
 	}
 	return GeneratorConfig{
 		TargetTables:    targetTables,
 		SkipTables:      skipTables,
 		TargetSchema:    targetSchema,
 		Algorithm:       algorithm,
-		Lock:            config.Lock,
+		Lock:            lock,
 		DumpConcurrency: config.DumpConcurrency,
 	}
 }
