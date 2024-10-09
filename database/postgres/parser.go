@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	pgquery "github.com/pganalyze/pg_query_go/v4"
+	pgquery "github.com/pganalyze/pg_query_go/v5"
 	"github.com/sqldef/sqldef/database"
 	"github.com/sqldef/sqldef/parser"
+	go_pgquery "github.com/wasilibs/go-pgquery"
 )
 
 type PostgresParser struct {
@@ -26,7 +27,7 @@ func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
 	//re := regexp.MustCompilePOSIX("^ *--.*")
 	//sql = re.ReplaceAllString(sql, "")
 
-	result, err := pgquery.Parse(sql)
+	result, err := go_pgquery.Parse(sql)
 	if err != nil {
 		return nil, err
 	}

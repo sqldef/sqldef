@@ -7,7 +7,6 @@ BUILD_DIR=build/$(GOOS)-$(GOARCH)
 SHELL=/bin/bash
 SQLDEF=$(shell pwd)
 MACOS_VERSION := 11.3
-PSQLDEF_CGO=$(shell if [[ $(GOOS) != "windows" ]]; then echo CGO_ENABLED=1; fi)
 
 ifeq ($(GOOS), windows)
   SUFFIX=.exe
@@ -24,9 +23,7 @@ build:
 	cd cmd/mysqldef    && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/mysqldef$(SUFFIX)
 	cd cmd/sqlite3def  && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/sqlite3def$(SUFFIX)
 	cd cmd/mssqldef    && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/mssqldef$(SUFFIX)
-	if [[ $(GOOS) != windows ]]; then \
-		cd cmd/psqldef && CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/psqldef$(SUFFIX); \
-	fi;
+	cd cmd/psqldef     && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/psqldef$(SUFFIX)	
 
 clean:
 	rm -rf build package
@@ -44,18 +41,14 @@ package-zip: build
 	cd $(BUILD_DIR) && zip ../../package/mssqldef_$(GOOS)_$(GOARCH).zip mssqldef$(SUFFIX)
 	cd $(BUILD_DIR) && zip ../../package/mysqldef_$(GOOS)_$(GOARCH).zip mysqldef$(SUFFIX)
 	cd $(BUILD_DIR) && zip ../../package/sqlite3def_$(GOOS)_$(GOARCH).zip sqlite3def$(SUFFIX)
-	if [[ $(GOOS) != windows ]]; then \
-		cd $(BUILD_DIR) && zip ../../package/psqldef_$(GOOS)_$(GOARCH).zip psqldef$(SUFFIX); \
-	fi
+	cd $(BUILD_DIR) && zip ../../package/psqldef_$(GOOS)_$(GOARCH).zip psqldef$(SUFFIX)
 
 package-tar.gz: build
 	mkdir -p package
 	cd $(BUILD_DIR) && tar zcvf ../../package/mssqldef_$(GOOS)_$(GOARCH).tar.gz mssqldef$(SUFFIX)
 	cd $(BUILD_DIR) && tar zcvf ../../package/mysqldef_$(GOOS)_$(GOARCH).tar.gz mysqldef$(SUFFIX)
 	cd $(BUILD_DIR) && tar zcvf ../../package/sqlite3def_$(GOOS)_$(GOARCH).tar.gz sqlite3def$(SUFFIX)
-	if [[ $(GOOS) != windows ]]; then \
-		cd $(BUILD_DIR) && tar zcvf ../../package/psqldef_$(GOOS)_$(GOARCH).tar.gz psqldef$(SUFFIX); \
-	fi
+	cd $(BUILD_DIR) && tar zcvf ../../package/psqldef_$(GOOS)_$(GOARCH).tar.gz psqldef$(SUFFIX)
 
 # Cached
 parser: goyacc parser/parser.go
@@ -70,8 +63,8 @@ test-mysqldef:
 	go test -v ./cmd/mysqldef
 
 test-psqldef:
-	$(PSQLDEF_CGO) go test -v ./cmd/psqldef
-	$(PSQLDEF_CGO) go test -v ./database/postgres
+	go test -v ./cmd/psqldef
+	go test -v ./database/postgres
 
 test-sqlite3def:
 	go test -v ./cmd/sqlite3def
