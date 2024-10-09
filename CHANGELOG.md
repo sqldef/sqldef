@@ -1,3 +1,8 @@
+## v0.17.20
+
+* psqldef: Support Windows [#564](https://github.com/sqldef/sqldef/pull/564)
+* mysqldef: Fix ALGORITHM option being overwritten by LOCK in config [#560](https://github.com/sqldef/sqldef/pull/560)
+
 ## v0.17.19
 
 * mysqldef, psqldef: Add `dump_concurrency` option to `--config` [#556](https://github.com/sqldef/sqldef/pull/556)
