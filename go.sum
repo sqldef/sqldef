@@ -26,8 +26,8 @@ github.com/golang-sql/sqlexp v0.1.0 h1:ZCD6MBpcuOVfGVqsEmY5/4FtYiKz6tSyUv9LPEDei
 github.com/golang-sql/sqlexp v0.1.0/go.mod h1:J4ad9Vo8ZCWQ2GMrC4UCQy1JpCbwU9m3EOqtpKwwwHI=
 github.com/golang/protobuf v1.5.0/go.mod h1:FsONVRAS9T7sI+LIUmWTfcYkHO4aIWwzhcaSAoJOfIk=
 github.com/google/go-cmp v0.5.5/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
-github.com/google/go-cmp v0.5.9 h1:O2Tfq5qg4qc4AmwVlvv0oLiVAGB7enBSJ2x2DqQFi38=
-github.com/google/go-cmp v0.5.9/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
+github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
+github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/google/pprof v0.0.0-20221118152302-e6195bd50e26 h1:Xim43kblpZXfIBQsbuBVKCudVG457BR2GZFIz3uw3hQ=
 github.com/google/pprof v0.0.0-20221118152302-e6195bd50e26/go.mod h1:dDKJzRmX4S37WGHujM7tX//fmj1uioxKzKxz3lo4HJo=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
@@ -64,8 +64,8 @@ github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsT
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/tetratelabs/wazero v1.8.0 h1:iEKu0d4c2Pd+QSRieYbnQC9yiFlMS9D+Jr0LsRmcF4g=
 github.com/tetratelabs/wazero v1.8.0/go.mod h1:yAI0XTsMBhREkM/YDAK/zNou3GoiAce1P6+rp/wQhjs=
-github.com/wasilibs/go-pgquery v0.0.0-20240826014338-9ea9e19d01fd h1:sg+N4jmzrjTjOXbDBy7p5nmASwSWiGJR82EL6H2xIJk=
-github.com/wasilibs/go-pgquery v0.0.0-20240826014338-9ea9e19d01fd/go.mod h1:wtFpefAF8l2Y52RXDIXZK6bJT9T7bhc9R5VBGdcO/Sk=
+github.com/wasilibs/go-pgquery v0.0.0-20241011013927-817756c5aae4 h1:p44LEm5hBmg95D3r4660Yj3JNhq49k8C15x2V8++S9U=
+github.com/wasilibs/go-pgquery v0.0.0-20241011013927-817756c5aae4/go.mod h1:wCxHuE+0U5cAPbv6kakm/EPjDwnpEao1HXvBhBMrprA=
 github.com/wasilibs/wazero-helpers v0.0.0-20240604052452-61d7981e9a38 h1:RBu75fhabyxyGJ2zhkoNuRyObBMhVeMoXqmeaPTg2CQ=
 github.com/wasilibs/wazero-helpers v0.0.0-20240604052452-61d7981e9a38/go.mod h1:Z80JvMwvze8KUlVQIdw9L7OSskZJ1yxlpi4AQhoQe4s=
 golang.org/x/crypto v0.18.0 h1:PGVlW0xEltQnzFZ55hkuX5+KLyrMYhHld1YHO4AKcdc=

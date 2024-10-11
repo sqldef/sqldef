@@ -41,11 +41,10 @@ require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/wasilibs/go-pgquery v0.0.0-20240826014338-9ea9e19d01fd
+	github.com/wasilibs/go-pgquery v0.0.0-20241011013927-817756c5aae4
 	google.golang.org/protobuf v1.31.0 // indirect
 	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect
 )
