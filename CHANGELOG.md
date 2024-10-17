@@ -1,3 +1,7 @@
+## v0.17.21
+
+* psqldef: Mitigate the memory usage increase in v0.17.20 [#567](https://github.com/sqldef/sqldef/pull/567)
+
 ## v0.17.20
 
 * psqldef: Support Windows [#564](https://github.com/sqldef/sqldef/pull/564)
