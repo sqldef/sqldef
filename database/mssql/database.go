@@ -262,6 +262,14 @@ func (c column) getLength() (string, bool) {
 			return "", false
 		}
 		return c.Scale, true
+	case "numeric", "decimal":
+		if c.Scale == "0" {
+			if c.MaxLength == "18" { // The default precision is 18.
+				return "", false
+			}
+			return c.MaxLength, true
+		}
+		return c.MaxLength + ", " + c.Scale, true
 	}
 	return "", false
 }
@@ -285,6 +293,7 @@ func (d *MssqlDatabase) updateColumns() error {
 	c.name,
 	[type_name] = tp.name,
 	c.max_length,
+	c.precision,
 	c.scale,
 	c.is_nullable,
 	c.is_identity,
@@ -315,17 +324,21 @@ ORDER BY c.object_id, COLUMNPROPERTY(c.object_id, c.name, 'ordinal')
 	allCols := make(map[string][]column)
 	for rows.Next() {
 		col := column{}
-		var colName, dataType, maxLen, scale, defaultId string
+		var colName, dataType, maxLen, precision, scale, defaultId string
 		var seedValue, incrementValue, defaultName, defaultVal, checkName, checkDefinition *string
 		var schemaName, tableName *string
 		var isNullable, isIdentity bool
 		var identityNotForReplication, checkNotForReplication *bool
-		err = rows.Scan(&schemaName, &tableName, &colName, &dataType, &maxLen, &scale, &isNullable, &isIdentity, &seedValue, &incrementValue, &identityNotForReplication, &defaultId, &defaultName, &defaultVal, &checkName, &checkDefinition, &checkNotForReplication)
+		err = rows.Scan(&schemaName, &tableName, &colName, &dataType, &maxLen, &precision, &scale, &isNullable, &isIdentity, &seedValue, &incrementValue, &identityNotForReplication, &defaultId, &defaultName, &defaultVal, &checkName, &checkDefinition, &checkNotForReplication)
 		if err != nil {
 			return err
 		}
 		col.Name = colName
 		col.MaxLength = maxLen
+		switch dataType {
+		case "numeric", "decimal":
+			col.MaxLength = precision
+		}
 		col.Scale = scale
 		if defaultId != "0" {
 			col.DefaultName = *defaultName

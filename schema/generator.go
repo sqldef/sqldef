@@ -505,6 +505,12 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 				// TODO: support adding a column's `references`
 			case GeneratorModeMssql:
+				if !g.haveSameDataType(*currentColumn, desiredColumn) {
+					// Change type
+					ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name), generateDataType(desiredColumn))
+					ddls = append(ddls, ddl)
+				}
+
 				if !areSameCheckDefinition(currentColumn.check, desiredColumn.check) {
 					_, tableName := splitTableName(desired.table.name, g.defaultSchema)
 					constraintName := fmt.Sprintf("%s_%s_check", tableName, desiredColumn.name)
