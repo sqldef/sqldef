@@ -1,3 +1,8 @@
+## v0.17.22
+
+* mssqldef: Support ALTER COLUMN [#568](https://github.com/sqldef/sqldef/pull/568)
+* mssqldef: Support precision for numeric and decimal [#568](https://github.com/sqldef/sqldef/pull/568)
+
 ## v0.17.21
 
 * psqldef: Mitigate the memory usage increase in v0.17.20 [#567](https://github.com/sqldef/sqldef/pull/567)
