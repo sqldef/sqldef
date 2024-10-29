@@ -263,8 +263,8 @@ func (c column) getLength() (string, bool) {
 		}
 		return c.Scale, true
 	case "numeric", "decimal":
-		if (c.Scale == "0") {
-			if (c.MaxLength == "18") {	// The default precision is 18.
+		if c.Scale == "0" {
+			if c.MaxLength == "18" { // The default precision is 18.
 				return "", false
 			}
 			return c.MaxLength, true
