@@ -1,3 +1,7 @@
+## v0.17.23
+
+* psqldef: Output CREATE EXTENSION first of DDL [#569](https://github.com/sqldef/sqldef/pull/569)
+
 ## v0.17.22
 
 * mssqldef: Support ALTER COLUMN [#568](https://github.com/sqldef/sqldef/pull/568)
