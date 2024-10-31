@@ -732,6 +732,13 @@ CreateExtensionIfNotExists:
     CREATE EXTENSION IF NOT EXISTS pgcrypto;
   output: |
     CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CreateExtensionOrder:
+  desired: |
+    CREATE TABLE hoge (id UUID DEFAULT gen_random_uuid());
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+  output: |
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+    CREATE TABLE hoge (id UUID DEFAULT gen_random_uuid());
 CreateViewWithCastCase:
   desired: |
     create table hoge (amount text);
