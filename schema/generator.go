@@ -109,6 +109,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	// These variables are used to control the output order of the DDL.
 	// `CREATE SCHEMA` should execute first, and DDLs that add indexes and foreign keys should execute last.
 	// Other ddls are stored in interDDLs.
+	createExtensionDDLs := []string{}
 	createSchemaDDLs := []string{}
 	interDDLs := []string{}
 	indexDDLs := []string{}
@@ -187,7 +188,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, extensionDDLs...)
+			createExtensionDDLs = append(createExtensionDDLs, extensionDDLs...)
 		case *Schema:
 			schemaDDLs, err := g.generateDDLsForSchema(desired)
 			if err != nil {
@@ -200,6 +201,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	}
 
 	ddls := []string{}
+	ddls = append(ddls, createExtensionDDLs...)
 	ddls = append(ddls, createSchemaDDLs...)
 	ddls = append(ddls, interDDLs...)
 	ddls = append(ddls, indexDDLs...)
