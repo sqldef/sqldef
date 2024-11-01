@@ -13,7 +13,7 @@ require (
 	github.com/pganalyze/pg_query_go/v5 v5.1.0
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/sync v0.6.0
-	golang.org/x/term v0.23.0
+	golang.org/x/term v0.25.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.29.5
 )
@@ -28,7 +28,7 @@ require (
 	github.com/tetratelabs/wazero v1.8.0 // indirect
 	github.com/wasilibs/wazero-helpers v0.0.0-20240604052452-61d7981e9a38 // indirect
 	golang.org/x/crypto v0.18.0 // indirect
-	golang.org/x/sys v0.23.0 // indirect
+	golang.org/x/sys v0.26.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	modernc.org/libc v1.41.0 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
