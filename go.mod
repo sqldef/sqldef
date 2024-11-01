@@ -7,7 +7,7 @@ toolchain go1.23.2
 require (
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/jessevdk/go-flags v1.6.1
-	github.com/k0kubun/pp/v3 v3.2.0
+	github.com/k0kubun/pp/v3 v3.3.0
 	github.com/lib/pq v1.10.9
 	github.com/microsoft/go-mssqldb v1.7.2
 	github.com/pganalyze/pg_query_go/v5 v5.1.0
