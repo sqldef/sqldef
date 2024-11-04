@@ -703,6 +703,43 @@ alter_statement:
       IndexCols: $10,
     }
   }
+/* For SQL Server */
+| ALTER ignore_opt TABLE table_name ADD CONSTRAINT sql_id UNIQUE CLUSTERED '(' index_column_list ')' index_option_opt index_partition_opt
+  {
+    $$ = &DDL{
+      Action: AddIndex,
+      Table: $4,
+      NewName: $4,
+      IndexSpec: &IndexSpec{
+        Name: $7,
+        Unique: true,
+        Primary: false,
+        Constraint: true,
+        Clustered: true,
+        Options: $13,
+        Partition: $14,
+      },
+      IndexCols: $11,
+    }
+  }
+| ALTER ignore_opt TABLE table_name ADD CONSTRAINT sql_id UNIQUE NONCLUSTERED '(' index_column_list ')' index_option_opt index_partition_opt
+  {
+    $$ = &DDL{
+      Action: AddIndex,
+      Table: $4,
+      NewName: $4,
+      IndexSpec: &IndexSpec{
+        Name: $7,
+        Unique: true,
+        Primary: false,
+        Constraint: true,
+        Clustered: false,
+        Options: $13,
+        Partition: $14,
+      },
+      IndexCols: $11,
+    }
+  }
 | ALTER ignore_opt TABLE table_name ADD foreign_key_definition
   {
     $$ = &DDL{
