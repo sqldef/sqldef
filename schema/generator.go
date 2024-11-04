@@ -1411,7 +1411,11 @@ func (g *Generator) generateDropIndex(tableName string, indexName string, constr
 			return fmt.Sprintf("DROP INDEX %s.%s", g.escapeSQLName(schema), g.escapeSQLName(indexName))
 		}
 	case GeneratorModeMssql:
-		return fmt.Sprintf("DROP INDEX %s ON %s", g.escapeSQLName(indexName), g.escapeTableName(tableName))
+		if constraint {
+			return fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(tableName), g.escapeSQLName(indexName))
+		} else {
+			return fmt.Sprintf("DROP INDEX %s ON %s", g.escapeSQLName(indexName), g.escapeTableName(tableName))
+		}
 	case GeneratorModeSQLite3:
 		return fmt.Sprintf("DROP INDEX %s", g.escapeSQLName(indexName))
 	default:

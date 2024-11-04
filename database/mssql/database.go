@@ -195,18 +195,26 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 		if indexDef.primary {
 			continue
 		}
-		fmt.Fprint(&queryBuilder, "CREATE")
 		if indexDef.unique {
-			fmt.Fprint(&queryBuilder, " UNIQUE")
+			if indexDef.constraint {
+				fmt.Fprintf(&queryBuilder, "ALTER TABLE %s ADD CONSTRAINT [%s] UNIQUE", table, indexDef.name)
+			} else {
+				fmt.Fprint(&queryBuilder, "CREATE UNIQUE")
+			}
+		} else {
+			fmt.Fprint(&queryBuilder, "CREATE")
 		}
 		switch indexDef.indexType {
 		case "CLUSTERED", "NONCLUSTERED", "NONCLUSTERED COLUMNSTORE":
 			fmt.Fprintf(&queryBuilder, " %s", indexDef.indexType)
 		}
+		if !indexDef.constraint {
+			fmt.Fprintf(&queryBuilder, " INDEX [%s] ON %s",  indexDef.name, table)
+		}
 		if indexDef.indexType == "NONCLUSTERED COLUMNSTORE" {
-			fmt.Fprintf(&queryBuilder, " INDEX [%s] ON %s (%s)", indexDef.name, table, strings.Join(indexDef.included, ", "))
+			fmt.Fprintf(&queryBuilder, " (%s)", strings.Join(indexDef.included, ", "))
 		} else {
-			fmt.Fprintf(&queryBuilder, " INDEX [%s] ON %s (%s)", indexDef.name, table, strings.Join(indexDef.columns, ", "))
+			fmt.Fprintf(&queryBuilder, " (%s)", strings.Join(indexDef.columns, ", "))
 			if len(indexDef.included) > 0 {
 				fmt.Fprintf(&queryBuilder, " INCLUDE (%s)", strings.Join(indexDef.included, ", "))
 			}
@@ -388,6 +396,7 @@ type indexDef struct {
 	columns   []string
 	primary   bool
 	unique    bool
+	constraint bool
 	indexType string
 	filter    *string
 	included  []string
@@ -406,6 +415,7 @@ func (d *MssqlDatabase) updateIndexDefs() error {
 	ind.name AS index_name,
 	ind.is_primary_key,
 	ind.is_unique,
+	ind.is_unique_constraint,
 	ind.type_desc,
 	ind.filter_definition,
 	ind.is_padded,
@@ -434,10 +444,10 @@ ORDER BY obj.object_id, ind.index_id, ic.key_ordinal
 	indexMap := make(map[string]map[string]*indexDef)
 	var schemaName, tableName, columnName, indexName, typeDesc, fillfactor string
 	var filter *string
-	var isPrimary, isUnique, padIndex, ignoreDupKey, noRecompute, incremental, rowLocks, pageLocks, isDescending, isIncluded bool
+	var isPrimary, isUnique, isConstraint, padIndex, ignoreDupKey, noRecompute, incremental, rowLocks, pageLocks, isDescending, isIncluded bool
 
 	for rows.Next() {
-		err = rows.Scan(&schemaName, &tableName, &indexName, &isPrimary, &isUnique, &typeDesc, &filter, &padIndex, &fillfactor, &ignoreDupKey, &noRecompute, &incremental, &rowLocks, &pageLocks, &columnName, &isDescending, &isIncluded)
+		err = rows.Scan(&schemaName, &tableName, &indexName, &isPrimary, &isUnique, &isConstraint, &typeDesc, &filter, &padIndex, &fillfactor, &ignoreDupKey, &noRecompute, &incremental, &rowLocks, &pageLocks, &columnName, &isDescending, &isIncluded)
 		if err != nil {
 			return err
 		}
@@ -468,7 +478,7 @@ ORDER BY obj.object_id, ind.index_id, ic.key_ordinal
 				{name: "ALLOW_PAGE_LOCKS", value: boolToOnOff(pageLocks)},
 			}...)
 
-			definition = &indexDef{name: indexName, columns: []string{}, primary: isPrimary, unique: isUnique, indexType: typeDesc, filter: filter, included: []string{}, options: options}
+			definition = &indexDef{name: indexName, columns: []string{}, primary: isPrimary, unique: isUnique, constraint: isConstraint, indexType: typeDesc, filter: filter, included: []string{}, options: options}
 			indexes[indexName] = definition
 		}
 

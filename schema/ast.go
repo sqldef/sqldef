@@ -87,7 +87,7 @@ type Index struct {
 	columns           []IndexColumn
 	primary           bool
 	unique            bool
-	constraint        bool // for Postgres `ADD CONSTRAINT UNIQUE`
+	constraint        bool // for Postgres/MSSQL `ADD CONSTRAINT UNIQUE`
 	constraintOptions *ConstraintOptions
 	where             string         // for Postgres `Partial Indexes`
 	included          []string       // for MSSQL
