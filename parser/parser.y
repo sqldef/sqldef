@@ -339,7 +339,7 @@ func forceEOF(yylex interface{}) {
 %type <strs> enum_values
 %type <columnDefinition> column_definition
 %type <columnType> column_definition_type
-%type <indexDefinition> index_definition primary_key_definition
+%type <indexDefinition> index_definition primary_key_definition unique_definition
 %type <checkDefinition> check_definition
 %type <foreignKeyDefinition> foreign_key_definition foreign_key_without_options
 %type <colIdent> reference_option
@@ -1343,6 +1343,10 @@ table_column_list:
     $$.addForeignKey($3)
   }
 | table_column_list ',' primary_key_definition
+  {
+    $$.addIndex($3)
+  }
+| table_column_list ',' unique_definition
   {
     $$.addIndex($3)
   }
@@ -2479,6 +2483,27 @@ primary_key_definition:
       Columns: $5,
       Options: $7,
       Partition: $8,
+    }
+  }
+
+unique_definition:
+  CONSTRAINT sql_id UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
+  {
+    $$ = &IndexDefinition{
+      Info: &IndexInfo{Type: string($3), Name: $2, Primary: false, Unique: true, Clustered: $4},
+      Columns: $6,
+      Options: $8,
+      Partition: $9,
+    }
+  }
+/* For PostgreSQL and SQLite3 */
+| UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
+  {
+    $$ = &IndexDefinition{
+      Info: &IndexInfo{Type: string($1), Primary: false, Unique: true, Clustered: $2},
+      Columns: $4,
+      Options: $6,
+      Partition: $7,
     }
   }
 
