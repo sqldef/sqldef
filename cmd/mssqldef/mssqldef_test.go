@@ -126,6 +126,30 @@ func TestMssqldefAlterTableDropUniqueConstraint(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMssqldefCreateTableDropUniqueConstraint(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20),
+		  CONSTRAINT [uq_users] UNIQUE ([name])
+		);
+		GO`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20)
+		);
+		GO`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [uq_users];\nGO\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMssqldefCreateTableQuotes(t *testing.T) {
 	resetTestDatabase()
 
