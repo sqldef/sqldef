@@ -431,7 +431,7 @@ create_statement:
         Name: $4,
         Type: NewColIdent(""),
         Unique: bool($2[0]),
-        Clustered: bool($2[0]),
+        Clustered: bool($2[1]),
         Included: $10,
         Where: NewWhere(WhereStr, $11),
         Options: $12,
@@ -2503,7 +2503,7 @@ check_definition:
 /* For SQL Server */
 clustered_opt:
   {
-    $$ = BoolVal(true)
+    $$ = BoolVal(false)
   }
 | CLUSTERED
   {
@@ -2517,7 +2517,7 @@ clustered_opt:
 /* For SQL Server */
 unique_clustered_opt:
   {
-    $$ = []BoolVal { false, true }
+    $$ = []BoolVal { false, false }
   }
 | CLUSTERED
   {
@@ -2529,7 +2529,7 @@ unique_clustered_opt:
   }
 | UNIQUE
   {
-    $$ = []BoolVal { true, true }
+    $$ = []BoolVal { true, false }
   }
 | UNIQUE CLUSTERED
   {
@@ -2537,7 +2537,7 @@ unique_clustered_opt:
   }
 | UNIQUE NONCLUSTERED
   {
-    $$ = []BoolVal { true, false, }
+    $$ = []BoolVal { true, false }
   }
 
 /* For SQL Server */
