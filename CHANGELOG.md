@@ -1,3 +1,7 @@
+## v0.17.24
+
+* mssqldef: Support UNIQUE CONSTRAINT for both ALTER TABLE and COLUMN definition [#573](https://github.com/sqldef/sqldef/pull/573)
+
 ## v0.17.23
 
 * psqldef: Output CREATE EXTENSION first of DDL [#569](https://github.com/sqldef/sqldef/pull/569)
