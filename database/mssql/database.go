@@ -608,7 +608,7 @@ var (
 )
 
 func (d *MssqlDatabase) views() ([]string, error) {
-	const sql = `SELECT
+	query := `SELECT
 	sys.views.name as name,
 	sys.sql_modules.definition as definition
 FROM sys.views
@@ -620,7 +620,7 @@ INNER JOIN sys.sql_modules
 	ON sys.sql_modules.object_id = sys.objects.object_id
 `
 
-	rows, err := d.db.Query(sql)
+	rows, err := d.db.Query(query)
 	if err != nil {
 		return nil, err
 	}
