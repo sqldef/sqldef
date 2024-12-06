@@ -436,6 +436,20 @@ WHERE obj.type = 'U'
 ORDER BY obj.object_id, ind.index_id, ic.key_ordinal
 `
 
+	// `sys.stats.is_incremental` only exists SQL Server 2014 (12.x) and above.
+	// https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-stats-transact-sql?view=sql-server-ver16
+	var hasIncremental int
+	err := d.db.QueryRow(`SELECT 1
+FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'sys.stats' AND COLUMN_NAME = 'is_incremental'
+	`).Scan(&hasIncremental)
+	if err != nil && err != sql.ErrNoRows {
+		return nil
+	}
+
+	if (hasIncremental != 1) {
+		query = strings.Replace(query, "st.is_incremental", "0 as is_incremental", 1);
+	}
+
 	rows, err := d.db.Query(query)
 	if err != nil {
 		return nil
@@ -594,7 +608,7 @@ var (
 )
 
 func (d *MssqlDatabase) views() ([]string, error) {
-	const sql = `SELECT
+	query := `SELECT
 	sys.views.name as name,
 	sys.sql_modules.definition as definition
 FROM sys.views
@@ -606,7 +620,7 @@ INNER JOIN sys.sql_modules
 	ON sys.sql_modules.object_id = sys.objects.object_id
 `
 
-	rows, err := d.db.Query(sql)
+	rows, err := d.db.Query(query)
 	if err != nil {
 		return nil, err
 	}
