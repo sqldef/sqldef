@@ -136,7 +136,7 @@ jobs:
           set -x
           cd ./homebrew-sqldef
           VERSION=$(echo "$GITHUB_REF" | sed -e 's!refs/tags/!!')
-          sed -i -e "s/tag: '.*'/tag: '$VERSION'/" mysqldef.rb psqldef.rb mssqldef.rb
+          sed -i -e "s/tag: '.*'/tag: '$VERSION'/" mysqldef.rb psqldef.rb mssqldef.rb sqlite3def.rb
           git add .
           if ! git diff-index --quiet HEAD --; then
             git config --global user.email "k0kubun@github.com"
