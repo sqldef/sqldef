@@ -886,13 +886,24 @@ func (p PostgresParser) parseFkAction(action string) parser.ColIdent {
 }
 
 func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName parser.TableName) (*parser.ColumnDefinition, *parser.ForeignKeyDefinition, error) {
-	if columnDef.Inhcount != 0 || columnDef.Identity != "" || columnDef.Generated != "" || columnDef.Storage != "" || columnDef.CollClause != nil {
+	if columnDef.Inhcount != 0 || columnDef.Identity != "" || columnDef.Generated != "" || columnDef.Storage != "" {
 		return nil, nil, fmt.Errorf("unhandled node in parseColumnDef: %#v", columnDef)
 	}
 
 	columnType, err := p.parseTypeName(columnDef.TypeName)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if columnDef.CollClause != nil {
+		if len(columnDef.CollClause.Collname) != 1 {
+			return nil, nil, fmt.Errorf("unexpected number of collnames in parseColumnDef: %d", len(columnDef.CollClause.Collname))
+		}
+		n, ok := columnDef.CollClause.Collname[0].Node.(*pgquery.Node_String_)
+		if !ok {
+			return nil, nil, fmt.Errorf("unexpected collname node type in parseColumnDef: %#v", columnDef.CollClause.Collname[0].Node)
+		}
+		columnType.Collate = n.String_.Sval
 	}
 
 	var foreignKey *parser.ForeignKeyDefinition

@@ -346,6 +346,9 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 		if col.IdentityGeneration != "" {
 			fmt.Fprintf(&queryBuilder, " GENERATED %s AS IDENTITY", col.IdentityGeneration)
 		}
+		if col.CollationName != "" {
+			fmt.Fprintf(&queryBuilder, " COLLATE %s", col.CollationName)
+		}
 		if col.Check != nil {
 			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s %s", col.Check.name, col.Check.definition)
 		}
@@ -390,6 +393,7 @@ type column struct {
 	Default            string
 	IsAutoIncrement    bool
 	IdentityGeneration string
+	CollationName      string
 	Check              *columnConstraint
 }
 
@@ -435,7 +439,8 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	      ELSE s.data_type
 	      END,
 	      format_type(f.atttypid, f.atttypmod),
-	      s.identity_generation
+	      s.identity_generation,
+		  s.collation_name
 	    FROM pg_attribute f
 	    JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
 	    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
@@ -484,8 +489,8 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	for rows.Next() {
 		col := column{}
 		var colName, isNullable, dataType, formattedDataType string
-		var colDefault, idGen, checkName, checkDefinition *string
-		err = rows.Scan(&colName, &colDefault, &isNullable, &dataType, &formattedDataType, &idGen, &checkName, &checkDefinition)
+		var colDefault, idGen, collationName, checkName, checkDefinition *string
+		err = rows.Scan(&colName, &colDefault, &isNullable, &dataType, &formattedDataType, &idGen, &collationName, &checkName, &checkDefinition)
 		if err != nil {
 			return nil, err
 		}
@@ -501,6 +506,9 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 		col.formattedDataType = formattedDataType
 		if idGen != nil {
 			col.IdentityGeneration = *idGen
+		}
+		if collationName != nil {
+			col.CollationName = *collationName
 		}
 		if checkName != nil && checkDefinition != nil {
 			col.Check = &columnConstraint{
