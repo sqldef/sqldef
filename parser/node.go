@@ -341,6 +341,7 @@ type Update struct {
 	Comments   Comments
 	TableExprs TableExprs
 	Exprs      UpdateExprs
+	From       TableExprs
 	Where      *Where
 	OrderBy    OrderBy
 	Limit      *Limit
@@ -348,9 +349,11 @@ type Update struct {
 
 // Format formats the node.
 func (node *Update) Format(buf *nodeBuffer) {
-	buf.Printf("update %v%v set %v%v%v%v",
-		node.Comments, node.TableExprs,
-		node.Exprs, node.Where, node.OrderBy, node.Limit)
+	buf.Printf("update %v%v set %v", node.Comments, node.TableExprs, node.Exprs)
+	if node.From != nil {
+		buf.Printf(" from %v", node.From);
+	}
+	buf.Printf("%v%v%v", node.Where, node.OrderBy, node.Limit)
 }
 
 // Delete represents a DELETE statement.
