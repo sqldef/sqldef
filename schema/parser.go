@@ -242,14 +242,27 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Tab
 			if err != nil {
 				return Table{}, err
 			}
+			name := column.Column.String()
 			indexColumns = append(
 				indexColumns,
 				IndexColumn{
-					column:    column.Column.String(),
+					column:    name,
 					length:    length,
 					direction: column.Direction,
 				},
 			)
+
+			// MSSQL: all columns participating in a PRIMARY KEY constraint have their nullability set to NOT NULL
+			// https://learn.microsoft.com/en-us/sql/relational-databases/tables/create-primary-keys#limitations
+			if (indexDef.Info.Primary && mode == GeneratorModeMssql) {
+				for i := range columns {
+					if columns[i].name == name {
+						val := true
+						columns[i].notNull = &val
+						break
+					}
+				}
+			}
 		}
 
 		indexOptions := []IndexOption{}

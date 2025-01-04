@@ -1550,6 +1550,7 @@ column_definition_type:
 | column_definition_type IDENTITY '(' INTEGRAL ',' INTEGRAL ')'
   {
     $1.Identity = &IdentityOpt{Sequence: &Sequence{StartWith: NewIntVal($4), IncrementBy: NewIntVal($6)}, NotForReplication: false}
+    $1.NotNull = NewBoolVal(true)
     $$ = $1
   }
 // for MSSQL: IDENTITY(N,M) NOT FOR REPLICATION

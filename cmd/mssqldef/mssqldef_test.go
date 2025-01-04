@@ -54,6 +54,75 @@ func TestApply(t *testing.T) {
 
 // TODO: non-CLI tests should be migrated to TestApply
 
+func TestMssqldefAddColumnNotNull(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20)
+		);
+		GO`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20) NOT NULL
+		);
+		GO`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] ALTER COLUMN [name] varchar(20) NOT NULL;\nGO\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefRemoveColumnNotNull(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20)
+		);
+		GO`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint,
+		  name varchar(20)
+		);
+		GO`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] ALTER COLUMN [id] bigint;\nGO\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
+func TestMssqldefChangeColumnLength(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(20)
+		);
+		GO`,
+	)
+	assertApply(t, createTable)
+
+	createTable = stripHeredoc(`
+		CREATE TABLE users (
+		  id bigint NOT NULL,
+		  name varchar(100)
+		);
+		GO`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] ALTER COLUMN [name] varchar(100);\nGO\n")
+	assertApplyOutput(t, createTable, nothingModified)
+}
+
 func TestMssqldefAlterTableAddUniqueConstraint(t *testing.T) {
 	resetTestDatabase()
 
