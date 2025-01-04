@@ -1,3 +1,7 @@
+## v0.17.26
+
+* mssqldef: Support NOT NULL CONSTRAINT for ALTER COLUMN [#591](https://github.com/sqldef/sqldef/pull/591)
+
 ## v0.17.25
 
 * mssqldef: Support legacy server versions [#576](https://github.com/sqldef/sqldef/pull/576)
