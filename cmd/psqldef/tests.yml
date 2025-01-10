@@ -144,6 +144,18 @@ CreateIndexWithCoalesce:
     CREATE INDEX create_index_with_function_call ON users (name, COALESCE(user_name, 'NO_NAME'::TEXT));
   output: |
     CREATE INDEX create_index_with_function_call ON users (name, COALESCE(user_name, 'NO_NAME'::TEXT));
+CreateIndexWithBoolExpr:
+  current: |
+    CREATE TABLE users (
+      is_active BOOLEAN
+    );
+  desired: |
+    CREATE TABLE users (
+      is_active BOOLEAN
+    );
+    CREATE INDEX create_index_with_bool ON users ((CASE WHEN is_active IS TRUE THEN 1 ELSE 0 END));
+  output: |
+    CREATE INDEX create_index_with_bool ON users ((CASE WHEN is_active IS TRUE THEN 1 ELSE 0 END));
 AlterTypeAddValue:
   current: |
     CREATE TYPE eventtype AS ENUM (
