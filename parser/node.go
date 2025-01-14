@@ -1505,12 +1505,14 @@ type IsExpr struct {
 
 // IsExpr.Operator
 const (
-	IsNullStr     = "is null"
-	IsNotNullStr  = "is not null"
-	IsTrueStr     = "is true"
-	IsNotTrueStr  = "is not true"
-	IsFalseStr    = "is false"
-	IsNotFalseStr = "is not false"
+	IsNullStr       = "is null"
+	IsNotNullStr    = "is not null"
+	IsTrueStr       = "is true"
+	IsNotTrueStr    = "is not true"
+	IsFalseStr      = "is false"
+	IsNotFalseStr   = "is not false"
+	IsUnknownStr    = "is unknown"
+	IsNotUnknownStr = "is not unknown"
 )
 
 // Format formats the node.

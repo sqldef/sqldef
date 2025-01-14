@@ -682,6 +682,46 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 			Name:  parser.NewColIdent("coalesce"),
 			Exprs: selectExprs,
 		}, nil
+	case *pgquery.Node_BooleanTest:
+		expr, err := p.parseExpr(node.BooleanTest.Arg)
+		if err != nil {
+			return nil, err
+		}
+
+		switch node.BooleanTest.Booltesttype {
+		case pgquery.BoolTestType_IS_TRUE:
+			return &parser.IsExpr{
+				Expr:     expr,
+				Operator: parser.IsTrueStr,
+			}, nil
+		case pgquery.BoolTestType_IS_NOT_TRUE:
+			return &parser.IsExpr{
+				Expr:     expr,
+				Operator: parser.IsNotTrueStr,
+			}, nil
+		case pgquery.BoolTestType_IS_FALSE:
+			return &parser.IsExpr{
+				Expr:     expr,
+				Operator: parser.IsFalseStr,
+			}, nil
+		case pgquery.BoolTestType_IS_NOT_FALSE:
+			return &parser.IsExpr{
+				Expr:     expr,
+				Operator: parser.IsNotFalseStr,
+			}, nil
+		case pgquery.BoolTestType_IS_UNKNOWN:
+			return &parser.IsExpr{
+				Expr:     expr,
+				Operator: parser.IsUnknownStr,
+			}, nil
+		case pgquery.BoolTestType_IS_NOT_UNKNOWN:
+			return &parser.IsExpr{
+				Expr:     expr,
+				Operator: parser.IsNotUnknownStr,
+			}, nil
+		default:
+			return nil, fmt.Errorf("unexpected boolean test type: %d", node.BooleanTest.Booltesttype)
+		}
 	default:
 		return nil, fmt.Errorf("unknown node in parseExpr: %#v", node)
 	}
