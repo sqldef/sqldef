@@ -1,3 +1,7 @@
+## v0.17.27
+
+* psqldef: Fix syntax error occurring when using boolean comparisons in CREATE INDEX [#592s](https://github.com/sqldef/sqldef/pull/592)
+
 ## v0.17.26
 
 * mssqldef: Support NOT NULL CONSTRAINT for ALTER COLUMN [#591](https://github.com/sqldef/sqldef/pull/591)
