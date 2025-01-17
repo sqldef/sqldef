@@ -93,6 +93,7 @@ func (d *PostgresDatabase) tableNames() ([]string, error) {
 		where n.nspname not in ('information_schema', 'pg_catalog')
 		and c.relkind in ('r', 'p')
 		and c.relpersistence in ('p', 'u')
+		and c.relispartition = false
 		and not exists (select * from pg_catalog.pg_depend d where c.oid = d.objid and d.deptype = 'e')
 		order by relname asc;
 	`)
