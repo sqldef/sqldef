@@ -1286,3 +1286,14 @@ CreateSchema:
     CREATE SCHEMA foo;
     CREATE SCHEMA IF NOT EXISTS bar;
     CREATE TABLE foo.test (id int);
+
+ExcludeConstraint:
+  desired: |
+    CREATE TABLE exclude_example (
+      name varchar(255),
+      event_start tstzrange NOT NULL,
+      event_end tstzrange NOT NULL,
+      EXCLUDE (name WITH =),
+      EXCLUDE (lower(name) WITH =) where (name <> ''),
+      EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&)
+    );
