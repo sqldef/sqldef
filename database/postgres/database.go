@@ -522,9 +522,9 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 }
 
 func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
-	// Exclude indexes that are implicitly created for primary keys or unique constraints.
+	// Exclude indexes that are implicitly created for primary keys or unique constraints or exclusion constraints.
 	const query = `WITH
-	  unique_and_pk_constraints AS (
+	  exclude_constraints AS (
 	    SELECT con.conname AS name
 	    FROM   pg_constraint con
 	    JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
@@ -537,7 +537,7 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 	FROM   pg_indexes
 	WHERE  schemaname = $1
 	AND    tablename = $2
-	AND    indexName NOT IN (SELECT name FROM unique_and_pk_constraints)
+	AND    indexName NOT IN (SELECT name FROM exclude_constraints)
 	`
 	schema, table := splitTableName(table, d.GetDefaultSchema())
 	rows, err := d.db.Query(query, schema, table)
