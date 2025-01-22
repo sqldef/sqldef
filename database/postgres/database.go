@@ -529,7 +529,7 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 	    FROM   pg_constraint con
 	    JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
 	    JOIN   pg_class cls ON cls.oid = con.conrelid
-	    WHERE  con.contype IN ('p', 'u')
+	    WHERE  con.contype IN ('p', 'u', 'x')
 	    AND    nsp.nspname = $1
 	    AND    cls.relname = $2
 	  )
