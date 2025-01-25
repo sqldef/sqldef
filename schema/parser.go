@@ -107,6 +107,12 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 					constraintOptions: constraintOptions,
 				},
 			}, nil
+		} else if stmt.Action == parser.AddExclusion {
+			return &AddExclusion{
+				statement: ddl,
+				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
+				exclusion: parseExclusion(stmt.Exclusion),
+			}, nil
 		} else if stmt.Action == parser.CreatePolicy {
 			scope := make([]string, len(stmt.Policy.To))
 			for i, to := range stmt.Policy.To {
@@ -197,6 +203,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Tab
 	var indexes []Index
 	var checks []CheckDefinition
 	var foreignKeys []ForeignKey
+	var exclusions []Exclusion
 
 	for i, parsedCol := range stmt.TableSpec.Columns {
 		column := Column{
@@ -254,7 +261,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Tab
 
 			// MSSQL: all columns participating in a PRIMARY KEY constraint have their nullability set to NOT NULL
 			// https://learn.microsoft.com/en-us/sql/relational-databases/tables/create-primary-keys#limitations
-			if (indexDef.Info.Primary && mode == GeneratorModeMssql) {
+			if indexDef.Info.Primary && mode == GeneratorModeMssql {
 				for i := range columns {
 					if columns[i].name == name {
 						val := true
@@ -357,12 +364,18 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Tab
 		foreignKeys = append(foreignKeys, foreignKey)
 	}
 
+	for _, exclusionDef := range stmt.TableSpec.Exclusions {
+		exclusion := parseExclusion(exclusionDef)
+		exclusions = append(exclusions, exclusion)
+	}
+
 	return Table{
 		name:        normalizedTableName(mode, stmt.NewName, defaultSchema),
 		columns:     columns,
 		indexes:     indexes,
 		checks:      checks,
 		foreignKeys: foreignKeys,
+		exclusions:  exclusions,
 		options:     stmt.TableSpec.Options,
 	}, nil
 }
@@ -607,6 +620,26 @@ func parseGenerated(genc *parser.GeneratedColumn) *Generated {
 	return &Generated{
 		expr:          parser.String(genc.Expr),
 		generatedType: typ,
+	}
+}
+
+func parseExclusion(exclusion *parser.ExclusionDefinition) Exclusion {
+	var exs []ExclusionPair
+	for _, exclusion := range exclusion.Exclusions {
+		exs = append(exs, ExclusionPair{
+			column:   exclusion.Column.String(),
+			operator: exclusion.Operator,
+		})
+	}
+	var where string
+	if exclusion.Where != nil {
+		where = parser.String(exclusion.Where.Expr)
+	}
+	return Exclusion{
+		constraintName: exclusion.ConstraintName.String(),
+		indexType:      strings.ToUpper(exclusion.IndexType),
+		exclusions:     exs,
+		where:          where,
 	}
 }
 

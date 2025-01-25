@@ -114,6 +114,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	interDDLs := []string{}
 	indexDDLs := []string{}
 	foreignKeyDDLs := []string{}
+	exclusionDDLs := []string{}
 
 	// Incrementally examine desiredDDLs
 	for _, ddl := range desiredDDLs {
@@ -153,6 +154,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return nil, err
 			}
 			foreignKeyDDLs = append(foreignKeyDDLs, fkeyDDLs...)
+		case *AddExclusion:
+			exDDLs, err := g.generateDDLsForAddExclusion(desired.tableName, desired.exclusion, "ALTER TABLE", ddl.Statement())
+			if err != nil {
+				return nil, err
+			}
+			exclusionDDLs = append(exclusionDDLs, exDDLs...)
 		case *AddPolicy:
 			policyDDLs, err := g.generateDDLsForCreatePolicy(desired.tableName, desired.policy, "CREATE POLICY", ddl.Statement())
 			if err != nil {
@@ -206,6 +213,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	ddls = append(ddls, interDDLs...)
 	ddls = append(ddls, indexDDLs...)
 	ddls = append(ddls, foreignKeyDDLs...)
+	ddls = append(ddls, exclusionDDLs...)
 
 	// Clean up obsoleted tables, indexes, columns
 	for _, currentTable := range g.currentTables {
@@ -227,6 +235,15 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			foreignKeyDDLs := g.generateDDLsForAbsentForeignKey(foreignKey, *currentTable, *desiredTable)
 			ddls = append(ddls, foreignKeyDDLs...)
 			// TODO: simulate to remove foreign key from `currentTable.foreignKeys`?
+		}
+
+		// Table is expected to exist. Drop exclusion constraints.
+		for _, exclusion := range currentTable.exclusions {
+			if containsString(convertExclusionToConstraintNames(desiredTable.exclusions), exclusion.constraintName) {
+				continue // Exclusion constraint is expected to exist.
+			}
+
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(exclusion.constraintName)))
 		}
 
 		// Check indexes
@@ -685,6 +702,32 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		}
 	}
 
+	// Examine each exclusion
+	for _, desiredExclusion := range desired.table.exclusions {
+		if len(desiredExclusion.constraintName) == 0 && g.mode != GeneratorModeSQLite3 {
+			return ddls, fmt.Errorf(
+				"Exclusion without constraint symbol was found in table '%s'. "+
+					"Specify the constraint symbol to identify the exclusion.",
+				desired.table.name,
+			)
+		}
+
+		if currentExclusion := findExclusionByName(currentTable.exclusions, desiredExclusion.constraintName); currentExclusion != nil {
+			// Drop and add exclusion as needed.
+			if !g.areSameExclusions(*currentExclusion, desiredExclusion) {
+				dropDDL := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentExclusion.constraintName))
+				if dropDDL != "" {
+					ddls = append(ddls, dropDDL, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), g.generateExclusionDefinition(desiredExclusion)))
+				}
+			}
+		} else {
+			// Exclusion not found, add exclusion.
+			definition := g.generateExclusionDefinition(desiredExclusion)
+			ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), definition)
+			ddls = append(ddls, ddl)
+		}
+	}
+
 	// Examine each check
 	for _, desiredCheck := range desired.table.checks {
 		if currentCheck := findCheckByName(currentTable.checks, desiredCheck.constraintName); currentCheck != nil {
@@ -778,6 +821,33 @@ func (g *Generator) generateDDLsForAddForeignKey(tableName string, desiredForeig
 		return nil, fmt.Errorf("index '%s' is doubly created against table '%s': '%s'", desiredForeignKey.constraintName, tableName, statement)
 	}
 	desiredTable.foreignKeys = append(desiredTable.foreignKeys, desiredForeignKey)
+
+	return ddls, nil
+}
+
+func (g *Generator) generateDDLsForAddExclusion(tableName string, desiredExclusion Exclusion, action string, statement string) ([]string, error) {
+	var ddls []string
+
+	currentTable := findTableByName(g.currentTables, tableName)
+	currentExclusion := findExclusionByName(currentTable.exclusions, desiredExclusion.constraintName)
+	if currentExclusion == nil {
+		// Exclusion not found, add exclusion
+		ddls = append(ddls, statement)
+		currentTable.exclusions = append(currentTable.exclusions, desiredExclusion)
+	} else {
+		// Exclusion key found, If it's different, drop and add or alter exclusion.
+		if !g.areSameExclusions(*currentExclusion, desiredExclusion) {
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentExclusion.constraintName)))
+			ddls = append(ddls, statement)
+		}
+	}
+
+	// Examine indexes in desiredTable to delete obsoleted indexes later
+	desiredTable := findTableByName(g.desiredTables, tableName)
+	if containsString(convertExclusionToConstraintNames(desiredTable.exclusions), desiredExclusion.constraintName) {
+		return nil, fmt.Errorf("index '%s' is doubly created against table '%s': '%s'", desiredExclusion.constraintName, tableName, statement)
+	}
+	desiredTable.exclusions = append(desiredTable.exclusions, desiredExclusion)
 
 	return ddls, nil
 }
@@ -1403,6 +1473,23 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 	return strings.TrimSuffix(definition, " ")
 }
 
+func (g *Generator) generateExclusionDefinition(exclusion Exclusion) string {
+	var ex []string
+	for _, exclusionPair := range exclusion.exclusions {
+		ex = append(ex, fmt.Sprintf("%s WITH %s", exclusionPair.column, exclusionPair.operator))
+	}
+	definition := fmt.Sprintf(
+		"CONSTRAINT %s EXCLUDE USING %s (%s)",
+		g.escapeSQLName(exclusion.constraintName),
+		exclusion.indexType,
+		strings.Join(ex, ", "),
+	)
+	if exclusion.where != "" {
+		definition += fmt.Sprintf(" WHERE (%s)", exclusion.where)
+	}
+	return definition
+}
+
 func (g *Generator) generateDropIndex(tableName string, indexName string, constraint bool) string {
 	switch g.mode {
 	case GeneratorModeMysql:
@@ -1554,6 +1641,13 @@ func aggregateDDLsToSchema(ddls []DDL) ([]*Table, []*View, []*Trigger, []*Type, 
 			}
 
 			table.foreignKeys = append(table.foreignKeys, stmt.foreignKey)
+		case *AddExclusion:
+			table := findTableByName(tables, stmt.tableName)
+			if table == nil {
+				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("ADD EXCLUDE is performed before CREATE TABLE: %s", ddl.Statement())
+			}
+
+			table.exclusions = append(table.exclusions, stmt.exclusion)
 		case *AddPolicy:
 			table := findTableByName(tables, stmt.tableName)
 			if table == nil {
@@ -1629,6 +1723,15 @@ func findForeignKeyByName(foreignKeys []ForeignKey, constraintName string) *Fore
 	for _, foreignKey := range foreignKeys {
 		if foreignKey.constraintName == constraintName {
 			return &foreignKey
+		}
+	}
+	return nil
+}
+
+func findExclusionByName(exclusions []Exclusion, constraintName string) *Exclusion {
+	for _, exclusion := range exclusions {
+		if exclusion.constraintName == constraintName {
+			return &exclusion
 		}
 	}
 	return nil
@@ -1992,6 +2095,26 @@ func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB Forei
 	return true
 }
 
+func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion) bool {
+	if exclusionA.indexType != exclusionB.indexType {
+		return false
+	}
+	if len(exclusionA.exclusions) != len(exclusionB.exclusions) {
+		return false
+	}
+	if exclusionA.where != exclusionB.where {
+		return false
+	}
+	for i := range exclusionA.exclusions {
+		a := exclusionA.exclusions[i]
+		b := exclusionB.exclusions[i]
+		if a.column != b.column || a.operator != b.operator {
+			return false
+		}
+	}
+	return true
+}
+
 func areSamePolicies(policyA, policyB Policy) bool {
 	if strings.ToLower(policyA.scope) != strings.ToLower(policyB.scope) {
 		return false
@@ -2063,6 +2186,14 @@ func convertForeignKeysToConstraintNames(foreignKeys []ForeignKey) []string {
 	constraintNames := []string{}
 	for _, foreignKey := range foreignKeys {
 		constraintNames = append(constraintNames, foreignKey.constraintName)
+	}
+	return constraintNames
+}
+
+func convertExclusionToConstraintNames(exclusions []Exclusion) []string {
+	constraintNames := []string{}
+	for _, exclusion := range exclusions {
+		constraintNames = append(constraintNames, exclusion.constraintName)
 	}
 	return constraintNames
 }

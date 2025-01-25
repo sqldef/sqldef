@@ -320,14 +320,18 @@ func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	exclusionDefs, err := d.getExclusionDefs(table)
+	if err != nil {
+		return "", err
+	}
 	comments, err := d.getComments(table)
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreignDefs, policyDefs, comments, checkConstraints, uniqueConstraints, d.GetDefaultSchema()), nil
+	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreignDefs, exclusionDefs, policyDefs, comments, checkConstraints, uniqueConstraints, d.GetDefaultSchema()), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreignDefs, policyDefs, comments []string, checkConstraints, uniqueConstraints map[string]string, defaultSchema string) string {
+func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreignDefs, exclusionDefs, policyDefs, comments []string, checkConstraints, uniqueConstraints map[string]string, defaultSchema string) string {
 	var queryBuilder strings.Builder
 	schema, table := splitTableName(table, defaultSchema)
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", escapeSQLName(schema), escapeSQLName(table))
@@ -363,6 +367,9 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
 	for _, v := range foreignDefs {
+		fmt.Fprintf(&queryBuilder, "%s;\n", v)
+	}
+	for _, v := range exclusionDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
 	for _, v := range policyDefs {
@@ -514,14 +521,14 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 }
 
 func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
-	// Exclude indexes that are implicitly created for primary keys or unique constraints.
+	// Exclude indexes that are implicitly created for primary keys or unique constraints or exclusion constraints.
 	const query = `WITH
-	  unique_and_pk_constraints AS (
+	  exclude_constraints AS (
 	    SELECT con.conname AS name
 	    FROM   pg_constraint con
 	    JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
 	    JOIN   pg_class cls ON cls.oid = con.conrelid
-	    WHERE  con.contype IN ('p', 'u')
+	    WHERE  con.contype IN ('p', 'u', 'x')
 	    AND    nsp.nspname = $1
 	    AND    cls.relname = $2
 	  )
@@ -529,7 +536,7 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 	FROM   pg_indexes
 	WHERE  schemaname = $1
 	AND    tablename = $2
-	AND    indexName NOT IN (SELECT name FROM unique_and_pk_constraints)
+	AND    indexName NOT IN (SELECT name FROM exclude_constraints)
 	`
 	schema, table := splitTableName(table, d.GetDefaultSchema())
 	rows, err := d.db.Query(query, schema, table)
@@ -610,6 +617,35 @@ func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]st
 			escapeSQLName(schema), escapeSQLName(table),
 			escapeSQLName(constraintName), constraintDef,
 		)
+	}
+
+	return result, nil
+}
+
+func (d *PostgresDatabase) getExclusionDefs(tableName string) ([]string, error) {
+	const query = `SELECT con.conname, pg_get_constraintdef(con.oid, true)
+	FROM   pg_constraint con
+	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+	JOIN   pg_class cls ON cls.oid = con.conrelid
+	WHERE  con.contype = 'x'
+	AND    nsp.nspname = $1
+	AND    cls.relname = $2;`
+
+	result := []string{}
+	schema, table := splitTableName(tableName, d.GetDefaultSchema())
+	rows, err := d.db.Query(query, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var constraintName, constraintDef string
+		err = rows.Scan(&constraintName, &constraintDef)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s", schema, table, constraintName, constraintDef))
 	}
 
 	return result, nil

@@ -36,6 +36,12 @@ type AddForeignKey struct {
 	foreignKey ForeignKey
 }
 
+type AddExclusion struct {
+	statement string
+	tableName string
+	exclusion Exclusion
+}
+
 type AddPolicy struct {
 	statement string
 	tableName string
@@ -48,6 +54,7 @@ type Table struct {
 	indexes     []Index
 	checks      []CheckDefinition
 	foreignKeys []ForeignKey
+	exclusions  []Exclusion
 	policies    []Policy
 	options     map[string]string
 }
@@ -133,6 +140,18 @@ type ForeignKey struct {
 	onUpdate          string
 	notForReplication bool
 	constraintOptions *ConstraintOptions
+}
+
+type Exclusion struct {
+	constraintName string
+	indexType      string
+	where          string
+	exclusions     []ExclusionPair
+}
+
+type ExclusionPair struct {
+	column   string
+	operator string
 }
 
 type Policy struct {
@@ -288,6 +307,10 @@ func (a *AddPrimaryKey) Statement() string {
 }
 
 func (a *AddForeignKey) Statement() string {
+	return a.statement
+}
+
+func (a *AddExclusion) Statement() string {
 	return a.statement
 }
 

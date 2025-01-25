@@ -1286,3 +1286,71 @@ CreateSchema:
     CREATE SCHEMA foo;
     CREATE SCHEMA IF NOT EXISTS bar;
     CREATE TABLE foo.test (id int);
+
+ExcludeConstraintWithCreateTable:
+  desired: |
+    CREATE TABLE exclude_example (
+      name varchar(255),
+      event_start tstzrange NOT NULL,
+      event_end tstzrange NOT NULL,
+      CONSTRAINT ex1 EXCLUDE (name WITH =),
+      CONSTRAINT ex2 EXCLUDE (lower(name::text) WITH =) where (name::text <> ''),
+      CONSTRAINT ex3 EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&)
+    );
+
+ExcludeConstraintChange:
+  current: |
+    CREATE TABLE exclude_example (
+      name varchar(255),
+      event_start tstzrange NOT NULL,
+      event_end tstzrange NOT NULL,
+      CONSTRAINT ex EXCLUDE (name WITH =)
+    );
+  desired: |
+    CREATE TABLE exclude_example (
+      name varchar(255),
+      event_start tstzrange NOT NULL,
+      event_end tstzrange NOT NULL,
+      CONSTRAINT ex EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&)
+    );
+  output: |
+    ALTER TABLE "public"."exclude_example" DROP CONSTRAINT "ex";
+    ALTER TABLE "public"."exclude_example" ADD CONSTRAINT "ex" EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&);
+
+ExcludeConstraintDropAndAdd:
+  current: |
+    CREATE TABLE exclude_example (
+      name varchar(255),
+      event_start tstzrange NOT NULL,
+      event_end tstzrange NOT NULL,
+      CONSTRAINT ex1 EXCLUDE (name WITH =)
+    );
+  desired: |
+    CREATE TABLE exclude_example (
+      name varchar(255),
+      event_start tstzrange NOT NULL,
+      event_end tstzrange NOT NULL,
+      CONSTRAINT ex2 EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&)
+    );
+  output: |
+    ALTER TABLE "public"."exclude_example" ADD CONSTRAINT "ex2" EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&);
+    ALTER TABLE "public"."exclude_example" DROP CONSTRAINT "ex1";
+
+ExcludeConstraintWithAlterTable:
+  current: |
+    CREATE TABLE exclude_example (
+      name varchar(255),
+      event_start tstzrange NOT NULL,
+      event_end tstzrange NOT NULL
+    );
+    ALTER TABLE exclude_example ADD CONSTRAINT ex1 EXCLUDE (name WITH =);
+  desired: |
+    CREATE TABLE exclude_example (
+      name varchar(255),
+      event_start tstzrange NOT NULL,
+      event_end tstzrange NOT NULL
+    );
+    ALTER TABLE exclude_example ADD CONSTRAINT ex2 EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&);
+  output: |
+    ALTER TABLE exclude_example ADD CONSTRAINT ex2 EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&);
+    ALTER TABLE "public"."exclude_example" DROP CONSTRAINT "ex1";

@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -102,6 +103,7 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 	var indexes []*parser.IndexDefinition
 	var foreignKeys []*parser.ForeignKeyDefinition
 	var checks []*parser.CheckDefinition
+	var exclusions []*parser.ExclusionDefinition
 	for _, elt := range stmt.TableElts {
 		switch node := elt.Node.(type) {
 		case *pgquery.Node_ColumnDef:
@@ -167,6 +169,12 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 					ConstraintName: parser.NewColIdent(node.Constraint.Conname),
 				}
 				checks = append(checks, check)
+			case pgquery.ConstrType_CONSTR_EXCLUSION:
+				exclusion, err := p.parseExclusion(node.Constraint)
+				if err != nil {
+					return nil, err
+				}
+				exclusions = append(exclusions, exclusion)
 			default:
 				return nil, fmt.Errorf("unknown Constraint type: %#v", node)
 			}
@@ -183,6 +191,7 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 			Indexes:     indexes,
 			ForeignKeys: foreignKeys,
 			Checks:      checks,
+			Exclusions:  exclusions,
 			Options:     map[string]string{},
 		},
 	}, nil
@@ -870,9 +879,69 @@ func (p PostgresParser) parseConstraint(constraint *pgquery.Constraint, tableNam
 			NewName:    tableName,
 			ForeignKey: fk,
 		}, nil
+	case pgquery.ConstrType_CONSTR_EXCLUSION:
+		ex, err := p.parseExclusion(constraint)
+		if err != nil {
+			return nil, err
+		}
+		return &parser.DDL{
+			Action:    parser.AddExclusion,
+			Table:     tableName,
+			NewName:   tableName,
+			Exclusion: ex,
+		}, nil
 	default:
 		return nil, fmt.Errorf("unhandled constraint type in parseAlterTableStmt: %d", constraint.Contype)
 	}
+}
+
+func (p PostgresParser) parseExclusion(constraint *pgquery.Constraint) (*parser.ExclusionDefinition, error) {
+	var exs []parser.ExclusionPair
+	for _, ex := range constraint.Exclusions {
+		nl := ex.GetList()
+		if nl == nil {
+			return nil, fmt.Errorf("require node list on exclusion: %#v", ex)
+		}
+		nItems := nl.GetItems()
+		if nItems == nil {
+			return nil, fmt.Errorf("require items on node list: %#v", nl)
+		}
+		excludeElement := nItems[0].GetIndexElem()
+		if excludeElement == nil {
+			return nil, errors.New("require exclude element")
+		}
+		var col parser.ColIdent
+		if n := excludeElement.GetExpr(); n != nil {
+			expr, err := p.parseExpr(n)
+			if err != nil {
+				return nil, err
+			}
+			col = parser.NewColIdent(parser.String(expr))
+		} else {
+			col = parser.NewColIdent(excludeElement.Name)
+		}
+
+		opList := nItems[1].GetList()
+		opItems := opList.GetItems()
+		exs = append(exs, parser.ExclusionPair{
+			Column:   col,
+			Operator: opItems[0].Node.(*pgquery.Node_String_).String_.Sval},
+		)
+	}
+	var whereExpr parser.Expr
+	if whereClause := constraint.GetWhereClause(); whereClause != nil {
+		expr, err := p.parseExpr(whereClause)
+		if err != nil {
+			return nil, err
+		}
+		whereExpr = expr
+	}
+	return &parser.ExclusionDefinition{
+		ConstraintName: parser.NewColIdent(constraint.Conname),
+		IndexType:      constraint.GetAccessMethod(),
+		Exclusions:     exs,
+		Where:          parser.NewWhere(parser.WhereStr, whereExpr),
+	}, nil
 }
 
 func (p PostgresParser) parseForeignKey(constraint *pgquery.Constraint) (*parser.ForeignKeyDefinition, error) {

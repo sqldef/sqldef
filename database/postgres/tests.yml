@@ -222,3 +222,32 @@ MathInDefault:
     CREATE TABLE public.foo (
       expires_at timestamp with time zone NOT NULL DEFAULT (CURRENT_TIMESTAMP + '1 day'::interval)
     )
+
+ExcludeConstraintBasic:
+  sql: |
+    ALTER TABLE exclude_example
+    ADD CONSTRAINT ex
+    EXCLUDE USING btree (name WITH =);
+
+ExcludeConstraintUsingGist:
+  sql: |
+    ALTER TABLE exclude_example
+    ADD CONSTRAINT ex
+    EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&);
+
+ExcludeConstraintUsingWhere:
+  sql: |
+    ALTER TABLE exclude_example
+    ADD CONSTRAINT ex
+    EXCLUDE (lower(name) WITH =) WHERE (name <> '');
+
+ExcludeConstraintWithCreateTable:
+  sql: |
+    CREATE TABLE exclude_example (
+      name varchar(255),
+      event_start tstzrange NOT NULL,
+      event_end tstzrange NOT NULL,
+      CONSTRAINT ex1 EXCLUDE (name WITH =),
+      CONSTRAINT ex2 EXCLUDE (lower(name) WITH =) where (name <> ''),
+      CONSTRAINT ex3 EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&)
+    );
