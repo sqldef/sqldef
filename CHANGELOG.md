@@ -1,3 +1,7 @@
+## v0.17.28
+
+* psqldef: Support exclusion constraints [#600](https://github.com/sqldef/sqldef/pull/600)
+
 ## v0.17.27
 
 * psqldef: Fix syntax error occurring when using boolean comparisons in CREATE INDEX [#592s](https://github.com/sqldef/sqldef/pull/592)
