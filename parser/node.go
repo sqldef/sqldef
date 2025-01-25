@@ -410,6 +410,7 @@ type DDL struct {
 	IndexCols     []IndexColumn
 	IndexExpr     Expr
 	ForeignKey    *ForeignKeyDefinition
+	Exclusion     *ExclusionDefinition
 	Policy        *Policy
 	View          *View
 	Trigger       *Trigger
@@ -426,6 +427,7 @@ const (
 	AddForeignKey = DDLAction(iota)
 	AddIndex
 	AddPrimaryKey
+	AddExclusion
 	CommentOn
 	CreateExtension
 	CreateIndex
@@ -671,9 +673,10 @@ type ExclusionPair struct {
 }
 
 type ExclusionDefinition struct {
-	AccessMethod string
-	Exclusions   []ExclusionPair
-	Where        *Where
+	ConstraintName ColIdent
+	IndexType      string
+	Exclusions     []ExclusionPair
+	Where          *Where
 }
 
 // Format returns a canonical string representation of the type and all relevant options
