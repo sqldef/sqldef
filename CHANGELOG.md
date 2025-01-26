@@ -1,3 +1,9 @@
+## v0.17.29
+
+* psqldef: Fix altering partitions [#597](https://github.com/sqldef/sqldef/pull/597)
+* psqldef: Fix missing columns and comments in partition table dumps [#595](https://github.com/sqldef/sqldef/pull/595)
+* mssqldef: Fix parsing UPDATE with FROM [#593](https://github.com/sqldef/sqldef/pull/593)
+
 ## v0.17.28
 
 * psqldef: Support exclusion constraints [#600](https://github.com/sqldef/sqldef/pull/600)
