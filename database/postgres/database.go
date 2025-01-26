@@ -448,7 +448,7 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
 	    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
 	    LEFT JOIN information_schema.columns s ON s.column_name = f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
-	    WHERE c.relkind = 'r'::char
+	    WHERE c.relkind in ('r', 'p')
 	    AND n.nspname = $1
 	    AND c.relname = $2
 	    AND f.attnum > 0
@@ -849,7 +849,7 @@ func (d *PostgresDatabase) getComments(table string) ([]string, error) {
 		SELECT obj_description(c.oid)
 		FROM pg_class c
 		JOIN pg_namespace n ON n.oid = c.relnamespace
-		WHERE c.relkind = 'r'
+		WHERE c.relkind in ('r', 'p')
 		AND obj_description(c.oid) IS NOT NULL
 		AND n.nspname = $1
 		AND c.relname = $2
