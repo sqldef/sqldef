@@ -246,3 +246,15 @@ PercentConstraintName:
       [test%] int CONSTRAINT [DF_percent_test_test%] DEFAULT (NULL)
     );
   output: ""
+UpdateWithFromAndWhere:
+  desired: |
+    CREATE TABLE reservation (
+      id BIGINT NOT NULL IDENTITY (1, 1),
+      start_time DATETIME2(0) NOT NULL,
+      end_time DATETIME2(0) NOT NULL,
+      reserve_time INTEGER,
+      CONSTRAINT reservation_pk PRIMARY KEY CLUSTERED (id)
+    );
+    CREATE TRIGGER [reservation_insert] ON [dbo].[reservation] instead of update AS
+    set nocount on
+    update reservation set reserve_time = DATEDIFF(second, inserted.start_time, inserted.end_time) from inserted where reservation.id = inserted.id;
