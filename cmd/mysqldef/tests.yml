@@ -364,6 +364,21 @@ TableComment:
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='都道府県マスター';
   output: |
     ALTER TABLE `prefecture` COMMENT = '都道府県マスター';
+RemoveTableComment:
+  current: |
+    CREATE TABLE `prefecture` (
+      `id` int(11) unsigned NOT NULL COMMENT 'ID',
+      `name` varchar(50) NOT NULL COMMENT '都道府県名',
+      PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='都道府県マスター';
+  desired: |
+    CREATE TABLE `prefecture` (
+      `id` int(11) unsigned NOT NULL COMMENT 'ID',
+      `name` varchar(50) NOT NULL COMMENT '都道府県名',
+      PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+  output: |
+    ALTER TABLE `prefecture` COMMENT = '';
 AlterTableAddSetTypeColumn:
   current: |
     CREATE TABLE alarm (id BIGINT PRIMARY KEY);

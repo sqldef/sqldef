@@ -746,7 +746,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	// Examine table comment
 	if currentTable.options["comment"] != desired.table.options["comment"] {
-		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s COMMENT = %s", g.escapeTableName(desired.table.name), desired.table.options["comment"]))
+		if desired.table.options["comment"] == "" {
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s COMMENT = ''", g.escapeTableName(desired.table.name)))
+		} else {
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s COMMENT = %s", g.escapeTableName(desired.table.name), desired.table.options["comment"]))
+		}
 	}
 
 	return ddls, nil
