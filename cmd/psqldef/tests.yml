@@ -570,6 +570,81 @@ CommentOnNonStandardDefaultSchema:
     COMMENT ON TABLE foo.users is 'users table updated';
     COMMENT ON COLUMN foo.users.id is 'users id';
   user: psqldef_user
+#; TODO: Enable to pass the following comment outed case 'CommentUnset'.
+#; 'Unsetting comment' is seen as 'change' false positively as of now (ref.
+#; https://github.com/sqldef/sqldef/issues/605 ), because the specified comment
+#; has no comment already before the application of sqldef,
+# but then 'COMMENT ON ... IS NULL' clause is requested as a change.
+#CommentUnset:
+#  current: |
+#    CREATE TABLE users (
+#      id bigint
+#    );
+#    COMMENT ON TABLE users IS 'users table is before update';
+#    COMMENT ON COLUMN users.id IS 'users id column is before update';
+#  desired: |
+#    CREATE TABLE users (
+#      id bigint
+#    );
+#    COMMENT ON TABLE users IS NULL;
+#    COMMENT ON COLUMN users.id IS null;
+#  output: |
+#    COMMENT ON TABLE public.users IS NULL;
+#    COMMENT ON COLUMN public.users.id IS null;
+CommentWithoutSchema:
+  current: |
+    CREATE TABLE users (
+      id bigint
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint
+    );
+    COMMENT ON TABLE users is 'users table is updated';
+    COMMENT ON COLUMN users.id is 'users id column is updated';
+  output: |
+    COMMENT ON TABLE foo.users is 'users table is updated';
+    COMMENT ON COLUMN foo.users.id is 'users id column is updated';
+  user: psqldef_user # in cmd/psqldef/psqldef_test.go schema 'foo' is used if 'user' is provided.
+CommentWithoutSchemaWithoutTableNameQuoted:
+  current: |
+    CREATE TABLE users (
+      id bigint,
+      "update" boolean
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint,
+      "update" boolean
+    );
+    COMMENT ON TABLE users IS 'users table is updated';
+    COMMENT ON COLUMN users.id IS 'users.id column is updated';
+    COMMENT ON COLUMN users."update" IS '"users."update" column is updated';
+  # Default schema 'public' is needed be prefixed in output to prevent false positive detection of DDL change.
+  output: |
+    COMMENT ON TABLE public.users IS 'users table is updated';
+    COMMENT ON COLUMN public.users.id IS 'users.id column is updated';
+    COMMENT ON COLUMN public.users."update" IS '"users."update" column is updated';
+CommentWithoutSchemaWithTableNameQuoted:
+  current: |
+    CREATE TABLE "select" (
+      id bigint,
+      "update" boolean
+    );
+  desired: |
+    CREATE TABLE "select" (
+      id bigint,
+      "update" boolean
+    );
+    COMMENT ON TABLE "select" IS '"select" table is updated';
+    COMMENT ON COLUMN "select".id IS '"select".id column is updated';
+    COMMENT ON COLUMN "select"."update" IS '"select"."update" column is updated';
+  # Default schema 'public' is needed be prefixed in output to prevent false positive detection of DDL change.
+  output: |
+    COMMENT ON TABLE public."select" IS '"select" table is updated';
+    COMMENT ON COLUMN public."select".id IS '"select".id column is updated';
+    COMMENT ON COLUMN public."select"."update" IS '"select"."update" column is updated';
+
 CommentContainingQuote:
   current: |
     CREATE TABLE public.test (
