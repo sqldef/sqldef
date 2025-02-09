@@ -301,6 +301,14 @@ func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// if pkey cols exist, retrieve the pkey name
+	pkeyName := ""
+	if len(pkeyCols) > 0 {
+		pkeyName, err = d.getPrimaryKeyName(table)
+		if err != nil {
+			return "", err
+		}
+	}
 	indexDefs, err := d.getIndexDefs(table)
 	if err != nil {
 		return "", err
@@ -329,10 +337,10 @@ func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return buildDumpTableDDL(table, cols, pkeyCols, indexDefs, foreignDefs, exclusionDefs, policyDefs, comments, checkConstraints, uniqueConstraints, d.GetDefaultSchema()), nil
+	return buildDumpTableDDL(table, cols, pkeyName, pkeyCols, indexDefs, foreignDefs, exclusionDefs, policyDefs, comments, checkConstraints, uniqueConstraints, d.GetDefaultSchema()), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, foreignDefs, exclusionDefs, policyDefs, comments []string, checkConstraints, uniqueConstraints map[string]string, defaultSchema string) string {
+func buildDumpTableDDL(table string, columns []column, pkeyName string, pkeyCols, indexDefs, foreignDefs, exclusionDefs, policyDefs, comments []string, checkConstraints, uniqueConstraints map[string]string, defaultSchema string) string {
 	var queryBuilder strings.Builder
 	schema, table := splitTableName(table, defaultSchema)
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", escapeSQLName(schema), escapeSQLName(table))
@@ -357,7 +365,7 @@ func buildDumpTableDDL(table string, columns []column, pkeyCols, indexDefs, fore
 	}
 	if len(pkeyCols) > 0 {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "PRIMARY KEY (\"%s\")", strings.Join(pkeyCols, "\", \""))
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", pkeyName, strings.Join(pkeyCols, "\", \""))
 	}
 	for constraintName, constraintDef := range checkConstraints {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
@@ -678,6 +686,29 @@ WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$
 		columnNames = append(columnNames, columnName)
 	}
 	return columnNames, nil
+}
+
+func (d *PostgresDatabase) getPrimaryKeyName(table string) (string, error) {
+	schema, table := splitTableName(table, d.GetDefaultSchema())
+	query := fmt.Sprintf(`SELECT
+	conname from pg_constraint where conrelid = '%s.%s'::regclass and contype = 'p'`, schema, table)
+	//tableWithSchema := fmt.Sprintf("'%s.%s'::regclass", schema, table)
+	rows, err := d.db.Query(query)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	var keyName string
+	if rows.Next() {
+		err = rows.Scan(&keyName)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		return "", err
+	}
+	return keyName, nil
 }
 
 // refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d

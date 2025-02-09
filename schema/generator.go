@@ -625,8 +625,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			case GeneratorModeMysql:
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", g.escapeTableName(desired.table.name)))
 			case GeneratorModePostgres:
-				tableName := strings.SplitN(desired.table.name, ".", 2)[1] // without schema
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(tableName+"_pkey")))
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentPrimaryKey.name)))
 			case GeneratorModeMssql:
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentPrimaryKey.name)))
 			default:
@@ -1361,6 +1360,10 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 			"ALTER TABLE %s ADD ",
 			g.escapeTableName(table),
 		)
+		if strings.ToUpper(index.indexType) == "PRIMARY KEY" && index.primary &&
+			(index.name != "" && index.name != "PRIMARY" && index.name != index.columns[0].column) {
+			ddl += fmt.Sprintf("CONSTRAINT %s ", g.escapeSQLName(index.name))
+		}
 		if strings.ToUpper(index.indexType) == "UNIQUE KEY" {
 			ddl += "CONSTRAINT"
 		} else {

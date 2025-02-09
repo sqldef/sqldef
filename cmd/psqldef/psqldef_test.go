@@ -1285,7 +1285,7 @@ func TestPsqldefExport(t *testing.T) {
 		    "c_char_10" character(10),
 		    "c_varchar_10" character varying(10),
 		    "c_varchar_unlimited" character varying,
-		    PRIMARY KEY ("id")
+		    CONSTRAINT users_pkey PRIMARY KEY ("id")
 		);
 
 		ALTER TABLE "public"."users" ADD CONSTRAINT "users_c_char_1_key" UNIQUE (c_char_1);
@@ -1312,7 +1312,7 @@ func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 		    "col1" character varying(40) NOT NULL,
 		    "col2" character varying(6) NOT NULL,
 		    "created_at" timestamp NOT NULL,
-		    PRIMARY KEY ("col1", "col2")
+		    CONSTRAINT users_pkey PRIMARY KEY ("col1", "col2")
 		);
 		`,
 	))
@@ -1351,17 +1351,17 @@ func TestPsqldefExportConcurrency(t *testing.T) {
 	assertEquals(t, outputDefault, stripHeredoc(`
 		CREATE TABLE "public"."users_1" (
 		    "id" bigint NOT NULL,
-		    PRIMARY KEY ("id")
+		    CONSTRAINT users_1_pkey PRIMARY KEY ("id")
 		);
 	
 		CREATE TABLE "public"."users_2" (
 		    "id" bigint NOT NULL,
-		    PRIMARY KEY ("id")
+		    CONSTRAINT users_2_pkey PRIMARY KEY ("id")
 		);
 	
 		CREATE TABLE "public"."users_3" (
 		    "id" bigint NOT NULL,
-		    PRIMARY KEY ("id")
+		    CONSTRAINT users_3_pkey PRIMARY KEY ("id")
 		);
 		`,
 	))
