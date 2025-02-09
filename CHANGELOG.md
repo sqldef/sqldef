@@ -1,3 +1,8 @@
+## v0.17.30
+
+* psqldef: Change the pkey using constraints [#609](https://github.com/sqldef/sqldef/pull/609)
+* psqldef: Handle case when schema is not specified in COMMENT ON clause [#606](https://github.com/sqldef/sqldef/pull/606)
+
 ## v0.17.29
 
 * psqldef: Fix altering partitions [#597](https://github.com/sqldef/sqldef/pull/597)
