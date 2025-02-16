@@ -1,3 +1,8 @@
+## v0.17.31
+
+* mssqldef: Fix parsing VIEW with header comment [#601](https://github.com/sqldef/sqldef/pull/601)
+* mysqldef: Fix an error when removing table comments [#608](https://github.com/sqldef/sqldef/pull/608)
+
 ## v0.17.30
 
 * psqldef: Change the pkey using constraints [#609](https://github.com/sqldef/sqldef/pull/609)
