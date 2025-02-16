@@ -605,6 +605,7 @@ func boolToOnOff(in bool) string {
 var (
 	suffixSemicolon = regexp.MustCompile(`;$`)
 	spaces          = regexp.MustCompile(`[ ]+`)
+	lineComment     = regexp.MustCompile(`(?m)--.*$`)
 )
 
 func (d *MssqlDatabase) views() ([]string, error) {
@@ -632,6 +633,7 @@ INNER JOIN sys.sql_modules
 		if err := rows.Scan(&name, &definition); err != nil {
 			return nil, err
 		}
+		definition = lineComment.ReplaceAllString(definition, "")	//XXX - Line comments should be removed before removing newlines.
 		definition = strings.TrimSpace(definition)
 		definition = strings.ReplaceAll(definition, "\n", " ")
 		definition = suffixSemicolon.ReplaceAllString(definition, "")

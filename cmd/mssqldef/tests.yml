@@ -258,3 +258,9 @@ UpdateWithFromAndWhere:
     CREATE TRIGGER [reservation_insert] ON [dbo].[reservation] instead of update AS
     set nocount on
     update reservation set reserve_time = DATEDIFF(second, inserted.start_time, inserted.end_time) from inserted where reservation.id = inserted.id;
+ViewWithHeaderComment:
+  desired: |
+    -- DUAL view
+    CREATE VIEW DUAL AS SELECT 'X' AS X;
+  output: |
+    CREATE VIEW DUAL AS SELECT 'X' AS X;
