@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	pgquery "github.com/pganalyze/pg_query_go/v5"
+	pgquery "github.com/pganalyze/pg_query_go/v6"
 	"github.com/sqldef/sqldef/database"
 	"github.com/sqldef/sqldef/parser"
 	go_pgquery "github.com/wasilibs/go-pgquery"
@@ -1219,6 +1219,8 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType
 		case "timestamptz":
 			columnType.Type = "timestamp"
 			columnType.Timezone = true
+		case "json":
+			columnType.Type = "json"
 		default:
 			if len(typeNames) == 2 {
 				return columnType, fmt.Errorf("unhandled type in parseTypeName: %s", typeName)
