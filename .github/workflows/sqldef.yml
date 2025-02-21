@@ -47,6 +47,8 @@ jobs:
           MYSQL_VERSION: ${{ matrix.mysql_version }}
           POSTGRES_VERSION: ${{ matrix.postgres_version }}
       - run: make deps
+      - run: echo "GODEBUG=tlsrsakex=1" >> $GITHUB_ENV
+        if: matrix.mysql_version == '5.7'
       - run: make test-${{ matrix.target }}
 
   package:
