@@ -1219,6 +1219,8 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType
 		case "timestamptz":
 			columnType.Type = "timestamp"
 			columnType.Timezone = true
+		case "json":
+			columnType.Type = "json"
 		default:
 			if len(typeNames) == 2 {
 				return columnType, fmt.Errorf("unhandled type in parseTypeName: %s", typeName)
