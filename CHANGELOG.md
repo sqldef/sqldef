@@ -1,3 +1,8 @@
+## v0.17.32
+
+* Update dependencies [#613](https://github.com/sqldef/sqldef/pull/613)
+  * This change includes an update to go 1.22.
+
 ## v0.17.31
 
 * mssqldef: Fix parsing VIEW with header comment [#601](https://github.com/sqldef/sqldef/pull/601)
