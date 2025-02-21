@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	pgquery "github.com/pganalyze/pg_query_go/v5"
+	pgquery "github.com/pganalyze/pg_query_go/v6"
 	"github.com/sqldef/sqldef/database"
 	"github.com/sqldef/sqldef/parser"
 	go_pgquery "github.com/wasilibs/go-pgquery"
