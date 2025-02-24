@@ -29,6 +29,7 @@ type Config struct {
 
 	// Only PostgreSQL
 	TargetSchema []string
+	SkipTables   []string
 
 	// Only MySQL and PostgreSQL
 	DumpConcurrency int

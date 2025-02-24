@@ -108,6 +108,9 @@ func (d *PostgresDatabase) tableNames() ([]string, error) {
 		if err := rows.Scan(&schema, &name); err != nil {
 			return nil, err
 		}
+		if d.config.SkipTables != nil && containsString(d.config.SkipTables, schema+"."+name) {
+			continue
+		}
 		if d.config.TargetSchema != nil && !containsString(d.config.TargetSchema, schema) {
 			continue
 		}

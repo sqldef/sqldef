@@ -115,6 +115,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		SkipView:        opts.SkipView,
 		SkipExtension:   opts.SkipExtension,
 		TargetSchema:    options.Config.TargetSchema,
+		SkipTables:      options.Config.SkipTables,
 		DumpConcurrency: options.Config.DumpConcurrency,
 	}
 	if _, err := os.Stat(config.Host); !os.IsNotExist(err) {
