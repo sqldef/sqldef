@@ -524,12 +524,10 @@ $ go test ./cmd/mysqldef -run=TestApply/CreateTable
 
 ## Contributing
 
-If you have multiple issues or pull requests to be filed,
-it'd be greatly appreciated if you can prepare all of the contents beforehand and file all issues or pull requests at once.
+Please file a pull request if you have a feature request.
 
-That way, I'd like to predict the amount of effort required to make it possible for you to start using sqldef.
-If you incrementally contribute to the project every day,
-it would make my time management for OSS development hard and ultimately slow down the sqldef development.
+If you're unsure what to do, you may file a "Feature requests" ticket on [Discussions](https://github.com/sqldef/sqldef/discussions)
+and discuss how to implement that with the community.
 
 ## License
 
