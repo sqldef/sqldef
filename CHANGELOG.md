@@ -1,3 +1,7 @@
+## v1.0.0
+
+* No changes; this is the release of the first major version 🎉
+
 ## v0.17.32
 
 * Update dependencies [#613](https://github.com/sqldef/sqldef/pull/613)
