@@ -144,6 +144,9 @@ func (d *PostgresDatabase) views() ([]string, error) {
 		if err := rows.Scan(&schema, &name, &definition); err != nil {
 			return nil, err
 		}
+		if d.config.TargetSchema != nil && !containsString(d.config.TargetSchema, schema) {
+			continue
+		}
 		definition = strings.TrimSpace(definition)
 		definition = strings.ReplaceAll(definition, "\n", "")
 		definition = suffixSemicolon.ReplaceAllString(definition, "")
@@ -178,6 +181,9 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 		var schema, name, definition string
 		if err := rows.Scan(&schema, &name, &definition); err != nil {
 			return nil, err
+		}
+		if d.config.TargetSchema != nil && !containsString(d.config.TargetSchema, schema) {
+			continue
 		}
 		definition = strings.TrimSpace(definition)
 		definition = strings.ReplaceAll(definition, "\n", "")
