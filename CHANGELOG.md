@@ -1,3 +1,7 @@
+## v1.0.1
+
+* psqldef: Recognize schema for views and materialized views [#655](https://github.com/sqldef/sqldef/pull/655)
+
 ## v1.0.0
 
 * No changes; this is the release of the first major version 🎉
