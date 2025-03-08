@@ -1489,6 +1489,43 @@ func TestPsqldefConfigIncludesTargetSchema(t *testing.T) {
 	assertEquals(t, apply, nothingModified)
 }
 
+func TestPsqldefConfigIncludesTargetSchemaWithViews(t *testing.T) {
+	resetTestDatabase()
+
+	mustExecuteSQL(`
+				CREATE SCHEMA foo;
+
+				CREATE TABLE foo.users (
+					id BIGINT PRIMARY KEY,
+					name character varying(100)
+				);
+				CREATE TABLE foo.posts (
+					id BIGINT PRIMARY KEY,
+					name character varying(100),
+					user_id BIGINT,
+					is_deleted boolean
+				);
+				CREATE VIEW foo.user_views AS SELECT id from foo.users;
+				CREATE MATERIALIZED VIEW foo.view_user_posts AS SELECT p.id FROM (foo.posts as p JOIN foo.users as u ON ((p.user_id = u.id)));
+    `)
+
+	schema := stripHeredoc(`
+				CREATE SCHEMA bar;
+				CREATE TABLE bar.companies (
+					id BIGINT PRIMARY KEY
+				);
+	`)
+	writeFile("schema.sql", schema)
+
+	writeFile("config.yml", "target_schema: bar\n")
+
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--config", "config.yml")
+	assertEquals(t, apply, applyPrefix+schema)
+
+	apply = assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--config", "config.yml")
+	assertEquals(t, apply, nothingModified)
+}
+
 func TestPsqldefConfigIncludesSkipTables(t *testing.T) {
 	resetTestDatabase()
 
