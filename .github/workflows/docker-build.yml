@@ -1,120 +1,54 @@
-name: Optimized Docker Build and Deploy
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
 
-on:
-  push:
-    branches:
-      - main
-      - feature/*
-  pull_request:
-    branches:
-      - main
-  workflow_dispatch:
-    inputs:
-      test_build:
-        description: 'Run a test build (true/false)'
-        required: false
-        default: 'true'
+# GitHub recommends pinning actions to a commit SHA.
+# To get a newer version, you will need to update the SHA.
+# You can also reference a tag or branch, but the action may change without warning.
 
-env:
-  IMAGE_NAME: sqldef
-  REGISTRY: docker.io
+name: Publish Docker image
+
+on: push
 
 jobs:
-  build-and-test:
+  push_to_registry:
+    name: Push Docker image to Docker Hub
     runs-on: ubuntu-latest
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}
-      cancel-in-progress: true
-
+    permissions:
+      packages: write
+      contents: read
+      attestations: write
+      id-token: write
     steps:
-      - name: Checkout code
+      - name: Check out the repo
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Cache Docker layers
-        uses: actions/cache@v3
+      - name: Log in to Docker Hub
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
         with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=moby/buildkit:master
-            network=host
-
-      # Move login here - before any docker run/pull operations
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract metadata
+      - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
         with:
-          images: ${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+          images: tommymcguiver/sqldef
 
-      - name: Test Build (Dry Run)
-        if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main' || github.event.inputs.test_build == 'true'
-        uses: docker/build-push-action@v5
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64
-          push: false
-          tags: ${{ steps.meta.outputs.tags }}
-          load: true  # Load to local Docker daemon for testing
-          cache-from: type=local,src=/tmp/.buildx-cache
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
-
-      - name: Run Container Tests
-        if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main' || github.event.inputs.test_build == 'true'
-        run: |
-          docker run --rm ${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }} sqlite3def --help
-          # Add your specific test commands here
-
-      # Login and push only for main branch
-      - name: Login to Docker Hub
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build and Push (Production)
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
 
-      - name: Move cache
-        if: always()
-        run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache || true
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: index.docker.io/tommymcguiver/sqldef
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
