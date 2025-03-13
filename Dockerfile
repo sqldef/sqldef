@@ -4,11 +4,10 @@ WORKDIR /work
 COPY . .
 
 RUN go install
-RUN make
-RUN find .
+RUN uname
+RUN make && build/$(go env GOOS)-$(go env GOARCH)/sqlite3def --version
 
 FROM alpine as final
 
 RUN mkdir -p /usr/local/bin
 COPY --from=builder /work/build/*/* /usr/local/bin
-
