@@ -1,3 +1,7 @@
+## v1.0.2
+
+* Support publishing a Docker image to sqldef/sqldef on Docker Hub [#659](https://github.com/sqldef/sqldef/pull/659)
+
 ## v1.0.1
 
 * psqldef: Recognize schema for views and materialized views [#655](https://github.com/sqldef/sqldef/pull/655)
