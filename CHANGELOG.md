@@ -1,3 +1,7 @@
+## v1.0.3
+
+* Fix a condition to publish a Docker image
+
 ## v1.0.2
 
 * Support publishing a Docker image to sqldef/sqldef on Docker Hub [#659](https://github.com/sqldef/sqldef/pull/659)
