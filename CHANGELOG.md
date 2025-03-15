@@ -1,3 +1,7 @@
+## v1.0.4
+
+* Support multi-platform Docker images [#660](https://github.com/sqldef/sqldef/pull/660)
+
 ## v1.0.3
 
 * Fix a condition to publish a Docker image
