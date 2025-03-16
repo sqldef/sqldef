@@ -8,7 +8,7 @@ on:
   pull_request:
 jobs:
   build:
-    name: ${{ startsWith(github.ref, 'refs/tags/') && 'push' || 'build' }} ${{ matrix.cmd }}
+    name: ${{ startsWith(github.ref, 'refs/tags/') && 'push' || 'build' }} (${{ matrix.cmd }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
