@@ -1,3 +1,7 @@
+## v1.0.5
+
+* Split Docker images for each sqldef command [#662](https://github.com/sqldef/sqldef/pull/662)
+
 ## v1.0.4
 
 * Support multi-platform Docker images [#660](https://github.com/sqldef/sqldef/pull/660)
