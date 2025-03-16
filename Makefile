@@ -14,16 +14,27 @@ else
   SUFFIX=
 endif
 
-.PHONY: all build clean deps goyacc package package-zip package-targz parser
+.PHONY: all build clean deps goyacc package package-zip package-targz parser build-mysqldef build-sqlite3def build-mssqldef build-psqldef
 
 all: build
 
-build:
+build: build-mysqldef build-sqlite3def build-mssqldef build-psqldef
+
+build-mysqldef:
 	mkdir -p $(BUILD_DIR)
-	cd cmd/mysqldef    && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/mysqldef$(SUFFIX)
-	cd cmd/sqlite3def  && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/sqlite3def$(SUFFIX)
-	cd cmd/mssqldef    && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/mssqldef$(SUFFIX)
-	cd cmd/psqldef     && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/psqldef$(SUFFIX)	
+	cd cmd/mysqldef && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/mysqldef$(SUFFIX)
+
+build-sqlite3def:
+	mkdir -p $(BUILD_DIR)
+	cd cmd/sqlite3def && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/sqlite3def$(SUFFIX)
+
+build-mssqldef:
+	mkdir -p $(BUILD_DIR)
+	cd cmd/mssqldef && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/mssqldef$(SUFFIX)
+
+build-psqldef:
+	mkdir -p $(BUILD_DIR)
+	cd cmd/psqldef && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/psqldef$(SUFFIX)
 
 clean:
 	rm -rf build package
