@@ -1,13 +1,22 @@
 FROM golang:1.24.1-bookworm AS builder
 
+ARG SQLDEF_TOOL=mysqldef
+
 WORKDIR /work
+
+COPY go.mod go.sum .
+RUN go mod download
+
 COPY . .
 
-RUN go install
-RUN uname
-RUN make && build/$(go env GOOS)-$(go env GOARCH)/sqlite3def --version
+RUN set -ex \
+    && make build-$SQLDEF_TOOL \
+    && build/$(go env GOOS)-$(go env GOARCH)/$SQLDEF_TOOL --version
 
-FROM alpine AS final
+FROM scratch
 
-RUN mkdir -p /usr/local/bin
-COPY --from=builder /work/build/*/* /usr/local/bin
+ARG SQLDEF_TOOL=mysqldef
+
+COPY --from=builder /work/build/*/$SQLDEF_TOOL /usr/local/bin/sqldef
+
+ENTRYPOINT ["sqldef"]
