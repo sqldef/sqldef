@@ -2,10 +2,10 @@ module github.com/sqldef/sqldef
 
 go 1.22.0
 
-toolchain go1.23.2
+toolchain go1.24.1
 
 require (
-	github.com/go-sql-driver/mysql v1.9.0
+	github.com/go-sql-driver/mysql v1.9.1
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/k0kubun/pp/v3 v3.4.1
 	github.com/lib/pq v1.10.9
