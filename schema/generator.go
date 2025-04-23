@@ -2376,6 +2376,8 @@ func FilterTables(ddls []DDL, config database.GeneratorConfig) []DDL {
 			tables = append(tables, stmt.foreignKey.referenceName)
 		case *AddIndex:
 			tables = append(tables, stmt.tableName)
+		case *View:
+			tables = append(tables, stmt.name)
 		}
 
 		if skipTables(tables, config) {
