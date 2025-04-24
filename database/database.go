@@ -37,6 +37,7 @@ type Config struct {
 type GeneratorConfig struct {
 	TargetTables    []string
 	SkipTables      []string
+	SkipViews       []string
 	TargetSchema    []string
 	Algorithm       string
 	Lock            string
@@ -103,6 +104,7 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 	var config struct {
 		TargetTables    string `yaml:"target_tables"`
 		SkipTables      string `yaml:"skip_tables"`
+		SkipViews       string `yaml:"skip_views"`
 		TargetSchema    string `yaml:"target_schema"`
 		Algorithm       string `yaml:"algorithm"`
 		Lock            string `yaml:"lock"`
@@ -126,6 +128,11 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 		skipTables = strings.Split(strings.Trim(config.SkipTables, "\n"), "\n")
 	}
 
+	var skipViews []string
+	if config.SkipViews != "" {
+		skipViews = strings.Split(strings.Trim(config.SkipViews, "\n"), "\n")
+	}
+
 	var targetSchema []string
 	if config.TargetSchema != "" {
 		targetSchema = strings.Split(strings.Trim(config.TargetSchema, "\n"), "\n")
@@ -143,6 +150,7 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 	return GeneratorConfig{
 		TargetTables:    targetTables,
 		SkipTables:      skipTables,
+		SkipViews:       skipViews,
 		TargetSchema:    targetSchema,
 		Algorithm:       algorithm,
 		Lock:            lock,

@@ -70,12 +70,14 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		return nil, err
 	}
 	desiredDDLs = FilterTables(desiredDDLs, config)
+	desiredDDLs = FilterViews(desiredDDLs, config)
 
 	currentDDLs, err := ParseDDLs(mode, sqlParser, currentSQL, defaultSchema)
 	if err != nil {
 		return nil, err
 	}
 	currentDDLs = FilterTables(currentDDLs, config)
+	currentDDLs = FilterViews(currentDDLs, config)
 
 	tables, views, triggers, types, comments, extensions, schemas, err := aggregateDDLsToSchema(currentDDLs)
 	if err != nil {
@@ -2376,8 +2378,6 @@ func FilterTables(ddls []DDL, config database.GeneratorConfig) []DDL {
 			tables = append(tables, stmt.foreignKey.referenceName)
 		case *AddIndex:
 			tables = append(tables, stmt.tableName)
-		case *View:
-			tables = append(tables, stmt.name)
 		}
 
 		if skipTables(tables, config) {
@@ -2401,6 +2401,37 @@ func skipTables(tables []string, config database.GeneratorConfig) bool {
 
 	for _, t := range tables {
 		if containsRegexpString(config.SkipTables, t) {
+			return true
+		}
+	}
+	return false
+}
+
+func FilterViews(ddls []DDL, config database.GeneratorConfig) []DDL {
+	filtered := []DDL{}
+
+	for _, ddl := range ddls {
+		views := []string{}
+		fmt.Printf("hoge0001 %+v\n", ddl)
+
+		switch stmt := ddl.(type) {
+		case *View:
+			views = append(views, stmt.name)
+		}
+
+		if skipViews(views, config) {
+			continue
+		}
+
+		filtered = append(filtered, ddl)
+	}
+
+	return filtered
+}
+
+func skipViews(views []string, config database.GeneratorConfig) bool {
+	for _, v := range views {
+		if containsRegexpString(config.SkipViews, v) {
 			return true
 		}
 	}
