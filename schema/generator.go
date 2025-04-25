@@ -2412,7 +2412,6 @@ func FilterViews(ddls []DDL, config database.GeneratorConfig) []DDL {
 
 	for _, ddl := range ddls {
 		views := []string{}
-		fmt.Printf("hoge0001 %+v\n", ddl)
 
 		switch stmt := ddl.(type) {
 		case *View:
