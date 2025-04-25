@@ -1553,6 +1553,29 @@ func TestPsqldefConfigIncludesSkipTables(t *testing.T) {
 	assertEquals(t, apply, nothingModified)
 }
 
+func TestPsqldefConfigIncludesSkipViews(t *testing.T) {
+	resetTestDatabase()
+
+	mustExecuteSQL(`
+	    CREATE MATERIALIZED VIEW views AS SELECT 1 AS id, 12 AS uid;
+        CREATE MATERIALIZED VIEW views_1 AS SELECT 1 AS id, 13 AS uid;
+
+        CREATE MATERIALIZED VIEW views_10 AS SELECT 1 AS id, 14 AS uid;
+		CREATE INDEX idx_views_10 ON views_10 (id);
+		CREATE UNIQUE INDEX uidx_views_10 ON views_10 (uid);
+	`)
+
+	writeFile("schema.sql", `
+        CREATE MATERIALIZED VIEW views AS SELECT 1 AS id, 12 AS uid;
+        CREATE MATERIALIZED VIEW views_1 AS SELECT 1 AS id, 13 AS uid;
+    `)
+
+	writeFile("config.yml", "skip_views: |\n  public\\.views_10\n")
+
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--config", "config.yml")
+	assertEquals(t, apply, nothingModified)
+}
+
 func TestPsqldefHelp(t *testing.T) {
 	_, err := testutils.Execute("./psqldef", "--help")
 	if err != nil {

@@ -2414,6 +2414,8 @@ func FilterViews(ddls []DDL, config database.GeneratorConfig) []DDL {
 		views := []string{}
 
 		switch stmt := ddl.(type) {
+		case *CreateIndex:
+			views = append(views, stmt.tableName)
 		case *View:
 			views = append(views, stmt.name)
 		}
