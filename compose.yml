@@ -19,7 +19,7 @@ services:
     ports:
       - '5432:5432'
   mssql:
-    image: mcr.microsoft.com/mssql/server:2019-CU28-ubuntu-24.04
+    image: mcr.microsoft.com/mssql/server:2019-CU28-ubuntu-20.04
     user: root
     environment:
       ACCEPT_EULA: Y
