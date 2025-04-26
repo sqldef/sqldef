@@ -1,3 +1,7 @@
+## v1.0.6
+
+* Add `skip_views` option in config file [#668](https://github.com/sqldef/sqldef/pull/668)
+
 ## v1.0.5
 
 * Split Docker images for each sqldef command [#662](https://github.com/sqldef/sqldef/pull/662)
