@@ -46,6 +46,7 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 				log.Fatal(err)
 			}
 			ddls = schema.FilterTables(ddls, options.Config)
+			ddls = schema.FilterViews(ddls, options.Config)
 			for i, ddl := range ddls {
 				if i > 0 {
 					fmt.Println()

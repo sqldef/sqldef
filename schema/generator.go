@@ -70,12 +70,14 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		return nil, err
 	}
 	desiredDDLs = FilterTables(desiredDDLs, config)
+	desiredDDLs = FilterViews(desiredDDLs, config)
 
 	currentDDLs, err := ParseDDLs(mode, sqlParser, currentSQL, defaultSchema)
 	if err != nil {
 		return nil, err
 	}
 	currentDDLs = FilterTables(currentDDLs, config)
+	currentDDLs = FilterViews(currentDDLs, config)
 
 	tables, views, triggers, types, comments, extensions, schemas, err := aggregateDDLsToSchema(currentDDLs)
 	if err != nil {
@@ -2399,6 +2401,38 @@ func skipTables(tables []string, config database.GeneratorConfig) bool {
 
 	for _, t := range tables {
 		if containsRegexpString(config.SkipTables, t) {
+			return true
+		}
+	}
+	return false
+}
+
+func FilterViews(ddls []DDL, config database.GeneratorConfig) []DDL {
+	filtered := []DDL{}
+
+	for _, ddl := range ddls {
+		views := []string{}
+
+		switch stmt := ddl.(type) {
+		case *CreateIndex:
+			views = append(views, stmt.tableName)
+		case *View:
+			views = append(views, stmt.name)
+		}
+
+		if skipViews(views, config) {
+			continue
+		}
+
+		filtered = append(filtered, ddl)
+	}
+
+	return filtered
+}
+
+func skipViews(views []string, config database.GeneratorConfig) bool {
+	for _, v := range views {
+		if containsRegexpString(config.SkipViews, v) {
 			return true
 		}
 	}
