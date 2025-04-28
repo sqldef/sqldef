@@ -2442,18 +2442,19 @@ func (node *If) Format(buf *nodeBuffer) {
 		endKeyword = "\nend"
 	case "then":
 		beginKeyword = " then"
-		endKeyword = ";\nend if"
+		endKeyword = "\nend if"
 	}
 	buf.Printf(beginKeyword)
 	for _, stmt := range node.IfStatements {
-		buf.Printf("\n%v", stmt)
+		buf.Printf("\n%v;", stmt)
 	}
-	buf.Printf(endKeyword)
 	if node.ElseStatements != nil {
-		buf.Printf("\nelse%s", beginKeyword)
+		buf.Printf("\nelse")
 		for _, stmt := range node.ElseStatements {
-			buf.Printf("\n%v", stmt)
+			buf.Printf("\n%v;", stmt)
 		}
+		buf.Printf(endKeyword)
+	}else{
 		buf.Printf(endKeyword)
 	}
 }

@@ -1061,6 +1061,15 @@ if_statement:
       Keyword: string($3),
     }
   }
+| IF expression THEN trigger_statements ';' ELSE trigger_statements ';' END IF
+  {
+    $$ = &If{
+      Condition: $2,
+      IfStatements: $4,
+      ElseStatements: $7,
+      Keyword: string($3),
+    }
+  }
 // For MSSQL?
 | IF condition BEGIN statement_block END
   {
@@ -1208,9 +1217,9 @@ trigger_statements:
   {
     $$ = []Statement{$1}
   }
-| trigger_statements trigger_statement
+| trigger_statements ';' trigger_statement
   {
-    $$ = append($$, $2)
+    $$ = append($$, $3)
   }
 
 trigger_statement:
@@ -1237,13 +1246,13 @@ trigger_statement:
 
 /* TODO: should be a part of trigger_statement */
 trigger_statement_start:
-  trigger_statement
-| BEGIN trigger_statement ';' END
+  BEGIN trigger_statements ';' END
   {
     $$ = &BeginEnd{
-      Statements: []Statement{$2},
+      Statements: $2,
     }
   }
+| trigger_statement
 
 for_each_row_opt:
   { $$ = struct{}{} }

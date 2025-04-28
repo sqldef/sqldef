@@ -1450,6 +1450,57 @@ func TestMysqldefTriggerIf(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
+func TestMysqldefTriggerMultipleStatements(t *testing.T) {
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE test_trigger (
+		  id int(11) NOT NULL AUTO_INCREMENT,
+		  created_at datetime NOT NULL,
+		  updated_at datetime NOT NULL,
+		  modified_at datetime NOT NULL,
+		  PRIMARY KEY (id)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+		CREATE TRIGGER ` + "`test_trigger_BEFORE_INSERT`" + ` before insert ON ` + "`test_trigger`" + ` FOR EACH ROW begin
+			set NEW.created_at = now();
+			set NEW.updated_at = now();
+			set NEW.modified_at = now();
+		end;
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+}
+func TestMysqlTriggerComplexStatements(t *testing.T){
+
+	resetTestDatabase()
+
+	createTable := stripHeredoc(`
+		CREATE TABLE test_trigger (
+		  id int(10) unsigned NOT NULL AUTO_INCREMENT,
+		  name varchar(255) COLLATE utf8mb4_bin NOT NULL,
+		  created_at datetime NOT NULL,
+		  updated_at datetime NOT NULL,
+		  PRIMARY KEY (id)
+		);
+		CREATE TRIGGER `+"`"+`test_trigger_BEFORE_UPDATE`+"`"+ ` before update ON `+"`"+ `test_trigger`+"`"+ ` FOR EACH ROW begin
+			if (COALESCE(OLD.name, 0) != COALESCE(NEW.name, 0)) then
+				if OLD.name is not null then
+					delete from test_trigger where name = OLD.name;
+				end if;
+				if NEW.name is not null and NEW.id is not null then
+					delete from test_trigger where name = OLD.name;
+				end if;
+			else
+				delete from test_trigger where name = OLD.name;
+			end if;
+			set NEW.updated_at = now();
+		end;
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+}
+
 func TestMysqldefDefaultValue(t *testing.T) {
 	resetTestDatabase()
 
