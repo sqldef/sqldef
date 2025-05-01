@@ -1,7 +1,6 @@
 module github.com/sqldef/sqldef
 
 go 1.22.0
-
 toolchain go1.24.1
 
 require (
@@ -12,7 +11,7 @@ require (
 	github.com/microsoft/go-mssqldb v1.8.0
 	github.com/pganalyze/pg_query_go/v6 v6.1.0
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/sync v0.11.0
+	golang.org/x/sync v0.13.0
 	golang.org/x/term v0.29.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.36.0
