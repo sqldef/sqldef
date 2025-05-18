@@ -1,3 +1,7 @@
+## v1.0.7
+
+* psqldef: Bump pg\_query\_go from 6.0.0 to 6.1.0 [#673](https://github.com/sqldef/sqldef/pull/673)
+
 ## v1.0.6
 
 * Add `skip_views` option in config file [#668](https://github.com/sqldef/sqldef/pull/668)
