@@ -50,7 +50,7 @@ type AddPolicy struct {
 
 type Table struct {
 	name        string
-	columns     []Column
+	columns     map[string]*Column
 	indexes     []Index
 	checks      []CheckDefinition
 	foreignKeys []ForeignKey
