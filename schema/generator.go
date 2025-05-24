@@ -272,7 +272,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Check columns.
 		for _, column := range currentTable.columns {
-			if containsString(convertColumnsToColumnNames(desiredTable.columns), column.name) {
+			if _, exist := desiredTable.columns[column.name]; exist {
 				continue // Column is expected to exist.
 			}
 
@@ -372,12 +372,20 @@ func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, columnName 
 // In the caller, `mergeTable` manages `g.currentTables`.
 func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired CreateTable) ([]string, error) {
 	ddls := []string{}
+	var desiredColumns = make([]*Column, len(desired.table.columns))
+	for _, col := range desired.table.columns {
+		desiredColumns[col.position] = col
+	}
 
 	// Examine each column
-	for i, desiredColumn := range desired.table.columns {
+	for _, desiredColumnPtr := range desiredColumns {
+		// deep copy to avoid modifying the original
+		desiredColumn := *desiredColumnPtr
+
 		currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
 		if currentColumn == nil || !currentColumn.autoIncrement {
 			// We may not be able to add AUTO_INCREMENT yet. It will be added after adding keys (primary or not) at the "Add new AUTO_INCREMENT" place.
+			// prevent to
 			desiredColumn.autoIncrement = false
 		}
 		if currentColumn == nil {
@@ -397,8 +405,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 			if g.mode == GeneratorModeMysql {
 				after := " FIRST"
-				if i > 0 {
-					after = " AFTER " + g.escapeSQLName(desired.table.columns[i-1].name)
+				if desiredColumn.position > 0 {
+					after = " AFTER " + g.escapeSQLName(desiredColumns[desiredColumn.position-1].name)
 				}
 				ddl += after
 			}
@@ -423,8 +431,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						ddl1 := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name))
 						ddl2 := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableName(desired.table.name), definition)
 						after := " FIRST"
-						if i > 0 {
-							after = " AFTER " + g.escapeSQLName(desired.table.columns[i-1].name)
+						if desiredColumn.position > 0 {
+							after = " AFTER " + g.escapeSQLName(desiredColumns[desiredColumn.position-1].name)
 						}
 						ddl2 += after
 						ddls = append(ddls, ddl1, ddl2)
@@ -432,8 +440,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						ddl := fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name), definition)
 						if changeOrder {
 							after := " FIRST"
-							if i > 0 {
-								after = " AFTER " + g.escapeSQLName(desired.table.columns[i-1].name)
+							if desiredColumn.position > 0 {
+								after = " AFTER " + g.escapeSQLName(desiredColumns[desiredColumn.position-1].name)
 							}
 							ddl += after
 						}
@@ -611,7 +619,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			desiredColumn := findColumnByName(desired.table.columns, currentColumn.name)
 			if currentColumn.autoIncrement && (primaryKeysChanged || desiredColumn == nil || !desiredColumn.autoIncrement) {
 				currentColumn.autoIncrement = false
-				definition, err := g.generateColumnDefinition(currentColumn, false)
+				definition, err := g.generateColumnDefinition(*currentColumn, false)
 				if err != nil {
 					return ddls, err
 				}
@@ -661,7 +669,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		for _, desiredColumn := range desired.table.columns {
 			currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
 			if desiredColumn.autoIncrement && (primaryKeysChanged || currentColumn == nil || !currentColumn.autoIncrement) {
-				definition, err := g.generateColumnDefinition(desiredColumn, false)
+				definition, err := g.generateColumnDefinition(*desiredColumn, false)
 				if err != nil {
 					return ddls, err
 				}
@@ -1087,7 +1095,7 @@ func (g *Generator) generateDDLsForAbsentForeignKey(currentForeignKey ForeignKey
 		var referencesColumn *Column
 		for _, column := range desiredTable.columns {
 			if column.references == currentForeignKey.referenceName {
-				referencesColumn = &column
+				referencesColumn = column
 				break
 			}
 		}
@@ -1110,7 +1118,7 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 		var primaryKeyColumn *Column
 		for _, column := range desiredTable.columns {
 			if column.keyOption == ColumnKeyPrimary {
-				primaryKeyColumn = &column
+				primaryKeyColumn = column
 				break
 			}
 		}
@@ -1134,7 +1142,7 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 		if len(currentIndex.columns) > 0 {
 			for _, column := range desiredTable.columns {
 				if column.name == currentIndex.columns[0].column && column.keyOption.isUnique() {
-					uniqueKeyColumn = &column
+					uniqueKeyColumn = column
 					break
 				}
 			}
@@ -1584,8 +1592,8 @@ func isPrimaryKey(column Column, table Table) bool {
 // Destructively modify table1 to have table2 columns/indexes
 func mergeTable(table1 *Table, table2 Table) {
 	for _, column := range table2.columns {
-		if containsString(convertColumnsToColumnNames(table1.columns), column.name) {
-			table1.columns = append(table1.columns, column)
+		if _, exist := table1.columns[column.name]; exist {
+			table1.columns[column.name] = column
 		}
 	}
 
@@ -1635,12 +1643,12 @@ func aggregateDDLsToSchema(ddls []DDL) ([]*Table, []*View, []*Trigger, []*Type, 
 				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("ADD PRIMARY KEY is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
-			newColumns := []Column{}
+			newColumns := map[string]*Column{}
 			for _, column := range table.columns {
 				if column.name == stmt.index.columns[0].column { // TODO: multi-column primary key?
 					column.keyOption = ColumnKeyPrimary
 				}
-				newColumns = append(newColumns, column)
+				newColumns[column.name] = column
 			}
 			table.columns = newColumns
 		case *AddForeignKey:
@@ -1692,12 +1700,11 @@ func findTableByName(tables []*Table, name string) *Table {
 	return nil
 }
 
-func findColumnByName(columns []Column, name string) *Column {
-	for _, column := range columns {
-		if column.name == name {
-			return &column
-		}
+func findColumnByName(columns map[string]*Column, name string) *Column {
+	if column, ok := columns[name]; ok {
+		return column
 	}
+
 	return nil
 }
 
@@ -2174,14 +2181,6 @@ func (g *Generator) normalizeReferenceOption(action string) string {
 }
 
 // TODO: Use interface to avoid defining following functions?
-
-func convertColumnsToColumnNames(columns []Column) []string {
-	columnNames := []string{}
-	for _, column := range columns {
-		columnNames = append(columnNames, column.name)
-	}
-	return columnNames
-}
 
 func convertIndexesToIndexNames(indexes []Index) []string {
 	indexNames := []string{}
