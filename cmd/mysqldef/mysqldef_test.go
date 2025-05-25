@@ -586,10 +586,11 @@ func TestMysqldefAddIndex(t *testing.T) {
 	assertApplyOutput(t, createTable+alterTable, nothingModified)
 
 	alterTable = "ALTER TABLE `users` ADD INDEX `index_name`(`name`, `created_at`);\n"
-	assertApplyOutput(t, createTable+alterTable, applyPrefix+"ALTER TABLE `users` DROP INDEX `index_name`;\n"+alterTable)
+	assertApplyOptionsOutput(t, createTable+alterTable, applyPrefix+"ALTER TABLE `users` DROP INDEX `index_name`;\n"+alterTable, "--enable-drop")
 	assertApplyOutput(t, createTable+alterTable, nothingModified)
 
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` DROP INDEX `index_name`;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"-- Skipped: ALTER TABLE `users` DROP INDEX `index_name`;\n")
+	assertApplyOptionsOutput(t, createTable, applyPrefix+"ALTER TABLE `users` DROP INDEX `index_name`;\n", "--enable-drop")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -790,7 +791,8 @@ func TestMysqldefFulltextIndex(t *testing.T) {
 		  title varchar(40) DEFAULT NULL
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `posts` DROP INDEX `title_fulltext_index`;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"-- Skipped: ALTER TABLE `posts` DROP INDEX `title_fulltext_index`;\n")
+	assertApplyOptionsOutput(t, createTable, applyPrefix+"ALTER TABLE `posts` DROP INDEX `title_fulltext_index`;\n", "--enable-drop")
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -821,9 +823,11 @@ func TestMysqldefCreateIndex(t *testing.T) {
 	assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+createIndex1+createIndex2)
 	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
 
-	assertApplyOutput(t, createTable, applyPrefix+
+	assertApplyOutput(t, createTable, applyPrefix+"-- Skipped: ALTER TABLE `users` DROP INDEX `index_created_at`;\n"+"-- Skipped: ALTER TABLE `users` DROP INDEX `index_name`;\n")
+	assertApplyOptionsOutput(t, createTable, applyPrefix+
 		"ALTER TABLE `users` DROP INDEX `index_created_at`;\n"+
 		"ALTER TABLE `users` DROP INDEX `index_name`;\n",
+		"--enable-drop",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -889,9 +893,10 @@ func TestMysqldefCreateTableWithUniqueColumn(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+
+	assertApplyOptionsOutput(t, createTable, applyPrefix+
 		"ALTER TABLE `users` DROP INDEX `name`;\n"+
 		"ALTER TABLE `users` DROP COLUMN `name`;\n",
+		"--enable-drop",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -926,8 +931,9 @@ func TestMysqldefCreateTableChangeUniqueColumn(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `users` DROP INDEX `name`;\n",
+		"-- Skipped: ALTER TABLE `users` DROP INDEX `name`;\n",
 	)
+	assertApplyOptionsOutput(t, createTable, applyPrefix+"ALTER TABLE `users` DROP INDEX `name`;\n", "--enable-drop")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -977,9 +983,9 @@ func TestMysqldefCreateTableForeignKey(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
+	assertApplyOptionsOutput(t, createUsers+createPosts, applyPrefix+
 		"ALTER TABLE `posts` DROP FOREIGN KEY `posts_ibfk_1`;\n"+
-		"ALTER TABLE `posts` DROP INDEX `posts_ibfk_1`;\n",
+		"ALTER TABLE `posts` DROP INDEX `posts_ibfk_1`;\n", "--enable-drop",
 	)
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
@@ -1304,7 +1310,7 @@ func TestMysqldefView(t *testing.T) {
 	assertApplyOutput(t, createTable+createView, applyPrefix+expected)
 	assertApplyOutput(t, createTable+createView, nothingModified)
 
-	assertApplyOutput(t, "", applyPrefix+"-- Skipped: DROP TABLE `posts`;\n-- Skipped: DROP TABLE `users`;\nDROP VIEW `foo`;\n")
+	assertApplyOutput(t, "", applyPrefix+"-- Skipped: DROP TABLE `posts`;\n-- Skipped: DROP TABLE `users`;\n-- Skipped: DROP VIEW `foo`;\n")
 }
 
 func TestMysqldefTriggerInsert(t *testing.T) {
@@ -1330,9 +1336,9 @@ func TestMysqldefTriggerInsert(t *testing.T) {
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 
 	createTrigger = "CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());\n"
-	assertApplyOutput(t, createTable+createTrigger, applyPrefix+
+	assertApplyOptionsOutput(t, createTable+createTrigger, applyPrefix+
 		"DROP TRIGGER `insert_log`;\n"+
-		"CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());\n")
+		"CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());\n", "--enable-drop")
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 
 	createTriggerForBeforeUpdate := "CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());\n"
@@ -1340,9 +1346,9 @@ func TestMysqldefTriggerInsert(t *testing.T) {
 	assertApplyOutput(t, createTable+createTriggerForBeforeUpdate, nothingModified)
 
 	createTriggerForBeforeUpdate = "CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());\n"
-	assertApplyOutput(t, createTable+createTriggerForBeforeUpdate, applyPrefix+
+	assertApplyOptionsOutput(t, createTable+createTriggerForBeforeUpdate, applyPrefix+
 		"DROP TRIGGER `insert_log_before_update`;\n"+
-		"CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());\n")
+		"CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());\n", "--enable-drop")
 	assertApplyOutput(t, createTable+createTriggerForBeforeUpdate, nothingModified)
 }
 
@@ -1536,11 +1542,11 @@ func TestMysqldefChangeIndexCombination(t *testing.T) {
 		"  KEY `index_users1`(account_id, name),\n" +
 		"  KEY `index_users2`(account_id)\n" +
 		");\n"
-	assertApplyOutput(t, createTable, applyPrefix+
+	assertApplyOptionsOutput(t, createTable, applyPrefix+
 		"ALTER TABLE `users` DROP INDEX `index_users1`;\n"+
 		"ALTER TABLE `users` ADD KEY `index_users1` (`account_id`, `name`);\n"+
 		"ALTER TABLE `users` DROP INDEX `index_users2`;\n"+
-		"ALTER TABLE `users` ADD KEY `index_users2` (`account_id`);\n")
+		"ALTER TABLE `users` ADD KEY `index_users2` (`account_id`);\n", "--enable-drop")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1653,7 +1659,7 @@ func TestMysqldefDropTable(t *testing.T) {
 	writeFile("schema.sql", "")
 
 	dropTable := "DROP TABLE `users`;\n"
-	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--enable-drop-table", "--file", "schema.sql")
+	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--enable-drop", "--file", "schema.sql")
 	assertEquals(t, out, applyPrefix+dropTable)
 }
 
@@ -1841,6 +1847,17 @@ func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
 	actual := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	assertEquals(t, actual, expected)
+}
+
+func assertApplyOptionsOutput(t *testing.T, schema string, expected string, options ...string) {
+	t.Helper()
+	writeFile("schema.sql", schema)
+	args := append([]string{
+		"-uroot", "mysqldef_test", "--file", "schema.sql",
+	}, options...)
+
+	actual := assertedExecute(t, "./mysqldef", args...)
 	assertEquals(t, actual, expected)
 }
 

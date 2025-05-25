@@ -562,7 +562,8 @@ func TestPsqldefCreateView(t *testing.T) {
 				fmt.Sprintf(`CREATE OR REPLACE VIEW "%s"."view_user_posts" AS select p.id from (%s as p join %s as u on ((p.user_id = u.id))) where (p.is_deleted = false);`+"\n", tc.Schema, posts, users))
 			assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
 
-			assertApplyOutput(t, createUsers+createPosts, applyPrefix+fmt.Sprintf(`DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n")
+			assertApplyOutput(t, createUsers+createPosts, applyPrefix+fmt.Sprintf(`-- Skipped: DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n")
+			assertApplyOptionsOutput(t, createUsers+createPosts, applyPrefix+fmt.Sprintf(`DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n", "--enable-drop")
 			assertApplyOutput(t, createUsers+createPosts, nothingModified)
 		})
 	}
@@ -591,7 +592,7 @@ func TestPsqldefCreateMaterializedView(t *testing.T) {
 				fmt.Sprintf("CREATE MATERIALIZED VIEW %s.view_user_posts AS SELECT p.id FROM (%s as p JOIN %s as u ON ((p.user_id = u.id)));\n", tc.Schema, posts, users))
 			assertApplyOutput(t, createUsers+createPosts+createMaterializedView, nothingModified)
 
-			assertApplyOutput(t, createUsers+createPosts, applyPrefix+fmt.Sprintf(`DROP MATERIALIZED VIEW "%s"."view_user_posts";`, tc.Schema)+"\n")
+			assertApplyOptionsOutput(t, createUsers+createPosts, applyPrefix+fmt.Sprintf(`DROP MATERIALIZED VIEW "%s"."view_user_posts";`, tc.Schema)+"\n", "--enable-drop")
 			assertApplyOutput(t, createUsers+createPosts, nothingModified)
 		})
 	}
@@ -642,19 +643,19 @@ func TestPsqldefCreateIndex(t *testing.T) {
 				createIndex2+"\n")
 			assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
 
-			assertApplyOutput(t, createTable+createIndex2+createIndex3, applyPrefix+
+			assertApplyOptionsOutput(t, createTable+createIndex2+createIndex3, applyPrefix+
 				dropIndex1+"\n"+
-				createIndex3+"\n")
+				createIndex3+"\n", "--enable-drop")
 			assertApplyOutput(t, createTable+createIndex2+createIndex3, nothingModified)
 
-			assertApplyOutput(t, createTable+createIndex2+createIndex4, applyPrefix+
+			assertApplyOptionsOutput(t, createTable+createIndex2+createIndex4, applyPrefix+
 				dropIndex1+"\n"+
-				createIndex4+"\n")
+				createIndex4+"\n", "--enable-drop")
 			assertApplyOutput(t, createTable+createIndex2+createIndex4, nothingModified)
 
-			assertApplyOutput(t, createTable, applyPrefix+
+			assertApplyOptionsOutput(t, createTable, applyPrefix+
 				dropIndex2+"\n"+
-				dropIndex1+"\n")
+				dropIndex1+"\n", "--enable-drop")
 			assertApplyOutput(t, createTable, nothingModified)
 		})
 	}
@@ -1257,7 +1258,7 @@ func TestPsqldefDropTable(t *testing.T) {
 	writeFile("schema.sql", "")
 
 	dropTable := `DROP TABLE "public"."users";`
-	out := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--enable-drop-table", "--file", "schema.sql")
+	out := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--enable-drop", "--file", "schema.sql")
 	assertEquals(t, out, applyPrefix+dropTable+"\n")
 }
 
@@ -1612,6 +1613,17 @@ func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
 	actual := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--file", "schema.sql")
+	assertEquals(t, actual, expected)
+}
+
+func assertApplyOptionsOutput(t *testing.T, schema string, expected string, options ...string) {
+	t.Helper()
+	writeFile("schema.sql", schema)
+	args := append([]string{
+		"-Upostgres", databaseName, "--file", "schema.sql",
+	}, options...)
+
+	actual := assertedExecute(t, "./psqldef", args...)
 	assertEquals(t, actual, expected)
 }
 

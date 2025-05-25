@@ -88,7 +88,7 @@ func TestSQLite3defDropTable(t *testing.T) {
 	writeFile("schema.sql", "")
 
 	dropTable := "DROP TABLE `users`;\n"
-	out := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--enable-drop-table", "--file", "schema.sql")
+	out := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--enable-drop", "--file", "schema.sql")
 	assertEquals(t, out, applyPrefix+dropTable)
 }
 
@@ -314,7 +314,8 @@ func TestSQLite3defDropTrigger(t *testing.T) {
 	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTable+createTrigger)
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 
-	assertApplyOutput(t, createTable, applyPrefix+"DROP TRIGGER `users_insert`;\n")
+	assertApplyOutput(t, createTable, applyPrefix+"-- Skipped: DROP TRIGGER `users_insert`;\n")
+	assertApplyOptionsOutput(t, createTable, applyPrefix+"DROP TRIGGER `users_insert`;\n", "--enable-drop")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -349,7 +350,7 @@ func TestSQLite3defChangeTrigger(t *testing.T) {
 			insert into logs(typ, typ_id, body) values ('user', NEW.id, 'user inserted');
 		END;
 	`)
-	assertApplyOutput(t, createTable+changeTrigger, applyPrefix+"DROP TRIGGER `users_insert`;\n"+changeTrigger)
+	assertApplyOptionsOutput(t, createTable+changeTrigger, applyPrefix+"DROP TRIGGER `users_insert`;\n"+changeTrigger, "--enable-drop")
 	assertApplyOutput(t, createTable+changeTrigger, nothingModified)
 }
 
@@ -380,6 +381,17 @@ func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
 	actual := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--file", "schema.sql")
+	assertEquals(t, actual, expected)
+}
+
+func assertApplyOptionsOutput(t *testing.T, schema string, expected string, options ...string) {
+	t.Helper()
+	writeFile("schema.sql", schema)
+	args := append([]string{
+		"sqlite3def_test", "--file", "schema.sql",
+	}, options...)
+
+	actual := assertedExecute(t, "./sqlite3def", args...)
 	assertEquals(t, actual, expected)
 }
 
