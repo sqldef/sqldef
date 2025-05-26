@@ -22,6 +22,7 @@ import (
 const (
 	applyPrefix     = "-- Apply --\n"
 	nothingModified = "-- Nothing is modified --\n"
+	skipPrefix      = "-- Skipped: "
 )
 
 func TestApply(t *testing.T) {
@@ -341,11 +342,11 @@ func TestMssqldefCreateView(t *testing.T) {
 	assertApplyOutput(t, createTable+createView, applyPrefix+createView)
 	assertApplyOutput(t, createTable+createView, nothingModified)
 
-	createView = "CREATE VIEW [dbo].[view_users] AS select id from dbo.users with(nolock) where age = 2;\nGO\n"
-	dropView := "DROP VIEW [dbo].[view_users];\nGO\n"
-	assertApplyOutput(t, createTable+createView, applyPrefix+dropView+createView)
-	assertApplyOutput(t, createTable+createView, nothingModified)
-	assertApplyOutput(t, "", applyPrefix+"-- Skipped: DROP TABLE [dbo].[users];\n"+dropView)
+	createView = "CREATE VIEW [dbo].[view_users_new] AS select id from dbo.users with(nolock) where age = 2;\nGO\n"
+	skipDropView := "-- Skipped: DROP VIEW [dbo].[view_users];\n"
+	assertApplyOutput(t, createTable+createView, applyPrefix+createView+skipDropView)
+	assertApplyOutput(t, createTable+createView, applyPrefix+skipDropView)
+	assertApplyOutput(t, "", applyPrefix+"-- Skipped: DROP TABLE [dbo].[users];\n-- Skipped: DROP VIEW [dbo].[view_users];\n-- Skipped: DROP VIEW [dbo].[view_users_new];\n")
 }
 
 func TestMssqldefTrigger(t *testing.T) {
@@ -843,7 +844,8 @@ func TestMssqldefCreateTableDropIndex(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+"DROP INDEX [ix_users_id] ON [dbo].[users];\nGO\n")
+	assertApplyOutput(t, createTable, applyPrefix+"-- Skipped: DROP INDEX [ix_users_id] ON [dbo].[users];\n")
+	assertApplyOptionsOutput(t, createTable, applyPrefix+"DROP INDEX [ix_users_id] ON [dbo].[users];\nGO\n", "--enable-drop")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -872,9 +874,9 @@ func TestMssqldefCreateTableChangeIndexDefinition(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+
+	assertApplyOptionsOutput(t, createTable, applyPrefix+
 		"DROP INDEX [ix_users_id] ON [dbo].[users];\nGO\n"+
-		"CREATE UNIQUE CLUSTERED INDEX [ix_users_id] ON [dbo].[users] ([id]);\nGO\n",
+		"CREATE UNIQUE CLUSTERED INDEX [ix_users_id] ON [dbo].[users] ([id]);\nGO\n", "--enable-drop",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 
@@ -891,9 +893,10 @@ func TestMssqldefCreateTableChangeIndexDefinition(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+
+	assertApplyOptionsOutput(t, createTable, applyPrefix+
 		"DROP INDEX [ix_users_id] ON [dbo].[users];\nGO\n"+
 		"CREATE UNIQUE CLUSTERED INDEX [ix_users_id] ON [dbo].[users] ([id]) WITH (pad_index = ON, fillfactor = 10);\nGO\n",
+		"--enable-drop",
 	)
 	assertApplyOutput(t, createTable, nothingModified)
 }
@@ -1048,7 +1051,8 @@ func TestMssqldefCreateIndex(t *testing.T) {
 	assertApplyOutput(t, createTable+createIndex, applyPrefix+createIndex)
 	assertApplyOutput(t, createTable+createIndex, nothingModified)
 
-	assertApplyOutput(t, createTable, applyPrefix+"DROP INDEX [index_name] ON [dbo].[users];\nGO\n")
+	assertApplyOutput(t, createTable, applyPrefix+"-- Skipped: DROP INDEX [index_name] ON [dbo].[users];\n")
+	assertApplyOptionsOutput(t, createTable, applyPrefix+"DROP INDEX [index_name] ON [dbo].[users];\nGO\n", "--enable-drop")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1071,16 +1075,16 @@ func TestMssqldefCreateIndexChangeIndexDefinition(t *testing.T) {
 	assertApplyOutput(t, createTable+createIndex, nothingModified)
 
 	createIndex = "CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at], [updated_at]) WITH (PAD_INDEX = ON);\nGO\n"
-	assertApplyOutput(t, createTable+createIndex, applyPrefix+
+	assertApplyOptionsOutput(t, createTable+createIndex, applyPrefix+
 		"DROP INDEX [index_name] ON [dbo].[users];\nGO\n"+
-		"CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at], [updated_at]) WITH (PAD_INDEX = ON);\nGO\n",
+		"CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at], [updated_at]) WITH (PAD_INDEX = ON);\nGO\n", "--enable-drop",
 	)
 	assertApplyOutput(t, createTable+createIndex, nothingModified)
 
 	createIndex = "CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at], [updated_at]) WITH (PAD_INDEX = ON, FILLFACTOR = 10);\nGO\n"
-	assertApplyOutput(t, createTable+createIndex, applyPrefix+
+	assertApplyOptionsOutput(t, createTable+createIndex, applyPrefix+
 		"DROP INDEX [index_name] ON [dbo].[users];\nGO\n"+
-		"CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at], [updated_at]) WITH (PAD_INDEX = ON, FILLFACTOR = 10);\nGO\n",
+		"CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at], [updated_at]) WITH (PAD_INDEX = ON, FILLFACTOR = 10);\nGO\n", "--enable-drop",
 	)
 	assertApplyOutput(t, createTable+createIndex, nothingModified)
 }
@@ -1268,7 +1272,7 @@ func TestMssqldefDropTable(t *testing.T) {
 		GO
 		`,
 	)
-	out := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--enable-drop-table", "--file", "schema.sql")
+	out := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--enable-drop", "--file", "schema.sql")
 	assertEquals(t, out, applyPrefix+dropTable)
 }
 
@@ -1358,6 +1362,17 @@ func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
 	actual := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql")
+	assertEquals(t, actual, expected)
+}
+
+func assertApplyOptionsOutput(t *testing.T, schema string, expected string, options ...string) {
+	t.Helper()
+	writeFile("schema.sql", schema)
+	args := append([]string{
+		"-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql",
+	}, options...)
+
+	actual := assertedExecute(t, "./mssqldef", args...)
 	assertEquals(t, actual, expected)
 }
 

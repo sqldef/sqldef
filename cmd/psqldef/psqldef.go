@@ -23,21 +23,21 @@ var version string
 // TODO: Support `sqldef schema.sql -opt val...`
 func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	var opts struct {
-		User            string   `short:"U" long:"user" description:"PostgreSQL user name" value-name:"username" default:"postgres"`
-		Password        string   `short:"W" long:"password" description:"PostgreSQL user password, overridden by $PGPASSWORD" value-name:"password"`
-		Host            string   `short:"h" long:"host" description:"Host or socket directory to connect to the PostgreSQL server" value-name:"hostname" default:"127.0.0.1"`
-		Port            uint     `short:"p" long:"port" description:"Port used for the connection" value-name:"port" default:"5432"`
-		Prompt          bool     `long:"password-prompt" description:"Force PostgreSQL user password prompt"`
-		File            []string `short:"f" long:"file" description:"Read desired SQL from the file, rather than stdin" value-name:"filename" default:"-"`
-		DryRun          bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
-		Export          bool     `long:"export" description:"Just dump the current schema to stdout"`
-		EnableDropTable bool     `long:"enable-drop-table" description:"Enable destructive changes such as DROP (enable only table drops)"`
-		SkipView        bool     `long:"skip-view" description:"Skip managing views/materialized views"`
-		SkipExtension   bool     `long:"skip-extension" description:"Skip managing extensions"`
-		BeforeApply     string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs"`
-		Config          string   `long:"config" description:"YAML file to specify: target_tables, skip_tables, skip_views, target_schema"`
-		Help            bool     `long:"help" description:"Show this help"`
-		Version         bool     `long:"version" description:"Show this version"`
+		User          string   `short:"U" long:"user" description:"PostgreSQL user name" value-name:"username" default:"postgres"`
+		Password      string   `short:"W" long:"password" description:"PostgreSQL user password, overridden by $PGPASSWORD" value-name:"password"`
+		Host          string   `short:"h" long:"host" description:"Host or socket directory to connect to the PostgreSQL server" value-name:"hostname" default:"127.0.0.1"`
+		Port          uint     `short:"p" long:"port" description:"Port used for the connection" value-name:"port" default:"5432"`
+		Prompt        bool     `long:"password-prompt" description:"Force PostgreSQL user password prompt"`
+		File          []string `short:"f" long:"file" description:"Read desired SQL from the file, rather than stdin" value-name:"filename" default:"-"`
+		DryRun        bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
+		Export        bool     `long:"export" description:"Just dump the current schema to stdout"`
+		EnableDrop    bool     `long:"enable-drop" description:"Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE"`
+		SkipView      bool     `long:"skip-view" description:"Skip managing views/materialized views"`
+		SkipExtension bool     `long:"skip-extension" description:"Skip managing extensions"`
+		BeforeApply   string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs"`
+		Config        string   `long:"config" description:"YAML file to specify: target_tables, skip_tables, skip_views, target_schema"`
+		Help          bool     `long:"help" description:"Show this help"`
+		Version       bool     `long:"version" description:"Show this version"`
 	}
 
 	parser := flags.NewParser(&opts, flags.None)
@@ -68,12 +68,12 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 
 	options := sqldef.Options{
-		DesiredDDLs:     desiredDDLs,
-		DryRun:          opts.DryRun,
-		Export:          opts.Export,
-		EnableDropTable: opts.EnableDropTable,
-		BeforeApply:     opts.BeforeApply,
-		Config:          database.ParseGeneratorConfig(opts.Config),
+		DesiredDDLs: desiredDDLs,
+		DryRun:      opts.DryRun,
+		Export:      opts.Export,
+		EnableDrop:  opts.EnableDrop,
+		BeforeApply: opts.BeforeApply,
+		Config:      database.ParseGeneratorConfig(opts.Config),
 	}
 
 	if len(args) == 0 {

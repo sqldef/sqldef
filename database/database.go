@@ -52,7 +52,7 @@ type Database interface {
 	GetDefaultSchema() string
 }
 
-func RunDDLs(d Database, ddls []string, enableDropTable bool, beforeApply string, ddlSuffix string) error {
+func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddlSuffix string) error {
 	transaction, err := d.DB().Begin()
 	if err != nil {
 		return err
@@ -66,7 +66,30 @@ func RunDDLs(d Database, ddls []string, enableDropTable bool, beforeApply string
 		}
 	}
 	for _, ddl := range ddls {
-		if !enableDropTable && strings.Contains(ddl, "DROP TABLE") {
+		// Skip the DDL contain if enableDrop is true:
+		// 1. DROP TABLE
+		// 2. DROP SCHEMA
+		// 3. DROP ROLE / USER
+		// 4. DROP FUNCTION / PROCEDURE
+		// 5. DROP TRIGGER
+		// less dangerous DDLs
+		// 6. DROP VIEW
+		// 7. DROP INDEX
+		// 8. DROP SEQUENCE
+		// 9. DROP TYPE
+		// 10. DROP MATERIALIZED VIEW
+		if !enableDrop && (strings.Contains(ddl, "DROP TABLE") ||
+			strings.Contains(ddl, "DROP SCHEMA") ||
+			strings.Contains(ddl, "DROP ROLE") ||
+			strings.Contains(ddl, "DROP USER") ||
+			strings.Contains(ddl, "DROP FUNCTION") ||
+			strings.Contains(ddl, "DROP PROCEDURE") ||
+			strings.Contains(ddl, "DROP TRIGGER") ||
+			strings.Contains(ddl, "DROP VIEW") ||
+			strings.Contains(ddl, "DROP MATERIALIZED VIEW") ||
+			strings.Contains(ddl, "DROP INDEX") ||
+			strings.Contains(ddl, "DROP SEQUENCE") ||
+			strings.Contains(ddl, "DROP TYPE")) {
 			fmt.Printf("-- Skipped: %s;\n", ddl)
 			continue
 		}

@@ -12,13 +12,13 @@ import (
 )
 
 type Options struct {
-	DesiredDDLs     string
-	CurrentFile     string
-	DryRun          bool
-	Export          bool
-	EnableDropTable bool
-	BeforeApply     string
-	Config          database.GeneratorConfig
+	DesiredDDLs string
+	CurrentFile string
+	DryRun      bool
+	Export      bool
+	EnableDrop  bool
+	BeforeApply string
+	Config      database.GeneratorConfig
 }
 
 // Main function shared by all commands
@@ -69,11 +69,11 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 	}
 
 	if options.DryRun || len(options.CurrentFile) > 0 {
-		showDDLs(ddls, options.EnableDropTable, options.BeforeApply, ddlSuffix)
+		showDDLs(ddls, options.EnableDrop, options.BeforeApply, ddlSuffix)
 		return
 	}
 
-	err = database.RunDDLs(db, ddls, options.EnableDropTable, options.BeforeApply, ddlSuffix)
+	err = database.RunDDLs(db, ddls, options.EnableDrop, options.BeforeApply, ddlSuffix)
 	if err != nil {
 		log.Fatal(err)
 	}
