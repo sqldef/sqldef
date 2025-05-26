@@ -79,7 +79,7 @@ func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddl
 		// 9. DROP TYPE
 		// 10. DROP MATERIALIZED VIEW
 		if !enableDrop && (strings.Contains(ddl, "DROP TABLE") ||
-			strings.Contains(ddl, "DROP) SCHEMA") ||
+			strings.Contains(ddl, "DROP SCHEMA") ||
 			strings.Contains(ddl, "DROP ROLE") ||
 			strings.Contains(ddl, "DROP USER") ||
 			strings.Contains(ddl, "DROP FUNCTION") ||
