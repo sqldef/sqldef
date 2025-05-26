@@ -1,3 +1,10 @@
+## v2.0.0
+
+* Rename `--enable-drop-table` to `--enable-drop` [#682](https://github.com/sqldef/sqldef/pull/682)
+* Disable most DROP DDLs by default [#682](https://github.com/sqldef/sqldef/pull/682)
+  * TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, MATERIALIZED VIEW, INDEX, SEQUENCE, TYPE
+* Improve DDL diff performance [#681](https://github.com/sqldef/sqldef/pull/681)
+
 ## v1.0.7
 
 * psqldef: Bump pg\_query\_go from 6.0.0 to 6.1.0 [#673](https://github.com/sqldef/sqldef/pull/673)
