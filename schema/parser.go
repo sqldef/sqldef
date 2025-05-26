@@ -200,7 +200,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 }
 
 func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Table, error) {
-	var columns []Column
+	var columns = map[string]*Column{}
 	var indexes []Index
 	var checks []CheckDefinition
 	var foreignKeys []ForeignKey
@@ -240,7 +240,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Tab
 				noInherit:         castBool(parsedCol.Type.Check.NoInherit),
 			}
 		}
-		columns = append(columns, column)
+		columns[parsedCol.Name.String()] = &column
 	}
 
 	for _, indexDef := range stmt.TableSpec.Indexes {
@@ -263,12 +263,9 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Tab
 			// MSSQL: all columns participating in a PRIMARY KEY constraint have their nullability set to NOT NULL
 			// https://learn.microsoft.com/en-us/sql/relational-databases/tables/create-primary-keys#limitations
 			if indexDef.Info.Primary && mode == GeneratorModeMssql {
-				for i := range columns {
-					if columns[i].name == name {
-						val := true
-						columns[i].notNull = &val
-						break
-					}
+				if column, ok := columns[name]; ok {
+					val := true
+					column.notNull = &val
 				}
 			}
 		}
