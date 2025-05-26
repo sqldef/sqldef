@@ -1,3 +1,7 @@
+## v2.0.1
+
+* Disable `DROP COLUMN` as well, which can be enabled by `--enable-drop`
+
 ## v2.0.0
 
 * Rename `--enable-drop-table` to `--enable-drop` [#682](https://github.com/sqldef/sqldef/pull/682)
