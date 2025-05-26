@@ -66,20 +66,22 @@ func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddl
 		}
 	}
 	for _, ddl := range ddls {
-		// Skip the DDL contain if enableDrop is true:
-		// 1. DROP TABLE
-		// 2. DROP SCHEMA
-		// 3. DROP ROLE / USER
-		// 4. DROP FUNCTION / PROCEDURE
-		// 5. DROP TRIGGER
+		// Skip the DDL that contains the following operations unless enableDrop.
+		// * DROP TABLE
+		// * DROP SCHEMA
+		// * DROP COLUMN
+		// * DROP ROLE / USER
+		// * DROP FUNCTION / PROCEDURE
+		// * DROP TRIGGER
 		// less dangerous DDLs
-		// 6. DROP VIEW
-		// 7. DROP INDEX
-		// 8. DROP SEQUENCE
-		// 9. DROP TYPE
-		// 10. DROP MATERIALIZED VIEW
+		// * DROP VIEW
+		// * DROP INDEX
+		// * DROP SEQUENCE
+		// * DROP TYPE
+		// * DROP MATERIALIZED VIEW
 		if !enableDrop && (strings.Contains(ddl, "DROP TABLE") ||
 			strings.Contains(ddl, "DROP SCHEMA") ||
+			strings.Contains(ddl, "DROP COLUMN") ||
 			strings.Contains(ddl, "DROP ROLE") ||
 			strings.Contains(ddl, "DROP USER") ||
 			strings.Contains(ddl, "DROP FUNCTION") ||
