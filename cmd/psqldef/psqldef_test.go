@@ -193,11 +193,12 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 		  name text
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+
+	assertApplyOptionsOutput(t, createTable, applyPrefix+
 		`ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";`+"\n"+
 		`ALTER TABLE "public"."users" DROP COLUMN "id";`+"\n",
+		"--enable-drop",
 	)
-	assertApplyOutput(t, createTable, nothingModified)
+	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 
 	createTable = stripHeredoc(`
 		CREATE TABLE users (
@@ -205,12 +206,12 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 		  name text
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+	assertApplyOptionsOutput(t, createTable, applyPrefix+stripHeredoc(`
 		ALTER TABLE "public"."users" ADD COLUMN "id" bigint NOT NULL;
 		ALTER TABLE "public"."users" ADD PRIMARY KEY ("id");
 		`,
-	))
-	assertApplyOutput(t, createTable, nothingModified)
+	), "--enable-drop")
+	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 }
 
 func TestPsqldefCreateTableConstraintPrimaryKey(t *testing.T) {
@@ -929,8 +930,8 @@ func TestPsqldefSameTableNameAmongSchemas(t *testing.T) {
 	createTable = stripHeredoc(`
 		CREATE TABLE dummy (id int);
 		CREATE TABLE test.dummy ();`)
-	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "test"."dummy" DROP COLUMN "id";`+"\n")
-	assertApplyOutput(t, createTable, nothingModified)
+	assertApplyOptionsOutput(t, createTable, applyPrefix+`ALTER TABLE "test"."dummy" DROP COLUMN "id";`+"\n", "--enable-drop")
+	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 }
 
 func TestPsqldefCreateTableWithIdentityColumn(t *testing.T) {
