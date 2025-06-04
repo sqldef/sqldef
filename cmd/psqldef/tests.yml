@@ -1429,3 +1429,88 @@ ExcludeConstraintWithAlterTable:
   output: |
     ALTER TABLE exclude_example ADD CONSTRAINT ex2 EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&);
     ALTER TABLE "public"."exclude_example" DROP CONSTRAINT "ex1";
+
+CreateDomain:
+  desired: |
+    CREATE DOMAIN positive_int AS integer CHECK (VALUE > 0);
+
+CreateDomainWithDefault:
+  desired: |
+    CREATE DOMAIN email_address AS varchar(255) DEFAULT 'unknown@example.com';
+
+CreateDomainWithConstraints:
+  desired: |
+    CREATE DOMAIN us_postal_code AS text
+    COLLATE "C"
+    DEFAULT '00000'
+    NOT NULL
+    CHECK (VALUE ~ '^\d{5}$' OR VALUE ~ '^\d{5}-\d{4}$');
+
+CreateDomainWithTable:
+  desired: |
+    CREATE DOMAIN positive_int AS integer CHECK (VALUE > 0);
+    CREATE TABLE products (
+      id positive_int,
+      name text
+    );
+
+CreateDomainArray:
+  desired: |
+    CREATE DOMAIN int_array AS integer[] CHECK (array_length(VALUE, 1) <= 10);
+
+CreateDomainInSchema:
+  desired: |
+    CREATE SCHEMA test_schema;
+    CREATE DOMAIN test_schema.custom_id AS bigint CHECK (VALUE > 0);
+
+CreateMultipleDomains:
+  desired: |
+    CREATE DOMAIN positive_int AS integer CHECK (VALUE > 0);
+    CREATE DOMAIN email_type AS varchar(100) CHECK (VALUE ~ '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+    CREATE DOMAIN phone_type AS varchar(20) CHECK (VALUE ~ '^\+?[1-9]\d{1,14}$');
+
+CreateDomainWithTableUsage:
+  desired: |
+    CREATE DOMAIN positive_int AS integer CHECK (VALUE > 0);
+    CREATE DOMAIN email_type AS varchar(100) CHECK (VALUE ~ '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+    CREATE TABLE users (
+      id positive_int,
+      email email_type,
+      name text
+    );
+
+# Test domain modification scenarios
+UpdateDomainConstraint:
+  current: |
+    CREATE DOMAIN positive_int AS integer CHECK (VALUE > 0);
+    CREATE TABLE products (
+      id positive_int,
+      name text
+    );
+  desired: |
+    CREATE DOMAIN positive_int AS integer CHECK (VALUE >= 0);
+    CREATE TABLE products (
+      id positive_int,
+      name text
+    );
+
+# Test domain usage with complex types
+CreateDomainWithComplexTypes:
+  desired: |
+    CREATE DOMAIN json_data AS jsonb DEFAULT '{}'::jsonb;
+    CREATE DOMAIN timestamp_range AS tstzrange;
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      data json_data,
+      period timestamp_range
+    );
+
+# Test domain with inheritance
+CreateDomainWithInheritance:
+  desired: |
+    CREATE DOMAIN base_id AS bigint CHECK (VALUE > 0);
+    CREATE DOMAIN user_id AS base_id;
+    CREATE TABLE users (
+      id user_id,
+      name text
+    );
