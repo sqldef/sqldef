@@ -533,20 +533,29 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	const query = `WITH
 	  columns AS (
 	    SELECT
-	      s.column_name,
-	      s.column_default,
-	      s.is_nullable,
-	      CASE
-	      WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod)
-	      ELSE s.data_type
-	      END,
-	      format_type(f.atttypid, f.atttypmod),
-	      s.identity_generation
+	      f.attname as column_name,
+	      pg_get_expr(d.adbin, d.adrelid) as column_default,
+	      CASE WHEN f.attnotnull THEN 'NO' ELSE 'YES' END as is_nullable,
+	      CASE 
+	      WHEN typ.typtype = 'd' THEN 
+	        CASE 
+	        WHEN typ_ns.nspname = 'public' THEN typ.typname::text
+	        ELSE typ_ns.nspname || '.' || typ.typname::text
+	        END
+	      ELSE format_type(f.atttypid, f.atttypmod)
+	      END as data_type,
+	      format_type(f.atttypid, f.atttypmod) as formatted_data_type,
+	      CASE 
+	      WHEN f.attidentity = 'a' THEN 'ALWAYS'
+	      WHEN f.attidentity = 'd' THEN 'BY DEFAULT'
+	      ELSE NULL
+	      END as identity_generation
 	    FROM pg_attribute f
-	    JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
+	    JOIN pg_class c ON c.oid = f.attrelid 
+	    JOIN pg_type typ ON typ.oid = f.atttypid
+	    LEFT JOIN pg_namespace typ_ns ON typ_ns.oid = typ.typnamespace
 	    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
 	    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
-	    LEFT JOIN information_schema.columns s ON s.column_name = f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
 	    WHERE c.relkind in ('r', 'p')
 	    AND n.nspname = $1
 	    AND c.relname = $2
