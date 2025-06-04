@@ -351,7 +351,7 @@ type Update struct {
 func (node *Update) Format(buf *nodeBuffer) {
 	buf.Printf("update %v%v set %v", node.Comments, node.TableExprs, node.Exprs)
 	if node.From != nil {
-		buf.Printf(" from %v", node.From);
+		buf.Printf(" from %v", node.From)
 	}
 	buf.Printf("%v%v%v", node.Where, node.OrderBy, node.Limit)
 }
@@ -910,9 +910,9 @@ type Domain struct {
 }
 
 type DomainConstraint struct {
-	Name       string
-	NotNull    *bool
-	CheckExpr  Expr
+	Name      string
+	NotNull   *bool
+	CheckExpr Expr
 }
 
 type Permissive string

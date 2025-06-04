@@ -1321,13 +1321,13 @@ func (p PostgresParser) parseCreateDomainStmt(stmt *pgquery.CreateDomainStmt) (p
 		domainNameParts[i] = part.Node.(*pgquery.Node_String_).String_.Sval
 	}
 	domainName := strings.Join(domainNameParts, ".")
-	
+
 	// Parse data type
 	dataType, err := p.parseTypeName(stmt.TypeName)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Parse collation
 	var collate string
 	if stmt.CollClause != nil {
@@ -1337,9 +1337,9 @@ func (p PostgresParser) parseCreateDomainStmt(stmt *pgquery.CreateDomainStmt) (p
 		}
 		collate = strings.Join(collateNames, ".")
 	}
-	
+
 	// Default value is handled as a constraint
-	
+
 	// Parse constraints
 	var constraints []*parser.DomainConstraint
 	for _, constraint := range stmt.Constraints {
@@ -1349,7 +1349,7 @@ func (p PostgresParser) parseCreateDomainStmt(stmt *pgquery.CreateDomainStmt) (p
 		}
 		constraints = append(constraints, domainConstraint)
 	}
-	
+
 	return &parser.DDL{
 		Action: parser.CreateDomain,
 		Domain: &parser.Domain{
@@ -1368,7 +1368,7 @@ func (p PostgresParser) parseDomainConstraint(constraint *pgquery.Node) (*parser
 		domainConstraint := &parser.DomainConstraint{
 			Name: node.Constraint.Conname,
 		}
-		
+
 		switch node.Constraint.Contype {
 		case pgquery.ConstrType_CONSTR_NULL:
 			notNull := false
@@ -1388,7 +1388,7 @@ func (p PostgresParser) parseDomainConstraint(constraint *pgquery.Node) (*parser
 		default:
 			return nil, fmt.Errorf("unsupported domain constraint type: %d", node.Constraint.Contype)
 		}
-		
+
 		return domainConstraint, nil
 	default:
 		return nil, fmt.Errorf("unknown domain constraint node: %#v", constraint)

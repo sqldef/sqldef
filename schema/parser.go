@@ -802,37 +802,37 @@ func castBoolPtr(val *parser.BoolVal) *bool {
 
 func parseDomain(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Domain, error) {
 	var constraints []DomainConstraint
-	
+
 	for _, constraint := range stmt.Domain.Constraints {
 		domainConstraint := DomainConstraint{
 			name:    constraint.Name,
 			notNull: constraint.NotNull,
 		}
-		
+
 		if constraint.CheckExpr != nil {
 			domainConstraint.checkExpr = parser.String(constraint.CheckExpr)
 		}
-		
+
 		constraints = append(constraints, domainConstraint)
 	}
-	
+
 	var defaultDef *DefaultDefinition
 	if stmt.Domain.Default != nil {
 		defaultDef = parseDefaultDefinition(stmt.Domain.Default)
 	}
-	
+
 	var dataType string
 	if stmt.Domain.DataType.References != "" {
 		dataType = stmt.Domain.DataType.References + stmt.Domain.DataType.Type
 	} else {
 		dataType = stmt.Domain.DataType.Type
 	}
-	
+
 	// Handle array types
 	if stmt.Domain.DataType.Array {
 		dataType += "[]"
 	}
-	
+
 	// Add length/scale if present
 	if stmt.Domain.DataType.Length != nil {
 		dataType += "(" + string(stmt.Domain.DataType.Length.Val)
@@ -841,12 +841,12 @@ func parseDomain(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Do
 		}
 		dataType += ")"
 	}
-	
+
 	// Add timezone if present
 	if stmt.Domain.DataType.Timezone {
 		dataType += " with time zone"
 	}
-	
+
 	return Domain{
 		name:        stmt.Domain.Name,
 		dataType:    dataType,

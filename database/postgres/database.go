@@ -333,18 +333,18 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 		var domainSchema, domainName, baseType string
 		var notNull bool
 		var defaultValue, collationName, checkClause sql.NullString
-		
+
 		if err := rows.Scan(&domainSchema, &domainName, &baseType, &notNull, &defaultValue, &collationName, &checkClause); err != nil {
 			return nil, err
 		}
-		
+
 		if d.config.TargetSchema != nil && !containsString(d.config.TargetSchema, domainSchema) {
 			continue
 		}
 
 		// Build CREATE DOMAIN statement
 		var parts []string
-		
+
 		// Add schema qualification if not in public schema
 		var domainFullName string
 		if domainSchema == "public" {
@@ -352,33 +352,33 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 		} else {
 			domainFullName = fmt.Sprintf("%s.%s", escapeSQLName(domainSchema), escapeSQLName(domainName))
 		}
-		
+
 		parts = append(parts, fmt.Sprintf("CREATE DOMAIN %s AS %s", domainFullName, baseType))
-		
+
 		// Add COLLATE if specified
 		if collationName.Valid && collationName.String != "" {
 			parts = append(parts, fmt.Sprintf("COLLATE %s", escapeSQLName(collationName.String)))
 		}
-		
+
 		// Add DEFAULT if specified
 		if defaultValue.Valid && defaultValue.String != "" {
 			parts = append(parts, fmt.Sprintf("DEFAULT %s", defaultValue.String))
 		}
-		
+
 		// Add NOT NULL if specified
 		if notNull {
 			parts = append(parts, "NOT NULL")
 		}
-		
+
 		// Add CHECK constraint if specified
 		if checkClause.Valid && checkClause.String != "" {
 			parts = append(parts, checkClause.String)
 		}
-		
+
 		ddl := strings.Join(parts, " ") + ";"
 		ddls = append(ddls, ddl)
 	}
-	
+
 	return ddls, nil
 }
 
