@@ -534,7 +534,10 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	  columns AS (
 	    SELECT
 	      f.attname as column_name,
-	      pg_get_expr(d.adbin, d.adrelid) as column_default,
+	      CASE 
+	      WHEN f.attgenerated != '' THEN NULL
+	      ELSE pg_get_expr(d.adbin, d.adrelid)
+	      END as column_default,
 	      CASE WHEN f.attnotnull THEN 'NO' ELSE 'YES' END as is_nullable,
 	      CASE 
 	      WHEN typ.typtype = 'd' THEN 
