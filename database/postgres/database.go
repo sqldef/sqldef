@@ -535,7 +535,8 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	    SELECT
 	      f.attname as column_name,
 	      CASE 
-	      WHEN f.attgenerated != '' THEN NULL
+	      WHEN current_setting('server_version_num')::int >= 120000 
+	        AND f.attgenerated != '' THEN NULL
 	      ELSE pg_get_expr(d.adbin, d.adrelid)
 	      END as column_default,
 	      CASE WHEN f.attnotnull THEN 'NO' ELSE 'YES' END as is_nullable,
