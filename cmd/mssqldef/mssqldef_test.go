@@ -540,8 +540,8 @@ func TestMssqldefCreateTableDropColumn(t *testing.T) {
 		);
 		GO`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\nGO\n")
-	assertApplyOutput(t, createTable, nothingModified)
+	assertApplyOptionsOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\nGO\n", "--enable-drop")
+	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 }
 
 func TestMssqldefCreateTableDropColumnWithDefaultConstraint(t *testing.T) {
@@ -562,8 +562,8 @@ func TestMssqldefCreateTableDropColumnWithDefaultConstraint(t *testing.T) {
 		);
 		GO`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [df_name];\nGO\n"+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\nGO\n")
-	assertApplyOutput(t, createTable, nothingModified)
+	assertApplyOptionsOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [df_name];\nGO\n"+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\nGO\n", "--enable-drop")
+	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 }
 
 func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
@@ -594,8 +594,8 @@ func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
 		  id bigint NOT NULL PRIMARY KEY
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+dropConstraint+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\nGO\n")
-	assertApplyOutput(t, createTable, nothingModified)
+	assertApplyOptionsOutput(t, createTable, applyPrefix+dropConstraint+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\nGO\n", "--enable-drop")
+	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 }
 
 func TestMssqldefCreateTableDropColumnWithPK(t *testing.T) {
@@ -615,8 +615,8 @@ func TestMssqldefCreateTableDropColumnWithPK(t *testing.T) {
 		  name varchar(20) DEFAULT NULL
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [pk_id];\nGO\n"+"ALTER TABLE [dbo].[users] DROP COLUMN [id];\nGO\n")
-	assertApplyOutput(t, createTable, nothingModified)
+	assertApplyOptionsOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [pk_id];\nGO\n"+"ALTER TABLE [dbo].[users] DROP COLUMN [id];\nGO\n", "--enable-drop")
+	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 }
 
 func TestMssqldefCreateTableAddPrimaryKey(t *testing.T) {
@@ -1137,15 +1137,16 @@ func TestMssqldefCreateTableAddNotForReplication(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
+	assertApplyOptionsOutput(t, createUsers+createPosts, applyPrefix+
 		"ALTER TABLE [dbo].[posts] DROP COLUMN [post_id];\nGO\n"+
 		"ALTER TABLE [dbo].[posts] ADD [post_id] bigint IDENTITY(1,1) NOT FOR REPLICATION;\nGO\n"+
 		"ALTER TABLE [dbo].[posts] DROP CONSTRAINT posts_view_check;\nGO\n"+
 		"ALTER TABLE [dbo].[posts] ADD CONSTRAINT posts_view_check CHECK NOT FOR REPLICATION (views > (-1));\nGO\n"+
 		"ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_ibfk_1];\nGO\n"+
 		"ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [dbo].[users] ([id]) NOT FOR REPLICATION;\nGO\n",
+		"--enable-drop",
 	)
-	assertApplyOutput(t, createUsers+createPosts, nothingModified)
+	assertApplyOptionsOutput(t, createUsers+createPosts, nothingModified, "--enable-drop")
 }
 
 func TestMssqldefCreateTableAddDefaultChangeDefault(t *testing.T) {

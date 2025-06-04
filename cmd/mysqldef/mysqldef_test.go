@@ -191,8 +191,8 @@ func TestMysqldefAddColumn(t *testing.T) {
 		  created_at datetime NOT NULL
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` DROP COLUMN `name`;\n")
-	assertApplyOutput(t, createTable, nothingModified)
+	assertApplyOptionsOutput(t, createTable, applyPrefix+"ALTER TABLE `users` DROP COLUMN `name`;\n", "--enable-drop")
+	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 }
 
 func TestMysqldefAddColumnAfter(t *testing.T) {
@@ -374,12 +374,12 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+	assertApplyOptionsOutput(t, createTable, applyPrefix+stripHeredoc(`
 		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`name`"+`;
 		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) VIRTUAL AFTER `+"`data`"+`;
 		`,
-	))
-	assertApplyOutput(t, createTable, nothingModified)
+	), "--enable-drop")
+	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 
 	createTable = stripHeredoc(`
 		CREATE TABLE test_table (
@@ -392,14 +392,14 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+	assertApplyOptionsOutput(t, createTable, applyPrefix+stripHeredoc(`
 		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`test_expr`"+`;
 		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`test_expr`"+` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED AFTER `+"`test_value`"+`;
 		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`name`"+`;
 		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED AFTER `+"`data`"+`;
 		`,
-	))
-	assertApplyOutput(t, createTable, nothingModified)
+	), "--enable-drop")
+	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 
 	createTable = stripHeredoc(`
 		CREATE TABLE test_table (
@@ -425,14 +425,14 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+	assertApplyOptionsOutput(t, createTable, applyPrefix+stripHeredoc(`
 		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`test_expr`"+`;
 		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`test_expr`"+` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED NOT NULL AFTER `+"`test_value`"+`;
 		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`name`"+`;
 		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED NOT NULL AFTER `+"`data`"+`;
 		`,
-	))
-	assertApplyOutput(t, createTable, nothingModified)
+	), "--enable-drop")
+	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 
 	createTable = stripHeredoc(`
 		CREATE TABLE test_table (
@@ -445,12 +445,12 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+	assertApplyOptionsOutput(t, createTable, applyPrefix+stripHeredoc(`
 		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`test_expr`"+`;
 		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`test_expr`"+` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) STORED NOT NULL AFTER `+"`test_value`"+`;
 		`,
-	))
-	assertApplyOutput(t, createTable, nothingModified)
+	), "--enable-drop")
+	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 
 	createTable = stripHeredoc(`
 		CREATE TABLE test_table (
@@ -463,12 +463,12 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+	assertApplyOptionsOutput(t, createTable, applyPrefix+stripHeredoc(`
 		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`name`"+`;
 		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (substr(`+"'"+`test_value`+"'"+`, 1, 2)) STORED NOT NULL AFTER `+"`data`"+`;
 		`,
-	))
-	assertApplyOutput(t, createTable, nothingModified)
+	), "--enable-drop")
+	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 
 	createTable = stripHeredoc(`
 		CREATE TABLE test_table (
@@ -481,12 +481,12 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+	assertApplyOptionsOutput(t, createTable, applyPrefix+stripHeredoc(`
 		ALTER TABLE `+"`test_table`"+` DROP COLUMN `+"`name`"+`;
 		ALTER TABLE `+"`test_table`"+` ADD COLUMN `+"`name`"+` varchar(20) GENERATED ALWAYS AS (substr(`+"'"+`test_value`+"'"+`, 2, 2)) STORED NOT NULL AFTER `+"`data`"+`;
 		`,
-	))
-	assertApplyOutput(t, createTable, nothingModified)
+	), "--enable-drop")
+	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 }
 
 func TestMysqldefChangeEnumColumn(t *testing.T) {
