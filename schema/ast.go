@@ -290,6 +290,25 @@ type Schema struct {
 	schema    parser.Schema
 }
 
+type CreateDomain struct {
+	statement string
+	domain    Domain
+}
+
+type Domain struct {
+	name        string
+	dataType    string
+	collate     string
+	defaultDef  *DefaultDefinition
+	constraints []DomainConstraint
+}
+
+type DomainConstraint struct {
+	name      string
+	notNull   *bool
+	checkExpr string
+}
+
 func (c *CreateTable) Statement() string {
 	return c.statement
 }
@@ -340,6 +359,10 @@ func (t *Extension) Statement() string {
 
 func (t *Schema) Statement() string {
 	return t.statement
+}
+
+func (d *CreateDomain) Statement() string {
+	return d.statement
 }
 
 func (t *Table) PrimaryKey() *Index {

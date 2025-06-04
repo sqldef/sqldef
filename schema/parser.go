@@ -188,6 +188,15 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				statement: ddl,
 				schema:    *stmt.Schema,
 			}, nil
+		} else if stmt.Action == parser.CreateDomain {
+			domain, err := parseDomain(mode, stmt, defaultSchema)
+			if err != nil {
+				return nil, err
+			}
+			return &CreateDomain{
+				statement: ddl,
+				domain:    domain,
+			}, nil
 		} else {
 			return nil, fmt.Errorf(
 				"unsupported type of DDL action '%d': %s",
@@ -789,4 +798,60 @@ func castBoolPtr(val *parser.BoolVal) *bool {
 	}
 	ret := castBool(*val)
 	return &ret
+}
+
+func parseDomain(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Domain, error) {
+	var constraints []DomainConstraint
+	
+	for _, constraint := range stmt.Domain.Constraints {
+		domainConstraint := DomainConstraint{
+			name:    constraint.Name,
+			notNull: constraint.NotNull,
+		}
+		
+		if constraint.CheckExpr != nil {
+			domainConstraint.checkExpr = parser.String(constraint.CheckExpr)
+		}
+		
+		constraints = append(constraints, domainConstraint)
+	}
+	
+	var defaultDef *DefaultDefinition
+	if stmt.Domain.Default != nil {
+		defaultDef = parseDefaultDefinition(stmt.Domain.Default)
+	}
+	
+	var dataType string
+	if stmt.Domain.DataType.References != "" {
+		dataType = stmt.Domain.DataType.References + stmt.Domain.DataType.Type
+	} else {
+		dataType = stmt.Domain.DataType.Type
+	}
+	
+	// Handle array types
+	if stmt.Domain.DataType.Array {
+		dataType += "[]"
+	}
+	
+	// Add length/scale if present
+	if stmt.Domain.DataType.Length != nil {
+		dataType += "(" + string(stmt.Domain.DataType.Length.Val)
+		if stmt.Domain.DataType.Scale != nil {
+			dataType += "," + string(stmt.Domain.DataType.Scale.Val)
+		}
+		dataType += ")"
+	}
+	
+	// Add timezone if present
+	if stmt.Domain.DataType.Timezone {
+		dataType += " with time zone"
+	}
+	
+	return Domain{
+		name:        stmt.Domain.Name,
+		dataType:    dataType,
+		collate:     stmt.Domain.Collate,
+		defaultDef:  defaultDef,
+		constraints: constraints,
+	}, nil
 }

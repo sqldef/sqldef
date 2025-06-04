@@ -84,6 +84,8 @@ func (p PostgresParser) parseStmt(node *pgquery.Node) (parser.Statement, error) 
 		return p.parseAlterTableStmt(stmt.AlterTableStmt)
 	case *pgquery.Node_CreateSchemaStmt:
 		return p.parseCreateSchemaStmt(stmt.CreateSchemaStmt)
+	case *pgquery.Node_CreateDomainStmt:
+		return p.parseCreateDomainStmt(stmt.CreateDomainStmt)
 	default:
 		return nil, fmt.Errorf("unknown node in parseStmt: %#v", stmt)
 	}
@@ -1310,6 +1312,87 @@ func (p PostgresParser) parseCreateSchemaStmt(stmt *pgquery.CreateSchemaStmt) (p
 			Name: stmt.Schemaname,
 		},
 	}, nil
+}
+
+func (p PostgresParser) parseCreateDomainStmt(stmt *pgquery.CreateDomainStmt) (parser.Statement, error) {
+	// Parse domain name
+	domainNameParts := make([]string, len(stmt.Domainname))
+	for i, part := range stmt.Domainname {
+		domainNameParts[i] = part.Node.(*pgquery.Node_String_).String_.Sval
+	}
+	domainName := strings.Join(domainNameParts, ".")
+	
+	// Parse data type
+	dataType, err := p.parseTypeName(stmt.TypeName)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Parse collation
+	var collate string
+	if stmt.CollClause != nil {
+		collateNames := make([]string, len(stmt.CollClause.Collname))
+		for i, name := range stmt.CollClause.Collname {
+			collateNames[i] = name.Node.(*pgquery.Node_String_).String_.Sval
+		}
+		collate = strings.Join(collateNames, ".")
+	}
+	
+	// Default value is handled as a constraint
+	
+	// Parse constraints
+	var constraints []*parser.DomainConstraint
+	for _, constraint := range stmt.Constraints {
+		domainConstraint, err := p.parseDomainConstraint(constraint)
+		if err != nil {
+			return nil, err
+		}
+		constraints = append(constraints, domainConstraint)
+	}
+	
+	return &parser.DDL{
+		Action: parser.CreateDomain,
+		Domain: &parser.Domain{
+			Name:        domainName,
+			DataType:    dataType,
+			Collate:     collate,
+			Default:     nil, // Will be set from constraints
+			Constraints: constraints,
+		},
+	}, nil
+}
+
+func (p PostgresParser) parseDomainConstraint(constraint *pgquery.Node) (*parser.DomainConstraint, error) {
+	switch node := constraint.Node.(type) {
+	case *pgquery.Node_Constraint:
+		domainConstraint := &parser.DomainConstraint{
+			Name: node.Constraint.Conname,
+		}
+		
+		switch node.Constraint.Contype {
+		case pgquery.ConstrType_CONSTR_NULL:
+			notNull := false
+			domainConstraint.NotNull = &notNull
+		case pgquery.ConstrType_CONSTR_NOTNULL:
+			notNull := true
+			domainConstraint.NotNull = &notNull
+		case pgquery.ConstrType_CONSTR_CHECK:
+			expr, err := p.parseExpr(node.Constraint.RawExpr)
+			if err != nil {
+				return nil, err
+			}
+			domainConstraint.CheckExpr = expr
+		case pgquery.ConstrType_CONSTR_DEFAULT:
+			// DEFAULT constraints are handled separately in the DDL
+			// For now, we'll skip them in domain constraints
+		default:
+			return nil, fmt.Errorf("unsupported domain constraint type: %d", node.Constraint.Contype)
+		}
+		
+		return domainConstraint, nil
+	default:
+		return nil, fmt.Errorf("unknown domain constraint node: %#v", constraint)
+	}
 }
 
 // This is a workaround to handle cases where PostgreSQL automatically adds or removes type casting.
