@@ -55,6 +55,12 @@ func (d *PostgresDatabase) DumpDDLs() (string, error) {
 	}
 	ddls = append(ddls, typeDDLs...)
 
+	domainDDLs, err := d.domains()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, domainDDLs...)
+
 	tableNames, err := d.tableNames()
 	if err != nil {
 		return "", err
@@ -295,6 +301,84 @@ func (d *PostgresDatabase) types() ([]string, error) {
 			),
 		)
 	}
+	return ddls, nil
+}
+
+func (d *PostgresDatabase) domains() ([]string, error) {
+	rows, err := d.db.Query(`
+		SELECT 
+			n.nspname as domain_schema,
+			t.typname as domain_name,
+			format_type(t.typbasetype, t.typtypmod) as base_type,
+			t.typnotnull,
+			t.typdefault,
+			c.collname as collation_name,
+			pg_get_constraintdef(cc.oid) as check_clause
+		FROM pg_type t
+		LEFT JOIN pg_namespace n ON t.typnamespace = n.oid
+		LEFT JOIN pg_collation c ON t.typcollation = c.oid AND t.typcollation <> 0
+		LEFT JOIN pg_constraint cc ON t.oid = cc.contypid
+		WHERE t.typtype = 'd'
+			AND n.nspname NOT IN ('information_schema', 'pg_catalog')
+			AND NOT EXISTS (SELECT * FROM pg_depend d WHERE d.objid = t.oid AND d.deptype = 'e')
+		ORDER BY n.nspname, t.typname;
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ddls []string
+	for rows.Next() {
+		var domainSchema, domainName, baseType string
+		var notNull bool
+		var defaultValue, collationName, checkClause sql.NullString
+		
+		if err := rows.Scan(&domainSchema, &domainName, &baseType, &notNull, &defaultValue, &collationName, &checkClause); err != nil {
+			return nil, err
+		}
+		
+		if d.config.TargetSchema != nil && !containsString(d.config.TargetSchema, domainSchema) {
+			continue
+		}
+
+		// Build CREATE DOMAIN statement
+		var parts []string
+		
+		// Add schema qualification if not in public schema
+		var domainFullName string
+		if domainSchema == "public" {
+			domainFullName = escapeSQLName(domainName)
+		} else {
+			domainFullName = fmt.Sprintf("%s.%s", escapeSQLName(domainSchema), escapeSQLName(domainName))
+		}
+		
+		parts = append(parts, fmt.Sprintf("CREATE DOMAIN %s AS %s", domainFullName, baseType))
+		
+		// Add COLLATE if specified
+		if collationName.Valid && collationName.String != "" {
+			parts = append(parts, fmt.Sprintf("COLLATE %s", escapeSQLName(collationName.String)))
+		}
+		
+		// Add DEFAULT if specified
+		if defaultValue.Valid && defaultValue.String != "" {
+			parts = append(parts, fmt.Sprintf("DEFAULT %s", defaultValue.String))
+		}
+		
+		// Add NOT NULL if specified
+		if notNull {
+			parts = append(parts, "NOT NULL")
+		}
+		
+		// Add CHECK constraint if specified
+		if checkClause.Valid && checkClause.String != "" {
+			parts = append(parts, checkClause.String)
+		}
+		
+		ddl := strings.Join(parts, " ") + ";"
+		ddls = append(ddls, ddl)
+	}
+	
 	return ddls, nil
 }
 
