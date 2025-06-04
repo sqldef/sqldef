@@ -530,67 +530,142 @@ func (c *column) GetDataType() string {
 }
 
 func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
-	const query = `WITH
-	  columns AS (
-	    SELECT
-	      f.attname as column_name,
-	      CASE 
-	      WHEN current_setting('server_version_num')::int >= 120000 
-	        AND f.attgenerated != '' THEN NULL
-	      ELSE pg_get_expr(d.adbin, d.adrelid)
-	      END as column_default,
-	      CASE WHEN f.attnotnull THEN 'NO' ELSE 'YES' END as is_nullable,
-	      CASE 
-	      WHEN typ.typtype = 'd' THEN 
-	        CASE 
-	        WHEN typ_ns.nspname = 'public' THEN typ.typname::text
-	        ELSE typ_ns.nspname || '.' || typ.typname::text
-	        END
-	      ELSE format_type(f.atttypid, f.atttypmod)
-	      END as data_type,
-	      format_type(f.atttypid, f.atttypmod) as formatted_data_type,
-	      CASE 
-	      WHEN f.attidentity = 'a' THEN 'ALWAYS'
-	      WHEN f.attidentity = 'd' THEN 'BY DEFAULT'
-	      ELSE NULL
-	      END as identity_generation
-	    FROM pg_attribute f
-	    JOIN pg_class c ON c.oid = f.attrelid 
-	    JOIN pg_type typ ON typ.oid = f.atttypid
-	    LEFT JOIN pg_namespace typ_ns ON typ_ns.oid = typ.typnamespace
-	    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
-	    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
-	    WHERE c.relkind in ('r', 'p')
-	    AND n.nspname = $1
-	    AND c.relname = $2
-	    AND f.attnum > 0
-	    ORDER BY f.attnum
-	  ),
-	  column_constraints AS (
-	    SELECT att.attname column_name, tmp.name, tmp.type , tmp.definition
-	    FROM (
-	      SELECT unnest(con.conkey) AS conkey,
-	             pg_get_constraintdef(con.oid, true) AS definition,
-	             cls.oid AS relid,
-	             con.conname AS name,
-	             con.contype AS type
-	      FROM   pg_constraint con
-	      JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
-	      JOIN   pg_class cls ON cls.oid = con.conrelid
-	      WHERE  nsp.nspname = $1
-	      AND    cls.relname = $2
-	      AND    array_length(con.conkey, 1) = 1
-	    ) tmp
-	    JOIN pg_attribute att ON tmp.conkey = att.attnum AND tmp.relid = att.attrelid
-	  ),
-	  check_constraints AS (
-	    SELECT column_name, name, definition
-	    FROM   column_constraints
-	    WHERE  type = 'c'
-	  )
-	SELECT    columns.*, checks.name, checks.definition
-	FROM      columns
-	LEFT JOIN check_constraints checks USING (column_name);`
+	// Check if attgenerated column exists (PostgreSQL 12+)
+	var hasAttGenerated bool
+	err := d.db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns 
+			WHERE table_name = 'pg_attribute' 
+			AND column_name = 'attgenerated'
+		)
+	`).Scan(&hasAttGenerated)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build query based on PostgreSQL version
+	var query string
+	if hasAttGenerated {
+		query = `WITH
+		  columns AS (
+		    SELECT
+		      f.attname as column_name,
+		      CASE 
+		      WHEN f.attgenerated != '' THEN NULL
+		      ELSE pg_get_expr(d.adbin, d.adrelid)
+		      END as column_default,
+		      CASE WHEN f.attnotnull THEN 'NO' ELSE 'YES' END as is_nullable,
+		      CASE 
+		      WHEN typ.typtype = 'd' THEN 
+		        CASE 
+		        WHEN typ_ns.nspname = 'public' THEN typ.typname::text
+		        ELSE typ_ns.nspname || '.' || typ.typname::text
+		        END
+		      ELSE format_type(f.atttypid, f.atttypmod)
+		      END as data_type,
+		      format_type(f.atttypid, f.atttypmod) as formatted_data_type,
+		      CASE 
+		      WHEN f.attidentity = 'a' THEN 'ALWAYS'
+		      WHEN f.attidentity = 'd' THEN 'BY DEFAULT'
+		      ELSE NULL
+		      END as identity_generation
+		    FROM pg_attribute f
+		    JOIN pg_class c ON c.oid = f.attrelid 
+		    JOIN pg_type typ ON typ.oid = f.atttypid
+		    LEFT JOIN pg_namespace typ_ns ON typ_ns.oid = typ.typnamespace
+		    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
+		    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
+		    WHERE c.relkind in ('r', 'p')
+		    AND n.nspname = $1
+		    AND c.relname = $2
+		    AND f.attnum > 0
+		    ORDER BY f.attnum
+		  ),
+		  column_constraints AS (
+		    SELECT att.attname column_name, tmp.name, tmp.type , tmp.definition
+		    FROM (
+		      SELECT unnest(con.conkey) AS conkey,
+		             pg_get_constraintdef(con.oid, true) AS definition,
+		             cls.oid AS relid,
+		             con.conname AS name,
+		             con.contype AS type
+		      FROM   pg_constraint con
+		      JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+		      JOIN   pg_class cls ON cls.oid = con.conrelid
+		      WHERE  nsp.nspname = $1
+		      AND    cls.relname = $2
+		      AND    array_length(con.conkey, 1) = 1
+		    ) tmp
+		    JOIN pg_attribute att ON tmp.conkey = att.attnum AND tmp.relid = att.attrelid
+		  ),
+		  check_constraints AS (
+		    SELECT column_name, name, definition
+		    FROM   column_constraints
+		    WHERE  type = 'c'
+		  )
+		SELECT    columns.*, checks.name, checks.definition
+		FROM      columns
+		LEFT JOIN check_constraints checks USING (column_name);`
+	} else {
+		// PostgreSQL 10/11 - no attgenerated column
+		query = `WITH
+		  columns AS (
+		    SELECT
+		      f.attname as column_name,
+		      pg_get_expr(d.adbin, d.adrelid) as column_default,
+		      CASE WHEN f.attnotnull THEN 'NO' ELSE 'YES' END as is_nullable,
+		      CASE 
+		      WHEN typ.typtype = 'd' THEN 
+		        CASE 
+		        WHEN typ_ns.nspname = 'public' THEN typ.typname::text
+		        ELSE typ_ns.nspname || '.' || typ.typname::text
+		        END
+		      ELSE format_type(f.atttypid, f.atttypmod)
+		      END as data_type,
+		      format_type(f.atttypid, f.atttypmod) as formatted_data_type,
+		      CASE 
+		      WHEN f.attidentity = 'a' THEN 'ALWAYS'
+		      WHEN f.attidentity = 'd' THEN 'BY DEFAULT'
+		      ELSE NULL
+		      END as identity_generation
+		    FROM pg_attribute f
+		    JOIN pg_class c ON c.oid = f.attrelid 
+		    JOIN pg_type typ ON typ.oid = f.atttypid
+		    LEFT JOIN pg_namespace typ_ns ON typ_ns.oid = typ.typnamespace
+		    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
+		    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
+		    WHERE c.relkind in ('r', 'p')
+		    AND n.nspname = $1
+		    AND c.relname = $2
+		    AND f.attnum > 0
+		    ORDER BY f.attnum
+		  ),
+		  column_constraints AS (
+		    SELECT att.attname column_name, tmp.name, tmp.type , tmp.definition
+		    FROM (
+		      SELECT unnest(con.conkey) AS conkey,
+		             pg_get_constraintdef(con.oid, true) AS definition,
+		             cls.oid AS relid,
+		             con.conname AS name,
+		             con.contype AS type
+		      FROM   pg_constraint con
+		      JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+		      JOIN   pg_class cls ON cls.oid = con.conrelid
+		      WHERE  nsp.nspname = $1
+		      AND    cls.relname = $2
+		      AND    array_length(con.conkey, 1) = 1
+		    ) tmp
+		    JOIN pg_attribute att ON tmp.conkey = att.attnum AND tmp.relid = att.attrelid
+		  ),
+		  check_constraints AS (
+		    SELECT column_name, name, definition
+		    FROM   column_constraints
+		    WHERE  type = 'c'
+		  )
+		SELECT    columns.*, checks.name, checks.definition
+		FROM      columns
+		LEFT JOIN check_constraints checks USING (column_name);`
+	}
 
 	schema, table := splitTableName(table, d.GetDefaultSchema())
 	rows, err := d.db.Query(query, schema, table)
