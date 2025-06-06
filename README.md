@@ -36,7 +36,7 @@ Application Options:
       --file=sql_file               Read desired SQL from the file, rather than stdin (default: -)
       --dry-run                     Don't run DDLs but just show them
       --export                      Just dump the current schema to stdout
-      --enable-drop-table           Enable destructive changes such as DROP (enable only table drops)
+      --enable-drop                 Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
       --skip-view                   Skip managing views (temporary feature, to be removed later)
       --before-apply=               Execute the given string before applying the regular DDLs
       --config=                     YAML file to specify: target_tables, skip_tables, algorithm, lock
@@ -102,7 +102,7 @@ $ mysqldef -uroot test < schema.sql
 Skipped: 'DROP TABLE users;'
 
 # Run dropping existing tables and columns
-$ mysqldef -uroot test --enable-drop-table < schema.sql
+$ mysqldef -uroot test --enable-drop < schema.sql
 Run: 'DROP TABLE users;'
 
 # Run using file with skip tables
@@ -128,7 +128,7 @@ Application Options:
   -f, --file=filename         Read desired SQL from the file, rather than stdin (default: -)
       --dry-run               Don't run DDLs but just show them
       --export                Just dump the current schema to stdout
-      --enable-drop-table     Enable destructive changes such as DROP (enable only table drops)
+      --enable-drop           Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
       --skip-view             Skip managing views/materialized views
       --skip-extension        Skip managing extensions
       --before-apply=         Execute the given string before applying the regular DDLs
@@ -202,7 +202,7 @@ $ psqldef -U postgres test < schema.sql
 Skipped: 'DROP TABLE users;'
 
 # Run dropping existing tables and columns
-$ psqldef -U postgres test --enable-drop-table < schema.sql
+$ psqldef -U postgres test --enable-drop < schema.sql
 Run: 'DROP TABLE users;'
 ```
 
@@ -216,7 +216,7 @@ Application Options:
   -f, --file=filename         Read desired SQL from the file, rather than stdin (default: -)
       --dry-run               Don't run DDLs but just show them
       --export                Just dump the current schema to stdout
-      --enable-drop-table     Enable destructive changes such as DROP (enable only table drops)
+      --enable-drop           Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
       --config=               YAML file to specify: target_tables, skip_tables
       --help                  Show this help
       --version               Show this version
@@ -237,7 +237,7 @@ Application Options:
       --file=sql_file         Read desired SQL from the file, rather than stdin (default: -)
       --dry-run               Don't run DDLs but just show them
       --export                Just dump the current schema to stdout
-      --enable-drop-table     Enable destructive changes such as DROP (enable only table drops)
+      --enable-drop           Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
       --help                  Show this help
       --version               Show this version
 ```
