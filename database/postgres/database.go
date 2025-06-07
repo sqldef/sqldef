@@ -55,6 +55,12 @@ func (d *PostgresDatabase) DumpDDLs() (string, error) {
 	}
 	ddls = append(ddls, typeDDLs...)
 
+	domainDDLs, err := d.domains()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, domainDDLs...)
+
 	tableNames, err := d.tableNames()
 	if err != nil {
 		return "", err
@@ -298,6 +304,84 @@ func (d *PostgresDatabase) types() ([]string, error) {
 	return ddls, nil
 }
 
+func (d *PostgresDatabase) domains() ([]string, error) {
+	rows, err := d.db.Query(`
+		SELECT 
+			n.nspname as domain_schema,
+			t.typname as domain_name,
+			format_type(t.typbasetype, t.typtypmod) as base_type,
+			t.typnotnull,
+			t.typdefault,
+			c.collname as collation_name,
+			pg_get_constraintdef(cc.oid) as check_clause
+		FROM pg_type t
+		LEFT JOIN pg_namespace n ON t.typnamespace = n.oid
+		LEFT JOIN pg_collation c ON t.typcollation = c.oid AND t.typcollation <> 0
+		LEFT JOIN pg_constraint cc ON t.oid = cc.contypid
+		WHERE t.typtype = 'd'
+			AND n.nspname NOT IN ('information_schema', 'pg_catalog')
+			AND NOT EXISTS (SELECT * FROM pg_depend d WHERE d.objid = t.oid AND d.deptype = 'e')
+		ORDER BY n.nspname, t.typname;
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ddls []string
+	for rows.Next() {
+		var domainSchema, domainName, baseType string
+		var notNull bool
+		var defaultValue, collationName, checkClause sql.NullString
+
+		if err := rows.Scan(&domainSchema, &domainName, &baseType, &notNull, &defaultValue, &collationName, &checkClause); err != nil {
+			return nil, err
+		}
+
+		if d.config.TargetSchema != nil && !containsString(d.config.TargetSchema, domainSchema) {
+			continue
+		}
+
+		// Build CREATE DOMAIN statement
+		var parts []string
+
+		// Add schema qualification if not in public schema
+		var domainFullName string
+		if domainSchema == "public" {
+			domainFullName = escapeSQLName(domainName)
+		} else {
+			domainFullName = fmt.Sprintf("%s.%s", escapeSQLName(domainSchema), escapeSQLName(domainName))
+		}
+
+		parts = append(parts, fmt.Sprintf("CREATE DOMAIN %s AS %s", domainFullName, baseType))
+
+		// Add COLLATE if specified
+		if collationName.Valid && collationName.String != "" {
+			parts = append(parts, fmt.Sprintf("COLLATE %s", escapeSQLName(collationName.String)))
+		}
+
+		// Add DEFAULT if specified
+		if defaultValue.Valid && defaultValue.String != "" {
+			parts = append(parts, fmt.Sprintf("DEFAULT %s", defaultValue.String))
+		}
+
+		// Add NOT NULL if specified
+		if notNull {
+			parts = append(parts, "NOT NULL")
+		}
+
+		// Add CHECK constraint if specified
+		if checkClause.Valid && checkClause.String != "" {
+			parts = append(parts, checkClause.String)
+		}
+
+		ddl := strings.Join(parts, " ") + ";"
+		ddls = append(ddls, ddl)
+	}
+
+	return ddls, nil
+}
+
 func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
 	cols, err := d.getColumns(table)
 	if err != nil {
@@ -446,54 +530,142 @@ func (c *column) GetDataType() string {
 }
 
 func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
-	const query = `WITH
-	  columns AS (
-	    SELECT
-	      s.column_name,
-	      s.column_default,
-	      s.is_nullable,
-	      CASE
-	      WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod)
-	      ELSE s.data_type
-	      END,
-	      format_type(f.atttypid, f.atttypmod),
-	      s.identity_generation
-	    FROM pg_attribute f
-	    JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
-	    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
-	    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
-	    LEFT JOIN information_schema.columns s ON s.column_name = f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
-	    WHERE c.relkind in ('r', 'p')
-	    AND n.nspname = $1
-	    AND c.relname = $2
-	    AND f.attnum > 0
-	    ORDER BY f.attnum
-	  ),
-	  column_constraints AS (
-	    SELECT att.attname column_name, tmp.name, tmp.type , tmp.definition
-	    FROM (
-	      SELECT unnest(con.conkey) AS conkey,
-	             pg_get_constraintdef(con.oid, true) AS definition,
-	             cls.oid AS relid,
-	             con.conname AS name,
-	             con.contype AS type
-	      FROM   pg_constraint con
-	      JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
-	      JOIN   pg_class cls ON cls.oid = con.conrelid
-	      WHERE  nsp.nspname = $1
-	      AND    cls.relname = $2
-	      AND    array_length(con.conkey, 1) = 1
-	    ) tmp
-	    JOIN pg_attribute att ON tmp.conkey = att.attnum AND tmp.relid = att.attrelid
-	  ),
-	  check_constraints AS (
-	    SELECT column_name, name, definition
-	    FROM   column_constraints
-	    WHERE  type = 'c'
-	  )
-	SELECT    columns.*, checks.name, checks.definition
-	FROM      columns
-	LEFT JOIN check_constraints checks USING (column_name);`
+	// Check if attgenerated column exists (PostgreSQL 12+)
+	var hasAttGenerated bool
+	err := d.db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns 
+			WHERE table_name = 'pg_attribute' 
+			AND column_name = 'attgenerated'
+		)
+	`).Scan(&hasAttGenerated)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build query based on PostgreSQL version
+	var query string
+	if hasAttGenerated {
+		query = `WITH
+		  columns AS (
+		    SELECT
+		      f.attname as column_name,
+		      CASE 
+		      WHEN f.attgenerated != '' THEN NULL
+		      ELSE pg_get_expr(d.adbin, d.adrelid)
+		      END as column_default,
+		      CASE WHEN f.attnotnull THEN 'NO' ELSE 'YES' END as is_nullable,
+		      CASE 
+		      WHEN typ.typtype = 'd' THEN 
+		        CASE 
+		        WHEN typ_ns.nspname = 'public' THEN typ.typname::text
+		        ELSE typ_ns.nspname || '.' || typ.typname::text
+		        END
+		      ELSE format_type(f.atttypid, f.atttypmod)
+		      END as data_type,
+		      format_type(f.atttypid, f.atttypmod) as formatted_data_type,
+		      CASE 
+		      WHEN f.attidentity = 'a' THEN 'ALWAYS'
+		      WHEN f.attidentity = 'd' THEN 'BY DEFAULT'
+		      ELSE NULL
+		      END as identity_generation
+		    FROM pg_attribute f
+		    JOIN pg_class c ON c.oid = f.attrelid 
+		    JOIN pg_type typ ON typ.oid = f.atttypid
+		    LEFT JOIN pg_namespace typ_ns ON typ_ns.oid = typ.typnamespace
+		    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
+		    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
+		    WHERE c.relkind in ('r', 'p')
+		    AND n.nspname = $1
+		    AND c.relname = $2
+		    AND f.attnum > 0
+		    ORDER BY f.attnum
+		  ),
+		  column_constraints AS (
+		    SELECT att.attname column_name, tmp.name, tmp.type , tmp.definition
+		    FROM (
+		      SELECT unnest(con.conkey) AS conkey,
+		             pg_get_constraintdef(con.oid, true) AS definition,
+		             cls.oid AS relid,
+		             con.conname AS name,
+		             con.contype AS type
+		      FROM   pg_constraint con
+		      JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+		      JOIN   pg_class cls ON cls.oid = con.conrelid
+		      WHERE  nsp.nspname = $1
+		      AND    cls.relname = $2
+		      AND    array_length(con.conkey, 1) = 1
+		    ) tmp
+		    JOIN pg_attribute att ON tmp.conkey = att.attnum AND tmp.relid = att.attrelid
+		  ),
+		  check_constraints AS (
+		    SELECT column_name, name, definition
+		    FROM   column_constraints
+		    WHERE  type = 'c'
+		  )
+		SELECT    columns.*, checks.name, checks.definition
+		FROM      columns
+		LEFT JOIN check_constraints checks USING (column_name);`
+	} else {
+		// PostgreSQL 10/11 - no attgenerated column
+		query = `WITH
+		  columns AS (
+		    SELECT
+		      f.attname as column_name,
+		      pg_get_expr(d.adbin, d.adrelid) as column_default,
+		      CASE WHEN f.attnotnull THEN 'NO' ELSE 'YES' END as is_nullable,
+		      CASE 
+		      WHEN typ.typtype = 'd' THEN 
+		        CASE 
+		        WHEN typ_ns.nspname = 'public' THEN typ.typname::text
+		        ELSE typ_ns.nspname || '.' || typ.typname::text
+		        END
+		      ELSE format_type(f.atttypid, f.atttypmod)
+		      END as data_type,
+		      format_type(f.atttypid, f.atttypmod) as formatted_data_type,
+		      CASE 
+		      WHEN f.attidentity = 'a' THEN 'ALWAYS'
+		      WHEN f.attidentity = 'd' THEN 'BY DEFAULT'
+		      ELSE NULL
+		      END as identity_generation
+		    FROM pg_attribute f
+		    JOIN pg_class c ON c.oid = f.attrelid 
+		    JOIN pg_type typ ON typ.oid = f.atttypid
+		    LEFT JOIN pg_namespace typ_ns ON typ_ns.oid = typ.typnamespace
+		    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
+		    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
+		    WHERE c.relkind in ('r', 'p')
+		    AND n.nspname = $1
+		    AND c.relname = $2
+		    AND f.attnum > 0
+		    ORDER BY f.attnum
+		  ),
+		  column_constraints AS (
+		    SELECT att.attname column_name, tmp.name, tmp.type , tmp.definition
+		    FROM (
+		      SELECT unnest(con.conkey) AS conkey,
+		             pg_get_constraintdef(con.oid, true) AS definition,
+		             cls.oid AS relid,
+		             con.conname AS name,
+		             con.contype AS type
+		      FROM   pg_constraint con
+		      JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+		      JOIN   pg_class cls ON cls.oid = con.conrelid
+		      WHERE  nsp.nspname = $1
+		      AND    cls.relname = $2
+		      AND    array_length(con.conkey, 1) = 1
+		    ) tmp
+		    JOIN pg_attribute att ON tmp.conkey = att.attnum AND tmp.relid = att.attrelid
+		  ),
+		  check_constraints AS (
+		    SELECT column_name, name, definition
+		    FROM   column_constraints
+		    WHERE  type = 'c'
+		  )
+		SELECT    columns.*, checks.name, checks.definition
+		FROM      columns
+		LEFT JOIN check_constraints checks USING (column_name);`
+	}
 
 	schema, table := splitTableName(table, d.GetDefaultSchema())
 	rows, err := d.db.Query(query, schema, table)

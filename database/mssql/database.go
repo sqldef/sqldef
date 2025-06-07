@@ -209,7 +209,7 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 			fmt.Fprintf(&queryBuilder, " %s", indexDef.indexType)
 		}
 		if !indexDef.constraint {
-			fmt.Fprintf(&queryBuilder, " INDEX [%s] ON %s",  indexDef.name, table)
+			fmt.Fprintf(&queryBuilder, " INDEX [%s] ON %s", indexDef.name, table)
 		}
 		if indexDef.indexType == "NONCLUSTERED COLUMNSTORE" {
 			fmt.Fprintf(&queryBuilder, " (%s)", strings.Join(indexDef.included, ", "))
@@ -392,15 +392,15 @@ func (d *MssqlDatabase) getColumns(table string) []column {
 }
 
 type indexDef struct {
-	name      string
-	columns   []string
-	primary   bool
-	unique    bool
+	name       string
+	columns    []string
+	primary    bool
+	unique     bool
 	constraint bool
-	indexType string
-	filter    *string
-	included  []string
-	options   []indexOption
+	indexType  string
+	filter     *string
+	included   []string
+	options    []indexOption
 }
 
 type indexOption struct {
@@ -446,8 +446,8 @@ FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'sys.stats' AND COLUMN_NAME =
 		return nil
 	}
 
-	if (hasIncremental != 1) {
-		query = strings.Replace(query, "st.is_incremental", "0 as is_incremental", 1);
+	if hasIncremental != 1 {
+		query = strings.Replace(query, "st.is_incremental", "0 as is_incremental", 1)
 	}
 
 	rows, err := d.db.Query(query)
@@ -633,7 +633,7 @@ INNER JOIN sys.sql_modules
 		if err := rows.Scan(&name, &definition); err != nil {
 			return nil, err
 		}
-		definition = lineComment.ReplaceAllString(definition, "")	//XXX - Line comments should be removed before removing newlines.
+		definition = lineComment.ReplaceAllString(definition, "") //XXX - Line comments should be removed before removing newlines.
 		definition = strings.TrimSpace(definition)
 		definition = strings.ReplaceAll(definition, "\n", " ")
 		definition = suffixSemicolon.ReplaceAllString(definition, "")

@@ -351,7 +351,7 @@ type Update struct {
 func (node *Update) Format(buf *nodeBuffer) {
 	buf.Printf("update %v%v set %v", node.Comments, node.TableExprs, node.Exprs)
 	if node.From != nil {
-		buf.Printf(" from %v", node.From);
+		buf.Printf(" from %v", node.From)
 	}
 	buf.Printf("%v%v%v", node.Where, node.OrderBy, node.Limit)
 }
@@ -421,6 +421,7 @@ type DDL struct {
 	Comment       *Comment
 	Extension     *Extension
 	Schema        *Schema
+	Domain        *Domain
 }
 
 type DDLAction int
@@ -432,6 +433,7 @@ const (
 	AddPrimaryKey
 	AddExclusion
 	CommentOn
+	CreateDomain
 	CreateExtension
 	CreateIndex
 	CreatePolicy
@@ -897,6 +899,20 @@ type Extension struct {
 
 type Schema struct {
 	Name string
+}
+
+type Domain struct {
+	Name        string
+	DataType    ColumnType
+	Collate     string
+	Default     *DefaultDefinition
+	Constraints []*DomainConstraint
+}
+
+type DomainConstraint struct {
+	Name      string
+	NotNull   *bool
+	CheckExpr Expr
 }
 
 type Permissive string
