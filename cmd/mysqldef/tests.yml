@@ -287,6 +287,11 @@ CreateTableUniqueIndex:
       created DATE NOT NULL,
       UNIQUE INDEX(id, created)
     );
+CreateTableWithKeyBlockSize:
+  desired: |
+    CREATE TABLE users (
+      id BIGINT
+    ) KEY_BLOCK_SIZE=8;
 PartitionByRange:
   desired: |
     CREATE TABLE `users` (
