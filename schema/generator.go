@@ -1417,7 +1417,12 @@ func (g *Generator) generateIndexOptionDefinition(indexOptions []IndexOption) st
 			if indexOption.optionName == "parser" {
 				indexOption.optionName = "WITH " + indexOption.optionName
 			}
-			optionDefinition = fmt.Sprintf(" %s %s", indexOption.optionName, string(indexOption.value.raw))
+			if indexOption.optionName == "comment" {
+				indexOption.optionName = "COMMENT"
+				optionDefinition = fmt.Sprintf(" %s '%s'", indexOption.optionName, string(indexOption.value.raw))
+			} else {
+				optionDefinition = fmt.Sprintf(" %s %s", indexOption.optionName, string(indexOption.value.raw))
+			}
 		case GeneratorModeMssql:
 			options := []string{}
 			for _, indexOption := range indexOptions {
