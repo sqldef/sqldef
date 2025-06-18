@@ -4263,6 +4263,10 @@ reserved_sql_id:
   {
     $$ = NewColIdent(string($1))
   }
+| KEY_BLOCK_SIZE
+  {
+    $$ = NewColIdent(string($1))
+  }
 | reserved_keyword
   {
     $$ = NewColIdent(string($1))
