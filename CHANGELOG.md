@@ -1,3 +1,8 @@
+## v2.0.2
+
+* Support key with comment [#693](https://github.com/sqldef/sqldef/pull/693)
+* Support KEY\_BLOCK\_SIZE in CREATE TABLE statement [#692](https://github.com/sqldef/sqldef/pull/692)
+
 ## v2.0.1
 
 * Disable `DROP COLUMN` as well, which can be enabled by `--enable-drop`
