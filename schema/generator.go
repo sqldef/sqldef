@@ -1168,20 +1168,30 @@ func generateDataType(column Column) string {
 		suffix += "[]"
 	}
 
+	// Determine the full type name including schema qualification
+	typeName := column.typeName
+	// Only qualify type names with schema when:
+	// 1. references is not empty and not just "public."
+	// 2. the type name doesn't already contain a dot
+	// 3. it's not a built-in type (built-in types shouldn't have references set to non-empty schema)
+	if column.references != "" && column.references != "public." && !strings.Contains(typeName, ".") {
+		typeName = column.references + typeName
+	}
+
 	if column.displayWidth != nil {
-		return fmt.Sprintf("%s(%s)%s", column.typeName, string(column.displayWidth.raw), suffix)
+		return fmt.Sprintf("%s(%s)%s", typeName, string(column.displayWidth.raw), suffix)
 	} else if column.length != nil {
 		if column.scale != nil {
-			return fmt.Sprintf("%s(%s, %s)%s", column.typeName, string(column.length.raw), string(column.scale.raw), suffix)
+			return fmt.Sprintf("%s(%s, %s)%s", typeName, string(column.length.raw), string(column.scale.raw), suffix)
 		} else {
-			return fmt.Sprintf("%s(%s)%s", column.typeName, string(column.length.raw), suffix)
+			return fmt.Sprintf("%s(%s)%s", typeName, string(column.length.raw), suffix)
 		}
 	} else {
 		switch column.typeName {
 		case "enum", "set":
 			return fmt.Sprintf("%s(%s)%s", column.typeName, strings.Join(column.enumValues, ", "), suffix)
 		default:
-			return fmt.Sprintf("%s%s", column.typeName, suffix)
+			return fmt.Sprintf("%s%s", typeName, suffix)
 		}
 	}
 }
