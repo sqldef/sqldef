@@ -1,3 +1,7 @@
+## v2.0.3
+
+* Fix schema qualification for enum types in ALTER TABLE ADD COLUMN [#694](https://github.com/sqldef/sqldef/pull/694)
+
 ## v2.0.2
 
 * Support key with comment [#693](https://github.com/sqldef/sqldef/pull/693)
