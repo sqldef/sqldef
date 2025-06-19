@@ -458,7 +458,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			case GeneratorModePostgres:
 				if !g.haveSameDataType(*currentColumn, desiredColumn) {
 					// Change type
-					ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name), generateDataType(desiredColumn))
+					ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name), g.generateDataType(desiredColumn))
 					ddls = append(ddls, ddl)
 				}
 
@@ -1159,7 +1159,7 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 	return ddls, nil
 }
 
-func generateDataType(column Column) string {
+func (g *Generator) generateDataType(column Column) string {
 	suffix := ""
 	if column.timezone {
 		suffix += " WITH TIME ZONE"
@@ -1170,11 +1170,11 @@ func generateDataType(column Column) string {
 
 	// Determine the full type name including schema qualification
 	typeName := column.typeName
-	// Only qualify type names with schema when:
+	// Only qualify type names with schema for PostgreSQL when:
 	// 1. references is not empty and not just "public."
 	// 2. the type name doesn't already contain a dot
 	// 3. it's not a built-in type (built-in types shouldn't have references set to non-empty schema)
-	if column.references != "" && column.references != "public." && !strings.Contains(typeName, ".") {
+	if g.mode == GeneratorModePostgres && column.references != "" && column.references != "public." && !strings.Contains(typeName, ".") {
 		typeName = column.references + typeName
 	}
 
@@ -1199,7 +1199,7 @@ func generateDataType(column Column) string {
 func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (string, error) {
 	// TODO: make string concatenation faster?
 
-	definition := fmt.Sprintf("%s %s ", g.escapeSQLName(column.name), generateDataType(column))
+	definition := fmt.Sprintf("%s %s ", g.escapeSQLName(column.name), g.generateDataType(column))
 
 	if column.unsigned {
 		definition += "UNSIGNED "
