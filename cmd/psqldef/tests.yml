@@ -208,6 +208,28 @@ AlterTypeAddValueWithSameTypeNameInDifferentSchema:
   output: |
     ALTER TYPE schema2.lang ADD VALUE 'de';
   min_version: '12'
+AddEnumTypeColumn:
+  current: |
+    CREATE SCHEMA s;
+    CREATE TABLE s.users (
+      id UUID NOT NULL PRIMARY KEY
+    );
+  desired: |
+    CREATE TYPE s.lang AS ENUM (
+      'ja',
+      'en'
+    );
+    CREATE TABLE s.users (
+      id UUID NOT NULL PRIMARY KEY,
+      lang s.lang NOT NULL
+    );
+  output: |
+    CREATE TYPE s.lang AS ENUM (
+      'ja',
+      'en'
+    );
+    ALTER TABLE "s"."users" ADD COLUMN "lang" s.lang NOT NULL;
+
 UUIDCast:
   desired: |
     CREATE TABLE public.test_table (
