@@ -1,4 +1,4 @@
-module github.com/sqldef/sqldef
+module github.com/sqldef/sqldef/v2
 
 go 1.22.0
 

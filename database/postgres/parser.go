@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	pgquery "github.com/pganalyze/pg_query_go/v6"
-	"github.com/sqldef/sqldef/database"
-	"github.com/sqldef/sqldef/parser"
+	"github.com/sqldef/sqldef/v2/database"
+	"github.com/sqldef/sqldef/v2/parser"
 	go_pgquery "github.com/wasilibs/go-pgquery"
 )
 

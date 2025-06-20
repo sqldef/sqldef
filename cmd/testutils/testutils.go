@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sqldef/sqldef/database"
-	"github.com/sqldef/sqldef/schema"
+	"github.com/sqldef/sqldef/v2/database"
+	"github.com/sqldef/sqldef/v2/schema"
 	"gopkg.in/yaml.v3"
 )
 
