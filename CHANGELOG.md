@@ -1,3 +1,9 @@
+## v2.0.4
+
+* Add `/v2` suffix to Go module name [#695](https://github.com/sqldef/sqldef/pull/695)
+  * NOTE: The primary distribution of sqldef is binaries for CLI, not the Go module.
+    We do accept contributions like this, but the Go library interface is not meant to be reliable.
+
 ## v2.0.3
 
 * Fix schema qualification for enum types in ALTER TABLE ADD COLUMN [#694](https://github.com/sqldef/sqldef/pull/694)
