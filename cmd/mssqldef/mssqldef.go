@@ -8,11 +8,11 @@ import (
 	"syscall"
 
 	"github.com/jessevdk/go-flags"
-	"github.com/sqldef/sqldef"
-	"github.com/sqldef/sqldef/database"
-	"github.com/sqldef/sqldef/database/file"
-	"github.com/sqldef/sqldef/database/mssql"
-	"github.com/sqldef/sqldef/schema"
+	"github.com/sqldef/sqldef/v2"
+	"github.com/sqldef/sqldef/v2/database"
+	"github.com/sqldef/sqldef/v2/database/file"
+	"github.com/sqldef/sqldef/v2/database/mssql"
+	"github.com/sqldef/sqldef/v2/schema"
 	"golang.org/x/term"
 )
 

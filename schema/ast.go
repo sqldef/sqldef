@@ -1,6 +1,6 @@
 package schema
 
-import "github.com/sqldef/sqldef/parser"
+import "github.com/sqldef/sqldef/v2/parser"
 
 type DDL interface {
 	Statement() string

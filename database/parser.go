@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/sqldef/sqldef/parser"
+	"github.com/sqldef/sqldef/v2/parser"
 )
 
 // A tuple of an original DDL and a Statement

@@ -2,7 +2,8 @@ package file
 
 import (
 	"database/sql"
-	"github.com/sqldef/sqldef"
+
+	"github.com/sqldef/sqldef/v2"
 )
 
 // Pseudo database for comparison between files
