@@ -1485,13 +1485,28 @@ const (
 
 // Format formats the node.
 func (node *ComparisonExpr) Format(buf *nodeBuffer) {
+	buf.Printf("%v %s ", node.Left, node.Operator)
 	if node.All {
-		buf.Printf("%v %s ALL (%v)", node.Left, node.Operator, node.Right)
+		buf.Printf("ALL ")
 	} else if node.Any {
-		buf.Printf("%v %s ANY (%v)", node.Left, node.Operator, node.Right)
-	} else {
-		buf.Printf("%v %s %v", node.Left, node.Operator, node.Right)
+		buf.Printf("ANY ")
 	}
+	
+	// For ALL/ANY/SOME, wrap the right expression in parentheses if it's not already a ParenExpr or Subquery
+	if (node.All || node.Any) {
+		if _, isParenExpr := node.Right.(*ParenExpr); !isParenExpr {
+			if _, isSubquery := node.Right.(*Subquery); !isSubquery {
+				buf.Printf("(%v)", node.Right)
+			} else {
+				buf.Printf("%v", node.Right)
+			}
+		} else {
+			buf.Printf("%v", node.Right)
+		}
+	} else {
+		buf.Printf("%v", node.Right)
+	}
+	
 	if node.Escape != nil {
 		buf.Printf(" escape %v", node.Escape)
 	}

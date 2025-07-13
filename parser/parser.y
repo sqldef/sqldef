@@ -137,7 +137,7 @@ func forceEOF(yylex interface{}) {
 %token LEX_ERROR
 %left <bytes> UNION
 %token <bytes> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER BY LIMIT OFFSET FOR DECLARE
-%token <bytes> ALL DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SRID SET LOCK KEYS
+%token <bytes> ALL ANY SOME DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SRID SET LOCK KEYS
 %token <bytes> ROWID STRICT
 %token <bytes> VALUES LAST_INSERT_ID
 %token <bytes> NEXT VALUE SHARE MODE
@@ -3138,6 +3138,18 @@ condition:
   value_expression compare value_expression
   {
     $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $3}
+  }
+| value_expression compare ALL value_expression
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $4, All: true}
+  }
+| value_expression compare ANY value_expression
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $4, Any: true}
+  }
+| value_expression compare SOME value_expression
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $4, Any: true}
   }
 | value_expression IN col_tuple
   {
