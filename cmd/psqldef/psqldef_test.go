@@ -1597,9 +1597,9 @@ func TestPsqldefAllAnySomeCheckConstraints(t *testing.T) {
 	createTable := stripHeredoc(`
 		CREATE TABLE test_all_any (
 		  id INTEGER PRIMARY KEY,
-		  numbers INTEGER[] CHECK (1 = ANY (numbers)),
-		  all_positive INTEGER CHECK (all_positive = ALL ('{1,2,3}'::int[])),
-		  some_text TEXT CHECK (some_text = SOME ('{valid,allowed}'::text[])),
+		  state TEXT CHECK (state = ANY (ARRAY['active', 'pending'])),
+		  all_positive INTEGER CHECK (all_positive = ALL (ARRAY[1, 2, 3])),
+		  some_text TEXT CHECK (some_text = SOME (ARRAY['valid', 'allowed'])),
 		  score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
 		);
 		`,
@@ -1611,39 +1611,39 @@ func TestPsqldefAllAnySomeCheckConstraints(t *testing.T) {
 	modifyTable := stripHeredoc(`
 		CREATE TABLE test_all_any (
 		  id INTEGER PRIMARY KEY,
-		  numbers INTEGER[] CHECK (1 = ANY (numbers)),
-		  all_positive INTEGER CHECK (all_positive = ALL ('{2,3,4}'::int[])),
-		  some_text TEXT CHECK (some_text = SOME ('{valid,allowed}'::text[])),
+		  state TEXT CHECK (state = ANY (ARRAY['active', 'pending'])),
+		  all_positive INTEGER CHECK (all_positive = ALL (ARRAY[2, 3, 4])),
+		  some_text TEXT CHECK (some_text = SOME (ARRAY['valid', 'allowed'])),
 		  score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
 		);
 		`,
 	)
 	assertApplyOutput(t, modifyTable, applyPrefix+
 		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_all_positive_check;`+"\n"+
-		`ALTER TABLE "public"."test_all_any" ADD CONSTRAINT test_all_any_all_positive_check CHECK (all_positive = ALL ('{2,3,4}'::integer[]));`+"\n")
+		`ALTER TABLE "public"."test_all_any" ADD CONSTRAINT test_all_any_all_positive_check CHECK (all_positive = ALL (ARRAY[2, 3, 4]));`+"\n")
 	assertApplyOutput(t, modifyTable, nothingModified)
 
 	// Test modifying SOME constraint specifically
 	modifySomeTable := stripHeredoc(`
 		CREATE TABLE test_all_any (
 		  id INTEGER PRIMARY KEY,
-		  numbers INTEGER[] CHECK (1 = ANY (numbers)),
-		  all_positive INTEGER CHECK (all_positive = ALL ('{2,3,4}'::int[])),
-		  some_text TEXT CHECK (some_text = SOME ('{updated,modified,changed}'::text[])),
+		  state TEXT CHECK (state = ANY (ARRAY['active', 'pending'])),
+		  all_positive INTEGER CHECK (all_positive = ALL (ARRAY[2, 3, 4])),
+		  some_text TEXT CHECK (some_text = SOME (ARRAY['updated', 'modified', 'changed'])),
 		  score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
 		);
 		`,
 	)
 	assertApplyOutput(t, modifySomeTable, applyPrefix+
 		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_some_text_check;`+"\n"+
-		`ALTER TABLE "public"."test_all_any" ADD CONSTRAINT test_all_any_some_text_check CHECK (some_text = ANY ('{updated,modified,changed}'::text[]));`+"\n")
+		`ALTER TABLE "public"."test_all_any" ADD CONSTRAINT test_all_any_some_text_check CHECK (some_text = ANY (ARRAY['updated', 'modified', 'changed']));`+"\n")
 	assertApplyOutput(t, modifySomeTable, nothingModified)
 
 	// Test removing ALL/ANY constraints
 	removeConstraints := stripHeredoc(`
 		CREATE TABLE test_all_any (
 		  id INTEGER PRIMARY KEY,
-		  numbers INTEGER[],
+		  state TEXT,
 		  all_positive INTEGER,
 		  some_text TEXT,
 		  score INTEGER
@@ -1651,7 +1651,7 @@ func TestPsqldefAllAnySomeCheckConstraints(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, removeConstraints, applyPrefix+
-		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_numbers_check;`+"\n"+
+		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_state_check;`+"\n"+
 		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_all_positive_check;`+"\n"+
 		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_some_text_check;`+"\n"+
 		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_score_check;`+"\n")
@@ -1661,11 +1661,11 @@ func TestPsqldefAllAnySomeCheckConstraints(t *testing.T) {
 func TestPsqldefSomeConstraintModifications(t *testing.T) {
 	resetTestDatabase()
 	
-	// Create initial table with SOME constraint
+	// Create initial table with SOME constraint using working ARRAY syntax
 	initialTable := stripHeredoc(`
 		CREATE TABLE test_some_modify (
 		  id INTEGER PRIMARY KEY,
-		  status TEXT CHECK (status = SOME ('{active,pending,draft}'::text[])),
+		  status TEXT CHECK (status = SOME (ARRAY['active', 'pending', 'draft'])),
 		  category TEXT CHECK (category = SOME (ARRAY['A', 'B', 'C']))
 		);
 		`,
@@ -1677,14 +1677,14 @@ func TestPsqldefSomeConstraintModifications(t *testing.T) {
 	modifiedTable := stripHeredoc(`
 		CREATE TABLE test_some_modify (
 		  id INTEGER PRIMARY KEY,
-		  status TEXT CHECK (status = SOME ('{active,completed,archived}'::text[])),
+		  status TEXT CHECK (status = SOME (ARRAY['active', 'completed', 'archived'])),
 		  category TEXT CHECK (category = SOME (ARRAY['X', 'Y', 'Z']))
 		);
 		`,
 	)
 	assertApplyOutput(t, modifiedTable, applyPrefix+
 		`ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT test_some_modify_status_check;`+"\n"+
-		`ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_status_check CHECK (status = ANY ('{active,completed,archived}'::text[]));`+"\n"+
+		`ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_status_check CHECK (status = ANY (ARRAY['active', 'completed', 'archived']));`+"\n"+
 		`ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT test_some_modify_category_check;`+"\n"+
 		`ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_category_check CHECK (category = ANY (ARRAY['X', 'Y', 'Z']));`+"\n")
 	assertApplyOutput(t, modifiedTable, nothingModified)
@@ -1693,7 +1693,7 @@ func TestPsqldefSomeConstraintModifications(t *testing.T) {
 	changeToAny := stripHeredoc(`
 		CREATE TABLE test_some_modify (
 		  id INTEGER PRIMARY KEY,
-		  status TEXT CHECK (status = ANY ('{active,completed,archived}'::text[])),
+		  status TEXT CHECK (status = ANY (ARRAY['active', 'completed', 'archived'])),
 		  category TEXT CHECK (category = ANY (ARRAY['X', 'Y', 'Z']))
 		);
 		`,
@@ -1704,17 +1704,56 @@ func TestPsqldefSomeConstraintModifications(t *testing.T) {
 	changeToAll := stripHeredoc(`
 		CREATE TABLE test_some_modify (
 		  id INTEGER PRIMARY KEY,
-		  status TEXT CHECK (status = ALL ('{active,completed,archived}'::text[])),
+		  status TEXT CHECK (status = ALL (ARRAY['active', 'completed', 'archived'])),
 		  category TEXT CHECK (category = ALL (ARRAY['X', 'Y', 'Z']))
 		);
 		`,
 	)
 	assertApplyOutput(t, changeToAll, applyPrefix+
 		`ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT test_some_modify_status_check;`+"\n"+
-		`ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_status_check CHECK (status = ALL ('{active,completed,archived}'::text[]));`+"\n"+
+		`ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_status_check CHECK (status = ALL (ARRAY['active', 'completed', 'archived']));`+"\n"+
 		`ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT test_some_modify_category_check;`+"\n"+
 		`ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_category_check CHECK (category = ALL (ARRAY['X', 'Y', 'Z']));`+"\n")
 	assertApplyOutput(t, changeToAll, nothingModified)
+}
+
+func TestPsqldefTableLevelCheckConstraintsWithAllAny(t *testing.T) {
+	resetTestDatabase()
+	
+	// Test truly table-level CHECK constraints (multi-column)
+	// This avoids the single-column constraint category confusion
+	tableWithMultiColumnConstraint := stripHeredoc(`
+		CREATE TABLE multi_check_test (
+		  id INTEGER PRIMARY KEY,
+		  state TEXT NOT NULL,
+		  priority INTEGER NOT NULL,
+		  CONSTRAINT valid_state_priority CHECK (
+		    (state = ANY (ARRAY['active', 'pending']) AND priority >= ALL (ARRAY[1, 2])) OR
+		    (state = ALL (ARRAY['inactive']) AND priority = ANY (ARRAY[0]))
+		  )
+		);
+		`,
+	)
+	assertApplyOutput(t, tableWithMultiColumnConstraint, applyPrefix+tableWithMultiColumnConstraint)
+	assertApplyOutput(t, tableWithMultiColumnConstraint, nothingModified)
+	
+	// Test modifying the multi-column constraint
+	modifiedConstraint := stripHeredoc(`
+		CREATE TABLE multi_check_test (
+		  id INTEGER PRIMARY KEY,
+		  state TEXT NOT NULL,
+		  priority INTEGER NOT NULL,
+		  CONSTRAINT valid_state_priority CHECK (
+		    (state = ANY (ARRAY['active', 'pending', 'waiting']) AND priority >= ALL (ARRAY[1, 2])) OR
+		    (state = ALL (ARRAY['inactive']) AND priority = ANY (ARRAY[0]))
+		  )
+		);
+		`,
+	)
+	assertApplyOutput(t, modifiedConstraint, applyPrefix+
+		`ALTER TABLE "public"."multi_check_test" DROP CONSTRAINT "valid_state_priority";`+"\n"+
+		`ALTER TABLE "public"."multi_check_test" ADD CONSTRAINT "valid_state_priority" CHECK (state = ANY (ARRAY['active', 'pending', 'waiting']) and priority >= ALL (ARRAY[1, 2]) or state = ALL (ARRAY['inactive']) and priority = ANY (ARRAY[0]));`+"\n")
+	assertApplyOutput(t, modifiedConstraint, nothingModified)
 }
 
 func TestMain(m *testing.M) {

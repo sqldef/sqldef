@@ -98,13 +98,13 @@ ParseAllAnyCheckConstraint:
   desired: |
     CREATE TABLE test (
       n1 int CHECK (n1 = ANY (ARRAY[1, 2, 3])),
-      n2 int CHECK (n2 = ALL ('{1,2,3}'::int[])),
-      t1 text CHECK (t1 = SOME ('{x,y}'::text[]))
+      n2 int CHECK (n2 = ALL (ARRAY[1, 2, 3])),
+      t1 text CHECK (t1 = SOME (ARRAY['x', 'y']))
     );
   output: |
     ALTER TABLE "public"."test" ADD CONSTRAINT test_n1_check CHECK (n1 = ANY (ARRAY[1, 2, 3]));
-    ALTER TABLE "public"."test" ADD CONSTRAINT test_n2_check CHECK (n2 = ALL ('{1,2,3}'::integer[]));
-    ALTER TABLE "public"."test" ADD CONSTRAINT test_t1_check CHECK (t1 = ANY ('{x,y}'::text[]));
+    ALTER TABLE "public"."test" ADD CONSTRAINT test_n2_check CHECK (n2 = ALL (ARRAY[1, 2, 3]));
+    ALTER TABLE "public"."test" ADD CONSTRAINT test_t1_check CHECK (t1 = ANY (ARRAY['x', 'y']));
 NullCast:
   desired: |
     CREATE TABLE public.test (
