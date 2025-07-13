@@ -1590,6 +1590,58 @@ func TestPsqldefHelp(t *testing.T) {
 	}
 }
 
+func TestPsqldefAllAnySomeCheckConstraints(t *testing.T) {
+	resetTestDatabase()
+	
+	// Test creating table with ALL/ANY/SOME CHECK constraints
+	createTable := stripHeredoc(`
+		CREATE TABLE test_all_any (
+		  id INTEGER PRIMARY KEY,
+		  numbers INTEGER[] CHECK (1 = ANY (numbers)),
+		  all_positive INTEGER CHECK (all_positive = ALL ('{1,2,3}'::int[])),
+		  some_text TEXT CHECK (some_text = SOME ('{valid,allowed}'::text[])),
+		  score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
+		);
+		`,
+	)
+	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, nothingModified)
+
+	// Test modifying ALL constraint
+	modifyTable := stripHeredoc(`
+		CREATE TABLE test_all_any (
+		  id INTEGER PRIMARY KEY,
+		  numbers INTEGER[] CHECK (1 = ANY (numbers)),
+		  all_positive INTEGER CHECK (all_positive = ALL ('{2,3,4}'::int[])),
+		  some_text TEXT CHECK (some_text = SOME ('{valid,allowed}'::text[])),
+		  score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
+		);
+		`,
+	)
+	assertApplyOutput(t, modifyTable, applyPrefix+
+		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_all_positive_check;`+"\n"+
+		`ALTER TABLE "public"."test_all_any" ADD CONSTRAINT test_all_any_all_positive_check CHECK (all_positive = ALL ('{2,3,4}'::integer[]));`+"\n")
+	assertApplyOutput(t, modifyTable, nothingModified)
+
+	// Test removing ALL/ANY constraints
+	removeConstraints := stripHeredoc(`
+		CREATE TABLE test_all_any (
+		  id INTEGER PRIMARY KEY,
+		  numbers INTEGER[],
+		  all_positive INTEGER,
+		  some_text TEXT,
+		  score INTEGER
+		);
+		`,
+	)
+	assertApplyOutput(t, removeConstraints, applyPrefix+
+		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_numbers_check;`+"\n"+
+		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_all_positive_check;`+"\n"+
+		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_some_text_check;`+"\n"+
+		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_score_check;`+"\n")
+	assertApplyOutput(t, removeConstraints, nothingModified)
+}
+
 func TestMain(m *testing.M) {
 	if _, ok := os.LookupEnv("PGHOST"); !ok {
 		os.Setenv("PGHOST", "127.0.0.1")
