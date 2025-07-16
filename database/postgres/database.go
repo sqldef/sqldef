@@ -526,7 +526,7 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 		}
 		if checkName != nil && checkDefinition != nil {
 			col.Check = &columnConstraint{
-				definition: *checkDefinition,
+				definition: normalizeCheckConstraintDefinition(*checkDefinition),
 				name:       *checkName,
 			}
 		}
@@ -598,10 +598,27 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[strin
 		if err != nil {
 			return nil, err
 		}
-		result[constraintName] = constraintDef
+		// Normalize constraint definition to handle PostgreSQL's automatic type casting
+		normalizedDef := normalizeCheckConstraintDefinition(constraintDef)
+		result[constraintName] = normalizedDef
 	}
 
 	return result, nil
+}
+
+// normalizeCheckConstraintDefinition removes redundant type casts that PostgreSQL automatically adds
+// to make constraint comparison work correctly. Specifically handles cases like:
+// - ARRAY['active'::text, 'pending'::text] -> ARRAY['active', 'pending']
+// - '[0-9]'::text -> '[0-9]' (already handled by shouldDeleteTypeCast)
+func normalizeCheckConstraintDefinition(def string) string {
+	// Remove ::text type casts from string literals in ARRAY expressions
+	// This handles the pattern: 'string'::text within ARRAY[...] 
+	result := regexp.MustCompile(`'([^']*)'::text`).ReplaceAllString(def, "'$1'")
+	
+	// Remove ::character varying type casts similarly
+	result = regexp.MustCompile(`'([^']*)'::character varying(\([^)]*\))?`).ReplaceAllString(result, "'$1'")
+	
+	return result
 }
 
 func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]string, error) {

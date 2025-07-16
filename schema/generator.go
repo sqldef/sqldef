@@ -1904,9 +1904,26 @@ func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bo
 	if checkA == nil || checkB == nil {
 		return false
 	}
-	return checkA.definition == checkB.definition &&
+	return normalizeCheckDefinitionForComparison(checkA.definition) == normalizeCheckDefinitionForComparison(checkB.definition) &&
 		checkA.notForReplication == checkB.notForReplication &&
 		checkA.noInherit == checkB.noInherit
+}
+
+// normalizeCheckDefinitionForComparison normalizes CHECK constraint definitions for accurate comparison
+// This handles PostgreSQL's automatic type casting behavior where:
+// - ARRAY['active', 'pending'] becomes ARRAY['active'::text, 'pending'::text]
+// - '[0-9]' becomes '[0-9]'::text
+func normalizeCheckDefinitionForComparison(def string) string {
+	// Remove ::text type casts from string literals
+	result := regexp.MustCompile(`'([^']*)'::text`).ReplaceAllString(def, "'$1'")
+	
+	// Remove ::character varying type casts
+	result = regexp.MustCompile(`'([^']*)'::character varying(\([^)]*\))?`).ReplaceAllString(result, "'$1'")
+	
+	// Remove extra parentheses that PostgreSQL sometimes adds
+	result = regexp.MustCompile(`\(\((.*)\)\)`).ReplaceAllString(result, "($1)")
+	
+	return result
 }
 
 func areSameIdentityDefinition(identityA *Identity, identityB *Identity) bool {
