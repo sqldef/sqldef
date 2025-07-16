@@ -1,3 +1,7 @@
+## v2.0.5
+
+* psqldef: Emit Foreign Key Constraints Last to Support CREATE TABLE Style [#705](https://github.com/sqldef/sqldef/pull/705)
+
 ## v2.0.4
 
 * Add `/v2` suffix to Go module name [#695](https://github.com/sqldef/sqldef/pull/695)
