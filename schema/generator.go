@@ -128,7 +128,13 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				if err != nil {
 					return nil, err
 				}
-				interDDLs = append(interDDLs, tableDDLs...)
+				for _, tableDDL := range tableDDLs {
+					if isAddConstraintForeignKey(tableDDL) {
+						foreignKeyDDLs = append(foreignKeyDDLs, tableDDL)
+					} else {
+						interDDLs = append(interDDLs, tableDDL)
+					}
+				}
 				mergeTable(currentTable, desired.table)
 			} else {
 				// Table not found, create table.
@@ -1585,6 +1591,13 @@ func (g *Generator) notNull(column Column) bool {
 	} else {
 		return *column.notNull
 	}
+}
+
+func isAddConstraintForeignKey(ddl string) bool {
+	if strings.HasPrefix(ddl, "ALTER TABLE") && strings.Contains(ddl, "ADD CONSTRAINT") && strings.Contains(ddl, "FOREIGN KEY") {
+		return true
+	}
+	return false
 }
 
 func isPrimaryKey(column Column, table Table) bool {

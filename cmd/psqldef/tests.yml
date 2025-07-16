@@ -297,6 +297,27 @@ IndexAndForeignOrder:
     );
     CREATE UNIQUE INDEX uniq_idx ON users (id);
     ALTER TABLE posts ADD CONSTRAINT "user_id_key" FOREIGN KEY ("user_id") REFERENCES users ("id");
+ForeignKeyConstraintsAreEmittedLast:
+  current: |
+    CREATE TABLE foos ( dummy_column text );
+    CREATE TABLE bars ( dummy_column text );
+  desired: |
+    CREATE TABLE foos (
+      foo_id bigint PRIMARY KEY,
+      bar_id bigint NOT NULL REFERENCES bars (bar_id)
+    );
+    CREATE TABLE bars (
+      bar_id bigint PRIMARY KEY
+    );
+  output: |
+    ALTER TABLE "public"."foos" ADD COLUMN "foo_id" bigint NOT NULL;
+    ALTER TABLE "public"."foos" ADD COLUMN "bar_id" bigint NOT NULL;
+    ALTER TABLE "public"."foos" ADD PRIMARY KEY ("foo_id");
+    ALTER TABLE "public"."bars" ADD COLUMN "bar_id" bigint NOT NULL;
+    ALTER TABLE "public"."bars" ADD PRIMARY KEY ("bar_id");
+    ALTER TABLE "public"."foos" ADD CONSTRAINT "foos_bar_id_fkey" FOREIGN KEY ("bar_id") REFERENCES "public"."bars" ("bar_id");
+    ALTER TABLE "public"."bars" DROP COLUMN "dummy_column";
+    ALTER TABLE "public"."foos" DROP COLUMN "dummy_column";
 ForeignKeyOnReservedName:
   current: |
     CREATE TABLE "public"."companies" (
@@ -1247,8 +1268,8 @@ CreateTableWithConstraintOptions:
     ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_order_unique";
     ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_order_unique" UNIQUE ("image_owner_type", "image_owner_id", "image_order") DEFERRABLE INITIALLY DEFERRED;
     ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_bindings_image_id_fkey";
-    ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_bindings_image_id_fkey" FOREIGN KEY ("image_id") REFERENCES "public"."images" ("id") ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE;
     ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_owner_fk";
+    ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_bindings_image_id_fkey" FOREIGN KEY ("image_id") REFERENCES "public"."images" ("id") ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE;
     ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_owner_fk" FOREIGN KEY ("image_owner_type","image_owner_id") REFERENCES "public"."image_owners" ("type","id") ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE;
 CreateTableWithForeignKeyAndGeneratedColumn:
   min_version: '12'
