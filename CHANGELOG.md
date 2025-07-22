@@ -1,3 +1,7 @@
+## v2.0.6
+
+* psqldef: Support ALL, ANY, and SOME expressions in CHECK CONSTRAINT and CREATE TABLE [#704](https://github.com/sqldef/sqldef/pull/704)
+
 ## v2.0.5
 
 * psqldef: Emit Foreign Key Constraints Last to Support CREATE TABLE Style [#705](https://github.com/sqldef/sqldef/pull/705)
