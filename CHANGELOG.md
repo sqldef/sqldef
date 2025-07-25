@@ -1,3 +1,7 @@
+## v2.0.7
+
+* psqldef: Emit CREATE VIEW after ALTER TABLE [#706](https://github.com/sqldef/sqldef/pull/706)
+
 ## v2.0.6
 
 * psqldef: Support ALL, ANY, and SOME expressions in CHECK CONSTRAINT and CREATE TABLE [#704](https://github.com/sqldef/sqldef/pull/704)
