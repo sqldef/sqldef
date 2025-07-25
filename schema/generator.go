@@ -117,6 +117,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	indexDDLs := []string{}
 	foreignKeyDDLs := []string{}
 	exclusionDDLs := []string{}
+	viewDDLs := []string{}
 
 	// Incrementally examine desiredDDLs
 	for _, ddl := range desiredDDLs {
@@ -175,11 +176,11 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 			interDDLs = append(interDDLs, policyDDLs...)
 		case *View:
-			viewDDLs, err := g.generateDDLsForCreateView(desired.name, desired)
+			ddls, err := g.generateDDLsForCreateView(desired.name, desired)
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, viewDDLs...)
+			viewDDLs = append(viewDDLs, ddls...)
 		case *Trigger:
 			triggerDDLs, err := g.generateDDLsForCreateTrigger(desired.name, desired)
 			if err != nil {
@@ -219,6 +220,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	ddls = append(ddls, createExtensionDDLs...)
 	ddls = append(ddls, createSchemaDDLs...)
 	ddls = append(ddls, interDDLs...)
+	ddls = append(ddls, viewDDLs...)
 	ddls = append(ddls, indexDDLs...)
 	ddls = append(ddls, foreignKeyDDLs...)
 	ddls = append(ddls, exclusionDDLs...)
@@ -1916,13 +1918,13 @@ func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bo
 func normalizeCheckDefinitionForComparison(def string) string {
 	// Remove ::text type casts from string literals
 	result := regexp.MustCompile(`'([^']*)'::text`).ReplaceAllString(def, "'$1'")
-	
+
 	// Remove ::character varying type casts
 	result = regexp.MustCompile(`'([^']*)'::character varying(\([^)]*\))?`).ReplaceAllString(result, "'$1'")
-	
+
 	// Remove extra parentheses that PostgreSQL sometimes adds
 	result = regexp.MustCompile(`\(\((.*)\)\)`).ReplaceAllString(result, "($1)")
-	
+
 	return result
 }
 
