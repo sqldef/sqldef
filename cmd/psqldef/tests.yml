@@ -318,6 +318,37 @@ ForeignKeyConstraintsAreEmittedLast:
     ALTER TABLE "public"."foos" ADD CONSTRAINT "foos_bar_id_fkey" FOREIGN KEY ("bar_id") REFERENCES "public"."bars" ("bar_id");
     ALTER TABLE "public"."bars" DROP COLUMN "dummy_column";
     ALTER TABLE "public"."foos" DROP COLUMN "dummy_column";
+ViewDDLsAreEmittedLastWithoutChangingDefinition:
+  current: |
+    CREATE TABLE foos (
+      id bigint PRIMARY KEY
+    );
+  desired: |
+    CREATE VIEW foos_view AS SELECT id, secret FROM foos WHERE secret = false;
+    CREATE TABLE foos (
+      id bigint PRIMARY KEY,
+      secret boolean NOT NULL DEFAULT false
+    );
+  output: |
+    ALTER TABLE "public"."foos" ADD COLUMN "secret" boolean NOT NULL DEFAULT false;
+    CREATE VIEW foos_view AS SELECT id, secret FROM foos WHERE secret = false;
+ViewDDLsAreEmittedLastWithChangingDefinition:
+  current: |
+    CREATE TABLE foos (
+      id bigint PRIMARY KEY
+    );
+    CREATE VIEW foos_view AS SELECT 1 AS dummy;
+  desired: |
+    CREATE VIEW foos_view AS
+      SELECT id, secret FROM foos WHERE secret = false;
+    CREATE TABLE foos (
+      id bigint PRIMARY KEY,
+      secret boolean NOT NULL DEFAULT false
+    );
+  output: |
+    ALTER TABLE "public"."foos" ADD COLUMN "secret" boolean NOT NULL DEFAULT false;
+    DROP VIEW "public"."foos_view";
+    CREATE VIEW "public"."foos_view" AS select id, secret from foos where secret = false;
 ForeignKeyOnReservedName:
   current: |
     CREATE TABLE "public"."companies" (
