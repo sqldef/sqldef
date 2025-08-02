@@ -146,7 +146,7 @@ func forceEOF(yylex interface{}) {
 %left <bytes> ON USING
 %token <empty> '(' ',' ')'
 %token <bytes> ID HEX STRING UNICODE_STRING INTEGRAL FLOAT HEXNUM VALUE_ARG LIST_ARG COMMENT COMMENT_KEYWORD BIT_LITERAL
-%token <bytes> NULL TRUE FALSE
+%token <bytes> NULL TRUE FALSE COLUMNS_UPDATED
 %token <bytes> OFF
 %token <bytes> MAX
 
@@ -3187,6 +3187,15 @@ condition:
   {
     $$ = &ExistsExpr{Subquery: $2}
   }
+/* For MSSQL */
+| UPDATE openb column_name closeb
+  {
+    $$ = &UpdateFuncExpr{Name: $3}
+  }
+| COLUMNS_UPDATED openb closeb
+  {
+    $$ = &UpdateFuncExpr{Name: nil}
+  }
 
 is_suffix:
   NULL
@@ -4423,6 +4432,7 @@ reserved_keyword:
 | CLUSTERED
 | NONCLUSTERED
 | COLLATE
+| COLUMNS_UPDATED
 | CONVERT
 | CREATE
 | CROSS
