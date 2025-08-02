@@ -1387,6 +1387,7 @@ func (*CollateExpr) iExpr()         {}
 func (*FuncExpr) iExpr()            {}
 func (*CaseExpr) iExpr()            {}
 func (*ValuesFuncExpr) iExpr()      {}
+func (*UpdateFuncExpr) iExpr()      {}
 func (*CastExpr) iExpr()            {}
 func (*ConvertExpr) iExpr()         {}
 func (*SubstrExpr) iExpr()          {}
@@ -1915,6 +1916,20 @@ type ValuesFuncExpr struct {
 // Format formats the node.
 func (node *ValuesFuncExpr) Format(buf *nodeBuffer) {
 	buf.Printf("values(%v)", node.Name)
+}
+
+// UpdateFuncExpr represents a function call.
+type UpdateFuncExpr struct {
+	Name *ColName
+}
+
+// Format formats the node.
+func (node *UpdateFuncExpr) Format(buf *nodeBuffer) {
+	if node.Name == nil {
+		buf.Printf("COLUMNS_UPDATED()", node.Name)
+	} else {
+		buf.Printf("UPDATE(%v)", node.Name)
+	}
 }
 
 // SubstrExpr represents a call to SubstrExpr(column, value_expression) or SubstrExpr(column, value_expression,value_expression)
