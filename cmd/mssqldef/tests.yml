@@ -264,3 +264,61 @@ ViewWithHeaderComment:
     CREATE VIEW DUAL AS SELECT 'X' AS X;
   output: |
     CREATE VIEW DUAL AS SELECT 'X' AS X;
+TriggerIfWithoutBeginEnd:
+  desired: |
+    CREATE TABLE users (
+        id   int          not null,
+        name varchar(255) not null
+    );
+    CREATE TRIGGER update_name_trigger
+        ON users
+        AFTER UPDATE
+        AS
+    IF UPDATE(name)
+        BEGIN
+            UPDATE u
+            SET name = i.name + '+1'
+            FROM users AS u
+                INNER JOIN inserted AS i ON u.id = i.id
+        END
+  output: |
+    CREATE TABLE users (
+        id   int          not null,
+        name varchar(255) not null
+    );
+    CREATE TRIGGER [update_name_trigger] ON [dbo].[users] after update AS
+    if UPDATE(name)
+    begin
+    update u set name = i.name + '+1' from users as u join inserted as i on u.id = i.id
+    end;
+TriggerIfWithBeginEnd:
+  desired: |
+    CREATE TABLE users (
+        id   int          not null,
+        name varchar(255) not null
+    );
+    CREATE TRIGGER update_name_trigger
+        ON users
+        AFTER UPDATE
+        AS
+    BEGIN
+        IF UPDATE(name)
+            BEGIN
+                UPDATE u
+                SET name = i.name + '+1'
+                FROM users AS u
+                    INNER JOIN inserted AS i ON u.id = i.id
+            END
+    END
+  output: |
+    CREATE TABLE users (
+        id   int          not null,
+        name varchar(255) not null
+    );
+    CREATE TRIGGER [update_name_trigger] ON [dbo].[users] after update AS
+    begin
+    if UPDATE(name)
+    begin
+    update u set name = i.name + '+1' from users as u join inserted as i on u.id = i.id
+    end
+    end;
