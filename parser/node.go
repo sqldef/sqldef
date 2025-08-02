@@ -2389,12 +2389,18 @@ func (node *Cursor) Format(buf *nodeBuffer) {
 
 type BeginEnd struct {
 	Statements []Statement
+	SuppressSemicolon bool
 }
 
 func (node *BeginEnd) Format(buf *nodeBuffer) {
+	semicolon := ";"
+	if node.SuppressSemicolon {
+		semicolon = ""
+	}
+
 	buf.Printf("begin")
 	for _, stmt := range node.Statements {
-		buf.Printf("\n%v;", stmt)
+		buf.Printf("\n%v%s", stmt, semicolon)
 	}
 	buf.Printf("\nend")
 }
