@@ -1926,7 +1926,7 @@ type UpdateFuncExpr struct {
 // Format formats the node.
 func (node *UpdateFuncExpr) Format(buf *nodeBuffer) {
 	if node.Name == nil {
-		buf.Printf("COLUMNS_UPDATED()", node.Name)
+		buf.Printf("COLUMNS_UPDATED()")
 	} else {
 		buf.Printf("UPDATE(%v)", node.Name)
 	}
