@@ -1,3 +1,7 @@
+## v2.0.8
+
+* mssqldef: Support triggers containing procedures [#712](https://github.com/sqldef/sqldef/pull/712)
+
 ## v2.0.7
 
 * psqldef: Emit CREATE VIEW after ALTER TABLE [#706](https://github.com/sqldef/sqldef/pull/706)
