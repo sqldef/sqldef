@@ -322,3 +322,13 @@ TriggerIfWithBeginEnd:
     update u set name = i.name + '+1' from users as u join inserted as i on u.id = i.id
     end
     end;
+CollateOnColumn:
+  desired: |
+    create table users (
+        id   int          not null,
+        name varchar(255) not null
+    );
+    create view user_view as
+    select id,
+          name collate database_default as name
+    from users;

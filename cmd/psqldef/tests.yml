@@ -1503,3 +1503,14 @@ ExcludeConstraintWithAlterTable:
   output: |
     ALTER TABLE exclude_example ADD CONSTRAINT ex2 EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&);
     ALTER TABLE "public"."exclude_example" DROP CONSTRAINT "ex1";
+CollateOnColumn:
+  desired: |
+    create table users
+    (
+        id   int          not null,
+        name varchar(255) not null
+    );
+    create view user_view as
+    select users.id,
+          (users.name collate "ja-JP-x-icu") as name
+    from users;
