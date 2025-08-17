@@ -3410,6 +3410,10 @@ value_expression:
   {
     $$ = &CollateExpr{Expr: $1}
   }
+| value_expression COLLATE charset
+  {
+    $$ = &CollateExpr{Expr: $1, Charset: $3}
+  }
 | value_expression TYPECAST TIMESTAMP WITH TIME ZONE
   {
     $$ = &CollateExpr{Expr: $1}
