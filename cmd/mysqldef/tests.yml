@@ -611,5 +611,5 @@ CollateOnColumn:
     );
     create view user_view as
     select u.id as id,
-           (u.name collate `utf8mb4_0900_ai_ci`) as name
+           (u.name collate `utf8mb4_unicode_ci`) as name
     from mysqldef_test.users as u;
