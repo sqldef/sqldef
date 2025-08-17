@@ -1,6 +1,6 @@
 ## v2.0.9
 
-* mysqldef: Support view with collate on column [#713](https://github.com/sqldef/sqldef/pull/713)
+* mysqldef, psqldef, mssqldef: Support view with collate on column [#713](https://github.com/sqldef/sqldef/pull/713)
 
 ## v2.0.8
 
