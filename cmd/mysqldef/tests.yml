@@ -607,7 +607,7 @@ CollateOnColumn:
     create table users
     (
         id   int          not null,
-        name varchar(255) not null
+        name varchar(255) collate `utf8mb4_general_ci` not null
     );
     create view user_view as
     select u.id as id,
