@@ -1,3 +1,7 @@
+## v2.0.10
+
+* mysqldef: Support complex statements in triggers [#715](https://github.com/sqldef/sqldef/pull/715)
+
 ## v2.0.9
 
 * mysqldef, psqldef, mssqldef: Support view with collate on column [#713](https://github.com/sqldef/sqldef/pull/713)
