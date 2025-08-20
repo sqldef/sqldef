@@ -2434,17 +2434,32 @@ type If struct {
 
 func (node *If) Format(buf *nodeBuffer) {
 	buf.Printf("if %v", node.Condition)
-	var beginKeyword string
-	var endKeyword string
-	switch node.Keyword {
-	case "begin":
-		beginKeyword = "\nbegin"
-		endKeyword = "\nend"
-	case "then":
-		beginKeyword = " then"
-		endKeyword = "\nend if"
+	// MSSQL
+	if node.Keyword == "begin" {
+		buf.Printf("\nbegin")
+		for i, stmt := range node.IfStatements {
+			buf.Printf("\n%v", stmt)
+			// avoid adding a semicolon after the last statement
+			if i != len(node.IfStatements)-1 {
+				buf.Printf(";")
+			}
+		}
+		if node.ElseStatements != nil {
+			// need end and begin for else
+			buf.Printf("\nend\nelse\nbegin")
+			for i, stmt := range node.ElseStatements {
+				buf.Printf("\n%v", stmt)
+				// avoid adding a semicolon after the last statement
+				if i != len(node.ElseStatements)-1 {
+					buf.Printf(";")
+				}
+			}
+		}
+		buf.Printf("\nend")
+		return
 	}
-	buf.Printf(beginKeyword)
+
+	buf.Printf(" then")
 	for _, stmt := range node.IfStatements {
 		buf.Printf("\n%v;", stmt)
 	}
@@ -2453,10 +2468,8 @@ func (node *If) Format(buf *nodeBuffer) {
 		for _, stmt := range node.ElseStatements {
 			buf.Printf("\n%v;", stmt)
 		}
-		buf.Printf(endKeyword)
-	}else{
-		buf.Printf(endKeyword)
 	}
+	buf.Printf("\nend if")
 }
 
 // TableIdent is a case sensitive SQL identifier.

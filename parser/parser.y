@@ -1221,6 +1221,11 @@ trigger_statements:
   {
     $$ = append($$, $3)
   }
+// For MSSQL
+| trigger_statements trigger_statement
+  {
+    $$ = append($$, $2)
+  }
 
 trigger_statement:
   insert_statement
