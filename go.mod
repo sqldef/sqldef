@@ -11,7 +11,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/microsoft/go-mssqldb v1.9.3
 	github.com/pganalyze/pg_query_go/v6 v6.1.0
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.16.0
 	golang.org/x/term v0.34.0
 	gopkg.in/yaml.v3 v3.0.1
