@@ -779,13 +779,18 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 	ddls := []string{}
 
 	currentTable := findTableByName(g.currentTables, tableName)
-	if currentTable == nil { // Views
+	if currentTable == nil { // Views or non-existent tables
 		currentView := findViewByName(g.currentViews, tableName)
-		currentIndex := findIndexByName(currentView.indexes, desiredIndex.name)
-		if currentIndex == nil {
-			// Index not found, add index.
+		if currentView != nil {
+			currentIndex := findIndexByName(currentView.indexes, desiredIndex.name)
+			if currentIndex == nil {
+				// Index not found, add index.
+				ddls = append(ddls, statement)
+				currentView.indexes = append(currentView.indexes, desiredIndex)
+			}
+		} else {
+			// Creating index on non-existent table/view, just add the statement
 			ddls = append(ddls, statement)
-			currentView.indexes = append(currentView.indexes, desiredIndex)
 		}
 		return ddls, nil
 	}
@@ -814,7 +819,9 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 	}
 
 	desiredTable := findTableByName(g.desiredTables, tableName)
-	desiredTable.indexes = append(desiredTable.indexes, desiredIndex)
+	if desiredTable != nil {
+		desiredTable.indexes = append(desiredTable.indexes, desiredIndex)
+	}
 
 	return ddls, nil
 }
@@ -1411,10 +1418,16 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 		ddl += fmt.Sprintf(" (%s)%s%s", strings.Join(columns, ", "), optionDefinition, constraintOptions)
 		return ddl
 	default:
+		// Construct index type with optional VECTOR keyword for MariaDB vector indexes
+		indexTypeStr := strings.ToUpper(index.indexType)
+		if index.vector {
+			indexTypeStr = "VECTOR INDEX"
+		}
+		
 		ddl := fmt.Sprintf(
 			"ALTER TABLE %s ADD %s",
 			g.escapeTableName(table),
-			strings.ToUpper(index.indexType),
+			indexTypeStr,
 		)
 
 		if !index.primary {
@@ -1431,15 +1444,38 @@ func (g *Generator) generateIndexOptionDefinition(indexOptions []IndexOption) st
 	if len(indexOptions) > 0 {
 		switch g.mode {
 		case GeneratorModeMysql:
-			indexOption := indexOptions[0]
-			if indexOption.optionName == "parser" {
-				indexOption.optionName = "WITH " + indexOption.optionName
-			}
-			if indexOption.optionName == "comment" {
-				indexOption.optionName = "COMMENT"
-				optionDefinition = fmt.Sprintf(" %s '%s'", indexOption.optionName, string(indexOption.value.raw))
+			// Handle multiple vector index options (M and DISTANCE)
+			if len(indexOptions) > 1 {
+				var mOption, distanceOption string
+				for _, indexOption := range indexOptions {
+					if strings.ToUpper(indexOption.optionName) == "M" {
+						mOption = fmt.Sprintf("M=%s", string(indexOption.value.raw))
+					} else if strings.ToUpper(indexOption.optionName) == "DISTANCE" {
+						distanceOption = fmt.Sprintf("DISTANCE=%s", string(indexOption.value.raw))
+					}
+				}
+				if mOption != "" && distanceOption != "" {
+					optionDefinition = fmt.Sprintf(" %s %s", mOption, distanceOption)
+				} else if mOption != "" {
+					optionDefinition = fmt.Sprintf(" %s", mOption)
+				} else if distanceOption != "" {
+					optionDefinition = fmt.Sprintf(" %s", distanceOption)
+				}
 			} else {
-				optionDefinition = fmt.Sprintf(" %s %s", indexOption.optionName, string(indexOption.value.raw))
+				indexOption := indexOptions[0]
+				if indexOption.optionName == "parser" {
+					indexOption.optionName = "WITH " + indexOption.optionName
+				}
+				if strings.ToUpper(indexOption.optionName) == "M" {
+					optionDefinition = fmt.Sprintf(" M=%s", string(indexOption.value.raw))
+				} else if strings.ToUpper(indexOption.optionName) == "DISTANCE" {
+					optionDefinition = fmt.Sprintf(" DISTANCE=%s", string(indexOption.value.raw))
+				} else if indexOption.optionName == "comment" {
+					indexOption.optionName = "COMMENT"
+					optionDefinition = fmt.Sprintf(" %s '%s'", indexOption.optionName, string(indexOption.value.raw))
+				} else {
+					optionDefinition = fmt.Sprintf(" %s %s", indexOption.optionName, string(indexOption.value.raw))
+				}
 			}
 		case GeneratorModeMssql:
 			options := []string{}
@@ -2052,6 +2088,9 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		return false
 	}
 	if indexA.primary != indexB.primary {
+		return false
+	}
+	if indexA.vector != indexB.vector {
 		return false
 	}
 	for len(indexA.columns) != len(indexB.columns) {

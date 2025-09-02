@@ -203,6 +203,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> TEXT TINYTEXT MEDIUMTEXT LONGTEXT CITEXT
 %token <bytes> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON JSONB ENUM
 %token <bytes> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
+%token <bytes> VECTOR
 %token <bytes> VARIADIC ARRAY
 %token <bytes> NOW GETDATE
 %token <bytes> BPCHAR
@@ -262,6 +263,9 @@ func forceEOF(yylex interface{}) {
 
 // SQL SECURITY
 %token <bytes> DEFINER INVOKER
+
+// MariaDB Vector options
+%token <bytes> DISTANCE COSINE EUCLIDEAN
 
 %type <statement> statement
 %type <selStmt> select_statement base_select union_lhs union_rhs
@@ -532,6 +536,22 @@ create_statement:
         Options: $11,
         Partition: $12,
       },
+    }
+  }
+/* For MariaDB */
+| CREATE VECTOR INDEX sql_id ON table_name '(' index_column_list ')' index_option_opt
+  {
+    $$ = &DDL{
+      Action: CreateIndex,
+      Table: $6,
+      NewName: $6,
+      IndexSpec: &IndexSpec{
+        Name: $4,
+        Type: NewColIdent("VECTOR"),
+        Vector: true,
+        Options: $10,
+      },
+      IndexCols: $8,
     }
   }
 | CREATE or_replace_opt VIEW not_exists_opt table_name AS select_statement
@@ -2076,6 +2096,10 @@ spatial_type:
   {
     $$ = ColumnType{Type: string($1)}
   }
+| VECTOR '(' INTEGRAL ')'
+  {
+    $$ = ColumnType{Type: string($1), Length: NewIntVal($3)}
+  }
 
 enum_values:
   STRING
@@ -2299,6 +2323,18 @@ index_option:
   {
     $$ = &IndexOption{Name: string($1), Value: $3}
   }
+| ID '=' INTEGRAL
+  {
+    $$ = &IndexOption{Name: string($1), Value: NewIntVal($3)}
+  }
+| DISTANCE '=' COSINE
+  {
+    $$ = &IndexOption{Name: string($1), Value: NewStrVal($3)}
+  }
+| DISTANCE '=' EUCLIDEAN
+  {
+    $$ = &IndexOption{Name: string($1), Value: NewStrVal($3)}
+  }
 
 equal_opt:
   /* empty */
@@ -2350,6 +2386,10 @@ index_info:
 | FULLTEXT ID
   {
     $$ = &IndexInfo{Type: string($1), Name: NewColIdent(string($2)), Fulltext: true}
+  }
+| VECTOR INDEX
+  {
+    $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(""), Vector: true}
   }
 | UNIQUE index_or_key ID
   {

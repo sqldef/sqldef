@@ -794,6 +794,7 @@ type IndexInfo struct {
 	Spatial   bool
 	Unique    bool
 	Fulltext  bool
+	Vector    bool
 	Clustered BoolVal
 }
 
@@ -855,6 +856,7 @@ type IndexSpec struct {
 	Type              ColIdent
 	Unique            bool
 	Primary           bool
+	Vector            bool // for MariaDB vector indexes
 	Constraint        bool
 	Clustered         bool // for MSSQL
 	ColumnStore       bool // for MSSQL
