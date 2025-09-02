@@ -5560,8 +5560,8 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:2334
 		{
-			id := strings.ToUpper(string(yyDollar[1].bytes))
-			if id != "DISTANCE" && id != "M" {
+			id := strings.Trim(strings.ToLower(string(yyDollar[1].bytes)), "`")
+			if id != "distance" && id != "m" {
 				yylex.Error(fmt.Sprintf("syntax error around '%s'", string(yyDollar[1].bytes)))
 			}
 			yyVAL.indexOption = &IndexOption{Name: id, Value: yyDollar[3].optVal}

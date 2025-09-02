@@ -2124,32 +2124,18 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 
 	indexAOptions := indexA.options
 	indexBOptions := indexB.options
-	// Mysql: Default Index B-Tree
+	// Mysql: Default Index B-Tree (but not for vector indexes)
 	if g.mode == GeneratorModeMysql {
-		if len(indexAOptions) == 0 {
+		if len(indexAOptions) == 0 && !indexA.vector {
 			indexAOptions = []IndexOption{{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: []byte("btree"), strVal: "btree"}}}
 		}
-		if len(indexBOptions) == 0 {
+		if len(indexBOptions) == 0 && !indexB.vector {
 			indexBOptions = []IndexOption{{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: []byte("btree"), strVal: "btree"}}}
 		}
 	}
-	// Check that both indexes have the same number of options
-	if len(indexAOptions) != len(indexBOptions) {
-		return false
-	}
-	// Check that all options in indexBOptions exist in indexAOptions and have same values
 	for _, optionB := range indexBOptions {
-		normalizedOptionName := strings.Trim(strings.ToUpper(optionB.optionName), "`")
-		var foundOption *IndexOption
-		for _, optionA := range indexAOptions {
-			normalizedOptionAName := strings.Trim(strings.ToUpper(optionA.optionName), "`")
-			if normalizedOptionAName == normalizedOptionName {
-				foundOption = &optionA
-				break
-			}
-		}
-		if foundOption != nil {
-			if !g.areSameValue(foundOption.value, optionB.value) {
+		if optionA := findIndexOptionByName(indexAOptions, optionB.optionName); optionA != nil {
+			if !g.areSameValue(optionA.value, optionB.value) {
 				return false
 			}
 		} else {

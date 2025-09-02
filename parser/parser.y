@@ -2332,8 +2332,8 @@ index_option:
   }
 | ID '=' vector_option_value
   {
-    id := strings.ToUpper(string($1))
-    if id != "DISTANCE" && id != "M" {
+    id := strings.Trim(strings.ToLower(string($1)), "`")
+    if id != "distance" && id != "m" {
       yylex.Error(fmt.Sprintf("syntax error around '%s'", string($1)))
     }
     $$ = &IndexOption{Name: id, Value: $3}
