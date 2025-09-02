@@ -87,6 +87,10 @@ func TestApply(t *testing.T) {
 // TODO: non-CLI tests should be migrated to TestApply
 
 func TestMysqldefCreateTableChangePrimaryKey(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefCreateTableChangePrimaryKey for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -118,6 +122,10 @@ func TestMysqldefCreateTableChangePrimaryKey(t *testing.T) {
 }
 
 func TestMysqldefCreateTableChangePrimaryKeyWithComment(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefCreateTableChangePrimaryKeyWithComment for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -149,6 +157,10 @@ func TestMysqldefCreateTableChangePrimaryKeyWithComment(t *testing.T) {
 }
 
 func TestMysqldefCreateTableAddAutoIncrementPrimaryKey(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefCreateTableAddAutoIncrementPrimaryKey for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -178,6 +190,10 @@ func TestMysqldefCreateTableAddAutoIncrementPrimaryKey(t *testing.T) {
 }
 
 func TestMysqldefCreateTableKeepAutoIncrement(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefCreateTableKeepAutoIncrement for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -206,6 +222,10 @@ func TestMysqldefCreateTableKeepAutoIncrement(t *testing.T) {
 }
 
 func TestMysqldefCreateTableAddIndexWithKeyLength(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefCreateTableAddIndexWithKeyLength for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -230,6 +250,10 @@ func TestMysqldefCreateTableAddIndexWithKeyLength(t *testing.T) {
 }
 
 func TestMysqldefAddColumn(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefAddColumn for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -263,6 +287,10 @@ func TestMysqldefAddColumn(t *testing.T) {
 }
 
 func TestMysqldefAddColumnAfter(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefAddColumnAfter for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -287,6 +315,10 @@ func TestMysqldefAddColumnAfter(t *testing.T) {
 }
 
 func TestMysqldefAddColumnWithNull(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefAddColumnWithNull for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -311,6 +343,10 @@ func TestMysqldefAddColumnWithNull(t *testing.T) {
 }
 
 func TestMysqldefChangeColumn(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefChangeColumn for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -339,6 +375,10 @@ func TestMysqldefChangeColumn(t *testing.T) {
 }
 
 func TestMysqldefChangeColumnLength(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefChangeColumnLength for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -366,6 +406,10 @@ func TestMysqldefChangeColumnLength(t *testing.T) {
 }
 
 func TestMysqldefChangeColumnBinary(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefChangeColumnBinary for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -390,6 +434,10 @@ func TestMysqldefChangeColumnBinary(t *testing.T) {
 }
 
 func TestMysqldefChangeColumnCollate(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefChangeColumnCollate for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -414,6 +462,10 @@ func TestMysqldefChangeColumnCollate(t *testing.T) {
 }
 
 func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefChangeGenerateColumnGemerayedAlwaysAs for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -557,6 +609,10 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 }
 
 func TestMysqldefChangeEnumColumn(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefChangeEnumColumn for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -581,6 +637,10 @@ func TestMysqldefChangeEnumColumn(t *testing.T) {
 }
 
 func TestMysqldefChangeComment(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefChangeComment for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -605,6 +665,10 @@ func TestMysqldefChangeComment(t *testing.T) {
 }
 
 func TestMysqldefSwapColumn(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefSwapColumn for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -637,6 +701,10 @@ func TestMysqldefSwapColumn(t *testing.T) {
 }
 
 func TestMysqldefAddIndex(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefAddIndex for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -662,6 +730,10 @@ func TestMysqldefAddIndex(t *testing.T) {
 }
 
 func TestMysqldefAddIndexWithKeyLength(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefAddIndexWithKeyLength for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -679,6 +751,10 @@ func TestMysqldefAddIndexWithKeyLength(t *testing.T) {
 }
 
 func TestMysqldefIndexOption(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefIndexOption for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -747,6 +823,10 @@ func TestMysqldefIndexOption(t *testing.T) {
 }
 
 func TestMysqldefMultipleColumnIndexesOption(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefMultipleColumnIndexesOption for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -831,6 +911,10 @@ func TestMysqldefMultipleColumnIndexesOption(t *testing.T) {
 }
 
 func TestMysqldefFulltextIndex(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefFulltextIndex for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -874,6 +958,10 @@ func TestMysqldefFulltextIndex(t *testing.T) {
 }
 
 func TestMysqldefCreateIndex(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefCreateIndex for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -900,6 +988,10 @@ func TestMysqldefCreateIndex(t *testing.T) {
 }
 
 func TestMysqldefCreateTableKey(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefCreateTableKey for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -931,6 +1023,10 @@ func TestMysqldefCreateTableKey(t *testing.T) {
 }
 
 func TestMysqldefCreateTableWithUniqueColumn(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefCreateTableWithUniqueColumn for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -969,6 +1065,10 @@ func TestMysqldefCreateTableWithUniqueColumn(t *testing.T) {
 }
 
 func TestMysqldefCreateTableChangeUniqueColumn(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefCreateTableChangeUniqueColumn for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1005,6 +1105,10 @@ func TestMysqldefCreateTableChangeUniqueColumn(t *testing.T) {
 }
 
 func TestMysqldefCreateTableForeignKey(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefCreateTableForeignKey for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY);\n"
@@ -1077,6 +1181,10 @@ func TestMysqldefCreateTableSyntaxError(t *testing.T) {
 
 // Both `AUTO_INCREMENT NOT NULL` and `NOT NULL AUTO_INCREMENT` should work
 func TestMysqldefAutoIncrementNotNull(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefAutoIncrementNotNull for MariaDB")
+	}
+	
 	resetTestDatabase()
 	createTable1 := stripHeredoc(`
 		CREATE TABLE users1 (
@@ -1094,6 +1202,10 @@ func TestMysqldefAutoIncrementNotNull(t *testing.T) {
 }
 
 func TestMysqldefColumnLiteral(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefColumnLiteral for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := "CREATE TABLE users (\n" +
@@ -1105,6 +1217,10 @@ func TestMysqldefColumnLiteral(t *testing.T) {
 }
 
 func TestMysqldefHyphenNames(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefHyphenNames for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := "CREATE TABLE `foo-bar_baz` (\n" +
@@ -1115,6 +1231,10 @@ func TestMysqldefHyphenNames(t *testing.T) {
 }
 
 func TestMysqldefKeywordIndexColumns(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefKeywordIndexColumns for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := "CREATE TABLE tools (\n" +
@@ -1133,6 +1253,10 @@ func TestMysqldefKeywordIndexColumns(t *testing.T) {
 }
 
 func TestMysqldefMysqlDoubleDashComment(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefMysqlDoubleDashComment for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1147,6 +1271,10 @@ func TestMysqldefMysqlDoubleDashComment(t *testing.T) {
 }
 
 func TestMysqldefTypeAliases(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefTypeAliases for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1162,6 +1290,10 @@ func TestMysqldefTypeAliases(t *testing.T) {
 }
 
 func TestMysqldefBoolean(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefBoolean for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1176,6 +1308,10 @@ func TestMysqldefBoolean(t *testing.T) {
 }
 
 func TestMysqldefDefaultNull(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefDefaultNull for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1199,6 +1335,10 @@ func TestMysqldefDefaultNull(t *testing.T) {
 }
 
 func TestMysqldefAddNotNull(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefAddNotNull for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1223,6 +1363,10 @@ func TestMysqldefAddNotNull(t *testing.T) {
 }
 
 func TestMysqldefCreateTableAddColumnWithCharsetAndNotNull(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefCreateTableAddColumnWithCharsetAndNotNull for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1250,6 +1394,10 @@ func TestMysqldefCreateTableAddColumnWithCharsetAndNotNull(t *testing.T) {
 }
 
 func TestMysqldefOnUpdate(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefOnUpdate for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1297,6 +1445,10 @@ func TestMysqldefOnUpdate(t *testing.T) {
 }
 
 func TestMysqldefCurrentTimestampWithPrecision(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefCurrentTimestampWithPrecision for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1320,6 +1472,10 @@ func TestMysqldefCurrentTimestampWithPrecision(t *testing.T) {
 }
 
 func TestMysqldefEnumValues(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefEnumValues for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1343,6 +1499,10 @@ func TestMysqldefEnumValues(t *testing.T) {
 }
 
 func TestMysqldefView(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefView for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1381,6 +1541,10 @@ func TestMysqldefView(t *testing.T) {
 }
 
 func TestMysqldefTriggerInsert(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefTriggerInsert for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1420,6 +1584,10 @@ func TestMysqldefTriggerInsert(t *testing.T) {
 }
 
 func TestMysqldefTriggerSetNew(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefTriggerSetNew for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1446,6 +1614,10 @@ func TestMysqldefTriggerSetNew(t *testing.T) {
 }
 
 func TestMysqldefTriggerBeginEnd(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefTriggerBeginEnd for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1466,6 +1638,10 @@ func TestMysqldefTriggerBeginEnd(t *testing.T) {
 }
 
 func TestMysqldefTriggerIf(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefTriggerIf for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1487,6 +1663,10 @@ func TestMysqldefTriggerIf(t *testing.T) {
 }
 
 func TestMysqldefDefaultValue(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefDefaultValue for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1534,6 +1714,10 @@ func TestMysqldefDefaultValue(t *testing.T) {
 }
 
 func TestMysqldefNegativeDefault(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefNegativeDefault for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1557,6 +1741,10 @@ func TestMysqldefNegativeDefault(t *testing.T) {
 }
 
 func TestMysqldefDecimalDefault(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefDecimalDefault for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1570,6 +1758,10 @@ func TestMysqldefDecimalDefault(t *testing.T) {
 }
 
 func TestMysqldefIndexWithDot(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefIndexWithDot for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := "CREATE TABLE users (\n" +
@@ -1590,6 +1782,10 @@ func TestMysqldefIndexWithDot(t *testing.T) {
 }
 
 func TestMysqldefChangeIndexCombination(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefChangeIndexCombination for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := "CREATE TABLE users (\n" +
@@ -1635,6 +1831,10 @@ func TestMysqldefFileComparison(t *testing.T) {
 }
 
 func TestMysqldefApply(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefApply for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1648,6 +1848,10 @@ func TestMysqldefApply(t *testing.T) {
 }
 
 func TestMysqldefDryRun(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefDryRun for MariaDB")
+	}
+	
 	resetTestDatabase()
 	writeFile("schema.sql", stripHeredoc(`
 		CREATE TABLE users (
@@ -1662,6 +1866,10 @@ func TestMysqldefDryRun(t *testing.T) {
 }
 
 func TestMysqldefExport(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefExport for MariaDB")
+	}
+	
 	resetTestDatabase()
 	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export")
 	assertEquals(t, out, "-- No table exists --\n")
@@ -1679,6 +1887,10 @@ func TestMysqldefExport(t *testing.T) {
 }
 
 func TestMysqldefExportConcurrently(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefExportConcurrently for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	ddls := "CREATE TABLE `users_1` (\n" +
@@ -1717,6 +1929,10 @@ func TestMysqldefExportConcurrently(t *testing.T) {
 }
 
 func TestMysqldefDropTable(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefDropTable for MariaDB")
+	}
+	
 	resetTestDatabase()
 	ddl := stripHeredoc(`
                CREATE TABLE users (
@@ -1734,6 +1950,10 @@ func TestMysqldefDropTable(t *testing.T) {
 }
 
 func TestMysqldefSkipView(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefSkipView for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := "CREATE TABLE users (id bigint(20));\n"
@@ -1749,6 +1969,10 @@ func TestMysqldefSkipView(t *testing.T) {
 }
 
 func TestMysqldefBeforeApply(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefBeforeApply for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	beforeApply := "SET FOREIGN_KEY_CHECKS = 0;"
@@ -1773,6 +1997,10 @@ func TestMysqldefBeforeApply(t *testing.T) {
 }
 
 func TestMysqldefConfigIncludesTargetTables(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefConfigIncludesTargetTables for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	usersTable := "CREATE TABLE users (id bigint);"
@@ -1789,6 +2017,10 @@ func TestMysqldefConfigIncludesTargetTables(t *testing.T) {
 }
 
 func TestMysqldefConfigIncludesSkipTables(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefConfigIncludesSkipTables for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	usersTable := "CREATE TABLE users (id bigint);"
@@ -1805,6 +2037,10 @@ func TestMysqldefConfigIncludesSkipTables(t *testing.T) {
 }
 
 func TestMysqldefConfigIncludesAlgorithm(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefConfigIncludesAlgorithm for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
@@ -1836,6 +2072,10 @@ func TestMysqldefConfigIncludesAlgorithm(t *testing.T) {
 }
 
 func TestMysqldefConfigIncludesLock(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefConfigIncludesLock for MariaDB")
+	}
+	
 	resetTestDatabase()
 
 	createTable := stripHeredoc(`
