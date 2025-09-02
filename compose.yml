@@ -8,6 +8,15 @@ services:
       - ./.docker/mysql/data:/var/lib/mysql
     ports:
       - '3306:3306'
+  mariadb:
+    image: mariadb:${MARIADB_VERSION:-11.8}
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: 'true'
+      MYSQL_ROOT_HOST: '%'
+    volumes:
+      - ./.docker/mariadb/data:/var/lib/mysql
+    ports:
+      - '3307:3306'
   postgres:
     image: postgres:${POSTGRES_VERSION:-14}
     # image: hartmutcouk/pg-repack-docker:1.4.6

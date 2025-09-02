@@ -71,7 +71,7 @@ parser/parser.go: parser/parser.y
 test: test-mysqldef test-psqldef test-sqlite3def test-mssqldef
 
 test-mysqldef:
-	go test -v ./cmd/mysqldef
+	MYSQL_FLAVOR=$${MYSQL_FLAVOR:-mysql} go test -v ./cmd/mysqldef
 
 test-psqldef:
 	go test -v ./cmd/psqldef

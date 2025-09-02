@@ -115,6 +115,7 @@ CreateTableRemoveAutoIncrement80:
   output: |
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
   min_version: '8.0'
+  flavor: mysql
 CreateTableRemoveAutoIncrementPrimaryKey57:
   current: |
     CREATE TABLE friends (
@@ -145,6 +146,7 @@ CreateTableRemoveAutoIncrementPrimaryKey80:
     ALTER TABLE `friends` DROP PRIMARY KEY;
     ALTER TABLE `friends` DROP COLUMN `id`;
   min_version: '8.0'
+  flavor: mysql
 CreateTableWithAutoIncrementPrimaryKeyAndAddMorePrimaryKey:
   current: |
     CREATE TABLE friends (
@@ -166,6 +168,7 @@ CreateTableWithAutoIncrementPrimaryKeyAndAddMorePrimaryKey:
     ALTER TABLE `friends` ADD PRIMARY KEY (`id`, `other_id`);
     ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
   min_version: '8.0'
+  flavor: mysql
 CreateTableWithSpatialTypesAndSpatialKey:
   current: |
     CREATE TABLE users (
@@ -201,6 +204,7 @@ CreateTableGeneratedAlwaysAs80:
       PRIMARY KEY (id)
     );
   min_version: '8.0'
+  flavor: mysql
 CreateTableGeneratedAlwaysAsChangeExpr80:
   current: |
     CREATE TABLE `test_table` (
@@ -220,6 +224,7 @@ CreateTableGeneratedAlwaysAsChangeExpr80:
     ALTER TABLE `test_table` DROP COLUMN `test_expr`;
     ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) VIRTUAL AFTER `test_value`;
   min_version: '8.0'
+  flavor: mysql
 CreateTableGeneratedAlwaysAsAbbreviation80:
   desired: |
     CREATE TABLE `test_table` (
@@ -229,6 +234,7 @@ CreateTableGeneratedAlwaysAsAbbreviation80:
       PRIMARY KEY (id)
     );
   min_version: '8.0'
+  flavor: mysql
 CreateTableGeneratedAlwaysAsAbbreviationChangeExpr80:
   current: |
     CREATE TABLE `test_table` (
@@ -248,6 +254,7 @@ CreateTableGeneratedAlwaysAsAbbreviationChangeExpr80:
     ALTER TABLE `test_table` DROP COLUMN `test_expr`;
     ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) STORED NOT NULL AFTER `test_value`;
   min_version: '8.0'
+  flavor: mysql
 ConstraintCheck:
   desired: |
     CREATE TABLE `books` (
@@ -259,6 +266,7 @@ ConstraintCheck:
       CONSTRAINT `books_type_chk` CHECK (`type` IN ('manga', 'novel'))
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
   min_version: '8.0'
+  flavor: mysql
 ColumnCheck:
   desired: |
     CREATE TABLE `books` (
@@ -269,6 +277,7 @@ ColumnCheck:
       `deleted_at` datetime DEFAULT null
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
   min_version: '8.0'
+  flavor: mysql
 ForeignKeyNormalizeRestrict:
   desired: |
     CREATE TABLE `groups` (
@@ -401,6 +410,7 @@ UUIDToBin:
       PRIMARY KEY (id)
     );
   min_version: '8.0'
+  flavor: mysql
 NonReservedColumnName:
   # TODO: broken. they could be non-reserved once we split parsers for each database
   desired: |
@@ -454,6 +464,7 @@ MysqlViewUsingWindowFuncOnlyOver:
   output: |
     CREATE OR REPLACE VIEW `foo2` AS select p.start_at as end_at0, lead(p.start_at) over() as end_at1, lag(p.start_at) over() as end_at2 from mysqldef_test.prices as p;
   min_version: '8.0'
+  flavor: mysql
 MysqlViewUsingWindowFuncPartitionBy:
   current: |
     CREATE TABLE prices (
@@ -474,6 +485,7 @@ MysqlViewUsingWindowFuncPartitionBy:
   output: |
     CREATE OR REPLACE VIEW `foo2` AS select lead(p.start_at) over(partition by p.start_at) as end_at from mysqldef_test.prices as p;
   min_version: '8.0'
+  flavor: mysql
 MysqlViewUsingWindowFuncOrderBy:
   current: |
     CREATE TABLE prices (
@@ -494,6 +506,7 @@ MysqlViewUsingWindowFuncOrderBy:
   output: |
     CREATE OR REPLACE VIEW `foo2` AS select lead(p.start_at) over( order by p.start_at asc) as end_at, lead(p.start_at) over( order by p.start_at desc) as end_at2 from mysqldef_test.prices as p;
   min_version: '8.0'
+  flavor: mysql
 MysqlViewUsingWindowFuncPartitionByAndOrderBy:
   current: |
     CREATE TABLE prices (
@@ -514,6 +527,7 @@ MysqlViewUsingWindowFuncPartitionByAndOrderBy:
   output: |
     CREATE OR REPLACE VIEW `foo2` AS select lead(p.start_at, 1) over(partition by p.start_at order by p.start_at asc) as end_at from mysqldef_test.prices as p;
   min_version: '8.0'
+  flavor: mysql
 MysqlViewUsingWindowFuncPartitionByAndOrderByAndCoalesce:
   current: |
     CREATE TABLE prices (
@@ -534,6 +548,7 @@ MysqlViewUsingWindowFuncPartitionByAndOrderByAndCoalesce:
   output: |
     CREATE OR REPLACE VIEW `foo2` AS select coalesce(lead(p.start_at, 1) over(partition by p.start_at order by p.start_at asc), '9999-12-31 00:00:00') as end_at from mysqldef_test.prices as p;
   min_version: '8.0'
+  flavor: mysql
 AddForeignKeyWithAlter:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY);
@@ -561,6 +576,7 @@ AddColumnWithDefaultExpression:
   output: |
     ALTER TABLE `users` ADD COLUMN `friend_ids` json DEFAULT(JSON_ARRAY()) AFTER `id`;
   min_version: '8.0'
+  flavor: mysql
 AddDefaultExpression:
   current: |
     CREATE TABLE users (
@@ -575,6 +591,7 @@ AddDefaultExpression:
   output: |
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json DEFAULT(JSON_ARRAY());
   min_version: '8.0'
+  flavor: mysql
 RemoveDefaultExpression:
   current: |
     CREATE TABLE users (
@@ -589,6 +606,7 @@ RemoveDefaultExpression:
   output: |
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json;
   min_version: '8.0'
+  flavor: mysql
 AlterTableColumnFractionalSecondsPart:
   current: |
     CREATE TABLE users (
@@ -603,6 +621,7 @@ AlterTableColumnFractionalSecondsPart:
   output: |
     ALTER TABLE `users` CHANGE COLUMN `created_at` `created_at` datetime(3) NOT NULL;
 CollateOnColumn:
+  flavor: mysql
   desired: |
     create table users
     (
@@ -613,6 +632,72 @@ CollateOnColumn:
     select u.id as id,
            (u.name collate `utf8mb4_unicode_ci`) as name
     from mysqldef_test.users as u;
+CreateVectorIndex:
+  flavor: mariadb
+  desired: |
+    CREATE TABLE vectors (
+      id int(10) unsigned NOT NULL AUTO_INCREMENT,
+      vector_col VECTOR(3) NOT NULL,
+      PRIMARY KEY (id)
+    );
+    CREATE VECTOR INDEX idx_vector ON vectors (vector_col);
+  output: |
+    CREATE TABLE vectors (
+      id int(10) unsigned NOT NULL AUTO_INCREMENT,
+      vector_col VECTOR(3) NOT NULL,
+      PRIMARY KEY (id)
+    );
+    CREATE VECTOR INDEX idx_vector ON vectors (vector_col);
+CreateVectorIndexWithOptions:
+  flavor: mariadb
+  desired: |
+    CREATE TABLE vectors (
+      id int(10) unsigned NOT NULL AUTO_INCREMENT,
+      vector_col VECTOR(512) NOT NULL,
+      PRIMARY KEY (id)
+    );
+    CREATE VECTOR INDEX idx_vector_cosine ON vectors (vector_col) DISTANCE=COSINE M=16;
+  output: |
+    CREATE TABLE vectors (
+      id int(10) unsigned NOT NULL AUTO_INCREMENT,
+      vector_col VECTOR(512) NOT NULL,
+      PRIMARY KEY (id)
+    );
+    CREATE VECTOR INDEX idx_vector_cosine ON vectors (vector_col) DISTANCE=COSINE M=16;
+AddVectorIndex:
+  flavor: mariadb
+  current: |
+    CREATE TABLE vectors (
+      id int(10) unsigned NOT NULL AUTO_INCREMENT,
+      vector_col VECTOR(512) NOT NULL,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE vectors (
+      id int(10) unsigned NOT NULL AUTO_INCREMENT,
+      vector_col VECTOR(512) NOT NULL,
+      PRIMARY KEY (id),
+      VECTOR INDEX idx_vector (vector_col)
+    );
+  output: |
+    ALTER TABLE `vectors` ADD VECTOR INDEX `idx_vector` (`vector_col`);
+DropVectorIndex:
+  flavor: mariadb
+  current: |
+    CREATE TABLE vectors (
+      id int(10) unsigned NOT NULL AUTO_INCREMENT,
+      vector_col VECTOR(512) NOT NULL,
+      PRIMARY KEY (id),
+      VECTOR INDEX idx_vector (vector_col)
+    );
+  desired: |
+    CREATE TABLE vectors (
+      id int(10) unsigned NOT NULL AUTO_INCREMENT,
+      vector_col VECTOR(512) NOT NULL,
+      PRIMARY KEY (id)
+    );
+  output: |
+    ALTER TABLE `vectors` DROP INDEX `idx_vector`;
 CreateTriggerWithComplexStatements:
   desired: |
     CREATE TABLE test_trigger (

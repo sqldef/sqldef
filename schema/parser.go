@@ -306,6 +306,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Tab
 			columns:   indexColumns,
 			primary:   indexDef.Info.Primary,
 			unique:    indexDef.Info.Unique,
+			vector:    indexDef.Info.Vector,
 			clustered: bool(indexDef.Info.Clustered),
 			options:   indexOptions,
 			partition: indexPartition,
@@ -453,6 +454,7 @@ func parseIndex(stmt *parser.DDL) (Index, error) {
 		columns:           indexColumns,
 		primary:           false, // not supported in parser yet
 		unique:            stmt.IndexSpec.Unique,
+		vector:            stmt.IndexSpec.Vector,
 		constraint:        stmt.IndexSpec.Constraint,
 		constraintOptions: constraintOptions,
 		clustered:         stmt.IndexSpec.Clustered,
