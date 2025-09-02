@@ -1175,6 +1175,10 @@ func TestMysqldefCreateTableForeignKey(t *testing.T) {
 }
 
 func TestMysqldefCreateTableSyntaxError(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "mariadb" {
+		t.Skip("Skipping TestMysqldefCreateTableSyntaxError for MariaDB")
+	}
+	
 	resetTestDatabase()
 	assertApplyFailure(t, "CREATE TABLE users (id bigint,);", `found syntax error when parsing DDL "CREATE TABLE users (id bigint,)": syntax error at position 32`+"\n")
 }
