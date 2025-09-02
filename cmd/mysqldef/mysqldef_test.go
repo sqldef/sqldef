@@ -38,10 +38,44 @@ func TestApply(t *testing.T) {
 
 	version := strings.TrimSpace(testutils.MustExecute("mysql", "-uroot", "-h", "127.0.0.1", "-sN", "-e", "select version();"))
 	sqlParser := database.NewParser(parser.ParserModeMysql)
+	
+	tests = testutils.FilterTestsByFlavor(tests, "", "mysql")
+	
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Initialize the database with test.Current
 			testutils.MustExecute("mysql", "-uroot", "-h", "127.0.0.1", "-e", "DROP DATABASE IF EXISTS mysqldef_test; CREATE DATABASE mysqldef_test;")
+
+			testutils.RunTest(t, db, test, schema.GeneratorModeMysql, sqlParser, version)
+		})
+	}
+}
+
+func TestApplyMariaDB(t *testing.T) {
+	if os.Getenv("MARIADB_TEST") != "1" {
+		t.Skip("MariaDB tests are skipped by default. Set MARIADB_TEST=1 to run them.")
+	}
+
+	db, err := connectMariaDatabase()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	tests, err := testutils.ReadTests("tests.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	version := strings.TrimSpace(testutils.MustExecute("mysql", "-uroot", "-h", "127.0.0.1", "-P", "3307", "-sN", "-e", "select version();"))
+	sqlParser := database.NewParser(parser.ParserModeMysql)
+	
+	tests = testutils.FilterTestsByFlavor(tests, "mariadb")
+	
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			// Initialize the database with test.Current
+			testutils.MustExecute("mysql", "-uroot", "-h", "127.0.0.1", "-P", "3307", "-e", "DROP DATABASE IF EXISTS mysqldef_test; CREATE DATABASE mysqldef_test;")
 
 			testutils.RunTest(t, db, test, schema.GeneratorModeMysql, sqlParser, version)
 		})
@@ -1944,6 +1978,15 @@ func connectDatabase() (database.Database, error) {
 		User:   "root",
 		Host:   "127.0.0.1",
 		Port:   3306,
+		DbName: "mysqldef_test",
+	})
+}
+
+func connectMariaDatabase() (database.Database, error) {
+	return mysql.NewDatabase(database.Config{
+		User:   "root",
+		Host:   "127.0.0.1",
+		Port:   3307,
 		DbName: "mysqldef_test",
 	})
 }

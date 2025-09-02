@@ -23,6 +23,9 @@ jobs:
             mysql_version: '5.7'
           - target: mysqldef
             mysql_version: '8.0'
+          - target: mysqldef
+            mariadb_version: '11.8'
+            mariadb_test: true
           - target: psqldef
             postgres_version: 10
           - target: psqldef
@@ -45,10 +48,13 @@ jobs:
       - run: docker compose up -d
         env:
           MYSQL_VERSION: ${{ matrix.mysql_version }}
+          MARIADB_VERSION: ${{ matrix.mariadb_version }}
           POSTGRES_VERSION: ${{ matrix.postgres_version }}
       - run: make deps
       - run: echo "GODEBUG=tlsrsakex=1" >> $GITHUB_ENV
         if: matrix.mysql_version == '5.7'
+      - run: echo "MARIADB_TEST=1" >> $GITHUB_ENV
+        if: matrix.mariadb_test
       - run: make test-${{ matrix.target }}
 
   package:

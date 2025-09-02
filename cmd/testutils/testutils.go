@@ -24,6 +24,7 @@ type TestCase struct {
 	MinVersion string  `yaml:"min_version"`
 	MaxVersion string  `yaml:"max_version"`
 	User       string
+	Flavor     string  // database flavor (e.g., "mariadb", "mysql")
 }
 
 func ReadTests(pattern string) (map[string]TestCase, error) {
@@ -60,6 +61,23 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 	}
 
 	return ret, nil
+}
+
+func FilterTestsByFlavor(tests map[string]TestCase, flavors ...string) map[string]TestCase {
+	ret := map[string]TestCase{}
+	
+	// Create a set of allowed flavors for faster lookup
+	allowedFlavors := make(map[string]bool)
+	for _, flavor := range flavors {
+		allowedFlavors[flavor] = true
+	}
+	
+	for name, test := range tests {
+		if allowedFlavors[test.Flavor] {
+			ret[name] = test
+		}
+	}
+	return ret
 }
 
 func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.GeneratorMode, sqlParser database.Parser, version string) {
