@@ -186,7 +186,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> STATUS VARIABLES
 %token <bytes> RESTRICT CASCADE NO ACTION
 %token <bytes> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
-%token <bytes> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS
+%token <bytes> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS DISTANCE M EUCLIDEAN COSINE
 %token <bytes> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE INSTEAD OF
 %token <bytes> DEFERRABLE INITIALLY IMMEDIATE DEFERRED
 %token <bytes> CONCURRENTLY
@@ -263,9 +263,6 @@ func forceEOF(yylex interface{}) {
 
 // SQL SECURITY
 %token <bytes> DEFINER INVOKER
-
-// MariaDB Vector options
-%token <bytes> DISTANCE COSINE EUCLIDEAN
 
 %type <statement> statement
 %type <selStmt> select_statement base_select union_lhs union_rhs
@@ -376,6 +373,8 @@ func forceEOF(yylex interface{}) {
 %type <expr> default_expression
 %type <optVal> srid_definition srid_val
 %type <optVal> on_off
+%type <optVal> index_distance_option_value
+%type <optVal> vector_option_value
 %type <str> trigger_time trigger_event fetch_opt
 %type <strs> trigger_event_list
 %type <blockStatement> trigger_statements statement_block
@@ -2323,18 +2322,23 @@ index_option:
   {
     $$ = &IndexOption{Name: string($1), Value: $3}
   }
-| ID '=' INTEGRAL
+| DISTANCE '=' index_distance_option_value
+  {
+    $$ = &IndexOption{Name: string($1), Value: $3}
+  }
+| M '=' INTEGRAL
   {
     $$ = &IndexOption{Name: string($1), Value: NewIntVal($3)}
   }
-| DISTANCE '=' COSINE
+| ID '=' vector_option_value
   {
-    $$ = &IndexOption{Name: string($1), Value: NewStrVal($3)}
+    id := strings.ToUpper(string($1))
+    if id != "DISTANCE" && id != "M" {
+      yylex.Error(fmt.Sprintf("syntax error around '%s'", string($1)))
+    }
+    $$ = &IndexOption{Name: id, Value: $3}
   }
-| DISTANCE '=' EUCLIDEAN
-  {
-    $$ = &IndexOption{Name: string($1), Value: NewStrVal($3)}
-  }
+
 
 equal_opt:
   /* empty */
@@ -2354,6 +2358,26 @@ on_off:
 | OFF
   {
     $$ = NewBoolSQLVal(false)
+  }
+
+index_distance_option_value:
+  EUCLIDEAN
+  {
+    $$ = NewStrVal($1)
+  }
+| COSINE
+  {
+    $$ = NewStrVal($1)
+  }
+
+vector_option_value:
+  index_distance_option_value
+  {
+    $$ = $1
+  }
+| INTEGRAL
+  {
+    $$ = NewIntVal($1)
   }
 
 // for MSSQL
@@ -2387,9 +2411,17 @@ index_info:
   {
     $$ = &IndexInfo{Type: string($1), Name: NewColIdent(string($2)), Fulltext: true}
   }
+| VECTOR INDEX ID
+  {
+    $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(string($3)), Vector: true}
+  }
 | VECTOR INDEX
   {
     $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(""), Vector: true}
+  }
+| VECTOR KEY ID
+  {
+    $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(string($3)), Vector: true}
   }
 | UNIQUE index_or_key ID
   {

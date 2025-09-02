@@ -63,29 +63,16 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 	return ret, nil
 }
 
-func FilterTestsByFlavor(tests map[string]TestCase, flavors ...string) map[string]TestCase {
-	ret := map[string]TestCase{}
-	
-	// Create a set of allowed flavors for faster lookup
-	allowedFlavors := make(map[string]bool)
-	for _, flavor := range flavors {
-		allowedFlavors[flavor] = true
-	}
-	
-	for name, test := range tests {
-		if allowedFlavors[test.Flavor] {
-			ret[name] = test
-		}
-	}
-	return ret
-}
 
-func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.GeneratorMode, sqlParser database.Parser, version string) {
+func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.GeneratorMode, sqlParser database.Parser, version string, allowedFlavor string) {
 	if test.MinVersion != "" && compareVersion(t, version, test.MinVersion) < 0 {
 		t.Skipf("Version '%s' is smaller than min_version '%s'", version, test.MaxVersion)
 	}
 	if test.MaxVersion != "" && compareVersion(t, version, test.MaxVersion) > 0 {
 		t.Skipf("Version '%s' is larger than max_version '%s'", version, test.MaxVersion)
+	}
+	if test.Flavor != "" && (allowedFlavor == "" || test.Flavor != allowedFlavor) {
+		t.Skipf("Test flavor '%s' does not match allowed flavor '%s'", test.Flavor, allowedFlavor)
 	}
 
 	// Prepare current

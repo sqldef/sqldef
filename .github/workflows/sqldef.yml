@@ -53,7 +53,9 @@ jobs:
       - run: make deps
       - run: echo "GODEBUG=tlsrsakex=1" >> $GITHUB_ENV
         if: matrix.mysql_version == '5.7'
-      - run: echo "MARIADB_TEST=1" >> $GITHUB_ENV
+      - run: echo "MYSQL_FLAVOR=mariadb" >> $GITHUB_ENV
+        if: matrix.mariadb_test
+      - run: echo "MYSQL_PORT=3307" >> $GITHUB_ENV
         if: matrix.mariadb_test
       - run: make test-${{ matrix.target }}
 

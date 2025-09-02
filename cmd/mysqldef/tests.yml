@@ -678,7 +678,7 @@ DropVectorIndex:
       PRIMARY KEY (id)
     );
   output: |
-    DROP INDEX `idx_vector` ON `vectors`;
+    ALTER TABLE `vectors` DROP INDEX `idx_vector`;
 CreateTriggerWithComplexStatements:
   desired: |
     CREATE TABLE test_trigger (

@@ -288,6 +288,7 @@ var keywords = map[string]int{
 	"longtext":               LONGTEXT,
 	"loop":                   UNUSED,
 	"low_priority":           UNUSED,
+	"m":                      M,
 	"master_bind":            UNUSED,
 	"match":                  MATCH,
 	"materialized":           MATERIALIZED,
