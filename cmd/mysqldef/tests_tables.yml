@@ -314,3 +314,14 @@ ChangeColumnCollate:
     );
   output: |
     ALTER TABLE `users` CHANGE COLUMN `password` `password` char(128) CHARACTER SET latin1 COLLATE latin1_bin;
+ChangeEnumColumn:
+  current: |
+    CREATE TABLE users (
+      active enum("active")
+    );
+  desired: |
+    CREATE TABLE users (
+      active enum("active", "inactive")
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `active` `active` enum('active', 'inactive');
