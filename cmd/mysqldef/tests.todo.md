@@ -225,10 +225,11 @@ Migrate tests from `mysqldef_test.go` to YAML-based tests loaded by `TestApply`,
   - [x] Move MySQL 8.0+ specific tests from tests.yml
   - [x] Run `make test-mysqldef` to verify
   - [x] Commit changes
-- [ ] **Commit 10**: Remove/rename original tests.yml
-  - [ ] Remove original tests.yml (now empty) or rename to tests_legacy.yml
-  - [ ] Run `make test-mysqldef` to verify
-  - [ ] Commit changes
+- [x] **Commit 10**: Remove/rename original tests.yml
+  - [x] Move remaining test to tests_tables.yml
+  - [x] Remove original tests.yml (now empty)
+  - [x] Run `make test-mysqldef` to verify
+  - [x] Commit changes
 
 ### Phase 3: Migrate Go Tests (One commit per test function)
 - [ ] **Migrate tables tests** (14 commits):

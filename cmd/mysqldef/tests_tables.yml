@@ -97,6 +97,11 @@ AlterTableAddSetTypeColumn:
     );
   output: |
     ALTER TABLE `alarm` ADD COLUMN `dayOfWeek` set('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun') NOT NULL AFTER `id`;
+CreateTableWithKeyBlockSize:
+  desired: |
+    CREATE TABLE users (
+      id BIGINT
+    ) KEY_BLOCK_SIZE=8;
 AlterTableColumnFractionalSecondsPart:
   current: |
     CREATE TABLE users (
