@@ -198,3 +198,39 @@ EnumValues:
     );
   output: |
     ALTER TABLE `users` ADD COLUMN `authorities` enum('normal', 'admin') NOT NULL DEFAULT 'normal' AFTER `id`;
+DefaultValue:
+  current: |
+    CREATE TABLE tools (
+      id int(10) unsigned NOT NULL AUTO_INCREMENT,
+      name varchar(255) COLLATE utf8mb4_bin NOT NULL,
+      created_at datetime NOT NULL,
+      updated_at datetime NOT NULL,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE tools (
+      id int(10) unsigned NOT NULL AUTO_INCREMENT,
+      name varchar(255) COLLATE utf8mb4_bin NOT NULL,
+      created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id)
+    );
+  output: |
+    ALTER TABLE `tools` CHANGE COLUMN `created_at` `created_at` datetime NOT NULL DEFAULT current_timestamp;
+    ALTER TABLE `tools` CHANGE COLUMN `updated_at` `updated_at` datetime NOT NULL DEFAULT current_timestamp ON UPDATE current_timestamp;
+NegativeDefault:
+  current: |
+    CREATE TABLE items (
+      position float DEFAULT -20
+    );
+  desired: |
+    CREATE TABLE items (
+      position float DEFAULT 100
+    );
+  output: |
+    ALTER TABLE `items` CHANGE COLUMN `position` `position` float DEFAULT 100;
+DecimalDefault:
+  desired: |
+    CREATE TABLE some_table (
+      some_value decimal(5, 2) DEFAULT 0.0
+    );

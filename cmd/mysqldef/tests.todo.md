@@ -265,7 +265,7 @@ Migrate tests from `mysqldef_test.go` to YAML-based tests loaded by `TestApply`,
 - [x] **Migrate constraints tests** (1 commit):
   - [x] Commit: `TestMysqldefCreateTableForeignKey` → tests_constraints.yml
 
-- [ ] **Migrate datatypes tests** (12 commits):
+- [x] **Migrate datatypes tests** (12 commits):
   - [x] Commit: `TestMysqldefAutoIncrementNotNull` → tests_datatypes.yml
   - [x] Commit: `TestMysqldefTypeAliases` → tests_datatypes.yml
   - [x] Commit: `TestMysqldefBoolean` → tests_datatypes.yml
@@ -275,9 +275,9 @@ Migrate tests from `mysqldef_test.go` to YAML-based tests loaded by `TestApply`,
   - [x] Commit: `TestMysqldefOnUpdate` → tests_datatypes.yml
   - [x] Commit: `TestMysqldefCurrentTimestampWithPrecision` → tests_datatypes.yml
   - [x] Commit: `TestMysqldefEnumValues` → tests_datatypes.yml
-  - [ ] Commit: `TestMysqldefDefaultValue` → tests_datatypes.yml
-  - [ ] Commit: `TestMysqldefNegativeDefault` → tests_datatypes.yml
-  - [ ] Commit: `TestMysqldefDecimalDefault` → tests_datatypes.yml
+  - [x] Commit: `TestMysqldefDefaultValue` → tests_datatypes.yml
+  - [x] Commit: `TestMysqldefNegativeDefault` → tests_datatypes.yml
+  - [x] Commit: `TestMysqldefDecimalDefault` → tests_datatypes.yml
 
 - [ ] **Migrate generated tests** (1 commit):
   - [ ] Commit: `TestMysqldefChangeGenerateColumnGemerayedAlwaysAs` → tests_generated.yml
