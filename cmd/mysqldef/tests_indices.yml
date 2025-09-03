@@ -131,3 +131,99 @@ IndexOptionAddWithoutUsingThenWith:
       KEY index_id (id) USING BTREE
     );
   output: ""
+MultipleColumnIndexesOption:
+  current: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      registered_at datetime(6) NOT NULL,
+      role_type int(1) NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      registered_at datetime(6) NOT NULL,
+      role_type int(1) NOT NULL,
+      INDEX index_id (registered_at, role_type) USING BTREE
+    );
+  output: |
+    ALTER TABLE `users` ADD INDEX `index_id` (`registered_at`, `role_type`) using BTREE;
+MultipleColumnIndexesOptionCaseInsensitive:
+  current: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      registered_at datetime(6) NOT NULL,
+      role_type int(1) NOT NULL,
+      INDEX index_id (registered_at, role_type) USING BTREE
+    );
+  desired: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      registered_at datetime(6) NOT NULL,
+      role_type int(1) NOT NULL,
+      INDEX index_id (registered_at, role_type) using btree
+    );
+  output: ""
+MultipleColumnIndexesOptionNoUsing:
+  current: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      registered_at datetime(6) NOT NULL,
+      role_type int(1) NOT NULL,
+      INDEX index_id (registered_at, role_type) USING BTREE
+    );
+  desired: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      registered_at datetime(6) NOT NULL,
+      role_type int(1) NOT NULL,
+      INDEX index_id (registered_at, role_type)
+    );
+  output: ""
+MultipleColumnIndexesOptionAddWithoutUsing:
+  current: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      registered_at datetime(6) NOT NULL,
+      role_type int(1) NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      registered_at datetime(6) NOT NULL,
+      role_type int(1) NOT NULL,
+      INDEX index_id (registered_at, role_type)
+    );
+  output: |
+    ALTER TABLE `users` ADD INDEX `index_id` (`registered_at`, `role_type`);
+MultipleColumnIndexesOptionAddWithoutUsingThenWith:
+  current: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      registered_at datetime(6) NOT NULL,
+      role_type int(1) NOT NULL,
+      INDEX index_id (registered_at, role_type)
+    );
+  desired: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      registered_at datetime(6) NOT NULL,
+      role_type int(1) NOT NULL,
+      INDEX index_id (registered_at, role_type) USING BTREE
+    );
+  output: ""
+MultipleColumnIndexesOptionAddWithoutUsingThenCaseInsensitive:
+  current: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      registered_at datetime(6) NOT NULL,
+      role_type int(1) NOT NULL,
+      INDEX index_id (registered_at, role_type)
+    );
+  desired: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      registered_at datetime(6) NOT NULL,
+      role_type int(1) NOT NULL,
+      INDEX index_id (registered_at, role_type) using btree
+    );
+  output: ""
