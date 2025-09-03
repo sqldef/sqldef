@@ -303,3 +303,14 @@ ChangeColumnBinary:
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   output: |
     ALTER TABLE `users` CHANGE COLUMN `word` `word` varchar(64) COLLATE utf8mb4_bin NOT NULL;
+ChangeColumnCollate:
+  current: |
+    CREATE TABLE users (
+      password char(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin
+    );
+  desired: |
+    CREATE TABLE users (
+      password char(128) CHARACTER SET latin1 COLLATE latin1_bin
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `password` `password` char(128) CHARACTER SET latin1 COLLATE latin1_bin;
