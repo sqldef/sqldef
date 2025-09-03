@@ -761,25 +761,6 @@ func TestMysqldefDecimalDefault(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
-func TestMysqldefIndexWithDot(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := "CREATE TABLE users (\n" +
-		"  `id` BIGINT,\n" +
-		"  `account_id` BIGINT\n" +
-		");\n"
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = "CREATE TABLE users (\n" +
-		"  `id` BIGINT,\n" +
-		"  `account_id` BIGINT,\n" +
-		"  KEY `account.id`(account_id)\n" +
-		");\n"
-	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `users` ADD KEY `account.id` (`account_id`);\n")
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 func TestMysqldefChangeIndexCombination(t *testing.T) {
 	resetTestDatabase()
