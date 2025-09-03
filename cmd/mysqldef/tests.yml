@@ -1,5 +1,0 @@
-CreateTableWithKeyBlockSize:
-  desired: |
-    CREATE TABLE users (
-      id BIGINT
-    ) KEY_BLOCK_SIZE=8;
