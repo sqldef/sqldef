@@ -190,11 +190,13 @@ Migrate tests from `mysqldef_test.go` to YAML-based tests loaded by `TestApply`,
   - [x] Run `make test-mysqldef` to verify
   - [x] Commit changes
 
+**IMPORTANT**: All new YAML files must end with a newline character to avoid test formatting issues.
+
 ### Phase 2: Split Existing tests.yml (One commit per file)
-- [ ] **Commit 2**: Create tests_indices.yml 
-  - [ ] Move index-related tests from tests.yml
-  - [ ] Run `make test-mysqldef` to verify
-  - [ ] Commit changes
+- [x] **Commit 2**: Create tests_indices.yml 
+  - [x] Move index-related tests from tests.yml
+  - [x] Run `make test-mysqldef` to verify
+  - [x] Commit changes
 - [ ] **Commit 3**: Create tests_constraints.yml
   - [ ] Move constraint-related tests from tests.yml  
   - [ ] Run `make test-mysqldef` to verify
