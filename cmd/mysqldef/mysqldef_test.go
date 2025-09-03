@@ -50,41 +50,6 @@ func TestApply(t *testing.T) {
 
 // TODO: non-CLI tests should be migrated to TestApply
 
-
-
-
-
-func TestMysqldefCreateTableAddIndexWithKeyLength(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-		  name TEXT NOT NULL,
-		  PRIMARY KEY (id)
-		);`,
-	)
-	assertApply(t, createTable)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-		  name TEXT NOT NULL,
-		  PRIMARY KEY (id),
-		  INDEX index_name(name(255))
-		);`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD INDEX `index_name` (`name`(255));\n")
-	assertApplyOutput(t, createTable, nothingModified)
-}
-
-
-
-
-
-
-
-
 func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 	resetTestDatabase()
 

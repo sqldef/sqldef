@@ -5,3 +5,19 @@ CreateTableUniqueIndex:
       created DATE NOT NULL,
       UNIQUE INDEX(id, created)
     );
+CreateTableAddIndexWithKeyLength:
+  current: |
+    CREATE TABLE users (
+      id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+      name TEXT NOT NULL,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+      name TEXT NOT NULL,
+      PRIMARY KEY (id),
+      INDEX index_name(name(255))
+    );
+  output: |
+    ALTER TABLE `users` ADD INDEX `index_name` (`name`(255));
