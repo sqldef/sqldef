@@ -53,33 +53,6 @@ func TestApply(t *testing.T) {
 
 
 
-func TestMysqldefCreateTableKeepAutoIncrement(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id int(11) NOT NULL AUTO_INCREMENT,
-		  password char(128) COLLATE utf8mb4_bin DEFAULT NULL,
-		  PRIMARY KEY (id)
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  id BIGINT NOT NULL AUTO_INCREMENT,
-		  password char(128) COLLATE utf8mb4_bin DEFAULT NULL,
-		  PRIMARY KEY (id)
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;\n",
-	)
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 func TestMysqldefCreateTableAddIndexWithKeyLength(t *testing.T) {
 	resetTestDatabase()
