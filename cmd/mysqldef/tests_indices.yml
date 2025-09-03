@@ -55,3 +55,19 @@ ChangeIndexColumns:
   output: |
     ALTER TABLE `users` DROP INDEX `index_name`;
     ALTER TABLE `users` ADD INDEX `index_name`(`name`, `created_at`);
+AddIndexWithKeyLength:
+  current: |
+    CREATE TABLE users (
+      id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+      name TEXT NOT NULL,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+      name TEXT NOT NULL,
+      PRIMARY KEY (id)
+    );
+    ALTER TABLE `users` ADD INDEX `index_name`(`name`(255));
+  output: |
+    ALTER TABLE `users` ADD INDEX `index_name`(`name`(255));

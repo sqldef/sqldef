@@ -197,22 +197,6 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 
 
 
-func TestMysqldefAddIndexWithKeyLength(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-		  name TEXT NOT NULL,
-		  PRIMARY KEY (id)
-		);`,
-	)
-	assertApply(t, createTable)
-
-	alterTable := "ALTER TABLE `users` ADD INDEX `index_name`(`name`(255));\n"
-	assertApplyOutput(t, createTable+alterTable, applyPrefix+alterTable)
-	assertApplyOutput(t, createTable+alterTable, nothingModified)
-}
 
 func TestMysqldefIndexOption(t *testing.T) {
 	resetTestDatabase()
