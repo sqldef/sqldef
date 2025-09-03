@@ -72,3 +72,11 @@ CollateOnColumn:
     select u.id as id,
            (u.name collate `utf8mb4_unicode_ci`) as name
     from mysqldef_test.users as u;
+AutoIncrementNotNull:
+  desired: |
+    CREATE TABLE users1 (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY
+    );
+    CREATE TABLE users2 (
+      id BIGINT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY
+    );

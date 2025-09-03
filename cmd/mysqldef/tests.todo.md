@@ -266,7 +266,7 @@ Migrate tests from `mysqldef_test.go` to YAML-based tests loaded by `TestApply`,
   - [x] Commit: `TestMysqldefCreateTableForeignKey` → tests_constraints.yml
 
 - [ ] **Migrate datatypes tests** (12 commits):
-  - [ ] Commit: `TestMysqldefAutoIncrementNotNull` → tests_datatypes.yml
+  - [x] Commit: `TestMysqldefAutoIncrementNotNull` → tests_datatypes.yml
   - [ ] Commit: `TestMysqldefTypeAliases` → tests_datatypes.yml
   - [ ] Commit: `TestMysqldefBoolean` → tests_datatypes.yml
   - [ ] Commit: `TestMysqldefDefaultNull` → tests_datatypes.yml
