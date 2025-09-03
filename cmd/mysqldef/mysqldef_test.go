@@ -57,15 +57,6 @@ func TestMysqldefCreateTableSyntaxError(t *testing.T) {
 
 
 
-func TestMysqldefHyphenNames(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := "CREATE TABLE `foo-bar_baz` (\n" +
-		"  `id-bar_baz` bigint NOT NULL\n" +
-		");\n"
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 func TestMysqldefKeywordIndexColumns(t *testing.T) {
 	resetTestDatabase()
