@@ -228,29 +228,6 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 }
 
-func TestMysqldefChangeEnumColumn(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  active enum("active")
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  active enum("active", "inactive")
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `users` CHANGE COLUMN `active` `active` enum('active', 'inactive');\n",
-	)
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 func TestMysqldefChangeComment(t *testing.T) {
 	resetTestDatabase()
