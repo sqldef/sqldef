@@ -1,0 +1,7 @@
+CreateTableUniqueIndex:
+  desired: |
+    CREATE TABLE items (
+      id int NOT NULL,
+      created DATE NOT NULL,
+      UNIQUE INDEX(id, created)
+    );

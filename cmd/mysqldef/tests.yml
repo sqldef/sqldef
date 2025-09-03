@@ -191,13 +191,6 @@ ForeignKeyNormalizeRestrict:
       KEY `fk_users_groups` (`group_id`),
       CONSTRAINT `fk_users_groups` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
     );
-CreateTableUniqueIndex:
-  desired: |
-    CREATE TABLE items (
-      id int NOT NULL,
-      created DATE NOT NULL,
-      UNIQUE INDEX(id, created)
-    );
 CreateTableWithKeyBlockSize:
   desired: |
     CREATE TABLE users (
