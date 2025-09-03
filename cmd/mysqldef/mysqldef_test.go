@@ -121,26 +121,6 @@ func TestMysqldefMysqlDoubleDashComment(t *testing.T) {
 
 
 
-func TestMysqldefTriggerIf(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE test_trigger (
-		  id int(11) NOT NULL AUTO_INCREMENT,
-		  set_id int(11) NOT NULL,
-		  sort_order int(11) NOT NULL,
-		  PRIMARY KEY (id)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-		CREATE TRIGGER ` + "`test_trigger_BEFORE_INSERT`" + ` before insert ON ` + "`test_trigger`" + ` FOR EACH ROW begin
-		if NEW.sort_order is null or NEW.sort_order = 0 then
-		set NEW.sort_order = (select COALESCE(MAX(sort_order) + 1, 1) from test_trigger where set_id = NEW.set_id);
-		end if;
-		end;
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 
 
