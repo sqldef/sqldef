@@ -221,10 +221,10 @@ Migrate tests from `mysqldef_test.go` to YAML-based tests loaded by `TestApply`,
   - [x] Move MySQL 5.7 specific tests from tests.yml
   - [x] Run `make test-mysqldef` to verify
   - [x] Commit changes
-- [ ] **Commit 9**: Create tests_mysql80.yml
-  - [ ] Move MySQL 8.0+ specific tests from tests.yml
-  - [ ] Run `make test-mysqldef` to verify
-  - [ ] Commit changes
+- [x] **Commit 9**: Create tests_mysql80.yml
+  - [x] Move MySQL 8.0+ specific tests from tests.yml
+  - [x] Run `make test-mysqldef` to verify
+  - [x] Commit changes
 - [ ] **Commit 10**: Remove/rename original tests.yml
   - [ ] Remove original tests.yml (now empty) or rename to tests_legacy.yml
   - [ ] Run `make test-mysqldef` to verify
