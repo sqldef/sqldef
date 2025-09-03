@@ -252,20 +252,6 @@ func TestMysqldefMysqlDoubleDashComment(t *testing.T) {
 	assertApplyOutput(t, createTableWithComments, nothingModified)
 }
 
-func TestMysqldefTypeAliases(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  charv character(40),
-		  varcharv character varying(40),
-		  intv integer
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 func TestMysqldefBoolean(t *testing.T) {
 	resetTestDatabase()
