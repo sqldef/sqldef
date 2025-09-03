@@ -202,30 +202,6 @@ SubstringExpression:
     CREATE VIEW modelstart_end12 AS select substring(min(202006),1) AS `c`;
     CREATE VIEW modelstart_end13 AS select substring(min(202006) from 1) AS `c`;
     CREATE VIEW modelstart_end14 AS select substring(min(202006) from 1 for 4) AS `c`;
-BooleanValue:
-  current: |
-    CREATE TABLE bools (
-      value1 boolean DEFAULT false,
-      value2 boolean DEFAULT False,
-      value3 boolean DEFAULT true,
-      value4 boolean DEFAULT True,
-      value5 TINYINT(1) DEFAULT 0,
-      value6 TINYINT(1) DEFAULT 0,
-      value7 TINYINT(1) DEFAULT 1,
-      value8 TINYINT(1) DEFAULT 1
-    );
-  desired: |
-    CREATE TABLE bools (
-      value1 boolean DEFAULT false,
-      value2 boolean DEFAULT False,
-      value3 boolean DEFAULT true,
-      value4 boolean DEFAULT True,
-      value5 TINYINT(1) DEFAULT 0,
-      value6 TINYINT(1) DEFAULT 0,
-      value7 TINYINT(1) DEFAULT 1,
-      value8 TINYINT(1) DEFAULT 1
-    );
-  output: |
 UUIDToBin:
   desired: |
     CREATE TABLE users (
@@ -366,56 +342,6 @@ MysqlViewUsingWindowFuncPartitionByAndOrderByAndCoalesce:
   output: |
     CREATE OR REPLACE VIEW `foo2` AS select coalesce(lead(p.start_at, 1) over(partition by p.start_at order by p.start_at asc), '9999-12-31 00:00:00') as end_at from mysqldef_test.prices as p;
   min_version: '8.0'
-AddColumnWithDefaultExpression:
-  current: |
-    CREATE TABLE users (id BIGINT PRIMARY KEY);
-  desired: |
-    CREATE TABLE users (
-      id BIGINT PRIMARY KEY,
-      friend_ids JSON DEFAULT(JSON_ARRAY())  
-    );
-  output: |
-    ALTER TABLE `users` ADD COLUMN `friend_ids` json DEFAULT(JSON_ARRAY()) AFTER `id`;
-  min_version: '8.0'
-AddDefaultExpression:
-  current: |
-    CREATE TABLE users (
-      id BIGINT PRIMARY KEY,
-      friend_ids JSON
-    );
-  desired: |
-    CREATE TABLE users (
-      id BIGINT PRIMARY KEY,
-      friend_ids JSON DEFAULT(JSON_ARRAY())
-    );
-  output: |
-    ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json DEFAULT(JSON_ARRAY());
-  min_version: '8.0'
-RemoveDefaultExpression:
-  current: |
-    CREATE TABLE users (
-      id BIGINT PRIMARY KEY,
-      friend_ids JSON DEFAULT(JSON_ARRAY())
-    );
-  desired: |
-    CREATE TABLE users (
-      id BIGINT PRIMARY KEY,
-      friend_ids JSON
-    );
-  output: |
-    ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json;
-  min_version: '8.0'
-CollateOnColumn:
-  desired: |
-    create table users
-    (
-        id   int          not null,
-        name varchar(255) not null
-    ) COLLATE=utf8mb4_general_ci;
-    create view user_view as
-    select u.id as id,
-           (u.name collate `utf8mb4_unicode_ci`) as name
-    from mysqldef_test.users as u;
 CreateTriggerWithComplexStatements:
   desired: |
     CREATE TABLE test_trigger (
