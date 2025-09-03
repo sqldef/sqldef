@@ -235,3 +235,35 @@ TriggerInsertBeforeUpdateChange:
   output: |
     DROP TRIGGER `insert_log_before_update`;
     CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());
+TriggerSetNew:
+  desired: |
+    CREATE TABLE users (
+      id int unsigned NOT NULL AUTO_INCREMENT,
+      name varchar(255) NOT NULL,
+      deleted_at timestamp NULL DEFAULT NULL,
+      logical_uniqueness tinyint(1) DEFAULT '1',
+      PRIMARY KEY (id)
+    );
+    CREATE TRIGGER `set_logical_uniqueness_on_users` before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = 1;
+TriggerSetNewComplex:
+  current: |
+    CREATE TABLE users (
+      id int unsigned NOT NULL AUTO_INCREMENT,
+      name varchar(255) NOT NULL,
+      deleted_at timestamp NULL DEFAULT NULL,
+      logical_uniqueness tinyint(1) DEFAULT '1',
+      PRIMARY KEY (id)
+    );
+    CREATE TRIGGER `set_logical_uniqueness_on_users` before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = 1;
+  desired: |
+    CREATE TABLE users (
+      id int unsigned NOT NULL AUTO_INCREMENT,
+      name varchar(255) NOT NULL,
+      deleted_at timestamp NULL DEFAULT NULL,
+      logical_uniqueness tinyint(1) DEFAULT '1',
+      PRIMARY KEY (id)
+    );
+    CREATE TRIGGER `set_logical_uniqueness_on_users` before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = 1;
+    CREATE TRIGGER `set_logical_uniqueness_on_users2` before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = case when NEW.deleted_at is null then 1 when NEW.deleted_at is not null then null end;
+  output: |
+    CREATE TRIGGER `set_logical_uniqueness_on_users2` before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = case when NEW.deleted_at is null then 1 when NEW.deleted_at is not null then null end;
