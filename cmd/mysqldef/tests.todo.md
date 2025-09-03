@@ -197,18 +197,18 @@ Migrate tests from `mysqldef_test.go` to YAML-based tests loaded by `TestApply`,
   - [x] Move index-related tests from tests.yml
   - [x] Run `make test-mysqldef` to verify
   - [x] Commit changes
-- [ ] **Commit 3**: Create tests_constraints.yml
-  - [ ] Move constraint-related tests from tests.yml  
-  - [ ] Run `make test-mysqldef` to verify
-  - [ ] Commit changes
-- [ ] **Commit 4**: Create tests_datatypes.yml
-  - [ ] Move datatype-related tests from tests.yml
-  - [ ] Run `make test-mysqldef` to verify  
-  - [ ] Commit changes
-- [ ] **Commit 5**: Create tests_generated.yml
-  - [ ] Move generated column tests from tests.yml
-  - [ ] Run `make test-mysqldef` to verify
-  - [ ] Commit changes
+- [x] **Commit 3**: Create tests_constraints.yml
+  - [x] Move constraint-related tests from tests.yml  
+  - [x] Run `make test-mysqldef` to verify
+  - [x] Commit changes
+- [x] **Commit 4**: Create tests_datatypes.yml
+  - [x] Move datatype-related tests from tests.yml
+  - [x] Run `make test-mysqldef` to verify  
+  - [x] Commit changes
+- [x] **Commit 5**: Create tests_generated.yml
+  - [x] Move generated column tests from tests.yml
+  - [x] Run `make test-mysqldef` to verify
+  - [x] Commit changes
 - [ ] **Commit 6**: Create tests_views_triggers.yml
   - [ ] Move view/trigger tests from tests.yml
   - [ ] Run `make test-mysqldef` to verify
