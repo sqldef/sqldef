@@ -294,7 +294,7 @@ Migrate tests from `mysqldef_test.go` to YAML-based tests loaded by `TestApply`,
 - [ ] **Migrate special tests** (4 commits):
   - [x] Commit: `TestMysqldefColumnLiteral` → tests_special.yml
   - [x] Commit: `TestMysqldefHyphenNames` → tests_special.yml
-  - [ ] Commit: `TestMysqldefKeywordIndexColumns` → tests_special.yml
+  - [x] Commit: `TestMysqldefKeywordIndexColumns` → tests_special.yml
   - [ ] Commit: `TestMysqldefMysqlDoubleDashComment` → tests_special.yml
 
 ### Phase 4: Final Cleanup

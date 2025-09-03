@@ -81,3 +81,20 @@ HyphenNames:
     CREATE TABLE `foo-bar_baz` (
       `id-bar_baz` bigint NOT NULL
     );
+KeywordIndexColumns:
+  desired: |
+    CREATE TABLE tools (
+      `character` varchar(255) COLLATE utf8mb4_bin DEFAULT NULL
+    );
+KeywordIndexColumnsAddIndex:
+  current: |
+    CREATE TABLE tools (
+      `character` varchar(255) COLLATE utf8mb4_bin DEFAULT NULL
+    );
+  desired: |
+    CREATE TABLE tools (
+      `character` varchar(255) COLLATE utf8mb4_bin DEFAULT NULL,
+      KEY `index_character`(`character`)
+    );
+  output: |
+    ALTER TABLE `tools` ADD KEY `index_character` (`character`);

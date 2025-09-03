@@ -58,23 +58,6 @@ func TestMysqldefCreateTableSyntaxError(t *testing.T) {
 
 
 
-func TestMysqldefKeywordIndexColumns(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := "CREATE TABLE tools (\n" +
-		"  `character` varchar(255) COLLATE utf8mb4_bin DEFAULT NULL\n" +
-		");\n"
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = "CREATE TABLE tools (\n" +
-		"  `character` varchar(255) COLLATE utf8mb4_bin DEFAULT NULL,\n" +
-		"  KEY `index_character`(`character`)\n" +
-		");\n"
-	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `tools` ADD KEY `index_character` (`character`);\n")
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 func TestMysqldefMysqlDoubleDashComment(t *testing.T) {
 	resetTestDatabase()
