@@ -48,32 +48,10 @@ func TestApply(t *testing.T) {
 	}
 }
 
-// TODO: non-CLI tests should be migrated to TestApply
-
 func TestMysqldefCreateTableSyntaxError(t *testing.T) {
 	resetTestDatabase()
 	assertApplyFailure(t, "CREATE TABLE users (id bigint,);", `found syntax error when parsing DDL "CREATE TABLE users (id bigint,)": syntax error at position 32`+"\n")
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 //
 // ----------------------- following tests are for CLI -----------------------
