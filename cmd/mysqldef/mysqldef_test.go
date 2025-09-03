@@ -202,36 +202,6 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 
 
 
-func TestMysqldefCreateTableKey(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-		  name varchar(40) DEFAULT NULL,
-		  created_at datetime NOT NULL
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-		  name varchar(40) DEFAULT NULL,
-		  created_at datetime NOT NULL,
-		  KEY index_name(name),
-		  UNIQUE KEY index_created_at(created_at)
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `users` ADD KEY `index_name` (`name`);\n"+
-		"ALTER TABLE `users` ADD UNIQUE KEY `index_created_at` (`created_at`);\n",
-	)
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 func TestMysqldefCreateTableWithUniqueColumn(t *testing.T) {
 	resetTestDatabase()

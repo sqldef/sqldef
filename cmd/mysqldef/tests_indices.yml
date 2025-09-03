@@ -304,3 +304,21 @@ CreateIndexDrop:
   output: |
     ALTER TABLE `users` DROP INDEX `index_created_at`;
     ALTER TABLE `users` DROP INDEX `index_name`;
+CreateTableKey:
+  current: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name varchar(40) DEFAULT NULL,
+      created_at datetime NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name varchar(40) DEFAULT NULL,
+      created_at datetime NOT NULL,
+      KEY index_name(name),
+      UNIQUE KEY index_created_at(created_at)
+    );
+  output: |
+    ALTER TABLE `users` ADD KEY `index_name` (`name`);
+    ALTER TABLE `users` ADD UNIQUE KEY `index_created_at` (`created_at`);
