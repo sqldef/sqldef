@@ -87,3 +87,21 @@ TypeAliases:
       varcharv character varying(40),
       intv integer
     );
+Boolean:
+  desired: |
+    CREATE TABLE users (
+      bool_flag BOOL,
+      boolean_flag BOOLEAN
+    );
+DefaultNull:
+  current: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL,
+      name varchar(40) DEFAULT NULL
+    );
+  output: |
+    ALTER TABLE `users` ADD COLUMN `name` varchar(40) DEFAULT null AFTER `id`;

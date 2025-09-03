@@ -253,42 +253,7 @@ func TestMysqldefMysqlDoubleDashComment(t *testing.T) {
 }
 
 
-func TestMysqldefBoolean(t *testing.T) {
-	resetTestDatabase()
 
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  bool_flag BOOL,
-		  boolean_flag BOOLEAN
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-}
-
-func TestMysqldefDefaultNull(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint(20) NOT NULL
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint(20) NOT NULL,
-		  name varchar(40) DEFAULT NULL
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `name` varchar(40) DEFAULT null AFTER `id`;\n")
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 func TestMysqldefAddNotNull(t *testing.T) {
 	resetTestDatabase()
