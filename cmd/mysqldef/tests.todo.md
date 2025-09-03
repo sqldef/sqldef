@@ -255,7 +255,7 @@ Migrate tests from `mysqldef_test.go` to YAML-based tests loaded by `TestApply`,
   - [x] Commit: `TestMysqldefIndexOption` → tests_indices.yml
   - [x] Commit: `TestMysqldefMultipleColumnIndexesOption` → tests_indices.yml
   - [x] Commit: `TestMysqldefFulltextIndex` → tests_indices.yml
-  - [ ] Commit: `TestMysqldefCreateIndex` → tests_indices.yml
+  - [x] Commit: `TestMysqldefCreateIndex` → tests_indices.yml
   - [ ] Commit: `TestMysqldefCreateTableKey` → tests_indices.yml
   - [ ] Commit: `TestMysqldefCreateTableWithUniqueColumn` → tests_indices.yml
   - [ ] Commit: `TestMysqldefCreateTableChangeUniqueColumn` → tests_indices.yml

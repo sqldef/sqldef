@@ -201,31 +201,6 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 
 
 
-func TestMysqldefCreateIndex(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-		  name varchar(40) DEFAULT NULL,
-		  created_at datetime NOT NULL
-		);`,
-	)
-	assertApply(t, createTable)
-
-	createIndex1 := "CREATE INDEX index_name ON users (name);\n"
-	createIndex2 := "CREATE UNIQUE INDEX index_created_at ON users (created_at);\n"
-	assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+createIndex1+createIndex2)
-	assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
-
-	assertApplyOutput(t, createTable, applyPrefix+"-- Skipped: ALTER TABLE `users` DROP INDEX `index_created_at`;\n"+"-- Skipped: ALTER TABLE `users` DROP INDEX `index_name`;\n")
-	assertApplyOptionsOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `users` DROP INDEX `index_created_at`;\n"+
-		"ALTER TABLE `users` DROP INDEX `index_name`;\n",
-		"--enable-drop",
-	)
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 func TestMysqldefCreateTableKey(t *testing.T) {
 	resetTestDatabase()
