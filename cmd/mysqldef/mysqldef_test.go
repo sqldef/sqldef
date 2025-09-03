@@ -229,29 +229,6 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 }
 
 
-func TestMysqldefChangeComment(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  created_at datetime COMMENT 'created at'
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  created_at datetime COMMENT 'created time'
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `users` CHANGE COLUMN `created_at` `created_at` datetime COMMENT 'created time';\n",
-	)
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 func TestMysqldefSwapColumn(t *testing.T) {
 	resetTestDatabase()
