@@ -200,48 +200,6 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 
 
 
-func TestMysqldefFulltextIndex(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE posts (
-		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-		  title varchar(40) DEFAULT NULL,
-		  FULLTEXT KEY title_fulltext_index (title) /*!50100 WITH PARSER ngram */
-		);
-		`,
-	)
-	output := stripHeredoc(`
-		CREATE TABLE posts (
-		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-		  title varchar(40) DEFAULT NULL,
-		  FULLTEXT KEY title_fulltext_index (title) /*!50100 WITH PARSER ngram */
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+output)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE posts (
-		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-		  title varchar(40) DEFAULT NULL
-		);`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+"-- Skipped: ALTER TABLE `posts` DROP INDEX `title_fulltext_index`;\n")
-	assertApplyOptionsOutput(t, createTable, applyPrefix+"ALTER TABLE `posts` DROP INDEX `title_fulltext_index`;\n", "--enable-drop")
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE posts (
-		  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-		  title varchar(40) DEFAULT NULL,
-		  FULLTEXT KEY title_fulltext_index (title) /*!50100 WITH PARSER ngram */
-		);`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `posts` ADD FULLTEXT KEY `title_fulltext_index` (`title`) WITH parser ngram;\n")
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 func TestMysqldefCreateIndex(t *testing.T) {
 	resetTestDatabase()

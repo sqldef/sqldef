@@ -227,3 +227,44 @@ MultipleColumnIndexesOptionAddWithoutUsingThenCaseInsensitive:
       INDEX index_id (registered_at, role_type) using btree
     );
   output: ""
+FulltextIndex:
+  desired: |
+    CREATE TABLE posts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      title varchar(40) DEFAULT NULL,
+      FULLTEXT KEY title_fulltext_index (title) /*!50100 WITH PARSER ngram */
+    );
+  output: |
+    CREATE TABLE posts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      title varchar(40) DEFAULT NULL,
+      FULLTEXT KEY title_fulltext_index (title) /*!50100 WITH PARSER ngram */
+    );
+FulltextIndexDrop:
+  current: |
+    CREATE TABLE posts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      title varchar(40) DEFAULT NULL,
+      FULLTEXT KEY title_fulltext_index (title) /*!50100 WITH PARSER ngram */
+    );
+  desired: |
+    CREATE TABLE posts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      title varchar(40) DEFAULT NULL
+    );
+  output: |
+    ALTER TABLE `posts` DROP INDEX `title_fulltext_index`;
+FulltextIndexReAdd:
+  current: |
+    CREATE TABLE posts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      title varchar(40) DEFAULT NULL
+    );
+  desired: |
+    CREATE TABLE posts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      title varchar(40) DEFAULT NULL,
+      FULLTEXT KEY title_fulltext_index (title) /*!50100 WITH PARSER ngram */
+    );
+  output: |
+    ALTER TABLE `posts` ADD FULLTEXT KEY `title_fulltext_index` (`title`) WITH parser ngram;
