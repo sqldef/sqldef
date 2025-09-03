@@ -209,18 +209,18 @@ Migrate tests from `mysqldef_test.go` to YAML-based tests loaded by `TestApply`,
   - [x] Move generated column tests from tests.yml
   - [x] Run `make test-mysqldef` to verify
   - [x] Commit changes
-- [ ] **Commit 6**: Create tests_views_triggers.yml
-  - [ ] Move view/trigger tests from tests.yml
-  - [ ] Run `make test-mysqldef` to verify
-  - [ ] Commit changes
-- [ ] **Commit 7**: Create tests_special.yml  
-  - [ ] Move special case tests from tests.yml
-  - [ ] Run `make test-mysqldef` to verify
-  - [ ] Commit changes
-- [ ] **Commit 8**: Create tests_mysql57.yml
-  - [ ] Move MySQL 5.7 specific tests from tests.yml
-  - [ ] Run `make test-mysqldef` to verify
-  - [ ] Commit changes
+- [x] **Commit 6**: Create tests_views_triggers.yml
+  - [x] Move view/trigger tests from tests.yml
+  - [x] Run `make test-mysqldef` to verify
+  - [x] Commit changes
+- [x] **Commit 7**: Create tests_special.yml  
+  - [x] Move special case tests from tests.yml
+  - [x] Run `make test-mysqldef` to verify
+  - [x] Commit changes
+- [x] **Commit 8**: Create tests_mysql57.yml
+  - [x] Move MySQL 5.7 specific tests from tests.yml
+  - [x] Run `make test-mysqldef` to verify
+  - [x] Commit changes
 - [ ] **Commit 9**: Create tests_mysql80.yml
   - [ ] Move MySQL 8.0+ specific tests from tests.yml
   - [ ] Run `make test-mysqldef` to verify
