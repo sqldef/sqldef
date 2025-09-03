@@ -238,7 +238,7 @@ Migrate tests from `mysqldef_test.go` to YAML-based tests loaded by `TestApply`,
   - [x] Commit: `TestMysqldefCreateTableAddAutoIncrementPrimaryKey` → tests_tables.yml
   - [x] Commit: `TestMysqldefCreateTableKeepAutoIncrement` → tests_tables.yml
   - [x] Commit: `TestMysqldefAddColumn` → tests_tables.yml
-  - [ ] Commit: `TestMysqldefAddColumnAfter` → tests_tables.yml
+  - [x] Commit: `TestMysqldefAddColumnAfter` → tests_tables.yml
   - [ ] Commit: `TestMysqldefAddColumnWithNull` → tests_tables.yml
   - [ ] Commit: `TestMysqldefChangeColumn` → tests_tables.yml
   - [ ] Commit: `TestMysqldefChangeColumnLength` → tests_tables.yml
