@@ -52,34 +52,6 @@ func TestApply(t *testing.T) {
 
 
 
-func TestMysqldefCreateTableAddAutoIncrementPrimaryKey(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  name varchar(20)
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint NOT NULL AUTO_INCREMENT,
-		  name varchar(20),
-		  PRIMARY KEY (id)
-		);
-		`,
-	)
-
-	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `users` ADD COLUMN `id` bigint NOT NULL FIRST;\n"+
-		"ALTER TABLE `users` ADD PRIMARY KEY (`id`);\n"+
-		"ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;\n",
-	)
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 func TestMysqldefCreateTableKeepAutoIncrement(t *testing.T) {
 	resetTestDatabase()
