@@ -209,3 +209,31 @@ CreateTableKeepAutoIncrement:
     );
   output: |
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
+AddColumn:
+  current: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name varchar(40) DEFAULT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name varchar(40) DEFAULT NULL,
+      created_at datetime NOT NULL
+    );
+  output: |
+    ALTER TABLE `users` ADD COLUMN `created_at` datetime NOT NULL AFTER `name`;
+DropColumn:
+  current: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name varchar(40) DEFAULT NULL,
+      created_at datetime NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      created_at datetime NOT NULL
+    );
+  output: |
+    ALTER TABLE `users` DROP COLUMN `name`;
