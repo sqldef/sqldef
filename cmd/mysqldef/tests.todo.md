@@ -241,7 +241,7 @@ Migrate tests from `mysqldef_test.go` to YAML-based tests loaded by `TestApply`,
   - [x] Commit: `TestMysqldefAddColumnAfter` → tests_tables.yml
   - [x] Commit: `TestMysqldefAddColumnWithNull` → tests_tables.yml
   - [x] Commit: `TestMysqldefChangeColumn` → tests_tables.yml
-  - [ ] Commit: `TestMysqldefChangeColumnLength` → tests_tables.yml
+  - [x] Commit: `TestMysqldefChangeColumnLength` → tests_tables.yml
   - [ ] Commit: `TestMysqldefChangeColumnBinary` → tests_tables.yml
   - [ ] Commit: `TestMysqldefChangeColumnCollate` → tests_tables.yml
   - [ ] Commit: `TestMysqldefChangeEnumColumn` → tests_tables.yml
