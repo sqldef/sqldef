@@ -76,3 +76,8 @@ ColumnLiteral:
       `id` bigint NOT NULL,
       `name` text
       );
+HyphenNames:
+  desired: |
+    CREATE TABLE `foo-bar_baz` (
+      `id-bar_baz` bigint NOT NULL
+    );
