@@ -105,3 +105,72 @@ DefaultNull:
     );
   output: |
     ALTER TABLE `users` ADD COLUMN `name` varchar(40) DEFAULT null AFTER `id`;
+AddNotNull:
+  current: |
+    CREATE TABLE users (
+      name varchar(255) DEFAULT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      name varchar(255) NOT NULL
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(255) NOT NULL;
+CreateTableAddColumnWithCharsetAndNotNull:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+      PRIMARY KEY (id)
+    );
+  output: |
+    ALTER TABLE `users` ADD COLUMN `name` varchar(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL AFTER `id`;
+OnUpdate:
+  current: |
+    CREATE TABLE users (
+      name varchar(40),
+      updated_at datetime DEFAULT current_timestamp ON UPDATE current_timestamp,
+      created_at datetime NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      name varchar(40),
+      updated_at datetime DEFAULT current_timestamp,
+      created_at datetime NOT NULL
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `updated_at` `updated_at` datetime DEFAULT current_timestamp;
+OnUpdateAdd:
+  current: |
+    CREATE TABLE users (
+      name varchar(40),
+      updated_at datetime DEFAULT current_timestamp,
+      created_at datetime NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      name varchar(40),
+      updated_at datetime DEFAULT current_timestamp ON UPDATE current_timestamp,
+      created_at datetime NOT NULL
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `updated_at` `updated_at` datetime DEFAULT current_timestamp ON UPDATE current_timestamp;
+OnUpdateParentheses:
+  current: |
+    CREATE TABLE users (
+      name varchar(40),
+      updated_at datetime DEFAULT current_timestamp ON UPDATE current_timestamp,
+      created_at datetime NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      name varchar(40),
+      updated_at datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+      created_at datetime NOT NULL
+    );
+  output: ""
