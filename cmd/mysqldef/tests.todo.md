@@ -284,7 +284,7 @@ Migrate tests from `mysqldef_test.go` to YAML-based tests loaded by `TestApply`,
 
 - [ ] **Migrate views/triggers tests** (5 commits):
   - [x] Commit: `TestMysqldefView` → tests_views_triggers.yml
-  - [ ] Commit: `TestMysqldefTriggerInsert` → tests_views_triggers.yml
+  - [x] Commit: `TestMysqldefTriggerInsert` → tests_views_triggers.yml
   - [ ] Commit: `TestMysqldefTriggerSetNew` → tests_views_triggers.yml
   - [ ] Commit: `TestMysqldefTriggerBeginEnd` → tests_views_triggers.yml
   - [ ] Commit: `TestMysqldefTriggerIf` → tests_views_triggers.yml

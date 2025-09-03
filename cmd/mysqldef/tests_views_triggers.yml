@@ -143,3 +143,95 @@ ViewDropsWhenEmptyDesired:
     DROP TABLE `posts`;
     DROP TABLE `users`;
     DROP VIEW `foo`;
+TriggerInsert:
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text
+    );
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      log varchar(20),
+      dt datetime
+    );
+    CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());
+TriggerInsertUpdate:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text
+    );
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      log varchar(20),
+      dt datetime
+    );
+    CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text
+    );
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      log varchar(20),
+      dt datetime
+    );
+    CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());
+  output: |
+    DROP TRIGGER `insert_log`;
+    CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());
+TriggerInsertBeforeUpdate:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text
+    );
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      log varchar(20),
+      dt datetime
+    );
+    CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text
+    );
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      log varchar(20),
+      dt datetime
+    );
+    CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());
+    CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());
+  output: |
+    CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());
+TriggerInsertBeforeUpdateChange:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text
+    );
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      log varchar(20),
+      dt datetime
+    );
+    CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());
+    CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text
+    );
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      log varchar(20),
+      dt datetime
+    );
+    CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());
+    CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());
+  output: |
+    DROP TRIGGER `insert_log_before_update`;
+    CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());

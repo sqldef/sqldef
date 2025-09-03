@@ -118,44 +118,6 @@ func TestMysqldefMysqlDoubleDashComment(t *testing.T) {
 
 
 
-func TestMysqldefTriggerInsert(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint NOT NULL,
-		  name text
-		);
-		CREATE TABLE logs (
-		  id bigint NOT NULL,
-		  log varchar(20),
-		  dt datetime
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTrigger := "CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());\n"
-	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTrigger)
-	assertApplyOutput(t, createTable+createTrigger, nothingModified)
-
-	createTrigger = "CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());\n"
-	assertApplyOptionsOutput(t, createTable+createTrigger, applyPrefix+
-		"DROP TRIGGER `insert_log`;\n"+
-		"CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());\n", "--enable-drop")
-	assertApplyOutput(t, createTable+createTrigger, nothingModified)
-
-	createTriggerForBeforeUpdate := "CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());\n"
-	assertApplyOutput(t, createTable+createTriggerForBeforeUpdate, applyPrefix+createTriggerForBeforeUpdate)
-	assertApplyOutput(t, createTable+createTriggerForBeforeUpdate, nothingModified)
-
-	createTriggerForBeforeUpdate = "CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());\n"
-	assertApplyOptionsOutput(t, createTable+createTriggerForBeforeUpdate, applyPrefix+
-		"DROP TRIGGER `insert_log_before_update`;\n"+
-		"CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());\n", "--enable-drop")
-	assertApplyOutput(t, createTable+createTriggerForBeforeUpdate, nothingModified)
-}
 
 func TestMysqldefTriggerSetNew(t *testing.T) {
 	resetTestDatabase()
