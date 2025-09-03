@@ -268,3 +268,39 @@ FulltextIndexReAdd:
     );
   output: |
     ALTER TABLE `posts` ADD FULLTEXT KEY `title_fulltext_index` (`title`) WITH parser ngram;
+CreateIndex:
+  current: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name varchar(40) DEFAULT NULL,
+      created_at datetime NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name varchar(40) DEFAULT NULL,
+      created_at datetime NOT NULL
+    );
+    CREATE INDEX index_name ON users (name);
+    CREATE UNIQUE INDEX index_created_at ON users (created_at);
+  output: |
+    CREATE INDEX index_name ON users (name);
+    CREATE UNIQUE INDEX index_created_at ON users (created_at);
+CreateIndexDrop:
+  current: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name varchar(40) DEFAULT NULL,
+      created_at datetime NOT NULL
+    );
+    CREATE INDEX index_name ON users (name);
+    CREATE UNIQUE INDEX index_created_at ON users (created_at);
+  desired: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name varchar(40) DEFAULT NULL,
+      created_at datetime NOT NULL
+    );
+  output: |
+    ALTER TABLE `users` DROP INDEX `index_created_at`;
+    ALTER TABLE `users` DROP INDEX `index_name`;
