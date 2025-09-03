@@ -162,3 +162,20 @@ CreateTableChangePrimaryKey:
   output: |
     ALTER TABLE `friends` DROP PRIMARY KEY;
     ALTER TABLE `friends` ADD PRIMARY KEY (`user_id`, `friend_id`);
+CreateTableChangePrimaryKeyWithComment:
+  current: |
+    CREATE TABLE friends (
+      user_id bigint NOT NULL PRIMARY KEY,
+      friend_id bigint NOT NULL,
+      created_at datetime NOT NULL
+    );
+  desired: |
+    CREATE TABLE friends (
+      user_id bigint NOT NULL,
+      friend_id bigint NOT NULL,
+      created_at datetime NOT NULL,
+      PRIMARY KEY (user_id, friend_id) COMMENT 'new primary key'
+    );
+  output: |
+    ALTER TABLE `friends` DROP PRIMARY KEY;
+    ALTER TABLE `friends` ADD PRIMARY KEY (`user_id`, `friend_id`) COMMENT 'new primary key';
