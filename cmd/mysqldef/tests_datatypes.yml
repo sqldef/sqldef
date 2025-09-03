@@ -174,3 +174,27 @@ OnUpdateParentheses:
       created_at datetime NOT NULL
     );
   output: ""
+CurrentTimestampWithPrecision:
+  current: |
+    CREATE TABLE users (
+      created_at datetime(6) DEFAULT current_timestamp(6)
+    );
+  desired: |
+    CREATE TABLE users (
+      created_at datetime(6) DEFAULT current_timestamp(6),
+      updated_at datetime(6) DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6)
+    );
+  output: |
+    ALTER TABLE `users` ADD COLUMN `updated_at` datetime(6) DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6) AFTER `created_at`;
+EnumValues:
+  current: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL,
+      authorities enum('normal', 'admin') NOT NULL DEFAULT 'normal'
+    );
+  output: |
+    ALTER TABLE `users` ADD COLUMN `authorities` enum('normal', 'admin') NOT NULL DEFAULT 'normal' AFTER `id`;
