@@ -179,3 +179,18 @@ CreateTableChangePrimaryKeyWithComment:
   output: |
     ALTER TABLE `friends` DROP PRIMARY KEY;
     ALTER TABLE `friends` ADD PRIMARY KEY (`user_id`, `friend_id`) COMMENT 'new primary key';
+CreateTableAddAutoIncrementPrimaryKey:
+  current: |
+    CREATE TABLE users (
+      name varchar(20)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL AUTO_INCREMENT,
+      name varchar(20),
+      PRIMARY KEY (id)
+    );
+  output: |
+    ALTER TABLE `users` ADD COLUMN `id` bigint NOT NULL FIRST;
+    ALTER TABLE `users` ADD PRIMARY KEY (`id`);
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;

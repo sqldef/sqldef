@@ -233,9 +233,9 @@ Migrate tests from `mysqldef_test.go` to YAML-based tests loaded by `TestApply`,
 
 ### Phase 3: Migrate Go Tests (One commit per test function)
 - [ ] **Migrate tables tests** (14 commits):
-  - [ ] Commit: `TestMysqldefCreateTableChangePrimaryKey` → tests_tables.yml
-  - [ ] Commit: `TestMysqldefCreateTableChangePrimaryKeyWithComment` → tests_tables.yml
-  - [ ] Commit: `TestMysqldefCreateTableAddAutoIncrementPrimaryKey` → tests_tables.yml
+  - [x] Commit: `TestMysqldefCreateTableChangePrimaryKey` → tests_tables.yml
+  - [x] Commit: `TestMysqldefCreateTableChangePrimaryKeyWithComment` → tests_tables.yml
+  - [x] Commit: `TestMysqldefCreateTableAddAutoIncrementPrimaryKey` → tests_tables.yml
   - [ ] Commit: `TestMysqldefCreateTableKeepAutoIncrement` → tests_tables.yml
   - [ ] Commit: `TestMysqldefAddColumn` → tests_tables.yml
   - [ ] Commit: `TestMysqldefAddColumnAfter` → tests_tables.yml
