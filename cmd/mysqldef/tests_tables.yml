@@ -325,3 +325,14 @@ ChangeEnumColumn:
     );
   output: |
     ALTER TABLE `users` CHANGE COLUMN `active` `active` enum('active', 'inactive');
+ChangeComment:
+  current: |
+    CREATE TABLE users (
+      created_at datetime COMMENT 'created at'
+    );
+  desired: |
+    CREATE TABLE users (
+      created_at datetime COMMENT 'created time'
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `created_at` `created_at` datetime COMMENT 'created time';
