@@ -273,8 +273,8 @@ Migrate tests from `mysqldef_test.go` to YAML-based tests loaded by `TestApply`,
   - [x] Commit: `TestMysqldefAddNotNull` → tests_datatypes.yml
   - [x] Commit: `TestMysqldefCreateTableAddColumnWithCharsetAndNotNull` → tests_datatypes.yml
   - [x] Commit: `TestMysqldefOnUpdate` → tests_datatypes.yml
-  - [ ] Commit: `TestMysqldefCurrentTimestampWithPrecision` → tests_datatypes.yml
-  - [ ] Commit: `TestMysqldefEnumValues` → tests_datatypes.yml
+  - [x] Commit: `TestMysqldefCurrentTimestampWithPrecision` → tests_datatypes.yml
+  - [x] Commit: `TestMysqldefEnumValues` → tests_datatypes.yml
   - [ ] Commit: `TestMysqldefDefaultValue` → tests_datatypes.yml
   - [ ] Commit: `TestMysqldefNegativeDefault` → tests_datatypes.yml
   - [ ] Commit: `TestMysqldefDecimalDefault` → tests_datatypes.yml

@@ -259,51 +259,6 @@ func TestMysqldefMysqlDoubleDashComment(t *testing.T) {
 
 
 
-func TestMysqldefCurrentTimestampWithPrecision(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  created_at datetime(6) DEFAULT current_timestamp(6)
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  created_at datetime(6) DEFAULT current_timestamp(6),
-		  updated_at datetime(6) DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6)
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `updated_at` datetime(6) DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6) AFTER `created_at`;\n")
-	assertApplyOutput(t, createTable, nothingModified)
-}
-
-func TestMysqldefEnumValues(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint(20) NOT NULL
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint(20) NOT NULL,
-		  authorities enum('normal', 'admin') NOT NULL DEFAULT 'normal'
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE `users` ADD COLUMN `authorities` enum('normal', 'admin') NOT NULL DEFAULT 'normal' AFTER `id`;\n")
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 func TestMysqldefView(t *testing.T) {
 	resetTestDatabase()
