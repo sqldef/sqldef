@@ -80,3 +80,10 @@ AutoIncrementNotNull:
     CREATE TABLE users2 (
       id BIGINT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY
     );
+TypeAliases:
+  desired: |
+    CREATE TABLE users (
+      charv character(40),
+      varcharv character varying(40),
+      intv integer
+    );
