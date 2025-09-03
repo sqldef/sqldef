@@ -71,3 +71,63 @@ AddIndexWithKeyLength:
     ALTER TABLE `users` ADD INDEX `index_name`(`name`(255));
   output: |
     ALTER TABLE `users` ADD INDEX `index_name`(`name`(255));
+IndexOption:
+  current: |
+    CREATE TABLE users (
+      id int(11) NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      KEY index_id (id) USING BTREE
+    );
+  output: |
+    ALTER TABLE `users` ADD KEY `index_id` (`id`) using BTREE;
+IndexOptionCaseInsensitive:
+  current: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      KEY index_id (id) USING BTREE
+    );
+  desired: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      KEY index_id (id) using btree
+    );
+  output: ""
+IndexOptionNoUsing:
+  current: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      KEY index_id (id) USING BTREE
+    );
+  desired: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      KEY index_id (id)
+    );
+  output: ""
+IndexOptionAddWithoutUsing:
+  current: |
+    CREATE TABLE users (
+      id int(11) NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      KEY index_id (id)
+    );
+  output: |
+    ALTER TABLE `users` ADD KEY `index_id` (`id`);
+IndexOptionAddWithoutUsingThenWith:
+  current: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      KEY index_id (id)
+    );
+  desired: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      KEY index_id (id) USING BTREE
+    );
+  output: ""
