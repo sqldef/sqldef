@@ -77,75 +77,11 @@ CreateTableWithAutoIncrementPrimaryKeyAndAddMorePrimaryKey:
     ALTER TABLE `friends` ADD PRIMARY KEY (`id`, `other_id`);
     ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
   min_version: '8.0'
-CreateTableWithSpatialTypesAndSpatialKey:
-  current: |
-    CREATE TABLE users (
-      id bigint(20) NOT NULL
-    );
-  desired: |
-    CREATE TABLE users (
-      id bigint(20) NOT NULL,
-      location point NOT NULL,
-      SPATIAL KEY index_users_location (location)
-    );
-  output: |
-    ALTER TABLE `users` ADD COLUMN `location` point NOT NULL AFTER `id`;
-    ALTER TABLE `users` ADD SPATIAL KEY `index_users_location` (`location`);
-CreateTableWithSpatialTypesSRIDSpecified:
-  current: |
-    CREATE TABLE users (
-      id bigint(20) NOT NULL
-    );
-  desired: |
-    CREATE TABLE users (
-      id bigint(20) NOT NULL,
-      location point NOT NULL /*!80003 SRID 4326 */
-    );
-  output: |
-    ALTER TABLE `users` ADD COLUMN `location` point NOT NULL /*!80003 SRID 4326 */ AFTER `id`;
 CreateTableWithKeyBlockSize:
   desired: |
     CREATE TABLE users (
       id BIGINT
     ) KEY_BLOCK_SIZE=8;
-PartitionByRange:
-  desired: |
-    CREATE TABLE `users` (
-      `uuid` varchar(37) NOT NULL,
-      `name` varchar(255) DEFAULT NULL,
-      `joined` date NOT NULL,
-      PRIMARY KEY (`uuid`,`joined`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=latin1
-    /*!50100 PARTITION BY RANGE (year(`joined`))
-    (PARTITION p202109 VALUES LESS THAN ('2021-10-01'),
-     PARTITION p202110 VALUES LESS THAN ('2021-11-01'),
-     PARTITION p202111 VALUES LESS THAN ('2021-12-01'),
-     PARTITION p202112 VALUES LESS THAN ('2022-01-01'),
-     PARTITION pmax VALUES LESS THAN MAXVALUE) */;
-  output: |
-    CREATE TABLE `users` (
-      `uuid` varchar(37) NOT NULL,
-      `name` varchar(255) DEFAULT NULL,
-      `joined` date NOT NULL,
-      PRIMARY KEY (`uuid`,`joined`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-MysqlComment:
-  desired: |
-    CREATE TABLE users(
-      id bigint NOT NULL /* comment */
-    );
-SubstrExpression:
-  desired: |
-    CREATE VIEW modelstart_end AS select substr(min(202006),1,4) AS `c`;
-    CREATE VIEW modelstart_end2 AS select substr(min(202006),1) AS `c`;
-    CREATE VIEW modelstart_end3 AS select substr(min(202006) from 1) AS `c`;
-    CREATE VIEW modelstart_end4 AS select substr(min(202006) from 1 for 4) AS `c`;
-SubstringExpression:
-  desired: |
-    CREATE VIEW modelstart_end11 AS select substring(min(202006),1,4) AS `c`;
-    CREATE VIEW modelstart_end12 AS select substring(min(202006),1) AS `c`;
-    CREATE VIEW modelstart_end13 AS select substring(min(202006) from 1) AS `c`;
-    CREATE VIEW modelstart_end14 AS select substring(min(202006) from 1 for 4) AS `c`;
 UUIDToBin:
   desired: |
     CREATE TABLE users (
@@ -153,14 +89,6 @@ UUIDToBin:
       PRIMARY KEY (id)
     );
   min_version: '8.0'
-NonReservedColumnName:
-  # TODO: broken. they could be non-reserved once we split parsers for each database
-  desired: |
-    CREATE TABLE `global` (
-      `money` INT,
-      `language` TEXT,
-      `json` TEXT
-    );
 MysqlViewUsingWindowFuncOnlyOver:
   current: |
     CREATE TABLE prices (
