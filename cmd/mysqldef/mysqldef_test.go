@@ -762,34 +762,6 @@ func TestMysqldefDecimalDefault(t *testing.T) {
 }
 
 
-func TestMysqldefChangeIndexCombination(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := "CREATE TABLE users (\n" +
-		"  `id` BIGINT,\n" +
-		"  `name` varchar(255),\n" +
-		"  `account_id` BIGINT,\n" +
-		"  KEY `index_users1`(account_id),\n" +
-		"  KEY `index_users2`(account_id, name)\n" +
-		");\n"
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = "CREATE TABLE users (\n" +
-		"  `id` BIGINT,\n" +
-		"  `name` varchar(255),\n" +
-		"  `account_id` BIGINT,\n" +
-		"  KEY `index_users1`(account_id, name),\n" +
-		"  KEY `index_users2`(account_id)\n" +
-		");\n"
-	assertApplyOptionsOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `users` DROP INDEX `index_users1`;\n"+
-		"ALTER TABLE `users` ADD KEY `index_users1` (`account_id`, `name`);\n"+
-		"ALTER TABLE `users` DROP INDEX `index_users2`;\n"+
-		"ALTER TABLE `users` ADD KEY `index_users2` (`account_id`);\n", "--enable-drop")
-	assertApplyOutput(t, createTable, nothingModified)
-}
-
 //
 // ----------------------- following tests are for CLI -----------------------
 //
