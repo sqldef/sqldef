@@ -181,12 +181,14 @@ Migrate tests from `mysqldef_test.go` to YAML-based tests loaded by `TestApply`,
 
 ## Implementation Steps
 
+**IMPORTANT**: Remember to check off completed tasks in this file before committing!
+
 ### Phase 1: Initial Setup & First Split
-- [ ] **Commit 1**: Update TestApply to load multiple YAML files + Create tests_tables.yml from existing tests.yml
-  - [ ] Update TestApply function to load all test_*.yml files 
-  - [ ] Create tests_tables.yml with table-related tests from existing tests.yml
-  - [ ] Run `make test-mysqldef` to verify
-  - [ ] Commit changes
+- [x] **Commit 1**: Update TestApply to load multiple YAML files + Create tests_tables.yml from existing tests.yml
+  - [x] Update TestApply function to load all test_*.yml files 
+  - [x] Create tests_tables.yml with table-related tests from existing tests.yml
+  - [x] Run `make test-mysqldef` to verify
+  - [x] Commit changes
 
 ### Phase 2: Split Existing tests.yml (One commit per file)
 - [ ] **Commit 2**: Create tests_indices.yml 

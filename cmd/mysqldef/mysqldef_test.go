@@ -31,7 +31,7 @@ func TestApply(t *testing.T) {
 	}
 	defer db.Close()
 
-	tests, err := testutils.ReadTests("tests.yml")
+	tests, err := testutils.ReadTests("tests*.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
