@@ -358,3 +358,17 @@ CreateTableChangeUniqueColumn:
     );
   output: |
     ALTER TABLE `users` ADD UNIQUE KEY `name`(`name`);
+IndexWithDot:
+  current: |
+    CREATE TABLE users (
+      `id` BIGINT,
+      `account_id` BIGINT
+    );
+  desired: |
+    CREATE TABLE users (
+      `id` BIGINT,
+      `account_id` BIGINT,
+      KEY `account.id`(account_id)
+    );
+  output: |
+    ALTER TABLE `users` ADD KEY `account.id` (`account_id`);
