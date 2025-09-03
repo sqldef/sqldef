@@ -267,3 +267,12 @@ TriggerSetNewComplex:
     CREATE TRIGGER `set_logical_uniqueness_on_users2` before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = case when NEW.deleted_at is null then 1 when NEW.deleted_at is not null then null end;
   output: |
     CREATE TRIGGER `set_logical_uniqueness_on_users2` before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = case when NEW.deleted_at is null then 1 when NEW.deleted_at is not null then null end;
+TriggerBeginEnd:
+  desired: |
+    CREATE TABLE test_trigger (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      PRIMARY KEY (id)
+    );
+    CREATE TRIGGER `BEFORE_UPDATE_test_trigger` before insert ON `test_trigger` FOR EACH ROW begin
+    set NEW.id = NEW.id + 10;
+    end;
