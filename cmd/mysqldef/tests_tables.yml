@@ -145,3 +145,20 @@ RemoveTableComment:
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
   output: |
     ALTER TABLE `prefecture` COMMENT = '';
+CreateTableChangePrimaryKey:
+  current: |
+    CREATE TABLE friends (
+      user_id bigint NOT NULL PRIMARY KEY,
+      friend_id bigint NOT NULL,
+      created_at datetime NOT NULL
+    );
+  desired: |
+    CREATE TABLE friends (
+      user_id bigint NOT NULL,
+      friend_id bigint NOT NULL,
+      created_at datetime NOT NULL,
+      PRIMARY KEY (user_id, friend_id)
+    );
+  output: |
+    ALTER TABLE `friends` DROP PRIMARY KEY;
+    ALTER TABLE `friends` ADD PRIMARY KEY (`user_id`, `friend_id`);

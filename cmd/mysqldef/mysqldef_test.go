@@ -50,36 +50,6 @@ func TestApply(t *testing.T) {
 
 // TODO: non-CLI tests should be migrated to TestApply
 
-func TestMysqldefCreateTableChangePrimaryKey(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE friends (
-		  user_id bigint NOT NULL PRIMARY KEY,
-		  friend_id bigint NOT NULL,
-		  created_at datetime NOT NULL
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE friends (
-		  user_id bigint NOT NULL,
-		  friend_id bigint NOT NULL,
-		  created_at datetime NOT NULL,
-		  PRIMARY KEY (user_id, friend_id)
-		);
-		`,
-	)
-
-	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `friends` DROP PRIMARY KEY;\n"+
-		"ALTER TABLE `friends` ADD PRIMARY KEY (`user_id`, `friend_id`);\n",
-	)
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 func TestMysqldefCreateTableChangePrimaryKeyWithComment(t *testing.T) {
 	resetTestDatabase()
