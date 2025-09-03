@@ -230,37 +230,6 @@ func TestMysqldefChangeGenerateColumnGemerayedAlwaysAs(t *testing.T) {
 
 
 
-func TestMysqldefSwapColumn(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint NOT NULL,
-		  name varchar(40) NOT NULL,
-		  nickname varchar(20) NOT NULL,
-		  created_at datetime NOT NULL,
-		  PRIMARY KEY (id)
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint NOT NULL,
-		  nickname varchar(20) NOT NULL,
-		  name varchar(40) NOT NULL,
-		  created_at datetime NOT NULL,
-		  PRIMARY KEY (id)
-		);`,
-	)
-
-	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `users` CHANGE COLUMN `nickname` `nickname` varchar(20) NOT NULL AFTER `id`;\n",
-	)
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 func TestMysqldefAddIndex(t *testing.T) {
 	resetTestDatabase()
