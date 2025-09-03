@@ -237,3 +237,17 @@ DropColumn:
     );
   output: |
     ALTER TABLE `users` DROP COLUMN `name`;
+AddColumnAfter:
+  current: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      created_at datetime NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name varchar(40) NOT NULL,
+      created_at datetime NOT NULL
+    );
+  output: |
+    ALTER TABLE `users` ADD COLUMN `name` varchar(40) NOT NULL AFTER `id`;
