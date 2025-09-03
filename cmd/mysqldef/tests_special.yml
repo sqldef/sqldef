@@ -98,3 +98,14 @@ KeywordIndexColumnsAddIndex:
     );
   output: |
     ALTER TABLE `tools` ADD KEY `index_character` (`character`);
+MysqlDoubleDashComment:
+  desired: |
+    -- comment 1
+    CREATE TABLE users(
+      id bigint NOT NULL
+    );
+    -- comment 2
+  output: |
+    CREATE TABLE users(
+      id bigint NOT NULL
+    );

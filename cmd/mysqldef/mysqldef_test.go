@@ -59,19 +59,6 @@ func TestMysqldefCreateTableSyntaxError(t *testing.T) {
 
 
 
-func TestMysqldefMysqlDoubleDashComment(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users(
-		  id bigint NOT NULL
-		);
-		`,
-	)
-	createTableWithComments := "-- comment 1\n" + createTable + "-- comment 2\n"
-	assertApplyOutput(t, createTableWithComments, applyPrefix+createTable)
-	assertApplyOutput(t, createTableWithComments, nothingModified)
-}
 
 
 
