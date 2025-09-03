@@ -251,7 +251,7 @@ Migrate tests from `mysqldef_test.go` to YAML-based tests loaded by `TestApply`,
 - [ ] **Migrate indices tests** (12 commits):
   - [x] Commit: `TestMysqldefCreateTableAddIndexWithKeyLength` → tests_indices.yml
   - [x] Commit: `TestMysqldefAddIndex` → tests_indices.yml
-  - [ ] Commit: `TestMysqldefAddIndexWithKeyLength` → tests_indices.yml
+  - [x] Commit: `TestMysqldefAddIndexWithKeyLength` → tests_indices.yml
   - [ ] Commit: `TestMysqldefIndexOption` → tests_indices.yml
   - [ ] Commit: `TestMysqldefMultipleColumnIndexesOption` → tests_indices.yml
   - [ ] Commit: `TestMysqldefFulltextIndex` → tests_indices.yml
