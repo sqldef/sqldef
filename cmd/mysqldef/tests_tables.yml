@@ -279,3 +279,16 @@ ChangeColumn:
   output: |
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint UNSIGNED NOT NULL;
     ALTER TABLE `users` CHANGE COLUMN `name` `name` char(40);
+ChangeColumnLength:
+  current: |
+    CREATE TABLE users (
+      id int UNSIGNED NOT NULL,
+      name varchar(255) COLLATE utf8mb4_bin DEFAULT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id int UNSIGNED NOT NULL,
+      name varchar(1000) COLLATE utf8mb4_bin DEFAULT NULL
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(1000) COLLATE utf8mb4_bin DEFAULT null;
