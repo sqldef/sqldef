@@ -336,3 +336,22 @@ ChangeComment:
     );
   output: |
     ALTER TABLE `users` CHANGE COLUMN `created_at` `created_at` datetime COMMENT 'created time';
+SwapColumn:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(40) NOT NULL,
+      nickname varchar(20) NOT NULL,
+      created_at datetime NOT NULL,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      nickname varchar(20) NOT NULL,
+      name varchar(40) NOT NULL,
+      created_at datetime NOT NULL,
+      PRIMARY KEY (id)
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `nickname` `nickname` varchar(20) NOT NULL AFTER `id`;
