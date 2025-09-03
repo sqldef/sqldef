@@ -81,33 +81,6 @@ func TestMysqldefCreateTableAddIndexWithKeyLength(t *testing.T) {
 
 
 
-func TestMysqldefChangeColumn(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id int UNSIGNED NOT NULL,
-		  name varchar(40)
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint UNSIGNED NOT NULL,
-		  name char(40)
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
-		ALTER TABLE `+"`users`"+` CHANGE COLUMN `+"`id` `id`"+` bigint UNSIGNED NOT NULL;
-		ALTER TABLE `+"`users`"+` CHANGE COLUMN `+"`name` `name`"+` char(40);
-		`,
-	))
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 func TestMysqldefChangeColumnLength(t *testing.T) {
 	resetTestDatabase()

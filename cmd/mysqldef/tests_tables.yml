@@ -265,3 +265,17 @@ AddColumnWithNull:
     );
   output: |
     ALTER TABLE `users` ADD COLUMN `created_at` timestamp NULL DEFAULT null AFTER `name`;
+ChangeColumn:
+  current: |
+    CREATE TABLE users (
+      id int UNSIGNED NOT NULL,
+      name varchar(40)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint UNSIGNED NOT NULL,
+      name char(40)
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint UNSIGNED NOT NULL;
+    ALTER TABLE `users` CHANGE COLUMN `name` `name` char(40);
