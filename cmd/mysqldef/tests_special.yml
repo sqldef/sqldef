@@ -70,3 +70,9 @@ CreateTableWithSpatialTypesSRIDSpecified:
     );
   output: |
     ALTER TABLE `users` ADD COLUMN `location` point NOT NULL /*!80003 SRID 4326 */ AFTER `id`;
+ColumnLiteral:
+  desired: |
+    CREATE TABLE users (
+      `id` bigint NOT NULL,
+      `name` text
+      );

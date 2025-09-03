@@ -56,16 +56,6 @@ func TestMysqldefCreateTableSyntaxError(t *testing.T) {
 }
 
 
-func TestMysqldefColumnLiteral(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := "CREATE TABLE users (\n" +
-		"  `id` bigint NOT NULL,\n" +
-		"  `name` text\n" +
-		"  );\n"
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 func TestMysqldefHyphenNames(t *testing.T) {
 	resetTestDatabase()
