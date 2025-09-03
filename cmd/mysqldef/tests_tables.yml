@@ -194,3 +194,18 @@ CreateTableAddAutoIncrementPrimaryKey:
     ALTER TABLE `users` ADD COLUMN `id` bigint NOT NULL FIRST;
     ALTER TABLE `users` ADD PRIMARY KEY (`id`);
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
+CreateTableKeepAutoIncrement:
+  current: |
+    CREATE TABLE users (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      password char(128) COLLATE utf8mb4_bin DEFAULT NULL,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL AUTO_INCREMENT,
+      password char(128) COLLATE utf8mb4_bin DEFAULT NULL,
+      PRIMARY KEY (id)
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
