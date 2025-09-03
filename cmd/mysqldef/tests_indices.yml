@@ -347,3 +347,14 @@ CreateTableWithUniqueColumn:
     );
   output: |
     ALTER TABLE `users` ADD COLUMN `name` varchar(40) UNIQUE AFTER `id`;
+CreateTableChangeUniqueColumn:
+  current: |
+    CREATE TABLE users (
+      name varchar(40)
+    );
+  desired: |
+    CREATE TABLE users (
+      name varchar(40) UNIQUE
+    );
+  output: |
+    ALTER TABLE `users` ADD UNIQUE KEY `name`(`name`);
