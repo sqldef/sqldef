@@ -251,3 +251,17 @@ AddColumnAfter:
     );
   output: |
     ALTER TABLE `users` ADD COLUMN `name` varchar(40) NOT NULL AFTER `id`;
+AddColumnWithNull:
+  current: |
+    CREATE TABLE users (
+      id bigint PRIMARY KEY,
+      name varchar(40) DEFAULT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint PRIMARY KEY,
+      name varchar(40) DEFAULT NULL,
+      created_at timestamp NULL DEFAULT NULL
+    );
+  output: |
+    ALTER TABLE `users` ADD COLUMN `created_at` timestamp NULL DEFAULT null AFTER `name`;
