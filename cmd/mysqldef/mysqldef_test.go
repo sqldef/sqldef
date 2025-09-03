@@ -83,29 +83,6 @@ func TestMysqldefCreateTableAddIndexWithKeyLength(t *testing.T) {
 
 
 
-func TestMysqldefChangeColumnBinary(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  word varchar(64) NOT NULL
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
-	assertApplyOutput(t, createTable, nothingModified)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  word varchar(64) BINARY NOT NULL
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-		`,
-	)
-	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE `users` CHANGE COLUMN `word` `word` varchar(64) COLLATE utf8mb4_bin NOT NULL;\n",
-	)
-	assertApplyOutput(t, createTable, nothingModified)
-}
 
 func TestMysqldefChangeColumnCollate(t *testing.T) {
 	resetTestDatabase()

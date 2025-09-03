@@ -292,3 +292,14 @@ ChangeColumnLength:
     );
   output: |
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(1000) COLLATE utf8mb4_bin DEFAULT null;
+ChangeColumnBinary:
+  current: |
+    CREATE TABLE users (
+      word varchar(64) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  desired: |
+    CREATE TABLE users (
+      word varchar(64) BINARY NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `word` `word` varchar(64) COLLATE utf8mb4_bin NOT NULL;
