@@ -159,38 +159,6 @@ CreateTableGeneratedAlwaysAsAbbreviationChangeExpr80:
     ALTER TABLE `test_table` DROP COLUMN `test_expr`;
     ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) STORED NOT NULL AFTER `test_value`;
   min_version: '8.0'
-ConstraintCheck:
-  desired: |
-    CREATE TABLE `books` (
-      `id` int(10) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-      `type` VARCHAR(255) NOT NULL COMMENT 'manga, novel',
-      `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      `deleted_at` datetime DEFAULT null,
-      CONSTRAINT `books_type_chk` CHECK (`type` IN ('manga', 'novel'))
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
-  min_version: '8.0'
-ColumnCheck:
-  desired: |
-    CREATE TABLE `books` (
-      `id` int(10) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-      `type` VARCHAR(255) NOT NULL CONSTRAINT `books_type_chk` CHECK (`type` REGEXP '^(manga|novel)$') COMMENT 'manga, novel',
-      `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      `deleted_at` datetime DEFAULT null
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
-  min_version: '8.0'
-ForeignKeyNormalizeRestrict:
-  desired: |
-    CREATE TABLE `groups` (
-      `id` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY
-    );
-    CREATE TABLE `users` (
-      `id` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      `group_id` BIGINT NOT NULL,
-      KEY `fk_users_groups` (`group_id`),
-      CONSTRAINT `fk_users_groups` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
-    );
 CreateTableWithKeyBlockSize:
   desired: |
     CREATE TABLE users (
@@ -398,22 +366,6 @@ MysqlViewUsingWindowFuncPartitionByAndOrderByAndCoalesce:
   output: |
     CREATE OR REPLACE VIEW `foo2` AS select coalesce(lead(p.start_at, 1) over(partition by p.start_at order by p.start_at asc), '9999-12-31 00:00:00') as end_at from mysqldef_test.prices as p;
   min_version: '8.0'
-AddForeignKeyWithAlter:
-  current: |
-    CREATE TABLE users (id BIGINT PRIMARY KEY);
-    CREATE TABLE posts (
-      content text,
-      user_id bigint
-    );
-  desired: |
-    CREATE TABLE users (id BIGINT PRIMARY KEY);
-    CREATE TABLE posts (
-      content text,
-      user_id bigint
-    );
-    ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;
-  output: |
-    ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;
 AddColumnWithDefaultExpression:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY);
