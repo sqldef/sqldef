@@ -611,23 +611,6 @@ create_statement:
       },
     }
   }
-/* For MSSQL */
-| CREATE TRIGGER sql_id ON table_name trigger_time trigger_event_list AS BEGIN trigger_statements END
-  {
-    $$ = &DDL{
-      Action: CreateTrigger,
-      Trigger: &Trigger{
-        Name: $3,
-        TableName: $5,
-        Time: $6,
-        Event: $7,
-        Body: []Statement{&BeginEnd{
-          Statements: $10,
-          SuppressSemicolon: true,
-        }},
-      },
-    }
-  }
 /* For SQLite3 */
 | CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt BEGIN statement_block ';' END
   {
@@ -945,9 +928,9 @@ declare_variable_list:
   }
 
 local_variable:
-  sql_id column_type
+  sql_id as_opt column_type
   {
-    $$ = &LocalVariable{Name: $1, DataType: $2}
+    $$ = &LocalVariable{Name: $1, DataType: $3}
   }
 
 scroll_opt:
@@ -1225,6 +1208,24 @@ trigger_statements:
 | trigger_statements trigger_statement
   {
     $$ = append($$, $2)
+  }
+| BEGIN trigger_statements END
+  {
+    $$ = []Statement{
+      &BeginEnd{
+        Statements: $2,
+        SuppressSemicolon: true,
+      },
+    }
+  }
+| trigger_statements BEGIN trigger_statements END
+  {
+    $$ = append($$,
+      &BeginEnd{
+        Statements: $3,
+        SuppressSemicolon: true,
+      },
+    )
   }
 
 trigger_statement:
