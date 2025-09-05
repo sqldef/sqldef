@@ -186,7 +186,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> STATUS VARIABLES
 %token <bytes> RESTRICT CASCADE NO ACTION
 %token <bytes> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
-%token <bytes> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS
+%token <bytes> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS DISTANCE M EUCLIDEAN COSINE
 %token <bytes> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE INSTEAD OF
 %token <bytes> DEFERRABLE INITIALLY IMMEDIATE DEFERRED
 %token <bytes> CONCURRENTLY
@@ -203,6 +203,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> TEXT TINYTEXT MEDIUMTEXT LONGTEXT CITEXT
 %token <bytes> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON JSONB ENUM
 %token <bytes> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
+%token <bytes> VECTOR
 %token <bytes> VARIADIC ARRAY
 %token <bytes> NOW GETDATE
 %token <bytes> BPCHAR
@@ -372,6 +373,8 @@ func forceEOF(yylex interface{}) {
 %type <expr> default_expression
 %type <optVal> srid_definition srid_val
 %type <optVal> on_off
+%type <optVal> index_distance_option_value
+%type <optVal> vector_option_value
 %type <str> trigger_time trigger_event fetch_opt
 %type <strs> trigger_event_list
 %type <blockStatement> trigger_statements statement_block
@@ -532,6 +535,22 @@ create_statement:
         Options: $11,
         Partition: $12,
       },
+    }
+  }
+/* For MariaDB */
+| CREATE VECTOR INDEX sql_id ON table_name '(' index_column_list ')' index_option_opt
+  {
+    $$ = &DDL{
+      Action: CreateIndex,
+      Table: $6,
+      NewName: $6,
+      IndexSpec: &IndexSpec{
+        Name: $4,
+        Type: NewColIdent("VECTOR"),
+        Vector: true,
+        Options: $10,
+      },
+      IndexCols: $8,
     }
   }
 | CREATE or_replace_opt VIEW not_exists_opt table_name AS select_statement
@@ -2076,6 +2095,10 @@ spatial_type:
   {
     $$ = ColumnType{Type: string($1)}
   }
+| VECTOR '(' INTEGRAL ')'
+  {
+    $$ = ColumnType{Type: string($1), Length: NewIntVal($3)}
+  }
 
 enum_values:
   STRING
@@ -2299,6 +2322,23 @@ index_option:
   {
     $$ = &IndexOption{Name: string($1), Value: $3}
   }
+| DISTANCE '=' index_distance_option_value
+  {
+    $$ = &IndexOption{Name: string($1), Value: $3}
+  }
+| M '=' INTEGRAL
+  {
+    $$ = &IndexOption{Name: string($1), Value: NewIntVal($3)}
+  }
+| ID '=' vector_option_value
+  {
+    id := strings.Trim(strings.ToLower(string($1)), "`")
+    if id != "distance" && id != "m" {
+      yylex.Error(fmt.Sprintf("syntax error around '%s'", string($1)))
+    }
+    $$ = &IndexOption{Name: id, Value: $3}
+  }
+
 
 equal_opt:
   /* empty */
@@ -2318,6 +2358,26 @@ on_off:
 | OFF
   {
     $$ = NewBoolSQLVal(false)
+  }
+
+index_distance_option_value:
+  EUCLIDEAN
+  {
+    $$ = NewStrVal($1)
+  }
+| COSINE
+  {
+    $$ = NewStrVal($1)
+  }
+
+vector_option_value:
+  index_distance_option_value
+  {
+    $$ = $1
+  }
+| INTEGRAL
+  {
+    $$ = NewIntVal($1)
   }
 
 // for MSSQL
@@ -2350,6 +2410,18 @@ index_info:
 | FULLTEXT ID
   {
     $$ = &IndexInfo{Type: string($1), Name: NewColIdent(string($2)), Fulltext: true}
+  }
+| VECTOR INDEX ID
+  {
+    $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(string($3)), Vector: true}
+  }
+| VECTOR INDEX
+  {
+    $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(""), Vector: true}
+  }
+| VECTOR KEY ID
+  {
+    $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(string($3)), Vector: true}
   }
 | UNIQUE index_or_key ID
   {

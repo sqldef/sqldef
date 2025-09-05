@@ -96,6 +96,7 @@ type Index struct {
 	columns           []IndexColumn
 	primary           bool
 	unique            bool
+	vector            bool   // for MariaDB vector indexes
 	constraint        bool // for Postgres/MSSQL `ADD CONSTRAINT UNIQUE`
 	constraintOptions *ConstraintOptions
 	where             string         // for Postgres `Partial Indexes`
