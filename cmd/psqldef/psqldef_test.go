@@ -1592,7 +1592,7 @@ func TestPsqldefHelp(t *testing.T) {
 
 func TestPsqldefAllAnySomeCheckConstraints(t *testing.T) {
 	resetTestDatabase()
-	
+
 	// Test creating table with ALL/ANY/SOME CHECK constraints
 	createTable := stripHeredoc(`
 		CREATE TABLE test_all_any (
@@ -1660,7 +1660,7 @@ func TestPsqldefAllAnySomeCheckConstraints(t *testing.T) {
 
 func TestPsqldefSomeConstraintModifications(t *testing.T) {
 	resetTestDatabase()
-	
+
 	// Create initial table with SOME constraint using working ARRAY syntax
 	initialTable := stripHeredoc(`
 		CREATE TABLE test_some_modify (
@@ -1719,7 +1719,7 @@ func TestPsqldefSomeConstraintModifications(t *testing.T) {
 
 func TestPsqldefTableLevelCheckConstraintsWithAllAny(t *testing.T) {
 	resetTestDatabase()
-	
+
 	// Test truly table-level CHECK constraints (multi-column)
 	// This avoids the single-column constraint category confusion
 	tableWithMultiColumnConstraint := stripHeredoc(`
@@ -1736,7 +1736,7 @@ func TestPsqldefTableLevelCheckConstraintsWithAllAny(t *testing.T) {
 	)
 	assertApplyOutput(t, tableWithMultiColumnConstraint, applyPrefix+tableWithMultiColumnConstraint)
 	assertApplyOutput(t, tableWithMultiColumnConstraint, nothingModified)
-	
+
 	// Test modifying the multi-column constraint
 	modifiedConstraint := stripHeredoc(`
 		CREATE TABLE multi_check_test (
