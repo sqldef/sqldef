@@ -240,6 +240,7 @@ FulltextIndex:
       title varchar(40) DEFAULT NULL,
       FULLTEXT KEY title_fulltext_index (title) /*!50100 WITH PARSER ngram */
     );
+  flavor: mysql  # MariaDB doesn't support ngram parser
 FulltextIndexDrop:
   current: |
     CREATE TABLE posts (
@@ -254,6 +255,7 @@ FulltextIndexDrop:
     );
   output: |
     ALTER TABLE `posts` DROP INDEX `title_fulltext_index`;
+  flavor: mysql  # MariaDB doesn't support ngram parser
 FulltextIndexReAdd:
   current: |
     CREATE TABLE posts (
@@ -268,6 +270,7 @@ FulltextIndexReAdd:
     );
   output: |
     ALTER TABLE `posts` ADD FULLTEXT KEY `title_fulltext_index` (`title`) WITH parser ngram;
+  flavor: mysql  # MariaDB doesn't support ngram parser
 CreateIndex:
   current: |
     CREATE TABLE users (

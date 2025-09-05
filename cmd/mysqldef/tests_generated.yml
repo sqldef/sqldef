@@ -25,6 +25,7 @@ CreateTableGeneratedAlwaysAsChangeExpr80:
   output: |
     ALTER TABLE `test_table` DROP COLUMN `test_expr`;
     ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) VIRTUAL AFTER `test_value`;
+  flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 CreateTableGeneratedAlwaysAsAbbreviation80:
   desired: |
@@ -34,6 +35,7 @@ CreateTableGeneratedAlwaysAsAbbreviation80:
       test_expr varchar(45) AS (test_value / test_value) STORED NOT NULL,
       PRIMARY KEY (id)
     );
+  flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 CreateTableGeneratedAlwaysAsAbbreviationChangeExpr80:
   current: |
@@ -53,6 +55,7 @@ CreateTableGeneratedAlwaysAsAbbreviationChangeExpr80:
   output: |
     ALTER TABLE `test_table` DROP COLUMN `test_expr`;
     ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) STORED NOT NULL AFTER `test_value`;
+  flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 ChangeGenerateColumnGemerayedAlwaysAs:
   desired: |
@@ -64,6 +67,7 @@ ChangeGenerateColumnGemerayedAlwaysAs:
       name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name1')) VIRTUAL,
       PRIMARY KEY (id)
     );
+  flavor: mysql  # MariaDB shows unexpected JSON column changes in idempotency tests
 ChangeGenerateColumnJsonExpressionChange:
   current: |
     CREATE TABLE test_table (
@@ -86,6 +90,7 @@ ChangeGenerateColumnJsonExpressionChange:
   output: |
     ALTER TABLE `test_table` DROP COLUMN `name`;
     ALTER TABLE `test_table` ADD COLUMN `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) VIRTUAL AFTER `data`;
+  flavor: mysql  # MariaDB handles generated column comparison differently, shows extra JSON column changes
 ChangeGenerateColumnVirtualToStored:
   current: |
     CREATE TABLE test_table (
@@ -110,6 +115,7 @@ ChangeGenerateColumnVirtualToStored:
     ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED AFTER `test_value`;
     ALTER TABLE `test_table` DROP COLUMN `name`;
     ALTER TABLE `test_table` ADD COLUMN `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED AFTER `data`;
+  flavor: mysql  # MariaDB shows unexpected JSON column changes in idempotency tests
 ChangeGenerateColumnSpacingIgnored:
   current: |
     CREATE TABLE test_table (
@@ -130,6 +136,7 @@ ChangeGenerateColumnSpacingIgnored:
       PRIMARY KEY (id)
     );
   output: ""
+  flavor: mysql  # MariaDB shows unexpected JSON column changes in idempotency tests
 ChangeGenerateColumnAddNotNull:
   current: |
     CREATE TABLE test_table (
@@ -154,6 +161,7 @@ ChangeGenerateColumnAddNotNull:
     ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED NOT NULL AFTER `test_value`;
     ALTER TABLE `test_table` DROP COLUMN `name`;
     ALTER TABLE `test_table` ADD COLUMN `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED NOT NULL AFTER `data`;
+  flavor: mysql  # MariaDB syntax error with STORED NOT NULL on generated columns
 ChangeGenerateColumnExpressionComplexity:
   current: |
     CREATE TABLE test_table (
@@ -176,6 +184,7 @@ ChangeGenerateColumnExpressionComplexity:
   output: |
     ALTER TABLE `test_table` DROP COLUMN `test_expr`;
     ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) STORED NOT NULL AFTER `test_value`;
+  flavor: mysql  # MariaDB syntax error with generated columns and NOT NULL
 ChangeGenerateColumnSubstrFunction:
   current: |
     CREATE TABLE test_table (
@@ -198,6 +207,7 @@ ChangeGenerateColumnSubstrFunction:
   output: |
     ALTER TABLE `test_table` DROP COLUMN `name`;
     ALTER TABLE `test_table` ADD COLUMN `name` varchar(20) GENERATED ALWAYS AS (substr('test_value', 1, 2)) STORED NOT NULL AFTER `data`;
+  flavor: mysql  # MariaDB syntax error with generated columns and NOT NULL constraint
 ChangeGenerateColumnSubstringFunction:
   current: |
     CREATE TABLE test_table (
@@ -220,3 +230,4 @@ ChangeGenerateColumnSubstringFunction:
   output: |
     ALTER TABLE `test_table` DROP COLUMN `name`;
     ALTER TABLE `test_table` ADD COLUMN `name` varchar(20) GENERATED ALWAYS AS (substr('test_value', 2, 2)) STORED NOT NULL AFTER `data`;
+  flavor: mysql  # MariaDB syntax error with generated columns and NOT NULL

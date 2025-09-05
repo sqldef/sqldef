@@ -11,6 +11,7 @@ CreateTableRemoveAutoIncrement80:
     );
   output: |
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
+  flavor: mysql # Different versioning of MariaDB
   min_version: '8.0'
 CreateTableRemoveAutoIncrementPrimaryKey80:
   current: |
@@ -26,6 +27,7 @@ CreateTableRemoveAutoIncrementPrimaryKey80:
     ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint NOT NULL;
     ALTER TABLE `friends` DROP PRIMARY KEY;
     ALTER TABLE `friends` DROP COLUMN `id`;
+  flavor: mysql # Different versioning of MariaDB
   min_version: '8.0'
 CreateTableWithAutoIncrementPrimaryKeyAndAddMorePrimaryKey:
   current: |
@@ -47,6 +49,7 @@ CreateTableWithAutoIncrementPrimaryKeyAndAddMorePrimaryKey:
     ALTER TABLE `friends` DROP PRIMARY KEY;
     ALTER TABLE `friends` ADD PRIMARY KEY (`id`, `other_id`);
     ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
+  flavor: mysql # Different versioning of MariaDB
   min_version: '8.0'
 UUIDToBin:
   desired: |
@@ -54,6 +57,7 @@ UUIDToBin:
       id BINARY(16) NOT NULL DEFAULT (UUID_TO_BIN(UUID())),
       PRIMARY KEY (id)
     );
+  flavor: mysql # Different versioning of MariaDB
   min_version: '8.0'
 MysqlViewUsingWindowFuncOnlyOver:
   current: |
@@ -74,6 +78,7 @@ MysqlViewUsingWindowFuncOnlyOver:
     CREATE OR REPLACE VIEW `foo2` AS select p.start_at as end_at0, lead(p.start_at) over() as end_at1, lag(p.start_at) over() as end_at2 from mysqldef_test.prices as p;
   output: |
     CREATE OR REPLACE VIEW `foo2` AS select p.start_at as end_at0, lead(p.start_at) over() as end_at1, lag(p.start_at) over() as end_at2 from mysqldef_test.prices as p;
+  flavor: mysql # Different versioning of MariaDB
   min_version: '8.0'
 MysqlViewUsingWindowFuncPartitionBy:
   current: |
@@ -94,6 +99,7 @@ MysqlViewUsingWindowFuncPartitionBy:
     CREATE OR REPLACE VIEW `foo2` AS select lead(p.start_at) over(partition by p.start_at) as end_at from mysqldef_test.prices as p;
   output: |
     CREATE OR REPLACE VIEW `foo2` AS select lead(p.start_at) over(partition by p.start_at) as end_at from mysqldef_test.prices as p;
+  flavor: mysql # Different versioning of MariaDB
   min_version: '8.0'
 MysqlViewUsingWindowFuncOrderBy:
   current: |
@@ -114,6 +120,7 @@ MysqlViewUsingWindowFuncOrderBy:
     CREATE OR REPLACE VIEW `foo2` AS select lead(p.start_at) over( order by p.start_at asc) as end_at, lead(p.start_at) over( order by p.start_at desc) as end_at2 from mysqldef_test.prices as p;
   output: |
     CREATE OR REPLACE VIEW `foo2` AS select lead(p.start_at) over( order by p.start_at asc) as end_at, lead(p.start_at) over( order by p.start_at desc) as end_at2 from mysqldef_test.prices as p;
+  flavor: mysql # Different versioning of MariaDB
   min_version: '8.0'
 MysqlViewUsingWindowFuncPartitionByAndOrderBy:
   current: |
@@ -134,6 +141,7 @@ MysqlViewUsingWindowFuncPartitionByAndOrderBy:
     CREATE OR REPLACE VIEW `foo2` AS select lead(p.start_at, 1) over(partition by p.start_at order by p.start_at asc) as end_at from mysqldef_test.prices as p;
   output: |
     CREATE OR REPLACE VIEW `foo2` AS select lead(p.start_at, 1) over(partition by p.start_at order by p.start_at asc) as end_at from mysqldef_test.prices as p;
+  flavor: mysql # Different versioning of MariaDB
   min_version: '8.0'
 MysqlViewUsingWindowFuncPartitionByAndOrderByAndCoalesce:
   current: |
@@ -154,4 +162,5 @@ MysqlViewUsingWindowFuncPartitionByAndOrderByAndCoalesce:
     CREATE OR REPLACE VIEW `foo2` AS select coalesce(lead(p.start_at, 1) over(partition by p.start_at order by p.start_at asc), '9999-12-31 00:00:00') as end_at from mysqldef_test.prices as p;
   output: |
     CREATE OR REPLACE VIEW `foo2` AS select coalesce(lead(p.start_at, 1) over(partition by p.start_at order by p.start_at asc), '9999-12-31 00:00:00') as end_at from mysqldef_test.prices as p;
+  flavor: mysql # Different versioning of MariaDB
   min_version: '8.0'

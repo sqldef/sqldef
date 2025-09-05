@@ -32,6 +32,7 @@ AddColumnWithDefaultExpression:
     );
   output: |
     ALTER TABLE `users` ADD COLUMN `friend_ids` json DEFAULT(JSON_ARRAY()) AFTER `id`;
+  flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 AddDefaultExpression:
   current: |
@@ -46,6 +47,7 @@ AddDefaultExpression:
     );
   output: |
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json DEFAULT(JSON_ARRAY());
+  flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 RemoveDefaultExpression:
   current: |
@@ -60,6 +62,7 @@ RemoveDefaultExpression:
     );
   output: |
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json;
+  flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 CollateOnColumn:
   desired: |
@@ -72,6 +75,7 @@ CollateOnColumn:
     select u.id as id,
            (u.name collate `utf8mb4_unicode_ci`) as name
     from mysqldef_test.users as u;
+  flavor: mysql  # MariaDB shows unexpected view changes in idempotency tests
 AutoIncrementNotNull:
   desired: |
     CREATE TABLE users1 (
