@@ -351,7 +351,7 @@ type Update struct {
 func (node *Update) Format(buf *nodeBuffer) {
 	buf.Printf("update %v%v set %v", node.Comments, node.TableExprs, node.Exprs)
 	if node.From != nil {
-		buf.Printf(" from %v", node.From);
+		buf.Printf(" from %v", node.From)
 	}
 	buf.Printf("%v%v%v", node.Where, node.OrderBy, node.Limit)
 }
@@ -1492,9 +1492,9 @@ func (node *ComparisonExpr) Format(buf *nodeBuffer) {
 	} else if node.Any {
 		buf.Printf("ANY ")
 	}
-	
+
 	// For ALL/ANY/SOME, wrap the right expression in parentheses if it's not already a ParenExpr or Subquery
-	if (node.All || node.Any) {
+	if node.All || node.Any {
 		if _, isParenExpr := node.Right.(*ParenExpr); !isParenExpr {
 			if _, isSubquery := node.Right.(*Subquery); !isSubquery {
 				buf.Printf("(%v)", node.Right)
@@ -1507,7 +1507,7 @@ func (node *ComparisonExpr) Format(buf *nodeBuffer) {
 	} else {
 		buf.Printf("%v", node.Right)
 	}
-	
+
 	if node.Escape != nil {
 		buf.Printf(" escape %v", node.Escape)
 	}
@@ -2388,7 +2388,7 @@ func (node *Cursor) Format(buf *nodeBuffer) {
 }
 
 type BeginEnd struct {
-	Statements []Statement
+	Statements        []Statement
 	SuppressSemicolon bool
 }
 

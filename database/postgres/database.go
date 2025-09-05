@@ -612,12 +612,12 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[strin
 // - '[0-9]'::text -> '[0-9]' (already handled by shouldDeleteTypeCast)
 func normalizeCheckConstraintDefinition(def string) string {
 	// Remove ::text type casts from string literals in ARRAY expressions
-	// This handles the pattern: 'string'::text within ARRAY[...] 
+	// This handles the pattern: 'string'::text within ARRAY[...]
 	result := regexp.MustCompile(`'([^']*)'::text`).ReplaceAllString(def, "'$1'")
-	
+
 	// Remove ::character varying type casts similarly
 	result = regexp.MustCompile(`'([^']*)'::character varying(\([^)]*\))?`).ReplaceAllString(result, "'$1'")
-	
+
 	return result
 }
 
