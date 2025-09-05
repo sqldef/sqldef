@@ -18,6 +18,7 @@ ColumnCheck:
       `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       `deleted_at` datetime DEFAULT null
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
+  flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 ForeignKeyNormalizeRestrict:
   desired: |

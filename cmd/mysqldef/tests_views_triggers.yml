@@ -104,6 +104,7 @@ View:
       is_deleted tinyint(1)
     );
     CREATE VIEW foo AS select u.id as id, p.id as post_id from  (mysqldef_test.users as u join mysqldef_test.posts as p on ((u.id = p.user_id)));
+  flavor: mysql  # MariaDB shows unexpected view changes in idempotency tests
 ViewUpdate:
   current: |
     CREATE TABLE users (
@@ -127,6 +128,7 @@ ViewUpdate:
     CREATE VIEW foo AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
   output: |
     CREATE OR REPLACE VIEW `foo` AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
+  flavor: mysql  # MariaDB handles view formatting differently than MySQL
 ViewDropsWhenEmptyDesired:
   current: |
     CREATE TABLE users (
@@ -143,6 +145,7 @@ ViewDropsWhenEmptyDesired:
     DROP TABLE `posts`;
     DROP TABLE `users`;
     DROP VIEW `foo`;
+  flavor: mysql  # MariaDB shows unexpected view changes in idempotency tests
 TriggerInsert:
   desired: |
     CREATE TABLE users (

@@ -11,6 +11,7 @@ CreateTableRemoveAutoIncrement57:
     );
   output: |
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
+  flavor: mysql # Different versioning of MariaDB
   max_version: '5.7'
 CreateTableRemoveAutoIncrementPrimaryKey57:
   current: |
@@ -26,4 +27,5 @@ CreateTableRemoveAutoIncrementPrimaryKey57:
     ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
     ALTER TABLE `friends` DROP PRIMARY KEY;
     ALTER TABLE `friends` DROP COLUMN `id`;
+  flavor: mysql # Different versioning of MariaDB
   max_version: '5.7'

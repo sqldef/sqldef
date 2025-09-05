@@ -1,5 +1,4 @@
 CreateVectorIndex:
-  flavor: mariadb
   desired: |
     CREATE TABLE vectors (
       id int(10) unsigned NOT NULL AUTO_INCREMENT,
@@ -14,8 +13,8 @@ CreateVectorIndex:
       PRIMARY KEY (id)
     );
     CREATE VECTOR INDEX idx_vector ON vectors (vector_col);
+  flavor: mariadb
 CreateVectorIndexWithOptions:
-  flavor: mariadb
   desired: |
     CREATE TABLE vectors (
       id int(10) unsigned NOT NULL AUTO_INCREMENT,
@@ -30,8 +29,8 @@ CreateVectorIndexWithOptions:
       PRIMARY KEY (id)
     );
     CREATE VECTOR INDEX idx_vector_cosine ON vectors (vector_col) DISTANCE=COSINE M=16;
-AddVectorIndex:
   flavor: mariadb
+AddVectorIndex:
   current: |
     CREATE TABLE vectors (
       id int(10) unsigned NOT NULL AUTO_INCREMENT,
@@ -47,8 +46,8 @@ AddVectorIndex:
     );
   output: |
     ALTER TABLE `vectors` ADD VECTOR INDEX `idx_vector` (`vector_col`);
-DropVectorIndex:
   flavor: mariadb
+DropVectorIndex:
   current: |
     CREATE TABLE vectors (
       id int(10) unsigned NOT NULL AUTO_INCREMENT,
@@ -64,3 +63,4 @@ DropVectorIndex:
     );
   output: |
     ALTER TABLE `vectors` DROP INDEX `idx_vector`;
+  flavor: mariadb
