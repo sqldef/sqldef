@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -24,6 +25,34 @@ const (
 	applyPrefix     = "-- Apply --\n"
 )
 
+func getMySQLPort() int {
+	if portStr := os.Getenv("MYSQL_PORT"); portStr != "" {
+		if port, err := strconv.Atoi(portStr); err == nil {
+			return port
+		}
+	}
+	return 3306
+}
+
+func getMySQLArgs(dbName ...string) []string {
+	port := getMySQLPort()
+	args := []string{"-uroot"}
+	
+	if port == 3306 {
+		if len(dbName) == 0 {
+			args = append(args, "-h", "127.0.0.1")
+		}
+	} else {
+		args = append(args, "-h", "127.0.0.1", "-P", strconv.Itoa(port))
+	}
+	
+	if len(dbName) > 0 {
+		args = append(args, dbName[0])
+	}
+	
+	return args
+}
+
 func TestApply(t *testing.T) {
 	db, err := connectDatabase()
 	if err != nil {
@@ -36,14 +65,20 @@ func TestApply(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	version := strings.TrimSpace(testutils.MustExecute("mysql", "-uroot", "-h", "127.0.0.1", "-sN", "-e", "select version();"))
+	args := append(getMySQLArgs(), "-sN", "-e", "select version();")
+	version := strings.TrimSpace(testutils.MustExecute("mysql", args...))
 	sqlParser := database.NewParser(parser.ParserModeMysql)
+	
+	// Get MySQL flavor for test filtering
+	mysqlFlavor := os.Getenv("MYSQL_FLAVOR")
+
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Initialize the database with test.Current
-			testutils.MustExecute("mysql", "-uroot", "-h", "127.0.0.1", "-e", "DROP DATABASE IF EXISTS mysqldef_test; CREATE DATABASE mysqldef_test;")
+			args := append(getMySQLArgs(), "-e", "DROP DATABASE IF EXISTS mysqldef_test; CREATE DATABASE mysqldef_test;")
+			testutils.MustExecute("mysql", args...)
 
-			testutils.RunTest(t, db, test, schema.GeneratorModeMysql, sqlParser, version)
+			testutils.RunTest(t, db, test, schema.GeneratorModeMysql, sqlParser, version, mysqlFlavor)
 		})
 	}
 }
@@ -108,7 +143,8 @@ func TestMysqldefExport(t *testing.T) {
 		") ENGINE=InnoDB DEFAULT CHARSET=latin1;\n" +
 		"\n" +
 		"CREATE TRIGGER test AFTER INSERT ON users FOR EACH ROW UPDATE users SET updated_at = current_timestamp();\n"
-	testutils.MustExecute("mysql", "-uroot", "mysqldef_test", "-e", ddls)
+	args := append(getMySQLArgs("mysqldef_test"), "-e", ddls)
+	testutils.MustExecute("mysql", args...)
 	out = assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export")
 	assertEquals(t, out, ddls)
 }
@@ -127,7 +163,8 @@ func TestMysqldefExportConcurrently(t *testing.T) {
 		"CREATE TABLE `users_3` (\n" +
 		"  `name` varchar(40) DEFAULT NULL\n" +
 		") ENGINE=InnoDB DEFAULT CHARSET=latin1;\n"
-	testutils.MustExecute("mysql", "-uroot", "mysqldef_test", "-e", ddls)
+	args := append(getMySQLArgs("mysqldef_test"), "-e", ddls)
+	testutils.MustExecute("mysql", args...)
 
 	outputDefault := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export")
 
@@ -152,12 +189,13 @@ func TestMysqldefExportConcurrently(t *testing.T) {
 
 func TestMysqldefDropTable(t *testing.T) {
 	resetTestDatabase()
-	testutils.MustExecute("mysql", "-uroot", "mysqldef_test", "-e", stripHeredoc(`
+	ddl := stripHeredoc(`
                CREATE TABLE users (
                  name varchar(40),
                  created_at datetime NOT NULL
-               ) DEFAULT CHARSET=latin1;`,
-	))
+               ) DEFAULT CHARSET=latin1;`)
+	args := append(getMySQLArgs("mysqldef_test"), "-e", ddl)
+	testutils.MustExecute("mysql", args...)
 
 	writeFile("schema.sql", "")
 
@@ -172,7 +210,8 @@ func TestMysqldefSkipView(t *testing.T) {
 	createTable := "CREATE TABLE users (id bigint(20));\n"
 	createView := "CREATE VIEW user_views AS SELECT id from users;\n"
 
-	testutils.MustExecute("mysql", "-uroot", "mysqldef_test", "-e", createTable+createView)
+	args := append(getMySQLArgs("mysqldef_test"), "-e", createTable+createView)
+	testutils.MustExecute("mysql", args...)
 
 	writeFile("schema.sql", createTable)
 
@@ -210,7 +249,8 @@ func TestMysqldefConfigIncludesTargetTables(t *testing.T) {
 	usersTable := "CREATE TABLE users (id bigint);"
 	users1Table := "CREATE TABLE users_1 (id bigint);"
 	users10Table := "CREATE TABLE users_10 (id bigint);"
-	testutils.MustExecute("mysql", "-uroot", "mysqldef_test", "-e", usersTable+users1Table+users10Table)
+	args := append(getMySQLArgs("mysqldef_test"), "-e", usersTable+users1Table+users10Table)
+	testutils.MustExecute("mysql", args...)
 
 	writeFile("schema.sql", usersTable+users1Table)
 	writeFile("config.yml", "target_tables: |\n  users\n  users_\\d\n")
@@ -225,7 +265,8 @@ func TestMysqldefConfigIncludesSkipTables(t *testing.T) {
 	usersTable := "CREATE TABLE users (id bigint);"
 	users1Table := "CREATE TABLE users_1 (id bigint);"
 	users10Table := "CREATE TABLE users_10 (id bigint);"
-	testutils.MustExecute("mysql", "-uroot", "mysqldef_test", "-e", usersTable+users1Table+users10Table)
+	args := append(getMySQLArgs("mysqldef_test"), "-e", usersTable+users1Table+users10Table)
+	testutils.MustExecute("mysql", args...)
 
 	writeFile("schema.sql", usersTable+users1Table)
 	writeFile("config.yml", "skip_tables: |\n  users_10\n")
@@ -391,8 +432,10 @@ func assertEquals(t *testing.T, actual string, expected string) {
 }
 
 func resetTestDatabase() {
-	testutils.MustExecute("mysql", "-uroot", "-e", "DROP DATABASE IF EXISTS mysqldef_test;")
-	testutils.MustExecute("mysql", "-uroot", "-e", "CREATE DATABASE mysqldef_test;")
+	args1 := append(getMySQLArgs(), "-e", "DROP DATABASE IF EXISTS mysqldef_test;")
+	testutils.MustExecute("mysql", args1...)
+	args2 := append(getMySQLArgs(), "-e", "CREATE DATABASE mysqldef_test;")
+	testutils.MustExecute("mysql", args2...)
 }
 
 func writeFile(path string, content string) {
@@ -415,7 +458,7 @@ func connectDatabase() (database.Database, error) {
 	return mysql.NewDatabase(database.Config{
 		User:   "root",
 		Host:   "127.0.0.1",
-		Port:   3306,
+		Port:   getMySQLPort(),
 		DbName: "mysqldef_test",
 	})
 }

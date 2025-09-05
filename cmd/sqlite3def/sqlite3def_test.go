@@ -43,7 +43,7 @@ func TestApply(t *testing.T) {
 			}
 			defer db.Close()
 
-			testutils.RunTest(t, db, test, schema.GeneratorModeSQLite3, sqlParser, "")
+			testutils.RunTest(t, db, test, schema.GeneratorModeSQLite3, sqlParser, "", "")
 		})
 	}
 }

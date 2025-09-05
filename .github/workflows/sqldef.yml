@@ -20,9 +20,14 @@ jobs:
           - mssqldef
         include:
           - target: mysqldef
+            mysql_flavor: mysql
             mysql_version: '5.7'
           - target: mysqldef
+            mysql_flavor: mysql
             mysql_version: '8.0'
+          - target: mysqldef
+            mysql_flavor: mariadb
+            mariadb_version: '11.8'
           - target: psqldef
             postgres_version: 12
           - target: psqldef
@@ -45,10 +50,15 @@ jobs:
       - run: docker compose up -d
         env:
           MYSQL_VERSION: ${{ matrix.mysql_version }}
+          MARIADB_VERSION: ${{ matrix.mariadb_version }}
           POSTGRES_VERSION: ${{ matrix.postgres_version }}
       - run: make deps
       - run: echo "GODEBUG=tlsrsakex=1" >> $GITHUB_ENV
         if: matrix.mysql_version == '5.7'
+      - run: echo "MYSQL_FLAVOR=${{ matrix.mysql_flavor }}" >> $GITHUB_ENV
+        if: matrix.mysql_flavor
+      - run: echo "MYSQL_PORT=3307" >> $GITHUB_ENV
+        if: matrix.mysql_flavor == 'mariadb'
       - run: make test-${{ matrix.target }}
 
   test-result:

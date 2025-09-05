@@ -25,6 +25,7 @@ type TestCase struct {
 	MinVersion string  `yaml:"min_version"`
 	MaxVersion string  `yaml:"max_version"`
 	User       string
+	Flavor     string  // database flavor (e.g., "mariadb", "mysql")
 }
 
 func ReadTests(pattern string) (map[string]TestCase, error) {
@@ -63,12 +64,16 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 	return ret, nil
 }
 
-func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.GeneratorMode, sqlParser database.Parser, version string) {
+
+func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.GeneratorMode, sqlParser database.Parser, version string, allowedFlavor string) {
 	if test.MinVersion != "" && compareVersion(t, version, test.MinVersion) < 0 {
 		t.Skipf("Version '%s' is smaller than min_version '%s'", version, test.MaxVersion)
 	}
 	if test.MaxVersion != "" && compareVersion(t, version, test.MaxVersion) > 0 {
 		t.Skipf("Version '%s' is larger than max_version '%s'", version, test.MaxVersion)
+	}
+	if test.Flavor != "" && (allowedFlavor == "" || test.Flavor != allowedFlavor) {
+		t.Skipf("Test flavor '%s' does not match allowed flavor '%s'", test.Flavor, allowedFlavor)
 	}
 
 	// Prepare current
