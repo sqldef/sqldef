@@ -564,13 +564,17 @@ func (ts *TableSpec) addForeignKey(foreignKey *ForeignKeyDefinition) {
 
 // ColumnDefinition describes a column in a CREATE TABLE statement
 type ColumnDefinition struct {
-	Name ColIdent
-	Type ColumnType
+	Name          ColIdent
+	Type          ColumnType
+	InlineComment []byte // For inline comments like -- @rename from=oldname
 }
 
 // Format formats the node.
 func (col *ColumnDefinition) Format(buf *nodeBuffer) {
 	buf.Printf("%v %v", col.Name, &col.Type)
+	if len(col.InlineComment) > 0 {
+		buf.Printf(" %s", col.InlineComment)
+	}
 }
 
 type Sequence struct {

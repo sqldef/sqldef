@@ -21,6 +21,7 @@ type TestCase struct {
 	Current    string  // default: empty schema
 	Desired    string  // default: empty schema
 	Output     *string // default: use Desired as Output
+	Error      *string // default: nil
 	MinVersion string  `yaml:"min_version"`
 	MaxVersion string  `yaml:"max_version"`
 	User       string
@@ -101,6 +102,17 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		log.Fatal(err)
 	}
 	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, database.GeneratorConfig{}, db.GetDefaultSchema())
+
+	// Handle expected errors
+	if test.Error != nil {
+		if err == nil {
+			t.Errorf("expected error: %s, but got no error", *test.Error)
+		} else if err.Error() != *test.Error {
+			t.Errorf("expected error: %s, but got: %s", *test.Error, err.Error())
+		}
+		return
+	}
+
 	if err != nil {
 		t.Fatal(err)
 	}

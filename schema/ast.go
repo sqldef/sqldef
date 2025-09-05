@@ -84,6 +84,7 @@ type Column struct {
 	identity      *Identity
 	sequence      *Sequence
 	generated     *Generated
+	renameFrom    string // Previous column name if renamed via @rename annotation
 	// TODO: keyopt
 	// XXX: zerofill?
 }
