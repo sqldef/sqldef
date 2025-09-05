@@ -375,7 +375,7 @@ func forceEOF(yylex interface{}) {
 %type <str> trigger_time trigger_event fetch_opt
 %type <strs> trigger_event_list
 %type <blockStatement> trigger_statements statement_block
-%type <statement> trigger_statement trigger_statement_start
+%type <statement> trigger_statement
 %type <localVariable> local_variable
 %type <localVariables> declare_variable_list
 %type <boolVal> scroll_opt
@@ -584,7 +584,7 @@ create_statement:
     }
   }
 /* For MySQL */
-| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW trigger_statement_start
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW trigger_statements
   {
     $$ = &DDL{
       Action: CreateTrigger,
@@ -593,7 +593,7 @@ create_statement:
         TableName: $7,
         Time: $4,
         Event: $5,
-        Body: []Statement{$11},
+        Body: $11,
       },
     }
   }
@@ -1204,6 +1204,15 @@ trigger_statements:
   {
     $$ = append($$, $3)
   }
+// For MySQL
+| BEGIN trigger_statements ';' END
+  {
+    $$ = []Statement{
+      &BeginEnd{
+        Statements: $2,
+      },
+    }
+  }
 // For MSSQL
 | trigger_statements trigger_statement
   {
@@ -1249,16 +1258,6 @@ trigger_statement:
     sel.Lock = $4
     $$ = sel
   }
-
-/* TODO: should be a part of trigger_statement */
-trigger_statement_start:
-  BEGIN trigger_statements ';' END
-  {
-    $$ = &BeginEnd{
-      Statements: $2,
-    }
-  }
-| trigger_statement
 
 for_each_row_opt:
   { $$ = struct{}{} }
