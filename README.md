@@ -477,14 +477,41 @@ brew install sqldef/sqldef/mysqldef
 brew install sqldef/sqldef/psqldef
 ```
 
+## Column Renaming
+
+sqldef supports renaming columns using the `-- @rename from=old_name` annotation:
+
+```sql
+CREATE TABLE users (
+  id bigint NOT NULL,
+  user_name text, -- @rename from=username
+  age integer
+);
+```
+
+This will generate appropriate rename commands for each database:
+- MySQL: `ALTER TABLE users CHANGE COLUMN username user_name text`
+- PostgreSQL: `ALTER TABLE users RENAME COLUMN username TO user_name`
+- SQL Server: `EXEC sp_rename 'users.username', 'user_name', 'COLUMN'`
+- SQLite: `ALTER TABLE users RENAME COLUMN username TO user_name`
+
+For columns with special characters or spaces, use double quotes:
+
+```sql
+CREATE TABLE users (
+  id bigint NOT NULL,
+  column_with_underscore varchar(50), -- @rename from="column-with-dash"
+  normal_column text, -- @rename from="special column"
+);
+```
+
 ## Limitations
 
-Because sqldef distinguishes table/index/column by its name, sqldef does NOT support:
+Because sqldef distinguishes table/index by its name, sqldef does NOT support:
 
 - RENAME TABLE
 - RENAME INDEX
   - DROP + ADD could be fine for index, though
-- CHANGE COLUMN for rename
 
 To rename them, you would need to rename manually and use `--export` again.
 

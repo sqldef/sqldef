@@ -10,3 +10,5 @@
 /MacOSX.sdk.tar.xz
 /MacOSX.sdk
 y.output
+mysqldef
+psqldef

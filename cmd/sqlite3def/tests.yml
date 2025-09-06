@@ -139,3 +139,37 @@ IndependentConstraintDefinition:
       CHECK (trackid > 0),
       FOREIGN KEY(trackartist) REFERENCES artist(artistid)
     );
+
+RenameColumn:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      username text,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      user_name text, -- @rename from=username
+      age integer
+    );
+  output: |
+    ALTER TABLE `users` RENAME COLUMN `username` TO `user_name`;
+
+RenameColumnWithTypeChange:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      username varchar(100),
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      user_name text NOT NULL, -- @rename from=username
+      age integer
+    );
+  output: |
+    ALTER TABLE `users` ADD COLUMN `user_name` text NOT NULL;
+    UPDATE `users` SET `user_name` = `username`;
+    ALTER TABLE `users` DROP COLUMN `username`;

@@ -284,10 +284,21 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue // Column is expected to exist.
 			}
 
-			// Column is obsoleted. Drop column.
-			columnDDLs := g.generateDDLsForAbsentColumn(currentTable, column.name)
-			ddls = append(ddls, columnDDLs...)
-			// TODO: simulate to remove column from `currentTable.columns`?
+			// Check if this column is being renamed (not dropped)
+			isRenamed := false
+			for _, desiredColumn := range desiredTable.columns {
+				if desiredColumn.renameFrom == column.name {
+					isRenamed = true
+					break
+				}
+			}
+
+			if !isRenamed {
+				// Column is obsoleted. Drop column.
+				columnDDLs := g.generateDDLsForAbsentColumn(currentTable, column.name)
+				ddls = append(ddls, columnDDLs...)
+				// TODO: simulate to remove column from `currentTable.columns`?
+			}
 		}
 
 		// Check policies.
@@ -390,6 +401,13 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		// deep copy to avoid modifying the original
 		desiredColumn := *desiredColumnPtr
 
+		if desiredColumn.renameFrom != "" {
+			if _, conflictExists := desired.table.columns[desiredColumn.renameFrom]; conflictExists {
+				return ddls, fmt.Errorf("cannot rename column '%s' to '%s' - column '%s' still exists",
+					desiredColumn.renameFrom, desiredColumn.name, desiredColumn.renameFrom)
+			}
+		}
+
 		currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
 		if currentColumn == nil || !currentColumn.autoIncrement {
 			// We may not be able to add AUTO_INCREMENT yet. It will be added after adding keys (primary or not) at the "Add new AUTO_INCREMENT" place.
@@ -397,29 +415,162 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			desiredColumn.autoIncrement = false
 		}
 		if currentColumn == nil {
-			definition, err := g.generateColumnDefinition(desiredColumn, true)
-			if err != nil {
-				return ddls, err
+			// Check if this is a renamed column
+			var renameFromColumn *Column
+			if desiredColumn.renameFrom != "" {
+				renameFromColumn = findColumnByName(currentTable.columns, desiredColumn.renameFrom)
 			}
 
-			// Column not found, add column.
-			var ddl string
-			switch g.mode {
-			case GeneratorModeMssql:
-				ddl = fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), definition)
-			default:
-				ddl = fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableName(desired.table.name), definition)
-			}
+			if renameFromColumn != nil {
+				// Generate RENAME COLUMN DDL
+				switch g.mode {
+				case GeneratorModePostgres:
+					ddl := fmt.Sprintf("ALTER TABLE %s RENAME COLUMN %s TO %s",
+						g.escapeTableName(desired.table.name),
+						g.escapeSQLName(renameFromColumn.name),
+						g.escapeSQLName(desiredColumn.name))
+					ddls = append(ddls, ddl)
 
-			if g.mode == GeneratorModeMysql {
-				after := " FIRST"
-				if desiredColumn.position > 0 {
-					after = " AFTER " + g.escapeSQLName(desiredColumns[desiredColumn.position-1].name)
+					// After renaming, check if type/constraints need to be changed
+					if !g.haveSameDataType(*renameFromColumn, desiredColumn) {
+						ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s",
+							g.escapeTableName(desired.table.name),
+							g.escapeSQLName(desiredColumn.name),
+							g.generateDataType(desiredColumn))
+						ddls = append(ddls, ddl)
+					}
+
+					if !isPrimaryKey(*renameFromColumn, currentTable) {
+						if g.notNull(*renameFromColumn) && !g.notNull(desiredColumn) {
+							ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL",
+								g.escapeTableName(desired.table.name),
+								g.escapeSQLName(desiredColumn.name)))
+						} else if !g.notNull(*renameFromColumn) && g.notNull(desiredColumn) {
+							ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL",
+								g.escapeTableName(desired.table.name),
+								g.escapeSQLName(desiredColumn.name)))
+						}
+					}
+				case GeneratorModeMysql:
+					// MySQL uses CHANGE COLUMN for rename
+					definition, err := g.generateColumnDefinition(desiredColumn, true)
+					if err != nil {
+						return ddls, err
+					}
+					ddl := fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s",
+						g.escapeTableName(desired.table.name),
+						g.escapeSQLName(renameFromColumn.name),
+						definition)
+					ddls = append(ddls, ddl)
+				case GeneratorModeMssql:
+					// SQL Server uses sp_rename
+					// For sp_rename, we need to handle schema prefixes properly
+					schema, tableName := splitTableName(desired.table.name, g.defaultSchema)
+					var tableRef string
+					if schema != "" && schema != g.defaultSchema {
+						// Only include schema if it's not the default
+						tableRef = fmt.Sprintf("%s.%s", schema, tableName)
+					} else {
+						tableRef = tableName
+					}
+					ddl := fmt.Sprintf("EXEC sp_rename '%s.%s', '%s', 'COLUMN'",
+						tableRef,
+						renameFromColumn.name,
+						desiredColumn.name)
+					ddls = append(ddls, ddl)
+
+					// After renaming, check if type/constraints need to be changed
+					if !g.haveSameDataType(*renameFromColumn, desiredColumn) ||
+						!g.areSameDefaultValue(renameFromColumn.defaultDef, desiredColumn.defaultDef) ||
+						(g.notNull(*renameFromColumn) != g.notNull(desiredColumn)) {
+						definition, err := g.generateColumnDefinition(desiredColumn, false)
+						if err != nil {
+							return ddls, err
+						}
+						// Use consistent table name format (without default schema prefix)
+						var escapedTableName string
+						if schema != "" && schema != g.defaultSchema {
+							escapedTableName = g.escapeSQLName(schema) + "." + g.escapeSQLName(tableName)
+						} else {
+							escapedTableName = g.escapeSQLName(tableName)
+						}
+						ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s",
+							escapedTableName,
+							definition)
+						ddls = append(ddls, ddl)
+					}
+				case GeneratorModeSQLite3:
+					// For SQLite, when type needs to change:
+					// 1. Add new column with new name and type
+					// 2. Copy data from old column to new column
+					// 3. Drop old column
+					if !g.haveSameDataType(*renameFromColumn, desiredColumn) ||
+						!g.areSameDefaultValue(renameFromColumn.defaultDef, desiredColumn.defaultDef) ||
+						(g.notNull(*renameFromColumn) != g.notNull(desiredColumn)) {
+
+						definition, err := g.generateColumnDefinition(desiredColumn, true)
+						if err != nil {
+							return ddls, err
+						}
+
+						// 1. Add new column with desired name and definition
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s",
+							g.escapeTableName(desired.table.name),
+							definition))
+
+						// 2. Copy data from old column to new column
+						ddls = append(ddls, fmt.Sprintf("UPDATE %s SET %s = %s",
+							g.escapeTableName(desired.table.name),
+							g.escapeSQLName(desiredColumn.name),
+							g.escapeSQLName(renameFromColumn.name)))
+
+						// 3. Drop the old column
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s",
+							g.escapeTableName(desired.table.name),
+							g.escapeSQLName(renameFromColumn.name)))
+					} else {
+						// Simple rename without type change
+						ddl := fmt.Sprintf("ALTER TABLE %s RENAME COLUMN %s TO %s",
+							g.escapeTableName(desired.table.name),
+							g.escapeSQLName(renameFromColumn.name),
+							g.escapeSQLName(desiredColumn.name))
+						ddls = append(ddls, ddl)
+					}
+				default:
+					// Fallback to regular ADD for unsupported databases
+					definition, err := g.generateColumnDefinition(desiredColumn, true)
+					if err != nil {
+						return ddls, err
+					}
+					ddl := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableName(desired.table.name), definition)
+					ddls = append(ddls, ddl)
 				}
-				ddl += after
-			}
+			} else {
+				// Regular column addition (not a rename)
+				definition, err := g.generateColumnDefinition(desiredColumn, true)
+				if err != nil {
+					return ddls, err
+				}
 
-			ddls = append(ddls, ddl)
+				// Column not found, add column.
+				var ddl string
+				switch g.mode {
+				case GeneratorModeMssql:
+					ddl = fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), definition)
+				default:
+					ddl = fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableName(desired.table.name), definition)
+				}
+
+				if g.mode == GeneratorModeMysql {
+					after := " FIRST"
+					if desiredColumn.position > 0 {
+						after = " AFTER " + g.escapeSQLName(desiredColumns[desiredColumn.position-1].name)
+					}
+					ddl += after
+				}
+
+				ddls = append(ddls, ddl)
+			}
 		} else {
 			// Change column data type or order as needed.
 			switch g.mode {

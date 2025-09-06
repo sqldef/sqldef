@@ -101,7 +101,7 @@ DropColumnStoreIndex:
     );
   output: |
     DROP INDEX [idx_v] ON [dbo].[v];
-    
+
 DropTableOnNonDefaultSchema:
   current: |
     CREATE TABLE FOO.bigdata1 (
@@ -116,7 +116,7 @@ DropTableOnNonDefaultSchema:
     );
   output: |
     DROP TABLE [FOO].[bigdata2];
-    
+
 CreateTableOnNonStandardDefaultSchema:
   desired: |
     CREATE TABLE v (
@@ -367,3 +367,34 @@ DeclareVariable:
     set @date = getdate()
     insert into logs select id, @date from inserted
     end;
+RenameColumn:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      username text,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      user_name text, -- @rename from=username
+      age integer
+    );
+  output: |
+    EXEC sp_rename 'users.username', 'user_name', 'COLUMN';
+RenameColumnWithTypeChange:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      username varchar(100),
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      user_name text NOT NULL, -- @rename from=username
+      age integer
+    );
+  output: |
+    EXEC sp_rename 'users.username', 'user_name', 'COLUMN';
+    ALTER TABLE [users] ALTER COLUMN [user_name] text NOT NULL;
