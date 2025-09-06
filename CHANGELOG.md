@@ -1,3 +1,7 @@
+## v2.0.11
+
+* mssqldef: Support complex trigger bodies with variables [#726](https://github.com/sqldef/sqldef/pull/726)
+
 ## v2.0.10
 
 * mysqldef: Support complex statements in triggers [#715](https://github.com/sqldef/sqldef/pull/715)
