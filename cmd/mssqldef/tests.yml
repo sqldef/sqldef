@@ -101,7 +101,7 @@ DropColumnStoreIndex:
     );
   output: |
     DROP INDEX [idx_v] ON [dbo].[v];
-    
+
 DropTableOnNonDefaultSchema:
   current: |
     CREATE TABLE FOO.bigdata1 (
@@ -116,7 +116,7 @@ DropTableOnNonDefaultSchema:
     );
   output: |
     DROP TABLE [FOO].[bigdata2];
-    
+
 CreateTableOnNonStandardDefaultSchema:
   desired: |
     CREATE TABLE v (
@@ -332,7 +332,41 @@ CollateOnColumn:
     select id,
           name collate database_default as name
     from users;
-
+DeclareVariable:
+  current: |
+    CREATE TABLE users (
+        id bigint NOT NULL,
+        name text
+    );
+    CREATE TABLE logs (
+        id bigint NOT NULL,
+        dt datetime
+    );
+  desired: |
+    CREATE TABLE users (
+        id bigint NOT NULL,
+        name text
+    );
+    CREATE TABLE logs (
+        id bigint NOT NULL,
+        dt datetime
+    );
+    CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
+    declare @date as datetime
+    set nocount on
+    begin
+        set @date = GETDATE()
+        insert into logs select id, @date from inserted
+    end
+  output: |
+    CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
+    declare
+    @date datetime
+    set nocount on
+    begin
+    set @date = getdate()
+    insert into logs select id, @date from inserted
+    end;
 RenameColumn:
   current: |
     CREATE TABLE users (
@@ -348,7 +382,6 @@ RenameColumn:
     );
   output: |
     EXEC sp_rename 'users.username', 'user_name', 'COLUMN';
-
 RenameColumnWithTypeChange:
   current: |
     CREATE TABLE users (
