@@ -24,10 +24,6 @@ jobs:
           - target: mysqldef
             mysql_version: '8.0'
           - target: psqldef
-            postgres_version: 10
-          - target: psqldef
-            postgres_version: 11
-          - target: psqldef
             postgres_version: 12
           - target: psqldef
             postgres_version: 13
@@ -35,6 +31,10 @@ jobs:
             postgres_version: 14
           - target: psqldef
             postgres_version: 15
+          - target: psqldef
+            postgres_version: 16
+          - target: psqldef
+            postgres_version: 17
       fail-fast: false
     steps:
       - uses: actions/setup-go@v5
