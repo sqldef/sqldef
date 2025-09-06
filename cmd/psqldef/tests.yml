@@ -1511,6 +1511,6 @@ CollateOnColumn:
         name varchar(255) not null
     );
     create view user_view as
-    select users.id,
-          (users.name collate "ja-JP-x-icu") as name
+    select id,
+          (name COLLATE "ja-JP-x-icu") as name
     from users;
