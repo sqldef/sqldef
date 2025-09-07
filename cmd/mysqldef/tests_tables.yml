@@ -544,13 +544,13 @@ RenameTableAndMultipleColumnChanges:
       id bigint NOT NULL AUTO_INCREMENT PRIMARY KEY,
       username varchar(100), -- @rename from=user_name
       is_active boolean DEFAULT true,
-      created_at timestamp DEFAULT CURRENT_TIMESTAMP
+      created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   output: |
     ALTER TABLE `old_accounts` RENAME TO `accounts`;
     ALTER TABLE `accounts` CHANGE COLUMN `user_name` `username` varchar(100);
     ALTER TABLE `accounts` CHANGE COLUMN `is_active` `is_active` boolean DEFAULT true;
-    ALTER TABLE `accounts` ADD COLUMN `created_at` timestamp DEFAULT current_timestamp AFTER `is_active`;
+    ALTER TABLE `accounts` ADD COLUMN `created_at` timestamp NOT NULL DEFAULT current_timestamp AFTER `is_active`;
     ALTER TABLE `accounts` ADD PRIMARY KEY (`id`);
     ALTER TABLE `accounts` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
     ALTER TABLE `accounts` DROP COLUMN `old_field`;
