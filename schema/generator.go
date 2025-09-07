@@ -977,8 +977,16 @@ func (g *Generator) normalizeViewDefinition(definition string) string {
 	if g.mode == GeneratorModePostgres {
 		definition = strings.ReplaceAll(definition, "array[", "")
 		definition = strings.ReplaceAll(definition, "]", "")
-		definition = strings.ReplaceAll(definition, "collate", "")
-		definition = strings.ReplaceAll(definition, "  ", "")
+
+		// Normalize table prefixes in column references (e.g., "users.name" -> "name")
+		// This handles cases like "(users.name collate ...)" -> "(name collate ...)"
+		// Match patterns like "table.column" but preserve the column name
+		tableColumnPattern := regexp.MustCompile(`\b(\w+)\.(\w+)\b`)
+		definition = tableColumnPattern.ReplaceAllString(definition, "$2")
+
+		// Normalize multiple spaces to single space
+		definition = regexp.MustCompile(`\s+`).ReplaceAllString(definition, " ")
+		definition = strings.TrimSpace(definition)
 	}
 	return definition
 }
