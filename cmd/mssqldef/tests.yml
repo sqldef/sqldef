@@ -398,3 +398,69 @@ RenameColumnWithTypeChange:
   output: |
     EXEC sp_rename 'users.username', 'user_name', 'COLUMN';
     ALTER TABLE [users] ALTER COLUMN [user_name] text NOT NULL;
+
+RenameTable:
+  current: |
+    CREATE TABLE user_accounts (
+      id bigint NOT NULL,
+      username text,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users ( -- @rename from=user_accounts
+      id bigint NOT NULL,
+      username text,
+      age integer
+    );
+  output: |
+    EXEC sp_rename 'user_accounts', 'users';
+
+RenameTableWithCommentVariant:
+  current: |
+    CREATE TABLE old_users (
+      id bigint NOT NULL,
+      name text
+    );
+  desired: |
+    CREATE TABLE new_users /* @rename from=old_users */ (
+      id bigint NOT NULL,
+      name text
+    );
+  output: |
+    EXEC sp_rename 'old_users', 'new_users';
+
+RenameTableWithQuotedName:
+  current: |
+    CREATE TABLE [user_accounts] (
+      id bigint NOT NULL,
+      name text
+    );
+  desired: |
+    CREATE TABLE [user_profiles] ( -- @rename from="user_accounts"
+      id bigint NOT NULL,
+      name text
+    );
+  output: |
+    EXEC sp_rename 'user_accounts', 'user_profiles';
+
+RenameTableAndMultipleChanges:
+  current: |
+    CREATE TABLE old_accounts (
+      id bigint NOT NULL,
+      user_name varchar(50),
+      is_active bit,
+      old_field text
+    );
+  desired: |
+    CREATE TABLE accounts ( -- @rename from=old_accounts
+      id bigint NOT NULL PRIMARY KEY,
+      username varchar(100) NOT NULL, -- @rename from=user_name
+      is_active bit DEFAULT 1
+    );
+  output: |
+    EXEC sp_rename 'old_accounts', 'accounts';
+    EXEC sp_rename 'accounts.user_name', 'username', 'COLUMN';
+    ALTER TABLE [accounts] ALTER COLUMN [username] varchar(100) NOT NULL;
+    ALTER TABLE [dbo].[accounts] ADD DEFAULT 1 FOR [is_active];
+    ALTER TABLE [dbo].[accounts] ADD PRIMARY KEY CLUSTERED ([id]);
+    ALTER TABLE [dbo].[accounts] DROP COLUMN [old_field];

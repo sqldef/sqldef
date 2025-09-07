@@ -486,3 +486,71 @@ RenameMultipleColumns:
   output: |
     ALTER TABLE `users` CHANGE COLUMN `user name` `username` text;
     ALTER TABLE `users` CHANGE COLUMN `email@address` `email_address` varchar(100);
+
+RenameTable:
+  current: |
+    CREATE TABLE user_accounts (
+      id bigint NOT NULL,
+      username text,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users ( -- @rename from=user_accounts
+      id bigint NOT NULL,
+      username text,
+      age integer
+    );
+  output: |
+    ALTER TABLE `user_accounts` RENAME TO `users`;
+
+RenameTableWithCommentVariant:
+  current: |
+    CREATE TABLE old_users (
+      id bigint NOT NULL,
+      name text
+    );
+  desired: |
+    CREATE TABLE new_users /* @rename from=old_users */ (
+      id bigint NOT NULL,
+      name text
+    );
+  output: |
+    ALTER TABLE `old_users` RENAME TO `new_users`;
+
+RenameTableWithQuotedName:
+  current: |
+    CREATE TABLE `user accounts` (
+      id bigint NOT NULL,
+      name text
+    );
+  desired: |
+    CREATE TABLE `user_profiles` ( -- @rename from="user accounts"
+      id bigint NOT NULL,
+      name text
+    );
+  output: |
+    ALTER TABLE `user accounts` RENAME TO `user_profiles`;
+
+RenameTableAndMultipleColumnChanges:
+  current: |
+    CREATE TABLE old_accounts (
+      id bigint NOT NULL,
+      user_name varchar(50),
+      is_active boolean,
+      old_field text
+    );
+  desired: |
+    CREATE TABLE accounts ( -- @rename from=old_accounts
+      id bigint NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      username varchar(100), -- @rename from=user_name
+      is_active boolean DEFAULT true,
+      created_at timestamp DEFAULT CURRENT_TIMESTAMP
+    );
+  output: |
+    ALTER TABLE `old_accounts` RENAME TO `accounts`;
+    ALTER TABLE `accounts` CHANGE COLUMN `user_name` `username` varchar(100);
+    ALTER TABLE `accounts` CHANGE COLUMN `is_active` `is_active` boolean DEFAULT true;
+    ALTER TABLE `accounts` ADD COLUMN `created_at` timestamp DEFAULT current_timestamp AFTER `is_active`;
+    ALTER TABLE `accounts` ADD PRIMARY KEY (`id`);
+    ALTER TABLE `accounts` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
+    ALTER TABLE `accounts` DROP COLUMN `old_field`;

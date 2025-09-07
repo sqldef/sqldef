@@ -1647,3 +1647,72 @@ RenameMultipleColumns:
   output: |
     ALTER TABLE "public"."users" RENAME COLUMN "user name" TO "username";
     ALTER TABLE "public"."users" RENAME COLUMN "email@address" TO "email_address";
+
+RenameTable:
+  current: |
+    CREATE TABLE user_accounts (
+      id bigint NOT NULL,
+      username text,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users ( -- @rename from=user_accounts
+      id bigint NOT NULL,
+      username text,
+      age integer
+    );
+  output: |
+    ALTER TABLE "public"."user_accounts" RENAME TO "users";
+
+RenameTableWithCommentVariant:
+  current: |
+    CREATE TABLE old_users (
+      id bigint NOT NULL,
+      name text
+    );
+  desired: |
+    CREATE TABLE new_users /* @rename from=old_users */ (
+      id bigint NOT NULL,
+      name text
+    );
+  output: |
+    ALTER TABLE "public"."old_users" RENAME TO "new_users";
+
+RenameTableWithQuotedName:
+  current: |
+    CREATE TABLE "user accounts" (
+      id bigint NOT NULL,
+      name text
+    );
+  desired: |
+    CREATE TABLE "user_profiles" ( -- @rename from="user accounts"
+      id bigint NOT NULL,
+      name text
+    );
+  output: |
+    ALTER TABLE "public"."user accounts" RENAME TO "user_profiles";
+
+RenameTableAndMultipleChanges:
+  current: |
+    CREATE TABLE old_accounts (
+      id bigint NOT NULL,
+      user_name varchar(50),
+      is_active boolean,
+      old_field text
+    );
+  desired: |
+    CREATE TABLE accounts ( -- @rename from=old_accounts
+      id bigint NOT NULL PRIMARY KEY,
+      username varchar(100) NOT NULL, -- @rename from=user_name
+      is_active boolean DEFAULT true,
+      created_at timestamp DEFAULT CURRENT_TIMESTAMP
+    );
+  output: |
+    ALTER TABLE "public"."old_accounts" RENAME TO "accounts";
+    ALTER TABLE "public"."accounts" RENAME COLUMN "user_name" TO "username";
+    ALTER TABLE "public"."accounts" ALTER COLUMN "username" TYPE varchar(100);
+    ALTER TABLE "public"."accounts" ALTER COLUMN "username" SET NOT NULL;
+    ALTER TABLE "public"."accounts" ALTER COLUMN "is_active" SET DEFAULT true;
+    ALTER TABLE "public"."accounts" ADD COLUMN "created_at" timestamp DEFAULT current_timestamp;
+    ALTER TABLE "public"."accounts" ADD PRIMARY KEY ("id");
+    ALTER TABLE "public"."accounts" DROP COLUMN "old_field";

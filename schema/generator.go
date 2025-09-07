@@ -138,10 +138,43 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				}
 				mergeTable(currentTable, desired.table)
 			} else {
-				// Table not found, create table.
-				interDDLs = append(interDDLs, desired.statement)
-				table := desired.table // copy table
-				g.currentTables = append(g.currentTables, &table)
+				// Table not found. Check if it's a rename from another table.
+				if desired.table.renameFrom != "" {
+					oldTableName := g.normalizeOldTableName(desired.table.renameFrom, desired.table.name)
+					oldTable := findTableByName(g.currentTables, oldTableName)
+					if oldTable != nil {
+						// Found the old table, generate rename DDL
+						renameDDL := g.generateRenameTableDDL(oldTableName, desired.table.name)
+						interDDLs = append(interDDLs, renameDDL)
+
+						// Update the old table's name to the new name
+						oldTable.name = desired.table.name
+
+						// Now generate DDLs for any column/index changes
+						tableDDLs, err := g.generateDDLsForCreateTable(*oldTable, *desired)
+						if err != nil {
+							return nil, err
+						}
+						for _, tableDDL := range tableDDLs {
+							if isAddConstraintForeignKey(tableDDL) {
+								foreignKeyDDLs = append(foreignKeyDDLs, tableDDL)
+							} else {
+								interDDLs = append(interDDLs, tableDDL)
+							}
+						}
+						mergeTable(oldTable, desired.table)
+					} else {
+						// Old table not found, create as new table
+						interDDLs = append(interDDLs, desired.statement)
+						table := desired.table // copy table
+						g.currentTables = append(g.currentTables, &table)
+					}
+				} else {
+					// Table not found and no rename, create table.
+					interDDLs = append(interDDLs, desired.statement)
+					table := desired.table // copy table
+					g.currentTables = append(g.currentTables, &table)
+				}
 			}
 			table := desired.table // copy table
 			g.desiredTables = append(g.desiredTables, &table)
@@ -663,7 +696,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 				}
 
-				_, tableName := splitTableName(desired.table.name, g.defaultSchema)
+				tableName := extractTableName(desired.table.name)
 				constraintName := fmt.Sprintf("%s_%s_check", tableName, desiredColumn.name)
 				if desiredColumn.check != nil && desiredColumn.check.constraintName != "" {
 					constraintName = desiredColumn.check.constraintName
@@ -704,7 +737,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				if !areSameCheckDefinition(currentColumn.check, desiredColumn.check) {
-					_, tableName := splitTableName(desired.table.name, g.defaultSchema)
+					tableName := extractTableName(desired.table.name)
 					constraintName := fmt.Sprintf("%s_%s_check", tableName, desiredColumn.name)
 					if currentColumn.check != nil {
 						currentConstraintName := currentColumn.check.constraintName
@@ -1738,6 +1771,56 @@ func (g *Generator) escapeSQLName(name string) string {
 		return fmt.Sprintf("[%s]", name)
 	default:
 		return fmt.Sprintf("`%s`", name)
+	}
+}
+
+func (g *Generator) normalizeOldTableName(oldName, newName string) string {
+	// Normalize the old table name with schema prefix if needed
+	oldTableName := oldName
+	if g.mode == GeneratorModePostgres || g.mode == GeneratorModeMssql {
+		// If the old name doesn't contain a schema, add the default schema
+		if !strings.Contains(oldTableName, ".") {
+			// Extract schema from the new table name
+			parts := strings.SplitN(newName, ".", 2)
+			if len(parts) == 2 {
+				oldTableName = parts[0] + "." + oldTableName
+			}
+		}
+	}
+	return oldTableName
+}
+
+// extractTableName extracts the table name from a fully-qualified name (e.g., "schema.table" -> "table")
+func extractTableName(fullName string) string {
+	if idx := strings.LastIndex(fullName, "."); idx != -1 {
+		return fullName[idx+1:]
+	}
+	return fullName
+}
+
+func (g *Generator) generateRenameTableDDL(oldName, newName string) string {
+	switch g.mode {
+	case GeneratorModePostgres:
+		// For PostgreSQL, RENAME TO should only include the table name without schema
+		// Extract just the table name from the full name
+		newTableName := extractTableName(newName)
+		return fmt.Sprintf("ALTER TABLE %s RENAME TO %s",
+			g.escapeTableName(oldName),
+			g.escapeSQLName(newTableName))
+	case GeneratorModeMssql:
+		// MSSQL uses sp_rename for renaming tables
+		// Extract just the table names without schema
+		oldTableName := extractTableName(oldName)
+		newTableName := extractTableName(newName)
+		return fmt.Sprintf("EXEC sp_rename '%s', '%s'", oldTableName, newTableName)
+	case GeneratorModeMysql:
+		fallthrough
+	case GeneratorModeSQLite3:
+		fallthrough
+	default:
+		return fmt.Sprintf("ALTER TABLE %s RENAME TO %s",
+			g.escapeTableName(oldName),
+			g.escapeTableName(newName))
 	}
 }
 

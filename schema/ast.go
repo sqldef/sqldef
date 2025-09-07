@@ -57,6 +57,7 @@ type Table struct {
 	exclusions  []Exclusion
 	policies    []Policy
 	options     map[string]string
+	renameFrom  string // Previous table name if renamed via @rename annotation
 }
 
 type Column struct {
