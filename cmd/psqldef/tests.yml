@@ -1108,6 +1108,252 @@ DropTableOnNonStandardDefaultSchema:
   output: |
     DROP TABLE "foo"."bigdata";
   user: psqldef_user
+
+# Regression: boolean type must not be schema-qualified on non-public schema
+AddBooleanColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      requires_consent boolean NOT NULL DEFAULT true
+    );
+  output: |
+    ALTER TABLE "foo"."items" ADD COLUMN "requires_consent" boolean NOT NULL DEFAULT true;
+  user: psqldef_user
+
+AddBooleanColumnWithExplicitSchema:
+  current: |
+    CREATE TABLE foo.items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE foo.items (
+      id integer,
+      requires_consent boolean NOT NULL DEFAULT true
+    );
+  output: |
+    ALTER TABLE "foo"."items" ADD COLUMN "requires_consent" boolean NOT NULL DEFAULT true;
+  user: psqldef_user
+
+# User-defined enum type on non-public default schema (unqualified type usage)
+AddEnumTypeColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TYPE lang AS ENUM (
+      'ja',
+      'en'
+    );
+
+    CREATE TABLE items (
+      id integer,
+      lang lang NOT NULL
+    );
+  output: |
+    CREATE TYPE lang AS ENUM (
+      'ja',
+      'en'
+    );
+    ALTER TABLE "foo"."items" ADD COLUMN "lang" lang NOT NULL;
+  user: psqldef_user
+
+# User-defined enum type on non-public default schema (explicit schema usage)
+AddEnumTypeColumnWithExplicitSchemaOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TYPE foo.lang AS ENUM (
+      'ja',
+      'en'
+    );
+
+    CREATE TABLE items (
+      id integer,
+      lang foo.lang NOT NULL
+    );
+  output: |
+    CREATE TYPE foo.lang AS ENUM (
+      'ja',
+      'en'
+    );
+    ALTER TABLE "foo"."items" ADD COLUMN "lang" foo.lang NOT NULL;
+  user: psqldef_user
+
+# Built-in types must not be schema-qualified on non-public schema
+AddIntegerColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      count integer NOT NULL
+    );
+  output: |
+    ALTER TABLE "foo"."items" ADD COLUMN "count" integer NOT NULL;
+  user: psqldef_user
+
+AddTextColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      description text NOT NULL
+    );
+  output: |
+    ALTER TABLE "foo"."items" ADD COLUMN "description" text NOT NULL;
+  user: psqldef_user
+
+AddVarcharColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      name varchar(255) NOT NULL
+    );
+  output: |
+    ALTER TABLE "foo"."items" ADD COLUMN "name" varchar(255) NOT NULL;
+  user: psqldef_user
+
+AddNumericColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      amount numeric(10, 2) NOT NULL
+    );
+  output: |
+    ALTER TABLE "foo"."items" ADD COLUMN "amount" numeric(10, 2) NOT NULL;
+  user: psqldef_user
+
+AddUUIDColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      uuid_col uuid NOT NULL
+    );
+  output: |
+    ALTER TABLE "foo"."items" ADD COLUMN "uuid_col" uuid NOT NULL;
+  user: psqldef_user
+
+AddJSONBColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      meta jsonb NOT NULL
+    );
+  output: |
+    ALTER TABLE "foo"."items" ADD COLUMN "meta" jsonb NOT NULL;
+  user: psqldef_user
+
+AddTimestampColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      ts timestamp NOT NULL
+    );
+  output: |
+    ALTER TABLE "foo"."items" ADD COLUMN "ts" timestamp NOT NULL;
+  user: psqldef_user
+
+AddTimestamptzColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      ts_tz timestamptz NOT NULL
+    );
+  output: |
+    ALTER TABLE "foo"."items" ADD COLUMN "ts_tz" timestamp WITH TIME ZONE NOT NULL;
+  user: psqldef_user
+
+AddTimetzColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      time_tz timetz NOT NULL
+    );
+  output: |
+    ALTER TABLE "foo"."items" ADD COLUMN "time_tz" time WITH TIME ZONE NOT NULL;
+  user: psqldef_user
+
+AddDoublePrecisionColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      dp double precision NOT NULL
+    );
+  output: |
+    ALTER TABLE "foo"."items" ADD COLUMN "dp" double precision NOT NULL;
+  user: psqldef_user
+
+AddRealColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      rp real NOT NULL
+    );
+  output: |
+    ALTER TABLE "foo"."items" ADD COLUMN "rp" real NOT NULL;
+  user: psqldef_user
+
+AddByteaColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      data bytea NOT NULL
+    );
+  output: |
+    ALTER TABLE "foo"."items" ADD COLUMN "data" bytea NOT NULL;
+  user: psqldef_user
 ChangeTimezone:
   current: |
     CREATE TABLE test (
