@@ -1,3 +1,7 @@
+## v2.1.0
+
+* Support renaming columns with `-- @rename from=<old_name>` annotation [#727](https://github.com/sqldef/sqldef/pull/727)
+
 ## v2.0.11
 
 * mssqldef: Support complex trigger bodies with variables [#726](https://github.com/sqldef/sqldef/pull/726)
