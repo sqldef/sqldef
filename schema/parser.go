@@ -38,7 +38,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 	case *parser.DDL:
 		if stmt.Action == parser.CreateTable {
 			// TODO: handle other create DDL as error?
-			table, err := parseTable(mode, stmt, defaultSchema)
+			table, err := parseTable(mode, stmt, defaultSchema, ddl)
 			if err != nil {
 				return nil, err
 			}
@@ -199,12 +199,14 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 	}
 }
 
-func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Table, error) {
+func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawDDL string) (Table, error) {
 	var columns = map[string]*Column{}
 	var indexes []Index
 	var checks []CheckDefinition
 	var foreignKeys []ForeignKey
 	var exclusions []Exclusion
+
+	inlineComments := extractInlineComments(rawDDL)
 
 	for i, parsedCol := range stmt.TableSpec.Columns {
 		column := Column{
@@ -232,6 +234,12 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string) (Tab
 			sequence:      parseIdentitySequence(parsedCol.Type.Identity),
 			generated:     parseGenerated(parsedCol.Type.Generated),
 		}
+
+		// Parse @rename annotation from inline comment if present
+		if comment, ok := inlineComments[parsedCol.Name.String()]; ok {
+			column.renameFrom = extractRenameFrom(comment)
+		}
+
 		if parsedCol.Type.Check != nil {
 			column.check = &CheckDefinition{
 				definition:        parser.String(parsedCol.Type.Check.Where.Expr),
@@ -789,4 +797,53 @@ func castBoolPtr(val *parser.BoolVal) *bool {
 	}
 	ret := castBool(*val)
 	return &ret
+}
+
+// extractRenameFrom extracts the rename annotation from a comment string
+// e.g. "-- @rename from=old_column_name" -> "old_column_name"
+// e.g. "-- @rename from=\"foo bar\"" -> "foo bar"
+func extractRenameFrom(comment string) string {
+	// Match pattern: @rename from= followed by either:
+	// - Standard SQL quoted identifier with double quotes
+	// - identifier
+	re := regexp.MustCompile(`@rename\s+from=(?:"([^"]+)"|(\S+))`)
+	matches := re.FindStringSubmatch(comment)
+
+	// The regex has 2 capture groups (double quotes or unquoted)
+	// Return whichever one matched
+	if len(matches) > 1 {
+		if matches[1] != "" {
+			return matches[1] // double-quoted identifier
+		}
+		if matches[2] != "" {
+			return matches[2] // unquoted identifier
+		}
+	}
+	return ""
+}
+
+// extractInlineComments extracts inline comments (-- comments) from a CREATE TABLE statement
+// and maps them to column names
+func extractInlineComments(rawDDL string) map[string]string {
+	comments := make(map[string]string)
+
+	// Split DDL into lines
+	lines := strings.Split(rawDDL, "\n")
+
+	// Regular expression to match column definitions with inline comments
+	// Matches: column_name type_info, -- comment
+	// or: column_name type_info -- comment
+	// Supports both quoted and unquoted column names
+	columnWithCommentRe := regexp.MustCompile(`^\s*(?:["\` + "`" + `\[]?([^"\` + "`" + `\],\s]+)["\` + "`" + `\]]?)\s+[^,]*(,?)?\s*--\s*(.*)$`)
+
+	for _, line := range lines {
+		matches := columnWithCommentRe.FindStringSubmatch(line)
+		if len(matches) > 3 {
+			columnName := strings.TrimSpace(matches[1])
+			comment := matches[3]
+			comments[columnName] = comment
+		}
+	}
+
+	return comments
 }

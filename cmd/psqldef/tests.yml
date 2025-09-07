@@ -1514,3 +1514,136 @@ CollateOnColumn:
     select users.id,
           (users.name collate "ja-JP-x-icu") as name
     from users;
+
+RenameColumn:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      username text,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      user_name text, -- @rename from=username
+      age integer
+    );
+  output: |
+    ALTER TABLE "public"."users" RENAME COLUMN "username" TO "user_name";
+
+RenameColumnWithTypeChange:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      username varchar(100),
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      user_name text NOT NULL, -- @rename from=username
+      age integer
+    );
+  output: |
+    ALTER TABLE "public"."users" RENAME COLUMN "username" TO "user_name";
+    ALTER TABLE "public"."users" ALTER COLUMN "user_name" TYPE text;
+    ALTER TABLE "public"."users" ALTER COLUMN "user_name" SET NOT NULL;
+
+RenameColumnIdempotency:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      user_name text,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      user_name text, -- @rename from=username
+      age integer
+    );
+  output: ""
+
+RenameColumnConflictingNames:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      username text,
+      user_name varchar(50),
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      username text,
+      user_name varchar(100), -- @rename from=username
+      age integer
+    );
+  error: "cannot rename column 'username' to 'user_name' - column 'username' still exists"
+
+RenameColumnQuotedDoubleQuotes:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      "foo bar" text,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      foobar text, -- @rename from="foo bar"
+      age integer
+    );
+  output: |
+    ALTER TABLE "public"."users" RENAME COLUMN "foo bar" TO "foobar";
+
+RenameColumnWithSpecialChars:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      "column-with-dash" varchar(50),
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      column_with_underscore varchar(50), -- @rename from="column-with-dash"
+      age integer
+    );
+  output: |
+    ALTER TABLE "public"."users" RENAME COLUMN "column-with-dash" TO "column_with_underscore";
+
+RenameColumnWithDot:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      "special.column" text NOT NULL,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      special_column text NOT NULL, -- @rename from="special.column"
+      age integer
+    );
+  output: |
+    ALTER TABLE "public"."users" RENAME COLUMN "special.column" TO "special_column";
+
+RenameMultipleColumns:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      "user name" text,
+      "email@address" varchar(100),
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      username text, -- @rename from="user name"
+      email_address varchar(100), -- @rename from="email@address"
+      age integer
+    );
+  output: |
+    ALTER TABLE "public"."users" RENAME COLUMN "user name" TO "username";
+    ALTER TABLE "public"."users" RENAME COLUMN "email@address" TO "email_address";
