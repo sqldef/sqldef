@@ -463,9 +463,9 @@ func assertEquals(t *testing.T, actual string, expected string) {
 }
 
 func resetTestDatabase() {
-	// First, explicitly drop all tables to handle MariaDB connection caching
-	dropTablesArgs := append(getMySQLArgs("mysqldef_test"), "-e", "SET FOREIGN_KEY_CHECKS = 0; DROP DATABASE IF EXISTS mysqldef_test; SET FOREIGN_KEY_CHECKS = 1;")
-	testutils.MustExecute("mysql", dropTablesArgs...)
+	// Drop database if it exists (don't specify database name in connection)
+	args1 := append(getMySQLArgs(), "-e", "DROP DATABASE IF EXISTS mysqldef_test;")
+	testutils.MustExecute("mysql", args1...)
 	
 	// Then recreate the database
 	args2 := append(getMySQLArgs(), "-e", "CREATE DATABASE mysqldef_test;")
