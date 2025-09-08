@@ -558,7 +558,6 @@ CREATE TABLE accounts ( -- @rename from=old_accounts
 
 Because sqldef distinguishes table/index by its name, sqldef does NOT support:
 
-- RENAME TABLE
 - RENAME INDEX
   - DROP + ADD could be fine for index, though
 
