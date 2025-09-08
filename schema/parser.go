@@ -663,13 +663,16 @@ func normalizedTableName(mode GeneratorMode, tableName parser.TableName, default
 }
 
 func normalizedTable(mode GeneratorMode, tableName string, defaultSchema string) string {
-	switch mode {
-	case GeneratorModePostgres, GeneratorModeMssql:
-		schema, table := splitTableName(tableName, defaultSchema)
-		return fmt.Sprintf("%s.%s", schema, table)
-	default:
-		return tableName
-	}
+    switch mode {
+    case GeneratorModePostgres, GeneratorModeMssql:
+        if tableName == "" { // avoid qualifying empty references (e.g., built-in types)
+            return ""
+        }
+        schema, table := splitTableName(tableName, defaultSchema)
+        return fmt.Sprintf("%s.%s", schema, table)
+    default:
+        return tableName
+    }
 }
 
 // Replace pseudo collation "binary" with "{charset}_bin"

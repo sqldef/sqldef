@@ -124,6 +124,35 @@ CreateTableOnNonStandardDefaultSchema:
       v_nvarchar nvarchar(30)
     );
   user: "mssqldef_user"
+  
+# Built-in types must not be schema-qualified on non-default schema
+AddBitColumnOnNonDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id int
+    );
+  desired: |
+    CREATE TABLE items (
+      id int,
+      requires_consent bit NOT NULL DEFAULT 1
+    );
+  output: |
+    ALTER TABLE [FOO].[items] ADD [requires_consent] bit NOT NULL DEFAULT 1;
+  user: "mssqldef_user"
+
+AddIntColumnOnNonDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id int
+    );
+  desired: |
+    CREATE TABLE items (
+      id int,
+      count int NOT NULL
+    );
+  output: |
+    ALTER TABLE [FOO].[items] ADD [count] int NOT NULL;
+  user: "mssqldef_user"
 DropTableOnNonStandardDefaultSchema:
   current: |
     CREATE TABLE v (
