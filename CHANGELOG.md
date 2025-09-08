@@ -1,3 +1,8 @@
+## v2.2.0
+
+* Support renaming tables with `-- @rename from=<old_table_name>` comment [#731](https://github.com/sqldef/sqldef/pull/731)
+* mssqldef, psqldef: Fix built-in types in ALTER statements [#730](https://github.com/sqldef/sqldef/pull/730)
+
 ## v2.1.0
 
 * Support renaming columns with `-- @rename from=<old_name>` annotation [#727](https://github.com/sqldef/sqldef/pull/727)
