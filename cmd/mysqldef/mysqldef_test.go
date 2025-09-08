@@ -53,6 +53,34 @@ func getMySQLArgs(dbName ...string) []string {
 	return args
 }
 
+func getMySQLDefArgs(dbName ...string) []string {
+	port := getMySQLPort()
+	args := []string{"-uroot"}
+	
+	// Always specify host for mysqldef to avoid connection issues
+	args = append(args, "-h", "127.0.0.1")
+	
+	if port != 3306 {
+		args = append(args, "-P", strconv.Itoa(port))
+	}
+	
+	if len(dbName) > 0 {
+		args = append(args, dbName[0])
+	}
+	
+	return args
+}
+
+// adjustDDLForFlavor adjusts DDL strings to match the expected output format for MariaDB vs MySQL
+func adjustDDLForFlavor(ddl string) string {
+	mysqlFlavor := os.Getenv("MYSQL_FLAVOR")
+	if mysqlFlavor == "mariadb" {
+		// MariaDB includes collation in DEFAULT CHARSET=latin1 statements
+		ddl = strings.ReplaceAll(ddl, "DEFAULT CHARSET=latin1;", "DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;")
+	}
+	return ddl
+}
+
 func TestApply(t *testing.T) {
 	db, err := connectDatabase()
 	if err != nil {
@@ -127,14 +155,14 @@ func TestMysqldefDryRun(t *testing.T) {
 		);`,
 	))
 
-	dryRun := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--dry-run", "--file", "schema.sql")
-	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	dryRun := assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--dry-run", "--file", "schema.sql")...)
+	apply := assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--file", "schema.sql")...)
 	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 }
 
 func TestMysqldefExport(t *testing.T) {
 	resetTestDatabase()
-	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export")
+	out := assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--export")...)
 	assertEquals(t, out, "-- No table exists --\n")
 
 	ddls := "CREATE TABLE `users` (\n" +
@@ -145,8 +173,9 @@ func TestMysqldefExport(t *testing.T) {
 		"CREATE TRIGGER test AFTER INSERT ON users FOR EACH ROW UPDATE users SET updated_at = current_timestamp();\n"
 	args := append(getMySQLArgs("mysqldef_test"), "-e", ddls)
 	testutils.MustExecute("mysql", args...)
-	out = assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export")
-	assertEquals(t, out, ddls)
+	out = assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--export")...)
+	expectedDDLs := adjustDDLForFlavor(ddls)
+	assertEquals(t, out, expectedDDLs)
 }
 
 func TestMysqldefExportConcurrently(t *testing.T) {
@@ -166,21 +195,22 @@ func TestMysqldefExportConcurrently(t *testing.T) {
 	args := append(getMySQLArgs("mysqldef_test"), "-e", ddls)
 	testutils.MustExecute("mysql", args...)
 
-	outputDefault := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export")
+	outputDefault := assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--export")...)
 
 	writeFile("config.yml", "dump_concurrency: 0")
-	outputNoConcurrency := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export", "--config", "config.yml")
+	outputNoConcurrency := assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--export", "--config", "config.yml")...)
 
 	writeFile("config.yml", "dump_concurrency: 1")
-	outputConcurrency1 := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export", "--config", "config.yml")
+	outputConcurrency1 := assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--export", "--config", "config.yml")...)
 
 	writeFile("config.yml", "dump_concurrency: 10")
-	outputConcurrency10 := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export", "--config", "config.yml")
+	outputConcurrency10 := assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--export", "--config", "config.yml")...)
 
 	writeFile("config.yml", "dump_concurrency: -1")
-	outputConcurrencyNoLimit := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--export", "--config", "config.yml")
+	outputConcurrencyNoLimit := assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--export", "--config", "config.yml")...)
 
-	assertEquals(t, outputDefault, ddls)
+	expectedDDLs := adjustDDLForFlavor(ddls)
+	assertEquals(t, outputDefault, expectedDDLs)
 	assertEquals(t, outputNoConcurrency, outputDefault)
 	assertEquals(t, outputConcurrency1, outputDefault)
 	assertEquals(t, outputConcurrency10, outputDefault)
@@ -200,7 +230,7 @@ func TestMysqldefDropTable(t *testing.T) {
 	writeFile("schema.sql", "")
 
 	dropTable := "DROP TABLE `users`;\n"
-	out := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--enable-drop", "--file", "schema.sql")
+	out := assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--enable-drop", "--file", "schema.sql")...)
 	assertEquals(t, out, applyPrefix+dropTable)
 }
 
@@ -215,7 +245,7 @@ func TestMysqldefSkipView(t *testing.T) {
 
 	writeFile("schema.sql", createTable)
 
-	output := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--skip-view", "--file", "schema.sql")
+	output := assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--skip-view", "--file", "schema.sql")...)
 	assertEquals(t, output, nothingModified)
 }
 
@@ -237,9 +267,9 @@ func TestMysqldefBeforeApply(t *testing.T) {
 	) ENGINE = InnoDB DEFAULT CHARSET = utf8;`,
 	)
 	writeFile("schema.sql", createTable)
-	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql", "--before-apply", beforeApply)
+	apply := assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--file", "schema.sql", "--before-apply", beforeApply)...)
 	assertEquals(t, apply, applyPrefix+beforeApply+"\n"+createTable+"\n")
-	apply = assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql", "--before-apply", beforeApply)
+	apply = assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--file", "schema.sql", "--before-apply", beforeApply)...)
 	assertEquals(t, apply, nothingModified)
 }
 
@@ -255,7 +285,7 @@ func TestMysqldefConfigIncludesTargetTables(t *testing.T) {
 	writeFile("schema.sql", usersTable+users1Table)
 	writeFile("config.yml", "target_tables: |\n  users\n  users_\\d\n")
 
-	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	apply := assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--config", "config.yml", "--file", "schema.sql")...)
 	assertEquals(t, apply, nothingModified)
 }
 
@@ -271,7 +301,7 @@ func TestMysqldefConfigIncludesSkipTables(t *testing.T) {
 	writeFile("schema.sql", usersTable+users1Table)
 	writeFile("config.yml", "skip_tables: |\n  users_10\n")
 
-	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	apply := assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--config", "config.yml", "--file", "schema.sql")...)
 	assertEquals(t, apply, nothingModified)
 }
 
@@ -299,7 +329,7 @@ func TestMysqldefConfigIncludesAlgorithm(t *testing.T) {
 	writeFile("schema.sql", createTable)
 	writeFile("config.yml", "algorithm: |\n  inplace\n")
 
-	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	apply := assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--config", "config.yml", "--file", "schema.sql")...)
 	assertEquals(t, apply, applyPrefix+stripHeredoc(`
 	ALTER TABLE `+"`users`"+` CHANGE COLUMN `+"`name` `name`"+` varchar(1000) COLLATE utf8mb4_bin DEFAULT null, ALGORITHM=INPLACE;
 	`,
@@ -331,7 +361,7 @@ func TestMysqldefConfigIncludesLock(t *testing.T) {
 	writeFile("schema.sql", createTable)
 	writeFile("config.yml", "lock: none")
 
-	apply := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	apply := assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--config", "config.yml", "--file", "schema.sql")...)
 	assertEquals(t, apply, applyPrefix+stripHeredoc(`
 	ALTER TABLE `+"`users`"+` ADD COLUMN `+"`new_column` "+`varchar(255) COLLATE utf8mb4_bin DEFAULT null `+"AFTER `name`, "+`LOCK=NONE;
 	`))
@@ -348,7 +378,7 @@ func TestMysqldefConfigIncludesLock(t *testing.T) {
 	writeFile("schema.sql", createTable)
 	writeFile("config.yml", "algorithm: inplace\nlock: none")
 
-	apply = assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	apply = assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--config", "config.yml", "--file", "schema.sql")...)
 	assertEquals(t, apply, applyPrefix+stripHeredoc(`
 	ALTER TABLE `+"`users`"+` CHANGE COLUMN `+"`new_column` `new_column` "+`varchar(1000) COLLATE utf8mb4_bin DEFAULT null, ALGORITHM=INPLACE, LOCK=NONE;
 	`))
@@ -384,13 +414,13 @@ func TestMain(m *testing.M) {
 func assertApply(t *testing.T, schema string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--file", "schema.sql")...)
 }
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	actual := assertedExecute(t, "./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	actual := assertedExecute(t, "./mysqldef", append(getMySQLDefArgs("mysqldef_test"), "--file", "schema.sql")...)
 	assertEquals(t, actual, expected)
 }
 
@@ -408,7 +438,8 @@ func assertApplyOptionsOutput(t *testing.T, schema string, expected string, opti
 func assertApplyFailure(t *testing.T, schema string, expected string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	actual, err := testutils.Execute("./mysqldef", "-uroot", "mysqldef_test", "--file", "schema.sql")
+	args := append(getMySQLDefArgs("mysqldef_test"), "--file", "schema.sql")
+	actual, err := testutils.Execute("./mysqldef", args...)
 	if err == nil {
 		t.Errorf("expected 'mysqldef -uroot mysqldef_test --file schema.sql' to fail but succeeded with: %s", actual)
 	}
@@ -432,8 +463,11 @@ func assertEquals(t *testing.T, actual string, expected string) {
 }
 
 func resetTestDatabase() {
-	args1 := append(getMySQLArgs(), "-e", "DROP DATABASE IF EXISTS mysqldef_test;")
-	testutils.MustExecute("mysql", args1...)
+	// First, explicitly drop all tables to handle MariaDB connection caching
+	dropTablesArgs := append(getMySQLArgs("mysqldef_test"), "-e", "SET FOREIGN_KEY_CHECKS = 0; DROP DATABASE IF EXISTS mysqldef_test; SET FOREIGN_KEY_CHECKS = 1;")
+	testutils.MustExecute("mysql", dropTablesArgs...)
+	
+	// Then recreate the database
 	args2 := append(getMySQLArgs(), "-e", "CREATE DATABASE mysqldef_test;")
 	testutils.MustExecute("mysql", args2...)
 }
