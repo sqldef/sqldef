@@ -477,7 +477,9 @@ brew install sqldef/sqldef/mysqldef
 brew install sqldef/sqldef/psqldef
 ```
 
-## Column Renaming
+## Column and Table Renaming
+
+### Column Renaming
 
 sqldef supports renaming columns using the `-- @rename from=old_name` annotation:
 
@@ -505,11 +507,57 @@ CREATE TABLE users (
 );
 ```
 
+### Table Renaming
+
+sqldef supports renaming tables using the `-- @rename from=old_name` annotation on the CREATE TABLE line:
+
+```sql
+CREATE TABLE users ( -- @rename from=user_accounts
+  id bigint NOT NULL,
+  username text,
+  age integer
+);
+```
+
+You can also use the block comment style:
+
+```sql
+CREATE TABLE users /* @rename from=user_accounts */ (
+  id bigint NOT NULL,
+  username text,
+  age integer
+);
+```
+
+This will generate appropriate rename commands for each database:
+- MySQL: `ALTER TABLE user_accounts RENAME TO users`
+- PostgreSQL: `ALTER TABLE user_accounts RENAME TO users`
+- SQL Server: `EXEC sp_rename 'user_accounts', 'users'`
+- SQLite: `ALTER TABLE user_accounts RENAME TO users`
+
+For tables with special characters or spaces, use double quotes:
+
+```sql
+CREATE TABLE user_profiles ( -- @rename from="user accounts"
+  id bigint NOT NULL,
+  name text
+);
+```
+
+You can combine table renaming with column renaming and other schema changes:
+
+```sql
+CREATE TABLE accounts ( -- @rename from=old_accounts
+  id bigint NOT NULL PRIMARY KEY,
+  username varchar(100) NOT NULL, -- @rename from=user_name
+  is_active boolean DEFAULT true
+);
+```
+
 ## Limitations
 
 Because sqldef distinguishes table/index by its name, sqldef does NOT support:
 
-- RENAME TABLE
 - RENAME INDEX
   - DROP + ADD could be fine for index, though
 

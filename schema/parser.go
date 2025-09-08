@@ -206,7 +206,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	var foreignKeys []ForeignKey
 	var exclusions []Exclusion
 
-	inlineComments := extractInlineComments(rawDDL)
+	columnComments := extractColumnComments(rawDDL, mode)
 
 	for i, parsedCol := range stmt.TableSpec.Columns {
 		column := Column{
@@ -235,8 +235,8 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			generated:     parseGenerated(parsedCol.Type.Generated),
 		}
 
-		// Parse @rename annotation from inline comment if present
-		if comment, ok := inlineComments[parsedCol.Name.String()]; ok {
+		// Parse @rename annotation for each column
+		if comment, ok := columnComments[parsedCol.Name.String()]; ok {
 			column.renameFrom = extractRenameFrom(comment)
 		}
 
@@ -375,6 +375,12 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		exclusions = append(exclusions, exclusion)
 	}
 
+	tableComment := extractTableComment(rawDDL, mode)
+	tableRenameFrom := ""
+	if tableComment != "" {
+		tableRenameFrom = extractRenameFrom(tableComment)
+	}
+
 	return Table{
 		name:        normalizedTableName(mode, stmt.NewName, defaultSchema),
 		columns:     columns,
@@ -383,6 +389,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		foreignKeys: foreignKeys,
 		exclusions:  exclusions,
 		options:     stmt.TableSpec.Options,
+		renameFrom:  tableRenameFrom,
 	}, nil
 }
 
@@ -825,9 +832,69 @@ func extractRenameFrom(comment string) string {
 	return ""
 }
 
-// extractInlineComments extracts inline comments (-- comments) from a CREATE TABLE statement
+// generatorModeToParserMode converts GeneratorMode to ParserMode
+func generatorModeToParserMode(mode GeneratorMode) parser.ParserMode {
+	switch mode {
+	case GeneratorModeMysql:
+		return parser.ParserModeMysql
+	case GeneratorModePostgres:
+		return parser.ParserModePostgres
+	case GeneratorModeSQLite3:
+		return parser.ParserModeSQLite3
+	case GeneratorModeMssql:
+		return parser.ParserModeMssql
+	default:
+		return parser.ParserModeMysql
+	}
+}
+
+func extractTableComment(rawDDL string, mode GeneratorMode) string {
+	tokenizer := parser.NewTokenizer(rawDDL, generatorModeToParserMode(mode))
+	tokenizer.AllowComments = true
+
+	var foundCreate, foundTable bool
+	var firstComment string // Store the first comment after CREATE TABLE
+
+	for {
+		tok, val := tokenizer.Scan()
+		if tok == 0 {
+			break // EOF
+		}
+
+		// Look for CREATE keyword
+		if tok == parser.CREATE {
+			foundCreate = true
+			continue
+		}
+
+		// Look for TABLE keyword after CREATE
+		if foundCreate && tok == parser.TABLE {
+			foundTable = true
+			foundCreate = false
+			continue
+		}
+
+		// After CREATE TABLE, capture the first comment we encounter
+		// This could be before or after the opening parenthesis
+		if foundTable && tok == parser.COMMENT && firstComment == "" {
+			comment := string(val)
+			comment = strings.TrimSpace(comment)
+			firstComment = comment
+			// Continue scanning to handle all cases
+		}
+
+		// Reset if we found CREATE but next token is not TABLE
+		if foundCreate && tok != parser.TABLE {
+			foundCreate = false
+		}
+	}
+
+	return firstComment
+}
+
+// extractColumnComments extracts inline comments (-- comments) from a CREATE TABLE statement
 // and maps them to column names
-func extractInlineComments(rawDDL string) map[string]string {
+func extractColumnComments(rawDDL string, mode GeneratorMode) map[string]string {
 	comments := make(map[string]string)
 
 	// Split DDL into lines
