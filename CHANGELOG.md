@@ -1,3 +1,8 @@
+## v2.3.0
+
+* mysqldef: Support MariaDB vector indexes [#717](https://github.com/sqldef/sqldef/pull/717)
+* Support column renames with `/* @rename from=<old_name> */` comments [#732](https://github.com/sqldef/sqldef/pull/732)
+
 ## v2.2.0
 
 * Support renaming tables with `-- @rename from=<old_table_name>` comment [#731](https://github.com/sqldef/sqldef/pull/731)
