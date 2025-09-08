@@ -468,6 +468,22 @@ RenameColumnWithDot:
   output: |
     ALTER TABLE `users` CHANGE COLUMN `special.column` `special_column` text NOT NULL;
 
+RenameColumnWithCStyleComment:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      username varchar(100),
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      user_name varchar(100), /* @rename from=username */
+      age integer
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `username` `user_name` varchar(100);
+
 RenameMultipleColumns:
   current: |
     CREATE TABLE users (

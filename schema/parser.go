@@ -672,16 +672,16 @@ func normalizedTableName(mode GeneratorMode, tableName parser.TableName, default
 }
 
 func normalizedTable(mode GeneratorMode, tableName string, defaultSchema string) string {
-    switch mode {
-    case GeneratorModePostgres, GeneratorModeMssql:
-        if tableName == "" { // avoid qualifying empty references (e.g., built-in types)
-            return ""
-        }
-        schema, table := splitTableName(tableName, defaultSchema)
-        return fmt.Sprintf("%s.%s", schema, table)
-    default:
-        return tableName
-    }
+	switch mode {
+	case GeneratorModePostgres, GeneratorModeMssql:
+		if tableName == "" { // avoid qualifying empty references (e.g., built-in types)
+			return ""
+		}
+		schema, table := splitTableName(tableName, defaultSchema)
+		return fmt.Sprintf("%s.%s", schema, table)
+	default:
+		return tableName
+	}
 }
 
 // Replace pseudo collation "binary" with "{charset}_bin"
@@ -899,21 +899,78 @@ func extractTableComment(rawDDL string, mode GeneratorMode) string {
 func extractColumnComments(rawDDL string, mode GeneratorMode) map[string]string {
 	comments := make(map[string]string)
 
-	// Split DDL into lines
-	lines := strings.Split(rawDDL, "\n")
+	tokenizer := parser.NewTokenizer(rawDDL, generatorModeToParserMode(mode))
+	tokenizer.AllowComments = true
 
-	// Regular expression to match column definitions with inline comments
-	// Matches: column_name type_info, -- comment
-	// or: column_name type_info -- comment
-	// Supports both quoted and unquoted column names
-	columnWithCommentRe := regexp.MustCompile(`^\s*(?:["\` + "`" + `\[]?([^"\` + "`" + `\],\s]+)["\` + "`" + `\]]?)\s+[^,]*(,?)?\s*--\s*(.*)$`)
+	var foundCreate bool
+	var inCreateTable bool
+	var parenDepth int
+	var currentColumnName string
+	var expectingColumnDef bool
 
-	for _, line := range lines {
-		matches := columnWithCommentRe.FindStringSubmatch(line)
-		if len(matches) > 3 {
-			columnName := strings.TrimSpace(matches[1])
-			comment := matches[3]
-			comments[columnName] = comment
+	for {
+		tok, val := tokenizer.Scan()
+		if tok == 0 {
+			break // EOF
+		}
+
+		// Track CREATE TABLE statements
+		if tok == parser.CREATE {
+			foundCreate = true
+			continue
+		}
+
+		if foundCreate && tok == parser.TABLE {
+			foundCreate = false
+			inCreateTable = true
+			parenDepth = 0
+			currentColumnName = ""
+			expectingColumnDef = false
+			continue
+		}
+
+		// Reset if we found CREATE but next token is not TABLE
+		if foundCreate && tok != parser.TABLE {
+			foundCreate = false
+		}
+
+		// Track parentheses depth to know when we're inside column definitions
+		if inCreateTable {
+			switch tok {
+			case '(':
+				parenDepth++
+				if parenDepth == 1 {
+					expectingColumnDef = true
+				}
+			case ')':
+				parenDepth--
+				if parenDepth == 0 {
+					inCreateTable = false
+				}
+			case ',':
+				// After a comma inside the table definition, expect a new column
+				if parenDepth == 1 {
+					expectingColumnDef = true
+					// Don't clear currentColumnName yet - the comment might come after the comma
+				}
+			case parser.ID:
+				// Capture potential column name at the start of a column definition
+				if expectingColumnDef && parenDepth == 1 {
+					currentColumnName = string(val)
+					expectingColumnDef = false
+				}
+			case parser.COMMENT:
+				// Associate comment with the current column name
+				// Comments can appear after the column definition but before the next column
+				if inCreateTable && currentColumnName != "" && parenDepth == 1 {
+					comment := string(val)
+					comment = strings.TrimSpace(comment)
+					// Only store if we haven't already stored a comment for this column
+					if _, exists := comments[currentColumnName]; !exists {
+						comments[currentColumnName] = comment
+					}
+				}
+			}
 		}
 	}
 
