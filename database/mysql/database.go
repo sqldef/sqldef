@@ -191,3 +191,7 @@ func registerTLSConfig(pemPath string) error {
 
 	return nil
 }
+
+func (d *MysqlDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
+	// Not implemented for mysql - privileges not supported yet
+}

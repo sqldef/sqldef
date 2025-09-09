@@ -18,14 +18,16 @@ import (
 )
 
 type TestCase struct {
-	Current    string  // default: empty schema
-	Desired    string  // default: empty schema
-	Output     *string // default: use Desired as Output
-	Error      *string // default: nil
-	MinVersion string  `yaml:"min_version"`
-	MaxVersion string  `yaml:"max_version"`
-	User       string
-	Flavor     string  // database flavor (e.g., "mariadb", "mysql")
+	Current           string  // default: empty schema
+	Desired           string  // default: empty schema
+	Output            *string // default: use Desired as Output
+	Error             *string // default: nil
+	MinVersion        string  `yaml:"min_version"`
+	MaxVersion        string  `yaml:"max_version"`
+	User              string
+	Flavor            string   // database flavor (e.g., "mariadb", "mysql")
+	IncludePrivileges []string `yaml:"include_privileges"` // Roles to include for privilege management
+	EnableDrop        bool     `yaml:"enable_drop"`        // Whether to enable DROP/REVOKE operations
 }
 
 func ReadTests(pattern string) (map[string]TestCase, error) {
@@ -64,7 +66,6 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 	return ret, nil
 }
 
-
 func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.GeneratorMode, sqlParser database.Parser, version string, allowedFlavor string) {
 	if test.MinVersion != "" && compareVersion(t, version, test.MinVersion) < 0 {
 		t.Skipf("Version '%s' is smaller than min_version '%s'", version, test.MaxVersion)
@@ -88,17 +89,24 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		}
 	}
 
-	// Test idempotency
+	// Set generator config on database so it knows which privileges to include
+	config := database.GeneratorConfig{
+		IncludePrivileges: test.IncludePrivileges,
+		EnableDrop:        test.EnableDrop,
+	}
+	db.SetGeneratorConfig(config)
+
+	// Test idempotency of current schema
 	dumpDDLs, err := db.DumpDDLs()
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, dumpDDLs, database.GeneratorConfig{}, db.GetDefaultSchema())
+	ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, dumpDDLs, config, db.GetDefaultSchema())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(ddls) > 0 {
-		t.Errorf("expected nothing is modified, but got:\n```\n%s```", joinDDLs(ddls))
+		t.Errorf("Current schema is not idempotent. Expected no changes when reapplying current schema, but got:\n```\n%s```\nThis means the current schema state didn't apply correctly or has conflicting/duplicate statements.", joinDDLs(ddls))
 	}
 
 	// Main test
@@ -106,7 +114,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, database.GeneratorConfig{}, db.GetDefaultSchema())
+	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, config, db.GetDefaultSchema())
 
 	// Handle expected errors
 	if test.Error != nil {
@@ -124,24 +132,24 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	expected := *test.Output
 	actual := joinDDLs(ddls)
 	if expected != actual {
-		t.Errorf("\nexpected:\n```\n%s```\n\nactual:\n```\n%s```", expected, actual)
+		t.Errorf("Migration output doesn't match expected.\n\nExpected DDLs:\n```\n%s```\n\nActual DDLs:\n```\n%s```", expected, actual)
 	}
 	err = runDDLs(db, ddls)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Test idempotency
+	// Test idempotency of desired schema
 	dumpDDLs, err = db.DumpDDLs()
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, database.GeneratorConfig{}, db.GetDefaultSchema())
+	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, config, db.GetDefaultSchema())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(ddls) > 0 {
-		t.Errorf("expected nothing is modified, but got:\n```\n%s```", joinDDLs(ddls))
+		t.Errorf("Desired schema is not idempotent. Expected no changes when reapplying desired schema, but got:\n```\n%s```\nThis means the migration didn't apply correctly.", joinDDLs(ddls))
 	}
 }
 

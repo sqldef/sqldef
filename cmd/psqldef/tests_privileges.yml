@@ -1,0 +1,833 @@
+PrivilegeGrantToIncludedRole:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  include_privileges:
+    - readonly_user
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
+
+PrivilegeGrantToMultipleIncludedRoles:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+  include_privileges:
+    - readonly_user
+    - app_user
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+
+PrivilegeIgnoreNonIncludedRole:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+    GRANT ALL PRIVILEGES ON TABLE "public"."users" TO "admin_role";
+  include_privileges:
+    - readonly_user
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
+
+PrivilegeNoPrivilegesWhenNotIncluded:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  include_privileges: []
+  output: ""
+
+PrivilegeModifyExistingGrant:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+  include_privileges:
+    - app_user
+  output: |
+    GRANT INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+
+PrivilegeRevokePrivilegeWithEnableDrop:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT INSERT, SELECT, UPDATE ON TABLE "public"."users" TO "app_user";
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+  include_privileges:
+    - app_user
+  enable_drop: true
+  output: |
+    REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
+
+PrivilegeRevokeAllPrivilegesWithEnableDrop:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT INSERT, SELECT, UPDATE ON TABLE "public"."users" TO "app_user";
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  include_privileges:
+    - app_user
+  enable_drop: true
+  output: |
+    REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "app_user";
+
+PrivilegeGrantToPublicWithInclusion:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE "public"."users" TO PUBLIC;
+  include_privileges:
+    - PUBLIC
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO PUBLIC;
+
+PrivilegeGrantAllPrivileges:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT ALL PRIVILEGES ON TABLE "public"."users" TO "admin_role";
+  include_privileges:
+    - admin_role
+  output: |
+    GRANT ALL PRIVILEGES ON TABLE "public"."users" TO "admin_role";
+
+PrivilegeIdempotentGrant:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  include_privileges:
+    - readonly_user
+  output: ""
+
+PrivilegePreserveNonIncludedRolePrivileges:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT ALL PRIVILEGES ON TABLE "public"."users" TO "admin_role";
+    GRANT SELECT ON TABLE users TO readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT ON TABLE users TO readonly_user;
+  include_privileges:
+    - readonly_user
+  output: |
+    GRANT INSERT ON TABLE "public"."users" TO "readonly_user";
+
+PrivilegeNoRevokeWithoutEnableDrop:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+  include_privileges:
+    - app_user
+  enable_drop: false
+  output: ""
+
+PrivilegeMultipleGranteesInOneStatement:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user, app_user, admin_role;
+  include_privileges:
+    - readonly_user
+    - app_user
+    - admin_role
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user", "app_user", "admin_role";
+
+PrivilegeMixedGranteesWithPartialInclusion:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO user1, user2, user3;
+    GRANT INSERT, UPDATE ON TABLE users TO user2, user4;
+  include_privileges:
+    - user2
+    - user4
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO "user2";
+    GRANT INSERT, UPDATE ON TABLE "public"."users" TO "user2", "user4";
+
+PrivilegeOverlappingPrivilegesMultipleGrantees:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO user1;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT ON TABLE users TO user1, user2;
+    GRANT UPDATE, DELETE ON TABLE users TO user1, user3;
+  include_privileges:
+    - user1
+    - user2
+    - user3
+  output: |
+    GRANT INSERT ON TABLE "public"."users" TO "user1";
+    GRANT SELECT, INSERT ON TABLE "public"."users" TO "user2";
+    GRANT UPDATE, DELETE ON TABLE "public"."users" TO "user1", "user3";
+
+PrivilegePublicWithOtherRoles:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO PUBLIC;
+    GRANT INSERT, UPDATE ON TABLE users TO app_user;
+  include_privileges:
+    - PUBLIC
+    - app_user
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO PUBLIC;
+    GRANT INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+
+PrivilegeMultiTableGrant:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE TABLE posts (
+      id BIGINT PRIMARY KEY,
+      title VARCHAR(100)
+    );
+    CREATE TABLE comments (
+      id BIGINT PRIMARY KEY,
+      content TEXT
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE TABLE posts (
+      id BIGINT PRIMARY KEY,
+      title VARCHAR(100)
+    );
+    CREATE TABLE comments (
+      id BIGINT PRIMARY KEY,
+      content TEXT
+    );
+    GRANT SELECT ON TABLE users, posts, comments TO readonly_user;
+  include_privileges:
+    - readonly_user
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
+    GRANT SELECT ON TABLE "public"."posts" TO "readonly_user";
+    GRANT SELECT ON TABLE "public"."comments" TO "readonly_user";
+
+PrivilegeMultiTableGrantWithMultiplePrivileges:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE TABLE posts (
+      id BIGINT PRIMARY KEY,
+      title VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE TABLE posts (
+      id BIGINT PRIMARY KEY,
+      title VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE users, posts TO app_user;
+  include_privileges:
+    - app_user
+  output: |
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."posts" TO "app_user";
+
+PrivilegeMultiTableRevoke:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE TABLE posts (
+      id BIGINT PRIMARY KEY,
+      title VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."posts" TO "app_user";
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE TABLE posts (
+      id BIGINT PRIMARY KEY,
+      title VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+    GRANT SELECT ON TABLE posts TO app_user;
+  include_privileges:
+    - app_user
+  enable_drop: true
+  output: |
+    REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
+    REVOKE INSERT, UPDATE ON TABLE "public"."posts" FROM "app_user";
+
+PrivilegeErrorOnWithGrantOption:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    grant select on table users to readonly_user with grant option;
+  include_privileges:
+    - readonly_user
+  error: "WITH GRANT OPTION is not supported yet"
+
+PrivilegeErrorOnCascade:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    grant select on table users to readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    revoke select on table users from readonly_user cascade;
+  include_privileges:
+    - readonly_user
+  enable_drop: true
+  error: "CASCADE/RESTRICT options are not supported yet"
+
+PrivilegePublicNotIncluded:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO PUBLIC;
+    GRANT INSERT ON TABLE users TO app_user;
+  include_privileges:
+    - app_user
+  output: |
+    GRANT INSERT ON TABLE "public"."users" TO "app_user";
+
+PrivilegeRevokePublicPrivileges:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT ON TABLE users TO PUBLIC;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO PUBLIC;
+  include_privileges:
+    - PUBLIC
+  enable_drop: true
+  output: |
+    REVOKE INSERT ON TABLE "public"."users" FROM PUBLIC;
+
+PrivilegeAllPrivilegesExpansion:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT ALL PRIVILEGES ON TABLE users TO admin_role;
+  include_privileges:
+    - admin_role
+  output: |
+    GRANT ALL PRIVILEGES ON TABLE "public"."users" TO "admin_role";
+
+PrivilegePartialRevokeFromAllPrivileges:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT ALL PRIVILEGES ON TABLE users TO admin_role;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE users TO admin_role;
+  include_privileges:
+    - admin_role
+  enable_drop: true
+  output: |
+    REVOKE DELETE, REFERENCES, TRIGGER, TRUNCATE ON TABLE "public"."users" FROM "admin_role";
+
+PrivilegeMultipleTablesMultipleGrantees:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE TABLE posts (
+      id BIGINT PRIMARY KEY,
+      user_id BIGINT
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE TABLE posts (
+      id BIGINT PRIMARY KEY,
+      user_id BIGINT
+    );
+    GRANT SELECT ON TABLE users TO reader1, reader2;
+    GRANT SELECT, INSERT ON TABLE posts TO writer1, writer2;
+    GRANT ALL PRIVILEGES ON TABLE users TO admin;
+    GRANT ALL PRIVILEGES ON TABLE posts TO admin;
+  include_privileges:
+    - reader1
+    - writer1
+    - admin
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO "reader1";
+    GRANT SELECT, INSERT ON TABLE "public"."posts" TO "writer1";
+    GRANT ALL PRIVILEGES ON TABLE "public"."users" TO "admin";
+    GRANT ALL PRIVILEGES ON TABLE "public"."posts" TO "admin";
+
+PrivilegeEmptyIncludePrivilegesWithGrants:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO reader;
+    GRANT ALL PRIVILEGES ON TABLE users TO admin;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT INSERT, UPDATE ON TABLE users TO writer;
+  include_privileges: []
+  output: ""
+
+PrivilegeAllSpecificPrivileges:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON TABLE users TO power_user;
+  include_privileges:
+    - power_user
+  output: |
+    GRANT ALL PRIVILEGES ON TABLE "public"."users" TO "power_user";
+
+PrivilegeReferencesAndTriggerPrivileges:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, REFERENCES, TRIGGER ON TABLE users TO app_user;
+  include_privileges:
+    - app_user
+  output: |
+    GRANT REFERENCES, TRIGGER ON TABLE "public"."users" TO "app_user";
+
+PrivilegeRoleNamesWithSpecialCharacters:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO "user-with-dash";
+    GRANT INSERT ON TABLE users TO "user.with.dot";
+    GRANT UPDATE ON TABLE users TO "user@domain.com";
+  include_privileges:
+    - user-with-dash
+    - user.with.dot
+    - user@domain.com
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO "user-with-dash";
+    GRANT INSERT ON TABLE "public"."users" TO "user.with.dot";
+    GRANT UPDATE ON TABLE "public"."users" TO "user@domain.com";
+
+PrivilegeIdempotentWithMultipleRolesAndPrivileges:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT ON TABLE users TO role1;
+    GRANT ALL PRIVILEGES ON TABLE users TO admin;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT ON TABLE users TO role1;
+    GRANT ALL PRIVILEGES ON TABLE users TO admin;
+  include_privileges:
+    - role1
+    - role2
+    - admin
+  output: ""
+
+PrivilegeGrantSelectToUser:
+  include_privileges:
+    - readonly_user
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  output: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
+
+PrivilegeGrantMultiplePrivilegesToUser:
+  include_privileges:
+    - app_user
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE users TO app_user;
+  output: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+
+PrivilegeGrantAllPrivilegesToUser:
+  include_privileges:
+    - admin_role
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+  output: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+
+PrivilegeGrantToPublic:
+  include_privileges:
+    - PUBLIC
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+    GRANT SELECT ON TABLE users TO PUBLIC;
+  output: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+    GRANT SELECT ON TABLE "public"."users" TO PUBLIC;
+
+PrivilegeGrantExistingPrivilegeIdempotent:
+  include_privileges:
+    - readonly_user
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  output: ""
+
+PrivilegeGrantModifyExistingPrivileges:
+  include_privileges:
+    - app_user
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE users TO app_user;
+  output: |
+    GRANT INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+
+PrivilegeRevokePrivileges:
+  include_privileges:
+    - app_user
+  enable_drop: true
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+  output: |
+    REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
+
+PrivilegeGrantWithMultipleRoles:
+  include_privileges:
+    - readonly_user
+    - app_user
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+    GRANT SELECT, INSERT, UPDATE ON TABLE users TO app_user;
+  output: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+
+PrivilegeMultipleGranteesInSingleStatement:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO user1, user2, user3;
+  include_privileges:
+    - user1
+    - user2
+    - user3
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO "user1", "user2", "user3";
+
+PrivilegePartialRevokePrivileges:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT ON TABLE users TO app_user;
+  include_privileges:
+    - app_user
+  enable_drop: true
+  output: |
+    REVOKE DELETE, UPDATE ON TABLE "public"."users" FROM "app_user";
+
+PrivilegeMixedPrivilegeChanges:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, DELETE ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, UPDATE ON TABLE users TO app_user;
+  include_privileges:
+    - app_user
+  enable_drop: true
+  output: |
+    REVOKE DELETE, INSERT ON TABLE "public"."users" FROM "app_user";
+    GRANT UPDATE ON TABLE "public"."users" TO "app_user";
+
+PrivilegeMultipleGranteesPartialInclude:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO user1, user2, user3;
+  include_privileges:
+    - user1
+    - user3
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO "user1", "user3";

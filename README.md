@@ -133,6 +133,7 @@ Application Options:
       --skip-extension        Skip managing extensions
       --before-apply=         Execute the given string before applying the regular DDLs
       --config=               YAML file to specify: target_tables, skip_tables, skip_views, target_schema
+      --include-privileges=   Include privilege management for specific roles (can be specified multiple times)
       --help                  Show this help
       --version               Show this version
 ```
@@ -181,7 +182,7 @@ Update the schema.sql like:
 
 And then run:
 
-```sql
+```shell
 # Check the auto-generated migration plan without execution
 $ psqldef -U postgres test --dry-run < schema.sql
 --- dry run ---
@@ -204,6 +205,15 @@ Skipped: 'DROP TABLE users;'
 # Run dropping existing tables and columns
 $ psqldef -U postgres test --enable-drop < schema.sql
 Run: 'DROP TABLE users;'
+
+# Managing table privileges for specific roles
+$ cat schema.sql
+CREATE TABLE users (
+    id bigint NOT NULL PRIMARY KEY,
+    name text
+);
+GRANT SELECT ON TABLE users TO readonly_user;
+GRANT SELECT, INSERT, UPDATE ON TABLE users TO app_user;
 ```
 
 ### sqlite3def

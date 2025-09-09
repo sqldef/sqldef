@@ -11,6 +11,15 @@ import (
 	go_pgquery "github.com/wasilibs/go-pgquery"
 )
 
+// validationError is an error that should not trigger fallback to the generic parser
+type validationError struct {
+	msg string
+}
+
+func (e validationError) Error() string {
+	return e.msg
+}
+
 type PostgresParser struct {
 	parser  database.GenericParser
 	testing bool
@@ -46,6 +55,11 @@ func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
 		// First, attempt to parse it with the wrapper of PostgreSQL's parser. If it works, use the result.
 		stmt, err := p.parseStmt(rawStmt.Stmt)
 		if err != nil {
+			// Check if this is a validation error (should not fallback)
+			if _, ok := err.(validationError); ok {
+				return nil, err
+			}
+
 			// Otherwise, fallback to the generic parser. We intend to deprecate this path in the future.
 			var stmts []database.DDLStatement
 			if !p.testing { // Disable fallback in parser tests
@@ -84,6 +98,8 @@ func (p PostgresParser) parseStmt(node *pgquery.Node) (parser.Statement, error) 
 		return p.parseAlterTableStmt(stmt.AlterTableStmt)
 	case *pgquery.Node_CreateSchemaStmt:
 		return p.parseCreateSchemaStmt(stmt.CreateSchemaStmt)
+	case *pgquery.Node_GrantStmt:
+		return p.parseGrantStmt(stmt.GrantStmt)
 	default:
 		return nil, fmt.Errorf("unknown node in parseStmt: %#v", stmt)
 	}
@@ -1362,4 +1378,108 @@ func shouldDeleteTypeCast(sourceNode *pgquery.Node, targetType parser.ColumnType
 	default:
 		return false
 	}
+}
+
+func (p PostgresParser) parseGrantStmt(stmt *pgquery.GrantStmt) (parser.Statement, error) {
+	if stmt.Objtype != pgquery.ObjectType_OBJECT_TABLE {
+		// For now, only support table grants
+		return nil, fmt.Errorf("only table grants are supported")
+	}
+
+	if len(stmt.Objects) == 0 {
+		return nil, fmt.Errorf("no objects specified in grant statement")
+	}
+
+	// Check for unsupported WITH GRANT OPTION
+	if stmt.GrantOption {
+		return nil, validationError{"WITH GRANT OPTION is not supported yet"}
+	}
+
+	// Check for unsupported CASCADE/RESTRICT (for REVOKE)
+	// Note: DROP_RESTRICT is the default behavior and is allowed
+	if !stmt.IsGrant && stmt.Behavior == pgquery.DropBehavior_DROP_CASCADE {
+		return nil, validationError{"CASCADE/RESTRICT options are not supported yet"}
+	}
+
+	// Handle multiple tables - return multiple DDL statements
+	var statements []parser.Statement
+
+	for _, obj := range stmt.Objects {
+		var tableName parser.TableName
+		if rangeVar, ok := obj.Node.(*pgquery.Node_RangeVar); ok {
+			parsedName, err := p.parseTableName(rangeVar.RangeVar)
+			if err != nil {
+				return nil, err
+			}
+			tableName = parsedName
+		} else {
+			return nil, fmt.Errorf("unexpected object type in grant statement")
+		}
+
+		var privileges []string
+		if stmt.Privileges == nil {
+			// ALL PRIVILEGES case
+			privileges = []string{"ALL"}
+		} else {
+			for _, priv := range stmt.Privileges {
+				if accessPriv, ok := priv.Node.(*pgquery.Node_AccessPriv); ok {
+					if accessPriv.AccessPriv.Cols == nil {
+						privileges = append(privileges, strings.ToUpper(accessPriv.AccessPriv.PrivName))
+					}
+				}
+			}
+		}
+
+		if len(stmt.Grantees) == 0 {
+			return nil, fmt.Errorf("no grantees specified in grant statement")
+		}
+
+		var grantees []string
+		for _, granteeNode := range stmt.Grantees {
+			if roleSpec, ok := granteeNode.Node.(*pgquery.Node_RoleSpec); ok {
+				switch roleSpec.RoleSpec.Roletype {
+				case pgquery.RoleSpecType_ROLESPEC_CSTRING:
+					grantees = append(grantees, roleSpec.RoleSpec.Rolename)
+				case pgquery.RoleSpecType_ROLESPEC_PUBLIC:
+					grantees = append(grantees, "PUBLIC")
+				default:
+					return nil, fmt.Errorf("unsupported role type in grant statement")
+				}
+			} else {
+				return nil, fmt.Errorf("unexpected grantee type in grant statement")
+			}
+		}
+
+		grant := &parser.Grant{
+			IsGrant:         stmt.IsGrant,
+			Privileges:      privileges,
+			TableName:       tableName,
+			Grantees:        grantees,
+			WithGrantOption: false, // Always false since we error on WITH GRANT OPTION above
+			CascadeOption:   false, // Always false since we error on CASCADE/RESTRICT above
+		}
+
+		action := parser.GrantPrivilege
+		if !stmt.IsGrant {
+			action = parser.RevokePrivilege
+		}
+
+		ddl := &parser.DDL{
+			Action: action,
+			Table:  tableName,
+			Grant:  grant,
+		}
+
+		statements = append(statements, ddl)
+	}
+
+	// If we have multiple statements, return a composite statement
+	if len(statements) == 1 {
+		return statements[0], nil
+	}
+
+	// Return a MultiStatement wrapper for multiple tables
+	return &parser.MultiStatement{
+		Statements: statements,
+	}, nil
 }

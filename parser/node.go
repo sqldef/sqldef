@@ -86,27 +86,28 @@ type Statement interface {
 	SQLNode
 }
 
-func (*Union) iStatement()         {}
-func (*Select) iStatement()        {}
-func (*Stream) iStatement()        {}
-func (*Insert) iStatement()        {}
-func (*Update) iStatement()        {}
-func (*Delete) iStatement()        {}
-func (*Set) iStatement()           {}
-func (*Declare) iStatement()       {}
-func (*Cursor) iStatement()        {}
-func (*BeginEnd) iStatement()      {}
-func (*While) iStatement()         {}
-func (*If) iStatement()            {}
-func (*DDL) iStatement()           {}
-func (*Show) iStatement()          {}
-func (*Use) iStatement()           {}
-func (*Begin) iStatement()         {}
-func (*Commit) iStatement()        {}
-func (*Rollback) iStatement()      {}
-func (*OtherRead) iStatement()     {}
-func (*OtherAdmin) iStatement()    {}
-func (*SetBoolOption) iStatement() {}
+func (*Union) iStatement()          {}
+func (*Select) iStatement()         {}
+func (*Stream) iStatement()         {}
+func (*Insert) iStatement()         {}
+func (*Update) iStatement()         {}
+func (*Delete) iStatement()         {}
+func (*Set) iStatement()            {}
+func (*Declare) iStatement()        {}
+func (*Cursor) iStatement()         {}
+func (*BeginEnd) iStatement()       {}
+func (*While) iStatement()          {}
+func (*If) iStatement()             {}
+func (*DDL) iStatement()            {}
+func (*Show) iStatement()           {}
+func (*Use) iStatement()            {}
+func (*Begin) iStatement()          {}
+func (*Commit) iStatement()         {}
+func (*Rollback) iStatement()       {}
+func (*OtherRead) iStatement()      {}
+func (*OtherAdmin) iStatement()     {}
+func (*SetBoolOption) iStatement()  {}
+func (*MultiStatement) iStatement() {}
 
 // ParenSelect can actually not be a top level statement,
 // but we have to allow it because it's a requirement
@@ -402,6 +403,22 @@ func (node *Set) Format(buf *nodeBuffer) {
 // DDL represents a CREATE, ALTER, DROP, RENAME or TRUNCATE statement.
 // Table is set for AlterStr, DropStr, RenameStr, TruncateTable
 // NewName is set for AlterStr, CreateStr, RenameStr.
+// MultiStatement represents multiple statements from a single parsed statement
+// (e.g., GRANT ... ON TABLE t1, t2, t3 becomes multiple DDL statements)
+type MultiStatement struct {
+	Statements []Statement
+}
+
+// Format formats the MultiStatement
+func (node *MultiStatement) Format(buf *nodeBuffer) {
+	for i, stmt := range node.Statements {
+		if i > 0 {
+			buf.WriteString("; ")
+		}
+		stmt.Format(buf)
+	}
+}
+
 type DDL struct {
 	Action        DDLAction
 	Table         TableName
@@ -421,6 +438,7 @@ type DDL struct {
 	Comment       *Comment
 	Extension     *Extension
 	Schema        *Schema
+	Grant         *Grant
 }
 
 type DDLAction int
@@ -440,6 +458,8 @@ const (
 	CreateType
 	CreateView
 	CreateSchema
+	GrantPrivilege
+	RevokePrivilege
 )
 
 // View types
@@ -903,6 +923,15 @@ type Extension struct {
 
 type Schema struct {
 	Name string
+}
+
+type Grant struct {
+	IsGrant         bool     // true for GRANT, false for REVOKE
+	Privileges      []string // e.g., ["SELECT", "INSERT", "UPDATE"]
+	TableName       TableName
+	Grantees        []string
+	WithGrantOption bool // Not supported - parser will error if WITH GRANT OPTION is used
+	CascadeOption   bool // Not supported - parser will error if CASCADE/RESTRICT is used
 }
 
 type Permissive string

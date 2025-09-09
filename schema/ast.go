@@ -48,6 +48,21 @@ type AddPolicy struct {
 	policy    Policy
 }
 
+type GrantPrivilege struct {
+	statement  string
+	tableName  string
+	grantees   []string
+	privileges []string
+}
+
+type RevokePrivilege struct {
+	statement     string
+	tableName     string
+	grantees      []string
+	privileges    []string
+	cascadeOption bool // CASCADE option for REVOKE
+}
+
 type Table struct {
 	name        string
 	columns     map[string]*Column
@@ -56,6 +71,7 @@ type Table struct {
 	foreignKeys []ForeignKey
 	exclusions  []Exclusion
 	policies    []Policy
+	privileges  []TablePrivilege
 	options     map[string]string
 	renameFrom  string // Previous table name if renamed via @rename annotation
 }
@@ -96,7 +112,7 @@ type Index struct {
 	columns           []IndexColumn
 	primary           bool
 	unique            bool
-	vector            bool   // for MariaDB vector indexes
+	vector            bool // for MariaDB vector indexes
 	constraint        bool // for Postgres/MSSQL `ADD CONSTRAINT UNIQUE`
 	constraintOptions *ConstraintOptions
 	where             string         // for Postgres `Partial Indexes`
@@ -165,6 +181,13 @@ type Policy struct {
 	roles         []string
 	using         string
 	withCheck     string
+}
+
+type TablePrivilege struct {
+	tableName       string
+	grantee         string
+	privileges      []string
+	withGrantOption bool
 }
 
 type View struct {
@@ -319,6 +342,14 @@ func (a *AddExclusion) Statement() string {
 
 func (a *AddPolicy) Statement() string {
 	return a.statement
+}
+
+func (g *GrantPrivilege) Statement() string {
+	return g.statement
+}
+
+func (r *RevokePrivilege) Statement() string {
+	return r.statement
 }
 
 func (v *View) Statement() string {

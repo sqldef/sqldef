@@ -35,13 +35,15 @@ type Config struct {
 }
 
 type GeneratorConfig struct {
-	TargetTables    []string
-	SkipTables      []string
-	SkipViews       []string
-	TargetSchema    []string
-	Algorithm       string
-	Lock            string
-	DumpConcurrency int
+	TargetTables      []string
+	SkipTables        []string
+	SkipViews         []string
+	TargetSchema      []string
+	Algorithm         string
+	Lock              string
+	DumpConcurrency   int
+	IncludePrivileges []string // Roles for which to manage privileges
+	EnableDrop        bool     // Whether to enable DROP/REVOKE operations
 }
 
 // Abstraction layer for multiple kinds of databases
@@ -50,6 +52,7 @@ type Database interface {
 	DB() *sql.DB
 	Close() error
 	GetDefaultSchema() string
+	SetGeneratorConfig(config GeneratorConfig)
 }
 
 func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddlSuffix string) error {
