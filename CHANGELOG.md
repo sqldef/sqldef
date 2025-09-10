@@ -1,3 +1,7 @@
+## v2.4.1
+
+* psqldef: Add `managed_roles` config [#733](https://github.com/sqldef/sqldef/pull/733)
+
 ## v2.4.0
 
 * Add `--config-inline=<yaml_string>` option [#734](https://github.com/sqldef/sqldef/pull/734)
