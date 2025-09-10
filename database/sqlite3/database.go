@@ -161,3 +161,7 @@ func (d *Sqlite3Database) Close() error {
 func (d *Sqlite3Database) GetDefaultSchema() string {
 	return ""
 }
+
+func (d *Sqlite3Database) SetGeneratorConfig(config database.GeneratorConfig) {
+	// Not implemented for sqlite3 - privileges not supported
+}

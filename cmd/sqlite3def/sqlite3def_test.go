@@ -167,7 +167,7 @@ func TestSQLite3defConfigMerge(t *testing.T) {
 	testutils.MustExecute("sqlite3", "sqlite3def_test", usersTable+users1Table+users10Table+postsTable)
 
 	writeFile("schema.sql", usersTable+users1Table+postsTable)
-	
+
 	// Config file says to skip users_10, but inline config overrides to skip posts
 	writeFile("config.yml", "skip_tables: users_10")
 
@@ -188,7 +188,7 @@ func TestSQLite3defMultipleConfigs(t *testing.T) {
 	testutils.MustExecute("sqlite3", "sqlite3def_test", usersTable+users1Table+users10Table+postsTable+commentsTable)
 
 	writeFile("schema.sql", usersTable+users1Table+postsTable)
-	
+
 	// First config skips users_10
 	writeFile("config1.yml", "skip_tables: users_10")
 	// Second config skips posts
@@ -213,10 +213,10 @@ func TestSQLite3defMultipleInlineConfigs(t *testing.T) {
 	testutils.MustExecute("sqlite3", "sqlite3def_test", usersTable+users1Table+users10Table+postsTable)
 
 	writeFile("schema.sql", usersTable+users1Table+postsTable)
-	
+
 	// Multiple inline configs - the last one should win
-	apply := assertedExecute(t, "./sqlite3def", 
-		"--config-inline", "skip_tables: posts", 
+	apply := assertedExecute(t, "./sqlite3def",
+		"--config-inline", "skip_tables: posts",
 		"--config-inline", "skip_tables: users_1",
 		"--config-inline", "skip_tables: users_10",
 		"--file", "schema.sql", "sqlite3def_test")
@@ -540,8 +540,8 @@ func TestSQLite3defConfigOrderPreserved(t *testing.T) {
 	// Create config files
 	config1 := "config1.yml"
 	config2 := "config2.yml"
-	writeFile(config1, "skip_tables: users")  // Skip users
-	writeFile(config2, "skip_tables: posts")  // Skip posts
+	writeFile(config1, "skip_tables: users") // Skip users
+	writeFile(config2, "skip_tables: posts") // Skip posts
 	defer os.Remove(config1)
 	defer os.Remove(config2)
 
@@ -553,7 +553,7 @@ func TestSQLite3defConfigOrderPreserved(t *testing.T) {
 		"--config-inline", "skip_tables: comments",
 		"--config", config2,
 		"--export", "sqlite3def_test")
-	
+
 	// Should export only users and comments (posts is skipped by the last config)
 	expectedContent := "CREATE TABLE users (id integer primary key);\n\nCREATE TABLE comments (id integer primary key);\n"
 	if out != expectedContent {
@@ -568,7 +568,7 @@ func TestSQLite3defConfigOrderPreserved(t *testing.T) {
 		"--config", config2,
 		"--config-inline", "skip_tables: comments",
 		"--export", "sqlite3def_test")
-	
+
 	// Should export only users and posts (comments is skipped by the last inline)
 	expectedContent2 := "CREATE TABLE users (id integer primary key);\n\nCREATE TABLE posts (id integer primary key);\n"
 	if out2 != expectedContent2 {

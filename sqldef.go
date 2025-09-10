@@ -23,6 +23,9 @@ type Options struct {
 
 // Main function shared by all commands
 func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser database.Parser, options *Options) {
+	// Set the generator config on the database for privilege filtering
+	db.SetGeneratorConfig(options.Config)
+
 	currentDDLs, err := db.DumpDDLs()
 	if err != nil {
 		log.Fatalf("Error on DumpDDLs: %s", err)
@@ -47,6 +50,7 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 			}
 			ddls = schema.FilterTables(ddls, options.Config)
 			ddls = schema.FilterViews(ddls, options.Config)
+			ddls = schema.FilterPrivileges(ddls, options.Config)
 			for i, ddl := range ddls {
 				if i > 0 {
 					fmt.Println()

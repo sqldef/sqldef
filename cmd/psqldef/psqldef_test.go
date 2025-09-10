@@ -26,7 +26,7 @@ const (
 )
 
 func TestApply(t *testing.T) {
-	tests, err := testutils.ReadTests("tests.yml")
+	tests, err := testutils.ReadTests("tests*.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1355,12 +1355,12 @@ func TestPsqldefExportConcurrency(t *testing.T) {
 		    "id" bigint NOT NULL,
 		    CONSTRAINT users_1_pkey PRIMARY KEY ("id")
 		);
-	
+
 		CREATE TABLE "public"."users_2" (
 		    "id" bigint NOT NULL,
 		    CONSTRAINT users_2_pkey PRIMARY KEY ("id")
 		);
-	
+
 		CREATE TABLE "public"."users_3" (
 		    "id" bigint NOT NULL,
 		    CONSTRAINT users_3_pkey PRIMARY KEY ("id")
@@ -1764,6 +1764,8 @@ func TestMain(m *testing.M) {
 	resetTestDatabase()
 	testutils.MustExecute("go", "build")
 	status := m.Run()
+
+	cleanupTestRoles()
 	_ = os.Remove("psqldef")
 	_ = os.Remove("schema.sql")
 	_ = os.Remove("config.yml")
@@ -1829,6 +1831,82 @@ func resetTestDatabase() {
 	testutils.MustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("CREATE DATABASE %s;", databaseName))
 }
 
+var testRoles = []string{
+	"readonly_user",
+	"app_user",
+	"admin_role",
+	"user-with-dash",
+	"user.with.dot",
+	"user with spaces",
+	"CamelCaseUser",
+	"UPPERCASE_USER",
+	"user1",
+	"user2",
+	"user3",
+	"user4",
+	"My User",
+	"reader",
+	"writer",
+	"admin",
+	"reader1",
+	"reader2",
+	"writer1",
+	"writer2",
+	"role1",
+	"role2",
+	"power_user",
+	"user@domain.com",
+}
+
+func createTestRole(role string) {
+	// Escape single quotes in role name for SQL string literal
+	escapedRole := strings.ReplaceAll(role, "'", "''")
+	// Quote identifier for CREATE ROLE statement
+	quotedRole := fmt.Sprintf(`"%s"`, strings.ReplaceAll(role, `"`, `""`))
+
+	query := fmt.Sprintf(`DO $$ BEGIN
+		IF NOT EXISTS (SELECT * FROM pg_roles WHERE rolname = '%s') THEN
+			CREATE ROLE %s;
+		END IF;
+	END $$;`, escapedRole, quotedRole)
+	testutils.MustExecute("psql", "-Upostgres", "-dpsqldef_test", "-c", query)
+}
+
+func createAllTestRoles() {
+	for _, role := range testRoles {
+		createTestRole(role)
+	}
+}
+
+func cleanupTestRoles() {
+	for _, role := range testRoles {
+		// Escape single quotes in role name for SQL string literal
+		escapedRole := strings.ReplaceAll(role, "'", "''")
+		// Quote identifier for REVOKE and DROP statements
+		quotedRole := fmt.Sprintf(`"%s"`, strings.ReplaceAll(role, `"`, `""`))
+
+		// First revoke all privileges from the role
+		revokeQuery := fmt.Sprintf(`DO $$
+			DECLARE r RECORD;
+			BEGIN
+				FOR r IN
+					SELECT nspname, relname
+					FROM pg_class c
+					JOIN pg_namespace n ON n.oid = c.relnamespace
+					WHERE relkind IN ('r', 'v', 'm')
+					AND has_table_privilege('%s', c.oid, 'SELECT')
+				LOOP
+					EXECUTE format('REVOKE ALL ON %%I.%%I FROM %s', r.nspname, r.relname);
+				END LOOP;
+			END $$;`, escapedRole, quotedRole)
+		testutils.Execute("psql", "-Upostgres", "-dpsqldef_test", "-c", revokeQuery)
+
+		// Then drop the role
+		dropQuery := fmt.Sprintf("DROP ROLE IF EXISTS %s;", quotedRole)
+		testutils.Execute("psql", "-Upostgres", "-dpsqldef_test", "-c", dropQuery)
+	}
+}
+
 func resetTestDatabaseWithUser(user string) {
 	resetTestDatabase()
 	if user != "" {
@@ -1837,6 +1915,8 @@ func resetTestDatabaseWithUser(user string) {
 		testutils.MustExecute("psql", "-Upostgres", "-dpsqldef_test", "-c", fmt.Sprintf("GRANT ALL ON DATABASE psqldef_test TO %s", user))
 		testutils.MustExecute("psql", fmt.Sprintf("-U%s", user), "-dpsqldef_test", "-c", "CREATE SCHEMA foo")
 	}
+
+	createAllTestRoles()
 }
 
 func writeFile(path string, content string) {

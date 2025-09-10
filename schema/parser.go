@@ -22,11 +22,23 @@ func ParseDDLs(mode GeneratorMode, sqlParser database.Parser, sql string, defaul
 
 	var result []DDL
 	for _, ddl := range ddls {
-		parsed, err := parseDDL(mode, ddl.DDL, ddl.Statement, defaultSchema)
-		if err != nil {
-			return result, err
+		// Check if this is a MultiStatement (e.g., from multi-table GRANT)
+		if multiStmt, ok := ddl.Statement.(*parser.MultiStatement); ok {
+			// Expand MultiStatement into individual DDLs
+			for _, stmt := range multiStmt.Statements {
+				parsed, err := parseDDL(mode, ddl.DDL, stmt, defaultSchema)
+				if err != nil {
+					return result, err
+				}
+				result = append(result, parsed)
+			}
+		} else {
+			parsed, err := parseDDL(mode, ddl.DDL, ddl.Statement, defaultSchema)
+			if err != nil {
+				return result, err
+			}
+			result = append(result, parsed)
 		}
-		result = append(result, parsed)
 	}
 	return result, nil
 }
@@ -188,6 +200,32 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				statement: ddl,
 				schema:    *stmt.Schema,
 			}, nil
+		} else if stmt.Action == parser.GrantPrivilege {
+			grantees := stmt.Grant.Grantees
+
+			if len(grantees) > 0 {
+				return &GrantPrivilege{
+					statement:  ddl,
+					tableName:  normalizedTableName(mode, stmt.Table, defaultSchema),
+					grantees:   grantees,
+					privileges: stmt.Grant.Privileges,
+				}, nil
+			}
+			return nil, fmt.Errorf("no grantees specified in GRANT statement")
+		} else if stmt.Action == parser.RevokePrivilege {
+			grantees := stmt.Grant.Grantees
+
+			// For now, return the first grantee as a single statement
+			if len(grantees) > 0 {
+				return &RevokePrivilege{
+					statement:     ddl,
+					tableName:     normalizedTableName(mode, stmt.Table, defaultSchema),
+					grantees:      grantees,
+					privileges:    stmt.Grant.Privileges,
+					cascadeOption: stmt.Grant.CascadeOption,
+				}, nil
+			}
+			return nil, fmt.Errorf("no grantees specified in REVOKE statement")
 		} else {
 			return nil, fmt.Errorf(
 				"unsupported type of DDL action '%d': %s",

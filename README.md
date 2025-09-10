@@ -153,8 +153,8 @@ Application Options:
       --skip-view             Skip managing views/materialized views
       --skip-extension        Skip managing extensions
       --before-apply=         Execute the given string before applying the regular DDLs
-      --config=               YAML file to specify: target_tables, skip_tables, skip_views, target_schema, dump_concurrency (can be specified multiple times)
-      --config-inline=        YAML object to specify: target_tables, skip_tables, skip_views, target_schema, dump_concurrency (can be specified multiple times)
+      --config=               YAML file to specify: target_tables, skip_tables, skip_views, target_schema, managed_roles, enable_drop, dump_concurrency (can be specified multiple times)
+      --config-inline=        YAML object to specify: target_tables, skip_tables, skip_views, target_schema, managed_roles, enable_drop, dump_concurrency (can be specified multiple times)
       --help                  Show this help
       --version               Show this version
 ```
@@ -203,7 +203,7 @@ Update the schema.sql like:
 
 And then run:
 
-```sql
+```shell
 # Check the auto-generated migration plan without execution
 $ psqldef -U postgres test --dry-run < schema.sql
 --- dry run ---
@@ -227,7 +227,16 @@ Skipped: 'DROP TABLE users;'
 $ psqldef -U postgres test --enable-drop < schema.sql
 Run: 'DROP TABLE users;'
 
-# Use config file to filter tables and schemas
+# Managing table privileges for specific roles via config
+$ cat schema.sql
+CREATE TABLE users (
+    id bigint NOT NULL PRIMARY KEY,
+    name text
+);
+GRANT SELECT ON TABLE users TO readonly_user;
+GRANT SELECT, INSERT, UPDATE ON TABLE users TO app_user;
+
+# Use config file to filter tables and manage privileges
 $ cat > config.yml <<EOF
 target_tables: |
   public\.users
@@ -240,12 +249,16 @@ skip_views: |
 target_schema: |
   public
   app
+managed_roles:
+  - readonly_user
+  - app_user
+enable_drop: true  # Allows REVOKE operations
 dump_concurrency: 4
 EOF
 $ psqldef -U postgres test --config=config.yml < schema.sql
 
-# Use inline YAML configuration
-$ psqldef -U postgres test --config-inline="target_schema: public" < schema.sql
+# Use inline YAML configuration with managed roles
+$ psqldef -U postgres test --config-inline="managed_roles: [readonly_user, app_user]" < schema.sql
 
 # Multiple configs with order preservation (latter wins)
 # In this example, skip_tables from the second config overrides the first

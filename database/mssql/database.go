@@ -720,3 +720,7 @@ func splitTableName(table string, defaultSchmea string) (string, string) {
 func quoteName(name string) string {
 	return "[" + strings.ReplaceAll(name, "]", "]]") + "]"
 }
+
+func (d *MssqlDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
+	// Not implemented for mssql - privileges not supported yet
+}

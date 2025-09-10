@@ -37,18 +37,17 @@ func getMySQLPort() int {
 func getMySQLArgs(dbName ...string) []string {
 	port := getMySQLPort()
 	args := []string{"-uroot", "-h", "127.0.0.1"}
-	
+
 	if port != 3306 {
 		args = append(args, "-P", strconv.Itoa(port))
 	}
-	
+
 	if len(dbName) > 0 {
 		args = append(args, dbName[0])
 	}
-	
+
 	return args
 }
-
 
 // adjustDDLForFlavor adjusts DDL strings to match the expected output format for MariaDB vs MySQL
 func adjustDDLForFlavor(ddl string) string {
@@ -88,7 +87,7 @@ func TestApply(t *testing.T) {
 	args := append(getMySQLArgs(), "-sN", "-e", "select version();")
 	version := strings.TrimSpace(testutils.MustExecute("mysql", args...))
 	sqlParser := database.NewParser(parser.ParserModeMysql)
-	
+
 	// Get MySQL flavor for test filtering
 	mysqlFlavor := os.Getenv("MYSQL_FLAVOR")
 
@@ -472,7 +471,7 @@ func resetTestDatabase() {
 	// Drop database if it exists (don't specify database name in connection)
 	args1 := append(getMySQLArgs(), "-e", "DROP DATABASE IF EXISTS mysqldef_test;")
 	testutils.MustExecute("mysql", args1...)
-	
+
 	// Then recreate the database
 	args2 := append(getMySQLArgs(), "-e", "CREATE DATABASE mysqldef_test;")
 	testutils.MustExecute("mysql", args2...)

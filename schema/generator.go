@@ -56,10 +56,15 @@ type Generator struct {
 	desiredSchemas []*Schema
 	currentSchemas []*Schema
 
+	desiredPrivileges []*GrantPrivilege
+	currentPrivileges []*GrantPrivilege
+
 	defaultSchema string
 
 	algorithm string
 	lock      string
+
+	config database.GeneratorConfig
 }
 
 // Parse argument DDLs and call `generateDDLs()`
@@ -71,6 +76,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	}
 	desiredDDLs = FilterTables(desiredDDLs, config)
 	desiredDDLs = FilterViews(desiredDDLs, config)
+	desiredDDLs = FilterPrivileges(desiredDDLs, config)
 
 	currentDDLs, err := ParseDDLs(mode, sqlParser, currentSQL, defaultSchema)
 	if err != nil {
@@ -78,30 +84,39 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	}
 	currentDDLs = FilterTables(currentDDLs, config)
 	currentDDLs = FilterViews(currentDDLs, config)
+	currentDDLs = FilterPrivileges(currentDDLs, config)
 
-	tables, views, triggers, types, comments, extensions, schemas, err := aggregateDDLsToSchema(currentDDLs)
+	aggregated, err := aggregateDDLsToSchema(currentDDLs)
+	if err != nil {
+		return nil, err
+	}
+
+	desiredAggregated, err := aggregateDDLsToSchema(desiredDDLs)
 	if err != nil {
 		return nil, err
 	}
 
 	generator := Generator{
 		mode:              mode,
-		desiredTables:     []*Table{},
-		currentTables:     tables,
-		desiredViews:      []*View{},
-		currentViews:      views,
-		desiredTriggers:   []*Trigger{},
-		currentTriggers:   triggers,
-		desiredTypes:      []*Type{},
-		currentTypes:      types,
-		currentComments:   comments,
-		desiredExtensions: []*Extension{},
-		currentExtensions: extensions,
-		desiredSchemas:    []*Schema{},
-		currentSchemas:    schemas,
+		desiredTables:     desiredAggregated.Tables,
+		currentTables:     aggregated.Tables,
+		desiredViews:      desiredAggregated.Views,
+		currentViews:      aggregated.Views,
+		desiredTriggers:   desiredAggregated.Triggers,
+		currentTriggers:   aggregated.Triggers,
+		desiredTypes:      desiredAggregated.Types,
+		currentTypes:      aggregated.Types,
+		currentComments:   aggregated.Comments,
+		desiredExtensions: desiredAggregated.Extensions,
+		currentExtensions: aggregated.Extensions,
+		desiredSchemas:    desiredAggregated.Schemas,
+		currentSchemas:    aggregated.Schemas,
+		desiredPrivileges: desiredAggregated.Privileges,
+		currentPrivileges: aggregated.Privileges,
 		defaultSchema:     defaultSchema,
 		algorithm:         config.Algorithm,
 		lock:              config.Lock,
+		config:            config,
 	}
 	return generator.generateDDLs(desiredDDLs)
 }
@@ -176,8 +191,11 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 					g.currentTables = append(g.currentTables, &table)
 				}
 			}
-			table := desired.table // copy table
-			g.desiredTables = append(g.desiredTables, &table)
+			// Only add to desiredTables if it doesn't already exist (it may have been pre-populated from aggregation)
+			if findTableByName(g.desiredTables, desired.table.name) == nil {
+				table := desired.table // copy table
+				g.desiredTables = append(g.desiredTables, &table)
+			}
 		case *CreateIndex:
 			idxDDLs, err := g.generateDDLsForCreateIndex(desired.tableName, desired.index, "CREATE INDEX", ddl.Statement())
 			if err != nil {
@@ -244,6 +262,18 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return nil, err
 			}
 			createSchemaDDLs = append(createSchemaDDLs, schemaDDLs...)
+		case *GrantPrivilege:
+			privilegeDDLs, err := g.generateDDLsForGrantPrivilege(desired)
+			if err != nil {
+				return nil, err
+			}
+			interDDLs = append(interDDLs, privilegeDDLs...)
+		case *RevokePrivilege:
+			revokeDDLs, err := g.generateDDLsForRevokePrivilege(desired)
+			if err != nil {
+				return nil, err
+			}
+			interDDLs = append(interDDLs, revokeDDLs...)
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", desired)
 		}
@@ -382,6 +412,44 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		if desitedTrigger == nil {
 			ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeSQLName(currentTrigger.name)))
 			continue
+		}
+	}
+
+	if g.config.EnableDrop && g.mode == GeneratorModePostgres {
+		for _, currentPriv := range g.currentPrivileges {
+			hasIncludedGrantee := false
+			for _, grantee := range currentPriv.grantees {
+				if containsString(g.config.ManagedRoles, grantee) {
+					hasIncludedGrantee = true
+					break
+				}
+			}
+			if len(currentPriv.grantees) > 0 && !hasIncludedGrantee {
+				continue
+			}
+
+			found := false
+			for _, desiredPriv := range g.desiredPrivileges {
+				if currentPriv.tableName == desiredPriv.tableName &&
+					len(currentPriv.grantees) > 0 && len(desiredPriv.grantees) > 0 &&
+					currentPriv.grantees[0] == desiredPriv.grantees[0] {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				escapedGrantee, err := g.validateAndEscapeGrantee(currentPriv.grantees[0])
+				if err != nil {
+					return nil, err
+				}
+
+				revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
+					formatPrivilegesForGrant(currentPriv.privileges),
+					g.escapeTableName(currentPriv.tableName),
+					escapedGrantee)
+				ddls = append(ddls, revoke)
+			}
 		}
 	}
 
@@ -973,8 +1041,24 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 				currentView.indexes = append(currentView.indexes, desiredIndex)
 			}
 		} else {
-			// Creating index on non-existent table/view, just add the statement
-			ddls = append(ddls, statement)
+			// Check if the view exists in desired views (might be created in the same migration)
+			desiredView := findViewByName(g.desiredViews, tableName)
+			if desiredView != nil {
+				// View will be created, add the index
+				ddls = append(ddls, statement)
+				desiredView.indexes = append(desiredView.indexes, desiredIndex)
+			} else {
+				// Check if it's a desired table that hasn't been created yet
+				desiredTable := findTableByName(g.desiredTables, tableName)
+				if desiredTable != nil {
+					// Table will be created, add the index
+					ddls = append(ddls, statement)
+					desiredTable.indexes = append(desiredTable.indexes, desiredIndex)
+				} else {
+					// Creating index on non-existent table/view, just add the statement
+					ddls = append(ddls, statement)
+				}
+			}
 		}
 		return ddls, nil
 	}
@@ -1029,10 +1113,10 @@ func (g *Generator) generateDDLsForAddForeignKey(tableName string, desiredForeig
 
 	// Examine indexes in desiredTable to delete obsoleted indexes later
 	desiredTable := findTableByName(g.desiredTables, tableName)
-	if containsString(convertForeignKeysToConstraintNames(desiredTable.foreignKeys), desiredForeignKey.constraintName) {
-		return nil, fmt.Errorf("index '%s' is doubly created against table '%s': '%s'", desiredForeignKey.constraintName, tableName, statement)
+	// Only add to desiredTable.foreignKeys if it doesn't already exist (it may have been pre-populated from aggregation)
+	if !containsString(convertForeignKeysToConstraintNames(desiredTable.foreignKeys), desiredForeignKey.constraintName) {
+		desiredTable.foreignKeys = append(desiredTable.foreignKeys, desiredForeignKey)
 	}
-	desiredTable.foreignKeys = append(desiredTable.foreignKeys, desiredForeignKey)
 
 	return ddls, nil
 }
@@ -1056,10 +1140,10 @@ func (g *Generator) generateDDLsForAddExclusion(tableName string, desiredExclusi
 
 	// Examine indexes in desiredTable to delete obsoleted indexes later
 	desiredTable := findTableByName(g.desiredTables, tableName)
-	if containsString(convertExclusionToConstraintNames(desiredTable.exclusions), desiredExclusion.constraintName) {
-		return nil, fmt.Errorf("index '%s' is doubly created against table '%s': '%s'", desiredExclusion.constraintName, tableName, statement)
+	// Only add to desiredTable.exclusions if it doesn't already exist (it may have been pre-populated from aggregation)
+	if !containsString(convertExclusionToConstraintNames(desiredTable.exclusions), desiredExclusion.constraintName) {
+		desiredTable.exclusions = append(desiredTable.exclusions, desiredExclusion)
 	}
-	desiredTable.exclusions = append(desiredTable.exclusions, desiredExclusion)
 
 	return ddls, nil
 }
@@ -1090,10 +1174,10 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy 
 	if desiredTable == nil {
 		return nil, fmt.Errorf("%s is performed before create table '%s': '%s'", action, tableName, statement)
 	}
-	if containsString(convertPolicyNames(desiredTable.policies), desiredPolicy.name) {
-		return nil, fmt.Errorf("policy '%s' is doubly created against table '%s': '%s'", desiredPolicy.name, tableName, statement)
+	// Only add to desiredTable.policies if it doesn't already exist (it may have been pre-populated from aggregation)
+	if !containsString(convertPolicyNames(desiredTable.policies), desiredPolicy.name) {
+		desiredTable.policies = append(desiredTable.policies, desiredPolicy)
 	}
-	desiredTable.policies = append(desiredTable.policies, desiredPolicy)
 
 	return ddls, nil
 }
@@ -1133,6 +1217,8 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 		// View not found, add view.
 		ddls = append(ddls, desiredView.statement)
 		view := *desiredView // copy view
+		// Don't copy indexes from desired to current - they'll be added when the CREATE INDEX is processed
+		view.indexes = []Index{}
 		g.currentViews = append(g.currentViews, &view)
 	} else if desiredView.viewType == "VIEW" { // TODO: Fix the definition comparison for materialized views and enable this
 		// View found. If it's different, create or replace view.
@@ -1152,10 +1238,10 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 	}
 
 	// Examine policies in desiredTable to delete obsoleted policies later
-	if containsString(convertViewNames(g.desiredViews), desiredView.name) {
-		return nil, fmt.Errorf("view '%s' is doubly created: '%s'", desiredView.name, desiredView.statement)
+	// Only add to desiredViews if it doesn't already exist (it may have been pre-populated from aggregation)
+	if !containsString(convertViewNames(g.desiredViews), desiredView.name) {
+		g.desiredViews = append(g.desiredViews, desiredView)
 	}
-	g.desiredViews = append(g.desiredViews, desiredView)
 
 	return ddls, nil
 }
@@ -1221,7 +1307,10 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName string, desiredTrig
 		}
 	}
 
-	g.desiredTriggers = append(g.desiredTriggers, desiredTrigger)
+	// Only add to desiredTriggers if it doesn't already exist (it may have been pre-populated from aggregation)
+	if findTriggerByName(g.desiredTriggers, desiredTrigger.name) == nil {
+		g.desiredTriggers = append(g.desiredTriggers, desiredTrigger)
+	}
 
 	return ddls, nil
 }
@@ -1243,7 +1332,10 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 		// Type not found, add type.
 		ddls = append(ddls, desired.statement)
 	}
-	g.desiredTypes = append(g.desiredTypes, desired)
+	// Only add to desiredTypes if it doesn't already exist (it may have been pre-populated from aggregation)
+	if findTypeByName(g.desiredTypes, desired.name) == nil {
+		g.desiredTypes = append(g.desiredTypes, desired)
+	}
 
 	return ddls, nil
 }
@@ -1270,7 +1362,10 @@ func (g *Generator) generateDDLsForExtension(desired *Extension) ([]string, erro
 		g.currentExtensions = append(g.currentExtensions, &extension)
 	}
 
-	g.desiredExtensions = append(g.desiredExtensions, desired)
+	// Only add to desiredExtensions if it doesn't already exist (it may have been pre-populated from aggregation)
+	if findExtensionByName(g.desiredExtensions, desired.extension.Name) == nil {
+		g.desiredExtensions = append(g.desiredExtensions, desired)
+	}
 
 	return ddls, nil
 }
@@ -1285,7 +1380,10 @@ func (g *Generator) generateDDLsForSchema(desired *Schema) ([]string, error) {
 		g.currentSchemas = append(g.currentSchemas, &schema)
 	}
 
-	g.desiredSchemas = append(g.desiredSchemas, desired)
+	// Only add to desiredSchemas if it doesn't already exist (it may have been pre-populated from aggregation)
+	if findSchemaByName(g.desiredSchemas, desired.schema.Name) == nil {
+		g.desiredSchemas = append(g.desiredSchemas, desired)
+	}
 
 	return ddls, nil
 }
@@ -1528,6 +1626,17 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 	return definition, nil
 }
 
+type AggregatedSchema struct {
+	Tables     []*Table
+	Views      []*View
+	Triggers   []*Trigger
+	Types      []*Type
+	Comments   []*Comment
+	Extensions []*Extension
+	Schemas    []*Schema
+	Privileges []*GrantPrivilege
+}
+
 func (g *Generator) generateAddIndex(table string, index Index) string {
 	var uniqueOption string
 	var clusteredOption string
@@ -1615,7 +1724,7 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 		if index.vector {
 			indexTypeStr = "VECTOR INDEX"
 		}
-		
+
 		ddl := fmt.Sprintf(
 			"ALTER TABLE %s ADD %s",
 			g.escapeTableName(table),
@@ -1802,12 +1911,34 @@ func (g *Generator) escapeTableName(name string) string {
 func (g *Generator) escapeSQLName(name string) string {
 	switch g.mode {
 	case GeneratorModePostgres:
-		return fmt.Sprintf("\"%s\"", name)
+		escaped := strings.ReplaceAll(name, "\"", "\"\"")
+		return fmt.Sprintf("\"%s\"", escaped)
 	case GeneratorModeMssql:
-		return fmt.Sprintf("[%s]", name)
+		escaped := strings.ReplaceAll(name, "]", "]]")
+		return fmt.Sprintf("[%s]", escaped)
 	default:
-		return fmt.Sprintf("`%s`", name)
+		escaped := strings.ReplaceAll(name, "`", "``")
+		return fmt.Sprintf("`%s`", escaped)
 	}
+}
+
+// validateAndEscapeGrantee validates and escapes a grantee name to prevent SQL injection
+func (g *Generator) validateAndEscapeGrantee(grantee string) (string, error) {
+	// PUBLIC is a special keyword and should not be quoted
+	if grantee == "PUBLIC" {
+		return "PUBLIC", nil
+	}
+
+	// Check for potentially dangerous characters that shouldn't be in role names
+	// PostgreSQL role names can contain letters, digits, underscores, and some special chars
+	// but we'll be conservative to prevent injection
+	// Note: quotes, backticks, and brackets are allowed as escapeSQLName handles them
+	if strings.ContainsAny(grantee, ";\n\r\t\x00") {
+		return "", fmt.Errorf("invalid characters in grantee name: %s", grantee)
+	}
+
+	// Use escapeSQLName which handles proper escaping including quotes/brackets/backticks
+	return g.escapeSQLName(grantee), nil
 }
 
 func (g *Generator) normalizeOldTableName(oldName, newName string) string {
@@ -1912,25 +2043,28 @@ func mergeTable(table1 *Table, table2 Table) {
 	}
 }
 
-func aggregateDDLsToSchema(ddls []DDL) ([]*Table, []*View, []*Trigger, []*Type, []*Comment, []*Extension, []*Schema, error) {
-	var tables []*Table
-	var views []*View
-	var triggers []*Trigger
-	var types []*Type
-	var comments []*Comment
-	var extensions []*Extension
-	var schemas []*Schema
+func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
+	aggregated := &AggregatedSchema{
+		Tables:     []*Table{},
+		Views:      []*View{},
+		Triggers:   []*Trigger{},
+		Types:      []*Type{},
+		Comments:   []*Comment{},
+		Extensions: []*Extension{},
+		Schemas:    []*Schema{},
+		Privileges: []*GrantPrivilege{},
+	}
 	for _, ddl := range ddls {
 		switch stmt := ddl.(type) {
 		case *CreateTable:
 			table := stmt.table // copy table
-			tables = append(tables, &table)
+			aggregated.Tables = append(aggregated.Tables, &table)
 		case *CreateIndex:
-			table := findTableByName(tables, stmt.tableName)
+			table := findTableByName(aggregated.Tables, stmt.tableName)
 			if table == nil {
-				view := findViewByName(views, stmt.tableName)
+				view := findViewByName(aggregated.Views, stmt.tableName)
 				if view == nil {
-					return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("CREATE INDEX is performed before CREATE TABLE: %s", ddl.Statement())
+					return nil, fmt.Errorf("CREATE INDEX is performed before CREATE TABLE: %s", ddl.Statement())
 				}
 				// TODO: check duplicated creation
 				view.indexes = append(view.indexes, stmt.index)
@@ -1939,16 +2073,16 @@ func aggregateDDLsToSchema(ddls []DDL) ([]*Table, []*View, []*Trigger, []*Type, 
 				table.indexes = append(table.indexes, stmt.index)
 			}
 		case *AddIndex:
-			table := findTableByName(tables, stmt.tableName)
+			table := findTableByName(aggregated.Tables, stmt.tableName)
 			if table == nil {
-				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("ADD INDEX is performed before CREATE TABLE: %s", ddl.Statement())
+				return nil, fmt.Errorf("ADD INDEX is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 			// TODO: check duplicated creation
 			table.indexes = append(table.indexes, stmt.index)
 		case *AddPrimaryKey:
-			table := findTableByName(tables, stmt.tableName)
+			table := findTableByName(aggregated.Tables, stmt.tableName)
 			if table == nil {
-				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("ADD PRIMARY KEY is performed before CREATE TABLE: %s", ddl.Statement())
+				return nil, fmt.Errorf("ADD PRIMARY KEY is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			newColumns := map[string]*Column{}
@@ -1960,43 +2094,326 @@ func aggregateDDLsToSchema(ddls []DDL) ([]*Table, []*View, []*Trigger, []*Type, 
 			}
 			table.columns = newColumns
 		case *AddForeignKey:
-			table := findTableByName(tables, stmt.tableName)
+			table := findTableByName(aggregated.Tables, stmt.tableName)
 			if table == nil {
-				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("ADD FOREIGN KEY is performed before CREATE TABLE: %s", ddl.Statement())
+				return nil, fmt.Errorf("ADD FOREIGN KEY is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			table.foreignKeys = append(table.foreignKeys, stmt.foreignKey)
 		case *AddExclusion:
-			table := findTableByName(tables, stmt.tableName)
+			table := findTableByName(aggregated.Tables, stmt.tableName)
 			if table == nil {
-				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("ADD EXCLUDE is performed before CREATE TABLE: %s", ddl.Statement())
+				return nil, fmt.Errorf("ADD EXCLUDE is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			table.exclusions = append(table.exclusions, stmt.exclusion)
 		case *AddPolicy:
-			table := findTableByName(tables, stmt.tableName)
+			table := findTableByName(aggregated.Tables, stmt.tableName)
 			if table == nil {
-				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("ADD POLICY performed before CREATE TABLE: %s", ddl.Statement())
+				return nil, fmt.Errorf("ADD POLICY performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			table.policies = append(table.policies, stmt.policy)
 		case *View:
-			views = append(views, stmt)
+			aggregated.Views = append(aggregated.Views, stmt)
 		case *Trigger:
-			triggers = append(triggers, stmt)
+			aggregated.Triggers = append(aggregated.Triggers, stmt)
 		case *Type:
-			types = append(types, stmt)
+			aggregated.Types = append(aggregated.Types, stmt)
 		case *Comment:
-			comments = append(comments, stmt)
+			aggregated.Comments = append(aggregated.Comments, stmt)
 		case *Extension:
-			extensions = append(extensions, stmt)
+			aggregated.Extensions = append(aggregated.Extensions, stmt)
 		case *Schema:
-			schemas = append(schemas, stmt)
+			aggregated.Schemas = append(aggregated.Schemas, stmt)
+		case *GrantPrivilege:
+			merged := false
+			for i, existing := range aggregated.Privileges {
+				if existing.tableName == stmt.tableName &&
+					len(existing.grantees) == len(stmt.grantees) {
+					allMatch := true
+					for j, grantee := range existing.grantees {
+						if grantee != stmt.grantees[j] {
+							allMatch = false
+							break
+						}
+					}
+					if allMatch {
+						privMap := make(map[string]bool)
+						for _, priv := range existing.privileges {
+							privMap[priv] = true
+						}
+						for _, priv := range stmt.privileges {
+							privMap[priv] = true
+						}
+						mergedPrivs := []string{}
+						for priv := range privMap {
+							mergedPrivs = append(mergedPrivs, priv)
+						}
+						sort.Strings(mergedPrivs)
+						aggregated.Privileges[i].privileges = mergedPrivs
+						merged = true
+						break
+					}
+				}
+			}
+			if !merged {
+				aggregated.Privileges = append(aggregated.Privileges, stmt)
+			}
+		case *RevokePrivilege:
+			// Note: REVOKE statements in desired schemas are not recommended
+			// The desired schema should describe the target state with GRANTs only
+			// This case is kept for backwards compatibility but may be removed
 		default:
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("unexpected ddl type in convertDDLsToTablesAndViews: %#v", stmt)
+			return nil, fmt.Errorf("unexpected ddl type in convertDDLsToTablesAndViews: %#v", stmt)
 		}
 	}
-	return tables, views, triggers, types, comments, extensions, schemas, nil
+	return aggregated, nil
+}
+
+var postgresTablePrivilegeList = []string{
+	"DELETE",
+	"INSERT",
+	"REFERENCES",
+	"SELECT",
+	"TRIGGER",
+	"TRUNCATE",
+	"UPDATE",
+}
+
+// Sort privileges in PostgreSQL canonical order
+func sortPrivilegesByCanonicalOrder(privileges []string) {
+	orderMap := make(map[string]int)
+	for i, priv := range postgresTablePrivilegeList {
+		orderMap[priv] = i
+	}
+
+	sort.Slice(privileges, func(i, j int) bool {
+		orderI, hasI := orderMap[privileges[i]]
+		orderJ, hasJ := orderMap[privileges[j]]
+		if hasI && hasJ {
+			return orderI < orderJ
+		}
+		if !hasI && !hasJ {
+			return privileges[i] < privileges[j]
+		}
+		return hasI
+	})
+}
+
+func normalizePrivilegesForComparison(privileges []string) []string {
+	if len(privileges) == 1 && (privileges[0] == "ALL" || privileges[0] == "ALL PRIVILEGES") {
+		return postgresTablePrivilegeList
+	}
+	return privileges
+}
+
+func formatPrivilegesForGrant(privileges []string) string {
+	if len(privileges) == 1 && privileges[0] == "ALL" {
+		return "ALL PRIVILEGES"
+	}
+	if len(privileges) == len(postgresTablePrivilegeList) {
+		privMap := make(map[string]bool)
+		for _, priv := range privileges {
+			privMap[priv] = true
+		}
+		allPresent := true
+		for _, reqPriv := range postgresTablePrivilegeList {
+			if !privMap[reqPriv] {
+				allPresent = false
+				break
+			}
+		}
+		if allPresent {
+			return "ALL PRIVILEGES"
+		}
+	}
+	return strings.Join(privileges, ", ")
+}
+
+func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]string, error) {
+	// Grantees should already be filtered by FilterPrivileges
+	// If multiple grantees made it here, they all have the same privileges to grant
+
+	var ddls []string
+	desiredNormalized := normalizePrivilegesForComparison(desired.privileges)
+
+	// Track REVOKE operations per grantee
+	revokesByGrantee := make(map[string][]string)
+	// Track GRANT operations grouped by privileges to grant
+	type grantGroup struct {
+		privileges []string
+		grantees   []string
+	}
+	grantsByPrivileges := make(map[string]*grantGroup) // privileges key -> grant group
+
+	for _, grantee := range desired.grantees {
+		existingPrivilegesMap := make(map[string]bool)
+		for _, currentPriv := range g.currentPrivileges {
+			if currentPriv.tableName == desired.tableName {
+				for _, currentGrantee := range currentPriv.grantees {
+					if currentGrantee == grantee {
+						normalized := normalizePrivilegesForComparison(currentPriv.privileges)
+						for _, priv := range normalized {
+							existingPrivilegesMap[priv] = true
+						}
+						break
+					}
+				}
+			}
+		}
+
+		var existingNormalized []string
+		for priv := range existingPrivilegesMap {
+			existingNormalized = append(existingNormalized, priv)
+		}
+		if len(existingNormalized) > 0 {
+			sortPrivilegesByCanonicalOrder(existingNormalized)
+		}
+
+		if len(existingNormalized) > 0 &&
+			equalPrivileges(existingNormalized, desiredNormalized) {
+			continue
+		}
+
+		var privilegesToRevoke []string
+		if len(existingNormalized) > 0 {
+			desiredMap := make(map[string]bool)
+			for _, priv := range desiredNormalized {
+				desiredMap[priv] = true
+			}
+			for _, priv := range existingNormalized {
+				if !desiredMap[priv] {
+					privilegesToRevoke = append(privilegesToRevoke, priv)
+				}
+			}
+			if len(privilegesToRevoke) > 0 {
+				sortPrivilegesByCanonicalOrder(privilegesToRevoke)
+				revokesByGrantee[grantee] = privilegesToRevoke
+			}
+		}
+
+		var privilegesToGrant []string
+		if len(existingNormalized) > 0 {
+			existingMap := make(map[string]bool)
+			for _, priv := range existingNormalized {
+				existingMap[priv] = true
+			}
+			for _, priv := range desiredNormalized {
+				if !existingMap[priv] {
+					privilegesToGrant = append(privilegesToGrant, priv)
+				}
+			}
+		} else {
+			privilegesToGrant = desiredNormalized
+		}
+
+		if len(privilegesToGrant) > 0 {
+			privilegesCopy := make([]string, len(privilegesToGrant))
+			copy(privilegesCopy, privilegesToGrant)
+			sortPrivilegesByCanonicalOrder(privilegesCopy)
+			privilegesKey := strings.Join(privilegesCopy, ",")
+
+			if group, exists := grantsByPrivileges[privilegesKey]; exists {
+				group.grantees = append(group.grantees, grantee)
+			} else {
+				grantsByPrivileges[privilegesKey] = &grantGroup{
+					privileges: privilegesToGrant,
+					grantees:   []string{grantee},
+				}
+			}
+		}
+	}
+
+	if g.config.EnableDrop {
+		for grantee, privileges := range revokesByGrantee {
+			escapedGrantee, err := g.validateAndEscapeGrantee(grantee)
+			if err != nil {
+				return nil, err
+			}
+			revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
+				strings.Join(privileges, ", "),
+				g.escapeTableName(desired.tableName),
+				escapedGrantee)
+			ddls = append(ddls, revoke)
+		}
+	}
+
+	for _, group := range grantsByPrivileges {
+		escapedGrantees := []string{}
+		for _, grantee := range group.grantees {
+			escapedGrantee, err := g.validateAndEscapeGrantee(grantee)
+			if err != nil {
+				return nil, err
+			}
+			escapedGrantees = append(escapedGrantees, escapedGrantee)
+		}
+		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s",
+			formatPrivilegesForGrant(group.privileges),
+			g.escapeTableName(desired.tableName),
+			strings.Join(escapedGrantees, ", "))
+		ddls = append(ddls, grant)
+	}
+
+	// DO NOT update current privileges here - this breaks idempotency
+	// The state should only be updated after DDLs are successfully applied
+
+	return ddls, nil
+}
+
+func (g *Generator) generateDDLsForRevokePrivilege(desired *RevokePrivilege) ([]string, error) {
+	if len(g.config.ManagedRoles) > 0 && len(desired.grantees) > 0 {
+		hasIncludedGrantee := false
+		for _, grantee := range desired.grantees {
+			if containsString(g.config.ManagedRoles, grantee) {
+				hasIncludedGrantee = true
+				break
+			}
+		}
+		if !hasIncludedGrantee {
+			return []string{}, nil
+		}
+	}
+
+	// Only process REVOKE if EnableDrop is true
+	if !g.config.EnableDrop {
+		return []string{}, nil
+	}
+
+	escapedGrantee, err := g.validateAndEscapeGrantee(desired.grantees[0])
+	if err != nil {
+		return nil, err
+	}
+
+	revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
+		formatPrivilegesForGrant(desired.privileges),
+		g.escapeTableName(desired.tableName),
+		escapedGrantee)
+
+	if desired.cascadeOption {
+		revoke += " CASCADE"
+	}
+
+	// DO NOT update current privileges here - this breaks idempotency
+	// The state should only be updated after DDLs are successfully applied
+
+	return []string{revoke}, nil
+}
+
+func equalPrivileges(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	aMap := make(map[string]bool)
+	for _, priv := range a {
+		aMap[priv] = true
+	}
+	for _, priv := range b {
+		if !aMap[priv] {
+			return false
+		}
+	}
+	return true
 }
 
 func findTableByName(tables []*Table, name string) *Table {
@@ -2752,6 +3169,113 @@ func FilterViews(ddls []DDL, config database.GeneratorConfig) []DDL {
 		}
 
 		filtered = append(filtered, ddl)
+	}
+
+	return filtered
+}
+
+func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
+	// If no roles specified, exclude all privileges
+	if len(config.ManagedRoles) == 0 {
+		filtered := []DDL{}
+		for _, ddl := range ddls {
+			switch ddl.(type) {
+			case *GrantPrivilege, *RevokePrivilege:
+				// Skip all privilege-related DDLs
+				continue
+			default:
+				filtered = append(filtered, ddl)
+			}
+		}
+		return filtered
+	}
+
+	// Filter privileges to only include specified roles
+	filtered := []DDL{}
+	// Map to consolidate grants by table and privileges
+	grantsByTableAndPrivs := make(map[string]*GrantPrivilege)
+	grantsOrder := []string{} // Track order of insertion
+	revokesByTableAndGrantee := make(map[string]*RevokePrivilege)
+	revokesOrder := []string{} // Track order of insertion
+
+	for _, ddl := range ddls {
+		switch stmt := ddl.(type) {
+		case *GrantPrivilege:
+			// Filter grantees to only include those in config
+			includedGrantees := []string{}
+			for _, grantee := range stmt.grantees {
+				if containsString(config.ManagedRoles, grantee) {
+					includedGrantees = append(includedGrantees, grantee)
+				}
+			}
+
+			if len(includedGrantees) > 0 {
+				// Sort privileges for consistent key
+				sortedPrivs := make([]string, len(stmt.privileges))
+				copy(sortedPrivs, stmt.privileges)
+				sort.Strings(sortedPrivs)
+				key := fmt.Sprintf("%s:%s", stmt.tableName, strings.Join(sortedPrivs, ","))
+
+				if existing, ok := grantsByTableAndPrivs[key]; ok {
+					// Add grantees to existing grant with same table and privileges
+					existing.grantees = append(existing.grantees, includedGrantees...)
+				} else {
+					// Create new grant with filtered grantees
+					grantsByTableAndPrivs[key] = &GrantPrivilege{
+						statement:  stmt.statement,
+						tableName:  stmt.tableName,
+						grantees:   includedGrantees,
+						privileges: stmt.privileges,
+					}
+					grantsOrder = append(grantsOrder, key)
+				}
+			}
+		case *RevokePrivilege:
+			// Process each grantee separately and consolidate
+			for _, grantee := range stmt.grantees {
+				if containsString(config.ManagedRoles, grantee) {
+					key := fmt.Sprintf("%s:%s", stmt.tableName, grantee)
+					if existing, ok := revokesByTableAndGrantee[key]; ok {
+						// Merge privileges
+						privMap := make(map[string]bool)
+						for _, priv := range existing.privileges {
+							privMap[priv] = true
+						}
+						for _, priv := range stmt.privileges {
+							privMap[priv] = true
+						}
+						mergedPrivs := []string{}
+						for priv := range privMap {
+							mergedPrivs = append(mergedPrivs, priv)
+						}
+						sort.Strings(mergedPrivs)
+						existing.privileges = mergedPrivs
+					} else {
+						// Create new revoke for this grantee
+						revokesByTableAndGrantee[key] = &RevokePrivilege{
+							statement:     stmt.statement,
+							tableName:     stmt.tableName,
+							grantees:      []string{grantee},
+							privileges:    stmt.privileges,
+							cascadeOption: stmt.cascadeOption,
+						}
+						revokesOrder = append(revokesOrder, key)
+					}
+				}
+			}
+		default:
+			// Include all non-privilege DDLs
+			filtered = append(filtered, ddl)
+		}
+	}
+
+	// Add all consolidated grants to the result in original order
+	for _, key := range grantsOrder {
+		filtered = append(filtered, grantsByTableAndPrivs[key])
+	}
+
+	for _, key := range revokesOrder {
+		filtered = append(filtered, revokesByTableAndGrantee[key])
 	}
 
 	return filtered

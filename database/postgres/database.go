@@ -17,9 +17,10 @@ import (
 const indent = "    "
 
 type PostgresDatabase struct {
-	config        database.Config
-	db            *sql.DB
-	defaultSchema *string
+	config          database.Config
+	generatorConfig database.GeneratorConfig
+	db              *sql.DB
+	defaultSchema   *string
 }
 
 func NewDatabase(config database.Config) (database.Database, error) {
@@ -32,6 +33,10 @@ func NewDatabase(config database.Config) (database.Database, error) {
 		db:     db,
 		config: config,
 	}, nil
+}
+
+func (d *PostgresDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
+	d.generatorConfig = config
 }
 
 func (d *PostgresDatabase) DumpDDLs() (string, error) {
@@ -298,59 +303,84 @@ func (d *PostgresDatabase) types() ([]string, error) {
 	return ddls, nil
 }
 
-func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
-	cols, err := d.getColumns(table)
-	if err != nil {
-		return "", err
-	}
-	pkeyCols, err := d.getPrimaryKeyColumns(table)
-	if err != nil {
-		return "", err
-	}
-	// if pkey cols exist, retrieve the pkey name
-	pkeyName := ""
-	if len(pkeyCols) > 0 {
-		pkeyName, err = d.getPrimaryKeyName(table)
-		if err != nil {
-			return "", err
-		}
-	}
-	indexDefs, err := d.getIndexDefs(table)
-	if err != nil {
-		return "", err
-	}
-	foreignDefs, err := d.getForeignDefs(table)
-	if err != nil {
-		return "", err
-	}
-	policyDefs, err := d.getPolicyDefs(table)
-	if err != nil {
-		return "", err
-	}
-	checkConstraints, err := d.getTableCheckConstraints(table)
-	if err != nil {
-		return "", err
-	}
-	uniqueConstraints, err := d.getUniqueConstraints(table)
-	if err != nil {
-		return "", err
-	}
-	exclusionDefs, err := d.getExclusionDefs(table)
-	if err != nil {
-		return "", err
-	}
-	comments, err := d.getComments(table)
-	if err != nil {
-		return "", err
-	}
-	return buildDumpTableDDL(table, cols, pkeyName, pkeyCols, indexDefs, foreignDefs, exclusionDefs, policyDefs, comments, checkConstraints, uniqueConstraints, d.GetDefaultSchema()), nil
+type TableDDLComponents struct {
+	TableName         string
+	Columns           []column
+	PrimaryKeyName    string
+	PrimaryKeyCols    []string
+	IndexDefs         []string
+	ForeignDefs       []string
+	ExclusionDefs     []string
+	PolicyDefs        []string
+	Comments          []string
+	CheckConstraints  map[string]string
+	UniqueConstraints map[string]string
+	PrivilegeDefs     []string
+	DefaultSchema     string
 }
 
-func buildDumpTableDDL(table string, columns []column, pkeyName string, pkeyCols, indexDefs, foreignDefs, exclusionDefs, policyDefs, comments []string, checkConstraints, uniqueConstraints map[string]string, defaultSchema string) string {
+func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
+	components := TableDDLComponents{
+		TableName:     table,
+		DefaultSchema: d.GetDefaultSchema(),
+	}
+
+	var err error
+	components.Columns, err = d.getColumns(table)
+	if err != nil {
+		return "", fmt.Errorf("failed to get columns for table %s: %w", table, err)
+	}
+	components.PrimaryKeyCols, err = d.getPrimaryKeyColumns(table)
+	if err != nil {
+		return "", fmt.Errorf("failed to get primary key columns for table %s: %w", table, err)
+	}
+	// if pkey cols exist, retrieve the pkey name
+	if len(components.PrimaryKeyCols) > 0 {
+		components.PrimaryKeyName, err = d.getPrimaryKeyName(table)
+		if err != nil {
+			return "", fmt.Errorf("failed to get primary key name for table %s: %w", table, err)
+		}
+	}
+	components.IndexDefs, err = d.getIndexDefs(table)
+	if err != nil {
+		return "", fmt.Errorf("failed to get index definitions for table %s: %w", table, err)
+	}
+	components.ForeignDefs, err = d.getForeignDefs(table)
+	if err != nil {
+		return "", fmt.Errorf("failed to get foreign key definitions for table %s: %w", table, err)
+	}
+	components.PolicyDefs, err = d.getPolicyDefs(table)
+	if err != nil {
+		return "", fmt.Errorf("failed to get policy definitions for table %s: %w", table, err)
+	}
+	components.CheckConstraints, err = d.getTableCheckConstraints(table)
+	if err != nil {
+		return "", fmt.Errorf("failed to get check constraints for table %s: %w", table, err)
+	}
+	components.UniqueConstraints, err = d.getUniqueConstraints(table)
+	if err != nil {
+		return "", fmt.Errorf("failed to get unique constraints for table %s: %w", table, err)
+	}
+	components.ExclusionDefs, err = d.getExclusionDefs(table)
+	if err != nil {
+		return "", fmt.Errorf("failed to get exclusion definitions for table %s: %w", table, err)
+	}
+	components.Comments, err = d.getComments(table)
+	if err != nil {
+		return "", fmt.Errorf("failed to get comments for table %s: %w", table, err)
+	}
+	components.PrivilegeDefs, err = d.getPrivilegeDefs(table)
+	if err != nil {
+		return "", fmt.Errorf("failed to get privilege definitions for table %s: %w", table, err)
+	}
+	return buildDumpTableDDL(components), nil
+}
+
+func buildDumpTableDDL(components TableDDLComponents) string {
 	var queryBuilder strings.Builder
-	schema, table := splitTableName(table, defaultSchema)
+	schema, table := splitTableName(components.TableName, components.DefaultSchema)
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", escapeSQLName(schema), escapeSQLName(table))
-	for i, col := range columns {
+	for i, col := range components.Columns {
 		if i > 0 {
 			fmt.Fprint(&queryBuilder, ",")
 		}
@@ -369,32 +399,35 @@ func buildDumpTableDDL(table string, columns []column, pkeyName string, pkeyCols
 			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s %s", col.Check.name, col.Check.definition)
 		}
 	}
-	if len(pkeyCols) > 0 {
+	if len(components.PrimaryKeyCols) > 0 {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", pkeyName, strings.Join(pkeyCols, "\", \""))
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", components.PrimaryKeyName, strings.Join(components.PrimaryKeyCols, "\", \""))
 	}
-	for constraintName, constraintDef := range checkConstraints {
+	for constraintName, constraintDef := range components.CheckConstraints {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
 		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", constraintName, constraintDef)
 	}
 	fmt.Fprintf(&queryBuilder, "\n);\n")
-	for _, v := range indexDefs {
+	for _, v := range components.IndexDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
-	for _, v := range foreignDefs {
+	for _, v := range components.ForeignDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
-	for _, v := range exclusionDefs {
+	for _, v := range components.ExclusionDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
-	for _, v := range policyDefs {
+	for _, v := range components.PolicyDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
-	for _, constraintDef := range uniqueConstraints {
+	for _, constraintDef := range components.UniqueConstraints {
 		fmt.Fprintf(&queryBuilder, "%s;\n", constraintDef)
 	}
-	for _, v := range comments {
+	for _, v := range components.Comments {
 		fmt.Fprintf(&queryBuilder, "%s\n", v)
+	}
+	for _, v := range components.PrivilegeDefs {
+		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
 	return strings.TrimSuffix(queryBuilder.String(), "\n")
 }
@@ -713,9 +746,9 @@ WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$
 
 func (d *PostgresDatabase) getPrimaryKeyName(table string) (string, error) {
 	schema, table := splitTableName(table, d.GetDefaultSchema())
+	tableWithSchema := fmt.Sprintf("%s.%s", escapeSQLName(schema), escapeSQLName(table))
 	query := fmt.Sprintf(`SELECT
-	conname from pg_constraint where conrelid = '%s.%s'::regclass and contype = 'p'`, schema, table)
-	//tableWithSchema := fmt.Sprintf("'%s.%s'::regclass", schema, table)
+	conname from pg_constraint where conrelid = '%s'::regclass and contype = 'p'`, tableWithSchema)
 	rows, err := d.db.Query(query)
 	if err != nil {
 		return "", err
@@ -1022,6 +1055,99 @@ func splitTableName(table string, defaultSchema string) (string, string) {
 		table = schemaTable[1]
 	}
 	return schema, table
+}
+
+// postgresTablePrivilegeList contains all possible table privileges for PostgreSQL
+// Ordered alphabetically as PostgreSQL returns them
+var postgresTablePrivilegeList = []string{
+	"DELETE",
+	"INSERT",
+	"REFERENCES",
+	"SELECT",
+	"TRIGGER",
+	"TRUNCATE",
+	"UPDATE",
+}
+
+// normalizePrivileges converts a privilege list to "ALL PRIVILEGES" if it contains all table privileges
+func normalizePrivileges(privileges string) string {
+	privList := strings.Split(privileges, ", ")
+	if len(privList) != len(postgresTablePrivilegeList) {
+		return privileges
+	}
+
+	privMap := make(map[string]bool)
+	for _, priv := range privList {
+		privMap[priv] = true
+	}
+
+	for _, requiredPriv := range postgresTablePrivilegeList {
+		if !privMap[requiredPriv] {
+			return privileges
+		}
+	}
+
+	return "ALL PRIVILEGES"
+}
+
+func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
+	// If no roles are specified to include, don't query privileges at all
+	if len(d.generatorConfig.ManagedRoles) == 0 {
+		return []string{}, nil
+	}
+
+	schema, tableName := splitTableName(table, d.GetDefaultSchema())
+
+	rolePlaceholders := make([]string, len(d.generatorConfig.ManagedRoles))
+	queryArgs := []interface{}{schema, tableName}
+	for i, role := range d.generatorConfig.ManagedRoles {
+		rolePlaceholders[i] = fmt.Sprintf("$%d", i+3)
+		queryArgs = append(queryArgs, role)
+	}
+	roleFilter := strings.Join(rolePlaceholders, ", ")
+
+	query := fmt.Sprintf(`
+		SELECT
+			grantee,
+			string_agg(privilege_type, ', ' ORDER BY privilege_type) as privileges
+		FROM information_schema.table_privileges
+		WHERE table_schema = $1
+		AND table_name = $2
+		AND grantee IN (%s)
+		AND grantee != (
+			SELECT tableowner FROM pg_tables
+			WHERE schemaname = $1 AND tablename = $2
+		)
+		GROUP BY grantee
+		ORDER BY grantee
+	`, roleFilter)
+
+	rows, err := d.db.Query(query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query privileges for table %s.%s: %w", schema, tableName, err)
+	}
+	defer rows.Close()
+
+	var privilegeDefs []string
+	for rows.Next() {
+		var grantee, privileges string
+		if err := rows.Scan(&grantee, &privileges); err != nil {
+			return nil, fmt.Errorf("failed to scan privilege row: %w", err)
+		}
+
+		privileges = normalizePrivileges(privileges)
+
+		escapedGrantee := grantee
+		if grantee != "PUBLIC" {
+			// PUBLIC is a special keyword and should not be quoted
+			escapedGrantee = escapeSQLName(grantee)
+		}
+
+		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s", privileges, table, escapedGrantee)
+		privilegeDefs = append(privilegeDefs, grant)
+	}
+
+	return privilegeDefs, nil
 }
 
 func containsString(strs []string, str string) bool {
