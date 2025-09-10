@@ -22,12 +22,15 @@ var version string
 // Return parsed options and schema filename
 // TODO: Support `sqldef schema.sql -opt val...`
 func parseOptions(args []string) (database.Config, *sqldef.Options) {
+	// Track parsed configs in order
+	var configs []database.GeneratorConfig
+
 	var opts struct {
-		User          string   `short:"U" long:"user" description:"PostgreSQL user name" value-name:"username" default:"postgres"`
-		Password      string   `short:"W" long:"password" description:"PostgreSQL user password, overridden by $PGPASSWORD" value-name:"password"`
-		Host          string   `short:"h" long:"host" description:"Host or socket directory to connect to the PostgreSQL server" value-name:"hostname" default:"127.0.0.1"`
-		Port          uint     `short:"p" long:"port" description:"Port used for the connection" value-name:"port" default:"5432"`
-		Prompt        bool     `long:"password-prompt" description:"Force PostgreSQL user password prompt"`
+		User          string `short:"U" long:"user" description:"PostgreSQL user name" value-name:"username" default:"postgres"`
+		Password      string `short:"W" long:"password" description:"PostgreSQL user password, overridden by $PGPASSWORD" value-name:"password"`
+		Host          string `short:"h" long:"host" description:"Host or socket directory to connect to the PostgreSQL server" value-name:"hostname" default:"127.0.0.1"`
+		Port          uint   `short:"p" long:"port" description:"Port used for the connection" value-name:"port" default:"5432"`
+		Prompt        bool   `long:"password-prompt" description:"Force PostgreSQL user password prompt"`
 		File          []string `short:"f" long:"file" description:"Read desired SQL from the file, rather than stdin" value-name:"filename" default:"-"`
 		DryRun        bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export        bool     `long:"export" description:"Just dump the current schema to stdout"`
@@ -35,9 +38,19 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		SkipView      bool     `long:"skip-view" description:"Skip managing views/materialized views"`
 		SkipExtension bool     `long:"skip-extension" description:"Skip managing extensions"`
 		BeforeApply   string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs"`
-		Config        string   `long:"config" description:"YAML file to specify: target_tables, skip_tables, skip_views, target_schema"`
 		Help          bool     `long:"help" description:"Show this help"`
 		Version       bool     `long:"version" description:"Show this version"`
+
+		// Custom handlers for config flags to preserve order
+		Config       func(string) `long:"config" description:"YAML file to specify: target_tables, skip_tables, skip_views, target_schema (can be specified multiple times)"`
+		ConfigInline func(string) `long:"config-inline" description:"YAML object to specify: target_tables, skip_tables, skip_views, target_schema (can be specified multiple times)"`
+	}
+
+	opts.Config = func(path string) {
+		configs = append(configs, database.ParseGeneratorConfig(path))
+	}
+	opts.ConfigInline = func(yaml string) {
+		configs = append(configs, database.ParseGeneratorConfigString(yaml))
 	}
 
 	parser := flags.NewParser(&opts, flags.None)
@@ -67,13 +80,16 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		}
 	}
 
+	// merge --config and --config-inline in order
+	config := database.MergeGeneratorConfigs(configs)
+
 	options := sqldef.Options{
 		DesiredDDLs: desiredDDLs,
 		DryRun:      opts.DryRun,
 		Export:      opts.Export,
 		EnableDrop:  opts.EnableDrop,
 		BeforeApply: opts.BeforeApply,
-		Config:      database.ParseGeneratorConfig(opts.Config),
+		Config:      config,
 	}
 
 	if len(args) == 0 {
@@ -106,7 +122,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		password = string(pass)
 	}
 
-	config := database.Config{
+	dbConfig := database.Config{
 		DbName:          databaseName,
 		User:            opts.User,
 		Password:        password,
@@ -117,10 +133,10 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		TargetSchema:    options.Config.TargetSchema,
 		DumpConcurrency: options.Config.DumpConcurrency,
 	}
-	if _, err := os.Stat(config.Host); !os.IsNotExist(err) {
-		config.Socket = config.Host
+	if _, err := os.Stat(dbConfig.Host); !os.IsNotExist(err) {
+		dbConfig.Socket = dbConfig.Host
 	}
-	return config, &options
+	return dbConfig, &options
 }
 
 func main() {

@@ -20,14 +20,27 @@ var version string
 // Return parsed options and schema filename
 // TODO: Support `sqldef schema.sql -opt val...`
 func parseOptions(args []string) (database.Config, *sqldef.Options) {
+	// Track parsed configs in order
+	var configs []database.GeneratorConfig
+
 	var opts struct {
 		File       []string `short:"f" long:"file" description:"Read desired SQL from the file, rather than stdin" value-name:"filename" default:"-"`
 		DryRun     bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export     bool     `long:"export" description:"Just dump the current schema to stdout"`
 		EnableDrop bool     `long:"enable-drop" description:"Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE"`
-		Config     string   `long:"config" description:"YAML file to specify: target_tables, skip_tables"`
 		Help       bool     `long:"help" description:"Show this help"`
 		Version    bool     `long:"version" description:"Show this version"`
+
+		// Custom handlers for config flags to preserve order
+		Config       func(string) `long:"config" description:"YAML file to specify: target_tables, skip_tables (can be specified multiple times)"`
+		ConfigInline func(string) `long:"config-inline" description:"YAML object to specify: target_tables, skip_tables (can be specified multiple times)"`
+	}
+
+	opts.Config = func(path string) {
+		configs = append(configs, database.ParseGeneratorConfig(path))
+	}
+	opts.ConfigInline = func(yaml string) {
+		configs = append(configs, database.ParseGeneratorConfigString(yaml))
 	}
 
 	parser := flags.NewParser(&opts, flags.None)
@@ -57,12 +70,15 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		}
 	}
 
+	// merge --config and --config-inline in order
+	config := database.MergeGeneratorConfigs(configs)
+
 	options := sqldef.Options{
 		DesiredDDLs: desiredDDLs,
 		DryRun:      opts.DryRun,
 		Export:      opts.Export,
 		EnableDrop:  opts.EnableDrop,
-		Config:      database.ParseGeneratorConfig(opts.Config),
+		Config:      config,
 	}
 
 	if len(args) == 0 {
@@ -81,13 +97,13 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		databaseName = args[0]
 	}
 
-	config := database.Config{
+	dbConfig := database.Config{
 		DbName: databaseName,
 	}
-	if _, err := os.Stat(config.Host); !os.IsNotExist(err) {
-		config.Socket = config.Host
+	if _, err := os.Stat(dbConfig.Host); !os.IsNotExist(err) {
+		dbConfig.Socket = dbConfig.Host
 	}
-	return config, &options
+	return dbConfig, &options
 }
 
 func main() {
