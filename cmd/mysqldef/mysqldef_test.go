@@ -297,6 +297,21 @@ func TestMysqldefConfigIncludesSkipTables(t *testing.T) {
 	assertEquals(t, apply, nothingModified)
 }
 
+func TestMysqldefConfigInlineSkipTables(t *testing.T) {
+	resetTestDatabase()
+
+	usersTable := "CREATE TABLE users (id bigint);"
+	users1Table := "CREATE TABLE users_1 (id bigint);"
+	users10Table := "CREATE TABLE users_10 (id bigint);"
+	args := append(getMySQLArgs("mysqldef_test"), "-e", usersTable+users1Table+users10Table)
+	testutils.MustExecute("mysql", args...)
+
+	writeFile("schema.sql", usersTable+users1Table)
+
+	apply := assertedExecuteMySQLDef(t, "mysqldef_test", "--config-inline", "skip_tables: users_10", "--file", "schema.sql")
+	assertEquals(t, apply, nothingModified)
+}
+
 func TestMysqldefConfigIncludesAlgorithm(t *testing.T) {
 	resetTestDatabase()
 

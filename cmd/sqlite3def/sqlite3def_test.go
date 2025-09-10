@@ -143,6 +143,86 @@ func TestSQLite3defConfigIncludesSkipTables(t *testing.T) {
 	assertEquals(t, apply, nothingModified)
 }
 
+func TestSQLite3defConfigInlineSkipTables(t *testing.T) {
+	resetTestDatabase()
+
+	usersTable := "CREATE TABLE users (id bigint);"
+	users1Table := "CREATE TABLE users_1 (id bigint);"
+	users10Table := "CREATE TABLE users_10 (id bigint);"
+	testutils.MustExecute("sqlite3", "sqlite3def_test", usersTable+users1Table+users10Table)
+
+	writeFile("schema.sql", usersTable+users1Table)
+
+	apply := assertedExecute(t, "./sqlite3def", "--config-inline", "skip_tables: users_10", "--file", "schema.sql", "sqlite3def_test")
+	assertEquals(t, apply, nothingModified)
+}
+
+func TestSQLite3defConfigMerge(t *testing.T) {
+	resetTestDatabase()
+
+	usersTable := "CREATE TABLE users (id bigint);"
+	users1Table := "CREATE TABLE users_1 (id bigint);"
+	users10Table := "CREATE TABLE users_10 (id bigint);"
+	postsTable := "CREATE TABLE posts (id bigint);"
+	testutils.MustExecute("sqlite3", "sqlite3def_test", usersTable+users1Table+users10Table+postsTable)
+
+	writeFile("schema.sql", usersTable+users1Table+postsTable)
+	
+	// Config file says to skip users_10, but inline config overrides to skip posts
+	writeFile("config.yml", "skip_tables: users_10")
+
+	// inline config should override file config, so posts will be skipped instead of users_10
+	// This means users_10 will be dropped (skipped without --enable-drop) and posts will be kept
+	apply := assertedExecute(t, "./sqlite3def", "--config", "config.yml", "--config-inline", "skip_tables: posts", "--file", "schema.sql", "sqlite3def_test")
+	assertEquals(t, apply, applyPrefix+"-- Skipped: DROP TABLE `users_10`;\n")
+}
+
+func TestSQLite3defMultipleConfigs(t *testing.T) {
+	resetTestDatabase()
+
+	usersTable := "CREATE TABLE users (id bigint);"
+	users1Table := "CREATE TABLE users_1 (id bigint);"
+	users10Table := "CREATE TABLE users_10 (id bigint);"
+	postsTable := "CREATE TABLE posts (id bigint);"
+	commentsTable := "CREATE TABLE comments (id bigint);"
+	testutils.MustExecute("sqlite3", "sqlite3def_test", usersTable+users1Table+users10Table+postsTable+commentsTable)
+
+	writeFile("schema.sql", usersTable+users1Table+postsTable)
+	
+	// First config skips users_10
+	writeFile("config1.yml", "skip_tables: users_10")
+	// Second config skips posts
+	writeFile("config2.yml", "skip_tables: posts")
+	// Third config skips comments (this should win)
+	writeFile("config3.yml", "skip_tables: comments")
+
+	// The last config (config3.yml) should win, so only comments will be skipped
+	// users_10 is NOT in the final skip list, so it will be dropped
+	// comments IS in the final skip list, so it won't be touched (even though it's not in schema.sql)
+	apply := assertedExecute(t, "./sqlite3def", "--config", "config1.yml", "--config", "config2.yml", "--config", "config3.yml", "--file", "schema.sql", "sqlite3def_test")
+	assertEquals(t, apply, applyPrefix+"-- Skipped: DROP TABLE `users_10`;\n")
+}
+
+func TestSQLite3defMultipleInlineConfigs(t *testing.T) {
+	resetTestDatabase()
+
+	usersTable := "CREATE TABLE users (id bigint);"
+	users1Table := "CREATE TABLE users_1 (id bigint);"
+	users10Table := "CREATE TABLE users_10 (id bigint);"
+	postsTable := "CREATE TABLE posts (id bigint);"
+	testutils.MustExecute("sqlite3", "sqlite3def_test", usersTable+users1Table+users10Table+postsTable)
+
+	writeFile("schema.sql", usersTable+users1Table+postsTable)
+	
+	// Multiple inline configs - the last one should win
+	apply := assertedExecute(t, "./sqlite3def", 
+		"--config-inline", "skip_tables: posts", 
+		"--config-inline", "skip_tables: users_1",
+		"--config-inline", "skip_tables: users_10",
+		"--file", "schema.sql", "sqlite3def_test")
+	assertEquals(t, apply, nothingModified)
+}
+
 func TestSQLite3defVirtualTable(t *testing.T) {
 	resetTestDatabase()
 
@@ -441,4 +521,57 @@ func connectDatabase() (database.Database, error) {
 	return sqlite3.NewDatabase(database.Config{
 		DbName: "sqlite3def_test",
 	})
+}
+
+func TestSQLite3defConfigOrderPreserved(t *testing.T) {
+	resetTestDatabase()
+
+	// Create tables
+	createTable := stripHeredoc(`
+		CREATE TABLE users (id integer primary key);
+		CREATE TABLE posts (id integer primary key);
+		CREATE TABLE comments (id integer primary key);
+	`)
+	assertApplyOutput(t, createTable, applyPrefix+
+		"CREATE TABLE users (id integer primary key);\n"+
+		"CREATE TABLE posts (id integer primary key);\n"+
+		"CREATE TABLE comments (id integer primary key);\n")
+
+	// Create config files
+	config1 := "config1.yml"
+	config2 := "config2.yml"
+	writeFile(config1, "skip_tables: users")  // Skip users
+	writeFile(config2, "skip_tables: posts")  // Skip posts
+	defer os.Remove(config1)
+	defer os.Remove(config2)
+
+	// Test: file, inline, file - the last file should win
+	// This tests that the order is preserved: config1, inline(comments), config2
+	// Final result: posts should be skipped (from config2)
+	out := assertedExecute(t, "./sqlite3def",
+		"--config", config1,
+		"--config-inline", "skip_tables: comments",
+		"--config", config2,
+		"--export", "sqlite3def_test")
+	
+	// Should export only users and comments (posts is skipped by the last config)
+	expectedContent := "CREATE TABLE users (id integer primary key);\n\nCREATE TABLE comments (id integer primary key);\n"
+	if out != expectedContent {
+		t.Errorf("Expected export with config order preserved (last config2 skipping posts):\n%s\nGot:\n%s", expectedContent, out)
+	}
+
+	// Test: inline, file, inline - the last inline should win
+	// This tests: inline(users), config2(posts), inline(comments)
+	// Final result: comments should be skipped
+	out2 := assertedExecute(t, "./sqlite3def",
+		"--config-inline", "skip_tables: users",
+		"--config", config2,
+		"--config-inline", "skip_tables: comments",
+		"--export", "sqlite3def_test")
+	
+	// Should export only users and posts (comments is skipped by the last inline)
+	expectedContent2 := "CREATE TABLE users (id integer primary key);\n\nCREATE TABLE posts (id integer primary key);\n"
+	if out2 != expectedContent2 {
+		t.Errorf("Expected export with last inline winning (skipping comments):\n%s\nGot:\n%s", expectedContent2, out2)
+	}
 }

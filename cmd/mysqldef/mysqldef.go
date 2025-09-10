@@ -23,25 +23,38 @@ var version string
 // Return parsed options and schema filename
 // TODO: Support `sqldef schema.sql -opt val...`
 func parseOptions(args []string) (database.Config, *sqldef.Options) {
+	// Track parsed configs in order
+	var configs []database.GeneratorConfig
+
 	var opts struct {
-		User                  string   `short:"u" long:"user" description:"MySQL user name" value-name:"user_name" default:"root"`
-		Password              string   `short:"p" long:"password" description:"MySQL user password, overridden by $MYSQL_PWD" value-name:"password"`
-		Host                  string   `short:"h" long:"host" description:"Host to connect to the MySQL server" value-name:"host_name" default:"127.0.0.1"`
-		Port                  uint     `short:"P" long:"port" description:"Port used for the connection" value-name:"port_num" default:"3306"`
-		Socket                string   `short:"S" long:"socket" description:"The socket file to use for connection" value-name:"socket"`
-		SslMode               string   `long:"ssl-mode" description:"SSL connection mode(PREFERRED,REQUIRED,DISABLED)." value-name:"ssl_mode" default:"PREFERRED"`
-		SslCa                 string   `long:"ssl-ca" description:"File that contains list of trusted SSL Certificate Authorities" value-name:"ssl_ca"`
-		Prompt                bool     `long:"password-prompt" description:"Force MySQL user password prompt"`
-		EnableCleartextPlugin bool     `long:"enable-cleartext-plugin" description:"Enable/disable the clear text authentication plugin"`
+		User                  string `short:"u" long:"user" description:"MySQL user name" value-name:"user_name" default:"root"`
+		Password              string `short:"p" long:"password" description:"MySQL user password, overridden by $MYSQL_PWD" value-name:"password"`
+		Host                  string `short:"h" long:"host" description:"Host to connect to the MySQL server" value-name:"host_name" default:"127.0.0.1"`
+		Port                  uint   `short:"P" long:"port" description:"Port used for the connection" value-name:"port_num" default:"3306"`
+		Socket                string `short:"S" long:"socket" description:"The socket file to use for connection" value-name:"socket"`
+		SslMode               string `long:"ssl-mode" description:"SSL connection mode(PREFERRED,REQUIRED,DISABLED)." value-name:"ssl_mode" default:"PREFERRED"`
+		SslCa                 string `long:"ssl-ca" description:"File that contains list of trusted SSL Certificate Authorities" value-name:"ssl_ca"`
+		Prompt                bool   `long:"password-prompt" description:"Force MySQL user password prompt"`
+		EnableCleartextPlugin bool   `long:"enable-cleartext-plugin" description:"Enable/disable the clear text authentication plugin"`
 		File                  []string `long:"file" description:"Read desired SQL from the file, rather than stdin" value-name:"sql_file" default:"-"`
 		DryRun                bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export                bool     `long:"export" description:"Just dump the current schema to stdout"`
 		EnableDrop            bool     `long:"enable-drop" description:"Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE"`
 		SkipView              bool     `long:"skip-view" description:"Skip managing views (temporary feature, to be removed later)"`
 		BeforeApply           string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs"`
-		Config                string   `long:"config" description:"YAML file to specify: target_tables, skip_tables, algorithm, lock"`
 		Help                  bool     `long:"help" description:"Show this help"`
 		Version               bool     `long:"version" description:"Show this version"`
+
+		// Custom handlers for config flags to preserve order
+		Config       func(string) `long:"config" description:"YAML file to specify: target_tables, skip_tables, algorithm, lock (can be specified multiple times)"`
+		ConfigInline func(string) `long:"config-inline" description:"YAML object to specify: target_tables, skip_tables, algorithm, lock (can be specified multiple times)"`
+	}
+
+	opts.Config = func(path string) {
+		configs = append(configs, database.ParseGeneratorConfig(path))
+	}
+	opts.ConfigInline = func(yaml string) {
+		configs = append(configs, database.ParseGeneratorConfigString(yaml))
 	}
 
 	parser := flags.NewParser(&opts, flags.None)
@@ -71,13 +84,16 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		}
 	}
 
+	// merge --config and --config-inline in order
+	config := database.MergeGeneratorConfigs(configs)
+
 	options := sqldef.Options{
 		DesiredDDLs: desiredDDLs,
 		DryRun:      opts.DryRun,
 		Export:      opts.Export,
 		EnableDrop:  opts.EnableDrop,
 		BeforeApply: opts.BeforeApply,
-		Config:      database.ParseGeneratorConfig(opts.Config),
+		Config:      config,
 	}
 
 	if len(args) == 0 {
@@ -125,7 +141,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		password = string(pass)
 	}
 
-	config := database.Config{
+	dbConfig := database.Config{
 		DbName:                     databaseName,
 		User:                       opts.User,
 		Password:                   password,
@@ -138,7 +154,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		SslCa:                      opts.SslCa,
 		DumpConcurrency:            options.Config.DumpConcurrency,
 	}
-	return config, &options
+	return dbConfig, &options
 }
 
 func main() {

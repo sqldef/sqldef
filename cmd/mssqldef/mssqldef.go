@@ -21,18 +21,32 @@ var version string
 // Return parsed options and schema filename
 // TODO: Support `sqldef schema.sql -opt val...`
 func parseOptions(args []string) (database.Config, *sqldef.Options) {
+	// Track parsed configs in order
+	var configs []database.GeneratorConfig
+
 	var opts struct {
-		User       string   `short:"U" long:"user" description:"MSSQL user name" value-name:"user_name" default:"sa"`
-		Password   string   `short:"P" long:"password" description:"MSSQL user password, overridden by $MSSQL_PWD" value-name:"password"`
-		Host       string   `short:"h" long:"host" description:"Host to connect to the MSSQL server" value-name:"host_name" default:"127.0.0.1"`
-		Port       uint     `short:"p" long:"port" description:"Port used for the connection" value-name:"port_num" default:"1433"`
-		Prompt     bool     `long:"password-prompt" description:"Force MSSQL user password prompt"`
+		User       string `short:"U" long:"user" description:"MSSQL user name" value-name:"user_name" default:"sa"`
+		Password   string `short:"P" long:"password" description:"MSSQL user password, overridden by $MSSQL_PWD" value-name:"password"`
+		Host       string `short:"h" long:"host" description:"Host to connect to the MSSQL server" value-name:"host_name" default:"127.0.0.1"`
+		Port       uint   `short:"p" long:"port" description:"Port used for the connection" value-name:"port_num" default:"1433"`
+		Prompt     bool   `long:"password-prompt" description:"Force MSSQL user password prompt"`
 		File       []string `long:"file" description:"Read desired SQL from the file, rather than stdin" value-name:"sql_file" default:"-"`
 		DryRun     bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export     bool     `long:"export" description:"Just dump the current schema to stdout"`
 		EnableDrop bool     `long:"enable-drop" description:"Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE"`
 		Help       bool     `long:"help" description:"Show this help"`
 		Version    bool     `long:"version" description:"Show this version"`
+
+		// Custom handlers for config flags to preserve order
+		Config       func(string) `long:"config" description:"YAML file to specify: target_tables, skip_tables (can be specified multiple times)"`
+		ConfigInline func(string) `long:"config-inline" description:"YAML object to specify: target_tables, skip_tables (can be specified multiple times)"`
+	}
+
+	opts.Config = func(path string) {
+		configs = append(configs, database.ParseGeneratorConfig(path))
+	}
+	opts.ConfigInline = func(yaml string) {
+		configs = append(configs, database.ParseGeneratorConfigString(yaml))
 	}
 
 	parser := flags.NewParser(&opts, flags.None)
@@ -62,11 +76,15 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		}
 	}
 
+	// merge --config and --config-inline in order
+	config := database.MergeGeneratorConfigs(configs)
+
 	options := sqldef.Options{
 		DesiredDDLs: desiredDDLs,
 		DryRun:      opts.DryRun,
 		Export:      opts.Export,
 		EnableDrop:  opts.EnableDrop,
+		Config:      config,
 	}
 
 	if len(args) == 0 {
@@ -99,14 +117,14 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		password = string(pass)
 	}
 
-	config := database.Config{
+	dbConfig := database.Config{
 		DbName:   databaseName,
 		User:     opts.User,
 		Password: password,
 		Host:     opts.Host,
 		Port:     int(opts.Port),
 	}
-	return config, &options
+	return dbConfig, &options
 }
 
 func main() {
