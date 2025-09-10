@@ -35,15 +35,15 @@ type Config struct {
 }
 
 type GeneratorConfig struct {
-	TargetTables      []string
-	SkipTables        []string
-	SkipViews         []string
-	TargetSchema      []string
-	Algorithm         string
-	Lock              string
-	DumpConcurrency   int
-	IncludePrivileges []string // Roles for which to manage privileges
-	EnableDrop        bool     // Whether to enable DROP/REVOKE operations
+	TargetTables    []string
+	SkipTables      []string
+	SkipViews       []string
+	TargetSchema    []string
+	Algorithm       string
+	Lock            string
+	DumpConcurrency int
+	ManagedRoles    []string // Roles whose privileges are managed by sqldef
+	EnableDrop      bool     // Whether to enable DROP/REVOKE operations
 }
 
 // Abstraction layer for multiple kinds of databases
@@ -172,19 +172,27 @@ func MergeGeneratorConfig(base, override GeneratorConfig) GeneratorConfig {
 	if override.DumpConcurrency != 0 {
 		result.DumpConcurrency = override.DumpConcurrency
 	}
+	if override.ManagedRoles != nil {
+		result.ManagedRoles = override.ManagedRoles
+	}
+	if override.EnableDrop {
+		result.EnableDrop = override.EnableDrop
+	}
 
 	return result
 }
 
 func parseGeneratorConfigFromBytes(buf []byte) GeneratorConfig {
 	var config struct {
-		TargetTables    string `yaml:"target_tables"`
-		SkipTables      string `yaml:"skip_tables"`
-		SkipViews       string `yaml:"skip_views"`
-		TargetSchema    string `yaml:"target_schema"`
-		Algorithm       string `yaml:"algorithm"`
-		Lock            string `yaml:"lock"`
-		DumpConcurrency int    `yaml:"dump_concurrency"`
+		TargetTables    string   `yaml:"target_tables"`
+		SkipTables      string   `yaml:"skip_tables"`
+		SkipViews       string   `yaml:"skip_views"`
+		TargetSchema    string   `yaml:"target_schema"`
+		Algorithm       string   `yaml:"algorithm"`
+		Lock            string   `yaml:"lock"`
+		DumpConcurrency int      `yaml:"dump_concurrency"`
+		ManagedRoles    []string `yaml:"managed_roles"`
+		EnableDrop      bool     `yaml:"enable_drop"`
 	}
 
 	dec := yaml.NewDecoder(bytes.NewReader(buf))
@@ -231,5 +239,7 @@ func parseGeneratorConfigFromBytes(buf []byte) GeneratorConfig {
 		Algorithm:       algorithm,
 		Lock:            lock,
 		DumpConcurrency: config.DumpConcurrency,
+		ManagedRoles:    config.ManagedRoles,
+		EnableDrop:      config.EnableDrop,
 	}
 }

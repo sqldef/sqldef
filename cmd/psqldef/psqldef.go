@@ -26,11 +26,11 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	var configs []database.GeneratorConfig
 
 	var opts struct {
-		User          string `short:"U" long:"user" description:"PostgreSQL user name" value-name:"username" default:"postgres"`
-		Password      string `short:"W" long:"password" description:"PostgreSQL user password, overridden by $PGPASSWORD" value-name:"password"`
-		Host          string `short:"h" long:"host" description:"Host or socket directory to connect to the PostgreSQL server" value-name:"hostname" default:"127.0.0.1"`
-		Port          uint   `short:"p" long:"port" description:"Port used for the connection" value-name:"port" default:"5432"`
-		Prompt        bool   `long:"password-prompt" description:"Force PostgreSQL user password prompt"`
+		User          string   `short:"U" long:"user" description:"PostgreSQL user name" value-name:"username" default:"postgres"`
+		Password      string   `short:"W" long:"password" description:"PostgreSQL user password, overridden by $PGPASSWORD" value-name:"password"`
+		Host          string   `short:"h" long:"host" description:"Host or socket directory to connect to the PostgreSQL server" value-name:"hostname" default:"127.0.0.1"`
+		Port          uint     `short:"p" long:"port" description:"Port used for the connection" value-name:"port" default:"5432"`
+		Prompt        bool     `long:"password-prompt" description:"Force PostgreSQL user password prompt"`
 		File          []string `short:"f" long:"file" description:"Read desired SQL from the file, rather than stdin" value-name:"filename" default:"-"`
 		DryRun        bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export        bool     `long:"export" description:"Just dump the current schema to stdout"`
@@ -39,12 +39,11 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		SkipExtension bool     `long:"skip-extension" description:"Skip managing extensions"`
 		BeforeApply   string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs"`
 		Help          bool     `long:"help" description:"Show this help"`
-		IncludePrivileges []string `long:"include-privileges" description:"Include privilege management for specific roles (can be specified multiple times)" value-name:"role"`
 		Version       bool     `long:"version" description:"Show this version"`
 
 		// Custom handlers for config flags to preserve order
-		Config       func(string) `long:"config" description:"YAML file to specify: target_tables, skip_tables, skip_views, target_schema (can be specified multiple times)"`
-		ConfigInline func(string) `long:"config-inline" description:"YAML object to specify: target_tables, skip_tables, skip_views, target_schema (can be specified multiple times)"`
+		Config       func(string) `long:"config" description:"YAML file to specify: target_tables, skip_tables, skip_views, target_schema, managed_roles (can be specified multiple times)"`
+		ConfigInline func(string) `long:"config-inline" description:"YAML object to specify: target_tables, skip_tables, skip_views, target_schema, managed_roles (can be specified multiple times)"`
 	}
 
 	opts.Config = func(path string) {
@@ -83,9 +82,10 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 
 	// merge --config and --config-inline in order
 	config := database.MergeGeneratorConfigs(configs)
-	config.IncludePrivileges = opts.IncludePrivileges
-	config.EnableDrop = opts.EnableDrop
 
+	if opts.EnableDrop {
+		config.EnableDrop = opts.EnableDrop
+	}
 
 	options := sqldef.Options{
 		DesiredDDLs: desiredDDLs,

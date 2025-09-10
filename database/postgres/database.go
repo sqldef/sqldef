@@ -1092,15 +1092,15 @@ func normalizePrivileges(privileges string) string {
 
 func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
 	// If no roles are specified to include, don't query privileges at all
-	if len(d.generatorConfig.IncludePrivileges) == 0 {
+	if len(d.generatorConfig.ManagedRoles) == 0 {
 		return []string{}, nil
 	}
 
 	schema, tableName := splitTableName(table, d.GetDefaultSchema())
 
-	rolePlaceholders := make([]string, len(d.generatorConfig.IncludePrivileges))
+	rolePlaceholders := make([]string, len(d.generatorConfig.ManagedRoles))
 	queryArgs := []interface{}{schema, tableName}
-	for i, role := range d.generatorConfig.IncludePrivileges {
+	for i, role := range d.generatorConfig.ManagedRoles {
 		rolePlaceholders[i] = fmt.Sprintf("$%d", i+3)
 		queryArgs = append(queryArgs, role)
 	}

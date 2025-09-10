@@ -419,7 +419,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		for _, currentPriv := range g.currentPrivileges {
 			hasIncludedGrantee := false
 			for _, grantee := range currentPriv.grantees {
-				if containsString(g.config.IncludePrivileges, grantee) {
+				if containsString(g.config.ManagedRoles, grantee) {
 					hasIncludedGrantee = true
 					break
 				}
@@ -2362,10 +2362,10 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 }
 
 func (g *Generator) generateDDLsForRevokePrivilege(desired *RevokePrivilege) ([]string, error) {
-	if len(g.config.IncludePrivileges) > 0 && len(desired.grantees) > 0 {
+	if len(g.config.ManagedRoles) > 0 && len(desired.grantees) > 0 {
 		hasIncludedGrantee := false
 		for _, grantee := range desired.grantees {
-			if containsString(g.config.IncludePrivileges, grantee) {
+			if containsString(g.config.ManagedRoles, grantee) {
 				hasIncludedGrantee = true
 				break
 			}
@@ -3176,7 +3176,7 @@ func FilterViews(ddls []DDL, config database.GeneratorConfig) []DDL {
 
 func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 	// If no roles specified, exclude all privileges
-	if len(config.IncludePrivileges) == 0 {
+	if len(config.ManagedRoles) == 0 {
 		filtered := []DDL{}
 		for _, ddl := range ddls {
 			switch ddl.(type) {
@@ -3204,7 +3204,7 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 			// Filter grantees to only include those in config
 			includedGrantees := []string{}
 			for _, grantee := range stmt.grantees {
-				if containsString(config.IncludePrivileges, grantee) {
+				if containsString(config.ManagedRoles, grantee) {
 					includedGrantees = append(includedGrantees, grantee)
 				}
 			}
@@ -3233,7 +3233,7 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 		case *RevokePrivilege:
 			// Process each grantee separately and consolidate
 			for _, grantee := range stmt.grantees {
-				if containsString(config.IncludePrivileges, grantee) {
+				if containsString(config.ManagedRoles, grantee) {
 					key := fmt.Sprintf("%s:%s", stmt.tableName, grantee)
 					if existing, ok := revokesByTableAndGrantee[key]; ok {
 						// Merge privileges

@@ -1,0 +1,378 @@
+ManagedRolesBasicGrant:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  managed_roles:
+    - readonly_user
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
+
+ManagedRolesMultipleRoles:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+  managed_roles:
+    - readonly_user
+    - app_user
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+
+ManagedRolesIgnoreUnmanagedRole:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+    GRANT ALL PRIVILEGES ON TABLE "public"."users" TO "admin_role";
+  managed_roles:
+    - readonly_user
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
+
+ManagedRolesEmptyListNoChanges:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  managed_roles: []
+  output: ""
+
+ManagedRolesAddPrivileges:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+  managed_roles:
+    - app_user
+  output: |
+    GRANT INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+
+ManagedRolesRevoke:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT INSERT, SELECT, UPDATE ON TABLE "public"."users" TO "app_user";
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+  managed_roles:
+    - app_user
+  enable_drop: true
+  output: |
+    REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
+
+ManagedRolesRevokeAll:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT INSERT, SELECT, UPDATE ON TABLE "public"."users" TO "app_user";
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  managed_roles:
+    - app_user
+  enable_drop: true
+  output: |
+    REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "app_user";
+
+ManagedRolesPublic:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE "public"."users" TO PUBLIC;
+  managed_roles:
+    - PUBLIC
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO PUBLIC;
+
+ManagedRolesAllPrivileges:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT ALL PRIVILEGES ON TABLE "public"."users" TO "admin_role";
+  managed_roles:
+    - admin_role
+  output: |
+    GRANT ALL PRIVILEGES ON TABLE "public"."users" TO "admin_role";
+
+ManagedRolesIdempotent:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  managed_roles:
+    - readonly_user
+  output: ""
+
+ManagedRolesNoRevokeWithoutDrop:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+  managed_roles:
+    - app_user
+  enable_drop: false
+  output: ""
+
+ManagedRolesMultipleGrantees:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user, app_user, admin_role;
+  managed_roles:
+    - readonly_user
+    - app_user
+    - admin_role
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user", "app_user", "admin_role";
+
+ManagedRolesPartialGrantees:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO user1, user2, user3;
+    GRANT INSERT, UPDATE ON TABLE users TO user2, user4;
+  managed_roles:
+    - user2
+    - user4
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO "user2";
+    GRANT INSERT, UPDATE ON TABLE "public"."users" TO "user2", "user4";
+
+ManagedRolesOverlapping:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO user1;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT ON TABLE users TO user1, user2;
+    GRANT UPDATE, DELETE ON TABLE users TO user1, user3;
+  managed_roles:
+    - user1
+    - user2
+    - user3
+  output: |
+    GRANT INSERT ON TABLE "public"."users" TO "user1";
+    GRANT SELECT, INSERT ON TABLE "public"."users" TO "user2";
+    GRANT UPDATE, DELETE ON TABLE "public"."users" TO "user1", "user3";
+
+ManagedRolesMultipleTables:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE TABLE posts (
+      id BIGINT PRIMARY KEY,
+      title VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE TABLE posts (
+      id BIGINT PRIMARY KEY,
+      title VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE users, posts TO app_user;
+  managed_roles:
+    - app_user
+  output: |
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."posts" TO "app_user";
+
+ManagedRolesErrorGrantOption:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    grant select on table users to readonly_user with grant option;
+  managed_roles:
+    - readonly_user
+  error: "WITH GRANT OPTION is not supported yet"
+
+ManagedRolesErrorCascade:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    grant select on table users to readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    revoke select on table users from readonly_user cascade;
+  managed_roles:
+    - readonly_user
+  enable_drop: true
+  error: "CASCADE/RESTRICT options are not supported yet"
+
+ManagedRolesPartialRevokeFromAll:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT ALL PRIVILEGES ON TABLE users TO admin_role;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE users TO admin_role;
+  managed_roles:
+    - admin_role
+  enable_drop: true
+  output: |
+    REVOKE DELETE, REFERENCES, TRIGGER, TRUNCATE ON TABLE "public"."users" FROM "admin_role";
+
+ManagedRolesSpecialCharacters:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO "user-with-dash";
+    GRANT INSERT ON TABLE users TO "user.with.dot";
+    GRANT UPDATE ON TABLE users TO "user@domain.com";
+  managed_roles:
+    - user-with-dash
+    - user.with.dot
+    - user@domain.com
+  output: |
+    GRANT SELECT ON TABLE "public"."users" TO "user-with-dash";
+    GRANT INSERT ON TABLE "public"."users" TO "user.with.dot";
+    GRANT UPDATE ON TABLE "public"."users" TO "user@domain.com";
+
+ManagedRolesMixedGrantRevoke:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, DELETE ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, UPDATE ON TABLE users TO app_user;
+  managed_roles:
+    - app_user
+  enable_drop: true
+  output: |
+    REVOKE DELETE, INSERT ON TABLE "public"."users" FROM "app_user";
+    GRANT UPDATE ON TABLE "public"."users" TO "app_user";

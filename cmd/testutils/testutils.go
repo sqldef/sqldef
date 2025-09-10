@@ -18,16 +18,16 @@ import (
 )
 
 type TestCase struct {
-	Current           string  // default: empty schema
-	Desired           string  // default: empty schema
-	Output            *string // default: use Desired as Output
-	Error             *string // default: nil
-	MinVersion        string  `yaml:"min_version"`
-	MaxVersion        string  `yaml:"max_version"`
-	User              string
-	Flavor            string   // database flavor (e.g., "mariadb", "mysql")
-	IncludePrivileges []string `yaml:"include_privileges"` // Roles to include for privilege management
-	EnableDrop        bool     `yaml:"enable_drop"`        // Whether to enable DROP/REVOKE operations
+	Current      string  // default: empty schema
+	Desired      string  // default: empty schema
+	Output       *string // default: use Desired as Output
+	Error        *string // default: nil
+	MinVersion   string  `yaml:"min_version"`
+	MaxVersion   string  `yaml:"max_version"`
+	User         string
+	Flavor       string   // database flavor (e.g., "mariadb", "mysql")
+	ManagedRoles []string `yaml:"managed_roles"` // Roles whose privileges are managed by sqldef
+	EnableDrop   bool     `yaml:"enable_drop"`   // Whether to enable DROP/REVOKE operations
 }
 
 func ReadTests(pattern string) (map[string]TestCase, error) {
@@ -91,8 +91,8 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 
 	// Set generator config on database so it knows which privileges to include
 	config := database.GeneratorConfig{
-		IncludePrivileges: test.IncludePrivileges,
-		EnableDrop:        test.EnableDrop,
+		ManagedRoles: test.ManagedRoles,
+		EnableDrop:   test.EnableDrop,
 	}
 	db.SetGeneratorConfig(config)
 
