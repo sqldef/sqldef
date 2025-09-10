@@ -119,6 +119,21 @@ func TransactionSupported(ddl string) bool {
 	return !strings.Contains(strings.ToLower(ddl), "concurrently")
 }
 
+func MergeGeneratorConfigs(configs []GeneratorConfig) GeneratorConfig {
+	var result GeneratorConfig
+	for _, config := range configs {
+		result = MergeGeneratorConfig(result, config)
+	}
+	return result
+}
+
+func ParseGeneratorConfigString(yamlString string) GeneratorConfig {
+	if yamlString == "" {
+		return GeneratorConfig{}
+	}
+	return parseGeneratorConfigFromBytes([]byte(yamlString))
+}
+
 func ParseGeneratorConfig(configFile string) GeneratorConfig {
 	if configFile == "" {
 		return GeneratorConfig{}
@@ -128,7 +143,40 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 	if err != nil {
 		log.Fatal(err)
 	}
+	return parseGeneratorConfigFromBytes(buf)
+}
 
+// MergeGeneratorConfig merges two configs, with the second one taking precedence
+func MergeGeneratorConfig(base, override GeneratorConfig) GeneratorConfig {
+	result := base
+
+	// Override fields if they are set in the override config
+	if override.TargetTables != nil {
+		result.TargetTables = override.TargetTables
+	}
+	if override.SkipTables != nil {
+		result.SkipTables = override.SkipTables
+	}
+	if override.SkipViews != nil {
+		result.SkipViews = override.SkipViews
+	}
+	if override.TargetSchema != nil {
+		result.TargetSchema = override.TargetSchema
+	}
+	if override.Algorithm != "" {
+		result.Algorithm = override.Algorithm
+	}
+	if override.Lock != "" {
+		result.Lock = override.Lock
+	}
+	if override.DumpConcurrency != 0 {
+		result.DumpConcurrency = override.DumpConcurrency
+	}
+
+	return result
+}
+
+func parseGeneratorConfigFromBytes(buf []byte) GeneratorConfig {
 	var config struct {
 		TargetTables    string `yaml:"target_tables"`
 		SkipTables      string `yaml:"skip_tables"`
@@ -141,7 +189,7 @@ func ParseGeneratorConfig(configFile string) GeneratorConfig {
 
 	dec := yaml.NewDecoder(bytes.NewReader(buf))
 	dec.KnownFields(true)
-	err = dec.Decode(&config)
+	err := dec.Decode(&config)
 	if err != nil {
 		log.Fatal(err)
 	}

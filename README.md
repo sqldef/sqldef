@@ -39,7 +39,8 @@ Application Options:
       --enable-drop                 Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
       --skip-view                   Skip managing views (temporary feature, to be removed later)
       --before-apply=               Execute the given string before applying the regular DDLs
-      --config=                     YAML file to specify: target_tables, skip_tables, algorithm, lock
+      --config=                     YAML file to specify: target_tables, skip_tables, algorithm, lock, dump_concurrency (can be specified multiple times)
+      --config-inline=              YAML object to specify: target_tables, skip_tables, algorithm, lock, dump_concurrency (can be specified multiple times)
       --help                        Show this help
       --version                     Show this version
 ```
@@ -109,6 +110,26 @@ Run: 'DROP TABLE users;'
 # Tables in 'skip-tables' are ignored (can use Regexp)
 $ echo "user\n.*_bk\n.*_[0-9]{8}" > skip-tables
 $ mysqldef -uroot test --skip-file skip-tables < schema.sql
+
+# Use config file to control schema management
+$ cat > config.yml <<EOF
+target_tables: |
+  users
+  posts_\d+
+skip_tables: |
+  tmp_.*
+algorithm: INPLACE
+lock: NONE
+dump_concurrency: 8
+EOF
+$ mysqldef -uroot test --config=config.yml < schema.sql
+
+# Use inline YAML configuration
+$ mysqldef -uroot test --config-inline="skip_tables: temp_.*" < schema.sql
+
+# Multiple configs with order preservation (latter wins)
+# In this example, algorithm from config-inline overrides the one from config.yml
+$ mysqldef -uroot test --config=config.yml --config-inline="algorithm: INSTANT" < schema.sql
 ```
 
 ### psqldef
@@ -132,8 +153,9 @@ Application Options:
       --skip-view             Skip managing views/materialized views
       --skip-extension        Skip managing extensions
       --before-apply=         Execute the given string before applying the regular DDLs
-      --config=               YAML file to specify: target_tables, skip_tables, skip_views, target_schema
       --include-privileges=   Include privilege management for specific roles (can be specified multiple times)
+      --config=               YAML file to specify: target_tables, skip_tables, skip_views, target_schema, dump_concurrency (can be specified multiple times)
+      --config-inline=        YAML object to specify: target_tables, skip_tables, skip_views, target_schema, dump_concurrency (can be specified multiple times)
       --help                  Show this help
       --version               Show this version
 ```
@@ -214,6 +236,30 @@ CREATE TABLE users (
 );
 GRANT SELECT ON TABLE users TO readonly_user;
 GRANT SELECT, INSERT, UPDATE ON TABLE users TO app_user;
+
+# Use config file to filter tables and schemas
+$ cat > config.yml <<EOF
+target_tables: |
+  public\.users
+  public\.posts_\d+
+skip_tables: |
+  migrations
+  temp_.*
+skip_views: |
+  materialized_view_.*
+target_schema: |
+  public
+  app
+dump_concurrency: 4
+EOF
+$ psqldef -U postgres test --config=config.yml < schema.sql
+
+# Use inline YAML configuration
+$ psqldef -U postgres test --config-inline="target_schema: public" < schema.sql
+
+# Multiple configs with order preservation (latter wins)
+# In this example, skip_tables from the second config overrides the first
+$ psqldef -U postgres test --config=base.yml --config-inline="skip_tables: archived_.*" < schema.sql
 ```
 
 ### sqlite3def
@@ -227,9 +273,37 @@ Application Options:
       --dry-run               Don't run DDLs but just show them
       --export                Just dump the current schema to stdout
       --enable-drop           Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
-      --config=               YAML file to specify: target_tables, skip_tables
+      --config=               YAML file to specify: target_tables, skip_tables (can be specified multiple times)
+      --config-inline=        YAML object to specify: target_tables, skip_tables (can be specified multiple times)
       --help                  Show this help
       --version               Show this version
+```
+
+#### Example
+
+```sql
+# Create SQLite database and tables
+$ sqlite3 mydb.db "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);"
+
+# Export current schema
+$ sqlite3def mydb.db --export > schema.sql
+
+# Use config file to filter tables
+$ cat > config.yml <<EOF
+target_tables: |
+  users
+  posts_\d+
+skip_tables: |
+  sqlite_.*
+  temp_.*
+EOF
+$ sqlite3def mydb.db --config=config.yml < schema.sql
+
+# Use inline YAML configuration
+$ sqlite3def mydb.db --config-inline="skip_tables: backup_.*" < schema.sql
+
+# Multiple configs with order preservation (latter wins)
+$ sqlite3def mydb.db --config=config.yml --config-inline="target_tables: users" < schema.sql
 ```
 
 ### mssqldef
@@ -248,8 +322,37 @@ Application Options:
       --dry-run               Don't run DDLs but just show them
       --export                Just dump the current schema to stdout
       --enable-drop           Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
+      --config=               YAML file to specify: target_tables, skip_tables (can be specified multiple times)
+      --config-inline=        YAML object to specify: target_tables, skip_tables (can be specified multiple times)
       --help                  Show this help
       --version               Show this version
+```
+
+#### Example
+
+```sql
+# Apply schema to MSSQL database
+$ mssqldef -U sa -P password123 mydb < schema.sql
+
+# Export current schema
+$ mssqldef -U sa -P password123 mydb --export > current.sql
+
+# Use config file to filter tables
+$ cat > config.yml <<EOF
+target_tables: |
+  dbo\.users
+  dbo\.posts_\d+
+skip_tables: |
+  sys\..*
+  temp_.*
+EOF
+$ mssqldef -U sa -P password123 mydb --config=config.yml < schema.sql
+
+# Use inline YAML configuration
+$ mssqldef -U sa -P password123 mydb --config-inline="skip_tables: backup_.*" < schema.sql
+
+# Multiple configs with order preservation (latter wins)
+$ mssqldef -U sa -P password123 mydb --config=base.yml --config-inline="target_tables: dbo\..*" < schema.sql
 ```
 
 ## Supported features

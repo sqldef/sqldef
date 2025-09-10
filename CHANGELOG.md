@@ -1,3 +1,7 @@
+## v2.4.0
+
+* Add `--config-inline=<yaml_string>` option [#734](https://github.com/sqldef/sqldef/pull/734)
+
 ## v2.3.0
 
 * mysqldef: Support MariaDB vector indexes [#717](https://github.com/sqldef/sqldef/pull/717)
