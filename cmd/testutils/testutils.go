@@ -14,7 +14,7 @@ import (
 
 	"github.com/sqldef/sqldef/v2/database"
 	"github.com/sqldef/sqldef/v2/schema"
-	"gopkg.in/yaml.v3"
+	"github.com/goccy/go-yaml"
 )
 
 type TestCase struct {
@@ -45,8 +45,7 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 			return nil, err
 		}
 
-		dec := yaml.NewDecoder(bytes.NewReader(buf))
-		dec.KnownFields(true)
+		dec := yaml.NewDecoder(bytes.NewReader(buf), yaml.DisallowUnknownField())
 		err = dec.Decode(&tests)
 		if err != nil {
 			return nil, err

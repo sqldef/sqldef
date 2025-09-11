@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"github.com/goccy/go-yaml"
 )
 
 type Config struct {
@@ -195,8 +195,7 @@ func parseGeneratorConfigFromBytes(buf []byte) GeneratorConfig {
 		EnableDrop      bool     `yaml:"enable_drop"`
 	}
 
-	dec := yaml.NewDecoder(bytes.NewReader(buf))
-	dec.KnownFields(true)
+	dec := yaml.NewDecoder(bytes.NewReader(buf), yaml.DisallowUnknownField())
 	err := dec.Decode(&config)
 	if err != nil {
 		log.Fatal(err)
