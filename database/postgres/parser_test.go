@@ -8,7 +8,7 @@ import (
 	"github.com/sqldef/sqldef/v2/database"
 	"github.com/sqldef/sqldef/v2/parser"
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v3"
+	"github.com/goccy/go-yaml"
 )
 
 func TestParse(t *testing.T) {
@@ -53,8 +53,7 @@ func readTests(file string) (map[string]TestCase, error) {
 	}
 
 	var tests map[string]TestCase
-	dec := yaml.NewDecoder(bytes.NewReader(buf))
-	dec.KnownFields(true)
+	dec := yaml.NewDecoder(bytes.NewReader(buf), yaml.DisallowUnknownField())
 	err = dec.Decode(&tests)
 	if err != nil {
 		return nil, err
