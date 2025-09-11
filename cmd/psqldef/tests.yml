@@ -1962,3 +1962,148 @@ RenameTableAndMultipleChanges:
     ALTER TABLE "public"."accounts" ADD COLUMN "created_at" timestamp DEFAULT current_timestamp;
     ALTER TABLE "public"."accounts" ADD PRIMARY KEY ("id");
     ALTER TABLE "public"."accounts" DROP COLUMN "old_field";
+
+ConstraintCheckInWithUniqueCreate:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL
+    );
+    CREATE TABLE animals (
+      id serial,
+      age INTEGER CHECK (age IN (0, 1, 2, 3, 4, 5)),
+      UNIQUE (age)
+    );
+  output: |
+    CREATE TABLE animals (
+      id serial,
+      age INTEGER CHECK (age IN (0, 1, 2, 3, 4, 5)),
+      UNIQUE (age)
+    );
+
+ConstraintCheckInAdd:
+  current: |
+    CREATE TABLE products (
+      id serial,
+      status text
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (status IN ('active', 'inactive', 'pending'))
+    );
+  output: |
+    ALTER TABLE "public"."products" ADD CONSTRAINT products_status_check CHECK (status = ANY (ARRAY['active', 'inactive', 'pending']));
+
+ConstraintCheckInRemove:
+  current: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (status IN ('active', 'inactive', 'pending'))
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text
+    );
+  output: |
+    ALTER TABLE "public"."products" DROP CONSTRAINT products_status_check;
+
+ConstraintUniqueAdd:
+  current: |
+    CREATE TABLE products (
+      id serial,
+      sku text
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      sku text,
+      UNIQUE (sku)
+    );
+  output: |
+    ALTER TABLE "public"."products" ADD CONSTRAINT "products_sku_key" UNIQUE ("sku");
+
+ConstraintUniqueRemove:
+  current: |
+    CREATE TABLE products (
+      id serial,
+      sku text,
+      UNIQUE (sku)
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      sku text
+    );
+  output: |
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_sku_key";
+
+ConstraintCheckInModify:
+  current: |
+    CREATE TABLE products (
+      id serial,
+      priority integer CHECK (priority IN (1, 2, 3))
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      priority integer CHECK (priority IN (1, 2, 3, 4, 5))
+    );
+  output: |
+    ALTER TABLE "public"."products" DROP CONSTRAINT products_priority_check;
+    ALTER TABLE "public"."products" ADD CONSTRAINT products_priority_check CHECK (priority = ANY (ARRAY[1, 2, 3, 4, 5]));
+
+ConstraintCheckInAndUniqueAdd:
+  current: |
+    CREATE TABLE products (
+      id serial,
+      level integer
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      level integer CHECK (level IN (1, 2, 3, 4)),
+      UNIQUE (level)
+    );
+  output: |
+    ALTER TABLE "public"."products" ADD CONSTRAINT products_level_check CHECK (level = ANY (ARRAY[1, 2, 3, 4]));
+    ALTER TABLE "public"."products" ADD CONSTRAINT "products_level_key" UNIQUE ("level");
+
+ConstraintCheckInAndUniqueRemove:
+  current: |
+    CREATE TABLE products (
+      id serial,
+      level integer CHECK (level IN (1, 2, 3, 4)),
+      UNIQUE (level)
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      level integer
+    );
+  output: |
+    ALTER TABLE "public"."products" DROP CONSTRAINT products_level_check;
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_level_key";
+
+ConstraintCheckInMultipleColumnsWithUnique:
+  current: |
+    CREATE TABLE orders (
+      id serial,
+      priority integer,
+      category integer
+    );
+  desired: |
+    CREATE TABLE orders (
+      id serial,
+      priority integer CHECK (priority IN (1, 2, 3)),
+      category integer CHECK (category IN (10, 20, 30, 40)),
+      UNIQUE (priority, category)
+    );
+  output: |
+    ALTER TABLE "public"."orders" ADD CONSTRAINT orders_priority_check CHECK (priority = ANY (ARRAY[1, 2, 3]));
+    ALTER TABLE "public"."orders" ADD CONSTRAINT orders_category_check CHECK (category = ANY (ARRAY[10, 20, 30, 40]));
+    ALTER TABLE "public"."orders" ADD CONSTRAINT "priority" UNIQUE ("priority", "category");

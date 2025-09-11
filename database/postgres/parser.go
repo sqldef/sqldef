@@ -155,10 +155,16 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 				}
 				indexes = append(indexes, index)
 			case pgquery.ConstrType_CONSTR_UNIQUE:
+				// Generate a constraint name if not provided to match PostgreSQL's behavior
+				constraintName := node.Constraint.Conname
+				if constraintName == "" && len(indexCols) == 1 {
+					// Generate name similar to PostgreSQL: tablename_columnname_key
+					constraintName = fmt.Sprintf("%s_%s_key", tableName.Name.String(), indexCols[0].Column.String())
+				}
 				index := &parser.IndexDefinition{
 					Info: &parser.IndexInfo{
 						Type:   "unique key",
-						Name:   parser.NewColIdent(node.Constraint.Conname),
+						Name:   parser.NewColIdent(constraintName),
 						Unique: true,
 					},
 					Columns: indexCols,
@@ -673,7 +679,8 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 			pgquery.A_Expr_Kind_AEXPR_LIKE,
 			pgquery.A_Expr_Kind_AEXPR_ILIKE,
 			pgquery.A_Expr_Kind_AEXPR_OP_ALL,
-			pgquery.A_Expr_Kind_AEXPR_OP_ANY:
+			pgquery.A_Expr_Kind_AEXPR_OP_ANY,
+			pgquery.A_Expr_Kind_AEXPR_IN:
 			left, err := p.parseExpr(node.AExpr.GetLexpr())
 			if err != nil {
 				return nil, err
@@ -682,12 +689,33 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 			if err != nil {
 				return nil, err
 			}
+			// IN operator is internally converted to = ANY (ARRAY[...]) in PostgreSQL
+			anyFlag := node.AExpr.Kind == pgquery.A_Expr_Kind_AEXPR_OP_ANY || node.AExpr.Kind == pgquery.A_Expr_Kind_AEXPR_IN
+
+			// For IN expressions, convert ValTuple to ArrayConstructor
+			if node.AExpr.Kind == pgquery.A_Expr_Kind_AEXPR_IN {
+				if valTuple, ok := right.(parser.ValTuple); ok {
+					// Convert ValTuple to ArrayConstructor
+					var elements parser.ArrayElements
+					for _, expr := range valTuple {
+						elem, err := p.parseArrayElement(expr)
+						if err != nil {
+							return nil, err
+						}
+						elements = append(elements, elem)
+					}
+					right = &parser.ArrayConstructor{
+						Elements: elements,
+					}
+				}
+			}
+
 			return &parser.ComparisonExpr{
 				Operator: op,
 				Left:     left,
 				Right:    right,
 				All:      node.AExpr.Kind == pgquery.A_Expr_Kind_AEXPR_OP_ALL,
-				Any:      node.AExpr.Kind == pgquery.A_Expr_Kind_AEXPR_OP_ANY,
+				Any:      anyFlag,
 			}, nil
 		default:
 			return nil, fmt.Errorf("unknown AExpr kind in parseExpr: %#v", node.AExpr)
@@ -747,6 +775,17 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 		default:
 			return nil, fmt.Errorf("unexpected boolean test type: %d", node.BooleanTest.Booltesttype)
 		}
+	case *pgquery.Node_List:
+		// Handle list of values (used in IN expressions)
+		var exprs parser.Exprs
+		for _, item := range node.List.Items {
+			expr, err := p.parseExpr(item)
+			if err != nil {
+				return nil, err
+			}
+			exprs = append(exprs, expr)
+		}
+		return parser.ValTuple(exprs), nil
 	default:
 		return nil, fmt.Errorf("unknown node in parseExpr: %#v", node)
 	}
