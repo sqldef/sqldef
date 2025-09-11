@@ -210,7 +210,7 @@ ManagedRolesMultipleGrantees:
     - app_user
     - admin_role
   output: |
-    GRANT SELECT ON TABLE "public"."users" TO "readonly_user", "app_user", "admin_role";
+    GRANT SELECT ON TABLE "public"."users" TO "admin_role", "app_user", "readonly_user";
 
 ManagedRolesPartialGrantees:
   current: |
