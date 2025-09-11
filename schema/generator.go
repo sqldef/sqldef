@@ -2339,7 +2339,14 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 		}
 	}
 
-	for _, group := range grantsByPrivileges {
+	var privilegeKeys []string
+	for key := range grantsByPrivileges {
+		privilegeKeys = append(privilegeKeys, key)
+	}
+	sort.Strings(privilegeKeys)
+
+	for _, key := range privilegeKeys {
+		group := grantsByPrivileges[key]
 		escapedGrantees := []string{}
 		for _, grantee := range group.grantees {
 			escapedGrantee, err := g.validateAndEscapeGrantee(grantee)
@@ -2348,6 +2355,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			}
 			escapedGrantees = append(escapedGrantees, escapedGrantee)
 		}
+		sort.Strings(escapedGrantees)
 		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s",
 			formatPrivilegesForGrant(group.privileges),
 			g.escapeTableName(desired.tableName),
