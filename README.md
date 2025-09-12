@@ -722,7 +722,7 @@ and discuss how to implement that with the community.
 
 ## Releasing
 
-To cut an sqldef release,
+To cut an sqldef release, push a commit to master and a tag. You don't need to make a Pull Request for each release.
 
 ```bash
 # Edit CHANGELOG.md, and then:
@@ -732,10 +732,23 @@ git tag vX.Y.Z
 git push origin --tags && git push origin master
 ```
 
-That's it.
-
 Unless it's a pretty big change that needs a discussion, we encourage sqldef maintainers to merge and release
-their own PRs without asking/waiting for reviews.
+their own Pull Requests without asking/waiting for reviews.
+
+## Maintainers
+
+* @k0kubun
+* @knaka (sqlite3def)
+* @odz (mssqldef)
+* @hokaccha (psqldef)
+* @gfx (psqldef)
+
+These are the component they were contributing to when they became a maintainer,
+but they're allowed to maintain every part of sqldef.
+
+### Alumni
+
+* @ytakaya (mssqldef)
 
 ## License
 
