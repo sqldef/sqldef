@@ -1,3 +1,7 @@
+## v2.4.2
+
+* psqldef: Support IN and UNIQUE constraints [#737](https://github.com/sqldef/sqldef/pull/737)
+
 ## v2.4.1
 
 * psqldef: Add `managed_roles` config [#733](https://github.com/sqldef/sqldef/pull/733)
