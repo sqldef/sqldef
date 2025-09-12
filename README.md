@@ -737,18 +737,18 @@ their own Pull Requests without asking/waiting for reviews.
 
 ## Maintainers
 
-* @k0kubun
-* @knaka (sqlite3def)
-* @odz (mssqldef)
-* @hokaccha (psqldef)
-* @gfx (psqldef)
+* **@k0kubun**
+* **@knaka** (sqlite3def)
+* **@odz** (mssqldef)
+* **@hokaccha** (psqldef)
+* **@gfx** (psqldef)
 
 These are the component they were contributing to when they became a maintainer,
 but they're allowed to maintain every part of sqldef.
 
 ### Alumni
 
-* @ytakaya (mssqldef)
+* **@ytakaya** (mssqldef)
 
 ## License
 
