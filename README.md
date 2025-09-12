@@ -720,6 +720,23 @@ Please file a pull request if you have a feature request.
 If you're unsure what to do, you may file a "Feature requests" ticket on [Discussions](https://github.com/sqldef/sqldef/discussions)
 and discuss how to implement that with the community.
 
+## Releasing
+
+To cut an sqldef release,
+
+```bash
+# Edit CHANGELOG.md, and then:
+git add CHANGELOG.md
+git commit -m "Version X.Y.Z"
+git tag vX.Y.Z
+git push origin --tags && git push origin master
+```
+
+That's it.
+
+Unless it's a pretty big change that needs a discussion, we encourage sqldef maintainers to merge and release
+their own PRs without asking/waiting for reviews.
+
 ## License
 
 Unless otherwise noted, the sqldef source files are distributed under the MIT License found in the LICENSE file.
