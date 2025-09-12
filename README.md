@@ -735,6 +735,9 @@ git push origin --tags && git push origin master
 Unless it's a pretty big change that needs a discussion, we encourage sqldef maintainers to merge and release
 their own Pull Requests without asking/waiting for reviews.
 
+We also expect them to release sqldef as frequently as possible.
+When there's a behavior change, sqldef should have at least one release on that day.
+
 ## Maintainers
 
 * **@k0kubun**
