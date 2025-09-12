@@ -722,7 +722,7 @@ and discuss how to implement that with the community.
 
 ## Releasing
 
-To cut an sqldef release, push a commit to master and a tag. You don't need to make a Pull Request for each release.
+To release sqldef, push a commit to master and tag it. You don't need to make a Pull Request for each release.
 
 ```bash
 # Edit CHANGELOG.md, and then:
