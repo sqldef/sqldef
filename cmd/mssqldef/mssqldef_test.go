@@ -1344,12 +1344,57 @@ func TestMssqldefHelp(t *testing.T) {
 	}
 }
 
+func TestMssqldefConfigIncludesTargetTables(t *testing.T) {
+	resetTestDatabase()
+
+	usersTable := "CREATE TABLE users (id bigint);"
+	users1Table := "CREATE TABLE users_1 (id bigint);"
+	users10Table := "CREATE TABLE users_10 (id bigint);"
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", usersTable+users1Table+users10Table)
+
+	writeFile("schema.sql", usersTable+users1Table)
+	writeFile("config.yml", "target_tables: |\n  dbo\\.users\n  dbo\\.users_\\d\n")
+
+	apply := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	assertEquals(t, apply, nothingModified)
+}
+
+func TestMssqldefConfigIncludesSkipTables(t *testing.T) {
+	resetTestDatabase()
+
+	usersTable := "CREATE TABLE users (id bigint);"
+	users1Table := "CREATE TABLE users_1 (id bigint);"
+	users10Table := "CREATE TABLE users_10 (id bigint);"
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", usersTable+users1Table+users10Table)
+
+	writeFile("schema.sql", usersTable+users1Table)
+	writeFile("config.yml", "skip_tables: |\n  dbo\\.users_10\n")
+
+	apply := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	assertEquals(t, apply, nothingModified)
+}
+
+func TestMssqldefConfigInlineSkipTables(t *testing.T) {
+	resetTestDatabase()
+
+	usersTable := "CREATE TABLE users (id bigint);"
+	users1Table := "CREATE TABLE users_1 (id bigint);"
+	users10Table := "CREATE TABLE users_10 (id bigint);"
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", usersTable+users1Table+users10Table)
+
+	writeFile("schema.sql", usersTable+users1Table)
+
+	apply := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--config-inline", "skip_tables: dbo\\.users_10", "--file", "schema.sql")
+	assertEquals(t, apply, nothingModified)
+}
+
 func TestMain(m *testing.M) {
 	resetTestDatabase()
 	testutils.MustExecute("go", "build")
 	status := m.Run()
 	_ = os.Remove("mssqldef")
 	_ = os.Remove("schema.sql")
+	_ = os.Remove("config.yml")
 	os.Exit(status)
 }
 
