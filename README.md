@@ -47,7 +47,7 @@ Application Options:
 
 #### Example
 
-```sql
+```shell
 # Make sure that MySQL server can be connected by mysql(1)
 $ mysql -uroot test -e "select 1;"
 +---+
@@ -82,7 +82,7 @@ Update the schema.sql like (instead of `ADD INDEX`, you can just add `KEY index_
 
 And then run:
 
-```sql
+```shell
 # Check the auto-generated migration plan without execution
 $ mysqldef -uroot test --dry-run < schema.sql
 --- dry run ---
@@ -163,7 +163,7 @@ You can use `PGSSLMODE` environment variable to specify sslmode.
 
 #### Example
 
-```sql
+```shell
 # Make sure that PostgreSQL server can be connected by psql(1)
 $ psql -U postgres test -c "select 1;"
  ?column?
@@ -284,7 +284,7 @@ Application Options:
 
 #### Example
 
-```sql
+```shell
 # Create SQLite database and tables
 $ sqlite3 mydb.db "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);"
 
@@ -333,7 +333,7 @@ Application Options:
 
 #### Example
 
-```sql
+```shell
 # Apply schema to MSSQL database
 $ mssqldef -U sa -P password123 mydb < schema.sql
 
@@ -572,7 +572,7 @@ Remove the line to DROP VIEW.
 ### Linux
 A debian package might be supported in the future, but for now it has not been implemented yet.
 
-```bash
+```shell
 # mysqldef
 wget -O - https://github.com/sqldef/sqldef/releases/latest/download/mysqldef_linux_amd64.tar.gz \
   | tar xvz
@@ -585,7 +585,7 @@ wget -O - https://github.com/sqldef/sqldef/releases/latest/download/psqldef_linu
 ### macOS
 [Homebrew tap](https://github.com/sqldef/homebrew-sqldef) is available.
 
-```
+```shell
 # mysqldef
 brew install sqldef/sqldef/mysqldef
 
@@ -683,13 +683,13 @@ To rename them, you would need to rename manually and use `--export` again.
 
 If you update parser/parser.y, run:
 
-```
+```shell
 $ make parser
 ```
 
 You can use the following command to prepare command line tools and DB servers for running tests.
 
-```bash
+```shell
 # Linux
 $ sudo apt install mysql-client postgresql-client sqlite3
 $ curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
@@ -724,7 +724,7 @@ and discuss how to implement that with the community.
 
 To release sqldef, push a commit to master and tag it. You don't need to make a Pull Request for each release.
 
-```bash
+```shell
 # Edit CHANGELOG.md, and then:
 git add CHANGELOG.md
 git commit -m "Version X.Y.Z"
