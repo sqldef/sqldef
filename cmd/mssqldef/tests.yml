@@ -396,6 +396,29 @@ DeclareVariable:
     set @date = getdate()
     insert into logs select id, @date from inserted
     end;
+CovertCurrentTimestampWithStyle:
+  current: |
+    CREATE TABLE users (
+        id bigint NOT NULL,
+        name text
+    );
+  desired: |
+    CREATE TABLE users (
+        id bigint NOT NULL,
+        name text
+    );
+    CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
+    declare @datetime as datetime
+    begin
+        set @datetime = CAST(CONVERT(VARCHAR, CURRENT_TIMESTAMP, 110) AS datetime)
+    end
+  output: |
+    CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
+    declare
+    @datetime datetime
+    begin
+    set @datetime = cast(convert(varchar, current_timestamp, 110) as datetime)
+    end;
 RenameColumn:
   current: |
     CREATE TABLE users (
