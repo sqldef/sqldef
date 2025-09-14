@@ -17,7 +17,9 @@ import (
 	"golang.org/x/term"
 )
 
-var version string
+// version and revision are set via -ldflags
+var version = "dev"
+var revision = "HEAD"
 
 // Return parsed options and schema filename
 // TODO: Support `sqldef schema.sql -opt val...`
@@ -66,7 +68,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 
 	if opts.Version {
-		fmt.Println(version)
+		fmt.Printf("%s (%s)\n", version, revision)
 		os.Exit(0)
 	}
 
