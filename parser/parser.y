@@ -3709,7 +3709,12 @@ function_call_keyword:
  * Dedicated grammar rules are needed because of the special syntax
  */
 function_call_nonkeyword:
-  CURRENT_TIMESTAMP func_datetime_precision_opt
+// for MSSQL
+  CURRENT_TIMESTAMP
+  {
+    $$ = &ColName{Name: NewColIdent(string($1))}
+  }
+| CURRENT_TIMESTAMP openb closeb
   {
     $$ = &FuncExpr{Name:NewColIdent("current_timestamp")}
   }
