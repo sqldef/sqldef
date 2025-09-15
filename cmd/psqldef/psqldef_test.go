@@ -25,14 +25,153 @@ const (
 	databaseName    = "psqldef_test"
 )
 
+// pgQuery executes a query against the database and returns rows as string
+func pgQuery(dbName string, query string) (string, error) {
+	// Set PGSSLMODE environment variable to disable SSL
+	os.Setenv("PGSSLMODE", "disable")
+	defer os.Unsetenv("PGSSLMODE")
+
+	config := database.Config{
+		User:   "postgres",
+		Host:   "127.0.0.1",
+		Port:   5432,
+		DbName: dbName,
+	}
+
+	db, err := postgres.NewDatabase(config)
+	if err != nil {
+		return "", err
+	}
+	defer db.Close()
+
+	rows, err := db.DB().Query(query)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	// Build result string
+	var result strings.Builder
+	columns, err := rows.Columns()
+	if err != nil {
+		return "", err
+	}
+
+	values := make([]any, len(columns))
+	valuePtrs := make([]any, len(columns))
+	for i := range values {
+		valuePtrs[i] = &values[i]
+	}
+
+	for rows.Next() {
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return "", err
+		}
+
+		for i, val := range values {
+			if i > 0 {
+				result.WriteString("\t")
+			}
+			if val != nil {
+				// Handle []byte values properly (convert to string)
+				switch v := val.(type) {
+				case []byte:
+					result.WriteString(string(v))
+				default:
+					result.WriteString(fmt.Sprintf("%v", v))
+				}
+			}
+		}
+		result.WriteString("\n")
+	}
+
+	return result.String(), nil
+}
+
+// pgExec executes a statement against the database (doesn't return rows)
+func pgExec(dbName string, statement string) error {
+	// Set PGSSLMODE environment variable to disable SSL
+	os.Setenv("PGSSLMODE", "disable")
+	defer os.Unsetenv("PGSSLMODE")
+
+	config := database.Config{
+		User:   "postgres",
+		Host:   "127.0.0.1",
+		Port:   5432,
+		DbName: dbName,
+	}
+
+	db, err := postgres.NewDatabase(config)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = db.DB().Exec(statement)
+	return err
+}
+
+// pgExecAsUser executes a statement as a specific user
+func pgExecAsUser(dbName string, user string, statement string) error {
+	// Set PGSSLMODE environment variable to disable SSL
+	os.Setenv("PGSSLMODE", "disable")
+	defer os.Unsetenv("PGSSLMODE")
+
+	config := database.Config{
+		User:   user,
+		Host:   "127.0.0.1",
+		Port:   5432,
+		DbName: dbName,
+	}
+
+	db, err := postgres.NewDatabase(config)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = db.DB().Exec(statement)
+	return err
+}
+
+// mustPgExec executes a statement against the database and panics on error
+func mustPgExec(dbName string, statement string) {
+	if err := pgExec(dbName, statement); err != nil {
+		panic(err)
+	}
+}
+
+// mustPgExecAsUser executes a statement as a specific user and panics on error
+func mustPgExecAsUser(dbName string, user string, statement string) {
+	if err := pgExecAsUser(dbName, user, statement); err != nil {
+		panic(err)
+	}
+}
+
+// mustGetServerVersion retrieves the PostgreSQL server version and panics on error
+func mustGetServerVersion() string {
+	db, err := connectDatabase()
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	var serverVersion string
+	err = db.DB().QueryRow("SHOW server_version").Scan(&serverVersion)
+	if err != nil {
+		panic(err)
+	}
+
+	return strings.Split(serverVersion, " ")[0]
+}
+
 func TestApply(t *testing.T) {
 	tests, err := testutils.ReadTests("tests*.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	serverVersion := strings.TrimSpace(testutils.MustExecute("psql", "-X", "-Upostgres", "-h", "127.0.0.1", "-t", "-c", "show server_version;"))
-	version := strings.Split(serverVersion, " ")[0]
+	version := mustGetServerVersion()
 	sqlParser := postgres.NewParser()
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -141,8 +280,8 @@ func TestPsqldefCitextExtension(t *testing.T) {
 	assertApplyOutput(t, createTable, applyPrefix+createTable)
 	assertApplyOutput(t, createTable, nothingModified)
 
-	mustExecuteSQL("DROP TABLE users;")
-	mustExecuteSQL("DROP EXTENSION citext;")
+	mustPgExec(databaseName, "DROP TABLE users;")
+	mustPgExec(databaseName, "DROP EXTENSION citext;")
 }
 
 func TestPsqldefIgnoreExtension(t *testing.T) {
@@ -172,7 +311,7 @@ func TestPsqldefIgnoreExtension(t *testing.T) {
 		);
 		`))
 
-	mustExecuteSQL("DROP EXTENSION pg_buffercache;")
+	mustPgExec(databaseName, "DROP EXTENSION pg_buffercache;")
 }
 
 func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
@@ -363,8 +502,8 @@ func TestPsqldefCreateTableWithReferencesOnDelete(t *testing.T) {
 
 func TestPsqldefCreateTableWithConstraintReferences(t *testing.T) {
 	resetTestDatabase()
-	mustExecuteSQL("CREATE SCHEMA a;")
-	mustExecuteSQL("CREATE SCHEMA c;")
+	mustPgExec(databaseName, "CREATE SCHEMA a;")
+	mustPgExec(databaseName, "CREATE SCHEMA c;")
 
 	createTable := stripHeredoc(`
 		CREATE TABLE a.b (
@@ -539,7 +678,7 @@ func TestPsqldefCreateView(t *testing.T) {
 	for _, tc := range publicAndNonPublicSchemaTestCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			resetTestDatabase()
-			mustExecuteSQL(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
+			mustPgExec(databaseName, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
 
 			createUsers := fmt.Sprintf("CREATE TABLE %s.users (id BIGINT PRIMARY KEY, name character varying(100));\n", tc.Schema)
 			createPosts := fmt.Sprintf("CREATE TABLE %s.posts (id BIGINT PRIMARY KEY, name character varying(100), user_id BIGINT, is_deleted boolean);\n", tc.Schema)
@@ -574,7 +713,7 @@ func TestPsqldefCreateMaterializedView(t *testing.T) {
 	for _, tc := range publicAndNonPublicSchemaTestCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			resetTestDatabase()
-			mustExecuteSQL(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
+			mustPgExec(databaseName, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
 
 			createUsers := fmt.Sprintf("CREATE TABLE %s.users (id BIGINT PRIMARY KEY, name character varying(100));\n", tc.Schema)
 			createPosts := fmt.Sprintf("CREATE TABLE %s.posts (id BIGINT PRIMARY KEY, name character varying(100), user_id BIGINT, is_deleted boolean);\n", tc.Schema)
@@ -623,7 +762,7 @@ func TestPsqldefCreateIndex(t *testing.T) {
 	for _, tc := range publicAndNonPublicSchemaTestCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			resetTestDatabase()
-			mustExecuteSQL(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
+			mustPgExec(databaseName, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
 
 			createTable := stripHeredoc(fmt.Sprintf(`
 				CREATE TABLE %s.users (
@@ -666,7 +805,7 @@ func TestPsqldefCreateMaterializedViewIndex(t *testing.T) {
 	for _, tc := range publicAndNonPublicSchemaTestCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			resetTestDatabase()
-			mustExecuteSQL(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
+			mustPgExec(databaseName, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
 
 			createTable := stripHeredoc(fmt.Sprintf(`
 				CREATE TABLE %s.users (
@@ -867,7 +1006,7 @@ func TestPsqldefDataTypes(t *testing.T) {
 
 func TestPsqldefCreateTableInSchema(t *testing.T) {
 	resetTestDatabase()
-	mustExecuteSQL("CREATE SCHEMA test;")
+	mustPgExec(databaseName, "CREATE SCHEMA test;")
 
 	createTable := "CREATE TABLE test.users (id serial primary key);"
 	assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
@@ -876,7 +1015,7 @@ func TestPsqldefCreateTableInSchema(t *testing.T) {
 
 func TestPsqldefCheckConstraintInSchema(t *testing.T) {
 	resetTestDatabase()
-	mustExecuteSQL("CREATE SCHEMA test;")
+	mustPgExec(databaseName, "CREATE SCHEMA test;")
 
 	createTable := stripHeredoc(`
 		CREATE TABLE test.dummy (
@@ -919,7 +1058,7 @@ func TestPsqldefCheckConstraintInSchema(t *testing.T) {
 
 func TestPsqldefSameTableNameAmongSchemas(t *testing.T) {
 	resetTestDatabase()
-	mustExecuteSQL("CREATE SCHEMA test;")
+	mustPgExec(databaseName, "CREATE SCHEMA test;")
 
 	createTable := stripHeredoc(`
 		CREATE TABLE dummy (id int);
@@ -959,8 +1098,7 @@ func TestPsqldefCreateTableWithExpressionStored(t *testing.T) {
 		);
 		`,
 	)
-	_, err := executeSQL(createTable)
-	if err != nil {
+	if err := pgExec(databaseName, createTable); err != nil {
 		t.Skipf("PostgreSQL doesn't support the test: %s", err)
 	}
 
@@ -1143,7 +1281,7 @@ func TestPsqldefAddIdentityColumnWithSequenceOption(t *testing.T) {
 
 func TestPsqldefAddUniqueConstraintToTableInNonpublicSchema(t *testing.T) {
 	resetTestDatabase()
-	mustExecuteSQL("CREATE SCHEMA test;")
+	mustPgExec(databaseName, "CREATE SCHEMA test;")
 
 	createTable := "CREATE TABLE test.dummy (a int, b int);"
 	assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
@@ -1183,9 +1321,9 @@ func TestPsqldefAddUniqueConstraintToTableInNonpublicSchema(t *testing.T) {
 func TestPsqldefFunctionAsDefault(t *testing.T) {
 	for _, tc := range publicAndNonPublicSchemaTestCases {
 		resetTestDatabase()
-		mustExecuteSQL(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
+		mustPgExec(databaseName, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
 
-		mustExecuteSQL(fmt.Sprintf(stripHeredoc(`
+		mustPgExec(databaseName, fmt.Sprintf(stripHeredoc(`
 			CREATE FUNCTION %s.my_func()
 			RETURNS int
 			AS $$
@@ -1245,7 +1383,7 @@ func TestPsqldefDryRun(t *testing.T) {
 
 func TestPsqldefDropTable(t *testing.T) {
 	resetTestDatabase()
-	mustExecuteSQL(stripHeredoc(`
+	mustPgExec(databaseName, stripHeredoc(`
 		CREATE TABLE users (
 		    id bigint NOT NULL PRIMARY KEY,
 		    age int,
@@ -1268,7 +1406,7 @@ func TestPsqldefExport(t *testing.T) {
 
 	assertExportOutput(t, "-- No table exists --\n")
 
-	mustExecuteSQL(stripHeredoc(`
+	mustPgExec(databaseName, stripHeredoc(`
 		CREATE TABLE users (
 		    id bigint NOT NULL PRIMARY KEY,
 		    age int,
@@ -1300,7 +1438,7 @@ func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 
 	assertExportOutput(t, "-- No table exists --\n")
 
-	mustExecuteSQL(stripHeredoc(`
+	mustPgExec(databaseName, stripHeredoc(`
 		CREATE TABLE users (
 		    col1 character varying(40) NOT NULL,
 		    col2 character varying(6) NOT NULL,
@@ -1323,7 +1461,7 @@ func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 func TestPsqldefExportConcurrency(t *testing.T) {
 	resetTestDatabase()
 
-	mustExecuteSQL(stripHeredoc(`
+	mustPgExec(databaseName, stripHeredoc(`
 		CREATE TABLE users_1 (
 		    id bigint NOT NULL PRIMARY KEY
 		);
@@ -1381,7 +1519,7 @@ func TestPsqldefSkipView(t *testing.T) {
 	createView := "CREATE VIEW user_views AS SELECT id from users;\n"
 	createMaterializedView := "CREATE MATERIALIZED VIEW user_materialized_views AS SELECT id from users;\n"
 
-	mustExecuteSQL(createTable + createView + createMaterializedView)
+	mustPgExec(databaseName, createTable+createView+createMaterializedView)
 
 	writeFile("schema.sql", createTable)
 
@@ -1394,7 +1532,7 @@ func TestPsqldefSkipExtension(t *testing.T) {
 
 	createExtension := "CREATE EXTENSION pgcrypto;\n"
 
-	mustExecuteSQL(createExtension)
+	mustPgExec(databaseName, createExtension)
 
 	writeFile("schema.sql", "")
 
@@ -1406,9 +1544,9 @@ func TestPsqldefBeforeApply(t *testing.T) {
 	resetTestDatabase()
 
 	// Setup
-	mustExecuteSQL("DROP ROLE IF EXISTS dummy_owner_role;")
-	mustExecuteSQL("CREATE ROLE dummy_owner_role;")
-	mustExecuteSQL("GRANT ALL ON SCHEMA public TO dummy_owner_role;")
+	mustPgExec(databaseName, "DROP ROLE IF EXISTS dummy_owner_role;")
+	mustPgExec(databaseName, "CREATE ROLE dummy_owner_role;")
+	mustPgExec(databaseName, "GRANT ALL ON SCHEMA public TO dummy_owner_role;")
 
 	beforeApply := "SET ROLE dummy_owner_role; SET TIME ZONE LOCAL;"
 	createTable := "CREATE TABLE dummy (id int);"
@@ -1422,14 +1560,17 @@ func TestPsqldefBeforeApply(t *testing.T) {
 	apply = assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--before-apply", beforeApply)
 	assertEquals(t, apply, nothingModified)
 
-	owner := assertedExecute(t, "psql", "-X", "-Upostgres", databaseName, "-tAc", "SELECT tableowner FROM pg_tables WHERE tablename = 'dummy'")
+	owner, err := pgQuery(databaseName, "SELECT tableowner FROM pg_tables WHERE tablename = 'dummy'")
+	if err != nil {
+		t.Fatal(err)
+	}
 	assertEquals(t, owner, "dummy_owner_role\n")
 }
 
 func TestPsqldefConfigIncludesTargetTables(t *testing.T) {
 	resetTestDatabase()
 
-	mustExecuteSQL(`
+	mustPgExec(databaseName, `
         CREATE TABLE users (id bigint PRIMARY KEY);
         CREATE TABLE users_1 (id bigint PRIMARY KEY);
 
@@ -1456,7 +1597,7 @@ func TestPsqldefConfigIncludesTargetTables(t *testing.T) {
 func TestPsqldefConfigIncludesTargetSchema(t *testing.T) {
 	resetTestDatabase()
 
-	mustExecuteSQL(`
+	mustPgExec(databaseName, `
         CREATE SCHEMA schema_a;
         CREATE TABLE schema_a.users (id bigint PRIMARY KEY);
         CREATE SCHEMA schema_b;
@@ -1473,7 +1614,7 @@ func TestPsqldefConfigIncludesTargetSchema(t *testing.T) {
 	assertEquals(t, apply, nothingModified)
 
 	// multiple targets
-	mustExecuteSQL(`
+	mustPgExec(databaseName, `
         CREATE SCHEMA schema_c;
         CREATE TABLE schema_c.users (id bigint PRIMARY KEY);
     `)
@@ -1494,7 +1635,7 @@ func TestPsqldefConfigIncludesTargetSchema(t *testing.T) {
 func TestPsqldefConfigIncludesTargetSchemaWithViews(t *testing.T) {
 	resetTestDatabase()
 
-	mustExecuteSQL(`
+	mustPgExec(databaseName, `
 				CREATE SCHEMA foo;
 
 				CREATE TABLE foo.users (
@@ -1531,7 +1672,7 @@ func TestPsqldefConfigIncludesTargetSchemaWithViews(t *testing.T) {
 func TestPsqldefConfigIncludesSkipTables(t *testing.T) {
 	resetTestDatabase()
 
-	mustExecuteSQL(`
+	mustPgExec(databaseName, `
         CREATE TABLE users (id bigint PRIMARY KEY);
         CREATE TABLE users_1 (id bigint PRIMARY KEY);
 
@@ -1558,7 +1699,7 @@ func TestPsqldefConfigIncludesSkipTables(t *testing.T) {
 func TestPsqldefConfigIncludesSkipViews(t *testing.T) {
 	resetTestDatabase()
 
-	mustExecuteSQL(`
+	mustPgExec(databaseName, `
 	    CREATE MATERIALIZED VIEW views AS SELECT 1 AS id, 12 AS uid;
         CREATE MATERIALIZED VIEW views_1 AS SELECT 1 AS id, 13 AS uid;
 
@@ -1802,14 +1943,6 @@ func assertExportOutput(t *testing.T, expected string) {
 	assertEquals(t, actual, expected)
 }
 
-func mustExecuteSQL(sql string) {
-	testutils.MustExecute("psql", "-Upostgres", databaseName, "-c", sql)
-}
-
-func executeSQL(sql string) (string, error) {
-	return testutils.Execute("psql", "-Upostgres", databaseName, "-c", sql)
-}
-
 func assertedExecute(t *testing.T, command string, args ...string) string {
 	t.Helper()
 	out, err := testutils.Execute(command, args...)
@@ -1827,8 +1960,9 @@ func assertEquals(t *testing.T, actual string, expected string) {
 }
 
 func resetTestDatabase() {
-	testutils.MustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("DROP DATABASE IF EXISTS %s;", databaseName))
-	testutils.MustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("CREATE DATABASE %s;", databaseName))
+	// Drop and recreate the test database
+	mustPgExec("postgres", fmt.Sprintf("DROP DATABASE IF EXISTS %s", databaseName))
+	mustPgExec("postgres", fmt.Sprintf("CREATE DATABASE %s", databaseName))
 }
 
 var testRoles = []string{
@@ -1869,7 +2003,8 @@ func createTestRole(role string) {
 			CREATE ROLE %s;
 		END IF;
 	END $$;`, escapedRole, quotedRole)
-	testutils.MustExecute("psql", "-Upostgres", "-dpsqldef_test", "-c", query)
+
+	mustPgExec(databaseName, query)
 }
 
 func createAllTestRoles() {
@@ -1879,6 +2014,13 @@ func createAllTestRoles() {
 }
 
 func cleanupTestRoles() {
+	db, err := connectDatabase()
+	if err != nil {
+		// Don't panic during cleanup, just return
+		return
+	}
+	defer db.Close()
+
 	for _, role := range testRoles {
 		// Escape single quotes in role name for SQL string literal
 		escapedRole := strings.ReplaceAll(role, "'", "''")
@@ -1899,21 +2041,22 @@ func cleanupTestRoles() {
 					EXECUTE format('REVOKE ALL ON %%I.%%I FROM %s', r.nspname, r.relname);
 				END LOOP;
 			END $$;`, escapedRole, quotedRole)
-		testutils.Execute("psql", "-Upostgres", "-dpsqldef_test", "-c", revokeQuery)
+		db.DB().Exec(revokeQuery) // Ignore errors during cleanup
 
 		// Then drop the role
 		dropQuery := fmt.Sprintf("DROP ROLE IF EXISTS %s;", quotedRole)
-		testutils.Execute("psql", "-Upostgres", "-dpsqldef_test", "-c", dropQuery)
+		db.DB().Exec(dropQuery) // Ignore errors during cleanup
 	}
 }
 
 func resetTestDatabaseWithUser(user string) {
 	resetTestDatabase()
 	if user != "" {
-		testutils.MustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("DO $$ BEGIN IF NOT EXISTS (SELECT * FROM pg_roles WHERE rolname = '%s') THEN CREATE ROLE %s WITH LOGIN; END IF; END $$;", user, user))
-		testutils.MustExecute("psql", "-Upostgres", "-c", fmt.Sprintf("ALTER ROLE %s SET search_path TO foo, public", user))
-		testutils.MustExecute("psql", "-Upostgres", "-dpsqldef_test", "-c", fmt.Sprintf("GRANT ALL ON DATABASE psqldef_test TO %s", user))
-		testutils.MustExecute("psql", fmt.Sprintf("-U%s", user), "-dpsqldef_test", "-c", "CREATE SCHEMA foo")
+		query := fmt.Sprintf("DO $$ BEGIN IF NOT EXISTS (SELECT * FROM pg_roles WHERE rolname = '%s') THEN CREATE ROLE %s WITH LOGIN; END IF; END $$;", user, user)
+		mustPgExec("postgres", query)
+		mustPgExec("postgres", fmt.Sprintf("ALTER ROLE %s SET search_path TO foo, public", user))
+		mustPgExec(databaseName, fmt.Sprintf("GRANT ALL ON DATABASE psqldef_test TO %s", user))
+		mustPgExecAsUser(databaseName, user, "CREATE SCHEMA foo")
 	}
 
 	createAllTestRoles()
@@ -1944,6 +2087,10 @@ var publicAndNonPublicSchemaTestCases = []struct {
 }
 
 func connectDatabase() (database.Database, error) {
+	// Set PGSSLMODE environment variable to disable SSL
+	os.Setenv("PGSSLMODE", "disable")
+	defer os.Unsetenv("PGSSLMODE")
+
 	return postgres.NewDatabase(database.Config{
 		User:   "postgres",
 		Host:   "127.0.0.1",
@@ -1953,6 +2100,10 @@ func connectDatabase() (database.Database, error) {
 }
 
 func connectDatabaseByUser(user string) (database.Database, error) {
+	// Set PGSSLMODE environment variable to disable SSL
+	os.Setenv("PGSSLMODE", "disable")
+	defer os.Unsetenv("PGSSLMODE")
+
 	return postgres.NewDatabase(database.Config{
 		User:   user,
 		Host:   "127.0.0.1",
