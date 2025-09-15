@@ -1023,8 +1023,11 @@ func postgresBuildDSN(config database.Config) string {
 	}
 
 	var options []string
-	if sslmode, ok := os.LookupEnv("PGSSLMODE"); ok { // TODO: have this in database.Config, or standardize config with DSN?
-		options = append(options, fmt.Sprintf("sslmode=%s", sslmode)) // TODO: uri escape
+	// Use config.SslMode if set, otherwise check environment variable
+	if config.SslMode != "" {
+		options = append(options, fmt.Sprintf("sslmode=%s", config.SslMode))
+	} else if sslmode, ok := os.LookupEnv("PGSSLMODE"); ok {
+		options = append(options, fmt.Sprintf("sslmode=%s", sslmode))
 	}
 
 	if sslrootcert, ok := os.LookupEnv("PGSSLROOTCERT"); ok { // TODO: have this in database.Config, or standardize config with DSN?
