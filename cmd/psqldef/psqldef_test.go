@@ -27,15 +27,12 @@ const (
 
 // pgQuery executes a query against the database and returns rows as string
 func pgQuery(dbName string, query string) (string, error) {
-	// Set PGSSLMODE environment variable to disable SSL
-	os.Setenv("PGSSLMODE", "disable")
-	defer os.Unsetenv("PGSSLMODE")
-
 	config := database.Config{
-		User:   "postgres",
-		Host:   "127.0.0.1",
-		Port:   5432,
-		DbName: dbName,
+		User:    "postgres",
+		Host:    "127.0.0.1",
+		Port:    5432,
+		DbName:  dbName,
+		SslMode: "disable",
 	}
 
 	db, err := postgres.NewDatabase(config)
@@ -90,15 +87,12 @@ func pgQuery(dbName string, query string) (string, error) {
 
 // pgExec executes a statement against the database (doesn't return rows)
 func pgExec(dbName string, statement string) error {
-	// Set PGSSLMODE environment variable to disable SSL
-	os.Setenv("PGSSLMODE", "disable")
-	defer os.Unsetenv("PGSSLMODE")
-
 	config := database.Config{
-		User:   "postgres",
-		Host:   "127.0.0.1",
-		Port:   5432,
-		DbName: dbName,
+		User:    "postgres",
+		Host:    "127.0.0.1",
+		Port:    5432,
+		DbName:  dbName,
+		SslMode: "disable",
 	}
 
 	db, err := postgres.NewDatabase(config)
@@ -113,15 +107,12 @@ func pgExec(dbName string, statement string) error {
 
 // pgExecAsUser executes a statement as a specific user
 func pgExecAsUser(dbName string, user string, statement string) error {
-	// Set PGSSLMODE environment variable to disable SSL
-	os.Setenv("PGSSLMODE", "disable")
-	defer os.Unsetenv("PGSSLMODE")
-
 	config := database.Config{
-		User:   user,
-		Host:   "127.0.0.1",
-		Port:   5432,
-		DbName: dbName,
+		User:    user,
+		Host:    "127.0.0.1",
+		Port:    5432,
+		DbName:  dbName,
+		SslMode: "disable",
 	}
 
 	db, err := postgres.NewDatabase(config)
@@ -2087,27 +2078,21 @@ var publicAndNonPublicSchemaTestCases = []struct {
 }
 
 func connectDatabase() (database.Database, error) {
-	// Set PGSSLMODE environment variable to disable SSL
-	os.Setenv("PGSSLMODE", "disable")
-	defer os.Unsetenv("PGSSLMODE")
-
 	return postgres.NewDatabase(database.Config{
-		User:   "postgres",
-		Host:   "127.0.0.1",
-		Port:   5432,
-		DbName: "psqldef_test",
+		User:    "postgres",
+		Host:    "127.0.0.1",
+		Port:    5432,
+		DbName:  "psqldef_test",
+		SslMode: "disable",
 	})
 }
 
 func connectDatabaseByUser(user string) (database.Database, error) {
-	// Set PGSSLMODE environment variable to disable SSL
-	os.Setenv("PGSSLMODE", "disable")
-	defer os.Unsetenv("PGSSLMODE")
-
 	return postgres.NewDatabase(database.Config{
-		User:   user,
-		Host:   "127.0.0.1",
-		Port:   5432,
-		DbName: "psqldef_test",
+		User:    user,
+		Host:    "127.0.0.1",
+		Port:    5432,
+		DbName:  "psqldef_test",
+		SslMode: "disable",
 	})
 }
