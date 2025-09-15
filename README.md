@@ -725,8 +725,8 @@ and discuss how to implement that with the community.
 To release sqldef, push a commit to master and tag it. You don't need to make a Pull Request for each release.
 
 ```shell
-# Edit CHANGELOG.md, and then:
-git add CHANGELOG.md
+# Edit CHANGELOG.md and VERSION files, and then:
+git add CHANGELOG.md VERSION
 git commit -m "Version X.Y.Z"
 git tag vX.Y.Z
 git push origin --tags && git push origin master
