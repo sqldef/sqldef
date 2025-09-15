@@ -1,7 +1,3 @@
-## v2.4.3
-
-* mssqldef: Support CONVERT CURRENT\_TIMESTAMP [#743](https://github.com/sqldef/sqldef/pull/743)
-
 ## v2.4.2
 
 * psqldef: Support IN and UNIQUE constraints [#737](https://github.com/sqldef/sqldef/pull/737)
