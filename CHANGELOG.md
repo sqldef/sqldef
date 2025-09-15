@@ -1,3 +1,9 @@
+## [v2.4.3](https://github.com/sqldef/sqldef/compare/v2.4.2...v2.4.3) - 2025-09-15
+- mssqldef: Add test code for config & config-inline by @chi-bd in https://github.com/sqldef/sqldef/pull/739
+- Introduce `Songmu/tagpr` for release engineering automation by @gfx in https://github.com/sqldef/sqldef/pull/741
+- [test] Make psqldef tests 30% faster by connectiong Pg server with Pg driver, not with psql(1) by @gfx in https://github.com/sqldef/sqldef/pull/744
+- mssqldef: Support CONVERT CURRENT_TIMESTAMP with style. by @chi-bd in https://github.com/sqldef/sqldef/pull/743
+
 ## v2.4.2
 
 * psqldef: Support IN and UNIQUE constraints [#737](https://github.com/sqldef/sqldef/pull/737)
