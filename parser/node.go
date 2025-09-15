@@ -1994,15 +1994,36 @@ func (node *CastExpr) Format(buf *nodeBuffer) {
 	buf.Printf("%v::%v", node.Expr, node.Type)
 }
 
-// ConvertExpr represents a call to CONVERT(expr, type)
-// or it's equivalent CAST(expr AS type). Both are rewritten to the former.
+// Convert types
+const (
+	CastStr    = "cast"
+	Type1stStr = "type1st"
+)
+
+// ConvertExpr represents a call to CONVERT(expr, type) and CAST(expr AS type)
+// or CONVERT(type, expr[, style]).
 type ConvertExpr struct {
-	Expr Expr
-	Type *ConvertType
+	Action string
+	Expr   Expr
+	Type   *ConvertType
+	Style  Expr
 }
 
 func (node *ConvertExpr) Format(buf *nodeBuffer) {
-	buf.Printf("convert(%v, %v)", node.Expr, node.Type)
+	switch node.Action {
+	case CastStr:
+		buf.Printf("cast(%v as %v)", node.Expr, node.Type)
+		return
+	case Type1stStr:
+		if node.Style != nil {
+			buf.Printf("convert(%v, %v, %v)", node.Type, node.Expr, node.Style)
+			return
+		}
+		buf.Printf("convert(%v, %v)", node.Type, node.Expr)
+		return
+	default:
+		buf.Printf("convert(%v, %v)", node.Expr, node.Type)
+	}
 }
 
 // ConvertUsingExpr represents a call to CONVERT(expr USING charset).

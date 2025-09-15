@@ -3626,13 +3626,18 @@ function_call_keyword:
   {
     $$ = &ConvertExpr{Expr: $3, Type: $5}
   }
+// for MSSQL
 | CONVERT openb convert_type ',' expression closeb
   {
-    $$ = &ConvertExpr{Expr: $5, Type: $3}
+    $$ = &ConvertExpr{Action: Type1stStr, Type: $3, Expr: $5}
   }
+| CONVERT openb convert_type ',' expression ',' value_expression closeb
+  {
+    $$ = &ConvertExpr{Action: Type1stStr, Type: $3, Expr: $5, Style: $7}
+   }
 | CAST openb expression AS convert_type closeb
   {
-    $$ = &ConvertExpr{Expr: $3, Type: $5}
+    $$ = &ConvertExpr{Action: CastStr, Expr: $3, Type: $5}
   }
 | CONVERT openb expression USING charset closeb
   {
@@ -3709,7 +3714,12 @@ function_call_keyword:
  * Dedicated grammar rules are needed because of the special syntax
  */
 function_call_nonkeyword:
-  CURRENT_TIMESTAMP func_datetime_precision_opt
+// for MSSQL
+  CURRENT_TIMESTAMP
+  {
+    $$ = &ColName{Name: NewColIdent(string($1))}
+  }
+| CURRENT_TIMESTAMP openb closeb
   {
     $$ = &FuncExpr{Name:NewColIdent("current_timestamp")}
   }
