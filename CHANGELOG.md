@@ -1,3 +1,5 @@
+## [v2.4.4](https://github.com/sqldef/sqldef/compare/v2.4.3...v2.4.4) - 2025-09-15
+
 ## v2.4.3
 
 * mssqldef: Support CONVERT CURRENT\_TIMESTAMP [#743](https://github.com/sqldef/sqldef/pull/743)
