@@ -939,39 +939,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 			if renameFromIndex != nil {
 				// Generate RENAME INDEX DDL
-				switch g.mode {
-				case GeneratorModeMysql:
-					// MySQL uses ALTER TABLE ... RENAME INDEX
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s RENAME INDEX %s TO %s",
-						g.escapeTableName(desired.table.name),
-						g.escapeSQLName(renameFromIndex.name),
-						g.escapeSQLName(desiredIndex.name)))
-				case GeneratorModePostgres:
-					// PostgreSQL uses ALTER INDEX ... RENAME TO
-					ddls = append(ddls, fmt.Sprintf("ALTER INDEX %s RENAME TO %s",
-						g.escapeSQLName(renameFromIndex.name),
-						g.escapeSQLName(desiredIndex.name)))
-				case GeneratorModeMssql:
-					// SQL Server uses sp_rename
-					// For sp_rename, we need to handle schema prefixes properly
-					schema, tableName := splitTableName(desired.table.name, g.defaultSchema)
-					var tableRef string
-					if schema != "" && schema != g.defaultSchema {
-						// Only include schema if it's not the default
-						tableRef = fmt.Sprintf("%s.%s", schema, tableName)
-					} else {
-						tableRef = tableName
-					}
-					ddls = append(ddls, fmt.Sprintf("EXEC sp_rename '%s.%s', '%s', 'INDEX'",
-						tableRef,
-						renameFromIndex.name,
-						desiredIndex.name))
-				case GeneratorModeSQLite3:
-					// SQLite doesn't support renaming indexes directly
-					// Need to drop and recreate
-					ddls = append(ddls, g.generateDropIndex(desired.table.name, renameFromIndex.name, renameFromIndex.constraint))
-					ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
-				}
+				renameDDLs := g.generateRenameIndex(desired.table.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
+				ddls = append(ddls, renameDDLs...)
 			} else {
 				// Index not found and not a rename, add index.
 				ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
@@ -1128,58 +1097,8 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 
 		if renameFromIndex != nil {
 			// Generate RENAME INDEX DDL
-			switch g.mode {
-			case GeneratorModeMysql:
-				// MySQL uses ALTER TABLE ... RENAME INDEX
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s RENAME INDEX %s TO %s",
-					g.escapeTableName(tableName),
-					g.escapeSQLName(renameFromIndex.name),
-					g.escapeSQLName(desiredIndex.name)))
-			case GeneratorModePostgres:
-				// PostgreSQL uses ALTER INDEX ... RENAME TO
-				ddls = append(ddls, fmt.Sprintf("ALTER INDEX %s RENAME TO %s",
-					g.escapeSQLName(renameFromIndex.name),
-					g.escapeSQLName(desiredIndex.name)))
-			case GeneratorModeMssql:
-				// SQL Server uses sp_rename
-				// For sp_rename, we need to handle schema prefixes properly
-				schema, tableNameOnly := splitTableName(tableName, g.defaultSchema)
-				var tableRef string
-				if schema != "" && schema != g.defaultSchema {
-					// Only include schema if it's not the default
-					tableRef = fmt.Sprintf("%s.%s", schema, tableNameOnly)
-				} else {
-					tableRef = tableNameOnly
-				}
-				ddls = append(ddls, fmt.Sprintf("EXEC sp_rename '%s.%s', '%s', 'INDEX'",
-					tableRef,
-					renameFromIndex.name,
-					desiredIndex.name))
-			case GeneratorModeSQLite3:
-				// SQLite doesn't support renaming indexes directly
-				// Need to drop and recreate with all properties preserved
-				ddls = append(ddls, g.generateDropIndex(currentTable.name, renameFromIndex.name, renameFromIndex.constraint))
-
-				// Generate a CREATE INDEX statement that preserves all properties
-				createStmt := "CREATE"
-				if desiredIndex.unique {
-					createStmt += " UNIQUE"
-				}
-				createStmt += fmt.Sprintf(" INDEX %s ON %s", g.escapeSQLName(desiredIndex.name), g.escapeTableName(tableName))
-
-				columnStrs := []string{}
-				for _, column := range desiredIndex.columns {
-					columnStrs = append(columnStrs, g.escapeSQLName(column.column))
-				}
-				createStmt += fmt.Sprintf(" (%s)", strings.Join(columnStrs, ", "))
-
-				// Preserve WHERE clause if present
-				if desiredIndex.where != "" {
-					createStmt += fmt.Sprintf(" WHERE %s", desiredIndex.where)
-				}
-
-				ddls = append(ddls, createStmt)
-			}
+			renameDDLs := g.generateRenameIndex(tableName, renameFromIndex.name, desiredIndex.name, &desiredIndex)
+			ddls = append(ddls, renameDDLs...)
 
 			// Update the current table's indexes to reflect the rename
 			newIndexes := []Index{}
@@ -1994,6 +1913,73 @@ func (g *Generator) generateExclusionDefinition(exclusion Exclusion) string {
 		definition += fmt.Sprintf(" WHERE (%s)", exclusion.where)
 	}
 	return definition
+}
+
+func (g *Generator) generateRenameIndex(tableName string, oldIndexName string, newIndexName string, desiredIndex *Index) []string {
+	ddls := []string{}
+
+	switch g.mode {
+	case GeneratorModeMysql:
+		// MySQL uses ALTER TABLE ... RENAME INDEX
+		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s RENAME INDEX %s TO %s",
+			g.escapeTableName(tableName),
+			g.escapeSQLName(oldIndexName),
+			g.escapeSQLName(newIndexName)))
+	case GeneratorModePostgres:
+		// PostgreSQL uses ALTER INDEX ... RENAME TO
+		ddls = append(ddls, fmt.Sprintf("ALTER INDEX %s RENAME TO %s",
+			g.escapeSQLName(oldIndexName),
+			g.escapeSQLName(newIndexName)))
+	case GeneratorModeMssql:
+		// SQL Server uses sp_rename
+		// For sp_rename, we need to handle schema prefixes properly
+		schema, tableNameOnly := splitTableName(tableName, g.defaultSchema)
+		var tableRef string
+		if schema != "" && schema != g.defaultSchema {
+			// Only include schema if it's not the default
+			tableRef = fmt.Sprintf("%s.%s", schema, tableNameOnly)
+		} else {
+			tableRef = tableNameOnly
+		}
+		ddls = append(ddls, fmt.Sprintf("EXEC sp_rename '%s.%s', '%s', 'INDEX'",
+			tableRef,
+			oldIndexName,
+			newIndexName))
+	case GeneratorModeSQLite3:
+		// SQLite doesn't support renaming indexes directly
+		// Need to drop and recreate
+		if desiredIndex != nil {
+			// Drop the old index
+			ddls = append(ddls, g.generateDropIndex(tableName, oldIndexName, desiredIndex.constraint))
+
+			// Generate a CREATE INDEX statement (SQLite doesn't support ALTER TABLE ADD INDEX)
+			createStmt := "CREATE"
+			if desiredIndex.unique {
+				createStmt += " UNIQUE"
+			}
+			createStmt += fmt.Sprintf(" INDEX %s ON %s", g.escapeSQLName(desiredIndex.name), g.escapeTableName(tableName))
+
+			// Add column specifications
+			columnStrs := []string{}
+			for _, column := range desiredIndex.columns {
+				columnStrs = append(columnStrs, g.escapeSQLName(column.column))
+			}
+			createStmt += fmt.Sprintf(" (%s)", strings.Join(columnStrs, ", "))
+
+			// Preserve WHERE clause if present
+			if desiredIndex.where != "" {
+				createStmt += fmt.Sprintf(" WHERE %s", desiredIndex.where)
+			}
+
+			ddls = append(ddls, createStmt)
+		} else {
+			// This should not happen in practice, but handle it gracefully
+			ddls = append(ddls, fmt.Sprintf("-- Warning: Cannot rename index %s to %s in SQLite without index definition",
+				oldIndexName, newIndexName))
+		}
+	}
+
+	return ddls
 }
 
 func (g *Generator) generateDropIndex(tableName string, indexName string, constraint bool) string {
