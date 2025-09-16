@@ -1,7 +1,6 @@
 ## [v2.4.4](https://github.com/sqldef/sqldef/compare/v2.4.3...v2.4.4) - 2025-09-16
-- disable tagpr for now (only triggered by hand) by @gfx in https://github.com/sqldef/sqldef/pull/746
 
-## [v2.4.4](https://github.com/sqldef/sqldef/compare/v2.4.3...v2.4.4) - 2025-09-15
+- disable tagpr for now (only triggered by hand) by @gfx in https://github.com/sqldef/sqldef/pull/746
 
 ## v2.4.3
 
