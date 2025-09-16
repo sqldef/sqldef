@@ -2598,6 +2598,7 @@ unique_definition:
       Columns: $6,
       Options: $8,
       Partition: $9,
+      ConstraintOptions: &ConstraintOptions{}, // Mark as constraint
     }
   }
 /* For PostgreSQL and SQLite3 */

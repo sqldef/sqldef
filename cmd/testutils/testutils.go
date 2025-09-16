@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/goccy/go-yaml"
 	"github.com/sqldef/sqldef/v2/database"
 	"github.com/sqldef/sqldef/v2/schema"
-	"github.com/goccy/go-yaml"
 )
 
 type TestCase struct {
