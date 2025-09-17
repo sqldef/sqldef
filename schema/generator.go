@@ -2884,14 +2884,16 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 		return false
 	}
 	for i, indexAColumn := range indexA.columns {
-		if indexAColumn.direction == "" {
-			indexAColumn.direction = AscScr
+		dirA := indexAColumn.direction
+		if dirA == "" {
+			dirA = AscScr
 		}
-		if indexB.columns[i].direction == "" {
-			indexB.columns[i].direction = AscScr
+		dirB := indexB.columns[i].direction
+		if dirB == "" {
+			dirB = AscScr
 		}
 		if g.normalizeIndexColumn(indexA.columns[i].column) != g.normalizeIndexColumn(indexB.columns[i].column) ||
-			indexAColumn.direction != indexB.columns[i].direction {
+			dirA != dirB {
 			return false
 		}
 	}

@@ -18,6 +18,76 @@ func TestStringConstantContainingSingleQuote(t *testing.T) {
 	assert.Equal(t, StringConstant("'example'"), "'''example'''")
 }
 
+func TestAreSamePrimaryKeyColumnsMutation(t *testing.T) {
+	// Test that areSamePrimaryKeyColumns doesn't mutate the input indexes
+	g := &Generator{mode: GeneratorModeMysql}
+
+	// Create two indexes with empty directions
+	indexA := Index{
+		primary: true,
+		columns: []IndexColumn{
+			{column: "id", direction: ""},
+			{column: "name", direction: ""},
+		},
+	}
+
+	indexB := Index{
+		primary: true,
+		columns: []IndexColumn{
+			{column: "id", direction: ""},
+			{column: "name", direction: ""},
+		},
+	}
+
+	// Store original direction values to check they weren't mutated
+	originalBDirection0 := indexB.columns[0].direction
+	originalBDirection1 := indexB.columns[1].direction
+
+	// Call the function which currently mutates indexB
+	result := g.areSamePrimaryKeyColumns(indexA, indexB)
+
+	// The function should return true (they are the same)
+	assert.True(t, result, "Indexes should be considered the same")
+
+	// BUG: The directions should not have been mutated
+	// This will FAIL with the current implementation
+	assert.Equal(t, originalBDirection0, indexB.columns[0].direction, "indexB.columns[0].direction was mutated")
+	assert.Equal(t, originalBDirection1, indexB.columns[1].direction, "indexB.columns[1].direction was mutated")
+}
+
+func TestAreSamePrimaryKeyColumnsWithDifferentDirections(t *testing.T) {
+	// Test comparing primary keys with different explicit directions
+	g := &Generator{mode: GeneratorModeMysql}
+
+	indexA := Index{
+		primary: true,
+		columns: []IndexColumn{
+			{column: "id", direction: AscScr},
+			{column: "name", direction: DescScr},
+		},
+	}
+
+	indexB := Index{
+		primary: true,
+		columns: []IndexColumn{
+			{column: "id", direction: AscScr},
+			{column: "name", direction: AscScr}, // Different direction
+		},
+	}
+
+	// Store original values
+	originalBDirection0 := indexB.columns[0].direction
+	originalBDirection1 := indexB.columns[1].direction
+
+	// Should return false due to different directions
+	result := g.areSamePrimaryKeyColumns(indexA, indexB)
+	assert.False(t, result, "Indexes with different directions should not be the same")
+
+	// Verify no mutation occurred
+	assert.Equal(t, originalBDirection0, indexB.columns[0].direction, "indexB.columns[0].direction should not be mutated")
+	assert.Equal(t, originalBDirection1, indexB.columns[1].direction, "indexB.columns[1].direction should not be mutated")
+}
+
 func TestNormalizeViewDefinition(t *testing.T) {
 	tests := []struct {
 		name     string
