@@ -26,10 +26,10 @@ type Config struct {
 	MySQLEnableCleartextPlugin bool
 
 	// Only MySQL and PostgreSQL
-	SslMode                    string
+	SslMode string
 
 	// Only MySQL
-	SslCa                      string
+	SslCa string
 
 	// Only PostgreSQL
 	TargetSchema []string

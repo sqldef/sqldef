@@ -5,10 +5,10 @@ import (
 	"os"
 	"testing"
 
+	"github.com/goccy/go-yaml"
 	"github.com/sqldef/sqldef/v2/database"
 	"github.com/sqldef/sqldef/v2/parser"
 	"github.com/stretchr/testify/assert"
-	"github.com/goccy/go-yaml"
 )
 
 func TestParse(t *testing.T) {

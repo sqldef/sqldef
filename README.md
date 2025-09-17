@@ -593,7 +593,7 @@ brew install sqldef/sqldef/mysqldef
 brew install sqldef/sqldef/psqldef
 ```
 
-## Column and Table Renaming
+## Column, Table, and Index Renaming
 
 ### Column Renaming
 
@@ -670,14 +670,52 @@ CREATE TABLE accounts ( -- @rename from=old_accounts
 );
 ```
 
-## Limitations
+### Index Renaming
 
-Because sqldef distinguishes table/index by its name, sqldef does NOT support:
+sqldef supports renaming indexes using the `-- @rename from=old_name` or `/* @rename from=old_name */` annotation:
 
-- RENAME INDEX
-  - DROP + ADD could be fine for index, though
+```sql
+CREATE TABLE users (
+  id bigint NOT NULL,
+  email varchar(255),
+  username varchar(100),
+  INDEX new_email_idx (email) -- @rename from=old_email_idx
+);
+```
 
-To rename them, you would need to rename manually and use `--export` again.
+Or with standalone index creation:
+
+```sql
+CREATE INDEX new_email_idx /* @rename from=old_email_idx */ ON users (email);
+```
+
+This will generate appropriate rename commands for each database:
+- MySQL: `ALTER TABLE users RENAME INDEX old_email_idx TO new_email_idx`
+- PostgreSQL: `ALTER INDEX old_email_idx RENAME TO new_email_idx`
+- SQL Server: `EXEC sp_rename 'users.old_email_idx', 'new_email_idx', 'INDEX'`
+- SQLite: Drops and recreates the index (SQLite doesn't support index renaming)
+
+You can rename multiple indexes:
+
+```sql
+CREATE TABLE users (
+  id bigint NOT NULL,
+  email varchar(255),
+  username varchar(100),
+  INDEX email_idx (email), -- @rename from=idx_email
+  INDEX username_idx (username) -- @rename from=idx_username
+);
+```
+
+The rename annotation also works for unique indexes and constraints:
+
+```sql
+CREATE TABLE users (
+  id bigint NOT NULL,
+  email varchar(255),
+  UNIQUE KEY unique_email (email) -- @rename from=old_unique_email
+);
+```
 
 ## Development
 

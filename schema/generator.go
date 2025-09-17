@@ -332,6 +332,18 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue // Index is expected to exist.
 			}
 
+			// Check if this index was renamed (don't drop if it was renamed)
+			isRenamed := false
+			for _, desiredIndex := range desiredTable.indexes {
+				if desiredIndex.renameFrom == index.name {
+					isRenamed = true
+					break
+				}
+			}
+			if isRenamed {
+				continue // Index was renamed, don't drop it
+			}
+
 			// The index seems obsoleted. Check and drop it as needed.
 			indexDDLs, err := g.generateDDLsForAbsentIndex(index, *currentTable, *desiredTable)
 			if err != nil {
@@ -919,8 +931,20 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
 			}
 		} else {
-			// Index not found, add index.
-			ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
+			// Check if this is a renamed index
+			var renameFromIndex *Index
+			if desiredIndex.renameFrom != "" {
+				renameFromIndex = findIndexByName(currentTable.indexes, desiredIndex.renameFrom)
+			}
+
+			if renameFromIndex != nil {
+				// Generate RENAME INDEX DDL
+				renameDDLs := g.generateRenameIndex(desired.table.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
+				ddls = append(ddls, renameDDLs...)
+			} else {
+				// Index not found and not a rename, add index.
+				ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
+			}
 		}
 	}
 
@@ -1065,9 +1089,33 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 
 	currentIndex := findIndexByName(currentTable.indexes, desiredIndex.name)
 	if currentIndex == nil {
-		// Index not found, add index.
-		ddls = append(ddls, statement)
-		currentTable.indexes = append(currentTable.indexes, desiredIndex)
+		// Check if this is a renamed index
+		var renameFromIndex *Index
+		if desiredIndex.renameFrom != "" {
+			renameFromIndex = findIndexByName(currentTable.indexes, desiredIndex.renameFrom)
+		}
+
+		if renameFromIndex != nil {
+			// Generate RENAME INDEX DDL
+			renameDDLs := g.generateRenameIndex(tableName, renameFromIndex.name, desiredIndex.name, &desiredIndex)
+			ddls = append(ddls, renameDDLs...)
+
+			// Update the current table's indexes to reflect the rename
+			newIndexes := []Index{}
+			for _, idx := range currentTable.indexes {
+				if idx.name == renameFromIndex.name {
+					// Replace with the renamed index
+					newIndexes = append(newIndexes, desiredIndex)
+				} else {
+					newIndexes = append(newIndexes, idx)
+				}
+			}
+			currentTable.indexes = newIndexes
+		} else {
+			// Index not found and not a rename, add index.
+			ddls = append(ddls, statement)
+			currentTable.indexes = append(currentTable.indexes, desiredIndex)
+		}
 	} else {
 		// Index found. If it's different, drop and add index.
 		if !g.areSameIndexes(*currentIndex, desiredIndex) {
@@ -1865,6 +1913,76 @@ func (g *Generator) generateExclusionDefinition(exclusion Exclusion) string {
 		definition += fmt.Sprintf(" WHERE (%s)", exclusion.where)
 	}
 	return definition
+}
+
+func (g *Generator) generateRenameIndex(tableName string, oldIndexName string, newIndexName string, desiredIndex *Index) []string {
+	ddls := []string{}
+
+	switch g.mode {
+	case GeneratorModeMysql:
+		// MySQL uses ALTER TABLE ... RENAME INDEX
+		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s RENAME INDEX %s TO %s",
+			g.escapeTableName(tableName),
+			g.escapeSQLName(oldIndexName),
+			g.escapeSQLName(newIndexName)))
+	case GeneratorModePostgres:
+		// PostgreSQL uses ALTER INDEX ... RENAME TO
+		// Qualify the old index name with schema for consistency with DROP INDEX
+		schema, _ := splitTableName(tableName, g.defaultSchema)
+		ddls = append(ddls, fmt.Sprintf("ALTER INDEX %s.%s RENAME TO %s",
+			g.escapeSQLName(schema),
+			g.escapeSQLName(oldIndexName),
+			g.escapeSQLName(newIndexName)))
+	case GeneratorModeMssql:
+		// SQL Server uses sp_rename
+		// For sp_rename, we need to handle schema prefixes properly
+		schema, tableNameOnly := splitTableName(tableName, g.defaultSchema)
+		var tableRef string
+		if schema != "" && schema != g.defaultSchema {
+			// Only include schema if it's not the default
+			tableRef = fmt.Sprintf("%s.%s", schema, tableNameOnly)
+		} else {
+			tableRef = tableNameOnly
+		}
+		ddls = append(ddls, fmt.Sprintf("EXEC sp_rename '%s.%s', '%s', 'INDEX'",
+			tableRef,
+			oldIndexName,
+			newIndexName))
+	case GeneratorModeSQLite3:
+		// SQLite doesn't support renaming indexes directly
+		// Need to drop and recreate
+		if desiredIndex != nil {
+			// Drop the old index
+			ddls = append(ddls, g.generateDropIndex(tableName, oldIndexName, desiredIndex.constraint))
+
+			// Generate a CREATE INDEX statement (SQLite doesn't support ALTER TABLE ADD INDEX)
+			createStmt := "CREATE"
+			if desiredIndex.unique {
+				createStmt += " UNIQUE"
+			}
+			createStmt += fmt.Sprintf(" INDEX %s ON %s", g.escapeSQLName(desiredIndex.name), g.escapeTableName(tableName))
+
+			// Add column specifications
+			columnStrs := []string{}
+			for _, column := range desiredIndex.columns {
+				columnStrs = append(columnStrs, g.escapeSQLName(column.column))
+			}
+			createStmt += fmt.Sprintf(" (%s)", strings.Join(columnStrs, ", "))
+
+			// Preserve WHERE clause if present
+			if desiredIndex.where != "" {
+				createStmt += fmt.Sprintf(" WHERE %s", desiredIndex.where)
+			}
+
+			ddls = append(ddls, createStmt)
+		} else {
+			// This should not happen in practice, but handle it gracefully
+			ddls = append(ddls, fmt.Sprintf("-- Warning: Cannot rename index %s to %s in SQLite without index definition",
+				oldIndexName, newIndexName))
+		}
+	}
+
+	return ddls
 }
 
 func (g *Generator) generateDropIndex(tableName string, indexName string, constraint bool) string {
@@ -2744,10 +2862,46 @@ func (g *Generator) normalizeDataType(dataType string) string {
 
 func (g *Generator) areSamePrimaryKeys(primaryKeyA *Index, primaryKeyB *Index) bool {
 	if primaryKeyA != nil && primaryKeyB != nil {
+		// For MSSQL, when comparing PRIMARY KEY constraints,
+		// ignore the name if one is auto-generated (PK__*) and the other is unnamed/synthetic ("PRIMARY")
+		if g.mode == GeneratorModeMssql && primaryKeyA.primary && primaryKeyB.primary {
+			// Check if one has an auto-generated name and the other is synthetic
+			if (strings.HasPrefix(primaryKeyA.name, "PK__") && primaryKeyB.name == "PRIMARY") ||
+				(strings.HasPrefix(primaryKeyB.name, "PK__") && primaryKeyA.name == "PRIMARY") {
+				// Compare everything except the name
+				return g.areSamePrimaryKeyColumns(*primaryKeyA, *primaryKeyB)
+			}
+		}
 		return g.areSameIndexes(*primaryKeyA, *primaryKeyB)
 	} else {
 		return primaryKeyA == nil && primaryKeyB == nil
 	}
+}
+
+// areSamePrimaryKeyColumns compares primary keys without checking the name
+func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
+	if !indexA.primary || !indexB.primary {
+		return false
+	}
+	if len(indexA.columns) != len(indexB.columns) {
+		return false
+	}
+	for i, indexAColumn := range indexA.columns {
+		dirA := indexAColumn.direction
+		if dirA == "" {
+			dirA = AscScr
+		}
+		dirB := indexB.columns[i].direction
+		if dirB == "" {
+			dirB = AscScr
+		}
+		if g.normalizeIndexColumn(indexA.columns[i].column) != g.normalizeIndexColumn(indexB.columns[i].column) ||
+			dirA != dirB {
+			return false
+		}
+	}
+	// For primary keys, we don't need to check other properties like where, included, options
+	return true
 }
 
 func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
@@ -2789,40 +2943,53 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		}
 	}
 
-	indexAOptions := indexA.options
-	indexBOptions := indexB.options
-	// Mysql: Default Index B-Tree (but not for vector indexes)
-	if g.mode == GeneratorModeMysql {
-		if len(indexAOptions) == 0 && !indexA.vector {
-			indexAOptions = []IndexOption{{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: []byte("btree"), strVal: "btree"}}}
+	// For MSSQL UNIQUE constraints (not regular indexes), don't compare options
+	// Inline constraints don't include WITH options in their DDL, but the database
+	// still has default options that show up in sys.indexes
+	// Only skip options comparison for constraints, not regular unique indexes
+	if !(g.mode == GeneratorModeMssql && indexA.constraint && indexB.constraint && indexA.unique && indexB.unique) {
+		indexAOptions := indexA.options
+		indexBOptions := indexB.options
+		// Mysql: Default Index B-Tree (but not for vector indexes)
+		if g.mode == GeneratorModeMysql {
+			if len(indexAOptions) == 0 && !indexA.vector {
+				indexAOptions = []IndexOption{{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: []byte("btree"), strVal: "btree"}}}
+			}
+			if len(indexBOptions) == 0 && !indexB.vector {
+				indexBOptions = []IndexOption{{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: []byte("btree"), strVal: "btree"}}}
+			}
 		}
-		if len(indexBOptions) == 0 && !indexB.vector {
-			indexBOptions = []IndexOption{{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: []byte("btree"), strVal: "btree"}}}
-		}
-	}
-	for _, optionB := range indexBOptions {
-		if optionA := findIndexOptionByName(indexAOptions, optionB.optionName); optionA != nil {
-			if !g.areSameValue(optionA.value, optionB.value) {
+		for _, optionB := range indexBOptions {
+			if optionA := findIndexOptionByName(indexAOptions, optionB.optionName); optionA != nil {
+				if !g.areSameValue(optionA.value, optionB.value) {
+					return false
+				}
+			} else {
 				return false
 			}
-		} else {
-			return false
 		}
 	}
 
 	// Specific to unique constraints
-	if indexA.constraint != indexB.constraint {
+	// For MSSQL, UNIQUE indexes and UNIQUE constraints are essentially the same
+	// Don't differentiate between them
+	if g.mode != GeneratorModeMssql && indexA.constraint != indexB.constraint {
 		return false
 	}
-	if (indexA.constraintOptions != nil) != (indexB.constraintOptions != nil) {
-		return false
-	}
-	if indexA.constraintOptions != nil && indexB.constraintOptions != nil {
-		if indexA.constraintOptions.deferrable != indexB.constraintOptions.deferrable {
+
+	// For MSSQL UNIQUE constraints, constraintOptions don't matter
+	// They're only used for PostgreSQL deferrable constraints
+	if g.mode != GeneratorModeMssql {
+		if (indexA.constraintOptions != nil) != (indexB.constraintOptions != nil) {
 			return false
 		}
-		if indexA.constraintOptions.initiallyDeferred != indexB.constraintOptions.initiallyDeferred {
-			return false
+		if indexA.constraintOptions != nil && indexB.constraintOptions != nil {
+			if indexA.constraintOptions.deferrable != indexB.constraintOptions.deferrable {
+				return false
+			}
+			if indexA.constraintOptions.initiallyDeferred != indexB.constraintOptions.initiallyDeferred {
+				return false
+			}
 		}
 	}
 
@@ -2835,6 +3002,13 @@ func (g *Generator) normalizeIndexColumn(column string) string {
 	if g.mode == GeneratorModePostgres {
 		column = strings.ReplaceAll(column, "array[", "")
 		column = strings.ReplaceAll(column, "]", "")
+	}
+	if g.mode == GeneratorModeMssql {
+		// Remove MSSQL square brackets from column names
+		column = strings.TrimPrefix(column, "[")
+		column = strings.TrimSuffix(column, "]")
+		// Handle escaped brackets (]] becomes ])
+		column = strings.ReplaceAll(column, "]]", "]")
 	}
 	return column
 }

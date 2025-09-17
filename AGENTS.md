@@ -61,7 +61,7 @@ go test ./cmd/*def -run=TestApply/AddColumn
 
 The test name pattern follows the format `TestApply/<TestCaseName>`, where `<TestCaseName>` corresponds to the test scenarios defined in the YAML test files.
 
-## How to Write Tests
+### How to Write Tests
 
 For schema management tests, in most cases you only need to edit the YAML test files.
 
@@ -76,6 +76,10 @@ For schema management tests, in most cases you only need to edit the YAML test f
 2. **Test both directions**: When testing schema changes, consider testing both:
    - Adding features (no `current`, only `desired`)
    - Modifying existing schemas (`current` → `desired`)
+
+## General Rules
+
+* Never commit the changes unless the user asks for it.
 
 ## Task Completion Checklist
 

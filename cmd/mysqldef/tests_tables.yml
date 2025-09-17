@@ -570,3 +570,74 @@ RenameTableAndMultipleColumnChanges:
     ALTER TABLE `accounts` ADD PRIMARY KEY (`id`);
     ALTER TABLE `accounts` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
     ALTER TABLE `accounts` DROP COLUMN `old_field`;
+
+RenameIndex:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100),
+      INDEX old_email_idx (email)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100),
+      INDEX new_email_idx (email) -- @rename from=old_email_idx
+    );
+  output: |
+    ALTER TABLE `users` RENAME INDEX `old_email_idx` TO `new_email_idx`;
+
+RenameIndexStandalone:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255)
+    );
+    CREATE INDEX email_idx ON users (email);
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255)
+    );
+    CREATE INDEX user_email_idx /* @rename from=email_idx */ ON users (email);
+  output: |
+    ALTER TABLE `users` RENAME INDEX `email_idx` TO `user_email_idx`;
+
+RenameUniqueIndex:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      UNIQUE KEY old_unique_email (email)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      UNIQUE KEY unique_email (email) -- @rename from=old_unique_email
+    );
+  output: |
+    ALTER TABLE `users` RENAME INDEX `old_unique_email` TO `unique_email`;
+
+RenameMultipleIndexes:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100),
+      INDEX idx_email (email),
+      INDEX idx_username (username)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100),
+      INDEX email_idx (email), -- @rename from=idx_email
+      INDEX username_idx (username) -- @rename from=idx_username
+    );
+  output: |
+    ALTER TABLE `users` RENAME INDEX `idx_email` TO `email_idx`;
+    ALTER TABLE `users` RENAME INDEX `idx_username` TO `username_idx`;

@@ -59,7 +59,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				table:     table,
 			}, nil
 		} else if stmt.Action == parser.CreateIndex {
-			index, err := parseIndex(stmt)
+			index, err := parseIndex(stmt, ddl, mode)
 			if err != nil {
 				return nil, err
 			}
@@ -69,7 +69,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				index:     index,
 			}, nil
 		} else if stmt.Action == parser.AddIndex {
-			index, err := parseIndex(stmt)
+			index, err := parseIndex(stmt, ddl, mode)
 			if err != nil {
 				return nil, err
 			}
@@ -79,7 +79,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				index:     index,
 			}, nil
 		} else if stmt.Action == parser.AddPrimaryKey {
-			index, err := parseIndex(stmt)
+			index, err := parseIndex(stmt, ddl, mode)
 			if err != nil {
 				return nil, err
 			}
@@ -245,6 +245,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	var exclusions []Exclusion
 
 	columnComments := extractColumnComments(rawDDL, mode)
+	indexComments := extractIndexComments(rawDDL, mode)
 
 	for i, parsedCol := range stmt.TableSpec.Columns {
 		column := Column{
@@ -346,6 +347,16 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			}
 		}
 
+		// Determine if this is a constraint
+		// Constraints have constraintOptions (set when CONSTRAINT keyword is used)
+		// For PostgreSQL: Constraints have constraintOptions
+		isConstraint := constraintOptions != nil
+
+		// For MSSQL, PRIMARY KEY is always a constraint
+		if mode == GeneratorModeMssql && indexDef.Info.Primary {
+			isConstraint = true
+		}
+
 		index := Index{
 			name:      name,
 			indexType: indexDef.Info.Type,
@@ -357,12 +368,16 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			options:   indexOptions,
 			partition: indexPartition,
 
-			// FIXME: existence of constraintOptions doesn't mean it's a
-			// constraint but other parts of the code doesn't mark it as a
-			// constraint so we have to leave it as is for now.
-			constraint:        constraintOptions != nil,
+			// Mark as constraint based on database-specific logic
+			constraint:        isConstraint,
 			constraintOptions: constraintOptions,
 		}
+
+		// Parse @rename annotation for this index
+		if comment, ok := indexComments[name]; ok {
+			index.renameFrom = extractRenameFrom(comment)
+		}
+
 		indexes = append(indexes, index)
 	}
 
@@ -432,7 +447,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	}, nil
 }
 
-func parseIndex(stmt *parser.DDL) (Index, error) {
+func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, error) {
 	if stmt.IndexSpec == nil {
 		return Index{}, fmt.Errorf("stmt.IndexSpec was null on parseIndex: %#v", stmt)
 	}
@@ -501,6 +516,14 @@ func parseIndex(stmt *parser.DDL) (Index, error) {
 		}
 		name += "_idx"
 	}
+
+	// Extract index comments and look for @rename annotation
+	indexComments := extractIndexComments(rawDDL, mode)
+	renameFrom := ""
+	if comment, ok := indexComments[name]; ok {
+		renameFrom = extractRenameFrom(comment)
+	}
+
 	return Index{
 		name:              name,
 		indexType:         "", // not supported in parser yet
@@ -515,6 +538,7 @@ func parseIndex(stmt *parser.DDL) (Index, error) {
 		included:          includedColumns,
 		options:           indexOptions,
 		partition:         indexParition,
+		renameFrom:        renameFrom,
 	}, nil
 }
 
@@ -1008,6 +1032,231 @@ func extractColumnComments(rawDDL string, mode GeneratorMode) map[string]string 
 						comments[currentColumnName] = comment
 					}
 				}
+			}
+		}
+	}
+
+	return comments
+}
+
+func extractIndexComments(rawDDL string, mode GeneratorMode) map[string]string {
+	comments := make(map[string]string)
+
+	tokenizer := parser.NewTokenizer(rawDDL, generatorModeToParserMode(mode))
+	tokenizer.AllowComments = true
+
+	var inCreateTable bool
+	var parenDepth int
+	var expectingIndexDef bool
+	var currentIndexName string
+	var afterIndexKeyword bool
+	var afterUniqueKeyword bool
+	var keyKeywordSeen bool
+	var afterConstraintKeyword bool
+	var constraintName string
+
+	for {
+		tok, val := tokenizer.Scan()
+		if tok == 0 {
+			break // EOF
+		}
+
+		// Track CREATE TABLE statements
+		if tok == parser.CREATE {
+			// Scan ahead to see if it's CREATE TABLE
+			for {
+				nextTok, _ := tokenizer.Scan()
+				if nextTok == 0 {
+					break
+				}
+				if nextTok == parser.TABLE {
+					inCreateTable = true
+					parenDepth = 0
+					currentIndexName = ""
+					expectingIndexDef = false
+					afterIndexKeyword = false
+					afterUniqueKeyword = false
+					keyKeywordSeen = false
+					break
+				}
+				if nextTok != parser.IF && nextTok != parser.NOT && nextTok != parser.EXISTS {
+					break
+				}
+			}
+			continue
+		}
+
+		// Track parentheses depth to know when we're inside table definition
+		if inCreateTable {
+			switch tok {
+			case '(':
+				parenDepth++
+			case ')':
+				parenDepth--
+				if parenDepth == 0 {
+					inCreateTable = false
+					currentIndexName = ""
+				}
+			case ',':
+				// After a comma inside the table definition, reset index tracking
+				if parenDepth == 1 {
+					expectingIndexDef = false
+					afterIndexKeyword = false
+					afterUniqueKeyword = false
+					keyKeywordSeen = false
+					afterConstraintKeyword = false
+					constraintName = ""
+					// Don't clear currentIndexName yet - the comment might come after the comma
+				}
+			case parser.INDEX, parser.KEY:
+				// Found an INDEX or KEY keyword inside CREATE TABLE
+				if parenDepth == 1 {
+					afterIndexKeyword = true
+					keyKeywordSeen = (tok == parser.KEY)
+					expectingIndexDef = true
+					currentIndexName = ""
+				}
+			case parser.UNIQUE:
+				// Found UNIQUE keyword which might be followed by INDEX or KEY
+				if parenDepth == 1 {
+					if afterConstraintKeyword && constraintName != "" {
+						// This is a CONSTRAINT ... UNIQUE definition
+						// Use the constraint name as the index name
+						currentIndexName = constraintName
+						afterConstraintKeyword = false
+						constraintName = ""
+					} else {
+						afterUniqueKeyword = true
+						expectingIndexDef = true
+						currentIndexName = ""
+					}
+				}
+			case parser.CONSTRAINT:
+				// CONSTRAINT can be followed by a name and then UNIQUE, which creates an index
+				if parenDepth == 1 {
+					expectingIndexDef = false
+					afterIndexKeyword = false
+					afterUniqueKeyword = false
+					keyKeywordSeen = false
+					afterConstraintKeyword = true
+					currentIndexName = ""
+					constraintName = ""
+				}
+			case parser.PRIMARY, parser.FOREIGN, parser.CHECK:
+				// These indicate other types of constraints, not regular indexes
+				if parenDepth == 1 {
+					expectingIndexDef = false
+					afterIndexKeyword = false
+					afterUniqueKeyword = false
+					keyKeywordSeen = false
+					afterConstraintKeyword = false
+					constraintName = ""
+					currentIndexName = ""
+				}
+			case parser.ID:
+				// Capture potential index name or constraint name
+				if parenDepth == 1 {
+					if afterConstraintKeyword && constraintName == "" {
+						// This is the constraint name
+						constraintName = string(val)
+						// Keep afterConstraintKeyword true to catch UNIQUE keyword next
+					} else if expectingIndexDef {
+						if afterIndexKeyword || (afterUniqueKeyword && keyKeywordSeen) {
+							// This is the index name
+							currentIndexName = string(val)
+							expectingIndexDef = false
+							afterIndexKeyword = false
+							afterUniqueKeyword = false
+						} else if afterUniqueKeyword {
+							// Check if this ID is "KEY" or "INDEX"
+							idStr := string(val)
+							if strings.EqualFold(idStr, "KEY") || strings.EqualFold(idStr, "INDEX") {
+								keyKeywordSeen = true
+								// Next ID will be the index name
+							} else {
+								// This is the index name for UNIQUE without KEY/INDEX keyword
+								currentIndexName = idStr
+								expectingIndexDef = false
+								afterUniqueKeyword = false
+							}
+						}
+					}
+				}
+			case parser.COMMENT:
+				// Associate comment with the current index name
+				if inCreateTable && currentIndexName != "" && parenDepth == 1 {
+					comment := string(val)
+					comment = strings.TrimSpace(comment)
+					// Only store if we haven't already stored a comment for this index
+					if _, exists := comments[currentIndexName]; !exists {
+						comments[currentIndexName] = comment
+					}
+				}
+			}
+		}
+	}
+
+	// Now handle standalone CREATE INDEX statements
+	tokenizer = parser.NewTokenizer(rawDDL, generatorModeToParserMode(mode))
+	tokenizer.AllowComments = true
+
+	var foundCreate bool
+	var foundIndex bool
+	var foundIndexName bool
+	var indexName string
+
+	for {
+		tok, val := tokenizer.Scan()
+		if tok == 0 {
+			break // EOF
+		}
+
+		switch tok {
+		case parser.CREATE:
+			foundCreate = true
+			foundIndex = false
+			foundIndexName = false
+			indexName = ""
+		case parser.UNIQUE:
+			// UNIQUE can appear after CREATE
+			if foundCreate {
+				// Continue looking for INDEX
+			}
+		case parser.INDEX:
+			if foundCreate {
+				foundIndex = true
+				foundCreate = false
+			}
+		case parser.IF:
+			// Part of CREATE INDEX IF NOT EXISTS
+			// Next tokens will be NOT and EXISTS
+		case parser.NOT, parser.EXISTS:
+			// Part of IF NOT EXISTS
+			continue
+		case parser.ID:
+			if foundIndex && !foundIndexName {
+				// This is the index name
+				indexName = string(val)
+				foundIndexName = true
+			}
+		case parser.COMMENT:
+			// Associate comment with the index from CREATE INDEX statement
+			if foundIndexName && indexName != "" {
+				comment := string(val)
+				comment = strings.TrimSpace(comment)
+				// Only store if we haven't already stored a comment for this index
+				if _, exists := comments[indexName]; !exists {
+					comments[indexName] = comment
+				}
+				// Reset for next potential index
+				foundIndexName = false
+				indexName = ""
+			}
+		case parser.ON:
+			// After ON keyword, we're past the index name
+			if foundIndex {
+				foundIndex = false
+				foundIndexName = false
 			}
 		}
 	}

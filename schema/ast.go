@@ -120,6 +120,7 @@ type Index struct {
 	clustered         bool           // for MSSQL
 	partition         IndexPartition // for MSSQL
 	options           []IndexOption
+	renameFrom        string // Previous index name if renamed via @rename annotation
 }
 
 type IndexColumn struct {

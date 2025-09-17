@@ -240,3 +240,83 @@ RenameTableAndMultipleColumnChanges:
     ALTER TABLE `accounts` DROP COLUMN `user_name`;
     ALTER TABLE `accounts` ADD COLUMN `created_at` timestamp DEFAULT current_timestamp;
     ALTER TABLE `accounts` DROP COLUMN `old_field`;
+
+RenameIndex:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100)
+    );
+    CREATE INDEX old_email_idx ON users (email);
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100)
+    );
+    CREATE INDEX new_email_idx /* @rename from=old_email_idx */ ON users (email);
+  output: |
+    DROP INDEX `old_email_idx`;
+    CREATE INDEX `new_email_idx` ON `users` (`email`);
+
+RenameMultipleIndexes:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100)
+    );
+    CREATE INDEX idx_email ON users (email);
+    CREATE INDEX idx_username ON users (username);
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100)
+    );
+    CREATE INDEX email_idx /* @rename from=idx_email */ ON users (email);
+    CREATE INDEX username_idx /* @rename from=idx_username */ ON users (username);
+  output: |
+    DROP INDEX `idx_email`;
+    CREATE INDEX `email_idx` ON `users` (`email`);
+    DROP INDEX `idx_username`;
+    CREATE INDEX `username_idx` ON `users` (`username`);
+
+RenameUniqueIndex:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100)
+    );
+    CREATE UNIQUE INDEX old_unique_email ON users (email);
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100)
+    );
+    CREATE UNIQUE INDEX unique_email /* @rename from=old_unique_email */ ON users (email);
+  output: |
+    DROP INDEX `old_unique_email`;
+    CREATE UNIQUE INDEX `unique_email` ON `users` (`email`);
+
+RenameIndexWithWhereClause:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      is_active boolean DEFAULT 1
+    );
+    CREATE INDEX old_active_users ON users (email) WHERE is_active = 1;
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      is_active boolean DEFAULT 1
+    );
+    CREATE INDEX active_users_idx /* @rename from=old_active_users */ ON users (email) WHERE is_active = 1;
+  output: |
+    DROP INDEX `old_active_users`;
+    CREATE INDEX `active_users_idx` ON `users` (`email`) WHERE is_active = 1;

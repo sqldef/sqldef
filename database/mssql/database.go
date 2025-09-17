@@ -185,6 +185,20 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 		}
 	}
 
+	// UNIQUE CONSTRAINTS (that were created as constraints, not indexes)
+	for _, indexDef := range indexDefs {
+		if indexDef.primary || !indexDef.unique || !indexDef.constraint {
+			continue
+		}
+		fmt.Fprint(&queryBuilder, ",\n"+indent)
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s UNIQUE", quoteName(indexDef.name))
+
+		if indexDef.indexType == "CLUSTERED" || indexDef.indexType == "NONCLUSTERED" {
+			fmt.Fprintf(&queryBuilder, " %s", indexDef.indexType)
+		}
+		fmt.Fprintf(&queryBuilder, " (%s)", strings.Join(indexDef.columns, ", "))
+	}
+
 	for _, v := range foreignDefs {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
 		fmt.Fprint(&queryBuilder, v)
@@ -195,12 +209,12 @@ func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, fo
 		if indexDef.primary {
 			continue
 		}
+		// Skip unique constraints - they're already handled inside the table definition
+		if indexDef.unique && indexDef.constraint {
+			continue
+		}
 		if indexDef.unique {
-			if indexDef.constraint {
-				fmt.Fprintf(&queryBuilder, "ALTER TABLE %s ADD CONSTRAINT [%s] UNIQUE", table, indexDef.name)
-			} else {
-				fmt.Fprint(&queryBuilder, "CREATE UNIQUE")
-			}
+			fmt.Fprint(&queryBuilder, "CREATE UNIQUE")
 		} else {
 			fmt.Fprint(&queryBuilder, "CREATE")
 		}
