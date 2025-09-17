@@ -1204,7 +1204,6 @@ func extractIndexComments(rawDDL string, mode GeneratorMode) map[string]string {
 	var foundIndex bool
 	var foundIndexName bool
 	var indexName string
-	var skipNextID bool
 
 	for {
 		tok, val := tokenizer.Scan()
@@ -1218,7 +1217,6 @@ func extractIndexComments(rawDDL string, mode GeneratorMode) map[string]string {
 			foundIndex = false
 			foundIndexName = false
 			indexName = ""
-			skipNextID = false
 		case parser.UNIQUE:
 			// UNIQUE can appear after CREATE
 			if foundCreate {
@@ -1230,15 +1228,13 @@ func extractIndexComments(rawDDL string, mode GeneratorMode) map[string]string {
 				foundCreate = false
 			}
 		case parser.IF:
-			// Handle CREATE INDEX IF NOT EXISTS
-			if foundIndex {
-				skipNextID = false // Will need to skip NOT and EXISTS
-			}
+			// Part of CREATE INDEX IF NOT EXISTS
+			// Next tokens will be NOT and EXISTS
 		case parser.NOT, parser.EXISTS:
 			// Part of IF NOT EXISTS
 			continue
 		case parser.ID:
-			if foundIndex && !foundIndexName && !skipNextID {
+			if foundIndex && !foundIndexName {
 				// This is the index name
 				indexName = string(val)
 				foundIndexName = true
