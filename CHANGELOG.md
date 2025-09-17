@@ -1,3 +1,7 @@
+## [v2.4.4](https://github.com/sqldef/sqldef/compare/v2.4.3...v2.4.4) - 2025-09-17
+- disable tagpr for now (only triggered by hand) by @gfx in https://github.com/sqldef/sqldef/pull/746
+- Enable push event for master branch in tagpr workflow by @gfx in https://github.com/sqldef/sqldef/pull/749
+
 ## [v2.4.4](https://github.com/sqldef/sqldef/compare/v2.4.3...v2.4.4) - 2025-09-16
 
 - disable tagpr for now (only triggered by hand) by @gfx in https://github.com/sqldef/sqldef/pull/746
