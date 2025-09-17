@@ -2124,7 +2124,7 @@ RenameIndex:
     );
     CREATE INDEX new_email_idx /* @rename from=old_email_idx */ ON users (email);
   output: |
-    ALTER INDEX "old_email_idx" RENAME TO "new_email_idx";
+    ALTER INDEX "public"."old_email_idx" RENAME TO "new_email_idx";
 
 RenameIndexInTable:
   current: |
@@ -2142,7 +2142,7 @@ RenameIndexInTable:
       CONSTRAINT unique_email UNIQUE (email) -- @rename from=old_unique_email
     );
   output: |
-    ALTER INDEX "old_unique_email" RENAME TO "unique_email";
+    ALTER INDEX "public"."old_unique_email" RENAME TO "unique_email";
 
 RenameMultipleIndexes:
   current: |
@@ -2162,5 +2162,24 @@ RenameMultipleIndexes:
     CREATE INDEX email_idx /* @rename from=idx_email */ ON users (email);
     CREATE INDEX username_idx /* @rename from=idx_username */ ON users (username);
   output: |
-    ALTER INDEX "idx_email" RENAME TO "email_idx";
-    ALTER INDEX "idx_username" RENAME TO "username_idx";
+    ALTER INDEX "public"."idx_email" RENAME TO "email_idx";
+    ALTER INDEX "public"."idx_username" RENAME TO "username_idx";
+
+RenameIndexInNonDefaultSchema:
+  current: |
+    CREATE SCHEMA myschema;
+    CREATE TABLE myschema.users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100)
+    );
+    CREATE INDEX old_email_idx ON myschema.users (email);
+  desired: |
+    CREATE TABLE myschema.users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100)
+    );
+    CREATE INDEX new_email_idx /* @rename from=old_email_idx */ ON myschema.users (email);
+  output: |
+    ALTER INDEX "myschema"."old_email_idx" RENAME TO "new_email_idx";

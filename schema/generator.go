@@ -1927,7 +1927,10 @@ func (g *Generator) generateRenameIndex(tableName string, oldIndexName string, n
 			g.escapeSQLName(newIndexName)))
 	case GeneratorModePostgres:
 		// PostgreSQL uses ALTER INDEX ... RENAME TO
-		ddls = append(ddls, fmt.Sprintf("ALTER INDEX %s RENAME TO %s",
+		// Qualify the old index name with schema for consistency with DROP INDEX
+		schema, _ := splitTableName(tableName, g.defaultSchema)
+		ddls = append(ddls, fmt.Sprintf("ALTER INDEX %s.%s RENAME TO %s",
+			g.escapeSQLName(schema),
 			g.escapeSQLName(oldIndexName),
 			g.escapeSQLName(newIndexName)))
 	case GeneratorModeMssql:
