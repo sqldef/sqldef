@@ -1,3 +1,7 @@
+## [v2.4.6](https://github.com/sqldef/sqldef/compare/v2.4.5...v2.4.6) - 2025-09-17
+- Revert "Revert "Enable push event for master branch in tagpr workflow"" by @gfx in https://github.com/sqldef/sqldef/pull/753
+- add a feature to "rename index" with the same way as table and column renaming by @gfx in https://github.com/sqldef/sqldef/pull/747
+
 ## [v2.4.5](https://github.com/sqldef/sqldef/compare/v2.4.4...v2.4.5) - 2025-09-17
 - Enable push event for master branch in tagpr workflow by @gfx in https://github.com/sqldef/sqldef/pull/749
 - Revert "Enable push event for master branch in tagpr workflow" by @gfx in https://github.com/sqldef/sqldef/pull/751
