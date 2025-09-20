@@ -422,6 +422,7 @@ var keywords = map[string]int{
 	"strict":                 STRICT,
 	"table":                  TABLE,
 	"tables":                 TABLES,
+	"tablock":                TABLOCK,
 	"terminated":             UNUSED,
 	"text":                   TEXT,
 	"text_pattern_ops":       TEXT_PATTERN_OPS,

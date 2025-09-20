@@ -259,7 +259,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> INCLUDE
 
 // table hint
-%token <bytes> HOLDLOCK NOLOCK NOWAIT PAGLOCK ROWLOCK TABLELOCK
+%token <bytes> HOLDLOCK NOLOCK NOWAIT PAGLOCK ROWLOCK TABLOCK
 
 // SQL SECURITY
 %token <bytes> DEFINER INVOKER
@@ -2973,7 +2973,7 @@ table_hint:
   {
     $$ = string($1)
   }
-| TABLELOCK
+| TABLOCK
   {
     $$ = string($1)
   }
@@ -4644,6 +4644,7 @@ reserved_keyword:
 | STRAIGHT_JOIN
 | TABLE
 | TABLES
+| TABLOCK
 | THEN
 | TO
 | TRUE
