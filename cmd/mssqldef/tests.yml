@@ -419,6 +419,16 @@ CovertCurrentTimestampWithStyle:
     begin
     set @datetime = cast(convert(varchar, current_timestamp, 110) as datetime)
     end;
+TableHint:
+  desired: |
+    CREATE TABLE users (
+        id bigint NOT NULL,
+        name text
+    );
+    CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
+    select MAX(id) from Inserted with(tablock)
+    select MAX(id) from Inserted with(readuncommitted)
+    select MAX(id) from Inserted with(updlock);
 RenameColumn:
   current: |
     CREATE TABLE users (
