@@ -3308,6 +3308,10 @@ condition:
   {
     $$ = &UpdateFuncExpr{Name: nil}
   }
+| openb condition closeb
+  {
+    $$ = &ParenExpr{Expr: $2}
+  }
 
 is_suffix:
   NULL
