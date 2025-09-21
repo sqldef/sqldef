@@ -2424,7 +2424,7 @@ type Cursor struct {
 	Action     string
 	Fetch      string
 	CursorName ColIdent
-	Into       ColIdent
+	Into       []ColIdent
 }
 
 func (node *Cursor) Format(buf *nodeBuffer) {
@@ -2433,11 +2433,14 @@ func (node *Cursor) Format(buf *nodeBuffer) {
 		if node.Fetch != "" {
 			fetch = fmt.Sprintf(" %s from", node.Fetch)
 		}
-		var into string
-		if !node.Into.isEmpty() {
-			into = fmt.Sprintf(" into %s", node.Into.lowered())
+		buf.Printf("%s%s %v", node.Action, fetch, node.CursorName)
+		if node.Into != nil {
+			prefix := " into "
+			for _, c := range node.Into {
+				buf.Printf("%s%s", prefix, c.lowered())
+				prefix = ", "
+			}
 		}
-		buf.Printf("%s%s %v%s", node.Action, fetch, node.CursorName, into)
 	} else {
 		buf.Printf("%s %v", node.Action, node.CursorName)
 	}

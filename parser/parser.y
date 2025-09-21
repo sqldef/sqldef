@@ -991,7 +991,7 @@ cursor_statement:
       CursorName: $3,
     }
   }
-| FETCH fetch_opt sql_id INTO sql_id
+| FETCH fetch_opt sql_id INTO sql_id_list
   {
     $$ = &Cursor{
       Action: FetchStr,
@@ -3307,6 +3307,10 @@ condition:
 | COLUMNS_UPDATED openb closeb
   {
     $$ = &UpdateFuncExpr{Name: nil}
+  }
+| openb condition closeb
+  {
+    $$ = &ParenExpr{Expr: $2}
   }
 
 is_suffix:
