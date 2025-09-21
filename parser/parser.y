@@ -991,7 +991,7 @@ cursor_statement:
       CursorName: $3,
     }
   }
-| FETCH fetch_opt sql_id INTO sql_id
+| FETCH fetch_opt sql_id INTO sql_id_list
   {
     $$ = &Cursor{
       Action: FetchStr,
