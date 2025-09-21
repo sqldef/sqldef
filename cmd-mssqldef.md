@@ -20,7 +20,7 @@ Application Options:
       --version               Show this version
 ```
 
-## Usage
+## Synopsis
 
 ```shell
 # Apply schema to MSSQL database

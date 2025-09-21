@@ -28,7 +28,7 @@ Application Options:
       --version                     Show this version
 ```
 
-## Usage
+## Synopsis
 
 ```shell
 # Verify MySQL server connectivity
