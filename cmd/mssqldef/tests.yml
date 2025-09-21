@@ -429,6 +429,56 @@ TableHint:
     select MAX(id) from Inserted with(tablock)
     select MAX(id) from Inserted with(readuncommitted)
     select MAX(id) from Inserted with(updlock);
+WhileLoopFetchIntoMulti:
+  current: |
+    CREATE TABLE users (
+        id bigint NOT NULL,
+        code varchar(20),
+        updatedat datetime
+    );
+  desired: |
+    CREATE TABLE users (
+        id bigint NOT NULL,
+        code varchar(20),
+        updatedat datetime
+    );
+    CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
+    declare @code as varchar(20)
+    declare @updatedat as datetime
+    begin
+      DECLARE cur CURSOR FOR
+        SELECT code, MAX(updatedat)
+        FROM [Inserted]
+        GROUP BY code
+
+      OPEN cur
+      FETCH NEXT FROM cur INTO @code, @updatedat
+      WHILE (@@FETCH_STATUS=0) -- with parentheses
+      BEGIN
+        FETCH NEXT FROM cur INTO @code, @updatedat
+      END
+      CLOSE cur
+      DEALLOCATE cur
+    end
+  output: |
+    CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
+    declare
+    @code varchar(20)
+    declare
+    @updatedat datetime
+    begin
+    declare
+    cur cursor for
+    select code, MAX(updatedat) from Inserted group by code
+    open cur
+    fetch next from cur into @code, @updatedat
+    while (@@FETCH_STATUS = 0)
+    begin
+    fetch next from cur into @code, @updatedat
+    end
+    close cur
+    deallocate cur
+    end;
 RenameColumn:
   current: |
     CREATE TABLE users (
