@@ -1,3 +1,7 @@
+## [v2.4.7](https://github.com/sqldef/sqldef/compare/v2.4.6...v2.4.7) - 2025-09-21
+- mssqldef: Fix and Add Table Hint by @chi-bd in https://github.com/sqldef/sqldef/pull/755
+- update "Release" section: all the maintainers do is to merge release pull requests created by tagpr by @gfx in https://github.com/sqldef/sqldef/pull/758
+
 ## [v2.4.6](https://github.com/sqldef/sqldef/compare/v2.4.5...v2.4.6) - 2025-09-17
 - Revert "Revert "Enable push event for master branch in tagpr workflow"" by @gfx in https://github.com/sqldef/sqldef/pull/753
 - add a feature to "rename index" with the same way as table and column renaming by @gfx in https://github.com/sqldef/sqldef/pull/747
