@@ -1,3 +1,8 @@
+## [v2.4.8](https://github.com/sqldef/sqldef/compare/v2.4.7...v2.4.8) - 2025-09-21
+- mssqldef: Support FETCH INTO multiple variables by @chi-bd in https://github.com/sqldef/sqldef/pull/759
+- [doc] split README into each command by @gfx in https://github.com/sqldef/sqldef/pull/760
+- [doc] let each command to have the command doc in GitHub  by @gfx in https://github.com/sqldef/sqldef/pull/762
+
 ## [v2.4.7](https://github.com/sqldef/sqldef/compare/v2.4.6...v2.4.7) - 2025-09-21
 - mssqldef: Fix and Add Table Hint by @chi-bd in https://github.com/sqldef/sqldef/pull/755
 - update "Release" section: all the maintainers do is to merge release pull requests created by tagpr by @gfx in https://github.com/sqldef/sqldef/pull/758
