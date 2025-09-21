@@ -259,7 +259,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> INCLUDE
 
 // table hint
-%token <bytes> HOLDLOCK NOLOCK NOWAIT PAGLOCK ROWLOCK TABLELOCK
+%token <bytes> HOLDLOCK NOLOCK NOWAIT PAGLOCK ROWLOCK TABLOCK UPDLOCK READUNCOMMITTED
 
 // SQL SECURITY
 %token <bytes> DEFINER INVOKER
@@ -2973,7 +2973,15 @@ table_hint:
   {
     $$ = string($1)
   }
-| TABLELOCK
+| TABLOCK
+  {
+    $$ = string($1)
+  }
+| UPDLOCK
+  {
+    $$ = string($1)
+  }
+| READUNCOMMITTED
   {
     $$ = string($1)
   }
@@ -4629,6 +4637,7 @@ reserved_keyword:
 | PAGLOCK
 | POLICY
 | PRIOR
+| READUNCOMMITTED
 | REGEXP
 | RENAME
 | REPLACE
@@ -4644,6 +4653,7 @@ reserved_keyword:
 | STRAIGHT_JOIN
 | TABLE
 | TABLES
+| TABLOCK
 | THEN
 | TO
 | TRUE
@@ -4651,6 +4661,7 @@ reserved_keyword:
 | UNION
 | UNIQUE
 | UPDATE
+| UPDLOCK
 | USE
 | USING
 | UTC_DATE
