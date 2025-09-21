@@ -70,7 +70,7 @@ For schema management tests, in most cases you only need to edit the YAML test f
 1. **Use consistent prefixes**: When adding related test cases, use the same prefix for test names. This allows you to run all related tests with a simple pattern:
    ```bash
    # Example: Testing all index-related features
-   go test ./cmd/psqldef -run=TestApply/Index.*
+   go test ./cmd/psqldef -run='TestApply/Index.*'
    ```
 
 2. **Test both directions**: When testing schema changes, consider testing both:
@@ -80,6 +80,11 @@ For schema management tests, in most cases you only need to edit the YAML test f
 ## General Rules
 
 * Never commit the changes unless the user asks for it.
+* Keep the documents up to date:
+  * `cmd-psqldef.md` describes all the features of `psqldef`
+  * `cmd-mysqldef.md` describes all the features of `mysqldef`
+  * `cmd-sqlite3def.md` describes all the features of `sqlite3def`
+  * `cmd-mssqldef.md` describes all the features of `mssqldef`
 
 ## Task Completion Checklist
 

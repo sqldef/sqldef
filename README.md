@@ -1,597 +1,74 @@
 # sqldef [![sqldef](https://github.com/sqldef/sqldef/actions/workflows/sqldef.yml/badge.svg)](https://github.com/sqldef/sqldef/actions/workflows/sqldef.yml)
 
-The easiest idempotent MySQL/PostgreSQL/SQLite3/SQL Server schema management by SQL.
+**sqldef** is the easiest idempotent schema management tool for MySQL, PostgreSQL, SQLite3, and SQL Server that uses plain SQL DDLs. Define your desired schema in SQL, and sqldef generates and applies the migrations to update your database.
 
-This is inspired by [Ridgepole](https://github.com/winebarrel/ridgepole) but using SQL,
+With sqldef, you maintain a single SQL file with your complete schema. To modify your schema - add columns, change constraints, or create indexes - simply edit this file. sqldef compares desired against current schema and generates the appropriate DDLs, ensuring your database reaches the desired state from any starting point.
+
+Each database gets its own command (`mysqldef`, `psqldef`, `sqlite3def`, `mssqldef`) that mimics the connection options of the native database client, making it familiar and easy to integrate into existing workflows. The tool comes as a single binary with no dependencies, and provides idempotent operations that are safe to run multiple times.
+
+This is inspired by [Ridgepole](https://github.com/ridgepole/ridgepole) but using SQL,
 so there's no need to remember Ruby DSL.
 
 ![demo](./demo.gif)
 
-## Installation
-
-Download the single-binary executable for your favorite database from:
-
-https://github.com/sqldef/sqldef/releases
-
 ## Usage
 
-### mysqldef
+### Basic Workflow
 
-`mysqldef` should work in the same way as `mysql` for setting connection information.
+This is the basic workflow, which is identical across all databases - only the connection options differ between commands.
 
-```
-Usage:
-  mysqldef [OPTIONS] [database|current.sql] < desired.sql
+**Note:** Replace `$sqldef` with the appropriate command for your database:
 
-Application Options:
-  -u, --user=user_name              MySQL user name (default: root)
-  -p, --password=password           MySQL user password, overridden by $MYSQL_PWD
-  -h, --host=host_name              Host to connect to the MySQL server (default: 127.0.0.1)
-  -P, --port=port_num               Port used for the connection (default: 3306)
-  -S, --socket=socket               The socket file to use for connection
-      --ssl-mode=ssl_mode           SSL connection mode(PREFERRED,REQUIRED,DISABLED). (default: PREFERRED)
-      --ssl-ca=ssl_ca               File that contains list of trusted SSL Certificate Authorities
-      --password-prompt             Force MySQL user password prompt
-      --enable-cleartext-plugin     Enable/disable the clear text authentication plugin
-      --file=sql_file               Read desired SQL from the file, rather than stdin (default: -)
-      --dry-run                     Don't run DDLs but just show them
-      --export                      Just dump the current schema to stdout
-      --enable-drop                 Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
-      --skip-view                   Skip managing views (temporary feature, to be removed later)
-      --before-apply=               Execute the given string before applying the regular DDLs
-      --config=                     YAML file to specify: target_tables, skip_tables, algorithm, lock, dump_concurrency (can be specified multiple times)
-      --config-inline=              YAML object to specify: target_tables, skip_tables, algorithm, lock, dump_concurrency (can be specified multiple times)
-      --help                        Show this help
-      --version                     Show this version
-```
+- `mysqldef` for MySQL
+- `psqldef` for PostgreSQL
+- `sqlite3def` for SQLite
+- `mssqldef` for SQL Server
 
-#### Example
+#### 1. Export Current Schema
 
 ```shell
-# Make sure that MySQL server can be connected by mysql(1)
-$ mysql -uroot test -e "select 1;"
-+---+
-| 1 |
-+---+
-| 1 |
-+---+
-
-# Dump current schema by adding `def` suffix and --export
-$ mysqldef -uroot test --export
-CREATE TABLE `user` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `name` varchar(191) DEFAULT 'k0kubun',
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-# Save it to edit
-$ mysqldef -uroot test --export > schema.sql
+$sqldef [connection-options] --export > schema.sql
 ```
 
-Update the schema.sql like (instead of `ADD INDEX`, you can just add `KEY index_name (name)` in the `CREATE TABLE` as well):
+Export the existing database schema to review your starting point.
 
-```diff
- CREATE TABLE user (
-   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-   name VARCHAR(128) DEFAULT 'k0kubun',
-+  created_at DATETIME NOT NULL
- ) Engine=InnoDB DEFAULT CHARSET=utf8mb4;
-+
-+ALTER TABLE user ADD INDEX index_name(name);
-```
+#### 2. Modify the Schema
 
-And then run:
+Edit `schema.sql` to add, remove, or change columns/tables/indexes:
 
-```shell
-# Check the auto-generated migration plan without execution
-$ mysqldef -uroot test --dry-run < schema.sql
---- dry run ---
-Run: 'ALTER TABLE user ADD COLUMN created_at datetime NOT NULL ;'
-Run: 'ALTER TABLE user ADD INDEX index_name(name);'
-
-# Run the above DDLs
-$ mysqldef -uroot test < schema.sql
-Run: 'ALTER TABLE user ADD COLUMN created_at datetime NOT NULL ;'
-Run: 'ALTER TABLE user ADD INDEX index_name(name);'
-
-# Operation is idempotent, safe for running it multiple times
-$ mysqldef -uroot test < schema.sql
-Nothing is modified
-
-# Run without dropping existing tables and columns
-$ mysqldef -uroot test < schema.sql
-Skipped: 'DROP TABLE users;'
-
-# Run dropping existing tables and columns
-$ mysqldef -uroot test --enable-drop < schema.sql
-Run: 'DROP TABLE users;'
-
-# Run using file with skip tables
-# Tables in 'skip-tables' are ignored (can use Regexp)
-$ echo "user\n.*_bk\n.*_[0-9]{8}" > skip-tables
-$ mysqldef -uroot test --skip-file skip-tables < schema.sql
-
-# Use config file to control schema management
-$ cat > config.yml <<EOF
-target_tables: |
-  users
-  posts_\d+
-skip_tables: |
-  tmp_.*
-algorithm: INPLACE
-lock: NONE
-dump_concurrency: 8
-EOF
-$ mysqldef -uroot test --config=config.yml < schema.sql
-
-# Use inline YAML configuration
-$ mysqldef -uroot test --config-inline="skip_tables: temp_.*" < schema.sql
-
-# Multiple configs with order preservation (latter wins)
-# In this example, algorithm from config-inline overrides the one from config.yml
-$ mysqldef -uroot test --config=config.yml --config-inline="algorithm: INSTANT" < schema.sql
-```
-
-### psqldef
-
-`psqldef` should work in the same way as `psql` for setting connection information.
-
-```
-Usage:
-  psqldef [OPTION]... [DBNAME|current.sql] < desired.sql
-
-Application Options:
-  -U, --user=username         PostgreSQL user name (default: postgres)
-  -W, --password=password     PostgreSQL user password, overridden by $PGPASSWORD
-  -h, --host=hostname         Host or socket directory to connect to the PostgreSQL server (default: 127.0.0.1)
-  -p, --port=port             Port used for the connection (default: 5432)
-      --password-prompt       Force PostgreSQL user password prompt
-  -f, --file=filename         Read desired SQL from the file, rather than stdin (default: -)
-      --dry-run               Don't run DDLs but just show them
-      --export                Just dump the current schema to stdout
-      --enable-drop           Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
-      --skip-view             Skip managing views/materialized views
-      --skip-extension        Skip managing extensions
-      --before-apply=         Execute the given string before applying the regular DDLs
-      --config=               YAML file to specify: target_tables, skip_tables, skip_views, target_schema, managed_roles, enable_drop, dump_concurrency (can be specified multiple times)
-      --config-inline=        YAML object to specify: target_tables, skip_tables, skip_views, target_schema, managed_roles, enable_drop, dump_concurrency (can be specified multiple times)
-      --help                  Show this help
-      --version               Show this version
-```
-
-You can use `PGSSLMODE` environment variable to specify sslmode.
-
-#### Example
-
-```shell
-# Make sure that PostgreSQL server can be connected by psql(1)
-$ psql -U postgres test -c "select 1;"
- ?column?
-----------
-        1
-(1 row)
-
-# Dump current schema by adding `def` suffix and --export
-$ psqldef -U postgres test --export
-CREATE TABLE public.users (
-    id bigint NOT NULL,
-    name text,
-    age integer
-);
-
-CREATE TABLE public.bigdata (
-    data bigint
-);
-
-# Save it to edit
-$ psqldef -U postgres test --export > schema.sql
-```
-
-Update the schema.sql like:
-
-```diff
- CREATE TABLE users (
-     id bigint NOT NULL PRIMARY KEY,
--    name text,
-     age int
- );
-
--CREATE TABLE bigdata (
--    data bigint
--);
-```
-
-And then run:
-
-```shell
-# Check the auto-generated migration plan without execution
-$ psqldef -U postgres test --dry-run < schema.sql
---- dry run ---
-Run: 'DROP TABLE bigdata;'
-Run: 'ALTER TABLE users DROP COLUMN name;'
-
-# Run the above DDLs
-$ psqldef -U postgres test < schema.sql
-Run: 'DROP TABLE bigdata;'
-Run: 'ALTER TABLE users DROP COLUMN name;'
-
-# Operation is idempotent, safe for running it multiple times
-$ psqldef -U postgres test < schema.sql
-Nothing is modified
-
-# Run without dropping existing tables and columns
-$ psqldef -U postgres test < schema.sql
-Skipped: 'DROP TABLE users;'
-
-# Run dropping existing tables and columns
-$ psqldef -U postgres test --enable-drop < schema.sql
-Run: 'DROP TABLE users;'
-
-# Managing table privileges for specific roles via config
-$ cat schema.sql
+```sql
 CREATE TABLE users (
-    id bigint NOT NULL PRIMARY KEY,
-    name text
+  id BIGINT PRIMARY KEY,
+  name VARCHAR(100),
+  age INTEGER,  -- Added new column
+  created_at TIMESTAMP
 );
-GRANT SELECT ON TABLE users TO readonly_user;
-GRANT SELECT, INSERT, UPDATE ON TABLE users TO app_user;
-
-# Use config file to filter tables and manage privileges
-$ cat > config.yml <<EOF
-target_tables: |
-  public\.users
-  public\.posts_\d+
-skip_tables: |
-  migrations
-  temp_.*
-skip_views: |
-  materialized_view_.*
-target_schema: |
-  public
-  app
-managed_roles:
-  - readonly_user
-  - app_user
-enable_drop: true  # Allows REVOKE operations
-dump_concurrency: 4
-EOF
-$ psqldef -U postgres test --config=config.yml < schema.sql
-
-# Use inline YAML configuration with managed roles
-$ psqldef -U postgres test --config-inline="managed_roles: [readonly_user, app_user]" < schema.sql
-
-# Multiple configs with order preservation (latter wins)
-# In this example, skip_tables from the second config overrides the first
-$ psqldef -U postgres test --config=base.yml --config-inline="skip_tables: archived_.*" < schema.sql
 ```
 
-### sqlite3def
-
-```
-Usage:
-  sqlite3def [OPTIONS] [FILENAME|current.sql] < desired.sql
-
-Application Options:
-  -f, --file=filename         Read desired SQL from the file, rather than stdin (default: -)
-      --dry-run               Don't run DDLs but just show them
-      --export                Just dump the current schema to stdout
-      --enable-drop           Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
-      --config=               YAML file to specify: target_tables, skip_tables (can be specified multiple times)
-      --config-inline=        YAML object to specify: target_tables, skip_tables (can be specified multiple times)
-      --help                  Show this help
-      --version               Show this version
-```
-
-#### Example
+#### 3. Preview Changes
 
 ```shell
-# Create SQLite database and tables
-$ sqlite3 mydb.db "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);"
-
-# Export current schema
-$ sqlite3def mydb.db --export > schema.sql
-
-# Use config file to filter tables
-$ cat > config.yml <<EOF
-target_tables: |
-  users
-  posts_\d+
-skip_tables: |
-  sqlite_.*
-  temp_.*
-EOF
-$ sqlite3def mydb.db --config=config.yml < schema.sql
-
-# Use inline YAML configuration
-$ sqlite3def mydb.db --config-inline="skip_tables: backup_.*" < schema.sql
-
-# Multiple configs with order preservation (latter wins)
-$ sqlite3def mydb.db --config=config.yml --config-inline="target_tables: users" < schema.sql
+$sqldef [connection-options] --dry-run < schema.sql
 ```
 
-### mssqldef
+Show the migrations that will be applied without executing them (e.g., `ALTER TABLE users ADD COLUMN age INTEGER`).
 
-```
-Usage:
-  mssqldef [OPTIONS] [database|current.sql] < desired.sql
-
-Application Options:
-  -U, --user=user_name        MSSQL user name (default: sa)
-  -P, --password=password     MSSQL user password, overridden by $MSSQL_PWD
-  -h, --host=host_name        Host to connect to the MSSQL server (default: 127.0.0.1)
-  -p, --port=port_num         Port used for the connection (default: 1433)
-      --password-prompt       Force MSSQL user password prompt
-      --file=sql_file         Read desired SQL from the file, rather than stdin (default: -)
-      --dry-run               Don't run DDLs but just show them
-      --export                Just dump the current schema to stdout
-      --enable-drop           Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
-      --config=               YAML file to specify: target_tables, skip_tables (can be specified multiple times)
-      --config-inline=        YAML object to specify: target_tables, skip_tables (can be specified multiple times)
-      --help                  Show this help
-      --version               Show this version
-```
-
-#### Example
+#### 4. Apply Changes
 
 ```shell
-# Apply schema to MSSQL database
-$ mssqldef -U sa -P password123 mydb < schema.sql
-
-# Export current schema
-$ mssqldef -U sa -P password123 mydb --export > current.sql
-
-# Use config file to filter tables
-$ cat > config.yml <<EOF
-target_tables: |
-  dbo\.users
-  dbo\.posts_\d+
-skip_tables: |
-  sys\..*
-  temp_.*
-EOF
-$ mssqldef -U sa -P password123 mydb --config=config.yml < schema.sql
-
-# Use inline YAML configuration
-$ mssqldef -U sa -P password123 mydb --config-inline="skip_tables: backup_.*" < schema.sql
-
-# Multiple configs with order preservation (latter wins)
-$ mssqldef -U sa -P password123 mydb --config=base.yml --config-inline="target_tables: dbo\..*" < schema.sql
+$sqldef [connection-options] < schema.sql
 ```
 
-## Supported features
+Apply the necessary DDLs to transform current schema to desired state.
 
-Following DDLs can be generated by updating `CREATE TABLE`.
-Some of them can also be used for input schema file.
+Running again shows no changes needed - operations are idempotent.
 
-- MySQL
-  - Table: CREATE TABLE, DROP TABLE
-  - Column: ADD COLUMN, CHANGE COLUMN, DROP COLUMN
-  - Index: ADD INDEX, ADD UNIQUE INDEX, CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX
-  - Primary key: ADD PRIMARY KEY, DROP PRIMARY KEY
-  - Foreign Key: ADD FOREIGN KEY, DROP FOREIGN KEY
-  - View: CREATE VIEW, CREATE OR REPLACE VIEW, DROP VIEW
-- PostgreSQL
-  - Table: CREATE TABLE, DROP TABLE
-  - Column: ADD COLUMN, ALTER COLUMN, DROP COLUMN
-  - Index: CREATE INDEX, CREATE UNIQUE INDEX, DROP INDEX
-  - Foreign / Primary Key: ADD FOREIGN KEY, DROP CONSTRAINT
-  - Policy: CREATE POLICY, DROP POLICY
-  - View: CREATE VIEW, CREATE OR REPLACE VIEW, DROP VIEW
-- SQLite3
-  - Table: CREATE TABLE, DROP TABLE, CREATE VIRTUAL TABLE
-  - Column: ADD COLUMN, DROP COLUMN
-  - Index: CREATE INDEX, DROP INDEX
-  - View: CREATE VIEW, DROP VIEW
-- SQL Server
-  - Table: CREATE TABLE, DROP TABLE
-  - Column: ADD COLUMN, DROP COLUMN, DROP CONSTRAINT
-  - Index: ADD INDEX, DROP INDEX
-  - Primary key: ADD PRIMARY KEY, DROP PRIMARY KEY
-  - VIEW: CREATE VIEW, DROP VIEW
+### Command Documentation
 
-## MySQL examples
-### CREATE TABLE
-```diff
-+CREATE TABLE users (
-+  name VARCHAR(40) DEFAULT NULL
-+);
-```
-
-Remove the statement to DROP TABLE.
-
-### ADD COLUMN
-```diff
- CREATE TABLE users (
-   name VARCHAR(40) DEFAULT NULL,
-+  created_at DATETIME NOT NULL
- );
-```
-
-Remove the line to DROP COLUMN.
-
-### CHANGE COLUMN
-```diff
- CREATE TABLE users (
--  name VARCHAR(40) DEFAULT NULL,
-+  name CHAR(40) DEFAULT NULL,
-   created_at DATETIME NOT NULL
- );
-```
-
-### ADD INDEX
-
-```diff
- CREATE TABLE users (
-   name CHAR(40) DEFAULT NULL,
-   created_at DATETIME NOT NULL,
-+  UNIQUE KEY index_name(name)
- );
-```
-
-or
-
-```diff
- CREATE TABLE users (
-   name CHAR(40) DEFAULT NULL,
-   created_at DATETIME NOT NULL
- );
-+
-+ALTER TABLE users ADD UNIQUE INDEX index_name(name);
-```
-
-Remove the line to DROP INDEX.
-
-### ADD PRIMARY KEY
-```diff
- CREATE TABLE users (
-+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-   name CHAR(40) DEFAULT NULL,
-   created_at datetime NOT NULL,
-   UNIQUE KEY index_name(name)
- );
-```
-
-Remove the line to DROP PRIMARY KEY.
-
-Composite primary key may not work for now.
-
-### ADD FOREIGN KEY
-
-```diff
- CREATE TABLE users (
-   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-   name CHAR(40) DEFAULT NULL,
-   created_at datetime NOT NULL,
-   UNIQUE KEY index_name(name)
- );
-
- CREATE TABLE posts (
-   user_id BIGINT UNSIGNED NOT NULL,
-+  CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id)
- );
-```
-
-Remove the line to DROP FOREIGN KEY.
-
-Composite foreign key may not work for now.
-
-### CREATE (OR REPLACE) VIEW
-
-```diff
- CREATE VIEW foo AS
-   select u.id as id, p.id as post_id
-   from  (
-     mysqldef_test.users as u
-     join mysqldef_test.posts as p on ((u.id = p.user_id))
-   )
- ;
-+ CREATE OR REPLACE VIEW foo AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
-```
-
-Remove the line to DROP VIEW.
-
-## PostgreSQL examples
-### CREATE TABLE
-```diff
-+CREATE TABLE users (
-+  id BIGINT PRIMARY KEY
-+);
-```
-
-Remove the statement to DROP TABLE.
-
-### ADD COLUMN
-```diff
- CREATE TABLE users (
-   id BIGINT PRIMARY KEY,
-+  name VARCHAR(40)
- );
-```
-
-Remove the line to DROP COLUMN.
-
-### CREATE INDEX
-
-```diff
- CREATE TABLE users (
-   id BIGINT PRIMARY KEY,
-   name VARCHAR(40)
- );
-+CREATE INDEX index_name on users (name);
-```
-
-Remove the line to DROP INDEX.
-
-### ADD FOREIGN KEY
-
-```diff
- CREATE TABLE users (
-   id BIGINT PRIMARY KEY,
-   name VARCHAR(40)
- );
- CREATE INDEX index_name on users (name);
-
- CREATE TABLE posts (
-   user_id BIGINT,
-+  CONSTRAINT fk_posts_user_id FOREIGN KEY (user_id) REFERENCES users (id)
- )
-```
-
-Remove the line to DROP CONSTRAINT.
-
-### ADD POLICY
-
-```diff
- CREATE TABLE users (
-   id BIGINT PRIMARY KEY,
-   name VARCHAR(40)
- );
- CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((name)::text = current_user)
-
-+CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((name)::text = current_user)
-```
-
-Remove the line to DROP POLICY.
-
-### CREATE (OR REPLACE) VIEW
-
-```diff
- CREATE VIEW foo AS
-   select u.id as id, p.id as post_id
-   from  (
-     mysqldef_test.users as u
-     join mysqldef_test.posts as p on ((u.id = p.user_id))
-   )
- ;
-+ CREATE OR REPLACE VIEW foo AS select u.id as id, p.id as post_id from (users as u join posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
-```
-
-Remove the line to DROP VIEW.
-
-## Distributions
-### Linux
-A debian package might be supported in the future, but for now it has not been implemented yet.
-
-```shell
-# mysqldef
-wget -O - https://github.com/sqldef/sqldef/releases/latest/download/mysqldef_linux_amd64.tar.gz \
-  | tar xvz
-
-# psqldef
-wget -O - https://github.com/sqldef/sqldef/releases/latest/download/psqldef_linux_amd64.tar.gz \
-  | tar xvz
-```
-
-### macOS
-[Homebrew tap](https://github.com/sqldef/homebrew-sqldef) is available.
-
-```shell
-# mysqldef
-brew install sqldef/sqldef/mysqldef
-
-# psqldef
-brew install sqldef/sqldef/psqldef
-```
+* [mysqldef](./cmd-mysqldef.md)
+* [psqldef](./cmd-psqldef.md)
+* [sqlite3def](./cmd-sqlite3def.md)
+* [mssqldef](./cmd-mssqldef.md)
 
 ## Column, Table, and Index Renaming
 
@@ -607,7 +84,7 @@ CREATE TABLE users (
 );
 ```
 
-This will generate appropriate rename commands for each database:
+This generates appropriate rename commands for each database:
 - MySQL: `ALTER TABLE users CHANGE COLUMN username user_name text`
 - PostgreSQL: `ALTER TABLE users RENAME COLUMN username TO user_name`
 - SQL Server: `EXEC sp_rename 'users.username', 'user_name', 'COLUMN'`
@@ -645,7 +122,7 @@ CREATE TABLE users /* @rename from=user_accounts */ (
 );
 ```
 
-This will generate appropriate rename commands for each database:
+This generates appropriate rename commands for each database:
 - MySQL: `ALTER TABLE user_accounts RENAME TO users`
 - PostgreSQL: `ALTER TABLE user_accounts RENAME TO users`
 - SQL Server: `EXEC sp_rename 'user_accounts', 'users'`
@@ -689,11 +166,11 @@ Or with standalone index creation:
 CREATE INDEX new_email_idx /* @rename from=old_email_idx */ ON users (email);
 ```
 
-This will generate appropriate rename commands for each database:
+This generates appropriate rename commands for each database:
 - MySQL: `ALTER TABLE users RENAME INDEX old_email_idx TO new_email_idx`
 - PostgreSQL: `ALTER INDEX old_email_idx RENAME TO new_email_idx`
 - SQL Server: `EXEC sp_rename 'users.old_email_idx', 'new_email_idx', 'INDEX'`
-- SQLite: Drops and recreates the index (SQLite doesn't support index renaming)
+- SQLite: Drops and recreates the index (doesn't support index renaming)
 
 You can rename multiple indexes:
 
@@ -717,15 +194,63 @@ CREATE TABLE users (
 );
 ```
 
+## Installation
+
+### Pre-built binaries
+
+Download the single-binary executable for your favorite database from:
+
+https://github.com/sqldef/sqldef/releases
+
+### Linux
+
+Debian packages might be supported in the future, but for now they have not been implemented yet.
+
+```shell
+# mysqldef
+wget -O - https://github.com/sqldef/sqldef/releases/latest/download/mysqldef_linux_amd64.tar.gz \
+  | tar xvz
+
+# psqldef
+wget -O - https://github.com/sqldef/sqldef/releases/latest/download/psqldef_linux_amd64.tar.gz \
+  | tar xvz
+
+# sqlite3def
+wget -O - https://github.com/sqldef/sqldef/releases/latest/download/sqlite3def_linux_amd64.tar.gz \
+  | tar xvz
+
+# mssqldef
+wget -O - https://github.com/sqldef/sqldef/releases/latest/download/mssqldef_linux_amd64.tar.gz \
+  | tar xvz
+```
+
+### macOS
+
+[Homebrew tap](https://github.com/sqldef/homebrew-sqldef) is available.
+
+```shell
+# mysqldef
+brew install sqldef/sqldef/mysqldef
+
+# psqldef
+brew install sqldef/sqldef/psqldef
+
+# sqlite3def
+brew install sqldef/sqldef/sqlite3def
+
+# mssqldef
+brew install sqldef/sqldef/mssqldef
+```
+
 ## Development
 
-If you update parser/parser.y, run:
+If you update `parser/parser.y`, run:
 
 ```shell
 $ make parser
 ```
 
-You can use the following command to prepare command line tools and DB servers for running tests.
+Use the following commands to prepare command line tools and DB servers for running tests.
 
 ```shell
 # Linux
@@ -793,4 +318,4 @@ but they're allowed to maintain every part of sqldef.
 
 Unless otherwise noted, the sqldef source files are distributed under the MIT License found in the LICENSE file.
 
-[parser](./parser) is distributed under the Apache Version 2.0 license found in the parser/LICENSE.md file.
+[parser](./parser) is distributed under the Apache Version 2.0 license found in the [parser/LICENSE.md](./parser/LICENSE.md) file.
