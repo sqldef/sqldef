@@ -760,15 +760,13 @@ and discuss how to implement that with the community.
 
 ## Releasing
 
-To release sqldef, push a commit to master and tag it. You don't need to make a Pull Request for each release.
+The `tagpr` and `sqldef` workflows are used to release sqldef.
 
-```shell
-# Edit CHANGELOG.md and VERSION files, and then:
-git add CHANGELOG.md VERSION
-git commit -m "Version X.Y.Z"
-git tag vX.Y.Z
-git push origin --tags && git push origin master
-```
+1. (optional) A maintainer labels a pull request (PR) with `minor` or `major` to manage the next version.
+2. When a PR is merged to the default branch, `tagpr` creates a PR to bump the version and update the CHANGELOG.md ("release PR").
+3. **A maintainer reviews the release PR and merges it.**
+4. `tagpr` creates and pushes a release tag, which triggers the next workflow.
+5. `sqldef` workflows creates a GitHub release, build artifacts, upload them to the GitHub release.
 
 Unless it's a pretty big change that needs a discussion, we encourage sqldef maintainers to merge and release
 their own Pull Requests without asking/waiting for reviews.
