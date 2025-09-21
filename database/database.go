@@ -50,6 +50,12 @@ type GeneratorConfig struct {
 	EnableDrop      bool     // Whether to enable DROP/REVOKE operations
 }
 
+type TransactionQueries struct {
+	Begin    string
+	Commit   string
+	Rollback string
+}
+
 // Abstraction layer for multiple kinds of databases
 type Database interface {
 	DumpDDLs() (string, error)
@@ -57,18 +63,33 @@ type Database interface {
 	Close() error
 	GetDefaultSchema() string
 	SetGeneratorConfig(config GeneratorConfig)
+	GetTransactionQueries() TransactionQueries
+}
+
+func isDryRun(d Database) bool {
+	_, isDryRun := d.(*DryRunDatabase)
+	return isDryRun
 }
 
 func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddlSuffix string) error {
+	if isDryRun(d) {
+		fmt.Println("-- dry run --")
+	} else {
+		fmt.Println("-- Apply --")
+	}
+
+	txQueries := d.GetTransactionQueries()
+	fmt.Printf("%s;\n", txQueries.Begin)
+
 	transaction, err := d.DB().Begin()
 	if err != nil {
 		return err
 	}
-	fmt.Println("-- Apply --")
 	if len(beforeApply) > 0 {
 		fmt.Println(beforeApply)
 		if _, err := transaction.Exec(beforeApply); err != nil {
 			transaction.Rollback()
+			fmt.Printf("%s;\n", txQueries.Rollback)
 			return err
 		}
 	}
@@ -112,10 +133,12 @@ func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddl
 		}
 		if err != nil {
 			transaction.Rollback()
+			fmt.Printf("%s;\n", txQueries.Rollback)
 			return err
 		}
 	}
 	transaction.Commit()
+	fmt.Printf("%s;\n", txQueries.Commit)
 	return nil
 }
 

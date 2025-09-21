@@ -73,8 +73,12 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 	}
 
 	if options.DryRun || len(options.CurrentFile) > 0 {
-		showDDLs(ddls, options.EnableDrop, options.BeforeApply, ddlSuffix)
-		return
+		dryRunDB, err := database.NewDryRunDatabase(db)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer dryRunDB.Close()
+		db = dryRunDB
 	}
 
 	err = database.RunDDLs(db, ddls, options.EnableDrop, options.BeforeApply, ddlSuffix)
@@ -132,21 +136,6 @@ func ReadFile(filepath string) (string, error) {
 		return "", err
 	}
 	return string(buf), nil
-}
-
-func showDDLs(ddls []string, enableDropTable bool, beforeApply string, ddlSuffix string) {
-	fmt.Println("-- dry run --")
-	if len(beforeApply) > 0 {
-		fmt.Println(beforeApply)
-	}
-	for _, ddl := range ddls {
-		if !enableDropTable && strings.Contains(ddl, "DROP TABLE") {
-			fmt.Printf("-- Skipped: %s;\n", ddl)
-			continue
-		}
-		fmt.Printf("%s;\n", ddl)
-		fmt.Print(ddlSuffix)
-	}
 }
 
 func ParseSkipTables(skipFile string) []string {

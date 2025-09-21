@@ -24,6 +24,10 @@ const (
 	nothingModified = "-- Nothing is modified --\n"
 )
 
+func wrapWithTransaction(ddls string) string {
+	return applyPrefix + "BEGIN;\n" + ddls + "COMMIT;\n"
+}
+
 func TestApply(t *testing.T) {
 	defer testutils.MustExecute("rm", "-f", "sqlite3def_test") // after-test cleanup
 
@@ -58,7 +62,7 @@ func TestSQLite3defApply(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -89,7 +93,7 @@ func TestSQLite3defDropTable(t *testing.T) {
 
 	dropTable := "DROP TABLE `users`;\n"
 	out := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--enable-drop", "--file", "schema.sql")
-	assertEquals(t, out, applyPrefix+dropTable)
+	assertEquals(t, out, wrapWithTransaction(dropTable))
 }
 
 func TestSQLite3defExport(t *testing.T) {
@@ -174,7 +178,7 @@ func TestSQLite3defConfigMerge(t *testing.T) {
 	// inline config should override file config, so posts will be skipped instead of users_10
 	// This means users_10 will be dropped (skipped without --enable-drop) and posts will be kept
 	apply := assertedExecute(t, "./sqlite3def", "--config", "config.yml", "--config-inline", "skip_tables: posts", "--file", "schema.sql", "sqlite3def_test")
-	assertEquals(t, apply, applyPrefix+"-- Skipped: DROP TABLE `users_10`;\n")
+	assertEquals(t, apply, wrapWithTransaction("-- Skipped: DROP TABLE `users_10`;\n"))
 }
 
 func TestSQLite3defMultipleConfigs(t *testing.T) {
@@ -200,7 +204,7 @@ func TestSQLite3defMultipleConfigs(t *testing.T) {
 	// users_10 is NOT in the final skip list, so it will be dropped
 	// comments IS in the final skip list, so it won't be touched (even though it's not in schema.sql)
 	apply := assertedExecute(t, "./sqlite3def", "--config", "config1.yml", "--config", "config2.yml", "--config", "config3.yml", "--file", "schema.sql", "sqlite3def_test")
-	assertEquals(t, apply, applyPrefix+"-- Skipped: DROP TABLE `users_10`;\n")
+	assertEquals(t, apply, wrapWithTransaction("-- Skipped: DROP TABLE `users_10`;\n"))
 }
 
 func TestSQLite3defMultipleInlineConfigs(t *testing.T) {
@@ -271,7 +275,7 @@ func TestSQLite3defVirtualTable(t *testing.T) {
 		  fts5tbl_\w+
 	`))
 	actual := assertedExecute(t, "./sqlite3def", "--config", "config.yml", "--file", "schema.sql", "sqlite3def_test")
-	assertEquals(t, actual, applyPrefix+createTableFts5+createTableRtreeA)
+	assertEquals(t, actual, wrapWithTransaction(createTableFts5+createTableRtreeA))
 	actual = assertedExecute(t, "./sqlite3def", "--config", "config.yml", "--file", "schema.sql", "sqlite3def_test")
 	assertEquals(t, actual, nothingModified)
 }
@@ -294,7 +298,7 @@ func TestSQLite3defCreateTrigger(t *testing.T) {
 		);
 		create view user_view as select * from users;
 	`)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	queries := map[string]string{
@@ -367,7 +371,7 @@ func TestSQLite3defCreateTrigger(t *testing.T) {
 		END;
 	`)
 
-	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTrigger)
+	assertApplyOutput(t, createTable+createTrigger, wrapWithTransaction(createTrigger))
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 }
 
@@ -391,11 +395,11 @@ func TestSQLite3defDropTrigger(t *testing.T) {
 			insert into logs(typ, typ_id, body) values ('user', NEW.id, 'inserted user');
 		END;
 	`)
-	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTable+createTrigger)
+	assertApplyOutput(t, createTable+createTrigger, wrapWithTransaction(createTable+createTrigger))
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 
-	assertApplyOutput(t, createTable, applyPrefix+"-- Skipped: DROP TRIGGER `users_insert`;\n")
-	assertApplyOptionsOutput(t, createTable, applyPrefix+"DROP TRIGGER `users_insert`;\n", "--enable-drop")
+	assertApplyOutput(t, createTable, wrapWithTransaction("-- Skipped: DROP TRIGGER `users_insert`;\n"))
+	assertApplyOptionsOutput(t, createTable, wrapWithTransaction("DROP TRIGGER `users_insert`;\n"), "--enable-drop")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -421,7 +425,7 @@ func TestSQLite3defChangeTrigger(t *testing.T) {
 			insert into logs(typ, typ_id, body) values ('user', NEW.id, 'inserted user');
 		END;
 	`)
-	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTable+createTrigger)
+	assertApplyOutput(t, createTable+createTrigger, wrapWithTransaction(createTable+createTrigger))
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 
 	changeTrigger := stripHeredoc(`
@@ -430,7 +434,7 @@ func TestSQLite3defChangeTrigger(t *testing.T) {
 			insert into logs(typ, typ_id, body) values ('user', NEW.id, 'user inserted');
 		END;
 	`)
-	assertApplyOptionsOutput(t, createTable+changeTrigger, applyPrefix+"DROP TRIGGER `users_insert`;\n"+changeTrigger, "--enable-drop")
+	assertApplyOptionsOutput(t, createTable+changeTrigger, wrapWithTransaction("DROP TRIGGER `users_insert`;\n"+changeTrigger), "--enable-drop")
 	assertApplyOutput(t, createTable+changeTrigger, nothingModified)
 }
 
@@ -532,10 +536,10 @@ func TestSQLite3defConfigOrderPreserved(t *testing.T) {
 		CREATE TABLE posts (id integer primary key);
 		CREATE TABLE comments (id integer primary key);
 	`)
-	assertApplyOutput(t, createTable, applyPrefix+
+	assertApplyOutput(t, createTable, wrapWithTransaction(
 		"CREATE TABLE users (id integer primary key);\n"+
-		"CREATE TABLE posts (id integer primary key);\n"+
-		"CREATE TABLE comments (id integer primary key);\n")
+			"CREATE TABLE posts (id integer primary key);\n"+
+			"CREATE TABLE comments (id integer primary key);\n"))
 
 	// Create config files
 	config1 := "config1.yml"

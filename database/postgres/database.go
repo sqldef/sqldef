@@ -39,6 +39,14 @@ func (d *PostgresDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
 	d.generatorConfig = config
 }
 
+func (d *PostgresDatabase) GetTransactionQueries() database.TransactionQueries {
+	return database.TransactionQueries{
+		Begin:    "BEGIN",
+		Commit:   "COMMIT",
+		Rollback: "ROLLBACK",
+	}
+}
+
 func (d *PostgresDatabase) DumpDDLs() (string, error) {
 	var ddls []string
 

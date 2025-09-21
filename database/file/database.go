@@ -37,3 +37,11 @@ func (f FileDatabase) GetDefaultSchema() string {
 func (d *FileDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
 	// Not implemented for file - privileges not supported yet
 }
+
+func (d *FileDatabase) GetTransactionQueries() database.TransactionQueries {
+	return database.TransactionQueries{
+		Begin:    "BEGIN",
+		Commit:   "COMMIT",
+		Rollback: "ROLLBACK",
+	}
+}
