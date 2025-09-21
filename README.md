@@ -1,26 +1,74 @@
 # sqldef [![sqldef](https://github.com/sqldef/sqldef/actions/workflows/sqldef.yml/badge.svg)](https://github.com/sqldef/sqldef/actions/workflows/sqldef.yml)
 
-The easiest idempotent schema management by SQL for MySQL / PostgreSQL / SQLite3 / SQL Server databases.
+**sqldef** is the easiest idempotent schema management tool for MySQL, PostgreSQL, SQLite3, and SQL Server that uses plain SQL DDLs. Define your desired schema in SQL, and sqldef generates and applies the migrations to update your database.
+
+With sqldef, you maintain a single SQL file with your complete schema. To modify your schema - add columns, change constraints, or create indexes - simply edit this file. sqldef compares desired against current schema and generates the appropriate DDLs, ensuring your database reaches the desired state from any starting point.
+
+Each database gets its own command (`mysqldef`, `psqldef`, `sqlite3def`, `mssqldef`) that mimics the connection options of the native database client, making it familiar and easy to integrate into existing workflows. The tool comes as a single binary with no dependencies, and provides idempotent operations that are safe to run multiple times.
 
 This is inspired by [Ridgepole](https://github.com/ridgepole/ridgepole) but using SQL,
 so there's no need to remember Ruby DSL.
 
 ![demo](./demo.gif)
 
-## Installation
-
-Download the single-binary executable for your favorite database from:
-
-https://github.com/sqldef/sqldef/releases
-
 ## Usage
 
-There are `mysqldef`, `psqldef`, `sqlite3def`, and `mssqldef` provided for each database:
+### Basic Workflow
 
-* [mysqldef](./mysqldef.md) for MySQL
-* [psqldef](./psqldef.md) for PostgreSQL
-* [sqlite3def](./sqlite3def.md) for SQLite3
-* [mssqldef](./mssqldef.md) for SQL Server
+This is the basic workflow, which is identical across all databases - only the connection options differ between commands.
+
+**Note:** Replace `$sqldef` with the appropriate command for your database:
+
+- `mysqldef` for MySQL
+- `psqldef` for PostgreSQL
+- `sqlite3def` for SQLite
+- `mssqldef` for SQL Server
+
+#### 1. Export Current Schema
+
+```shell
+$sqldef [connection-options] --export > schema.sql
+```
+
+Export the existing database schema to review your starting point.
+
+#### 2. Modify the Schema
+
+Edit `schema.sql` to add, remove, or change columns/tables/indexes:
+
+```sql
+CREATE TABLE users (
+  id BIGINT PRIMARY KEY,
+  name VARCHAR(100),
+  age INTEGER,  -- Added new column
+  created_at TIMESTAMP
+);
+```
+
+#### 3. Preview Changes
+
+```shell
+$sqldef [connection-options] --dry-run < schema.sql
+```
+
+Show the migrations that will be applied without executing them (e.g., `ALTER TABLE users ADD COLUMN age INTEGER`).
+
+#### 4. Apply Changes
+
+```shell
+$sqldef [connection-options] < schema.sql
+```
+
+Apply the necessary DDLs to transform current schema to desired state.
+
+Running again shows no changes needed - operations are idempotent.
+
+### Command Documentation
+
+* [mysqldef](./cmd-mysqldef.md)
+* [psqldef](./cmd-psqldef.md)
+* [sqlite3def](./cmd-sqlite3def.md)
+* [mssqldef](./cmd-mssqldef.md)
 
 ## Column, Table, and Index Renaming
 
@@ -36,7 +84,7 @@ CREATE TABLE users (
 );
 ```
 
-This will generate appropriate rename commands for each database:
+This generates appropriate rename commands for each database:
 - MySQL: `ALTER TABLE users CHANGE COLUMN username user_name text`
 - PostgreSQL: `ALTER TABLE users RENAME COLUMN username TO user_name`
 - SQL Server: `EXEC sp_rename 'users.username', 'user_name', 'COLUMN'`
@@ -74,7 +122,7 @@ CREATE TABLE users /* @rename from=user_accounts */ (
 );
 ```
 
-This will generate appropriate rename commands for each database:
+This generates appropriate rename commands for each database:
 - MySQL: `ALTER TABLE user_accounts RENAME TO users`
 - PostgreSQL: `ALTER TABLE user_accounts RENAME TO users`
 - SQL Server: `EXEC sp_rename 'user_accounts', 'users'`
@@ -118,11 +166,11 @@ Or with standalone index creation:
 CREATE INDEX new_email_idx /* @rename from=old_email_idx */ ON users (email);
 ```
 
-This will generate appropriate rename commands for each database:
+This generates appropriate rename commands for each database:
 - MySQL: `ALTER TABLE users RENAME INDEX old_email_idx TO new_email_idx`
 - PostgreSQL: `ALTER INDEX old_email_idx RENAME TO new_email_idx`
 - SQL Server: `EXEC sp_rename 'users.old_email_idx', 'new_email_idx', 'INDEX'`
-- SQLite: Drops and recreates the index (SQLite doesn't support index renaming)
+- SQLite: Drops and recreates the index (doesn't support index renaming)
 
 You can rename multiple indexes:
 
@@ -146,11 +194,17 @@ CREATE TABLE users (
 );
 ```
 
-## Distributions
+## Installation
+
+### Pre-built binaries
+
+Download the single-binary executable for your favorite database from:
+
+https://github.com/sqldef/sqldef/releases
 
 ### Linux
 
-A debian package might be supported in the future, but for now it has not been implemented yet.
+Debian packages might be supported in the future, but for now they have not been implemented yet.
 
 ```shell
 # mysqldef
@@ -159,6 +213,14 @@ wget -O - https://github.com/sqldef/sqldef/releases/latest/download/mysqldef_lin
 
 # psqldef
 wget -O - https://github.com/sqldef/sqldef/releases/latest/download/psqldef_linux_amd64.tar.gz \
+  | tar xvz
+
+# sqlite3def
+wget -O - https://github.com/sqldef/sqldef/releases/latest/download/sqlite3def_linux_amd64.tar.gz \
+  | tar xvz
+
+# mssqldef
+wget -O - https://github.com/sqldef/sqldef/releases/latest/download/mssqldef_linux_amd64.tar.gz \
   | tar xvz
 ```
 
@@ -172,17 +234,23 @@ brew install sqldef/sqldef/mysqldef
 
 # psqldef
 brew install sqldef/sqldef/psqldef
+
+# sqlite3def
+brew install sqldef/sqldef/sqlite3def
+
+# mssqldef
+brew install sqldef/sqldef/mssqldef
 ```
 
 ## Development
 
-If you update parser/parser.y, run:
+If you update `parser/parser.y`, run:
 
 ```shell
 $ make parser
 ```
 
-You can use the following command to prepare command line tools and DB servers for running tests.
+Use the following commands to prepare command line tools and DB servers for running tests.
 
 ```shell
 # Linux
@@ -250,4 +318,4 @@ but they're allowed to maintain every part of sqldef.
 
 Unless otherwise noted, the sqldef source files are distributed under the MIT License found in the LICENSE file.
 
-[parser](./parser) is distributed under the Apache Version 2.0 license found in the parser/LICENSE.md file.
+[parser](./parser) is distributed under the Apache Version 2.0 license found in the [parser/LICENSE.md](./parser/LICENSE.md) file.

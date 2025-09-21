@@ -40,8 +40,8 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		Version    bool     `long:"version" description:"Show this version"`
 
 		// Custom handlers for config flags to preserve order
-		Config       func(string) `long:"config" description:"YAML file to specify: target_tables, skip_tables (can be specified multiple times)"`
-		ConfigInline func(string) `long:"config-inline" description:"YAML object to specify: target_tables, skip_tables (can be specified multiple times)"`
+		Config       func(string) `long:"config" description:"YAML configuration file (can be specified multiple times)"`
+		ConfigInline func(string) `long:"config-inline" description:"YAML configuration as inline string (can be specified multiple times)"`
 	}
 
 	opts.Config = func(path string) {
