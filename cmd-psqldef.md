@@ -27,7 +27,7 @@ Application Options:
 
 Use `PGSSLMODE` environment variable to specify sslmode.
 
-## Usage
+## Synopsis
 
 ```shell
 # Verify PostgreSQL server connectivity

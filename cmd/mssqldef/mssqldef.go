@@ -60,6 +60,13 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 
 	if opts.Help {
 		parser.WriteHelp(os.Stdout)
+		var gitRef string
+		if version != "dev" {
+			gitRef = "v" + version
+		} else {
+			gitRef = "master"
+		}
+		fmt.Printf("\nFor more information, see: https://github.com/sqldef/sqldef/blob/%s/cmd-mssqldef.md\n", gitRef)
 		os.Exit(0)
 	}
 

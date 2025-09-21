@@ -15,7 +15,7 @@ Application Options:
       --version               Show this version
 ```
 
-## Usage
+## Synopsis
 
 ```shell
 # Create SQLite database and tables
