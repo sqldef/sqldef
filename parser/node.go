@@ -586,7 +586,7 @@ func (ts *TableSpec) addForeignKey(foreignKey *ForeignKeyDefinition) {
 type ColumnDefinition struct {
 	Name          ColIdent
 	Type          ColumnType
-	InlineComment []byte // For inline comments like -- @rename from=oldname
+	InlineComment []byte // For inline comments like -- @renamed from=oldname
 }
 
 // Format formats the node.

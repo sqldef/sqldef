@@ -366,7 +366,7 @@ RenameColumn:
   desired: |
     CREATE TABLE users (
       id bigint NOT NULL,
-      user_name text, -- @rename from=username
+      user_name text, -- @renamed from=username
       age integer
     );
   output: |
@@ -382,7 +382,7 @@ RenameColumnWithTypeChange:
   desired: |
     CREATE TABLE users (
       id bigint NOT NULL,
-      user_name text NOT NULL, -- @rename from=username
+      user_name text NOT NULL, -- @renamed from=username
       age integer
     );
   output: |
@@ -398,7 +398,7 @@ RenameColumnIdempotency:
   desired: |
     CREATE TABLE users (
       id bigint NOT NULL,
-      user_name text, -- @rename from=username
+      user_name text, -- @renamed from=username
       age integer
     );
   output: ""
@@ -415,7 +415,7 @@ RenameColumnConflictingNames:
     CREATE TABLE users (
       id bigint NOT NULL,
       username text,
-      user_name varchar(100), -- @rename from=username
+      user_name varchar(100), -- @renamed from=username
       age integer
     );
   error: "cannot rename column 'username' to 'user_name' - column 'username' still exists"
@@ -430,7 +430,7 @@ RenameColumnQuotedDoubleQuotes:
   desired: |
     CREATE TABLE users (
       id bigint NOT NULL,
-      foobar text, -- @rename from="foo bar"
+      foobar text, -- @renamed from="foo bar"
       age integer
     );
   output: |
@@ -446,7 +446,7 @@ RenameColumnWithSpecialChars:
   desired: |
     CREATE TABLE users (
       id bigint NOT NULL,
-      column_with_underscore varchar(50), -- @rename from="column-with-dash"
+      column_with_underscore varchar(50), -- @renamed from="column-with-dash"
       age integer
     );
   output: |
@@ -462,7 +462,7 @@ RenameColumnWithDot:
   desired: |
     CREATE TABLE users (
       id bigint NOT NULL,
-      special_column text NOT NULL, -- @rename from="special.column"
+      special_column text NOT NULL, -- @renamed from="special.column"
       age integer
     );
   output: |
@@ -478,7 +478,7 @@ RenameColumnWithCStyleComment:
   desired: |
     CREATE TABLE users (
       id bigint NOT NULL,
-      user_name varchar(100), /* @rename from=username */
+      user_name varchar(100), /* @renamed from=username */
       age integer
     );
   output: |
@@ -495,8 +495,8 @@ RenameMultipleColumns:
   desired: |
     CREATE TABLE users (
       id bigint NOT NULL,
-      username text, -- @rename from="user name"
-      email_address varchar(100), -- @rename from="email@address"
+      username text, -- @renamed from="user name"
+      email_address varchar(100), -- @renamed from="email@address"
       age integer
     );
   output: |
@@ -511,7 +511,7 @@ RenameTable:
       age integer
     );
   desired: |
-    CREATE TABLE users ( -- @rename from=user_accounts
+    CREATE TABLE users ( -- @renamed from=user_accounts
       id bigint NOT NULL,
       username text,
       age integer
@@ -526,7 +526,7 @@ RenameTableWithCommentVariant:
       name text
     );
   desired: |
-    CREATE TABLE new_users /* @rename from=old_users */ (
+    CREATE TABLE new_users /* @renamed from=old_users */ (
       id bigint NOT NULL,
       name text
     );
@@ -540,7 +540,7 @@ RenameTableWithQuotedName:
       name text
     );
   desired: |
-    CREATE TABLE `user_profiles` ( -- @rename from="user accounts"
+    CREATE TABLE `user_profiles` ( -- @renamed from="user accounts"
       id bigint NOT NULL,
       name text
     );
@@ -556,9 +556,9 @@ RenameTableAndMultipleColumnChanges:
       old_field text
     );
   desired: |
-    CREATE TABLE accounts ( -- @rename from=old_accounts
+    CREATE TABLE accounts ( -- @renamed from=old_accounts
       id bigint NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      username varchar(100), -- @rename from=user_name
+      username varchar(100), -- @renamed from=user_name
       is_active boolean DEFAULT true,
       created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -584,7 +584,7 @@ RenameIndex:
       id bigint NOT NULL,
       email varchar(255),
       username varchar(100),
-      INDEX new_email_idx (email) -- @rename from=old_email_idx
+      INDEX new_email_idx (email) -- @renamed from=old_email_idx
     );
   output: |
     ALTER TABLE `users` RENAME INDEX `old_email_idx` TO `new_email_idx`;
@@ -601,7 +601,7 @@ RenameIndexStandalone:
       id bigint NOT NULL,
       email varchar(255)
     );
-    CREATE INDEX user_email_idx /* @rename from=email_idx */ ON users (email);
+    CREATE INDEX user_email_idx /* @renamed from=email_idx */ ON users (email);
   output: |
     ALTER TABLE `users` RENAME INDEX `email_idx` TO `user_email_idx`;
 
@@ -616,7 +616,7 @@ RenameUniqueIndex:
     CREATE TABLE users (
       id bigint NOT NULL,
       email varchar(255),
-      UNIQUE KEY unique_email (email) -- @rename from=old_unique_email
+      UNIQUE KEY unique_email (email) -- @renamed from=old_unique_email
     );
   output: |
     ALTER TABLE `users` RENAME INDEX `old_unique_email` TO `unique_email`;
@@ -635,8 +635,8 @@ RenameMultipleIndexes:
       id bigint NOT NULL,
       email varchar(255),
       username varchar(100),
-      INDEX email_idx (email), -- @rename from=idx_email
-      INDEX username_idx (username) -- @rename from=idx_username
+      INDEX email_idx (email), -- @renamed from=idx_email
+      INDEX username_idx (username) -- @renamed from=idx_username
     );
   output: |
     ALTER TABLE `users` RENAME INDEX `idx_email` TO `email_idx`;

@@ -154,8 +154,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				mergeTable(currentTable, desired.table)
 			} else {
 				// Table not found. Check if it's a rename from another table.
-				if desired.table.renameFrom != "" {
-					oldTableName := g.normalizeOldTableName(desired.table.renameFrom, desired.table.name)
+				if desired.table.renamedFrom != "" {
+					oldTableName := g.normalizeOldTableName(desired.table.renamedFrom, desired.table.name)
 					oldTable := findTableByName(g.currentTables, oldTableName)
 					if oldTable != nil {
 						// Found the old table, generate rename DDL
@@ -335,7 +335,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			// Check if this index was renamed (don't drop if it was renamed)
 			isRenamed := false
 			for _, desiredIndex := range desiredTable.indexes {
-				if desiredIndex.renameFrom == index.name {
+				if desiredIndex.renamedFrom == index.name {
 					isRenamed = true
 					break
 				}
@@ -362,7 +362,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			// Check if this column is being renamed (not dropped)
 			isRenamed := false
 			for _, desiredColumn := range desiredTable.columns {
-				if desiredColumn.renameFrom == column.name {
+				if desiredColumn.renamedFrom == column.name {
 					isRenamed = true
 					break
 				}
@@ -514,10 +514,10 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		// deep copy to avoid modifying the original
 		desiredColumn := *desiredColumnPtr
 
-		if desiredColumn.renameFrom != "" {
-			if _, conflictExists := desired.table.columns[desiredColumn.renameFrom]; conflictExists {
+		if desiredColumn.renamedFrom != "" {
+			if _, conflictExists := desired.table.columns[desiredColumn.renamedFrom]; conflictExists {
 				return ddls, fmt.Errorf("cannot rename column '%s' to '%s' - column '%s' still exists",
-					desiredColumn.renameFrom, desiredColumn.name, desiredColumn.renameFrom)
+					desiredColumn.renamedFrom, desiredColumn.name, desiredColumn.renamedFrom)
 			}
 		}
 
@@ -530,8 +530,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		if currentColumn == nil {
 			// Check if this is a renamed column
 			var renameFromColumn *Column
-			if desiredColumn.renameFrom != "" {
-				renameFromColumn = findColumnByName(currentTable.columns, desiredColumn.renameFrom)
+			if desiredColumn.renamedFrom != "" {
+				renameFromColumn = findColumnByName(currentTable.columns, desiredColumn.renamedFrom)
 			}
 
 			if renameFromColumn != nil {
@@ -933,8 +933,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		} else {
 			// Check if this is a renamed index
 			var renameFromIndex *Index
-			if desiredIndex.renameFrom != "" {
-				renameFromIndex = findIndexByName(currentTable.indexes, desiredIndex.renameFrom)
+			if desiredIndex.renamedFrom != "" {
+				renameFromIndex = findIndexByName(currentTable.indexes, desiredIndex.renamedFrom)
 			}
 
 			if renameFromIndex != nil {
@@ -1091,8 +1091,8 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 	if currentIndex == nil {
 		// Check if this is a renamed index
 		var renameFromIndex *Index
-		if desiredIndex.renameFrom != "" {
-			renameFromIndex = findIndexByName(currentTable.indexes, desiredIndex.renameFrom)
+		if desiredIndex.renamedFrom != "" {
+			renameFromIndex = findIndexByName(currentTable.indexes, desiredIndex.renamedFrom)
 		}
 
 		if renameFromIndex != nil {
