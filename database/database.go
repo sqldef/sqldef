@@ -78,14 +78,33 @@ func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddl
 		fmt.Println("-- Apply --")
 	}
 
-	txQueries := d.GetTransactionQueries()
-	fmt.Printf("%s;\n", txQueries.Begin)
+	ddlsInTx := []string{}
+	ddlsNotInTx := []string{}
 
-	transaction, err := d.DB().Begin()
-	if err != nil {
-		return err
+	for _, ddl := range ddls {
+		if TransactionSupported(ddl) {
+			ddlsInTx = append(ddlsInTx, ddl)
+		} else {
+			ddlsNotInTx = append(ddlsNotInTx, ddl)
+		}
 	}
+
+	txQueries := d.GetTransactionQueries()
+
+	var transaction *sql.Tx
+	var err error
+
+	if len(ddlsInTx) > 0 || len(beforeApply) > 0 {
+		transaction, err = d.DB().Begin()
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("%s;\n", txQueries.Begin)
+	}
+
 	if len(beforeApply) > 0 {
+		// beforeApply is executed in transaction
 		fmt.Println(beforeApply)
 		if _, err := transaction.Exec(beforeApply); err != nil {
 			_ = transaction.Rollback()
@@ -93,59 +112,68 @@ func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddl
 			return err
 		}
 	}
-	for _, ddl := range ddls {
-		// Skip the DDL that contains the following operations unless enableDrop.
-		// * DROP TABLE
-		// * DROP SCHEMA
-		// * DROP COLUMN
-		// * DROP ROLE / USER
-		// * DROP FUNCTION / PROCEDURE
-		// * DROP TRIGGER
-		// less dangerous DDLs
-		// * DROP VIEW
-		// * DROP INDEX
-		// * DROP SEQUENCE
-		// * DROP TYPE
-		// * DROP MATERIALIZED VIEW
-		if !enableDrop && (strings.Contains(ddl, "DROP TABLE") ||
-			strings.Contains(ddl, "DROP SCHEMA") ||
-			strings.Contains(ddl, "DROP COLUMN") ||
-			strings.Contains(ddl, "DROP ROLE") ||
-			strings.Contains(ddl, "DROP USER") ||
-			strings.Contains(ddl, "DROP FUNCTION") ||
-			strings.Contains(ddl, "DROP PROCEDURE") ||
-			strings.Contains(ddl, "DROP TRIGGER") ||
-			strings.Contains(ddl, "DROP VIEW") ||
-			strings.Contains(ddl, "DROP MATERIALIZED VIEW") ||
-			strings.Contains(ddl, "DROP INDEX") ||
-			strings.Contains(ddl, "DROP SEQUENCE") ||
-			strings.Contains(ddl, "DROP TYPE")) {
+
+	// DDLs in transaction
+	for _, ddl := range ddlsInTx {
+		// Skip the DDL that contains destructive operations unless enableDrop.
+		if !enableDrop && IsDropStatement(ddl) {
 			fmt.Printf("-- Skipped: %s;\n", ddl)
 			continue
 		}
 		fmt.Printf("%s;\n", ddl)
 		fmt.Print(ddlSuffix)
-		var err error
-		if TransactionSupported(ddl) {
-			_, err = transaction.Exec(ddl)
-		} else {
-			_, err = d.DB().Exec(ddl)
-		}
+		_, err = transaction.Exec(ddl)
 		if err != nil {
-			transaction.Rollback()
+			_ = transaction.Rollback()
 			fmt.Printf("%s;\n", txQueries.Rollback)
 			return err
 		}
 	}
-	if err := transaction.Commit(); err != nil {
-		return err
+
+	// Only commit if we started a transaction
+	if transaction != nil {
+		if err := transaction.Commit(); err != nil {
+			return err
+		}
+		fmt.Printf("%s;\n", txQueries.Commit)
 	}
-	fmt.Printf("%s;\n", txQueries.Commit)
+
+	// DDLs not in transaction
+	for _, ddl := range ddlsNotInTx {
+		// Skip the DDL that contains destructive operations unless enableDrop.
+		if !enableDrop && IsDropStatement(ddl) {
+			fmt.Printf("-- Skipped: %s;\n", ddl)
+			continue
+		}
+
+		fmt.Printf("%s;\n", ddl)
+		fmt.Print(ddlSuffix)
+		_, err = d.DB().Exec(ddl)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func TransactionSupported(ddl string) bool {
 	return !strings.Contains(strings.ToLower(ddl), "concurrently")
+}
+
+func IsDropStatement(ddl string) bool {
+	return strings.Contains(ddl, "DROP TABLE") ||
+		strings.Contains(ddl, "DROP SCHEMA") ||
+		strings.Contains(ddl, "DROP COLUMN") ||
+		strings.Contains(ddl, "DROP ROLE") ||
+		strings.Contains(ddl, "DROP USER") ||
+		strings.Contains(ddl, "DROP FUNCTION") ||
+		strings.Contains(ddl, "DROP PROCEDURE") ||
+		strings.Contains(ddl, "DROP TRIGGER") ||
+		strings.Contains(ddl, "DROP VIEW") ||
+		strings.Contains(ddl, "DROP MATERIALIZED VIEW") ||
+		strings.Contains(ddl, "DROP INDEX") ||
+		strings.Contains(ddl, "DROP SEQUENCE") ||
+		strings.Contains(ddl, "DROP TYPE")
 }
 
 func MergeGeneratorConfigs(configs []GeneratorConfig) GeneratorConfig {
