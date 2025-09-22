@@ -22,7 +22,62 @@ Application Options:
 $ sqlite3 mydb.db "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);"
 
 # Export current schema
+$ sqlite3def mydb.db --export
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY,
+    name TEXT
+);
+
+# Save it to edit
 $ sqlite3def mydb.db --export > schema.sql
+```
+
+Update schema.sql as follows:
+
+```diff
+ CREATE TABLE users (
+     id INTEGER PRIMARY KEY,
+-    name TEXT
++    name TEXT,
++    email TEXT NOT NULL
+ );
++
++CREATE INDEX idx_users_email ON users(email);
+```
+
+And then run:
+
+```shell
+# Preview migration plan (dry run)
+$ sqlite3def mydb.db --dry-run < schema.sql
+-- dry run --
+BEGIN;
+ALTER TABLE users ADD COLUMN email TEXT NOT NULL;
+CREATE INDEX idx_users_email ON users(email);
+COMMIT;
+
+# Apply DDLs
+$ sqlite3def mydb.db < schema.sql
+-- Apply --
+BEGIN;
+ALTER TABLE users ADD COLUMN email TEXT NOT NULL;
+CREATE INDEX idx_users_email ON users(email);
+COMMIT;
+
+# Operations are idempotent - safe to run multiple times
+$ sqlite3def mydb.db < schema.sql
+-- Nothing is modified --
+
+# Run without dropping tables and columns
+$ sqlite3def mydb.db < schema.sql
+-- Skipped: DROP TABLE old_users;
+
+# Run with drop operations enabled
+$ sqlite3def mydb.db --enable-drop < schema.sql
+-- Apply --
+BEGIN;
+DROP TABLE old_users;
+COMMIT;
 
 # Use config file to filter tables
 $ cat > config.yml <<EOF

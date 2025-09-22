@@ -68,26 +68,28 @@ And then run:
 ```shell
 # Preview migration plan (dry run)
 $ mysqldef -uroot test --dry-run < schema.sql
---- dry run ---
-Run: 'ALTER TABLE user ADD COLUMN created_at datetime NOT NULL ;'
-Run: 'ALTER TABLE user ADD INDEX index_name(name);'
+-- dry run --
+ALTER TABLE user ADD COLUMN created_at datetime NOT NULL ;
+ALTER TABLE user ADD INDEX index_name(name);
 
 # Apply DDLs
 $ mysqldef -uroot test < schema.sql
-Run: 'ALTER TABLE user ADD COLUMN created_at datetime NOT NULL ;'
-Run: 'ALTER TABLE user ADD INDEX index_name(name);'
+-- Apply --
+ALTER TABLE user ADD COLUMN created_at datetime NOT NULL ;
+ALTER TABLE user ADD INDEX index_name(name);
 
 # Operations are idempotent - safe to run multiple times
 $ mysqldef -uroot test < schema.sql
-Nothing is modified
+-- Nothing is modified --
 
 # Run without dropping tables and columns
 $ mysqldef -uroot test < schema.sql
-Skipped: 'DROP TABLE users;'
+-- Skipped: DROP TABLE users;
 
 # Run with drop operations enabled
 $ mysqldef -uroot test --enable-drop < schema.sql
-Run: 'DROP TABLE users;'
+-- Apply --
+DROP TABLE users;
 
 # Skip tables matching patterns (supports regular expressions)
 $ echo "user\n.*_bk\n.*_[0-9]{8}" > skip-tables
