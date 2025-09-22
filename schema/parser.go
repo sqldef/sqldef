@@ -173,7 +173,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 
 			return &Trigger{
 				statement: ddl,
-				name:      stmt.Trigger.Name.String(),
+				name:      parser.String(stmt.Trigger.Name),
 				tableName: stmt.Trigger.TableName.Name.String(),
 				time:      stmt.Trigger.Time,
 				event:     stmt.Trigger.Event,
