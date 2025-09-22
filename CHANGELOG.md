@@ -1,3 +1,8 @@
+## [v2.5.0](https://github.com/sqldef/sqldef/compare/v2.4.8...v2.5.0) - 2025-09-22
+- Rename @rename to @renamed (keep @rename as deprecated) by @gfx in https://github.com/sqldef/sqldef/pull/764
+- improve code quality suggested by golangci-lint(1) by @gfx in https://github.com/sqldef/sqldef/pull/766
+- build artifacts with go 1.25 by @gfx in https://github.com/sqldef/sqldef/pull/767
+
 ## [v2.4.8](https://github.com/sqldef/sqldef/compare/v2.4.7...v2.4.8) - 2025-09-21
 - mssqldef: Support FETCH INTO multiple variables by @chi-bd in https://github.com/sqldef/sqldef/pull/759
 - [doc] split README into each command by @gfx in https://github.com/sqldef/sqldef/pull/760
