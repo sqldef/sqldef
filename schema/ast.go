@@ -73,7 +73,7 @@ type Table struct {
 	policies    []Policy
 	privileges  []TablePrivilege
 	options     map[string]string
-	renameFrom  string // Previous table name if renamed via @rename annotation
+	renamedFrom string // Previous table name if renamed via @renamed annotation
 }
 
 type Column struct {
@@ -101,7 +101,7 @@ type Column struct {
 	identity      *Identity
 	sequence      *Sequence
 	generated     *Generated
-	renameFrom    string // Previous column name if renamed via @rename annotation
+	renamedFrom   string // Previous column name if renamed via @renamed annotation
 	// TODO: keyopt
 	// XXX: zerofill?
 }
@@ -120,7 +120,7 @@ type Index struct {
 	clustered         bool           // for MSSQL
 	partition         IndexPartition // for MSSQL
 	options           []IndexOption
-	renameFrom        string // Previous index name if renamed via @rename annotation
+	renamedFrom       string // Previous index name if renamed via @renamed annotation
 }
 
 type IndexColumn struct {

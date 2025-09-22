@@ -154,8 +154,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				mergeTable(currentTable, desired.table)
 			} else {
 				// Table not found. Check if it's a rename from another table.
-				if desired.table.renameFrom != "" {
-					oldTableName := g.normalizeOldTableName(desired.table.renameFrom, desired.table.name)
+				if desired.table.renamedFrom != "" {
+					oldTableName := g.normalizeOldTableName(desired.table.renamedFrom, desired.table.name)
 					oldTable := findTableByName(g.currentTables, oldTableName)
 					if oldTable != nil {
 						// Found the old table, generate rename DDL
@@ -335,7 +335,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			// Check if this index was renamed (don't drop if it was renamed)
 			isRenamed := false
 			for _, desiredIndex := range desiredTable.indexes {
-				if desiredIndex.renameFrom == index.name {
+				if desiredIndex.renamedFrom == index.name {
 					isRenamed = true
 					break
 				}
@@ -362,7 +362,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			// Check if this column is being renamed (not dropped)
 			isRenamed := false
 			for _, desiredColumn := range desiredTable.columns {
-				if desiredColumn.renameFrom == column.name {
+				if desiredColumn.renamedFrom == column.name {
 					isRenamed = true
 					break
 				}
@@ -514,10 +514,10 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		// deep copy to avoid modifying the original
 		desiredColumn := *desiredColumnPtr
 
-		if desiredColumn.renameFrom != "" {
-			if _, conflictExists := desired.table.columns[desiredColumn.renameFrom]; conflictExists {
+		if desiredColumn.renamedFrom != "" {
+			if _, conflictExists := desired.table.columns[desiredColumn.renamedFrom]; conflictExists {
 				return ddls, fmt.Errorf("cannot rename column '%s' to '%s' - column '%s' still exists",
-					desiredColumn.renameFrom, desiredColumn.name, desiredColumn.renameFrom)
+					desiredColumn.renamedFrom, desiredColumn.name, desiredColumn.renamedFrom)
 			}
 		}
 
@@ -530,8 +530,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		if currentColumn == nil {
 			// Check if this is a renamed column
 			var renameFromColumn *Column
-			if desiredColumn.renameFrom != "" {
-				renameFromColumn = findColumnByName(currentTable.columns, desiredColumn.renameFrom)
+			if desiredColumn.renamedFrom != "" {
+				renameFromColumn = findColumnByName(currentTable.columns, desiredColumn.renamedFrom)
 			}
 
 			if renameFromColumn != nil {
@@ -933,8 +933,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		} else {
 			// Check if this is a renamed index
 			var renameFromIndex *Index
-			if desiredIndex.renameFrom != "" {
-				renameFromIndex = findIndexByName(currentTable.indexes, desiredIndex.renameFrom)
+			if desiredIndex.renamedFrom != "" {
+				renameFromIndex = findIndexByName(currentTable.indexes, desiredIndex.renamedFrom)
 			}
 
 			if renameFromIndex != nil {
@@ -1091,8 +1091,8 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 	if currentIndex == nil {
 		// Check if this is a renamed index
 		var renameFromIndex *Index
-		if desiredIndex.renameFrom != "" {
-			renameFromIndex = findIndexByName(currentTable.indexes, desiredIndex.renameFrom)
+		if desiredIndex.renamedFrom != "" {
+			renameFromIndex = findIndexByName(currentTable.indexes, desiredIndex.renamedFrom)
 		}
 
 		if renameFromIndex != nil {
@@ -2780,7 +2780,7 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 	if desiredDefault != nil {
 		desiredExprSchema, desiredExpr = splitTableName(desiredDefault.expression, g.defaultSchema)
 	}
-	return strings.ToLower(currentExprSchema) == strings.ToLower(desiredExprSchema) && strings.ToLower(currentExpr) == strings.ToLower(desiredExpr)
+	return strings.EqualFold(currentExprSchema, desiredExprSchema) && strings.EqualFold(currentExpr, desiredExpr)
 }
 
 func (g *Generator) areSameValue(current, desired *Value) bool {
@@ -2803,9 +2803,9 @@ func (g *Generator) areSameValue(current, desired *Value) bool {
 	// NOTE: Boolean constants is evaluated as TINYINT(1) value in MySQL.
 	if g.mode == GeneratorModeMysql {
 		if desired.valueType == ValueTypeBool {
-			if strings.ToLower(string(desired.raw)) == "false" {
+			if strings.EqualFold(string(desired.raw), "false") {
 				desiredRaw = "0"
-			} else if strings.ToLower(string(desired.raw)) == "true" {
+			} else if strings.EqualFold(string(desired.raw), "true") {
 				desiredRaw = "1"
 			}
 		}
@@ -2833,9 +2833,9 @@ func areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 		return false
 	}
 	for i := 0; i < len(triggerA.body); i++ {
-		bodyA := strings.ToLower(strings.Replace(triggerA.body[i], " ", "", -1))
-		bodyB := strings.ToLower(strings.Replace(triggerB.body[i], " ", "", -1))
-		if bodyA != bodyB {
+		bodyA := strings.Replace(triggerA.body[i], " ", "", -1)
+		bodyB := strings.Replace(triggerB.body[i], " ", "", -1)
+		if !strings.EqualFold(bodyA, bodyB) {
 			return false
 		}
 	}
@@ -3059,16 +3059,16 @@ func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion
 }
 
 func areSamePolicies(policyA, policyB Policy) bool {
-	if strings.ToLower(policyA.scope) != strings.ToLower(policyB.scope) {
+	if !strings.EqualFold(policyA.scope, policyB.scope) {
 		return false
 	}
-	if strings.ToLower(policyA.permissive) != strings.ToLower(policyB.permissive) {
+	if !strings.EqualFold(policyA.permissive, policyB.permissive) {
 		return false
 	}
 	if normalizeUsing(policyA.using) != normalizeUsing(policyB.using) {
 		return fmt.Sprintf("(%s)", policyA.using) == policyB.using
 	}
-	if strings.ToLower(policyA.withCheck) != strings.ToLower(policyB.withCheck) {
+	if !strings.EqualFold(policyA.withCheck, policyB.withCheck) {
 		return fmt.Sprintf("(%s)", policyA.withCheck) == policyB.withCheck
 	}
 	if len(policyA.roles) != len(policyB.roles) {
@@ -3081,7 +3081,7 @@ func areSamePolicies(policyA, policyB Policy) bool {
 		return policyB.roles[i] <= policyB.roles[j]
 	})
 	for i := range policyA.roles {
-		if strings.ToLower(policyA.roles[i]) != strings.ToLower(policyB.roles[i]) {
+		if !strings.EqualFold(policyA.roles[i], policyB.roles[i]) {
 			return false
 		}
 	}

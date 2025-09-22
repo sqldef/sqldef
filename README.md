@@ -74,12 +74,12 @@ Running again shows no changes needed - operations are idempotent.
 
 ### Column Renaming
 
-sqldef supports renaming columns using the `-- @rename from=old_name` annotation:
+sqldef supports renaming columns using the `-- @renamed from=old_name` annotation:
 
 ```sql
 CREATE TABLE users (
   id bigint NOT NULL,
-  user_name text, -- @rename from=username
+  user_name text, -- @renamed from=username
   age integer
 );
 ```
@@ -95,17 +95,17 @@ For columns with special characters or spaces, use double quotes:
 ```sql
 CREATE TABLE users (
   id bigint NOT NULL,
-  column_with_underscore varchar(50), -- @rename from="column-with-dash"
-  normal_column text, -- @rename from="special column"
+  column_with_underscore varchar(50), -- @renamed from="column-with-dash"
+  normal_column text, -- @renamed from="special column"
 );
 ```
 
 ### Table Renaming
 
-sqldef supports renaming tables using the `-- @rename from=old_name` annotation on the CREATE TABLE line:
+sqldef supports renaming tables using the `-- @renamed from=old_name` annotation on the CREATE TABLE line:
 
 ```sql
-CREATE TABLE users ( -- @rename from=user_accounts
+CREATE TABLE users ( -- @renamed from=user_accounts
   id bigint NOT NULL,
   username text,
   age integer
@@ -115,7 +115,7 @@ CREATE TABLE users ( -- @rename from=user_accounts
 You can also use the block comment style:
 
 ```sql
-CREATE TABLE users /* @rename from=user_accounts */ (
+CREATE TABLE users /* @renamed from=user_accounts */ (
   id bigint NOT NULL,
   username text,
   age integer
@@ -131,7 +131,7 @@ This generates appropriate rename commands for each database:
 For tables with special characters or spaces, use double quotes:
 
 ```sql
-CREATE TABLE user_profiles ( -- @rename from="user accounts"
+CREATE TABLE user_profiles ( -- @renamed from="user accounts"
   id bigint NOT NULL,
   name text
 );
@@ -140,30 +140,30 @@ CREATE TABLE user_profiles ( -- @rename from="user accounts"
 You can combine table renaming with column renaming and other schema changes:
 
 ```sql
-CREATE TABLE accounts ( -- @rename from=old_accounts
+CREATE TABLE accounts ( -- @renamed from=old_accounts
   id bigint NOT NULL PRIMARY KEY,
-  username varchar(100) NOT NULL, -- @rename from=user_name
+  username varchar(100) NOT NULL, -- @renamed from=user_name
   is_active boolean DEFAULT true
 );
 ```
 
 ### Index Renaming
 
-sqldef supports renaming indexes using the `-- @rename from=old_name` or `/* @rename from=old_name */` annotation:
+sqldef supports renaming indexes using the `-- @renamed from=old_name` or `/* @renamed from=old_name */` annotation:
 
 ```sql
 CREATE TABLE users (
   id bigint NOT NULL,
   email varchar(255),
   username varchar(100),
-  INDEX new_email_idx (email) -- @rename from=old_email_idx
+  INDEX new_email_idx (email) -- @renamed from=old_email_idx
 );
 ```
 
 Or with standalone index creation:
 
 ```sql
-CREATE INDEX new_email_idx /* @rename from=old_email_idx */ ON users (email);
+CREATE INDEX new_email_idx /* @renamed from=old_email_idx */ ON users (email);
 ```
 
 This generates appropriate rename commands for each database:
@@ -179,8 +179,8 @@ CREATE TABLE users (
   id bigint NOT NULL,
   email varchar(255),
   username varchar(100),
-  INDEX email_idx (email), -- @rename from=idx_email
-  INDEX username_idx (username) -- @rename from=idx_username
+  INDEX email_idx (email), -- @renamed from=idx_email
+  INDEX username_idx (username) -- @renamed from=idx_username
 );
 ```
 
@@ -190,7 +190,7 @@ The rename annotation also works for unique indexes and constraints:
 CREATE TABLE users (
   id bigint NOT NULL,
   email varchar(255),
-  UNIQUE KEY unique_email (email) -- @rename from=old_unique_email
+  UNIQUE KEY unique_email (email) -- @renamed from=old_unique_email
 );
 ```
 

@@ -450,6 +450,82 @@ func TestSQLite3defHelp(t *testing.T) {
 	}
 }
 
+func TestDeprecatedRenameAnnotation(t *testing.T) {
+	resetTestDatabase()
+
+	// Create initial table with old column name
+	testutils.MustExecute("sqlite3", "sqlite3def_test", stripHeredoc(`
+		CREATE TABLE users (
+		    id integer NOT NULL PRIMARY KEY,
+		    username text NOT NULL
+		);`,
+	))
+
+	// Define schema using deprecated @rename annotation
+	schemaWithDeprecatedRename := stripHeredoc(`
+		CREATE TABLE users (
+		    id integer NOT NULL PRIMARY KEY,
+		    user_name text NOT NULL -- @rename from=username
+		);`,
+	)
+
+	writeFile("schema.sql", schemaWithDeprecatedRename)
+
+	// Execute sqlite3def and capture combined output (stdout + stderr)
+	out, err := testutils.Execute("./sqlite3def", "sqlite3def_test", "--file", "schema.sql")
+	if err != nil {
+		t.Fatalf("sqlite3def execution failed: %s\nOutput: %s", err, out)
+	}
+
+	// Check that the deprecation warning is present
+	if !strings.Contains(out, "-- WARNING: @rename is deprecated. Please use @renamed instead.") {
+		t.Errorf("Expected deprecation warning not found in output:\n%s", out)
+	}
+
+	// Verify that the rename operation actually worked
+	if !strings.Contains(out, "ALTER TABLE `users` RENAME COLUMN `username` TO `user_name`;") {
+		t.Errorf("Expected rename operation not found in output:\n%s", out)
+	}
+
+	// Verify the table structure is correct after rename
+	export := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--export")
+	if !strings.Contains(export, "\"user_name\" text NOT NULL") && !strings.Contains(export, "user_name text NOT NULL") {
+		t.Errorf("Column rename didn't work correctly. Export output:\n%s", export)
+	}
+
+	// Now test with @renamed (no warning expected)
+	testutils.MustExecute("sqlite3", "sqlite3def_test", stripHeredoc(`
+		DROP TABLE users;
+		CREATE TABLE users (
+		    id integer NOT NULL PRIMARY KEY,
+		    old_name text NOT NULL
+		);`,
+	))
+
+	schemaWithRenamed := stripHeredoc(`
+		CREATE TABLE users (
+		    id integer NOT NULL PRIMARY KEY,
+		    new_name text NOT NULL -- @renamed from=old_name
+		);`,
+	)
+
+	writeFile("schema.sql", schemaWithRenamed)
+	out, err = testutils.Execute("./sqlite3def", "sqlite3def_test", "--file", "schema.sql")
+	if err != nil {
+		t.Fatalf("sqlite3def execution failed: %s\nOutput: %s", err, out)
+	}
+
+	// Should NOT have warning for @renamed
+	if strings.Contains(out, "-- WARNING: @rename is deprecated") {
+		t.Errorf("Unexpected deprecation warning for @renamed in output:\n%s", out)
+	}
+
+	// Should still perform the rename
+	if !strings.Contains(out, "ALTER TABLE `users` RENAME COLUMN `old_name` TO `new_name`;") {
+		t.Errorf("Expected rename operation not found for @renamed annotation:\n%s", out)
+	}
+}
+
 func TestMain(m *testing.M) {
 	resetTestDatabase()
 	testutils.MustExecute("go", "build")

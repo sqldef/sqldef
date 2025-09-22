@@ -4,6 +4,7 @@ package schema
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -274,9 +275,9 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			generated:     parseGenerated(parsedCol.Type.Generated),
 		}
 
-		// Parse @rename annotation for each column
+		// Parse @renamed annotation for each column
 		if comment, ok := columnComments[parsedCol.Name.String()]; ok {
-			column.renameFrom = extractRenameFrom(comment)
+			column.renamedFrom = extractRenameFrom(comment)
 		}
 
 		if parsedCol.Type.Check != nil {
@@ -373,9 +374,9 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			constraintOptions: constraintOptions,
 		}
 
-		// Parse @rename annotation for this index
+		// Parse @renamed annotation for this index
 		if comment, ok := indexComments[name]; ok {
-			index.renameFrom = extractRenameFrom(comment)
+			index.renamedFrom = extractRenameFrom(comment)
 		}
 
 		indexes = append(indexes, index)
@@ -443,7 +444,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		foreignKeys: foreignKeys,
 		exclusions:  exclusions,
 		options:     stmt.TableSpec.Options,
-		renameFrom:  tableRenameFrom,
+		renamedFrom: tableRenameFrom,
 	}, nil
 }
 
@@ -517,7 +518,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		name += "_idx"
 	}
 
-	// Extract index comments and look for @rename annotation
+	// Extract index comments and look for @renamed annotation
 	indexComments := extractIndexComments(rawDDL, mode)
 	renameFrom := ""
 	if comment, ok := indexComments[name]; ok {
@@ -538,7 +539,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		included:          includedColumns,
 		options:           indexOptions,
 		partition:         indexParition,
-		renameFrom:        renameFrom,
+		renamedFrom:       renameFrom,
 	}, nil
 }
 
@@ -874,14 +875,24 @@ func castBoolPtr(val *parser.BoolVal) *bool {
 }
 
 // extractRenameFrom extracts the rename annotation from a comment string
-// e.g. "-- @rename from=old_column_name" -> "old_column_name"
+// Supports both @renamed (preferred) and @rename (deprecated)
+// e.g. "-- @renamed from=old_column_name" -> "old_column_name"
 // e.g. "-- @rename from=\"foo bar\"" -> "foo bar"
 func extractRenameFrom(comment string) string {
-	// Match pattern: @rename from= followed by either:
-	// - Standard SQL quoted identifier with double quotes
-	// - identifier
-	re := regexp.MustCompile(`@rename\s+from=(?:"([^"]+)"|(\S+))`)
-	matches := re.FindStringSubmatch(comment)
+	// First try to match @renamed (preferred)
+	reRenamed := regexp.MustCompile(`@renamed\s+from=(?:"([^"]+)"|(\S+))`)
+	matches := reRenamed.FindStringSubmatch(comment)
+
+	// If @renamed not found, try @rename (deprecated) for backward compatibility
+	if len(matches) == 0 {
+		reRename := regexp.MustCompile(`@rename\s+from=(?:"([^"]+)"|(\S+))`)
+		matches = reRename.FindStringSubmatch(comment)
+
+		// If @rename is found, issue a deprecation warning
+		if len(matches) > 0 {
+			fmt.Fprintf(os.Stderr, "-- WARNING: @rename is deprecated. Please use @renamed instead.\n")
+		}
+	}
 
 	// The regex has 2 capture groups (double quotes or unquoted)
 	// Return whichever one matched

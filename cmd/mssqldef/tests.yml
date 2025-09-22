@@ -489,7 +489,7 @@ RenameColumn:
   desired: |
     CREATE TABLE users (
       id bigint NOT NULL,
-      user_name text, -- @rename from=username
+      user_name text, -- @renamed from=username
       age integer
     );
   output: |
@@ -504,7 +504,7 @@ RenameColumnWithTypeChange:
   desired: |
     CREATE TABLE users (
       id bigint NOT NULL,
-      user_name text NOT NULL, -- @rename from=username
+      user_name text NOT NULL, -- @renamed from=username
       age integer
     );
   output: |
@@ -519,7 +519,7 @@ RenameTable:
       age integer
     );
   desired: |
-    CREATE TABLE users ( -- @rename from=user_accounts
+    CREATE TABLE users ( -- @renamed from=user_accounts
       id bigint NOT NULL,
       username text,
       age integer
@@ -534,7 +534,7 @@ RenameTableWithCommentVariant:
       name text
     );
   desired: |
-    CREATE TABLE new_users /* @rename from=old_users */ (
+    CREATE TABLE new_users /* @renamed from=old_users */ (
       id bigint NOT NULL,
       name text
     );
@@ -548,7 +548,7 @@ RenameTableWithQuotedName:
       name text
     );
   desired: |
-    CREATE TABLE [user_profiles] ( -- @rename from="user_accounts"
+    CREATE TABLE [user_profiles] ( -- @renamed from="user_accounts"
       id bigint NOT NULL,
       name text
     );
@@ -564,9 +564,9 @@ RenameTableAndMultipleChanges:
       old_field text
     );
   desired: |
-    CREATE TABLE accounts ( -- @rename from=old_accounts
+    CREATE TABLE accounts ( -- @renamed from=old_accounts
       id bigint NOT NULL PRIMARY KEY,
-      username varchar(100) NOT NULL, -- @rename from=user_name
+      username varchar(100) NOT NULL, -- @renamed from=user_name
       is_active bit DEFAULT 1
     );
   output: |
@@ -591,7 +591,7 @@ RenameIndex:
       email varchar(255),
       username varchar(100)
     );
-    CREATE INDEX new_email_idx /* @rename from=old_email_idx */ ON users (email);
+    CREATE INDEX new_email_idx /* @renamed from=old_email_idx */ ON users (email);
   output: |
     EXEC sp_rename 'users.old_email_idx', 'new_email_idx', 'INDEX';
 
@@ -608,7 +608,7 @@ RenameIndexInTable:
       id bigint NOT NULL,
       email varchar(255),
       username varchar(100),
-      INDEX email_idx (email) -- @rename from=idx_email
+      INDEX email_idx (email) -- @renamed from=idx_email
     );
   output: |
     EXEC sp_rename 'users.idx_email', 'email_idx', 'INDEX';
@@ -628,8 +628,8 @@ RenameMultipleIndexes:
       email varchar(255),
       username varchar(100)
     );
-    CREATE INDEX email_idx /* @rename from=idx_email */ ON users (email);
-    CREATE INDEX username_idx /* @rename from=idx_username */ ON users (username);
+    CREATE INDEX email_idx /* @renamed from=idx_email */ ON users (email);
+    CREATE INDEX username_idx /* @renamed from=idx_username */ ON users (username);
   output: |
     EXEC sp_rename 'users.idx_email', 'email_idx', 'INDEX';
     EXEC sp_rename 'users.idx_username', 'username_idx', 'INDEX';
@@ -647,7 +647,7 @@ RenameUniqueConstraint:
       id bigint NOT NULL,
       email varchar(255),
       username varchar(100),
-      CONSTRAINT unique_email UNIQUE (email) -- @rename from=old_unique_email
+      CONSTRAINT unique_email UNIQUE (email) -- @renamed from=old_unique_email
     );
   output: |
     EXEC sp_rename 'users.old_unique_email', 'unique_email', 'INDEX';
