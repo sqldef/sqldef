@@ -72,26 +72,34 @@ And then run:
 ```shell
 # Preview migration plan (dry run)
 $ psqldef -U postgres test --dry-run < schema.sql
---- dry run ---
-Run: 'DROP TABLE bigdata;'
-Run: 'ALTER TABLE users DROP COLUMN name;'
+-- dry run --
+BEGIN;
+DROP TABLE bigdata;
+ALTER TABLE users DROP COLUMN name;
+COMMIT;
 
 # Apply DDLs
 $ psqldef -U postgres test < schema.sql
-Run: 'DROP TABLE bigdata;'
-Run: 'ALTER TABLE users DROP COLUMN name;'
+-- Apply --
+BEGIN;
+DROP TABLE bigdata;
+ALTER TABLE users DROP COLUMN name;
+COMMIT;
 
 # Operations are idempotent - safe to run multiple times
 $ psqldef -U postgres test < schema.sql
-Nothing is modified
+-- Nothing is modified --
 
 # Run without dropping tables and columns
 $ psqldef -U postgres test < schema.sql
-Skipped: 'DROP TABLE users;'
+-- Skipped: DROP TABLE users;
 
 # Run with drop operations enabled
 $ psqldef -U postgres test --enable-drop < schema.sql
-Run: 'DROP TABLE users;'
+-- Apply --
+BEGIN;
+DROP TABLE users;
+COMMIT;
 
 # Managing table privileges for specific roles via config
 $ cat schema.sql

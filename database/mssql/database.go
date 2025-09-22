@@ -738,3 +738,11 @@ func quoteName(name string) string {
 func (d *MssqlDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
 	// Not implemented for mssql - privileges not supported yet
 }
+
+func (d *MssqlDatabase) GetTransactionQueries() database.TransactionQueries {
+	return database.TransactionQueries{
+		Begin:    "BEGIN TRANSACTION",
+		Commit:   "COMMIT TRANSACTION",
+		Rollback: "ROLLBACK TRANSACTION",
+	}
+}

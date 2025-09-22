@@ -23,11 +23,66 @@ Application Options:
 ## Synopsis
 
 ```shell
-# Apply schema to MSSQL database
-$ mssqldef -U sa -P password123 mydb < schema.sql
-
 # Export current schema
-$ mssqldef -U sa -P password123 mydb --export > current.sql
+$ mssqldef -U sa -P password123 mydb --export
+CREATE TABLE dbo.users (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    name NVARCHAR(255) NOT NULL
+);
+
+# Save it to edit
+$ mssqldef -U sa -P password123 mydb --export > schema.sql
+```
+
+Update schema.sql as follows:
+
+```diff
+ CREATE TABLE dbo.users (
+     id INT IDENTITY(1,1) PRIMARY KEY,
+-    name NVARCHAR(255) NOT NULL
++    name NVARCHAR(255) NOT NULL,
++    email NVARCHAR(320) NOT NULL,
++    created_at DATETIME2 DEFAULT GETDATE()
+ );
++
++CREATE INDEX IX_users_email ON dbo.users(email);
+```
+
+And then run:
+
+```shell
+# Preview migration plan (dry run)
+$ mssqldef -U sa -P password123 mydb --dry-run < schema.sql
+-- dry run --
+BEGIN TRANSACTION;
+ALTER TABLE dbo.users ADD email NVARCHAR(320) NOT NULL;
+ALTER TABLE dbo.users ADD created_at DATETIME2 DEFAULT GETDATE();
+CREATE INDEX IX_users_email ON dbo.users(email);
+COMMIT;
+
+# Apply DDLs
+$ mssqldef -U sa -P password123 mydb < schema.sql
+-- Apply --
+BEGIN TRANSACTION;
+ALTER TABLE dbo.users ADD email NVARCHAR(320) NOT NULL;
+ALTER TABLE dbo.users ADD created_at DATETIME2 DEFAULT GETDATE();
+CREATE INDEX IX_users_email ON dbo.users(email);
+COMMIT;
+
+# Operations are idempotent - safe to run multiple times
+$ mssqldef -U sa -P password123 mydb < schema.sql
+-- Nothing is modified --
+
+# Run without dropping tables and columns
+$ mssqldef -U sa -P password123 mydb < schema.sql
+-- Skipped: DROP TABLE dbo.old_users;
+
+# Run with drop operations enabled
+$ mssqldef -U sa -P password123 mydb --enable-drop < schema.sql
+-- Apply --
+BEGIN TRANSACTION;
+DROP TABLE dbo.old_users;
+COMMIT;
 
 # Use config file to filter tables
 $ cat > config.yml <<EOF

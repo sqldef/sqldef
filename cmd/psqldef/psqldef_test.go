@@ -25,6 +25,10 @@ const (
 	databaseName    = "psqldef_test"
 )
 
+func wrapWithTransaction(ddls string) string {
+	return applyPrefix + "BEGIN;\n" + ddls + "COMMIT;\n"
+}
+
 // pgQuery executes a query against the database and returns rows as string
 func pgQuery(dbName string, query string) (string, error) {
 	config := database.Config{
@@ -203,7 +207,7 @@ func TestPsqldefCreateTableChangeDefaultTimestamp(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTableDropDefault := stripHeredoc(`
@@ -213,11 +217,11 @@ func TestPsqldefCreateTableChangeDefaultTimestamp(t *testing.T) {
 		`,
 	)
 	alter1 := `ALTER TABLE "public"."timestamps" ALTER COLUMN "created_at" DROP DEFAULT;`
-	assertApplyOutput(t, createTableDropDefault, applyPrefix+alter1+"\n")
+	assertApplyOutput(t, createTableDropDefault, wrapWithTransaction(alter1+"\n"))
 	assertApplyOutput(t, createTableDropDefault, nothingModified)
 
 	alter2 := `ALTER TABLE "public"."timestamps" ALTER COLUMN "created_at" SET DEFAULT current_timestamp;`
-	assertApplyOutput(t, createTable, applyPrefix+alter2+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(alter2+"\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -230,7 +234,7 @@ func TestPsqldefCreateTableNotNull(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -239,10 +243,9 @@ func TestPsqldefCreateTableNotNull(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+	assertApplyOutput(t, createTable, wrapWithTransaction(stripHeredoc(`
 		ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
-		`,
-	))
+		`)))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -251,10 +254,9 @@ func TestPsqldefCreateTableNotNull(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+stripHeredoc(`
+	assertApplyOutput(t, createTable, wrapWithTransaction(stripHeredoc(`
 		ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
-		`,
-	))
+		`)))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -268,7 +270,7 @@ func TestPsqldefCitextExtension(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	mustPgExec(databaseName, "DROP TABLE users;")
@@ -288,7 +290,7 @@ func TestPsqldefIgnoreExtension(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	// pg_buffercache extension creates a view on public schema, but it should not be exported.
@@ -315,7 +317,7 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -323,9 +325,9 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 		  name text
 		);`,
 	)
-	assertApplyOptionsOutput(t, createTable, applyPrefix+
+	assertApplyOptionsOutput(t, createTable, wrapWithTransaction(
 		`ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";`+"\n"+
-		`ALTER TABLE "public"."users" DROP COLUMN "id";`+"\n",
+			`ALTER TABLE "public"."users" DROP COLUMN "id";`+"\n"),
 		"--enable-drop",
 	)
 	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
@@ -336,11 +338,11 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 		  name text
 		);`,
 	)
-	assertApplyOptionsOutput(t, createTable, applyPrefix+stripHeredoc(`
+	assertApplyOptionsOutput(t, createTable, wrapWithTransaction(stripHeredoc(`
 		ALTER TABLE "public"."users" ADD COLUMN "id" bigint NOT NULL;
 		ALTER TABLE "public"."users" ADD PRIMARY KEY ("id");
 		`,
-	), "--enable-drop")
+	)), "--enable-drop")
 	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 }
 
@@ -355,7 +357,7 @@ func TestPsqldefCreateTableConstraintPrimaryKey(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -370,7 +372,7 @@ func TestPsqldefCreateTableForeignKey(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
+	assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(createUsers+createPosts))
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	createPosts = stripHeredoc(`
@@ -381,9 +383,7 @@ func TestPsqldefCreateTableForeignKey(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
-		`ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id");`+"\n",
-	)
+	assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(`ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id");`+"\n"))
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	createPosts = stripHeredoc(`
@@ -394,10 +394,8 @@ func TestPsqldefCreateTableForeignKey(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
-		`ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";`+"\n"+
-		`ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id") ON DELETE SET NULL ON UPDATE CASCADE;`+"\n",
-	)
+	assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(`ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";`+"\n"+
+		`ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id") ON DELETE SET NULL ON UPDATE CASCADE;`+"\n"))
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	createPosts = stripHeredoc(`
@@ -407,7 +405,7 @@ func TestPsqldefCreateTableForeignKey(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+`ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";`+"\n")
+	assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(`ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";`+"\n"))
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 }
 
@@ -423,7 +421,7 @@ func TestPsqldefAddForeignKey(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
+	assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(createUsers+createPosts))
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	createPosts = stripHeredoc(`
@@ -455,7 +453,7 @@ func TestPsqldefCreateTableWithReferences(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTableA+createTableB, applyPrefix+createTableA+createTableB)
+	assertApplyOutput(t, createTableA+createTableB, wrapWithTransaction(createTableA+createTableB))
 	assertApplyOutput(t, createTableA+createTableB, nothingModified)
 
 	createTableB = stripHeredoc(`
@@ -466,9 +464,8 @@ func TestPsqldefCreateTableWithReferences(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTableA+createTableB, applyPrefix+
-		`ALTER TABLE "public"."b" DROP CONSTRAINT "b_a_id_fkey";`+"\n"+
-		`ALTER TABLE "public"."b" DROP CONSTRAINT "b_a_my_text_fkey";`+"\n")
+	assertApplyOutput(t, createTableA+createTableB, wrapWithTransaction(`ALTER TABLE "public"."b" DROP CONSTRAINT "b_a_id_fkey";`+"\n"+
+		`ALTER TABLE "public"."b" DROP CONSTRAINT "b_a_my_text_fkey";`+"\n"))
 	assertApplyOutput(t, createTableA+createTableB, nothingModified)
 }
 
@@ -487,7 +484,7 @@ func TestPsqldefCreateTableWithReferencesOnDelete(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -505,7 +502,7 @@ func TestPsqldefCreateTableWithConstraintReferences(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -518,7 +515,7 @@ func TestPsqldefCreateTableWithConstraintReferences(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "c"."d" ADD CONSTRAINT "d_id_fkey" FOREIGN KEY ("id") REFERENCES "a"."b" ("id");`+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(`ALTER TABLE "c"."d" ADD CONSTRAINT "d_id_fkey" FOREIGN KEY ("id") REFERENCES "a"."b" ("id");`+"\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -532,7 +529,7 @@ func TestPsqldefCreateTableWithCheck(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -542,9 +539,8 @@ func TestPsqldefCreateTableWithCheck(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+
-		`ALTER TABLE "public"."a" DROP CONSTRAINT a_a_id_check;`+"\n"+
-		`ALTER TABLE "public"."a" ADD CONSTRAINT a_a_id_check CHECK (a_id > 1);`+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(`ALTER TABLE "public"."a" DROP CONSTRAINT a_a_id_check;`+"\n"+
+		`ALTER TABLE "public"."a" ADD CONSTRAINT a_a_id_check CHECK (a_id > 1);`+"\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -554,8 +550,7 @@ func TestPsqldefCreateTableWithCheck(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+
-		`ALTER TABLE "public"."a" DROP CONSTRAINT a_a_id_check;`+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(`ALTER TABLE "public"."a" DROP CONSTRAINT a_a_id_check;`+"\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -565,8 +560,7 @@ func TestPsqldefCreateTableWithCheck(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+
-		`ALTER TABLE "public"."a" ADD CONSTRAINT a_a_id_check CHECK (a_id > 2) NO INHERIT;`+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(`ALTER TABLE "public"."a" ADD CONSTRAINT a_a_id_check CHECK (a_id > 2) NO INHERIT;`+"\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -576,9 +570,8 @@ func TestPsqldefCreateTableWithCheck(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+
-		`ALTER TABLE "public"."a" DROP CONSTRAINT a_a_id_check;`+"\n"+
-		`ALTER TABLE "public"."a" ADD CONSTRAINT a_a_id_check CHECK (a_id > 3) NO INHERIT;`+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(`ALTER TABLE "public"."a" DROP CONSTRAINT a_a_id_check;`+"\n"+
+		`ALTER TABLE "public"."a" ADD CONSTRAINT a_a_id_check CHECK (a_id > 3) NO INHERIT;`+"\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -593,7 +586,7 @@ func TestPsqldefMultiColumnCheck(t *testing.T) {
 		  store_table VARCHAR(255)
 		);
 		`)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -605,8 +598,7 @@ func TestPsqldefMultiColumnCheck(t *testing.T) {
 		  CONSTRAINT check_customer_or_table CHECK (store_table is not null and customer is null or store_table is null and customer is not null)
 		);
 		`)
-	assertApplyOutput(t, createTable, applyPrefix+
-		`ALTER TABLE "public"."orders" ADD CONSTRAINT "check_customer_or_table" CHECK (store_table is not null and customer is null or store_table is null and customer is not null);`+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(`ALTER TABLE "public"."orders" ADD CONSTRAINT "check_customer_or_table" CHECK (store_table is not null and customer is null or store_table is null and customer is not null);`+"\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -617,8 +609,7 @@ func TestPsqldefMultiColumnCheck(t *testing.T) {
 		  store_table VARCHAR(255)
 		);
 		`)
-	assertApplyOutput(t, createTable, applyPrefix+
-		`ALTER TABLE "public"."orders" DROP CONSTRAINT "check_customer_or_table";`+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(`ALTER TABLE "public"."orders" DROP CONSTRAINT "check_customer_or_table";`+"\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -627,41 +618,37 @@ func TestPsqlddefCreatePolicy(t *testing.T) {
 
 	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));\n"
 
-	assertApplyOutput(t, createUsers, applyPrefix+createUsers)
+	assertApplyOutput(t, createUsers, wrapWithTransaction(createUsers))
 	assertApplyOutput(t, createUsers, nothingModified)
 
 	createPolicy := stripHeredoc(`
 		CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((current_user)::integer = 1);
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPolicy, applyPrefix+
-		"CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((current_user)::integer = 1);\n",
-	)
+	assertApplyOutput(t, createUsers+createPolicy, wrapWithTransaction("CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((current_user)::integer = 1);\n"))
 	assertApplyOutput(t, createUsers+createPolicy, nothingModified)
 
 	createPolicy = stripHeredoc(`
 		CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (id = (current_user)::integer);
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPolicy, applyPrefix+stripHeredoc(`
+	assertApplyOutput(t, createUsers+createPolicy, wrapWithTransaction(stripHeredoc(`
 		DROP POLICY "p_users" ON "public"."users";
 		CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (id = (current_user)::integer);
-		`,
-	))
+		`)))
 	assertApplyOutput(t, createUsers+createPolicy, nothingModified)
 
 	createPolicy = stripHeredoc(`
 		CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPolicy, applyPrefix+stripHeredoc(`
+	assertApplyOutput(t, createUsers+createPolicy, wrapWithTransaction(stripHeredoc(`
 		DROP POLICY "p_users" ON "public"."users";
 		CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);
-		`,
-	))
+		`)))
 	assertApplyOutput(t, createUsers+createPolicy, nothingModified)
 
-	assertApplyOutput(t, createUsers, applyPrefix+`DROP POLICY "p_users" ON "public"."users";`+"\n")
+	assertApplyOutput(t, createUsers, wrapWithTransaction(`DROP POLICY "p_users" ON "public"."users";`+"\n"))
 	assertApplyOutput(t, createUsers, nothingModified)
 }
 
@@ -673,7 +660,7 @@ func TestPsqldefCreateView(t *testing.T) {
 
 			createUsers := fmt.Sprintf("CREATE TABLE %s.users (id BIGINT PRIMARY KEY, name character varying(100));\n", tc.Schema)
 			createPosts := fmt.Sprintf("CREATE TABLE %s.posts (id BIGINT PRIMARY KEY, name character varying(100), user_id BIGINT, is_deleted boolean);\n", tc.Schema)
-			assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
+			assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(createUsers+createPosts))
 			assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 			posts := "posts"
@@ -684,17 +671,15 @@ func TestPsqldefCreateView(t *testing.T) {
 			}
 
 			createView := fmt.Sprintf("CREATE VIEW %s.view_user_posts AS SELECT p.id FROM (%s as p JOIN %s as u ON ((p.user_id = u.id)));\n", tc.Schema, posts, users)
-			assertApplyOutput(t, createUsers+createPosts+createView, applyPrefix+
-				fmt.Sprintf("CREATE VIEW %s.view_user_posts AS SELECT p.id FROM (%s as p JOIN %s as u ON ((p.user_id = u.id)));\n", tc.Schema, posts, users))
+			assertApplyOutput(t, createUsers+createPosts+createView, wrapWithTransaction(fmt.Sprintf("CREATE VIEW %s.view_user_posts AS SELECT p.id FROM (%s as p JOIN %s as u ON ((p.user_id = u.id)));\n", tc.Schema, posts, users)))
 			assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
 
 			createView = fmt.Sprintf("CREATE VIEW %s.view_user_posts AS SELECT p.id from (%s p INNER JOIN %s u ON ((p.user_id = u.id))) WHERE (p.is_deleted = FALSE);\n", tc.Schema, posts, users)
-			assertApplyOutput(t, createUsers+createPosts+createView, applyPrefix+
-				fmt.Sprintf(`CREATE OR REPLACE VIEW "%s"."view_user_posts" AS select p.id from (%s as p join %s as u on ((p.user_id = u.id))) where (p.is_deleted = false);`+"\n", tc.Schema, posts, users))
+			assertApplyOutput(t, createUsers+createPosts+createView, wrapWithTransaction(fmt.Sprintf(`CREATE OR REPLACE VIEW "%s"."view_user_posts" AS select p.id from (%s as p join %s as u on ((p.user_id = u.id))) where (p.is_deleted = false);`+"\n", tc.Schema, posts, users)))
 			assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
 
-			assertApplyOutput(t, createUsers+createPosts, applyPrefix+fmt.Sprintf(`-- Skipped: DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n")
-			assertApplyOptionsOutput(t, createUsers+createPosts, applyPrefix+fmt.Sprintf(`DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n", "--enable-drop")
+			assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(fmt.Sprintf(`-- Skipped: DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n"))
+			assertApplyOptionsOutput(t, createUsers+createPosts, wrapWithTransaction(fmt.Sprintf(`DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n"), "--enable-drop")
 			assertApplyOutput(t, createUsers+createPosts, nothingModified)
 		})
 	}
@@ -708,7 +693,7 @@ func TestPsqldefCreateMaterializedView(t *testing.T) {
 
 			createUsers := fmt.Sprintf("CREATE TABLE %s.users (id BIGINT PRIMARY KEY, name character varying(100));\n", tc.Schema)
 			createPosts := fmt.Sprintf("CREATE TABLE %s.posts (id BIGINT PRIMARY KEY, name character varying(100), user_id BIGINT, is_deleted boolean);\n", tc.Schema)
-			assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
+			assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(createUsers+createPosts))
 			assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 			posts := "posts"
@@ -719,11 +704,10 @@ func TestPsqldefCreateMaterializedView(t *testing.T) {
 			}
 
 			createMaterializedView := fmt.Sprintf("CREATE MATERIALIZED VIEW %s.view_user_posts AS SELECT p.id FROM (%s as p JOIN %s as u ON ((p.user_id = u.id)));\n", tc.Schema, posts, users)
-			assertApplyOutput(t, createUsers+createPosts+createMaterializedView, applyPrefix+
-				fmt.Sprintf("CREATE MATERIALIZED VIEW %s.view_user_posts AS SELECT p.id FROM (%s as p JOIN %s as u ON ((p.user_id = u.id)));\n", tc.Schema, posts, users))
+			assertApplyOutput(t, createUsers+createPosts+createMaterializedView, wrapWithTransaction(fmt.Sprintf("CREATE MATERIALIZED VIEW %s.view_user_posts AS SELECT p.id FROM (%s as p JOIN %s as u ON ((p.user_id = u.id)));\n", tc.Schema, posts, users)))
 			assertApplyOutput(t, createUsers+createPosts+createMaterializedView, nothingModified)
 
-			assertApplyOptionsOutput(t, createUsers+createPosts, applyPrefix+fmt.Sprintf(`DROP MATERIALIZED VIEW "%s"."view_user_posts";`, tc.Schema)+"\n", "--enable-drop")
+			assertApplyOptionsOutput(t, createUsers+createPosts, wrapWithTransaction(fmt.Sprintf(`DROP MATERIALIZED VIEW "%s"."view_user_posts";`, tc.Schema)+"\n"), "--enable-drop")
 			assertApplyOutput(t, createUsers+createPosts, nothingModified)
 		})
 	}
@@ -746,7 +730,7 @@ func TestPsqldefDropPrimaryKey(t *testing.T) {
 		  name text
 		);`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";`+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(`ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";`+"\n"))
 }
 
 func TestPsqldefCreateIndex(t *testing.T) {
@@ -768,25 +752,24 @@ func TestPsqldefCreateIndex(t *testing.T) {
 			dropIndex1 := fmt.Sprintf(`DROP INDEX "%s"."index_name";`, tc.Schema)
 			dropIndex2 := fmt.Sprintf(`DROP INDEX "%s"."index_age";`, tc.Schema)
 
-			assertApplyOutput(t, createTable+createIndex1+createIndex2, applyPrefix+
-				createTable+"\n"+
+			assertApplyOutput(t, createTable+createIndex1+createIndex2, wrapWithTransaction(createTable+"\n"+
 				createIndex1+"\n"+
-				createIndex2+"\n")
+				createIndex2+"\n"))
 			assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
 
-			assertApplyOptionsOutput(t, createTable+createIndex2+createIndex3, applyPrefix+
+			assertApplyOptionsOutput(t, createTable+createIndex2+createIndex3, wrapWithTransaction(
 				dropIndex1+"\n"+
-				createIndex3+"\n", "--enable-drop")
+					createIndex3+"\n"), "--enable-drop")
 			assertApplyOutput(t, createTable+createIndex2+createIndex3, nothingModified)
 
-			assertApplyOptionsOutput(t, createTable+createIndex2+createIndex4, applyPrefix+
+			assertApplyOptionsOutput(t, createTable+createIndex2+createIndex4, wrapWithTransaction(
 				dropIndex1+"\n"+
-				createIndex4+"\n", "--enable-drop")
+					createIndex4+"\n"), "--enable-drop")
 			assertApplyOutput(t, createTable+createIndex2+createIndex4, nothingModified)
 
-			assertApplyOptionsOutput(t, createTable, applyPrefix+
+			assertApplyOptionsOutput(t, createTable, wrapWithTransaction(
 				dropIndex2+"\n"+
-				dropIndex1+"\n", "--enable-drop")
+					dropIndex1+"\n"), "--enable-drop")
 			assertApplyOutput(t, createTable, nothingModified)
 		})
 	}
@@ -809,16 +792,14 @@ func TestPsqldefCreateMaterializedViewIndex(t *testing.T) {
 				users = fmt.Sprintf("%s.users", tc.Schema)
 			}
 			createMaterializedView := fmt.Sprintf("CREATE MATERIALIZED VIEW %s.view_users AS SELECT * FROM %s;\n", tc.Schema, users)
-			assertApplyOutput(t, createTable+createMaterializedView, applyPrefix+
-				createTable+"\n"+
-				fmt.Sprintf("CREATE MATERIALIZED VIEW %s.view_users AS SELECT * FROM %s;\n", tc.Schema, users))
+			assertApplyOutput(t, createTable+createMaterializedView, wrapWithTransaction(createTable+"\n"+
+				fmt.Sprintf("CREATE MATERIALIZED VIEW %s.view_users AS SELECT * FROM %s;\n", tc.Schema, users)))
 			assertApplyOutput(t, createTable+createMaterializedView, nothingModified)
 
 			createIndex1 := fmt.Sprintf(`CREATE INDEX index_name on %s.view_users (name);`, tc.Schema)
 			createIndex2 := fmt.Sprintf(`CREATE UNIQUE INDEX index_age on %s.view_users (age);`, tc.Schema)
-			assertApplyOutput(t, createTable+createMaterializedView+createIndex1+createIndex2, applyPrefix+
-				createIndex1+"\n"+
-				createIndex2+"\n")
+			assertApplyOutput(t, createTable+createMaterializedView+createIndex1+createIndex2, wrapWithTransaction(createIndex1+"\n"+
+				createIndex2+"\n"))
 			assertApplyOutput(t, createTable+createMaterializedView+createIndex1+createIndex2, nothingModified)
 		})
 	}
@@ -836,7 +817,7 @@ func TestPsqldefAddConstraintUnique(t *testing.T) {
 		`,
 	)
 	alterTable := "alter table dummy add constraint dummy_uniq unique (column_a, column_b);"
-	assertApplyOutput(t, createTable+alterTable, applyPrefix+createTable+alterTable+"\n")
+	assertApplyOutput(t, createTable+alterTable, wrapWithTransaction(createTable+alterTable+"\n"))
 	assertApplyOutput(t, createTable+alterTable, nothingModified)
 
 	alterTable = "alter table dummy add constraint dummy_uniq unique (column_a, column_b) not deferrable initially immediate;"
@@ -844,15 +825,15 @@ func TestPsqldefAddConstraintUnique(t *testing.T) {
 
 	alterTable = "alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable;"
 	dropConstraint := `ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";`
-	assertApplyOutput(t, createTable+alterTable, applyPrefix+dropConstraint+"\n"+alterTable+"\n")
+	assertApplyOutput(t, createTable+alterTable, wrapWithTransaction(dropConstraint+"\n"+alterTable+"\n"))
 
 	alterTable = "alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable initially deferred;"
-	assertApplyOutput(t, createTable+alterTable, applyPrefix+dropConstraint+"\n"+alterTable+"\n")
+	assertApplyOutput(t, createTable+alterTable, wrapWithTransaction(dropConstraint+"\n"+alterTable+"\n"))
 
 	alterTable = "alter table dummy add constraint dummy_uniq unique (column_a, column_b);"
-	assertApplyOutput(t, createTable+alterTable, applyPrefix+dropConstraint+"\n"+alterTable+"\n")
+	assertApplyOutput(t, createTable+alterTable, wrapWithTransaction(dropConstraint+"\n"+alterTable+"\n"))
 
-	assertApplyOutput(t, createTable, applyPrefix+dropConstraint+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(dropConstraint+"\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -866,7 +847,7 @@ func TestPsqldefCreateIndexWithKey(t *testing.T) {
 		`,
 	)
 	createIndex := `CREATE INDEX "index_name" on users (key);`
-	assertApplyOutput(t, createTable+createIndex, applyPrefix+createTable+createIndex+"\n")
+	assertApplyOutput(t, createTable+createIndex, wrapWithTransaction(createTable+createIndex+"\n"))
 	assertApplyOutput(t, createTable+createIndex, nothingModified)
 }
 
@@ -880,7 +861,7 @@ func TestPsqldefCreateIndexWithOperatorClass(t *testing.T) {
 		CREATE INDEX product_name_autocomplete_index ON products(name text_pattern_ops);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -895,7 +876,7 @@ func TestPsqldefCreateType(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -910,7 +891,7 @@ func TestPsqldefColumnLiteral(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -991,7 +972,7 @@ func TestPsqldefDataTypes(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified) // Label for column type may change. Type will be examined.
 }
 
@@ -1000,7 +981,7 @@ func TestPsqldefCreateTableInSchema(t *testing.T) {
 	mustPgExec(databaseName, "CREATE SCHEMA test;")
 
 	createTable := "CREATE TABLE test.users (id serial primary key);"
-	assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable+"\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1013,7 +994,7 @@ func TestPsqldefCheckConstraintInSchema(t *testing.T) {
 		  min_value INT CHECK (min_value > 0),
 		  max_value INT
 		);`)
-	assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable+"\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -1022,9 +1003,8 @@ func TestPsqldefCheckConstraintInSchema(t *testing.T) {
 		  max_value INT CHECK (max_value > 0),
 		  CONSTRAINT min_max CHECK (min_value < max_value)
 		);`)
-	assertApplyOutput(t, createTable, applyPrefix+
-		`ALTER TABLE "test"."dummy" ADD CONSTRAINT dummy_max_value_check CHECK (max_value > 0);`+"\n"+
-		`ALTER TABLE "test"."dummy" ADD CONSTRAINT "min_max" CHECK (min_value < max_value);`+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(`ALTER TABLE "test"."dummy" ADD CONSTRAINT dummy_max_value_check CHECK (max_value > 0);`+"\n"+
+		`ALTER TABLE "test"."dummy" ADD CONSTRAINT "min_max" CHECK (min_value < max_value);`+"\n"))
 	assertExportOutput(t, stripHeredoc(`
 		CREATE SCHEMA "test";
 
@@ -1041,9 +1021,8 @@ func TestPsqldefCheckConstraintInSchema(t *testing.T) {
 		  min_value INT CHECK (min_value > 0),
 		  max_value INT
 		);`)
-	assertApplyOutput(t, createTable, applyPrefix+
-		`ALTER TABLE "test"."dummy" DROP CONSTRAINT dummy_max_value_check;`+"\n"+
-		`ALTER TABLE "test"."dummy" DROP CONSTRAINT "min_max";`+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(`ALTER TABLE "test"."dummy" DROP CONSTRAINT dummy_max_value_check;`+"\n"+
+		`ALTER TABLE "test"."dummy" DROP CONSTRAINT "min_max";`+"\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1054,13 +1033,13 @@ func TestPsqldefSameTableNameAmongSchemas(t *testing.T) {
 	createTable := stripHeredoc(`
 		CREATE TABLE dummy (id int);
 		CREATE TABLE test.dummy (id int);`)
-	assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable+"\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
 		CREATE TABLE dummy (id int);
 		CREATE TABLE test.dummy ();`)
-	assertApplyOptionsOutput(t, createTable, applyPrefix+`ALTER TABLE "test"."dummy" DROP COLUMN "id";`+"\n", "--enable-drop")
+	assertApplyOptionsOutput(t, createTable, wrapWithTransaction(`ALTER TABLE "test"."dummy" DROP COLUMN "id";`+"\n"), "--enable-drop")
 	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 }
 
@@ -1074,7 +1053,7 @@ func TestPsqldefCreateTableWithIdentityColumn(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1095,7 +1074,7 @@ func TestPsqldefCreateTableWithExpressionStored(t *testing.T) {
 
 	resetTestDatabase()
 
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1109,7 +1088,7 @@ func TestPsqldefAddingIdentityColumn(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -1119,7 +1098,7 @@ func TestPsqldefAddingIdentityColumn(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."color" ALTER COLUMN "color_id" ADD GENERATED BY DEFAULT AS IDENTITY;`+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(`ALTER TABLE "public"."color" ALTER COLUMN "color_id" ADD GENERATED BY DEFAULT AS IDENTITY;`+"\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1133,7 +1112,7 @@ func TestPsqldefRemovingIdentityColumn(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -1143,7 +1122,7 @@ func TestPsqldefRemovingIdentityColumn(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."color" ALTER COLUMN "color_id" DROP IDENTITY IF EXISTS;`+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(`ALTER TABLE "public"."color" ALTER COLUMN "color_id" DROP IDENTITY IF EXISTS;`+"\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1157,7 +1136,7 @@ func TestPsqldefChangingIdentityColumn(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -1167,7 +1146,7 @@ func TestPsqldefChangingIdentityColumn(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+`ALTER TABLE "public"."color" ALTER COLUMN "color_id" SET GENERATED ALWAYS;`+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(`ALTER TABLE "public"."color" ALTER COLUMN "color_id" SET GENERATED ALWAYS;`+"\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1188,7 +1167,7 @@ func TestPsqldefCreateIdentityColumnWithSequenceOption(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTableWithSequence1, applyPrefix+createTableWithSequence1)
+	assertApplyOutput(t, createTableWithSequence1, wrapWithTransaction(createTableWithSequence1))
 	assertApplyOutput(t, createTableWithoutSequence, nothingModified)
 
 	createTableWithSequence2 := stripHeredoc(`
@@ -1212,7 +1191,7 @@ func TestPsqldefModifyIdentityColumnWithSequenceOption(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 
 	createTableWithSequence := stripHeredoc(`
 		CREATE TABLE voltages (
@@ -1223,7 +1202,7 @@ func TestPsqldefModifyIdentityColumnWithSequenceOption(t *testing.T) {
 	)
 	alter1 := `ALTER TABLE "public"."voltages" ALTER COLUMN "volt" SET NOT NULL;`
 	alter2 := `ALTER TABLE "public"."voltages" ALTER COLUMN "volt" ADD GENERATED BY DEFAULT AS IDENTITY (START WITH -100 INCREMENT BY 5 MINVALUE -100 MAXVALUE 100);`
-	assertApplyOutput(t, createTableWithSequence, applyPrefix+alter1+"\n"+alter2+"\n")
+	assertApplyOutput(t, createTableWithSequence, wrapWithTransaction(alter1+"\n"+alter2+"\n"))
 
 	createTableWithoutSequence := stripHeredoc(`
 		CREATE TABLE voltages (
@@ -1245,7 +1224,7 @@ func TestPsqldefAddIdentityColumnWithSequenceOption(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 
 	createTableWithSequence := stripHeredoc(`
 		CREATE TABLE voltages (
@@ -1256,7 +1235,7 @@ func TestPsqldefAddIdentityColumnWithSequenceOption(t *testing.T) {
 		`,
 	)
 	alter := `ALTER TABLE "public"."voltages" ADD COLUMN "volt" int GENERATED BY DEFAULT AS IDENTITY (START WITH -100 INCREMENT BY 5 MINVALUE -100 MAXVALUE 100);`
-	assertApplyOutput(t, createTableWithSequence, applyPrefix+alter+"\n")
+	assertApplyOutput(t, createTableWithSequence, wrapWithTransaction(alter+"\n"))
 
 	createTableWithoutSequence := stripHeredoc(`
 		CREATE TABLE voltages (
@@ -1275,11 +1254,11 @@ func TestPsqldefAddUniqueConstraintToTableInNonpublicSchema(t *testing.T) {
 	mustPgExec(databaseName, "CREATE SCHEMA test;")
 
 	createTable := "CREATE TABLE test.dummy (a int, b int);"
-	assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable+"\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	alterTable := "ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);"
-	assertApplyOutput(t, createTable+"\n"+alterTable, applyPrefix+alterTable+"\n")
+	assertApplyOutput(t, createTable+"\n"+alterTable, wrapWithTransaction(alterTable+"\n"))
 	assertExportOutput(t, stripHeredoc(`
 		CREATE SCHEMA "test";
 
@@ -1293,9 +1272,8 @@ func TestPsqldefAddUniqueConstraintToTableInNonpublicSchema(t *testing.T) {
 	assertApplyOutput(t, createTable+"\n"+alterTable, nothingModified)
 
 	alterTable = "ALTER TABLE test.dummy ADD CONSTRAINT a_uniq UNIQUE (a) DEFERRABLE INITIALLY DEFERRED;"
-	assertApplyOutput(t, createTable+"\n"+alterTable, applyPrefix+
-		alterTable+"\n"+
-		`ALTER TABLE "test"."dummy" DROP CONSTRAINT "a_b_uniq";`+"\n")
+	assertApplyOutput(t, createTable+"\n"+alterTable, wrapWithTransaction(alterTable+"\n"+
+		`ALTER TABLE "test"."dummy" DROP CONSTRAINT "a_b_uniq";`+"\n"))
 	assertExportOutput(t, stripHeredoc(`
 		CREATE SCHEMA "test";
 
@@ -1335,7 +1313,7 @@ func TestPsqldefFunctionAsDefault(t *testing.T) {
 			  not_null timestamp not null default now(),
 			  same_schema int default %s.my_func()
 			);`), tc.Schema, tc.Schema)
-		assertApplyOutput(t, createTable, applyPrefix+createTable+"\n")
+		assertApplyOutput(t, createTable, wrapWithTransaction(createTable+"\n"))
 		assertApplyOutput(t, createTable, nothingModified)
 	}
 }
@@ -1354,7 +1332,7 @@ func TestPsqldefApply(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1389,7 +1367,7 @@ func TestPsqldefDropTable(t *testing.T) {
 
 	dropTable := `DROP TABLE "public"."users";`
 	out := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--enable-drop", "--file", "schema.sql")
-	assertEquals(t, out, applyPrefix+dropTable+"\n")
+	assertEquals(t, out, wrapWithTransaction(dropTable+"\n"))
 }
 
 func TestPsqldefExport(t *testing.T) {
@@ -1546,7 +1524,7 @@ func TestPsqldefBeforeApply(t *testing.T) {
 	dryRun := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--before-apply", beforeApply, "--dry-run")
 	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--before-apply", beforeApply)
 	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
-	assertEquals(t, apply, applyPrefix+beforeApply+"\n"+createTable+"\n")
+	assertEquals(t, apply, applyPrefix+"BEGIN;\n"+beforeApply+"\n"+createTable+"\nCOMMIT;\n")
 
 	apply = assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--before-apply", beforeApply)
 	assertEquals(t, apply, nothingModified)
@@ -1654,7 +1632,7 @@ func TestPsqldefConfigIncludesTargetSchemaWithViews(t *testing.T) {
 	writeFile("config.yml", "target_schema: bar\n")
 
 	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--config", "config.yml")
-	assertEquals(t, apply, applyPrefix+schema)
+	assertEquals(t, apply, wrapWithTransaction(schema))
 
 	apply = assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--config", "config.yml")
 	assertEquals(t, apply, nothingModified)
@@ -1736,7 +1714,7 @@ func TestPsqldefAllAnySomeCheckConstraints(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	// Test modifying ALL constraint
@@ -1750,9 +1728,8 @@ func TestPsqldefAllAnySomeCheckConstraints(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, modifyTable, applyPrefix+
-		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_all_positive_check;`+"\n"+
-		`ALTER TABLE "public"."test_all_any" ADD CONSTRAINT test_all_any_all_positive_check CHECK (all_positive = ALL (ARRAY[2, 3, 4]));`+"\n")
+	assertApplyOutput(t, modifyTable, wrapWithTransaction(`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_all_positive_check;`+"\n"+
+		`ALTER TABLE "public"."test_all_any" ADD CONSTRAINT test_all_any_all_positive_check CHECK (all_positive = ALL (ARRAY[2, 3, 4]));`+"\n"))
 	assertApplyOutput(t, modifyTable, nothingModified)
 
 	// Test modifying SOME constraint specifically
@@ -1766,9 +1743,8 @@ func TestPsqldefAllAnySomeCheckConstraints(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, modifySomeTable, applyPrefix+
-		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_some_text_check;`+"\n"+
-		`ALTER TABLE "public"."test_all_any" ADD CONSTRAINT test_all_any_some_text_check CHECK (some_text = ANY (ARRAY['updated', 'modified', 'changed']));`+"\n")
+	assertApplyOutput(t, modifySomeTable, wrapWithTransaction(`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_some_text_check;`+"\n"+
+		`ALTER TABLE "public"."test_all_any" ADD CONSTRAINT test_all_any_some_text_check CHECK (some_text = ANY (ARRAY['updated', 'modified', 'changed']));`+"\n"))
 	assertApplyOutput(t, modifySomeTable, nothingModified)
 
 	// Test removing ALL/ANY constraints
@@ -1782,11 +1758,10 @@ func TestPsqldefAllAnySomeCheckConstraints(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, removeConstraints, applyPrefix+
-		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_state_check;`+"\n"+
+	assertApplyOutput(t, removeConstraints, wrapWithTransaction(`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_state_check;`+"\n"+
 		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_all_positive_check;`+"\n"+
 		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_some_text_check;`+"\n"+
-		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_score_check;`+"\n")
+		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_score_check;`+"\n"))
 	assertApplyOutput(t, removeConstraints, nothingModified)
 }
 
@@ -1802,7 +1777,7 @@ func TestPsqldefSomeConstraintModifications(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, initialTable, applyPrefix+initialTable)
+	assertApplyOutput(t, initialTable, wrapWithTransaction(initialTable))
 	assertApplyOutput(t, initialTable, nothingModified)
 
 	// Modify SOME constraint with different values
@@ -1814,11 +1789,10 @@ func TestPsqldefSomeConstraintModifications(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, modifiedTable, applyPrefix+
-		`ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT test_some_modify_status_check;`+"\n"+
+	assertApplyOutput(t, modifiedTable, wrapWithTransaction(`ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT test_some_modify_status_check;`+"\n"+
 		`ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_status_check CHECK (status = ANY (ARRAY['active', 'completed', 'archived']));`+"\n"+
 		`ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT test_some_modify_category_check;`+"\n"+
-		`ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_category_check CHECK (category = ANY (ARRAY['X', 'Y', 'Z']));`+"\n")
+		`ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_category_check CHECK (category = ANY (ARRAY['X', 'Y', 'Z']));`+"\n"))
 	assertApplyOutput(t, modifiedTable, nothingModified)
 
 	// Change SOME to ANY explicitly
@@ -1841,11 +1815,10 @@ func TestPsqldefSomeConstraintModifications(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, changeToAll, applyPrefix+
-		`ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT test_some_modify_status_check;`+"\n"+
+	assertApplyOutput(t, changeToAll, wrapWithTransaction(`ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT test_some_modify_status_check;`+"\n"+
 		`ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_status_check CHECK (status = ALL (ARRAY['active', 'completed', 'archived']));`+"\n"+
 		`ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT test_some_modify_category_check;`+"\n"+
-		`ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_category_check CHECK (category = ALL (ARRAY['X', 'Y', 'Z']));`+"\n")
+		`ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_category_check CHECK (category = ALL (ARRAY['X', 'Y', 'Z']));`+"\n"))
 	assertApplyOutput(t, changeToAll, nothingModified)
 }
 
@@ -1866,7 +1839,7 @@ func TestPsqldefTableLevelCheckConstraintsWithAllAny(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, tableWithMultiColumnConstraint, applyPrefix+tableWithMultiColumnConstraint)
+	assertApplyOutput(t, tableWithMultiColumnConstraint, wrapWithTransaction(tableWithMultiColumnConstraint))
 	assertApplyOutput(t, tableWithMultiColumnConstraint, nothingModified)
 
 	// Test modifying the multi-column constraint
@@ -1882,9 +1855,8 @@ func TestPsqldefTableLevelCheckConstraintsWithAllAny(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, modifiedConstraint, applyPrefix+
-		`ALTER TABLE "public"."multi_check_test" DROP CONSTRAINT "valid_state_priority";`+"\n"+
-		`ALTER TABLE "public"."multi_check_test" ADD CONSTRAINT "valid_state_priority" CHECK (state = ANY (ARRAY['active', 'pending', 'waiting']) and priority >= ALL (ARRAY[1, 2]) or state = ALL (ARRAY['inactive']) and priority = ANY (ARRAY[0]));`+"\n")
+	assertApplyOutput(t, modifiedConstraint, wrapWithTransaction(`ALTER TABLE "public"."multi_check_test" DROP CONSTRAINT "valid_state_priority";`+"\n"+
+		`ALTER TABLE "public"."multi_check_test" ADD CONSTRAINT "valid_state_priority" CHECK (state = ANY (ARRAY['active', 'pending', 'waiting']) and priority >= ALL (ARRAY[1, 2]) or state = ALL (ARRAY['inactive']) and priority = ANY (ARRAY[0]));`+"\n"))
 	assertApplyOutput(t, modifiedConstraint, nothingModified)
 }
 

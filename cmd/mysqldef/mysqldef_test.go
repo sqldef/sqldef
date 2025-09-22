@@ -25,6 +25,10 @@ const (
 	applyPrefix     = "-- Apply --\n"
 )
 
+func wrapWithTransaction(ddls string) string {
+	return applyPrefix + "BEGIN;\n" + ddls + "COMMIT;\n"
+}
+
 func getMySQLPort() int {
 	if portStr := os.Getenv("MYSQL_PORT"); portStr != "" {
 		if port, err := strconv.Atoi(portStr); err == nil {
@@ -133,7 +137,7 @@ func TestMysqldefApply(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -147,8 +151,28 @@ func TestMysqldefDryRun(t *testing.T) {
 	))
 
 	dryRun := assertedExecuteMySQLDef(t, "mysqldef_test", "--dry-run", "--file", "schema.sql")
+	expectedDryRun := stripHeredoc(`
+		-- dry run --
+		BEGIN;
+		CREATE TABLE users (
+		  name varchar(40),
+		  created_at datetime NOT NULL
+		);
+		COMMIT;
+	`)
+	assertEquals(t, dryRun, expectedDryRun)
+
 	apply := assertedExecuteMySQLDef(t, "mysqldef_test", "--file", "schema.sql")
-	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
+	expectedApply := stripHeredoc(`
+		-- Apply --
+		BEGIN;
+		CREATE TABLE users (
+		  name varchar(40),
+		  created_at datetime NOT NULL
+		);
+		COMMIT;
+	`)
+	assertEquals(t, apply, expectedApply)
 }
 
 func TestMysqldefExport(t *testing.T) {
@@ -222,7 +246,7 @@ func TestMysqldefDropTable(t *testing.T) {
 
 	dropTable := "DROP TABLE `users`;\n"
 	out := assertedExecuteMySQLDef(t, "mysqldef_test", "--enable-drop", "--file", "schema.sql")
-	assertEquals(t, out, applyPrefix+dropTable)
+	assertEquals(t, out, wrapWithTransaction(dropTable))
 }
 
 func TestMysqldefSkipView(t *testing.T) {
@@ -259,7 +283,7 @@ func TestMysqldefBeforeApply(t *testing.T) {
 	)
 	writeFile("schema.sql", createTable)
 	apply := assertedExecuteMySQLDef(t, "mysqldef_test", "--file", "schema.sql", "--before-apply", beforeApply)
-	assertEquals(t, apply, applyPrefix+beforeApply+"\n"+createTable+"\n")
+	assertEquals(t, apply, applyPrefix+"BEGIN;\n"+beforeApply+"\n"+createTable+"\nCOMMIT;\n")
 	apply = assertedExecuteMySQLDef(t, "mysqldef_test", "--file", "schema.sql", "--before-apply", beforeApply)
 	assertEquals(t, apply, nothingModified)
 }
@@ -321,7 +345,7 @@ func TestMysqldefConfigIncludesAlgorithm(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -336,10 +360,10 @@ func TestMysqldefConfigIncludesAlgorithm(t *testing.T) {
 	writeFile("config.yml", "algorithm: |\n  inplace\n")
 
 	apply := assertedExecuteMySQLDef(t, "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
-	assertEquals(t, apply, applyPrefix+stripHeredoc(`
+	assertEquals(t, apply, wrapWithTransaction(stripHeredoc(`
 	ALTER TABLE `+"`users`"+` CHANGE COLUMN `+"`name` `name`"+` varchar(1000) COLLATE utf8mb4_bin DEFAULT null, ALGORITHM=INPLACE;
 	`,
-	))
+	)))
 }
 
 func TestMysqldefConfigIncludesLock(t *testing.T) {
@@ -352,7 +376,7 @@ func TestMysqldefConfigIncludesLock(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -368,9 +392,9 @@ func TestMysqldefConfigIncludesLock(t *testing.T) {
 	writeFile("config.yml", "lock: none")
 
 	apply := assertedExecuteMySQLDef(t, "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
-	assertEquals(t, apply, applyPrefix+stripHeredoc(`
+	assertEquals(t, apply, wrapWithTransaction(stripHeredoc(`
 	ALTER TABLE `+"`users`"+` ADD COLUMN `+"`new_column` "+`varchar(255) COLLATE utf8mb4_bin DEFAULT null `+"AFTER `name`, "+`LOCK=NONE;
-	`))
+	`)))
 
 	createTable = stripHeredoc(`
 		CREATE TABLE users (
@@ -385,9 +409,9 @@ func TestMysqldefConfigIncludesLock(t *testing.T) {
 	writeFile("config.yml", "algorithm: inplace\nlock: none")
 
 	apply = assertedExecuteMySQLDef(t, "mysqldef_test", "--config", "config.yml", "--file", "schema.sql")
-	assertEquals(t, apply, applyPrefix+stripHeredoc(`
+	assertEquals(t, apply, wrapWithTransaction(stripHeredoc(`
 	ALTER TABLE `+"`users`"+` CHANGE COLUMN `+"`new_column` `new_column` "+`varchar(1000) COLLATE utf8mb4_bin DEFAULT null, ALGORITHM=INPLACE, LOCK=NONE;
-	`))
+	`)))
 
 }
 

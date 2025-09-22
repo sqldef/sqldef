@@ -197,3 +197,11 @@ func registerTLSConfig(pemPath string) error {
 func (d *MysqlDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
 	// Not implemented for mysql - privileges not supported yet
 }
+
+func (d *MysqlDatabase) GetTransactionQueries() database.TransactionQueries {
+	return database.TransactionQueries{
+		Begin:    "BEGIN",
+		Commit:   "COMMIT",
+		Rollback: "ROLLBACK",
+	}
+}

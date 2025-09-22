@@ -71,8 +71,16 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if test.MaxVersion != "" && compareVersion(t, version, test.MaxVersion) > 0 {
 		t.Skipf("Version '%s' is larger than max_version '%s'", version, test.MaxVersion)
 	}
-	if test.Flavor != "" && (allowedFlavor == "" || test.Flavor != allowedFlavor) {
-		t.Skipf("Test flavor '%s' does not match allowed flavor '%s'", test.Flavor, allowedFlavor)
+	// If test requires a specific flavor, check if it matches the current environment
+	if test.Flavor != "" {
+		// If no flavor is explicitly set, default to "mysql" for MySQL tests
+		currentFlavor := allowedFlavor
+		if currentFlavor == "" && mode == schema.GeneratorModeMysql {
+			currentFlavor = "mysql"
+		}
+		if test.Flavor != currentFlavor {
+			t.Skipf("Test flavor '%s' does not match current flavor '%s'", test.Flavor, currentFlavor)
+		}
 	}
 
 	// Prepare current

@@ -80,6 +80,7 @@ For schema management tests, in most cases you only need to edit the YAML test f
 ## General Rules
 
 * Never commit the changes unless the user asks for it.
+* Write comments to describe what is not obvious in the code. Describing the "why" is a recommended practice.
 * Keep the documents up to date:
   * `cmd-psqldef.md` describes all the features of `psqldef`
   * `cmd-mysqldef.md` describes all the features of `mysqldef`

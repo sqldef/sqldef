@@ -25,6 +25,10 @@ const (
 	skipPrefix      = "-- Skipped: "
 )
 
+func wrapWithTransaction(ddls string) string {
+	return applyPrefix + "BEGIN TRANSACTION;\n" + ddls + "COMMIT TRANSACTION;\n"
+}
+
 func TestApply(t *testing.T) {
 	tests, err := testutils.ReadTests("tests.yml")
 	if err != nil {
@@ -74,7 +78,7 @@ func TestMssqldefAddColumnNotNull(t *testing.T) {
 		);
 		GO`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] ALTER COLUMN [name] varchar(20) NOT NULL;\nGO\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction("ALTER TABLE [dbo].[users] ALTER COLUMN [name] varchar(20) NOT NULL;\nGO\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -97,7 +101,7 @@ func TestMssqldefRemoveColumnNotNull(t *testing.T) {
 		);
 		GO`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] ALTER COLUMN [id] bigint;\nGO\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction("ALTER TABLE [dbo].[users] ALTER COLUMN [id] bigint;\nGO\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -120,7 +124,7 @@ func TestMssqldefChangeColumnLength(t *testing.T) {
 		);
 		GO`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] ALTER COLUMN [name] varchar(100);\nGO\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction("ALTER TABLE [dbo].[users] ALTER COLUMN [name] varchar(100);\nGO\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -143,7 +147,7 @@ func TestMssqldefAlterTableAddUniqueConstraint(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable+alterTable, applyPrefix+alterTable)
+	assertApplyOutput(t, createTable+alterTable, wrapWithTransaction(alterTable))
 	assertApplyOutput(t, createTable+alterTable, nothingModified)
 }
 
@@ -166,7 +170,7 @@ func TestMssqldefAlterTableAddUniqueConstraintWithNONCLUSTERED(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable+alterTable, applyPrefix+alterTable)
+	assertApplyOutput(t, createTable+alterTable, wrapWithTransaction(alterTable))
 	assertApplyOutput(t, createTable+alterTable, nothingModified)
 }
 
@@ -192,7 +196,7 @@ func TestMssqldefAlterTableDropUniqueConstraint(t *testing.T) {
 		);
 		GO`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [uq_users];\nGO\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction("ALTER TABLE [dbo].[users] DROP CONSTRAINT [uq_users];\nGO\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -216,7 +220,7 @@ func TestMssqldefCreateTableDropUniqueConstraint(t *testing.T) {
 		);
 		GO`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [uq_users];\nGO\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction("ALTER TABLE [dbo].[users] DROP CONSTRAINT [uq_users];\nGO\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -230,7 +234,7 @@ func TestMssqldefCreateTableQuotes(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -263,9 +267,9 @@ func TestMssqldefCreateTable(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable1+createTable2, applyPrefix+createTable1+createTable2)
+	assertApplyOutput(t, createTable1+createTable2, wrapWithTransaction(createTable1+createTable2))
 	assertApplyOutput(t, createTable1+createTable2, nothingModified)
-	assertApplyOutput(t, createTable1, applyPrefix+"-- Skipped: DROP TABLE [dbo].[bigdata];\n")
+	assertApplyOutput(t, createTable1, wrapWithTransaction("-- Skipped: DROP TABLE [dbo].[bigdata];\n"))
 }
 
 func TestMssqldefCreateTableWithDefault(t *testing.T) {
@@ -284,7 +288,7 @@ func TestMssqldefCreateTableWithDefault(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -301,7 +305,7 @@ func TestMssqldefCreateTableWithIDENTITY(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -319,7 +323,7 @@ func TestMssqldefCreateTableWithCLUSTERED(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -335,18 +339,18 @@ func TestMssqldefCreateView(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createView := "CREATE VIEW [dbo].[view_users] AS select id from dbo.users with(nolock) where age = 1;\nGO\n"
-	assertApplyOutput(t, createTable+createView, applyPrefix+createView)
+	assertApplyOutput(t, createTable+createView, wrapWithTransaction(createView))
 	assertApplyOutput(t, createTable+createView, nothingModified)
 
 	createView = "CREATE VIEW [dbo].[view_users_new] AS select id from dbo.users with(nolock) where age = 2;\nGO\n"
 	skipDropView := "-- Skipped: DROP VIEW [dbo].[view_users];\n"
-	assertApplyOutput(t, createTable+createView, applyPrefix+createView+skipDropView)
-	assertApplyOutput(t, createTable+createView, applyPrefix+skipDropView)
-	assertApplyOutput(t, "", applyPrefix+"-- Skipped: DROP TABLE [dbo].[users];\n-- Skipped: DROP VIEW [dbo].[view_users];\n-- Skipped: DROP VIEW [dbo].[view_users_new];\n")
+	assertApplyOutput(t, createTable+createView, wrapWithTransaction(createView+skipDropView))
+	assertApplyOutput(t, createTable+createView, wrapWithTransaction(skipDropView))
+	assertApplyOutput(t, "", wrapWithTransaction("-- Skipped: DROP TABLE [dbo].[users];\n-- Skipped: DROP VIEW [dbo].[view_users];\n-- Skipped: DROP VIEW [dbo].[view_users_new];\n"))
 }
 
 func TestMssqldefTrigger(t *testing.T) {
@@ -366,7 +370,7 @@ func TestMssqldefTrigger(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTrigger := stripHeredoc(`
@@ -375,7 +379,7 @@ func TestMssqldefTrigger(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTrigger)
+	assertApplyOutput(t, createTable+createTrigger, wrapWithTransaction(createTrigger))
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 
 	createTrigger = stripHeredoc(`
@@ -386,13 +390,13 @@ func TestMssqldefTrigger(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable+createTrigger, applyPrefix+stripHeredoc(`
+	assertApplyOutput(t, createTable+createTrigger, wrapWithTransaction(stripHeredoc(`
 		CREATE OR ALTER TRIGGER [insert_log] ON [dbo].[users] for insert AS
 		delete from logs
 		insert into logs(log, dt) values ('insert', getdate());
 		GO
 		`,
-	))
+	)))
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 }
 
@@ -413,7 +417,7 @@ func TestMssqldefTriggerWithRichSyntax(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTrigger := stripHeredoc(`
@@ -446,7 +450,7 @@ func TestMssqldefTriggerWithRichSyntax(t *testing.T) {
 			GO
 		`,
 	)
-	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTrigger)
+	assertApplyOutput(t, createTable+createTrigger, wrapWithTransaction(createTrigger))
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 }
 
@@ -460,7 +464,7 @@ func TestMssqldefAddColumn(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -470,7 +474,7 @@ func TestMssqldefAddColumn(t *testing.T) {
 		);
 		GO`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] ADD [name] varchar(40);\nGO\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction("ALTER TABLE [dbo].[users] ADD [name] varchar(40);\nGO\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -484,7 +488,7 @@ func TestMssqldefAddColumnWithIDENTITY(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -494,7 +498,7 @@ func TestMssqldefAddColumnWithIDENTITY(t *testing.T) {
 		);
 		GO`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] ADD [membership_id] int IDENTITY(1,1) NOT FOR REPLICATION;\nGO\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction("ALTER TABLE [dbo].[users] ADD [membership_id] int IDENTITY(1,1) NOT FOR REPLICATION;\nGO\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -508,7 +512,7 @@ func TestMssqldefAddColumnWithCheck(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -518,7 +522,7 @@ func TestMssqldefAddColumnWithCheck(t *testing.T) {
 		);
 		GO`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] ADD [membership_id] int CHECK NOT FOR REPLICATION (membership_id > (0));\nGO\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction("ALTER TABLE [dbo].[users] ADD [membership_id] int CHECK NOT FOR REPLICATION (membership_id > (0));\nGO\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -540,7 +544,7 @@ func TestMssqldefCreateTableDropColumn(t *testing.T) {
 		);
 		GO`,
 	)
-	assertApplyOptionsOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\nGO\n", "--enable-drop")
+	assertApplyOptionsOutput(t, createTable, wrapWithTransaction("ALTER TABLE [dbo].[users] DROP COLUMN [name];\nGO\n"), "--enable-drop")
 	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 }
 
@@ -562,7 +566,7 @@ func TestMssqldefCreateTableDropColumnWithDefaultConstraint(t *testing.T) {
 		);
 		GO`,
 	)
-	assertApplyOptionsOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [df_name];\nGO\n"+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\nGO\n", "--enable-drop")
+	assertApplyOptionsOutput(t, createTable, wrapWithTransaction("ALTER TABLE [dbo].[users] DROP CONSTRAINT [df_name];\nGO\n"+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\nGO\n"), "--enable-drop")
 	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 }
 
@@ -594,7 +598,7 @@ func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
 		  id bigint NOT NULL PRIMARY KEY
 		);`,
 	)
-	assertApplyOptionsOutput(t, createTable, applyPrefix+dropConstraint+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\nGO\n", "--enable-drop")
+	assertApplyOptionsOutput(t, createTable, wrapWithTransaction(dropConstraint+"ALTER TABLE [dbo].[users] DROP COLUMN [name];\nGO\n"), "--enable-drop")
 	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 }
 
@@ -615,7 +619,7 @@ func TestMssqldefCreateTableDropColumnWithPK(t *testing.T) {
 		  name varchar(20) DEFAULT NULL
 		);`,
 	)
-	assertApplyOptionsOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [pk_id];\nGO\n"+"ALTER TABLE [dbo].[users] DROP COLUMN [id];\nGO\n", "--enable-drop")
+	assertApplyOptionsOutput(t, createTable, wrapWithTransaction("ALTER TABLE [dbo].[users] DROP CONSTRAINT [pk_id];\nGO\n"+"ALTER TABLE [dbo].[users] DROP COLUMN [id];\nGO\n"), "--enable-drop")
 	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
 }
 
@@ -630,7 +634,7 @@ func TestMssqldefCreateTableAddPrimaryKey(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -642,9 +646,9 @@ func TestMssqldefCreateTableAddPrimaryKey(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+
+	assertApplyOutput(t, createTable, wrapWithTransaction(
 		"ALTER TABLE [dbo].[users] ADD PRIMARY KEY CLUSTERED ([id]);\nGO\n",
-	)
+	))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -659,7 +663,7 @@ func TestMssqldefCreateTableAddPrimaryKeyConstraint(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -672,9 +676,9 @@ func TestMssqldefCreateTableAddPrimaryKeyConstraint(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+
+	assertApplyOutput(t, createTable, wrapWithTransaction(
 		"ALTER TABLE [dbo].[users] ADD CONSTRAINT [pk_users] PRIMARY KEY CLUSTERED ([id] desc);\nGO\n",
-	)
+	))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -708,7 +712,7 @@ func TestMssqldefCreateTableDropPrimaryKey(t *testing.T) {
 		);
 		GO`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+dropConstraint)
+	assertApplyOutput(t, createTable, wrapWithTransaction(dropConstraint))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -732,7 +736,7 @@ func TestMssqldefCreateTableDropPrimaryKeyConstraint(t *testing.T) {
 		);
 		GO`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+"ALTER TABLE [dbo].[users] DROP CONSTRAINT [pk_users];\nGO\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction("ALTER TABLE [dbo].[users] DROP CONSTRAINT [pk_users];\nGO\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -756,7 +760,7 @@ func TestMssqldefCreateTableWithIndexOption(t *testing.T) {
 		GO
 		`)
 
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -778,7 +782,7 @@ func TestMssqldefCreateTablePrimaryKeyWithIndexOption(t *testing.T) {
 		GO
 		`)
 
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -793,7 +797,7 @@ func TestMssqldefCreateTableAddIndex(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -810,9 +814,9 @@ func TestMssqldefCreateTableAddIndex(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+
+	assertApplyOutput(t, createTable, wrapWithTransaction(
 		"CREATE UNIQUE CLUSTERED INDEX [ix_users_id] ON [dbo].[users] ([id] desc) WITH (pad_index = ON, fillfactor = 10, statistics_norecompute = ON) ON [PRIMARY];\nGO\n",
-	)
+	))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -832,7 +836,7 @@ func TestMssqldefCreateTableDropIndex(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -844,8 +848,8 @@ func TestMssqldefCreateTableDropIndex(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+"-- Skipped: DROP INDEX [ix_users_id] ON [dbo].[users];\n")
-	assertApplyOptionsOutput(t, createTable, applyPrefix+"DROP INDEX [ix_users_id] ON [dbo].[users];\nGO\n", "--enable-drop")
+	assertApplyOutput(t, createTable, wrapWithTransaction("-- Skipped: DROP INDEX [ix_users_id] ON [dbo].[users];\n"))
+	assertApplyOptionsOutput(t, createTable, wrapWithTransaction("DROP INDEX [ix_users_id] ON [dbo].[users];\nGO\n"), "--enable-drop")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -861,7 +865,7 @@ func TestMssqldefCreateTableChangeIndexDefinition(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -874,10 +878,9 @@ func TestMssqldefCreateTableChangeIndexDefinition(t *testing.T) {
 		`,
 	)
 
-	assertApplyOptionsOutput(t, createTable, applyPrefix+
+	assertApplyOptionsOutput(t, createTable, wrapWithTransaction(
 		"DROP INDEX [ix_users_id] ON [dbo].[users];\nGO\n"+
-		"CREATE UNIQUE CLUSTERED INDEX [ix_users_id] ON [dbo].[users] ([id]);\nGO\n", "--enable-drop",
-	)
+			"CREATE UNIQUE CLUSTERED INDEX [ix_users_id] ON [dbo].[users] ([id]);\nGO\n"), "--enable-drop")
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -893,11 +896,10 @@ func TestMssqldefCreateTableChangeIndexDefinition(t *testing.T) {
 		`,
 	)
 
-	assertApplyOptionsOutput(t, createTable, applyPrefix+
+	assertApplyOptionsOutput(t, createTable, wrapWithTransaction(
 		"DROP INDEX [ix_users_id] ON [dbo].[users];\nGO\n"+
-		"CREATE UNIQUE CLUSTERED INDEX [ix_users_id] ON [dbo].[users] ([id]) WITH (pad_index = ON, fillfactor = 10);\nGO\n",
-		"--enable-drop",
-	)
+			"CREATE UNIQUE CLUSTERED INDEX [ix_users_id] ON [dbo].[users] ([id]) WITH (pad_index = ON, fillfactor = 10);\nGO\n"),
+		"--enable-drop")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -913,7 +915,7 @@ func TestMssqldefCreateTableForeignKey(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
+	assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(createUsers+createPosts))
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	createPosts = stripHeredoc(`
@@ -925,7 +927,7 @@ func TestMssqldefCreateTableForeignKey(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [dbo].[users] ([id]);\nGO\n")
+	assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction("ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [dbo].[users] ([id]);\nGO\n"))
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	createPosts = stripHeredoc(`
@@ -937,10 +939,10 @@ func TestMssqldefCreateTableForeignKey(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+
+	assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(
 		"ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_ibfk_1];\nGO\n"+
-		"ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [dbo].[users] ([id]) ON DELETE SET NULL ON UPDATE CASCADE;\nGO\n",
-	)
+			"ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [dbo].[users] ([id]) ON DELETE SET NULL ON UPDATE CASCADE;\nGO\n",
+	))
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	createPosts = stripHeredoc(`
@@ -950,7 +952,7 @@ func TestMssqldefCreateTableForeignKey(t *testing.T) {
 		);
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+"ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_ibfk_1];\nGO\n")
+	assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction("ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_ibfk_1];\nGO\n"))
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 }
 
@@ -965,7 +967,7 @@ func TestMssqldefCreateTableWithCheck(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -976,9 +978,9 @@ func TestMssqldefCreateTableWithCheck(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+
+	assertApplyOutput(t, createTable, wrapWithTransaction(
 		"ALTER TABLE [dbo].[a] DROP CONSTRAINT a_a_id_check;\nGO\n"+
-		"ALTER TABLE [dbo].[a] ADD CONSTRAINT a_a_id_check CHECK (a_id > (1));\nGO\n")
+			"ALTER TABLE [dbo].[a] ADD CONSTRAINT a_a_id_check CHECK (a_id > (1));\nGO\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -989,8 +991,8 @@ func TestMssqldefCreateTableWithCheck(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+
-		"ALTER TABLE [dbo].[a] DROP CONSTRAINT a_a_id_check;\nGO\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(
+		"ALTER TABLE [dbo].[a] DROP CONSTRAINT a_a_id_check;\nGO\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1005,7 +1007,7 @@ func TestMssqldefCreateTableWithCheckWithoutName(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -1028,8 +1030,8 @@ func TestMssqldefCreateTableWithCheckWithoutName(t *testing.T) {
 	checkConstraintName := strings.Replace((strings.Split(out, "\n")[0]), " ", "", -1)
 	dropConstraint := fmt.Sprintf("ALTER TABLE [dbo].[a] DROP CONSTRAINT %s;\nGO\n", checkConstraintName)
 
-	assertApplyOutput(t, createTable, applyPrefix+
-		dropConstraint+"ALTER TABLE [dbo].[a] ADD CONSTRAINT a_a_id_check CHECK (a_id > (1));\nGO\n")
+	assertApplyOutput(t, createTable, wrapWithTransaction(
+		dropConstraint+"ALTER TABLE [dbo].[a] ADD CONSTRAINT a_a_id_check CHECK (a_id > (1));\nGO\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1048,11 +1050,11 @@ func TestMssqldefCreateIndex(t *testing.T) {
 	assertApply(t, createTable)
 
 	createIndex := "CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at]) WITH (PAD_INDEX = ON) ON [PRIMARY];\nGO\n"
-	assertApplyOutput(t, createTable+createIndex, applyPrefix+createIndex)
+	assertApplyOutput(t, createTable+createIndex, wrapWithTransaction(createIndex))
 	assertApplyOutput(t, createTable+createIndex, nothingModified)
 
-	assertApplyOutput(t, createTable, applyPrefix+"-- Skipped: DROP INDEX [index_name] ON [dbo].[users];\n")
-	assertApplyOptionsOutput(t, createTable, applyPrefix+"DROP INDEX [index_name] ON [dbo].[users];\nGO\n", "--enable-drop")
+	assertApplyOutput(t, createTable, wrapWithTransaction("-- Skipped: DROP INDEX [index_name] ON [dbo].[users];\n"))
+	assertApplyOptionsOutput(t, createTable, wrapWithTransaction("DROP INDEX [index_name] ON [dbo].[users];\nGO\n"), "--enable-drop")
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1071,21 +1073,19 @@ func TestMssqldefCreateIndexChangeIndexDefinition(t *testing.T) {
 	)
 
 	createIndex := "CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at]) WITH (PAD_INDEX = ON);\nGO\n"
-	assertApplyOutput(t, createTable+createIndex, applyPrefix+createTable+createIndex)
+	assertApplyOutput(t, createTable+createIndex, wrapWithTransaction(createTable+createIndex))
 	assertApplyOutput(t, createTable+createIndex, nothingModified)
 
 	createIndex = "CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at], [updated_at]) WITH (PAD_INDEX = ON);\nGO\n"
-	assertApplyOptionsOutput(t, createTable+createIndex, applyPrefix+
+	assertApplyOptionsOutput(t, createTable+createIndex, wrapWithTransaction(
 		"DROP INDEX [index_name] ON [dbo].[users];\nGO\n"+
-		"CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at], [updated_at]) WITH (PAD_INDEX = ON);\nGO\n", "--enable-drop",
-	)
+			"CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at], [updated_at]) WITH (PAD_INDEX = ON);\nGO\n"), "--enable-drop")
 	assertApplyOutput(t, createTable+createIndex, nothingModified)
 
 	createIndex = "CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at], [updated_at]) WITH (PAD_INDEX = ON, FILLFACTOR = 10);\nGO\n"
-	assertApplyOptionsOutput(t, createTable+createIndex, applyPrefix+
+	assertApplyOptionsOutput(t, createTable+createIndex, wrapWithTransaction(
 		"DROP INDEX [index_name] ON [dbo].[users];\nGO\n"+
-		"CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at], [updated_at]) WITH (PAD_INDEX = ON, FILLFACTOR = 10);\nGO\n", "--enable-drop",
-	)
+			"CREATE NONCLUSTERED INDEX [index_name] ON [users] ([name] DESC) INCLUDE([created_at], [updated_at]) WITH (PAD_INDEX = ON, FILLFACTOR = 10);\nGO\n"), "--enable-drop")
 	assertApplyOutput(t, createTable+createIndex, nothingModified)
 }
 
@@ -1104,7 +1104,7 @@ func TestMssqldefCreateTableNotForReplication(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
+	assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(createUsers+createPosts))
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 }
 
@@ -1123,7 +1123,7 @@ func TestMssqldefCreateTableAddNotForReplication(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createUsers+createPosts, applyPrefix+createUsers+createPosts)
+	assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(createUsers+createPosts))
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
 	createPosts = stripHeredoc(`
@@ -1137,15 +1137,14 @@ func TestMssqldefCreateTableAddNotForReplication(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOptionsOutput(t, createUsers+createPosts, applyPrefix+
+	assertApplyOptionsOutput(t, createUsers+createPosts, wrapWithTransaction(
 		"ALTER TABLE [dbo].[posts] DROP COLUMN [post_id];\nGO\n"+
-		"ALTER TABLE [dbo].[posts] ADD [post_id] bigint IDENTITY(1,1) NOT FOR REPLICATION;\nGO\n"+
-		"ALTER TABLE [dbo].[posts] DROP CONSTRAINT posts_view_check;\nGO\n"+
-		"ALTER TABLE [dbo].[posts] ADD CONSTRAINT posts_view_check CHECK NOT FOR REPLICATION (views > (-1));\nGO\n"+
-		"ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_ibfk_1];\nGO\n"+
-		"ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [dbo].[users] ([id]) NOT FOR REPLICATION;\nGO\n",
-		"--enable-drop",
-	)
+			"ALTER TABLE [dbo].[posts] ADD [post_id] bigint IDENTITY(1,1) NOT FOR REPLICATION;\nGO\n"+
+			"ALTER TABLE [dbo].[posts] DROP CONSTRAINT posts_view_check;\nGO\n"+
+			"ALTER TABLE [dbo].[posts] ADD CONSTRAINT posts_view_check CHECK NOT FOR REPLICATION (views > (-1));\nGO\n"+
+			"ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_ibfk_1];\nGO\n"+
+			"ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [dbo].[users] ([id]) NOT FOR REPLICATION;\nGO\n"),
+		"--enable-drop")
 	assertApplyOptionsOutput(t, createUsers+createPosts, nothingModified, "--enable-drop")
 }
 
@@ -1160,7 +1159,7 @@ func TestMssqldefCreateTableAddDefaultChangeDefault(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -1172,9 +1171,9 @@ func TestMssqldefCreateTableAddDefaultChangeDefault(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+
+	assertApplyOutput(t, createTable, wrapWithTransaction(
 		"ALTER TABLE [dbo].[messages] ADD CONSTRAINT [df_messages_content] DEFAULT '' FOR [content];\nGO\n",
-	)
+	))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
@@ -1186,10 +1185,10 @@ func TestMssqldefCreateTableAddDefaultChangeDefault(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable, applyPrefix+
+	assertApplyOutput(t, createTable, wrapWithTransaction(
 		"ALTER TABLE [dbo].[messages] DROP CONSTRAINT [df_messages_content];\nGO\n"+
-		"ALTER TABLE [dbo].[messages] ADD DEFAULT 'hello' FOR [content];\nGO\n",
-	)
+			"ALTER TABLE [dbo].[messages] ADD DEFAULT 'hello' FOR [content];\nGO\n",
+	))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1217,7 +1216,7 @@ func TestMssqldefUseSequenceInTrigger(t *testing.T) {
 		GO
 	`)
 
-	assertApplyOutput(t, createTable+createTrigger, applyPrefix+createTable+createTrigger)
+	assertApplyOutput(t, createTable+createTrigger, wrapWithTransaction(createTable+createTrigger))
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 }
 
@@ -1235,7 +1234,7 @@ func TestMssqldefApply(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, applyPrefix+createTable)
+	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1274,7 +1273,7 @@ func TestMssqldefDropTable(t *testing.T) {
 		`,
 	)
 	out := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--enable-drop", "--file", "schema.sql")
-	assertEquals(t, out, applyPrefix+dropTable)
+	assertEquals(t, out, wrapWithTransaction(dropTable))
 }
 
 func TestMssqldefExport(t *testing.T) {

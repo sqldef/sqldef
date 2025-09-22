@@ -165,3 +165,11 @@ func (d *Sqlite3Database) GetDefaultSchema() string {
 func (d *Sqlite3Database) SetGeneratorConfig(config database.GeneratorConfig) {
 	// Not implemented for sqlite3 - privileges not supported
 }
+
+func (d *Sqlite3Database) GetTransactionQueries() database.TransactionQueries {
+	return database.TransactionQueries{
+		Begin:    "BEGIN",
+		Commit:   "COMMIT",
+		Rollback: "ROLLBACK",
+	}
+}
