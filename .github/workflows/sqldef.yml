@@ -44,7 +44,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.21
+          go-version: 1.25
       - uses: actions/checkout@v5
 
       - run: docker compose up -d
@@ -85,7 +85,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.21
+          go-version: 1.25
       - uses: actions/checkout@v5
 
       - name: make package-${{ matrix.EXT }}
@@ -109,7 +109,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.21
+          go-version: 1.25
       - uses: actions/checkout@v5
 
       - name: make package-${{ matrix.EXT }}
