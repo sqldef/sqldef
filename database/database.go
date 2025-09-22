@@ -68,7 +68,7 @@ func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddl
 	if len(beforeApply) > 0 {
 		fmt.Println(beforeApply)
 		if _, err := transaction.Exec(beforeApply); err != nil {
-			transaction.Rollback()
+			_ = transaction.Rollback()
 			return err
 		}
 	}
@@ -111,11 +111,13 @@ func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddl
 			_, err = d.DB().Exec(ddl)
 		}
 		if err != nil {
-			transaction.Rollback()
+			_ = transaction.Rollback()
 			return err
 		}
 	}
-	transaction.Commit()
+	if err := transaction.Commit(); err != nil {
+		return err
+	}
 	return nil
 }
 

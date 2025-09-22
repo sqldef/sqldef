@@ -3,7 +3,6 @@ package testutils
 
 import (
 	"bytes"
-	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -56,7 +55,7 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 				test.Output = &test.Desired
 			}
 			if _, ok := ret[name]; ok {
-				log.Fatal(fmt.Sprintf("There are multiple test cases named '%s'", name))
+				log.Fatalf("There are multiple test cases named '%s'", name)
 			}
 			ret[name] = *test
 		}
