@@ -185,9 +185,11 @@ func registerTLSConfig(pemPath string) error {
 		return fmt.Errorf("failed to append PEM")
 	}
 
-	driver.RegisterTLSConfig("custom", &tls.Config{
+	if err := driver.RegisterTLSConfig("custom", &tls.Config{
 		RootCAs: rootCertPool,
-	})
+	}); err != nil {
+		return err
+	}
 
 	return nil
 }

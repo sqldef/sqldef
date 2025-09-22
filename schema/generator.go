@@ -2780,7 +2780,7 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 	if desiredDefault != nil {
 		desiredExprSchema, desiredExpr = splitTableName(desiredDefault.expression, g.defaultSchema)
 	}
-	return strings.ToLower(currentExprSchema) == strings.ToLower(desiredExprSchema) && strings.ToLower(currentExpr) == strings.ToLower(desiredExpr)
+	return strings.EqualFold(currentExprSchema, desiredExprSchema) && strings.EqualFold(currentExpr, desiredExpr)
 }
 
 func (g *Generator) areSameValue(current, desired *Value) bool {
@@ -2803,9 +2803,9 @@ func (g *Generator) areSameValue(current, desired *Value) bool {
 	// NOTE: Boolean constants is evaluated as TINYINT(1) value in MySQL.
 	if g.mode == GeneratorModeMysql {
 		if desired.valueType == ValueTypeBool {
-			if strings.ToLower(string(desired.raw)) == "false" {
+			if strings.EqualFold(string(desired.raw), "false") {
 				desiredRaw = "0"
-			} else if strings.ToLower(string(desired.raw)) == "true" {
+			} else if strings.EqualFold(string(desired.raw), "true") {
 				desiredRaw = "1"
 			}
 		}
@@ -2833,9 +2833,9 @@ func areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 		return false
 	}
 	for i := 0; i < len(triggerA.body); i++ {
-		bodyA := strings.ToLower(strings.Replace(triggerA.body[i], " ", "", -1))
-		bodyB := strings.ToLower(strings.Replace(triggerB.body[i], " ", "", -1))
-		if bodyA != bodyB {
+		bodyA := strings.Replace(triggerA.body[i], " ", "", -1)
+		bodyB := strings.Replace(triggerB.body[i], " ", "", -1)
+		if !strings.EqualFold(bodyA, bodyB) {
 			return false
 		}
 	}
@@ -3059,16 +3059,16 @@ func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion
 }
 
 func areSamePolicies(policyA, policyB Policy) bool {
-	if strings.ToLower(policyA.scope) != strings.ToLower(policyB.scope) {
+	if !strings.EqualFold(policyA.scope, policyB.scope) {
 		return false
 	}
-	if strings.ToLower(policyA.permissive) != strings.ToLower(policyB.permissive) {
+	if !strings.EqualFold(policyA.permissive, policyB.permissive) {
 		return false
 	}
 	if normalizeUsing(policyA.using) != normalizeUsing(policyB.using) {
 		return fmt.Sprintf("(%s)", policyA.using) == policyB.using
 	}
-	if strings.ToLower(policyA.withCheck) != strings.ToLower(policyB.withCheck) {
+	if !strings.EqualFold(policyA.withCheck, policyB.withCheck) {
 		return fmt.Sprintf("(%s)", policyA.withCheck) == policyB.withCheck
 	}
 	if len(policyA.roles) != len(policyB.roles) {
@@ -3081,7 +3081,7 @@ func areSamePolicies(policyA, policyB Policy) bool {
 		return policyB.roles[i] <= policyB.roles[j]
 	})
 	for i := range policyA.roles {
-		if strings.ToLower(policyA.roles[i]) != strings.ToLower(policyB.roles[i]) {
+		if !strings.EqualFold(policyA.roles[i], policyB.roles[i]) {
 			return false
 		}
 	}

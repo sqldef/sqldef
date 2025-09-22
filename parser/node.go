@@ -201,7 +201,6 @@ func (node *Select) addWhere(expr Expr) {
 		Left:  node.Where.Expr,
 		Right: expr,
 	}
-	return
 }
 
 // addHaving adds the boolean expression to the
@@ -224,7 +223,6 @@ func (node *Select) addHaving(expr Expr) {
 		Left:  node.Having.Expr,
 		Right: expr,
 	}
-	return
 }
 
 // ParenSelect is a parenthesized SELECT statement.
