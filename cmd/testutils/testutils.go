@@ -26,7 +26,10 @@ type TestCase struct {
 	User         string
 	Flavor       string   // database flavor (e.g., "mariadb", "mysql")
 	ManagedRoles []string `yaml:"managed_roles"` // Roles whose privileges are managed by sqldef
-	EnableDrop   bool     `yaml:"enable_drop"`   // Whether to enable DROP/REVOKE operations
+	EnableDrop   *bool    `yaml:"enable_drop"`   // Whether to enable DROP/REVOKE operations
+	Config       struct { // Optional config settings for the test
+		CreateIndexConcurrently bool `yaml:"create_index_concurrently"`
+	} `yaml:"config"`
 }
 
 func ReadTests(pattern string) (map[string]TestCase, error) {
@@ -53,6 +56,11 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 		for name, test := range tests {
 			if test.Output == nil {
 				test.Output = &test.Desired
+			}
+
+			if test.EnableDrop == nil {
+				enableDrop := true // defaults to true
+				test.EnableDrop = &enableDrop
 			}
 			if _, ok := ret[name]; ok {
 				log.Fatalf("There are multiple test cases named '%s'", name)
@@ -89,7 +97,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = runDDLs(db, ddls)
+		err = runDDLs(db, ddls, *test.EnableDrop)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -97,8 +105,9 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 
 	// Set generator config on database so it knows which privileges to include
 	config := database.GeneratorConfig{
-		ManagedRoles: test.ManagedRoles,
-		EnableDrop:   test.EnableDrop,
+		ManagedRoles:            test.ManagedRoles,
+		EnableDrop:              *test.EnableDrop,
+		CreateIndexConcurrently: test.Config.CreateIndexConcurrently,
 	}
 	db.SetGeneratorConfig(config)
 
@@ -140,7 +149,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if expected != actual {
 		t.Errorf("Migration output doesn't match expected.\n\nExpected DDLs:\n```\n%s```\n\nActual DDLs:\n```\n%s```", expected, actual)
 	}
-	err = runDDLs(db, ddls)
+	err = runDDLs(db, ddls, *test.EnableDrop)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,27 +213,14 @@ func splitDDLs(mode schema.GeneratorMode, sqlParser database.Parser, str string,
 	return ddls, nil
 }
 
-func runDDLs(db database.Database, ddls []string) error {
-	transaction, err := db.DB().Begin()
-	if err != nil {
-		return err
+func runDDLs(db database.Database, ddls []string, enableDrop bool) error {
+	var logger database.Logger
+	if !testing.Verbose() {
+		logger = database.NullLogger{}
+	} else {
+		logger = database.StdoutLogger{}
 	}
-	for _, ddl := range ddls {
-		var err error
-		if database.TransactionSupported(ddl) {
-			_, err = transaction.Exec(ddl)
-		} else {
-			_, err = db.DB().Exec(ddl)
-		}
-		if err != nil {
-			rollbackErr := transaction.Rollback()
-			if rollbackErr != nil {
-				return rollbackErr
-			}
-			return err
-		}
-	}
-	return transaction.Commit()
+	return database.RunDDLs(db, ddls, enableDrop /* beforeApply */, "" /* ddlSuffix */, "", logger)
 }
 
 func joinDDLs(ddls []string) string {

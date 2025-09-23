@@ -102,7 +102,6 @@ ManagedRolesRevoke:
     GRANT SELECT ON TABLE users TO app_user;
   managed_roles:
     - app_user
-  enable_drop: true
   output: |
     REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
 
@@ -120,7 +119,6 @@ ManagedRolesRevokeAll:
     );
   managed_roles:
     - app_user
-  enable_drop: true
   output: |
     REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "app_user";
 
@@ -194,6 +192,7 @@ ManagedRolesNoRevokeWithoutDrop:
   output: ""
 
 ManagedRolesMultipleGrantees:
+  enable_drop: false
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -213,6 +212,7 @@ ManagedRolesMultipleGrantees:
     GRANT SELECT ON TABLE "public"."users" TO "admin_role", "app_user", "readonly_user";
 
 ManagedRolesPartialGrantees:
+  enable_drop: false
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -233,6 +233,7 @@ ManagedRolesPartialGrantees:
     GRANT INSERT, UPDATE ON TABLE "public"."users" TO "user2", "user4";
 
 ManagedRolesOverlapping:
+  enable_drop: false
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -312,7 +313,6 @@ ManagedRolesErrorCascade:
     revoke select on table users from readonly_user cascade;
   managed_roles:
     - readonly_user
-  enable_drop: true
   error: "CASCADE/RESTRICT options are not supported yet"
 
 ManagedRolesPartialRevokeFromAll:
@@ -330,7 +330,6 @@ ManagedRolesPartialRevokeFromAll:
     GRANT SELECT, INSERT, UPDATE ON TABLE users TO admin_role;
   managed_roles:
     - admin_role
-  enable_drop: true
   output: |
     REVOKE DELETE, REFERENCES, TRIGGER, TRUNCATE ON TABLE "public"."users" FROM "admin_role";
 
@@ -372,7 +371,6 @@ ManagedRolesMixedGrantRevoke:
     GRANT SELECT, UPDATE ON TABLE users TO app_user;
   managed_roles:
     - app_user
-  enable_drop: true
   output: |
     REVOKE DELETE, INSERT ON TABLE "public"."users" FROM "app_user";
     GRANT UPDATE ON TABLE "public"."users" TO "app_user";

@@ -81,7 +81,7 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 		db = dryRunDB
 	}
 
-	err = database.RunDDLs(db, ddls, options.EnableDrop, options.BeforeApply, ddlSuffix)
+	err = database.RunDDLs(db, ddls, options.EnableDrop, options.BeforeApply, ddlSuffix, database.StdoutLogger{})
 	if err != nil {
 		log.Fatal(err)
 	}
