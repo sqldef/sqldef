@@ -7,12 +7,12 @@ import (
 	"strings"
 
 	"github.com/jessevdk/go-flags"
-	"github.com/sqldef/sqldef/v2"
-	"github.com/sqldef/sqldef/v2/database"
-	"github.com/sqldef/sqldef/v2/database/file"
-	"github.com/sqldef/sqldef/v2/database/sqlite3"
-	"github.com/sqldef/sqldef/v2/parser"
-	"github.com/sqldef/sqldef/v2/schema"
+	"github.com/sqldef/sqldef/v3"
+	"github.com/sqldef/sqldef/v3/database"
+	"github.com/sqldef/sqldef/v3/database/file"
+	"github.com/sqldef/sqldef/v3/database/sqlite3"
+	"github.com/sqldef/sqldef/v3/parser"
+	"github.com/sqldef/sqldef/v3/schema"
 )
 
 // version and revision are set via -ldflags

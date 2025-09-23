@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	_ "github.com/lib/pq"
-	"github.com/sqldef/sqldef/v2/database"
-	schemaLib "github.com/sqldef/sqldef/v2/schema"
+	"github.com/sqldef/sqldef/v3/database"
+	schemaLib "github.com/sqldef/sqldef/v3/schema"
 )
 
 const indent = "    "

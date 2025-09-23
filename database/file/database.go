@@ -3,8 +3,8 @@ package file
 import (
 	"database/sql"
 
-	"github.com/sqldef/sqldef/v2"
-	"github.com/sqldef/sqldef/v2/database"
+	"github.com/sqldef/sqldef/v3"
+	"github.com/sqldef/sqldef/v3/database"
 )
 
 // Pseudo database for comparison between files

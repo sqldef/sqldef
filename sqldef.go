@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sqldef/sqldef/v2/database"
-	"github.com/sqldef/sqldef/v2/schema"
+	"github.com/sqldef/sqldef/v3/database"
+	"github.com/sqldef/sqldef/v3/schema"
 )
 
 type Options struct {
