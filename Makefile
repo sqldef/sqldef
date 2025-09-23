@@ -86,5 +86,8 @@ test-mssqldef:
 	go test -v ./cmd/mssqldef
 	go test -v ./database/mssql
 
+format:
+	go fmt .
+
 touch:
 	touch parser/parser.y

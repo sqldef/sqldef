@@ -4,7 +4,6 @@ package database
 import (
 	"bytes"
 	"database/sql"
-	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -39,15 +38,16 @@ type Config struct {
 }
 
 type GeneratorConfig struct {
-	TargetTables    []string
-	SkipTables      []string
-	SkipViews       []string
-	TargetSchema    []string
-	Algorithm       string
-	Lock            string
-	DumpConcurrency int
-	ManagedRoles    []string // Roles whose privileges are managed by sqldef
-	EnableDrop      bool     // Whether to enable DROP/REVOKE operations
+	TargetTables            []string
+	SkipTables              []string
+	SkipViews               []string
+	TargetSchema            []string
+	Algorithm               string
+	Lock                    string
+	DumpConcurrency         int
+	ManagedRoles            []string // Roles whose privileges are managed by sqldef
+	EnableDrop              bool     // Whether to enable DROP/REVOKE operations
+	CreateIndexConcurrently bool     // Whether to add CONCURRENTLY to CREATE INDEX statements
 }
 
 type TransactionQueries struct {
@@ -71,11 +71,11 @@ func isDryRun(d Database) bool {
 	return isDryRun
 }
 
-func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddlSuffix string) error {
+func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddlSuffix string, logger Logger) error {
 	if isDryRun(d) {
-		fmt.Println("-- dry run --")
+		logger.Println("-- dry run --")
 	} else {
-		fmt.Println("-- Apply --")
+		logger.Println("-- Apply --")
 	}
 
 	ddlsInTx := []string{}
@@ -100,15 +100,15 @@ func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddl
 			return err
 		}
 
-		fmt.Printf("%s;\n", txQueries.Begin)
+		logger.Printf("%s;\n", txQueries.Begin)
 	}
 
 	if len(beforeApply) > 0 {
 		// beforeApply is executed in transaction
-		fmt.Println(beforeApply)
+		logger.Println(beforeApply)
 		if _, err := transaction.Exec(beforeApply); err != nil {
 			_ = transaction.Rollback()
-			fmt.Printf("%s;\n", txQueries.Rollback)
+			logger.Printf("%s;\n", txQueries.Rollback)
 			return err
 		}
 	}
@@ -117,15 +117,15 @@ func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddl
 	for _, ddl := range ddlsInTx {
 		// Skip the DDL that contains destructive operations unless enableDrop.
 		if !enableDrop && IsDropStatement(ddl) {
-			fmt.Printf("-- Skipped: %s;\n", ddl)
+			logger.Printf("-- Skipped: %s;\n", ddl)
 			continue
 		}
-		fmt.Printf("%s;\n", ddl)
-		fmt.Print(ddlSuffix)
+		logger.Printf("%s;\n", ddl)
+		logger.Print(ddlSuffix)
 		_, err = transaction.Exec(ddl)
 		if err != nil {
 			_ = transaction.Rollback()
-			fmt.Printf("%s;\n", txQueries.Rollback)
+			logger.Printf("%s;\n", txQueries.Rollback)
 			return err
 		}
 	}
@@ -135,19 +135,19 @@ func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddl
 		if err := transaction.Commit(); err != nil {
 			return err
 		}
-		fmt.Printf("%s;\n", txQueries.Commit)
+		logger.Printf("%s;\n", txQueries.Commit)
 	}
 
 	// DDLs not in transaction
 	for _, ddl := range ddlsNotInTx {
 		// Skip the DDL that contains destructive operations unless enableDrop.
 		if !enableDrop && IsDropStatement(ddl) {
-			fmt.Printf("-- Skipped: %s;\n", ddl)
+			logger.Printf("-- Skipped: %s;\n", ddl)
 			continue
 		}
 
-		fmt.Printf("%s;\n", ddl)
-		fmt.Print(ddlSuffix)
+		logger.Printf("%s;\n", ddl)
+		logger.Print(ddlSuffix)
 		_, err = d.DB().Exec(ddl)
 		if err != nil {
 			return err
@@ -235,21 +235,25 @@ func MergeGeneratorConfig(base, override GeneratorConfig) GeneratorConfig {
 	if override.EnableDrop {
 		result.EnableDrop = override.EnableDrop
 	}
+	if override.CreateIndexConcurrently {
+		result.CreateIndexConcurrently = override.CreateIndexConcurrently
+	}
 
 	return result
 }
 
 func parseGeneratorConfigFromBytes(buf []byte) GeneratorConfig {
 	var config struct {
-		TargetTables    string   `yaml:"target_tables"`
-		SkipTables      string   `yaml:"skip_tables"`
-		SkipViews       string   `yaml:"skip_views"`
-		TargetSchema    string   `yaml:"target_schema"`
-		Algorithm       string   `yaml:"algorithm"`
-		Lock            string   `yaml:"lock"`
-		DumpConcurrency int      `yaml:"dump_concurrency"`
-		ManagedRoles    []string `yaml:"managed_roles"`
-		EnableDrop      bool     `yaml:"enable_drop"`
+		TargetTables            string   `yaml:"target_tables"`
+		SkipTables              string   `yaml:"skip_tables"`
+		SkipViews               string   `yaml:"skip_views"`
+		TargetSchema            string   `yaml:"target_schema"`
+		Algorithm               string   `yaml:"algorithm"`
+		Lock                    string   `yaml:"lock"`
+		DumpConcurrency         int      `yaml:"dump_concurrency"`
+		ManagedRoles            []string `yaml:"managed_roles"`
+		EnableDrop              bool     `yaml:"enable_drop"`
+		CreateIndexConcurrently bool     `yaml:"create_index_concurrently"`
 	}
 
 	dec := yaml.NewDecoder(bytes.NewReader(buf), yaml.DisallowUnknownField())
@@ -288,14 +292,15 @@ func parseGeneratorConfigFromBytes(buf []byte) GeneratorConfig {
 		lock = strings.Trim(config.Lock, "\n")
 	}
 	return GeneratorConfig{
-		TargetTables:    targetTables,
-		SkipTables:      skipTables,
-		SkipViews:       skipViews,
-		TargetSchema:    targetSchema,
-		Algorithm:       algorithm,
-		Lock:            lock,
-		DumpConcurrency: config.DumpConcurrency,
-		ManagedRoles:    config.ManagedRoles,
-		EnableDrop:      config.EnableDrop,
+		TargetTables:            targetTables,
+		SkipTables:              skipTables,
+		SkipViews:               skipViews,
+		TargetSchema:            targetSchema,
+		Algorithm:               algorithm,
+		Lock:                    lock,
+		DumpConcurrency:         config.DumpConcurrency,
+		ManagedRoles:            config.ManagedRoles,
+		EnableDrop:              config.EnableDrop,
+		CreateIndexConcurrently: config.CreateIndexConcurrently,
 	}
 }

@@ -2183,3 +2183,79 @@ RenameIndexInNonDefaultSchema:
     CREATE INDEX new_email_idx /* @renamed from=old_email_idx */ ON myschema.users (email);
   output: |
     ALTER INDEX "myschema"."old_email_idx" RENAME TO "new_email_idx";
+
+CreateIndexWithConcurrentlyConfig:
+  config:
+    create_index_concurrently: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(128),
+      email VARCHAR(255)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(128),
+      email VARCHAR(255)
+    );
+    CREATE INDEX idx_users_name ON users (name);
+    CREATE INDEX idx_users_email ON users (email);
+  output: |
+    CREATE INDEX CONCURRENTLY idx_users_name ON users (name);
+    CREATE INDEX CONCURRENTLY idx_users_email ON users (email);
+
+CreateUniqueIndexWithConcurrentlyConfig:
+  config:
+    create_index_concurrently: true
+  current: |
+    CREATE TABLE products (
+      id BIGINT NOT NULL PRIMARY KEY,
+      sku VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE products (
+      id BIGINT NOT NULL PRIMARY KEY,
+      sku VARCHAR(100)
+    );
+    CREATE UNIQUE INDEX idx_products_sku ON products (sku);
+  output: |
+    CREATE UNIQUE INDEX CONCURRENTLY idx_products_sku ON products (sku);
+
+CreateIndexWithConcurrentlyConfigMixedStatements:
+  config:
+    create_index_concurrently: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(128)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(128),
+      email VARCHAR(255)
+    );
+    CREATE INDEX idx_users_name ON users (name);
+    CREATE INDEX CONCURRENTLY idx_users_email_manual ON users (email);
+  output: |
+    ALTER TABLE "public"."users" ADD COLUMN "email" varchar(255);
+    CREATE INDEX CONCURRENTLY idx_users_name ON users (name);
+    CREATE INDEX CONCURRENTLY idx_users_email_manual ON users (email);
+
+CreateIndexWithoutConcurrentlyConfig:
+  config:
+    create_index_concurrently: false
+  current: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(128)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(128)
+    );
+    CREATE INDEX idx_users_name ON users (name);
+  output: |
+    CREATE INDEX idx_users_name ON users (name);

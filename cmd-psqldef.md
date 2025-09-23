@@ -126,8 +126,9 @@ target_schema: |
 managed_roles:
   - readonly_user
   - app_user
-enable_drop: true  # Allows REVOKE operations
+enable_drop: true
 dump_concurrency: 4
+create_index_concurrently: true
 EOF
 $ psqldef -U postgres test --config=config.yml < schema.sql
 
@@ -183,6 +184,31 @@ Remove the line to DROP COLUMN.
 ```
 
 Remove the line to DROP INDEX.
+
+#### CREATE INDEX CONCURRENTLY
+
+To create indexes without blocking writes, use the `create_index_concurrently` configuration:
+
+```shell
+# Using configuration file
+$ cat > config.yml <<EOF
+create_index_concurrently: true
+EOF
+$ psqldef -U postgres test --config=config.yml < schema.sql
+
+# Using inline configuration
+$ psqldef -U postgres test --config-inline="create_index_concurrently: true" < schema.sql
+
+# Example output with create_index_concurrently enabled
+-- Apply --
+BEGIN;
+ALTER TABLE users ADD COLUMN email VARCHAR(255);
+COMMIT;
+CREATE INDEX CONCURRENTLY idx_users_email ON users (email);  # Runs outside transaction
+CREATE INDEX CONCURRENTLY idx_users_name ON users (name);    # Runs outside transaction
+```
+
+Note: CREATE INDEX CONCURRENTLY operations must run outside of transactions. When enabled, psqldef automatically separates these operations from the transaction block.
 
 ### ADD FOREIGN KEY
 
@@ -242,4 +268,5 @@ The `--config` and `--config-inline` options accept YAML configuration with the 
 | `managed_roles` | array | List of role names whose privileges (GRANT/REVOKE) should be managed. Only privileges for these roles will be applied. |
 | `enable_drop` | boolean | When true, enables destructive operations like DROP TABLE, DROP COLUMN, and REVOKE. Default is false. |
 | `dump_concurrency` | integer | Number of parallel connections to use when exporting the schema. Improves performance for large schemas. Default is 1. |
+| `create_index_concurrently` | boolean | When true, adds CONCURRENTLY to all CREATE INDEX statements.Default is false. |
 
