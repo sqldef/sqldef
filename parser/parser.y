@@ -608,7 +608,7 @@ create_statement:
     $$ = &DDL{
       Action: CreateTrigger,
       Trigger: &Trigger{
-        Name: $3,
+        Name: &ColName{Name: $3},
         TableName: $7,
         Time: $4,
         Event: $5,
@@ -617,7 +617,7 @@ create_statement:
     }
   }
 /* For MSSQL */
-| CREATE TRIGGER sql_id ON table_name trigger_time trigger_event_list AS trigger_statements
+| CREATE TRIGGER column_name ON table_name trigger_time trigger_event_list AS trigger_statements
   {
     $$ = &DDL{
       Action: CreateTrigger,
@@ -636,7 +636,7 @@ create_statement:
     $$ = &DDL{
       Action: CreateTrigger,
       Trigger: &Trigger{
-        Name: $3,
+        Name: &ColName{Name: $3},
         TableName: $7,
         Time: $4,
         Event: $5,
@@ -649,7 +649,7 @@ create_statement:
     $$ = &DDL{
       Action: CreateTrigger,
       Trigger: &Trigger{
-        Name: $6,
+        Name: &ColName{Name: $6},
         TableName: $10,
         Time: $7,
         Event: $8,

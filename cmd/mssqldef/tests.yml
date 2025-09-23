@@ -479,6 +479,14 @@ WhileLoopFetchIntoMulti:
     close cur
     deallocate cur
     end;
+TriggerNameWithSchema:
+  desired: |
+    CREATE TABLE users (
+        id bigint NOT NULL,
+        name text
+    );
+    CREATE TRIGGER [dbo].[insert_log] ON [dbo].[users] after insert AS
+    set nocount on;
 RenameColumn:
   current: |
     CREATE TABLE users (

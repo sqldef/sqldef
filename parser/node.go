@@ -1087,7 +1087,7 @@ type View struct {
 }
 
 type Trigger struct {
-	Name      ColIdent
+	Name      *ColName
 	TableName TableName
 	Time      string
 	Event     []string
