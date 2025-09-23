@@ -1,3 +1,12 @@
+## [v3.0.0](https://github.com/sqldef/sqldef/compare/v2.5.0...v3.0.0) - 2025-09-23
+- let `--dry-run` and apply to have transaction queries (e.g. BEGIN) by @gfx in https://github.com/sqldef/sqldef/pull/763
+- DDLs that do not support tx should be shown outside of the transaction (dry-run & apply) by @gfx in https://github.com/sqldef/sqldef/pull/770
+- mssqldef: Support Trigger Name with Schema by @chi-bd in https://github.com/sqldef/sqldef/pull/769
+- psqldef: add `create_index_concurrently` configuration field to add CONCURRENTLY to CREATE INDEX by @gfx in https://github.com/sqldef/sqldef/pull/771
+- test: check return values by @gfx in https://github.com/sqldef/sqldef/pull/772
+- [go.mod] declare go version 1.25 by @gfx in https://github.com/sqldef/sqldef/pull/773
+- bump the module version to v3 by @gfx in https://github.com/sqldef/sqldef/pull/774
+
 ## [v2.5.0](https://github.com/sqldef/sqldef/compare/v2.4.8...v2.5.0) - 2025-09-22
 - Rename @rename to @renamed (keep @rename as deprecated) by @gfx in https://github.com/sqldef/sqldef/pull/764
 - improve code quality suggested by golangci-lint(1) by @gfx in https://github.com/sqldef/sqldef/pull/766
