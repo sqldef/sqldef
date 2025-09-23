@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/goccy/go-yaml"
-	"github.com/sqldef/sqldef/v2/database"
-	"github.com/sqldef/sqldef/v2/parser"
+	"github.com/sqldef/sqldef/v3/database"
+	"github.com/sqldef/sqldef/v3/parser"
 	"github.com/stretchr/testify/assert"
 )
 
