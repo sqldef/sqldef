@@ -2209,11 +2209,11 @@ func cleanupTestRoles() {
 					EXECUTE format('REVOKE ALL ON %%I.%%I FROM %s', r.nspname, r.relname);
 				END LOOP;
 			END $$;`, escapedRole, quotedRole)
-		db.DB().Exec(revokeQuery) // Ignore errors during cleanup
+		_, _ = db.DB().Exec(revokeQuery) // Ignore errors during cleanup
 
 		// Then drop the role
 		dropQuery := fmt.Sprintf("DROP ROLE IF EXISTS %s;", quotedRole)
-		db.DB().Exec(dropQuery) // Ignore errors during cleanup
+		_, _ = db.DB().Exec(dropQuery) // Ignore errors during cleanup
 	}
 }
 
@@ -2237,7 +2237,9 @@ func writeFile(path string, content string) {
 	}
 	defer file.Close()
 
-	file.Write(([]byte)(content))
+	if _, err := file.Write(([]byte)(content)); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func stripHeredoc(heredoc string) string {

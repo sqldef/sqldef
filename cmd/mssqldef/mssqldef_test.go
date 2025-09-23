@@ -1455,7 +1455,9 @@ func writeFile(path string, content string) {
 	}
 	defer file.Close()
 
-	file.Write(([]byte)(content))
+	if _, err := file.Write(([]byte)(content)); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func stripHeredoc(heredoc string) string {
