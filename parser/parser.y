@@ -1045,8 +1045,12 @@ while_statement:
   {
     $$ = &While{
       Condition: $2,
-      Statements: $4,
-      Keyword: string($3),
+      Statements: []Statement{
+        &BeginEnd{
+          Statements: $4,
+          SuppressSemicolon: true,
+        },
+      },
     }
   }
 

@@ -2465,21 +2465,13 @@ func (node *BeginEnd) Format(buf *nodeBuffer) {
 type While struct {
 	Condition  Expr
 	Statements []Statement
-	Keyword    string
 }
 
 func (node *While) Format(buf *nodeBuffer) {
 	buf.Printf("while %v", node.Condition)
-	var endKeyword string
-	switch node.Keyword {
-	case "begin":
-		buf.Printf("\nbegin")
-		endKeyword = "\nend"
-	}
 	for _, stmt := range node.Statements {
 		buf.Printf("\n%v", stmt)
 	}
-	buf.Printf(endKeyword)
 }
 
 type If struct {
