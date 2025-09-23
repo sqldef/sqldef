@@ -2493,7 +2493,6 @@ func (node *If) Format(buf *nodeBuffer) {
 	buf.Printf("if %v", node.Condition)
 	// MSSQL
 	if node.Keyword == "begin" {
-		buf.Printf("\nbegin")
 		for i, stmt := range node.IfStatements {
 			buf.Printf("\n%v", stmt)
 			// avoid adding a semicolon after the last statement
@@ -2503,7 +2502,7 @@ func (node *If) Format(buf *nodeBuffer) {
 		}
 		if node.ElseStatements != nil {
 			// need end and begin for else
-			buf.Printf("\nend\nelse\nbegin")
+			buf.Printf("\nelse")
 			for i, stmt := range node.ElseStatements {
 				buf.Printf("\n%v", stmt)
 				// avoid adding a semicolon after the last statement
@@ -2512,7 +2511,6 @@ func (node *If) Format(buf *nodeBuffer) {
 				}
 			}
 		}
-		buf.Printf("\nend")
 		return
 	}
 
