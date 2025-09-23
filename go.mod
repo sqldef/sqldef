@@ -1,8 +1,8 @@
 module github.com/sqldef/sqldef/v2
 
-go 1.23.0
+go 1.25
 
-toolchain go1.24.1
+toolchain go1.25.1
 
 require (
 	github.com/go-sql-driver/mysql v1.9.3
