@@ -1101,7 +1101,7 @@ matched_if_statement:
       Condition: $2,
       IfStatements: $3,
       ElseStatements: []Statement{$5},
-      Keyword: "begin",
+      Keyword: "Mssql",
     }
   }
   // Base case rule for a simple, final 'ELSE'
@@ -1111,24 +1111,24 @@ matched_if_statement:
       Condition: $2,
       IfStatements: $3,
       ElseStatements: $5,
-      Keyword: "begin",
+      Keyword: "Mssql",
     }
   }
 
 unmatched_if_statement:
   IF condition if_statement
   {
-    $$ = &If{Condition: $2, IfStatements: []Statement{$3}, Keyword: "begin"}
+    $$ = &If{Condition: $2, IfStatements: []Statement{$3}, Keyword: "Mssql"}
   }
 |
   IF condition matched_if_statement ELSE unmatched_if_statement
   {
-    $$ = &If{Condition: $2, IfStatements: []Statement{$3}, ElseStatements: []Statement{$5}, Keyword: "begin"}
+    $$ = &If{Condition: $2, IfStatements: []Statement{$3}, ElseStatements: []Statement{$5}, Keyword: "Mssql"}
   }
 |
   IF condition simple_if_body %prec NO_ELSE
   {
-    $$ = &If{Condition: $2, IfStatements: $3, Keyword: "begin"}
+    $$ = &If{Condition: $2, IfStatements: $3, Keyword: "Mssql"}
   }
 
 // A helper for any statement body that is not an unmatched IF statement

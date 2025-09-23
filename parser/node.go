@@ -2492,7 +2492,7 @@ type If struct {
 func (node *If) Format(buf *nodeBuffer) {
 	buf.Printf("if %v", node.Condition)
 	// MSSQL
-	if node.Keyword == "begin" {
+	if node.Keyword == "Mssql" {
 		for i, stmt := range node.IfStatements {
 			buf.Printf("\n%v", stmt)
 			// avoid adding a semicolon after the last statement
