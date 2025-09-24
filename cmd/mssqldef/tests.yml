@@ -487,6 +487,57 @@ TriggerNameWithSchema:
     );
     CREATE TRIGGER [dbo].[insert_log] ON [dbo].[users] after insert AS
     set nocount on;
+DanglingElse:
+  current: |
+    CREATE TABLE users (
+        id bigint NOT NULL,
+        name text
+    );
+  desired: |
+    CREATE TABLE users (
+        id bigint NOT NULL,
+        name text
+    );
+    CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
+    IF UPDATE(name) set nocount on
+    IF UPDATE(name) set nocount on ELSE set nocount off
+    IF UPDATE(name) set nocount on ELSE BEGIN set nocount off END
+    IF UPDATE(name) BEGIN set nocount on END
+    IF UPDATE(name) BEGIN set nocount on END ELSE set nocount off
+    IF UPDATE(name) BEGIN set nocount on END ELSE BEGIN set nocount off END
+    ;
+  output: |
+    CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
+    if UPDATE(name)
+    set nocount on
+    if UPDATE(name)
+    set nocount on
+    else
+    set nocount off
+    if UPDATE(name)
+    set nocount on
+    else
+    begin
+    set nocount off
+    end
+    if UPDATE(name)
+    begin
+    set nocount on
+    end
+    if UPDATE(name)
+    begin
+    set nocount on
+    end
+    else
+    set nocount off
+    if UPDATE(name)
+    begin
+    set nocount on
+    end
+    else
+    begin
+    set nocount off
+    end;
 RenameColumn:
   current: |
     CREATE TABLE users (

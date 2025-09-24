@@ -157,7 +157,16 @@ func forceEOF(yylex interface{}) {
 %left <bytes> OR
 %left <bytes> AND
 %right <bytes> NOT '!'
-%left <bytes> BETWEEN CASE WHEN THEN ELSE END
+/* ---------------- Dangling Else Resolution --------------------------------
+ * The following definitions, `NO_ELSE` and `ELSE`, are ordered specifically
+ * to resolve the "dangling else" ambiguity. `ELSE` MUST have a higher
+ * precedence than `NO_ELSE`. Their relative order and separation from
+ * other keywords are critical for correct parsing.                           */
+%nonassoc NO_ELSE
+/** DO NOT MERGE these definitions. Their separation and order are critical. **/
+%left <bytes> BETWEEN CASE WHEN THEN END
+%left <bytes> ELSE
+/* ---------------- End of Dangling Else Resolution ------------------------- */
 %left <bytes> '=' '<' '>' LE GE NE NULL_SAFE_EQUAL IS LIKE REGEXP IN
 %left <bytes> POSIX_REGEX POSIX_REGEX_CI POSIX_NOT_REGEX POSIX_NOT_REGEX_CI
 %left <bytes> '|'
@@ -267,6 +276,8 @@ func forceEOF(yylex interface{}) {
 %type <statement> statement
 %type <selStmt> select_statement base_select union_lhs union_rhs
 %type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement if_statement
+%type <statement> matched_if_statement unmatched_if_statement trigger_statement_not_if
+%type <blockStatement> simple_if_body
 %type <statement> create_statement alter_statement
 %type <statement> set_option_statement set_bool_option_statement
 %type <ddl> create_table_prefix
@@ -1034,8 +1045,12 @@ while_statement:
   {
     $$ = &While{
       Condition: $2,
-      Statements: $4,
-      Keyword: string($3),
+      Statements: []Statement{
+        &BeginEnd{
+          Statements: $4,
+          SuppressSemicolon: true,
+        },
+      },
     }
   }
 
@@ -1072,22 +1087,67 @@ if_statement:
       Keyword: string($3),
     }
   }
-// For MSSQL?
-| IF condition BEGIN statement_block END
+// For MSSQL: Decompose into matched and unmatched statements to resolve ambiguity
+| matched_if_statement
+  {
+    $$ = $1
+  }
+| unmatched_if_statement
+  {
+    $$ = $1
+  }
+
+matched_if_statement:
+  // Recursive rule for 'ELSE IF' chains
+  IF condition simple_if_body ELSE matched_if_statement
   {
     $$ = &If{
       Condition: $2,
-      IfStatements: $4,
-      Keyword: string($3),
+      IfStatements: $3,
+      ElseStatements: []Statement{$5},
+      Keyword: "Mssql",
     }
   }
-| IF condition BEGIN statement_block END ELSE BEGIN statement_block END
+  // Base case rule for a simple, final 'ELSE'
+| IF condition simple_if_body ELSE simple_if_body
   {
     $$ = &If{
       Condition: $2,
-      IfStatements: $4,
-      ElseStatements: $8,
-      Keyword: string($3),
+      IfStatements: $3,
+      ElseStatements: $5,
+      Keyword: "Mssql",
+    }
+  }
+
+unmatched_if_statement:
+  IF condition if_statement
+  {
+    $$ = &If{Condition: $2, IfStatements: []Statement{$3}, Keyword: "Mssql"}
+  }
+|
+  IF condition matched_if_statement ELSE unmatched_if_statement
+  {
+    $$ = &If{Condition: $2, IfStatements: []Statement{$3}, ElseStatements: []Statement{$5}, Keyword: "Mssql"}
+  }
+|
+  IF condition simple_if_body %prec NO_ELSE
+  {
+    $$ = &If{Condition: $2, IfStatements: $3, Keyword: "Mssql"}
+  }
+
+// A helper for any statement body that is not an unmatched IF statement
+simple_if_body:
+  trigger_statement_not_if
+  {
+    $$ = []Statement{$1}
+  }
+| BEGIN statement_block END
+  {
+    $$ = []Statement{
+      &BeginEnd{
+        Statements: $2,
+        SuppressSemicolon: true,
+      },
     }
   }
 
@@ -1257,6 +1317,11 @@ trigger_statements:
   }
 
 trigger_statement:
+  trigger_statement_not_if
+| if_statement
+
+// A trigger statement that is NOT an if_statement. Used to resolve if_statement ambiguity.
+trigger_statement_not_if:
   insert_statement
   {
     $$ = $1
@@ -1267,7 +1332,6 @@ trigger_statement:
 | set_statement
 | cursor_statement
 | while_statement
-| if_statement
 | set_option_statement
 | base_select order_by_opt limit_opt lock_opt
   {

@@ -2465,21 +2465,13 @@ func (node *BeginEnd) Format(buf *nodeBuffer) {
 type While struct {
 	Condition  Expr
 	Statements []Statement
-	Keyword    string
 }
 
 func (node *While) Format(buf *nodeBuffer) {
 	buf.Printf("while %v", node.Condition)
-	var endKeyword string
-	switch node.Keyword {
-	case "begin":
-		buf.Printf("\nbegin")
-		endKeyword = "\nend"
-	}
 	for _, stmt := range node.Statements {
 		buf.Printf("\n%v", stmt)
 	}
-	buf.Printf(endKeyword)
 }
 
 type If struct {
@@ -2492,8 +2484,7 @@ type If struct {
 func (node *If) Format(buf *nodeBuffer) {
 	buf.Printf("if %v", node.Condition)
 	// MSSQL
-	if node.Keyword == "begin" {
-		buf.Printf("\nbegin")
+	if node.Keyword == "Mssql" {
 		for i, stmt := range node.IfStatements {
 			buf.Printf("\n%v", stmt)
 			// avoid adding a semicolon after the last statement
@@ -2503,7 +2494,7 @@ func (node *If) Format(buf *nodeBuffer) {
 		}
 		if node.ElseStatements != nil {
 			// need end and begin for else
-			buf.Printf("\nend\nelse\nbegin")
+			buf.Printf("\nelse")
 			for i, stmt := range node.ElseStatements {
 				buf.Printf("\n%v", stmt)
 				// avoid adding a semicolon after the last statement
@@ -2512,7 +2503,6 @@ func (node *If) Format(buf *nodeBuffer) {
 				}
 			}
 		}
-		buf.Printf("\nend")
 		return
 	}
 
