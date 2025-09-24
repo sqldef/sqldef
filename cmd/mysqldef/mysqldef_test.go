@@ -249,6 +249,30 @@ func TestMysqldefDropTable(t *testing.T) {
 	assertEquals(t, out, wrapWithTransaction(dropTable))
 }
 
+func TestMysqldefConfigInlineEnableDrop(t *testing.T) {
+	resetTestDatabase()
+	ddl := stripHeredoc(`
+               CREATE TABLE users (
+                 name varchar(40),
+                 created_at datetime NOT NULL
+               ) DEFAULT CHARSET=latin1;`)
+	args := append(getMySQLArgs("mysqldef_test"), "-e", ddl)
+	testutils.MustExecute("mysql", args...)
+
+	writeFile("schema.sql", "")
+
+	dropTable := "DROP TABLE `users`;\n"
+	expectedOutput := wrapWithTransaction(dropTable)
+
+	outFlag := assertedExecuteMySQLDef(t, "mysqldef_test", "--enable-drop", "--file", "schema.sql")
+	assertEquals(t, outFlag, expectedOutput)
+
+	testutils.MustExecute("mysql", append(getMySQLArgs("mysqldef_test"), "-e", ddl)...)
+
+	outConfigInline := assertedExecuteMySQLDef(t, "mysqldef_test", "--config-inline", "enable_drop: true", "--file", "schema.sql")
+	assertEquals(t, outConfigInline, expectedOutput)
+}
+
 func TestMysqldefSkipView(t *testing.T) {
 	resetTestDatabase()
 
