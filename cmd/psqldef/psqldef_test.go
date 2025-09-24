@@ -1370,6 +1370,34 @@ func TestPsqldefDropTable(t *testing.T) {
 	assertEquals(t, out, wrapWithTransaction(dropTable+"\n"))
 }
 
+func TestPsqldefConfigInlineEnableDrop(t *testing.T) {
+	resetTestDatabase()
+	ddl := stripHeredoc(`
+		CREATE TABLE users (
+		    id bigint NOT NULL PRIMARY KEY,
+		    age int,
+		    c_char_1 char,
+		    c_char_10 char(10),
+		    c_varchar_10 varchar(10),
+		    c_varchar_unlimited varchar
+		);`,
+	)
+	mustPgExec(databaseName, ddl)
+
+	writeFile("schema.sql", "")
+
+	dropTable := `DROP TABLE "public"."users";`
+	expectedOutput := wrapWithTransaction(dropTable + "\n")
+
+	outFlag := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--enable-drop", "--file", "schema.sql")
+	assertEquals(t, outFlag, expectedOutput)
+
+	mustPgExec(databaseName, ddl)
+
+	outConfigInline := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--config-inline", "enable_drop: true", "--file", "schema.sql")
+	assertEquals(t, outConfigInline, expectedOutput)
+}
+
 func TestPsqldefExport(t *testing.T) {
 	resetTestDatabase()
 

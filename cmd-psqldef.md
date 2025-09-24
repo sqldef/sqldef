@@ -257,16 +257,40 @@ Remove the line to DROP VIEW.
 
 ## Configuration
 
-The `--config` and `--config-inline` options accept YAML configuration with the following fields:
+Configuration can be provided through YAML files (`--config`) or inline YAML strings (`--config-inline`). Multiple configurations can be specified and will be merged in order.
+
+### Using Configuration Files
+
+```shell
+$ psqldef -U postgres dbname --config config.yml < schema.sql
+```
+
+### Using Inline Configuration
+
+```shell
+$ psqldef -U postgres dbname --config-inline 'enable_drop: true' < schema.sql
+```
+
+### Combining Multiple Configurations
+
+```shell
+$ psqldef -U postgres dbname \
+  --config base.yml \
+  --config-inline 'managed_roles: [app_user, readonly]' \
+  --config-inline 'enable_drop: true' \
+  < schema.sql
+```
+
+### Available Configuration Options
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `enable_drop` | boolean | Enable destructive changes (DROP statements). Equivalent to `--enable-drop` flag. Default is false. |
 | `target_tables` | string | Regular expression patterns (one per line) to specify which tables to manage. Only tables matching these patterns will be processed. |
 | `skip_tables` | string | Regular expression patterns (one per line) to specify which tables to skip. Tables matching these patterns will be ignored. |
 | `skip_views` | string | Regular expression patterns (one per line) to specify which views/materialized views to skip. |
 | `target_schema` | string | Schema names (one per line) to specify which schemas to manage. Only objects in these schemas will be processed. |
 | `managed_roles` | array | List of role names whose privileges (GRANT/REVOKE) should be managed. Only privileges for these roles will be applied. |
-| `enable_drop` | boolean | When true, enables destructive operations like DROP TABLE, DROP COLUMN, and REVOKE. Default is false. |
 | `dump_concurrency` | integer | Number of parallel connections to use when exporting the schema. Improves performance for large schemas. Default is 1. |
-| `create_index_concurrently` | boolean | When true, adds CONCURRENTLY to all CREATE INDEX statements.Default is false. |
+| `create_index_concurrently` | boolean | When true, adds CONCURRENTLY to all CREATE INDEX statements. Default is false. |
 

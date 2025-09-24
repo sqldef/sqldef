@@ -109,9 +109,35 @@ Some can also be used in the input schema.sql file.
 
 ## Configuration
 
-The `--config` and `--config-inline` options accept YAML configuration with the following fields:
+Configuration can be provided through YAML files (`--config`) or inline YAML strings (`--config-inline`). Multiple configurations can be specified and will be merged in order.
+
+### Using Configuration Files
+
+```shell
+$ sqlite3def mydb.db --config config.yml < schema.sql
+```
+
+### Using Inline Configuration
+
+```shell
+$ sqlite3def mydb.db --config-inline 'enable_drop: true' < schema.sql
+```
+
+### Combining Multiple Configurations
+
+```shell
+$ sqlite3def mydb.db \
+  --config base.yml \
+  --config-inline 'skip_tables: [logs, temp_data]' \
+  --config-inline 'enable_drop: true' \
+  < schema.sql
+```
+
+### Available Configuration Options
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `enable_drop` | boolean | Enable destructive changes (DROP statements). Equivalent to `--enable-drop` flag. |
 | `target_tables` | string | Regular expression patterns (one per line) to specify which tables to manage. Only tables matching these patterns will be processed. |
 | `skip_tables` | string | Regular expression patterns (one per line) to specify which tables to skip. Tables matching these patterns will be ignored. |
+| `skip_views` | string | Regular expression patterns (one per line) to specify which views to skip. |

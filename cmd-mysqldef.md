@@ -235,12 +235,38 @@ Remove the line to DROP VIEW.
 
 ## Configuration
 
-The `--config` and `--config-inline` options accept YAML configuration with the following fields:
+Configuration can be provided through YAML files (`--config`) or inline YAML strings (`--config-inline`). Multiple configurations can be specified and will be merged in order.
+
+### Using Configuration Files
+
+```shell
+$ mysqldef -uroot dbname --config config.yml < schema.sql
+```
+
+### Using Inline Configuration
+
+```shell
+$ mysqldef -uroot dbname --config-inline 'enable_drop: true' < schema.sql
+```
+
+### Combining Multiple Configurations
+
+```shell
+$ mysqldef -uroot dbname \
+  --config base.yml \
+  --config-inline 'skip_tables: [logs, temp_data]' \
+  --config-inline 'enable_drop: true' \
+  < schema.sql
+```
+
+### Available Configuration Options
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `enable_drop` | boolean | Enable destructive changes (DROP statements). Equivalent to `--enable-drop` flag. |
 | `target_tables` | string | Regular expression patterns (one per line) to specify which tables to manage. Only tables matching these patterns will be processed. |
 | `skip_tables` | string | Regular expression patterns (one per line) to specify which tables to skip. Tables matching these patterns will be ignored. |
+| `skip_views` | string | Regular expression patterns (one per line) to specify which views to skip. |
 | `algorithm` | string | Algorithm to use for ALTER TABLE operations (e.g., INPLACE, INSTANT, COPY). Controls how MySQL performs the schema change. |
 | `lock` | string | Lock level to use for ALTER TABLE operations (e.g., NONE, SHARED, EXCLUSIVE). Controls concurrent access during schema changes. |
 | `dump_concurrency` | integer | Number of parallel connections to use when exporting the schema. Improves performance for large schemas. Default is 1. |

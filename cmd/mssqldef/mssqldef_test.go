@@ -1276,6 +1276,37 @@ func TestMssqldefDropTable(t *testing.T) {
 	assertEquals(t, out, wrapWithTransaction(dropTable))
 }
 
+func TestMssqldefConfigInlineEnableDrop(t *testing.T) {
+	resetTestDatabase()
+
+	ddl := stripHeredoc(`
+		CREATE TABLE users (
+		    id integer NOT NULL PRIMARY KEY,
+		    age integer
+		);
+		GO
+		`,
+	)
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", ddl)
+
+	writeFile("schema.sql", "")
+
+	dropTable := stripHeredoc(`
+		DROP TABLE [dbo].[users];
+		GO
+		`,
+	)
+	expectedOutput := wrapWithTransaction(dropTable)
+
+	outFlag := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--enable-drop", "--file", "schema.sql")
+	assertEquals(t, outFlag, expectedOutput)
+
+	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", ddl)
+
+	outConfigInline := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--config-inline", "enable_drop: true", "--file", "schema.sql")
+	assertEquals(t, outConfigInline, expectedOutput)
+}
+
 func TestMssqldefExport(t *testing.T) {
 	resetTestDatabase()
 	out := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")

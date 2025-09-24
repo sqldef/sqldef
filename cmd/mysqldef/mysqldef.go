@@ -100,7 +100,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		DesiredDDLs: desiredDDLs,
 		DryRun:      opts.DryRun,
 		Export:      opts.Export,
-		EnableDrop:  opts.EnableDrop,
+		EnableDrop:  opts.EnableDrop || config.EnableDrop,
 		BeforeApply: opts.BeforeApply,
 		Config:      config,
 	}

@@ -96,6 +96,31 @@ func TestSQLite3defDropTable(t *testing.T) {
 	assertEquals(t, out, wrapWithTransaction(dropTable))
 }
 
+func TestSQLite3defConfigInlineEnableDrop(t *testing.T) {
+	resetTestDatabase()
+
+	ddl := stripHeredoc(`
+		CREATE TABLE users (
+		    id integer NOT NULL PRIMARY KEY,
+		    age integer
+		);`,
+	)
+	testutils.MustExecute("sqlite3", "sqlite3def_test", ddl)
+
+	writeFile("schema.sql", "")
+
+	dropTable := "DROP TABLE `users`;\n"
+	expectedOutput := wrapWithTransaction(dropTable)
+
+	outFlag := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--enable-drop", "--file", "schema.sql")
+	assertEquals(t, outFlag, expectedOutput)
+
+	testutils.MustExecute("sqlite3", "sqlite3def_test", ddl)
+
+	outConfigInline := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--config-inline", "enable_drop: true", "--file", "schema.sql")
+	assertEquals(t, outConfigInline, expectedOutput)
+}
+
 func TestSQLite3defExport(t *testing.T) {
 	resetTestDatabase()
 	out := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--export")
