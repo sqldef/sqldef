@@ -17,8 +17,11 @@ jobs:
       matrix:
         target:
           - sqlite3def
-          - mssqldef
         include:
+          - target: mssqldef
+            mssql_version: '2019-latest'
+          - target: mssqldef
+            mssql_version: '2022-latest'
           - target: mysqldef
             mysql_flavor: mysql
             mysql_version: '5.7'
@@ -52,6 +55,7 @@ jobs:
           MYSQL_VERSION: ${{ matrix.mysql_version }}
           MARIADB_VERSION: ${{ matrix.mariadb_version }}
           POSTGRES_VERSION: ${{ matrix.postgres_version }}
+          MSSQL_VERSION: ${{ matrix.mssql_version }}
       - run: make deps
       - run: echo "GODEBUG=tlsrsakex=1" >> $GITHUB_ENV
         if: matrix.mysql_version == '5.7'
