@@ -1,3 +1,8 @@
+## [v3.0.1](https://github.com/sqldef/sqldef/compare/v3.0.0...v3.0.1) - 2025-09-24
+- [CI] add mssql-2022 to the test matrix by @gfx in https://github.com/sqldef/sqldef/pull/775
+- mssqldef: Support Dangling Else by @chi-bd in https://github.com/sqldef/sqldef/pull/777
+- [fix] `enable_drop: true` in config did not work by @gfx in https://github.com/sqldef/sqldef/pull/778
+
 ## [v3.0.0](https://github.com/sqldef/sqldef/compare/v2.5.0...v3.0.0) - 2025-09-23
 - let `--dry-run` and apply to have transaction queries (e.g. BEGIN) by @gfx in https://github.com/sqldef/sqldef/pull/763
 - DDLs that do not support tx should be shown outside of the transaction (dry-run & apply) by @gfx in https://github.com/sqldef/sqldef/pull/770
