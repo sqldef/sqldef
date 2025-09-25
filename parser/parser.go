@@ -6345,7 +6345,7 @@ yydefault:
 		yyDollar = yyS[yypt-0 : yypt+1]
 //line parser/parser.y:2964
 		{
-			yyVAL.tableExprs = TableExprs{&AliasedTableExpr{Expr: TableName{Name: NewTableIdent("dual")}}}
+			yyVAL.tableExprs = TableExprs{}
 		}
 	case 478:
 		yyDollar = yyS[yypt-2 : yypt+1]

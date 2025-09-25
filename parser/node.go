@@ -174,9 +174,16 @@ func (node *Select) setLimit(limit *Limit) {
 
 // Format formats the node.
 func (node *Select) Format(buf *nodeBuffer) {
-	buf.Printf("select %v%s%s%s%v from %v%v%v%v%v%v%s",
+	buf.Printf("select %v%s%s%s%v",
 		node.Comments, node.Cache, node.Distinct, node.Hints, node.SelectExprs,
-		node.From, node.Where,
+	)
+	if node.From.isEmpty() {
+		buf.Printf(" from dual")
+	} else {
+		buf.Printf(" from %v", node.From)
+	}
+	buf.Printf("%v%v%v%v%v%s",
+		node.Where,
 		node.GroupBy, node.Having, node.OrderBy,
 		node.Limit, node.Lock)
 }
@@ -349,7 +356,7 @@ type Update struct {
 // Format formats the node.
 func (node *Update) Format(buf *nodeBuffer) {
 	buf.Printf("update %v%v set %v", node.Comments, node.TableExprs, node.Exprs)
-	if node.From != nil {
+	if !node.From.isEmpty() {
 		buf.Printf(" from %v", node.From)
 	}
 	buf.Printf("%v%v%v", node.Where, node.OrderBy, node.Limit)
@@ -1195,6 +1202,10 @@ func (node TableExprs) Format(buf *nodeBuffer) {
 		buf.Printf("%s%v", prefix, n)
 		prefix = ", "
 	}
+}
+
+func (node TableExprs) isEmpty() bool {
+	return len(node) == 0
 }
 
 // TableExpr represents a table expression.
