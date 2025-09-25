@@ -2962,7 +2962,7 @@ over_expression:
 
 from_opt:
   {
-    $$ = TableExprs{&AliasedTableExpr{Expr:TableName{Name: NewTableIdent("dual")}}}
+    $$ = TableExprs{}
   }
 | FROM table_references
   {

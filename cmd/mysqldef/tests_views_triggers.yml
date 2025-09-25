@@ -292,3 +292,25 @@ TriggerIf:
     set NEW.sort_order = (select COALESCE(MAX(sort_order) + 1, 1) from test_trigger where set_id = NEW.set_id);
     end if;
     end;
+TriggerUpdate:
+  desired: |
+    CREATE TABLE t1 (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      t2_id int(11),
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+    CREATE TABLE t2 (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+    CREATE TRIGGER `t2_BEFORE_DELETE` before delete ON `t2` FOR EACH ROW update t1 set t2_id = null where t1.t2_id = OLD.id;
+TriggerSelect:
+  desired: |
+    CREATE TABLE users (
+      id int unsigned NOT NULL AUTO_INCREMENT,
+      name varchar(255) NOT NULL,
+      deleted_at timestamp NULL DEFAULT NULL,
+      logical_uniqueness tinyint(1) DEFAULT '1',
+      PRIMARY KEY (id)
+    );
+    CREATE TRIGGER `set_logical_uniqueness_on_users` before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = (select 1 from dual);
