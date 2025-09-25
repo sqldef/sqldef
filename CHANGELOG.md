@@ -1,3 +1,6 @@
+## [v3.0.2](https://github.com/sqldef/sqldef/compare/v3.0.1...v3.0.2) - 2025-09-24
+- mysqldef: allow update statements without from clause inside triggers https://github.com/sqldef/sqldef/pull/781
+
 ## [v3.0.1](https://github.com/sqldef/sqldef/compare/v3.0.0...v3.0.1) - 2025-09-24
 - [CI] add mssql-2022 to the test matrix by @gfx in https://github.com/sqldef/sqldef/pull/775
 - mssqldef: Support Dangling Else by @chi-bd in https://github.com/sqldef/sqldef/pull/777
