@@ -314,3 +314,15 @@ TriggerSelect:
       PRIMARY KEY (id)
     );
     CREATE TRIGGER `set_logical_uniqueness_on_users` before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = (select 1 from dual);
+TriggerUseReservedWordsAsColumn:
+  desired: |
+    CREATE TABLE test_trigger (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      `status` int(4),
+      `interval` int(4),
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+    CREATE TRIGGER `test_trigger_BEFORE_INSERT` before insert ON `test_trigger` FOR EACH ROW begin
+    set NEW.status = 0;
+    set NEW.interval = 0;
+    end;
