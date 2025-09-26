@@ -270,7 +270,7 @@ $ brew install libpq && brew link --force libpq
 $ brew install microsoft/mssql-release/mssql-tools
 
 # Start database
-$ docker-compose up
+$ docker compose up
 
 # Run all tests
 $ make test
