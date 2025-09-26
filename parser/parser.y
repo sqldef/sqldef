@@ -299,6 +299,7 @@ func forceEOF(yylex interface{}) {
 %type <expr> where_expression_opt
 %type <expr> condition
 %type <boolVal> boolean_value
+%type <bytes> int_value
 %type <str> compare
 %type <ins> insert_data
 %type <expr> value value_expression
@@ -1682,7 +1683,8 @@ column_definition_type:
     $1.NotNull = NewBoolVal(true)
     $$ = $1
   }
-| column_definition_type IDENTITY '(' INTEGRAL ',' INTEGRAL ')'
+// for MSSQL
+| column_definition_type IDENTITY '(' int_value ',' int_value ')'
   {
     $1.Identity = &IdentityOpt{Sequence: &Sequence{StartWith: NewIntVal($4), IncrementBy: NewIntVal($6)}, NotForReplication: false}
     $1.NotNull = NewBoolVal(true)
@@ -1735,9 +1737,17 @@ default_val:
   {
     $$ = NewIntVal($1)
   }
+| '-' INTEGRAL
+  {
+    $$ = NewIntVal(append([]byte("-"), $2...))
+  }
 | FLOAT
   {
     $$ = NewFloatVal($1)
+  }
+| '-' FLOAT
+  {
+    $$ = NewFloatVal(append([]byte("-"), $2...))
   }
 | NULL character_cast_opt
   {
@@ -1792,32 +1802,32 @@ sequence_opt:
   {
     $$ = &Sequence{}
   }
-| sequence_opt START WITH INTEGRAL
+| sequence_opt START WITH int_value
   {
     $1.StartWith = NewIntVal($4)
     $$ = $1
   }
-| sequence_opt START INTEGRAL
+| sequence_opt START int_value
   {
     $1.StartWith = NewIntVal($3)
     $$ = $1
   }
-| sequence_opt INCREMENT BY INTEGRAL
+| sequence_opt INCREMENT BY int_value
   {
     $1.IncrementBy = NewIntVal($4)
     $$ = $1
   }
-| sequence_opt INCREMENT INTEGRAL
+| sequence_opt INCREMENT int_value
   {
     $1.IncrementBy = NewIntVal($3)
     $$ = $1
   }
-| sequence_opt MINVALUE INTEGRAL
+| sequence_opt MINVALUE int_value
   {
     $1.MinValue = NewIntVal($3)
     $$ = $1
   }
-| sequence_opt MAXVALUE INTEGRAL
+| sequence_opt MAXVALUE int_value
   {
     $1.MaxValue = NewIntVal($3)
     $$ = $1
@@ -4196,6 +4206,16 @@ value:
 | NULL
   {
     $$ = &NullVal{}
+  }
+
+int_value:
+  INTEGRAL
+  {
+    $$ = $1
+  }
+| '-' INTEGRAL
+  {
+    $$ = append([]byte("-"), $2...)
   }
 
 group_by_opt:

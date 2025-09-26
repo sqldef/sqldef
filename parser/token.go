@@ -712,10 +712,6 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 		case '#':
 			return tkn.scanCommentType1("#")
 		case '-':
-			if isDigit(tkn.lastChar) {
-				num, buf := tkn.scanNumber(false)
-				return num, append([]byte{'-'}, buf...)
-			}
 			switch tkn.lastChar {
 			case '-':
 				tkn.next()

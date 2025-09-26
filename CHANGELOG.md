@@ -1,3 +1,7 @@
+## [v3.0.4](https://github.com/sqldef/sqldef/compare/v3.0.3...v3.0.4) - 2025-09-26
+- [CI] add parser-integrity job by @gfx in https://github.com/sqldef/sqldef/pull/789
+- Handle negative values in parser instead of tokenizer by @osjupiter in https://github.com/sqldef/sqldef/pull/788
+
 ## [v3.0.3](https://github.com/sqldef/sqldef/compare/v3.0.2...v3.0.3) - 2025-09-26
 - add status to reserved keyword list by @osjupiter in https://github.com/sqldef/sqldef/pull/784
 - [package] use -9 for compress artifacts by @gfx in https://github.com/sqldef/sqldef/pull/786
