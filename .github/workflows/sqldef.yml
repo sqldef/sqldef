@@ -117,6 +117,7 @@ jobs:
           - { GOOS: linux,   GOARCH: arm64, EXT: tar.gz }
           - { GOOS: linux,   GOARCH: arm,   EXT: tar.gz }
           - { GOOS: windows, GOARCH: amd64, EXT: zip }
+    if: startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/setup-go@v5
         with:
@@ -141,6 +142,7 @@ jobs:
           - { GOOS: darwin, GOARCH: amd64, EXT: zip }
           - { GOOS: darwin, GOARCH: arm64, EXT: zip }
       fail-fast: false
+    if: startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/setup-go@v5
         with:
