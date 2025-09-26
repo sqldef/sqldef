@@ -180,8 +180,8 @@ jobs:
       - name: Upload artifacts
         run: |
           export VERSION=$(echo "$GITHUB_REF" | sed -e 's!refs/tags/!!')
-          curl -L "https://github.com/tcnksm/ghr/releases/download/${GHR_VERSION}/ghr_${GHR_VERSION}_linux_amd64.tar.gz" | tar xvz
-          "ghr_${GHR_VERSION}_linux_amd64/ghr" -u sqldef -r sqldef -replace -n "$VERSION" "$VERSION" package/
+          curl -sSfL "https://github.com/tcnksm/ghr/releases/download/${GHR_VERSION}/ghr_${GHR_VERSION}_linux_amd64.tar.gz" | tar xvz
+          "ghr_${GHR_VERSION}_linux_amd64/ghr" -u sqldef -r sqldef -draft -replace -n "$VERSION" "$VERSION" package/
         env:
           GHR_VERSION: v0.17.0
           GITHUB_TOKEN: ${{ github.token }}
