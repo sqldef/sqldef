@@ -710,3 +710,18 @@ RenameUniqueConstraint:
     );
   output: |
     EXEC sp_rename 'users.old_unique_email', 'unique_email', 'INDEX';
+
+IdentityWithNegativeValue:
+  desired: |
+    CREATE TABLE test_identity_negative1 (
+      id int IDENTITY(-100, -5) NOT NULL
+    );
+    CREATE TABLE test_identity_negative2 (
+      id bigint IDENTITY(-1, 1) NOT NULL
+    );
+    CREATE TABLE test_identity_negative3 (
+      id int IDENTITY(0, -1) NOT NULL
+    );
+    CREATE TABLE test_identity_negative4 (
+      id bigint IDENTITY(-1000, -10) NOT NULL
+    );
