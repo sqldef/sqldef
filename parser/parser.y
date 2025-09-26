@@ -4719,6 +4719,7 @@ reserved_keyword:
 | SET
 | SHOW
 | STRAIGHT_JOIN
+| STATUS
 | TABLE
 | TABLES
 | TABLOCK
