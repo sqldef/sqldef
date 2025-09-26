@@ -46,7 +46,7 @@ deps:
 
 goyacc:
 	@if ! which goyacc > /dev/null; then \
-	  go install golang.org/x/tools/cmd/goyacc; \
+	  go install golang.org/x/tools/cmd/goyacc@latest; \
 	fi
 
 package-zip: build
