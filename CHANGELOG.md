@@ -1,3 +1,7 @@
+## [v3.0.3](https://github.com/sqldef/sqldef/compare/v3.0.2...v3.0.3) - 2025-09-26
+- add status to reserved keyword list by @osjupiter in https://github.com/sqldef/sqldef/pull/784
+- [package] use -9 for compress artifacts by @gfx in https://github.com/sqldef/sqldef/pull/786
+
 ## [v3.0.2](https://github.com/sqldef/sqldef/compare/v3.0.1...v3.0.2) - 2025-09-24
 - mysqldef: allow update statements without from clause inside triggers https://github.com/sqldef/sqldef/pull/781
 
