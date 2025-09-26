@@ -323,6 +323,7 @@ func forceEOF(yylex interface{}) {
 %type <limit> limit_opt
 %type <str> lock_opt
 %type <columns> ins_column_list column_list
+%type <colIdent> ins_column
 %type <columns> include_columns_opt
 %type <partitions> opt_partition_clause partition_list
 %type <updateExprs> on_dup_opt
@@ -4363,21 +4364,27 @@ insert_data:
   }
 
 ins_column_list:
-  sql_id
+  ins_column
   {
     $$ = Columns{$1}
   }
+| ins_column_list ',' ins_column
+  {
+    $$ = append($1, $3)
+  }
+
+ins_column:
+  sql_id
+  {
+    $$ = $1
+  }
 | sql_id '.' sql_id
   {
-    $$ = Columns{$3}
+    $$ = $3
   }
-| ins_column_list ',' sql_id
+| reserved_keyword
   {
-    $$ = append($$, $3)
-  }
-| ins_column_list ',' sql_id '.' sql_id
-  {
-    $$ = append($$, $5)
+    $$ = NewColIdent(string($1))
   }
 
 on_dup_opt:
