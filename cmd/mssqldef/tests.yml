@@ -538,6 +538,17 @@ DanglingElse:
     begin
     set nocount off
     end;
+Execute:
+  desired: |
+    CREATE TABLE users (
+        id bigint NOT NULL,
+        name text
+    );
+    CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
+    declare
+    @o1 int
+    exec sp_executesql N'SELECT @o1 = @p1', N'@p1 int, @o1 int output', 1, @o1 output
+    execute ('SELECT 1');
 RenameColumn:
   current: |
     CREATE TABLE users (

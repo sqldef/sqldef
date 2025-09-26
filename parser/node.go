@@ -108,6 +108,7 @@ func (*OtherRead) iStatement()      {}
 func (*OtherAdmin) iStatement()     {}
 func (*SetBoolOption) iStatement()  {}
 func (*MultiStatement) iStatement() {}
+func (*Exec) iStatement()           {}
 
 // ParenSelect can actually not be a top level statement,
 // but we have to allow it because it's a requirement
@@ -424,6 +425,21 @@ func (node *MultiStatement) Format(buf *nodeBuffer) {
 	}
 }
 
+// Exec represents a EXEC statement.
+type Exec struct {
+	Action string // EXEC or EXECUTE
+	Name   ColIdent
+	Exprs  Exprs
+}
+
+// Format formats the Exec
+func (node *Exec) Format(buf *nodeBuffer) {
+	if node.Name.isEmpty() {
+		buf.Printf("%s (%v)", node.Action, node.Exprs)
+		return
+	}
+	buf.Printf("%s %s %v", node.Action, node.Name.String(), node.Exprs)
+}
 type DDL struct {
 	Action        DDLAction
 	Table         TableName
@@ -1443,6 +1459,7 @@ func (*Default) iExpr()             {}
 func (*ArrayConstructor) iExpr()    {}
 func (*FuncCallExpr) iExpr()        {}
 func (*NextSeqValExpr) iExpr()      {}
+func (*SuffixExpr) iExpr()          {}
 
 // Exprs represents a list of value expressions.
 // It's not a valid expression because it's not parenthesized.
@@ -2316,6 +2333,17 @@ func (node OnDup) Format(buf *nodeBuffer) {
 		return
 	}
 	buf.Printf(" on duplicate key update %v", UpdateExprs(node))
+}
+
+// SuffixExpr represents Suffix operator like a 'OUTPUT'.
+type SuffixExpr struct {
+	Expr   Expr
+	Suffix string
+}
+
+// Format formats the node.
+func (node *SuffixExpr) Format(buf *nodeBuffer) {
+	buf.Printf("%v %s", node.Expr, node.Suffix)
 }
 
 // ColIdent is a case insensitive SQL identifier. It will be escaped with

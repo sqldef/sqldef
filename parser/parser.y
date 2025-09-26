@@ -190,13 +190,13 @@ func forceEOF(yylex interface{}) {
 %token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD
 %token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE
 %right <bytes> UNIQUE KEY
-%token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE
+%token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
 %token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE
 %token <bytes> STATUS VARIABLES
 %token <bytes> RESTRICT CASCADE NO ACTION
 %token <bytes> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
 %token <bytes> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS DISTANCE M EUCLIDEAN COSINE
-%token <bytes> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE INSTEAD OF
+%token <bytes> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE INSTEAD OF OUTPUT
 %token <bytes> DEFERRABLE INITIALLY IMMEDIATE DEFERRED
 %token <bytes> CONCURRENTLY
 %token <bytes> SQL SECURITY
@@ -275,14 +275,14 @@ func forceEOF(yylex interface{}) {
 
 %type <statement> statement
 %type <selStmt> select_statement base_select union_lhs union_rhs
-%type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement if_statement
-%type <statement> matched_if_statement unmatched_if_statement trigger_statement_not_if
+%type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement
+%type <statement> if_statement matched_if_statement unmatched_if_statement trigger_statement_not_if
 %type <blockStatement> simple_if_body
 %type <statement> create_statement alter_statement
 %type <statement> set_option_statement set_bool_option_statement
 %type <ddl> create_table_prefix
 %type <bytes2> comment_opt comment_list
-%type <str> union_op insert_or_replace
+%type <str> union_op insert_or_replace exec_keyword
 %type <str> distinct_opt straight_join_opt cache_opt match_option separator_opt
 %type <expr> like_escape_opt
 %type <selectExprs> select_expression_list select_expression_list_opt
@@ -306,7 +306,7 @@ func forceEOF(yylex interface{}) {
 %type <expr> function_call_keyword function_call_nonkeyword function_call_generic function_call_conflict
 %type <str> is_suffix
 %type <colTuple> col_tuple
-%type <exprs> expression_list
+%type <exprs> expression_list exec_param_list_opt
 %type <values> tuple_list
 %type <valTuple> row_tuple tuple_or_empty
 %type <expr> tuple_expression
@@ -1333,6 +1333,7 @@ trigger_statement_not_if:
 | set_statement
 | cursor_statement
 | while_statement
+| exec_statement
 | set_option_statement
 | base_select order_by_opt limit_opt lock_opt
   {
@@ -1342,6 +1343,26 @@ trigger_statement_not_if:
     sel.Lock = $4
     $$ = sel
   }
+
+exec_statement:
+  exec_keyword sql_id exec_param_list_opt
+  {
+    // EXEC sp_name param1, param2
+    $$ = &Exec{Action: $1, Name: $2, Exprs: $3}
+  }
+| exec_keyword openb exec_param_list_opt closeb
+  {
+    // EXEC ('SELECT * FROM ...')
+    $$ = &Exec{Action: $1, Exprs: $3}
+  }
+
+exec_keyword:
+  EXEC    { $$ = string($1) }
+| EXECUTE { $$ = string($1) }
+
+exec_param_list_opt:
+  /* empty */     { $$ = nil }
+| expression_list { $$ = $1 }
 
 for_each_row_opt:
   { $$ = struct{}{} }
@@ -3291,6 +3312,10 @@ expression:
   {
     $$ = &IsExpr{Operator: $3, Expr: $1}
   }
+| expression OUTPUT
+  {
+    $$ = &SuffixExpr{Expr: $1, Suffix: string($2)}
+  }
 | value_expression
   {
     $$ = $1
@@ -4672,6 +4697,8 @@ reserved_keyword:
 | ELSE
 | END
 | ESCAPE
+| EXEC
+| EXECUTE
 | EXISTS
 | EXPLAIN
 | FALSE
