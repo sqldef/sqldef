@@ -202,6 +202,12 @@ Download the single-binary executable for your favorite database from:
 
 https://github.com/sqldef/sqldef/releases
 
+### Docker images
+
+Docker images are available on Docker Hub:
+
+https://hub.docker.com/u/sqldef
+
 ### Linux
 
 Debian packages might be supported in the future, but for now they have not been implemented yet.
@@ -264,7 +270,7 @@ $ brew install libpq && brew link --force libpq
 $ brew install microsoft/mssql-release/mssql-tools
 
 # Start database
-$ docker-compose up
+$ docker compose up
 
 # Run all tests
 $ make test
