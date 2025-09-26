@@ -198,6 +198,8 @@ var keywords = map[string]int{
 	"escape":                 ESCAPE,
 	"escaped":                UNUSED,
 	"exists":                 EXISTS,
+	"exec":                   EXEC,
+	"execute":                EXECUTE,
 	"exit":                   UNUSED,
 	"explain":                EXPLAIN,
 	"expansion":              EXPANSION,
