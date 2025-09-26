@@ -171,14 +171,21 @@ jobs:
       - { uses: actions/download-artifact@v4, with: { name: sqldef-darwin-arm64,  path: package/ } }
       - { uses: actions/download-artifact@v4, with: { name: sqldef-windows-amd64, path: package/ } }
 
-      - name: Release binaries
+      - name: Upload artifacts
         run: |
           export VERSION=$(echo "$GITHUB_REF" | sed -e 's!refs/tags/!!')
           curl -L "https://github.com/tcnksm/ghr/releases/download/${GHR_VERSION}/ghr_${GHR_VERSION}_linux_amd64.tar.gz" | tar xvz
-          "ghr_${GHR_VERSION}_linux_amd64/ghr" -u sqldef -r sqldef -replace -n "$VERSION" "$VERSION" package/
+          "ghr_${GHR_VERSION}_linux_amd64/ghr" -u sqldef -r sqldef -replace "$VERSION" package/
         env:
-          GHR_VERSION: v0.13.0
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHR_VERSION: v0.17.0
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Publish release
+        run: |
+          VERSION=$(echo "$GITHUB_REF" | sed -e 's!refs/tags/!!')
+          gh release edit "$VERSION" --draft=false
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - uses: actions/checkout@v5
         with:
