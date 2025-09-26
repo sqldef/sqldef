@@ -1,3 +1,12 @@
+## [v3.0.5](https://github.com/sqldef/sqldef/compare/v3.0.4...v3.0.5) - 2025-09-26
+- mssqldef: Support EXECUTE with OUTPUT by @chi-bd in https://github.com/sqldef/sqldef/pull/791
+- let sqldef.yml immutable-release ready by @gfx in https://github.com/sqldef/sqldef/pull/793
+- chore: s/parser-integrity/integrity/ by @gfx in https://github.com/sqldef/sqldef/pull/794
+- for security reasons, it's better to declare permissions for each workflow by @gfx in https://github.com/sqldef/sqldef/pull/795
+- doc: mention to docker hub by @gfx in https://github.com/sqldef/sqldef/pull/796
+- ci: run packaging jobs only for tags by @gfx in https://github.com/sqldef/sqldef/pull/797
+- fix use of ghr when tagpr's release PR is not used by @gfx in https://github.com/sqldef/sqldef/pull/798
+
 ## [v3.0.4](https://github.com/sqldef/sqldef/compare/v3.0.3...v3.0.4) - 2025-09-26
 - [CI] add parser-integrity job by @gfx in https://github.com/sqldef/sqldef/pull/789
 - Handle negative values in parser instead of tokenizer by @osjupiter in https://github.com/sqldef/sqldef/pull/788
