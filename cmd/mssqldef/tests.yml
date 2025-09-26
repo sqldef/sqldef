@@ -545,8 +545,10 @@ Execute:
         name text
     );
     CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
-    execute ('SELECT 1')
-    exec sp_executesql N'SELECT @p1', N'@p1 int', @p1 = 1;
+    declare
+    @o1 int
+    exec sp_executesql N'SELECT @o1 = @p1', N'@p1 int, @o1 int output', 1, @o1 output
+    execute ('SELECT 1');
 RenameColumn:
   current: |
     CREATE TABLE users (

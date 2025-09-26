@@ -1459,6 +1459,7 @@ func (*Default) iExpr()             {}
 func (*ArrayConstructor) iExpr()    {}
 func (*FuncCallExpr) iExpr()        {}
 func (*NextSeqValExpr) iExpr()      {}
+func (*SuffixExpr) iExpr()          {}
 
 // Exprs represents a list of value expressions.
 // It's not a valid expression because it's not parenthesized.
@@ -2332,6 +2333,17 @@ func (node OnDup) Format(buf *nodeBuffer) {
 		return
 	}
 	buf.Printf(" on duplicate key update %v", UpdateExprs(node))
+}
+
+// SuffixExpr represents Suffix operator like a 'OUTPUT'.
+type SuffixExpr struct {
+	Expr   Expr
+	Suffix string
+}
+
+// Format formats the node.
+func (node *SuffixExpr) Format(buf *nodeBuffer) {
+	buf.Printf("%v %s", node.Expr, node.Suffix)
 }
 
 // ColIdent is a case insensitive SQL identifier. It will be escaped with
