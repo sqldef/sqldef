@@ -238,3 +238,12 @@ DecimalDefault:
     CREATE TABLE some_table (
       some_value decimal(5, 2) DEFAULT 0.0
     );
+NegativeDefaultNumbers:
+  desired: |
+    CREATE TABLE items (
+      v0 float DEFAULT - 20,
+      v6 float DEFAULT -20,
+      v7 decimal(5, 2) DEFAULT -20.0,
+      v8 decimal(5, 2) DEFAULT 20.0,
+      v9 decimal(5, 2) DEFAULT 0.0
+    );
