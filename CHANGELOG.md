@@ -1,3 +1,6 @@
+## [v3.0.8](https://github.com/sqldef/sqldef/compare/v3.0.7...v3.0.8) - 2025-09-27
+- mssqldef: Support RETURN statement by @chi-bd in https://github.com/sqldef/sqldef/pull/803
+
 ## [v3.0.7](https://github.com/sqldef/sqldef/compare/v3.0.6...v3.0.7) - 2025-09-27
 - mssqldef: Support compound conditions in IF and WHILE statements by @chi-bd in https://github.com/sqldef/sqldef/pull/801
 
