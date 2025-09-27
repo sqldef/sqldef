@@ -1,3 +1,6 @@
+## [v3.0.6](https://github.com/sqldef/sqldef/compare/v3.0.5...v3.0.6) - 2025-09-26
+- ci: add -draft to ghr options in order to work with Immutable Releases by @gfx in https://github.com/sqldef/sqldef/pull/799
+
 ## [v3.0.5](https://github.com/sqldef/sqldef/compare/v3.0.4...v3.0.5) - 2025-09-26
 - mssqldef: Support EXECUTE with OUTPUT by @chi-bd in https://github.com/sqldef/sqldef/pull/791
 - let sqldef.yml immutable-release ready by @gfx in https://github.com/sqldef/sqldef/pull/793
