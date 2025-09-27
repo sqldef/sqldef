@@ -563,6 +563,15 @@ IfWhileCompoundConditions:
     else
     set nocount off
     end;
+Return:
+  desired: |
+    CREATE TABLE users (
+        id bigint NOT NULL,
+        name text
+    );
+    CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
+    if (1 = 1)
+    return;
 RenameColumn:
   current: |
     CREATE TABLE users (
