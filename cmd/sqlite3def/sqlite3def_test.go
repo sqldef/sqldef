@@ -31,7 +31,7 @@ func wrapWithTransaction(ddls string) string {
 func TestApply(t *testing.T) {
 	defer testutils.MustExecute("rm", "-f", "sqlite3def_test") // after-test cleanup
 
-	tests, err := testutils.ReadTests("tests.yml")
+	tests, err := testutils.ReadTests("tests*.yml")
 	if err != nil {
 		t.Fatal(err)
 	}

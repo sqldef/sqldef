@@ -310,11 +310,11 @@ ForeignKeyConstraintsAreEmittedLast:
       bar_id bigint PRIMARY KEY
     );
   output: |
+    ALTER TABLE "public"."bars" ADD COLUMN "bar_id" bigint NOT NULL;
+    ALTER TABLE "public"."bars" ADD PRIMARY KEY ("bar_id");
     ALTER TABLE "public"."foos" ADD COLUMN "foo_id" bigint NOT NULL;
     ALTER TABLE "public"."foos" ADD COLUMN "bar_id" bigint NOT NULL;
     ALTER TABLE "public"."foos" ADD PRIMARY KEY ("foo_id");
-    ALTER TABLE "public"."bars" ADD COLUMN "bar_id" bigint NOT NULL;
-    ALTER TABLE "public"."bars" ADD PRIMARY KEY ("bar_id");
     ALTER TABLE "public"."foos" ADD CONSTRAINT "foos_bar_id_fkey" FOREIGN KEY ("bar_id") REFERENCES "public"."bars" ("bar_id");
     ALTER TABLE "public"."bars" DROP COLUMN "dummy_column";
     ALTER TABLE "public"."foos" DROP COLUMN "dummy_column";

@@ -1,0 +1,163 @@
+# Test cases to reproduce issues mentioned in the Qiita article
+# https://qiita.com/abe_masanori/items/7fd2a470e7eba2f255a4
+
+# Issue 1: Export order with foreign key constraints
+# When exporting a database with foreign keys, the tables might be exported
+# in an order that causes dependency errors when recreating the schema
+ExportOrderForeignKey:
+  desired: |
+    CREATE TABLE `suppliers` (
+      `supplier_id` int PRIMARY KEY,
+      `name` VARCHAR(100)
+    );
+    CREATE TABLE `items` (
+      `item_id` int PRIMARY KEY,
+      `supplier_id` int NOT NULL,
+      CONSTRAINT `items_supplier_fk` FOREIGN KEY (`supplier_id`) REFERENCES `suppliers` (`supplier_id`)
+    );
+
+# Issue 2: Complex primary key change with foreign key dependencies
+# Changing primary key from single column to composite when foreign keys exist
+# This test demonstrates the limitation when trying to change a primary key
+# that is referenced by foreign keys
+PrimaryKeyChangeWithForeignKey:
+  current: |
+    CREATE TABLE `items` (
+      `item_id` int PRIMARY KEY,
+      `supplier_id` int,
+      `name` VARCHAR(100)
+    );
+    CREATE TABLE `item_prices` (
+      `price_id` int PRIMARY KEY,
+      `item_id` int,
+      `price` DECIMAL(10,2),
+      CONSTRAINT `prices_item_fk` FOREIGN KEY (`item_id`) REFERENCES `items` (`item_id`)
+    );
+  desired: |
+    CREATE TABLE `items` (
+      `item_id` int NOT NULL,
+      `supplier_id` int NOT NULL,
+      `name` VARCHAR(100),
+      PRIMARY KEY (`supplier_id`, `item_id`)
+    );
+    CREATE TABLE `item_prices` (
+      `price_id` int PRIMARY KEY,
+      `item_id` int,
+      `supplier_id` int,
+      `price` DECIMAL(10,2),
+      CONSTRAINT `prices_item_fk` FOREIGN KEY (`supplier_id`, `item_id`)
+        REFERENCES `items` (`supplier_id`, `item_id`)
+    );
+  output: |
+    ALTER TABLE `items` CHANGE COLUMN `supplier_id` `supplier_id` int NOT NULL;
+    ALTER TABLE `item_prices` DROP FOREIGN KEY `prices_item_fk`;
+    ALTER TABLE `item_prices` DROP INDEX `prices_item_fk`;
+    ALTER TABLE `items` DROP PRIMARY KEY;
+    ALTER TABLE `items` ADD PRIMARY KEY (`supplier_id`, `item_id`);
+    ALTER TABLE `item_prices` ADD COLUMN `supplier_id` int AFTER `item_id`;
+    ALTER TABLE `item_prices` ADD CONSTRAINT `prices_item_fk` FOREIGN KEY (`supplier_id`, `item_id`) REFERENCES `items` (`supplier_id`, `item_id`);
+
+# Issue 3: Circular foreign key dependencies
+CircularForeignKeyDependency:
+  current: |
+    CREATE TABLE `departments` (
+      `dept_id` int PRIMARY KEY,
+      `name` VARCHAR(100)
+    );
+    CREATE TABLE `employees` (
+      `emp_id` int PRIMARY KEY,
+      `dept_id` int,
+      `name` VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE `departments` (
+      `dept_id` int PRIMARY KEY,
+      `name` VARCHAR(100),
+      `manager_id` int
+    );
+    CREATE TABLE `employees` (
+      `emp_id` int PRIMARY KEY,
+      `dept_id` int,
+      `name` VARCHAR(100),
+      CONSTRAINT `emp_dept_fk` FOREIGN KEY (`dept_id`) REFERENCES `departments` (`dept_id`)
+    );
+    ALTER TABLE `departments` ADD CONSTRAINT `dept_manager_fk`
+      FOREIGN KEY (`manager_id`) REFERENCES `employees` (`emp_id`);
+  output: |
+    ALTER TABLE `departments` ADD COLUMN `manager_id` int AFTER `name`;
+    ALTER TABLE `employees` ADD CONSTRAINT `emp_dept_fk` FOREIGN KEY (`dept_id`) REFERENCES `departments` (`dept_id`);
+    ALTER TABLE `departments` ADD CONSTRAINT `dept_manager_fk`
+      FOREIGN KEY (`manager_id`) REFERENCES `employees` (`emp_id`);
+
+# Issue 4: Add constraint after table creation (mentioned as limited support)
+AddConstraintAfterCreation:
+  current: |
+    CREATE TABLE `orders` (
+      `order_id` int PRIMARY KEY,
+      `customer_id` int,
+      `order_date` DATE
+    );
+    CREATE TABLE `customers` (
+      `customer_id` int PRIMARY KEY,
+      `name` VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE `orders` (
+      `order_id` int PRIMARY KEY,
+      `customer_id` int,
+      `order_date` DATE
+    );
+    CREATE TABLE `customers` (
+      `customer_id` int PRIMARY KEY,
+      `name` VARCHAR(100)
+    );
+    ALTER TABLE `orders` ADD CONSTRAINT `order_customer_fk`
+      FOREIGN KEY (`customer_id`) REFERENCES `customers` (`customer_id`);
+  output: |
+    ALTER TABLE `orders` ADD CONSTRAINT `order_customer_fk`
+      FOREIGN KEY (`customer_id`) REFERENCES `customers` (`customer_id`);
+
+# Issue 5: Multiple foreign keys to same table being modified
+MultipleForeignKeysToModifiedTable:
+  current: |
+    CREATE TABLE `users` (
+      `user_id` int PRIMARY KEY,
+      `username` VARCHAR(50)
+    );
+    CREATE TABLE `posts` (
+      `post_id` int PRIMARY KEY,
+      `author_id` int,
+      `reviewer_id` int,
+      CONSTRAINT `posts_author_fk` FOREIGN KEY (`author_id`) REFERENCES `users` (`user_id`),
+      CONSTRAINT `posts_reviewer_fk` FOREIGN KEY (`reviewer_id`) REFERENCES `users` (`user_id`)
+    );
+  desired: |
+    CREATE TABLE `users` (
+      `user_id` int NOT NULL,
+      `username` VARCHAR(50),
+      `tenant_id` int NOT NULL,
+      PRIMARY KEY (`tenant_id`, `user_id`)
+    );
+    CREATE TABLE `posts` (
+      `post_id` int PRIMARY KEY,
+      `author_id` int,
+      `author_tenant_id` int,
+      `reviewer_id` int,
+      `reviewer_tenant_id` int,
+      CONSTRAINT `posts_author_fk` FOREIGN KEY (`author_tenant_id`, `author_id`)
+        REFERENCES `users` (`tenant_id`, `user_id`),
+      CONSTRAINT `posts_reviewer_fk` FOREIGN KEY (`reviewer_tenant_id`, `reviewer_id`)
+        REFERENCES `users` (`tenant_id`, `user_id`)
+    );
+  output: |
+    ALTER TABLE `users` ADD COLUMN `tenant_id` int NOT NULL AFTER `username`;
+    ALTER TABLE `posts` DROP FOREIGN KEY `posts_author_fk`;
+    ALTER TABLE `posts` DROP INDEX `posts_author_fk`;
+    ALTER TABLE `posts` DROP FOREIGN KEY `posts_reviewer_fk`;
+    ALTER TABLE `posts` DROP INDEX `posts_reviewer_fk`;
+    ALTER TABLE `users` DROP PRIMARY KEY;
+    ALTER TABLE `users` ADD PRIMARY KEY (`tenant_id`, `user_id`);
+    ALTER TABLE `posts` ADD COLUMN `author_tenant_id` int AFTER `author_id`;
+    ALTER TABLE `posts` ADD COLUMN `reviewer_tenant_id` int AFTER `reviewer_id`;
+    ALTER TABLE `posts` ADD CONSTRAINT `posts_author_fk` FOREIGN KEY (`author_tenant_id`, `author_id`) REFERENCES `users` (`tenant_id`, `user_id`);
+    ALTER TABLE `posts` ADD CONSTRAINT `posts_reviewer_fk` FOREIGN KEY (`reviewer_tenant_id`, `reviewer_id`) REFERENCES `users` (`tenant_id`, `user_id`);
