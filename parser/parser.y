@@ -2262,7 +2262,7 @@ max_length_opt:
   }
 | '(' ID ')'
   {
-    if strings.ToLower(string($2)) != "max" {
+    if !strings.EqualFold(string($2), "max") {
       yylex.Error(fmt.Sprintf("syntax error around '%s'", string($2)))
     }
     $$ = NewIntVal($2)

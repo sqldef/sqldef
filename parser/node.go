@@ -2225,7 +2225,7 @@ func (node *Order) Format(buf *nodeBuffer) {
 		return
 	}
 	if node, ok := node.Expr.(*FuncExpr); ok {
-		if node.Name.lowered() == "rand" {
+		if node.Name.equalString("rand") {
 			buf.Printf("%v", node)
 			return
 		}
@@ -2412,7 +2412,7 @@ func (node ColIdent) lowered() string {
 
 // equalString performs a case-insensitive compare with str.
 func (node ColIdent) equalString(str string) bool {
-	return node.lowered() == strings.ToLower(str)
+	return strings.EqualFold(node.val, str)
 }
 
 type DeclareType int
