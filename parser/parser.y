@@ -1035,14 +1035,14 @@ fetch_opt:
   }
 
 while_statement:
-  WHILE condition trigger_statement
+  WHILE expression trigger_statement
   {
     $$ = &While{
       Condition: $2,
       Statements: []Statement{$3},
     }
   }
-| WHILE condition BEGIN statement_block END
+| WHILE expression BEGIN statement_block END
   {
     $$ = &While{
       Condition: $2,
@@ -1100,7 +1100,7 @@ if_statement:
 
 matched_if_statement:
   // Recursive rule for 'ELSE IF' chains
-  IF condition simple_if_body ELSE matched_if_statement
+  IF expression simple_if_body ELSE matched_if_statement
   {
     $$ = &If{
       Condition: $2,
@@ -1110,7 +1110,7 @@ matched_if_statement:
     }
   }
   // Base case rule for a simple, final 'ELSE'
-| IF condition simple_if_body ELSE simple_if_body
+| IF expression simple_if_body ELSE simple_if_body
   {
     $$ = &If{
       Condition: $2,
@@ -1121,17 +1121,17 @@ matched_if_statement:
   }
 
 unmatched_if_statement:
-  IF condition if_statement
+  IF expression if_statement
   {
     $$ = &If{Condition: $2, IfStatements: []Statement{$3}, Keyword: "Mssql"}
   }
 |
-  IF condition matched_if_statement ELSE unmatched_if_statement
+  IF expression matched_if_statement ELSE unmatched_if_statement
   {
     $$ = &If{Condition: $2, IfStatements: []Statement{$3}, ElseStatements: []Statement{$5}, Keyword: "Mssql"}
   }
 |
-  IF condition simple_if_body %prec NO_ELSE
+  IF expression simple_if_body %prec NO_ELSE
   {
     $$ = &If{Condition: $2, IfStatements: $3, Keyword: "Mssql"}
   }
