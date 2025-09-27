@@ -30,7 +30,7 @@ func wrapWithTransaction(ddls string) string {
 }
 
 func TestApply(t *testing.T) {
-	tests, err := testutils.ReadTests("tests.yml")
+	tests, err := testutils.ReadTests("tests*.yml")
 	if err != nil {
 		t.Fatal(err)
 	}

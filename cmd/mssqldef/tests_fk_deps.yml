@@ -1,0 +1,196 @@
+# Test cases for foreign key dependency handling in SQL Server
+
+# Issue 1: Export order with foreign key constraints
+# When exporting a database with foreign keys, the tables might be exported
+# in an order that causes dependency errors when recreating the schema
+ExportOrderForeignKey:
+  desired: |
+    CREATE TABLE [suppliers] (
+      [supplier_id] int PRIMARY KEY,
+      [name] NVARCHAR(100)
+    );
+    CREATE TABLE [items] (
+      [item_id] int PRIMARY KEY,
+      [supplier_id] int NOT NULL,
+      CONSTRAINT [items_supplier_fk] FOREIGN KEY ([supplier_id]) REFERENCES [suppliers] ([supplier_id])
+    );
+
+# Issue 2: Complex primary key change with foreign key dependencies
+# Changing primary key from single column to composite when foreign keys exist
+PrimaryKeyChangeWithForeignKey:
+  current: |
+    CREATE TABLE [items] (
+      [item_id] int,
+      [supplier_id] int,
+      [name] NVARCHAR(100),
+      CONSTRAINT [items_pkey] PRIMARY KEY ([item_id])
+    );
+    CREATE TABLE [item_prices] (
+      [price_id] int,
+      [price] DECIMAL(10,2),
+      [item_id] int,
+      CONSTRAINT [item_prices_pkey] PRIMARY KEY ([price_id]),
+      CONSTRAINT [prices_item_fk] FOREIGN KEY ([item_id]) REFERENCES [items] ([item_id])
+    );
+  desired: |
+    CREATE TABLE [items] (
+      [item_id] int NOT NULL,
+      [supplier_id] int NOT NULL,
+      [name] NVARCHAR(100),
+      PRIMARY KEY ([supplier_id], [item_id])
+    );
+    CREATE TABLE [item_prices] (
+      [price_id] int PRIMARY KEY,
+      [item_id] int,
+      [supplier_id] int,
+      [price] DECIMAL(10,2),
+      CONSTRAINT [prices_item_fk] FOREIGN KEY ([supplier_id], [item_id])
+        REFERENCES [items] ([supplier_id], [item_id])
+    );
+  output: |
+    ALTER TABLE [dbo].[items] ALTER COLUMN [supplier_id] int NOT NULL;
+    ALTER TABLE [dbo].[item_prices] DROP CONSTRAINT [prices_item_fk];
+    ALTER TABLE [dbo].[items] DROP CONSTRAINT [items_pkey];
+    ALTER TABLE [dbo].[items] ADD PRIMARY KEY NONCLUSTERED ([supplier_id], [item_id]);
+    ALTER TABLE [dbo].[item_prices] ADD [supplier_id] int;
+    ALTER TABLE [dbo].[item_prices] ADD CONSTRAINT [prices_item_fk] FOREIGN KEY ([supplier_id], [item_id]) REFERENCES [dbo].[items] ([supplier_id], [item_id]);
+
+# Issue 3: Circular foreign key dependencies
+CircularForeignKeyDependency:
+  current: |
+    CREATE TABLE [departments] (
+      [dept_id] int PRIMARY KEY,
+      [name] NVARCHAR(100)
+    );
+    CREATE TABLE [employees] (
+      [emp_id] int PRIMARY KEY,
+      [dept_id] int,
+      [name] NVARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE [departments] (
+      [dept_id] int PRIMARY KEY,
+      [name] NVARCHAR(100),
+      [manager_id] int,
+      CONSTRAINT [dept_manager_fk] FOREIGN KEY ([manager_id]) REFERENCES [employees] ([emp_id])
+    );
+    CREATE TABLE [employees] (
+      [emp_id] int PRIMARY KEY,
+      [dept_id] int,
+      [name] NVARCHAR(100),
+      CONSTRAINT [emp_dept_fk] FOREIGN KEY ([dept_id]) REFERENCES [departments] ([dept_id])
+    );
+  output: |
+    ALTER TABLE [dbo].[departments] ADD [manager_id] int;
+    ALTER TABLE [dbo].[departments] ADD CONSTRAINT [dept_manager_fk] FOREIGN KEY ([manager_id]) REFERENCES [dbo].[employees] ([emp_id]);
+    ALTER TABLE [dbo].[employees] ADD CONSTRAINT [emp_dept_fk] FOREIGN KEY ([dept_id]) REFERENCES [dbo].[departments] ([dept_id]);
+
+# Issue 4: Add constraint after table creation
+AddConstraintAfterCreation:
+  current: |
+    CREATE TABLE [orders] (
+      [order_id] int PRIMARY KEY,
+      [customer_id] int,
+      [order_date] DATE
+    );
+    CREATE TABLE [customers] (
+      [customer_id] int PRIMARY KEY,
+      [name] NVARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE [customers] (
+      [customer_id] int PRIMARY KEY,
+      [name] NVARCHAR(100)
+    );
+    CREATE TABLE [orders] (
+      [order_id] int PRIMARY KEY,
+      [customer_id] int,
+      [order_date] DATE,
+      CONSTRAINT [order_customer_fk] FOREIGN KEY ([customer_id]) REFERENCES [customers] ([customer_id])
+    );
+  output: |
+    ALTER TABLE [dbo].[orders] ADD CONSTRAINT [order_customer_fk] FOREIGN KEY ([customer_id]) REFERENCES [dbo].[customers] ([customer_id]);
+
+# Issue 5: Multiple foreign keys to same table being modified
+MultipleForeignKeysToModifiedTable:
+  current: |
+    CREATE TABLE [users] (
+      [user_id] int,
+      [username] NVARCHAR(50),
+      CONSTRAINT [users_pkey] PRIMARY KEY ([user_id])
+    );
+    CREATE TABLE [posts] (
+      [post_id] int,
+      [author_id] int,
+      [reviewer_id] int,
+      CONSTRAINT [posts_pkey] PRIMARY KEY ([post_id]),
+      CONSTRAINT [posts_author_fk] FOREIGN KEY ([author_id]) REFERENCES [users] ([user_id]),
+      CONSTRAINT [posts_reviewer_fk] FOREIGN KEY ([reviewer_id]) REFERENCES [users] ([user_id])
+    );
+  desired: |
+    CREATE TABLE [users] (
+      [user_id] int NOT NULL,
+      [username] NVARCHAR(50),
+      [tenant_id] int NOT NULL,
+      PRIMARY KEY ([tenant_id], [user_id])
+    );
+    CREATE TABLE [posts] (
+      [post_id] int PRIMARY KEY,
+      [author_id] int,
+      [author_tenant_id] int,
+      [reviewer_id] int,
+      [reviewer_tenant_id] int,
+      CONSTRAINT [posts_author_fk] FOREIGN KEY ([author_tenant_id], [author_id])
+        REFERENCES [users] ([tenant_id], [user_id]),
+      CONSTRAINT [posts_reviewer_fk] FOREIGN KEY ([reviewer_tenant_id], [reviewer_id])
+        REFERENCES [users] ([tenant_id], [user_id])
+    );
+  output: |
+    ALTER TABLE [dbo].[users] ADD [tenant_id] int NOT NULL;
+    ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_author_fk];
+    ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_reviewer_fk];
+    ALTER TABLE [dbo].[users] DROP CONSTRAINT [users_pkey];
+    ALTER TABLE [dbo].[users] ADD PRIMARY KEY NONCLUSTERED ([tenant_id], [user_id]);
+    ALTER TABLE [dbo].[posts] ADD [author_tenant_id] int;
+    ALTER TABLE [dbo].[posts] ADD [reviewer_tenant_id] int;
+    ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_author_fk] FOREIGN KEY ([author_tenant_id], [author_id]) REFERENCES [dbo].[users] ([tenant_id], [user_id]);
+    ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_reviewer_fk] FOREIGN KEY ([reviewer_tenant_id], [reviewer_id]) REFERENCES [dbo].[users] ([tenant_id], [user_id]);
+
+# Issue 6: CASCADE options preservation
+CascadeOptionsPreservation:
+  current: |
+    CREATE TABLE [categories] (
+      [category_id] int,
+      [name] NVARCHAR(100),
+      CONSTRAINT [categories_pkey] PRIMARY KEY ([category_id])
+    );
+    CREATE TABLE [products] (
+      [product_id] int,
+      [category_id] int,
+      [name] NVARCHAR(100),
+      CONSTRAINT [products_pkey] PRIMARY KEY ([product_id]),
+      CONSTRAINT [products_category_fk] FOREIGN KEY ([category_id])
+        REFERENCES [categories] ([category_id]) ON DELETE CASCADE ON UPDATE CASCADE
+    );
+  desired: |
+    CREATE TABLE [categories] (
+      [category_id] int NOT NULL,
+      [tenant_id] int NOT NULL,
+      [name] NVARCHAR(100),
+      PRIMARY KEY ([tenant_id], [category_id])
+    );
+    CREATE TABLE [products] (
+      [product_id] int PRIMARY KEY,
+      [category_id] int,
+      [tenant_id] int,
+      [name] NVARCHAR(100),
+      CONSTRAINT [products_category_fk] FOREIGN KEY ([tenant_id], [category_id])
+        REFERENCES [categories] ([tenant_id], [category_id]) ON DELETE CASCADE ON UPDATE CASCADE
+    );
+  output: |
+    ALTER TABLE [dbo].[categories] ADD [tenant_id] int NOT NULL;
+    ALTER TABLE [dbo].[products] DROP CONSTRAINT [products_category_fk];
+    ALTER TABLE [dbo].[categories] DROP CONSTRAINT [categories_pkey];
+    ALTER TABLE [dbo].[categories] ADD PRIMARY KEY NONCLUSTERED ([tenant_id], [category_id]);
+    ALTER TABLE [dbo].[products] ADD [tenant_id] int;
+    ALTER TABLE [dbo].[products] ADD CONSTRAINT [products_category_fk] FOREIGN KEY ([tenant_id], [category_id]) REFERENCES [dbo].[categories] ([tenant_id], [category_id]) ON DELETE CASCADE ON UPDATE CASCADE;

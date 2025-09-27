@@ -1,0 +1,190 @@
+# Test cases for foreign key dependency handling in PostgreSQL
+
+# Issue 1: Export order with foreign key constraints
+# When exporting a database with foreign keys, the tables might be exported
+# in an order that causes dependency errors when recreating the schema
+ExportOrderForeignKey:
+  desired: |
+    CREATE TABLE suppliers (
+      supplier_id int PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE TABLE items (
+      item_id int PRIMARY KEY,
+      supplier_id int NOT NULL,
+      CONSTRAINT items_supplier_fk FOREIGN KEY (supplier_id) REFERENCES suppliers (supplier_id)
+    );
+
+# Issue 2: Complex primary key change with foreign key dependencies
+# Changing primary key from single column to composite when foreign keys exist
+PrimaryKeyChangeWithForeignKey:
+  current: |
+    CREATE TABLE items (
+      item_id int PRIMARY KEY,
+      supplier_id int,
+      name VARCHAR(100)
+    );
+    CREATE TABLE item_prices (
+      price_id int PRIMARY KEY,
+      item_id int,
+      price DECIMAL(10,2),
+      CONSTRAINT prices_item_fk FOREIGN KEY (item_id) REFERENCES items (item_id)
+    );
+  desired: |
+    CREATE TABLE items (
+      item_id int NOT NULL,
+      supplier_id int NOT NULL,
+      name VARCHAR(100),
+      PRIMARY KEY (supplier_id, item_id)
+    );
+    CREATE TABLE item_prices (
+      price_id int PRIMARY KEY,
+      item_id int,
+      supplier_id int,
+      price DECIMAL(10,2),
+      CONSTRAINT prices_item_fk FOREIGN KEY (supplier_id, item_id)
+        REFERENCES items (supplier_id, item_id)
+    );
+  output: |
+    ALTER TABLE "public"."items" ALTER COLUMN "supplier_id" SET NOT NULL;
+    ALTER TABLE "public"."item_prices" DROP CONSTRAINT "prices_item_fk";
+    ALTER TABLE "public"."items" DROP CONSTRAINT "items_pkey";
+    ALTER TABLE "public"."items" ADD PRIMARY KEY ("supplier_id", "item_id");
+    ALTER TABLE "public"."item_prices" ADD COLUMN "supplier_id" integer;
+    ALTER TABLE "public"."item_prices" ADD CONSTRAINT "prices_item_fk" FOREIGN KEY ("supplier_id", "item_id") REFERENCES "public"."items" ("supplier_id", "item_id");
+
+# Issue 3: Circular foreign key dependencies
+CircularForeignKeyDependency:
+  current: |
+    CREATE TABLE departments (
+      dept_id int PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE TABLE employees (
+      emp_id int PRIMARY KEY,
+      dept_id int,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE departments (
+      dept_id int PRIMARY KEY,
+      name VARCHAR(100),
+      manager_id int,
+      CONSTRAINT dept_manager_fk FOREIGN KEY (manager_id) REFERENCES employees (emp_id)
+    );
+    CREATE TABLE employees (
+      emp_id int PRIMARY KEY,
+      dept_id int,
+      name VARCHAR(100),
+      CONSTRAINT emp_dept_fk FOREIGN KEY (dept_id) REFERENCES departments (dept_id)
+    );
+  output: |
+    ALTER TABLE "public"."departments" ADD COLUMN "manager_id" integer;
+    ALTER TABLE "public"."departments" ADD CONSTRAINT "dept_manager_fk" FOREIGN KEY ("manager_id") REFERENCES "public"."employees" ("emp_id");
+    ALTER TABLE "public"."employees" ADD CONSTRAINT "emp_dept_fk" FOREIGN KEY ("dept_id") REFERENCES "public"."departments" ("dept_id");
+
+# Issue 4: Add constraint after table creation
+AddConstraintAfterCreation:
+  current: |
+    CREATE TABLE orders (
+      order_id int PRIMARY KEY,
+      customer_id int,
+      order_date DATE
+    );
+    CREATE TABLE customers (
+      customer_id int PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE customers (
+      customer_id int PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE TABLE orders (
+      order_id int PRIMARY KEY,
+      customer_id int,
+      order_date DATE,
+      CONSTRAINT order_customer_fk FOREIGN KEY (customer_id) REFERENCES customers (customer_id)
+    );
+  output: |
+    ALTER TABLE "public"."orders" ADD CONSTRAINT "order_customer_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."customers" ("customer_id");
+
+# Issue 5: Multiple foreign keys to same table being modified
+MultipleForeignKeysToModifiedTable:
+  current: |
+    CREATE TABLE users (
+      user_id int PRIMARY KEY,
+      username VARCHAR(50)
+    );
+    CREATE TABLE posts (
+      post_id int PRIMARY KEY,
+      author_id int,
+      reviewer_id int,
+      CONSTRAINT posts_author_fk FOREIGN KEY (author_id) REFERENCES users (user_id),
+      CONSTRAINT posts_reviewer_fk FOREIGN KEY (reviewer_id) REFERENCES users (user_id)
+    );
+  desired: |
+    CREATE TABLE users (
+      user_id int NOT NULL,
+      username VARCHAR(50),
+      tenant_id int NOT NULL,
+      PRIMARY KEY (tenant_id, user_id)
+    );
+    CREATE TABLE posts (
+      post_id int PRIMARY KEY,
+      author_id int,
+      author_tenant_id int,
+      reviewer_id int,
+      reviewer_tenant_id int,
+      CONSTRAINT posts_author_fk FOREIGN KEY (author_tenant_id, author_id)
+        REFERENCES users (tenant_id, user_id),
+      CONSTRAINT posts_reviewer_fk FOREIGN KEY (reviewer_tenant_id, reviewer_id)
+        REFERENCES users (tenant_id, user_id)
+    );
+  output: |
+    ALTER TABLE "public"."users" ADD COLUMN "tenant_id" integer NOT NULL;
+    ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_author_fk";
+    ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_reviewer_fk";
+    ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";
+    ALTER TABLE "public"."users" ADD PRIMARY KEY ("tenant_id", "user_id");
+    ALTER TABLE "public"."posts" ADD COLUMN "author_tenant_id" integer;
+    ALTER TABLE "public"."posts" ADD COLUMN "reviewer_tenant_id" integer;
+    ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_author_fk" FOREIGN KEY ("author_tenant_id", "author_id") REFERENCES "public"."users" ("tenant_id", "user_id");
+    ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_reviewer_fk" FOREIGN KEY ("reviewer_tenant_id", "reviewer_id") REFERENCES "public"."users" ("tenant_id", "user_id");
+
+# Issue 6: CASCADE options preservation
+CascadeOptionsPreservation:
+  current: |
+    CREATE TABLE categories (
+      category_id int PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE TABLE products (
+      product_id int PRIMARY KEY,
+      category_id int,
+      name VARCHAR(100),
+      CONSTRAINT products_category_fk FOREIGN KEY (category_id)
+        REFERENCES categories (category_id) ON DELETE CASCADE ON UPDATE CASCADE
+    );
+  desired: |
+    CREATE TABLE categories (
+      category_id int NOT NULL,
+      tenant_id int NOT NULL,
+      name VARCHAR(100),
+      PRIMARY KEY (tenant_id, category_id)
+    );
+    CREATE TABLE products (
+      product_id int PRIMARY KEY,
+      category_id int,
+      tenant_id int,
+      name VARCHAR(100),
+      CONSTRAINT products_category_fk FOREIGN KEY (tenant_id, category_id)
+        REFERENCES categories (tenant_id, category_id) ON DELETE CASCADE ON UPDATE CASCADE
+    );
+  output: |
+    ALTER TABLE "public"."categories" ADD COLUMN "tenant_id" integer NOT NULL;
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_category_fk";
+    ALTER TABLE "public"."categories" DROP CONSTRAINT "categories_pkey";
+    ALTER TABLE "public"."categories" ADD PRIMARY KEY ("tenant_id", "category_id");
+    ALTER TABLE "public"."products" ADD COLUMN "tenant_id" integer;
+    ALTER TABLE "public"."products" ADD CONSTRAINT "products_category_fk" FOREIGN KEY ("tenant_id", "category_id") REFERENCES "public"."categories" ("tenant_id", "category_id") ON DELETE CASCADE ON UPDATE CASCADE;

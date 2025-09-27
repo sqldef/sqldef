@@ -307,7 +307,21 @@ func TestMysqldefBeforeApply(t *testing.T) {
 	)
 	writeFile("schema.sql", createTable)
 	apply := assertedExecuteMySQLDef(t, "mysqldef_test", "--file", "schema.sql", "--before-apply", beforeApply)
-	assertEquals(t, apply, applyPrefix+"BEGIN;\n"+beforeApply+"\n"+createTable+"\nCOMMIT;\n")
+	// Tables should be sorted by dependencies, so 'b' comes before 'a'
+	sortedCreateTable := stripHeredoc(`
+	CREATE TABLE b (
+		id int(11) NOT NULL AUTO_INCREMENT,
+		a_id int(11) NOT NULL,
+		PRIMARY KEY (id)
+	) ENGINE = InnoDB DEFAULT CHARSET = utf8;
+	CREATE TABLE a (
+		id int(11) NOT NULL AUTO_INCREMENT,
+		b_id int(11) NOT NULL,
+		PRIMARY KEY (id),
+		CONSTRAINT a FOREIGN KEY (b_id) REFERENCES b (id)
+	) ENGINE = InnoDB DEFAULT CHARSET = utf8;`,
+	)
+	assertEquals(t, apply, applyPrefix+"BEGIN;\n"+beforeApply+"\n"+sortedCreateTable+"\nCOMMIT;\n")
 	apply = assertedExecuteMySQLDef(t, "mysqldef_test", "--file", "schema.sql", "--before-apply", beforeApply)
 	assertEquals(t, apply, nothingModified)
 }

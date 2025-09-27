@@ -48,6 +48,9 @@ type Generator struct {
 	desiredTypes []*Type
 	currentTypes []*Type
 
+	// Track FKs that have been handled during primary key changes
+	handledForeignKeys map[string]bool
+
 	currentComments []*Comment
 
 	desiredExtensions []*Extension
@@ -78,6 +81,8 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	desiredDDLs = FilterViews(desiredDDLs, config)
 	desiredDDLs = FilterPrivileges(desiredDDLs, config)
 
+	desiredDDLs = SortTablesByDependencies(desiredDDLs)
+
 	currentDDLs, err := ParseDDLs(mode, sqlParser, currentSQL, defaultSchema)
 	if err != nil {
 		return nil, err
@@ -85,6 +90,8 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	currentDDLs = FilterTables(currentDDLs, config)
 	currentDDLs = FilterViews(currentDDLs, config)
 	currentDDLs = FilterPrivileges(currentDDLs, config)
+
+	currentDDLs = SortTablesByDependencies(currentDDLs)
 
 	aggregated, err := aggregateDDLsToSchema(currentDDLs)
 	if err != nil {
@@ -97,26 +104,27 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	}
 
 	generator := Generator{
-		mode:              mode,
-		desiredTables:     desiredAggregated.Tables,
-		currentTables:     aggregated.Tables,
-		desiredViews:      desiredAggregated.Views,
-		currentViews:      aggregated.Views,
-		desiredTriggers:   desiredAggregated.Triggers,
-		currentTriggers:   aggregated.Triggers,
-		desiredTypes:      desiredAggregated.Types,
-		currentTypes:      aggregated.Types,
-		currentComments:   aggregated.Comments,
-		desiredExtensions: desiredAggregated.Extensions,
-		currentExtensions: aggregated.Extensions,
-		desiredSchemas:    desiredAggregated.Schemas,
-		currentSchemas:    aggregated.Schemas,
-		desiredPrivileges: desiredAggregated.Privileges,
-		currentPrivileges: aggregated.Privileges,
-		defaultSchema:     defaultSchema,
-		algorithm:         config.Algorithm,
-		lock:              config.Lock,
-		config:            config,
+		mode:               mode,
+		desiredTables:      desiredAggregated.Tables,
+		currentTables:      aggregated.Tables,
+		desiredViews:       desiredAggregated.Views,
+		currentViews:       aggregated.Views,
+		desiredTriggers:    desiredAggregated.Triggers,
+		currentTriggers:    aggregated.Triggers,
+		desiredTypes:       desiredAggregated.Types,
+		currentTypes:       aggregated.Types,
+		currentComments:    aggregated.Comments,
+		desiredExtensions:  desiredAggregated.Extensions,
+		currentExtensions:  aggregated.Extensions,
+		desiredSchemas:     desiredAggregated.Schemas,
+		currentSchemas:     aggregated.Schemas,
+		desiredPrivileges:  desiredAggregated.Privileges,
+		currentPrivileges:  aggregated.Privileges,
+		defaultSchema:      defaultSchema,
+		algorithm:          config.Algorithm,
+		lock:               config.Lock,
+		config:             config,
+		handledForeignKeys: make(map[string]bool),
 	}
 	return generator.generateDDLs(desiredDDLs)
 }
@@ -504,6 +512,8 @@ func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, columnName 
 // In the caller, `mergeTable` manages `g.currentTables`.
 func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired CreateTable) ([]string, error) {
 	ddls := []string{}
+	// Track foreign keys that need to be recreated after primary key changes
+	var fkRecreationDDLs []string
 	var desiredColumns = make([]*Column, len(desired.table.columns))
 	for _, col := range desired.table.columns {
 		desiredColumns[col.position] = col
@@ -902,6 +912,89 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	// Examine primary key
 	if primaryKeysChanged {
+		// Check if there are foreign keys referencing this table's primary key
+		referencingFKs := g.findForeignKeysReferencingTable(desired.table.name)
+
+		var dropFKDDLs []string
+		var recreateFKDDLs []string
+
+		// If there are foreign keys referencing this table,
+		// we need to drop them first before modifying the primary key
+		if len(referencingFKs) > 0 {
+			for _, refFK := range referencingFKs {
+				var dropFKDDL string
+				switch g.mode {
+				case GeneratorModeMysql:
+					dropFKDDL = fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s",
+						g.escapeTableName(refFK.tableName),
+						g.escapeSQLName(refFK.foreignKey.constraintName))
+				case GeneratorModePostgres, GeneratorModeMssql:
+					dropFKDDL = fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s",
+						g.escapeTableName(refFK.tableName),
+						g.escapeSQLName(refFK.foreignKey.constraintName))
+				}
+				if dropFKDDL != "" {
+					dropFKDDLs = append(dropFKDDLs, dropFKDDL)
+				}
+
+				// Update the current state to reflect that we've dropped this FK
+				// This prevents duplicate FK creation when processing the referencing table
+				for _, table := range g.currentTables {
+					if table.name == refFK.tableName {
+						// Remove the FK from the current table's FK list
+						newFKs := []ForeignKey{}
+						for _, fk := range table.foreignKeys {
+							if fk.constraintName != refFK.foreignKey.constraintName {
+								newFKs = append(newFKs, fk)
+							}
+						}
+						table.foreignKeys = newFKs
+						break
+					}
+				}
+
+				// Also drop the index if it exists (MySQL creates implicit indexes for FKs)
+				// PostgreSQL and SQL Server don't create implicit indexes for FKs
+				if g.mode == GeneratorModeMysql {
+					dropIndexDDL := fmt.Sprintf("ALTER TABLE %s DROP INDEX %s",
+						g.escapeTableName(refFK.tableName),
+						g.escapeSQLName(refFK.foreignKey.constraintName))
+					dropFKDDLs = append(dropFKDDLs, dropIndexDDL)
+				}
+
+				// Look for the corresponding desired foreign key to get updated columns
+				// We need to find the desired table that references our table
+				var desiredFK *ForeignKey
+				for _, desiredTable := range g.desiredTables {
+					if desiredTable.name == refFK.tableName {
+						for _, fk := range desiredTable.foreignKeys {
+							if fk.constraintName == refFK.foreignKey.constraintName {
+								desiredFK = &fk
+								break
+							}
+						}
+						break
+					}
+				}
+
+				// If we found the desired FK, use its columns, otherwise use the original
+				if desiredFK != nil {
+					recreateDDL := g.buildForeignKeyDDL(refFK.tableName, desiredFK)
+					recreateFKDDLs = append(recreateFKDDLs, recreateDDL)
+					// Mark this FK as globally handled so we don't add it again in normal FK processing
+					g.handledForeignKeys[refFK.tableName+":"+desiredFK.constraintName] = true
+				} else {
+					// No desired FK found, just recreate with original columns
+					// This might fail if the primary key structure changed
+					recreateDDL := g.buildForeignKeyDDL(refFK.tableName, &refFK.foreignKey)
+					recreateFKDDLs = append(recreateFKDDLs, recreateDDL)
+				}
+			}
+
+			// Add the DROP FK statements before we modify the primary key
+			ddls = append(ddls, dropFKDDLs...)
+		}
+
 		if currentPrimaryKey != nil {
 			switch g.mode {
 			case GeneratorModeMysql:
@@ -915,6 +1008,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		}
 		if desiredPrimaryKey != nil {
 			ddls = append(ddls, g.generateAddIndex(desired.table.name, *desiredPrimaryKey))
+		}
+
+		// Store the FK recreation DDLs to be added at the end
+		if len(recreateFKDDLs) > 0 {
+			fkRecreationDDLs = append(fkRecreationDDLs, recreateFKDDLs...)
 		}
 	}
 
@@ -989,9 +1087,13 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 		} else {
 			// Foreign key not found, add foreign key.
-			definition := g.generateForeignKeyDefinition(desiredForeignKey)
-			ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), definition)
-			ddls = append(ddls, ddl)
+			// But first check if we've already handled this FK during primary key changes
+			fkKey := desired.table.name + ":" + desiredForeignKey.constraintName
+			if !g.handledForeignKeys[fkKey] {
+				definition := g.generateForeignKeyDefinition(desiredForeignKey)
+				ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), definition)
+				ddls = append(ddls, ddl)
+			}
 		}
 	}
 
@@ -1044,6 +1146,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		} else {
 			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s COMMENT = %s", g.escapeTableName(desired.table.name), desired.table.options["comment"]))
 		}
+	}
+
+	// Add FK recreation DDLs at the end (they will be executed after all table modifications)
+	if len(fkRecreationDDLs) > 0 {
+		ddls = append(ddls, fkRecreationDDLs...)
 	}
 
 	return ddls, nil
@@ -2053,6 +2160,15 @@ func (g *Generator) escapeSQLName(name string) string {
 	}
 }
 
+// escapeAndJoinColumns escapes a list of column names and joins them with commas
+func (g *Generator) escapeAndJoinColumns(columns []string) string {
+	escapedColumns := make([]string, len(columns))
+	for i, col := range columns {
+		escapedColumns[i] = g.escapeSQLName(col)
+	}
+	return strings.Join(escapedColumns, ", ")
+}
+
 // validateAndEscapeGrantee validates and escapes a grantee name to prevent SQL injection
 func (g *Generator) validateAndEscapeGrantee(grantee string) (string, error) {
 	// PUBLIC is a special keyword and should not be quoted
@@ -2608,6 +2724,34 @@ func findForeignKeyByName(foreignKeys []ForeignKey, constraintName string) *Fore
 	return nil
 }
 
+// findForeignKeysReferencingTable finds all foreign keys from all tables that reference the given table
+func (g *Generator) findForeignKeysReferencingTable(referencedTableName string) []struct {
+	tableName  string
+	foreignKey ForeignKey
+} {
+	var referencingFKs []struct {
+		tableName  string
+		foreignKey ForeignKey
+	}
+
+	// Check all current tables for foreign keys that reference this table
+	for _, table := range g.currentTables {
+		for _, fk := range table.foreignKeys {
+			if fk.referenceName == referencedTableName {
+				referencingFKs = append(referencingFKs, struct {
+					tableName  string
+					foreignKey ForeignKey
+				}{
+					tableName:  table.name,
+					foreignKey: fk,
+				})
+			}
+		}
+	}
+
+	return referencingFKs
+}
+
 func findExclusionByName(exclusions []Exclusion, constraintName string) *Exclusion {
 	for _, exclusion := range exclusions {
 		if exclusion.constraintName == constraintName {
@@ -2743,6 +2887,24 @@ func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bo
 	return normalizeCheckDefinitionForComparison(checkA.definition) == normalizeCheckDefinitionForComparison(checkB.definition) &&
 		checkA.notForReplication == checkB.notForReplication &&
 		checkA.noInherit == checkB.noInherit
+}
+
+func (g *Generator) buildForeignKeyDDL(tableName string, fk *ForeignKey) string {
+	ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
+		g.escapeTableName(tableName),
+		g.escapeSQLName(fk.constraintName),
+		g.escapeAndJoinColumns(fk.indexColumns),
+		g.escapeTableName(fk.referenceName),
+		g.escapeAndJoinColumns(fk.referenceColumns))
+
+	if fk.onDelete != "" {
+		ddl += " ON DELETE " + fk.onDelete
+	}
+	if fk.onUpdate != "" {
+		ddl += " ON UPDATE " + fk.onUpdate
+	}
+
+	return ddl
 }
 
 // normalizeCheckDefinitionForComparison normalizes CHECK constraint definitions for accurate comparison
@@ -3492,6 +3654,124 @@ func containsRegexpString(strs []string, str string) bool {
 		}
 	}
 	return false
+}
+
+// topologicalSort performs a topological sort on items based on their dependencies using
+// depth-first search (DFS). It returns the sorted items in dependency order, or an empty
+// slice if a circular dependency is detected.
+//
+// The algorithm uses DFS with three-color marking (unvisited, visiting, visited) to detect
+// cycles and ensure each node is processed only once.
+func topologicalSort[T any](items []T, dependencies map[string][]string, getID func(T) string) []T {
+	var sorted []T
+	visited := make(map[string]bool)
+	visiting := make(map[string]bool)
+	itemMap := make(map[string]T)
+
+	// Build item map for quick lookup
+	for _, item := range items {
+		id := getID(item)
+		itemMap[id] = item
+	}
+
+	// DFS visit function
+	var visit func(string) bool
+	visit = func(id string) bool {
+		if visiting[id] {
+			// Circular dependency detected
+			return false
+		}
+		if visited[id] {
+			return true
+		}
+
+		visiting[id] = true
+
+		// Visit dependencies first
+		for _, dep := range dependencies[id] {
+			// Only visit if the dependency is in our current set of items
+			if _, exists := itemMap[dep]; exists {
+				if !visit(dep) {
+					// Circular dependency - abandon sort
+					return false
+				}
+			}
+		}
+
+		visiting[id] = false
+		visited[id] = true
+
+		if item, exists := itemMap[id]; exists {
+			sorted = append(sorted, item)
+		}
+		return true
+	}
+
+	// Visit all items
+	for _, item := range items {
+		id := getID(item)
+		if !visited[id] {
+			if !visit(id) {
+				// Circular dependency detected, return empty slice
+				return []T{}
+			}
+		}
+	}
+
+	return sorted
+}
+
+// SortTablesByDependencies sorts CREATE TABLE DDLs by foreign key dependencies
+// to ensure tables are created in the correct order (referenced tables before referencing tables)
+func SortTablesByDependencies(ddls []DDL) []DDL {
+	// Extract CREATE TABLE DDLs and other DDLs
+	var createTables []*CreateTable
+	var otherDDLs []DDL
+
+	for _, ddl := range ddls {
+		if ct, ok := ddl.(*CreateTable); ok {
+			createTables = append(createTables, ct)
+		} else {
+			otherDDLs = append(otherDDLs, ddl)
+		}
+	}
+
+	// If there are no or only one CREATE TABLE, no sorting needed
+	if len(createTables) <= 1 {
+		return ddls
+	}
+
+	// Build dependency graph
+	tableDependencies := make(map[string][]string)
+	for _, ct := range createTables {
+		tableName := ct.table.name
+		// Extract foreign key dependencies
+		deps := []string{}
+		for _, fk := range ct.table.foreignKeys {
+			if fk.referenceName != "" && fk.referenceName != tableName {
+				deps = append(deps, fk.referenceName)
+			}
+		}
+		tableDependencies[tableName] = deps
+	}
+
+	sorted := topologicalSort(createTables, tableDependencies, func(ct *CreateTable) string {
+		return ct.table.name
+	})
+
+	// If circular dependency detected, keep original order
+	if len(sorted) == 0 {
+		return ddls
+	}
+
+	// Rebuild the DDL list with sorted CREATE TABLEs first, then other DDLs
+	var result []DDL
+	for _, ct := range sorted {
+		result = append(result, ct)
+	}
+	result = append(result, otherDDLs...)
+
+	return result
 }
 
 func splitTableName(table string, defaultSchema string) (string, string) {
