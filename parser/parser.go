@@ -5497,7 +5497,7 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:2264
 		{
-			if strings.ToLower(string(yyDollar[2].bytes)) != "max" {
+			if !strings.EqualFold(string(yyDollar[2].bytes), "max") {
 				yylex.Error(fmt.Sprintf("syntax error around '%s'", string(yyDollar[2].bytes)))
 			}
 			yyVAL.optVal = NewIntVal(yyDollar[2].bytes)

@@ -1861,11 +1861,11 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 			"ALTER TABLE %s ADD ",
 			g.escapeTableName(table),
 		)
-		if strings.ToUpper(index.indexType) == "PRIMARY KEY" && index.primary &&
+		if strings.EqualFold(index.indexType, "PRIMARY KEY") && index.primary &&
 			(index.name != "" && index.name != "PRIMARY" && index.name != index.columns[0].column) {
 			ddl += fmt.Sprintf("CONSTRAINT %s ", g.escapeSQLName(index.name))
 		}
-		if strings.ToUpper(index.indexType) == "UNIQUE KEY" {
+		if strings.EqualFold(index.indexType, "UNIQUE KEY") {
 			ddl += "CONSTRAINT"
 		} else {
 			ddl += strings.ToUpper(index.indexType)
@@ -1873,7 +1873,7 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 		if !index.primary {
 			ddl += fmt.Sprintf(" %s", g.escapeSQLName(index.name))
 		}
-		if strings.ToUpper(index.indexType) == "UNIQUE KEY" {
+		if strings.EqualFold(index.indexType, "UNIQUE KEY") {
 			ddl += " UNIQUE"
 		}
 		constraintOptions := g.generateConstraintOptions(index.constraintOptions)
@@ -1928,9 +1928,9 @@ func (g *Generator) generateIndexOptionDefinition(indexOptions []IndexOption) st
 				if indexOption.optionName == "parser" {
 					indexOption.optionName = "WITH " + indexOption.optionName
 				}
-				if strings.ToUpper(indexOption.optionName) == "M" {
+				if strings.EqualFold(indexOption.optionName, "M") {
 					optionDefinition = fmt.Sprintf(" M=%s", string(indexOption.value.raw))
-				} else if strings.ToUpper(indexOption.optionName) == "DISTANCE" {
+				} else if strings.EqualFold(indexOption.optionName, "DISTANCE") {
 					optionDefinition = fmt.Sprintf(" DISTANCE=%s", string(indexOption.value.raw))
 				} else if indexOption.optionName == "comment" {
 					indexOption.optionName = "COMMENT"
@@ -3008,8 +3008,8 @@ func areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 		return false
 	}
 	for i := 0; i < len(triggerA.body); i++ {
-		bodyA := strings.Replace(triggerA.body[i], " ", "", -1)
-		bodyB := strings.Replace(triggerB.body[i], " ", "", -1)
+		bodyA := strings.ReplaceAll(triggerA.body[i], " ", "")
+		bodyB := strings.ReplaceAll(triggerB.body[i], " ", "")
 		if !strings.EqualFold(bodyA, bodyB) {
 			return false
 		}
