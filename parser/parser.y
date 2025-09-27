@@ -191,7 +191,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE
 %right <bytes> UNIQUE KEY
 %token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
-%token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE
+%token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN
 %token <bytes> STATUS VARIABLES
 %token <bytes> RESTRICT CASCADE NO ACTION
 %token <bytes> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
@@ -275,7 +275,7 @@ func forceEOF(yylex interface{}) {
 
 %type <statement> statement
 %type <selStmt> select_statement base_select union_lhs union_rhs
-%type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement
+%type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement
 %type <statement> if_statement matched_if_statement unmatched_if_statement trigger_statement_not_if
 %type <blockStatement> simple_if_body
 %type <statement> create_statement alter_statement
@@ -1334,6 +1334,7 @@ trigger_statement_not_if:
 | cursor_statement
 | while_statement
 | exec_statement
+| return_statement
 | set_option_statement
 | base_select order_by_opt limit_opt lock_opt
   {
@@ -1363,6 +1364,12 @@ exec_keyword:
 exec_param_list_opt:
   /* empty */     { $$ = nil }
 | expression_list { $$ = $1 }
+
+return_statement:
+  RETURN expression_opt
+  {
+    $$ = &Return{ Expr: $2 }
+  }
 
 for_each_row_opt:
   { $$ = struct{}{} }
@@ -4756,6 +4763,7 @@ reserved_keyword:
 | REGEXP
 | RENAME
 | REPLACE
+| RETURN
 | RIGHT
 | ROW
 | ROWLOCK

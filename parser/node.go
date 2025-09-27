@@ -109,6 +109,7 @@ func (*OtherAdmin) iStatement()     {}
 func (*SetBoolOption) iStatement()  {}
 func (*MultiStatement) iStatement() {}
 func (*Exec) iStatement()           {}
+func (*Return) iStatement()         {}
 
 // ParenSelect can actually not be a top level statement,
 // but we have to allow it because it's a requirement
@@ -440,6 +441,20 @@ func (node *Exec) Format(buf *nodeBuffer) {
 	}
 	buf.Printf("%s %s %v", node.Action, node.Name.String(), node.Exprs)
 }
+
+// Return represents a RETURN statement.
+type Return struct {
+	Expr Expr
+}
+
+// Format formats the node.
+func (node *Return) Format(buf *nodeBuffer) {
+	buf.WriteString("return")
+	if node.Expr != nil {
+		buf.Printf(" %v", node.Expr)
+	}
+}
+
 type DDL struct {
 	Action        DDLAction
 	Table         TableName
