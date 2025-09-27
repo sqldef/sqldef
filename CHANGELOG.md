@@ -1,3 +1,7 @@
+## [v3.1.0](https://github.com/sqldef/sqldef/compare/v3.0.8...v3.1.0) - 2025-09-27
+- fix: handle foreign key dependencies correctly by @gfx in https://github.com/sqldef/sqldef/pull/805
+- chore: prefer using string.EqualFold() for case-insensitive comparisons by @gfx in https://github.com/sqldef/sqldef/pull/807
+
 ## [v3.0.8](https://github.com/sqldef/sqldef/compare/v3.0.7...v3.0.8) - 2025-09-27
 - mssqldef: Support RETURN statement by @chi-bd in https://github.com/sqldef/sqldef/pull/803
 
