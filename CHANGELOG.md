@@ -1,3 +1,6 @@
+## [v3.0.7](https://github.com/sqldef/sqldef/compare/v3.0.6...v3.0.7) - 2025-09-27
+- mssqldef: Support compound conditions in IF and WHILE statements by @chi-bd in https://github.com/sqldef/sqldef/pull/801
+
 ## [v3.0.6](https://github.com/sqldef/sqldef/compare/v3.0.5...v3.0.6) - 2025-09-26
 - ci: add -draft to ghr options in order to work with Immutable Releases by @gfx in https://github.com/sqldef/sqldef/pull/799
 
