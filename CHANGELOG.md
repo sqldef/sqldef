@@ -1,3 +1,6 @@
+## [v3.1.3](https://github.com/sqldef/sqldef/compare/v3.1.2...v3.1.3) - 2025-09-28
+- doc: improve `--help` and docs by @gfx in https://github.com/sqldef/sqldef/pull/813
+
 ## [v3.1.2](https://github.com/sqldef/sqldef/compare/v3.1.1...v3.1.2) - 2025-09-28
 - fix: Allow reserved keywords as column names in INSERT statements by @osjupiter in https://github.com/sqldef/sqldef/pull/811
 
