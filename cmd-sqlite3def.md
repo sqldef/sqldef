@@ -107,6 +107,109 @@ Some can also be used in the input schema.sql file.
 - Index: CREATE INDEX, DROP INDEX
 - View: CREATE VIEW, DROP VIEW
 
+## Column, Table, and Index Renaming
+
+### Column Renaming
+
+sqlite3def supports renaming columns using the `-- @renamed from=old_name` annotation:
+
+```sql
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY,
+  user_name TEXT, -- @renamed from=username
+  age INTEGER
+);
+```
+
+This generates:
+```sql
+ALTER TABLE users RENAME COLUMN username TO user_name;
+```
+
+For columns with special characters or spaces, use double quotes:
+
+```sql
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY,
+  column_with_underscore VARCHAR(50), -- @renamed from="column-with-dash"
+  normal_column TEXT, -- @renamed from="special column"
+);
+```
+
+### Table Renaming
+
+sqlite3def supports renaming tables using the `-- @renamed from=old_name` annotation on the CREATE TABLE line:
+
+```sql
+CREATE TABLE users ( -- @renamed from=user_accounts
+  id INTEGER PRIMARY KEY,
+  username TEXT,
+  age INTEGER
+);
+```
+
+You can also use the block comment style:
+
+```sql
+CREATE TABLE users /* @renamed from=user_accounts */ (
+  id INTEGER PRIMARY KEY,
+  username TEXT,
+  age INTEGER
+);
+```
+
+This generates:
+```sql
+ALTER TABLE user_accounts RENAME TO users;
+```
+
+For tables with special characters or spaces, use double quotes:
+
+```sql
+CREATE TABLE user_profiles ( -- @renamed from="user accounts"
+  id INTEGER PRIMARY KEY,
+  name TEXT
+);
+```
+
+You can combine table renaming with column renaming and other schema changes:
+
+```sql
+CREATE TABLE accounts ( -- @renamed from=old_accounts
+  id INTEGER PRIMARY KEY,
+  username TEXT NOT NULL, -- @renamed from=user_name
+  is_active BOOLEAN DEFAULT 1
+);
+```
+
+### Index Renaming
+
+sqlite3def supports renaming indexes using the `-- @renamed from=old_name` or `/* @renamed from=old_name */` annotation:
+
+```sql
+CREATE INDEX new_email_idx /* @renamed from=old_email_idx */ ON users (email);
+```
+
+**Note:** SQLite doesn't support direct index renaming. sqlite3def handles this by dropping the old index and creating the new one:
+
+```sql
+DROP INDEX old_email_idx;
+CREATE INDEX new_email_idx ON users (email);
+```
+
+You can rename multiple indexes:
+
+```sql
+CREATE INDEX email_idx ON users (email); -- @renamed from=idx_email
+CREATE INDEX username_idx ON users (username); -- @renamed from=idx_username
+```
+
+The rename annotation also works for unique indexes:
+
+```sql
+CREATE UNIQUE INDEX unique_email /* @renamed from=old_unique_email */ ON users (email);
+```
+
 ## Configuration
 
 Configuration can be provided through YAML files (`--config`) or inline YAML strings (`--config-inline`). Multiple configurations can be specified and will be merged in order.
