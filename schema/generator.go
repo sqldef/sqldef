@@ -3793,50 +3793,51 @@ func SortTablesByDependencies(ddls []DDL) []DDL {
 // generateDropTableDDLsWithDependencies generates DROP TABLE statements in the correct order
 // considering foreign key dependencies. Tables that reference other tables are dropped first.
 func (g *Generator) generateDropTableDDLsWithDependencies(tablesToDrop []*Table) []string {
-	if len(tablesToDrop) == 0 {
-		return nil
-	}
+	var sortedTablesToDrop []*Table
 
-	if len(tablesToDrop) == 1 {
-		return []string{fmt.Sprintf("DROP TABLE %s", g.escapeTableName(tablesToDrop[0].name))}
-	}
+	if len(tablesToDrop) <= 1 {
+		// If there are no or only one table to drop, no sorting needed.
+		sortedTablesToDrop = tablesToDrop
+	} else {
+		// Build reverse dependency graph for drops
+		// For drops: if table A references table B, then B depends on A (B can't be dropped until A is dropped)
+		tableDependencies := make(map[string][]string)
+		tableMap := make(map[string]*Table)
 
-	// Build reverse dependency graph for drops
-	// For drops: if table A references table B, then B depends on A (B can't be dropped until A is dropped)
-	tableDependencies := make(map[string][]string)
-	tableMap := make(map[string]*Table)
+		// First, build a map of tables to be dropped for quick lookup
+		for _, table := range tablesToDrop {
+			tableMap[table.name] = table
+			tableDependencies[table.name] = []string{}
+		}
 
-	// First, build a map of tables to be dropped for quick lookup
-	for _, table := range tablesToDrop {
-		tableMap[table.name] = table
-		tableDependencies[table.name] = []string{}
-	}
-
-	// Now build reverse dependencies
-	// For each table, find which other tables (in the drop list) reference it
-	for _, table := range tablesToDrop {
-		for _, fk := range table.foreignKeys {
-			if fk.referenceName != "" && fk.referenceName != table.name {
-				// If the referenced table is also being dropped
-				if _, exists := tableMap[fk.referenceName]; exists {
-					// The referenced table depends on this table being dropped first
-					tableDependencies[fk.referenceName] = append(tableDependencies[fk.referenceName], table.name)
+		// Now build reverse dependencies
+		// For each table, find which other tables (in the drop list) reference it
+		for _, table := range tablesToDrop {
+			for _, fk := range table.foreignKeys {
+				if fk.referenceName != "" && fk.referenceName != table.name {
+					// If the referenced table is also being dropped
+					if _, exists := tableMap[fk.referenceName]; exists {
+						// The referenced table depends on this table being dropped first
+						tableDependencies[fk.referenceName] = append(tableDependencies[fk.referenceName], table.name)
+					}
 				}
 			}
 		}
-	}
 
-	sorted := topologicalSort(tablesToDrop, tableDependencies, func(t *Table) string {
-		return t.name
-	})
+		sorted := topologicalSort(tablesToDrop, tableDependencies, func(t *Table) string {
+			return t.name
+		})
 
-	// If circular dependency detected, fall back to original order
-	if len(sorted) == 0 {
-		sorted = tablesToDrop
+		if len(sorted) != 0 {
+			sortedTablesToDrop = sorted
+		} else {
+			// If circular dependency is detected, fall back to the original order.
+			sortedTablesToDrop = tablesToDrop
+		}
 	}
 
 	var ddls []string
-	for _, table := range sorted {
+	for _, table := range sortedTablesToDrop {
 		ddls = append(ddls, fmt.Sprintf("DROP TABLE %s", g.escapeTableName(table.name)))
 	}
 	return ddls
