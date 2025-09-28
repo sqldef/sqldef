@@ -7,22 +7,22 @@ Usage:
   psqldef [OPTION]... [DBNAME|current.sql] < desired.sql
 
 Application Options:
-  -U, --user=username         PostgreSQL user name (default: postgres)
-  -W, --password=password     PostgreSQL user password, overridden by $PGPASSWORD
-  -h, --host=hostname         Host or socket directory to connect to the PostgreSQL server (default: 127.0.0.1)
-  -p, --port=port             Port used for the connection (default: 5432)
+  -U, --user=USERNAME         PostgreSQL user name (default: postgres)
+  -W, --password=PASSWORD     PostgreSQL user password, overridden by $PGPASSWORD
+  -h, --host=HOSTNAME         Host or socket directory to connect to the PostgreSQL server (default: 127.0.0.1)
+  -p, --port=PORT             Port used for the connection (default: 5432)
       --password-prompt       Force PostgreSQL user password prompt
-  -f, --file=filename         Read desired SQL from the file, rather than stdin (default: -)
+  -f, --file=FILENAME         Read desired SQL from the file, rather than stdin (default: -)
       --dry-run               Don't run DDLs but just show them
       --export                Just dump the current schema to stdout
       --enable-drop           Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
       --skip-view             Skip managing views/materialized views
       --skip-extension        Skip managing extensions
-      --before-apply=         Execute the given string before applying the regular DDLs
-      --config=config.yml     YAML file to specify configuration options (can be specified multiple times)
-      --config-inline=YAML    YAML string to specify configuration options (can be specified multiple times)
+      --before-apply=SQL      Execute the given string before applying the regular DDLs
+      --config=PATH           YAML configuration file (can be specified multiple times)
+      --config-inline=YAML    YAML configuration as inline string (can be specified multiple times)
       --help                  Show this help
-      --version               Show this version
+      --version               Show version information
 ```
 
 Use `PGSSLMODE` environment variable to specify sslmode.

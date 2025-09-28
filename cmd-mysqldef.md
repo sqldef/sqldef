@@ -7,25 +7,25 @@ Usage:
   mysqldef [OPTIONS] [database|current.sql] < desired.sql
 
 Application Options:
-  -u, --user=user_name              MySQL user name (default: root)
-  -p, --password=password           MySQL user password, overridden by $MYSQL_PWD
-  -h, --host=host_name              Host to connect to the MySQL server (default: 127.0.0.1)
-  -P, --port=port_num               Port used for the connection (default: 3306)
-  -S, --socket=socket               The socket file to use for connection
-      --ssl-mode=ssl_mode           SSL connection mode(PREFERRED,REQUIRED,DISABLED). (default: PREFERRED)
-      --ssl-ca=ssl_ca               File that contains list of trusted SSL Certificate Authorities
+  -u, --user=USERNAME               MySQL user name (default: root)
+  -p, --password=PASSWORD           MySQL user password, overridden by $MYSQL_PWD
+  -h, --host=HOSTNAME               Host to connect to the MySQL server (default: 127.0.0.1)
+  -P, --port=PORT                   Port used for the connection (default: 3306)
+  -S, --socket=PATH                 The socket file to use for connection
+      --ssl-mode=MODE               SSL connection mode(PREFERRED,REQUIRED,DISABLED). (default: PREFERRED)
+      --ssl-ca=PATH                 File that contains list of trusted SSL Certificate Authorities
       --password-prompt             Force MySQL user password prompt
       --enable-cleartext-plugin     Enable/disable the clear text authentication plugin
-      --file=sql_file               Read desired SQL from the file, rather than stdin (default: -)
+      --file=FILENAME               Read desired SQL from the file, rather than stdin (default: -)
       --dry-run                     Don't run DDLs but just show them
       --export                      Just dump the current schema to stdout
       --enable-drop                 Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
       --skip-view                   Skip managing views (temporary feature, to be removed later)
-      --before-apply=               Execute the given string before applying the regular DDLs
-      --config=config.yml           YAML file to specify configuration options (can be specified multiple times)
-      --config-inline=YAML          YAML string to specify configuration options (can be specified multiple times)
+      --before-apply=SQL            Execute the given string before applying the regular DDLs
+      --config=PATH                 YAML configuration file (can be specified multiple times)
+      --config-inline=YAML          YAML configuration as inline string (can be specified multiple times)
       --help                        Show this help
-      --version                     Show this version
+      --version                     Show version information
 ```
 
 ## Synopsis

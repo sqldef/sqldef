@@ -5,14 +5,14 @@ Usage:
   sqlite3def [OPTIONS] [FILENAME|current.sql] < desired.sql
 
 Application Options:
-  -f, --file=filename         Read desired SQL from the file, rather than stdin (default: -)
+  -f, --file=FILENAME         Read desired SQL from the file, rather than stdin (default: -)
       --dry-run               Don't run DDLs but just show them
       --export                Just dump the current schema to stdout
       --enable-drop           Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
-      --config=config.yml     YAML file to specify configuration options (can be specified multiple times)
-      --config-inline=YAML    YAML string to specify configuration options (can be specified multiple times)
+      --config=PATH           YAML configuration file (can be specified multiple times)
+      --config-inline=YAML    YAML configuration as inline string (can be specified multiple times)
       --help                  Show this help
-      --version               Show this version
+      --version               Show version information
 ```
 
 ## Synopsis

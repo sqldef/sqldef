@@ -5,19 +5,19 @@ Usage:
   mssqldef [OPTIONS] [database|current.sql] < desired.sql
 
 Application Options:
-  -U, --user=user_name        MSSQL user name (default: sa)
-  -P, --password=password     MSSQL user password, overridden by $MSSQL_PWD
-  -h, --host=host_name        Host to connect to the MSSQL server (default: 127.0.0.1)
-  -p, --port=port_num         Port used for the connection (default: 1433)
+  -U, --user=USERNAME         MSSQL user name (default: sa)
+  -P, --password=PASSWORD     MSSQL user password, overridden by $MSSQL_PWD
+  -h, --host=HOSTNAME         Host to connect to the MSSQL server (default: 127.0.0.1)
+  -p, --port=PORT             Port used for the connection (default: 1433)
       --password-prompt       Force MSSQL user password prompt
-      --file=sql_file         Read desired SQL from the file, rather than stdin (default: -)
+      --file=FILENAME         Read desired SQL from the file, rather than stdin (default: -)
       --dry-run               Don't run DDLs but just show them
       --export                Just dump the current schema to stdout
       --enable-drop           Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
-      --config=config.yml     YAML file to specify configuration options (can be specified multiple times)
-      --config-inline=YAML    YAML string to specify configuration options (can be specified multiple times)
+      --config=PATH           YAML configuration file (can be specified multiple times)
+      --config-inline=YAML    YAML configuration as inline string (can be specified multiple times)
       --help                  Show this help
-      --version               Show this version
+      --version               Show version information
 ```
 
 ## Synopsis
