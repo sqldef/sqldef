@@ -235,3 +235,36 @@ ForeignKeyDependenciesMultipleWithIdempotency:
       constraint fk_supplier_id_item_id
         foreign key (supplier_id, item_id) references items(supplier_id, item_id)
     );
+
+ForeignKeyDependenciesMultipleDrops:
+  apply_only: true
+  current: |
+    create table users (
+      user_id integer primary key,
+      family_name varchar(100) not null,
+      given_name varchar(100) not null,
+      email_address varchar(254) not null
+    );
+
+    create unique index uk_email_address on users(email_address);
+
+    create table items (
+      supplier_id integer,
+      item_id integer,
+      item_name varchar(100),
+      constraint pk_items primary key (supplier_id, item_id)
+    );
+
+    create table sales (
+      sales_id integer primary key,
+      user_id integer not null,
+      supplier_id integer,
+      item_id integer not null,
+      sales_qty integer not null,
+      sales_amt integer not null,
+      constraint fk_user_id
+        foreign key (user_id) references users(user_id),
+      constraint fk_supplier_id_item_id
+        foreign key (supplier_id, item_id) references items(supplier_id, item_id)
+    );
+  desired: "" # all drops
