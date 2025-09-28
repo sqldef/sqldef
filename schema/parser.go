@@ -310,7 +310,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 
 			// MSSQL and MySQL: all columns participating in a PRIMARY KEY constraint have their nullability set to NOT NULL
 			// MSSQL: https://learn.microsoft.com/en-us/sql/relational-databases/tables/create-primary-keys#limitations
-			// MySQL: Primary key columns are implicitly NOT NULL
+			// MySQL: https://dev.mysql.com/doc/refman/8.4/en/create-table.html
 			if indexDef.Info.Primary && (mode == GeneratorModeMssql || mode == GeneratorModeMysql) {
 				if column, ok := columns[name]; ok {
 					val := true
