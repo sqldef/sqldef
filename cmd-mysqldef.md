@@ -7,25 +7,25 @@ Usage:
   mysqldef [OPTIONS] [database|current.sql] < desired.sql
 
 Application Options:
-  -u, --user=user_name              MySQL user name (default: root)
-  -p, --password=password           MySQL user password, overridden by $MYSQL_PWD
-  -h, --host=host_name              Host to connect to the MySQL server (default: 127.0.0.1)
-  -P, --port=port_num               Port used for the connection (default: 3306)
-  -S, --socket=socket               The socket file to use for connection
-      --ssl-mode=ssl_mode           SSL connection mode(PREFERRED,REQUIRED,DISABLED). (default: PREFERRED)
-      --ssl-ca=ssl_ca               File that contains list of trusted SSL Certificate Authorities
+  -u, --user=USERNAME               MySQL user name (default: root)
+  -p, --password=PASSWORD           MySQL user password, overridden by $MYSQL_PWD
+  -h, --host=HOSTNAME               Host to connect to the MySQL server (default: 127.0.0.1)
+  -P, --port=PORT                   Port used for the connection (default: 3306)
+  -S, --socket=PATH                 The socket file to use for connection
+      --ssl-mode=MODE               SSL connection mode(PREFERRED,REQUIRED,DISABLED). (default: PREFERRED)
+      --ssl-ca=PATH                 File that contains list of trusted SSL Certificate Authorities
       --password-prompt             Force MySQL user password prompt
       --enable-cleartext-plugin     Enable/disable the clear text authentication plugin
-      --file=sql_file               Read desired SQL from the file, rather than stdin (default: -)
+      --file=FILENAME               Read desired SQL from the file, rather than stdin (default: -)
       --dry-run                     Don't run DDLs but just show them
       --export                      Just dump the current schema to stdout
       --enable-drop                 Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
       --skip-view                   Skip managing views (temporary feature, to be removed later)
-      --before-apply=               Execute the given string before applying the regular DDLs
-      --config=config.yml           YAML file to specify configuration options (can be specified multiple times)
-      --config-inline=YAML          YAML string to specify configuration options (can be specified multiple times)
+      --before-apply=SQL            Execute the given string before applying the regular DDLs
+      --config=PATH                 YAML configuration file (can be specified multiple times)
+      --config-inline=YAML          YAML configuration as inline string (can be specified multiple times)
       --help                        Show this help
-      --version                     Show this version
+      --version                     Show version information
 ```
 
 ## Synopsis
@@ -232,6 +232,127 @@ Composite foreign key may not work for now.
 ```
 
 Remove the line to DROP VIEW.
+
+## Column, Table, and Index Renaming
+
+### Column Renaming
+
+mysqldef supports renaming columns using the `-- @renamed from=old_name` annotation:
+
+```sql
+CREATE TABLE users (
+  id bigint NOT NULL,
+  user_name text, -- @renamed from=username
+  age integer
+);
+```
+
+This generates:
+```sql
+ALTER TABLE users CHANGE COLUMN username user_name text;
+```
+
+For columns with special characters or spaces, use double quotes:
+
+```sql
+CREATE TABLE users (
+  id bigint NOT NULL,
+  column_with_underscore varchar(50), -- @renamed from="column-with-dash"
+  normal_column text, -- @renamed from="special column"
+);
+```
+
+### Table Renaming
+
+mysqldef supports renaming tables using the `-- @renamed from=old_name` annotation on the CREATE TABLE line:
+
+```sql
+CREATE TABLE users ( -- @renamed from=user_accounts
+  id bigint NOT NULL,
+  username text,
+  age integer
+);
+```
+
+You can also use the block comment style:
+
+```sql
+CREATE TABLE users /* @renamed from=user_accounts */ (
+  id bigint NOT NULL,
+  username text,
+  age integer
+);
+```
+
+This generates:
+```sql
+ALTER TABLE user_accounts RENAME TO users;
+```
+
+For tables with special characters or spaces, use double quotes:
+
+```sql
+CREATE TABLE user_profiles ( -- @renamed from="user accounts"
+  id bigint NOT NULL,
+  name text
+);
+```
+
+You can combine table renaming with column renaming and other schema changes:
+
+```sql
+CREATE TABLE accounts ( -- @renamed from=old_accounts
+  id bigint NOT NULL PRIMARY KEY,
+  username varchar(100) NOT NULL, -- @renamed from=user_name
+  is_active boolean DEFAULT true
+);
+```
+
+### Index Renaming
+
+mysqldef supports renaming indexes using the `-- @renamed from=old_name` or `/* @renamed from=old_name */` annotation:
+
+```sql
+CREATE TABLE users (
+  id bigint NOT NULL,
+  email varchar(255),
+  username varchar(100),
+  KEY new_email_idx (email) -- @renamed from=old_email_idx
+);
+```
+
+Or with standalone index creation:
+
+```sql
+CREATE INDEX new_email_idx /* @renamed from=old_email_idx */ ON users (email);
+```
+
+This generates:
+```sql
+ALTER TABLE users RENAME INDEX old_email_idx TO new_email_idx;
+```
+
+You can rename multiple indexes:
+
+```sql
+CREATE TABLE users (
+  id bigint NOT NULL,
+  email varchar(255),
+  username varchar(100),
+  KEY email_idx (email), -- @renamed from=idx_email
+  KEY username_idx (username) -- @renamed from=idx_username
+);
+```
+
+The rename annotation also works for unique indexes and constraints:
+
+```sql
+CREATE TABLE users (
+  id bigint NOT NULL,
+  email varchar(255),
+  UNIQUE KEY unique_email (email) -- @renamed from=old_unique_email
+);
+```
 
 ## Configuration
 

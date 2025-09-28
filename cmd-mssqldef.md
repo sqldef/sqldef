@@ -5,19 +5,19 @@ Usage:
   mssqldef [OPTIONS] [database|current.sql] < desired.sql
 
 Application Options:
-  -U, --user=user_name        MSSQL user name (default: sa)
-  -P, --password=password     MSSQL user password, overridden by $MSSQL_PWD
-  -h, --host=host_name        Host to connect to the MSSQL server (default: 127.0.0.1)
-  -p, --port=port_num         Port used for the connection (default: 1433)
+  -U, --user=USERNAME         MSSQL user name (default: sa)
+  -P, --password=PASSWORD     MSSQL user password, overridden by $MSSQL_PWD
+  -h, --host=HOSTNAME         Host to connect to the MSSQL server (default: 127.0.0.1)
+  -p, --port=PORT             Port used for the connection (default: 1433)
       --password-prompt       Force MSSQL user password prompt
-      --file=sql_file         Read desired SQL from the file, rather than stdin (default: -)
+      --file=FILENAME         Read desired SQL from the file, rather than stdin (default: -)
       --dry-run               Don't run DDLs but just show them
       --export                Just dump the current schema to stdout
       --enable-drop           Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
-      --config=config.yml     YAML file to specify configuration options (can be specified multiple times)
-      --config-inline=YAML    YAML string to specify configuration options (can be specified multiple times)
+      --config=PATH           YAML configuration file (can be specified multiple times)
+      --config-inline=YAML    YAML configuration as inline string (can be specified multiple times)
       --help                  Show this help
-      --version               Show this version
+      --version               Show version information
 ```
 
 ## Synopsis
@@ -112,6 +112,107 @@ Some can also be used in the input schema.sql file.
 - Index: ADD INDEX, DROP INDEX
 - Primary key: ADD PRIMARY KEY, DROP PRIMARY KEY
 - VIEW: CREATE VIEW, DROP VIEW
+
+## Column, Table, and Index Renaming
+
+### Column Renaming
+
+mssqldef supports renaming columns using the `-- @renamed from=old_name` annotation:
+
+```sql
+CREATE TABLE users (
+  id bigint NOT NULL,
+  user_name text, -- @renamed from=username
+  age integer
+);
+```
+
+This generates:
+```sql
+EXEC sp_rename 'users.username', 'user_name', 'COLUMN';
+```
+
+For columns with special characters or spaces, use double quotes:
+
+```sql
+CREATE TABLE users (
+  id bigint NOT NULL,
+  column_with_underscore varchar(50), -- @renamed from="column-with-dash"
+  normal_column text, -- @renamed from="special column"
+);
+```
+
+### Table Renaming
+
+mssqldef supports renaming tables using the `-- @renamed from=old_name` annotation on the CREATE TABLE line:
+
+```sql
+CREATE TABLE users ( -- @renamed from=user_accounts
+  id bigint NOT NULL,
+  username text,
+  age integer
+);
+```
+
+You can also use the block comment style:
+
+```sql
+CREATE TABLE users /* @renamed from=user_accounts */ (
+  id bigint NOT NULL,
+  username text,
+  age integer
+);
+```
+
+This generates:
+```sql
+EXEC sp_rename 'user_accounts', 'users';
+```
+
+For tables with special characters or spaces, use double quotes:
+
+```sql
+CREATE TABLE user_profiles ( -- @renamed from="user accounts"
+  id bigint NOT NULL,
+  name text
+);
+```
+
+You can combine table renaming with column renaming and other schema changes:
+
+```sql
+CREATE TABLE accounts ( -- @renamed from=old_accounts
+  id bigint NOT NULL PRIMARY KEY,
+  username varchar(100) NOT NULL, -- @renamed from=user_name
+  is_active bit DEFAULT 1
+);
+```
+
+### Index Renaming
+
+mssqldef supports renaming indexes using the `-- @renamed from=old_name` or `/* @renamed from=old_name */` annotation:
+
+```sql
+CREATE INDEX new_email_idx /* @renamed from=old_email_idx */ ON users (email);
+```
+
+This generates:
+```sql
+EXEC sp_rename 'users.old_email_idx', 'new_email_idx', 'INDEX';
+```
+
+You can rename multiple indexes:
+
+```sql
+CREATE INDEX email_idx ON users (email); -- @renamed from=idx_email
+CREATE INDEX username_idx ON users (username); -- @renamed from=idx_username
+```
+
+The rename annotation also works for unique indexes:
+
+```sql
+CREATE UNIQUE INDEX unique_email /* @renamed from=old_unique_email */ ON users (email);
+```
 
 ## Configuration
 

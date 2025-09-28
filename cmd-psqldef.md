@@ -7,22 +7,22 @@ Usage:
   psqldef [OPTION]... [DBNAME|current.sql] < desired.sql
 
 Application Options:
-  -U, --user=username         PostgreSQL user name (default: postgres)
-  -W, --password=password     PostgreSQL user password, overridden by $PGPASSWORD
-  -h, --host=hostname         Host or socket directory to connect to the PostgreSQL server (default: 127.0.0.1)
-  -p, --port=port             Port used for the connection (default: 5432)
+  -U, --user=USERNAME         PostgreSQL user name (default: postgres)
+  -W, --password=PASSWORD     PostgreSQL user password, overridden by $PGPASSWORD
+  -h, --host=HOSTNAME         Host or socket directory to connect to the PostgreSQL server (default: 127.0.0.1)
+  -p, --port=PORT             Port used for the connection (default: 5432)
       --password-prompt       Force PostgreSQL user password prompt
-  -f, --file=filename         Read desired SQL from the file, rather than stdin (default: -)
+  -f, --file=FILENAME         Read desired SQL from the file, rather than stdin (default: -)
       --dry-run               Don't run DDLs but just show them
       --export                Just dump the current schema to stdout
       --enable-drop           Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
       --skip-view             Skip managing views/materialized views
       --skip-extension        Skip managing extensions
-      --before-apply=         Execute the given string before applying the regular DDLs
-      --config=config.yml     YAML file to specify configuration options (can be specified multiple times)
-      --config-inline=YAML    YAML string to specify configuration options (can be specified multiple times)
+      --before-apply=SQL      Execute the given string before applying the regular DDLs
+      --config=PATH           YAML configuration file (can be specified multiple times)
+      --config-inline=YAML    YAML configuration as inline string (can be specified multiple times)
       --help                  Show this help
-      --version               Show this version
+      --version               Show version information
 ```
 
 Use `PGSSLMODE` environment variable to specify sslmode.
@@ -254,6 +254,107 @@ Remove the line to DROP POLICY.
 ```
 
 Remove the line to DROP VIEW.
+
+## Column, Table, and Index Renaming
+
+### Column Renaming
+
+psqldef supports renaming columns using the `-- @renamed from=old_name` annotation:
+
+```sql
+CREATE TABLE users (
+  id bigint NOT NULL,
+  user_name text, -- @renamed from=username
+  age integer
+);
+```
+
+This generates:
+```sql
+ALTER TABLE users RENAME COLUMN username TO user_name;
+```
+
+For columns with special characters or spaces, use double quotes:
+
+```sql
+CREATE TABLE users (
+  id bigint NOT NULL,
+  column_with_underscore varchar(50), -- @renamed from="column-with-dash"
+  normal_column text, -- @renamed from="special column"
+);
+```
+
+### Table Renaming
+
+psqldef supports renaming tables using the `-- @renamed from=old_name` annotation on the CREATE TABLE line:
+
+```sql
+CREATE TABLE users ( -- @renamed from=user_accounts
+  id bigint NOT NULL,
+  username text,
+  age integer
+);
+```
+
+You can also use the block comment style:
+
+```sql
+CREATE TABLE users /* @renamed from=user_accounts */ (
+  id bigint NOT NULL,
+  username text,
+  age integer
+);
+```
+
+This generates:
+```sql
+ALTER TABLE user_accounts RENAME TO users;
+```
+
+For tables with special characters or spaces, use double quotes:
+
+```sql
+CREATE TABLE user_profiles ( -- @renamed from="user accounts"
+  id bigint NOT NULL,
+  name text
+);
+```
+
+You can combine table renaming with column renaming and other schema changes:
+
+```sql
+CREATE TABLE accounts ( -- @renamed from=old_accounts
+  id bigint NOT NULL PRIMARY KEY,
+  username varchar(100) NOT NULL, -- @renamed from=user_name
+  is_active boolean DEFAULT true
+);
+```
+
+### Index Renaming
+
+psqldef supports renaming indexes using the `-- @renamed from=old_name` or `/* @renamed from=old_name */` annotation:
+
+```sql
+CREATE INDEX new_email_idx /* @renamed from=old_email_idx */ ON users (email);
+```
+
+This generates:
+```sql
+ALTER INDEX old_email_idx RENAME TO new_email_idx;
+```
+
+You can rename multiple indexes:
+
+```sql
+CREATE INDEX email_idx ON users (email); -- @renamed from=idx_email
+CREATE INDEX username_idx ON users (username); -- @renamed from=idx_username
+```
+
+The rename annotation also works for unique indexes:
+
+```sql
+CREATE UNIQUE INDEX unique_email /* @renamed from=old_unique_email */ ON users (email);
+```
 
 ## Configuration
 

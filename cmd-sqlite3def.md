@@ -5,14 +5,14 @@ Usage:
   sqlite3def [OPTIONS] [FILENAME|current.sql] < desired.sql
 
 Application Options:
-  -f, --file=filename         Read desired SQL from the file, rather than stdin (default: -)
+  -f, --file=FILENAME         Read desired SQL from the file, rather than stdin (default: -)
       --dry-run               Don't run DDLs but just show them
       --export                Just dump the current schema to stdout
       --enable-drop           Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
-      --config=config.yml     YAML file to specify configuration options (can be specified multiple times)
-      --config-inline=YAML    YAML string to specify configuration options (can be specified multiple times)
+      --config=PATH           YAML configuration file (can be specified multiple times)
+      --config-inline=YAML    YAML configuration as inline string (can be specified multiple times)
       --help                  Show this help
-      --version               Show this version
+      --version               Show version information
 ```
 
 ## Synopsis
@@ -106,6 +106,109 @@ Some can also be used in the input schema.sql file.
 - Column: ADD COLUMN, DROP COLUMN
 - Index: CREATE INDEX, DROP INDEX
 - View: CREATE VIEW, DROP VIEW
+
+## Column, Table, and Index Renaming
+
+### Column Renaming
+
+sqlite3def supports renaming columns using the `-- @renamed from=old_name` annotation:
+
+```sql
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY,
+  user_name TEXT, -- @renamed from=username
+  age INTEGER
+);
+```
+
+This generates:
+```sql
+ALTER TABLE users RENAME COLUMN username TO user_name;
+```
+
+For columns with special characters or spaces, use double quotes:
+
+```sql
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY,
+  column_with_underscore VARCHAR(50), -- @renamed from="column-with-dash"
+  normal_column TEXT, -- @renamed from="special column"
+);
+```
+
+### Table Renaming
+
+sqlite3def supports renaming tables using the `-- @renamed from=old_name` annotation on the CREATE TABLE line:
+
+```sql
+CREATE TABLE users ( -- @renamed from=user_accounts
+  id INTEGER PRIMARY KEY,
+  username TEXT,
+  age INTEGER
+);
+```
+
+You can also use the block comment style:
+
+```sql
+CREATE TABLE users /* @renamed from=user_accounts */ (
+  id INTEGER PRIMARY KEY,
+  username TEXT,
+  age INTEGER
+);
+```
+
+This generates:
+```sql
+ALTER TABLE user_accounts RENAME TO users;
+```
+
+For tables with special characters or spaces, use double quotes:
+
+```sql
+CREATE TABLE user_profiles ( -- @renamed from="user accounts"
+  id INTEGER PRIMARY KEY,
+  name TEXT
+);
+```
+
+You can combine table renaming with column renaming and other schema changes:
+
+```sql
+CREATE TABLE accounts ( -- @renamed from=old_accounts
+  id INTEGER PRIMARY KEY,
+  username TEXT NOT NULL, -- @renamed from=user_name
+  is_active BOOLEAN DEFAULT 1
+);
+```
+
+### Index Renaming
+
+sqlite3def supports renaming indexes using the `-- @renamed from=old_name` or `/* @renamed from=old_name */` annotation:
+
+```sql
+CREATE INDEX new_email_idx /* @renamed from=old_email_idx */ ON users (email);
+```
+
+**Note:** SQLite doesn't support direct index renaming. sqlite3def handles this by dropping the old index and creating the new one:
+
+```sql
+DROP INDEX old_email_idx;
+CREATE INDEX new_email_idx ON users (email);
+```
+
+You can rename multiple indexes:
+
+```sql
+CREATE INDEX email_idx ON users (email); -- @renamed from=idx_email
+CREATE INDEX username_idx ON users (username); -- @renamed from=idx_username
+```
+
+The rename annotation also works for unique indexes:
+
+```sql
+CREATE UNIQUE INDEX unique_email /* @renamed from=old_unique_email */ ON users (email);
+```
 
 ## Configuration
 
