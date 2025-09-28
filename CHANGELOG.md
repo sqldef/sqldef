@@ -1,3 +1,6 @@
+## [v3.1.2](https://github.com/sqldef/sqldef/compare/v3.1.1...v3.1.2) - 2025-09-28
+- fix: Allow reserved keywords as column names in INSERT statements by @osjupiter in https://github.com/sqldef/sqldef/pull/811
+
 ## [v3.1.1](https://github.com/sqldef/sqldef/compare/v3.1.0...v3.1.1) - 2025-09-28
 - fix mysql's primary key nullability issues by @gfx in https://github.com/sqldef/sqldef/pull/808
 
