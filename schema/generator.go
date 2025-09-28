@@ -296,14 +296,30 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	ddls = append(ddls, foreignKeyDDLs...)
 	ddls = append(ddls, exclusionDDLs...)
 
-	// Clean up obsoleted tables, indexes, columns
+	var tablesToDrop []*Table
 	for _, currentTable := range g.currentTables {
 		desiredTable := findTableByName(g.desiredTables, currentTable.name)
 		if desiredTable == nil {
-			// Obsoleted table found. Drop table.
-			ddls = append(ddls, fmt.Sprintf("DROP TABLE %s", g.escapeTableName(currentTable.name)))
-			g.currentTables = removeTableByName(g.currentTables, currentTable.name)
-			continue
+			tablesToDrop = append(tablesToDrop, currentTable)
+		}
+	}
+
+	// Sort tables to be dropped by dependencies (dependent tables first)
+	if len(tablesToDrop) > 0 {
+		dropTableDDLs := g.generateDropTableDDLsWithDependencies(tablesToDrop)
+		ddls = append(ddls, dropTableDDLs...)
+
+		// Remove dropped tables from currentTables
+		for _, table := range tablesToDrop {
+			g.currentTables = removeTableByName(g.currentTables, table.name)
+		}
+	}
+
+	// Clean up obsoleted indexes, columns in remaining tables
+	for _, currentTable := range g.currentTables {
+		desiredTable := findTableByName(g.desiredTables, currentTable.name)
+		if desiredTable == nil {
+			continue // Already handled in drop tables above
 		}
 
 		// Table is expected to exist. Drop foreign keys prior to index deletion
@@ -3772,6 +3788,59 @@ func SortTablesByDependencies(ddls []DDL) []DDL {
 	result = append(result, otherDDLs...)
 
 	return result
+}
+
+// generateDropTableDDLsWithDependencies generates DROP TABLE statements in the correct order
+// considering foreign key dependencies. Tables that reference other tables are dropped first.
+func (g *Generator) generateDropTableDDLsWithDependencies(tablesToDrop []*Table) []string {
+	var sortedTablesToDrop []*Table
+
+	if len(tablesToDrop) <= 1 {
+		// If there are no or only one table to drop, no sorting needed.
+		sortedTablesToDrop = tablesToDrop
+	} else {
+		// Build reverse dependency graph for drops
+		// For drops: if table A references table B, then B depends on A (B can't be dropped until A is dropped)
+		tableDependencies := make(map[string][]string)
+		tableMap := make(map[string]*Table)
+
+		// First, build a map of tables to be dropped for quick lookup
+		for _, table := range tablesToDrop {
+			tableMap[table.name] = table
+			tableDependencies[table.name] = []string{}
+		}
+
+		// Now build reverse dependencies
+		// For each table, find which other tables (in the drop list) reference it
+		for _, table := range tablesToDrop {
+			for _, fk := range table.foreignKeys {
+				if fk.referenceName != "" && fk.referenceName != table.name {
+					// If the referenced table is also being dropped
+					if _, exists := tableMap[fk.referenceName]; exists {
+						// The referenced table depends on this table being dropped first
+						tableDependencies[fk.referenceName] = append(tableDependencies[fk.referenceName], table.name)
+					}
+				}
+			}
+		}
+
+		sorted := topologicalSort(tablesToDrop, tableDependencies, func(t *Table) string {
+			return t.name
+		})
+
+		if len(sorted) != 0 {
+			sortedTablesToDrop = sorted
+		} else {
+			// If circular dependency is detected, fall back to the original order.
+			sortedTablesToDrop = tablesToDrop
+		}
+	}
+
+	var ddls []string
+	for _, table := range sortedTablesToDrop {
+		ddls = append(ddls, fmt.Sprintf("DROP TABLE %s", g.escapeTableName(table.name)))
+	}
+	return ddls
 }
 
 func splitTableName(table string, defaultSchema string) (string, string) {

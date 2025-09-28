@@ -1,23 +1,38 @@
 # Test cases for foreign key dependency handling in SQL Server
 
-# Issue 1: Export order with foreign key constraints
-# When exporting a database with foreign keys, the tables might be exported
-# in an order that causes dependency errors when recreating the schema
-ExportOrderForeignKey:
+# Issue 1: order of create tables with foreign key constraints
+ForeignKeyDependenciesForCreateTables:
+  apply_only: true
   desired: |
-    CREATE TABLE [suppliers] (
-      [supplier_id] int PRIMARY KEY,
-      [name] NVARCHAR(100)
-    );
     CREATE TABLE [items] (
-      [item_id] int PRIMARY KEY,
-      [supplier_id] int NOT NULL,
-      CONSTRAINT [items_supplier_fk] FOREIGN KEY ([supplier_id]) REFERENCES [suppliers] ([supplier_id])
+      [item_id] int NOT NULL,
+      [item_name] varchar(100) DEFAULT NULL,
+      PRIMARY KEY ([item_id])
+    );
+
+    CREATE TABLE [users] (
+      [user_id] int NOT NULL,
+      [family_name] varchar(100) NOT NULL,
+      [given_name] varchar(100) NOT NULL,
+      [email_address] varchar(254) NOT NULL,
+      PRIMARY KEY ([user_id]),
+      CONSTRAINT [uk_email_address] UNIQUE ([email_address])
+    );
+
+    CREATE TABLE [sales] (
+      [sales_id] int NOT NULL,
+      [user_id] int NOT NULL,
+      [item_id] int NOT NULL,
+      [sales_qty] int NOT NULL,
+      [sales_amt] int NOT NULL,
+      PRIMARY KEY ([sales_id]),
+      CONSTRAINT [fk_item_id] FOREIGN KEY ([item_id]) REFERENCES [items] ([item_id]),
+      CONSTRAINT [fk_user_id] FOREIGN KEY ([user_id]) REFERENCES [users] ([user_id])
     );
 
 # Issue 2: Complex primary key change with foreign key dependencies
 # Changing primary key from single column to composite when foreign keys exist
-PrimaryKeyChangeWithForeignKey:
+ForeignKeyDependenciesPrimaryKeyChange:
   current: |
     CREATE TABLE [items] (
       [item_id] int,
@@ -56,7 +71,7 @@ PrimaryKeyChangeWithForeignKey:
     ALTER TABLE [dbo].[item_prices] ADD CONSTRAINT [prices_item_fk] FOREIGN KEY ([supplier_id], [item_id]) REFERENCES [dbo].[items] ([supplier_id], [item_id]);
 
 # Issue 3: Circular foreign key dependencies
-CircularForeignKeyDependency:
+ForeignKeyDependenciesCircular:
   current: |
     CREATE TABLE [departments] (
       [dept_id] int PRIMARY KEY,
@@ -86,7 +101,7 @@ CircularForeignKeyDependency:
     ALTER TABLE [dbo].[employees] ADD CONSTRAINT [emp_dept_fk] FOREIGN KEY ([dept_id]) REFERENCES [dbo].[departments] ([dept_id]);
 
 # Issue 4: Add constraint after table creation
-AddConstraintAfterCreation:
+ForeignKeyDependenciesAddConstraintAfterCreation:
   current: |
     CREATE TABLE [orders] (
       [order_id] int PRIMARY KEY,
@@ -112,7 +127,7 @@ AddConstraintAfterCreation:
     ALTER TABLE [dbo].[orders] ADD CONSTRAINT [order_customer_fk] FOREIGN KEY ([customer_id]) REFERENCES [dbo].[customers] ([customer_id]);
 
 # Issue 5: Multiple foreign keys to same table being modified
-MultipleForeignKeysToModifiedTable:
+ForeignKeyDependenciesMultipleToModifiedTable:
   current: |
     CREATE TABLE [users] (
       [user_id] int,
@@ -157,7 +172,7 @@ MultipleForeignKeysToModifiedTable:
     ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_reviewer_fk] FOREIGN KEY ([reviewer_tenant_id], [reviewer_id]) REFERENCES [dbo].[users] ([tenant_id], [user_id]);
 
 # Issue 6: CASCADE options preservation
-CascadeOptionsPreservation:
+ForeignKeyDependenciesCascadeOptionsPreservation:
   current: |
     CREATE TABLE [categories] (
       [category_id] int,
@@ -194,3 +209,68 @@ CascadeOptionsPreservation:
     ALTER TABLE [dbo].[categories] ADD PRIMARY KEY NONCLUSTERED ([tenant_id], [category_id]);
     ALTER TABLE [dbo].[products] ADD [tenant_id] int;
     ALTER TABLE [dbo].[products] ADD CONSTRAINT [products_category_fk] FOREIGN KEY ([tenant_id], [category_id]) REFERENCES [dbo].[categories] ([tenant_id], [category_id]) ON DELETE CASCADE ON UPDATE CASCADE;
+
+ForeignKeyDependenciesMultipleWithIdempotency:
+  apply_only: true
+  desired: |
+    create table users (
+      user_id int primary key,
+      family_name varchar(100) not null,
+      given_name varchar(100) not null,
+      email_address varchar(254) not null
+    );
+
+    create unique index uk_email_address on users(email_address);
+
+    create table items (
+      supplier_id int,
+      item_id int,
+      item_name varchar(100),
+      constraint pk_items primary key (supplier_id, item_id)
+    );
+
+    create table sales (
+      sales_id int primary key,
+      user_id int not null,
+      supplier_id int,
+      item_id int not null,
+      sales_qty int not null,
+      sales_amt int not null,
+      constraint fk_user_id
+        foreign key (user_id) references users(user_id),
+      constraint fk_supplier_id_item_id
+        foreign key (supplier_id, item_id) references items(supplier_id, item_id)
+    );
+
+ForeignKeyDependenciesMultipleDrops:
+  apply_only: true
+  current: |
+    create table users (
+      user_id int primary key,
+      family_name varchar(100) not null,
+      given_name varchar(100) not null,
+      email_address varchar(254) not null
+    );
+
+    create unique index uk_email_address on users(email_address);
+
+    create table items (
+      supplier_id int,
+      item_id int,
+      item_name varchar(100),
+      constraint pk_items primary key (supplier_id, item_id)
+    );
+
+    create table sales (
+      sales_id int primary key,
+      user_id int not null,
+      supplier_id int,
+      item_id int not null,
+      sales_qty int not null,
+      sales_amt int not null,
+      constraint fk_user_id
+        foreign key (user_id) references users(user_id),
+      constraint fk_supplier_id_item_id
+        foreign key (supplier_id, item_id) references items(supplier_id, item_id)
+    );
+  desired: "" # all drops
