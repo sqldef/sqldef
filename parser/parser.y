@@ -334,7 +334,7 @@ func forceEOF(yylex interface{}) {
 %type <setExpr> set_expression transaction_char isolation_level
 %type <str> ignore_opt default_opt
 %type <empty> not_exists_opt when_expression_opt for_each_row_opt
-%type <bytes> reserved_keyword
+%type <bytes> reserved_keyword non_reserved_keyword
 %type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt
 %type <boolVal> unique_opt
 %type <expr> charset_value
@@ -1503,6 +1503,10 @@ column_definition:
   sql_id column_definition_type
   {
     $$ = &ColumnDefinition{Name: $1, Type: $2}
+  }
+| non_reserved_keyword column_definition_type
+  {
+    $$ = &ColumnDefinition{Name: NewColIdent(string($1)), Type: $2}
   }
 /* For SQLite3 https://www.sqlite.org/lang_keywords.html */
 | STRING column_definition_type
@@ -4157,6 +4161,10 @@ column_name:
   {
     $$ = &ColName{Name: $1}
   }
+| non_reserved_keyword
+  {
+    $$ = &ColName{Name: NewColIdent(string($1))}
+  }
 | table_id '.' reserved_sql_id
   {
     $$ = &ColName{Qualifier: TableName{Name: $1}, Name: $3}
@@ -4386,6 +4394,10 @@ ins_column:
   {
     $$ = NewColIdent(string($1))
   }
+| non_reserved_keyword
+  {
+    $$ = NewColIdent(string($1))
+  }
 
 on_dup_opt:
   {
@@ -4545,9 +4557,17 @@ reserved_sql_id:
   {
     $$ = NewColIdent(string($1))
   }
+| non_reserved_keyword
+  {
+    $$ = NewColIdent(string($1))
+  }
 
 table_id:
   ID
+  {
+    $$ = NewTableIdent(string($1))
+  }
+| non_reserved_keyword
   {
     $$ = NewTableIdent(string($1))
   }
@@ -4700,7 +4720,6 @@ reserved_keyword:
 | DEALLOCATE
 | DECLARE
 | DEFAULT
-| DEFINER
 | DELETE
 | DESC
 | DESCRIBE
@@ -4736,7 +4755,6 @@ reserved_keyword:
 | INSERT
 | INTERVAL
 | INTO
-| INVOKER
 | IS
 | JOIN
 | KEY
@@ -4764,7 +4782,6 @@ reserved_keyword:
 | OUTER
 | PARTITION
 | PAGLOCK
-| POLICY
 | PRIOR
 | READUNCOMMITTED
 | REGEXP
@@ -4781,14 +4798,12 @@ reserved_keyword:
 | SET
 | SHOW
 | STRAIGHT_JOIN
-| STATUS
 | TABLE
 | TABLES
 | TABLOCK
 | THEN
 | TO
 | TRUE
-| TYPE
 | UNION
 | UNIQUE
 | UPDATE
@@ -4804,6 +4819,14 @@ reserved_keyword:
 | WHILE
 | WITH
 | OFF
+
+non_reserved_keyword:
+  DEFINER
+| INVOKER
+| POLICY
+| TYPE
+| STATUS
+| ZONE
 
 openb:
   '('
