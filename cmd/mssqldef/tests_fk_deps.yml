@@ -274,3 +274,32 @@ ForeignKeyDependenciesMultipleDrops:
         foreign key (supplier_id, item_id) references items(supplier_id, item_id)
     );
   desired: "" # all drops
+
+# Test case: Primary key column rename with foreign key from table that will be dropped
+# When changing a primary key column and a referencing table will be dropped,
+# we should not try to recreate the foreign key constraint
+ForeignKeyWithPrimaryKeyChangeAndDrop:
+  current: |
+    CREATE TABLE users (
+      id int,
+      CONSTRAINT PK_users PRIMARY KEY (id)
+    );
+    CREATE TABLE taggings (
+      user_id int NOT NULL,
+      tag nvarchar(max) NOT NULL,
+      CONSTRAINT taggings_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  desired: |
+    CREATE TABLE users (
+      user_id int,
+      name nvarchar(max),
+      CONSTRAINT PK_users PRIMARY KEY (user_id)
+    );
+  output: |
+    ALTER TABLE [dbo].[users] ADD [user_id] int NOT NULL;
+    ALTER TABLE [dbo].[users] ADD [name] nvarchar(max);
+    ALTER TABLE [dbo].[taggings] DROP CONSTRAINT [taggings_user_id_fkey];
+    ALTER TABLE [dbo].[users] DROP CONSTRAINT [PK_users];
+    ALTER TABLE [dbo].[users] ADD CONSTRAINT [PK_users] PRIMARY KEY NONCLUSTERED ([user_id]);
+    DROP TABLE [dbo].[taggings];
+    ALTER TABLE [dbo].[users] DROP COLUMN [id];
