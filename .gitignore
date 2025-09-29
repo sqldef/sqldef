@@ -6,6 +6,7 @@
 /build/*/*
 /package/*
 *.sql
+*.db
 /.docker
 /MacOSX.sdk.tar.xz
 /MacOSX.sdk
