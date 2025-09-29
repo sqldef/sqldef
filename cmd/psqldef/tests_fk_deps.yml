@@ -268,3 +268,30 @@ ForeignKeyDependenciesMultipleDrops:
         foreign key (supplier_id, item_id) references items(supplier_id, item_id)
     );
   desired: "" # all drops
+
+# Test case: Primary key column rename with foreign key from table that will be dropped
+# When changing a primary key column and a referencing table will be dropped,
+# we should not try to recreate the foreign key constraint
+ForeignKeyWithPrimaryKeyChangeAndDrop:
+  current: |
+    CREATE TABLE users (
+      id integer PRIMARY KEY
+    );
+    CREATE TABLE taggings (
+      user_id integer NOT NULL,
+      tag text NOT NULL,
+      CONSTRAINT taggings_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  desired: |
+    CREATE TABLE users (
+      user_id integer PRIMARY KEY,
+      name text
+    );
+  output: |
+    ALTER TABLE "public"."users" ADD COLUMN "user_id" integer NOT NULL;
+    ALTER TABLE "public"."users" ADD COLUMN "name" text;
+    ALTER TABLE "public"."taggings" DROP CONSTRAINT "taggings_user_id_fkey";
+    ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";
+    ALTER TABLE "public"."users" ADD PRIMARY KEY ("user_id");
+    DROP TABLE "public"."taggings";
+    ALTER TABLE "public"."users" DROP COLUMN "id";

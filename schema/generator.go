@@ -981,8 +981,10 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				// Look for the corresponding desired foreign key to get updated columns
 				// We need to find the desired table that references our table
 				var desiredFK *ForeignKey
+				var desiredTableExists bool
 				for _, desiredTable := range g.desiredTables {
 					if desiredTable.name == refFK.tableName {
+						desiredTableExists = true
 						for _, fk := range desiredTable.foreignKeys {
 							if fk.constraintName == refFK.foreignKey.constraintName {
 								desiredFK = &fk
@@ -993,18 +995,17 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 				}
 
-				// If we found the desired FK, use its columns, otherwise use the original
-				if desiredFK != nil {
+				// Only recreate the foreign key if:
+				// 1. The referencing table exists in the desired schema, AND
+				// 2. The foreign key exists in the desired schema
+				if desiredTableExists && desiredFK != nil {
 					recreateDDL := g.buildForeignKeyDDL(refFK.tableName, desiredFK)
 					recreateFKDDLs = append(recreateFKDDLs, recreateDDL)
 					// Mark this FK as globally handled so we don't add it again in normal FK processing
 					g.handledForeignKeys[refFK.tableName+":"+desiredFK.constraintName] = true
-				} else {
-					// No desired FK found, just recreate with original columns
-					// This might fail if the primary key structure changed
-					recreateDDL := g.buildForeignKeyDDL(refFK.tableName, &refFK.foreignKey)
-					recreateFKDDLs = append(recreateFKDDLs, recreateDDL)
 				}
+				// If the table doesn't exist in desired schema or the FK doesn't exist,
+				// we don't recreate it (it will be dropped with the table)
 			}
 
 			// Add the DROP FK statements before we modify the primary key
