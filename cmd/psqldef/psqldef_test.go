@@ -170,12 +170,6 @@ func TestApply(t *testing.T) {
 	sqlParser := postgres.NewParser()
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			// This is implemented in the psqldef command layer, so it's needed for TestApply
-			if _, ok := os.LookupEnv("PGSSLMODE"); !ok {
-				os.Setenv("PGSSLMODE", "disable")
-				defer os.Unsetenv("PGSSLMODE")
-			}
-
 			// Initialize the database with test.Current
 			resetTestDatabaseWithUser(test.User)
 			var db database.Database
@@ -2094,10 +2088,6 @@ func TestPsqldefReindexConcurrently(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
-	if _, ok := os.LookupEnv("PGHOST"); !ok {
-		os.Setenv("PGHOST", "127.0.0.1")
-	}
-
 	resetTestDatabase()
 	testutils.MustExecute("go", "build")
 	status := m.Run()
