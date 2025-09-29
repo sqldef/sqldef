@@ -1,3 +1,6 @@
+## [v3.1.4](https://github.com/sqldef/sqldef/compare/v3.1.3...v3.1.4) - 2025-09-29
+- Fix foreign key recreation when dropping referencing tables by @gfx in https://github.com/sqldef/sqldef/pull/815
+
 ## [v3.1.3](https://github.com/sqldef/sqldef/compare/v3.1.2...v3.1.3) - 2025-09-28
 - doc: improve `--help` and docs by @gfx in https://github.com/sqldef/sqldef/pull/813
 
