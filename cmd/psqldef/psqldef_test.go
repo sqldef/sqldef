@@ -329,12 +329,11 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 		  name text
 		);`,
 	)
-	assertApplyOptionsOutput(t, createTable, wrapWithTransaction(
+	assertApplyOutputWithEnableDrop(t, createTable, wrapWithTransaction(
 		`ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";`+"\n"+
 			`ALTER TABLE "public"."users" DROP COLUMN "id";`+"\n"),
-		"--enable-drop",
 	)
-	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
+	assertApplyOutputWithEnableDrop(t, createTable, nothingModified)
 
 	createTable = stripHeredoc(`
 		CREATE TABLE users (
@@ -342,12 +341,12 @@ func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
 		  name text
 		);`,
 	)
-	assertApplyOptionsOutput(t, createTable, wrapWithTransaction(stripHeredoc(`
+	assertApplyOutputWithEnableDrop(t, createTable, wrapWithTransaction(stripHeredoc(`
 		ALTER TABLE "public"."users" ADD COLUMN "id" bigint NOT NULL;
 		ALTER TABLE "public"."users" ADD PRIMARY KEY ("id");
 		`,
-	)), "--enable-drop")
-	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
+	)))
+	assertApplyOutputWithEnableDrop(t, createTable, nothingModified)
 }
 
 func TestPsqldefCreateTableConstraintPrimaryKey(t *testing.T) {
@@ -683,7 +682,7 @@ func TestPsqldefCreateView(t *testing.T) {
 			assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
 
 			assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(fmt.Sprintf(`-- Skipped: DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n"))
-			assertApplyOptionsOutput(t, createUsers+createPosts, wrapWithTransaction(fmt.Sprintf(`DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n"), "--enable-drop")
+			assertApplyOutputWithEnableDrop(t, createUsers+createPosts, wrapWithTransaction(fmt.Sprintf(`DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n"))
 			assertApplyOutput(t, createUsers+createPosts, nothingModified)
 		})
 	}
@@ -711,7 +710,7 @@ func TestPsqldefCreateMaterializedView(t *testing.T) {
 			assertApplyOutput(t, createUsers+createPosts+createMaterializedView, wrapWithTransaction(fmt.Sprintf("CREATE MATERIALIZED VIEW %s.view_user_posts AS SELECT p.id FROM (%s as p JOIN %s as u ON ((p.user_id = u.id)));\n", tc.Schema, posts, users)))
 			assertApplyOutput(t, createUsers+createPosts+createMaterializedView, nothingModified)
 
-			assertApplyOptionsOutput(t, createUsers+createPosts, wrapWithTransaction(fmt.Sprintf(`DROP MATERIALIZED VIEW "%s"."view_user_posts";`, tc.Schema)+"\n"), "--enable-drop")
+			assertApplyOutputWithEnableDrop(t, createUsers+createPosts, wrapWithTransaction(fmt.Sprintf(`DROP MATERIALIZED VIEW "%s"."view_user_posts";`, tc.Schema)+"\n"))
 			assertApplyOutput(t, createUsers+createPosts, nothingModified)
 		})
 	}
@@ -761,19 +760,19 @@ func TestPsqldefCreateIndex(t *testing.T) {
 				createIndex2+"\n"))
 			assertApplyOutput(t, createTable+createIndex1+createIndex2, nothingModified)
 
-			assertApplyOptionsOutput(t, createTable+createIndex2+createIndex3, wrapWithTransaction(
+			assertApplyOutputWithEnableDrop(t, createTable+createIndex2+createIndex3, wrapWithTransaction(
 				dropIndex1+"\n"+
-					createIndex3+"\n"), "--enable-drop")
+					createIndex3+"\n"))
 			assertApplyOutput(t, createTable+createIndex2+createIndex3, nothingModified)
 
-			assertApplyOptionsOutput(t, createTable+createIndex2+createIndex4, wrapWithTransaction(
+			assertApplyOutputWithEnableDrop(t, createTable+createIndex2+createIndex4, wrapWithTransaction(
 				dropIndex1+"\n"+
-					createIndex4+"\n"), "--enable-drop")
+					createIndex4+"\n"))
 			assertApplyOutput(t, createTable+createIndex2+createIndex4, nothingModified)
 
-			assertApplyOptionsOutput(t, createTable, wrapWithTransaction(
+			assertApplyOutputWithEnableDrop(t, createTable, wrapWithTransaction(
 				dropIndex2+"\n"+
-					dropIndex1+"\n"), "--enable-drop")
+					dropIndex1+"\n"))
 			assertApplyOutput(t, createTable, nothingModified)
 		})
 	}
@@ -1043,8 +1042,8 @@ func TestPsqldefSameTableNameAmongSchemas(t *testing.T) {
 	createTable = stripHeredoc(`
 		CREATE TABLE dummy (id int);
 		CREATE TABLE test.dummy ();`)
-	assertApplyOptionsOutput(t, createTable, wrapWithTransaction(`ALTER TABLE "test"."dummy" DROP COLUMN "id";`+"\n"), "--enable-drop")
-	assertApplyOptionsOutput(t, createTable, nothingModified, "--enable-drop")
+	assertApplyOutputWithEnableDrop(t, createTable, wrapWithTransaction(`ALTER TABLE "test"."dummy" DROP COLUMN "id";`+"\n"))
+	assertApplyOutputWithEnableDrop(t, createTable, nothingModified)
 }
 
 func TestPsqldefCreateTableWithIdentityColumn(t *testing.T) {
@@ -1349,8 +1348,8 @@ func TestPsqldefDryRun(t *testing.T) {
 	    );`,
 	))
 
-	dryRun := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--dry-run", "--file", "schema.sql")
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
+	dryRun := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--dry-run", "--file", "schema.sql")
+	apply := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
 	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 }
 
@@ -1370,7 +1369,7 @@ func TestPsqldefDropTable(t *testing.T) {
 	writeFile("schema.sql", "")
 
 	dropTable := `DROP TABLE "public"."users";`
-	out := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--enable-drop", "--file", "schema.sql")
+	out := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--enable-drop", "--file", "schema.sql")
 	assertEquals(t, out, wrapWithTransaction(dropTable+"\n"))
 }
 
@@ -1393,12 +1392,12 @@ func TestPsqldefConfigInlineEnableDrop(t *testing.T) {
 	dropTable := `DROP TABLE "public"."users";`
 	expectedOutput := wrapWithTransaction(dropTable + "\n")
 
-	outFlag := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--enable-drop", "--file", "schema.sql")
+	outFlag := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--enable-drop", "--file", "schema.sql")
 	assertEquals(t, outFlag, expectedOutput)
 
 	mustPgExec(testDatabaseName, ddl)
 
-	outConfigInline := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--config-inline", "enable_drop: true", "--file", "schema.sql")
+	outConfigInline := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--config-inline", "enable_drop: true", "--file", "schema.sql")
 	assertEquals(t, outConfigInline, expectedOutput)
 }
 
@@ -1475,19 +1474,19 @@ func TestPsqldefExportConcurrency(t *testing.T) {
 		`,
 	))
 
-	outputDefault := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export")
+	outputDefault := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export")
 
 	writeFile("config.yml", "dump_concurrency: 0")
-	outputNoConcurrency := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export", "--config", "config.yml")
+	outputNoConcurrency := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export", "--config", "config.yml")
 
 	writeFile("config.yml", "dump_concurrency: 1")
-	outputConcurrency1 := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export", "--config", "config.yml")
+	outputConcurrency1 := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export", "--config", "config.yml")
 
 	writeFile("config.yml", "dump_concurrency: 10")
-	outputConcurrency10 := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export", "--config", "config.yml")
+	outputConcurrency10 := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export", "--config", "config.yml")
 
 	writeFile("config.yml", "dump_concurrency: -1")
-	outputConcurrencyNoLimit := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export", "--config", "config.yml")
+	outputConcurrencyNoLimit := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export", "--config", "config.yml")
 
 	assertEquals(t, outputDefault, stripHeredoc(`
 		CREATE TABLE "public"."users_1" (
@@ -1524,7 +1523,7 @@ func TestPsqldefSkipView(t *testing.T) {
 
 	writeFile("schema.sql", createTable)
 
-	output := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--skip-view", "-f", "schema.sql")
+	output := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--skip-view", "-f", "schema.sql")
 	assertEquals(t, output, nothingModified)
 }
 
@@ -1537,7 +1536,7 @@ func TestPsqldefSkipExtension(t *testing.T) {
 
 	writeFile("schema.sql", "")
 
-	output := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--skip-extension", "-f", "schema.sql")
+	output := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--skip-extension", "-f", "schema.sql")
 	assertEquals(t, output, nothingModified)
 }
 
@@ -1553,12 +1552,12 @@ func TestPsqldefBeforeApply(t *testing.T) {
 	createTable := "CREATE TABLE dummy (id int);"
 	writeFile("schema.sql", createTable)
 
-	dryRun := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--before-apply", beforeApply, "--dry-run")
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--before-apply", beforeApply)
+	dryRun := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--before-apply", beforeApply, "--dry-run")
+	apply := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--before-apply", beforeApply)
 	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 	assertEquals(t, apply, applyPrefix+"BEGIN;\n"+beforeApply+"\n"+createTable+"\nCOMMIT;\n")
 
-	apply = assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--before-apply", beforeApply)
+	apply = mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--before-apply", beforeApply)
 	assertEquals(t, apply, nothingModified)
 
 	owner, err := pgQuery(testDatabaseName, "SELECT tableowner FROM pg_tables WHERE tablename = 'dummy'")
@@ -1591,7 +1590,7 @@ func TestPsqldefConfigIncludesTargetTables(t *testing.T) {
 
 	writeFile("config.yml", "target_tables: |\n  public\\.users\n  public\\.users_\\d\n")
 
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
 	assertEquals(t, apply, nothingModified)
 }
 
@@ -1611,7 +1610,7 @@ func TestPsqldefConfigIncludesTargetSchema(t *testing.T) {
 
 	writeFile("config.yml", "target_schema: schema_a\n")
 
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
 	assertEquals(t, apply, nothingModified)
 
 	// multiple targets
@@ -1629,7 +1628,7 @@ func TestPsqldefConfigIncludesTargetSchema(t *testing.T) {
   schema_a
   schema_b`)
 
-	apply = assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply = mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
 	assertEquals(t, apply, nothingModified)
 }
 
@@ -1663,10 +1662,10 @@ func TestPsqldefConfigIncludesTargetSchemaWithViews(t *testing.T) {
 
 	writeFile("config.yml", "target_schema: bar\n")
 
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
 	assertEquals(t, apply, wrapWithTransaction(schema))
 
-	apply = assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply = mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
 	assertEquals(t, apply, nothingModified)
 }
 
@@ -1693,7 +1692,7 @@ func TestPsqldefConfigIncludesSkipTables(t *testing.T) {
 
 	writeFile("config.yml", "skip_tables: |\n  public\\.users_10\n")
 
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
 	assertEquals(t, apply, nothingModified)
 }
 
@@ -1716,7 +1715,7 @@ func TestPsqldefConfigIncludesSkipViews(t *testing.T) {
 
 	writeFile("config.yml", "skip_views: |\n  public\\.views_10\n")
 
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
 	assertEquals(t, apply, nothingModified)
 }
 
@@ -1980,7 +1979,7 @@ func TestPsqldefTransactionBoundariesWithConcurrentIndex(t *testing.T) {
 			DROP INDEX "public"."idx_users_age";
 		`))
 
-		assertApplyOptionsOutput(t, schema, expected, "--enable-drop")
+		assertApplyOutputWithEnableDrop(t, schema, expected)
 	})
 
 	// Test 4: Dry run with concurrent index
@@ -2001,8 +2000,8 @@ func TestPsqldefTransactionBoundariesWithConcurrentIndex(t *testing.T) {
 			CREATE INDEX CONCURRENTLY idx_users_email ON users (email);
 			CREATE INDEX idx_users_age ON users (age);`))
 
-		dryRun := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--dry-run", "--file", "schema.sql")
-		apply := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
+		dryRun := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--dry-run", "--file", "schema.sql")
+		apply := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
 
 		// Verify that dry run output matches apply output (except for the prefix)
 		assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
@@ -2092,7 +2091,7 @@ func TestPsqldefReindexConcurrently(t *testing.T) {
 			CREATE INDEX idx_users_age ON users (age);`))
 
 		// Verify that regular operations still work
-		output := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
+		output := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
 		assertEquals(t, output, nothingModified)
 	})
 }
@@ -2112,34 +2111,48 @@ func TestMain(m *testing.M) {
 func assertApply(t *testing.T, schema string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
+	mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
 }
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
-	writeFile("schema.sql", schema)
-	actual := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
+	actual := assertApplyOutputWithConfig(t, schema, database.GeneratorConfig{EnableDrop: false})
 	assertEquals(t, actual, expected)
 }
 
-func assertApplyOptionsOutput(t *testing.T, schema string, expected string, options ...string) {
+func assertApplyOutputWithEnableDrop(t *testing.T, schema string, expected string) {
 	t.Helper()
-	writeFile("schema.sql", schema)
-	args := append([]string{
-		"-Upostgres", testDatabaseName, "--file", "schema.sql",
-	}, options...)
-
-	actual := assertedExecute(t, "./psqldef", args...)
+	actual := assertApplyOutputWithConfig(t, schema, database.GeneratorConfig{EnableDrop: true})
 	assertEquals(t, actual, expected)
+}
+
+func assertApplyOutputWithConfig(t *testing.T, desiredSchema string, config database.GeneratorConfig) string {
+	t.Helper()
+
+	db, err := connectDatabase(dbConfig{
+		DbName: testDatabaseName,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	sqlParser := postgres.NewParser()
+	output, err := testutils.ApplyWithOutput(db, schema.GeneratorModePostgres, sqlParser, desiredSchema, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return output
 }
 
 func assertExportOutput(t *testing.T, expected string) {
 	t.Helper()
-	actual := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export")
+	actual := mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export")
 	assertEquals(t, actual, expected)
 }
 
-func assertedExecute(t *testing.T, command string, args ...string) string {
+func mustExecute(t *testing.T, command string, args ...string) string {
 	t.Helper()
 	out, err := testutils.Execute(command, args...)
 	if err != nil {
