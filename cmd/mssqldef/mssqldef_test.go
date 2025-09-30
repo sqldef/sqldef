@@ -1436,9 +1436,26 @@ func assertApply(t *testing.T, schema string) {
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
-	writeFile("schema.sql", schema)
-	actual := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql")
+	actual := assertApplyOutputWithConfig(t, schema, database.GeneratorConfig{EnableDrop: false})
 	assertEquals(t, actual, expected)
+}
+
+func assertApplyOutputWithConfig(t *testing.T, desiredSchema string, config database.GeneratorConfig) string {
+	t.Helper()
+
+	db, err := connectDatabase()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	sqlParser := mssql.NewParser()
+	output, err := testutils.ApplyWithOutput(db, schema.GeneratorModeMssql, sqlParser, desiredSchema, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return output
 }
 
 func assertApplyOptionsOutput(t *testing.T, schema string, expected string, options ...string) {

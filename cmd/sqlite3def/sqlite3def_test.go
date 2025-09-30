@@ -564,9 +564,26 @@ func TestMain(m *testing.M) {
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
-	writeFile("schema.sql", schema)
-	actual := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--file", "schema.sql")
+	actual := assertApplyOutputWithConfig(t, schema, database.GeneratorConfig{EnableDrop: false})
 	assertEquals(t, actual, expected)
+}
+
+func assertApplyOutputWithConfig(t *testing.T, desiredSchema string, config database.GeneratorConfig) string {
+	t.Helper()
+
+	db, err := connectDatabase()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	sqlParser := database.NewParser(parser.ParserModeSQLite3)
+	output, err := testutils.ApplyWithOutput(db, schema.GeneratorModeSQLite3, sqlParser, desiredSchema, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return output
 }
 
 func assertApplyOptionsOutput(t *testing.T, schema string, expected string, options ...string) {
