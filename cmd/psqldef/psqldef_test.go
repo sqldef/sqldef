@@ -20,10 +20,38 @@ import (
 )
 
 const (
-	applyPrefix     = "-- Apply --\n"
-	nothingModified = "-- Nothing is modified --\n"
-	databaseName    = "psqldef_test"
+	applyPrefix      = "-- Apply --\n"
+	nothingModified  = "-- Nothing is modified --\n"
+	defaultUser      = "postgres"
+	testDatabaseName = "psqldef_test"
 )
+
+type dbConfig struct {
+	User   string
+	DbName string
+}
+
+var defaultDbConfig = dbConfig{
+	User:   defaultUser,
+	DbName: testDatabaseName,
+}
+
+func connectDatabase(config dbConfig) (database.Database, error) {
+	var user string
+	if config.User != "" {
+		user = config.User
+	} else {
+		user = defaultUser
+	}
+
+	return postgres.NewDatabase(database.Config{
+		User:    user,
+		Host:    "127.0.0.1",
+		Port:    5432,
+		DbName:  config.DbName,
+		SslMode: "disable",
+	})
+}
 
 func wrapWithTransaction(ddls string) string {
 	return applyPrefix + "BEGIN;\n" + ddls + "COMMIT;\n"
@@ -31,15 +59,10 @@ func wrapWithTransaction(ddls string) string {
 
 // pgQuery executes a query against the database and returns rows as string
 func pgQuery(dbName string, query string) (string, error) {
-	config := database.Config{
-		User:    "postgres",
-		Host:    "127.0.0.1",
-		Port:    5432,
-		DbName:  dbName,
-		SslMode: "disable",
-	}
-
-	db, err := postgres.NewDatabase(config)
+	db, err := connectDatabase(dbConfig{
+		User:   defaultUser,
+		DbName: dbName,
+	})
 	if err != nil {
 		return "", err
 	}
@@ -91,18 +114,14 @@ func pgQuery(dbName string, query string) (string, error) {
 
 // pgExec executes a statement against the database (doesn't return rows)
 func pgExec(dbName string, statement string) error {
-	config := database.Config{
-		User:    "postgres",
-		Host:    "127.0.0.1",
-		Port:    5432,
-		DbName:  dbName,
-		SslMode: "disable",
-	}
-
-	db, err := postgres.NewDatabase(config)
+	db, err := connectDatabase(dbConfig{
+		User:   defaultUser,
+		DbName: dbName,
+	})
 	if err != nil {
 		return err
 	}
+
 	defer db.Close()
 
 	_, err = db.DB().Exec(statement)
@@ -111,15 +130,10 @@ func pgExec(dbName string, statement string) error {
 
 // pgExecAsUser executes a statement as a specific user
 func pgExecAsUser(dbName string, user string, statement string) error {
-	config := database.Config{
-		User:    user,
-		Host:    "127.0.0.1",
-		Port:    5432,
-		DbName:  dbName,
-		SslMode: "disable",
-	}
-
-	db, err := postgres.NewDatabase(config)
+	db, err := connectDatabase(dbConfig{
+		User:   user,
+		DbName: dbName,
+	})
 	if err != nil {
 		return err
 	}
@@ -145,7 +159,7 @@ func mustPgExecAsUser(dbName string, user string, statement string) {
 
 // mustGetServerVersion retrieves the PostgreSQL server version and panics on error
 func mustGetServerVersion() string {
-	db, err := connectDatabase()
+	db, err := connectDatabase(defaultDbConfig)
 	if err != nil {
 		panic(err)
 	}
@@ -170,22 +184,12 @@ func TestApply(t *testing.T) {
 	sqlParser := postgres.NewParser()
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			// This is implemented in the psqldef command layer, so it's needed for TestApply
-			if _, ok := os.LookupEnv("PGSSLMODE"); !ok {
-				os.Setenv("PGSSLMODE", "disable")
-				defer os.Unsetenv("PGSSLMODE")
-			}
-
-			// Initialize the database with test.Current
 			resetTestDatabaseWithUser(test.User)
-			var db database.Database
-			var err error
-			// PostgreSQL doesn't allow DROP DATABASE when there's a connection
-			if test.User != "" {
-				db, err = connectDatabaseByUser(test.User)
-			} else {
-				db, err = connectDatabase()
-			}
+
+			db, err := connectDatabase(dbConfig{
+				User:   test.User,
+				DbName: testDatabaseName,
+			})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -273,8 +277,8 @@ func TestPsqldefCitextExtension(t *testing.T) {
 	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
-	mustPgExec(databaseName, "DROP TABLE users;")
-	mustPgExec(databaseName, "DROP EXTENSION citext;")
+	mustPgExec(testDatabaseName, "DROP TABLE users;")
+	mustPgExec(testDatabaseName, "DROP EXTENSION citext;")
 }
 
 func TestPsqldefIgnoreExtension(t *testing.T) {
@@ -304,7 +308,7 @@ func TestPsqldefIgnoreExtension(t *testing.T) {
 		);
 		`))
 
-	mustPgExec(databaseName, "DROP EXTENSION pg_buffercache;")
+	mustPgExec(testDatabaseName, "DROP EXTENSION pg_buffercache;")
 }
 
 func TestPsqldefCreateTablePrimaryKey(t *testing.T) {
@@ -490,8 +494,8 @@ func TestPsqldefCreateTableWithReferencesOnDelete(t *testing.T) {
 
 func TestPsqldefCreateTableWithConstraintReferences(t *testing.T) {
 	resetTestDatabase()
-	mustPgExec(databaseName, "CREATE SCHEMA a;")
-	mustPgExec(databaseName, "CREATE SCHEMA c;")
+	mustPgExec(testDatabaseName, "CREATE SCHEMA a;")
+	mustPgExec(testDatabaseName, "CREATE SCHEMA c;")
 
 	createTable := stripHeredoc(`
 		CREATE TABLE a.b (
@@ -656,7 +660,7 @@ func TestPsqldefCreateView(t *testing.T) {
 	for _, tc := range publicAndNonPublicSchemaTestCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			resetTestDatabase()
-			mustPgExec(databaseName, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
+			mustPgExec(testDatabaseName, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
 
 			createUsers := fmt.Sprintf("CREATE TABLE %s.users (id BIGINT PRIMARY KEY, name character varying(100));\n", tc.Schema)
 			createPosts := fmt.Sprintf("CREATE TABLE %s.posts (id BIGINT PRIMARY KEY, name character varying(100), user_id BIGINT, is_deleted boolean);\n", tc.Schema)
@@ -689,7 +693,7 @@ func TestPsqldefCreateMaterializedView(t *testing.T) {
 	for _, tc := range publicAndNonPublicSchemaTestCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			resetTestDatabase()
-			mustPgExec(databaseName, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
+			mustPgExec(testDatabaseName, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
 
 			createUsers := fmt.Sprintf("CREATE TABLE %s.users (id BIGINT PRIMARY KEY, name character varying(100));\n", tc.Schema)
 			createPosts := fmt.Sprintf("CREATE TABLE %s.posts (id BIGINT PRIMARY KEY, name character varying(100), user_id BIGINT, is_deleted boolean);\n", tc.Schema)
@@ -737,7 +741,7 @@ func TestPsqldefCreateIndex(t *testing.T) {
 	for _, tc := range publicAndNonPublicSchemaTestCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			resetTestDatabase()
-			mustPgExec(databaseName, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
+			mustPgExec(testDatabaseName, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
 
 			createTable := stripHeredoc(fmt.Sprintf(`
 				CREATE TABLE %s.users (
@@ -779,7 +783,7 @@ func TestPsqldefCreateMaterializedViewIndex(t *testing.T) {
 	for _, tc := range publicAndNonPublicSchemaTestCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			resetTestDatabase()
-			mustPgExec(databaseName, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
+			mustPgExec(testDatabaseName, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
 
 			createTable := stripHeredoc(fmt.Sprintf(`
 				CREATE TABLE %s.users (
@@ -978,7 +982,7 @@ func TestPsqldefDataTypes(t *testing.T) {
 
 func TestPsqldefCreateTableInSchema(t *testing.T) {
 	resetTestDatabase()
-	mustPgExec(databaseName, "CREATE SCHEMA test;")
+	mustPgExec(testDatabaseName, "CREATE SCHEMA test;")
 
 	createTable := "CREATE TABLE test.users (id serial primary key);"
 	assertApplyOutput(t, createTable, wrapWithTransaction(createTable+"\n"))
@@ -987,7 +991,7 @@ func TestPsqldefCreateTableInSchema(t *testing.T) {
 
 func TestPsqldefCheckConstraintInSchema(t *testing.T) {
 	resetTestDatabase()
-	mustPgExec(databaseName, "CREATE SCHEMA test;")
+	mustPgExec(testDatabaseName, "CREATE SCHEMA test;")
 
 	createTable := stripHeredoc(`
 		CREATE TABLE test.dummy (
@@ -1028,7 +1032,7 @@ func TestPsqldefCheckConstraintInSchema(t *testing.T) {
 
 func TestPsqldefSameTableNameAmongSchemas(t *testing.T) {
 	resetTestDatabase()
-	mustPgExec(databaseName, "CREATE SCHEMA test;")
+	mustPgExec(testDatabaseName, "CREATE SCHEMA test;")
 
 	createTable := stripHeredoc(`
 		CREATE TABLE dummy (id int);
@@ -1068,7 +1072,7 @@ func TestPsqldefCreateTableWithExpressionStored(t *testing.T) {
 		);
 		`,
 	)
-	if err := pgExec(databaseName, createTable); err != nil {
+	if err := pgExec(testDatabaseName, createTable); err != nil {
 		t.Skipf("PostgreSQL doesn't support the test: %s", err)
 	}
 
@@ -1251,7 +1255,7 @@ func TestPsqldefAddIdentityColumnWithSequenceOption(t *testing.T) {
 
 func TestPsqldefAddUniqueConstraintToTableInNonpublicSchema(t *testing.T) {
 	resetTestDatabase()
-	mustPgExec(databaseName, "CREATE SCHEMA test;")
+	mustPgExec(testDatabaseName, "CREATE SCHEMA test;")
 
 	createTable := "CREATE TABLE test.dummy (a int, b int);"
 	assertApplyOutput(t, createTable, wrapWithTransaction(createTable+"\n"))
@@ -1290,9 +1294,9 @@ func TestPsqldefAddUniqueConstraintToTableInNonpublicSchema(t *testing.T) {
 func TestPsqldefFunctionAsDefault(t *testing.T) {
 	for _, tc := range publicAndNonPublicSchemaTestCases {
 		resetTestDatabase()
-		mustPgExec(databaseName, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
+		mustPgExec(testDatabaseName, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
 
-		mustPgExec(databaseName, fmt.Sprintf(stripHeredoc(`
+		mustPgExec(testDatabaseName, fmt.Sprintf(stripHeredoc(`
 			CREATE FUNCTION %s.my_func()
 			RETURNS int
 			AS $$
@@ -1345,14 +1349,14 @@ func TestPsqldefDryRun(t *testing.T) {
 	    );`,
 	))
 
-	dryRun := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--dry-run", "--file", "schema.sql")
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--file", "schema.sql")
+	dryRun := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--dry-run", "--file", "schema.sql")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
 	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 }
 
 func TestPsqldefDropTable(t *testing.T) {
 	resetTestDatabase()
-	mustPgExec(databaseName, stripHeredoc(`
+	mustPgExec(testDatabaseName, stripHeredoc(`
 		CREATE TABLE users (
 		    id bigint NOT NULL PRIMARY KEY,
 		    age int,
@@ -1366,7 +1370,7 @@ func TestPsqldefDropTable(t *testing.T) {
 	writeFile("schema.sql", "")
 
 	dropTable := `DROP TABLE "public"."users";`
-	out := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--enable-drop", "--file", "schema.sql")
+	out := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--enable-drop", "--file", "schema.sql")
 	assertEquals(t, out, wrapWithTransaction(dropTable+"\n"))
 }
 
@@ -1382,19 +1386,19 @@ func TestPsqldefConfigInlineEnableDrop(t *testing.T) {
 		    c_varchar_unlimited varchar
 		);`,
 	)
-	mustPgExec(databaseName, ddl)
+	mustPgExec(testDatabaseName, ddl)
 
 	writeFile("schema.sql", "")
 
 	dropTable := `DROP TABLE "public"."users";`
 	expectedOutput := wrapWithTransaction(dropTable + "\n")
 
-	outFlag := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--enable-drop", "--file", "schema.sql")
+	outFlag := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--enable-drop", "--file", "schema.sql")
 	assertEquals(t, outFlag, expectedOutput)
 
-	mustPgExec(databaseName, ddl)
+	mustPgExec(testDatabaseName, ddl)
 
-	outConfigInline := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--config-inline", "enable_drop: true", "--file", "schema.sql")
+	outConfigInline := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--config-inline", "enable_drop: true", "--file", "schema.sql")
 	assertEquals(t, outConfigInline, expectedOutput)
 }
 
@@ -1403,7 +1407,7 @@ func TestPsqldefExport(t *testing.T) {
 
 	assertExportOutput(t, "-- No table exists --\n")
 
-	mustPgExec(databaseName, stripHeredoc(`
+	mustPgExec(testDatabaseName, stripHeredoc(`
 		CREATE TABLE users (
 		    id bigint NOT NULL PRIMARY KEY,
 		    age int,
@@ -1435,7 +1439,7 @@ func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 
 	assertExportOutput(t, "-- No table exists --\n")
 
-	mustPgExec(databaseName, stripHeredoc(`
+	mustPgExec(testDatabaseName, stripHeredoc(`
 		CREATE TABLE users (
 		    col1 character varying(40) NOT NULL,
 		    col2 character varying(6) NOT NULL,
@@ -1458,7 +1462,7 @@ func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 func TestPsqldefExportConcurrency(t *testing.T) {
 	resetTestDatabase()
 
-	mustPgExec(databaseName, stripHeredoc(`
+	mustPgExec(testDatabaseName, stripHeredoc(`
 		CREATE TABLE users_1 (
 		    id bigint NOT NULL PRIMARY KEY
 		);
@@ -1471,19 +1475,19 @@ func TestPsqldefExportConcurrency(t *testing.T) {
 		`,
 	))
 
-	outputDefault := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--export")
+	outputDefault := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export")
 
 	writeFile("config.yml", "dump_concurrency: 0")
-	outputNoConcurrency := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--export", "--config", "config.yml")
+	outputNoConcurrency := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export", "--config", "config.yml")
 
 	writeFile("config.yml", "dump_concurrency: 1")
-	outputConcurrency1 := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--export", "--config", "config.yml")
+	outputConcurrency1 := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export", "--config", "config.yml")
 
 	writeFile("config.yml", "dump_concurrency: 10")
-	outputConcurrency10 := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--export", "--config", "config.yml")
+	outputConcurrency10 := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export", "--config", "config.yml")
 
 	writeFile("config.yml", "dump_concurrency: -1")
-	outputConcurrencyNoLimit := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--export", "--config", "config.yml")
+	outputConcurrencyNoLimit := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export", "--config", "config.yml")
 
 	assertEquals(t, outputDefault, stripHeredoc(`
 		CREATE TABLE "public"."users_1" (
@@ -1516,11 +1520,11 @@ func TestPsqldefSkipView(t *testing.T) {
 	createView := "CREATE VIEW user_views AS SELECT id from users;\n"
 	createMaterializedView := "CREATE MATERIALIZED VIEW user_materialized_views AS SELECT id from users;\n"
 
-	mustPgExec(databaseName, createTable+createView+createMaterializedView)
+	mustPgExec(testDatabaseName, createTable+createView+createMaterializedView)
 
 	writeFile("schema.sql", createTable)
 
-	output := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--skip-view", "-f", "schema.sql")
+	output := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--skip-view", "-f", "schema.sql")
 	assertEquals(t, output, nothingModified)
 }
 
@@ -1529,11 +1533,11 @@ func TestPsqldefSkipExtension(t *testing.T) {
 
 	createExtension := "CREATE EXTENSION pgcrypto;\n"
 
-	mustPgExec(databaseName, createExtension)
+	mustPgExec(testDatabaseName, createExtension)
 
 	writeFile("schema.sql", "")
 
-	output := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--skip-extension", "-f", "schema.sql")
+	output := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--skip-extension", "-f", "schema.sql")
 	assertEquals(t, output, nothingModified)
 }
 
@@ -1541,23 +1545,23 @@ func TestPsqldefBeforeApply(t *testing.T) {
 	resetTestDatabase()
 
 	// Setup
-	mustPgExec(databaseName, "DROP ROLE IF EXISTS dummy_owner_role;")
-	mustPgExec(databaseName, "CREATE ROLE dummy_owner_role;")
-	mustPgExec(databaseName, "GRANT ALL ON SCHEMA public TO dummy_owner_role;")
+	mustPgExec(testDatabaseName, "DROP ROLE IF EXISTS dummy_owner_role;")
+	mustPgExec(testDatabaseName, "CREATE ROLE dummy_owner_role;")
+	mustPgExec(testDatabaseName, "GRANT ALL ON SCHEMA public TO dummy_owner_role;")
 
 	beforeApply := "SET ROLE dummy_owner_role; SET TIME ZONE LOCAL;"
 	createTable := "CREATE TABLE dummy (id int);"
 	writeFile("schema.sql", createTable)
 
-	dryRun := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--before-apply", beforeApply, "--dry-run")
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--before-apply", beforeApply)
+	dryRun := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--before-apply", beforeApply, "--dry-run")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--before-apply", beforeApply)
 	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
 	assertEquals(t, apply, applyPrefix+"BEGIN;\n"+beforeApply+"\n"+createTable+"\nCOMMIT;\n")
 
-	apply = assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--before-apply", beforeApply)
+	apply = assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--before-apply", beforeApply)
 	assertEquals(t, apply, nothingModified)
 
-	owner, err := pgQuery(databaseName, "SELECT tableowner FROM pg_tables WHERE tablename = 'dummy'")
+	owner, err := pgQuery(testDatabaseName, "SELECT tableowner FROM pg_tables WHERE tablename = 'dummy'")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1567,7 +1571,7 @@ func TestPsqldefBeforeApply(t *testing.T) {
 func TestPsqldefConfigIncludesTargetTables(t *testing.T) {
 	resetTestDatabase()
 
-	mustPgExec(databaseName, `
+	mustPgExec(testDatabaseName, `
         CREATE TABLE users (id bigint PRIMARY KEY);
         CREATE TABLE users_1 (id bigint PRIMARY KEY);
 
@@ -1587,14 +1591,14 @@ func TestPsqldefConfigIncludesTargetTables(t *testing.T) {
 
 	writeFile("config.yml", "target_tables: |\n  public\\.users\n  public\\.users_\\d\n")
 
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
 	assertEquals(t, apply, nothingModified)
 }
 
 func TestPsqldefConfigIncludesTargetSchema(t *testing.T) {
 	resetTestDatabase()
 
-	mustPgExec(databaseName, `
+	mustPgExec(testDatabaseName, `
         CREATE SCHEMA schema_a;
         CREATE TABLE schema_a.users (id bigint PRIMARY KEY);
         CREATE SCHEMA schema_b;
@@ -1607,11 +1611,11 @@ func TestPsqldefConfigIncludesTargetSchema(t *testing.T) {
 
 	writeFile("config.yml", "target_schema: schema_a\n")
 
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
 	assertEquals(t, apply, nothingModified)
 
 	// multiple targets
-	mustPgExec(databaseName, `
+	mustPgExec(testDatabaseName, `
         CREATE SCHEMA schema_c;
         CREATE TABLE schema_c.users (id bigint PRIMARY KEY);
     `)
@@ -1625,14 +1629,14 @@ func TestPsqldefConfigIncludesTargetSchema(t *testing.T) {
   schema_a
   schema_b`)
 
-	apply = assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply = assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
 	assertEquals(t, apply, nothingModified)
 }
 
 func TestPsqldefConfigIncludesTargetSchemaWithViews(t *testing.T) {
 	resetTestDatabase()
 
-	mustPgExec(databaseName, `
+	mustPgExec(testDatabaseName, `
 				CREATE SCHEMA foo;
 
 				CREATE TABLE foo.users (
@@ -1659,17 +1663,17 @@ func TestPsqldefConfigIncludesTargetSchemaWithViews(t *testing.T) {
 
 	writeFile("config.yml", "target_schema: bar\n")
 
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
 	assertEquals(t, apply, wrapWithTransaction(schema))
 
-	apply = assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply = assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
 	assertEquals(t, apply, nothingModified)
 }
 
 func TestPsqldefConfigIncludesSkipTables(t *testing.T) {
 	resetTestDatabase()
 
-	mustPgExec(databaseName, `
+	mustPgExec(testDatabaseName, `
         CREATE TABLE users (id bigint PRIMARY KEY);
         CREATE TABLE users_1 (id bigint PRIMARY KEY);
 
@@ -1689,14 +1693,14 @@ func TestPsqldefConfigIncludesSkipTables(t *testing.T) {
 
 	writeFile("config.yml", "skip_tables: |\n  public\\.users_10\n")
 
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
 	assertEquals(t, apply, nothingModified)
 }
 
 func TestPsqldefConfigIncludesSkipViews(t *testing.T) {
 	resetTestDatabase()
 
-	mustPgExec(databaseName, `
+	mustPgExec(testDatabaseName, `
 	    CREATE MATERIALIZED VIEW views AS SELECT 1 AS id, 12 AS uid;
         CREATE MATERIALIZED VIEW views_1 AS SELECT 1 AS id, 13 AS uid;
 
@@ -1712,7 +1716,7 @@ func TestPsqldefConfigIncludesSkipViews(t *testing.T) {
 
 	writeFile("config.yml", "skip_views: |\n  public\\.views_10\n")
 
-	apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
 	assertEquals(t, apply, nothingModified)
 }
 
@@ -1891,7 +1895,7 @@ func TestPsqldefTableLevelCheckConstraintsWithAllAny(t *testing.T) {
 func TestPsqldefTransactionBoundariesWithConcurrentIndex(t *testing.T) {
 	resetTestDatabase()
 
-	mustPgExec(databaseName, stripHeredoc(`
+	mustPgExec(testDatabaseName, stripHeredoc(`
 		CREATE TABLE users (
 		    id bigint NOT NULL PRIMARY KEY,
 		    email text,
@@ -1917,7 +1921,7 @@ func TestPsqldefTransactionBoundariesWithConcurrentIndex(t *testing.T) {
 	// Test 2: Mix of regular DDLs and concurrent index
 	t.Run("MixedDDLsWithConcurrentIndex", func(t *testing.T) {
 		resetTestDatabase()
-		mustPgExec(databaseName, stripHeredoc(`
+		mustPgExec(testDatabaseName, stripHeredoc(`
 			CREATE TABLE users (
 			    id bigint NOT NULL PRIMARY KEY,
 			    email text
@@ -1951,7 +1955,7 @@ func TestPsqldefTransactionBoundariesWithConcurrentIndex(t *testing.T) {
 	// Test 3: DROP INDEX CONCURRENTLY - should be outside transaction
 	t.Run("DropConcurrentIndex", func(t *testing.T) {
 		resetTestDatabase()
-		mustPgExec(databaseName, stripHeredoc(`
+		mustPgExec(testDatabaseName, stripHeredoc(`
 			CREATE TABLE users (
 			    id bigint NOT NULL PRIMARY KEY,
 			    email text,
@@ -1982,7 +1986,7 @@ func TestPsqldefTransactionBoundariesWithConcurrentIndex(t *testing.T) {
 	// Test 4: Dry run with concurrent index
 	t.Run("DryRunWithConcurrentIndex", func(t *testing.T) {
 		resetTestDatabase()
-		mustPgExec(databaseName, stripHeredoc(`
+		mustPgExec(testDatabaseName, stripHeredoc(`
 			CREATE TABLE users (
 			    id bigint NOT NULL PRIMARY KEY,
 			    email text
@@ -1997,8 +2001,8 @@ func TestPsqldefTransactionBoundariesWithConcurrentIndex(t *testing.T) {
 			CREATE INDEX CONCURRENTLY idx_users_email ON users (email);
 			CREATE INDEX idx_users_age ON users (age);`))
 
-		dryRun := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--dry-run", "--file", "schema.sql")
-		apply := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--file", "schema.sql")
+		dryRun := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--dry-run", "--file", "schema.sql")
+		apply := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
 
 		// Verify that dry run output matches apply output (except for the prefix)
 		assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
@@ -2018,7 +2022,7 @@ func TestPsqldefTransactionBoundariesWithConcurrentIndex(t *testing.T) {
 	// Test 5: Multiple concurrent operations
 	t.Run("MultipleConcurrentOperations", func(t *testing.T) {
 		resetTestDatabase()
-		mustPgExec(databaseName, stripHeredoc(`
+		mustPgExec(testDatabaseName, stripHeredoc(`
 			CREATE TABLE users (
 			    id bigint NOT NULL PRIMARY KEY,
 			    email text,
@@ -2065,7 +2069,7 @@ func TestPsqldefReindexConcurrently(t *testing.T) {
 	resetTestDatabase()
 
 	// Create table with indexes
-	mustPgExec(databaseName, stripHeredoc(`
+	mustPgExec(testDatabaseName, stripHeredoc(`
 		CREATE TABLE users (
 		    id bigint NOT NULL PRIMARY KEY,
 		    email text,
@@ -2088,16 +2092,12 @@ func TestPsqldefReindexConcurrently(t *testing.T) {
 			CREATE INDEX idx_users_age ON users (age);`))
 
 		// Verify that regular operations still work
-		output := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--file", "schema.sql")
+		output := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
 		assertEquals(t, output, nothingModified)
 	})
 }
 
 func TestMain(m *testing.M) {
-	if _, ok := os.LookupEnv("PGHOST"); !ok {
-		os.Setenv("PGHOST", "127.0.0.1")
-	}
-
 	resetTestDatabase()
 	testutils.MustExecute("go", "build")
 	status := m.Run()
@@ -2112,13 +2112,13 @@ func TestMain(m *testing.M) {
 func assertApply(t *testing.T, schema string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--file", "schema.sql")
+	assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
 }
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
 	writeFile("schema.sql", schema)
-	actual := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--file", "schema.sql")
+	actual := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
 	assertEquals(t, actual, expected)
 }
 
@@ -2126,7 +2126,7 @@ func assertApplyOptionsOutput(t *testing.T, schema string, expected string, opti
 	t.Helper()
 	writeFile("schema.sql", schema)
 	args := append([]string{
-		"-Upostgres", databaseName, "--file", "schema.sql",
+		"-Upostgres", testDatabaseName, "--file", "schema.sql",
 	}, options...)
 
 	actual := assertedExecute(t, "./psqldef", args...)
@@ -2135,7 +2135,7 @@ func assertApplyOptionsOutput(t *testing.T, schema string, expected string, opti
 
 func assertExportOutput(t *testing.T, expected string) {
 	t.Helper()
-	actual := assertedExecute(t, "./psqldef", "-Upostgres", databaseName, "--export")
+	actual := assertedExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export")
 	assertEquals(t, actual, expected)
 }
 
@@ -2155,10 +2155,12 @@ func assertEquals(t *testing.T, actual string, expected string) {
 	}
 }
 
+// resetTestDatabase drops and recreates the test database.
 func resetTestDatabase() {
-	// Drop and recreate the test database
-	mustPgExec("postgres", fmt.Sprintf("DROP DATABASE IF EXISTS %s", databaseName))
-	mustPgExec("postgres", fmt.Sprintf("CREATE DATABASE %s", databaseName))
+	// PostgreSQL cannot drop the database if it is connected to, so we need to use the default database.
+	defaultDatabaseName := "postgres"
+	mustPgExec(defaultDatabaseName, fmt.Sprintf("DROP DATABASE IF EXISTS %s", testDatabaseName))
+	mustPgExec(defaultDatabaseName, fmt.Sprintf("CREATE DATABASE %s", testDatabaseName))
 }
 
 var testRoles = []string{
@@ -2200,7 +2202,7 @@ func createTestRole(role string) {
 		END IF;
 	END $$;`, escapedRole, quotedRole)
 
-	mustPgExec(databaseName, query)
+	mustPgExec(testDatabaseName, query)
 }
 
 func createAllTestRoles() {
@@ -2210,7 +2212,7 @@ func createAllTestRoles() {
 }
 
 func cleanupTestRoles() {
-	db, err := connectDatabase()
+	db, err := connectDatabase(defaultDbConfig)
 	if err != nil {
 		// Don't panic during cleanup, just return
 		return
@@ -2248,11 +2250,17 @@ func cleanupTestRoles() {
 func resetTestDatabaseWithUser(user string) {
 	resetTestDatabase()
 	if user != "" {
-		query := fmt.Sprintf("DO $$ BEGIN IF NOT EXISTS (SELECT * FROM pg_roles WHERE rolname = '%s') THEN CREATE ROLE %s WITH LOGIN; END IF; END $$;", user, user)
-		mustPgExec("postgres", query)
-		mustPgExec("postgres", fmt.Sprintf("ALTER ROLE %s SET search_path TO foo, public", user))
-		mustPgExec(databaseName, fmt.Sprintf("GRANT ALL ON DATABASE psqldef_test TO %s", user))
-		mustPgExecAsUser(databaseName, user, "CREATE SCHEMA foo")
+		query := fmt.Sprintf(`
+			DO $$ BEGIN
+				IF NOT EXISTS (SELECT * FROM pg_roles WHERE rolname = '%s') THEN
+					CREATE ROLE %s WITH LOGIN;
+				END IF;
+			END $$;
+		`, user, user)
+		mustPgExec(testDatabaseName, query)
+		mustPgExec(testDatabaseName, fmt.Sprintf("ALTER ROLE %s SET search_path TO foo, public", user))
+		mustPgExec(testDatabaseName, fmt.Sprintf("GRANT ALL ON DATABASE %s TO %s", testDatabaseName, user))
+		mustPgExecAsUser(testDatabaseName, user, "CREATE SCHEMA foo")
 	}
 
 	createAllTestRoles()
@@ -2282,24 +2290,4 @@ var publicAndNonPublicSchemaTestCases = []struct {
 }{
 	{Name: "in public schema", Schema: "public"},
 	{Name: "in non-public schema", Schema: "test"},
-}
-
-func connectDatabase() (database.Database, error) {
-	return postgres.NewDatabase(database.Config{
-		User:    "postgres",
-		Host:    "127.0.0.1",
-		Port:    5432,
-		DbName:  "psqldef_test",
-		SslMode: "disable",
-	})
-}
-
-func connectDatabaseByUser(user string) (database.Database, error) {
-	return postgres.NewDatabase(database.Config{
-		User:    user,
-		Host:    "127.0.0.1",
-		Port:    5432,
-		DbName:  "psqldef_test",
-		SslMode: "disable",
-	})
 }
