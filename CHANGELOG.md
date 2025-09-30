@@ -1,3 +1,6 @@
+## [v3.1.6](https://github.com/sqldef/sqldef/compare/v3.1.5...v3.1.6) - 2025-09-30
+- psqldef test: clean up test code by @gfx in https://github.com/sqldef/sqldef/pull/822
+
 ## [v3.1.5](https://github.com/sqldef/sqldef/compare/v3.1.4...v3.1.5) - 2025-09-29
 - [doc] update AGENTS.md with cmmand line examples by @gfx in https://github.com/sqldef/sqldef/pull/817
 - doc: update Supportd Features sections by @gfx in https://github.com/sqldef/sqldef/pull/819
