@@ -6,15 +6,21 @@ updates:
       interval: "monthly"
     cooldown:
       default-days: 7
+    labels:
+      - "dependencies"
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "monthly"
     cooldown:
       default-days: 7
+    labels:
+      - "dependencies"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
     cooldown:
       default-days: 7
+    labels:
+      - "dependencies"
