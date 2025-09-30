@@ -3,6 +3,7 @@ package testutils
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -253,4 +254,60 @@ func Execute(command string, args ...string) (string, error) {
 	cmd := exec.Command(command, args...)
 	out, err := cmd.CombinedOutput()
 	return strings.ReplaceAll(string(out), "\r\n", "\n"), err
+}
+
+type stringLogger struct {
+	buf strings.Builder
+}
+
+func (l *stringLogger) Print(v ...any) {
+	l.buf.WriteString(fmt.Sprint(v...))
+}
+
+func (l *stringLogger) Printf(format string, v ...any) {
+	l.buf.WriteString(fmt.Sprintf(format, v...))
+}
+
+func (l *stringLogger) Println(v ...any) {
+	l.buf.WriteString(fmt.Sprint(v...))
+	l.buf.WriteString("\n")
+}
+
+func (l *stringLogger) String() string {
+	return l.buf.String()
+}
+
+// ApplyWithOutput applies desired DDLs to a database and returns the CLI output format
+// This mimics the behavior of running psqldef/mysqldef/etc from the command line
+func ApplyWithOutput(db database.Database, mode schema.GeneratorMode, sqlParser database.Parser, desiredDDLs string, config database.GeneratorConfig) (string, error) {
+	db.SetGeneratorConfig(config)
+
+	currentDDLs, err := db.DumpDDLs()
+	if err != nil {
+		return "", err
+	}
+
+	ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, desiredDDLs, currentDDLs, config, db.GetDefaultSchema())
+	if err != nil {
+		return "", err
+	}
+
+	if len(ddls) == 0 {
+		return "-- Nothing is modified --\n", nil
+	}
+
+	logger := &stringLogger{}
+	var ddlSuffix string
+	if mode == schema.GeneratorModeMssql {
+		ddlSuffix = "GO\n"
+	} else {
+		ddlSuffix = ""
+	}
+
+	err = database.RunDDLs(db, ddls, config.EnableDrop, "" /* beforeApply */, ddlSuffix, logger)
+	if err != nil {
+		return "", err
+	}
+
+	return logger.String(), nil
 }
