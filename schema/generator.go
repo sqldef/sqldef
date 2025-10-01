@@ -410,7 +410,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Check checks.
 		for _, check := range currentTable.checks {
-			if containsString(convertCheckConstraintNames(desiredTable.checks), check.constraintName) {
+			if findCheckConstraintInTable(desiredTable, check.constraintName) != nil {
 				continue
 			}
 			if g.mode != GeneratorModeMysql { // workaround. inline CHECK should be converted to out-of-place CONSTRAINT to fix this.
@@ -808,14 +808,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					constraintName = desiredColumn.check.constraintName
 				}
 
-				columnChecks := []CheckDefinition{}
-				for _, column := range currentTable.columns {
-					if column.check != nil {
-						columnChecks = append(columnChecks, *column.check)
-					}
-				}
-
-				currentCheck := findCheckByName(columnChecks, constraintName)
+				currentCheck := findCheckConstraintInTable(&currentTable, constraintName)
 				if !areSameCheckDefinition(currentCheck, desiredColumn.check) { // || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
 					if currentCheck != nil {
 						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), constraintName)
@@ -1142,7 +1135,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	// Examine each check
 	for _, desiredCheck := range desired.table.checks {
-		if currentCheck := findCheckByName(currentTable.checks, desiredCheck.constraintName); currentCheck != nil {
+		if currentCheck := findCheckConstraintInTable(&currentTable, desiredCheck.constraintName); currentCheck != nil {
 			if !areSameCheckDefinition(currentCheck, &desiredCheck) {
 				switch g.mode {
 				case GeneratorModePostgres:
@@ -2723,12 +2716,21 @@ func findIndexOptionByName(options []IndexOption, name string) *IndexOption {
 	return nil
 }
 
-func findCheckByName(checks []CheckDefinition, name string) *CheckDefinition {
-	for _, check := range checks {
-		if check.constraintName == name {
+func findCheckConstraintInTable(table *Table, constraintName string) *CheckDefinition {
+	// First, look for table-level check constraints
+	for _, check := range table.checks {
+		if check.constraintName == constraintName {
 			return &check
 		}
 	}
+
+	// Then, look for column-level check constraints
+	for _, column := range table.columns {
+		if column.check != nil && column.check.constraintName == constraintName {
+			return column.check
+		}
+	}
+
 	return nil
 }
 
