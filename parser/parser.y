@@ -2596,6 +2596,10 @@ index_column:
   {
     $$ = IndexColumn{Column: $1, OperatorClass: string($2)}
   }
+| '(' expression ')' asc_desc_opt
+  {
+    $$ = IndexColumn{Expression: $2, Direction: $4}
+  }
 
 // https://www.postgresql.org/docs/9.5/brin-builtin-opclasses.html
 operator_class:
