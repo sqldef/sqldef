@@ -311,3 +311,48 @@ func ApplyWithOutput(db database.Database, mode schema.GeneratorMode, sqlParser 
 
 	return logger.String(), nil
 }
+
+// QueryRows executes a query and returns the results as a tab-separated string.
+// This is a common helper for all *Query functions in *def_test.go files.
+func QueryRows(db database.Database, query string) (string, error) {
+	rows, err := db.DB().Query(query)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	var result strings.Builder
+	columns, err := rows.Columns()
+	if err != nil {
+		return "", err
+	}
+
+	values := make([]any, len(columns))
+	valuePtrs := make([]any, len(columns))
+	for i := range values {
+		valuePtrs[i] = &values[i]
+	}
+
+	for rows.Next() {
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return "", err
+		}
+
+		for i, val := range values {
+			if i > 0 {
+				result.WriteString("\t")
+			}
+			if val != nil {
+				switch v := val.(type) {
+				case []byte:
+					result.WriteString(string(v))
+				default:
+					result.WriteString(fmt.Sprintf("%v", v))
+				}
+			}
+		}
+		result.WriteString("\n")
+	}
+
+	return result.String(), nil
+}

@@ -1196,7 +1196,7 @@ func TestMssqldefUseSequenceInTrigger(t *testing.T) {
 	resetTestDatabase()
 
 	// Prepare sequence, because "CREATE SEQUENCE" is currently unavailable in mssqldef.
-	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", stripHeredoc(`
+	mustMssqlExec("mssqldef_test", stripHeredoc(`
 		CREATE SEQUENCE seq_user_id AS int START WITH 1;
 		GO
 	`))
@@ -1256,7 +1256,7 @@ func TestMssqldefDryRun(t *testing.T) {
 
 func TestMssqldefDropTable(t *testing.T) {
 	resetTestDatabase()
-	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", stripHeredoc(`
+	mustMssqlExec("mssqldef_test", stripHeredoc(`
 		CREATE TABLE users (
 		    id integer NOT NULL PRIMARY KEY,
 		    age integer
@@ -1287,7 +1287,7 @@ func TestMssqldefConfigInlineEnableDrop(t *testing.T) {
 		GO
 		`,
 	)
-	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", ddl)
+	mustMssqlExec("mssqldef_test", ddl)
 
 	writeFile("schema.sql", "")
 
@@ -1301,7 +1301,7 @@ func TestMssqldefConfigInlineEnableDrop(t *testing.T) {
 	outFlag := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--enable-drop", "--file", "schema.sql")
 	assertEquals(t, outFlag, expectedOutput)
 
-	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", ddl)
+	mustMssqlExec("mssqldef_test", ddl)
 
 	outConfigInline := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--config-inline", "enable_drop: true", "--file", "schema.sql")
 	assertEquals(t, outConfigInline, expectedOutput)
@@ -1312,7 +1312,7 @@ func TestMssqldefExport(t *testing.T) {
 	out := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")
 	assertEquals(t, out, "-- No table exists --\n")
 
-	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", stripHeredoc(`
+	mustMssqlExec("mssqldef_test", stripHeredoc(`
 		CREATE TABLE dbo.v (
 		    v_int int NOT NULL,
 		    v_smallmoney smallmoney,
@@ -1356,7 +1356,7 @@ func TestMssqldefExportConstraint(t *testing.T) {
 	`,
 	)
 
-	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", sql)
+	mustMssqlExec("mssqldef_test", sql)
 
 	out := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")
 	assertEquals(t, out, sql+"GO\n")
@@ -1380,7 +1380,7 @@ func TestMssqldefConfigIncludesTargetTables(t *testing.T) {
 	usersTable := "CREATE TABLE users (id bigint);"
 	users1Table := "CREATE TABLE users_1 (id bigint);"
 	users10Table := "CREATE TABLE users_10 (id bigint);"
-	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", usersTable+users1Table+users10Table)
+	mustMssqlExec("mssqldef_test", usersTable+users1Table+users10Table)
 
 	writeFile("schema.sql", usersTable+users1Table)
 	writeFile("config.yml", "target_tables: |\n  dbo\\.users\n  dbo\\.users_\\d\n")
@@ -1395,7 +1395,7 @@ func TestMssqldefConfigIncludesSkipTables(t *testing.T) {
 	usersTable := "CREATE TABLE users (id bigint);"
 	users1Table := "CREATE TABLE users_1 (id bigint);"
 	users10Table := "CREATE TABLE users_10 (id bigint);"
-	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", usersTable+users1Table+users10Table)
+	mustMssqlExec("mssqldef_test", usersTable+users1Table+users10Table)
 
 	writeFile("schema.sql", usersTable+users1Table)
 	writeFile("config.yml", "skip_tables: |\n  dbo\\.users_10\n")
@@ -1410,7 +1410,7 @@ func TestMssqldefConfigInlineSkipTables(t *testing.T) {
 	usersTable := "CREATE TABLE users (id bigint);"
 	users1Table := "CREATE TABLE users_1 (id bigint);"
 	users10Table := "CREATE TABLE users_10 (id bigint);"
-	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", usersTable+users1Table+users10Table)
+	mustMssqlExec("mssqldef_test", usersTable+users1Table+users10Table)
 
 	writeFile("schema.sql", usersTable+users1Table)
 
@@ -1436,9 +1436,26 @@ func assertApply(t *testing.T, schema string) {
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
-	writeFile("schema.sql", schema)
-	actual := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql")
+	actual := assertApplyOutputWithConfig(t, schema, database.GeneratorConfig{EnableDrop: false})
 	assertEquals(t, actual, expected)
+}
+
+func assertApplyOutputWithConfig(t *testing.T, desiredSchema string, config database.GeneratorConfig) string {
+	t.Helper()
+
+	db, err := connectDatabase()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	sqlParser := mssql.NewParser()
+	output, err := testutils.ApplyWithOutput(db, schema.GeneratorModeMssql, sqlParser, desiredSchema, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return output
 }
 
 func assertApplyOptionsOutput(t *testing.T, schema string, expected string, options ...string) {
@@ -1470,13 +1487,13 @@ func assertEquals(t *testing.T, actual string, expected string) {
 }
 
 func resetTestDatabase() {
-	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "IF NOT EXISTS (SELECT name FROM sys.database_principals WHERE name = 'mssqldef_user') BEGIN CREATE LOGIN mssqldef_user WITH PASSWORD = N'Passw0rd' END;")
-	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "DROP DATABASE IF EXISTS mssqldef_test;")
-	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-Q", "CREATE DATABASE mssqldef_test;")
-	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", "CREATE SCHEMA FOO;")
-	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", "CREATE USER mssqldef_user FOR LOGIN mssqldef_user WITH DEFAULT_SCHEMA = FOO;")
-	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", "ALTER ROLE db_owner ADD MEMBER mssqldef_user;")
-	testutils.MustExecute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-Q", "ALTER AUTHORIZATION ON SCHEMA::FOO TO mssqldef_user;")
+	mustMssqlExec("master", "IF NOT EXISTS (SELECT name FROM sys.server_principals WHERE name = 'mssqldef_user') CREATE LOGIN mssqldef_user WITH PASSWORD = N'Passw0rd'")
+	mustMssqlExec("master", "DROP DATABASE IF EXISTS mssqldef_test")
+	mustMssqlExec("master", "CREATE DATABASE mssqldef_test")
+	mustMssqlExec("mssqldef_test", "CREATE SCHEMA FOO")
+	mustMssqlExec("mssqldef_test", "CREATE USER mssqldef_user FOR LOGIN mssqldef_user WITH DEFAULT_SCHEMA = FOO")
+	mustMssqlExec("mssqldef_test", "ALTER ROLE db_owner ADD MEMBER mssqldef_user")
+	mustMssqlExec("mssqldef_test", "ALTER AUTHORIZATION ON SCHEMA::FOO TO mssqldef_user")
 }
 
 func writeFile(path string, content string) {
@@ -1515,4 +1532,60 @@ func connectDatabaseByUser(user string) (database.Database, error) {
 		Port:     1433,
 		DbName:   "mssqldef_test",
 	})
+}
+
+// mssqlQuery executes a query against the database and returns rows as string
+func mssqlQuery(dbName string, query string) (string, error) {
+	db, err := mssql.NewDatabase(database.Config{
+		User:     "sa",
+		Password: "Passw0rd",
+		Host:     "127.0.0.1",
+		Port:     1433,
+		DbName:   dbName,
+	})
+	if err != nil {
+		return "", err
+	}
+	defer db.Close()
+
+	return testutils.QueryRows(db, query)
+}
+
+// mssqlExec executes a statement against the database (doesn't return rows)
+func mssqlExec(dbName string, statement string) error {
+	db, err := mssql.NewDatabase(database.Config{
+		User:     "sa",
+		Password: "Passw0rd",
+		Host:     "127.0.0.1",
+		Port:     1433,
+		DbName:   dbName,
+	})
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	// Split on GO batch separator (MSSQL-specific, not understood by the driver)
+	// GO must be on its own line
+	batches := regexp.MustCompile(`(?mi)^\s*GO\s*$`).Split(statement, -1)
+
+	for _, batch := range batches {
+		batch = strings.TrimSpace(batch)
+		if batch == "" {
+			continue
+		}
+		_, err = db.DB().Exec(batch)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// mustMssqlExec executes a statement against the database and panics on error
+func mustMssqlExec(dbName string, statement string) {
+	if err := mssqlExec(dbName, statement); err != nil {
+		panic(err)
+	}
 }

@@ -82,7 +82,7 @@ func TestSQLite3defDryRun(t *testing.T) {
 
 func TestSQLite3defDropTable(t *testing.T) {
 	resetTestDatabase()
-	testutils.MustExecute("sqlite3", "sqlite3def_test", stripHeredoc(`
+	mustSqlite3Exec("sqlite3def_test", stripHeredoc(`
 		CREATE TABLE users (
 		    id integer NOT NULL PRIMARY KEY,
 		    age integer
@@ -105,7 +105,7 @@ func TestSQLite3defConfigInlineEnableDrop(t *testing.T) {
 		    age integer
 		);`,
 	)
-	testutils.MustExecute("sqlite3", "sqlite3def_test", ddl)
+	mustSqlite3Exec("sqlite3def_test", ddl)
 
 	writeFile("schema.sql", "")
 
@@ -115,7 +115,7 @@ func TestSQLite3defConfigInlineEnableDrop(t *testing.T) {
 	outFlag := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--enable-drop", "--file", "schema.sql")
 	assertEquals(t, outFlag, expectedOutput)
 
-	testutils.MustExecute("sqlite3", "sqlite3def_test", ddl)
+	mustSqlite3Exec("sqlite3def_test", ddl)
 
 	outConfigInline := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--config-inline", "enable_drop: true", "--file", "schema.sql")
 	assertEquals(t, outConfigInline, expectedOutput)
@@ -126,7 +126,7 @@ func TestSQLite3defExport(t *testing.T) {
 	out := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--export")
 	assertEquals(t, out, "-- No table exists --\n")
 
-	testutils.MustExecute("sqlite3", "sqlite3def_test", stripHeredoc(`
+	mustSqlite3Exec("sqlite3def_test", stripHeredoc(`
 		CREATE TABLE users (
 		    id integer NOT NULL PRIMARY KEY,
 		    age integer
@@ -148,7 +148,7 @@ func TestSQLite3defConfigIncludesTargetTables(t *testing.T) {
 	usersTable := "CREATE TABLE users (id bigint);"
 	users1Table := "CREATE TABLE users_1 (id bigint);"
 	users10Table := "CREATE TABLE users_10 (id bigint);"
-	testutils.MustExecute("sqlite3", "sqlite3def_test", usersTable+users1Table+users10Table)
+	mustSqlite3Exec("sqlite3def_test", usersTable+users1Table+users10Table)
 
 	writeFile("schema.sql", usersTable+users1Table)
 	writeFile("config.yml", "target_tables: |\n  users\n  users_\\d\n")
@@ -163,7 +163,7 @@ func TestSQLite3defConfigIncludesSkipTables(t *testing.T) {
 	usersTable := "CREATE TABLE users (id bigint);"
 	users1Table := "CREATE TABLE users_1 (id bigint);"
 	users10Table := "CREATE TABLE users_10 (id bigint);"
-	testutils.MustExecute("sqlite3", "sqlite3def_test", usersTable+users1Table+users10Table)
+	mustSqlite3Exec("sqlite3def_test", usersTable+users1Table+users10Table)
 
 	writeFile("schema.sql", usersTable+users1Table)
 	writeFile("config.yml", "skip_tables: |\n  users_10\n")
@@ -178,7 +178,7 @@ func TestSQLite3defConfigInlineSkipTables(t *testing.T) {
 	usersTable := "CREATE TABLE users (id bigint);"
 	users1Table := "CREATE TABLE users_1 (id bigint);"
 	users10Table := "CREATE TABLE users_10 (id bigint);"
-	testutils.MustExecute("sqlite3", "sqlite3def_test", usersTable+users1Table+users10Table)
+	mustSqlite3Exec("sqlite3def_test", usersTable+users1Table+users10Table)
 
 	writeFile("schema.sql", usersTable+users1Table)
 
@@ -193,7 +193,7 @@ func TestSQLite3defConfigMerge(t *testing.T) {
 	users1Table := "CREATE TABLE users_1 (id bigint);"
 	users10Table := "CREATE TABLE users_10 (id bigint);"
 	postsTable := "CREATE TABLE posts (id bigint);"
-	testutils.MustExecute("sqlite3", "sqlite3def_test", usersTable+users1Table+users10Table+postsTable)
+	mustSqlite3Exec("sqlite3def_test", usersTable+users1Table+users10Table+postsTable)
 
 	writeFile("schema.sql", usersTable+users1Table+postsTable)
 
@@ -214,7 +214,7 @@ func TestSQLite3defMultipleConfigs(t *testing.T) {
 	users10Table := "CREATE TABLE users_10 (id bigint);"
 	postsTable := "CREATE TABLE posts (id bigint);"
 	commentsTable := "CREATE TABLE comments (id bigint);"
-	testutils.MustExecute("sqlite3", "sqlite3def_test", usersTable+users1Table+users10Table+postsTable+commentsTable)
+	mustSqlite3Exec("sqlite3def_test", usersTable+users1Table+users10Table+postsTable+commentsTable)
 
 	writeFile("schema.sql", usersTable+users1Table+postsTable)
 
@@ -239,7 +239,7 @@ func TestSQLite3defMultipleInlineConfigs(t *testing.T) {
 	users1Table := "CREATE TABLE users_1 (id bigint);"
 	users10Table := "CREATE TABLE users_10 (id bigint);"
 	postsTable := "CREATE TABLE posts (id bigint);"
-	testutils.MustExecute("sqlite3", "sqlite3def_test", usersTable+users1Table+users10Table+postsTable)
+	mustSqlite3Exec("sqlite3def_test", usersTable+users1Table+users10Table+postsTable)
 
 	writeFile("schema.sql", usersTable+users1Table+postsTable)
 
@@ -479,7 +479,7 @@ func TestDeprecatedRenameAnnotation(t *testing.T) {
 	resetTestDatabase()
 
 	// Create initial table with old column name
-	testutils.MustExecute("sqlite3", "sqlite3def_test", stripHeredoc(`
+	mustSqlite3Exec("sqlite3def_test", stripHeredoc(`
 		CREATE TABLE users (
 		    id integer NOT NULL PRIMARY KEY,
 		    username text NOT NULL
@@ -519,7 +519,7 @@ func TestDeprecatedRenameAnnotation(t *testing.T) {
 	}
 
 	// Now test with @renamed (no warning expected)
-	testutils.MustExecute("sqlite3", "sqlite3def_test", stripHeredoc(`
+	mustSqlite3Exec("sqlite3def_test", stripHeredoc(`
 		DROP TABLE users;
 		CREATE TABLE users (
 		    id integer NOT NULL PRIMARY KEY,
@@ -564,9 +564,26 @@ func TestMain(m *testing.M) {
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
-	writeFile("schema.sql", schema)
-	actual := assertedExecute(t, "./sqlite3def", "sqlite3def_test", "--file", "schema.sql")
+	actual := assertApplyOutputWithConfig(t, schema, database.GeneratorConfig{EnableDrop: false})
 	assertEquals(t, actual, expected)
+}
+
+func assertApplyOutputWithConfig(t *testing.T, desiredSchema string, config database.GeneratorConfig) string {
+	t.Helper()
+
+	db, err := connectDatabase()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	sqlParser := database.NewParser(parser.ParserModeSQLite3)
+	output, err := testutils.ApplyWithOutput(db, schema.GeneratorModeSQLite3, sqlParser, desiredSchema, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return output
 }
 
 func assertApplyOptionsOutput(t *testing.T, schema string, expected string, options ...string) {
@@ -628,6 +645,40 @@ func connectDatabase() (database.Database, error) {
 	return sqlite3.NewDatabase(database.Config{
 		DbName: "sqlite3def_test",
 	})
+}
+
+// sqlite3Query executes a query against the database and returns rows as string
+func sqlite3Query(dbName string, query string) (string, error) {
+	db, err := sqlite3.NewDatabase(database.Config{
+		DbName: dbName,
+	})
+	if err != nil {
+		return "", err
+	}
+	defer db.Close()
+
+	return testutils.QueryRows(db, query)
+}
+
+// sqlite3Exec executes a statement against the database (doesn't return rows)
+func sqlite3Exec(dbName string, statement string) error {
+	db, err := sqlite3.NewDatabase(database.Config{
+		DbName: dbName,
+	})
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = db.DB().Exec(statement)
+	return err
+}
+
+// mustSqlite3Exec executes a statement against the database and panics on error
+func mustSqlite3Exec(dbName string, statement string) {
+	if err := sqlite3Exec(dbName, statement); err != nil {
+		panic(err)
+	}
 }
 
 func TestSQLite3defConfigOrderPreserved(t *testing.T) {
