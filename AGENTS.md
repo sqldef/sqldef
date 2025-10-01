@@ -13,7 +13,7 @@ Each command follows the same pattern: it accepts connection parameters similar 
 
 Build all `*def` commands:
 
-```bash
+```sh
 make build
 ```
 
@@ -23,7 +23,7 @@ The compiled binaries will be placed in the `build/$os-$arch$/` directory.
 
 To have trial and error locally, you can use the following commands:
 
-```bash
+```sh
 # psqldef
 build/$os-$arch$/psqldef psqldef_test [args...]
 
@@ -43,24 +43,30 @@ For development iterations, use these commands to run tests:
 
 ### Run all tests
 
-```bash
+```sh
 make test
 ```
 
 ### Run tests for specific `*def` tools
 
-```bash
+```sh
 go test ./cmd/mysqldef
 go test ./cmd/psqldef
 go test ./cmd/sqlite3def
 go test ./cmd/mssqldef
 ```
 
+For MariaDB testing locally:
+
+```sh
+MYSQL_FLAVOR=mariadb MYSQL_PORT=3307 go test ./cmd/mysqldef
+```
+
 ### Run individual tests
 
 Use the `-run` flag with a regex pattern to run specific test cases:
 
-```bash
+```sh
 # Run a specific test (runs test cases matching CreateTable* defined in the YAML test files)
 go test ./cmd/mysqldef -run=TestApply/CreateTable
 
@@ -77,7 +83,7 @@ For schema management tests, in most cases you only need to edit the YAML test f
 ### Best Practices
 
 1. **Use consistent prefixes**: When adding related test cases, use the same prefix for test names. This allows you to run all related tests with a simple pattern:
-   ```bash
+   ```sh
    # Example: Testing all index-related features
    go test ./cmd/psqldef -run='TestApply/Index.*'
    ```

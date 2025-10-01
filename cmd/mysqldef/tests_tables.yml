@@ -669,6 +669,7 @@ CreateWithNonReservedKeywordColumns:
 
 CreateTableWithFunctionalIndex:
   # https://blogs.oracle.com/mysql/post/functional-indexes-in-mysql
+  flavor: mysql
   min_version: '8.0'
   desired: |
     CREATE TABLE `app_badge_tag` (
