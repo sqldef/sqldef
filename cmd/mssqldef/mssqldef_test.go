@@ -1548,48 +1548,7 @@ func mssqlQuery(dbName string, query string) (string, error) {
 	}
 	defer db.Close()
 
-	rows, err := db.DB().Query(query)
-	if err != nil {
-		return "", err
-	}
-	defer rows.Close()
-
-	// Build result string
-	var result strings.Builder
-	columns, err := rows.Columns()
-	if err != nil {
-		return "", err
-	}
-
-	values := make([]any, len(columns))
-	valuePtrs := make([]any, len(columns))
-	for i := range values {
-		valuePtrs[i] = &values[i]
-	}
-
-	for rows.Next() {
-		if err := rows.Scan(valuePtrs...); err != nil {
-			return "", err
-		}
-
-		for i, val := range values {
-			if i > 0 {
-				result.WriteString("\t")
-			}
-			if val != nil {
-				// Handle []byte values properly (convert to string)
-				switch v := val.(type) {
-				case []byte:
-					result.WriteString(string(v))
-				default:
-					result.WriteString(fmt.Sprintf("%v", v))
-				}
-			}
-		}
-		result.WriteString("\n")
-	}
-
-	return result.String(), nil
+	return testutils.QueryRows(db, query)
 }
 
 // mssqlExec executes a statement against the database (doesn't return rows)
