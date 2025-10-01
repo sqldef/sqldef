@@ -666,3 +666,29 @@ CreateWithNonReservedKeywordColumns:
     insert into test_log(age, definer, invoker, policy, type, status, zone) values (NEW.age, NEW.definer, NEW.invoker, NEW.policy, NEW.type, NEW.status, NEW.zone);
     update test_log set status = NEW.status, type = NEW.type, zone = NEW.zone, policy = NEW.policy where definer = NEW.definer and invoker = NEW.invoker;
     end;
+
+CreateTableWithFunctionalIndex:
+  # https://blogs.oracle.com/mysql/post/functional-indexes-in-mysql
+  min_version: '8.0'
+  desired: |
+    CREATE TABLE `app_badge_tag` (
+    `tag_id` varchar(255) NOT NULL,
+    `badge_id` varchar(32) NOT NULL,
+    `design_id` varchar(255) DEFAULT NULL,
+    `color_id` varchar(255) DEFAULT NULL,
+    `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`tag_id`),
+    UNIQUE KEY `app_badge_tag_pk` (`badge_id`,((case when (`design_id` is null) then _utf8mb4'' else `design_id` end)),((case when (`color_id` is null) then _utf8mb4'' else `color_id` end))),
+    KEY `app_badge_tag_design_id_index` (`design_id`)
+    );
+  output: |
+    CREATE TABLE `app_badge_tag` (
+    `tag_id` varchar(255) NOT NULL,
+    `badge_id` varchar(32) NOT NULL,
+    `design_id` varchar(255) DEFAULT NULL,
+    `color_id` varchar(255) DEFAULT NULL,
+    `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`tag_id`),
+    UNIQUE KEY `app_badge_tag_pk` (`badge_id`,((case when (`design_id` is null) then _utf8mb4'' else `design_id` end)),((case when (`color_id` is null) then _utf8mb4'' else `color_id` end))),
+    KEY `app_badge_tag_design_id_index` (`design_id`)
+    );
