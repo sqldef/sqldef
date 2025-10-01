@@ -1,3 +1,7 @@
+## [v3.1.8](https://github.com/sqldef/sqldef/compare/v3.1.7...v3.1.8) - 2025-10-01
+- handle functional indexes (MySQL 8.0.13+) by @gfx in https://github.com/sqldef/sqldef/pull/836
+- psqldef: handle table-level constrains and column-level constraints correctly by @gfx in https://github.com/sqldef/sqldef/pull/838
+
 ## [v3.1.7](https://github.com/sqldef/sqldef/compare/v3.1.6...v3.1.7) - 2025-10-01
 - [security] set dependabot cooldown days by @gfx in https://github.com/sqldef/sqldef/pull/824
 - Bump golang.org/x/sync from 0.16.0 to 0.17.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/826
