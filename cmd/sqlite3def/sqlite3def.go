@@ -26,16 +26,17 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	var configs []database.GeneratorConfig
 
 	var opts struct {
-		File       []string `short:"f" long:"file" description:"Read desired SQL from the file, rather than stdin" value-name:"filename" default:"-"`
+		File       []string `short:"f" long:"file" description:"Read desired SQL from the file, rather than stdin" value-name:"FILENAME" default:"-"`
 		DryRun     bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
 		Export     bool     `long:"export" description:"Just dump the current schema to stdout"`
 		EnableDrop bool     `long:"enable-drop" description:"Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE"`
-		Help       bool     `long:"help" description:"Show this help"`
-		Version    bool     `long:"version" description:"Show this version"`
 
 		// Custom handlers for config flags to preserve order
-		Config       func(string) `long:"config" description:"YAML configuration file (can be specified multiple times)"`
-		ConfigInline func(string) `long:"config-inline" description:"YAML configuration as inline string (can be specified multiple times)"`
+		Config       func(string) `long:"config" description:"YAML configuration file (can be specified multiple times)" value-name:"PATH"`
+		ConfigInline func(string) `long:"config-inline" description:"YAML configuration as inline string (can be specified multiple times)" value-name:"YAML"`
+
+		Help    bool `long:"help" description:"Show this help"`
+		Version bool `long:"version" description:"Show version information"`
 	}
 
 	opts.Config = func(path string) {

@@ -326,3 +326,35 @@ TriggerUseReservedWordsAsColumn:
     set NEW.status = 0;
     set NEW.interval = 0;
     end;
+TriggerSubtractionWithoutSpace:
+  desired: |
+    CREATE TABLE test_trigger (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      `status` int(4),
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+    CREATE TRIGGER `test_trigger_BEFORE_INSERT` before insert ON `test_trigger` FOR EACH ROW begin
+    set NEW.status = 1+1-1;
+    end;
+  output: |
+    CREATE TABLE test_trigger (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      `status` int(4),
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+    CREATE TRIGGER `test_trigger_BEFORE_INSERT` before insert ON `test_trigger` FOR EACH ROW begin
+    set NEW.status = 1 + 1 - 1;
+    end;
+TriggerNonReservedWordInInsertList:
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text
+    );
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      `status` int,
+      `off` int
+    );
+    CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(status, off) values (0, 0);
+

@@ -1,3 +1,53 @@
+## [v3.1.6](https://github.com/sqldef/sqldef/compare/v3.1.5...v3.1.6) - 2025-09-30
+- psqldef test: clean up test code by @gfx in https://github.com/sqldef/sqldef/pull/822
+
+## [v3.1.5](https://github.com/sqldef/sqldef/compare/v3.1.4...v3.1.5) - 2025-09-29
+- [doc] update AGENTS.md with cmmand line examples by @gfx in https://github.com/sqldef/sqldef/pull/817
+- doc: update Supportd Features sections by @gfx in https://github.com/sqldef/sqldef/pull/819
+- Allow non-reserved keywords in insert list by @osjupiter in https://github.com/sqldef/sqldef/pull/821
+
+## [v3.1.4](https://github.com/sqldef/sqldef/compare/v3.1.3...v3.1.4) - 2025-09-29
+- Fix foreign key recreation when dropping referencing tables by @gfx in https://github.com/sqldef/sqldef/pull/815
+
+## [v3.1.3](https://github.com/sqldef/sqldef/compare/v3.1.2...v3.1.3) - 2025-09-28
+- doc: improve `--help` and docs by @gfx in https://github.com/sqldef/sqldef/pull/813
+
+## [v3.1.2](https://github.com/sqldef/sqldef/compare/v3.1.1...v3.1.2) - 2025-09-28
+- fix: Allow reserved keywords as column names in INSERT statements by @osjupiter in https://github.com/sqldef/sqldef/pull/811
+
+## [v3.1.1](https://github.com/sqldef/sqldef/compare/v3.1.0...v3.1.1) - 2025-09-28
+- fix mysql's primary key nullability issues by @gfx in https://github.com/sqldef/sqldef/pull/808
+
+## [v3.1.0](https://github.com/sqldef/sqldef/compare/v3.0.8...v3.1.0) - 2025-09-27
+- fix: handle foreign key dependencies correctly by @gfx in https://github.com/sqldef/sqldef/pull/805
+- chore: prefer using string.EqualFold() for case-insensitive comparisons by @gfx in https://github.com/sqldef/sqldef/pull/807
+
+## [v3.0.8](https://github.com/sqldef/sqldef/compare/v3.0.7...v3.0.8) - 2025-09-27
+- mssqldef: Support RETURN statement by @chi-bd in https://github.com/sqldef/sqldef/pull/803
+
+## [v3.0.7](https://github.com/sqldef/sqldef/compare/v3.0.6...v3.0.7) - 2025-09-27
+- mssqldef: Support compound conditions in IF and WHILE statements by @chi-bd in https://github.com/sqldef/sqldef/pull/801
+
+## [v3.0.6](https://github.com/sqldef/sqldef/compare/v3.0.5...v3.0.6) - 2025-09-26
+- ci: add -draft to ghr options in order to work with Immutable Releases by @gfx in https://github.com/sqldef/sqldef/pull/799
+
+## [v3.0.5](https://github.com/sqldef/sqldef/compare/v3.0.4...v3.0.5) - 2025-09-26
+- mssqldef: Support EXECUTE with OUTPUT by @chi-bd in https://github.com/sqldef/sqldef/pull/791
+- let sqldef.yml immutable-release ready by @gfx in https://github.com/sqldef/sqldef/pull/793
+- chore: s/parser-integrity/integrity/ by @gfx in https://github.com/sqldef/sqldef/pull/794
+- for security reasons, it's better to declare permissions for each workflow by @gfx in https://github.com/sqldef/sqldef/pull/795
+- doc: mention to docker hub by @gfx in https://github.com/sqldef/sqldef/pull/796
+- ci: run packaging jobs only for tags by @gfx in https://github.com/sqldef/sqldef/pull/797
+- fix use of ghr when tagpr's release PR is not used by @gfx in https://github.com/sqldef/sqldef/pull/798
+
+## [v3.0.4](https://github.com/sqldef/sqldef/compare/v3.0.3...v3.0.4) - 2025-09-26
+- [CI] add parser-integrity job by @gfx in https://github.com/sqldef/sqldef/pull/789
+- Handle negative values in parser instead of tokenizer by @osjupiter in https://github.com/sqldef/sqldef/pull/788
+
+## [v3.0.3](https://github.com/sqldef/sqldef/compare/v3.0.2...v3.0.3) - 2025-09-26
+- add status to reserved keyword list by @osjupiter in https://github.com/sqldef/sqldef/pull/784
+- [package] use -9 for compress artifacts by @gfx in https://github.com/sqldef/sqldef/pull/786
+
 ## [v3.0.2](https://github.com/sqldef/sqldef/compare/v3.0.1...v3.0.2) - 2025-09-24
 - mysqldef: allow update statements without from clause inside triggers https://github.com/sqldef/sqldef/pull/781
 

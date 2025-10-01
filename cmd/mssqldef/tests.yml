@@ -538,6 +538,40 @@ DanglingElse:
     begin
     set nocount off
     end;
+Execute:
+  desired: |
+    CREATE TABLE users (
+        id bigint NOT NULL,
+        name text
+    );
+    CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
+    declare
+    @o1 int
+    exec sp_executesql N'SELECT @o1 = @p1', N'@p1 int, @o1 int output', 1, @o1 output
+    execute ('SELECT 1');
+IfWhileCompoundConditions:
+  desired: |
+    CREATE TABLE users (
+        id bigint NOT NULL,
+        name text
+    );
+    CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
+    while (1 = 1 and 2 = 2)
+    begin
+    if (not 1 = 1)
+    set nocount on
+    else
+    set nocount off
+    end;
+Return:
+  desired: |
+    CREATE TABLE users (
+        id bigint NOT NULL,
+        name text
+    );
+    CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
+    if (1 = 1)
+    return;
 RenameColumn:
   current: |
     CREATE TABLE users (
@@ -710,3 +744,18 @@ RenameUniqueConstraint:
     );
   output: |
     EXEC sp_rename 'users.old_unique_email', 'unique_email', 'INDEX';
+
+IdentityWithNegativeValue:
+  desired: |
+    CREATE TABLE test_identity_negative1 (
+      id int IDENTITY(-100, -5) NOT NULL
+    );
+    CREATE TABLE test_identity_negative2 (
+      id bigint IDENTITY(-1, 1) NOT NULL
+    );
+    CREATE TABLE test_identity_negative3 (
+      id int IDENTITY(0, -1) NOT NULL
+    );
+    CREATE TABLE test_identity_negative4 (
+      id bigint IDENTITY(-1000, -10) NOT NULL
+    );

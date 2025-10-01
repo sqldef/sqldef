@@ -4,7 +4,7 @@ This project provides four schema management commands:
 
 - **mysqldef** - MySQL schema management (mimics `mysql` CLI options)
 - **psqldef** - PostgreSQL schema management (mimics `psql` CLI options)
-- **mssqldef** - SQL Server schema management (mimics SQL Server CLI options)
+- **mssqldef** - SQL Server schema management (mimics `sqlcmd` CLI options)
 - **sqlite3def** - SQLite3 schema management (mimics `sqlite3` CLI options)
 
 Each command follows the same pattern: it accepts connection parameters similar to those of the corresponding database CLI tool and applies schema changes idempotently.
@@ -17,16 +17,25 @@ Build all `*def` commands:
 make build
 ```
 
-Build individual commands:
+The compiled binaries will be placed in the `build/$os-$arch$/` directory.
+
+## Local Development
+
+To have trial and error locally, you can use the following commands:
 
 ```bash
-make build-mysqldef
-make build-psqldef
-make build-sqlite3def
-make build-mssqldef
-```
+# psqldef
+build/$os-$arch$/psqldef psqldef_test [args...]
 
-The compiled binaries will be placed in the `build/<os>-<arch>/` directory.
+# mysqldef
+build/$os-$arch$/mysqldef mysqldef_test [args...]
+
+# mssqldef (password is mandatory)
+build/$os-$arch$/mssqldef -PPassw0rd mssqldef_test [args...]
+
+# sqlite3def
+build/$os-$arch$/sqlite3def sqlite3def.db [args...]
+```
 
 ## Running Tests
 

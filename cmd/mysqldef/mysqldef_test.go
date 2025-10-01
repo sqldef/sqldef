@@ -6,6 +6,8 @@
 package main
 
 import (
+	"database/sql"
+	"fmt"
 	"log"
 	"os"
 	"regexp"
@@ -13,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/sqldef/sqldef/v3/cmd/testutils"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/database/mysql"
@@ -88,8 +91,7 @@ func TestApply(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	args := append(getMySQLArgs(), "-sN", "-e", "select version();")
-	version := strings.TrimSpace(testutils.MustExecute("mysql", args...))
+	version := mustGetMySQLVersion()
 	sqlParser := database.NewParser(parser.ParserModeMysql)
 
 	// Get MySQL flavor for test filtering
@@ -98,8 +100,8 @@ func TestApply(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Initialize the database with test.Current
-			args := append(getMySQLArgs(), "-e", "DROP DATABASE IF EXISTS mysqldef_test; CREATE DATABASE mysqldef_test;")
-			testutils.MustExecute("mysql", args...)
+			mustMysqlExec("", "DROP DATABASE IF EXISTS mysqldef_test")
+			mustMysqlExec("", "CREATE DATABASE mysqldef_test")
 
 			testutils.RunTest(t, db, test, schema.GeneratorModeMysql, sqlParser, version, mysqlFlavor)
 		})
@@ -186,8 +188,7 @@ func TestMysqldefExport(t *testing.T) {
 		") ENGINE=InnoDB DEFAULT CHARSET=latin1;\n" +
 		"\n" +
 		"CREATE TRIGGER test AFTER INSERT ON users FOR EACH ROW UPDATE users SET updated_at = current_timestamp();\n"
-	args := append(getMySQLArgs("mysqldef_test"), "-e", ddls)
-	testutils.MustExecute("mysql", args...)
+	mustMysqlExec("mysqldef_test", ddls)
 	out = assertedExecuteMySQLDef(t, "mysqldef_test", "--export")
 	expectedDDLs := adjustDDLForFlavor(ddls)
 	assertEquals(t, out, expectedDDLs)
@@ -207,8 +208,7 @@ func TestMysqldefExportConcurrently(t *testing.T) {
 		"CREATE TABLE `users_3` (\n" +
 		"  `name` varchar(40) DEFAULT NULL\n" +
 		") ENGINE=InnoDB DEFAULT CHARSET=latin1;\n"
-	args := append(getMySQLArgs("mysqldef_test"), "-e", ddls)
-	testutils.MustExecute("mysql", args...)
+	mustMysqlExec("mysqldef_test", ddls)
 
 	outputDefault := assertedExecuteMySQLDef(t, "mysqldef_test", "--export")
 
@@ -239,8 +239,7 @@ func TestMysqldefDropTable(t *testing.T) {
                  name varchar(40),
                  created_at datetime NOT NULL
                ) DEFAULT CHARSET=latin1;`)
-	args := append(getMySQLArgs("mysqldef_test"), "-e", ddl)
-	testutils.MustExecute("mysql", args...)
+	mustMysqlExec("mysqldef_test", ddl)
 
 	writeFile("schema.sql", "")
 
@@ -256,8 +255,7 @@ func TestMysqldefConfigInlineEnableDrop(t *testing.T) {
                  name varchar(40),
                  created_at datetime NOT NULL
                ) DEFAULT CHARSET=latin1;`)
-	args := append(getMySQLArgs("mysqldef_test"), "-e", ddl)
-	testutils.MustExecute("mysql", args...)
+	mustMysqlExec("mysqldef_test", ddl)
 
 	writeFile("schema.sql", "")
 
@@ -267,7 +265,7 @@ func TestMysqldefConfigInlineEnableDrop(t *testing.T) {
 	outFlag := assertedExecuteMySQLDef(t, "mysqldef_test", "--enable-drop", "--file", "schema.sql")
 	assertEquals(t, outFlag, expectedOutput)
 
-	testutils.MustExecute("mysql", append(getMySQLArgs("mysqldef_test"), "-e", ddl)...)
+	mustMysqlExec("mysqldef_test", ddl)
 
 	outConfigInline := assertedExecuteMySQLDef(t, "mysqldef_test", "--config-inline", "enable_drop: true", "--file", "schema.sql")
 	assertEquals(t, outConfigInline, expectedOutput)
@@ -279,8 +277,7 @@ func TestMysqldefSkipView(t *testing.T) {
 	createTable := "CREATE TABLE users (id bigint(20));\n"
 	createView := "CREATE VIEW user_views AS SELECT id from users;\n"
 
-	args := append(getMySQLArgs("mysqldef_test"), "-e", createTable+createView)
-	testutils.MustExecute("mysql", args...)
+	mustMysqlExec("mysqldef_test", createTable+createView)
 
 	writeFile("schema.sql", createTable)
 
@@ -307,7 +304,21 @@ func TestMysqldefBeforeApply(t *testing.T) {
 	)
 	writeFile("schema.sql", createTable)
 	apply := assertedExecuteMySQLDef(t, "mysqldef_test", "--file", "schema.sql", "--before-apply", beforeApply)
-	assertEquals(t, apply, applyPrefix+"BEGIN;\n"+beforeApply+"\n"+createTable+"\nCOMMIT;\n")
+	// Tables should be sorted by dependencies, so 'b' comes before 'a'
+	sortedCreateTable := stripHeredoc(`
+	CREATE TABLE b (
+		id int(11) NOT NULL AUTO_INCREMENT,
+		a_id int(11) NOT NULL,
+		PRIMARY KEY (id)
+	) ENGINE = InnoDB DEFAULT CHARSET = utf8;
+	CREATE TABLE a (
+		id int(11) NOT NULL AUTO_INCREMENT,
+		b_id int(11) NOT NULL,
+		PRIMARY KEY (id),
+		CONSTRAINT a FOREIGN KEY (b_id) REFERENCES b (id)
+	) ENGINE = InnoDB DEFAULT CHARSET = utf8;`,
+	)
+	assertEquals(t, apply, applyPrefix+"BEGIN;\n"+beforeApply+"\n"+sortedCreateTable+"\nCOMMIT;\n")
 	apply = assertedExecuteMySQLDef(t, "mysqldef_test", "--file", "schema.sql", "--before-apply", beforeApply)
 	assertEquals(t, apply, nothingModified)
 }
@@ -318,8 +329,7 @@ func TestMysqldefConfigIncludesTargetTables(t *testing.T) {
 	usersTable := "CREATE TABLE users (id bigint);"
 	users1Table := "CREATE TABLE users_1 (id bigint);"
 	users10Table := "CREATE TABLE users_10 (id bigint);"
-	args := append(getMySQLArgs("mysqldef_test"), "-e", usersTable+users1Table+users10Table)
-	testutils.MustExecute("mysql", args...)
+	mustMysqlExec("mysqldef_test", usersTable+users1Table+users10Table)
 
 	writeFile("schema.sql", usersTable+users1Table)
 	writeFile("config.yml", "target_tables: |\n  users\n  users_\\d\n")
@@ -334,8 +344,7 @@ func TestMysqldefConfigIncludesSkipTables(t *testing.T) {
 	usersTable := "CREATE TABLE users (id bigint);"
 	users1Table := "CREATE TABLE users_1 (id bigint);"
 	users10Table := "CREATE TABLE users_10 (id bigint);"
-	args := append(getMySQLArgs("mysqldef_test"), "-e", usersTable+users1Table+users10Table)
-	testutils.MustExecute("mysql", args...)
+	mustMysqlExec("mysqldef_test", usersTable+users1Table+users10Table)
 
 	writeFile("schema.sql", usersTable+users1Table)
 	writeFile("config.yml", "skip_tables: |\n  users_10\n")
@@ -350,8 +359,7 @@ func TestMysqldefConfigInlineSkipTables(t *testing.T) {
 	usersTable := "CREATE TABLE users (id bigint);"
 	users1Table := "CREATE TABLE users_1 (id bigint);"
 	users10Table := "CREATE TABLE users_10 (id bigint);"
-	args := append(getMySQLArgs("mysqldef_test"), "-e", usersTable+users1Table+users10Table)
-	testutils.MustExecute("mysql", args...)
+	mustMysqlExec("mysqldef_test", usersTable+users1Table+users10Table)
 
 	writeFile("schema.sql", usersTable+users1Table)
 
@@ -473,9 +481,26 @@ func assertApply(t *testing.T, schema string) {
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
-	writeFile("schema.sql", schema)
-	actual := assertedExecuteMySQLDef(t, "mysqldef_test", "--file", "schema.sql")
+	actual := assertApplyOutputWithConfig(t, schema, database.GeneratorConfig{EnableDrop: false})
 	assertEquals(t, actual, expected)
+}
+
+func assertApplyOutputWithConfig(t *testing.T, desiredSchema string, config database.GeneratorConfig) string {
+	t.Helper()
+
+	db, err := connectDatabase()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	sqlParser := database.NewParser(parser.ParserModeMysql)
+	output, err := testutils.ApplyWithOutput(db, schema.GeneratorModeMysql, sqlParser, desiredSchema, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return output
 }
 
 func assertApplyOptionsOutput(t *testing.T, schema string, expected string, options ...string) {
@@ -517,12 +542,10 @@ func assertEquals(t *testing.T, actual string, expected string) {
 
 func resetTestDatabase() {
 	// Drop database if it exists (don't specify database name in connection)
-	args1 := append(getMySQLArgs(), "-e", "DROP DATABASE IF EXISTS mysqldef_test;")
-	testutils.MustExecute("mysql", args1...)
+	mustMysqlExec("", "DROP DATABASE IF EXISTS mysqldef_test")
 
 	// Then recreate the database
-	args2 := append(getMySQLArgs(), "-e", "CREATE DATABASE mysqldef_test;")
-	testutils.MustExecute("mysql", args2...)
+	mustMysqlExec("", "CREATE DATABASE mysqldef_test")
 }
 
 func writeFile(path string, content string) {
@@ -550,4 +573,63 @@ func connectDatabase() (database.Database, error) {
 		Port:   getMySQLPort(),
 		DbName: "mysqldef_test",
 	})
+}
+
+// mysqlQuery executes a query against the database and returns rows as string
+func mysqlQuery(dbName string, query string) (string, error) {
+	db, err := mysql.NewDatabase(database.Config{
+		User:   "root",
+		Host:   "127.0.0.1",
+		Port:   getMySQLPort(),
+		DbName: dbName,
+	})
+	if err != nil {
+		return "", err
+	}
+	defer db.Close()
+
+	return testutils.QueryRows(db, query)
+}
+
+// mysqlExec executes a statement (or multiple statements) against the database
+func mysqlExec(dbName string, statement string) error {
+	// Build DSN with multiStatements=true to support executing multiple statements
+	dsn := fmt.Sprintf("root@tcp(127.0.0.1:%d)/%s?multiStatements=true", getMySQLPort(), dbName)
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = db.Exec(statement)
+	return err
+}
+
+// mustMysqlExec executes a statement against the database and panics on error
+func mustMysqlExec(dbName string, statement string) {
+	if err := mysqlExec(dbName, statement); err != nil {
+		panic(err)
+	}
+}
+
+// mustGetMySQLVersion retrieves the MySQL server version and panics on error
+func mustGetMySQLVersion() string {
+	db, err := mysql.NewDatabase(database.Config{
+		User:   "root",
+		Host:   "127.0.0.1",
+		Port:   getMySQLPort(),
+		DbName: "mysqldef_test",
+	})
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	var version string
+	err = db.DB().QueryRow("SELECT version()").Scan(&version)
+	if err != nil {
+		panic(err)
+	}
+
+	return strings.TrimSpace(version)
 }

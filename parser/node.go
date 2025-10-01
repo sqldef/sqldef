@@ -108,6 +108,8 @@ func (*OtherRead) iStatement()      {}
 func (*OtherAdmin) iStatement()     {}
 func (*SetBoolOption) iStatement()  {}
 func (*MultiStatement) iStatement() {}
+func (*Exec) iStatement()           {}
+func (*Return) iStatement()         {}
 
 // ParenSelect can actually not be a top level statement,
 // but we have to allow it because it's a requirement
@@ -421,6 +423,35 @@ func (node *MultiStatement) Format(buf *nodeBuffer) {
 			buf.WriteString("; ")
 		}
 		stmt.Format(buf)
+	}
+}
+
+// Exec represents a EXEC statement.
+type Exec struct {
+	Action string // EXEC or EXECUTE
+	Name   ColIdent
+	Exprs  Exprs
+}
+
+// Format formats the Exec
+func (node *Exec) Format(buf *nodeBuffer) {
+	if node.Name.isEmpty() {
+		buf.Printf("%s (%v)", node.Action, node.Exprs)
+		return
+	}
+	buf.Printf("%s %s %v", node.Action, node.Name.String(), node.Exprs)
+}
+
+// Return represents a RETURN statement.
+type Return struct {
+	Expr Expr
+}
+
+// Format formats the node.
+func (node *Return) Format(buf *nodeBuffer) {
+	buf.WriteString("return")
+	if node.Expr != nil {
+		buf.Printf(" %v", node.Expr)
 	}
 }
 
@@ -1443,6 +1474,7 @@ func (*Default) iExpr()             {}
 func (*ArrayConstructor) iExpr()    {}
 func (*FuncCallExpr) iExpr()        {}
 func (*NextSeqValExpr) iExpr()      {}
+func (*SuffixExpr) iExpr()          {}
 
 // Exprs represents a list of value expressions.
 // It's not a valid expression because it's not parenthesized.
@@ -2193,7 +2225,7 @@ func (node *Order) Format(buf *nodeBuffer) {
 		return
 	}
 	if node, ok := node.Expr.(*FuncExpr); ok {
-		if node.Name.lowered() == "rand" {
+		if node.Name.equalString("rand") {
 			buf.Printf("%v", node)
 			return
 		}
@@ -2318,6 +2350,17 @@ func (node OnDup) Format(buf *nodeBuffer) {
 	buf.Printf(" on duplicate key update %v", UpdateExprs(node))
 }
 
+// SuffixExpr represents Suffix operator like a 'OUTPUT'.
+type SuffixExpr struct {
+	Expr   Expr
+	Suffix string
+}
+
+// Format formats the node.
+func (node *SuffixExpr) Format(buf *nodeBuffer) {
+	buf.Printf("%v %s", node.Expr, node.Suffix)
+}
+
 // ColIdent is a case insensitive SQL identifier. It will be escaped with
 // backquotes if necessary.
 type ColIdent struct {
@@ -2369,7 +2412,7 @@ func (node ColIdent) lowered() string {
 
 // equalString performs a case-insensitive compare with str.
 func (node ColIdent) equalString(str string) bool {
-	return node.lowered() == strings.ToLower(str)
+	return strings.EqualFold(node.val, str)
 }
 
 type DeclareType int

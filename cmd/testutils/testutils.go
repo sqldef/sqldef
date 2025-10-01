@@ -3,6 +3,7 @@ package testutils
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -27,6 +28,7 @@ type TestCase struct {
 	Flavor       string   // database flavor (e.g., "mariadb", "mysql")
 	ManagedRoles []string `yaml:"managed_roles"` // Roles whose privileges are managed by sqldef
 	EnableDrop   *bool    `yaml:"enable_drop"`   // Whether to enable DROP/REVOKE operations
+	ApplyOnly    bool     `yaml:"apply_only"`    // Whether to only test that the schema applies successfully, without checking exact DDL output
 	Config       struct { // Optional config settings for the test
 		CreateIndexConcurrently bool `yaml:"create_index_concurrently"`
 	} `yaml:"config"`
@@ -144,11 +146,16 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := *test.Output
-	actual := joinDDLs(ddls)
-	if expected != actual {
-		t.Errorf("Migration output doesn't match expected.\n\nExpected DDLs:\n```\n%s```\n\nActual DDLs:\n```\n%s```", expected, actual)
+
+	// Skip output comparison if ApplyOnly is set
+	if !test.ApplyOnly {
+		expected := *test.Output
+		actual := joinDDLs(ddls)
+		if expected != actual {
+			t.Errorf("Migration output doesn't match expected.\n\nExpected DDLs:\n```\n%s```\n\nActual DDLs:\n```\n%s```", expected, actual)
+		}
 	}
+
 	err = runDDLs(db, ddls, *test.EnableDrop)
 	if err != nil {
 		t.Fatal(err)
@@ -206,6 +213,8 @@ func splitDDLs(mode schema.GeneratorMode, sqlParser database.Parser, str string,
 		return nil, err
 	}
 
+	statements = schema.SortTablesByDependencies(statements)
+
 	var ddls []string
 	for _, statement := range statements {
 		ddls = append(ddls, statement.Statement())
@@ -245,4 +254,105 @@ func Execute(command string, args ...string) (string, error) {
 	cmd := exec.Command(command, args...)
 	out, err := cmd.CombinedOutput()
 	return strings.ReplaceAll(string(out), "\r\n", "\n"), err
+}
+
+type stringLogger struct {
+	buf strings.Builder
+}
+
+func (l *stringLogger) Print(v ...any) {
+	l.buf.WriteString(fmt.Sprint(v...))
+}
+
+func (l *stringLogger) Printf(format string, v ...any) {
+	l.buf.WriteString(fmt.Sprintf(format, v...))
+}
+
+func (l *stringLogger) Println(v ...any) {
+	l.buf.WriteString(fmt.Sprint(v...))
+	l.buf.WriteString("\n")
+}
+
+func (l *stringLogger) String() string {
+	return l.buf.String()
+}
+
+// ApplyWithOutput applies desired DDLs to a database and returns the CLI output format
+// This mimics the behavior of running psqldef/mysqldef/etc from the command line
+func ApplyWithOutput(db database.Database, mode schema.GeneratorMode, sqlParser database.Parser, desiredDDLs string, config database.GeneratorConfig) (string, error) {
+	db.SetGeneratorConfig(config)
+
+	currentDDLs, err := db.DumpDDLs()
+	if err != nil {
+		return "", err
+	}
+
+	ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, desiredDDLs, currentDDLs, config, db.GetDefaultSchema())
+	if err != nil {
+		return "", err
+	}
+
+	if len(ddls) == 0 {
+		return "-- Nothing is modified --\n", nil
+	}
+
+	logger := &stringLogger{}
+	var ddlSuffix string
+	if mode == schema.GeneratorModeMssql {
+		ddlSuffix = "GO\n"
+	} else {
+		ddlSuffix = ""
+	}
+
+	err = database.RunDDLs(db, ddls, config.EnableDrop, "" /* beforeApply */, ddlSuffix, logger)
+	if err != nil {
+		return "", err
+	}
+
+	return logger.String(), nil
+}
+
+// QueryRows executes a query and returns the results as a tab-separated string.
+// This is a common helper for all *Query functions in *def_test.go files.
+func QueryRows(db database.Database, query string) (string, error) {
+	rows, err := db.DB().Query(query)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	var result strings.Builder
+	columns, err := rows.Columns()
+	if err != nil {
+		return "", err
+	}
+
+	values := make([]any, len(columns))
+	valuePtrs := make([]any, len(columns))
+	for i := range values {
+		valuePtrs[i] = &values[i]
+	}
+
+	for rows.Next() {
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return "", err
+		}
+
+		for i, val := range values {
+			if i > 0 {
+				result.WriteString("\t")
+			}
+			if val != nil {
+				switch v := val.(type) {
+				case []byte:
+					result.WriteString(string(v))
+				default:
+					result.WriteString(fmt.Sprintf("%v", v))
+				}
+			}
+		}
+		result.WriteString("\n")
+	}
+
+	return result.String(), nil
 }

@@ -641,3 +641,28 @@ RenameMultipleIndexes:
   output: |
     ALTER TABLE `users` RENAME INDEX `idx_email` TO `email_idx`;
     ALTER TABLE `users` RENAME INDEX `idx_username` TO `username_idx`;
+
+CreateWithNonReservedKeywordColumns:
+  desired: |
+    CREATE TABLE test (
+        age INTEGER,
+        definer INTEGER,
+        invoker INTEGER,
+        policy INTEGER,
+        type INTEGER,
+        status INTEGER,
+        zone INTEGER
+    );
+    CREATE TABLE test_log (
+        age INTEGER,
+        definer INTEGER,
+        invoker INTEGER,
+        policy INTEGER,
+        type INTEGER,
+        status INTEGER,
+        zone INTEGER
+    );
+    CREATE TRIGGER `test_after_insert` after insert ON `test` FOR EACH ROW begin
+    insert into test_log(age, definer, invoker, policy, type, status, zone) values (NEW.age, NEW.definer, NEW.invoker, NEW.policy, NEW.type, NEW.status, NEW.zone);
+    update test_log set status = NEW.status, type = NEW.type, zone = NEW.zone, policy = NEW.policy where definer = NEW.definer and invoker = NEW.invoker;
+    end;

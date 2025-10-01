@@ -5,3 +5,4 @@ releaseBranch = master
 changelogFile = CHANGELOG.md
 versionFile = VERSION
 vPrefix = true
+release = draft

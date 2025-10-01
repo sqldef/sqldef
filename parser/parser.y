@@ -190,13 +190,13 @@ func forceEOF(yylex interface{}) {
 %token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD
 %token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE
 %right <bytes> UNIQUE KEY
-%token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE
-%token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE
+%token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
+%token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN
 %token <bytes> STATUS VARIABLES
 %token <bytes> RESTRICT CASCADE NO ACTION
 %token <bytes> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
 %token <bytes> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS DISTANCE M EUCLIDEAN COSINE
-%token <bytes> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE INSTEAD OF
+%token <bytes> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE INSTEAD OF OUTPUT
 %token <bytes> DEFERRABLE INITIALLY IMMEDIATE DEFERRED
 %token <bytes> CONCURRENTLY
 %token <bytes> SQL SECURITY
@@ -275,14 +275,14 @@ func forceEOF(yylex interface{}) {
 
 %type <statement> statement
 %type <selStmt> select_statement base_select union_lhs union_rhs
-%type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement if_statement
-%type <statement> matched_if_statement unmatched_if_statement trigger_statement_not_if
+%type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement
+%type <statement> if_statement matched_if_statement unmatched_if_statement trigger_statement_not_if
 %type <blockStatement> simple_if_body
 %type <statement> create_statement alter_statement
 %type <statement> set_option_statement set_bool_option_statement
 %type <ddl> create_table_prefix
 %type <bytes2> comment_opt comment_list
-%type <str> union_op insert_or_replace
+%type <str> union_op insert_or_replace exec_keyword
 %type <str> distinct_opt straight_join_opt cache_opt match_option separator_opt
 %type <expr> like_escape_opt
 %type <selectExprs> select_expression_list select_expression_list_opt
@@ -299,13 +299,14 @@ func forceEOF(yylex interface{}) {
 %type <expr> where_expression_opt
 %type <expr> condition
 %type <boolVal> boolean_value
+%type <bytes> int_value
 %type <str> compare
 %type <ins> insert_data
 %type <expr> value value_expression
 %type <expr> function_call_keyword function_call_nonkeyword function_call_generic function_call_conflict
 %type <str> is_suffix
 %type <colTuple> col_tuple
-%type <exprs> expression_list
+%type <exprs> expression_list exec_param_list_opt
 %type <values> tuple_list
 %type <valTuple> row_tuple tuple_or_empty
 %type <expr> tuple_expression
@@ -322,6 +323,7 @@ func forceEOF(yylex interface{}) {
 %type <limit> limit_opt
 %type <str> lock_opt
 %type <columns> ins_column_list column_list
+%type <colIdent> ins_column
 %type <columns> include_columns_opt
 %type <partitions> opt_partition_clause partition_list
 %type <updateExprs> on_dup_opt
@@ -332,7 +334,7 @@ func forceEOF(yylex interface{}) {
 %type <setExpr> set_expression transaction_char isolation_level
 %type <str> ignore_opt default_opt
 %type <empty> not_exists_opt when_expression_opt for_each_row_opt
-%type <bytes> reserved_keyword
+%type <bytes> reserved_keyword non_reserved_keyword
 %type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt
 %type <boolVal> unique_opt
 %type <expr> charset_value
@@ -1034,14 +1036,14 @@ fetch_opt:
   }
 
 while_statement:
-  WHILE condition trigger_statement
+  WHILE expression trigger_statement
   {
     $$ = &While{
       Condition: $2,
       Statements: []Statement{$3},
     }
   }
-| WHILE condition BEGIN statement_block END
+| WHILE expression BEGIN statement_block END
   {
     $$ = &While{
       Condition: $2,
@@ -1099,7 +1101,7 @@ if_statement:
 
 matched_if_statement:
   // Recursive rule for 'ELSE IF' chains
-  IF condition simple_if_body ELSE matched_if_statement
+  IF expression simple_if_body ELSE matched_if_statement
   {
     $$ = &If{
       Condition: $2,
@@ -1109,7 +1111,7 @@ matched_if_statement:
     }
   }
   // Base case rule for a simple, final 'ELSE'
-| IF condition simple_if_body ELSE simple_if_body
+| IF expression simple_if_body ELSE simple_if_body
   {
     $$ = &If{
       Condition: $2,
@@ -1120,17 +1122,17 @@ matched_if_statement:
   }
 
 unmatched_if_statement:
-  IF condition if_statement
+  IF expression if_statement
   {
     $$ = &If{Condition: $2, IfStatements: []Statement{$3}, Keyword: "Mssql"}
   }
 |
-  IF condition matched_if_statement ELSE unmatched_if_statement
+  IF expression matched_if_statement ELSE unmatched_if_statement
   {
     $$ = &If{Condition: $2, IfStatements: []Statement{$3}, ElseStatements: []Statement{$5}, Keyword: "Mssql"}
   }
 |
-  IF condition simple_if_body %prec NO_ELSE
+  IF expression simple_if_body %prec NO_ELSE
   {
     $$ = &If{Condition: $2, IfStatements: $3, Keyword: "Mssql"}
   }
@@ -1332,6 +1334,8 @@ trigger_statement_not_if:
 | set_statement
 | cursor_statement
 | while_statement
+| exec_statement
+| return_statement
 | set_option_statement
 | base_select order_by_opt limit_opt lock_opt
   {
@@ -1340,6 +1344,32 @@ trigger_statement_not_if:
     sel.Limit = $3
     sel.Lock = $4
     $$ = sel
+  }
+
+exec_statement:
+  exec_keyword sql_id exec_param_list_opt
+  {
+    // EXEC sp_name param1, param2
+    $$ = &Exec{Action: $1, Name: $2, Exprs: $3}
+  }
+| exec_keyword openb exec_param_list_opt closeb
+  {
+    // EXEC ('SELECT * FROM ...')
+    $$ = &Exec{Action: $1, Exprs: $3}
+  }
+
+exec_keyword:
+  EXEC    { $$ = string($1) }
+| EXECUTE { $$ = string($1) }
+
+exec_param_list_opt:
+  /* empty */     { $$ = nil }
+| expression_list { $$ = $1 }
+
+return_statement:
+  RETURN expression_opt
+  {
+    $$ = &Return{ Expr: $2 }
   }
 
 for_each_row_opt:
@@ -1473,6 +1503,10 @@ column_definition:
   sql_id column_definition_type
   {
     $$ = &ColumnDefinition{Name: $1, Type: $2}
+  }
+| non_reserved_keyword column_definition_type
+  {
+    $$ = &ColumnDefinition{Name: NewColIdent(string($1)), Type: $2}
   }
 /* For SQLite3 https://www.sqlite.org/lang_keywords.html */
 | STRING column_definition_type
@@ -1661,7 +1695,8 @@ column_definition_type:
     $1.NotNull = NewBoolVal(true)
     $$ = $1
   }
-| column_definition_type IDENTITY '(' INTEGRAL ',' INTEGRAL ')'
+// for MSSQL
+| column_definition_type IDENTITY '(' int_value ',' int_value ')'
   {
     $1.Identity = &IdentityOpt{Sequence: &Sequence{StartWith: NewIntVal($4), IncrementBy: NewIntVal($6)}, NotForReplication: false}
     $1.NotNull = NewBoolVal(true)
@@ -1714,9 +1749,17 @@ default_val:
   {
     $$ = NewIntVal($1)
   }
+| '-' INTEGRAL
+  {
+    $$ = NewIntVal(append([]byte("-"), $2...))
+  }
 | FLOAT
   {
     $$ = NewFloatVal($1)
+  }
+| '-' FLOAT
+  {
+    $$ = NewFloatVal(append([]byte("-"), $2...))
   }
 | NULL character_cast_opt
   {
@@ -1771,32 +1814,32 @@ sequence_opt:
   {
     $$ = &Sequence{}
   }
-| sequence_opt START WITH INTEGRAL
+| sequence_opt START WITH int_value
   {
     $1.StartWith = NewIntVal($4)
     $$ = $1
   }
-| sequence_opt START INTEGRAL
+| sequence_opt START int_value
   {
     $1.StartWith = NewIntVal($3)
     $$ = $1
   }
-| sequence_opt INCREMENT BY INTEGRAL
+| sequence_opt INCREMENT BY int_value
   {
     $1.IncrementBy = NewIntVal($4)
     $$ = $1
   }
-| sequence_opt INCREMENT INTEGRAL
+| sequence_opt INCREMENT int_value
   {
     $1.IncrementBy = NewIntVal($3)
     $$ = $1
   }
-| sequence_opt MINVALUE INTEGRAL
+| sequence_opt MINVALUE int_value
   {
     $1.MinValue = NewIntVal($3)
     $$ = $1
   }
-| sequence_opt MAXVALUE INTEGRAL
+| sequence_opt MAXVALUE int_value
   {
     $1.MaxValue = NewIntVal($3)
     $$ = $1
@@ -2224,7 +2267,7 @@ max_length_opt:
   }
 | '(' ID ')'
   {
-    if strings.ToLower(string($2)) != "max" {
+    if !strings.EqualFold(string($2), "max") {
       yylex.Error(fmt.Sprintf("syntax error around '%s'", string($2)))
     }
     $$ = NewIntVal($2)
@@ -3281,6 +3324,10 @@ expression:
   {
     $$ = &IsExpr{Operator: $3, Expr: $1}
   }
+| expression OUTPUT
+  {
+    $$ = &SuffixExpr{Expr: $1, Suffix: string($2)}
+  }
 | value_expression
   {
     $$ = $1
@@ -4114,6 +4161,10 @@ column_name:
   {
     $$ = &ColName{Name: $1}
   }
+| non_reserved_keyword
+  {
+    $$ = &ColName{Name: NewColIdent(string($1))}
+  }
 | table_id '.' reserved_sql_id
   {
     $$ = &ColName{Qualifier: TableName{Name: $1}, Name: $3}
@@ -4171,6 +4222,16 @@ value:
 | NULL
   {
     $$ = &NullVal{}
+  }
+
+int_value:
+  INTEGRAL
+  {
+    $$ = $1
+  }
+| '-' INTEGRAL
+  {
+    $$ = append([]byte("-"), $2...)
   }
 
 group_by_opt:
@@ -4311,21 +4372,31 @@ insert_data:
   }
 
 ins_column_list:
-  sql_id
+  ins_column
   {
     $$ = Columns{$1}
   }
+| ins_column_list ',' ins_column
+  {
+    $$ = append($1, $3)
+  }
+
+ins_column:
+  sql_id
+  {
+    $$ = $1
+  }
 | sql_id '.' sql_id
   {
-    $$ = Columns{$3}
+    $$ = $3
   }
-| ins_column_list ',' sql_id
+| reserved_keyword
   {
-    $$ = append($$, $3)
+    $$ = NewColIdent(string($1))
   }
-| ins_column_list ',' sql_id '.' sql_id
+| non_reserved_keyword
   {
-    $$ = append($$, $5)
+    $$ = NewColIdent(string($1))
   }
 
 on_dup_opt:
@@ -4486,9 +4557,17 @@ reserved_sql_id:
   {
     $$ = NewColIdent(string($1))
   }
+| non_reserved_keyword
+  {
+    $$ = NewColIdent(string($1))
+  }
 
 table_id:
   ID
+  {
+    $$ = NewTableIdent(string($1))
+  }
+| non_reserved_keyword
   {
     $$ = NewTableIdent(string($1))
   }
@@ -4641,7 +4720,6 @@ reserved_keyword:
 | DEALLOCATE
 | DECLARE
 | DEFAULT
-| DEFINER
 | DELETE
 | DESC
 | DESCRIBE
@@ -4652,6 +4730,8 @@ reserved_keyword:
 | ELSE
 | END
 | ESCAPE
+| EXEC
+| EXECUTE
 | EXISTS
 | EXPLAIN
 | FALSE
@@ -4675,7 +4755,6 @@ reserved_keyword:
 | INSERT
 | INTERVAL
 | INTO
-| INVOKER
 | IS
 | JOIN
 | KEY
@@ -4703,12 +4782,12 @@ reserved_keyword:
 | OUTER
 | PARTITION
 | PAGLOCK
-| POLICY
 | PRIOR
 | READUNCOMMITTED
 | REGEXP
 | RENAME
 | REPLACE
+| RETURN
 | RIGHT
 | ROW
 | ROWLOCK
@@ -4719,14 +4798,12 @@ reserved_keyword:
 | SET
 | SHOW
 | STRAIGHT_JOIN
-| STATUS
 | TABLE
 | TABLES
 | TABLOCK
 | THEN
 | TO
 | TRUE
-| TYPE
 | UNION
 | UNIQUE
 | UPDATE
@@ -4742,6 +4819,14 @@ reserved_keyword:
 | WHILE
 | WITH
 | OFF
+
+non_reserved_keyword:
+  DEFINER
+| INVOKER
+| POLICY
+| TYPE
+| STATUS
+| ZONE
 
 openb:
   '('

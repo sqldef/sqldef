@@ -198,6 +198,8 @@ var keywords = map[string]int{
 	"escape":                 ESCAPE,
 	"escaped":                UNUSED,
 	"exists":                 EXISTS,
+	"exec":                   EXEC,
+	"execute":                EXECUTE,
 	"exit":                   UNUSED,
 	"explain":                EXPLAIN,
 	"expansion":              EXPANSION,
@@ -337,6 +339,7 @@ var keywords = map[string]int{
 	"out":                    UNUSED,
 	"outer":                  OUTER,
 	"outfile":                UNUSED,
+	"output":                 OUTPUT,
 	"over":                   OVER,
 	"owned":                  OWNED,
 	"paglock":                PAGLOCK,
@@ -372,7 +375,7 @@ var keywords = map[string]int{
 	"require":                UNUSED,
 	"resignal":               UNUSED,
 	"restrict":               RESTRICT,
-	"return":                 UNUSED,
+	"return":                 RETURN,
 	"revoke":                 UNUSED,
 	"right":                  RIGHT,
 	"rlike":                  REGEXP,
@@ -709,10 +712,6 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 		case '#':
 			return tkn.scanCommentType1("#")
 		case '-':
-			if isDigit(tkn.lastChar) {
-				num, buf := tkn.scanNumber(false)
-				return num, append([]byte{'-'}, buf...)
-			}
 			switch tkn.lastChar {
 			case '-':
 				tkn.next()
