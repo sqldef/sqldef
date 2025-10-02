@@ -6,6 +6,7 @@ import (
 	"log"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -324,7 +325,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Table is expected to exist. Drop foreign keys prior to index deletion
 		for _, foreignKey := range currentTable.foreignKeys {
-			if containsString(convertForeignKeysToConstraintNames(desiredTable.foreignKeys), foreignKey.constraintName) {
+			if slices.Contains(convertForeignKeysToConstraintNames(desiredTable.foreignKeys), foreignKey.constraintName) {
 				continue // Foreign key is expected to exist.
 			}
 
@@ -336,7 +337,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Table is expected to exist. Drop exclusion constraints.
 		for _, exclusion := range currentTable.exclusions {
-			if containsString(convertExclusionToConstraintNames(desiredTable.exclusions), exclusion.constraintName) {
+			if slices.Contains(convertExclusionToConstraintNames(desiredTable.exclusions), exclusion.constraintName) {
 				continue // Exclusion constraint is expected to exist.
 			}
 
@@ -351,8 +352,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue
 			}
 
-			if containsString(convertIndexesToIndexNames(desiredTable.indexes), index.name) ||
-				containsString(convertForeignKeysToIndexNames(desiredTable.foreignKeys), index.name) {
+			if slices.Contains(convertIndexesToIndexNames(desiredTable.indexes), index.name) ||
+				slices.Contains(convertForeignKeysToIndexNames(desiredTable.foreignKeys), index.name) {
 				continue // Index is expected to exist.
 			}
 
@@ -402,7 +403,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Check policies.
 		for _, policy := range currentTable.policies {
-			if containsString(convertPolicyNames(desiredTable.policies), policy.name) {
+			if slices.Contains(convertPolicyNames(desiredTable.policies), policy.name) {
 				continue
 			}
 			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLName(policy.name), g.escapeTableName(currentTable.name)))
@@ -421,7 +422,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted views
 	for _, currentView := range g.currentViews {
-		if containsString(convertViewNames(g.desiredViews), currentView.name) {
+		if slices.Contains(convertViewNames(g.desiredViews), currentView.name) {
 			continue
 		}
 		if currentView.viewType == "MATERIALIZED VIEW" {
@@ -433,7 +434,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted extensions
 	for _, currentExtension := range g.currentExtensions {
-		if containsString(convertExtensionNames(g.desiredExtensions), currentExtension.extension.Name) {
+		if slices.Contains(convertExtensionNames(g.desiredExtensions), currentExtension.extension.Name) {
 			continue
 		}
 		ddls = append(ddls, fmt.Sprintf("DROP EXTENSION %s", g.escapeSQLName(currentExtension.extension.Name)))
@@ -455,7 +456,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		for _, currentPriv := range g.currentPrivileges {
 			hasIncludedGrantee := false
 			for _, grantee := range currentPriv.grantees {
-				if containsString(g.config.ManagedRoles, grantee) {
+				if slices.Contains(g.config.ManagedRoles, grantee) {
 					hasIncludedGrantee = true
 					break
 				}
@@ -1285,7 +1286,7 @@ func (g *Generator) generateDDLsForAddForeignKey(tableName string, desiredForeig
 	// Examine indexes in desiredTable to delete obsoleted indexes later
 	desiredTable := findTableByName(g.desiredTables, tableName)
 	// Only add to desiredTable.foreignKeys if it doesn't already exist (it may have been pre-populated from aggregation)
-	if !containsString(convertForeignKeysToConstraintNames(desiredTable.foreignKeys), desiredForeignKey.constraintName) {
+	if !slices.Contains(convertForeignKeysToConstraintNames(desiredTable.foreignKeys), desiredForeignKey.constraintName) {
 		desiredTable.foreignKeys = append(desiredTable.foreignKeys, desiredForeignKey)
 	}
 
@@ -1312,7 +1313,7 @@ func (g *Generator) generateDDLsForAddExclusion(tableName string, desiredExclusi
 	// Examine indexes in desiredTable to delete obsoleted indexes later
 	desiredTable := findTableByName(g.desiredTables, tableName)
 	// Only add to desiredTable.exclusions if it doesn't already exist (it may have been pre-populated from aggregation)
-	if !containsString(convertExclusionToConstraintNames(desiredTable.exclusions), desiredExclusion.constraintName) {
+	if !slices.Contains(convertExclusionToConstraintNames(desiredTable.exclusions), desiredExclusion.constraintName) {
 		desiredTable.exclusions = append(desiredTable.exclusions, desiredExclusion)
 	}
 
@@ -1346,7 +1347,7 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy 
 		return nil, fmt.Errorf("%s is performed before create table '%s': '%s'", action, tableName, statement)
 	}
 	// Only add to desiredTable.policies if it doesn't already exist (it may have been pre-populated from aggregation)
-	if !containsString(convertPolicyNames(desiredTable.policies), desiredPolicy.name) {
+	if !slices.Contains(convertPolicyNames(desiredTable.policies), desiredPolicy.name) {
 		desiredTable.policies = append(desiredTable.policies, desiredPolicy)
 	}
 
@@ -1410,7 +1411,7 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 
 	// Examine policies in desiredTable to delete obsoleted policies later
 	// Only add to desiredViews if it doesn't already exist (it may have been pre-populated from aggregation)
-	if !containsString(convertViewNames(g.desiredViews), desiredView.name) {
+	if !slices.Contains(convertViewNames(g.desiredViews), desiredView.name) {
 		g.desiredViews = append(g.desiredViews, desiredView)
 	}
 
@@ -1493,7 +1494,7 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 		// Type found. Add values if not present.
 		if currentType.enumValues != nil && len(currentType.enumValues) < len(desired.enumValues) {
 			for _, enumValue := range desired.enumValues {
-				if !containsString(currentType.enumValues, enumValue) {
+				if !slices.Contains(currentType.enumValues, enumValue) {
 					ddl := fmt.Sprintf("ALTER TYPE %s ADD VALUE %s", currentType.name, enumValue)
 					ddls = append(ddls, ddl)
 				}
@@ -2294,7 +2295,7 @@ func mergeTable(table1 *Table, table2 Table) {
 	}
 
 	for _, index := range table2.indexes {
-		if containsString(convertIndexesToIndexNames(table1.indexes), index.name) {
+		if slices.Contains(convertIndexesToIndexNames(table1.indexes), index.name) {
 			table1.indexes = append(table1.indexes, index)
 		}
 	}
@@ -2630,7 +2631,7 @@ func (g *Generator) generateDDLsForRevokePrivilege(desired *RevokePrivilege) ([]
 	if len(g.config.ManagedRoles) > 0 && len(desired.grantees) > 0 {
 		hasIncludedGrantee := false
 		for _, grantee := range desired.grantees {
-			if containsString(g.config.ManagedRoles, grantee) {
+			if slices.Contains(g.config.ManagedRoles, grantee) {
 				hasIncludedGrantee = true
 				break
 			}
@@ -3347,14 +3348,6 @@ func convertPolicyNames(policies []Policy) []string {
 	return policyNames
 }
 
-func convertCheckConstraintNames(checks []CheckDefinition) []string {
-	checkConstraintNames := make([]string, len(checks))
-	for i, check := range checks {
-		checkConstraintNames[i] = check.constraintName
-	}
-	return checkConstraintNames
-}
-
 func convertViewNames(views []*View) []string {
 	viewNames := make([]string, len(views))
 	for i, view := range views {
@@ -3369,15 +3362,6 @@ func convertExtensionNames(extensions []*Extension) []string {
 		extensionNames[i] = extension.extension.Name
 	}
 	return extensionNames
-}
-
-func containsString(strs []string, str string) bool {
-	for _, s := range strs {
-		if s == str {
-			return true
-		}
-	}
-	return false
 }
 
 func removeTableByName(tables []*Table, name string) []*Table {
@@ -3580,7 +3564,7 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 			// Filter grantees to only include those in config
 			includedGrantees := []string{}
 			for _, grantee := range stmt.grantees {
-				if containsString(config.ManagedRoles, grantee) {
+				if slices.Contains(config.ManagedRoles, grantee) {
 					includedGrantees = append(includedGrantees, grantee)
 				}
 			}
@@ -3609,7 +3593,7 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 		case *RevokePrivilege:
 			// Process each grantee separately and consolidate
 			for _, grantee := range stmt.grantees {
-				if containsString(config.ManagedRoles, grantee) {
+				if slices.Contains(config.ManagedRoles, grantee) {
 					key := fmt.Sprintf("%s:%s", stmt.tableName, grantee)
 					if existing, ok := revokesByTableAndGrantee[key]; ok {
 						// Merge privileges

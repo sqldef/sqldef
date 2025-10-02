@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -122,7 +123,7 @@ func (d *PostgresDatabase) tableNames() ([]string, error) {
 		if err := rows.Scan(&schema, &name); err != nil {
 			return nil, err
 		}
-		if d.config.TargetSchema != nil && !containsString(d.config.TargetSchema, schema) {
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, schema) {
 			continue
 		}
 		tables = append(tables, schema+"."+name)
@@ -158,7 +159,7 @@ func (d *PostgresDatabase) views() ([]string, error) {
 		if err := rows.Scan(&schema, &name, &definition); err != nil {
 			return nil, err
 		}
-		if d.config.TargetSchema != nil && !containsString(d.config.TargetSchema, schema) {
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, schema) {
 			continue
 		}
 		definition = strings.TrimSpace(definition)
@@ -196,7 +197,7 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 		if err := rows.Scan(&schema, &name, &definition); err != nil {
 			return nil, err
 		}
-		if d.config.TargetSchema != nil && !containsString(d.config.TargetSchema, schema) {
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, schema) {
 			continue
 		}
 		definition = strings.TrimSpace(definition)
@@ -296,7 +297,7 @@ func (d *PostgresDatabase) types() ([]string, error) {
 		if err := rows.Scan(&typeSchema, &typeName, &labels); err != nil {
 			return nil, err
 		}
-		if d.config.TargetSchema != nil && !containsString(d.config.TargetSchema, typeSchema) {
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, typeSchema) {
 			continue
 		}
 		enumLabels := []string{}
@@ -385,8 +386,8 @@ func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
 	return buildDumpTableDDL(components), nil
 }
 
-func canonicalMapIter(m map[string]string) iter.Seq2[string, string] {
-	return func(yield func(string, string) bool) {
+func canonicalMapIter[T any](m map[string]T) iter.Seq2[string, T] {
+	return func(yield func(string, T) bool) {
 		keys := make([]string, 0, len(m))
 		for k := range m {
 			keys = append(keys, k)
@@ -1180,13 +1181,4 @@ func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
 	}
 
 	return privilegeDefs, nil
-}
-
-func containsString(strs []string, str string) bool {
-	for _, s := range strs {
-		if s == str {
-			return true
-		}
-	}
-	return false
 }
