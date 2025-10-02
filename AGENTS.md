@@ -9,9 +9,14 @@ This project provides four schema management commands:
 
 Each command follows the same pattern: it accepts connection parameters similar to those of the corresponding database CLI tool and applies schema changes idempotently.
 
+## General Rules
+
+* Never commit the changes unless the user asks for it.
+* Write comments to describe what is not obvious in the code. Describing the "why" is a recommended practice.
+
 ## Building Commands
 
-Build all `*def` commands:
+Build all sqldef commands (`mysqldef`, `psqldef`, `sqlite3def`, `mssqldef`):
 
 ```sh
 make build
@@ -80,6 +85,63 @@ The test name pattern follows the format `TestApply/<TestCaseName>`, where `<Tes
 
 For schema management tests, in most cases you only need to edit the YAML test files.
 
+#### YAML Test Schema
+
+The test files use a YAML format where each top-level key is a test case name, and the value is a `TestCase` object with the following fields:
+
+```yaml
+TestCaseName:
+  # Current schema state (optional, defaults to empty schema)
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL
+    );
+
+  # Desired schema state (optional, defaults to empty schema)
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text
+    );
+
+  # Expected DDL output (optional, defaults to 'desired' if not specified)
+  output: |
+    ALTER TABLE "public"."users" ADD COLUMN "name" text;
+
+  # Expected error message (optional, defaults to no error)
+  error: "specific error message"
+
+  # Minimum database version required (optional)
+  min_version: "10.0"
+
+  # Maximum database version supported (optional)
+  max_version: "14.0"
+
+  # Database flavor requirement (optional, mysqldef only)
+  # Either "mariadb" or "mysql"
+  flavor: "mariadb"
+
+  # User to run the test as (optional)
+  user: "testuser"
+
+  # Managed roles for privilege testing (optional, psqldef only)
+  managed_roles:
+    - readonly_user
+    - app_user
+
+  # Whether to enable DROP/REVOKE operations (optional, defaults to true)
+  enable_drop: false
+
+  # Only test that the schema applies successfully (optional, defaults to false)
+  # When true, doesn't check exact DDL output, just that it applies without error
+  apply_only: true
+
+  # Configuration options for the test (optional)
+  config:
+    # Create indexes concurrently (psqldef only)
+    create_index_concurrently: true
+```
+
 ### Best Practices
 
 1. **Use consistent prefixes**: When adding related test cases, use the same prefix for test names. This allows you to run all related tests with a simple pattern:
@@ -92,15 +154,14 @@ For schema management tests, in most cases you only need to edit the YAML test f
    - Adding features (no `current`, only `desired`)
    - Modifying existing schemas (`current` → `desired`)
 
-## General Rules
+## Documentation
 
-* Never commit the changes unless the user asks for it.
-* Write comments to describe what is not obvious in the code. Describing the "why" is a recommended practice.
-* Keep the documents up to date:
-  * `cmd-psqldef.md` describes all the features of `psqldef`
-  * `cmd-mysqldef.md` describes all the features of `mysqldef`
-  * `cmd-sqlite3def.md` describes all the features of `sqlite3def`
-  * `cmd-mssqldef.md` describes all the features of `mssqldef`
+There are markdown files to describe the usage of each command. Keep them up to date:
+
+* `cmd-psqldef.md` for `psqldef`
+* `cmd-mysqldef.md` for `mysqldef`
+* `cmd-sqlite3def.md` for `sqlite3def`
+* `cmd-mssqldef.md` for `mssqldef`
 
 ## Task Completion Checklist
 
