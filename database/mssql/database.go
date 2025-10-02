@@ -3,8 +3,10 @@ package mssql
 import (
 	"database/sql"
 	"fmt"
+	"iter"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -126,6 +128,22 @@ func (d *MssqlDatabase) dumpTableDDL(table string) (string, error) {
 	indexDefs := d.getIndexDefs(table)
 	foreignDefs := d.getForeignDefs(table)
 	return buildDumpTableDDL(table, cols, indexDefs, foreignDefs), nil
+}
+
+func canonicalMapIter[T any](m map[string]T) iter.Seq2[string, T] {
+	return func(yield func(string, T) bool) {
+		keys := make([]string, 0, len(m))
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		for _, k := range keys {
+			if !yield(k, m[k]) {
+				return
+			}
+		}
+	}
 }
 
 func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, foreignDefs []string) string {
@@ -527,8 +545,8 @@ FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'sys.stats' AND COLUMN_NAME =
 	for tableName, indexes := range indexMap {
 		tableIndexes := []*indexDef{}
 
-		for _, definition := range indexes {
-			tableIndexes = append(tableIndexes, definition)
+		for _, indexDef := range canonicalMapIter(indexes) {
+			tableIndexes = append(tableIndexes, indexDef)
 		}
 
 		indexDefs[tableName] = tableIndexes
