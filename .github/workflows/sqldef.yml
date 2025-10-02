@@ -96,6 +96,9 @@ jobs:
           fi
           echo "✓ parser.go is in sync with parser.y"
 
+      - name: Lint
+        run: make lint
+
   test-result:
     if: ${{ always() }}
     runs-on: ubuntu-22.04

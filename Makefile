@@ -89,5 +89,8 @@ test-mssqldef:
 format:
 	go fmt .
 
+lint:
+	go vet ./...
+
 touch:
 	touch parser/parser.y
