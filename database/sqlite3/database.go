@@ -33,7 +33,7 @@ func (d *Sqlite3Database) ExportDDLs() (string, error) {
 		return "", err
 	}
 	for _, tableName := range tableNames {
-		ddl, err := d.ExportTableDDL(tableName)
+		ddl, err := d.exportTableDDL(tableName)
 		if err != nil {
 			return "", err
 		}
@@ -82,7 +82,7 @@ func (d *Sqlite3Database) tableNames() ([]string, error) {
 	return tables, nil
 }
 
-func (d *Sqlite3Database) ExportTableDDL(table string) (string, error) {
+func (d *Sqlite3Database) exportTableDDL(table string) (string, error) {
 	const query = `select sql from sqlite_master where tbl_name = ? and type = 'table'`
 	var sql string
 	err := d.db.QueryRow(query, table).Scan(&sql)
