@@ -579,14 +579,81 @@ func (tkn *Tokenizer) Lex(lval *yySymType) int {
 	return typ
 }
 
+func (tkn *Tokenizer) getLineInfo(position int) (lineNum int, lineContent string, columnNum int) {
+	// Calculate line number and get line content
+	lineNum = 1
+	lineStart := 0
+
+	for i := 0; i < position && i < len(tkn.buf); i++ {
+		if tkn.buf[i] == '\n' {
+			lineNum++
+			lineStart = i + 1
+		}
+	}
+
+	// Find the end of the current line
+	lineEnd := position
+	for lineEnd < len(tkn.buf) && tkn.buf[lineEnd] != '\n' {
+		lineEnd++
+	}
+
+	// Extract the line content
+	if lineStart < len(tkn.buf) {
+		lineContent = string(tkn.buf[lineStart:lineEnd])
+	}
+
+	// Calculate column number (position within the line)
+	columnNum = position - lineStart + 1
+
+	return lineNum, lineContent, columnNum
+}
+
 // Error is called by go yacc if there's a parsing error.
 func (tkn *Tokenizer) Error(err string) {
 	var buf tokenBuffer
+
+	lineNum, lineContent, columnNum := tkn.getLineInfo(tkn.Position)
+
+	fmt.Fprintf(&buf, "%s at line %d, column %d", err, lineNum, columnNum)
+
 	if tkn.lastToken != nil {
-		fmt.Fprintf(&buf, "%s at position %v near '%s'", err, tkn.Position, tkn.lastToken)
-	} else {
-		fmt.Fprintf(&buf, "%s at position %v", err, tkn.Position)
+		fmt.Fprintf(&buf, " near '%s'", tkn.lastToken)
 	}
+
+	if lineContent != "" {
+		displayLine := lineContent
+		adjustedColumn := columnNum - 1 // 0-based position for display
+
+		if len(displayLine) > 80 {
+			// Calculate start and end positions for truncation
+			start := max(columnNum-30, 0)
+			end := min(columnNum+30, len(lineContent))
+
+			if start > 0 {
+				displayLine = "..." + lineContent[start:end]
+				// Adjust column position for the "..." prefix
+				adjustedColumn = columnNum - start - 1 + 3 // +3 for "..."
+				if end < len(lineContent) {
+					displayLine = displayLine + "..."
+				}
+			} else {
+				displayLine = lineContent[start:end]
+				adjustedColumn = columnNum - 1
+				if end < len(lineContent) {
+					displayLine = displayLine + "..."
+				}
+			}
+		}
+
+		fmt.Fprintf(&buf, "\n  %s", displayLine)
+
+		// Add a pointer to show the exact position
+		// Only show pointer if it's within the displayed content
+		if adjustedColumn >= 0 && adjustedColumn < len(displayLine) {
+			fmt.Fprintf(&buf, "\n  %s^", strings.Repeat(" ", adjustedColumn))
+		}
+	}
+
 	tkn.LastError = errors.New(buf.String())
 
 	// Try and re-sync to the next statement
