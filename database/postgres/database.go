@@ -3,6 +3,7 @@ package postgres
 import (
 	"database/sql"
 	"fmt"
+	"iter"
 	"net/url"
 	"os"
 	"regexp"
@@ -384,6 +385,22 @@ func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
 	return buildDumpTableDDL(components), nil
 }
 
+func canonicalMapIter(m map[string]string) iter.Seq2[string, string] {
+	return func(yield func(string, string) bool) {
+		keys := make([]string, 0, len(m))
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		for _, k := range keys {
+			if !yield(k, m[k]) {
+				return
+			}
+		}
+	}
+}
+
 func buildDumpTableDDL(components TableDDLComponents) string {
 	var queryBuilder strings.Builder
 	schema, table := splitTableName(components.TableName, components.DefaultSchema)
@@ -411,10 +428,12 @@ func buildDumpTableDDL(components TableDDLComponents) string {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
 		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", components.PrimaryKeyName, strings.Join(components.PrimaryKeyCols, "\", \""))
 	}
-	for constraintName, constraintDef := range components.CheckConstraints {
+
+	for constraintName, constraintDef := range canonicalMapIter(components.CheckConstraints) {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
 		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", constraintName, constraintDef)
 	}
+
 	fmt.Fprintf(&queryBuilder, "\n);\n")
 	for _, v := range components.IndexDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
@@ -428,9 +447,11 @@ func buildDumpTableDDL(components TableDDLComponents) string {
 	for _, v := range components.PolicyDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
-	for _, constraintDef := range components.UniqueConstraints {
+
+	for _, constraintDef := range canonicalMapIter(components.UniqueConstraints) {
 		fmt.Fprintf(&queryBuilder, "%s;\n", constraintDef)
 	}
+
 	for _, v := range components.Comments {
 		fmt.Fprintf(&queryBuilder, "%s\n", v)
 	}
