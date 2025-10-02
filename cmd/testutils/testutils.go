@@ -114,11 +114,11 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	db.SetGeneratorConfig(config)
 
 	// Test idempotency of current schema
-	dumpDDLs, err := db.DumpDDLs()
+	currentDDLs, err := db.ExportDDLs()
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, dumpDDLs, config, db.GetDefaultSchema())
+	ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, currentDDLs, config, db.GetDefaultSchema())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,11 +127,11 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	}
 
 	// Main test
-	dumpDDLs, err = db.DumpDDLs()
+	currentDDLs, err = db.ExportDDLs()
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, config, db.GetDefaultSchema())
+	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, db.GetDefaultSchema())
 
 	// Handle expected errors
 	if test.Error != nil {
@@ -162,11 +162,11 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	}
 
 	// Test idempotency of desired schema
-	dumpDDLs, err = db.DumpDDLs()
+	currentDDLs, err = db.ExportDDLs()
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, dumpDDLs, config, db.GetDefaultSchema())
+	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, db.GetDefaultSchema())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +282,7 @@ func (l *stringLogger) String() string {
 func ApplyWithOutput(db database.Database, mode schema.GeneratorMode, sqlParser database.Parser, desiredDDLs string, config database.GeneratorConfig) (string, error) {
 	db.SetGeneratorConfig(config)
 
-	currentDDLs, err := db.DumpDDLs()
+	currentDDLs, err := db.ExportDDLs()
 	if err != nil {
 		return "", err
 	}
