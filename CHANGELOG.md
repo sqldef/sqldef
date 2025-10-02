@@ -1,3 +1,7 @@
+## [v3.1.9](https://github.com/sqldef/sqldef/compare/v3.1.8...v3.1.9) - 2025-10-02
+- CI: run lint in CI (`go vet ./...`) as a part of `integrity` job by @gfx in https://github.com/sqldef/sqldef/pull/839
+- psqldef: determistic constraint export by @gfx in https://github.com/sqldef/sqldef/pull/841
+
 ## [v3.1.8](https://github.com/sqldef/sqldef/compare/v3.1.7...v3.1.8) - 2025-10-01
 - handle functional indexes (MySQL 8.0.13+) by @gfx in https://github.com/sqldef/sqldef/pull/836
 - psqldef: handle table-level constrains and column-level constraints correctly by @gfx in https://github.com/sqldef/sqldef/pull/838
