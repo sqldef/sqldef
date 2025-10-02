@@ -584,6 +584,11 @@ func (tkn *Tokenizer) getLineInfo(position int) (lineNum int, lineContent string
 	lineNum = 1
 	lineStart := 0
 
+	// Ensure position doesn't exceed buffer length
+	if position > len(tkn.buf) {
+		position = len(tkn.buf)
+	}
+
 	for i := 0; i < position && i < len(tkn.buf); i++ {
 		if tkn.buf[i] == '\n' {
 			lineNum++
@@ -592,13 +597,13 @@ func (tkn *Tokenizer) getLineInfo(position int) (lineNum int, lineContent string
 	}
 
 	// Find the end of the current line
-	lineEnd := position
+	lineEnd := lineStart
 	for lineEnd < len(tkn.buf) && tkn.buf[lineEnd] != '\n' {
 		lineEnd++
 	}
 
 	// Extract the line content
-	if lineStart < len(tkn.buf) {
+	if lineStart <= len(tkn.buf) && lineEnd <= len(tkn.buf) {
 		lineContent = string(tkn.buf[lineStart:lineEnd])
 	}
 

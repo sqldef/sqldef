@@ -110,7 +110,7 @@ func TestApply(t *testing.T) {
 
 func TestMysqldefCreateTableSyntaxError(t *testing.T) {
 	resetTestDatabase()
-	assertApplyFailure(t, "CREATE TABLE users (id bigint,);", `found syntax error when parsing DDL "CREATE TABLE users (id bigint,)": syntax error at position 32`+"\n")
+	assertApplyFailure(t, "CREATE TABLE users (id bigint,);", "found syntax error when parsing DDL \"CREATE TABLE users (id bigint,)\": syntax error at line 1, column 32\n  CREATE TABLE users (id bigint,)\n")
 }
 
 //
