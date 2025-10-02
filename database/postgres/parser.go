@@ -200,6 +200,10 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 			default:
 				return nil, fmt.Errorf("unknown Constraint type: %#v", node)
 			}
+		case *pgquery.Node_TableLikeClause:
+			// Handle CREATE TABLE ... LIKE syntax
+			// For now, we'll just continue as the table structure will be copied at runtime
+			continue
 		default:
 			return nil, fmt.Errorf("unknown node in parseCreateStmt: %#v", node)
 		}
