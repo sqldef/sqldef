@@ -36,7 +36,7 @@ func NewDatabase(config database.Config) (database.Database, error) {
 	}, nil
 }
 
-func (d *MysqlDatabase) DumpDDLs() (string, error) {
+func (d *MysqlDatabase) ExportDDLs() (string, error) {
 	var ddls []string
 
 	tableNames, err := d.tableNames()
@@ -47,7 +47,7 @@ func (d *MysqlDatabase) DumpDDLs() (string, error) {
 		tableNames,
 		d.config.DumpConcurrency,
 		func(tableName string) (string, error) {
-			return d.dumpTableDDL(tableName)
+			return d.exportTableDDL(tableName)
 		})
 	if err != nil {
 		return "", err
@@ -88,7 +88,7 @@ func (d *MysqlDatabase) tableNames() ([]string, error) {
 	return tables, nil
 }
 
-func (d *MysqlDatabase) dumpTableDDL(table string) (string, error) {
+func (d *MysqlDatabase) exportTableDDL(table string) (string, error) {
 	var ddl string
 	sql := fmt.Sprintf("show create table `%s`;", table) // TODO: escape table name
 

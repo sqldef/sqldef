@@ -26,9 +26,9 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 	// Set the generator config on the database for privilege filtering
 	db.SetGeneratorConfig(options.Config)
 
-	currentDDLs, err := db.DumpDDLs()
+	currentDDLs, err := db.ExportDDLs()
 	if err != nil {
-		log.Fatalf("Error on DumpDDLs: %s", err)
+		log.Fatalf("Error on ExportDDLs: %s", err)
 	}
 
 	defaultSchema := db.GetDefaultSchema()

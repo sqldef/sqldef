@@ -42,7 +42,7 @@ func NewDatabase(config database.Config) (database.Database, error) {
 	}, nil
 }
 
-func (d *MssqlDatabase) DumpDDLs() (string, error) {
+func (d *MssqlDatabase) ExportDDLs() (string, error) {
 	var ddls []string
 
 	err := d.updateDatabaesInfo()
@@ -52,7 +52,7 @@ func (d *MssqlDatabase) DumpDDLs() (string, error) {
 
 	tableNames := d.tableNames()
 	for _, tableName := range tableNames {
-		ddl, err := d.dumpTableDDL(tableName)
+		ddl, err := d.exportTableDDL(tableName)
 		if err != nil {
 			return "", err
 		}
@@ -123,11 +123,11 @@ func (d *MssqlDatabase) tableNames() []string {
 	return d.info.tableName
 }
 
-func (d *MssqlDatabase) dumpTableDDL(table string) (string, error) {
+func (d *MssqlDatabase) exportTableDDL(table string) (string, error) {
 	cols := d.getColumns(table)
 	indexDefs := d.getIndexDefs(table)
 	foreignDefs := d.getForeignDefs(table)
-	return buildDumpTableDDL(table, cols, indexDefs, foreignDefs), nil
+	return buildExportTableDDL(table, cols, indexDefs, foreignDefs), nil
 }
 
 func canonicalMapIter[T any](m map[string]T) iter.Seq2[string, T] {
@@ -146,7 +146,7 @@ func canonicalMapIter[T any](m map[string]T) iter.Seq2[string, T] {
 	}
 }
 
-func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, foreignDefs []string) string {
+func buildExportTableDDL(table string, columns []column, indexDefs []*indexDef, foreignDefs []string) string {
 	var queryBuilder strings.Builder
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (", table)
 	for i, col := range columns {

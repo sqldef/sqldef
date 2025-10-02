@@ -49,7 +49,7 @@ func (d *PostgresDatabase) GetTransactionQueries() database.TransactionQueries {
 	}
 }
 
-func (d *PostgresDatabase) DumpDDLs() (string, error) {
+func (d *PostgresDatabase) ExportDDLs() (string, error) {
 	var ddls []string
 
 	schemaDDLs, err := d.schemas()
@@ -79,7 +79,7 @@ func (d *PostgresDatabase) DumpDDLs() (string, error) {
 		tableNames,
 		d.config.DumpConcurrency,
 		func(tableName string) (string, error) {
-			return d.dumpTableDDL(tableName)
+			return d.exportTableDDL(tableName)
 		})
 	if err != nil {
 		return "", err
@@ -329,7 +329,7 @@ type TableDDLComponents struct {
 	DefaultSchema     string
 }
 
-func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
+func (d *PostgresDatabase) exportTableDDL(table string) (string, error) {
 	components := TableDDLComponents{
 		TableName:     table,
 		DefaultSchema: d.GetDefaultSchema(),
@@ -383,7 +383,7 @@ func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get privilege definitions for table %s: %w", table, err)
 	}
-	return buildDumpTableDDL(components), nil
+	return buildExportTableDDL(components), nil
 }
 
 func canonicalMapIter[T any](m map[string]T) iter.Seq2[string, T] {
@@ -402,7 +402,7 @@ func canonicalMapIter[T any](m map[string]T) iter.Seq2[string, T] {
 	}
 }
 
-func buildDumpTableDDL(components TableDDLComponents) string {
+func buildExportTableDDL(components TableDDLComponents) string {
 	var queryBuilder strings.Builder
 	schema, table := splitTableName(components.TableName, components.DefaultSchema)
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", escapeSQLName(schema), escapeSQLName(table))

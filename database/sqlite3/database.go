@@ -25,7 +25,7 @@ func NewDatabase(config database.Config) (database.Database, error) {
 	}, nil
 }
 
-func (d *Sqlite3Database) DumpDDLs() (string, error) {
+func (d *Sqlite3Database) ExportDDLs() (string, error) {
 	var ddls []string
 
 	tableNames, err := d.tableNames()
@@ -33,7 +33,7 @@ func (d *Sqlite3Database) DumpDDLs() (string, error) {
 		return "", err
 	}
 	for _, tableName := range tableNames {
-		ddl, err := d.DumpTableDDL(tableName)
+		ddl, err := d.ExportTableDDL(tableName)
 		if err != nil {
 			return "", err
 		}
@@ -82,7 +82,7 @@ func (d *Sqlite3Database) tableNames() ([]string, error) {
 	return tables, nil
 }
 
-func (d *Sqlite3Database) DumpTableDDL(table string) (string, error) {
+func (d *Sqlite3Database) ExportTableDDL(table string) (string, error) {
 	const query = `select sql from sqlite_master where tbl_name = ? and type = 'table'`
 	var sql string
 	err := d.db.QueryRow(query, table).Scan(&sql)

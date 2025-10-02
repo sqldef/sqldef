@@ -18,7 +18,7 @@ func NewDatabase(file string) *FileDatabase {
 	}
 }
 
-func (f FileDatabase) DumpDDLs() (string, error) {
+func (f FileDatabase) ExportDDLs() (string, error) {
 	return sqldef.ReadFile(f.file)
 }
 
