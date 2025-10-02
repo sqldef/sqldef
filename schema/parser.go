@@ -244,9 +244,15 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	var checks []CheckDefinition
 	var foreignKeys []ForeignKey
 	var exclusions []Exclusion
+	var likeTable *parser.TableLikeClause
 
 	columnComments := extractColumnComments(rawDDL, mode)
 	indexComments := extractIndexComments(rawDDL, mode)
+
+	// Check for LIKE clause
+	if stmt.TableSpec.LikeTable != nil {
+		likeTable = stmt.TableSpec.LikeTable
+	}
 
 	for i, parsedCol := range stmt.TableSpec.Columns {
 		column := Column{
@@ -446,6 +452,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		exclusions:  exclusions,
 		options:     stmt.TableSpec.Options,
 		renamedFrom: tableRenameFrom,
+		likeTable:   likeTable,
 	}, nil
 }
 

@@ -577,10 +577,17 @@ type TableSpec struct {
 	Checks      []*CheckDefinition
 	Exclusions  []*ExclusionDefinition // for Postgres
 	Options     map[string]string
+	LikeTable   *TableLikeClause // for CREATE TABLE ... LIKE
 }
 
 // Format formats the node.
 func (ts *TableSpec) Format(buf *nodeBuffer) {
+	// Handle CREATE TABLE ... LIKE syntax
+	if ts.LikeTable != nil {
+		buf.Printf("(%v)", ts.LikeTable)
+		return
+	}
+
 	buf.Printf("(\n")
 	for i, col := range ts.Columns {
 		if i == 0 {
@@ -616,6 +623,20 @@ func (ts *TableSpec) addCheck(check *CheckDefinition) {
 
 func (ts *TableSpec) addForeignKey(foreignKey *ForeignKeyDefinition) {
 	ts.ForeignKeys = append(ts.ForeignKeys, foreignKey)
+}
+
+// TableLikeClause represents a CREATE TABLE ... LIKE clause
+type TableLikeClause struct {
+	TableName TableName
+	Options   []string // e.g., "EXCLUDING CONSTRAINTS"
+}
+
+// Format formats the node.
+func (tlc *TableLikeClause) Format(buf *nodeBuffer) {
+	buf.Printf("LIKE %v", tlc.TableName)
+	for _, opt := range tlc.Options {
+		buf.Printf(" %s", opt)
+	}
 }
 
 // ColumnDefinition describes a column in a CREATE TABLE statement

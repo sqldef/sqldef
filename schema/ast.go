@@ -73,7 +73,8 @@ type Table struct {
 	policies    []Policy
 	privileges  []TablePrivilege
 	options     map[string]string
-	renamedFrom string // Previous table name if renamed via @renamed annotation
+	renamedFrom string                  // Previous table name if renamed via @renamed annotation
+	likeTable   *parser.TableLikeClause // For CREATE TABLE ... LIKE
 }
 
 type Column struct {

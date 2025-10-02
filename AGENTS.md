@@ -49,7 +49,7 @@ For development iterations, use these commands to run tests:
 ### Run all tests
 
 ```sh
-make test
+make test # will take 5 minutes
 ```
 
 ### Run tests for specific `*def` tools

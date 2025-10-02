@@ -2301,3 +2301,12 @@ CreateTableWithCheckConstraints:
       CONSTRAINT c_lowercase_name CHECK (((name)::TEXT = LOWER((name)::TEXT)))
     );
   output: ""
+
+CreateTableLike:
+  current: |
+    CREATE TABLE task (id int);
+  desired: |
+    CREATE TABLE task (id int);
+    CREATE TABLE task_log (LIKE task EXCLUDING CONSTRAINTS);
+  output: |
+    CREATE TABLE task_log (LIKE task EXCLUDING CONSTRAINTS);

@@ -94,6 +94,12 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 
 	currentDDLs = SortTablesByDependencies(currentDDLs)
 
+	// Expand LIKE clauses in desired DDLs using tables from both current and desired DDLs
+	desiredDDLs, err = expandLikeClauses(mode, desiredDDLs, append(currentDDLs, desiredDDLs...), defaultSchema)
+	if err != nil {
+		return nil, err
+	}
+
 	aggregated, err := aggregateDDLsToSchema(currentDDLs)
 	if err != nil {
 		return nil, err
@@ -2299,6 +2305,60 @@ func mergeTable(table1 *Table, table2 Table) {
 			table1.indexes = append(table1.indexes, index)
 		}
 	}
+}
+
+// expandLikeClauses expands CREATE TABLE ... LIKE clauses by copying columns from source tables
+func expandLikeClauses(mode GeneratorMode, desiredDDLs []DDL, allDDLs []DDL, defaultSchema string) ([]DDL, error) {
+	// Build a map of available tables for lookup
+	tableMap := make(map[string]*Table)
+	for _, ddl := range allDDLs {
+		if createTable, ok := ddl.(*CreateTable); ok {
+			tableMap[createTable.table.name] = &createTable.table
+		}
+	}
+
+	// Process desired DDLs and expand LIKE clauses
+	result := make([]DDL, 0, len(desiredDDLs))
+	for _, ddl := range desiredDDLs {
+		if createTable, ok := ddl.(*CreateTable); ok {
+			// Check if this table uses LIKE clause
+			if createTable.table.likeTable != nil {
+				// Convert TableName to normalized string for lookup
+				sourceTableName := normalizedTableName(mode, createTable.table.likeTable.TableName, defaultSchema)
+				sourceTable, exists := tableMap[sourceTableName]
+				if !exists {
+					return nil, fmt.Errorf("table %s referenced in LIKE clause does not exist", sourceTableName)
+				}
+
+				// Copy columns from source table if the target table has no columns
+				if len(createTable.table.columns) == 0 && len(sourceTable.columns) > 0 {
+					// Check options to see what should be excluded
+					excludeConstraints := false
+					for _, opt := range createTable.table.likeTable.Options {
+						if opt == "EXCLUDING CONSTRAINTS" {
+							excludeConstraints = true
+						}
+					}
+
+					// Copy columns from source table
+					copiedColumns := make(map[string]*Column)
+					for name, col := range sourceTable.columns {
+						copiedCol := *col // Copy the column
+						// If excluding constraints, remove certain constraints
+						if excludeConstraints {
+							copiedCol.keyOption = ColumnKeyNone
+							// Remove other constraint-related fields as needed
+						}
+						copiedColumns[name] = &copiedCol
+					}
+					createTable.table.columns = copiedColumns
+				}
+			}
+		}
+		result = append(result, ddl)
+	}
+
+	return result, nil
 }
 
 func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {

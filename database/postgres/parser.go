@@ -120,6 +120,7 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 	var foreignKeys []*parser.ForeignKeyDefinition
 	var checks []*parser.CheckDefinition
 	var exclusions []*parser.ExclusionDefinition
+	var likeTable *parser.TableLikeClause
 	for _, elt := range stmt.TableElts {
 		switch node := elt.Node.(type) {
 		case *pgquery.Node_ColumnDef:
@@ -202,8 +203,44 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 			}
 		case *pgquery.Node_TableLikeClause:
 			// Handle CREATE TABLE ... LIKE syntax
-			// For now, we'll just continue as the table structure will be copied at runtime
-			continue
+			sourceTableName, err := p.parseTableName(node.TableLikeClause.Relation)
+			if err != nil {
+				return nil, err
+			}
+
+			// Parse the options bitmask
+			// The options are encoded as a bitmask where each bit represents INCLUDING/EXCLUDING for each option type
+			var options []string
+			optBits := node.TableLikeClause.Options
+
+			// PostgreSQL's CREATE_TABLE_LIKE options bit positions
+			const (
+				CREATE_TABLE_LIKE_DEFAULTS    = 1 << 0
+				CREATE_TABLE_LIKE_CONSTRAINTS = 1 << 1
+				CREATE_TABLE_LIKE_INDEXES     = 1 << 2
+				CREATE_TABLE_LIKE_STORAGE     = 1 << 3
+				CREATE_TABLE_LIKE_COMMENTS    = 1 << 4
+				CREATE_TABLE_LIKE_COMPRESSION = 1 << 5
+				CREATE_TABLE_LIKE_STATISTICS  = 1 << 6
+				CREATE_TABLE_LIKE_GENERATED   = 1 << 7
+				CREATE_TABLE_LIKE_IDENTITY    = 1 << 8
+				CREATE_TABLE_LIKE_ALL         = 0x7FFF // All bits
+			)
+
+			// Check which options are excluded (when bit is not set)
+			// Default behavior is INCLUDING for most things except constraints and indexes
+			if (optBits & CREATE_TABLE_LIKE_CONSTRAINTS) == 0 {
+				options = append(options, "EXCLUDING CONSTRAINTS")
+			}
+			if (optBits&CREATE_TABLE_LIKE_INDEXES) == 0 && len(options) == 0 {
+				options = append(options, "EXCLUDING INDEXES")
+			}
+			// For now, only handle the common cases
+
+			likeTable = &parser.TableLikeClause{
+				TableName: sourceTableName,
+				Options:   options,
+			}
 		default:
 			return nil, fmt.Errorf("unknown node in parseCreateStmt: %#v", node)
 		}
@@ -219,6 +256,7 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 			Checks:      checks,
 			Exclusions:  exclusions,
 			Options:     map[string]string{},
+			LikeTable:   likeTable,
 		},
 	}, nil
 }
