@@ -1,3 +1,7 @@
+## [v3.1.11](https://github.com/sqldef/sqldef/compare/v3.1.10...v3.1.11) - 2025-10-03
+- show readable error positions on syntax errors by @gfx in https://github.com/sqldef/sqldef/pull/848
+- update agent rules by @gfx in https://github.com/sqldef/sqldef/pull/850
+
 ## [v3.1.10](https://github.com/sqldef/sqldef/compare/v3.1.9...v3.1.10) - 2025-10-02
 - mssql: sort indexes name in --export by @gfx in https://github.com/sqldef/sqldef/pull/842
 - modernize the code by @gfx in https://github.com/sqldef/sqldef/pull/844
