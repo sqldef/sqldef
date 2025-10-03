@@ -475,6 +475,7 @@ type DDL struct {
 	Extension     *Extension
 	Schema        *Schema
 	Grant         *Grant
+	ColumnDef     *ColumnDefinition
 }
 
 type DDLAction int
@@ -485,6 +486,7 @@ const (
 	AddIndex
 	AddPrimaryKey
 	AddExclusion
+	AddColumn
 	CommentOn
 	CreateExtension
 	CreateIndex
@@ -616,6 +618,10 @@ func (ts *TableSpec) addCheck(check *CheckDefinition) {
 
 func (ts *TableSpec) addForeignKey(foreignKey *ForeignKeyDefinition) {
 	ts.ForeignKeys = append(ts.ForeignKeys, foreignKey)
+}
+
+func (ts *TableSpec) addExclusion(exclusion *ExclusionDefinition) {
+	ts.Exclusions = append(ts.Exclusions, exclusion)
 }
 
 // ColumnDefinition describes a column in a CREATE TABLE statement
@@ -966,7 +972,8 @@ type Extension struct {
 }
 
 type Schema struct {
-	Name string
+	Name        string
+	IfNotExists bool
 }
 
 type Grant struct {
@@ -1141,8 +1148,10 @@ type Trigger struct {
 }
 
 type Type struct {
-	Name TableName // workaround: using TableName to handle schema
-	Type ColumnType
+	Name       TableName // workaround: using TableName to handle schema
+	Type       ColumnType
+	IsEnum     bool
+	EnumValues []string
 }
 
 type Comment struct {
@@ -1570,26 +1579,56 @@ const (
 
 // Format formats the node.
 func (node *ComparisonExpr) Format(buf *nodeBuffer) {
-	buf.Printf("%v %s ", node.Left, node.Operator)
-	if node.All {
-		buf.Printf("ALL ")
-	} else if node.Any {
-		buf.Printf("ANY ")
-	}
-
-	// For ALL/ANY/SOME, wrap the right expression in parentheses if it's not already a ParenExpr or Subquery
-	if node.All || node.Any {
-		if _, isParenExpr := node.Right.(*ParenExpr); !isParenExpr {
-			if _, isSubquery := node.Right.(*Subquery); !isSubquery {
-				buf.Printf("(%v)", node.Right)
-			} else {
-				buf.Printf("%v", node.Right)
+	// Convert IN expressions to ANY(ARRAY) for PostgreSQL compatibility
+	// PostgreSQL internally converts IN (list) to = ANY (ARRAY[list])
+	if node.Operator == InStr {
+		// Format as = ANY (ARRAY[...])
+		buf.Printf("%v = ANY ", node.Left)
+		if tuple, ok := node.Right.(ValTuple); ok {
+			buf.Printf("(ARRAY[")
+			for i, val := range tuple {
+				if i > 0 {
+					buf.Printf(", ")
+				}
+				buf.Printf("%v", val)
 			}
+			buf.Printf("])")
+		} else {
+			buf.Printf("%v", node.Right)
+		}
+	} else if node.Operator == NotInStr {
+		// Format as <> ALL (ARRAY[...])
+		buf.Printf("%v <> ALL ", node.Left)
+		if tuple, ok := node.Right.(ValTuple); ok {
+			buf.Printf("(ARRAY[")
+			for i, val := range tuple {
+				if i > 0 {
+					buf.Printf(", ")
+				}
+				buf.Printf("%v", val)
+			}
+			buf.Printf("])")
 		} else {
 			buf.Printf("%v", node.Right)
 		}
 	} else {
-		buf.Printf("%v", node.Right)
+		// Original formatting for other operators
+		buf.Printf("%v %s", node.Left, node.Operator)
+		if node.All {
+			buf.Printf(" ALL ")
+		} else if node.Any {
+			buf.Printf(" ANY ")
+		} else {
+			buf.Printf(" ")
+		}
+
+		// For ALL/ANY/SOME, wrap the right expression in parentheses if it's not already a ParenExpr or Subquery
+		if node.All || node.Any {
+			// Always add parentheses for consistency with PostgreSQL output format
+			buf.Printf("(%v)", node.Right)
+		} else {
+			buf.Printf("%v", node.Right)
+		}
 	}
 
 	if node.Escape != nil {
@@ -2092,6 +2131,7 @@ type ConvertType struct {
 	Scale    *SQLVal
 	Operator string
 	Charset  string
+	Array    bool
 }
 
 // this string is "character set" and this comment is required
@@ -2108,6 +2148,9 @@ func (node *ConvertType) Format(buf *nodeBuffer) {
 			buf.Printf(", %v", node.Scale)
 		}
 		buf.Printf(")")
+	}
+	if node.Array {
+		buf.Printf("[]")
 	}
 	if node.Charset != "" {
 		buf.Printf("%s %s", node.Operator, node.Charset)
@@ -2662,5 +2705,11 @@ type ArrayElement interface {
 	SQLNode
 }
 
-func (*SQLVal) iArrayElement()   {}
-func (*CastExpr) iArrayElement() {}
+func (*SQLVal) iArrayElement()          {}
+func (*CastExpr) iArrayElement()        {}
+func (*FuncExpr) iArrayElement()        {}
+func (*BinaryExpr) iArrayElement()      {}
+func (*UnaryExpr) iArrayElement()       {}
+func (*ColName) iArrayElement()         {}
+func (*ParenExpr) iArrayElement()       {}
+func (*ArrayConstructor) iArrayElement() {}

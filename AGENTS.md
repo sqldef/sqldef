@@ -13,6 +13,7 @@ Each command follows the same pattern: it accepts connection parameters similar 
 
 * Never commit the changes unless the user asks for it.
 * Write comments to describe what is not obvious in the code. Describing the "why" is a recommended practice.
+* Always use the SQL parser (parser/parser.y) to parse statements and expressions, instead of using regular expressions.
 
 ## Build
 
@@ -175,6 +176,7 @@ There are markdown files to describe the usage of each command. Keep them up to 
 
 Before considering any task complete, run these commands:
 
-* [ ] `make build`      # Ensure it compiles
-* [ ] `make test`       # Run all tests
-* [ ] `gofmt -w .`      # Format the code
+* [ ] `make build`  # Ensure all commands are compiled
+* [ ] `make test`   # Ensure all tests pass
+* [ ] `make lint`   # Ensure the code is linted
+* [ ] `make format` # Ensure the code is formatted

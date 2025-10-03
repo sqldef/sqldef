@@ -11,7 +11,6 @@ require (
 	github.com/k0kubun/pp/v3 v3.5.0
 	github.com/lib/pq v1.10.9
 	github.com/microsoft/go-mssqldb v1.9.3
-	github.com/pganalyze/pg_query_go/v6 v6.1.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.17.0
 	golang.org/x/term v0.35.0
@@ -25,8 +24,6 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/tetratelabs/wazero v1.9.0 // indirect
-	github.com/wasilibs/wazero-helpers v0.0.0-20250123031827-cd30c44769bb // indirect
 	golang.org/x/crypto v0.38.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	golang.org/x/sys v0.36.0 // indirect
@@ -43,6 +40,4 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/wasilibs/go-pgquery v0.0.0-20250219053243-148840c597e6
-	google.golang.org/protobuf v1.36.5 // indirect
 )

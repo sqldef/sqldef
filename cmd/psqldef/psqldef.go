@@ -13,6 +13,7 @@ import (
 	"github.com/sqldef/sqldef/v3"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/database/postgres"
+	"github.com/sqldef/sqldef/v3/parser"
 	"github.com/sqldef/sqldef/v3/schema"
 	"golang.org/x/term"
 )
@@ -180,6 +181,6 @@ func main() {
 		defer db.Close()
 	}
 
-	sqlParser := postgres.NewParser()
+	sqlParser := database.NewParser(parser.ParserModePostgres)
 	sqldef.Run(schema.GeneratorModePostgres, db, sqlParser, options)
 }

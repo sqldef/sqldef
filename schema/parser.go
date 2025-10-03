@@ -337,8 +337,14 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		name := indexDef.Info.Name.String()
-		if name == "" { // For MySQL
-			name = indexColumns[0].column
+		if name == "" {
+			// PostgreSQL generates names like "tablename_columnname_key" for unnamed UNIQUE constraints
+			if mode == GeneratorModePostgres && indexDef.Info.Unique && !indexDef.Info.Primary {
+				name = fmt.Sprintf("%s_%s_key", stmt.NewName.Name.String(), indexColumns[0].column)
+			} else {
+				// For MySQL and others
+				name = indexColumns[0].column
+			}
 		}
 
 		var constraintOptions *ConstraintOptions
@@ -353,6 +359,11 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		// Constraints have constraintOptions (set when CONSTRAINT keyword is used)
 		// For PostgreSQL: Constraints have constraintOptions
 		isConstraint := constraintOptions != nil
+
+		// For PostgreSQL, UNIQUE constraints in CREATE TABLE are always constraints
+		if mode == GeneratorModePostgres && indexDef.Info.Unique && !indexDef.Info.Primary {
+			isConstraint = true
+		}
 
 		// For MSSQL, PRIMARY KEY is always a constraint
 		if mode == GeneratorModeMssql && indexDef.Info.Primary {

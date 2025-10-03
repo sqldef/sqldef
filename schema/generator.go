@@ -23,12 +23,19 @@ const (
 )
 
 var (
-	dataTypeAliases = map[string]string{
-		"bool":    "boolean",
-		"int":     "integer",
-		"char":    "character",
-		"varchar": "character varying",
+	// PostgreSQL-specific type aliases
+	postgresDataTypeAliases = map[string]string{
+		"bool":        "boolean",
+		"int":         "integer",
+		"int2":        "smallint",
+		"int4":        "integer",
+		"int8":        "bigint",
+		"char":        "character",
+		"varchar":     "character varying",
+		"timestamptz": "timestamp with time zone",
+		"timetz":      "time with time zone",
 	}
+	// MySQL-specific type aliases
 	mysqlDataTypeAliases = map[string]string{
 		"boolean": "tinyint",
 	}
@@ -816,7 +823,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						ddls = append(ddls, ddl)
 					}
 					if desiredColumn.check != nil {
-						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), constraintName, desiredColumn.check.definition)
+						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), constraintName, normalizeCheckDefinitionForOutput(desiredColumn.check.definition))
 						if desiredColumn.check.noInherit {
 							ddl += " NO INHERIT"
 						}
@@ -853,7 +860,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						if desiredColumn.check.notForReplication {
 							replicationDefinition = " NOT FOR REPLICATION"
 						}
-						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableName(desired.table.name), desiredConstraintName, replicationDefinition, desiredColumn.check.definition)
+						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableName(desired.table.name), desiredConstraintName, replicationDefinition, normalizeCheckDefinitionForOutput(desiredColumn.check.definition))
 						ddls = append(ddls, ddl)
 					}
 				}
@@ -1141,12 +1148,12 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				switch g.mode {
 				case GeneratorModePostgres:
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), desiredCheck.definition))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), normalizeCheckDefinitionForOutput(desiredCheck.definition)))
 				default:
 				}
 			}
 		} else {
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), desiredCheck.definition))
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), normalizeCheckDefinitionForOutput(desiredCheck.definition)))
 		}
 	}
 
@@ -1433,6 +1440,17 @@ func (g *Generator) normalizeViewDefinition(definition string) string {
 		tableColumnPattern := regexp.MustCompile(`\b(\w+)\.(\w+)\b`)
 		definition = tableColumnPattern.ReplaceAllString(definition, "$2")
 
+		// Remove unnecessary parentheses around NOT expressions
+		// PostgreSQL adds these when exporting views
+		// Handle cases like "(NOT deleted)" -> "NOT deleted"
+		definition = regexp.MustCompile(`\((not\s+[^)]+)\)`).ReplaceAllString(definition, "$1")
+
+		// Normalize casts - PostgreSQL may add extra parens and change formats
+		// Handle numeric(10,2) vs numeric(10, 2) - normalize spacing
+		definition = regexp.MustCompile(`numeric\((\d+),\s*(\d+)\)`).ReplaceAllString(definition, "numeric($1, $2)")
+		// Remove extra parens around cast expressions
+		definition = regexp.MustCompile(`\(([^()]+::[^()]+)\)`).ReplaceAllString(definition, "$1")
+
 		// Normalize multiple spaces to single space
 		definition = regexp.MustCompile(`\s+`).ReplaceAllString(definition, " ")
 		definition = strings.TrimSpace(definition)
@@ -1646,7 +1664,7 @@ func (g *Generator) generateDataType(column Column) string {
 	}
 
 	// Determine the full type name including schema qualification
-	typeName := column.typeName
+	typeName := g.normalizeDataType(column.typeName)
 	// Only qualify type names with schema for PostgreSQL when:
 	// 1. references is not empty and not just "public."
 	// 2. the type name doesn't already contain a dot
@@ -1872,20 +1890,26 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 			"ALTER TABLE %s ADD ",
 			g.escapeTableName(table),
 		)
-		if strings.EqualFold(index.indexType, "PRIMARY KEY") && index.primary &&
-			(index.name != "" && index.name != "PRIMARY" && index.name != index.columns[0].column) {
-			ddl += fmt.Sprintf("CONSTRAINT %s ", g.escapeSQLName(index.name))
-		}
-		if strings.EqualFold(index.indexType, "UNIQUE KEY") {
-			ddl += "CONSTRAINT"
-		} else {
+
+		// Handle primary keys
+		if index.primary || strings.EqualFold(index.indexType, "PRIMARY KEY") {
+			if index.name != "" && index.name != "PRIMARY" && index.name != index.columns[0].column {
+				ddl += fmt.Sprintf("CONSTRAINT %s ", g.escapeSQLName(index.name))
+			}
+			ddl += "PRIMARY KEY"
+		} else if index.constraint && index.unique {
+			// Handle unique constraints
+			ddl += fmt.Sprintf("CONSTRAINT %s UNIQUE", g.escapeSQLName(index.name))
+		} else if strings.EqualFold(index.indexType, "UNIQUE KEY") {
+			ddl += fmt.Sprintf("CONSTRAINT %s UNIQUE", g.escapeSQLName(index.name))
+		} else if index.unique && !index.constraint {
+			// Non-constraint unique index
+			ddl += fmt.Sprintf("UNIQUE %s", g.escapeSQLName(index.name))
+		} else if index.indexType != "" {
 			ddl += strings.ToUpper(index.indexType)
-		}
-		if !index.primary {
-			ddl += fmt.Sprintf(" %s", g.escapeSQLName(index.name))
-		}
-		if strings.EqualFold(index.indexType, "UNIQUE KEY") {
-			ddl += " UNIQUE"
+			if !index.primary {
+				ddl += fmt.Sprintf(" %s", g.escapeSQLName(index.name))
+			}
 		}
 		constraintOptions := g.generateConstraintOptions(index.constraintOptions)
 		ddl += fmt.Sprintf(" (%s)%s%s", strings.Join(columns, ", "), optionDefinition, constraintOptions)
@@ -2027,12 +2051,21 @@ func (g *Generator) generateExclusionDefinition(exclusion Exclusion) string {
 	for _, exclusionPair := range exclusion.exclusions {
 		ex = append(ex, fmt.Sprintf("%s WITH %s", exclusionPair.column, exclusionPair.operator))
 	}
-	definition := fmt.Sprintf(
-		"CONSTRAINT %s EXCLUDE USING %s (%s)",
-		g.escapeSQLName(exclusion.constraintName),
-		exclusion.indexType,
-		strings.Join(ex, ", "),
-	)
+	var definition string
+	if exclusion.indexType != "" {
+		definition = fmt.Sprintf(
+			"CONSTRAINT %s EXCLUDE USING %s (%s)",
+			g.escapeSQLName(exclusion.constraintName),
+			exclusion.indexType,
+			strings.Join(ex, ", "),
+		)
+	} else {
+		definition = fmt.Sprintf(
+			"CONSTRAINT %s EXCLUDE (%s)",
+			g.escapeSQLName(exclusion.constraintName),
+			strings.Join(ex, ", "),
+		)
+	}
 	if exclusion.where != "" {
 		definition += fmt.Sprintf(" WHERE (%s)", exclusion.where)
 	}
@@ -2870,18 +2903,55 @@ func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
-	if g.normalizeDataType(current.typeName) != g.normalizeDataType(desired.typeName) {
+	// Normalize and compare type names, handling schema qualifiers
+	currentType := g.normalizeDataType(current.typeName)
+	desiredType := g.normalizeDataType(desired.typeName)
+
+	// Strip schema qualifiers for comparison (e.g., "public.country" -> "country")
+	currentType = g.stripSchemaFromType(currentType)
+	desiredType = g.stripSchemaFromType(desiredType)
+
+	if currentType != desiredType {
 		return false
 	}
 	if !reflect.DeepEqual(current.enumValues, desired.enumValues) {
 		return false
 	}
-	if current.length == nil && desired.length != nil || current.length != nil && desired.length == nil {
-		return false
+
+	// PostgreSQL special handling for timestamp/time with time zone precision
+	// PostgreSQL always stores these types with precision 6, so:
+	// - timestamp with time zone == timestamp(6) with time zone
+	// - time with time zone == time(6) with time zone
+	if g.mode == GeneratorModePostgres && current.timezone && desired.timezone {
+		if currentType == "timestamp with time zone" || currentType == "time with time zone" {
+			// Check if one has no precision and the other has precision 6
+			if (current.length == nil && desired.length != nil && desired.length.intVal == 6) ||
+			   (desired.length == nil && current.length != nil && current.length.intVal == 6) ||
+			   (current.length != nil && desired.length != nil && current.length.intVal == desired.length.intVal) ||
+			   (current.length == nil && desired.length == nil) {
+				// These are considered the same for PostgreSQL timezone types
+			} else {
+				return false
+			}
+		} else {
+			// For non-timezone timestamp/time types, use regular comparison
+			if current.length == nil && desired.length != nil || current.length != nil && desired.length == nil {
+				return false
+			}
+			if current.length != nil && desired.length != nil && current.length.intVal != desired.length.intVal {
+				return false
+			}
+		}
+	} else {
+		// Regular length comparison for other databases and types
+		if current.length == nil && desired.length != nil || current.length != nil && desired.length == nil {
+			return false
+		}
+		if current.length != nil && desired.length != nil && current.length.intVal != desired.length.intVal {
+			return false
+		}
 	}
-	if current.length != nil && desired.length != nil && current.length.intVal != desired.length.intVal {
-		return false
-	}
+
 	if current.scale == nil && (desired.scale != nil && desired.scale.intVal != 0) || (current.scale != nil && current.scale.intVal != 0) && desired.scale == nil {
 		return false
 	}
@@ -2931,15 +3001,72 @@ func (g *Generator) buildForeignKeyDDL(tableName string, fk *ForeignKey) string 
 // This handles PostgreSQL's automatic type casting behavior where:
 // - ARRAY['active', 'pending'] becomes ARRAY['active'::text, 'pending'::text]
 // - '[0-9]' becomes '[0-9]'::text
+// - SOME is an alias for ANY in SQL
+// - PostgreSQL may reformat parentheses based on operator precedence
 func normalizeCheckDefinitionForComparison(def string) string {
+	// For now, we'll use string-based normalization
+	// TODO: Refactor to parse the expression as AST and normalize it properly
+	result := def
+
 	// Remove ::text type casts from string literals
-	result := regexp.MustCompile(`'([^']*)'::text`).ReplaceAllString(def, "'$1'")
+	result = regexp.MustCompile(`'([^']*)'::text`).ReplaceAllString(result, "'$1'")
 
 	// Remove ::character varying type casts
 	result = regexp.MustCompile(`'([^']*)'::character varying(\([^)]*\))?`).ReplaceAllString(result, "'$1'")
 
-	// Remove extra parentheses that PostgreSQL sometimes adds
-	result = regexp.MustCompile(`\(\((.*)\)\)`).ReplaceAllString(result, "($1)")
+	// Normalize SOME to ANY (they are equivalent in SQL)
+	result = regexp.MustCompile(`\bSOME\s*\(`).ReplaceAllString(result, "ANY(")
+
+	// Normalize AND/OR case first
+	result = regexp.MustCompile(`\bAND\b`).ReplaceAllString(result, "and")
+	result = regexp.MustCompile(`\bOR\b`).ReplaceAllString(result, "or")
+
+	// Normalize spacing around parentheses for array constructors and operators
+	result = regexp.MustCompile(`\s*\(\s*ARRAY`).ReplaceAllString(result, "(ARRAY")
+	result = regexp.MustCompile(`ANY\s*\(`).ReplaceAllString(result, "ANY(")
+	result = regexp.MustCompile(`ALL\s*\(`).ReplaceAllString(result, "ALL(")
+
+	// Normalize logical operators
+	result = regexp.MustCompile(`\s+and\s+`).ReplaceAllString(result, " and ")
+	result = regexp.MustCompile(`\s+or\s+`).ReplaceAllString(result, " or ")
+
+	// Remove unnecessary parentheses around individual comparisons
+	for i := 0; i < 3; i++ {
+		prev := result
+		// Match patterns like "(column op ANY/ALL(ARRAY[...]))"
+		result = regexp.MustCompile(`\((\w+\s*[=<>]+\s*(?:ANY|ALL)\s*\(\s*ARRAY\s*\[[^\]]+\]\s*\))\)`).ReplaceAllString(result, "$1")
+		if result == prev {
+			break
+		}
+	}
+
+	// Handle parentheses around AND groups when used with OR
+	if strings.Contains(result, ") or (") {
+		if strings.HasPrefix(result, "(") && strings.HasSuffix(result, ")") {
+			inner := result[1 : len(result)-1]
+			// Count the parentheses levels at the " or " position
+			if idx := strings.Index(inner, ") or ("); idx >= 0 {
+				// This looks like our pattern, remove the outer parens from each AND group
+				result = strings.ReplaceAll(result, ") or (", " or ")
+				result = strings.TrimPrefix(result, "(")
+				result = strings.TrimSuffix(result, ")")
+			}
+		}
+	}
+
+	// Remove redundant spaces
+	result = regexp.MustCompile(`\s+`).ReplaceAllString(result, " ")
+	result = strings.TrimSpace(result)
+
+	return result
+}
+
+// normalizeCheckDefinitionForOutput normalizes CHECK constraint definitions for output
+// This ensures consistent output format, converting SOME to ANY since they're equivalent
+func normalizeCheckDefinitionForOutput(def string) string {
+	// Convert SOME to ANY without space (they are equivalent in SQL, but ANY is more standard)
+	// Note: This deliberately outputs ANY( without space when converting from SOME
+	result := regexp.MustCompile(`\bSOME\s*\(`).ReplaceAllString(def, "ANY(")
 
 	return result
 }
@@ -3042,17 +3169,38 @@ func isNullValue(value *Value) bool {
 }
 
 func (g *Generator) normalizeDataType(dataType string) string {
-	alias, ok := dataTypeAliases[dataType]
-	if ok {
-		dataType = alias
-	}
-	if g.mode == GeneratorModeMysql {
-		alias, ok = mysqlDataTypeAliases[dataType]
+	// Normalize to lowercase for consistent alias lookup
+	lowerDataType := strings.ToLower(dataType)
+
+	switch g.mode {
+	case GeneratorModePostgres:
+		alias, ok := postgresDataTypeAliases[lowerDataType]
+		if ok {
+			dataType = alias
+		}
+	case GeneratorModeMysql:
+		alias, ok := mysqlDataTypeAliases[lowerDataType]
 		if ok {
 			dataType = alias
 		}
 	}
 	return dataType
+}
+
+// stripSchemaFromType removes schema qualifiers from type names
+// e.g., "public.country" -> "country", "public"."country" -> "country"
+func (g *Generator) stripSchemaFromType(typeName string) string {
+	// Remove quoted schema qualifiers like "public"."country"
+	if idx := strings.LastIndex(typeName, "\".\""); idx >= 0 {
+		// Find the last occurrence of "."
+		return typeName[idx+3:] // Skip past "."
+	}
+	// Remove unquoted schema qualifiers like public.country
+	if idx := strings.LastIndex(typeName, "."); idx >= 0 {
+		return typeName[idx+1:]
+	}
+	// Remove leading/trailing quotes if present
+	return strings.Trim(typeName, "\"")
 }
 
 func (g *Generator) areSamePrimaryKeys(primaryKeyA *Index, primaryKeyB *Index) bool {
@@ -3234,13 +3382,19 @@ func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB Forei
 }
 
 func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion) bool {
-	if exclusionA.indexType != exclusionB.indexType {
+	// Normalize index types - empty and "btree" are equivalent (btree is the default)
+	indexTypeA := exclusionA.indexType
+	indexTypeB := exclusionB.indexType
+	if (indexTypeA == "" || indexTypeA == "btree") && (indexTypeB == "" || indexTypeB == "btree") {
+		// Both are btree (default), so they're equal
+	} else if indexTypeA != indexTypeB {
 		return false
 	}
 	if len(exclusionA.exclusions) != len(exclusionB.exclusions) {
 		return false
 	}
-	if exclusionA.where != exclusionB.where {
+	// Normalize WHERE clauses for comparison
+	if normalizeExclusionWhere(exclusionA.where) != normalizeExclusionWhere(exclusionB.where) {
 		return false
 	}
 	for i := range exclusionA.exclusions {
@@ -3251,6 +3405,21 @@ func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion
 		}
 	}
 	return true
+}
+
+func normalizeExclusionWhere(where string) string {
+	if where == "" {
+		return ""
+	}
+	// Remove outer parentheses if present
+	normalized := strings.TrimSpace(where)
+	if strings.HasPrefix(normalized, "((") && strings.HasSuffix(normalized, "))") {
+		normalized = strings.TrimPrefix(normalized, "(")
+		normalized = strings.TrimSuffix(normalized, ")")
+	}
+	// Normalize <> to != (PostgreSQL treats them as equivalent)
+	normalized = strings.ReplaceAll(normalized, "<>", "!=")
+	return normalized
 }
 
 func areSamePolicies(policyA, policyB Policy) bool {

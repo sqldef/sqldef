@@ -108,6 +108,7 @@ func forceEOF(yylex interface{}) {
   LengthScaleOption        LengthScaleOption
   columnDefinition         *ColumnDefinition
   checkDefinition          *CheckDefinition
+  exclusionDefinition      *ExclusionDefinition
   indexDefinition          *IndexDefinition
   indexInfo                *IndexInfo
   indexOption              *IndexOption
@@ -128,6 +129,8 @@ func forceEOF(yylex interface{}) {
   arrayConstructor         *ArrayConstructor
   arrayElements            ArrayElements
   arrayElement             ArrayElement
+  exclusionPair            ExclusionPair
+  exclusionPairs           []ExclusionPair
   tableOptions             map[string]string
   overExpr                 *OverExpr
   partitionBy              PartitionBy
@@ -190,7 +193,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD
 %token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE
 %right <bytes> UNIQUE KEY
-%token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
+%token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE CONNECT USAGE
 %token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN
 %token <bytes> STATUS VARIABLES
 %token <bytes> RESTRICT CASCADE NO ACTION
@@ -200,6 +203,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> DEFERRABLE INITIALLY IMMEDIATE DEFERRED
 %token <bytes> CONCURRENTLY
 %token <bytes> SQL SECURITY
+%token <bytes> EXTENSION GRANT REVOKE PRIVILEGES EXCLUDE GIST OPTION
 
 // Transaction Tokens
 %token <bytes> BEGIN START TRANSACTION COMMIT ROLLBACK
@@ -207,7 +211,7 @@ func forceEOF(yylex interface{}) {
 // Type Tokens
 %token <bytes> BIT TINYINT SMALLINT SMALLSERIAL MEDIUMINT INT INTEGER SERIAL BIGINT BIGSERIAL INTNUM
 %token <bytes> REAL DOUBLE PRECISION FLOAT_TYPE DECIMAL NUMERIC SMALLMONEY MONEY
-%token <bytes> TIME TIMESTAMP DATETIME YEAR DATETIMEOFFSET DATETIME2 SMALLDATETIME
+%token <bytes> TIME TIMESTAMP TIMESTAMPTZ TIMETZ DATETIME YEAR DATETIMEOFFSET DATETIME2 SMALLDATETIME
 %token <bytes> CHAR VARCHAR VARYING BOOL CHARACTER VARBINARY NCHAR NVARCHAR NTEXT UUID
 %token <bytes> TEXT TINYTEXT MEDIUMTEXT LONGTEXT CITEXT
 %token <bytes> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON JSONB ENUM
@@ -278,12 +282,13 @@ func forceEOF(yylex interface{}) {
 %type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement
 %type <statement> if_statement matched_if_statement unmatched_if_statement trigger_statement_not_if
 %type <blockStatement> simple_if_body
-%type <statement> create_statement alter_statement
+%type <statement> create_statement alter_statement grant_statement comment_statement
 %type <statement> set_option_statement set_bool_option_statement
 %type <ddl> create_table_prefix
 %type <bytes2> comment_opt comment_list
-%type <str> union_op insert_or_replace exec_keyword
+%type <str> union_op insert_or_replace exec_keyword privilege_keyword exclusion_operator
 %type <str> distinct_opt straight_join_opt cache_opt match_option separator_opt
+%type <strs> enum_value_list
 %type <expr> like_escape_opt
 %type <selectExprs> select_expression_list select_expression_list_opt
 %type <selectExpr> select_expression
@@ -332,11 +337,12 @@ func forceEOF(yylex interface{}) {
 %type <bytes> charset_or_character_set
 %type <updateExpr> update_expression
 %type <setExpr> set_expression transaction_char isolation_level
-%type <str> ignore_opt default_opt
+%type <str> ignore_opt default_opt cascade_opt
 %type <empty> not_exists_opt when_expression_opt for_each_row_opt
 %type <bytes> reserved_keyword non_reserved_keyword
 %type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt
-%type <boolVal> unique_opt
+%type <boolVal> unique_opt if_not_exists_opt
+%type <byt> with_grant_option_opt
 %type <expr> charset_value
 %type <tableIdent> table_id reserved_table_id table_alias as_opt_id
 %type <empty> as_opt
@@ -355,6 +361,9 @@ func forceEOF(yylex interface{}) {
 %type <columnType> column_definition_type
 %type <indexDefinition> index_definition primary_key_definition unique_definition
 %type <checkDefinition> check_definition
+%type <exclusionDefinition> exclude_definition
+%type <exclusionPair> exclusion_pair
+%type <exclusionPairs> exclusion_pairs
 %type <foreignKeyDefinition> foreign_key_definition foreign_key_without_options
 %type <colIdent> reference_option
 %type <colIdent> sql_id_opt
@@ -389,7 +398,8 @@ func forceEOF(yylex interface{}) {
 %type <optVal> index_distance_option_value
 %type <optVal> vector_option_value
 %type <str> trigger_time trigger_event fetch_opt
-%type <strs> trigger_event_list
+%type <strs> trigger_event_list privilege_list grantee_list
+%type <str> grantee
 %type <blockStatement> trigger_statements statement_block
 %type <statement> trigger_statement
 %type <localVariable> local_variable
@@ -430,6 +440,8 @@ semicolon_opt:
 statement:
   create_statement
 | alter_statement
+| grant_statement
+| comment_statement
 
 create_statement:
   create_table_prefix table_spec
@@ -681,14 +693,119 @@ create_statement:
       },
     }
   }
+| CREATE TYPE table_name AS ENUM '(' enum_value_list ')'
+  {
+    $$ = &DDL{
+      Action: CreateType,
+      Type: &Type{
+        Name: $3,
+        IsEnum: true,
+        EnumValues: $7,
+      },
+    }
+  }
 /* For SQLite3, only to parse because alternation is not supported. // The Virtual Table Mechanism Of SQLite https://www.sqlite.org/vtab.html */
 | CREATE VIRTUAL TABLE not_exists_opt table_name USING sql_id module_arguments_opt
   {
     $$ = &DDL{Action: CreateTable, NewName: $5, TableSpec: &TableSpec{}}
   }
+/* For PostgreSQL - CREATE SCHEMA */
+| CREATE SCHEMA if_not_exists_opt sql_id
+  {
+    $$ = &DDL{
+      Action: CreateSchema,
+      Schema: &Schema{
+        Name: $4.String(),
+        IfNotExists: bool($3),
+      },
+    }
+  }
+| CREATE SCHEMA if_not_exists_opt STRING
+  {
+    $$ = &DDL{
+      Action: CreateSchema,
+      Schema: &Schema{
+        Name: string($4),
+        IfNotExists: bool($3),
+      },
+    }
+  }
+/* For PostgreSQL - CREATE EXTENSION */
+| CREATE EXTENSION STRING
+  {
+    $$ = &DDL{
+      Action: CreateExtension,
+      Extension: &Extension{
+        Name: string($3),
+      },
+    }
+  }
+| CREATE EXTENSION sql_id
+  {
+    $$ = &DDL{
+      Action: CreateExtension,
+      Extension: &Extension{
+        Name: $3.String(),
+      },
+    }
+  }
+| CREATE EXTENSION CITEXT
+  {
+    $$ = &DDL{
+      Action: CreateExtension,
+      Extension: &Extension{
+        Name: "citext",
+      },
+    }
+  }
+| CREATE EXTENSION IF NOT EXISTS STRING
+  {
+    $$ = &DDL{
+      Action: CreateExtension,
+      Extension: &Extension{
+        Name: string($6),
+      },
+    }
+  }
+| CREATE EXTENSION IF NOT EXISTS sql_id
+  {
+    $$ = &DDL{
+      Action: CreateExtension,
+      Extension: &Extension{
+        Name: $6.String(),
+      },
+    }
+  }
+| CREATE EXTENSION IF NOT EXISTS CITEXT
+  {
+    $$ = &DDL{
+      Action: CreateExtension,
+      Extension: &Extension{
+        Name: "citext",
+      },
+    }
+  }
 
 alter_statement:
-  ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')'
+  ALTER ignore_opt TABLE table_name ADD COLUMN column_definition
+  {
+    $$ = &DDL{
+      Action: AddColumn,
+      Table: $4,
+      NewName: $4,
+      ColumnDef: $7,
+    }
+  }
+| ALTER ignore_opt TABLE table_name ADD column_definition
+  {
+    $$ = &DDL{
+      Action: AddColumn,
+      Table: $4,
+      NewName: $4,
+      ColumnDef: $6,
+    }
+  }
+| ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')'
   {
     $$ = &DDL{
       Action: AddIndex,
@@ -788,6 +905,245 @@ alter_statement:
       Table: $5,
       NewName: $5,
       ForeignKey: $7,
+    }
+  }
+| ALTER ignore_opt TABLE table_name ADD exclude_definition
+  {
+    $$ = &DDL{
+      Action: AddExclusion,
+      Table: $4,
+      NewName: $4,
+      Exclusion: $6,
+    }
+  }
+
+/* GRANT/REVOKE statements for PostgreSQL */
+grant_statement:
+  GRANT privilege_list ON TABLE table_name_list TO grantee_list with_grant_option_opt
+  {
+    if $8 != 0 {
+      yylex.Error("WITH GRANT OPTION is not supported yet")
+      return 1
+    }
+    // For now, only support single table
+    if len($5) > 1 {
+      yylex.Error("Multiple tables in GRANT are not supported yet")
+      return 1
+    }
+    $$ = &DDL{
+      Action: GrantPrivilege,
+      Table: $5[0],
+      Grant: &Grant{
+        IsGrant: true,
+        Privileges: $2,
+        TableName: $5[0],
+        Grantees: $7,
+      },
+    }
+  }
+| GRANT ALL PRIVILEGES ON TABLE table_name TO grantee_list with_grant_option_opt
+  {
+    if $9 != 0 {
+      yylex.Error("WITH GRANT OPTION is not supported yet")
+      return 1
+    }
+    $$ = &DDL{
+      Action: GrantPrivilege,
+      Table: $6,
+      Grant: &Grant{
+        IsGrant: true,
+        Privileges: []string{"ALL"},
+        TableName: $6,
+        Grantees: $8,
+      },
+    }
+  }
+| GRANT ALL ON TABLE table_name TO grantee_list with_grant_option_opt
+  {
+    if $8 != 0 {
+      yylex.Error("WITH GRANT OPTION is not supported yet")
+      return 1
+    }
+    $$ = &DDL{
+      Action: GrantPrivilege,
+      Table: $5,
+      Grant: &Grant{
+        IsGrant: true,
+        Privileges: []string{"ALL"},
+        TableName: $5,
+        Grantees: $7,
+      },
+    }
+  }
+| REVOKE privilege_list ON TABLE table_name FROM grantee_list cascade_opt
+  {
+    if $8 == "CASCADE" {
+      yylex.Error("CASCADE/RESTRICT options are not supported yet")
+      return 1
+    }
+    $$ = &DDL{
+      Action: RevokePrivilege,
+      Table: $5,
+      Grant: &Grant{
+        IsGrant: false,
+        Privileges: $2,
+        TableName: $5,
+        Grantees: $7,
+      },
+    }
+  }
+| REVOKE ALL PRIVILEGES ON TABLE table_name FROM grantee_list cascade_opt
+  {
+    if $9 == "CASCADE" {
+      yylex.Error("CASCADE/RESTRICT options are not supported yet")
+      return 1
+    }
+    $$ = &DDL{
+      Action: RevokePrivilege,
+      Table: $6,
+      Grant: &Grant{
+        IsGrant: false,
+        Privileges: []string{"ALL"},
+        TableName: $6,
+        Grantees: $8,
+      },
+    }
+  }
+| REVOKE ALL ON TABLE table_name FROM grantee_list cascade_opt
+  {
+    if $8 == "CASCADE" {
+      yylex.Error("CASCADE/RESTRICT options are not supported yet")
+      return 1
+    }
+    $$ = &DDL{
+      Action: RevokePrivilege,
+      Table: $5,
+      Grant: &Grant{
+        IsGrant: false,
+        Privileges: []string{"ALL"},
+        TableName: $5,
+        Grantees: $7,
+      },
+    }
+  }
+
+privilege_list:
+  privilege_keyword
+  {
+    $$ = []string{$1}
+  }
+| privilege_list ',' privilege_keyword
+  {
+    $$ = append($1, $3)
+  }
+
+privilege_keyword:
+  SELECT
+  {
+    $$ = "SELECT"
+  }
+| INSERT
+  {
+    $$ = "INSERT"
+  }
+| UPDATE
+  {
+    $$ = "UPDATE"
+  }
+| DELETE
+  {
+    $$ = "DELETE"
+  }
+| TRUNCATE
+  {
+    $$ = "TRUNCATE"
+  }
+| REFERENCES
+  {
+    $$ = "REFERENCES"
+  }
+| TRIGGER
+  {
+    $$ = "TRIGGER"
+  }
+| CREATE
+  {
+    $$ = "CREATE"
+  }
+| CONNECT
+  {
+    $$ = "CONNECT"
+  }
+| EXECUTE
+  {
+    $$ = "EXECUTE"
+  }
+| USAGE
+  {
+    $$ = "USAGE"
+  }
+| sql_id
+  {
+    $$ = strings.ToUpper($1.String())
+  }
+
+grantee_list:
+  grantee
+  {
+    $$ = []string{$1}
+  }
+| grantee_list ',' grantee
+  {
+    $$ = append($1, $3)
+  }
+
+grantee:
+  sql_id
+  {
+    $$ = $1.String()
+  }
+| STRING
+  {
+    $$ = string($1)
+  }
+| PUBLIC
+  {
+    $$ = "PUBLIC"
+  }
+
+/* COMMENT ON statements for PostgreSQL */
+comment_statement:
+  COMMENT_KEYWORD ON TABLE table_name IS STRING
+  {
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "TABLE",
+        Object: String($4),
+        Comment: string($6),
+      },
+    }
+  }
+| COMMENT_KEYWORD ON COLUMN table_id '.' sql_id IS STRING
+  {
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "COLUMN",
+        Object: String(TableName{Name: $4}) + "." + $6.String(),
+        Comment: string($8),
+      },
+    }
+  }
+| COMMENT_KEYWORD ON COLUMN table_id '.' reserved_table_id '.' sql_id IS STRING
+  {
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "COLUMN",
+        Object: String(TableName{Schema: $4, Name: $6}) + "." + $8.String(),
+        Comment: string($10),
+      },
     }
   }
 
@@ -1498,6 +1854,10 @@ table_column_list:
   {
     $$.addCheck($3)
   }
+| table_column_list ',' exclude_definition
+  {
+    $$.addExclusion($3)
+  }
 
 column_definition:
   sql_id column_definition_type
@@ -1505,6 +1865,10 @@ column_definition:
     $$ = &ColumnDefinition{Name: $1, Type: $2}
   }
 | non_reserved_keyword column_definition_type
+  {
+    $$ = &ColumnDefinition{Name: NewColIdent(string($1)), Type: $2}
+  }
+| LEVEL column_definition_type
   {
     $$ = &ColumnDefinition{Name: NewColIdent(string($1)), Type: $2}
   }
@@ -1534,6 +1898,10 @@ column_type:
 | sql_id
   {
     $$ = ColumnType{Type: $1.val}
+  }
+| sql_id '.' sql_id
+  {
+    $$ = ColumnType{Type: $1.val + "." + $3.val}
   }
 
 column_definition_type:
@@ -1783,7 +2151,7 @@ default_val:
   }
 
 default_expression:
-  function_call_generic
+  expression
   {
     $$ = $1
   }
@@ -2038,6 +2406,14 @@ time_type:
   {
     $$ = ColumnType{Type: string($1), Length: $2, Timezone: $3}
   }
+| TIMESTAMPTZ length_opt
+  {
+    $$ = ColumnType{Type: "timestamp", Length: $2, Timezone: BoolVal(true)}
+  }
+| TIMETZ length_opt
+  {
+    $$ = ColumnType{Type: "time", Length: $2, Timezone: BoolVal(true)}
+  }
 | DATETIME length_opt
   {
     $$ = ColumnType{Type: string($1), Length: $2}
@@ -2055,6 +2431,10 @@ time_type:
     $$ = ColumnType{Type: string($1)}
   }
 | YEAR
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| INTERVAL
   {
     $$ = ColumnType{Type: string($1)}
   }
@@ -2583,7 +2963,7 @@ index_column_list:
   }
 
 index_column:
-  sql_id length_opt asc_desc_opt
+  reserved_sql_id length_opt asc_desc_opt
   {
     $$ = IndexColumn{Column: $1, Length: $2, Direction: $3}
   }
@@ -2592,7 +2972,11 @@ index_column:
   {
     $$ = IndexColumn{Column: NewColIdent(string($1)), Length: $2}
   }
-| sql_id operator_class
+| LEVEL length_opt asc_desc_opt
+  {
+    $$ = IndexColumn{Column: NewColIdent("level"), Length: $2, Direction: $3}
+  }
+| reserved_sql_id operator_class
   {
     $$ = IndexColumn{Column: $1, OperatorClass: string($2)}
   }
@@ -2739,6 +3123,103 @@ check_definition:
       Where: *NewWhere(WhereStr, $3),
       NoInherit: $5,
     }
+  }
+
+/* PostgreSQL EXCLUDE constraint definition */
+exclude_definition:
+  CONSTRAINT sql_id EXCLUDE USING reserved_sql_id '(' exclusion_pairs ')' where_expression_opt
+  {
+    $$ = &ExclusionDefinition{
+      ConstraintName: $2,
+      IndexType: $5.String(),
+      Exclusions: $7,
+      Where: NewWhere(WhereStr, $9),
+    }
+  }
+| CONSTRAINT sql_id EXCLUDE '(' exclusion_pairs ')' where_expression_opt
+  {
+    $$ = &ExclusionDefinition{
+      ConstraintName: $2,
+      IndexType: "",
+      Exclusions: $5,
+      Where: NewWhere(WhereStr, $7),
+    }
+  }
+| EXCLUDE USING reserved_sql_id '(' exclusion_pairs ')' where_expression_opt
+  {
+    $$ = &ExclusionDefinition{
+      IndexType: $3.String(),
+      Exclusions: $5,
+      Where: NewWhere(WhereStr, $7),
+    }
+  }
+| EXCLUDE '(' exclusion_pairs ')' where_expression_opt
+  {
+    $$ = &ExclusionDefinition{
+      IndexType: "",
+      Exclusions: $3,
+      Where: NewWhere(WhereStr, $5),
+    }
+  }
+
+exclusion_pairs:
+  exclusion_pair
+  {
+    $$ = []ExclusionPair{$1}
+  }
+| exclusion_pairs ',' exclusion_pair
+  {
+    $$ = append($1, $3)
+  }
+
+exclusion_pair:
+  sql_id WITH exclusion_operator
+  {
+    $$ = ExclusionPair{
+      Column: $1,
+      Operator: $3,
+    }
+  }
+| expression WITH exclusion_operator
+  {
+    $$ = ExclusionPair{
+      Column: NewColIdent(String($1)),
+      Operator: $3,
+    }
+  }
+
+exclusion_operator:
+  '='
+  {
+    $$ = "="
+  }
+| NE
+  {
+    $$ = "<>"
+  }
+| '<'
+  {
+    $$ = "<"
+  }
+| '>'
+  {
+    $$ = ">"
+  }
+| AND
+  {
+    $$ = "&&"
+  }
+| LE
+  {
+    $$ = "<="
+  }
+| GE
+  {
+    $$ = ">="
+  }
+| sql_id
+  {
+    $$ = $1.String()
   }
 
 /* For SQL Server */
@@ -3366,17 +3847,17 @@ condition:
   {
     $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $3}
   }
-| value_expression compare ALL value_expression
+| value_expression compare ALL openb value_expression closeb
   {
-    $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $4, All: true}
+    $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $5, All: true}
   }
-| value_expression compare ANY value_expression
+| value_expression compare ANY openb value_expression closeb
   {
-    $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $4, Any: true}
+    $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $5, Any: true}
   }
-| value_expression compare SOME value_expression
+| value_expression compare SOME openb value_expression closeb
   {
-    $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $4, Any: true}
+    $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $5, Any: true}
   }
 | value_expression IN col_tuple
   {
@@ -3564,6 +4045,22 @@ value_expression:
   {
     $$ = $1
   }
+| DATE STRING
+  {
+    $$ = &CastExpr{Expr: NewStrVal($2), Type: &ConvertType{Type: "date"}}
+  }
+| TIME STRING
+  {
+    $$ = &CastExpr{Expr: NewStrVal($2), Type: &ConvertType{Type: "time"}}
+  }
+| TIMESTAMP STRING
+  {
+    $$ = &CastExpr{Expr: NewStrVal($2), Type: &ConvertType{Type: "timestamp"}}
+  }
+| array_constructor
+  {
+    $$ = $1
+  }
 | value_expression '&' value_expression
   {
     $$ = &BinaryExpr{Left: $1, Operator: BitAndStr, Right: $3}
@@ -3622,7 +4119,33 @@ value_expression:
   }
 | value_expression TYPECAST numeric_type
   {
-    $$ = &CollateExpr{Expr: $1}
+    $$ = &CastExpr{
+      Expr: $1,
+      Type: &ConvertType{
+        Type: $3.Type,
+        Length: $3.Length,
+        Scale: $3.Scale,
+      },
+    }
+  }
+| value_expression TYPECAST char_type
+  {
+    $$ = &CastExpr{
+      Expr: $1,
+      Type: &ConvertType{
+        Type: $3.Type,
+        Length: $3.Length,
+      },
+    }
+  }
+| value_expression TYPECAST time_type
+  {
+    $$ = &CastExpr{
+      Expr: $1,
+      Type: &ConvertType{
+        Type: $3.Type,
+      },
+    }
   }
 | value_expression COLLATE charset
   {
@@ -3630,7 +4153,7 @@ value_expression:
   }
 | value_expression TYPECAST TIMESTAMP WITH TIME ZONE
   {
-    $$ = &CollateExpr{Expr: $1}
+    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: string($3) + " WITH TIME ZONE"}}
   }
 | BINARY value_expression %prec UNARY
   {
@@ -3689,6 +4212,10 @@ value_expression:
 | value_expression TYPECAST simple_convert_type
   {
     $$ = &CastExpr{Expr: $1, Type: $3}
+  }
+| openb value_expression closeb
+  {
+    $$ = &ParenExpr{Expr: $2}
   }
 | function_call_generic
 | function_call_keyword
@@ -4099,6 +4626,10 @@ simple_convert_type:
   {
     $$ = &ConvertType{Type: $1.Type}
   }
+| int_type '[' ']'
+  {
+    $$ = &ConvertType{Type: $1.Type, Array: true}
+  }
 | bool_type
   {
     $$ = &ConvertType{Type: $1.Type}
@@ -4106,6 +4637,10 @@ simple_convert_type:
 | TEXT
   {
     $$ = &ConvertType{Type: string($1)}
+  }
+| TEXT '[' ']'
+  {
+    $$ = &ConvertType{Type: string($1), Array: true}
   }
 | UUID
   {
@@ -4168,6 +4703,10 @@ column_name:
 | non_reserved_keyword
   {
     $$ = &ColName{Name: NewColIdent(string($1))}
+  }
+| LEVEL
+  {
+    $$ = &ColName{Name: NewColIdent("level")}
   }
 | table_id '.' reserved_sql_id
   {
@@ -4536,10 +5075,27 @@ not_exists_opt:
 | IF NOT EXISTS
   { $$ = struct{}{} }
 
+if_not_exists_opt:
+  { $$ = BoolVal(false) }
+| IF NOT EXISTS
+  { $$ = BoolVal(true) }
+
 ignore_opt:
   { $$ = "" }
 | IGNORE
   { $$ = IgnoreStr }
+
+cascade_opt:
+  { $$ = "" }
+| CASCADE
+  { $$ = "CASCADE" }
+| RESTRICT
+  { $$ = "RESTRICT" }
+
+with_grant_option_opt:
+  { $$ = 0 }
+| WITH GRANT OPTION
+  { $$ = 1 }
 
 sql_id:
   ID
@@ -4632,6 +5188,10 @@ array_constructor:
   {
     $$ = &ArrayConstructor{Elements: $3}
   }
+| ARRAY '[' ']'
+  {
+    $$ = &ArrayConstructor{Elements: nil}
+  }
 
 /* For PostgreSQL */
 array_element_list:
@@ -4646,9 +5206,21 @@ array_element_list:
 
 /* For PostgreSQL */
 array_element:
-  STRING character_cast_opt
+  value_expression
   {
-    $$ = NewStrVal($1)
+    // Most expressions should implement ArrayElement now
+    // We use a type assertion here since value_expression returns Expr
+    $$ = $1.(ArrayElement)
+  }
+
+enum_value_list:
+  STRING
+  {
+    $$ = []string{string($1)}
+  }
+| enum_value_list ',' STRING
+  {
+    $$ = append($1, string($3))
   }
 
 bool_option_name_list:
@@ -4830,7 +5402,9 @@ non_reserved_keyword:
 | POLICY
 | TYPE
 | STATUS
+| VARIABLES
 | ZONE
+| GIST
 
 openb:
   '('

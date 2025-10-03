@@ -961,7 +961,7 @@ CreateTableAlterColumn:
       name varchar(40)
     );
   output: |
-    ALTER TABLE "public"."users" ALTER COLUMN "name" TYPE varchar(40);
+    ALTER TABLE "public"."users" ALTER COLUMN "name" TYPE character varying(40);
 CreateTableAddColumn:
   current: |
     CREATE TABLE users (
@@ -1226,7 +1226,7 @@ AddVarcharColumnOnNonStandardDefaultSchema:
       name varchar(255) NOT NULL
     );
   output: |
-    ALTER TABLE "foo"."items" ADD COLUMN "name" varchar(255) NOT NULL;
+    ALTER TABLE "foo"."items" ADD COLUMN "name" character varying(255) NOT NULL;
   user: psqldef_user
 
 AddNumericColumnOnNonStandardDefaultSchema:
@@ -1956,7 +1956,7 @@ RenameTableAndMultipleChanges:
   output: |
     ALTER TABLE "public"."old_accounts" RENAME TO "accounts";
     ALTER TABLE "public"."accounts" RENAME COLUMN "user_name" TO "username";
-    ALTER TABLE "public"."accounts" ALTER COLUMN "username" TYPE varchar(100);
+    ALTER TABLE "public"."accounts" ALTER COLUMN "username" TYPE character varying(100);
     ALTER TABLE "public"."accounts" ALTER COLUMN "username" SET NOT NULL;
     ALTER TABLE "public"."accounts" ALTER COLUMN "is_active" SET DEFAULT true;
     ALTER TABLE "public"."accounts" ADD COLUMN "created_at" timestamp DEFAULT current_timestamp;

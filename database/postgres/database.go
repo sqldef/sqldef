@@ -501,8 +501,18 @@ func (c *column) GetDataType() string {
 		// timestamptz is accepted as an abbreviation for timestamp with time zone; this is a PostgreSQL extension.
 		// https://www.postgresql.org/docs/9.6/datatype-datetime.html
 		return strings.TrimSuffix(c.formattedDataType, " without time zone")
+	case "timestamp with time zone":
+		// PostgreSQL returns "timestamp with time zone" but we preserve the precision if specified
+		// formattedDataType contains the precision: "timestamp(6) with time zone"
+		// Note: timestamptz is a PostgreSQL extension abbreviation for timestamp with time zone
+		return c.formattedDataType
 	case "time without time zone":
 		return strings.TrimSuffix(c.formattedDataType, " without time zone")
+	case "time with time zone":
+		// PostgreSQL returns "time with time zone" but we preserve the precision if specified
+		// formattedDataType contains the precision: "time(6) with time zone"
+		// Note: timetz is a PostgreSQL extension abbreviation for time with time zone
+		return c.formattedDataType
 	default:
 		return c.formattedDataType
 	}
@@ -670,16 +680,29 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[strin
 }
 
 // normalizeCheckConstraintDefinition removes redundant type casts that PostgreSQL automatically adds
-// to make constraint comparison work correctly. Specifically handles cases like:
+// and normalizes the format to make constraint comparison work correctly. Specifically handles:
 // - ARRAY['active'::text, 'pending'::text] -> ARRAY['active', 'pending']
-// - '[0-9]'::text -> '[0-9]' (already handled by shouldDeleteTypeCast)
+// - '[0-9]'::text -> '[0-9]'
+// - Uppercase AND/OR -> lowercase and/or
+// - Spacing normalization
 func normalizeCheckConstraintDefinition(def string) string {
+	// pg_get_constraintdef returns "CHECK (...)" so we need to preserve that format
+	// but normalize the content inside
+
 	// Remove ::text type casts from string literals in ARRAY expressions
 	// This handles the pattern: 'string'::text within ARRAY[...]
 	result := regexp.MustCompile(`'([^']*)'::text`).ReplaceAllString(def, "'$1'")
 
 	// Remove ::character varying type casts similarly
 	result = regexp.MustCompile(`'([^']*)'::character varying(\([^)]*\))?`).ReplaceAllString(result, "'$1'")
+
+	// Normalize AND/OR to lowercase
+	result = regexp.MustCompile(`\bAND\b`).ReplaceAllString(result, "and")
+	result = regexp.MustCompile(`\bOR\b`).ReplaceAllString(result, "or")
+
+	// Remove spaces between function names and parentheses
+	result = regexp.MustCompile(`ANY\s+\(`).ReplaceAllString(result, "ANY(")
+	result = regexp.MustCompile(`ALL\s+\(`).ReplaceAllString(result, "ALL(")
 
 	return result
 }
