@@ -579,14 +579,57 @@ func (tkn *Tokenizer) Lex(lval *yySymType) int {
 	return typ
 }
 
+func (tkn *Tokenizer) getLineInfo(position int) (lineNum int, lineContent string, columnNum int) {
+	lineNum = 1
+	lineStart := 0
+
+	position = min(position, len(tkn.buf))
+
+	for i := 0; i < position && i < len(tkn.buf); i++ {
+		if tkn.buf[i] == '\n' {
+			lineNum++
+			lineStart = i + 1
+		}
+	}
+
+	// Find the end of the current line
+	lineEnd := lineStart
+	for lineEnd < len(tkn.buf) && tkn.buf[lineEnd] != '\n' {
+		lineEnd++
+	}
+
+	// Extract the line content
+	if lineStart <= len(tkn.buf) && lineEnd <= len(tkn.buf) {
+		lineContent = string(tkn.buf[lineStart:lineEnd])
+	}
+
+	// Calculate column number (position within the line)
+	columnNum = position - lineStart + 1
+
+	return lineNum, lineContent, columnNum
+}
+
 // Error is called by go yacc if there's a parsing error.
 func (tkn *Tokenizer) Error(err string) {
 	var buf tokenBuffer
+
+	lineNum, lineContent, columnNum := tkn.getLineInfo(tkn.Position)
+
+	fmt.Fprintf(&buf, "%s at line %d, column %d", err, lineNum, columnNum)
+
 	if tkn.lastToken != nil {
-		fmt.Fprintf(&buf, "%s at position %v near '%s'", err, tkn.Position, tkn.lastToken)
-	} else {
-		fmt.Fprintf(&buf, "%s at position %v", err, tkn.Position)
+		fmt.Fprintf(&buf, " near '%s'", tkn.lastToken)
 	}
+
+	if lineContent != "" {
+		fmt.Fprintf(&buf, "\n  %s", lineContent)
+
+		// Add a pointer to show the exact position
+		if columnNum > 0 {
+			fmt.Fprintf(&buf, "\n  %s^", strings.Repeat(" ", columnNum-1))
+		}
+	}
+
 	tkn.LastError = errors.New(buf.String())
 
 	// Try and re-sync to the next statement
