@@ -1,3 +1,9 @@
+## [v3.1.10](https://github.com/sqldef/sqldef/compare/v3.1.9...v3.1.10) - 2025-10-02
+- mssql: sort indexes name in --export by @gfx in https://github.com/sqldef/sqldef/pull/842
+- modernize the code by @gfx in https://github.com/sqldef/sqldef/pull/844
+- doc: test case object in yaml by @gfx in https://github.com/sqldef/sqldef/pull/845
+- refactoring: dump -> export for internal functions that implement --export by @gfx in https://github.com/sqldef/sqldef/pull/846
+
 ## [v3.1.9](https://github.com/sqldef/sqldef/compare/v3.1.8...v3.1.9) - 2025-10-02
 - CI: run lint in CI (`go vet ./...`) as a part of `integrity` job by @gfx in https://github.com/sqldef/sqldef/pull/839
 - psqldef: determistic constraint export by @gfx in https://github.com/sqldef/sqldef/pull/841
