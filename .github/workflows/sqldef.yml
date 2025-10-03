@@ -36,8 +36,6 @@ jobs:
             mysql_flavor: mariadb
             mariadb_version: '11.8'
           - target: psqldef
-            postgres_version: 12
-          - target: psqldef
             postgres_version: 13
           - target: psqldef
             postgres_version: 14
@@ -47,6 +45,8 @@ jobs:
             postgres_version: 16
           - target: psqldef
             postgres_version: 17
+          - target: psqldef
+            postgres_version: 18
       fail-fast: false
     steps:
       - uses: actions/setup-go@v6
