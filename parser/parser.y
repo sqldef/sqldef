@@ -2083,7 +2083,11 @@ column_definition_type:
   }
 
 default_definition:
-  DEFAULT default_val
+  DEFAULT default_expression
+  {
+    $$ = DefaultValueOrExpression{Expr: $2}
+  }
+| DEFAULT default_val
   {
     $$ = DefaultValueOrExpression{Value: $2}
   }
@@ -2094,14 +2098,6 @@ default_definition:
 | DEFAULT '(' '(' default_val ')' ')'
   {
     $$ = DefaultValueOrExpression{Value: $4}
-  }
-| DEFAULT default_expression
-  {
-    $$ = DefaultValueOrExpression{Expr: $2}
-  }
-| DEFAULT '(' default_expression ')'
-  {
-    $$ = DefaultValueOrExpression{Expr: $3}
   }
 
 default_val:
@@ -2132,10 +2128,6 @@ default_val:
 | NULL character_cast_opt
   {
     $$ = NewValArg($1)
-  }
-| current_timestamp
-  {
-    $$ = $1
   }
 | BIT_LITERAL
   {
@@ -2983,6 +2975,19 @@ index_column:
 | '(' expression ')' asc_desc_opt
   {
     $$ = IndexColumn{Expression: $2, Direction: $4}
+  }
+/* For PostgreSQL: function calls in index expressions without wrapping parens */
+| function_call_generic asc_desc_opt
+  {
+    $$ = IndexColumn{Expression: $1, Direction: $2}
+  }
+| function_call_keyword asc_desc_opt
+  {
+    $$ = IndexColumn{Expression: $1, Direction: $2}
+  }
+| function_call_nonkeyword asc_desc_opt
+  {
+    $$ = IndexColumn{Expression: $1, Direction: $2}
   }
 
 // https://www.postgresql.org/docs/9.5/brin-builtin-opclasses.html
@@ -4374,10 +4379,6 @@ function_call_nonkeyword:
   {
     $$ = &ColName{Name: NewColIdent(string($1))}
   }
-| CURRENT_TIMESTAMP openb closeb
-  {
-    $$ = &FuncExpr{Name:NewColIdent("current_timestamp")}
-  }
 | UTC_TIMESTAMP func_datetime_precision_opt
   {
     $$ = &FuncExpr{Name:NewColIdent("utc_timestamp")}
@@ -5287,7 +5288,6 @@ reserved_keyword:
 | CROSS
 | CURRENT_DATE
 | CURRENT_TIME
-| CURRENT_TIMESTAMP
 | CURSOR
 | SUBSTR
 | SUBSTRING
