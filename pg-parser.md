@@ -334,6 +334,60 @@ The following issues were resolved during the latest work session:
 - Current state: Same as Part 7 (275 shift/reduce, 1556 reduce/reduce)
 - No grammar changes in this session, only normalization improvements
 
+## Parser/AST-Based Comparison (October 2025 - Part 9)
+
+### Architecture Shift: From Regexp to AST
+
+**Problem with Regexp Approach**: The regexp-based normalization in `normalizeViewDefinition()` reached ~100 lines of complex, fragile patterns that couldn't handle:
+- Nested expressions: `func(func(func(x)))`
+- Context-sensitive parentheses: `(a + b) * c` vs redundant `(column_name)`
+- Recursive structures like CASE expressions with function calls
+
+**New AST-Based Approach**:
+
+Implemented a three-phase architecture:
+1. **Parse**: Convert PostgreSQL string output → AST via `parser.ParseSelectStatement()`
+2. **Normalize**: Visitor pattern to remove semantic-preserving differences
+3. **Compare**: Structural deep comparison instead of string matching
+
+**Files Created**:
+- `parser/expr.go`: Parse helpers for SELECT statements and expressions
+- `parser/normalize.go`: AST normalization visitor (~550 lines)
+- `parser/compare.go`: Structural comparison functions (~450 lines)
+
+**Schema Changes**:
+- `schema/ast.go`: Added `definitionAST parser.SelectStatement` to View struct
+- `schema/parser.go`: Store parsed AST when creating views
+- `schema/generator.go`: Use `parser.CompareSelectStatements()` for view comparison
+
+**Key Normalizations Implemented**:
+- ✅ Remove SQL comments from AST
+- ✅ Clear PostgreSQL-added ELSE NULL from CASE expressions
+- ✅ Normalize operators (~~→LIKE, etc.)
+- ✅ Remove redundant parentheses
+- ✅ Handle nested type casts
+
+**Limitations Discovered**:
+- ❌ PostgreSQL's variadic ARRAY transformation: `func(x, 'a', 'b')` → `func(x, ARRAY['a', 'b'])`
+  - This is a **structural** change, not formatting
+  - Requires deep knowledge of which functions are variadic
+  - Very difficult to normalize reliably
+- ❌ Complex nested cast chains: `((x)::bigint)::double precision)::real`
+  - PostgreSQL adds intermediate casts for type promotion
+  - Partial normalization implemented but not complete
+- ❌ CAST vs :: syntax differences in complex expressions
+
+**Conclusion**:
+The AST-based approach is **architecturally superior** but PostgreSQL's transformations are more extensive than initially understood. Some transformations (like variadic ARRAY) change the AST structure fundamentally, not just formatting.
+
+**Recommendation**:
+- Keep AST comparison for **new code** going forward
+- Use it for simple/moderate views (works well)
+- Accept limitations for complex views with:
+  - Variadic functions (jsonb_extract_path_text, etc.)
+  - Heavy CASE nesting
+  - Multiple type cast chains
+
 ## Remaining Issues ❌
 
 ### Test Failures (11 YAML test cases remaining in TestApply)

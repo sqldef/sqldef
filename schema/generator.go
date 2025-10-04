@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/sqldef/sqldef/v3/database"
+	"github.com/sqldef/sqldef/v3/parser"
 )
 
 type GeneratorMode int
@@ -1405,9 +1406,28 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 		g.currentViews = append(g.currentViews, &view)
 	} else if desiredView.viewType == "VIEW" { // TODO: Fix the definition comparison for materialized views and enable this
 		// View found. If it's different, create or replace view.
-		normalizedCurrent := g.normalizeViewDefinition(currentView.definition)
-		normalizedDesired := g.normalizeViewDefinition(desiredView.definition)
-		if normalizedCurrent != normalizedDesired {
+		// Use AST comparison for more accurate semantic comparison
+		viewsAreDifferent := false
+		normalizedDesired := g.normalizeViewDefinition(desiredView.definition) // Compute this for later use
+
+		if currentView.definitionAST != nil && desiredView.definitionAST != nil {
+			// Use AST-based comparison for accurate semantic equivalence
+			viewsAreDifferent = !parser.CompareSelectStatements(currentView.definitionAST, desiredView.definitionAST)
+			if viewsAreDifferent {
+				// Debug: log the definitions being compared
+				log.Printf("DEBUG: View definitions differ (AST comparison)")
+				log.Printf("  Current (from DB): %s", currentView.definition)
+				log.Printf("  Desired (from schema): %s", desiredView.definition)
+			}
+		} else {
+			// Fallback to string-based comparison if AST is not available
+			log.Printf("DEBUG: Using string comparison for view %s (current AST: %v, desired AST: %v)",
+				viewName, currentView.definitionAST != nil, desiredView.definitionAST != nil)
+			normalizedCurrent := g.normalizeViewDefinition(currentView.definition)
+			viewsAreDifferent = (normalizedCurrent != normalizedDesired)
+		}
+
+		if viewsAreDifferent {
 			// Use the normalized definition for PostgreSQL to ensure consistency with how PostgreSQL stores views
 			// For other databases, use the original definition from the desired schema
 			viewDefinition := desiredView.definition

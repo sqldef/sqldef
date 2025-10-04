@@ -159,12 +159,13 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				}
 			}
 			return &View{
-				statement:    ddl,
-				viewType:     strings.ToUpper(stmt.View.Type),
-				securityType: strings.ToUpper(stmt.View.SecurityType),
-				name:         normalizedTableName(mode, stmt.View.Name, defaultSchema),
-				definition:   parser.String(stmt.View.Definition),
-				columns:      columns,
+				statement:     ddl,
+				viewType:      strings.ToUpper(stmt.View.Type),
+				securityType:  strings.ToUpper(stmt.View.SecurityType),
+				name:          normalizedTableName(mode, stmt.View.Name, defaultSchema),
+				definition:    parser.String(stmt.View.Definition),
+				definitionAST: stmt.View.Definition, // Store the parsed AST
+				columns:       columns,
 			}, nil
 		} else if stmt.Action == parser.CreateTrigger {
 			body := []string{}

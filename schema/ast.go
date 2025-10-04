@@ -197,13 +197,14 @@ type TablePrivilege struct {
 }
 
 type View struct {
-	statement    string
-	viewType     string
-	securityType string
-	name         string
-	definition   string
-	indexes      []Index
-	columns      []string
+	statement      string
+	viewType       string
+	securityType   string
+	name           string
+	definition     string // String representation for backwards compatibility
+	definitionAST  parser.SelectStatement // Parsed AST for structural comparison
+	indexes        []Index
+	columns        []string
 }
 
 type Trigger struct {
