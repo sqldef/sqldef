@@ -682,19 +682,16 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[strin
 // normalizeCheckConstraintDefinition removes redundant type casts that PostgreSQL automatically adds
 // and normalizes the format to make constraint comparison work correctly. Specifically handles:
 // - ARRAY['active'::text, 'pending'::text] -> ARRAY['active', 'pending']
-// - '[0-9]'::text -> '[0-9]'
+// - (name)::text -> (name)
 // - Uppercase AND/OR -> lowercase and/or
 // - Spacing normalization
 func normalizeCheckConstraintDefinition(def string) string {
 	// pg_get_constraintdef returns "CHECK (...)" so we need to preserve that format
 	// but normalize the content inside
 
-	// Remove ::text type casts from string literals in ARRAY expressions
-	// This handles the pattern: 'string'::text within ARRAY[...]
-	result := regexp.MustCompile(`'([^']*)'::text`).ReplaceAllString(def, "'$1'")
-
-	// Remove ::character varying type casts similarly
-	result = regexp.MustCompile(`'([^']*)'::character varying(\([^)]*\))?`).ReplaceAllString(result, "'$1'")
+	// Remove all type casts - this is more comprehensive than just handling string literals
+	// Remove ::type and ::type(...) patterns
+	result := regexp.MustCompile(`::[a-zA-Z_][a-zA-Z0-9_]*(\s*\([^)]*\))?`).ReplaceAllString(def, "")
 
 	// Normalize AND/OR to lowercase
 	result = regexp.MustCompile(`\bAND\b`).ReplaceAllString(result, "and")

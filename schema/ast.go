@@ -96,9 +96,14 @@ type Column struct {
 	keyOption     ColumnKeyOption
 	onUpdate      *Value
 	comment       *Value
-	enumValues    []string
-	references    string
-	identity      *Identity
+	enumValues       []string
+	references       string
+	referenceColumns []string // For inline REFERENCES (col) syntax
+	referenceOnDelete string  // For inline REFERENCES ... ON DELETE
+	referenceOnUpdate string  // For inline REFERENCES ... ON UPDATE
+	referenceDeferrable bool  // For inline REFERENCES ... DEFERRABLE
+	referenceInitiallyDeferred bool  // For inline REFERENCES ... INITIALLY DEFERRED
+	identity         *Identity
 	sequence      *Sequence
 	generated     *Generated
 	renamedFrom   string // Previous column name if renamed via @renamed annotation

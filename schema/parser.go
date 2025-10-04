@@ -268,11 +268,32 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			keyOption:     ColumnKeyOption(parsedCol.Type.KeyOpt), // FIXME: tight coupling in enum order
 			onUpdate:      parseValue(parsedCol.Type.OnUpdate),
 			comment:       parseValue(parsedCol.Type.Comment),
-			enumValues:    parsedCol.Type.EnumValues,
-			references:    normalizedTable(mode, parsedCol.Type.References, defaultSchema),
-			identity:      parseIdentity(parsedCol.Type.Identity),
-			sequence:      parseIdentitySequence(parsedCol.Type.Identity),
-			generated:     parseGenerated(parsedCol.Type.Generated),
+			enumValues:        parsedCol.Type.EnumValues,
+			referenceOnDelete: parsedCol.Type.ReferenceOnDelete.String(),
+			referenceOnUpdate: parsedCol.Type.ReferenceOnUpdate.String(),
+			referenceDeferrable: castBool(parsedCol.Type.ReferenceDeferrable),
+			referenceInitiallyDeferred: castBool(parsedCol.Type.ReferenceInitiallyDeferred),
+			identity:          parseIdentity(parsedCol.Type.Identity),
+			sequence:          parseIdentitySequence(parsedCol.Type.Identity),
+			generated:         parseGenerated(parsedCol.Type.Generated),
+		}
+
+		// Handle References field: it's used for TWO different purposes:
+		// 1. For inline foreign keys when ReferenceNames is present (e.g., REFERENCES companies(id))
+		// 2. For schema-qualified type names when ReferenceNames is empty (e.g., myschema.mytype)
+		// We store the foreign key table reference separately and only use column.references for schema qualification
+		if len(parsedCol.Type.ReferenceNames) > 0 {
+			// This is an inline foreign key - extract reference info but DON'T set column.references
+			// (to avoid it being used for type schema qualification)
+			column.referenceColumns = make([]string, len(parsedCol.Type.ReferenceNames))
+			for i, refCol := range parsedCol.Type.ReferenceNames {
+				column.referenceColumns[i] = refCol.String()
+			}
+			// Store the FK table reference in a temporary field that will be used to create ForeignKey
+			column.references = normalizedTable(mode, parsedCol.Type.References, defaultSchema)
+		} else if parsedCol.Type.References != "" {
+			// This is a schema-qualified type name (e.g., myschema.mytype)
+			column.references = normalizedTable(mode, parsedCol.Type.References, defaultSchema)
 		}
 
 		// Parse @renamed annotation for each column
@@ -289,6 +310,44 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			}
 		}
 		columns[parsedCol.Name.String()] = &column
+	}
+
+	// Convert inline column-level REFERENCES to ForeignKey objects
+	for colName, column := range columns {
+		if column.references != "" && len(column.referenceColumns) > 0 {
+			// This is an inline foreign key reference
+			// Generate constraint name if not specified
+			// PostgreSQL naming convention: tablename_columnname_fkey
+			constraintName := fmt.Sprintf("%s_%s_fkey", stmt.NewName.Name.String(), colName)
+
+			// PostgreSQL truncates identifiers to 63 characters (NAMEDATALEN - 1)
+			if mode == GeneratorModePostgres && len(constraintName) > 63 {
+				constraintName = constraintName[:63]
+			}
+
+			var constraintOptions *ConstraintOptions
+			if column.referenceDeferrable || column.referenceInitiallyDeferred {
+				constraintOptions = &ConstraintOptions{
+					deferrable:        column.referenceDeferrable,
+					initiallyDeferred: column.referenceInitiallyDeferred,
+				}
+			}
+
+			foreignKey := ForeignKey{
+				constraintName:    constraintName,
+				indexColumns:      []string{colName},
+				referenceName:     column.references,
+				referenceColumns:  column.referenceColumns,
+				onDelete:          column.referenceOnDelete,
+				onUpdate:          column.referenceOnUpdate,
+				constraintOptions: constraintOptions,
+			}
+			foreignKeys = append(foreignKeys, foreignKey)
+
+			// Clear the references field after creating the FK to prevent it from being
+			// used for type schema qualification in generateDataType
+			column.references = ""
+		}
 	}
 
 	for _, indexDef := range stmt.TableSpec.Indexes {
@@ -779,11 +838,11 @@ func normalizeTableInComment(mode GeneratorMode, comment *parser.Comment, defaul
 			return comment
 		case 1, 2:
 			switch comment.ObjectType {
-			case "OBJECT_TABLE":
+			case "TABLE":
 				if len(objs) == 1 {
 					objs = append([]string{defaultSchema}, objs...)
 				}
-			case "OBJECT_COLUMN":
+			case "COLUMN":
 				if len(objs) == 2 {
 					objs = append([]string{defaultSchema}, objs...)
 				}
@@ -856,11 +915,11 @@ func normalizeTableInCommentOnStmt(mode GeneratorMode, comment *parser.Comment, 
 		switch l := len(objs); {
 		case l == 1 || l == 2:
 			switch comment.ObjectType {
-			case "OBJECT_TABLE":
+			case "TABLE":
 				if len(objs) == 1 {
 					return fmt.Sprintf(`%s%s.%s%s`, matches[1], defaultSchema, objs[0], matches[3])
 				}
-			case "OBJECT_COLUMN":
+			case "COLUMN":
 				if len(objs) == 2 {
 					return fmt.Sprintf(`%s%s.%s.%s%s`, matches[1], defaultSchema, objs[0], objs[1], matches[3])
 				}

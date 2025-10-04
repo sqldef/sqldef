@@ -707,6 +707,8 @@ type ColumnType struct {
 	ReferenceNames    Columns
 	ReferenceOnDelete ColIdent
 	ReferenceOnUpdate ColIdent
+	ReferenceDeferrable BoolVal
+	ReferenceInitiallyDeferred BoolVal
 
 	// MySQL: GENERATED ALWAYS AS (expr)
 	Generated *GeneratedColumn
@@ -1567,6 +1569,10 @@ const (
 	NotInStr             = "not in"
 	LikeStr              = "like"
 	NotLikeStr           = "not like"
+	LikeOpStr            = "~~"
+	NotLikeOpStr         = "!~~"
+	ILikeOpStr           = "~~*"
+	NotILikeOpStr        = "!~~*"
 	RegexpStr            = "regexp"
 	NotRegexpStr         = "not regexp"
 	JSONExtractOp        = "->"
@@ -1611,6 +1617,18 @@ func (node *ComparisonExpr) Format(buf *nodeBuffer) {
 		} else {
 			buf.Printf("%v", node.Right)
 		}
+	} else if node.Operator == LikeOpStr {
+		// Convert ~~ back to LIKE for readability
+		buf.Printf("%v LIKE %v", node.Left, node.Right)
+	} else if node.Operator == NotLikeOpStr {
+		// Convert !~~ back to NOT LIKE for readability
+		buf.Printf("%v NOT LIKE %v", node.Left, node.Right)
+	} else if node.Operator == ILikeOpStr {
+		// Convert ~~* back to ILIKE for readability
+		buf.Printf("%v ILIKE %v", node.Left, node.Right)
+	} else if node.Operator == NotILikeOpStr {
+		// Convert !~~* back to NOT ILIKE for readability
+		buf.Printf("%v NOT ILIKE %v", node.Left, node.Right)
 	} else {
 		// Original formatting for other operators
 		buf.Printf("%v %s", node.Left, node.Operator)
@@ -2186,7 +2204,7 @@ type CaseExpr struct {
 
 // Format formats the node.
 func (node *CaseExpr) Format(buf *nodeBuffer) {
-	buf.Printf("case ")
+	buf.Printf("CASE ")
 	if node.Expr != nil {
 		buf.Printf("%v ", node.Expr)
 	}
@@ -2194,9 +2212,9 @@ func (node *CaseExpr) Format(buf *nodeBuffer) {
 		buf.Printf("%v ", when)
 	}
 	if node.Else != nil {
-		buf.Printf("else %v ", node.Else)
+		buf.Printf("ELSE %v ", node.Else)
 	}
-	buf.Printf("end")
+	buf.Printf("END")
 }
 
 // Default represents a DEFAULT expression.
@@ -2230,7 +2248,7 @@ type When struct {
 
 // Format formats the node.
 func (node *When) Format(buf *nodeBuffer) {
-	buf.Printf("when %v then %v", node.Cond, node.Val)
+	buf.Printf("WHEN %v THEN %v", node.Cond, node.Val)
 }
 
 // GroupBy represents a GROUP BY clause.

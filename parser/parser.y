@@ -172,6 +172,7 @@ func forceEOF(yylex interface{}) {
 /* ---------------- End of Dangling Else Resolution ------------------------- */
 %left <bytes> '=' '<' '>' LE GE NE NULL_SAFE_EQUAL IS LIKE REGEXP IN
 %left <bytes> POSIX_REGEX POSIX_REGEX_CI POSIX_NOT_REGEX POSIX_NOT_REGEX_CI
+%left <bytes> LIKE_OP NOT_LIKE_OP ILIKE_OP NOT_ILIKE_OP
 %left <bytes> '|'
 %left <bytes> '&'
 %left <bytes> SHIFT_LEFT SHIFT_RIGHT
@@ -367,7 +368,7 @@ func forceEOF(yylex interface{}) {
 %type <foreignKeyDefinition> foreign_key_definition foreign_key_without_options
 %type <colIdent> reference_option
 %type <colIdent> sql_id_opt
-%type <colIdents> sql_id_list
+%type <colIdents> sql_id_list reserved_sql_id_list
 %type <str> index_or_key
 %type <str> equal_opt
 %type <TableSpec> table_spec table_column_list
@@ -925,20 +926,33 @@ grant_statement:
       yylex.Error("WITH GRANT OPTION is not supported yet")
       return 1
     }
-    // For now, only support single table
+    // Handle multiple tables by creating a MultiStatement
     if len($5) > 1 {
-      yylex.Error("Multiple tables in GRANT are not supported yet")
-      return 1
-    }
-    $$ = &DDL{
-      Action: GrantPrivilege,
-      Table: $5[0],
-      Grant: &Grant{
-        IsGrant: true,
-        Privileges: $2,
-        TableName: $5[0],
-        Grantees: $7,
-      },
+      stmts := make([]Statement, len($5))
+      for i, tableName := range $5 {
+        stmts[i] = &DDL{
+          Action: GrantPrivilege,
+          Table: tableName,
+          Grant: &Grant{
+            IsGrant: true,
+            Privileges: $2,
+            TableName: tableName,
+            Grantees: $7,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    } else {
+      $$ = &DDL{
+        Action: GrantPrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: true,
+          Privileges: $2,
+          TableName: $5[0],
+          Grantees: $7,
+        },
+      }
     }
   }
 | GRANT ALL PRIVILEGES ON TABLE table_name TO grantee_list with_grant_option_opt
@@ -2029,6 +2043,33 @@ column_definition_type:
     $1.ReferenceOnUpdate = $9
     $$ = $1
   }
+// PostgreSQL: inline REFERENCES with constraint options
+| column_definition_type REFERENCES table_name '(' column_list ')' deferrable_opt initially_deferred_opt
+  {
+    $1.References     = String($3)
+    $1.ReferenceNames = $5
+    $1.ReferenceDeferrable = $7
+    $1.ReferenceInitiallyDeferred = $8
+    $$ = $1
+  }
+| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option deferrable_opt initially_deferred_opt
+  {
+    $1.References     = String($3)
+    $1.ReferenceNames = $5
+    $1.ReferenceOnDelete = $9
+    $1.ReferenceDeferrable = $10
+    $1.ReferenceInitiallyDeferred = $11
+    $$ = $1
+  }
+| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option deferrable_opt initially_deferred_opt
+  {
+    $1.References     = String($3)
+    $1.ReferenceNames = $5
+    $1.ReferenceOnUpdate = $9
+    $1.ReferenceDeferrable = $10
+    $1.ReferenceInitiallyDeferred = $11
+    $$ = $1
+  }
 // for MySQL and PostgreSQL
 | column_definition_type AS '(' expression ')' VIRTUAL
   {
@@ -2995,42 +3036,72 @@ operator_class:
   TEXT_PATTERN_OPS
 
 foreign_key_definition:
-  foreign_key_without_options not_for_replication_opt
+  foreign_key_without_options not_for_replication_opt deferrable_opt initially_deferred_opt
   {
     $1.NotForReplication = bool($2)
+    if bool($3) || bool($4) {
+      $1.ConstraintOptions = &ConstraintOptions{
+        Deferrable: bool($3),
+        InitiallyDeferred: bool($4),
+      }
+    }
     $$ = $1
   }
-| foreign_key_without_options ON DELETE reference_option not_for_replication_opt
+| foreign_key_without_options ON DELETE reference_option not_for_replication_opt deferrable_opt initially_deferred_opt
   {
     $1.OnUpdate = NewColIdent("")
     $1.OnDelete = $4
     $1.NotForReplication = bool($5)
+    if bool($6) || bool($7) {
+      $1.ConstraintOptions = &ConstraintOptions{
+        Deferrable: bool($6),
+        InitiallyDeferred: bool($7),
+      }
+    }
     $$ = $1
   }
-| foreign_key_without_options ON UPDATE reference_option not_for_replication_opt
+| foreign_key_without_options ON UPDATE reference_option not_for_replication_opt deferrable_opt initially_deferred_opt
   {
     $1.OnUpdate = $4
     $1.OnDelete = NewColIdent("")
     $1.NotForReplication = bool($5)
+    if bool($6) || bool($7) {
+      $1.ConstraintOptions = &ConstraintOptions{
+        Deferrable: bool($6),
+        InitiallyDeferred: bool($7),
+      }
+    }
     $$ = $1
   }
-| foreign_key_without_options ON DELETE reference_option ON UPDATE reference_option not_for_replication_opt
+| foreign_key_without_options ON DELETE reference_option ON UPDATE reference_option not_for_replication_opt deferrable_opt initially_deferred_opt
   {
     $1.OnUpdate = $7
     $1.OnDelete = $4
     $1.NotForReplication = bool($8)
+    if bool($9) || bool($10) {
+      $1.ConstraintOptions = &ConstraintOptions{
+        Deferrable: bool($9),
+        InitiallyDeferred: bool($10),
+      }
+    }
     $$ = $1
   }
-| foreign_key_without_options ON UPDATE reference_option ON DELETE reference_option not_for_replication_opt
+| foreign_key_without_options ON UPDATE reference_option ON DELETE reference_option not_for_replication_opt deferrable_opt initially_deferred_opt
   {
     $1.OnUpdate = $4
     $1.OnDelete = $7
     $1.NotForReplication = bool($8)
+    if bool($9) || bool($10) {
+      $1.ConstraintOptions = &ConstraintOptions{
+        Deferrable: bool($9),
+        InitiallyDeferred: bool($10),
+      }
+    }
     $$ = $1
   }
 
 foreign_key_without_options:
-  CONSTRAINT sql_id_opt FOREIGN KEY sql_id_opt '(' sql_id_list ')' REFERENCES table_name '(' sql_id_list ')'
+  CONSTRAINT sql_id_opt FOREIGN KEY sql_id_opt '(' sql_id_list ')' REFERENCES table_name '(' reserved_sql_id_list ')'
   {
     $$ = &ForeignKeyDefinition{
       ConstraintName: $2,
@@ -3041,7 +3112,7 @@ foreign_key_without_options:
     }
   }
 /* For SQLite3 // SQLite Syntax: table-constraint https://www.sqlite.org/syntax/table-constraint.html */
-| FOREIGN KEY sql_id_opt '(' sql_id_list ')' REFERENCES table_name '(' sql_id_list ')'
+| FOREIGN KEY sql_id_opt '(' sql_id_list ')' REFERENCES table_name '(' reserved_sql_id_list ')'
   {
     $$ = &ForeignKeyDefinition{
       IndexName: $3,
@@ -3091,24 +3162,36 @@ primary_key_definition:
   }
 
 unique_definition:
-  CONSTRAINT sql_id UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
+  CONSTRAINT sql_id UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
   {
+    constraintOptions := &ConstraintOptions{
+      Deferrable: bool($10),
+      InitiallyDeferred: bool($11),
+    }
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: string($3), Name: $2, Primary: false, Unique: true, Clustered: $4},
       Columns: $6,
       Options: $8,
       Partition: $9,
-      ConstraintOptions: &ConstraintOptions{}, // Mark as constraint
+      ConstraintOptions: constraintOptions,
     }
   }
 /* For PostgreSQL and SQLite3 */
-| UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
+| UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
   {
+    var constraintOptions *ConstraintOptions
+    if bool($8) || bool($9) {
+      constraintOptions = &ConstraintOptions{
+        Deferrable: bool($8),
+        InitiallyDeferred: bool($9),
+      }
+    }
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: string($1), Primary: false, Unique: true, Clustered: $2},
       Columns: $4,
       Options: $6,
       Partition: $7,
+      ConstraintOptions: constraintOptions,
     }
   }
 
@@ -3294,6 +3377,16 @@ sql_id_list:
     $$ = []ColIdent{$1}
   }
 | sql_id_list ',' sql_id
+  {
+    $$ = append($1, $3)
+  }
+
+reserved_sql_id_list:
+  reserved_sql_id
+  {
+    $$ = []ColIdent{$1}
+  }
+| reserved_sql_id_list ',' reserved_sql_id
   {
     $$ = append($1, $3)
   }
@@ -3594,7 +3687,7 @@ aliased_table_name:
   }
 
 column_list:
-  sql_id
+  reserved_sql_id
   {
     $$ = Columns{$1}
   }
@@ -3603,7 +3696,7 @@ column_list:
   {
     $$ = Columns{NewColIdent(string($1))}
   }
-| column_list ',' sql_id
+| column_list ',' reserved_sql_id
   {
     $$ = append($$, $3)
   }
@@ -3879,6 +3972,22 @@ condition:
 | value_expression NOT LIKE value_expression like_escape_opt
   {
     $$ = &ComparisonExpr{Left: $1, Operator: NotLikeStr, Right: $4, Escape: $5}
+  }
+| value_expression LIKE_OP value_expression
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: LikeOpStr, Right: $3}
+  }
+| value_expression NOT_LIKE_OP value_expression
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: NotLikeOpStr, Right: $3}
+  }
+| value_expression ILIKE_OP value_expression
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: ILikeOpStr, Right: $3}
+  }
+| value_expression NOT_ILIKE_OP value_expression
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: NotILikeOpStr, Right: $3}
   }
 | value_expression REGEXP value_expression
   {

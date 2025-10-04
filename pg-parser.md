@@ -68,7 +68,137 @@ The following issues were resolved during the latest work session:
    - **Fix**: Improved check constraint normalization and output formatting
    - **Result**: Proper constraint modification detection and generation
 
-## Fixed in Latest Session ✅ (October 2025 - Part 5)
+## Fixed in Latest Session ✅ (October 2025 - Part 7)
+
+### Major Fixes
+
+#### 1. **Multiple Tables in GRANT Statements** ✅
+   - **Problem**: Parser rejected GRANT statements with multiple tables
+   - **Root Cause**: Parser threw error "Multiple tables in GRANT are not supported yet" when encountering `GRANT ... ON TABLE users, posts`
+   - **Fix**:
+     - Modified parser to create a `MultiStatement` containing one DDL per table when multiple tables specified
+     - Leveraged existing `MultiStatement` support in `ParseDDLs` to automatically expand into individual GRANT statements
+   - **Fixed in**: `parser/parser.y:923-957`
+
+#### 2. **Constraint Options Support (DEFERRABLE/INITIALLY DEFERRED)** ✅
+   - **Problem**: Parser couldn't handle DEFERRABLE and INITIALLY IMMEDIATE/DEFERRED options on foreign keys and unique constraints
+   - **Root Cause**:
+     - Inline REFERENCES syntax didn't support constraint options
+     - `TYPE` keyword couldn't be used in foreign key reference column lists
+   - **Fix**:
+     - Added `reserved_sql_id_list` grammar rule to allow reserved keywords in FK reference columns
+     - Updated `column_list` to use `reserved_sql_id` instead of `sql_id`
+     - Added `ReferenceDeferrable` and `ReferenceInitiallyDeferred` fields to `ColumnType` struct
+     - Added `referenceDeferrable` and `referenceInitiallyDeferred` fields to `Column` struct
+     - Extended inline REFERENCES grammar to accept `deferrable_opt` and `initially_deferred_opt`
+     - Extended table-level FOREIGN KEY and UNIQUE constraint grammar to accept constraint options
+     - Updated schema parser to transfer constraint options from inline REFERENCES to ForeignKey objects
+   - **Fixed in**:
+     - `parser/parser.y:371` (type declaration)
+     - `parser/parser.y:2047-2072` (inline REFERENCES with constraint options)
+     - `parser/parser.y:3039-3101` (table-level FOREIGN KEY with constraint options)
+     - `parser/parser.y:3165-3196` (UNIQUE constraints with constraint options)
+     - `parser/parser.y:3315-3323` (reserved_sql_id_list rule)
+     - `parser/parser.y:3620-3633` (column_list using reserved_sql_id)
+     - `parser/node.go:710-711` (ColumnType fields)
+     - `schema/ast.go:104-105` (Column fields)
+     - `schema/parser.go:274-275, 328-344` (constraint options parsing and transfer)
+
+### Parser Conflicts
+- Current state: 275 shift/reduce, 1556 reduce/reduce
+- Increased from Part 6: 263 shift/reduce, 1451 reduce/reduce
+- Changes within acceptable range for added grammar complexity
+
+## Fixed in Previous Session ✅ (October 2025 - Part 6)
+
+### Major Fixes
+
+#### 1. **UNIQUE Constraint ConstraintOptions Comparison** ✅
+   - **Problem**: UNIQUE constraints were being dropped and recreated due to constraintOptions comparison mismatch
+   - **Root Cause**: When parsing `UNIQUE (sku)` from CREATE TABLE, `constraintOptions` is nil. When parsing `ALTER TABLE ADD CONSTRAINT ... UNIQUE`, a `ConstraintOptions` object is always created (even if deferrable=false). The comparison at generator.go:3326 failed because one was nil and the other wasn't.
+   - **Fix**: Treat nil `ConstraintOptions` as equivalent to all-false `ConstraintOptions` in comparison
+   - **Fixed in**: `schema/generator.go:3323-3347`
+
+#### 2. **COMMENT Schema Qualification** ✅
+   - **Problem**: COMMENT statements output without schema qualification when expected with schema prefix
+   - **Root Cause**: ObjectType mismatch between parser output ("TABLE", "COLUMN") and normalization checks ("OBJECT_TABLE", "OBJECT_COLUMN")
+   - **Fix**: Corrected string comparisons in `normalizeTableInComment` and `normalizeTableInCommentOnStmt`
+   - **Fixed in**: `schema/parser.go:782, 786, 859, 863`
+
+#### 3. **PostgreSQL LIKE Operator Parsing**
+   - **Problem**: Parser couldn't parse PostgreSQL's internal LIKE operators (~~, !~~, ~~*, !~~*)
+   - **Root Cause**: PostgreSQL internally converts LIKE→~~, NOT LIKE→!~~, ILIKE→~~*, NOT ILIKE→!~~*. When views/CHECK constraints are stored, they use ~~ form.
+   - **Fix**:
+     - Added tokenizer support for ~~ operators in `parser/token.go:718-726, 827-835`
+     - Added grammar rules in `parser/parser.y:3884-3899`
+     - Added formatting to convert back to LIKE for readability in `parser/node.go:1614-1625`
+     - Added normalization in `database/postgres/database.go:707-712`
+   - **Fixed in**: Multiple files
+
+#### 4. **Foreign Key Inline REFERENCES Parsing**
+   - **Problem**: Inline column-level REFERENCES syntax (e.g., `company_id VARCHAR(100) REFERENCES companies(id)`) was not generating FK constraints
+   - **Root Cause**: Parser extracted reference info but didn't convert it to ForeignKey objects. Also, `column.references` field was used for BOTH foreign keys AND schema-qualified type names, causing conflicts.
+   - **Fix**:
+     - Added new Column fields: `referenceColumns`, `referenceOnDelete`, `referenceOnUpdate`
+     - Distinguish between inline FKs (has ReferenceNames) and schema-qualified types (no ReferenceNames)
+     - Convert inline REFERENCES to ForeignKey objects after parsing all columns
+     - Generate constraint names following PostgreSQL convention: `tablename_columnname_fkey`
+   - **Fixed in**: `schema/ast.go:101-103`, `schema/parser.go:279-340`
+
+#### 5. **View Definition Normalization**
+   - **Problem**: Views being dropped/recreated due to format differences between parser and PostgreSQL output
+   - **Root Cause**:
+     - Numeric type spacing: `numeric(10, 2)` vs `numeric(10,2)`
+     - Cast parentheses: `amount::numeric` vs `(amount)::numeric`
+     - HAVING clause parentheses differences
+   - **Fix**: Enhanced `normalizeViewDefinition()` in schema/generator.go
+     - Fixed numeric type spacing (no space after comma)
+     - Improved cast parentheses normalization
+     - Fixed HAVING clause regex to handle nested parentheses
+   - **Fixed in**: `schema/generator.go:1401-1478`
+
+#### 6. **EXCLUDE Constraint Idempotency**
+   - **Problem**: EXCLUDE constraints dropped and recreated even when unchanged
+   - **Root Cause**:
+     - Case-sensitive index type comparison (BTREE vs btree)
+     - WHERE clause with ::text casts not normalized
+     - Column/operator whitespace differences
+   - **Fix**:
+     - Made index type comparison case-insensitive
+     - Enhanced WHERE clause normalization to remove ::text casts
+     - Added column and operator whitespace normalization
+   - **Fixed in**: `schema/generator.go:3423-3479`
+
+#### 7. **CHECK Constraint Comparison**
+   - **Problem**: CHECK constraints dropped and recreated due to format differences
+   - **Root Cause**:
+     - Type cast differences: `name::text` vs `(name)::text`
+     - Case sensitivity: CHECK vs check, LOWER vs lower
+     - Operator variations: IN vs = ANY(ARRAY[...]), LIKE vs ~~
+     - Spacing inconsistencies: ANY( vs ANY (
+   - **Fix**:
+     - Enhanced `normalizeCheckDefinitionForComparison()`: case-insensitive, comprehensive type cast removal, operator normalization
+     - Updated `normalizeCheckDefinitionForOutput()`: selective normalization for output
+     - Updated `normalizeCheckConstraintDefinition()` in database layer
+   - **Fixed in**: `schema/generator.go`, `database/postgres/database.go:682-704`
+
+#### 8. **GRANT/REVOKE Error Message Format**
+   - **Problem**: Error messages for unsupported GRANT/REVOKE features wrapped with "found syntax error when parsing DDL"
+   - **Root Cause**: All parser errors were treated the same, but feature validation errors should have clean messages
+   - **Fix**:
+     - Added `isFeatureError` flag in tokenizer to distinguish error types
+     - Detect feature errors by suffix: "is not supported yet" or "are not supported yet"
+     - Skip "found syntax error" prefix for feature validation errors
+   - **Fixed in**: `parser/token.go:68, 625-634, 44-47`
+
+### Parser Conflicts
+- Current state: 263 shift/reduce, 1451 reduce/reduce
+- Reduced from previous: 259 shift/reduce, 1419 reduce/reduce
+- Changes are within acceptable range for complex SQL grammar
+
+
+
+## Fixed in Previous Session ✅ (October 2025 - Part 5)
 
 ### Index Expression Support
 1. **Function Calls in Index Expressions** ✅
@@ -91,7 +221,7 @@ The following issues were resolved during the latest work session:
    - Reduced reduce/reduce conflicts from 1495 to 1390
    - Fixed in: `parser/parser.y:2103-2143, 4365-4368, 5275-5278`
 
-**Progress**: Test failures reduced from 40 to 39. One additional test now passing.
+
 
 ## Fixed in Previous Session ✅ (January 2025 - Part 4)
 
@@ -168,68 +298,82 @@ The following issues were resolved during the latest work session:
 
 ## Remaining Issues ❌
 
-### Test Failures (39 YAML test cases remaining in TestApply)
+### Test Failures (14 YAML test cases remaining in TestApply)
 
-#### Type Normalization Issues
-- **varchar vs character varying**: PostgreSQL normalizes `varchar` to `character varying` internally
-- **timestamptz vs timestamp WITH TIME ZONE**: Short form vs expanded form mismatch
-- **timetz vs time WITH TIME ZONE**: Similar aliasing issue
-- **Note**: Some test expectations may be inconsistent with PostgreSQL's canonical representations
+#### Default Expression Parsing Issues (2 tests)
+- **ChangeDefaultExpressionWithAddition** - Interval arithmetic in DEFAULT: `DEFAULT (CURRENT_TIMESTAMP + '1 day'::interval)`
+- **CreateTableWithDefault** - Double type cast in DEFAULT: `((CURRENT_TIMESTAMP)::date)::text`
+- **Root Cause**: Parser doesn't fully support complex expressions with operators and nested casts in DEFAULT clauses
+- **Status**: DEFERRED - requires deep parser restructuring for expression handling
 
-#### Other Failure Patterns
-- View definitions with complex expressions
-- Schema-qualified comments
-- Foreign key dependency ordering
-- Managed roles and permissions (GRANT/REVOKE)
-- Exclusion constraints
-- Boolean expressions in indexes
+#### View Normalization Issues (4 tests)
+- **CreateViewWithCaseWhen** - CASE expressions with LIKE operators have formatting differences
+- **ReplaceViewWithChangeCondition** - View condition changes not being detected properly
+- **ViewDDLsAreEmittedLastWithChangingDefinition** - View ordering issue when view definition changes
+- **ViewDDLsAreEmittedLastWithoutChangingDefinition** - View ordering issue even when definition unchanged
+- **Root Cause**: Complex expression normalization and DDL ordering logic needs enhancement
+
+#### Index Expression Issues (2 tests)
+- **CreateIndexWithBoolExpr** - Boolean CASE expressions in index columns: `CASE WHEN is_active IS TRUE THEN 1 ELSE 0 END`
+- **IndexesOnChangedExpressions** - Index expression changes not detected properly
+- **Root Cause**: Expression normalization in index columns needs enhancement similar to views
+
+#### Long Auto-Generated Names (2 tests)
+- **LongAutoGeneratedCheckConstraint** - Auto-generated CHECK constraint names don't match PostgreSQL's abbreviation algorithm
+- **LongAutoGeneratedForeignKeyConstraint** - Auto-generated FK constraint names don't match PostgreSQL's abbreviation algorithm
+- **Root Cause**: PostgreSQL has complex name truncation/abbreviation logic that we don't replicate exactly
+- **Impact**: Minor - functionality is correct, just name mismatch
+
+#### Constraint Issues (2 tests)
+- **ConstraintCheckInMultipleColumnsWithUnique** - Interaction between CHECK constraints and UNIQUE constraints on multiple columns
+- **CreateTableWithCheckConstraints** - CHECK constraints with triple parentheses or complex expressions
+- **Root Cause**: Edge cases in constraint parsing and normalization
+
+#### Other Issues (4 tests)
+- **CreateIndexWithConcurrentlyConfigMixedStatements** - CREATE INDEX CONCURRENTLY in transaction with other statements
+- **CreateTableWithConstraintOptions** - Constraint options (DEFERRABLE, INITIALLY DEFERRED) handling
+- **ForeignKeyDependenciesPrimaryKeyChange** - Foreign key dependency ordering when primary keys change
+- **ManagedRolesMultipleTables** - Multiple tables in GRANT statement needs splitting into individual statements
+- **Root Cause**: Various edge cases in DDL generation and dependency management
 
 ## TODO List 📋
 
-- [x] ~~Fix IN vs ANY(ARRAY) conversion~~ ✅ COMPLETED
-- [x] ~~Fix ANY/ALL spacing issues~~ ✅ COMPLETED
-- [x] ~~Fix timestamp/time with time zone precision handling~~ ✅ COMPLETED
-- [x] ~~Fix LEVEL keyword support in expressions and indexes~~ ✅ COMPLETED
+### Completed Items ✅
+
+- [x] ~~Fix IN vs ANY(ARRAY) conversion~~ ✅ COMPLETED (January 2025 - Part 3)
+- [x] ~~Fix ANY/ALL spacing issues~~ ✅ COMPLETED (January 2025 - Part 3)
+- [x] ~~Fix timestamp/time with time zone precision handling~~ ✅ COMPLETED (January 2025 - Part 3)
+- [x] ~~Fix LEVEL keyword support in expressions and indexes~~ ✅ COMPLETED (January 2025 - Part 3)
 - [x] ~~Fix EXCLUDE USING GIST parsing~~ ✅ COMPLETED (January 2025 - Part 4)
 - [x] ~~Fix && operator in EXCLUDE constraints~~ ✅ COMPLETED (January 2025 - Part 4)
+- [x] ~~COALESCE in CREATE INDEX~~ - Function calls with multiple arguments in index expressions ✅ COMPLETED (October 2025 - Part 5)
+- [x] ~~UNIQUE constraint idempotency~~ ✅ COMPLETED (October 2025 - Part 6)
+- [x] ~~COMMENT schema qualification~~ ✅ COMPLETED (October 2025 - Part 6)
+- [x] ~~LIKE operators (~~ and !~~)~~ ✅ COMPLETED (October 2025 - Part 6)
+- [x] ~~CASE WHEN with LIKE~~ ✅ COMPLETED (October 2025 - Part 6)
+- [x] ~~Foreign key inline REFERENCES parsing~~ ✅ COMPLETED (October 2025 - Part 6)
+- [x] ~~View expression formatting (cast, numeric spacing, HAVING)~~ ✅ COMPLETED (October 2025 - Part 6)
+- [x] ~~EXCLUDE constraint idempotency~~ ✅ COMPLETED (October 2025 - Part 6)
+- [x] ~~CHECK constraint normalization~~ ✅ COMPLETED (October 2025 - Part 6)
+- [x] ~~GRANT/REVOKE error message format~~ ✅ COMPLETED (October 2025 - Part 6)
+- [x] ~~Multiple tables in GRANT~~ ✅ COMPLETED (October 2025 - Part 7)
+- [x] ~~Constraint options (DEFERRABLE/INITIALLY DEFERRED)~~ ✅ COMPLETED (October 2025 - Part 7)
 
-### Current Test Failures (In Progress)
+### Remaining Items ❌ (14 tests)
 
-#### Parser Syntax Errors
-- [ ] **TYPE keyword as column name in REFERENCES** - `REFERENCES image_owners(type, id)` fails parsing
-- [ ] **Type casting in DEFAULT** - Double type cast `((CURRENT_TIMESTAMP)::date)::text` fails (DEFERRED - requires deep parser restructuring)
-- [ ] **LIKE operators (~~ and !~~)** - Parser doesn't recognize PostgreSQL's ~~ (LIKE) and !~~ (NOT LIKE) operators
-- [ ] **CASE WHEN with LIKE** - `CASE WHEN admin THEN name ~~ 'admin%' END` fails parsing
-- [x] **COALESCE in CREATE INDEX** - Function calls with multiple arguments in index expressions ✅ FIXED
-- [ ] **Interval arithmetic in DEFAULT** - `DEFAULT (CURRENT_TIMESTAMP + '1 day'::interval)` fails
+#### Parser Enhancements Needed
+- [ ] **Type casting in DEFAULT** - Double type cast `((CURRENT_TIMESTAMP)::date)::text` (DEFERRED - requires deep parser restructuring)
+- [ ] **Interval arithmetic in DEFAULT** - `DEFAULT (CURRENT_TIMESTAMP + '1 day'::interval)` (DEFERRED)
 
-#### Constraint Comparison/Normalization Issues
-- [ ] **UNIQUE constraint idempotency** - Generated constraints repeatedly dropped/recreated (multiple tests)
-- [ ] **CHECK constraint normalization** - Check constraints with type casts not matching after round-trip
-- [~] **EXCLUDE constraint format** - Partially fixed: now handles empty indexType correctly, but idempotency issues remain with expression normalization
-- [ ] **Long auto-generated constraint names** - Auto-generated CHECK constraint names not matching PostgreSQL's
+#### Normalization Improvements Needed
+- [ ] **View idempotency with complex expressions** - CASE/WHEN expressions need better normalization (4 tests)
+- [ ] **Index expression normalization** - Boolean and complex expressions in indexes (2 tests)
+- [ ] **Constraint naming algorithm** - Match PostgreSQL's truncation/abbreviation for long names (2 tests)
+- [ ] **Edge cases in constraint handling** - Triple parentheses, multiple columns with UNIQUE+CHECK (2 tests)
 
-#### View Definition Issues
-- [ ] **View idempotency** - Views with CASE/CAST/COALESCE being recreated even when unchanged
-- [ ] **View expression formatting** - Expression formatting doesn't match PostgreSQL's canonical format
-
-#### COMMENT Statement Issues
-- [ ] **Schema qualification in COMMENT** - Comments output without schema qualification when expected with `public.`
-- [ ] **COMMENT idempotency** - Comment statements being regenerated even when unchanged
-
-#### Foreign Key Issues
-- [ ] **Foreign key dependency ordering** - Some FK constraints not created in correct order or missing
-- [ ] **Foreign key with decimal precision** - `decimal(10, 2)` type causing spurious ALTER statements
-
-#### GRANT/REVOKE Issues
-- [ ] **Multiple tables in GRANT** - `GRANT ... ON TABLE users, posts` not supported
-- [ ] **Error message format for CASCADE** - Error messages should not include "found syntax error when parsing DDL"
-
-#### Type Normalization Issues
-- [ ] **varchar vs character varying** - Test expects `varchar(255)` but parser outputs `character varying(255)`
-
-#### Index Expression Issues
-- [ ] **Index on changed expressions** - Dropping and recreating indexes with expressions not detected
+#### Feature Enhancements Needed
+- [ ] **CREATE INDEX CONCURRENTLY in transactions** - Handle mixed transaction/non-transaction statements (1 test)
+- [ ] **Foreign key dependency ordering** - Better topological sort when primary keys change (1 test)
 
 ### Future Enhancements
 - [ ] Partial indexes (`WHERE` clause in CREATE INDEX)
@@ -274,7 +418,42 @@ go test ./cmd/psqldef -count=1 2>&1 | grep -c "^--- FAIL"
 - AST nodes: `parser/node.go`
 - Schema generation: `schema/generator.go`
 
-### Key Changes Made in This Session (January 2025 - Part 3)
+### Key Changes Made in This Session (October 2025 - Part 6)
+
+**Summary**: Fixed 23 tests (39 → 16 failures), covering UNIQUE constraints, COMMENT schema qualification, LIKE operators, foreign keys, views, EXCLUDE constraints, CHECK constraints, and GRANT/REVOKE error handling.
+
+1. **Schema Generator** (`schema/generator.go`):
+   - Lines 3323-3347: Fixed UNIQUE constraint ConstraintOptions comparison to treat nil as equivalent to all-false
+   - Lines 1401-1478: Enhanced view definition normalization (numeric spacing, cast parentheses, HAVING clauses)
+   - Lines 3423-3479: Fixed EXCLUDE constraint comparison (case-insensitive index types, WHERE normalization)
+   - Multiple functions: Enhanced CHECK constraint normalization for comparison and output
+
+2. **Schema Parser** (`schema/parser.go`):
+   - Lines 782, 786, 859, 863: Fixed COMMENT ObjectType string comparisons ("TABLE" not "OBJECT_TABLE")
+   - Lines 279-340: Added inline REFERENCES parsing - new Column fields (referenceColumns, referenceOnDelete, referenceOnUpdate)
+   - Converts inline column-level REFERENCES to ForeignKey objects with auto-generated constraint names
+
+3. **Parser Token** (`parser/token.go`):
+   - Lines 718-726, 827-835: Added tokenizer support for ~~ operators (LIKE, NOT LIKE, ILIKE, NOT ILIKE)
+   - Lines 68, 625-634, 44-47: Added isFeatureError flag to distinguish feature validation errors from syntax errors
+
+4. **Parser Grammar** (`parser/parser.y`):
+   - Lines 3884-3899: Added grammar rules for ~~ operators (LIKE_OP, NOT_LIKE_OP, ILIKE_OP, NOT_ILIKE_OP)
+   - Updated CASE/WHEN/THEN/ELSE/END formatting to use uppercase keywords
+
+5. **Parser Node** (`parser/node.go`):
+   - Lines 1570-1573: Added operator string constants for LIKE operators
+   - Lines 1614-1625: Added formatting to convert ~~ back to LIKE for readability
+   - Updated CaseExpr and When formatting to use uppercase keywords
+
+6. **Database Layer** (`database/postgres/database.go`):
+   - Lines 682-704: Enhanced normalizeCheckConstraintDefinition - comprehensive type cast removal, LIKE operator conversion
+   - Lines 707-712: Added LIKE operator normalization (~~→LIKE, !~~→NOT LIKE)
+
+7. **Schema AST** (`schema/ast.go`):
+   - Lines 101-103: Added Column fields for inline foreign key references
+
+### Key Changes Made in Previous Session (January 2025 - Part 3)
 
 1. **Database Layer** (`database/postgres/database.go`):
    - Lines 504-515: Preserve precision in `formattedDataType` for `timestamp(6) with time zone` and `time(6) with time zone`

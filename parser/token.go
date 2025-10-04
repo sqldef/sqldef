@@ -41,6 +41,10 @@ const (
 func ParseDDL(sql string, mode ParserMode) (Statement, error) {
 	tokenizer := NewTokenizer(sql, mode)
 	if yyParse(tokenizer) != 0 {
+		// For feature validation errors, return the error message without the "found syntax error" prefix
+		if tokenizer.isFeatureError {
+			return nil, tokenizer.LastError
+		}
 		return nil, fmt.Errorf(
 			"found syntax error when parsing DDL \"%s\": %v", sql, tokenizer.LastError,
 		)
@@ -65,6 +69,7 @@ type Tokenizer struct {
 	multi          bool
 	specialComment *Tokenizer
 	mode           ParserMode
+	isFeatureError bool // true if error is a feature validation error, not a syntax error
 
 	buf     []byte
 	bufPos  int
@@ -620,6 +625,15 @@ func (tkn *Tokenizer) getLineInfo(position int) (lineNum int, lineContent string
 func (tkn *Tokenizer) Error(err string) {
 	var buf tokenBuffer
 
+	// Check if this is a feature validation error (not a syntax error)
+	// Feature validation errors end with "is not supported yet" or "are not supported yet"
+	if strings.HasSuffix(err, "is not supported yet") || strings.HasSuffix(err, "are not supported yet") {
+		tkn.isFeatureError = true
+		// For feature validation errors, use the message as-is without position info
+		tkn.LastError = errors.New(err)
+		return
+	}
+
 	lineNum, lineContent, columnNum := tkn.getLineInfo(tkn.Position)
 
 	fmt.Fprintf(&buf, "%s at line %d, column %d", err, lineNum, columnNum)
@@ -714,10 +728,23 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 				return tkn.scanLiteralIdentifier(']')
 			}
 			if tkn.mode == ParserModePostgres && ch == '~' {
+				// Check for ~~ operators (PostgreSQL LIKE operators)
+				if tkn.lastChar == '~' {
+					tkn.next()
+					// Check for ~~* (ILIKE)
+					if tkn.lastChar == '*' {
+						tkn.next()
+						return ILIKE_OP, nil
+					}
+					// Just ~~ (LIKE)
+					return LIKE_OP, nil
+				}
+				// Check for ~* (case-insensitive regex)
 				if tkn.lastChar == '*' {
 					tkn.next()
 					return POSIX_REGEX_CI, nil
 				}
+				// Just ~ (regex)
 				return POSIX_REGEX, nil
 			}
 			return int(ch), nil
@@ -810,10 +837,23 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 			if tkn.mode == ParserModePostgres {
 				if tkn.lastChar == '~' {
 					tkn.next()
+					// Check for !~~ operators (PostgreSQL NOT LIKE operators)
+					if tkn.lastChar == '~' {
+						tkn.next()
+						// Check for !~~* (NOT ILIKE)
+						if tkn.lastChar == '*' {
+							tkn.next()
+							return NOT_ILIKE_OP, nil
+						}
+						// Just !~~ (NOT LIKE)
+						return NOT_LIKE_OP, nil
+					}
+					// Check for !~* (case-insensitive NOT regex)
 					if tkn.lastChar == '*' {
 						tkn.next()
 						return POSIX_NOT_REGEX_CI, nil
 					}
+					// Just !~ (NOT regex)
 					return POSIX_NOT_REGEX, nil
 				}
 			}

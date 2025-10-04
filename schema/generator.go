@@ -1398,16 +1398,33 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 		view := *desiredView // copy view
 		// Don't copy indexes from desired to current - they'll be added when the CREATE INDEX is processed
 		view.indexes = []Index{}
+		// For PostgreSQL, normalize the definition to match how PostgreSQL stores it
+		if g.mode == GeneratorModePostgres {
+			view.definition = g.normalizeViewDefinition(view.definition)
+		}
 		g.currentViews = append(g.currentViews, &view)
 	} else if desiredView.viewType == "VIEW" { // TODO: Fix the definition comparison for materialized views and enable this
 		// View found. If it's different, create or replace view.
-		if g.normalizeViewDefinition(currentView.definition) != g.normalizeViewDefinition(desiredView.definition) {
+		normalizedCurrent := g.normalizeViewDefinition(currentView.definition)
+		normalizedDesired := g.normalizeViewDefinition(desiredView.definition)
+		if normalizedCurrent != normalizedDesired {
+			// Use the normalized definition for PostgreSQL to ensure consistency with how PostgreSQL stores views
+			// For other databases, use the original definition from the desired schema
+			viewDefinition := desiredView.definition
+			if g.mode == GeneratorModePostgres {
+				viewDefinition = normalizedDesired
+			}
+
 			if g.shouldDropAndCreateView(currentView, desiredView) {
 				ddls = append(ddls, fmt.Sprintf("DROP %s %s", desiredView.viewType, g.escapeTableName(viewName)))
-				ddls = append(ddls, fmt.Sprintf("CREATE %s %s AS %s", desiredView.viewType, g.escapeTableName(viewName), desiredView.definition))
+				ddls = append(ddls, fmt.Sprintf("CREATE %s %s AS %s", desiredView.viewType, g.escapeTableName(viewName), viewDefinition))
 			} else {
-				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE %s %s AS %s", desiredView.viewType, g.escapeTableName(viewName), desiredView.definition))
+				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE %s %s AS %s", desiredView.viewType, g.escapeTableName(viewName), viewDefinition))
 			}
+
+			// Update current view's definition to match what will be stored in the database
+			// For PostgreSQL, this is the normalized version
+			currentView.definition = viewDefinition
 		}
 	} else if desiredView.viewType == "SQL SECURITY" {
 		// VIEW with the specified security type found. If it's different, create or replace view.
@@ -1445,11 +1462,20 @@ func (g *Generator) normalizeViewDefinition(definition string) string {
 		// Handle cases like "(NOT deleted)" -> "NOT deleted"
 		definition = regexp.MustCompile(`\((not\s+[^)]+)\)`).ReplaceAllString(definition, "$1")
 
-		// Normalize casts - PostgreSQL may add extra parens and change formats
-		// Handle numeric(10,2) vs numeric(10, 2) - normalize spacing
-		definition = regexp.MustCompile(`numeric\((\d+),\s*(\d+)\)`).ReplaceAllString(definition, "numeric($1, $2)")
-		// Remove extra parens around cast expressions
-		definition = regexp.MustCompile(`\(([^()]+::[^()]+)\)`).ReplaceAllString(definition, "$1")
+		// Normalize casts - PostgreSQL doesn't add spaces or extra parens
+		// Handle numeric(10, 2) -> numeric(10,2) - remove space after comma to match PostgreSQL
+		definition = regexp.MustCompile(`numeric\((\d+),\s*(\d+)\)`).ReplaceAllString(definition, "numeric($1,$2)")
+		// Remove extra parens around simple cast expressions: (x)::type -> x::type
+		// This handles cases like "(amount)::numeric" -> "amount::numeric"
+		definition = regexp.MustCompile(`\((\w+)\)::`).ReplaceAllString(definition, "$1::")
+		// Also handle numeric literals: (2)::bigint -> 2::bigint
+		definition = regexp.MustCompile(`\((\d+)\)::`).ReplaceAllString(definition, "$1::")
+
+		// Remove unnecessary parentheses in HAVING clauses
+		// PostgreSQL adds parentheses: "HAVING (count(*) > 1)" but parser outputs "HAVING count(*) > 1"
+		// Match HAVING followed by an opening paren, then any content until the LAST closing paren
+		// This handles nested parentheses like count(*)
+		definition = regexp.MustCompile(`\bhaving\s+\((.*)\)(\s*;?)\s*$`).ReplaceAllString(definition, "having $1$2")
 
 		// Normalize multiple spaces to single space
 		definition = regexp.MustCompile(`\s+`).ReplaceAllString(definition, " ")
@@ -3002,71 +3028,151 @@ func (g *Generator) buildForeignKeyDDL(tableName string, fk *ForeignKey) string 
 // - ARRAY['active', 'pending'] becomes ARRAY['active'::text, 'pending'::text]
 // - '[0-9]' becomes '[0-9]'::text
 // - SOME is an alias for ANY in SQL
+// - IN (...) is converted to = ANY (ARRAY[...])
+// - date 'YYYY-MM-DD' is converted to 'YYYY-MM-DD'::date
 // - PostgreSQL may reformat parentheses based on operator precedence
 func normalizeCheckDefinitionForComparison(def string) string {
 	// For now, we'll use string-based normalization
 	// TODO: Refactor to parse the expression as AST and normalize it properly
 	result := def
 
-	// Remove ::text type casts from string literals
-	result = regexp.MustCompile(`'([^']*)'::text`).ReplaceAllString(result, "'$1'")
+	// Normalize to lowercase for case-insensitive comparison
+	result = strings.ToLower(result)
 
-	// Remove ::character varying type casts
-	result = regexp.MustCompile(`'([^']*)'::character varying(\([^)]*\))?`).ReplaceAllString(result, "'$1'")
+	// Remove all type casts (::type syntax) - handles any type, not just text
+	// This is more comprehensive than the previous approach
+	result = regexp.MustCompile(`::[a-z_][a-z0-9_]*(\s*\([^)]*\))?`).ReplaceAllString(result, "")
+
+	// Normalize date keyword: date 'YYYY-MM-DD' -> 'YYYY-MM-DD'
+	result = regexp.MustCompile(`\bdate\s+'([^']+)'`).ReplaceAllString(result, "'$1'")
+
+	// Normalize inequality operators: PostgreSQL converts <> to != internally
+	result = regexp.MustCompile(`\s+!=\s+`).ReplaceAllString(result, " <> ")
 
 	// Normalize SOME to ANY (they are equivalent in SQL)
-	result = regexp.MustCompile(`\bSOME\s*\(`).ReplaceAllString(result, "ANY(")
+	result = regexp.MustCompile(`\bsome\s*\(`).ReplaceAllString(result, "any(")
 
-	// Normalize AND/OR case first
-	result = regexp.MustCompile(`\bAND\b`).ReplaceAllString(result, "and")
-	result = regexp.MustCompile(`\bOR\b`).ReplaceAllString(result, "or")
+	// Normalize LIKE operators - PostgreSQL stores LIKE as ~~, NOT LIKE as !~~, etc.
+	result = regexp.MustCompile(`\s+like\s+`).ReplaceAllString(result, " ~~ ")
+	result = regexp.MustCompile(`\s+not\s+like\s+`).ReplaceAllString(result, " !~~ ")
+	result = regexp.MustCompile(`\s+ilike\s+`).ReplaceAllString(result, " ~~* ")
+	result = regexp.MustCompile(`\s+not\s+ilike\s+`).ReplaceAllString(result, " !~~* ")
 
-	// Normalize spacing around parentheses for array constructors and operators
-	result = regexp.MustCompile(`\s*\(\s*ARRAY`).ReplaceAllString(result, "(ARRAY")
-	result = regexp.MustCompile(`ANY\s*\(`).ReplaceAllString(result, "ANY(")
-	result = regexp.MustCompile(`ALL\s*\(`).ReplaceAllString(result, "ALL(")
+	// Convert IN (...) to = ANY (ARRAY[...]) to match PostgreSQL's internal representation
+	result = regexp.MustCompile(`(\w+)\s+in\s+\(([^)]+)\)`).ReplaceAllStringFunc(result, func(match string) string {
+		parts := regexp.MustCompile(`(\w+)\s+in\s+\(([^)]+)\)`).FindStringSubmatch(match)
+		if len(parts) == 3 {
+			return parts[1] + " = any(array[" + parts[2] + "])"
+		}
+		return match
+	})
 
-	// Normalize logical operators
-	result = regexp.MustCompile(`\s+and\s+`).ReplaceAllString(result, " and ")
-	result = regexp.MustCompile(`\s+or\s+`).ReplaceAllString(result, " or ")
+	// Convert NOT IN (...) to <> ALL (ARRAY[...]) to match PostgreSQL's internal representation
+	result = regexp.MustCompile(`(\w+)\s+not\s+in\s+\(([^)]+)\)`).ReplaceAllStringFunc(result, func(match string) string {
+		parts := regexp.MustCompile(`(\w+)\s+not\s+in\s+\(([^)]+)\)`).FindStringSubmatch(match)
+		if len(parts) == 3 {
+			return parts[1] + " <> all(array[" + parts[2] + "])"
+		}
+		return match
+	})
 
-	// Remove unnecessary parentheses around individual comparisons
-	for i := 0; i < 3; i++ {
+	// Normalize spacing around operators
+	result = regexp.MustCompile(`any\s*\(`).ReplaceAllString(result, "any(")
+	result = regexp.MustCompile(`all\s*\(`).ReplaceAllString(result, "all(")
+	result = regexp.MustCompile(`array\s*\[`).ReplaceAllString(result, "array[")
+
+	// Remove unnecessary parentheses around identifiers
+	// This handles PostgreSQL adding parentheses like (name)::text which becomes (name) after type cast removal
+	// Match (identifier) that's not preceded by a word character (which would make it a function call)
+	for i := 0; i < 10; i++ {
 		prev := result
-		// Match patterns like "(column op ANY/ALL(ARRAY[...]))"
-		result = regexp.MustCompile(`\((\w+\s*[=<>]+\s*(?:ANY|ALL)\s*\(\s*ARRAY\s*\[[^\]]+\]\s*\))\)`).ReplaceAllString(result, "$1")
+		result = regexp.MustCompile(`([^a-z0-9_])\(([a-z_][a-z0-9_]*)\)`).ReplaceAllString(result, "$1$2")
 		if result == prev {
 			break
 		}
 	}
 
-	// Handle parentheses around AND groups when used with OR
-	if strings.Contains(result, ") or (") {
-		if strings.HasPrefix(result, "(") && strings.HasSuffix(result, ")") {
-			inner := result[1 : len(result)-1]
-			// Count the parentheses levels at the " or " position
-			if idx := strings.Index(inner, ") or ("); idx >= 0 {
-				// This looks like our pattern, remove the outer parens from each AND group
-				result = strings.ReplaceAll(result, ") or (", " or ")
-				result = strings.TrimPrefix(result, "(")
-				result = strings.TrimSuffix(result, ")")
+	// Normalize spacing
+	result = regexp.MustCompile(`\s+`).ReplaceAllString(result, " ")
+
+	// Remove redundant outer parentheses (multiple passes)
+	// This handles cases like CHECK (((expr))) -> CHECK (expr)
+	for i := 0; i < 10; i++ {
+		prev := result
+		// Pattern: check ((...)) -> check (...)
+		if m := regexp.MustCompile(`^check\s+\(\((.*)\)\)$`).FindStringSubmatch(result); m != nil {
+			inner := m[1]
+			// Only remove if parentheses are balanced
+			if isBalancedParentheses(inner) {
+				result = "check (" + inner + ")"
 			}
+		}
+		if result == prev {
+			break
 		}
 	}
 
-	// Remove redundant spaces
-	result = regexp.MustCompile(`\s+`).ReplaceAllString(result, " ")
 	result = strings.TrimSpace(result)
 
 	return result
 }
 
+// isBalancedParentheses checks if a string has balanced parentheses
+func isBalancedParentheses(s string) bool {
+	count := 0
+	for _, c := range s {
+		if c == '(' {
+			count++
+		} else if c == ')' {
+			count--
+			if count < 0 {
+				return false
+			}
+		}
+	}
+	return count == 0
+}
+
 // normalizeCheckDefinitionForOutput normalizes CHECK constraint definitions for output
-// This ensures consistent output format, converting SOME to ANY since they're equivalent
+// This ensures consistent output format:
+// - Converting SOME to ANY since they're equivalent
+// - Converting LIKE/NOT LIKE to PostgreSQL's internal operators (~~, !~~) to match database output
+// - Ensuring consistent spacing (ANY ( vs ANY()
+// - Removing type casts from literals (but keeping them on column references)
 func normalizeCheckDefinitionForOutput(def string) string {
-	// Convert SOME to ANY without space (they are equivalent in SQL, but ANY is more standard)
-	// Note: This deliberately outputs ANY( without space when converting from SOME
-	result := regexp.MustCompile(`\bSOME\s*\(`).ReplaceAllString(def, "ANY(")
+	// Remove type casts only from literals, not from column references
+	// Remove ::text from string literals like ''::text or 'value'::text
+	result := regexp.MustCompile(`'([^']*)'::text`).ReplaceAllString(def, "'$1'")
+
+	// Remove ::date from date literals
+	result = regexp.MustCompile(`'([^']*)'::date`).ReplaceAllString(result, "'$1'")
+
+	// Remove date keyword prefix: date 'YYYY-MM-DD' -> 'YYYY-MM-DD'
+	result = regexp.MustCompile(`\bdate\s+'([^']+)'`).ReplaceAllStringFunc(result, func(match string) string {
+		parts := regexp.MustCompile(`\bdate\s+'([^']+)'`).FindStringSubmatch(match)
+		if len(parts) == 2 {
+			return "'" + parts[1] + "'"
+		}
+		return match
+	})
+
+	// Convert SOME to ANY with space (they are equivalent in SQL, but ANY is more standard)
+	// Match the PostgreSQL convention of using space: ANY (
+	result = regexp.MustCompile(`\bSOME\s*\(`).ReplaceAllString(result, "ANY (")
+
+	// Ensure consistent spacing for ANY and ALL - PostgreSQL uses space before (
+	result = regexp.MustCompile(`\bANY\s*\(`).ReplaceAllString(result, "ANY (")
+	result = regexp.MustCompile(`\bALL\s*\(`).ReplaceAllString(result, "ALL (")
+
+	// Convert != to <> for consistency (PostgreSQL converts <> to != internally)
+	result = regexp.MustCompile(`\s+!=\s+`).ReplaceAllString(result, " <> ")
+
+	// Convert LIKE operators to PostgreSQL's internal representation
+	// This must be done in the right order (NOT LIKE before LIKE, NOT ILIKE before ILIKE)
+	result = regexp.MustCompile(`\s+(?i)NOT\s+ILIKE\s+`).ReplaceAllString(result, " !~~* ")
+	result = regexp.MustCompile(`\s+(?i)NOT\s+LIKE\s+`).ReplaceAllString(result, " !~~ ")
+	result = regexp.MustCompile(`\s+(?i)ILIKE\s+`).ReplaceAllString(result, " ~~* ")
+	result = regexp.MustCompile(`\s+(?i)LIKE\s+`).ReplaceAllString(result, " ~~ ")
 
 	return result
 }
@@ -3323,16 +3429,26 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 	// For MSSQL UNIQUE constraints, constraintOptions don't matter
 	// They're only used for PostgreSQL deferrable constraints
 	if g.mode != GeneratorModeMssql {
-		if (indexA.constraintOptions != nil) != (indexB.constraintOptions != nil) {
+		// Helper function to get deferrable value (treats nil as false)
+		getDeferrable := func(opts *ConstraintOptions) bool {
+			if opts == nil {
+				return false
+			}
+			return opts.deferrable
+		}
+		getInitiallyDeferred := func(opts *ConstraintOptions) bool {
+			if opts == nil {
+				return false
+			}
+			return opts.initiallyDeferred
+		}
+
+		// Compare constraint options, treating nil as equivalent to all-false
+		if getDeferrable(indexA.constraintOptions) != getDeferrable(indexB.constraintOptions) {
 			return false
 		}
-		if indexA.constraintOptions != nil && indexB.constraintOptions != nil {
-			if indexA.constraintOptions.deferrable != indexB.constraintOptions.deferrable {
-				return false
-			}
-			if indexA.constraintOptions.initiallyDeferred != indexB.constraintOptions.initiallyDeferred {
-				return false
-			}
+		if getInitiallyDeferred(indexA.constraintOptions) != getInitiallyDeferred(indexB.constraintOptions) {
+			return false
 		}
 	}
 
@@ -3383,8 +3499,9 @@ func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB Forei
 
 func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion) bool {
 	// Normalize index types - empty and "btree" are equivalent (btree is the default)
-	indexTypeA := exclusionA.indexType
-	indexTypeB := exclusionB.indexType
+	// Use case-insensitive comparison since PostgreSQL may return different cases
+	indexTypeA := strings.ToLower(exclusionA.indexType)
+	indexTypeB := strings.ToLower(exclusionB.indexType)
 	if (indexTypeA == "" || indexTypeA == "btree") && (indexTypeB == "" || indexTypeB == "btree") {
 		// Both are btree (default), so they're equal
 	} else if indexTypeA != indexTypeB {
@@ -3400,11 +3517,29 @@ func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion
 	for i := range exclusionA.exclusions {
 		a := exclusionA.exclusions[i]
 		b := exclusionB.exclusions[i]
-		if a.column != b.column || a.operator != b.operator {
+		// Normalize columns for comparison (expressions might have whitespace differences)
+		if normalizeExclusionColumn(a.column) != normalizeExclusionColumn(b.column) {
+			return false
+		}
+		// Normalize operators for comparison
+		if normalizeExclusionOperator(a.operator) != normalizeExclusionOperator(b.operator) {
 			return false
 		}
 	}
 	return true
+}
+
+func normalizeExclusionColumn(column string) string {
+	// Normalize whitespace in column expressions
+	normalized := strings.TrimSpace(column)
+	// Normalize multiple spaces to single space
+	normalized = strings.Join(strings.Fields(normalized), " ")
+	return normalized
+}
+
+func normalizeExclusionOperator(operator string) string {
+	// Normalize operator - just trim whitespace for now
+	return strings.TrimSpace(operator)
 }
 
 func normalizeExclusionWhere(where string) string {
@@ -3419,6 +3554,9 @@ func normalizeExclusionWhere(where string) string {
 	}
 	// Normalize <> to != (PostgreSQL treats them as equivalent)
 	normalized = strings.ReplaceAll(normalized, "<>", "!=")
+	// Remove ::text casts from string literals (PostgreSQL adds these automatically)
+	// This handles cases like '' vs ''::text
+	normalized = strings.ReplaceAll(normalized, "''::text", "''")
 	return normalized
 }
 
