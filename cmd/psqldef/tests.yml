@@ -2106,7 +2106,7 @@ ConstraintCheckInMultipleColumnsWithUnique:
   output: |
     ALTER TABLE "public"."orders" ADD CONSTRAINT orders_priority_check CHECK (priority = ANY (ARRAY[1, 2, 3]));
     ALTER TABLE "public"."orders" ADD CONSTRAINT orders_category_check CHECK (category = ANY (ARRAY[10, 20, 30, 40]));
-    ALTER TABLE "public"."orders" ADD CONSTRAINT "priority" UNIQUE ("priority", "category");
+    ALTER TABLE "public"."orders" ADD CONSTRAINT "orders_priority_key" UNIQUE ("priority", "category");
 
 RenameIndex:
   current: |

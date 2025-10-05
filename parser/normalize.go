@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"log"
 	"strings"
 )
 
@@ -316,8 +317,11 @@ func normalizeFuncExpr(f *FuncExpr) *FuncExpr {
 		normalizedExprs[i] = normalizeSelectExpr(expr)
 	}
 
+	// Normalize function name to lowercase (PostgreSQL normalizes all function names to lowercase)
+	funcName := strings.ToLower(String(f.Name))
+
 	return &FuncExpr{
-		Name:     f.Name,
+		Name:     NewColIdent(funcName),
 		Distinct: f.Distinct,
 		Exprs:    normalizedExprs,
 	}
@@ -343,8 +347,11 @@ func normalizeFuncCallExpr(f *FuncCallExpr) *FuncCallExpr {
 		normalizedExprs = append(normalizedExprs, NormalizeExpr(expr))
 	}
 
+	// Normalize function name to lowercase (PostgreSQL normalizes all function names to lowercase)
+	funcName := strings.ToLower(String(f.Name))
+
 	return &FuncCallExpr{
-		Name:  f.Name,
+		Name:  NewColIdent(funcName),
 		Exprs: normalizedExprs,
 	}
 }
@@ -481,9 +488,13 @@ func normalizeColName(c *ColName) *ColName {
 	}
 
 	// Normalize column references by removing table qualifiers
-	// PostgreSQL often adds them, but we want to compare just the column name
-	// However, we should keep the structure for proper comparison
-	return c
+	// PostgreSQL removes table qualifiers when they're unambiguous
+	// For comparison purposes, we strip the qualifier to match PostgreSQL's behavior
+	return &ColName{
+		Metadata:  c.Metadata,
+		Name:      c.Name,
+		Qualifier: TableName{}, // Remove table qualifier for comparison
+	}
 }
 
 func normalizeSQLVal(v *SQLVal) *SQLVal {
@@ -523,8 +534,6 @@ func normalizeValTuple(vt ValTuple) ValTuple {
 // variadic function transformation and returns the individual elements if so.
 // Returns nil if this is not an expandable array literal.
 func tryExpandArrayLiteral(expr Expr) Exprs {
-	import "log"
-
 	// Check if this is a FuncExpr with name "array" (ARRAY[...] syntax)
 	funcExpr, ok := expr.(*FuncExpr)
 	if !ok {
@@ -574,6 +583,12 @@ func isSimpleExpr(expr Expr) bool {
 		return true
 	case *FuncExpr, *FuncCallExpr:
 		// Function calls don't need extra parens
+		return true
+	case *ComparisonExpr, *IsExpr:
+		// Comparison expressions (=, !=, <, >, etc.) and IS expressions don't need parens
+		return true
+	case *NotExpr:
+		// NOT expressions don't need parens in WHERE clauses
 		return true
 	default:
 		return false

@@ -689,17 +689,16 @@ func normalizeCheckConstraintDefinition(def string) string {
 	// pg_get_constraintdef returns "CHECK (...)" so we need to preserve that format
 	// but normalize the content inside
 
+	// Normalize to lowercase first (PostgreSQL returns lowercase from pg_get_constraintdef)
+	result := strings.ToLower(def)
+
 	// Remove all type casts - this is more comprehensive than just handling string literals
 	// Remove ::type and ::type(...) patterns
-	result := regexp.MustCompile(`::[a-zA-Z_][a-zA-Z0-9_]*(\s*\([^)]*\))?`).ReplaceAllString(def, "")
-
-	// Normalize AND/OR to lowercase
-	result = regexp.MustCompile(`\bAND\b`).ReplaceAllString(result, "and")
-	result = regexp.MustCompile(`\bOR\b`).ReplaceAllString(result, "or")
+	result = regexp.MustCompile(`::[a-z_][a-z0-9_]*(\s*\([^)]*\))?`).ReplaceAllString(result, "")
 
 	// Remove spaces between function names and parentheses
-	result = regexp.MustCompile(`ANY\s+\(`).ReplaceAllString(result, "ANY(")
-	result = regexp.MustCompile(`ALL\s+\(`).ReplaceAllString(result, "ALL(")
+	result = regexp.MustCompile(`any\s+\(`).ReplaceAllString(result, "any(")
+	result = regexp.MustCompile(`all\s+\(`).ReplaceAllString(result, "all(")
 
 	return result
 }
