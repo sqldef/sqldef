@@ -58,3 +58,35 @@ func ParseExpression(exprStr string, mode ParserMode) (Expr, error) {
 
 	return aliasedExpr.Expr, nil
 }
+
+// ParseCheckConstraintDefinition parses a CHECK constraint definition string
+// (e.g., "CHECK ((name)::text = lower((name)::text))") into an Expr AST.
+// It strips the "CHECK" keyword and outer parentheses, then parses the inner expression.
+func ParseCheckConstraintDefinition(checkDef string, mode ParserMode) (Expr, error) {
+	// Trim whitespace
+	checkDef = strings.TrimSpace(checkDef)
+	if checkDef == "" {
+		return nil, fmt.Errorf("empty CHECK constraint definition")
+	}
+
+	// Remove "CHECK" keyword (case-insensitive)
+	checkDefLower := strings.ToLower(checkDef)
+	if !strings.HasPrefix(checkDefLower, "check") {
+		return nil, fmt.Errorf("CHECK constraint definition must start with 'CHECK': %s", checkDef)
+	}
+
+	// Find the position after "check"
+	remaining := strings.TrimSpace(checkDef[5:]) // Skip "CHECK"
+
+	// The remaining should be wrapped in parentheses: (expression)
+	if !strings.HasPrefix(remaining, "(") || !strings.HasSuffix(remaining, ")") {
+		return nil, fmt.Errorf("CHECK constraint expression must be wrapped in parentheses: %s", remaining)
+	}
+
+	// Extract the expression inside the parentheses
+	// We need to find the matching closing parenthesis
+	exprStr := remaining[1 : len(remaining)-1]
+
+	// Parse the expression
+	return ParseExpression(exprStr, mode)
+}

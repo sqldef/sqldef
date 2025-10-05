@@ -221,6 +221,9 @@ func NormalizeExpr(expr Expr) Expr {
 			Left:     NormalizeExpr(e.Left),
 			Operator: normalizeOperator(e.Operator),
 			Right:    NormalizeExpr(e.Right),
+			Escape:   NormalizeExpr(e.Escape),
+			All:      e.All,
+			Any:      e.Any,
 		}
 
 	case *IsExpr:
@@ -404,7 +407,7 @@ func normalizeCaseExpr(c *CaseExpr) *CaseExpr {
 	}
 }
 
-func normalizeCastExpr(c *CastExpr) *CastExpr {
+func normalizeCastExpr(c *CastExpr) Expr {
 	if c == nil {
 		return nil
 	}
@@ -415,17 +418,8 @@ func normalizeCastExpr(c *CastExpr) *CastExpr {
 	// e.g., 'text'::text, 123::integer, etc.
 	if isRedundantCast(normalizedExpr, c.Type) {
 		// Return just the expression, unwrapping the redundant cast
-		if unwrapped, ok := normalizedExpr.(*CastExpr); ok {
-			return unwrapped
-		}
-		// For non-cast expressions, we still need to preserve the type info
-		// but we can skip redundant literal casts
-		if _, isSQLVal := normalizedExpr.(*SQLVal); isSQLVal {
-			return &CastExpr{
-				Expr: normalizedExpr,
-				Type: c.Type,
-			}
-		}
+		// This handles cases like 'x'::text -> 'x' and 123::integer -> 123
+		return normalizedExpr
 	}
 
 	// Remove intermediate casts like ::double precision, ::real
@@ -608,6 +602,13 @@ func isRedundantCast(expr Expr, castType *ConvertType) bool {
 			if strings.Contains(typeStr, "text") ||
 				strings.Contains(typeStr, "varchar") ||
 				strings.Contains(typeStr, "character varying") {
+				return true
+			}
+			// String literals with date/timestamp casts are redundant
+			// PostgreSQL accepts date literals as strings, so '2022-01-01'::date can be simplified to '2022-01-01'
+			if strings.Contains(typeStr, "date") ||
+				strings.Contains(typeStr, "timestamp") ||
+				strings.Contains(typeStr, "time") {
 				return true
 			}
 		}

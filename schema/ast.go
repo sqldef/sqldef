@@ -284,6 +284,7 @@ type SridDefinition struct {
 
 type CheckDefinition struct {
 	definition        string
+	definitionAST     parser.Expr // Parsed AST representation of the CHECK constraint expression
 	constraintName    string
 	notForReplication bool
 	noInherit         bool
@@ -415,4 +416,26 @@ func (t *Table) PrimaryKey() *Index {
 
 func (keyOption ColumnKeyOption) isUnique() bool {
 	return keyOption == ColumnKeyUnique || keyOption == ColumnKeyUniqueKey
+}
+
+// NewCheckDefinition creates a new CheckDefinition with the given parameters.
+// This constructor is used primarily by the database layer when retrieving CHECK constraints from the database.
+func NewCheckDefinition(definition string, definitionAST parser.Expr, constraintName string, notForReplication bool, noInherit bool) *CheckDefinition {
+	return &CheckDefinition{
+		definition:        definition,
+		definitionAST:     definitionAST,
+		constraintName:    constraintName,
+		notForReplication: notForReplication,
+		noInherit:         noInherit,
+	}
+}
+
+// Definition returns the string representation of the CHECK constraint expression.
+func (c *CheckDefinition) Definition() string {
+	return c.definition
+}
+
+// NoInherit returns whether the CHECK constraint has the NO INHERIT option.
+func (c *CheckDefinition) NoInherit() bool {
+	return c.noInherit
 }

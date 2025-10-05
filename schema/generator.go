@@ -1149,12 +1149,20 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				switch g.mode {
 				case GeneratorModePostgres:
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), normalizeCheckDefinitionForOutput(desiredCheck.definition)))
+					ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), normalizeCheckDefinitionForOutput(desiredCheck.definition))
+			if desiredCheck.noInherit {
+				ddl += " NO INHERIT"
+			}
+			ddls = append(ddls, ddl)
 				default:
 				}
 			}
 		} else {
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), normalizeCheckDefinitionForOutput(desiredCheck.definition)))
+			ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), normalizeCheckDefinitionForOutput(desiredCheck.definition))
+			if desiredCheck.noInherit {
+				ddl += " NO INHERIT"
+			}
+			ddls = append(ddls, ddl)
 		}
 	}
 
@@ -3088,9 +3096,21 @@ func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bo
 	if checkA == nil || checkB == nil {
 		return false
 	}
-	return normalizeCheckDefinitionForComparison(checkA.definition) == normalizeCheckDefinitionForComparison(checkB.definition) &&
-		checkA.notForReplication == checkB.notForReplication &&
+
+	// Use AST-based comparison for CHECK constraint definitions
+	if !compareCheckDefinitions(checkA, checkB) {
+		return false
+	}
+
+	return checkA.notForReplication == checkB.notForReplication &&
 		checkA.noInherit == checkB.noInherit
+}
+
+// compareCheckDefinitions compares two CHECK constraint definitions using their pre-parsed ASTs.
+// This provides accurate comparison by using structural AST comparison with normalization.
+// Both checkA and checkB must have their definitionAST field populated.
+func compareCheckDefinitions(checkA, checkB *CheckDefinition) bool {
+	return parser.CompareExpr(checkA.definitionAST, checkB.definitionAST)
 }
 
 func (g *Generator) buildForeignKeyDDL(tableName string, fk *ForeignKey) string {
@@ -3109,116 +3129,6 @@ func (g *Generator) buildForeignKeyDDL(tableName string, fk *ForeignKey) string 
 	}
 
 	return ddl
-}
-
-// normalizeCheckDefinitionForComparison normalizes CHECK constraint definitions for accurate comparison
-// This handles PostgreSQL's automatic type casting behavior where:
-// - ARRAY['active', 'pending'] becomes ARRAY['active'::text, 'pending'::text]
-// - '[0-9]' becomes '[0-9]'::text
-// - SOME is an alias for ANY in SQL
-// - IN (...) is converted to = ANY (ARRAY[...])
-// - date 'YYYY-MM-DD' is converted to 'YYYY-MM-DD'::date
-// - PostgreSQL may reformat parentheses based on operator precedence
-func normalizeCheckDefinitionForComparison(def string) string {
-	// For now, we'll use string-based normalization
-	// TODO: Refactor to parse the expression as AST and normalize it properly
-	result := def
-
-	// Normalize to lowercase for case-insensitive comparison
-	result = strings.ToLower(result)
-
-	// Remove all type casts (::type syntax) - handles any type, not just text
-	// This is more comprehensive than the previous approach
-	result = regexp.MustCompile(`::[a-z_][a-z0-9_]*(\s*\([^)]*\))?`).ReplaceAllString(result, "")
-
-	// Normalize date keyword: date 'YYYY-MM-DD' -> 'YYYY-MM-DD'
-	result = regexp.MustCompile(`\bdate\s+'([^']+)'`).ReplaceAllString(result, "'$1'")
-
-	// Normalize inequality operators: PostgreSQL converts <> to != internally
-	result = regexp.MustCompile(`\s+!=\s+`).ReplaceAllString(result, " <> ")
-
-	// Normalize SOME to ANY (they are equivalent in SQL)
-	result = regexp.MustCompile(`\bsome\s*\(`).ReplaceAllString(result, "any(")
-
-	// Normalize LIKE operators - PostgreSQL stores LIKE as ~~, NOT LIKE as !~~, etc.
-	result = regexp.MustCompile(`\s+like\s+`).ReplaceAllString(result, " ~~ ")
-	result = regexp.MustCompile(`\s+not\s+like\s+`).ReplaceAllString(result, " !~~ ")
-	result = regexp.MustCompile(`\s+ilike\s+`).ReplaceAllString(result, " ~~* ")
-	result = regexp.MustCompile(`\s+not\s+ilike\s+`).ReplaceAllString(result, " !~~* ")
-
-	// Convert IN (...) to = ANY (ARRAY[...]) to match PostgreSQL's internal representation
-	result = regexp.MustCompile(`(\w+)\s+in\s+\(([^)]+)\)`).ReplaceAllStringFunc(result, func(match string) string {
-		parts := regexp.MustCompile(`(\w+)\s+in\s+\(([^)]+)\)`).FindStringSubmatch(match)
-		if len(parts) == 3 {
-			return parts[1] + " = any(array[" + parts[2] + "])"
-		}
-		return match
-	})
-
-	// Convert NOT IN (...) to <> ALL (ARRAY[...]) to match PostgreSQL's internal representation
-	result = regexp.MustCompile(`(\w+)\s+not\s+in\s+\(([^)]+)\)`).ReplaceAllStringFunc(result, func(match string) string {
-		parts := regexp.MustCompile(`(\w+)\s+not\s+in\s+\(([^)]+)\)`).FindStringSubmatch(match)
-		if len(parts) == 3 {
-			return parts[1] + " <> all(array[" + parts[2] + "])"
-		}
-		return match
-	})
-
-	// Normalize spacing around operators
-	result = regexp.MustCompile(`any\s*\(`).ReplaceAllString(result, "any(")
-	result = regexp.MustCompile(`all\s*\(`).ReplaceAllString(result, "all(")
-	result = regexp.MustCompile(`array\s*\[`).ReplaceAllString(result, "array[")
-
-	// Remove unnecessary parentheses around identifiers
-	// This handles PostgreSQL adding parentheses like (name)::text which becomes (name) after type cast removal
-	// Match (identifier) that's not preceded by a word character (which would make it a function call)
-	for i := 0; i < 10; i++ {
-		prev := result
-		result = regexp.MustCompile(`([^a-z0-9_])\(([a-z_][a-z0-9_]*)\)`).ReplaceAllString(result, "$1$2")
-		if result == prev {
-			break
-		}
-	}
-
-	// Normalize spacing
-	result = regexp.MustCompile(`\s+`).ReplaceAllString(result, " ")
-
-	// Remove redundant outer parentheses (multiple passes)
-	// This handles cases like CHECK (((expr))) -> CHECK (expr)
-	for i := 0; i < 10; i++ {
-		prev := result
-		// Pattern: check ((...)) -> check (...)
-		if m := regexp.MustCompile(`^check\s+\(\((.*)\)\)$`).FindStringSubmatch(result); m != nil {
-			inner := m[1]
-			// Only remove if parentheses are balanced
-			if isBalancedParentheses(inner) {
-				result = "check (" + inner + ")"
-			}
-		}
-		if result == prev {
-			break
-		}
-	}
-
-	result = strings.TrimSpace(result)
-
-	return result
-}
-
-// isBalancedParentheses checks if a string has balanced parentheses
-func isBalancedParentheses(s string) bool {
-	count := 0
-	for _, c := range s {
-		if c == '(' {
-			count++
-		} else if c == ')' {
-			count--
-			if count < 0 {
-				return false
-			}
-		}
-	}
-	return count == 0
 }
 
 // normalizeCheckDefinitionForOutput normalizes CHECK constraint definitions for output

@@ -303,8 +303,10 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		if parsedCol.Type.Check != nil {
+			definition := parser.String(parsedCol.Type.Check.Where.Expr)
 			column.check = &CheckDefinition{
-				definition:        parser.String(parsedCol.Type.Check.Where.Expr),
+				definition:        definition,
+				definitionAST:     parsedCol.Type.Check.Where.Expr,
 				constraintName:    parser.String(parsedCol.Type.Check.ConstraintName),
 				notForReplication: parsedCol.Type.Check.NotForReplication,
 				noInherit:         castBool(parsedCol.Type.Check.NoInherit),
@@ -455,8 +457,10 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	}
 
 	for _, checkDef := range stmt.TableSpec.Checks {
+		definition := parser.String(checkDef.Where.Expr)
 		check := CheckDefinition{
-			definition:        parser.String(checkDef.Where.Expr),
+			definition:        definition,
+			definitionAST:     checkDef.Where.Expr,
 			constraintName:    parser.String(checkDef.ConstraintName),
 			notForReplication: checkDef.NotForReplication,
 			noInherit:         castBool(checkDef.NoInherit),
@@ -1347,3 +1351,4 @@ func extractIndexComments(rawDDL string, mode GeneratorMode) map[string]string {
 
 	return comments
 }
+

@@ -329,8 +329,11 @@ func compareExpr(a, b Expr) bool {
 	case *ComparisonExpr:
 		be := b.(*ComparisonExpr)
 		return ae.Operator == be.Operator &&
+			ae.All == be.All &&
+			ae.Any == be.Any &&
 			compareExpr(ae.Left, be.Left) &&
-			compareExpr(ae.Right, be.Right)
+			compareExpr(ae.Right, be.Right) &&
+			compareExpr(ae.Escape, be.Escape)
 
 	case *IsExpr:
 		be := b.(*IsExpr)

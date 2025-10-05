@@ -13,6 +13,7 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/sqldef/sqldef/v3/database"
+	"github.com/sqldef/sqldef/v3/parser"
 	schemaLib "github.com/sqldef/sqldef/v3/schema"
 )
 
@@ -323,7 +324,7 @@ type TableDDLComponents struct {
 	ExclusionDefs     []string
 	PolicyDefs        []string
 	Comments          []string
-	CheckConstraints  map[string]string
+	CheckConstraints  map[string]*schemaLib.CheckDefinition
 	UniqueConstraints map[string]string
 	PrivilegeDefs     []string
 	DefaultSchema     string
@@ -422,7 +423,10 @@ func buildExportTableDDL(components TableDDLComponents) string {
 			fmt.Fprintf(&queryBuilder, " GENERATED %s AS IDENTITY", col.IdentityGeneration)
 		}
 		if col.Check != nil {
-			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s %s", col.Check.name, col.Check.definition)
+			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s CHECK (%s)", col.Check.name, col.Check.definition)
+			if col.Check.noInherit {
+				fmt.Fprint(&queryBuilder, " NO INHERIT")
+			}
 		}
 	}
 	if len(components.PrimaryKeyCols) > 0 {
@@ -430,9 +434,12 @@ func buildExportTableDDL(components TableDDLComponents) string {
 		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", components.PrimaryKeyName, strings.Join(components.PrimaryKeyCols, "\", \""))
 	}
 
-	for constraintName, constraintDef := range canonicalMapIter(components.CheckConstraints) {
+	for constraintName, checkDef := range canonicalMapIter(components.CheckConstraints) {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", constraintName, constraintDef)
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s CHECK (%s)", constraintName, checkDef.Definition())
+		if checkDef.NoInherit() {
+			fmt.Fprint(&queryBuilder, " NO INHERIT")
+		}
 	}
 
 	fmt.Fprintf(&queryBuilder, "\n);\n")
@@ -465,6 +472,7 @@ func buildExportTableDDL(components TableDDLComponents) string {
 type columnConstraint struct {
 	definition string
 	name       string
+	noInherit  bool
 }
 
 type column struct {
@@ -598,9 +606,11 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 			col.IdentityGeneration = *idGen
 		}
 		if checkName != nil && checkDefinition != nil {
+			noInherit := strings.Contains(strings.ToLower(*checkDefinition), " no inherit")
 			col.Check = &columnConstraint{
 				definition: normalizeCheckConstraintDefinition(*checkDefinition),
 				name:       *checkName,
+				noInherit:  noInherit,
 			}
 		}
 		cols = append(cols, col)
@@ -647,7 +657,7 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 	return indexes, nil
 }
 
-func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[string]string, error) {
+func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[string]*schemaLib.CheckDefinition, error) {
 	const query = `SELECT con.conname, pg_get_constraintdef(con.oid, true)
 	FROM   pg_constraint con
 	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
@@ -657,7 +667,7 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[strin
 	AND    cls.relname = $2
 	AND    array_length(con.conkey, 1) > 1;`
 
-	result := map[string]string{}
+	result := map[string]*schemaLib.CheckDefinition{}
 	schema, table := splitTableName(tableName, d.GetDefaultSchema())
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
@@ -671,36 +681,55 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[strin
 		if err != nil {
 			return nil, err
 		}
-		// Normalize constraint definition to handle PostgreSQL's automatic type casting
+
+		// Check for NO INHERIT before stripping it
+		noInherit := strings.Contains(strings.ToLower(constraintDef), " no inherit")
+
+		// Normalize constraint definition to strip CHECK keyword and outer parentheses
 		normalizedDef := normalizeCheckConstraintDefinition(constraintDef)
-		result[constraintName] = normalizedDef
+
+		// Parse the expression into AST
+		ast, err := parser.ParseExpression(normalizedDef, parser.ParserModePostgres)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse CHECK constraint %s: %w", constraintName, err)
+		}
+
+		// Create CheckDefinition with parsed AST
+		result[constraintName] = schemaLib.NewCheckDefinition(normalizedDef, ast, constraintName, false, noInherit)
 	}
 
 	return result, nil
 }
 
-// normalizeCheckConstraintDefinition removes redundant type casts that PostgreSQL automatically adds
-// and normalizes the format to make constraint comparison work correctly. Specifically handles:
-// - ARRAY['active'::text, 'pending'::text] -> ARRAY['active', 'pending']
-// - (name)::text -> (name)
-// - Uppercase AND/OR -> lowercase and/or
-// - Spacing normalization
+// normalizeCheckConstraintDefinition strips the CHECK keyword, outer parentheses, and constraint options from a constraint definition.
+// This normalizes the format to match what's stored in the schema (which stores only the expression).
+// For example: "CHECK ((n3 > 0) NO INHERIT)" -> "(n3 > 0)"
 func normalizeCheckConstraintDefinition(def string) string {
-	// pg_get_constraintdef returns "CHECK (...)" so we need to preserve that format
-	// but normalize the content inside
+	// Trim whitespace
+	def = strings.TrimSpace(def)
 
-	// Normalize to lowercase first (PostgreSQL returns lowercase from pg_get_constraintdef)
-	result := strings.ToLower(def)
+	// Remove "CHECK" prefix (case-insensitive)
+	defLower := strings.ToLower(def)
+	if strings.HasPrefix(defLower, "check") {
+		def = strings.TrimSpace(def[5:]) // Skip "CHECK"
+	}
 
-	// Remove all type casts - this is more comprehensive than just handling string literals
-	// Remove ::type and ::type(...) patterns
-	result = regexp.MustCompile(`::[a-z_][a-z0-9_]*(\s*\([^)]*\))?`).ReplaceAllString(result, "")
+	// Remove constraint options like NO INHERIT, NOT VALID, etc.
+	// These appear at the end of the constraint definition
+	defLower = strings.ToLower(def)
+	if idx := strings.Index(defLower, " no inherit"); idx != -1 {
+		def = strings.TrimSpace(def[:idx])
+	}
+	if idx := strings.Index(defLower, " not valid"); idx != -1 {
+		def = strings.TrimSpace(def[:idx])
+	}
 
-	// Remove spaces between function names and parentheses
-	result = regexp.MustCompile(`any\s+\(`).ReplaceAllString(result, "any(")
-	result = regexp.MustCompile(`all\s+\(`).ReplaceAllString(result, "all(")
+	// Remove outer parentheses
+	if strings.HasPrefix(def, "(") && strings.HasSuffix(def, ")") {
+		def = def[1 : len(def)-1]
+	}
 
-	return result
+	return def
 }
 
 func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]string, error) {
