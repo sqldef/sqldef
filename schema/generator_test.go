@@ -3,6 +3,7 @@ package schema
 import (
 	"testing"
 
+	"github.com/sqldef/sqldef/v3/parser"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -160,4 +161,112 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			assert.Equal(t, tt.expected, actual)
 		})
 	}
+}
+
+func TestNormalizeCheckExprAST(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Remove ::text cast from string literal",
+			input:    "status = 'active'::text",
+			expected: "status = 'active'",
+		},
+		{
+			name:     "Remove ::text cast from ARRAY elements",
+			input:    "status = ANY(ARRAY['active'::text, 'pending'::text])",
+			expected: "status = ANY(ARRAY['active', 'pending'])",
+		},
+		{
+			name:     "Remove ::character varying cast",
+			input:    "name = 'test'::character varying",
+			expected: "name = 'test'",
+		},
+		{
+			name:     "Remove ::character varying(255) cast",
+			input:    "name = 'test'::character varying(255)",
+			expected: "name = 'test'",
+		},
+		{
+			name:     "Remove double parentheses",
+			input:    "((status = 'active'))",
+			expected: "(status = 'active')",
+		},
+		{
+			name:     "Handle AND expression with casts",
+			input:    "status = 'active'::text and name = 'test'::text",
+			expected: "status = 'active' and name = 'test'",
+		},
+		{
+			name:     "Handle OR expression with casts",
+			input:    "status = 'active'::text or status = 'pending'::text",
+			expected: "status = 'active' or status = 'pending'",
+		},
+		{
+			name:     "Handle NOT expression with cast",
+			input:    "not status = 'inactive'::text",
+			expected: "not status = 'inactive'",
+		},
+		{
+			name:     "Handle complex comparison with casts",
+			input:    "status = ANY(ARRAY['active'::text, 'pending'::text, 'processing'::text])",
+			expected: "status = ANY(ARRAY['active', 'pending', 'processing'])",
+		},
+		{
+			name:     "Handle IS NULL with cast",
+			input:    "status::text is null",
+			expected: "status is null",
+		},
+		{
+			name:     "Handle BETWEEN with casts",
+			input:    "created_at between '2020-01-01'::text and '2020-12-31'::text",
+			expected: "created_at between '2020-01-01' and '2020-12-31'",
+		},
+		{
+			name:     "Handle function call with cast arguments",
+			input:    "upper(status::text) = 'ACTIVE'",
+			expected: "upper(status) = 'ACTIVE'",
+		},
+		{
+			name:     "No changes for expression without casts",
+			input:    "status = 'active' and amount > 100",
+			expected: "status = 'active' and amount > 100",
+		},
+		{
+			name:     "Handle nested expressions with casts",
+			input:    "(status = 'active'::text and (priority = 'high'::text or priority = 'urgent'::text))",
+			expected: "(status = 'active' and (priority = 'high' or priority = 'urgent'))",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Parse the input expression as a CHECK constraint
+			stmt, err := parser.ParseDDL("create table t (id int, check("+tt.input+"))", parser.ParserModePostgres)
+			assert.NoError(t, err, "Failed to parse input")
+			assert.NotNil(t, stmt, "Parsed statement is nil")
+
+			ddl, ok := stmt.(*parser.DDL)
+			assert.True(t, ok, "Statement is not a DDL")
+			assert.NotNil(t, ddl.TableSpec, "TableSpec is nil")
+			assert.Greater(t, len(ddl.TableSpec.Checks), 0, "No check constraints found")
+
+			check := ddl.TableSpec.Checks[0]
+			assert.NotNil(t, check.Where.Expr, "Check expression is nil")
+
+			// Normalize the expression
+			normalized := normalizeCheckExprAST(check.Where.Expr)
+
+			// Convert normalized expression to string
+			actual := parser.String(normalized)
+			assert.Equal(t, tt.expected, actual)
+		})
+	}
+}
+
+func TestNormalizeCheckExprASTNilInput(t *testing.T) {
+	result := normalizeCheckExprAST(nil)
+	assert.Nil(t, result)
 }

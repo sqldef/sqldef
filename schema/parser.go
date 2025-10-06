@@ -283,6 +283,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		if parsedCol.Type.Check != nil {
 			column.check = &CheckDefinition{
 				definition:        parser.String(parsedCol.Type.Check.Where.Expr),
+				definitionAST:     parsedCol.Type.Check.Where.Expr,
 				constraintName:    parser.String(parsedCol.Type.Check.ConstraintName),
 				notForReplication: parsedCol.Type.Check.NotForReplication,
 				noInherit:         castBool(parsedCol.Type.Check.NoInherit),
@@ -386,6 +387,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	for _, checkDef := range stmt.TableSpec.Checks {
 		check := CheckDefinition{
 			definition:        parser.String(checkDef.Where.Expr),
+			definitionAST:     checkDef.Where.Expr,
 			constraintName:    parser.String(checkDef.ConstraintName),
 			notForReplication: checkDef.NotForReplication,
 			noInherit:         castBool(checkDef.NoInherit),
