@@ -175,6 +175,7 @@ There are markdown files to describe the usage of each command. Keep them up to 
 
 Before considering any task complete, run these commands:
 
-* [ ] `make build`      # Ensure it compiles
-* [ ] `make test`       # Run all tests
-* [ ] `gofmt -w .`      # Format the code
+* [ ] `make build`  # Ensure all commands are compiled
+* [ ] `make test`   # Ensure all tests pass
+* [ ] `make lint`   # Ensure the code is linted
+* [ ] `make format` # Ensure the code is formatted
