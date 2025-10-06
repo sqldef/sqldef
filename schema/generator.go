@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/sqldef/sqldef/v3/database"
+	"github.com/sqldef/sqldef/v3/parser"
 )
 
 type GeneratorMode int
@@ -2904,7 +2905,15 @@ func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bo
 	if checkA == nil || checkB == nil {
 		return false
 	}
-	return normalizeCheckDefinitionForComparison(checkA.definition) == normalizeCheckDefinitionForComparison(checkB.definition) &&
+
+	if checkA.definitionAST == nil || checkB.definitionAST == nil {
+		panic(fmt.Sprintf("CheckDefinition.definitionAST must not be nil (checkA.definitionAST=%v, checkB.definitionAST=%v)", checkA.definitionAST, checkB.definitionAST))
+	}
+
+	normalizedA := normalizeCheckExprAST(checkA.definitionAST)
+	normalizedB := normalizeCheckExprAST(checkB.definitionAST)
+
+	return parser.String(normalizedA) == parser.String(normalizedB) &&
 		checkA.notForReplication == checkB.notForReplication &&
 		checkA.noInherit == checkB.noInherit
 }
@@ -2927,22 +2936,113 @@ func (g *Generator) buildForeignKeyDDL(tableName string, fk *ForeignKey) string 
 	return ddl
 }
 
-// normalizeCheckDefinitionForComparison normalizes CHECK constraint definitions for accurate comparison
-// This handles PostgreSQL's automatic type casting behavior where:
-// - ARRAY['active', 'pending'] becomes ARRAY['active'::text, 'pending'::text]
-// - '[0-9]' becomes '[0-9]'::text
-func normalizeCheckDefinitionForComparison(def string) string {
-	// Remove ::text type casts from string literals
-	result := regexp.MustCompile(`'([^']*)'::text`).ReplaceAllString(def, "'$1'")
+// normalizeCheckExprAST normalizes a CHECK constraint expression AST for comparison
+// by removing database-added type casts (e.g., ::text, ::character varying)
+func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
+	if expr == nil {
+		return nil
+	}
 
-	// Remove ::character varying type casts
-	result = regexp.MustCompile(`'([^']*)'::character varying(\([^)]*\))?`).ReplaceAllString(result, "'$1'")
-
-	// Remove extra parentheses that PostgreSQL sometimes adds
-	result = regexp.MustCompile(`\(\((.*)\)\)`).ReplaceAllString(result, "($1)")
-
-	return result
+	switch e := expr.(type) {
+	case *parser.CastExpr:
+		// Remove casts to text or character varying
+		if e.Type != nil && (e.Type.Type == "text" || e.Type.Type == "character varying") {
+			return normalizeCheckExprAST(e.Expr)
+		}
+		return &parser.CastExpr{
+			Expr: normalizeCheckExprAST(e.Expr),
+			Type: e.Type,
+		}
+	case *parser.ParenExpr:
+		normalized := normalizeCheckExprAST(e.Expr)
+		if paren, ok := normalized.(*parser.ParenExpr); ok {
+			return paren
+		}
+		return &parser.ParenExpr{Expr: normalized}
+	case *parser.AndExpr:
+		return &parser.AndExpr{
+			Left:  normalizeCheckExprAST(e.Left),
+			Right: normalizeCheckExprAST(e.Right),
+		}
+	case *parser.OrExpr:
+		return &parser.OrExpr{
+			Left:  normalizeCheckExprAST(e.Left),
+			Right: normalizeCheckExprAST(e.Right),
+		}
+	case *parser.NotExpr:
+		return &parser.NotExpr{Expr: normalizeCheckExprAST(e.Expr)}
+	case *parser.ComparisonExpr:
+		return &parser.ComparisonExpr{
+			Operator: e.Operator,
+			Left:     normalizeCheckExprAST(e.Left),
+			Right:    normalizeCheckExprAST(e.Right),
+			Escape:   normalizeCheckExprAST(e.Escape),
+			All:      e.All,
+			Any:      e.Any,
+		}
+	case *parser.BinaryExpr:
+		return &parser.BinaryExpr{
+			Operator: e.Operator,
+			Left:     normalizeCheckExprAST(e.Left),
+			Right:    normalizeCheckExprAST(e.Right),
+		}
+	case *parser.UnaryExpr:
+		return &parser.UnaryExpr{
+			Operator: e.Operator,
+			Expr:     normalizeCheckExprAST(e.Expr),
+		}
+	case *parser.FuncExpr:
+		normalizedExprs := make(parser.SelectExprs, len(e.Exprs))
+		for i, arg := range e.Exprs {
+			if aliased, ok := arg.(*parser.AliasedExpr); ok {
+				normalizedExprs[i] = &parser.AliasedExpr{
+					Expr: normalizeCheckExprAST(aliased.Expr),
+					As:   aliased.As,
+				}
+			} else {
+				normalizedExprs[i] = arg
+			}
+		}
+		return &parser.FuncExpr{
+			Qualifier: e.Qualifier,
+			Name:      e.Name,
+			Distinct:  e.Distinct,
+			Exprs:     normalizedExprs,
+			Over:      e.Over,
+		}
+	case *parser.ArrayConstructor:
+		normalizedElements := make(parser.ArrayElements, len(e.Elements))
+		for i, elem := range e.Elements {
+			if castExpr, ok := elem.(*parser.CastExpr); ok {
+				normalized := normalizeCheckExprAST(castExpr)
+				if normalizedArrayElem, ok := normalized.(parser.ArrayElement); ok {
+					normalizedElements[i] = normalizedArrayElem
+				} else {
+					normalizedElements[i] = elem
+				}
+			} else {
+				normalizedElements[i] = elem
+			}
+		}
+		return &parser.ArrayConstructor{Elements: normalizedElements}
+	case *parser.IsExpr:
+		return &parser.IsExpr{
+			Operator: e.Operator,
+			Expr:     normalizeCheckExprAST(e.Expr),
+		}
+	case *parser.RangeCond:
+		return &parser.RangeCond{
+			Operator: e.Operator,
+			Left:     normalizeCheckExprAST(e.Left),
+			From:     normalizeCheckExprAST(e.From),
+			To:       normalizeCheckExprAST(e.To),
+		}
+	default:
+		// For all other expression types (literals, column names, etc.), return as-is
+		return expr
+	}
 }
+
 
 func areSameIdentityDefinition(identityA *Identity, identityB *Identity) bool {
 	if identityA == nil && identityB == nil {
