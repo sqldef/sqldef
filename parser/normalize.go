@@ -217,6 +217,57 @@ func NormalizeExpr(expr Expr) Expr {
 		return &ParenExpr{Expr: inner}
 
 	case *ComparisonExpr:
+		// Normalize IN (val1, val2, ...) to = ANY (ARRAY[val1, val2, ...])
+		// Normalize NOT IN (val1, val2, ...) to != ALL (ARRAY[val1, val2, ...])
+		// This matches PostgreSQL's internal representation
+		if strings.ToLower(e.Operator) == "in" && !e.All && !e.Any {
+			// Check if the right side is a ValTuple (list of values)
+			if valTuple, ok := e.Right.(ValTuple); ok {
+				// Convert ValTuple to ArrayElements
+				elements := make(ArrayElements, len(valTuple))
+				for i, val := range valTuple {
+					// Cast to ArrayElement (all Expr types that can be in ValTuple implement ArrayElement)
+					elements[i] = val.(ArrayElement)
+				}
+				arrayConstructor := &ArrayConstructor{
+					Elements: elements,
+				}
+
+				return &ComparisonExpr{
+					Left:     NormalizeExpr(e.Left),
+					Operator: "=",
+					Right:    NormalizeExpr(arrayConstructor),
+					Escape:   NormalizeExpr(e.Escape),
+					All:      false,
+					Any:      true,
+				}
+			}
+		}
+
+		if strings.ToLower(e.Operator) == "not in" && !e.All && !e.Any {
+			// Check if the right side is a ValTuple (list of values)
+			if valTuple, ok := e.Right.(ValTuple); ok {
+				// Convert ValTuple to ArrayElements
+				elements := make(ArrayElements, len(valTuple))
+				for i, val := range valTuple {
+					// Cast to ArrayElement (all Expr types that can be in ValTuple implement ArrayElement)
+					elements[i] = val.(ArrayElement)
+				}
+				arrayConstructor := &ArrayConstructor{
+					Elements: elements,
+				}
+
+				return &ComparisonExpr{
+					Left:     NormalizeExpr(e.Left),
+					Operator: "!=",
+					Right:    NormalizeExpr(arrayConstructor),
+					Escape:   NormalizeExpr(e.Escape),
+					All:      true,
+					Any:      false,
+				}
+			}
+		}
+
 		return &ComparisonExpr{
 			Left:     NormalizeExpr(e.Left),
 			Operator: normalizeOperator(e.Operator),

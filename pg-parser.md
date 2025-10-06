@@ -8,13 +8,14 @@ The `gfx/psqldef_parser` branch removes the dependency on the external PostgreSQ
 
 ## Current Status
 
-**Progress**: All non-TestApply tests passing. TestApply has 13 remaining YAML test failures.
+**Progress**: All non-TestApply tests passing. TestApply has 6 remaining YAML test failures.
 
-**Test Failures**: 13 out of ~500 test cases (97.4% pass rate)
+**Test Failures**: 6 out of ~500 test cases (98.8% pass rate)
 
 **Recent Fixes**:
 - ✅ Fixed `numeric` vs `decimal` type normalization (ForeignKeyDependenciesPrimaryKeyChange)
 - ✅ Fixed `varchar` vs `character varying` normalization (CreateIndexWithConcurrentlyConfigMixedStatements)
+- ✅ **Fixed CHECK constraint normalization (7 tests)** - Added IN/NOT IN to ARRAY transformation in AST normalization
 
 ### Parser Conflicts
 - Current state: 275 shift/reduce, 1556 reduce/reduce
@@ -22,12 +23,11 @@ The `gfx/psqldef_parser` branch removes the dependency on the external PostgreSQ
 
 ## Remaining Issues ❌
 
-**Summary**: 13 test failures across 4 categories (down from 15 original failures)
+**Summary**: 6 test failures across 3 categories (down from 13 → 54% reduction)
 
 **Breakdown**:
-- 7 CHECK constraint normalization tests
-- 2 DEFAULT expression parsing tests
-- 2 Long auto-generated constraint name tests
+- 2 DEFAULT expression parsing tests (requires parser grammar enhancement)
+- 2 Long auto-generated constraint name tests (requires PostgreSQL naming algorithm)
 - 2 Variadic ARRAY transformation tests (documented limitation)
 
 ### 1. Default Expression Parsing (2 tests)
@@ -98,9 +98,9 @@ The `gfx/psqldef_parser` branch removes the dependency on the external PostgreSQ
   ```
 - **Status**: Same limitation as view variadic functions
 
-### 3. CHECK Constraint Normalization (7 tests)
+### 3. CHECK Constraint Normalization ✅ FIXED
 
-**Affected Tests**:
+**Affected Tests** (all now passing):
 - ConstraintCheckInAdd
 - ConstraintCheckInRemove
 - ConstraintCheckInModify
@@ -109,21 +109,22 @@ The `gfx/psqldef_parser` branch removes the dependency on the external PostgreSQ
 - ConstraintCheckInMultipleColumnsWithUnique
 - ConstraintCheckInWithUniqueCreate
 
-- **Issue**: CHECK constraint definition comparison fails due to PostgreSQL adding `::text` type casts
-- **Current behavior**: Constraints are dropped and recreated on every run despite being semantically identical
-- **Expected behavior**: Should recognize constraints as identical using AST-based comparison
-- **Root cause**: PostgreSQL adds `::text` casts to array literals in CHECK constraints
-- **Detailed comparison**:
+- **Issue**: CHECK constraint comparison failed because `IN (...)` syntax was not normalized to PostgreSQL's internal `= ANY (ARRAY[...])` representation
+- **Root cause**: The parser preserves `IN (val1, val2, ...)` as `ComparisonExpr{Operator: "in", Right: ValTuple}`, but PostgreSQL converts this to `ComparisonExpr{Operator: "=", Any: true, Right: ArrayConstructor}`. Additionally, PostgreSQL adds `::text` casts to array elements.
+- **Detailed issue**:
   ```
-  Parser generates: CHECK (status = ANY (ARRAY['active', 'inactive', 'pending']))
-  PostgreSQL stores: CHECK (status = ANY (ARRAY['active'::text, 'inactive'::text, 'pending'::text]))
+  Desired schema:     CHECK (status IN ('active', 'inactive', 'pending'))
+  Parser AST:         ComparisonExpr{Operator: "in", Right: ValTuple}
+  PostgreSQL stores:  CHECK (status = ANY (ARRAY['active'::text, 'inactive'::text, 'pending'::text]))
+  PostgreSQL AST:     ComparisonExpr{Operator: "=", Any: true, Right: ArrayConstructor}
   ```
-- **AST Normalization**: The `NormalizeExpr` function should remove redundant `::text` casts via `isRedundantCast`, but comparison still fails
-- **Investigation Status**: AST normalization logic exists and should work, but requires deeper debugging to identify why comparison fails
-- **Files involved**:
-  - `parser/normalize.go:592-632` - isRedundantCast() function
-  - `parser/compare.go:292-296` - CompareExpr() with normalization
-  - `schema/generator.go:3094-3116` - areSameCheckDefinition() using AST comparison
+- **Solution**: Enhanced `NormalizeExpr()` in `parser/normalize.go` to transform IN/NOT IN expressions:
+  - `IN (val1, val2, ...)` → `= ANY (ARRAY[val1, val2, ...])`
+  - `NOT IN (val1, val2, ...)` → `!= ALL (ARRAY[val1, val2, ...])`
+  - The existing `isRedundantCast()` function then removes the `::text` casts from array elements
+- **Files modified**:
+  - `parser/normalize.go:219-268` - Added IN/NOT IN transformation logic
+- **Status**: ✅ All 7 tests now passing
 
 ### 4. Long Auto-Generated Constraint Names (2 tests)
 
