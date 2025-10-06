@@ -57,7 +57,7 @@ For development iterations, use these commands to run tests:
 ### Run all tests
 
 ```sh
-make test
+make test # it will take 5 minutes to run
 ```
 
 ### Run tests for specific `*def` tools
@@ -69,7 +69,7 @@ go test ./cmd/sqlite3def
 go test ./cmd/mssqldef
 ```
 
-For MariaDB testing locally:
+For MariaDB testing:
 
 ```sh
 MYSQL_FLAVOR=mariadb MYSQL_PORT=3307 go test ./cmd/mysqldef

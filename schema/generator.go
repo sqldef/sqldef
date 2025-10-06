@@ -415,8 +415,11 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if findCheckConstraintInTable(desiredTable, check.constraintName) != nil {
 				continue
 			}
-			if g.mode != GeneratorModeMysql { // workaround. inline CHECK should be converted to out-of-place CONSTRAINT to fix this.
+			switch g.mode {
+			case GeneratorModePostgres, GeneratorModeMssql, GeneratorModeSQLite3:
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(check.constraintName)))
+			case GeneratorModeMysql:
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(currentTable.name), g.escapeSQLName(check.constraintName)))
 			}
 		}
 	}
@@ -1142,6 +1145,9 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				switch g.mode {
 				case GeneratorModePostgres:
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), desiredCheck.definition))
+				case GeneratorModeMysql:
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), desiredCheck.definition))
 				default:
 				}
@@ -2913,9 +2919,22 @@ func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bo
 	normalizedA := normalizeCheckExprAST(checkA.definitionAST)
 	normalizedB := normalizeCheckExprAST(checkB.definitionAST)
 
+	// Unwrap outermost parentheses if present (MySQL adds extra parens)
+	normalizedA = unwrapOutermostParenExpr(normalizedA)
+	normalizedB = unwrapOutermostParenExpr(normalizedB)
+
 	return parser.String(normalizedA) == parser.String(normalizedB) &&
 		checkA.notForReplication == checkB.notForReplication &&
 		checkA.noInherit == checkB.noInherit
+}
+
+// unwrapOutermostParenExpr removes the outermost ParenExpr if the expression is wrapped in one.
+// This is needed because some databases (like MySQL) add extra parentheses around CHECK expressions.
+func unwrapOutermostParenExpr(expr parser.Expr) parser.Expr {
+	if paren, ok := expr.(*parser.ParenExpr); ok {
+		return paren.Expr
+	}
+	return expr
 }
 
 func (g *Generator) buildForeignKeyDDL(tableName string, fk *ForeignKey) string {
@@ -3037,6 +3056,13 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 			From:     normalizeCheckExprAST(e.From),
 			To:       normalizeCheckExprAST(e.To),
 		}
+	case parser.ValTuple:
+		// Normalize each element in the tuple
+		normalizedTuple := make(parser.ValTuple, len(e))
+		for i, elem := range e {
+			normalizedTuple[i] = normalizeCheckExprAST(elem)
+		}
+		return normalizedTuple
 	default:
 		// For all other expression types (literals, column names, etc.), return as-is
 		return expr

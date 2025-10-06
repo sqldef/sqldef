@@ -98,3 +98,117 @@ DropForeignKey:
   output: |
     ALTER TABLE `posts` DROP FOREIGN KEY `posts_ibfk_1`;
     ALTER TABLE `posts` DROP INDEX `posts_ibfk_1`;
+CheckInClauseInteger:
+  desired: |
+    CREATE TABLE `products` (
+      `id` int PRIMARY KEY,
+      `status` int,
+      CONSTRAINT `products_status_chk` CHECK (`status` IN (1, 2, 3))
+    );
+  min_version: '8.0'
+CheckInClauseString:
+  desired: |
+    CREATE TABLE `users` (
+      `id` int PRIMARY KEY,
+      `role` varchar(50),
+      CONSTRAINT `users_role_chk` CHECK (`role` IN ('admin', 'user', 'guest'))
+    );
+  min_version: '8.0'
+CheckInClauseColumnLevel:
+  desired: |
+    CREATE TABLE `orders` (
+      `id` int PRIMARY KEY,
+      `status` varchar(20) CHECK (`status` IN ('pending', 'approved', 'shipped', 'delivered'))
+    );
+  apply_only: true
+  min_version: '8.0'
+CheckInClauseWithMultipleConditions:
+  desired: |
+    CREATE TABLE `items` (
+      `id` int PRIMARY KEY,
+      `category` varchar(50),
+      `priority` int,
+      CONSTRAINT `items_chk` CHECK (`category` IN ('electronics', 'clothing', 'food') AND `priority` >= 1 AND `priority` <= 5)
+    );
+  apply_only: true
+  min_version: '8.0'
+AddCheckConstraintWithIn:
+  current: |
+    CREATE TABLE `documents` (
+      `id` int PRIMARY KEY,
+      `state` varchar(20)
+    );
+  desired: |
+    CREATE TABLE `documents` (
+      `id` int PRIMARY KEY,
+      `state` varchar(20),
+      CONSTRAINT `documents_state_chk` CHECK (`state` IN ('draft', 'review', 'published', 'archived'))
+    );
+  output: |
+    ALTER TABLE `documents` ADD CONSTRAINT `documents_state_chk` CHECK (state in ('draft', 'review', 'published', 'archived'));
+  min_version: '8.0'
+ModifyCheckConstraintIn:
+  current: |
+    CREATE TABLE `tasks` (
+      `id` int PRIMARY KEY,
+      `status` varchar(20),
+      CONSTRAINT `tasks_status_chk` CHECK (`status` IN ('todo', 'in_progress'))
+    );
+  desired: |
+    CREATE TABLE `tasks` (
+      `id` int PRIMARY KEY,
+      `status` varchar(20),
+      CONSTRAINT `tasks_status_chk` CHECK (`status` IN ('todo', 'in_progress', 'done'))
+    );
+  output: |
+    ALTER TABLE `tasks` DROP CHECK `tasks_status_chk`;
+    ALTER TABLE `tasks` ADD CONSTRAINT `tasks_status_chk` CHECK (status in ('todo', 'in_progress', 'done'));
+  min_version: '8.0'
+DropCheckConstraintWithIn:
+  current: |
+    CREATE TABLE `events` (
+      `id` int PRIMARY KEY,
+      `type` varchar(20),
+      CONSTRAINT `events_type_chk` CHECK (`type` IN ('public', 'private'))
+    );
+  desired: |
+    CREATE TABLE `events` (
+      `id` int PRIMARY KEY,
+      `type` varchar(20)
+    );
+  output: |
+    ALTER TABLE `events` DROP CHECK `events_type_chk`;
+  min_version: '8.0'
+CheckInClauseWithNegation:
+  desired: |
+    CREATE TABLE `messages` (
+      `id` int PRIMARY KEY,
+      `status` varchar(20),
+      CONSTRAINT `messages_status_chk` CHECK (`status` NOT IN ('deleted', 'spam'))
+    );
+  min_version: '8.0'
+CheckInClauseMultipleColumns:
+  desired: |
+    CREATE TABLE `shipments` (
+      `id` int PRIMARY KEY,
+      `status` varchar(20),
+      `priority` int,
+      CONSTRAINT `shipments_status_chk` CHECK (`status` IN ('pending', 'shipped')),
+      CONSTRAINT `shipments_priority_chk` CHECK (`priority` IN (1, 2, 3))
+    );
+  min_version: '8.0'
+CheckInClauseNormalization:
+  current: |
+    CREATE TABLE `workflows` (
+      `id` int PRIMARY KEY,
+      `state` varchar(20),
+      CONSTRAINT `workflows_state_chk` CHECK (`state` in ('active', 'paused', 'stopped'))
+    );
+  desired: |
+    CREATE TABLE `workflows` (
+      `id` int PRIMARY KEY,
+      `state` varchar(20),
+      CONSTRAINT `workflows_state_chk` CHECK (`state` IN ('active', 'paused', 'stopped'))
+    );
+  output: ""
+  min_version: '8.0'

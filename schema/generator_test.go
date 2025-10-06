@@ -239,6 +239,16 @@ func TestNormalizeCheckExprAST(t *testing.T) {
 			input:    "(status = 'active'::text and (priority = 'high'::text or priority = 'urgent'::text))",
 			expected: "(status = 'active' and (priority = 'high' or priority = 'urgent'))",
 		},
+		{
+			name:     "Handle ValTuple in IN clause",
+			input:    "status IN ('a', 'b', 'c')",
+			expected: "status in ('a', 'b', 'c')",
+		},
+		{
+			name:     "Handle ValTuple with charset prefix",
+			input:    "status in (_utf8mb4'a', _utf8mb4'b')",
+			expected: "status in ('a', 'b')",
+		},
 	}
 
 	for _, tt := range tests {
@@ -269,4 +279,68 @@ func TestNormalizeCheckExprAST(t *testing.T) {
 func TestNormalizeCheckExprASTNilInput(t *testing.T) {
 	result := normalizeCheckExprAST(nil)
 	assert.Nil(t, result)
+}
+
+func TestCheckConstraintComparisonWithDifferentInValues(t *testing.T) {
+	// Test that CHECK constraints with different IN clause values are detected as different
+
+	// Parse current state (from DB with charset prefix)
+	stmt1, err := parser.ParseDDL("create table t (id int, check(status IN (_utf8mb4'todo',_utf8mb4'in_progress')))", parser.ParserModeMysql)
+	assert.NoError(t, err)
+	ddl1 := stmt1.(*parser.DDL)
+	check1 := ddl1.TableSpec.Checks[0]
+
+	// Parse desired state (from user, no charset prefix)
+	stmt2, err := parser.ParseDDL("create table t (id int, check(status IN ('todo', 'in_progress', 'done')))", parser.ParserModeMysql)
+	assert.NoError(t, err)
+	ddl2 := stmt2.(*parser.DDL)
+	check2 := ddl2.TableSpec.Checks[0]
+
+	// Normalize both
+	normalized1 := normalizeCheckExprAST(check1.Where.Expr)
+	normalized2 := normalizeCheckExprAST(check2.Where.Expr)
+
+	// Convert to strings
+	str1 := parser.String(normalized1)
+	str2 := parser.String(normalized2)
+
+	t.Logf("Normalized 1: %s", str1)
+	t.Logf("Normalized 2: %s", str2)
+
+	// They should be different
+	assert.NotEqual(t, str1, str2, "CHECK constraints with different IN values should be detected as different")
+}
+
+func TestCheckConstraintIdempotencyWithMySQLFormat(t *testing.T) {
+	// Test that CHECK constraints are idempotent when MySQL returns them with extra parens and charset
+
+	// Parse as user would write it
+	stmt1, err := parser.ParseDDL("create table t (id int, check(`status` IN ('todo', 'in_progress')))", parser.ParserModeMysql)
+	assert.NoError(t, err)
+	ddl1 := stmt1.(*parser.DDL)
+	check1 := ddl1.TableSpec.Checks[0]
+
+	// Parse as MySQL would return it (extra parens, charset prefix, lowercase)
+	stmt2, err := parser.ParseDDL("create table t (id int, check((`status` in (_utf8mb4'todo',_utf8mb4'in_progress'))))", parser.ParserModeMysql)
+	assert.NoError(t, err)
+	ddl2 := stmt2.(*parser.DDL)
+	check2 := ddl2.TableSpec.Checks[0]
+
+	// Normalize both
+	normalized1 := normalizeCheckExprAST(check1.Where.Expr)
+	normalized2 := normalizeCheckExprAST(check2.Where.Expr)
+
+	// Unwrap outermost parentheses (as done in areSameCheckDefinition)
+	normalized1 = unwrapOutermostParenExpr(normalized1)
+	normalized2 = unwrapOutermostParenExpr(normalized2)
+
+	// Convert to strings
+	str1 := parser.String(normalized1)
+	str2 := parser.String(normalized2)
+
+	t.Logf("Normalized 1 (user format): %s", str1)
+	t.Logf("Normalized 2 (MySQL format): %s", str2)
+
+	// They should be the same (idempotent)
+	assert.Equal(t, str1, str2, "CHECK constraints should be idempotent despite MySQL's formatting")
 }
