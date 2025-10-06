@@ -33,6 +33,7 @@ var (
 		"int8":        "bigint",
 		"char":        "character",
 		"varchar":     "character varying",
+		"decimal":     "numeric",
 		"timestamptz": "timestamp with time zone",
 		"timetz":      "time with time zone",
 	}

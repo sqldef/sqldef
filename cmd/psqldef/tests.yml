@@ -2239,7 +2239,7 @@ CreateIndexWithConcurrentlyConfigMixedStatements:
     CREATE INDEX idx_users_name ON users (name);
     CREATE INDEX CONCURRENTLY idx_users_email_manual ON users (email);
   output: |
-    ALTER TABLE "public"."users" ADD COLUMN "email" varchar(255);
+    ALTER TABLE "public"."users" ADD COLUMN "email" character varying(255);
     CREATE INDEX CONCURRENTLY idx_users_name ON users (name);
     CREATE INDEX CONCURRENTLY idx_users_email_manual ON users (email);
 

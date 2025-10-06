@@ -8,15 +8,27 @@ The `gfx/psqldef_parser` branch removes the dependency on the external PostgreSQ
 
 ## Current Status
 
-**Progress**: All non-TestApply tests passing. TestApply has 9 remaining YAML test failures.
+**Progress**: All non-TestApply tests passing. TestApply has 13 remaining YAML test failures.
 
-**Test Failures**: 9 out of ~500 test cases (98.2% pass rate)
+**Test Failures**: 13 out of ~500 test cases (97.4% pass rate)
+
+**Recent Fixes**:
+- ✅ Fixed `numeric` vs `decimal` type normalization (ForeignKeyDependenciesPrimaryKeyChange)
+- ✅ Fixed `varchar` vs `character varying` normalization (CreateIndexWithConcurrentlyConfigMixedStatements)
 
 ### Parser Conflicts
 - Current state: 275 shift/reduce, 1556 reduce/reduce
 - These are acceptable for complex SQL grammar and don't affect functionality
 
 ## Remaining Issues ❌
+
+**Summary**: 13 test failures across 4 categories (down from 15 original failures)
+
+**Breakdown**:
+- 7 CHECK constraint normalization tests
+- 2 DEFAULT expression parsing tests
+- 2 Long auto-generated constraint name tests
+- 2 Variadic ARRAY transformation tests (documented limitation)
 
 ### 1. Default Expression Parsing (2 tests)
 
@@ -86,30 +98,32 @@ The `gfx/psqldef_parser` branch removes the dependency on the external PostgreSQ
   ```
 - **Status**: Same limitation as view variadic functions
 
-### 3. CHECK Constraint Normalization (1 test)
+### 3. CHECK Constraint Normalization (7 tests)
 
-#### CreateTableWithCheckConstraints
-- **Issue**: CHECK constraint definition comparison fails despite normalization
-- **Current behavior**: Constraint is dropped and recreated on every run
-- **Expected behavior**: Should recognize constraints as identical
-- **Root cause**: Mismatch in parentheses between parser output and PostgreSQL storage
+**Affected Tests**:
+- ConstraintCheckInAdd
+- ConstraintCheckInRemove
+- ConstraintCheckInModify
+- ConstraintCheckInAndUniqueAdd
+- ConstraintCheckInAndUniqueRemove
+- ConstraintCheckInMultipleColumnsWithUnique
+- ConstraintCheckInWithUniqueCreate
+
+- **Issue**: CHECK constraint definition comparison fails due to PostgreSQL adding `::text` type casts
+- **Current behavior**: Constraints are dropped and recreated on every run despite being semantically identical
+- **Expected behavior**: Should recognize constraints as identical using AST-based comparison
+- **Root cause**: PostgreSQL adds `::text` casts to array literals in CHECK constraints
 - **Detailed comparison**:
   ```
-  Parser input:    CHECK (((name)::TEXT = LOWER((name)::TEXT)))
-  Parser output:   CHECK (((name)::text = LOWER((name)::text)))
-  PostgreSQL DB:   CHECK (((name)::text = lower((name)::text)))
-
-  After normalizeCheckConstraintDefinition() in database layer:
-    DB: check (((name) = lower((name))))
-
-  After normalizeCheckDefinitionForComparison() in generator:
-    Parser: check ((name = lower(name)))
-    DB:     check ((name = lower(name)))  [missing one closing paren]
+  Parser generates: CHECK (status = ANY (ARRAY['active', 'inactive', 'pending']))
+  PostgreSQL stores: CHECK (status = ANY (ARRAY['active'::text, 'inactive'::text, 'pending'::text]))
   ```
-- **Investigation needed**: The normalization functions are removing different numbers of parentheses
+- **AST Normalization**: The `NormalizeExpr` function should remove redundant `::text` casts via `isRedundantCast`, but comparison still fails
+- **Investigation Status**: AST normalization logic exists and should work, but requires deeper debugging to identify why comparison fails
 - **Files involved**:
-  - `database/postgres/database.go:688-704` - normalizeCheckConstraintDefinition()
-  - `schema/generator.go:3122-3214` - normalizeCheckDefinitionForComparison()
+  - `parser/normalize.go:592-632` - isRedundantCast() function
+  - `parser/compare.go:292-296` - CompareExpr() with normalization
+  - `schema/generator.go:3094-3116` - areSameCheckDefinition() using AST comparison
 
 ### 4. Long Auto-Generated Constraint Names (2 tests)
 
@@ -152,40 +166,6 @@ The `gfx/psqldef_parser` branch removes the dependency on the external PostgreSQ
   PostgreSQL creates: loooooooooooooooooooooooooooooooooooooooong_table_63_cha_a_fkey
   ```
 - **Impact**: Same as CHECK constraints - functional but name mismatch
-
-### 5. Data Type Normalization (1 test)
-
-#### ForeignKeyDependenciesPrimaryKeyChange
-- **Issue**: `numeric` vs `decimal` type comparison fails
-- **Current behavior**: `ALTER TABLE ... ALTER COLUMN "price" TYPE decimal(10, 2)` generated on every run
-- **Expected behavior**: Recognize `numeric(10,2)` and `decimal(10,2)` as equivalent
-- **Root cause**: PostgreSQL treats `numeric` and `decimal` as aliases, but sqldef doesn't
-- **Detailed error**:
-  ```
-  Current schema has:  price numeric(10,2)
-  Desired schema has:  price DECIMAL(10, 2)
-
-  Both should normalize to: numeric(10, 2)
-  ```
-- **Secondary issue**: Test also has primary key dependency ordering, but the type issue masks it
-- **Files to check**:
-  - `schema/generator.go` - Type comparison logic
-  - `database/postgres/database.go` - Type normalization from DB
-
-### 6. VARCHAR vs Character Varying (1 test)
-
-#### CreateIndexWithConcurrentlyConfigMixedStatements
-- **Issue**: Type name normalization mismatch
-- **Current behavior**: Test expects `varchar(255)` but gets `character varying(255)`
-- **Expected behavior**: Both should be treated as equivalent
-- **Root cause**: PostgreSQL returns `character varying` but schema uses `varchar`
-- **Detailed comparison**:
-  ```
-  Expected: ALTER TABLE "public"."users" ADD COLUMN "email" varchar(255);
-  Actual:   ALTER TABLE "public"."users" ADD COLUMN "email" character varying(255);
-  ```
-- **Impact**: Cosmetic - both are identical in PostgreSQL, just different syntax
-- **Fix needed**: Normalize `character varying` → `varchar` or vice versa for comparison
 
 ## Testing Strategy
 
