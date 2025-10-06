@@ -2128,18 +2128,20 @@ default_definition:
   {
     $$ = DefaultValueOrExpression{Expr: $2}
   }
-| DEFAULT default_val
-  {
-    $$ = DefaultValueOrExpression{Value: $2}
-  }
-| DEFAULT '(' default_val ')'
-  {
-    $$ = DefaultValueOrExpression{Value: $3}
-  }
-| DEFAULT '(' '(' default_val ')' ')'
-  {
-    $$ = DefaultValueOrExpression{Value: $4}
-  }
+// Removed default_val alternatives to fix parsing conflicts with typecast operator
+// All literals are valid expressions, so default_expression is sufficient
+// | DEFAULT default_val
+//   {
+//     $$ = DefaultValueOrExpression{Value: $2}
+//   }
+// | DEFAULT '(' default_val ')'
+//   {
+//     $$ = DefaultValueOrExpression{Value: $3}
+//   }
+// | DEFAULT '(' '(' default_val ')' ')'
+//   {
+//     $$ = DefaultValueOrExpression{Value: $4}
+//   }
 
 default_val:
   STRING character_cast_opt
@@ -4231,44 +4233,46 @@ value_expression:
   {
     $$ = &BinaryExpr{Left: $1, Operator: JSONUnquoteExtractOp, Right: $3}
   }
-| value_expression TYPECAST numeric_type
-  {
-    $$ = &CastExpr{
-      Expr: $1,
-      Type: &ConvertType{
-        Type: $3.Type,
-        Length: $3.Length,
-        Scale: $3.Scale,
-      },
-    }
-  }
-| value_expression TYPECAST char_type
-  {
-    $$ = &CastExpr{
-      Expr: $1,
-      Type: &ConvertType{
-        Type: $3.Type,
-        Length: $3.Length,
-      },
-    }
-  }
-| value_expression TYPECAST time_type
-  {
-    $$ = &CastExpr{
-      Expr: $1,
-      Type: &ConvertType{
-        Type: $3.Type,
-      },
-    }
-  }
+// Removed specific typecast rules to fix parsing conflicts
+// | value_expression TYPECAST numeric_type
+//   {
+//     $$ = &CastExpr{
+//       Expr: $1,
+//       Type: &ConvertType{
+//         Type: $3.Type,
+//         Length: $3.Length,
+//         Scale: $3.Scale,
+//       },
+//     }
+//   }
+// | value_expression TYPECAST char_type
+//   {
+//     $$ = &CastExpr{
+//       Expr: $1,
+//       Type: &ConvertType{
+//         Type: $3.Type,
+//         Length: $3.Length,
+//       },
+//     }
+//   }
+// | value_expression TYPECAST time_type
+//   {
+//     $$ = &CastExpr{
+//       Expr: $1,
+//       Type: &ConvertType{
+//         Type: $3.Type,
+//       },
+//     }
+//   }
 | value_expression COLLATE charset
   {
     $$ = &CollateExpr{Expr: $1, Charset: $3}
   }
-| value_expression TYPECAST TIMESTAMP WITH TIME ZONE
-  {
-    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: string($3) + " WITH TIME ZONE"}}
-  }
+// Removed specific TIMESTAMP WITH TIME ZONE typecast - now handled by simple_convert_type
+// | value_expression TYPECAST TIMESTAMP WITH TIME ZONE
+//   {
+//     $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: string($3) + " WITH TIME ZONE"}}
+//   }
 | BINARY value_expression %prec UNARY
   {
     $$ = &UnaryExpr{Operator: BinaryStr, Expr: $2}
@@ -4520,10 +4524,11 @@ function_call_nonkeyword:
   {
     $$ = &FuncExpr{Name:NewColIdent("current_time")}
   }
-| TYPECAST simple_convert_type
-  {
-    $$ = &ConvertExpr{Type: $2}
-  }
+// Removed problematic rule that was causing typecast parsing to fail:
+// | TYPECAST simple_convert_type
+//   {
+//     $$ = &ConvertExpr{Type: $2}
+//   }
 
 func_datetime_precision_opt:
 /* empty */
@@ -4834,7 +4839,7 @@ new_qualifier_column_name:
   }
 
 value:
-  STRING character_cast_opt
+  STRING
   {
     $$ = NewStrVal($1)
   }
