@@ -3144,17 +3144,6 @@ func normalizeOperator(op string) string {
 	return strings.ToLower(op)
 }
 
-// normalizeValTuple creates a sorted copy of a ValTuple for consistent comparison.
-// This ensures that IN (1, 2, 3) matches IN (3, 2, 1).
-func normalizeValTuple(tuple parser.ValTuple) parser.ValTuple {
-	sortedValues := make([]parser.Expr, len(tuple))
-	copy(sortedValues, tuple)
-	sort.Slice(sortedValues, func(i, j int) bool {
-		return parser.String(sortedValues[i]) < parser.String(sortedValues[j])
-	})
-	return parser.ValTuple(sortedValues)
-}
-
 // normalizeCheckExprAST normalizes a CHECK constraint expression AST for comparison
 // by removing database-added type casts (e.g., ::text, ::character varying)
 func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
@@ -3233,19 +3222,10 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 	case *parser.NotExpr:
 		return &parser.NotExpr{Expr: normalizeCheckExprAST(e.Expr)}
 	case *parser.ComparisonExpr:
-		left := normalizeCheckExprAST(e.Left)
-		right := normalizeCheckExprAST(e.Right)
-
-		if strings.EqualFold(e.Operator, "in") {
-			if tuple, ok := right.(parser.ValTuple); ok {
-				right = normalizeValTuple(tuple)
-			}
-		}
-
 		return &parser.ComparisonExpr{
 			Operator: normalizeOperator(e.Operator),
-			Left:     left,
-			Right:    right,
+			Left:     normalizeCheckExprAST(e.Left),
+			Right:    normalizeCheckExprAST(e.Right),
 			Escape:   normalizeCheckExprAST(e.Escape),
 			All:      e.All,
 			Any:      e.Any,
@@ -3307,7 +3287,13 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 		normalizedTuple := parser.ValTuple(transformSlice([]parser.Expr(e), func(elem parser.Expr) parser.Expr {
 			return normalizeCheckExprAST(elem)
 		}))
-		return normalizedTuple
+		// Sort the tuple for consistent comparison (e.g., IN (1, 2, 3) matches IN (3, 2, 1))
+		sortedValues := make([]parser.Expr, len(normalizedTuple))
+		copy(sortedValues, normalizedTuple)
+		sort.Slice(sortedValues, func(i, j int) bool {
+			return parser.String(sortedValues[i]) < parser.String(sortedValues[j])
+		})
+		return parser.ValTuple(sortedValues)
 	case *parser.ColName:
 		qualifierStr := ""
 		if e.Qualifier.Name.String() != "" {

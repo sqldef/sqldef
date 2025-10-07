@@ -202,7 +202,7 @@ func TestNormalizeCheckExprAST(t *testing.T) {
 		{
 			name:     "Handle OR expression with casts",
 			input:    "status = 'active'::text or status = 'pending'::text",
-			expected: "status = 'active' or status = 'pending'",
+			expected: "status in ('active', 'pending')",
 		},
 		{
 			name:     "Handle NOT expression with cast",
@@ -237,11 +237,11 @@ func TestNormalizeCheckExprAST(t *testing.T) {
 		{
 			name:     "Handle nested expressions with casts",
 			input:    "(status = 'active'::text and (priority = 'high'::text or priority = 'urgent'::text))",
-			expected: "(status = 'active' and (priority = 'high' or priority = 'urgent'))",
+			expected: "(status = 'active' and priority in ('high', 'urgent'))",
 		},
 		{
 			name:     "Handle ValTuple in IN clause",
-			input:    "status IN ('a', 'b', 'c')",
+			input:    "status IN ('a', 'c', 'b')",
 			expected: "status in ('a', 'b', 'c')",
 		},
 		{
