@@ -144,6 +144,7 @@ AddCheckConstraintWithIn:
     );
   output: |
     ALTER TABLE `documents` ADD CONSTRAINT `documents_state_chk` CHECK (state in ('draft', 'review', 'published', 'archived'));
+  flavor: mysql
   min_version: '8.0'
 ModifyCheckConstraintIn:
   current: |
@@ -161,6 +162,7 @@ ModifyCheckConstraintIn:
   output: |
     ALTER TABLE `tasks` DROP CHECK `tasks_status_chk`;
     ALTER TABLE `tasks` ADD CONSTRAINT `tasks_status_chk` CHECK (status in ('todo', 'in_progress', 'done'));
+  flavor: mysql
   min_version: '8.0'
 DropCheckConstraintWithIn:
   current: |
@@ -176,6 +178,7 @@ DropCheckConstraintWithIn:
     );
   output: |
     ALTER TABLE `events` DROP CHECK `events_type_chk`;
+  flavor: mysql
   min_version: '8.0'
 CheckInClauseWithNegation:
   desired: |
