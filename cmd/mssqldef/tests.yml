@@ -759,3 +759,123 @@ IdentityWithNegativeValue:
     CREATE TABLE test_identity_negative4 (
       id bigint IDENTITY(-1000, -10) NOT NULL
     );
+CheckInClauseInteger:
+  desired: |
+    CREATE TABLE products (
+      id int PRIMARY KEY,
+      status int,
+      CONSTRAINT products_status_chk CHECK (status IN (1, 2, 3))
+    );
+CheckInClauseString:
+  desired: |
+    CREATE TABLE users (
+      id int PRIMARY KEY,
+      role varchar(50),
+      CONSTRAINT users_role_chk CHECK (role IN ('admin', 'user', 'guest'))
+    );
+CheckInClauseWithMultipleConditions:
+  desired: |
+    CREATE TABLE items (
+      id int PRIMARY KEY,
+      category varchar(50),
+      priority int,
+      CONSTRAINT items_chk CHECK (category IN ('electronics', 'clothing', 'food') AND priority >= 1 AND priority <= 5)
+    );
+AddCheckConstraintWithIn:
+  current: |
+    CREATE TABLE documents (
+      id int PRIMARY KEY,
+      state varchar(20)
+    );
+  desired: |
+    CREATE TABLE documents (
+      id int PRIMARY KEY,
+      state varchar(20),
+      CONSTRAINT documents_state_chk CHECK (state IN ('draft', 'review', 'published', 'archived'))
+    );
+  output: |
+    ALTER TABLE [dbo].[documents] ADD CONSTRAINT [documents_state_chk] CHECK (state in ('draft', 'review', 'published', 'archived'));
+ModifyCheckConstraintIn:
+  current: |
+    CREATE TABLE tasks (
+      id int PRIMARY KEY,
+      status varchar(20),
+      CONSTRAINT tasks_status_chk CHECK (status IN ('todo', 'in_progress'))
+    );
+  desired: |
+    CREATE TABLE tasks (
+      id int PRIMARY KEY,
+      status varchar(20),
+      CONSTRAINT tasks_status_chk CHECK (status IN ('todo', 'in_progress', 'done'))
+    );
+  output: |
+    ALTER TABLE [dbo].[tasks] DROP CONSTRAINT [tasks_status_chk];
+    ALTER TABLE [dbo].[tasks] ADD CONSTRAINT [tasks_status_chk] CHECK (status in ('todo', 'in_progress', 'done'));
+DropCheckConstraintWithIn:
+  current: |
+    CREATE TABLE events (
+      id int PRIMARY KEY,
+      type varchar(20),
+      CONSTRAINT events_type_chk CHECK (type IN ('public', 'private'))
+    );
+  desired: |
+    CREATE TABLE events (
+      id int PRIMARY KEY,
+      type varchar(20)
+    );
+  output: |
+    ALTER TABLE [dbo].[events] DROP CONSTRAINT events_type_chk;
+CheckInClauseNormalization:
+  current: |
+    CREATE TABLE workflows (
+      id int PRIMARY KEY,
+      state varchar(20),
+      CONSTRAINT workflows_state_chk CHECK (state in ('active', 'paused', 'stopped'))
+    );
+  desired: |
+    CREATE TABLE workflows (
+      id int PRIMARY KEY,
+      state varchar(20),
+      CONSTRAINT workflows_state_chk CHECK (state IN ('active', 'paused', 'stopped'))
+    );
+  output: ""
+CheckTableLevelToColumnLevel:
+  current: |
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      status varchar(20),
+      CONSTRAINT orders_status_chk CHECK (status IN ('pending', 'shipped', 'delivered'))
+    );
+  desired: |
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      status varchar(20) CHECK (status IN ('pending', 'shipped', 'delivered'))
+    );
+  output: ""
+CheckTableLevelToUnnamedColumnLevel:
+  current: |
+    CREATE TABLE payments (
+      id int PRIMARY KEY,
+      method varchar(20),
+      CONSTRAINT CK_payments_method CHECK (method IN ('card', 'cash', 'transfer'))
+    );
+  desired: |
+    CREATE TABLE payments (
+      id int PRIMARY KEY,
+      method varchar(20) CHECK (method IN ('card', 'cash', 'transfer'))
+    );
+  output: ""
+CheckDuplicateValuesInOrChain:
+  current: |
+    CREATE TABLE items (
+      id int PRIMARY KEY,
+      category varchar(20),
+      CONSTRAINT items_category_chk CHECK (category = 'electronics' OR category = 'electronics' OR category = 'clothing')
+    );
+  desired: |
+    CREATE TABLE items (
+      id int PRIMARY KEY,
+      category varchar(20),
+      CONSTRAINT items_category_chk CHECK (category IN ('electronics', 'clothing'))
+    );
+  output: ""

@@ -87,7 +87,7 @@ test-mssqldef:
 	go test -v ./database/mssql
 
 format:
-	go fmt .
+	go fmt ./...
 
 lint:
 	go vet ./...
