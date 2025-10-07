@@ -2222,10 +2222,7 @@ func (g *Generator) escapeSQLName(name string) string {
 
 // escapeAndJoinColumns escapes a list of column names and joins them with commas
 func (g *Generator) escapeAndJoinColumns(columns []string) string {
-	escapedColumns := make([]string, len(columns))
-	for i, col := range columns {
-		escapedColumns[i] = g.escapeSQLName(col)
-	}
+	escapedColumns := transformSlice(columns, func(col string) string { return g.escapeSQLName(col) })
 	return strings.Join(escapedColumns, ", ")
 }
 
@@ -3265,17 +3262,15 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 			Expr:     normalizeCheckExprAST(e.Expr),
 		}
 	case *parser.FuncExpr:
-		normalizedExprs := make(parser.SelectExprs, len(e.Exprs))
-		for i, arg := range e.Exprs {
+		normalizedExprs := parser.SelectExprs(transformSlice([]parser.SelectExpr(e.Exprs), func(arg parser.SelectExpr) parser.SelectExpr {
 			if aliased, ok := arg.(*parser.AliasedExpr); ok {
-				normalizedExprs[i] = &parser.AliasedExpr{
+				return &parser.AliasedExpr{
 					Expr: normalizeCheckExprAST(aliased.Expr),
 					As:   aliased.As,
 				}
-			} else {
-				normalizedExprs[i] = arg
 			}
-		}
+			return arg
+		}))
 		return &parser.FuncExpr{
 			Qualifier: e.Qualifier,
 			Name:      e.Name,
@@ -3284,19 +3279,16 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 			Over:      e.Over,
 		}
 	case *parser.ArrayConstructor:
-		normalizedElements := make(parser.ArrayElements, len(e.Elements))
-		for i, elem := range e.Elements {
+		normalizedElements := parser.ArrayElements(transformSlice([]parser.ArrayElement(e.Elements), func(elem parser.ArrayElement) parser.ArrayElement {
 			if castExpr, ok := elem.(*parser.CastExpr); ok {
 				normalized := normalizeCheckExprAST(castExpr)
 				if normalizedArrayElem, ok := normalized.(parser.ArrayElement); ok {
-					normalizedElements[i] = normalizedArrayElem
-				} else {
-					normalizedElements[i] = elem
+					return normalizedArrayElem
 				}
-			} else {
-				normalizedElements[i] = elem
+				return elem
 			}
-		}
+			return elem
+		}))
 		return &parser.ArrayConstructor{Elements: normalizedElements}
 	case *parser.IsExpr:
 		return &parser.IsExpr{
@@ -3312,10 +3304,9 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 		}
 	case parser.ValTuple:
 		// Normalize each element in the tuple
-		normalizedTuple := make(parser.ValTuple, len(e))
-		for i, elem := range e {
-			normalizedTuple[i] = normalizeCheckExprAST(elem)
-		}
+		normalizedTuple := parser.ValTuple(transformSlice([]parser.Expr(e), func(elem parser.Expr) parser.Expr {
+			return normalizeCheckExprAST(elem)
+		}))
 		return normalizedTuple
 	case *parser.ColName:
 		qualifierStr := ""
@@ -3733,27 +3724,15 @@ func convertForeignKeysToIndexNames(foreignKeys []ForeignKey) []string {
 }
 
 func convertPolicyNames(policies []Policy) []string {
-	policyNames := make([]string, len(policies))
-	for i, policy := range policies {
-		policyNames[i] = policy.name
-	}
-	return policyNames
+	return transformSlice(policies, func(p Policy) string { return p.name })
 }
 
 func convertViewNames(views []*View) []string {
-	viewNames := make([]string, len(views))
-	for i, view := range views {
-		viewNames[i] = view.name
-	}
-	return viewNames
+	return transformSlice(views, func(v *View) string { return v.name })
 }
 
 func convertExtensionNames(extensions []*Extension) []string {
-	extensionNames := make([]string, len(extensions))
-	for i, extension := range extensions {
-		extensionNames[i] = extension.extension.Name
-	}
-	return extensionNames
+	return transformSlice(extensions, func(e *Extension) string { return e.extension.Name })
 }
 
 func removeTableByName(tables []*Table, name string) []*Table {
@@ -4252,4 +4231,13 @@ func isValidLock(lock string) bool {
 // Escape a string and add quotes to form a legal SQL string constant.
 func StringConstant(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
+// transformSlice applies the converter to each element in the input slice and returns a new slice.
+func transformSlice[T any, R any](in []T, converter func(T) R) []R {
+	out := make([]R, len(in))
+	for i, v := range in {
+		out[i] = converter(v)
+	}
+	return out
 }
