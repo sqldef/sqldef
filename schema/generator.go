@@ -3149,7 +3149,6 @@ func normalizeOperator(op string) string {
 }
 
 // normalizeCheckExprAST normalizes a CHECK constraint expression AST for comparison
-// by removing database-added type casts (e.g., ::text, ::character varying)
 func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 	if expr == nil {
 		return nil
