@@ -1,3 +1,10 @@
+## [v3.1.11](https://github.com/sqldef/sqldef/compare/v3.1.10...v3.1.11) - 2025-10-07
+- show readable error positions on syntax errors by @gfx in https://github.com/sqldef/sqldef/pull/848
+- update agent rules by @gfx in https://github.com/sqldef/sqldef/pull/850
+- update AGENTS.md by @gfx in https://github.com/sqldef/sqldef/pull/852
+- refactor: normalize CHECK definitions based on AST, not string representation by @gfx in https://github.com/sqldef/sqldef/pull/853
+- support CHECK ... IN constraints for mysqldef and mssqldef by @gfx in https://github.com/sqldef/sqldef/pull/855
+
 ## [v3.1.10](https://github.com/sqldef/sqldef/compare/v3.1.9...v3.1.10) - 2025-10-02
 - mssql: sort indexes name in --export by @gfx in https://github.com/sqldef/sqldef/pull/842
 - modernize the code by @gfx in https://github.com/sqldef/sqldef/pull/844
