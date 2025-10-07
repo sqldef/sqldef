@@ -13,16 +13,17 @@ Each command follows the same pattern: it accepts connection parameters similar 
 
 * Never commit the changes unless the user asks for it.
 * Write comments to describe what is not obvious in the code. Describing the "why" is a recommended practice.
+* Format queries in string literals.
 
 ## Build
 
-Build all sqldef commands (`mysqldef`, `psqldef`, `sqlite3def`, `mssqldef`):
+Build all the sqldef commands (`mysqldef`, `psqldef`, `sqlite3def`, `mssqldef`):
 
 ```sh
 make build
 ```
 
-The compiled binaries will be placed in the `build/$os-$arch$/` directory.
+The executable binaries will be placed in the `build/$os-$arch$/` directory.
 
 ### Build Parser
 
@@ -31,6 +32,9 @@ To maintain the parser, edit `parser/parser.y` and run:
 ```sh
 make parser
 ```
+
+For now, `psqldef` uses `go-pgquery` (a native PostgreSQL parser) as the primary parser,
+and the generic parser as a fallback.
 
 ## Local Development
 

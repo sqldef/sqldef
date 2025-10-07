@@ -344,3 +344,40 @@ func TestCheckConstraintIdempotencyWithMySQLFormat(t *testing.T) {
 	// They should be the same (idempotent)
 	assert.Equal(t, str1, str2, "CHECK constraints should be idempotent despite MySQL's formatting")
 }
+
+func TestCheckConstraintMSSQLInVsOrNormalization(t *testing.T) {
+	// Test that MSSQL's OR chain is normalized to IN and matches user's IN clause
+
+	// Parse user's IN format as table-level CHECK (what user writes)
+	stmtUser, err := parser.ParseDDL("CREATE TABLE t (c varchar(20), CONSTRAINT c_chk CHECK (c IN ('todo', 'in_progress')))", parser.ParserModeMssql)
+	assert.NoError(t, err)
+	ddlUser := stmtUser.(*parser.DDL)
+	checkUser := ddlUser.TableSpec.Checks[0]
+
+	// Parse MSSQL's OR format as column-level CHECK (what DB returns after MSSQL converts it)
+	stmtDB, err := parser.ParseDDL("CREATE TABLE t (c varchar(20) CONSTRAINT [c_chk] CHECK ([c]='in_progress' OR [c]='todo'))", parser.ParserModeMssql)
+	assert.NoError(t, err)
+	ddlDB := stmtDB.(*parser.DDL)
+	// This should be a column-level CHECK
+	colDB := ddlDB.TableSpec.Columns[0] // First column is 'c'
+	assert.NotNil(t, colDB.Type.Check, "Expected column-level CHECK")
+	checkDB := colDB.Type.Check
+
+	// Normalize both
+	normalizedUser := normalizeCheckExprAST(checkUser.Where.Expr)
+	normalizedDB := normalizeCheckExprAST(checkDB.Where.Expr)
+
+	// Unwrap outermost parens
+	normalizedUser = unwrapOutermostParenExpr(normalizedUser)
+	normalizedDB = unwrapOutermostParenExpr(normalizedDB)
+
+	// Convert to strings
+	strUser := parser.String(normalizedUser)
+	strDB := parser.String(normalizedDB)
+
+	t.Logf("Normalized user (table-level IN): %s", strUser)
+	t.Logf("Normalized DB (column-level OR):  %s", strDB)
+
+	// They should be equal
+	assert.Equal(t, strUser, strDB, "CHECK constraints should normalize to the same format")
+}

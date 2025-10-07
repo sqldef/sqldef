@@ -120,7 +120,6 @@ CheckInClauseColumnLevel:
       `id` int PRIMARY KEY,
       `status` varchar(20) CHECK (`status` IN ('pending', 'approved', 'shipped', 'delivered'))
     );
-  apply_only: true
   min_version: '8.0'
 CheckInClauseWithMultipleConditions:
   desired: |
@@ -130,7 +129,6 @@ CheckInClauseWithMultipleConditions:
       `priority` int,
       CONSTRAINT `items_chk` CHECK (`category` IN ('electronics', 'clothing', 'food') AND `priority` >= 1 AND `priority` <= 5)
     );
-  apply_only: true
   min_version: '8.0'
 AddCheckConstraintWithIn:
   current: |

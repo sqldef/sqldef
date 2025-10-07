@@ -412,9 +412,17 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Check checks.
 		for _, check := range currentTable.checks {
+			// First try to find by name
 			if findCheckConstraintInTable(desiredTable, check.constraintName) != nil {
 				continue
 			}
+
+			// For MySQL and MSSQL, also check if this constraint matches any column-level CHECK by definition
+			// This handles auto-generated constraint names for column-level CHECKs
+			if (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) && findCheckConstraintByDefinition(desiredTable, &check) != nil {
+				continue
+			}
+
 			switch g.mode {
 			case GeneratorModePostgres, GeneratorModeMssql, GeneratorModeSQLite3:
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(check.constraintName)))
@@ -841,24 +849,40 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				if !areSameCheckDefinition(currentColumn.check, desiredColumn.check) {
-					tableName := extractTableName(desired.table.name)
-					constraintName := fmt.Sprintf("%s_%s_check", tableName, desiredColumn.name)
-					if currentColumn.check != nil {
-						currentConstraintName := currentColumn.check.constraintName
-						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), currentConstraintName)
-						ddls = append(ddls, ddl)
+					// For MSSQL, column-level CHECKs might actually be table-level CHECKs that MSSQL converted
+					// Check if the current column-level CHECK matches a table-level CHECK in desired
+					skipDrop := false
+					if currentColumn.check != nil && desiredColumn.check == nil {
+						// Current has column-level CHECK, desired doesn't
+						// Check if it matches a table-level CHECK in desired
+						if findCheckConstraintByName(desired.table.checks, currentColumn.check.constraintName) != nil ||
+							findCheckConstraintByDefinitionInList(desired.table.checks, currentColumn.check) != nil {
+							// This column-level CHECK is actually a table-level CHECK
+							// It will be handled in the table-level CHECK processing
+							skipDrop = true
+						}
 					}
-					if desiredColumn.check != nil {
-						desiredConstraintName := desiredColumn.check.constraintName
-						if desiredConstraintName == "" {
-							desiredConstraintName = constraintName
+
+					if !skipDrop {
+						tableName := extractTableName(desired.table.name)
+						constraintName := fmt.Sprintf("%s_%s_check", tableName, desiredColumn.name)
+						if currentColumn.check != nil {
+							currentConstraintName := currentColumn.check.constraintName
+							ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), currentConstraintName)
+							ddls = append(ddls, ddl)
 						}
-						replicationDefinition := ""
-						if desiredColumn.check.notForReplication {
-							replicationDefinition = " NOT FOR REPLICATION"
+						if desiredColumn.check != nil {
+							desiredConstraintName := desiredColumn.check.constraintName
+							if desiredConstraintName == "" {
+								desiredConstraintName = constraintName
+							}
+							replicationDefinition := ""
+							if desiredColumn.check.notForReplication {
+								replicationDefinition = " NOT FOR REPLICATION"
+							}
+							ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableName(desired.table.name), desiredConstraintName, replicationDefinition, desiredColumn.check.definition)
+							ddls = append(ddls, ddl)
 						}
-						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableName(desired.table.name), desiredConstraintName, replicationDefinition, desiredColumn.check.definition)
-						ddls = append(ddls, ddl)
 					}
 				}
 
@@ -1140,19 +1164,37 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	// Examine each check
 	for _, desiredCheck := range desired.table.checks {
-		if currentCheck := findCheckConstraintInTable(&currentTable, desiredCheck.constraintName); currentCheck != nil {
+		// First try to find by name
+		currentCheck := findCheckConstraintInTable(&currentTable, desiredCheck.constraintName)
+
+		// For MySQL and MSSQL, also try to find by definition if not found by name
+		// This handles auto-generated constraint names
+		if currentCheck == nil && (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) {
+			currentCheck = findCheckConstraintByDefinition(&currentTable, &desiredCheck)
+		}
+
+		if currentCheck != nil {
 			if !areSameCheckDefinition(currentCheck, &desiredCheck) {
+				// Constraint exists but has different definition, need to replace it
 				switch g.mode {
-				case GeneratorModePostgres:
+				case GeneratorModePostgres, GeneratorModeMssql:
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), desiredCheck.definition))
 				case GeneratorModeMysql:
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), desiredCheck.definition))
-				default:
+				case GeneratorModeSQLite3:
+					// SQLite does not support ALTER TABLE for CHECK constraints
+					// Modifying CHECK constraints requires recreating the table, which is not supported
 				}
+			} else if currentCheck.constraintName != desiredCheck.constraintName {
+				// Constraint exists with same definition but different name
+				// Don't generate DDL for renaming - constraint names don't matter if the definition is the same
+				// This handles cases where MSSQL auto-generates names like CK__table__column__hash
+				// and sqldef auto-generates names like table_column_check
 			}
 		} else {
+			// Constraint doesn't exist, add it
 			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), desiredCheck.definition))
 		}
 	}
@@ -2742,6 +2784,55 @@ func findCheckConstraintInTable(table *Table, constraintName string) *CheckDefin
 	return nil
 }
 
+// findCheckConstraintByName finds a CHECK constraint in a list by name
+func findCheckConstraintByName(checks []CheckDefinition, constraintName string) *CheckDefinition {
+	for _, check := range checks {
+		if check.constraintName == constraintName {
+			return &check
+		}
+	}
+	return nil
+}
+
+// findCheckConstraintByDefinitionInList finds a CHECK constraint in a list by comparing definitions
+func findCheckConstraintByDefinitionInList(checks []CheckDefinition, check *CheckDefinition) *CheckDefinition {
+	if check == nil {
+		return nil
+	}
+
+	for _, currentCheck := range checks {
+		if areSameCheckDefinition(&currentCheck, check) {
+			return &currentCheck
+		}
+	}
+	return nil
+}
+
+// findCheckConstraintByDefinition finds a CHECK constraint in a table by comparing definitions.
+// This is used for MySQL when column-level CHECKs are converted to table-level CONSTRAINTs
+// with auto-generated names.
+func findCheckConstraintByDefinition(table *Table, check *CheckDefinition) *CheckDefinition {
+	if check == nil {
+		return nil
+	}
+
+	// Search table-level checks
+	for _, currentCheck := range table.checks {
+		if areSameCheckDefinition(&currentCheck, check) {
+			return &currentCheck
+		}
+	}
+
+	// Search column-level checks
+	for _, column := range table.columns {
+		if column.check != nil && areSameCheckDefinition(column.check, check) {
+			return column.check
+		}
+	}
+
+	return nil
+}
+
 func findForeignKeyByName(foreignKeys []ForeignKey, constraintName string) *ForeignKey {
 	for _, foreignKey := range foreignKeys {
 		if foreignKey.constraintName == constraintName {
@@ -2955,6 +3046,118 @@ func (g *Generator) buildForeignKeyDDL(tableName string, fk *ForeignKey) string 
 	return ddl
 }
 
+// tryConvertOrChainToIn attempts to convert an OR chain of equality comparisons
+// (e.g., col=a OR col=b OR col=c) into an IN expression (e.g., col IN (a, b, c))
+// Returns nil if the conversion is not applicable.
+func tryConvertOrChainToIn(orExpr *parser.OrExpr) parser.Expr {
+	var column parser.Expr
+	var values []parser.Expr
+
+	extractEqComparison := func(expr parser.Expr) (parser.Expr, parser.Expr, bool) {
+		cmp, ok := expr.(*parser.ComparisonExpr)
+		if !ok || cmp.Operator != "=" {
+			return nil, nil, false
+		}
+		return cmp.Left, cmp.Right, true
+	}
+
+	columnsEqual := func(col1, col2 parser.Expr) bool {
+		name1 := normalizeName(parser.String(col1))
+		name2 := normalizeName(parser.String(col2))
+		return strings.EqualFold(name1, name2)
+	}
+
+	// Walk the OR chain and collect comparisons
+	// Also handle already-normalized IN expressions from nested ORs
+	var walk func(expr parser.Expr) bool
+	walk = func(expr parser.Expr) bool {
+		switch e := expr.(type) {
+		case *parser.OrExpr:
+			return walk(e.Left) && walk(e.Right)
+		case *parser.ComparisonExpr:
+			// Handle IN expressions that were already normalized
+			if strings.EqualFold(e.Operator, "in") {
+				if column == nil {
+					column = e.Left
+				} else if !columnsEqual(column, e.Left) {
+					return false
+				}
+				// Extract values from IN clause
+				if tuple, ok := e.Right.(parser.ValTuple); ok {
+					for _, v := range tuple {
+						values = append(values, v)
+					}
+					return true
+				}
+				return false
+			}
+
+			col, val, ok := extractEqComparison(e)
+			if !ok {
+				return false
+			}
+			if column == nil {
+				column = col
+				values = append(values, val)
+				return true
+			}
+			if columnsEqual(column, col) {
+				values = append(values, val)
+				return true
+			}
+			return false
+		default:
+			return false
+		}
+	}
+
+	if !walk(orExpr) || len(values) < 2 {
+		return nil
+	}
+
+	// Normalize IN values for consistent comparison
+	sort.Slice(values, func(i, j int) bool {
+		return parser.String(values[i]) < parser.String(values[j])
+	})
+
+	var tupleExprs parser.ValTuple
+	for _, v := range values {
+		tupleExprs = append(tupleExprs, v)
+	}
+
+	return &parser.ComparisonExpr{
+		Operator: "in",
+		Left:     column,
+		Right:    tupleExprs,
+	}
+}
+
+// normalizeName removes brackets, backticks, and quotes from identifiers for consistent comparison.
+// MSSQL uses [name], MySQL uses `name`, Postgres uses "name".
+func normalizeName(name string) string {
+	// Remove brackets [], backticks `, and quotes "
+	name = strings.Trim(name, "[]")
+	name = strings.Trim(name, "`")
+	name = strings.Trim(name, "\"")
+	return name
+}
+
+// normalizeOperator converts operator to lowercase for consistent comparison.
+func normalizeOperator(op string) string {
+	return strings.ToLower(op)
+}
+
+// normalizeValTuple creates a sorted copy of a ValTuple for consistent comparison.
+// This ensures that IN (1, 2, 3) matches IN (3, 2, 1).
+func normalizeValTuple(tuple parser.ValTuple) parser.ValTuple {
+	sortedValues := make([]parser.Expr, len(tuple))
+	copy(sortedValues, tuple)
+	sort.Slice(sortedValues, func(i, j int) bool {
+		return parser.String(sortedValues[i]) < parser.String(sortedValues[j])
+	})
+	return parser.ValTuple(sortedValues)
+}
+
 // normalizeCheckExprAST normalizes a CHECK constraint expression AST for comparison
 // by removing database-added type casts (e.g., ::text, ::character varying)
 func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
@@ -2977,24 +3180,75 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 		if paren, ok := normalized.(*parser.ParenExpr); ok {
 			return paren
 		}
+		// Unwrap parentheses around literals (numbers, strings, etc.)
+		// MSSQL adds unnecessary parens like (1) instead of 1
+		switch normalized.(type) {
+		case *parser.SQLVal:
+			return normalized
+		}
 		return &parser.ParenExpr{Expr: normalized}
 	case *parser.AndExpr:
+		// Normalize operands and unwrap unnecessary parentheses around them
+		left := normalizeCheckExprAST(e.Left)
+		right := normalizeCheckExprAST(e.Right)
+		// MySQL adds parentheses around each operand in AND chains, so unwrap them
+		// Only unwrap if it's safe (not changing operator precedence)
+		if paren, ok := left.(*parser.ParenExpr); ok {
+			// Safe to unwrap if the inner expression is not an OR (which has lower precedence)
+			if _, isOr := paren.Expr.(*parser.OrExpr); !isOr {
+				left = paren.Expr
+			}
+		}
+		if paren, ok := right.(*parser.ParenExpr); ok {
+			// Safe to unwrap if the inner expression is not an OR (which has lower precedence)
+			if _, isOr := paren.Expr.(*parser.OrExpr); !isOr {
+				right = paren.Expr
+			}
+		}
 		return &parser.AndExpr{
-			Left:  normalizeCheckExprAST(e.Left),
-			Right: normalizeCheckExprAST(e.Right),
+			Left:  left,
+			Right: right,
 		}
 	case *parser.OrExpr:
+		// Normalize operands and unwrap unnecessary parentheses around them
+		left := normalizeCheckExprAST(e.Left)
+		right := normalizeCheckExprAST(e.Right)
+		// MySQL adds parentheses around each operand in OR chains, so unwrap them
+		// Always safe to unwrap in OR chains since OR has the lowest precedence
+		if paren, ok := left.(*parser.ParenExpr); ok {
+			left = paren.Expr
+		}
+		if paren, ok := right.(*parser.ParenExpr); ok {
+			right = paren.Expr
+		}
+
+		// Try to convert OR chain of equality comparisons to IN expression
+		// MSSQL transforms IN (a, b, c) to col=a OR col=b OR col=c
+		// We normalize back to IN for comparison
+		if inExpr := tryConvertOrChainToIn(&parser.OrExpr{Left: left, Right: right}); inExpr != nil {
+			return inExpr
+		}
+
 		return &parser.OrExpr{
-			Left:  normalizeCheckExprAST(e.Left),
-			Right: normalizeCheckExprAST(e.Right),
+			Left:  left,
+			Right: right,
 		}
 	case *parser.NotExpr:
 		return &parser.NotExpr{Expr: normalizeCheckExprAST(e.Expr)}
 	case *parser.ComparisonExpr:
+		left := normalizeCheckExprAST(e.Left)
+		right := normalizeCheckExprAST(e.Right)
+
+		if strings.EqualFold(e.Operator, "in") {
+			if tuple, ok := right.(parser.ValTuple); ok {
+				right = normalizeValTuple(tuple)
+			}
+		}
+
 		return &parser.ComparisonExpr{
-			Operator: e.Operator,
-			Left:     normalizeCheckExprAST(e.Left),
-			Right:    normalizeCheckExprAST(e.Right),
+			Operator: normalizeOperator(e.Operator),
+			Left:     left,
+			Right:    right,
 			Escape:   normalizeCheckExprAST(e.Escape),
 			All:      e.All,
 			Any:      e.Any,
@@ -3063,12 +3317,24 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 			normalizedTuple[i] = normalizeCheckExprAST(elem)
 		}
 		return normalizedTuple
+	case *parser.ColName:
+		qualifierStr := ""
+		if e.Qualifier.Name.String() != "" {
+			qualifierStr = normalizeName(e.Qualifier.Name.String())
+		}
+		nameStr := normalizeName(e.Name.String())
+
+		return &parser.ColName{
+			Name: parser.NewColIdent(nameStr),
+			Qualifier: parser.TableName{
+				Name: parser.NewTableIdent(qualifierStr),
+			},
+		}
 	default:
-		// For all other expression types (literals, column names, etc.), return as-is
+		// For all other expression types (literals, etc.), return as-is
 		return expr
 	}
 }
-
 
 func areSameIdentityDefinition(identityA *Identity, identityB *Identity) bool {
 	if identityA == nil && identityB == nil {
