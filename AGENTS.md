@@ -9,21 +9,34 @@ This project provides four schema management commands:
 
 Each command follows the same pattern: it accepts connection parameters similar to those of the corresponding database CLI tool and applies schema changes idempotently.
 
-## Building Commands
+## General Rules
 
-Build all `*def` commands:
+* Never commit the changes unless the user asks for it.
+* Write comments to describe what is not obvious in the code. Describing the "why" is a recommended practice.
 
-```bash
+## Build
+
+Build all sqldef commands (`mysqldef`, `psqldef`, `sqlite3def`, `mssqldef`):
+
+```sh
 make build
 ```
 
 The compiled binaries will be placed in the `build/$os-$arch$/` directory.
 
+### Build Parser
+
+To maintain the parser, edit `parser/parser.y` and run:
+
+```sh
+make parser
+```
+
 ## Local Development
 
 To have trial and error locally, you can use the following commands:
 
-```bash
+```sh
 # psqldef
 build/$os-$arch$/psqldef psqldef_test [args...]
 
@@ -43,24 +56,30 @@ For development iterations, use these commands to run tests:
 
 ### Run all tests
 
-```bash
+```sh
 make test
 ```
 
 ### Run tests for specific `*def` tools
 
-```bash
+```sh
 go test ./cmd/mysqldef
 go test ./cmd/psqldef
 go test ./cmd/sqlite3def
 go test ./cmd/mssqldef
 ```
 
+For MariaDB testing locally:
+
+```sh
+MYSQL_FLAVOR=mariadb MYSQL_PORT=3307 go test ./cmd/mysqldef
+```
+
 ### Run individual tests
 
 Use the `-run` flag with a regex pattern to run specific test cases:
 
-```bash
+```sh
 # Run a specific test (runs test cases matching CreateTable* defined in the YAML test files)
 go test ./cmd/mysqldef -run=TestApply/CreateTable
 
@@ -74,10 +93,67 @@ The test name pattern follows the format `TestApply/<TestCaseName>`, where `<Tes
 
 For schema management tests, in most cases you only need to edit the YAML test files.
 
+#### YAML Test Schema
+
+The test files use a YAML format where each top-level key is a test case name, and the value is a `TestCase` object with the following fields:
+
+```yaml
+TestCaseName:
+  # Current schema state (optional, defaults to empty schema)
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL
+    );
+
+  # Desired schema state (optional, defaults to empty schema)
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text
+    );
+
+  # Expected DDL output (optional, defaults to 'desired' if not specified)
+  output: |
+    ALTER TABLE "public"."users" ADD COLUMN "name" text;
+
+  # Expected error message (optional, defaults to no error)
+  error: "specific error message"
+
+  # Minimum database version required (optional)
+  min_version: "10.0"
+
+  # Maximum database version supported (optional)
+  max_version: "14.0"
+
+  # Database flavor requirement (optional, mysqldef only)
+  # Either "mariadb" or "mysql"
+  flavor: "mariadb"
+
+  # User to run the test as (optional)
+  user: "testuser"
+
+  # Managed roles for privilege testing (optional, psqldef only)
+  managed_roles:
+    - readonly_user
+    - app_user
+
+  # Whether to enable DROP/REVOKE operations (optional, defaults to true)
+  enable_drop: false
+
+  # Only test that the schema applies successfully (optional, defaults to false)
+  # When true, doesn't check exact DDL output, just that it applies without error
+  apply_only: true
+
+  # Configuration options for the test (optional)
+  config:
+    # Create indexes concurrently (psqldef only)
+    create_index_concurrently: true
+```
+
 ### Best Practices
 
 1. **Use consistent prefixes**: When adding related test cases, use the same prefix for test names. This allows you to run all related tests with a simple pattern:
-   ```bash
+   ```sh
    # Example: Testing all index-related features
    go test ./cmd/psqldef -run='TestApply/Index.*'
    ```
@@ -86,20 +162,20 @@ For schema management tests, in most cases you only need to edit the YAML test f
    - Adding features (no `current`, only `desired`)
    - Modifying existing schemas (`current` → `desired`)
 
-## General Rules
+## Documentation
 
-* Never commit the changes unless the user asks for it.
-* Write comments to describe what is not obvious in the code. Describing the "why" is a recommended practice.
-* Keep the documents up to date:
-  * `cmd-psqldef.md` describes all the features of `psqldef`
-  * `cmd-mysqldef.md` describes all the features of `mysqldef`
-  * `cmd-sqlite3def.md` describes all the features of `sqlite3def`
-  * `cmd-mssqldef.md` describes all the features of `mssqldef`
+There are markdown files to describe the usage of each command. Keep them up to date:
+
+* `cmd-psqldef.md` for `psqldef`
+* `cmd-mysqldef.md` for `mysqldef`
+* `cmd-sqlite3def.md` for `sqlite3def`
+* `cmd-mssqldef.md` for `mssqldef`
 
 ## Task Completion Checklist
 
 Before considering any task complete, run these commands:
 
-* [ ] `make build`      # Ensure it compiles
-* [ ] `make test`       # Run all tests
-* [ ] `gofmt -w .`      # Format the code
+* [ ] `make build`  # Ensure all commands are compiled
+* [ ] `make test`   # Ensure all tests pass
+* [ ] `make lint`   # Ensure the code is linted
+* [ ] `make format` # Ensure the code is formatted

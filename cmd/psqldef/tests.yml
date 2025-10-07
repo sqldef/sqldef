@@ -2286,3 +2286,18 @@ CreateIdentityColumnWithNegativeValue:
         CACHE 10
       )
     );
+
+CreateTableWithCheckConstraints:
+  current: |
+    CREATE TABLE "public"."domains" (
+      "id" serial NOT NULL,
+      "name" character varying(255) NOT NULL CONSTRAINT c_lowercase_name CHECK (name::text = lower(name::text)),
+      PRIMARY KEY ("id")
+    );
+  desired: |
+    CREATE TABLE "public"."domains" (
+      id                    SERIAL PRIMARY KEY,
+      name                  VARCHAR(255) NOT NULL,
+      CONSTRAINT c_lowercase_name CHECK (((name)::TEXT = LOWER((name)::TEXT)))
+    );
+  output: ""

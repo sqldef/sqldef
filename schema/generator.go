@@ -6,10 +6,12 @@ import (
 	"log"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/sqldef/sqldef/v3/database"
+	"github.com/sqldef/sqldef/v3/parser"
 )
 
 type GeneratorMode int
@@ -324,7 +326,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Table is expected to exist. Drop foreign keys prior to index deletion
 		for _, foreignKey := range currentTable.foreignKeys {
-			if containsString(convertForeignKeysToConstraintNames(desiredTable.foreignKeys), foreignKey.constraintName) {
+			if slices.Contains(convertForeignKeysToConstraintNames(desiredTable.foreignKeys), foreignKey.constraintName) {
 				continue // Foreign key is expected to exist.
 			}
 
@@ -336,7 +338,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Table is expected to exist. Drop exclusion constraints.
 		for _, exclusion := range currentTable.exclusions {
-			if containsString(convertExclusionToConstraintNames(desiredTable.exclusions), exclusion.constraintName) {
+			if slices.Contains(convertExclusionToConstraintNames(desiredTable.exclusions), exclusion.constraintName) {
 				continue // Exclusion constraint is expected to exist.
 			}
 
@@ -351,8 +353,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue
 			}
 
-			if containsString(convertIndexesToIndexNames(desiredTable.indexes), index.name) ||
-				containsString(convertForeignKeysToIndexNames(desiredTable.foreignKeys), index.name) {
+			if slices.Contains(convertIndexesToIndexNames(desiredTable.indexes), index.name) ||
+				slices.Contains(convertForeignKeysToIndexNames(desiredTable.foreignKeys), index.name) {
 				continue // Index is expected to exist.
 			}
 
@@ -402,7 +404,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Check policies.
 		for _, policy := range currentTable.policies {
-			if containsString(convertPolicyNames(desiredTable.policies), policy.name) {
+			if slices.Contains(convertPolicyNames(desiredTable.policies), policy.name) {
 				continue
 			}
 			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLName(policy.name), g.escapeTableName(currentTable.name)))
@@ -410,7 +412,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Check checks.
 		for _, check := range currentTable.checks {
-			if containsString(convertCheckConstraintNames(desiredTable.checks), check.constraintName) {
+			if findCheckConstraintInTable(desiredTable, check.constraintName) != nil {
 				continue
 			}
 			if g.mode != GeneratorModeMysql { // workaround. inline CHECK should be converted to out-of-place CONSTRAINT to fix this.
@@ -421,7 +423,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted views
 	for _, currentView := range g.currentViews {
-		if containsString(convertViewNames(g.desiredViews), currentView.name) {
+		if slices.Contains(convertViewNames(g.desiredViews), currentView.name) {
 			continue
 		}
 		if currentView.viewType == "MATERIALIZED VIEW" {
@@ -433,7 +435,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted extensions
 	for _, currentExtension := range g.currentExtensions {
-		if containsString(convertExtensionNames(g.desiredExtensions), currentExtension.extension.Name) {
+		if slices.Contains(convertExtensionNames(g.desiredExtensions), currentExtension.extension.Name) {
 			continue
 		}
 		ddls = append(ddls, fmt.Sprintf("DROP EXTENSION %s", g.escapeSQLName(currentExtension.extension.Name)))
@@ -455,7 +457,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		for _, currentPriv := range g.currentPrivileges {
 			hasIncludedGrantee := false
 			for _, grantee := range currentPriv.grantees {
-				if containsString(g.config.ManagedRoles, grantee) {
+				if slices.Contains(g.config.ManagedRoles, grantee) {
 					hasIncludedGrantee = true
 					break
 				}
@@ -808,14 +810,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					constraintName = desiredColumn.check.constraintName
 				}
 
-				columnChecks := []CheckDefinition{}
-				for _, column := range currentTable.columns {
-					if column.check != nil {
-						columnChecks = append(columnChecks, *column.check)
-					}
-				}
-
-				currentCheck := findCheckByName(columnChecks, constraintName)
+				currentCheck := findCheckConstraintInTable(&currentTable, constraintName)
 				if !areSameCheckDefinition(currentCheck, desiredColumn.check) { // || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
 					if currentCheck != nil {
 						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), constraintName)
@@ -1142,7 +1137,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	// Examine each check
 	for _, desiredCheck := range desired.table.checks {
-		if currentCheck := findCheckByName(currentTable.checks, desiredCheck.constraintName); currentCheck != nil {
+		if currentCheck := findCheckConstraintInTable(&currentTable, desiredCheck.constraintName); currentCheck != nil {
 			if !areSameCheckDefinition(currentCheck, &desiredCheck) {
 				switch g.mode {
 				case GeneratorModePostgres:
@@ -1292,7 +1287,7 @@ func (g *Generator) generateDDLsForAddForeignKey(tableName string, desiredForeig
 	// Examine indexes in desiredTable to delete obsoleted indexes later
 	desiredTable := findTableByName(g.desiredTables, tableName)
 	// Only add to desiredTable.foreignKeys if it doesn't already exist (it may have been pre-populated from aggregation)
-	if !containsString(convertForeignKeysToConstraintNames(desiredTable.foreignKeys), desiredForeignKey.constraintName) {
+	if !slices.Contains(convertForeignKeysToConstraintNames(desiredTable.foreignKeys), desiredForeignKey.constraintName) {
 		desiredTable.foreignKeys = append(desiredTable.foreignKeys, desiredForeignKey)
 	}
 
@@ -1319,7 +1314,7 @@ func (g *Generator) generateDDLsForAddExclusion(tableName string, desiredExclusi
 	// Examine indexes in desiredTable to delete obsoleted indexes later
 	desiredTable := findTableByName(g.desiredTables, tableName)
 	// Only add to desiredTable.exclusions if it doesn't already exist (it may have been pre-populated from aggregation)
-	if !containsString(convertExclusionToConstraintNames(desiredTable.exclusions), desiredExclusion.constraintName) {
+	if !slices.Contains(convertExclusionToConstraintNames(desiredTable.exclusions), desiredExclusion.constraintName) {
 		desiredTable.exclusions = append(desiredTable.exclusions, desiredExclusion)
 	}
 
@@ -1353,7 +1348,7 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy 
 		return nil, fmt.Errorf("%s is performed before create table '%s': '%s'", action, tableName, statement)
 	}
 	// Only add to desiredTable.policies if it doesn't already exist (it may have been pre-populated from aggregation)
-	if !containsString(convertPolicyNames(desiredTable.policies), desiredPolicy.name) {
+	if !slices.Contains(convertPolicyNames(desiredTable.policies), desiredPolicy.name) {
 		desiredTable.policies = append(desiredTable.policies, desiredPolicy)
 	}
 
@@ -1417,7 +1412,7 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 
 	// Examine policies in desiredTable to delete obsoleted policies later
 	// Only add to desiredViews if it doesn't already exist (it may have been pre-populated from aggregation)
-	if !containsString(convertViewNames(g.desiredViews), desiredView.name) {
+	if !slices.Contains(convertViewNames(g.desiredViews), desiredView.name) {
 		g.desiredViews = append(g.desiredViews, desiredView)
 	}
 
@@ -1500,7 +1495,7 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 		// Type found. Add values if not present.
 		if currentType.enumValues != nil && len(currentType.enumValues) < len(desired.enumValues) {
 			for _, enumValue := range desired.enumValues {
-				if !containsString(currentType.enumValues, enumValue) {
+				if !slices.Contains(currentType.enumValues, enumValue) {
 					ddl := fmt.Sprintf("ALTER TYPE %s ADD VALUE %s", currentType.name, enumValue)
 					ddls = append(ddls, ddl)
 				}
@@ -2301,7 +2296,7 @@ func mergeTable(table1 *Table, table2 Table) {
 	}
 
 	for _, index := range table2.indexes {
-		if containsString(convertIndexesToIndexNames(table1.indexes), index.name) {
+		if slices.Contains(convertIndexesToIndexNames(table1.indexes), index.name) {
 			table1.indexes = append(table1.indexes, index)
 		}
 	}
@@ -2637,7 +2632,7 @@ func (g *Generator) generateDDLsForRevokePrivilege(desired *RevokePrivilege) ([]
 	if len(g.config.ManagedRoles) > 0 && len(desired.grantees) > 0 {
 		hasIncludedGrantee := false
 		for _, grantee := range desired.grantees {
-			if containsString(g.config.ManagedRoles, grantee) {
+			if slices.Contains(g.config.ManagedRoles, grantee) {
 				hasIncludedGrantee = true
 				break
 			}
@@ -2723,12 +2718,21 @@ func findIndexOptionByName(options []IndexOption, name string) *IndexOption {
 	return nil
 }
 
-func findCheckByName(checks []CheckDefinition, name string) *CheckDefinition {
-	for _, check := range checks {
-		if check.constraintName == name {
+func findCheckConstraintInTable(table *Table, constraintName string) *CheckDefinition {
+	// First, look for table-level check constraints
+	for _, check := range table.checks {
+		if check.constraintName == constraintName {
 			return &check
 		}
 	}
+
+	// Then, look for column-level check constraints
+	for _, column := range table.columns {
+		if column.check != nil && column.check.constraintName == constraintName {
+			return column.check
+		}
+	}
+
 	return nil
 }
 
@@ -2901,7 +2905,15 @@ func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bo
 	if checkA == nil || checkB == nil {
 		return false
 	}
-	return normalizeCheckDefinitionForComparison(checkA.definition) == normalizeCheckDefinitionForComparison(checkB.definition) &&
+
+	if checkA.definitionAST == nil || checkB.definitionAST == nil {
+		panic(fmt.Sprintf("CheckDefinition.definitionAST must not be nil (checkA.definitionAST=%v, checkB.definitionAST=%v)", checkA.definitionAST, checkB.definitionAST))
+	}
+
+	normalizedA := normalizeCheckExprAST(checkA.definitionAST)
+	normalizedB := normalizeCheckExprAST(checkB.definitionAST)
+
+	return parser.String(normalizedA) == parser.String(normalizedB) &&
 		checkA.notForReplication == checkB.notForReplication &&
 		checkA.noInherit == checkB.noInherit
 }
@@ -2924,22 +2936,113 @@ func (g *Generator) buildForeignKeyDDL(tableName string, fk *ForeignKey) string 
 	return ddl
 }
 
-// normalizeCheckDefinitionForComparison normalizes CHECK constraint definitions for accurate comparison
-// This handles PostgreSQL's automatic type casting behavior where:
-// - ARRAY['active', 'pending'] becomes ARRAY['active'::text, 'pending'::text]
-// - '[0-9]' becomes '[0-9]'::text
-func normalizeCheckDefinitionForComparison(def string) string {
-	// Remove ::text type casts from string literals
-	result := regexp.MustCompile(`'([^']*)'::text`).ReplaceAllString(def, "'$1'")
+// normalizeCheckExprAST normalizes a CHECK constraint expression AST for comparison
+// by removing database-added type casts (e.g., ::text, ::character varying)
+func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
+	if expr == nil {
+		return nil
+	}
 
-	// Remove ::character varying type casts
-	result = regexp.MustCompile(`'([^']*)'::character varying(\([^)]*\))?`).ReplaceAllString(result, "'$1'")
-
-	// Remove extra parentheses that PostgreSQL sometimes adds
-	result = regexp.MustCompile(`\(\((.*)\)\)`).ReplaceAllString(result, "($1)")
-
-	return result
+	switch e := expr.(type) {
+	case *parser.CastExpr:
+		// Remove casts to text or character varying
+		if e.Type != nil && (e.Type.Type == "text" || e.Type.Type == "character varying") {
+			return normalizeCheckExprAST(e.Expr)
+		}
+		return &parser.CastExpr{
+			Expr: normalizeCheckExprAST(e.Expr),
+			Type: e.Type,
+		}
+	case *parser.ParenExpr:
+		normalized := normalizeCheckExprAST(e.Expr)
+		if paren, ok := normalized.(*parser.ParenExpr); ok {
+			return paren
+		}
+		return &parser.ParenExpr{Expr: normalized}
+	case *parser.AndExpr:
+		return &parser.AndExpr{
+			Left:  normalizeCheckExprAST(e.Left),
+			Right: normalizeCheckExprAST(e.Right),
+		}
+	case *parser.OrExpr:
+		return &parser.OrExpr{
+			Left:  normalizeCheckExprAST(e.Left),
+			Right: normalizeCheckExprAST(e.Right),
+		}
+	case *parser.NotExpr:
+		return &parser.NotExpr{Expr: normalizeCheckExprAST(e.Expr)}
+	case *parser.ComparisonExpr:
+		return &parser.ComparisonExpr{
+			Operator: e.Operator,
+			Left:     normalizeCheckExprAST(e.Left),
+			Right:    normalizeCheckExprAST(e.Right),
+			Escape:   normalizeCheckExprAST(e.Escape),
+			All:      e.All,
+			Any:      e.Any,
+		}
+	case *parser.BinaryExpr:
+		return &parser.BinaryExpr{
+			Operator: e.Operator,
+			Left:     normalizeCheckExprAST(e.Left),
+			Right:    normalizeCheckExprAST(e.Right),
+		}
+	case *parser.UnaryExpr:
+		return &parser.UnaryExpr{
+			Operator: e.Operator,
+			Expr:     normalizeCheckExprAST(e.Expr),
+		}
+	case *parser.FuncExpr:
+		normalizedExprs := make(parser.SelectExprs, len(e.Exprs))
+		for i, arg := range e.Exprs {
+			if aliased, ok := arg.(*parser.AliasedExpr); ok {
+				normalizedExprs[i] = &parser.AliasedExpr{
+					Expr: normalizeCheckExprAST(aliased.Expr),
+					As:   aliased.As,
+				}
+			} else {
+				normalizedExprs[i] = arg
+			}
+		}
+		return &parser.FuncExpr{
+			Qualifier: e.Qualifier,
+			Name:      e.Name,
+			Distinct:  e.Distinct,
+			Exprs:     normalizedExprs,
+			Over:      e.Over,
+		}
+	case *parser.ArrayConstructor:
+		normalizedElements := make(parser.ArrayElements, len(e.Elements))
+		for i, elem := range e.Elements {
+			if castExpr, ok := elem.(*parser.CastExpr); ok {
+				normalized := normalizeCheckExprAST(castExpr)
+				if normalizedArrayElem, ok := normalized.(parser.ArrayElement); ok {
+					normalizedElements[i] = normalizedArrayElem
+				} else {
+					normalizedElements[i] = elem
+				}
+			} else {
+				normalizedElements[i] = elem
+			}
+		}
+		return &parser.ArrayConstructor{Elements: normalizedElements}
+	case *parser.IsExpr:
+		return &parser.IsExpr{
+			Operator: e.Operator,
+			Expr:     normalizeCheckExprAST(e.Expr),
+		}
+	case *parser.RangeCond:
+		return &parser.RangeCond{
+			Operator: e.Operator,
+			Left:     normalizeCheckExprAST(e.Left),
+			From:     normalizeCheckExprAST(e.From),
+			To:       normalizeCheckExprAST(e.To),
+		}
+	default:
+		// For all other expression types (literals, column names, etc.), return as-is
+		return expr
+	}
 }
+
 
 func areSameIdentityDefinition(identityA *Identity, identityB *Identity) bool {
 	if identityA == nil && identityB == nil {
@@ -3345,14 +3448,6 @@ func convertPolicyNames(policies []Policy) []string {
 	return policyNames
 }
 
-func convertCheckConstraintNames(checks []CheckDefinition) []string {
-	checkConstraintNames := make([]string, len(checks))
-	for i, check := range checks {
-		checkConstraintNames[i] = check.constraintName
-	}
-	return checkConstraintNames
-}
-
 func convertViewNames(views []*View) []string {
 	viewNames := make([]string, len(views))
 	for i, view := range views {
@@ -3367,15 +3462,6 @@ func convertExtensionNames(extensions []*Extension) []string {
 		extensionNames[i] = extension.extension.Name
 	}
 	return extensionNames
-}
-
-func containsString(strs []string, str string) bool {
-	for _, s := range strs {
-		if s == str {
-			return true
-		}
-	}
-	return false
 }
 
 func removeTableByName(tables []*Table, name string) []*Table {
@@ -3578,7 +3664,7 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 			// Filter grantees to only include those in config
 			includedGrantees := []string{}
 			for _, grantee := range stmt.grantees {
-				if containsString(config.ManagedRoles, grantee) {
+				if slices.Contains(config.ManagedRoles, grantee) {
 					includedGrantees = append(includedGrantees, grantee)
 				}
 			}
@@ -3607,7 +3693,7 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 		case *RevokePrivilege:
 			// Process each grantee separately and consolidate
 			for _, grantee := range stmt.grantees {
-				if containsString(config.ManagedRoles, grantee) {
+				if slices.Contains(config.ManagedRoles, grantee) {
 					key := fmt.Sprintf("%s:%s", stmt.tableName, grantee)
 					if existing, ok := revokesByTableAndGrantee[key]; ok {
 						// Merge privileges

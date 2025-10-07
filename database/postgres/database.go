@@ -3,9 +3,11 @@ package postgres
 import (
 	"database/sql"
 	"fmt"
+	"iter"
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -47,7 +49,7 @@ func (d *PostgresDatabase) GetTransactionQueries() database.TransactionQueries {
 	}
 }
 
-func (d *PostgresDatabase) DumpDDLs() (string, error) {
+func (d *PostgresDatabase) ExportDDLs() (string, error) {
 	var ddls []string
 
 	schemaDDLs, err := d.schemas()
@@ -77,7 +79,7 @@ func (d *PostgresDatabase) DumpDDLs() (string, error) {
 		tableNames,
 		d.config.DumpConcurrency,
 		func(tableName string) (string, error) {
-			return d.dumpTableDDL(tableName)
+			return d.exportTableDDL(tableName)
 		})
 	if err != nil {
 		return "", err
@@ -121,7 +123,7 @@ func (d *PostgresDatabase) tableNames() ([]string, error) {
 		if err := rows.Scan(&schema, &name); err != nil {
 			return nil, err
 		}
-		if d.config.TargetSchema != nil && !containsString(d.config.TargetSchema, schema) {
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, schema) {
 			continue
 		}
 		tables = append(tables, schema+"."+name)
@@ -157,7 +159,7 @@ func (d *PostgresDatabase) views() ([]string, error) {
 		if err := rows.Scan(&schema, &name, &definition); err != nil {
 			return nil, err
 		}
-		if d.config.TargetSchema != nil && !containsString(d.config.TargetSchema, schema) {
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, schema) {
 			continue
 		}
 		definition = strings.TrimSpace(definition)
@@ -195,7 +197,7 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 		if err := rows.Scan(&schema, &name, &definition); err != nil {
 			return nil, err
 		}
-		if d.config.TargetSchema != nil && !containsString(d.config.TargetSchema, schema) {
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, schema) {
 			continue
 		}
 		definition = strings.TrimSpace(definition)
@@ -295,7 +297,7 @@ func (d *PostgresDatabase) types() ([]string, error) {
 		if err := rows.Scan(&typeSchema, &typeName, &labels); err != nil {
 			return nil, err
 		}
-		if d.config.TargetSchema != nil && !containsString(d.config.TargetSchema, typeSchema) {
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, typeSchema) {
 			continue
 		}
 		enumLabels := []string{}
@@ -327,7 +329,7 @@ type TableDDLComponents struct {
 	DefaultSchema     string
 }
 
-func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
+func (d *PostgresDatabase) exportTableDDL(table string) (string, error) {
 	components := TableDDLComponents{
 		TableName:     table,
 		DefaultSchema: d.GetDefaultSchema(),
@@ -381,10 +383,26 @@ func (d *PostgresDatabase) dumpTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get privilege definitions for table %s: %w", table, err)
 	}
-	return buildDumpTableDDL(components), nil
+	return buildExportTableDDL(components), nil
 }
 
-func buildDumpTableDDL(components TableDDLComponents) string {
+func canonicalMapIter[T any](m map[string]T) iter.Seq2[string, T] {
+	return func(yield func(string, T) bool) {
+		keys := make([]string, 0, len(m))
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		for _, k := range keys {
+			if !yield(k, m[k]) {
+				return
+			}
+		}
+	}
+}
+
+func buildExportTableDDL(components TableDDLComponents) string {
 	var queryBuilder strings.Builder
 	schema, table := splitTableName(components.TableName, components.DefaultSchema)
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", escapeSQLName(schema), escapeSQLName(table))
@@ -411,10 +429,12 @@ func buildDumpTableDDL(components TableDDLComponents) string {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
 		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", components.PrimaryKeyName, strings.Join(components.PrimaryKeyCols, "\", \""))
 	}
-	for constraintName, constraintDef := range components.CheckConstraints {
+
+	for constraintName, constraintDef := range canonicalMapIter(components.CheckConstraints) {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
 		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", constraintName, constraintDef)
 	}
+
 	fmt.Fprintf(&queryBuilder, "\n);\n")
 	for _, v := range components.IndexDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
@@ -428,9 +448,11 @@ func buildDumpTableDDL(components TableDDLComponents) string {
 	for _, v := range components.PolicyDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
-	for _, constraintDef := range components.UniqueConstraints {
+
+	for _, constraintDef := range canonicalMapIter(components.UniqueConstraints) {
 		fmt.Fprintf(&queryBuilder, "%s;\n", constraintDef)
 	}
+
 	for _, v := range components.Comments {
 		fmt.Fprintf(&queryBuilder, "%s\n", v)
 	}
@@ -1159,13 +1181,4 @@ func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
 	}
 
 	return privilegeDefs, nil
-}
-
-func containsString(strs []string, str string) bool {
-	for _, s := range strs {
-		if s == str {
-			return true
-		}
-	}
-	return false
 }

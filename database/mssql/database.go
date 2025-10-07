@@ -3,8 +3,10 @@ package mssql
 import (
 	"database/sql"
 	"fmt"
+	"iter"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -40,7 +42,7 @@ func NewDatabase(config database.Config) (database.Database, error) {
 	}, nil
 }
 
-func (d *MssqlDatabase) DumpDDLs() (string, error) {
+func (d *MssqlDatabase) ExportDDLs() (string, error) {
 	var ddls []string
 
 	err := d.updateDatabaesInfo()
@@ -50,7 +52,7 @@ func (d *MssqlDatabase) DumpDDLs() (string, error) {
 
 	tableNames := d.tableNames()
 	for _, tableName := range tableNames {
-		ddl, err := d.dumpTableDDL(tableName)
+		ddl, err := d.exportTableDDL(tableName)
 		if err != nil {
 			return "", err
 		}
@@ -121,14 +123,30 @@ func (d *MssqlDatabase) tableNames() []string {
 	return d.info.tableName
 }
 
-func (d *MssqlDatabase) dumpTableDDL(table string) (string, error) {
+func (d *MssqlDatabase) exportTableDDL(table string) (string, error) {
 	cols := d.getColumns(table)
 	indexDefs := d.getIndexDefs(table)
 	foreignDefs := d.getForeignDefs(table)
-	return buildDumpTableDDL(table, cols, indexDefs, foreignDefs), nil
+	return buildExportTableDDL(table, cols, indexDefs, foreignDefs), nil
 }
 
-func buildDumpTableDDL(table string, columns []column, indexDefs []*indexDef, foreignDefs []string) string {
+func canonicalMapIter[T any](m map[string]T) iter.Seq2[string, T] {
+	return func(yield func(string, T) bool) {
+		keys := make([]string, 0, len(m))
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		for _, k := range keys {
+			if !yield(k, m[k]) {
+				return
+			}
+		}
+	}
+}
+
+func buildExportTableDDL(table string, columns []column, indexDefs []*indexDef, foreignDefs []string) string {
 	var queryBuilder strings.Builder
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (", table)
 	for i, col := range columns {
@@ -527,8 +545,8 @@ FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'sys.stats' AND COLUMN_NAME =
 	for tableName, indexes := range indexMap {
 		tableIndexes := []*indexDef{}
 
-		for _, definition := range indexes {
-			tableIndexes = append(tableIndexes, definition)
+		for _, indexDef := range canonicalMapIter(indexes) {
+			tableIndexes = append(tableIndexes, indexDef)
 		}
 
 		indexDefs[tableName] = tableIndexes

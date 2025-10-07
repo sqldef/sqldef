@@ -878,6 +878,14 @@ type IndexColumn struct {
 	Length        *SQLVal
 	Direction     string
 	OperatorClass string
+	Expression    Expr // For functional indexes like ((CASE WHEN ...))
+}
+
+func (ic IndexColumn) String() string {
+	if ic.Expression != nil {
+		return String(ic.Expression)
+	}
+	return ic.Column.String()
 }
 
 // LengthScaleOption is used for types that have an optional length

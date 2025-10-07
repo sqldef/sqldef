@@ -1,3 +1,29 @@
+## [v3.1.10](https://github.com/sqldef/sqldef/compare/v3.1.9...v3.1.10) - 2025-10-02
+- mssql: sort indexes name in --export by @gfx in https://github.com/sqldef/sqldef/pull/842
+- modernize the code by @gfx in https://github.com/sqldef/sqldef/pull/844
+- doc: test case object in yaml by @gfx in https://github.com/sqldef/sqldef/pull/845
+- refactoring: dump -> export for internal functions that implement --export by @gfx in https://github.com/sqldef/sqldef/pull/846
+
+## [v3.1.9](https://github.com/sqldef/sqldef/compare/v3.1.8...v3.1.9) - 2025-10-02
+- CI: run lint in CI (`go vet ./...`) as a part of `integrity` job by @gfx in https://github.com/sqldef/sqldef/pull/839
+- psqldef: determistic constraint export by @gfx in https://github.com/sqldef/sqldef/pull/841
+
+## [v3.1.8](https://github.com/sqldef/sqldef/compare/v3.1.7...v3.1.8) - 2025-10-01
+- handle functional indexes (MySQL 8.0.13+) by @gfx in https://github.com/sqldef/sqldef/pull/836
+- psqldef: handle table-level constrains and column-level constraints correctly by @gfx in https://github.com/sqldef/sqldef/pull/838
+
+## [v3.1.7](https://github.com/sqldef/sqldef/compare/v3.1.6...v3.1.7) - 2025-10-01
+- [security] set dependabot cooldown days by @gfx in https://github.com/sqldef/sqldef/pull/824
+- Bump golang.org/x/sync from 0.16.0 to 0.17.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/826
+- Bump github.com/goccy/go-yaml from 1.15.13 to 1.18.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/827
+- Bump actions/setup-go from 5 to 6 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/830
+- Bump lewagon/wait-on-check-action from 1.4.0 to 1.4.1 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/831
+- Bump golang.org/x/term from 0.34.0 to 0.35.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/829
+- Bump modernc.org/sqlite from 1.38.2 to 1.39.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/828
+- let dependabot label only "dependencies", skipping any other labels by @gfx in https://github.com/sqldef/sqldef/pull/833
+- test: make psqldef_test.go faster: 150s -> 50s by @gfx in https://github.com/sqldef/sqldef/pull/834
+- [test] faster test part 2 by @gfx in https://github.com/sqldef/sqldef/pull/835
+
 ## [v3.1.6](https://github.com/sqldef/sqldef/compare/v3.1.5...v3.1.6) - 2025-09-30
 - psqldef test: clean up test code by @gfx in https://github.com/sqldef/sqldef/pull/822
 

@@ -283,6 +283,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		if parsedCol.Type.Check != nil {
 			column.check = &CheckDefinition{
 				definition:        parser.String(parsedCol.Type.Check.Where.Expr),
+				definitionAST:     parsedCol.Type.Check.Where.Expr,
 				constraintName:    parser.String(parsedCol.Type.Check.ConstraintName),
 				notForReplication: parsedCol.Type.Check.NotForReplication,
 				noInherit:         castBool(parsedCol.Type.Check.NoInherit),
@@ -298,11 +299,11 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			if err != nil {
 				return Table{}, err
 			}
-			name := column.Column.String()
+
 			indexColumns = append(
 				indexColumns,
 				IndexColumn{
-					column:    name,
+					column:    column.String(),
 					length:    length,
 					direction: column.Direction,
 				},
@@ -312,7 +313,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			// MSSQL: https://learn.microsoft.com/en-us/sql/relational-databases/tables/create-primary-keys#limitations
 			// MySQL: https://dev.mysql.com/doc/refman/8.4/en/create-table.html
 			if indexDef.Info.Primary && (mode == GeneratorModeMssql || mode == GeneratorModeMysql) {
-				if column, ok := columns[name]; ok {
+				if column, ok := columns[column.Column.String()]; ok {
 					val := true
 					column.notNull = &val
 				}
@@ -386,6 +387,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	for _, checkDef := range stmt.TableSpec.Checks {
 		check := CheckDefinition{
 			definition:        parser.String(checkDef.Where.Expr),
+			definitionAST:     checkDef.Where.Expr,
 			constraintName:    parser.String(checkDef.ConstraintName),
 			notForReplication: checkDef.NotForReplication,
 			noInherit:         castBool(checkDef.NoInherit),
@@ -460,10 +462,11 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		if err != nil {
 			return Index{}, err
 		}
+
 		indexColumns = append(
 			indexColumns,
 			IndexColumn{
-				column:    column.Column.String(),
+				column:    column.String(),
 				length:    length,
 				direction: column.Direction,
 			},

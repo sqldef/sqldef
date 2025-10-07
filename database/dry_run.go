@@ -29,8 +29,8 @@ func NewDryRunDatabase(db Database) (*DryRunDatabase, error) {
 	}, nil
 }
 
-func (d *DryRunDatabase) DumpDDLs() (string, error) {
-	return d.wrapped.DumpDDLs()
+func (d *DryRunDatabase) ExportDDLs() (string, error) {
+	return d.wrapped.ExportDDLs()
 }
 
 func (d *DryRunDatabase) DB() *sql.DB {

@@ -58,7 +58,7 @@ type TransactionQueries struct {
 
 // Abstraction layer for multiple kinds of databases
 type Database interface {
-	DumpDDLs() (string, error)
+	ExportDDLs() (string, error)
 	DB() *sql.DB
 	Close() error
 	GetDefaultSchema() string
