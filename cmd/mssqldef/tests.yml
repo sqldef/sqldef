@@ -839,3 +839,43 @@ CheckInClauseNormalization:
       CONSTRAINT workflows_state_chk CHECK (state IN ('active', 'paused', 'stopped'))
     );
   output: ""
+CheckTableLevelToColumnLevel:
+  current: |
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      status varchar(20),
+      CONSTRAINT orders_status_chk CHECK (status IN ('pending', 'shipped', 'delivered'))
+    );
+  desired: |
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      status varchar(20) CHECK (status IN ('pending', 'shipped', 'delivered'))
+    );
+  output: ""
+CheckTableLevelToUnnamedColumnLevel:
+  current: |
+    CREATE TABLE payments (
+      id int PRIMARY KEY,
+      method varchar(20),
+      CONSTRAINT CK_payments_method CHECK (method IN ('card', 'cash', 'transfer'))
+    );
+  desired: |
+    CREATE TABLE payments (
+      id int PRIMARY KEY,
+      method varchar(20) CHECK (method IN ('card', 'cash', 'transfer'))
+    );
+  output: ""
+CheckDuplicateValuesInOrChain:
+  current: |
+    CREATE TABLE items (
+      id int PRIMARY KEY,
+      category varchar(20),
+      CONSTRAINT items_category_chk CHECK (category = 'electronics' OR category = 'electronics' OR category = 'clothing')
+    );
+  desired: |
+    CREATE TABLE items (
+      id int PRIMARY KEY,
+      category varchar(20),
+      CONSTRAINT items_category_chk CHECK (category IN ('electronics', 'clothing'))
+    );
+  output: ""

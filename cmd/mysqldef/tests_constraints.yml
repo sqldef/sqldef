@@ -213,3 +213,83 @@ CheckInClauseNormalization:
     );
   output: ""
   min_version: '8.0'
+CheckTableLevelToColumnLevel:
+  current: |
+    CREATE TABLE `orders` (
+      `id` int PRIMARY KEY,
+      `status` varchar(20),
+      CONSTRAINT `orders_status_chk` CHECK (`status` IN ('pending', 'shipped', 'delivered'))
+    );
+  desired: |
+    CREATE TABLE `orders` (
+      `id` int PRIMARY KEY,
+      `status` varchar(20) CHECK (`status` IN ('pending', 'shipped', 'delivered'))
+    );
+  output: ""
+  flavor: mysql
+  min_version: '8.0'
+CheckTableLevelToUnnamedColumnLevel:
+  current: |
+    CREATE TABLE `payments` (
+      `id` int PRIMARY KEY,
+      `method` varchar(20),
+      CONSTRAINT `payments_method_chk` CHECK (`method` IN ('card', 'cash', 'transfer'))
+    );
+  desired: |
+    CREATE TABLE `payments` (
+      `id` int PRIMARY KEY,
+      `method` varchar(20) CHECK (`method` IN ('card', 'cash', 'transfer'))
+    );
+  output: ""
+  flavor: mysql
+  min_version: '8.0'
+CheckDuplicateValuesInOrChain:
+  current: |
+    CREATE TABLE `items` (
+      `id` int PRIMARY KEY,
+      `category` varchar(20),
+      CONSTRAINT `items_category_chk` CHECK (`category` = 'electronics' OR `category` = 'electronics' OR `category` = 'clothing')
+    );
+  desired: |
+    CREATE TABLE `items` (
+      `id` int PRIMARY KEY,
+      `category` varchar(20),
+      CONSTRAINT `items_category_chk` CHECK (`category` IN ('electronics', 'clothing'))
+    );
+  output: ""
+  flavor: mysql
+  min_version: '8.0'
+CheckRowValueConstructorMultipleInnerValues:
+  current: |
+    CREATE TABLE `test_multi` (
+      `col_a` int,
+      `col_b` int,
+      CONSTRAINT `test_multi_chk` CHECK ((`col_a`, `col_b`) IN ((3, 1), (2, 4)))
+    );
+  desired: |
+    CREATE TABLE `test_multi` (
+      `col_a` int,
+      `col_b` int,
+      CONSTRAINT `test_multi_chk` CHECK ((`col_a`, `col_b`) IN ((1, 3), (2, 4)))
+    );
+  output: |
+    ALTER TABLE `test_multi` DROP CHECK `test_multi_chk`;
+    ALTER TABLE `test_multi` ADD CONSTRAINT `test_multi_chk` CHECK ((col_a, col_b) in ((1, 3), (2, 4)));
+  flavor: mysql
+  min_version: '8.0'
+CheckRowValueConstructorOuterOrderShouldMatch:
+  current: |
+    CREATE TABLE `test_outer` (
+      `col_a` int,
+      `col_b` int,
+      CONSTRAINT `test_outer_chk` CHECK ((`col_a`, `col_b`) IN ((1, 2), (3, 4)))
+    );
+  desired: |
+    CREATE TABLE `test_outer` (
+      `col_a` int,
+      `col_b` int,
+      CONSTRAINT `test_outer_chk` CHECK ((`col_a`, `col_b`) IN ((3, 4), (1, 2)))
+    );
+  output: ""
+  flavor: mysql
+  min_version: '8.0'

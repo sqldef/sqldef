@@ -3116,10 +3116,7 @@ func tryConvertOrChainToIn(orExpr *parser.OrExpr) parser.Expr {
 		return nil
 	}
 
-	// Normalize IN values for consistent comparison
-	sort.Slice(values, func(i, j int) bool {
-		return parser.String(values[i]) < parser.String(values[j])
-	})
+	values = sortAndDeduplicateValues(values)
 
 	var tupleExprs parser.ValTuple
 	for _, v := range values {
@@ -3146,6 +3143,30 @@ func normalizeName(name string) string {
 // normalizeOperator converts operator to lowercase for consistent comparison.
 func normalizeOperator(op string) string {
 	return strings.ToLower(op)
+}
+
+// sortAndDeduplicateValues sorts and deduplicates a slice of expressions based on their string representation.
+// This ensures that semantically equivalent lists are treated as identical regardless of order or duplicates.
+// For example: [b, a, b] becomes [a, b]
+func sortAndDeduplicateValues(values []parser.Expr) []parser.Expr {
+	if len(values) <= 1 {
+		return values
+	}
+
+	// Sort values for consistent comparison
+	sort.Slice(values, func(i, j int) bool {
+		return parser.String(values[i]) < parser.String(values[j])
+	})
+
+	// Deduplicate sorted values
+	uniqueValues := values[:0] // reuse underlying array
+	for i, v := range values {
+		if i == 0 || parser.String(v) != parser.String(values[i-1]) {
+			uniqueValues = append(uniqueValues, v)
+		}
+	}
+
+	return uniqueValues
 }
 
 // normalizeCheckExprAST normalizes a CHECK constraint expression AST for comparison
@@ -3210,10 +3231,20 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 	case *parser.NotExpr:
 		return &parser.NotExpr{Expr: normalizeCheckExprAST(e.Expr)}
 	case *parser.ComparisonExpr:
+		left := normalizeCheckExprAST(e.Left)
+		right := normalizeCheckExprAST(e.Right)
+		op := normalizeOperator(e.Operator)
+
+		if op == "in" || op == "not in" {
+			if tuple, ok := right.(parser.ValTuple); ok {
+				right = parser.ValTuple(sortAndDeduplicateValues([]parser.Expr(tuple)))
+			}
+		}
+
 		return &parser.ComparisonExpr{
-			Operator: normalizeOperator(e.Operator),
-			Left:     normalizeCheckExprAST(e.Left),
-			Right:    normalizeCheckExprAST(e.Right),
+			Operator: op,
+			Left:     left,
+			Right:    right,
 			Escape:   normalizeCheckExprAST(e.Escape),
 			All:      e.All,
 			Any:      e.Any,
@@ -3271,17 +3302,10 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 			To:       normalizeCheckExprAST(e.To),
 		}
 	case parser.ValTuple:
-		// Normalize each element in the tuple
-		normalizedTuple := parser.ValTuple(transformSlice([]parser.Expr(e), func(elem parser.Expr) parser.Expr {
+		normalizedTuple := transformSlice([]parser.Expr(e), func(elem parser.Expr) parser.Expr {
 			return normalizeCheckExprAST(elem)
-		}))
-		// Sort the tuple for consistent comparison (e.g., IN (1, 2, 3) matches IN (3, 2, 1))
-		sortedValues := make([]parser.Expr, len(normalizedTuple))
-		copy(sortedValues, normalizedTuple)
-		sort.Slice(sortedValues, func(i, j int) bool {
-			return parser.String(sortedValues[i]) < parser.String(sortedValues[j])
 		})
-		return parser.ValTuple(sortedValues)
+		return parser.ValTuple(normalizedTuple)
 	case *parser.ColName:
 		qualifierStr := ""
 		if e.Qualifier.Name.String() != "" {
