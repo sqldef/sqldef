@@ -249,6 +249,34 @@ func TestNormalizeCheckExprAST(t *testing.T) {
 			input:    "status in (_utf8mb4'a', _utf8mb4'b')",
 			expected: "status in ('a', 'b')",
 		},
+		// Test unwrapOutermostParenExpr behavior in AND/OR contexts
+		// Note: outermost parens are preserved by normalizeCheckExprAST,
+		// they're only unwrapped in areSameCheckDefinition
+		{
+			name:     "Unwrap unnecessary parens in AND operands",
+			input:    "(a = 1) and (b = 2)",
+			expected: "a = 1 and b = 2",
+		},
+		{
+			name:     "Preserve parens around OR in AND expression",
+			input:    "a = 1 and (b = 2 or c = 3)",
+			expected: "a = 1 and (b = 2 or c = 3)",
+		},
+		{
+			name:     "Preserve parens around OR in both AND operands",
+			input:    "(a = 1 or b = 2) and (c = 3 or d = 4)",
+			expected: "(a = 1 or b = 2) and (c = 3 or d = 4)",
+		},
+		{
+			name:     "Mixed: unwrap AND but preserve OR",
+			input:    "(a = 1 and b = 2) and (c = 3 or d = 4)",
+			expected: "a = 1 and b = 2 and (c = 3 or d = 4)",
+		},
+		{
+			name:     "Unwrap parens in OR operands",
+			input:    "(a = 1) or (b = 2)",
+			expected: "a = 1 or b = 2",
+		},
 	}
 
 	for _, tt := range tests {

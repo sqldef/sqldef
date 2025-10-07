@@ -3018,9 +3018,13 @@ func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bo
 
 // unwrapOutermostParenExpr removes the outermost ParenExpr if the expression is wrapped in one.
 // This is needed because some databases (like MySQL) add extra parentheses around CHECK expressions.
+// It preserves parentheses around OR expressions to maintain correct operator precedence.
 func unwrapOutermostParenExpr(expr parser.Expr) parser.Expr {
 	if paren, ok := expr.(*parser.ParenExpr); ok {
-		return paren.Expr
+		// Don't unwrap if inner expression is OR (to preserve operator precedence)
+		if _, isOr := paren.Expr.(*parser.OrExpr); !isOr {
+			return paren.Expr
+		}
 	}
 	return expr
 }
@@ -3178,19 +3182,8 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 		left := normalizeCheckExprAST(e.Left)
 		right := normalizeCheckExprAST(e.Right)
 		// MySQL adds parentheses around each operand in AND chains, so unwrap them
-		// Only unwrap if it's safe (not changing operator precedence)
-		if paren, ok := left.(*parser.ParenExpr); ok {
-			// Safe to unwrap if the inner expression is not an OR (which has lower precedence)
-			if _, isOr := paren.Expr.(*parser.OrExpr); !isOr {
-				left = paren.Expr
-			}
-		}
-		if paren, ok := right.(*parser.ParenExpr); ok {
-			// Safe to unwrap if the inner expression is not an OR (which has lower precedence)
-			if _, isOr := paren.Expr.(*parser.OrExpr); !isOr {
-				right = paren.Expr
-			}
-		}
+		left = unwrapOutermostParenExpr(left)
+		right = unwrapOutermostParenExpr(right)
 		return &parser.AndExpr{
 			Left:  left,
 			Right: right,
@@ -3201,12 +3194,8 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 		right := normalizeCheckExprAST(e.Right)
 		// MySQL adds parentheses around each operand in OR chains, so unwrap them
 		// Always safe to unwrap in OR chains since OR has the lowest precedence
-		if paren, ok := left.(*parser.ParenExpr); ok {
-			left = paren.Expr
-		}
-		if paren, ok := right.(*parser.ParenExpr); ok {
-			right = paren.Expr
-		}
+		left = unwrapOutermostParenExpr(left)
+		right = unwrapOutermostParenExpr(right)
 
 		// Try to convert OR chain of equality comparisons to IN expression
 		// MSSQL transforms IN (a, b, c) to col=a OR col=b OR col=c
