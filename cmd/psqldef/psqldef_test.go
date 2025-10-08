@@ -1670,7 +1670,6 @@ func TestPsqldefHelp(t *testing.T) {
 	}
 }
 
-
 func TestPsqldefTableLevelCheckConstraintsWithAllAny(t *testing.T) {
 	resetTestDatabase()
 
