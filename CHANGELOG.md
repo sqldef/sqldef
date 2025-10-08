@@ -1,3 +1,6 @@
+## [v3.1.13](https://github.com/sqldef/sqldef/compare/v3.1.12...v3.1.13) - 2025-10-08
+- refactor: format queries in string literals by @gfx in https://github.com/sqldef/sqldef/pull/858
+
 ## [v3.1.12](https://github.com/sqldef/sqldef/compare/v3.1.11...v3.1.12) - 2025-10-08
 - [CI] notify a release to sqldef-preiew-action by @gfx in https://github.com/sqldef/sqldef/pull/856
 
