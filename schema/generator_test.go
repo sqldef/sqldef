@@ -202,7 +202,7 @@ func TestNormalizeCheckExprAST(t *testing.T) {
 		{
 			name:     "Handle OR expression with casts",
 			input:    "status = 'active'::text or status = 'pending'::text",
-			expected: "status = 'active' or status = 'pending'",
+			expected: "status in ('active', 'pending')",
 		},
 		{
 			name:     "Handle NOT expression with cast",
@@ -237,7 +237,45 @@ func TestNormalizeCheckExprAST(t *testing.T) {
 		{
 			name:     "Handle nested expressions with casts",
 			input:    "(status = 'active'::text and (priority = 'high'::text or priority = 'urgent'::text))",
-			expected: "(status = 'active' and (priority = 'high' or priority = 'urgent'))",
+			expected: "(status = 'active' and priority in ('high', 'urgent'))",
+		},
+		{
+			name:     "Handle ValTuple in IN clause",
+			input:    "status IN ('a', 'c', 'b')",
+			expected: "status in ('a', 'b', 'c')",
+		},
+		{
+			name:     "Handle ValTuple with charset prefix",
+			input:    "status in (_utf8mb4'a', _utf8mb4'b')",
+			expected: "status in ('a', 'b')",
+		},
+		// Test unwrapOutermostParenExpr behavior in AND/OR contexts
+		// Note: outermost parens are preserved by normalizeCheckExprAST,
+		// they're only unwrapped in areSameCheckDefinition
+		{
+			name:     "Unwrap unnecessary parens in AND operands",
+			input:    "(a = 1) and (b = 2)",
+			expected: "a = 1 and b = 2",
+		},
+		{
+			name:     "Preserve parens around OR in AND expression",
+			input:    "a = 1 and (b = 2 or c = 3)",
+			expected: "a = 1 and (b = 2 or c = 3)",
+		},
+		{
+			name:     "Preserve parens around OR in both AND operands",
+			input:    "(a = 1 or b = 2) and (c = 3 or d = 4)",
+			expected: "(a = 1 or b = 2) and (c = 3 or d = 4)",
+		},
+		{
+			name:     "Mixed: unwrap AND but preserve OR",
+			input:    "(a = 1 and b = 2) and (c = 3 or d = 4)",
+			expected: "a = 1 and b = 2 and (c = 3 or d = 4)",
+		},
+		{
+			name:     "Unwrap parens in OR operands",
+			input:    "(a = 1) or (b = 2)",
+			expected: "a = 1 or b = 2",
 		},
 	}
 
@@ -269,4 +307,105 @@ func TestNormalizeCheckExprAST(t *testing.T) {
 func TestNormalizeCheckExprASTNilInput(t *testing.T) {
 	result := normalizeCheckExprAST(nil)
 	assert.Nil(t, result)
+}
+
+func TestCheckConstraintComparisonWithDifferentInValues(t *testing.T) {
+	// Test that CHECK constraints with different IN clause values are detected as different
+
+	// Parse current state (from DB with charset prefix)
+	stmt1, err := parser.ParseDDL("create table t (id int, check(status IN (_utf8mb4'todo',_utf8mb4'in_progress')))", parser.ParserModeMysql)
+	assert.NoError(t, err)
+	ddl1 := stmt1.(*parser.DDL)
+	check1 := ddl1.TableSpec.Checks[0]
+
+	// Parse desired state (from user, no charset prefix)
+	stmt2, err := parser.ParseDDL("create table t (id int, check(status IN ('todo', 'in_progress', 'done')))", parser.ParserModeMysql)
+	assert.NoError(t, err)
+	ddl2 := stmt2.(*parser.DDL)
+	check2 := ddl2.TableSpec.Checks[0]
+
+	// Normalize both
+	normalized1 := normalizeCheckExprAST(check1.Where.Expr)
+	normalized2 := normalizeCheckExprAST(check2.Where.Expr)
+
+	// Convert to strings
+	str1 := parser.String(normalized1)
+	str2 := parser.String(normalized2)
+
+	t.Logf("Normalized 1: %s", str1)
+	t.Logf("Normalized 2: %s", str2)
+
+	// They should be different
+	assert.NotEqual(t, str1, str2, "CHECK constraints with different IN values should be detected as different")
+}
+
+func TestCheckConstraintIdempotencyWithMySQLFormat(t *testing.T) {
+	// Test that CHECK constraints are idempotent when MySQL returns them with extra parens and charset
+
+	// Parse as user would write it
+	stmt1, err := parser.ParseDDL("create table t (id int, check(`status` IN ('todo', 'in_progress')))", parser.ParserModeMysql)
+	assert.NoError(t, err)
+	ddl1 := stmt1.(*parser.DDL)
+	check1 := ddl1.TableSpec.Checks[0]
+
+	// Parse as MySQL would return it (extra parens, charset prefix, lowercase)
+	stmt2, err := parser.ParseDDL("create table t (id int, check((`status` in (_utf8mb4'todo',_utf8mb4'in_progress'))))", parser.ParserModeMysql)
+	assert.NoError(t, err)
+	ddl2 := stmt2.(*parser.DDL)
+	check2 := ddl2.TableSpec.Checks[0]
+
+	// Normalize both
+	normalized1 := normalizeCheckExprAST(check1.Where.Expr)
+	normalized2 := normalizeCheckExprAST(check2.Where.Expr)
+
+	// Unwrap outermost parentheses (as done in areSameCheckDefinition)
+	normalized1 = unwrapOutermostParenExpr(normalized1)
+	normalized2 = unwrapOutermostParenExpr(normalized2)
+
+	// Convert to strings
+	str1 := parser.String(normalized1)
+	str2 := parser.String(normalized2)
+
+	t.Logf("Normalized 1 (user format): %s", str1)
+	t.Logf("Normalized 2 (MySQL format): %s", str2)
+
+	// They should be the same (idempotent)
+	assert.Equal(t, str1, str2, "CHECK constraints should be idempotent despite MySQL's formatting")
+}
+
+func TestCheckConstraintMSSQLInVsOrNormalization(t *testing.T) {
+	// Test that MSSQL's OR chain is normalized to IN and matches user's IN clause
+
+	// Parse user's IN format as table-level CHECK (what user writes)
+	stmtUser, err := parser.ParseDDL("CREATE TABLE t (c varchar(20), CONSTRAINT c_chk CHECK (c IN ('todo', 'in_progress')))", parser.ParserModeMssql)
+	assert.NoError(t, err)
+	ddlUser := stmtUser.(*parser.DDL)
+	checkUser := ddlUser.TableSpec.Checks[0]
+
+	// Parse MSSQL's OR format as column-level CHECK (what DB returns after MSSQL converts it)
+	stmtDB, err := parser.ParseDDL("CREATE TABLE t (c varchar(20) CONSTRAINT [c_chk] CHECK ([c]='in_progress' OR [c]='todo'))", parser.ParserModeMssql)
+	assert.NoError(t, err)
+	ddlDB := stmtDB.(*parser.DDL)
+	// This should be a column-level CHECK
+	colDB := ddlDB.TableSpec.Columns[0] // First column is 'c'
+	assert.NotNil(t, colDB.Type.Check, "Expected column-level CHECK")
+	checkDB := colDB.Type.Check
+
+	// Normalize both
+	normalizedUser := normalizeCheckExprAST(checkUser.Where.Expr)
+	normalizedDB := normalizeCheckExprAST(checkDB.Where.Expr)
+
+	// Unwrap outermost parens
+	normalizedUser = unwrapOutermostParenExpr(normalizedUser)
+	normalizedDB = unwrapOutermostParenExpr(normalizedDB)
+
+	// Convert to strings
+	strUser := parser.String(normalizedUser)
+	strDB := parser.String(normalizedDB)
+
+	t.Logf("Normalized user (table-level IN): %s", strUser)
+	t.Logf("Normalized DB (column-level OR):  %s", strDB)
+
+	// They should be equal
+	assert.Equal(t, strUser, strDB, "CHECK constraints should normalize to the same format")
 }

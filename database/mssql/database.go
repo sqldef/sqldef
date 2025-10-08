@@ -21,6 +21,7 @@ type databaseInfo struct {
 	columns     map[string][]column
 	indexDefs   map[string][]*indexDef
 	foreignDefs map[string][]string
+	checkDefs   map[string][]string
 }
 
 type MssqlDatabase struct {
@@ -94,14 +95,22 @@ func (d *MssqlDatabase) updateDatabaesInfo() error {
 	if err != nil {
 		return err
 	}
+	err = d.updateCheckDefs()
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
 func (d *MssqlDatabase) updateTableNames() error {
-	rows, err := d.db.Query(
-		`select schema_name(schema_id) as table_schema, name from sys.objects where type = 'U';`,
-	)
+	rows, err := d.db.Query(`
+		SELECT
+			schema_name(schema_id) AS table_schema,
+			name
+		FROM sys.objects
+		WHERE type = 'U'
+	`)
 	if err != nil {
 		return err
 	}
@@ -127,7 +136,8 @@ func (d *MssqlDatabase) exportTableDDL(table string) (string, error) {
 	cols := d.getColumns(table)
 	indexDefs := d.getIndexDefs(table)
 	foreignDefs := d.getForeignDefs(table)
-	return buildExportTableDDL(table, cols, indexDefs, foreignDefs), nil
+	checkDefs := d.getCheckDefs(table)
+	return buildExportTableDDL(table, cols, indexDefs, foreignDefs, checkDefs), nil
 }
 
 func canonicalMapIter[T any](m map[string]T) iter.Seq2[string, T] {
@@ -146,7 +156,7 @@ func canonicalMapIter[T any](m map[string]T) iter.Seq2[string, T] {
 	}
 }
 
-func buildExportTableDDL(table string, columns []column, indexDefs []*indexDef, foreignDefs []string) string {
+func buildExportTableDDL(table string, columns []column, indexDefs []*indexDef, foreignDefs []string, checkDefs []string) string {
 	var queryBuilder strings.Builder
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (", table)
 	for i, col := range columns {
@@ -215,6 +225,11 @@ func buildExportTableDDL(table string, columns []column, indexDefs []*indexDef, 
 			fmt.Fprintf(&queryBuilder, " %s", indexDef.indexType)
 		}
 		fmt.Fprintf(&queryBuilder, " (%s)", strings.Join(indexDef.columns, ", "))
+	}
+
+	for _, v := range checkDefs {
+		fmt.Fprint(&queryBuilder, ",\n"+indent)
+		fmt.Fprint(&queryBuilder, v)
 	}
 
 	for _, v := range foreignDefs {
@@ -471,8 +486,10 @@ ORDER BY obj.object_id, ind.index_id, ic.key_ordinal
 	// `sys.stats.is_incremental` only exists SQL Server 2014 (12.x) and above.
 	// https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-stats-transact-sql?view=sql-server-ver16
 	var hasIncremental int
-	err := d.db.QueryRow(`SELECT 1
-FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'sys.stats' AND COLUMN_NAME = 'is_incremental'
+	err := d.db.QueryRow(`
+		SELECT 1
+		FROM INFORMATION_SCHEMA.COLUMNS
+		WHERE TABLE_NAME = 'sys.stats' AND COLUMN_NAME = 'is_incremental'
 	`).Scan(&hasIncremental)
 	if err != nil && err != sql.ErrNoRows {
 		return nil
@@ -626,6 +643,56 @@ func (d *MssqlDatabase) getForeignDefs(table string) []string {
 	}
 }
 
+func (d *MssqlDatabase) updateCheckDefs() error {
+	// Query for table-level CHECK constraints only (those without a parent_column_id)
+	// Column-level CHECKs are handled in updateColumns()
+	query := `
+		SELECT
+			SCHEMA_NAME(obj.schema_id) as schema_name,
+			obj.name as table_name,
+			cc.name as constraint_name,
+			cc.definition as check_definition
+		FROM sys.objects obj
+		INNER JOIN sys.check_constraints cc ON cc.parent_object_id = obj.object_id
+		WHERE obj.type = 'U'
+			AND cc.parent_column_id = 0
+	`
+
+	rows, err := d.db.Query(query)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	defs := make(map[string][]string)
+
+	for rows.Next() {
+		var schemaName, tableName, constraintName, checkDefinition string
+
+		err = rows.Scan(&schemaName, &tableName, &constraintName, &checkDefinition)
+		if err != nil {
+			return err
+		}
+
+		def := fmt.Sprintf("CONSTRAINT [%s] CHECK %s", constraintName, checkDefinition)
+		defs[schemaName+"."+tableName] = append(defs[schemaName+"."+tableName], def)
+	}
+
+	d.info.checkDefs = defs
+
+	return nil
+}
+
+func (d *MssqlDatabase) getCheckDefs(table string) []string {
+	schema, table := splitTableName(table, d.GetDefaultSchema())
+
+	if defs, ok := d.info.checkDefs[schema+"."+table]; ok {
+		return defs
+	} else {
+		return make([]string, 0)
+	}
+}
+
 func boolToOnOff(in bool) string {
 	if in {
 		return "ON"
@@ -714,7 +781,9 @@ func (d *MssqlDatabase) GetDefaultSchema() string {
 	}
 
 	var defaultSchema string
-	query := "SELECT schema_name();"
+	query := `
+		SELECT schema_name()
+	`
 
 	err := d.db.QueryRow(query).Scan(&defaultSchema)
 	if err != nil {

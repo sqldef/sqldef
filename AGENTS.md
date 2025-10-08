@@ -13,16 +13,17 @@ Each command follows the same pattern: it accepts connection parameters similar 
 
 * Never commit the changes unless the user asks for it.
 * Write comments to describe what is not obvious in the code. Describing the "why" is a recommended practice.
+* Format queries in string literals.
 
 ## Build
 
-Build all sqldef commands (`mysqldef`, `psqldef`, `sqlite3def`, `mssqldef`):
+Build all the sqldef commands (`mysqldef`, `psqldef`, `sqlite3def`, `mssqldef`):
 
 ```sh
 make build
 ```
 
-The compiled binaries will be placed in the `build/$os-$arch$/` directory.
+The executable binaries will be placed in the `build/$os-$arch$/` directory.
 
 ### Build Parser
 
@@ -31,6 +32,9 @@ To maintain the parser, edit `parser/parser.y` and run:
 ```sh
 make parser
 ```
+
+For now, `psqldef` uses `go-pgquery` (a native PostgreSQL parser) as the primary parser,
+and the generic parser as a fallback.
 
 ## Local Development
 
@@ -57,7 +61,7 @@ For development iterations, use these commands to run tests:
 ### Run all tests
 
 ```sh
-make test
+make test # it will take 5 minutes to run
 ```
 
 ### Run tests for specific `*def` tools
@@ -69,7 +73,7 @@ go test ./cmd/sqlite3def
 go test ./cmd/mssqldef
 ```
 
-For MariaDB testing locally:
+For MariaDB testing:
 
 ```sh
 MYSQL_FLAVOR=mariadb MYSQL_PORT=3307 go test ./cmd/mysqldef

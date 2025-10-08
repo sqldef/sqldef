@@ -777,8 +777,11 @@ WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$
 func (d *PostgresDatabase) getPrimaryKeyName(table string) (string, error) {
 	schema, table := splitTableName(table, d.GetDefaultSchema())
 	tableWithSchema := fmt.Sprintf("%s.%s", escapeSQLName(schema), escapeSQLName(table))
-	query := fmt.Sprintf(`SELECT
-	conname from pg_constraint where conrelid = '%s'::regclass and contype = 'p'`, tableWithSchema)
+	query := fmt.Sprintf(`
+		SELECT conname
+		FROM pg_constraint
+		WHERE conrelid = '%s'::regclass AND contype = 'p'
+	`, tableWithSchema)
 	rows, err := d.db.Query(query)
 	if err != nil {
 		return "", err
@@ -923,7 +926,11 @@ var (
 )
 
 func (d *PostgresDatabase) getPolicyDefs(table string) ([]string, error) {
-	const query = "SELECT policyname, permissive, roles, cmd, qual, with_check FROM pg_policies WHERE schemaname = $1 AND tablename = $2;"
+	const query = `
+		SELECT policyname, permissive, roles, cmd, qual, with_check
+		FROM pg_policies
+		WHERE schemaname = $1 AND tablename = $2
+	`
 	schema, table := splitTableName(table, d.GetDefaultSchema())
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
@@ -1029,7 +1036,9 @@ func (d *PostgresDatabase) GetDefaultSchema() string {
 	}
 
 	var defaultSchema string
-	query := "SELECT current_schema();"
+	query := `
+		SELECT current_schema()
+	`
 
 	err := d.db.QueryRow(query).Scan(&defaultSchema)
 	if err != nil {

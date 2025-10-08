@@ -80,12 +80,6 @@ func executeMySQLDef(dbName string, extraArgs ...string) (string, error) {
 }
 
 func TestApply(t *testing.T) {
-	db, err := connectDatabase()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-
 	tests, err := testutils.ReadTests("tests*.yml")
 	if err != nil {
 		t.Fatal(err)
@@ -102,6 +96,15 @@ func TestApply(t *testing.T) {
 			// Initialize the database with test.Current
 			mustMysqlExec("", "DROP DATABASE IF EXISTS mysqldef_test")
 			mustMysqlExec("", "CREATE DATABASE mysqldef_test")
+
+			// Connect to the database after it's been recreated. This must be done
+			// inside each subtest because the database is dropped and recreated for
+			// each test, which would invalidate any connection created outside.
+			db, err := connectDatabase()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
 
 			testutils.RunTest(t, db, test, schema.GeneratorModeMysql, sqlParser, version, mysqlFlavor)
 		})
