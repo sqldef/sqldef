@@ -63,9 +63,11 @@ func (d *Sqlite3Database) ExportDDLs() (string, error) {
 }
 
 func (d *Sqlite3Database) tableNames() ([]string, error) {
-	rows, err := d.db.Query(
-		`select tbl_name from sqlite_master where type = 'table' and tbl_name not like 'sqlite_%'`,
-	)
+	rows, err := d.db.Query(`
+		SELECT tbl_name
+		FROM sqlite_master
+		WHERE type = 'table' AND tbl_name NOT LIKE 'sqlite_%'
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +85,11 @@ func (d *Sqlite3Database) tableNames() ([]string, error) {
 }
 
 func (d *Sqlite3Database) exportTableDDL(table string) (string, error) {
-	const query = `select sql from sqlite_master where tbl_name = ? and type = 'table'`
+	const query = `
+		SELECT sql
+		FROM sqlite_master
+		WHERE tbl_name = ? AND type = 'table'
+	`
 	var sql string
 	err := d.db.QueryRow(query, table).Scan(&sql)
 	return sql + ";", err
@@ -91,7 +97,11 @@ func (d *Sqlite3Database) exportTableDDL(table string) (string, error) {
 
 func (d *Sqlite3Database) views() ([]string, error) {
 	var ddls []string
-	const query = "select sql from sqlite_master where type = 'view';"
+	const query = `
+		SELECT sql
+		FROM sqlite_master
+		WHERE type = 'view'
+	`
 	rows, err := d.db.Query(query)
 	if err != nil {
 		return nil, err
@@ -112,7 +122,11 @@ func (d *Sqlite3Database) views() ([]string, error) {
 func (d *Sqlite3Database) indexes() ([]string, error) {
 	var ddls []string
 	// Exclude automatically generated indexes for unique constraint
-	const query = "select sql from sqlite_master where type = 'index' and sql is not null;"
+	const query = `
+		SELECT sql
+		FROM sqlite_master
+		WHERE type = 'index' AND sql IS NOT NULL
+	`
 	rows, err := d.db.Query(query)
 	if err != nil {
 		return nil, err
@@ -132,7 +146,11 @@ func (d *Sqlite3Database) indexes() ([]string, error) {
 
 func (d *Sqlite3Database) triggers() ([]string, error) {
 	var ddls []string
-	const query = "select sql from sqlite_master where type = 'trigger' and sql is not null;"
+	const query = `
+		SELECT sql
+		FROM sqlite_master
+		WHERE type = 'trigger' AND sql IS NOT NULL
+	`
 	rows, err := d.db.Query(query)
 	if err != nil {
 		return nil, err
