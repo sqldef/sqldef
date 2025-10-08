@@ -33,6 +33,12 @@ jobs:
             mysql_flavor: mysql
             mysql_version: '8.0'
           - target: mysqldef
+            mysql_flavor: mysql
+            mysql_version: '8.4'
+          - target: mysqldef
+            mysql_flavor: mysql
+            mysql_version: '9'
+          - target: mysqldef
             mysql_flavor: mariadb
             mariadb_version: '11.8'
           - target: psqldef
@@ -101,7 +107,7 @@ jobs:
 
   test-result:
     if: ${{ always() }}
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     needs: [test, integrity]
     steps:
       - name: test jobs have failed
