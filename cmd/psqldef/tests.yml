@@ -88,6 +88,19 @@ ParseTextCheckConstraint:
     );
   output: |
     ALTER TABLE "public"."test" DROP CONSTRAINT test_col_check;
+DropPrimaryKey:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text
+    );
+  output: |
+    ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";
 ParseAllAnyCheckConstraint:
   current: |
     CREATE TABLE test (
@@ -105,6 +118,134 @@ ParseAllAnyCheckConstraint:
     ALTER TABLE "public"."test" ADD CONSTRAINT test_n1_check CHECK (n1 = ANY (ARRAY[1, 2, 3]));
     ALTER TABLE "public"."test" ADD CONSTRAINT test_n2_check CHECK (n2 = ALL (ARRAY[1, 2, 3]));
     ALTER TABLE "public"."test" ADD CONSTRAINT test_t1_check CHECK (t1 = ANY (ARRAY['x', 'y']));
+AllAnySomeCheckConstraintsCreate:
+  desired: |
+    CREATE TABLE test_all_any (
+      id INTEGER PRIMARY KEY,
+      state TEXT CHECK (state = ANY (ARRAY['active', 'pending'])),
+      all_positive INTEGER CHECK (all_positive = ALL (ARRAY[1, 2, 3])),
+      some_text TEXT CHECK (some_text = SOME (ARRAY['valid', 'allowed'])),
+      score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
+    );
+AllAnySomeCheckConstraintsModifyAll:
+  current: |
+    CREATE TABLE test_all_any (
+      id INTEGER PRIMARY KEY,
+      state TEXT CHECK (state = ANY (ARRAY['active', 'pending'])),
+      all_positive INTEGER CHECK (all_positive = ALL (ARRAY[1, 2, 3])),
+      some_text TEXT CHECK (some_text = SOME (ARRAY['valid', 'allowed'])),
+      score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
+    );
+  desired: |
+    CREATE TABLE test_all_any (
+      id INTEGER PRIMARY KEY,
+      state TEXT CHECK (state = ANY (ARRAY['active', 'pending'])),
+      all_positive INTEGER CHECK (all_positive = ALL (ARRAY[2, 3, 4])),
+      some_text TEXT CHECK (some_text = SOME (ARRAY['valid', 'allowed'])),
+      score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
+    );
+  output: |
+    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_all_positive_check;
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT test_all_any_all_positive_check CHECK (all_positive = ALL (ARRAY[2, 3, 4]));
+AllAnySomeCheckConstraintsModifySome:
+  current: |
+    CREATE TABLE test_all_any (
+      id INTEGER PRIMARY KEY,
+      state TEXT CHECK (state = ANY (ARRAY['active', 'pending'])),
+      all_positive INTEGER CHECK (all_positive = ALL (ARRAY[2, 3, 4])),
+      some_text TEXT CHECK (some_text = SOME (ARRAY['valid', 'allowed'])),
+      score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
+    );
+  desired: |
+    CREATE TABLE test_all_any (
+      id INTEGER PRIMARY KEY,
+      state TEXT CHECK (state = ANY (ARRAY['active', 'pending'])),
+      all_positive INTEGER CHECK (all_positive = ALL (ARRAY[2, 3, 4])),
+      some_text TEXT CHECK (some_text = SOME (ARRAY['updated', 'modified', 'changed'])),
+      score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
+    );
+  output: |
+    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_some_text_check;
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT test_all_any_some_text_check CHECK (some_text = ANY (ARRAY['updated', 'modified', 'changed']));
+AllAnySomeCheckConstraintsRemove:
+  current: |
+    CREATE TABLE test_all_any (
+      id INTEGER PRIMARY KEY,
+      state TEXT CHECK (state = ANY (ARRAY['active', 'pending'])),
+      all_positive INTEGER CHECK (all_positive = ALL (ARRAY[2, 3, 4])),
+      some_text TEXT CHECK (some_text = SOME (ARRAY['updated', 'modified', 'changed'])),
+      score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
+    );
+  desired: |
+    CREATE TABLE test_all_any (
+      id INTEGER PRIMARY KEY,
+      state TEXT,
+      all_positive INTEGER,
+      some_text TEXT,
+      score INTEGER
+    );
+  output: |
+    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_state_check;
+    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_all_positive_check;
+    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_some_text_check;
+    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_score_check;
+SomeConstraintModificationsCreate:
+  desired: |
+    CREATE TABLE test_some_modify (
+      id INTEGER PRIMARY KEY,
+      status TEXT CHECK (status = SOME (ARRAY['active', 'pending', 'draft'])),
+      category TEXT CHECK (category = SOME (ARRAY['A', 'B', 'C']))
+    );
+SomeConstraintModificationsModify:
+  current: |
+    CREATE TABLE test_some_modify (
+      id INTEGER PRIMARY KEY,
+      status TEXT CHECK (status = SOME (ARRAY['active', 'pending', 'draft'])),
+      category TEXT CHECK (category = SOME (ARRAY['A', 'B', 'C']))
+    );
+  desired: |
+    CREATE TABLE test_some_modify (
+      id INTEGER PRIMARY KEY,
+      status TEXT CHECK (status = SOME (ARRAY['active', 'completed', 'archived'])),
+      category TEXT CHECK (category = SOME (ARRAY['X', 'Y', 'Z']))
+    );
+  output: |
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT test_some_modify_status_check;
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_status_check CHECK (status = ANY (ARRAY['active', 'completed', 'archived']));
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT test_some_modify_category_check;
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_category_check CHECK (category = ANY (ARRAY['X', 'Y', 'Z']));
+SomeConstraintModificationsSomeToAny:
+  current: |
+    CREATE TABLE test_some_modify (
+      id INTEGER PRIMARY KEY,
+      status TEXT CHECK (status = SOME (ARRAY['active', 'completed', 'archived'])),
+      category TEXT CHECK (category = SOME (ARRAY['X', 'Y', 'Z']))
+    );
+  desired: |
+    CREATE TABLE test_some_modify (
+      id INTEGER PRIMARY KEY,
+      status TEXT CHECK (status = ANY (ARRAY['active', 'completed', 'archived'])),
+      category TEXT CHECK (category = ANY (ARRAY['X', 'Y', 'Z']))
+    );
+  output: ""
+SomeConstraintModificationsSomeToAll:
+  current: |
+    CREATE TABLE test_some_modify (
+      id INTEGER PRIMARY KEY,
+      status TEXT CHECK (status = SOME (ARRAY['active', 'completed', 'archived'])),
+      category TEXT CHECK (category = SOME (ARRAY['X', 'Y', 'Z']))
+    );
+  desired: |
+    CREATE TABLE test_some_modify (
+      id INTEGER PRIMARY KEY,
+      status TEXT CHECK (status = ALL (ARRAY['active', 'completed', 'archived'])),
+      category TEXT CHECK (category = ALL (ARRAY['X', 'Y', 'Z']))
+    );
+  output: |
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT test_some_modify_status_check;
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_status_check CHECK (status = ALL (ARRAY['active', 'completed', 'archived']));
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT test_some_modify_category_check;
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_category_check CHECK (category = ALL (ARRAY['X', 'Y', 'Z']));
 NullCast:
   desired: |
     CREATE TABLE public.test (
