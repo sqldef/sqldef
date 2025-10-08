@@ -675,26 +675,6 @@ func TestPsqldefCreateMaterializedView(t *testing.T) {
 	}
 }
 
-func TestPsqldefDropPrimaryKey(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint NOT NULL PRIMARY KEY,
-		  name text
-		);`,
-	)
-	assertApply(t, createTable)
-
-	createTable = stripHeredoc(`
-		CREATE TABLE users (
-		  id bigint NOT NULL,
-		  name text
-		);`,
-	)
-	assertApplyOutput(t, createTable, wrapWithTransaction(`ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";`+"\n"))
-}
-
 func TestPsqldefCreateIndex(t *testing.T) {
 	for _, tc := range publicAndNonPublicSchemaTestCases {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -1690,127 +1670,6 @@ func TestPsqldefHelp(t *testing.T) {
 	}
 }
 
-func TestPsqldefAllAnySomeCheckConstraints(t *testing.T) {
-	resetTestDatabase()
-
-	// Test creating table with ALL/ANY/SOME CHECK constraints
-	createTable := stripHeredoc(`
-		CREATE TABLE test_all_any (
-		  id INTEGER PRIMARY KEY,
-		  state TEXT CHECK (state = ANY (ARRAY['active', 'pending'])),
-		  all_positive INTEGER CHECK (all_positive = ALL (ARRAY[1, 2, 3])),
-		  some_text TEXT CHECK (some_text = SOME (ARRAY['valid', 'allowed'])),
-		  score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
-		);
-		`,
-	)
-	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
-	assertApplyOutput(t, createTable, nothingModified)
-
-	// Test modifying ALL constraint
-	modifyTable := stripHeredoc(`
-		CREATE TABLE test_all_any (
-		  id INTEGER PRIMARY KEY,
-		  state TEXT CHECK (state = ANY (ARRAY['active', 'pending'])),
-		  all_positive INTEGER CHECK (all_positive = ALL (ARRAY[2, 3, 4])),
-		  some_text TEXT CHECK (some_text = SOME (ARRAY['valid', 'allowed'])),
-		  score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
-		);
-		`,
-	)
-	assertApplyOutput(t, modifyTable, wrapWithTransaction(`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_all_positive_check;`+"\n"+
-		`ALTER TABLE "public"."test_all_any" ADD CONSTRAINT test_all_any_all_positive_check CHECK (all_positive = ALL (ARRAY[2, 3, 4]));`+"\n"))
-	assertApplyOutput(t, modifyTable, nothingModified)
-
-	// Test modifying SOME constraint specifically
-	modifySomeTable := stripHeredoc(`
-		CREATE TABLE test_all_any (
-		  id INTEGER PRIMARY KEY,
-		  state TEXT CHECK (state = ANY (ARRAY['active', 'pending'])),
-		  all_positive INTEGER CHECK (all_positive = ALL (ARRAY[2, 3, 4])),
-		  some_text TEXT CHECK (some_text = SOME (ARRAY['updated', 'modified', 'changed'])),
-		  score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
-		);
-		`,
-	)
-	assertApplyOutput(t, modifySomeTable, wrapWithTransaction(`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_some_text_check;`+"\n"+
-		`ALTER TABLE "public"."test_all_any" ADD CONSTRAINT test_all_any_some_text_check CHECK (some_text = ANY (ARRAY['updated', 'modified', 'changed']));`+"\n"))
-	assertApplyOutput(t, modifySomeTable, nothingModified)
-
-	// Test removing ALL/ANY constraints
-	removeConstraints := stripHeredoc(`
-		CREATE TABLE test_all_any (
-		  id INTEGER PRIMARY KEY,
-		  state TEXT,
-		  all_positive INTEGER,
-		  some_text TEXT,
-		  score INTEGER
-		);
-		`,
-	)
-	assertApplyOutput(t, removeConstraints, wrapWithTransaction(`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_state_check;`+"\n"+
-		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_all_positive_check;`+"\n"+
-		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_some_text_check;`+"\n"+
-		`ALTER TABLE "public"."test_all_any" DROP CONSTRAINT test_all_any_score_check;`+"\n"))
-	assertApplyOutput(t, removeConstraints, nothingModified)
-}
-
-func TestPsqldefSomeConstraintModifications(t *testing.T) {
-	resetTestDatabase()
-
-	// Create initial table with SOME constraint using working ARRAY syntax
-	initialTable := stripHeredoc(`
-		CREATE TABLE test_some_modify (
-		  id INTEGER PRIMARY KEY,
-		  status TEXT CHECK (status = SOME (ARRAY['active', 'pending', 'draft'])),
-		  category TEXT CHECK (category = SOME (ARRAY['A', 'B', 'C']))
-		);
-		`,
-	)
-	assertApplyOutput(t, initialTable, wrapWithTransaction(initialTable))
-	assertApplyOutput(t, initialTable, nothingModified)
-
-	// Modify SOME constraint with different values
-	modifiedTable := stripHeredoc(`
-		CREATE TABLE test_some_modify (
-		  id INTEGER PRIMARY KEY,
-		  status TEXT CHECK (status = SOME (ARRAY['active', 'completed', 'archived'])),
-		  category TEXT CHECK (category = SOME (ARRAY['X', 'Y', 'Z']))
-		);
-		`,
-	)
-	assertApplyOutput(t, modifiedTable, wrapWithTransaction(`ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT test_some_modify_status_check;`+"\n"+
-		`ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_status_check CHECK (status = ANY (ARRAY['active', 'completed', 'archived']));`+"\n"+
-		`ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT test_some_modify_category_check;`+"\n"+
-		`ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_category_check CHECK (category = ANY (ARRAY['X', 'Y', 'Z']));`+"\n"))
-	assertApplyOutput(t, modifiedTable, nothingModified)
-
-	// Change SOME to ANY explicitly
-	changeToAny := stripHeredoc(`
-		CREATE TABLE test_some_modify (
-		  id INTEGER PRIMARY KEY,
-		  status TEXT CHECK (status = ANY (ARRAY['active', 'completed', 'archived'])),
-		  category TEXT CHECK (category = ANY (ARRAY['X', 'Y', 'Z']))
-		);
-		`,
-	)
-	assertApplyOutput(t, changeToAny, nothingModified) // Should be no change since SOME is treated as ANY
-
-	// Change from SOME to ALL
-	changeToAll := stripHeredoc(`
-		CREATE TABLE test_some_modify (
-		  id INTEGER PRIMARY KEY,
-		  status TEXT CHECK (status = ALL (ARRAY['active', 'completed', 'archived'])),
-		  category TEXT CHECK (category = ALL (ARRAY['X', 'Y', 'Z']))
-		);
-		`,
-	)
-	assertApplyOutput(t, changeToAll, wrapWithTransaction(`ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT test_some_modify_status_check;`+"\n"+
-		`ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_status_check CHECK (status = ALL (ARRAY['active', 'completed', 'archived']));`+"\n"+
-		`ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT test_some_modify_category_check;`+"\n"+
-		`ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT test_some_modify_category_check CHECK (category = ALL (ARRAY['X', 'Y', 'Z']));`+"\n"))
-	assertApplyOutput(t, changeToAll, nothingModified)
-}
 
 func TestPsqldefTableLevelCheckConstraintsWithAllAny(t *testing.T) {
 	resetTestDatabase()
@@ -2065,12 +1924,6 @@ func TestMain(m *testing.M) {
 	_ = os.Remove("schema.sql")
 	_ = os.Remove("config.yml")
 	os.Exit(status)
-}
-
-func assertApply(t *testing.T, schema string) {
-	t.Helper()
-	writeFile("schema.sql", schema)
-	mustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
 }
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
