@@ -1,3 +1,6 @@
+## [v3.1.14](https://github.com/sqldef/sqldef/compare/v3.1.13...v3.1.14) - 2025-10-08
+- fix permissions by @gfx in https://github.com/sqldef/sqldef/pull/860
+
 ## [v3.1.13](https://github.com/sqldef/sqldef/compare/v3.1.12...v3.1.13) - 2025-10-08
 - refactor: format queries in string literals by @gfx in https://github.com/sqldef/sqldef/pull/858
 
