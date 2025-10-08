@@ -4095,14 +4095,18 @@ func topologicalSort[T any](items []T, dependencies map[string][]string, getID f
 
 // SortTablesByDependencies sorts CREATE TABLE DDLs by foreign key dependencies
 // to ensure tables are created in the correct order (referenced tables before referencing tables)
+// Also ensures CREATE TYPE statements are placed before CREATE TABLE statements that use them
 func SortTablesByDependencies(ddls []DDL) []DDL {
-	// Extract CREATE TABLE DDLs and other DDLs
+	// Extract CREATE TABLE DDLs, CREATE TYPE DDLs, and other DDLs
 	var createTables []*CreateTable
+	var createTypes []*Type
 	var otherDDLs []DDL
 
 	for _, ddl := range ddls {
 		if ct, ok := ddl.(*CreateTable); ok {
 			createTables = append(createTables, ct)
+		} else if typ, ok := ddl.(*Type); ok {
+			createTypes = append(createTypes, typ)
 		} else {
 			otherDDLs = append(otherDDLs, ddl)
 		}
@@ -4136,8 +4140,11 @@ func SortTablesByDependencies(ddls []DDL) []DDL {
 		return ddls
 	}
 
-	// Rebuild the DDL list with sorted CREATE TABLEs first, then other DDLs
+	// Rebuild the DDL list with CREATE TYPEs first, then sorted CREATE TABLEs, then other DDLs
 	var result []DDL
+	for _, typ := range createTypes {
+		result = append(result, typ)
+	}
 	for _, ct := range sorted {
 		result = append(result, ct)
 	}

@@ -371,6 +371,38 @@ AddEnumTypeColumn:
     );
     ALTER TABLE "s"."users" ADD COLUMN "lang" s.lang NOT NULL;
 
+CreateTypeWithMultipleTables:
+  apply_only: true
+  desired: |
+    CREATE TYPE order_status AS ENUM ('pending', 'shipped');
+
+    CREATE TABLE customers (
+      id SERIAL PRIMARY KEY
+    );
+
+    CREATE TABLE orders (
+      id SERIAL PRIMARY KEY,
+      status order_status NOT NULL
+    );
+
+CreateMultipleTypesWithMultipleTables:
+  apply_only: true
+  desired: |
+    CREATE TYPE order_status AS ENUM ('pending', 'shipped', 'delivered');
+    CREATE TYPE payment_method AS ENUM ('credit_card', 'paypal', 'bank_transfer');
+
+    CREATE TABLE customers (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL
+    );
+
+    CREATE TABLE orders (
+      id SERIAL PRIMARY KEY,
+      customer_id INTEGER REFERENCES customers(id),
+      status order_status NOT NULL,
+      payment payment_method NOT NULL
+    );
+
 UUIDCast:
   desired: |
     CREATE TABLE public.test_table (
