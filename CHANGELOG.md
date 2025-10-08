@@ -1,3 +1,9 @@
+## [v3.1.15](https://github.com/sqldef/sqldef/compare/v3.1.14...v3.1.15) - 2025-10-08
+- add `postgres:18` to the test matrix, and drop `postgres:12` by @gfx in https://github.com/sqldef/sqldef/pull/785
+- test: move some Go test code to YAML files by @gfx in https://github.com/sqldef/sqldef/pull/863
+- test: add mysql 8.4 and 9 to the test matrix by @gfx in https://github.com/sqldef/sqldef/pull/864
+- fix: let type + multiple create tables work by @gfx in https://github.com/sqldef/sqldef/pull/865
+
 ## [v3.1.14](https://github.com/sqldef/sqldef/compare/v3.1.13...v3.1.14) - 2025-10-08
 - fix permissions by @gfx in https://github.com/sqldef/sqldef/pull/860
 
