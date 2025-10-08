@@ -104,9 +104,13 @@ func (d *MssqlDatabase) updateDatabaesInfo() error {
 }
 
 func (d *MssqlDatabase) updateTableNames() error {
-	rows, err := d.db.Query(
-		`select schema_name(schema_id) as table_schema, name from sys.objects where type = 'U';`,
-	)
+	rows, err := d.db.Query(`
+		SELECT
+			schema_name(schema_id) AS table_schema,
+			name
+		FROM sys.objects
+		WHERE type = 'U'
+	`)
 	if err != nil {
 		return err
 	}
@@ -482,8 +486,10 @@ ORDER BY obj.object_id, ind.index_id, ic.key_ordinal
 	// `sys.stats.is_incremental` only exists SQL Server 2014 (12.x) and above.
 	// https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-stats-transact-sql?view=sql-server-ver16
 	var hasIncremental int
-	err := d.db.QueryRow(`SELECT 1
-FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'sys.stats' AND COLUMN_NAME = 'is_incremental'
+	err := d.db.QueryRow(`
+		SELECT 1
+		FROM INFORMATION_SCHEMA.COLUMNS
+		WHERE TABLE_NAME = 'sys.stats' AND COLUMN_NAME = 'is_incremental'
 	`).Scan(&hasIncremental)
 	if err != nil && err != sql.ErrNoRows {
 		return nil
@@ -775,7 +781,9 @@ func (d *MssqlDatabase) GetDefaultSchema() string {
 	}
 
 	var defaultSchema string
-	query := "SELECT schema_name();"
+	query := `
+		SELECT schema_name()
+	`
 
 	err := d.db.QueryRow(query).Scan(&defaultSchema)
 	if err != nil {

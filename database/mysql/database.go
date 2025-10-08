@@ -70,7 +70,10 @@ func (d *MysqlDatabase) ExportDDLs() (string, error) {
 }
 
 func (d *MysqlDatabase) tableNames() ([]string, error) {
-	rows, err := d.db.Query("show full tables where Table_Type != 'VIEW'")
+	rows, err := d.db.Query(`
+		SHOW FULL TABLES
+		WHERE Table_Type != 'VIEW'
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +93,8 @@ func (d *MysqlDatabase) tableNames() ([]string, error) {
 
 func (d *MysqlDatabase) exportTableDDL(table string) (string, error) {
 	var ddl string
-	sql := fmt.Sprintf("show create table `%s`;", table) // TODO: escape table name
+	sql := fmt.Sprintf(`
+		SHOW CREATE TABLE `+"`%s`", table) // TODO: escape table name
 
 	err := d.db.QueryRow(sql).Scan(&table, &ddl)
 	if err != nil {
@@ -105,7 +109,10 @@ func (d *MysqlDatabase) views() ([]string, error) {
 		return []string{}, nil
 	}
 
-	rows, err := d.db.Query("show full tables where TABLE_TYPE = 'VIEW'")
+	rows, err := d.db.Query(`
+		SHOW FULL TABLES
+		WHERE TABLE_TYPE = 'VIEW'
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +124,11 @@ func (d *MysqlDatabase) views() ([]string, error) {
 		if err = rows.Scan(&viewName, &viewType); err != nil {
 			return nil, err
 		}
-		query := fmt.Sprintf("select VIEW_DEFINITION,SECURITY_TYPE from INFORMATION_SCHEMA.VIEWS where TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s';", d.config.DbName, viewName)
+		query := fmt.Sprintf(`
+			SELECT VIEW_DEFINITION, SECURITY_TYPE
+			FROM INFORMATION_SCHEMA.VIEWS
+			WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s'
+		`, d.config.DbName, viewName)
 		if err = d.db.QueryRow(query).Scan(&definition, &security_type); err != nil {
 			return nil, err
 		}
@@ -127,7 +138,9 @@ func (d *MysqlDatabase) views() ([]string, error) {
 }
 
 func (d *MysqlDatabase) triggers() ([]string, error) {
-	rows, err := d.db.Query("show triggers")
+	rows, err := d.db.Query(`
+		SHOW TRIGGERS
+	`)
 	if err != nil {
 		return nil, err
 	}
