@@ -223,7 +223,7 @@ jobs:
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
           owner: sqldef
           repositories: sqldef-preview-action
-          permission-administration: write
+          permission-contents: write
 
       - name: Trigger sqldef-preview-action update
         run: |
