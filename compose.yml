@@ -4,8 +4,6 @@ services:
     environment:
       MYSQL_ALLOW_EMPTY_PASSWORD: 'true'
       MYSQL_ROOT_HOST: '%'
-    volumes:
-      - ./.docker/mysql/data:/var/lib/mysql
     ports:
       - '3306:3306'
   mariadb:
@@ -13,28 +11,23 @@ services:
     environment:
       MYSQL_ALLOW_EMPTY_PASSWORD: 'true'
       MYSQL_ROOT_HOST: '%'
-    volumes:
-      - ./.docker/mariadb/data:/var/lib/mysql
     ports:
       - '3307:3306'
   postgres:
     image: postgres:${POSTGRES_VERSION:-14}
     # image: hartmutcouk/pg-repack-docker:1.4.6
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_HOST_AUTH_METHOD: trust
-    volumes:
-      - ./.docker/postgresql/data:/var/lib/postgresql/data
+      POSTGRES_USER: 'postgres'
+      POSTGRES_HOST_AUTH_METHOD: 'trust'
     ports:
       - '5432:5432'
   mssql:
     # Available versions: https://mcr.microsoft.com/artifact/mar/mssql/server/about
     image: mcr.microsoft.com/mssql/server:${MSSQL_VERSION:-2019-latest}
+    platform: linux/amd64
     user: root
     environment:
-      ACCEPT_EULA: Y
-      SA_PASSWORD: Passw0rd
-    volumes:
-      - ./.docker/mssql/data:/var/opt/mssql/data
+      ACCEPT_EULA: 'Y'
+      SA_PASSWORD: 'Passw0rd'
     ports:
       - '1433:1433'
