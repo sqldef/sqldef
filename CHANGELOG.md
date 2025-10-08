@@ -1,3 +1,6 @@
+## [v3.1.12](https://github.com/sqldef/sqldef/compare/v3.1.11...v3.1.12) - 2025-10-08
+- [CI] notify a release to sqldef-preiew-action by @gfx in https://github.com/sqldef/sqldef/pull/856
+
 ## [v3.1.11](https://github.com/sqldef/sqldef/compare/v3.1.10...v3.1.11) - 2025-10-07
 - show readable error positions on syntax errors by @gfx in https://github.com/sqldef/sqldef/pull/848
 - update agent rules by @gfx in https://github.com/sqldef/sqldef/pull/850
