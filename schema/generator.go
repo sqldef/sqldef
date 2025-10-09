@@ -3,7 +3,8 @@ package schema
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
 	"reflect"
 	"regexp"
 	"slices"
@@ -1874,7 +1875,8 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 	for _, indexColumn := range index.columns {
 		column := g.escapeSQLName(indexColumn.column)
 		if indexColumn.length != nil {
-			column += fmt.Sprintf("(%d)", *indexColumn.length)
+			// The length should be outside the backticks/quotes
+			column = fmt.Sprintf("%s(%d)", column, *indexColumn.length)
 		}
 		if indexColumn.direction == DescScr {
 			column += fmt.Sprintf(" %s", indexColumn.direction)
@@ -2940,13 +2942,49 @@ func (g *Generator) haveSameColumnDefinition(current Column, desired Column) boo
 	// Not examining AUTO_INCREMENT and UNIQUE KEY because it'll be added in a later stage
 	return g.haveSameDataType(current, desired) &&
 		(current.unsigned == desired.unsigned) &&
-		((current.notNull != nil && *current.notNull) == ((desired.notNull != nil && *desired.notNull) || desired.keyOption == ColumnKeyPrimary)) && // `PRIMARY KEY` implies `NOT NULL`
+		g.haveSameNullability(current, desired) &&
 		(current.timezone == desired.timezone) &&
 		// (current.check == desired.check) && /* workaround. CHECK handling in general should be improved later */
 		(desired.charset == "" || current.charset == desired.charset) && // detect change column only when set explicitly. TODO: can we calculate implicit charset?
 		(desired.collate == "" || current.collate == desired.collate) && // detect change column only when set explicitly. TODO: can we calculate implicit collate?
 		reflect.DeepEqual(current.onUpdate, desired.onUpdate) &&
 		reflect.DeepEqual(current.comment, desired.comment)
+}
+
+func columnIsEffectivelyNotNull(col Column) bool {
+	// PRIMARY KEY implies NOT NULL
+	if col.keyOption == ColumnKeyPrimary {
+		return true
+	}
+	// Explicit NOT NULL
+	if col.notNull != nil && *col.notNull {
+		return true
+	}
+	return false
+}
+
+func (g *Generator) haveSameNullability(current Column, desired Column) bool {
+	currentNotNull := columnIsEffectivelyNotNull(current)
+	desiredNotNull := columnIsEffectivelyNotNull(desired)
+
+	// If desired doesn't specify nullability (nil), it means "use database default"
+	if desired.notNull == nil {
+		// For MySQL and MSSQL, unspecified nullability defaults to NULL (nullable) unless it's a PRIMARY KEY
+		if g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql {
+			// If desired will become a PRIMARY KEY, it should be NOT NULL
+			if desired.keyOption == ColumnKeyPrimary {
+				return currentNotNull == true
+			}
+			// Otherwise, unspecified means nullable in MySQL and MSSQL
+			// Current should be nullable (not NOT NULL)
+			// This means: if current is nullable (currentNotNull == false), they match
+			return !currentNotNull
+		}
+		// For other databases, if not specified, accept whatever current has
+		return true
+	}
+
+	return currentNotNull == desiredNotNull
 }
 
 func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
@@ -3332,7 +3370,111 @@ func areSameIdentityDefinition(identityA *Identity, identityB *Identity) bool {
 	return identityA.behavior == identityB.behavior && identityA.notForReplication == identityB.notForReplication
 }
 
+// removeAllOuterParentheses removes all outer parentheses from a string
+// e.g., "(('text'))" -> "'text'", "((20))" -> "20", "(”)" -> "”"
+func removeAllOuterParentheses(s string) string {
+	s = strings.TrimSpace(s)
+	for len(s) >= 2 && s[0] == '(' && s[len(s)-1] == ')' {
+		s = strings.TrimSpace(s[1 : len(s)-1])
+	}
+	return s
+}
+
 func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desiredDefault *DefaultDefinition) bool {
+
+	// For MySQL and PostgreSQL, if desired has no default (nil) and current has DEFAULT NULL,
+	// treat them as the same (this is the implicit default for nullable columns)
+	if g.mode == GeneratorModeMysql || g.mode == GeneratorModePostgres {
+		if desiredDefault == nil && currentDefault != nil {
+			// Check if current has DEFAULT NULL (either as value or expression)
+			if isNullValue(currentDefault.value) ||
+				(currentDefault.value == nil && strings.ToLower(currentDefault.expression) == "null") {
+				return true
+			}
+		}
+		// Also handle the reverse: current is nil, desired has DEFAULT NULL
+		if currentDefault == nil && desiredDefault != nil {
+			if isNullValue(desiredDefault.value) ||
+				(desiredDefault.value == nil && strings.ToLower(desiredDefault.expression) == "null") {
+				return true
+			}
+		}
+	}
+
+	// Special case for PostgreSQL: handle null with type cast
+	if g.mode == GeneratorModePostgres {
+		// If one has "null" as value and the other has "null::type" as expression
+		if currentDefault != nil && desiredDefault != nil {
+			currentIsNull := isNullValue(currentDefault.value) ||
+				(currentDefault.expression != "" && strings.HasPrefix(strings.ToLower(currentDefault.expression), "null::"))
+			desiredIsNull := isNullValue(desiredDefault.value) ||
+				(desiredDefault.expression != "" && strings.HasPrefix(strings.ToLower(desiredDefault.expression), "null::"))
+
+			if currentIsNull && desiredIsNull {
+				return true
+			}
+		}
+	}
+
+	// Both nil means no default specified - they're the same
+	if currentDefault == nil && desiredDefault == nil {
+		return true
+	}
+
+	// One nil, one not nil - already handled MySQL DEFAULT NULL case above
+	if currentDefault == nil || desiredDefault == nil {
+		// Otherwise they're different
+		return false
+	}
+
+	// For MSSQL: apply special comparison logic due to parenthesization differences
+	if g.mode == GeneratorModeMssql {
+		currentHasAutoName := currentDefault.constraintName != "" && strings.HasPrefix(currentDefault.constraintName, "DF__")
+
+		// For non-auto-generated names, constraint names must match
+		if !currentHasAutoName {
+			if currentDefault.constraintName != desiredDefault.constraintName {
+				return false
+			}
+		}
+		// For auto-generated names, we ignore constraint name differences and only compare values
+
+		// Get string representations of both defaults for comparison
+		var currentStr, desiredStr string
+
+		// Current default - use strVal if available (for string literals), otherwise raw
+		if currentDefault.value != nil && !isNullValue(currentDefault.value) {
+			if currentDefault.value.valueType == ValueTypeStr {
+				// For string values, use the strVal which contains the actual string content
+				currentStr = StringConstant(currentDefault.value.strVal)
+			} else {
+				currentStr = string(currentDefault.value.raw)
+			}
+		} else if currentDefault.expression != "" {
+			currentStr = currentDefault.expression
+		}
+
+		// Desired default - use strVal if available (for string literals), otherwise raw
+		if desiredDefault.value != nil && !isNullValue(desiredDefault.value) {
+			if desiredDefault.value.valueType == ValueTypeStr {
+				// For string values, use the strVal which contains the actual string content
+				desiredStr = StringConstant(desiredDefault.value.strVal)
+			} else {
+				desiredStr = string(desiredDefault.value.raw)
+			}
+		} else if desiredDefault.expression != "" {
+			desiredStr = desiredDefault.expression
+		}
+
+		// Normalize for comparison: MSSQL wraps defaults in parentheses
+		// Remove ALL outer parentheses from both values for comparison
+		currentStr = removeAllOuterParentheses(currentStr)
+		desiredStr = removeAllOuterParentheses(desiredStr)
+
+		return strings.EqualFold(currentStr, desiredStr)
+	}
+
+	// Both have defaults - compare values
 	var currentVal *Value
 	var desiredVal *Value
 	if currentDefault != nil && !isNullValue(currentDefault.value) {
@@ -3341,19 +3483,245 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 	if desiredDefault != nil && !isNullValue(desiredDefault.value) {
 		desiredVal = desiredDefault.value
 	}
+
+	// Special case for MySQL: if one has a numeric value and the other has an expression
+	// representing the same number, consider them equal
+	if g.mode == GeneratorModeMysql {
+		// Case 1: current has value, desired has expression
+		if currentVal != nil && desiredVal == nil && desiredDefault != nil && desiredDefault.expression != "" {
+			// Try to compare the numeric value with the expression
+			// Note: Decimal values from MySQL are stored as ValueTypeStr
+			if currentVal.valueType == ValueTypeFloat || currentVal.valueType == ValueTypeInt || currentVal.valueType == ValueTypeStr {
+				// Compare the string representation of the value with the expression
+				// Normalize both for comparison
+				currentStr := strings.TrimSpace(string(currentVal.raw))
+				desiredStr := strings.TrimSpace(desiredDefault.expression)
+				// Remove trailing zeros for decimal comparison
+				currentStr = strings.TrimRight(strings.TrimRight(currentStr, "0"), ".")
+				desiredStr = strings.TrimRight(strings.TrimRight(desiredStr, "0"), ".")
+				// Also handle negative numbers with different formats
+				if currentStr == desiredStr || currentStr == "-"+desiredStr || "-"+currentStr == desiredStr {
+					// The values match, they're the same default
+					return true
+				}
+			}
+		}
+		// Case 2: desired has value, current has expression
+		if desiredVal != nil && currentVal == nil && currentDefault != nil && currentDefault.expression != "" {
+			// Similar logic but reversed
+			// Note: Decimal values are stored as ValueTypeStr
+			if desiredVal.valueType == ValueTypeFloat || desiredVal.valueType == ValueTypeInt || desiredVal.valueType == ValueTypeStr {
+				desiredStr := strings.TrimSpace(string(desiredVal.raw))
+				currentStr := strings.TrimSpace(currentDefault.expression)
+				desiredStr = strings.TrimRight(strings.TrimRight(desiredStr, "0"), ".")
+				currentStr = strings.TrimRight(strings.TrimRight(currentStr, "0"), ".")
+				if currentStr == desiredStr || currentStr == "-"+desiredStr || "-"+currentStr == desiredStr {
+					// The values match, they're the same default
+					return true
+				}
+			}
+		}
+	}
+
 	if !g.areSameValue(currentVal, desiredVal) {
 		return false
 	}
 
-	var currentExprSchema, currentExpr string
-	var desiredExprSchema, desiredExpr string
-	if currentDefault != nil {
+	// Compare expressions using AST if available
+	if currentDefault != nil && desiredDefault != nil {
+		// If both have AST, use AST comparison
+		if currentDefault.expressionAST != nil && desiredDefault.expressionAST != nil {
+			return g.expressionsEqual(currentDefault.expressionAST, desiredDefault.expressionAST)
+		}
+
+		slog.Debug("Default comparison",
+			"current_has_ast", currentDefault.expressionAST != nil,
+			"desired_has_ast", desiredDefault.expressionAST != nil,
+			"current_expr", currentDefault.expression,
+			"desired_expr", desiredDefault.expression)
+
+		// Fallback to string comparison with normalization
+		var currentExprSchema, currentExpr string
+		var desiredExprSchema, desiredExpr string
 		currentExprSchema, currentExpr = splitTableName(currentDefault.expression, g.defaultSchema)
-	}
-	if desiredDefault != nil {
+		// Normalize function expressions
+		currentExpr = g.normalizeDefaultExpression(currentExpr)
+
 		desiredExprSchema, desiredExpr = splitTableName(desiredDefault.expression, g.defaultSchema)
+		// Normalize function expressions
+		desiredExpr = g.normalizeDefaultExpression(desiredExpr)
+
+		return strings.EqualFold(currentExprSchema, desiredExprSchema) && strings.EqualFold(currentExpr, desiredExpr)
 	}
-	return strings.EqualFold(currentExprSchema, desiredExprSchema) && strings.EqualFold(currentExpr, desiredExpr)
+
+	// If only one has default, they're different
+	return currentDefault == nil && desiredDefault == nil
+}
+
+// normalizeExpressionAST normalizes an expression AST for comparison
+func (g *Generator) normalizeExpressionAST(expr parser.Expr) parser.Expr {
+	if expr == nil {
+		return nil
+	}
+
+	switch e := expr.(type) {
+	case *parser.ParenExpr:
+		// Unwrap parentheses around simple expressions
+		inner := g.normalizeExpressionAST(e.Expr)
+		// Check if the inner expression is simple (not a binary expression)
+		if !isComplexExpression(inner) {
+			return inner
+		}
+		return &parser.ParenExpr{Expr: inner}
+
+	case *parser.FuncExpr:
+		// Normalize function names to lowercase
+		funcName := strings.ToLower(e.Name.String())
+
+		// Normalize timestamp functions
+		if funcName == "now" {
+			// Convert NOW() to CURRENT_TIMESTAMP (represented as a ColName)
+			return &parser.ColName{Name: parser.NewColIdent("current_timestamp")}
+		}
+		if funcName == "current_timestamp" {
+			// Return as a ColName without parentheses
+			return &parser.ColName{Name: parser.NewColIdent("current_timestamp")}
+		}
+
+		// Strip schema qualifier if it matches the default schema
+		// PostgreSQL strips schema prefixes from function defaults when the function is in the default schema
+		qualifier := e.Qualifier
+		if g.mode == GeneratorModePostgres && qualifier.String() != "" {
+			if strings.EqualFold(qualifier.String(), g.defaultSchema) {
+				qualifier = parser.NewTableIdent("")
+			}
+		}
+
+		// For other functions, normalize the name but keep the structure
+		return &parser.FuncExpr{
+			Qualifier: qualifier,
+			Name:      parser.NewColIdent(funcName),
+			Distinct:  e.Distinct,
+			Exprs:     e.Exprs,
+			Over:      e.Over,
+		}
+
+	case *parser.ColName:
+		// Normalize column/constant names to lowercase
+		name := strings.ToLower(e.Name.String())
+		// Handle special cases for timestamp constants
+		if name == "current_timestamp()" || name == "now()" {
+			name = "current_timestamp"
+		}
+		return &parser.ColName{
+			Name:      parser.NewColIdent(name),
+			Qualifier: e.Qualifier,
+			Metadata:  e.Metadata,
+		}
+
+	case *parser.UnaryExpr:
+		// For unary expressions like -20, normalize the inner expression
+		return &parser.UnaryExpr{
+			Operator: e.Operator,
+			Expr:     g.normalizeExpressionAST(e.Expr),
+		}
+
+	case *parser.BinaryExpr:
+		// Normalize both sides of binary expressions
+		return &parser.BinaryExpr{
+			Operator: e.Operator,
+			Left:     g.normalizeExpressionAST(e.Left),
+			Right:    g.normalizeExpressionAST(e.Right),
+		}
+
+	case *parser.CastExpr:
+		// For cast expressions like null::character varying
+		return &parser.CastExpr{
+			Expr: g.normalizeExpressionAST(e.Expr),
+			Type: e.Type,
+		}
+
+	case *parser.SQLVal, *parser.NullVal, parser.BoolVal:
+		// These are leaf nodes, return as-is
+		return expr
+
+	default:
+		// For any other expression types, return as-is
+		return expr
+	}
+}
+
+// isComplexExpression checks if an expression is complex (contains operators)
+func isComplexExpression(expr parser.Expr) bool {
+	switch expr.(type) {
+	case *parser.BinaryExpr:
+		// Binary expressions with operators are complex
+		return true
+	default:
+		return false
+	}
+}
+
+// expressionsEqual compares two normalized expression ASTs
+func (g *Generator) expressionsEqual(expr1, expr2 parser.Expr) bool {
+	// Normalize both expressions
+	norm1 := g.normalizeExpressionAST(expr1)
+	norm2 := g.normalizeExpressionAST(expr2)
+
+	// Convert to string for comparison
+	// This is a simplification - ideally we'd do deep AST comparison
+	str1 := ""
+	str2 := ""
+	if norm1 != nil {
+		str1 = strings.ToLower(parser.String(norm1))
+	}
+	if norm2 != nil {
+		str2 = strings.ToLower(parser.String(norm2))
+	}
+
+	return str1 == str2
+}
+
+func (g *Generator) normalizeDefaultExpression(expr string) string {
+	if expr == "" {
+		return expr
+	}
+
+	// For backward compatibility, still do string normalization
+	// This is used when we don't have AST available
+	normalized := strings.ToLower(strings.TrimSpace(expr))
+
+	// Common MySQL timestamp function normalizations
+	// now() and current_timestamp are equivalent
+	if normalized == "now()" || normalized == "(now())" {
+		normalized = "current_timestamp"
+	}
+	// current_timestamp() with parens is same as without
+	if normalized == "current_timestamp()" || normalized == "(current_timestamp())" {
+		normalized = "current_timestamp"
+	}
+	// Remove outer parentheses if present
+	if strings.HasPrefix(normalized, "(") && strings.HasSuffix(normalized, ")") {
+		inner := normalized[1 : len(normalized)-1]
+		// Check if it's a simple value (including negative numbers) vs complex expression
+		// A negative number starts with - but doesn't have operators in the middle
+		isNegativeNumber := strings.HasPrefix(inner, "-") &&
+			!strings.Contains(inner[1:], "+") &&
+			!strings.Contains(inner[1:], "-") &&
+			!strings.Contains(inner[1:], "*") &&
+			!strings.Contains(inner[1:], "/")
+		// It's simple if it has no operators, or if it's just a negative number
+		isSimpleExpression := (!strings.Contains(inner, "+") &&
+			!strings.Contains(inner, "-") &&
+			!strings.Contains(inner, "*") &&
+			!strings.Contains(inner, "/")) || isNegativeNumber
+
+		if isSimpleExpression {
+			normalized = inner
+		}
+	}
+
+	return normalized
 }
 
 func (g *Generator) areSameValue(current, desired *Value) bool {
@@ -3743,7 +4111,7 @@ func removeTableByName(tables []*Table, name string) []*Table {
 	}
 
 	if !removed {
-		log.Fatalf("Failed to removeTableByName: Table `%s` is not found in `%v`", name, tables)
+		panic(fmt.Sprintf("Failed to removeTableByName: Table `%s` is not found in `%v`", name, tables))
 	}
 	return ret
 }
@@ -3787,14 +4155,27 @@ func generateSequenceClause(sequence *Sequence) string {
 func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinition) (string, error) {
 	if defaultDefinition.value != nil {
 		defaultVal := defaultDefinition.value
+		slog.Debug("generateDefaultDefinition value",
+			"type", defaultVal.valueType,
+			"intVal", defaultVal.intVal,
+			"floatVal", defaultVal.floatVal,
+		)
 		switch defaultVal.valueType {
 		case ValueTypeStr:
 			return fmt.Sprintf("DEFAULT %s", StringConstant(defaultVal.strVal)), nil
 		case ValueTypeBool:
 			return fmt.Sprintf("DEFAULT %s", defaultVal.strVal), nil
 		case ValueTypeInt:
+			// MySQL requires parentheses for negative numbers
+			if g.mode == GeneratorModeMysql && defaultVal.intVal < 0 {
+				return fmt.Sprintf("DEFAULT(%d)", defaultVal.intVal), nil
+			}
 			return fmt.Sprintf("DEFAULT %d", defaultVal.intVal), nil
 		case ValueTypeFloat:
+			// MySQL requires parentheses for negative numbers
+			if g.mode == GeneratorModeMysql && defaultVal.floatVal < 0 {
+				return fmt.Sprintf("DEFAULT(%f)", defaultVal.floatVal), nil
+			}
 			return fmt.Sprintf("DEFAULT %f", defaultVal.floatVal), nil
 		case ValueTypeBit:
 			if defaultVal.bitVal {
@@ -3803,16 +4184,60 @@ func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinitio
 				return "DEFAULT b'0'", nil
 			}
 		case ValueTypeValArg: // NULL, CURRENT_TIMESTAMP, ...
+			// Special handling for null to avoid parentheses
+			if strings.EqualFold(string(defaultVal.raw), "null") {
+				return "DEFAULT null", nil
+			}
 			return fmt.Sprintf("DEFAULT %s", string(defaultVal.raw)), nil
 		default:
 			return "", fmt.Errorf("unsupported default value type (valueType: '%d')", defaultVal.valueType)
 		}
 	} else if defaultDefinition.expression != "" {
 		if g.mode == GeneratorModeMysql || g.mode == GeneratorModeSQLite3 {
-			// Enclose expression with parentheses to avoid syntax error
-			// https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html#data-type-defaults-explicit
-			// https://www.sqlite.org/syntax/column-constraint.html
-			return fmt.Sprintf("DEFAULT(%s)", defaultDefinition.expression), nil
+			// MySQL doesn't need parentheses for certain common expressions
+			expr := strings.ToLower(strings.TrimSpace(defaultDefinition.expression))
+			needsParens := true
+
+			slog.Debug("generateDefaultDefinition",
+				"expression", defaultDefinition.expression,
+				"expr", expr,
+				"needsParens", needsParens,
+			)
+
+			// Check if this is a simple function call or constant that doesn't need parens
+			if strings.HasPrefix(expr, "current_timestamp") ||
+				strings.HasPrefix(expr, "now()") ||
+				strings.HasPrefix(expr, "curdate") ||
+				strings.HasPrefix(expr, "curtime") ||
+				strings.HasPrefix(expr, "localtime") ||
+				strings.HasPrefix(expr, "localtimestamp") ||
+				strings.HasPrefix(expr, "utc_date") ||
+				strings.HasPrefix(expr, "utc_time") ||
+				strings.HasPrefix(expr, "utc_timestamp") ||
+				strings.HasPrefix(expr, "uuid()") ||
+				expr == "null" { // null should not have parentheses
+				needsParens = false
+			}
+
+			// For negative numbers in expression form, MySQL needs parentheses
+			// This handles cases like "- 20" or "-20.0"
+			if strings.HasPrefix(expr, "-") || strings.HasPrefix(expr, "- ") {
+				// It's a negative number, needs parentheses in MySQL
+				needsParens = true
+			}
+
+			if needsParens {
+				// Enclose expression with parentheses to avoid syntax error
+				// https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html#data-type-defaults-explicit
+				// https://www.sqlite.org/syntax/column-constraint.html
+				return fmt.Sprintf("DEFAULT(%s)", defaultDefinition.expression), nil
+			} else {
+				// Special case for null to ensure consistent casing
+				if expr == "null" {
+					return "DEFAULT null", nil
+				}
+				return fmt.Sprintf("DEFAULT %s", defaultDefinition.expression), nil
+			}
 		} else {
 			return fmt.Sprintf("DEFAULT %s", defaultDefinition.expression), nil
 		}
@@ -4242,4 +4667,27 @@ func transformSlice[T any, R any](in []T, converter func(T) R) []R {
 		out[i] = converter(v)
 	}
 	return out
+}
+
+func init() {
+	level := slog.LevelWarn
+
+	if logLevel, ok := os.LookupEnv("LOG_LEVEL"); ok {
+		switch strings.ToLower(logLevel) {
+		case "debug":
+			level = slog.LevelDebug
+		case "info":
+			level = slog.LevelInfo
+		case "warn":
+			level = slog.LevelWarn
+		case "error":
+			level = slog.LevelError
+		}
+	}
+
+	opts := &slog.HandlerOptions{
+		Level: level,
+	}
+	handler := slog.NewTextHandler(os.Stdout, opts)
+	slog.SetDefault(slog.New(handler))
 }

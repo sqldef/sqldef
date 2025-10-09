@@ -295,15 +295,44 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	for _, indexDef := range stmt.TableSpec.Indexes {
 		indexColumns := []IndexColumn{}
 		for _, column := range indexDef.Columns {
-			length, err := parseLength(column.Length)
-			if err != nil {
-				return Table{}, err
+			var columnName string
+			var length *int
+
+			// Check if this is a function expression that's actually a column with length
+			// e.g., name(255) gets parsed as a function call but should be treated as column with length
+			if column.Expression != nil {
+				if funcExpr, ok := column.Expression.(*parser.FuncExpr); ok &&
+					funcExpr.Name.String() != "" &&
+					len(funcExpr.Exprs) == 1 {
+					// This looks like column(length) - extract the column name and length
+					columnName = funcExpr.Name.String()
+					// Try to extract the numeric length from the argument
+					if aliasedExpr, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
+						if sqlVal, ok := aliasedExpr.Expr.(*parser.SQLVal); ok && sqlVal.Type == parser.IntVal {
+							lengthVal := string(sqlVal.Val)
+							if l, err := strconv.Atoi(lengthVal); err == nil {
+								length = &l
+							}
+						}
+					}
+				} else {
+					// It's a genuine expression, use column.String() which will use the expression
+					columnName = column.String()
+				}
+			} else {
+				// Normal column with optional length
+				columnName = column.String()
+				var err error
+				length, err = parseLength(column.Length)
+				if err != nil {
+					return Table{}, err
+				}
 			}
 
 			indexColumns = append(
 				indexColumns,
 				IndexColumn{
-					column:    column.String(),
+					column:    columnName,
 					length:    length,
 					direction: column.Direction,
 				},
@@ -313,7 +342,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			// MSSQL: https://learn.microsoft.com/en-us/sql/relational-databases/tables/create-primary-keys#limitations
 			// MySQL: https://dev.mysql.com/doc/refman/8.4/en/create-table.html
 			if indexDef.Info.Primary && (mode == GeneratorModeMssql || mode == GeneratorModeMysql) {
-				if column, ok := columns[column.Column.String()]; ok {
+				if column, ok := columns[columnName]; ok {
 					val := true
 					column.notNull = &val
 				}
@@ -458,15 +487,44 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 
 	indexColumns := []IndexColumn{}
 	for _, column := range stmt.IndexCols {
-		length, err := parseLength(column.Length)
-		if err != nil {
-			return Index{}, err
+		var columnName string
+		var length *int
+
+		// Check if this is a function expression that's actually a column with length
+		// e.g., name(255) gets parsed as a function call but should be treated as column with length
+		if column.Expression != nil {
+			if funcExpr, ok := column.Expression.(*parser.FuncExpr); ok &&
+				funcExpr.Name.String() != "" &&
+				len(funcExpr.Exprs) == 1 {
+				// This looks like column(length) - extract the column name and length
+				columnName = funcExpr.Name.String()
+				// Try to extract the numeric length from the argument
+				if aliasedExpr, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
+					if sqlVal, ok := aliasedExpr.Expr.(*parser.SQLVal); ok && sqlVal.Type == parser.IntVal {
+						lengthVal := string(sqlVal.Val)
+						if l, err := strconv.Atoi(lengthVal); err == nil {
+							length = &l
+						}
+					}
+				}
+			} else {
+				// It's a genuine expression, use column.String() which will use the expression
+				columnName = column.String()
+			}
+		} else {
+			// Normal column with optional length
+			columnName = column.String()
+			var err error
+			length, err = parseLength(column.Length)
+			if err != nil {
+				return Index{}, err
+			}
 		}
 
 		indexColumns = append(
 			indexColumns,
 			IndexColumn{
-				column:    column.String(),
+				column:    columnName,
 				length:    length,
 				direction: column.Direction,
 			},
@@ -635,8 +693,16 @@ func parseDefaultDefinition(opt *parser.DefaultDefinition) *DefaultDefinition {
 		defaultVal := parseValue(opt.ValueOrExpression.Value)
 		return &DefaultDefinition{constraintName: constraintName, value: defaultVal}
 	} else {
-		defaultExpr := parser.String(opt.ValueOrExpression.Expr)
-		return &DefaultDefinition{constraintName: constraintName, expression: defaultExpr}
+		expr := opt.ValueOrExpression.Expr
+		// Store the original AST before unwrapping
+		originalExpr := expr
+		// Unwrap ParenExpr for MySQL compatibility
+		// MySQL doesn't accept parentheses around DEFAULT expressions in most cases
+		if parenExpr, ok := expr.(*parser.ParenExpr); ok {
+			expr = parenExpr.Expr
+		}
+		defaultExpr := parser.String(expr)
+		return &DefaultDefinition{constraintName: constraintName, expression: defaultExpr, expressionAST: originalExpr}
 	}
 }
 

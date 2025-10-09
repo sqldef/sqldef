@@ -158,6 +158,7 @@ var keywords = map[string]int{
 	"current_user":           CURRENT_USER,
 	"cursor":                 CURSOR,
 	"cycle":                  CYCLE,
+	"data":                   DATA,
 	"database":               DATABASE,
 	"databases":              DATABASES,
 	"day_hour":               UNUSED,
@@ -197,12 +198,14 @@ var keywords = map[string]int{
 	"euclidean":              EUCLIDEAN,
 	"escape":                 ESCAPE,
 	"escaped":                UNUSED,
+	"exclude":                EXCLUDE,
 	"exists":                 EXISTS,
 	"exec":                   EXEC,
 	"execute":                EXECUTE,
 	"exit":                   UNUSED,
 	"explain":                EXPLAIN,
 	"expansion":              EXPANSION,
+	"extension":              EXTENSION,
 	"extended":               EXTENDED,
 	"false":                  FALSE,
 	"fetch":                  FETCH,
@@ -222,7 +225,7 @@ var keywords = map[string]int{
 	"get":                    UNUSED,
 	"getdate":                GETDATE,
 	"global":                 GLOBAL,
-	"grant":                  UNUSED,
+	"grant":                  GRANT,
 	"group":                  GROUP,
 	"group_concat":           GROUP_CONCAT,
 	"having":                 HAVING,
@@ -332,7 +335,7 @@ var keywords = map[string]int{
 	"open":                   OPEN,
 	"optimize":               OPTIMIZE,
 	"optimizer_costs":        UNUSED,
-	"option":                 UNUSED,
+	"option":                 OPTION,
 	"optionally":             UNUSED,
 	"or":                     OR,
 	"order":                  ORDER,
@@ -352,6 +355,7 @@ var keywords = map[string]int{
 	"precision":              PRECISION,
 	"primary":                PRIMARY,
 	"prior":                  PRIOR,
+	"privileges":             PRIVILEGES,
 	"processlist":            PROCESSLIST,
 	"procedure":              PROCEDURE,
 	"query":                  QUERY,
@@ -376,7 +380,7 @@ var keywords = map[string]int{
 	"resignal":               UNUSED,
 	"restrict":               RESTRICT,
 	"return":                 RETURN,
-	"revoke":                 UNUSED,
+	"revoke":                 REVOKE,
 	"right":                  RIGHT,
 	"rlike":                  REGEXP,
 	"rollback":               ROLLBACK,
@@ -707,6 +711,10 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 				return tkn.scanLiteralIdentifier(']')
 			}
 			if tkn.mode == ParserModePostgres && ch == '~' {
+				if tkn.lastChar == '~' {
+					tkn.next()
+					return LIKE, nil
+				}
 				if tkn.lastChar == '*' {
 					tkn.next()
 					return POSIX_REGEX_CI, nil
@@ -802,11 +810,20 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 		case '!':
 			if tkn.mode == ParserModePostgres {
 				if tkn.lastChar == '~' {
-					tkn.next()
-					if tkn.lastChar == '*' {
+					// Peek ahead to check for !~~ vs !~ vs !~*
+					savedPos := tkn.bufPos
+					savedLastChar := tkn.lastChar
+					tkn.next() // consume first ~
+					if tkn.lastChar == '~' {
+						// It's !~~ - restore position and return ! only
+						tkn.bufPos = savedPos
+						tkn.lastChar = savedLastChar
+						return int('!'), nil
+					} else if tkn.lastChar == '*' {
 						tkn.next()
 						return POSIX_NOT_REGEX_CI, nil
 					}
+					// It's just !~
 					return POSIX_NOT_REGEX, nil
 				}
 			}
