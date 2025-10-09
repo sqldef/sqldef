@@ -2555,13 +2555,10 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 		existingPrivilegesMap := make(map[string]bool)
 		for _, currentPriv := range g.currentPrivileges {
 			if currentPriv.tableName == desired.tableName {
-				for _, currentGrantee := range currentPriv.grantees {
-					if currentGrantee == grantee {
-						normalized := normalizePrivilegesForComparison(currentPriv.privileges)
-						for _, priv := range normalized {
-							existingPrivilegesMap[priv] = true
-						}
-						break
+				if slices.Contains(currentPriv.grantees, grantee) {
+					normalized := normalizePrivilegesForComparison(currentPriv.privileges)
+					for _, priv := range normalized {
+						existingPrivilegesMap[priv] = true
 					}
 				}
 			}
