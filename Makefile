@@ -92,5 +92,8 @@ format:
 lint:
 	go vet ./...
 
+modernize:
+	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix ./...
+
 touch:
 	touch parser/parser.y

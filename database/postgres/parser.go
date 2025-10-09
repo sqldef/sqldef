@@ -466,9 +466,9 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 	case *pgquery.Node_AConst:
 		switch cNode := node.AConst.Val.(type) {
 		case *pgquery.A_Const_Ival:
-			return parser.NewIntVal([]byte(fmt.Sprint(cNode.Ival.Ival))), nil
+			return parser.NewIntVal(fmt.Append(nil, cNode.Ival.Ival)), nil
 		case *pgquery.A_Const_Fval:
-			return parser.NewFloatVal([]byte(fmt.Sprint(cNode.Fval.Fval))), nil
+			return parser.NewFloatVal(fmt.Append(nil, cNode.Fval.Fval)), nil
 		case *pgquery.A_Const_Boolval:
 			return parser.NewBoolVal(cNode.Boolval.Boolval), nil
 		case *pgquery.A_Const_Sval:
@@ -596,7 +596,7 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 			Exprs:     exprs,
 		}, nil
 	case *pgquery.Node_Integer:
-		return parser.NewIntVal([]byte(fmt.Sprint(node.Integer.Ival))), nil
+		return parser.NewIntVal(fmt.Append(nil, node.Integer.Ival)), nil
 	case *pgquery.Node_NullTest:
 		expr, err := p.parseExpr(node.NullTest.Arg)
 		if err != nil {

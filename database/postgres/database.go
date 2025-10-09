@@ -301,7 +301,7 @@ func (d *PostgresDatabase) types() ([]string, error) {
 			continue
 		}
 		enumLabels := []string{}
-		for _, label := range strings.Split(labels, " ") {
+		for label := range strings.SplitSeq(labels, " ") {
 			enumLabels = append(enumLabels, fmt.Sprintf("'%s'", label))
 		}
 		ddls = append(
@@ -1141,7 +1141,7 @@ func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
 	schema, tableName := splitTableName(table, d.GetDefaultSchema())
 
 	rolePlaceholders := make([]string, len(d.generatorConfig.ManagedRoles))
-	queryArgs := []interface{}{schema, tableName}
+	queryArgs := []any{schema, tableName}
 	for i, role := range d.generatorConfig.ManagedRoles {
 		rolePlaceholders[i] = fmt.Sprintf("$%d", i+3)
 		queryArgs = append(queryArgs, role)

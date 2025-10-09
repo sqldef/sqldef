@@ -33,7 +33,7 @@ type nodeBuffer struct {
 }
 
 // Printf mimics fmt.Fprintf(buf, ...), but limited to %s for string and %v for Node.
-func (buf *nodeBuffer) Printf(format string, values ...interface{}) {
+func (buf *nodeBuffer) Printf(format string, values ...any) {
 	end := len(format)
 	fieldnum := 0
 	for i := 0; i < end; {
@@ -1710,7 +1710,7 @@ func NewValArg(in []byte) *SQLVal {
 }
 
 func NewBoolSQLVal(in bool) *SQLVal {
-	return &SQLVal{Type: ValBool, Val: []byte(fmt.Sprintf("%t", in))}
+	return &SQLVal{Type: ValBool, Val: fmt.Appendf(nil, "%t", in)}
 }
 
 // NewUnicode builds a new UnicodeStrVal.
@@ -1794,7 +1794,7 @@ type ColName struct {
 	// It's a placeholder for analyzers to store
 	// additional data, typically info about which
 	// table or column this node references.
-	Metadata  interface{}
+	Metadata  any
 	Name      ColIdent
 	Qualifier TableName
 }
