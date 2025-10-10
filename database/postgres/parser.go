@@ -3,6 +3,8 @@ package postgres
 import (
 	"errors"
 	"fmt"
+	"log/slog"
+	"os"
 	"strings"
 
 	pgquery "github.com/pganalyze/pg_query_go/v6"
@@ -33,6 +35,11 @@ func NewParser() PostgresParser {
 }
 
 func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
+	if os.Getenv("PSQLDEF_PARSER") == "generic" {
+		slog.Debug("Using generic parser (PSQLDEF_PARSER=generic)")
+		return p.parser.Parse(sql)
+	}
+
 	// Workaround for comments (not needed?)
 	//re := regexp.MustCompilePOSIX("^ *--.*")
 	//sql = re.ReplaceAllString(sql, "")
@@ -59,6 +66,8 @@ func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
 			if _, ok := err.(validationError); ok {
 				return nil, err
 			}
+
+			slog.Warn("Falling back to generic parser", "ddl", ddl, "error", err.Error())
 
 			// Otherwise, fallback to the generic parser. We intend to deprecate this path in the future.
 			var stmts []database.DDLStatement
