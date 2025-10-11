@@ -262,10 +262,18 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			referenceColumns = append(referenceColumns, refCol.String())
 		}
 
-		// For PostgreSQL: REFERENCES keyword is ONLY used for foreign keys, never for custom types
-		// For other databases, we need to distinguish between FK and custom type references
-		isFK := mode == GeneratorModePostgres && parsedCol.Type.References != ""
-		if mode != GeneratorModePostgres {
+		// For PostgreSQL with generic parser: REFERENCES can be either:
+		// 1. A foreign key (when ReferenceNames is set or has FK-specific clauses)
+		// 2. A schema-qualified type (when References is set but no FK-specific fields)
+		// For pgquery parser: REFERENCES is ONLY used for foreign keys
+		isFK := false
+		if mode == GeneratorModePostgres {
+			// For PostgreSQL: it's a FK only if we have reference columns or FK-specific clauses
+			isFK = (len(referenceColumns) > 0 || parsedCol.Type.ReferenceOnDelete.String() != "" ||
+				parsedCol.Type.ReferenceOnUpdate.String() != "" ||
+				castBool(parsedCol.Type.ReferenceDeferrable) ||
+				castBool(parsedCol.Type.ReferenceInitiallyDeferred)) && parsedCol.Type.References != ""
+		} else {
 			// For non-PostgreSQL: check if it's a FK by looking at FK-specific fields
 			isFK = (len(referenceColumns) > 0 || parsedCol.Type.ReferenceOnDelete.String() != "" ||
 				parsedCol.Type.ReferenceOnUpdate.String() != "" ||
@@ -526,9 +534,16 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 				continue
 			}
 
-			// For PostgreSQL: REFERENCES keyword is ONLY used for foreign keys
-			// So if References is set, it's always a FK that needs to be converted to table-level
-			if parsedCol.Type.References != "" {
+			// For PostgreSQL: Only convert to FK if it's actually a foreign key
+			// Check for reference columns or FK-specific clauses to distinguish from schema-qualified types
+			hasReferenceColumns := len(parsedCol.Type.ReferenceNames) > 0
+			hasFKClauses := parsedCol.Type.ReferenceOnDelete.String() != "" ||
+				parsedCol.Type.ReferenceOnUpdate.String() != "" ||
+				castBool(parsedCol.Type.ReferenceDeferrable) ||
+				castBool(parsedCol.Type.ReferenceInitiallyDeferred)
+			isActualFK := (hasReferenceColumns || hasFKClauses) && parsedCol.Type.References != ""
+
+			if isActualFK {
 				// Generate constraint name: tablename_columnname_fkey
 				tableName := stmt.NewName.Name.String()
 				constraintName := tableName + "_" + column.name + "_fkey"
