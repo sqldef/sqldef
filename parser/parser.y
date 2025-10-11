@@ -2305,7 +2305,7 @@ default_definition:
   }
 
 default_val:
-  STRING character_cast_opt
+  STRING
   {
     $$ = NewStrVal($1)
   }
@@ -2329,7 +2329,7 @@ default_val:
   {
     $$ = NewFloatVal(append([]byte("-"), $2...))
   }
-| NULL character_cast_opt
+| NULL
   {
     $$ = NewValArg($1)
   }
@@ -4983,7 +4983,7 @@ new_qualifier_column_name:
   }
 
 value:
-  STRING character_cast_opt
+  STRING
   {
     $$ = NewStrVal($1)
   }
@@ -5457,7 +5457,7 @@ array_element_list:
 
 /* For PostgreSQL */
 array_element:
-  STRING character_cast_opt
+  STRING
   {
     $$ = NewStrVal($1)
   }

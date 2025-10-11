@@ -3206,7 +3206,7 @@ func unwrapOutermostParenExpr(expr parser.Expr) parser.Expr {
 func normalizeSelectAST(sel *parser.Select) *parser.Select {
 	return &parser.Select{
 		Cache:       sel.Cache,
-		Comments:    sel.Comments,
+		Comments:    nil, // Clear comments for normalization
 		Distinct:    sel.Distinct,
 		Hints:       sel.Hints,
 		SelectExprs: normalizeSelectExprsAST(sel.SelectExprs),
@@ -3404,38 +3404,92 @@ func normalizeExprForView(expr parser.Expr) parser.Expr {
 		}
 	case *parser.CastExpr:
 		normalizedExpr := normalizeExprForView(e.Expr)
-		// Remove unnecessary casts on literals
+		if e.Type == nil {
+			return normalizedExpr
+		}
+
+		typeName := strings.ToLower(e.Type.Type)
+
+		// Remove ::text casts - PostgreSQL adds these but they're redundant
+		if typeName == "text" {
+			return normalizedExpr
+		}
+
+		// Remove intermediate type casts like ::double precision
+		if typeName == "double precision" || typeName == "real" {
+			return normalizedExpr
+		}
+
+		// Remove unnecessary casts on numeric literals
 		if _, isLiteral := normalizedExpr.(*parser.SQLVal); isLiteral {
-			if e.Type != nil {
-				typeName := strings.ToLower(e.Type.Type)
-				// Remove common redundant casts
-				if typeName == "text" || typeName == "numeric" || typeName == "bigint" ||
-					typeName == "integer" || typeName == "smallint" || typeName == "real" ||
-					strings.Contains(typeName, "double") {
-					return normalizedExpr
-				}
+			// Remove common redundant numeric casts on literals
+			if typeName == "numeric" || typeName == "bigint" ||
+				typeName == "integer" || typeName == "smallint" {
+				return normalizedExpr
 			}
 		}
-		// Normalize type name to lowercase
-		var normalizedType *parser.ConvertType
-		if e.Type != nil {
-			normalizedType = &parser.ConvertType{
-				Type:     strings.ToLower(e.Type.Type),
-				Length:   e.Type.Length,
-				Scale:    e.Type.Scale,
-				Charset:  e.Type.Charset,
-				Operator: e.Type.Operator,
-			}
-		}
-		return &parser.CastExpr{
+
+		// Convert CAST(...) to :: syntax for consistency with PostgreSQL output
+		// PostgreSQL normalizes CAST to :: internally
+		return &parser.CollateExpr{
 			Expr: normalizedExpr,
-			Type: normalizedType,
+			Type: &parser.ColumnType{
+				Type:   typeName,
+				Length: e.Type.Length,
+				Scale:  e.Type.Scale,
+			},
 		}
 	case *parser.CollateExpr:
-		// Normalize collation to lowercase
-		return &parser.CollateExpr{
-			Expr:    normalizeExprForView(e.Expr),
-			Charset: strings.ToLower(e.Charset),
+		normalizedExpr := normalizeExprForView(e.Expr)
+		if e.Type != nil {
+			// This is a type cast (::type syntax)
+			typeName := strings.ToLower(e.Type.Type)
+
+			// Remove ::text cast from string literals
+			// PostgreSQL adds these but they're redundant
+			if typeName == "text" {
+				// Check if the normalized expression is a string literal
+				if sqlVal, ok := normalizedExpr.(*parser.SQLVal); ok {
+					if sqlVal.Type == parser.StrVal || sqlVal.Type == parser.HexVal {
+						return normalizedExpr
+					}
+				}
+				// Even if we're not sure it's a literal, ::text on text is redundant
+				// This handles cases where PostgreSQL adds ::text to string arguments
+				return normalizedExpr
+			}
+
+			// Remove intermediate type casts like ::double precision
+			// These are added by PostgreSQL but not in the original schema
+			if typeName == "double precision" || typeName == "real" {
+				return normalizedExpr
+			}
+
+			// Normalize type name to lowercase
+			normalizedType := &parser.ColumnType{
+				Type:   typeName,
+				Length: e.Type.Length,
+				Scale:  e.Type.Scale,
+				// Copy other relevant fields from ColumnType
+				NotNull:       e.Type.NotNull,
+				Autoincrement: e.Type.Autoincrement,
+				Default:       e.Type.Default,
+				Srid:          e.Type.Srid,
+				OnUpdate:      e.Type.OnUpdate,
+				Comment:       e.Type.Comment,
+				Check:         e.Type.Check,
+				Array:         e.Type.Array,
+			}
+			return &parser.CollateExpr{
+				Expr: normalizedExpr,
+				Type: normalizedType,
+			}
+		} else {
+			// This is a collation (COLLATE syntax)
+			return &parser.CollateExpr{
+				Expr:    normalizedExpr,
+				Charset: strings.ToLower(e.Charset),
+			}
 		}
 	case *parser.ParenExpr:
 		normalized := normalizeExprForView(e.Expr)
@@ -3516,8 +3570,14 @@ func normalizeExprForView(expr parser.Expr) parser.Expr {
 		if e.Else != nil {
 			normalizedElse = normalizeExprForView(e.Else)
 			// If ELSE is explicitly NULL, remove it (PostgreSQL adds this)
+			// Check for plain NULL or NULL::type (which becomes CollateExpr after normalization,
+			// but ::text casts are removed, so it should just be NullVal)
 			if _, ok := normalizedElse.(*parser.NullVal); ok {
 				normalizedElse = nil
+			} else if collate, ok := normalizedElse.(*parser.CollateExpr); ok {
+				if _, ok := collate.Expr.(*parser.NullVal); ok {
+					normalizedElse = nil
+				}
 			}
 		}
 

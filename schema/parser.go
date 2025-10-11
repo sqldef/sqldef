@@ -279,10 +279,23 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			references = normalizedTable(mode, parsedCol.Type.References, defaultSchema)
 		}
 
+		// Normalize PostgreSQL type aliases
+		typeName := parsedCol.Type.Type
+		timezone := castBool(parsedCol.Type.Timezone)
+		if mode == GeneratorModePostgres {
+			if typeName == "timestamptz" {
+				typeName = "timestamp"
+				timezone = true
+			} else if typeName == "timetz" {
+				typeName = "time"
+				timezone = true
+			}
+		}
+
 		column := Column{
 			name:          parsedCol.Name.String(),
 			position:      i,
-			typeName:      parsedCol.Type.Type,
+			typeName:      typeName,
 			unsigned:      castBool(parsedCol.Type.Unsigned),
 			notNull:       castBoolPtr(parsedCol.Type.NotNull),
 			autoIncrement: castBool(parsedCol.Type.Autoincrement),
@@ -294,7 +307,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			displayWidth:  parseValue(parsedCol.Type.DisplayWidth),
 			charset:       parsedCol.Type.Charset,
 			collate:       normalizeCollate(parsedCol.Type.Collate, *stmt.TableSpec),
-			timezone:      castBool(parsedCol.Type.Timezone),
+			timezone:      timezone,
 			keyOption:     ColumnKeyOption(parsedCol.Type.KeyOpt), // FIXME: tight coupling in enum order
 			onUpdate:      parseValue(parsedCol.Type.OnUpdate),
 			comment:       parseValue(parsedCol.Type.Comment),
@@ -352,8 +365,10 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 						}
 					}
 				} else {
-					// It's a genuine expression, use column.String() which will use the expression
-					columnName = column.String()
+					// It's a genuine expression
+					// Normalize by removing unnecessary parentheses
+					normalized := normalizeExpressionParens(column.Expression)
+					columnName = parser.String(normalized)
 				}
 			} else {
 				// Normal column with optional length
@@ -589,8 +604,10 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 					}
 				}
 			} else {
-				// It's a genuine expression, use column.String() which will use the expression
-				columnName = column.String()
+				// It's a genuine expression
+				// Normalize by removing unnecessary parentheses
+				normalized := normalizeExpressionParens(column.Expression)
+				columnName = parser.String(normalized)
 			}
 		} else {
 			// Normal column with optional length
@@ -849,6 +866,72 @@ func parseGenerated(genc *parser.GeneratedColumn) *Generated {
 	return &Generated{
 		expr:          parser.String(genc.Expr),
 		generatedType: typ,
+	}
+}
+
+// normalizeExpressionParens recursively removes unnecessary ParenExpr nodes from an expression tree
+// PostgreSQL adds parentheses around certain expressions (like IS TRUE) which we need to normalize for comparison
+func normalizeExpressionParens(expr parser.Expr) parser.Expr {
+	if expr == nil {
+		return nil
+	}
+
+	switch e := expr.(type) {
+	case *parser.ParenExpr:
+		// Recursively normalize the inner expression first
+		normalized := normalizeExpressionParens(e.Expr)
+
+		// Remove parentheses around certain expressions that don't need them
+		switch normalized.(type) {
+		case *parser.IsExpr, *parser.ColName, *parser.SQLVal:
+			// These don't need parentheses
+			return normalized
+		default:
+			// Keep the parentheses for other expressions
+			return &parser.ParenExpr{Expr: normalized}
+		}
+
+	case *parser.CaseExpr:
+		// Normalize WHEN conditions and values
+		normalizedWhens := make([]*parser.When, len(e.Whens))
+		for i, when := range e.Whens {
+			normalizedWhens[i] = &parser.When{
+				Cond: normalizeExpressionParens(when.Cond),
+				Val:  normalizeExpressionParens(when.Val),
+			}
+		}
+		return &parser.CaseExpr{
+			Expr:  normalizeExpressionParens(e.Expr),
+			Whens: normalizedWhens,
+			Else:  normalizeExpressionParens(e.Else),
+		}
+
+	case *parser.BinaryExpr:
+		return &parser.BinaryExpr{
+			Operator: e.Operator,
+			Left:     normalizeExpressionParens(e.Left),
+			Right:    normalizeExpressionParens(e.Right),
+		}
+
+	case *parser.UnaryExpr:
+		return &parser.UnaryExpr{
+			Operator: e.Operator,
+			Expr:     normalizeExpressionParens(e.Expr),
+		}
+
+	case *parser.ComparisonExpr:
+		return &parser.ComparisonExpr{
+			Operator: e.Operator,
+			Left:     normalizeExpressionParens(e.Left),
+			Right:    normalizeExpressionParens(e.Right),
+			Escape:   normalizeExpressionParens(e.Escape),
+			All:      e.All,
+			Any:      e.Any,
+		}
+
+	default:
+		// For other expression types, return as-is
+		return expr
 	}
 }
 
