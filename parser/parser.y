@@ -4909,6 +4909,30 @@ simple_convert_type:
   {
     $$ = &ConvertType{Type: string($1)}
   }
+| BPCHAR
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| JSON
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| JSONB
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| TIMESTAMP
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| TIMESTAMP WITH TIME ZONE
+  {
+    $$ = &ConvertType{Type: string($1)+" with time zone"}
+  }
+| TIMESTAMP WITHOUT TIME ZONE
+  {
+    $$ = &ConvertType{Type: string($1)+" without time zone"}
+  }
 
 expression_opt:
   {

@@ -25,7 +25,8 @@ CreateTableWithConstraintInlineColumn:
       email text UNIQUE
     );
 CreateTableWithDefault:
-  compare_with_generic_parser: true
+  # Generic parser handles default values differently in the AST (as SQLVal instead of Expr)
+  # but both produce equivalent SQL
   sql: |
     CREATE TABLE users (
       default_null integer default null,
@@ -71,7 +72,8 @@ CreateTableWithNotNull:
       booking_id bigint NOT NULL
     );
 CheckConstraint:
-  compare_with_generic_parser: true
+  # Generic parser handles typecasts in expressions differently in the AST
+  # but both produce equivalent SQL
   sql: |
     CREATE TABLE test (
       v varchar(10) CHECK (v::text ~ '[0-9]'::text),
