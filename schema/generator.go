@@ -30,6 +30,7 @@ var (
 		"int":     "integer",
 		"char":    "character",
 		"varchar": "character varying",
+		"decimal": "numeric",
 	}
 	mysqlDataTypeAliases = map[string]string{
 		"boolean": "tinyint",
@@ -1790,6 +1791,17 @@ func (g *Generator) generateDataType(column Column) string {
 
 	// Determine the full type name including schema qualification
 	typeName := column.typeName
+
+	// Normalize PostgreSQL type names to match what format_type() returns
+	if g.mode == GeneratorModePostgres {
+		switch strings.ToLower(typeName) {
+		case "int":
+			typeName = "integer"
+		case "decimal":
+			typeName = "numeric"
+		}
+	}
+
 	// Only qualify type names with schema for PostgreSQL when:
 	// 1. references is not empty and not just "public."
 	// 2. the type name doesn't already contain a dot
@@ -3915,9 +3927,9 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 		// The parser stores DATE '...' literals as StrVal with "date " prefix
 		if e.Type == parser.StrVal {
 			valStr := string(e.Val)
-			if strings.HasPrefix(valStr, "date ") {
+			if after, ok := strings.CutPrefix(valStr, "date "); ok {
 				// Remove "date " prefix
-				normalizedVal := strings.TrimPrefix(valStr, "date ")
+				normalizedVal := after
 				return parser.NewStrVal([]byte(normalizedVal))
 			}
 		}
@@ -3976,7 +3988,7 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 		// Also handle the reverse: current is nil, desired has DEFAULT NULL
 		if currentDefault == nil && desiredDefault != nil {
 			if isNullValue(desiredDefault.value) ||
-				(desiredDefault.value == nil && strings.ToLower(desiredDefault.expression) == "null") {
+				(desiredDefault.value == nil && strings.EqualFold(desiredDefault.expression, "null")) {
 				return true
 			}
 		}
@@ -3987,9 +3999,9 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 		// If one has "null" as value and the other has "null::type" as expression
 		if currentDefault != nil && desiredDefault != nil {
 			currentIsNull := isNullValue(currentDefault.value) ||
-				(currentDefault.expression != "" && strings.HasPrefix(strings.ToLower(currentDefault.expression), "null::"))
+				(currentDefault.expression != "" && (strings.EqualFold(currentDefault.expression, "null") || strings.HasPrefix(strings.ToLower(currentDefault.expression), "null::")))
 			desiredIsNull := isNullValue(desiredDefault.value) ||
-				(desiredDefault.expression != "" && strings.HasPrefix(strings.ToLower(desiredDefault.expression), "null::"))
+				(desiredDefault.expression != "" && (strings.EqualFold(desiredDefault.expression, "null") || strings.HasPrefix(strings.ToLower(desiredDefault.expression), "null::")))
 
 			if currentIsNull && desiredIsNull {
 				return true

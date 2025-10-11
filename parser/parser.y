@@ -442,7 +442,7 @@ statement:
 | alter_statement
 | comment_statement
   {
-    $$ = nil
+    $$ = $1
   }
 
 create_statement:
@@ -709,7 +709,12 @@ create_statement:
 /* For PostgreSQL */
 | CREATE EXTENSION if_not_exists_opt sql_id
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: CreateExtension,
+      Extension: &Extension{
+        Name: $4.String(),
+      },
+    }
   }
 /* For SQLite3, only to parse because alternation is not supported. // The Virtual Table Mechanism Of SQLite https://www.sqlite.org/vtab.html */
 | CREATE VIRTUAL TABLE if_not_exists_opt table_name USING sql_id module_arguments_opt
@@ -718,23 +723,98 @@ create_statement:
   }
 | CREATE SCHEMA if_not_exists_opt sql_id
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: CreateSchema,
+      Schema: &Schema{
+        Name: $4.String(),
+      },
+    }
   }
 | GRANT grant_privileges ON TABLE table_name_list TO grant_target_list
   {
-    $$ = nil
+    // Convert table names to multiple Grant statements (one per table)
+    var stmts []Statement
+    for _, tableName := range $5 {
+      stmts = append(stmts, &DDL{
+        Action: GrantPrivilege,
+        Grant: &Grant{
+          IsGrant:    true,
+          Privileges: $2,
+          TableName:  tableName,
+          Grantees:   $7,
+        },
+      })
+    }
+    if len(stmts) == 1 {
+      $$ = stmts[0]
+    } else {
+      $$ = &MultiStatement{Statements: stmts}
+    }
   }
 | GRANT grant_privileges ON TABLE table_name_list TO grant_target_list WITH GRANT OPTION
   {
-    $$ = nil
+    // Convert table names to multiple Grant statements (one per table)
+    var stmts []Statement
+    for _, tableName := range $5 {
+      stmts = append(stmts, &DDL{
+        Action: GrantPrivilege,
+        Grant: &Grant{
+          IsGrant:         true,
+          Privileges:      $2,
+          TableName:       tableName,
+          Grantees:        $7,
+          WithGrantOption: true,
+        },
+      })
+    }
+    if len(stmts) == 1 {
+      $$ = stmts[0]
+    } else {
+      $$ = &MultiStatement{Statements: stmts}
+    }
   }
 | REVOKE grant_privileges ON TABLE table_name_list FROM grant_target_list
   {
-    $$ = nil
+    // Convert table names to multiple Revoke statements (one per table)
+    var stmts []Statement
+    for _, tableName := range $5 {
+      stmts = append(stmts, &DDL{
+        Action: RevokePrivilege,
+        Grant: &Grant{
+          IsGrant:    false,
+          Privileges: $2,
+          TableName:  tableName,
+          Grantees:   $7,
+        },
+      })
+    }
+    if len(stmts) == 1 {
+      $$ = stmts[0]
+    } else {
+      $$ = &MultiStatement{Statements: stmts}
+    }
   }
 | REVOKE grant_privileges ON TABLE table_name_list FROM grant_target_list CASCADE
   {
-    $$ = nil
+    // Convert table names to multiple Revoke statements (one per table)
+    var stmts []Statement
+    for _, tableName := range $5 {
+      stmts = append(stmts, &DDL{
+        Action: RevokePrivilege,
+        Grant: &Grant{
+          IsGrant:       false,
+          Privileges:    $2,
+          TableName:     tableName,
+          Grantees:      $7,
+          CascadeOption: true,
+        },
+      })
+    }
+    if len(stmts) == 1 {
+      $$ = stmts[0]
+    } else {
+      $$ = &MultiStatement{Statements: stmts}
+    }
   }
 
 alter_statement:
@@ -1161,27 +1241,69 @@ alter_statement:
 comment_statement:
   COMMENT_KEYWORD ON TABLE table_name IS STRING
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "TABLE",
+        Object:     String($4),
+        Comment:    string($6),
+      },
+    }
   }
 | COMMENT_KEYWORD ON TABLE table_name IS NULL
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "TABLE",
+        Object:     String($4),
+        Comment:    "NULL",
+      },
+    }
   }
 | COMMENT_KEYWORD ON COLUMN table_id '.' sql_id IS STRING
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "COLUMN",
+        Object:     $4.String() + "." + $6.String(),
+        Comment:    string($8),
+      },
+    }
   }
 | COMMENT_KEYWORD ON COLUMN table_id '.' sql_id IS NULL
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "COLUMN",
+        Object:     $4.String() + "." + $6.String(),
+        Comment:    "NULL",
+      },
+    }
   }
 | COMMENT_KEYWORD ON COLUMN table_id '.' reserved_table_id '.' sql_id IS STRING
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "COLUMN",
+        Object:     $4.String() + "." + $6.String() + "." + $8.String(),
+        Comment:    string($10),
+      },
+    }
   }
 | COMMENT_KEYWORD ON COLUMN table_id '.' reserved_table_id '.' sql_id IS NULL
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "COLUMN",
+        Object:     $4.String() + "." + $6.String() + "." + $8.String(),
+        Comment:    "NULL",
+      },
+    }
   }
 
 alter_object_type_index:
