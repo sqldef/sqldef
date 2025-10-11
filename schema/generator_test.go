@@ -316,8 +316,8 @@ func TestNormalizeCheckExprAST(t *testing.T) {
 			check := ddl.TableSpec.Checks[0]
 			assert.NotNil(t, check.Where.Expr, "Check expression is nil")
 
-			// Normalize the expression
-			normalized := normalizeCheckExprAST(check.Where.Expr)
+			// Normalize the expression (use Postgres mode since tests are Postgres-based)
+			normalized := normalizeCheckExprAST(check.Where.Expr, GeneratorModePostgres)
 
 			// Convert normalized expression to string
 			actual := parser.String(normalized)
@@ -327,7 +327,7 @@ func TestNormalizeCheckExprAST(t *testing.T) {
 }
 
 func TestNormalizeCheckExprASTNilInput(t *testing.T) {
-	result := normalizeCheckExprAST(nil)
+	result := normalizeCheckExprAST(nil, GeneratorModePostgres)
 	assert.Nil(t, result)
 }
 
@@ -346,9 +346,9 @@ func TestCheckConstraintComparisonWithDifferentInValues(t *testing.T) {
 	ddl2 := stmt2.(*parser.DDL)
 	check2 := ddl2.TableSpec.Checks[0]
 
-	// Normalize both
-	normalized1 := normalizeCheckExprAST(check1.Where.Expr)
-	normalized2 := normalizeCheckExprAST(check2.Where.Expr)
+	// Normalize both (MySQL mode for this test)
+	normalized1 := normalizeCheckExprAST(check1.Where.Expr, GeneratorModeMysql)
+	normalized2 := normalizeCheckExprAST(check2.Where.Expr, GeneratorModeMysql)
 
 	// Convert to strings
 	str1 := parser.String(normalized1)
@@ -376,9 +376,9 @@ func TestCheckConstraintIdempotencyWithMySQLFormat(t *testing.T) {
 	ddl2 := stmt2.(*parser.DDL)
 	check2 := ddl2.TableSpec.Checks[0]
 
-	// Normalize both
-	normalized1 := normalizeCheckExprAST(check1.Where.Expr)
-	normalized2 := normalizeCheckExprAST(check2.Where.Expr)
+	// Normalize both (MySQL mode for this test)
+	normalized1 := normalizeCheckExprAST(check1.Where.Expr, GeneratorModeMysql)
+	normalized2 := normalizeCheckExprAST(check2.Where.Expr, GeneratorModeMysql)
 
 	// Unwrap outermost parentheses (as done in areSameCheckDefinition)
 	normalized1 = unwrapOutermostParenExpr(normalized1)
@@ -413,9 +413,9 @@ func TestCheckConstraintMSSQLInVsOrNormalization(t *testing.T) {
 	assert.NotNil(t, colDB.Type.Check, "Expected column-level CHECK")
 	checkDB := colDB.Type.Check
 
-	// Normalize both
-	normalizedUser := normalizeCheckExprAST(checkUser.Where.Expr)
-	normalizedDB := normalizeCheckExprAST(checkDB.Where.Expr)
+	// Normalize both (MSSQL mode for this test)
+	normalizedUser := normalizeCheckExprAST(checkUser.Where.Expr, GeneratorModeMssql)
+	normalizedDB := normalizeCheckExprAST(checkDB.Where.Expr, GeneratorModeMssql)
 
 	// Unwrap outermost parens
 	normalizedUser = unwrapOutermostParenExpr(normalizedUser)

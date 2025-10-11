@@ -39,8 +39,4 @@ These issues are due to parser limitations and would require significant parser 
 
 ## Known Issues
 
-**MySQL**:
-- `CheckDuplicateValuesInOrChain` - expects OR chain deduplication and conversion to IN (not implemented)
-
-**SQL Server**:
-- 10 CHECK constraint tests failing due to SQL Server's own normalization differences (pre-existing)
+None - all MySQL and SQL Server CHECK constraint tests are now passing!
