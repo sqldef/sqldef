@@ -2054,9 +2054,11 @@ column_definition_type:
   }
 | column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option deferrable_opt initially_deferred_opt
   {
-    $1.References     = String($3)
-    $1.ReferenceNames = $5
-    $1.ReferenceOnDelete = $9
+    $1.References              = String($3)
+    $1.ReferenceNames          = $5
+    $1.ReferenceOnDelete       = $9
+    $1.ReferenceDeferrable     = $10
+    $1.ReferenceInitiallyDeferred = $11
     $$ = $1
   }
 | column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option
@@ -2064,6 +2066,50 @@ column_definition_type:
     $1.References     = String($3)
     $1.ReferenceNames = $5
     $1.ReferenceOnUpdate = $9
+    $$ = $1
+  }
+| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option deferrable_opt initially_deferred_opt
+  {
+    $1.References              = String($3)
+    $1.ReferenceNames          = $5
+    $1.ReferenceOnUpdate       = $9
+    $1.ReferenceDeferrable     = $10
+    $1.ReferenceInitiallyDeferred = $11
+    $$ = $1
+  }
+| column_definition_type REFERENCES table_name deferrable_opt initially_deferred_opt
+  {
+    $1.References              = String($3)
+    $1.ReferenceDeferrable     = $4
+    $1.ReferenceInitiallyDeferred = $5
+    $$ = $1
+  }
+| column_definition_type REFERENCES table_name '(' column_list ')' deferrable_opt initially_deferred_opt
+  {
+    $1.References              = String($3)
+    $1.ReferenceNames          = $5
+    $1.ReferenceDeferrable     = $7
+    $1.ReferenceInitiallyDeferred = $8
+    $$ = $1
+  }
+| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option ON UPDATE reference_option deferrable_opt initially_deferred_opt
+  {
+    $1.References              = String($3)
+    $1.ReferenceNames          = $5
+    $1.ReferenceOnDelete       = $9
+    $1.ReferenceOnUpdate       = $12
+    $1.ReferenceDeferrable     = $13
+    $1.ReferenceInitiallyDeferred = $14
+    $$ = $1
+  }
+| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option ON DELETE reference_option deferrable_opt initially_deferred_opt
+  {
+    $1.References              = String($3)
+    $1.ReferenceNames          = $5
+    $1.ReferenceOnUpdate       = $9
+    $1.ReferenceOnDelete       = $12
+    $1.ReferenceDeferrable     = $13
+    $1.ReferenceInitiallyDeferred = $14
     $$ = $1
   }
 // for MySQL and PostgreSQL

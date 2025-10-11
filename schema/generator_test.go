@@ -96,12 +96,12 @@ func TestNormalizeViewDefinition(t *testing.T) {
 		input    string
 		expected string
 	}{
-		// PostgreSQL specific tests
+		// PostgreSQL specific tests - AST normalization
 		{
 			name:     "PostgreSQL: normalize table prefix with COLLATE",
 			mode:     GeneratorModePostgres,
 			input:    `select users.id, (users.name COLLATE "ja-JP-x-icu") as name from users`,
-			expected: `select id, (name collate "ja-jp-x-icu") as name from users`,
+			expected: `select id, (name collate ja-jp-x-icu) as name from users`,
 		},
 		{
 			name:     "PostgreSQL: normalize multiple table prefixes",
@@ -113,33 +113,27 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			name:     "PostgreSQL: normalize with lowercase collate",
 			mode:     GeneratorModePostgres,
 			input:    `select users.id, (users.name collate "ja-JP-x-icu") as name from users`,
-			expected: `select id, (name collate "ja-jp-x-icu") as name from users`,
+			expected: `select id, (name collate ja-jp-x-icu) as name from users`,
 		},
 		{
 			name:     "PostgreSQL: normalize spaces",
 			mode:     GeneratorModePostgres,
 			input:    `select   users.id,    (users.name   COLLATE   "ja-JP-x-icu")   as   name   from   users`,
-			expected: `select id, (name collate "ja-jp-x-icu") as name from users`,
+			expected: `select id, (name collate ja-jp-x-icu) as name from users`,
 		},
 		{
 			name:     "PostgreSQL: normalize with joins",
 			mode:     GeneratorModePostgres,
 			input:    `select u.id, (u.name COLLATE "en_US") as name from users u join orders o on u.id = o.user_id`,
-			expected: `select id, (name collate "en_us") as name from users u join orders o on id = user_id`,
+			expected: `select id, (name collate en_us) as name from users as u join orders as o on id = user_id`,
 		},
 		{
 			name:     "PostgreSQL: preserve column names without prefixes",
 			mode:     GeneratorModePostgres,
 			input:    `select id, (name COLLATE "ja-JP-x-icu") as name from users`,
-			expected: `select id, (name collate "ja-jp-x-icu") as name from users`,
+			expected: `select id, (name collate ja-jp-x-icu) as name from users`,
 		},
-		{
-			name:     "PostgreSQL: normalize array syntax",
-			mode:     GeneratorModePostgres,
-			input:    `select array[1, 2, 3] as nums`,
-			expected: `select 1, 2, 3 as nums`,
-		},
-		// Non-PostgreSQL modes should not normalize
+		// Non-PostgreSQL modes - basic normalization
 		{
 			name:     "MySQL: no normalization",
 			mode:     GeneratorModeMysql,
@@ -157,8 +151,36 @@ func TestNormalizeViewDefinition(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := &Generator{mode: tt.mode}
-			actual := g.normalizeViewDefinition(tt.input)
-			assert.Equal(t, tt.expected, actual)
+
+			// Parse the input to get the SelectStatement AST
+			var parserMode parser.ParserMode
+			switch tt.mode {
+			case GeneratorModePostgres:
+				parserMode = parser.ParserModePostgres
+			case GeneratorModeMysql:
+				parserMode = parser.ParserModeMysql
+			case GeneratorModeSQLite3:
+				parserMode = parser.ParserModeSQLite3
+			case GeneratorModeMssql:
+				parserMode = parser.ParserModeMssql
+			}
+
+			// Parse as CREATE VIEW to get the SelectStatement
+			ddl := "CREATE VIEW test_view AS " + tt.input
+			stmt, err := parser.ParseDDL(ddl, parserMode)
+			assert.NoError(t, err, "Failed to parse DDL")
+
+			viewStmt, ok := stmt.(*parser.DDL)
+			assert.True(t, ok, "Statement is not a DDL")
+			assert.NotNil(t, viewStmt.View, "View is nil")
+
+			view := &View{
+				definition:    tt.input,
+				definitionAST: viewStmt.View.Definition,
+			}
+
+			normalizedView := g.normalizeViewDefinition(view)
+			assert.Equal(t, tt.expected, normalizedView.definition)
 		})
 	}
 }

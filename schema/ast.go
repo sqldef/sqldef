@@ -98,10 +98,16 @@ type Column struct {
 	comment       *Value
 	enumValues    []string
 	references    string
-	identity      *Identity
-	sequence      *Sequence
-	generated     *Generated
-	renamedFrom   string // Previous column name if renamed via @renamed annotation
+	// Inline REFERENCES options (column-level foreign keys)
+	referenceColumns           []string // referenced column names
+	referenceOnDelete          string   // ON DELETE action
+	referenceOnUpdate          string   // ON UPDATE action
+	referenceDeferrable        bool     // DEFERRABLE option
+	referenceInitiallyDeferred bool     // INITIALLY DEFERRED option
+	identity                   *Identity
+	sequence                   *Sequence
+	generated                  *Generated
+	renamedFrom                string // Previous column name if renamed via @renamed annotation
 	// TODO: keyopt
 	// XXX: zerofill?
 }
@@ -192,13 +198,14 @@ type TablePrivilege struct {
 }
 
 type View struct {
-	statement    string
-	viewType     string
-	securityType string
-	name         string
-	definition   string
-	indexes      []Index
-	columns      []string
+	statement     string
+	viewType      string
+	securityType  string
+	name          string
+	definition    string
+	definitionAST parser.SelectStatement
+	indexes       []Index
+	columns       []string
 }
 
 type Trigger struct {

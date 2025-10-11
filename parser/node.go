@@ -701,10 +701,12 @@ type ColumnType struct {
 	// Key specification
 	KeyOpt ColumnKeyOption
 
-	References        string
-	ReferenceNames    Columns
-	ReferenceOnDelete ColIdent
-	ReferenceOnUpdate ColIdent
+	References                 string
+	ReferenceNames             Columns
+	ReferenceOnDelete          ColIdent
+	ReferenceOnUpdate          ColIdent
+	ReferenceDeferrable        BoolVal
+	ReferenceInitiallyDeferred BoolVal
 
 	// MySQL: GENERATED ALWAYS AS (expr)
 	Generated *GeneratedColumn

@@ -2,7 +2,7 @@
 
 This document tracks the failing tests when using `PSQLDEF_PARSER=generic`.
 
-**Total failing tests: 79**
+**Total failing tests: 74**
 
 ## Principle of Operation
 
@@ -17,53 +17,58 @@ This document tracks the failing tests when using `PSQLDEF_PARSER=generic`.
 ## Summary by Issue Type
 
 - **Unsupported SQL features**: 58 tests (CREATE SCHEMA, CREATE EXTENSION, GRANT, COMMENT)
-- **Idempotence issues**: 16 tests (schema not applying correctly on re-run) - was 33, fixed 17!
-- **Migration output mismatch**: 23 tests (generated DDL doesn't match expected)
-- **SQL syntax errors**: 0 tests (all fixed!)
+- **Idempotence issues**: 11 tests (schema not applying correctly on re-run)
+- **Migration output mismatch**: 19 tests (generated DDL doesn't match expected)
+
+## Recent Fixes (Non-Generic Parser Issues)
+
+### CHECK Constraint Normalization (Cross-Database Fix)
+
+**Fixed issue:**
+- `normalizeCheckDefinitionForDDL` was applying PostgreSQL-specific normalization (IN to ANY/ARRAY conversion) to all databases
+- This caused MySQL and SQL Server tests to fail with syntax errors
+- **Fix**: Modified function to only apply PostgreSQL-specific normalization when `g.mode == GeneratorModePostgres`
+- MySQL tests now pass (except 1 pre-existing OR-to-IN normalization test)
+
+### Known Pre-Existing Issues (Not Related to Generic Parser)
+
+**MySQL**:
+- `CheckDuplicateValuesInOrChain` - expects OR chain deduplication and conversion to IN (not implemented)
+
+**SQL Server**:
+- 10 CHECK constraint tests failing due to SQL Server's own normalization differences (pre-existing)
 
 ## Categories
 
-### View-Related Issues (6 tests remaining)
+### View-Related Issues (1 test remaining)
 
-**Partial solution implemented:**
-- Enhanced view definition normalization to handle PostgreSQL's parenthesization of expressions
-- Added type cast normalization for literals (e.g., `(2)::bigint` → `2::bigint` → `2`)
+**Solution implemented:**
+- Migrated from regex-based string manipulation to AST-based view definition normalization
+- Enhanced `normalizeViewDefinition` to return `*View` instead of `string`
+- Merged `normalizeViewDefinitionAST` into `normalizeViewDefinition` using recursive helper
+- Handles PostgreSQL's formatting differences:
+  - Parenthesization of expressions in WHERE clauses
+  - Table qualifiers in column names
+  - Type cast normalization for literals
+  - COLLATE expression normalization
+  - CASE expression "ELSE NULL" normalization (PostgreSQL adds this automatically)
+  - Function argument ARRAY conversion (e.g., jsonb_extract_path_text variadic args)
+  - Whitespace and case normalization
 
 **Remaining issues:**
-These require more complex view definition normalization:
-
-- [ ] CreateViewWithCaseWhen
-  - Desired schema not idempotent
-  - CASE WHEN expressions not preserved
 
 - [ ] NullCast
   - Desired schema not idempotent
+  - Not a view issue - DEFAULT NULL normalization problem
 
-- [ ] ReplaceViewWithChangeCondition
-  - Desired schema not idempotent
+### FOREIGN KEY Constraint Issues (5 tests remaining)
 
-- [ ] ViewDDLsAreEmittedLastWithChangingDefinition
-  - Desired schema not idempotent
+**Fixed issues:**
+- Added parser support for inline REFERENCES with DEFERRABLE/INITIALLY DEFERRED options
+- Implemented conversion of inline REFERENCES to table-level foreign key constraints for PostgreSQL
+- Fixed constraint options comparison to treat nil as default values (deferrable=false, initiallyDeferred=false)
 
-- [ ] ViewDDLsAreEmittedLastWithoutChangingDefinition
-  - Desired schema not idempotent
-  - CREATE OR REPLACE generated when not needed
-
-- [ ] ViewWithGroupByAndHaving
-  - Desired schema not idempotent
-
-### FOREIGN KEY Constraint Issues (9 tests)
-Issues with foreign key constraint handling:
-
-- [ ] CreateTableWithConstraintOptions
-  - Foreign key with DEFERRABLE options not detected (missing DDL for inline REFERENCES)
-  - Expected to update inline FK with DEFERRABLE options but doesn't generate DDL
-
-- [ ] CreateTableAddAbsentForeignKey
-  - Foreign key not being added (empty migration)
-
-- [ ] ForeignKeyConstraintsAreEmittedLast
-  - Migration output mismatch
+**Remaining issues:**
 
 - [ ] ForeignKeyDependenciesCascadeOptionsPreservation
   - Migration output mismatch
@@ -80,9 +85,6 @@ Issues with foreign key constraint handling:
 
 - [ ] ForeignKeyDependenciesPrimaryKeyChange
   - Both schemas not idempotent
-
-- [ ] ForeignKeyOnReservedName
-  - Migration output mismatch
 
 ### Unsupported SQL Features (58 tests)
 These require parser extensions for CREATE SCHEMA, CREATE EXTENSION, GRANT, COMMENT:

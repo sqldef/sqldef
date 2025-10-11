@@ -159,12 +159,13 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				}
 			}
 			return &View{
-				statement:    ddl,
-				viewType:     strings.ToUpper(stmt.View.Type),
-				securityType: strings.ToUpper(stmt.View.SecurityType),
-				name:         normalizedTableName(mode, stmt.View.Name, defaultSchema),
-				definition:   parser.String(stmt.View.Definition),
-				columns:      columns,
+				statement:     ddl,
+				viewType:      strings.ToUpper(stmt.View.Type),
+				securityType:  strings.ToUpper(stmt.View.SecurityType),
+				name:          normalizedTableName(mode, stmt.View.Name, defaultSchema),
+				definition:    parser.String(stmt.View.Definition),
+				definitionAST: stmt.View.Definition, // Store the AST for normalization
+				columns:       columns,
 			}, nil
 		} else if stmt.Action == parser.CreateTrigger {
 			body := []string{}
@@ -249,6 +250,29 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	indexComments := extractIndexComments(rawDDL, mode)
 
 	for i, parsedCol := range stmt.TableSpec.Columns {
+		// Parse inline REFERENCES columns
+		var referenceColumns []string
+		for _, refCol := range parsedCol.Type.ReferenceNames {
+			referenceColumns = append(referenceColumns, refCol.String())
+		}
+
+		// For PostgreSQL: REFERENCES keyword is ONLY used for foreign keys, never for custom types
+		// For other databases, we need to distinguish between FK and custom type references
+		isFK := mode == GeneratorModePostgres && parsedCol.Type.References != ""
+		if mode != GeneratorModePostgres {
+			// For non-PostgreSQL: check if it's a FK by looking at FK-specific fields
+			isFK = (len(referenceColumns) > 0 || parsedCol.Type.ReferenceOnDelete.String() != "" ||
+				parsedCol.Type.ReferenceOnUpdate.String() != "" ||
+				castBool(parsedCol.Type.ReferenceDeferrable) ||
+				castBool(parsedCol.Type.ReferenceInitiallyDeferred)) && parsedCol.Type.References != ""
+		}
+
+		// Only use references field for custom type schema, not for FK table references
+		var references string
+		if !isFK && parsedCol.Type.References != "" {
+			references = normalizedTable(mode, parsedCol.Type.References, defaultSchema)
+		}
+
 		column := Column{
 			name:          parsedCol.Name.String(),
 			position:      i,
@@ -269,10 +293,16 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			onUpdate:      parseValue(parsedCol.Type.OnUpdate),
 			comment:       parseValue(parsedCol.Type.Comment),
 			enumValues:    parsedCol.Type.EnumValues,
-			references:    normalizedTable(mode, parsedCol.Type.References, defaultSchema),
-			identity:      parseIdentity(parsedCol.Type.Identity),
-			sequence:      parseIdentitySequence(parsedCol.Type.Identity),
-			generated:     parseGenerated(parsedCol.Type.Generated),
+			references:    references,
+			// Inline REFERENCES details (for FK purposes)
+			referenceColumns:           referenceColumns,
+			referenceOnDelete:          parsedCol.Type.ReferenceOnDelete.String(),
+			referenceOnUpdate:          parsedCol.Type.ReferenceOnUpdate.String(),
+			referenceDeferrable:        castBool(parsedCol.Type.ReferenceDeferrable),
+			referenceInitiallyDeferred: castBool(parsedCol.Type.ReferenceInitiallyDeferred),
+			identity:                   parseIdentity(parsedCol.Type.Identity),
+			sequence:                   parseIdentitySequence(parsedCol.Type.Identity),
+			generated:                  parseGenerated(parsedCol.Type.Generated),
 		}
 
 		// Parse @renamed annotation for each column
@@ -460,6 +490,51 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	for _, exclusionDef := range stmt.TableSpec.Exclusions {
 		exclusion := parseExclusion(exclusionDef)
 		exclusions = append(exclusions, exclusion)
+	}
+
+	// Convert inline REFERENCES to table-level foreign keys
+	// For PostgreSQL: ALWAYS convert inline REFERENCES to table-level FKs because
+	// PostgreSQL creates named constraints for them automatically
+	// Process inline FKs FIRST so they appear before table-level FKs in the list
+	var inlineForeignKeys []ForeignKey
+	if mode == GeneratorModePostgres {
+		// Need to match columns with parsed columns to get the reference table name
+		for i, parsedCol := range stmt.TableSpec.Columns {
+			column := columns[parsedCol.Name.String()]
+			if column == nil {
+				continue
+			}
+
+			// For PostgreSQL: REFERENCES keyword is ONLY used for foreign keys
+			// So if References is set, it's always a FK that needs to be converted to table-level
+			if parsedCol.Type.References != "" {
+				// Generate constraint name: tablename_columnname_fkey
+				tableName := stmt.NewName.Name.String()
+				constraintName := tableName + "_" + column.name + "_fkey"
+
+				var constraintOptions *ConstraintOptions
+				if column.referenceDeferrable || column.referenceInitiallyDeferred {
+					constraintOptions = &ConstraintOptions{
+						deferrable:        column.referenceDeferrable,
+						initiallyDeferred: column.referenceInitiallyDeferred,
+					}
+				}
+
+				foreignKey := ForeignKey{
+					constraintName:    constraintName,
+					indexColumns:      []string{column.name},
+					referenceName:     normalizedTable(mode, parsedCol.Type.References, defaultSchema),
+					referenceColumns:  column.referenceColumns,
+					onDelete:          column.referenceOnDelete,
+					onUpdate:          column.referenceOnUpdate,
+					constraintOptions: constraintOptions,
+				}
+				inlineForeignKeys = append(inlineForeignKeys, foreignKey)
+			}
+			_ = i // suppress unused variable warning
+		}
+		// Prepend inline FKs before table-level FKs
+		foreignKeys = append(inlineForeignKeys, foreignKeys...)
 	}
 
 	tableComment := extractTableComment(rawDDL, mode)
