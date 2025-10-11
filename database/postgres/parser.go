@@ -195,9 +195,19 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 				if err != nil {
 					return nil, err
 				}
+				constraintName := node.Constraint.Conname
+				// If no explicit constraint name and it's a simple single-column check, generate truncated name
+				if constraintName == "" {
+					if colName := extractSingleColumnFromCheckExpr(expr); colName != "" {
+						name, truncated := p.absentConstraintName(tableName.Name.String(), colName, "check")
+						if truncated {
+							constraintName = name
+						}
+					}
+				}
 				check := &parser.CheckDefinition{
 					Where:          *parser.NewWhere(parser.WhereStr, expr),
-					ConstraintName: parser.NewColIdent(node.Constraint.Conname),
+					ConstraintName: parser.NewColIdent(constraintName),
 				}
 				checks = append(checks, check)
 			case pgquery.ConstrType_CONSTR_EXCLUSION:
@@ -1374,6 +1384,100 @@ func (p PostgresParser) parseCreateSchemaStmt(stmt *pgquery.CreateSchemaStmt) (p
 			Name: stmt.Schemaname,
 		},
 	}, nil
+}
+
+// extractSingleColumnFromCheckExpr attempts to extract a single column name from a CHECK expression
+// Returns the column name if the expression is a simple single-column check, empty string otherwise
+func extractSingleColumnFromCheckExpr(expr parser.Expr) string {
+	// Recursively find all column references in the expression
+	cols := findColumnRefs(expr)
+
+	// Only return the column name if there's exactly one unique column reference
+	if len(cols) == 1 {
+		for col := range cols {
+			return col
+		}
+	}
+	return ""
+}
+
+// findColumnRefs recursively finds all unique column names referenced in an expression
+func findColumnRefs(expr parser.Expr) map[string]bool {
+	cols := make(map[string]bool)
+
+	switch e := expr.(type) {
+	case *parser.ColName:
+		cols[e.Name.String()] = true
+	case *parser.ComparisonExpr:
+		for col := range findColumnRefs(e.Left) {
+			cols[col] = true
+		}
+		for col := range findColumnRefs(e.Right) {
+			cols[col] = true
+		}
+	case *parser.AndExpr:
+		for col := range findColumnRefs(e.Left) {
+			cols[col] = true
+		}
+		for col := range findColumnRefs(e.Right) {
+			cols[col] = true
+		}
+	case *parser.OrExpr:
+		for col := range findColumnRefs(e.Left) {
+			cols[col] = true
+		}
+		for col := range findColumnRefs(e.Right) {
+			cols[col] = true
+		}
+	case *parser.NotExpr:
+		for col := range findColumnRefs(e.Expr) {
+			cols[col] = true
+		}
+	case *parser.ParenExpr:
+		for col := range findColumnRefs(e.Expr) {
+			cols[col] = true
+		}
+	case *parser.IsExpr:
+		for col := range findColumnRefs(e.Expr) {
+			cols[col] = true
+		}
+	case *parser.FuncExpr:
+		for _, selectExpr := range e.Exprs {
+			if aliased, ok := selectExpr.(*parser.AliasedExpr); ok {
+				for col := range findColumnRefs(aliased.Expr) {
+					cols[col] = true
+				}
+			}
+		}
+	case *parser.CastExpr:
+		for col := range findColumnRefs(e.Expr) {
+			cols[col] = true
+		}
+	case *parser.CaseExpr:
+		if e.Expr != nil {
+			for col := range findColumnRefs(e.Expr) {
+				cols[col] = true
+			}
+		}
+		for _, when := range e.Whens {
+			for col := range findColumnRefs(when.Cond) {
+				cols[col] = true
+			}
+			for col := range findColumnRefs(when.Val) {
+				cols[col] = true
+			}
+		}
+		if e.Else != nil {
+			for col := range findColumnRefs(e.Else) {
+				cols[col] = true
+			}
+		}
+	// Leaf nodes that don't contain column references
+	case *parser.SQLVal, *parser.BoolVal, *parser.NullVal, *parser.ArrayConstructor:
+		// No column references
+	}
+
+	return cols
 }
 
 // This is a workaround to handle cases where PostgreSQL automatically adds or removes type casting.

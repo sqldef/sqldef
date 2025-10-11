@@ -45,7 +45,159 @@ func ParseDDL(sql string, mode ParserMode) (Statement, error) {
 			"found syntax error when parsing DDL \"%s\": %v", sql, tokenizer.LastError,
 		)
 	}
+
+	// Post-process for PostgreSQL-specific behavior
+	if mode == ParserModePostgres {
+		postProcessPostgres(tokenizer.ParseTree)
+	}
+
 	return tokenizer.ParseTree, nil
+}
+
+// postProcessPostgres applies PostgreSQL-specific transformations to the parsed DDL
+func postProcessPostgres(stmt Statement) {
+	if ddl, ok := stmt.(*DDL); ok && ddl.Action == CreateTable {
+		if ddl.TableSpec != nil && ddl.NewName.Name.String() != "" {
+			tableName := ddl.NewName.Name.String()
+
+			// Process column-level CHECK constraints
+			for _, col := range ddl.TableSpec.Columns {
+				if col.Type.Check != nil && col.Type.Check.ConstraintName.String() == "" {
+					// Generate truncated constraint name for column-level checks
+					name, truncated := postgresAbsentConstraintName(tableName, col.Name.String(), "check")
+					if truncated {
+						col.Type.Check.ConstraintName = NewColIdent(name)
+					}
+				}
+			}
+
+			// Process table-level CHECK constraints
+			for _, check := range ddl.TableSpec.Checks {
+				if check.ConstraintName.String() == "" {
+					// Try to extract single column name from check expression
+					if colName := extractSingleColumnName(check.Where.Expr); colName != "" {
+						name, truncated := postgresAbsentConstraintName(tableName, colName, "check")
+						if truncated {
+							check.ConstraintName = NewColIdent(name)
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// postgresAbsentConstraintName generates a PostgreSQL constraint name with truncation
+// Matches the logic from database/postgres/parser.go
+func postgresAbsentConstraintName(tableName, columnName, suffix string) (string, bool) {
+	if name := tableName + "_" + columnName + "_" + suffix; len(name) <= 63 {
+		return name, false
+	}
+
+	var tableThreshold, columnThreshold = 33 - len(suffix), 28
+	var maxSum = tableThreshold + columnThreshold
+
+	if len(tableName) <= tableThreshold {
+		columnName = columnName[:maxSum-len(tableName)]
+	} else if len(columnName) <= columnThreshold {
+		tableName = tableName[:maxSum-len(columnName)]
+	} else {
+		tableName = tableName[:tableThreshold]
+		columnName = columnName[:columnThreshold]
+	}
+
+	return tableName + "_" + columnName + "_" + suffix, true
+}
+
+// extractSingleColumnName attempts to extract a single column name from an expression
+// Returns the column name if the expression references exactly one column, empty string otherwise
+func extractSingleColumnName(expr Expr) string {
+	cols := findColumnReferences(expr)
+	if len(cols) == 1 {
+		for col := range cols {
+			return col
+		}
+	}
+	return ""
+}
+
+// findColumnReferences recursively finds all unique column names referenced in an expression
+func findColumnReferences(expr Expr) map[string]bool {
+	cols := make(map[string]bool)
+
+	switch e := expr.(type) {
+	case *ColName:
+		cols[e.Name.String()] = true
+	case *ComparisonExpr:
+		for col := range findColumnReferences(e.Left) {
+			cols[col] = true
+		}
+		for col := range findColumnReferences(e.Right) {
+			cols[col] = true
+		}
+	case *AndExpr:
+		for col := range findColumnReferences(e.Left) {
+			cols[col] = true
+		}
+		for col := range findColumnReferences(e.Right) {
+			cols[col] = true
+		}
+	case *OrExpr:
+		for col := range findColumnReferences(e.Left) {
+			cols[col] = true
+		}
+		for col := range findColumnReferences(e.Right) {
+			cols[col] = true
+		}
+	case *NotExpr:
+		for col := range findColumnReferences(e.Expr) {
+			cols[col] = true
+		}
+	case *ParenExpr:
+		for col := range findColumnReferences(e.Expr) {
+			cols[col] = true
+		}
+	case *IsExpr:
+		for col := range findColumnReferences(e.Expr) {
+			cols[col] = true
+		}
+	case *FuncExpr:
+		for _, selectExpr := range e.Exprs {
+			if aliased, ok := selectExpr.(*AliasedExpr); ok {
+				for col := range findColumnReferences(aliased.Expr) {
+					cols[col] = true
+				}
+			}
+		}
+	case *CastExpr:
+		for col := range findColumnReferences(e.Expr) {
+			cols[col] = true
+		}
+	case *CaseExpr:
+		if e.Expr != nil {
+			for col := range findColumnReferences(e.Expr) {
+				cols[col] = true
+			}
+		}
+		for _, when := range e.Whens {
+			for col := range findColumnReferences(when.Cond) {
+				cols[col] = true
+			}
+			for col := range findColumnReferences(when.Val) {
+				cols[col] = true
+			}
+		}
+		if e.Else != nil {
+			for col := range findColumnReferences(e.Else) {
+				cols[col] = true
+			}
+		}
+	// Leaf nodes that don't contain column references
+	case *SQLVal, *BoolVal, *NullVal, *ArrayConstructor:
+		// No column references
+	}
+
+	return cols
 }
 
 // Tokenizer is the struct used to generate SQL

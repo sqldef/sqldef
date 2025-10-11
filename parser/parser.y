@@ -4223,7 +4223,8 @@ value_expression:
   }
 | value_expression TYPECAST numeric_type
   {
-    $$ = &CollateExpr{Expr: $1}
+    colType := $3
+    $$ = &CollateExpr{Expr: $1, Type: &colType}
   }
 | value_expression COLLATE charset
   {
@@ -4231,7 +4232,8 @@ value_expression:
   }
 | value_expression TYPECAST TIMESTAMP WITH TIME ZONE
   {
-    $$ = &CollateExpr{Expr: $1}
+    timestampType := ColumnType{Type: "timestamp", Timezone: BoolVal(true)}
+    $$ = &CollateExpr{Expr: $1, Type: &timestampType}
   }
 | BINARY value_expression %prec UNARY
   {

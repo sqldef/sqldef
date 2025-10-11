@@ -193,12 +193,21 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						// Old table not found, create as new table
 						interDDLs = append(interDDLs, desired.statement)
 						table := desired.table // copy table
+						// Normalize index names for tracking (handles auto-generated names)
+						for i := range table.indexes {
+							table.indexes[i].name = normalizeIndexName(table.name, table.indexes[i])
+						}
 						g.currentTables = append(g.currentTables, &table)
+						slog.Debug("added table to currentTables after CREATE", "table", table.name, "indexes", fmt.Sprintf("%v", table.indexes))
 					}
 				} else {
 					// Table not found and no rename, create table.
 					interDDLs = append(interDDLs, desired.statement)
 					table := desired.table // copy table
+					// Normalize index names for tracking (handles auto-generated names)
+					for i := range table.indexes {
+						table.indexes[i].name = normalizeIndexName(table.name, table.indexes[i])
+					}
 					g.currentTables = append(g.currentTables, &table)
 				}
 			}
@@ -354,8 +363,17 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue
 			}
 
-			if slices.Contains(convertIndexesToIndexNames(desiredTable.indexes), index.name) ||
+			// Normalize desired index names for comparison (handles auto-generated names)
+			normalizedDesiredNames := make([]string, len(desiredTable.indexes))
+			for i, desiredIndex := range desiredTable.indexes {
+				normalizedDesiredNames[i] = normalizeIndexName(desiredTable.name, desiredIndex)
+			}
+
+			slog.Debug("checking absent index", "table", currentTable.name, "currentIndex", index.name, "normalizedDesired", normalizedDesiredNames)
+
+			if slices.Contains(normalizedDesiredNames, index.name) ||
 				slices.Contains(convertForeignKeysToIndexNames(desiredTable.foreignKeys), index.name) {
+				slog.Debug("index exists in desired, skipping", "index", index.name)
 				continue // Index is expected to exist.
 			}
 
@@ -829,7 +847,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						ddls = append(ddls, ddl)
 					}
 					if desiredColumn.check != nil {
-						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), constraintName, desiredColumn.check.definition)
+						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), constraintName, g.normalizeCheckDefinitionForDDL(*desiredColumn.check))
 						if desiredColumn.check.noInherit {
 							ddl += " NO INHERIT"
 						}
@@ -881,7 +899,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 							if desiredColumn.check.notForReplication {
 								replicationDefinition = " NOT FOR REPLICATION"
 							}
-							ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableName(desired.table.name), desiredConstraintName, replicationDefinition, desiredColumn.check.definition)
+							ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableName(desired.table.name), desiredConstraintName, replicationDefinition, g.normalizeCheckDefinitionForDDL(*desiredColumn.check))
 							ddls = append(ddls, ddl)
 						}
 					}
@@ -1062,10 +1080,14 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			continue
 		}
 
-		if currentIndex := findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex != nil {
+		// Normalize index name for comparison (handles auto-generated names)
+		normalizedDesiredName := normalizeIndexName(desired.table.name, desiredIndex)
+		slog.Debug("examining index", "table", desired.table.name, "desiredName", desiredIndex.name, "normalizedName", normalizedDesiredName)
+
+		if currentIndex := findIndexByName(currentTable.indexes, normalizedDesiredName); currentIndex != nil {
 			// Drop and add index as needed.
 			if !g.areSameIndexes(*currentIndex, desiredIndex) {
-				ddls = append(ddls, g.generateDropIndex(desired.table.name, desiredIndex.name, desiredIndex.constraint))
+				ddls = append(ddls, g.generateDropIndex(desired.table.name, normalizedDesiredName, desiredIndex.constraint))
 				ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
 			}
 		} else {
@@ -1180,10 +1202,10 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				switch g.mode {
 				case GeneratorModePostgres, GeneratorModeMssql:
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), desiredCheck.definition))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckDefinitionForDDL(desiredCheck)))
 				case GeneratorModeMysql:
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), desiredCheck.definition))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckDefinitionForDDL(desiredCheck)))
 				case GeneratorModeSQLite3:
 					// SQLite does not support ALTER TABLE for CHECK constraints
 					// Modifying CHECK constraints requires recreating the table, which is not supported
@@ -1196,7 +1218,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 		} else {
 			// Constraint doesn't exist, add it
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), desiredCheck.definition))
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckDefinitionForDDL(desiredCheck)))
 		}
 	}
 
@@ -1219,6 +1241,27 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 // Shared by `CREATE INDEX` and `ALTER TABLE ADD INDEX`.
 // This manages `g.currentTables` unlike `generateDDLsForCreateTable`...
+func getTableNameWithoutSchema(table string) string {
+	parts := strings.Split(table, ".")
+	if len(parts) > 1 {
+		return parts[len(parts)-1]
+	}
+	return table
+}
+
+// normalizeIndexName applies auto-naming rules for indexes/constraints
+// For PostgreSQL UNIQUE constraints without explicit names, generates: {table}_{column}_key
+func normalizeIndexName(tableName string, index Index) string {
+	// Auto-generate constraint name for single-column UNIQUE constraints in PostgreSQL
+	// if the name is empty or equals the column name (indicates parser didn't get an explicit name)
+	if (strings.EqualFold(index.indexType, "UNIQUE KEY") || strings.EqualFold(index.indexType, "UNIQUE")) &&
+		len(index.columns) == 1 && (index.name == "" || index.name == index.columns[0].column) {
+		table := getTableNameWithoutSchema(tableName)
+		return fmt.Sprintf("%s_%s_key", table, index.columns[0].column)
+	}
+	return index.name
+}
+
 func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex Index, action string, statement string) ([]string, error) {
 	// Add CONCURRENTLY to CREATE [UNIQUE] INDEX statements if configured (PostgreSQL only)
 	if g.mode == GeneratorModePostgres && action == "CREATE INDEX" && g.config.CreateIndexConcurrently {
@@ -1476,6 +1519,20 @@ func (g *Generator) normalizeViewDefinition(definition string) string {
 	if g.mode == GeneratorModePostgres {
 		definition = strings.ReplaceAll(definition, "array[", "")
 		definition = strings.ReplaceAll(definition, "]", "")
+
+		// PostgreSQL wraps column references and some literals in parentheses in view definitions
+		// Remove parentheses around simple column names and literals to normalize comparison
+		// This handles: (column_name)::type -> column_name::type, (2)::bigint -> 2::bigint
+		// Match patterns like (word):: where :: indicates a type cast follows
+		parenWithCastPattern := regexp.MustCompile(`\((\w+)\)(::)`)
+		definition = parenWithCastPattern.ReplaceAllString(definition, "$1$2")
+
+		// Normalize type casts on literals that PostgreSQL removes or simplifies
+		// PostgreSQL may remove unnecessary type casts on string/numeric literals
+		// e.g., '1'::numeric -> '1', ''::text -> '', 2::bigint -> 2
+		// Match patterns like: 'literal'::type or number::type where the cast is redundant
+		literalCastPattern := regexp.MustCompile(`('(?:[^']|'')*'|"(?:[^"]|"")*"|\b\d+)\s*::\s*(?:text|numeric|bigint|integer|smallint|real|double\s+precision)\b`)
+		definition = literalCastPattern.ReplaceAllString(definition, "$1")
 
 		// Normalize table prefixes in column references (e.g., "users.name" -> "name")
 		// This handles cases like "(users.name collate ...)" -> "(name collate ...)"
@@ -1927,15 +1984,23 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 			(index.name != "" && index.name != "PRIMARY" && index.name != index.columns[0].column) {
 			ddl += fmt.Sprintf("CONSTRAINT %s ", g.escapeSQLName(index.name))
 		}
-		if strings.EqualFold(index.indexType, "UNIQUE KEY") {
+		if strings.EqualFold(index.indexType, "UNIQUE KEY") || strings.EqualFold(index.indexType, "UNIQUE") {
 			ddl += "CONSTRAINT"
 		} else {
 			ddl += strings.ToUpper(index.indexType)
 		}
 		if !index.primary {
-			ddl += fmt.Sprintf(" %s", g.escapeSQLName(index.name))
+			// Auto-generate constraint name for UNIQUE constraints if not explicitly named
+			constraintName := index.name
+			if (strings.EqualFold(index.indexType, "UNIQUE KEY") || strings.EqualFold(index.indexType, "UNIQUE")) &&
+				len(index.columns) == 1 && (index.name == "" || index.name == index.columns[0].column) {
+				tableName := getTableNameWithoutSchema(table)
+				constraintName = fmt.Sprintf("%s_%s_key", tableName, index.columns[0].column)
+				slog.Debug("auto-generating UNIQUE constraint name in ALTER TABLE", "table", table, "column", index.columns[0].column, "name", constraintName)
+			}
+			ddl += fmt.Sprintf(" %s", g.escapeSQLName(constraintName))
 		}
-		if strings.EqualFold(index.indexType, "UNIQUE KEY") {
+		if strings.EqualFold(index.indexType, "UNIQUE KEY") || strings.EqualFold(index.indexType, "UNIQUE") {
 			ddl += " UNIQUE"
 		}
 		constraintOptions := g.generateConstraintOptions(index.constraintOptions)
@@ -2078,12 +2143,23 @@ func (g *Generator) generateExclusionDefinition(exclusion Exclusion) string {
 	for _, exclusionPair := range exclusion.exclusions {
 		ex = append(ex, fmt.Sprintf("%s WITH %s", exclusionPair.column, exclusionPair.operator))
 	}
-	definition := fmt.Sprintf(
-		"CONSTRAINT %s EXCLUDE USING %s (%s)",
-		g.escapeSQLName(exclusion.constraintName),
-		exclusion.indexType,
-		strings.Join(ex, ", "),
-	)
+	// Build the EXCLUDE constraint definition
+	// Include USING clause only if indexType is specified
+	var definition string
+	if exclusion.indexType != "" {
+		definition = fmt.Sprintf(
+			"CONSTRAINT %s EXCLUDE USING %s (%s)",
+			g.escapeSQLName(exclusion.constraintName),
+			exclusion.indexType,
+			strings.Join(ex, ", "),
+		)
+	} else {
+		definition = fmt.Sprintf(
+			"CONSTRAINT %s EXCLUDE (%s)",
+			g.escapeSQLName(exclusion.constraintName),
+			strings.Join(ex, ", "),
+		)
+	}
 	if exclusion.where != "" {
 		definition += fmt.Sprintf(" WHERE (%s)", exclusion.where)
 	}
@@ -3046,7 +3122,17 @@ func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bo
 	normalizedA = unwrapOutermostParenExpr(normalizedA)
 	normalizedB = unwrapOutermostParenExpr(normalizedB)
 
-	return parser.String(normalizedA) == parser.String(normalizedB) &&
+	strA := parser.String(normalizedA)
+	strB := parser.String(normalizedB)
+
+	// Normalize whitespace for comparison (parser.String() and database may format differently)
+	// Remove all spaces to avoid issues with "ANY(ARRAY" vs "ANY (ARRAY"
+	normalizedStrA := strings.ReplaceAll(strA, " ", "")
+	normalizedStrB := strings.ReplaceAll(strB, " ", "")
+
+	slog.Debug("comparing CHECK constraints", "A", strA, "B", strB, "normalizedA", normalizedStrA, "normalizedB", normalizedStrB, "equal", normalizedStrA == normalizedStrB)
+
+	return normalizedStrA == normalizedStrB &&
 		checkA.notForReplication == checkB.notForReplication &&
 		checkA.noInherit == checkB.noInherit
 }
@@ -3177,7 +3263,19 @@ func normalizeName(name string) string {
 
 // normalizeOperator converts operator to lowercase for consistent comparison.
 func normalizeOperator(op string) string {
-	return strings.ToLower(op)
+	opLower := strings.ToLower(op)
+	// PostgreSQL normalizes LIKE/NOT LIKE to ~~ and !~~ operators
+	// Also normalize != to <> for SQL standard compliance
+	switch opLower {
+	case "like":
+		return "~~"
+	case "not like":
+		return "!~~"
+	case "!=":
+		return "<>"
+	default:
+		return opLower
+	}
 }
 
 // sortAndDeduplicateValues sorts and deduplicates a slice of expressions based on their string representation.
@@ -3212,23 +3310,42 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 
 	switch e := expr.(type) {
 	case *parser.CastExpr:
-		// Remove casts to text or character varying
+		normalizedExpr := normalizeCheckExprAST(e.Expr)
+
+		// Remove casts to text or character varying, but only on literals
+		// Keep casts on column references like t4::text
 		if e.Type != nil && (e.Type.Type == "text" || e.Type.Type == "character varying") {
-			return normalizeCheckExprAST(e.Expr)
+			// Check if the expression being cast is a literal (SQLVal)
+			if _, isLiteral := normalizedExpr.(*parser.SQLVal); isLiteral {
+				return normalizedExpr
+			}
 		}
+
+		// Normalize type name to lowercase
+		var normalizedType *parser.ConvertType
+		if e.Type != nil {
+			normalizedType = &parser.ConvertType{
+				Type:     strings.ToLower(e.Type.Type),
+				Length:   e.Type.Length,
+				Scale:    e.Type.Scale,
+				Charset:  e.Type.Charset,
+				Operator: e.Type.Operator,
+			}
+		}
+
 		return &parser.CastExpr{
-			Expr: normalizeCheckExprAST(e.Expr),
-			Type: e.Type,
+			Expr: normalizedExpr,
+			Type: normalizedType,
 		}
 	case *parser.ParenExpr:
 		normalized := normalizeCheckExprAST(e.Expr)
 		if paren, ok := normalized.(*parser.ParenExpr); ok {
 			return paren
 		}
-		// Unwrap parentheses around literals (numbers, strings, etc.)
-		// MSSQL adds unnecessary parens like (1) instead of 1
+		// Unwrap parentheses around literals, column names, and casts
+		// This handles cases like ((name)::TEXT) -> name::text
 		switch normalized.(type) {
-		case *parser.SQLVal:
+		case *parser.SQLVal, *parser.ColName, *parser.CastExpr:
 			return normalized
 		}
 		return &parser.ParenExpr{Expr: normalized}
@@ -3270,9 +3387,81 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 		right := normalizeCheckExprAST(e.Right)
 		op := normalizeOperator(e.Operator)
 
+		// Check if right side is a function call to ANY/ALL/SOME
+		// This happens when the input has a space like "= ANY (ARRAY[...])"
+		// The parser treats "ANY (...)" as a function call instead of the special ANY syntax
+		if funcExpr, ok := right.(*parser.FuncExpr); ok {
+			funcName := strings.ToUpper(funcExpr.Name.String())
+			if funcName == "ANY" || funcName == "SOME" || funcName == "ALL" {
+				if len(funcExpr.Exprs) == 1 {
+					// Extract the argument from SelectExprs
+					if aliasedExpr, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
+						right = aliasedExpr.Expr
+						// Set the appropriate flag and normalize SOME to ANY
+						if funcName == "ALL" {
+							return &parser.ComparisonExpr{
+								Operator: op,
+								Left:     left,
+								Right:    right,
+								All:      true,
+							}
+						} else {
+							// Both ANY and SOME should be normalized to ANY
+							return &parser.ComparisonExpr{
+								Operator: op,
+								Left:     left,
+								Right:    right,
+								Any:      true,
+							}
+						}
+					}
+				}
+			}
+		}
+
 		if op == "in" || op == "not in" {
 			if tuple, ok := right.(parser.ValTuple); ok {
 				right = parser.ValTuple(sortAndDeduplicateValues([]parser.Expr(tuple)))
+			}
+		}
+
+		if op == "in" || op == "not in" {
+			if tuple, ok := right.(parser.ValTuple); ok {
+				right = parser.ValTuple(sortAndDeduplicateValues([]parser.Expr(tuple)))
+
+				// Convert ValTuple elements to ArrayElements
+				arrayElements := make(parser.ArrayElements, len(tuple))
+				for i, elem := range tuple {
+					if arrayElem, ok := elem.(parser.ArrayElement); ok {
+						arrayElements[i] = arrayElem
+					} else {
+						slog.Warn("CHECK constraint tuple element is not an ArrayElement, keeping original IN form", "type", fmt.Sprintf("%T", elem))
+						return &parser.ComparisonExpr{
+							Operator: op,
+							Left:     left,
+							Right:    right,
+							Escape:   normalizeCheckExprAST(e.Escape),
+							All:      e.All,
+							Any:      e.Any,
+						}
+					}
+				}
+
+				if op == "in" {
+					return &parser.ComparisonExpr{
+						Operator: "=",
+						Left:     left,
+						Right:    &parser.ArrayConstructor{Elements: arrayElements},
+						Any:      true,
+					}
+				} else { // not in
+					return &parser.ComparisonExpr{
+						Operator: "<>",
+						Left:     left,
+						Right:    &parser.ArrayConstructor{Elements: arrayElements},
+						All:      true,
+					}
+				}
 			}
 		}
 
@@ -3305,9 +3494,11 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 			}
 			return arg
 		}))
+		// Normalize function name to lowercase
+		normalizedName := parser.NewColIdent(strings.ToLower(e.Name.String()))
 		return &parser.FuncExpr{
 			Qualifier: e.Qualifier,
-			Name:      e.Name,
+			Name:      normalizedName,
 			Distinct:  e.Distinct,
 			Exprs:     normalizedExprs,
 			Over:      e.Over,
@@ -3354,10 +3545,33 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 				Name: parser.NewTableIdent(qualifierStr),
 			},
 		}
+	case *parser.SQLVal:
+		// Normalize PostgreSQL date literal syntax: "date '2022-01-01'" -> "'2022-01-01'"
+		// The parser stores DATE '...' literals as StrVal with "date " prefix
+		if e.Type == parser.StrVal {
+			valStr := string(e.Val)
+			if strings.HasPrefix(valStr, "date ") {
+				// Remove "date " prefix
+				normalizedVal := strings.TrimPrefix(valStr, "date ")
+				return parser.NewStrVal([]byte(normalizedVal))
+			}
+		}
+		return e
 	default:
 		// For all other expression types (literals, etc.), return as-is
 		return expr
 	}
+}
+
+// normalizeCheckDefinitionForDDL returns a normalized CHECK definition string for DDL generation
+// It converts IN to ANY(ARRAY[...]) form to match PostgreSQL normalization
+func (g *Generator) normalizeCheckDefinitionForDDL(check CheckDefinition) string {
+	if check.definitionAST != nil {
+		// Use normalized AST to ensure consistent form (IN -> ANY, SOME -> ANY)
+		normalizedAST := normalizeCheckExprAST(check.definitionAST)
+		return parser.String(normalizedAST)
+	}
+	return check.definition
 }
 
 func areSameIdentityDefinition(identityA *Identity, identityB *Identity) bool {
@@ -3846,6 +4060,16 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 }
 
 func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
+	slog.Debug("areSameIndexes",
+		"indexA.name", indexA.name,
+		"indexB.name", indexB.name,
+		"indexA.unique", indexA.unique,
+		"indexB.unique", indexB.unique,
+		"indexA.primary", indexA.primary,
+		"indexB.primary", indexB.primary,
+		"indexA.constraint", indexA.constraint,
+		"indexB.constraint", indexB.constraint,
+	)
 	if indexA.unique != indexB.unique {
 		return false
 	}
@@ -3980,9 +4204,21 @@ func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB Forei
 }
 
 func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion) bool {
-	if exclusionA.indexType != exclusionB.indexType {
+	// Normalize index types for comparison
+	// When one index type is empty and the other is set, they may still be equivalent
+	// because PostgreSQL automatically chooses an index method when none is specified.
+	// We normalize both to uppercase for case-insensitive comparison.
+	indexTypeA := strings.ToUpper(exclusionA.indexType)
+	indexTypeB := strings.ToUpper(exclusionB.indexType)
+
+	// If both are empty or both are the same, they match
+	// If one is empty and the other is not, they may still match (PostgreSQL's auto-selection)
+	// We consider them the same to avoid unnecessary DROP/ADD cycles
+	if indexTypeA != indexTypeB && indexTypeA != "" && indexTypeB != "" {
+		// Both are non-empty and different, so they're definitely different
 		return false
 	}
+
 	if len(exclusionA.exclusions) != len(exclusionB.exclusions) {
 		return false
 	}

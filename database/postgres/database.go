@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"iter"
+	"log/slog"
 	"net/url"
 	"os"
 	"regexp"
@@ -588,8 +589,10 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 			col.IdentityGeneration = *idGen
 		}
 		if checkName != nil && checkDefinition != nil {
+			normalized := normalizeCheckConstraintDefinition(*checkDefinition)
+			slog.Debug("normalizing column CHECK constraint", "table", table, "column", colName, "constraint", *checkName, "original", *checkDefinition, "normalized", normalized)
 			col.Check = &columnConstraint{
-				definition: normalizeCheckConstraintDefinition(*checkDefinition),
+				definition: normalized,
 				name:       *checkName,
 			}
 		}
@@ -663,16 +666,18 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[strin
 		}
 		// Normalize constraint definition to handle PostgreSQL's automatic type casting
 		normalizedDef := normalizeCheckConstraintDefinition(constraintDef)
+		slog.Debug("normalizing CHECK constraint", "table", tableName, "constraint", constraintName, "original", constraintDef, "normalized", normalizedDef)
 		result[constraintName] = normalizedDef
 	}
 
 	return result, nil
 }
 
-// normalizeCheckConstraintDefinition removes redundant type casts that PostgreSQL automatically adds
+// normalizeCheckConstraintDefinition removes redundant type casts and outer parentheses that PostgreSQL automatically adds
 // to make constraint comparison work correctly. Specifically handles cases like:
 // - ARRAY['active'::text, 'pending'::text] -> ARRAY['active', 'pending']
 // - '[0-9]'::text -> '[0-9]' (already handled by shouldDeleteTypeCast)
+// - (expression) -> expression (removes outer parentheses added by PostgreSQL)
 func normalizeCheckConstraintDefinition(def string) string {
 	// Remove ::text type casts from string literals in ARRAY expressions
 	// This handles the pattern: 'string'::text within ARRAY[...]
@@ -680,6 +685,30 @@ func normalizeCheckConstraintDefinition(def string) string {
 
 	// Remove ::character varying type casts similarly
 	result = regexp.MustCompile(`'([^']*)'::character varying(\([^)]*\))?`).ReplaceAllString(result, "'$1'")
+
+	// Remove outer parentheses if the entire expression is wrapped
+	// PostgreSQL adds these: CHECK ((expr)) but we generate CHECK (expr)
+	result = strings.TrimSpace(result)
+	if strings.HasPrefix(result, "(") && strings.HasSuffix(result, ")") {
+		// Count parentheses to ensure we're removing a matching pair
+		depth := 0
+		canRemove := true
+		for i, ch := range result[1 : len(result)-1] {
+			if ch == '(' {
+				depth++
+			} else if ch == ')' {
+				depth--
+				if depth < 0 && i < len(result)-2 {
+					// Found closing paren before the end, can't remove outer parens
+					canRemove = false
+					break
+				}
+			}
+		}
+		if canRemove && depth == 0 {
+			result = result[1 : len(result)-1]
+		}
+	}
 
 	return result
 }

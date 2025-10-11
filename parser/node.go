@@ -1921,15 +1921,22 @@ func (node *IntervalExpr) Format(buf *nodeBuffer) {
 	buf.Printf("interval %v %s", node.Expr, node.Unit)
 }
 
-// CollateExpr represents dynamic collate operator.
+// CollateExpr represents dynamic collate operator or type cast.
 type CollateExpr struct {
 	Expr    Expr
 	Charset string
+	Type    *ColumnType // for type cast (::type)
 }
 
 // Format formats the node.
 func (node *CollateExpr) Format(buf *nodeBuffer) {
-	buf.Printf("%v collate %s", node.Expr, node.Charset)
+	if node.Type != nil {
+		// Type cast: expr::type
+		buf.Printf("%v::%v", node.Expr, node.Type)
+	} else {
+		// Collate: expr collate charset
+		buf.Printf("%v collate %s", node.Expr, node.Charset)
+	}
 }
 
 // FuncExpr represents a function call that takes SelectExprs.
