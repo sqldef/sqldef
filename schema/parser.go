@@ -205,10 +205,13 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 		} else if stmt.Action == parser.GrantPrivilege {
 			grantees := stmt.Grant.Grantees
 
+			if stmt.Grant.WithGrantOption {
+				return nil, fmt.Errorf("WITH GRANT OPTION is not supported yet")
+			}
 			if len(grantees) > 0 {
 				return &GrantPrivilege{
 					statement:  ddl,
-					tableName:  normalizedTableName(mode, stmt.Table, defaultSchema),
+					tableName:  normalizedTableName(mode, stmt.Grant.TableName, defaultSchema),
 					grantees:   grantees,
 					privileges: stmt.Grant.Privileges,
 				}, nil
@@ -217,11 +220,14 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 		} else if stmt.Action == parser.RevokePrivilege {
 			grantees := stmt.Grant.Grantees
 
+			if stmt.Grant.CascadeOption {
+				return nil, fmt.Errorf("CASCADE/RESTRICT options are not supported yet")
+			}
 			// For now, return the first grantee as a single statement
 			if len(grantees) > 0 {
 				return &RevokePrivilege{
 					statement:     ddl,
-					tableName:     normalizedTableName(mode, stmt.Table, defaultSchema),
+					tableName:     normalizedTableName(mode, stmt.Grant.TableName, defaultSchema),
 					grantees:      grantees,
 					privileges:    stmt.Grant.Privileges,
 					cascadeOption: stmt.Grant.CascadeOption,
@@ -911,11 +917,11 @@ func normalizeTableInComment(mode GeneratorMode, comment *parser.Comment, defaul
 			return comment
 		case 1, 2:
 			switch comment.ObjectType {
-			case "OBJECT_TABLE":
+			case "OBJECT_TABLE" /* pgquery */, "TABLE" /* generic parser */ :
 				if len(objs) == 1 {
 					objs = append([]string{defaultSchema}, objs...)
 				}
-			case "OBJECT_COLUMN":
+			case "OBJECT_COLUMN" /* pgquery */, "COLUMN" /* generic parser */ :
 				if len(objs) == 2 {
 					objs = append([]string{defaultSchema}, objs...)
 				}
@@ -988,11 +994,11 @@ func normalizeTableInCommentOnStmt(mode GeneratorMode, comment *parser.Comment, 
 		switch l := len(objs); {
 		case l == 1 || l == 2:
 			switch comment.ObjectType {
-			case "OBJECT_TABLE":
+			case "OBJECT_TABLE" /* pgquery */, "TABLE" /* generic parser */ :
 				if len(objs) == 1 {
 					return fmt.Sprintf(`%s%s.%s%s`, matches[1], defaultSchema, objs[0], matches[3])
 				}
-			case "OBJECT_COLUMN":
+			case "OBJECT_COLUMN" /* pgquery */, "COLUMN" /* generic parser */ :
 				if len(objs) == 2 {
 					return fmt.Sprintf(`%s%s.%s.%s%s`, matches[1], defaultSchema, objs[0], objs[1], matches[3])
 				}

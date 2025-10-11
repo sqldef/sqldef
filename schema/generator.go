@@ -2632,20 +2632,23 @@ func sortPrivilegesByCanonicalOrder(privileges []string) {
 }
 
 func normalizePrivilegesForComparison(privileges []string) []string {
-	if len(privileges) == 1 && (privileges[0] == "ALL" || privileges[0] == "ALL PRIVILEGES") {
-		return postgresTablePrivilegeList
+	if len(privileges) == 1 {
+		privilege := privileges[0]
+		if strings.EqualFold(privilege, "ALL") || strings.EqualFold(privilege, "ALL PRIVILEGES") {
+			return postgresTablePrivilegeList
+		}
 	}
-	return privileges
+	return transformSlice(privileges, strings.ToUpper)
 }
 
 func formatPrivilegesForGrant(privileges []string) string {
-	if len(privileges) == 1 && privileges[0] == "ALL" {
+	if len(privileges) == 1 && strings.EqualFold(privileges[0], "ALL") {
 		return "ALL PRIVILEGES"
 	}
 	if len(privileges) == len(postgresTablePrivilegeList) {
 		privMap := make(map[string]bool)
 		for _, priv := range privileges {
-			privMap[priv] = true
+			privMap[strings.ToUpper(priv)] = true
 		}
 		allPresent := true
 		for _, reqPriv := range postgresTablePrivilegeList {
@@ -2658,7 +2661,8 @@ func formatPrivilegesForGrant(privileges []string) string {
 			return "ALL PRIVILEGES"
 		}
 	}
-	return strings.Join(privileges, ", ")
+
+	return strings.Join(transformSlice(privileges, strings.ToUpper), ", ")
 }
 
 func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]string, error) {
