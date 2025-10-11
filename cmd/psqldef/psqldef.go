@@ -14,6 +14,7 @@ import (
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/database/postgres"
 	"github.com/sqldef/sqldef/v3/schema"
+	"github.com/sqldef/sqldef/v3/util"
 	"golang.org/x/term"
 )
 
@@ -154,6 +155,8 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 }
 
 func main() {
+	util.InitSlog()
+
 	config, options := parseOptions(os.Args[1:])
 
 	var db database.Database

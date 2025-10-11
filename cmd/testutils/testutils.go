@@ -15,7 +15,12 @@ import (
 	"github.com/goccy/go-yaml"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/schema"
+	"github.com/sqldef/sqldef/v3/util"
 )
+
+func init() {
+	util.InitSlog()
+}
 
 type TestCase struct {
 	Current      string  // default: empty schema

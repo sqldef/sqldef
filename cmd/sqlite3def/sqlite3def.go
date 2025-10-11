@@ -13,6 +13,7 @@ import (
 	"github.com/sqldef/sqldef/v3/database/sqlite3"
 	"github.com/sqldef/sqldef/v3/parser"
 	"github.com/sqldef/sqldef/v3/schema"
+	"github.com/sqldef/sqldef/v3/util"
 )
 
 // version and revision are set via -ldflags
@@ -117,6 +118,8 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 }
 
 func main() {
+	util.InitSlog()
+
 	config, options := parseOptions(os.Args[1:])
 
 	var db database.Database

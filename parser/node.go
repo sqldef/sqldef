@@ -618,6 +618,10 @@ func (ts *TableSpec) addForeignKey(foreignKey *ForeignKeyDefinition) {
 	ts.ForeignKeys = append(ts.ForeignKeys, foreignKey)
 }
 
+func (ts *TableSpec) addExclusion(exclusion *ExclusionDefinition) {
+	ts.Exclusions = append(ts.Exclusions, exclusion)
+}
+
 // ColumnDefinition describes a column in a CREATE TABLE statement
 type ColumnDefinition struct {
 	Name          ColIdent
@@ -2662,5 +2666,14 @@ type ArrayElement interface {
 	SQLNode
 }
 
-func (*SQLVal) iArrayElement()   {}
-func (*CastExpr) iArrayElement() {}
+func (*SQLVal) iArrayElement()           {}
+func (*CastExpr) iArrayElement()         {}
+func (*BinaryExpr) iArrayElement()       {}
+func (*UnaryExpr) iArrayElement()        {}
+func (*ColName) iArrayElement()          {}
+func (*FuncExpr) iArrayElement()         {}
+func (*ParenExpr) iArrayElement()        {}
+func (*IntervalExpr) iArrayElement()     {}
+func (BoolVal) iArrayElement()           {}
+func (*NullVal) iArrayElement()          {}
+func (*ArrayConstructor) iArrayElement() {}

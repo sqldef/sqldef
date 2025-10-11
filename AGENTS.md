@@ -14,6 +14,7 @@ Each command follows the same pattern: it accepts connection parameters similar 
 * Never commit the changes unless the user asks for it.
 * Write comments to describe what is not obvious in the code. Describing the "why" is a recommended practice.
 * Format queries in string literals.
+* Use "log/slog" to trace internal flow of the code. `LOG_LEVEL=debug` to enable debug logging.
 
 ## Build
 
@@ -31,6 +32,8 @@ To maintain the parser, edit `parser/parser.y` and run:
 
 ```sh
 make parser
+# or
+make regen-parser # force regeneration
 ```
 
 For now, `psqldef` uses `go-pgquery` (a native PostgreSQL parser) as the primary parser,

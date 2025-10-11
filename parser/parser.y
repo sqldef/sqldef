@@ -108,6 +108,9 @@ func forceEOF(yylex interface{}) {
   LengthScaleOption        LengthScaleOption
   columnDefinition         *ColumnDefinition
   checkDefinition          *CheckDefinition
+  exclusionDefinition      *ExclusionDefinition
+  exclusionPair            ExclusionPair
+  exclusionPairs           []ExclusionPair
   indexDefinition          *IndexDefinition
   indexInfo                *IndexInfo
   indexOption              *IndexOption
@@ -187,11 +190,12 @@ func forceEOF(yylex interface{}) {
 %token <empty> JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP
 
 // DDL Tokens
-%token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD
-%token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE
+%token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD GRANT REVOKE OPTION PRIVILEGES
+%token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXCLUDE GIST
 %right <bytes> UNIQUE KEY
 %token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
 %token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN
+%token <bytes> EXTENSION DATA
 %token <bytes> STATUS VARIABLES
 %token <bytes> RESTRICT CASCADE NO ACTION
 %token <bytes> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
@@ -239,7 +243,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> CURRENT_TIME LOCALTIME LOCALTIMESTAMP
 %token <bytes> UTC_DATE UTC_TIME UTC_TIMESTAMP
 %token <bytes> REPLACE
-%token <bytes> CONVERT CAST
+%token <bytes> CONVERT CAST COALESCE
 %token <bytes> SUBSTR SUBSTRING
 %token <bytes> GROUP_CONCAT SEPARATOR
 %token <bytes> INHERIT
@@ -278,7 +282,7 @@ func forceEOF(yylex interface{}) {
 %type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement
 %type <statement> if_statement matched_if_statement unmatched_if_statement trigger_statement_not_if
 %type <blockStatement> simple_if_body
-%type <statement> create_statement alter_statement
+%type <statement> create_statement alter_statement comment_statement
 %type <statement> set_option_statement set_bool_option_statement
 %type <ddl> create_table_prefix
 %type <bytes2> comment_opt comment_list
@@ -333,7 +337,7 @@ func forceEOF(yylex interface{}) {
 %type <updateExpr> update_expression
 %type <setExpr> set_expression transaction_char isolation_level
 %type <str> ignore_opt default_opt
-%type <empty> not_exists_opt when_expression_opt for_each_row_opt
+%type <empty> if_not_exists_opt if_exists_opt when_expression_opt for_each_row_opt
 %type <bytes> reserved_keyword non_reserved_keyword
 %type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt
 %type <boolVal> unique_opt
@@ -355,6 +359,9 @@ func forceEOF(yylex interface{}) {
 %type <columnType> column_definition_type
 %type <indexDefinition> index_definition primary_key_definition unique_definition
 %type <checkDefinition> check_definition
+%type <exclusionDefinition> exclude_definition
+%type <exclusionPair> exclude_element
+%type <exclusionPairs> exclude_element_list
 %type <foreignKeyDefinition> foreign_key_definition foreign_key_without_options
 %type <colIdent> reference_option
 %type <colIdent> sql_id_opt
@@ -412,6 +419,9 @@ func forceEOF(yylex interface{}) {
 %type <empty> nonclustered_columnstore
 %type <bytes> bool_option_name
 %type <strs> bool_option_name_list
+%type <str> grant_privilege_name
+%type <strs> grant_privileges
+%type <strs> grant_target_list
 
 %start program
 
@@ -430,6 +440,10 @@ semicolon_opt:
 statement:
   create_statement
 | alter_statement
+| comment_statement
+  {
+    $$ = nil
+  }
 
 create_statement:
   create_table_prefix table_spec
@@ -566,7 +580,7 @@ create_statement:
       IndexCols: $8,
     }
   }
-| CREATE or_replace_opt VIEW not_exists_opt table_name AS select_statement
+| CREATE or_replace_opt VIEW if_not_exists_opt table_name AS select_statement
   {
     $$ = &DDL{
       Action: CreateView,
@@ -577,7 +591,7 @@ create_statement:
       },
     }
   }
-| CREATE or_replace_opt SQL SECURITY sql_security VIEW not_exists_opt table_name AS select_statement
+| CREATE or_replace_opt SQL SECURITY sql_security VIEW if_not_exists_opt table_name AS select_statement
   {
     $$ = &DDL{
       Action: CreateView,
@@ -589,7 +603,7 @@ create_statement:
       },
     }
   }
-| CREATE MATERIALIZED VIEW not_exists_opt table_name AS select_statement
+| CREATE MATERIALIZED VIEW if_not_exists_opt table_name AS select_statement
   {
     $$ = &DDL{
       Action: CreateView,
@@ -657,16 +671,16 @@ create_statement:
       },
     }
   }
-| CREATE TRIGGER IF NOT EXISTS sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt BEGIN statement_block ';' END
+| CREATE TRIGGER if_not_exists_opt sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt BEGIN statement_block ';' END
   {
     $$ = &DDL{
       Action: CreateTrigger,
       Trigger: &Trigger{
-        Name: &ColName{Name: $6},
-        TableName: $10,
-        Time: $7,
-        Event: $8,
-        Body: $14,
+        Name: &ColName{Name: $4},
+        TableName: $8,
+        Time: $5,
+        Event: $6,
+        Body: $12,
       },
     }
   }
@@ -681,14 +695,93 @@ create_statement:
       },
     }
   }
+/* For PostgreSQL - CREATE TYPE AS ENUM */
+| CREATE TYPE table_name AS ENUM '(' enum_values ')'
+  {
+    $$ = &DDL{
+      Action: CreateType,
+      Type: &Type{
+        Name: $3,
+        Type: ColumnType{Type: "enum", EnumValues: $7},
+      },
+    }
+  }
+/* For PostgreSQL */
+| CREATE EXTENSION if_not_exists_opt sql_id
+  {
+    $$ = nil
+  }
 /* For SQLite3, only to parse because alternation is not supported. // The Virtual Table Mechanism Of SQLite https://www.sqlite.org/vtab.html */
-| CREATE VIRTUAL TABLE not_exists_opt table_name USING sql_id module_arguments_opt
+| CREATE VIRTUAL TABLE if_not_exists_opt table_name USING sql_id module_arguments_opt
   {
     $$ = &DDL{Action: CreateTable, NewName: $5, TableSpec: &TableSpec{}}
   }
+| CREATE SCHEMA if_not_exists_opt sql_id
+  {
+    $$ = nil
+  }
+| GRANT grant_privileges ON TABLE table_name_list TO grant_target_list
+  {
+    $$ = nil
+  }
+| GRANT grant_privileges ON TABLE table_name_list TO grant_target_list WITH GRANT OPTION
+  {
+    $$ = nil
+  }
+| REVOKE grant_privileges ON TABLE table_name_list FROM grant_target_list
+  {
+    $$ = nil
+  }
+| REVOKE grant_privileges ON TABLE table_name_list FROM grant_target_list CASCADE
+  {
+    $$ = nil
+  }
 
 alter_statement:
-  ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')'
+  ALTER TABLE table_name ADD COLUMN column_definition
+  {
+    $$ = nil
+  }
+| ALTER TABLE table_name ALTER COLUMN sql_id SET DEFAULT value_expression
+  {
+    $$ = nil
+  }
+| ALTER TABLE table_name ALTER COLUMN sql_id DROP DEFAULT
+  {
+    $$ = nil
+  }
+| ALTER TABLE table_name ALTER COLUMN sql_id SET NOT NULL
+  {
+    $$ = nil
+  }
+| ALTER TABLE table_name ALTER COLUMN sql_id DROP NOT NULL
+  {
+    $$ = nil
+  }
+| ALTER TABLE table_name ALTER COLUMN sql_id TYPE column_type
+  {
+    $$ = nil
+  }
+| ALTER TABLE table_name ALTER COLUMN sql_id SET DATA TYPE column_type
+  {
+    $$ = nil
+  }
+/* ADD INDEX/KEY rules must come before ADD column rules to avoid ambiguity */
+| ALTER TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')'
+  {
+    $$ = &DDL{
+      Action: AddIndex,
+      Table: $3,
+      NewName: $3,
+      IndexSpec: &IndexSpec{
+        Name: $7,
+        Unique: bool($5),
+        Primary: false,
+      },
+      IndexCols: $9,
+    }
+  }
+| ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')'
   {
     $$ = &DDL{
       Action: AddIndex,
@@ -700,6 +793,153 @@ alter_statement:
         Primary: false,
       },
       IndexCols: $10,
+    }
+  }
+| ALTER ignore_opt TABLE table_name ADD COLUMN column_definition
+  {
+    $$ = nil
+  }
+| ALTER ignore_opt TABLE table_name ADD column_definition
+  {
+    $$ = nil
+  }
+| ALTER ignore_opt TABLE table_name ALTER COLUMN sql_id SET DEFAULT value_expression
+  {
+    $$ = nil
+  }
+| ALTER ignore_opt TABLE table_name ALTER COLUMN sql_id DROP DEFAULT
+  {
+    $$ = nil
+  }
+| ALTER ignore_opt TABLE table_name ALTER COLUMN sql_id SET NOT NULL
+  {
+    $$ = nil
+  }
+| ALTER ignore_opt TABLE table_name ALTER COLUMN sql_id DROP NOT NULL
+  {
+    $$ = nil
+  }
+| ALTER ignore_opt TABLE table_name ALTER COLUMN sql_id TYPE column_type
+  {
+    $$ = nil
+  }
+| ALTER ignore_opt TABLE table_name ALTER COLUMN sql_id SET DATA TYPE column_type
+  {
+    $$ = nil
+  }
+| ALTER TABLE table_name ADD CONSTRAINT sql_id UNIQUE '(' index_column_list ')' deferrable_opt initially_deferred_opt
+  {
+    $$ = &DDL{
+      Action: AddIndex,
+      Table: $3,
+      NewName: $3,
+      IndexSpec: &IndexSpec{
+        Name: $6,
+        Unique: true,
+        Primary: false,
+        Constraint: true,
+        ConstraintOptions: &ConstraintOptions{
+          Deferrable: bool($11),
+          InitiallyDeferred: bool($12),
+        },
+      },
+      IndexCols: $9,
+    }
+  }
+| ALTER TABLE table_name ADD CONSTRAINT sql_id UNIQUE CLUSTERED '(' index_column_list ')' index_option_opt index_partition_opt
+  {
+    $$ = &DDL{
+      Action: AddIndex,
+      Table: $3,
+      NewName: $3,
+      IndexSpec: &IndexSpec{
+        Name: $6,
+        Unique: true,
+        Primary: false,
+        Clustered: true,
+        Constraint: true,
+        Options: $12,
+        Partition: $13,
+      },
+      IndexCols: $10,
+    }
+  }
+| ALTER TABLE table_name ADD CONSTRAINT sql_id UNIQUE NONCLUSTERED '(' index_column_list ')' index_option_opt index_partition_opt
+  {
+    $$ = &DDL{
+      Action: AddIndex,
+      Table: $3,
+      NewName: $3,
+      IndexSpec: &IndexSpec{
+        Name: $6,
+        Unique: true,
+        Primary: false,
+        Clustered: false,
+        Constraint: true,
+        Options: $12,
+        Partition: $13,
+      },
+      IndexCols: $10,
+    }
+  }
+| ALTER TABLE table_name ADD foreign_key_definition
+  {
+    $$ = &DDL{
+      Action: AddForeignKey,
+      Table: $3,
+      NewName: $3,
+      ForeignKey: $5,
+    }
+  }
+| ALTER TABLE ONLY table_name ADD CONSTRAINT sql_id PRIMARY KEY '(' index_column_list ')'
+  {
+    $$ = &DDL{
+      Action: AddPrimaryKey,
+      Table: $4,
+      NewName: $4,
+      IndexSpec: &IndexSpec{
+        Name: $7,
+        Unique: false,
+        Primary: true,
+      },
+      IndexCols: $11,
+    }
+  }
+| ALTER TABLE table_name ADD CONSTRAINT sql_id PRIMARY KEY '(' index_column_list ')'
+  {
+    $$ = &DDL{
+      Action: AddPrimaryKey,
+      Table: $3,
+      NewName: $3,
+      IndexSpec: &IndexSpec{
+        Name: $6,
+        Unique: false,
+        Primary: true,
+      },
+      IndexCols: $10,
+    }
+  }
+| ALTER TABLE table_name ADD PRIMARY KEY '(' index_column_list ')'
+  {
+    $$ = &DDL{
+      Action: AddPrimaryKey,
+      Table: $3,
+      NewName: $3,
+      IndexSpec: &IndexSpec{
+        Name: NewColIdent(""),
+        Unique: false,
+        Primary: true,
+      },
+      IndexCols: $8,
+    }
+  }
+| ALTER TABLE ONLY table_name ADD foreign_key_definition
+  {
+    $$ = &DDL{
+      Action: AddForeignKey,
+      Table: $4,
+      NewName: $4,
+      ForeignKey: $6,
     }
   }
 | ALTER ignore_opt TABLE ONLY table_name ADD CONSTRAINT sql_id PRIMARY KEY '(' index_column_list ')'
@@ -789,6 +1029,159 @@ alter_statement:
       NewName: $5,
       ForeignKey: $7,
     }
+  }
+| ALTER TABLE table_name DROP COLUMN sql_id
+  {
+    $$ = nil
+  }
+| ALTER TABLE table_name DROP CONSTRAINT sql_id
+  {
+    $$ = nil
+  }
+| ALTER TABLE table_name ADD CONSTRAINT sql_id CHECK '(' expression ')'
+  {
+    $$ = nil
+  }
+| ALTER TABLE table_name ADD CONSTRAINT sql_id CHECK '(' expression ')' NO INHERIT
+  {
+    $$ = nil
+  }
+| ALTER TABLE table_name ADD CONSTRAINT sql_id EXCLUDE '(' exclude_element_list ')'
+  {
+    $$ = &DDL{
+      Action: AddExclusion,
+      Table: $3,
+      NewName: $3,
+      Exclusion: &ExclusionDefinition{
+        ConstraintName: $6,
+        Exclusions: $9,
+      },
+    }
+  }
+| ALTER TABLE table_name ADD CONSTRAINT sql_id EXCLUDE '(' exclude_element_list ')' where_expression_opt
+  {
+    $$ = &DDL{
+      Action: AddExclusion,
+      Table: $3,
+      NewName: $3,
+      Exclusion: &ExclusionDefinition{
+        ConstraintName: $6,
+        Exclusions: $9,
+        Where: NewWhere(WhereStr, $11),
+      },
+    }
+  }
+| ALTER TABLE table_name ADD CONSTRAINT sql_id EXCLUDE USING GIST '(' exclude_element_list ')'
+  {
+    $$ = &DDL{
+      Action: AddExclusion,
+      Table: $3,
+      NewName: $3,
+      Exclusion: &ExclusionDefinition{
+        ConstraintName: $6,
+        IndexType: "GIST",
+        Exclusions: $11,
+      },
+    }
+  }
+| ALTER TABLE table_name ADD CONSTRAINT sql_id EXCLUDE USING GIST '(' exclude_element_list ')' where_expression_opt
+  {
+    $$ = &DDL{
+      Action: AddExclusion,
+      Table: $3,
+      NewName: $3,
+      Exclusion: &ExclusionDefinition{
+        ConstraintName: $6,
+        IndexType: "GIST",
+        Exclusions: $11,
+        Where: NewWhere(WhereStr, $13),
+      },
+    }
+  }
+| ALTER TABLE table_name ADD CONSTRAINT sql_id EXCLUDE USING sql_id '(' exclude_element_list ')'
+  {
+    $$ = &DDL{
+      Action: AddExclusion,
+      Table: $3,
+      NewName: $3,
+      Exclusion: &ExclusionDefinition{
+        ConstraintName: $6,
+        IndexType: $9.String(),
+        Exclusions: $11,
+      },
+    }
+  }
+| ALTER TABLE table_name ADD CONSTRAINT sql_id EXCLUDE USING sql_id '(' exclude_element_list ')' where_expression_opt
+  {
+    $$ = &DDL{
+      Action: AddExclusion,
+      Table: $3,
+      NewName: $3,
+      Exclusion: &ExclusionDefinition{
+        ConstraintName: $6,
+        IndexType: $9.String(),
+        Exclusions: $11,
+        Where: NewWhere(WhereStr, $13),
+      },
+    }
+  }
+| ALTER ignore_opt TABLE table_name DROP COLUMN sql_id
+  {
+    $$ = nil
+  }
+| ALTER ignore_opt TABLE table_name DROP CONSTRAINT sql_id
+  {
+    $$ = nil
+  }
+| ALTER ignore_opt TABLE table_name ADD CONSTRAINT sql_id CHECK '(' expression ')'
+  {
+    $$ = nil
+  }
+| ALTER ignore_opt TABLE table_name ADD CONSTRAINT sql_id CHECK '(' expression ')' NO INHERIT
+  {
+    $$ = nil
+  }
+| ALTER INDEX table_name RENAME TO sql_id
+  {
+    $$ = nil
+  }
+| ALTER TABLE table_name RENAME TO sql_id
+  {
+    $$ = nil
+  }
+| ALTER TABLE table_name RENAME COLUMN sql_id TO sql_id
+  {
+    $$ = nil
+  }
+| ALTER TYPE table_name ADD VALUE if_not_exists_opt STRING
+  {
+    $$ = nil
+  }
+
+comment_statement:
+  COMMENT_KEYWORD ON TABLE table_name IS STRING
+  {
+    $$ = nil
+  }
+| COMMENT_KEYWORD ON TABLE table_name IS NULL
+  {
+    $$ = nil
+  }
+| COMMENT_KEYWORD ON COLUMN table_id '.' sql_id IS STRING
+  {
+    $$ = nil
+  }
+| COMMENT_KEYWORD ON COLUMN table_id '.' sql_id IS NULL
+  {
+    $$ = nil
+  }
+| COMMENT_KEYWORD ON COLUMN table_id '.' reserved_table_id '.' sql_id IS STRING
+  {
+    $$ = nil
+  }
+| COMMENT_KEYWORD ON COLUMN table_id '.' reserved_table_id '.' sql_id IS NULL
+  {
+    $$ = nil
   }
 
 alter_object_type_index:
@@ -1452,7 +1845,7 @@ or_replace_opt:
   }
 
 create_table_prefix:
-  CREATE TABLE not_exists_opt table_name
+  CREATE TABLE if_not_exists_opt table_name
   {
     $$ = &DDL{Action: CreateTable, NewName: $4}
     setDDL(yylex, $$)
@@ -1498,15 +1891,16 @@ table_column_list:
   {
     $$.addCheck($3)
   }
+| table_column_list ',' exclude_definition
+  {
+    $$ = $1
+    $$.addExclusion($3)
+  }
 
 column_definition:
-  sql_id column_definition_type
+  reserved_sql_id column_definition_type
   {
     $$ = &ColumnDefinition{Name: $1, Type: $2}
-  }
-| non_reserved_keyword column_definition_type
-  {
-    $$ = &ColumnDefinition{Name: NewColIdent(string($1)), Type: $2}
   }
 /* For SQLite3 https://www.sqlite.org/lang_keywords.html */
 | STRING column_definition_type
@@ -1534,6 +1928,10 @@ column_type:
 | sql_id
   {
     $$ = ColumnType{Type: $1.val}
+  }
+| sql_id '.' sql_id
+  {
+    $$ = ColumnType{Type: string($1.val) + "." + string($3.val)}
   }
 
 column_definition_type:
@@ -1654,6 +2052,13 @@ column_definition_type:
     $1.ReferenceOnDelete = $9
     $$ = $1
   }
+| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option deferrable_opt initially_deferred_opt
+  {
+    $1.References     = String($3)
+    $1.ReferenceNames = $5
+    $1.ReferenceOnDelete = $9
+    $$ = $1
+  }
 | column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option
   {
     $1.References     = String($3)
@@ -1715,25 +2120,20 @@ column_definition_type:
   }
 
 default_definition:
-  DEFAULT default_val
+  DEFAULT value_expression
   {
-    $$ = DefaultValueOrExpression{Value: $2}
+    // Check if it's a simple value that should be stored as Value
+    if val, ok := $2.(*SQLVal); ok {
+      $$ = DefaultValueOrExpression{Value: val}
+    } else if val, ok := $2.(BoolVal); ok {
+      $$ = DefaultValueOrExpression{Value: NewBoolSQLVal(bool(val))}
+    } else {
+      $$ = DefaultValueOrExpression{Expr: $2}
+    }
   }
-| DEFAULT '(' default_val ')'
+| DEFAULT '(' value_expression ')'
   {
-    $$ = DefaultValueOrExpression{Value: $3}
-  }
-| DEFAULT '(' '(' default_val ')' ')'
-  {
-    $$ = DefaultValueOrExpression{Value: $4}
-  }
-| DEFAULT default_expression
-  {
-    $$ = DefaultValueOrExpression{Expr: $2}
-  }
-| DEFAULT '(' default_expression ')'
-  {
-    $$ = DefaultValueOrExpression{Expr: $3}
+    $$ = DefaultValueOrExpression{Expr: &ParenExpr{Expr: $3}}
   }
 
 default_val:
@@ -1783,7 +2183,7 @@ default_val:
   }
 
 default_expression:
-  function_call_generic
+  value_expression
   {
     $$ = $1
   }
@@ -1888,6 +2288,10 @@ current_timestamp:
 | CURRENT_TIMESTAMP '(' ')'
   {
     $$ = NewValArgWithOpt($1, nil)
+  }
+| CURRENT_TIMESTAMP '(' INTEGRAL ')'
+  {
+    $$ = NewValArgWithOpt($1, NewIntVal($3))
   }
 | CURRENT_TIME length_opt
   {
@@ -2055,6 +2459,10 @@ time_type:
     $$ = ColumnType{Type: string($1)}
   }
 | YEAR
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| INTERVAL
   {
     $$ = ColumnType{Type: string($1)}
   }
@@ -2571,6 +2979,18 @@ index_column_list_or_expression:
   {
     $$ = IndexColumnsOrExpression{IndexExpr: $1}
   }
+| function_call_keyword
+  {
+    $$ = IndexColumnsOrExpression{IndexExpr: $1}
+  }
+| function_call_nonkeyword
+  {
+    $$ = IndexColumnsOrExpression{IndexExpr: $1}
+  }
+| function_call_conflict
+  {
+    $$ = IndexColumnsOrExpression{IndexExpr: $1}
+  }
 
 index_column_list:
   index_column
@@ -2587,6 +3007,11 @@ index_column:
   {
     $$ = IndexColumn{Column: $1, Length: $2, Direction: $3}
   }
+/* MySQL-style syntax: column_name(length) */
+| sql_id '(' INTEGRAL ')' asc_desc_opt
+  {
+    $$ = IndexColumn{Column: $1, Length: NewIntVal($3), Direction: $5}
+  }
 /* For PostgreSQL */
 | KEY length_opt
   {
@@ -2596,9 +3021,29 @@ index_column:
   {
     $$ = IndexColumn{Column: $1, OperatorClass: string($2)}
   }
+| non_reserved_keyword length_opt asc_desc_opt
+  {
+    $$ = IndexColumn{Column: NewColIdent(string($1)), Length: $2, Direction: $3}
+  }
 | '(' expression ')' asc_desc_opt
   {
     $$ = IndexColumn{Expression: $2, Direction: $4}
+  }
+| function_call_generic asc_desc_opt
+  {
+    $$ = IndexColumn{Expression: $1, Direction: $2}
+  }
+| function_call_keyword asc_desc_opt
+  {
+    $$ = IndexColumn{Expression: $1, Direction: $2}
+  }
+| function_call_nonkeyword asc_desc_opt
+  {
+    $$ = IndexColumn{Expression: $1, Direction: $2}
+  }
+| function_call_conflict asc_desc_opt
+  {
+    $$ = IndexColumn{Expression: $1, Direction: $2}
   }
 
 // https://www.postgresql.org/docs/9.5/brin-builtin-opclasses.html
@@ -2606,37 +3051,57 @@ operator_class:
   TEXT_PATTERN_OPS
 
 foreign_key_definition:
-  foreign_key_without_options not_for_replication_opt
+  foreign_key_without_options not_for_replication_opt deferrable_opt initially_deferred_opt
   {
     $1.NotForReplication = bool($2)
+    $1.ConstraintOptions = &ConstraintOptions{
+      Deferrable: bool($3),
+      InitiallyDeferred: bool($4),
+    }
     $$ = $1
   }
-| foreign_key_without_options ON DELETE reference_option not_for_replication_opt
+| foreign_key_without_options ON DELETE reference_option not_for_replication_opt deferrable_opt initially_deferred_opt
   {
     $1.OnUpdate = NewColIdent("")
     $1.OnDelete = $4
     $1.NotForReplication = bool($5)
+    $1.ConstraintOptions = &ConstraintOptions{
+      Deferrable: bool($6),
+      InitiallyDeferred: bool($7),
+    }
     $$ = $1
   }
-| foreign_key_without_options ON UPDATE reference_option not_for_replication_opt
+| foreign_key_without_options ON UPDATE reference_option not_for_replication_opt deferrable_opt initially_deferred_opt
   {
     $1.OnUpdate = $4
     $1.OnDelete = NewColIdent("")
     $1.NotForReplication = bool($5)
+    $1.ConstraintOptions = &ConstraintOptions{
+      Deferrable: bool($6),
+      InitiallyDeferred: bool($7),
+    }
     $$ = $1
   }
-| foreign_key_without_options ON DELETE reference_option ON UPDATE reference_option not_for_replication_opt
+| foreign_key_without_options ON DELETE reference_option ON UPDATE reference_option not_for_replication_opt deferrable_opt initially_deferred_opt
   {
     $1.OnUpdate = $7
     $1.OnDelete = $4
     $1.NotForReplication = bool($8)
+    $1.ConstraintOptions = &ConstraintOptions{
+      Deferrable: bool($9),
+      InitiallyDeferred: bool($10),
+    }
     $$ = $1
   }
-| foreign_key_without_options ON UPDATE reference_option ON DELETE reference_option not_for_replication_opt
+| foreign_key_without_options ON UPDATE reference_option ON DELETE reference_option not_for_replication_opt deferrable_opt initially_deferred_opt
   {
     $1.OnUpdate = $4
     $1.OnDelete = $7
     $1.NotForReplication = bool($8)
+    $1.ConstraintOptions = &ConstraintOptions{
+      Deferrable: bool($9),
+      InitiallyDeferred: bool($10),
+    }
     $$ = $1
   }
 
@@ -2702,24 +3167,31 @@ primary_key_definition:
   }
 
 unique_definition:
-  CONSTRAINT sql_id UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
+  CONSTRAINT sql_id UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
   {
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: string($3), Name: $2, Primary: false, Unique: true, Clustered: $4},
       Columns: $6,
       Options: $8,
       Partition: $9,
-      ConstraintOptions: &ConstraintOptions{}, // Mark as constraint
+      ConstraintOptions: &ConstraintOptions{
+        Deferrable: bool($10),
+        InitiallyDeferred: bool($11),
+      },
     }
   }
 /* For PostgreSQL and SQLite3 */
-| UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
+| UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
   {
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: string($1), Primary: false, Unique: true, Clustered: $2},
       Columns: $4,
       Options: $6,
       Partition: $7,
+      ConstraintOptions: &ConstraintOptions{
+        Deferrable: bool($8),
+        InitiallyDeferred: bool($9),
+      },
     }
   }
 
@@ -2739,6 +3211,94 @@ check_definition:
       Where: *NewWhere(WhereStr, $3),
       NoInherit: $5,
     }
+  }
+
+exclude_definition:
+  CONSTRAINT sql_id EXCLUDE openb exclude_element_list closeb
+  {
+    $$ = &ExclusionDefinition{
+      ConstraintName: $2,
+      Exclusions: $5,
+    }
+  }
+| CONSTRAINT sql_id EXCLUDE openb exclude_element_list closeb where_expression_opt
+  {
+    $$ = &ExclusionDefinition{
+      ConstraintName: $2,
+      Exclusions: $5,
+      Where: NewWhere(WhereStr, $7),
+    }
+  }
+| CONSTRAINT sql_id EXCLUDE USING GIST openb exclude_element_list closeb
+  {
+    $$ = &ExclusionDefinition{
+      ConstraintName: $2,
+      IndexType: "GIST",
+      Exclusions: $7,
+    }
+  }
+| CONSTRAINT sql_id EXCLUDE USING GIST openb exclude_element_list closeb where_expression_opt
+  {
+    $$ = &ExclusionDefinition{
+      ConstraintName: $2,
+      IndexType: "GIST",
+      Exclusions: $7,
+      Where: NewWhere(WhereStr, $9),
+    }
+  }
+| CONSTRAINT sql_id EXCLUDE USING sql_id openb exclude_element_list closeb
+  {
+    $$ = &ExclusionDefinition{
+      ConstraintName: $2,
+      IndexType: $5.String(),
+      Exclusions: $7,
+    }
+  }
+| CONSTRAINT sql_id EXCLUDE USING sql_id openb exclude_element_list closeb where_expression_opt
+  {
+    $$ = &ExclusionDefinition{
+      ConstraintName: $2,
+      IndexType: $5.String(),
+      Exclusions: $7,
+      Where: NewWhere(WhereStr, $9),
+    }
+  }
+
+exclude_element_list:
+  exclude_element
+  {
+    $$ = []ExclusionPair{$1}
+  }
+| exclude_element_list ',' exclude_element
+  {
+    $$ = append($1, $3)
+  }
+
+exclude_element:
+  sql_id WITH '='
+  {
+    $$ = ExclusionPair{Column: $1, Operator: "="}
+  }
+| sql_id WITH sql_id
+  {
+    $$ = ExclusionPair{Column: $1, Operator: $3.String()}
+  }
+| sql_id WITH AND
+  {
+    $$ = ExclusionPair{Column: $1, Operator: "&&"}
+  }
+| expression WITH '='
+  {
+    // For expressions, we'll use a special column name to indicate it's an expression
+    $$ = ExclusionPair{Column: NewColIdent(String($1)), Operator: "="}
+  }
+| expression WITH sql_id
+  {
+    $$ = ExclusionPair{Column: NewColIdent(String($1)), Operator: $3.String()}
+  }
+| expression WITH AND
+  {
+    $$ = ExclusionPair{Column: NewColIdent(String($1)), Operator: "&&"}
   }
 
 /* For SQL Server */
@@ -2803,11 +3363,11 @@ sql_id_opt:
 | sql_id
 
 sql_id_list:
-  sql_id
+  reserved_sql_id
   {
     $$ = []ColIdent{$1}
   }
-| sql_id_list ',' sql_id
+| sql_id_list ',' reserved_sql_id
   {
     $$ = append($1, $3)
   }
@@ -3370,13 +3930,25 @@ condition:
   {
     $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $4, All: true}
   }
+| value_expression compare ALL openb value_expression closeb
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $5, All: true}
+  }
 | value_expression compare ANY value_expression
   {
     $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $4, Any: true}
   }
+| value_expression compare ANY openb value_expression closeb
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $5, Any: true}
+  }
 | value_expression compare SOME value_expression
   {
     $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $4, Any: true}
+  }
+| value_expression compare SOME openb value_expression closeb
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: $2, Right: $5, Any: true}
   }
 | value_expression IN col_tuple
   {
@@ -3394,6 +3966,10 @@ condition:
   {
     $$ = &ComparisonExpr{Left: $1, Operator: NotLikeStr, Right: $4, Escape: $5}
   }
+| value_expression '!' LIKE value_expression like_escape_opt
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: NotLikeStr, Right: $4, Escape: $5}
+  }
 | value_expression REGEXP value_expression
   {
     $$ = &ComparisonExpr{Left: $1, Operator: RegexpStr, Right: $3}
@@ -3401,6 +3977,22 @@ condition:
 | value_expression NOT REGEXP value_expression
   {
     $$ = &ComparisonExpr{Left: $1, Operator: NotRegexpStr, Right: $4}
+  }
+| value_expression POSIX_REGEX value_expression
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: PosixRegexStr, Right: $3}
+  }
+| value_expression POSIX_REGEX_CI value_expression
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: PosixRegexCiStr, Right: $3}
+  }
+| value_expression POSIX_NOT_REGEX value_expression
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: PosixNotRegexStr, Right: $3}
+  }
+| value_expression POSIX_NOT_REGEX_CI value_expression
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: PosixNotRegexCiStr, Right: $3}
   }
 | value_expression BETWEEN value_expression AND value_expression
   {
@@ -3548,6 +4140,11 @@ value_expression:
   {
     $$ = $1
   }
+| DATE STRING
+  {
+    // PostgreSQL date literal syntax: DATE '2022-01-01'
+    $$ = NewStrVal(append([]byte("date "), $2...))
+  }
 | column_name
   {
     $$ = $1
@@ -3557,6 +4154,10 @@ value_expression:
     $$ = $1
   }
 | tuple_expression
+  {
+    $$ = $1
+  }
+| array_constructor
   {
     $$ = $1
   }
@@ -3702,6 +4303,10 @@ value_expression:
   {
     $$ = &ColName{Name: NewColIdent(string($1))}
   }
+| openb value_expression closeb
+  {
+    $$ = &ParenExpr{Expr: $2}
+  }
 
 /*
  * Regular function calls without special token or syntax, guaranteed to not
@@ -3766,6 +4371,10 @@ function_call_keyword:
 | CAST openb expression AS convert_type closeb
   {
     $$ = &ConvertExpr{Action: CastStr, Expr: $3, Type: $5}
+  }
+| COALESCE openb select_expression_list closeb
+  {
+    $$ = &FuncExpr{Name: NewColIdent("coalesce"), Exprs: $3}
   }
 | CONVERT openb expression USING charset closeb
   {
@@ -3850,6 +4459,13 @@ function_call_nonkeyword:
 | CURRENT_TIMESTAMP openb closeb
   {
     $$ = &FuncExpr{Name:NewColIdent("current_timestamp")}
+  }
+| CURRENT_TIMESTAMP openb INTEGRAL closeb
+  {
+    $$ = &FuncExpr{
+      Name: NewColIdent("current_timestamp"),
+      Exprs: SelectExprs{&AliasedExpr{Expr: NewIntVal($3)}},
+    }
   }
 | UTC_TIMESTAMP func_datetime_precision_opt
   {
@@ -4108,6 +4724,18 @@ simple_convert_type:
     $$ = &ConvertType{Type: string($1)}
   }
 | UUID
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| int_type '[' ']'
+  {
+    $$ = &ConvertType{Type: $1.Type + "[]"}
+  }
+| TEXT '[' ']'
+  {
+    $$ = &ConvertType{Type: string($1) + "[]"}
+  }
+| INTERVAL
   {
     $$ = &ConvertType{Type: string($1)}
   }
@@ -4531,9 +5159,14 @@ charset_value:
     $$ = &Default{}
   }
 
-not_exists_opt:
+if_not_exists_opt:
   { $$ = struct{}{} }
 | IF NOT EXISTS
+  { $$ = struct{}{} }
+
+if_exists_opt:
+  { $$ = struct{}{} }
+| IF EXISTS
   { $$ = struct{}{} }
 
 ignore_opt:
@@ -4543,6 +5176,10 @@ ignore_opt:
 
 sql_id:
   ID
+  {
+    $$ = NewColIdent(string($1))
+  }
+| LEVEL
   {
     $$ = NewColIdent(string($1))
   }
@@ -4632,6 +5269,10 @@ array_constructor:
   {
     $$ = &ArrayConstructor{Elements: $3}
   }
+| ARRAY '[' ']'
+  {
+    $$ = &ArrayConstructor{Elements: nil}
+  }
 
 /* For PostgreSQL */
 array_element_list:
@@ -4649,6 +5290,38 @@ array_element:
   STRING character_cast_opt
   {
     $$ = NewStrVal($1)
+  }
+| INTEGRAL
+  {
+    $$ = NewIntVal($1)
+  }
+| FLOAT
+  {
+    $$ = NewFloatVal($1)
+  }
+| HEXNUM
+  {
+    $$ = NewHexNum($1)
+  }
+| VALUE_ARG
+  {
+    $$ = NewValArg($1)
+  }
+| NULL
+  {
+    $$ = &NullVal{}
+  }
+| TRUE
+  {
+    $$ = BoolVal(true)
+  }
+| FALSE
+  {
+    $$ = BoolVal(false)
+  }
+| value_expression TYPECAST simple_convert_type
+  {
+    $$ = &CastExpr{Expr: $1, Type: $3}
   }
 
 bool_option_name_list:
@@ -4683,6 +5356,68 @@ bool_option_name:
 | IMPLICIT_TRANSACTIONS
 | REMOTE_PROC_TRANSACTIONS
 | XACT_ABORT
+
+grant_privilege_name:
+  SELECT
+  {
+    $$ = string($1)
+  }
+| INSERT
+  {
+    $$ = string($1)
+  }
+| UPDATE
+  {
+    $$ = string($1)
+  }
+| DELETE
+  {
+    $$ = string($1)
+  }
+| TRUNCATE
+  {
+    $$ = string($1)
+  }
+| REFERENCES
+  {
+    $$ = string($1)
+  }
+| TRIGGER
+  {
+    $$ = string($1)
+  }
+| ALL
+  {
+    $$ = string($1)
+  }
+| ALL PRIVILEGES
+  {
+    $$ = "ALL PRIVILEGES"
+  }
+| sql_id
+  {
+    $$ = $1.String()
+  }
+
+grant_privileges:
+  grant_privilege_name
+  {
+    $$ = []string{$1}
+  }
+| grant_privileges ',' grant_privilege_name
+  {
+    $$ = append($$, $3)
+  }
+
+grant_target_list:
+  sql_id
+  {
+    $$ = []string{$1.String()}
+  }
+| grant_target_list ',' sql_id
+  {
+    $$ = append($$, $3.String())
+  }
 
 /*
  * These are not all necessarily reserved in MySQL, but some are.
@@ -4825,11 +5560,13 @@ reserved_keyword:
 | OFF
 
 non_reserved_keyword:
-  DEFINER
+  DATA
+| DEFINER
 | INVOKER
 | POLICY
 | TYPE
 | STATUS
+| VARIABLES
 | ZONE
 
 openb:
