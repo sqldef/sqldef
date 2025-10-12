@@ -167,6 +167,7 @@ func (d *PostgresDatabase) views() ([]string, error) {
 		definition = strings.ReplaceAll(definition, "\n", "")
 		definition = suffixSemicolon.ReplaceAllString(definition, "")
 		definition = spaces.ReplaceAllString(definition, " ")
+		definition = normalizeViewDefinitionString(definition)
 		ddls = append(
 			ddls, fmt.Sprintf(
 				"CREATE VIEW %s AS %s;", schema+"."+name, definition,
@@ -578,7 +579,9 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 		}
 		col.Name = strings.Trim(colName, `" `)
 		if colDefault != nil {
-			col.Default = *colDefault
+			normalized := normalizeDefaultValue(*colDefault)
+			col.Default = normalized
+			slog.Debug("Column default from database", "table", table, "column", colName, "default", *colDefault, "normalized", normalized)
 		}
 		if colDefault != nil && strings.HasPrefix(*colDefault, "nextval(") {
 			col.IsAutoIncrement = true
@@ -674,6 +677,30 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[strin
 	return result, nil
 }
 
+// normalizeDefaultValue removes redundant type casts that PostgreSQL automatically adds to DEFAULT values
+// Examples:
+// - 'text value'::text -> 'text value'
+// - '2022-01-01'::date -> '2022-01-01'
+// - 123::integer -> 123
+func normalizeDefaultValue(def string) string {
+	// Remove ::text type casts from string literals (handles quotes with '')
+	result := regexp.MustCompile(`'([^']*(?:''[^']*)*)'::text`).ReplaceAllString(def, "'$1'")
+
+	// Remove ::character varying type casts
+	result = regexp.MustCompile(`'([^']*(?:''[^']*)*)'::character varying(\([^)]*\))?`).ReplaceAllString(result, "'$1'")
+
+	// Remove ::date type casts from string literals
+	result = regexp.MustCompile(`'([^']*)'::date`).ReplaceAllString(result, "'$1'")
+
+	// Remove ::integer type casts from numeric literals
+	result = regexp.MustCompile(`(\d+)::integer`).ReplaceAllString(result, "$1")
+
+	// Normalize DATE 'value' literal syntax to 'value'
+	result = regexp.MustCompile(`(?i)date\s+'([^']+)'`).ReplaceAllString(result, "'$1'")
+
+	return result
+}
+
 // normalizeCheckConstraintDefinition removes redundant type casts and outer parentheses that PostgreSQL automatically adds
 // to make constraint comparison work correctly. Specifically handles cases like:
 // - ARRAY['active'::text, 'pending'::text] -> ARRAY['active', 'pending']
@@ -686,6 +713,12 @@ func normalizeCheckConstraintDefinition(def string) string {
 
 	// Remove ::character varying type casts similarly
 	result = regexp.MustCompile(`'([^']*)'::character varying(\([^)]*\))?`).ReplaceAllString(result, "'$1'")
+
+	// Remove ::date type casts from string literals
+	result = regexp.MustCompile(`'([^']*)'::date`).ReplaceAllString(result, "'$1'")
+
+	// Normalize DATE 'value' literal syntax to 'value'
+	result = regexp.MustCompile(`(?i)date\s+'([^']+)'`).ReplaceAllString(result, "'$1'")
 
 	// Remove outer parentheses if the entire expression is wrapped
 	// PostgreSQL adds these: CHECK ((expr)) but we generate CHECK (expr)
@@ -710,6 +743,16 @@ func normalizeCheckConstraintDefinition(def string) string {
 			result = result[1 : len(result)-1]
 		}
 	}
+
+	return result
+}
+
+// normalizeViewDefinitionString removes redundant type casts that PostgreSQL adds
+// to view definitions retrieved via pg_get_viewdef().
+func normalizeViewDefinitionString(def string) string {
+	// Remove ::text type casts from string literals in view definitions
+	// PostgreSQL adds these automatically but they're redundant
+	result := regexp.MustCompile(`'([^']*)'::text`).ReplaceAllString(def, "'$1'")
 
 	return result
 }

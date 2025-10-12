@@ -707,7 +707,7 @@ create_statement:
     }
   }
 /* For PostgreSQL */
-| CREATE EXTENSION if_not_exists_opt sql_id
+| CREATE EXTENSION if_not_exists_opt reserved_sql_id
   {
     $$ = &DDL{
       Action: CreateExtension,
@@ -4307,7 +4307,8 @@ value_expression:
 | DATE STRING
   {
     // PostgreSQL date literal syntax: DATE '2022-01-01'
-    $$ = NewStrVal(append([]byte("date "), $2...))
+    // This is syntactic sugar for '2022-01-01', so just use the string value
+    $$ = NewStrVal($2)
   }
 | column_name
   {
@@ -4928,6 +4929,14 @@ simple_convert_type:
 | TIMESTAMP WITHOUT TIME ZONE
   {
     $$ = &ConvertType{Type: string($1)+" without time zone"}
+  }
+| sql_id
+  {
+    $$ = &ConvertType{Type: $1.val}
+  }
+| sql_id '.' sql_id
+  {
+    $$ = &ConvertType{Type: string($1.val) + "." + string($3.val)}
   }
 
 expression_opt:
@@ -5758,6 +5767,7 @@ non_reserved_keyword:
 | STATUS
 | VARIABLES
 | ZONE
+| CITEXT
 
 openb:
   '('

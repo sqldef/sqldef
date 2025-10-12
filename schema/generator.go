@@ -372,10 +372,19 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 			slog.Debug("checking absent index", "table", currentTable.name, "currentIndex", index.name, "normalizedDesired", normalizedDesiredNames)
 
+			// Check if index exists in desired with the same name
 			if slices.Contains(normalizedDesiredNames, index.name) ||
 				slices.Contains(convertForeignKeysToIndexNames(desiredTable.foreignKeys), index.name) {
-				slog.Debug("index exists in desired, skipping", "index", index.name)
-				continue // Index is expected to exist.
+				// Index name exists in desired. But we need to check if the definition is the same.
+				// If the definition changed (e.g., expression changed), we need to drop and recreate.
+				desiredIndex := findIndexByName(desiredTable.indexes, index.name)
+				if desiredIndex != nil && g.areSameIndexes(index, *desiredIndex) {
+					slog.Debug("index exists in desired with same definition, skipping", "index", index.name)
+					continue // Index is expected to exist with the same definition.
+				} else {
+					slog.Debug("index exists in desired but definition changed, will drop and recreate", "index", index.name)
+					// Fall through to drop the index - it will be recreated later with the new definition
+				}
 			}
 
 			// Check if this index was renamed (don't drop if it was renamed)
@@ -3180,10 +3189,14 @@ func (g *Generator) areSameCheckDefinition(checkA *CheckDefinition, checkB *Chec
 	strA := parser.String(normalizedA)
 	strB := parser.String(normalizedB)
 
-	// Normalize whitespace for comparison (parser.String() and database may format differently)
+	// Normalize whitespace and type casts for comparison (parser.String() and database may format differently)
 	// Remove all spaces to avoid issues with "ANY(ARRAY" vs "ANY (ARRAY"
 	normalizedStrA := strings.ReplaceAll(strA, " ", "")
 	normalizedStrB := strings.ReplaceAll(strB, " ", "")
+
+	// Remove redundant type casts that PostgreSQL adds (e.g., '2022-01-01'::date -> '2022-01-01')
+	normalizedStrA = normalizeCheckStringForComparison(normalizedStrA)
+	normalizedStrB = normalizeCheckStringForComparison(normalizedStrB)
 
 	slog.Debug("comparing CHECK constraints", "A", strA, "B", strB, "normalizedA", normalizedStrA, "normalizedB", normalizedStrB, "equal", normalizedStrA == normalizedStrB)
 
@@ -3203,6 +3216,21 @@ func unwrapOutermostParenExpr(expr parser.Expr) parser.Expr {
 		}
 	}
 	return expr
+}
+
+// normalizeCheckStringForComparison removes redundant type casts from CHECK constraint strings for comparison
+// This is used during AST comparison to ensure semantically equivalent constraints match
+func normalizeCheckStringForComparison(s string) string {
+	// Remove ::text type casts
+	s = regexp.MustCompile(`'([^']*)'::text`).ReplaceAllString(s, "'$1'")
+
+	// Remove ::date type casts
+	s = regexp.MustCompile(`'([^']*)'::date`).ReplaceAllString(s, "'$1'")
+
+	// Remove ::integer type casts
+	s = regexp.MustCompile(`(\d+)::integer`).ReplaceAllString(s, "$1")
+
+	return s
 }
 
 // normalizeSelectAST normalizes a Select statement's expressions
@@ -4511,6 +4539,20 @@ func (g *Generator) normalizeDataType(dataType string) string {
 		return normalizedBase + "[]"
 	}
 
+	// Remove quotes from type names for PostgreSQL
+	// PostgreSQL's format_type() returns quoted identifiers like "public"."country"
+	// but our parser generates unquoted like public.country
+	if g.mode == GeneratorModePostgres {
+		dataType = strings.ReplaceAll(dataType, "\"", "")
+
+		// PostgreSQL's format_type() omits the schema for types in the search_path (including public schema)
+		// So "public.country" from the parser becomes "country" from format_type()
+		// Strip "public." prefix for comparison
+		if strings.HasPrefix(dataType, "public.") {
+			dataType = strings.TrimPrefix(dataType, "public.")
+		}
+	}
+
 	alias, ok := dataTypeAliases[dataType]
 	if ok {
 		dataType = alias
@@ -4588,7 +4630,12 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 	if indexA.vector != indexB.vector {
 		return false
 	}
-	for len(indexA.columns) != len(indexB.columns) {
+	slog.Debug("comparing index column counts",
+		"indexA.name", indexA.name,
+		"len(indexA.columns)", len(indexA.columns),
+		"len(indexB.columns)", len(indexB.columns),
+	)
+	if len(indexA.columns) != len(indexB.columns) {
 		return false
 	}
 	for i, indexAColumn := range indexA.columns {
@@ -4599,8 +4646,17 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 			indexB.columns[i].direction = AscScr
 		}
 		// TODO: check length?
-		if g.normalizeIndexColumn(indexA.columns[i].column) != g.normalizeIndexColumn(indexB.columns[i].column) ||
-			indexAColumn.direction != indexB.columns[i].direction {
+		normalizedA := g.normalizeIndexColumn(indexA.columns[i].column)
+		normalizedB := g.normalizeIndexColumn(indexB.columns[i].column)
+		slog.Debug("comparing index columns",
+			"i", i,
+			"columnA", indexA.columns[i].column,
+			"columnB", indexB.columns[i].column,
+			"normalizedA", normalizedA,
+			"normalizedB", normalizedB,
+			"equal", normalizedA == normalizedB,
+		)
+		if normalizedA != normalizedB || indexAColumn.direction != indexB.columns[i].direction {
 			return false
 		}
 	}
@@ -4676,6 +4732,8 @@ func (g *Generator) normalizeIndexColumn(column string) string {
 	if g.mode == GeneratorModePostgres {
 		column = strings.ReplaceAll(column, "array[", "")
 		column = strings.ReplaceAll(column, "]", "")
+		// Remove ::text type casts that PostgreSQL adds to string literals in expressions
+		column = regexp.MustCompile(`'([^']*)'::text`).ReplaceAllString(column, "'$1'")
 	}
 	if g.mode == GeneratorModeMssql {
 		// Remove MSSQL square brackets from column names

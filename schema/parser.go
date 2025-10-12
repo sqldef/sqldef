@@ -597,51 +597,65 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 	}
 
 	indexColumns := []IndexColumn{}
-	for _, column := range stmt.IndexCols {
-		var columnName string
-		var length *int
 
-		// Check if this is a function expression that's actually a column with length
-		// e.g., name(255) gets parsed as a function call but should be treated as column with length
-		if column.Expression != nil {
-			if funcExpr, ok := column.Expression.(*parser.FuncExpr); ok &&
-				funcExpr.Name.String() != "" &&
-				len(funcExpr.Exprs) == 1 {
-				// This looks like column(length) - extract the column name and length
-				columnName = funcExpr.Name.String()
-				// Try to extract the numeric length from the argument
-				if aliasedExpr, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
-					if sqlVal, ok := aliasedExpr.Expr.(*parser.SQLVal); ok && sqlVal.Type == parser.IntVal {
-						lengthVal := string(sqlVal.Val)
-						if l, err := strconv.Atoi(lengthVal); err == nil {
-							length = &l
+	// Check if this is an expression index (IndexExpr is set instead of IndexCols)
+	if stmt.IndexExpr != nil {
+		// Expression index - store the expression as a single column
+		normalized := normalizeExpressionParens(stmt.IndexExpr)
+		columnName := parser.String(normalized)
+		indexColumns = append(indexColumns, IndexColumn{
+			column:    columnName,
+			length:    nil,
+			direction: "",
+		})
+	} else {
+		// Column-based index - process IndexCols
+		for _, column := range stmt.IndexCols {
+			var columnName string
+			var length *int
+
+			// Check if this is a function expression that's actually a column with length
+			// e.g., name(255) gets parsed as a function call but should be treated as column with length
+			if column.Expression != nil {
+				if funcExpr, ok := column.Expression.(*parser.FuncExpr); ok &&
+					funcExpr.Name.String() != "" &&
+					len(funcExpr.Exprs) == 1 {
+					// This looks like column(length) - extract the column name and length
+					columnName = funcExpr.Name.String()
+					// Try to extract the numeric length from the argument
+					if aliasedExpr, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
+						if sqlVal, ok := aliasedExpr.Expr.(*parser.SQLVal); ok && sqlVal.Type == parser.IntVal {
+							lengthVal := string(sqlVal.Val)
+							if l, err := strconv.Atoi(lengthVal); err == nil {
+								length = &l
+							}
 						}
 					}
+				} else {
+					// It's a genuine expression
+					// Normalize by removing unnecessary parentheses
+					normalized := normalizeExpressionParens(column.Expression)
+					columnName = parser.String(normalized)
 				}
 			} else {
-				// It's a genuine expression
-				// Normalize by removing unnecessary parentheses
-				normalized := normalizeExpressionParens(column.Expression)
-				columnName = parser.String(normalized)
+				// Normal column with optional length
+				columnName = column.String()
+				var err error
+				length, err = parseLength(column.Length)
+				if err != nil {
+					return Index{}, err
+				}
 			}
-		} else {
-			// Normal column with optional length
-			columnName = column.String()
-			var err error
-			length, err = parseLength(column.Length)
-			if err != nil {
-				return Index{}, err
-			}
-		}
 
-		indexColumns = append(
-			indexColumns,
-			IndexColumn{
-				column:    columnName,
-				length:    length,
-				direction: column.Direction,
-			},
-		)
+			indexColumns = append(
+				indexColumns,
+				IndexColumn{
+					column:    columnName,
+					length:    length,
+					direction: column.Direction,
+				},
+			)
+		}
 	}
 
 	where := ""
