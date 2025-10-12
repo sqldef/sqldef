@@ -377,7 +377,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				slices.Contains(convertForeignKeysToIndexNames(desiredTable.foreignKeys), index.name) {
 				// Index name exists in desired. But we need to check if the definition is the same.
 				// If the definition changed (e.g., expression changed), we need to drop and recreate.
-				desiredIndex := findIndexByName(desiredTable.indexes, index.name)
+				// Need to find by normalized name since normalizedDesiredNames contains normalized names
+				var desiredIndex *Index
+				for i := range desiredTable.indexes {
+					if normalizeIndexName(desiredTable.name, desiredTable.indexes[i]) == index.name {
+						desiredIndex = &desiredTable.indexes[i]
+						break
+					}
+				}
 				if desiredIndex != nil && g.areSameIndexes(index, *desiredIndex) {
 					slog.Debug("index exists in desired with same definition, skipping", "index", index.name)
 					continue // Index is expected to exist with the same definition.
@@ -3140,7 +3147,17 @@ func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
-	if g.normalizeDataType(current.typeName) != g.normalizeDataType(desired.typeName) {
+	normalizedCurrent := g.normalizeDataType(current.typeName)
+	normalizedDesired := g.normalizeDataType(desired.typeName)
+	slog.Debug("comparing data types",
+		"column", current.name,
+		"current.typeName", current.typeName,
+		"desired.typeName", desired.typeName,
+		"normalizedCurrent", normalizedCurrent,
+		"normalizedDesired", normalizedDesired,
+		"equal", normalizedCurrent == normalizedDesired,
+	)
+	if normalizedCurrent != normalizedDesired {
 		return false
 	}
 	if !reflect.DeepEqual(current.enumValues, desired.enumValues) {
@@ -3784,12 +3801,15 @@ func normalizeCheckExprAST(expr parser.Expr, mode GeneratorMode) parser.Expr {
 	case *parser.CastExpr:
 		normalizedExpr := normalizeCheckExprAST(e.Expr, mode)
 
-		// Remove casts to text or character varying, but only on literals
-		// Keep casts on column references like t4::text
-		if e.Type != nil && (e.Type.Type == "text" || e.Type.Type == "character varying") {
-			// Check if the expression being cast is a literal (SQLVal)
+		if mode == GeneratorModePostgres && e.Type != nil {
+			typeName := strings.ToLower(e.Type.Type)
+
+			// Remove casts to text, character varying, date, but only on literals
+			// Keep casts on column references like t4::text
 			if _, isLiteral := normalizedExpr.(*parser.SQLVal); isLiteral {
-				return normalizedExpr
+				if typeName == "text" || typeName == "character varying" || typeName == "date" {
+					return normalizedExpr
+				}
 			}
 		}
 
@@ -4215,59 +4235,94 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 		}
 	}
 
-	if !g.areSameValue(currentVal, desiredVal) {
-		return false
-	}
-
 	// Compare expressions using AST-based normalization
+	// Handle mixed cases: value vs expression, or expression vs expression
 	if currentDefault != nil && desiredDefault != nil {
-		var currentAST, desiredAST parser.Expr
+		// Case 1: Both have expressions - compare normalized ASTs
+		if currentDefault.expressionAST != nil && desiredDefault.expressionAST != nil {
+			return g.areSameExpr(currentDefault.expressionAST, desiredDefault.expressionAST)
+		}
 
-		// Get or parse current expression AST
-		if currentDefault.expressionAST != nil {
-			currentAST = currentDefault.expressionAST
-		} else if currentDefault.expression != "" {
-			// Parse expression if AST not available
+		// Case 2: Current has value, desired has expression (e.g., '' vs ''::text)
+		// Normalize the expression and see if it reduces to the value
+		if currentVal != nil && desiredDefault.expressionAST != nil {
+			normalized := g.normalizeExpressionAST(desiredDefault.expressionAST)
+			// Check if normalized expression is a simple literal matching the value
+			if sqlVal, ok := normalized.(*parser.SQLVal); ok {
+				// Expression normalized to a literal - compare with value
+				normalizedValue := parseValue(sqlVal)
+				return g.areSameValue(currentVal, normalizedValue)
+			}
+			// Expression didn't normalize to a simple value - they're different
+			return false
+		}
+
+		// Case 3: Desired has value, current has expression (reverse of case 2)
+		if desiredVal != nil && currentDefault.expressionAST != nil {
+			normalized := g.normalizeExpressionAST(currentDefault.expressionAST)
+			// Check if normalized expression is a simple literal matching the value
+			if sqlVal, ok := normalized.(*parser.SQLVal); ok {
+				// Expression normalized to a literal - compare with value
+				normalizedValue := parseValue(sqlVal)
+				return g.areSameValue(normalizedValue, desiredVal)
+			}
+			// Expression didn't normalize to a simple value - they're different
+			return false
+		}
+
+		// Case 4: One has expression string but no AST - parse and compare
+		if currentDefault.expression != "" && currentDefault.expressionAST == nil {
 			_, exprWithoutSchema := splitTableName(currentDefault.expression, g.defaultSchema)
-			var err error
-			currentAST, err = g.parseExpression(exprWithoutSchema)
+			currentAST, err := g.parseExpression(exprWithoutSchema)
 			if err != nil {
 				slog.Warn("Failed to parse current default expression",
 					"expr", currentDefault.expression,
 					"error", err.Error())
-				// Cannot normalize, fall back to string comparison
 				return strings.EqualFold(currentDefault.expression, desiredDefault.expression)
+			}
+			// If desired has AST, compare ASTs
+			if desiredDefault.expressionAST != nil {
+				return g.areSameExpr(currentAST, desiredDefault.expressionAST)
+			}
+			// If desired has value, normalize current AST
+			if desiredVal != nil {
+				normalized := g.normalizeExpressionAST(currentAST)
+				if sqlVal, ok := normalized.(*parser.SQLVal); ok {
+					normalizedValue := parseValue(sqlVal)
+					return g.areSameValue(normalizedValue, desiredVal)
+				}
+				return false
 			}
 		}
 
-		// Get or parse desired expression AST
-		if desiredDefault.expressionAST != nil {
-			desiredAST = desiredDefault.expressionAST
-		} else if desiredDefault.expression != "" {
-			// Parse expression if AST not available
+		if desiredDefault.expression != "" && desiredDefault.expressionAST == nil {
 			_, exprWithoutSchema := splitTableName(desiredDefault.expression, g.defaultSchema)
-			var err error
-			desiredAST, err = g.parseExpression(exprWithoutSchema)
+			desiredAST, err := g.parseExpression(exprWithoutSchema)
 			if err != nil {
 				slog.Warn("Failed to parse desired default expression",
 					"expr", desiredDefault.expression,
 					"error", err.Error())
-				// Cannot normalize, fall back to string comparison
 				return strings.EqualFold(currentDefault.expression, desiredDefault.expression)
 			}
+			// If current has AST, compare ASTs
+			if currentDefault.expressionAST != nil {
+				return g.areSameExpr(currentDefault.expressionAST, desiredAST)
+			}
+			// If current has value, normalize desired AST
+			if currentVal != nil {
+				normalized := g.normalizeExpressionAST(desiredAST)
+				if sqlVal, ok := normalized.(*parser.SQLVal); ok {
+					normalizedValue := parseValue(sqlVal)
+					return g.areSameValue(currentVal, normalizedValue)
+				}
+				return false
+			}
 		}
-
-		// Compare using AST normalization
-		if currentAST != nil && desiredAST != nil {
-			return g.expressionsEqual(currentAST, desiredAST)
-		}
-
-		// If we got here, one or both expressions are empty/nil
-		return currentAST == nil && desiredAST == nil
 	}
 
-	// If only one has default, they're different
-	return currentDefault == nil && desiredDefault == nil
+	// Simple value comparison as fallback (for cases where both have simple values, no expressions)
+	// If we reach here, values match, so defaults are the same
+	return g.areSameValue(currentVal, desiredVal)
 }
 
 // normalizeExpressionAST normalizes an expression AST for comparison
@@ -4357,6 +4412,45 @@ func (g *Generator) normalizeExpressionAST(expr parser.Expr) parser.Expr {
 
 	case *parser.CastExpr:
 		// For cast expressions like null::character varying or '{}'::int[]
+
+		// For PostgreSQL, strip unnecessary casts that the database removes
+		if g.mode == GeneratorModePostgres && e.Type != nil {
+			innerExpr := e.Expr
+
+			// Strip casts from string literals when casting to text-like types
+			if sqlVal, ok := innerExpr.(*parser.SQLVal); ok && sqlVal.Type == parser.StrVal {
+				typeName := strings.ToLower(e.Type.Type)
+				// Remove ::text, ::character varying, ::bpchar casts from string literals
+				if typeName == "text" || typeName == "character varying" || typeName == "bpchar" || typeName == "character" {
+					return g.normalizeExpressionAST(innerExpr)
+				}
+			}
+
+			// Strip outer ::type[] cast from ARRAY expressions
+			// PostgreSQL removes these: ARRAY[...]::type[] becomes ARRAY[...]
+			if _, ok := innerExpr.(*parser.ArrayConstructor); ok {
+				// Strip the outer array type cast
+				return g.normalizeExpressionAST(innerExpr)
+			}
+
+			// Strip nested casts from type casts (e.g., expr::type1::type2)
+			if innerCast, ok := innerExpr.(*parser.CastExpr); ok {
+				// Recursively normalize and potentially strip the inner cast
+				normalized := g.normalizeExpressionAST(innerCast)
+				// If the inner cast was stripped, just return the expression
+				if _, isCast := normalized.(*parser.CastExpr); !isCast {
+					// Inner cast was removed, check if we should keep the outer cast
+					// Apply same logic as above
+					if sqlVal, ok := normalized.(*parser.SQLVal); ok && sqlVal.Type == parser.StrVal {
+						typeName := strings.ToLower(e.Type.Type)
+						if typeName == "text" || typeName == "character varying" || typeName == "bpchar" || typeName == "character" {
+							return normalized
+						}
+					}
+				}
+			}
+		}
+
 		// Normalize the type name (e.g., int → integer, int[] → integer[])
 		normalizedType := e.Type
 		if normalizedType != nil {
@@ -4373,6 +4467,38 @@ func (g *Generator) normalizeExpressionAST(expr parser.Expr) parser.Expr {
 			Expr: g.normalizeExpressionAST(e.Expr),
 			Type: normalizedType,
 		}
+
+	case *parser.ArrayConstructor:
+		// Normalize array elements
+		normalizedElements := make(parser.ArrayElements, len(e.Elements))
+		for i, elem := range e.Elements {
+			// Array elements can be SQLVal or CastExpr
+			switch elemNode := elem.(type) {
+			case *parser.SQLVal:
+				normalizedElements[i] = elemNode
+			case *parser.CastExpr:
+				// Normalize cast expressions in array elements
+				normalized := g.normalizeExpressionAST(elemNode)
+				// Cast the normalized expression back to ArrayElement
+				if arrayElem, ok := normalized.(parser.ArrayElement); ok {
+					normalizedElements[i] = arrayElem
+				} else {
+					// If normalization didn't produce an ArrayElement, keep original
+					normalizedElements[i] = elemNode
+				}
+			case *parser.FuncExpr:
+				// Normalize function calls in array elements (e.g., current_date())
+				normalized := g.normalizeExpressionAST(elemNode)
+				if arrayElem, ok := normalized.(parser.ArrayElement); ok {
+					normalizedElements[i] = arrayElem
+				} else {
+					normalizedElements[i] = elemNode
+				}
+			default:
+				normalizedElements[i] = elem
+			}
+		}
+		return &parser.ArrayConstructor{Elements: normalizedElements}
 
 	case *parser.SQLVal, *parser.NullVal, parser.BoolVal:
 		// These are leaf nodes, return as-is
@@ -4393,26 +4519,6 @@ func isComplexExpression(expr parser.Expr) bool {
 	default:
 		return false
 	}
-}
-
-// expressionsEqual compares two normalized expression ASTs
-func (g *Generator) expressionsEqual(expr1, expr2 parser.Expr) bool {
-	// Normalize both expressions
-	norm1 := g.normalizeExpressionAST(expr1)
-	norm2 := g.normalizeExpressionAST(expr2)
-
-	// Convert to string for comparison
-	// This is a simplification - ideally we'd do deep AST comparison
-	str1 := ""
-	str2 := ""
-	if norm1 != nil {
-		str1 = strings.ToLower(parser.String(norm1))
-	}
-	if norm2 != nil {
-		str2 = strings.ToLower(parser.String(norm2))
-	}
-
-	return str1 == str2
 }
 
 // parseExpression parses an expression string into an AST node.
@@ -4481,22 +4587,43 @@ func (g *Generator) areSameValue(current, desired *Value) bool {
 	desiredRaw := strings.ToLower(string(desired.raw))
 	if desired.valueType == ValueTypeFloat && len(currentRaw) > len(desiredRaw) {
 		// Round "0.00" to "0.0" for comparison with desired.
-		// Ideally we should do this seeing precision in a data type.
+		// Ideally we should do this seeing precision in a data type.]
+		// TODO: Use big.Float for comparison.
 		currentRaw = currentRaw[0:len(desiredRaw)]
 	}
 
 	// NOTE: Boolean constants is evaluated as TINYINT(1) value in MySQL.
 	if g.mode == GeneratorModeMysql {
 		if desired.valueType == ValueTypeBool {
-			if strings.EqualFold(string(desired.raw), "false") {
+			if strings.EqualFold(currentRaw, "false") {
 				desiredRaw = "0"
-			} else if strings.EqualFold(string(desired.raw), "true") {
+			} else if strings.EqualFold(currentRaw, "true") {
 				desiredRaw = "1"
 			}
 		}
 	}
 
 	return currentRaw == desiredRaw
+}
+
+// areSameExpr compares two normalized expression ASTs
+func (g *Generator) areSameExpr(expr1, expr2 parser.Expr) bool {
+	// Normalize both expressions
+	norm1 := g.normalizeExpressionAST(expr1)
+	norm2 := g.normalizeExpressionAST(expr2)
+
+	// Convert to string for comparison
+	// This is a simplification - ideally we'd do deep AST comparison
+	str1 := ""
+	str2 := ""
+	if norm1 != nil {
+		str1 = strings.ToLower(parser.String(norm1))
+	}
+	if norm2 != nil {
+		str2 = strings.ToLower(parser.String(norm2))
+	}
+
+	return str1 == str2
 }
 
 func areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
@@ -4545,11 +4672,10 @@ func (g *Generator) normalizeDataType(dataType string) string {
 	if g.mode == GeneratorModePostgres {
 		dataType = strings.ReplaceAll(dataType, "\"", "")
 
-		// PostgreSQL's format_type() omits the schema for types in the search_path (including public schema)
-		// So "public.country" from the parser becomes "country" from format_type()
-		// Strip "public." prefix for comparison
-		if strings.HasPrefix(dataType, "public.") {
-			dataType = strings.TrimPrefix(dataType, "public.")
+		// PostgreSQL's format_type() omits the schema for types in the search_path
+		// Strip schema prefix for comparison if it matches the default schema
+		if g.defaultSchema != "" && strings.HasPrefix(dataType, g.defaultSchema+".") {
+			dataType = strings.TrimPrefix(dataType, g.defaultSchema+".")
 		}
 	}
 
