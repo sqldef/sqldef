@@ -4191,31 +4191,51 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 		return false
 	}
 
-	// Compare expressions using AST if available
+	// Compare expressions using AST-based normalization
 	if currentDefault != nil && desiredDefault != nil {
-		// If both have AST, use AST comparison
-		if currentDefault.expressionAST != nil && desiredDefault.expressionAST != nil {
-			return g.expressionsEqual(currentDefault.expressionAST, desiredDefault.expressionAST)
+		var currentAST, desiredAST parser.Expr
+
+		// Get or parse current expression AST
+		if currentDefault.expressionAST != nil {
+			currentAST = currentDefault.expressionAST
+		} else if currentDefault.expression != "" {
+			// Parse expression if AST not available
+			_, exprWithoutSchema := splitTableName(currentDefault.expression, g.defaultSchema)
+			var err error
+			currentAST, err = g.parseExpression(exprWithoutSchema)
+			if err != nil {
+				slog.Warn("Failed to parse current default expression",
+					"expr", currentDefault.expression,
+					"error", err.Error())
+				// Cannot normalize, fall back to string comparison
+				return strings.EqualFold(currentDefault.expression, desiredDefault.expression)
+			}
 		}
 
-		slog.Debug("Default comparison",
-			"current_has_ast", currentDefault.expressionAST != nil,
-			"desired_has_ast", desiredDefault.expressionAST != nil,
-			"current_expr", currentDefault.expression,
-			"desired_expr", desiredDefault.expression)
+		// Get or parse desired expression AST
+		if desiredDefault.expressionAST != nil {
+			desiredAST = desiredDefault.expressionAST
+		} else if desiredDefault.expression != "" {
+			// Parse expression if AST not available
+			_, exprWithoutSchema := splitTableName(desiredDefault.expression, g.defaultSchema)
+			var err error
+			desiredAST, err = g.parseExpression(exprWithoutSchema)
+			if err != nil {
+				slog.Warn("Failed to parse desired default expression",
+					"expr", desiredDefault.expression,
+					"error", err.Error())
+				// Cannot normalize, fall back to string comparison
+				return strings.EqualFold(currentDefault.expression, desiredDefault.expression)
+			}
+		}
 
-		// Fallback to string comparison with normalization
-		var currentExprSchema, currentExpr string
-		var desiredExprSchema, desiredExpr string
-		currentExprSchema, currentExpr = splitTableName(currentDefault.expression, g.defaultSchema)
-		// Normalize function expressions
-		currentExpr = g.normalizeDefaultExpression(currentExpr)
+		// Compare using AST normalization
+		if currentAST != nil && desiredAST != nil {
+			return g.expressionsEqual(currentAST, desiredAST)
+		}
 
-		desiredExprSchema, desiredExpr = splitTableName(desiredDefault.expression, g.defaultSchema)
-		// Normalize function expressions
-		desiredExpr = g.normalizeDefaultExpression(desiredExpr)
-
-		return strings.EqualFold(currentExprSchema, desiredExprSchema) && strings.EqualFold(currentExpr, desiredExpr)
+		// If we got here, one or both expressions are empty/nil
+		return currentAST == nil && desiredAST == nil
 	}
 
 	// If only one has default, they're different
@@ -4367,53 +4387,58 @@ func (g *Generator) expressionsEqual(expr1, expr2 parser.Expr) bool {
 	return str1 == str2
 }
 
-func (g *Generator) normalizeDefaultExpression(expr string) string {
+// parseExpression parses an expression string into an AST node.
+// It wraps the expression in a minimal SELECT statement to leverage the DDL parser.
+func (g *Generator) parseExpression(expr string) (parser.Expr, error) {
 	if expr == "" {
-		return expr
+		return nil, fmt.Errorf("empty expression")
 	}
 
-	// For backward compatibility, still do string normalization
-	// This is used when we don't have AST available
-	normalized := strings.ToLower(strings.TrimSpace(expr))
+	// Wrap the expression in a SELECT statement
+	// This allows us to use the DDL parser to parse just the expression
+	sql := fmt.Sprintf("SELECT %s", expr)
 
-	// Common MySQL timestamp function normalizations
-	// now() and current_timestamp are equivalent
-	if normalized == "now()" || normalized == "(now())" {
-		normalized = "current_timestamp"
-	}
-	// current_timestamp() with parens is same as without
-	if normalized == "current_timestamp()" || normalized == "(current_timestamp())" {
-		normalized = "current_timestamp"
-	}
-
-	// PostgreSQL special keywords - remove empty parentheses
-	// These are keywords, not functions, so () should be removed
-	normalized = strings.ReplaceAll(normalized, "current_date()", "current_date")
-	normalized = strings.ReplaceAll(normalized, "current_time()", "current_time")
-	normalized = strings.ReplaceAll(normalized, "current_timestamp()", "current_timestamp")
-	// Remove outer parentheses if present
-	if strings.HasPrefix(normalized, "(") && strings.HasSuffix(normalized, ")") {
-		inner := normalized[1 : len(normalized)-1]
-		// Check if it's a simple value (including negative numbers) vs complex expression
-		// A negative number starts with - but doesn't have operators in the middle
-		isNegativeNumber := strings.HasPrefix(inner, "-") &&
-			!strings.Contains(inner[1:], "+") &&
-			!strings.Contains(inner[1:], "-") &&
-			!strings.Contains(inner[1:], "*") &&
-			!strings.Contains(inner[1:], "/")
-		// It's simple if it has no operators, or if it's just a negative number
-		isSimpleExpression := (!strings.Contains(inner, "+") &&
-			!strings.Contains(inner, "-") &&
-			!strings.Contains(inner, "*") &&
-			!strings.Contains(inner, "/")) || isNegativeNumber
-
-		if isSimpleExpression {
-			normalized = inner
-		}
+	// Convert GeneratorMode to ParserMode
+	var parserMode parser.ParserMode
+	switch g.mode {
+	case GeneratorModeMysql:
+		parserMode = parser.ParserModeMysql
+	case GeneratorModePostgres:
+		parserMode = parser.ParserModePostgres
+	case GeneratorModeSQLite3:
+		parserMode = parser.ParserModeSQLite3
+	case GeneratorModeMssql:
+		parserMode = parser.ParserModeMssql
+	default:
+		return nil, fmt.Errorf("unknown generator mode: %v", g.mode)
 	}
 
-	return normalized
+	// Parse the SELECT statement
+	stmt, err := parser.ParseDDL(sql, parserMode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse expression %q: %w", expr, err)
+	}
+
+	// Extract the expression from the SELECT statement
+	selectStmt, ok := stmt.(*parser.Select)
+	if !ok {
+		return nil, fmt.Errorf("expected SELECT statement, got %T", stmt)
+	}
+
+	if len(selectStmt.SelectExprs) == 0 {
+		return nil, fmt.Errorf("no expressions in SELECT")
+	}
+
+	// Get the first expression
+	firstExpr := selectStmt.SelectExprs[0]
+	aliasedExpr, ok := firstExpr.(*parser.AliasedExpr)
+	if !ok {
+		return nil, fmt.Errorf("expected AliasedExpr, got %T", firstExpr)
+	}
+
+	return aliasedExpr.Expr, nil
 }
+
 
 func (g *Generator) areSameValue(current, desired *Value) bool {
 	if current == nil && desired == nil {
