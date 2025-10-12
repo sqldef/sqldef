@@ -4242,7 +4242,8 @@ func (g *Generator) normalizeExpressionAST(expr parser.Expr) parser.Expr {
 		// Normalize function names to lowercase
 		funcName := strings.ToLower(e.Name.String())
 
-		// Normalize timestamp functions
+		// Normalize timestamp/date functions to their keyword forms (without parentheses)
+		// PostgreSQL treats these as special keywords, not functions
 		if funcName == "now" {
 			// Convert NOW() to CURRENT_TIMESTAMP (represented as a ColName)
 			return &parser.ColName{Name: parser.NewColIdent("current_timestamp")}
@@ -4250,6 +4251,14 @@ func (g *Generator) normalizeExpressionAST(expr parser.Expr) parser.Expr {
 		if funcName == "current_timestamp" {
 			// Return as a ColName without parentheses
 			return &parser.ColName{Name: parser.NewColIdent("current_timestamp")}
+		}
+		if funcName == "current_date" {
+			// Return as a ColName without parentheses
+			return &parser.ColName{Name: parser.NewColIdent("current_date")}
+		}
+		if funcName == "current_time" {
+			// Return as a ColName without parentheses
+			return &parser.ColName{Name: parser.NewColIdent("current_time")}
 		}
 
 		// Strip schema qualifier if it matches the default schema
@@ -4299,10 +4308,22 @@ func (g *Generator) normalizeExpressionAST(expr parser.Expr) parser.Expr {
 		}
 
 	case *parser.CastExpr:
-		// For cast expressions like null::character varying
+		// For cast expressions like null::character varying or '{}'::int[]
+		// Normalize the type name (e.g., int → integer, int[] → integer[])
+		normalizedType := e.Type
+		if normalizedType != nil {
+			normalizedTypeName := g.normalizeDataType(normalizedType.Type)
+			normalizedType = &parser.ConvertType{
+				Type:     normalizedTypeName,
+				Length:   normalizedType.Length,
+				Scale:    normalizedType.Scale,
+				Operator: normalizedType.Operator,
+				Charset:  normalizedType.Charset,
+			}
+		}
 		return &parser.CastExpr{
 			Expr: g.normalizeExpressionAST(e.Expr),
-			Type: e.Type,
+			Type: normalizedType,
 		}
 
 	case *parser.SQLVal, *parser.NullVal, parser.BoolVal:
@@ -4364,6 +4385,12 @@ func (g *Generator) normalizeDefaultExpression(expr string) string {
 	if normalized == "current_timestamp()" || normalized == "(current_timestamp())" {
 		normalized = "current_timestamp"
 	}
+
+	// PostgreSQL special keywords - remove empty parentheses
+	// These are keywords, not functions, so () should be removed
+	normalized = strings.ReplaceAll(normalized, "current_date()", "current_date")
+	normalized = strings.ReplaceAll(normalized, "current_time()", "current_time")
+	normalized = strings.ReplaceAll(normalized, "current_timestamp()", "current_timestamp")
 	// Remove outer parentheses if present
 	if strings.HasPrefix(normalized, "(") && strings.HasSuffix(normalized, ")") {
 		inner := normalized[1 : len(normalized)-1]
@@ -4452,6 +4479,13 @@ func isNullValue(value *Value) bool {
 }
 
 func (g *Generator) normalizeDataType(dataType string) string {
+	// Handle array types by normalizing the base type
+	if strings.HasSuffix(dataType, "[]") {
+		baseType := strings.TrimSuffix(dataType, "[]")
+		normalizedBase := g.normalizeDataType(baseType)
+		return normalizedBase + "[]"
+	}
+
 	alias, ok := dataTypeAliases[dataType]
 	if ok {
 		dataType = alias

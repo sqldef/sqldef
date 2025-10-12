@@ -651,6 +651,14 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 			return expr, nil
 		} else {
 			typeName := columnType.Type
+			// Normalize type names to match PostgreSQL canonical names before appending array suffix
+			// This ensures "int[]" becomes "integer[]" to match database exports
+			switch typeName {
+			case "int":
+				typeName = "integer"
+			case "decimal":
+				typeName = "numeric"
+			}
 			if columnType.Array {
 				typeName += "[]"
 			}
