@@ -35,11 +35,35 @@ func NewParser() PostgresParser {
 }
 
 func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
-	if os.Getenv("PSQLDEF_PARSER") == "generic" {
+	if os.Getenv("PSQLDEF_PARSER") == "pgquery" {
+		slog.Debug("Using pgquery parser (PSQLDEF_PARSER=pgquery)")
+		return p.parsePgquery(sql)
+	} else if os.Getenv("PSQLDEF_PARSER") == "generic" {
 		slog.Debug("Using generic parser (PSQLDEF_PARSER=generic)")
 		return p.parser.Parse(sql)
 	}
 
+	// Try generic parser first
+	stmts, err := p.parser.Parse(sql)
+	if err != nil {
+		slog.Warn("Falling back to pgquery parser", "error", err.Error())
+
+		// Fall back to pgquery parser
+		var fallbackStmts []database.DDLStatement
+		if !p.testing { // Disable fallback in parser tests
+			fallbackStmts, err = p.parsePgquery(sql)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return fallbackStmts, nil
+	}
+
+	return stmts, nil
+}
+
+// parsePgquery parses SQL using the pgquery parser with generic fallback
+func (p PostgresParser) parsePgquery(sql string) ([]database.DDLStatement, error) {
 	// Workaround for comments (not needed?)
 	//re := regexp.MustCompilePOSIX("^ *--.*")
 	//sql = re.ReplaceAllString(sql, "")

@@ -2,9 +2,6 @@
 
 This document tracks the progress of migrating from `pgquery` to `generic` parser.
 
-**Status: Active development - Multiple parser issues identified**
-**Goal: Both `make test-psqldef` and `PSQLDEF_PARSER=generic make test-psqldef` should pass**
-
 ## Principle of Operation
 
 * We are migrating from `pgquery` to `generic` parser, discarding `pgquery` in the future.
@@ -18,9 +15,9 @@ This document tracks the progress of migrating from `pgquery` to `generic` parse
 
 ## Test
 
-`PSQLDEF_PARSER=generic` to use the generic parser. Otherwise, `psqldef` uses `pgquery` as the primary parser, and the generic parser as a fallback.
+`PSQLDEF_PARSER=generic` to use the generic parser. `PSQLDEF_PARSER=pgquery` to use the pgquery parser. Otherwise, `psqldef` uses `generic` as the primary parser, and the `pgquery` as the fallback.
 
-Eventually, both `make test-psqldef` and `PSQLDEF_PARSER=pgquery make test-psqldef` should pass.
+Eventually, both `PSQLDEF_PARSER=generic make test-psqldef` and `PSQLDEF_PARSER=pgquery make test-psqldef` must pass, as well as `make test-mysqldef`, `make test-sqlite3def`, `make test-mssqldef`.
 
 ## Current Test Status
 
@@ -41,12 +38,6 @@ When running with default parser (pgquery with generic fallback):
 ### GENERIC Parser Failures (13 tests fail as of latest run)
 When running with `PSQLDEF_PARSER=generic`:
 
-Major fixes completed:
-- ✅ **TestApply/IndexesOnChangedExpressions** - Expression index comparison now working
-- ✅ **TestPsqldefCitextExtension** - CREATE EXTENSION parsing now supported
-- ✅ **TestPsqldefCreateType** - ENUM type parsing with schema qualification now working
-- ✅ **TestApply/CreateTableWithDefaultContainingQuote** - String quote escaping fixed
-- ✅ **TestApply/CheckConstraint** - Date literal normalization fixed
 
 Remaining issues:
 1. **TestApply/CreateViewWithCaseWhen** - View idempotency: parenthesization differences in complex expressions
@@ -77,85 +68,3 @@ Remaining issues:
 ### Medium Priority - Generic Parser
 1. **CREATE EXTENSION** - Extension creation not supported (`CREATE EXTENSION citext;`)
 
-## Completed Fixes
-
-### Expression Index Support ✅
-**Problem**: Expression indexes weren't being parsed or compared correctly
-- Parser was only processing `IndexCols`, ignoring `IndexExpr` for expression indexes
-- No DDL generated when index expressions changed
-
-**Solution**:
-1. Modified `parseIndex()` in schema/parser.go to check for `IndexExpr` field
-   - When IndexExpr is set, convert the expression to a string and store as single IndexColumn
-2. Enhanced `normalizeIndexColumn()` to handle PostgreSQL transformations:
-   - Removes `ARRAY[...]` wrapper from variadic function calls
-   - Removes `::text` type casts from string literals
-
-**Status**: Expression indexes now fully supported ✅
-
-### ENUM Type Support ✅
-**Problem**: Custom ENUM types couldn't be used in typecasts or column definitions
-- Parser failed on `DEFAULT 'value'::custom_type` with syntax error
-- Schema-qualified types like `public.country` caused comparison mismatches
-
-**Solution**:
-1. Extended `simple_convert_type` grammar rule to accept identifiers:
-   - Added `sql_id` rule for simple custom types
-   - Added `sql_id '.' sql_id` rule for schema-qualified types
-2. Enhanced `normalizeDataType()` to handle PostgreSQL's format_type() output:
-   - Strips quotes from type names
-   - Removes `public.` prefix (PostgreSQL omits schema for types in search_path)
-
-**Status**: ENUM and custom types now fully supported ✅
-
-### CREATE EXTENSION Support ✅
-**Problem**: Parser failed on `CREATE EXTENSION extension_name;`
-- Extension names like 'citext' were reserved keywords
-- Grammar rule expected unreserved identifiers only
-
-**Solution**:
-1. Changed CREATE EXTENSION grammar to use `reserved_sql_id` instead of `sql_id`
-2. Added CITEXT to `non_reserved_keyword` list
-
-**Status**: CREATE EXTENSION now fully supported ✅
-
-### Type Normalization (int vs integer) ✅
-- Normalized all representations to `integer` (PostgreSQL canonical type name)
-- Modified `database/postgres/database.go`, `database/postgres/parser.go`, `schema/generator.go`
-- All IDENTITY column tests now pass with `PSQLDEF_PARSER=generic`
-
-### Basic Type Support ✅
-1. **BPCHAR type** - Added to `simple_convert_type` for `'JPN'::bpchar`
-2. **JSON/JSONB types** - Added to `simple_convert_type` for `'{}'::json`
-3. **TIMESTAMP types** - Added `timestamp with/without time zone` support
-
-### Nested Typecast Parsing ✅
-**Problem**: Parser failed on nested typecasts like `((CURRENT_TIMESTAMP)::date)::text`
-- Error: "syntax error near '::'" at the second typecast operator
-- Affected DEFAULT clauses and any parenthesized typecast expressions
-
-**Root Cause**: Grammar rule `DEFAULT '(' value_expression ')'` in `parser/parser.y` at line 2302
-- This rule explicitly matched `DEFAULT (expr)` and consumed the parentheses
-- Prevented parenthesized expressions from being used in larger expressions
-- Example: `DEFAULT (expr)::type` would parse `(expr)` as complete, then fail on `::type`
-- Same issue with `DEFAULT (expr) + 3` - couldn't use parenthesized expr as left operand
-
-**Solution**: Removed the problematic rule
-- The first rule `DEFAULT value_expression` is sufficient
-- `value_expression` includes `tuple_expression` which handles parentheses via `ParenExpr`
-- Now `DEFAULT (expr)::type` correctly parses `(expr)::type` as a complete `value_expression`
-
-**Status**: Nested typecasts now parse successfully ✅
-- `(CURRENT_TIMESTAMP::date)::text` ✅
-- `((CURRENT_TIMESTAMP)::date)::text` ✅
-- `(1 + 2) + 3` ✅
-
-### Array Defaults Idempotency ✅
-**Problem**: Array defaults showed type normalization issues
-- `'{}'::int[]` vs `'{}'::integer[]` - type name inconsistency
-- `ARRAY[]` constructor formatting differences
-
-**Solution**: Fixed through type normalization
-- The int vs integer normalization (completed earlier) resolved these issues
-- Array type names are now consistently normalized
-- `TestApply/CreateTableWithDefault` now passes with PSQLDEF_PARSER=generic
