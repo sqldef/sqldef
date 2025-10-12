@@ -1792,13 +1792,16 @@ func (g *Generator) generateDataType(column Column) string {
 	// Determine the full type name including schema qualification
 	typeName := column.typeName
 
-	// Normalize PostgreSQL type names to match what format_type() returns
+	// Normalize PostgreSQL type names to match what the database export returns
+	// Note: We normalize "int" to "integer" to match PostgreSQL canonical type name
 	if g.mode == GeneratorModePostgres {
 		switch strings.ToLower(typeName) {
-		case "int":
-			typeName = "integer"
 		case "decimal":
 			typeName = "numeric"
+		case "int":
+			// Normalize "int" to "integer" (PostgreSQL canonical type name)
+			// This ensures consistency with database exports which use format_type() and return "integer"
+			typeName = "integer"
 		}
 	}
 

@@ -490,7 +490,8 @@ func (c *column) GetDataType() string {
 		if c.IsAutoIncrement {
 			return "serial" + strings.TrimPrefix(c.formattedDataType, "integer")
 		}
-		return c.dataType
+		// Keep "integer" as the canonical type name (PostgreSQL standard)
+		return "integer"
 	case "bigint":
 		if c.IsAutoIncrement {
 			return "bigserial" + strings.TrimPrefix(c.formattedDataType, "bigint")

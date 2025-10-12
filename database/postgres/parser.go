@@ -1137,6 +1137,50 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 				// Postgres only supports stored generated column
 				GeneratedType: "STORED",
 			}
+		case pgquery.ConstrType_CONSTR_IDENTITY:
+			// Parse GENERATED { ALWAYS | BY DEFAULT } AS IDENTITY
+			var behavior string
+			switch constraint.GeneratedWhen {
+			case "a":
+				behavior = "ALWAYS"
+			case "d":
+				behavior = "BY DEFAULT"
+			default:
+				return nil, nil, fmt.Errorf("unknown GeneratedWhen value: %s", constraint.GeneratedWhen)
+			}
+
+			// Parse sequence options
+			sequence := &parser.Sequence{}
+			for _, opt := range constraint.Options {
+				defElem := opt.GetDefElem()
+				if defElem == nil {
+					continue
+				}
+
+				// Parse the value from the DefElem.Arg
+				var val *parser.SQLVal
+				if defElem.Arg != nil {
+					if intNode := defElem.Arg.GetInteger(); intNode != nil {
+						val = parser.NewIntVal(fmt.Append(nil, intNode.Ival))
+					}
+				}
+
+				switch defElem.Defname {
+				case "start":
+					sequence.StartWith = val
+				case "increment":
+					sequence.IncrementBy = val
+				case "minvalue":
+					sequence.MinValue = val
+				case "maxvalue":
+					sequence.MaxValue = val
+				}
+			}
+
+			columnType.Identity = &parser.IdentityOpt{
+				Behavior: behavior,
+				Sequence: sequence,
+			}
 		default:
 			return nil, nil, fmt.Errorf("unhandled contype: %d", constraint.Contype)
 		}
@@ -1267,7 +1311,9 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType
 		switch typeName {
 		case "int2":
 			columnType.Type = "smallint"
-		case "int4":
+		case "int4", "int":
+			// Normalize both "int4" and "int" to "integer" (PostgreSQL canonical type name)
+			// This ensures user-provided "INT" in schemas is normalized to match database exports
 			columnType.Type = "integer"
 		case "int8":
 			columnType.Type = "bigint"

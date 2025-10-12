@@ -82,6 +82,8 @@ For MariaDB testing:
 MYSQL_FLAVOR=mariadb MYSQL_PORT=3307 go test ./cmd/mysqldef
 ```
 
+`make test* VERBOSE=1` sets `-v` to `go test`.
+
 ### Run individual tests
 
 Use the `-run` flag with a regex pattern to run specific test cases:
