@@ -179,10 +179,9 @@ func TestAlterTableStatements(t *testing.T) {
 
 func TestSpecialConstructs(t *testing.T) {
 	tests := []struct {
-		name      string
-		sql       string
-		mode      ParserMode
-		shouldErr bool
+		name string
+		sql  string
+		mode ParserMode
 	}{
 		{
 			name: "Type casting with :: in default",
@@ -222,6 +221,26 @@ func TestSpecialConstructs(t *testing.T) {
 		{
 			name: "Type casting with :: timestamp",
 			sql:  `CREATE TABLE test (col text DEFAULT CURRENT_TIMESTAMP::date::text)`,
+			mode: ParserModePostgres,
+		},
+		{
+			name: "Parenthesized typecast - single paren",
+			sql:  `CREATE TABLE test (col text DEFAULT (CURRENT_TIMESTAMP::date)::text)`,
+			mode: ParserModePostgres,
+		},
+		{
+			name: "Parenthesized typecast - double paren",
+			sql:  `CREATE TABLE test (col text DEFAULT ((CURRENT_TIMESTAMP)::date)::text)`,
+			mode: ParserModePostgres,
+		},
+		{
+			name: "Parenthesized expression with arithmetic",
+			sql:  `CREATE TABLE test (num int DEFAULT (1 + 2) + 3)`,
+			mode: ParserModePostgres,
+		},
+		{
+			name: "Parenthesized expression with double parens and arithmetic",
+			sql:  `CREATE TABLE test (num int DEFAULT ((1 + 2)) + 3)`,
 			mode: ParserModePostgres,
 		},
 		{
@@ -314,13 +333,11 @@ func TestSpecialConstructs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			stmt, err := ParseDDL(tt.sql, tt.mode)
-			if tt.shouldErr {
-				if err == nil {
-					t.Errorf("Expected error but got none for %s", tt.name)
-				}
+			if err != nil {
+				t.Errorf("Failed to parse %s: %v", tt.name, err)
 			} else {
-				if err != nil {
-					t.Errorf("Failed to parse %s: %v", tt.name, err)
+				if stmt == nil {
+					t.Errorf("Expected non-nil statement for %s", tt.name)
 				} else {
 					t.Logf("Successfully parsed %s: %T", tt.name, stmt)
 				}

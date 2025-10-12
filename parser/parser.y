@@ -2299,10 +2299,6 @@ default_definition:
       $$ = DefaultValueOrExpression{Expr: $2}
     }
   }
-| DEFAULT '(' value_expression ')'
-  {
-    $$ = DefaultValueOrExpression{Expr: &ParenExpr{Expr: $3}}
-  }
 
 default_val:
   STRING
