@@ -135,6 +135,7 @@ func forceEOF(yylex interface{}) {
   overExpr                 *OverExpr
   partitionBy              PartitionBy
   partition                *Partition
+  constraintOptions        *ConstraintOptions
 }
 
 %token LEX_ERROR
@@ -403,7 +404,7 @@ func forceEOF(yylex interface{}) {
 %type <strs> table_hint_list table_hint_opt
 %type <str> table_hint
 %type <newQualifierColName> new_qualifier_column_name
-%type <boolVal> deferrable_opt initially_deferred_opt
+%type <constraintOptions> constraint_timing_opt
 %type <arrayConstructor> array_constructor
 %type <arrayElements> array_element_list
 %type <arrayElement> array_element
@@ -904,7 +905,7 @@ alter_statement:
   {
     $$ = nil
   }
-| ALTER TABLE table_name ADD CONSTRAINT sql_id UNIQUE '(' index_column_list ')' deferrable_opt initially_deferred_opt
+| ALTER TABLE table_name ADD CONSTRAINT sql_id UNIQUE '(' index_column_list ')' constraint_timing_opt
   {
     $$ = &DDL{
       Action: AddIndex,
@@ -915,10 +916,7 @@ alter_statement:
         Unique: true,
         Primary: false,
         Constraint: true,
-        ConstraintOptions: &ConstraintOptions{
-          Deferrable: bool($11),
-          InitiallyDeferred: bool($12),
-        },
+        ConstraintOptions: $11,
       },
       IndexCols: $9,
     }
@@ -1033,7 +1031,7 @@ alter_statement:
       IndexCols: $12,
     }
   }
-| ALTER ignore_opt TABLE table_name ADD CONSTRAINT sql_id UNIQUE '(' index_column_list ')' deferrable_opt initially_deferred_opt
+| ALTER ignore_opt TABLE table_name ADD CONSTRAINT sql_id UNIQUE '(' index_column_list ')' constraint_timing_opt
   {
     $$ = &DDL{
       Action: AddIndex,
@@ -1044,10 +1042,7 @@ alter_statement:
         Unique: true,
         Primary: false,
         Constraint: true,
-        ConstraintOptions: &ConstraintOptions{
-          Deferrable: bool($12),
-          InitiallyDeferred: bool($13),
-        },
+        ConstraintOptions: $12,
       },
       IndexCols: $10,
     }
@@ -2171,13 +2166,13 @@ column_definition_type:
     $1.ReferenceOnDelete = $9
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option deferrable_opt initially_deferred_opt
+| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option constraint_timing_opt
   {
     $1.References              = String($3)
     $1.ReferenceNames          = $5
     $1.ReferenceOnDelete       = $9
-    $1.ReferenceDeferrable     = $10
-    $1.ReferenceInitiallyDeferred = $11
+    $1.ReferenceDeferrable     = BoolVal($10.Deferrable)
+    $1.ReferenceInitiallyDeferred = BoolVal($10.InitiallyDeferred)
     $$ = $1
   }
 | column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option
@@ -2187,48 +2182,48 @@ column_definition_type:
     $1.ReferenceOnUpdate = $9
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option deferrable_opt initially_deferred_opt
+| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option constraint_timing_opt
   {
     $1.References              = String($3)
     $1.ReferenceNames          = $5
     $1.ReferenceOnUpdate       = $9
-    $1.ReferenceDeferrable     = $10
-    $1.ReferenceInitiallyDeferred = $11
+    $1.ReferenceDeferrable     = BoolVal($10.Deferrable)
+    $1.ReferenceInitiallyDeferred = BoolVal($10.InitiallyDeferred)
     $$ = $1
   }
-| column_definition_type REFERENCES table_name deferrable_opt initially_deferred_opt
+| column_definition_type REFERENCES table_name constraint_timing_opt
   {
     $1.References              = String($3)
-    $1.ReferenceDeferrable     = $4
-    $1.ReferenceInitiallyDeferred = $5
+    $1.ReferenceDeferrable     = BoolVal($4.Deferrable)
+    $1.ReferenceInitiallyDeferred = BoolVal($4.InitiallyDeferred)
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' deferrable_opt initially_deferred_opt
+| column_definition_type REFERENCES table_name '(' column_list ')' constraint_timing_opt
   {
     $1.References              = String($3)
     $1.ReferenceNames          = $5
-    $1.ReferenceDeferrable     = $7
-    $1.ReferenceInitiallyDeferred = $8
+    $1.ReferenceDeferrable     = BoolVal($7.Deferrable)
+    $1.ReferenceInitiallyDeferred = BoolVal($7.InitiallyDeferred)
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option ON UPDATE reference_option deferrable_opt initially_deferred_opt
+| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option ON UPDATE reference_option constraint_timing_opt
   {
     $1.References              = String($3)
     $1.ReferenceNames          = $5
     $1.ReferenceOnDelete       = $9
     $1.ReferenceOnUpdate       = $12
-    $1.ReferenceDeferrable     = $13
-    $1.ReferenceInitiallyDeferred = $14
+    $1.ReferenceDeferrable     = BoolVal($13.Deferrable)
+    $1.ReferenceInitiallyDeferred = BoolVal($13.InitiallyDeferred)
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option ON DELETE reference_option deferrable_opt initially_deferred_opt
+| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option ON DELETE reference_option constraint_timing_opt
   {
     $1.References              = String($3)
     $1.ReferenceNames          = $5
     $1.ReferenceOnUpdate       = $9
     $1.ReferenceOnDelete       = $12
-    $1.ReferenceDeferrable     = $13
-    $1.ReferenceInitiallyDeferred = $14
+    $1.ReferenceDeferrable     = BoolVal($13.Deferrable)
+    $1.ReferenceInitiallyDeferred = BoolVal($13.InitiallyDeferred)
     $$ = $1
   }
 // for MySQL and PostgreSQL
@@ -3152,57 +3147,42 @@ operator_class:
   TEXT_PATTERN_OPS
 
 foreign_key_definition:
-  foreign_key_without_options not_for_replication_opt deferrable_opt initially_deferred_opt
+  foreign_key_without_options not_for_replication_opt constraint_timing_opt
   {
     $1.NotForReplication = bool($2)
-    $1.ConstraintOptions = &ConstraintOptions{
-      Deferrable: bool($3),
-      InitiallyDeferred: bool($4),
-    }
+    $1.ConstraintOptions = $3
     $$ = $1
   }
-| foreign_key_without_options ON DELETE reference_option not_for_replication_opt deferrable_opt initially_deferred_opt
+| foreign_key_without_options ON DELETE reference_option not_for_replication_opt constraint_timing_opt
   {
     $1.OnUpdate = NewColIdent("")
     $1.OnDelete = $4
     $1.NotForReplication = bool($5)
-    $1.ConstraintOptions = &ConstraintOptions{
-      Deferrable: bool($6),
-      InitiallyDeferred: bool($7),
-    }
+    $1.ConstraintOptions = $6
     $$ = $1
   }
-| foreign_key_without_options ON UPDATE reference_option not_for_replication_opt deferrable_opt initially_deferred_opt
+| foreign_key_without_options ON UPDATE reference_option not_for_replication_opt constraint_timing_opt
   {
     $1.OnUpdate = $4
     $1.OnDelete = NewColIdent("")
     $1.NotForReplication = bool($5)
-    $1.ConstraintOptions = &ConstraintOptions{
-      Deferrable: bool($6),
-      InitiallyDeferred: bool($7),
-    }
+    $1.ConstraintOptions = $6
     $$ = $1
   }
-| foreign_key_without_options ON DELETE reference_option ON UPDATE reference_option not_for_replication_opt deferrable_opt initially_deferred_opt
+| foreign_key_without_options ON DELETE reference_option ON UPDATE reference_option not_for_replication_opt constraint_timing_opt
   {
     $1.OnUpdate = $7
     $1.OnDelete = $4
     $1.NotForReplication = bool($8)
-    $1.ConstraintOptions = &ConstraintOptions{
-      Deferrable: bool($9),
-      InitiallyDeferred: bool($10),
-    }
+    $1.ConstraintOptions = $9
     $$ = $1
   }
-| foreign_key_without_options ON UPDATE reference_option ON DELETE reference_option not_for_replication_opt deferrable_opt initially_deferred_opt
+| foreign_key_without_options ON UPDATE reference_option ON DELETE reference_option not_for_replication_opt constraint_timing_opt
   {
     $1.OnUpdate = $4
     $1.OnDelete = $7
     $1.NotForReplication = bool($8)
-    $1.ConstraintOptions = &ConstraintOptions{
-      Deferrable: bool($9),
-      InitiallyDeferred: bool($10),
-    }
+    $1.ConstraintOptions = $9
     $$ = $1
   }
 
@@ -3268,31 +3248,25 @@ primary_key_definition:
   }
 
 unique_definition:
-  CONSTRAINT sql_id UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
+  CONSTRAINT sql_id UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt constraint_timing_opt
   {
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: string($3), Name: $2, Primary: false, Unique: true, Clustered: $4},
       Columns: $6,
       Options: $8,
       Partition: $9,
-      ConstraintOptions: &ConstraintOptions{
-        Deferrable: bool($10),
-        InitiallyDeferred: bool($11),
-      },
+      ConstraintOptions: $10,
     }
   }
 /* For PostgreSQL and SQLite3 */
-| UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
+| UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt constraint_timing_opt
   {
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: string($1), Primary: false, Unique: true, Clustered: $2},
       Columns: $4,
       Options: $6,
       Partition: $7,
-      ConstraintOptions: &ConstraintOptions{
-        Deferrable: bool($8),
-        InitiallyDeferred: bool($9),
-      },
+      ConstraintOptions: $8,
     }
   }
 
@@ -5364,32 +5338,69 @@ reserved_table_id:
     $$ = NewTableIdent(string($1))
   }
 
-deferrable_opt:
+constraint_timing_opt:
   /* empty */
   {
-    $$ = BoolVal(false)
+    $$ = &ConstraintOptions{
+      Deferrable: false,
+      InitiallyDeferred: false,
+    }
   }
 | DEFERRABLE
   {
-    $$ = BoolVal(true)
+    $$ = &ConstraintOptions{
+      Deferrable: true,
+      InitiallyDeferred: false,
+    }
   }
 | NOT DEFERRABLE
   {
-    $$ = BoolVal(false)
-  }
-
-initially_deferred_opt:
-  /* empty */
-  {
-    $$ = BoolVal(false)
+    $$ = &ConstraintOptions{
+      Deferrable: false,
+      InitiallyDeferred: false,
+    }
   }
 | INITIALLY DEFERRED
   {
-    $$ = BoolVal(true)
+    $$ = &ConstraintOptions{
+      Deferrable: true,
+      InitiallyDeferred: true,
+    }
   }
 | INITIALLY IMMEDIATE
   {
-    $$ = BoolVal(false)
+    $$ = &ConstraintOptions{
+      Deferrable: false,
+      InitiallyDeferred: false,
+    }
+  }
+| DEFERRABLE INITIALLY DEFERRED
+  {
+    $$ = &ConstraintOptions{
+      Deferrable: true,
+      InitiallyDeferred: true,
+    }
+  }
+| DEFERRABLE INITIALLY IMMEDIATE
+  {
+    $$ = &ConstraintOptions{
+      Deferrable: true,
+      InitiallyDeferred: false,
+    }
+  }
+| NOT DEFERRABLE INITIALLY IMMEDIATE
+  {
+    $$ = &ConstraintOptions{
+      Deferrable: false,
+      InitiallyDeferred: false,
+    }
+  }
+| NOT DEFERRABLE INITIALLY DEFERRED
+  {
+    $$ = &ConstraintOptions{
+      Deferrable: false,
+      InitiallyDeferred: true,
+    }
   }
 
 /* For PostgreSQL. https://www.postgresql.org/docs/14/sql-expressions.html#SQL-SYNTAX-ARRAY-CONSTRUCTORS */

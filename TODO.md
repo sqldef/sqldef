@@ -206,10 +206,9 @@ Based on deep analysis of `goyacc -v output.txt`, here's the concrete plan to re
 ### Next Steps
 
 1. ✅ **DONE**: Generate and analyze `goyacc -v output.txt`
-2. **TODO**: Create branch `refactor/reduce-conflicts`
-3. **TODO**: Implement Phase 1.1 (merge optional rules)
-4. **TODO**: Run full test suite, benchmark performance
-5. **TODO**: Document conflicts before/after each phase
+2. **TODO**: Implement Phase 1.1 (merge optional rules)
+3. **TODO**: Run full test suite, benchmark performance
+4. **TODO**: Document conflicts before/after each phase
 
 ## Tasks
 
