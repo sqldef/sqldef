@@ -88,10 +88,11 @@ func postProcessPostgres(stmt Statement) {
 			for _, fk := range ddl.TableSpec.ForeignKeys {
 				// Only process if constraint name is not explicitly set and there's a single column
 				if fk.ConstraintName.String() == "" && len(fk.IndexColumns) == 1 {
-					// Generate constraint name: tablename_columnname_fkey
 					columnName := fk.IndexColumns[0].String()
-					name, _ := PostgresAbsentConstraintName(tableName, columnName, "fkey")
-					fk.ConstraintName = NewColIdent(name)
+					name, truncated := PostgresAbsentConstraintName(tableName, columnName, "fkey")
+					if truncated {
+						fk.ConstraintName = NewColIdent(name)
+					}
 				}
 			}
 		}
