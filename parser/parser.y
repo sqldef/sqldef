@@ -337,7 +337,7 @@ func forceEOF(yylex interface{}) {
 %type <updateExpr> update_expression
 %type <setExpr> set_expression transaction_char isolation_level
 %type <str> ignore_opt default_opt
-%type <empty> if_not_exists_opt if_exists_opt when_expression_opt for_each_row_opt
+%type <empty> if_not_exists_opt when_expression_opt for_each_row_opt
 %type <bytes> reserved_keyword non_reserved_keyword
 %type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt
 %type <boolVal> unique_opt
@@ -380,7 +380,7 @@ func forceEOF(yylex interface{}) {
 %type <indexOptions> index_option_opt
 %type <indexOption> index_option
 %type <indexOptions> index_option_list mssql_index_option_list
-%type <bytes> policy_as_opt policy_for_opt character_cast_opt
+%type <bytes> policy_as_opt policy_for_opt
 %type <expr> using_opt with_check_opt
 %left <bytes> TYPECAST CHECK
 %type <bytes> or_replace_opt
@@ -389,8 +389,6 @@ func forceEOF(yylex interface{}) {
 %type <sequence> sequence_opt
 %type <boolVal> clustered_opt not_for_replication_opt
 %type <defaultValueOrExpression> default_definition
-%type <optVal> default_val
-%type <expr> default_expression
 %type <optVal> srid_definition srid_val
 %type <optVal> on_off
 %type <optVal> index_distance_option_value
@@ -406,7 +404,6 @@ func forceEOF(yylex interface{}) {
 %type <str> table_hint
 %type <newQualifierColName> new_qualifier_column_name
 %type <boolVal> deferrable_opt initially_deferred_opt
-%type <boolVal> variadic_opt
 %type <arrayConstructor> array_constructor
 %type <arrayElements> array_element_list
 %type <arrayElement> array_element
@@ -2300,58 +2297,6 @@ default_definition:
     }
   }
 
-default_val:
-  STRING
-  {
-    $$ = NewStrVal($1)
-  }
-| UNICODE_STRING
-  {
-    $$ = NewUnicodeStrVal($1)
-  }
-| INTEGRAL
-  {
-    $$ = NewIntVal($1)
-  }
-| '-' INTEGRAL
-  {
-    $$ = NewIntVal(append([]byte("-"), $2...))
-  }
-| FLOAT
-  {
-    $$ = NewFloatVal($1)
-  }
-| '-' FLOAT
-  {
-    $$ = NewFloatVal(append([]byte("-"), $2...))
-  }
-| NULL
-  {
-    $$ = NewValArg($1)
-  }
-| current_timestamp
-  {
-    $$ = $1
-  }
-| BIT_LITERAL
-  {
-    $$ = NewBitVal($1)
-  }
-| boolean_value
-  {
-    $$ = NewBoolSQLVal(bool($1))
-  }
-| NOW openb closeb
-  {
-    $$ = NewBitVal($1)
-  }
-
-default_expression:
-  value_expression
-  {
-    $$ = $1
-  }
-
 srid_definition:
   SRID srid_val
   {
@@ -2482,14 +2427,6 @@ no_inherit_opt:
   {
     $$ = BoolVal(true)
   }
-
-character_cast_opt:
-  {
-    $$ = nil
-  }
-| TYPECAST BPCHAR
-| TYPECAST INTERVAL
-| TYPECAST column_type array_opt
 
 numeric_type:
   int_type length_opt
@@ -4470,7 +4407,7 @@ value_expression:
 | function_call_keyword
 | function_call_nonkeyword
 | function_call_conflict
-| variadic_opt array_constructor
+| VARIADIC array_constructor
   {
     $$ = $2
   }
@@ -5371,11 +5308,6 @@ if_not_exists_opt:
 | IF NOT EXISTS
   { $$ = struct{}{} }
 
-if_exists_opt:
-  { $$ = struct{}{} }
-| IF EXISTS
-  { $$ = struct{}{} }
-
 ignore_opt:
   { $$ = "" }
 | IGNORE
@@ -5458,16 +5390,6 @@ initially_deferred_opt:
 | INITIALLY IMMEDIATE
   {
     $$ = BoolVal(false)
-  }
-
-variadic_opt:
-  /* empty */
-  {
-    $$ = BoolVal(false)
-  }
-| VARIADIC
-  {
-    $$ =BoolVal(true)
   }
 
 /* For PostgreSQL. https://www.postgresql.org/docs/14/sql-expressions.html#SQL-SYNTAX-ARRAY-CONSTRUCTORS */
