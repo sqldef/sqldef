@@ -392,13 +392,19 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						break
 					}
 				}
-				if desiredIndex != nil && g.areSameIndexes(index, *desiredIndex) {
-					slog.Debug("index exists in desired with same definition, skipping", "index", index.name)
-					continue // Index is expected to exist with the same definition.
-				} else {
-					slog.Debug("index exists in desired but definition changed, will drop and recreate", "index", index.name)
-					// Fall through to drop the index - it will be recreated later with the new definition
+				if desiredIndex != nil {
+					// Index exists in desired (same or different definition)
+					// Skip - let the second loop (lines 1102-1132) handle any necessary drop+add
+					// This prevents duplicate DROP statements when the definition changes
+					if g.areSameIndexes(index, *desiredIndex) {
+						slog.Debug("index exists in desired with same definition, skipping", "index", index.name)
+					} else {
+						slog.Debug("index exists in desired but definition changed, will be handled by second loop", "index", index.name)
+					}
+					continue
 				}
+				// If desiredIndex is nil but name exists, it might be a foreign key index
+				// Fall through to check if it should be dropped
 			}
 
 			// Check if this index was renamed (don't drop if it was renamed)

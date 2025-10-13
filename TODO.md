@@ -22,18 +22,11 @@ Eventually, both `PSQLDEF_PARSER=generic make test-psqldef` and `PSQLDEF_PARSER=
 
 ## Current Test Status
 
-### Default Parser (generic primary, pgquery fallback) - 1 test fails
-When running with default parser:
+### Default Parser (generic primary, pgquery fallback) - ✅ ALL TESTS PASS
+When running with default parser: All tests pass
 
-1. **TestApply/CreateTableWithConstraintOptions** - Constraint options idempotency issues
-
-### GENERIC Parser (PSQLDEF_PARSER=generic) - 1 test fails
-When running with `PSQLDEF_PARSER=generic`:
-
-1. **TestApply/CreateTableWithConstraintOptions** - Constraint options idempotency issues
-
-**Root cause of remaining failure**:
-- Constraint options idempotency: Duplicate DROP constraint statements being generated when updating constraint options
+### GENERIC Parser (PSQLDEF_PARSER=generic) - ✅ ALL TESTS PASS
+When running with `PSQLDEF_PARSER=generic`: All tests pass
 
 ## Completed Issues ✅
 
@@ -57,26 +50,16 @@ When running with `PSQLDEF_PARSER=generic`:
    - Updated pgquery fallback parser in `database/postgres/parser.go` to use `ColumnType`
    - Benefits: Reduced type duplication, improved consistency, eliminated conversion overhead
    - All view and cast normalization tests pass with the new type system
+4. **Constraint options idempotency** ✅ - Fixed duplicate DROP constraint statements
+   - Root cause: When an index/constraint definition changed, it was being dropped in two places
+   - First loop (checking absent indexes) would drop if definition changed
+   - Second loop (examining desired indexes) would also drop before adding
+   - Fix: Modified first loop in `schema/generator.go` to skip dropping indexes that exist in desired
+   - Now only the second loop handles drop+add for changed definitions
+   - Eliminates duplicate DROP statements and ensures idempotent migrations
+   - All tests pass with both generic and default parsers
 
 ## Priority Issues to Fix
-
-### High Priority - Generic Parser
-1. **Constraint options** (BLOCKED - PostgreSQL Limitation) - DEFERRABLE options not stored for UNIQUE constraints
-   - Root cause: PostgreSQL does not persist DEFERRABLE/INITIALLY DEFERRED options for UNIQUE constraints added via ALTER TABLE
-   - When executing: `ALTER TABLE t ADD CONSTRAINT c UNIQUE (...) DEFERRABLE INITIALLY DEFERRED;`
-   - PostgreSQL stores: `condeferrable=false, condeferred=false` in pg_constraint
-   - This appears to be a PostgreSQL limitation - DEFERRABLE may only work for inline UNIQUE constraints in CREATE TABLE
-   - Investigation findings:
-     * Modified `getUniqueConstraints()` to query `con.condeferrable` and `con.condeferred` columns
-     * Confirmed the DDL includes DEFERRABLE options when applied
-     * Database consistently returns `condeferrable=false` after applying the constraint
-     * Same issue occurs with both generic and pgquery parsers
-     * PostgreSQL 14 is being used (supports DEFERRABLE syntax but doesn't persist it)
-   - Possible workarounds:
-     * Use inline constraints in CREATE TABLE instead of ALTER TABLE for UNIQUE constraints with DEFERRABLE
-     * Drop and recreate the table with inline constraints
-     * Mark test as known limitation
-   - Status: Needs verification if this is a PostgreSQL bug or expected behavior
 
 ### Medium Priority - Generic Parser
 1. **CREATE EXTENSION** - Extension creation not supported (`CREATE EXTENSION citext;`)
