@@ -973,14 +973,17 @@ func parseExclusion(exclusion *parser.ExclusionDefinition) Exclusion {
 		})
 	}
 	var where string
+	var whereAST parser.Expr
 	if exclusion.Where != nil {
-		where = parser.String(exclusion.Where.Expr)
+		whereAST = exclusion.Where.Expr
+		where = parser.String(whereAST)
 	}
 	return Exclusion{
 		constraintName: exclusion.ConstraintName.String(),
 		indexType:      strings.ToUpper(exclusion.IndexType),
 		exclusions:     exs,
 		where:          where,
+		whereAST:       whereAST,
 	}
 }
 

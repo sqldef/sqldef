@@ -2976,12 +2976,88 @@ func (g *Generator) findCheckConstraintByDefinition(table *Table, check *CheckDe
 	return nil
 }
 
+// truncatePostgresIdentifier truncates an identifier to PostgreSQL's 63-character limit
+func truncatePostgresIdentifier(identifier string) string {
+	if len(identifier) <= 63 {
+		return identifier
+	}
+	return identifier[:63]
+}
+
+// normalizePostgresConstraintName attempts to match PostgreSQL's constraint name truncation algorithm
+// PostgreSQL generates constraint names in the form: {table}_{column}_{suffix}
+// When this exceeds 63 characters, it uses a smart truncation algorithm (implemented in absentConstraintName)
+// This function extracts table, column, and suffix from a constraint name and reconstructs it with the same algorithm
+func normalizePostgresConstraintName(constraintName string) string {
+	if len(constraintName) <= 63 {
+		return constraintName
+	}
+
+	// Try to parse the constraint name to extract components
+	// Pattern: {table}_{column}_{suffix}
+	// Common suffixes: fkey, key, pkey, check, etc.
+	var tableName, columnName, suffix string
+
+	// Try common suffixes
+	suffixes := []string{"_fkey", "_key", "_pkey", "_check", "_seq"}
+	for _, suf := range suffixes {
+		if strings.HasSuffix(constraintName, suf) {
+			suffix = suf[1:] // remove leading underscore
+			remainder := constraintName[:len(constraintName)-len(suf)]
+
+			// Find the last underscore to split table and column
+			lastUnderscore := strings.LastIndex(remainder, "_")
+			if lastUnderscore > 0 {
+				tableName = remainder[:lastUnderscore]
+				columnName = remainder[lastUnderscore+1:]
+				break
+			}
+		}
+	}
+
+	// If we couldn't parse it, just truncate naively
+	if tableName == "" || columnName == "" || suffix == "" {
+		return truncatePostgresIdentifier(constraintName)
+	}
+
+	// Apply PostgreSQL's truncation algorithm (same as absentConstraintName)
+	if fullName := fmt.Sprintf("%s_%s_%s", tableName, columnName, suffix); len(fullName) <= 63 {
+		return fullName
+	}
+
+	var tableThreshold, columnThreshold = 33 - len(suffix), 28
+	var maxSum = tableThreshold + columnThreshold
+
+	if len(tableName) <= tableThreshold {
+		columnName = columnName[:maxSum-len(tableName)]
+	} else if len(columnName) <= columnThreshold {
+		tableName = tableName[:maxSum-len(columnName)]
+	} else {
+		tableName = tableName[:tableThreshold]
+		columnName = columnName[:columnThreshold]
+	}
+
+	return fmt.Sprintf("%s_%s_%s", tableName, columnName, suffix)
+}
+
 func findForeignKeyByName(foreignKeys []ForeignKey, constraintName string) *ForeignKey {
+	// First try exact match
 	for _, foreignKey := range foreignKeys {
 		if foreignKey.constraintName == constraintName {
 			return &foreignKey
 		}
 	}
+
+	// If no exact match, normalize both names using PostgreSQL's truncation algorithm
+	// This handles cases where one name is auto-generated/truncated and the other isn't
+	normalizedSearchName := normalizePostgresConstraintName(constraintName)
+	for _, foreignKey := range foreignKeys {
+		normalizedFKName := normalizePostgresConstraintName(foreignKey.constraintName)
+		if normalizedFKName == normalizedSearchName {
+			return &foreignKey
+		}
+	}
+
 	return nil
 }
 
@@ -3014,8 +3090,11 @@ func (g *Generator) findForeignKeysReferencingTable(referencedTableName string) 
 }
 
 func findExclusionByName(exclusions []Exclusion, constraintName string) *Exclusion {
+	truncatedSearchName := truncatePostgresIdentifier(constraintName)
+
 	for _, exclusion := range exclusions {
-		if exclusion.constraintName == constraintName {
+		truncatedExclusionName := truncatePostgresIdentifier(exclusion.constraintName)
+		if truncatedExclusionName == truncatedSearchName {
 			return &exclusion
 		}
 	}
@@ -3385,7 +3464,7 @@ func normalizeExprForView(expr parser.Expr) parser.Expr {
 		}
 	case *parser.FuncExpr:
 		// Handle ARRAY function - remove it and return just the comma-separated elements
-		if strings.ToUpper(e.Name.String()) == "ARRAY" {
+		if strings.EqualFold(e.Name.String(), "ARRAY") {
 			// Convert ARRAY[a, b, c] to just a, b, c (comma-separated)
 			// This matches the regex replacement in the old code: array[ -> "", ] -> ""
 			normalizedExprs := make(parser.SelectExprs, len(e.Exprs))
@@ -3456,23 +3535,23 @@ func normalizeExprForView(expr parser.Expr) parser.Expr {
 			return normalizedExpr
 		}
 
-		typeName := strings.ToLower(e.Type.Type)
+		normalizedTypeName := strings.ToLower(e.Type.Type)
 
 		// Remove ::text casts - PostgreSQL adds these but they're redundant
-		if typeName == "text" {
+		if normalizedTypeName == "text" {
 			return normalizedExpr
 		}
 
 		// Remove intermediate type casts like ::double precision
-		if typeName == "double precision" || typeName == "real" {
+		if normalizedTypeName == "double precision" || normalizedTypeName == "real" {
 			return normalizedExpr
 		}
 
 		// Remove unnecessary casts on numeric literals
 		if _, isLiteral := normalizedExpr.(*parser.SQLVal); isLiteral {
 			// Remove common redundant numeric casts on literals
-			if typeName == "numeric" || typeName == "bigint" ||
-				typeName == "integer" || typeName == "smallint" {
+			if normalizedTypeName == "numeric" || normalizedTypeName == "bigint" ||
+				normalizedTypeName == "integer" || normalizedTypeName == "smallint" {
 				return normalizedExpr
 			}
 		}
@@ -3482,7 +3561,7 @@ func normalizeExprForView(expr parser.Expr) parser.Expr {
 		return &parser.CollateExpr{
 			Expr: normalizedExpr,
 			Type: &parser.ColumnType{
-				Type:   typeName,
+				Type:   normalizedTypeName,
 				Length: e.Type.Length,
 				Scale:  e.Type.Scale,
 			},
@@ -4913,8 +4992,38 @@ func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB Forei
 		slog.Debug("FK initiallyDeferred differs", "initiallyDeferredA", initiallyDeferredA, "initiallyDeferredB", initiallyDeferredB)
 		return false
 	}
-	// TODO: check index, reference
-	slog.Debug("FK comparison: same (TODO: check index, reference)")
+
+	// Compare index columns (columns in the foreign key)
+	if len(foreignKeyA.indexColumns) != len(foreignKeyB.indexColumns) {
+		slog.Debug("FK indexColumns length differs", "lenA", len(foreignKeyA.indexColumns), "lenB", len(foreignKeyB.indexColumns))
+		return false
+	}
+	for i := range foreignKeyA.indexColumns {
+		if foreignKeyA.indexColumns[i] != foreignKeyB.indexColumns[i] {
+			slog.Debug("FK indexColumn differs at position", "pos", i, "colA", foreignKeyA.indexColumns[i], "colB", foreignKeyB.indexColumns[i])
+			return false
+		}
+	}
+
+	// Compare reference table name
+	if foreignKeyA.referenceName != foreignKeyB.referenceName {
+		slog.Debug("FK referenceName differs", "nameA", foreignKeyA.referenceName, "nameB", foreignKeyB.referenceName)
+		return false
+	}
+
+	// Compare reference columns (columns in the referenced table)
+	if len(foreignKeyA.referenceColumns) != len(foreignKeyB.referenceColumns) {
+		slog.Debug("FK referenceColumns length differs", "lenA", len(foreignKeyA.referenceColumns), "lenB", len(foreignKeyB.referenceColumns))
+		return false
+	}
+	for i := range foreignKeyA.referenceColumns {
+		if foreignKeyA.referenceColumns[i] != foreignKeyB.referenceColumns[i] {
+			slog.Debug("FK referenceColumn differs at position", "pos", i, "colA", foreignKeyA.referenceColumns[i], "colB", foreignKeyB.referenceColumns[i])
+			return false
+		}
+	}
+
+	slog.Debug("FK comparison: same")
 	return true
 }
 
@@ -4937,9 +5046,23 @@ func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion
 	if len(exclusionA.exclusions) != len(exclusionB.exclusions) {
 		return false
 	}
-	if exclusionA.where != exclusionB.where {
+
+	// Both sides must have empty WHERE clauses or both must be non-empty
+	if (exclusionA.whereAST == nil) != (exclusionB.whereAST == nil) {
+		slog.Debug("Exclusion WHERE presence differs", "whereA", exclusionA.where, "whereB", exclusionB.where)
 		return false
 	}
+	if exclusionA.whereAST != nil {
+		normalizedA := normalizeExprForView(exclusionA.whereAST)
+		normalizedB := normalizeExprForView(exclusionB.whereAST)
+		whereStrA := strings.ToLower(parser.String(normalizedA))
+		whereStrB := strings.ToLower(parser.String(normalizedB))
+		if whereStrA != whereStrB {
+			slog.Debug("Exclusion WHERE differs", "whereA", exclusionA.where, "whereB", exclusionB.where, "normalizedA", whereStrA, "normalizedB", whereStrB)
+			return false
+		}
+	}
+
 	for i := range exclusionA.exclusions {
 		a := exclusionA.exclusions[i]
 		b := exclusionB.exclusions[i]

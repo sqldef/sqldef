@@ -172,6 +172,7 @@ type Exclusion struct {
 	constraintName string
 	indexType      string
 	where          string
+	whereAST       parser.Expr
 	exclusions     []ExclusionPair
 }
 
