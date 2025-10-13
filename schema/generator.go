@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/sqldef/sqldef/v3/database"
@@ -4750,28 +4751,36 @@ func (g *Generator) areSameValue(current, desired *Value) bool {
 	if current == nil || desired == nil {
 		return false
 	}
-
-	// NOTE: -1 can be changed to '-1' in show create table and valueType is not reliable
-	currentRaw := strings.ToLower(string(current.raw))
-	desiredRaw := strings.ToLower(string(desired.raw))
-	if desired.valueType == ValueTypeFloat && len(currentRaw) > len(desiredRaw) {
-		// Round "0.00" to "0.0" for comparison with desired.
-		// Ideally we should do this seeing precision in a data type.]
-		// TODO: Use big.Float for comparison.
-		currentRaw = currentRaw[0:len(desiredRaw)]
+	if desired.valueType == ValueTypeFloat && current.valueType == ValueTypeFloat {
+		return current.floatVal == desired.floatVal
+	} else if desired.valueType == ValueTypeInt && current.valueType == ValueTypeInt {
+		return current.intVal == desired.intVal
 	}
+
+	currentRaw := string(current.raw)
+	desiredRaw := string(desired.raw)
+
+	if desired.valueType == ValueTypeFloat && current.valueType == ValueTypeStr {
+		// NegativeDefaultNumbers
+		// TODO: support DECIMAL type
+		if currentFloatVal, err := strconv.ParseFloat(currentRaw, 64); err == nil {
+			return desired.floatVal == currentFloatVal
+		}
+	}
+
+	slog.Debug("areSameValue", "current", current, "desired", desired, "currentRaw", currentRaw, "desiredRaw", desiredRaw)
 
 	// NOTE: Boolean constants is evaluated as TINYINT(1) value in MySQL.
 	// Normalize both current and desired values to numeric representation
 	if g.mode == GeneratorModeMysql {
-		if desired.valueType == ValueTypeBool || current.valueType == ValueTypeBool {
-			// Normalize desiredRaw
+		if desired.valueType == ValueTypeBool {
 			if strings.EqualFold(desiredRaw, "false") {
 				desiredRaw = "0"
 			} else if strings.EqualFold(desiredRaw, "true") {
 				desiredRaw = "1"
 			}
-			// Normalize currentRaw
+		}
+		if current.valueType == ValueTypeBool {
 			if strings.EqualFold(currentRaw, "false") {
 				currentRaw = "0"
 			} else if strings.EqualFold(currentRaw, "true") {
