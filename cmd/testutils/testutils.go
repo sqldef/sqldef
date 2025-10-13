@@ -40,6 +40,10 @@ type TestCase struct {
 	} `yaml:"config"`
 }
 
+func init() {
+	util.InitSlog()
+}
+
 func ReadTests(pattern string) (map[string]TestCase, error) {
 	files, err := filepath.Glob(pattern)
 	if err != nil {
