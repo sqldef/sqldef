@@ -328,6 +328,11 @@ func TestSpecialConstructs(t *testing.T) {
 			sql:  `CREATE TABLE test (val text CHECK (val !~* '[A-Z]+'))`,
 			mode: ParserModePostgres,
 		},
+		{
+			name: "Type casting with :: and decimal precision",
+			sql:  `CREATE TABLE test (price numeric DEFAULT 100.50::decimal(10,2))`,
+			mode: ParserModePostgres,
+		},
 	}
 
 	for _, tt := range tests {
