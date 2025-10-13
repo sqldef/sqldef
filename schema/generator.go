@@ -403,8 +403,13 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 					}
 					continue
 				}
-				// If desiredIndex is nil but name exists, it might be a foreign key index
-				// Fall through to check if it should be dropped
+				// If desiredIndex is nil but this is a foreign key index, skip it
+				// Foreign key indexes are managed by the foreign key constraint
+				if slices.Contains(convertForeignKeysToIndexNames(desiredTable.foreignKeys), index.name) {
+					slog.Debug("index is for a foreign key in desired schema, skipping", "index", index.name)
+					continue
+				}
+				// If desiredIndex is nil and not a FK index, fall through to check if it should be dropped
 			}
 
 			// Check if this index was renamed (don't drop if it was renamed)
@@ -1186,6 +1191,17 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 				if dropDDL != "" {
 					ddls = append(ddls, dropDDL, fmt.Sprintf("ALTER TABLE %s ADD %s%s", g.escapeTableName(desired.table.name), g.generateForeignKeyDefinition(desiredForeignKey), g.generateConstraintOptions(desiredForeignKey.constraintOptions)))
+
+					// Update the current state to reflect the FK change
+					// Remove old FK and add new one
+					newFKs := []ForeignKey{}
+					for _, fk := range currentTable.foreignKeys {
+						if fk.constraintName != currentForeignKey.constraintName {
+							newFKs = append(newFKs, fk)
+						}
+					}
+					newFKs = append(newFKs, desiredForeignKey)
+					currentTable.foreignKeys = newFKs
 				}
 			}
 		} else {
@@ -1196,6 +1212,9 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				definition := g.generateForeignKeyDefinition(desiredForeignKey)
 				ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), definition)
 				ddls = append(ddls, ddl)
+
+				// Update the current state to reflect the new FK
+				currentTable.foreignKeys = append(currentTable.foreignKeys, desiredForeignKey)
 			}
 		}
 	}
@@ -4724,7 +4743,6 @@ func (g *Generator) parseExpression(expr string) (parser.Expr, error) {
 	return aliasedExpr.Expr, nil
 }
 
-
 func (g *Generator) areSameValue(current, desired *Value) bool {
 	if current == nil && desired == nil {
 		return true
@@ -4744,12 +4762,20 @@ func (g *Generator) areSameValue(current, desired *Value) bool {
 	}
 
 	// NOTE: Boolean constants is evaluated as TINYINT(1) value in MySQL.
+	// Normalize both current and desired values to numeric representation
 	if g.mode == GeneratorModeMysql {
-		if desired.valueType == ValueTypeBool {
-			if strings.EqualFold(currentRaw, "false") {
+		if desired.valueType == ValueTypeBool || current.valueType == ValueTypeBool {
+			// Normalize desiredRaw
+			if strings.EqualFold(desiredRaw, "false") {
 				desiredRaw = "0"
-			} else if strings.EqualFold(currentRaw, "true") {
+			} else if strings.EqualFold(desiredRaw, "true") {
 				desiredRaw = "1"
+			}
+			// Normalize currentRaw
+			if strings.EqualFold(currentRaw, "false") {
+				currentRaw = "0"
+			} else if strings.EqualFold(currentRaw, "true") {
+				currentRaw = "1"
 			}
 		}
 	}
