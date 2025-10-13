@@ -55,3 +55,22 @@ When running with `PSQLDEF_PARSER=generic`:
 ### Medium Priority - Generic Parser
 1. **CREATE EXTENSION** - Extension creation not supported (`CREATE EXTENSION citext;`)
 
+## Needs Refactoring
+
+### Normalization Functions (`normalizeExprForView()` vs `normalizeCheckExprAST()`)
+**Problem**: Two similar normalization functions with ~150 lines of duplicated logic:
+
+- `normalizeExprForView()` - Used for view expressions (from `pg_get_viewdef()`)
+- `normalizeCheckExprAST()` - Used for CHECK constraint expressions (from `pg_get_constraintdef()`)
+
+**Current inconsistency**: Exclusion constraint WHERE clauses use `normalizeExprForView()` but should use `normalizeCheckExprAST()` since they come from `pg_get_constraintdef()` like CHECK constraints.
+
+**Key differences**:
+- Cast handling: View normalizer aggressively removes casts; check normalizer is selective (keeps casts on columns, removes on literals)
+- Operator normalization: Only check normalizer does this (<> → !=, etc.)
+- IN clause: Check normalizer converts IN to ANY(ARRAY[...]) for PostgreSQL
+- Mode awareness: Check normalizer handles MySQL/MSSQL/SQLite differences; view normalizer assumes PostgreSQL
+
+**Recommendation**:
+1. Short-term: Use `normalizeCheckExprAST()` for exclusion WHERE clauses instead of `normalizeExprForView()`
+2. Long-term: Unify into a single `normalizeExprAST(expr, config)` with configuration-based behavior to eliminate duplication
