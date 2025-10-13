@@ -22,11 +22,12 @@ Eventually, both `PSQLDEF_PARSER=generic make test-psqldef` and `PSQLDEF_PARSER=
 
 ## Current Test Status
 
-### Default Parser (generic primary, pgquery fallback) - ✅ ALL TESTS PASS
-When running with default parser: All tests pass
-
-### GENERIC Parser (PSQLDEF_PARSER=generic) - ✅ ALL TESTS PASS
-When running with `PSQLDEF_PARSER=generic`: All tests pass
+### All Databases - ✅ ALL TESTS PASS
+- `make test-mysqldef`: All tests pass
+- `make test-psqldef`: All tests pass (both default and `PSQLDEF_PARSER=generic`)
+- `make test-sqlite3def`: All tests pass
+- `make test-mssqldef`: All tests pass
+- `make test`: Full test suite passes
 
 ## Completed Issues ✅
 
@@ -58,6 +59,36 @@ When running with `PSQLDEF_PARSER=generic`: All tests pass
    - Now only the second loop handles drop+add for changed definitions
    - Eliminates duplicate DROP statements and ensures idempotent migrations
    - All tests pass with both generic and default parsers
+
+### MySQL - Schema Comparison & Idempotency
+5. **Foreign key auto-created indexes** ✅ - MySQL drops FK indexes unnecessarily
+   - Root cause: MySQL auto-creates indexes for foreign keys with the constraint name
+   - During idempotency check, code tried to drop these auto-created indexes even when FK exists
+   - Fix: Added logic in `schema/generator.go` to skip dropping indexes that match FK constraint names
+   - Check if index name exists in `desiredTable.foreignKeys` before dropping
+   - Location: `schema/generator.go:406-412`
+
+6. **Boolean value normalization** ✅ - MySQL boolean defaults cause non-idempotent changes
+   - Root cause: MySQL treats `boolean` as `TINYINT(1)`, converts `false`/`true` to `0`/`1`
+   - Original code only normalized desired values, not current values from database
+   - Fix: Enhanced `areSameValue()` to normalize BOTH current and desired boolean values
+   - Converts `false`→`0` and `true`→`1` in both directions for proper comparison
+   - Location: `schema/generator.go:4751-4768`
+
+### MSSQL - Foreign Key Handling
+7. **Foreign key state tracking** ✅ - Duplicate FKs after drop/recreate operations
+   - Root cause: In-memory state not updated when FKs dropped and recreated
+   - Led to duplicate foreign key tracking, causing repeated drop/add cycles
+   - Fix: Added state updates to remove old FKs and add new ones in `generateDDLsForCreateTable()`
+   - Properly maintains `currentTable.foreignKeys` during modifications
+   - Location: `schema/generator.go:1193-1218`
+
+8. **Composite foreign key parsing** ✅ - Multi-column FKs parsed as multiple single-column FKs
+   - Root cause: MSSQL query returns one row per FK column, code didn't group by constraint name
+   - Composite FKs appeared as separate single-column constraints in exported schema
+   - Fix: Rewrote `updateForeignDefs()` to group columns by constraint name before building definitions
+   - Now properly handles multi-column FKs: `FOREIGN KEY (col1, col2) REFERENCES table (col1, col2)`
+   - Location: `database/mssql/database.go:598-687`
 
 ## Priority Issues to Fix
 
