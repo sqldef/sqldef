@@ -14,7 +14,8 @@ Each command follows the same pattern: it accepts connection parameters similar 
 * Never commit the changes unless the user asks for it.
 * Write comments to describe what is not obvious in the code. Describing the "why" is a recommended practice.
 * Format queries in string literals.
-
+* Use "log/slog" to trace internal flow of the code. `LOG_LEVEL=debug` to enable debug logging.
+*
 ## Build
 
 Build all the sqldef commands (`mysqldef`, `psqldef`, `sqlite3def`, `mssqldef`):
