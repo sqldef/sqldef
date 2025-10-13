@@ -15,6 +15,7 @@ import (
 	"github.com/goccy/go-yaml"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/schema"
+	"github.com/sqldef/sqldef/v3/util"
 )
 
 type TestCase struct {
@@ -32,6 +33,10 @@ type TestCase struct {
 	Config       struct { // Optional config settings for the test
 		CreateIndexConcurrently bool `yaml:"create_index_concurrently"`
 	} `yaml:"config"`
+}
+
+func init() {
+	util.InitSlog()
 }
 
 func ReadTests(pattern string) (map[string]TestCase, error) {
