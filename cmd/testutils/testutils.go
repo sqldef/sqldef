@@ -4,6 +4,7 @@ package testutils
 import (
 	"bytes"
 	"fmt"
+	"github.com/google/go-cmp/cmp"
 	"log"
 	"os"
 	"os/exec"
@@ -11,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"github.com/google/go-cmp/cmp"
 
 	"github.com/goccy/go-yaml"
 	"github.com/sqldef/sqldef/v3/database"

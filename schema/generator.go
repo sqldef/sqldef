@@ -4863,7 +4863,6 @@ func (g *Generator) normalizeDataType(dataType string) string {
 		}
 	}
 
-
 	if alias, ok := dataTypeAliases[dataType]; ok {
 		dataType = alias
 	}
