@@ -3720,10 +3720,10 @@ func normalizeExprForView(expr parser.Expr) parser.Expr {
 			return paren
 		}
 		// Unwrap parentheses around simple expressions like literals, column names, casts, and function calls
-		// CastExpr is used for :: cast syntax, CollateExpr for COLLATE syntax
+		// CastExpr is used for :: cast syntax
 		// FuncExpr should not need parentheses (PostgreSQL adds them for clarity but they're not required)
 		switch normalized.(type) {
-		case *parser.SQLVal, *parser.ColName, *parser.CastExpr, *parser.CollateExpr, *parser.FuncExpr:
+		case *parser.SQLVal, *parser.ColName, *parser.CastExpr, *parser.FuncExpr:
 			return normalized
 		}
 		return &parser.ParenExpr{Expr: normalized}
