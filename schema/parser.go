@@ -544,9 +544,8 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			isActualFK := (hasReferenceColumns || hasFKClauses) && parsedCol.Type.References != ""
 
 			if isActualFK {
-				// Generate constraint name: tablename_columnname_fkey
 				tableName := stmt.NewName.Name.String()
-				constraintName := tableName + "_" + column.name + "_fkey"
+				constraintName, _ := parser.PostgresAbsentConstraintName(tableName, column.name, "fkey")
 
 				var constraintOptions *ConstraintOptions
 				if column.referenceDeferrable || column.referenceInitiallyDeferred {

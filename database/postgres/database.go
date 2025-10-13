@@ -758,7 +758,7 @@ func normalizeViewDefinitionString(def string) string {
 }
 
 func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]string, error) {
-	const query = `SELECT con.conname, pg_get_constraintdef(con.oid)
+	const query = `SELECT con.conname, pg_get_constraintdef(con.oid, true)
 	FROM   pg_constraint con
 	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
 	JOIN   pg_class cls ON cls.oid = con.conrelid
@@ -781,10 +781,11 @@ func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]st
 			return nil, err
 		}
 
-		result[constraintName] = fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s",
+		fullDef := fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s",
 			escapeSQLName(schema), escapeSQLName(table),
 			escapeSQLName(constraintName), constraintDef,
 		)
+		result[constraintName] = fullDef
 	}
 
 	return result, nil

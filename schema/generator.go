@@ -357,6 +357,13 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		}
 
 		// Check indexes
+		slog.Debug("checking currentTable.indexes", "table", currentTable.name, "indexCount", len(currentTable.indexes), "indexNames", func() []string {
+			names := make([]string, len(currentTable.indexes))
+			for i, idx := range currentTable.indexes {
+				names[i] = idx.name
+			}
+			return names
+		}())
 		for _, index := range currentTable.indexes {
 
 			// Alter statement for primary key index should be generated above.
@@ -1359,7 +1366,20 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 		} else {
 			// Index not found and not a rename, add index.
 			ddls = append(ddls, statement)
-			currentTable.indexes = append(currentTable.indexes, desiredIndex)
+			// Check if index was already added (avoid duplicates from multiple Generate() calls)
+			alreadyExists := false
+			slog.Debug("generateDDLsForCreateIndex: checking for duplicate before mutation", "tableName", tableName, "desiredIndexName", desiredIndex.name, "currentIndexCount", len(currentTable.indexes))
+			for _, idx := range currentTable.indexes {
+				if idx.name == desiredIndex.name {
+					alreadyExists = true
+					slog.Debug("generateDDLsForCreateIndex: index already exists, skipping mutation", "tableName", tableName, "indexName", desiredIndex.name)
+					break
+				}
+			}
+			if !alreadyExists {
+				slog.Debug("generateDDLsForCreateIndex: appending index to currentTable", "tableName", tableName, "indexName", desiredIndex.name)
+				currentTable.indexes = append(currentTable.indexes, desiredIndex)
+			}
 		}
 	} else {
 		// Index found. If it's different, drop and add index.
@@ -2493,6 +2513,13 @@ func mergeTable(table1 *Table, table2 Table) {
 }
 
 func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
+	slog.Debug("aggregateDDLsToSchema called", "ddlCount", len(ddls), "ddls", func() []string {
+		stmts := make([]string, len(ddls))
+		for i, ddl := range ddls {
+			stmts[i] = ddl.Statement()
+		}
+		return stmts
+	}())
 	aggregated := &AggregatedSchema{
 		Tables:     []*Table{},
 		Views:      []*View{},
@@ -2507,6 +2534,13 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 		switch stmt := ddl.(type) {
 		case *CreateTable:
 			table := stmt.table // copy table
+			slog.Debug("CreateTable: adding table", "tableName", table.name, "indexCount", len(table.indexes), "indexNames", func() []string {
+				names := make([]string, len(table.indexes))
+				for i, idx := range table.indexes {
+					names[i] = idx.name
+				}
+				return names
+			}())
 			aggregated.Tables = append(aggregated.Tables, &table)
 		case *CreateIndex:
 			table := findTableByName(aggregated.Tables, stmt.tableName)
@@ -2515,19 +2549,59 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 				if view == nil {
 					return nil, fmt.Errorf("CREATE INDEX is performed before CREATE TABLE: %s", ddl.Statement())
 				}
-				// TODO: check duplicated creation
-				view.indexes = append(view.indexes, stmt.index)
+				// Check if index already exists (avoid duplicates)
+				indexExists := false
+				for _, existingIndex := range view.indexes {
+					if existingIndex.name == stmt.index.name {
+						indexExists = true
+						slog.Debug("CreateIndex: index already exists on view, skipping", "view", stmt.tableName, "indexName", stmt.index.name)
+						break
+					}
+				}
+				if !indexExists {
+					slog.Debug("CreateIndex: appending to view.indexes", "view", stmt.tableName, "indexName", stmt.index.name, "statement", ddl.Statement())
+					view.indexes = append(view.indexes, stmt.index)
+				}
 			} else {
-				// TODO: check duplicated creation
-				table.indexes = append(table.indexes, stmt.index)
+				// Check if index already exists (avoid duplicates from inline constraints)
+				indexExists := false
+				for _, existingIndex := range table.indexes {
+					if existingIndex.name == stmt.index.name {
+						indexExists = true
+						slog.Debug("CreateIndex: index already exists on table, skipping", "table", stmt.tableName, "indexName", stmt.index.name)
+						break
+					}
+				}
+				if !indexExists {
+					slog.Debug("CreateIndex: appending to table.indexes", "table", stmt.tableName, "indexName", stmt.index.name, "statement", ddl.Statement())
+					table.indexes = append(table.indexes, stmt.index)
+				}
 			}
 		case *AddIndex:
 			table := findTableByName(aggregated.Tables, stmt.tableName)
 			if table == nil {
 				return nil, fmt.Errorf("ADD INDEX is performed before CREATE TABLE: %s", ddl.Statement())
 			}
-			// TODO: check duplicated creation
-			table.indexes = append(table.indexes, stmt.index)
+			// Check if index already exists (avoid duplicates from inline constraints)
+			indexExists := false
+			slog.Debug("AddIndex: checking for duplicates", "table", stmt.tableName, "newIndexName", stmt.index.name, "existingIndexCount", len(table.indexes), "existingIndexNames", func() []string {
+				names := make([]string, len(table.indexes))
+				for i, idx := range table.indexes {
+					names[i] = idx.name
+				}
+				return names
+			}())
+			for _, existingIndex := range table.indexes {
+				if existingIndex.name == stmt.index.name {
+					indexExists = true
+					slog.Debug("AddIndex: index already exists, skipping", "table", stmt.tableName, "indexName", stmt.index.name)
+					break
+				}
+			}
+			if !indexExists {
+				slog.Debug("AddIndex: appending to table.indexes", "table", stmt.tableName, "indexName", stmt.index.name, "constraint", stmt.constraint, "statement", ddl.Statement())
+				table.indexes = append(table.indexes, stmt.index)
+			}
 		case *AddPrimaryKey:
 			table := findTableByName(aggregated.Tables, stmt.tableName)
 			if table == nil {
@@ -3530,6 +3604,7 @@ func normalizeExprForView(expr parser.Expr) parser.Expr {
 			Over:      e.Over,
 		}
 	case *parser.CastExpr:
+		// CastExpr already represents ::type syntax - just normalize the expression
 		normalizedExpr := normalizeExprForView(e.Expr)
 		if e.Type == nil {
 			return normalizedExpr
@@ -3556,9 +3631,45 @@ func normalizeExprForView(expr parser.Expr) parser.Expr {
 			}
 		}
 
-		// Convert CAST(...) to :: syntax for consistency with PostgreSQL output
-		// PostgreSQL normalizes CAST to :: internally
-		return &parser.CollateExpr{
+		// Keep as CastExpr (::type syntax)
+		return &parser.CastExpr{
+			Expr: normalizedExpr,
+			Type: &parser.ColumnType{
+				Type:   normalizedTypeName,
+				Length: e.Type.Length,
+				Scale:  e.Type.Scale,
+			},
+		}
+	case *parser.ConvertExpr:
+		// ConvertExpr is used for CAST() syntax in the generic parser
+		normalizedExpr := normalizeExprForView(e.Expr)
+		if e.Type == nil {
+			return normalizedExpr
+		}
+
+		normalizedTypeName := strings.ToLower(e.Type.Type)
+
+		// Remove ::text casts - PostgreSQL adds these but they're redundant
+		if normalizedTypeName == "text" {
+			return normalizedExpr
+		}
+
+		// Remove intermediate type casts like ::double precision
+		if normalizedTypeName == "double precision" || normalizedTypeName == "real" {
+			return normalizedExpr
+		}
+
+		// Remove unnecessary casts on numeric literals
+		if _, isLiteral := normalizedExpr.(*parser.SQLVal); isLiteral {
+			// Remove common redundant numeric casts on literals
+			if normalizedTypeName == "numeric" || normalizedTypeName == "bigint" ||
+				normalizedTypeName == "integer" || normalizedTypeName == "smallint" {
+				return normalizedExpr
+			}
+		}
+
+		// Convert CAST() to :: syntax (CastExpr) for consistency with PostgreSQL output
+		return &parser.CastExpr{
 			Expr: normalizedExpr,
 			Type: &parser.ColumnType{
 				Type:   normalizedTypeName,
@@ -3567,56 +3678,11 @@ func normalizeExprForView(expr parser.Expr) parser.Expr {
 			},
 		}
 	case *parser.CollateExpr:
+		// CollateExpr now only represents COLLATE expressions (not type casts)
 		normalizedExpr := normalizeExprForView(e.Expr)
-		if e.Type != nil {
-			// This is a type cast (::type syntax)
-			typeName := strings.ToLower(e.Type.Type)
-
-			// Remove ::text cast from string literals
-			// PostgreSQL adds these but they're redundant
-			if typeName == "text" {
-				// Check if the normalized expression is a string literal
-				if sqlVal, ok := normalizedExpr.(*parser.SQLVal); ok {
-					if sqlVal.Type == parser.StrVal || sqlVal.Type == parser.HexVal {
-						return normalizedExpr
-					}
-				}
-				// Even if we're not sure it's a literal, ::text on text is redundant
-				// This handles cases where PostgreSQL adds ::text to string arguments
-				return normalizedExpr
-			}
-
-			// Remove intermediate type casts like ::double precision
-			// These are added by PostgreSQL but not in the original schema
-			if typeName == "double precision" || typeName == "real" {
-				return normalizedExpr
-			}
-
-			// Normalize type name to lowercase
-			normalizedType := &parser.ColumnType{
-				Type:   typeName,
-				Length: e.Type.Length,
-				Scale:  e.Type.Scale,
-				// Copy other relevant fields from ColumnType
-				NotNull:       e.Type.NotNull,
-				Autoincrement: e.Type.Autoincrement,
-				Default:       e.Type.Default,
-				Srid:          e.Type.Srid,
-				OnUpdate:      e.Type.OnUpdate,
-				Comment:       e.Type.Comment,
-				Check:         e.Type.Check,
-				Array:         e.Type.Array,
-			}
-			return &parser.CollateExpr{
-				Expr: normalizedExpr,
-				Type: normalizedType,
-			}
-		} else {
-			// This is a collation (COLLATE syntax)
-			return &parser.CollateExpr{
-				Expr:    normalizedExpr,
-				Charset: strings.ToLower(e.Charset),
-			}
+		return &parser.CollateExpr{
+			Expr:    normalizedExpr,
+			Charset: strings.ToLower(e.Charset),
 		}
 	case *parser.ParenExpr:
 		normalized := normalizeExprForView(e.Expr)
@@ -3624,9 +3690,11 @@ func normalizeExprForView(expr parser.Expr) parser.Expr {
 		if paren, ok := normalized.(*parser.ParenExpr); ok {
 			return paren
 		}
-		// Unwrap parentheses around simple expressions like literals, column names, and casts
+		// Unwrap parentheses around simple expressions like literals, column names, casts, and function calls
+		// CastExpr is used for :: cast syntax, CollateExpr for COLLATE syntax
+		// FuncExpr should not need parentheses (PostgreSQL adds them for clarity but they're not required)
 		switch normalized.(type) {
-		case *parser.SQLVal, *parser.ColName, *parser.CastExpr:
+		case *parser.SQLVal, *parser.ColName, *parser.CastExpr, *parser.CollateExpr, *parser.FuncExpr:
 			return normalized
 		}
 		return &parser.ParenExpr{Expr: normalized}
@@ -3893,14 +3961,13 @@ func normalizeCheckExprAST(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		}
 
 		// Normalize type name to lowercase
-		var normalizedType *parser.ConvertType
+		var normalizedType *parser.ColumnType
 		if e.Type != nil {
-			normalizedType = &parser.ConvertType{
-				Type:     strings.ToLower(e.Type.Type),
-				Length:   e.Type.Length,
-				Scale:    e.Type.Scale,
-				Charset:  e.Type.Charset,
-				Operator: e.Type.Operator,
+			normalizedType = &parser.ColumnType{
+				Type:    strings.ToLower(e.Type.Type),
+				Length:  e.Type.Length,
+				Scale:   e.Type.Scale,
+				Charset: e.Type.Charset,
 			}
 		}
 
@@ -4534,12 +4601,11 @@ func (g *Generator) normalizeExpressionAST(expr parser.Expr) parser.Expr {
 		normalizedType := e.Type
 		if normalizedType != nil {
 			normalizedTypeName := g.normalizeDataType(normalizedType.Type)
-			normalizedType = &parser.ConvertType{
-				Type:     normalizedTypeName,
-				Length:   normalizedType.Length,
-				Scale:    normalizedType.Scale,
-				Operator: normalizedType.Operator,
-				Charset:  normalizedType.Charset,
+			normalizedType = &parser.ColumnType{
+				Type:    normalizedTypeName,
+				Length:  normalizedType.Length,
+				Scale:   normalizedType.Scale,
+				Charset: normalizedType.Charset,
 			}
 		}
 		return &parser.CastExpr{

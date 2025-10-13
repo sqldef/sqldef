@@ -64,7 +64,7 @@ func postProcessPostgres(stmt Statement) {
 			for _, col := range ddl.TableSpec.Columns {
 				if col.Type.Check != nil && col.Type.Check.ConstraintName.String() == "" {
 					// Generate truncated constraint name for column-level checks
-					name, truncated := postgresAbsentConstraintName(tableName, col.Name.String(), "check")
+					name, truncated := PostgresAbsentConstraintName(tableName, col.Name.String(), "check")
 					if truncated {
 						col.Type.Check.ConstraintName = NewColIdent(name)
 					}
@@ -76,20 +76,32 @@ func postProcessPostgres(stmt Statement) {
 				if check.ConstraintName.String() == "" {
 					// Try to extract single column name from check expression
 					if colName := extractSingleColumnName(check.Where.Expr); colName != "" {
-						name, truncated := postgresAbsentConstraintName(tableName, colName, "check")
+						name, truncated := PostgresAbsentConstraintName(tableName, colName, "check")
 						if truncated {
 							check.ConstraintName = NewColIdent(name)
 						}
 					}
 				}
 			}
+
+			// Process table-level foreign keys
+			for _, fk := range ddl.TableSpec.ForeignKeys {
+				// Only process if constraint name is not explicitly set and there's a single column
+				if fk.ConstraintName.String() == "" && len(fk.IndexColumns) == 1 {
+					// Generate constraint name: tablename_columnname_fkey
+					columnName := fk.IndexColumns[0].String()
+					name, _ := PostgresAbsentConstraintName(tableName, columnName, "fkey")
+					fk.ConstraintName = NewColIdent(name)
+				}
+			}
 		}
 	}
 }
 
-// postgresAbsentConstraintName generates a PostgreSQL constraint name with truncation
+// PostgresAbsentConstraintName generates a PostgreSQL constraint name with truncation to 63 characters
 // Matches the logic from database/postgres/parser.go
-func postgresAbsentConstraintName(tableName, columnName, suffix string) (string, bool) {
+// Returns the generated name and whether it was truncated
+func PostgresAbsentConstraintName(tableName, columnName, suffix string) (string, bool) {
 	if name := tableName + "_" + columnName + "_" + suffix; len(name) <= 63 {
 		return name, false
 	}

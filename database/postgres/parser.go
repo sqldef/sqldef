@@ -687,7 +687,7 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 				typeName += "[]"
 			}
 			return &parser.CastExpr{
-				Type: &parser.ConvertType{
+				Type: &parser.ColumnType{
 					Type:    typeName,
 					Length:  columnType.Length,
 					Scale:   columnType.Scale,
