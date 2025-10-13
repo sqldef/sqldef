@@ -4089,12 +4089,6 @@ func normalizeCheckExprAST(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		if op == "in" || op == "not in" {
 			if tuple, ok := right.(parser.ValTuple); ok {
 				right = parser.ValTuple(sortAndDeduplicateValues([]parser.Expr(tuple)))
-			}
-		}
-
-		if op == "in" || op == "not in" {
-			if tuple, ok := right.(parser.ValTuple); ok {
-				right = parser.ValTuple(sortAndDeduplicateValues([]parser.Expr(tuple)))
 
 				// PostgreSQL normalizes IN to ANY(ARRAY[...]) via pg_get_constraintdef()
 				// For other databases, keep IN syntax as-is
