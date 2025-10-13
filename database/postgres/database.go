@@ -682,6 +682,7 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[strin
 // - 'text value'::text -> 'text value'
 // - '2022-01-01'::date -> '2022-01-01'
 // - 123::integer -> 123
+// - '-20'::integer -> -20 (handles negative numbers)
 func normalizeDefaultValue(def string) string {
 	// Remove ::text type casts from string literals (handles quotes with '')
 	result := regexp.MustCompile(`'([^']*(?:''[^']*)*)'::text`).ReplaceAllString(def, "'$1'")
@@ -692,7 +693,11 @@ func normalizeDefaultValue(def string) string {
 	// Remove ::date type casts from string literals
 	result = regexp.MustCompile(`'([^']*)'::date`).ReplaceAllString(result, "'$1'")
 
-	// Remove ::integer type casts from numeric literals
+	// Remove quotes and type casts from numeric literals (handles negative numbers like '-20'::integer)
+	// This must come before the unquoted numeric literal normalization
+	result = regexp.MustCompile(`'(-?\d+(?:\.\d+)?)'::(?:integer|bigint|smallint|numeric|decimal|real|double precision)`).ReplaceAllString(result, "$1")
+
+	// Remove ::integer type casts from unquoted numeric literals
 	result = regexp.MustCompile(`(\d+)::integer`).ReplaceAllString(result, "$1")
 
 	// Normalize DATE 'value' literal syntax to 'value'

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"github.com/google/go-cmp/cmp"
 
 	"github.com/goccy/go-yaml"
 	"github.com/sqldef/sqldef/v3/database"
@@ -157,7 +158,8 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		expected := *test.Output
 		actual := joinDDLs(ddls)
 		if expected != actual {
-			t.Errorf("Migration output doesn't match expected.\n\nExpected DDLs:\n```\n%s```\n\nActual DDLs:\n```\n%s```", expected, actual)
+			diff := cmp.Diff(expected, actual)
+			t.Errorf("Migration output doesn't match expected.\n\nExpected DDLs:\n~~\n%s~~\n\nActual DDLs:\n~~\n%s~~\n\nDiff:\n%s", expected, actual, diff)
 		}
 	}
 

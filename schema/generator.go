@@ -33,6 +33,9 @@ var (
 		"varchar": "character varying",
 		"decimal": "numeric",
 	}
+	postgresDataTypeAliases = map[string]string{
+		"float": "double precision", // PostgreSQL stores float as double precision
+	}
 	mysqlDataTypeAliases = map[string]string{
 		"boolean": "tinyint",
 	}
@@ -4789,12 +4792,13 @@ func (g *Generator) areSameValue(current, desired *Value) bool {
 		}
 	}
 
-	return currentRaw == desiredRaw
+	// For string values (like index options), use case-insensitive comparison
+	// to handle differences in case (e.g., "BTREE" vs "btree", "USING" vs "using")
+	return strings.EqualFold(currentRaw, desiredRaw)
 }
 
 // areSameExpr compares two normalized expression ASTs
 func (g *Generator) areSameExpr(expr1, expr2 parser.Expr) bool {
-	// Normalize both expressions
 	norm1 := g.normalizeExpressionAST(expr1)
 	norm2 := g.normalizeExpressionAST(expr2)
 
@@ -4803,13 +4807,13 @@ func (g *Generator) areSameExpr(expr1, expr2 parser.Expr) bool {
 	str1 := ""
 	str2 := ""
 	if norm1 != nil {
-		str1 = strings.ToLower(parser.String(norm1))
+		str1 = parser.String(norm1)
 	}
 	if norm2 != nil {
-		str2 = strings.ToLower(parser.String(norm2))
+		str2 = parser.String(norm2)
 	}
 
-	return str1 == str2
+	return strings.EqualFold(str1, str2)
 }
 
 func areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
@@ -4841,7 +4845,7 @@ func areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 }
 
 func isNullValue(value *Value) bool {
-	return value != nil && value.valueType == ValueTypeValArg && string(value.raw) == "null"
+	return value != nil && value.valueType == ValueTypeValArg && strings.EqualFold(string(value.raw), "null")
 }
 
 func (g *Generator) normalizeDataType(dataType string) string {
@@ -4865,12 +4869,19 @@ func (g *Generator) normalizeDataType(dataType string) string {
 		}
 	}
 
-	alias, ok := dataTypeAliases[dataType]
-	if ok {
+
+	if alias, ok := dataTypeAliases[dataType]; ok {
 		dataType = alias
 	}
-	if g.mode == GeneratorModeMysql {
-		alias, ok = mysqlDataTypeAliases[dataType]
+
+	switch g.mode {
+	case GeneratorModePostgres:
+		alias, ok := postgresDataTypeAliases[dataType]
+		if ok {
+			dataType = alias
+		}
+	case GeneratorModeMysql:
+		alias, ok := mysqlDataTypeAliases[dataType]
 		if ok {
 			dataType = alias
 		}

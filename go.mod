@@ -7,6 +7,7 @@ toolchain go1.25.1
 require (
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/goccy/go-yaml v1.18.0
+	github.com/google/go-cmp v0.6.0
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/k0kubun/pp/v3 v3.5.0
 	github.com/lib/pq v1.10.9
