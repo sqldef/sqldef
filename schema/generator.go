@@ -4,6 +4,7 @@ package schema
 import (
 	"fmt"
 	"log/slog"
+	"math/big"
 	"os"
 	"reflect"
 	"regexp"
@@ -4262,7 +4263,6 @@ func removeAllOuterParentheses(s string) string {
 }
 
 func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desiredDefault *DefaultDefinition) bool {
-
 	// For MySQL and PostgreSQL, if desired has no default (nil) and current has DEFAULT NULL,
 	// treat them as the same (this is the implicit default for nullable columns)
 	if g.mode == GeneratorModeMysql || g.mode == GeneratorModePostgres {
@@ -4373,17 +4373,8 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 			// Try to compare the numeric value with the expression
 			// Note: Decimal values from MySQL are stored as ValueTypeStr
 			if currentVal.valueType == ValueTypeFloat || currentVal.valueType == ValueTypeInt || currentVal.valueType == ValueTypeStr {
-				// Compare the string representation of the value with the expression
-				// Normalize both for comparison
-				currentStr := strings.TrimSpace(string(currentVal.raw))
-				desiredStr := strings.TrimSpace(desiredDefault.expression)
-				// Remove trailing zeros for decimal comparison
-				currentStr = strings.TrimRight(strings.TrimRight(currentStr, "0"), ".")
-				desiredStr = strings.TrimRight(strings.TrimRight(desiredStr, "0"), ".")
-				// Also handle negative numbers with different formats
-				if currentStr == desiredStr || currentStr == "-"+desiredStr || "-"+currentStr == desiredStr {
-					// The values match, they're the same default
-					return true
+				if equal, ok := equalDecimal(string(currentVal.raw), desiredDefault.expression); ok {
+					return equal
 				}
 			}
 		}
@@ -4392,14 +4383,16 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 			// Similar logic but reversed
 			// Note: Decimal values are stored as ValueTypeStr
 			if desiredVal.valueType == ValueTypeFloat || desiredVal.valueType == ValueTypeInt || desiredVal.valueType == ValueTypeStr {
-				desiredStr := strings.TrimSpace(string(desiredVal.raw))
-				currentStr := strings.TrimSpace(currentDefault.expression)
-				desiredStr = strings.TrimRight(strings.TrimRight(desiredStr, "0"), ".")
-				currentStr = strings.TrimRight(strings.TrimRight(currentStr, "0"), ".")
-				if currentStr == desiredStr || currentStr == "-"+desiredStr || "-"+currentStr == desiredStr {
-					// The values match, they're the same default
-					return true
+				if equal, ok := equalDecimal(string(desiredVal.raw), currentDefault.expression); ok {
+					return equal
 				}
+			}
+		}
+
+		// Case 3: Both have expressions
+		if currentDefault.expression != "" && desiredDefault.expression != "" {
+			if equal, ok := equalDecimal(currentDefault.expression, desiredDefault.expression); ok {
+				return equal
 			}
 		}
 	}
@@ -4492,6 +4485,15 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 	// Simple value comparison as fallback (for cases where both have simple values, no expressions)
 	// If we reach here, values match, so defaults are the same
 	return g.areSameValue(currentVal, desiredVal)
+}
+
+func equalDecimal(current, desired string) (equal bool, ok bool) {
+	currentNumeric, _, currentNumericErr := big.ParseFloat(current, 10, 256, big.ToNearestEven)
+	desiredNumeric, _, desiredNumericErr := big.ParseFloat(desired, 10, 256, big.ToNearestEven)
+	if currentNumericErr == nil && desiredNumericErr == nil {
+		return currentNumeric.Cmp(desiredNumeric) == 0, true
+	}
+	return false, false
 }
 
 // normalizeExpressionAST normalizes an expression AST for comparison
@@ -4757,11 +4759,9 @@ func (g *Generator) areSameValue(current, desired *Value) bool {
 	currentRaw := string(current.raw)
 	desiredRaw := string(desired.raw)
 
-	if desired.valueType == ValueTypeFloat && current.valueType == ValueTypeStr {
-		// NegativeDefaultNumbers
-		// TODO: support DECIMAL type
-		if currentFloatVal, err := strconv.ParseFloat(currentRaw, 64); err == nil {
-			return desired.floatVal == currentFloatVal
+	if desired.valueType == ValueTypeFloat {
+		if equal, ok := equalDecimal(currentRaw, desiredRaw); ok {
+			return equal
 		}
 	}
 
@@ -5337,6 +5337,15 @@ func generateSequenceClause(sequence *Sequence) string {
 	return strings.TrimSpace(ddl)
 }
 
+// isSimpleNumericLiteral checks if the expression is a simple numeric literal
+// that doesn't need parentheses in MySQL/MariaDB default values.
+// Examples: -20, -20.0, 123.456, 0.5, .5, 1e10, -2.5e-3
+func isSimpleNumericLiteral(expr string) bool {
+	// Try to parse as a float - if it succeeds, it's a numeric literal
+	_, err := strconv.ParseFloat(strings.TrimSpace(expr), 64)
+	return err == nil
+}
+
 func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinition) (string, error) {
 	if defaultDefinition.value != nil {
 		defaultVal := defaultDefinition.value
@@ -5351,16 +5360,8 @@ func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinitio
 		case ValueTypeBool:
 			return fmt.Sprintf("DEFAULT %s", defaultVal.strVal), nil
 		case ValueTypeInt:
-			// MySQL requires parentheses for negative numbers
-			if g.mode == GeneratorModeMysql && defaultVal.intVal < 0 {
-				return fmt.Sprintf("DEFAULT(%d)", defaultVal.intVal), nil
-			}
 			return fmt.Sprintf("DEFAULT %d", defaultVal.intVal), nil
 		case ValueTypeFloat:
-			// MySQL requires parentheses for negative numbers
-			if g.mode == GeneratorModeMysql && defaultVal.floatVal < 0 {
-				return fmt.Sprintf("DEFAULT(%f)", defaultVal.floatVal), nil
-			}
 			return fmt.Sprintf("DEFAULT %f", defaultVal.floatVal), nil
 		case ValueTypeBit:
 			if defaultVal.bitVal {
@@ -5404,11 +5405,11 @@ func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinitio
 				needsParens = false
 			}
 
-			// For negative numbers in expression form, MySQL needs parentheses
-			// This handles cases like "- 20" or "-20.0"
-			if strings.HasPrefix(expr, "-") || strings.HasPrefix(expr, "- ") {
-				// It's a negative number, needs parentheses in MySQL
-				needsParens = true
+			// Check if this is a simple numeric literal (including negative numbers)
+			// Simple numeric literals like -20, -20.0, 123.456 don't need parentheses
+			// in MariaDB and MySQL. Only complex expressions need parentheses.
+			if isSimpleNumericLiteral(expr) {
+				needsParens = false
 			}
 
 			if needsParens {

@@ -74,11 +74,8 @@ go test ./cmd/mysqldef
 go test ./cmd/psqldef
 go test ./cmd/sqlite3def
 go test ./cmd/mssqldef
-```
 
-For MariaDB testing:
-
-```sh
+# for testing with MariaDB
 MYSQL_FLAVOR=mariadb MYSQL_PORT=3307 go test ./cmd/mysqldef
 ```
 
