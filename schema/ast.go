@@ -42,6 +42,12 @@ type AddExclusion struct {
 	exclusion Exclusion
 }
 
+type AddConstraintCheck struct {
+	statement string
+	tableName string
+	check     CheckDefinition
+}
+
 type AddPolicy struct {
 	statement string
 	tableName string
@@ -348,6 +354,10 @@ func (a *AddForeignKey) Statement() string {
 }
 
 func (a *AddExclusion) Statement() string {
+	return a.statement
+}
+
+func (a *AddConstraintCheck) Statement() string {
 	return a.statement
 }
 

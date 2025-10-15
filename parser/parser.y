@@ -818,31 +818,80 @@ create_statement:
 alter_statement:
   ALTER TABLE table_name ADD COLUMN column_definition
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: AddColumn,
+      Table: $3,
+      Column: $6,
+    }
   }
 | ALTER TABLE table_name ALTER COLUMN sql_id SET DEFAULT value_expression
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: AlterColumnSetDefault,
+      Table: $3,
+      ColumnName: $6,
+      DefaultValue: $9,
+    }
   }
 | ALTER TABLE table_name ALTER COLUMN sql_id DROP DEFAULT
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: AlterColumnDropDefault,
+      Table: $3,
+      ColumnName: $6,
+    }
   }
 | ALTER TABLE table_name ALTER COLUMN sql_id SET NOT NULL
   {
-    $$ = nil
+    colDef := &ColumnDefinition{
+      Name: $6,
+      Type: ColumnType{NotNull: NewBoolVal(true)},
+    }
+    $$ = &DDL{
+      Action: AlterColumnSetNotNull,
+      Table: $3,
+      ColumnName: $6,
+      Column: colDef,
+    }
   }
 | ALTER TABLE table_name ALTER COLUMN sql_id DROP NOT NULL
   {
-    $$ = nil
+    colDef := &ColumnDefinition{
+      Name: $6,
+      Type: ColumnType{NotNull: NewBoolVal(false)},
+    }
+    $$ = &DDL{
+      Action: AlterColumnDropNotNull,
+      Table: $3,
+      ColumnName: $6,
+      Column: colDef,
+    }
   }
 | ALTER TABLE table_name ALTER COLUMN sql_id TYPE column_type
   {
-    $$ = nil
+    colDef := &ColumnDefinition{
+      Name: $6,
+      Type: $8,
+    }
+    $$ = &DDL{
+      Action: AlterColumnType,
+      Table: $3,
+      ColumnName: $6,
+      Column: colDef,
+    }
   }
 | ALTER TABLE table_name ALTER COLUMN sql_id SET DATA TYPE column_type
   {
-    $$ = nil
+    colDef := &ColumnDefinition{
+      Name: $6,
+      Type: $10,
+    }
+    $$ = &DDL{
+      Action: AlterColumnType,
+      Table: $3,
+      ColumnName: $6,
+      Column: colDef,
+    }
   }
 /* ADD INDEX/KEY rules must come before ADD column rules to avoid ambiguity */
 | ALTER TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')'
@@ -875,35 +924,88 @@ alter_statement:
   }
 | ALTER ignore_opt TABLE table_name ADD COLUMN column_definition
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: AddColumn,
+      Table: $4,
+      Column: $7,
+    }
   }
 | ALTER ignore_opt TABLE table_name ADD column_definition
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: AddColumn,
+      Table: $4,
+      Column: $6,
+    }
   }
 | ALTER ignore_opt TABLE table_name ALTER COLUMN sql_id SET DEFAULT value_expression
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: AlterColumnSetDefault,
+      Table: $4,
+      ColumnName: $7,
+      DefaultValue: $10,
+    }
   }
 | ALTER ignore_opt TABLE table_name ALTER COLUMN sql_id DROP DEFAULT
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: AlterColumnDropDefault,
+      Table: $4,
+      ColumnName: $7,
+    }
   }
 | ALTER ignore_opt TABLE table_name ALTER COLUMN sql_id SET NOT NULL
   {
-    $$ = nil
+    colDef := &ColumnDefinition{
+      Name: $7,
+      Type: ColumnType{NotNull: NewBoolVal(true)},
+    }
+    $$ = &DDL{
+      Action: AlterColumnSetNotNull,
+      Table: $4,
+      ColumnName: $7,
+      Column: colDef,
+    }
   }
 | ALTER ignore_opt TABLE table_name ALTER COLUMN sql_id DROP NOT NULL
   {
-    $$ = nil
+    colDef := &ColumnDefinition{
+      Name: $7,
+      Type: ColumnType{NotNull: NewBoolVal(false)},
+    }
+    $$ = &DDL{
+      Action: AlterColumnDropNotNull,
+      Table: $4,
+      ColumnName: $7,
+      Column: colDef,
+    }
   }
 | ALTER ignore_opt TABLE table_name ALTER COLUMN sql_id TYPE column_type
   {
-    $$ = nil
+    colDef := &ColumnDefinition{
+      Name: $7,
+      Type: $9,
+    }
+    $$ = &DDL{
+      Action: AlterColumnType,
+      Table: $4,
+      ColumnName: $7,
+      Column: colDef,
+    }
   }
 | ALTER ignore_opt TABLE table_name ALTER COLUMN sql_id SET DATA TYPE column_type
   {
-    $$ = nil
+    colDef := &ColumnDefinition{
+      Name: $7,
+      Type: $11,
+    }
+    $$ = &DDL{
+      Action: AlterColumnType,
+      Table: $4,
+      ColumnName: $7,
+      Column: colDef,
+    }
   }
 | ALTER TABLE table_name ADD CONSTRAINT sql_id UNIQUE '(' index_column_list ')' constraint_timing_opt
   {
@@ -1104,19 +1206,38 @@ alter_statement:
   }
 | ALTER TABLE table_name DROP COLUMN sql_id
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: DropColumn,
+      Table: $3,
+      ColumnName: $6,
+    }
   }
 | ALTER TABLE table_name DROP CONSTRAINT sql_id
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: DropConstraint,
+      Table: $3,
+      ConstraintName: $6,
+    }
   }
 | ALTER TABLE table_name ADD CONSTRAINT sql_id CHECK '(' expression ')'
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: AddConstraintCheck,
+      Table: $3,
+      ConstraintName: $6,
+      CheckExpr: NewWhere(WhereStr, $9),
+    }
   }
 | ALTER TABLE table_name ADD CONSTRAINT sql_id CHECK '(' expression ')' NO INHERIT
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: AddConstraintCheck,
+      Table: $3,
+      ConstraintName: $6,
+      CheckExpr: NewWhere(WhereStr, $9),
+      NoInherit: true,
+    }
   }
 | ALTER TABLE table_name ADD CONSTRAINT sql_id EXCLUDE '(' exclude_element_list ')'
   {
@@ -1199,35 +1320,81 @@ alter_statement:
   }
 | ALTER ignore_opt TABLE table_name DROP COLUMN sql_id
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: DropColumn,
+      Table: $4,
+      ColumnName: $7,
+    }
   }
 | ALTER ignore_opt TABLE table_name DROP CONSTRAINT sql_id
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: DropConstraint,
+      Table: $4,
+      ConstraintName: $7,
+    }
   }
 | ALTER ignore_opt TABLE table_name ADD CONSTRAINT sql_id CHECK '(' expression ')'
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: AddConstraintCheck,
+      Table: $4,
+      ConstraintName: $7,
+      CheckExpr: NewWhere(WhereStr, $10),
+    }
   }
 | ALTER ignore_opt TABLE table_name ADD CONSTRAINT sql_id CHECK '(' expression ')' NO INHERIT
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: AddConstraintCheck,
+      Table: $4,
+      ConstraintName: $7,
+      CheckExpr: NewWhere(WhereStr, $10),
+      NoInherit: true,
+    }
   }
 | ALTER INDEX table_name RENAME TO sql_id
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: RenameIndex,
+      Table: $3,
+      NewName: TableName{Name: NewTableIdent($6.String())},
+    }
   }
 | ALTER TABLE table_name RENAME TO sql_id
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: RenameTable,
+      Table: $3,
+      NewName: TableName{Name: NewTableIdent($6.String())},
+    }
   }
 | ALTER TABLE table_name RENAME COLUMN sql_id TO sql_id
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: RenameColumn,
+      Table: $3,
+      ColumnName: $6,
+      NewColumnName: $8,
+    }
   }
-| ALTER TYPE table_name ADD VALUE if_not_exists_opt STRING
+| ALTER TYPE table_name ADD VALUE STRING
   {
-    $$ = nil
+    $$ = &DDL{
+      Action: AlterTypeAddValue,
+      Table: $3,
+      IfExists: false,
+      DefaultValue: &SQLVal{Type: StrVal, Val: $6},
+    }
+  }
+| ALTER TYPE table_name ADD VALUE IF NOT EXISTS STRING
+  {
+    $$ = &DDL{
+      Action: AlterTypeAddValue,
+      Table: $3,
+      IfExists: true,
+      DefaultValue: &SQLVal{Type: StrVal, Val: $9},
+    }
   }
 
 comment_statement:

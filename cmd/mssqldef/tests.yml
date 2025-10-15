@@ -879,3 +879,83 @@ CheckDuplicateValuesInOrChain:
       CONSTRAINT items_category_chk CHECK (category IN ('electronics', 'clothing'))
     );
   output: ""
+AlterColumnSetNotNull:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      email varchar(255)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text NOT NULL,
+      email varchar(255) NOT NULL
+    );
+  output: |
+    ALTER TABLE [dbo].[users] ALTER COLUMN [name] text NOT NULL;
+    ALTER TABLE [dbo].[users] ALTER COLUMN [email] varchar(255) NOT NULL;
+AlterColumnDropNotNull:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text NOT NULL,
+      email varchar(255) NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      email varchar(255)
+    );
+  output: |
+    ALTER TABLE [dbo].[users] ALTER COLUMN [name] text;
+    ALTER TABLE [dbo].[users] ALTER COLUMN [email] varchar(255);
+AlterColumnSetDefault:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20),
+      priority int
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20) DEFAULT 'active',
+      priority int DEFAULT 1
+    );
+  output: |
+    ALTER TABLE [dbo].[users] ADD DEFAULT 'active' FOR [status];
+    ALTER TABLE [dbo].[users] ADD DEFAULT 1 FOR [priority];
+AlterColumnDropDefault:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20) CONSTRAINT DF_users_status DEFAULT 'active',
+      priority int CONSTRAINT DF_users_priority DEFAULT 1
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20),
+      priority int
+    );
+  output: |
+    ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_users_status];
+    ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_users_priority];
+AlterColumnChangeType:
+  current: |
+    CREATE TABLE products (
+      id bigint NOT NULL,
+      name varchar(50),
+      price decimal(8, 2)
+    );
+  desired: |
+    CREATE TABLE products (
+      id bigint NOT NULL,
+      name varchar(100),
+      price decimal(10, 2)
+    );
+  output: |
+    ALTER TABLE [dbo].[products] ALTER COLUMN [name] varchar(100);
+    ALTER TABLE [dbo].[products] ALTER COLUMN [price] decimal(10, 2);

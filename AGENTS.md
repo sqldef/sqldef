@@ -36,8 +36,7 @@ make parser
 make regen-parser # force regeneration
 ```
 
-For now, `psqldef` uses `go-pgquery` (a native PostgreSQL parser) as the primary parser,
-and the generic parser as a fallback.
+For now, `psqldef` has two parsers: the primary parser is `generic` parser, and the fallback parser is `pgquery`, a native PostgreSQL parser.
 
 ## Local Development
 

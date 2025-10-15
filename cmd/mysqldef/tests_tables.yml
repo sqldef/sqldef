@@ -693,3 +693,105 @@ CreateTableWithFunctionalIndex:
     UNIQUE KEY `app_badge_tag_pk` (`badge_id`,((case when (`design_id` is null) then _utf8mb4'' else `design_id` end)),((case when (`color_id` is null) then _utf8mb4'' else `color_id` end))),
     KEY `app_badge_tag_design_id_index` (`design_id`)
     );
+
+AlterColumnSetDefault:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20),
+      priority int
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20) DEFAULT 'active',
+      priority int DEFAULT 1
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `status` `status` varchar(20) DEFAULT 'active';
+    ALTER TABLE `users` CHANGE COLUMN `priority` `priority` int DEFAULT 1;
+
+AlterColumnDropDefault:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20) DEFAULT 'active',
+      priority int DEFAULT 1
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20),
+      priority int
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `status` `status` varchar(20);
+    ALTER TABLE `users` CHANGE COLUMN `priority` `priority` int;
+
+AlterColumnChangeDefault:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20) DEFAULT 'pending',
+      is_active boolean DEFAULT false
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20) DEFAULT 'active',
+      is_active boolean DEFAULT true
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `status` `status` varchar(20) DEFAULT 'active';
+    ALTER TABLE `users` CHANGE COLUMN `is_active` `is_active` boolean DEFAULT true;
+
+AlterColumnSetNotNull:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100),
+      email varchar(255)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100) NOT NULL,
+      email varchar(255) NOT NULL
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(100) NOT NULL;
+    ALTER TABLE `users` CHANGE COLUMN `email` `email` varchar(255) NOT NULL;
+
+AlterColumnDropNotNull:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100) NOT NULL,
+      email varchar(255) NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100),
+      email varchar(255)
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(100);
+    ALTER TABLE `users` CHANGE COLUMN `email` `email` varchar(255);
+
+AlterColumnChangeNotNullAndDefault:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100),
+      email varchar(255) NOT NULL DEFAULT 'unknown@example.com'
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100) NOT NULL DEFAULT 'anonymous',
+      email varchar(255)
+    );
+  output: |
+    ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(100) NOT NULL DEFAULT 'anonymous';
+    ALTER TABLE `users` CHANGE COLUMN `email` `email` varchar(255);

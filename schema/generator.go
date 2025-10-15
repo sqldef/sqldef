@@ -157,10 +157,22 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		case *CreateTable:
 			if currentTable := findTableByName(g.currentTables, desired.table.name); currentTable != nil {
 				// Table already exists, guess required DDLs.
-				tableDDLs, err := g.generateDDLsForCreateTable(*currentTable, *desired)
+				// Use the aggregated desired table from g.desiredTables to get consolidated CHECKs
+				desiredTable := findTableByName(g.desiredTables, desired.table.name)
+				if desiredTable == nil {
+					return nil, fmt.Errorf("desired table %s not found in aggregated tables", desired.table.name)
+				}
+				// Create a new CreateTable with the aggregated table
+				desiredDDL := &CreateTable{
+					statement: desired.statement,
+					table:     *desiredTable,
+				}
+				slog.Debug("generateDDLs: processing CREATE TABLE for existing table", "table", desired.table.name, "currentChecks", len(currentTable.checks), "desiredChecks", len(desiredTable.checks))
+				tableDDLs, err := g.generateDDLsForCreateTable(*currentTable, *desiredDDL)
 				if err != nil {
 					return nil, err
 				}
+				slog.Debug("generateDDLs: generateDDLsForCreateTable returned", "table", desired.table.name, "ddlCount", len(tableDDLs), "ddls", tableDDLs)
 				for _, tableDDL := range tableDDLs {
 					if isAddConstraintForeignKey(tableDDL) {
 						foreignKeyDDLs = append(foreignKeyDDLs, tableDDL)
@@ -168,7 +180,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						interDDLs = append(interDDLs, tableDDL)
 					}
 				}
-				mergeTable(currentTable, desired.table)
+				mergeTable(currentTable, *desiredTable)
 			} else {
 				// Table not found. Check if it's a rename from another table.
 				if desired.table.renamedFrom != "" {
@@ -182,8 +194,18 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						// Update the old table's name to the new name
 						oldTable.name = desired.table.name
 
+						// Use the aggregated desired table from g.desiredTables
+						desiredTable := findTableByName(g.desiredTables, desired.table.name)
+						if desiredTable == nil {
+							return nil, fmt.Errorf("desired table %s not found in aggregated tables", desired.table.name)
+						}
+						desiredDDL := &CreateTable{
+							statement: desired.statement,
+							table:     *desiredTable,
+						}
+
 						// Now generate DDLs for any column/index changes
-						tableDDLs, err := g.generateDDLsForCreateTable(*oldTable, *desired)
+						tableDDLs, err := g.generateDDLsForCreateTable(*oldTable, *desiredDDL)
 						if err != nil {
 							return nil, err
 						}
@@ -194,7 +216,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 								interDDLs = append(interDDLs, tableDDL)
 							}
 						}
-						mergeTable(oldTable, desired.table)
+						mergeTable(oldTable, *desiredTable)
 					} else {
 						// Old table not found, create as new table
 						interDDLs = append(interDDLs, desired.statement)
@@ -246,6 +268,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return nil, err
 			}
 			exclusionDDLs = append(exclusionDDLs, exDDLs...)
+		case *AddConstraintCheck:
+			checkDDLs, err := g.generateDDLsForAddConstraintCheck(desired.tableName, desired.check, "ALTER TABLE", ddl.Statement())
+			if err != nil {
+				return nil, err
+			}
+			interDDLs = append(interDDLs, checkDDLs...)
 		case *AddPolicy:
 			policyDDLs, err := g.generateDDLsForCreatePolicy(desired.tableName, desired.policy, "CREATE POLICY", ddl.Statement())
 			if err != nil {
@@ -334,8 +362,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	}
 
 	// Clean up obsoleted indexes, columns in remaining tables
+	slog.Debug("generateDDLs: cleanup loop starting", "currentTablesCount", len(g.currentTables), "desiredTablesCount", len(g.desiredTables))
 	for _, currentTable := range g.currentTables {
 		desiredTable := findTableByName(g.desiredTables, currentTable.name)
+		slog.Debug("generateDDLs: cleanup loop processing table", "table", currentTable.name, "desiredTable_found", desiredTable != nil)
 		if desiredTable == nil {
 			continue // Already handled in drop tables above
 		}
@@ -470,23 +500,31 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		}
 
 		// Check checks.
+		slog.Debug("Comparing CHECK constraints", "table", currentTable.name, "currentTable_ptr", fmt.Sprintf("%p", currentTable), "desiredTable_ptr", fmt.Sprintf("%p", desiredTable), "currentChecks", len(currentTable.checks), "desiredChecks", len(desiredTable.checks))
 		for _, check := range currentTable.checks {
 			// First try to find by name
-			if findCheckConstraintInTable(desiredTable, check.constraintName) != nil {
+			foundCheck := findCheckConstraintInTable(desiredTable, check.constraintName)
+			slog.Debug("Looking for CHECK constraint by name", "constraint", check.constraintName, "found", foundCheck != nil)
+			if foundCheck != nil {
 				continue
 			}
 
-			// For MySQL and MSSQL, also check if this constraint matches any column-level CHECK by definition
-			// This handles auto-generated constraint names for column-level CHECKs
-			if (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) && g.findCheckConstraintByDefinition(desiredTable, &check) != nil {
+			// If not found by name, also check if this constraint matches any CHECK by definition
+			// This handles cases where the desired CHECK has no explicit constraint name (e.g., CHECK (...) without CONSTRAINT name)
+			// In such cases, the parser leaves the constraint name empty, but PostgreSQL auto-generates one
+			foundByDefinition := g.findCheckConstraintByDefinition(desiredTable, &check)
+			slog.Debug("Looking for CHECK constraint by definition", "constraint", check.constraintName, "found", foundByDefinition != nil)
+			if foundByDefinition != nil {
 				continue
 			}
 
+			dropSQL := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeConstraintName(check.constraintName))
+			slog.Debug("Generating DROP for CHECK constraint not found in desired", "constraint", check.constraintName, "table", currentTable.name, "sql", dropSQL)
 			switch g.mode {
 			case GeneratorModePostgres, GeneratorModeMssql, GeneratorModeSQLite3:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(check.constraintName)))
+				ddls = append(ddls, dropSQL)
 			case GeneratorModeMysql:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(currentTable.name), g.escapeSQLName(check.constraintName)))
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(currentTable.name), g.escapeConstraintName(check.constraintName)))
 			}
 		}
 	}
@@ -874,20 +912,24 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 				}
 
-				tableName := extractTableName(desired.table.name)
-				constraintName := fmt.Sprintf("%s_%s_check", tableName, desiredColumn.name)
-				if desiredColumn.check != nil && desiredColumn.check.constraintName != "" {
-					constraintName = desiredColumn.check.constraintName
-				}
-
-				currentCheck := findCheckConstraintInTable(&currentTable, constraintName)
-				if !g.areSameCheckDefinition(currentCheck, desiredColumn.check) {
-					if currentCheck != nil {
-						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), constraintName)
+				// For column-level CHECK constraints, only compare currentColumn.check with desiredColumn.check
+				// Do NOT look in table-level checks (currentTable.checks) because column-level CHECKs
+				// that were consolidated to table-level during aggregation should be handled by
+				// the table-level CHECK loop (lines 1265-1305), not here.
+				slog.Debug("generateDDLsForCreateTable: column CHECK comparison (PostgreSQL)", "column", desiredColumn.name, "currentCheck", currentColumn.check != nil, "desiredCheck", desiredColumn.check != nil)
+				if !g.areSameCheckDefinition(currentColumn.check, desiredColumn.check) {
+					if currentColumn.check != nil {
+						slog.Debug("generateDDLsForCreateTable: dropping column-level CHECK", "column", desiredColumn.name, "constraint", currentColumn.check.constraintName)
+						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeConstraintName(currentColumn.check.constraintName))
 						ddls = append(ddls, ddl)
 					}
 					if desiredColumn.check != nil {
-						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), constraintName, g.normalizeCheckDefinitionForDDL(*desiredColumn.check))
+						constraintName := desiredColumn.check.constraintName
+						if constraintName == "" {
+							tableName := extractTableName(desired.table.name)
+							constraintName = fmt.Sprintf("%s_%s_check", tableName, desiredColumn.name)
+						}
+						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeConstraintName(constraintName), g.normalizeCheckDefinitionForDDL(*desiredColumn.check))
 						if desiredColumn.check.noInherit {
 							ddl += " NO INHERIT"
 						}
@@ -927,7 +969,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						constraintName := fmt.Sprintf("%s_%s_check", tableName, desiredColumn.name)
 						if currentColumn.check != nil {
 							currentConstraintName := currentColumn.check.constraintName
-							ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), currentConstraintName)
+							ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentConstraintName))
 							ddls = append(ddls, ddl)
 						}
 						if desiredColumn.check != nil {
@@ -1251,6 +1293,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	}
 
 	// Examine each check
+	slog.Debug("generateDDLsForCreateTable: examining checks", "table", desired.table.name, "desiredChecks", len(desired.table.checks), "currentChecks", len(currentTable.checks))
 	for _, desiredCheck := range desired.table.checks {
 		// First try to find by name
 		currentCheck := findCheckConstraintInTable(&currentTable, desiredCheck.constraintName)
@@ -1262,15 +1305,17 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		}
 
 		if currentCheck != nil {
+			slog.Debug("generateDDLsForCreateTable: found currentCheck for desiredCheck", "constraint", desiredCheck.constraintName, "currentDef", currentCheck.definition, "desiredDef", desiredCheck.definition)
 			if !g.areSameCheckDefinition(currentCheck, &desiredCheck) {
 				// Constraint exists but has different definition, need to replace it
+				slog.Debug("generateDDLsForCreateTable: CHECK constraint definition changed, dropping and re-adding", "constraint", desiredCheck.constraintName, "table", desired.table.name)
 				switch g.mode {
 				case GeneratorModePostgres, GeneratorModeMssql:
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckDefinitionForDDL(desiredCheck)))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeConstraintName(currentCheck.constraintName)))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeConstraintName(desiredCheck.constraintName), g.normalizeCheckDefinitionForDDL(desiredCheck)))
 				case GeneratorModeMysql:
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckDefinitionForDDL(desiredCheck)))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(desired.table.name), g.escapeConstraintName(currentCheck.constraintName)))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeConstraintName(desiredCheck.constraintName), g.normalizeCheckDefinitionForDDL(desiredCheck)))
 				case GeneratorModeSQLite3:
 					// SQLite does not support ALTER TABLE for CHECK constraints
 					// Modifying CHECK constraints requires recreating the table, which is not supported
@@ -1283,7 +1328,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 		} else {
 			// Constraint doesn't exist, add it
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckDefinitionForDDL(desiredCheck)))
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeConstraintName(desiredCheck.constraintName), g.normalizeCheckDefinitionForDDL(desiredCheck)))
 		}
 	}
 
@@ -1301,6 +1346,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		ddls = append(ddls, fkRecreationDDLs...)
 	}
 
+	slog.Debug("generateDDLsForCreateTable: returning", "table", desired.table.name, "ddlCount", len(ddls), "ddls", ddls)
 	return ddls, nil
 }
 
@@ -1486,6 +1532,67 @@ func (g *Generator) generateDDLsForAddExclusion(tableName string, desiredExclusi
 	// Only add to desiredTable.exclusions if it doesn't already exist (it may have been pre-populated from aggregation)
 	if !slices.Contains(convertExclusionToConstraintNames(desiredTable.exclusions), desiredExclusion.constraintName) {
 		desiredTable.exclusions = append(desiredTable.exclusions, desiredExclusion)
+	}
+
+	return ddls, nil
+}
+
+func (g *Generator) generateDDLsForAddConstraintCheck(tableName string, desiredCheck CheckDefinition, action string, statement string) ([]string, error) {
+	var ddls []string
+
+	slog.Debug("generateDDLsForAddConstraintCheck called", "table", tableName, "constraint", desiredCheck.constraintName)
+
+	currentTable := findTableByName(g.currentTables, tableName)
+	if currentTable == nil {
+		return nil, fmt.Errorf("%s is performed for inexistent table '%s': '%s'", action, tableName, statement)
+	}
+	slog.Debug("generateDDLsForAddConstraintCheck: currentTable found", "table", tableName, "currentTable_ptr", fmt.Sprintf("%p", currentTable), "currentChecks", len(currentTable.checks))
+
+	currentCheck := findCheckByName(currentTable.checks, desiredCheck.constraintName)
+	slog.Debug("generateDDLsForAddConstraintCheck: checking if exists", "constraint", desiredCheck.constraintName, "found", currentCheck != nil)
+	if currentCheck == nil {
+		// CHECK constraint not found, add it
+		slog.Debug("generateDDLsForAddConstraintCheck: adding new constraint to currentTable")
+		ddls = append(ddls, statement)
+		currentTable.checks = append(currentTable.checks, desiredCheck)
+		slog.Debug("generateDDLsForAddConstraintCheck: after adding, currentChecks", len(currentTable.checks))
+	} else {
+		// CHECK constraint found. If it's different, drop and add it.
+		same := g.areSameChecks(*currentCheck, desiredCheck)
+		slog.Debug("generateDDLsForAddConstraintCheck: constraint exists, checking if same", "same", same)
+		if !same {
+			slog.Debug("generateDDLsForAddConstraintCheck: dropping and re-adding different constraint")
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeConstraintName(currentCheck.constraintName)))
+			ddls = append(ddls, statement)
+			// Update the existing check in place
+			for i := range currentTable.checks {
+				if currentTable.checks[i].constraintName == currentCheck.constraintName {
+					currentTable.checks[i] = desiredCheck
+					break
+				}
+			}
+		}
+	}
+
+	// Examine checks in desiredTable to delete obsoleted checks later
+	desiredTable := findTableByName(g.desiredTables, tableName)
+	if desiredTable == nil {
+		return nil, fmt.Errorf("%s is performed for inexistent table '%s': '%s'", action, tableName, statement)
+	}
+	slog.Debug("generateDDLsForAddConstraintCheck: desiredTable found", "table", tableName, "desiredTable_ptr", fmt.Sprintf("%p", desiredTable), "desiredChecks_before", len(desiredTable.checks))
+	// Only add to desiredTable.checks if it doesn't already exist
+	found := false
+	for _, check := range desiredTable.checks {
+		if check.constraintName == desiredCheck.constraintName {
+			found = true
+			break
+		}
+	}
+	if !found {
+		desiredTable.checks = append(desiredTable.checks, desiredCheck)
+		slog.Debug("generateDDLsForAddConstraintCheck: added constraint to desiredTable", "desiredChecks_after", len(desiredTable.checks))
+	} else {
+		slog.Debug("generateDDLsForAddConstraintCheck: constraint already in desiredTable", "desiredChecks", len(desiredTable.checks))
 	}
 
 	return ddls, nil
@@ -2415,6 +2522,38 @@ func (g *Generator) escapeSQLName(name string) string {
 	}
 }
 
+// escapeConstraintName escapes a constraint name, quoting only when necessary for PostgreSQL
+// For PostgreSQL, simple lowercase identifiers don't need quotes
+func (g *Generator) escapeConstraintName(name string) string {
+	switch g.mode {
+	case GeneratorModePostgres:
+		// Check if the name needs quoting
+		// Simple lowercase identifiers (letters, digits, underscores, not starting with digit) don't need quotes
+		needsQuoting := false
+		if len(name) == 0 {
+			needsQuoting = true
+		} else if name[0] >= '0' && name[0] <= '9' {
+			// Starts with a digit
+			needsQuoting = true
+		} else {
+			for _, ch := range name {
+				if !((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_') {
+					needsQuoting = true
+					break
+				}
+			}
+		}
+		if needsQuoting {
+			escaped := strings.ReplaceAll(name, "\"", "\"\"")
+			return fmt.Sprintf("\"%s\"", escaped)
+		}
+		return name
+	default:
+		// For other databases, always quote
+		return g.escapeSQLName(name)
+	}
+}
+
 // escapeAndJoinColumns escapes a list of column names and joins them with commas
 func (g *Generator) escapeAndJoinColumns(columns []string) string {
 	escapedColumns := transformSlice(columns, func(col string) string { return g.escapeSQLName(col) })
@@ -2571,6 +2710,62 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 				}
 				return names
 			}())
+
+			// Consolidate column-level CHECK constraints into table-level checks
+			// PostgreSQL returns CHECK constraints as column-level even when they were created as table-level
+			// This ensures both current and desired schemas have checks in the same location for proper comparison
+			for _, column := range table.columns {
+				if column.check != nil {
+					// Check if this constraint is already in table.checks (avoid duplicates)
+					found := false
+					for _, existingCheck := range table.checks {
+						// When both constraint names are empty, also check if definitions match
+						// to avoid incorrectly treating different CHECK constraints as duplicates
+						if existingCheck.constraintName != "" && column.check.constraintName != "" {
+							// Both have names - compare names only
+							if existingCheck.constraintName == column.check.constraintName {
+								found = true
+								break
+							}
+						} else if existingCheck.constraintName == "" && column.check.constraintName == "" {
+							// Both have empty names - compare definitions
+							if existingCheck.definition == column.check.definition {
+								found = true
+								break
+							}
+						}
+						// If one has a name and the other doesn't, they're different constraints
+					}
+					if !found {
+						slog.Debug("Consolidating column-level CHECK to table-level", "table", table.name, "column", column.name, "constraint", column.check.constraintName)
+						check := *column.check
+						// Auto-generate constraint name if empty (PostgreSQL-style)
+						if check.constraintName == "" {
+							// Extract simple table name without schema prefix for constraint naming
+							tableName := table.name
+							if idx := strings.LastIndex(tableName, "."); idx >= 0 {
+								tableName = tableName[idx+1:]
+							}
+							check.constraintName, _ = parser.PostgresAbsentConstraintName(tableName, column.name, "check")
+							slog.Debug("Auto-generated constraint name for column-level CHECK", "table", table.name, "column", column.name, "generatedName", check.constraintName)
+						}
+						table.checks = append(table.checks, check)
+					}
+					// Remove from column to avoid duplicate DROP statements
+					// Since columns map values are pointers, we can modify them directly
+					column.check = nil
+				}
+			}
+
+			// Log final state after consolidation
+			columnCheckCount := 0
+			for _, col := range table.columns {
+				if col.check != nil {
+					columnCheckCount++
+				}
+			}
+			slog.Debug("CreateTable: after consolidation", "table", table.name, "tableChecks", len(table.checks), "columnCheckCount", columnCheckCount)
+
 			aggregated.Tables = append(aggregated.Tables, &table)
 		case *CreateIndex:
 			table := findTableByName(aggregated.Tables, stmt.tableName)
@@ -2660,6 +2855,11 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 			}
 
 			table.exclusions = append(table.exclusions, stmt.exclusion)
+		case *AddConstraintCheck:
+			// Do NOT aggregate standalone AddConstraintCheck DDLs into tables
+			// They should be processed separately in generateDDLs
+			// Only column-level CHECK constraints from CREATE TABLE should be aggregated
+			slog.Debug("AddConstraintCheck: skipping aggregation (will be processed separately)", "table", stmt.tableName, "constraint", stmt.check.constraintName)
 		case *AddPolicy:
 			table := findTableByName(aggregated.Tables, stmt.tableName)
 			if table == nil {
@@ -2721,6 +2921,12 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 			return nil, fmt.Errorf("unexpected ddl type in convertDDLsToTablesAndViews: %#v", stmt)
 		}
 	}
+
+	// Log final aggregated schema
+	for _, table := range aggregated.Tables {
+		slog.Debug("aggregateDDLsToSchema: final table state", "table", table.name, "tableChecks", len(table.checks))
+	}
+
 	return aggregated, nil
 }
 
@@ -3205,6 +3411,18 @@ func findExclusionByName(exclusions []Exclusion, constraintName string) *Exclusi
 	return nil
 }
 
+func findCheckByName(checks []CheckDefinition, constraintName string) *CheckDefinition {
+	truncatedSearchName := truncatePostgresIdentifier(constraintName)
+
+	for _, check := range checks {
+		truncatedCheckName := truncatePostgresIdentifier(check.constraintName)
+		if truncatedCheckName == truncatedSearchName {
+			return &check
+		}
+	}
+	return nil
+}
+
 func findPolicyByName(policies []Policy, name string) *Policy {
 	for _, policy := range policies {
 		if policy.name == name {
@@ -3552,6 +3770,45 @@ func normalizeOrderByAST(orderBy parser.OrderBy) parser.OrderBy {
 	return normalized
 }
 
+// convertValTupleToArray converts a ValTuple to an ArrayConstructor
+// This is needed when converting IN expressions to = ANY for PostgreSQL compatibility
+// PostgreSQL requires ARRAY[...] syntax with ANY, not just (...)
+func convertValTupleToArray(expr parser.Expr) parser.Expr {
+	if expr == nil {
+		return nil
+	}
+
+	// Unwrap ParenExpr if present
+	if parenExpr, ok := expr.(*parser.ParenExpr); ok {
+		innerConverted := convertValTupleToArray(parenExpr.Expr)
+		// If we converted the inner expression to an array, return it without ParenExpr
+		// because ArrayConstructor already provides the necessary structure
+		if _, isArray := innerConverted.(*parser.ArrayConstructor); isArray {
+			return innerConverted
+		}
+		return &parser.ParenExpr{Expr: innerConverted}
+	}
+
+	// Convert ValTuple to ArrayConstructor
+	if valTuple, ok := expr.(parser.ValTuple); ok {
+		elements := make(parser.ArrayElements, 0, len(valTuple))
+		for _, elem := range valTuple {
+			// Type assert to ArrayElement - all common expression types implement ArrayElement
+			if arrayElem, ok := elem.(parser.ArrayElement); ok {
+				elements = append(elements, arrayElem)
+			} else {
+				// If not directly an ArrayElement, wrap in ParenExpr which is an ArrayElement
+				elements = append(elements, &parser.ParenExpr{Expr: elem})
+			}
+		}
+		return &parser.ArrayConstructor{
+			Elements: elements,
+		}
+	}
+
+	return expr
+}
+
 // normalizeExprForView normalizes expressions specifically for view definitions
 // This is similar to normalizeCheckExprAST but with view-specific handling
 func normalizeExprForView(expr parser.Expr) parser.Expr {
@@ -3743,13 +4000,43 @@ func normalizeExprForView(expr parser.Expr) parser.Expr {
 			Expr: normalizeExprForView(e.Expr),
 		}
 	case *parser.ComparisonExpr:
+		// Normalize IN/NOT IN expressions to = ANY / != ANY for PostgreSQL compatibility
+		// PostgreSQL stores `col IN ('a', 'b')` as `col = ANY (ARRAY['a', 'b'])`
+		normalizedLeft := normalizeExprForView(e.Left)
+		normalizedRight := normalizeExprForView(e.Right)
+		normalizedEscape := normalizeExprForView(e.Escape)
+
+		operator := e.Operator
+		any := e.Any
+		all := e.All
+
+		if strings.EqualFold(operator, parser.InStr) {
+			// Convert IN to = ANY
+			operator = parser.EqualStr
+			any = true
+			// Convert ValTuple to ArrayConstructor for ANY operator
+			// PostgreSQL requires ARRAY[...] syntax with ANY, not just (...)
+			normalizedRight = convertValTupleToArray(normalizedRight)
+		} else if strings.EqualFold(operator, parser.NotInStr) {
+			// Convert NOT IN to != ANY
+			operator = parser.NotEqualStr
+			any = true
+			// Convert ValTuple to ArrayConstructor for ANY operator
+			normalizedRight = convertValTupleToArray(normalizedRight)
+		}
+
+		// SOME is equivalent to ANY in PostgreSQL
+		// Normalize SOME to ANY for consistency
+		// Note: The parser represents SOME the same way as ANY (with Any=true)
+		// so we don't need special handling here
+
 		return &parser.ComparisonExpr{
-			Operator: e.Operator,
-			Left:     normalizeExprForView(e.Left),
-			Right:    normalizeExprForView(e.Right),
-			Escape:   normalizeExprForView(e.Escape),
-			Any:      e.Any,
-			All:      e.All,
+			Operator: operator,
+			Left:     normalizedLeft,
+			Right:    normalizedRight,
+			Escape:   normalizedEscape,
+			Any:      any,
+			All:      all,
 		}
 	case *parser.BinaryExpr:
 		return &parser.BinaryExpr{
@@ -5181,6 +5468,53 @@ func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion
 			return false
 		}
 	}
+	return true
+}
+
+// normalizeWhitespaceForComparison normalizes whitespace in SQL expressions for comparison
+// Removes ALL whitespace to ensure expressions like "any(array" and "any (array" are treated as equal
+func normalizeWhitespaceForComparison(s string) string {
+	// Remove all whitespace characters for comparison
+	var result strings.Builder
+	for _, r := range s {
+		if r != ' ' && r != '\t' && r != '\n' && r != '\r' {
+			result.WriteRune(r)
+		}
+	}
+	return result.String()
+}
+
+func (g *Generator) areSameChecks(checkA CheckDefinition, checkB CheckDefinition) bool {
+	// Compare noInherit flag
+	if checkA.noInherit != checkB.noInherit {
+		slog.Debug("Check NO INHERIT differs", "noInheritA", checkA.noInherit, "noInheritB", checkB.noInherit)
+		return false
+	}
+
+	// Compare notForReplication flag (for SQL Server)
+	if checkA.notForReplication != checkB.notForReplication {
+		slog.Debug("Check NOT FOR REPLICATION differs", "nfrA", checkA.notForReplication, "nfrB", checkB.notForReplication)
+		return false
+	}
+
+	// Compare the CHECK expression
+	// Both sides must have empty definitions or both must be non-empty
+	if (checkA.definitionAST == nil) != (checkB.definitionAST == nil) {
+		slog.Debug("Check definition presence differs", "defA", checkA.definition, "defB", checkB.definition)
+		return false
+	}
+
+	if checkA.definitionAST != nil {
+		normalizedA := normalizeExprForView(checkA.definitionAST)
+		normalizedB := normalizeExprForView(checkB.definitionAST)
+		defStrA := normalizeWhitespaceForComparison(strings.ToLower(parser.String(normalizedA)))
+		defStrB := normalizeWhitespaceForComparison(strings.ToLower(parser.String(normalizedB)))
+		if defStrA != defStrB {
+			slog.Debug("Check definition differs", "defA", checkA.definition, "defB", checkB.definition, "normalizedA", defStrA, "normalizedB", defStrB)
+			return false
+		}
+	}
+
 	return true
 }
 

@@ -475,6 +475,14 @@ type DDL struct {
 	Extension     *Extension
 	Schema        *Schema
 	Grant         *Grant
+	// ALTER TABLE column operations
+	Column         *ColumnDefinition // For ADD COLUMN
+	ColumnName     ColIdent          // For ALTER/DROP/RENAME COLUMN
+	NewColumnName  ColIdent          // For RENAME COLUMN
+	DefaultValue   Expr              // For SET/DROP DEFAULT
+	ConstraintName ColIdent          // For constraint operations
+	CheckExpr      *Where            // For ADD CHECK constraint
+	NoInherit      BoolVal           // For CHECK NO INHERIT
 }
 
 type DDLAction int
@@ -496,6 +504,20 @@ const (
 	CreateSchema
 	GrantPrivilege
 	RevokePrivilege
+	// ALTER TABLE operations
+	AddColumn
+	AlterColumnSetDefault
+	AlterColumnDropDefault
+	AlterColumnSetNotNull
+	AlterColumnDropNotNull
+	AlterColumnType
+	DropColumn
+	RenameColumn
+	RenameTable
+	RenameIndex
+	AddConstraintCheck
+	DropConstraint
+	AlterTypeAddValue
 )
 
 // View types

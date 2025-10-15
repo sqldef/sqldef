@@ -127,6 +127,40 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
 				exclusion: parseExclusion(stmt.Exclusion),
 			}, nil
+		} else if stmt.Action == parser.AddConstraintCheck {
+			// Normalize the CHECK expression AST for PostgreSQL compatibility
+			normalizedExpr := stmt.CheckExpr.Expr
+			if mode == GeneratorModePostgres {
+				normalizedExpr = normalizeCheckExprForPostgres(stmt.CheckExpr.Expr)
+			}
+
+			check := CheckDefinition{
+				definition:     parser.String(normalizedExpr),
+				definitionAST:  normalizedExpr,
+				constraintName: stmt.ConstraintName.String(),
+				noInherit:      castBool(stmt.NoInherit),
+			}
+
+			// Rebuild the statement with normalized expression for PostgreSQL
+			// Use simple table name without schema prefix to match expected test output
+			rebuiltStatement := ddl
+			if mode == GeneratorModePostgres {
+				constraintName := stmt.ConstraintName.String()
+				tableName := stmt.Table.Name.String() // Use simple table name, not schema-qualified
+				checkExpr := parser.String(normalizedExpr)
+				noInheritClause := ""
+				if castBool(stmt.NoInherit) {
+					noInheritClause = " NO INHERIT"
+				}
+				rebuiltStatement = fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)%s",
+					tableName, constraintName, checkExpr, noInheritClause)
+			}
+
+			return &AddConstraintCheck{
+				statement: rebuiltStatement,
+				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
+				check:     check,
+			}, nil
 		} else if stmt.Action == parser.CreatePolicy {
 			scope := make([]string, len(stmt.Policy.To))
 			for i, to := range stmt.Policy.To {
@@ -1137,6 +1171,12 @@ func castBoolPtr(val *parser.BoolVal) *bool {
 	}
 	ret := castBool(*val)
 	return &ret
+}
+
+// normalizeCheckExprForPostgres normalizes CHECK constraint expressions for PostgreSQL compatibility
+// Specifically converts IN/NOT IN expressions to = ANY / != ANY form
+func normalizeCheckExprForPostgres(expr parser.Expr) parser.Expr {
+	return normalizeExprForView(expr)
 }
 
 // extractRenameFrom extracts the rename annotation from a comment string

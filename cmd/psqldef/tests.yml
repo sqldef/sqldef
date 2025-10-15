@@ -2484,3 +2484,125 @@ NegativeDefaultNumbers:
       v8 decimal(5, 2) DEFAULT 20.0,
       v9 decimal(5, 2) DEFAULT 0.0
     );
+
+AlterColumnSetNotNull:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      email varchar(255)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text NOT NULL,
+      email varchar(255) NOT NULL
+    );
+  output: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "email" SET NOT NULL;
+
+AlterColumnDropNotNull:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text NOT NULL,
+      email varchar(255) NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      email varchar(255)
+    );
+  output: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "email" DROP NOT NULL;
+
+AlterColumnChangeNotNull:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      email varchar(255) NOT NULL,
+      username varchar(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text NOT NULL,
+      email varchar(255),
+      username varchar(100) NOT NULL
+    );
+  output: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "email" DROP NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "username" SET NOT NULL;
+
+AlterTableAddNamedCheckConstraint:
+  current: |
+    CREATE TABLE products (
+      id serial,
+      status text,
+      price numeric(10, 2)
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text,
+      price numeric(10, 2)
+    );
+    ALTER TABLE products ADD CONSTRAINT products_status_valid CHECK (status IN ('active', 'inactive', 'pending'));
+    ALTER TABLE products ADD CONSTRAINT products_price_positive CHECK (price > 0);
+  output: |
+    ALTER TABLE products ADD CONSTRAINT products_status_valid CHECK (status = ANY (ARRAY['active', 'inactive', 'pending']));
+    ALTER TABLE products ADD CONSTRAINT products_price_positive CHECK (price > 0);
+
+AlterTableAddCheckConstraintWithNoInherit:
+  current: |
+    CREATE TABLE parent_table (
+      id serial,
+      value integer
+    );
+  desired: |
+    CREATE TABLE parent_table (
+      id serial,
+      value integer
+    );
+    ALTER TABLE parent_table ADD CONSTRAINT parent_table_value_check CHECK (value > 0) NO INHERIT;
+  output: |
+    ALTER TABLE parent_table ADD CONSTRAINT parent_table_value_check CHECK (value > 0) NO INHERIT;
+
+AlterTableDropConstraintCheckStandalone:
+  current: |
+    CREATE TABLE products (
+      id serial,
+      status text
+    );
+    ALTER TABLE products ADD CONSTRAINT products_status_check CHECK (status IN ('active', 'inactive'));
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text
+    );
+  output: |
+    ALTER TABLE "public"."products" DROP CONSTRAINT products_status_check;
+
+AlterTableDropConstraintMultiple:
+  current: |
+    CREATE TABLE orders (
+      id serial,
+      priority integer,
+      status text
+    );
+    ALTER TABLE orders ADD CONSTRAINT orders_priority_check CHECK (priority IN (1, 2, 3));
+    ALTER TABLE orders ADD CONSTRAINT orders_status_check CHECK (status IN ('pending', 'shipped'));
+  desired: |
+    CREATE TABLE orders (
+      id serial,
+      priority integer,
+      status text
+    );
+  output: |
+    ALTER TABLE "public"."orders" DROP CONSTRAINT orders_priority_check;
+    ALTER TABLE "public"."orders" DROP CONSTRAINT orders_status_check;
