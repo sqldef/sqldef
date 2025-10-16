@@ -3,15 +3,14 @@ package mssql
 import (
 	"database/sql"
 	"fmt"
-	"iter"
 	"net/url"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 
 	_ "github.com/microsoft/go-mssqldb"
 	"github.com/sqldef/sqldef/v3/database"
+	"github.com/sqldef/sqldef/v3/util"
 )
 
 const indent = "    "
@@ -138,22 +137,6 @@ func (d *MssqlDatabase) exportTableDDL(table string) (string, error) {
 	foreignDefs := d.getForeignDefs(table)
 	checkDefs := d.getCheckDefs(table)
 	return buildExportTableDDL(table, cols, indexDefs, foreignDefs, checkDefs), nil
-}
-
-func canonicalMapIter[T any](m map[string]T) iter.Seq2[string, T] {
-	return func(yield func(string, T) bool) {
-		keys := make([]string, 0, len(m))
-		for k := range m {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-
-		for _, k := range keys {
-			if !yield(k, m[k]) {
-				return
-			}
-		}
-	}
 }
 
 func buildExportTableDDL(table string, columns []column, indexDefs []*indexDef, foreignDefs []string, checkDefs []string) string {
@@ -562,7 +545,7 @@ ORDER BY obj.object_id, ind.index_id, ic.key_ordinal
 	for tableName, indexes := range indexMap {
 		tableIndexes := []*indexDef{}
 
-		for _, indexDef := range canonicalMapIter(indexes) {
+		for _, indexDef := range util.CanonicalMapIter(indexes) {
 			tableIndexes = append(tableIndexes, indexDef)
 		}
 

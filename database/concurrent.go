@@ -3,6 +3,7 @@ package database
 import (
 	"sort"
 
+	"github.com/sqldef/sqldef/v3/util"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -59,10 +60,9 @@ func ConcurrentMapFuncWithError[Tin any, Tout any](inputs []Tin, concurrency int
 		return tmp[i].order < tmp[j].order
 	})
 
-	outputs := make([]Tout, 0, len(tmp))
-	for _, t := range tmp {
-		outputs = append(outputs, t.output.(Tout))
-	}
+	outputs := util.TransformSlice(tmp, func(t concurrentOutputWithOrdering) Tout {
+		return t.output.(Tout)
+	})
 
 	return outputs, nil
 }

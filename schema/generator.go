@@ -12,6 +12,7 @@ import (
 
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/parser"
+	"github.com/sqldef/sqldef/v3/util"
 )
 
 type GeneratorMode int
@@ -2222,7 +2223,7 @@ func (g *Generator) escapeSQLName(name string) string {
 
 // escapeAndJoinColumns escapes a list of column names and joins them with commas
 func (g *Generator) escapeAndJoinColumns(columns []string) string {
-	escapedColumns := transformSlice(columns, func(col string) string { return g.escapeSQLName(col) })
+	escapedColumns := util.TransformSlice(columns, func(col string) string { return g.escapeSQLName(col) })
 	return strings.Join(escapedColumns, ", ")
 }
 
@@ -3258,7 +3259,7 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 			Expr:     normalizeCheckExprAST(e.Expr),
 		}
 	case *parser.FuncExpr:
-		normalizedExprs := parser.SelectExprs(transformSlice([]parser.SelectExpr(e.Exprs), func(arg parser.SelectExpr) parser.SelectExpr {
+		normalizedExprs := parser.SelectExprs(util.TransformSlice([]parser.SelectExpr(e.Exprs), func(arg parser.SelectExpr) parser.SelectExpr {
 			if aliased, ok := arg.(*parser.AliasedExpr); ok {
 				return &parser.AliasedExpr{
 					Expr: normalizeCheckExprAST(aliased.Expr),
@@ -3275,7 +3276,7 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 			Over:      e.Over,
 		}
 	case *parser.ArrayConstructor:
-		normalizedElements := parser.ArrayElements(transformSlice([]parser.ArrayElement(e.Elements), func(elem parser.ArrayElement) parser.ArrayElement {
+		normalizedElements := parser.ArrayElements(util.TransformSlice([]parser.ArrayElement(e.Elements), func(elem parser.ArrayElement) parser.ArrayElement {
 			if castExpr, ok := elem.(*parser.CastExpr); ok {
 				normalized := normalizeCheckExprAST(castExpr)
 				if normalizedArrayElem, ok := normalized.(parser.ArrayElement); ok {
@@ -3299,7 +3300,7 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 			To:       normalizeCheckExprAST(e.To),
 		}
 	case parser.ValTuple:
-		normalizedTuple := transformSlice([]parser.Expr(e), func(elem parser.Expr) parser.Expr {
+		normalizedTuple := util.TransformSlice([]parser.Expr(e), func(elem parser.Expr) parser.Expr {
 			return normalizeCheckExprAST(elem)
 		})
 		return parser.ValTuple(normalizedTuple)
@@ -3719,15 +3720,15 @@ func convertForeignKeysToIndexNames(foreignKeys []ForeignKey) []string {
 }
 
 func convertPolicyNames(policies []Policy) []string {
-	return transformSlice(policies, func(p Policy) string { return p.name })
+	return util.TransformSlice(policies, func(p Policy) string { return p.name })
 }
 
 func convertViewNames(views []*View) []string {
-	return transformSlice(views, func(v *View) string { return v.name })
+	return util.TransformSlice(views, func(v *View) string { return v.name })
 }
 
 func convertExtensionNames(extensions []*Extension) []string {
-	return transformSlice(extensions, func(e *Extension) string { return e.extension.Name })
+	return util.TransformSlice(extensions, func(e *Extension) string { return e.extension.Name })
 }
 
 func removeTableByName(tables []*Table, name string) []*Table {
@@ -4168,13 +4169,4 @@ func isValidLock(lock string) bool {
 // Escape a string and add quotes to form a legal SQL string constant.
 func StringConstant(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
-}
-
-// transformSlice applies the converter to each element in the input slice and returns a new slice.
-func transformSlice[T any, R any](in []T, converter func(T) R) []R {
-	out := make([]R, len(in))
-	for i, v := range in {
-		out[i] = converter(v)
-	}
-	return out
 }
