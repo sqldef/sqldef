@@ -11,6 +11,7 @@ import (
 
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/parser"
+	"github.com/sqldef/sqldef/v3/util"
 )
 
 // Parse `ddls`, which is expected to `;`-concatenated DDLs
@@ -128,10 +129,9 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				exclusion: parseExclusion(stmt.Exclusion),
 			}, nil
 		} else if stmt.Action == parser.CreatePolicy {
-			scope := make([]string, len(stmt.Policy.To))
-			for i, to := range stmt.Policy.To {
-				scope[i] = to.String()
-			}
+			scope := util.TransformSlice(stmt.Policy.To, func(to parser.ColIdent) string {
+				return to.String()
+			})
 			var using, withCheck string
 			if stmt.Policy.Using != nil {
 				using = parser.String(stmt.Policy.Using.Expr)

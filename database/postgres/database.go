@@ -3,7 +3,6 @@ package postgres
 import (
 	"database/sql"
 	"fmt"
-	"iter"
 	"net/url"
 	"os"
 	"regexp"
@@ -14,6 +13,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/sqldef/sqldef/v3/database"
 	schemaLib "github.com/sqldef/sqldef/v3/schema"
+	"github.com/sqldef/sqldef/v3/util"
 )
 
 const indent = "    "
@@ -386,22 +386,6 @@ func (d *PostgresDatabase) exportTableDDL(table string) (string, error) {
 	return buildExportTableDDL(components), nil
 }
 
-func canonicalMapIter[T any](m map[string]T) iter.Seq2[string, T] {
-	return func(yield func(string, T) bool) {
-		keys := make([]string, 0, len(m))
-		for k := range m {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-
-		for _, k := range keys {
-			if !yield(k, m[k]) {
-				return
-			}
-		}
-	}
-}
-
 func buildExportTableDDL(components TableDDLComponents) string {
 	var queryBuilder strings.Builder
 	schema, table := splitTableName(components.TableName, components.DefaultSchema)
@@ -430,7 +414,7 @@ func buildExportTableDDL(components TableDDLComponents) string {
 		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", components.PrimaryKeyName, strings.Join(components.PrimaryKeyCols, "\", \""))
 	}
 
-	for constraintName, constraintDef := range canonicalMapIter(components.CheckConstraints) {
+	for constraintName, constraintDef := range util.CanonicalMapIter(components.CheckConstraints) {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
 		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", constraintName, constraintDef)
 	}
@@ -449,7 +433,7 @@ func buildExportTableDDL(components TableDDLComponents) string {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
 
-	for _, constraintDef := range canonicalMapIter(components.UniqueConstraints) {
+	for _, constraintDef := range util.CanonicalMapIter(components.UniqueConstraints) {
 		fmt.Fprintf(&queryBuilder, "%s;\n", constraintDef)
 	}
 

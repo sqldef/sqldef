@@ -8,6 +8,7 @@ import (
 	pgquery "github.com/pganalyze/pg_query_go/v6"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/parser"
+	"github.com/sqldef/sqldef/v3/util"
 	go_pgquery "github.com/wasilibs/go-pgquery"
 )
 
@@ -901,13 +902,12 @@ func (p PostgresParser) parseAlterTableStmt(stmt *pgquery.AlterTableStmt) (parse
 func (p PostgresParser) parseConstraint(constraint *pgquery.Constraint, tableName parser.TableName) (parser.Statement, error) {
 	switch constraint.Contype {
 	case pgquery.ConstrType_CONSTR_UNIQUE:
-		cols := make([]parser.IndexColumn, len(constraint.Keys))
-		for i, key := range constraint.Keys {
-			cols[i] = parser.IndexColumn{
+		cols := util.TransformSlice(constraint.Keys, func(key *pgquery.Node) parser.IndexColumn {
+			return parser.IndexColumn{
 				Column:    parser.NewColIdent(key.Node.(*pgquery.Node_String_).String_.Sval),
 				Direction: "asc",
 			}
-		}
+		})
 		return &parser.DDL{
 			Action:  parser.AddIndex,
 			Table:   tableName,
@@ -1000,16 +1000,14 @@ func (p PostgresParser) parseExclusion(constraint *pgquery.Constraint) (*parser.
 }
 
 func (p PostgresParser) parseForeignKey(constraint *pgquery.Constraint) (*parser.ForeignKeyDefinition, error) {
-	idxCols := make([]parser.ColIdent, len(constraint.FkAttrs))
-	for i, fkAttr := range constraint.FkAttrs {
+	idxCols := util.TransformSlice(constraint.FkAttrs, func(fkAttr *pgquery.Node) parser.ColIdent {
 		v := fkAttr.Node.(*pgquery.Node_String_).String_.Sval
-		idxCols[i] = parser.NewColIdent(v)
-	}
-	refCols := make([]parser.ColIdent, len(constraint.PkAttrs))
-	for i, pkAttr := range constraint.PkAttrs {
+		return parser.NewColIdent(v)
+	})
+	refCols := util.TransformSlice(constraint.PkAttrs, func(pkAttr *pgquery.Node) parser.ColIdent {
 		v := pkAttr.Node.(*pgquery.Node_String_).String_.Sval
-		refCols[i] = parser.NewColIdent(v)
-	}
+		return parser.NewColIdent(v)
+	})
 
 	refName, err := p.parseTableName(constraint.Pktable)
 	if err != nil {

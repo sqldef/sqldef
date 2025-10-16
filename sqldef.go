@@ -9,6 +9,7 @@ import (
 
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/schema"
+	"github.com/sqldef/sqldef/v3/util"
 )
 
 type Options struct {
@@ -96,10 +97,10 @@ func ParseFiles(files []string) []string {
 	for _, f := range files {
 		result = append(result, strings.Split(f, ",")...)
 	}
-	for i, r := range result {
-		result[i] = strings.TrimSpace(r)
-	}
-	return result
+
+	return util.TransformSlice(result, func(r string) string {
+		return strings.TrimSpace(r)
+	})
 }
 
 func ReadFiles(filepaths []string) (string, error) {
