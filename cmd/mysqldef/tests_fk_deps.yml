@@ -3,7 +3,6 @@
 
 # Issue 1: order of create tables with foreign key constraints
 ForeignKeyDependenciesForCreateTables:
-  apply_only: true
   desired: |
     CREATE TABLE `items` (
       `item_id` int NOT NULL,
@@ -20,6 +19,32 @@ ForeignKeyDependenciesForCreateTables:
       UNIQUE KEY `uk_email_address` (`email_address`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+    CREATE TABLE `sales` (
+      `sales_id` int NOT NULL,
+      `user_id` int NOT NULL,
+      `item_id` int NOT NULL,
+      `sales_qty` int NOT NULL,
+      `sales_amt` int NOT NULL,
+      PRIMARY KEY (`sales_id`),
+      KEY `fk_user_id` (`user_id`),
+      KEY `fk_item_id` (`item_id`),
+      CONSTRAINT `fk_item_id` FOREIGN KEY (`item_id`) REFERENCES `items` (`item_id`),
+      CONSTRAINT `fk_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  output: |
+    CREATE TABLE `items` (
+      `item_id` int NOT NULL,
+      `item_name` varchar(100) DEFAULT NULL,
+      PRIMARY KEY (`item_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    CREATE TABLE `users` (
+      `user_id` int NOT NULL,
+      `family_name` varchar(100) NOT NULL,
+      `given_name` varchar(100) NOT NULL,
+      `email_address` varchar(254) NOT NULL,
+      PRIMARY KEY (`user_id`),
+      UNIQUE KEY `uk_email_address` (`email_address`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     CREATE TABLE `sales` (
       `sales_id` int NOT NULL,
       `user_id` int NOT NULL,
@@ -180,7 +205,6 @@ ForeignKeyDependenciesMultipleToModifiedTable:
     ALTER TABLE `posts` ADD CONSTRAINT `posts_reviewer_fk` FOREIGN KEY (`reviewer_tenant_id`, `reviewer_id`) REFERENCES `users` (`tenant_id`, `user_id`);
 
 ForeignKeyDependenciesMultipleWithIdempotency:
-  apply_only: true
   desired: |
     create table users (
       user_id integer primary key,
@@ -210,9 +234,34 @@ ForeignKeyDependenciesMultipleWithIdempotency:
       constraint fk_supplier_id_item_id
         foreign key (supplier_id, item_id) references items(supplier_id, item_id)
     );
+  output: |
+    create table users (
+      user_id integer primary key,
+      family_name varchar(100) not null,
+      given_name varchar(100) not null,
+      email_address varchar(254) not null
+    );
+    create table items (
+      supplier_id integer,
+      item_id integer,
+      item_name varchar(100),
+      constraint pk_items primary key (supplier_id, item_id)
+    );
+    create table sales (
+      sales_id integer primary key,
+      user_id integer not null,
+      supplier_id integer,
+      item_id integer not null,
+      sales_qty integer not null,
+      sales_amt integer not null,
+      constraint fk_user_id
+        foreign key (user_id) references users(user_id),
+      constraint fk_supplier_id_item_id
+        foreign key (supplier_id, item_id) references items(supplier_id, item_id)
+    );
+    create unique index uk_email_address on users(email_address);
 
 ForeignKeyDependenciesMultipleDrops:
-  apply_only: true
   current: |
     create table users (
       user_id integer primary key,
@@ -243,6 +292,10 @@ ForeignKeyDependenciesMultipleDrops:
         foreign key (supplier_id, item_id) references items(supplier_id, item_id)
     );
   desired: "" # all drops
+  output: |
+    DROP TABLE `sales`;
+    DROP TABLE `items`;
+    DROP TABLE `users`;
 
 # Test case: Primary key column rename with foreign key from table that will be dropped
 # When changing a primary key column and a referencing table will be dropped,
