@@ -1,3 +1,9 @@
+## [v3.1.16](https://github.com/sqldef/sqldef/compare/v3.1.15...v3.1.16) - 2025-10-16
+- introduce `make modernize` and apply it to the codebase by @gfx in https://github.com/sqldef/sqldef/pull/866
+- init slog based on LOG_LEVEL env by @gfx in https://github.com/sqldef/sqldef/pull/869
+- use google/go-cmp to compare test results by @gfx in https://github.com/sqldef/sqldef/pull/870
+- [refactor] introduce util module to reduce the size of generator.go by @gfx in https://github.com/sqldef/sqldef/pull/871
+
 ## [v3.1.15](https://github.com/sqldef/sqldef/compare/v3.1.14...v3.1.15) - 2025-10-08
 - add `postgres:18` to the test matrix, and drop `postgres:12` by @gfx in https://github.com/sqldef/sqldef/pull/785
 - test: move some Go test code to YAML files by @gfx in https://github.com/sqldef/sqldef/pull/863
