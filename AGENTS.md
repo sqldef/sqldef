@@ -15,7 +15,7 @@ Each command follows the same pattern: it accepts connection parameters similar 
 * Write comments to describe what is not obvious in the code. Describing the "why" is a recommended practice.
 * Format queries in string literals.
 * Use "log/slog" to trace internal flow of the code. `LOG_LEVEL=debug` to enable debug logging.
-*
+
 ## Build
 
 Build all the sqldef commands (`mysqldef`, `psqldef`, `sqlite3def`, `mssqldef`):
@@ -144,10 +144,6 @@ TestCaseName:
 
   # Whether to enable DROP/REVOKE operations (optional, defaults to true)
   enable_drop: false
-
-  # Only test that the schema applies successfully (optional, defaults to false)
-  # When true, doesn't check exact DDL output, just that it applies without error
-  apply_only: true
 
   # Configuration options for the test (optional)
   config:

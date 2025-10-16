@@ -30,7 +30,6 @@ type TestCase struct {
 	Flavor       string   // database flavor (e.g., "mariadb", "mysql")
 	ManagedRoles []string `yaml:"managed_roles"` // Roles whose privileges are managed by sqldef
 	EnableDrop   *bool    `yaml:"enable_drop"`   // Whether to enable DROP/REVOKE operations
-	ApplyOnly    bool     `yaml:"apply_only"`    // Whether to only test that the schema applies successfully, without checking exact DDL output
 	Config       struct { // Optional config settings for the test
 		CreateIndexConcurrently bool `yaml:"create_index_concurrently"`
 	} `yaml:"config"`
@@ -153,13 +152,11 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		t.Fatal(err)
 	}
 
-	// Skip output comparison if ApplyOnly is set
-	if !test.ApplyOnly {
-		expected := strings.TrimSpace(*test.Output)
-		actual := strings.TrimSpace(joinDDLs(ddls))
-		if expected != actual {
-			diff := cmp.Diff(expected, actual)
-			t.Errorf(`Migration output doesn't match expected.
+	expected := strings.TrimSpace(*test.Output)
+	actual := strings.TrimSpace(joinDDLs(ddls))
+	if expected != actual {
+		diff := cmp.Diff(expected, actual)
+		t.Errorf(`Migration output doesn't match expected.
 Expected DDLs:
 ~~sql
 %s
@@ -170,7 +167,6 @@ Actual DDLs:
 ~~
 Diff:
 %s`, expected, actual, diff)
-		}
 	}
 
 	err = runDDLs(db, ddls, *test.EnableDrop)
