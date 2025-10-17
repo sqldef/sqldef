@@ -2,12 +2,12 @@
 package schema
 
 import (
+	"cmp"
 	"fmt"
 	"log"
 	"reflect"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/sqldef/sqldef/v3/database"
@@ -2455,7 +2455,7 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 						for priv := range privMap {
 							mergedPrivs = append(mergedPrivs, priv)
 						}
-						sort.Strings(mergedPrivs)
+						slices.Sort(mergedPrivs)
 						aggregated.Privileges[i].privileges = mergedPrivs
 						merged = true
 						break
@@ -2493,16 +2493,19 @@ func sortPrivilegesByCanonicalOrder(privileges []string) {
 		orderMap[priv] = i
 	}
 
-	sort.Slice(privileges, func(i, j int) bool {
-		orderI, hasI := orderMap[privileges[i]]
-		orderJ, hasJ := orderMap[privileges[j]]
-		if hasI && hasJ {
-			return orderI < orderJ
+	slices.SortFunc(privileges, func(a, b string) int {
+		orderA, hasA := orderMap[a]
+		orderB, hasB := orderMap[b]
+		if hasA && hasB {
+			return cmp.Compare(orderA, orderB)
 		}
-		if !hasI && !hasJ {
-			return privileges[i] < privileges[j]
+		if !hasA && !hasB {
+			return cmp.Compare(a, b)
 		}
-		return hasI
+		if hasA {
+			return -1
+		}
+		return 1
 	})
 }
 
@@ -2645,7 +2648,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 	for key := range grantsByPrivileges {
 		privilegeKeys = append(privilegeKeys, key)
 	}
-	sort.Strings(privilegeKeys)
+	slices.Sort(privilegeKeys)
 
 	for _, key := range privilegeKeys {
 		group := grantsByPrivileges[key]
@@ -2657,7 +2660,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			}
 			escapedGrantees = append(escapedGrantees, escapedGrantee)
 		}
-		sort.Strings(escapedGrantees)
+		slices.Sort(escapedGrantees)
 		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s",
 			formatPrivilegesForGrant(group.privileges),
 			g.escapeTableName(desired.tableName),
@@ -3152,8 +3155,8 @@ func sortAndDeduplicateValues(values []parser.Expr) []parser.Expr {
 	}
 
 	// Sort values for consistent comparison
-	sort.Slice(values, func(i, j int) bool {
-		return parser.String(values[i]) < parser.String(values[j])
+	slices.SortFunc(values, func(a, b parser.Expr) int {
+		return cmp.Compare(parser.String(a), parser.String(b))
 	})
 
 	// Deduplicate sorted values
@@ -3648,11 +3651,11 @@ func areSamePolicies(policyA, policyB Policy) bool {
 	if len(policyA.roles) != len(policyB.roles) {
 		return false
 	}
-	sort.Slice(policyA.roles, func(i, j int) bool {
-		return policyA.roles[i] <= policyA.roles[j]
+	slices.SortFunc(policyA.roles, func(a, b string) int {
+		return cmp.Compare(a, b)
 	})
-	sort.Slice(policyB.roles, func(i, j int) bool {
-		return policyB.roles[i] <= policyB.roles[j]
+	slices.SortFunc(policyB.roles, func(a, b string) int {
+		return cmp.Compare(a, b)
 	})
 	for i := range policyA.roles {
 		if !strings.EqualFold(policyA.roles[i], policyB.roles[i]) {
@@ -3940,7 +3943,7 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 				// Sort privileges for consistent key
 				sortedPrivs := make([]string, len(stmt.privileges))
 				copy(sortedPrivs, stmt.privileges)
-				sort.Strings(sortedPrivs)
+				slices.Sort(sortedPrivs)
 				key := fmt.Sprintf("%s:%s", stmt.tableName, strings.Join(sortedPrivs, ","))
 
 				if existing, ok := grantsByTableAndPrivs[key]; ok {
@@ -3975,7 +3978,7 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 						for priv := range privMap {
 							mergedPrivs = append(mergedPrivs, priv)
 						}
-						sort.Strings(mergedPrivs)
+						slices.Sort(mergedPrivs)
 						existing.privileges = mergedPrivs
 					} else {
 						// Create new revoke for this grantee
