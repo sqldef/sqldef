@@ -126,6 +126,7 @@ func (d *Sqlite3Database) indexes() ([]string, error) {
 		SELECT sql
 		FROM sqlite_master
 		WHERE type = 'index' AND sql IS NOT NULL
+		ORDER BY sql
 	`
 	rows, err := d.db.Query(query)
 	if err != nil {
