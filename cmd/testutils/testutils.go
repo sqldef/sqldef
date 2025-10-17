@@ -3,6 +3,8 @@ package testutils
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -37,6 +39,50 @@ type TestCase struct {
 
 func init() {
 	util.InitSlog()
+}
+
+// CreateTestDatabaseName generates a unique database name for a test case.
+// The name is sanitized to be a valid database name (lowercase, alphanumeric + underscore)
+// and uses MD5 hash to ensure uniqueness.
+//
+// Parameters:
+//   - testName: The test name to sanitize
+//   - dbLimit: Database name length limit. For example:
+//     - PostgreSQL: 63 characters
+//     - SQL Server: 128 characters
+//
+// The resulting format is: sqldef_test_{sanitized}_{hash}
+// where hash is the first 8 characters of the MD5 hash of the original test name.
+func CreateTestDatabaseName(testName string, dbLimit int) string {
+	const prefix = "sqldef_test_"
+	const hashLen = 8
+
+	// Calculate maximum length for the sanitized portion
+	// dbLimit = len(prefix) + len(sanitized) + len("_") + len(hash)
+	// sanitized = dbLimit - len(prefix) - 1 - hashLen
+	maxSanitizedLen := dbLimit - len(prefix) - 1 - hashLen
+
+	// Sanitize the test name: lowercase, replace non-alphanumeric with underscore
+	sanitized := strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			return r
+		}
+		if r >= 'A' && r <= 'Z' {
+			return r - 'A' + 'a' // Convert to lowercase
+		}
+		return '_'
+	}, testName)
+
+	// Truncate to maxSanitizedLen to ensure the full name stays within database limits
+	if len(sanitized) > maxSanitizedLen {
+		sanitized = sanitized[:maxSanitizedLen]
+	}
+
+	// Create a short hash from the full test name for uniqueness
+	hash := md5.Sum([]byte(testName))
+	hashStr := hex.EncodeToString(hash[:])[:hashLen]
+
+	return fmt.Sprintf("%s%s_%s", prefix, sanitized, hashStr)
 }
 
 func ReadTests(pattern string) (map[string]TestCase, error) {
