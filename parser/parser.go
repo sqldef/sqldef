@@ -12,19 +12,19 @@ import (
 	"strings"
 )
 
-func setParseTree(yylex interface{}, stmt Statement) {
+func setParseTree(yylex any, stmt Statement) {
 	yylex.(*Tokenizer).ParseTree = stmt
 }
 
-func setAllowComments(yylex interface{}, allow bool) {
+func setAllowComments(yylex any, allow bool) {
 	yylex.(*Tokenizer).AllowComments = allow
 }
 
-func setDDL(yylex interface{}, ddl *DDL) {
+func setDDL(yylex any, ddl *DDL) {
 	yylex.(*Tokenizer).partialDDL = ddl
 }
 
-func incNesting(yylex interface{}) bool {
+func incNesting(yylex any) bool {
 	yylex.(*Tokenizer).nesting++
 	if yylex.(*Tokenizer).nesting == 200 {
 		return true
@@ -32,14 +32,14 @@ func incNesting(yylex interface{}) bool {
 	return false
 }
 
-func decNesting(yylex interface{}) {
+func decNesting(yylex any) {
 	yylex.(*Tokenizer).nesting--
 }
 
 // forceEOF forces the lexer to end prematurely. Not all SQL statements
 // are supported by the Parser, thus calling forceEOF will make the lexer
 // return EOF early.
-func forceEOF(yylex interface{}) {
+func forceEOF(yylex any) {
 	yylex.(*Tokenizer).ForceEOF = true
 }
 

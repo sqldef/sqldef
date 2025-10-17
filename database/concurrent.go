@@ -1,7 +1,8 @@
 package database
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 
 	"github.com/sqldef/sqldef/v3/util"
 	"golang.org/x/sync/errgroup"
@@ -56,8 +57,8 @@ func ConcurrentMapFuncWithError[Tin any, Tout any](inputs []Tin, concurrency int
 		tmp = append(tmp, t)
 	}
 
-	sort.Slice(tmp, func(i, j int) bool {
-		return tmp[i].order < tmp[j].order
+	slices.SortFunc(tmp, func(a, b concurrentOutputWithOrdering) int {
+		return cmp.Compare(a.order, b.order)
 	})
 
 	outputs := util.TransformSlice(tmp, func(t concurrentOutputWithOrdering) Tout {

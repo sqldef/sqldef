@@ -1,13 +1,13 @@
 package postgres
 
 import (
+	"cmp"
 	"database/sql"
 	"fmt"
 	"net/url"
 	"os"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 
 	_ "github.com/lib/pq"
@@ -870,8 +870,11 @@ func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 	for key := range constraints {
 		keys = append(keys, key)
 	}
-	sort.Slice(keys, func(i, j int) bool {
-		return keys[i].schema < keys[j].schema || keys[i].name < keys[j].name
+	slices.SortFunc(keys, func(a, b identifier) int {
+		if c := cmp.Compare(a.schema, b.schema); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.name, b.name)
 	})
 
 	defs := make([]string, 0)

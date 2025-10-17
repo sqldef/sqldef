@@ -2,7 +2,7 @@ package util
 
 import (
 	"iter"
-	"sort"
+	"slices"
 )
 
 // TransformSlice applies the converter to each element in the input slice and returns a new slice.
@@ -23,7 +23,7 @@ func CanonicalMapIter[T any](m map[string]T) iter.Seq2[string, T] {
 		for k := range m {
 			keys = append(keys, k)
 		}
-		sort.Strings(keys)
+		slices.Sort(keys)
 
 		for _, k := range keys {
 			if !yield(k, m[k]) {

@@ -198,7 +198,7 @@ func compareVersion(t *testing.T, leftVersion string, rightVersion string) int {
 	// Compare only specified segments
 	length := min(len(leftVersions), len(rightVersions))
 
-	for i := 0; i < length; i++ {
+	for i := range length {
 		left, err := strconv.Atoi(leftVersions[i])
 		if err != nil {
 			t.Fatal(err)
