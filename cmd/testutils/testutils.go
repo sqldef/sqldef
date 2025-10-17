@@ -126,6 +126,8 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 }
 
 func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.GeneratorMode, sqlParser database.Parser, version string, allowedFlavor string) {
+	t.Helper()
+
 	if test.MinVersion != "" && compareVersion(t, version, test.MinVersion) < 0 {
 		t.Skipf("Version '%s' is smaller than min_version '%s'", version, test.MaxVersion)
 	}
