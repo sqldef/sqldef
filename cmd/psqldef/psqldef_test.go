@@ -1792,8 +1792,8 @@ func TestPsqldefTransactionBoundariesWithConcurrentIndex(t *testing.T) {
 		// This test may need adjustment based on actual behavior
 		// For now, we'll test that regular DROP INDEX is in transaction
 		expected := wrapWithTransaction(stripHeredoc(`
-			DROP INDEX "public"."idx_users_email";
 			DROP INDEX "public"."idx_users_age";
+			DROP INDEX "public"."idx_users_email";
 		`))
 
 		assertApplyOutputWithEnableDrop(t, schema, expected)

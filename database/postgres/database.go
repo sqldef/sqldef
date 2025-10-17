@@ -599,6 +599,7 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 	WHERE  schemaname = $1
 	AND    tablename = $2
 	AND    indexName NOT IN (SELECT name FROM exclude_constraints)
+	ORDER BY indexdef
 	`
 	schema, table := splitTableName(table, d.GetDefaultSchema())
 	rows, err := d.db.Query(query, schema, table)
