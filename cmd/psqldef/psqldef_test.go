@@ -11,6 +11,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/sqldef/sqldef/v3/cmd/testutils"
@@ -35,6 +36,10 @@ var defaultDbConfig = dbConfig{
 	User:   defaultUser,
 	DbName: testDatabaseName,
 }
+
+// roleConfigMutex protects role configuration operations (CREATE ROLE, ALTER ROLE)
+// to prevent "tuple concurrently updated" errors when running tests in parallel.
+var roleConfigMutex sync.Mutex
 
 func connectDatabase(config dbConfig) (database.Database, error) {
 	var user string
@@ -133,7 +138,54 @@ func mustGetServerVersion() string {
 	return strings.Split(serverVersion, " ")[0]
 }
 
+
+// createTestDatabase creates a new database for a test case with the specified user.
+// If a user is specified, it creates the user role and grants necessary permissions.
+func createTestDatabase(t *testing.T, dbName string, user string) {
+	t.Helper()
+
+	// Use the default 'postgres' database to create the new test database
+	defaultDatabaseName := "postgres"
+	mustPgExec(defaultDatabaseName, fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
+	mustPgExec(defaultDatabaseName, fmt.Sprintf("CREATE DATABASE %s", dbName))
+
+	// Set up user if specified
+	if user != "" {
+		// Protect role operations with a mutex to prevent concurrent updates
+		roleConfigMutex.Lock()
+		// Create the user role if it doesn't exist (roles are cluster-wide)
+		query := fmt.Sprintf(`
+			DO $$ BEGIN
+				IF NOT EXISTS (SELECT * FROM pg_roles WHERE rolname = '%s') THEN
+					CREATE ROLE %s WITH LOGIN;
+				END IF;
+			END $$;
+		`, user, user)
+		mustPgExec(defaultDatabaseName, query)
+
+		// Set up the user-specific search_path (this modifies cluster-wide role settings)
+		mustPgExec(dbName, fmt.Sprintf("ALTER ROLE %s SET search_path TO foo, public", user))
+		roleConfigMutex.Unlock()
+
+		// Grant permissions and create schema (these are database-specific, safe to run in parallel)
+		mustPgExec(dbName, fmt.Sprintf("GRANT ALL ON DATABASE %s TO %s", dbName, user))
+		mustPgExecAsUser(dbName, user, "CREATE SCHEMA foo")
+	}
+}
+
+// dropTestDatabase drops a test database. This is used in cleanup.
+func dropTestDatabase(dbName string) {
+	// Use the default 'postgres' database to drop the test database
+	defaultDatabaseName := "postgres"
+	// Ignore errors during cleanup, as the database might already be dropped
+	_ = pgExec(defaultDatabaseName, fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
+}
+
 func TestApply(t *testing.T) {
+	// Create all test roles once before running tests
+	// PostgreSQL roles are cluster-wide, not database-specific
+	createAllTestRoles()
+
 	tests, err := testutils.ReadTests("tests*.yml")
 	if err != nil {
 		t.Fatal(err)
@@ -143,11 +195,18 @@ func TestApply(t *testing.T) {
 	sqlParser := postgres.NewParser()
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			resetTestDatabaseWithUser(test.User)
+			t.Parallel()
+
+			dbName := testutils.CreateTestDatabaseName(name, 63)
+			createTestDatabase(t, dbName, test.User)
+
+			t.Cleanup(func() {
+				dropTestDatabase(dbName)
+			})
 
 			db, err := connectDatabase(dbConfig{
 				User:   test.User,
-				DbName: testDatabaseName,
+				DbName: dbName,
 			})
 			if err != nil {
 				t.Fatal(err)

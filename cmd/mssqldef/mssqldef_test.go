@@ -11,6 +11,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/sqldef/sqldef/v3/cmd/testutils"
@@ -25,11 +26,71 @@ const (
 	skipPrefix      = "-- Skipped: "
 )
 
+// loginConfigMutex protects SQL Server login creation operations
+// to prevent conflicts when running tests in parallel.
+// SQL Server logins are server-wide, not database-specific.
+var loginConfigMutex sync.Mutex
+
 func wrapWithTransaction(ddls string) string {
 	return applyPrefix + "BEGIN TRANSACTION;\n" + ddls + "COMMIT TRANSACTION;\n"
 }
 
+
+// createTestUser creates the mssqldef_user login if it doesn't exist.
+// SQL Server logins are server-wide, so this is called once before all tests.
+func createTestUser() {
+	loginConfigMutex.Lock()
+	defer loginConfigMutex.Unlock()
+
+	mustMssqlExec("master", "IF NOT EXISTS (SELECT name FROM sys.server_principals WHERE name = 'mssqldef_user') CREATE LOGIN mssqldef_user WITH PASSWORD = N'Passw0rd'")
+}
+
+// createTestDatabase creates a new database for a test case with the specified user.
+func createTestDatabase(t *testing.T, dbName string, user string) {
+	t.Helper()
+
+	// Drop and create the database
+	mustMssqlExec("master", fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
+	mustMssqlExec("master", fmt.Sprintf("CREATE DATABASE %s", dbName))
+
+	// Create FOO schema (used by some tests)
+	mustMssqlExec(dbName, "CREATE SCHEMA FOO")
+
+	// Set up user if specified
+	if user != "" {
+		mustMssqlExec(dbName, fmt.Sprintf("CREATE USER %s FOR LOGIN %s WITH DEFAULT_SCHEMA = FOO", user, user))
+		mustMssqlExec(dbName, fmt.Sprintf("ALTER ROLE db_owner ADD MEMBER %s", user))
+		mustMssqlExec(dbName, fmt.Sprintf("ALTER AUTHORIZATION ON SCHEMA::FOO TO %s", user))
+	}
+}
+
+// dropTestDatabase drops a test database. This is used in cleanup.
+func dropTestDatabase(dbName string) {
+	// Ignore errors during cleanup, as the database might already be dropped
+	_ = mssqlExec("master", fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
+}
+
+// connectDatabaseByName connects to a specific database with the given user.
+func connectDatabaseByName(dbName string, user string) (database.Database, error) {
+	password := "Passw0rd"
+	if user == "sa" {
+		password = "Passw0rd"
+	}
+
+	return mssql.NewDatabase(database.Config{
+		User:     user,
+		Password: password,
+		Host:     "127.0.0.1",
+		Port:     1433,
+		DbName:   dbName,
+	})
+}
+
 func TestApply(t *testing.T) {
+	// Create test user once before running tests
+	// SQL Server logins are server-wide, not database-specific
+	createTestUser()
+
 	tests, err := testutils.ReadTests("tests*.yml")
 	if err != nil {
 		t.Fatal(err)
@@ -38,14 +99,21 @@ func TestApply(t *testing.T) {
 	sqlParser := mssql.NewParser()
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			// Initialize the database with test.Current
-			resetTestDatabase()
+			t.Parallel()
+
+			dbName := testutils.CreateTestDatabaseName(name, 128)
+			createTestDatabase(t, dbName, test.User)
+
+			t.Cleanup(func() {
+				dropTestDatabase(dbName)
+			})
+
 			var db database.Database
 			var err error
 			if test.User != "" {
-				db, err = connectDatabaseByUser(test.User)
+				db, err = connectDatabaseByName(dbName, test.User)
 			} else {
-				db, err = connectDatabase() // DROP DATABASE hangs when there's a connection
+				db, err = connectDatabaseByName(dbName, "sa")
 			}
 			if err != nil {
 				t.Fatal(err)

@@ -29,8 +29,6 @@ func wrapWithTransaction(ddls string) string {
 }
 
 func TestApply(t *testing.T) {
-	defer testutils.MustExecute("rm", "-f", "sqlite3def_test") // after-test cleanup
-
 	tests, err := testutils.ReadTests("tests*.yml")
 	if err != nil {
 		t.Fatal(err)
@@ -39,9 +37,11 @@ func TestApply(t *testing.T) {
 	sqlParser := database.NewParser(parser.ParserModeSQLite3)
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			// Initialize the database with test.Current
-			testutils.MustExecute("rm", "-f", "sqlite3def_test")
-			db, err := connectDatabase() // re-connection seems needed after rm
+			t.Parallel()
+
+			// Use in-memory database for parallel testing
+			// Each connection to :memory: creates a new, independent database
+			db, err := connectDatabaseByName(":memory:")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -644,6 +644,14 @@ func stripHeredoc(heredoc string) string {
 func connectDatabase() (database.Database, error) {
 	return sqlite3.NewDatabase(database.Config{
 		DbName: "sqlite3def_test",
+	})
+}
+
+// connectDatabaseByName connects to a SQLite database with the given name.
+// Use ":memory:" for in-memory databases (useful for parallel testing).
+func connectDatabaseByName(dbName string) (database.Database, error) {
+	return sqlite3.NewDatabase(database.Config{
+		DbName: dbName,
 	})
 }
 
