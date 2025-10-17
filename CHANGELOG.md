@@ -1,3 +1,8 @@
+## [v3.1.17](https://github.com/sqldef/sqldef/compare/v3.1.16...v3.1.17) - 2025-10-17
+- use slices.sort; sort package is deprecated by @gfx in https://github.com/sqldef/sqldef/pull/874
+- sort CREATE INDEX by @gfx in https://github.com/sqldef/sqldef/pull/876
+- [test] run TestApppy in parallel by @gfx in https://github.com/sqldef/sqldef/pull/877
+
 ## [v3.1.16](https://github.com/sqldef/sqldef/compare/v3.1.15...v3.1.16) - 2025-10-16
 - introduce `make modernize` and apply it to the codebase by @gfx in https://github.com/sqldef/sqldef/pull/866
 - init slog based on LOG_LEVEL env by @gfx in https://github.com/sqldef/sqldef/pull/869
