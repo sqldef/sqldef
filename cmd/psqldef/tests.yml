@@ -2468,3 +2468,751 @@ CreateTableWithCheckConstraints:
       CONSTRAINT c_lowercase_name CHECK (((name)::TEXT = LOWER((name)::TEXT)))
     );
   output: ""
+
+CreateTableWithCurrentTimestamp:
+  desired: |
+    CREATE TABLE timestamps (
+      created_at timestamp default current_timestamp
+    );
+
+DropTimestampDefault:
+  current: |
+    CREATE TABLE timestamps (
+      created_at timestamp default current_timestamp
+    );
+  desired: |
+    CREATE TABLE timestamps (
+      created_at timestamp
+    );
+  output: |
+    ALTER TABLE "public"."timestamps" ALTER COLUMN "created_at" DROP DEFAULT;
+
+AddTimestampDefaultBack:
+  current: |
+    CREATE TABLE timestamps (
+      created_at timestamp
+    );
+  desired: |
+    CREATE TABLE timestamps (
+      created_at timestamp default current_timestamp
+    );
+  output: |
+    ALTER TABLE "public"."timestamps" ALTER COLUMN "created_at" SET DEFAULT current_timestamp;
+
+CreateTableWithoutNotNull:
+  desired: |
+    CREATE TABLE users (
+      name text
+    );
+
+AddNotNullConstraint:
+  current: |
+    CREATE TABLE users (
+      name text
+    );
+  desired: |
+    CREATE TABLE users (
+      name text NOT NULL
+    );
+  output: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
+
+DropNotNullConstraint:
+  current: |
+    CREATE TABLE users (
+      name text NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      name text
+    );
+  output: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
+
+CreateTableWithPrimaryKey:
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+
+DropPrimaryKeyAndColumn:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+  desired: |
+    CREATE TABLE users (
+      name text
+    );
+  output: |
+    ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";
+    ALTER TABLE "public"."users" DROP COLUMN "id";
+
+AddPrimaryKeyAndColumnBack:
+  current: |
+    CREATE TABLE users (
+      name text
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+  output: |
+    ALTER TABLE "public"."users" ADD COLUMN "id" bigint NOT NULL;
+    ALTER TABLE "public"."users" ADD PRIMARY KEY ("id");
+
+ConstraintPrimaryKey:
+  desired: |
+    CREATE TABLE users (
+      a integer,
+      b integer,
+      CONSTRAINT a_b_pkey PRIMARY KEY (a, b)
+    );
+
+CreateTablesWithoutForeignKey:
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint
+    );
+
+AddForeignKeyConstraint:
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint
+    );
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint,
+      CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+  output: |
+    ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id");
+
+ModifyForeignKeyActions:
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint,
+      CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint,
+      CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+    );
+  output: |
+    ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";
+    ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+RemoveForeignKeyConstraint:
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint,
+      CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+    );
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint
+    );
+  output: |
+    ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";
+
+CreateTableWithReferences:
+  desired: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY,
+      my_text TEXT UNIQUE NOT NULL
+    );
+    CREATE TABLE b (
+      b_id INTEGER PRIMARY KEY,
+      a_id INTEGER REFERENCES a,
+      a_my_text TEXT NOT NULL REFERENCES a (my_text)
+    );
+
+DropReferences:
+  current: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY,
+      my_text TEXT UNIQUE NOT NULL
+    );
+    CREATE TABLE b (
+      b_id INTEGER PRIMARY KEY,
+      a_id INTEGER REFERENCES a,
+      a_my_text TEXT NOT NULL REFERENCES a (my_text)
+    );
+  desired: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY,
+      my_text TEXT UNIQUE NOT NULL
+    );
+    CREATE TABLE b (
+      b_id INTEGER PRIMARY KEY,
+      a_id INTEGER,
+      a_my_text TEXT NOT NULL
+    );
+  output: |
+    ALTER TABLE "public"."b" DROP CONSTRAINT "b_a_id_fkey";
+    ALTER TABLE "public"."b" DROP CONSTRAINT "b_a_my_text_fkey";
+
+ReferencesWithOnDeleteCascade:
+  desired: |
+    CREATE TABLE customers (
+      id UUID NOT NULL PRIMARY KEY,
+      customer_name VARCHAR(255) NOT NULL
+    );
+    CREATE TABLE orders (
+      id UUID NOT NULL PRIMARY KEY,
+      order_number VARCHAR(255) NOT NULL,
+      customer UUID REFERENCES customers(id) ON DELETE CASCADE
+    );
+
+ColumnCheckConstraint:
+  desired: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY CHECK (a_id > 0),
+      my_text TEXT UNIQUE NOT NULL
+    );
+
+ModifyColumnCheckConstraint:
+  current: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY CHECK (a_id > 0),
+      my_text TEXT UNIQUE NOT NULL
+    );
+  desired: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY CHECK (a_id > 1),
+      my_text TEXT UNIQUE NOT NULL
+    );
+  output: |
+    ALTER TABLE "public"."a" DROP CONSTRAINT a_a_id_check;
+    ALTER TABLE "public"."a" ADD CONSTRAINT a_a_id_check CHECK (a_id > 1);
+
+DropCheckConstraint:
+  current: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY CHECK (a_id > 1),
+      my_text TEXT UNIQUE NOT NULL
+    );
+  desired: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY,
+      my_text TEXT UNIQUE NOT NULL
+    );
+  output: |
+    ALTER TABLE "public"."a" DROP CONSTRAINT a_a_id_check;
+
+AddCheckConstraintNoInherit:
+  current: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY,
+      my_text TEXT UNIQUE NOT NULL
+    );
+  desired: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY CHECK (a_id > 2) NO INHERIT,
+      my_text TEXT UNIQUE NOT NULL
+    );
+  output: |
+    ALTER TABLE "public"."a" ADD CONSTRAINT a_a_id_check CHECK (a_id > 2) NO INHERIT;
+
+ModifyCheckConstraintNoInherit:
+  current: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY CHECK (a_id > 2) NO INHERIT,
+      my_text TEXT UNIQUE NOT NULL
+    );
+  desired: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY CHECK (a_id > 3) NO INHERIT,
+      my_text TEXT UNIQUE NOT NULL
+    );
+  output: |
+    ALTER TABLE "public"."a" DROP CONSTRAINT a_a_id_check;
+    ALTER TABLE "public"."a" ADD CONSTRAINT a_a_id_check CHECK (a_id > 3) NO INHERIT;
+
+CreateTableWithoutMultiColumnCheck:
+  desired: |
+    CREATE TABLE orders (
+      id UUID NOT NULL PRIMARY KEY,
+      order_number VARCHAR(255) NOT NULL,
+      customer VARCHAR(255),
+      store_table VARCHAR(255)
+    );
+
+AddMultiColumnCheck:
+  current: |
+    CREATE TABLE orders (
+      id UUID NOT NULL PRIMARY KEY,
+      order_number VARCHAR(255) NOT NULL,
+      customer VARCHAR(255),
+      store_table VARCHAR(255)
+    );
+  desired: |
+    CREATE TABLE orders (
+      id UUID NOT NULL PRIMARY KEY,
+      order_number VARCHAR(255) NOT NULL,
+      customer VARCHAR(255),
+      store_table VARCHAR(255),
+      CONSTRAINT check_customer_or_table CHECK (store_table is not null and customer is null or store_table is null and customer is not null)
+    );
+  output: |
+    ALTER TABLE "public"."orders" ADD CONSTRAINT "check_customer_or_table" CHECK (store_table is not null and customer is null or store_table is null and customer is not null);
+
+DropMultiColumnCheck:
+  current: |
+    CREATE TABLE orders (
+      id UUID NOT NULL PRIMARY KEY,
+      order_number VARCHAR(255) NOT NULL,
+      customer VARCHAR(255),
+      store_table VARCHAR(255),
+      CONSTRAINT check_customer_or_table CHECK (store_table is not null and customer is null or store_table is null and customer is not null)
+    );
+  desired: |
+    CREATE TABLE orders (
+      id UUID NOT NULL PRIMARY KEY,
+      order_number VARCHAR(255) NOT NULL,
+      customer VARCHAR(255),
+      store_table VARCHAR(255)
+    );
+  output: |
+    ALTER TABLE "public"."orders" DROP CONSTRAINT "check_customer_or_table";
+
+CreatePolicy:
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((current_user)::integer = 1);
+  output: |
+    CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((current_user)::integer = 1);
+
+ModifyPolicyToRestrictive:
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((current_user)::integer = 1);
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (id = (current_user)::integer);
+  output: |
+    DROP POLICY "p_users" ON "public"."users";
+    CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (id = (current_user)::integer);
+
+ModifyPolicyUsing:
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (id = (current_user)::integer);
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);
+  output: |
+    DROP POLICY "p_users" ON "public"."users";
+    CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);
+
+DropPolicy:
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+  output: |
+    DROP POLICY "p_users" ON "public"."users";
+
+AddUniqueConstraint:
+  current: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+  desired: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b);
+  output: |
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b);
+
+UniqueConstraintNotDeferrable:
+  current: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b);
+  desired: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) not deferrable initially immediate;
+  output: ""
+
+ModifyUniqueConstraintToDeferrable:
+  current: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) not deferrable initially immediate;
+  desired: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable;
+  output: |
+    ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable;
+
+ModifyUniqueConstraintToInitiallyDeferred:
+  current: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable;
+  desired: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable initially deferred;
+  output: |
+    ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable initially deferred;
+
+RevertUniqueConstraintToNotDeferrable:
+  current: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable initially deferred;
+  desired: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b);
+  output: |
+    ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b);
+
+DropUniqueConstraint:
+  current: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b);
+  desired: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+  output: |
+    ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
+
+IndexOnReservedWordColumn:
+  desired: |
+    CREATE TABLE users (
+      "key" text
+    );
+    CREATE INDEX "index_name" on users (key);
+
+IndexWithOperatorClass:
+  desired: |
+    CREATE TABLE products (
+      name VARCHAR(255)
+    );
+    CREATE INDEX product_name_autocomplete_index ON products(name text_pattern_ops);
+
+CreateTypeEnum:
+  desired: |
+    CREATE TYPE "public"."country" AS ENUM ('us', 'jp');
+    CREATE TABLE users (
+      id SERIAL PRIMARY KEY,
+      country "public"."country" NOT NULL DEFAULT 'jp'::country
+    );
+
+ColumnWithQuotes:
+  desired: |
+    CREATE TABLE users (
+      "id" bigint NOT NULL,
+      "name" text,
+      "age" integer
+    );
+
+PostgreSQLDataTypes:
+  desired: |
+    CREATE TABLE users (
+      c_array integer array,
+      c_array_bracket integer[],
+      c_bigint bigint,
+      c_bigserial bigserial,
+      c_bit bit,
+      c_bit_2 bit(2),
+      c_bool bool,
+      c_boolean boolean,
+      c_char_10 char(10),
+      c_character_20 character(20),
+      c_character_varying_30 character varying(30),
+      c_date date,
+      c_double_precision double precision,
+      c_json json,
+      c_jsonb jsonb,
+      c_timestamp timestamp,
+      c_timestamp_6 timestamp(6),
+      c_timestamp_tz timestamp with time zone,
+      c_timestamp_tz_6 timestamp(6) with time zone,
+      c_timestamp_tz_6_notnull timestamp(6) with time zone not null,
+      c_time time,
+      c_time_6 time(6),
+      c_time_tz time with time zone,
+      c_time_tz_6 time(6) with time zone,
+      c_time_tz_6_notnull time(6) with time zone not null,
+      c_int int,
+      c_integer integer,
+      c_serial serial,
+      c_text text,
+      c_uuid uuid,
+      c_varchar_40 varchar(40)
+    );
+
+CreateTableInNonPublicSchema:
+  desired: |
+    CREATE SCHEMA test;
+    CREATE TABLE test.users (id serial primary key);
+  output: |
+    CREATE SCHEMA test;
+    CREATE TABLE test.users (id serial primary key);
+
+CheckConstraintInNonPublicSchema:
+  current: |
+    CREATE SCHEMA test;
+    CREATE TABLE test.dummy (
+      min_value INT CHECK (min_value > 0),
+      max_value INT
+    );
+  desired: |
+    CREATE TABLE test.dummy (
+      min_value INT CHECK (min_value > 0),
+      max_value INT CHECK (max_value > 0),
+      CONSTRAINT min_max CHECK (min_value < max_value)
+    );
+  output: |
+    ALTER TABLE "test"."dummy" ADD CONSTRAINT dummy_max_value_check CHECK (max_value > 0);
+    ALTER TABLE "test"."dummy" ADD CONSTRAINT "min_max" CHECK (min_value < max_value);
+
+RemoveCheckConstraintInNonPublicSchema:
+  current: |
+    CREATE SCHEMA test;
+    CREATE TABLE test.dummy (
+      min_value INT CHECK (min_value > 0),
+      max_value INT CHECK (max_value > 0),
+      CONSTRAINT min_max CHECK (min_value < max_value)
+    );
+  desired: |
+    CREATE TABLE test.dummy (
+      min_value INT CHECK (min_value > 0),
+      max_value INT
+    );
+  output: |
+    ALTER TABLE "test"."dummy" DROP CONSTRAINT dummy_max_value_check;
+    ALTER TABLE "test"."dummy" DROP CONSTRAINT "min_max";
+
+SameTableNameAcrossSchemas:
+  desired: |
+    CREATE SCHEMA test;
+    CREATE TABLE dummy (id int);
+    CREATE TABLE test.dummy (id int);
+  output: |
+    CREATE SCHEMA test;
+    CREATE TABLE dummy (id int);
+    CREATE TABLE test.dummy (id int);
+
+CreateTableWithIdentityAlways:
+  desired: |
+    CREATE TABLE color (
+      color_id INT GENERATED ALWAYS AS IDENTITY,
+      color_name VARCHAR NOT NULL
+    );
+
+AddIdentityToExistingColumn:
+  current: |
+    CREATE TABLE color (
+      color_id INT NOT NULL,
+      color_name VARCHAR NOT NULL
+    );
+  desired: |
+    CREATE TABLE color (
+      color_id INT GENERATED BY DEFAULT AS IDENTITY,
+      color_name VARCHAR NOT NULL
+    );
+  output: |
+    ALTER TABLE "public"."color" ALTER COLUMN "color_id" ADD GENERATED BY DEFAULT AS IDENTITY;
+
+RemoveIdentityFromColumn:
+  current: |
+    CREATE TABLE color (
+      color_id INT GENERATED BY DEFAULT AS IDENTITY,
+      color_name VARCHAR NOT NULL
+    );
+  desired: |
+    CREATE TABLE color (
+      color_id INT NOT NULL,
+      color_name VARCHAR NOT NULL
+    );
+  output: |
+    ALTER TABLE "public"."color" ALTER COLUMN "color_id" DROP IDENTITY IF EXISTS;
+
+ChangeIdentityFromByDefaultToAlways:
+  current: |
+    CREATE TABLE color (
+      color_id INT GENERATED BY DEFAULT AS IDENTITY,
+      color_name VARCHAR NOT NULL
+    );
+  desired: |
+    CREATE TABLE color (
+      color_id INT GENERATED ALWAYS AS IDENTITY,
+      color_name VARCHAR NOT NULL
+    );
+  output: |
+    ALTER TABLE "public"."color" ALTER COLUMN "color_id" SET GENERATED ALWAYS;
+
+IdentityWithSequenceOptions:
+  desired: |
+    CREATE TABLE voltages (
+      volt int GENERATED BY DEFAULT AS IDENTITY
+        (START WITH -200 INCREMENT BY 10 MINVALUE -200 MAXVALUE 200)
+    );
+
+# Note: Sequence option changes are not supported, so this should result in no change
+IdentitySequenceOptionsIgnored:
+  current: |
+    CREATE TABLE voltages (
+      volt int GENERATED BY DEFAULT AS IDENTITY
+        (START WITH -200 INCREMENT BY 10 MINVALUE -200 MAXVALUE 200)
+    );
+  desired: |
+    CREATE TABLE voltages (
+      volt int GENERATED BY DEFAULT AS IDENTITY
+        (START WITH -100 INCREMENT BY 5 MINVALUE -100 MAXVALUE 100)
+    );
+  output: ""
+
+AddIdentityWithSequenceToExistingColumn:
+  current: |
+    CREATE TABLE voltages (
+      volt int
+    );
+  desired: |
+    CREATE TABLE voltages (
+      volt int GENERATED BY DEFAULT AS IDENTITY
+        (START WITH -100 INCREMENT BY 5 MINVALUE -100 MAXVALUE 100)
+    );
+  output: |
+    ALTER TABLE "public"."voltages" ALTER COLUMN "volt" SET NOT NULL;
+    ALTER TABLE "public"."voltages" ALTER COLUMN "volt" ADD GENERATED BY DEFAULT AS IDENTITY (START WITH -100 INCREMENT BY 5 MINVALUE -100 MAXVALUE 100);
+
+AddNewIdentityColumnWithSequence:
+  current: |
+    CREATE TABLE voltages (
+      name varchar NOT NULL
+    );
+  desired: |
+    CREATE TABLE voltages (
+      name varchar NOT NULL,
+      volt int GENERATED BY DEFAULT AS IDENTITY
+        (START WITH -100 INCREMENT BY 5 MINVALUE -100 MAXVALUE 100)
+    );
+  output: |
+    ALTER TABLE "public"."voltages" ADD COLUMN "volt" int GENERATED BY DEFAULT AS IDENTITY (START WITH -100 INCREMENT BY 5 MINVALUE -100 MAXVALUE 100);
+
+AddUniqueConstraintInNonPublicSchema:
+  current: |
+    CREATE SCHEMA test;
+    CREATE TABLE test.dummy (a int, b int);
+  desired: |
+    CREATE TABLE test.dummy (a int, b int);
+    ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);
+  output: |
+    ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);
+
+ChangeUniqueConstraintInNonPublicSchema:
+  current: |
+    CREATE SCHEMA test;
+    CREATE TABLE test.dummy (a int, b int);
+    ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);
+  desired: |
+    CREATE TABLE test.dummy (a int, b int);
+    ALTER TABLE test.dummy ADD CONSTRAINT a_uniq UNIQUE (a) DEFERRABLE INITIALLY DEFERRED;
+  output: |
+    ALTER TABLE test.dummy ADD CONSTRAINT a_uniq UNIQUE (a) DEFERRABLE INITIALLY DEFERRED;
+    ALTER TABLE "test"."dummy" DROP CONSTRAINT "a_b_uniq";
+
+TableLevelCheckMultiColumnAllAny:
+  desired: |
+    CREATE TABLE multi_check_test (
+      id INTEGER PRIMARY KEY,
+      state TEXT NOT NULL,
+      priority INTEGER NOT NULL,
+      CONSTRAINT valid_state_priority CHECK (
+        (state = ANY (ARRAY['active', 'pending']) AND priority >= ALL (ARRAY[1, 2])) OR
+        (state = ALL (ARRAY['inactive']) AND priority = ANY (ARRAY[0]))
+      )
+    );
+
+ModifyTableLevelCheckMultiColumnAllAny:
+  current: |
+    CREATE TABLE multi_check_test (
+      id INTEGER PRIMARY KEY,
+      state TEXT NOT NULL,
+      priority INTEGER NOT NULL,
+      CONSTRAINT valid_state_priority CHECK (
+        (state = ANY (ARRAY['active', 'pending']) AND priority >= ALL (ARRAY[1, 2])) OR
+        (state = ALL (ARRAY['inactive']) AND priority = ANY (ARRAY[0]))
+      )
+    );
+  desired: |
+    CREATE TABLE multi_check_test (
+      id INTEGER PRIMARY KEY,
+      state TEXT NOT NULL,
+      priority INTEGER NOT NULL,
+      CONSTRAINT valid_state_priority CHECK (
+        (state = ANY (ARRAY['active', 'pending', 'waiting']) AND priority >= ALL (ARRAY[1, 2])) OR
+        (state = ALL (ARRAY['inactive']) AND priority = ANY (ARRAY[0]))
+      )
+    );
+  output: |
+    ALTER TABLE "public"."multi_check_test" DROP CONSTRAINT "valid_state_priority";
+    ALTER TABLE "public"."multi_check_test" ADD CONSTRAINT "valid_state_priority" CHECK (state = ANY (ARRAY['active', 'pending', 'waiting']) and priority >= ALL (ARRAY[1, 2]) or state = ALL (ARRAY['inactive']) and priority = ANY (ARRAY[0]));
