@@ -1,6 +1,9 @@
-FROM golang:1.25.1-bookworm AS builder
+FROM golang:1.25.1-alpine AS builder
 
 ARG SQLDEF_TOOL=mysqldef
+
+# Install build dependencies
+RUN apk add --no-cache git make
 
 WORKDIR /work
 
