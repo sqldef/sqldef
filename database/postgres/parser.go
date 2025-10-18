@@ -3,8 +3,8 @@ package postgres
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"log/slog"
+	"strings"
 
 	pgquery "github.com/pganalyze/pg_query_go/v6"
 	"github.com/sqldef/sqldef/v3/database"
