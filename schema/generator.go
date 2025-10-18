@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"math/big"
 	"reflect"
 	"regexp"
 	"slices"
-	"math/big"
 	"strings"
 
 	"github.com/sqldef/sqldef/v3/database"

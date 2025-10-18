@@ -3,6 +3,7 @@ package postgres
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	pgquery "github.com/pganalyze/pg_query_go/v6"
@@ -64,6 +65,7 @@ func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
 			// Otherwise, fallback to the generic parser. We intend to deprecate this path in the future.
 			var stmts []database.DDLStatement
 			if !p.testing { // Disable fallback in parser tests
+				slog.Debug("Falling back to generic parser", "ddl", ddl, "error", err.Error())
 				stmts, err = p.parser.Parse(ddl)
 			}
 			if err != nil {

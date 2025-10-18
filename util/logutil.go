@@ -22,7 +22,7 @@ func InitSlog() {
 		case "error":
 			level = slog.LevelError
 		default:
-			return
+			level = slog.LevelInfo
 		}
 
 		opts := &slog.HandlerOptions{
