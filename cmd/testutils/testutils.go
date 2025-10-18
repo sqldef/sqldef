@@ -1,4 +1,3 @@
-// Utilities for _test.go files
 package testutils
 
 import (
@@ -10,15 +9,17 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/goccy/go-yaml"
-	"github.com/google/go-cmp/cmp"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/schema"
 	"github.com/sqldef/sqldef/v3/util"
+	"github.com/stretchr/testify/assert"
 )
 
 type TestCase struct {
@@ -48,8 +49,8 @@ func init() {
 // Parameters:
 //   - testName: The test name to sanitize
 //   - dbLimit: Database name length limit. For example:
-//     - PostgreSQL: 63 characters
-//     - SQL Server: 128 characters
+//   - PostgreSQL: 63 characters
+//   - SQL Server: 128 characters
 //
 // The resulting format is: sqldef_test_{sanitized}_{hash}
 // where hash is the first 8 characters of the MD5 hash of the original test name.
@@ -64,11 +65,11 @@ func CreateTestDatabaseName(testName string, dbLimit int) string {
 
 	// Sanitize the test name: lowercase, replace non-alphanumeric with underscore
 	sanitized := strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			return r
+		if unicode.IsLetter(r) {
+			return unicode.ToLower(r)
 		}
-		if r >= 'A' && r <= 'Z' {
-			return r - 'A' + 'a' // Convert to lowercase
+		if unicode.IsDigit(r) {
+			return r
 		}
 		return '_'
 	}, testName)
@@ -202,20 +203,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 
 	expected := strings.TrimSpace(*test.Output)
 	actual := strings.TrimSpace(joinDDLs(ddls))
-	if expected != actual {
-		diff := cmp.Diff(expected, actual)
-		t.Errorf(`Migration output doesn't match expected.
-Expected DDLs:
-~~sql
-%s
-~~
-Actual DDLs:
-~~sql
-%s
-~~
-Diff:
-%s`, expected, actual, diff)
-	}
+	assert.Equal(t, expected, actual, "Migration output doesn't match expected.")
 
 	err = runDDLs(db, ddls, *test.EnableDrop)
 	if err != nil {
@@ -299,11 +287,22 @@ func joinDDLs(ddls []string) string {
 	return builder.String()
 }
 
-func MustExecute(command string, args ...string) string {
+// MustExecute executes a command within a test and fails the test if it errors.
+func MustExecute(t *testing.T, command string, args ...string) string {
+	t.Helper()
 	out, err := Execute(command, args...)
 	if err != nil {
-		log.Printf("failed to execute '%s %s': `%s`", command, strings.Join(args, " "), out)
-		log.Fatal(err)
+		t.Fatalf("failed to execute '%s %s' (error: '%s'): `%s`", command, strings.Join(args, " "), err, out)
+	}
+	return out
+}
+
+// MustExecuteNoTest executes a command and terminates the program if it errors.
+// Use this in TestMain or other setup code where *testing.T is not available.
+func MustExecuteNoTest(command string, args ...string) string {
+	out, err := Execute(command, args...)
+	if err != nil {
+		log.Fatalf("failed to execute '%s %s' (error: '%s'): `%s`", command, strings.Join(args, " "), err, out)
 	}
 	return out
 }
@@ -413,4 +412,22 @@ func QueryRows(db database.Database, query string) (string, error) {
 	}
 
 	return result.String(), nil
+}
+
+func WriteFile(path string, content string) {
+	file, err := os.Create(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	if _, err := file.Write(([]byte)(content)); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func StripHeredoc(heredoc string) string {
+	heredoc = strings.TrimPrefix(heredoc, "\n")
+	re := regexp.MustCompilePOSIX("^\t*")
+	return re.ReplaceAllLiteralString(heredoc, "")
 }

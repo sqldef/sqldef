@@ -7,14 +7,15 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"regexp"
 	"strings"
 	"sync"
 	"testing"
 
-	"github.com/sqldef/sqldef/v3/cmd/testutils"
+	"github.com/stretchr/testify/assert"
+
+	tu "github.com/sqldef/sqldef/v3/cmd/testutils"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/database/mssql"
 	"github.com/sqldef/sqldef/v3/schema"
@@ -34,7 +35,6 @@ var loginConfigMutex sync.Mutex
 func wrapWithTransaction(ddls string) string {
 	return applyPrefix + "BEGIN TRANSACTION;\n" + ddls + "COMMIT TRANSACTION;\n"
 }
-
 
 // createTestUser creates the mssqldef_user login if it doesn't exist.
 // SQL Server logins are server-wide, so this is called once before all tests.
@@ -91,7 +91,7 @@ func TestApply(t *testing.T) {
 	// SQL Server logins are server-wide, not database-specific
 	createTestUser()
 
-	tests, err := testutils.ReadTests("tests*.yml")
+	tests, err := tu.ReadTests("tests*.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestApply(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			dbName := testutils.CreateTestDatabaseName(name, 128)
+			dbName := tu.CreateTestDatabaseName(name, 128)
 			createTestDatabase(t, dbName, test.User)
 
 			t.Cleanup(func() {
@@ -120,7 +120,7 @@ func TestApply(t *testing.T) {
 			}
 			defer db.Close()
 
-			testutils.RunTest(t, db, test, schema.GeneratorModeMssql, sqlParser, "", "")
+			tu.RunTest(t, db, test, schema.GeneratorModeMssql, sqlParser, "", "")
 		})
 	}
 }
@@ -130,7 +130,7 @@ func TestApply(t *testing.T) {
 func TestMssqldefAddColumnNotNull(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20)
@@ -139,7 +139,7 @@ func TestMssqldefAddColumnNotNull(t *testing.T) {
 	)
 	assertApply(t, createTable)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20) NOT NULL
@@ -153,7 +153,7 @@ func TestMssqldefAddColumnNotNull(t *testing.T) {
 func TestMssqldefRemoveColumnNotNull(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20)
@@ -162,7 +162,7 @@ func TestMssqldefRemoveColumnNotNull(t *testing.T) {
 	)
 	assertApply(t, createTable)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint,
 		  name varchar(20)
@@ -176,7 +176,7 @@ func TestMssqldefRemoveColumnNotNull(t *testing.T) {
 func TestMssqldefChangeColumnLength(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20)
@@ -185,7 +185,7 @@ func TestMssqldefChangeColumnLength(t *testing.T) {
 	)
 	assertApply(t, createTable)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(100)
@@ -199,7 +199,7 @@ func TestMssqldefChangeColumnLength(t *testing.T) {
 func TestMssqldefAlterTableAddUniqueConstraint(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20)
@@ -209,7 +209,7 @@ func TestMssqldefAlterTableAddUniqueConstraint(t *testing.T) {
 	)
 	assertApply(t, createTable)
 
-	alterTable := stripHeredoc(`
+	alterTable := tu.StripHeredoc(`
 		ALTER TABLE users
 		  ADD CONSTRAINT [uq_users] UNIQUE CLUSTERED ([name]);
 		GO
@@ -222,7 +222,7 @@ func TestMssqldefAlterTableAddUniqueConstraint(t *testing.T) {
 func TestMssqldefAlterTableAddUniqueConstraintWithNONCLUSTERED(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20)
@@ -232,7 +232,7 @@ func TestMssqldefAlterTableAddUniqueConstraintWithNONCLUSTERED(t *testing.T) {
 	)
 	assertApply(t, createTable)
 
-	alterTable := stripHeredoc(`
+	alterTable := tu.StripHeredoc(`
 		ALTER TABLE users
 		  ADD CONSTRAINT [uq_users] UNIQUE NONCLUSTERED ([name]);
 		GO
@@ -245,7 +245,7 @@ func TestMssqldefAlterTableAddUniqueConstraintWithNONCLUSTERED(t *testing.T) {
 func TestMssqldefAlterTableDropUniqueConstraint(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20)
@@ -257,7 +257,7 @@ func TestMssqldefAlterTableDropUniqueConstraint(t *testing.T) {
 	)
 	assertApply(t, createTable)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20)
@@ -271,7 +271,7 @@ func TestMssqldefAlterTableDropUniqueConstraint(t *testing.T) {
 func TestMssqldefCreateTableDropUniqueConstraint(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
@@ -281,7 +281,7 @@ func TestMssqldefCreateTableDropUniqueConstraint(t *testing.T) {
 	)
 	assertApply(t, createTable)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20)
@@ -295,7 +295,7 @@ func TestMssqldefCreateTableDropUniqueConstraint(t *testing.T) {
 func TestMssqldefCreateTableQuotes(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE test_table (
 		  id integer
 		);
@@ -305,7 +305,7 @@ func TestMssqldefCreateTableQuotes(t *testing.T) {
 	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE test_table (
 		  id integer
 		);
@@ -318,7 +318,7 @@ func TestMssqldefCreateTableQuotes(t *testing.T) {
 func TestMssqldefCreateTable(t *testing.T) {
 	resetTestDatabase()
 
-	createTable1 := stripHeredoc(`
+	createTable1 := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name text,
@@ -327,7 +327,7 @@ func TestMssqldefCreateTable(t *testing.T) {
 		GO
 		`,
 	)
-	createTable2 := stripHeredoc(`
+	createTable2 := tu.StripHeredoc(`
 		CREATE TABLE bigdata (
 		  data bigint
 		);
@@ -343,7 +343,7 @@ func TestMssqldefCreateTable(t *testing.T) {
 func TestMssqldefCreateTableWithDefault(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  profile varchar(50) NOT NULL DEFAULT (''),
 		  default_int int default ((20)),
@@ -363,7 +363,7 @@ func TestMssqldefCreateTableWithDefault(t *testing.T) {
 func TestMssqldefCreateTableWithIDENTITY(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id integer PRIMARY KEY IDENTITY(1,1),
 		  name text,
@@ -380,7 +380,7 @@ func TestMssqldefCreateTableWithIDENTITY(t *testing.T) {
 func TestMssqldefCreateTableWithCLUSTERED(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id integer,
 		  name text,
@@ -398,7 +398,7 @@ func TestMssqldefCreateTableWithCLUSTERED(t *testing.T) {
 func TestMssqldefCreateView(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE [dbo].[users] (
 		  id integer NOT NULL,
 		  name text,
@@ -424,7 +424,7 @@ func TestMssqldefCreateView(t *testing.T) {
 func TestMssqldefTrigger(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name text
@@ -441,7 +441,7 @@ func TestMssqldefTrigger(t *testing.T) {
 	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTrigger := stripHeredoc(`
+	createTrigger := tu.StripHeredoc(`
 		CREATE TRIGGER [insert_log] ON [dbo].[users] for insert AS
 		insert into logs(log, dt) values ('insert', getdate());
 		GO
@@ -450,7 +450,7 @@ func TestMssqldefTrigger(t *testing.T) {
 	assertApplyOutput(t, createTable+createTrigger, wrapWithTransaction(createTrigger))
 	assertApplyOutput(t, createTable+createTrigger, nothingModified)
 
-	createTrigger = stripHeredoc(`
+	createTrigger = tu.StripHeredoc(`
 		CREATE TRIGGER [insert_log] ON [dbo].[users] for insert AS
 		  delete from logs
 		  insert into logs(log, dt) values ('insert', getdate());
@@ -458,7 +458,7 @@ func TestMssqldefTrigger(t *testing.T) {
 		`,
 	)
 
-	assertApplyOutput(t, createTable+createTrigger, wrapWithTransaction(stripHeredoc(`
+	assertApplyOutput(t, createTable+createTrigger, wrapWithTransaction(tu.StripHeredoc(`
 		CREATE OR ALTER TRIGGER [insert_log] ON [dbo].[users] for insert AS
 		delete from logs
 		insert into logs(log, dt) values ('insert', getdate());
@@ -471,7 +471,7 @@ func TestMssqldefTrigger(t *testing.T) {
 func TestMssqldefTriggerWithRichSyntax(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name text
@@ -488,7 +488,7 @@ func TestMssqldefTriggerWithRichSyntax(t *testing.T) {
 	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTrigger := stripHeredoc(`
+	createTrigger := tu.StripHeredoc(`
 		CREATE TRIGGER [insert_log] ON [dbo].[users] after insert, delete AS
 			declare
 				@userId bigint,
@@ -525,7 +525,7 @@ func TestMssqldefTriggerWithRichSyntax(t *testing.T) {
 func TestMssqldefAddColumn(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id BIGINT NOT NULL PRIMARY KEY
 		);
@@ -535,7 +535,7 @@ func TestMssqldefAddColumn(t *testing.T) {
 	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id BIGINT NOT NULL PRIMARY KEY,
 		  name varchar(40)
@@ -549,7 +549,7 @@ func TestMssqldefAddColumn(t *testing.T) {
 func TestMssqldefAddColumnWithIDENTITY(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id BIGINT NOT NULL PRIMARY KEY
 		);
@@ -559,7 +559,7 @@ func TestMssqldefAddColumnWithIDENTITY(t *testing.T) {
 	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id BIGINT NOT NULL PRIMARY KEY,
 		  membership_id int IDENTITY(1,1) NOT FOR REPLICATION
@@ -573,7 +573,7 @@ func TestMssqldefAddColumnWithIDENTITY(t *testing.T) {
 func TestMssqldefAddColumnWithCheck(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id BIGINT NOT NULL PRIMARY KEY
 		);
@@ -583,7 +583,7 @@ func TestMssqldefAddColumnWithCheck(t *testing.T) {
 	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id BIGINT NOT NULL PRIMARY KEY,
 		  membership_id int CHECK NOT FOR REPLICATION (membership_id>(0))
@@ -597,7 +597,7 @@ func TestMssqldefAddColumnWithCheck(t *testing.T) {
 func TestMssqldefCreateTableDropColumn(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL PRIMARY KEY,
 		  name varchar(20)
@@ -606,7 +606,7 @@ func TestMssqldefCreateTableDropColumn(t *testing.T) {
 	)
 	assertApply(t, createTable)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL PRIMARY KEY
 		);
@@ -619,7 +619,7 @@ func TestMssqldefCreateTableDropColumn(t *testing.T) {
 func TestMssqldefCreateTableDropColumnWithDefaultConstraint(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL PRIMARY KEY,
 		  name varchar(20) CONSTRAINT df_name DEFAULT NULL
@@ -628,7 +628,7 @@ func TestMssqldefCreateTableDropColumnWithDefaultConstraint(t *testing.T) {
 	)
 	assertApply(t, createTable)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL PRIMARY KEY
 		);
@@ -641,7 +641,7 @@ func TestMssqldefCreateTableDropColumnWithDefaultConstraint(t *testing.T) {
 func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL PRIMARY KEY,
 		  name varchar(20) DEFAULT NULL
@@ -651,7 +651,7 @@ func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
 	assertApply(t, createTable)
 
 	// extract name of default constraint from sql server
-	out, err := testutils.Execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
+	out, err := tu.Execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", tu.StripHeredoc(`
 		SELECT OBJECT_NAME(c.default_object_id) FROM sys.columns c WHERE c.object_id = OBJECT_ID('dbo.users', 'U') AND c.default_object_id != 0;
 		`,
 	))
@@ -661,7 +661,7 @@ func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
 	dfConstraintName := strings.Replace((strings.Split(out, "\n")[0]), " ", "", -1)
 	dropConstraint := fmt.Sprintf("ALTER TABLE [dbo].[users] DROP CONSTRAINT [%s];\nGO\n", dfConstraintName)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL PRIMARY KEY
 		);`,
@@ -673,7 +673,7 @@ func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
 func TestMssqldefCreateTableDropColumnWithPK(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20) DEFAULT NULL,
@@ -682,7 +682,7 @@ func TestMssqldefCreateTableDropColumnWithPK(t *testing.T) {
 	)
 	assertApply(t, createTable)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  name varchar(20) DEFAULT NULL
 		);`,
@@ -694,7 +694,7 @@ func TestMssqldefCreateTableDropColumnWithPK(t *testing.T) {
 func TestMssqldefCreateTableAddPrimaryKey(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20)
@@ -705,7 +705,7 @@ func TestMssqldefCreateTableAddPrimaryKey(t *testing.T) {
 	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL PRIMARY KEY,
 		  name varchar(20)
@@ -723,7 +723,7 @@ func TestMssqldefCreateTableAddPrimaryKey(t *testing.T) {
 func TestMssqldefCreateTableAddPrimaryKeyConstraint(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20)
@@ -734,7 +734,7 @@ func TestMssqldefCreateTableAddPrimaryKeyConstraint(t *testing.T) {
 	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
@@ -753,7 +753,7 @@ func TestMssqldefCreateTableAddPrimaryKeyConstraint(t *testing.T) {
 func TestMssqldefCreateTableDropPrimaryKey(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL PRIMARY KEY,
 		  name varchar(20)
@@ -763,7 +763,7 @@ func TestMssqldefCreateTableDropPrimaryKey(t *testing.T) {
 	assertApply(t, createTable)
 
 	// extract name of primary key constraint from sql server
-	out, err := testutils.Execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
+	out, err := tu.Execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", tu.StripHeredoc(`
 		SELECT kc.name FROM sys.key_constraints kc WHERE kc.parent_object_id=OBJECT_ID('users', 'U') AND kc.[type]='PK';
 		`,
 	))
@@ -773,7 +773,7 @@ func TestMssqldefCreateTableDropPrimaryKey(t *testing.T) {
 	pkConstraintName := strings.Replace((strings.Split(out, "\n")[0]), " ", "", -1)
 	dropConstraint := fmt.Sprintf("ALTER TABLE [dbo].[users] DROP CONSTRAINT [%s];\nGO\n", pkConstraintName)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20)
@@ -787,7 +787,7 @@ func TestMssqldefCreateTableDropPrimaryKey(t *testing.T) {
 func TestMssqldefCreateTableDropPrimaryKeyConstraint(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
@@ -797,7 +797,7 @@ func TestMssqldefCreateTableDropPrimaryKeyConstraint(t *testing.T) {
 	)
 	assertApply(t, createTable)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20)
@@ -811,7 +811,7 @@ func TestMssqldefCreateTableDropPrimaryKeyConstraint(t *testing.T) {
 func TestMssqldefCreateTableWithIndexOption(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
@@ -835,7 +835,7 @@ func TestMssqldefCreateTableWithIndexOption(t *testing.T) {
 func TestMssqldefCreateTablePrimaryKeyWithIndexOption(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
@@ -857,7 +857,7 @@ func TestMssqldefCreateTablePrimaryKeyWithIndexOption(t *testing.T) {
 func TestMssqldefCreateTableAddIndex(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20)
@@ -868,7 +868,7 @@ func TestMssqldefCreateTableAddIndex(t *testing.T) {
 	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
@@ -891,7 +891,7 @@ func TestMssqldefCreateTableAddIndex(t *testing.T) {
 func TestMssqldefCreateTableDropIndex(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
@@ -907,7 +907,7 @@ func TestMssqldefCreateTableDropIndex(t *testing.T) {
 	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20)
@@ -924,7 +924,7 @@ func TestMssqldefCreateTableDropIndex(t *testing.T) {
 func TestMssqldefCreateTableChangeIndexDefinition(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
@@ -936,7 +936,7 @@ func TestMssqldefCreateTableChangeIndexDefinition(t *testing.T) {
 	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
@@ -951,7 +951,7 @@ func TestMssqldefCreateTableChangeIndexDefinition(t *testing.T) {
 			"CREATE UNIQUE CLUSTERED INDEX [ix_users_id] ON [dbo].[users] ([id]);\nGO\n"), "--enable-drop")
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id bigint NOT NULL,
 		  name varchar(20),
@@ -975,7 +975,7 @@ func TestMssqldefCreateTableForeignKey(t *testing.T) {
 	resetTestDatabase()
 
 	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY);\nGO\n"
-	createPosts := stripHeredoc(`
+	createPosts := tu.StripHeredoc(`
 		CREATE TABLE posts (
 		  content text,
 		  user_id bigint
@@ -986,7 +986,7 @@ func TestMssqldefCreateTableForeignKey(t *testing.T) {
 	assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(createUsers+createPosts))
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
-	createPosts = stripHeredoc(`
+	createPosts = tu.StripHeredoc(`
 		CREATE TABLE posts (
 		  content text,
 		  user_id bigint,
@@ -998,7 +998,7 @@ func TestMssqldefCreateTableForeignKey(t *testing.T) {
 	assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction("ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [dbo].[users] ([id]);\nGO\n"))
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
-	createPosts = stripHeredoc(`
+	createPosts = tu.StripHeredoc(`
 		CREATE TABLE posts (
 		  content text,
 		  user_id bigint,
@@ -1013,7 +1013,7 @@ func TestMssqldefCreateTableForeignKey(t *testing.T) {
 	))
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
-	createPosts = stripHeredoc(`
+	createPosts = tu.StripHeredoc(`
 		CREATE TABLE posts (
 		  content text,
 		  user_id bigint
@@ -1027,7 +1027,7 @@ func TestMssqldefCreateTableForeignKey(t *testing.T) {
 func TestMssqldefCreateTableWithCheck(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE a (
 		  a_id INTEGER PRIMARY KEY CONSTRAINT [a_a_id_check] CHECK ([a_id]>(0)),
 		  my_text TEXT NOT NULL
@@ -1038,7 +1038,7 @@ func TestMssqldefCreateTableWithCheck(t *testing.T) {
 	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE a (
 		  a_id INTEGER PRIMARY KEY CONSTRAINT [a_a_id_check] CHECK ([a_id]>(1)),
 		  my_text TEXT NOT NULL
@@ -1051,7 +1051,7 @@ func TestMssqldefCreateTableWithCheck(t *testing.T) {
 			"ALTER TABLE [dbo].[a] ADD CONSTRAINT a_a_id_check CHECK (a_id > (1));\nGO\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE a (
 		  a_id INTEGER PRIMARY KEY,
 		  my_text TEXT NOT NULL
@@ -1067,7 +1067,7 @@ func TestMssqldefCreateTableWithCheck(t *testing.T) {
 func TestMssqldefCreateTableWithCheckWithoutName(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE a (
 		  a_id INTEGER PRIMARY KEY CHECK ([a_id]>(0)),
 		  my_text TEXT NOT NULL
@@ -1078,7 +1078,7 @@ func TestMssqldefCreateTableWithCheckWithoutName(t *testing.T) {
 	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE a (
 		  a_id INTEGER PRIMARY KEY CHECK ([a_id]>(1)),
 		  my_text TEXT NOT NULL
@@ -1088,7 +1088,7 @@ func TestMssqldefCreateTableWithCheckWithoutName(t *testing.T) {
 	)
 
 	// extract name of check constraint from sql server
-	out, err := testutils.Execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
+	out, err := tu.Execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", tu.StripHeredoc(`
 		SELECT name FROM sys.check_constraints cc WHERE cc.parent_object_id = OBJECT_ID('dbo.a', 'U');
 		`,
 	))
@@ -1106,7 +1106,7 @@ func TestMssqldefCreateTableWithCheckWithoutName(t *testing.T) {
 func TestMssqldefCreateIndex(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id BIGINT NOT NULL IDENTITY(1,1) PRIMARY KEY,
 		  name varchar(40) DEFAULT NULL,
@@ -1129,7 +1129,7 @@ func TestMssqldefCreateIndex(t *testing.T) {
 func TestMssqldefCreateIndexChangeIndexDefinition(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id BIGINT NOT NULL IDENTITY(1,1) PRIMARY KEY,
 		  name varchar(40) DEFAULT NULL,
@@ -1161,7 +1161,7 @@ func TestMssqldefCreateTableNotForReplication(t *testing.T) {
 	resetTestDatabase()
 
 	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY);\nGO\n"
-	createPosts := stripHeredoc(`
+	createPosts := tu.StripHeredoc(`
 		CREATE TABLE posts (
 		  post_id BIGINT IDENTITY(1,1) NOT FOR REPLICATION,
 		  user_id BIGINT,
@@ -1180,7 +1180,7 @@ func TestMssqldefCreateTableAddNotForReplication(t *testing.T) {
 	resetTestDatabase()
 
 	createUsers := "CREATE TABLE users (id BIGINT PRIMARY KEY);\nGO\n"
-	createPosts := stripHeredoc(`
+	createPosts := tu.StripHeredoc(`
 		CREATE TABLE posts (
 		  post_id BIGINT IDENTITY(1,1),
 		  user_id BIGINT,
@@ -1194,7 +1194,7 @@ func TestMssqldefCreateTableAddNotForReplication(t *testing.T) {
 	assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(createUsers+createPosts))
 	assertApplyOutput(t, createUsers+createPosts, nothingModified)
 
-	createPosts = stripHeredoc(`
+	createPosts = tu.StripHeredoc(`
 		CREATE TABLE posts (
 		  post_id BIGINT IDENTITY(1,1) NOT FOR REPLICATION,
 		  user_id BIGINT,
@@ -1219,7 +1219,7 @@ func TestMssqldefCreateTableAddNotForReplication(t *testing.T) {
 func TestMssqldefCreateTableAddDefaultChangeDefault(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE messages (
 		  id BIGINT NOT NULL PRIMARY KEY,
 		  content TEXT NOT NULL
@@ -1230,7 +1230,7 @@ func TestMssqldefCreateTableAddDefaultChangeDefault(t *testing.T) {
 	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE messages (
 		  id BIGINT NOT NULL PRIMARY KEY,
 		  content TEXT NOT NULL CONSTRAINT [df_messages_content] DEFAULT ''
@@ -1244,7 +1244,7 @@ func TestMssqldefCreateTableAddDefaultChangeDefault(t *testing.T) {
 	))
 	assertApplyOutput(t, createTable, nothingModified)
 
-	createTable = stripHeredoc(`
+	createTable = tu.StripHeredoc(`
 		CREATE TABLE messages (
 		  id BIGINT NOT NULL PRIMARY KEY,
 		  content TEXT NOT NULL DEFAULT 'hello'
@@ -1264,12 +1264,12 @@ func TestMssqldefUseSequenceInTrigger(t *testing.T) {
 	resetTestDatabase()
 
 	// Prepare sequence, because "CREATE SEQUENCE" is currently unavailable in mssqldef.
-	mustMssqlExec("mssqldef_test", stripHeredoc(`
+	mustMssqlExec("mssqldef_test", tu.StripHeredoc(`
 		CREATE SEQUENCE seq_user_id AS int START WITH 1;
 		GO
 	`))
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id int NOT NULL PRIMARY KEY,
 		  name text,
@@ -1277,7 +1277,7 @@ func TestMssqldefUseSequenceInTrigger(t *testing.T) {
 		);
 		GO
 	`)
-	createTrigger := stripHeredoc(`
+	createTrigger := tu.StripHeredoc(`
 		CREATE TRIGGER [insert_users_trigger] ON [dbo].[users] instead of insert AS
 		set nocount on
 		insert into dbo.users(id, name, age) select next value for seq_user_id, name, age from inserted;
@@ -1295,7 +1295,7 @@ func TestMssqldefUseSequenceInTrigger(t *testing.T) {
 func TestMssqldefApply(t *testing.T) {
 	resetTestDatabase()
 
-	createTable := stripHeredoc(`
+	createTable := tu.StripHeredoc(`
 		CREATE TABLE bigdata (
 		  data bigint
 		);
@@ -1308,7 +1308,7 @@ func TestMssqldefApply(t *testing.T) {
 
 func TestMssqldefDryRun(t *testing.T) {
 	resetTestDatabase()
-	writeFile("schema.sql", stripHeredoc(`
+	tu.WriteFile("schema.sql", tu.StripHeredoc(`
 		CREATE TABLE users (
 		  id integer NOT NULL PRIMARY KEY,
 		  age integer
@@ -1317,14 +1317,14 @@ func TestMssqldefDryRun(t *testing.T) {
 		`,
 	))
 
-	dryRun := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--dry-run", "--file", "schema.sql")
-	apply := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql")
-	assertEquals(t, dryRun, strings.Replace(apply, "Apply", "dry run", 1))
+	dryRun := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--dry-run", "--file", "schema.sql")
+	apply := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql")
+	assert.Equal(t, strings.Replace(apply, "Apply", "dry run", 1), dryRun)
 }
 
 func TestMssqldefDropTable(t *testing.T) {
 	resetTestDatabase()
-	mustMssqlExec("mssqldef_test", stripHeredoc(`
+	mustMssqlExec("mssqldef_test", tu.StripHeredoc(`
 		CREATE TABLE users (
 		    id integer NOT NULL PRIMARY KEY,
 		    age integer
@@ -1333,21 +1333,21 @@ func TestMssqldefDropTable(t *testing.T) {
 		`,
 	))
 
-	writeFile("schema.sql", "")
+	tu.WriteFile("schema.sql", "")
 
-	dropTable := stripHeredoc(`
+	dropTable := tu.StripHeredoc(`
 		DROP TABLE [dbo].[users];
 		GO
 		`,
 	)
-	out := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--enable-drop", "--file", "schema.sql")
-	assertEquals(t, out, wrapWithTransaction(dropTable))
+	out := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--enable-drop", "--file", "schema.sql")
+	assert.Equal(t, wrapWithTransaction(dropTable), out)
 }
 
 func TestMssqldefConfigInlineEnableDrop(t *testing.T) {
 	resetTestDatabase()
 
-	ddl := stripHeredoc(`
+	ddl := tu.StripHeredoc(`
 		CREATE TABLE users (
 		    id integer NOT NULL PRIMARY KEY,
 		    age integer
@@ -1357,30 +1357,30 @@ func TestMssqldefConfigInlineEnableDrop(t *testing.T) {
 	)
 	mustMssqlExec("mssqldef_test", ddl)
 
-	writeFile("schema.sql", "")
+	tu.WriteFile("schema.sql", "")
 
-	dropTable := stripHeredoc(`
+	dropTable := tu.StripHeredoc(`
 		DROP TABLE [dbo].[users];
 		GO
 		`,
 	)
 	expectedOutput := wrapWithTransaction(dropTable)
 
-	outFlag := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--enable-drop", "--file", "schema.sql")
-	assertEquals(t, outFlag, expectedOutput)
+	outFlag := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--enable-drop", "--file", "schema.sql")
+	assert.Equal(t, expectedOutput, outFlag)
 
 	mustMssqlExec("mssqldef_test", ddl)
 
-	outConfigInline := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--config-inline", "enable_drop: true", "--file", "schema.sql")
-	assertEquals(t, outConfigInline, expectedOutput)
+	outConfigInline := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--config-inline", "enable_drop: true", "--file", "schema.sql")
+	assert.Equal(t, expectedOutput, outConfigInline)
 }
 
 func TestMssqldefExport(t *testing.T) {
 	resetTestDatabase()
-	out := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")
-	assertEquals(t, out, "-- No table exists --\n")
+	out := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")
+	assert.Equal(t, "-- No table exists --\n", out)
 
-	mustMssqlExec("mssqldef_test", stripHeredoc(`
+	mustMssqlExec("mssqldef_test", tu.StripHeredoc(`
 		CREATE TABLE dbo.v (
 		    v_int int NOT NULL,
 		    v_smallmoney smallmoney,
@@ -1394,8 +1394,8 @@ func TestMssqldefExport(t *testing.T) {
 		);
 		`,
 	))
-	out = assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")
-	assertEquals(t, out, stripHeredoc(`
+	out = tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")
+	assert.Equal(t, tu.StripHeredoc(`
 		CREATE TABLE dbo.v (
 		    [v_int] int NOT NULL,
 		    [v_smallmoney] smallmoney,
@@ -1409,13 +1409,13 @@ func TestMssqldefExport(t *testing.T) {
 		);
 		GO
 		`,
-	))
+	), out)
 }
 
 func TestMssqldefExportConstraint(t *testing.T) {
 	resetTestDatabase()
 
-	sql := stripHeredoc(`
+	sql := tu.StripHeredoc(`
 		CREATE TABLE dbo.v (
 		    [v1] int NOT NULL,
 		    [v2] int NOT NULL,
@@ -1426,17 +1426,17 @@ func TestMssqldefExportConstraint(t *testing.T) {
 
 	mustMssqlExec("mssqldef_test", sql)
 
-	out := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")
-	assertEquals(t, out, sql+"GO\n")
+	out := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")
+	assert.Equal(t, sql+"GO\n", out)
 }
 
 func TestMssqldefHelp(t *testing.T) {
-	_, err := testutils.Execute("./mssqldef", "--help")
+	_, err := tu.Execute("./mssqldef", "--help")
 	if err != nil {
 		t.Errorf("failed to run --help: %s", err)
 	}
 
-	out, err := testutils.Execute("./mssqldef")
+	out, err := tu.Execute("./mssqldef")
 	if err == nil {
 		t.Errorf("no database must be error, but successfully got: %s", out)
 	}
@@ -1450,11 +1450,11 @@ func TestMssqldefConfigIncludesTargetTables(t *testing.T) {
 	users10Table := "CREATE TABLE users_10 (id bigint);"
 	mustMssqlExec("mssqldef_test", usersTable+users1Table+users10Table)
 
-	writeFile("schema.sql", usersTable+users1Table)
-	writeFile("config.yml", "target_tables: |\n  dbo\\.users\n  dbo\\.users_\\d\n")
+	tu.WriteFile("schema.sql", usersTable+users1Table)
+	tu.WriteFile("config.yml", "target_tables: |\n  dbo\\.users\n  dbo\\.users_\\d\n")
 
-	apply := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--config", "config.yml", "--file", "schema.sql")
-	assertEquals(t, apply, nothingModified)
+	apply := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	assert.Equal(t, nothingModified, apply)
 }
 
 func TestMssqldefConfigIncludesSkipTables(t *testing.T) {
@@ -1465,11 +1465,11 @@ func TestMssqldefConfigIncludesSkipTables(t *testing.T) {
 	users10Table := "CREATE TABLE users_10 (id bigint);"
 	mustMssqlExec("mssqldef_test", usersTable+users1Table+users10Table)
 
-	writeFile("schema.sql", usersTable+users1Table)
-	writeFile("config.yml", "skip_tables: |\n  dbo\\.users_10\n")
+	tu.WriteFile("schema.sql", usersTable+users1Table)
+	tu.WriteFile("config.yml", "skip_tables: |\n  dbo\\.users_10\n")
 
-	apply := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--config", "config.yml", "--file", "schema.sql")
-	assertEquals(t, apply, nothingModified)
+	apply := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	assert.Equal(t, nothingModified, apply)
 }
 
 func TestMssqldefConfigInlineSkipTables(t *testing.T) {
@@ -1480,15 +1480,15 @@ func TestMssqldefConfigInlineSkipTables(t *testing.T) {
 	users10Table := "CREATE TABLE users_10 (id bigint);"
 	mustMssqlExec("mssqldef_test", usersTable+users1Table+users10Table)
 
-	writeFile("schema.sql", usersTable+users1Table)
+	tu.WriteFile("schema.sql", usersTable+users1Table)
 
-	apply := assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--config-inline", "skip_tables: dbo\\.users_10", "--file", "schema.sql")
-	assertEquals(t, apply, nothingModified)
+	apply := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--config-inline", "skip_tables: dbo\\.users_10", "--file", "schema.sql")
+	assert.Equal(t, nothingModified, apply)
 }
 
 func TestMain(m *testing.M) {
 	resetTestDatabase()
-	testutils.MustExecute("go", "build")
+	tu.MustExecuteNoTest("go", "build")
 	status := m.Run()
 	_ = os.Remove("mssqldef")
 	_ = os.Remove("schema.sql")
@@ -1498,14 +1498,14 @@ func TestMain(m *testing.M) {
 
 func assertApply(t *testing.T, schema string) {
 	t.Helper()
-	writeFile("schema.sql", schema)
-	assertedExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql")
+	tu.WriteFile("schema.sql", schema)
+	tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql")
 }
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
 	actual := assertApplyOutputWithConfig(t, schema, database.GeneratorConfig{EnableDrop: false})
-	assertEquals(t, actual, expected)
+	assert.Equal(t, expected, actual)
 }
 
 func assertApplyOutputWithConfig(t *testing.T, desiredSchema string, config database.GeneratorConfig) string {
@@ -1518,7 +1518,7 @@ func assertApplyOutputWithConfig(t *testing.T, desiredSchema string, config data
 	defer db.Close()
 
 	sqlParser := mssql.NewParser()
-	output, err := testutils.ApplyWithOutput(db, schema.GeneratorModeMssql, sqlParser, desiredSchema, config)
+	output, err := tu.ApplyWithOutput(db, schema.GeneratorModeMssql, sqlParser, desiredSchema, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1528,30 +1528,13 @@ func assertApplyOutputWithConfig(t *testing.T, desiredSchema string, config data
 
 func assertApplyOptionsOutput(t *testing.T, schema string, expected string, options ...string) {
 	t.Helper()
-	writeFile("schema.sql", schema)
+	tu.WriteFile("schema.sql", schema)
 	args := append([]string{
 		"-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql",
 	}, options...)
 
-	actual := assertedExecute(t, "./mssqldef", args...)
-	assertEquals(t, actual, expected)
-}
-
-func assertedExecute(t *testing.T, command string, args ...string) string {
-	t.Helper()
-	out, err := testutils.Execute(command, args...)
-	if err != nil {
-		t.Errorf("failed to execute '%s %s' (error: '%s'): `%s`", command, strings.Join(args, " "), err, out)
-	}
-	return out
-}
-
-func assertEquals(t *testing.T, actual string, expected string) {
-	t.Helper()
-
-	if expected != actual {
-		t.Errorf("expected '%s' but got '%s'", expected, actual)
-	}
+	actual := tu.MustExecute(t, "./mssqldef", args...)
+	assert.Equal(t, expected, actual)
 }
 
 func resetTestDatabase() {
@@ -1562,24 +1545,6 @@ func resetTestDatabase() {
 	mustMssqlExec("mssqldef_test", "CREATE USER mssqldef_user FOR LOGIN mssqldef_user WITH DEFAULT_SCHEMA = FOO")
 	mustMssqlExec("mssqldef_test", "ALTER ROLE db_owner ADD MEMBER mssqldef_user")
 	mustMssqlExec("mssqldef_test", "ALTER AUTHORIZATION ON SCHEMA::FOO TO mssqldef_user")
-}
-
-func writeFile(path string, content string) {
-	file, err := os.Create(path)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-
-	if _, err := file.Write(([]byte)(content)); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func stripHeredoc(heredoc string) string {
-	heredoc = strings.TrimPrefix(heredoc, "\n")
-	re := regexp.MustCompilePOSIX("^\t*")
-	return re.ReplaceAllLiteralString(heredoc, "")
 }
 
 func connectDatabase() (database.Database, error) {
@@ -1616,7 +1581,7 @@ func mssqlQuery(dbName string, query string) (string, error) {
 	}
 	defer db.Close()
 
-	return testutils.QueryRows(db, query)
+	return tu.QueryRows(db, query)
 }
 
 // mssqlExec executes a statement against the database (doesn't return rows)
