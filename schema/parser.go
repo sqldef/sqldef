@@ -575,7 +575,7 @@ func parseValue(val *parser.SQLVal) *Value {
 
 	ret := Value{
 		valueType: valueType,
-		raw:       val.Val,
+		raw:       string(val.Val),
 	}
 
 	switch valueType {

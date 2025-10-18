@@ -5,9 +5,11 @@ import (
 	"cmp"
 	"fmt"
 	"log"
+	"log/slog"
 	"reflect"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/sqldef/sqldef/v3/database"
@@ -29,9 +31,12 @@ var (
 		"bool":    "boolean",
 		"int":     "integer",
 		"char":    "character",
+		"numeric": "decimal",
 		"varchar": "character varying",
 	}
-	mysqlDataTypeAliases = map[string]string{
+	postgresDataTypeAliases = map[string]string{}
+	mssqlDataTypeAliases    = map[string]string{}
+	mysqlDataTypeAliases    = map[string]string{
 		"boolean": "tinyint",
 	}
 )
@@ -132,11 +137,11 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	return generator.generateDDLs(desiredDDLs)
 }
 
-// Main part of DDL genearation
+// Main part of DDL generation
 func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	// These variables are used to control the output order of the DDL.
 	// `CREATE SCHEMA` should execute first, and DDLs that add indexes and foreign keys should execute last.
-	// Other ddls are stored in interDDLs.
+	// Other DDLs are stored in interDDLs.
 	createExtensionDDLs := []string{}
 	createSchemaDDLs := []string{}
 	interDDLs := []string{}
@@ -634,7 +639,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 					// After renaming, check if type/constraints need to be changed
 					if !g.haveSameDataType(*renameFromColumn, desiredColumn) ||
-						!g.areSameDefaultValue(renameFromColumn.defaultDef, desiredColumn.defaultDef) ||
+						!g.areSameDefaultValue(renameFromColumn.defaultDef, desiredColumn.defaultDef, desiredColumn.typeName) ||
 						(g.notNull(*renameFromColumn) != g.notNull(desiredColumn)) {
 						definition, err := g.generateColumnDefinition(desiredColumn, false)
 						if err != nil {
@@ -658,7 +663,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					// 2. Copy data from old column to new column
 					// 3. Drop old column
 					if !g.haveSameDataType(*renameFromColumn, desiredColumn) ||
-						!g.areSameDefaultValue(renameFromColumn.defaultDef, desiredColumn.defaultDef) ||
+						!g.areSameDefaultValue(renameFromColumn.defaultDef, desiredColumn.defaultDef, desiredColumn.typeName) ||
 						(g.notNull(*renameFromColumn) != g.notNull(desiredColumn)) {
 
 						definition, err := g.generateColumnDefinition(desiredColumn, true)
@@ -733,7 +738,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				changeOrder := currentPos > desiredPos && currentPos-desiredPos > len(currentTable.columns)-len(desired.table.columns)
 
 				// Change column type and orders, *except* AUTO_INCREMENT and UNIQUE KEY.
-				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) || !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef) || !g.areSameGenerated(currentColumn.generated, desiredColumn.generated) || changeOrder {
+				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) || !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef, desiredColumn.typeName) || !g.areSameGenerated(currentColumn.generated, desiredColumn.generated) || changeOrder {
 					definition, err := g.generateColumnDefinition(desiredColumn, false)
 					if err != nil {
 						return ddls, err
@@ -802,7 +807,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				// default
-				if !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef) {
+				if !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef, desiredColumn.typeName) {
 					if desiredColumn.defaultDef == nil {
 						// drop
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.name)))
@@ -903,7 +908,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				// DEFAULT
-				if !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef) {
+				if !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef, desiredColumn.typeName) {
 					if currentColumn.defaultDef != nil {
 						// drop
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.defaultDef.constraintName)))
@@ -1706,12 +1711,12 @@ func (g *Generator) generateDataType(column Column) string {
 	}
 
 	if column.displayWidth != nil {
-		return fmt.Sprintf("%s(%s)%s", typeName, string(column.displayWidth.raw), suffix)
+		return fmt.Sprintf("%s(%s)%s", typeName, column.displayWidth.raw, suffix)
 	} else if column.length != nil {
 		if column.scale != nil {
-			return fmt.Sprintf("%s(%s, %s)%s", typeName, string(column.length.raw), string(column.scale.raw), suffix)
+			return fmt.Sprintf("%s(%s, %s)%s", typeName, column.length.raw, column.scale.raw, suffix)
 		} else {
-			return fmt.Sprintf("%s(%s)%s", typeName, string(column.length.raw), suffix)
+			return fmt.Sprintf("%s(%s)%s", typeName, column.length.raw, suffix)
 		}
 	} else {
 		switch column.typeName {
@@ -1796,12 +1801,12 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 	}
 
 	if column.onUpdate != nil {
-		definition += fmt.Sprintf("ON UPDATE %s ", string(column.onUpdate.raw))
+		definition += fmt.Sprintf("ON UPDATE %s ", column.onUpdate.raw)
 	}
 
 	if column.comment != nil {
 		// TODO: Should this use StringConstant?
-		definition += fmt.Sprintf("COMMENT '%s' ", string(column.comment.raw))
+		definition += fmt.Sprintf("COMMENT '%s' ", column.comment.raw)
 	}
 
 	if column.check != nil {
@@ -1972,9 +1977,9 @@ func (g *Generator) generateIndexOptionDefinition(indexOptions []IndexOption) st
 				var mOption, distanceOption string
 				for _, indexOption := range indexOptions {
 					if strings.ToUpper(indexOption.optionName) == "M" {
-						mOption = fmt.Sprintf("M=%s", string(indexOption.value.raw))
+						mOption = fmt.Sprintf("M=%s", indexOption.value.raw)
 					} else if strings.ToUpper(indexOption.optionName) == "DISTANCE" {
-						distanceOption = fmt.Sprintf("DISTANCE=%s", string(indexOption.value.raw))
+						distanceOption = fmt.Sprintf("DISTANCE=%s", indexOption.value.raw)
 					}
 				}
 				if mOption != "" && distanceOption != "" {
@@ -1990,14 +1995,14 @@ func (g *Generator) generateIndexOptionDefinition(indexOptions []IndexOption) st
 					indexOption.optionName = "WITH " + indexOption.optionName
 				}
 				if strings.EqualFold(indexOption.optionName, "M") {
-					optionDefinition = fmt.Sprintf(" M=%s", string(indexOption.value.raw))
+					optionDefinition = fmt.Sprintf(" M=%s", indexOption.value.raw)
 				} else if strings.EqualFold(indexOption.optionName, "DISTANCE") {
-					optionDefinition = fmt.Sprintf(" DISTANCE=%s", string(indexOption.value.raw))
+					optionDefinition = fmt.Sprintf(" DISTANCE=%s", indexOption.value.raw)
 				} else if indexOption.optionName == "comment" {
 					indexOption.optionName = "COMMENT"
-					optionDefinition = fmt.Sprintf(" %s '%s'", indexOption.optionName, string(indexOption.value.raw))
+					optionDefinition = fmt.Sprintf(" %s '%s'", indexOption.optionName, indexOption.value.raw)
 				} else {
-					optionDefinition = fmt.Sprintf(" %s %s", indexOption.optionName, string(indexOption.value.raw))
+					optionDefinition = fmt.Sprintf(" %s %s", indexOption.optionName, indexOption.value.raw)
 				}
 			}
 		case GeneratorModeMssql:
@@ -2006,13 +2011,13 @@ func (g *Generator) generateIndexOptionDefinition(indexOptions []IndexOption) st
 				var optionValue string
 				switch indexOption.value.valueType {
 				case ValueTypeBool:
-					if string(indexOption.value.raw) == "true" {
+					if indexOption.value.raw == "true" {
 						optionValue = "ON"
 					} else {
 						optionValue = "OFF"
 					}
 				default:
-					optionValue = string(indexOption.value.raw)
+					optionValue = indexOption.value.raw
 				}
 				option := fmt.Sprintf("%s = %s", indexOption.optionName, optionValue)
 				options = append(options, option)
@@ -3336,7 +3341,7 @@ func areSameIdentityDefinition(identityA *Identity, identityB *Identity) bool {
 	return identityA.behavior == identityB.behavior && identityA.notForReplication == identityB.notForReplication
 }
 
-func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desiredDefault *DefaultDefinition) bool {
+func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desiredDefault *DefaultDefinition, columnType string) bool {
 	var currentVal *Value
 	var desiredVal *Value
 	if currentDefault != nil && !isNullValue(currentDefault.value) {
@@ -3345,7 +3350,7 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 	if desiredDefault != nil && !isNullValue(desiredDefault.value) {
 		desiredVal = desiredDefault.value
 	}
-	if !g.areSameValue(currentVal, desiredVal) {
+	if !g.areSameValue(currentVal, desiredVal, columnType) {
 		return false
 	}
 
@@ -3360,7 +3365,27 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 	return strings.EqualFold(currentExprSchema, desiredExprSchema) && strings.EqualFold(currentExpr, desiredExpr)
 }
 
-func (g *Generator) areSameValue(current, desired *Value) bool {
+// isNumericColumnType determines if a column type should be compared numerically.
+// This is used to decide how to compare default values.
+func (g *Generator) isNumericColumnType(typeName string) bool {
+	normalized := g.normalizeDataType(strings.ToLower(typeName))
+	switch normalized {
+	case "tinyint", "smallint", "mediumint", "integer", "bigint",
+		"decimal", "float", "double", "real":
+		return true
+	default:
+		return false
+	}
+}
+
+// areSameValue compares two default values with knowledge of the column type.
+func (g *Generator) areSameValue(current, desired *Value, columnType string) bool {
+	slog.Debug("Generator#areSameValueForDefault",
+		"current", current,
+		"desired", desired,
+		"columnType", columnType,
+	)
+
 	if current == nil && desired == nil {
 		return true
 	}
@@ -3368,27 +3393,44 @@ func (g *Generator) areSameValue(current, desired *Value) bool {
 		return false
 	}
 
-	// NOTE: -1 can be changed to '-1' in show create table and valueType is not reliable
-	currentRaw := strings.ToLower(string(current.raw))
-	desiredRaw := strings.ToLower(string(desired.raw))
-	if desired.valueType == ValueTypeFloat && len(currentRaw) > len(desiredRaw) {
-		// Round "0.00" to "0.0" for comparison with desired.
-		// Ideally we should do this seeing precision in a data type.
-		currentRaw = currentRaw[0:len(desiredRaw)]
-	}
+	currentRaw := current.raw
+	desiredRaw := desired.raw
 
-	// NOTE: Boolean constants is evaluated as TINYINT(1) value in MySQL.
-	if g.mode == GeneratorModeMysql {
-		if desired.valueType == ValueTypeBool {
-			if strings.EqualFold(string(desired.raw), "false") {
-				desiredRaw = "0"
-			} else if strings.EqualFold(string(desired.raw), "true") {
-				desiredRaw = "1"
-			}
+	// Special handling for MySQL boolean values (BOOLEAN is stored as TINYINT(1))
+	// MySQL converts: false → 0, true → 1
+	if g.mode == GeneratorModeMysql && desired.valueType == ValueTypeBool {
+		if strings.EqualFold(desiredRaw, "false") {
+			desiredRaw = "0"
+		} else if strings.EqualFold(desiredRaw, "true") {
+			desiredRaw = "1"
 		}
 	}
 
+	if g.isNumericColumnType(columnType) {
+		// For numeric types (DECIMAL, INT, FLOAT, etc.): use numeric comparison
+		// This handles DECIMAL precision normalization: '0.1' vs '0.10'
+		if currentFloat, err := strconv.ParseFloat(currentRaw, 64); err == nil {
+			if desiredFloat, err := strconv.ParseFloat(desiredRaw, 64); err == nil {
+				return currentFloat == desiredFloat
+			}
+		}
+		// Fallback to string comparison if parse fails
+	}
+
+	// For string types (VARCHAR, CHAR, TEXT, etc.): use exact string comparison
+	// This ensures '1.00' != '1.0000' for VARCHAR columns
 	return currentRaw == desiredRaw
+}
+
+// areSameIdentifier compares two values for identifiers/keywords (case-insensitive).
+func (g *Generator) areSameIdentifier(current, desired *Value) bool {
+	if current == nil && desired == nil {
+		return true
+	}
+	if current == nil || desired == nil {
+		return false
+	}
+	return strings.EqualFold(current.raw, desired.raw)
 }
 
 func areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
@@ -3420,17 +3462,25 @@ func areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 }
 
 func isNullValue(value *Value) bool {
-	return value != nil && value.valueType == ValueTypeValArg && string(value.raw) == "null"
+	return value != nil && value.valueType == ValueTypeValArg && value.raw == "null"
 }
 
 func (g *Generator) normalizeDataType(dataType string) string {
-	alias, ok := dataTypeAliases[dataType]
-	if ok {
+	if alias, ok := dataTypeAliases[dataType]; ok {
 		dataType = alias
 	}
-	if g.mode == GeneratorModeMysql {
-		alias, ok = mysqlDataTypeAliases[dataType]
-		if ok {
+
+	switch g.mode {
+	case GeneratorModePostgres:
+		if alias, ok := postgresDataTypeAliases[dataType]; ok {
+			dataType = alias
+		}
+	case GeneratorModeMysql:
+		if alias, ok := mysqlDataTypeAliases[dataType]; ok {
+			dataType = alias
+		}
+	case GeneratorModeMssql:
+		if alias, ok := mssqlDataTypeAliases[dataType]; ok {
 			dataType = alias
 		}
 	}
@@ -3530,15 +3580,15 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		// Mysql: Default Index B-Tree (but not for vector indexes)
 		if g.mode == GeneratorModeMysql {
 			if len(indexAOptions) == 0 && !indexA.vector {
-				indexAOptions = []IndexOption{{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: []byte("btree"), strVal: "btree"}}}
+				indexAOptions = []IndexOption{{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: "btree", strVal: "btree"}}}
 			}
 			if len(indexBOptions) == 0 && !indexB.vector {
-				indexBOptions = []IndexOption{{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: []byte("btree"), strVal: "btree"}}}
+				indexBOptions = []IndexOption{{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: "btree", strVal: "btree"}}}
 			}
 		}
 		for _, optionB := range indexBOptions {
 			if optionA := findIndexOptionByName(indexAOptions, optionB.optionName); optionA != nil {
-				if !g.areSameValue(optionA.value, optionB.value) {
+				if !g.areSameIdentifier(optionA.value, optionB.value) {
 					return false
 				}
 			} else {
@@ -3807,7 +3857,7 @@ func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinitio
 				return "DEFAULT b'0'", nil
 			}
 		case ValueTypeValArg: // NULL, CURRENT_TIMESTAMP, ...
-			return fmt.Sprintf("DEFAULT %s", string(defaultVal.raw)), nil
+			return fmt.Sprintf("DEFAULT %s", defaultVal.raw), nil
 		default:
 			return "", fmt.Errorf("unsupported default value type (valueType: '%d')", defaultVal.valueType)
 		}
