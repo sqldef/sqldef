@@ -163,7 +163,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				viewType:     strings.ToUpper(stmt.View.Type),
 				securityType: strings.ToUpper(stmt.View.SecurityType),
 				name:         normalizedTableName(mode, stmt.View.Name, defaultSchema),
-				definition:   parser.String(stmt.View.Definition),
+				definition:   stmt.View.Definition,
 				columns:      columns,
 			}, nil
 		} else if stmt.Action == parser.CreateTrigger {

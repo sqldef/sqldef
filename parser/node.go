@@ -1925,7 +1925,7 @@ type CollateExpr struct {
 
 // Format formats the node.
 func (node *CollateExpr) Format(buf *nodeBuffer) {
-	buf.Printf("%v collate %s", node.Expr, node.Charset)
+	buf.Printf("%v collate \"%s\"", node.Expr, node.Charset)
 }
 
 // FuncExpr represents a function call that takes SelectExprs.

@@ -196,7 +196,7 @@ type View struct {
 	viewType     string
 	securityType string
 	name         string
-	definition   string
+	definition   parser.SelectStatement
 	indexes      []Index
 	columns      []string
 }
