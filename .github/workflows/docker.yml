@@ -22,7 +22,7 @@ jobs:
         cmd: [mysqldef, sqlite3def, mssqldef, psqldef]
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
       - name: Log in to Docker Hub
         uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
@@ -59,7 +59,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-name: index.docker.io/sqldef/${{ matrix.cmd }}
           subject-digest: ${{ steps.push.outputs.digest }}
