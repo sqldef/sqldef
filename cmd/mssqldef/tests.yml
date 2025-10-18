@@ -124,7 +124,7 @@ CreateTableOnNonStandardDefaultSchema:
       v_nvarchar nvarchar(30)
     );
   user: "mssqldef_user"
-  
+
 # Built-in types must not be schema-qualified on non-default schema
 AddBitColumnOnNonDefaultSchema:
   current: |
@@ -879,3 +879,22 @@ CheckDuplicateValuesInOrChain:
       CONSTRAINT items_category_chk CHECK (category IN ('electronics', 'clothing'))
     );
   output: ""
+DecimalDefault:
+  desired: |
+    CREATE TABLE some_table (
+      v0 decimal(5, 2) DEFAULT 0.0,
+      v1 decimal(5, 2) DEFAULT 1.2,
+      v2 decimal(30, 20) DEFAULT  0.0000000000123456789,
+      v3 decimal(30, 20) DEFAULT '0.0000000000123456789'
+    );
+NegativeDefaultNumbers:
+  desired: |
+    CREATE TABLE items (
+      v0 float DEFAULT - 20,
+      v1 float DEFAULT -3.14,
+      v6 float DEFAULT -20,
+      v7 decimal(5, 2) DEFAULT -20.0,
+      v8 decimal(5, 2) DEFAULT 20.0,
+      v9 decimal(5, 2) DEFAULT 0.0,
+      v10 decimal(10, 4) DEFAULT 0.001
+    );

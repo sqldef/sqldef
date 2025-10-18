@@ -3216,3 +3216,49 @@ ModifyTableLevelCheckMultiColumnAllAny:
   output: |
     ALTER TABLE "public"."multi_check_test" DROP CONSTRAINT "valid_state_priority";
     ALTER TABLE "public"."multi_check_test" ADD CONSTRAINT "valid_state_priority" CHECK (state = ANY (ARRAY['active', 'pending', 'waiting']) and priority >= ALL (ARRAY[1, 2]) or state = ALL (ARRAY['inactive']) and priority = ANY (ARRAY[0]));
+DecimalDefault:
+  current: |
+    CREATE TABLE some_table (
+      v0 decimal(5, 2) DEFAULT 0.0,
+      v1 decimal(5, 2) DEFAULT 1.2,
+      v2 decimal(30, 20) DEFAULT  0.12345,
+      v3 decimal(30, 20) DEFAULT '0.0000000000123456789'
+    );
+  desired: |
+    CREATE TABLE some_table (
+      v0 decimal(5, 2) DEFAULT 0.01,
+      v1 decimal(5, 2) DEFAULT 1.23,
+      v2 decimal(30, 20) DEFAULT  0.1234,
+      v3 decimal(30, 20) DEFAULT '0.00000000001234567891'
+    );
+  output: |
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v0" SET DEFAULT 0.010000;
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v1" SET DEFAULT 1.230000;
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v2" SET DEFAULT 0.123400;
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v3" SET DEFAULT '0.00000000001234567891';
+NegativeDefaultNumbers:
+  desired: |
+    CREATE TABLE items (
+      v0 float DEFAULT - 20,
+      v1 float DEFAULT -3.14,
+      v6 float DEFAULT -20,
+      v7 decimal(5, 2) DEFAULT -20.0,
+      v8 decimal(5, 2) DEFAULT 20.0,
+      v9 decimal(5, 2) DEFAULT 0.0,
+      v10 decimal(10, 4) DEFAULT 0.001
+    );
+DefaultString:
+  current: |
+    CREATE TABLE some_table (
+      v0 TEXT DEFAULT 'foo',
+      v1 TEXT DEFAULT 'BAR'
+    );
+  desired: |
+    CREATE TABLE some_table (
+      v0 TEXT DEFAULT 'FOO',
+      v1 TEXT DEFAULT 'bar'
+    );
+  output: |
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v0" SET DEFAULT 'FOO';
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v1" SET DEFAULT 'bar';
+
