@@ -834,7 +834,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						ddls = append(ddls, ddl)
 					}
 					if desiredColumn.check != nil {
-						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), constraintName, desiredColumn.check.definition)
+						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), constraintName, parser.String(desiredColumn.check.definition))
 						if desiredColumn.check.noInherit {
 							ddl += " NO INHERIT"
 						}
@@ -886,7 +886,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 							if desiredColumn.check.notForReplication {
 								replicationDefinition = " NOT FOR REPLICATION"
 							}
-							ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableName(desired.table.name), desiredConstraintName, replicationDefinition, desiredColumn.check.definition)
+							ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableName(desired.table.name), desiredConstraintName, replicationDefinition, parser.String(desiredColumn.check.definition))
 							ddls = append(ddls, ddl)
 						}
 					}
@@ -1185,10 +1185,10 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				switch g.mode {
 				case GeneratorModePostgres, GeneratorModeMssql:
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), desiredCheck.definition))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), parser.String(desiredCheck.definition)))
 				case GeneratorModeMysql:
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), desiredCheck.definition))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), parser.String(desiredCheck.definition)))
 				case GeneratorModeSQLite3:
 					// SQLite does not support ALTER TABLE for CHECK constraints
 					// Modifying CHECK constraints requires recreating the table, which is not supported
@@ -1201,7 +1201,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 		} else {
 			// Constraint doesn't exist, add it
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), desiredCheck.definition))
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), parser.String(desiredCheck.definition)))
 		}
 	}
 
@@ -2049,7 +2049,7 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		if column.check.notForReplication {
 			definition += "NOT FOR REPLICATION "
 		}
-		definition += fmt.Sprintf("(%s) ", column.check.definition)
+		definition += fmt.Sprintf("(%s) ", parser.String(column.check.definition))
 		if column.check.noInherit {
 			definition += "NO INHERIT "
 		}
@@ -3241,12 +3241,12 @@ func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bo
 		return false
 	}
 
-	if checkA.definitionAST == nil || checkB.definitionAST == nil {
-		panic(fmt.Sprintf("CheckDefinition.definitionAST must not be nil (checkA.definitionAST=%v, checkB.definitionAST=%v)", checkA.definitionAST, checkB.definitionAST))
+	if checkA.definition == nil || checkB.definition == nil {
+		panic(fmt.Sprintf("CheckDefinition.definitionAST must not be nil (checkA.definitionAST=%v, checkB.definitionAST=%v)", checkA.definition, checkB.definition))
 	}
 
-	normalizedA := normalizeCheckExpr(checkA.definitionAST)
-	normalizedB := normalizeCheckExpr(checkB.definitionAST)
+	normalizedA := normalizeCheckExpr(checkA.definition)
+	normalizedB := normalizeCheckExpr(checkB.definition)
 
 	// Unwrap outermost parentheses if present (MySQL adds extra parens)
 	normalizedA = unwrapOutermostParenExpr(normalizedA)

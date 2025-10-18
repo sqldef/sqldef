@@ -277,8 +277,7 @@ type SridDefinition struct {
 }
 
 type CheckDefinition struct {
-	definition        string
-	definitionAST     parser.Expr
+	definition        parser.Expr
 	constraintName    string
 	notForReplication bool
 	noInherit         bool
