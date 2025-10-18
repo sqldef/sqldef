@@ -1,3 +1,13 @@
+## [v3.1.18](https://github.com/sqldef/sqldef/compare/v3.1.17...v3.1.18) - 2025-10-18
+- [test] make tests simler by @gfx in https://github.com/sqldef/sqldef/pull/879
+- [test] migrate tests in psqldef_test to tests.yaml (TestApply) by @gfx in https://github.com/sqldef/sqldef/pull/881
+- Switch Dockerfile to Alpine distribution to speed up Docker builds by @Copilot in https://github.com/sqldef/sqldef/pull/882
+- [security] pin actions by @gfx in https://github.com/sqldef/sqldef/pull/883
+- fix default value comparison in case the values are DECIMAL or VARCHAR by @gfx in https://github.com/sqldef/sqldef/pull/884
+- use big float to interpret DECIMAL to compare DECIMAL more correctly by @gfx in https://github.com/sqldef/sqldef/pull/885
+- [psqldef] fallback log by @gfx in https://github.com/sqldef/sqldef/pull/886
+- [refactor] make normalizeViewDefinition AST-based by @gfx in https://github.com/sqldef/sqldef/pull/887
+
 ## [v3.1.17](https://github.com/sqldef/sqldef/compare/v3.1.16...v3.1.17) - 2025-10-17
 - use slices.sort; sort package is deprecated by @gfx in https://github.com/sqldef/sqldef/pull/874
 - sort CREATE INDEX by @gfx in https://github.com/sqldef/sqldef/pull/876
