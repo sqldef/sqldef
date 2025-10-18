@@ -212,7 +212,7 @@ type Trigger struct {
 
 type Value struct {
 	valueType ValueType
-	raw       []byte
+	raw       string
 
 	// ValueType-specific. Should be union?
 	strVal   string  // ValueTypeStr, ValueTypeBool

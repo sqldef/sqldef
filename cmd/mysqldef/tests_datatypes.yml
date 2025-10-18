@@ -253,7 +253,6 @@ DecimalDefault:
     ALTER TABLE `some_table` CHANGE COLUMN `v1` `v1` decimal(5, 2) DEFAULT 1.230000;
     ALTER TABLE `some_table` CHANGE COLUMN `v2` `v2` decimal(30, 20) DEFAULT 0.123400;
     ALTER TABLE `some_table` CHANGE COLUMN `v3` `v3` decimal(30, 20) DEFAULT '0.00000000001234567891';
-
 NegativeDefaultNumbers:
   desired: |
     CREATE TABLE items (
@@ -269,14 +268,20 @@ DefaultString:
   current: |
     CREATE TABLE some_table (
       v0 VARCHAR(255) DEFAULT 'foo',
-      v1 VARCHAR(255) DEFAULT 'BAR'
+      v1 VARCHAR(255) DEFAULT 'BAR',
+      v2 VARCHAR(255) DEFAULT '1.00',
+      v3 VARCHAR(255) DEFAULT '1.00'
     );
   desired: |
     CREATE TABLE some_table (
       v0 VARCHAR(255) DEFAULT 'FOO',
-      v1 VARCHAR(255) DEFAULT 'bar'
+      v1 VARCHAR(255) DEFAULT 'bar',
+      v2 VARCHAR(255) DEFAULT '1.0000',
+      v3 VARCHAR(255) DEFAULT '1'
     );
   output: |
     ALTER TABLE `some_table` CHANGE COLUMN `v0` `v0` varchar(255) DEFAULT 'FOO';
     ALTER TABLE `some_table` CHANGE COLUMN `v1` `v1` varchar(255) DEFAULT 'bar';
+    ALTER TABLE `some_table` CHANGE COLUMN `v2` `v2` varchar(255) DEFAULT '1.0000';
+    ALTER TABLE `some_table` CHANGE COLUMN `v3` `v3` varchar(255) DEFAULT '1';
 
