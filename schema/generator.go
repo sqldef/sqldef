@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
-	"strconv"
+	"math/big"
 	"strings"
 
 	"github.com/sqldef/sqldef/v3/database"
@@ -3409,9 +3409,11 @@ func (g *Generator) areSameValue(current, desired *Value, columnType string) boo
 	if g.isNumericColumnType(columnType) {
 		// For numeric types (DECIMAL, INT, FLOAT, etc.): use numeric comparison
 		// This handles DECIMAL precision normalization: '0.1' vs '0.10'
-		if currentFloat, err := strconv.ParseFloat(currentRaw, 64); err == nil {
-			if desiredFloat, err := strconv.ParseFloat(desiredRaw, 64); err == nil {
-				return currentFloat == desiredFloat
+		// Use 256 bits of precision to safely handle DECIMAL(65,30) (MySQL's max)
+		// 65 decimal digits * 3.32 bits/digit ≈ 216 bits, so 256 bits is safe
+		if currentFloat, _, err := big.ParseFloat(currentRaw, 10, 256, big.ToNearestEven); err == nil {
+			if desiredFloat, _, err := big.ParseFloat(desiredRaw, 10, 256, big.ToNearestEven); err == nil {
+				return currentFloat.Cmp(desiredFloat) == 0
 			}
 		}
 		// Fallback to string comparison if parse fails
