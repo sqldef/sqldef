@@ -16,6 +16,10 @@ else
   SUFFIX=
 endif
 
+ifeq ($(VERBOSE), 1)
+  GOTESTFLAGS := -v
+endif
+
 .PHONY: all build clean deps goyacc package package-zip package-targz parser build-mysqldef build-sqlite3def build-mssqldef build-psqldef
 
 all: build
@@ -73,18 +77,18 @@ parser/parser.go: parser/parser.y
 test: test-mysqldef test-psqldef test-sqlite3def test-mssqldef
 
 test-mysqldef:
-	MYSQL_FLAVOR=$${MYSQL_FLAVOR:-mysql} go test -v ./cmd/mysqldef
+	MYSQL_FLAVOR=$${MYSQL_FLAVOR:-mysql} go test $(GOTESTFLAGS) ./cmd/mysqldef
 
 test-psqldef:
-	go test -v ./cmd/psqldef
-	go test -v ./database/postgres
+	go test $(GOTESTFLAGS) ./cmd/psqldef
+	go test $(GOTESTFLAGS) ./database/postgres
 
 test-sqlite3def:
-	go test -v ./cmd/sqlite3def
+	go test $(GOTESTFLAGS) ./cmd/sqlite3def
 
 test-mssqldef:
-	go test -v ./cmd/mssqldef
-	go test -v ./database/mssql
+	go test $(GOTESTFLAGS) ./cmd/mssqldef
+	go test $(GOTESTFLAGS) ./database/mssql
 
 format:
 	go fmt ./...
