@@ -6,7 +6,7 @@ GOVERSION=$(shell go version)
 GOOS=$(word 1,$(subst /, ,$(lastword $(GOVERSION))))
 GOARCH=$(word 2,$(subst /, ,$(lastword $(GOVERSION))))
 BUILD_DIR=build/$(GOOS)-$(GOARCH)
-SHELL=/bin/bash
+SHELL=/bin/sh
 SQLDEF=$(shell pwd)
 MACOS_VERSION := 11.3
 
