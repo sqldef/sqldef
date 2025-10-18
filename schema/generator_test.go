@@ -1,6 +1,8 @@
 package schema
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/sqldef/sqldef/v3/parser"
@@ -125,7 +127,7 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			name:     "PostgreSQL: normalize with joins",
 			mode:     GeneratorModePostgres,
 			input:    `select u.id, (u.name COLLATE "en_US") as name from users u join orders o on u.id = o.user_id`,
-			expected: `select id, (name collate "en_us") as name from users u join orders o on id = user_id`,
+			expected: `select id, (name collate "en_us") as name from users as u join orders as o on u.id = o.user_id`,
 		},
 		{
 			name:     "PostgreSQL: preserve column names without prefixes",
@@ -134,10 +136,16 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			expected: `select id, (name collate "ja-jp-x-icu") as name from users`,
 		},
 		{
-			name:     "PostgreSQL: normalize array syntax",
+			name:     "PostgreSQL: normalize ARRAY in function calls",
 			mode:     GeneratorModePostgres,
-			input:    `select array[1, 2, 3] as nums`,
-			expected: `select 1, 2, 3 as nums`,
+			input:    `select jsonb_extract_path_text(payload, VARIADIC ARRAY['amount']) from events`,
+			expected: `select jsonb_extract_path_text(payload, 'amount') from events`,
+		},
+		{
+			name:     "PostgreSQL: normalize ARRAY with multiple elements in function calls",
+			mode:     GeneratorModePostgres,
+			input:    `select jsonb_extract_path_text(payload, VARIADIC ARRAY['data', 'user', 'name']) from events`,
+			expected: `select jsonb_extract_path_text(payload, 'data', 'user', 'name') from events`,
 		},
 		// Non-PostgreSQL modes should not normalize
 		{
@@ -157,7 +165,21 @@ func TestNormalizeViewDefinition(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := &Generator{mode: tt.mode}
-			actual := g.normalizeViewDefinition(tt.input)
+
+			// Parse the input SQL into a view definition
+			viewSQL := fmt.Sprintf("CREATE VIEW test_view AS %s", tt.input)
+			stmt, err := parser.ParseDDL(viewSQL, parser.ParserModePostgres)
+			assert.NoError(t, err)
+
+			ddl, ok := stmt.(*parser.DDL)
+			assert.True(t, ok, "Statement is not a DDL")
+			assert.Equal(t, parser.CreateView, ddl.Action)
+			assert.NotNil(t, ddl.View.Definition, "Definition should not be nil")
+
+			// Normalize using AST
+			normalized := g.normalizeViewDefinition(ddl.View.Definition)
+			actual := strings.ToLower(parser.String(normalized))
+
 			assert.Equal(t, tt.expected, actual)
 		})
 	}
