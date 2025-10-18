@@ -1554,7 +1554,7 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 }
 
 // normalizeExpr normalizes an expression in a view definition
-// This is similar to normalizeCheckExprAST but tailored for view definitions
+// This is similar to normalizeCheckExpr but tailored for view definitions
 func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 	if expr == nil {
 		return nil
@@ -3245,8 +3245,8 @@ func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bo
 		panic(fmt.Sprintf("CheckDefinition.definitionAST must not be nil (checkA.definitionAST=%v, checkB.definitionAST=%v)", checkA.definitionAST, checkB.definitionAST))
 	}
 
-	normalizedA := normalizeCheckExprAST(checkA.definitionAST)
-	normalizedB := normalizeCheckExprAST(checkB.definitionAST)
+	normalizedA := normalizeCheckExpr(checkA.definitionAST)
+	normalizedB := normalizeCheckExpr(checkB.definitionAST)
 
 	// Unwrap outermost parentheses if present (MySQL adds extra parens)
 	normalizedA = unwrapOutermostParenExpr(normalizedA)
@@ -3410,8 +3410,8 @@ func sortAndDeduplicateValues(values []parser.Expr) []parser.Expr {
 	return uniqueValues
 }
 
-// normalizeCheckExprAST normalizes a CHECK constraint expression AST for comparison
-func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
+// normalizeCheckExpr normalizes a CHECK constraint expression AST for comparison
+func normalizeCheckExpr(expr parser.Expr) parser.Expr {
 	if expr == nil {
 		return nil
 	}
@@ -3420,14 +3420,14 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 	case *parser.CastExpr:
 		// Remove casts to text or character varying
 		if e.Type != nil && (e.Type.Type == "text" || e.Type.Type == "character varying") {
-			return normalizeCheckExprAST(e.Expr)
+			return normalizeCheckExpr(e.Expr)
 		}
 		return &parser.CastExpr{
-			Expr: normalizeCheckExprAST(e.Expr),
+			Expr: normalizeCheckExpr(e.Expr),
 			Type: e.Type,
 		}
 	case *parser.ParenExpr:
-		normalized := normalizeCheckExprAST(e.Expr)
+		normalized := normalizeCheckExpr(e.Expr)
 		if paren, ok := normalized.(*parser.ParenExpr); ok {
 			return paren
 		}
@@ -3440,8 +3440,8 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 		return &parser.ParenExpr{Expr: normalized}
 	case *parser.AndExpr:
 		// Normalize operands and unwrap unnecessary parentheses around them
-		left := normalizeCheckExprAST(e.Left)
-		right := normalizeCheckExprAST(e.Right)
+		left := normalizeCheckExpr(e.Left)
+		right := normalizeCheckExpr(e.Right)
 		// MySQL adds parentheses around each operand in AND chains, so unwrap them
 		left = unwrapOutermostParenExpr(left)
 		right = unwrapOutermostParenExpr(right)
@@ -3451,8 +3451,8 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 		}
 	case *parser.OrExpr:
 		// Normalize operands and unwrap unnecessary parentheses around them
-		left := normalizeCheckExprAST(e.Left)
-		right := normalizeCheckExprAST(e.Right)
+		left := normalizeCheckExpr(e.Left)
+		right := normalizeCheckExpr(e.Right)
 		// MySQL adds parentheses around each operand in OR chains, so unwrap them
 		// Always safe to unwrap in OR chains since OR has the lowest precedence
 		left = unwrapOutermostParenExpr(left)
@@ -3470,10 +3470,10 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 			Right: right,
 		}
 	case *parser.NotExpr:
-		return &parser.NotExpr{Expr: normalizeCheckExprAST(e.Expr)}
+		return &parser.NotExpr{Expr: normalizeCheckExpr(e.Expr)}
 	case *parser.ComparisonExpr:
-		left := normalizeCheckExprAST(e.Left)
-		right := normalizeCheckExprAST(e.Right)
+		left := normalizeCheckExpr(e.Left)
+		right := normalizeCheckExpr(e.Right)
 		op := normalizeOperator(e.Operator)
 
 		if op == "in" || op == "not in" {
@@ -3486,26 +3486,26 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 			Operator: op,
 			Left:     left,
 			Right:    right,
-			Escape:   normalizeCheckExprAST(e.Escape),
+			Escape:   normalizeCheckExpr(e.Escape),
 			All:      e.All,
 			Any:      e.Any,
 		}
 	case *parser.BinaryExpr:
 		return &parser.BinaryExpr{
 			Operator: e.Operator,
-			Left:     normalizeCheckExprAST(e.Left),
-			Right:    normalizeCheckExprAST(e.Right),
+			Left:     normalizeCheckExpr(e.Left),
+			Right:    normalizeCheckExpr(e.Right),
 		}
 	case *parser.UnaryExpr:
 		return &parser.UnaryExpr{
 			Operator: e.Operator,
-			Expr:     normalizeCheckExprAST(e.Expr),
+			Expr:     normalizeCheckExpr(e.Expr),
 		}
 	case *parser.FuncExpr:
 		normalizedExprs := parser.SelectExprs(util.TransformSlice([]parser.SelectExpr(e.Exprs), func(arg parser.SelectExpr) parser.SelectExpr {
 			if aliased, ok := arg.(*parser.AliasedExpr); ok {
 				return &parser.AliasedExpr{
-					Expr: normalizeCheckExprAST(aliased.Expr),
+					Expr: normalizeCheckExpr(aliased.Expr),
 					As:   aliased.As,
 				}
 			}
@@ -3521,7 +3521,7 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 	case *parser.ArrayConstructor:
 		normalizedElements := parser.ArrayElements(util.TransformSlice([]parser.ArrayElement(e.Elements), func(elem parser.ArrayElement) parser.ArrayElement {
 			if castExpr, ok := elem.(*parser.CastExpr); ok {
-				normalized := normalizeCheckExprAST(castExpr)
+				normalized := normalizeCheckExpr(castExpr)
 				if normalizedArrayElem, ok := normalized.(parser.ArrayElement); ok {
 					return normalizedArrayElem
 				}
@@ -3533,18 +3533,18 @@ func normalizeCheckExprAST(expr parser.Expr) parser.Expr {
 	case *parser.IsExpr:
 		return &parser.IsExpr{
 			Operator: e.Operator,
-			Expr:     normalizeCheckExprAST(e.Expr),
+			Expr:     normalizeCheckExpr(e.Expr),
 		}
 	case *parser.RangeCond:
 		return &parser.RangeCond{
 			Operator: e.Operator,
-			Left:     normalizeCheckExprAST(e.Left),
-			From:     normalizeCheckExprAST(e.From),
-			To:       normalizeCheckExprAST(e.To),
+			Left:     normalizeCheckExpr(e.Left),
+			From:     normalizeCheckExpr(e.From),
+			To:       normalizeCheckExpr(e.To),
 		}
 	case parser.ValTuple:
 		normalizedTuple := util.TransformSlice([]parser.Expr(e), func(elem parser.Expr) parser.Expr {
-			return normalizeCheckExprAST(elem)
+			return normalizeCheckExpr(elem)
 		})
 		return parser.ValTuple(normalizedTuple)
 	case *parser.ColName:
