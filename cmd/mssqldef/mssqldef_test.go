@@ -14,7 +14,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sqldef/sqldef/v3/cmd/testutils"
+	tu "github.com/sqldef/sqldef/v3/cmd/testutils"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/database/mssql"
 	"github.com/sqldef/sqldef/v3/schema"
@@ -34,7 +34,6 @@ var loginConfigMutex sync.Mutex
 func wrapWithTransaction(ddls string) string {
 	return applyPrefix + "BEGIN TRANSACTION;\n" + ddls + "COMMIT TRANSACTION;\n"
 }
-
 
 // createTestUser creates the mssqldef_user login if it doesn't exist.
 // SQL Server logins are server-wide, so this is called once before all tests.
@@ -91,7 +90,7 @@ func TestApply(t *testing.T) {
 	// SQL Server logins are server-wide, not database-specific
 	createTestUser()
 
-	tests, err := testutils.ReadTests("tests*.yml")
+	tests, err := tu.ReadTests("tests*.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +100,7 @@ func TestApply(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			dbName := testutils.CreateTestDatabaseName(name, 128)
+			dbName := tu.CreateTestDatabaseName(name, 128)
 			createTestDatabase(t, dbName, test.User)
 
 			t.Cleanup(func() {
@@ -120,7 +119,7 @@ func TestApply(t *testing.T) {
 			}
 			defer db.Close()
 
-			testutils.RunTest(t, db, test, schema.GeneratorModeMssql, sqlParser, "", "")
+			tu.RunTest(t, db, test, schema.GeneratorModeMssql, sqlParser, "", "")
 		})
 	}
 }
@@ -651,7 +650,7 @@ func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
 	assertApply(t, createTable)
 
 	// extract name of default constraint from sql server
-	out, err := testutils.Execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
+	out, err := tu.Execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
 		SELECT OBJECT_NAME(c.default_object_id) FROM sys.columns c WHERE c.object_id = OBJECT_ID('dbo.users', 'U') AND c.default_object_id != 0;
 		`,
 	))
@@ -763,7 +762,7 @@ func TestMssqldefCreateTableDropPrimaryKey(t *testing.T) {
 	assertApply(t, createTable)
 
 	// extract name of primary key constraint from sql server
-	out, err := testutils.Execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
+	out, err := tu.Execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
 		SELECT kc.name FROM sys.key_constraints kc WHERE kc.parent_object_id=OBJECT_ID('users', 'U') AND kc.[type]='PK';
 		`,
 	))
@@ -1088,7 +1087,7 @@ func TestMssqldefCreateTableWithCheckWithoutName(t *testing.T) {
 	)
 
 	// extract name of check constraint from sql server
-	out, err := testutils.Execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
+	out, err := tu.Execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", stripHeredoc(`
 		SELECT name FROM sys.check_constraints cc WHERE cc.parent_object_id = OBJECT_ID('dbo.a', 'U');
 		`,
 	))
@@ -1431,12 +1430,12 @@ func TestMssqldefExportConstraint(t *testing.T) {
 }
 
 func TestMssqldefHelp(t *testing.T) {
-	_, err := testutils.Execute("./mssqldef", "--help")
+	_, err := tu.Execute("./mssqldef", "--help")
 	if err != nil {
 		t.Errorf("failed to run --help: %s", err)
 	}
 
-	out, err := testutils.Execute("./mssqldef")
+	out, err := tu.Execute("./mssqldef")
 	if err == nil {
 		t.Errorf("no database must be error, but successfully got: %s", out)
 	}
@@ -1488,7 +1487,7 @@ func TestMssqldefConfigInlineSkipTables(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	resetTestDatabase()
-	testutils.MustExecute("go", "build")
+	tu.MustExecute("go", "build")
 	status := m.Run()
 	_ = os.Remove("mssqldef")
 	_ = os.Remove("schema.sql")
@@ -1518,7 +1517,7 @@ func assertApplyOutputWithConfig(t *testing.T, desiredSchema string, config data
 	defer db.Close()
 
 	sqlParser := mssql.NewParser()
-	output, err := testutils.ApplyWithOutput(db, schema.GeneratorModeMssql, sqlParser, desiredSchema, config)
+	output, err := tu.ApplyWithOutput(db, schema.GeneratorModeMssql, sqlParser, desiredSchema, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1539,7 +1538,7 @@ func assertApplyOptionsOutput(t *testing.T, schema string, expected string, opti
 
 func assertedExecute(t *testing.T, command string, args ...string) string {
 	t.Helper()
-	out, err := testutils.Execute(command, args...)
+	out, err := tu.Execute(command, args...)
 	if err != nil {
 		t.Errorf("failed to execute '%s %s' (error: '%s'): `%s`", command, strings.Join(args, " "), err, out)
 	}
@@ -1616,7 +1615,7 @@ func mssqlQuery(dbName string, query string) (string, error) {
 	}
 	defer db.Close()
 
-	return testutils.QueryRows(db, query)
+	return tu.QueryRows(db, query)
 }
 
 // mssqlExec executes a statement against the database (doesn't return rows)

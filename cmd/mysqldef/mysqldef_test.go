@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/sqldef/sqldef/v3/cmd/testutils"
+	tu "github.com/sqldef/sqldef/v3/cmd/testutils"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/database/mysql"
 	"github.com/sqldef/sqldef/v3/parser"
@@ -76,11 +76,11 @@ func assertedExecuteMySQLDef(t *testing.T, dbName string, extraArgs ...string) s
 // executeMySQLDef executes mysqldef and returns output and error (for failure testing)
 func executeMySQLDef(dbName string, extraArgs ...string) (string, error) {
 	args := append(getMySQLArgs(dbName), extraArgs...)
-	return testutils.Execute("./mysqldef", args...)
+	return tu.Execute("./mysqldef", args...)
 }
 
 func TestApply(t *testing.T) {
-	tests, err := testutils.ReadTests("tests*.yml")
+	tests, err := tu.ReadTests("tests*.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestApply(t *testing.T) {
 			}
 			defer db.Close()
 
-			testutils.RunTest(t, db, test, schema.GeneratorModeMysql, sqlParser, version, mysqlFlavor)
+			tu.RunTest(t, db, test, schema.GeneratorModeMysql, sqlParser, version, mysqlFlavor)
 		})
 	}
 }
@@ -456,12 +456,12 @@ func TestMysqldefConfigIncludesLock(t *testing.T) {
 }
 
 func TestMysqldefHelp(t *testing.T) {
-	_, err := testutils.Execute("./mysqldef", "--help")
+	_, err := tu.Execute("./mysqldef", "--help")
 	if err != nil {
 		t.Errorf("failed to run --help: %s", err)
 	}
 
-	out, err := testutils.Execute("./mysqldef")
+	out, err := tu.Execute("./mysqldef")
 	if err == nil {
 		t.Errorf("no database must be error, but successfully got: %s", out)
 	}
@@ -473,7 +473,7 @@ func TestMain(m *testing.M) {
 	}
 
 	resetTestDatabase()
-	testutils.MustExecute("go", "build")
+	tu.MustExecute("go", "build")
 	status := m.Run()
 	os.Remove("mysqldef")
 	os.Remove("schema.sql")
@@ -503,7 +503,7 @@ func assertApplyOutputWithConfig(t *testing.T, desiredSchema string, config data
 	defer db.Close()
 
 	sqlParser := database.NewParser(parser.ParserModeMysql)
-	output, err := testutils.ApplyWithOutput(db, schema.GeneratorModeMysql, sqlParser, desiredSchema, config)
+	output, err := tu.ApplyWithOutput(db, schema.GeneratorModeMysql, sqlParser, desiredSchema, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -534,7 +534,7 @@ func assertApplyFailure(t *testing.T, schema string, expected string) {
 
 func assertedExecute(t *testing.T, command string, args ...string) string {
 	t.Helper()
-	out, err := testutils.Execute(command, args...)
+	out, err := tu.Execute(command, args...)
 	if err != nil {
 		t.Errorf("failed to execute '%s %s' (error: '%s'): `%s`", command, strings.Join(args, " "), err, out)
 	}
@@ -596,7 +596,7 @@ func mysqlQuery(dbName string, query string) (string, error) {
 	}
 	defer db.Close()
 
-	return testutils.QueryRows(db, query)
+	return tu.QueryRows(db, query)
 }
 
 // mysqlExec executes a statement (or multiple statements) against the database

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sqldef/sqldef/v3/cmd/testutils"
+	tu "github.com/sqldef/sqldef/v3/cmd/testutils"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/database/sqlite3"
 	"github.com/sqldef/sqldef/v3/parser"
@@ -29,7 +29,7 @@ func wrapWithTransaction(ddls string) string {
 }
 
 func TestApply(t *testing.T) {
-	tests, err := testutils.ReadTests("tests*.yml")
+	tests, err := tu.ReadTests("tests*.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestApply(t *testing.T) {
 			}
 			defer db.Close()
 
-			testutils.RunTest(t, db, test, schema.GeneratorModeSQLite3, sqlParser, "", "")
+			tu.RunTest(t, db, test, schema.GeneratorModeSQLite3, sqlParser, "", "")
 		})
 	}
 }
@@ -464,12 +464,12 @@ func TestSQLite3defChangeTrigger(t *testing.T) {
 }
 
 func TestSQLite3defHelp(t *testing.T) {
-	_, err := testutils.Execute("./sqlite3def", "--help")
+	_, err := tu.Execute("./sqlite3def", "--help")
 	if err != nil {
 		t.Errorf("failed to run --help: %s", err)
 	}
 
-	out, err := testutils.Execute("./sqlite3def")
+	out, err := tu.Execute("./sqlite3def")
 	if err == nil {
 		t.Errorf("no database must be error, but successfully got: %s", out)
 	}
@@ -497,7 +497,7 @@ func TestDeprecatedRenameAnnotation(t *testing.T) {
 	writeFile("schema.sql", schemaWithDeprecatedRename)
 
 	// Execute sqlite3def and capture combined output (stdout + stderr)
-	out, err := testutils.Execute("./sqlite3def", "sqlite3def_test", "--file", "schema.sql")
+	out, err := tu.Execute("./sqlite3def", "sqlite3def_test", "--file", "schema.sql")
 	if err != nil {
 		t.Fatalf("sqlite3def execution failed: %s\nOutput: %s", err, out)
 	}
@@ -535,7 +535,7 @@ func TestDeprecatedRenameAnnotation(t *testing.T) {
 	)
 
 	writeFile("schema.sql", schemaWithRenamed)
-	out, err = testutils.Execute("./sqlite3def", "sqlite3def_test", "--file", "schema.sql")
+	out, err = tu.Execute("./sqlite3def", "sqlite3def_test", "--file", "schema.sql")
 	if err != nil {
 		t.Fatalf("sqlite3def execution failed: %s\nOutput: %s", err, out)
 	}
@@ -553,7 +553,7 @@ func TestDeprecatedRenameAnnotation(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	resetTestDatabase()
-	testutils.MustExecute("go", "build")
+	tu.MustExecute("go", "build")
 	status := m.Run()
 	_ = os.Remove("sqlite3def")
 	_ = os.Remove("sqlite3def_test")
@@ -578,7 +578,7 @@ func assertApplyOutputWithConfig(t *testing.T, desiredSchema string, config data
 	defer db.Close()
 
 	sqlParser := database.NewParser(parser.ParserModeSQLite3)
-	output, err := testutils.ApplyWithOutput(db, schema.GeneratorModeSQLite3, sqlParser, desiredSchema, config)
+	output, err := tu.ApplyWithOutput(db, schema.GeneratorModeSQLite3, sqlParser, desiredSchema, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -599,7 +599,7 @@ func assertApplyOptionsOutput(t *testing.T, schema string, expected string, opti
 
 func assertedExecute(t *testing.T, command string, args ...string) string {
 	t.Helper()
-	out, err := testutils.Execute(command, args...)
+	out, err := tu.Execute(command, args...)
 	if err != nil {
 		t.Errorf("failed to execute '%s %s' (error: '%s'): `%s`", command, strings.Join(args, " "), err, out)
 	}
@@ -665,7 +665,7 @@ func sqlite3Query(dbName string, query string) (string, error) {
 	}
 	defer db.Close()
 
-	return testutils.QueryRows(db, query)
+	return tu.QueryRows(db, query)
 }
 
 // sqlite3Exec executes a statement against the database (doesn't return rows)

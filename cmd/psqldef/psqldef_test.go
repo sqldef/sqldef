@@ -14,7 +14,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sqldef/sqldef/v3/cmd/testutils"
+	tu "github.com/sqldef/sqldef/v3/cmd/testutils"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/database/postgres"
 	"github.com/sqldef/sqldef/v3/schema"
@@ -73,7 +73,7 @@ func pgQuery(dbName string, query string) (string, error) {
 	}
 	defer db.Close()
 
-	return testutils.QueryRows(db, query)
+	return tu.QueryRows(db, query)
 }
 
 // pgExec executes a statement against the database (doesn't return rows)
@@ -138,7 +138,6 @@ func mustGetServerVersion() string {
 	return strings.Split(serverVersion, " ")[0]
 }
 
-
 // createTestDatabase creates a new database for a test case with the specified user.
 // If a user is specified, it creates the user role and grants necessary permissions.
 func createTestDatabase(t *testing.T, dbName string, user string) {
@@ -186,7 +185,7 @@ func TestApply(t *testing.T) {
 	// PostgreSQL roles are cluster-wide, not database-specific
 	createAllTestRoles()
 
-	tests, err := testutils.ReadTests("tests*.yml")
+	tests, err := tu.ReadTests("tests*.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +196,7 @@ func TestApply(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			dbName := testutils.CreateTestDatabaseName(name, 63)
+			dbName := tu.CreateTestDatabaseName(name, 63)
 			createTestDatabase(t, dbName, test.User)
 
 			t.Cleanup(func() {
@@ -213,7 +212,7 @@ func TestApply(t *testing.T) {
 			}
 			defer db.Close()
 
-			testutils.RunTest(t, db, test, schema.GeneratorModePostgres, sqlParser, version, "")
+			tu.RunTest(t, db, test, schema.GeneratorModePostgres, sqlParser, version, "")
 		})
 	}
 }
@@ -1718,12 +1717,12 @@ func TestPsqldefConfigIncludesSkipViews(t *testing.T) {
 }
 
 func TestPsqldefHelp(t *testing.T) {
-	_, err := testutils.Execute("./psqldef", "--help")
+	_, err := tu.Execute("./psqldef", "--help")
 	if err != nil {
 		t.Errorf("failed to run --help: %s", err)
 	}
 
-	out, err := testutils.Execute("./psqldef")
+	out, err := tu.Execute("./psqldef")
 	if err == nil {
 		t.Errorf("no database must be error, but successfully got: %s", out)
 	}
@@ -1974,7 +1973,7 @@ func TestPsqldefReindexConcurrently(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	resetTestDatabase()
-	testutils.MustExecute("go", "build")
+	tu.MustExecute("go", "build")
 	status := m.Run()
 
 	cleanupTestRoles()
@@ -2008,7 +2007,7 @@ func assertApplyOutputWithConfig(t *testing.T, desiredSchema string, config data
 	defer db.Close()
 
 	sqlParser := postgres.NewParser()
-	output, err := testutils.ApplyWithOutput(db, schema.GeneratorModePostgres, sqlParser, desiredSchema, config)
+	output, err := tu.ApplyWithOutput(db, schema.GeneratorModePostgres, sqlParser, desiredSchema, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2024,7 +2023,7 @@ func assertExportOutput(t *testing.T, expected string) {
 
 func mustExecute(t *testing.T, command string, args ...string) string {
 	t.Helper()
-	out, err := testutils.Execute(command, args...)
+	out, err := tu.Execute(command, args...)
 	if err != nil {
 		t.Errorf("failed to execute '%s %s' (error: '%s'): `%s`", command, strings.Join(args, " "), err, out)
 	}

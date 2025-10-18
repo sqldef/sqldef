@@ -1,4 +1,3 @@
-// Utilities for _test.go files
 package testutils
 
 import (
@@ -13,12 +12,13 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/goccy/go-yaml"
-	"github.com/google/go-cmp/cmp"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/schema"
 	"github.com/sqldef/sqldef/v3/util"
+	"github.com/stretchr/testify/assert"
 )
 
 type TestCase struct {
@@ -48,8 +48,8 @@ func init() {
 // Parameters:
 //   - testName: The test name to sanitize
 //   - dbLimit: Database name length limit. For example:
-//     - PostgreSQL: 63 characters
-//     - SQL Server: 128 characters
+//   - PostgreSQL: 63 characters
+//   - SQL Server: 128 characters
 //
 // The resulting format is: sqldef_test_{sanitized}_{hash}
 // where hash is the first 8 characters of the MD5 hash of the original test name.
@@ -64,11 +64,11 @@ func CreateTestDatabaseName(testName string, dbLimit int) string {
 
 	// Sanitize the test name: lowercase, replace non-alphanumeric with underscore
 	sanitized := strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			return r
+		if unicode.IsLetter(r) {
+			return unicode.ToLower(r)
 		}
-		if r >= 'A' && r <= 'Z' {
-			return r - 'A' + 'a' // Convert to lowercase
+		if unicode.IsDigit(r) {
+			return r
 		}
 		return '_'
 	}, testName)
@@ -202,20 +202,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 
 	expected := strings.TrimSpace(*test.Output)
 	actual := strings.TrimSpace(joinDDLs(ddls))
-	if expected != actual {
-		diff := cmp.Diff(expected, actual)
-		t.Errorf(`Migration output doesn't match expected.
-Expected DDLs:
-~~sql
-%s
-~~
-Actual DDLs:
-~~sql
-%s
-~~
-Diff:
-%s`, expected, actual, diff)
-	}
+	assert.Equal(t, expected, actual, "Migration output doesn't match expected.")
 
 	err = runDDLs(db, ddls, *test.EnableDrop)
 	if err != nil {
