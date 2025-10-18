@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -286,11 +287,22 @@ func joinDDLs(ddls []string) string {
 	return builder.String()
 }
 
-func MustExecute(command string, args ...string) string {
+// MustExecute executes a command within a test and fails the test if it errors.
+func MustExecute(t *testing.T, command string, args ...string) string {
+	t.Helper()
 	out, err := Execute(command, args...)
 	if err != nil {
-		log.Printf("failed to execute '%s %s': `%s`", command, strings.Join(args, " "), out)
-		log.Fatal(err)
+		t.Fatalf("failed to execute '%s %s' (error: '%s'): `%s`", command, strings.Join(args, " "), err, out)
+	}
+	return out
+}
+
+// MustExecuteNoTest executes a command and terminates the program if it errors.
+// Use this in TestMain or other setup code where *testing.T is not available.
+func MustExecuteNoTest(command string, args ...string) string {
+	out, err := Execute(command, args...)
+	if err != nil {
+		log.Fatalf("failed to execute '%s %s' (error: '%s'): `%s`", command, strings.Join(args, " "), err, out)
 	}
 	return out
 }
@@ -400,4 +412,22 @@ func QueryRows(db database.Database, query string) (string, error) {
 	}
 
 	return result.String(), nil
+}
+
+func WriteFile(path string, content string) {
+	file, err := os.Create(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	if _, err := file.Write(([]byte)(content)); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func StripHeredoc(heredoc string) string {
+	heredoc = strings.TrimPrefix(heredoc, "\n")
+	re := regexp.MustCompilePOSIX("^\t*")
+	return re.ReplaceAllLiteralString(heredoc, "")
 }
