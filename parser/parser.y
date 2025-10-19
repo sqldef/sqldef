@@ -338,7 +338,7 @@ func forceEOF(yylex any) {
 %type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt
 %type <boolVal> unique_opt
 %type <expr> charset_value
-%type <tableIdent> table_id reserved_table_id table_alias as_opt_id
+%type <tableIdent> table_id reserved_table_id as_opt_id
 %type <empty> as_opt
 %type <str> charset
 %type <str> set_session_or_global
@@ -3160,20 +3160,13 @@ as_opt_id:
   {
     $$ = NewTableIdent("")
   }
-| table_alias
+| table_id
   {
     $$ = $1
   }
-| AS table_alias
+| AS table_id
   {
     $$ = $2
-  }
-
-table_alias:
-  table_id
-| STRING
-  {
-    $$ = NewTableIdent(string($1))
   }
 
 inner_join:
