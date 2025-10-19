@@ -1218,18 +1218,71 @@ set_session_or_global:
   }
 
 module_arguments_opt:
-  {}
-| '(' module_arguments ')' {}
+  /* empty */
+| '(' module_arguments ')'
 
-/* mod */
+/* mod - SQLite virtual table module arguments are opaque token sequences, not structured SQL.
+   Accept arbitrary tokens since virtual table modules have custom syntax. */
 module_arguments:
-  {}
-| sql_id module_arguments {}
-| '+' module_arguments {}
-| '=' module_arguments {}
-| STRING module_arguments {}
-| column_definition module_arguments {}
-| ',' module_arguments {}
+  /* empty */
+| sql_id module_arguments
+| '+' module_arguments
+| '-' module_arguments
+| '*' module_arguments
+| '/' module_arguments
+| '%' module_arguments
+| '&' module_arguments
+| '|' module_arguments
+| '^' module_arguments
+| '.' module_arguments
+| '=' module_arguments
+| '<' module_arguments
+| '>' module_arguments
+| STRING module_arguments
+| ',' module_arguments
+| '(' module_arguments ')' module_arguments  /* nested parens */
+| INTEGRAL module_arguments
+| FLOAT module_arguments
+| HEXNUM module_arguments
+| VALUE_ARG module_arguments
+| non_reserved_keyword module_arguments
+| int_type_keyword module_arguments
+| float_type_keyword module_arguments
+| decimal_type_keyword module_arguments
+| money_type_keyword module_arguments
+| TEXT module_arguments
+| BLOB module_arguments
+| TINYBLOB module_arguments
+| MEDIUMBLOB module_arguments
+| LONGBLOB module_arguments
+| VARCHAR module_arguments
+| CHAR module_arguments
+| TINYTEXT module_arguments
+| MEDIUMTEXT module_arguments
+| LONGTEXT module_arguments
+| NULL module_arguments
+| NOT module_arguments
+| AND module_arguments
+| OR module_arguments
+| IN module_arguments
+| IS module_arguments
+| LIKE module_arguments
+| BETWEEN module_arguments
+| CASE module_arguments
+| WHEN module_arguments
+| THEN module_arguments
+| ELSE module_arguments
+| END module_arguments
+| CAST module_arguments
+| CONVERT module_arguments
+| SUBSTR module_arguments
+| SUBSTRING module_arguments
+| DEFAULT module_arguments
+| CONSTRAINT module_arguments
+| PRIMARY module_arguments
+| UNIQUE module_arguments
+| CHECK module_arguments
+| REFERENCES module_arguments
 
 trigger_time:
   FOR
