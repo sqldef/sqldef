@@ -2428,12 +2428,14 @@ type DeclareType int
 const (
 	declareVariable DeclareType = iota
 	declareCursor
+	declareHandler
 )
 
 type Declare struct {
 	Type      DeclareType
 	Variables []*LocalVariable
 	Cursor    *CursorDefinition
+	Handler   *HandlerDefinition
 }
 
 func (node *Declare) Format(buf *nodeBuffer) {
@@ -2447,6 +2449,8 @@ func (node *Declare) Format(buf *nodeBuffer) {
 		}
 	case declareCursor:
 		buf.Printf("%v", node.Cursor)
+	case declareHandler:
+		buf.Printf("%v", node.Handler)
 	}
 }
 
@@ -2471,6 +2475,57 @@ func (node *CursorDefinition) Format(buf *nodeBuffer) {
 		scrollStr = " scroll"
 	}
 	buf.Printf("%v%s cursor for\n%v", node.Name, scrollStr, node.Select)
+}
+
+type HandlerConditionType int
+
+const (
+	handlerConditionMysqlErrorCode HandlerConditionType = iota
+	handlerConditionSqlstate
+	handlerConditionSqlwarning
+	handlerConditionNotFound
+	handlerConditionSqlexception
+	handlerConditionName
+)
+
+type HandlerCondition struct {
+	Type  HandlerConditionType
+	Value string
+}
+
+func (node *HandlerCondition) Format(buf *nodeBuffer) {
+	switch node.Type {
+	case handlerConditionMysqlErrorCode:
+		buf.Printf("%s", node.Value)
+	case handlerConditionSqlstate:
+		// SQLSTATE value must be quoted in output
+		buf.Printf("sqlstate '%s'", node.Value)
+	case handlerConditionSqlwarning:
+		buf.Printf("sqlwarning")
+	case handlerConditionNotFound:
+		buf.Printf("not found")
+	case handlerConditionSqlexception:
+		buf.Printf("sqlexception")
+	case handlerConditionName:
+		buf.Printf("%s", node.Value)
+	}
+}
+
+type HandlerDefinition struct {
+	Action     string
+	Conditions []HandlerCondition
+	Statement  Statement
+}
+
+func (node *HandlerDefinition) Format(buf *nodeBuffer) {
+	buf.Printf("%s handler for ", node.Action)
+	for i, cond := range node.Conditions {
+		if i > 0 {
+			buf.Printf(", ")
+		}
+		buf.Printf("%v", &cond)
+	}
+	buf.Printf("\n%v", node.Statement)
 }
 
 const (

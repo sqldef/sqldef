@@ -132,6 +132,8 @@ func forceEOF(yylex any) {
   overExpr                 *OverExpr
   partitionBy              PartitionBy
   partition                *Partition
+  handlerCondition         HandlerCondition
+  handlerConditions        []HandlerCondition
 }
 
 %token LEX_ERROR
@@ -197,6 +199,7 @@ func forceEOF(yylex any) {
 %token <bytes> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
 %token <bytes> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS DISTANCE M EUCLIDEAN COSINE
 %token <bytes> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE INSTEAD OF OUTPUT
+%token <bytes> HANDLER CONTINUE EXIT SQLEXCEPTION SQLWARNING SQLSTATE FOUND
 %token <bytes> DEFERRABLE INITIALLY IMMEDIATE DEFERRED
 %token <bytes> CONCURRENTLY
 %token <bytes> SQL SECURITY
@@ -397,6 +400,10 @@ func forceEOF(yylex any) {
 %type <localVariable> local_variable
 %type <localVariables> declare_variable_list
 %type <boolVal> scroll_opt
+%type <str> handler_action
+%type <handlerCondition> handler_condition
+%type <handlerConditions> handler_condition_list
+%type <statement> handler_statement
 %type <strs> table_hint_list table_hint_opt
 %type <str> table_hint
 %type <newQualifierColName> new_qualifier_column_name
@@ -950,6 +957,17 @@ declare_statement:
       },
     }
   }
+| DECLARE handler_action HANDLER FOR handler_condition_list handler_statement
+  {
+    $$ = &Declare{
+      Type: declareHandler,
+      Handler: &HandlerDefinition{
+        Action: $2,
+        Conditions: $5,
+        Statement: $6,
+      },
+    }
+  }
 
 declare_variable_list:
   local_variable
@@ -974,6 +992,83 @@ scroll_opt:
 | SCROLL
   {
     $$ = BoolVal(true)
+  }
+
+handler_action:
+  CONTINUE
+  {
+    $$ = string($1)
+  }
+| EXIT
+  {
+    $$ = string($1)
+  }
+
+handler_condition_list:
+  handler_condition
+  {
+    $$ = []HandlerCondition{$1}
+  }
+| handler_condition_list ',' handler_condition
+  {
+    $$ = append($$, $3)
+  }
+
+handler_condition:
+  INTEGRAL
+  {
+    $$ = HandlerCondition{Type: handlerConditionMysqlErrorCode, Value: string($1)}
+  }
+| SQLSTATE STRING
+  {
+    $$ = HandlerCondition{Type: handlerConditionSqlstate, Value: string($2)}
+  }
+| SQLSTATE VALUE STRING
+  {
+    $$ = HandlerCondition{Type: handlerConditionSqlstate, Value: string($3)}
+  }
+| SQLWARNING
+  {
+    $$ = HandlerCondition{Type: handlerConditionSqlwarning}
+  }
+| NOT FOUND
+  {
+    $$ = HandlerCondition{Type: handlerConditionNotFound}
+  }
+| SQLEXCEPTION
+  {
+    $$ = HandlerCondition{Type: handlerConditionSqlexception}
+  }
+| sql_id
+  {
+    $$ = HandlerCondition{Type: handlerConditionName, Value: string($1.String())}
+  }
+
+handler_statement:
+  trigger_statement
+  {
+    $$ = $1
+  }
+| BEGIN END
+  {
+    $$ = &BeginEnd{
+      Statements: []Statement{},
+      SuppressSemicolon: false,
+    }
+  }
+| BEGIN trigger_statements END
+  {
+    $$ = &BeginEnd{
+      Statements: $2,
+      SuppressSemicolon: false,
+    }
+  }
+| BEGIN trigger_statements ';' END
+  {
+    $$ = &BeginEnd{
+      Statements: $2,
+      SuppressSemicolon: false,
+    }
   }
 
 cursor_statement:

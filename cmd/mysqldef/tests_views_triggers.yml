@@ -357,4 +357,139 @@ TriggerNonReservedWordInInsertList:
       `off` int
     );
     CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(status, off) values (0, 0);
+TriggerWithDeclareContinueHandler:
+  desired: |
+    CREATE TABLE example_table (
+      id int NOT NULL,
+      col_a varchar(255),
+      col_b varchar(255),
+      created_at datetime,
+      updated_at datetime
+    );
+    CREATE TABLE example_table_new (
+      id int NOT NULL,
+      col_a varchar(255),
+      col_b varchar(255),
+      created_at datetime,
+      updated_at datetime
+    );
+    CREATE TRIGGER trg_insert_example
+      AFTER INSERT ON example_table
+    FOR EACH ROW
+    BEGIN
+      DECLARE CONTINUE HANDLER FOR 1146 BEGIN END;
+      REPLACE INTO example_table_new (
+        id, col_a, col_b, created_at, updated_at
+      ) VALUES (
+        NEW.id, NEW.col_a, NEW.col_b, NEW.created_at, NEW.updated_at
+      );
+    END;
+  output: |
+    CREATE TABLE example_table (
+      id int NOT NULL,
+      col_a varchar(255),
+      col_b varchar(255),
+      created_at datetime,
+      updated_at datetime
+    );
+    CREATE TABLE example_table_new (
+      id int NOT NULL,
+      col_a varchar(255),
+      col_b varchar(255),
+      created_at datetime,
+      updated_at datetime
+    );
+    CREATE TRIGGER `trg_insert_example` after insert ON `example_table` FOR EACH ROW begin
+    declare
+    continue handler for 1146
+    begin
+    end;
+    replace into example_table_new(id, col_a, col_b, created_at, updated_at) values (NEW.id, NEW.col_a, NEW.col_b, NEW.created_at, NEW.updated_at);
+    end;
+TriggerWithDeclareExitHandler:
+  desired: |
+    CREATE TABLE example_table (
+      id int NOT NULL,
+      name varchar(255)
+    );
+    CREATE TRIGGER trg_exit_handler
+      BEFORE INSERT ON example_table
+    FOR EACH ROW
+    BEGIN
+      DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN END;
+      SET NEW.name = UPPER(NEW.name);
+    END;
+  output: |
+    CREATE TABLE example_table (
+      id int NOT NULL,
+      name varchar(255)
+    );
+    CREATE TRIGGER `trg_exit_handler` before insert ON `example_table` FOR EACH ROW begin
+    declare
+    exit handler for sqlexception
+    begin
+    end;
+    set NEW.name = UPPER(NEW.name);
+    end;
+TriggerWithDeclareHandlerSqlstate:
+  desired: |
+    CREATE TABLE example_table (
+      id int NOT NULL,
+      name varchar(255)
+    );
+    CREATE TRIGGER trg_sqlstate_handler
+      BEFORE INSERT ON example_table
+    FOR EACH ROW
+    BEGIN
+      DECLARE CONTINUE HANDLER FOR SQLSTATE '23000' SET @x = 1;
+      INSERT INTO example_table VALUES (NEW.id, NEW.name);
+    END;
+  output: |
+    CREATE TABLE example_table (
+      id int NOT NULL,
+      name varchar(255)
+    );
+    CREATE TRIGGER `trg_sqlstate_handler` before insert ON `example_table` FOR EACH ROW begin
+    declare
+    continue handler for sqlstate '23000'
+    set @x = 1;
+    insert into example_table values (NEW.id, NEW.name);
+    end;
+TriggerWithDeclareHandlerMultipleStatements:
+  desired: |
+    CREATE TABLE example_table (
+      id int NOT NULL,
+      name varchar(255)
+    );
+    CREATE TABLE error_log (
+      error_msg varchar(255)
+    );
+    CREATE TRIGGER trg_handler_complex
+      AFTER INSERT ON example_table
+    FOR EACH ROW
+    BEGIN
+      DECLARE CONTINUE HANDLER FOR 1146
+      BEGIN
+        INSERT INTO error_log VALUES ('Table not found');
+        SET @error_count = @error_count + 1;
+      END;
+      INSERT INTO example_table VALUES (NEW.id, NEW.name);
+    END;
+  output: |
+    CREATE TABLE example_table (
+      id int NOT NULL,
+      name varchar(255)
+    );
+    CREATE TABLE error_log (
+      error_msg varchar(255)
+    );
+    CREATE TRIGGER `trg_handler_complex` after insert ON `example_table` FOR EACH ROW begin
+    declare
+    continue handler for 1146
+    begin
+    insert into error_log values ('Table not found');
+    set @error_count = @error_count + 1;
+    end;
+    insert into example_table values (NEW.id, NEW.name);
+    end;
 
