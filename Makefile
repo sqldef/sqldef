@@ -68,11 +68,11 @@ package-tar.gz: build
 
 parser: goyacc
 	goyacc -o parser/parser.go parser/parser.y
-	go fmt ./parser/parser.go
+	gofmt -w ./parser/parser.go
 
 parser-v: goyacc
 	goyacc -v y.output -o parser/parser.go parser/parser.y
-	go fmt ./parser/parser.go
+	gofmt -w ./parser/parser.go
 
 test: test-mysqldef test-psqldef test-sqlite3def test-mssqldef
 
