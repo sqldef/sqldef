@@ -28,18 +28,18 @@ The executable binaries will be placed in the `build/$os-$arch$/` directory.
 
 ### The Parser
 
-To maintain the parser, edit `parser/parser.y` and run:
+To update the generic SQL parser, edit `parser/parser.y` and regenerate:
 
 ```sh
-make parser # do nothing if parser.go is up to date
-
-make regen-parser # for force regeneration
-
-make regen-parser-v # for force regeneration with y.output
+make parser    # generate parser/parser.go from parser/parser.y
+make parser-v  # same as above, also writes a conflict report to y.output
 ```
 
-For now, `psqldef` uses `go-pgquery` (a native PostgreSQL parser) as the primary parser,
-and the generic parser as a fallback.
+Requirements:
+- No reduce/reduce conflicts are allowed. Use `make parser-v` and inspect `y.output` to confirm.
+
+Usage notes:
+- `psqldef` primarily uses `go-pgquery` (a native PostgreSQL parser) and falls back to the generic parser.
 
 ## Local Development
 
