@@ -66,19 +66,12 @@ package-tar.gz: build
 	cd $(BUILD_DIR) && GZIP=-9 tar zcf ../../package/sqlite3def_$(GOOS)_$(GOARCH).tar.gz sqlite3def$(SUFFIX)
 	cd $(BUILD_DIR) && GZIP=-9 tar zcf ../../package/psqldef_$(GOOS)_$(GOARCH).tar.gz psqldef$(SUFFIX)
 
-# Cached
-parser: goyacc parser/parser.go
-
-regen-parser: goyacc
+parser: goyacc
 	goyacc -o parser/parser.go parser/parser.y
 	go fmt ./parser/parser.go
 
-regen-parser-v: goyacc
+parser-v: goyacc
 	goyacc -v y.output -o parser/parser.go parser/parser.y
-	go fmt ./parser/parser.go
-
-parser/parser.go: parser/parser.y
-	goyacc -o parser/parser.go parser/parser.y
 	go fmt ./parser/parser.go
 
 test: test-mysqldef test-psqldef test-sqlite3def test-mssqldef
