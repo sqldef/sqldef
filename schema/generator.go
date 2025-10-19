@@ -3386,7 +3386,7 @@ func tryConvertOrChainToIn(orExpr *parser.OrExpr) parser.Expr {
 //   - PostgreSQL: case-insensitive by default, case-sensitive when quoted
 //   - MySQL: depends on settings, such as lower_case_table_names
 //   - MSSQL: depends on collation settings
-//   For now, we lowercase everything after removing quotes for normalization.
+//     For now, we lowercase everything after removing quotes for normalization.
 func normalizeName(name string) string {
 	name = strings.Trim(name, "[]")
 	name = strings.Trim(name, "`")

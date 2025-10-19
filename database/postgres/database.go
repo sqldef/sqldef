@@ -573,7 +573,7 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 		}
 		if checkName != nil && checkDefinition != nil {
 			col.Check = &columnConstraint{
-				definition: normalizeCheckConstraintDefinition(*checkDefinition),
+				definition: *checkDefinition,
 				name:       *checkName,
 			}
 		}
@@ -646,29 +646,11 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[strin
 		if err != nil {
 			return nil, err
 		}
-		// Normalize constraint definition to handle PostgreSQL's automatic type casting
-		normalizedDef := normalizeCheckConstraintDefinition(constraintDef)
-		result[constraintName] = normalizedDef
+		result[constraintName] = constraintDef
 	}
 
 	return result, nil
 }
-
-// normalizeCheckConstraintDefinition removes redundant type casts that PostgreSQL automatically adds
-// to make constraint comparison work correctly. Specifically handles cases like:
-// - ARRAY['active'::text, 'pending'::text] -> ARRAY['active', 'pending']
-// - '[0-9]'::text -> '[0-9]' (already handled by shouldDeleteTypeCast)
-func normalizeCheckConstraintDefinition(def string) string {
-	// Remove ::text type casts from string literals in ARRAY expressions
-	// This handles the pattern: 'string'::text within ARRAY[...]
-	result := regexp.MustCompile(`'([^']*)'::text`).ReplaceAllString(def, "'$1'")
-
-	// Remove ::character varying type casts similarly
-	result = regexp.MustCompile(`'([^']*)'::character varying(\([^)]*\))?`).ReplaceAllString(result, "'$1'")
-
-	return result
-}
-
 func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]string, error) {
 	const query = `SELECT con.conname, pg_get_constraintdef(con.oid)
 	FROM   pg_constraint con
@@ -1087,39 +1069,6 @@ func splitTableName(table string, defaultSchema string) (string, string) {
 	return schema, table
 }
 
-// postgresTablePrivilegeList contains all possible table privileges for PostgreSQL
-// Ordered alphabetically as PostgreSQL returns them
-var postgresTablePrivilegeList = []string{
-	"DELETE",
-	"INSERT",
-	"REFERENCES",
-	"SELECT",
-	"TRIGGER",
-	"TRUNCATE",
-	"UPDATE",
-}
-
-// normalizePrivileges converts a privilege list to "ALL PRIVILEGES" if it contains all table privileges
-func normalizePrivileges(privileges string) string {
-	privList := strings.Split(privileges, ", ")
-	if len(privList) != len(postgresTablePrivilegeList) {
-		return privileges
-	}
-
-	privMap := make(map[string]bool)
-	for _, priv := range privList {
-		privMap[priv] = true
-	}
-
-	for _, requiredPriv := range postgresTablePrivilegeList {
-		if !privMap[requiredPriv] {
-			return privileges
-		}
-	}
-
-	return "ALL PRIVILEGES"
-}
-
 func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
 	// If no roles are specified to include, don't query privileges at all
 	if len(d.generatorConfig.ManagedRoles) == 0 {
@@ -1164,8 +1113,6 @@ func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
 		if err := rows.Scan(&grantee, &privileges); err != nil {
 			return nil, fmt.Errorf("failed to scan privilege row: %w", err)
 		}
-
-		privileges = normalizePrivileges(privileges)
 
 		escapedGrantee := grantee
 		if grantee != "PUBLIC" {
