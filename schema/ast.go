@@ -124,9 +124,20 @@ type Index struct {
 }
 
 type IndexColumn struct {
-	column    string
-	length    *int
-	direction string
+	columnExpr parser.Expr // never nil as it's always initialized in the parser
+	length     *int
+	direction  string
+}
+
+// ColumnName returns the column name if this is a simple column reference.
+// For functional indexes or expressions, it returns the string representation.
+func (ic IndexColumn) ColumnName() string {
+	// Check if it's a simple column reference (ColName)
+	if colName, ok := ic.columnExpr.(*parser.ColName); ok {
+		return colName.Name.String()
+	}
+	// For expressions, return the full expression string
+	return parser.String(ic.columnExpr)
 }
 
 // IndexColumn.direction
@@ -277,8 +288,7 @@ type SridDefinition struct {
 }
 
 type CheckDefinition struct {
-	definition        string
-	definitionAST     parser.Expr
+	definition        parser.Expr
 	constraintName    string
 	notForReplication bool
 	noInherit         bool
@@ -389,7 +399,7 @@ func (t *Table) PrimaryKey() *Index {
 	for _, column := range t.columns {
 		if column.keyOption == ColumnKeyPrimary {
 			primaryColumns = append(primaryColumns, IndexColumn{
-				column: column.name,
+				columnExpr: &parser.ColName{Name: parser.NewColIdent(column.name)},
 			})
 		}
 	}

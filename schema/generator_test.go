@@ -29,16 +29,16 @@ func TestAreSamePrimaryKeyColumnsMutation(t *testing.T) {
 	indexA := Index{
 		primary: true,
 		columns: []IndexColumn{
-			{column: "id", direction: ""},
-			{column: "name", direction: ""},
+			{columnExpr: &parser.ColName{Name: parser.NewColIdent("id")}, direction: ""},
+			{columnExpr: &parser.ColName{Name: parser.NewColIdent("name")}, direction: ""},
 		},
 	}
 
 	indexB := Index{
 		primary: true,
 		columns: []IndexColumn{
-			{column: "id", direction: ""},
-			{column: "name", direction: ""},
+			{columnExpr: &parser.ColName{Name: parser.NewColIdent("id")}, direction: ""},
+			{columnExpr: &parser.ColName{Name: parser.NewColIdent("name")}, direction: ""},
 		},
 	}
 
@@ -65,16 +65,16 @@ func TestAreSamePrimaryKeyColumnsWithDifferentDirections(t *testing.T) {
 	indexA := Index{
 		primary: true,
 		columns: []IndexColumn{
-			{column: "id", direction: AscScr},
-			{column: "name", direction: DescScr},
+			{columnExpr: &parser.ColName{Name: parser.NewColIdent("id")}, direction: AscScr},
+			{columnExpr: &parser.ColName{Name: parser.NewColIdent("name")}, direction: DescScr},
 		},
 	}
 
 	indexB := Index{
 		primary: true,
 		columns: []IndexColumn{
-			{column: "id", direction: AscScr},
-			{column: "name", direction: AscScr}, // Different direction
+			{columnExpr: &parser.ColName{Name: parser.NewColIdent("id")}, direction: AscScr},
+			{columnExpr: &parser.ColName{Name: parser.NewColIdent("name")}, direction: AscScr}, // Different direction
 		},
 	}
 
@@ -185,7 +185,7 @@ func TestNormalizeViewDefinition(t *testing.T) {
 	}
 }
 
-func TestNormalizeCheckExprAST(t *testing.T) {
+func TestNormalizeCheckExpr(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
@@ -272,7 +272,7 @@ func TestNormalizeCheckExprAST(t *testing.T) {
 			expected: "status in ('a', 'b')",
 		},
 		// Test unwrapOutermostParenExpr behavior in AND/OR contexts
-		// Note: outermost parens are preserved by normalizeCheckExprAST,
+		// Note: outermost parens are preserved by normalizeCheckExpr,
 		// they're only unwrapped in areSameCheckDefinition
 		{
 			name:     "Unwrap unnecessary parens in AND operands",
@@ -317,7 +317,7 @@ func TestNormalizeCheckExprAST(t *testing.T) {
 			assert.NotNil(t, check.Where.Expr, "Check expression is nil")
 
 			// Normalize the expression
-			normalized := normalizeCheckExprAST(check.Where.Expr)
+			normalized := normalizeCheckExpr(check.Where.Expr)
 
 			// Convert normalized expression to string
 			actual := parser.String(normalized)
@@ -326,8 +326,8 @@ func TestNormalizeCheckExprAST(t *testing.T) {
 	}
 }
 
-func TestNormalizeCheckExprASTNilInput(t *testing.T) {
-	result := normalizeCheckExprAST(nil)
+func TestNormalizeCheckExprNilInput(t *testing.T) {
+	result := normalizeCheckExpr(nil)
 	assert.Nil(t, result)
 }
 
@@ -347,8 +347,8 @@ func TestCheckConstraintComparisonWithDifferentInValues(t *testing.T) {
 	check2 := ddl2.TableSpec.Checks[0]
 
 	// Normalize both
-	normalized1 := normalizeCheckExprAST(check1.Where.Expr)
-	normalized2 := normalizeCheckExprAST(check2.Where.Expr)
+	normalized1 := normalizeCheckExpr(check1.Where.Expr)
+	normalized2 := normalizeCheckExpr(check2.Where.Expr)
 
 	// Convert to strings
 	str1 := parser.String(normalized1)
@@ -377,8 +377,8 @@ func TestCheckConstraintIdempotencyWithMySQLFormat(t *testing.T) {
 	check2 := ddl2.TableSpec.Checks[0]
 
 	// Normalize both
-	normalized1 := normalizeCheckExprAST(check1.Where.Expr)
-	normalized2 := normalizeCheckExprAST(check2.Where.Expr)
+	normalized1 := normalizeCheckExpr(check1.Where.Expr)
+	normalized2 := normalizeCheckExpr(check2.Where.Expr)
 
 	// Unwrap outermost parentheses (as done in areSameCheckDefinition)
 	normalized1 = unwrapOutermostParenExpr(normalized1)
@@ -414,8 +414,8 @@ func TestCheckConstraintMSSQLInVsOrNormalization(t *testing.T) {
 	checkDB := colDB.Type.Check
 
 	// Normalize both
-	normalizedUser := normalizeCheckExprAST(checkUser.Where.Expr)
-	normalizedDB := normalizeCheckExprAST(checkDB.Where.Expr)
+	normalizedUser := normalizeCheckExpr(checkUser.Where.Expr)
+	normalizedDB := normalizeCheckExpr(checkDB.Where.Expr)
 
 	// Unwrap outermost parens
 	normalizedUser = unwrapOutermostParenExpr(normalizedUser)
