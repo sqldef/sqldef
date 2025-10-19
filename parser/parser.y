@@ -344,7 +344,9 @@ func forceEOF(yylex any) {
 %type <str> set_session_or_global
 %type <convertType> convert_type simple_convert_type
 %type <columnType> column_type
-%type <columnType> bool_type int_type decimal_type numeric_type time_type char_type spatial_type
+%type <columnType> bool_type decimal_type numeric_type time_type char_type spatial_type
+%type <bytes> int_type_keyword
+%type <columnType> int_type_spec
 %type <str> precision_opt varying_opt
 %type <optVal> length_opt max_length_opt current_timestamp
 %type <str> charset_opt collate_opt
@@ -1924,56 +1926,25 @@ character_cast_opt:
 | TYPECAST column_type array_opt
 
 numeric_type:
-  int_type length_opt
-  {
-    $$ = $1
-    $$.DisplayWidth = $2
-  }
+  int_type_spec
 | decimal_type
-  {
-    $$ = $1
-  }
 
-int_type:
+int_type_keyword:
   BIT
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
 | TINYINT
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
 | SMALLINT
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
 | SMALLSERIAL
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
 | MEDIUMINT
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
 | INT
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
 | INTEGER
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
 | SERIAL
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
 | BIGINT
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
 | BIGSERIAL
+
+int_type_spec:
+  int_type_keyword length_opt
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: string($1), DisplayWidth: $2}
   }
 
 decimal_type:
@@ -3620,10 +3591,6 @@ value_expression:
   {
     $$ = &BinaryExpr{Left: $1, Operator: JSONUnquoteExtractOp, Right: $3}
   }
-| value_expression TYPECAST numeric_type
-  {
-    $$ = &CollateExpr{Expr: $1}
-  }
 | value_expression COLLATE charset
   {
     $$ = &CollateExpr{Expr: $1, Charset: $3}
@@ -4001,17 +3968,9 @@ convert_type:
   {
     $$ = &ConvertType{Type: string($1)}
   }
-| BIGINT
+| int_type_keyword length_opt
   {
-    $$ = &ConvertType{Type: string($1)}
-  }
-| BIT
-  {
-    $$ = &ConvertType{Type: string($1)}
-  }
-| INT
-  {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: string($1), Length: $2}
   }
 | MONEY
   {
@@ -4021,15 +3980,7 @@ convert_type:
   {
     $$ = &ConvertType{Type: string($1), Length: $2.Length, Scale: $2.Scale}
   }
-| SMALLINT
-  {
-    $$ = &ConvertType{Type: string($1)}
-  }
 | SMALLMONEY
-  {
-    $$ = &ConvertType{Type: string($1)}
-  }
-| TINYINT
   {
     $$ = &ConvertType{Type: string($1)}
   }
@@ -4095,9 +4046,9 @@ simple_convert_type:
   {
     $$ = &ConvertType{Type: string($1)}
   }
-| int_type
+| int_type_keyword
   {
-    $$ = &ConvertType{Type: $1.Type}
+    $$ = &ConvertType{Type: string($1)}
   }
 | bool_type
   {
