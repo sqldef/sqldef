@@ -19,7 +19,7 @@ ifeq ($(VERBOSE), 1)
   GOTESTFLAGS := -v
 endif
 
-.PHONY: all build clean deps goyacc package package-zip package-targz parser build-mysqldef build-sqlite3def build-mssqldef build-psqldef
+.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef
 
 all: build
 
@@ -66,12 +66,13 @@ package-tar.gz: build
 	cd $(BUILD_DIR) && GZIP=-9 tar zcf ../../package/sqlite3def_$(GOOS)_$(GOARCH).tar.gz sqlite3def$(SUFFIX)
 	cd $(BUILD_DIR) && GZIP=-9 tar zcf ../../package/psqldef_$(GOOS)_$(GOARCH).tar.gz psqldef$(SUFFIX)
 
-# Cached
-parser: goyacc parser/parser.go
-
-parser/parser.go: parser/parser.y
+parser: goyacc
 	goyacc -o parser/parser.go parser/parser.y
-	gofmt -w parser/parser.go
+	gofmt -w ./parser/parser.go
+
+parser-v: goyacc
+	goyacc -v y.output -o parser/parser.go parser/parser.y
+	gofmt -w ./parser/parser.go
 
 test: test-mysqldef test-psqldef test-sqlite3def test-mssqldef
 

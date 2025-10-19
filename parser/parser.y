@@ -333,18 +333,20 @@ func forceEOF(yylex any) {
 %type <updateExpr> update_expression
 %type <setExpr> set_expression transaction_char isolation_level
 %type <str> ignore_opt default_opt
-%type <empty> not_exists_opt when_expression_opt for_each_row_opt
+%type <empty> if_not_exists_opt when_expression_opt for_each_row_opt
 %type <bytes> reserved_keyword non_reserved_keyword
 %type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt
 %type <boolVal> unique_opt
 %type <expr> charset_value
-%type <tableIdent> table_id reserved_table_id table_alias as_opt_id
+%type <tableIdent> table_id reserved_table_id as_opt_id
 %type <empty> as_opt
 %type <str> charset
 %type <str> set_session_or_global
 %type <convertType> convert_type simple_convert_type
 %type <columnType> column_type
-%type <columnType> bool_type int_type decimal_type numeric_type time_type char_type spatial_type
+%type <columnType> bool_type numeric_type time_type char_type spatial_type
+%type <bytes> int_type_keyword float_type_keyword decimal_type_keyword money_type_keyword
+%type <columnType> int_type_spec float_type_spec decimal_type_spec money_type_spec double_type_spec
 %type <str> precision_opt varying_opt
 %type <optVal> length_opt max_length_opt current_timestamp
 %type <str> charset_opt collate_opt
@@ -566,7 +568,7 @@ create_statement:
       IndexCols: $8,
     }
   }
-| CREATE or_replace_opt VIEW not_exists_opt table_name AS select_statement
+| CREATE or_replace_opt VIEW if_not_exists_opt table_name AS select_statement
   {
     $$ = &DDL{
       Action: CreateView,
@@ -577,7 +579,7 @@ create_statement:
       },
     }
   }
-| CREATE or_replace_opt SQL SECURITY sql_security VIEW not_exists_opt table_name AS select_statement
+| CREATE or_replace_opt SQL SECURITY sql_security VIEW if_not_exists_opt table_name AS select_statement
   {
     $$ = &DDL{
       Action: CreateView,
@@ -589,7 +591,7 @@ create_statement:
       },
     }
   }
-| CREATE MATERIALIZED VIEW not_exists_opt table_name AS select_statement
+| CREATE MATERIALIZED VIEW if_not_exists_opt table_name AS select_statement
   {
     $$ = &DDL{
       Action: CreateView,
@@ -682,7 +684,7 @@ create_statement:
     }
   }
 /* For SQLite3, only to parse because alternation is not supported. // The Virtual Table Mechanism Of SQLite https://www.sqlite.org/vtab.html */
-| CREATE VIRTUAL TABLE not_exists_opt table_name USING sql_id module_arguments_opt
+| CREATE VIRTUAL TABLE if_not_exists_opt table_name USING sql_id module_arguments_opt
   {
     $$ = &DDL{Action: CreateTable, NewName: $5, TableSpec: &TableSpec{}}
   }
@@ -1216,18 +1218,71 @@ set_session_or_global:
   }
 
 module_arguments_opt:
-  {}
-| '(' module_arguments ')' {}
+  /* empty */
+| '(' module_arguments ')'
 
-/* mod */
+/* mod - SQLite virtual table module arguments are opaque token sequences, not structured SQL.
+   Accept arbitrary tokens since virtual table modules have custom syntax. */
 module_arguments:
-  {}
-| sql_id module_arguments {}
-| '+' module_arguments {}
-| '=' module_arguments {}
-| STRING module_arguments {}
-| column_definition module_arguments {}
-| ',' module_arguments {}
+  /* empty */
+| sql_id module_arguments
+| '+' module_arguments
+| '-' module_arguments
+| '*' module_arguments
+| '/' module_arguments
+| '%' module_arguments
+| '&' module_arguments
+| '|' module_arguments
+| '^' module_arguments
+| '.' module_arguments
+| '=' module_arguments
+| '<' module_arguments
+| '>' module_arguments
+| STRING module_arguments
+| ',' module_arguments
+| '(' module_arguments ')' module_arguments  /* nested parens */
+| INTEGRAL module_arguments
+| FLOAT module_arguments
+| HEXNUM module_arguments
+| VALUE_ARG module_arguments
+| non_reserved_keyword module_arguments
+| int_type_keyword module_arguments
+| float_type_keyword module_arguments
+| decimal_type_keyword module_arguments
+| money_type_keyword module_arguments
+| TEXT module_arguments
+| BLOB module_arguments
+| TINYBLOB module_arguments
+| MEDIUMBLOB module_arguments
+| LONGBLOB module_arguments
+| VARCHAR module_arguments
+| CHAR module_arguments
+| TINYTEXT module_arguments
+| MEDIUMTEXT module_arguments
+| LONGTEXT module_arguments
+| NULL module_arguments
+| NOT module_arguments
+| AND module_arguments
+| OR module_arguments
+| IN module_arguments
+| IS module_arguments
+| LIKE module_arguments
+| BETWEEN module_arguments
+| CASE module_arguments
+| WHEN module_arguments
+| THEN module_arguments
+| ELSE module_arguments
+| END module_arguments
+| CAST module_arguments
+| CONVERT module_arguments
+| SUBSTR module_arguments
+| SUBSTRING module_arguments
+| DEFAULT module_arguments
+| CONSTRAINT module_arguments
+| PRIMARY module_arguments
+| UNIQUE module_arguments
+| CHECK module_arguments
+| REFERENCES module_arguments
 
 trigger_time:
   FOR
@@ -1452,7 +1507,7 @@ or_replace_opt:
   }
 
 create_table_prefix:
-  CREATE TABLE not_exists_opt table_name
+  CREATE TABLE if_not_exists_opt table_name
   {
     $$ = &DDL{Action: CreateTable, NewName: $4}
     setDDL(yylex, $$)
@@ -1924,96 +1979,60 @@ character_cast_opt:
 | TYPECAST column_type array_opt
 
 numeric_type:
-  int_type length_opt
-  {
-    $$ = $1
-    $$.DisplayWidth = $2
-  }
-| decimal_type
-  {
-    $$ = $1
-  }
+  int_type_spec
+| float_type_spec
+| double_type_spec
+| decimal_type_spec
+| money_type_spec
 
-int_type:
+int_type_keyword:
   BIT
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
 | TINYINT
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
 | SMALLINT
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
 | SMALLSERIAL
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
 | MEDIUMINT
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
 | INT
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
 | INTEGER
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
 | SERIAL
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
 | BIGINT
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
 | BIGSERIAL
+
+int_type_spec:
+  int_type_keyword length_opt
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: string($1), DisplayWidth: $2}
   }
 
-decimal_type:
-  REAL float_length_opt
+float_type_keyword:
+  REAL
+| FLOAT_TYPE
+
+float_type_spec:
+  float_type_keyword float_length_opt
   {
     $$ = ColumnType{Type: string($1)}
     $$.Length = $2.Length
     $$.Scale = $2.Scale
   }
-| DOUBLE precision_opt float_length_opt
+
+decimal_type_keyword:
+  DECIMAL
+| NUMERIC
+
+decimal_type_spec:
+  decimal_type_keyword decimal_length_opt
+  {
+    $$ = ColumnType{Type: string($1)}
+    $$.Length = $2.Length
+    $$.Scale = $2.Scale
+  }
+
+double_type_spec:
+  DOUBLE precision_opt float_length_opt
   {
     $$ = ColumnType{Type: string($1)+$2}
     $$.Length = $3.Length
     $$.Scale = $3.Scale
-  }
-| FLOAT_TYPE float_length_opt
-  {
-    $$ = ColumnType{Type: string($1)}
-    $$.Length = $2.Length
-    $$.Scale = $2.Scale
-  }
-| DECIMAL decimal_length_opt
-  {
-    $$ = ColumnType{Type: string($1)}
-    $$.Length = $2.Length
-    $$.Scale = $2.Scale
-  }
-| NUMERIC decimal_length_opt
-  {
-    $$ = ColumnType{Type: string($1)}
-    $$.Length = $2.Length
-    $$.Scale = $2.Scale
-  }
-| MONEY
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
-| SMALLMONEY
-  {
-    $$ = ColumnType{Type: string($1)}
   }
 
 precision_opt:
@@ -2023,6 +2042,46 @@ precision_opt:
 | PRECISION
   {
     $$ = " " + string($1)
+  }
+
+float_length_opt:
+  {
+    $$ = LengthScaleOption{}
+  }
+| '(' INTEGRAL ',' INTEGRAL ')'
+  {
+    $$ = LengthScaleOption{
+      Length: NewIntVal($2),
+      Scale: NewIntVal($4),
+    }
+  }
+
+decimal_length_opt:
+  {
+    $$ = LengthScaleOption{}
+  }
+| '(' INTEGRAL ')'
+  {
+    $$ = LengthScaleOption{
+      Length: NewIntVal($2),
+    }
+  }
+| '(' INTEGRAL ',' INTEGRAL ')'
+  {
+    $$ = LengthScaleOption{
+      Length: NewIntVal($2),
+      Scale: NewIntVal($4),
+    }
+  }
+
+money_type_keyword:
+  MONEY
+| SMALLMONEY
+
+money_type_spec:
+  money_type_keyword
+  {
+    $$ = ColumnType{Type: string($1)}
   }
 
 time_type:
@@ -2225,36 +2284,6 @@ length_opt:
 | '(' INTEGRAL ')'
   {
     $$ = NewIntVal($2)
-  }
-
-float_length_opt:
-  {
-    $$ = LengthScaleOption{}
-  }
-| '(' INTEGRAL ',' INTEGRAL ')'
-  {
-    $$ = LengthScaleOption{
-      Length: NewIntVal($2),
-      Scale: NewIntVal($4),
-    }
-  }
-
-decimal_length_opt:
-  {
-    $$ = LengthScaleOption{}
-  }
-| '(' INTEGRAL ')'
-  {
-    $$ = LengthScaleOption{
-      Length: NewIntVal($2),
-    }
-  }
-| '(' INTEGRAL ',' INTEGRAL ')'
-  {
-    $$ = LengthScaleOption{
-      Length: NewIntVal($2),
-      Scale: NewIntVal($4),
-    }
   }
 
 max_length_opt:
@@ -2502,11 +2531,7 @@ index_partition_opt:
   }
 
 index_info:
-  PRIMARY KEY
-  {
-    $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent("PRIMARY"), Primary: true, Unique: true}
-  }
-| SPATIAL index_or_key ID
+  SPATIAL index_or_key ID
   {
     $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(string($3)), Spatial: true, Unique: false}
   }
@@ -2694,7 +2719,7 @@ primary_key_definition:
 | PRIMARY KEY clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
   {
     $$ = &IndexDefinition{
-      Info: &IndexInfo{Type: string($1) + " " + string($2), Primary: true, Unique: true, Clustered: $3},
+      Info: &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent("PRIMARY"), Primary: true, Unique: true, Clustered: $3},
       Columns: $5,
       Options: $7,
       Partition: $8,
@@ -3184,20 +3209,13 @@ as_opt_id:
   {
     $$ = NewTableIdent("")
   }
-| table_alias
+| table_id
   {
     $$ = $1
   }
-| AS table_alias
+| AS table_id
   {
     $$ = $2
-  }
-
-table_alias:
-  table_id
-| STRING
-  {
-    $$ = NewTableIdent(string($1))
   }
 
 inner_join:
@@ -3620,10 +3638,6 @@ value_expression:
   {
     $$ = &BinaryExpr{Left: $1, Operator: JSONUnquoteExtractOp, Right: $3}
   }
-| value_expression TYPECAST numeric_type
-  {
-    $$ = &CollateExpr{Expr: $1}
-  }
 | value_expression COLLATE charset
   {
     $$ = &CollateExpr{Expr: $1, Charset: $3}
@@ -3731,10 +3745,6 @@ function_call_generic:
 | table_id '.' reserved_sql_id openb select_expression_list_opt closeb
   {
     $$ = &FuncExpr{Qualifier: $1, Name: $3, Exprs: $5}
-  }
-| sql_id openb expression_list closeb
-  {
-    $$ = &FuncCallExpr{Name: $1, Exprs: $3}
   }
 
 /*
@@ -3967,11 +3977,27 @@ convert_type:
   {
     $$ = &ConvertType{Type: string($1), Length: $2}
   }
-| DECIMAL decimal_length_opt
+| decimal_type_keyword decimal_length_opt
   {
     $$ = &ConvertType{Type: string($1)}
     $$.Length = $2.Length
     $$.Scale = $2.Scale
+  }
+| float_type_keyword float_length_opt
+  {
+    $$ = &ConvertType{Type: string($1)}
+    $$.Length = $2.Length
+    $$.Scale = $2.Scale
+  }
+| money_type_keyword
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| DOUBLE precision_opt float_length_opt
+  {
+    $$ = &ConvertType{Type: string($1)+$2}
+    $$.Length = $3.Length
+    $$.Scale = $3.Scale
   }
 | JSON
   {
@@ -4001,45 +4027,9 @@ convert_type:
   {
     $$ = &ConvertType{Type: string($1)}
   }
-| BIGINT
+| int_type_keyword length_opt
   {
-    $$ = &ConvertType{Type: string($1)}
-  }
-| BIT
-  {
-    $$ = &ConvertType{Type: string($1)}
-  }
-| INT
-  {
-    $$ = &ConvertType{Type: string($1)}
-  }
-| MONEY
-  {
-    $$ = &ConvertType{Type: string($1)}
-  }
-| NUMERIC decimal_length_opt
-  {
-    $$ = &ConvertType{Type: string($1), Length: $2.Length, Scale: $2.Scale}
-  }
-| SMALLINT
-  {
-    $$ = &ConvertType{Type: string($1)}
-  }
-| SMALLMONEY
-  {
-    $$ = &ConvertType{Type: string($1)}
-  }
-| TINYINT
-  {
-    $$ = &ConvertType{Type: string($1)}
-  }
-| FLOAT_TYPE
-  {
-    $$ = &ConvertType{Type: string($1)}
-  }
-| REAL
-  {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: string($1), Length: $2}
   }
 | DATETIME2 length_opt
   {
@@ -4095,9 +4085,9 @@ simple_convert_type:
   {
     $$ = &ConvertType{Type: string($1)}
   }
-| int_type
+| int_type_keyword
   {
-    $$ = &ConvertType{Type: $1.Type}
+    $$ = &ConvertType{Type: string($1)}
   }
 | bool_type
   {
@@ -4531,7 +4521,7 @@ charset_value:
     $$ = &Default{}
   }
 
-not_exists_opt:
+if_not_exists_opt:
   { $$ = struct{}{} }
 | IF NOT EXISTS
   { $$ = struct{}{} }
