@@ -19,7 +19,7 @@ ifeq ($(VERBOSE), 1)
   GOTESTFLAGS := -v
 endif
 
-.PHONY: all build clean deps goyacc package package-zip package-targz parser regen-parser build-mysqldef build-sqlite3def build-mssqldef build-psqldef
+.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef
 
 all: build
 
