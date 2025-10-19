@@ -1,3 +1,11 @@
+## [v3.2.0](https://github.com/sqldef/sqldef/compare/v3.1.18...v3.2.0) - 2025-10-19
+- refactor normalization logic by @gfx in https://github.com/sqldef/sqldef/pull/888
+- [refactor] resolve all the reduce/reduce conflicts in parser.y by @gfx in https://github.com/sqldef/sqldef/pull/890
+- remove redundant code by @gfx in https://github.com/sqldef/sqldef/pull/891
+- fix gh action warnings about caches by @gfx in https://github.com/sqldef/sqldef/pull/892
+- [CI] setup docker build caches by @gfx in https://github.com/sqldef/sqldef/pull/893
+- mysqldef: implement triggers with condition handlers by @gfx in https://github.com/sqldef/sqldef/pull/894
+
 ## [v3.1.18](https://github.com/sqldef/sqldef/compare/v3.1.17...v3.1.18) - 2025-10-18
 - [test] make tests simler by @gfx in https://github.com/sqldef/sqldef/pull/879
 - [test] migrate tests in psqldef_test to tests.yaml (TestApply) by @gfx in https://github.com/sqldef/sqldef/pull/881
