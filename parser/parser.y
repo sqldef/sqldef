@@ -2531,11 +2531,7 @@ index_partition_opt:
   }
 
 index_info:
-  PRIMARY KEY
-  {
-    $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent("PRIMARY"), Primary: true, Unique: true}
-  }
-| SPATIAL index_or_key ID
+  SPATIAL index_or_key ID
   {
     $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(string($3)), Spatial: true, Unique: false}
   }
@@ -2723,7 +2719,7 @@ primary_key_definition:
 | PRIMARY KEY clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
   {
     $$ = &IndexDefinition{
-      Info: &IndexInfo{Type: string($1) + " " + string($2), Primary: true, Unique: true, Clustered: $3},
+      Info: &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent("PRIMARY"), Primary: true, Unique: true, Clustered: $3},
       Columns: $5,
       Options: $7,
       Partition: $8,
@@ -3749,10 +3745,6 @@ function_call_generic:
 | table_id '.' reserved_sql_id openb select_expression_list_opt closeb
   {
     $$ = &FuncExpr{Qualifier: $1, Name: $3, Exprs: $5}
-  }
-| sql_id openb expression_list closeb
-  {
-    $$ = &FuncCallExpr{Name: $1, Exprs: $3}
   }
 
 /*
