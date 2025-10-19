@@ -344,9 +344,9 @@ func forceEOF(yylex any) {
 %type <str> set_session_or_global
 %type <convertType> convert_type simple_convert_type
 %type <columnType> column_type
-%type <columnType> bool_type decimal_type numeric_type time_type char_type spatial_type
-%type <bytes> int_type_keyword
-%type <columnType> int_type_spec
+%type <columnType> bool_type numeric_type time_type char_type spatial_type
+%type <bytes> int_type_keyword float_type_keyword decimal_type_keyword money_type_keyword
+%type <columnType> int_type_spec float_type_spec decimal_type_spec money_type_spec double_type_spec
 %type <str> precision_opt varying_opt
 %type <optVal> length_opt max_length_opt current_timestamp
 %type <str> charset_opt collate_opt
@@ -1927,7 +1927,10 @@ character_cast_opt:
 
 numeric_type:
   int_type_spec
-| decimal_type
+| float_type_spec
+| double_type_spec
+| decimal_type_spec
+| money_type_spec
 
 int_type_keyword:
   BIT
@@ -1947,44 +1950,36 @@ int_type_spec:
     $$ = ColumnType{Type: string($1), DisplayWidth: $2}
   }
 
-decimal_type:
-  REAL float_length_opt
+float_type_keyword:
+  REAL
+| FLOAT_TYPE
+
+float_type_spec:
+  float_type_keyword float_length_opt
   {
     $$ = ColumnType{Type: string($1)}
     $$.Length = $2.Length
     $$.Scale = $2.Scale
   }
-| DOUBLE precision_opt float_length_opt
+
+decimal_type_keyword:
+  DECIMAL
+| NUMERIC
+
+decimal_type_spec:
+  decimal_type_keyword decimal_length_opt
+  {
+    $$ = ColumnType{Type: string($1)}
+    $$.Length = $2.Length
+    $$.Scale = $2.Scale
+  }
+
+double_type_spec:
+  DOUBLE precision_opt float_length_opt
   {
     $$ = ColumnType{Type: string($1)+$2}
     $$.Length = $3.Length
     $$.Scale = $3.Scale
-  }
-| FLOAT_TYPE float_length_opt
-  {
-    $$ = ColumnType{Type: string($1)}
-    $$.Length = $2.Length
-    $$.Scale = $2.Scale
-  }
-| DECIMAL decimal_length_opt
-  {
-    $$ = ColumnType{Type: string($1)}
-    $$.Length = $2.Length
-    $$.Scale = $2.Scale
-  }
-| NUMERIC decimal_length_opt
-  {
-    $$ = ColumnType{Type: string($1)}
-    $$.Length = $2.Length
-    $$.Scale = $2.Scale
-  }
-| MONEY
-  {
-    $$ = ColumnType{Type: string($1)}
-  }
-| SMALLMONEY
-  {
-    $$ = ColumnType{Type: string($1)}
   }
 
 precision_opt:
@@ -1994,6 +1989,46 @@ precision_opt:
 | PRECISION
   {
     $$ = " " + string($1)
+  }
+
+float_length_opt:
+  {
+    $$ = LengthScaleOption{}
+  }
+| '(' INTEGRAL ',' INTEGRAL ')'
+  {
+    $$ = LengthScaleOption{
+      Length: NewIntVal($2),
+      Scale: NewIntVal($4),
+    }
+  }
+
+decimal_length_opt:
+  {
+    $$ = LengthScaleOption{}
+  }
+| '(' INTEGRAL ')'
+  {
+    $$ = LengthScaleOption{
+      Length: NewIntVal($2),
+    }
+  }
+| '(' INTEGRAL ',' INTEGRAL ')'
+  {
+    $$ = LengthScaleOption{
+      Length: NewIntVal($2),
+      Scale: NewIntVal($4),
+    }
+  }
+
+money_type_keyword:
+  MONEY
+| SMALLMONEY
+
+money_type_spec:
+  money_type_keyword
+  {
+    $$ = ColumnType{Type: string($1)}
   }
 
 time_type:
@@ -2196,36 +2231,6 @@ length_opt:
 | '(' INTEGRAL ')'
   {
     $$ = NewIntVal($2)
-  }
-
-float_length_opt:
-  {
-    $$ = LengthScaleOption{}
-  }
-| '(' INTEGRAL ',' INTEGRAL ')'
-  {
-    $$ = LengthScaleOption{
-      Length: NewIntVal($2),
-      Scale: NewIntVal($4),
-    }
-  }
-
-decimal_length_opt:
-  {
-    $$ = LengthScaleOption{}
-  }
-| '(' INTEGRAL ')'
-  {
-    $$ = LengthScaleOption{
-      Length: NewIntVal($2),
-    }
-  }
-| '(' INTEGRAL ',' INTEGRAL ')'
-  {
-    $$ = LengthScaleOption{
-      Length: NewIntVal($2),
-      Scale: NewIntVal($4),
-    }
   }
 
 max_length_opt:
@@ -3934,11 +3939,27 @@ convert_type:
   {
     $$ = &ConvertType{Type: string($1), Length: $2}
   }
-| DECIMAL decimal_length_opt
+| decimal_type_keyword decimal_length_opt
   {
     $$ = &ConvertType{Type: string($1)}
     $$.Length = $2.Length
     $$.Scale = $2.Scale
+  }
+| float_type_keyword float_length_opt
+  {
+    $$ = &ConvertType{Type: string($1)}
+    $$.Length = $2.Length
+    $$.Scale = $2.Scale
+  }
+| money_type_keyword
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| DOUBLE precision_opt float_length_opt
+  {
+    $$ = &ConvertType{Type: string($1)+$2}
+    $$.Length = $3.Length
+    $$.Scale = $3.Scale
   }
 | JSON
   {
@@ -3971,26 +3992,6 @@ convert_type:
 | int_type_keyword length_opt
   {
     $$ = &ConvertType{Type: string($1), Length: $2}
-  }
-| MONEY
-  {
-    $$ = &ConvertType{Type: string($1)}
-  }
-| NUMERIC decimal_length_opt
-  {
-    $$ = &ConvertType{Type: string($1), Length: $2.Length, Scale: $2.Scale}
-  }
-| SMALLMONEY
-  {
-    $$ = &ConvertType{Type: string($1)}
-  }
-| FLOAT_TYPE
-  {
-    $$ = &ConvertType{Type: string($1)}
-  }
-| REAL
-  {
-    $$ = &ConvertType{Type: string($1)}
   }
 | DATETIME2 length_opt
   {
