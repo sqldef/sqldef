@@ -26,12 +26,16 @@ make build
 
 The executable binaries will be placed in the `build/$os-$arch$/` directory.
 
-### Build Parser
+### The Parser
 
 To maintain the parser, edit `parser/parser.y` and run:
 
 ```sh
-make parser
+make parser # do nothing if parser.go is up to date
+
+make regen-parser # for force regeneration
+
+make regen-parser-v # for force regeneration with y.output
 ```
 
 For now, `psqldef` uses `go-pgquery` (a native PostgreSQL parser) as the primary parser,
