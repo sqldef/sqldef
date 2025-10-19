@@ -29,16 +29,16 @@ func TestAreSamePrimaryKeyColumnsMutation(t *testing.T) {
 	indexA := Index{
 		primary: true,
 		columns: []IndexColumn{
-			{column: "id", direction: ""},
-			{column: "name", direction: ""},
+			{columnExpr: &parser.ColName{Name: parser.NewColIdent("id")}, direction: ""},
+			{columnExpr: &parser.ColName{Name: parser.NewColIdent("name")}, direction: ""},
 		},
 	}
 
 	indexB := Index{
 		primary: true,
 		columns: []IndexColumn{
-			{column: "id", direction: ""},
-			{column: "name", direction: ""},
+			{columnExpr: &parser.ColName{Name: parser.NewColIdent("id")}, direction: ""},
+			{columnExpr: &parser.ColName{Name: parser.NewColIdent("name")}, direction: ""},
 		},
 	}
 
@@ -65,16 +65,16 @@ func TestAreSamePrimaryKeyColumnsWithDifferentDirections(t *testing.T) {
 	indexA := Index{
 		primary: true,
 		columns: []IndexColumn{
-			{column: "id", direction: AscScr},
-			{column: "name", direction: DescScr},
+			{columnExpr: &parser.ColName{Name: parser.NewColIdent("id")}, direction: AscScr},
+			{columnExpr: &parser.ColName{Name: parser.NewColIdent("name")}, direction: DescScr},
 		},
 	}
 
 	indexB := Index{
 		primary: true,
 		columns: []IndexColumn{
-			{column: "id", direction: AscScr},
-			{column: "name", direction: AscScr}, // Different direction
+			{columnExpr: &parser.ColName{Name: parser.NewColIdent("id")}, direction: AscScr},
+			{columnExpr: &parser.ColName{Name: parser.NewColIdent("name")}, direction: AscScr}, // Different direction
 		},
 	}
 

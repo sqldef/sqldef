@@ -1538,7 +1538,7 @@ func normalizeSelectExprs(exprs parser.SelectExprs, mode GeneratorMode) parser.S
 	return normalized
 }
 
-// normalizeSelectExpr normalizes a single SELECT expression
+// normalizeSelectExpr normalizes a single SELECT expression for views
 func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.SelectExpr {
 	switch e := expr.(type) {
 	case *parser.AliasedExpr:
@@ -1562,17 +1562,26 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 
 	switch e := expr.(type) {
 	case *parser.ColName:
-		// For Postgres, remove table qualifiers from column references
-		// e.g., "users.name" -> "name"
-		if mode == GeneratorModePostgres {
-			return &parser.ColName{
-				Name: e.Name,
-				Qualifier: parser.TableName{
-					Name: parser.NewTableIdent(""),
-				},
-			}
+		// Normalize column name and qualifier
+		// 1. Remove database-specific quotes/brackets from identifiers
+		// 2. For Postgres, remove table qualifiers from column references
+		qualifierStr := ""
+		if e.Qualifier.Name.String() != "" {
+			qualifierStr = normalizeName(e.Qualifier.Name.String())
 		}
-		return e
+		nameStr := normalizeName(e.Name.String())
+
+		// For Postgres, remove table qualifiers (e.g., "users.name" -> "name")
+		if mode == GeneratorModePostgres {
+			qualifierStr = ""
+		}
+
+		return &parser.ColName{
+			Name: parser.NewColIdent(nameStr),
+			Qualifier: parser.TableName{
+				Name: parser.NewTableIdent(qualifierStr),
+			},
+		}
 	case *parser.ArrayConstructor:
 		normalizedElements := parser.ArrayElements{}
 		for _, elem := range e.Elements {
@@ -1591,18 +1600,18 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 	case *parser.FuncExpr:
 		normalizedExprs := parser.SelectExprs{}
 		for _, arg := range e.Exprs {
-			normalized := normalizeSelectExpr(arg, mode)
-
-			// For Postgres, normalize ARRAY constructors in function arguments
+			// For Postgres, check for ARRAY constructors BEFORE normalizing
+			// PostgreSQL standardizes function arguments to use ARRAY['a', 'b'] notation
+			// but users may write them expanded as 'a', 'b', so we expand for comparison
 			// e.g., jsonb_extract_path_text(payload, ARRAY['amount']) -> jsonb_extract_path_text(payload, 'amount')
 			// e.g., jsonb_extract_path_text(payload, ARRAY['a', 'b']) -> jsonb_extract_path_text(payload, 'a', 'b')
 			if mode == GeneratorModePostgres {
-				if aliased, ok := normalized.(*parser.AliasedExpr); ok {
+				if aliased, ok := arg.(*parser.AliasedExpr); ok {
 					if arrayConstr, ok := aliased.Expr.(*parser.ArrayConstructor); ok && len(arrayConstr.Elements) > 0 {
-						// Expand ARRAY elements into separate arguments
+						// Expand ARRAY elements into separate normalized arguments
 						for _, elem := range arrayConstr.Elements {
 							normalizedExprs = append(normalizedExprs, &parser.AliasedExpr{
-								Expr: elem.(parser.Expr),
+								Expr: normalizeExpr(elem.(parser.Expr), mode),
 							})
 						}
 						continue
@@ -1610,6 +1619,8 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				}
 			}
 
+			// Not an ARRAY, normalize normally
+			normalized := normalizeSelectExpr(arg, mode)
 			normalizedExprs = append(normalizedExprs, normalized)
 		}
 		return &parser.FuncExpr{
@@ -1893,14 +1904,14 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 		if primaryKeyColumn == nil {
 			// If nil, it will be `DROP COLUMN`-ed and we can usually ignore it.
 			// However, it seems like you need to explicitly drop it first for MSSQL.
-			if g.mode == GeneratorModeMssql && (primaryKeyColumn == nil || primaryKeyColumn.name != currentIndex.columns[0].column) {
+			if g.mode == GeneratorModeMssql && (primaryKeyColumn == nil || primaryKeyColumn.name != currentIndex.columns[0].ColumnName()) {
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentIndex.name)))
 			}
-		} else if primaryKeyColumn.name != currentIndex.columns[0].column { // TODO: check length of currentIndex.columns
+		} else if primaryKeyColumn.name != currentIndex.columns[0].ColumnName() { // TODO: check length of currentIndex.columns
 			// TODO: handle this. Rename primary key column...?
 			return ddls, fmt.Errorf(
 				"primary key column name of '%s' should be '%s' but currently '%s'. This is not handled yet.",
-				currentTable.name, primaryKeyColumn.name, currentIndex.columns[0].column,
+				currentTable.name, primaryKeyColumn.name, currentIndex.columns[0].ColumnName(),
 			)
 		}
 	} else if currentIndex.unique {
@@ -1908,7 +1919,7 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 		// Columns become empty if the index is a PostgreSQL's expression index.
 		if len(currentIndex.columns) > 0 {
 			for _, column := range desiredTable.columns {
-				if column.name == currentIndex.columns[0].column && column.keyOption.isUnique() {
+				if column.name == currentIndex.columns[0].ColumnName() && column.keyOption.isUnique() {
 					uniqueKeyColumn = column
 					break
 				}
@@ -2113,7 +2124,7 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 
 	columns := []string{}
 	for _, indexColumn := range index.columns {
-		column := g.escapeSQLName(indexColumn.column)
+		column := g.escapeSQLName(parser.String(indexColumn.columnExpr))
 		if indexColumn.length != nil {
 			column += fmt.Sprintf("(%d)", *indexColumn.length)
 		}
@@ -2163,7 +2174,7 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 			g.escapeTableName(table),
 		)
 		if strings.EqualFold(index.indexType, "PRIMARY KEY") && index.primary &&
-			(index.name != "" && index.name != "PRIMARY" && index.name != index.columns[0].column) {
+			(index.name != "" && index.name != "PRIMARY" && index.name != index.columns[0].ColumnName()) {
 			ddl += fmt.Sprintf("CONSTRAINT %s ", g.escapeSQLName(index.name))
 		}
 		if strings.EqualFold(index.indexType, "UNIQUE KEY") {
@@ -2379,7 +2390,7 @@ func (g *Generator) generateRenameIndex(tableName string, oldIndexName string, n
 			// Add column specifications
 			columnStrs := []string{}
 			for _, column := range desiredIndex.columns {
-				columnStrs = append(columnStrs, g.escapeSQLName(column.column))
+				columnStrs = append(columnStrs, g.escapeSQLName(parser.String(column.columnExpr)))
 			}
 			createStmt += fmt.Sprintf(" (%s)", strings.Join(columnStrs, ", "))
 
@@ -2564,7 +2575,7 @@ func isPrimaryKey(column Column, table Table) bool {
 	for _, index := range table.indexes {
 		if index.primary {
 			for _, indexColumn := range index.columns {
-				if indexColumn.column == column.name {
+				if indexColumn.ColumnName() == column.name {
 					return true
 				}
 			}
@@ -2632,7 +2643,7 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 
 			newColumns := map[string]*Column{}
 			for _, column := range table.columns {
-				if column.name == stmt.index.columns[0].column { // TODO: multi-column primary key?
+				if column.name == stmt.index.columns[0].ColumnName() { // TODO: multi-column primary key?
 					column.keyOption = ColumnKeyPrimary
 				}
 				newColumns[column.name] = column
@@ -3304,9 +3315,7 @@ func tryConvertOrChainToIn(orExpr *parser.OrExpr) parser.Expr {
 	}
 
 	columnsEqual := func(col1, col2 parser.Expr) bool {
-		name1 := normalizeName(parser.String(col1))
-		name2 := normalizeName(parser.String(col2))
-		return strings.EqualFold(name1, name2)
+		return normalizeName(parser.String(col1)) == normalizeName(parser.String(col2))
 	}
 
 	// Walk the OR chain and collect comparisons
@@ -3371,14 +3380,18 @@ func tryConvertOrChainToIn(orExpr *parser.OrExpr) parser.Expr {
 	}
 }
 
-// normalizeName removes brackets, backticks, and quotes from identifiers for consistent comparison.
+// normalizeName removes brackets, backticks, and quotes from identifiers and lowercases them for consistent comparison.
 // MSSQL uses [name], MySQL uses `name`, Postgres uses "name".
+// TODO: Identifier case-sensitivity varies by RDBMS and settings:
+//   - PostgreSQL: case-insensitive by default, case-sensitive when quoted
+//   - MySQL: depends on settings, such as lower_case_table_names
+//   - MSSQL: depends on collation settings
+//   For now, we lowercase everything after removing quotes for normalization.
 func normalizeName(name string) string {
-	// Remove brackets [], backticks `, and quotes "
 	name = strings.Trim(name, "[]")
 	name = strings.Trim(name, "`")
 	name = strings.Trim(name, "\"")
-	return name
+	return strings.ToLower(name)
 }
 
 // normalizeOperator converts operator to lowercase for consistent comparison.
@@ -3759,8 +3772,10 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 		if dirB == "" {
 			dirB = AscScr
 		}
-		if g.normalizeIndexColumn(indexA.columns[i].column) != g.normalizeIndexColumn(indexB.columns[i].column) ||
-			dirA != dirB {
+
+		normalizedA := parser.String(normalizeExpr(indexA.columns[i].columnExpr, g.mode))
+		normalizedB := parser.String(normalizeExpr(indexB.columns[i].columnExpr, g.mode))
+		if normalizedA != normalizedB || dirA != dirB {
 			return false
 		}
 	}
@@ -3789,7 +3804,9 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 			indexB.columns[i].direction = AscScr
 		}
 		// TODO: check length?
-		if g.normalizeIndexColumn(indexA.columns[i].column) != g.normalizeIndexColumn(indexB.columns[i].column) ||
+		normalizedA := parser.String(normalizeExpr(indexA.columns[i].columnExpr, g.mode))
+		normalizedB := parser.String(normalizeExpr(indexB.columns[i].columnExpr, g.mode))
+		if normalizedA != normalizedB ||
 			indexAColumn.direction != indexB.columns[i].direction {
 			return false
 		}
@@ -3858,23 +3875,6 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 	}
 
 	return true
-}
-
-// jsonb_extract_path_text(col, ARRAY['foo', 'bar']) => jsonb_extract_path_text(col, 'foo', 'bar')
-func (g *Generator) normalizeIndexColumn(column string) string {
-	column = strings.ToLower(column)
-	if g.mode == GeneratorModePostgres {
-		column = strings.ReplaceAll(column, "array[", "")
-		column = strings.ReplaceAll(column, "]", "")
-	}
-	if g.mode == GeneratorModeMssql {
-		// Remove MSSQL square brackets from column names
-		column = strings.TrimPrefix(column, "[")
-		column = strings.TrimSuffix(column, "]")
-		// Handle escaped brackets (]] becomes ])
-		column = strings.ReplaceAll(column, "]]", "]")
-	}
-	return column
 }
 
 func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB ForeignKey) bool {

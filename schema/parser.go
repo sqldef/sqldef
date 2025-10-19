@@ -299,12 +299,19 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 				return Table{}, err
 			}
 
+			var columnExpr parser.Expr
+			if column.Expression != nil {
+				columnExpr = column.Expression
+			} else {
+				columnExpr = &parser.ColName{Name: column.Column}
+			}
+
 			indexColumns = append(
 				indexColumns,
 				IndexColumn{
-					column:    column.String(),
-					length:    length,
-					direction: column.Direction,
+					columnExpr: columnExpr,
+					length:     length,
+					direction:  column.Direction,
 				},
 			)
 
@@ -338,7 +345,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 
 		name := indexDef.Info.Name.String()
 		if name == "" { // For MySQL
-			name = indexColumns[0].column
+			name = indexColumns[0].ColumnName()
 		}
 
 		var constraintOptions *ConstraintOptions
@@ -461,12 +468,19 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 			return Index{}, err
 		}
 
+		var columnExpr parser.Expr
+		if column.Expression != nil {
+			columnExpr = column.Expression
+		} else {
+			columnExpr = &parser.ColName{Name: column.Column}
+		}
+
 		indexColumns = append(
 			indexColumns,
 			IndexColumn{
-				column:    column.String(),
-				length:    length,
-				direction: column.Direction,
+				columnExpr: columnExpr,
+				length:     length,
+				direction:  column.Direction,
 			},
 		)
 	}
@@ -515,7 +529,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 	if name == "" {
 		name = stmt.Table.Name.String()
 		for _, indexColumn := range indexColumns {
-			name += fmt.Sprintf("_%s", indexColumn.column)
+			name += fmt.Sprintf("_%s", indexColumn.ColumnName())
 		}
 		name += "_idx"
 	}

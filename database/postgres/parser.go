@@ -804,7 +804,7 @@ func (p PostgresParser) parseIndexColumn(stmt *pgquery.Node) (parser.IndexColumn
 			}
 
 			return parser.IndexColumn{
-				Column: parser.NewColIdent(parser.String(expr)),
+				Expression: expr,
 			}, nil
 		} else {
 			var direction string
