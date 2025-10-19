@@ -333,7 +333,7 @@ func forceEOF(yylex any) {
 %type <updateExpr> update_expression
 %type <setExpr> set_expression transaction_char isolation_level
 %type <str> ignore_opt default_opt
-%type <empty> not_exists_opt when_expression_opt for_each_row_opt
+%type <empty> if_not_exists_opt when_expression_opt for_each_row_opt
 %type <bytes> reserved_keyword non_reserved_keyword
 %type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt
 %type <boolVal> unique_opt
@@ -568,7 +568,7 @@ create_statement:
       IndexCols: $8,
     }
   }
-| CREATE or_replace_opt VIEW not_exists_opt table_name AS select_statement
+| CREATE or_replace_opt VIEW if_not_exists_opt table_name AS select_statement
   {
     $$ = &DDL{
       Action: CreateView,
@@ -579,7 +579,7 @@ create_statement:
       },
     }
   }
-| CREATE or_replace_opt SQL SECURITY sql_security VIEW not_exists_opt table_name AS select_statement
+| CREATE or_replace_opt SQL SECURITY sql_security VIEW if_not_exists_opt table_name AS select_statement
   {
     $$ = &DDL{
       Action: CreateView,
@@ -591,7 +591,7 @@ create_statement:
       },
     }
   }
-| CREATE MATERIALIZED VIEW not_exists_opt table_name AS select_statement
+| CREATE MATERIALIZED VIEW if_not_exists_opt table_name AS select_statement
   {
     $$ = &DDL{
       Action: CreateView,
@@ -684,7 +684,7 @@ create_statement:
     }
   }
 /* For SQLite3, only to parse because alternation is not supported. // The Virtual Table Mechanism Of SQLite https://www.sqlite.org/vtab.html */
-| CREATE VIRTUAL TABLE not_exists_opt table_name USING sql_id module_arguments_opt
+| CREATE VIRTUAL TABLE if_not_exists_opt table_name USING sql_id module_arguments_opt
   {
     $$ = &DDL{Action: CreateTable, NewName: $5, TableSpec: &TableSpec{}}
   }
@@ -1507,7 +1507,7 @@ or_replace_opt:
   }
 
 create_table_prefix:
-  CREATE TABLE not_exists_opt table_name
+  CREATE TABLE if_not_exists_opt table_name
   {
     $$ = &DDL{Action: CreateTable, NewName: $4}
     setDDL(yylex, $$)
@@ -4521,7 +4521,7 @@ charset_value:
     $$ = &Default{}
   }
 
-not_exists_opt:
+if_not_exists_opt:
   { $$ = struct{}{} }
 | IF NOT EXISTS
   { $$ = struct{}{} }
