@@ -1,3 +1,6 @@
+## [v3.2.1](https://github.com/sqldef/sqldef/compare/v3.2.0...v3.2.1) - 2025-10-21
+- psqldef: fix commment unset by @gfx in https://github.com/sqldef/sqldef/pull/895
+
 ## [v3.2.0](https://github.com/sqldef/sqldef/compare/v3.1.18...v3.2.0) - 2025-10-19
 - refactor normalization logic by @gfx in https://github.com/sqldef/sqldef/pull/888
 - [refactor] resolve all the reduce/reduce conflicts in parser.y by @gfx in https://github.com/sqldef/sqldef/pull/890
