@@ -811,27 +811,34 @@ CommentOnNonStandardDefaultSchema:
     COMMENT ON TABLE foo.users is 'users table updated';
     COMMENT ON COLUMN foo.users.id is 'users id';
   user: psqldef_user
-#; TODO: Enable to pass the following comment outed case 'CommentUnset'.
-#; 'Unsetting comment' is seen as 'change' false positively as of now (ref.
-#; https://github.com/sqldef/sqldef/issues/605 ), because the specified comment
-#; has no comment already before the application of sqldef,
-# but then 'COMMENT ON ... IS NULL' clause is requested as a change.
-#CommentUnset:
-#  current: |
-#    CREATE TABLE users (
-#      id bigint
-#    );
-#    COMMENT ON TABLE users IS 'users table is before update';
-#    COMMENT ON COLUMN users.id IS 'users id column is before update';
-#  desired: |
-#    CREATE TABLE users (
-#      id bigint
-#    );
-#    COMMENT ON TABLE users IS NULL;
-#    COMMENT ON COLUMN users.id IS null;
-#  output: |
-#    COMMENT ON TABLE public.users IS NULL;
-#    COMMENT ON COLUMN public.users.id IS null;
+# This test removes existing comments by setting them to NULL
+CommentUnset:
+  current: |
+    CREATE TABLE users (
+      id bigint
+    );
+    COMMENT ON TABLE users IS 'users table is before update';
+    COMMENT ON COLUMN users.id IS 'users id column is before update';
+  desired: |
+    CREATE TABLE users (
+      id bigint
+    );
+    COMMENT ON TABLE users IS NULL;
+    COMMENT ON COLUMN users.id IS null;
+  output: |
+    COMMENT ON TABLE public.users IS NULL;
+    COMMENT ON COLUMN public.users.id IS null;
+CommentNullWhenAlreadyNull:
+  current: |
+    CREATE TABLE "status" (
+      "id" bigint NOT NULL
+    );
+  desired: |
+    CREATE TABLE "status" (
+      "id" bigint NOT NULL
+    );
+    COMMENT ON COLUMN "status"."id" IS NULL;
+  output: ""
 CommentWithoutSchema:
   current: |
     CREATE TABLE users (

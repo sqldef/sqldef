@@ -1817,8 +1817,14 @@ func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 	ddls := []string{}
 
 	currentComment := findCommentByObject(g.currentComments, desired.comment.Object)
+
+	// If both current and desired comments are NULL/empty, no change is needed.
+	if currentComment == nil && desired.comment.Comment == "" {
+		return ddls, nil
+	}
+
 	if currentComment == nil || currentComment.comment.Comment != desired.comment.Comment {
-		// Comment not found, add comment.
+		// Comment not found or different, add comment.
 		ddls = append(ddls, desired.statement)
 	}
 
