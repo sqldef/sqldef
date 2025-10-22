@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/assert"
@@ -467,11 +468,31 @@ func TestMysqldefHelp(t *testing.T) {
 	}
 }
 
+// waitForMySQL waits for MySQL to be ready for connections with retry logic.
+// MySQL initialization can take several seconds, especially in CI environments.
+func waitForMySQL() {
+	maxRetries := 30
+	retryDelay := 500 * time.Millisecond
+
+	for i := 0; i < maxRetries; i++ {
+		if PingToMySQL() == nil {
+			return
+		}
+
+		// Connection failed, wait and retry
+		time.Sleep(retryDelay)
+	}
+
+	// If we get here, MySQL never became ready
+	panic(fmt.Sprintf("MySQL did not become ready after %d retries", maxRetries))
+}
+
 func TestMain(m *testing.M) {
 	if _, ok := os.LookupEnv("MYSQL_HOST"); !ok {
 		os.Setenv("MYSQL_HOST", "127.0.0.1")
 	}
 
+	waitForMySQL()
 	resetTestDatabase()
 	tu.MustExecuteNoTest("go", "build")
 	status := m.Run()
@@ -583,6 +604,18 @@ func mustMysqlExec(dbName string, statement string) {
 	if err := mysqlExec(dbName, statement); err != nil {
 		panic(err)
 	}
+}
+
+// PingToMySQL checks if MySQL is ready for connections
+func PingToMySQL() error {
+	dsn := fmt.Sprintf("root@tcp(127.0.0.1:%d)/", getMySQLPort())
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	return db.Ping()
 }
 
 // mustGetMySQLVersion retrieves the MySQL server version and panics on error
