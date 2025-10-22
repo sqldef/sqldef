@@ -3300,4 +3300,107 @@ NumericDecimalExplicit:
       price2 decimal(20, 6)
     );
   output: ""
+AlterColumnSetDefault:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20),
+      priority int
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20) DEFAULT 'active',
+      priority int DEFAULT 1
+    );
+  output: |
+    ALTER TABLE "public"."users" ALTER COLUMN "status" SET DEFAULT 'active';
+    ALTER TABLE "public"."users" ALTER COLUMN "priority" SET DEFAULT 1;
+
+AlterColumnDropDefault:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20) DEFAULT 'active',
+      priority int DEFAULT 1
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20),
+      priority int
+    );
+  output: |
+    ALTER TABLE "public"."users" ALTER COLUMN "status" DROP DEFAULT;
+    ALTER TABLE "public"."users" ALTER COLUMN "priority" DROP DEFAULT;
+
+AlterColumnChangeDefault:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20) DEFAULT 'pending',
+      is_active boolean DEFAULT false
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20) DEFAULT 'active',
+      is_active boolean DEFAULT true
+    );
+  output: |
+    ALTER TABLE "public"."users" ALTER COLUMN "status" SET DEFAULT 'active';
+    ALTER TABLE "public"."users" ALTER COLUMN "is_active" SET DEFAULT true;
+
+AlterColumnSetNotNull:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100),
+      email varchar(255)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100) NOT NULL,
+      email varchar(255) NOT NULL
+    );
+  output: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "email" SET NOT NULL;
+
+AlterColumnDropNotNull:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100) NOT NULL,
+      email varchar(255) NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100),
+      email varchar(255)
+    );
+  output: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "email" DROP NOT NULL;
+
+AlterColumnChangeNotNullAndDefault:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100),
+      email varchar(255) NOT NULL DEFAULT 'unknown@example.com'
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100) NOT NULL DEFAULT 'anonymous',
+      email varchar(255)
+    );
+  output: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "name" SET DEFAULT 'anonymous';
+    ALTER TABLE "public"."users" ALTER COLUMN "email" DROP NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "email" DROP DEFAULT;
 
