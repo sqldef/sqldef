@@ -587,11 +587,13 @@ func mustMysqlExec(dbName string, statement string) {
 
 // mustGetMySQLVersion retrieves the MySQL server version and panics on error
 func mustGetMySQLVersion() string {
+	// Connect without specifying a database since SELECT version() is a server-level function.
+	// This avoids dependency on mysqldef_test database existing and reduces timing issues.
 	db, err := mysql.NewDatabase(database.Config{
 		User:   "root",
 		Host:   "127.0.0.1",
 		Port:   getMySQLPort(),
-		DbName: "mysqldef_test",
+		DbName: "",
 	})
 	if err != nil {
 		panic(err)
