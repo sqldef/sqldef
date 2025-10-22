@@ -74,6 +74,20 @@ jobs:
       - run: echo "MYSQL_PORT=3307" >> $GITHUB_ENV
         if: matrix.mysql_flavor == 'mariadb'
       - run: make test-${{ matrix.target }}
+        id: test
+      - name: Show docker compose logs on failure
+        if: failure() && steps.test.outcome == 'failure'
+        run: |
+          echo "=== Docker Compose Services Status ==="
+          docker compose ps
+          echo ""
+          echo "=== Docker Compose Logs ==="
+          docker compose logs --timestamps
+        env:
+          MYSQL_VERSION: ${{ matrix.mysql_version }}
+          MARIADB_VERSION: ${{ matrix.mariadb_version }}
+          POSTGRES_VERSION: ${{ matrix.postgres_version }}
+          MSSQL_VERSION: ${{ matrix.mssql_version }}
 
   integrity:
     runs-on: ubuntu-latest
