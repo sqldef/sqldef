@@ -3268,4 +3268,36 @@ DefaultString:
   output: |
     ALTER TABLE "public"."some_table" ALTER COLUMN "v0" SET DEFAULT 'FOO';
     ALTER TABLE "public"."some_table" ALTER COLUMN "v1" SET DEFAULT 'bar';
+NumericDecimalVariablePrecision:
+  current: |
+    CREATE TABLE test (
+      id int,
+      num numeric,
+      price decimal
+    );
+  desired: |
+    CREATE TABLE test (
+      id int,
+      num numeric,
+      price decimal
+    );
+  output: ""
+NumericDecimalExplicit:
+  current: |
+    CREATE TABLE test (
+      id int,
+      num1 numeric(10),
+      num2 numeric(15, 4),
+      price1 decimal(12),
+      price2 decimal(20, 6)
+    );
+  desired: |
+    CREATE TABLE test (
+      id int,
+      num1 numeric(10),
+      num2 numeric(15, 4),
+      price1 decimal(12),
+      price2 decimal(20, 6)
+    );
+  output: ""
 

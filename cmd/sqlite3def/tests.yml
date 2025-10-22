@@ -320,3 +320,35 @@ RenameIndexWithWhereClause:
   output: |
     DROP INDEX `old_active_users`;
     CREATE INDEX `active_users_idx` ON `users` (`email`) WHERE is_active = 1;
+NumericDecimalWithoutPrecision:
+  current: |
+    CREATE TABLE test (
+      id int,
+      num numeric,
+      price decimal
+    );
+  desired: |
+    CREATE TABLE test (
+      id int,
+      num numeric,
+      price decimal
+    );
+  output: ""
+NumericDecimalExplicit:
+  current: |
+    CREATE TABLE test (
+      id int,
+      num1 numeric(10),
+      num2 numeric(15, 4),
+      price1 decimal(12),
+      price2 decimal(20, 6)
+    );
+  desired: |
+    CREATE TABLE test (
+      id int,
+      num1 numeric(10),
+      num2 numeric(15, 4),
+      price1 decimal(12),
+      price2 decimal(20, 6)
+    );
+  output: ""
