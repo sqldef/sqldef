@@ -3229,16 +3229,49 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 	if !reflect.DeepEqual(current.enumValues, desired.enumValues) {
 		return false
 	}
-	if current.length == nil && desired.length != nil || current.length != nil && desired.length == nil {
+
+	currentLength := current.length
+	desiredLength := desired.length
+	currentScale := current.scale
+	desiredScale := desired.scale
+
+	// Normalize default precision/scale for numeric/decimal types.
+	if g.mode == GeneratorModeMssql || g.mode == GeneratorModeMysql {
+		normalizedType := g.normalizeDataType(current.typeName)
+		if normalizedType == "decimal" {
+			var defaultPrecision int
+			switch g.mode {
+			case GeneratorModeMysql:
+				defaultPrecision = 10
+			case GeneratorModeMssql:
+				defaultPrecision = 18
+			}
+
+			if currentLength == nil {
+				currentLength = &Value{valueType: ValueTypeInt, intVal: defaultPrecision}
+			}
+			if desiredLength == nil {
+				desiredLength = &Value{valueType: ValueTypeInt, intVal: defaultPrecision}
+			}
+			if currentScale == nil {
+				currentScale = &Value{valueType: ValueTypeInt, intVal: 0}
+			}
+			if desiredScale == nil {
+				desiredScale = &Value{valueType: ValueTypeInt, intVal: 0}
+			}
+		}
+	}
+
+	if currentLength == nil && desiredLength != nil || currentLength != nil && desiredLength == nil {
 		return false
 	}
-	if current.length != nil && desired.length != nil && current.length.intVal != desired.length.intVal {
+	if currentLength != nil && desiredLength != nil && currentLength.intVal != desiredLength.intVal {
 		return false
 	}
-	if current.scale == nil && (desired.scale != nil && desired.scale.intVal != 0) || (current.scale != nil && current.scale.intVal != 0) && desired.scale == nil {
+	if currentScale == nil && (desiredScale != nil && desiredScale.intVal != 0) || (currentScale != nil && currentScale.intVal != 0) && desiredScale == nil {
 		return false
 	}
-	if current.scale != nil && desired.scale != nil && current.scale.intVal != desired.scale.intVal {
+	if currentScale != nil && desiredScale != nil && currentScale.intVal != desiredScale.intVal {
 		return false
 	}
 	if current.array != desired.array {

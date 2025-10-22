@@ -284,3 +284,35 @@ DefaultString:
     ALTER TABLE `some_table` CHANGE COLUMN `v1` `v1` varchar(255) DEFAULT 'bar';
     ALTER TABLE `some_table` CHANGE COLUMN `v2` `v2` varchar(255) DEFAULT '1.0000';
     ALTER TABLE `some_table` CHANGE COLUMN `v3` `v3` varchar(255) DEFAULT '1';
+NumericDecimalDefaults:
+  current: |
+    CREATE TABLE test (
+      id int,
+      num numeric,
+      price decimal
+    );
+  desired: |
+    CREATE TABLE test (
+      id int,
+      num numeric(10),
+      price decimal(10)
+    );
+  output: ""
+NumericDecimalExplicit:
+  current: |
+    CREATE TABLE test (
+      id int,
+      num1 numeric(15),
+      num2 numeric(15, 4),
+      price1 decimal(12),
+      price2 decimal(20, 6)
+    );
+  desired: |
+    CREATE TABLE test (
+      id int,
+      num1 numeric(15),
+      num2 numeric(15, 4),
+      price1 decimal(12),
+      price2 decimal(20, 6)
+    );
+  output: ""
