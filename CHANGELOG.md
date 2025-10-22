@@ -1,3 +1,7 @@
+## [v3.2.2](https://github.com/sqldef/sqldef/compare/v3.2.1...v3.2.2) - 2025-10-22
+- Fix handling decimal defaults by @gfx in https://github.com/sqldef/sqldef/pull/897
+- fix mysqldef CI failure by @gfx in https://github.com/sqldef/sqldef/pull/899
+
 ## [v3.2.1](https://github.com/sqldef/sqldef/compare/v3.2.0...v3.2.1) - 2025-10-21
 - psqldef: fix commment unset by @gfx in https://github.com/sqldef/sqldef/pull/895
 
