@@ -1106,7 +1106,7 @@ func TestPsqldefReindexConcurrently(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	resetTestDatabase()
-	tu.MustExecuteNoTest("go", "build")
+	tu.BuildForTest()
 	status := m.Run()
 
 	cleanupTestRoles()
