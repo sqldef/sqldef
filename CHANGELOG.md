@@ -1,3 +1,7 @@
+## [v3.2.3](https://github.com/sqldef/sqldef/compare/v3.2.2...v3.2.3) - 2025-10-23
+- add tests about constraints by @gfx in https://github.com/sqldef/sqldef/pull/900
+- [test] add `make test-cov` to take test coverage by @gfx in https://github.com/sqldef/sqldef/pull/902
+
 ## [v3.2.2](https://github.com/sqldef/sqldef/compare/v3.2.1...v3.2.2) - 2025-10-22
 - Fix handling decimal defaults by @gfx in https://github.com/sqldef/sqldef/pull/897
 - fix mysqldef CI failure by @gfx in https://github.com/sqldef/sqldef/pull/899
