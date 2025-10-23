@@ -494,7 +494,7 @@ func TestMain(m *testing.M) {
 
 	waitForMySQL()
 	resetTestDatabase()
-	tu.MustExecuteNoTest("go", "build")
+	tu.BuildForTest()
 	status := m.Run()
 	os.Remove("mysqldef")
 	os.Remove("schema.sql")

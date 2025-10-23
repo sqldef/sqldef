@@ -1488,7 +1488,7 @@ func TestMssqldefConfigInlineSkipTables(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	resetTestDatabase()
-	tu.MustExecuteNoTest("go", "build")
+	tu.BuildForTest()
 	status := m.Run()
 	_ = os.Remove("mssqldef")
 	_ = os.Remove("schema.sql")

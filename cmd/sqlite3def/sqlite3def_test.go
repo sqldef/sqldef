@@ -554,7 +554,7 @@ func TestDeprecatedRenameAnnotation(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	resetTestDatabase()
-	tu.MustExecuteNoTest("go", "build")
+	tu.BuildForTest()
 	status := m.Run()
 	_ = os.Remove("sqlite3def")
 	_ = os.Remove("sqlite3def_test")
