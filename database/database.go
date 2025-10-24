@@ -36,7 +36,7 @@ type Config struct {
 	// Only MySQL and PostgreSQL
 	DumpConcurrency int
 
-	// Only PostgreSQL
+	// Only PostgreSQL, especially for Aurora DSQL limitation
 	DisableDdlTransaction bool
 }
 
@@ -166,7 +166,8 @@ func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddl
 }
 
 func TransactionSupported(ddl string) bool {
-	return !strings.Contains(strings.ToLower(ddl), "concurrently")
+	ddlLower := strings.ToLower(ddl)
+	return !strings.Contains(ddlLower, "concurrently") && !strings.Contains(ddlLower, "async")
 }
 
 func IsDropStatement(ddl string) bool {

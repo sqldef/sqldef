@@ -41,6 +41,11 @@ func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
 
 	result, err := go_pgquery.Parse(sql)
 	if err != nil {
+		// If go_pgquery fails (e.g., due to DSQL-specific syntax like ASYNC),
+		// fallback to the generic parser which supports extended syntax
+		if !p.testing {
+			return p.parser.Parse(sql)
+		}
 		return nil, err
 	}
 
@@ -257,6 +262,7 @@ func (p PostgresParser) parseIndexStmt(stmt *pgquery.IndexStmt) (parser.Statemen
 			Name:   parser.NewColIdent(stmt.Idxname),
 			Type:   parser.NewColIdent(stmt.AccessMethod),
 			Unique: stmt.Unique,
+			Async:  false, // go_pgquery doesn't support ASYNC, will be set by generic parser
 			Where:  where,
 		},
 		IndexCols: indexCols,
