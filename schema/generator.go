@@ -1231,6 +1231,12 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 		statement = re.ReplaceAllString(statement, "${1} CONCURRENTLY${2}")
 	}
 
+	// Add ASYNC to CREATE [UNIQUE] INDEX statements if the index has the async flag (Aurora DSQL)
+	if g.mode == GeneratorModePostgres && action == "CREATE INDEX" && desiredIndex.async {
+		re := regexp.MustCompile(`(?i)^(CREATE\s+(?:UNIQUE\s+)?INDEX)(?:\s+ASYNC)?(\s+.*)`)
+		statement = re.ReplaceAllString(statement, "${1} ASYNC${2}")
+	}
+
 	ddls := []string{}
 
 	currentTable := findTableByName(g.currentTables, tableName)

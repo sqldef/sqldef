@@ -49,6 +49,10 @@ func (d *PostgresDatabase) GetTransactionQueries() database.TransactionQueries {
 	}
 }
 
+func (d *PostgresDatabase) GetConfig() database.Config {
+	return d.config
+}
+
 func (d *PostgresDatabase) ExportDDLs() (string, error) {
 	var ddls []string
 

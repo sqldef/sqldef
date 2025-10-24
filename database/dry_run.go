@@ -57,6 +57,10 @@ func (d *DryRunDatabase) GetTransactionQueries() TransactionQueries {
 	return d.wrapped.GetTransactionQueries()
 }
 
+func (d *DryRunDatabase) GetConfig() Config {
+	return d.wrapped.GetConfig()
+}
+
 type dryRunDriver struct {
 	txQueries TransactionQueries
 }

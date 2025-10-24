@@ -816,3 +816,7 @@ func (d *MssqlDatabase) GetTransactionQueries() database.TransactionQueries {
 		Rollback: "ROLLBACK TRANSACTION",
 	}
 }
+
+func (d *MssqlDatabase) GetConfig() database.Config {
+	return d.config
+}

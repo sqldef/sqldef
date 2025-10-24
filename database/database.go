@@ -35,6 +35,9 @@ type Config struct {
 
 	// Only MySQL and PostgreSQL
 	DumpConcurrency int
+
+	// Only PostgreSQL, especially for Aurora DSQL limitation
+	DisableDdlTransaction bool
 }
 
 type GeneratorConfig struct {
@@ -48,6 +51,7 @@ type GeneratorConfig struct {
 	ManagedRoles            []string // Roles whose privileges are managed by sqldef
 	EnableDrop              bool     // Whether to enable DROP/REVOKE operations
 	CreateIndexConcurrently bool     // Whether to add CONCURRENTLY to CREATE INDEX statements
+	DisableDdlTransaction   bool     // Do not use a transaction for DDL statements
 }
 
 type TransactionQueries struct {
@@ -64,6 +68,7 @@ type Database interface {
 	GetDefaultSchema() string
 	SetGeneratorConfig(config GeneratorConfig)
 	GetTransactionQueries() TransactionQueries
+	GetConfig() Config
 }
 
 func isDryRun(d Database) bool {
@@ -81,11 +86,15 @@ func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddl
 	ddlsInTx := []string{}
 	ddlsNotInTx := []string{}
 
-	for _, ddl := range ddls {
-		if TransactionSupported(ddl) {
-			ddlsInTx = append(ddlsInTx, ddl)
-		} else {
-			ddlsNotInTx = append(ddlsNotInTx, ddl)
+	if d.GetConfig().DisableDdlTransaction {
+		ddlsNotInTx = ddls
+	} else {
+		for _, ddl := range ddls {
+			if TransactionSupported(ddl) {
+				ddlsInTx = append(ddlsInTx, ddl)
+			} else {
+				ddlsNotInTx = append(ddlsNotInTx, ddl)
+			}
 		}
 	}
 
@@ -157,7 +166,8 @@ func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddl
 }
 
 func TransactionSupported(ddl string) bool {
-	return !strings.Contains(strings.ToLower(ddl), "concurrently")
+	ddlLower := strings.ToLower(ddl)
+	return !strings.Contains(ddlLower, "concurrently") && !strings.Contains(ddlLower, "async")
 }
 
 func IsDropStatement(ddl string) bool {
@@ -238,6 +248,9 @@ func MergeGeneratorConfig(base, override GeneratorConfig) GeneratorConfig {
 	if override.CreateIndexConcurrently {
 		result.CreateIndexConcurrently = override.CreateIndexConcurrently
 	}
+	if override.DisableDdlTransaction {
+		result.DisableDdlTransaction = override.DisableDdlTransaction
+	}
 
 	return result
 }
@@ -254,6 +267,7 @@ func parseGeneratorConfigFromBytes(buf []byte) GeneratorConfig {
 		ManagedRoles            []string `yaml:"managed_roles"`
 		EnableDrop              bool     `yaml:"enable_drop"`
 		CreateIndexConcurrently bool     `yaml:"create_index_concurrently"`
+		DisableDdlTransaction   bool     `yaml:"disable_ddl_transaction"`
 	}
 
 	dec := yaml.NewDecoder(bytes.NewReader(buf), yaml.DisallowUnknownField())
@@ -302,5 +316,6 @@ func parseGeneratorConfigFromBytes(buf []byte) GeneratorConfig {
 		ManagedRoles:            config.ManagedRoles,
 		EnableDrop:              config.EnableDrop,
 		CreateIndexConcurrently: config.CreateIndexConcurrently,
+		DisableDdlTransaction:   config.DisableDdlTransaction,
 	}
 }

@@ -192,3 +192,7 @@ func (d *Sqlite3Database) GetTransactionQueries() database.TransactionQueries {
 		Rollback: "ROLLBACK",
 	}
 }
+
+func (d *Sqlite3Database) GetConfig() database.Config {
+	return d.config
+}

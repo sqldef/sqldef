@@ -218,3 +218,7 @@ func (d *MysqlDatabase) GetTransactionQueries() database.TransactionQueries {
 		Rollback: "ROLLBACK",
 	}
 }
+
+func (d *MysqlDatabase) GetConfig() database.Config {
+	return d.config
+}

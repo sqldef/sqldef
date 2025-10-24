@@ -3,6 +3,7 @@ package postgres
 import (
 	"bytes"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/goccy/go-yaml"
@@ -60,4 +61,55 @@ func readTests(file string) (map[string]TestCase, error) {
 	}
 
 	return tests, nil
+}
+
+// TestParseIndexAsync tests parsing of CREATE INDEX ASYNC without database execution.
+// This is a parse-only test since regular PostgreSQL doesn't support ASYNC (Aurora DSQL only).
+// The parser uses testing=false to allow fallback to the generic parser.
+func TestParseIndexAsync(t *testing.T) {
+	// Create parser with testing=false to enable generic parser fallback
+	sqlParser := NewParser()
+
+	// Test parsing CREATE INDEX ASYNC
+	sql := `CREATE TABLE users (
+  id BIGINT NOT NULL PRIMARY KEY,
+  name VARCHAR(128) DEFAULT 'konsumer'
+);
+CREATE INDEX ASYNC username on users (name);`
+
+	// Parse the schema - should not error (will use generic parser fallback)
+	statements, err := sqlParser.Parse(sql)
+	if err != nil {
+		t.Fatalf("failed to parse CREATE INDEX ASYNC: %v", err)
+	}
+
+	// Verify we got 2 statements
+	if len(statements) != 2 {
+		t.Fatalf("expected 2 statements, got %d", len(statements))
+	}
+
+	// Verify second statement is CREATE INDEX with Async flag
+	indexStmt := statements[1].Statement
+	ddl, ok := indexStmt.(*parser.DDL)
+	if !ok {
+		t.Fatalf("expected DDL statement, got %T", indexStmt)
+	}
+
+	if ddl.Action != parser.CreateIndex {
+		t.Fatalf("expected CreateIndex action, got %v", ddl.Action)
+	}
+
+	if ddl.IndexSpec == nil {
+		t.Fatal("expected IndexSpec to be non-nil")
+	}
+
+	if !ddl.IndexSpec.Async {
+		t.Error("expected Async flag to be true")
+	}
+
+	// Verify the generated DDL string contains ASYNC
+	generatedDDL := statements[1].DDL
+	if !strings.Contains(strings.ToUpper(generatedDDL), "ASYNC") {
+		t.Errorf("expected ASYNC in generated DDL, got: %s", generatedDDL)
+	}
 }
