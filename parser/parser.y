@@ -201,7 +201,7 @@ func forceEOF(yylex any) {
 %token <bytes> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE INSTEAD OF OUTPUT
 %token <bytes> HANDLER CONTINUE EXIT SQLEXCEPTION SQLWARNING SQLSTATE FOUND
 %token <bytes> DEFERRABLE INITIALLY IMMEDIATE DEFERRED
-%token <bytes> CONCURRENTLY
+%token <bytes> CONCURRENTLY ASYNC
 %token <bytes> SQL SECURITY
 
 // Transaction Tokens
@@ -504,6 +504,49 @@ create_statement:
       },
       IndexCols: $9.IndexCols,
       IndexExpr: $9.IndexExpr,
+    }
+  }
+/* For Aurora DSQL */
+| CREATE unique_clustered_opt INDEX ASYNC sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+  {
+    $$ = &DDL{
+      Action: CreateIndex,
+      Table: $7,
+      NewName: $7,
+      IndexSpec: &IndexSpec{
+        Name: $5,
+        Type: NewColIdent(""),
+        Unique: bool($2[0]),
+        Clustered: bool($2[1]),
+        Async: true,
+        Included: $11,
+        Where: NewWhere(WhereStr, $12),
+        Options: $13,
+        Partition: $14,
+      },
+      IndexCols: $9.IndexCols,
+      IndexExpr: $9.IndexExpr,
+    }
+  }
+| CREATE unique_clustered_opt INDEX ASYNC ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+  {
+    $$ = &DDL{
+      Action: CreateIndex,
+      Table: $6,
+      NewName: $6,
+      IndexSpec: &IndexSpec{
+        Name: NewColIdent(""),
+        Type: NewColIdent(""),
+        Unique: bool($2[0]),
+        Clustered: bool($2[1]),
+        Async: true,
+        Included: $10,
+        Where: NewWhere(WhereStr, $11),
+        Options: $12,
+        Partition: $13,
+      },
+      IndexCols: $8.IndexCols,
+      IndexExpr: $8.IndexExpr,
     }
   }
 /* For MySQL */

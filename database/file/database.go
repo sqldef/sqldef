@@ -45,3 +45,7 @@ func (d *FileDatabase) GetTransactionQueries() database.TransactionQueries {
 		Rollback: "ROLLBACK",
 	}
 }
+
+func (d *FileDatabase) GetConfig() database.Config {
+	return database.Config{}
+}

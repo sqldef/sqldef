@@ -143,6 +143,7 @@ var keywords = map[string]int{
 	"committed":              COMMITTED,
 	"commit":                 COMMIT,
 	"concurrently":           CONCURRENTLY,
+	"async":                  ASYNC,
 	"condition":              UNUSED,
 	"constraint":             CONSTRAINT,
 	"continue":               CONTINUE,
