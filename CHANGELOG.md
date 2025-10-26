@@ -1,3 +1,8 @@
+## [v3.3.0](https://github.com/sqldef/sqldef/compare/v3.2.2...v3.3.0) - 2025-10-26
+- add tests about constraints by @gfx in https://github.com/sqldef/sqldef/pull/900
+- [test] add `make test-cov` to take test coverage by @gfx in https://github.com/sqldef/sqldef/pull/902
+- Aurora DSQL support by @sorah in https://github.com/sqldef/sqldef/pull/903
+
 ## [v3.2.2](https://github.com/sqldef/sqldef/compare/v3.2.1...v3.2.2) - 2025-10-22
 - Fix handling decimal defaults by @gfx in https://github.com/sqldef/sqldef/pull/897
 - fix mysqldef CI failure by @gfx in https://github.com/sqldef/sqldef/pull/899
