@@ -124,6 +124,12 @@ brew install sqldef/sqldef/sqlite3def
 brew install sqldef/sqldef/mssqldef
 ```
 
+## Preview Changes with GitHub Actions
+
+There's an GitHub Action that can preview changes to your database schema:
+
+https://github.com/sqldef/sqldef-preview-action
+
 ## Development
 
 If you update `parser/parser.y`, run:
