@@ -460,6 +460,7 @@ type DDL struct {
 	Table         TableName
 	NewName       TableName
 	IfExists      bool
+	IfNotExists   bool
 	TableSpec     *TableSpec
 	PartitionSpec *PartitionSpec
 	IndexSpec     *IndexSpec
@@ -496,6 +497,7 @@ const (
 	CreateSchema
 	GrantPrivilege
 	RevokePrivilege
+	DropIndex
 )
 
 // View types

@@ -58,6 +58,7 @@ func forceEOF(yylex any) {
 %union {
   empty                    struct{}
   statement                Statement
+  statements               []Statement
   selStmt                  SelectStatement
   ddl                      *DDL
   ins                      *Insert
@@ -189,7 +190,7 @@ func forceEOF(yylex any) {
 %token <empty> JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP
 
 // DDL Tokens
-%token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD
+%token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD GRANT REVOKE
 %token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE
 %right <bytes> UNIQUE KEY
 %token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
@@ -277,11 +278,12 @@ func forceEOF(yylex any) {
 %token <bytes> DEFINER INVOKER
 
 %type <statement> statement
+%type <statements> statement_list
 %type <selStmt> select_statement base_select union_lhs union_rhs
 %type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement
 %type <statement> if_statement matched_if_statement unmatched_if_statement trigger_statement_not_if
 %type <blockStatement> simple_if_body
-%type <statement> create_statement alter_statement
+%type <statement> create_statement alter_statement drop_statement
 %type <statement> set_option_statement set_bool_option_statement
 %type <ddl> create_table_prefix
 %type <bytes2> comment_opt comment_list
@@ -427,9 +429,30 @@ func forceEOF(yylex any) {
 %%
 
 program:
-  statement semicolon_opt
+  statement_list
   {
-    setParseTree(yylex, $1)
+    switch len($1) {
+    case 0:
+      setParseTree(yylex, nil)
+    case 1:
+      setParseTree(yylex, $1[0])
+    default:
+      setParseTree(yylex, &MultiStatement{Statements: $1})
+    }
+  }
+
+statement_list:
+  statement
+  {
+    $$ = []Statement{$1}
+  }
+| statement ';' statement_list
+  {
+    $$ = append([]Statement{$1}, $3...)
+  }
+| statement ';'
+  {
+    $$ = []Statement{$1}
   }
 
 semicolon_opt:
@@ -439,6 +462,7 @@ semicolon_opt:
 statement:
   create_statement
 | alter_statement
+| drop_statement
 
 create_statement:
   create_table_prefix table_spec
@@ -737,6 +761,175 @@ create_statement:
 | CREATE VIRTUAL TABLE if_not_exists_opt table_name USING sql_id module_arguments_opt
   {
     $$ = &DDL{Action: CreateTable, NewName: $5, TableSpec: &TableSpec{}}
+  }
+/* GRANT statement */
+| GRANT sql_id_list ON TABLE table_name TO sql_id_list
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($7))
+    for i, g := range $7 {
+      grantees[i] = g.String()
+    }
+    $$ = &DDL{
+      Action: GrantPrivilege,
+      Table: $5,
+      Grant: &Grant{
+        IsGrant: true,
+        Privileges: privs,
+        Grantees: grantees,
+      },
+    }
+  }
+| GRANT sql_id_list ON table_name TO sql_id_list
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($6))
+    for i, g := range $6 {
+      grantees[i] = g.String()
+    }
+    $$ = &DDL{
+      Action: GrantPrivilege,
+      Table: $4,
+      Grant: &Grant{
+        IsGrant: true,
+        Privileges: privs,
+        Grantees: grantees,
+      },
+    }
+  }
+/* REVOKE statement */
+| REVOKE sql_id_list ON TABLE table_name FROM sql_id_list
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($7))
+    for i, g := range $7 {
+      grantees[i] = g.String()
+    }
+    $$ = &DDL{
+      Action: RevokePrivilege,
+      Table: $5,
+      Grant: &Grant{
+        IsGrant: false,
+        Privileges: privs,
+        Grantees: grantees,
+      },
+    }
+  }
+| REVOKE sql_id_list ON table_name FROM sql_id_list
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($6))
+    for i, g := range $6 {
+      grantees[i] = g.String()
+    }
+    $$ = &DDL{
+      Action: RevokePrivilege,
+      Table: $4,
+      Grant: &Grant{
+        IsGrant: false,
+        Privileges: privs,
+        Grantees: grantees,
+      },
+    }
+  }
+/* CREATE SCHEMA statement */
+| CREATE SCHEMA sql_id
+  {
+    $$ = &DDL{
+      Action: CreateSchema,
+      Schema: &Schema{
+        Name: $3.String(),
+      },
+    }
+  }
+| CREATE SCHEMA IF NOT EXISTS sql_id
+  {
+    $$ = &DDL{
+      Action: CreateSchema,
+      IfNotExists: true,
+      Schema: &Schema{
+        Name: $6.String(),
+      },
+    }
+  }
+/* COMMENT ON statement */
+| COMMENT ON TABLE table_name IS STRING
+  {
+    tableName := ""
+    if !$4.Schema.isEmpty() {
+      tableName = $4.Schema.String() + "."
+    }
+    tableName += $4.Name.String()
+    $$ = &DDL{
+      Action: CommentOn,
+      Table: $4,
+      Comment: &Comment{
+        ObjectType: "TABLE",
+        Object: tableName,
+        Comment: string($6),
+      },
+    }
+  }
+| COMMENT ON COLUMN column_name IS STRING
+  {
+    colName := ""
+    if !$4.Qualifier.isEmpty() {
+      if !$4.Qualifier.Schema.isEmpty() {
+        colName = $4.Qualifier.Schema.String() + "."
+      }
+      colName += $4.Qualifier.Name.String() + "."
+    }
+    colName += $4.Name.String()
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "COLUMN",
+        Object: colName,
+        Comment: string($6),
+      },
+    }
+  }
+| COMMENT ON COLUMN column_name IS NULL
+  {
+    colName := ""
+    if !$4.Qualifier.isEmpty() {
+      if !$4.Qualifier.Schema.isEmpty() {
+        colName = $4.Qualifier.Schema.String() + "."
+      }
+      colName += $4.Qualifier.Name.String() + "."
+    }
+    colName += $4.Name.String()
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "COLUMN",
+        Object: colName,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT ON INDEX sql_id IS STRING
+  {
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "INDEX",
+        Object: $4.String(),
+        Comment: string($6),
+      },
+    }
   }
 
 alter_statement:
@@ -1642,6 +1835,48 @@ or_replace_opt:
 | OR REPLACE
   {
     $$ = nil
+  }
+
+drop_statement:
+  DROP INDEX sql_id
+  {
+    $$ = &DDL{
+      Action: DropIndex,
+      IndexSpec: &IndexSpec{
+        Name: $3,
+      },
+    }
+  }
+| DROP INDEX IF EXISTS sql_id
+  {
+    $$ = &DDL{
+      Action: DropIndex,
+      IfExists: true,
+      IndexSpec: &IndexSpec{
+        Name: $5,
+      },
+    }
+  }
+| DROP INDEX sql_id ON table_name
+  {
+    $$ = &DDL{
+      Action: DropIndex,
+      Table: $5,
+      IndexSpec: &IndexSpec{
+        Name: $3,
+      },
+    }
+  }
+| DROP INDEX IF EXISTS sql_id ON table_name
+  {
+    $$ = &DDL{
+      Action: DropIndex,
+      IfExists: true,
+      Table: $7,
+      IndexSpec: &IndexSpec{
+        Name: $5,
+      },
+    }
   }
 
 create_table_prefix:
