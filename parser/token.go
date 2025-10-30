@@ -203,6 +203,7 @@ var keywords = map[string]int{
 	"execute":                EXECUTE,
 	"exit":                   EXIT,
 	"explain":                EXPLAIN,
+	"extension":              EXTENSION,
 	"expansion":              EXPANSION,
 	"extended":               EXTENDED,
 	"false":                  FALSE,

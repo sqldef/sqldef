@@ -191,7 +191,7 @@ func forceEOF(yylex any) {
 
 // DDL Tokens
 %token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD GRANT REVOKE
-%token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE
+%token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION
 %right <bytes> UNIQUE KEY
 %token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
 %token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN
@@ -861,6 +861,45 @@ create_statement:
       IfNotExists: true,
       Schema: &Schema{
         Name: $6.String(),
+      },
+    }
+  }
+/* CREATE EXTENSION statement */
+| CREATE EXTENSION sql_id
+  {
+    $$ = &DDL{
+      Action: CreateExtension,
+      Extension: &Extension{
+        Name: $3.String(),
+      },
+    }
+  }
+| CREATE EXTENSION IF NOT EXISTS sql_id
+  {
+    $$ = &DDL{
+      Action: CreateExtension,
+      IfNotExists: true,
+      Extension: &Extension{
+        Name: $6.String(),
+      },
+    }
+  }
+| CREATE EXTENSION STRING
+  {
+    $$ = &DDL{
+      Action: CreateExtension,
+      Extension: &Extension{
+        Name: string($3),
+      },
+    }
+  }
+| CREATE EXTENSION IF NOT EXISTS STRING
+  {
+    $$ = &DDL{
+      Action: CreateExtension,
+      IfNotExists: true,
+      Extension: &Extension{
+        Name: string($6),
       },
     }
   }
@@ -1875,6 +1914,45 @@ drop_statement:
       Table: $7,
       IndexSpec: &IndexSpec{
         Name: $5,
+      },
+    }
+  }
+/* DROP EXTENSION statement */
+| DROP EXTENSION sql_id
+  {
+    $$ = &DDL{
+      Action: DropExtension,
+      Extension: &Extension{
+        Name: $3.String(),
+      },
+    }
+  }
+| DROP EXTENSION IF EXISTS sql_id
+  {
+    $$ = &DDL{
+      Action: DropExtension,
+      IfExists: true,
+      Extension: &Extension{
+        Name: $5.String(),
+      },
+    }
+  }
+| DROP EXTENSION STRING
+  {
+    $$ = &DDL{
+      Action: DropExtension,
+      Extension: &Extension{
+        Name: string($3),
+      },
+    }
+  }
+| DROP EXTENSION IF EXISTS STRING
+  {
+    $$ = &DDL{
+      Action: DropExtension,
+      IfExists: true,
+      Extension: &Extension{
+        Name: string($5),
       },
     }
   }

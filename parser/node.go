@@ -498,6 +498,7 @@ const (
 	GrantPrivilege
 	RevokePrivilege
 	DropIndex
+	DropExtension
 )
 
 // View types

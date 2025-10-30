@@ -85,6 +85,13 @@ For MariaDB testing:
 MYSQL_FLAVOR=mariadb MYSQL_PORT=3307 go test ./cmd/mysqldef
 ```
 
+For test coverage:
+
+```sh
+make test-cov     # shows a plain text report
+make test-cov-xml # generates coverage.xml
+```
+
 ### Run individual tests
 
 Use the `-run` flag with a regex pattern to run specific test cases:
@@ -167,6 +174,8 @@ TestCaseName:
 2. **Test both directions**: When testing schema changes, consider testing both:
    - Adding features (no `current`, only `desired`)
    - Modifying existing schemas (`current` → `desired`)
+
+3. **Check test coverage**: When you edit source code, always check the coverage report to ensure the code is covered by tests.
 
 ## Documentation
 
