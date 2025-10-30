@@ -2486,7 +2486,6 @@ character_cast_opt:
     $$ = nil
   }
 | TYPECAST BPCHAR
-| TYPECAST INTERVAL
 | TYPECAST column_type array_opt
 
 numeric_type:
@@ -2627,6 +2626,10 @@ time_type:
 | YEAR
   {
     $$ = ColumnType{Type: string($1)}
+  }
+| INTERVAL length_opt
+  {
+    $$ = ColumnType{Type: string($1), Length: $2}
   }
 
 bool_type:

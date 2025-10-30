@@ -35,7 +35,6 @@ The remaining failures are primarily due to PostgreSQL-specific syntax not yet i
 
 ### 1. PostgreSQL-specific data types
 - Arrays with bracket syntax: `INTEGER[]`, `TEXT[][]` (array type definitions)
-- `INTERVAL` as a column type (conflicts with INTERVAL expressions)
 
 ### 2. Advanced constraints
 - Complex `EXCLUDE` constraints with USING GIST and multiple operators
@@ -66,7 +65,6 @@ The remaining failures are primarily due to PostgreSQL-specific syntax not yet i
 
 ## Implementation Challenges
 Some features cannot be easily added without introducing grammar conflicts:
-- **INTERVAL as column type**: Conflicts with `INTERVAL 'value'` expressions (attempted, causes 111 reduce/reduce conflicts)
 - **Extended TYPECAST**: Supporting all `::type(params)` patterns may cause reduce/reduce conflicts
 - **Complex EXCLUDE constraints**: Basic structure added, but full USING GIST support needs more work
 
