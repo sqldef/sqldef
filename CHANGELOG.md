@@ -1,3 +1,7 @@
+## [v3.3.1](https://github.com/sqldef/sqldef/compare/v3.3.0...v3.3.1) - 2025-10-30
+- mention to https://github.com/sqldef/sqldef-preview-action by @gfx in https://github.com/sqldef/sqldef/pull/904
+- [internal] PSQLDEF_PARSER=generic to use only the generic parser for psqldef by @gfx in https://github.com/sqldef/sqldef/pull/906
+
 ## [v3.3.0](https://github.com/sqldef/sqldef/compare/v3.2.2...v3.3.0) - 2025-10-26
 - add tests about constraints by @gfx in https://github.com/sqldef/sqldef/pull/900
 - [test] add `make test-cov` to take test coverage by @gfx in https://github.com/sqldef/sqldef/pull/902
