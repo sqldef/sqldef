@@ -39,7 +39,8 @@ Requirements:
 - No reduce/reduce conflicts are allowed. Use `make parser-v` and inspect `y.output` to confirm.
 
 Usage notes:
-- `psqldef` primarily uses `go-pgquery` (a native PostgreSQL parser) and falls back to the generic parser.
+- `psqldef` primarily uses `go-pgquery` (a native PostgreSQL parser) and falls back to the generic parser
+- `PSQLDEF_PARSER=generic` environment variable can be used to force the use of the generic parser only for `psqldef`
 
 ## Local Development
 
