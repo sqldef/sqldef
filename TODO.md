@@ -1,10 +1,16 @@
 # Generic Parser Improvements
 
 ## Current Status
-- **535/678 tests passing** (78.9% success rate)
+
+- **593/685 tests passing** (86.6% success rate)
 - **0 reduce/reduce conflicts**
 - **38 shift/reduce conflicts**
 
+## Running Tests
+
+```sh
+go test ./parser
+```
 
 ## TODO: Remove splitDDLs Workaround
 The generic parser now natively supports multiple statements. The `splitDDLs()` workaround should be removed:
@@ -23,25 +29,22 @@ The generic parser now natively supports multiple statements. The `splitDDLs()` 
 
 This will make the parser more robust for complex SQL with embedded semicolons (e.g., stored procedures, triggers)
 
-## Remaining Failures (143 tests)
+## Remaining Failures (92 tests)
 
 The remaining failures are primarily due to PostgreSQL-specific syntax not yet implemented:
 
 ### 1. PostgreSQL-specific data types
-- Range types: `tstzrange`, `tsrange` (custom type definitions)
-- Arrays with bracket syntax: `INTEGER[]`, `TEXT[][]`
+- Arrays with bracket syntax: `INTEGER[]`, `TEXT[][]` (array type definitions)
 - `INTERVAL` as a column type (conflicts with INTERVAL expressions)
 
 ### 2. Advanced constraints
-- `EXCLUDE` constraints with operator expressions (e.g., `WITH &&`, `WITH =`)
-- Complex CHECK constraints with `ALL(ARRAY[...])`, `ANY(ARRAY[...])`, `SOME(ARRAY[...])`
+- Complex `EXCLUDE` constraints with USING GIST and multiple operators
 - Constraint options: `DEFERRABLE`, `INITIALLY DEFERRED`
 - `NO INHERIT` on constraints (partial support)
 
 ### 3. Advanced expressions and operators
-- Type casting with `::` for parameterized types (e.g., `::numeric(10,2)`)
+- Type casting with `::` for more complex types
 - Operator classes in indexes (e.g., `text_pattern_ops`)
-- Array constructors: `ARRAY[1, 2, 3]`
 - Complex default expressions with operators
 - PostgreSQL-specific operators in WHERE clauses
 
@@ -63,11 +66,9 @@ The remaining failures are primarily due to PostgreSQL-specific syntax not yet i
 
 ## Implementation Challenges
 Some features cannot be easily added without introducing grammar conflicts:
-- **INTERVAL as column type**: Conflicts with `INTERVAL 'value'` expressions (attempted, causes reduce/reduce conflicts)
-- **Extended TYPECAST**: Supporting `::type(params)` causes reduce/reduce conflicts with convert_type
-- **Complex EXCLUDE constraints**: Basic structure added, but full operator support needs grammar restructuring
-- **ARRAY constructors**: Conflicts with existing array syntax and expressions
-- **ALL/ANY/SOME with arrays**: Complex interaction with existing comparison operators
+- **INTERVAL as column type**: Conflicts with `INTERVAL 'value'` expressions (attempted, causes 111 reduce/reduce conflicts)
+- **Extended TYPECAST**: Supporting all `::type(params)` patterns may cause reduce/reduce conflicts
+- **Complex EXCLUDE constraints**: Basic structure added, but full USING GIST support needs more work
 
 ## Notes
 - The generic parser is primarily a fallback - `psqldef` uses `go-pgquery` by default

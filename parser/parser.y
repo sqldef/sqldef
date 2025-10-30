@@ -215,6 +215,7 @@ func forceEOF(yylex any) {
 %token <bytes> TIME TIMESTAMP DATETIME YEAR DATETIMEOFFSET DATETIME2 SMALLDATETIME
 %token <bytes> CHAR VARCHAR VARYING BOOL CHARACTER VARBINARY NCHAR NVARCHAR NTEXT UUID
 %token <bytes> TEXT TINYTEXT MEDIUMTEXT LONGTEXT CITEXT
+%token <bytes> TSTZRANGE TSRANGE INT4RANGE INT8RANGE NUMRANGE DATERANGE
 %token <bytes> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON JSONB ENUM
 %token <bytes> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
 %token <bytes> VECTOR
@@ -468,7 +469,7 @@ statement:
 | comment_statement
 
 comment_statement:
-  COMMENT ON TABLE table_name IS STRING
+  COMMENT_KEYWORD ON TABLE table_name IS STRING
   {
     tableName := ""
     if !$4.Schema.isEmpty() {
@@ -485,7 +486,24 @@ comment_statement:
       },
     }
   }
-| COMMENT ON COLUMN column_name IS STRING
+| COMMENT_KEYWORD ON TABLE table_name IS NULL
+  {
+    tableName := ""
+    if !$4.Schema.isEmpty() {
+      tableName = $4.Schema.String() + "."
+    }
+    tableName += $4.Name.String()
+    $$ = &DDL{
+      Action: CommentOn,
+      Table: $4,
+      Comment: &Comment{
+        ObjectType: "TABLE",
+        Object: tableName,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT_KEYWORD ON COLUMN column_name IS STRING
   {
     colName := ""
     if !$4.Qualifier.isEmpty() {
@@ -504,7 +522,7 @@ comment_statement:
       },
     }
   }
-| COMMENT ON COLUMN column_name IS NULL
+| COMMENT_KEYWORD ON COLUMN column_name IS NULL
   {
     colName := ""
     if !$4.Qualifier.isEmpty() {
@@ -523,7 +541,7 @@ comment_statement:
       },
     }
   }
-| COMMENT ON INDEX sql_id IS STRING
+| COMMENT_KEYWORD ON INDEX sql_id IS STRING
   {
     $$ = &DDL{
       Action: CommentOn,
@@ -1058,6 +1076,13 @@ alter_statement:
         Partition: $14,
       },
       IndexCols: $11,
+    }
+  }
+| ALTER ignore_opt TABLE table_name ADD exclude_definition
+  {
+    $$ = &DDL{
+      Action: AddExclusion,
+      Table: $4,
     }
   }
 | ALTER ignore_opt TABLE table_name ADD foreign_key_definition
@@ -2028,8 +2053,13 @@ exclude_definition:
   }
 
 exclude_element_list:
-  sql_id WITH sql_id
-| exclude_element_list ',' sql_id WITH sql_id
+  exclude_element
+| exclude_element_list ',' exclude_element
+
+exclude_element:
+  sql_id WITH '='
+| sql_id WITH '&' '&'
+| sql_id WITH sql_id
 
 column_definition:
   sql_id column_definition_type
@@ -2687,6 +2717,30 @@ char_type:
     $$ = ColumnType{Type: string($1)}
   }
 | UUID
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| TSRANGE
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| TSTZRANGE
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| INT4RANGE
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| INT8RANGE
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| NUMRANGE
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| DATERANGE
   {
     $$ = ColumnType{Type: string($1)}
   }
@@ -4582,6 +4636,14 @@ simple_convert_type:
   {
     $$ = &ConvertType{Type: string($1)}
   }
+| NUMERIC '(' INTEGRAL ',' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s,%s)", $1, $3, $5)}
+  }
+| DECIMAL '(' INTEGRAL ',' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s,%s)", $1, $3, $5)}
+  }
 
 expression_opt:
   {
@@ -5120,6 +5182,14 @@ array_element:
   STRING character_cast_opt
   {
     $$ = NewStrVal($1)
+  }
+| INTEGRAL
+  {
+    $$ = NewIntVal($1)
+  }
+| FLOAT
+  {
+    $$ = NewFloatVal($1)
   }
 
 bool_option_name_list:
