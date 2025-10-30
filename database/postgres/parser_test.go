@@ -19,8 +19,7 @@ func TestParse(t *testing.T) {
 	}
 
 	genericParser := database.NewParser(parser.ParserModePostgres)
-	postgresParser := NewParser()
-	postgresParser.testing = true
+	postgresParser := NewParserWithMode(PsqldefParserModePgquery)
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			psqlResult, err := postgresParser.Parse(test.SQL)
