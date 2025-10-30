@@ -1,9 +1,10 @@
-# Generic Parser - Remaining Work
+# Generic Parser Improvements
 
 ## Current Status
-- **528/678 tests passing** (77.9% success rate)
-- **0 reduce/reduce conflicts** ✓
+- **535/678 tests passing** (78.9% success rate)
+- **0 reduce/reduce conflicts**
 - **38 shift/reduce conflicts**
+
 
 ## TODO: Remove splitDDLs Workaround
 The generic parser now natively supports multiple statements. The `splitDDLs()` workaround should be removed:
@@ -22,41 +23,51 @@ The generic parser now natively supports multiple statements. The `splitDDLs()` 
 
 This will make the parser more robust for complex SQL with embedded semicolons (e.g., stored procedures, triggers)
 
-## Remaining Failures (150 tests)
+## Remaining Failures (143 tests)
 
 The remaining failures are primarily due to PostgreSQL-specific syntax not yet implemented:
 
 ### 1. PostgreSQL-specific data types
-- `tstzrange`, `tsrange`, `citext`
-- Arrays and custom types
+- Range types: `tstzrange`, `tsrange` (custom type definitions)
+- Arrays with bracket syntax: `INTEGER[]`, `TEXT[][]`
 - `INTERVAL` as a column type (conflicts with INTERVAL expressions)
 
 ### 2. Advanced constraints
-- `EXCLUDE` constraints with operators
-- Complex CHECK constraints with `ALL`, `ANY`, `SOME` operators
-- Constraint options like `DEFERRABLE`
+- `EXCLUDE` constraints with operator expressions (e.g., `WITH &&`, `WITH =`)
+- Complex CHECK constraints with `ALL(ARRAY[...])`, `ANY(ARRAY[...])`, `SOME(ARRAY[...])`
+- Constraint options: `DEFERRABLE`, `INITIALLY DEFERRED`
+- `NO INHERIT` on constraints (partial support)
 
-### 3. Advanced expressions
-- Type casting with `::` for complex types (e.g., `::numeric(10,2)`)
-- Operator classes in indexes
+### 3. Advanced expressions and operators
+- Type casting with `::` for parameterized types (e.g., `::numeric(10,2)`)
+- Operator classes in indexes (e.g., `text_pattern_ops`)
+- Array constructors: `ARRAY[1, 2, 3]`
 - Complex default expressions with operators
-- Functions like `gen_random_uuid()` (works as function calls)
+- PostgreSQL-specific operators in WHERE clauses
 
-### 4. COMMENT statements
-- `COMMENT ON ... IS NULL` syntax (partial support)
+### 4. GRANT/REVOKE edge cases
+- Complex privilege management with multiple grantees
+- `WITH GRANT OPTION` support
+- CASCADE/RESTRICT options
+- Role-based access control with special characters
 
 ### 5. Reserved word handling
-- Some PostgreSQL reserved words like `level` not properly handled
+- Reserved words as identifiers (e.g., `level`, `select` as column names)
+- Context-sensitive keywords
 
-### 6. Advanced GRANT/REVOKE
-- Complex privilege management scenarios
-- Role-based access control edge cases
+### 6. Other PostgreSQL features
+- `CREATE TYPE ... AS ENUM` with complex usage patterns
+- Views with complex CASE/WHEN expressions
+- Index expressions with functions (e.g., `COALESCE`)
+- Specialized index types and options
 
 ## Implementation Challenges
 Some features cannot be easily added without introducing grammar conflicts:
-- **INTERVAL as column type**: Conflicts with `INTERVAL 'value'` expressions
+- **INTERVAL as column type**: Conflicts with `INTERVAL 'value'` expressions (attempted, causes reduce/reduce conflicts)
 - **Extended TYPECAST**: Supporting `::type(params)` causes reduce/reduce conflicts with convert_type
-- **EXCLUDE keyword**: Would require significant grammar restructuring to avoid conflicts
+- **Complex EXCLUDE constraints**: Basic structure added, but full operator support needs grammar restructuring
+- **ARRAY constructors**: Conflicts with existing array syntax and expressions
+- **ALL/ANY/SOME with arrays**: Complex interaction with existing comparison operators
 
 ## Notes
 - The generic parser is primarily a fallback - `psqldef` uses `go-pgquery` by default

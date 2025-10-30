@@ -198,6 +198,7 @@ var keywords = map[string]int{
 	"euclidean":              EUCLIDEAN,
 	"escape":                 ESCAPE,
 	"escaped":                UNUSED,
+	"exclude":                EXCLUDE,
 	"exists":                 EXISTS,
 	"exec":                   EXEC,
 	"execute":                EXECUTE,

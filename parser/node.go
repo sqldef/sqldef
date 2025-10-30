@@ -621,6 +621,10 @@ func (ts *TableSpec) addForeignKey(foreignKey *ForeignKeyDefinition) {
 	ts.ForeignKeys = append(ts.ForeignKeys, foreignKey)
 }
 
+func (ts *TableSpec) addExclusion(exclusion *ExclusionDefinition) {
+	ts.Exclusions = append(ts.Exclusions, exclusion)
+}
+
 // ColumnDefinition describes a column in a CREATE TABLE statement
 type ColumnDefinition struct {
 	Name          ColIdent

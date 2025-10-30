@@ -109,6 +109,7 @@ func forceEOF(yylex any) {
   LengthScaleOption        LengthScaleOption
   columnDefinition         *ColumnDefinition
   checkDefinition          *CheckDefinition
+  exclusionDefinition      *ExclusionDefinition
   indexDefinition          *IndexDefinition
   indexInfo                *IndexInfo
   indexOption              *IndexOption
@@ -191,7 +192,7 @@ func forceEOF(yylex any) {
 
 // DDL Tokens
 %token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD GRANT REVOKE
-%token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION
+%token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION EXCLUDE
 %right <bytes> UNIQUE KEY
 %token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
 %token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN
@@ -283,7 +284,7 @@ func forceEOF(yylex any) {
 %type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement
 %type <statement> if_statement matched_if_statement unmatched_if_statement trigger_statement_not_if
 %type <blockStatement> simple_if_body
-%type <statement> create_statement alter_statement drop_statement
+%type <statement> create_statement alter_statement drop_statement comment_statement
 %type <statement> set_option_statement set_bool_option_statement
 %type <ddl> create_table_prefix
 %type <bytes2> comment_opt comment_list
@@ -362,6 +363,7 @@ func forceEOF(yylex any) {
 %type <columnType> column_definition_type
 %type <indexDefinition> index_definition primary_key_definition unique_definition
 %type <checkDefinition> check_definition
+%type <exclusionDefinition> exclude_definition
 %type <foreignKeyDefinition> foreign_key_definition foreign_key_without_options
 %type <colIdent> reference_option
 %type <colIdent> sql_id_opt
@@ -463,6 +465,75 @@ statement:
   create_statement
 | alter_statement
 | drop_statement
+| comment_statement
+
+comment_statement:
+  COMMENT ON TABLE table_name IS STRING
+  {
+    tableName := ""
+    if !$4.Schema.isEmpty() {
+      tableName = $4.Schema.String() + "."
+    }
+    tableName += $4.Name.String()
+    $$ = &DDL{
+      Action: CommentOn,
+      Table: $4,
+      Comment: &Comment{
+        ObjectType: "TABLE",
+        Object: tableName,
+        Comment: string($6),
+      },
+    }
+  }
+| COMMENT ON COLUMN column_name IS STRING
+  {
+    colName := ""
+    if !$4.Qualifier.isEmpty() {
+      if !$4.Qualifier.Schema.isEmpty() {
+        colName = $4.Qualifier.Schema.String() + "."
+      }
+      colName += $4.Qualifier.Name.String() + "."
+    }
+    colName += $4.Name.String()
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "COLUMN",
+        Object: colName,
+        Comment: string($6),
+      },
+    }
+  }
+| COMMENT ON COLUMN column_name IS NULL
+  {
+    colName := ""
+    if !$4.Qualifier.isEmpty() {
+      if !$4.Qualifier.Schema.isEmpty() {
+        colName = $4.Qualifier.Schema.String() + "."
+      }
+      colName += $4.Qualifier.Name.String() + "."
+    }
+    colName += $4.Name.String()
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "COLUMN",
+        Object: colName,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT ON INDEX sql_id IS STRING
+  {
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "INDEX",
+        Object: $4.String(),
+        Comment: string($6),
+      },
+    }
+  }
 
 create_statement:
   create_table_prefix table_spec
@@ -900,73 +971,6 @@ create_statement:
       IfNotExists: true,
       Extension: &Extension{
         Name: string($6),
-      },
-    }
-  }
-/* COMMENT ON statement */
-| COMMENT ON TABLE table_name IS STRING
-  {
-    tableName := ""
-    if !$4.Schema.isEmpty() {
-      tableName = $4.Schema.String() + "."
-    }
-    tableName += $4.Name.String()
-    $$ = &DDL{
-      Action: CommentOn,
-      Table: $4,
-      Comment: &Comment{
-        ObjectType: "TABLE",
-        Object: tableName,
-        Comment: string($6),
-      },
-    }
-  }
-| COMMENT ON COLUMN column_name IS STRING
-  {
-    colName := ""
-    if !$4.Qualifier.isEmpty() {
-      if !$4.Qualifier.Schema.isEmpty() {
-        colName = $4.Qualifier.Schema.String() + "."
-      }
-      colName += $4.Qualifier.Name.String() + "."
-    }
-    colName += $4.Name.String()
-    $$ = &DDL{
-      Action: CommentOn,
-      Comment: &Comment{
-        ObjectType: "COLUMN",
-        Object: colName,
-        Comment: string($6),
-      },
-    }
-  }
-| COMMENT ON COLUMN column_name IS NULL
-  {
-    colName := ""
-    if !$4.Qualifier.isEmpty() {
-      if !$4.Qualifier.Schema.isEmpty() {
-        colName = $4.Qualifier.Schema.String() + "."
-      }
-      colName += $4.Qualifier.Name.String() + "."
-    }
-    colName += $4.Name.String()
-    $$ = &DDL{
-      Action: CommentOn,
-      Comment: &Comment{
-        ObjectType: "COLUMN",
-        Object: colName,
-        Comment: "",
-      },
-    }
-  }
-| COMMENT ON INDEX sql_id IS STRING
-  {
-    $$ = &DDL{
-      Action: CommentOn,
-      Comment: &Comment{
-        ObjectType: "INDEX",
-        Object: $4.String(),
-        Comment: string($6),
       },
     }
   }
@@ -2004,6 +2008,28 @@ table_column_list:
   {
     $$.addCheck($3)
   }
+| table_column_list ',' exclude_definition
+  {
+    $$.addExclusion($3)
+  }
+
+exclude_definition:
+  CONSTRAINT sql_id EXCLUDE '(' exclude_element_list ')'
+  {
+    $$ = &ExclusionDefinition{
+      ConstraintName: $2,
+    }
+  }
+| CONSTRAINT sql_id EXCLUDE USING sql_id '(' exclude_element_list ')'
+  {
+    $$ = &ExclusionDefinition{
+      ConstraintName: $2,
+    }
+  }
+
+exclude_element_list:
+  sql_id WITH sql_id
+| exclude_element_list ',' sql_id WITH sql_id
 
 column_definition:
   sql_id column_definition_type
@@ -2040,6 +2066,10 @@ column_type:
 | sql_id
   {
     $$ = ColumnType{Type: $1.val}
+  }
+| STRING '.' STRING
+  {
+    $$ = ColumnType{Type: string($1) + "." + string($3)}
   }
 
 column_definition_type:
