@@ -2,7 +2,7 @@
 
 ## Current Status
 
-- **593/685 tests passing** (86.6% success rate)
+- **209/490 YAML test cases passing** (42.7% success rate)
 - **0 reduce/reduce conflicts**
 - **38 shift/reduce conflicts**
 
@@ -29,7 +29,7 @@ The generic parser now natively supports multiple statements. The `splitDDLs()` 
 
 This will make the parser more robust for complex SQL with embedded semicolons (e.g., stored procedures, triggers)
 
-## Remaining Failures (92 tests)
+## Remaining Failures
 
 The remaining failures are primarily due to PostgreSQL-specific syntax not yet implemented:
 
@@ -42,7 +42,6 @@ The remaining failures are primarily due to PostgreSQL-specific syntax not yet i
 - `NO INHERIT` on constraints (partial support)
 
 ### 3. Advanced expressions and operators
-- Type casting with `::` for more complex types
 - Operator classes in indexes (e.g., `text_pattern_ops`)
 - Complex default expressions with operators
 - PostgreSQL-specific operators in WHERE clauses
@@ -65,8 +64,6 @@ The remaining failures are primarily due to PostgreSQL-specific syntax not yet i
 
 ## Implementation Challenges
 Some features cannot be easily added without introducing grammar conflicts:
-- ✅ **Extended TYPECAST**: Successfully implemented support for `::type(params)` patterns without conflicts
-  - Added support for: varchar(n), char(n), numeric(p,s), decimal(p,s), bit(n), timestamp(p), time(p)
 - **Complex EXCLUDE constraints**: Basic structure added, but full USING GIST support needs more work
 
 ## Notes

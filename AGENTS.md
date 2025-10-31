@@ -41,6 +41,7 @@ Requirements:
 Usage notes:
 - `psqldef` primarily uses `go-pgquery` (a native PostgreSQL parser) and falls back to the generic parser
 - `PSQLDEF_PARSER=generic` environment variable can be used to force the use of the generic parser only for `psqldef`
+- The generic parser should build AST, and the generator manipulates the AST as is. Do not parse strings with regular expressions unless unavoidable
 
 ## Local Development
 

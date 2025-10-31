@@ -4641,47 +4641,47 @@ simple_convert_type:
   }
 | NUMERIC '(' INTEGRAL ',' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s,%s)", $1, $3, $5)}
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3), Scale: NewIntVal($5)}
   }
 | DECIMAL '(' INTEGRAL ',' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s,%s)", $1, $3, $5)}
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3), Scale: NewIntVal($5)}
   }
 | VARCHAR '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s)", $1, $3)}
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
   }
 | CHARACTER VARYING '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: fmt.Sprintf("%s %s(%s)", $1, $2, $4)}
+    $$ = &ConvertType{Type: string($1) + " " + string($2), Length: NewIntVal($4)}
   }
 | CHAR '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s)", $1, $3)}
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
   }
 | CHARACTER '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s)", $1, $3)}
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
   }
 | BIT '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s)", $1, $3)}
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
   }
 | NUMERIC '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s)", $1, $3)}
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
   }
 | DECIMAL '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s)", $1, $3)}
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
   }
 | TIMESTAMP '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s)", $1, $3)}
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
   }
 | TIME '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s)", $1, $3)}
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
   }
 | INTERVAL
   {

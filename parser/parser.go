@@ -8769,67 +8769,67 @@ yydefault:
 		yyDollar = yyS[yypt-6 : yypt+1]
 //line parser/parser.y:4643
 		{
-			yyVAL.convertType = &ConvertType{Type: fmt.Sprintf("%s(%s,%s)", yyDollar[1].bytes, yyDollar[3].bytes, yyDollar[5].bytes)}
+			yyVAL.convertType = &ConvertType{Type: string(yyDollar[1].bytes), Length: NewIntVal(yyDollar[3].bytes), Scale: NewIntVal(yyDollar[5].bytes)}
 		}
 	case 852:
 		yyDollar = yyS[yypt-6 : yypt+1]
 //line parser/parser.y:4647
 		{
-			yyVAL.convertType = &ConvertType{Type: fmt.Sprintf("%s(%s,%s)", yyDollar[1].bytes, yyDollar[3].bytes, yyDollar[5].bytes)}
+			yyVAL.convertType = &ConvertType{Type: string(yyDollar[1].bytes), Length: NewIntVal(yyDollar[3].bytes), Scale: NewIntVal(yyDollar[5].bytes)}
 		}
 	case 853:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line parser/parser.y:4651
 		{
-			yyVAL.convertType = &ConvertType{Type: fmt.Sprintf("%s(%s)", yyDollar[1].bytes, yyDollar[3].bytes)}
+			yyVAL.convertType = &ConvertType{Type: string(yyDollar[1].bytes), Length: NewIntVal(yyDollar[3].bytes)}
 		}
 	case 854:
 		yyDollar = yyS[yypt-5 : yypt+1]
 //line parser/parser.y:4655
 		{
-			yyVAL.convertType = &ConvertType{Type: fmt.Sprintf("%s %s(%s)", yyDollar[1].bytes, yyDollar[2].bytes, yyDollar[4].bytes)}
+			yyVAL.convertType = &ConvertType{Type: string(yyDollar[1].bytes) + " " + string(yyDollar[2].bytes), Length: NewIntVal(yyDollar[4].bytes)}
 		}
 	case 855:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line parser/parser.y:4659
 		{
-			yyVAL.convertType = &ConvertType{Type: fmt.Sprintf("%s(%s)", yyDollar[1].bytes, yyDollar[3].bytes)}
+			yyVAL.convertType = &ConvertType{Type: string(yyDollar[1].bytes), Length: NewIntVal(yyDollar[3].bytes)}
 		}
 	case 856:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line parser/parser.y:4663
 		{
-			yyVAL.convertType = &ConvertType{Type: fmt.Sprintf("%s(%s)", yyDollar[1].bytes, yyDollar[3].bytes)}
+			yyVAL.convertType = &ConvertType{Type: string(yyDollar[1].bytes), Length: NewIntVal(yyDollar[3].bytes)}
 		}
 	case 857:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line parser/parser.y:4667
 		{
-			yyVAL.convertType = &ConvertType{Type: fmt.Sprintf("%s(%s)", yyDollar[1].bytes, yyDollar[3].bytes)}
+			yyVAL.convertType = &ConvertType{Type: string(yyDollar[1].bytes), Length: NewIntVal(yyDollar[3].bytes)}
 		}
 	case 858:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line parser/parser.y:4671
 		{
-			yyVAL.convertType = &ConvertType{Type: fmt.Sprintf("%s(%s)", yyDollar[1].bytes, yyDollar[3].bytes)}
+			yyVAL.convertType = &ConvertType{Type: string(yyDollar[1].bytes), Length: NewIntVal(yyDollar[3].bytes)}
 		}
 	case 859:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line parser/parser.y:4675
 		{
-			yyVAL.convertType = &ConvertType{Type: fmt.Sprintf("%s(%s)", yyDollar[1].bytes, yyDollar[3].bytes)}
+			yyVAL.convertType = &ConvertType{Type: string(yyDollar[1].bytes), Length: NewIntVal(yyDollar[3].bytes)}
 		}
 	case 860:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line parser/parser.y:4679
 		{
-			yyVAL.convertType = &ConvertType{Type: fmt.Sprintf("%s(%s)", yyDollar[1].bytes, yyDollar[3].bytes)}
+			yyVAL.convertType = &ConvertType{Type: string(yyDollar[1].bytes), Length: NewIntVal(yyDollar[3].bytes)}
 		}
 	case 861:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line parser/parser.y:4683
 		{
-			yyVAL.convertType = &ConvertType{Type: fmt.Sprintf("%s(%s)", yyDollar[1].bytes, yyDollar[3].bytes)}
+			yyVAL.convertType = &ConvertType{Type: string(yyDollar[1].bytes), Length: NewIntVal(yyDollar[3].bytes)}
 		}
 	case 862:
 		yyDollar = yyS[yypt-1 : yypt+1]
