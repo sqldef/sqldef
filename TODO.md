@@ -2,9 +2,9 @@
 
 ## Current Status
 
-- **600/677 parser tests passing** (88.6% success rate)
-- **0 reduce/reduce conflicts**
-- **38 shift/reduce conflicts**
+- **643/677 parser tests passing** (95% success rate) ✅
+- **0 reduce/reduce conflicts** ✅
+- **38 shift/reduce conflicts** (baseline maintained) ✅
 
 ## Running Tests
 
@@ -37,29 +37,27 @@ This will make the parser more robust for complex SQL with embedded semicolons (
 ### 2. Advanced constraints
 - Constraint options: `DEFERRABLE`, `INITIALLY DEFERRED`
 - `NO INHERIT` on constraints (partial support)
+- CHECK constraints with IN operator
 
 ### 3. Advanced expressions and operators
+- Type cast operator `::` (requires careful integration to avoid conflicts)
 - Operator classes in indexes (e.g., `text_pattern_ops`)
 - Complex default expressions with operators
 - PostgreSQL-specific operators in WHERE clauses
+- Index expressions with functions (e.g., `COALESCE`)
 
 ### 4. GRANT/REVOKE edge cases
-- Complex privilege management with multiple grantees
 - `WITH GRANT OPTION` support
 - CASCADE/RESTRICT options
-- Role-based access control with special characters
+- `ALL PRIVILEGES` syntax (currently uses `ALL`)
 
-### 5. Reserved word handling
-- Reserved words as identifiers (e.g., `level`, `select` as column names)
-- Context-sensitive keywords
-
-### 6. Other PostgreSQL features
-- `CREATE TYPE ... AS ENUM` with complex usage patterns
+### 5. Other PostgreSQL features
 - Views with complex CASE/WHEN expressions
-- Index expressions with functions (e.g., `COALESCE`)
 - Specialized index types and options
+- Reserved words as identifiers in more contexts
 
 ## Notes
 - The generic parser is primarily a fallback - `psqldef` uses `go-pgquery` by default
 - Use `PSQLDEF_PARSER=generic` environment variable to force generic parser
 - The parser must maintain zero reduce/reduce conflicts for correctness
+- Shift/reduce conflicts should stay at baseline (38) to avoid regressions

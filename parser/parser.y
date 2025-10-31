@@ -2147,9 +2147,9 @@ column_type:
   {
     $$ = ColumnType{Type: string($1) + "." + string($3)}
   }
-| table_id '.' table_id
+| ID '.' ID
   {
-    $$ = ColumnType{Type: $1.String() + "." + $3.String()}
+    $$ = ColumnType{Type: string($1) + "." + string($3)}
   }
 
 column_definition_type:
@@ -3978,14 +3978,6 @@ expression:
 | expression OUTPUT
   {
     $$ = &SuffixExpr{Expr: $1, Suffix: string($2)}
-  }
-| expression TYPECAST column_type
-  {
-    typeName := ""
-    if $3.Type != "" {
-      typeName = $3.Type
-    }
-    $$ = &ConvertExpr{Action: CastStr, Expr: $1, Type: &ConvertType{Type: typeName}}
   }
 | value_expression
   {
