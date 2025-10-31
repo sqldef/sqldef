@@ -201,7 +201,7 @@ func TestIntervalColumnType(t *testing.T) {
 		},
 		// Edge cases and complex scenarios
 		{
-			name:        "INTERVAL in complex table definition",
+			name: "INTERVAL in complex table definition",
 			sql: `CREATE TABLE scheduled_events (
 				id SERIAL PRIMARY KEY,
 				name VARCHAR(255) NOT NULL,

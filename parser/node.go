@@ -1149,8 +1149,9 @@ type Trigger struct {
 }
 
 type Type struct {
-	Name TableName // workaround: using TableName to handle schema
-	Type ColumnType
+	Name       TableName // workaround: using TableName to handle schema
+	Type       ColumnType
+	EnumValues []string
 }
 
 type Comment struct {

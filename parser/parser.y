@@ -371,8 +371,8 @@ func forceEOF(yylex any) {
 %type <exclusionPair> exclude_element
 %type <foreignKeyDefinition> foreign_key_definition foreign_key_without_options
 %type <colIdent> reference_option
-%type <colIdent> sql_id_opt
-%type <colIdents> sql_id_list
+%type <colIdent> sql_id_opt privilege grantee
+%type <colIdents> sql_id_list privilege_list grantee_list
 %type <str> index_or_key
 %type <str> equal_opt
 %type <TableSpec> table_spec table_column_list
@@ -847,6 +847,7 @@ create_statement:
       Type: &Type{
         Name: $3,
         Type: $5,
+        EnumValues: $5.EnumValues,
       },
     }
   }
@@ -856,7 +857,7 @@ create_statement:
     $$ = &DDL{Action: CreateTable, NewName: $5, TableSpec: &TableSpec{}}
   }
 /* GRANT statement */
-| GRANT sql_id_list ON TABLE table_name TO sql_id_list
+| GRANT privilege_list ON TABLE table_name TO grantee_list
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
@@ -876,7 +877,7 @@ create_statement:
       },
     }
   }
-| GRANT sql_id_list ON table_name TO sql_id_list
+| GRANT privilege_list ON table_name TO grantee_list
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
@@ -897,7 +898,7 @@ create_statement:
     }
   }
 /* REVOKE statement */
-| REVOKE sql_id_list ON TABLE table_name FROM sql_id_list
+| REVOKE privilege_list ON TABLE table_name FROM grantee_list
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
@@ -917,7 +918,7 @@ create_statement:
       },
     }
   }
-| REVOKE sql_id_list ON table_name FROM sql_id_list
+| REVOKE privilege_list ON table_name FROM grantee_list
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
@@ -2145,6 +2146,10 @@ column_type:
 | STRING '.' STRING
   {
     $$ = ColumnType{Type: string($1) + "." + string($3)}
+  }
+| table_id '.' table_id
+  {
+    $$ = ColumnType{Type: $1.String() + "." + $3.String()}
   }
 
 column_definition_type:
@@ -3420,6 +3425,47 @@ sql_id_list:
     $$ = append($1, $3)
   }
 
+privilege:
+  reserved_sql_id
+  {
+    $$ = $1
+  }
+| ALL
+  {
+    $$ = NewColIdent(string($1))
+  }
+
+privilege_list:
+  privilege
+  {
+    $$ = []ColIdent{$1}
+  }
+| privilege_list ',' privilege
+  {
+    $$ = append($1, $3)
+  }
+
+/* For GRANT/REVOKE grantees - allows PUBLIC keyword */
+grantee:
+  sql_id
+  {
+    $$ = $1
+  }
+| PUBLIC
+  {
+    $$ = NewColIdent(string($1))
+  }
+
+grantee_list:
+  grantee
+  {
+    $$ = []ColIdent{$1}
+  }
+| grantee_list ',' grantee
+  {
+    $$ = append($1, $3)
+  }
+
 // rather than explicitly parsing the various keywords for table options,
 // just accept any number of keywords, IDs, strings, numbers, and '='
 table_option_list:
@@ -3932,6 +3978,14 @@ expression:
 | expression OUTPUT
   {
     $$ = &SuffixExpr{Expr: $1, Suffix: string($2)}
+  }
+| expression TYPECAST column_type
+  {
+    typeName := ""
+    if $3.Type != "" {
+      typeName = $3.Type
+    }
+    $$ = &ConvertExpr{Action: CastStr, Expr: $1, Type: &ConvertType{Type: typeName}}
   }
 | value_expression
   {
