@@ -110,6 +110,8 @@ func forceEOF(yylex any) {
   columnDefinition         *ColumnDefinition
   checkDefinition          *CheckDefinition
   exclusionDefinition      *ExclusionDefinition
+  exclusionPair            ExclusionPair
+  exclusionPairs           []ExclusionPair
   indexDefinition          *IndexDefinition
   indexInfo                *IndexInfo
   indexOption              *IndexOption
@@ -365,6 +367,8 @@ func forceEOF(yylex any) {
 %type <indexDefinition> index_definition primary_key_definition unique_definition
 %type <checkDefinition> check_definition
 %type <exclusionDefinition> exclude_definition
+%type <exclusionPairs> exclude_element_list
+%type <exclusionPair> exclude_element
 %type <foreignKeyDefinition> foreign_key_definition foreign_key_without_options
 %type <colIdent> reference_option
 %type <colIdent> sql_id_opt
@@ -1083,6 +1087,7 @@ alter_statement:
     $$ = &DDL{
       Action: AddExclusion,
       Table: $4,
+      Exclusion: $6,
     }
   }
 | ALTER ignore_opt TABLE table_name ADD foreign_key_definition
@@ -2039,27 +2044,67 @@ table_column_list:
   }
 
 exclude_definition:
-  CONSTRAINT sql_id EXCLUDE '(' exclude_element_list ')'
+  CONSTRAINT sql_id EXCLUDE '(' exclude_element_list ')' where_expression_opt
   {
     $$ = &ExclusionDefinition{
       ConstraintName: $2,
+      IndexType: NewColIdent(""), // Default index type
+      Exclusions: $5,
+      Where: NewWhere(WhereStr, $7),
     }
   }
-| CONSTRAINT sql_id EXCLUDE USING sql_id '(' exclude_element_list ')'
+| CONSTRAINT sql_id EXCLUDE USING sql_id '(' exclude_element_list ')' where_expression_opt
   {
     $$ = &ExclusionDefinition{
       ConstraintName: $2,
+      IndexType: $5, // GIST, btree, etc.
+      Exclusions: $7,
+      Where: NewWhere(WhereStr, $9),
     }
   }
 
 exclude_element_list:
   exclude_element
+  {
+    $$ = []ExclusionPair{$1}
+  }
 | exclude_element_list ',' exclude_element
+  {
+    $$ = append($1, $3)
+  }
 
 exclude_element:
-  sql_id WITH '='
-| sql_id WITH '&' '&'
-| sql_id WITH sql_id
+  expression WITH '='
+  {
+    $$ = ExclusionPair{
+      Expression: $1,
+      Operator: "=",
+    }
+  }
+| expression WITH AND
+  {
+    // AND token represents && in the lexer
+    $$ = ExclusionPair{
+      Expression: $1,
+      Operator: "&&",
+    }
+  }
+| expression WITH OR
+  {
+    // OR token represents || in the lexer
+    $$ = ExclusionPair{
+      Expression: $1,
+      Operator: "||",
+    }
+  }
+| expression WITH sql_id
+  {
+    // Handle all other operators and GIST-specific operators
+    $$ = ExclusionPair{
+      Expression: $1,
+      Operator: string($3.val),
+    }
+  }
 
 column_definition:
   sql_id column_definition_type

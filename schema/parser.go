@@ -722,7 +722,7 @@ func parseExclusion(exclusion *parser.ExclusionDefinition) Exclusion {
 	var exs []ExclusionPair
 	for _, exclusion := range exclusion.Exclusions {
 		exs = append(exs, ExclusionPair{
-			column:   exclusion.Column.String(),
+			column:   parser.String(exclusion.Expression),
 			operator: exclusion.Operator,
 		})
 	}
@@ -732,7 +732,7 @@ func parseExclusion(exclusion *parser.ExclusionDefinition) Exclusion {
 	}
 	return Exclusion{
 		constraintName: exclusion.ConstraintName.String(),
-		indexType:      strings.ToUpper(exclusion.IndexType),
+		indexType:      strings.ToUpper(exclusion.IndexType.String()),
 		exclusions:     exs,
 		where:          where,
 	}

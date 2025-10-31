@@ -1,8 +1,8 @@
-# Generic Parser Improvements
+# Generic Parser TODO
 
 ## Current Status
 
-- **209/490 YAML test cases passing** (42.7% success rate)
+- **600/677 parser tests passing** (88.6% success rate)
 - **0 reduce/reduce conflicts**
 - **38 shift/reduce conflicts**
 
@@ -29,15 +29,12 @@ The generic parser now natively supports multiple statements. The `splitDDLs()` 
 
 This will make the parser more robust for complex SQL with embedded semicolons (e.g., stored procedures, triggers)
 
-## Remaining Failures
-
-The remaining failures are primarily due to PostgreSQL-specific syntax not yet implemented:
+## Remaining Features to Implement
 
 ### 1. PostgreSQL-specific data types
 - Arrays with bracket syntax: `INTEGER[]`, `TEXT[][]` (array type definitions)
 
 ### 2. Advanced constraints
-- Complex `EXCLUDE` constraints with USING GIST and multiple operators
 - Constraint options: `DEFERRABLE`, `INITIALLY DEFERRED`
 - `NO INHERIT` on constraints (partial support)
 
@@ -61,10 +58,6 @@ The remaining failures are primarily due to PostgreSQL-specific syntax not yet i
 - Views with complex CASE/WHEN expressions
 - Index expressions with functions (e.g., `COALESCE`)
 - Specialized index types and options
-
-## Implementation Challenges
-Some features cannot be easily added without introducing grammar conflicts:
-- **Complex EXCLUDE constraints**: Basic structure added, but full USING GIST support needs more work
 
 ## Notes
 - The generic parser is primarily a fallback - `psqldef` uses `go-pgquery` by default

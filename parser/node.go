@@ -738,13 +738,13 @@ type CheckDefinition struct {
 }
 
 type ExclusionPair struct {
-	Column   ColIdent
-	Operator string
+	Expression Expr
+	Operator   string
 }
 
 type ExclusionDefinition struct {
 	ConstraintName ColIdent
-	IndexType      string
+	IndexType      ColIdent
 	Exclusions     []ExclusionPair
 	Where          *Where
 }
