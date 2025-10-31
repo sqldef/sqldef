@@ -1,4 +1,8 @@
-# Generic Parser TODO
+# Generic Parser Migration
+
+## Goal
+
+We are implementing all SQL dialects in the generic parser. Once the migration is complete, we will discard the `pgquery` parser.
 
 ## Current Status
 
@@ -60,7 +64,8 @@ The following tests are still failing and represent features not yet fully suppo
 
 ### Trade-offs
 Some PostgreSQL-specific features have implementation constraints:
-- Parenthesized expressions with type casts have limited support through `tuple_expression`
+- **Parenthesized expressions with type casts** (e.g., `('text')::varchar`) cannot be supported in DEFAULT expressions without introducing hundreds of reduce/reduce conflicts. The parser's `default_expression` rule is intentionally limited to avoid grammar ambiguities. This affects tests like CreateTableWithDefault that use `''::character varying` syntax.
+- **Arithmetic operations in DEFAULT expressions** similarly create significant conflicts when added to the generic parser
 - Complex operator precedence can create ambiguities
 
 ## Notes
@@ -68,3 +73,4 @@ Some PostgreSQL-specific features have implementation constraints:
 - Use `PSQLDEF_PARSER=generic` environment variable to force generic parser
 - The parser must maintain zero reduce/reduce conflicts for correctness
 - Shift/reduce conflicts should stay at baseline (38) to avoid regressions
+- Keep the document up to date
