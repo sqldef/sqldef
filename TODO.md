@@ -2,7 +2,7 @@
 
 ## Current Status
 
-- **651/677 parser tests passing** (96.2% success rate - aiming for 100%)
+- **661/678 parser tests passing** (97.5% success rate - up from 96.2%)
 - **0 reduce/reduce conflicts** ✓
 - **38 shift/reduce conflicts** (baseline maintained) ✓
 
@@ -28,6 +28,15 @@ The generic parser now natively supports multiple statements. The `splitDDLs()` 
 3. Return all statements
 
 This will make the parser more robust for complex SQL with embedded semicolons (e.g., stored procedures, triggers)
+
+## Recent Improvements
+
+### ✅ Completed
+1. **GRANT ALL PRIVILEGES** support - Fixed keyword mapping
+2. **Multiple tables in GRANT/REVOKE** - Now supports `GRANT ... ON TABLE users, posts TO ...`
+3. **Test coverage increased** - From 651/677 (96.2%) to 661/678 (97.5%)
+4. **Refactored GRANT/REVOKE rules** - Consolidated 17 rules down to 10, eliminating redundancy
+5. **Maintained baseline conflicts** - Kept shift/reduce conflicts at 38 (baseline)
 
 ## Remaining Features to Implement
 

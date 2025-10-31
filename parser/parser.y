@@ -852,8 +852,7 @@ create_statement:
   {
     $$ = &DDL{Action: CreateTable, NewName: $5, TableSpec: &TableSpec{}}
   }
-/* GRANT statement */
-| GRANT privilege_list ON TABLE table_name TO grantee_list
+| GRANT privilege_list ON TABLE table_name_list TO grantee_list
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
@@ -863,17 +862,34 @@ create_statement:
     for i, g := range $7 {
       grantees[i] = g.String()
     }
-    $$ = &DDL{
-      Action: GrantPrivilege,
-      Table: $5,
-      Grant: &Grant{
-        IsGrant: true,
-        Privileges: privs,
-        Grantees: grantees,
-      },
+
+    if len($5) == 1 {
+      $$ = &DDL{
+        Action: GrantPrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: true,
+          Privileges: privs,
+          Grantees: grantees,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($5))
+      for i, table := range $5 {
+        stmts[i] = &DDL{
+          Action: GrantPrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: true,
+            Privileges: privs,
+            Grantees: grantees,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
     }
   }
-| GRANT privilege_list ON TABLE table_name TO grantee_list WITH GRANT OPTION
+| GRANT privilege_list ON TABLE table_name_list TO grantee_list WITH GRANT OPTION
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
@@ -883,18 +899,36 @@ create_statement:
     for i, g := range $7 {
       grantees[i] = g.String()
     }
-    $$ = &DDL{
-      Action: GrantPrivilege,
-      Table: $5,
-      Grant: &Grant{
-        IsGrant: true,
-        Privileges: privs,
-        Grantees: grantees,
-        WithGrantOption: true,
-      },
+
+    if len($5) == 1 {
+      $$ = &DDL{
+        Action: GrantPrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: true,
+          Privileges: privs,
+          Grantees: grantees,
+          WithGrantOption: true,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($5))
+      for i, table := range $5 {
+        stmts[i] = &DDL{
+          Action: GrantPrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: true,
+            Privileges: privs,
+            Grantees: grantees,
+            WithGrantOption: true,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
     }
   }
-| GRANT privilege_list ON table_name TO grantee_list
+| GRANT privilege_list ON table_name_list TO grantee_list
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
@@ -904,17 +938,34 @@ create_statement:
     for i, g := range $6 {
       grantees[i] = g.String()
     }
-    $$ = &DDL{
-      Action: GrantPrivilege,
-      Table: $4,
-      Grant: &Grant{
-        IsGrant: true,
-        Privileges: privs,
-        Grantees: grantees,
-      },
+
+    if len($4) == 1 {
+      $$ = &DDL{
+        Action: GrantPrivilege,
+        Table: $4[0],
+        Grant: &Grant{
+          IsGrant: true,
+          Privileges: privs,
+          Grantees: grantees,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($4))
+      for i, table := range $4 {
+        stmts[i] = &DDL{
+          Action: GrantPrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: true,
+            Privileges: privs,
+            Grantees: grantees,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
     }
   }
-| GRANT privilege_list ON table_name TO grantee_list WITH GRANT OPTION
+| GRANT privilege_list ON table_name_list TO grantee_list WITH GRANT OPTION
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
@@ -924,19 +975,36 @@ create_statement:
     for i, g := range $6 {
       grantees[i] = g.String()
     }
-    $$ = &DDL{
-      Action: GrantPrivilege,
-      Table: $4,
-      Grant: &Grant{
-        IsGrant: true,
-        Privileges: privs,
-        Grantees: grantees,
-        WithGrantOption: true,
-      },
+
+    if len($4) == 1 {
+      $$ = &DDL{
+        Action: GrantPrivilege,
+        Table: $4[0],
+        Grant: &Grant{
+          IsGrant: true,
+          Privileges: privs,
+          Grantees: grantees,
+          WithGrantOption: true,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($4))
+      for i, table := range $4 {
+        stmts[i] = &DDL{
+          Action: GrantPrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: true,
+            Privileges: privs,
+            Grantees: grantees,
+            WithGrantOption: true,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
     }
   }
-/* REVOKE statement */
-| REVOKE privilege_list ON TABLE table_name FROM grantee_list
+| REVOKE privilege_list ON TABLE table_name_list FROM grantee_list
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
@@ -946,17 +1014,34 @@ create_statement:
     for i, g := range $7 {
       grantees[i] = g.String()
     }
-    $$ = &DDL{
-      Action: RevokePrivilege,
-      Table: $5,
-      Grant: &Grant{
-        IsGrant: false,
-        Privileges: privs,
-        Grantees: grantees,
-      },
+
+    if len($5) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($5))
+      for i, table := range $5 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
     }
   }
-| REVOKE privilege_list ON TABLE table_name FROM grantee_list CASCADE
+| REVOKE privilege_list ON TABLE table_name_list FROM grantee_list CASCADE
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
@@ -966,18 +1051,36 @@ create_statement:
     for i, g := range $7 {
       grantees[i] = g.String()
     }
-    $$ = &DDL{
-      Action: RevokePrivilege,
-      Table: $5,
-      Grant: &Grant{
-        IsGrant: false,
-        Privileges: privs,
-        Grantees: grantees,
-        CascadeOption: true,
-      },
+
+    if len($5) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+          CascadeOption: true,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($5))
+      for i, table := range $5 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+            CascadeOption: true,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
     }
   }
-| REVOKE privilege_list ON TABLE table_name FROM grantee_list RESTRICT
+| REVOKE privilege_list ON TABLE table_name_list FROM grantee_list RESTRICT
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
@@ -987,18 +1090,36 @@ create_statement:
     for i, g := range $7 {
       grantees[i] = g.String()
     }
-    $$ = &DDL{
-      Action: RevokePrivilege,
-      Table: $5,
-      Grant: &Grant{
-        IsGrant: false,
-        Privileges: privs,
-        Grantees: grantees,
-        CascadeOption: false,
-      },
+
+    if len($5) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+          // RESTRICT is the default, no special flag needed
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($5))
+      for i, table := range $5 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+            // RESTRICT is the default, no special flag needed
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
     }
   }
-| REVOKE privilege_list ON table_name FROM grantee_list
+| REVOKE privilege_list ON table_name_list FROM grantee_list
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
@@ -1008,17 +1129,34 @@ create_statement:
     for i, g := range $6 {
       grantees[i] = g.String()
     }
-    $$ = &DDL{
-      Action: RevokePrivilege,
-      Table: $4,
-      Grant: &Grant{
-        IsGrant: false,
-        Privileges: privs,
-        Grantees: grantees,
-      },
+
+    if len($4) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $4[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($4))
+      for i, table := range $4 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
     }
   }
-| REVOKE privilege_list ON table_name FROM grantee_list CASCADE
+| REVOKE privilege_list ON table_name_list FROM grantee_list CASCADE
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
@@ -1028,18 +1166,36 @@ create_statement:
     for i, g := range $6 {
       grantees[i] = g.String()
     }
-    $$ = &DDL{
-      Action: RevokePrivilege,
-      Table: $4,
-      Grant: &Grant{
-        IsGrant: false,
-        Privileges: privs,
-        Grantees: grantees,
-        CascadeOption: true,
-      },
+
+    if len($4) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $4[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+          CascadeOption: true,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($4))
+      for i, table := range $4 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+            CascadeOption: true,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
     }
   }
-| REVOKE privilege_list ON table_name FROM grantee_list RESTRICT
+| REVOKE privilege_list ON table_name_list FROM grantee_list RESTRICT
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
@@ -1049,15 +1205,33 @@ create_statement:
     for i, g := range $6 {
       grantees[i] = g.String()
     }
-    $$ = &DDL{
-      Action: RevokePrivilege,
-      Table: $4,
-      Grant: &Grant{
-        IsGrant: false,
-        Privileges: privs,
-        Grantees: grantees,
-        CascadeOption: false,
-      },
+
+    if len($4) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $4[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+          // RESTRICT is the default, no special flag needed
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($4))
+      for i, table := range $4 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+            // RESTRICT is the default, no special flag needed
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
     }
   }
 /* CREATE SCHEMA statement */
