@@ -36,7 +36,9 @@ make parser-v  # same as above, also writes a conflict report to y.output
 ```
 
 Requirements:
-- No reduce/reduce conflicts are allowed. Use `make parser-v` and inspect `y.output` to confirm.
+- No reduce/reduce conflicts are allowed
+- No more shift/reduce conflicts are allowed unless absolutely necessary
+- To resolve conflicts, use `make parser-v` and inspect `y.output`
 
 Usage notes:
 - `psqldef` primarily uses `go-pgquery` (a native PostgreSQL parser) and falls back to the generic parser
