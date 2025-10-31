@@ -462,10 +462,6 @@ statement_list:
     $$ = []Statement{$1}
   }
 
-semicolon_opt:
-/* empty */ {}
-| ';' {}
-
 statement:
   create_statement
 | alter_statement
