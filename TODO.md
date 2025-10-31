@@ -65,7 +65,8 @@ The remaining failures are primarily due to PostgreSQL-specific syntax not yet i
 
 ## Implementation Challenges
 Some features cannot be easily added without introducing grammar conflicts:
-- **Extended TYPECAST**: Supporting all `::type(params)` patterns may cause reduce/reduce conflicts
+- ✅ **Extended TYPECAST**: Successfully implemented support for `::type(params)` patterns without conflicts
+  - Added support for: varchar(n), char(n), numeric(p,s), decimal(p,s), bit(n), timestamp(p), time(p)
 - **Complex EXCLUDE constraints**: Basic structure added, but full USING GIST support needs more work
 
 ## Notes

@@ -4647,6 +4647,46 @@ simple_convert_type:
   {
     $$ = &ConvertType{Type: fmt.Sprintf("%s(%s,%s)", $1, $3, $5)}
   }
+| VARCHAR '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s)", $1, $3)}
+  }
+| CHARACTER VARYING '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: fmt.Sprintf("%s %s(%s)", $1, $2, $4)}
+  }
+| CHAR '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s)", $1, $3)}
+  }
+| CHARACTER '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s)", $1, $3)}
+  }
+| BIT '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s)", $1, $3)}
+  }
+| NUMERIC '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s)", $1, $3)}
+  }
+| DECIMAL '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s)", $1, $3)}
+  }
+| TIMESTAMP '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s)", $1, $3)}
+  }
+| TIME '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: fmt.Sprintf("%s(%s)", $1, $3)}
+  }
+| INTERVAL
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
 
 expression_opt:
   {

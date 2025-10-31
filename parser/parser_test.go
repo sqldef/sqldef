@@ -225,6 +225,110 @@ func TestIntervalColumnType(t *testing.T) {
 			shouldParse: true,
 			description: "INTERVAL columns should work with CHECK constraints",
 		},
+
+		// Extended TYPECAST tests with parameters
+		{
+			name:        "TYPECAST to VARCHAR with length",
+			sql:         "CREATE TABLE test (val VARCHAR(50) DEFAULT 'hello'::varchar(10))",
+			shouldParse: true,
+			description: "Should support ::varchar(n) casting",
+		},
+		{
+			name:        "TYPECAST to CHARACTER VARYING with length",
+			sql:         "CREATE TABLE test (val TEXT DEFAULT 'hello'::character varying(20))",
+			shouldParse: true,
+			description: "Should support ::character varying(n) casting",
+		},
+		{
+			name:        "TYPECAST to CHAR with length",
+			sql:         "CREATE TABLE test (val VARCHAR(50) DEFAULT 'A'::char(1))",
+			shouldParse: true,
+			description: "Should support ::char(n) casting",
+		},
+		{
+			name:        "TYPECAST to CHARACTER with length",
+			sql:         "CREATE TABLE test (val TEXT DEFAULT 'B'::character(5))",
+			shouldParse: true,
+			description: "Should support ::character(n) casting",
+		},
+		{
+			name:        "TYPECAST to NUMERIC with precision",
+			sql:         "CREATE TABLE test (val VARCHAR(50) DEFAULT '123.45'::numeric(5))",
+			shouldParse: true,
+			description: "Should support ::numeric(p) casting",
+		},
+		{
+			name:        "TYPECAST to NUMERIC with precision and scale",
+			sql:         "CREATE TABLE test (val TEXT DEFAULT '123.45'::numeric(10,2))",
+			shouldParse: true,
+			description: "Should support ::numeric(p,s) casting",
+		},
+		{
+			name:        "TYPECAST to DECIMAL with precision",
+			sql:         "CREATE TABLE test (val VARCHAR(50) DEFAULT '99.99'::decimal(4))",
+			shouldParse: true,
+			description: "Should support ::decimal(p) casting",
+		},
+		{
+			name:        "TYPECAST to DECIMAL with precision and scale",
+			sql:         "CREATE TABLE test (val TEXT DEFAULT '99.99'::decimal(5,2))",
+			shouldParse: true,
+			description: "Should support ::decimal(p,s) casting",
+		},
+		{
+			name:        "TYPECAST to BIT with length",
+			sql:         "CREATE TABLE test (val VARCHAR(50) DEFAULT '1010'::bit(4))",
+			shouldParse: true,
+			description: "Should support ::bit(n) casting",
+		},
+		{
+			name:        "TYPECAST to TIMESTAMP with precision",
+			sql:         "CREATE TABLE test (val TEXT DEFAULT '2024-01-01 12:00:00'::timestamp(3))",
+			shouldParse: true,
+			description: "Should support ::timestamp(p) casting",
+		},
+		{
+			name:        "TYPECAST to TIME with precision",
+			sql:         "CREATE TABLE test (val VARCHAR(50) DEFAULT '12:30:45.123'::time(3))",
+			shouldParse: true,
+			description: "Should support ::time(p) casting",
+		},
+		{
+			name:        "TYPECAST in VIEW with numeric parameters",
+			sql:         "CREATE VIEW test_view AS SELECT amount::numeric(10,2) AS amount_num FROM orders",
+			shouldParse: true,
+			description: "Should support parameterized TYPECAST in VIEW definitions",
+		},
+		{
+			name:        "Multiple TYPECAST with parameters in same statement",
+			sql:         "CREATE TABLE test (a VARCHAR(50) DEFAULT '10'::varchar(5), b TEXT DEFAULT '99.99'::numeric(4,2), c VARCHAR(100) DEFAULT 'X'::char(1))",
+			shouldParse: true,
+			description: "Should support multiple parameterized TYPECASTs",
+		},
+		{
+			name:        "TYPECAST in CHECK constraint",
+			sql:         "CREATE TABLE test (amount TEXT, CONSTRAINT valid_amount CHECK (amount::numeric(10,2) > 0))",
+			shouldParse: true,
+			description: "Should support parameterized TYPECAST in CHECK constraints",
+		},
+		{
+			name:        "TYPECAST in function call",
+			sql:         "CREATE TABLE test (val VARCHAR(50) DEFAULT COALESCE('123'::varchar(10), 'default'))",
+			shouldParse: true,
+			description: "Should support parameterized TYPECAST within function calls",
+		},
+		{
+			name:        "TYPECAST with parentheses in expressions",
+			sql:         "CREATE VIEW test_view AS SELECT (amount)::numeric(10,2) AS amount FROM orders",
+			shouldParse: true,
+			description: "Should handle parenthesized expressions before TYPECAST",
+		},
+		{
+			name:        "Chained TYPECAST operations",
+			sql:         "CREATE TABLE test (val TEXT DEFAULT '123'::varchar(10))",
+			shouldParse: true,
+			description: "Should support TYPECAST operations with varchar parameter",
+		},
 	}
 
 	for _, tc := range testCases {
