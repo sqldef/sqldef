@@ -14,27 +14,6 @@ go test ./parser         # Run parser tests only
 make test                # Run all tests (takes ~5 minutes)
 ```
 
-## Parser Architecture Notes
-
-### The splitDDLs Function
-The `splitDDLs()` function in `database/parser.go:49-82` serves an important purpose:
-- It preserves the exact original DDL text for each statement
-- This is crucial for accurate diff generation in the schema management tools
-- While the parser supports `MultiStatement`, the original DDL text preservation is still needed
-- **Decision:** Keep the splitDDLs function as it serves a valid architectural purpose
-
-## Recent Improvements
-
-### ✅ Completed
-1. **GRANT ALL PRIVILEGES** support - Fixed keyword mapping
-2. **Multiple tables in GRANT/REVOKE** - Now supports `GRANT ... ON TABLE users, posts TO ...`
-3. **Test coverage increased** - From 651/677 (96.2%) to 663/678 (97.8%)
-4. **Refactored GRANT/REVOKE rules** - Consolidated 17 rules down to 10, eliminating redundancy
-5. **Maintained baseline conflicts** - Kept shift/reduce conflicts at 38 (baseline)
-6. **Date/time literals with type prefix** - **Fully implemented** support for `DATE '2024-01-01'`, `TIME '12:00:00'`, `TIMESTAMP '2024-01-01 12:00:00'`
-   - Works in ALL contexts: DEFAULT clauses, CHECK constraints, WHERE clauses, and value expressions
-   - Implemented without increasing parser conflicts by carefully adding rules to both `value_expression` and `default_expression`
-
 ## Failing Tests (15 failures in 6 test scenarios)
 
 The following tests are still failing and represent features not yet fully supported:
@@ -58,10 +37,6 @@ The following tests are still failing and represent features not yet fully suppo
 - CHECK constraints with IN operator
 
 ### 3. Advanced expressions and operators
-- ✅ **Date/time literals with type prefix** (e.g., `DATE '2022-01-01'`, `TIMESTAMP '2022-01-01'`)
-  - **Fully implemented** in all contexts: DEFAULT clauses, CHECK constraints, WHERE clauses, and value expressions
-  - Implemented without increasing conflicts (maintained at 38 shift/reduce)
-  - Added to both `value_expression` and `default_expression` rules for complete coverage
 - Operator classes in indexes (e.g., `text_pattern_ops`)
 - Complex default expressions with operators
 - PostgreSQL-specific operators in WHERE clauses
