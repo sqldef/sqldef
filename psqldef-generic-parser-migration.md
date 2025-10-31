@@ -14,22 +14,14 @@ go test ./parser         # Run parser tests only
 make test                # Run all tests (takes ~5 minutes)
 ```
 
-## TODO: Remove splitDDLs Workaround
-The generic parser now natively supports multiple statements. The `splitDDLs()` workaround should be removed:
+## Parser Architecture Notes
 
-**Location:** `database/parser.go:49-82` (GenericParser.splitDDLs method)
-
-**Current flow:**
-1. `GenericParser.Parse()` calls `splitDDLs()`
-2. `splitDDLs()` manually splits by semicolons
-3. Each fragment is parsed individually
-
-**New flow should be:**
-1. `GenericParser.Parse()` calls `parser.ParseDDL()` once
-2. Handle `MultiStatement` result if multiple statements exist
-3. Return all statements
-
-This will make the parser more robust for complex SQL with embedded semicolons (e.g., stored procedures, triggers)
+### The splitDDLs Function
+The `splitDDLs()` function in `database/parser.go:49-82` serves an important purpose:
+- It preserves the exact original DDL text for each statement
+- This is crucial for accurate diff generation in the schema management tools
+- While the parser supports `MultiStatement`, the original DDL text preservation is still needed
+- **Decision:** Keep the splitDDLs function as it serves a valid architectural purpose
 
 ## Recent Improvements
 
@@ -46,12 +38,14 @@ This will make the parser more robust for complex SQL with embedded semicolons (
 ## Failing Tests (15 failures in 6 test scenarios)
 
 The following tests are still failing and represent features not yet fully supported:
-- **CreateTableWithDefault** - Complex default expressions with type casts
-- **ChangeDefaultExpressionWithAddition** - Default expressions with arithmetic operations
+- **CreateTableWithDefault** - Complex default expressions with type casts (e.g., `''::character varying`)
+- **ChangeDefaultExpressionWithAddition** - Default expressions with arithmetic operations (e.g., `DEFAULT 1 + 1`)
 - **ForeignKeyOnReservedName** - Foreign keys referencing reserved word columns
 - **NumericCast** - Numeric type casting expressions
 - **CreateIndexWithCoalesce** - Index expressions with COALESCE function
 - **CreateTableWithConstraintOptions** - Constraint options like DEFERRABLE
+
+**Note:** Adding support for type casts and arithmetic operations in default expressions creates significant grammar conflicts (337 reduce/reduce conflicts). These features would require major parser refactoring to implement without conflicts. Since the generic parser must support multiple SQL dialects and `psqldef` primarily uses `go-pgquery` anyway, these PostgreSQL-specific features remain unsupported in the generic parser.
 
 ## Remaining Features to Implement
 

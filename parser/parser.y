@@ -282,7 +282,6 @@ func forceEOF(yylex any) {
 %token <bytes> DEFINER INVOKER
 
 %type <statement> statement
-%type <statements> statement_list
 %type <selStmt> select_statement base_select union_lhs union_rhs
 %type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement
 %type <statement> if_statement matched_if_statement unmatched_if_statement trigger_statement_not_if
@@ -436,31 +435,14 @@ func forceEOF(yylex any) {
 %%
 
 program:
-  statement_list
+  statement semicolon_opt
   {
-    switch len($1) {
-    case 0:
-      setParseTree(yylex, nil)
-    case 1:
-      setParseTree(yylex, $1[0])
-    default:
-      setParseTree(yylex, &MultiStatement{Statements: $1})
-    }
+    setParseTree(yylex, $1)
   }
 
-statement_list:
-  statement
-  {
-    $$ = []Statement{$1}
-  }
-| statement ';' statement_list
-  {
-    $$ = append([]Statement{$1}, $3...)
-  }
-| statement ';'
-  {
-    $$ = []Statement{$1}
-  }
+semicolon_opt:
+/* empty */ {}
+| ';' {}
 
 statement:
   create_statement
