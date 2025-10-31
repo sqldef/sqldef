@@ -193,7 +193,7 @@ func forceEOF(yylex any) {
 %token <empty> JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP
 
 // DDL Tokens
-%token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD GRANT REVOKE
+%token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD GRANT REVOKE OPTION PRIVILEGES
 %token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION EXCLUDE
 %right <bytes> UNIQUE KEY
 %token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
@@ -877,6 +877,27 @@ create_statement:
       },
     }
   }
+| GRANT privilege_list ON TABLE table_name TO grantee_list WITH GRANT OPTION
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($7))
+    for i, g := range $7 {
+      grantees[i] = g.String()
+    }
+    $$ = &DDL{
+      Action: GrantPrivilege,
+      Table: $5,
+      Grant: &Grant{
+        IsGrant: true,
+        Privileges: privs,
+        Grantees: grantees,
+        WithGrantOption: true,
+      },
+    }
+  }
 | GRANT privilege_list ON table_name TO grantee_list
   {
     privs := make([]string, len($2))
@@ -894,6 +915,27 @@ create_statement:
         IsGrant: true,
         Privileges: privs,
         Grantees: grantees,
+      },
+    }
+  }
+| GRANT privilege_list ON table_name TO grantee_list WITH GRANT OPTION
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($6))
+    for i, g := range $6 {
+      grantees[i] = g.String()
+    }
+    $$ = &DDL{
+      Action: GrantPrivilege,
+      Table: $4,
+      Grant: &Grant{
+        IsGrant: true,
+        Privileges: privs,
+        Grantees: grantees,
+        WithGrantOption: true,
       },
     }
   }
@@ -918,6 +960,48 @@ create_statement:
       },
     }
   }
+| REVOKE privilege_list ON TABLE table_name FROM grantee_list CASCADE
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($7))
+    for i, g := range $7 {
+      grantees[i] = g.String()
+    }
+    $$ = &DDL{
+      Action: RevokePrivilege,
+      Table: $5,
+      Grant: &Grant{
+        IsGrant: false,
+        Privileges: privs,
+        Grantees: grantees,
+        CascadeOption: true,
+      },
+    }
+  }
+| REVOKE privilege_list ON TABLE table_name FROM grantee_list RESTRICT
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($7))
+    for i, g := range $7 {
+      grantees[i] = g.String()
+    }
+    $$ = &DDL{
+      Action: RevokePrivilege,
+      Table: $5,
+      Grant: &Grant{
+        IsGrant: false,
+        Privileges: privs,
+        Grantees: grantees,
+        CascadeOption: false,
+      },
+    }
+  }
 | REVOKE privilege_list ON table_name FROM grantee_list
   {
     privs := make([]string, len($2))
@@ -935,6 +1019,48 @@ create_statement:
         IsGrant: false,
         Privileges: privs,
         Grantees: grantees,
+      },
+    }
+  }
+| REVOKE privilege_list ON table_name FROM grantee_list CASCADE
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($6))
+    for i, g := range $6 {
+      grantees[i] = g.String()
+    }
+    $$ = &DDL{
+      Action: RevokePrivilege,
+      Table: $4,
+      Grant: &Grant{
+        IsGrant: false,
+        Privileges: privs,
+        Grantees: grantees,
+        CascadeOption: true,
+      },
+    }
+  }
+| REVOKE privilege_list ON table_name FROM grantee_list RESTRICT
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($6))
+    for i, g := range $6 {
+      grantees[i] = g.String()
+    }
+    $$ = &DDL{
+      Action: RevokePrivilege,
+      Table: $4,
+      Grant: &Grant{
+        IsGrant: false,
+        Privileges: privs,
+        Grantees: grantees,
+        CascadeOption: false,
       },
     }
   }
@@ -3200,6 +3326,10 @@ index_column:
   {
     $$ = IndexColumn{Column: $1, Length: $2, Direction: $3}
   }
+| non_reserved_keyword length_opt asc_desc_opt
+  {
+    $$ = IndexColumn{Column: NewColIdent(string($1)), Length: $2, Direction: $3}
+  }
 /* For PostgreSQL */
 | KEY length_opt
   {
@@ -3208,6 +3338,10 @@ index_column:
 | sql_id operator_class
   {
     $$ = IndexColumn{Column: $1, OperatorClass: string($2)}
+  }
+| non_reserved_keyword operator_class
+  {
+    $$ = IndexColumn{Column: NewColIdent(string($1)), OperatorClass: string($2)}
   }
 | '(' expression ')' asc_desc_opt
   {
@@ -3433,6 +3567,10 @@ privilege:
 | ALL
   {
     $$ = NewColIdent(string($1))
+  }
+| ALL PRIVILEGES
+  {
+    $$ = NewColIdent("ALL")
   }
 
 privilege_list:
@@ -5506,6 +5644,11 @@ non_reserved_keyword:
 | TYPE
 | STATUS
 | ZONE
+| LEVEL
+| PRIVILEGES
+| RESTRICT
+| CASCADE
+| OPTION
 
 openb:
   '('

@@ -2,9 +2,9 @@
 
 ## Current Status
 
-- **643/677 parser tests passing** (95% success rate) ✅
-- **0 reduce/reduce conflicts** ✅
-- **38 shift/reduce conflicts** (baseline maintained) ✅
+- **651/677 parser tests passing** (96.2% success rate)
+- **0 reduce/reduce conflicts**
+- **38 shift/reduce conflicts** (baseline maintained)
 
 ## Running Tests
 
