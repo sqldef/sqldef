@@ -1475,6 +1475,7 @@ func (ListArg) iExpr()              {}
 func (*BinaryExpr) iExpr()          {}
 func (*UnaryExpr) iExpr()           {}
 func (*IntervalExpr) iExpr()        {}
+func (*TypedLiteral) iExpr()        {}
 func (*CollateExpr) iExpr()         {}
 func (*FuncExpr) iExpr()            {}
 func (*CaseExpr) iExpr()            {}
@@ -1924,6 +1925,17 @@ type IntervalExpr struct {
 // Format formats the node.
 func (node *IntervalExpr) Format(buf *nodeBuffer) {
 	buf.Printf("interval %v %s", node.Expr, node.Unit)
+}
+
+// TypedLiteral represents a typed literal like DATE '2022-01-01' or TIMESTAMP '2022-01-01'.
+type TypedLiteral struct {
+	Type  string
+	Value Expr
+}
+
+// Format formats the node.
+func (node *TypedLiteral) Format(buf *nodeBuffer) {
+	buf.Printf("%s %v", node.Type, node.Value)
 }
 
 // CollateExpr represents dynamic collate operator.

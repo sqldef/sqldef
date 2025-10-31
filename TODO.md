@@ -2,14 +2,16 @@
 
 ## Current Status
 
-- **661/678 parser tests passing** (97.5% success rate - up from 96.2%)
+- **663/678 parser tests passing** (97.8% success rate)
 - **0 reduce/reduce conflicts** ✓
 - **38 shift/reduce conflicts** (baseline maintained) ✓
+- **All command tests passing** ✓ (mysqldef, psqldef, sqlite3def, mssqldef)
 
 ## Running Tests
 
 ```sh
-go test ./parser
+go test ./parser         # Run parser tests only
+make test                # Run all tests (takes ~5 minutes)
 ```
 
 ## TODO: Remove splitDDLs Workaround
@@ -34,9 +36,22 @@ This will make the parser more robust for complex SQL with embedded semicolons (
 ### ✅ Completed
 1. **GRANT ALL PRIVILEGES** support - Fixed keyword mapping
 2. **Multiple tables in GRANT/REVOKE** - Now supports `GRANT ... ON TABLE users, posts TO ...`
-3. **Test coverage increased** - From 651/677 (96.2%) to 661/678 (97.5%)
+3. **Test coverage increased** - From 651/677 (96.2%) to 663/678 (97.8%)
 4. **Refactored GRANT/REVOKE rules** - Consolidated 17 rules down to 10, eliminating redundancy
 5. **Maintained baseline conflicts** - Kept shift/reduce conflicts at 38 (baseline)
+6. **Date/time literals with type prefix** - **Fully implemented** support for `DATE '2024-01-01'`, `TIME '12:00:00'`, `TIMESTAMP '2024-01-01 12:00:00'`
+   - Works in ALL contexts: DEFAULT clauses, CHECK constraints, WHERE clauses, and value expressions
+   - Implemented without increasing parser conflicts by carefully adding rules to both `value_expression` and `default_expression`
+
+## Failing Tests (15 failures in 6 test scenarios)
+
+The following tests are still failing and represent features not yet fully supported:
+- **CreateTableWithDefault** - Complex default expressions with type casts
+- **ChangeDefaultExpressionWithAddition** - Default expressions with arithmetic operations
+- **ForeignKeyOnReservedName** - Foreign keys referencing reserved word columns
+- **NumericCast** - Numeric type casting expressions
+- **CreateIndexWithCoalesce** - Index expressions with COALESCE function
+- **CreateTableWithConstraintOptions** - Constraint options like DEFERRABLE
 
 ## Remaining Features to Implement
 
@@ -49,8 +64,10 @@ This will make the parser more robust for complex SQL with embedded semicolons (
 - CHECK constraints with IN operator
 
 ### 3. Advanced expressions and operators
-- Date/time literals with type prefix (e.g., `DATE '2022-01-01'`, `TIMESTAMP '2022-01-01'`)
-  - Note: Adding these creates shift/reduce conflicts
+- ✅ **Date/time literals with type prefix** (e.g., `DATE '2022-01-01'`, `TIMESTAMP '2022-01-01'`)
+  - **Fully implemented** in all contexts: DEFAULT clauses, CHECK constraints, WHERE clauses, and value expressions
+  - Implemented without increasing conflicts (maintained at 38 shift/reduce)
+  - Added to both `value_expression` and `default_expression` rules for complete coverage
 - Operator classes in indexes (e.g., `text_pattern_ops`)
 - Complex default expressions with operators
 - PostgreSQL-specific operators in WHERE clauses
@@ -70,11 +87,10 @@ This will make the parser more robust for complex SQL with embedded semicolons (
 ### Parser Conflict Requirements
 - **Must maintain zero reduce/reduce conflicts** for parser correctness
 - **Must maintain baseline of 38 shift/reduce conflicts** to avoid regressions
-- Adding certain features (like date literals) can introduce additional conflicts that are difficult to resolve
+- Careful rule refactoring can often avoid conflict increases when adding new features
 
 ### Trade-offs
-Some PostgreSQL-specific features cannot be added without breaking the conflict baseline:
-- Date/time literals with type prefix introduce conflicts with existing grammar rules
+Some PostgreSQL-specific features have implementation constraints:
 - Parenthesized expressions with type casts have limited support through `tuple_expression`
 - Complex operator precedence can create ambiguities
 

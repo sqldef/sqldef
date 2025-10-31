@@ -2699,6 +2699,18 @@ default_expression:
   {
     $$ = $1
   }
+| DATE STRING
+  {
+    $$ = &TypedLiteral{Type: "date", Value: NewStrVal($2)}
+  }
+| TIME STRING
+  {
+    $$ = &TypedLiteral{Type: "time", Value: NewStrVal($2)}
+  }
+| TIMESTAMP STRING
+  {
+    $$ = &TypedLiteral{Type: "timestamp", Value: NewStrVal($2)}
+  }
 
 srid_definition:
   SRID srid_val
@@ -4636,6 +4648,18 @@ value_expression:
     // we'll need to revisit this. The solution
     // will be non-trivial because of grammar conflicts.
     $$ = &IntervalExpr{Expr: $2, Unit: $3.String()}
+  }
+| DATE STRING
+  {
+    $$ = &TypedLiteral{Type: "date", Value: NewStrVal($2)}
+  }
+| TIME STRING
+  {
+    $$ = &TypedLiteral{Type: "time", Value: NewStrVal($2)}
+  }
+| TIMESTAMP STRING
+  {
+    $$ = &TypedLiteral{Type: "timestamp", Value: NewStrVal($2)}
   }
 | value_expression TYPECAST simple_convert_type
   {
