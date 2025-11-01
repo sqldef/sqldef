@@ -19,7 +19,7 @@ ifeq ($(VERBOSE), 1)
   GOTESTFLAGS := -v
 endif
 
-.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef test-cov test-cov-xml
+.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef test-cov test-cov-xml test-core
 
 all: build
 
@@ -91,6 +91,9 @@ test-sqlite3def:
 test-mssqldef:
 	go test $(GOTESTFLAGS) ./cmd/mssqldef
 	go test $(GOTESTFLAGS) ./database/mssql
+
+test-core:
+	go test $(GOTESTFLAGS) ./parser ./schema ./util
 
 test-cov:
 	mkdir -p coverage
