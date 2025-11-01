@@ -19,7 +19,7 @@ ifeq ($(VERBOSE), 1)
   GOTESTFLAGS := -v
 endif
 
-.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef test-cov test-cov-xml test-core
+.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef test-cov test-cov-xml test-core test
 
 all: build
 
@@ -76,7 +76,9 @@ parser-v: goyacc
 	goyacc -v y.output -o parser/parser.go parser/parser.y
 	gofmt -w ./parser/parser.go
 
-test: test-mysqldef test-psqldef test-sqlite3def test-mssqldef
+# TODO: just run ./... instead of excluding parser tests
+test:
+	go test $(GOTESTFLAGS) ./cmd ./schema ./database
 
 test-mysqldef:
 	MYSQL_FLAVOR=$${MYSQL_FLAVOR:-mysql} go test $(GOTESTFLAGS) ./cmd/mysqldef
