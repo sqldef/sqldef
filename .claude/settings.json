@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd $CLAUDE_PROJECT_DIR && make test || exit 2",
+            "timeout": 600
+          },
+        ]
+      }
+    ]
+  }
+}
