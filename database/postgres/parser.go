@@ -999,22 +999,23 @@ func (p PostgresParser) parseExclusion(constraint *pgquery.Constraint) (*parser.
 		if excludeElement == nil {
 			return nil, errors.New("require exclude element")
 		}
-		var col parser.ColIdent
+		var expr parser.Expr
 		if n := excludeElement.GetExpr(); n != nil {
-			expr, err := p.parseExpr(n)
+			parsedExpr, err := p.parseExpr(n)
 			if err != nil {
 				return nil, err
 			}
-			col = parser.NewColIdent(parser.String(expr))
+			expr = parsedExpr
 		} else {
-			col = parser.NewColIdent(excludeElement.Name)
+			// If there's no expression, just use the column name as an expression
+			expr = &parser.ColName{Name: parser.NewColIdent(excludeElement.Name)}
 		}
 
 		opList := nItems[1].GetList()
 		opItems := opList.GetItems()
 		exs = append(exs, parser.ExclusionPair{
-			Column:   col,
-			Operator: opItems[0].Node.(*pgquery.Node_String_).String_.Sval},
+			Expression: expr,
+			Operator:   opItems[0].Node.(*pgquery.Node_String_).String_.Sval},
 		)
 	}
 	var whereExpr parser.Expr
@@ -1027,7 +1028,7 @@ func (p PostgresParser) parseExclusion(constraint *pgquery.Constraint) (*parser.
 	}
 	return &parser.ExclusionDefinition{
 		ConstraintName: parser.NewColIdent(constraint.Conname),
-		IndexType:      constraint.GetAccessMethod(),
+		IndexType:      parser.NewColIdent(constraint.GetAccessMethod()),
 		Exclusions:     exs,
 		Where:          parser.NewWhere(parser.WhereStr, whereExpr),
 	}, nil

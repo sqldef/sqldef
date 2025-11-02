@@ -58,6 +58,7 @@ func forceEOF(yylex any) {
 %union {
   empty                    struct{}
   statement                Statement
+  statements               []Statement
   selStmt                  SelectStatement
   ddl                      *DDL
   ins                      *Insert
@@ -108,6 +109,9 @@ func forceEOF(yylex any) {
   LengthScaleOption        LengthScaleOption
   columnDefinition         *ColumnDefinition
   checkDefinition          *CheckDefinition
+  exclusionDefinition      *ExclusionDefinition
+  exclusionPair            ExclusionPair
+  exclusionPairs           []ExclusionPair
   indexDefinition          *IndexDefinition
   indexInfo                *IndexInfo
   indexOption              *IndexOption
@@ -189,8 +193,8 @@ func forceEOF(yylex any) {
 %token <empty> JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP
 
 // DDL Tokens
-%token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD
-%token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE
+%token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD GRANT REVOKE OPTION PRIVILEGES
+%token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION EXCLUDE
 %right <bytes> UNIQUE KEY
 %token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
 %token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN
@@ -213,6 +217,7 @@ func forceEOF(yylex any) {
 %token <bytes> TIME TIMESTAMP DATETIME YEAR DATETIMEOFFSET DATETIME2 SMALLDATETIME
 %token <bytes> CHAR VARCHAR VARYING BOOL CHARACTER VARBINARY NCHAR NVARCHAR NTEXT UUID
 %token <bytes> TEXT TINYTEXT MEDIUMTEXT LONGTEXT CITEXT
+%token <bytes> TSTZRANGE TSRANGE INT4RANGE INT8RANGE NUMRANGE DATERANGE
 %token <bytes> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON JSONB ENUM
 %token <bytes> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
 %token <bytes> VECTOR
@@ -281,7 +286,7 @@ func forceEOF(yylex any) {
 %type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement
 %type <statement> if_statement matched_if_statement unmatched_if_statement trigger_statement_not_if
 %type <blockStatement> simple_if_body
-%type <statement> create_statement alter_statement
+%type <statement> create_statement alter_statement drop_statement comment_statement
 %type <statement> set_option_statement set_bool_option_statement
 %type <ddl> create_table_prefix
 %type <bytes2> comment_opt comment_list
@@ -360,10 +365,13 @@ func forceEOF(yylex any) {
 %type <columnType> column_definition_type
 %type <indexDefinition> index_definition primary_key_definition unique_definition
 %type <checkDefinition> check_definition
+%type <exclusionDefinition> exclude_definition
+%type <exclusionPairs> exclude_element_list
+%type <exclusionPair> exclude_element
 %type <foreignKeyDefinition> foreign_key_definition foreign_key_without_options
 %type <colIdent> reference_option
-%type <colIdent> sql_id_opt
-%type <colIdents> sql_id_list
+%type <colIdent> sql_id_opt privilege grantee
+%type <colIdents> sql_id_list privilege_list grantee_list
 %type <str> index_or_key
 %type <str> equal_opt
 %type <TableSpec> table_spec table_column_list
@@ -439,6 +447,93 @@ semicolon_opt:
 statement:
   create_statement
 | alter_statement
+| drop_statement
+| comment_statement
+
+comment_statement:
+  COMMENT_KEYWORD ON TABLE table_name IS STRING
+  {
+    tableName := ""
+    if !$4.Schema.isEmpty() {
+      tableName = $4.Schema.String() + "."
+    }
+    tableName += $4.Name.String()
+    $$ = &DDL{
+      Action: CommentOn,
+      Table: $4,
+      Comment: &Comment{
+        ObjectType: "TABLE",
+        Object: tableName,
+        Comment: string($6),
+      },
+    }
+  }
+| COMMENT_KEYWORD ON TABLE table_name IS NULL
+  {
+    tableName := ""
+    if !$4.Schema.isEmpty() {
+      tableName = $4.Schema.String() + "."
+    }
+    tableName += $4.Name.String()
+    $$ = &DDL{
+      Action: CommentOn,
+      Table: $4,
+      Comment: &Comment{
+        ObjectType: "TABLE",
+        Object: tableName,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT_KEYWORD ON COLUMN column_name IS STRING
+  {
+    colName := ""
+    if !$4.Qualifier.isEmpty() {
+      if !$4.Qualifier.Schema.isEmpty() {
+        colName = $4.Qualifier.Schema.String() + "."
+      }
+      colName += $4.Qualifier.Name.String() + "."
+    }
+    colName += $4.Name.String()
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "COLUMN",
+        Object: colName,
+        Comment: string($6),
+      },
+    }
+  }
+| COMMENT_KEYWORD ON COLUMN column_name IS NULL
+  {
+    colName := ""
+    if !$4.Qualifier.isEmpty() {
+      if !$4.Qualifier.Schema.isEmpty() {
+        colName = $4.Qualifier.Schema.String() + "."
+      }
+      colName += $4.Qualifier.Name.String() + "."
+    }
+    colName += $4.Name.String()
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "COLUMN",
+        Object: colName,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT_KEYWORD ON INDEX sql_id IS STRING
+  {
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "INDEX",
+        Object: $4.String(),
+        Comment: string($6),
+      },
+    }
+  }
 
 create_statement:
   create_table_prefix table_spec
@@ -730,6 +825,7 @@ create_statement:
       Type: &Type{
         Name: $3,
         Type: $5,
+        EnumValues: $5.EnumValues,
       },
     }
   }
@@ -737,6 +833,447 @@ create_statement:
 | CREATE VIRTUAL TABLE if_not_exists_opt table_name USING sql_id module_arguments_opt
   {
     $$ = &DDL{Action: CreateTable, NewName: $5, TableSpec: &TableSpec{}}
+  }
+| GRANT privilege_list ON TABLE table_name_list TO grantee_list
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($7))
+    for i, g := range $7 {
+      grantees[i] = g.String()
+    }
+
+    if len($5) == 1 {
+      $$ = &DDL{
+        Action: GrantPrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: true,
+          Privileges: privs,
+          Grantees: grantees,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($5))
+      for i, table := range $5 {
+        stmts[i] = &DDL{
+          Action: GrantPrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: true,
+            Privileges: privs,
+            Grantees: grantees,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| GRANT privilege_list ON TABLE table_name_list TO grantee_list WITH GRANT OPTION
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($7))
+    for i, g := range $7 {
+      grantees[i] = g.String()
+    }
+
+    if len($5) == 1 {
+      $$ = &DDL{
+        Action: GrantPrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: true,
+          Privileges: privs,
+          Grantees: grantees,
+          WithGrantOption: true,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($5))
+      for i, table := range $5 {
+        stmts[i] = &DDL{
+          Action: GrantPrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: true,
+            Privileges: privs,
+            Grantees: grantees,
+            WithGrantOption: true,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| GRANT privilege_list ON table_name_list TO grantee_list
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($6))
+    for i, g := range $6 {
+      grantees[i] = g.String()
+    }
+
+    if len($4) == 1 {
+      $$ = &DDL{
+        Action: GrantPrivilege,
+        Table: $4[0],
+        Grant: &Grant{
+          IsGrant: true,
+          Privileges: privs,
+          Grantees: grantees,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($4))
+      for i, table := range $4 {
+        stmts[i] = &DDL{
+          Action: GrantPrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: true,
+            Privileges: privs,
+            Grantees: grantees,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| GRANT privilege_list ON table_name_list TO grantee_list WITH GRANT OPTION
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($6))
+    for i, g := range $6 {
+      grantees[i] = g.String()
+    }
+
+    if len($4) == 1 {
+      $$ = &DDL{
+        Action: GrantPrivilege,
+        Table: $4[0],
+        Grant: &Grant{
+          IsGrant: true,
+          Privileges: privs,
+          Grantees: grantees,
+          WithGrantOption: true,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($4))
+      for i, table := range $4 {
+        stmts[i] = &DDL{
+          Action: GrantPrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: true,
+            Privileges: privs,
+            Grantees: grantees,
+            WithGrantOption: true,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| REVOKE privilege_list ON TABLE table_name_list FROM grantee_list
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($7))
+    for i, g := range $7 {
+      grantees[i] = g.String()
+    }
+
+    if len($5) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($5))
+      for i, table := range $5 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| REVOKE privilege_list ON TABLE table_name_list FROM grantee_list CASCADE
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($7))
+    for i, g := range $7 {
+      grantees[i] = g.String()
+    }
+
+    if len($5) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+          CascadeOption: true,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($5))
+      for i, table := range $5 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+            CascadeOption: true,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| REVOKE privilege_list ON TABLE table_name_list FROM grantee_list RESTRICT
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($7))
+    for i, g := range $7 {
+      grantees[i] = g.String()
+    }
+
+    if len($5) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+          // RESTRICT is the default, no special flag needed
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($5))
+      for i, table := range $5 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+            // RESTRICT is the default, no special flag needed
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| REVOKE privilege_list ON table_name_list FROM grantee_list
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($6))
+    for i, g := range $6 {
+      grantees[i] = g.String()
+    }
+
+    if len($4) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $4[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($4))
+      for i, table := range $4 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| REVOKE privilege_list ON table_name_list FROM grantee_list CASCADE
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($6))
+    for i, g := range $6 {
+      grantees[i] = g.String()
+    }
+
+    if len($4) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $4[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+          CascadeOption: true,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($4))
+      for i, table := range $4 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+            CascadeOption: true,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| REVOKE privilege_list ON table_name_list FROM grantee_list RESTRICT
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($6))
+    for i, g := range $6 {
+      grantees[i] = g.String()
+    }
+
+    if len($4) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $4[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+          // RESTRICT is the default, no special flag needed
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($4))
+      for i, table := range $4 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+            // RESTRICT is the default, no special flag needed
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+/* CREATE SCHEMA statement */
+| CREATE SCHEMA sql_id
+  {
+    $$ = &DDL{
+      Action: CreateSchema,
+      Schema: &Schema{
+        Name: $3.String(),
+      },
+    }
+  }
+| CREATE SCHEMA IF NOT EXISTS sql_id
+  {
+    $$ = &DDL{
+      Action: CreateSchema,
+      IfNotExists: true,
+      Schema: &Schema{
+        Name: $6.String(),
+      },
+    }
+  }
+/* CREATE EXTENSION statement */
+| CREATE EXTENSION sql_id
+  {
+    $$ = &DDL{
+      Action: CreateExtension,
+      Extension: &Extension{
+        Name: $3.String(),
+      },
+    }
+  }
+| CREATE EXTENSION IF NOT EXISTS sql_id
+  {
+    $$ = &DDL{
+      Action: CreateExtension,
+      IfNotExists: true,
+      Extension: &Extension{
+        Name: $6.String(),
+      },
+    }
+  }
+| CREATE EXTENSION STRING
+  {
+    $$ = &DDL{
+      Action: CreateExtension,
+      Extension: &Extension{
+        Name: string($3),
+      },
+    }
+  }
+| CREATE EXTENSION IF NOT EXISTS STRING
+  {
+    $$ = &DDL{
+      Action: CreateExtension,
+      IfNotExists: true,
+      Extension: &Extension{
+        Name: string($6),
+      },
+    }
   }
 
 alter_statement:
@@ -822,6 +1359,14 @@ alter_statement:
         Partition: $14,
       },
       IndexCols: $11,
+    }
+  }
+| ALTER ignore_opt TABLE table_name ADD exclude_definition
+  {
+    $$ = &DDL{
+      Action: AddExclusion,
+      Table: $4,
+      Exclusion: $6,
     }
   }
 | ALTER ignore_opt TABLE table_name ADD foreign_key_definition
@@ -1644,6 +2189,87 @@ or_replace_opt:
     $$ = nil
   }
 
+drop_statement:
+  DROP INDEX sql_id
+  {
+    $$ = &DDL{
+      Action: DropIndex,
+      IndexSpec: &IndexSpec{
+        Name: $3,
+      },
+    }
+  }
+| DROP INDEX IF EXISTS sql_id
+  {
+    $$ = &DDL{
+      Action: DropIndex,
+      IfExists: true,
+      IndexSpec: &IndexSpec{
+        Name: $5,
+      },
+    }
+  }
+| DROP INDEX sql_id ON table_name
+  {
+    $$ = &DDL{
+      Action: DropIndex,
+      Table: $5,
+      IndexSpec: &IndexSpec{
+        Name: $3,
+      },
+    }
+  }
+| DROP INDEX IF EXISTS sql_id ON table_name
+  {
+    $$ = &DDL{
+      Action: DropIndex,
+      IfExists: true,
+      Table: $7,
+      IndexSpec: &IndexSpec{
+        Name: $5,
+      },
+    }
+  }
+/* DROP EXTENSION statement */
+| DROP EXTENSION sql_id
+  {
+    $$ = &DDL{
+      Action: DropExtension,
+      Extension: &Extension{
+        Name: $3.String(),
+      },
+    }
+  }
+| DROP EXTENSION IF EXISTS sql_id
+  {
+    $$ = &DDL{
+      Action: DropExtension,
+      IfExists: true,
+      Extension: &Extension{
+        Name: $5.String(),
+      },
+    }
+  }
+| DROP EXTENSION STRING
+  {
+    $$ = &DDL{
+      Action: DropExtension,
+      Extension: &Extension{
+        Name: string($3),
+      },
+    }
+  }
+| DROP EXTENSION IF EXISTS STRING
+  {
+    $$ = &DDL{
+      Action: DropExtension,
+      IfExists: true,
+      Extension: &Extension{
+        Name: string($5),
+      },
+    }
+  }
+
 create_table_prefix:
   CREATE TABLE if_not_exists_opt table_name
   {
@@ -1691,6 +2317,73 @@ table_column_list:
   {
     $$.addCheck($3)
   }
+| table_column_list ',' exclude_definition
+  {
+    $$.addExclusion($3)
+  }
+
+exclude_definition:
+  CONSTRAINT sql_id EXCLUDE '(' exclude_element_list ')' where_expression_opt
+  {
+    $$ = &ExclusionDefinition{
+      ConstraintName: $2,
+      IndexType: NewColIdent(""), // Default index type
+      Exclusions: $5,
+      Where: NewWhere(WhereStr, $7),
+    }
+  }
+| CONSTRAINT sql_id EXCLUDE USING sql_id '(' exclude_element_list ')' where_expression_opt
+  {
+    $$ = &ExclusionDefinition{
+      ConstraintName: $2,
+      IndexType: $5, // GIST, btree, etc.
+      Exclusions: $7,
+      Where: NewWhere(WhereStr, $9),
+    }
+  }
+
+exclude_element_list:
+  exclude_element
+  {
+    $$ = []ExclusionPair{$1}
+  }
+| exclude_element_list ',' exclude_element
+  {
+    $$ = append($1, $3)
+  }
+
+exclude_element:
+  expression WITH '='
+  {
+    $$ = ExclusionPair{
+      Expression: $1,
+      Operator: "=",
+    }
+  }
+| expression WITH AND
+  {
+    // AND token represents && in the lexer
+    $$ = ExclusionPair{
+      Expression: $1,
+      Operator: "&&",
+    }
+  }
+| expression WITH OR
+  {
+    // OR token represents || in the lexer
+    $$ = ExclusionPair{
+      Expression: $1,
+      Operator: "||",
+    }
+  }
+| expression WITH sql_id
+  {
+    // Handle all other operators and GIST-specific operators
+    $$ = ExclusionPair{
+      Expression: $1,
+      Operator: string($3.val),
+    }
+  }
 
 column_definition:
   sql_id column_definition_type
@@ -1727,6 +2420,14 @@ column_type:
 | sql_id
   {
     $$ = ColumnType{Type: $1.val}
+  }
+| STRING '.' STRING
+  {
+    $$ = ColumnType{Type: string($1) + "." + string($3)}
+  }
+| ID '.' ID
+  {
+    $$ = ColumnType{Type: string($1) + "." + string($3)}
   }
 
 column_definition_type:
@@ -1980,6 +2681,18 @@ default_expression:
   {
     $$ = $1
   }
+| DATE STRING
+  {
+    $$ = &TypedLiteral{Type: "date", Value: NewStrVal($2)}
+  }
+| TIME STRING
+  {
+    $$ = &TypedLiteral{Type: "time", Value: NewStrVal($2)}
+  }
+| TIMESTAMP STRING
+  {
+    $$ = &TypedLiteral{Type: "timestamp", Value: NewStrVal($2)}
+  }
 
 srid_definition:
   SRID srid_val
@@ -2113,7 +2826,6 @@ character_cast_opt:
     $$ = nil
   }
 | TYPECAST BPCHAR
-| TYPECAST INTERVAL
 | TYPECAST column_type array_opt
 
 numeric_type:
@@ -2255,6 +2967,10 @@ time_type:
   {
     $$ = ColumnType{Type: string($1)}
   }
+| INTERVAL length_opt
+  {
+    $$ = ColumnType{Type: string($1), Length: $2}
+  }
 
 bool_type:
   BOOL
@@ -2344,6 +3060,30 @@ char_type:
     $$ = ColumnType{Type: string($1)}
   }
 | UUID
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| TSRANGE
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| TSTZRANGE
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| INT4RANGE
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| INT8RANGE
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| NUMRANGE
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| DATERANGE
   {
     $$ = ColumnType{Type: string($1)}
   }
@@ -2750,6 +3490,10 @@ index_column:
   {
     $$ = IndexColumn{Column: $1, Length: $2, Direction: $3}
   }
+| non_reserved_keyword length_opt asc_desc_opt
+  {
+    $$ = IndexColumn{Column: NewColIdent(string($1)), Length: $2, Direction: $3}
+  }
 /* For PostgreSQL */
 | KEY length_opt
   {
@@ -2758,6 +3502,10 @@ index_column:
 | sql_id operator_class
   {
     $$ = IndexColumn{Column: $1, OperatorClass: string($2)}
+  }
+| non_reserved_keyword operator_class
+  {
+    $$ = IndexColumn{Column: NewColIdent(string($1)), OperatorClass: string($2)}
   }
 | '(' expression ')' asc_desc_opt
   {
@@ -2971,6 +3719,51 @@ sql_id_list:
     $$ = []ColIdent{$1}
   }
 | sql_id_list ',' sql_id
+  {
+    $$ = append($1, $3)
+  }
+
+privilege:
+  reserved_sql_id
+  {
+    $$ = $1
+  }
+| ALL
+  {
+    $$ = NewColIdent(string($1))
+  }
+| ALL PRIVILEGES
+  {
+    $$ = NewColIdent("ALL")
+  }
+
+privilege_list:
+  privilege
+  {
+    $$ = []ColIdent{$1}
+  }
+| privilege_list ',' privilege
+  {
+    $$ = append($1, $3)
+  }
+
+/* For GRANT/REVOKE grantees - allows PUBLIC keyword */
+grantee:
+  sql_id
+  {
+    $$ = $1
+  }
+| PUBLIC
+  {
+    $$ = NewColIdent(string($1))
+  }
+
+grantee_list:
+  grantee
+  {
+    $$ = []ColIdent{$1}
+  }
+| grantee_list ',' grantee
   {
     $$ = append($1, $3)
   }
@@ -3838,6 +4631,18 @@ value_expression:
     // will be non-trivial because of grammar conflicts.
     $$ = &IntervalExpr{Expr: $2, Unit: $3.String()}
   }
+| DATE STRING
+  {
+    $$ = &TypedLiteral{Type: "date", Value: NewStrVal($2)}
+  }
+| TIME STRING
+  {
+    $$ = &TypedLiteral{Type: "time", Value: NewStrVal($2)}
+  }
+| TIMESTAMP STRING
+  {
+    $$ = &TypedLiteral{Type: "timestamp", Value: NewStrVal($2)}
+  }
 | value_expression TYPECAST simple_convert_type
   {
     $$ = &CastExpr{Expr: $1, Type: $3}
@@ -4236,6 +5041,54 @@ simple_convert_type:
     $$ = &ConvertType{Type: string($1)}
   }
 | UUID
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| NUMERIC '(' INTEGRAL ',' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3), Scale: NewIntVal($5)}
+  }
+| DECIMAL '(' INTEGRAL ',' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3), Scale: NewIntVal($5)}
+  }
+| VARCHAR '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+  }
+| CHARACTER VARYING '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1) + " " + string($2), Length: NewIntVal($4)}
+  }
+| CHAR '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+  }
+| CHARACTER '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+  }
+| BIT '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+  }
+| NUMERIC '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+  }
+| DECIMAL '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+  }
+| TIMESTAMP '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+  }
+| TIME '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+  }
+| INTERVAL
   {
     $$ = &ConvertType{Type: string($1)}
   }
@@ -4778,6 +5631,14 @@ array_element:
   {
     $$ = NewStrVal($1)
   }
+| INTEGRAL
+  {
+    $$ = NewIntVal($1)
+  }
+| FLOAT
+  {
+    $$ = NewFloatVal($1)
+  }
 
 bool_option_name_list:
   bool_option_name
@@ -4959,6 +5820,11 @@ non_reserved_keyword:
 | TYPE
 | STATUS
 | ZONE
+| LEVEL
+| PRIVILEGES
+| RESTRICT
+| CASCADE
+| OPTION
 
 openb:
   '('

@@ -36,10 +36,14 @@ make parser-v  # same as above, also writes a conflict report to y.output
 ```
 
 Requirements:
-- No reduce/reduce conflicts are allowed. Use `make parser-v` and inspect `y.output` to confirm.
+- No reduce/reduce conflicts are allowed
+- No more shift/reduce conflicts are allowed unless absolutely necessary
+- To resolve conflicts, use `make parser-v` and inspect `y.output`
 
 Usage notes:
-- `psqldef` primarily uses `go-pgquery` (a native PostgreSQL parser) and falls back to the generic parser.
+- `psqldef` primarily uses `go-pgquery` (a native PostgreSQL parser) and falls back to the generic parser
+- `PSQLDEF_PARSER=generic` environment variable can be used to force the use of the generic parser only for `psqldef`
+- The generic parser builds ASTs, and the generator manipulates the ASTs for normalization and comparison. Do not parse strings with regular expressions
 
 ## Local Development
 
@@ -71,6 +75,8 @@ make test # it will take 5 minutes to run
 
 ### Run tests for specific `*def` tools
 
+The test runner is `gotestsum`, which is a wrapper around `go test` that provides a more readable output.
+
 ```sh
 go test ./cmd/mysqldef
 go test ./cmd/psqldef
@@ -82,6 +88,13 @@ For MariaDB testing:
 
 ```sh
 MYSQL_FLAVOR=mariadb MYSQL_PORT=3307 go test ./cmd/mysqldef
+```
+
+For test coverage:
+
+```sh
+make test-cov     # shows a plain text report
+make test-cov-xml # generates coverage.xml
 ```
 
 ### Run individual tests
@@ -166,6 +179,8 @@ TestCaseName:
 2. **Test both directions**: When testing schema changes, consider testing both:
    - Adding features (no `current`, only `desired`)
    - Modifying existing schemas (`current` → `desired`)
+
+3. **Check test coverage**: When you edit source code, always check the coverage report to ensure the code is covered by tests.
 
 ## Documentation
 

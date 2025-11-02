@@ -460,6 +460,7 @@ type DDL struct {
 	Table         TableName
 	NewName       TableName
 	IfExists      bool
+	IfNotExists   bool
 	TableSpec     *TableSpec
 	PartitionSpec *PartitionSpec
 	IndexSpec     *IndexSpec
@@ -496,6 +497,8 @@ const (
 	CreateSchema
 	GrantPrivilege
 	RevokePrivilege
+	DropIndex
+	DropExtension
 )
 
 // View types
@@ -618,6 +621,10 @@ func (ts *TableSpec) addForeignKey(foreignKey *ForeignKeyDefinition) {
 	ts.ForeignKeys = append(ts.ForeignKeys, foreignKey)
 }
 
+func (ts *TableSpec) addExclusion(exclusion *ExclusionDefinition) {
+	ts.Exclusions = append(ts.Exclusions, exclusion)
+}
+
 // ColumnDefinition describes a column in a CREATE TABLE statement
 type ColumnDefinition struct {
 	Name          ColIdent
@@ -731,13 +738,13 @@ type CheckDefinition struct {
 }
 
 type ExclusionPair struct {
-	Column   ColIdent
-	Operator string
+	Expression Expr
+	Operator   string
 }
 
 type ExclusionDefinition struct {
 	ConstraintName ColIdent
-	IndexType      string
+	IndexType      ColIdent
 	Exclusions     []ExclusionPair
 	Where          *Where
 }
@@ -1142,8 +1149,9 @@ type Trigger struct {
 }
 
 type Type struct {
-	Name TableName // workaround: using TableName to handle schema
-	Type ColumnType
+	Name       TableName // workaround: using TableName to handle schema
+	Type       ColumnType
+	EnumValues []string
 }
 
 type Comment struct {
@@ -1467,6 +1475,7 @@ func (ListArg) iExpr()              {}
 func (*BinaryExpr) iExpr()          {}
 func (*UnaryExpr) iExpr()           {}
 func (*IntervalExpr) iExpr()        {}
+func (*TypedLiteral) iExpr()        {}
 func (*CollateExpr) iExpr()         {}
 func (*FuncExpr) iExpr()            {}
 func (*CaseExpr) iExpr()            {}
@@ -1916,6 +1925,17 @@ type IntervalExpr struct {
 // Format formats the node.
 func (node *IntervalExpr) Format(buf *nodeBuffer) {
 	buf.Printf("interval %v %s", node.Expr, node.Unit)
+}
+
+// TypedLiteral represents a typed literal like DATE '2022-01-01' or TIMESTAMP '2022-01-01'.
+type TypedLiteral struct {
+	Type  string
+	Value Expr
+}
+
+// Format formats the node.
+func (node *TypedLiteral) Format(buf *nodeBuffer) {
+	buf.Printf("%s %v", node.Type, node.Value)
 }
 
 // CollateExpr represents dynamic collate operator.

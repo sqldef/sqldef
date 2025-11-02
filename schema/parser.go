@@ -648,8 +648,7 @@ func parseDefaultDefinition(opt *parser.DefaultDefinition) *DefaultDefinition {
 		defaultVal := parseValue(opt.ValueOrExpression.Value)
 		return &DefaultDefinition{constraintName: constraintName, value: defaultVal}
 	} else {
-		defaultExpr := parser.String(opt.ValueOrExpression.Expr)
-		return &DefaultDefinition{constraintName: constraintName, expression: defaultExpr}
+		return &DefaultDefinition{constraintName: constraintName, expression: opt.ValueOrExpression.Expr}
 	}
 }
 
@@ -722,7 +721,7 @@ func parseExclusion(exclusion *parser.ExclusionDefinition) Exclusion {
 	var exs []ExclusionPair
 	for _, exclusion := range exclusion.Exclusions {
 		exs = append(exs, ExclusionPair{
-			column:   exclusion.Column.String(),
+			column:   parser.String(exclusion.Expression),
 			operator: exclusion.Operator,
 		})
 	}
@@ -732,7 +731,7 @@ func parseExclusion(exclusion *parser.ExclusionDefinition) Exclusion {
 	}
 	return Exclusion{
 		constraintName: exclusion.ConstraintName.String(),
-		indexType:      strings.ToUpper(exclusion.IndexType),
+		indexType:      strings.ToUpper(exclusion.IndexType.String()),
 		exclusions:     exs,
 		where:          where,
 	}

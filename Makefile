@@ -19,7 +19,13 @@ ifeq ($(VERBOSE), 1)
   GOTESTFLAGS := -v
 endif
 
-.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef test-cov test-cov-xml
+ifeq ($(CI), true)
+  GOTEST := go test
+else
+  GOTEST := go run gotest.tools/gotestsum@latest --hide-summary=skipped
+endif
+
+.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef test-cov test-cov-xml test-core test
 
 all: build
 
@@ -76,21 +82,26 @@ parser-v: goyacc
 	goyacc -v y.output -o parser/parser.go parser/parser.y
 	gofmt -w ./parser/parser.go
 
-test: test-mysqldef test-psqldef test-sqlite3def test-mssqldef
+# TODO: just run ./... instead of excluding parser tests
+test:
+	$(GOTEST) $(GOTESTFLAGS) ./cmd/mysqldef ./cmd/psqldef ./cmd/sqlite3def ./cmd/mssqldef ./schema ./database
 
 test-mysqldef:
 	MYSQL_FLAVOR=$${MYSQL_FLAVOR:-mysql} go test $(GOTESTFLAGS) ./cmd/mysqldef
 
 test-psqldef:
-	go test $(GOTESTFLAGS) ./cmd/psqldef
-	go test $(GOTESTFLAGS) ./database/postgres
+	$(GOTEST) $(GOTESTFLAGS) ./cmd/psqldef
+	$(GOTEST) $(GOTESTFLAGS) ./database/postgres
 
 test-sqlite3def:
-	go test $(GOTESTFLAGS) ./cmd/sqlite3def
+	$(GOTEST) $(GOTESTFLAGS) ./cmd/sqlite3def
 
 test-mssqldef:
-	go test $(GOTESTFLAGS) ./cmd/mssqldef
-	go test $(GOTESTFLAGS) ./database/mssql
+	$(GOTEST) $(GOTESTFLAGS) ./cmd/mssqldef
+	$(GOTEST) $(GOTESTFLAGS) ./database/mssql
+
+test-core:
+	$(GOTEST) $(GOTESTFLAGS) ./parser ./schema ./util
 
 test-cov:
 	mkdir -p coverage
