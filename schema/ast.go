@@ -280,7 +280,7 @@ type Sequence struct {
 
 type DefaultDefinition struct {
 	value          *Value
-	expression     string
+	expression     parser.Expr
 	constraintName string // only for MSSQL
 }
 

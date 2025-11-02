@@ -3649,11 +3649,11 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 
 	var currentExprSchema, currentExpr string
 	var desiredExprSchema, desiredExpr string
-	if currentDefault != nil {
-		currentExprSchema, currentExpr = splitTableName(currentDefault.expression, g.defaultSchema)
+	if currentDefault != nil && currentDefault.expression != nil {
+		currentExprSchema, currentExpr = splitTableName(parser.String(currentDefault.expression), g.defaultSchema)
 	}
-	if desiredDefault != nil {
-		desiredExprSchema, desiredExpr = splitTableName(desiredDefault.expression, g.defaultSchema)
+	if desiredDefault != nil && desiredDefault.expression != nil {
+		desiredExprSchema, desiredExpr = splitTableName(parser.String(desiredDefault.expression), g.defaultSchema)
 	}
 	return strings.EqualFold(currentExprSchema, desiredExprSchema) && strings.EqualFold(currentExpr, desiredExpr)
 }
@@ -4143,14 +4143,15 @@ func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinitio
 		default:
 			return "", fmt.Errorf("unsupported default value type (valueType: '%d')", defaultVal.valueType)
 		}
-	} else if defaultDefinition.expression != "" {
+	} else if defaultDefinition.expression != nil {
+		exprStr := parser.String(defaultDefinition.expression)
 		if g.mode == GeneratorModeMysql || g.mode == GeneratorModeSQLite3 {
 			// Enclose expression with parentheses to avoid syntax error
 			// https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html#data-type-defaults-explicit
 			// https://www.sqlite.org/syntax/column-constraint.html
-			return fmt.Sprintf("DEFAULT(%s)", defaultDefinition.expression), nil
+			return fmt.Sprintf("DEFAULT(%s)", exprStr), nil
 		} else {
-			return fmt.Sprintf("DEFAULT %s", defaultDefinition.expression), nil
+			return fmt.Sprintf("DEFAULT %s", exprStr), nil
 		}
 	}
 	return "", fmt.Errorf("default value is not set")
