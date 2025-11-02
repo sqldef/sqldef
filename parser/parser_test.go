@@ -291,6 +291,18 @@ func TestIntervalColumnType(t *testing.T) {
 			shouldParse: true,
 			description: "Should support chained typecasts like value::type1::type2",
 		},
+		{
+			name:        "CREATE EXTENSION with user-defined extension name",
+			sql:         "CREATE EXTENSION my_extension",
+			shouldParse: true,
+			description: "Should support CREATE EXTENSION with user-defined extension name",
+		},
+		{
+			name:        "CREATE EXTENSION with user-defined extension name (quoted)",
+			sql:         "CREATE EXTENSION \"my extension\"",
+			shouldParse: true,
+			description: "Should support CREATE EXTENSION with user-defined extension name",
+		},
 	}
 
 	for _, tc := range testCases {

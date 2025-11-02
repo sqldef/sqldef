@@ -1222,62 +1222,30 @@ create_statement:
       $$ = &MultiStatement{Statements: stmts}
     }
   }
-/* CREATE SCHEMA statement */
-| CREATE SCHEMA sql_id
+| CREATE SCHEMA if_not_exists_opt sql_id
   {
     $$ = &DDL{
       Action: CreateSchema,
       Schema: &Schema{
-        Name: $3.String(),
+        Name: $4.String(),
       },
     }
   }
-| CREATE SCHEMA IF NOT EXISTS sql_id
-  {
-    $$ = &DDL{
-      Action: CreateSchema,
-      IfNotExists: true,
-      Schema: &Schema{
-        Name: $6.String(),
-      },
-    }
-  }
-/* CREATE EXTENSION statement */
-| CREATE EXTENSION sql_id
+| CREATE EXTENSION if_not_exists_opt reserved_sql_id
   {
     $$ = &DDL{
       Action: CreateExtension,
       Extension: &Extension{
-        Name: $3.String(),
+        Name: $4.String(),
       },
     }
   }
-| CREATE EXTENSION IF NOT EXISTS sql_id
-  {
-    $$ = &DDL{
-      Action: CreateExtension,
-      IfNotExists: true,
-      Extension: &Extension{
-        Name: $6.String(),
-      },
-    }
-  }
-| CREATE EXTENSION STRING
+| CREATE EXTENSION if_not_exists_opt STRING
   {
     $$ = &DDL{
       Action: CreateExtension,
       Extension: &Extension{
-        Name: string($3),
-      },
-    }
-  }
-| CREATE EXTENSION IF NOT EXISTS STRING
-  {
-    $$ = &DDL{
-      Action: CreateExtension,
-      IfNotExists: true,
-      Extension: &Extension{
-        Name: string($6),
+        Name: string($4),
       },
     }
   }
@@ -5737,6 +5705,26 @@ reserved_sql_id:
     $$ = NewColIdent(string($1))
   }
 | KEY_BLOCK_SIZE
+  {
+    $$ = NewColIdent(string($1))
+  }
+| TEXT
+  {
+    $$ = NewColIdent(string($1))
+  }
+| TINYTEXT
+  {
+    $$ = NewColIdent(string($1))
+  }
+| MEDIUMTEXT
+  {
+    $$ = NewColIdent(string($1))
+  }
+| LONGTEXT
+  {
+    $$ = NewColIdent(string($1))
+  }
+| CITEXT
   {
     $$ = NewColIdent(string($1))
   }

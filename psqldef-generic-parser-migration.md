@@ -6,7 +6,7 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Current Status
 
-- **DONE 1006 tests, 100 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
+- **DONE 1006 tests, 99 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
 
 ## Rules
 
@@ -16,9 +16,9 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ### Summary
 
-The 100 test failures fall into these categories:
+The 99 test failures fall into these categories:
 
-1. **Missing Parser Features** - 4 items causing ~25 syntax errors
+1. **Missing Parser Features** - 3 items causing ~24 syntax errors
 2. **Type Normalization** - 3 items causing ~53 idempotency failures
 3. **Expression Normalization** - 3 items causing ~21 idempotency failures
 4. **View Normalization** - 1 item causing ~8 idempotency failures
@@ -35,16 +35,11 @@ Note: Many tests have multiple issues, so the counts overlap.
    - Affects: `ForeignKeyDependenciesForCreateTables`
    - Location: Foreign key reference type resolution code
 
-2. **CREATE EXTENSION parsing** - Extension names not recognized
-   - Example: `CREATE EXTENSION citext;`
-   - Error: `syntax error at line 1, column 25 near 'citext'`
-   - Note: Parser already has CREATE EXTENSION rules; likely a lexer or identifier issue
-
-3. **Reserved keyword handling** - Quoted identifiers using reserved keywords
+2. **Reserved keyword handling** - Quoted identifiers using reserved keywords
    - Keywords: "level", "sku", "priority" (when quoted as identifiers)
    - Multiple CREATE TABLE statements failing
 
-4. **ADD UNIQUE syntax** - Incorrect UNIQUE constraint generation
+3. **ADD UNIQUE syntax** - Incorrect UNIQUE constraint generation
    - Generated: `ADD UNIQUE "constraint_name" (columns)`
    - Expected: `ADD CONSTRAINT "constraint_name" UNIQUE (columns)`
    - Affects: `ConstraintCheckInAndUniqueAdd`, `ConstraintCheckInAndUniqueRemove`, `ConstraintUniqueAdd`, `ConstraintUniqueRemove`
