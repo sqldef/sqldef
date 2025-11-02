@@ -400,8 +400,7 @@ func forceEOF(yylex any) {
 %type <sequence> sequence_opt
 %type <boolVal> clustered_opt not_for_replication_opt
 %type <defaultValueOrExpression> default_definition
-%type <optVal> default_val
-%type <expr> default_expression
+%type <expr> default_value_expression
 %type <optVal> srid_definition srid_val
 %type <optVal> on_off
 %type <optVal> index_distance_option_value
@@ -2641,28 +2640,12 @@ column_definition_type:
   }
 
 default_definition:
-  DEFAULT default_val
-  {
-    $$ = DefaultValueOrExpression{Value: $2}
-  }
-| DEFAULT '(' default_val ')'
-  {
-    $$ = DefaultValueOrExpression{Value: $3}
-  }
-| DEFAULT '(' '(' default_val ')' ')'
-  {
-    $$ = DefaultValueOrExpression{Value: $4}
-  }
-| DEFAULT default_expression
+  DEFAULT default_value_expression
   {
     $$ = DefaultValueOrExpression{Expr: $2}
   }
-| DEFAULT '(' default_expression ')'
-  {
-    $$ = DefaultValueOrExpression{Expr: $3}
-  }
 
-default_val:
+default_value_expression:
   STRING character_cast_opt
   {
     $$ = NewStrVal($1)
@@ -2707,9 +2690,7 @@ default_val:
   {
     $$ = NewBitVal($1)
   }
-
-default_expression:
-  function_call_generic
+| function_call_generic
   {
     $$ = $1
   }
@@ -2725,25 +2706,37 @@ default_expression:
   {
     $$ = &TypedLiteral{Type: "timestamp", Value: NewStrVal($2)}
   }
-| current_timestamp TYPECAST simple_convert_type array_opt
-  {
-    t := $3
-    if $4 {
-      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
-    }
-    $$ = &CastExpr{Expr: $1, Type: t}
-  }
 | variadic_opt array_constructor
   {
     $$ = $2
   }
-| default_expression TYPECAST simple_convert_type array_opt
+| default_value_expression TYPECAST simple_convert_type array_opt
   {
     t := $3
     if $4 {
       t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
     }
     $$ = &CastExpr{Expr: $1, Type: t}
+  }
+| default_value_expression '+' default_value_expression
+  {
+    $$ = &BinaryExpr{Left: $1, Operator: PlusStr, Right: $3}
+  }
+| default_value_expression '-' default_value_expression
+  {
+    $$ = &BinaryExpr{Left: $1, Operator: MinusStr, Right: $3}
+  }
+| default_value_expression '*' default_value_expression
+  {
+    $$ = &BinaryExpr{Left: $1, Operator: MultStr, Right: $3}
+  }
+| default_value_expression '/' default_value_expression
+  {
+    $$ = &BinaryExpr{Left: $1, Operator: DivStr, Right: $3}
+  }
+| '(' default_value_expression ')'
+  {
+    $$ = $2
   }
 
 srid_definition:

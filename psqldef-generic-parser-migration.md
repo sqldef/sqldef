@@ -7,9 +7,9 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 ## Current Status
 
 - **708 tests PASSING, 2 tests SKIPPED** (99.7% success rate for generic parser tests)
-- **1 unique test case** affected by genuine parser limitations
+- **1 unique test case** affected by parser limitations (reserved keyword as column name)
 - **0 reduce/reduce conflicts**
-- **45 shift/reduce conflicts** (baseline)
+- **47 shift/reduce conflicts** (baseline, +2 from adding arithmetic operators in DEFAULT)
 
 ## Running Generic Parser Tests
 
@@ -24,7 +24,7 @@ make test
 ## Rules
 
 - **Must maintain zero reduce/reduce conflicts** for parser correctness
-- **Must maintain baseline of 45 shift/reduce conflicts** to avoid regressions
+- **Must maintain baseline of 47 shift/reduce conflicts** to avoid regressions
 
 ## Notes
 
@@ -34,55 +34,36 @@ make test
 
 ## Parser Limitations
 
-### Arithmetic Expressions in DEFAULT (1 test case) - ❌ BLOCKED
+### Reserved Keywords as Column Names in Foreign Key References (1 test case) - ⚠️ PARSER LIMITATION
 
-**Status:** Cannot be implemented without violating grammar conflict constraints.
+**Status:** Cannot parse reserved keywords (like `TYPE`) as unquoted column names in foreign key references.
 
-**Problem:** Parser doesn't support arithmetic operations in DEFAULT expressions like `(CURRENT_TIMESTAMP + '1 day'::interval)`.
+**Problem:** Parser fails when reserved keywords are used as column names without quotes in `REFERENCES` clauses.
 
-**Error Pattern:** `syntax error` when parsing binary operators in DEFAULT context
+**Error Pattern:** `syntax error` when parsing reserved keywords in foreign key column lists
 
 **Example:**
 ```sql
-CREATE TABLE foo (
-  expires_at timestamp DEFAULT (CURRENT_TIMESTAMP + '1 day'::interval)
+CREATE TABLE image_owners (
+  type VARCHAR(20) NOT NULL,
+  PRIMARY KEY (type, id)
+);
+
+CREATE TABLE image_bindings (
+  FOREIGN KEY (owner_type) REFERENCES image_owners(type, id)
+  -- ERROR: Parser treats 'type' as keyword, not column name
 );
 ```
 
-**Root Cause - Fundamental Grammar Limitation:**
-
-The parser has a dual-path structure for DEFAULT values:
-```yacc
-DEFAULT default_val          # Simple values → .Value field
-DEFAULT default_expression   # Complex expressions → .Expr field
+**Workaround:** Use quoted identifiers:
+```sql
+REFERENCES image_owners("type", id)  -- Works with quotes
 ```
 
-This design creates an inherent conflict when trying to add arithmetic operators:
-
-1. **Adding literals to `default_expression`** (e.g., `default_expression: STRING`):
-   - Creates reduce/reduce conflicts with `default_val: STRING`
-   - Parser can't decide which path to take for `DEFAULT 'hello'`
-
-2. **Using `value_expression`** (which has all operators):
-   - Creates 248 reduce/reduce conflicts
-   - Too broad, conflicts with other grammar rules
-
-3. **Creating intermediate rules** (e.g., `default_val_expr`):
-   - If used as base case: creates 97 reduce/reduce conflicts
-   - If used only in operators: parser can't form complete expressions
-
-**Why This Matters:**
-- The dual-path design optimizes for simple literals vs. complex expressions
-- Simple values print as `DEFAULT 5`, expressions print as `DEFAULT (expr)`
-- Merging paths would require always printing parentheses, breaking diff generation
-
-**Possible Solutions (all have trade-offs):**
-1. Accept reduce/reduce conflicts (violates project rules)
-2. Major grammar refactoring to single-path design (breaks compatibility)
-3. Use GLR parsing instead of LALR (requires parser generator change)
-4. Keep using pgquery parser for this syntax (current fallback works)
+**Root Cause:**
+The parser's grammar doesn't allow reserved keywords in all contexts where column names are valid. The `REFERENCES` clause expects column identifiers, but the parser's keyword precedence prevents `TYPE` from being recognized as an identifier in this context.
 
 **Tests affected:**
-- ChangeDefaultExpressionWithAddition (2 tests: current + desired) - SKIPPED ⏭️
+- CreateTableWithConstraintOptions (2 tests: current + desired) - SKIPPED ⏭️
 
-**Decision:** This syntax remains unsupported in the generic parser. Users needing this feature should rely on the pgquery parser (default for psqldef).
+**Note:** This test also covers `DEFERRABLE`/`INITIALLY IMMEDIATE`/`INITIALLY DEFERRED` constraint options, which are implemented and working. The test is skipped due to the reserved keyword issue, not the constraint options feature.

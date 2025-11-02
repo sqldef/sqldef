@@ -1192,19 +1192,19 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 	case *parser.NullVal:
 		return &parser.DefaultDefinition{
 			ValueOrExpression: parser.DefaultValueOrExpression{
-				Value: parser.NewValArg([]byte("null")),
+				Expr: parser.NewValArg([]byte("null")),
 			},
 		}, nil
 	case *parser.SQLVal:
 		return &parser.DefaultDefinition{
 			ValueOrExpression: parser.DefaultValueOrExpression{
-				Value: expr,
+				Expr: expr,
 			},
 		}, nil
 	case *parser.BoolVal:
 		return &parser.DefaultDefinition{
 			ValueOrExpression: parser.DefaultValueOrExpression{
-				Value: parser.NewBoolSQLVal(bool(*expr)),
+				Expr: parser.NewBoolSQLVal(bool(*expr)),
 			},
 		}, nil
 	case *parser.ArrayConstructor:
@@ -1218,7 +1218,7 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 		case *parser.SQLVal:
 			return &parser.DefaultDefinition{
 				ValueOrExpression: parser.DefaultValueOrExpression{
-					Value: castExpr,
+					Expr: castExpr,
 				},
 			}, nil
 		case *parser.CastExpr, *parser.ArrayConstructor:
@@ -1235,7 +1235,7 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 		case *parser.SQLVal:
 			return &parser.DefaultDefinition{
 				ValueOrExpression: parser.DefaultValueOrExpression{
-					Value: expr,
+					Expr: expr,
 				},
 			}, nil
 		case *parser.ArrayConstructor:

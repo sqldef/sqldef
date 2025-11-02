@@ -3635,26 +3635,50 @@ func areSameIdentityDefinition(identityA *Identity, identityB *Identity) bool {
 }
 
 func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desiredDefault *DefaultDefinition, columnType string) bool {
-	var currentVal *Value
-	var desiredVal *Value
-	if currentDefault != nil && !isNullValue(currentDefault.value) {
-		currentVal = currentDefault.value
+	// Normalize: DEFAULT NULL is the same as no default
+	currentIsNull := currentDefault == nil || isNullDefault(currentDefault)
+	desiredIsNull := desiredDefault == nil || isNullDefault(desiredDefault)
+
+	// Both null (or absent) - they're the same
+	if currentIsNull && desiredIsNull {
+		return true
 	}
-	if desiredDefault != nil && !isNullValue(desiredDefault.value) {
-		desiredVal = desiredDefault.value
-	}
-	if !g.areSameValue(currentVal, desiredVal, columnType) {
+	// One is null, the other isn't - they're different
+	if currentIsNull || desiredIsNull {
 		return false
 	}
 
+	// Check if both are simple SQLVal (vs complex expressions)
+	currSQLVal, currentIsSQLVal := currentDefault.expression.(*parser.SQLVal)
+	desSQLVal, desiredIsSQLVal := desiredDefault.expression.(*parser.SQLVal)
+
+	// If both are simple values (SQLVal), use value comparison
+	if currentIsSQLVal && desiredIsSQLVal {
+		var currentVal *Value
+		var desiredVal *Value
+
+		currentVal = parseValue(currSQLVal)
+		if isNullValue(currentVal) {
+			currentVal = nil
+		}
+		desiredVal = parseValue(desSQLVal)
+		if isNullValue(desiredVal) {
+			desiredVal = nil
+		}
+
+		return g.areSameValue(currentVal, desiredVal, columnType)
+	}
+
+	// If one is SQLVal and the other is not, they're different
+	if currentIsSQLVal != desiredIsSQLVal {
+		return false
+	}
+
+	// Both are complex expressions - use string comparison
 	var currentExprSchema, currentExpr string
 	var desiredExprSchema, desiredExpr string
-	if currentDefault != nil && currentDefault.expression != nil {
-		currentExprSchema, currentExpr = splitTableName(parser.String(currentDefault.expression), g.defaultSchema)
-	}
-	if desiredDefault != nil && desiredDefault.expression != nil {
-		desiredExprSchema, desiredExpr = splitTableName(parser.String(desiredDefault.expression), g.defaultSchema)
-	}
+	currentExprSchema, currentExpr = splitTableName(parser.String(currentDefault.expression), g.defaultSchema)
+	desiredExprSchema, desiredExpr = splitTableName(parser.String(desiredDefault.expression), g.defaultSchema)
 	return strings.EqualFold(currentExprSchema, desiredExprSchema) && strings.EqualFold(currentExpr, desiredExpr)
 }
 
@@ -3758,6 +3782,18 @@ func areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 
 func isNullValue(value *Value) bool {
 	return value != nil && value.valueType == ValueTypeValArg && value.raw == "null"
+}
+
+func isNullDefault(def *DefaultDefinition) bool {
+	if def == nil || def.expression == nil {
+		return false
+	}
+	sqlVal, ok := def.expression.(*parser.SQLVal)
+	if !ok {
+		return false
+	}
+	val := parseValue(sqlVal)
+	return isNullValue(val)
 }
 
 func (g *Generator) normalizeDataType(dataType string) string {
@@ -4121,8 +4157,14 @@ func generateSequenceClause(sequence *Sequence) string {
 }
 
 func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinition) (string, error) {
-	if defaultDefinition.value != nil {
-		defaultVal := defaultDefinition.value
+	if defaultDefinition.expression == nil {
+		return "", fmt.Errorf("default expression is nil")
+	}
+
+	// Type assertion: Check if it's a simple SQLVal
+	if sqlVal, ok := defaultDefinition.expression.(*parser.SQLVal); ok {
+		// Simple value path - maintain existing formatting behavior
+		defaultVal := parseValue(sqlVal)
 		switch defaultVal.valueType {
 		case ValueTypeStr:
 			return fmt.Sprintf("DEFAULT %s", StringConstant(defaultVal.strVal)), nil
@@ -4143,18 +4185,18 @@ func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinitio
 		default:
 			return "", fmt.Errorf("unsupported default value type (valueType: '%d')", defaultVal.valueType)
 		}
-	} else if defaultDefinition.expression != nil {
-		exprStr := parser.String(defaultDefinition.expression)
-		if g.mode == GeneratorModeMysql || g.mode == GeneratorModeSQLite3 {
-			// Enclose expression with parentheses to avoid syntax error
-			// https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html#data-type-defaults-explicit
-			// https://www.sqlite.org/syntax/column-constraint.html
-			return fmt.Sprintf("DEFAULT(%s)", exprStr), nil
-		} else {
-			return fmt.Sprintf("DEFAULT %s", exprStr), nil
-		}
 	}
-	return "", fmt.Errorf("default value is not set")
+
+	// Complex expression path
+	exprStr := parser.String(defaultDefinition.expression)
+	if g.mode == GeneratorModeMysql || g.mode == GeneratorModeSQLite3 {
+		// Enclose expression with parentheses to avoid syntax error
+		// https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html#data-type-defaults-explicit
+		// https://www.sqlite.org/syntax/column-constraint.html
+		return fmt.Sprintf("DEFAULT(%s)", exprStr), nil
+	} else {
+		return fmt.Sprintf("DEFAULT %s", exprStr), nil
+	}
 }
 
 func generateSridDefinition(sridVal Value) (string, error) {

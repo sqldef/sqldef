@@ -724,8 +724,7 @@ type DefaultDefinition struct {
 }
 
 type DefaultValueOrExpression struct {
-	Value *SQLVal
-	Expr  Expr
+	Expr Expr
 }
 
 type SridDefinition struct {
@@ -786,8 +785,8 @@ func (ct *ColumnType) Format(buf *nodeBuffer) {
 	}
 	if ct.Default != nil {
 		buf.Printf(" %s", keywordStrings[DEFAULT])
-		if ct.Default.ValueOrExpression.Value != nil {
-			buf.Printf(" %s", String(ct.Default.ValueOrExpression.Value))
+		if _, ok := ct.Default.ValueOrExpression.Expr.(*SQLVal); ok {
+			buf.Printf(" %s", String(ct.Default.ValueOrExpression.Expr))
 		} else {
 			buf.Printf("(%v)", ct.Default.ValueOrExpression.Expr)
 		}

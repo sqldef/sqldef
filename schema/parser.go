@@ -637,7 +637,7 @@ func parseIdentity(opt *parser.IdentityOpt) *Identity {
 }
 
 func parseDefaultDefinition(opt *parser.DefaultDefinition) *DefaultDefinition {
-	if opt == nil || (opt.ValueOrExpression.Value == nil && opt.ValueOrExpression.Expr == nil) {
+	if opt == nil || opt.ValueOrExpression.Expr == nil {
 		return nil
 	}
 
@@ -646,11 +646,9 @@ func parseDefaultDefinition(opt *parser.DefaultDefinition) *DefaultDefinition {
 		constraintName = opt.ConstraintName.String()
 	}
 
-	if opt.ValueOrExpression.Value != nil {
-		defaultVal := parseValue(opt.ValueOrExpression.Value)
-		return &DefaultDefinition{constraintName: constraintName, value: defaultVal}
-	} else {
-		return &DefaultDefinition{constraintName: constraintName, expression: opt.ValueOrExpression.Expr}
+	return &DefaultDefinition{
+		constraintName: constraintName,
+		expression:     opt.ValueOrExpression.Expr,
 	}
 }
 
