@@ -6,10 +6,10 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Current Status
 
-- **690 tests PASSING, 8 tests SKIPPED** (98.9% success rate)
+- **690 tests PASSING, 8 tests SKIPPED** (98.9% success rate for generic parser tests)
 - **5 unique test cases** affected by genuine parser limitations
 - **0 reduce/reduce conflicts**
-- **38 shift/reduce conflicts** (baseline maintained)
+- **38 shift/reduce conflicts** (baseline)
 
 ## Running Tests
 
@@ -34,9 +34,9 @@ make test
 
 ## Remaining Tasks
 
-The analysis below is based on 8 skipped tests affecting 5 unique test cases.
+The analysis below is based on remaining skipped tests affecting 4 unique test cases.
 
-### Remaining Parser Limitations (1.1% of tests)
+### Remaining Parser Limitations
 
 #### 1. Chained Type Casts (1 test case) - ✅ PARTIALLY FIXED
 
@@ -63,11 +63,13 @@ CREATE TABLE users (
 **Tests affected:**
 - CreateTableWithDefault (1 test - still skipped due to ARRAY constructor issue)
 
-#### 2. Arithmetic Expressions in DEFAULT (1 test case)
+#### 2. Arithmetic Expressions in DEFAULT (1 test case) - ❌ BLOCKED
 
-**Problem:** Parser doesn't support arithmetic operations like `+` in DEFAULT expressions.
+**Status:** Cannot be implemented without violating grammar conflict constraints.
 
-**Error Pattern:** `syntax error at DEFAULT (CURRENT_TIMESTAMP + '1 day'::interval)`
+**Problem:** Parser doesn't support arithmetic operations in DEFAULT expressions like `(CURRENT_TIMESTAMP + '1 day'::interval)`.
+
+**Error Pattern:** `syntax error` when parsing binary operators in DEFAULT context
 
 **Example:**
 ```sql
@@ -76,8 +78,43 @@ CREATE TABLE foo (
 );
 ```
 
+**Root Cause - Fundamental Grammar Limitation:**
+
+The parser has a dual-path structure for DEFAULT values:
+```yacc
+DEFAULT default_val          # Simple values → .Value field
+DEFAULT default_expression   # Complex expressions → .Expr field
+```
+
+This design creates an inherent conflict when trying to add arithmetic operators:
+
+1. **Adding literals to `default_expression`** (e.g., `default_expression: STRING`):
+   - Creates reduce/reduce conflicts with `default_val: STRING`
+   - Parser can't decide which path to take for `DEFAULT 'hello'`
+
+2. **Using `value_expression`** (which has all operators):
+   - Creates 248 reduce/reduce conflicts
+   - Too broad, conflicts with other grammar rules
+
+3. **Creating intermediate rules** (e.g., `default_val_expr`):
+   - If used as base case: creates 97 reduce/reduce conflicts
+   - If used only in operators: parser can't form complete expressions
+
+**Why This Matters:**
+- The dual-path design optimizes for simple literals vs. complex expressions
+- Simple values print as `DEFAULT 5`, expressions print as `DEFAULT (expr)`
+- Merging paths would require always printing parentheses, breaking diff generation
+
+**Possible Solutions (all have trade-offs):**
+1. Accept reduce/reduce conflicts (violates project rules)
+2. Major grammar refactoring to single-path design (breaks compatibility)
+3. Use GLR parsing instead of LALR (requires parser generator change)
+4. Keep using pgquery parser for this syntax (current fallback works)
+
 **Tests affected:**
-- ChangeDefaultExpressionWithAddition (2 tests: current + desired)
+- ChangeDefaultExpressionWithAddition (2 tests: current + desired) - SKIPPED ⏭️
+
+**Decision:** This syntax remains unsupported in the generic parser. Users needing this feature should rely on the pgquery parser (default for psqldef).
 
 #### 3. COALESCE in Index Expressions (1 test case)
 
