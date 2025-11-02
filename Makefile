@@ -22,7 +22,7 @@ endif
 ifeq ($(CI), true)
   GOTEST := go test
 else
-  GOTEST := go run gotest.tools/gotestsum@latest
+  GOTEST := go run gotest.tools/gotestsum@latest --hide-summary=skipped
 endif
 
 .PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef test-cov test-cov-xml test-core test
