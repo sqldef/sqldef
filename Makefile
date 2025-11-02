@@ -82,9 +82,8 @@ parser-v: goyacc
 	goyacc -v y.output -o parser/parser.go parser/parser.y
 	gofmt -w ./parser/parser.go
 
-# TODO: just run ./... instead of excluding parser tests
 test:
-	$(GOTEST) $(GOTESTFLAGS) ./cmd/mysqldef ./cmd/psqldef ./cmd/sqlite3def ./cmd/mssqldef ./schema ./database
+	$(GOTEST) $(GOTESTFLAGS) ./...
 
 test-mysqldef:
 	MYSQL_FLAVOR=$${MYSQL_FLAVOR:-mysql} go test $(GOTESTFLAGS) ./cmd/mysqldef
