@@ -2189,7 +2189,9 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 			(index.name != "" && index.name != "PRIMARY" && index.name != index.columns[0].ColumnName()) {
 			ddl += fmt.Sprintf("CONSTRAINT %s ", g.escapeSQLName(index.name))
 		}
-		if strings.EqualFold(index.indexType, "UNIQUE KEY") {
+		// Handle both "UNIQUE KEY" (MySQL-style) and "UNIQUE" (PostgreSQL-style)
+		isUniqueConstraint := strings.EqualFold(index.indexType, "UNIQUE KEY") || strings.EqualFold(index.indexType, "UNIQUE")
+		if isUniqueConstraint {
 			ddl += "CONSTRAINT"
 		} else {
 			ddl += strings.ToUpper(index.indexType)
@@ -2197,7 +2199,7 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 		if !index.primary {
 			ddl += fmt.Sprintf(" %s", g.escapeSQLName(index.name))
 		}
-		if strings.EqualFold(index.indexType, "UNIQUE KEY") {
+		if isUniqueConstraint {
 			ddl += " UNIQUE"
 		}
 		constraintOptions := g.generateConstraintOptions(index.constraintOptions)

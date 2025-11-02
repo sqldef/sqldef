@@ -198,7 +198,7 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 				}
 				index := &parser.IndexDefinition{
 					Info: &parser.IndexInfo{
-						Type:   "unique key",
+						Type:   "UNIQUE",
 						Name:   parser.NewColIdent(constraintName),
 						Unique: true,
 					},
