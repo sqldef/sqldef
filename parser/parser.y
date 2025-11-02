@@ -3501,11 +3501,6 @@ index_column_list_or_expression:
   {
     $$ = IndexColumnsOrExpression{IndexCols: $1}
   }
-/* For PostgreSQL: https://www.postgresql.org/docs/14/indexes-expressional.html */
-| function_call_generic
-  {
-    $$ = IndexColumnsOrExpression{IndexExpr: $1}
-  }
 
 index_column_list:
   index_column
@@ -3542,6 +3537,10 @@ index_column:
 | '(' expression ')' asc_desc_opt
   {
     $$ = IndexColumn{Expression: $2, Direction: $4}
+  }
+| function_call_generic asc_desc_opt
+  {
+    $$ = IndexColumn{Expression: $1, Direction: $2}
   }
 
 // https://www.postgresql.org/docs/9.5/brin-builtin-opclasses.html
