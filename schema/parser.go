@@ -205,11 +205,13 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			grantees := stmt.Grant.Grantees
 
 			if len(grantees) > 0 {
+				// Normalize privilege names to uppercase for consistency
+				normalizedPrivileges := util.TransformSlice(stmt.Grant.Privileges, strings.ToUpper)
 				return &GrantPrivilege{
 					statement:  ddl,
 					tableName:  normalizedTableName(mode, stmt.Table, defaultSchema),
 					grantees:   grantees,
-					privileges: stmt.Grant.Privileges,
+					privileges: normalizedPrivileges,
 				}, nil
 			}
 			return nil, fmt.Errorf("no grantees specified in GRANT statement")
@@ -218,11 +220,13 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 
 			// For now, return the first grantee as a single statement
 			if len(grantees) > 0 {
+				// Normalize privilege names to uppercase for consistency
+				normalizedPrivileges := util.TransformSlice(stmt.Grant.Privileges, strings.ToUpper)
 				return &RevokePrivilege{
 					statement:     ddl,
 					tableName:     normalizedTableName(mode, stmt.Table, defaultSchema),
 					grantees:      grantees,
-					privileges:    stmt.Grant.Privileges,
+					privileges:    normalizedPrivileges,
 					cascadeOption: stmt.Grant.CascadeOption,
 				}, nil
 			}

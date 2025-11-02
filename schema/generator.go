@@ -425,7 +425,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 			// For MySQL and MSSQL, also check if this constraint matches any column-level CHECK by definition
 			// This handles auto-generated constraint names for column-level CHECKs
-			if (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) && findCheckConstraintByDefinition(desiredTable, &check) != nil {
+			if (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) && g.findCheckConstraintByDefinition(desiredTable, &check) != nil {
 				continue
 			}
 
@@ -828,13 +828,13 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				currentCheck := findCheckConstraintInTable(&currentTable, constraintName)
-				if !areSameCheckDefinition(currentCheck, desiredColumn.check) { // || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
+				if !g.areSameCheckDefinition(currentCheck, desiredColumn.check) { // || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
 					if currentCheck != nil {
 						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), constraintName)
 						ddls = append(ddls, ddl)
 					}
 					if desiredColumn.check != nil {
-						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), constraintName, parser.String(desiredColumn.check.definition))
+						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), constraintName, g.normalizeCheckExprString(desiredColumn.check.definition))
 						if desiredColumn.check.noInherit {
 							ddl += " NO INHERIT"
 						}
@@ -854,7 +854,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					ddls = append(ddls, ddl)
 				}
 
-				if !areSameCheckDefinition(currentColumn.check, desiredColumn.check) {
+				if !g.areSameCheckDefinition(currentColumn.check, desiredColumn.check) {
 					// For MSSQL, column-level CHECKs might actually be table-level CHECKs that MSSQL converted
 					// Check if the current column-level CHECK matches a table-level CHECK in desired
 					skipDrop := false
@@ -862,7 +862,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						// Current has column-level CHECK, desired doesn't
 						// Check if it matches a table-level CHECK in desired
 						if findCheckConstraintByName(desired.table.checks, currentColumn.check.constraintName) != nil ||
-							findCheckConstraintByDefinitionInList(desired.table.checks, currentColumn.check) != nil {
+							g.findCheckConstraintByDefinitionInList(desired.table.checks, currentColumn.check) != nil {
 							// This column-level CHECK is actually a table-level CHECK
 							// It will be handled in the table-level CHECK processing
 							skipDrop = true
@@ -886,7 +886,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 							if desiredColumn.check.notForReplication {
 								replicationDefinition = " NOT FOR REPLICATION"
 							}
-							ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableName(desired.table.name), desiredConstraintName, replicationDefinition, parser.String(desiredColumn.check.definition))
+							ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableName(desired.table.name), desiredConstraintName, replicationDefinition, g.normalizeCheckExprString(desiredColumn.check.definition))
 							ddls = append(ddls, ddl)
 						}
 					}
@@ -1176,19 +1176,19 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		// For MySQL and MSSQL, also try to find by definition if not found by name
 		// This handles auto-generated constraint names
 		if currentCheck == nil && (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) {
-			currentCheck = findCheckConstraintByDefinition(&currentTable, &desiredCheck)
+			currentCheck = g.findCheckConstraintByDefinition(&currentTable, &desiredCheck)
 		}
 
 		if currentCheck != nil {
-			if !areSameCheckDefinition(currentCheck, &desiredCheck) {
+			if !g.areSameCheckDefinition(currentCheck, &desiredCheck) {
 				// Constraint exists but has different definition, need to replace it
 				switch g.mode {
 				case GeneratorModePostgres, GeneratorModeMssql:
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), parser.String(desiredCheck.definition)))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckExprString(desiredCheck.definition)))
 				case GeneratorModeMysql:
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), parser.String(desiredCheck.definition)))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckExprString(desiredCheck.definition)))
 				case GeneratorModeSQLite3:
 					// SQLite does not support ALTER TABLE for CHECK constraints
 					// Modifying CHECK constraints requires recreating the table, which is not supported
@@ -1201,7 +1201,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 		} else {
 			// Constraint doesn't exist, add it
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), parser.String(desiredCheck.definition)))
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckExprString(desiredCheck.definition)))
 		}
 	}
 
@@ -2088,6 +2088,8 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		if column.check.notForReplication {
 			definition += "NOT FOR REPLICATION "
 		}
+		// Don't normalize in CREATE TABLE - use the original form
+		// Normalization happens during comparison and ALTER statements
 		definition += fmt.Sprintf("(%s) ", parser.String(column.check.definition))
 		if column.check.noInherit {
 			definition += "NO INHERIT "
@@ -3105,13 +3107,13 @@ func findCheckConstraintByName(checks []CheckDefinition, constraintName string) 
 }
 
 // findCheckConstraintByDefinitionInList finds a CHECK constraint in a list by comparing definitions
-func findCheckConstraintByDefinitionInList(checks []CheckDefinition, check *CheckDefinition) *CheckDefinition {
+func (g *Generator) findCheckConstraintByDefinitionInList(checks []CheckDefinition, check *CheckDefinition) *CheckDefinition {
 	if check == nil {
 		return nil
 	}
 
 	for _, currentCheck := range checks {
-		if areSameCheckDefinition(&currentCheck, check) {
+		if g.areSameCheckDefinition(&currentCheck, check) {
 			return &currentCheck
 		}
 	}
@@ -3121,21 +3123,21 @@ func findCheckConstraintByDefinitionInList(checks []CheckDefinition, check *Chec
 // findCheckConstraintByDefinition finds a CHECK constraint in a table by comparing definitions.
 // This is used for MySQL when column-level CHECKs are converted to table-level CONSTRAINTs
 // with auto-generated names.
-func findCheckConstraintByDefinition(table *Table, check *CheckDefinition) *CheckDefinition {
+func (g *Generator) findCheckConstraintByDefinition(table *Table, check *CheckDefinition) *CheckDefinition {
 	if check == nil {
 		return nil
 	}
 
 	// Search table-level checks
 	for _, currentCheck := range table.checks {
-		if areSameCheckDefinition(&currentCheck, check) {
+		if g.areSameCheckDefinition(&currentCheck, check) {
 			return &currentCheck
 		}
 	}
 
 	// Search column-level checks
 	for _, column := range table.columns {
-		if column.check != nil && areSameCheckDefinition(column.check, check) {
+		if column.check != nil && g.areSameCheckDefinition(column.check, check) {
 			return column.check
 		}
 	}
@@ -3338,7 +3340,7 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 	return true
 }
 
-func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bool {
+func (g *Generator) areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bool {
 	if checkA == nil && checkB == nil {
 		return true
 	}
@@ -3350,8 +3352,12 @@ func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bo
 		panic(fmt.Sprintf("CheckDefinition.definitionAST must not be nil (checkA.definitionAST=%v, checkB.definitionAST=%v)", checkA.definition, checkB.definition))
 	}
 
-	normalizedA := normalizeCheckExpr(checkA.definition)
-	normalizedB := normalizeCheckExpr(checkB.definition)
+	normalizedA := normalizeCheckExpr(checkA.definition, g.mode)
+	normalizedB := normalizeCheckExpr(checkB.definition, g.mode)
+
+	// Sort arrays for comparison (but not for output)
+	normalizedA = sortCheckExprArrays(normalizedA)
+	normalizedB = sortCheckExprArrays(normalizedB)
 
 	// Unwrap outermost parentheses if present (MySQL adds extra parens)
 	normalizedA = unwrapOutermostParenExpr(normalizedA)
@@ -3360,6 +3366,67 @@ func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bo
 	return parser.String(normalizedA) == parser.String(normalizedB) &&
 		checkA.notForReplication == checkB.notForReplication &&
 		checkA.noInherit == checkB.noInherit
+}
+
+// sortCheckExprArrays sorts arrays in CHECK expressions for comparison
+// This ensures ['b', 'a'] is considered equal to ['a', 'b']
+func sortCheckExprArrays(expr parser.Expr) parser.Expr {
+	if expr == nil {
+		return nil
+	}
+
+	switch e := expr.(type) {
+	case *parser.ComparisonExpr:
+		left := sortCheckExprArrays(e.Left)
+		right := sortCheckExprArrays(e.Right)
+
+		// Sort arrays in ANY/ALL comparisons
+		if e.Any || e.All {
+			if arrayConst, ok := right.(*parser.ArrayConstructor); ok {
+				var exprs []parser.Expr
+				for _, elem := range arrayConst.Elements {
+					if expr, ok := elem.(parser.Expr); ok {
+						exprs = append(exprs, expr)
+					}
+				}
+				sortedExprs := sortAndDeduplicateValues(exprs)
+
+				var elements parser.ArrayElements
+				for _, expr := range sortedExprs {
+					if elem, ok := expr.(parser.ArrayElement); ok {
+						elements = append(elements, elem)
+					}
+				}
+
+				right = &parser.ArrayConstructor{Elements: elements}
+			}
+		}
+
+		return &parser.ComparisonExpr{
+			Operator: e.Operator,
+			Left:     left,
+			Right:    right,
+			Escape:   e.Escape,
+			All:      e.All,
+			Any:      e.Any,
+		}
+	case *parser.AndExpr:
+		return &parser.AndExpr{
+			Left:  sortCheckExprArrays(e.Left),
+			Right: sortCheckExprArrays(e.Right),
+		}
+	case *parser.OrExpr:
+		return &parser.OrExpr{
+			Left:  sortCheckExprArrays(e.Left),
+			Right: sortCheckExprArrays(e.Right),
+		}
+	case *parser.NotExpr:
+		return &parser.NotExpr{Expr: sortCheckExprArrays(e.Expr)}
+	case *parser.ParenExpr:
+		return &parser.ParenExpr{Expr: sortCheckExprArrays(e.Expr)}
+	default:
+		return expr
+	}
 }
 
 // unwrapOutermostParenExpr removes the outermost ParenExpr if the expression is wrapped in one.
@@ -3517,8 +3584,21 @@ func sortAndDeduplicateValues(values []parser.Expr) []parser.Expr {
 	return uniqueValues
 }
 
+// normalizeCheckExprString returns a normalized string representation of a CHECK constraint expression
+// For PostgreSQL, this converts IN (a,b,c) to = ANY (ARRAY[a,b,c])
+func (g *Generator) normalizeCheckExprString(expr parser.Expr) string {
+	if g.mode == GeneratorModePostgres {
+		normalized := normalizeCheckExpr(expr, g.mode)
+		// Unwrap outermost parentheses for consistent output (comparison does this too)
+		normalized = unwrapOutermostParenExpr(normalized)
+		return parser.String(normalized)
+	}
+	return parser.String(expr)
+}
+
 // normalizeCheckExpr normalizes a CHECK constraint expression AST for comparison
-func normalizeCheckExpr(expr parser.Expr) parser.Expr {
+// mode parameter controls PostgreSQL-specific normalization (IN to ANY conversion)
+func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 	if expr == nil {
 		return nil
 	}
@@ -3527,28 +3607,28 @@ func normalizeCheckExpr(expr parser.Expr) parser.Expr {
 	case *parser.CastExpr:
 		// Remove casts to text or character varying
 		if e.Type != nil && (e.Type.Type == "text" || e.Type.Type == "character varying") {
-			return normalizeCheckExpr(e.Expr)
+			return normalizeCheckExpr(e.Expr, mode)
 		}
 		return &parser.CastExpr{
-			Expr: normalizeCheckExpr(e.Expr),
+			Expr: normalizeCheckExpr(e.Expr, mode),
 			Type: e.Type,
 		}
 	case *parser.ParenExpr:
-		normalized := normalizeCheckExpr(e.Expr)
+		normalized := normalizeCheckExpr(e.Expr, mode)
 		if paren, ok := normalized.(*parser.ParenExpr); ok {
 			return paren
 		}
-		// Unwrap parentheses around literals (numbers, strings, etc.)
-		// MSSQL adds unnecessary parens like (1) instead of 1
+		// Unwrap parentheses around simple expressions (literals, column names, etc.)
+		// MSSQL/PostgreSQL may add unnecessary parens like (1) instead of 1 or (name) instead of name
 		switch normalized.(type) {
-		case *parser.SQLVal:
+		case *parser.SQLVal, *parser.ColName:
 			return normalized
 		}
 		return &parser.ParenExpr{Expr: normalized}
 	case *parser.AndExpr:
 		// Normalize operands and unwrap unnecessary parentheses around them
-		left := normalizeCheckExpr(e.Left)
-		right := normalizeCheckExpr(e.Right)
+		left := normalizeCheckExpr(e.Left, mode)
+		right := normalizeCheckExpr(e.Right, mode)
 		// MySQL adds parentheses around each operand in AND chains, so unwrap them
 		left = unwrapOutermostParenExpr(left)
 		right = unwrapOutermostParenExpr(right)
@@ -3558,8 +3638,8 @@ func normalizeCheckExpr(expr parser.Expr) parser.Expr {
 		}
 	case *parser.OrExpr:
 		// Normalize operands and unwrap unnecessary parentheses around them
-		left := normalizeCheckExpr(e.Left)
-		right := normalizeCheckExpr(e.Right)
+		left := normalizeCheckExpr(e.Left, mode)
+		right := normalizeCheckExpr(e.Right, mode)
 		// MySQL adds parentheses around each operand in OR chains, so unwrap them
 		// Always safe to unwrap in OR chains since OR has the lowest precedence
 		left = unwrapOutermostParenExpr(left)
@@ -3577,15 +3657,108 @@ func normalizeCheckExpr(expr parser.Expr) parser.Expr {
 			Right: right,
 		}
 	case *parser.NotExpr:
-		return &parser.NotExpr{Expr: normalizeCheckExpr(e.Expr)}
+		return &parser.NotExpr{Expr: normalizeCheckExpr(e.Expr, mode)}
 	case *parser.ComparisonExpr:
-		left := normalizeCheckExpr(e.Left)
-		right := normalizeCheckExpr(e.Right)
-		op := normalizeOperator(e.Operator)
+		left := normalizeCheckExpr(e.Left, mode)
+		right := normalizeCheckExpr(e.Right, mode)
 
+		op := normalizeOperator(e.Operator)
+		anyFlag := e.Any
+		allFlag := e.All
+
+		// The generic parser may parse "= ANY(ARRAY[...])" as a FuncExpr on the right side
+		// We need to normalize this to set the Any/All flags properly
+		if funcExpr, ok := right.(*parser.FuncExpr); ok {
+			funcName := strings.ToUpper(funcExpr.Name.String())
+			if funcName == "ANY" || funcName == "SOME" {
+				// Convert "column = ANY(array)" to ComparisonExpr with Any=true
+				if len(funcExpr.Exprs) == 1 {
+					if aliased, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
+						right = normalizeCheckExpr(aliased.Expr, mode)
+						anyFlag = true
+					}
+				}
+			} else if funcName == "ALL" {
+				// Convert "column = ALL(array)" to ComparisonExpr with All=true
+				if len(funcExpr.Exprs) == 1 {
+					if aliased, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
+						right = normalizeCheckExpr(aliased.Expr, mode)
+						allFlag = true
+					}
+				}
+			}
+		}
+
+		// Unwrap ParenExpr from right side for ANY/ALL to ensure consistent formatting
+		// The parser may create ParenExpr(ArrayConstructor) which formats as ANY(ARRAY
+		// We want to normalize to ArrayConstructor directly which formats as ANY (ARRAY
+		if anyFlag || allFlag {
+			if parenExpr, ok := right.(*parser.ParenExpr); ok {
+				right = parenExpr.Expr
+			}
+		}
+
+		// Handle IN clauses based on mode
 		if op == "in" || op == "not in" {
 			if tuple, ok := right.(parser.ValTuple); ok {
-				right = parser.ValTuple(sortAndDeduplicateValues([]parser.Expr(tuple)))
+				if mode == GeneratorModePostgres {
+					// PostgreSQL normalizes IN (values) to = ANY (ARRAY[values])
+					tupleExprs := []parser.Expr(tuple)
+
+					// Convert ValTuple to ArrayConstructor
+					var elements parser.ArrayElements
+					for _, expr := range tupleExprs {
+						// Check if expr implements ArrayElement interface
+						if elem, ok := expr.(parser.ArrayElement); ok {
+							elements = append(elements, elem)
+						} else {
+							// Wrap in a compatible type if needed
+							elements = append(elements, expr.(parser.ArrayElement))
+						}
+					}
+
+					right = &parser.ArrayConstructor{
+						Elements: elements,
+					}
+
+					// Change operator and set ANY flag
+					if op == "in" {
+						op = "="
+						anyFlag = true
+					} else { // "not in"
+						op = "!="
+						anyFlag = true
+					}
+				} else {
+					// For other databases, keep IN but sort the tuple for consistent comparison
+					right = parser.ValTuple(sortAndDeduplicateValues([]parser.Expr(tuple)))
+				}
+			}
+		}
+
+		// For ANY/ALL expressions with ValTuple, sort and deduplicate
+		if (anyFlag || allFlag) && !e.Any && !e.All {
+			// This means we just set the flag above from IN conversion
+			// Already handled
+		} else if anyFlag || allFlag {
+			// Normalize existing ANY/ALL expressions (strip casts, preserve order)
+			if arrayConst, ok := right.(*parser.ArrayConstructor); ok {
+				// Normalize array elements (strip type casts) but preserve order
+				// Sorting is done during comparison, not during normalization for output
+				var elements parser.ArrayElements
+				for _, elem := range arrayConst.Elements {
+					if expr, ok := elem.(parser.Expr); ok {
+						// Recursively normalize to strip type casts
+						normalized := normalizeCheckExpr(expr, mode)
+						if normalizedElem, ok := normalized.(parser.ArrayElement); ok {
+							elements = append(elements, normalizedElem)
+						}
+					}
+				}
+
+				right = &parser.ArrayConstructor{
+					Elements: elements,
+				}
 			}
 		}
 
@@ -3593,46 +3766,48 @@ func normalizeCheckExpr(expr parser.Expr) parser.Expr {
 			Operator: op,
 			Left:     left,
 			Right:    right,
-			Escape:   normalizeCheckExpr(e.Escape),
-			All:      e.All,
-			Any:      e.Any,
+			Escape:   normalizeCheckExpr(e.Escape, mode),
+			All:      allFlag,
+			Any:      anyFlag,
 		}
 	case *parser.BinaryExpr:
 		return &parser.BinaryExpr{
 			Operator: e.Operator,
-			Left:     normalizeCheckExpr(e.Left),
-			Right:    normalizeCheckExpr(e.Right),
+			Left:     normalizeCheckExpr(e.Left, mode),
+			Right:    normalizeCheckExpr(e.Right, mode),
 		}
 	case *parser.UnaryExpr:
 		return &parser.UnaryExpr{
 			Operator: e.Operator,
-			Expr:     normalizeCheckExpr(e.Expr),
+			Expr:     normalizeCheckExpr(e.Expr, mode),
 		}
 	case *parser.FuncExpr:
 		normalizedExprs := parser.SelectExprs(util.TransformSlice([]parser.SelectExpr(e.Exprs), func(arg parser.SelectExpr) parser.SelectExpr {
 			if aliased, ok := arg.(*parser.AliasedExpr); ok {
 				return &parser.AliasedExpr{
-					Expr: normalizeCheckExpr(aliased.Expr),
+					Expr: normalizeCheckExpr(aliased.Expr, mode),
 					As:   aliased.As,
 				}
 			}
 			return arg
 		}))
+		// Normalize function name to lowercase (PostgreSQL convention)
+		funcName := parser.NewColIdent(strings.ToLower(e.Name.String()))
 		return &parser.FuncExpr{
 			Qualifier: e.Qualifier,
-			Name:      e.Name,
+			Name:      funcName,
 			Distinct:  e.Distinct,
 			Exprs:     normalizedExprs,
 			Over:      e.Over,
 		}
 	case *parser.ArrayConstructor:
 		normalizedElements := parser.ArrayElements(util.TransformSlice([]parser.ArrayElement(e.Elements), func(elem parser.ArrayElement) parser.ArrayElement {
-			if castExpr, ok := elem.(*parser.CastExpr); ok {
-				normalized := normalizeCheckExpr(castExpr)
+			// Normalize all array elements, not just CastExpr
+			if expr, ok := elem.(parser.Expr); ok {
+				normalized := normalizeCheckExpr(expr, mode)
 				if normalizedArrayElem, ok := normalized.(parser.ArrayElement); ok {
 					return normalizedArrayElem
 				}
-				return elem
 			}
 			return elem
 		}))
@@ -3640,18 +3815,18 @@ func normalizeCheckExpr(expr parser.Expr) parser.Expr {
 	case *parser.IsExpr:
 		return &parser.IsExpr{
 			Operator: e.Operator,
-			Expr:     normalizeCheckExpr(e.Expr),
+			Expr:     normalizeCheckExpr(e.Expr, mode),
 		}
 	case *parser.RangeCond:
 		return &parser.RangeCond{
 			Operator: e.Operator,
-			Left:     normalizeCheckExpr(e.Left),
-			From:     normalizeCheckExpr(e.From),
-			To:       normalizeCheckExpr(e.To),
+			Left:     normalizeCheckExpr(e.Left, mode),
+			From:     normalizeCheckExpr(e.From, mode),
+			To:       normalizeCheckExpr(e.To, mode),
 		}
 	case parser.ValTuple:
 		normalizedTuple := util.TransformSlice([]parser.Expr(e), func(elem parser.Expr) parser.Expr {
-			return normalizeCheckExpr(elem)
+			return normalizeCheckExpr(elem, mode)
 		})
 		return parser.ValTuple(normalizedTuple)
 	case *parser.ColName:

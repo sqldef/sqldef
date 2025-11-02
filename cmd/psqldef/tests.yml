@@ -597,7 +597,7 @@ CheckConstraint:
     ALTER TABLE "public"."test" ADD CONSTRAINT test_t1_check CHECK (t1 ~~ 'x');
     ALTER TABLE "public"."test" ADD CONSTRAINT test_t2_check CHECK (t2 !~~ 'x');
     ALTER TABLE "public"."test" ADD CONSTRAINT test_t3_check CHECK (t3 <> '');
-    ALTER TABLE "public"."test" ADD CONSTRAINT test_t4_check CHECK (t4::text ~ '[0-9]');
+    ALTER TABLE "public"."test" ADD CONSTRAINT test_t4_check CHECK (t4 ~ '[0-9]');
     ALTER TABLE "public"."test" ADD CONSTRAINT test_d1_check CHECK (d1 >= '2022-01-01');
     ALTER TABLE "public"."test" ADD CONSTRAINT test_d2_check CHECK (d2 >= '2022-01-01');
 

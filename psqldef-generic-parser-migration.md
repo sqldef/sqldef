@@ -6,7 +6,7 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Current Status
 
-- **DONE 1006 tests, 74 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
+- **DONE 1006 tests, 41 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
 
 ## Rules
 
@@ -34,19 +34,12 @@ Note: Many tests have multiple issues, so the counts overlap.
 
 ### Expression Normalization
 
-1. **CHECK constraints with IN/ANY/SOME/ALL** - Different representations not normalized
-   - PostgreSQL converts: `IN (1,2,3)` → `= ANY (ARRAY[1,2,3])`
-   - PostgreSQL preserves: `= SOME (ARRAY[...])`, `= ALL (ARRAY[...])`
-   - Generic parser outputs original form, causing mismatch
-   - Affects: ~15 tests including `ConstraintCheckInModify`, `ParseAllAnyCheckConstraint`, `SomeConstraintModificationsSomeToAll`
-   - Fix: Normalize all forms consistently or parse PostgreSQL's normalized form
-
-2. **Typed literal defaults** - Type prefix in default values
+1. **Typed literal defaults** - Type prefix in default values
    - PostgreSQL adds type prefix: `date '2024-01-01'` instead of `'2024-01-01'`
    - Affects: `TypedLiterals`, `TypedLiteralsChangeDefault`, `TypedLiteralsIdempotency`
    - Fix: Parse and normalize typed literals (date/time/timestamp prefixes)
 
-3. **EXCLUDE constraint normalization** - Missing USING clause or other parts
+2. **EXCLUDE constraint normalization** - Missing USING clause or other parts
    - Example: `EXCLUDE (name WITH =)` vs `EXCLUDE USING GIST (name WITH =)`
    - PostgreSQL adds default USING method
    - Affects: `ExcludeConstraintDropAndAdd`, `ExcludeConstraintChange`, `ExcludeConstraintWithAlterTable`
@@ -59,14 +52,6 @@ Note: Many tests have multiple issues, so the counts overlap.
    - Generic parser doesn't normalize to match PostgreSQL's output
    - Affects: ~8 tests including `ViewDDLsAreEmittedLastWithoutChangingDefinition`, `ViewWithGroupByAndHaving`, `CreateViewCast`
    - Fix: Either normalize views in generic parser or fetch normalized definition from database
-
-### Keyword Case Sensitivity
-
-1. **GRANT privilege keywords** - Case mismatch in output
-   - Expected: `GRANT SELECT ...` (uppercase)
-   - Actual: `GRANT select ...` (lowercase)
-   - Affects: `ManagedRolesSpecialCharacters` and ~12 other managed roles tests
-   - Fix: Normalize privilege keywords to uppercase in generator
 
 ### Auto-generated Constraint Names
 
@@ -135,25 +120,3 @@ Note: Many tests have multiple issues, so the counts overlap.
 5. **Default values in CREATE TABLE** - Not idempotent
    - Affects: `CreateTableWithDefault`
    - Fix: Normalize default value representation
-
-### Integration Test Failures
-
-All integration tests are failing due to the INFO log message being included in output:
-- `TestPsqldefBeforeApply`
-- `TestPsqldefConfigIncludesSkipTables`
-- `TestPsqldefConfigIncludesSkipViews`
-- `TestPsqldefConfigIncludesTargetSchema`
-- `TestPsqldefConfigIncludesTargetSchemaWithViews`
-- `TestPsqldefConfigIncludesTargetTables`
-- `TestPsqldefConfigInlineEnableDrop`
-- `TestPsqldefDropTable`
-- `TestPsqldefExport`
-- `TestPsqldefExportCompositePrimaryKey`
-- `TestPsqldefExportConcurrency`
-- `TestPsqldefIgnoreExtension`
-- `TestPsqldefReindexConcurrently`
-- `TestPsqldefSkipExtension`
-- `TestPsqldefSkipView`
-- `TestPsqldefTransactionBoundariesWithConcurrentIndex`
-
-Fix: Suppress INFO log when `PSQLDEF_PARSER=generic` is set, or update tests to expect the log message
