@@ -47,7 +47,7 @@ func NewParser() PostgresParser {
 func NewParserWithMode(mode PsqldefParserMode) PostgresParser {
 	if envParser := os.Getenv("PSQLDEF_PARSER"); envParser == "generic" {
 		mode = PsqldefParserModeGeneric
-		slog.Info("Using generic parser only mode (PSQLDEF_PARSER=generic)")
+		slog.Debug("Using generic parser only mode (PSQLDEF_PARSER=generic)")
 	}
 	return PostgresParser{
 		parser: database.NewParser(parser.ParserModePostgres),
