@@ -3868,11 +3868,11 @@ sql_id_opt:
 | sql_id
 
 sql_id_list:
-  sql_id
+  reserved_sql_id
   {
     $$ = []ColIdent{$1}
   }
-| sql_id_list ',' sql_id
+| sql_id_list ',' reserved_sql_id
   {
     $$ = append($1, $3)
   }
@@ -4218,16 +4218,11 @@ aliased_table_name:
   }
 
 column_list:
-  sql_id
+  reserved_sql_id
   {
     $$ = Columns{$1}
   }
-/* For PostgreSQL */
-| KEY
-  {
-    $$ = Columns{NewColIdent(string($1))}
-  }
-| column_list ',' sql_id
+| column_list ',' reserved_sql_id
   {
     $$ = append($$, $3)
   }

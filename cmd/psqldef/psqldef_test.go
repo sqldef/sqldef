@@ -1124,7 +1124,7 @@ func TestPsqldefYamlGenericParser(t *testing.T) {
 				t.Run("current", func(t *testing.T) {
 					stmts, err := sqlParser.Parse(testCase.Current)
 					if err != nil {
-						t.Skipf("Failed to parse 'current' schema: %v\nSQL:\n%s", err, testCase.Current)
+						t.Errorf("Failed to parse 'current' schema: %v\nSQL:\n%s", err, testCase.Current)
 						return
 					}
 					if len(stmts) == 0 {
@@ -1138,7 +1138,7 @@ func TestPsqldefYamlGenericParser(t *testing.T) {
 				t.Run("desired", func(t *testing.T) {
 					stmts, err := sqlParser.Parse(testCase.Desired)
 					if err != nil {
-						t.Skipf("Failed to parse 'desired' schema: %v\nSQL:\n%s", err, testCase.Desired)
+						t.Errorf("Failed to parse 'desired' schema: %v\nSQL:\n%s", err, testCase.Desired)
 						return
 					}
 					if len(stmts) == 0 {
