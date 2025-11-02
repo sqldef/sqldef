@@ -4012,7 +4012,7 @@ func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB Forei
 			return false
 		}
 	}
-	// TODO: check index, reference
+
 	return true
 }
 

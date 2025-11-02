@@ -293,6 +293,67 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		columns[parsedCol.Name.String()] = &column
 	}
 
+	// Convert inline foreign key references to ForeignKey objects
+	// This handles syntax like: column_name TYPE REFERENCES table_name(column_name)
+	// Note: We only convert when reference columns are explicitly specified.
+	// If not specified (e.g., "REFERENCES table_name"), we leave it as-is
+	// for the database-specific parser to handle (it will infer the primary key).
+	for _, parsedCol := range stmt.TableSpec.Columns {
+		// Skip if no inline foreign key reference or if it's missing column names
+		// (empty ReferenceNames means it will use the primary key, which is database-specific)
+		if parsedCol.Type.References == "" || len(parsedCol.Type.ReferenceNames) == 0 {
+			continue
+		}
+
+		column := columns[parsedCol.Name.String()]
+
+		// Build the foreign key object
+		indexColumns := []string{parsedCol.Name.String()}
+
+		// Extract reference column names
+		referenceColumns := []string{}
+		for _, refCol := range parsedCol.Type.ReferenceNames {
+			referenceColumns = append(referenceColumns, refCol.String())
+		}
+
+		// Generate constraint name if not explicitly provided
+		// Follow PostgreSQL's convention: tablename_columnname_fkey
+		constraintName := fmt.Sprintf("%s_%s_fkey", stmt.NewName.Name.String(), parsedCol.Name.String())
+
+		var constraintOptions *ConstraintOptions
+		if parsedCol.Type.ReferenceDeferrable != nil || parsedCol.Type.ReferenceInitDeferred != nil {
+			deferrable := false
+			if parsedCol.Type.ReferenceDeferrable != nil {
+				deferrable = castBool(*parsedCol.Type.ReferenceDeferrable)
+			}
+			initiallyDeferred := false
+			if parsedCol.Type.ReferenceInitDeferred != nil {
+				initiallyDeferred = castBool(*parsedCol.Type.ReferenceInitDeferred)
+			}
+			constraintOptions = &ConstraintOptions{
+				deferrable:        deferrable,
+				initiallyDeferred: initiallyDeferred,
+			}
+		}
+
+		foreignKey := ForeignKey{
+			constraintName:    constraintName,
+			indexColumns:      indexColumns,
+			referenceName:     normalizedTableName(mode, parser.TableName{Name: parser.NewTableIdent(parsedCol.Type.References)}, defaultSchema),
+			referenceColumns:  referenceColumns,
+			onDelete:          parser.String(parsedCol.Type.ReferenceOnDelete),
+			onUpdate:          parser.String(parsedCol.Type.ReferenceOnUpdate),
+			constraintOptions: constraintOptions,
+		}
+		foreignKeys = append(foreignKeys, foreignKey)
+
+		// Clear the references field from the column since it's now represented as a foreign key
+		// This prevents it from being used for type qualification
+		column.references = ""
+		column.referenceDeferrable = nil
+		column.referenceInitiallyDeferred = nil
+	}
+
 	for _, indexDef := range stmt.TableSpec.Indexes {
 		indexColumns := []IndexColumn{}
 		for _, column := range indexDef.Columns {
