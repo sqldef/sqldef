@@ -75,6 +75,8 @@ make test # it will take 5 minutes to run
 
 ### Run tests for specific `*def` tools
 
+The test runner is `gotestsum`, which is a wrapper around `go test` that provides a more readable output.
+
 ```sh
 go test ./cmd/mysqldef
 go test ./cmd/psqldef
