@@ -17,7 +17,6 @@ import (
 	tu "github.com/sqldef/sqldef/v3/cmd/testutils"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/database/postgres"
-	"github.com/sqldef/sqldef/v3/parser"
 	"github.com/sqldef/sqldef/v3/schema"
 )
 
@@ -1115,18 +1114,21 @@ func TestPsqldefYamlGenericParser(t *testing.T) {
 		t.Fatalf("Failed to read psqldef YAML tests: %v", err)
 	}
 
+	// Use the generic parser (not pgquery)
+	sqlParser := postgres.NewParserWithMode(postgres.PsqldefParserModeGeneric)
+
 	for name, testCase := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Test parsing the 'current' schema if present
 			if testCase.Current != "" {
 				t.Run("current", func(t *testing.T) {
-					stmt, err := parser.ParseDDL(testCase.Current, parser.ParserModePostgres)
+					stmts, err := sqlParser.Parse(testCase.Current)
 					if err != nil {
 						t.Skipf("Failed to parse 'current' schema: %v\nSQL:\n%s", err, testCase.Current)
 						return
 					}
-					if stmt == nil {
-						t.Errorf("ParseDDL returned nil statement for 'current' schema\nSQL:\n%s", testCase.Current)
+					if len(stmts) == 0 {
+						t.Errorf("Parse returned no statements for 'current' schema\nSQL:\n%s", testCase.Current)
 					}
 				})
 			}
@@ -1134,13 +1136,13 @@ func TestPsqldefYamlGenericParser(t *testing.T) {
 			// Test parsing the 'desired' schema if present
 			if testCase.Desired != "" {
 				t.Run("desired", func(t *testing.T) {
-					stmt, err := parser.ParseDDL(testCase.Desired, parser.ParserModePostgres)
+					stmts, err := sqlParser.Parse(testCase.Desired)
 					if err != nil {
 						t.Skipf("Failed to parse 'desired' schema: %v\nSQL:\n%s", err, testCase.Desired)
 						return
 					}
-					if stmt == nil {
-						t.Errorf("ParseDDL returned nil statement for 'desired' schema\nSQL:\n%s", testCase.Desired)
+					if len(stmts) == 0 {
+						t.Errorf("Parse returned no statements for 'desired' schema\nSQL:\n%s", testCase.Desired)
 					}
 				})
 			}

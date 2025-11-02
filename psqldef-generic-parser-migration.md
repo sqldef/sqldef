@@ -2,75 +2,130 @@
 
 ## Goal
 
-We are implementing all SQL dialects in the generic parser. Once the migration is complete, we will discard the `pgquery` parser.
+We are implementing PostgreSQL syntaxes in the generic parser. Once the migration is complete, we will discard the `pgquery` parser.
 
 ## Current Status
 
-- **663/678 parser tests passing** (97.8% success rate)
-- **0 reduce/reduce conflicts** ✓
-- **38 shift/reduce conflicts** (baseline maintained) ✓
-- **All command tests passing** ✓ (mysqldef, psqldef, sqlite3def, mssqldef)
+- **690 tests PASSING, 8 tests SKIPPED** (98.9% success rate)
+- **5 unique test cases** affected by genuine parser limitations
+- **0 reduce/reduce conflicts**
+- **38 shift/reduce conflicts** (baseline maintained)
 
 ## Running Tests
 
 ```sh
-go test ./parser         # Run parser tests only
-make test                # Run all tests (takes ~5 minutes)
+# Run parser tests only
+go run gotest.tools/gotestsum@latest ./cmd/psqldef -run TestPsqldefYamlGenericParser
+
+# Run all tests (takes ~5 minutes)
+make test
 ```
 
-## Failing Tests (15 failures in 6 test scenarios)
+## Rules
 
-The following tests are still failing and represent features not yet fully supported:
-- **CreateTableWithDefault** - Complex default expressions with type casts (e.g., `''::character varying`)
-- **ChangeDefaultExpressionWithAddition** - Default expressions with arithmetic operations (e.g., `DEFAULT 1 + 1`)
-- **ForeignKeyOnReservedName** - Foreign keys referencing reserved word columns
-- **NumericCast** - Numeric type casting expressions
-- **CreateIndexWithCoalesce** - Index expressions with COALESCE function
-- **CreateTableWithConstraintOptions** - Constraint options like DEFERRABLE
-
-**Note:** Adding support for type casts and arithmetic operations in default expressions creates significant grammar conflicts (337 reduce/reduce conflicts). These features would require major parser refactoring to implement without conflicts. Since the generic parser must support multiple SQL dialects and `psqldef` primarily uses `go-pgquery` anyway, these PostgreSQL-specific features remain unsupported in the generic parser.
-
-## Remaining Features to Implement
-
-### 1. PostgreSQL-specific data types
-- Arrays with bracket syntax: `INTEGER[]`, `TEXT[][]` (array type definitions)
-
-### 2. Advanced constraints
-- Constraint options: `DEFERRABLE`, `INITIALLY DEFERRED`
-- `NO INHERIT` on constraints (partial support)
-- CHECK constraints with IN operator
-
-### 3. Advanced expressions and operators
-- Operator classes in indexes (e.g., `text_pattern_ops`)
-- Complex default expressions with operators
-- PostgreSQL-specific operators in WHERE clauses
-- Index expressions with functions (e.g., `COALESCE`)
-- String literals with type casts in parentheses (e.g., `('text'::varchar)`)
-
-### 4. GRANT/REVOKE edge cases
-- CASCADE/RESTRICT options on REVOKE
-
-### 5. Other PostgreSQL features
-- Views with complex CASE/WHEN expressions
-- Specialized index types and options
-- Reserved words as identifiers in more contexts
-
-## Implementation Constraints
-
-### Parser Conflict Requirements
 - **Must maintain zero reduce/reduce conflicts** for parser correctness
 - **Must maintain baseline of 38 shift/reduce conflicts** to avoid regressions
-- Careful rule refactoring can often avoid conflict increases when adding new features
-
-### Trade-offs
-Some PostgreSQL-specific features have implementation constraints:
-- **Parenthesized expressions with type casts** (e.g., `('text')::varchar`) cannot be supported in DEFAULT expressions without introducing hundreds of reduce/reduce conflicts. The parser's `default_expression` rule is intentionally limited to avoid grammar ambiguities. This affects tests like CreateTableWithDefault that use `''::character varying` syntax.
-- **Arithmetic operations in DEFAULT expressions** similarly create significant conflicts when added to the generic parser
-- Complex operator precedence can create ambiguities
 
 ## Notes
-- The generic parser is primarily a fallback - `psqldef` uses `go-pgquery` by default
+
+- The generic parser is a fallback - `psqldef` uses `pgquery` by default
 - Use `PSQLDEF_PARSER=generic` environment variable to force generic parser
-- The parser must maintain zero reduce/reduce conflicts for correctness
-- Shift/reduce conflicts should stay at baseline (38) to avoid regressions
-- Keep the document up to date
+- Keep this document up to date
+
+## Remaining Tasks
+
+The analysis below is based on 8 skipped tests affecting 5 unique test cases.
+
+### Remaining Parser Limitations (1.1% of tests)
+
+#### 1. Chained Type Casts (1 test case)
+
+**Problem:** PostgreSQL allows `value::type1::type2` but parser doesn't support it.
+
+**Error Pattern:** `syntax error at line N, column M near '::'`
+
+**Example:**
+```sql
+CREATE TABLE users (
+  default_date_text text DEFAULT CURRENT_TIMESTAMP::date::text
+);
+```
+
+**Tests affected:**
+- CreateTableWithDefault (1 test)
+
+#### 2. Arithmetic Expressions in DEFAULT (1 test case)
+
+**Problem:** Parser doesn't support arithmetic operations like `+` in DEFAULT expressions.
+
+**Error Pattern:** `syntax error at DEFAULT (CURRENT_TIMESTAMP + '1 day'::interval)`
+
+**Example:**
+```sql
+CREATE TABLE foo (
+  expires_at timestamp DEFAULT (CURRENT_TIMESTAMP + '1 day'::interval)
+);
+```
+
+**Tests affected:**
+- ChangeDefaultExpressionWithAddition (2 tests: current + desired)
+
+#### 3. COALESCE in Index Expressions (1 test case)
+
+**Problem:** Parser doesn't support function calls like COALESCE in CREATE INDEX expressions.
+
+**Error Pattern:** `syntax error in CREATE INDEX ... (COALESCE(...))`
+
+**Example:**
+```sql
+CREATE INDEX idx ON users (name, COALESCE(user_name, 'NO_NAME'::TEXT));
+```
+
+**Tests affected:**
+- CreateIndexWithCoalesce (1 test)
+
+#### 4. Type Cast to Numeric (1 test case)
+
+**Problem:** Parser doesn't support casting to `numeric` type in expressions.
+
+**Error Pattern:** `syntax error near '::numeric'`
+
+**Example:**
+```sql
+CREATE VIEW v AS SELECT * FROM t WHERE (t.item = (0)::numeric);
+```
+
+**Tests affected:**
+- NumericCast (1 test)
+
+#### 5. Reserved Word "variables" as Table Name (1 test case)
+
+**Problem:** Parser treats `variables` as a reserved keyword instead of allowing it as a table name.
+
+**Error Pattern:** `syntax error near 'variables'`
+
+**Example:**
+```sql
+CREATE TABLE IF NOT EXISTS variables (
+  id VARCHAR(100) PRIMARY KEY
+);
+```
+
+**Tests affected:**
+- ForeignKeyOnReservedName (1 test)
+
+#### 6. DEFERRABLE INITIALLY IMMEDIATE (1 test case)
+
+**Problem:** Parser doesn't support `DEFERRABLE INITIALLY IMMEDIATE` constraint options on inline foreign key references.
+
+**Error Pattern:** `syntax error near 'deferrable'`
+
+**Example:**
+```sql
+CREATE TABLE bindings (
+  image_id INT REFERENCES images(id) ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE
+);
+```
+
+**Tests affected:**
+- CreateTableWithConstraintOptions (2 tests: current + desired)
