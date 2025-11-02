@@ -6,7 +6,7 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Current Status
 
-- **709 tests PASSING, 6 tests SKIPPED** (99.2% success rate for generic parser tests)
+- **708 tests PASSING, 5 tests SKIPPED** (99.3% success rate for generic parser tests)
 - **3 unique test cases** affected by genuine parser limitations
 - **0 reduce/reduce conflicts**
 - **38 shift/reduce conflicts** (baseline)
@@ -33,8 +33,6 @@ make test
 - Keep this document up to date
 
 ## Remaining Tasks
-
-The analysis below is based on remaining skipped tests affecting 3 unique test cases.
 
 ### Remaining Parser Limitations
 
@@ -91,21 +89,7 @@ This design creates an inherent conflict when trying to add arithmetic operators
 
 **Decision:** This syntax remains unsupported in the generic parser. Users needing this feature should rely on the pgquery parser (default for psqldef).
 
-#### 2. Type Cast to Numeric (1 test case)
-
-**Problem:** Parser doesn't support casting to `numeric` type in expressions.
-
-**Error Pattern:** `syntax error near '::numeric'`
-
-**Example:**
-```sql
-CREATE VIEW v AS SELECT * FROM t WHERE (t.item = (0)::numeric);
-```
-
-**Tests affected:**
-- NumericCast (1 test)
-
-#### 3. Reserved Word "variables" as Table Name (1 test case)
+#### 2. Reserved Word "variables" as Table Name (1 test case)
 
 **Problem:** Parser treats `variables` as a reserved keyword instead of allowing it as a table name.
 
@@ -121,7 +105,7 @@ CREATE TABLE IF NOT EXISTS variables (
 **Tests affected:**
 - ForeignKeyOnReservedName (1 test)
 
-#### 4. DEFERRABLE INITIALLY IMMEDIATE (1 test case)
+#### 3. DEFERRABLE INITIALLY IMMEDIATE (1 test case)
 
 **Problem:** Parser doesn't support `DEFERRABLE INITIALLY IMMEDIATE` constraint options on inline foreign key references.
 

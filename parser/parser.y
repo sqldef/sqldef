@@ -5075,6 +5075,14 @@ simple_convert_type:
   {
     $$ = &ConvertType{Type: string($1)}
   }
+| NUMERIC
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| DECIMAL
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
 | NUMERIC '(' INTEGRAL ',' INTEGRAL ')'
   {
     $$ = &ConvertType{Type: string($1), Length: NewIntVal($3), Scale: NewIntVal($5)}
