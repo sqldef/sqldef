@@ -2197,7 +2197,38 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 			ddl += strings.ToUpper(index.indexType)
 		}
 		if !index.primary {
-			ddl += fmt.Sprintf(" %s", g.escapeSQLName(index.name))
+			constraintName := index.name
+			// Auto-generate PostgreSQL-style constraint name for single-column UNIQUE constraints
+			// PostgreSQL naming convention: tablename_columnname_key
+			if isUniqueConstraint && len(index.columns) == 1 {
+				// Extract simple table name without schema prefix for naming
+				simpleTableName := table
+				if strings.Contains(table, ".") {
+					parts := strings.Split(table, ".")
+					simpleTableName = strings.Trim(parts[len(parts)-1], "\"")
+				} else {
+					simpleTableName = strings.Trim(table, "\"")
+				}
+				columnName := index.columns[0].ColumnName()
+				expectedName := fmt.Sprintf("%s_%s_key", simpleTableName, columnName)
+
+				// If the current name is just the column name (common with generic parser),
+				// replace it with the PostgreSQL convention
+				if constraintName == columnName {
+					slog.Debug("Auto-generating PostgreSQL UNIQUE constraint name",
+						"table", table,
+						"column", columnName,
+						"original_name", constraintName,
+						"generated_name", expectedName)
+					constraintName = expectedName
+				} else {
+					slog.Debug("Using existing UNIQUE constraint name",
+						"table", table,
+						"column", columnName,
+						"constraint_name", constraintName)
+				}
+			}
+			ddl += fmt.Sprintf(" %s", g.escapeSQLName(constraintName))
 		}
 		if isUniqueConstraint {
 			ddl += " UNIQUE"

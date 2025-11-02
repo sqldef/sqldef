@@ -346,8 +346,21 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		name := indexDef.Info.Name.String()
-		if name == "" { // For MySQL
-			name = indexColumns[0].ColumnName()
+		if name == "" {
+			// Auto-generate index/constraint name based on database conventions
+			tableName := stmt.Table.Name.String()
+			if tableName == "" {
+				tableName = stmt.NewName.Name.String()
+			}
+			columnName := indexColumns[0].ColumnName()
+
+			// PostgreSQL UNIQUE constraint naming convention: tablename_columnname_key
+			if mode == GeneratorModePostgres && indexDef.Info.Unique && len(indexColumns) == 1 {
+				name = fmt.Sprintf("%s_%s_key", tableName, columnName)
+			} else {
+				// For MySQL or multi-column constraints, use just the column name
+				name = columnName
+			}
 		}
 
 		var constraintOptions *ConstraintOptions
@@ -533,7 +546,12 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		for _, indexColumn := range indexColumns {
 			name += fmt.Sprintf("_%s", indexColumn.ColumnName())
 		}
-		name += "_idx"
+		// Use PostgreSQL naming convention for UNIQUE constraints
+		if mode == GeneratorModePostgres && stmt.IndexSpec.Unique && len(indexColumns) == 1 {
+			name += "_key"
+		} else {
+			name += "_idx"
+		}
 	}
 
 	// Extract index comments and look for @renamed annotation
