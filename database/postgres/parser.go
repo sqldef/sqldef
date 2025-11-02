@@ -70,6 +70,7 @@ func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
 		// If go_pgquery fails (e.g., due to DSQL-specific syntax like ASYNC),
 		// fallback to the generic parser which supports extended syntax
 		if p.mode == PsqldefParserModeAuto {
+			slog.Debug("Falling back to generic parser", "sql", sql, "error", err.Error())
 			return p.parser.Parse(sql)
 		}
 		return nil, err
