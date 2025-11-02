@@ -334,3 +334,64 @@ TypedLiterals:
     ALTER TABLE `events` ADD COLUMN `event_date` date DEFAULT(date '2024-01-01') AFTER `id`;
     ALTER TABLE `events` ADD COLUMN `event_time` time DEFAULT(time '12:00:00') AFTER `event_date`;
     ALTER TABLE `events` ADD COLUMN `event_timestamp` timestamp DEFAULT(timestamp '2024-01-01 12:00:00') AFTER `event_time`;
+TypedLiteralsIdempotency:
+  current: |
+    CREATE TABLE events (
+      id int NOT NULL AUTO_INCREMENT,
+      event_date date DEFAULT '2024-01-01',
+      event_time time DEFAULT '12:00:00',
+      event_timestamp timestamp DEFAULT '2024-01-01 12:00:00',
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE events (
+      id int NOT NULL AUTO_INCREMENT,
+      event_date date DEFAULT DATE '2024-01-01',
+      event_time time DEFAULT TIME '12:00:00',
+      event_timestamp timestamp DEFAULT TIMESTAMP '2024-01-01 12:00:00',
+      PRIMARY KEY (id)
+    );
+  output: |
+    ALTER TABLE `events` CHANGE COLUMN `event_date` `event_date` date DEFAULT(date '2024-01-01');
+    ALTER TABLE `events` CHANGE COLUMN `event_time` `event_time` time DEFAULT(time '12:00:00');
+    ALTER TABLE `events` CHANGE COLUMN `event_timestamp` `event_timestamp` timestamp DEFAULT(timestamp '2024-01-01 12:00:00');
+TypedLiteralsChangeDefault:
+  current: |
+    CREATE TABLE events (
+      id int NOT NULL AUTO_INCREMENT,
+      event_date date DEFAULT '2024-01-01',
+      event_time time DEFAULT '12:00:00',
+      event_timestamp timestamp DEFAULT '2024-01-01 12:00:00',
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE events (
+      id int NOT NULL AUTO_INCREMENT,
+      event_date date DEFAULT DATE '2024-12-31',
+      event_time time DEFAULT TIME '23:59:59',
+      event_timestamp timestamp DEFAULT TIMESTAMP '2024-12-31 23:59:59',
+      PRIMARY KEY (id)
+    );
+  output: |
+    ALTER TABLE `events` CHANGE COLUMN `event_date` `event_date` date DEFAULT(date '2024-12-31');
+    ALTER TABLE `events` CHANGE COLUMN `event_time` `event_time` time DEFAULT(time '23:59:59');
+    ALTER TABLE `events` CHANGE COLUMN `event_timestamp` `event_timestamp` timestamp DEFAULT(timestamp '2024-12-31 23:59:59');
+TypedLiteralsInCheck:
+  current: |
+    CREATE TABLE events (
+      id int NOT NULL AUTO_INCREMENT,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE events (
+      id int NOT NULL AUTO_INCREMENT,
+      event_date date,
+      event_end_date date,
+      PRIMARY KEY (id),
+      CONSTRAINT chk_date_range CHECK (event_date >= DATE '2020-01-01' AND event_end_date <= DATE '2030-12-31')
+    );
+  output: |
+    ALTER TABLE `events` ADD COLUMN `event_date` date AFTER `id`;
+    ALTER TABLE `events` ADD COLUMN `event_end_date` date AFTER `event_date`;
+    ALTER TABLE `events` ADD CONSTRAINT `chk_date_range` CHECK (event_date >= date '2020-01-01' and event_end_date <= date '2030-12-31');
+  min_version: '8.0.16'

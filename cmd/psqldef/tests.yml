@@ -3419,4 +3419,55 @@ TypedLiterals:
     ALTER TABLE "public"."events" ADD COLUMN "event_date" date DEFAULT '2024-01-01';
     ALTER TABLE "public"."events" ADD COLUMN "event_time" time DEFAULT '12:00:00';
     ALTER TABLE "public"."events" ADD COLUMN "event_timestamp" timestamp DEFAULT '2024-01-01 12:00:00';
+TypedLiteralsIdempotency:
+  current: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      event_date date DEFAULT DATE '2024-01-01',
+      event_time time DEFAULT TIME '12:00:00',
+      event_timestamp timestamp DEFAULT TIMESTAMP '2024-01-01 12:00:00'
+    );
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      event_date date DEFAULT DATE '2024-01-01',
+      event_time time DEFAULT TIME '12:00:00',
+      event_timestamp timestamp DEFAULT TIMESTAMP '2024-01-01 12:00:00'
+    );
+  output: ""
+TypedLiteralsChangeDefault:
+  current: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      event_date date DEFAULT DATE '2024-01-01',
+      event_time time DEFAULT TIME '12:00:00',
+      event_timestamp timestamp DEFAULT TIMESTAMP '2024-01-01 12:00:00'
+    );
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      event_date date DEFAULT DATE '2024-12-31',
+      event_time time DEFAULT TIME '23:59:59',
+      event_timestamp timestamp DEFAULT TIMESTAMP '2024-12-31 23:59:59'
+    );
+  output: |
+    ALTER TABLE "public"."events" ALTER COLUMN "event_date" SET DEFAULT '2024-12-31';
+    ALTER TABLE "public"."events" ALTER COLUMN "event_time" SET DEFAULT '23:59:59';
+    ALTER TABLE "public"."events" ALTER COLUMN "event_timestamp" SET DEFAULT '2024-12-31 23:59:59';
+TypedLiteralsInCheckWithCast:
+  current: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY
+    );
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      event_date date CHECK (event_date >= '2020-01-01'::date),
+      event_time time CHECK (event_time >= time '09:00:00'),
+      event_end_date date CHECK (event_end_date <= DATE '2030-12-31')
+    );
+  output: |
+    ALTER TABLE "public"."events" ADD COLUMN "event_date" date CHECK (event_date >= '2020-01-01');
+    ALTER TABLE "public"."events" ADD COLUMN "event_time" time CHECK (event_time >= '09:00:00'::time);
+    ALTER TABLE "public"."events" ADD COLUMN "event_end_date" date CHECK (event_end_date <= '2030-12-31');
 
