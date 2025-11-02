@@ -359,6 +359,7 @@ func forceEOF(yylex any) {
 %type <optVal> length_opt max_length_opt current_timestamp
 %type <str> charset_opt collate_opt
 %type <boolVal> unsigned_opt zero_fill_opt array_opt time_zone_opt
+%type <empty> array_brackets
 %type <LengthScaleOption> float_length_opt decimal_length_opt
 %type <strs> enum_values
 %type <columnDefinition> column_definition
@@ -3236,13 +3237,24 @@ array_opt:
   {
     $$ = BoolVal(false)
   }
-| '[' ']'
+| array_brackets
   {
     $$ = BoolVal(true)
   }
 | ARRAY
   {
     $$ = BoolVal(true)
+  }
+
+/* Handles [], [][], [][][], etc. - PostgreSQL treats all as equivalent */
+array_brackets:
+  '[' ']'
+  {
+    $$ = struct{}{}
+  }
+| array_brackets '[' ']'
+  {
+    $$ = struct{}{}
   }
 
 charset_opt:
@@ -5636,7 +5648,11 @@ array_constructor:
 
 /* For PostgreSQL */
 array_element_list:
-  array_element
+  /* empty - allows ARRAY[] */
+  {
+    $$ = nil
+  }
+| array_element
   {
     $$ = ArrayElements{$1}
   }
@@ -5658,6 +5674,22 @@ array_element:
 | FLOAT
   {
     $$ = NewFloatVal($1)
+  }
+| current_timestamp
+  {
+    $$ = $1
+  }
+| current_timestamp TYPECAST simple_convert_type array_opt
+  {
+    t := $3
+    if $4 {
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+    }
+    $$ = &CastExpr{Expr: $1, Type: t}
+  }
+| variadic_opt array_constructor
+  {
+    $$ = $2
   }
 
 bool_option_name_list:

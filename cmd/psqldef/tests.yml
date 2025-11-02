@@ -3471,3 +3471,78 @@ TypedLiteralsInCheckWithCast:
     ALTER TABLE "public"."events" ADD COLUMN "event_time" time CHECK (event_time >= '09:00:00'::time);
     ALTER TABLE "public"."events" ADD COLUMN "event_end_date" date CHECK (event_end_date <= '2030-12-31');
 
+# Multi-dimensional array support
+CreateTableWithMultiDimensionalArrays:
+  desired: |
+    CREATE TABLE matrices (
+      id serial PRIMARY KEY,
+      matrix_2d int[][],
+      matrix_3d text[][][],
+      coords double precision[][]
+    );
+
+AddMultiDimensionalArrayColumn:
+  current: |
+    CREATE TABLE matrices (
+      id serial PRIMARY KEY
+    );
+  desired: |
+    CREATE TABLE matrices (
+      id serial PRIMARY KEY,
+      matrix_2d int[][]
+    );
+  output: |
+    ALTER TABLE "public"."matrices" ADD COLUMN "matrix_2d" integer[];
+
+MultiDimensionalArrayWithDefaultEmpty:
+  desired: |
+    CREATE TABLE matrices (
+      id serial PRIMARY KEY,
+      matrix_2d int[][] DEFAULT ARRAY[]::int[],
+      matrix_3d text[][][] DEFAULT ARRAY[]::text[]
+    );
+
+MultiDimensionalArrayWithNestedConstructor:
+  desired: |
+    CREATE TABLE matrices (
+      id serial PRIMARY KEY,
+      matrix_2d int[][] DEFAULT ARRAY[ARRAY[1, 2], ARRAY[3, 4]]
+    );
+
+ChangeMultiDimensionalArrayDefault:
+  current: |
+    CREATE TABLE matrices (
+      id serial PRIMARY KEY,
+      matrix_2d int[][] DEFAULT ARRAY[]::int[]
+    );
+  desired: |
+    CREATE TABLE matrices (
+      id serial PRIMARY KEY,
+      matrix_2d int[][] DEFAULT ARRAY[ARRAY[1, 2]]
+    );
+  output: |
+    ALTER TABLE "public"."matrices" ALTER COLUMN "matrix_2d" SET DEFAULT ARRAY[ARRAY[1, 2]];
+
+# PostgreSQL treats int[], int[][], int[][][] all as int[] internally
+MultiDimensionalArrayEquivalence1D2D:
+  current: |
+    CREATE TABLE test (
+      arr int[]
+    );
+  desired: |
+    CREATE TABLE test (
+      arr int[][]
+    );
+  output: ""
+
+MultiDimensionalArrayEquivalence2D3D:
+  current: |
+    CREATE TABLE test (
+      arr int[][]
+    );
+  desired: |
+    CREATE TABLE test (
+      arr int[][][]
+    );
+  output: ""
+

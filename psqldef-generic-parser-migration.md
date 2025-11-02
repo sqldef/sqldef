@@ -6,8 +6,8 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Current Status
 
-- **690 tests PASSING, 8 tests SKIPPED** (98.9% success rate for generic parser tests)
-- **5 unique test cases** affected by genuine parser limitations
+- **708 tests PASSING, 7 tests SKIPPED** (99.0% success rate for generic parser tests)
+- **4 unique test cases** affected by genuine parser limitations
 - **0 reduce/reduce conflicts**
 - **38 shift/reduce conflicts** (baseline)
 
@@ -38,32 +38,7 @@ The analysis below is based on remaining skipped tests affecting 4 unique test c
 
 ### Remaining Parser Limitations
 
-#### 1. Chained Type Casts (1 test case) - ✅ PARTIALLY FIXED
-
-**Status:** Chained type casts now work (e.g., `CURRENT_TIMESTAMP::date::text`), but the test remains skipped due to unrelated issues with ARRAY constructors in the same test case.
-
-**What works:**
-```sql
--- This now parses successfully ✅
-CREATE TABLE users (
-  default_date_text text DEFAULT CURRENT_TIMESTAMP::date::text
-);
-```
-
-**What still fails (unrelated issue):**
-```sql
--- ARRAY constructors in DEFAULT not yet supported
-CREATE TABLE users (
-  arr int[] DEFAULT ARRAY[]::int[]
-);
-```
-
-**Implementation:** Modified `default_expression` grammar in `parser/parser.y` (lines 2696-2715) to support recursive type casting.
-
-**Tests affected:**
-- CreateTableWithDefault (1 test - still skipped due to ARRAY constructor issue)
-
-#### 2. Arithmetic Expressions in DEFAULT (1 test case) - ❌ BLOCKED
+#### 1. Arithmetic Expressions in DEFAULT (1 test case) - ❌ BLOCKED
 
 **Status:** Cannot be implemented without violating grammar conflict constraints.
 
@@ -116,7 +91,7 @@ This design creates an inherent conflict when trying to add arithmetic operators
 
 **Decision:** This syntax remains unsupported in the generic parser. Users needing this feature should rely on the pgquery parser (default for psqldef).
 
-#### 3. COALESCE in Index Expressions (1 test case)
+#### 2. COALESCE in Index Expressions (1 test case)
 
 **Problem:** Parser doesn't support function calls like COALESCE in CREATE INDEX expressions.
 
@@ -130,7 +105,7 @@ CREATE INDEX idx ON users (name, COALESCE(user_name, 'NO_NAME'::TEXT));
 **Tests affected:**
 - CreateIndexWithCoalesce (1 test)
 
-#### 4. Type Cast to Numeric (1 test case)
+#### 3. Type Cast to Numeric (1 test case)
 
 **Problem:** Parser doesn't support casting to `numeric` type in expressions.
 
@@ -144,7 +119,7 @@ CREATE VIEW v AS SELECT * FROM t WHERE (t.item = (0)::numeric);
 **Tests affected:**
 - NumericCast (1 test)
 
-#### 5. Reserved Word "variables" as Table Name (1 test case)
+#### 4. Reserved Word "variables" as Table Name (1 test case)
 
 **Problem:** Parser treats `variables` as a reserved keyword instead of allowing it as a table name.
 
@@ -160,7 +135,7 @@ CREATE TABLE IF NOT EXISTS variables (
 **Tests affected:**
 - ForeignKeyOnReservedName (1 test)
 
-#### 6. DEFERRABLE INITIALLY IMMEDIATE (1 test case)
+#### 5. DEFERRABLE INITIALLY IMMEDIATE (1 test case)
 
 **Problem:** Parser doesn't support `DEFERRABLE INITIALLY IMMEDIATE` constraint options on inline foreign key references.
 
