@@ -1,52 +1,8 @@
 package parser
 
 import (
-	"bytes"
-	"os"
-	"path/filepath"
 	"testing"
-
-	"github.com/goccy/go-yaml"
 )
-
-// TestCase represents a test case from the psqldef YAML files
-type TestCase struct {
-	Current string // Current schema state
-	Desired string // Desired schema state
-	// Other fields are not needed for this test
-}
-
-// readPsqldefTests reads all psqldef YAML test files
-func readPsqldefTests() (map[string]TestCase, error) {
-	// Find all YAML test files in cmd/psqldef/
-	pattern := filepath.Join("..", "cmd", "psqldef", "tests*.yml")
-	files, err := filepath.Glob(pattern)
-	if err != nil {
-		return nil, err
-	}
-
-	ret := map[string]TestCase{}
-	for _, file := range files {
-		var tests map[string]*TestCase
-
-		buf, err := os.ReadFile(file)
-		if err != nil {
-			return nil, err
-		}
-
-		dec := yaml.NewDecoder(bytes.NewReader(buf))
-		err = dec.Decode(&tests)
-		if err != nil {
-			return nil, err
-		}
-
-		for name, test := range tests {
-			ret[name] = *test
-		}
-	}
-
-	return ret, nil
-}
 
 func TestErrorMessageSourcePosition(t *testing.T) {
 	testCases := []struct {
@@ -339,49 +295,6 @@ func TestIntervalColumnType(t *testing.T) {
 				t.Errorf("%s\nSQL: %s\nError: %v", tc.description, tc.sql, err)
 			} else if !tc.shouldParse && err == nil {
 				t.Errorf("Expected parse error but got none.\n%s\nSQL: %s", tc.description, tc.sql)
-			}
-		})
-	}
-}
-
-// TestPsqldefYamlGenericParser tests that the generic parser can parse all SQL statements
-// from the psqldef YAML test files. This validates that the generic parser works as a fallback
-// for PostgreSQL statements.
-func TestPsqldefYamlGenericParser(t *testing.T) {
-	// Read all YAML test files from cmd/psqldef/*.yml
-	tests, err := readPsqldefTests()
-	if err != nil {
-		t.Fatalf("Failed to read psqldef YAML tests: %v", err)
-	}
-
-	for name, testCase := range tests {
-		t.Run(name, func(t *testing.T) {
-			// Test parsing the 'current' schema if present
-			if testCase.Current != "" {
-				t.Run("current", func(t *testing.T) {
-					stmt, err := ParseDDL(testCase.Current, ParserModePostgres)
-					if err != nil {
-						t.Skipf("Failed to parse 'current' schema: %v\nSQL:\n%s", err, testCase.Current)
-						return
-					}
-					if stmt == nil {
-						t.Errorf("ParseDDL returned nil statement for 'current' schema\nSQL:\n%s", testCase.Current)
-					}
-				})
-			}
-
-			// Test parsing the 'desired' schema if present
-			if testCase.Desired != "" {
-				t.Run("desired", func(t *testing.T) {
-					stmt, err := ParseDDL(testCase.Desired, ParserModePostgres)
-					if err != nil {
-						t.Skipf("Failed to parse 'desired' schema: %v\nSQL:\n%s", err, testCase.Desired)
-						return
-					}
-					if stmt == nil {
-						t.Errorf("ParseDDL returned nil statement for 'desired' schema\nSQL:\n%s", testCase.Desired)
-					}
-				})
 			}
 		})
 	}

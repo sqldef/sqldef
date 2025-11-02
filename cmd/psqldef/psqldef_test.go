@@ -17,6 +17,7 @@ import (
 	tu "github.com/sqldef/sqldef/v3/cmd/testutils"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/database/postgres"
+	"github.com/sqldef/sqldef/v3/parser"
 	"github.com/sqldef/sqldef/v3/schema"
 )
 
@@ -1102,6 +1103,49 @@ func TestPsqldefReindexConcurrently(t *testing.T) {
 		output := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
 		assert.Equal(t, nothingModified, output)
 	})
+}
+
+// TestPsqldefYamlGenericParser tests that the generic parser can parse all SQL statements
+// from the psqldef YAML test files. This validates that the generic parser works as a fallback
+// for PostgreSQL statements.
+func TestPsqldefYamlGenericParser(t *testing.T) {
+	// Read all YAML test files from cmd/psqldef/*.yml
+	tests, err := tu.ReadTests("tests*.yml")
+	if err != nil {
+		t.Fatalf("Failed to read psqldef YAML tests: %v", err)
+	}
+
+	for name, testCase := range tests {
+		t.Run(name, func(t *testing.T) {
+			// Test parsing the 'current' schema if present
+			if testCase.Current != "" {
+				t.Run("current", func(t *testing.T) {
+					stmt, err := parser.ParseDDL(testCase.Current, parser.ParserModePostgres)
+					if err != nil {
+						t.Skipf("Failed to parse 'current' schema: %v\nSQL:\n%s", err, testCase.Current)
+						return
+					}
+					if stmt == nil {
+						t.Errorf("ParseDDL returned nil statement for 'current' schema\nSQL:\n%s", testCase.Current)
+					}
+				})
+			}
+
+			// Test parsing the 'desired' schema if present
+			if testCase.Desired != "" {
+				t.Run("desired", func(t *testing.T) {
+					stmt, err := parser.ParseDDL(testCase.Desired, parser.ParserModePostgres)
+					if err != nil {
+						t.Skipf("Failed to parse 'desired' schema: %v\nSQL:\n%s", err, testCase.Desired)
+						return
+					}
+					if stmt == nil {
+						t.Errorf("ParseDDL returned nil statement for 'desired' schema\nSQL:\n%s", testCase.Desired)
+					}
+				})
+			}
+		})
+	}
 }
 
 func TestMain(m *testing.M) {
