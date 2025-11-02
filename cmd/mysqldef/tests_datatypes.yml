@@ -316,3 +316,21 @@ NumericDecimalExplicit:
       price2 decimal(20, 6)
     );
   output: ""
+TypedLiterals:
+  current: |
+    CREATE TABLE events (
+      id int NOT NULL AUTO_INCREMENT,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE events (
+      id int NOT NULL AUTO_INCREMENT,
+      event_date date DEFAULT DATE '2024-01-01',
+      event_time time DEFAULT TIME '12:00:00',
+      event_timestamp timestamp DEFAULT TIMESTAMP '2024-01-01 12:00:00',
+      PRIMARY KEY (id)
+    );
+  output: |
+    ALTER TABLE `events` ADD COLUMN `event_date` date DEFAULT(date '2024-01-01') AFTER `id`;
+    ALTER TABLE `events` ADD COLUMN `event_time` time DEFAULT(time '12:00:00') AFTER `event_date`;
+    ALTER TABLE `events` ADD COLUMN `event_timestamp` timestamp DEFAULT(timestamp '2024-01-01 12:00:00') AFTER `event_time`;

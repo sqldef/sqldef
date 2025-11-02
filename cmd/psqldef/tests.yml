@@ -3403,4 +3403,20 @@ AlterColumnChangeNotNullAndDefault:
     ALTER TABLE "public"."users" ALTER COLUMN "name" SET DEFAULT 'anonymous';
     ALTER TABLE "public"."users" ALTER COLUMN "email" DROP NOT NULL;
     ALTER TABLE "public"."users" ALTER COLUMN "email" DROP DEFAULT;
+TypedLiterals:
+  current: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY
+    );
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      event_date date DEFAULT DATE '2024-01-01',
+      event_time time DEFAULT TIME '12:00:00',
+      event_timestamp timestamp DEFAULT TIMESTAMP '2024-01-01 12:00:00'
+    );
+  output: |
+    ALTER TABLE "public"."events" ADD COLUMN "event_date" date DEFAULT '2024-01-01';
+    ALTER TABLE "public"."events" ADD COLUMN "event_time" time DEFAULT '12:00:00';
+    ALTER TABLE "public"."events" ADD COLUMN "event_timestamp" timestamp DEFAULT '2024-01-01 12:00:00';
 
