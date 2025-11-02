@@ -719,6 +719,16 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 				return tkn.scanLiteralIdentifier(']')
 			}
 			if tkn.mode == ParserModePostgres && ch == '~' {
+				// Check for ~~ (LIKE) and ~~* (ILIKE) pattern operators
+				if tkn.lastChar == '~' {
+					tkn.next()
+					if tkn.lastChar == '*' {
+						tkn.next()
+						return PATTERN_ILIKE, nil
+					}
+					return PATTERN_LIKE, nil
+				}
+				// Check for ~* (case-insensitive regex) or ~ (regex)
 				if tkn.lastChar == '*' {
 					tkn.next()
 					return POSIX_REGEX_CI, nil
@@ -815,6 +825,16 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 			if tkn.mode == ParserModePostgres {
 				if tkn.lastChar == '~' {
 					tkn.next()
+					// Check for !~~* (NOT ILIKE) and !~~ (NOT LIKE)
+					if tkn.lastChar == '~' {
+						tkn.next()
+						if tkn.lastChar == '*' {
+							tkn.next()
+							return PATTERN_NOT_ILIKE, nil
+						}
+						return PATTERN_NOT_LIKE, nil
+					}
+					// Check for !~* (NOT case-insensitive regex) or !~ (NOT regex)
 					if tkn.lastChar == '*' {
 						tkn.next()
 						return POSIX_NOT_REGEX_CI, nil

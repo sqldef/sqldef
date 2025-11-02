@@ -1569,6 +1569,8 @@ const (
 	NotInStr             = "not in"
 	LikeStr              = "like"
 	NotLikeStr           = "not like"
+	ILikeStr             = "ilike"
+	NotILikeStr          = "not ilike"
 	RegexpStr            = "regexp"
 	NotRegexpStr         = "not regexp"
 	JSONExtractOp        = "->"

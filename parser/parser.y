@@ -179,6 +179,7 @@ func forceEOF(yylex any) {
 /* ---------------- End of Dangling Else Resolution ------------------------- */
 %left <bytes> '=' '<' '>' LE GE NE NULL_SAFE_EQUAL IS LIKE REGEXP IN
 %left <bytes> POSIX_REGEX POSIX_REGEX_CI POSIX_NOT_REGEX POSIX_NOT_REGEX_CI
+%left <bytes> PATTERN_LIKE PATTERN_ILIKE PATTERN_NOT_LIKE PATTERN_NOT_ILIKE
 %left <bytes> '|'
 %left <bytes> '&'
 %left <bytes> SHIFT_LEFT SHIFT_RIGHT
@@ -3890,6 +3891,18 @@ privilege:
   {
     $$ = NewColIdent("ALL")
   }
+| REFERENCES
+  {
+    $$ = NewColIdent(string($1))
+  }
+| TRIGGER
+  {
+    $$ = NewColIdent(string($1))
+  }
+| TRUNCATE
+  {
+    $$ = NewColIdent(string($1))
+  }
 
 privilege_list:
   privilege
@@ -4597,6 +4610,22 @@ compare:
   {
     $$ = PosixNotRegexCiStr
   }
+| PATTERN_LIKE
+  {
+    $$ = LikeStr
+  }
+| PATTERN_ILIKE
+  {
+    $$ = ILikeStr
+  }
+| PATTERN_NOT_LIKE
+  {
+    $$ = NotLikeStr
+  }
+| PATTERN_NOT_ILIKE
+  {
+    $$ = NotILikeStr
+  }
 
 like_escape_opt:
   {
@@ -4722,10 +4751,6 @@ value_expression:
   {
     $$ = &CollateExpr{Expr: $1, Charset: $3}
   }
-| value_expression TYPECAST TIMESTAMP WITH TIME ZONE
-  {
-    $$ = &CollateExpr{Expr: $1}
-  }
 | BINARY value_expression %prec UNARY
   {
     $$ = &UnaryExpr{Operator: BinaryStr, Expr: $2}
@@ -4795,6 +4820,26 @@ value_expression:
 | value_expression TYPECAST simple_convert_type
   {
     $$ = &CastExpr{Expr: $1, Type: $3}
+  }
+| value_expression TYPECAST DOUBLE PRECISION
+  {
+    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: "double precision"}}
+  }
+| value_expression TYPECAST TIMESTAMP WITH TIME ZONE
+  {
+    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: "timestamp with time zone"}}
+  }
+| value_expression TYPECAST TIMESTAMP WITHOUT TIME ZONE
+  {
+    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: "timestamp without time zone"}}
+  }
+| value_expression TYPECAST TIME WITH TIME ZONE
+  {
+    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: "time with time zone"}}
+  }
+| value_expression TYPECAST TIME WITHOUT TIME ZONE
+  {
+    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: "time without time zone"}}
   }
 | function_call_generic
 | function_call_keyword
