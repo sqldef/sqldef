@@ -249,10 +249,41 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	indexComments := extractIndexComments(rawDDL, mode)
 
 	for i, parsedCol := range stmt.TableSpec.Columns {
+		// Normalize PostgreSQL type aliases from generic parser
+		typeName := parsedCol.Type.Type
+		timezone := castBool(parsedCol.Type.Timezone)
+		references := parsedCol.Type.References
+
+		if mode == GeneratorModePostgres {
+			// Handle short timezone forms: timestamptz -> timestamp, timetz -> time
+			// The generic parser may parse these as identifiers without setting Timezone flag
+			switch typeName {
+			case "timestamptz":
+				typeName = "timestamp"
+				timezone = true
+			case "timetz":
+				typeName = "time"
+				timezone = true
+			}
+
+			// Handle schema-qualified types from generic parser
+			// Generic parser stores "schema.type" in typeName field
+			// pgquery parser stores "schema." in references and "type" in typeName
+			// Normalize to the pgquery format for consistent comparison
+			if strings.Contains(typeName, ".") && references == "" {
+				parts := strings.SplitN(typeName, ".", 2)
+				if len(parts) == 2 {
+					// Store schema with trailing dot to match pgquery format
+					references = parts[0] + "."
+					typeName = parts[1]
+				}
+			}
+		}
+
 		column := Column{
 			name:                       parsedCol.Name.String(),
 			position:                   i,
-			typeName:                   parsedCol.Type.Type,
+			typeName:                   typeName,
 			unsigned:                   castBool(parsedCol.Type.Unsigned),
 			notNull:                    castBoolPtr(parsedCol.Type.NotNull),
 			autoIncrement:              castBool(parsedCol.Type.Autoincrement),
@@ -264,12 +295,12 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			displayWidth:               parseValue(parsedCol.Type.DisplayWidth),
 			charset:                    parsedCol.Type.Charset,
 			collate:                    normalizeCollate(parsedCol.Type.Collate, *stmt.TableSpec),
-			timezone:                   castBool(parsedCol.Type.Timezone),
+			timezone:                   timezone,
 			keyOption:                  ColumnKeyOption(parsedCol.Type.KeyOpt), // FIXME: tight coupling in enum order
 			onUpdate:                   parseValue(parsedCol.Type.OnUpdate),
 			comment:                    parseValue(parsedCol.Type.Comment),
 			enumValues:                 parsedCol.Type.EnumValues,
-			references:                 normalizedTable(mode, parsedCol.Type.References, defaultSchema),
+			references:                 normalizedTable(mode, references, defaultSchema),
 			referenceDeferrable:        castBoolPtr(parsedCol.Type.ReferenceDeferrable),
 			referenceInitiallyDeferred: castBoolPtr(parsedCol.Type.ReferenceInitDeferred),
 			identity:                   parseIdentity(parsedCol.Type.Identity),

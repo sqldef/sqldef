@@ -6,7 +6,7 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Current Status
 
-- **DONE 1006 tests, 102 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
+- **DONE 1006 tests, 74 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
 
 ## Rules
 
@@ -19,40 +19,18 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ### Summary
 
-The 102 test failures fall into these categories:
+The 74 test failures fall into these categories:
 
-1. **Type Normalization** - 3 items causing ~10 failures
-2. **Expression Normalization** - 3 items causing ~30 failures
-3. **View Normalization** - 1 item causing ~9 failures
-4. **Keyword Case Sensitivity** - 1 item causing ~17 failures
-5. **Auto-generated Constraint Names** - 1 item causing ~2 failures
-6. **Comment Statement Issues** - 2 items causing ~4 failures
-7. **Foreign Key Issues** - Multiple items causing ~7 failures
-8. **Array Default Issues** - 1 item causing ~3 failures
-9. **Miscellaneous** - Various items causing ~4 failures
-10. **Integration Test Failures** - 16 tests failing due to INFO log output
+1. **Expression Normalization** - 3 items causing ~30 failures
+2. **View Normalization** - 1 item causing ~9 failures
+3. **Keyword Case Sensitivity** - 1 item causing ~17 failures
+4. **Auto-generated Constraint Names** - 1 item causing ~2 failures
+5. **Comment Statement Issues** - 2 items causing ~4 failures
+6. **Foreign Key Issues** - Multiple items causing ~7 failures
+7. **Array Default Issues** - 1 item causing ~3 failures
+8. **Miscellaneous** - Various items causing ~2 failures
 
 Note: Many tests have multiple issues, so the counts overlap.
-
-### Type Normalization
-
-1. **Integer type aliases** - Generic parser outputs "int" but PostgreSQL normalizes to "integer"
-   - All ADD COLUMN statements with int/integer type
-   - Affects: `ForeignKeyDependenciesMultipleToModifiedTable`, `ForeignKeyDependenciesPrimaryKeyChange`, `ForeignKeyDependenciesCascadeOptionsPreservation`
-   - Fix: Normalize "int" → "integer" in generator output
-
-2. **Timestamp and time type aliases** - Generic parser outputs short forms
-   - Parser outputs: `timestamptz`, `timetz`
-   - PostgreSQL expects: `timestamp WITH TIME ZONE`, `time WITH TIME ZONE`
-   - Also affects: `timestamp` vs `timestamp WITHOUT TIME ZONE`
-   - Affects: `ChangeTimezoneSyntax`, `AddTimestamptzColumnOnNonStandardDefaultSchema`, `AddTimetzColumnOnNonStandardDefaultSchema`
-   - Fix: Always output long form with explicit WITH/WITHOUT TIME ZONE
-
-3. **Enum type schema qualification** - Missing or incorrect schema prefix
-   - Example: `country` vs `public.country` vs `foo.lang`
-   - Parser doesn't preserve or normalize schema qualification
-   - Affects: `CreateTypeEnum`, `AddEnumTypeColumnWithExplicitSchemaOnNonStandardDefaultSchema`, `CreateMultipleTypesWithMultipleTables`
-   - Fix: Always include schema prefix when outputting enum types
 
 ### Expression Normalization
 

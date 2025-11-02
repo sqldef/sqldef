@@ -1960,11 +1960,27 @@ func (g *Generator) generateDataType(column Column) string {
 
 	// Determine the full type name including schema qualification
 	typeName := column.typeName
+
+	// Normalize type names for PostgreSQL
+	if g.mode == GeneratorModePostgres {
+		// Normalize short timezone forms to their canonical types
+		// The timezone flag will add the "WITH TIME ZONE" suffix
+		switch typeName {
+		case "timestamptz":
+			typeName = "timestamp"
+		case "timetz":
+			typeName = "time"
+		case "int":
+			// PostgreSQL normalizes "int" to "integer"
+			typeName = "integer"
+		}
+	}
+
 	// Only qualify type names with schema for PostgreSQL when:
-	// 1. references is not empty and not just "public."
+	// 1. references is not empty (including "public." for enum types)
 	// 2. the type name doesn't already contain a dot
 	// 3. it's not a built-in type (built-in types shouldn't have references set to non-empty schema)
-	if g.mode == GeneratorModePostgres && column.references != "" && column.references != "public." && !strings.Contains(typeName, ".") {
+	if g.mode == GeneratorModePostgres && column.references != "" && !strings.Contains(typeName, ".") {
 		typeName = column.references + typeName
 	}
 
