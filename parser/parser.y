@@ -138,6 +138,10 @@ func forceEOF(yylex any) {
   partition                *Partition
   handlerCondition         HandlerCondition
   handlerConditions        []HandlerCondition
+  fkDeferOpts              struct {
+    constraintOpts    *ConstraintOptions
+    notForReplication bool
+  }
 }
 
 %token LEX_ERROR
@@ -418,6 +422,7 @@ func forceEOF(yylex any) {
 %type <newQualifierColName> new_qualifier_column_name
 %type <boolVal> deferrable_opt initially_deferred_opt
 %type <boolVal> variadic_opt
+%type <fkDeferOpts> fk_defer_opts
 %type <arrayConstructor> array_constructor
 %type <arrayElements> array_element_list
 %type <arrayElement> array_element
@@ -2535,25 +2540,51 @@ column_definition_type:
     $1.References = String($3)
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')'
+// PostgreSQL: inline foreign key with constraint options
+| column_definition_type REFERENCES table_name '(' column_list ')' deferrable_opt initially_deferred_opt
   {
-    $1.References     = String($3)
-    $1.ReferenceNames = $5
+    $1.References           = String($3)
+    $1.ReferenceNames       = $5
+    $1.ReferenceDeferrable  = &$7
+    $1.ReferenceInitDeferred = &$8
     $$ = $1
   }
-// TODO: avoid a shfit/reduce conflict here
-| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option
+| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option deferrable_opt initially_deferred_opt
   {
-    $1.References     = String($3)
-    $1.ReferenceNames = $5
-    $1.ReferenceOnDelete = $9
+    $1.References            = String($3)
+    $1.ReferenceNames        = $5
+    $1.ReferenceOnDelete     = $9
+    $1.ReferenceDeferrable   = &$10
+    $1.ReferenceInitDeferred = &$11
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option
+| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option deferrable_opt initially_deferred_opt
   {
-    $1.References     = String($3)
-    $1.ReferenceNames = $5
-    $1.ReferenceOnUpdate = $9
+    $1.References            = String($3)
+    $1.ReferenceNames        = $5
+    $1.ReferenceOnUpdate     = $9
+    $1.ReferenceDeferrable   = &$10
+    $1.ReferenceInitDeferred = &$11
+    $$ = $1
+  }
+| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option ON UPDATE reference_option deferrable_opt initially_deferred_opt
+  {
+    $1.References            = String($3)
+    $1.ReferenceNames        = $5
+    $1.ReferenceOnDelete     = $9
+    $1.ReferenceOnUpdate     = $12
+    $1.ReferenceDeferrable   = &$13
+    $1.ReferenceInitDeferred = &$14
+    $$ = $1
+  }
+| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option ON DELETE reference_option deferrable_opt initially_deferred_opt
+  {
+    $1.References            = String($3)
+    $1.ReferenceNames        = $5
+    $1.ReferenceOnUpdate     = $9
+    $1.ReferenceOnDelete     = $12
+    $1.ReferenceDeferrable   = &$13
+    $1.ReferenceInitDeferred = &$14
     $$ = $1
   }
 // for MySQL and PostgreSQL
@@ -3548,37 +3579,42 @@ operator_class:
   TEXT_PATTERN_OPS
 
 foreign_key_definition:
-  foreign_key_without_options not_for_replication_opt
+  foreign_key_without_options fk_defer_opts
   {
-    $1.NotForReplication = bool($2)
+    $1.ConstraintOptions = $2.constraintOpts
+    $1.NotForReplication = $2.notForReplication
     $$ = $1
   }
-| foreign_key_without_options ON DELETE reference_option not_for_replication_opt
+| foreign_key_without_options ON DELETE reference_option fk_defer_opts
   {
     $1.OnUpdate = NewColIdent("")
     $1.OnDelete = $4
-    $1.NotForReplication = bool($5)
+    $1.ConstraintOptions = $5.constraintOpts
+    $1.NotForReplication = $5.notForReplication
     $$ = $1
   }
-| foreign_key_without_options ON UPDATE reference_option not_for_replication_opt
+| foreign_key_without_options ON UPDATE reference_option fk_defer_opts
   {
     $1.OnUpdate = $4
     $1.OnDelete = NewColIdent("")
-    $1.NotForReplication = bool($5)
+    $1.ConstraintOptions = $5.constraintOpts
+    $1.NotForReplication = $5.notForReplication
     $$ = $1
   }
-| foreign_key_without_options ON DELETE reference_option ON UPDATE reference_option not_for_replication_opt
+| foreign_key_without_options ON DELETE reference_option ON UPDATE reference_option fk_defer_opts
   {
     $1.OnUpdate = $7
     $1.OnDelete = $4
-    $1.NotForReplication = bool($8)
+    $1.ConstraintOptions = $8.constraintOpts
+    $1.NotForReplication = $8.notForReplication
     $$ = $1
   }
-| foreign_key_without_options ON UPDATE reference_option ON DELETE reference_option not_for_replication_opt
+| foreign_key_without_options ON UPDATE reference_option ON DELETE reference_option fk_defer_opts
   {
     $1.OnUpdate = $4
     $1.OnDelete = $7
-    $1.NotForReplication = bool($8)
+    $1.ConstraintOptions = $8.constraintOpts
+    $1.NotForReplication = $8.notForReplication
     $$ = $1
   }
 
@@ -3644,24 +3680,25 @@ primary_key_definition:
   }
 
 unique_definition:
-  CONSTRAINT sql_id UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
+  CONSTRAINT sql_id UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
   {
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: string($3), Name: $2, Primary: false, Unique: true, Clustered: $4},
       Columns: $6,
       Options: $8,
       Partition: $9,
-      ConstraintOptions: &ConstraintOptions{}, // Mark as constraint
+      ConstraintOptions: &ConstraintOptions{Deferrable: bool($10), InitiallyDeferred: bool($11)},
     }
   }
 /* For PostgreSQL and SQLite3 */
-| UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
+| UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
   {
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: string($1), Primary: false, Unique: true, Clustered: $2},
       Columns: $4,
       Options: $6,
       Partition: $7,
+      ConstraintOptions: &ConstraintOptions{Deferrable: bool($8), InitiallyDeferred: bool($9)},
     }
   }
 
@@ -3736,6 +3773,99 @@ not_for_replication_opt:
 | NOT FOR REPLICATION
   {
     $$ = BoolVal(true)
+  }
+
+/* Combined rule for foreign key constraint options to avoid reduce/reduce conflicts */
+fk_defer_opts:
+  /* empty */
+  {
+    $$.constraintOpts = nil
+    $$.notForReplication = false
+  }
+| DEFERRABLE
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: false}
+    $$.notForReplication = false
+  }
+| NOT DEFERRABLE
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
+    $$.notForReplication = false
+  }
+| INITIALLY IMMEDIATE
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
+    $$.notForReplication = false
+  }
+| INITIALLY DEFERRED
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: true}
+    $$.notForReplication = false
+  }
+| DEFERRABLE INITIALLY IMMEDIATE
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: false}
+    $$.notForReplication = false
+  }
+| DEFERRABLE INITIALLY DEFERRED
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: true}
+    $$.notForReplication = false
+  }
+| NOT DEFERRABLE INITIALLY IMMEDIATE
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
+    $$.notForReplication = false
+  }
+| NOT DEFERRABLE INITIALLY DEFERRED
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: true}
+    $$.notForReplication = false
+  }
+| NOT FOR REPLICATION
+  {
+    $$.constraintOpts = nil
+    $$.notForReplication = true
+  }
+| DEFERRABLE NOT FOR REPLICATION
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: false}
+    $$.notForReplication = true
+  }
+| NOT DEFERRABLE NOT FOR REPLICATION
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
+    $$.notForReplication = true
+  }
+| INITIALLY IMMEDIATE NOT FOR REPLICATION
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
+    $$.notForReplication = true
+  }
+| INITIALLY DEFERRED NOT FOR REPLICATION
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: true}
+    $$.notForReplication = true
+  }
+| DEFERRABLE INITIALLY IMMEDIATE NOT FOR REPLICATION
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: false}
+    $$.notForReplication = true
+  }
+| DEFERRABLE INITIALLY DEFERRED NOT FOR REPLICATION
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: true}
+    $$.notForReplication = true
+  }
+| NOT DEFERRABLE INITIALLY IMMEDIATE NOT FOR REPLICATION
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
+    $$.notForReplication = true
+  }
+| NOT DEFERRABLE INITIALLY DEFERRED NOT FOR REPLICATION
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: true}
+    $$.notForReplication = true
   }
 
 sql_id_opt:

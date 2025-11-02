@@ -6,10 +6,10 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Current Status
 
-- **708 tests PASSING, 4 tests SKIPPED** (99.4% success rate for generic parser tests)
-- **2 unique test cases** affected by genuine parser limitations
+- **708 tests PASSING, 2 tests SKIPPED** (99.7% success rate for generic parser tests)
+- **1 unique test case** affected by genuine parser limitations
 - **0 reduce/reduce conflicts**
-- **38 shift/reduce conflicts** (baseline)
+- **45 shift/reduce conflicts** (baseline)
 
 ## Running Generic Parser Tests
 
@@ -24,7 +24,7 @@ make test
 ## Rules
 
 - **Must maintain zero reduce/reduce conflicts** for parser correctness
-- **Must maintain baseline of 38 shift/reduce conflicts** to avoid regressions
+- **Must maintain baseline of 45 shift/reduce conflicts** to avoid regressions
 
 ## Notes
 
@@ -32,11 +32,9 @@ make test
 - Use `PSQLDEF_PARSER=generic` environment variable to force generic parser
 - Keep this document up to date
 
-## Remaining Tasks
+## Parser Limitations
 
-### Remaining Parser Limitations
-
-#### 1. Arithmetic Expressions in DEFAULT (1 test case) - ❌ BLOCKED
+### Arithmetic Expressions in DEFAULT (1 test case) - ❌ BLOCKED
 
 **Status:** Cannot be implemented without violating grammar conflict constraints.
 
@@ -88,19 +86,3 @@ This design creates an inherent conflict when trying to add arithmetic operators
 - ChangeDefaultExpressionWithAddition (2 tests: current + desired) - SKIPPED ⏭️
 
 **Decision:** This syntax remains unsupported in the generic parser. Users needing this feature should rely on the pgquery parser (default for psqldef).
-
-#### 2. DEFERRABLE INITIALLY IMMEDIATE (1 test case)
-
-**Problem:** Parser doesn't support `DEFERRABLE INITIALLY IMMEDIATE` constraint options on inline foreign key references.
-
-**Error Pattern:** `syntax error near 'deferrable'`
-
-**Example:**
-```sql
-CREATE TABLE bindings (
-  image_id INT REFERENCES images(id) ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE
-);
-```
-
-**Tests affected:**
-- CreateTableWithConstraintOptions (2 tests: current + desired)

@@ -704,10 +704,12 @@ type ColumnType struct {
 	// Key specification
 	KeyOpt ColumnKeyOption
 
-	References        string
-	ReferenceNames    Columns
-	ReferenceOnDelete ColIdent
-	ReferenceOnUpdate ColIdent
+	References            string
+	ReferenceNames        Columns
+	ReferenceOnDelete     ColIdent
+	ReferenceOnUpdate     ColIdent
+	ReferenceDeferrable   *BoolVal // for Postgres: DEFERRABLE, NOT DEFERRABLE, or nil
+	ReferenceInitDeferred *BoolVal // for Postgres: INITIALLY DEFERRED, INITIALLY IMMEDIATE, or nil
 
 	// MySQL: GENERATED ALWAYS AS (expr)
 	Generated *GeneratedColumn
