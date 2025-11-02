@@ -5878,6 +5878,7 @@ non_reserved_keyword:
 | POLICY
 | TYPE
 | STATUS
+| VARIABLES
 | ZONE
 | LEVEL
 | PRIVILEGES
