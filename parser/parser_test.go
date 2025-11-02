@@ -285,6 +285,12 @@ func TestIntervalColumnType(t *testing.T) {
 			shouldParse: true,
 			description: "Should support TYPECAST operations with varchar parameter",
 		},
+		{
+			name:        "Chained TYPECAST - simple types",
+			sql:         "CREATE TABLE test (val TEXT DEFAULT CURRENT_TIMESTAMP::date::text)",
+			shouldParse: true,
+			description: "Should support chained typecasts like value::type1::type2",
+		},
 	}
 
 	for _, tc := range testCases {

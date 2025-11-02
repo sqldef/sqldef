@@ -2693,6 +2693,26 @@ default_expression:
   {
     $$ = &TypedLiteral{Type: "timestamp", Value: NewStrVal($2)}
   }
+| current_timestamp TYPECAST simple_convert_type array_opt
+  {
+    t := $3
+    if $4 {
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+    }
+    $$ = &CastExpr{Expr: $1, Type: t}
+  }
+| variadic_opt array_constructor
+  {
+    $$ = $2
+  }
+| default_expression TYPECAST simple_convert_type array_opt
+  {
+    t := $3
+    if $4 {
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+    }
+    $$ = &CastExpr{Expr: $1, Type: t}
+  }
 
 srid_definition:
   SRID srid_val

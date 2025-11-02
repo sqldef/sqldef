@@ -38,21 +38,30 @@ The analysis below is based on 8 skipped tests affecting 5 unique test cases.
 
 ### Remaining Parser Limitations (1.1% of tests)
 
-#### 1. Chained Type Casts (1 test case)
+#### 1. Chained Type Casts (1 test case) - ✅ PARTIALLY FIXED
 
-**Problem:** PostgreSQL allows `value::type1::type2` but parser doesn't support it.
+**Status:** Chained type casts now work (e.g., `CURRENT_TIMESTAMP::date::text`), but the test remains skipped due to unrelated issues with ARRAY constructors in the same test case.
 
-**Error Pattern:** `syntax error at line N, column M near '::'`
-
-**Example:**
+**What works:**
 ```sql
+-- This now parses successfully ✅
 CREATE TABLE users (
   default_date_text text DEFAULT CURRENT_TIMESTAMP::date::text
 );
 ```
 
+**What still fails (unrelated issue):**
+```sql
+-- ARRAY constructors in DEFAULT not yet supported
+CREATE TABLE users (
+  arr int[] DEFAULT ARRAY[]::int[]
+);
+```
+
+**Implementation:** Modified `default_expression` grammar in `parser/parser.y` (lines 2696-2715) to support recursive type casting.
+
 **Tests affected:**
-- CreateTableWithDefault (1 test)
+- CreateTableWithDefault (1 test - still skipped due to ARRAY constructor issue)
 
 #### 2. Arithmetic Expressions in DEFAULT (1 test case)
 
