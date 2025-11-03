@@ -1702,6 +1702,16 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Whens: normalizedWhens,
 			Else:  normalizedElse,
 		}
+	case *parser.TypedLiteral:
+		// PostgreSQL normalizes typed literals by removing the type prefix
+		// e.g., DATE '2024-01-01' -> '2024-01-01'
+		// e.g., TIME '12:00:00' -> '12:00:00'
+		// e.g., TIMESTAMP '2024-01-01 12:00:00' -> '2024-01-01 12:00:00'
+		// Only normalize for PostgreSQL mode
+		if mode == GeneratorModePostgres {
+			return normalizeExpr(e.Value, mode)
+		}
+		return expr
 	default:
 		// For literals and other types, return as-is
 		return expr
@@ -2088,9 +2098,9 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		if column.check.notForReplication {
 			definition += "NOT FOR REPLICATION "
 		}
-		// Don't normalize in CREATE TABLE - use the original form
-		// Normalization happens during comparison and ALTER statements
-		definition += fmt.Sprintf("(%s) ", parser.String(column.check.definition))
+		// Normalize CHECK expression to match PostgreSQL's output
+		// This ensures typed literals are properly converted (e.g., time '...' -> '...'::time)
+		definition += fmt.Sprintf("(%s) ", g.normalizeCheckExprString(column.check.definition))
 		if column.check.noInherit {
 			definition += "NO INHERIT "
 		}
@@ -3605,9 +3615,39 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 
 	switch e := expr.(type) {
 	case *parser.CastExpr:
-		// Remove casts to text or character varying
-		if e.Type != nil && (e.Type.Type == "text" || e.Type.Type == "character varying") {
-			return normalizeCheckExpr(e.Expr, mode)
+		// Remove certain casts that PostgreSQL simplifies
+		// - text, character varying: Always removed
+		// - date, timestamp without time zone: Removed when cast from string literals
+		// - time, time without time zone: Kept but normalized (PostgreSQL preserves these for precision)
+		if e.Type != nil {
+			typeStr := strings.ToLower(e.Type.Type)
+			// Always remove text casts
+			if typeStr == "text" || typeStr == "character varying" {
+				return normalizeCheckExpr(e.Expr, mode)
+			}
+
+			// Normalize time type names BEFORE checking for removal
+			// "time without time zone" -> "time"
+			// "timestamp without time zone" -> "timestamp"
+			normalizedTypeStr := typeStr
+			if strings.Contains(typeStr, "time without time zone") {
+				normalizedTypeStr = "time"
+			} else if strings.Contains(typeStr, "timestamp without time zone") {
+				normalizedTypeStr = "timestamp"
+			}
+
+			// Remove date/timestamp casts from string literals
+			// PostgreSQL simplifies '2020-01-01'::date to '2020-01-01' in CHECK constraints
+			// But keeps time casts: time '09:00:00' becomes '09:00:00'::time
+			if normalizedTypeStr == "date" || normalizedTypeStr == "timestamp" {
+				return normalizeCheckExpr(e.Expr, mode)
+			}
+
+			// For time types, keep the cast but use normalized type name
+			return &parser.CastExpr{
+				Expr: normalizeCheckExpr(e.Expr, mode),
+				Type: &parser.ConvertType{Type: normalizedTypeStr},
+			}
 		}
 		return &parser.CastExpr{
 			Expr: normalizeCheckExpr(e.Expr, mode),
@@ -3842,6 +3882,24 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				Name: parser.NewTableIdent(qualifierStr),
 			},
 		}
+	case *parser.TypedLiteral:
+		// PostgreSQL normalizes typed literals differently based on type:
+		// - DATE 'value' -> 'value' (removes type prefix)
+		// - TIMESTAMP 'value' -> 'value' (removes type prefix)
+		// - TIME 'value' -> 'value'::time (converts to cast expression)
+		// - TIMETZ 'value' -> 'value'::timetz (converts to cast expression)
+		typeStr := strings.ToLower(e.Type)
+
+		// For time types, convert to cast expression
+		if strings.HasPrefix(typeStr, "time") {
+			return &parser.CastExpr{
+				Expr: normalizeCheckExpr(e.Value, mode),
+				Type: &parser.ConvertType{Type: typeStr},
+			}
+		}
+
+		// For date/timestamp, remove the type prefix
+		return normalizeCheckExpr(e.Value, mode)
 	default:
 		// For all other expression types (literals, etc.), return as-is
 		return expr
@@ -3872,9 +3930,14 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 		return false
 	}
 
-	// Check if both are simple SQLVal (vs complex expressions)
-	currSQLVal, currentIsSQLVal := currentDefault.expression.(*parser.SQLVal)
-	desSQLVal, desiredIsSQLVal := desiredDefault.expression.(*parser.SQLVal)
+	// Normalize expressions first to handle typed literals and other database-specific normalizations
+	// This ensures that TypedLiterals are converted to their underlying values before comparison
+	normalizedCurrent := normalizeExpr(currentDefault.expression, g.mode)
+	normalizedDesired := normalizeExpr(desiredDefault.expression, g.mode)
+
+	// Check if both are simple SQLVal (vs complex expressions) after normalization
+	currSQLVal, currentIsSQLVal := normalizedCurrent.(*parser.SQLVal)
+	desSQLVal, desiredIsSQLVal := normalizedDesired.(*parser.SQLVal)
 
 	// If both are simple values (SQLVal), use value comparison
 	if currentIsSQLVal && desiredIsSQLVal {
@@ -3898,11 +3961,12 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 		return false
 	}
 
-	// Both are complex expressions - use string comparison
+	// Both are complex expressions - use string comparison on already-normalized expressions
 	var currentExprSchema, currentExpr string
 	var desiredExprSchema, desiredExpr string
-	currentExprSchema, currentExpr = splitTableName(parser.String(currentDefault.expression), g.defaultSchema)
-	desiredExprSchema, desiredExpr = splitTableName(parser.String(desiredDefault.expression), g.defaultSchema)
+
+	currentExprSchema, currentExpr = splitTableName(parser.String(normalizedCurrent), g.defaultSchema)
+	desiredExprSchema, desiredExpr = splitTableName(parser.String(normalizedDesired), g.defaultSchema)
 	return strings.EqualFold(currentExprSchema, desiredExprSchema) && strings.EqualFold(currentExpr, desiredExpr)
 }
 
@@ -4412,7 +4476,9 @@ func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinitio
 	}
 
 	// Complex expression path
-	exprStr := parser.String(defaultDefinition.expression)
+	// Normalize the expression to handle typed literals and other database-specific normalizations
+	normalizedExpr := normalizeExpr(defaultDefinition.expression, g.mode)
+	exprStr := parser.String(normalizedExpr)
 	if g.mode == GeneratorModeMysql || g.mode == GeneratorModeSQLite3 {
 		// Enclose expression with parentheses to avoid syntax error
 		// https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html#data-type-defaults-explicit

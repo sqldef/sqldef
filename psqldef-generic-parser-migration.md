@@ -6,7 +6,7 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Current Status
 
-- **DONE 1006 tests, 41 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
+- **DONE 1006 tests, 34 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
 
 ## Rules
 
@@ -19,31 +19,16 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ### Summary
 
-The 74 test failures fall into these categories:
+The 34 remaining test failures fall into these categories:
 
-1. **Expression Normalization** - 3 items causing ~30 failures
-2. **View Normalization** - 1 item causing ~9 failures
-3. **Keyword Case Sensitivity** - 1 item causing ~17 failures
-4. **Auto-generated Constraint Names** - 1 item causing ~2 failures
-5. **Comment Statement Issues** - 2 items causing ~4 failures
-6. **Foreign Key Issues** - Multiple items causing ~7 failures
-7. **Array Default Issues** - 1 item causing ~3 failures
-8. **Miscellaneous** - Various items causing ~2 failures
+1. **View Normalization** - 1 item causing ~9 failures
+2. **Auto-generated Constraint Names** - 1 item causing ~2 failures
+3. **Comment Statement Issues** - 2 items causing ~4 failures
+4. **Foreign Key Issues** - Multiple items causing ~7 failures
+5. **Array Default Issues** - 1 item causing ~3 failures
+6. **Miscellaneous** - Various items causing ~9 failures
 
 Note: Many tests have multiple issues, so the counts overlap.
-
-### Expression Normalization
-
-1. **Typed literal defaults** - Type prefix in default values
-   - PostgreSQL adds type prefix: `date '2024-01-01'` instead of `'2024-01-01'`
-   - Affects: `TypedLiterals`, `TypedLiteralsChangeDefault`, `TypedLiteralsIdempotency`
-   - Fix: Parse and normalize typed literals (date/time/timestamp prefixes)
-
-2. **EXCLUDE constraint normalization** - Missing USING clause or other parts
-   - Example: `EXCLUDE (name WITH =)` vs `EXCLUDE USING GIST (name WITH =)`
-   - PostgreSQL adds default USING method
-   - Affects: `ExcludeConstraintDropAndAdd`, `ExcludeConstraintChange`, `ExcludeConstraintWithAlterTable`
-   - Fix: Parse and output complete EXCLUDE constraint syntax
 
 ### View Normalization
 

@@ -843,9 +843,14 @@ func parseExclusion(exclusion *parser.ExclusionDefinition) Exclusion {
 	if exclusion.Where != nil {
 		where = parser.String(exclusion.Where.Expr)
 	}
+	// PostgreSQL defaults to btree when no index method is specified
+	indexType := strings.ToUpper(exclusion.IndexType.String())
+	if indexType == "" {
+		indexType = "BTREE"
+	}
 	return Exclusion{
 		constraintName: exclusion.ConstraintName.String(),
-		indexType:      strings.ToUpper(exclusion.IndexType.String()),
+		indexType:      indexType,
 		exclusions:     exs,
 		where:          where,
 	}

@@ -2,10 +2,11 @@
   "hooks": {
     "Stop": [
       {
+        "matcher": "Write|Edit",
         "hooks": [
           {
             "type": "command",
-            "command": "cd $CLAUDE_PROJECT_DIR && make test || exit 2",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/on-code-change.sh",
             "timeout": 600
           }
         ]
