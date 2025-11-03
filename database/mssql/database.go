@@ -782,7 +782,7 @@ func mssqlBuildDSN(config database.Config) string {
 	query := url.Values{}
 	query.Add("database", config.DbName)
 	if config.TrustServerCert {
-        query.Add("trustservercert", "true")
+        query.Add("TrustServerCertificate", "true")
     }
 
 	var user *url.Userinfo
