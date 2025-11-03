@@ -1716,19 +1716,33 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 	case *parser.ArrayConstructor:
 		normalizedElements := parser.ArrayElements{}
 		for _, elem := range e.Elements {
-			switch el := elem.(type) {
-			case *parser.CastExpr:
-				if normalized, ok := normalizeExpr(el, mode).(*parser.CastExpr); ok {
-					normalizedElements = append(normalizedElements, normalized)
-				} else {
-					normalizedElements = append(normalizedElements, el)
-				}
-			default:
+			// Normalize all array elements, not just CastExpr
+			// This ensures ParenExpr, FuncExpr, and other expressions are normalized
+			normalizedElem := normalizeExpr(elem.(parser.Expr), mode)
+
+			// Try to convert back to ArrayElement interface
+			if arrayElem, ok := normalizedElem.(parser.ArrayElement); ok {
+				normalizedElements = append(normalizedElements, arrayElem)
+			} else {
+				// If normalization changed the type to something that's not an ArrayElement,
+				// keep the original element
 				normalizedElements = append(normalizedElements, elem)
 			}
 		}
 		return &parser.ArrayConstructor{Elements: normalizedElements}
 	case *parser.FuncExpr:
+		// For PostgreSQL, normalize date/time function calls to keywords
+		// The generic parser parses CURRENT_DATE in parentheses as a function call,
+		// but without parentheses as a keyword (SQLVal with ValArg type)
+		// e.g., (CURRENT_DATE) -> current_date(), but CURRENT_DATE -> current_date
+		if mode == GeneratorModePostgres && len(e.Exprs) == 0 {
+			funcName := strings.ToLower(e.Name.String())
+			switch funcName {
+			case "current_date", "current_time", "current_timestamp":
+				return parser.NewValArg([]byte(funcName))
+			}
+		}
+
 		normalizedExprs := parser.SelectExprs{}
 		for _, arg := range e.Exprs {
 			// For Postgres, check for ARRAY constructors BEFORE normalizing
@@ -1792,6 +1806,19 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 								return innerCast
 							}
 						}
+					}
+				}
+
+				// Remove redundant array typecasts on ARRAY constructors
+				// PostgreSQL normalizes ARRAY[expr::type]::type[] to ARRAY[(expr)::type]
+				// The array typecast is redundant since the ARRAY constructor already produces the right type
+				// e.g., ARRAY[current_date::text]::text[] -> ARRAY[(CURRENT_DATE)::text]
+				if _, isArrayConstructor := normalizedExpr.(*parser.ArrayConstructor); isArrayConstructor {
+					// Check if this is an array type cast (type string ends with [])
+					if strings.HasSuffix(typeStr, "[]") {
+						// This is an array type (e.g., text[], int[])
+						// Strip the redundant array typecast and return just the ARRAY constructor
+						return normalizedExpr
 					}
 				}
 			}
@@ -4214,6 +4241,11 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 
 	// Normalize expressions first to handle typed literals and other database-specific normalizations
 	// This ensures that TypedLiterals are converted to their underlying values before comparison
+	slog.Debug("Generator#areSameDefaultValue (before normalization)",
+		"currentExpr", parser.String(currentDefault.expression),
+		"desiredExpr", parser.String(desiredDefault.expression),
+		"columnType", columnType,
+	)
 	normalizedCurrent := normalizeExpr(currentDefault.expression, g.mode)
 	normalizedDesired := normalizeExpr(desiredDefault.expression, g.mode)
 
@@ -4249,6 +4281,11 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 
 	currentExprSchema, currentExpr = splitTableName(parser.String(normalizedCurrent), g.defaultSchema)
 	desiredExprSchema, desiredExpr = splitTableName(parser.String(normalizedDesired), g.defaultSchema)
+	slog.Debug("Generator#areSameDefaultValue (complex expressions)",
+		"currentExpr", currentExpr,
+		"desiredExpr", desiredExpr,
+		"columnType", columnType,
+	)
 	return strings.EqualFold(currentExprSchema, desiredExprSchema) && strings.EqualFold(currentExpr, desiredExpr)
 }
 

@@ -1757,7 +1757,7 @@ func (node *SQLVal) Format(buf *nodeBuffer) {
 	case ValArg:
 		buf.WriteString(string(node.Val))
 	case ValBool:
-		buf.Printf("%t", node.Val)
+		buf.WriteString(string(node.Val))
 	default:
 		panic("unexpected")
 	}
