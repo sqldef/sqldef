@@ -3,8 +3,8 @@ VERSION := $(shell cat VERSION)
 REVISION := $(shell git describe --always)
 GOFLAGS := -tags netgo -installsuffix netgo -ldflags '-w -s -X main.version=$(VERSION) -X main.revision=$(REVISION)'
 GOVERSION=$(shell go version)
-GOOS=$(word 1,$(subst /, ,$(lastword $(GOVERSION))))
-GOARCH=$(word 2,$(subst /, ,$(lastword $(GOVERSION))))
+GOOS ?= $(word 1,$(subst /, ,$(lastword $(GOVERSION))))
+GOARCH ?= $(word 2,$(subst /, ,$(lastword $(GOVERSION))))
 BUILD_DIR=build/$(GOOS)-$(GOARCH)
 SQLDEF=$(shell pwd)
 MACOS_VERSION := 11.3
