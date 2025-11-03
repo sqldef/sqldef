@@ -6,7 +6,7 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Current Status
 
-- **1006 tests, 4 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
+- **1006 tests, 3 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
 
 ## Rules
 
@@ -17,16 +17,15 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Remaining Tasks
 
-### Failing Tests (4 total)
+### Failing Tests (3 total)
 
 1. `ChangeDefaultExpressionWithAddition`
 2. `CreateTableWithConstraintOptions`
 3. `CreateTableWithDefault`
-4. `NegativeDefaultNumbers`
 
 ### Summary by Category
 
-1. **Miscellaneous** - 4 failures
+1. **Miscellaneous** - 3 failures
 
 ### Miscellaneous
 
@@ -34,14 +33,10 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
    - Affects: `ChangeDefaultExpressionWithAddition`
    - Fix: Normalize arithmetic expressions in defaults
 
-2. **Negative default numbers** - Not parsed correctly
-   - Affects: `NegativeDefaultNumbers`
-   - Fix: Handle negative numbers in default values
-
-3. **Default values in CREATE TABLE** - Not idempotent
+2. **Default values in CREATE TABLE** - Not idempotent
    - Affects: `CreateTableWithDefault`
    - Fix: Normalize default value representation
 
-4. **Constraint options** - DEFERRABLE/NOT DEFERRABLE not handled correctly
+3. **Constraint options** - DEFERRABLE/NOT DEFERRABLE not handled correctly
    - Affects: `CreateTableWithConstraintOptions`
    - Fix: Parse and generate constraint options correctly for non-FK constraints

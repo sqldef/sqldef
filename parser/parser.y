@@ -2627,17 +2627,9 @@ default_value_expression:
   {
     $$ = NewIntVal($1)
   }
-| '-' INTEGRAL
-  {
-    $$ = NewIntVal(append([]byte("-"), $2...))
-  }
 | FLOAT
   {
     $$ = NewFloatVal($1)
-  }
-| '-' FLOAT
-  {
-    $$ = NewFloatVal(append([]byte("-"), $2...))
   }
 | NULL character_cast_opt
   {
@@ -2702,6 +2694,35 @@ default_value_expression:
 | default_value_expression '/' default_value_expression
   {
     $$ = &BinaryExpr{Left: $1, Operator: DivStr, Right: $3}
+  }
+| '+' default_value_expression %prec UNARY
+  {
+    if num, ok := $2.(*SQLVal); ok && num.Type == IntVal {
+      $$ = num
+    } else {
+      $$ = &UnaryExpr{Operator: UPlusStr, Expr: $2}
+    }
+  }
+| '-' default_value_expression %prec UNARY
+  {
+    if num, ok := $2.(*SQLVal); ok && num.Type == IntVal {
+      // Handle double negative
+      if num.Val[0] == '-' {
+        num.Val = num.Val[1:]
+        $$ = num
+      } else {
+        $$ = NewIntVal(append([]byte("-"), num.Val...))
+      }
+    } else if num, ok := $2.(*SQLVal); ok && num.Type == FloatVal {
+      if num.Val[0] == '-' {
+        num.Val = num.Val[1:]
+        $$ = num
+      } else {
+        $$ = NewFloatVal(append([]byte("-"), num.Val...))
+      }
+    } else {
+      $$ = &UnaryExpr{Operator: UMinusStr, Expr: $2}
+    }
   }
 | '(' default_value_expression ')'
   {

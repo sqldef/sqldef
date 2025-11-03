@@ -34,9 +34,12 @@ var (
 		"numeric": "decimal",
 		"varchar": "character varying",
 	}
-	postgresDataTypeAliases = map[string]string{}
-	mssqlDataTypeAliases    = map[string]string{}
-	mysqlDataTypeAliases    = map[string]string{
+	postgresDataTypeAliases = map[string]string{
+		// In PostgreSQL, FLOAT without precision is equivalent to DOUBLE PRECISION
+		"float": "double precision",
+	}
+	mssqlDataTypeAliases = map[string]string{}
+	mysqlDataTypeAliases = map[string]string{
 		"boolean": "tinyint",
 	}
 )
@@ -1852,9 +1855,43 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Right:    normalizeExpr(e.Right, mode),
 		}
 	case *parser.UnaryExpr:
+		normalized := normalizeExpr(e.Expr, mode)
+
+		// Collapse UnaryExpr with minus/plus on numeric literals to SQLVal
+		// This ensures "-20" and "- 20" (unary minus on 20) are treated the same
+		if sqlVal, ok := normalized.(*parser.SQLVal); ok {
+			switch e.Operator {
+			case parser.UMinusStr:
+				switch sqlVal.Type {
+				case parser.IntVal:
+					// Create negative integer: -N
+					if sqlVal.Val[0] == '-' {
+						// Double negative: --N → N
+						return parser.NewIntVal(sqlVal.Val[1:])
+					} else {
+						return parser.NewIntVal(append([]byte("-"), sqlVal.Val...))
+					}
+				case parser.FloatVal:
+					// Create negative float: -N.M
+					if sqlVal.Val[0] == '-' {
+						// Double negative: --N.M → N.M
+						return parser.NewFloatVal(sqlVal.Val[1:])
+					} else {
+						return parser.NewFloatVal(append([]byte("-"), sqlVal.Val...))
+					}
+				}
+			case parser.UPlusStr:
+				// Unary plus has no effect on numeric values
+				switch sqlVal.Type {
+				case parser.IntVal, parser.FloatVal:
+					return sqlVal
+				}
+			}
+		}
+
 		return &parser.UnaryExpr{
 			Operator: e.Operator,
-			Expr:     normalizeExpr(e.Expr, mode),
+			Expr:     normalized,
 		}
 	case *parser.IsExpr:
 		return &parser.IsExpr{
