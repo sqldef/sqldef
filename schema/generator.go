@@ -3792,9 +3792,26 @@ func normalizeName(name string) string {
 	return strings.ToLower(name)
 }
 
-// normalizeOperator converts operator to lowercase for consistent comparison.
-func normalizeOperator(op string) string {
-	return strings.ToLower(op)
+// normalizeOperator converts operator to lowercase and applies PostgreSQL-specific mappings.
+// PostgreSQL stores certain operators in a canonical form:
+// - LIKE is stored as ~~
+// - NOT LIKE is stored as !~~
+// - != is stored as <>
+func normalizeOperator(op string, mode GeneratorMode) string {
+	op = strings.ToLower(op)
+
+	if mode == GeneratorModePostgres {
+		switch op {
+		case "like":
+			return "~~"
+		case "not like":
+			return "!~~"
+		case "!=":
+			return "<>"
+		}
+	}
+
+	return op
 }
 
 // sortAndDeduplicateValues sorts and deduplicates a slice of expressions based on their string representation.
@@ -3848,19 +3865,20 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		// - time, time without time zone: Kept but normalized (PostgreSQL preserves these for precision)
 		if e.Type != nil {
 			typeStr := strings.ToLower(e.Type.Type)
+
 			// Always remove text casts
 			if typeStr == "text" || typeStr == "character varying" {
 				return normalizeCheckExpr(e.Expr, mode)
 			}
 
 			// Normalize time type names BEFORE checking for removal
+			// "timestamp without time zone" -> "timestamp" (check this first!)
 			// "time without time zone" -> "time"
-			// "timestamp without time zone" -> "timestamp"
 			normalizedTypeStr := typeStr
-			if strings.Contains(typeStr, "time without time zone") {
-				normalizedTypeStr = "time"
-			} else if strings.Contains(typeStr, "timestamp without time zone") {
+			if strings.Contains(typeStr, "timestamp without time zone") {
 				normalizedTypeStr = "timestamp"
+			} else if strings.Contains(typeStr, "time without time zone") {
+				normalizedTypeStr = "time"
 			}
 
 			// Remove date/timestamp casts from string literals
@@ -3929,7 +3947,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		left := normalizeCheckExpr(e.Left, mode)
 		right := normalizeCheckExpr(e.Right, mode)
 
-		op := normalizeOperator(e.Operator)
+		op := normalizeOperator(e.Operator, mode)
 		anyFlag := e.Any
 		allFlag := e.All
 

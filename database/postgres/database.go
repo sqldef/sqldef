@@ -576,8 +576,10 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 			col.IdentityGeneration = *idGen
 		}
 		if checkName != nil && checkDefinition != nil {
+			// Normalize type casts for generic parser compatibility
+			normalizedDef := normalizePostgresTypeCasts(*checkDefinition)
 			col.Check = &columnConstraint{
-				definition: *checkDefinition,
+				definition: normalizedDef,
 				name:       *checkName,
 			}
 		}
@@ -626,6 +628,25 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 	return indexes, nil
 }
 
+// normalizePostgresTypeCasts normalizes PostgreSQL's verbose type cast syntax for generic parser compatibility.
+// The generic parser has difficulty parsing ::time casts, so we convert them to TypedLiteral format (time 'value').
+func normalizePostgresTypeCasts(sql string) string {
+	// Convert ::time without time zone casts to typed literal format
+	// PostgreSQL returns: '09:00:00'::time without time zone
+	// Convert to: time '09:00:00' (which the generic parser can handle)
+	re := regexp.MustCompile(`'([^']+)'::time without time zone`)
+	sql = re.ReplaceAllString(sql, "time '$1'")
+
+	re = regexp.MustCompile(`'([^']+)'::timestamp without time zone`)
+	sql = re.ReplaceAllString(sql, "timestamp '$1'")
+
+	// For with time zone variants, keep as cast since TypedLiteral doesn't support them well
+	sql = strings.ReplaceAll(sql, "::timestamp with time zone", "::timestamptz")
+	sql = strings.ReplaceAll(sql, "::time with time zone", "::timetz")
+
+	return sql
+}
+
 func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[string]string, error) {
 	const query = `SELECT con.conname, pg_get_constraintdef(con.oid, true)
 	FROM   pg_constraint con
@@ -650,6 +671,9 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[strin
 		if err != nil {
 			return nil, err
 		}
+		// Normalize type casts for generic parser compatibility
+		// PostgreSQL returns "::time without time zone" but the generic parser expects "::time"
+		constraintDef = normalizePostgresTypeCasts(constraintDef)
 		result[constraintName] = constraintDef
 	}
 

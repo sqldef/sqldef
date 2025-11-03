@@ -5254,9 +5254,17 @@ simple_convert_type:
   {
     $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
   }
+| TIMESTAMP
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
 | TIME '(' INTEGRAL ')'
   {
     $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+  }
+| TIME
+  {
+    $$ = &ConvertType{Type: string($1)}
   }
 | INTERVAL
   {

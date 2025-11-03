@@ -6,7 +6,7 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Current Status
 
-- **1006 tests, 8 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
+- **1006 tests, 6 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
 
 ## Rules
 
@@ -17,29 +17,19 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Remaining Tasks
 
-### Failing Tests (8 total)
+### Failing Tests (6 total)
 
 1. `ChangeDefaultExpressionWithAddition`
-2. `CheckConstraint`
-3. `CreateTableWithConstraintOptions`
-4. `CreateTableWithDefault`
-5. `ManagedRolesErrorCascade`
-6. `ManagedRolesErrorGrantOption`
-7. `NegativeDefaultNumbers`
-8. `TypedLiteralsInCheckWithCast`
+2. `CreateTableWithConstraintOptions`
+3. `CreateTableWithDefault`
+4. `ManagedRolesErrorCascade`
+5. `ManagedRolesErrorGrantOption`
+6. `NegativeDefaultNumbers`
 
 ### Summary by Category
 
-1. **Check Constraint Issues** - 2 failures
-2. **Managed Roles Issues** - 2 failures
-3. **Miscellaneous** - 4 failures
-
-### Check Constraint Issues
-
-1. **Check constraint with typed literals and casts** - Not handled correctly
-   - Check constraints with complex type casts and literal formats
-   - Affects: `CheckConstraint`, `TypedLiteralsInCheckWithCast`
-   - Fix: Normalize typed literals and cast expressions in CHECK constraints
+1. **Managed Roles Issues** - 2 failures
+2. **Miscellaneous** - 4 failures
 
 ### Managed Roles Issues
 
