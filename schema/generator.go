@@ -1626,6 +1626,61 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 	}
 }
 
+// normalizeConvertType normalizes a ConvertType's type name using the same logic as normalizeDataType
+// This handles type aliases like int -> integer and properly handles array types like int[] -> integer[]
+func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *parser.ConvertType {
+	if convertType == nil {
+		return nil
+	}
+
+	// Check if the type is an array type (ends with [])
+	typeStr := convertType.Type
+	isArray := strings.HasSuffix(typeStr, "[]")
+
+	// For array types, normalize the base type and then re-append the []
+	if isArray {
+		baseType := strings.TrimSuffix(typeStr, "[]")
+		normalizedBase := normalizeTypeName(baseType, mode)
+		typeStr = normalizedBase + "[]"
+	} else {
+		typeStr = normalizeTypeName(typeStr, mode)
+	}
+
+	return &parser.ConvertType{
+		Type:     typeStr,
+		Length:   convertType.Length,
+		Scale:    convertType.Scale,
+		Operator: convertType.Operator,
+		Charset:  convertType.Charset,
+	}
+}
+
+// normalizeTypeName normalizes a type name using dataTypeAliases and mode-specific aliases
+func normalizeTypeName(typeName string, mode GeneratorMode) string {
+	// Apply common aliases
+	if alias, ok := dataTypeAliases[typeName]; ok {
+		typeName = alias
+	}
+
+	// Apply mode-specific aliases
+	switch mode {
+	case GeneratorModePostgres:
+		if alias, ok := postgresDataTypeAliases[typeName]; ok {
+			typeName = alias
+		}
+	case GeneratorModeMysql:
+		if alias, ok := mysqlDataTypeAliases[typeName]; ok {
+			typeName = alias
+		}
+	case GeneratorModeMssql:
+		if alias, ok := mssqlDataTypeAliases[typeName]; ok {
+			typeName = alias
+		}
+	}
+
+	return typeName
+}
+
 // normalizeExpr normalizes an expression in a view definition
 // This is similar to normalizeCheckExpr but tailored for view definitions
 func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
@@ -1738,9 +1793,17 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				}
 			}
 		}
+
+		// Normalize the type name in the cast expression to handle type aliases
+		// e.g., int[]::int[] should become int[]::integer[]
+		normalizedType := e.Type
+		if e.Type != nil {
+			normalizedType = normalizeConvertType(e.Type, mode)
+		}
+
 		return &parser.CastExpr{
 			Expr: normalizedExpr,
-			Type: e.Type,
+			Type: normalizedType,
 		}
 	case *parser.ParenExpr:
 		normalizedInner := normalizeExpr(e.Expr, mode)
@@ -4249,25 +4312,7 @@ func isNullDefault(def *DefaultDefinition) bool {
 }
 
 func (g *Generator) normalizeDataType(dataType string) string {
-	if alias, ok := dataTypeAliases[dataType]; ok {
-		dataType = alias
-	}
-
-	switch g.mode {
-	case GeneratorModePostgres:
-		if alias, ok := postgresDataTypeAliases[dataType]; ok {
-			dataType = alias
-		}
-	case GeneratorModeMysql:
-		if alias, ok := mysqlDataTypeAliases[dataType]; ok {
-			dataType = alias
-		}
-	case GeneratorModeMssql:
-		if alias, ok := mssqlDataTypeAliases[dataType]; ok {
-			dataType = alias
-		}
-	}
-	return dataType
+	return normalizeTypeName(dataType, g.mode)
 }
 
 func (g *Generator) areSamePrimaryKeys(primaryKeyA *Index, primaryKeyB *Index) bool {
