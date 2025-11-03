@@ -354,8 +354,18 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		// Generate constraint name if not explicitly provided
 		constraintName := util.BuildPostgresConstraintName(stmt.NewName.Name.String(), parsedCol.Name.String(), "fkey")
 
+		// Only create constraintOptions if DEFERRABLE or INITIALLY DEFERRED is explicitly set to true
+		// This ensures we don't create an empty constraintOptions struct that would differ from
+		// database-parsed FKs (which have nil constraintOptions when not deferrable)
 		var constraintOptions *ConstraintOptions
-		if parsedCol.Type.ReferenceDeferrable != nil || parsedCol.Type.ReferenceInitDeferred != nil {
+		var deferrableVal, initDeferredVal bool
+		if parsedCol.Type.ReferenceDeferrable != nil {
+			deferrableVal = castBool(*parsedCol.Type.ReferenceDeferrable)
+		}
+		if parsedCol.Type.ReferenceInitDeferred != nil {
+			initDeferredVal = castBool(*parsedCol.Type.ReferenceInitDeferred)
+		}
+		if (parsedCol.Type.ReferenceDeferrable != nil || parsedCol.Type.ReferenceInitDeferred != nil) && (deferrableVal || initDeferredVal) {
 			deferrable := false
 			if parsedCol.Type.ReferenceDeferrable != nil {
 				deferrable = castBool(*parsedCol.Type.ReferenceDeferrable)
