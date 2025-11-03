@@ -2744,3 +2744,5 @@ type ArrayElement interface {
 func (*SQLVal) iArrayElement()           {}
 func (*CastExpr) iArrayElement()         {}
 func (*ArrayConstructor) iArrayElement() {}
+func (*ParenExpr) iArrayElement()        {}
+func (ValTuple) iArrayElement()          {}

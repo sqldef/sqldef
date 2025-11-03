@@ -5882,6 +5882,18 @@ array_element:
     }
     $$ = &CastExpr{Expr: $1, Type: t}
   }
+| tuple_expression
+  {
+    $$ = $1.(ArrayElement)
+  }
+| tuple_expression TYPECAST simple_convert_type array_opt
+  {
+    t := $3
+    if $4 {
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+    }
+    $$ = &CastExpr{Expr: $1, Type: t}
+  }
 | variadic_opt array_constructor
   {
     $$ = $2

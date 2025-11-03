@@ -14,6 +14,7 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 * Do not modify tests in this migration process. No breaking changes are allowed
 * Do not change the behavior by checking `PSQLDEF_PARSER`, which will be removed away after the migration
 * `pgquery` parser might normalize AST in a wrong way, which should be fixed in this migration process (commit cadcee36b9ed3fbb1a185262cc8881ca53d409d4 for example)
+* `make test` must pass (i.e. no regressions are allowed)
 
 ## Remaining Tasks
 
@@ -33,8 +34,9 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
    - Issue: `current_timestamp + '3 days'` should generate `current_timestamp + '3 days'::interval`
    - Fix: Preserve type casts in binary expressions within DEFAULT clauses
 
-2. **Array element typecast in defaults** - Syntax error parsing array with typecast elements
+2. **Array element typecast in defaults** - Parser fixes applied, normalization issue remains
    - Affects: `CreateTableWithDefault`
-   - Issue: Parser fails on `ARRAY[(CURRENT_DATE)::text]`
-   - Error: `syntax error at line 17, column 61`
-   - Fix: Support typecast expressions as array elements in ARRAY constructor syntax
+   - Parser fix: Added `tuple_expression` support in `array_element` grammar rule to parse `ARRAY[(CURRENT_DATE)::text]`
+   - Remaining issue: PostgreSQL normalizes `ARRAY[current_date::text]::text[]` to `ARRAY[(CURRENT_DATE)::text]` (drops redundant array typecast when column type is already `text[]`)
+   - This is a schema normalization issue, not a parser issue
+   - Next step: Add normalization logic to strip redundant array typecasts when column type matches
