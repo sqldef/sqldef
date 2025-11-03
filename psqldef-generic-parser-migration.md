@@ -6,7 +6,7 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Current Status
 
-- **DONE 1006 tests, 34 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
+- **DONE 1006 tests, 26 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
 
 ## Rules
 
@@ -19,24 +19,15 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ### Summary
 
-The 34 remaining test failures fall into these categories:
+The 26 remaining test failures fall into these categories:
 
-1. **View Normalization** - 1 item causing ~9 failures
-2. **Auto-generated Constraint Names** - 1 item causing ~2 failures
-3. **Comment Statement Issues** - 2 items causing ~4 failures
-4. **Foreign Key Issues** - Multiple items causing ~7 failures
-5. **Array Default Issues** - 1 item causing ~3 failures
-6. **Miscellaneous** - Various items causing ~9 failures
+1. **Auto-generated Constraint Names** - 1 item causing ~2 failures
+2. **Comment Statement Issues** - 2 items causing ~4 failures
+3. **Foreign Key Issues** - Multiple items causing ~9 failures
+4. **Array Default Issues** - 1 item causing ~3 failures
+5. **Miscellaneous** - Various items causing ~9 failures
 
 Note: Many tests have multiple issues, so the counts overlap.
-
-### View Normalization
-
-1. **VIEW definition normalization** - Views not idempotent after creation
-   - PostgreSQL normalizes view definitions (adds casts, rewrites expressions, etc.)
-   - Generic parser doesn't normalize to match PostgreSQL's output
-   - Affects: ~8 tests including `ViewDDLsAreEmittedLastWithoutChangingDefinition`, `ViewWithGroupByAndHaving`, `CreateViewCast`
-   - Fix: Either normalize views in generic parser or fetch normalized definition from database
 
 ### Auto-generated Constraint Names
 
@@ -65,7 +56,7 @@ Note: Many tests have multiple issues, so the counts overlap.
    - Syntax: `REFERENCES table` (without column list)
    - Parser creates foreign key with empty referenceColumns array
    - Database infers primary key, but comparison fails during idempotency check
-   - Affects: `CreateTableWithReferences`, `DropReferences`, `CreateTableAddAbsentForeignKey`, `ForeignKeyOnReservedName`
+   - Affects: `CreateTableWithReferences`, `DropReferences`, `CreateTableAddAbsentForeignKey`, `ForeignKeyOnReservedName`, `ViewWithDistinct`, `ViewWithGroupByAndHaving`
    - Fix: Handle implicit reference columns in comparison or lookup primary key during parsing
 
 2. **Foreign key dependency ordering** - Circular dependencies not handled

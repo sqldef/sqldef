@@ -1509,7 +1509,7 @@ func (g *Generator) normalizeViewDefinition(stmt parser.SelectStatement) parser.
 	case *parser.Select:
 		return &parser.Select{
 			Cache:       s.Cache,
-			Comments:    s.Comments,
+			Comments:    nil, // Remove comments for view comparison - they don't affect semantic meaning
 			Distinct:    s.Distinct,
 			Hints:       s.Hints,
 			SelectExprs: normalizeSelectExprs(s.SelectExprs, g.mode),
@@ -1637,13 +1637,58 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Over:      e.Over,
 		}
 	case *parser.CastExpr:
+		normalizedExpr := normalizeExpr(e.Expr, mode)
+		// For PostgreSQL, unwrap unnecessary parentheses around simple expressions in casts
+		// PostgreSQL adds parentheses like (amount)::numeric, but we want to normalize to amount::numeric
+		if mode == GeneratorModePostgres {
+			if parenExpr, ok := normalizedExpr.(*parser.ParenExpr); ok {
+				if _, isColName := parenExpr.Expr.(*parser.ColName); isColName {
+					normalizedExpr = parenExpr.Expr
+				}
+			}
+
+			// Remove text/varchar casts that PostgreSQL adds
+			// PostgreSQL adds ::text casts for string literals and function results
+			if e.Type != nil {
+				typeStr := strings.ToLower(e.Type.Type)
+				if typeStr == "text" || typeStr == "character varying" {
+					return normalizedExpr
+				}
+
+				// Remove redundant implicit casts that PostgreSQL adds for function arguments
+				// e.g., expr::bigint::double precision -> expr::bigint
+				// PostgreSQL adds these when a function expects double precision but gets bigint
+				if typeStr == "double precision" || typeStr == "real" {
+					if innerCast, ok := normalizedExpr.(*parser.CastExpr); ok {
+						if innerCast.Type != nil {
+							innerTypeStr := strings.ToLower(innerCast.Type.Type)
+							// If the inner cast is to an integer type, remove the outer double precision cast
+							if innerTypeStr == "bigint" || innerTypeStr == "integer" || innerTypeStr == "smallint" {
+								return innerCast
+							}
+						}
+					}
+				}
+			}
+		}
 		return &parser.CastExpr{
-			Expr: normalizeExpr(e.Expr, mode),
+			Expr: normalizedExpr,
 			Type: e.Type,
 		}
 	case *parser.ParenExpr:
+		normalizedInner := normalizeExpr(e.Expr, mode)
+		// For PostgreSQL, unwrap parentheses around most expressions to normalize
+		// PostgreSQL adds parentheses around many expressions, but we want a canonical form
+		// We always unwrap ParenExpr during normalization to get a canonical form
+		// The only exception is when parentheses are around complex nested expressions
+		// where they're needed for precedence (like CASE inside a larger expression)
+		if mode == GeneratorModePostgres {
+			// Always unwrap single-layer parentheses for normalization
+			// This handles cases like (NOT deleted), (a = 1), ((col)::type), etc.
+			return normalizedInner
+		}
 		return &parser.ParenExpr{
-			Expr: normalizeExpr(e.Expr, mode),
+			Expr: normalizedInner,
 		}
 	case *parser.ComparisonExpr:
 		return &parser.ComparisonExpr{
@@ -1680,6 +1725,21 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Operator: e.Operator,
 			Expr:     normalizeExpr(e.Expr, mode),
 		}
+	case *parser.ConvertExpr:
+		// Normalize CAST(expr AS type) to expr::type (CastExpr) for consistency
+		// PostgreSQL represents both forms identically in its internal representation
+		if mode == GeneratorModePostgres && e.Action == parser.CastStr {
+			return normalizeExpr(&parser.CastExpr{
+				Expr: e.Expr,
+				Type: e.Type,
+			}, mode)
+		}
+		return &parser.ConvertExpr{
+			Action: e.Action,
+			Expr:   normalizeExpr(e.Expr, mode),
+			Type:   e.Type,
+			Style:  e.Style,
+		}
 	case *parser.CollateExpr:
 		return &parser.CollateExpr{
 			Expr:    normalizeExpr(e.Expr, mode),
@@ -1694,8 +1754,15 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			}
 		}
 		normalizedElse := normalizeExpr(e.Else, mode)
+		// PostgreSQL adds ELSE NULL to CASE expressions, normalize it away
 		if _, ok := normalizedElse.(*parser.NullVal); ok {
 			normalizedElse = nil
+		}
+		// Also handle ELSE NULL::type (cast to null)
+		if castExpr, ok := normalizedElse.(*parser.CastExpr); ok {
+			if _, isNull := castExpr.Expr.(*parser.NullVal); isNull {
+				normalizedElse = nil
+			}
 		}
 		return &parser.CaseExpr{
 			Expr:  normalizeExpr(e.Expr, mode),
