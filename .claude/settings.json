@@ -2,7 +2,6 @@
   "hooks": {
     "Stop": [
       {
-        "matcher": "Write|Edit",
         "hooks": [
           {
             "type": "command",

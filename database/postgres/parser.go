@@ -190,16 +190,10 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 				}
 				indexes = append(indexes, index)
 			case pgquery.ConstrType_CONSTR_UNIQUE:
-				// Generate a constraint name if not provided to match PostgreSQL's behavior
-				constraintName := node.Constraint.Conname
-				if constraintName == "" && len(indexCols) == 1 {
-					// Generate name similar to PostgreSQL: tablename_columnname_key
-					constraintName = fmt.Sprintf("%s_%s_key", tableName.Name.String(), indexCols[0].Column.String())
-				}
 				index := &parser.IndexDefinition{
 					Info: &parser.IndexInfo{
 						Type:   "UNIQUE",
-						Name:   parser.NewColIdent(constraintName),
+						Name:   parser.NewColIdent(node.Constraint.Conname),
 						Unique: true,
 					},
 					Columns: indexCols,
@@ -1114,12 +1108,6 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 				return nil, nil, err
 			}
 			columnType.Check = check
-			if constraint.Conname == "" {
-				name, truncated := p.absentConstraintName(tableName.Name.String(), columnDef.Colname, "check")
-				if truncated {
-					check.ConstraintName = parser.NewColIdent(name)
-				}
-			}
 		case pgquery.ConstrType_CONSTR_PRIMARY:
 			columnType.KeyOpt = parser.ColumnKeyOption(1)
 		case pgquery.ConstrType_CONSTR_UNIQUE:
@@ -1130,10 +1118,6 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 				return nil, nil, err
 			}
 			foreignKey.IndexColumns = []parser.ColIdent{parser.NewColIdent(columnDef.Colname)}
-			if constraint.Conname == "" {
-				name, _ := p.absentConstraintName(tableName.Name.String(), columnDef.Colname, "fkey")
-				foreignKey.ConstraintName = parser.NewColIdent(name)
-			}
 		case pgquery.ConstrType_CONSTR_ATTR_DEFERRABLE:
 			foreignKey.ConstraintOptions.Deferrable = true
 		case pgquery.ConstrType_CONSTR_ATTR_NOT_DEFERRABLE:
@@ -1161,26 +1145,6 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 		Name: parser.NewColIdent(columnDef.Colname),
 		Type: columnType,
 	}, foreignKey, nil
-}
-
-func (p PostgresParser) absentConstraintName(tableName, columnName, suffix string) (string, bool) {
-	if name := fmt.Sprintf("%s_%s_%s", tableName, columnName, suffix); len(name) <= 63 {
-		return name, false
-	}
-
-	var tableThreshold, columnThreshold = 33 - len(suffix), 28
-	var maxSum = tableThreshold + columnThreshold
-
-	if len(tableName) <= tableThreshold {
-		columnName = columnName[:maxSum-len(tableName)]
-	} else if len(columnName) <= columnThreshold {
-		tableName = tableName[:maxSum-len(columnName)]
-	} else {
-		tableName = tableName[:tableThreshold]
-		columnName = columnName[:columnThreshold]
-	}
-
-	return fmt.Sprintf("%s_%s_%s", tableName, columnName, suffix), true
 }
 
 func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.DefaultDefinition, error) {

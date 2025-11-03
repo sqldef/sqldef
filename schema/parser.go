@@ -352,8 +352,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		// Generate constraint name if not explicitly provided
-		// Follow PostgreSQL's convention: tablename_columnname_fkey
-		constraintName := fmt.Sprintf("%s_%s_fkey", stmt.NewName.Name.String(), parsedCol.Name.String())
+		constraintName := util.BuildPostgresConstraintName(stmt.NewName.Name.String(), parsedCol.Name.String(), "fkey")
 
 		var constraintOptions *ConstraintOptions
 		if parsedCol.Type.ReferenceDeferrable != nil || parsedCol.Type.ReferenceInitDeferred != nil {
@@ -450,9 +449,8 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			}
 			columnName := indexColumns[0].ColumnName()
 
-			// PostgreSQL UNIQUE constraint naming convention: tablename_columnname_key
 			if mode == GeneratorModePostgres && indexDef.Info.Unique && len(indexColumns) == 1 {
-				name = fmt.Sprintf("%s_%s_key", tableName, columnName)
+				name = util.BuildPostgresConstraintName(tableName, columnName, "key")
 			} else {
 				// For MySQL or multi-column constraints, use just the column name
 				name = columnName
