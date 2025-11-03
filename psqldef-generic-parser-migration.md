@@ -6,7 +6,7 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Current Status
 
-- **1006 tests, 6 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
+- **1006 tests, 4 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
 
 ## Rules
 
@@ -17,26 +17,16 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Remaining Tasks
 
-### Failing Tests (6 total)
+### Failing Tests (4 total)
 
 1. `ChangeDefaultExpressionWithAddition`
 2. `CreateTableWithConstraintOptions`
 3. `CreateTableWithDefault`
-4. `ManagedRolesErrorCascade`
-5. `ManagedRolesErrorGrantOption`
-6. `NegativeDefaultNumbers`
+4. `NegativeDefaultNumbers`
 
 ### Summary by Category
 
-1. **Managed Roles Issues** - 2 failures
-2. **Miscellaneous** - 4 failures
-
-### Managed Roles Issues
-
-1. **Managed roles error handling** - CASCADE and GRANT OPTION not properly validated
-   - When using managed roles, certain grant operations should error
-   - Affects: `ManagedRolesErrorCascade`, `ManagedRolesErrorGrantOption`
-   - Fix: Implement proper validation for managed roles feature
+1. **Miscellaneous** - 4 failures
 
 ### Miscellaneous
 

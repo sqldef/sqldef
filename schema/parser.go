@@ -202,6 +202,10 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				schema:    *stmt.Schema,
 			}, nil
 		} else if stmt.Action == parser.GrantPrivilege {
+			if stmt.Grant.WithGrantOption {
+				return nil, fmt.Errorf("WITH GRANT OPTION is not supported yet")
+			}
+
 			grantees := stmt.Grant.Grantees
 
 			if len(grantees) > 0 {
@@ -216,6 +220,10 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}
 			return nil, fmt.Errorf("no grantees specified in GRANT statement")
 		} else if stmt.Action == parser.RevokePrivilege {
+			if stmt.Grant.CascadeOption {
+				return nil, fmt.Errorf("CASCADE/RESTRICT options are not supported yet")
+			}
+
 			grantees := stmt.Grant.Grantees
 
 			// For now, return the first grantee as a single statement
