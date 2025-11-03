@@ -781,11 +781,22 @@ func (d *MssqlDatabase) GetDefaultSchema() string {
 func mssqlBuildDSN(config database.Config) string {
 	query := url.Values{}
 	query.Add("database", config.DbName)
+	if config.TrustServerCert {
+        query.Add("trustservercert", "true")
+    }
+
+	var user *url.Userinfo
+	if config.TrustedConnection {
+		user = nil
+	} else {
+		user = url.UserPassword(config.User, config.Password)
+	}
 
 	u := &url.URL{
 		Scheme:   "sqlserver",
-		User:     url.UserPassword(config.User, config.Password),
+		User:     user,
 		Host:     fmt.Sprintf("%s:%d", config.Host, config.Port),
+		Path:     config.Instance,
 		RawQuery: query.Encode(),
 	}
 	return u.String()
