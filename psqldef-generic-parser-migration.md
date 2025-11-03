@@ -6,7 +6,7 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Current Status
 
-- **1006 tests, 3 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
+- **1006 tests, 2 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
 
 ## Rules
 
@@ -17,26 +17,24 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Remaining Tasks
 
-### Failing Tests (3 total)
+### Failing Tests (2 total)
 
 1. `ChangeDefaultExpressionWithAddition`
-2. `CreateTableWithConstraintOptions`
-3. `CreateTableWithDefault`
+2. `CreateTableWithDefault`
 
 ### Summary by Category
 
-1. **Miscellaneous** - 3 failures
+1. **Default expressions** - 2 failures
 
-### Miscellaneous
+### Default Expressions
 
-1. **Default expression with addition** - Expression not normalized
+1. **Default expression with interval addition** - Missing `::interval` typecast
    - Affects: `ChangeDefaultExpressionWithAddition`
-   - Fix: Normalize arithmetic expressions in defaults
+   - Issue: `current_timestamp + '3 days'` should generate `current_timestamp + '3 days'::interval`
+   - Fix: Preserve type casts in binary expressions within DEFAULT clauses
 
-2. **Default values in CREATE TABLE** - Not idempotent
+2. **Array element typecast in defaults** - Syntax error parsing array with typecast elements
    - Affects: `CreateTableWithDefault`
-   - Fix: Normalize default value representation
-
-3. **Constraint options** - DEFERRABLE/NOT DEFERRABLE not handled correctly
-   - Affects: `CreateTableWithConstraintOptions`
-   - Fix: Parse and generate constraint options correctly for non-FK constraints
+   - Issue: Parser fails on `ARRAY[(CURRENT_DATE)::text]`
+   - Error: `syntax error at line 17, column 61`
+   - Fix: Support typecast expressions as array elements in ARRAY constructor syntax

@@ -2517,42 +2517,50 @@ column_definition_type:
     $1.ReferenceInitDeferred = &$8
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option deferrable_opt initially_deferred_opt
+| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option fk_defer_opts
   {
     $1.References            = String($3)
     $1.ReferenceNames        = $5
     $1.ReferenceOnDelete     = $9
-    $1.ReferenceDeferrable   = &$10
-    $1.ReferenceInitDeferred = &$11
+    if $10.constraintOpts != nil {
+      $1.ReferenceDeferrable  = NewBoolVal($10.constraintOpts.Deferrable)
+      $1.ReferenceInitDeferred = NewBoolVal($10.constraintOpts.InitiallyDeferred)
+    }
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option deferrable_opt initially_deferred_opt
+| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option fk_defer_opts
   {
     $1.References            = String($3)
     $1.ReferenceNames        = $5
     $1.ReferenceOnUpdate     = $9
-    $1.ReferenceDeferrable   = &$10
-    $1.ReferenceInitDeferred = &$11
+    if $10.constraintOpts != nil {
+      $1.ReferenceDeferrable  = NewBoolVal($10.constraintOpts.Deferrable)
+      $1.ReferenceInitDeferred = NewBoolVal($10.constraintOpts.InitiallyDeferred)
+    }
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option ON UPDATE reference_option deferrable_opt initially_deferred_opt
+| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option ON UPDATE reference_option fk_defer_opts
   {
     $1.References            = String($3)
     $1.ReferenceNames        = $5
     $1.ReferenceOnDelete     = $9
     $1.ReferenceOnUpdate     = $12
-    $1.ReferenceDeferrable   = &$13
-    $1.ReferenceInitDeferred = &$14
+    if $13.constraintOpts != nil {
+      $1.ReferenceDeferrable  = NewBoolVal($13.constraintOpts.Deferrable)
+      $1.ReferenceInitDeferred = NewBoolVal($13.constraintOpts.InitiallyDeferred)
+    }
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option ON DELETE reference_option deferrable_opt initially_deferred_opt
+| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option ON DELETE reference_option fk_defer_opts
   {
     $1.References            = String($3)
     $1.ReferenceNames        = $5
     $1.ReferenceOnUpdate     = $9
     $1.ReferenceOnDelete     = $12
-    $1.ReferenceDeferrable   = &$13
-    $1.ReferenceInitDeferred = &$14
+    if $13.constraintOpts != nil {
+      $1.ReferenceDeferrable  = NewBoolVal($13.constraintOpts.Deferrable)
+      $1.ReferenceInitDeferred = NewBoolVal($13.constraintOpts.InitiallyDeferred)
+    }
     $$ = $1
   }
 // for MySQL and PostgreSQL
