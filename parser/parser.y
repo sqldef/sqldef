@@ -392,7 +392,8 @@ func forceEOF(yylex any) {
 %type <indexOptions> index_option_opt
 %type <indexOption> index_option
 %type <indexOptions> index_option_list mssql_index_option_list
-%type <bytes> policy_as_opt policy_for_opt character_cast_opt
+%type <bytes> policy_as_opt policy_for_opt
+%type <convertType> character_cast_opt
 %type <expr> using_opt with_check_opt
 %left <bytes> TYPECAST CHECK
 %type <bytes> or_replace_opt
@@ -2625,7 +2626,11 @@ default_definition:
 default_value_expression:
   STRING character_cast_opt
   {
-    $$ = NewStrVal($1)
+    if $2 != nil {
+      $$ = &CastExpr{Expr: NewStrVal($1), Type: $2}
+    } else {
+      $$ = NewStrVal($1)
+    }
   }
 | UNICODE_STRING
   {
@@ -2641,7 +2646,11 @@ default_value_expression:
   }
 | NULL character_cast_opt
   {
-    $$ = NewValArg($1)
+    if $2 != nil {
+      $$ = &CastExpr{Expr: NewValArg($1), Type: $2}
+    } else {
+      $$ = NewValArg($1)
+    }
   }
 | current_timestamp
   {
@@ -2869,7 +2878,17 @@ character_cast_opt:
     $$ = nil
   }
 | TYPECAST BPCHAR
+  {
+    $$ = &ConvertType{Type: string($2)}
+  }
 | TYPECAST column_type array_opt
+  {
+    typeName := $2.Type
+    if $3 {
+      typeName = typeName + "[]"
+    }
+    $$ = &ConvertType{Type: typeName}
+  }
 
 numeric_type:
   int_type_spec
@@ -5375,6 +5394,8 @@ new_qualifier_column_name:
 value:
   STRING character_cast_opt
   {
+    // Don't create CastExpr in value context - only in default_value_expression
+    // This avoids affecting comparisons in non-default contexts
     $$ = NewStrVal($1)
   }
 | UNICODE_STRING
@@ -5860,6 +5881,8 @@ array_element_list:
 array_element:
   STRING character_cast_opt
   {
+    // Don't create CastExpr in array_element context - only in default_value_expression
+    // This avoids affecting array comparisons
     $$ = NewStrVal($1)
   }
 | INTEGRAL

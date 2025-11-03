@@ -1185,6 +1185,14 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 					Expr: castExpr,
 				},
 			}, nil
+		case *parser.NullVal:
+			// Handle NULL::type casts by converting NullVal to SQLVal
+			// PostgreSQL represents NULL as NullVal in pg_query AST but we use SQLVal
+			return &parser.DefaultDefinition{
+				ValueOrExpression: parser.DefaultValueOrExpression{
+					Expr: parser.NewValArg([]byte("null")),
+				},
+			}, nil
 		case *parser.CastExpr, *parser.ArrayConstructor:
 			return &parser.DefaultDefinition{
 				ValueOrExpression: parser.DefaultValueOrExpression{
