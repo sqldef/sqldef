@@ -902,8 +902,12 @@ func normalizeCollate(collate string, table parser.TableSpec) string {
 func normalizeTableInComment(mode GeneratorMode, comment *parser.Comment, defaultSchema string) *parser.Comment {
 	switch mode {
 	case GeneratorModePostgres:
+		// Normalize quotes in the object identifier for consistent comparison
+		// e.g., "public"."users" -> public.users
+		normalizedObject := strings.ReplaceAll(comment.Object, "\"", "")
+
 		// Expected format is [schema.]table.column
-		objs := strings.Split(comment.Object, ".")
+		objs := strings.Split(normalizedObject, ".")
 		switch len(objs) {
 		case 0: // abnormal-case. fallback
 			return comment
@@ -919,7 +923,11 @@ func normalizeTableInComment(mode GeneratorMode, comment *parser.Comment, defaul
 				}
 			}
 		case 3: // complete-case (schema.table.column). no-op
-			return comment
+			return &parser.Comment{
+				ObjectType: comment.ObjectType,
+				Object:     normalizedObject,
+				Comment:    comment.Comment,
+			}
 		case 4: // abnormal-case. fallback
 			return comment
 		}

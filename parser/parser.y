@@ -468,7 +468,7 @@ comment_statement:
       Action: CommentOn,
       Table: $4,
       Comment: &Comment{
-        ObjectType: "TABLE",
+        ObjectType: "OBJECT_TABLE",
         Object: tableName,
         Comment: string($6),
       },
@@ -485,7 +485,7 @@ comment_statement:
       Action: CommentOn,
       Table: $4,
       Comment: &Comment{
-        ObjectType: "TABLE",
+        ObjectType: "OBJECT_TABLE",
         Object: tableName,
         Comment: "",
       },
@@ -504,7 +504,7 @@ comment_statement:
     $$ = &DDL{
       Action: CommentOn,
       Comment: &Comment{
-        ObjectType: "COLUMN",
+        ObjectType: "OBJECT_COLUMN",
         Object: colName,
         Comment: string($6),
       },
@@ -523,7 +523,7 @@ comment_statement:
     $$ = &DDL{
       Action: CommentOn,
       Comment: &Comment{
-        ObjectType: "COLUMN",
+        ObjectType: "OBJECT_COLUMN",
         Object: colName,
         Comment: "",
       },

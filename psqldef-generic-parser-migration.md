@@ -6,7 +6,7 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Current Status
 
-- **1006 tests, 14 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
+- **1006 tests, 10 failures** (`PSQLDEF_PARSER=generic make test-psqldef`)
 
 ## Rules
 
@@ -17,44 +17,25 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 
 ## Remaining Tasks
 
-### Failing Tests (14 total)
+### Failing Tests (10 total)
 
 1. `ChangeDefaultExpressionWithAddition`
 2. `ChangeMultiDimensionalArrayDefault`
 3. `CheckConstraint`
-4. `CommentUnset`
-5. `CommentWithoutSchema`
-6. `CommentWithoutSchemaWithoutTableNameQuoted`
-7. `CommentWithoutSchemaWithTableNameQuoted`
-8. `CreateTableWithConstraintOptions`
-9. `CreateTableWithDefault`
-10. `ManagedRolesErrorCascade`
-11. `ManagedRolesErrorGrantOption`
-12. `MultiDimensionalArrayWithDefaultEmpty`
-13. `NegativeDefaultNumbers`
-14. `TypedLiteralsInCheckWithCast`
+4. `CreateTableWithConstraintOptions`
+5. `CreateTableWithDefault`
+6. `ManagedRolesErrorCascade`
+7. `ManagedRolesErrorGrantOption`
+8. `MultiDimensionalArrayWithDefaultEmpty`
+9. `NegativeDefaultNumbers`
+10. `TypedLiteralsInCheckWithCast`
 
 ### Summary by Category
 
-1. **Comment Statement Issues** - 4 failures
-2. **Array Default Issues** - 2 failures
-3. **Check Constraint Issues** - 2 failures
-4. **Managed Roles Issues** - 2 failures
-5. **Miscellaneous** - 4 failures
-
-### Comment Statement Issues
-
-1. **COMMENT schema qualification** - Missing schema prefix in COMMENT statements
-   - Generated: `COMMENT ON TABLE users IS ...`
-   - Expected: `COMMENT ON TABLE public.users IS ...`
-   - Affects: `CommentUnset`, `CommentWithoutSchema`, `CommentWithoutSchemaWithoutTableNameQuoted`, `CommentWithoutSchemaWithTableNameQuoted`
-   - Fix: Always include schema prefix in COMMENT statements
-
-2. **COMMENT IS NULL not generated** - Comment removal statements not output
-   - When comments need to be removed, should generate: `COMMENT ON TABLE table IS NULL;`
-   - Currently generates: nothing (empty string)
-   - Affects: `CommentUnset`
-   - Fix: Detect when comments are removed and generate COMMENT ... IS NULL statements
+1. **Array Default Issues** - 2 failures
+2. **Check Constraint Issues** - 2 failures
+3. **Managed Roles Issues** - 2 failures
+4. **Miscellaneous** - 4 failures
 
 ### Array Default Issues
 

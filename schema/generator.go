@@ -59,6 +59,7 @@ type Generator struct {
 	// Track FKs that have been handled during primary key changes
 	handledForeignKeys map[string]bool
 
+	desiredComments []*Comment
 	currentComments []*Comment
 
 	desiredExtensions []*Extension
@@ -121,6 +122,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		currentTriggers:    aggregated.Triggers,
 		desiredTypes:       desiredAggregated.Types,
 		currentTypes:       aggregated.Types,
+		desiredComments:    desiredAggregated.Comments,
 		currentComments:    aggregated.Comments,
 		desiredExtensions:  desiredAggregated.Extensions,
 		currentExtensions:  aggregated.Extensions,
@@ -475,6 +477,26 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			continue
 		}
 		ddls = append(ddls, fmt.Sprintf("DROP EXTENSION %s", g.escapeSQLName(currentExtension.extension.Name)))
+	}
+
+	// Clean up obsoleted comments
+	for _, currentComment := range g.currentComments {
+		// Check if this comment still exists in desired comments
+		desiredComment := findCommentByObject(g.desiredComments, currentComment.comment.Object)
+		// Only generate NULL statement if the comment is completely absent from desired schema
+		// If desiredComment exists but is empty, it means the desired schema has "COMMENT ... IS NULL",
+		// which will be handled by generateDDLsForComment
+		if desiredComment == nil {
+			// Comment was completely removed, generate COMMENT ... IS NULL
+			slog.Debug("Generating NULL statement for removed comment",
+				"object", currentComment.comment.Object,
+				"statement", currentComment.statement)
+			nullStmt := generateCommentNullStatement(currentComment)
+			if nullStmt != "" {
+				slog.Debug("Generated NULL statement", "stmt", nullStmt)
+				ddls = append(ddls, nullStmt)
+			}
+		}
 	}
 
 	// Clean up obsoleted triggers
@@ -3362,6 +3384,30 @@ func findCommentByObject(comments []*Comment, object string) *Comment {
 		}
 	}
 	return nil
+}
+
+// generateCommentNullStatement creates a COMMENT ... IS NULL statement from a Comment
+func generateCommentNullStatement(comment *Comment) string {
+	// Replace the comment value in the statement with NULL
+	// The statement looks like: COMMENT ON TABLE/COLUMN object IS 'value';
+	// We need to replace 'value' with NULL
+	// Note: We don't add a trailing semicolon as it's added by joinDDLs
+	stmt := comment.statement
+
+	// Normalize quotes in the statement (e.g., "public"."users" -> public.users)
+	stmt = strings.ReplaceAll(stmt, "\"", "")
+
+	// Use regex to replace the comment value with NULL, removing any trailing semicolon
+	// Match: IS followed by everything until the end
+	re := regexp.MustCompile(`(?i)\s+IS\s+.+$`)
+	if re.MatchString(stmt) {
+		result := re.ReplaceAllString(stmt, " IS NULL")
+		// Remove any trailing semicolon from the original statement
+		return strings.TrimSuffix(result, ";")
+	}
+
+	// Fallback: shouldn't happen, but just in case
+	return ""
 }
 
 func findExtensionByName(extensions []*Extension, name string) *Extension {

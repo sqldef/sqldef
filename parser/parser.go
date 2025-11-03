@@ -3975,7 +3975,7 @@ yydefault:
 				Action: CommentOn,
 				Table:  yyDollar[4].tableName,
 				Comment: &Comment{
-					ObjectType: "TABLE",
+					ObjectType: "OBJECT_TABLE",
 					Object:     tableName,
 					Comment:    string(yyDollar[6].bytes),
 				},
@@ -3994,7 +3994,7 @@ yydefault:
 				Action: CommentOn,
 				Table:  yyDollar[4].tableName,
 				Comment: &Comment{
-					ObjectType: "TABLE",
+					ObjectType: "OBJECT_TABLE",
 					Object:     tableName,
 					Comment:    "",
 				},
@@ -4015,7 +4015,7 @@ yydefault:
 			yyVAL.statement = &DDL{
 				Action: CommentOn,
 				Comment: &Comment{
-					ObjectType: "COLUMN",
+					ObjectType: "OBJECT_COLUMN",
 					Object:     colName,
 					Comment:    string(yyDollar[6].bytes),
 				},
@@ -4036,7 +4036,7 @@ yydefault:
 			yyVAL.statement = &DDL{
 				Action: CommentOn,
 				Comment: &Comment{
-					ObjectType: "COLUMN",
+					ObjectType: "OBJECT_COLUMN",
 					Object:     colName,
 					Comment:    "",
 				},
