@@ -832,6 +832,28 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode) pa
 	}
 }
 
+// normalizeOperator converts operator to lowercase and applies PostgreSQL-specific mappings.
+// PostgreSQL stores certain operators in a canonical form:
+// - LIKE is stored as ~~
+// - NOT LIKE is stored as !~~
+// - != is stored as <>
+func normalizeOperator(op string, mode GeneratorMode) string {
+	op = strings.ToLower(op)
+
+	if mode == GeneratorModePostgres {
+		switch op {
+		case "like":
+			return "~~"
+		case "not like":
+			return "!~~"
+		case "!=":
+			return "<>"
+		}
+	}
+
+	return op
+}
+
 // normalizeName lowercases them for consistent comparison.
 // TODO: Identifier case-sensitivity varies by RDBMS and settings:
 //   - PostgreSQL: case-insensitive by default, case-sensitive when quoted
@@ -840,6 +862,46 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode) pa
 //     For now, we lowercase everything for normalization.
 func normalizeName(name string) string {
 	return strings.ToLower(name)
+}
+
+var postgresTablePrivilegeList = []string{
+	"DELETE",
+	"INSERT",
+	"REFERENCES",
+	"SELECT",
+	"TRIGGER",
+	"TRUNCATE",
+	"UPDATE",
+}
+
+func normalizePrivilegesForComparison(privileges []string) []string {
+	if len(privileges) == 1 && (privileges[0] == "ALL" || privileges[0] == "ALL PRIVILEGES") {
+		return postgresTablePrivilegeList
+	}
+	return privileges
+}
+
+// Sort privileges in PostgreSQL canonical order
+func sortPrivilegesByCanonicalOrder(privileges []string) {
+	orderMap := make(map[string]int)
+	for i, priv := range postgresTablePrivilegeList {
+		orderMap[priv] = i
+	}
+
+	slices.SortFunc(privileges, func(a, b string) int {
+		orderA, hasA := orderMap[a]
+		orderB, hasB := orderMap[b]
+		if hasA && hasB {
+			return cmp.Compare(orderA, orderB)
+		}
+		if !hasA && !hasB {
+			return cmp.Compare(a, b)
+		}
+		if hasA {
+			return -1
+		}
+		return 1
+	})
 }
 
 // sortAndDeduplicateValues sorts and deduplicates a slice of expressions based on their string representation.

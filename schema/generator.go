@@ -2628,46 +2628,6 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 	return aggregated, nil
 }
 
-var postgresTablePrivilegeList = []string{
-	"DELETE",
-	"INSERT",
-	"REFERENCES",
-	"SELECT",
-	"TRIGGER",
-	"TRUNCATE",
-	"UPDATE",
-}
-
-// Sort privileges in PostgreSQL canonical order
-func sortPrivilegesByCanonicalOrder(privileges []string) {
-	orderMap := make(map[string]int)
-	for i, priv := range postgresTablePrivilegeList {
-		orderMap[priv] = i
-	}
-
-	slices.SortFunc(privileges, func(a, b string) int {
-		orderA, hasA := orderMap[a]
-		orderB, hasB := orderMap[b]
-		if hasA && hasB {
-			return cmp.Compare(orderA, orderB)
-		}
-		if !hasA && !hasB {
-			return cmp.Compare(a, b)
-		}
-		if hasA {
-			return -1
-		}
-		return 1
-	})
-}
-
-func normalizePrivilegesForComparison(privileges []string) []string {
-	if len(privileges) == 1 && (privileges[0] == "ALL" || privileges[0] == "ALL PRIVILEGES") {
-		return postgresTablePrivilegeList
-	}
-	return privileges
-}
-
 func formatPrivilegesForGrant(privileges []string) string {
 	if len(privileges) == 1 && privileges[0] == "ALL" {
 		return "ALL PRIVILEGES"
@@ -2728,8 +2688,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			sortPrivilegesByCanonicalOrder(existingNormalized)
 		}
 
-		if len(existingNormalized) > 0 &&
-			equalPrivileges(existingNormalized, desiredNormalized) {
+		if len(existingNormalized) > 0 && equalPrivileges(existingNormalized, desiredNormalized) {
 			continue
 		}
 
@@ -3280,28 +3239,6 @@ func (g *Generator) buildForeignKeyDDL(tableName string, fk *ForeignKey) string 
 	}
 
 	return ddl
-}
-
-// normalizeOperator converts operator to lowercase and applies PostgreSQL-specific mappings.
-// PostgreSQL stores certain operators in a canonical form:
-// - LIKE is stored as ~~
-// - NOT LIKE is stored as !~~
-// - != is stored as <>
-func normalizeOperator(op string, mode GeneratorMode) string {
-	op = strings.ToLower(op)
-
-	if mode == GeneratorModePostgres {
-		switch op {
-		case "like":
-			return "~~"
-		case "not like":
-			return "!~~"
-		case "!=":
-			return "<>"
-		}
-	}
-
-	return op
 }
 
 // normalizeCheckExprString returns a normalized string representation of a CHECK constraint expression
