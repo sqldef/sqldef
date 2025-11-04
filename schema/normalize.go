@@ -931,16 +931,11 @@ func tryConvertOrChainToIn(orExpr *parser.OrExpr) parser.Expr {
 		return nil
 	}
 
-	values = sortAndDeduplicateValues(values)
-
-	var tupleExprs parser.ValTuple
-	for _, v := range values {
-		tupleExprs = append(tupleExprs, v)
-	}
+	sortedValues := sortAndDeduplicateValues(values)
 
 	return &parser.ComparisonExpr{
 		Operator: "in",
 		Left:     column,
-		Right:    tupleExprs,
+		Right:    parser.ValTuple(sortedValues),
 	}
 }
