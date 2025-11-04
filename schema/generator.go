@@ -3282,20 +3282,6 @@ func (g *Generator) buildForeignKeyDDL(tableName string, fk *ForeignKey) string 
 	return ddl
 }
 
-// normalizeName removes brackets, backticks, and quotes from identifiers and lowercases them for consistent comparison.
-// MSSQL uses [name], MySQL uses `name`, Postgres uses "name".
-// TODO: Identifier case-sensitivity varies by RDBMS and settings:
-//   - PostgreSQL: case-insensitive by default, case-sensitive when quoted
-//   - MySQL: depends on settings, such as lower_case_table_names
-//   - MSSQL: depends on collation settings
-//     For now, we lowercase everything after removing quotes for normalization.
-func normalizeName(name string) string {
-	name = strings.Trim(name, "[]")
-	name = strings.Trim(name, "`")
-	name = strings.Trim(name, "\"")
-	return strings.ToLower(name)
-}
-
 // normalizeOperator converts operator to lowercase and applies PostgreSQL-specific mappings.
 // PostgreSQL stores certain operators in a canonical form:
 // - LIKE is stored as ~~

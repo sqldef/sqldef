@@ -832,6 +832,16 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode) pa
 	}
 }
 
+// normalizeName lowercases them for consistent comparison.
+// TODO: Identifier case-sensitivity varies by RDBMS and settings:
+//   - PostgreSQL: case-insensitive by default, case-sensitive when quoted
+//   - MySQL: depends on settings, such as lower_case_table_names
+//   - MSSQL: depends on collation settings
+//     For now, we lowercase everything for normalization.
+func normalizeName(name string) string {
+	return strings.ToLower(name)
+}
+
 // sortAndDeduplicateValues sorts and deduplicates a slice of expressions based on their string representation.
 // This ensures that semantically equivalent lists are treated as identical regardless of order or duplicates.
 // For example: [b, a, b] becomes [a, b]
