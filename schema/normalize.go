@@ -350,7 +350,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Over:      e.Over,
 		}
 	case *parser.ArrayConstructor:
-		normalizedElements := parser.ArrayElements(util.TransformSlice([]parser.ArrayElement(e.Elements), func(elem parser.ArrayElement) parser.ArrayElement {
+		normalizedElements := parser.ArrayElements(util.TransformSlice(e.Elements, func(elem parser.ArrayElement) parser.ArrayElement {
 			// Normalize all array elements, not just CastExpr
 			if expr, ok := elem.(parser.Expr); ok {
 				normalized := normalizeCheckExpr(expr, mode)
