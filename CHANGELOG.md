@@ -1,3 +1,12 @@
+## [v3.4.0](https://github.com/sqldef/sqldef/compare/v3.3.0...v3.4.0) - 2025-11-04
+- mention to https://github.com/sqldef/sqldef-preview-action by @gfx in https://github.com/sqldef/sqldef/pull/904
+- [internal] PSQLDEF_PARSER=generic to use only the generic parser for psqldef by @gfx in https://github.com/sqldef/sqldef/pull/906
+- Bump modernc.org/sqlite from 1.39.0 to 1.39.1 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/907
+- Bump docker/login-action from 3.5.0 to 3.6.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/909
+- Bump actions/upload-artifact from 4.6.2 to 5.0.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/910
+- Bump golang.org/x/term from 0.35.0 to 0.36.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/908
+- mssqldef: Support Windows Authentication and Instance Name by @chi-bd in https://github.com/sqldef/sqldef/pull/912
+
 ## [v3.3.0](https://github.com/sqldef/sqldef/compare/v3.2.2...v3.3.0) - 2025-10-26
 - add tests about constraints by @gfx in https://github.com/sqldef/sqldef/pull/900
 - [test] add `make test-cov` to take test coverage by @gfx in https://github.com/sqldef/sqldef/pull/902
