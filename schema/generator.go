@@ -1588,7 +1588,6 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 			"desired_after_norm", desiredNormalized,
 		)
 
-
 		if currentNormalized != desiredNormalized {
 			viewDefinition := parser.String(desiredView.definition)
 			if g.shouldDropAndCreateView(currentView, desiredView) {

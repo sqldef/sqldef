@@ -2,27 +2,6 @@
 
 ## 1. Logic Flaws (CRITICAL)
 
-### ⚠️ MEDIUM: Type Name Fallback May Hide Bugs
-
-**File**: `database/postgres/parser.go:682-689`
-
-```go
-rawTypeName := p.getRawTypeName(node.TypeCast.TypeName)
-typeName := rawTypeName
-if typeName == "" {
-    // Fallback to normalized type if raw extraction fails
-    typeName = columnType.Type
-}
-```
-
-**Problem**: If `getRawTypeName` fails (returns `""`), the code silently falls back to the normalized type. This could hide bugs in `getRawTypeName` where:
-- The function should work but doesn't (e.g., edge case not handled)
-- A legitimate error is being masked
-
-**Recommendation**: Log a warning when fallback occurs, or handle the error explicitly. Silent fallbacks make debugging harder.
-
----
-
 ### ⚠️ MEDIUM: Inconsistent ExclusionPair Field Naming
 
 **File**: `parser/node.go:742-745` vs `schema/ast.go:186-189`

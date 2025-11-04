@@ -697,6 +697,9 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 			typeName := rawTypeName
 			if typeName == "" {
 				// Fallback to normalized type if raw extraction fails
+				slog.Debug("Failed to extract raw type name from TypeCast, falling back to normalized type",
+					"normalized_type", columnType.Type,
+					"type_node", fmt.Sprintf("%#v", node.TypeCast.TypeName))
 				typeName = columnType.Type
 			}
 			if columnType.Array {
