@@ -1786,13 +1786,50 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				}
 			}
 
-			// Remove text/varchar casts that PostgreSQL adds
-			// PostgreSQL adds ::text casts for string literals and function results
+			// Remove redundant casts that PostgreSQL adds for typed literals
+			// PostgreSQL adds ::type casts when storing typed literals like DATE '2024-01-01'
+			// We strip these redundant casts to generate cleaner DDL
+			// However, we preserve necessary casts like ::interval, ::bpchar, ::json, ::jsonb, and numeric casts
 			if e.Type != nil {
 				typeStr := strings.ToLower(e.Type.Type)
-				if typeStr == "text" || typeStr == "character varying" {
-					return normalizedExpr
+				// Only strip casts on simple string literals (not in expressions)
+				if sqlVal, ok := normalizedExpr.(*parser.SQLVal); ok && sqlVal.Type == parser.StrVal {
+					// Check if the string looks like a number (PostgreSQL stores negative numbers as string literals with casts)
+					// Only treat it as numeric if it's purely digits/decimal, not a date/time string
+					if util.IsNumericString(string(sqlVal.Val)) {
+						// PostgreSQL stores negative numbers as string literals with casts like '-20'::integer
+						// We need to convert these back to plain numeric literals
+						switch typeStr {
+						case "integer", "bigint", "smallint":
+							// Convert numeric string to actual numeric literal
+							// This unwraps '-20'::integer -> -20
+							return parser.NewIntVal(sqlVal.Val)
+						case "numeric", "decimal", "real", "double precision":
+							return parser.NewFloatVal(sqlVal.Val)
+						}
+					} else {
+						// Strip redundant type casts that PostgreSQL adds on non-numeric strings
+						switch typeStr {
+						case "text", "character varying":
+							// Always strip text casts on non-numeric strings
+							return normalizedExpr
+						case "date", "time", "timestamp", "timestamp without time zone":
+							// Strip date/time casts on literals (PostgreSQL adds these for typed literals)
+							return normalizedExpr
+						}
+					}
 				}
+				// Strip redundant casts on NULL values and normalize to lowercase
+				// PostgreSQL stores DEFAULT NULL as NULL::type, but we normalize to just null
+				// (matching the lexer's keyword normalization to lowercase)
+				if sqlVal, ok := normalizedExpr.(*parser.SQLVal); ok && sqlVal.Type == parser.ValArg {
+					valStr := strings.ToUpper(string(sqlVal.Val))
+					if valStr == "NULL" {
+						// Strip all type casts on NULL and return lowercase null (matching lexer)
+						return parser.NewValArg([]byte("null"))
+					}
+				}
+				// Preserve all other casts (interval, bpchar, json, jsonb, etc.)
 
 				// Remove redundant implicit casts that PostgreSQL adds for function arguments
 				// e.g., expr::bigint::double precision -> expr::bigint
@@ -4388,19 +4425,29 @@ func areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 }
 
 func isNullValue(value *Value) bool {
-	return value != nil && value.valueType == ValueTypeValArg && value.raw == "null"
+	return value != nil && value.valueType == ValueTypeValArg && strings.EqualFold(value.raw, "null")
 }
 
 func isNullDefault(def *DefaultDefinition) bool {
 	if def == nil || def.expression == nil {
 		return false
 	}
-	sqlVal, ok := def.expression.(*parser.SQLVal)
-	if !ok {
-		return false
+
+	// Check if it's a direct SQLVal
+	if sqlVal, ok := def.expression.(*parser.SQLVal); ok {
+		val := parseValue(sqlVal)
+		return isNullValue(val)
 	}
-	val := parseValue(sqlVal)
-	return isNullValue(val)
+
+	// Check if it's a CastExpr wrapping a NULL value (e.g., NULL::character varying)
+	if castExpr, ok := def.expression.(*parser.CastExpr); ok {
+		if sqlVal, ok := castExpr.Expr.(*parser.SQLVal); ok {
+			val := parseValue(sqlVal)
+			return isNullValue(val)
+		}
+	}
+
+	return false
 }
 
 func (g *Generator) normalizeDataType(dataType string) string {

@@ -661,7 +661,14 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 		if shouldDeleteTypeCast(node.TypeCast.Arg, columnType) {
 			return expr, nil
 		} else {
-			typeName := columnType.Type
+			// For casts, use the raw type name from pgquery to preserve "bpchar" instead of "character"
+			// This matches what the generic parser produces from ::bpchar syntax
+			rawTypeName := p.getRawTypeName(node.TypeCast.TypeName)
+			typeName := rawTypeName
+			if typeName == "" {
+				// Fallback to normalized type if raw extraction fails
+				typeName = columnType.Type
+			}
 			if columnType.Array {
 				typeName += "[]"
 			}
@@ -1178,30 +1185,68 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 			},
 		}, nil
 	case *parser.CastExpr:
-		switch castExpr := expr.Expr.(type) {
-		case *parser.SQLVal:
-			return &parser.DefaultDefinition{
-				ValueOrExpression: parser.DefaultValueOrExpression{
-					Expr: castExpr,
-				},
-			}, nil
-		case *parser.NullVal:
+		// Preserve CastExpr nodes in defaults (fix for incorrect normalization)
+		// PostgreSQL stores defaults with explicit casts, so we should preserve them
+		// Special case: Convert NullVal to SQLVal for consistency
+		if nullVal, ok := expr.Expr.(*parser.NullVal); ok {
+			_ = nullVal // Mark as used
 			// Handle NULL::type casts by converting NullVal to SQLVal
 			// PostgreSQL represents NULL as NullVal in pg_query AST but we use SQLVal
+			// Preserve the cast by wrapping the SQLVal in a CastExpr
+			// Use lowercase null to match the lexer's keyword normalization
 			return &parser.DefaultDefinition{
 				ValueOrExpression: parser.DefaultValueOrExpression{
-					Expr: parser.NewValArg([]byte("null")),
+					Expr: &parser.CastExpr{
+						Expr: parser.NewValArg([]byte("null")),
+						Type: expr.Type,
+					},
 				},
 			}, nil
-		case *parser.CastExpr, *parser.ArrayConstructor:
-			return &parser.DefaultDefinition{
-				ValueOrExpression: parser.DefaultValueOrExpression{
-					Expr: castExpr,
-				},
-			}, nil
-		default:
-			return nil, fmt.Errorf("unhandled default CastExpr node: %#v", castExpr)
 		}
+		// For other CastExpr cases, check if the cast is semantically meaningful
+		// Strip redundant casts like ::text, ::character varying on string literals
+		// But preserve important casts like ::interval, ::bpchar, ::json, ::jsonb, ::integer[], and numeric casts
+		if expr.Type != nil {
+			typeStr := strings.ToLower(expr.Type.Type)
+			// Check if this is a redundant cast that should be stripped
+			if sqlVal, ok := expr.Expr.(*parser.SQLVal); ok && sqlVal.Type == parser.StrVal {
+				// Handle numeric string literals vs text strings differently
+				if util.IsNumericString(string(sqlVal.Val)) {
+					// PostgreSQL stores negative numbers as string literals with casts like '-20'::integer
+					// Convert these back to plain numeric literals
+					switch typeStr {
+					case "integer", "bigint", "smallint":
+						return &parser.DefaultDefinition{
+							ValueOrExpression: parser.DefaultValueOrExpression{
+								Expr: parser.NewIntVal(sqlVal.Val),
+							},
+						}, nil
+					case "numeric", "decimal", "real", "double precision":
+						return &parser.DefaultDefinition{
+							ValueOrExpression: parser.DefaultValueOrExpression{
+								Expr: parser.NewFloatVal(sqlVal.Val),
+							},
+						}, nil
+					}
+				} else {
+					// Strip redundant text casts on non-numeric string literals
+					switch typeStr {
+					case "text", "character varying", "varchar":
+						return &parser.DefaultDefinition{
+							ValueOrExpression: parser.DefaultValueOrExpression{
+								Expr: sqlVal,
+							},
+						}, nil
+					}
+				}
+			}
+		}
+		// Preserve all other casts (interval, bpchar, json, jsonb, integer[], timestamp, numeric casts on strings, etc.)
+		return &parser.DefaultDefinition{
+			ValueOrExpression: parser.DefaultValueOrExpression{
+				Expr: expr,
+			},
+		}, nil
 	case *parser.CollateExpr:
 		switch expr := expr.Expr.(type) {
 		case *parser.SQLVal:
@@ -1227,6 +1272,47 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 		}, nil
 	default:
 		return nil, fmt.Errorf("unhandled default node: %#v", expr)
+	}
+}
+
+// getRawTypeName extracts the raw type name from a TypeName node with minimal normalization.
+// This preserves type names like "bpchar" instead of normalizing them to "character",
+// but still normalizes PostgreSQL internal names like "int4" to "integer" for consistency.
+func (p PostgresParser) getRawTypeName(node *pgquery.TypeName) string {
+	if node == nil || node.Names == nil {
+		return ""
+	}
+
+	var typeNames []string
+	for _, name := range node.Names {
+		if n, ok := name.Node.(*pgquery.Node_String_); ok {
+			typeNames = append(typeNames, n.String_.Sval)
+		}
+	}
+
+	// Get the last name, skipping schema prefix like "pg_catalog"
+	if len(typeNames) == 0 {
+		return ""
+	}
+
+	typeName := typeNames[len(typeNames)-1]
+
+	// Normalize PostgreSQL internal type names to SQL standard names
+	// but preserve types like "bpchar" that should not be normalized
+	switch typeName {
+	case "int2":
+		return "smallint"
+	case "int4":
+		return "integer"
+	case "int8":
+		return "bigint"
+	case "float4":
+		return "real"
+	case "float8":
+		return "double precision"
+	default:
+		// Keep the type name as-is (including "bpchar", "timetz", "timestamptz", etc.)
+		return typeName
 	}
 }
 

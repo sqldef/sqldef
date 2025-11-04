@@ -3,6 +3,7 @@ package util
 import (
 	"iter"
 	"slices"
+	"strconv"
 )
 
 // TransformSlice applies the converter to each element in the input slice and returns a new slice.
@@ -31,4 +32,14 @@ func CanonicalMapIter[T any](m map[string]T) iter.Seq2[string, T] {
 			}
 		}
 	}
+}
+
+func IsIntegerString(s string) bool {
+	_, err := strconv.Atoi(s)
+	return err == nil
+}
+
+func IsNumericString(s string) bool {
+	_, err := strconv.ParseFloat(s, 64)
+	return err == nil
 }
