@@ -2594,7 +2594,7 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 			// PostgreSQL naming convention: tablename_columnname_key
 			if isUniqueConstraint && len(index.columns) == 1 {
 				// Extract simple table name without schema prefix for naming
-				simpleTableName := table
+				var simpleTableName string
 				if strings.Contains(table, ".") {
 					parts := strings.Split(table, ".")
 					simpleTableName = strings.Trim(parts[len(parts)-1], "\"")
