@@ -35,8 +35,21 @@ var (
 		"varchar": "character varying",
 	}
 	postgresDataTypeAliases = map[string]string{
-		// In PostgreSQL, FLOAT without precision is equivalent to DOUBLE PRECISION
-		"float": "double precision",
+		"int2":   "smallint",
+		"int4":   "integer",
+		"int8":   "bigint",
+		"float4": "real",
+		"float8": "double precision",
+		"float":  "double precision",
+		"bpchar": "character",
+
+		// Timezone type aliases (the timezone flag is stored separately in Column.timezone)
+		"timestamptz":                 "timestamp",
+		"timestamp with time zone":    "timestamp",
+		"timestamp without time zone": "timestamp",
+		"timetz":                      "time",
+		"time with time zone":         "time",
+		"time without time zone":      "time",
 	}
 	mssqlDataTypeAliases = map[string]string{}
 	mysqlDataTypeAliases = map[string]string{
@@ -1697,30 +1710,34 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 	}
 }
 
-// normalizeTypeName normalizes a type name using dataTypeAliases and mode-specific aliases
+// normalizeTypeName normalizes a type name using dataTypeAliases and mode-specific aliases.
+// This is the central function for all type name normalization in the generator.
 func normalizeTypeName(typeName string, mode GeneratorMode) string {
+	// Normalize to lowercase for case-insensitive comparison
+	normalized := strings.ToLower(typeName)
+
 	// Apply common aliases
-	if alias, ok := dataTypeAliases[typeName]; ok {
-		typeName = alias
+	if alias, ok := dataTypeAliases[normalized]; ok {
+		normalized = alias
 	}
 
-	// Apply mode-specific aliases
+	// Apply database-specific aliases
 	switch mode {
 	case GeneratorModePostgres:
-		if alias, ok := postgresDataTypeAliases[typeName]; ok {
-			typeName = alias
+		if alias, ok := postgresDataTypeAliases[normalized]; ok {
+			normalized = alias
 		}
 	case GeneratorModeMysql:
-		if alias, ok := mysqlDataTypeAliases[typeName]; ok {
-			typeName = alias
+		if alias, ok := mysqlDataTypeAliases[normalized]; ok {
+			normalized = alias
 		}
 	case GeneratorModeMssql:
-		if alias, ok := mssqlDataTypeAliases[typeName]; ok {
-			typeName = alias
+		if alias, ok := mssqlDataTypeAliases[normalized]; ok {
+			normalized = alias
 		}
 	}
 
-	return typeName
+	return normalized
 }
 
 // normalizeExpr normalizes an expression in a view definition
@@ -2314,19 +2331,16 @@ func (g *Generator) generateDataType(column Column) string {
 	// Determine the full type name including schema qualification
 	typeName := column.typeName
 
-	// Normalize type names for PostgreSQL
+	// Normalize PostgreSQL shortcuts to their canonical forms for output
+	// Note: We DON'T normalize general aliases like varchar->character varying or numeric->decimal
+	// Those are preserved as-is in the output. We only normalize PostgreSQL-specific shortcuts.
 	if g.mode == GeneratorModePostgres {
-		// Normalize short timezone forms to their canonical types
-		// The timezone flag will add the "WITH TIME ZONE" suffix
 		switch typeName {
-		case "timestamptz":
-			typeName = "timestamp"
-		case "timetz":
-			typeName = "time"
 		case "int":
-			// PostgreSQL normalizes "int" to "integer"
 			typeName = "integer"
 		}
+		// Note: timestamptz and timetz are already normalized by the parsers
+		// (they set the timezone flag and convert the type name to timestamp/time)
 	}
 
 	// Only qualify type names with schema for PostgreSQL when:
@@ -4036,15 +4050,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				return normalizeCheckExpr(e.Expr, mode)
 			}
 
-			// Normalize time type names BEFORE checking for removal
-			// "timestamp without time zone" -> "timestamp" (check this first!)
-			// "time without time zone" -> "time"
-			normalizedTypeStr := typeStr
-			if strings.Contains(typeStr, "timestamp without time zone") {
-				normalizedTypeStr = "timestamp"
-			} else if strings.Contains(typeStr, "time without time zone") {
-				normalizedTypeStr = "time"
-			}
+			normalizedTypeStr := normalizeTypeName(typeStr, mode)
 
 			// Remove date/timestamp casts from string literals
 			// PostgreSQL simplifies '2020-01-01'::date to '2020-01-01' in CHECK constraints
@@ -4393,7 +4399,7 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 // isNumericColumnType determines if a column type should be compared numerically.
 // This is used to decide how to compare default values.
 func (g *Generator) isNumericColumnType(typeName string) bool {
-	switch normalizeTypeName(strings.ToLower(typeName), g.mode) {
+	switch normalizeTypeName(typeName, g.mode) {
 	case "tinyint", "smallint", "mediumint", "integer", "bigint",
 		"decimal", "float", "double", "real":
 		return true
