@@ -27,7 +27,7 @@ func (e validationError) Error() string {
 type PsqldefParserMode int
 
 const (
-	// PsqldefParserModeAuto uses pgquery with fallback to generic parser (default)
+	// PsqldefParserModeAuto uses generic parser with fallback to pgquery (default)
 	PsqldefParserModeAuto PsqldefParserMode = iota
 	// PsqldefParserModePgquery uses only pgquery without fallback (for testing)
 	PsqldefParserModePgquery
@@ -45,9 +45,15 @@ func NewParser() PostgresParser {
 }
 
 func NewParserWithMode(mode PsqldefParserMode) PostgresParser {
-	if envParser := os.Getenv("PSQLDEF_PARSER"); envParser == "generic" {
-		mode = PsqldefParserModeGeneric
-		slog.Debug("Using generic parser only mode (PSQLDEF_PARSER=generic)")
+	if envParser := os.Getenv("PSQLDEF_PARSER"); envParser != "" {
+		switch envParser {
+		case "generic":
+			mode = PsqldefParserModeGeneric
+			slog.Debug("Using generic parser only mode (PSQLDEF_PARSER=generic)")
+		case "pgquery":
+			mode = PsqldefParserModePgquery
+			slog.Debug("Using pgquery parser only mode (PSQLDEF_PARSER=pgquery)")
+		}
 	}
 	return PostgresParser{
 		parser: database.NewParser(parser.ParserModePostgres),
@@ -65,14 +71,26 @@ func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
 		return p.parser.Parse(sql)
 	}
 
+	// If pgquery only mode is enabled, skip generic parser entirely
+	if p.mode == PsqldefParserModePgquery {
+		return p.parsePgquery(sql)
+	}
+
+	// Default mode (Auto): try generic parser first, fallback to pgquery with warnings
+	statements, err := p.parser.Parse(sql)
+	if err != nil {
+		// Generic parser failed, fallback to pgquery
+		slog.Warn("Generic parser failed, falling back to pgquery (unexpected behavior)", "sql", sql, "error", err.Error())
+		return p.parsePgquery(sql)
+	}
+
+	return statements, nil
+}
+
+// parsePgquery parses SQL using the pgquery parser
+func (p PostgresParser) parsePgquery(sql string) ([]database.DDLStatement, error) {
 	result, err := go_pgquery.Parse(sql)
 	if err != nil {
-		// If go_pgquery fails (e.g., due to DSQL-specific syntax like ASYNC),
-		// fallback to the generic parser which supports extended syntax
-		if p.mode == PsqldefParserModeAuto {
-			slog.Debug("Falling back to generic parser", "sql", sql, "error", err.Error())
-			return p.parser.Parse(sql)
-		}
 		return nil, err
 	}
 
@@ -86,7 +104,7 @@ func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
 		}
 		ddl = strings.TrimSpace(ddl)
 
-		// First, attempt to parse it with the wrapper of PostgreSQL's parser. If it works, use the result.
+		// Attempt to parse it with the wrapper of PostgreSQL's parser
 		stmt, err := p.parseStmt(rawStmt.Stmt)
 		if err != nil {
 			// Check if this is a validation error (should not fallback)
@@ -94,10 +112,10 @@ func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
 				return nil, err
 			}
 
-			// Otherwise, fallback to the generic parser. We intend to deprecate this path in the future.
+			// Otherwise, fallback to the generic parser for this statement
 			var stmts []database.DDLStatement
-			if p.mode == PsqldefParserModeAuto { // Disable fallback in parser tests
-				slog.Debug("Falling back to generic parser", "ddl", ddl, "error", err.Error())
+			if p.mode == PsqldefParserModeAuto {
+				slog.Warn("pgquery parseStmt failed, falling back to generic parser for statement", "ddl", ddl, "error", err.Error())
 				stmts, err = p.parser.Parse(ddl)
 			}
 			if err != nil {
