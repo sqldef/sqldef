@@ -1749,17 +1749,25 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		}
 		nameStr := normalizeName(e.Name.String())
 
+		// Debug: show what we're normalizing
+		fmt.Fprintf(os.Stderr, "[DEBUG COLNAME] before: qualifier=%q name=%q\n", e.Qualifier.Name.String(), e.Name.String())
+
 		// For Postgres, remove table qualifiers (e.g., "users.name" -> "name")
 		if mode == GeneratorModePostgres {
 			qualifierStr = ""
 		}
 
-		return &parser.ColName{
+		result := &parser.ColName{
 			Name: parser.NewColIdent(nameStr),
 			Qualifier: parser.TableName{
 				Name: parser.NewTableIdent(qualifierStr),
 			},
 		}
+
+		// Debug: show what we normalized to
+		fmt.Fprintf(os.Stderr, "[DEBUG COLNAME] after: qualifier=%q name=%q (mode=%v)\n", result.Qualifier.Name.String(), result.Name.String(), mode)
+
+		return result
 	case *parser.ArrayConstructor:
 		normalizedElements := parser.ArrayElements{}
 		for _, elem := range e.Elements {
@@ -1966,7 +1974,13 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Right:    normalizeExpr(e.Right, mode),
 		}
 	case *parser.UnaryExpr:
+		// Debug: show what's inside the UnaryExpr
+		fmt.Fprintf(os.Stderr, "[DEBUG UNARYEXPR] operator=%q expr_type=%T expr_value=%q\n", e.Operator, e.Expr, parser.String(e.Expr))
+
 		normalized := normalizeExpr(e.Expr, mode)
+
+		// Debug: show what we normalized to
+		fmt.Fprintf(os.Stderr, "[DEBUG UNARYEXPR] normalized_type=%T normalized_value=%q\n", normalized, parser.String(normalized))
 
 		// Collapse UnaryExpr with minus/plus on numeric literals to SQLVal
 		// This ensures "-20" and "- 20" (unary minus on 20) are treated the same
