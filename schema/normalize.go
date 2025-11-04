@@ -1,7 +1,9 @@
 package schema
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/sqldef/sqldef/v3/parser"
@@ -268,7 +270,8 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				if mode == GeneratorModePostgres {
 					// PostgreSQL normalizes IN (values) to = ANY (ARRAY[values])
 
-					elements := util.TransformSlice(tuple, func(expr parser.Expr) parser.ArrayElement {
+					sortedItems := sortAndDeduplicateValues(tuple)
+					elements := util.TransformSlice(sortedItems, func(expr parser.Expr) parser.ArrayElement {
 						return expr.(parser.ArrayElement)
 					})
 
@@ -279,7 +282,6 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 					// Change operator and set ANY flag
 					if op == "in" {
 						op = "="
-
 						anyFlag = true
 					} else { // "not in"
 						op = "!="
@@ -299,8 +301,6 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		} else if anyFlag || allFlag {
 			// Normalize existing ANY/ALL expressions (strip casts, preserve order)
 			if arrayConst, ok := right.(*parser.ArrayConstructor); ok {
-				// Normalize array elements (strip type casts) but preserve order
-				// Sorting is done during comparison, not during normalization for output
 				elements := util.TransformSlice(arrayConst.Elements, func(elem parser.ArrayElement) parser.ArrayElement {
 					return normalizeCheckExpr(elem.(parser.Expr), mode).(parser.ArrayElement)
 				})
@@ -850,5 +850,108 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode) pa
 		}
 	default:
 		return stmt
+	}
+}
+
+// sortAndDeduplicateValues sorts and deduplicates a slice of expressions based on their string representation.
+// This ensures that semantically equivalent lists are treated as identical regardless of order or duplicates.
+// For example: [b, a, b] becomes [a, b]
+func sortAndDeduplicateValues[Expr parser.Expr](values []Expr) []Expr {
+	if len(values) <= 1 {
+		return values
+	}
+
+	slices.SortFunc(values, func(a, b Expr) int {
+		return cmp.Compare(parser.String(a), parser.String(b))
+	})
+
+	uniqueValues := values[:0] // reuse underlying array
+	for i, v := range values {
+		if i == 0 || parser.String(v) != parser.String(values[i-1]) {
+			uniqueValues = append(uniqueValues, v)
+		}
+	}
+
+	return uniqueValues
+}
+
+// tryConvertOrChainToIn attempts to convert an OR chain of equality comparisons
+// (e.g., col=a OR col=b OR col=c) into an IN expression (e.g., col IN (a, b, c))
+// Returns nil if the conversion is not applicable.
+func tryConvertOrChainToIn(orExpr *parser.OrExpr) parser.Expr {
+	var column parser.Expr
+	var values []parser.Expr
+
+	extractEqComparison := func(expr parser.Expr) (parser.Expr, parser.Expr, bool) {
+		cmp, ok := expr.(*parser.ComparisonExpr)
+		if !ok || cmp.Operator != "=" {
+			return nil, nil, false
+		}
+		return cmp.Left, cmp.Right, true
+	}
+
+	columnsEqual := func(col1, col2 parser.Expr) bool {
+		return normalizeName(parser.String(col1)) == normalizeName(parser.String(col2))
+	}
+
+	// Walk the OR chain and collect comparisons
+	// Also handle already-normalized IN expressions from nested ORs
+	var walk func(expr parser.Expr) bool
+	walk = func(expr parser.Expr) bool {
+		switch e := expr.(type) {
+		case *parser.OrExpr:
+			return walk(e.Left) && walk(e.Right)
+		case *parser.ComparisonExpr:
+			// Handle IN expressions that were already normalized
+			if strings.EqualFold(e.Operator, "in") {
+				if column == nil {
+					column = e.Left
+				} else if !columnsEqual(column, e.Left) {
+					return false
+				}
+				// Extract values from IN clause
+				if tuple, ok := e.Right.(parser.ValTuple); ok {
+					for _, v := range tuple {
+						values = append(values, v)
+					}
+					return true
+				}
+				return false
+			}
+
+			col, val, ok := extractEqComparison(e)
+			if !ok {
+				return false
+			}
+			if column == nil {
+				column = col
+				values = append(values, val)
+				return true
+			}
+			if columnsEqual(column, col) {
+				values = append(values, val)
+				return true
+			}
+			return false
+		default:
+			return false
+		}
+	}
+
+	if !walk(orExpr) || len(values) < 2 {
+		return nil
+	}
+
+	values = sortAndDeduplicateValues(values)
+
+	var tupleExprs parser.ValTuple
+	for _, v := range values {
+		tupleExprs = append(tupleExprs, v)
+	}
+
+	return &parser.ComparisonExpr{
+		Operator: "in",
+		Left:     column,
+		Right:    tupleExprs,
 	}
 }

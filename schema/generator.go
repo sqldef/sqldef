@@ -3242,10 +3242,6 @@ func (g *Generator) areSameCheckDefinition(checkA *CheckDefinition, checkB *Chec
 	normalizedA := normalizeCheckExpr(checkA.definition, g.mode)
 	normalizedB := normalizeCheckExpr(checkB.definition, g.mode)
 
-	// Sort arrays for comparison (but not for output)
-	normalizedA = sortCheckExprArrays(normalizedA)
-	normalizedB = sortCheckExprArrays(normalizedB)
-
 	// Unwrap outermost parentheses if present (MySQL adds extra parens)
 	normalizedA = unwrapOutermostParenExpr(normalizedA)
 	normalizedB = unwrapOutermostParenExpr(normalizedB)
@@ -3253,67 +3249,6 @@ func (g *Generator) areSameCheckDefinition(checkA *CheckDefinition, checkB *Chec
 	return parser.String(normalizedA) == parser.String(normalizedB) &&
 		checkA.notForReplication == checkB.notForReplication &&
 		checkA.noInherit == checkB.noInherit
-}
-
-// sortCheckExprArrays sorts arrays in CHECK expressions for comparison
-// This ensures ['b', 'a'] is considered equal to ['a', 'b']
-func sortCheckExprArrays(expr parser.Expr) parser.Expr {
-	if expr == nil {
-		return nil
-	}
-
-	switch e := expr.(type) {
-	case *parser.ComparisonExpr:
-		left := sortCheckExprArrays(e.Left)
-		right := sortCheckExprArrays(e.Right)
-
-		// Sort arrays in ANY/ALL comparisons
-		if e.Any || e.All {
-			if arrayConst, ok := right.(*parser.ArrayConstructor); ok {
-				var exprs []parser.Expr
-				for _, elem := range arrayConst.Elements {
-					if expr, ok := elem.(parser.Expr); ok {
-						exprs = append(exprs, expr)
-					}
-				}
-				sortedExprs := sortAndDeduplicateValues(exprs)
-
-				var elements parser.ArrayElements
-				for _, expr := range sortedExprs {
-					if elem, ok := expr.(parser.ArrayElement); ok {
-						elements = append(elements, elem)
-					}
-				}
-
-				right = &parser.ArrayConstructor{Elements: elements}
-			}
-		}
-
-		return &parser.ComparisonExpr{
-			Operator: e.Operator,
-			Left:     left,
-			Right:    right,
-			Escape:   e.Escape,
-			All:      e.All,
-			Any:      e.Any,
-		}
-	case *parser.AndExpr:
-		return &parser.AndExpr{
-			Left:  sortCheckExprArrays(e.Left),
-			Right: sortCheckExprArrays(e.Right),
-		}
-	case *parser.OrExpr:
-		return &parser.OrExpr{
-			Left:  sortCheckExprArrays(e.Left),
-			Right: sortCheckExprArrays(e.Right),
-		}
-	case *parser.NotExpr:
-		return &parser.NotExpr{Expr: sortCheckExprArrays(e.Expr)}
-	case *parser.ParenExpr:
-		return &parser.ParenExpr{Expr: sortCheckExprArrays(e.Expr)}
-	default:
-		return expr
-	}
 }
 
 // unwrapOutermostParenExpr removes the outermost ParenExpr if the expression is wrapped in one.
@@ -3345,87 +3280,6 @@ func (g *Generator) buildForeignKeyDDL(tableName string, fk *ForeignKey) string 
 	}
 
 	return ddl
-}
-
-// tryConvertOrChainToIn attempts to convert an OR chain of equality comparisons
-// (e.g., col=a OR col=b OR col=c) into an IN expression (e.g., col IN (a, b, c))
-// Returns nil if the conversion is not applicable.
-func tryConvertOrChainToIn(orExpr *parser.OrExpr) parser.Expr {
-	var column parser.Expr
-	var values []parser.Expr
-
-	extractEqComparison := func(expr parser.Expr) (parser.Expr, parser.Expr, bool) {
-		cmp, ok := expr.(*parser.ComparisonExpr)
-		if !ok || cmp.Operator != "=" {
-			return nil, nil, false
-		}
-		return cmp.Left, cmp.Right, true
-	}
-
-	columnsEqual := func(col1, col2 parser.Expr) bool {
-		return normalizeName(parser.String(col1)) == normalizeName(parser.String(col2))
-	}
-
-	// Walk the OR chain and collect comparisons
-	// Also handle already-normalized IN expressions from nested ORs
-	var walk func(expr parser.Expr) bool
-	walk = func(expr parser.Expr) bool {
-		switch e := expr.(type) {
-		case *parser.OrExpr:
-			return walk(e.Left) && walk(e.Right)
-		case *parser.ComparisonExpr:
-			// Handle IN expressions that were already normalized
-			if strings.EqualFold(e.Operator, "in") {
-				if column == nil {
-					column = e.Left
-				} else if !columnsEqual(column, e.Left) {
-					return false
-				}
-				// Extract values from IN clause
-				if tuple, ok := e.Right.(parser.ValTuple); ok {
-					for _, v := range tuple {
-						values = append(values, v)
-					}
-					return true
-				}
-				return false
-			}
-
-			col, val, ok := extractEqComparison(e)
-			if !ok {
-				return false
-			}
-			if column == nil {
-				column = col
-				values = append(values, val)
-				return true
-			}
-			if columnsEqual(column, col) {
-				values = append(values, val)
-				return true
-			}
-			return false
-		default:
-			return false
-		}
-	}
-
-	if !walk(orExpr) || len(values) < 2 {
-		return nil
-	}
-
-	values = sortAndDeduplicateValues(values)
-
-	var tupleExprs parser.ValTuple
-	for _, v := range values {
-		tupleExprs = append(tupleExprs, v)
-	}
-
-	return &parser.ComparisonExpr{
-		Operator: "in",
-		Left:     column,
-		Right:    tupleExprs,
-	}
 }
 
 // normalizeName removes brackets, backticks, and quotes from identifiers and lowercases them for consistent comparison.
@@ -3462,30 +3316,6 @@ func normalizeOperator(op string, mode GeneratorMode) string {
 	}
 
 	return op
-}
-
-// sortAndDeduplicateValues sorts and deduplicates a slice of expressions based on their string representation.
-// This ensures that semantically equivalent lists are treated as identical regardless of order or duplicates.
-// For example: [b, a, b] becomes [a, b]
-func sortAndDeduplicateValues(values []parser.Expr) []parser.Expr {
-	if len(values) <= 1 {
-		return values
-	}
-
-	// Sort values for consistent comparison
-	slices.SortFunc(values, func(a, b parser.Expr) int {
-		return cmp.Compare(parser.String(a), parser.String(b))
-	})
-
-	// Deduplicate sorted values
-	uniqueValues := values[:0] // reuse underlying array
-	for i, v := range values {
-		if i == 0 || parser.String(v) != parser.String(values[i-1]) {
-			uniqueValues = append(uniqueValues, v)
-		}
-	}
-
-	return uniqueValues
 }
 
 // normalizeCheckExprString returns a normalized string representation of a CHECK constraint expression
