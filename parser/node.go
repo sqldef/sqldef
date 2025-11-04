@@ -2717,32 +2717,9 @@ mustEscape:
 }
 
 type ArrayConstructor struct {
-	Elements ArrayElements
+	Elements Exprs
 }
 
 func (node *ArrayConstructor) Format(buf *nodeBuffer) {
 	buf.Printf("ARRAY[%v]", node.Elements)
 }
-
-type ArrayElements []ArrayElement
-
-func (node ArrayElements) Format(buf *nodeBuffer) {
-	for i, n := range node {
-		if i == 0 {
-			buf.Printf("%v", n)
-		} else {
-			buf.Printf(", %v", n)
-		}
-	}
-}
-
-type ArrayElement interface {
-	iArrayElement()
-	SQLNode
-}
-
-func (*SQLVal) iArrayElement()           {}
-func (*CastExpr) iArrayElement()         {}
-func (*ArrayConstructor) iArrayElement() {}
-func (*ParenExpr) iArrayElement()        {}
-func (ValTuple) iArrayElement()          {}

@@ -270,14 +270,11 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				if mode == GeneratorModePostgres {
 					// PostgreSQL normalizes IN (values) to = ANY (ARRAY[values])
 
-					sortedItems := sortAndDeduplicateValues(tuple)
-					elements := util.TransformSlice(sortedItems, func(expr parser.Expr) parser.ArrayElement {
-						return expr.(parser.ArrayElement)
+					elements := sortAndDeduplicateValues(tuple)
+					normalizedElements := util.TransformSlice(elements, func(elem parser.Expr) parser.Expr {
+						return normalizeCheckExpr(elem, mode)
 					})
-
-					right = &parser.ArrayConstructor{
-						Elements: elements,
-					}
+					right = &parser.ArrayConstructor{Elements: normalizedElements}
 
 					// Change operator and set ANY flag
 					if op == "in" {
@@ -289,7 +286,11 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 					}
 				} else {
 					// For other databases, keep IN but sort the tuple for consistent comparison
-					right = parser.ValTuple(sortAndDeduplicateValues(tuple))
+					sortedElements := sortAndDeduplicateValues(tuple)
+					normalizedElements := util.TransformSlice(sortedElements, func(elem parser.Expr) parser.Expr {
+						return normalizeCheckExpr(elem, mode)
+					})
+					right = parser.ValTuple(normalizedElements)
 				}
 			}
 		}
@@ -301,13 +302,10 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		} else if anyFlag || allFlag {
 			// Normalize existing ANY/ALL expressions (strip casts, preserve order)
 			if arrayConst, ok := right.(*parser.ArrayConstructor); ok {
-				elements := util.TransformSlice(arrayConst.Elements, func(elem parser.ArrayElement) parser.ArrayElement {
-					return normalizeCheckExpr(elem.(parser.Expr), mode).(parser.ArrayElement)
+				normalizedElements := util.TransformSlice(arrayConst.Elements, func(elem parser.Expr) parser.Expr {
+					return normalizeCheckExpr(elem, mode)
 				})
-
-				right = &parser.ArrayConstructor{
-					Elements: elements,
-				}
+				right = &parser.ArrayConstructor{Elements: normalizedElements}
 			}
 		}
 
@@ -331,7 +329,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Expr:     normalizeCheckExpr(e.Expr, mode),
 		}
 	case *parser.FuncExpr:
-		normalizedExprs := parser.SelectExprs(util.TransformSlice([]parser.SelectExpr(e.Exprs), func(arg parser.SelectExpr) parser.SelectExpr {
+		normalizedExprs := util.TransformSlice(e.Exprs, func(arg parser.SelectExpr) parser.SelectExpr {
 			if aliased, ok := arg.(*parser.AliasedExpr); ok {
 				return &parser.AliasedExpr{
 					Expr: normalizeCheckExpr(aliased.Expr, mode),
@@ -339,7 +337,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				}
 			}
 			return arg
-		}))
+		})
 		// Normalize function name to lowercase (PostgreSQL convention)
 		funcName := parser.NewColIdent(strings.ToLower(e.Name.String()))
 		return &parser.FuncExpr{
@@ -350,16 +348,9 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Over:      e.Over,
 		}
 	case *parser.ArrayConstructor:
-		normalizedElements := parser.ArrayElements(util.TransformSlice(e.Elements, func(elem parser.ArrayElement) parser.ArrayElement {
-			// Normalize all array elements, not just CastExpr
-			if expr, ok := elem.(parser.Expr); ok {
-				normalized := normalizeCheckExpr(expr, mode)
-				if normalizedArrayElem, ok := normalized.(parser.ArrayElement); ok {
-					return normalizedArrayElem
-				}
-			}
-			return elem
-		}))
+		normalizedElements := util.TransformSlice(e.Elements, func(elem parser.Expr) parser.Expr {
+			return normalizeCheckExpr(elem, mode)
+		})
 		return &parser.ArrayConstructor{Elements: normalizedElements}
 	case *parser.IsExpr:
 		return &parser.IsExpr{
@@ -374,7 +365,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			To:       normalizeCheckExpr(e.To, mode),
 		}
 	case parser.ValTuple:
-		normalizedTuple := util.TransformSlice([]parser.Expr(e), func(elem parser.Expr) parser.Expr {
+		normalizedTuple := util.TransformSlice(e, func(elem parser.Expr) parser.Expr {
 			return normalizeCheckExpr(elem, mode)
 		})
 		return parser.ValTuple(normalizedTuple)
@@ -445,22 +436,10 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			},
 		}
 	case *parser.ArrayConstructor:
-		normalizedElements := parser.ArrayElements{}
-		for _, elem := range e.Elements {
-			// Normalize all array elements, not just CastExpr
-			// This ensures ParenExpr, FuncExpr, and other expressions are normalized
-			normalizedElem := normalizeExpr(elem.(parser.Expr), mode)
-
-			// Try to convert back to ArrayElement interface
-			if arrayElem, ok := normalizedElem.(parser.ArrayElement); ok {
-				normalizedElements = append(normalizedElements, arrayElem)
-			} else {
-				// If normalization changed the type to something that's not an ArrayElement,
-				// keep the original element
-				normalizedElements = append(normalizedElements, elem)
-			}
-		}
-		return &parser.ArrayConstructor{Elements: normalizedElements}
+		elements := util.TransformSlice(e.Elements, func(elem parser.Expr) parser.Expr {
+			return normalizeExpr(elem, mode)
+		})
+		return &parser.ArrayConstructor{Elements: elements}
 	case *parser.FuncExpr:
 		// For PostgreSQL, normalize date/time function calls to keywords
 		// The generic parser parses CURRENT_DATE in parentheses as a function call,
@@ -487,7 +466,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 						// Expand ARRAY elements into separate normalized arguments
 						for _, elem := range arrayConstr.Elements {
 							normalizedExprs = append(normalizedExprs, &parser.AliasedExpr{
-								Expr: normalizeExpr(elem.(parser.Expr), mode),
+								Expr: normalizeExpr(elem, mode),
 							})
 						}
 						continue

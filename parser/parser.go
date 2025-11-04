@@ -120,8 +120,8 @@ type yySymType struct {
 	localVariable            *LocalVariable
 	localVariables           []*LocalVariable
 	arrayConstructor         *ArrayConstructor
-	arrayElements            ArrayElements
-	arrayElement             ArrayElement
+	arrayElements            Exprs
+	arrayElement             Expr
 	tableOptions             map[string]string
 	overExpr                 *OverExpr
 	partitionBy              PartitionBy
@@ -10571,25 +10571,25 @@ yydefault:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line parser/parser.y:5865
 		{
-			yyVAL.arrayConstructor = &ArrayConstructor{Elements: yyDollar[3].arrayElements}
+			yyVAL.arrayConstructor = &ArrayConstructor{Elements: yyDollar[3].exprs}
 		}
 	case 1039:
 		yyDollar = yyS[yypt-0 : yypt+1]
 //line parser/parser.y:5872
 		{
-			yyVAL.arrayElements = nil
+			yyVAL.exprs = nil
 		}
 	case 1040:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser/parser.y:5876
 		{
-			yyVAL.arrayElements = ArrayElements{yyDollar[1].arrayElement}
+			yyVAL.exprs = Exprs{yyDollar[1].expr}
 		}
 	case 1041:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:5880
 		{
-			yyVAL.arrayElements = append(yyVAL.arrayElements, yyDollar[3].arrayElement)
+			yyVAL.exprs = append(yyVAL.exprs, yyDollar[3].expr)
 		}
 	case 1042:
 		yyDollar = yyS[yypt-2 : yypt+1]
@@ -10597,25 +10597,25 @@ yydefault:
 		{
 			// Don't create CastExpr in array_element context - only in default_value_expression
 			// This avoids affecting array comparisons
-			yyVAL.arrayElement = NewStrVal(yyDollar[1].bytes)
+			yyVAL.expr = NewStrVal(yyDollar[1].bytes)
 		}
 	case 1043:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser/parser.y:5893
 		{
-			yyVAL.arrayElement = NewIntVal(yyDollar[1].bytes)
+			yyVAL.expr = NewIntVal(yyDollar[1].bytes)
 		}
 	case 1044:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser/parser.y:5897
 		{
-			yyVAL.arrayElement = NewFloatVal(yyDollar[1].bytes)
+			yyVAL.expr = NewFloatVal(yyDollar[1].bytes)
 		}
 	case 1045:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser/parser.y:5901
 		{
-			yyVAL.arrayElement = yyDollar[1].optVal
+			yyVAL.expr = yyDollar[1].optVal
 		}
 	case 1046:
 		yyDollar = yyS[yypt-4 : yypt+1]
@@ -10625,13 +10625,13 @@ yydefault:
 			if yyDollar[4].boolVal {
 				t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
 			}
-			yyVAL.arrayElement = &CastExpr{Expr: yyDollar[1].optVal, Type: t}
+			yyVAL.expr = &CastExpr{Expr: yyDollar[1].optVal, Type: t}
 		}
 	case 1047:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser/parser.y:5913
 		{
-			yyVAL.arrayElement = yyDollar[1].expr.(ArrayElement)
+			yyVAL.expr = yyDollar[1].expr
 		}
 	case 1048:
 		yyDollar = yyS[yypt-4 : yypt+1]
@@ -10641,13 +10641,13 @@ yydefault:
 			if yyDollar[4].boolVal {
 				t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
 			}
-			yyVAL.arrayElement = &CastExpr{Expr: yyDollar[1].expr, Type: t}
+			yyVAL.expr = &CastExpr{Expr: yyDollar[1].expr, Type: t}
 		}
 	case 1049:
 		yyDollar = yyS[yypt-2 : yypt+1]
 //line parser/parser.y:5925
 		{
-			yyVAL.arrayElement = yyDollar[2].arrayConstructor
+			yyVAL.expr = yyDollar[2].arrayConstructor
 		}
 	case 1050:
 		yyDollar = yyS[yypt-1 : yypt+1]

@@ -507,7 +507,7 @@ func (p PostgresParser) parseResTarget(stmt *pgquery.ResTarget) (parser.SelectEx
 func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 	switch node := stmt.Node.(type) {
 	case *pgquery.Node_AArrayExpr:
-		var elements parser.ArrayElements
+		var elements parser.Exprs
 		for _, element := range node.AArrayExpr.Elements {
 			node, err := p.parseExpr(element)
 			if err != nil {
@@ -766,7 +766,7 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 			if node.AExpr.Kind == pgquery.A_Expr_Kind_AEXPR_IN {
 				if valTuple, ok := right.(parser.ValTuple); ok {
 					// Convert ValTuple to ArrayConstructor
-					var elements parser.ArrayElements
+					var elements parser.Exprs
 					for _, expr := range valTuple {
 						elem, err := p.parseArrayElement(expr)
 						if err != nil {
@@ -895,7 +895,7 @@ func (p PostgresParser) parseIndexColumn(stmt *pgquery.Node) (parser.IndexColumn
 	}
 }
 
-func (p PostgresParser) parseArrayElement(node parser.Expr) (parser.ArrayElement, error) {
+func (p PostgresParser) parseArrayElement(node parser.Expr) (parser.Expr, error) {
 	switch node := node.(type) {
 	case *parser.SQLVal:
 		return node, nil

@@ -130,8 +130,8 @@ func forceEOF(yylex any) {
   localVariable            *LocalVariable
   localVariables           []*LocalVariable
   arrayConstructor         *ArrayConstructor
-  arrayElements            ArrayElements
-  arrayElement             ArrayElement
+  arrayElements            Exprs
+  arrayElement             Expr
   tableOptions             map[string]string
   overExpr                 *OverExpr
   partitionBy              PartitionBy
@@ -425,8 +425,8 @@ func forceEOF(yylex any) {
 %type <boolVal> variadic_opt
 %type <fkDeferOpts> fk_defer_opts
 %type <arrayConstructor> array_constructor
-%type <arrayElements> array_element_list
-%type <arrayElement> array_element
+%type <exprs> array_element_list
+%type <expr> array_element
 %type <str> sql_security
 %type <overExpr> over_expression
 %token <bytes> OVER
@@ -5874,7 +5874,7 @@ array_element_list:
   }
 | array_element
   {
-    $$ = ArrayElements{$1}
+    $$ = Exprs{$1}
   }
 | array_element_list ',' array_element
   {
@@ -5911,7 +5911,7 @@ array_element:
   }
 | tuple_expression
   {
-    $$ = $1.(ArrayElement)
+    $$ = $1
   }
 | tuple_expression TYPECAST simple_convert_type array_opt
   {
