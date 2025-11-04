@@ -360,7 +360,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		// Generate constraint name if not explicitly provided
-		constraintName := util.BuildPostgresConstraintName(stmt.NewName.Name.String(), parsedCol.Name.String(), "fkey")
+		constraintName := buildPostgresConstraintName(stmt.NewName.Name.String(), parsedCol.Name.String(), "fkey")
 
 		// Only create constraintOptions if DEFERRABLE or INITIALLY DEFERRED is explicitly set to true
 		// This ensures we don't create an empty constraintOptions struct that would differ from
@@ -468,7 +468,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			columnName := indexColumns[0].ColumnName()
 
 			if mode == GeneratorModePostgres && indexDef.Info.Unique && len(indexColumns) == 1 {
-				name = util.BuildPostgresConstraintName(tableName, columnName, "key")
+				name = buildPostgresConstraintName(tableName, columnName, "key")
 			} else {
 				// For MySQL or multi-column constraints, use just the column name
 				name = columnName
