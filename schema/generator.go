@@ -1668,7 +1668,7 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 	}
 }
 
-// normalizeConvertType normalizes a ConvertType's type name using the same logic as normalizeDataType
+// normalizeConvertType normalizes a ConvertType's type name.
 // This handles type aliases like int -> integer and properly handles array types like int[] -> integer[]
 func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *parser.ConvertType {
 	if convertType == nil {
@@ -3682,7 +3682,7 @@ func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
-	if g.normalizeDataType(current.typeName) != g.normalizeDataType(desired.typeName) {
+	if normalizeTypeName(current.typeName, g.mode) != normalizeTypeName(desired.typeName, g.mode) {
 		return false
 	}
 	if !reflect.DeepEqual(current.enumValues, desired.enumValues) {
@@ -3696,7 +3696,7 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 
 	// Normalize default precision/scale for numeric/decimal types.
 	if g.mode == GeneratorModeMssql || g.mode == GeneratorModeMysql {
-		normalizedType := g.normalizeDataType(current.typeName)
+		normalizedType := normalizeTypeName(current.typeName, g.mode)
 		if normalizedType == "decimal" {
 			var defaultPrecision int
 			switch g.mode {
@@ -4393,8 +4393,7 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 // isNumericColumnType determines if a column type should be compared numerically.
 // This is used to decide how to compare default values.
 func (g *Generator) isNumericColumnType(typeName string) bool {
-	normalized := g.normalizeDataType(strings.ToLower(typeName))
-	switch normalized {
+	switch normalizeTypeName(strings.ToLower(typeName), g.mode) {
 	case "tinyint", "smallint", "mediumint", "integer", "bigint",
 		"decimal", "float", "double", "real":
 		return true
@@ -4512,10 +4511,6 @@ func isNullDefault(def *DefaultDefinition) bool {
 	}
 
 	return false
-}
-
-func (g *Generator) normalizeDataType(dataType string) string {
-	return normalizeTypeName(dataType, g.mode)
 }
 
 func (g *Generator) areSamePrimaryKeys(primaryKeyA *Index, primaryKeyB *Index) bool {
