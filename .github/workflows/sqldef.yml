@@ -73,6 +73,8 @@ jobs:
         if: matrix.mysql_flavor
       - run: echo "MYSQL_PORT=3307" >> $GITHUB_ENV
         if: matrix.mysql_flavor == 'mariadb'
+      - run: echo "PSQLDEF_PARSER=generic" >> $GITHUB_ENV
+        if: matrix.target == 'psqldef'
       - run: make test-${{ matrix.target }}
         id: test
       - name: Show docker compose logs on failure

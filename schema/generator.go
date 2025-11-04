@@ -1485,6 +1485,33 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy 
 	return ddls, nil
 }
 
+// normalizeViewColumnsFromDefinition extracts and normalizes column names from a view definition.
+// This handles differences in how PostgreSQL versions format column names:
+// - PostgreSQL 13-15: includes table qualifiers (e.g., "users.id")
+// - PostgreSQL 16+: omits unnecessary qualifiers (e.g., "id")
+func (g *Generator) normalizeViewColumnsFromDefinition(def parser.SelectStatement) []string {
+	if def == nil {
+		return nil
+	}
+
+	var selectExprs parser.SelectExprs
+	switch stmt := def.(type) {
+	case *parser.Select:
+		selectExprs = stmt.SelectExprs
+	default:
+		// For other statement types (e.g., UNION), we can't easily extract columns
+		return nil
+	}
+
+	columns := make([]string, len(selectExprs))
+	for i, expr := range selectExprs {
+		// Normalize the expression using the same logic as view definition normalization
+		normalized := normalizeSelectExpr(expr, g.mode)
+		columns[i] = strings.ToLower(parser.String(normalized))
+	}
+	return columns
+}
+
 func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View) bool {
 	if g.mode == GeneratorModeSQLite3 || g.mode == GeneratorModeMssql {
 		return true
@@ -1500,13 +1527,25 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 	// > (that is, the same column names in the same order and with the same data types), but it may add additional
 	// > columns to the end of the list. The calculations giving rise to the output columns may be completely different.
 	if g.mode == GeneratorModePostgres {
-		// If columns are added, be sure to DROP and CREATE.
-		if len(currentView.columns) > len(desiredView.columns) {
+		// Extract and normalize column names from the view definitions for accurate comparison.
+		// This handles differences in PostgreSQL versions where pg_get_viewdef formats columns differently:
+		// - PostgreSQL 13-15: includes table qualifiers (e.g., "users.id")
+		// - PostgreSQL 16+: omits unnecessary qualifiers (e.g., "id")
+		currentNormalized := g.normalizeViewColumnsFromDefinition(currentView.definition)
+		desiredNormalized := g.normalizeViewColumnsFromDefinition(desiredView.definition)
+
+		// If we couldn't extract columns from the definitions, fall back to DROP and CREATE
+		if currentNormalized == nil || desiredNormalized == nil {
+			return true
+		}
+
+		// If columns are removed, we need to DROP and CREATE.
+		if len(currentNormalized) > len(desiredNormalized) {
 			return true
 		}
 
 		// If all existing columns are identical and only a new column is added, use REPLACE; otherwise, execute DROP and CREATE.
-		return !reflect.DeepEqual(currentView.columns, desiredView.columns[:len(currentView.columns)])
+		return !reflect.DeepEqual(currentNormalized, desiredNormalized[:len(currentNormalized)])
 	}
 
 	return false

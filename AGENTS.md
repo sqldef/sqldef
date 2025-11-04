@@ -41,8 +41,11 @@ Requirements:
 - To resolve conflicts, use `make parser-v` and inspect `y.output`
 
 Usage notes:
-- `psqldef` primarily uses `go-pgquery` (a native PostgreSQL parser) and falls back to the generic parser
-- `PSQLDEF_PARSER=generic` environment variable can be used to force the use of the generic parser only for `psqldef`
+- `psqldef` uses the **generic parser** by default with fallback to `go-pgquery` (native PostgreSQL parser)
+- You can override the parser mode using the `PSQLDEF_PARSER` environment variable:
+  - `PSQLDEF_PARSER=generic` - Use only the generic parser (no fallback to pgquery)
+  - `PSQLDEF_PARSER=pgquery` - Use only the pgquery parser (no fallback to generic)
+  - Not set (default) - Use generic parser with fallback to pgquery
 - The generic parser builds ASTs, and the generator manipulates the ASTs for normalization and comparison. Do not parse strings with regular expressions
 
 ## Local Development
