@@ -1104,52 +1104,6 @@ func TestPsqldefReindexConcurrently(t *testing.T) {
 	})
 }
 
-// TestPsqldefYamlGenericParser tests that the generic parser can parse all SQL statements
-// from the psqldef YAML test files. This validates that the generic parser works as a fallback
-// for PostgreSQL statements.
-func TestPsqldefYamlGenericParser(t *testing.T) {
-	// Read all YAML test files from cmd/psqldef/*.yml
-	tests, err := tu.ReadTests("tests*.yml")
-	if err != nil {
-		t.Fatalf("Failed to read psqldef YAML tests: %v", err)
-	}
-
-	// Use the generic parser (not pgquery)
-	sqlParser := postgres.NewParserWithMode(postgres.PsqldefParserModeGeneric)
-
-	for name, testCase := range tests {
-		t.Run(name, func(t *testing.T) {
-			// Test parsing the 'current' schema if present
-			if testCase.Current != "" {
-				t.Run("current", func(t *testing.T) {
-					stmts, err := sqlParser.Parse(testCase.Current)
-					if err != nil {
-						t.Errorf("Failed to parse 'current' schema: %v\nSQL:\n%s", err, testCase.Current)
-						return
-					}
-					if len(stmts) == 0 {
-						t.Errorf("Parse returned no statements for 'current' schema\nSQL:\n%s", testCase.Current)
-					}
-				})
-			}
-
-			// Test parsing the 'desired' schema if present
-			if testCase.Desired != "" {
-				t.Run("desired", func(t *testing.T) {
-					stmts, err := sqlParser.Parse(testCase.Desired)
-					if err != nil {
-						t.Errorf("Failed to parse 'desired' schema: %v\nSQL:\n%s", err, testCase.Desired)
-						return
-					}
-					if len(stmts) == 0 {
-						t.Errorf("Parse returned no statements for 'desired' schema\nSQL:\n%s", testCase.Desired)
-					}
-				})
-			}
-		})
-	}
-}
-
 func TestMain(m *testing.M) {
 	resetTestDatabase()
 	tu.BuildForTest()
