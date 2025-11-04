@@ -1,36 +1,6 @@
 # Code Review: psqldef Generic Parser Changes
 
-## 1. Logic Flaws (CRITICAL)
-
-### ⚠️ MEDIUM: Inconsistent ExclusionPair Field Naming
-
-**File**: `parser/node.go:742-745` vs `schema/ast.go:186-189`
-
-The parser AST changed from `Column` to `Expression`:
-```go
-// parser/node.go
-type ExclusionPair struct {
-    Expression Expr    // Changed from Column ColIdent
-    Operator   string
-}
-```
-
-But the schema AST still uses `column`:
-```go
-// schema/ast.go
-type ExclusionPair struct {
-    column   string   // Should be renamed to expression for clarity
-    operator string
-}
-```
-
-**Problem**: While the code works (it converts Expression to string and stores in `column`), the naming is misleading:
-- New contributors will be confused about why it's called `column` when it can be an expression
-- Future refactoring might mistakenly treat it as column-only
-
-**Recommendation**: Rename the field from `column` to `expression` in `schema/ast.go` for consistency and clarity.
-
-## 2. Low-Quality Code
+## Low-Quality Code
 
 ### Duplicated Normalization Calls
 

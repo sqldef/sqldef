@@ -851,8 +851,8 @@ func parseExclusion(exclusion *parser.ExclusionDefinition) Exclusion {
 	var exs []ExclusionPair
 	for _, exclusion := range exclusion.Exclusions {
 		exs = append(exs, ExclusionPair{
-			column:   parser.String(exclusion.Expression),
-			operator: exclusion.Operator,
+			expression: parser.String(exclusion.Expression),
+			operator:   exclusion.Operator,
 		})
 	}
 	var where string

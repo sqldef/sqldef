@@ -184,8 +184,8 @@ type Exclusion struct {
 }
 
 type ExclusionPair struct {
-	column   string
-	operator string
+	expression string
+	operator   string
 }
 
 type Policy struct {

@@ -2763,7 +2763,7 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 func (g *Generator) generateExclusionDefinition(exclusion Exclusion) string {
 	var ex []string
 	for _, exclusionPair := range exclusion.exclusions {
-		ex = append(ex, fmt.Sprintf("%s WITH %s", exclusionPair.column, exclusionPair.operator))
+		ex = append(ex, fmt.Sprintf("%s WITH %s", exclusionPair.expression, exclusionPair.operator))
 	}
 	definition := fmt.Sprintf(
 		"CONSTRAINT %s EXCLUDE USING %s (%s)",
@@ -4692,7 +4692,7 @@ func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion
 	for i := range exclusionA.exclusions {
 		a := exclusionA.exclusions[i]
 		b := exclusionB.exclusions[i]
-		if a.column != b.column || a.operator != b.operator {
+		if a.expression != b.expression || a.operator != b.operator {
 			return false
 		}
 	}
