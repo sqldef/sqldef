@@ -7,7 +7,6 @@ import (
 	"log"
 	"log/slog"
 	"math/big"
-	"os"
 	"reflect"
 	"regexp"
 	"slices"
@@ -1575,6 +1574,13 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 		currentNormalized := strings.ToLower(parser.String(currentNormalizedAST))
 		desiredNormalized := strings.ToLower(parser.String(desiredNormalizedAST))
 
+		// Post-normalization fix for generic parser: strip remaining table qualifiers
+		// The generic parser's ColName.String() may not respect the empty qualifier we set
+		if g.mode == GeneratorModePostgres {
+			currentNormalized = stripTableQualifiers(currentNormalized)
+			desiredNormalized = stripTableQualifiers(desiredNormalized)
+		}
+
 		slog.Debug("Comparing view definitions",
 			"current_before_norm", parser.String(currentView.definition),
 			"desired_before_norm", parser.String(desiredView.definition),
@@ -1582,12 +1588,6 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 			"desired_after_norm", desiredNormalized,
 		)
 
-		// Temporary debug output for CI investigation
-		fmt.Fprintf(os.Stderr, "[DEBUG VIEW COMPARE] current_before=%q\n", parser.String(currentView.definition))
-		fmt.Fprintf(os.Stderr, "[DEBUG VIEW COMPARE] desired_before=%q\n", parser.String(desiredView.definition))
-		fmt.Fprintf(os.Stderr, "[DEBUG VIEW COMPARE] current_after=%q\n", currentNormalized)
-		fmt.Fprintf(os.Stderr, "[DEBUG VIEW COMPARE] desired_after=%q\n", desiredNormalized)
-		fmt.Fprintf(os.Stderr, "[DEBUG VIEW COMPARE] match=%v\n", currentNormalized == desiredNormalized)
 
 		if currentNormalized != desiredNormalized {
 			viewDefinition := parser.String(desiredView.definition)
@@ -1613,6 +1613,20 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 	}
 
 	return ddls, nil
+}
+
+// stripTableQualifiers removes table qualifiers from column references in SQL
+// E.g., "users.name" -> "name", "t.id" -> "id"
+// This is a workaround for the generic parser not properly removing qualifiers during AST normalization
+func stripTableQualifiers(sql string) string {
+	// Match table.column patterns where:
+	// - table name is [a-z_][a-z0-9_]* (identifier)
+	// - followed by a dot
+	// - followed by column name [a-z_][a-z0-9_]* (identifier)
+	// We use word boundaries to avoid matching within quoted strings
+	re := regexp.MustCompile(`\b[a-z_][a-z0-9_]*\.([a-z_][a-z0-9_]*)\b`)
+	// Replace "table.column" with just "column" (keeping capture group 1)
+	return re.ReplaceAllString(sql, "$1")
 }
 
 // normalizeViewDefinition normalizes a view definition AST for comparison.
@@ -1749,25 +1763,17 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		}
 		nameStr := normalizeName(e.Name.String())
 
-		// Debug: show what we're normalizing
-		fmt.Fprintf(os.Stderr, "[DEBUG COLNAME] before: qualifier=%q name=%q\n", e.Qualifier.Name.String(), e.Name.String())
-
 		// For Postgres, remove table qualifiers (e.g., "users.name" -> "name")
 		if mode == GeneratorModePostgres {
 			qualifierStr = ""
 		}
 
-		result := &parser.ColName{
+		return &parser.ColName{
 			Name: parser.NewColIdent(nameStr),
 			Qualifier: parser.TableName{
 				Name: parser.NewTableIdent(qualifierStr),
 			},
 		}
-
-		// Debug: show what we normalized to
-		fmt.Fprintf(os.Stderr, "[DEBUG COLNAME] after: qualifier=%q name=%q (mode=%v)\n", result.Qualifier.Name.String(), result.Name.String(), mode)
-
-		return result
 	case *parser.ArrayConstructor:
 		normalizedElements := parser.ArrayElements{}
 		for _, elem := range e.Elements {
@@ -1974,13 +1980,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Right:    normalizeExpr(e.Right, mode),
 		}
 	case *parser.UnaryExpr:
-		// Debug: show what's inside the UnaryExpr
-		fmt.Fprintf(os.Stderr, "[DEBUG UNARYEXPR] operator=%q expr_type=%T expr_value=%q\n", e.Operator, e.Expr, parser.String(e.Expr))
-
 		normalized := normalizeExpr(e.Expr, mode)
-
-		// Debug: show what we normalized to
-		fmt.Fprintf(os.Stderr, "[DEBUG UNARYEXPR] normalized_type=%T normalized_value=%q\n", normalized, parser.String(normalized))
 
 		// Collapse UnaryExpr with minus/plus on numeric literals to SQLVal
 		// This ensures "-20" and "- 20" (unary minus on 20) are treated the same
