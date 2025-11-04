@@ -2,41 +2,6 @@
 
 ## 1. Logic Flaws (CRITICAL)
 
-### ⚠️ CRITICAL: Parser Mode Confusion and Circular Fallback Risk
-
-**File**: `database/postgres/parser.go:79-87`
-
-The comment says "Auto mode" tries generic first, then falls back to pgquery:
-```go
-// Default mode (Auto): try generic parser first, fallback to pgquery with warnings
-statements, err := p.parser.Parse(sql)
-if err != nil {
-    slog.Warn("Generic parser failed, falling back to pgquery (unexpected behavior)", ...)
-    return p.parsePgquery(sql)
-}
-```
-
-But `parsePgquery` (line 117-119) **also** falls back to the generic parser:
-```go
-if p.mode == PsqldefParserModeAuto {
-    slog.Warn("pgquery parseStmt failed, falling back to generic parser for statement", ...)
-    stmts, err = p.parser.Parse(ddl)
-}
-```
-
-**Problems**:
-1. **Confusing flow**: Auto mode → generic → (fails) → pgquery → (splits) → parseStmt → (fails) → generic again
-2. **The warning says "unexpected behavior"**: If this is truly unexpected, why implement a fallback? This suggests uncertainty about when each parser should be used
-3. **Potential for confusion during debugging**: Two different parsing paths can produce different results
-4. **Poor separation of concerns**: The fallback logic is duplicated and interleaved
-
-**Recommendation**:
-- If the generic parser is ready for production, remove the pgquery fallback and fix any remaining issues
-- If not, keep pgquery as primary and document the migration plan
-- The current approach creates technical debt by maintaining two parser paths
-
----
-
 ### ⚠️ HIGH: Unique Constraint Name Generation Removed
 
 **File**: `database/postgres/parser.go:210-224`
