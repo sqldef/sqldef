@@ -2014,8 +2014,7 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 			(index.name != "" && index.name != "PRIMARY" && index.name != index.columns[0].ColumnName()) {
 			ddl += fmt.Sprintf("CONSTRAINT %s ", g.escapeSQLName(index.name))
 		}
-		// Handle both "UNIQUE KEY" (MySQL-style) and "UNIQUE" (PostgreSQL-style)
-		isUniqueConstraint := strings.EqualFold(index.indexType, "UNIQUE KEY") || strings.EqualFold(index.indexType, "UNIQUE")
+		isUniqueConstraint := strings.EqualFold(index.indexType, "UNIQUE")
 		if isUniqueConstraint {
 			ddl += "CONSTRAINT"
 		} else {
@@ -2023,23 +2022,13 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 		}
 		if !index.primary {
 			constraintName := index.name
-			// Auto-generate PostgreSQL-style constraint name for single-column UNIQUE constraints
-			// PostgreSQL naming convention: tablename_columnname_key
 			if isUniqueConstraint && len(index.columns) == 1 {
-				// Extract simple table name without schema prefix for naming
-				var simpleTableName string
-				if strings.Contains(table, ".") {
-					parts := strings.Split(table, ".")
-					simpleTableName = strings.Trim(parts[len(parts)-1], "\"")
-				} else {
-					simpleTableName = strings.Trim(table, "\"")
-				}
 				columnName := index.columns[0].ColumnName()
-				expectedName := buildPostgresConstraintName(simpleTableName, columnName, "key")
 
 				// If the current name is just the column name (common with generic parser),
 				// replace it with the PostgreSQL convention
 				if constraintName == columnName {
+					expectedName := buildPostgresConstraintName(table, columnName, "key")
 					slog.Debug("Auto-generating PostgreSQL UNIQUE constraint name",
 						"table", table,
 						"column", columnName,
