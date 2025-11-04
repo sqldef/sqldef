@@ -32,6 +32,9 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		Password   string   `short:"P" long:"password" description:"MSSQL user password, overridden by $MSSQL_PWD" value-name:"PASSWORD"`
 		Host       string   `short:"h" long:"host" description:"Host to connect to the MSSQL server" value-name:"HOSTNAME" default:"127.0.0.1"`
 		Port       uint     `short:"p" long:"port" description:"Port used for the connection" value-name:"PORT" default:"1433"`
+		Trusted    bool     `short:"E" long:"trusted-connection" description:"Use Windows authentication"`
+		Instance   string   `long:"instance" description:"Instance name" value-name:"INSTANCE"`
+		TrustCert  bool     `long:"trust-server-cert" description:"Trust server certificate"`
 		Prompt     bool     `long:"password-prompt" description:"Force MSSQL user password prompt"`
 		File       []string `long:"file" description:"Read desired SQL from the file, rather than stdin" value-name:"FILENAME" default:"-"`
 		DryRun     bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
@@ -129,11 +132,14 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 
 	dbConfig := database.Config{
-		DbName:   databaseName,
-		User:     opts.User,
-		Password: password,
-		Host:     opts.Host,
-		Port:     int(opts.Port),
+		DbName:            databaseName,
+		User:              opts.User,
+		Password:          password,
+		Host:              opts.Host,
+		Port:              int(opts.Port),
+		TrustedConnection: opts.Trusted,
+		Instance:          opts.Instance,
+		TrustServerCert:   opts.TrustCert,
 	}
 	return dbConfig, &options
 }

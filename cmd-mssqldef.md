@@ -9,6 +9,9 @@ Application Options:
   -P, --password=PASSWORD     MSSQL user password, overridden by $MSSQL_PWD
   -h, --host=HOSTNAME         Host to connect to the MSSQL server (default: 127.0.0.1)
   -p, --port=PORT             Port used for the connection (default: 1433)
+  -E, --trusted-connection    Use Windows authentication
+      --instance=INSTANCE     Instance name
+      --trust-server-cert     Trust server certificate
       --password-prompt       Force MSSQL user password prompt
       --file=FILENAME         Read desired SQL from the file, rather than stdin (default: -)
       --dry-run               Don't run DDLs but just show them
@@ -32,6 +35,11 @@ CREATE TABLE dbo.users (
 
 # Save it to edit
 $ mssqldef -U sa -P password123 mydb --export > schema.sql
+```
+
+```shell
+# Use Windows Authentication (Windows Only)
+> mssqldef /E /h localhost /instance SQLEXPRESS mydb /export
 ```
 
 Update schema.sql as follows:

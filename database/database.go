@@ -38,6 +38,11 @@ type Config struct {
 
 	// Only PostgreSQL, especially for Aurora DSQL limitation
 	DisableDdlTransaction bool
+
+	// Only MSSQL
+	TrustedConnection bool   // Use Windows authentication
+	Instance          string // Instance name
+	TrustServerCert   bool   // Trust server certificate
 }
 
 type GeneratorConfig struct {
