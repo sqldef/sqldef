@@ -1565,7 +1565,7 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 
 // stripTableQualifiers removes table qualifiers from column references in SQL
 // E.g., "users.name" -> "name", "t.id" -> "id"
-// This is a workaround for the generic parser not properly removing qualifiers during AST normalization
+// This is needed for PostgreSQL 13-15 where table qualifiers are included in column references.
 func stripTableQualifiers(sql string) string {
 	// Match table.column patterns where:
 	// - table name is [a-z_][a-z0-9_]* (identifier)
