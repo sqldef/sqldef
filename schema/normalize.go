@@ -227,7 +227,6 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 	case *parser.ComparisonExpr:
 		left := normalizeCheckExpr(e.Left, mode)
 		right := normalizeCheckExpr(e.Right, mode)
-
 		op := normalizeOperator(e.Operator, mode)
 		anyFlag := e.Any
 		allFlag := e.All
@@ -235,8 +234,9 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		// The generic parser may parse "= ANY(ARRAY[...])" as a FuncExpr on the right side
 		// We need to normalize this to set the Any/All flags properly
 		if funcExpr, ok := right.(*parser.FuncExpr); ok {
-			funcName := strings.ToUpper(funcExpr.Name.String())
-			if funcName == "ANY" || funcName == "SOME" {
+			funcName := strings.ToLower(funcExpr.Name.String())
+			switch funcName {
+			case "any", "some":
 				// Convert "column = ANY(array)" to ComparisonExpr with Any=true
 				if len(funcExpr.Exprs) == 1 {
 					if aliased, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
@@ -244,7 +244,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 						anyFlag = true
 					}
 				}
-			} else if funcName == "ALL" {
+			case "all":
 				// Convert "column = ALL(array)" to ComparisonExpr with All=true
 				if len(funcExpr.Exprs) == 1 {
 					if aliased, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
