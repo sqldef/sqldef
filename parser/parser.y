@@ -3587,6 +3587,10 @@ index_column:
 // https://www.postgresql.org/docs/9.5/brin-builtin-opclasses.html
 operator_class:
   TEXT_PATTERN_OPS
+| sql_id
+  {
+    $$ = []byte($1.String())
+  }
 
 foreign_key_definition:
   foreign_key_without_options fk_defer_opts

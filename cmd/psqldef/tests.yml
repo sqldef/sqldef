@@ -2963,6 +2963,15 @@ IndexWithOperatorClass:
     );
     CREATE INDEX product_name_autocomplete_index ON products(name text_pattern_ops);
 
+IndexWithUsing:
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+    CREATE TABLE products (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL
+    );
+    CREATE INDEX idx_trgm_name ON products USING gin (name gin_trgm_ops);
+
 CreateTypeEnum:
   desired: |
     CREATE TYPE "public"."country" AS ENUM ('us', 'jp');
