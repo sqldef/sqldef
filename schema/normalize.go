@@ -826,6 +826,32 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode) pa
 	}
 }
 
+
+// normalizeViewColumnsFromDefinition extracts and normalizes column names from a view definition.
+// This handles differences in how PostgreSQL versions format column names:
+// - PostgreSQL 13-15: includes table qualifiers (e.g., "users.id")
+// - PostgreSQL 16+: omits unnecessary qualifiers (e.g., "id")
+func normalizeViewColumnsFromDefinition(def parser.SelectStatement, mode GeneratorMode) []string {
+	if def == nil {
+		return nil
+	}
+
+	var selectExprs parser.SelectExprs
+	switch stmt := def.(type) {
+	case *parser.Select:
+		selectExprs = stmt.SelectExprs
+	default:
+		// For other statement types (e.g., UNION), we can't easily extract columns
+		return nil
+	}
+
+	return util.TransformSlice(selectExprs, func(expr parser.SelectExpr) string {
+		normalized := normalizeSelectExpr(expr, mode)
+		return strings.ToLower(parser.String(normalized))
+	})
+}
+
+
 // normalizeOperator converts operator to lowercase and applies PostgreSQL-specific mappings.
 // PostgreSQL stores certain operators in a canonical form:
 // - LIKE is stored as ~~
