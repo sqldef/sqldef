@@ -267,19 +267,10 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			if tuple, ok := right.(parser.ValTuple); ok {
 				if mode == GeneratorModePostgres {
 					// PostgreSQL normalizes IN (values) to = ANY (ARRAY[values])
-					tupleExprs := []parser.Expr(tuple)
 
-					// Convert ValTuple to ArrayConstructor
-					var elements parser.ArrayElements
-					for _, expr := range tupleExprs {
-						// Check if expr implements ArrayElement interface
-						if elem, ok := expr.(parser.ArrayElement); ok {
-							elements = append(elements, elem)
-						} else {
-							// Wrap in a compatible type if needed
-							elements = append(elements, expr.(parser.ArrayElement))
-						}
-					}
+					elements := util.TransformSlice(tuple, func(expr parser.Expr) parser.ArrayElement {
+						return expr.(parser.ArrayElement)
+					})
 
 					right = &parser.ArrayConstructor{
 						Elements: elements,
@@ -288,6 +279,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 					// Change operator and set ANY flag
 					if op == "in" {
 						op = "="
+
 						anyFlag = true
 					} else { // "not in"
 						op = "!="
@@ -295,7 +287,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 					}
 				} else {
 					// For other databases, keep IN but sort the tuple for consistent comparison
-					right = parser.ValTuple(sortAndDeduplicateValues([]parser.Expr(tuple)))
+					right = parser.ValTuple(sortAndDeduplicateValues(tuple))
 				}
 			}
 		}
@@ -309,16 +301,9 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			if arrayConst, ok := right.(*parser.ArrayConstructor); ok {
 				// Normalize array elements (strip type casts) but preserve order
 				// Sorting is done during comparison, not during normalization for output
-				var elements parser.ArrayElements
-				for _, elem := range arrayConst.Elements {
-					if expr, ok := elem.(parser.Expr); ok {
-						// Recursively normalize to strip type casts
-						normalized := normalizeCheckExpr(expr, mode)
-						if normalizedElem, ok := normalized.(parser.ArrayElement); ok {
-							elements = append(elements, normalizedElem)
-						}
-					}
-				}
+				elements := util.TransformSlice(arrayConst.Elements, func(elem parser.ArrayElement) parser.ArrayElement {
+					return normalizeCheckExpr(elem.(parser.Expr), mode).(parser.ArrayElement)
+				})
 
 				right = &parser.ArrayConstructor{
 					Elements: elements,
