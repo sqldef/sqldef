@@ -7,6 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"math/big"
+	"os"
 	"reflect"
 	"regexp"
 	"slices"
@@ -1580,6 +1581,13 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 			"current_after_norm", currentNormalized,
 			"desired_after_norm", desiredNormalized,
 		)
+
+		// Temporary debug output for CI investigation
+		fmt.Fprintf(os.Stderr, "[DEBUG VIEW COMPARE] current_before=%q\n", parser.String(currentView.definition))
+		fmt.Fprintf(os.Stderr, "[DEBUG VIEW COMPARE] desired_before=%q\n", parser.String(desiredView.definition))
+		fmt.Fprintf(os.Stderr, "[DEBUG VIEW COMPARE] current_after=%q\n", currentNormalized)
+		fmt.Fprintf(os.Stderr, "[DEBUG VIEW COMPARE] desired_after=%q\n", desiredNormalized)
+		fmt.Fprintf(os.Stderr, "[DEBUG VIEW COMPARE] match=%v\n", currentNormalized == desiredNormalized)
 
 		if currentNormalized != desiredNormalized {
 			viewDefinition := parser.String(desiredView.definition)
