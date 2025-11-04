@@ -533,8 +533,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// PostgreSQL stores DEFAULT NULL as NULL::type, but we normalize to just null
 				// (matching the lexer's keyword normalization to lowercase)
 				if sqlVal, ok := normalizedExpr.(*parser.SQLVal); ok && sqlVal.Type == parser.ValArg {
-					valStr := strings.ToUpper(string(sqlVal.Val))
-					if valStr == "NULL" {
+					if strings.EqualFold(string(sqlVal.Val), "null") {
 						// Strip all type casts on NULL and return lowercase null (matching lexer)
 						return parser.NewValArg([]byte("null"))
 					}
@@ -546,12 +545,10 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// PostgreSQL adds these when a function expects double precision but gets bigint
 				if typeStr == "double precision" || typeStr == "real" {
 					if innerCast, ok := normalizedExpr.(*parser.CastExpr); ok {
-						if innerCast.Type != nil {
-							innerTypeStr := strings.ToLower(innerCast.Type.Type)
-							// If the inner cast is to an integer type, remove the outer double precision cast
-							if innerTypeStr == "bigint" || innerTypeStr == "integer" || innerTypeStr == "smallint" {
-								return innerCast
-							}
+						innerTypeStr := strings.ToLower(innerCast.Type.Type)
+						// If the inner cast is to an integer type, remove the outer double precision cast
+						if innerTypeStr == "bigint" || innerTypeStr == "integer" || innerTypeStr == "smallint" {
+							return innerCast
 						}
 					}
 				}
@@ -573,10 +570,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 
 		// Normalize the type name in the cast expression to handle type aliases
 		// e.g., int[]::int[] should become int[]::integer[]
-		normalizedType := e.Type
-		if e.Type != nil {
-			normalizedType = normalizeConvertType(e.Type, mode)
-		}
+		normalizedType := normalizeConvertType(e.Type, mode)
 
 		return &parser.CastExpr{
 			Expr: normalizedExpr,
