@@ -494,7 +494,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			slog.Debug("Generating NULL statement for removed comment",
 				"object", currentComment.comment.Object,
 				"statement", currentComment.statement)
-			nullStmt := generateCommentNullStatement(currentComment)
+			nullStmt := g.generateCommentNullStatement(currentComment)
 			if nullStmt != "" {
 				slog.Debug("Generated NULL statement", "stmt", nullStmt)
 				ddls = append(ddls, nullStmt)
@@ -3610,28 +3610,53 @@ func findCommentByObject(comments []*Comment, object string) *Comment {
 	return nil
 }
 
-// generateCommentNullStatement creates a COMMENT ... IS NULL statement from a Comment
-func generateCommentNullStatement(comment *Comment) string {
-	// Replace the comment value in the statement with NULL
-	// The statement looks like: COMMENT ON TABLE/COLUMN object IS 'value';
-	// We need to replace 'value' with NULL
-	// Note: We don't add a trailing semicolon as it's added by joinDDLs
-	stmt := comment.statement
+// generateCommentNullStatement creates a COMMENT ... IS NULL statement.
+func (g *Generator) generateCommentNullStatement(comment *Comment) string {
+	// Generate the COMMENT statement directly from the AST
+	// The comment.comment contains ObjectType, Object, and Comment fields
+	objectType := comment.comment.ObjectType
+	object := comment.comment.Object
 
-	// Normalize quotes in the statement (e.g., "public"."users" -> public.users)
-	stmt = strings.ReplaceAll(stmt, "\"", "")
-
-	// Use regex to replace the comment value with NULL, removing any trailing semicolon
-	// Match: IS followed by everything until the end
-	re := regexp.MustCompile(`(?i)\s+IS\s+.+$`)
-	if re.MatchString(stmt) {
-		result := re.ReplaceAllString(stmt, " IS NULL")
-		// Remove any trailing semicolon from the original statement
-		return strings.TrimSuffix(result, ";")
+	var sqlObjectType string
+	switch objectType {
+	case "OBJECT_TABLE":
+		sqlObjectType = "TABLE"
+	case "OBJECT_COLUMN":
+		sqlObjectType = "COLUMN"
+	default:
+		// For other object: strip "OBJECT_" prefix if present
+		sqlObjectType = strings.TrimPrefix(objectType, "OBJECT_")
 	}
 
-	// Fallback: shouldn't happen, but just in case
-	return ""
+	// Escape the object name appropriately based on object type
+	var escapedObject string
+	if sqlObjectType == "COLUMN" {
+		// For columns, the object is in format "schema.table.column"
+		// We need to escape each part appropriately
+		parts := strings.Split(object, ".")
+		if len(parts) == 3 {
+			// schema.table.column
+			escapedObject = fmt.Sprintf("%s.%s.%s",
+				g.escapeSQLName(parts[0]),
+				g.escapeSQLName(parts[1]),
+				g.escapeSQLName(parts[2]))
+		} else if len(parts) == 2 {
+			// table.column (schema was added during normalization)
+			escapedObject = fmt.Sprintf("%s.%s",
+				g.escapeSQLName(parts[0]),
+				g.escapeSQLName(parts[1]))
+		} else {
+			// Fallback: escape the whole thing
+			escapedObject = g.escapeSQLName(object)
+		}
+	} else {
+		// For tables and other objects, use escapeTableName which handles schema.table format
+		escapedObject = g.escapeTableName(object)
+	}
+
+	// Generate the COMMENT statement with NULL value
+	// Note: We don't add a trailing semicolon as it's added by joinDDLs
+	return fmt.Sprintf("COMMENT ON %s %s IS NULL", sqlObjectType, escapedObject)
 }
 
 func findExtensionByName(extensions []*Extension, name string) *Extension {
