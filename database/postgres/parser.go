@@ -89,7 +89,7 @@ func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
 		// Generic parser couldn't handle this SQL, use pgquery as fallback.
 		// This is expected during the migration period as the generic parser
 		// may not support all PostgreSQL features yet.
-		slog.Debug("Generic parser failed on full SQL, using pgquery fallback", "error", err.Error())
+		slog.Warn("Generic parser failed on full SQL, using pgquery fallback", "error", err.Error())
 		return p.parsePgquery(sql)
 	}
 
