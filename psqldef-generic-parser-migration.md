@@ -7,9 +7,9 @@ We are implementing PostgreSQL syntaxes in the generic parser. Once the migratio
 ## Current Status
 
 - **✅ Integration tests**: 1528 tests, 0 failures (`make test`) - **ALL PASS!**
-- **Generic parser tests**: 1006 tests, 2 failures (`PSQLDEF_PARSER=generic make test-psqldef`)
+- **✅ Generic parser tests**: 1006 tests, 0 failures (`PSQLDEF_PARSER=generic make test-psqldef`) - **ALL PASS!**
 
-The remaining 2 failures are parser comparison unit tests only - they do not affect actual functionality.
+**Migration completed successfully!** All tests now pass with the generic parser.
 
 ## Rules
 
@@ -19,21 +19,18 @@ The remaining 2 failures are parser comparison unit tests only - they do not aff
 * `pgquery` parser might normalize AST in a wrong way, which should be fixed in this migration process (commit cadcee36b9ed3fbb1a185262cc8881ca53d409d4 for example)
 * `make test` must pass (i.e. no regressions are allowed)
 
-## Remaining Tasks
+## Completed Tasks
 
-### Parser Comparison Unit Tests (2 failures)
+### Parser Comparison Unit Tests ✅
 
-These are unit tests in `database/postgres/parser_test.go` that compare AST structures between pgquery and generic parsers. They do not affect integration tests or actual functionality.
+Fixed the `CreateViewWithCast` test failure by adding support for the `REAL` type in type cast expressions.
 
-1. **`CreateViewWithCast`** - Parser comparison for views with type casts
-   - Location: `database/postgres/tests.yml`
-   - Issue: AST structure differences in view definitions with type casts
-   - Impact: None - integration tests pass
-   - Test SQL involves views with cast expressions like `b::bool`, `s::smallint`, etc.
+**Solution:**
+- Added `REAL` to the `simple_convert_type` rule in `parser/parser.y`
+- The generic parser was missing support for `::real` type casts used in view definitions
+- After regenerating the parser, all 1006 generic parser tests now pass
 
-**Next Steps:**
-- Investigate AST differences in view cast expressions
-- Ensure both parsers generate functionally equivalent AST for view casts
-- May need to adjust type normalization in view context
-
-**Note:** The migration's primary goal is achieved - all integration tests pass. These remaining unit test failures are low priority and can be addressed incrementally.
+**Technical Details:**
+- Modified: `parser/parser.y` (added REAL to simple_convert_type rule around line 5321)
+- The issue was that `REAL` was defined as a token and used in column types, but was missing from the type cast conversion rules
+- Test case involved views with cast expressions: `b::bool`, `s::smallint`, `r::real`, etc.
