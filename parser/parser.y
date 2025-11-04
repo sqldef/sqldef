@@ -105,7 +105,7 @@ func forceEOF(yylex any) {
   columnType               ColumnType
   colKeyOpt                ColumnKeyOption
   optVal                   *SQLVal
-  defaultValueOrExpression DefaultValueOrExpression
+  defaultExpression DefaultExpression
   LengthScaleOption        LengthScaleOption
   columnDefinition         *ColumnDefinition
   checkDefinition          *CheckDefinition
@@ -401,7 +401,7 @@ func forceEOF(yylex any) {
 %type <str> identity_behavior
 %type <sequence> sequence_opt
 %type <boolVal> clustered_opt not_for_replication_opt
-%type <defaultValueOrExpression> default_definition
+%type <defaultExpression> default_definition
 %type <expr> default_value_expression
 %type <optVal> srid_definition srid_val
 %type <optVal> on_off
@@ -2431,12 +2431,12 @@ column_definition_type:
   }
 | column_definition_type default_definition
   {
-    $1.Default = &DefaultDefinition{ValueOrExpression: $2}
+    $1.Default = &DefaultDefinition{Expression: $2}
     $$ = $1
   }
 | column_definition_type CONSTRAINT sql_id default_definition
   {
-    $1.Default = &DefaultDefinition{ConstraintName: $3, ValueOrExpression: $4}
+    $1.Default = &DefaultDefinition{ConstraintName: $3, Expression: $4}
     $$ = $1
   }
 // for MySQL: Spatial data option
@@ -2620,7 +2620,7 @@ column_definition_type:
 default_definition:
   DEFAULT default_value_expression
   {
-    $$ = DefaultValueOrExpression{Expr: $2}
+    $$ = DefaultExpression{Expr: $2}
   }
 
 default_value_expression:

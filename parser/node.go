@@ -719,11 +719,11 @@ type ColumnType struct {
 }
 
 type DefaultDefinition struct {
-	ValueOrExpression DefaultValueOrExpression
-	ConstraintName    ColIdent // only for MSSQL
+	Expression     DefaultExpression
+	ConstraintName ColIdent // only for MSSQL
 }
 
-type DefaultValueOrExpression struct {
+type DefaultExpression struct {
 	Expr Expr
 }
 
@@ -785,10 +785,10 @@ func (ct *ColumnType) Format(buf *nodeBuffer) {
 	}
 	if ct.Default != nil {
 		buf.Printf(" %s", keywordStrings[DEFAULT])
-		if _, ok := ct.Default.ValueOrExpression.Expr.(*SQLVal); ok {
-			buf.Printf(" %s", String(ct.Default.ValueOrExpression.Expr))
+		if _, ok := ct.Default.Expression.Expr.(*SQLVal); ok {
+			buf.Printf(" %s", String(ct.Default.Expression.Expr))
 		} else {
-			buf.Printf("(%v)", ct.Default.ValueOrExpression.Expr)
+			buf.Printf("(%v)", ct.Default.Expression.Expr)
 		}
 	}
 	if ct.OnUpdate != nil {

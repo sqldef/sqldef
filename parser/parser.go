@@ -95,7 +95,7 @@ type yySymType struct {
 	columnType               ColumnType
 	colKeyOpt                ColumnKeyOption
 	optVal                   *SQLVal
-	defaultValueOrExpression DefaultValueOrExpression
+	defaultExpression        DefaultExpression
 	LengthScaleOption        LengthScaleOption
 	columnDefinition         *ColumnDefinition
 	checkDefinition          *CheckDefinition
@@ -6109,14 +6109,14 @@ yydefault:
 		yyDollar = yyS[yypt-2 : yypt+1]
 //line parser/parser.y:2433
 		{
-			yyDollar[1].columnType.Default = &DefaultDefinition{ValueOrExpression: yyDollar[2].defaultValueOrExpression}
+			yyDollar[1].columnType.Default = &DefaultDefinition{Expression: yyDollar[2].defaultExpression}
 			yyVAL.columnType = yyDollar[1].columnType
 		}
 	case 302:
 		yyDollar = yyS[yypt-4 : yypt+1]
 //line parser/parser.y:2438
 		{
-			yyDollar[1].columnType.Default = &DefaultDefinition{ConstraintName: yyDollar[3].colIdent, ValueOrExpression: yyDollar[4].defaultValueOrExpression}
+			yyDollar[1].columnType.Default = &DefaultDefinition{ConstraintName: yyDollar[3].colIdent, Expression: yyDollar[4].defaultExpression}
 			yyVAL.columnType = yyDollar[1].columnType
 		}
 	case 303:
@@ -6345,7 +6345,7 @@ yydefault:
 		yyDollar = yyS[yypt-2 : yypt+1]
 //line parser/parser.y:2622
 		{
-			yyVAL.defaultValueOrExpression = DefaultValueOrExpression{Expr: yyDollar[2].expr}
+			yyVAL.defaultExpression = DefaultExpression{Expr: yyDollar[2].expr}
 		}
 	case 330:
 		yyDollar = yyS[yypt-2 : yypt+1]

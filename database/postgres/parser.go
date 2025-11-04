@@ -1195,25 +1195,25 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 	switch expr := node.(type) {
 	case *parser.NullVal:
 		return &parser.DefaultDefinition{
-			ValueOrExpression: parser.DefaultValueOrExpression{
+			Expression: parser.DefaultExpression{
 				Expr: parser.NewValArg([]byte("null")),
 			},
 		}, nil
 	case *parser.SQLVal:
 		return &parser.DefaultDefinition{
-			ValueOrExpression: parser.DefaultValueOrExpression{
+			Expression: parser.DefaultExpression{
 				Expr: expr,
 			},
 		}, nil
 	case *parser.BoolVal:
 		return &parser.DefaultDefinition{
-			ValueOrExpression: parser.DefaultValueOrExpression{
+			Expression: parser.DefaultExpression{
 				Expr: parser.NewBoolSQLVal(bool(*expr)),
 			},
 		}, nil
 	case *parser.ArrayConstructor:
 		return &parser.DefaultDefinition{
-			ValueOrExpression: parser.DefaultValueOrExpression{
+			Expression: parser.DefaultExpression{
 				Expr: expr,
 			},
 		}, nil
@@ -1228,7 +1228,7 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 			// Preserve the cast by wrapping the SQLVal in a CastExpr
 			// Use lowercase null to match the lexer's keyword normalization
 			return &parser.DefaultDefinition{
-				ValueOrExpression: parser.DefaultValueOrExpression{
+				Expression: parser.DefaultExpression{
 					Expr: &parser.CastExpr{
 						Expr: parser.NewValArg([]byte("null")),
 						Type: expr.Type,
@@ -1250,13 +1250,13 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 					switch typeStr {
 					case "integer", "bigint", "smallint":
 						return &parser.DefaultDefinition{
-							ValueOrExpression: parser.DefaultValueOrExpression{
+							Expression: parser.DefaultExpression{
 								Expr: parser.NewIntVal(sqlVal.Val),
 							},
 						}, nil
 					case "numeric", "decimal", "real", "double precision":
 						return &parser.DefaultDefinition{
-							ValueOrExpression: parser.DefaultValueOrExpression{
+							Expression: parser.DefaultExpression{
 								Expr: parser.NewFloatVal(sqlVal.Val),
 							},
 						}, nil
@@ -1266,7 +1266,7 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 					switch typeStr {
 					case "text", "character varying", "varchar":
 						return &parser.DefaultDefinition{
-							ValueOrExpression: parser.DefaultValueOrExpression{
+							Expression: parser.DefaultExpression{
 								Expr: sqlVal,
 							},
 						}, nil
@@ -1276,7 +1276,7 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 		}
 		// Preserve all other casts (interval, bpchar, json, jsonb, integer[], timestamp, numeric casts on strings, etc.)
 		return &parser.DefaultDefinition{
-			ValueOrExpression: parser.DefaultValueOrExpression{
+			Expression: parser.DefaultExpression{
 				Expr: expr,
 			},
 		}, nil
@@ -1284,13 +1284,13 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 		switch expr := expr.Expr.(type) {
 		case *parser.SQLVal:
 			return &parser.DefaultDefinition{
-				ValueOrExpression: parser.DefaultValueOrExpression{
+				Expression: parser.DefaultExpression{
 					Expr: expr,
 				},
 			}, nil
 		case *parser.ArrayConstructor:
 			return &parser.DefaultDefinition{
-				ValueOrExpression: parser.DefaultValueOrExpression{
+				Expression: parser.DefaultExpression{
 					Expr: expr,
 				},
 			}, nil
@@ -1299,7 +1299,7 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 		}
 	case *parser.ComparisonExpr, *parser.FuncExpr:
 		return &parser.DefaultDefinition{
-			ValueOrExpression: parser.DefaultValueOrExpression{
+			Expression: parser.DefaultExpression{
 				Expr: expr,
 			},
 		}, nil
