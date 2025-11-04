@@ -1,43 +1,8 @@
 # Code Review: psqldef Generic Parser Changes
 
-**Branch**: `gfx/psqldef_generic_parser`
-**Reviewed**: 2025-11-04
-
-## Executive Summary
-
-This PR makes `psqldef` use the generic parser by default instead of pgquery, a significant architectural change. While the implementation is largely sound, there are **critical logic flaws**, **code quality issues**, and **duplication** that should be addressed before merging.
-
----
-
 ## 1. Logic Flaws (CRITICAL)
 
-### 1.1 ⚠️ CRITICAL: Regex-Based SQL Manipulation Violates Design Principles
-
-**File**: `database/postgres/database.go:631-648`
-
-The `normalizePostgresTypeCasts` function uses regex to parse and modify SQL strings:
-
-```go
-re := regexp.MustCompile(`'([^']+)'::time without time zone`)
-sql = re.ReplaceAllString(sql, "time '$1'")
-```
-
-**Problems**:
-1. **Project guidelines violation**: The project's `CLAUDE.md` explicitly states:
-   > "The generic parser builds ASTs, and the generator manipulates the ASTs for normalization and comparison. Do not parse strings with regular expressions"
-
-2. **Fragility with escaped quotes**: The regex `'([^']+)'` does not handle PostgreSQL's escaped quotes correctly:
-   - Input: `'can''t'::time without time zone`
-   - The regex will fail or produce incorrect results
-   - PostgreSQL escapes single quotes by doubling them: `'can''t'` represents the string `can't`
-
-3. **False positives in comments/strings**: The regex could match patterns inside SQL comments or other string contexts
-
-**Recommendation**: Refactor to use AST-based normalization instead of regex. If the generic parser cannot parse these constructs, enhance the parser rather than working around it with string manipulation.
-
----
-
-### 1.2 ⚠️ CRITICAL: Parser Mode Confusion and Circular Fallback Risk
+### ⚠️ CRITICAL: Parser Mode Confusion and Circular Fallback Risk
 
 **File**: `database/postgres/parser.go:79-87`
 
@@ -72,7 +37,7 @@ if p.mode == PsqldefParserModeAuto {
 
 ---
 
-### 1.3 ⚠️ HIGH: Unique Constraint Name Generation Removed
+### ⚠️ HIGH: Unique Constraint Name Generation Removed
 
 **File**: `database/postgres/parser.go:210-224`
 
@@ -103,7 +68,7 @@ Now it just uses the constraint name as-is:
 
 ---
 
-### 1.4 ⚠️ MEDIUM: Type Name Fallback May Hide Bugs
+### ⚠️ MEDIUM: Type Name Fallback May Hide Bugs
 
 **File**: `database/postgres/parser.go:682-689`
 
@@ -124,7 +89,7 @@ if typeName == "" {
 
 ---
 
-### 1.5 ⚠️ MEDIUM: Inconsistent ExclusionPair Field Naming
+### ⚠️ MEDIUM: Inconsistent ExclusionPair Field Naming
 
 **File**: `parser/node.go:742-745` vs `schema/ast.go:186-189`
 
@@ -152,19 +117,9 @@ type ExclusionPair struct {
 
 **Recommendation**: Rename the field from `column` to `expression` in `schema/ast.go` for consistency and clarity.
 
----
-
 ## 2. Low-Quality Code
 
-### 2.1 String-Based SQL Normalization
-
-**File**: `database/postgres/database.go:631-648`
-
-Already covered in Logic Flaws 1.1. Using regex for SQL manipulation is a code smell in a project that has a full SQL parser.
-
----
-
-### 2.2 Duplicated Normalization Calls
+### Duplicated Normalization Calls
 
 **File**: `database/postgres/database.go:580, 676`
 
@@ -193,7 +148,7 @@ result[constraintName] = constraintDef
 
 ---
 
-### 2.3 Inconsistent Logging Levels
+### Inconsistent Logging Levels
 
 **File**: `database/postgres/parser.go:52, 83, 118`
 
@@ -226,7 +181,7 @@ slog.Warn("pgquery parseStmt failed, falling back to generic parser for statemen
 
 ---
 
-### 2.4 Complex Nested Logic in Parse Method
+### Complex Nested Logic in Parse Method
 
 **File**: `database/postgres/parser.go:64-136`
 
@@ -267,7 +222,7 @@ func (p PostgresParser) parsePgquery(sql string) ([]database.DDLStatement, error
 
 ---
 
-### 2.5 Poor Variable Naming
+### Poor Variable Naming
 
 **File**: `database/postgres/parser.go:684`
 
@@ -282,179 +237,3 @@ if typeName == "" {
 Both `rawTypeName` and `typeName` are used, but the distinction between "raw" and "normalized" is unclear. Better names would be:
 - `rawTypeName` → `typeNameFromPgquery`
 - `typeName` → `finalTypeName`
-
----
-
-### 2.6 Test Logging Configuration Smell
-
-**File**: `cmd/testutils/testutils.go:41-55`
-
-The test utility sets up logging configuration in an `init()` function:
-
-```go
-func init() {
-    util.InitSlog()
-
-    // In test environments, suppress INFO-level logs...
-    if os.Getenv("LOG_LEVEL") == "" {
-        opts := &slog.HandlerOptions{
-            Level: slog.LevelWarn,
-        }
-        handler := slog.NewTextHandler(os.Stderr, opts)
-        slog.SetDefault(slog.New(handler))
-    }
-}
-```
-
-**Problem**: Global state modification in `init()` can cause:
-- Test order dependencies
-- Hard-to-debug issues when tests fail only in certain orders
-- Pollution of global logger state
-
-**Recommendation**: Use test-specific logger configuration or t.Cleanup() to restore state.
-
----
-
-## 3. Code Duplication
-
-### 3.1 Parser Fallback Logic Duplication
-
-**File**: `database/postgres/parser.go:79-87, 117-119`
-
-The fallback between generic parser and pgquery appears in two places:
-
-1. Top-level `Parse()`: generic → pgquery
-2. Within `parsePgquery()`: pgquery's parseStmt → generic
-
-**Recommendation**: Extract fallback logic into a dedicated method like:
-```go
-func (p PostgresParser) parseWithFallback(sql string, preferGeneric bool) ([]database.DDLStatement, error)
-```
-
----
-
-### 3.2 Test Case Duplication Across Databases
-
-**Files**: `cmd/mysqldef/tests_datatypes.yml`, `cmd/psqldef/tests.yml`, `cmd/mssqldef/tests.yml`
-
-Similar test cases added to multiple files:
-- `NegativeDefaultNumbers` (line added: `v11 decimal(10, 4) DEFAULT -0.001`)
-- `TypedLiterals`
-- `TypedLiteralsIdempotency`
-- `TypedLiteralsChangeDefault`
-
-**Problem**: While testing each database is necessary, the structure is duplicated. If the test schema changes, it must be updated in 3+ places.
-
-**Recommendation**: This is acceptable for database-specific tests, but consider:
-- Shared test generators for common patterns
-- Comments linking related tests across databases
-- Or accepting this as necessary duplication for database-specific testing
-
----
-
-### 3.3 Constraint Name Generation Duplication
-
-**File**: `schema/generator.go:869, 916, 1158`
-
-Constraint name generation appears in multiple places:
-
-```go
-// Line 869
-constraintName := util.BuildPostgresConstraintName(tableName, desiredColumn.name, "check")
-
-// Line 916
-constraintName := util.BuildPostgresConstraintName(tableName, desiredColumn.name, "check")
-
-// Line 1158 (for foreign keys)
-constraintName = util.BuildPostgresConstraintName(tableName, columnName, "fkey")
-```
-
-**Recommendation**: This is acceptable - the duplication is minimal and the logic is delegated to a utility function. No action needed unless the pattern becomes more complex.
-
----
-
-## 4. Missing Error Handling
-
-### 4.1 Silent Fallback in Type Name Extraction
-
-**File**: `database/postgres/parser.go:686-689`
-
-Already covered in Logic Flaws 1.4. When `getRawTypeName` returns empty string, the code silently falls back without logging.
-
----
-
-### 4.2 No Validation of Regex Replacement Results
-
-**File**: `database/postgres/database.go:637-641`
-
-The regex replacements don't validate their results:
-```go
-re := regexp.MustCompile(`'([^']+)'::time without time zone`)
-sql = re.ReplaceAllString(sql, "time '$1'")
-```
-
-If the regex fails to compile or produces unexpected results, there's no error checking.
-
-**Recommendation**: Add validation or at least debug logging to show before/after transformation.
-
----
-
-## 5. Breaking Changes Not Documented
-
-### 5.1 ExclusionPair Structure Change
-
-**File**: `parser/node.go:742-745`
-
-Changed from `Column ColIdent` to `Expression Expr` - this is a breaking change for any code using the parser AST directly.
-
-**Recommendation**: Document in commit message or migration guide.
-
----
-
-### 5.2 Default Parser Mode Change
-
-The default behavior changed from "pgquery with generic fallback" to "generic with pgquery fallback". This is a major behavioral change.
-
-**Recommendation**: Document in release notes and ensure comprehensive testing.
-
----
-
-## 6. Positive Observations
-
-Despite the issues above, there are several good practices:
-
-1. **Comprehensive test coverage**: New test cases for TypedLiterals, multi-dimensional arrays, negative defaults
-2. **Utility function extraction**: `util.BuildPostgresConstraintName` centralizes constraint naming
-3. **Test for generic parser**: `TestPsqldefYamlGenericParser` validates generic parser against all YAML tests
-4. **Documentation updates**: `CLAUDE.md` and `AGENTS.md` updated with clear guidelines
-
----
-
-## 7. Recommendations Summary
-
-### Must Fix (Before Merge)
-
-1. **Replace regex-based normalization** with AST-based approach (1.1)
-2. **Clarify parser fallback strategy** and remove "unexpected behavior" warnings (1.2)
-3. **Verify UNIQUE constraint name generation** works correctly (1.3)
-
-### Should Fix (Before Merge)
-
-4. Add logging for type name fallback (1.4)
-5. Rename `ExclusionPair.column` to `expression` in schema AST (1.5)
-6. Make logging levels consistent (2.3)
-7. Add error handling for regex replacements (4.2)
-
-### Nice to Have (Future Work)
-
-8. Simplify Parse() method control flow (2.4)
-9. Extract fallback logic to reduce duplication (3.1)
-10. Add test logging cleanup with t.Cleanup() (2.6)
-
----
-
-## Conclusion
-
-This PR represents significant work toward making the generic parser production-ready for PostgreSQL. The core implementation is solid, but the **regex-based normalization violates design principles** and the **parser fallback logic is confusing**. These must be addressed before merge.
-
-The test coverage is excellent, and the changes are well-structured overall. With the critical issues fixed, this will be a valuable improvement to the codebase.
