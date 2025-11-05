@@ -147,11 +147,11 @@ var keywords = map[string]int{
 	"condition":              UNUSED,
 	"constraint":             CONSTRAINT,
 	"continue":               CONTINUE,
+	"create":                 CREATE,
 	"convert":                CONVERT,
 	"cosine":                 COSINE,
 	"substr":                 SUBSTR,
 	"substring":              SUBSTRING,
-	"create":                 CREATE,
 	"cross":                  CROSS,
 	"current_date":           CURRENT_DATE,
 	"current_time":           CURRENT_TIME,
@@ -166,6 +166,7 @@ var keywords = map[string]int{
 	"day_minute":             UNUSED,
 	"day_second":             UNUSED,
 	"date":                   DATE,
+	"daterange":              DATERANGE,
 	"datetime":               DATETIME,
 	"datetime2":              DATETIME2,
 	"datetimeoffset":         DATETIMEOFFSET,
@@ -198,12 +199,16 @@ var keywords = map[string]int{
 	"euclidean":              EUCLIDEAN,
 	"escape":                 ESCAPE,
 	"escaped":                UNUSED,
+	"exclude":                EXCLUDE,
 	"exists":                 EXISTS,
 	"exec":                   EXEC,
 	"execute":                EXECUTE,
+	"except":                 EXCEPT,
 	"exit":                   EXIT,
 	"explain":                EXPLAIN,
+	"extension":              EXTENSION,
 	"expansion":              EXPANSION,
+	"extract":                EXTRACT,
 	"extended":               EXTENDED,
 	"false":                  FALSE,
 	"fetch":                  FETCH,
@@ -224,7 +229,7 @@ var keywords = map[string]int{
 	"get":                    UNUSED,
 	"getdate":                GETDATE,
 	"global":                 GLOBAL,
-	"grant":                  UNUSED,
+	"grant":                  GRANT,
 	"group":                  GROUP,
 	"group_concat":           GROUP_CONCAT,
 	"handler":                HANDLER,
@@ -254,8 +259,11 @@ var keywords = map[string]int{
 	"int2":                   UNUSED,
 	"int3":                   UNUSED,
 	"int4":                   UNUSED,
+	"int4range":              INT4RANGE,
 	"int8":                   UNUSED,
+	"int8range":              INT8RANGE,
 	"integer":                INTEGER,
+	"intersect":              INTERSECT,
 	"interval":               INTERVAL,
 	"into":                   INTO,
 	"invoker":                INVOKER,
@@ -327,6 +335,7 @@ var keywords = map[string]int{
 	"ntext":                  NTEXT,
 	"null":                   NULL,
 	"numeric":                NUMERIC,
+	"numrange":               NUMRANGE,
 	"nvarchar":               NVARCHAR,
 	"of":                     OF,
 	"offset":                 OFFSET,
@@ -335,7 +344,7 @@ var keywords = map[string]int{
 	"open":                   OPEN,
 	"optimize":               OPTIMIZE,
 	"optimizer_costs":        UNUSED,
-	"option":                 UNUSED,
+	"option":                 OPTION,
 	"optionally":             UNUSED,
 	"or":                     OR,
 	"order":                  ORDER,
@@ -355,6 +364,7 @@ var keywords = map[string]int{
 	"precision":              PRECISION,
 	"primary":                PRIMARY,
 	"prior":                  PRIOR,
+	"privileges":             PRIVILEGES,
 	"processlist":            PROCESSLIST,
 	"procedure":              PROCEDURE,
 	"query":                  QUERY,
@@ -379,7 +389,7 @@ var keywords = map[string]int{
 	"resignal":               UNUSED,
 	"restrict":               RESTRICT,
 	"return":                 RETURN,
-	"revoke":                 UNUSED,
+	"revoke":                 REVOKE,
 	"right":                  RIGHT,
 	"rlike":                  REGEXP,
 	"rollback":               ROLLBACK,
@@ -445,6 +455,8 @@ var keywords = map[string]int{
 	"transaction":            TRANSACTION,
 	"trigger":                TRIGGER,
 	"true":                   TRUE,
+	"tsrange":                TSRANGE,
+	"tstzrange":              TSTZRANGE,
 	"truncate":               TRUNCATE,
 	"type":                   TYPE,
 	"uncommitted":            UNCOMMITTED,
@@ -710,6 +722,16 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 				return tkn.scanLiteralIdentifier(']')
 			}
 			if tkn.mode == ParserModePostgres && ch == '~' {
+				// Check for ~~ (LIKE) and ~~* (ILIKE) pattern operators
+				if tkn.lastChar == '~' {
+					tkn.next()
+					if tkn.lastChar == '*' {
+						tkn.next()
+						return PATTERN_ILIKE, nil
+					}
+					return PATTERN_LIKE, nil
+				}
+				// Check for ~* (case-insensitive regex) or ~ (regex)
 				if tkn.lastChar == '*' {
 					tkn.next()
 					return POSIX_REGEX_CI, nil
@@ -806,6 +828,16 @@ func (tkn *Tokenizer) Scan() (int, []byte) {
 			if tkn.mode == ParserModePostgres {
 				if tkn.lastChar == '~' {
 					tkn.next()
+					// Check for !~~* (NOT ILIKE) and !~~ (NOT LIKE)
+					if tkn.lastChar == '~' {
+						tkn.next()
+						if tkn.lastChar == '*' {
+							tkn.next()
+							return PATTERN_NOT_ILIKE, nil
+						}
+						return PATTERN_NOT_LIKE, nil
+					}
+					// Check for !~* (NOT case-insensitive regex) or !~ (NOT regex)
 					if tkn.lastChar == '*' {
 						tkn.next()
 						return POSIX_NOT_REGEX_CI, nil

@@ -77,31 +77,33 @@ type Table struct {
 }
 
 type Column struct {
-	name          string
-	position      int
-	typeName      string
-	unsigned      bool
-	notNull       *bool
-	autoIncrement bool
-	array         bool
-	defaultDef    *DefaultDefinition
-	sridDef       *SridDefinition
-	length        *Value
-	scale         *Value
-	displayWidth  *Value
-	check         *CheckDefinition
-	charset       string
-	collate       string
-	timezone      bool // for Postgres `with time zone`
-	keyOption     ColumnKeyOption
-	onUpdate      *Value
-	comment       *Value
-	enumValues    []string
-	references    string
-	identity      *Identity
-	sequence      *Sequence
-	generated     *Generated
-	renamedFrom   string // Previous column name if renamed via @renamed annotation
+	name                       string
+	position                   int
+	typeName                   string
+	unsigned                   bool
+	notNull                    *bool
+	autoIncrement              bool
+	array                      bool
+	defaultDef                 *DefaultDefinition
+	sridDef                    *SridDefinition
+	length                     *Value
+	scale                      *Value
+	displayWidth               *Value
+	check                      *CheckDefinition
+	charset                    string
+	collate                    string
+	timezone                   bool // for Postgres `with time zone`
+	keyOption                  ColumnKeyOption
+	onUpdate                   *Value
+	comment                    *Value
+	enumValues                 []string
+	references                 string
+	referenceDeferrable        *bool // for Postgres: DEFERRABLE, NOT DEFERRABLE, or nil
+	referenceInitiallyDeferred *bool // for Postgres: INITIALLY DEFERRED, INITIALLY IMMEDIATE, or nil
+	identity                   *Identity
+	sequence                   *Sequence
+	generated                  *Generated
+	renamedFrom                string // Previous column name if renamed via @renamed annotation
 	// TODO: keyopt
 	// XXX: zerofill?
 }
@@ -115,6 +117,7 @@ type Index struct {
 	vector            bool // for MariaDB vector indexes
 	constraint        bool // for Postgres/MSSQL `ADD CONSTRAINT UNIQUE`
 	async             bool // for Aurora DSQL
+	concurrently      bool // for PostgreSQL
 	constraintOptions *ConstraintOptions
 	where             string         // for Postgres `Partial Indexes`
 	included          []string       // for MSSQL
@@ -182,8 +185,8 @@ type Exclusion struct {
 }
 
 type ExclusionPair struct {
-	column   string
-	operator string
+	expression string
+	operator   string
 }
 
 type Policy struct {
@@ -192,8 +195,8 @@ type Policy struct {
 	permissive    string
 	scope         string
 	roles         []string
-	using         string
-	withCheck     string
+	using         parser.Expr
+	withCheck     parser.Expr
 }
 
 type TablePrivilege struct {
@@ -279,8 +282,7 @@ type Sequence struct {
 }
 
 type DefaultDefinition struct {
-	value          *Value
-	expression     string
+	expression     parser.Expr
 	constraintName string // only for MSSQL
 }
 

@@ -13,8 +13,8 @@ Each command follows the same pattern: it accepts connection parameters similar 
 
 * Never commit the changes unless the user asks for it.
 * Write comments to describe what is not obvious in the code. Describing the "why" is a recommended practice.
-* Format queries in string literals.
-* Use "log/slog" to trace internal flow of the code. `LOG_LEVEL=debug` to enable debug logging.
+* Format SQL statements in string literals.
+* Use `log/slog` to trace internal state of the code. Set `LOG_LEVEL=debug` to enable debug logging.
 
 ## Build
 
@@ -36,10 +36,18 @@ make parser-v  # same as above, also writes a conflict report to y.output
 ```
 
 Requirements:
-- No reduce/reduce conflicts are allowed. Use `make parser-v` and inspect `y.output` to confirm.
+- No reduce/reduce conflicts are allowed
+- No more shift/reduce conflicts are allowed unless absolutely necessary
+- To resolve conflicts, use `make parser-v` and inspect `y.output`
 
 Usage notes:
-- `psqldef` primarily uses `go-pgquery` (a native PostgreSQL parser) and falls back to the generic parser.
+- `psqldef` uses the **generic parser** by default with fallback to `go-pgquery` (native PostgreSQL parser)
+- Always set `PSQLDEF_PARSER=generic` environment variable on development:
+  - `PSQLDEF_PARSER=generic` - Use only the generic parser (no fallback to pgquery)
+  - `PSQLDEF_PARSER=pgquery` - Use only the pgquery parser (no fallback to generic)
+  - Not set (default) - Use generic parser with fallback to pgquery
+- The generic parser builds ASTs, and the generator manipulates the ASTs for normalization and comparison. Do not parse strings with regular expressions
+- The pgquery parser is deprecated and will be removed in the future
 
 ## Local Development
 
@@ -71,6 +79,8 @@ make test # it will take 5 minutes to run
 
 ### Run tests for specific `*def` tools
 
+The test runner is `gotestsum`, which is a wrapper around `go test` that provides a more readable output.
+
 ```sh
 go test ./cmd/mysqldef
 go test ./cmd/psqldef
@@ -82,6 +92,13 @@ For MariaDB testing:
 
 ```sh
 MYSQL_FLAVOR=mariadb MYSQL_PORT=3307 go test ./cmd/mysqldef
+```
+
+For test coverage:
+
+```sh
+make test-cov     # shows a plain text report
+make test-cov-xml # generates coverage.xml
 ```
 
 ### Run individual tests
@@ -157,15 +174,15 @@ TestCaseName:
 
 ### Best Practices
 
-1. **Use consistent prefixes**: When adding related test cases, use the same prefix for test names. This allows you to run all related tests with a simple pattern:
+* **Use consistent prefixes**: When adding related test cases, use the same prefix for test names. This allows you to run all related tests with a simple pattern:
    ```sh
    # Example: Testing all index-related features
    go test ./cmd/psqldef -run='TestApply/Index.*'
    ```
-
-2. **Test both directions**: When testing schema changes, consider testing both:
+*  **Test both directions**: When testing schema changes, consider testing both:
    - Adding features (no `current`, only `desired`)
    - Modifying existing schemas (`current` → `desired`)
+* **Check test coverage**: When you edit source code, check the coverage report to ensure the code is covered by tests.
 
 ## Documentation
 
@@ -178,9 +195,10 @@ There are markdown files to describe the usage of each command. Keep them up to 
 
 ## Task Completion Checklist
 
-Before considering any task complete, run these commands:
+Before considering any task complete, run these commands to ensure the code is in a good state:
 
-* [ ] `make build`  # Ensure all commands are compiled
-* [ ] `make test`   # Ensure all tests pass
-* [ ] `make lint`   # Ensure the code is linted
-* [ ] `make format` # Ensure the code is formatted
+* `make build`
+* `make test`
+* `make modernize`
+* `make lint`
+* `make format`

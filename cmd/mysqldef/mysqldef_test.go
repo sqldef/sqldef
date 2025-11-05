@@ -474,7 +474,7 @@ func waitForMySQL() {
 	maxRetries := 30
 	retryDelay := 500 * time.Millisecond
 
-	for i := 0; i < maxRetries; i++ {
+	for range maxRetries {
 		if PingToMySQL() == nil {
 			return
 		}

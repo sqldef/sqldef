@@ -167,9 +167,11 @@ func (d *PostgresDatabase) views() ([]string, error) {
 			continue
 		}
 		definition = strings.TrimSpace(definition)
-		definition = strings.ReplaceAll(definition, "\n", "")
+		definition = strings.ReplaceAll(definition, "\n", " ")
 		definition = suffixSemicolon.ReplaceAllString(definition, "")
 		definition = spaces.ReplaceAllString(definition, " ")
+		// Normalize PostgreSQL-specific syntax for generic parser compatibility
+		definition = normalizeDatePartToExtract(definition)
 		ddls = append(
 			ddls, fmt.Sprintf(
 				"CREATE VIEW %s AS %s;", schema+"."+name, definition,
@@ -205,9 +207,11 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 			continue
 		}
 		definition = strings.TrimSpace(definition)
-		definition = strings.ReplaceAll(definition, "\n", "")
+		definition = strings.ReplaceAll(definition, "\n", " ")
 		definition = suffixSemicolon.ReplaceAllString(definition, "")
 		definition = spaces.ReplaceAllString(definition, " ")
+		// Normalize PostgreSQL-specific syntax for generic parser compatibility
+		definition = normalizeDatePartToExtract(definition)
 		ddls = append(
 			ddls, fmt.Sprintf(
 				"CREATE MATERIALIZED VIEW %s AS %s;", schema+"."+name, definition,
@@ -576,8 +580,10 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 			col.IdentityGeneration = *idGen
 		}
 		if checkName != nil && checkDefinition != nil {
+			// Normalize type casts for generic parser compatibility
+			normalizedDef := normalizePostgresTypeCasts(*checkDefinition)
 			col.Check = &columnConstraint{
-				definition: *checkDefinition,
+				definition: normalizedDef,
 				name:       *checkName,
 			}
 		}
@@ -626,6 +632,52 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 	return indexes, nil
 }
 
+// normalizeDatePartToExtract converts PostgreSQL's date_part() function calls to EXTRACT() expressions
+// PostgreSQL stores EXTRACT(field FROM source) as date_part('field'::text, source) internally.
+// The generic parser handles EXTRACT natively but parses date_part as a generic function call,
+// so we need to convert it back to EXTRACT for idempotent schema comparisons.
+func normalizeDatePartToExtract(sql string) string {
+	// Match date_part('field'::text, ...) or date_part('field', ...)
+	// The field can be: year, month, day, hour, minute, second, epoch, dow, doy, week, quarter, etc.
+	// We need to handle nested function calls and complex expressions as the second argument
+
+	// Use a regex that captures the field name and finds the matching closing parenthesis
+	// Pattern: date_part('field'::text, source) or date_part('field', source)
+	re := regexp.MustCompile(`date_part\('([^']+)'(?:::text)?,\s*([^)]+)\)`)
+
+	// Replace with EXTRACT(field FROM source)
+	sql = re.ReplaceAllStringFunc(sql, func(match string) string {
+		submatches := re.FindStringSubmatch(match)
+		if len(submatches) == 3 {
+			field := submatches[1]
+			source := strings.TrimSpace(submatches[2])
+			return fmt.Sprintf("EXTRACT(%s FROM %s)", field, source)
+		}
+		return match
+	})
+
+	return sql
+}
+
+// normalizePostgresTypeCasts normalizes PostgreSQL's verbose type cast syntax for generic parser compatibility.
+// The generic parser has difficulty parsing ::time casts, so we convert them to TypedLiteral format (time 'value').
+func normalizePostgresTypeCasts(sql string) string {
+	// Convert ::time without time zone casts to typed literal format
+	// PostgreSQL returns: '09:00:00'::time without time zone
+	// Convert to: time '09:00:00' (which the generic parser can handle)
+	re := regexp.MustCompile(`'([^']+)'::time without time zone`)
+	sql = re.ReplaceAllString(sql, "time '$1'")
+
+	re = regexp.MustCompile(`'([^']+)'::timestamp without time zone`)
+	sql = re.ReplaceAllString(sql, "timestamp '$1'")
+
+	// For with time zone variants, keep as cast since TypedLiteral doesn't support them well
+	sql = strings.ReplaceAll(sql, "::timestamp with time zone", "::timestamptz")
+	sql = strings.ReplaceAll(sql, "::time with time zone", "::timetz")
+
+	return sql
+}
+
 func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[string]string, error) {
 	const query = `SELECT con.conname, pg_get_constraintdef(con.oid, true)
 	FROM   pg_constraint con
@@ -650,6 +702,9 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[strin
 		if err != nil {
 			return nil, err
 		}
+		// Normalize type casts for generic parser compatibility
+		// PostgreSQL returns "::time without time zone" but the generic parser expects "::time"
+		constraintDef = normalizePostgresTypeCasts(constraintDef)
 		result[constraintName] = constraintDef
 	}
 

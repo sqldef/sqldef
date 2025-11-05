@@ -144,6 +144,7 @@ type Select struct {
 	OrderBy     OrderBy
 	Limit       *Limit
 	Lock        string
+	With        *With
 }
 
 // Select.Distinct
@@ -176,8 +177,8 @@ func (node *Select) setLimit(limit *Limit) {
 
 // Format formats the node.
 func (node *Select) Format(buf *nodeBuffer) {
-	buf.Printf("select %v%s%s%s%v",
-		node.Comments, node.Cache, node.Distinct, node.Hints, node.SelectExprs,
+	buf.Printf("%vselect %v%s%s%s%v",
+		node.With, node.Comments, node.Cache, node.Distinct, node.Hints, node.SelectExprs,
 	)
 	if node.From.isEmpty() {
 		buf.Printf(" from dual")
@@ -261,6 +262,7 @@ type Union struct {
 	OrderBy     OrderBy
 	Limit       *Limit
 	Lock        string
+	With        *With
 }
 
 // Union.Type
@@ -268,6 +270,10 @@ const (
 	UnionStr         = "union"
 	UnionAllStr      = "union all"
 	UnionDistinctStr = "union distinct"
+	IntersectStr     = "intersect"
+	IntersectAllStr  = "intersect all"
+	ExceptStr        = "except"
+	ExceptAllStr     = "except all"
 )
 
 // addOrder adds an order by element
@@ -282,8 +288,40 @@ func (node *Union) setLimit(limit *Limit) {
 
 // Format formats the node.
 func (node *Union) Format(buf *nodeBuffer) {
-	buf.Printf("%v %s %v%v%v%s", node.Left, node.Type, node.Right,
+	buf.Printf("%v%v %s %v%v%v%s", node.With, node.Left, node.Type, node.Right,
 		node.OrderBy, node.Limit, node.Lock)
+}
+
+// With represents a WITH clause (Common Table Expressions)
+type With struct {
+	CTEs []*CommonTableExpr
+}
+
+// Format formats the node.
+func (node *With) Format(buf *nodeBuffer) {
+	if node == nil || len(node.CTEs) == 0 {
+		return
+	}
+	buf.Printf("WITH ")
+	for i, cte := range node.CTEs {
+		if i > 0 {
+			buf.Printf(", ")
+		}
+		buf.Printf("%v", cte)
+	}
+	buf.Printf(" ")
+}
+
+// CommonTableExpr represents a single Common Table Expression in a WITH clause
+type CommonTableExpr struct {
+	Name       TableIdent
+	Columns    Columns
+	Definition SelectStatement
+}
+
+// Format formats the node.
+func (node *CommonTableExpr) Format(buf *nodeBuffer) {
+	buf.Printf("%v AS (%v)", node.Name, node.Definition)
 }
 
 // Stream represents a SELECT statement.
@@ -460,6 +498,7 @@ type DDL struct {
 	Table         TableName
 	NewName       TableName
 	IfExists      bool
+	IfNotExists   bool
 	TableSpec     *TableSpec
 	PartitionSpec *PartitionSpec
 	IndexSpec     *IndexSpec
@@ -496,6 +535,8 @@ const (
 	CreateSchema
 	GrantPrivilege
 	RevokePrivilege
+	DropIndex
+	DropExtension
 )
 
 // View types
@@ -618,6 +659,10 @@ func (ts *TableSpec) addForeignKey(foreignKey *ForeignKeyDefinition) {
 	ts.ForeignKeys = append(ts.ForeignKeys, foreignKey)
 }
 
+func (ts *TableSpec) addExclusion(exclusion *ExclusionDefinition) {
+	ts.Exclusions = append(ts.Exclusions, exclusion)
+}
+
 // ColumnDefinition describes a column in a CREATE TABLE statement
 type ColumnDefinition struct {
 	Name          ColIdent
@@ -697,10 +742,12 @@ type ColumnType struct {
 	// Key specification
 	KeyOpt ColumnKeyOption
 
-	References        string
-	ReferenceNames    Columns
-	ReferenceOnDelete ColIdent
-	ReferenceOnUpdate ColIdent
+	References            string
+	ReferenceNames        Columns
+	ReferenceOnDelete     ColIdent
+	ReferenceOnUpdate     ColIdent
+	ReferenceDeferrable   *BoolVal // for Postgres: DEFERRABLE, NOT DEFERRABLE, or nil
+	ReferenceInitDeferred *BoolVal // for Postgres: INITIALLY DEFERRED, INITIALLY IMMEDIATE, or nil
 
 	// MySQL: GENERATED ALWAYS AS (expr)
 	Generated *GeneratedColumn
@@ -710,13 +757,12 @@ type ColumnType struct {
 }
 
 type DefaultDefinition struct {
-	ValueOrExpression DefaultValueOrExpression
-	ConstraintName    ColIdent // only for MSSQL
+	Expression     DefaultExpression
+	ConstraintName ColIdent // only for MSSQL
 }
 
-type DefaultValueOrExpression struct {
-	Value *SQLVal
-	Expr  Expr
+type DefaultExpression struct {
+	Expr Expr
 }
 
 type SridDefinition struct {
@@ -731,13 +777,13 @@ type CheckDefinition struct {
 }
 
 type ExclusionPair struct {
-	Column   ColIdent
-	Operator string
+	Expression Expr
+	Operator   string
 }
 
 type ExclusionDefinition struct {
 	ConstraintName ColIdent
-	IndexType      string
+	IndexType      ColIdent
 	Exclusions     []ExclusionPair
 	Where          *Where
 }
@@ -777,10 +823,10 @@ func (ct *ColumnType) Format(buf *nodeBuffer) {
 	}
 	if ct.Default != nil {
 		buf.Printf(" %s", keywordStrings[DEFAULT])
-		if ct.Default.ValueOrExpression.Value != nil {
-			buf.Printf(" %s", String(ct.Default.ValueOrExpression.Value))
+		if _, ok := ct.Default.Expression.Expr.(*SQLVal); ok {
+			buf.Printf(" %s", String(ct.Default.Expression.Expr))
 		} else {
-			buf.Printf("(%v)", ct.Default.ValueOrExpression.Expr)
+			buf.Printf("(%v)", ct.Default.Expression.Expr)
 		}
 	}
 	if ct.OnUpdate != nil {
@@ -927,6 +973,7 @@ type IndexSpec struct {
 	Vector            bool // for MariaDB vector indexes
 	Constraint        bool
 	Async             bool // for Aurora DSQL
+	Concurrently      bool // for PostgreSQL
 	Clustered         bool // for MSSQL
 	ColumnStore       bool // for MSSQL
 	Included          []ColIdent
@@ -1142,8 +1189,9 @@ type Trigger struct {
 }
 
 type Type struct {
-	Name TableName // workaround: using TableName to handle schema
-	Type ColumnType
+	Name       TableName // workaround: using TableName to handle schema
+	Type       ColumnType
+	EnumValues []string
 }
 
 type Comment struct {
@@ -1467,6 +1515,7 @@ func (ListArg) iExpr()              {}
 func (*BinaryExpr) iExpr()          {}
 func (*UnaryExpr) iExpr()           {}
 func (*IntervalExpr) iExpr()        {}
+func (*TypedLiteral) iExpr()        {}
 func (*CollateExpr) iExpr()         {}
 func (*FuncExpr) iExpr()            {}
 func (*CaseExpr) iExpr()            {}
@@ -1475,6 +1524,7 @@ func (*UpdateFuncExpr) iExpr()      {}
 func (*CastExpr) iExpr()            {}
 func (*ConvertExpr) iExpr()         {}
 func (*SubstrExpr) iExpr()          {}
+func (*ExtractExpr) iExpr()         {}
 func (*ConvertUsingExpr) iExpr()    {}
 func (*MatchExpr) iExpr()           {}
 func (*GroupConcatExpr) iExpr()     {}
@@ -1559,6 +1609,8 @@ const (
 	NotInStr             = "not in"
 	LikeStr              = "like"
 	NotLikeStr           = "not like"
+	ILikeStr             = "ilike"
+	NotILikeStr          = "not ilike"
 	RegexpStr            = "regexp"
 	NotRegexpStr         = "not regexp"
 	JSONExtractOp        = "->"
@@ -1745,7 +1797,7 @@ func (node *SQLVal) Format(buf *nodeBuffer) {
 	case ValArg:
 		buf.WriteString(string(node.Val))
 	case ValBool:
-		buf.Printf("%t", node.Val)
+		buf.WriteString(string(node.Val))
 	default:
 		panic("unexpected")
 	}
@@ -1918,6 +1970,17 @@ func (node *IntervalExpr) Format(buf *nodeBuffer) {
 	buf.Printf("interval %v %s", node.Expr, node.Unit)
 }
 
+// TypedLiteral represents a typed literal like DATE '2022-01-01' or TIMESTAMP '2022-01-01'.
+type TypedLiteral struct {
+	Type  string
+	Value Expr
+}
+
+// Format formats the node.
+func (node *TypedLiteral) Format(buf *nodeBuffer) {
+	buf.Printf("%s %v", node.Type, node.Value)
+}
+
 // CollateExpr represents dynamic collate operator.
 type CollateExpr struct {
 	Expr    Expr
@@ -2032,6 +2095,17 @@ func (node *SubstrExpr) Format(buf *nodeBuffer) {
 	} else {
 		buf.Printf("substr(%v, %v, %v)", node.Name, node.From, node.To)
 	}
+}
+
+// ExtractExpr represents EXTRACT(field FROM source)
+type ExtractExpr struct {
+	Field  string
+	Source Expr
+}
+
+// Format formats the node.
+func (node *ExtractExpr) Format(buf *nodeBuffer) {
+	buf.Printf("EXTRACT(%s FROM %v)", node.Field, node.Source)
 }
 
 // CastExpr represents expr::type
@@ -2694,29 +2768,9 @@ mustEscape:
 }
 
 type ArrayConstructor struct {
-	Elements ArrayElements
+	Elements Exprs
 }
 
 func (node *ArrayConstructor) Format(buf *nodeBuffer) {
 	buf.Printf("ARRAY[%v]", node.Elements)
 }
-
-type ArrayElements []ArrayElement
-
-func (node ArrayElements) Format(buf *nodeBuffer) {
-	for i, n := range node {
-		if i == 0 {
-			buf.Printf("%v", n)
-		} else {
-			buf.Printf(", %v", n)
-		}
-	}
-}
-
-type ArrayElement interface {
-	iArrayElement()
-	SQLNode
-}
-
-func (*SQLVal) iArrayElement()   {}
-func (*CastExpr) iArrayElement() {}

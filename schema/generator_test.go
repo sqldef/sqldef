@@ -176,8 +176,7 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			assert.Equal(t, parser.CreateView, ddl.Action)
 			assert.NotNil(t, ddl.View.Definition, "Definition should not be nil")
 
-			// Normalize using AST
-			normalized := g.normalizeViewDefinition(ddl.View.Definition)
+			normalized := normalizeViewDefinition(ddl.View.Definition, g.mode)
 			actual := strings.ToLower(parser.String(normalized))
 
 			assert.Equal(t, tt.expected, actual)
@@ -198,8 +197,8 @@ func TestNormalizeCheckExpr(t *testing.T) {
 		},
 		{
 			name:     "Remove ::text cast from ARRAY elements",
-			input:    "status = ANY(ARRAY['active'::text, 'pending'::text])",
-			expected: "status = ANY(ARRAY['active', 'pending'])",
+			input:    "status = ANY (ARRAY['active'::text, 'pending'::text])",
+			expected: "status = ANY (ARRAY['active', 'pending'])",
 		},
 		{
 			name:     "Remove ::character varying cast",
@@ -233,8 +232,8 @@ func TestNormalizeCheckExpr(t *testing.T) {
 		},
 		{
 			name:     "Handle complex comparison with casts",
-			input:    "status = ANY(ARRAY['active'::text, 'pending'::text, 'processing'::text])",
-			expected: "status = ANY(ARRAY['active', 'pending', 'processing'])",
+			input:    "status = ANY (ARRAY['active'::text, 'pending'::text, 'processing'::text])",
+			expected: "status = ANY (ARRAY['active', 'pending', 'processing'])",
 		},
 		{
 			name:     "Handle IS NULL with cast",
@@ -317,7 +316,7 @@ func TestNormalizeCheckExpr(t *testing.T) {
 			assert.NotNil(t, check.Where.Expr, "Check expression is nil")
 
 			// Normalize the expression
-			normalized := normalizeCheckExpr(check.Where.Expr)
+			normalized := normalizeCheckExpr(check.Where.Expr, GeneratorModeMysql)
 
 			// Convert normalized expression to string
 			actual := parser.String(normalized)
@@ -327,7 +326,7 @@ func TestNormalizeCheckExpr(t *testing.T) {
 }
 
 func TestNormalizeCheckExprNilInput(t *testing.T) {
-	result := normalizeCheckExpr(nil)
+	result := normalizeCheckExpr(nil, GeneratorModeMysql)
 	assert.Nil(t, result)
 }
 
@@ -347,8 +346,8 @@ func TestCheckConstraintComparisonWithDifferentInValues(t *testing.T) {
 	check2 := ddl2.TableSpec.Checks[0]
 
 	// Normalize both
-	normalized1 := normalizeCheckExpr(check1.Where.Expr)
-	normalized2 := normalizeCheckExpr(check2.Where.Expr)
+	normalized1 := normalizeCheckExpr(check1.Where.Expr, GeneratorModeMysql)
+	normalized2 := normalizeCheckExpr(check2.Where.Expr, GeneratorModeMysql)
 
 	// Convert to strings
 	str1 := parser.String(normalized1)
@@ -377,8 +376,8 @@ func TestCheckConstraintIdempotencyWithMySQLFormat(t *testing.T) {
 	check2 := ddl2.TableSpec.Checks[0]
 
 	// Normalize both
-	normalized1 := normalizeCheckExpr(check1.Where.Expr)
-	normalized2 := normalizeCheckExpr(check2.Where.Expr)
+	normalized1 := normalizeCheckExpr(check1.Where.Expr, GeneratorModeMysql)
+	normalized2 := normalizeCheckExpr(check2.Where.Expr, GeneratorModeMysql)
 
 	// Unwrap outermost parentheses (as done in areSameCheckDefinition)
 	normalized1 = unwrapOutermostParenExpr(normalized1)
@@ -413,9 +412,9 @@ func TestCheckConstraintMSSQLInVsOrNormalization(t *testing.T) {
 	assert.NotNil(t, colDB.Type.Check, "Expected column-level CHECK")
 	checkDB := colDB.Type.Check
 
-	// Normalize both
-	normalizedUser := normalizeCheckExpr(checkUser.Where.Expr)
-	normalizedDB := normalizeCheckExpr(checkDB.Where.Expr)
+	// Normalize both (use MySQL mode since this test is for MSSQL/MySQL behavior)
+	normalizedUser := normalizeCheckExpr(checkUser.Where.Expr, GeneratorModeMysql)
+	normalizedDB := normalizeCheckExpr(checkDB.Where.Expr, GeneratorModeMysql)
 
 	// Unwrap outermost parens
 	normalizedUser = unwrapOutermostParenExpr(normalizedUser)

@@ -1,4 +1,3 @@
-// TODO: Normalize implicit things in input first, and then compare
 package schema
 
 import (
@@ -26,21 +25,6 @@ const (
 	GeneratorModeMssql
 )
 
-var (
-	dataTypeAliases = map[string]string{
-		"bool":    "boolean",
-		"int":     "integer",
-		"char":    "character",
-		"numeric": "decimal",
-		"varchar": "character varying",
-	}
-	postgresDataTypeAliases = map[string]string{}
-	mssqlDataTypeAliases    = map[string]string{}
-	mysqlDataTypeAliases    = map[string]string{
-		"boolean": "tinyint",
-	}
-)
-
 // This struct holds simulated schema states during GenerateIdempotentDDLs().
 type Generator struct {
 	mode          GeneratorMode
@@ -59,6 +43,7 @@ type Generator struct {
 	// Track FKs that have been handled during primary key changes
 	handledForeignKeys map[string]bool
 
+	desiredComments []*Comment
 	currentComments []*Comment
 
 	desiredExtensions []*Extension
@@ -121,6 +106,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		currentTriggers:    aggregated.Triggers,
 		desiredTypes:       desiredAggregated.Types,
 		currentTypes:       aggregated.Types,
+		desiredComments:    desiredAggregated.Comments,
 		currentComments:    aggregated.Comments,
 		desiredExtensions:  desiredAggregated.Extensions,
 		currentExtensions:  aggregated.Extensions,
@@ -332,7 +318,29 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Table is expected to exist. Drop foreign keys prior to index deletion
 		for _, foreignKey := range currentTable.foreignKeys {
-			if slices.Contains(convertForeignKeysToConstraintNames(desiredTable.foreignKeys), foreignKey.constraintName) {
+			// Skip foreign keys without constraint names - they're likely from column-level REFERENCES
+			// that haven't been fully processed yet
+			if foreignKey.constraintName == "" {
+				continue
+			}
+
+			// Generate constraint names for desired foreign keys (for comparison)
+			desiredConstraintNames := []string{}
+			for _, desiredFK := range desiredTable.foreignKeys {
+				constraintName := desiredFK.constraintName
+
+				if g.mode == GeneratorModeMysql {
+					// Auto-generate constraint name if not specified (for PostgreSQL)
+					if constraintName == "" && len(desiredFK.indexColumns) > 0 {
+						tableName := extractTableName(desiredTable.name)
+						columnName := desiredFK.indexColumns[0]
+						constraintName = buildPostgresConstraintName(tableName, columnName, "fkey")
+					}
+				}
+				desiredConstraintNames = append(desiredConstraintNames, constraintName)
+			}
+
+			if slices.Contains(desiredConstraintNames, foreignKey.constraintName) {
 				continue // Foreign key is expected to exist.
 			}
 
@@ -425,7 +433,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 			// For MySQL and MSSQL, also check if this constraint matches any column-level CHECK by definition
 			// This handles auto-generated constraint names for column-level CHECKs
-			if (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) && findCheckConstraintByDefinition(desiredTable, &check) != nil {
+			if (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) && g.findCheckConstraintByDefinition(desiredTable, &check) != nil {
 				continue
 			}
 
@@ -456,6 +464,26 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			continue
 		}
 		ddls = append(ddls, fmt.Sprintf("DROP EXTENSION %s", g.escapeSQLName(currentExtension.extension.Name)))
+	}
+
+	// Clean up obsoleted comments
+	for _, currentComment := range g.currentComments {
+		// Check if this comment still exists in desired comments
+		desiredComment := findCommentByObject(g.desiredComments, currentComment.comment.Object)
+		// Only generate NULL statement if the comment is completely absent from desired schema
+		// If desiredComment exists but is empty, it means the desired schema has "COMMENT ... IS NULL",
+		// which will be handled by generateDDLsForComment
+		if desiredComment == nil {
+			// Comment was completely removed, generate COMMENT ... IS NULL
+			slog.Debug("Generating NULL statement for removed comment",
+				"object", currentComment.comment.Object,
+				"statement", currentComment.statement)
+			nullStmt := g.generateCommentNullStatement(currentComment)
+			if nullStmt != "" {
+				slog.Debug("Generated NULL statement", "stmt", nullStmt)
+				ddls = append(ddls, nullStmt)
+			}
+		}
 	}
 
 	// Clean up obsoleted triggers
@@ -822,19 +850,20 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				tableName := extractTableName(desired.table.name)
-				constraintName := fmt.Sprintf("%s_%s_check", tableName, desiredColumn.name)
+				constraintName := buildPostgresConstraintName(tableName, desiredColumn.name, "check")
 				if desiredColumn.check != nil && desiredColumn.check.constraintName != "" {
 					constraintName = desiredColumn.check.constraintName
 				}
 
 				currentCheck := findCheckConstraintInTable(&currentTable, constraintName)
-				if !areSameCheckDefinition(currentCheck, desiredColumn.check) { // || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
+
+				if !g.areSameCheckDefinition(currentCheck, desiredColumn.check) { // || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
 					if currentCheck != nil {
 						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), constraintName)
 						ddls = append(ddls, ddl)
 					}
 					if desiredColumn.check != nil {
-						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), constraintName, parser.String(desiredColumn.check.definition))
+						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), constraintName, g.normalizeCheckExprString(desiredColumn.check.definition))
 						if desiredColumn.check.noInherit {
 							ddl += " NO INHERIT"
 						}
@@ -854,7 +883,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					ddls = append(ddls, ddl)
 				}
 
-				if !areSameCheckDefinition(currentColumn.check, desiredColumn.check) {
+				if !g.areSameCheckDefinition(currentColumn.check, desiredColumn.check) {
 					// For MSSQL, column-level CHECKs might actually be table-level CHECKs that MSSQL converted
 					// Check if the current column-level CHECK matches a table-level CHECK in desired
 					skipDrop := false
@@ -862,7 +891,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						// Current has column-level CHECK, desired doesn't
 						// Check if it matches a table-level CHECK in desired
 						if findCheckConstraintByName(desired.table.checks, currentColumn.check.constraintName) != nil ||
-							findCheckConstraintByDefinitionInList(desired.table.checks, currentColumn.check) != nil {
+							g.findCheckConstraintByDefinitionInList(desired.table.checks, currentColumn.check) != nil {
 							// This column-level CHECK is actually a table-level CHECK
 							// It will be handled in the table-level CHECK processing
 							skipDrop = true
@@ -871,7 +900,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 					if !skipDrop {
 						tableName := extractTableName(desired.table.name)
-						constraintName := fmt.Sprintf("%s_%s_check", tableName, desiredColumn.name)
+						constraintName := buildPostgresConstraintName(tableName, desiredColumn.name, "check")
 						if currentColumn.check != nil {
 							currentConstraintName := currentColumn.check.constraintName
 							ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), currentConstraintName)
@@ -886,7 +915,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 							if desiredColumn.check.notForReplication {
 								replicationDefinition = " NOT FOR REPLICATION"
 							}
-							ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableName(desired.table.name), desiredConstraintName, replicationDefinition, parser.String(desiredColumn.check.definition))
+							ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableName(desired.table.name), desiredConstraintName, replicationDefinition, g.normalizeCheckExprString(desiredColumn.check.definition))
 							ddls = append(ddls, ddl)
 						}
 					}
@@ -1107,7 +1136,16 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	// Examine each foreign key
 	for _, desiredForeignKey := range desired.table.foreignKeys {
-		if len(desiredForeignKey.constraintName) == 0 && g.mode != GeneratorModeSQLite3 {
+		// Auto-generate constraint name if not specified (for PostgreSQL)
+		constraintName := desiredForeignKey.constraintName
+		if constraintName == "" && g.mode == GeneratorModePostgres && len(desiredForeignKey.indexColumns) > 0 {
+			tableName := extractTableName(desired.table.name)
+			// Use the first column name for the constraint name (matches PostgreSQL behavior)
+			columnName := desiredForeignKey.indexColumns[0]
+			constraintName = buildPostgresConstraintName(tableName, columnName, "fkey")
+		}
+
+		if len(constraintName) == 0 && g.mode != GeneratorModeSQLite3 {
 			return ddls, fmt.Errorf(
 				"Foreign key without constraint symbol was found in table '%s' (index name: '%s', columns: %v). "+
 					"Specify the constraint symbol to identify the foreign key.",
@@ -1115,9 +1153,25 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			)
 		}
 
-		if currentForeignKey := findForeignKeyByName(currentTable.foreignKeys, desiredForeignKey.constraintName); currentForeignKey != nil {
+		// Create a modified ForeignKey with the generated constraint name if needed
+		fkWithName := desiredForeignKey
+		if desiredForeignKey.constraintName == "" && constraintName != "" {
+			fkWithName = ForeignKey{
+				constraintName:    constraintName,
+				indexName:         desiredForeignKey.indexName,
+				indexColumns:      desiredForeignKey.indexColumns,
+				referenceName:     desiredForeignKey.referenceName,
+				referenceColumns:  desiredForeignKey.referenceColumns,
+				onDelete:          desiredForeignKey.onDelete,
+				onUpdate:          desiredForeignKey.onUpdate,
+				notForReplication: desiredForeignKey.notForReplication,
+				constraintOptions: desiredForeignKey.constraintOptions,
+			}
+		}
+
+		if currentForeignKey := findForeignKeyByName(currentTable.foreignKeys, constraintName); currentForeignKey != nil {
 			// Drop and add foreign key as needed.
-			if !g.areSameForeignKeys(*currentForeignKey, desiredForeignKey) {
+			if !g.areSameForeignKeys(*currentForeignKey, fkWithName) {
 				var dropDDL string
 				switch g.mode {
 				case GeneratorModeMysql:
@@ -1127,15 +1181,15 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				default:
 				}
 				if dropDDL != "" {
-					ddls = append(ddls, dropDDL, fmt.Sprintf("ALTER TABLE %s ADD %s%s", g.escapeTableName(desired.table.name), g.generateForeignKeyDefinition(desiredForeignKey), g.generateConstraintOptions(desiredForeignKey.constraintOptions)))
+					ddls = append(ddls, dropDDL, fmt.Sprintf("ALTER TABLE %s ADD %s%s", g.escapeTableName(desired.table.name), g.generateForeignKeyDefinition(fkWithName), g.generateConstraintOptions(fkWithName.constraintOptions)))
 				}
 			}
 		} else {
 			// Foreign key not found, add foreign key.
 			// But first check if we've already handled this FK during primary key changes
-			fkKey := desired.table.name + ":" + desiredForeignKey.constraintName
+			fkKey := desired.table.name + ":" + constraintName
 			if !g.handledForeignKeys[fkKey] {
-				definition := g.generateForeignKeyDefinition(desiredForeignKey)
+				definition := g.generateForeignKeyDefinition(fkWithName)
 				ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), definition)
 				ddls = append(ddls, ddl)
 			}
@@ -1176,19 +1230,19 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		// For MySQL and MSSQL, also try to find by definition if not found by name
 		// This handles auto-generated constraint names
 		if currentCheck == nil && (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) {
-			currentCheck = findCheckConstraintByDefinition(&currentTable, &desiredCheck)
+			currentCheck = g.findCheckConstraintByDefinition(&currentTable, &desiredCheck)
 		}
 
 		if currentCheck != nil {
-			if !areSameCheckDefinition(currentCheck, &desiredCheck) {
+			if !g.areSameCheckDefinition(currentCheck, &desiredCheck) {
 				// Constraint exists but has different definition, need to replace it
 				switch g.mode {
 				case GeneratorModePostgres, GeneratorModeMssql:
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), parser.String(desiredCheck.definition)))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckExprString(desiredCheck.definition)))
 				case GeneratorModeMysql:
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), parser.String(desiredCheck.definition)))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckExprString(desiredCheck.definition)))
 				case GeneratorModeSQLite3:
 					// SQLite does not support ALTER TABLE for CHECK constraints
 					// Modifying CHECK constraints requires recreating the table, which is not supported
@@ -1201,7 +1255,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 		} else {
 			// Constraint doesn't exist, add it
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), parser.String(desiredCheck.definition)))
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckExprString(desiredCheck.definition)))
 		}
 	}
 
@@ -1225,8 +1279,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 // Shared by `CREATE INDEX` and `ALTER TABLE ADD INDEX`.
 // This manages `g.currentTables` unlike `generateDDLsForCreateTable`...
 func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex Index, action string, statement string) ([]string, error) {
-	// Add CONCURRENTLY to CREATE [UNIQUE] INDEX statements if configured (PostgreSQL only)
-	if g.mode == GeneratorModePostgres && action == "CREATE INDEX" && g.config.CreateIndexConcurrently {
+	// Add CONCURRENTLY to CREATE [UNIQUE] INDEX statements (PostgreSQL only)
+	// This can come from either:
+	// 1. The config flag (g.config.CreateIndexConcurrently)
+	// 2. The parsed DDL (desiredIndex.concurrently)
+	if g.mode == GeneratorModePostgres && action == "CREATE INDEX" && (g.config.CreateIndexConcurrently || desiredIndex.concurrently) {
 		re := regexp.MustCompile(`(?i)^(CREATE\s+(?:UNIQUE\s+)?INDEX)(?:\s+CONCURRENTLY)?(\s+.*)`)
 		statement = re.ReplaceAllString(statement, "${1} CONCURRENTLY${2}")
 	}
@@ -1396,7 +1453,7 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy 
 		currentTable.policies = append(currentTable.policies, desiredPolicy)
 	} else {
 		// policy found. If it's different, drop and add or alter policy.
-		if !areSamePolicies(*currentPolicy, desiredPolicy) {
+		if !g.areSamePolicies(*currentPolicy, desiredPolicy) {
 			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLName(currentPolicy.name), g.escapeTableName(currentTable.name)))
 			ddls = append(ddls, statement)
 		}
@@ -1430,13 +1487,21 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 	// > (that is, the same column names in the same order and with the same data types), but it may add additional
 	// > columns to the end of the list. The calculations giving rise to the output columns may be completely different.
 	if g.mode == GeneratorModePostgres {
-		// If columns are added, be sure to DROP and CREATE.
-		if len(currentView.columns) > len(desiredView.columns) {
+		currentNormalized := normalizeViewColumnsFromDefinition(currentView.definition, g.mode)
+		desiredNormalized := normalizeViewColumnsFromDefinition(desiredView.definition, g.mode)
+
+		// If we couldn't extract columns from the definitions, fall back to DROP and CREATE
+		if currentNormalized == nil || desiredNormalized == nil {
+			return true
+		}
+
+		// If columns are removed, we need to DROP and CREATE.
+		if len(currentNormalized) > len(desiredNormalized) {
 			return true
 		}
 
 		// If all existing columns are identical and only a new column is added, use REPLACE; otherwise, execute DROP and CREATE.
-		return !reflect.DeepEqual(currentView.columns, desiredView.columns[:len(currentView.columns)])
+		return !reflect.DeepEqual(currentNormalized, desiredNormalized[:len(currentNormalized)])
 	}
 
 	return false
@@ -1460,11 +1525,17 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 			panic(fmt.Sprintf("View.definition must not be nil (currentView.definition=%v, desiredView.definition=%v)", currentView.definition, desiredView.definition))
 		}
 
-		currentNormalizedAST := g.normalizeViewDefinition(currentView.definition)
-		desiredNormalizedAST := g.normalizeViewDefinition(desiredView.definition)
+		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode)
+		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode)
 		currentNormalized := strings.ToLower(parser.String(currentNormalizedAST))
 		desiredNormalized := strings.ToLower(parser.String(desiredNormalizedAST))
 
+		// Post-normalization fix for generic parser: strip remaining table qualifiers
+		// The generic parser's ColName.String() may not respect the empty qualifier we set
+		if g.mode == GeneratorModePostgres {
+			currentNormalized = stripTableQualifiers(currentNormalized)
+			desiredNormalized = stripTableQualifiers(desiredNormalized)
+		}
 		slog.Debug("Comparing view definitions",
 			"current_before_norm", parser.String(currentView.definition),
 			"desired_before_norm", parser.String(desiredView.definition),
@@ -1498,253 +1569,18 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 	return ddls, nil
 }
 
-// normalizeViewDefinition normalizes a view definition AST for comparison.
-// This function removes database-specific formatting differences that don't affect the logical meaning.
-func (g *Generator) normalizeViewDefinition(stmt parser.SelectStatement) parser.SelectStatement {
-	if stmt == nil {
-		return nil
-	}
-
-	switch s := stmt.(type) {
-	case *parser.Select:
-		return &parser.Select{
-			Cache:       s.Cache,
-			Comments:    s.Comments,
-			Distinct:    s.Distinct,
-			Hints:       s.Hints,
-			SelectExprs: normalizeSelectExprs(s.SelectExprs, g.mode),
-			From:        normalizeTableExprs(s.From, g.mode),
-			Where:       normalizeWhere(s.Where, g.mode),
-			GroupBy:     normalizeGroupBy(s.GroupBy, g.mode),
-			Having:      normalizeWhere(s.Having, g.mode),
-			OrderBy:     normalizeOrderBy(s.OrderBy, g.mode),
-			Limit:       s.Limit,
-			Lock:        s.Lock,
-		}
-	case *parser.Union:
-		return &parser.Union{
-			Type:    s.Type,
-			Left:    g.normalizeViewDefinition(s.Left),
-			Right:   g.normalizeViewDefinition(s.Right),
-			OrderBy: normalizeOrderBy(s.OrderBy, g.mode),
-			Limit:   s.Limit,
-			Lock:    s.Lock,
-		}
-	default:
-		return stmt
-	}
-}
-
-// normalizeSelectExprs normalizes SELECT expressions for comparison
-func normalizeSelectExprs(exprs parser.SelectExprs, mode GeneratorMode) parser.SelectExprs {
-	normalized := make(parser.SelectExprs, len(exprs))
-	for i, expr := range exprs {
-		normalized[i] = normalizeSelectExpr(expr, mode)
-	}
-	return normalized
-}
-
-// normalizeSelectExpr normalizes a single SELECT expression for views
-func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.SelectExpr {
-	switch e := expr.(type) {
-	case *parser.AliasedExpr:
-		return &parser.AliasedExpr{
-			Expr: normalizeExpr(e.Expr, mode),
-			As:   e.As,
-		}
-	case *parser.StarExpr:
-		return e
-	default:
-		return expr
-	}
-}
-
-// normalizeExpr normalizes an expression in a view definition
-// This is similar to normalizeCheckExpr but tailored for view definitions
-func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
-	if expr == nil {
-		return nil
-	}
-
-	switch e := expr.(type) {
-	case *parser.ColName:
-		// Normalize column name and qualifier
-		// 1. Remove database-specific quotes/brackets from identifiers
-		// 2. For Postgres, remove table qualifiers from column references
-		qualifierStr := ""
-		if e.Qualifier.Name.String() != "" {
-			qualifierStr = normalizeName(e.Qualifier.Name.String())
-		}
-		nameStr := normalizeName(e.Name.String())
-
-		// For Postgres, remove table qualifiers (e.g., "users.name" -> "name")
-		if mode == GeneratorModePostgres {
-			qualifierStr = ""
-		}
-
-		return &parser.ColName{
-			Name: parser.NewColIdent(nameStr),
-			Qualifier: parser.TableName{
-				Name: parser.NewTableIdent(qualifierStr),
-			},
-		}
-	case *parser.ArrayConstructor:
-		normalizedElements := parser.ArrayElements{}
-		for _, elem := range e.Elements {
-			switch el := elem.(type) {
-			case *parser.CastExpr:
-				if normalized, ok := normalizeExpr(el, mode).(*parser.CastExpr); ok {
-					normalizedElements = append(normalizedElements, normalized)
-				} else {
-					normalizedElements = append(normalizedElements, el)
-				}
-			default:
-				normalizedElements = append(normalizedElements, elem)
-			}
-		}
-		return &parser.ArrayConstructor{Elements: normalizedElements}
-	case *parser.FuncExpr:
-		normalizedExprs := parser.SelectExprs{}
-		for _, arg := range e.Exprs {
-			// For Postgres, check for ARRAY constructors BEFORE normalizing
-			// PostgreSQL standardizes function arguments to use ARRAY['a', 'b'] notation
-			// but users may write them expanded as 'a', 'b', so we expand for comparison
-			// e.g., jsonb_extract_path_text(payload, ARRAY['amount']) -> jsonb_extract_path_text(payload, 'amount')
-			// e.g., jsonb_extract_path_text(payload, ARRAY['a', 'b']) -> jsonb_extract_path_text(payload, 'a', 'b')
-			if mode == GeneratorModePostgres {
-				if aliased, ok := arg.(*parser.AliasedExpr); ok {
-					if arrayConstr, ok := aliased.Expr.(*parser.ArrayConstructor); ok && len(arrayConstr.Elements) > 0 {
-						// Expand ARRAY elements into separate normalized arguments
-						for _, elem := range arrayConstr.Elements {
-							normalizedExprs = append(normalizedExprs, &parser.AliasedExpr{
-								Expr: normalizeExpr(elem.(parser.Expr), mode),
-							})
-						}
-						continue
-					}
-				}
-			}
-
-			// Not an ARRAY, normalize normally
-			normalized := normalizeSelectExpr(arg, mode)
-			normalizedExprs = append(normalizedExprs, normalized)
-		}
-		return &parser.FuncExpr{
-			Qualifier: e.Qualifier,
-			Name:      e.Name,
-			Distinct:  e.Distinct,
-			Exprs:     normalizedExprs,
-			Over:      e.Over,
-		}
-	case *parser.CastExpr:
-		return &parser.CastExpr{
-			Expr: normalizeExpr(e.Expr, mode),
-			Type: e.Type,
-		}
-	case *parser.ParenExpr:
-		return &parser.ParenExpr{
-			Expr: normalizeExpr(e.Expr, mode),
-		}
-	case *parser.ComparisonExpr:
-		return &parser.ComparisonExpr{
-			Operator: e.Operator,
-			Left:     normalizeExpr(e.Left, mode),
-			Right:    normalizeExpr(e.Right, mode),
-			Escape:   normalizeExpr(e.Escape, mode),
-			All:      e.All,
-			Any:      e.Any,
-		}
-	case *parser.AndExpr:
-		return &parser.AndExpr{
-			Left:  normalizeExpr(e.Left, mode),
-			Right: normalizeExpr(e.Right, mode),
-		}
-	case *parser.OrExpr:
-		return &parser.OrExpr{
-			Left:  normalizeExpr(e.Left, mode),
-			Right: normalizeExpr(e.Right, mode),
-		}
-	case *parser.BinaryExpr:
-		return &parser.BinaryExpr{
-			Operator: e.Operator,
-			Left:     normalizeExpr(e.Left, mode),
-			Right:    normalizeExpr(e.Right, mode),
-		}
-	case *parser.UnaryExpr:
-		return &parser.UnaryExpr{
-			Operator: e.Operator,
-			Expr:     normalizeExpr(e.Expr, mode),
-		}
-	case *parser.IsExpr:
-		return &parser.IsExpr{
-			Operator: e.Operator,
-			Expr:     normalizeExpr(e.Expr, mode),
-		}
-	case *parser.CollateExpr:
-		return &parser.CollateExpr{
-			Expr:    normalizeExpr(e.Expr, mode),
-			Charset: strings.ToLower(e.Charset),
-		}
-	case *parser.CaseExpr:
-		normalizedWhens := make([]*parser.When, len(e.Whens))
-		for i, when := range e.Whens {
-			normalizedWhens[i] = &parser.When{
-				Cond: normalizeExpr(when.Cond, mode),
-				Val:  normalizeExpr(when.Val, mode),
-			}
-		}
-		normalizedElse := normalizeExpr(e.Else, mode)
-		if _, ok := normalizedElse.(*parser.NullVal); ok {
-			normalizedElse = nil
-		}
-		return &parser.CaseExpr{
-			Expr:  normalizeExpr(e.Expr, mode),
-			Whens: normalizedWhens,
-			Else:  normalizedElse,
-		}
-	default:
-		// For literals and other types, return as-is
-		return expr
-	}
-}
-
-// normalizeTableExprs normalizes FROM clause table expressions
-func normalizeTableExprs(exprs parser.TableExprs, mode GeneratorMode) parser.TableExprs {
-	// For now, return as-is since table name normalization is less critical
-	// We mainly care about column references in the SELECT and WHERE clauses
-	return exprs
-}
-
-// normalizeWhere normalizes WHERE clause
-func normalizeWhere(where *parser.Where, mode GeneratorMode) *parser.Where {
-	if where == nil {
-		return nil
-	}
-	return &parser.Where{
-		Type: where.Type,
-		Expr: normalizeExpr(where.Expr, mode),
-	}
-}
-
-// normalizeGroupBy normalizes GROUP BY clause
-func normalizeGroupBy(groupBy parser.GroupBy, mode GeneratorMode) parser.GroupBy {
-	normalized := make(parser.GroupBy, len(groupBy))
-	for i, expr := range groupBy {
-		normalized[i] = normalizeExpr(expr, mode)
-	}
-	return normalized
-}
-
-// normalizeOrderBy normalizes ORDER BY clause
-func normalizeOrderBy(orderBy parser.OrderBy, mode GeneratorMode) parser.OrderBy {
-	normalized := make(parser.OrderBy, len(orderBy))
-	for i, order := range orderBy {
-		normalized[i] = &parser.Order{
-			Expr:      normalizeExpr(order.Expr, mode),
-			Direction: order.Direction,
-		}
-	}
-	return normalized
+// stripTableQualifiers removes table qualifiers from column references in SQL
+// E.g., "users.name" -> "name", "t.id" -> "id"
+// This is needed for PostgreSQL 13-15 where table qualifiers are included in column references.
+func stripTableQualifiers(sql string) string {
+	// Match table.column patterns where:
+	// - table name is [a-z_][a-z0-9_]* (identifier)
+	// - followed by a dot
+	// - followed by column name [a-z_][a-z0-9_]* (identifier)
+	// We use word boundaries to avoid matching within quoted strings
+	re := regexp.MustCompile(`\b[a-z_][a-z0-9_]*\.([a-z_][a-z0-9_]*)\b`)
+	// Replace "table.column" with just "column" (keeping capture group 1)
+	return re.ReplaceAllString(sql, "$1")
 }
 
 func (g *Generator) generateDDLsForCreateTrigger(triggerName string, desiredTrigger *Trigger) ([]string, error) {
@@ -1960,11 +1796,24 @@ func (g *Generator) generateDataType(column Column) string {
 
 	// Determine the full type name including schema qualification
 	typeName := column.typeName
+
+	// Normalize PostgreSQL shortcuts to their canonical forms for output
+	// Note: We DON'T normalize general aliases like varchar->character varying or numeric->decimal
+	// Those are preserved as-is in the output. We only normalize PostgreSQL-specific shortcuts.
+	if g.mode == GeneratorModePostgres {
+		switch typeName {
+		case "int":
+			typeName = "integer"
+		}
+		// Note: timestamptz and timetz are already normalized by the parsers
+		// (they set the timezone flag and convert the type name to timestamp/time)
+	}
+
 	// Only qualify type names with schema for PostgreSQL when:
-	// 1. references is not empty and not just "public."
+	// 1. references is not empty (including "public." for enum types)
 	// 2. the type name doesn't already contain a dot
 	// 3. it's not a built-in type (built-in types shouldn't have references set to non-empty schema)
-	if g.mode == GeneratorModePostgres && column.references != "" && column.references != "public." && !strings.Contains(typeName, ".") {
+	if g.mode == GeneratorModePostgres && column.references != "" && !strings.Contains(typeName, ".") {
 		typeName = column.references + typeName
 	}
 
@@ -2072,7 +1921,9 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		if column.check.notForReplication {
 			definition += "NOT FOR REPLICATION "
 		}
-		definition += fmt.Sprintf("(%s) ", parser.String(column.check.definition))
+		// Normalize CHECK expression to match PostgreSQL's output
+		// This ensures typed literals are properly converted (e.g., time '...' -> '...'::time)
+		definition += fmt.Sprintf("(%s) ", g.normalizeCheckExprString(column.check.definition))
 		if column.check.noInherit {
 			definition += "NO INHERIT "
 		}
@@ -2189,15 +2040,37 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 			(index.name != "" && index.name != "PRIMARY" && index.name != index.columns[0].ColumnName()) {
 			ddl += fmt.Sprintf("CONSTRAINT %s ", g.escapeSQLName(index.name))
 		}
-		if strings.EqualFold(index.indexType, "UNIQUE KEY") {
+		isUniqueConstraint := strings.EqualFold(index.indexType, "UNIQUE")
+		if isUniqueConstraint {
 			ddl += "CONSTRAINT"
 		} else {
 			ddl += strings.ToUpper(index.indexType)
 		}
 		if !index.primary {
-			ddl += fmt.Sprintf(" %s", g.escapeSQLName(index.name))
+			constraintName := index.name
+			if isUniqueConstraint && len(index.columns) == 1 {
+				columnName := index.columns[0].ColumnName()
+
+				// If the current name is just the column name (common with generic parser),
+				// replace it with the PostgreSQL convention
+				if constraintName == columnName {
+					expectedName := buildPostgresConstraintName(table, columnName, "key")
+					slog.Debug("Auto-generating PostgreSQL UNIQUE constraint name",
+						"table", table,
+						"column", columnName,
+						"original_name", constraintName,
+						"generated_name", expectedName)
+					constraintName = expectedName
+				} else {
+					slog.Debug("Using existing UNIQUE constraint name",
+						"table", table,
+						"column", columnName,
+						"constraint_name", constraintName)
+				}
+			}
+			ddl += fmt.Sprintf(" %s", g.escapeSQLName(constraintName))
 		}
-		if strings.EqualFold(index.indexType, "UNIQUE KEY") {
+		if isUniqueConstraint {
 			ddl += " UNIQUE"
 		}
 		constraintOptions := g.generateConstraintOptions(index.constraintOptions)
@@ -2338,7 +2211,7 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 func (g *Generator) generateExclusionDefinition(exclusion Exclusion) string {
 	var ex []string
 	for _, exclusionPair := range exclusion.exclusions {
-		ex = append(ex, fmt.Sprintf("%s WITH %s", exclusionPair.column, exclusionPair.operator))
+		ex = append(ex, fmt.Sprintf("%s WITH %s", exclusionPair.expression, exclusionPair.operator))
 	}
 	definition := fmt.Sprintf(
 		"CONSTRAINT %s EXCLUDE USING %s (%s)",
@@ -2739,46 +2612,6 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 	return aggregated, nil
 }
 
-var postgresTablePrivilegeList = []string{
-	"DELETE",
-	"INSERT",
-	"REFERENCES",
-	"SELECT",
-	"TRIGGER",
-	"TRUNCATE",
-	"UPDATE",
-}
-
-// Sort privileges in PostgreSQL canonical order
-func sortPrivilegesByCanonicalOrder(privileges []string) {
-	orderMap := make(map[string]int)
-	for i, priv := range postgresTablePrivilegeList {
-		orderMap[priv] = i
-	}
-
-	slices.SortFunc(privileges, func(a, b string) int {
-		orderA, hasA := orderMap[a]
-		orderB, hasB := orderMap[b]
-		if hasA && hasB {
-			return cmp.Compare(orderA, orderB)
-		}
-		if !hasA && !hasB {
-			return cmp.Compare(a, b)
-		}
-		if hasA {
-			return -1
-		}
-		return 1
-	})
-}
-
-func normalizePrivilegesForComparison(privileges []string) []string {
-	if len(privileges) == 1 && (privileges[0] == "ALL" || privileges[0] == "ALL PRIVILEGES") {
-		return postgresTablePrivilegeList
-	}
-	return privileges
-}
-
 func formatPrivilegesForGrant(privileges []string) string {
 	if len(privileges) == 1 && privileges[0] == "ALL" {
 		return "ALL PRIVILEGES"
@@ -2839,8 +2672,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			sortPrivilegesByCanonicalOrder(existingNormalized)
 		}
 
-		if len(existingNormalized) > 0 &&
-			equalPrivileges(existingNormalized, desiredNormalized) {
+		if len(existingNormalized) > 0 && equalPrivileges(existingNormalized, desiredNormalized) {
 			continue
 		}
 
@@ -3056,13 +2888,13 @@ func findCheckConstraintByName(checks []CheckDefinition, constraintName string) 
 }
 
 // findCheckConstraintByDefinitionInList finds a CHECK constraint in a list by comparing definitions
-func findCheckConstraintByDefinitionInList(checks []CheckDefinition, check *CheckDefinition) *CheckDefinition {
+func (g *Generator) findCheckConstraintByDefinitionInList(checks []CheckDefinition, check *CheckDefinition) *CheckDefinition {
 	if check == nil {
 		return nil
 	}
 
 	for _, currentCheck := range checks {
-		if areSameCheckDefinition(&currentCheck, check) {
+		if g.areSameCheckDefinition(&currentCheck, check) {
 			return &currentCheck
 		}
 	}
@@ -3072,21 +2904,21 @@ func findCheckConstraintByDefinitionInList(checks []CheckDefinition, check *Chec
 // findCheckConstraintByDefinition finds a CHECK constraint in a table by comparing definitions.
 // This is used for MySQL when column-level CHECKs are converted to table-level CONSTRAINTs
 // with auto-generated names.
-func findCheckConstraintByDefinition(table *Table, check *CheckDefinition) *CheckDefinition {
+func (g *Generator) findCheckConstraintByDefinition(table *Table, check *CheckDefinition) *CheckDefinition {
 	if check == nil {
 		return nil
 	}
 
 	// Search table-level checks
 	for _, currentCheck := range table.checks {
-		if areSameCheckDefinition(&currentCheck, check) {
+		if g.areSameCheckDefinition(&currentCheck, check) {
 			return &currentCheck
 		}
 	}
 
 	// Search column-level checks
 	for _, column := range table.columns {
-		if column.check != nil && areSameCheckDefinition(column.check, check) {
+		if column.check != nil && g.areSameCheckDefinition(column.check, check) {
 			return column.check
 		}
 	}
@@ -3185,6 +3017,55 @@ func findCommentByObject(comments []*Comment, object string) *Comment {
 	return nil
 }
 
+// generateCommentNullStatement creates a COMMENT ... IS NULL statement.
+func (g *Generator) generateCommentNullStatement(comment *Comment) string {
+	// Generate the COMMENT statement directly from the AST
+	// The comment.comment contains ObjectType, Object, and Comment fields
+	objectType := comment.comment.ObjectType
+	object := comment.comment.Object
+
+	var sqlObjectType string
+	switch objectType {
+	case "OBJECT_TABLE":
+		sqlObjectType = "TABLE"
+	case "OBJECT_COLUMN":
+		sqlObjectType = "COLUMN"
+	default:
+		// For other object: strip "OBJECT_" prefix if present
+		sqlObjectType = strings.TrimPrefix(objectType, "OBJECT_")
+	}
+
+	// Escape the object name appropriately based on object type
+	var escapedObject string
+	if sqlObjectType == "COLUMN" {
+		// For columns, the object is in format "schema.table.column"
+		// We need to escape each part appropriately
+		parts := strings.Split(object, ".")
+		if len(parts) == 3 {
+			// schema.table.column
+			escapedObject = fmt.Sprintf("%s.%s.%s",
+				g.escapeSQLName(parts[0]),
+				g.escapeSQLName(parts[1]),
+				g.escapeSQLName(parts[2]))
+		} else if len(parts) == 2 {
+			// table.column (schema was added during normalization)
+			escapedObject = fmt.Sprintf("%s.%s",
+				g.escapeSQLName(parts[0]),
+				g.escapeSQLName(parts[1]))
+		} else {
+			// Fallback: escape the whole thing
+			escapedObject = g.escapeSQLName(object)
+		}
+	} else {
+		// For tables and other objects, use escapeTableName which handles schema.table format
+		escapedObject = g.escapeTableName(object)
+	}
+
+	// Generate the COMMENT statement with NULL value
+	// Note: We don't add a trailing semicolon as it's added by joinDDLs
+	return fmt.Sprintf("COMMENT ON %s %s IS NULL", sqlObjectType, escapedObject)
+}
+
 func findExtensionByName(extensions []*Extension, name string) *Extension {
 	for _, extension := range extensions {
 		if extension.extension.Name == name {
@@ -3229,7 +3110,7 @@ func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
-	if g.normalizeDataType(current.typeName) != g.normalizeDataType(desired.typeName) {
+	if normalizeTypeName(current.typeName, g.mode) != normalizeTypeName(desired.typeName, g.mode) {
 		return false
 	}
 	if !reflect.DeepEqual(current.enumValues, desired.enumValues) {
@@ -3243,7 +3124,7 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 
 	// Normalize default precision/scale for numeric/decimal types.
 	if g.mode == GeneratorModeMssql || g.mode == GeneratorModeMysql {
-		normalizedType := g.normalizeDataType(current.typeName)
+		normalizedType := normalizeTypeName(current.typeName, g.mode)
 		if normalizedType == "decimal" {
 			var defaultPrecision int
 			switch g.mode {
@@ -3289,7 +3170,7 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 	return true
 }
 
-func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bool {
+func (g *Generator) areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bool {
 	if checkA == nil && checkB == nil {
 		return true
 	}
@@ -3301,8 +3182,8 @@ func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bo
 		panic(fmt.Sprintf("CheckDefinition.definitionAST must not be nil (checkA.definitionAST=%v, checkB.definitionAST=%v)", checkA.definition, checkB.definition))
 	}
 
-	normalizedA := normalizeCheckExpr(checkA.definition)
-	normalizedB := normalizeCheckExpr(checkB.definition)
+	normalizedA := normalizeCheckExpr(checkA.definition, g.mode)
+	normalizedB := normalizeCheckExpr(checkB.definition, g.mode)
 
 	// Unwrap outermost parentheses if present (MySQL adds extra parens)
 	normalizedA = unwrapOutermostParenExpr(normalizedA)
@@ -3317,13 +3198,16 @@ func areSameCheckDefinition(checkA *CheckDefinition, checkB *CheckDefinition) bo
 // This is needed because some databases (like MySQL) add extra parentheses around CHECK expressions.
 // It preserves parentheses around OR expressions to maintain correct operator precedence.
 func unwrapOutermostParenExpr(expr parser.Expr) parser.Expr {
-	if paren, ok := expr.(*parser.ParenExpr); ok {
-		// Don't unwrap if inner expression is OR (to preserve operator precedence)
-		if _, isOr := paren.Expr.(*parser.OrExpr); !isOr {
-			return paren.Expr
+	for {
+		paren, ok := expr.(*parser.ParenExpr)
+		if !ok {
+			return expr
 		}
+		if _, isOr := paren.Expr.(*parser.OrExpr); isOr {
+			return expr
+		}
+		expr = paren.Expr
 	}
-	return expr
 }
 
 func (g *Generator) buildForeignKeyDDL(tableName string, fk *ForeignKey) string {
@@ -3344,284 +3228,16 @@ func (g *Generator) buildForeignKeyDDL(tableName string, fk *ForeignKey) string 
 	return ddl
 }
 
-// tryConvertOrChainToIn attempts to convert an OR chain of equality comparisons
-// (e.g., col=a OR col=b OR col=c) into an IN expression (e.g., col IN (a, b, c))
-// Returns nil if the conversion is not applicable.
-func tryConvertOrChainToIn(orExpr *parser.OrExpr) parser.Expr {
-	var column parser.Expr
-	var values []parser.Expr
-
-	extractEqComparison := func(expr parser.Expr) (parser.Expr, parser.Expr, bool) {
-		cmp, ok := expr.(*parser.ComparisonExpr)
-		if !ok || cmp.Operator != "=" {
-			return nil, nil, false
-		}
-		return cmp.Left, cmp.Right, true
+// normalizeCheckExprString returns a normalized string representation of a CHECK constraint expression
+// For PostgreSQL, this converts IN (a,b,c) to = ANY (ARRAY[a,b,c])
+func (g *Generator) normalizeCheckExprString(expr parser.Expr) string {
+	if g.mode == GeneratorModePostgres {
+		normalized := normalizeCheckExpr(expr, g.mode)
+		// Unwrap outermost parentheses for consistent output (comparison does this too)
+		normalized = unwrapOutermostParenExpr(normalized)
+		return parser.String(normalized)
 	}
-
-	columnsEqual := func(col1, col2 parser.Expr) bool {
-		return normalizeName(parser.String(col1)) == normalizeName(parser.String(col2))
-	}
-
-	// Walk the OR chain and collect comparisons
-	// Also handle already-normalized IN expressions from nested ORs
-	var walk func(expr parser.Expr) bool
-	walk = func(expr parser.Expr) bool {
-		switch e := expr.(type) {
-		case *parser.OrExpr:
-			return walk(e.Left) && walk(e.Right)
-		case *parser.ComparisonExpr:
-			// Handle IN expressions that were already normalized
-			if strings.EqualFold(e.Operator, "in") {
-				if column == nil {
-					column = e.Left
-				} else if !columnsEqual(column, e.Left) {
-					return false
-				}
-				// Extract values from IN clause
-				if tuple, ok := e.Right.(parser.ValTuple); ok {
-					for _, v := range tuple {
-						values = append(values, v)
-					}
-					return true
-				}
-				return false
-			}
-
-			col, val, ok := extractEqComparison(e)
-			if !ok {
-				return false
-			}
-			if column == nil {
-				column = col
-				values = append(values, val)
-				return true
-			}
-			if columnsEqual(column, col) {
-				values = append(values, val)
-				return true
-			}
-			return false
-		default:
-			return false
-		}
-	}
-
-	if !walk(orExpr) || len(values) < 2 {
-		return nil
-	}
-
-	values = sortAndDeduplicateValues(values)
-
-	var tupleExprs parser.ValTuple
-	for _, v := range values {
-		tupleExprs = append(tupleExprs, v)
-	}
-
-	return &parser.ComparisonExpr{
-		Operator: "in",
-		Left:     column,
-		Right:    tupleExprs,
-	}
-}
-
-// normalizeName removes brackets, backticks, and quotes from identifiers and lowercases them for consistent comparison.
-// MSSQL uses [name], MySQL uses `name`, Postgres uses "name".
-// TODO: Identifier case-sensitivity varies by RDBMS and settings:
-//   - PostgreSQL: case-insensitive by default, case-sensitive when quoted
-//   - MySQL: depends on settings, such as lower_case_table_names
-//   - MSSQL: depends on collation settings
-//     For now, we lowercase everything after removing quotes for normalization.
-func normalizeName(name string) string {
-	name = strings.Trim(name, "[]")
-	name = strings.Trim(name, "`")
-	name = strings.Trim(name, "\"")
-	return strings.ToLower(name)
-}
-
-// normalizeOperator converts operator to lowercase for consistent comparison.
-func normalizeOperator(op string) string {
-	return strings.ToLower(op)
-}
-
-// sortAndDeduplicateValues sorts and deduplicates a slice of expressions based on their string representation.
-// This ensures that semantically equivalent lists are treated as identical regardless of order or duplicates.
-// For example: [b, a, b] becomes [a, b]
-func sortAndDeduplicateValues(values []parser.Expr) []parser.Expr {
-	if len(values) <= 1 {
-		return values
-	}
-
-	// Sort values for consistent comparison
-	slices.SortFunc(values, func(a, b parser.Expr) int {
-		return cmp.Compare(parser.String(a), parser.String(b))
-	})
-
-	// Deduplicate sorted values
-	uniqueValues := values[:0] // reuse underlying array
-	for i, v := range values {
-		if i == 0 || parser.String(v) != parser.String(values[i-1]) {
-			uniqueValues = append(uniqueValues, v)
-		}
-	}
-
-	return uniqueValues
-}
-
-// normalizeCheckExpr normalizes a CHECK constraint expression AST for comparison
-func normalizeCheckExpr(expr parser.Expr) parser.Expr {
-	if expr == nil {
-		return nil
-	}
-
-	switch e := expr.(type) {
-	case *parser.CastExpr:
-		// Remove casts to text or character varying
-		if e.Type != nil && (e.Type.Type == "text" || e.Type.Type == "character varying") {
-			return normalizeCheckExpr(e.Expr)
-		}
-		return &parser.CastExpr{
-			Expr: normalizeCheckExpr(e.Expr),
-			Type: e.Type,
-		}
-	case *parser.ParenExpr:
-		normalized := normalizeCheckExpr(e.Expr)
-		if paren, ok := normalized.(*parser.ParenExpr); ok {
-			return paren
-		}
-		// Unwrap parentheses around literals (numbers, strings, etc.)
-		// MSSQL adds unnecessary parens like (1) instead of 1
-		switch normalized.(type) {
-		case *parser.SQLVal:
-			return normalized
-		}
-		return &parser.ParenExpr{Expr: normalized}
-	case *parser.AndExpr:
-		// Normalize operands and unwrap unnecessary parentheses around them
-		left := normalizeCheckExpr(e.Left)
-		right := normalizeCheckExpr(e.Right)
-		// MySQL adds parentheses around each operand in AND chains, so unwrap them
-		left = unwrapOutermostParenExpr(left)
-		right = unwrapOutermostParenExpr(right)
-		return &parser.AndExpr{
-			Left:  left,
-			Right: right,
-		}
-	case *parser.OrExpr:
-		// Normalize operands and unwrap unnecessary parentheses around them
-		left := normalizeCheckExpr(e.Left)
-		right := normalizeCheckExpr(e.Right)
-		// MySQL adds parentheses around each operand in OR chains, so unwrap them
-		// Always safe to unwrap in OR chains since OR has the lowest precedence
-		left = unwrapOutermostParenExpr(left)
-		right = unwrapOutermostParenExpr(right)
-
-		// Try to convert OR chain of equality comparisons to IN expression
-		// MSSQL transforms IN (a, b, c) to col=a OR col=b OR col=c
-		// We normalize back to IN for comparison
-		if inExpr := tryConvertOrChainToIn(&parser.OrExpr{Left: left, Right: right}); inExpr != nil {
-			return inExpr
-		}
-
-		return &parser.OrExpr{
-			Left:  left,
-			Right: right,
-		}
-	case *parser.NotExpr:
-		return &parser.NotExpr{Expr: normalizeCheckExpr(e.Expr)}
-	case *parser.ComparisonExpr:
-		left := normalizeCheckExpr(e.Left)
-		right := normalizeCheckExpr(e.Right)
-		op := normalizeOperator(e.Operator)
-
-		if op == "in" || op == "not in" {
-			if tuple, ok := right.(parser.ValTuple); ok {
-				right = parser.ValTuple(sortAndDeduplicateValues([]parser.Expr(tuple)))
-			}
-		}
-
-		return &parser.ComparisonExpr{
-			Operator: op,
-			Left:     left,
-			Right:    right,
-			Escape:   normalizeCheckExpr(e.Escape),
-			All:      e.All,
-			Any:      e.Any,
-		}
-	case *parser.BinaryExpr:
-		return &parser.BinaryExpr{
-			Operator: e.Operator,
-			Left:     normalizeCheckExpr(e.Left),
-			Right:    normalizeCheckExpr(e.Right),
-		}
-	case *parser.UnaryExpr:
-		return &parser.UnaryExpr{
-			Operator: e.Operator,
-			Expr:     normalizeCheckExpr(e.Expr),
-		}
-	case *parser.FuncExpr:
-		normalizedExprs := parser.SelectExprs(util.TransformSlice([]parser.SelectExpr(e.Exprs), func(arg parser.SelectExpr) parser.SelectExpr {
-			if aliased, ok := arg.(*parser.AliasedExpr); ok {
-				return &parser.AliasedExpr{
-					Expr: normalizeCheckExpr(aliased.Expr),
-					As:   aliased.As,
-				}
-			}
-			return arg
-		}))
-		return &parser.FuncExpr{
-			Qualifier: e.Qualifier,
-			Name:      e.Name,
-			Distinct:  e.Distinct,
-			Exprs:     normalizedExprs,
-			Over:      e.Over,
-		}
-	case *parser.ArrayConstructor:
-		normalizedElements := parser.ArrayElements(util.TransformSlice([]parser.ArrayElement(e.Elements), func(elem parser.ArrayElement) parser.ArrayElement {
-			if castExpr, ok := elem.(*parser.CastExpr); ok {
-				normalized := normalizeCheckExpr(castExpr)
-				if normalizedArrayElem, ok := normalized.(parser.ArrayElement); ok {
-					return normalizedArrayElem
-				}
-				return elem
-			}
-			return elem
-		}))
-		return &parser.ArrayConstructor{Elements: normalizedElements}
-	case *parser.IsExpr:
-		return &parser.IsExpr{
-			Operator: e.Operator,
-			Expr:     normalizeCheckExpr(e.Expr),
-		}
-	case *parser.RangeCond:
-		return &parser.RangeCond{
-			Operator: e.Operator,
-			Left:     normalizeCheckExpr(e.Left),
-			From:     normalizeCheckExpr(e.From),
-			To:       normalizeCheckExpr(e.To),
-		}
-	case parser.ValTuple:
-		normalizedTuple := util.TransformSlice([]parser.Expr(e), func(elem parser.Expr) parser.Expr {
-			return normalizeCheckExpr(elem)
-		})
-		return parser.ValTuple(normalizedTuple)
-	case *parser.ColName:
-		qualifierStr := ""
-		if e.Qualifier.Name.String() != "" {
-			qualifierStr = normalizeName(e.Qualifier.Name.String())
-		}
-		nameStr := normalizeName(e.Name.String())
-
-		return &parser.ColName{
-			Name: parser.NewColIdent(nameStr),
-			Qualifier: parser.TableName{
-				Name: parser.NewTableIdent(qualifierStr),
-			},
-		}
-	default:
-		// For all other expression types (literals, etc.), return as-is
-		return expr
-	}
+	return parser.String(expr)
 }
 
 func areSameIdentityDefinition(identityA *Identity, identityB *Identity) bool {
@@ -3635,34 +3251,71 @@ func areSameIdentityDefinition(identityA *Identity, identityB *Identity) bool {
 }
 
 func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desiredDefault *DefaultDefinition, columnType string) bool {
-	var currentVal *Value
-	var desiredVal *Value
-	if currentDefault != nil && !isNullValue(currentDefault.value) {
-		currentVal = currentDefault.value
+	// Normalize: DEFAULT NULL is the same as no default
+	currentIsNull := currentDefault == nil || isNullDefault(currentDefault)
+	desiredIsNull := desiredDefault == nil || isNullDefault(desiredDefault)
+
+	// Both null (or absent) - they're the same
+	if currentIsNull && desiredIsNull {
+		return true
 	}
-	if desiredDefault != nil && !isNullValue(desiredDefault.value) {
-		desiredVal = desiredDefault.value
-	}
-	if !g.areSameValue(currentVal, desiredVal, columnType) {
+	// One is null, the other isn't - they're different
+	if currentIsNull || desiredIsNull {
 		return false
 	}
 
+	// Normalize expressions first to handle typed literals and other database-specific normalizations
+	// This ensures that TypedLiterals are converted to their underlying values before comparison
+	slog.Debug("Generator#areSameDefaultValue (before normalization)",
+		"currentExpr", parser.String(currentDefault.expression),
+		"desiredExpr", parser.String(desiredDefault.expression),
+		"columnType", columnType,
+	)
+	normalizedCurrent := normalizeExpr(currentDefault.expression, g.mode)
+	normalizedDesired := normalizeExpr(desiredDefault.expression, g.mode)
+
+	// Check if both are simple SQLVal (vs complex expressions) after normalization
+	currSQLVal, currentIsSQLVal := normalizedCurrent.(*parser.SQLVal)
+	desSQLVal, desiredIsSQLVal := normalizedDesired.(*parser.SQLVal)
+
+	// If both are simple values (SQLVal), use value comparison
+	if currentIsSQLVal && desiredIsSQLVal {
+		currentVal := parseValue(currSQLVal)
+		desiredVal := parseValue(desSQLVal)
+
+		if isNullValue(currentVal) {
+			currentVal = nil
+		}
+		if isNullValue(desiredVal) {
+			desiredVal = nil
+		}
+
+		return g.areSameValue(currentVal, desiredVal, columnType)
+	}
+
+	// If one is SQLVal and the other is not, they're different
+	if currentIsSQLVal != desiredIsSQLVal {
+		return false
+	}
+
+	// Both are complex expressions - use string comparison on already-normalized expressions
 	var currentExprSchema, currentExpr string
 	var desiredExprSchema, desiredExpr string
-	if currentDefault != nil {
-		currentExprSchema, currentExpr = splitTableName(currentDefault.expression, g.defaultSchema)
-	}
-	if desiredDefault != nil {
-		desiredExprSchema, desiredExpr = splitTableName(desiredDefault.expression, g.defaultSchema)
-	}
+
+	currentExprSchema, currentExpr = splitTableName(parser.String(normalizedCurrent), g.defaultSchema)
+	desiredExprSchema, desiredExpr = splitTableName(parser.String(normalizedDesired), g.defaultSchema)
+	slog.Debug("Generator#areSameDefaultValue (complex expressions)",
+		"currentExpr", currentExpr,
+		"desiredExpr", desiredExpr,
+		"columnType", columnType,
+	)
 	return strings.EqualFold(currentExprSchema, desiredExprSchema) && strings.EqualFold(currentExpr, desiredExpr)
 }
 
 // isNumericColumnType determines if a column type should be compared numerically.
 // This is used to decide how to compare default values.
 func (g *Generator) isNumericColumnType(typeName string) bool {
-	normalized := g.normalizeDataType(strings.ToLower(typeName))
-	switch normalized {
+	switch normalizeTypeName(typeName, g.mode) {
 	case "tinyint", "smallint", "mediumint", "integer", "bigint",
 		"decimal", "float", "double", "real":
 		return true
@@ -3757,29 +3410,29 @@ func areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 }
 
 func isNullValue(value *Value) bool {
-	return value != nil && value.valueType == ValueTypeValArg && value.raw == "null"
+	return value != nil && value.valueType == ValueTypeValArg && strings.EqualFold(value.raw, "null")
 }
 
-func (g *Generator) normalizeDataType(dataType string) string {
-	if alias, ok := dataTypeAliases[dataType]; ok {
-		dataType = alias
+func isNullDefault(def *DefaultDefinition) bool {
+	if def == nil || def.expression == nil {
+		return false
 	}
 
-	switch g.mode {
-	case GeneratorModePostgres:
-		if alias, ok := postgresDataTypeAliases[dataType]; ok {
-			dataType = alias
-		}
-	case GeneratorModeMysql:
-		if alias, ok := mysqlDataTypeAliases[dataType]; ok {
-			dataType = alias
-		}
-	case GeneratorModeMssql:
-		if alias, ok := mssqlDataTypeAliases[dataType]; ok {
-			dataType = alias
+	// Check if it's a direct SQLVal
+	if sqlVal, ok := def.expression.(*parser.SQLVal); ok {
+		val := parseValue(sqlVal)
+		return isNullValue(val)
+	}
+
+	// Check if it's a CastExpr wrapping a NULL value (e.g., NULL::character varying)
+	if castExpr, ok := def.expression.(*parser.CastExpr); ok {
+		if sqlVal, ok := castExpr.Expr.(*parser.SQLVal); ok {
+			val := parseValue(sqlVal)
+			return isNullValue(val)
 		}
 	}
-	return dataType
+
+	return false
 }
 
 func (g *Generator) areSamePrimaryKeys(primaryKeyA *Index, primaryKeyB *Index) bool {
@@ -3879,10 +3532,14 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		// Mysql: Default Index B-Tree (but not for vector indexes)
 		if g.mode == GeneratorModeMysql {
 			if len(indexAOptions) == 0 && !indexA.vector {
-				indexAOptions = []IndexOption{{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: "btree", strVal: "btree"}}}
+				indexAOptions = []IndexOption{
+					{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: "btree", strVal: "btree"}},
+				}
 			}
 			if len(indexBOptions) == 0 && !indexB.vector {
-				indexBOptions = []IndexOption{{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: "btree", strVal: "btree"}}}
+				indexBOptions = []IndexOption{
+					{optionName: "using", value: &Value{valueType: ValueTypeStr, raw: "btree", strVal: "btree"}},
+				}
 			}
 		}
 		for _, optionB := range indexBOptions {
@@ -3896,16 +3553,12 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		}
 	}
 
-	// Specific to unique constraints
-	// For MSSQL, UNIQUE indexes and UNIQUE constraints are essentially the same
-	// Don't differentiate between them
-	if g.mode != GeneratorModeMssql && indexA.constraint != indexB.constraint {
-		return false
-	}
-
 	// For MSSQL UNIQUE constraints, constraintOptions don't matter
 	// They're only used for PostgreSQL deferrable constraints
 	if g.mode != GeneratorModeMssql {
+		if indexA.constraint != indexB.constraint {
+			return false
+		}
 		if (indexA.constraintOptions != nil) != (indexB.constraintOptions != nil) {
 			return false
 		}
@@ -3943,7 +3596,7 @@ func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB Forei
 			return false
 		}
 	}
-	// TODO: check index, reference
+
 	return true
 }
 
@@ -3960,25 +3613,41 @@ func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion
 	for i := range exclusionA.exclusions {
 		a := exclusionA.exclusions[i]
 		b := exclusionB.exclusions[i]
-		if a.column != b.column || a.operator != b.operator {
+		if a.expression != b.expression || a.operator != b.operator {
 			return false
 		}
 	}
 	return true
 }
 
-func areSamePolicies(policyA, policyB Policy) bool {
+func (g *Generator) areSameExprs(exprA, exprB parser.Expr) bool {
+	if exprA == nil && exprB == nil {
+		return true
+	}
+	if exprA == nil || exprB == nil {
+		return false
+	}
+	normalizedA := normalizeExpr(exprA, g.mode)
+	normalizedB := normalizeExpr(exprB, g.mode)
+	normalizedA = unwrapOutermostParenExpr(normalizedA)
+	normalizedB = unwrapOutermostParenExpr(normalizedB)
+
+	// TODO: case-insensitive comparison is not always correct
+	return strings.EqualFold(parser.String(normalizedA), parser.String(normalizedB))
+}
+
+func (g *Generator) areSamePolicies(policyA, policyB Policy) bool {
 	if !strings.EqualFold(policyA.scope, policyB.scope) {
 		return false
 	}
 	if !strings.EqualFold(policyA.permissive, policyB.permissive) {
 		return false
 	}
-	if normalizeUsing(policyA.using) != normalizeUsing(policyB.using) {
-		return fmt.Sprintf("(%s)", policyA.using) == policyB.using
+	if !g.areSameExprs(policyA.using, policyB.using) {
+		return false
 	}
-	if !strings.EqualFold(policyA.withCheck, policyB.withCheck) {
-		return fmt.Sprintf("(%s)", policyA.withCheck) == policyB.withCheck
+	if !g.areSameExprs(policyA.withCheck, policyB.withCheck) {
+		return false
 	}
 	if len(policyA.roles) != len(policyB.roles) {
 		return false
@@ -3995,15 +3664,6 @@ func areSamePolicies(policyA, policyB Policy) bool {
 		}
 	}
 	return true
-}
-
-// Workaround for: ((current_schema())::uuid = (current_database())::uuid)
-// generated by (current_schema()::uuid = current_database()::uuid)
-func normalizeUsing(expr string) string {
-	expr = strings.ToLower(expr)
-	expr = strings.ReplaceAll(expr, "(", "")
-	expr = strings.ReplaceAll(expr, ")", "")
-	return expr
 }
 
 func (g *Generator) normalizeReferenceOption(action string) string {
@@ -4121,8 +3781,14 @@ func generateSequenceClause(sequence *Sequence) string {
 }
 
 func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinition) (string, error) {
-	if defaultDefinition.value != nil {
-		defaultVal := defaultDefinition.value
+	if defaultDefinition.expression == nil {
+		return "", fmt.Errorf("default expression is nil")
+	}
+
+	// Type assertion: Check if it's a simple SQLVal
+	if sqlVal, ok := defaultDefinition.expression.(*parser.SQLVal); ok {
+		// Simple value path - maintain existing formatting behavior
+		defaultVal := parseValue(sqlVal)
 		switch defaultVal.valueType {
 		case ValueTypeStr:
 			return fmt.Sprintf("DEFAULT %s", StringConstant(defaultVal.strVal)), nil
@@ -4143,17 +3809,20 @@ func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinitio
 		default:
 			return "", fmt.Errorf("unsupported default value type (valueType: '%d')", defaultVal.valueType)
 		}
-	} else if defaultDefinition.expression != "" {
-		if g.mode == GeneratorModeMysql || g.mode == GeneratorModeSQLite3 {
-			// Enclose expression with parentheses to avoid syntax error
-			// https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html#data-type-defaults-explicit
-			// https://www.sqlite.org/syntax/column-constraint.html
-			return fmt.Sprintf("DEFAULT(%s)", defaultDefinition.expression), nil
-		} else {
-			return fmt.Sprintf("DEFAULT %s", defaultDefinition.expression), nil
-		}
 	}
-	return "", fmt.Errorf("default value is not set")
+
+	// Complex expression path
+	// Normalize the expression to handle typed literals and other database-specific normalizations
+	normalizedExpr := normalizeExpr(defaultDefinition.expression, g.mode)
+	exprStr := parser.String(normalizedExpr)
+	if g.mode == GeneratorModeMysql || g.mode == GeneratorModeSQLite3 {
+		// Enclose expression with parentheses to avoid syntax error
+		// https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html#data-type-defaults-explicit
+		// https://www.sqlite.org/syntax/column-constraint.html
+		return fmt.Sprintf("DEFAULT(%s)", exprStr), nil
+	} else {
+		return fmt.Sprintf("DEFAULT %s", exprStr), nil
+	}
 }
 
 func generateSridDefinition(sridVal Value) (string, error) {

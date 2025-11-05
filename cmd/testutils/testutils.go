@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,6 +41,18 @@ type TestCase struct {
 
 func init() {
 	util.InitSlog()
+
+	// In test environments, suppress INFO-level logs to prevent them from contaminating test output comparisons.
+	// Users can still see DEBUG/INFO logs by setting LOG_LEVEL=debug or LOG_LEVEL=info environment variable,
+	// which will override this default. Warnings and errors will still appear by default.
+	if os.Getenv("LOG_LEVEL") == "" {
+		// Set default test log level to WARN to hide INFO messages like "Using generic parser only mode"
+		opts := &slog.HandlerOptions{
+			Level: slog.LevelWarn,
+		}
+		handler := slog.NewTextHandler(os.Stderr, opts)
+		slog.SetDefault(slog.New(handler))
+	}
 }
 
 // CreateTestDatabaseName generates a unique database name for a test case.

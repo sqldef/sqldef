@@ -58,6 +58,7 @@ func forceEOF(yylex any) {
 %union {
   empty                    struct{}
   statement                Statement
+  statements               []Statement
   selStmt                  SelectStatement
   ddl                      *DDL
   ins                      *Insert
@@ -104,10 +105,13 @@ func forceEOF(yylex any) {
   columnType               ColumnType
   colKeyOpt                ColumnKeyOption
   optVal                   *SQLVal
-  defaultValueOrExpression DefaultValueOrExpression
+  defaultExpression        DefaultExpression
   LengthScaleOption        LengthScaleOption
   columnDefinition         *ColumnDefinition
   checkDefinition          *CheckDefinition
+  exclusionDefinition      *ExclusionDefinition
+  exclusionPair            ExclusionPair
+  exclusionPairs           []ExclusionPair
   indexDefinition          *IndexDefinition
   indexInfo                *IndexInfo
   indexOption              *IndexOption
@@ -126,18 +130,23 @@ func forceEOF(yylex any) {
   localVariable            *LocalVariable
   localVariables           []*LocalVariable
   arrayConstructor         *ArrayConstructor
-  arrayElements            ArrayElements
-  arrayElement             ArrayElement
+  withClause               *With
+  commonTableExprs         []*CommonTableExpr
+  commonTableExpr          *CommonTableExpr
   tableOptions             map[string]string
   overExpr                 *OverExpr
   partitionBy              PartitionBy
   partition                *Partition
   handlerCondition         HandlerCondition
   handlerConditions        []HandlerCondition
+  fkDeferOpts              struct {
+    constraintOpts    *ConstraintOptions
+    notForReplication bool
+  }
 }
 
 %token LEX_ERROR
-%left <bytes> UNION
+%left <bytes> UNION INTERSECT EXCEPT
 %token <bytes> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER BY LIMIT OFFSET FOR DECLARE
 %token <bytes> ALL ANY SOME DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SRID SET LOCK KEYS
 %token <bytes> ROWID STRICT
@@ -171,6 +180,7 @@ func forceEOF(yylex any) {
 /* ---------------- End of Dangling Else Resolution ------------------------- */
 %left <bytes> '=' '<' '>' LE GE NE NULL_SAFE_EQUAL IS LIKE REGEXP IN
 %left <bytes> POSIX_REGEX POSIX_REGEX_CI POSIX_NOT_REGEX POSIX_NOT_REGEX_CI
+%left <bytes> PATTERN_LIKE PATTERN_ILIKE PATTERN_NOT_LIKE PATTERN_NOT_ILIKE
 %left <bytes> '|'
 %left <bytes> '&'
 %left <bytes> SHIFT_LEFT SHIFT_RIGHT
@@ -189,8 +199,8 @@ func forceEOF(yylex any) {
 %token <empty> JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP
 
 // DDL Tokens
-%token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD
-%token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE
+%token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD GRANT REVOKE OPTION PRIVILEGES
+%token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION EXCLUDE
 %right <bytes> UNIQUE KEY
 %token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
 %token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN
@@ -213,6 +223,7 @@ func forceEOF(yylex any) {
 %token <bytes> TIME TIMESTAMP DATETIME YEAR DATETIMEOFFSET DATETIME2 SMALLDATETIME
 %token <bytes> CHAR VARCHAR VARYING BOOL CHARACTER VARBINARY NCHAR NVARCHAR NTEXT UUID
 %token <bytes> TEXT TINYTEXT MEDIUMTEXT LONGTEXT CITEXT
+%token <bytes> TSTZRANGE TSRANGE INT4RANGE INT8RANGE NUMRANGE DATERANGE
 %token <bytes> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON JSONB ENUM
 %token <bytes> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
 %token <bytes> VECTOR
@@ -243,7 +254,7 @@ func forceEOF(yylex any) {
 %token <bytes> UTC_DATE UTC_TIME UTC_TIMESTAMP
 %token <bytes> REPLACE
 %token <bytes> CONVERT CAST
-%token <bytes> SUBSTR SUBSTRING
+%token <bytes> SUBSTR SUBSTRING EXTRACT
 %token <bytes> GROUP_CONCAT SEPARATOR
 %token <bytes> INHERIT
 %token <bytes> LEAD LAG
@@ -277,11 +288,14 @@ func forceEOF(yylex any) {
 %token <bytes> DEFINER INVOKER
 
 %type <statement> statement
-%type <selStmt> select_statement base_select union_lhs union_rhs
+%type <selStmt> select_statement select_statement_core base_select union_rhs
+%type <withClause> with_clause_opt with_clause
+%type <commonTableExprs> common_table_expr_list
+%type <commonTableExpr> common_table_expr
 %type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement
 %type <statement> if_statement matched_if_statement unmatched_if_statement trigger_statement_not_if
 %type <blockStatement> simple_if_body
-%type <statement> create_statement alter_statement
+%type <statement> create_statement alter_statement drop_statement comment_statement
 %type <statement> set_option_statement set_bool_option_statement
 %type <ddl> create_table_prefix
 %type <bytes2> comment_opt comment_list
@@ -303,7 +317,7 @@ func forceEOF(yylex any) {
 %type <expr> condition
 %type <boolVal> boolean_value
 %type <bytes> int_value
-%type <str> compare
+%type <str> compare extract_field
 %type <ins> insert_data
 %type <expr> value value_expression
 %type <expr> function_call_keyword function_call_nonkeyword function_call_generic function_call_conflict
@@ -354,16 +368,20 @@ func forceEOF(yylex any) {
 %type <optVal> length_opt max_length_opt current_timestamp
 %type <str> charset_opt collate_opt
 %type <boolVal> unsigned_opt zero_fill_opt array_opt time_zone_opt
+%type <empty> array_brackets
 %type <LengthScaleOption> float_length_opt decimal_length_opt
 %type <strs> enum_values
 %type <columnDefinition> column_definition
 %type <columnType> column_definition_type
 %type <indexDefinition> index_definition primary_key_definition unique_definition
 %type <checkDefinition> check_definition
+%type <exclusionDefinition> exclude_definition
+%type <exclusionPairs> exclude_element_list
+%type <exclusionPair> exclude_element
 %type <foreignKeyDefinition> foreign_key_definition foreign_key_without_options
 %type <colIdent> reference_option
-%type <colIdent> sql_id_opt
-%type <colIdents> sql_id_list
+%type <colIdent> sql_id_opt privilege grantee
+%type <colIdents> sql_id_list privilege_list grantee_list
 %type <str> index_or_key
 %type <str> equal_opt
 %type <TableSpec> table_spec table_column_list
@@ -378,7 +396,8 @@ func forceEOF(yylex any) {
 %type <indexOptions> index_option_opt
 %type <indexOption> index_option
 %type <indexOptions> index_option_list mssql_index_option_list
-%type <bytes> policy_as_opt policy_for_opt character_cast_opt
+%type <bytes> policy_as_opt policy_for_opt
+%type <convertType> character_cast_opt
 %type <expr> using_opt with_check_opt
 %left <bytes> TYPECAST CHECK
 %type <bytes> or_replace_opt
@@ -386,9 +405,8 @@ func forceEOF(yylex any) {
 %type <str> identity_behavior
 %type <sequence> sequence_opt
 %type <boolVal> clustered_opt not_for_replication_opt
-%type <defaultValueOrExpression> default_definition
-%type <optVal> default_val
-%type <expr> default_expression
+%type <defaultExpression> default_definition
+%type <expr> default_value_expression
 %type <optVal> srid_definition srid_val
 %type <optVal> on_off
 %type <optVal> index_distance_option_value
@@ -409,15 +427,17 @@ func forceEOF(yylex any) {
 %type <newQualifierColName> new_qualifier_column_name
 %type <boolVal> deferrable_opt initially_deferred_opt
 %type <boolVal> variadic_opt
+%type <fkDeferOpts> fk_defer_opts
 %type <arrayConstructor> array_constructor
-%type <arrayElements> array_element_list
-%type <arrayElement> array_element
+%type <exprs> array_element_list
+%type <expr> array_element
 %type <str> sql_security
 %type <overExpr> over_expression
 %token <bytes> OVER
 %type <partitionBy> partition_by_list
 %type <partition> partition
 %type <boolVals> unique_clustered_opt
+%type <byt> concurrently_opt
 %type <empty> nonclustered_columnstore
 %type <bytes> bool_option_name
 %type <strs> bool_option_name_list
@@ -439,6 +459,93 @@ semicolon_opt:
 statement:
   create_statement
 | alter_statement
+| drop_statement
+| comment_statement
+
+comment_statement:
+  COMMENT_KEYWORD ON TABLE table_name IS STRING
+  {
+    tableName := ""
+    if !$4.Schema.isEmpty() {
+      tableName = $4.Schema.String() + "."
+    }
+    tableName += $4.Name.String()
+    $$ = &DDL{
+      Action: CommentOn,
+      Table: $4,
+      Comment: &Comment{
+        ObjectType: "OBJECT_TABLE",
+        Object: tableName,
+        Comment: string($6),
+      },
+    }
+  }
+| COMMENT_KEYWORD ON TABLE table_name IS NULL
+  {
+    tableName := ""
+    if !$4.Schema.isEmpty() {
+      tableName = $4.Schema.String() + "."
+    }
+    tableName += $4.Name.String()
+    $$ = &DDL{
+      Action: CommentOn,
+      Table: $4,
+      Comment: &Comment{
+        ObjectType: "OBJECT_TABLE",
+        Object: tableName,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT_KEYWORD ON COLUMN column_name IS STRING
+  {
+    colName := ""
+    if !$4.Qualifier.isEmpty() {
+      if !$4.Qualifier.Schema.isEmpty() {
+        colName = $4.Qualifier.Schema.String() + "."
+      }
+      colName += $4.Qualifier.Name.String() + "."
+    }
+    colName += $4.Name.String()
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_COLUMN",
+        Object: colName,
+        Comment: string($6),
+      },
+    }
+  }
+| COMMENT_KEYWORD ON COLUMN column_name IS NULL
+  {
+    colName := ""
+    if !$4.Qualifier.isEmpty() {
+      if !$4.Qualifier.Schema.isEmpty() {
+        colName = $4.Qualifier.Schema.String() + "."
+      }
+      colName += $4.Qualifier.Name.String() + "."
+    }
+    colName += $4.Name.String()
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_COLUMN",
+        Object: colName,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT_KEYWORD ON INDEX sql_id IS STRING
+  {
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "INDEX",
+        Object: $4.String(),
+        Comment: string($6),
+      },
+    }
+  }
 
 create_statement:
   create_table_prefix table_spec
@@ -446,47 +553,7 @@ create_statement:
     $1.TableSpec = $2
     $$ = $1
   }
-| CREATE unique_clustered_opt INDEX sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
-  {
-    $$ = &DDL{
-      Action: CreateIndex,
-      Table: $6,
-      NewName: $6,
-      IndexSpec: &IndexSpec{
-        Name: $4,
-        Type: NewColIdent(""),
-        Unique: bool($2[0]),
-        Clustered: bool($2[1]),
-        Included: $10,
-        Where: NewWhere(WhereStr, $11),
-        Options: $12,
-        Partition: $13,
-      },
-      IndexCols: $8.IndexCols,
-      IndexExpr: $8.IndexExpr,
-    }
-  }
-| CREATE unique_clustered_opt INDEX ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
-  {
-    $$ = &DDL{
-      Action: CreateIndex,
-      Table: $5,
-      NewName: $5,
-      IndexSpec: &IndexSpec{
-        Name: NewColIdent(""),
-        Type: NewColIdent(""),
-        Unique: bool($2[0]),
-        Clustered: bool($2[1]),
-        Included: $9,
-        Where: NewWhere(WhereStr, $10),
-        Options: $11,
-        Partition: $12,
-      },
-      IndexCols: $7.IndexCols,
-      IndexExpr: $7.IndexExpr,
-    }
-  }
-| CREATE unique_clustered_opt INDEX CONCURRENTLY sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
       Action: CreateIndex,
@@ -497,6 +564,8 @@ create_statement:
         Type: NewColIdent(""),
         Unique: bool($2[0]),
         Clustered: bool($2[1]),
+        Async: $4 == byte(2),
+        Concurrently: $4 == byte(1),
         Included: $11,
         Where: NewWhere(WhereStr, $12),
         Options: $13,
@@ -506,29 +575,7 @@ create_statement:
       IndexExpr: $9.IndexExpr,
     }
   }
-/* For Aurora DSQL */
-| CREATE unique_clustered_opt INDEX ASYNC sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
-  {
-    $$ = &DDL{
-      Action: CreateIndex,
-      Table: $7,
-      NewName: $7,
-      IndexSpec: &IndexSpec{
-        Name: $5,
-        Type: NewColIdent(""),
-        Unique: bool($2[0]),
-        Clustered: bool($2[1]),
-        Async: true,
-        Included: $11,
-        Where: NewWhere(WhereStr, $12),
-        Options: $13,
-        Partition: $14,
-      },
-      IndexCols: $9.IndexCols,
-      IndexExpr: $9.IndexExpr,
-    }
-  }
-| CREATE unique_clustered_opt INDEX ASYNC ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
       Action: CreateIndex,
@@ -539,7 +586,8 @@ create_statement:
         Type: NewColIdent(""),
         Unique: bool($2[0]),
         Clustered: bool($2[1]),
-        Async: true,
+        Async: $4 == byte(2),
+        Concurrently: $4 == byte(1),
         Included: $10,
         Where: NewWhere(WhereStr, $11),
         Options: $12,
@@ -550,36 +598,45 @@ create_statement:
     }
   }
 /* For MySQL */
-| CREATE unique_clustered_opt INDEX sql_id USING sql_id ON table_name '(' index_column_list ')' index_option_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id USING sql_id ON table_name '(' index_column_list ')' index_option_opt
   {
     $$ = &DDL{
       Action: CreateIndex,
-      Table: $8,
-      NewName: $8,
+      Table: $9,
+      NewName: $9,
       IndexSpec: &IndexSpec{
-        Name: $4,
-        Type: $6,
+        Name: $5,
+        Type: $7,
         Unique: bool($2[0]),
-        Options: $12,
+        Async: $4 == byte(2),
+        Concurrently: $4 == byte(1),
+        Options: $13,
       },
-      IndexCols: $10,
+      IndexCols: $11,
     }
   }
 /* For PostgreSQL */
-| CREATE unique_clustered_opt INDEX sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' where_expression_opt index_option_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt
   {
+    indexSpec := &IndexSpec{
+      Name: $5,
+      Type: $9,
+      Unique: bool($2[0]),
+      Async: $4 == byte(2),
+      Concurrently: $4 == byte(1),
+      Where: NewWhere(WhereStr, $14),
+      Included: $13,
+    }
+    if $15 != nil && len($15) > 0 {
+      indexSpec.Options = $15
+    }
     $$ = &DDL{
       Action: CreateIndex,
-      Table: $6,
-      NewName: $6,
-      IndexSpec: &IndexSpec{
-        Name: $4,
-        Type: $8,
-        Unique: bool($2[0]),
-        Where: NewWhere(WhereStr, $12),
-      },
-      IndexCols: $10.IndexCols,
-      IndexExpr: $10.IndexExpr,
+      Table: $7,
+      NewName: $7,
+      IndexSpec: indexSpec,
+      IndexCols: $11.IndexCols,
+      IndexExpr: $11.IndexExpr,
     }
   }
 /* For SQL Server */
@@ -730,6 +787,7 @@ create_statement:
       Type: &Type{
         Name: $3,
         Type: $5,
+        EnumValues: $5.EnumValues,
       },
     }
   }
@@ -737,6 +795,415 @@ create_statement:
 | CREATE VIRTUAL TABLE if_not_exists_opt table_name USING sql_id module_arguments_opt
   {
     $$ = &DDL{Action: CreateTable, NewName: $5, TableSpec: &TableSpec{}}
+  }
+| GRANT privilege_list ON TABLE table_name_list TO grantee_list
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($7))
+    for i, g := range $7 {
+      grantees[i] = g.String()
+    }
+
+    if len($5) == 1 {
+      $$ = &DDL{
+        Action: GrantPrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: true,
+          Privileges: privs,
+          Grantees: grantees,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($5))
+      for i, table := range $5 {
+        stmts[i] = &DDL{
+          Action: GrantPrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: true,
+            Privileges: privs,
+            Grantees: grantees,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| GRANT privilege_list ON TABLE table_name_list TO grantee_list WITH GRANT OPTION
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($7))
+    for i, g := range $7 {
+      grantees[i] = g.String()
+    }
+
+    if len($5) == 1 {
+      $$ = &DDL{
+        Action: GrantPrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: true,
+          Privileges: privs,
+          Grantees: grantees,
+          WithGrantOption: true,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($5))
+      for i, table := range $5 {
+        stmts[i] = &DDL{
+          Action: GrantPrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: true,
+            Privileges: privs,
+            Grantees: grantees,
+            WithGrantOption: true,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| GRANT privilege_list ON table_name_list TO grantee_list
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($6))
+    for i, g := range $6 {
+      grantees[i] = g.String()
+    }
+
+    if len($4) == 1 {
+      $$ = &DDL{
+        Action: GrantPrivilege,
+        Table: $4[0],
+        Grant: &Grant{
+          IsGrant: true,
+          Privileges: privs,
+          Grantees: grantees,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($4))
+      for i, table := range $4 {
+        stmts[i] = &DDL{
+          Action: GrantPrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: true,
+            Privileges: privs,
+            Grantees: grantees,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| GRANT privilege_list ON table_name_list TO grantee_list WITH GRANT OPTION
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($6))
+    for i, g := range $6 {
+      grantees[i] = g.String()
+    }
+
+    if len($4) == 1 {
+      $$ = &DDL{
+        Action: GrantPrivilege,
+        Table: $4[0],
+        Grant: &Grant{
+          IsGrant: true,
+          Privileges: privs,
+          Grantees: grantees,
+          WithGrantOption: true,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($4))
+      for i, table := range $4 {
+        stmts[i] = &DDL{
+          Action: GrantPrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: true,
+            Privileges: privs,
+            Grantees: grantees,
+            WithGrantOption: true,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| REVOKE privilege_list ON TABLE table_name_list FROM grantee_list
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($7))
+    for i, g := range $7 {
+      grantees[i] = g.String()
+    }
+
+    if len($5) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($5))
+      for i, table := range $5 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| REVOKE privilege_list ON TABLE table_name_list FROM grantee_list CASCADE
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($7))
+    for i, g := range $7 {
+      grantees[i] = g.String()
+    }
+
+    if len($5) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+          CascadeOption: true,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($5))
+      for i, table := range $5 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+            CascadeOption: true,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| REVOKE privilege_list ON TABLE table_name_list FROM grantee_list RESTRICT
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($7))
+    for i, g := range $7 {
+      grantees[i] = g.String()
+    }
+
+    if len($5) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+          // RESTRICT is the default, no special flag needed
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($5))
+      for i, table := range $5 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+            // RESTRICT is the default, no special flag needed
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| REVOKE privilege_list ON table_name_list FROM grantee_list
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($6))
+    for i, g := range $6 {
+      grantees[i] = g.String()
+    }
+
+    if len($4) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $4[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($4))
+      for i, table := range $4 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| REVOKE privilege_list ON table_name_list FROM grantee_list CASCADE
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($6))
+    for i, g := range $6 {
+      grantees[i] = g.String()
+    }
+
+    if len($4) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $4[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+          CascadeOption: true,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($4))
+      for i, table := range $4 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+            CascadeOption: true,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| REVOKE privilege_list ON table_name_list FROM grantee_list RESTRICT
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.String()
+    }
+    grantees := make([]string, len($6))
+    for i, g := range $6 {
+      grantees[i] = g.String()
+    }
+
+    if len($4) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $4[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+          // RESTRICT is the default, no special flag needed
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($4))
+      for i, table := range $4 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+            // RESTRICT is the default, no special flag needed
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| CREATE SCHEMA if_not_exists_opt sql_id
+  {
+    $$ = &DDL{
+      Action: CreateSchema,
+      Schema: &Schema{
+        Name: $4.String(),
+      },
+    }
+  }
+| CREATE EXTENSION if_not_exists_opt reserved_sql_id
+  {
+    $$ = &DDL{
+      Action: CreateExtension,
+      Extension: &Extension{
+        Name: $4.String(),
+      },
+    }
+  }
+| CREATE EXTENSION if_not_exists_opt STRING
+  {
+    $$ = &DDL{
+      Action: CreateExtension,
+      Extension: &Extension{
+        Name: string($4),
+      },
+    }
   }
 
 alter_statement:
@@ -824,6 +1291,14 @@ alter_statement:
       IndexCols: $11,
     }
   }
+| ALTER ignore_opt TABLE table_name ADD exclude_definition
+  {
+    $$ = &DDL{
+      Action: AddExclusion,
+      Table: $4,
+      Exclusion: $6,
+    }
+  }
 | ALTER ignore_opt TABLE table_name ADD foreign_key_definition
   {
     $$ = &DDL{
@@ -847,18 +1322,70 @@ alter_object_type_index:
   INDEX
 | KEY
 
-select_statement:
-  base_select order_by_opt limit_opt lock_opt
+with_clause_opt:
   {
-    sel := $1.(*Select)
-    sel.OrderBy = $2
-    sel.Limit = $3
-    sel.Lock = $4
-    $$ = sel
+    $$ = nil
   }
-| union_lhs union_op union_rhs order_by_opt limit_opt lock_opt
+| with_clause
   {
-    $$ = &Union{Type: $2, Left: $1, Right: $3, OrderBy: $4, Limit: $5, Lock: $6}
+    $$ = $1
+  }
+
+with_clause:
+  WITH common_table_expr_list
+  {
+    $$ = &With{CTEs: $2}
+  }
+
+common_table_expr_list:
+  common_table_expr
+  {
+    $$ = []*CommonTableExpr{$1}
+  }
+| common_table_expr_list ',' common_table_expr
+  {
+    $$ = append($1, $3)
+  }
+
+common_table_expr:
+  table_id AS openb select_statement closeb
+  {
+    $$ = &CommonTableExpr{Name: $1, Definition: $4}
+  }
+
+select_statement:
+  with_clause_opt select_statement_core order_by_opt limit_opt lock_opt
+  {
+    switch core := $2.(type) {
+    case *Select:
+      core.OrderBy = $3
+      core.Limit = $4
+      core.Lock = $5
+      core.With = $1
+      $$ = core
+    case *Union:
+      core.OrderBy = $3
+      core.Limit = $4
+      core.Lock = $5
+      core.With = $1
+      $$ = core
+    case *ParenSelect:
+      // ParenSelect should not have OrderBy/Limit/Lock at this level
+      $$ = core
+    default:
+      $$ = $2
+    }
+  }
+
+// select_statement_core is the SELECT body that can include set operations (UNION, INTERSECT, EXCEPT)
+select_statement_core:
+  base_select
+  {
+    $$ = $1
+  }
+| select_statement_core union_op union_rhs
+  {
+    $$ = &Union{Type: $2, Left: $1, Right: $3}
   }
 
 // base_select is an unparenthesized SELECT with no order by clause or beyond.
@@ -868,24 +1395,29 @@ base_select:
     $$ = &Select{Comments: Comments($2), Cache: $3, Distinct: $4, Hints: $5, SelectExprs: $6, From: $7, Where: NewWhere(WhereStr, $8), GroupBy: GroupBy($9), Having: NewWhere(HavingStr, $10)}
   }
 
-union_lhs:
-  select_statement
-  {
-    $$ = $1
-  }
-| openb select_statement closeb
-  {
-    $$ = &ParenSelect{Select: $2}
-  }
-
 union_rhs:
   base_select
   {
     $$ = $1
   }
-| openb select_statement closeb
+| openb with_clause_opt select_statement_core order_by_opt limit_opt lock_opt closeb
   {
-    $$ = &ParenSelect{Select: $2}
+    switch core := $3.(type) {
+    case *Select:
+      core.OrderBy = $4
+      core.Limit = $5
+      core.Lock = $6
+      core.With = $2
+      $$ = &ParenSelect{Select: core}
+    case *Union:
+      core.OrderBy = $4
+      core.Limit = $5
+      core.Lock = $6
+      core.With = $2
+      $$ = &ParenSelect{Select: core}
+    default:
+      $$ = &ParenSelect{Select: core}
+    }
   }
 
 
@@ -1415,6 +1947,7 @@ module_arguments:
 | CONVERT module_arguments
 | SUBSTR module_arguments
 | SUBSTRING module_arguments
+| EXTRACT module_arguments
 | DEFAULT module_arguments
 | CONSTRAINT module_arguments
 | PRIMARY module_arguments
@@ -1644,6 +2177,87 @@ or_replace_opt:
     $$ = nil
   }
 
+drop_statement:
+  DROP INDEX sql_id
+  {
+    $$ = &DDL{
+      Action: DropIndex,
+      IndexSpec: &IndexSpec{
+        Name: $3,
+      },
+    }
+  }
+| DROP INDEX IF EXISTS sql_id
+  {
+    $$ = &DDL{
+      Action: DropIndex,
+      IfExists: true,
+      IndexSpec: &IndexSpec{
+        Name: $5,
+      },
+    }
+  }
+| DROP INDEX sql_id ON table_name
+  {
+    $$ = &DDL{
+      Action: DropIndex,
+      Table: $5,
+      IndexSpec: &IndexSpec{
+        Name: $3,
+      },
+    }
+  }
+| DROP INDEX IF EXISTS sql_id ON table_name
+  {
+    $$ = &DDL{
+      Action: DropIndex,
+      IfExists: true,
+      Table: $7,
+      IndexSpec: &IndexSpec{
+        Name: $5,
+      },
+    }
+  }
+/* DROP EXTENSION statement */
+| DROP EXTENSION sql_id
+  {
+    $$ = &DDL{
+      Action: DropExtension,
+      Extension: &Extension{
+        Name: $3.String(),
+      },
+    }
+  }
+| DROP EXTENSION IF EXISTS sql_id
+  {
+    $$ = &DDL{
+      Action: DropExtension,
+      IfExists: true,
+      Extension: &Extension{
+        Name: $5.String(),
+      },
+    }
+  }
+| DROP EXTENSION STRING
+  {
+    $$ = &DDL{
+      Action: DropExtension,
+      Extension: &Extension{
+        Name: string($3),
+      },
+    }
+  }
+| DROP EXTENSION IF EXISTS STRING
+  {
+    $$ = &DDL{
+      Action: DropExtension,
+      IfExists: true,
+      Extension: &Extension{
+        Name: string($5),
+      },
+    }
+  }
+
 create_table_prefix:
   CREATE TABLE if_not_exists_opt table_name
   {
@@ -1691,6 +2305,73 @@ table_column_list:
   {
     $$.addCheck($3)
   }
+| table_column_list ',' exclude_definition
+  {
+    $$.addExclusion($3)
+  }
+
+exclude_definition:
+  CONSTRAINT sql_id EXCLUDE '(' exclude_element_list ')' where_expression_opt
+  {
+    $$ = &ExclusionDefinition{
+      ConstraintName: $2,
+      IndexType: NewColIdent(""), // Default index type
+      Exclusions: $5,
+      Where: NewWhere(WhereStr, $7),
+    }
+  }
+| CONSTRAINT sql_id EXCLUDE USING sql_id '(' exclude_element_list ')' where_expression_opt
+  {
+    $$ = &ExclusionDefinition{
+      ConstraintName: $2,
+      IndexType: $5, // GIST, btree, etc.
+      Exclusions: $7,
+      Where: NewWhere(WhereStr, $9),
+    }
+  }
+
+exclude_element_list:
+  exclude_element
+  {
+    $$ = []ExclusionPair{$1}
+  }
+| exclude_element_list ',' exclude_element
+  {
+    $$ = append($1, $3)
+  }
+
+exclude_element:
+  expression WITH '='
+  {
+    $$ = ExclusionPair{
+      Expression: $1,
+      Operator: "=",
+    }
+  }
+| expression WITH AND
+  {
+    // AND token represents && in the lexer
+    $$ = ExclusionPair{
+      Expression: $1,
+      Operator: "&&",
+    }
+  }
+| expression WITH OR
+  {
+    // OR token represents || in the lexer
+    $$ = ExclusionPair{
+      Expression: $1,
+      Operator: "||",
+    }
+  }
+| expression WITH sql_id
+  {
+    // Handle all other operators and GIST-specific operators
+    $$ = ExclusionPair{
+      Expression: $1,
+      Operator: string($3.val),
+    }
+  }
 
 column_definition:
   sql_id column_definition_type
@@ -1728,6 +2409,14 @@ column_type:
   {
     $$ = ColumnType{Type: $1.val}
   }
+| STRING '.' STRING
+  {
+    $$ = ColumnType{Type: string($1) + "." + string($3)}
+  }
+| ID '.' ID
+  {
+    $$ = ColumnType{Type: string($1) + "." + string($3)}
+  }
 
 column_definition_type:
   column_type array_opt
@@ -1755,12 +2444,12 @@ column_definition_type:
   }
 | column_definition_type default_definition
   {
-    $1.Default = &DefaultDefinition{ValueOrExpression: $2}
+    $1.Default = &DefaultDefinition{Expression: $2}
     $$ = $1
   }
 | column_definition_type CONSTRAINT sql_id default_definition
   {
-    $1.Default = &DefaultDefinition{ConstraintName: $3, ValueOrExpression: $4}
+    $1.Default = &DefaultDefinition{ConstraintName: $3, Expression: $4}
     $$ = $1
   }
 // for MySQL: Spatial data option
@@ -1833,25 +2522,59 @@ column_definition_type:
     $1.References = String($3)
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')'
+// PostgreSQL: inline foreign key with constraint options
+| column_definition_type REFERENCES table_name '(' column_list ')' deferrable_opt initially_deferred_opt
   {
-    $1.References     = String($3)
-    $1.ReferenceNames = $5
+    $1.References           = String($3)
+    $1.ReferenceNames       = $5
+    $1.ReferenceDeferrable  = &$7
+    $1.ReferenceInitDeferred = &$8
     $$ = $1
   }
-// TODO: avoid a shfit/reduce conflict here
-| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option
+| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option fk_defer_opts
   {
-    $1.References     = String($3)
-    $1.ReferenceNames = $5
-    $1.ReferenceOnDelete = $9
+    $1.References            = String($3)
+    $1.ReferenceNames        = $5
+    $1.ReferenceOnDelete     = $9
+    if $10.constraintOpts != nil {
+      $1.ReferenceDeferrable  = NewBoolVal($10.constraintOpts.Deferrable)
+      $1.ReferenceInitDeferred = NewBoolVal($10.constraintOpts.InitiallyDeferred)
+    }
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option
+| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option fk_defer_opts
   {
-    $1.References     = String($3)
-    $1.ReferenceNames = $5
-    $1.ReferenceOnUpdate = $9
+    $1.References            = String($3)
+    $1.ReferenceNames        = $5
+    $1.ReferenceOnUpdate     = $9
+    if $10.constraintOpts != nil {
+      $1.ReferenceDeferrable  = NewBoolVal($10.constraintOpts.Deferrable)
+      $1.ReferenceInitDeferred = NewBoolVal($10.constraintOpts.InitiallyDeferred)
+    }
+    $$ = $1
+  }
+| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option ON UPDATE reference_option fk_defer_opts
+  {
+    $1.References            = String($3)
+    $1.ReferenceNames        = $5
+    $1.ReferenceOnDelete     = $9
+    $1.ReferenceOnUpdate     = $12
+    if $13.constraintOpts != nil {
+      $1.ReferenceDeferrable  = NewBoolVal($13.constraintOpts.Deferrable)
+      $1.ReferenceInitDeferred = NewBoolVal($13.constraintOpts.InitiallyDeferred)
+    }
+    $$ = $1
+  }
+| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option ON DELETE reference_option fk_defer_opts
+  {
+    $1.References            = String($3)
+    $1.ReferenceNames        = $5
+    $1.ReferenceOnUpdate     = $9
+    $1.ReferenceOnDelete     = $12
+    if $13.constraintOpts != nil {
+      $1.ReferenceDeferrable  = NewBoolVal($13.constraintOpts.Deferrable)
+      $1.ReferenceInitDeferred = NewBoolVal($13.constraintOpts.InitiallyDeferred)
+    }
     $$ = $1
   }
 // for MySQL and PostgreSQL
@@ -1908,31 +2631,19 @@ column_definition_type:
   }
 
 default_definition:
-  DEFAULT default_val
+  DEFAULT default_value_expression
   {
-    $$ = DefaultValueOrExpression{Value: $2}
-  }
-| DEFAULT '(' default_val ')'
-  {
-    $$ = DefaultValueOrExpression{Value: $3}
-  }
-| DEFAULT '(' '(' default_val ')' ')'
-  {
-    $$ = DefaultValueOrExpression{Value: $4}
-  }
-| DEFAULT default_expression
-  {
-    $$ = DefaultValueOrExpression{Expr: $2}
-  }
-| DEFAULT '(' default_expression ')'
-  {
-    $$ = DefaultValueOrExpression{Expr: $3}
+    $$ = DefaultExpression{Expr: $2}
   }
 
-default_val:
+default_value_expression:
   STRING character_cast_opt
   {
-    $$ = NewStrVal($1)
+    if $2 != nil {
+      $$ = &CastExpr{Expr: NewStrVal($1), Type: $2}
+    } else {
+      $$ = NewStrVal($1)
+    }
   }
 | UNICODE_STRING
   {
@@ -1942,21 +2653,17 @@ default_val:
   {
     $$ = NewIntVal($1)
   }
-| '-' INTEGRAL
-  {
-    $$ = NewIntVal(append([]byte("-"), $2...))
-  }
 | FLOAT
   {
     $$ = NewFloatVal($1)
   }
-| '-' FLOAT
-  {
-    $$ = NewFloatVal(append([]byte("-"), $2...))
-  }
 | NULL character_cast_opt
   {
-    $$ = NewValArg($1)
+    if $2 != nil {
+      $$ = &CastExpr{Expr: NewValArg($1), Type: $2}
+    } else {
+      $$ = NewValArg($1)
+    }
   }
 | current_timestamp
   {
@@ -1974,11 +2681,82 @@ default_val:
   {
     $$ = NewBitVal($1)
   }
-
-default_expression:
-  function_call_generic
+| function_call_generic
   {
     $$ = $1
+  }
+| DATE STRING
+  {
+    $$ = &TypedLiteral{Type: "date", Value: NewStrVal($2)}
+  }
+| TIME STRING
+  {
+    $$ = &TypedLiteral{Type: "time", Value: NewStrVal($2)}
+  }
+| TIMESTAMP STRING
+  {
+    $$ = &TypedLiteral{Type: "timestamp", Value: NewStrVal($2)}
+  }
+| variadic_opt array_constructor
+  {
+    $$ = $2
+  }
+| default_value_expression TYPECAST simple_convert_type array_opt
+  {
+    t := $3
+    if $4 {
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+    }
+    $$ = &CastExpr{Expr: $1, Type: t}
+  }
+| default_value_expression '+' default_value_expression
+  {
+    $$ = &BinaryExpr{Left: $1, Operator: PlusStr, Right: $3}
+  }
+| default_value_expression '-' default_value_expression
+  {
+    $$ = &BinaryExpr{Left: $1, Operator: MinusStr, Right: $3}
+  }
+| default_value_expression '*' default_value_expression
+  {
+    $$ = &BinaryExpr{Left: $1, Operator: MultStr, Right: $3}
+  }
+| default_value_expression '/' default_value_expression
+  {
+    $$ = &BinaryExpr{Left: $1, Operator: DivStr, Right: $3}
+  }
+| '+' default_value_expression %prec UNARY
+  {
+    if num, ok := $2.(*SQLVal); ok && num.Type == IntVal {
+      $$ = num
+    } else {
+      $$ = &UnaryExpr{Operator: UPlusStr, Expr: $2}
+    }
+  }
+| '-' default_value_expression %prec UNARY
+  {
+    if num, ok := $2.(*SQLVal); ok && num.Type == IntVal {
+      // Handle double negative
+      if num.Val[0] == '-' {
+        num.Val = num.Val[1:]
+        $$ = num
+      } else {
+        $$ = NewIntVal(append([]byte("-"), num.Val...))
+      }
+    } else if num, ok := $2.(*SQLVal); ok && num.Type == FloatVal {
+      if num.Val[0] == '-' {
+        num.Val = num.Val[1:]
+        $$ = num
+      } else {
+        $$ = NewFloatVal(append([]byte("-"), num.Val...))
+      }
+    } else {
+      $$ = &UnaryExpr{Operator: UMinusStr, Expr: $2}
+    }
+  }
+| '(' default_value_expression ')'
+  {
+    $$ = $2
   }
 
 srid_definition:
@@ -2113,8 +2891,17 @@ character_cast_opt:
     $$ = nil
   }
 | TYPECAST BPCHAR
-| TYPECAST INTERVAL
+  {
+    $$ = &ConvertType{Type: string($2)}
+  }
 | TYPECAST column_type array_opt
+  {
+    typeName := $2.Type
+    if $3 {
+      typeName = typeName + "[]"
+    }
+    $$ = &ConvertType{Type: typeName}
+  }
 
 numeric_type:
   int_type_spec
@@ -2255,6 +3042,10 @@ time_type:
   {
     $$ = ColumnType{Type: string($1)}
   }
+| INTERVAL length_opt
+  {
+    $$ = ColumnType{Type: string($1), Length: $2}
+  }
 
 bool_type:
   BOOL
@@ -2344,6 +3135,30 @@ char_type:
     $$ = ColumnType{Type: string($1)}
   }
 | UUID
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| TSRANGE
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| TSTZRANGE
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| INT4RANGE
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| INT8RANGE
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| NUMRANGE
+  {
+    $$ = ColumnType{Type: string($1)}
+  }
+| DATERANGE
   {
     $$ = ColumnType{Type: string($1)}
   }
@@ -2476,13 +3291,24 @@ array_opt:
   {
     $$ = BoolVal(false)
   }
-| '[' ']'
+| array_brackets
   {
     $$ = BoolVal(true)
   }
 | ARRAY
   {
     $$ = BoolVal(true)
+  }
+
+/* Handles [], [][], [][][], etc. - PostgreSQL treats all as equivalent */
+array_brackets:
+  '[' ']'
+  {
+    $$ = struct{}{}
+  }
+| array_brackets '[' ']'
+  {
+    $$ = struct{}{}
   }
 
 charset_opt:
@@ -2576,6 +3402,10 @@ index_option:
   {
     $$ = &IndexOption{Name: string($1), Value: NewIntVal($3)}
   }
+| FILLFACTOR '=' STRING
+  {
+    $$ = &IndexOption{Name: string($1), Value: NewStrVal($3)}
+  }
 | IGNORE_DUP_KEY '=' on_off
   {
     $$ = &IndexOption{Name: string($1), Value: $3}
@@ -2604,12 +3434,13 @@ index_option:
   {
     $$ = &IndexOption{Name: string($1), Value: NewIntVal($3)}
   }
+| M '=' STRING
+  {
+    $$ = &IndexOption{Name: string($1), Value: NewStrVal($3)}
+  }
 | ID '=' vector_option_value
   {
     id := strings.Trim(strings.ToLower(string($1)), "`")
-    if id != "distance" && id != "m" {
-      yylex.Error(fmt.Sprintf("syntax error around '%s'", string($1)))
-    }
     $$ = &IndexOption{Name: id, Value: $3}
   }
 
@@ -2652,6 +3483,10 @@ vector_option_value:
 | INTEGRAL
   {
     $$ = NewIntVal($1)
+  }
+| STRING
+  {
+    $$ = NewStrVal($1)
   }
 
 // for MSSQL
@@ -2729,11 +3564,6 @@ index_column_list_or_expression:
   {
     $$ = IndexColumnsOrExpression{IndexCols: $1}
   }
-/* For PostgreSQL: https://www.postgresql.org/docs/14/indexes-expressional.html */
-| function_call_generic
-  {
-    $$ = IndexColumnsOrExpression{IndexExpr: $1}
-  }
 
 index_column_list:
   index_column
@@ -2750,6 +3580,10 @@ index_column:
   {
     $$ = IndexColumn{Column: $1, Length: $2, Direction: $3}
   }
+| non_reserved_keyword length_opt asc_desc_opt
+  {
+    $$ = IndexColumn{Column: NewColIdent(string($1)), Length: $2, Direction: $3}
+  }
 /* For PostgreSQL */
 | KEY length_opt
   {
@@ -2759,47 +3593,64 @@ index_column:
   {
     $$ = IndexColumn{Column: $1, OperatorClass: string($2)}
   }
+| non_reserved_keyword operator_class
+  {
+    $$ = IndexColumn{Column: NewColIdent(string($1)), OperatorClass: string($2)}
+  }
 | '(' expression ')' asc_desc_opt
   {
     $$ = IndexColumn{Expression: $2, Direction: $4}
+  }
+| function_call_generic asc_desc_opt
+  {
+    $$ = IndexColumn{Expression: $1, Direction: $2}
   }
 
 // https://www.postgresql.org/docs/9.5/brin-builtin-opclasses.html
 operator_class:
   TEXT_PATTERN_OPS
+| sql_id
+  {
+    $$ = []byte($1.String())
+  }
 
 foreign_key_definition:
-  foreign_key_without_options not_for_replication_opt
+  foreign_key_without_options fk_defer_opts
   {
-    $1.NotForReplication = bool($2)
+    $1.ConstraintOptions = $2.constraintOpts
+    $1.NotForReplication = $2.notForReplication
     $$ = $1
   }
-| foreign_key_without_options ON DELETE reference_option not_for_replication_opt
+| foreign_key_without_options ON DELETE reference_option fk_defer_opts
   {
     $1.OnUpdate = NewColIdent("")
     $1.OnDelete = $4
-    $1.NotForReplication = bool($5)
+    $1.ConstraintOptions = $5.constraintOpts
+    $1.NotForReplication = $5.notForReplication
     $$ = $1
   }
-| foreign_key_without_options ON UPDATE reference_option not_for_replication_opt
+| foreign_key_without_options ON UPDATE reference_option fk_defer_opts
   {
     $1.OnUpdate = $4
     $1.OnDelete = NewColIdent("")
-    $1.NotForReplication = bool($5)
+    $1.ConstraintOptions = $5.constraintOpts
+    $1.NotForReplication = $5.notForReplication
     $$ = $1
   }
-| foreign_key_without_options ON DELETE reference_option ON UPDATE reference_option not_for_replication_opt
+| foreign_key_without_options ON DELETE reference_option ON UPDATE reference_option fk_defer_opts
   {
     $1.OnUpdate = $7
     $1.OnDelete = $4
-    $1.NotForReplication = bool($8)
+    $1.ConstraintOptions = $8.constraintOpts
+    $1.NotForReplication = $8.notForReplication
     $$ = $1
   }
-| foreign_key_without_options ON UPDATE reference_option ON DELETE reference_option not_for_replication_opt
+| foreign_key_without_options ON UPDATE reference_option ON DELETE reference_option fk_defer_opts
   {
     $1.OnUpdate = $4
     $1.OnDelete = $7
-    $1.NotForReplication = bool($8)
+    $1.ConstraintOptions = $8.constraintOpts
+    $1.NotForReplication = $8.notForReplication
     $$ = $1
   }
 
@@ -2865,24 +3716,25 @@ primary_key_definition:
   }
 
 unique_definition:
-  CONSTRAINT sql_id UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
+  CONSTRAINT sql_id UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
   {
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: string($3), Name: $2, Primary: false, Unique: true, Clustered: $4},
       Columns: $6,
       Options: $8,
       Partition: $9,
-      ConstraintOptions: &ConstraintOptions{}, // Mark as constraint
+      ConstraintOptions: &ConstraintOptions{Deferrable: bool($10), InitiallyDeferred: bool($11)},
     }
   }
 /* For PostgreSQL and SQLite3 */
-| UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
+| UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
   {
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: string($1), Primary: false, Unique: true, Clustered: $2},
       Columns: $4,
       Options: $6,
       Partition: $7,
+      ConstraintOptions: &ConstraintOptions{Deferrable: bool($8), InitiallyDeferred: bool($9)},
     }
   }
 
@@ -2944,6 +3796,20 @@ unique_clustered_opt:
     $$ = []BoolVal { true, false }
   }
 
+/* For PostgreSQL and Aurora DSQL */
+concurrently_opt:
+  {
+    $$ = byte(0) // no concurrency mode
+  }
+| CONCURRENTLY
+  {
+    $$ = byte(1) // PostgreSQL CONCURRENTLY
+  }
+| ASYNC
+  {
+    $$ = byte(2) // Aurora DSQL ASYNC
+  }
+
 /* For SQL Server */
 nonclustered_columnstore:
   COLUMNSTORE {}
@@ -2959,6 +3825,99 @@ not_for_replication_opt:
     $$ = BoolVal(true)
   }
 
+/* Combined rule for foreign key constraint options to avoid reduce/reduce conflicts */
+fk_defer_opts:
+  /* empty */
+  {
+    $$.constraintOpts = nil
+    $$.notForReplication = false
+  }
+| DEFERRABLE
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: false}
+    $$.notForReplication = false
+  }
+| NOT DEFERRABLE
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
+    $$.notForReplication = false
+  }
+| INITIALLY IMMEDIATE
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
+    $$.notForReplication = false
+  }
+| INITIALLY DEFERRED
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: true}
+    $$.notForReplication = false
+  }
+| DEFERRABLE INITIALLY IMMEDIATE
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: false}
+    $$.notForReplication = false
+  }
+| DEFERRABLE INITIALLY DEFERRED
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: true}
+    $$.notForReplication = false
+  }
+| NOT DEFERRABLE INITIALLY IMMEDIATE
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
+    $$.notForReplication = false
+  }
+| NOT DEFERRABLE INITIALLY DEFERRED
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: true}
+    $$.notForReplication = false
+  }
+| NOT FOR REPLICATION
+  {
+    $$.constraintOpts = nil
+    $$.notForReplication = true
+  }
+| DEFERRABLE NOT FOR REPLICATION
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: false}
+    $$.notForReplication = true
+  }
+| NOT DEFERRABLE NOT FOR REPLICATION
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
+    $$.notForReplication = true
+  }
+| INITIALLY IMMEDIATE NOT FOR REPLICATION
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
+    $$.notForReplication = true
+  }
+| INITIALLY DEFERRED NOT FOR REPLICATION
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: true}
+    $$.notForReplication = true
+  }
+| DEFERRABLE INITIALLY IMMEDIATE NOT FOR REPLICATION
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: false}
+    $$.notForReplication = true
+  }
+| DEFERRABLE INITIALLY DEFERRED NOT FOR REPLICATION
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: true}
+    $$.notForReplication = true
+  }
+| NOT DEFERRABLE INITIALLY IMMEDIATE NOT FOR REPLICATION
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
+    $$.notForReplication = true
+  }
+| NOT DEFERRABLE INITIALLY DEFERRED NOT FOR REPLICATION
+  {
+    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: true}
+    $$.notForReplication = true
+  }
+
 sql_id_opt:
   {
     $$ = NewColIdent("")
@@ -2966,11 +3925,68 @@ sql_id_opt:
 | sql_id
 
 sql_id_list:
-  sql_id
+  reserved_sql_id
   {
     $$ = []ColIdent{$1}
   }
-| sql_id_list ',' sql_id
+| sql_id_list ',' reserved_sql_id
+  {
+    $$ = append($1, $3)
+  }
+
+privilege:
+  reserved_sql_id
+  {
+    $$ = $1
+  }
+| ALL
+  {
+    $$ = NewColIdent(string($1))
+  }
+| ALL PRIVILEGES
+  {
+    $$ = NewColIdent("ALL")
+  }
+| REFERENCES
+  {
+    $$ = NewColIdent(string($1))
+  }
+| TRIGGER
+  {
+    $$ = NewColIdent(string($1))
+  }
+| TRUNCATE
+  {
+    $$ = NewColIdent(string($1))
+  }
+
+privilege_list:
+  privilege
+  {
+    $$ = []ColIdent{$1}
+  }
+| privilege_list ',' privilege
+  {
+    $$ = append($1, $3)
+  }
+
+/* For GRANT/REVOKE grantees - allows PUBLIC keyword */
+grantee:
+  sql_id
+  {
+    $$ = $1
+  }
+| PUBLIC
+  {
+    $$ = NewColIdent(string($1))
+  }
+
+grantee_list:
+  grantee
+  {
+    $$ = []ColIdent{$1}
+  }
+| grantee_list ',' grantee
   {
     $$ = append($1, $3)
   }
@@ -3059,6 +4075,22 @@ union_op:
 | UNION DISTINCT
   {
     $$ = UnionDistinctStr
+  }
+| INTERSECT
+  {
+    $$ = IntersectStr
+  }
+| INTERSECT ALL
+  {
+    $$ = IntersectAllStr
+  }
+| EXCEPT
+  {
+    $$ = ExceptStr
+  }
+| EXCEPT ALL
+  {
+    $$ = ExceptAllStr
   }
 
 cache_opt:
@@ -3271,16 +4303,11 @@ aliased_table_name:
   }
 
 column_list:
-  sql_id
+  reserved_sql_id
   {
     $$ = Columns{$1}
   }
-/* For PostgreSQL */
-| KEY
-  {
-    $$ = Columns{NewColIdent(string($1))}
-  }
-| column_list ',' sql_id
+| column_list ',' reserved_sql_id
   {
     $$ = append($$, $3)
   }
@@ -3655,6 +4682,22 @@ compare:
   {
     $$ = PosixNotRegexCiStr
   }
+| PATTERN_LIKE
+  {
+    $$ = LikeStr
+  }
+| PATTERN_ILIKE
+  {
+    $$ = ILikeStr
+  }
+| PATTERN_NOT_LIKE
+  {
+    $$ = NotLikeStr
+  }
+| PATTERN_NOT_ILIKE
+  {
+    $$ = NotILikeStr
+  }
 
 like_escape_opt:
   {
@@ -3780,10 +4823,6 @@ value_expression:
   {
     $$ = &CollateExpr{Expr: $1, Charset: $3}
   }
-| value_expression TYPECAST TIMESTAMP WITH TIME ZONE
-  {
-    $$ = &CollateExpr{Expr: $1}
-  }
 | BINARY value_expression %prec UNARY
   {
     $$ = &UnaryExpr{Operator: BinaryStr, Expr: $2}
@@ -3838,9 +4877,45 @@ value_expression:
     // will be non-trivial because of grammar conflicts.
     $$ = &IntervalExpr{Expr: $2, Unit: $3.String()}
   }
-| value_expression TYPECAST simple_convert_type
+| DATE STRING
   {
-    $$ = &CastExpr{Expr: $1, Type: $3}
+    $$ = &TypedLiteral{Type: "date", Value: NewStrVal($2)}
+  }
+| TIME STRING
+  {
+    $$ = &TypedLiteral{Type: "time", Value: NewStrVal($2)}
+  }
+| TIMESTAMP STRING
+  {
+    $$ = &TypedLiteral{Type: "timestamp", Value: NewStrVal($2)}
+  }
+| value_expression TYPECAST simple_convert_type array_opt
+  {
+    t := $3
+    if $4 {
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+    }
+    $$ = &CastExpr{Expr: $1, Type: t}
+  }
+| value_expression TYPECAST DOUBLE PRECISION
+  {
+    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: "double precision"}}
+  }
+| value_expression TYPECAST TIMESTAMP WITH TIME ZONE
+  {
+    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: "timestamp with time zone"}}
+  }
+| value_expression TYPECAST TIMESTAMP WITHOUT TIME ZONE
+  {
+    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: "timestamp without time zone"}}
+  }
+| value_expression TYPECAST TIME WITH TIME ZONE
+  {
+    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: "time with time zone"}}
+  }
+| value_expression TYPECAST TIME WITHOUT TIME ZONE
+  {
+    $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: "time without time zone"}}
   }
 | function_call_generic
 | function_call_keyword
@@ -3951,6 +5026,10 @@ function_call_keyword:
   {
     $$ = &SubstrExpr{Name: $3, From: $5, To: $7}
   }
+| EXTRACT openb extract_field FROM value_expression closeb
+  {
+    $$ = &ExtractExpr{Field: $3, Source: $5}
+  }
 | MATCH openb select_expression_list closeb AGAINST openb value_expression match_option closeb
   {
     $$ = &MatchExpr{Columns: $3, Expr: $7, Option: $8}
@@ -3983,6 +5062,18 @@ function_call_keyword:
 | GETDATE openb closeb
   {
     $$ = &FuncExpr{Name: NewColIdent(string($1))}
+  }
+| DATE openb select_expression_list closeb
+  {
+    $$ = &FuncExpr{Name: NewColIdent("date"), Exprs: $3}
+  }
+| TIME openb select_expression_list closeb
+  {
+    $$ = &FuncExpr{Name: NewColIdent("time"), Exprs: $3}
+  }
+| TIMESTAMP openb select_expression_list closeb
+  {
+    $$ = &FuncExpr{Name: NewColIdent("timestamp"), Exprs: $3}
   }
 
 /*
@@ -4060,6 +5151,16 @@ function_call_conflict:
 | REPLACE openb select_expression_list closeb
   {
     $$ = &FuncExpr{Name: NewColIdent("replace"), Exprs: $3}
+  }
+
+extract_field:
+  sql_id
+  {
+    $$ = $1.String()
+  }
+| YEAR
+  {
+    $$ = string($1)
   }
 
 match_option:
@@ -4239,6 +5340,74 @@ simple_convert_type:
   {
     $$ = &ConvertType{Type: string($1)}
   }
+| NUMERIC
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| DECIMAL
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| NUMERIC '(' INTEGRAL ',' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3), Scale: NewIntVal($5)}
+  }
+| DECIMAL '(' INTEGRAL ',' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3), Scale: NewIntVal($5)}
+  }
+| VARCHAR '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+  }
+| CHARACTER VARYING '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1) + " " + string($2), Length: NewIntVal($4)}
+  }
+| CHAR '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+  }
+| CHARACTER '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+  }
+| BIT '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+  }
+| NUMERIC '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+  }
+| DECIMAL '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+  }
+| TIMESTAMP '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+  }
+| TIMESTAMP
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| TIME '(' INTEGRAL ')'
+  {
+    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+  }
+| TIME
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| INTERVAL
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
+| REAL
+  {
+    $$ = &ConvertType{Type: string($1)}
+  }
 
 expression_opt:
   {
@@ -4315,6 +5484,8 @@ new_qualifier_column_name:
 value:
   STRING character_cast_opt
   {
+    // Don't create CastExpr in value context - only in default_value_expression
+    // This avoids affecting comparisons in non-default contexts
     $$ = NewStrVal($1)
   }
 | UNICODE_STRING
@@ -4685,6 +5856,26 @@ reserved_sql_id:
   {
     $$ = NewColIdent(string($1))
   }
+| TEXT
+  {
+    $$ = NewColIdent(string($1))
+  }
+| TINYTEXT
+  {
+    $$ = NewColIdent(string($1))
+  }
+| MEDIUMTEXT
+  {
+    $$ = NewColIdent(string($1))
+  }
+| LONGTEXT
+  {
+    $$ = NewColIdent(string($1))
+  }
+| CITEXT
+  {
+    $$ = NewColIdent(string($1))
+  }
 | reserved_keyword
   {
     $$ = NewColIdent(string($1))
@@ -4763,9 +5954,13 @@ array_constructor:
 
 /* For PostgreSQL */
 array_element_list:
-  array_element
+  /* empty - allows ARRAY[] */
   {
-    $$ = ArrayElements{$1}
+    $$ = nil
+  }
+| array_element
+  {
+    $$ = Exprs{$1}
   }
 | array_element_list ',' array_element
   {
@@ -4776,7 +5971,45 @@ array_element_list:
 array_element:
   STRING character_cast_opt
   {
+    // Don't create CastExpr in array_element context - only in default_value_expression
+    // This avoids affecting array comparisons
     $$ = NewStrVal($1)
+  }
+| INTEGRAL
+  {
+    $$ = NewIntVal($1)
+  }
+| FLOAT
+  {
+    $$ = NewFloatVal($1)
+  }
+| current_timestamp
+  {
+    $$ = $1
+  }
+| current_timestamp TYPECAST simple_convert_type array_opt
+  {
+    t := $3
+    if $4 {
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+    }
+    $$ = &CastExpr{Expr: $1, Type: t}
+  }
+| tuple_expression
+  {
+    $$ = $1
+  }
+| tuple_expression TYPECAST simple_convert_type array_opt
+  {
+    t := $3
+    if $4 {
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+    }
+    $$ = &CastExpr{Expr: $1, Type: t}
+  }
+| variadic_opt array_constructor
+  {
+    $$ = $2
   }
 
 bool_option_name_list:
@@ -4864,6 +6097,7 @@ reserved_keyword:
 | ESCAPE
 | EXEC
 | EXECUTE
+| EXTRACT
 | EXISTS
 | EXPLAIN
 | FALSE
@@ -4953,12 +6187,19 @@ reserved_keyword:
 | OFF
 
 non_reserved_keyword:
-  DEFINER
+  ACTION
+| DEFINER
 | INVOKER
 | POLICY
 | TYPE
 | STATUS
+| VARIABLES
 | ZONE
+| LEVEL
+| PRIVILEGES
+| RESTRICT
+| CASCADE
+| OPTION
 
 openb:
   '('

@@ -27,11 +27,16 @@ func (e validationError) Error() string {
 type PsqldefParserMode int
 
 const (
-	// PsqldefParserModeAuto uses pgquery with fallback to generic parser (default)
+	// PsqldefParserModeAuto is the default migration mode that prefers the generic parser
+	// but falls back to pgquery when needed. This mode helps with gradual migration:
+	// 1. First tries generic parser on the full SQL
+	// 2. If that fails, uses pgquery to split SQL into statements
+	// 3. For each statement, tries to convert pgquery AST to generic AST
+	// 4. If conversion fails for a statement, tries generic parser on that statement
 	PsqldefParserModeAuto PsqldefParserMode = iota
-	// PsqldefParserModePgquery uses only pgquery without fallback (for testing)
+	// PsqldefParserModePgquery uses only pgquery without any fallback to generic parser
 	PsqldefParserModePgquery
-	// PsqldefParserModeGeneric uses only the generic parser
+	// PsqldefParserModeGeneric uses only the generic parser without any fallback to pgquery
 	PsqldefParserModeGeneric
 )
 
@@ -45,9 +50,15 @@ func NewParser() PostgresParser {
 }
 
 func NewParserWithMode(mode PsqldefParserMode) PostgresParser {
-	if envParser := os.Getenv("PSQLDEF_PARSER"); envParser == "generic" {
-		mode = PsqldefParserModeGeneric
-		slog.Info("Using generic parser only mode (PSQLDEF_PARSER=generic)")
+	if envParser := os.Getenv("PSQLDEF_PARSER"); envParser != "" {
+		switch envParser {
+		case "generic":
+			mode = PsqldefParserModeGeneric
+			slog.Debug("Using generic parser only mode (PSQLDEF_PARSER=generic)")
+		case "pgquery":
+			mode = PsqldefParserModePgquery
+			slog.Debug("Using pgquery parser only mode (PSQLDEF_PARSER=pgquery)")
+		}
 	}
 	return PostgresParser{
 		parser: database.NewParser(parser.ParserModePostgres),
@@ -65,13 +76,30 @@ func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
 		return p.parser.Parse(sql)
 	}
 
+	// If pgquery only mode is enabled, skip generic parser entirely
+	if p.mode == PsqldefParserModePgquery {
+		return p.parsePgquery(sql)
+	}
+
+	// Auto mode: Try generic parser first for faster path and better error messages.
+	// If generic parser succeeds, we're done. If it fails, fall back to pgquery
+	// which can handle more PostgreSQL-specific syntax and provides statement splitting.
+	statements, err := p.parser.Parse(sql)
+	if err != nil {
+		// Generic parser couldn't handle this SQL, use pgquery as fallback.
+		// This is expected during the migration period as the generic parser
+		// may not support all PostgreSQL features yet.
+		slog.Warn("Generic parser failed on full SQL, using pgquery fallback", "error", err.Error())
+		return p.parsePgquery(sql)
+	}
+
+	return statements, nil
+}
+
+// parsePgquery parses SQL using the pgquery parser
+func (p PostgresParser) parsePgquery(sql string) ([]database.DDLStatement, error) {
 	result, err := go_pgquery.Parse(sql)
 	if err != nil {
-		// If go_pgquery fails (e.g., due to DSQL-specific syntax like ASYNC),
-		// fallback to the generic parser which supports extended syntax
-		if p.mode == PsqldefParserModeAuto {
-			return p.parser.Parse(sql)
-		}
 		return nil, err
 	}
 
@@ -85,7 +113,7 @@ func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
 		}
 		ddl = strings.TrimSpace(ddl)
 
-		// First, attempt to parse it with the wrapper of PostgreSQL's parser. If it works, use the result.
+		// Attempt to convert pgquery AST to our generic AST format
 		stmt, err := p.parseStmt(rawStmt.Stmt)
 		if err != nil {
 			// Check if this is a validation error (should not fallback)
@@ -93,10 +121,13 @@ func (p PostgresParser) Parse(sql string) ([]database.DDLStatement, error) {
 				return nil, err
 			}
 
-			// Otherwise, fallback to the generic parser. We intend to deprecate this path in the future.
+			// In Auto mode, if we can't convert the pgquery AST to generic AST,
+			// try parsing this individual statement with the generic parser directly.
+			// This handles cases where the generic parser can parse the statement
+			// but we haven't implemented the AST conversion from pgquery yet.
 			var stmts []database.DDLStatement
-			if p.mode == PsqldefParserModeAuto { // Disable fallback in parser tests
-				slog.Debug("Falling back to generic parser", "ddl", ddl, "error", err.Error())
+			if p.mode == PsqldefParserModeAuto {
+				slog.Debug("pgquery AST conversion failed, trying generic parser for this statement", "error", err.Error())
 				stmts, err = p.parser.Parse(ddl)
 			}
 			if err != nil {
@@ -189,16 +220,10 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 				}
 				indexes = append(indexes, index)
 			case pgquery.ConstrType_CONSTR_UNIQUE:
-				// Generate a constraint name if not provided to match PostgreSQL's behavior
-				constraintName := node.Constraint.Conname
-				if constraintName == "" && len(indexCols) == 1 {
-					// Generate name similar to PostgreSQL: tablename_columnname_key
-					constraintName = fmt.Sprintf("%s_%s_key", tableName.Name.String(), indexCols[0].Column.String())
-				}
 				index := &parser.IndexDefinition{
 					Info: &parser.IndexInfo{
-						Type:   "unique key",
-						Name:   parser.NewColIdent(constraintName),
+						Type:   "UNIQUE",
+						Name:   parser.NewColIdent(node.Constraint.Conname),
 						Unique: true,
 					},
 					Columns: indexCols,
@@ -482,7 +507,7 @@ func (p PostgresParser) parseResTarget(stmt *pgquery.ResTarget) (parser.SelectEx
 func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 	switch node := stmt.Node.(type) {
 	case *pgquery.Node_AArrayExpr:
-		var elements parser.ArrayElements
+		var elements parser.Exprs
 		for _, element := range node.AArrayExpr.Elements {
 			node, err := p.parseExpr(element)
 			if err != nil {
@@ -666,7 +691,17 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 		if shouldDeleteTypeCast(node.TypeCast.Arg, columnType) {
 			return expr, nil
 		} else {
-			typeName := columnType.Type
+			// For casts, use the raw type name from pgquery to preserve "bpchar" instead of "character"
+			// This matches what the generic parser produces from ::bpchar syntax
+			rawTypeName := p.getRawTypeName(node.TypeCast.TypeName)
+			typeName := rawTypeName
+			if typeName == "" {
+				// Fallback to normalized type if raw extraction fails
+				slog.Debug("Failed to extract raw type name from TypeCast, falling back to normalized type",
+					"normalized_type", columnType.Type,
+					"type_node", fmt.Sprintf("%#v", node.TypeCast.TypeName))
+				typeName = columnType.Type
+			}
 			if columnType.Array {
 				typeName += "[]"
 			}
@@ -731,7 +766,7 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 			if node.AExpr.Kind == pgquery.A_Expr_Kind_AEXPR_IN {
 				if valTuple, ok := right.(parser.ValTuple); ok {
 					// Convert ValTuple to ArrayConstructor
-					var elements parser.ArrayElements
+					var elements parser.Exprs
 					for _, expr := range valTuple {
 						elem, err := p.parseArrayElement(expr)
 						if err != nil {
@@ -860,7 +895,7 @@ func (p PostgresParser) parseIndexColumn(stmt *pgquery.Node) (parser.IndexColumn
 	}
 }
 
-func (p PostgresParser) parseArrayElement(node parser.Expr) (parser.ArrayElement, error) {
+func (p PostgresParser) parseArrayElement(node parser.Expr) (parser.Expr, error) {
 	switch node := node.(type) {
 	case *parser.SQLVal:
 		return node, nil
@@ -999,22 +1034,23 @@ func (p PostgresParser) parseExclusion(constraint *pgquery.Constraint) (*parser.
 		if excludeElement == nil {
 			return nil, errors.New("require exclude element")
 		}
-		var col parser.ColIdent
+		var expr parser.Expr
 		if n := excludeElement.GetExpr(); n != nil {
-			expr, err := p.parseExpr(n)
+			parsedExpr, err := p.parseExpr(n)
 			if err != nil {
 				return nil, err
 			}
-			col = parser.NewColIdent(parser.String(expr))
+			expr = parsedExpr
 		} else {
-			col = parser.NewColIdent(excludeElement.Name)
+			// If there's no expression, just use the column name as an expression
+			expr = &parser.ColName{Name: parser.NewColIdent(excludeElement.Name)}
 		}
 
 		opList := nItems[1].GetList()
 		opItems := opList.GetItems()
 		exs = append(exs, parser.ExclusionPair{
-			Column:   col,
-			Operator: opItems[0].Node.(*pgquery.Node_String_).String_.Sval},
+			Expression: expr,
+			Operator:   opItems[0].Node.(*pgquery.Node_String_).String_.Sval},
 		)
 	}
 	var whereExpr parser.Expr
@@ -1027,7 +1063,7 @@ func (p PostgresParser) parseExclusion(constraint *pgquery.Constraint) (*parser.
 	}
 	return &parser.ExclusionDefinition{
 		ConstraintName: parser.NewColIdent(constraint.Conname),
-		IndexType:      constraint.GetAccessMethod(),
+		IndexType:      parser.NewColIdent(constraint.GetAccessMethod()),
 		Exclusions:     exs,
 		Where:          parser.NewWhere(parser.WhereStr, whereExpr),
 	}, nil
@@ -1112,12 +1148,6 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 				return nil, nil, err
 			}
 			columnType.Check = check
-			if constraint.Conname == "" {
-				name, truncated := p.absentConstraintName(tableName.Name.String(), columnDef.Colname, "check")
-				if truncated {
-					check.ConstraintName = parser.NewColIdent(name)
-				}
-			}
 		case pgquery.ConstrType_CONSTR_PRIMARY:
 			columnType.KeyOpt = parser.ColumnKeyOption(1)
 		case pgquery.ConstrType_CONSTR_UNIQUE:
@@ -1128,10 +1158,6 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 				return nil, nil, err
 			}
 			foreignKey.IndexColumns = []parser.ColIdent{parser.NewColIdent(columnDef.Colname)}
-			if constraint.Conname == "" {
-				name, _ := p.absentConstraintName(tableName.Name.String(), columnDef.Colname, "fkey")
-				foreignKey.ConstraintName = parser.NewColIdent(name)
-			}
 		case pgquery.ConstrType_CONSTR_ATTR_DEFERRABLE:
 			foreignKey.ConstraintOptions.Deferrable = true
 		case pgquery.ConstrType_CONSTR_ATTR_NOT_DEFERRABLE:
@@ -1161,26 +1187,6 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 	}, foreignKey, nil
 }
 
-func (p PostgresParser) absentConstraintName(tableName, columnName, suffix string) (string, bool) {
-	if name := fmt.Sprintf("%s_%s_%s", tableName, columnName, suffix); len(name) <= 63 {
-		return name, false
-	}
-
-	var tableThreshold, columnThreshold = 33 - len(suffix), 28
-	var maxSum = tableThreshold + columnThreshold
-
-	if len(tableName) <= tableThreshold {
-		columnName = columnName[:maxSum-len(tableName)]
-	} else if len(columnName) <= columnThreshold {
-		tableName = tableName[:maxSum-len(columnName)]
-	} else {
-		tableName = tableName[:tableThreshold]
-		columnName = columnName[:columnThreshold]
-	}
-
-	return fmt.Sprintf("%s_%s_%s", tableName, columnName, suffix), true
-}
-
 func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.DefaultDefinition, error) {
 	node, err := p.parseExpr(rawExpr)
 	if err != nil {
@@ -1189,56 +1195,102 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 	switch expr := node.(type) {
 	case *parser.NullVal:
 		return &parser.DefaultDefinition{
-			ValueOrExpression: parser.DefaultValueOrExpression{
-				Value: parser.NewValArg([]byte("null")),
+			Expression: parser.DefaultExpression{
+				Expr: parser.NewValArg([]byte("null")),
 			},
 		}, nil
 	case *parser.SQLVal:
 		return &parser.DefaultDefinition{
-			ValueOrExpression: parser.DefaultValueOrExpression{
-				Value: expr,
+			Expression: parser.DefaultExpression{
+				Expr: expr,
 			},
 		}, nil
 	case *parser.BoolVal:
 		return &parser.DefaultDefinition{
-			ValueOrExpression: parser.DefaultValueOrExpression{
-				Value: parser.NewBoolSQLVal(bool(*expr)),
+			Expression: parser.DefaultExpression{
+				Expr: parser.NewBoolSQLVal(bool(*expr)),
 			},
 		}, nil
 	case *parser.ArrayConstructor:
 		return &parser.DefaultDefinition{
-			ValueOrExpression: parser.DefaultValueOrExpression{
+			Expression: parser.DefaultExpression{
 				Expr: expr,
 			},
 		}, nil
 	case *parser.CastExpr:
-		switch castExpr := expr.Expr.(type) {
-		case *parser.SQLVal:
+		// Preserve CastExpr nodes in defaults (fix for incorrect normalization)
+		// PostgreSQL stores defaults with explicit casts, so we should preserve them
+		// Special case: Convert NullVal to SQLVal for consistency
+		if nullVal, ok := expr.Expr.(*parser.NullVal); ok {
+			_ = nullVal // Mark as used
+			// Handle NULL::type casts by converting NullVal to SQLVal
+			// PostgreSQL represents NULL as NullVal in pg_query AST but we use SQLVal
+			// Preserve the cast by wrapping the SQLVal in a CastExpr
+			// Use lowercase null to match the lexer's keyword normalization
 			return &parser.DefaultDefinition{
-				ValueOrExpression: parser.DefaultValueOrExpression{
-					Value: castExpr,
+				Expression: parser.DefaultExpression{
+					Expr: &parser.CastExpr{
+						Expr: parser.NewValArg([]byte("null")),
+						Type: expr.Type,
+					},
 				},
 			}, nil
-		case *parser.CastExpr, *parser.ArrayConstructor:
-			return &parser.DefaultDefinition{
-				ValueOrExpression: parser.DefaultValueOrExpression{
-					Expr: castExpr,
-				},
-			}, nil
-		default:
-			return nil, fmt.Errorf("unhandled default CastExpr node: %#v", castExpr)
 		}
+		// For other CastExpr cases, check if the cast is semantically meaningful
+		// Strip redundant casts like ::text, ::character varying on string literals
+		// But preserve important casts like ::interval, ::bpchar, ::json, ::jsonb, ::integer[], and numeric casts
+		if expr.Type != nil {
+			typeStr := strings.ToLower(expr.Type.Type)
+			// Check if this is a redundant cast that should be stripped
+			if sqlVal, ok := expr.Expr.(*parser.SQLVal); ok && sqlVal.Type == parser.StrVal {
+				// Handle numeric string literals vs text strings differently
+				if util.IsNumericString(string(sqlVal.Val)) {
+					// PostgreSQL stores negative numbers as string literals with casts like '-20'::integer
+					// Convert these back to plain numeric literals
+					switch typeStr {
+					case "integer", "bigint", "smallint":
+						return &parser.DefaultDefinition{
+							Expression: parser.DefaultExpression{
+								Expr: parser.NewIntVal(sqlVal.Val),
+							},
+						}, nil
+					case "numeric", "decimal", "real", "double precision":
+						return &parser.DefaultDefinition{
+							Expression: parser.DefaultExpression{
+								Expr: parser.NewFloatVal(sqlVal.Val),
+							},
+						}, nil
+					}
+				} else {
+					// Strip redundant text casts on non-numeric string literals
+					switch typeStr {
+					case "text", "character varying", "varchar":
+						return &parser.DefaultDefinition{
+							Expression: parser.DefaultExpression{
+								Expr: sqlVal,
+							},
+						}, nil
+					}
+				}
+			}
+		}
+		// Preserve all other casts (interval, bpchar, json, jsonb, integer[], timestamp, numeric casts on strings, etc.)
+		return &parser.DefaultDefinition{
+			Expression: parser.DefaultExpression{
+				Expr: expr,
+			},
+		}, nil
 	case *parser.CollateExpr:
 		switch expr := expr.Expr.(type) {
 		case *parser.SQLVal:
 			return &parser.DefaultDefinition{
-				ValueOrExpression: parser.DefaultValueOrExpression{
-					Value: expr,
+				Expression: parser.DefaultExpression{
+					Expr: expr,
 				},
 			}, nil
 		case *parser.ArrayConstructor:
 			return &parser.DefaultDefinition{
-				ValueOrExpression: parser.DefaultValueOrExpression{
+				Expression: parser.DefaultExpression{
 					Expr: expr,
 				},
 			}, nil
@@ -1247,12 +1299,53 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 		}
 	case *parser.ComparisonExpr, *parser.FuncExpr:
 		return &parser.DefaultDefinition{
-			ValueOrExpression: parser.DefaultValueOrExpression{
+			Expression: parser.DefaultExpression{
 				Expr: expr,
 			},
 		}, nil
 	default:
 		return nil, fmt.Errorf("unhandled default node: %#v", expr)
+	}
+}
+
+// getRawTypeName extracts the raw type name from a TypeName node with minimal normalization.
+// This preserves type names like "bpchar" instead of normalizing them to "character",
+// but still normalizes PostgreSQL internal names like "int4" to "integer" for consistency.
+func (p PostgresParser) getRawTypeName(node *pgquery.TypeName) string {
+	if node == nil || node.Names == nil {
+		return ""
+	}
+
+	var typeNames []string
+	for _, name := range node.Names {
+		if n, ok := name.Node.(*pgquery.Node_String_); ok {
+			typeNames = append(typeNames, n.String_.Sval)
+		}
+	}
+
+	// Get the last name, skipping schema prefix like "pg_catalog"
+	if len(typeNames) == 0 {
+		return ""
+	}
+
+	typeName := typeNames[len(typeNames)-1]
+
+	// Normalize PostgreSQL internal type names to SQL standard names
+	// but preserve types like "bpchar" that should not be normalized
+	switch typeName {
+	case "int2":
+		return "smallint"
+	case "int4":
+		return "integer"
+	case "int8":
+		return "bigint"
+	case "float4":
+		return "real"
+	case "float8":
+		return "double precision"
+	default:
+		// Keep the type name as-is (including "bpchar", "timetz", "timestamptz", etc.)
+		return typeName
 	}
 }
 
