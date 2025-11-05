@@ -1276,8 +1276,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 // Shared by `CREATE INDEX` and `ALTER TABLE ADD INDEX`.
 // This manages `g.currentTables` unlike `generateDDLsForCreateTable`...
 func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex Index, action string, statement string) ([]string, error) {
-	// Add CONCURRENTLY to CREATE [UNIQUE] INDEX statements if configured (PostgreSQL only)
-	if g.mode == GeneratorModePostgres && action == "CREATE INDEX" && g.config.CreateIndexConcurrently {
+	// Add CONCURRENTLY to CREATE [UNIQUE] INDEX statements (PostgreSQL only)
+	// This can come from either:
+	// 1. The config flag (g.config.CreateIndexConcurrently)
+	// 2. The parsed DDL (desiredIndex.concurrently)
+	if g.mode == GeneratorModePostgres && action == "CREATE INDEX" && (g.config.CreateIndexConcurrently || desiredIndex.concurrently) {
 		re := regexp.MustCompile(`(?i)^(CREATE\s+(?:UNIQUE\s+)?INDEX)(?:\s+CONCURRENTLY)?(\s+.*)`)
 		statement = re.ReplaceAllString(statement, "${1} CONCURRENTLY${2}")
 	}

@@ -682,6 +682,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		vector:            stmt.IndexSpec.Vector,
 		constraint:        stmt.IndexSpec.Constraint,
 		async:             stmt.IndexSpec.Async,
+		concurrently:      stmt.IndexSpec.Concurrently,
 		constraintOptions: constraintOptions,
 		clustered:         stmt.IndexSpec.Clustered,
 		where:             where,

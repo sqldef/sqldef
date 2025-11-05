@@ -439,6 +439,7 @@ func forceEOF(yylex any) {
 %type <partitionBy> partition_by_list
 %type <partition> partition
 %type <boolVals> unique_clustered_opt
+%type <byt> concurrently_opt
 %type <empty> nonclustered_columnstore
 %type <bytes> bool_option_name
 %type <strs> bool_option_name_list
@@ -554,47 +555,7 @@ create_statement:
     $1.TableSpec = $2
     $$ = $1
   }
-| CREATE unique_clustered_opt INDEX sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
-  {
-    $$ = &DDL{
-      Action: CreateIndex,
-      Table: $6,
-      NewName: $6,
-      IndexSpec: &IndexSpec{
-        Name: $4,
-        Type: NewColIdent(""),
-        Unique: bool($2[0]),
-        Clustered: bool($2[1]),
-        Included: $10,
-        Where: NewWhere(WhereStr, $11),
-        Options: $12,
-        Partition: $13,
-      },
-      IndexCols: $8.IndexCols,
-      IndexExpr: $8.IndexExpr,
-    }
-  }
-| CREATE unique_clustered_opt INDEX ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
-  {
-    $$ = &DDL{
-      Action: CreateIndex,
-      Table: $5,
-      NewName: $5,
-      IndexSpec: &IndexSpec{
-        Name: NewColIdent(""),
-        Type: NewColIdent(""),
-        Unique: bool($2[0]),
-        Clustered: bool($2[1]),
-        Included: $9,
-        Where: NewWhere(WhereStr, $10),
-        Options: $11,
-        Partition: $12,
-      },
-      IndexCols: $7.IndexCols,
-      IndexExpr: $7.IndexExpr,
-    }
-  }
-| CREATE unique_clustered_opt INDEX CONCURRENTLY sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
       Action: CreateIndex,
@@ -605,6 +566,8 @@ create_statement:
         Type: NewColIdent(""),
         Unique: bool($2[0]),
         Clustered: bool($2[1]),
+        Async: $4 == byte(2),
+        Concurrently: $4 == byte(1),
         Included: $11,
         Where: NewWhere(WhereStr, $12),
         Options: $13,
@@ -614,13 +577,55 @@ create_statement:
       IndexExpr: $9.IndexExpr,
     }
   }
-/* For PostgreSQL - CONCURRENTLY with USING */
-| CREATE unique_clustered_opt INDEX CONCURRENTLY sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+  {
+    $$ = &DDL{
+      Action: CreateIndex,
+      Table: $6,
+      NewName: $6,
+      IndexSpec: &IndexSpec{
+        Name: NewColIdent(""),
+        Type: NewColIdent(""),
+        Unique: bool($2[0]),
+        Clustered: bool($2[1]),
+        Async: $4 == byte(2),
+        Concurrently: $4 == byte(1),
+        Included: $10,
+        Where: NewWhere(WhereStr, $11),
+        Options: $12,
+        Partition: $13,
+      },
+      IndexCols: $8.IndexCols,
+      IndexExpr: $8.IndexExpr,
+    }
+  }
+/* For MySQL */
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id USING sql_id ON table_name '(' index_column_list ')' index_option_opt
+  {
+    $$ = &DDL{
+      Action: CreateIndex,
+      Table: $9,
+      NewName: $9,
+      IndexSpec: &IndexSpec{
+        Name: $5,
+        Type: $7,
+        Unique: bool($2[0]),
+        Async: $4 == byte(2),
+        Concurrently: $4 == byte(1),
+        Options: $13,
+      },
+      IndexCols: $11,
+    }
+  }
+/* For PostgreSQL */
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt
   {
     indexSpec := &IndexSpec{
       Name: $5,
       Type: $9,
       Unique: bool($2[0]),
+      Async: $4 == byte(2),
+      Concurrently: $4 == byte(1),
       Where: NewWhere(WhereStr, $14),
       Included: $13,
     }
@@ -634,87 +639,6 @@ create_statement:
       IndexSpec: indexSpec,
       IndexCols: $11.IndexCols,
       IndexExpr: $11.IndexExpr,
-    }
-  }
-/* For Aurora DSQL */
-| CREATE unique_clustered_opt INDEX ASYNC sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
-  {
-    $$ = &DDL{
-      Action: CreateIndex,
-      Table: $7,
-      NewName: $7,
-      IndexSpec: &IndexSpec{
-        Name: $5,
-        Type: NewColIdent(""),
-        Unique: bool($2[0]),
-        Clustered: bool($2[1]),
-        Async: true,
-        Included: $11,
-        Where: NewWhere(WhereStr, $12),
-        Options: $13,
-        Partition: $14,
-      },
-      IndexCols: $9.IndexCols,
-      IndexExpr: $9.IndexExpr,
-    }
-  }
-| CREATE unique_clustered_opt INDEX ASYNC ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
-  {
-    $$ = &DDL{
-      Action: CreateIndex,
-      Table: $6,
-      NewName: $6,
-      IndexSpec: &IndexSpec{
-        Name: NewColIdent(""),
-        Type: NewColIdent(""),
-        Unique: bool($2[0]),
-        Clustered: bool($2[1]),
-        Async: true,
-        Included: $10,
-        Where: NewWhere(WhereStr, $11),
-        Options: $12,
-        Partition: $13,
-      },
-      IndexCols: $8.IndexCols,
-      IndexExpr: $8.IndexExpr,
-    }
-  }
-/* For MySQL */
-| CREATE unique_clustered_opt INDEX sql_id USING sql_id ON table_name '(' index_column_list ')' index_option_opt
-  {
-    $$ = &DDL{
-      Action: CreateIndex,
-      Table: $8,
-      NewName: $8,
-      IndexSpec: &IndexSpec{
-        Name: $4,
-        Type: $6,
-        Unique: bool($2[0]),
-        Options: $12,
-      },
-      IndexCols: $10,
-    }
-  }
-/* For PostgreSQL */
-| CREATE unique_clustered_opt INDEX sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt
-  {
-    indexSpec := &IndexSpec{
-      Name: $4,
-      Type: $8,
-      Unique: bool($2[0]),
-      Where: NewWhere(WhereStr, $13),
-      Included: $12,
-    }
-    if $14 != nil && len($14) > 0 {
-      indexSpec.Options = $14
-    }
-    $$ = &DDL{
-      Action: CreateIndex,
-      Table: $6,
-      NewName: $6,
-      IndexSpec: indexSpec,
-      IndexCols: $10.IndexCols,
-      IndexExpr: $10.IndexExpr,
     }
   }
 /* For SQL Server */
@@ -3872,6 +3796,20 @@ unique_clustered_opt:
 | UNIQUE NONCLUSTERED
   {
     $$ = []BoolVal { true, false }
+  }
+
+/* For PostgreSQL and Aurora DSQL */
+concurrently_opt:
+  {
+    $$ = byte(0) // no concurrency mode
+  }
+| CONCURRENTLY
+  {
+    $$ = byte(1) // PostgreSQL CONCURRENTLY
+  }
+| ASYNC
+  {
+    $$ = byte(2) // Aurora DSQL ASYNC
   }
 
 /* For SQL Server */

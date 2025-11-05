@@ -117,6 +117,7 @@ type Index struct {
 	vector            bool // for MariaDB vector indexes
 	constraint        bool // for Postgres/MSSQL `ADD CONSTRAINT UNIQUE`
 	async             bool // for Aurora DSQL
+	concurrently      bool // for PostgreSQL
 	constraintOptions *ConstraintOptions
 	where             string         // for Postgres `Partial Indexes`
 	included          []string       // for MSSQL

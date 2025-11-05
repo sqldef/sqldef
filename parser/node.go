@@ -972,9 +972,10 @@ type IndexSpec struct {
 	Primary           bool
 	Vector            bool // for MariaDB vector indexes
 	Constraint        bool
-	Async             bool // for Aurora DSQL
-	Clustered         bool // for MSSQL
-	ColumnStore       bool // for MSSQL
+	Async             bool        // for Aurora DSQL
+	Concurrently      bool        // for PostgreSQL
+	Clustered         bool        // for MSSQL
+	ColumnStore       bool        // for MSSQL
 	Included          []ColIdent
 	Where             *Where
 	Options           []*IndexOption
