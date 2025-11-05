@@ -1,3 +1,6 @@
+## [v3.5.0](https://github.com/sqldef/sqldef/compare/v3.4.0...v3.5.0) - 2025-11-05
+- psqldef: improve the generic parser to process all the existing tests by @gfx in https://github.com/sqldef/sqldef/pull/911
+
 ## [v3.4.0](https://github.com/sqldef/sqldef/compare/v3.3.0...v3.4.0) - 2025-11-04
 - mention to https://github.com/sqldef/sqldef-preview-action by @gfx in https://github.com/sqldef/sqldef/pull/904
 - [internal] PSQLDEF_PARSER=generic to use only the generic parser for psqldef by @gfx in https://github.com/sqldef/sqldef/pull/906
