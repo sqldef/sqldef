@@ -5127,6 +5127,18 @@ function_call_keyword:
   {
     $$ = &FuncExpr{Name: NewColIdent(string($1))}
   }
+| DATE openb select_expression_list closeb
+  {
+    $$ = &FuncExpr{Name: NewColIdent("date"), Exprs: $3}
+  }
+| TIME openb select_expression_list closeb
+  {
+    $$ = &FuncExpr{Name: NewColIdent("time"), Exprs: $3}
+  }
+| TIMESTAMP openb select_expression_list closeb
+  {
+    $$ = &FuncExpr{Name: NewColIdent("timestamp"), Exprs: $3}
+  }
 
 /*
  * Function calls using non reserved keywords but with special syntax forms.

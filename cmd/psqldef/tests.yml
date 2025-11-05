@@ -784,6 +784,22 @@ CreateMaterializedViewWithUnionAllMultiple:
     SELECT 2 AS id, 'b' AS name
     UNION ALL
     SELECT 3 AS id, 'c' AS name;
+ViewWithDateFunction:
+  desired: |
+    CREATE TABLE events (
+      created_at timestamp
+    );
+    CREATE VIEW event_dates AS
+      SELECT date(created_at) AS event_date
+      FROM events;
+MaterializedViewWithDateFunction:
+  desired: |
+    CREATE TABLE activities (
+      occurred_at timestamp
+    );
+    CREATE MATERIALIZED VIEW activity_dates AS
+      SELECT date(occurred_at) AS activity_date
+      FROM activities;
 Comment:
   current: |
     CREATE TABLE "public"."hoge" (
