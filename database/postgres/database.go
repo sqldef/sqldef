@@ -170,6 +170,8 @@ func (d *PostgresDatabase) views() ([]string, error) {
 		definition = strings.ReplaceAll(definition, "\n", " ")
 		definition = suffixSemicolon.ReplaceAllString(definition, "")
 		definition = spaces.ReplaceAllString(definition, " ")
+		// Normalize PostgreSQL-specific syntax for generic parser compatibility
+		definition = normalizeDatePartToExtract(definition)
 		ddls = append(
 			ddls, fmt.Sprintf(
 				"CREATE VIEW %s AS %s;", schema+"."+name, definition,
@@ -208,6 +210,8 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 		definition = strings.ReplaceAll(definition, "\n", " ")
 		definition = suffixSemicolon.ReplaceAllString(definition, "")
 		definition = spaces.ReplaceAllString(definition, " ")
+		// Normalize PostgreSQL-specific syntax for generic parser compatibility
+		definition = normalizeDatePartToExtract(definition)
 		ddls = append(
 			ddls, fmt.Sprintf(
 				"CREATE MATERIALIZED VIEW %s AS %s;", schema+"."+name, definition,
@@ -626,6 +630,33 @@ func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 		indexes = append(indexes, indexdef)
 	}
 	return indexes, nil
+}
+
+// normalizeDatePartToExtract converts PostgreSQL's date_part() function calls to EXTRACT() expressions
+// PostgreSQL stores EXTRACT(field FROM source) as date_part('field'::text, source) internally.
+// The generic parser handles EXTRACT natively but parses date_part as a generic function call,
+// so we need to convert it back to EXTRACT for idempotent schema comparisons.
+func normalizeDatePartToExtract(sql string) string {
+	// Match date_part('field'::text, ...) or date_part('field', ...)
+	// The field can be: year, month, day, hour, minute, second, epoch, dow, doy, week, quarter, etc.
+	// We need to handle nested function calls and complex expressions as the second argument
+
+	// Use a regex that captures the field name and finds the matching closing parenthesis
+	// Pattern: date_part('field'::text, source) or date_part('field', source)
+	re := regexp.MustCompile(`date_part\('([^']+)'(?:::text)?,\s*([^)]+)\)`)
+
+	// Replace with EXTRACT(field FROM source)
+	sql = re.ReplaceAllStringFunc(sql, func(match string) string {
+		submatches := re.FindStringSubmatch(match)
+		if len(submatches) == 3 {
+			field := submatches[1]
+			source := strings.TrimSpace(submatches[2])
+			return fmt.Sprintf("EXTRACT(%s FROM %s)", field, source)
+		}
+		return match
+	})
+
+	return sql
 }
 
 // normalizePostgresTypeCasts normalizes PostgreSQL's verbose type cast syntax for generic parser compatibility.
