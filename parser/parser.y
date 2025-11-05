@@ -148,7 +148,7 @@ func forceEOF(yylex any) {
 }
 
 %token LEX_ERROR
-%left <bytes> UNION
+%left <bytes> UNION INTERSECT EXCEPT
 %token <bytes> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER BY LIMIT OFFSET FOR DECLARE
 %token <bytes> ALL ANY SOME DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SRID SET LOCK KEYS
 %token <bytes> ROWID STRICT
@@ -290,7 +290,7 @@ func forceEOF(yylex any) {
 %token <bytes> DEFINER INVOKER
 
 %type <statement> statement
-%type <selStmt> select_statement base_select union_lhs union_rhs
+%type <selStmt> select_statement select_statement_core base_select union_rhs
 %type <withClause> with_clause_opt with_clause
 %type <commonTableExprs> common_table_expr_list
 %type <commonTableExpr> common_table_expr
@@ -1432,18 +1432,38 @@ common_table_expr:
   }
 
 select_statement:
-  with_clause_opt base_select order_by_opt limit_opt lock_opt
+  with_clause_opt select_statement_core order_by_opt limit_opt lock_opt
   {
-    sel := $2.(*Select)
-    sel.OrderBy = $3
-    sel.Limit = $4
-    sel.Lock = $5
-    sel.With = $1
-    $$ = sel
+    switch core := $2.(type) {
+    case *Select:
+      core.OrderBy = $3
+      core.Limit = $4
+      core.Lock = $5
+      core.With = $1
+      $$ = core
+    case *Union:
+      core.OrderBy = $3
+      core.Limit = $4
+      core.Lock = $5
+      core.With = $1
+      $$ = core
+    case *ParenSelect:
+      // ParenSelect should not have OrderBy/Limit/Lock at this level
+      $$ = core
+    default:
+      $$ = $2
+    }
   }
-| with_clause_opt union_lhs union_op union_rhs order_by_opt limit_opt lock_opt
+
+// select_statement_core is the SELECT body that can include set operations (UNION, INTERSECT, EXCEPT)
+select_statement_core:
+  base_select
   {
-    $$ = &Union{Type: $3, Left: $2, Right: $4, OrderBy: $5, Limit: $6, Lock: $7, With: $1}
+    $$ = $1
+  }
+| select_statement_core union_op union_rhs
+  {
+    $$ = &Union{Type: $2, Left: $1, Right: $3}
   }
 
 // base_select is an unparenthesized SELECT with no order by clause or beyond.
@@ -1453,24 +1473,29 @@ base_select:
     $$ = &Select{Comments: Comments($2), Cache: $3, Distinct: $4, Hints: $5, SelectExprs: $6, From: $7, Where: NewWhere(WhereStr, $8), GroupBy: GroupBy($9), Having: NewWhere(HavingStr, $10)}
   }
 
-union_lhs:
-  select_statement
-  {
-    $$ = $1
-  }
-| openb select_statement closeb
-  {
-    $$ = &ParenSelect{Select: $2}
-  }
-
 union_rhs:
   base_select
   {
     $$ = $1
   }
-| openb select_statement closeb
+| openb with_clause_opt select_statement_core order_by_opt limit_opt lock_opt closeb
   {
-    $$ = &ParenSelect{Select: $2}
+    switch core := $3.(type) {
+    case *Select:
+      core.OrderBy = $4
+      core.Limit = $5
+      core.Lock = $6
+      core.With = $2
+      $$ = &ParenSelect{Select: core}
+    case *Union:
+      core.OrderBy = $4
+      core.Limit = $5
+      core.Lock = $6
+      core.With = $2
+      $$ = &ParenSelect{Select: core}
+    default:
+      $$ = &ParenSelect{Select: core}
+    }
   }
 
 
@@ -4114,6 +4139,22 @@ union_op:
 | UNION DISTINCT
   {
     $$ = UnionDistinctStr
+  }
+| INTERSECT
+  {
+    $$ = IntersectStr
+  }
+| INTERSECT ALL
+  {
+    $$ = IntersectAllStr
+  }
+| EXCEPT
+  {
+    $$ = ExceptStr
+  }
+| EXCEPT ALL
+  {
+    $$ = ExceptAllStr
   }
 
 cache_opt:

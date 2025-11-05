@@ -756,6 +756,34 @@ MaterializedViewWithMultipleCTEs:
     SELECT au.user_id, uc.session_count
     FROM active_users au
     JOIN user_counts uc ON au.user_id = uc.user_id;
+# Test cases for set operations in views (UNION, INTERSECT, EXCEPT)
+# These currently fail with the generic parser
+CreateViewWithUnion:
+  desired: |
+    CREATE VIEW test_view AS SELECT 1 AS id UNION SELECT 2 AS id;
+CreateViewWithUnionAll:
+  desired: |
+    CREATE VIEW test_view AS SELECT 1 AS id UNION ALL SELECT 2 AS id;
+CreateViewWithIntersect:
+  desired: |
+    CREATE VIEW test_view AS SELECT 1 AS id INTERSECT SELECT 2 AS id;
+CreateViewWithExcept:
+  desired: |
+    CREATE VIEW test_view AS SELECT 1 AS id EXCEPT SELECT 2 AS id;
+CreateMaterializedViewWithUnion:
+  desired: |
+    CREATE MATERIALIZED VIEW test_view AS SELECT 1 AS id UNION SELECT 2 AS id;
+CreateMaterializedViewWithUnionAll:
+  desired: |
+    CREATE MATERIALIZED VIEW test_view AS SELECT 1 AS id UNION ALL SELECT 2 AS id;
+CreateMaterializedViewWithUnionAllMultiple:
+  desired: |
+    CREATE MATERIALIZED VIEW test_view AS
+    SELECT 1 AS id, 'a' AS name
+    UNION ALL
+    SELECT 2 AS id, 'b' AS name
+    UNION ALL
+    SELECT 3 AS id, 'c' AS name;
 Comment:
   current: |
     CREATE TABLE "public"."hoge" (

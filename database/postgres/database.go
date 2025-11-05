@@ -167,7 +167,7 @@ func (d *PostgresDatabase) views() ([]string, error) {
 			continue
 		}
 		definition = strings.TrimSpace(definition)
-		definition = strings.ReplaceAll(definition, "\n", "")
+		definition = strings.ReplaceAll(definition, "\n", " ")
 		definition = suffixSemicolon.ReplaceAllString(definition, "")
 		definition = spaces.ReplaceAllString(definition, " ")
 		ddls = append(
@@ -205,7 +205,7 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 			continue
 		}
 		definition = strings.TrimSpace(definition)
-		definition = strings.ReplaceAll(definition, "\n", "")
+		definition = strings.ReplaceAll(definition, "\n", " ")
 		definition = suffixSemicolon.ReplaceAllString(definition, "")
 		definition = spaces.ReplaceAllString(definition, " ")
 		ddls = append(

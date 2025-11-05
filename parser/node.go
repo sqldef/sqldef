@@ -270,6 +270,10 @@ const (
 	UnionStr         = "union"
 	UnionAllStr      = "union all"
 	UnionDistinctStr = "union distinct"
+	IntersectStr     = "intersect"
+	IntersectAllStr  = "intersect all"
+	ExceptStr        = "except"
+	ExceptAllStr     = "except all"
 )
 
 // addOrder adds an order by element
