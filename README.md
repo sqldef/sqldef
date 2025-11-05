@@ -63,6 +63,37 @@ Apply the necessary DDLs to transform current schema to desired state.
 
 Running again shows no changes needed - operations are idempotent.
 
+### Offline Mode
+
+sqldef can compare two SQL files without connecting to a database. This is useful for CI/CD pipelines, schema validation, and generating migration scripts.
+
+To use offline mode, specify a `.sql` file as the database argument:
+
+```shell
+# Compare current.sql with desired.sql
+$sqldef current.sql < desired.sql
+```
+
+See the command documentation for more details on offline mode features.
+
+### Examples
+
+See practical examples in the [example](./example) directory:
+
+```shell
+# Database mode - apply schema changes to a running database
+./example/run.sh psqldef      # PostgreSQL
+./example/run.sh mysqldef     # MySQL/MariaDB
+./example/run.sh sqlite3def   # SQLite3
+./example/run.sh mssqldef     # SQL Server
+
+# Offline mode - compare schema files without database connection
+./example/run-offline.sh psqldef      # PostgreSQL
+./example/run-offline.sh mysqldef     # MySQL/MariaDB
+./example/run-offline.sh sqlite3def   # SQLite3
+./example/run-offline.sh mssqldef     # SQL Server
+```
+
 ### Command Documentation
 
 * [mysqldef](./cmd-mysqldef.md)

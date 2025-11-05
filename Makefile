@@ -25,7 +25,7 @@ else
   GOTEST := go run gotest.tools/gotestsum@latest --hide-summary=skipped -- $(GOTESTFLAGS)
 endif
 
-.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef test-cov test-cov-xml test-core test
+.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef test-cov test-cov-xml test-core test test-example test-example-offline
 
 all: build
 
@@ -101,6 +101,18 @@ test-mssqldef:
 
 test-core:
 	$(GOTEST) ./parser ./schema ./util
+
+test-example-offline:
+	./example/run-offline.sh psqldef
+	./example/run-offline.sh mysqldef
+	./example/run-offline.sh sqlite3def
+	./example/run-offline.sh mssqldef
+
+test-example:
+	./example/run.sh psqldef
+	./example/run.sh mysqldef
+	./example/run.sh sqlite3def
+	./example/run.sh mssqldef
 
 test-cov:
 	rm -rf coverage && mkdir -p coverage
