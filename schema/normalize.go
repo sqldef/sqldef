@@ -406,8 +406,8 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 	}
 }
 
-// normalizeExpr normalizes an expression in a view definition
-// This is similar to normalizeCheckExpr but tailored for view definitions
+// normalizeExpr normalizes an expression.
+// This is similar to normalizeCheckExpr but tailored for other contexts.
 func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 	if expr == nil {
 		return nil

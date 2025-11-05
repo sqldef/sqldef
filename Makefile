@@ -103,7 +103,7 @@ test-core:
 	$(GOTEST) ./parser ./schema ./util
 
 test-cov:
-	mkdir -p coverage
+	rm -rf coverage && mkdir -p coverage
 	GOCOVERDIR=$(shell pwd)/coverage go test $(GOTESTFLAGS) -count=1 ./...
 	go tool covdata textfmt -i=coverage -o coverage.out
 	@grep -v -e "parser.y" -e "parser/parser.go" -e "testutils.go" coverage.out > coverage_filtered.out
