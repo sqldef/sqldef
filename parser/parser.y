@@ -130,8 +130,6 @@ func forceEOF(yylex any) {
   localVariable            *LocalVariable
   localVariables           []*LocalVariable
   arrayConstructor         *ArrayConstructor
-  arrayElements            Exprs
-  arrayElement             Expr
   withClause               *With
   commonTableExprs         []*CommonTableExpr
   commonTableExpr          *CommonTableExpr
