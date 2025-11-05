@@ -256,7 +256,7 @@ func forceEOF(yylex any) {
 %token <bytes> UTC_DATE UTC_TIME UTC_TIMESTAMP
 %token <bytes> REPLACE
 %token <bytes> CONVERT CAST
-%token <bytes> SUBSTR SUBSTRING
+%token <bytes> SUBSTR SUBSTRING EXTRACT
 %token <bytes> GROUP_CONCAT SEPARATOR
 %token <bytes> INHERIT
 %token <bytes> LEAD LAG
@@ -319,7 +319,7 @@ func forceEOF(yylex any) {
 %type <expr> condition
 %type <boolVal> boolean_value
 %type <bytes> int_value
-%type <str> compare
+%type <str> compare extract_field
 %type <ins> insert_data
 %type <expr> value value_expression
 %type <expr> function_call_keyword function_call_nonkeyword function_call_generic function_call_conflict
@@ -2000,6 +2000,7 @@ module_arguments:
 | CONVERT module_arguments
 | SUBSTR module_arguments
 | SUBSTRING module_arguments
+| EXTRACT module_arguments
 | DEFAULT module_arguments
 | CONSTRAINT module_arguments
 | PRIMARY module_arguments
@@ -5048,6 +5049,10 @@ function_call_keyword:
   {
     $$ = &SubstrExpr{Name: $3, From: $5, To: $7}
   }
+| EXTRACT openb extract_field FROM value_expression closeb
+  {
+    $$ = &ExtractExpr{Field: $3, Source: $5}
+  }
 | MATCH openb select_expression_list closeb AGAINST openb value_expression match_option closeb
   {
     $$ = &MatchExpr{Columns: $3, Expr: $7, Option: $8}
@@ -5157,6 +5162,16 @@ function_call_conflict:
 | REPLACE openb select_expression_list closeb
   {
     $$ = &FuncExpr{Name: NewColIdent("replace"), Exprs: $3}
+  }
+
+extract_field:
+  sql_id
+  {
+    $$ = $1.String()
+  }
+| YEAR
+  {
+    $$ = string($1)
   }
 
 match_option:
@@ -6093,6 +6108,7 @@ reserved_keyword:
 | ESCAPE
 | EXEC
 | EXECUTE
+| EXTRACT
 | EXISTS
 | EXPLAIN
 | FALSE

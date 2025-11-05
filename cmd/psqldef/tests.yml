@@ -3742,3 +3742,52 @@ CreateIndexGenericStorageParameter:
       data text
     );
     CREATE INDEX idx_data ON test_table USING btree (data) WITH (deduplicate_items='on');
+
+# EXTRACT function tests - these test the EXTRACT(field FROM source) syntax
+ExtractBasicFields:
+  desired: |
+    CREATE TABLE events (
+      id bigint,
+      created_at timestamp
+    );
+    CREATE VIEW extract_view AS
+      SELECT
+        EXTRACT(year FROM created_at) AS year_value,
+        EXTRACT(month FROM created_at) AS month_value,
+        EXTRACT(day FROM created_at) AS day_value,
+        EXTRACT(hour FROM created_at) AS hour_value,
+        EXTRACT(minute FROM created_at) AS minute_value,
+        EXTRACT(second FROM created_at) AS second_value,
+        EXTRACT(epoch FROM created_at) AS epoch_value,
+        EXTRACT(dow FROM created_at) AS dow_value,
+        EXTRACT(doy FROM created_at) AS doy_value,
+        EXTRACT(week FROM created_at) AS week_value,
+        EXTRACT(quarter FROM created_at) AS quarter_value
+      FROM events;
+
+ExtractWithAge:
+  desired: |
+    CREATE TABLE user_info (
+      user_id varchar,
+      birthdate timestamp with time zone
+    );
+    CREATE VIEW age_view AS
+      SELECT
+        user_id,
+        EXTRACT(year FROM age(birthdate)) AS age_years,
+        EXTRACT(month FROM age(birthdate)) AS age_months
+      FROM user_info;
+
+ExtractInMaterializedView:
+  desired: |
+    CREATE TABLE events (
+      event_id bigint,
+      event_timestamp timestamp
+    );
+    CREATE MATERIALIZED VIEW event_stats AS
+      SELECT
+        EXTRACT(year FROM event_timestamp) AS event_year,
+        EXTRACT(month FROM event_timestamp) AS event_month,
+        COUNT(*) AS event_count
+      FROM events
+      GROUP BY event_year, event_month;

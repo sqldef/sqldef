@@ -207,6 +207,7 @@ var keywords = map[string]int{
 	"explain":                EXPLAIN,
 	"extension":              EXTENSION,
 	"expansion":              EXPANSION,
+	"extract":                EXTRACT,
 	"extended":               EXTENDED,
 	"false":                  FALSE,
 	"fetch":                  FETCH,

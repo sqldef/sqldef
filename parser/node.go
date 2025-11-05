@@ -1519,6 +1519,7 @@ func (*UpdateFuncExpr) iExpr()      {}
 func (*CastExpr) iExpr()            {}
 func (*ConvertExpr) iExpr()         {}
 func (*SubstrExpr) iExpr()          {}
+func (*ExtractExpr) iExpr()         {}
 func (*ConvertUsingExpr) iExpr()    {}
 func (*MatchExpr) iExpr()           {}
 func (*GroupConcatExpr) iExpr()     {}
@@ -2089,6 +2090,17 @@ func (node *SubstrExpr) Format(buf *nodeBuffer) {
 	} else {
 		buf.Printf("substr(%v, %v, %v)", node.Name, node.From, node.To)
 	}
+}
+
+// ExtractExpr represents EXTRACT(field FROM source)
+type ExtractExpr struct {
+	Field  string
+	Source Expr
+}
+
+// Format formats the node.
+func (node *ExtractExpr) Format(buf *nodeBuffer) {
+	buf.Printf("EXTRACT(%s FROM %v)", node.Field, node.Source)
 }
 
 // CastExpr represents expr::type
