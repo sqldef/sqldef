@@ -105,7 +105,7 @@ func forceEOF(yylex any) {
   columnType               ColumnType
   colKeyOpt                ColumnKeyOption
   optVal                   *SQLVal
-  defaultExpression DefaultExpression
+  defaultExpression        DefaultExpression
   LengthScaleOption        LengthScaleOption
   columnDefinition         *ColumnDefinition
   checkDefinition          *CheckDefinition
