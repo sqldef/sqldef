@@ -131,12 +131,12 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			scope := util.TransformSlice(stmt.Policy.To, func(to parser.ColIdent) string {
 				return to.String()
 			})
-			var using, withCheck string
+			var using, withCheck parser.Expr
 			if stmt.Policy.Using != nil {
-				using = parser.String(stmt.Policy.Using.Expr)
+				using = stmt.Policy.Using.Expr
 			}
 			if stmt.Policy.WithCheck != nil {
-				withCheck = parser.String(stmt.Policy.WithCheck.Expr)
+				withCheck = stmt.Policy.WithCheck.Expr
 			}
 			return &AddPolicy{
 				statement: ddl,

@@ -1450,7 +1450,7 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy 
 		currentTable.policies = append(currentTable.policies, desiredPolicy)
 	} else {
 		// policy found. If it's different, drop and add or alter policy.
-		if !areSamePolicies(*currentPolicy, desiredPolicy) {
+		if !g.areSamePolicies(*currentPolicy, desiredPolicy) {
 			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLName(currentPolicy.name), g.escapeTableName(currentTable.name)))
 			ddls = append(ddls, statement)
 		}
@@ -3195,13 +3195,16 @@ func (g *Generator) areSameCheckDefinition(checkA *CheckDefinition, checkB *Chec
 // This is needed because some databases (like MySQL) add extra parentheses around CHECK expressions.
 // It preserves parentheses around OR expressions to maintain correct operator precedence.
 func unwrapOutermostParenExpr(expr parser.Expr) parser.Expr {
-	if paren, ok := expr.(*parser.ParenExpr); ok {
-		// Don't unwrap if inner expression is OR (to preserve operator precedence)
-		if _, isOr := paren.Expr.(*parser.OrExpr); !isOr {
-			return paren.Expr
+	for {
+		paren, ok := expr.(*parser.ParenExpr)
+		if !ok {
+			return expr
 		}
+		if _, isOr := paren.Expr.(*parser.OrExpr); isOr {
+			return expr
+		}
+		expr = paren.Expr
 	}
-	return expr
 }
 
 func (g *Generator) buildForeignKeyDDL(tableName string, fk *ForeignKey) string {
@@ -3614,18 +3617,34 @@ func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion
 	return true
 }
 
-func areSamePolicies(policyA, policyB Policy) bool {
+func (g *Generator) areSameExprs(exprA, exprB parser.Expr) bool {
+	if exprA == nil && exprB == nil {
+		return true
+	}
+	if exprA == nil || exprB == nil {
+		return false
+	}
+	normalizedA := normalizeExpr(exprA, g.mode)
+	normalizedB := normalizeExpr(exprB, g.mode)
+	normalizedA = unwrapOutermostParenExpr(normalizedA)
+	normalizedB = unwrapOutermostParenExpr(normalizedB)
+
+	// TODO: case-insensitive comparison is not always correct
+	return strings.EqualFold(parser.String(normalizedA), parser.String(normalizedB))
+}
+
+func (g *Generator) areSamePolicies(policyA, policyB Policy) bool {
 	if !strings.EqualFold(policyA.scope, policyB.scope) {
 		return false
 	}
 	if !strings.EqualFold(policyA.permissive, policyB.permissive) {
 		return false
 	}
-	if normalizeUsing(policyA.using) != normalizeUsing(policyB.using) {
-		return fmt.Sprintf("(%s)", policyA.using) == policyB.using
+	if !g.areSameExprs(policyA.using, policyB.using) {
+		return false
 	}
-	if !strings.EqualFold(policyA.withCheck, policyB.withCheck) {
-		return fmt.Sprintf("(%s)", policyA.withCheck) == policyB.withCheck
+	if !g.areSameExprs(policyA.withCheck, policyB.withCheck) {
+		return false
 	}
 	if len(policyA.roles) != len(policyB.roles) {
 		return false

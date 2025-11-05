@@ -195,8 +195,8 @@ type Policy struct {
 	permissive    string
 	scope         string
 	roles         []string
-	using         string
-	withCheck     string
+	using         parser.Expr
+	withCheck     parser.Expr
 }
 
 type TablePrivilege struct {
