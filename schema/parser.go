@@ -91,14 +91,13 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				index:     index,
 			}, nil
 		} else if stmt.Action == parser.AddForeignKey {
-			indexColumns := []string{}
-			for _, indexColumn := range stmt.ForeignKey.IndexColumns {
-				indexColumns = append(indexColumns, indexColumn.String())
-			}
-			referenceColumns := []string{}
-			for _, referenceColumn := range stmt.ForeignKey.ReferenceColumns {
-				referenceColumns = append(referenceColumns, referenceColumn.String())
-			}
+
+			indexColumns := util.TransformSlice(stmt.ForeignKey.IndexColumns, func(indexColumn parser.ColIdent) string {
+				return indexColumn.String()
+			})
+			referenceColumns := util.TransformSlice(stmt.ForeignKey.ReferenceColumns, func(referenceColumn parser.ColIdent) string {
+				return referenceColumn.String()
+			})
 			var constraintOptions *ConstraintOptions
 			if stmt.ForeignKey.ConstraintOptions != nil {
 				constraintOptions = &ConstraintOptions{
@@ -353,13 +352,10 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		// Build the foreign key object
 		indexColumns := []string{parsedCol.Name.String()}
 
-		// Extract reference column names
-		referenceColumns := []string{}
-		for _, refCol := range parsedCol.Type.ReferenceNames {
-			referenceColumns = append(referenceColumns, refCol.String())
-		}
+		referenceColumns := util.TransformSlice(parsedCol.Type.ReferenceNames, func(refCol parser.ColIdent) string {
+			return refCol.String()
+		})
 
-		// Generate constraint name if not explicitly provided
 		constraintName := buildPostgresConstraintName(stmt.NewName.Name.String(), parsedCol.Name.String(), "fkey")
 
 		// Only create constraintOptions if DEFERRABLE or INITIALLY DEFERRED is explicitly set to true
@@ -441,16 +437,12 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			}
 		}
 
-		indexOptions := []IndexOption{}
-		for _, option := range indexDef.Options {
-			indexOptions = append(
-				indexOptions,
-				IndexOption{
-					optionName: option.Name,
-					value:      parseValue(option.Value),
-				},
-			)
-		}
+		indexOptions := util.TransformSlice(indexDef.Options, func(option *parser.IndexOption) IndexOption {
+			return IndexOption{
+				optionName: option.Name,
+				value:      parseValue(option.Value),
+			}
+		})
 
 		indexPartition := IndexPartition{}
 		if indexDef.Partition != nil {
@@ -528,15 +520,13 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	}
 
 	for _, foreignKeyDef := range stmt.TableSpec.ForeignKeys {
-		indexColumns := []string{}
-		for _, indexColumn := range foreignKeyDef.IndexColumns {
-			indexColumns = append(indexColumns, indexColumn.String())
-		}
+		indexColumns := util.TransformSlice(foreignKeyDef.IndexColumns, func(indexColumn parser.ColIdent) string {
+			return indexColumn.String()
+		})
 
-		referenceColumns := []string{}
-		for _, referenceColumn := range foreignKeyDef.ReferenceColumns {
-			referenceColumns = append(referenceColumns, referenceColumn.String())
-		}
+		referenceColumns := util.TransformSlice(foreignKeyDef.ReferenceColumns, func(referenceColumn parser.ColIdent) string {
+			return referenceColumn.String()
+		})
 
 		var constraintOptions *ConstraintOptions
 		if foreignKeyDef.ConstraintOptions != nil {
@@ -622,21 +612,16 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		where = parser.String(expr)
 	}
 
-	includedColumns := []string{}
-	for _, includedColumn := range stmt.IndexSpec.Included {
-		includedColumns = append(includedColumns, includedColumn.String())
-	}
+	includedColumns := util.TransformSlice(stmt.IndexSpec.Included, func(includedColumn parser.ColIdent) string {
+		return includedColumn.String()
+	})
 
-	indexOptions := []IndexOption{}
-	for _, option := range stmt.IndexSpec.Options {
-		indexOptions = append(
-			indexOptions,
-			IndexOption{
-				optionName: option.Name,
-				value:      parseValue(option.Value),
-			},
-		)
-	}
+	indexOptions := util.TransformSlice(stmt.IndexSpec.Options, func(option *parser.IndexOption) IndexOption {
+		return IndexOption{
+			optionName: option.Name,
+			value:      parseValue(option.Value),
+		}
+	})
 
 	indexParition := IndexPartition{}
 	if stmt.IndexSpec.Partition != nil {
