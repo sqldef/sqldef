@@ -789,6 +789,26 @@ func normalizeOrderBy(orderBy parser.OrderBy, mode GeneratorMode) parser.OrderBy
 	return normalized
 }
 
+// normalizeWith normalizes a WITH clause (Common Table Expressions) for comparison.
+func normalizeWith(with *parser.With, mode GeneratorMode) *parser.With {
+	if with == nil {
+		return nil
+	}
+
+	normalizedCTEs := make([]*parser.CommonTableExpr, len(with.CTEs))
+	for i, cte := range with.CTEs {
+		normalizedCTEs[i] = &parser.CommonTableExpr{
+			Name:       cte.Name,
+			Columns:    cte.Columns,
+			Definition: normalizeViewDefinition(cte.Definition, mode),
+		}
+	}
+
+	return &parser.With{
+		CTEs: normalizedCTEs,
+	}
+}
+
 // normalizeViewDefinition normalizes a view definition AST for comparison.
 // This function removes database-specific formatting differences that don't affect the logical meaning.
 func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode) parser.SelectStatement {
@@ -811,6 +831,7 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode) pa
 			OrderBy:     normalizeOrderBy(s.OrderBy, mode),
 			Limit:       s.Limit,
 			Lock:        s.Lock,
+			With:        normalizeWith(s.With, mode),
 		}
 	case *parser.Union:
 		return &parser.Union{
@@ -820,6 +841,7 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode) pa
 			OrderBy: normalizeOrderBy(s.OrderBy, mode),
 			Limit:   s.Limit,
 			Lock:    s.Lock,
+			With:    normalizeWith(s.With, mode),
 		}
 	default:
 		return stmt

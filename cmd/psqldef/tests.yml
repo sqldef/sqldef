@@ -717,6 +717,45 @@ MaterializedViewIndex:
             GROUP BY point_type, user_id);
     CREATE INDEX points_idx ON points (tenant_id, user_id, point_type);
     CREATE INDEX points_view_idx ON points_view (tenant_id);
+ViewWithCTE:
+  desired: |
+    CREATE TABLE users (
+      id bigint PRIMARY KEY,
+      active boolean NOT NULL
+    );
+    CREATE VIEW active_users AS
+    WITH recent_users AS (
+      SELECT id FROM users WHERE active = true
+    )
+    SELECT id FROM recent_users;
+MaterializedViewWithCTE:
+  desired: |
+    CREATE TABLE users (
+      id bigint PRIMARY KEY,
+      active boolean NOT NULL
+    );
+    CREATE MATERIALIZED VIEW active_users AS
+    WITH recent_users AS (
+      SELECT id FROM users WHERE active = true
+    )
+    SELECT * FROM recent_users;
+MaterializedViewWithMultipleCTEs:
+  desired: |
+    CREATE TABLE sessions (
+      user_id text NOT NULL,
+      duration double precision NOT NULL,
+      started_at timestamp NOT NULL
+    );
+    CREATE MATERIALIZED VIEW user_stats AS
+    WITH active_users AS (
+      SELECT DISTINCT user_id FROM sessions WHERE duration > 0
+    ),
+    user_counts AS (
+      SELECT user_id, COUNT(*) as session_count FROM sessions GROUP BY user_id
+    )
+    SELECT au.user_id, uc.session_count
+    FROM active_users au
+    JOIN user_counts uc ON au.user_id = uc.user_id;
 Comment:
   current: |
     CREATE TABLE "public"."hoge" (

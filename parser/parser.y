@@ -132,6 +132,9 @@ func forceEOF(yylex any) {
   arrayConstructor         *ArrayConstructor
   arrayElements            Exprs
   arrayElement             Expr
+  withClause               *With
+  commonTableExprs         []*CommonTableExpr
+  commonTableExpr          *CommonTableExpr
   tableOptions             map[string]string
   overExpr                 *OverExpr
   partitionBy              PartitionBy
@@ -288,6 +291,9 @@ func forceEOF(yylex any) {
 
 %type <statement> statement
 %type <selStmt> select_statement base_select union_lhs union_rhs
+%type <withClause> with_clause_opt with_clause
+%type <commonTableExprs> common_table_expr_list
+%type <commonTableExpr> common_table_expr
 %type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement
 %type <statement> if_statement matched_if_statement unmatched_if_statement trigger_statement_not_if
 %type <blockStatement> simple_if_body
@@ -1394,18 +1400,50 @@ alter_object_type_index:
   INDEX
 | KEY
 
-select_statement:
-  base_select order_by_opt limit_opt lock_opt
+with_clause_opt:
   {
-    sel := $1.(*Select)
-    sel.OrderBy = $2
-    sel.Limit = $3
-    sel.Lock = $4
+    $$ = nil
+  }
+| with_clause
+  {
+    $$ = $1
+  }
+
+with_clause:
+  WITH common_table_expr_list
+  {
+    $$ = &With{CTEs: $2}
+  }
+
+common_table_expr_list:
+  common_table_expr
+  {
+    $$ = []*CommonTableExpr{$1}
+  }
+| common_table_expr_list ',' common_table_expr
+  {
+    $$ = append($1, $3)
+  }
+
+common_table_expr:
+  table_id AS openb select_statement closeb
+  {
+    $$ = &CommonTableExpr{Name: $1, Definition: $4}
+  }
+
+select_statement:
+  with_clause_opt base_select order_by_opt limit_opt lock_opt
+  {
+    sel := $2.(*Select)
+    sel.OrderBy = $3
+    sel.Limit = $4
+    sel.Lock = $5
+    sel.With = $1
     $$ = sel
   }
-| union_lhs union_op union_rhs order_by_opt limit_opt lock_opt
+| with_clause_opt union_lhs union_op union_rhs order_by_opt limit_opt lock_opt
   {
-    $$ = &Union{Type: $2, Left: $1, Right: $3, OrderBy: $4, Limit: $5, Lock: $6}
+    $$ = &Union{Type: $3, Left: $2, Right: $4, OrderBy: $5, Limit: $6, Lock: $7, With: $1}
   }
 
 // base_select is an unparenthesized SELECT with no order by clause or beyond.

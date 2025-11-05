@@ -144,6 +144,7 @@ type Select struct {
 	OrderBy     OrderBy
 	Limit       *Limit
 	Lock        string
+	With        *With
 }
 
 // Select.Distinct
@@ -176,8 +177,8 @@ func (node *Select) setLimit(limit *Limit) {
 
 // Format formats the node.
 func (node *Select) Format(buf *nodeBuffer) {
-	buf.Printf("select %v%s%s%s%v",
-		node.Comments, node.Cache, node.Distinct, node.Hints, node.SelectExprs,
+	buf.Printf("%vselect %v%s%s%s%v",
+		node.With, node.Comments, node.Cache, node.Distinct, node.Hints, node.SelectExprs,
 	)
 	if node.From.isEmpty() {
 		buf.Printf(" from dual")
@@ -261,6 +262,7 @@ type Union struct {
 	OrderBy     OrderBy
 	Limit       *Limit
 	Lock        string
+	With        *With
 }
 
 // Union.Type
@@ -282,8 +284,40 @@ func (node *Union) setLimit(limit *Limit) {
 
 // Format formats the node.
 func (node *Union) Format(buf *nodeBuffer) {
-	buf.Printf("%v %s %v%v%v%s", node.Left, node.Type, node.Right,
+	buf.Printf("%v%v %s %v%v%v%s", node.With, node.Left, node.Type, node.Right,
 		node.OrderBy, node.Limit, node.Lock)
+}
+
+// With represents a WITH clause (Common Table Expressions)
+type With struct {
+	CTEs []*CommonTableExpr
+}
+
+// Format formats the node.
+func (node *With) Format(buf *nodeBuffer) {
+	if node == nil || len(node.CTEs) == 0 {
+		return
+	}
+	buf.Printf("WITH ")
+	for i, cte := range node.CTEs {
+		if i > 0 {
+			buf.Printf(", ")
+		}
+		buf.Printf("%v", cte)
+	}
+	buf.Printf(" ")
+}
+
+// CommonTableExpr represents a single Common Table Expression in a WITH clause
+type CommonTableExpr struct {
+	Name       TableIdent
+	Columns    Columns
+	Definition SelectStatement
+}
+
+// Format formats the node.
+func (node *CommonTableExpr) Format(buf *nodeBuffer) {
+	buf.Printf("%v AS (%v)", node.Name, node.Definition)
 }
 
 // Stream represents a SELECT statement.
