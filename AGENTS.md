@@ -42,11 +42,12 @@ Requirements:
 
 Usage notes:
 - `psqldef` uses the **generic parser** by default with fallback to `go-pgquery` (native PostgreSQL parser)
-- You can override the parser mode using the `PSQLDEF_PARSER` environment variable:
+- Always set `PSQLDEF_PARSER=generic` environment variable on development:
   - `PSQLDEF_PARSER=generic` - Use only the generic parser (no fallback to pgquery)
   - `PSQLDEF_PARSER=pgquery` - Use only the pgquery parser (no fallback to generic)
   - Not set (default) - Use generic parser with fallback to pgquery
 - The generic parser builds ASTs, and the generator manipulates the ASTs for normalization and comparison. Do not parse strings with regular expressions
+- The pgquery parser is deprecated and will be removed in the future
 
 ## Local Development
 
