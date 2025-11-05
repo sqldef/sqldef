@@ -608,6 +608,28 @@ create_statement:
       IndexExpr: $9.IndexExpr,
     }
   }
+/* For PostgreSQL - CONCURRENTLY with USING */
+| CREATE unique_clustered_opt INDEX CONCURRENTLY sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt
+  {
+    indexSpec := &IndexSpec{
+      Name: $5,
+      Type: $9,
+      Unique: bool($2[0]),
+      Where: NewWhere(WhereStr, $14),
+      Included: $13,
+    }
+    if $15 != nil && len($15) > 0 {
+      indexSpec.Options = $15
+    }
+    $$ = &DDL{
+      Action: CreateIndex,
+      Table: $7,
+      NewName: $7,
+      IndexSpec: indexSpec,
+      IndexCols: $11.IndexCols,
+      IndexExpr: $11.IndexExpr,
+    }
+  }
 /* For Aurora DSQL */
 | CREATE unique_clustered_opt INDEX ASYNC sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
@@ -668,18 +690,23 @@ create_statement:
     }
   }
 /* For PostgreSQL */
-| CREATE unique_clustered_opt INDEX sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' where_expression_opt index_option_opt
+| CREATE unique_clustered_opt INDEX sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt
   {
+    indexSpec := &IndexSpec{
+      Name: $4,
+      Type: $8,
+      Unique: bool($2[0]),
+      Where: NewWhere(WhereStr, $13),
+      Included: $12,
+    }
+    if $14 != nil && len($14) > 0 {
+      indexSpec.Options = $14
+    }
     $$ = &DDL{
       Action: CreateIndex,
       Table: $6,
       NewName: $6,
-      IndexSpec: &IndexSpec{
-        Name: $4,
-        Type: $8,
-        Unique: bool($2[0]),
-        Where: NewWhere(WhereStr, $12),
-      },
+      IndexSpec: indexSpec,
       IndexCols: $10.IndexCols,
       IndexExpr: $10.IndexExpr,
     }
@@ -3389,6 +3416,10 @@ index_option:
   {
     $$ = &IndexOption{Name: string($1), Value: NewIntVal($3)}
   }
+| FILLFACTOR '=' STRING
+  {
+    $$ = &IndexOption{Name: string($1), Value: NewStrVal($3)}
+  }
 | IGNORE_DUP_KEY '=' on_off
   {
     $$ = &IndexOption{Name: string($1), Value: $3}
@@ -3417,12 +3448,13 @@ index_option:
   {
     $$ = &IndexOption{Name: string($1), Value: NewIntVal($3)}
   }
+| M '=' STRING
+  {
+    $$ = &IndexOption{Name: string($1), Value: NewStrVal($3)}
+  }
 | ID '=' vector_option_value
   {
     id := strings.Trim(strings.ToLower(string($1)), "`")
-    if id != "distance" && id != "m" {
-      yylex.Error(fmt.Sprintf("syntax error around '%s'", string($1)))
-    }
     $$ = &IndexOption{Name: id, Value: $3}
   }
 
@@ -3465,6 +3497,10 @@ vector_option_value:
 | INTEGRAL
   {
     $$ = NewIntVal($1)
+  }
+| STRING
+  {
+    $$ = NewStrVal($1)
   }
 
 // for MSSQL
@@ -4837,9 +4873,13 @@ value_expression:
   {
     $$ = &TypedLiteral{Type: "timestamp", Value: NewStrVal($2)}
   }
-| value_expression TYPECAST simple_convert_type
+| value_expression TYPECAST simple_convert_type array_opt
   {
-    $$ = &CastExpr{Expr: $1, Type: $3}
+    t := $3
+    if $4 {
+      t = &ConvertType{Type: t.Type + "[]", Length: t.Length, Scale: t.Scale}
+    }
+    $$ = &CastExpr{Expr: $1, Type: t}
   }
 | value_expression TYPECAST DOUBLE PRECISION
   {
@@ -6104,7 +6144,8 @@ reserved_keyword:
 | OFF
 
 non_reserved_keyword:
-  DEFINER
+  ACTION
+| DEFINER
 | INVOKER
 | POLICY
 | TYPE

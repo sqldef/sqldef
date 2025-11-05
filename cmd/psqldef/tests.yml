@@ -3556,3 +3556,150 @@ MultiDimensionalArrayEquivalence2D3D:
     );
   output: ""
 
+
+# This ensures the parser handles storage parameters like fillfactor='70'
+CreateIndexWithStorageParameterString:
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      data text
+    );
+    CREATE INDEX idx_data ON test_table USING hash (data) WITH (fillfactor='70');
+
+CreateIndexWithStorageParameterInt:
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      data text
+    );
+    CREATE INDEX idx_data ON test_table USING btree (data) WITH (fillfactor=70);
+
+
+CreateIndexWithUsingAndInclude:
+  desired: |
+    CREATE TABLE users (
+      id serial,
+      email text,
+      name text,
+      created_at timestamp
+    );
+    CREATE INDEX idx_email_include_name ON users USING btree (email) INCLUDE (name);
+
+CreateIndexWithUsingIncludeWhere:
+  desired: |
+    CREATE TABLE orders (
+      id serial,
+      user_id int,
+      status text,
+      total numeric
+    );
+    CREATE INDEX idx_active_orders ON orders USING btree (user_id, status) INCLUDE (total) WHERE status = 'active';
+
+CreateIndexWithMultipleStorageParameters:
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      data text
+    );
+    CREATE INDEX idx_data_multi ON test_table USING btree (data) WITH (fillfactor='70', deduplicate_items='on');
+
+CreateIndexWithOperatorClassAndWith:
+  desired: |
+    CREATE TABLE text_data (
+      id serial,
+      content text
+    );
+    CREATE INDEX idx_content_pattern ON text_data USING btree (content text_pattern_ops) WITH (fillfactor=90);
+
+DefaultValueWithArrayTypeCast:
+  desired: |
+    CREATE TABLE settings (
+      id serial,
+      allowed_values text[] DEFAULT ARRAY['option1', 'option2']::text[]
+    );
+
+# Test for CREATE INDEX with string value for integer parameter
+# PostgreSQL exports integer parameters as strings, ensure idempotency
+CreateIndexWithStringifiedIntParameter:
+  current: |
+    CREATE TABLE test_table (
+      id serial,
+      data text
+    );
+    CREATE INDEX idx_data ON test_table USING btree (data) WITH (fillfactor=70);
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      data text
+    );
+    CREATE INDEX idx_data ON test_table USING btree (data) WITH (fillfactor='70');
+  output: ""
+
+
+# Note: The parser can handle arbitrary storage parameter names (e.g., custom_param='value')
+# but PostgreSQL itself validates and rejects unrecognized parameters at runtime.
+# This is expected PostgreSQL behavior, not a parser limitation.
+
+CreateIndexWithMultipleIncludeColumns:
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      sku text,
+      name text,
+      price numeric,
+      stock int
+    );
+    CREATE INDEX idx_sku_multi_include ON products USING btree (sku) INCLUDE (name, price, stock);
+
+CreateIndexConcurrentlyWithUsingAndInclude:
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      sku text,
+      name text,
+      price numeric
+    );
+    CREATE INDEX CONCURRENTLY idx_sku_include ON products USING btree (sku) INCLUDE (name, price);
+
+
+
+# Test for CREATE INDEX with fillfactor parameter variations
+# Ensures both integer and string values work and are treated as equivalent (main fix)
+CreateIndexFillfactorVariations:
+  current: |
+    CREATE TABLE test_table (
+      id serial,
+      data text
+    );
+    CREATE INDEX idx1 ON test_table USING btree (data) WITH (fillfactor=70);
+    CREATE INDEX idx2 ON test_table USING btree (id) WITH (fillfactor='80');
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      data text
+    );
+    CREATE INDEX idx1 ON test_table USING btree (data) WITH (fillfactor='70');
+    CREATE INDEX idx2 ON test_table USING btree (id) WITH (fillfactor=80);
+  output: ""
+
+CreateIndexUsingIncludeWhere:
+  desired: |
+    CREATE TABLE orders (
+      id serial,
+      user_id int,
+      status text,
+      total numeric
+    );
+    CREATE INDEX idx_orders_active ON orders USING btree (user_id, status) 
+      INCLUDE (total) 
+      WHERE status = 'active';
+
+# Test for CREATE INDEX with generic storage parameter names
+# Parser accepts any parameter name (PostgreSQL validates at runtime)
+CreateIndexGenericStorageParameter:
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      data text
+    );
+    CREATE INDEX idx_data ON test_table USING btree (data) WITH (deduplicate_items='on');
