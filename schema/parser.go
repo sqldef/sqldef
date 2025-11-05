@@ -1031,8 +1031,8 @@ func extractRenameFrom(comment string) string {
 	}
 
 	// The regex has 2 capture groups (double quotes or unquoted)
-	// Return whichever one matched
-	if len(matches) > 1 {
+	// matches[0] = full match, matches[1] = quoted, matches[2] = unquoted
+	if len(matches) >= 3 {
 		if matches[1] != "" {
 			return matches[1] // double-quoted identifier
 		}
