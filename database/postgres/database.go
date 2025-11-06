@@ -334,13 +334,10 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 		       pg_catalog.format_type(t.typbasetype, t.typtypmod) AS data_type,
 		       t.typdefault AS default_value,
 		       t.typnotnull AS not_null,
-		       c.collname AS collation,
-		       con.conname AS constraint_name,
-		       pg_catalog.pg_get_constraintdef(con.oid, true) AS constraint_def
+		       c.collname AS collation
 		FROM pg_catalog.pg_type t
 		INNER JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
 		LEFT JOIN pg_catalog.pg_collation c ON t.typcollation = c.oid AND t.typcollation <> 0
-		LEFT JOIN pg_catalog.pg_constraint con ON con.contypid = t.oid
 		WHERE t.typtype = 'd'
 		  AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
 		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = t.oid AND d.deptype = 'e')
@@ -351,37 +348,77 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 	}
 	defer rows.Close()
 
-	var ddls []string
+	type domainInfo struct {
+		schema, name, dataType  string
+		defaultValue, collation sql.NullString
+		notNull                 bool
+	}
+
+	var domains []domainInfo
 	for rows.Next() {
-		var domainSchema, domainName, dataType string
-		var defaultValue, collation, constraintName, constraintDef sql.NullString
-		var notNull bool
-		if err := rows.Scan(&domainSchema, &domainName, &dataType, &defaultValue, &notNull, &collation, &constraintName, &constraintDef); err != nil {
+		var di domainInfo
+		if err := rows.Scan(&di.schema, &di.name, &di.dataType, &di.defaultValue, &di.notNull, &di.collation); err != nil {
 			return nil, err
 		}
-		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, domainSchema) {
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, di.schema) {
 			continue
 		}
+		domains = append(domains, di)
+	}
 
-		// Build CREATE DOMAIN statement
-		ddl := fmt.Sprintf("CREATE DOMAIN %s.%s AS %s", escapeSQLName(domainSchema), escapeSQLName(domainName), dataType)
+	// Now fetch constraints for all domains
+	constraintRows, err := d.db.Query(`
+		SELECT n.nspname AS domain_schema,
+		       t.typname AS domain_name,
+		       con.conname AS constraint_name,
+		       pg_catalog.pg_get_constraintdef(con.oid, true) AS constraint_def
+		FROM pg_catalog.pg_constraint con
+		INNER JOIN pg_catalog.pg_type t ON con.contypid = t.oid
+		INNER JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
+		WHERE t.typtype = 'd'
+		  AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+		ORDER BY n.nspname, t.typname, con.conname;
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer constraintRows.Close()
 
-		if collation.Valid && collation.String != "" && collation.String != "default" {
-			ddl += fmt.Sprintf(" COLLATE %s", escapeSQLName(collation.String))
+	// Map of domain (schema.name) to list of constraint definitions
+	constraintsMap := make(map[string][]string)
+	for constraintRows.Next() {
+		var domainSchema, domainName, constraintName string
+		var constraintDef string
+		if err := constraintRows.Scan(&domainSchema, &domainName, &constraintName, &constraintDef); err != nil {
+			return nil, err
+		}
+		key := domainSchema + "." + domainName
+		constraintsMap[key] = append(constraintsMap[key], constraintDef)
+	}
+
+	// Build CREATE DOMAIN statements
+	var ddls []string
+	for _, di := range domains {
+		ddl := fmt.Sprintf("CREATE DOMAIN %s.%s AS %s", escapeSQLName(di.schema), escapeSQLName(di.name), di.dataType)
+
+		if di.collation.Valid && di.collation.String != "" && di.collation.String != "default" {
+			ddl += fmt.Sprintf(" COLLATE %s", escapeSQLName(di.collation.String))
 		}
 
-		if defaultValue.Valid {
-			ddl += fmt.Sprintf(" DEFAULT %s", defaultValue.String)
+		if di.defaultValue.Valid {
+			ddl += fmt.Sprintf(" DEFAULT %s", di.defaultValue.String)
 		}
 
-		if notNull {
+		if di.notNull {
 			ddl += " NOT NULL"
 		}
 
-		if constraintDef.Valid {
-			// Extract CHECK constraint from full constraint definition
-			// pg_get_constraintdef returns something like "CHECK (VALUE ~ '...')"
-			ddl += fmt.Sprintf(" %s", constraintDef.String)
+		// Add all CHECK constraints
+		key := di.schema + "." + di.name
+		if constraints, ok := constraintsMap[key]; ok {
+			for _, constraintDef := range constraints {
+				ddl += fmt.Sprintf(" %s", constraintDef)
+			}
 		}
 
 		ddl += ";"

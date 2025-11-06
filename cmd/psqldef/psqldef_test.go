@@ -1272,7 +1272,7 @@ func TestPsqldefCreateDomain(t *testing.T) {
 			assertApplyOutput(t, createDomain+createDomainWithConstraints, nothingModified)
 
 			// Test dropping a domain
-			assertApplyOutput(t, createDomain, wrapWithTransaction(fmt.Sprintf("DROP DOMAIN \"%s\".\"positive_int\";\n", tc.Schema)))
+			assertApplyOutput(t, createDomain, wrapWithTransaction(fmt.Sprintf("DROP DOMAIN %s.positive_int;\n", tc.Schema)))
 			assertApplyOutput(t, createDomain, nothingModified)
 		})
 	}

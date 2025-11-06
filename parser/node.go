@@ -1197,12 +1197,12 @@ type Type struct {
 }
 
 type Domain struct {
-	Name       ObjectName
-	DataType   ColumnType // the underlying data type for the domain
-	Default    *DefaultDefinition
-	NotNull    bool
-	Collation  string
-	Constraint *CheckDefinition
+	Name        ObjectName
+	DataType    ColumnType // the underlying data type for the domain
+	Default     *DefaultDefinition
+	NotNull     bool
+	Collation   string
+	Constraints []*CheckDefinition // PostgreSQL allows multiple CHECK constraints
 }
 
 type Comment struct {

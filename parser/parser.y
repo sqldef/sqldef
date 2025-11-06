@@ -148,7 +148,7 @@ func forceEOF(yylex any) {
     defaultDef *DefaultDefinition
     notNull    bool
     collation  string
-    check      *CheckDefinition
+    checks     []*CheckDefinition
   }
 }
 
@@ -808,7 +808,7 @@ create_statement:
       Default: $6.defaultDef,
       NotNull: $6.notNull,
       Collation: $6.collation,
-      Constraint: $6.check,
+      Constraints: $6.checks,
     }
     $$ = &DDL{
       Action: CreateDomain,
@@ -2915,7 +2915,7 @@ domain_constraints_opt:
     $$.defaultDef = nil
     $$.notNull = false
     $$.collation = ""
-    $$.check = nil
+    $$.checks = nil
   }
 | domain_constraints_opt domain_constraint
   {
@@ -2929,8 +2929,8 @@ domain_constraints_opt:
     if $2.collation != "" {
       $$.collation = $2.collation
     }
-    if $2.check != nil {
-      $$.check = $2.check
+    if len($2.checks) > 0 {
+      $$.checks = append($$.checks, $2.checks...)
     }
   }
 
@@ -2940,42 +2940,42 @@ domain_constraint:
     $$.defaultDef = &DefaultDefinition{Expression: DefaultExpression{Expr: $2}}
     $$.notNull = false
     $$.collation = ""
-    $$.check = nil
+    $$.checks = nil
   }
 | NOT NULL
   {
     $$.defaultDef = nil
     $$.notNull = true
     $$.collation = ""
-    $$.check = nil
+    $$.checks = nil
   }
 | NULL
   {
     $$.defaultDef = nil
     $$.notNull = false
     $$.collation = ""
-    $$.check = nil
+    $$.checks = nil
   }
 | COLLATE sql_id
   {
     $$.defaultDef = nil
     $$.notNull = false
     $$.collation = $2.String()
-    $$.check = nil
+    $$.checks = nil
   }
 | CHECK openb expression closeb
   {
     $$.defaultDef = nil
     $$.notNull = false
     $$.collation = ""
-    $$.check = &CheckDefinition{Where: *NewWhere(WhereStr, $3)}
+    $$.checks = []*CheckDefinition{{Where: *NewWhere(WhereStr, $3)}}
   }
 | CONSTRAINT sql_id CHECK openb expression closeb
   {
     $$.defaultDef = nil
     $$.notNull = false
     $$.collation = ""
-    $$.check = &CheckDefinition{ConstraintName: $2, Where: *NewWhere(WhereStr, $5)}
+    $$.checks = []*CheckDefinition{{ConstraintName: $2, Where: *NewWhere(WhereStr, $5)}}
   }
 
 character_cast_opt:
@@ -5567,6 +5567,10 @@ column_name:
 | non_reserved_keyword
   {
     $$ = &ColName{Name: NewColIdent(string($1))}
+  }
+| VALUE
+  {
+    $$ = &ColName{Name: NewColIdent("VALUE")}
   }
 | table_id '.' reserved_sql_id
   {

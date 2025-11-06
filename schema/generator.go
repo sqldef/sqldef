@@ -474,7 +474,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		if slices.Contains(convertDomainNames(g.desiredDomains), currentDomain.name) {
 			continue
 		}
-		ddls = append(ddls, fmt.Sprintf("DROP DOMAIN %s", g.escapeTableName(currentDomain.name)))
+		ddls = append(ddls, fmt.Sprintf("DROP DOMAIN %s", currentDomain.name))
 	}
 
 	// Clean up obsoleted extensions
