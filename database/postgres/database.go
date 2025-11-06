@@ -39,6 +39,9 @@ func NewDatabase(config database.Config) (database.Database, error) {
 
 func (d *PostgresDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
 	d.generatorConfig = config
+	// Sync TargetSchema to d.config for backward compatibility
+	// (other methods read from d.config.TargetSchema)
+	d.config.TargetSchema = config.TargetSchema
 }
 
 func (d *PostgresDatabase) GetTransactionQueries() database.TransactionQueries {
@@ -365,8 +368,11 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 		}
 		domains = append(domains, di)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
-	// Now fetch constraints for all domains
+	// Now fetch constraints for domains, applying the same TargetSchema filter
 	constraintRows, err := d.db.Query(`
 		SELECT n.nspname AS domain_schema,
 		       t.typname AS domain_name,
@@ -392,8 +398,15 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 		if err := constraintRows.Scan(&domainSchema, &domainName, &constraintName, &constraintDef); err != nil {
 			return nil, err
 		}
+		// Apply TargetSchema filter to constraints as well
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, domainSchema) {
+			continue
+		}
 		key := domainSchema + "." + domainName
 		constraintsMap[key] = append(constraintsMap[key], constraintDef)
+	}
+	if err := constraintRows.Err(); err != nil {
+		return nil, err
 	}
 
 	// Build CREATE DOMAIN statements
