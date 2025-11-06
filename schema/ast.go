@@ -229,11 +229,11 @@ type Value struct {
 	valueType ValueType
 	raw       string
 
-	// ValueType-specific. Should be union?
-	strVal   string  // ValueTypeStr, ValueTypeBool
+	// ValueType-specific (behaves like a union)
+	strVal   string  // ValueTypeStr
 	intVal   int     // ValueTypeInt
 	floatVal float64 // ValueTypeFloat
-	bitVal   bool    // ValueTypeBit
+	bitVal   bool    // ValueTypeBit, ValueTypeBool
 }
 
 type ValueType int

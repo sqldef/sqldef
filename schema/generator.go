@@ -2137,12 +2137,11 @@ func (g *Generator) generateIndexOptionDefinition(indexOptions []IndexOption) st
 				}
 			}
 		case GeneratorModeMssql:
-			options := []string{}
-			for _, indexOption := range indexOptions {
+			options := util.TransformSlice(indexOptions, func(indexOption IndexOption) string {
 				var optionValue string
 				switch indexOption.value.valueType {
 				case ValueTypeBool:
-					if indexOption.value.raw == "true" {
+					if indexOption.value.bitVal {
 						optionValue = "ON"
 					} else {
 						optionValue = "OFF"
@@ -2150,9 +2149,8 @@ func (g *Generator) generateIndexOptionDefinition(indexOptions []IndexOption) st
 				default:
 					optionValue = indexOption.value.raw
 				}
-				option := fmt.Sprintf("%s = %s", indexOption.optionName, optionValue)
-				options = append(options, option)
-			}
+				return fmt.Sprintf("%s = %s", indexOption.optionName, optionValue)
+			})
 			optionDefinition = fmt.Sprintf(" WITH (%s)", strings.Join(options, ", "))
 		}
 	}
@@ -3345,10 +3343,10 @@ func (g *Generator) areSameValue(current, desired *Value, columnType string) boo
 	// Special handling for MySQL boolean values (BOOLEAN is stored as TINYINT(1))
 	// MySQL converts: false → 0, true → 1
 	if g.mode == GeneratorModeMysql && desired.valueType == ValueTypeBool {
-		if strings.EqualFold(desiredRaw, "false") {
-			desiredRaw = "0"
-		} else if strings.EqualFold(desiredRaw, "true") {
+		if desired.bitVal {
 			desiredRaw = "1"
+		} else {
+			desiredRaw = "0"
 		}
 	}
 
@@ -3793,7 +3791,7 @@ func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinitio
 		case ValueTypeStr:
 			return fmt.Sprintf("DEFAULT %s", StringConstant(defaultVal.strVal)), nil
 		case ValueTypeBool:
-			return fmt.Sprintf("DEFAULT %s", defaultVal.strVal), nil
+			return fmt.Sprintf("DEFAULT %t", defaultVal.bitVal), nil
 		case ValueTypeInt:
 			return fmt.Sprintf("DEFAULT %d", defaultVal.intVal), nil
 		case ValueTypeFloat:

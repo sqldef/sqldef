@@ -694,10 +694,6 @@ func mustConvertToFloat(val []byte) float64 {
 	return floatVal
 }
 
-func convertBitToBool(val []byte) bool {
-	return string(val) == "1"
-}
-
 func parseValue(val *parser.SQLVal) *Value {
 	if val == nil {
 		return nil
@@ -731,14 +727,16 @@ func parseValue(val *parser.SQLVal) *Value {
 	}
 
 	switch valueType {
-	case ValueTypeStr, ValueTypeBool:
+	case ValueTypeStr:
 		ret.strVal = string(val.Val)
 	case ValueTypeInt:
 		ret.intVal = mustConvertToInt(val.Val)
 	case ValueTypeFloat:
 		ret.floatVal = mustConvertToFloat(val.Val)
+	case ValueTypeBool:
+		ret.bitVal = string(val.Val) == "true"
 	case ValueTypeBit:
-		ret.bitVal = convertBitToBool(val.Val)
+		ret.bitVal = string(val.Val) == "1"
 	}
 
 	return &ret
