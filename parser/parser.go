@@ -7174,7 +7174,7 @@ yydefault:
 			if !strings.EqualFold(string(yyDollar[2].bytes), "max") {
 				yylex.Error(fmt.Sprintf("syntax error around '%s'", string(yyDollar[2].bytes)))
 			}
-			yyVAL.optVal = NewIntVal(yyDollar[2].bytes)
+			yyVAL.optVal = NewStrVal(yyDollar[2].bytes)
 		}
 	case 474:
 		yyDollar = yyS[yypt-0 : yypt+1]

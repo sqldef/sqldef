@@ -2137,12 +2137,11 @@ func (g *Generator) generateIndexOptionDefinition(indexOptions []IndexOption) st
 				}
 			}
 		case GeneratorModeMssql:
-			options := []string{}
-			for _, indexOption := range indexOptions {
+			options := util.TransformSlice(indexOptions, func(indexOption IndexOption) string {
 				var optionValue string
 				switch indexOption.value.valueType {
 				case ValueTypeBool:
-					if indexOption.value.raw == "true" {
+					if indexOption.value.bitVal {
 						optionValue = "ON"
 					} else {
 						optionValue = "OFF"
@@ -2150,9 +2149,8 @@ func (g *Generator) generateIndexOptionDefinition(indexOptions []IndexOption) st
 				default:
 					optionValue = indexOption.value.raw
 				}
-				option := fmt.Sprintf("%s = %s", indexOption.optionName, optionValue)
-				options = append(options, option)
-			}
+				return fmt.Sprintf("%s = %s", indexOption.optionName, optionValue)
+			})
 			optionDefinition = fmt.Sprintf(" WITH (%s)", strings.Join(options, ", "))
 		}
 	}
@@ -3135,26 +3133,26 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 			}
 
 			if currentLength == nil {
-				currentLength = &Value{valueType: ValueTypeInt, intVal: defaultPrecision}
+				currentLength = &Value{valueType: ValueTypeInt, intVal: defaultPrecision, raw: fmt.Sprintf("%d", defaultPrecision)}
 			}
 			if desiredLength == nil {
-				desiredLength = &Value{valueType: ValueTypeInt, intVal: defaultPrecision}
+				desiredLength = &Value{valueType: ValueTypeInt, intVal: defaultPrecision, raw: fmt.Sprintf("%d", defaultPrecision)}
 			}
 			if currentScale == nil {
-				currentScale = &Value{valueType: ValueTypeInt, intVal: 0}
+				currentScale = &Value{valueType: ValueTypeInt, intVal: 0, raw: "0"}
 			}
 			if desiredScale == nil {
-				desiredScale = &Value{valueType: ValueTypeInt, intVal: 0}
+				desiredScale = &Value{valueType: ValueTypeInt, intVal: 0, raw: "0"}
 			}
 		}
 	}
 
-	if currentLength == nil && desiredLength != nil || currentLength != nil && desiredLength == nil {
+	// Length is typically an integer value, but MSSQL can use "max".
+	// For example, VARCHAR(MAX)
+	if !g.areSameIdentifiers(currentLength, desiredLength) {
 		return false
 	}
-	if currentLength != nil && desiredLength != nil && currentLength.intVal != desiredLength.intVal {
-		return false
-	}
+
 	if currentScale == nil && (desiredScale != nil && desiredScale.intVal != 0) || (currentScale != nil && currentScale.intVal != 0) && desiredScale == nil {
 		return false
 	}
@@ -3345,10 +3343,10 @@ func (g *Generator) areSameValue(current, desired *Value, columnType string) boo
 	// Special handling for MySQL boolean values (BOOLEAN is stored as TINYINT(1))
 	// MySQL converts: false → 0, true → 1
 	if g.mode == GeneratorModeMysql && desired.valueType == ValueTypeBool {
-		if strings.EqualFold(desiredRaw, "false") {
-			desiredRaw = "0"
-		} else if strings.EqualFold(desiredRaw, "true") {
+		if desired.bitVal {
 			desiredRaw = "1"
+		} else {
+			desiredRaw = "0"
 		}
 	}
 
@@ -3370,8 +3368,8 @@ func (g *Generator) areSameValue(current, desired *Value, columnType string) boo
 	return currentRaw == desiredRaw
 }
 
-// areSameIdentifier compares two values for identifiers/keywords (case-insensitive).
-func (g *Generator) areSameIdentifier(current, desired *Value) bool {
+// areSameIdentifiers compares two values for identifiers/keywords (case-insensitive).
+func (g *Generator) areSameIdentifiers(current, desired *Value) bool {
 	if current == nil && desired == nil {
 		return true
 	}
@@ -3544,7 +3542,7 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		}
 		for _, optionB := range indexBOptions {
 			if optionA := findIndexOptionByName(indexAOptions, optionB.optionName); optionA != nil {
-				if !g.areSameIdentifier(optionA.value, optionB.value) {
+				if !g.areSameIdentifiers(optionA.value, optionB.value) {
 					return false
 				}
 			} else {
@@ -3793,7 +3791,7 @@ func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinitio
 		case ValueTypeStr:
 			return fmt.Sprintf("DEFAULT %s", StringConstant(defaultVal.strVal)), nil
 		case ValueTypeBool:
-			return fmt.Sprintf("DEFAULT %s", defaultVal.strVal), nil
+			return fmt.Sprintf("DEFAULT %t", defaultVal.bitVal), nil
 		case ValueTypeInt:
 			return fmt.Sprintf("DEFAULT %d", defaultVal.intVal), nil
 		case ValueTypeFloat:
