@@ -1,3 +1,9 @@
+## [v3.5.1](https://github.com/sqldef/sqldef/compare/v3.5.0...v3.5.1) - 2025-11-06
+- add examples, update docs, explain offline-mode by @gfx in https://github.com/sqldef/sqldef/pull/914
+- clarify it's not off-by-one (was safe, but suspecious) by @gfx in https://github.com/sqldef/sqldef/pull/916
+- fix a typo in code by @gfx in https://github.com/sqldef/sqldef/pull/917
+- fix value handlings by @gfx in https://github.com/sqldef/sqldef/pull/918
+
 ## [v3.5.0](https://github.com/sqldef/sqldef/compare/v3.4.0...v3.5.0) - 2025-11-05
 - psqldef: improve the generic parser to process all the existing tests by @gfx in https://github.com/sqldef/sqldef/pull/911
 
