@@ -623,10 +623,10 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		}
 	})
 
-	indexParition := IndexPartition{}
+	indexPartition := IndexPartition{}
 	if stmt.IndexSpec.Partition != nil {
-		indexParition.partitionName = stmt.IndexSpec.Partition.Name
-		indexParition.column = stmt.IndexSpec.Partition.Column
+		indexPartition.partitionName = stmt.IndexSpec.Partition.Name
+		indexPartition.column = stmt.IndexSpec.Partition.Column
 	}
 
 	var constraintOptions *ConstraintOptions
@@ -673,7 +673,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		where:             where,
 		included:          includedColumns,
 		options:           indexOptions,
-		partition:         indexParition,
+		partition:         indexPartition,
 		renamedFrom:       renameFrom,
 	}, nil
 }
