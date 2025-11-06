@@ -40,6 +40,9 @@ type Generator struct {
 	desiredTypes []*Type
 	currentTypes []*Type
 
+	desiredDomains []*Domain
+	currentDomains []*Domain
+
 	// Track FKs that have been handled during primary key changes
 	handledForeignKeys map[string]bool
 
@@ -106,6 +109,8 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		currentTriggers:    aggregated.Triggers,
 		desiredTypes:       desiredAggregated.Types,
 		currentTypes:       aggregated.Types,
+		desiredDomains:     desiredAggregated.Domains,
+		currentDomains:     aggregated.Domains,
 		desiredComments:    desiredAggregated.Comments,
 		currentComments:    aggregated.Comments,
 		desiredExtensions:  desiredAggregated.Extensions,
@@ -246,6 +251,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return nil, err
 			}
 			interDDLs = append(interDDLs, typeDDLs...)
+		case *Domain:
+			domainDDLs, err := g.generateDDLsForCreateDomain(desired)
+			if err != nil {
+				return nil, err
+			}
+			interDDLs = append(interDDLs, domainDDLs...)
 		case *Comment:
 			commentDDLs, err := g.generateDDLsForComment(desired)
 			if err != nil {
@@ -456,6 +467,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			continue
 		}
 		ddls = append(ddls, fmt.Sprintf("DROP VIEW %s", g.escapeTableName(currentView.name)))
+	}
+
+	// Clean up obsoleted domains
+	for _, currentDomain := range g.currentDomains {
+		if slices.Contains(convertDomainNames(g.desiredDomains), currentDomain.name) {
+			continue
+		}
+		ddls = append(ddls, fmt.Sprintf("DROP DOMAIN %s", g.escapeTableName(currentDomain.name)))
 	}
 
 	// Clean up obsoleted extensions
@@ -1655,6 +1674,24 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 	return ddls, nil
 }
 
+func (g *Generator) generateDDLsForCreateDomain(desired *Domain) ([]string, error) {
+	ddls := []string{}
+
+	if currentDomain := findDomainByName(g.currentDomains, desired.name); currentDomain != nil {
+		// Domain found. For now, we just keep it as is.
+		// TODO: Support ALTER DOMAIN operations in the future
+	} else {
+		// Domain not found, add domain.
+		ddls = append(ddls, desired.statement)
+	}
+	// Only add to desiredDomains if it doesn't already exist (it may have been pre-populated from aggregation)
+	if findDomainByName(g.desiredDomains, desired.name) == nil {
+		g.desiredDomains = append(g.desiredDomains, desired)
+	}
+
+	return ddls, nil
+}
+
 func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 	ddls := []string{}
 
@@ -1967,6 +2004,7 @@ type AggregatedSchema struct {
 	Views      []*View
 	Triggers   []*Trigger
 	Types      []*Type
+	Domains    []*Domain
 	Comments   []*Comment
 	Extensions []*Extension
 	Schemas    []*Schema
@@ -2488,6 +2526,7 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 		Views:      []*View{},
 		Triggers:   []*Trigger{},
 		Types:      []*Type{},
+		Domains:    []*Domain{},
 		Comments:   []*Comment{},
 		Extensions: []*Extension{},
 		Schemas:    []*Schema{},
@@ -2559,6 +2598,8 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 			aggregated.Triggers = append(aggregated.Triggers, stmt)
 		case *Type:
 			aggregated.Types = append(aggregated.Types, stmt)
+		case *Domain:
+			aggregated.Domains = append(aggregated.Domains, stmt)
 		case *Comment:
 			aggregated.Comments = append(aggregated.Comments, stmt)
 		case *Extension:
@@ -3001,6 +3042,15 @@ func findTypeByName(types []*Type, name string) *Type {
 	for _, createType := range types {
 		if createType.name == name {
 			return createType
+		}
+	}
+	return nil
+}
+
+func findDomainByName(domains []*Domain, name string) *Domain {
+	for _, domain := range domains {
+		if domain.name == name {
+			return domain
 		}
 	}
 	return nil
@@ -3718,6 +3768,10 @@ func convertPolicyNames(policies []Policy) []string {
 
 func convertViewNames(views []*View) []string {
 	return util.TransformSlice(views, func(v *View) string { return v.name })
+}
+
+func convertDomainNames(domains []*Domain) []string {
+	return util.TransformSlice(domains, func(d *Domain) string { return d.name })
 }
 
 func convertExtensionNames(extensions []*Extension) []string {

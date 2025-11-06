@@ -74,6 +74,12 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 	}
 	ddls = append(ddls, typeDDLs...)
 
+	domainDDLs, err := d.domains()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, domainDDLs...)
+
 	tableNames, err := d.tableNames()
 	if err != nil {
 		return "", err
@@ -317,6 +323,69 @@ func (d *PostgresDatabase) types() ([]string, error) {
 				"CREATE TYPE %s.%s AS ENUM (%s);", escapeSQLName(typeSchema), escapeSQLName(typeName), strings.Join(enumLabels, ", "),
 			),
 		)
+	}
+	return ddls, nil
+}
+
+func (d *PostgresDatabase) domains() ([]string, error) {
+	rows, err := d.db.Query(`
+		SELECT n.nspname AS domain_schema,
+		       t.typname AS domain_name,
+		       pg_catalog.format_type(t.typbasetype, t.typtypmod) AS data_type,
+		       t.typdefault AS default_value,
+		       t.typnotnull AS not_null,
+		       c.collname AS collation,
+		       con.conname AS constraint_name,
+		       pg_catalog.pg_get_constraintdef(con.oid, true) AS constraint_def
+		FROM pg_catalog.pg_type t
+		INNER JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
+		LEFT JOIN pg_catalog.pg_collation c ON t.typcollation = c.oid AND t.typcollation <> 0
+		LEFT JOIN pg_catalog.pg_constraint con ON con.contypid = t.oid
+		WHERE t.typtype = 'd'
+		  AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = t.oid AND d.deptype = 'e')
+		ORDER BY n.nspname, t.typname;
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ddls []string
+	for rows.Next() {
+		var domainSchema, domainName, dataType string
+		var defaultValue, collation, constraintName, constraintDef sql.NullString
+		var notNull bool
+		if err := rows.Scan(&domainSchema, &domainName, &dataType, &defaultValue, &notNull, &collation, &constraintName, &constraintDef); err != nil {
+			return nil, err
+		}
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, domainSchema) {
+			continue
+		}
+
+		// Build CREATE DOMAIN statement
+		ddl := fmt.Sprintf("CREATE DOMAIN %s.%s AS %s", escapeSQLName(domainSchema), escapeSQLName(domainName), dataType)
+
+		if collation.Valid && collation.String != "" && collation.String != "default" {
+			ddl += fmt.Sprintf(" COLLATE %s", escapeSQLName(collation.String))
+		}
+
+		if defaultValue.Valid {
+			ddl += fmt.Sprintf(" DEFAULT %s", defaultValue.String)
+		}
+
+		if notNull {
+			ddl += " NOT NULL"
+		}
+
+		if constraintDef.Valid {
+			// Extract CHECK constraint from full constraint definition
+			// pg_get_constraintdef returns something like "CHECK (VALUE ~ '...')"
+			ddl += fmt.Sprintf(" %s", constraintDef.String)
+		}
+
+		ddl += ";"
+		ddls = append(ddls, ddl)
 	}
 	return ddls, nil
 }

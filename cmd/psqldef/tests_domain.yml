@@ -1,0 +1,67 @@
+CreateDomain:
+  desired: |
+    CREATE DOMAIN public.us_postal_code AS text;
+
+CreateDomainWithoutSchemaQualification:
+  desired: |
+    CREATE DOMAIN email AS text;
+
+CreateDomainWithConstraints:
+  desired: |
+    CREATE DOMAIN public.positive_int AS integer
+      DEFAULT 1
+      NOT NULL;
+
+DropDomain:
+  current: |
+    CREATE DOMAIN public.us_postal_code AS text;
+  desired: |
+  output: |
+    DROP DOMAIN "public"."us_postal_code";
+
+CreateDomainWithDefault:
+  desired: |
+    CREATE DOMAIN public.status_code AS integer DEFAULT 200;
+
+CreateDomainWithCollation:
+  desired: |
+    CREATE DOMAIN public.case_insensitive_text AS text COLLATE "en_US";
+
+CreateDomainWithSchemaQualification:
+  desired: |
+    CREATE SCHEMA test_schema;
+    CREATE DOMAIN test_schema.my_domain AS text DEFAULT 'default_value';
+
+# Test dropping domains from multiple schemas
+DropDomainMultipleSchemas:
+  current: |
+    CREATE SCHEMA test_schema;
+    CREATE DOMAIN test_schema.test_domain AS text;
+    CREATE DOMAIN public.public_domain AS integer;
+  desired: |
+  output: |
+    DROP DOMAIN "public"."public_domain";
+    DROP DOMAIN "test_schema"."test_domain";
+
+# Test that domains work correctly with schema qualification
+CreateAndKeepDomainInNonPublicSchema:
+  current: |
+    CREATE SCHEMA test_schema;
+  desired: |
+    CREATE SCHEMA test_schema;
+    CREATE DOMAIN test_schema.my_domain AS text;
+  output: |
+    CREATE DOMAIN test_schema.my_domain AS text;
+
+# Test that unqualified and qualified domain names are treated as the same (idempotent)
+UnqualifiedAndQualifiedAreSame:
+  current: |
+    CREATE DOMAIN email AS text;
+  desired: |
+    CREATE DOMAIN public.email AS text;
+  output: |
+
+MixedQualifiedAndUnqualifiedDomains:
+  desired: |
+    CREATE DOMAIN email AS text;
+    CREATE DOMAIN public.status_code AS integer;

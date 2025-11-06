@@ -304,6 +304,11 @@ type Type struct {
 	enumValues []string
 }
 
+type Domain struct {
+	name      string
+	statement string
+}
+
 type Generated struct {
 	expr          string
 	generatedType GeneratedType
@@ -377,6 +382,10 @@ func (t *Trigger) Statement() string {
 
 func (t *Type) Statement() string {
 	return t.statement
+}
+
+func (d *Domain) Statement() string {
+	return d.statement
 }
 
 func (t *Comment) Statement() string {

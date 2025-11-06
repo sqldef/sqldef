@@ -510,6 +510,7 @@ type DDL struct {
 	View          *View
 	Trigger       *Trigger
 	Type          *Type
+	Domain        *Domain
 	Comment       *Comment
 	Extension     *Extension
 	Schema        *Schema
@@ -533,6 +534,7 @@ const (
 	CreateType
 	CreateView
 	CreateSchema
+	CreateDomain
 	GrantPrivilege
 	RevokePrivilege
 	DropIndex
@@ -1189,9 +1191,18 @@ type Trigger struct {
 }
 
 type Type struct {
-	Name       TableName // workaround: using TableName to handle schema
+	Name       ObjectName
 	Type       ColumnType
 	EnumValues []string
+}
+
+type Domain struct {
+	Name       ObjectName
+	DataType   ColumnType // the underlying data type for the domain
+	Default    *DefaultDefinition
+	NotNull    bool
+	Collation  string
+	Constraint *CheckDefinition
 }
 
 type Comment struct {
@@ -1384,6 +1395,22 @@ func (node TableName) toViewName() TableName {
 		Schema: node.Schema,
 		Name:   NewTableIdent(strings.ToLower(node.Name.v)),
 	}
+}
+
+// ObjectName represents a schema-qualified database object name: [Name] or [Schema].[Name]
+// This is used for objects like domains, types, functions, etc. that can be schema-qualified
+// but are not tables.
+type ObjectName struct {
+	Schema TableIdent
+	Name   TableIdent
+}
+
+// Format formats the node.
+func (node ObjectName) Format(buf *nodeBuffer) {
+	if !node.Schema.isEmpty() {
+		buf.Printf("%v.", node.Schema)
+	}
+	buf.Printf("%v", node.Name)
 }
 
 // ParenTableExpr represents a parenthesized list of TableExpr.

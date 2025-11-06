@@ -1253,3 +1253,27 @@ var publicAndNonPublicSchemaTestCases = []struct {
 	{Name: "in public schema", Schema: "public"},
 	{Name: "in non-public schema", Schema: "test"},
 }
+
+// TestPsqldefCreateDomain tests domain creation in both public and non-public schemas
+func TestPsqldefCreateDomain(t *testing.T) {
+	for _, tc := range publicAndNonPublicSchemaTestCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			resetTestDatabase()
+			mustPgExec(testDatabaseName, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
+
+			// Test creating a basic domain
+			createDomain := fmt.Sprintf("CREATE DOMAIN %s.email AS text;\n", tc.Schema)
+			assertApplyOutput(t, createDomain, wrapWithTransaction(createDomain))
+			assertApplyOutput(t, createDomain, nothingModified)
+
+			// Test creating a domain with constraints
+			createDomainWithConstraints := fmt.Sprintf("CREATE DOMAIN %s.positive_int AS integer DEFAULT 1 NOT NULL;\n", tc.Schema)
+			assertApplyOutput(t, createDomain+createDomainWithConstraints, wrapWithTransaction(createDomainWithConstraints))
+			assertApplyOutput(t, createDomain+createDomainWithConstraints, nothingModified)
+
+			// Test dropping a domain
+			assertApplyOutput(t, createDomain, wrapWithTransaction(fmt.Sprintf("DROP DOMAIN \"%s\".\"positive_int\";\n", tc.Schema)))
+			assertApplyOutput(t, createDomain, nothingModified)
+		})
+	}
+}
