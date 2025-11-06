@@ -3252,7 +3252,7 @@ max_length_opt:
     if !strings.EqualFold(string($2), "max") {
       yylex.Error(fmt.Sprintf("syntax error around '%s'", string($2)))
     }
-    $$ = NewIntVal($2)
+    $$ = NewStrVal($2)
   }
 
 

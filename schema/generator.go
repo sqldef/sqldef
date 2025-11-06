@@ -3135,26 +3135,26 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 			}
 
 			if currentLength == nil {
-				currentLength = &Value{valueType: ValueTypeInt, intVal: defaultPrecision}
+				currentLength = &Value{valueType: ValueTypeInt, intVal: defaultPrecision, raw: fmt.Sprintf("%d", defaultPrecision)}
 			}
 			if desiredLength == nil {
-				desiredLength = &Value{valueType: ValueTypeInt, intVal: defaultPrecision}
+				desiredLength = &Value{valueType: ValueTypeInt, intVal: defaultPrecision, raw: fmt.Sprintf("%d", defaultPrecision)}
 			}
 			if currentScale == nil {
-				currentScale = &Value{valueType: ValueTypeInt, intVal: 0}
+				currentScale = &Value{valueType: ValueTypeInt, intVal: 0, raw: "0"}
 			}
 			if desiredScale == nil {
-				desiredScale = &Value{valueType: ValueTypeInt, intVal: 0}
+				desiredScale = &Value{valueType: ValueTypeInt, intVal: 0, raw: "0"}
 			}
 		}
 	}
 
-	if currentLength == nil && desiredLength != nil || currentLength != nil && desiredLength == nil {
+	// Length is typically an integer value, but MSSQL can use "max".
+	// For example, VARCHAR(MAX)
+	if !g.areSameIdentifiers(currentLength, desiredLength) {
 		return false
 	}
-	if currentLength != nil && desiredLength != nil && currentLength.intVal != desiredLength.intVal {
-		return false
-	}
+
 	if currentScale == nil && (desiredScale != nil && desiredScale.intVal != 0) || (currentScale != nil && currentScale.intVal != 0) && desiredScale == nil {
 		return false
 	}
@@ -3370,8 +3370,8 @@ func (g *Generator) areSameValue(current, desired *Value, columnType string) boo
 	return currentRaw == desiredRaw
 }
 
-// areSameIdentifier compares two values for identifiers/keywords (case-insensitive).
-func (g *Generator) areSameIdentifier(current, desired *Value) bool {
+// areSameIdentifiers compares two values for identifiers/keywords (case-insensitive).
+func (g *Generator) areSameIdentifiers(current, desired *Value) bool {
 	if current == nil && desired == nil {
 		return true
 	}
@@ -3544,7 +3544,7 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		}
 		for _, optionB := range indexBOptions {
 			if optionA := findIndexOptionByName(indexAOptions, optionB.optionName); optionA != nil {
-				if !g.areSameIdentifier(optionA.value, optionB.value) {
+				if !g.areSameIdentifiers(optionA.value, optionB.value) {
 					return false
 				}
 			} else {

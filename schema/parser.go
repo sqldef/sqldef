@@ -678,30 +678,51 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 	}, nil
 }
 
+func mustConvertToInt(val []byte) int {
+	intVal, err := strconv.Atoi(string(val))
+	if err != nil {
+		panic(fmt.Errorf("failed to convert %s to int: %w", string(val), err))
+	}
+	return intVal
+}
+
+func mustConvertToFloat(val []byte) float64 {
+	floatVal, err := strconv.ParseFloat(string(val), 64)
+	if err != nil {
+		panic(fmt.Errorf("failed to convert %s to float: %w", string(val), err))
+	}
+	return floatVal
+}
+
+func convertBitToBool(val []byte) bool {
+	return string(val) == "1"
+}
+
 func parseValue(val *parser.SQLVal) *Value {
 	if val == nil {
 		return nil
 	}
 
 	var valueType ValueType
-	if val.Type == parser.StrVal {
+	switch val.Type {
+	case parser.StrVal:
 		valueType = ValueTypeStr
-	} else if val.Type == parser.IntVal {
+	case parser.IntVal:
 		valueType = ValueTypeInt
-	} else if val.Type == parser.FloatVal {
+	case parser.FloatVal:
 		valueType = ValueTypeFloat
-	} else if val.Type == parser.HexNum {
+	case parser.HexNum:
 		valueType = ValueTypeHexNum
-	} else if val.Type == parser.HexVal {
+	case parser.HexVal:
 		valueType = ValueTypeHex
-	} else if val.Type == parser.ValArg {
+	case parser.ValArg:
 		valueType = ValueTypeValArg
-	} else if val.Type == parser.BitVal {
+	case parser.BitVal:
 		valueType = ValueTypeBit
-	} else if val.Type == parser.ValBool {
+	case parser.ValBool:
 		valueType = ValueTypeBool
-	} else {
-		return nil // TODO: Unreachable, but handle this properly...
+	default:
+		panic(fmt.Errorf("unexpected value type: %d (%#v)", val.Type, val.Val))
 	}
 
 	ret := Value{
@@ -713,17 +734,11 @@ func parseValue(val *parser.SQLVal) *Value {
 	case ValueTypeStr, ValueTypeBool:
 		ret.strVal = string(val.Val)
 	case ValueTypeInt:
-		intVal, _ := strconv.Atoi(string(val.Val)) // TODO: handle error
-		ret.intVal = intVal
+		ret.intVal = mustConvertToInt(val.Val)
 	case ValueTypeFloat:
-		floatVal, _ := strconv.ParseFloat(string(val.Val), 64) // TODO: handle error
-		ret.floatVal = floatVal
+		ret.floatVal = mustConvertToFloat(val.Val)
 	case ValueTypeBit:
-		if string(val.Val) == "1" {
-			ret.bitVal = true
-		} else {
-			ret.bitVal = false
-		}
+		ret.bitVal = convertBitToBool(val.Val)
 	}
 
 	return &ret
@@ -736,7 +751,7 @@ func parseLength(val *parser.SQLVal) (*int, error) {
 		return nil, nil
 	}
 	if val.Type != parser.IntVal {
-		return nil, fmt.Errorf("Expected a length to be int, but got ValType: %d (%#v)", val.Type, val.Val)
+		return nil, fmt.Errorf("expected a length to be int, but got ValType: %d (%#v)", val.Type, val.Val)
 	}
 	intVal, err := strconv.Atoi(string(val.Val)) // TODO: handle error
 	if err != nil {

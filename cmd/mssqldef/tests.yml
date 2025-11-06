@@ -1017,3 +1017,19 @@ AlterColumnDropNotNull:
   output: |
     ALTER TABLE [dbo].[users] ALTER COLUMN [name] varchar(100);
     ALTER TABLE [dbo].[users] ALTER COLUMN [email] varchar(255);
+VarcharMaxExchange:
+  current: |
+    CREATE TABLE test_table (
+      id int,
+      col1 varchar(100),
+      col2 varchar(max)
+    );
+  desired: |
+    CREATE TABLE test_table (
+      id int,
+      col1 varchar(max),
+      col2 varchar(100)
+    );
+  output: |
+    ALTER TABLE [dbo].[test_table] ALTER COLUMN [col1] varchar(max);
+    ALTER TABLE [dbo].[test_table] ALTER COLUMN [col2] varchar(100);
