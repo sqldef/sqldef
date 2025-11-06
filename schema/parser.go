@@ -751,10 +751,7 @@ func parseLength(val *parser.SQLVal) (*int, error) {
 	if val.Type != parser.IntVal {
 		return nil, fmt.Errorf("expected a length to be int, but got ValType: %d (%#v)", val.Type, val.Val)
 	}
-	intVal, err := strconv.Atoi(string(val.Val)) // TODO: handle error
-	if err != nil {
-		return nil, err
-	}
+	intVal := mustConvertToInt(val.Val)
 	return &intVal, nil
 }
 
