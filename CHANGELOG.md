@@ -1,3 +1,6 @@
+## [v3.6.0](https://github.com/sqldef/sqldef/compare/v3.5.1...v3.6.0) - 2025-11-07
+- psqldef: CREATE / ALTER / DROP DOMAIN by @gfx in https://github.com/sqldef/sqldef/pull/919
+
 ## [v3.5.1](https://github.com/sqldef/sqldef/compare/v3.5.0...v3.5.1) - 2025-11-06
 - add examples, update docs, explain offline-mode by @gfx in https://github.com/sqldef/sqldef/pull/914
 - clarify it's not off-by-one (was safe, but suspecious) by @gfx in https://github.com/sqldef/sqldef/pull/916
