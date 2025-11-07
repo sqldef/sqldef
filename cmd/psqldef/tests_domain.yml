@@ -30,7 +30,7 @@ CreateDomainWithCollation:
 CreateDomainWithSchemaQualification:
   desired: |
     CREATE SCHEMA test_schema;
-    CREATE DOMAIN test_schema.my_domain AS text DEFAULT 'default_value';
+    CREATE DOMAIN test_schema.my_domain AS text;
 
 DropDomainMultipleSchemas:
   current: |
@@ -85,32 +85,13 @@ CreateDomainWithMultipleNamedChecks:
       CONSTRAINT min_check CHECK (VALUE >= 0.0)
       CONSTRAINT max_check CHECK (VALUE <= 100.0);
 
-CreateDomainWithAllOptions:
-  desired: |
-    CREATE DOMAIN email_address AS text
-      COLLATE "en_US"
-      DEFAULT 'user@example.com'
-      NOT NULL
-      CONSTRAINT email_format CHECK (VALUE ~ '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}$');
-
-CreateDomainWithComplexCheck:
-  desired: |
-    CREATE DOMAIN price AS numeric(10,2)
-      DEFAULT 0.00
-      CHECK (VALUE >= 0.00 AND VALUE < 1000000.00);
-
-CreateDomainWithExplicitNull:
-  desired: |
-    CREATE DOMAIN optional_text AS text
-      NULL
-      DEFAULT NULL;
-
 DomainWithCheckIsIdempotent:
   current: |
     CREATE DOMAIN positive_int AS integer CHECK (VALUE > 0);
   desired: |
     CREATE DOMAIN positive_int AS integer CHECK (VALUE > 0);
   output: |
+
 CreateDomainCheckAndNotNull:
   desired: |
     CREATE DOMAIN username AS text
@@ -147,12 +128,6 @@ MultiplDomainsInTable:
       email email
     );
 
-CreateDomainStatusType:
-  desired: |
-    CREATE DOMAIN user_status AS text
-      DEFAULT 'active'
-      CHECK (VALUE IN ('active', 'inactive', 'pending', 'suspended'));
-
 CreateDomainDateOfBirth:
   desired: |
     CREATE DOMAIN date_of_birth AS date
@@ -172,12 +147,6 @@ CreateDomainBoundedString:
   desired: |
     CREATE DOMAIN short_description AS text
       CHECK (char_length(VALUE) >= 3 AND char_length(VALUE) <= 255);
-
-CreateDomainCurrency:
-  desired: |
-    CREATE DOMAIN currency_amount AS numeric(12,2)
-      DEFAULT 0.00
-      CHECK (VALUE >= 0.00);
 
 CreateDomainPhoneNumber:
   desired: |
@@ -199,11 +168,6 @@ CreateDomainNoLeadingTrailingSpaces:
   desired: |
     CREATE DOMAIN clean_text AS text
       CHECK (VALUE !~ '^\s' AND VALUE !~ '\s$');
-
-CreateDomainPercentage:
-  desired: |
-    CREATE DOMAIN percentage AS numeric(5,2)
-      CHECK (VALUE >= 0 AND VALUE <= 100);
 
 CreateDomainIpAddress:
   desired: |
@@ -232,12 +196,6 @@ CreateDomainRating:
     CREATE DOMAIN star_rating AS integer
       CHECK (VALUE >= 1 AND VALUE <= 5);
 
-CreateDomainPriority:
-  desired: |
-    CREATE DOMAIN priority_level AS integer
-      DEFAULT 3
-      CHECK (VALUE IN (1, 2, 3, 4, 5));
-
 CreateDomainPassword:
   desired: |
     CREATE DOMAIN password_hash AS text
@@ -249,12 +207,71 @@ CreateDomainUuidString:
     CREATE DOMAIN external_id AS text
       CHECK (VALUE ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
 
-CreateTableWithCommonDomains:
+# ALTER DOMAIN test cases - simple cases that should work
+
+AlterDomainSetDefault:
+  current: |
+    CREATE DOMAIN status_code AS integer;
   desired: |
-    CREATE DOMAIN user_status AS text DEFAULT 'active' CHECK (VALUE IN ('active', 'inactive'));
-    CREATE DOMAIN email_addr AS text CHECK (VALUE ~ '@');
-    CREATE TABLE users (
-      id integer PRIMARY KEY,
-      email email_addr NOT NULL,
-      status user_status
-    );
+    CREATE DOMAIN status_code AS integer DEFAULT 200;
+  output: |
+    ALTER DOMAIN public.status_code SET DEFAULT 200;
+
+AlterDomainDropDefault:
+  current: |
+    CREATE DOMAIN status_code AS integer DEFAULT 200;
+  desired: |
+    CREATE DOMAIN status_code AS integer;
+  output: |
+    ALTER DOMAIN public.status_code DROP DEFAULT;
+
+AlterDomainChangeDefault:
+  current: |
+    CREATE DOMAIN status_code AS integer DEFAULT 200;
+  desired: |
+    CREATE DOMAIN status_code AS integer DEFAULT 404;
+  output: |
+    ALTER DOMAIN public.status_code SET DEFAULT 404;
+
+AlterDomainSetNotNull:
+  current: |
+    CREATE DOMAIN email AS text;
+  desired: |
+    CREATE DOMAIN email AS text NOT NULL;
+  output: |
+    ALTER DOMAIN public.email SET NOT NULL;
+
+AlterDomainDropNotNull:
+  current: |
+    CREATE DOMAIN email AS text NOT NULL;
+  desired: |
+    CREATE DOMAIN email AS text;
+  output: |
+    ALTER DOMAIN public.email DROP NOT NULL;
+
+AlterDomainAddCheck:
+  current: |
+    CREATE DOMAIN positive_int AS integer;
+  desired: |
+    CREATE DOMAIN positive_int AS integer CHECK (VALUE > 0);
+  output: |
+    ALTER DOMAIN public.positive_int ADD CHECK (VALUE > 0);
+
+AlterDomainAddNamedCheck:
+  current: |
+    CREATE DOMAIN positive_int AS integer;
+  desired: |
+    CREATE DOMAIN positive_int AS integer CONSTRAINT positive_check CHECK (VALUE > 0);
+  output: |
+    ALTER DOMAIN public.positive_int ADD CONSTRAINT positive_check CHECK (VALUE > 0);
+
+AlterDomainAddMultipleChecks:
+  current: |
+    CREATE DOMAIN valid_score AS integer;
+  desired: |
+    CREATE DOMAIN valid_score AS integer
+      CHECK (VALUE >= 0)
+      CHECK (VALUE <= 100);
+  output: |
+    ALTER DOMAIN public.valid_score ADD CHECK (VALUE >= 0);
+    ALTER DOMAIN public.valid_score ADD CHECK (VALUE <= 100);

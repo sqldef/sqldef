@@ -305,8 +305,18 @@ type Type struct {
 }
 
 type Domain struct {
-	name      string
-	statement string
+	name         string
+	statement    string
+	dataType     string
+	defaultValue *DefaultDefinition
+	notNull      bool
+	collation    string
+	constraints  []DomainConstraint
+}
+
+type DomainConstraint struct {
+	name       string
+	expression parser.Expr
 }
 
 type Generated struct {

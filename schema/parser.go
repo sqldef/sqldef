@@ -186,9 +186,22 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				enumValues: stmt.Type.Type.EnumValues,
 			}, nil
 		} else if stmt.Action == parser.CreateDomain {
+			var constraints []DomainConstraint
+			for _, check := range stmt.Domain.Constraints {
+				constraints = append(constraints, DomainConstraint{
+					name:       parser.String(check.ConstraintName),
+					expression: check.Where.Expr,
+				})
+			}
+
 			return &Domain{
-				name:      normalizedObjectName(mode, stmt.Domain.Name, defaultSchema),
-				statement: ddl,
+				name:         normalizedObjectName(mode, stmt.Domain.Name, defaultSchema),
+				statement:    ddl,
+				dataType:     parser.String(&stmt.Domain.DataType),
+				defaultValue: parseDefaultDefinition(stmt.Domain.Default),
+				notNull:      stmt.Domain.NotNull,
+				collation:    stmt.Domain.Collation,
+				constraints:  constraints,
 			}, nil
 		} else if stmt.Action == parser.CommentOn {
 			return &Comment{
