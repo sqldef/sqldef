@@ -39,6 +39,9 @@ func NewDatabase(config database.Config) (database.Database, error) {
 
 func (d *PostgresDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
 	d.generatorConfig = config
+	// Sync TargetSchema to d.config for backward compatibility
+	// (other methods read from d.config.TargetSchema)
+	d.config.TargetSchema = config.TargetSchema
 }
 
 func (d *PostgresDatabase) GetTransactionQueries() database.TransactionQueries {
@@ -73,6 +76,12 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 		return "", err
 	}
 	ddls = append(ddls, typeDDLs...)
+
+	domainDDLs, err := d.domains()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, domainDDLs...)
 
 	tableNames, err := d.tableNames()
 	if err != nil {
@@ -317,6 +326,116 @@ func (d *PostgresDatabase) types() ([]string, error) {
 				"CREATE TYPE %s.%s AS ENUM (%s);", escapeSQLName(typeSchema), escapeSQLName(typeName), strings.Join(enumLabels, ", "),
 			),
 		)
+	}
+	return ddls, nil
+}
+
+func (d *PostgresDatabase) domains() ([]string, error) {
+	rows, err := d.db.Query(`
+		SELECT n.nspname AS domain_schema,
+		       t.typname AS domain_name,
+		       pg_catalog.format_type(t.typbasetype, t.typtypmod) AS data_type,
+		       t.typdefault AS default_value,
+		       t.typnotnull AS not_null,
+		       c.collname AS collation
+		FROM pg_catalog.pg_type t
+		INNER JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
+		LEFT JOIN pg_catalog.pg_collation c ON t.typcollation = c.oid AND t.typcollation <> 0
+		WHERE t.typtype = 'd'
+		  AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = t.oid AND d.deptype = 'e')
+		ORDER BY n.nspname, t.typname;
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type domainInfo struct {
+		schema, name, dataType  string
+		defaultValue, collation sql.NullString
+		notNull                 bool
+	}
+
+	var domains []domainInfo
+	for rows.Next() {
+		var di domainInfo
+		if err := rows.Scan(&di.schema, &di.name, &di.dataType, &di.defaultValue, &di.notNull, &di.collation); err != nil {
+			return nil, err
+		}
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, di.schema) {
+			continue
+		}
+		domains = append(domains, di)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Now fetch constraints for domains, applying the same TargetSchema filter
+	constraintRows, err := d.db.Query(`
+		SELECT n.nspname AS domain_schema,
+		       t.typname AS domain_name,
+		       con.conname AS constraint_name,
+		       pg_catalog.pg_get_constraintdef(con.oid, true) AS constraint_def
+		FROM pg_catalog.pg_constraint con
+		INNER JOIN pg_catalog.pg_type t ON con.contypid = t.oid
+		INNER JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
+		WHERE t.typtype = 'd'
+		  AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+		ORDER BY n.nspname, t.typname, con.conname;
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer constraintRows.Close()
+
+	// Map of domain (schema.name) to list of constraint definitions
+	constraintsMap := make(map[string][]string)
+	for constraintRows.Next() {
+		var domainSchema, domainName, constraintName string
+		var constraintDef string
+		if err := constraintRows.Scan(&domainSchema, &domainName, &constraintName, &constraintDef); err != nil {
+			return nil, err
+		}
+		// Apply TargetSchema filter to constraints as well
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, domainSchema) {
+			continue
+		}
+		key := domainSchema + "." + domainName
+		constraintsMap[key] = append(constraintsMap[key], constraintDef)
+	}
+	if err := constraintRows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Build CREATE DOMAIN statements
+	var ddls []string
+	for _, di := range domains {
+		ddl := fmt.Sprintf("CREATE DOMAIN %s.%s AS %s", escapeSQLName(di.schema), escapeSQLName(di.name), di.dataType)
+
+		if di.collation.Valid && di.collation.String != "" && di.collation.String != "default" {
+			ddl += fmt.Sprintf(" COLLATE %s", escapeSQLName(di.collation.String))
+		}
+
+		if di.defaultValue.Valid {
+			ddl += fmt.Sprintf(" DEFAULT %s", di.defaultValue.String)
+		}
+
+		if di.notNull {
+			ddl += " NOT NULL"
+		}
+
+		// Add all CHECK constraints
+		key := di.schema + "." + di.name
+		if constraints, ok := constraintsMap[key]; ok {
+			for _, constraintDef := range constraints {
+				ddl += fmt.Sprintf(" %s", constraintDef)
+			}
+		}
+
+		ddl += ";"
+		ddls = append(ddls, ddl)
 	}
 	return ddls, nil
 }

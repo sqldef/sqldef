@@ -1253,3 +1253,127 @@ var publicAndNonPublicSchemaTestCases = []struct {
 	{Name: "in public schema", Schema: "public"},
 	{Name: "in non-public schema", Schema: "test"},
 }
+
+// TestPsqldefCreateDomain tests domain creation in both public and non-public schemas
+func TestPsqldefCreateDomain(t *testing.T) {
+	for _, tc := range publicAndNonPublicSchemaTestCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			resetTestDatabase()
+			mustPgExec(testDatabaseName, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
+
+			// Test creating a basic domain
+			createDomain := fmt.Sprintf("CREATE DOMAIN %s.email AS text;\n", tc.Schema)
+			assertApplyOutput(t, createDomain, wrapWithTransaction(createDomain))
+			assertApplyOutput(t, createDomain, nothingModified)
+
+			// Test creating a domain with constraints
+			createDomainWithConstraints := fmt.Sprintf("CREATE DOMAIN %s.positive_int AS integer DEFAULT 1 NOT NULL;\n", tc.Schema)
+			assertApplyOutput(t, createDomain+createDomainWithConstraints, wrapWithTransaction(createDomainWithConstraints))
+			assertApplyOutput(t, createDomain+createDomainWithConstraints, nothingModified)
+
+			// Test dropping a domain
+			assertApplyOutput(t, createDomain, wrapWithTransaction(fmt.Sprintf("DROP DOMAIN %s.positive_int;\n", tc.Schema)))
+			assertApplyOutput(t, createDomain, nothingModified)
+		})
+	}
+}
+
+// TestPsqldefDomainWithTargetSchema tests that TargetSchema filtering works correctly for domains
+func TestPsqldefDomainWithTargetSchema(t *testing.T) {
+	resetTestDatabase()
+
+	// Create two schemas with domains of the same name but different constraints
+	mustPgExec(testDatabaseName, `
+		CREATE SCHEMA test_schema_a;
+		CREATE SCHEMA test_schema_b;
+		CREATE DOMAIN test_schema_a.amount AS integer CHECK (VALUE > 0);
+		CREATE DOMAIN test_schema_b.amount AS integer CHECK (VALUE < 0);
+		CREATE DOMAIN test_schema_a.email AS text CHECK (VALUE ~ '@');
+		CREATE DOMAIN test_schema_b.status AS text DEFAULT 'pending';
+	`)
+
+	t.Run("filter to schema_a only", func(t *testing.T) {
+		// Export schema with TargetSchema filtering to schema_a
+		db, err := connectDatabase(dbConfig{DbName: testDatabaseName})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+
+		config := database.GeneratorConfig{
+			TargetSchema: []string{"test_schema_a"},
+		}
+		db.SetGeneratorConfig(config)
+
+		exported, err := db.ExportDDLs()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify schema_a domains are present (using quoted identifiers)
+		assert.Contains(t, exported, `CREATE DOMAIN "test_schema_a"."amount"`)
+		assert.Contains(t, exported, "CHECK (VALUE > 0)") // schema_a constraint
+		assert.Contains(t, exported, `CREATE DOMAIN "test_schema_a"."email"`)
+		assert.Contains(t, exported, "CHECK (VALUE ~ '@'")
+
+		// Verify schema_b domains are NOT present
+		assert.NotContains(t, exported, `CREATE DOMAIN "test_schema_b"."amount"`)
+		assert.NotContains(t, exported, "CHECK (VALUE < 0)") // schema_b constraint
+		assert.NotContains(t, exported, `CREATE DOMAIN "test_schema_b"."status"`)
+	})
+
+	t.Run("filter to schema_b only", func(t *testing.T) {
+		db, err := connectDatabase(dbConfig{DbName: testDatabaseName})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+
+		config := database.GeneratorConfig{
+			TargetSchema: []string{"test_schema_b"},
+		}
+		db.SetGeneratorConfig(config)
+
+		exported, err := db.ExportDDLs()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify schema_b domains are present (using quoted identifiers)
+		assert.Contains(t, exported, `CREATE DOMAIN "test_schema_b"."amount"`)
+		assert.Contains(t, exported, "CHECK (VALUE < 0)") // schema_b constraint
+		assert.Contains(t, exported, `CREATE DOMAIN "test_schema_b"."status"`)
+		assert.Contains(t, exported, "DEFAULT 'pending'")
+
+		// Verify schema_a domains are NOT present
+		assert.NotContains(t, exported, `CREATE DOMAIN "test_schema_a"."amount"`)
+		assert.NotContains(t, exported, "CHECK (VALUE > 0)") // schema_a constraint
+		assert.NotContains(t, exported, `CREATE DOMAIN "test_schema_a"."email"`)
+	})
+
+	t.Run("filter to both schemas", func(t *testing.T) {
+		db, err := connectDatabase(dbConfig{DbName: testDatabaseName})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+
+		config := database.GeneratorConfig{
+			TargetSchema: []string{"test_schema_a", "test_schema_b"},
+		}
+		db.SetGeneratorConfig(config)
+
+		exported, err := db.ExportDDLs()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify all domains from both schemas are present (using quoted identifiers)
+		assert.Contains(t, exported, `CREATE DOMAIN "test_schema_a"."amount"`)
+		assert.Contains(t, exported, "CHECK (VALUE > 0)")
+		assert.Contains(t, exported, `CREATE DOMAIN "test_schema_b"."amount"`)
+		assert.Contains(t, exported, "CHECK (VALUE < 0)")
+		assert.Contains(t, exported, `CREATE DOMAIN "test_schema_a"."email"`)
+		assert.Contains(t, exported, `CREATE DOMAIN "test_schema_b"."status"`)
+	})
+}

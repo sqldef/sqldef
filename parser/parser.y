@@ -78,6 +78,7 @@ func forceEOF(yylex any) {
   joinCondition            JoinCondition
   tableName                TableName
   tableNames               TableNames
+  objectName               ObjectName
   indexHints               *IndexHints
   expr                     Expr
   exprs                    Exprs
@@ -143,6 +144,12 @@ func forceEOF(yylex any) {
     constraintOpts    *ConstraintOptions
     notForReplication bool
   }
+  domainConstraints        struct {
+    defaultDef *DefaultDefinition
+    notNull    bool
+    collation  string
+    checks     []*CheckDefinition
+  }
 }
 
 %token LEX_ERROR
@@ -200,7 +207,7 @@ func forceEOF(yylex any) {
 
 // DDL Tokens
 %token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD GRANT REVOKE OPTION PRIVILEGES
-%token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION EXCLUDE
+%token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION EXCLUDE DOMAIN
 %right <bytes> UNIQUE KEY
 %token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
 %token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN
@@ -311,6 +318,7 @@ func forceEOF(yylex any) {
 %type <tableNames> table_name_list
 %type <str> inner_join outer_join straight_join natural_join
 %type <tableName> table_name into_table_name
+%type <objectName> object_name
 %type <aliasedTableName> aliased_table_name
 %type <indexHints> index_hint_list
 %type <expr> where_expression_opt
@@ -428,6 +436,7 @@ func forceEOF(yylex any) {
 %type <boolVal> deferrable_opt initially_deferred_opt
 %type <boolVal> variadic_opt
 %type <fkDeferOpts> fk_defer_opts
+%type <domainConstraints> domain_constraints_opt domain_constraint
 %type <arrayConstructor> array_constructor
 %type <exprs> array_element_list
 %type <expr> array_element
@@ -780,7 +789,7 @@ create_statement:
     }
   }
 /* For PostgreSQL */
-| CREATE TYPE table_name AS column_type
+| CREATE TYPE object_name AS column_type
   {
     $$ = &DDL{
       Action: CreateType,
@@ -789,6 +798,21 @@ create_statement:
         Type: $5,
         EnumValues: $5.EnumValues,
       },
+    }
+  }
+| CREATE DOMAIN object_name AS column_type domain_constraints_opt
+  {
+    domain := &Domain{
+      Name: $3,
+      DataType: $5,
+      Default: $6.defaultDef,
+      NotNull: $6.notNull,
+      Collation: $6.collation,
+      Constraints: $6.checks,
+    }
+    $$ = &DDL{
+      Action: CreateDomain,
+      Domain: domain,
     }
   }
 /* For SQLite3, only to parse because alternation is not supported. // The Virtual Table Mechanism Of SQLite https://www.sqlite.org/vtab.html */
@@ -2886,6 +2910,74 @@ no_inherit_opt:
     $$ = BoolVal(true)
   }
 
+domain_constraints_opt:
+  {
+    $$.defaultDef = nil
+    $$.notNull = false
+    $$.collation = ""
+    $$.checks = nil
+  }
+| domain_constraints_opt domain_constraint
+  {
+    $$ = $1
+    if $2.defaultDef != nil {
+      $$.defaultDef = $2.defaultDef
+    }
+    if $2.notNull {
+      $$.notNull = $2.notNull
+    }
+    if $2.collation != "" {
+      $$.collation = $2.collation
+    }
+    if len($2.checks) > 0 {
+      $$.checks = append($$.checks, $2.checks...)
+    }
+  }
+
+domain_constraint:
+  DEFAULT default_value_expression
+  {
+    $$.defaultDef = &DefaultDefinition{Expression: DefaultExpression{Expr: $2}}
+    $$.notNull = false
+    $$.collation = ""
+    $$.checks = nil
+  }
+| NOT NULL
+  {
+    $$.defaultDef = nil
+    $$.notNull = true
+    $$.collation = ""
+    $$.checks = nil
+  }
+| NULL
+  {
+    $$.defaultDef = nil
+    $$.notNull = false
+    $$.collation = ""
+    $$.checks = nil
+  }
+| COLLATE sql_id
+  {
+    $$.defaultDef = nil
+    $$.notNull = false
+    $$.collation = $2.String()
+    $$.checks = nil
+  }
+| CHECK openb expression closeb
+  {
+    $$.defaultDef = nil
+    $$.notNull = false
+    $$.collation = ""
+    $$.checks = []*CheckDefinition{{Where: *NewWhere(WhereStr, $3)}}
+  }
+| CONSTRAINT sql_id CHECK openb expression closeb
+  {
+    $$.defaultDef = nil
+    $$.notNull = false
+    $$.collation = ""
+    $$.checks = []*CheckDefinition{{ConstraintName: $2, Where: *NewWhere(WhereStr, $5)}}
+  }
+
 character_cast_opt:
   {
     $$ = nil
@@ -4455,6 +4547,16 @@ table_name:
     $$ = TableName{Schema: $1, Name: $3}
   }
 
+object_name:
+  table_id
+  {
+    $$ = ObjectName{Name: $1}
+  }
+| table_id '.' reserved_table_id
+  {
+    $$ = ObjectName{Schema: $1, Name: $3}
+  }
+
 index_hint_list:
   {
     $$ = nil
@@ -5466,6 +5568,10 @@ column_name:
   {
     $$ = &ColName{Name: NewColIdent(string($1))}
   }
+| VALUE
+  {
+    $$ = &ColName{Name: NewColIdent("VALUE")}
+  }
 | table_id '.' reserved_sql_id
   {
     $$ = &ColName{Qualifier: TableName{Name: $1}, Name: $3}
@@ -5856,6 +5962,10 @@ reserved_sql_id:
   {
     $$ = NewColIdent(string($1))
   }
+| VALUE
+  {
+    $$ = NewColIdent(string($1))
+  }
 | TEXT
   {
     $$ = NewColIdent(string($1))
@@ -6189,6 +6299,7 @@ reserved_keyword:
 non_reserved_keyword:
   ACTION
 | DEFINER
+| DOMAIN
 | INVOKER
 | POLICY
 | TYPE

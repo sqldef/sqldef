@@ -40,6 +40,9 @@ type Generator struct {
 	desiredTypes []*Type
 	currentTypes []*Type
 
+	desiredDomains []*Domain
+	currentDomains []*Domain
+
 	// Track FKs that have been handled during primary key changes
 	handledForeignKeys map[string]bool
 
@@ -106,6 +109,8 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		currentTriggers:    aggregated.Triggers,
 		desiredTypes:       desiredAggregated.Types,
 		currentTypes:       aggregated.Types,
+		desiredDomains:     desiredAggregated.Domains,
+		currentDomains:     aggregated.Domains,
 		desiredComments:    desiredAggregated.Comments,
 		currentComments:    aggregated.Comments,
 		desiredExtensions:  desiredAggregated.Extensions,
@@ -246,6 +251,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return nil, err
 			}
 			interDDLs = append(interDDLs, typeDDLs...)
+		case *Domain:
+			domainDDLs, err := g.generateDDLsForCreateDomain(desired)
+			if err != nil {
+				return nil, err
+			}
+			interDDLs = append(interDDLs, domainDDLs...)
 		case *Comment:
 			commentDDLs, err := g.generateDDLsForComment(desired)
 			if err != nil {
@@ -456,6 +467,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			continue
 		}
 		ddls = append(ddls, fmt.Sprintf("DROP VIEW %s", g.escapeTableName(currentView.name)))
+	}
+
+	// Clean up obsoleted domains
+	for _, currentDomain := range g.currentDomains {
+		if slices.Contains(convertDomainNames(g.desiredDomains), currentDomain.name) {
+			continue
+		}
+		ddls = append(ddls, fmt.Sprintf("DROP DOMAIN %s", currentDomain.name))
 	}
 
 	// Clean up obsoleted extensions
@@ -1655,6 +1674,90 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 	return ddls, nil
 }
 
+func (g *Generator) generateDDLsForCreateDomain(desired *Domain) ([]string, error) {
+	ddls := []string{}
+
+	if currentDomain := findDomainByName(g.currentDomains, desired.name); currentDomain != nil {
+		alterDDLs, err := g.generateAlterDomainDDLs(currentDomain, desired)
+		if err != nil {
+			return nil, err
+		}
+		ddls = append(ddls, alterDDLs...)
+	} else {
+		ddls = append(ddls, desired.statement)
+	}
+	// Only add to desiredDomains if it doesn't already exist (it may have been pre-populated from aggregation)
+	if findDomainByName(g.desiredDomains, desired.name) == nil {
+		g.desiredDomains = append(g.desiredDomains, desired)
+	}
+
+	return ddls, nil
+}
+
+func (g *Generator) generateAlterDomainDDLs(current, desired *Domain) ([]string, error) {
+	var ddls []string
+
+	if !g.areSameDefaultValue(current.defaultValue, desired.defaultValue, current.dataType) {
+		if desired.defaultValue == nil {
+			ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s DROP DEFAULT", current.name))
+		} else {
+			normalizedExpr := normalizeExpr(desired.defaultValue.expression, g.mode)
+			exprStr := parser.String(normalizedExpr)
+			ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s SET DEFAULT %s", current.name, exprStr))
+		}
+	}
+
+	if current.notNull != desired.notNull {
+		if desired.notNull {
+			ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s SET NOT NULL", current.name))
+		} else {
+			ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s DROP NOT NULL", current.name))
+		}
+	}
+
+	for _, currentConstraint := range current.constraints {
+		if !g.findDomainConstraintByExpression(desired.constraints, currentConstraint.expression) {
+			if currentConstraint.name != "" {
+				ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s DROP CONSTRAINT %s",
+					current.name, currentConstraint.name))
+			}
+		}
+	}
+
+	for _, desiredConstraint := range desired.constraints {
+		if !g.findDomainConstraintByExpression(current.constraints, desiredConstraint.expression) {
+			exprStr := parser.String(desiredConstraint.expression)
+			if desiredConstraint.name != "" {
+				ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s ADD CONSTRAINT %s CHECK (%s)",
+					current.name, desiredConstraint.name, exprStr))
+			} else {
+				ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s ADD CHECK (%s)",
+					current.name, exprStr))
+			}
+		}
+	}
+
+	// Note: We don't handle collation changes as PostgreSQL doesn't support changing collation via ALTER DOMAIN
+	// The user would need to drop and recreate the domain to change collation
+
+	return ddls, nil
+}
+
+func (g *Generator) findDomainConstraintByExpression(constraints []DomainConstraint, expression parser.Expr) bool {
+	normalizedExpr := normalizeCheckExpr(expression, g.mode)
+	normalizedExprStr := strings.ToLower(parser.String(normalizedExpr))
+
+	for _, c := range constraints {
+		normalizedC := normalizeCheckExpr(c.expression, g.mode)
+		normalizedCStr := strings.ToLower(parser.String(normalizedC))
+
+		if normalizedCStr == normalizedExprStr {
+			return true
+		}
+	}
+	return false
+}
+
 func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 	ddls := []string{}
 
@@ -1967,6 +2070,7 @@ type AggregatedSchema struct {
 	Views      []*View
 	Triggers   []*Trigger
 	Types      []*Type
+	Domains    []*Domain
 	Comments   []*Comment
 	Extensions []*Extension
 	Schemas    []*Schema
@@ -2488,6 +2592,7 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 		Views:      []*View{},
 		Triggers:   []*Trigger{},
 		Types:      []*Type{},
+		Domains:    []*Domain{},
 		Comments:   []*Comment{},
 		Extensions: []*Extension{},
 		Schemas:    []*Schema{},
@@ -2559,6 +2664,8 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 			aggregated.Triggers = append(aggregated.Triggers, stmt)
 		case *Type:
 			aggregated.Types = append(aggregated.Types, stmt)
+		case *Domain:
+			aggregated.Domains = append(aggregated.Domains, stmt)
 		case *Comment:
 			aggregated.Comments = append(aggregated.Comments, stmt)
 		case *Extension:
@@ -3001,6 +3108,15 @@ func findTypeByName(types []*Type, name string) *Type {
 	for _, createType := range types {
 		if createType.name == name {
 			return createType
+		}
+	}
+	return nil
+}
+
+func findDomainByName(domains []*Domain, name string) *Domain {
+	for _, domain := range domains {
+		if domain.name == name {
+			return domain
 		}
 	}
 	return nil
@@ -3718,6 +3834,10 @@ func convertPolicyNames(policies []Policy) []string {
 
 func convertViewNames(views []*View) []string {
 	return util.TransformSlice(views, func(v *View) string { return v.name })
+}
+
+func convertDomainNames(domains []*Domain) []string {
+	return util.TransformSlice(domains, func(d *Domain) string { return d.name })
 }
 
 func convertExtensionNames(extensions []*Extension) []string {
