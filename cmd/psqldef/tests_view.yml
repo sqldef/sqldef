@@ -1,3 +1,20 @@
+View:
+  desired: |
+    CREATE TABLE points (id bigint);
+    CREATE VIEW points_view AS SELECT id FROM points;
+MaterializedView:
+  desired: |
+    CREATE TABLE points (id bigint);
+    CREATE MATERIALIZED VIEW points_view AS SELECT id FROM points;
+MaterializedViewWithData:
+  desired: |
+    CREATE TABLE points (id bigint);
+    CREATE MATERIALIZED VIEW points_view AS SELECT id FROM points WITH DATA;
+MaterializedViewWithNoData:
+  desired: |
+    CREATE TABLE points (id bigint);
+    CREATE MATERIALIZED VIEW points_view AS SELECT id FROM points WITH NO DATA;
+
 ViewDDLsAreEmittedLastWithoutChangingDefinition:
   current: |
     CREATE TABLE foos (
@@ -29,10 +46,6 @@ ViewDDLsAreEmittedLastWithChangingDefinition:
     ALTER TABLE "public"."foos" ADD COLUMN "secret" boolean NOT NULL DEFAULT false;
     DROP VIEW "public"."foos_view";
     CREATE VIEW "public"."foos_view" AS select id, secret from foos where secret = false;
-MaterializedView:
-  desired: |
-    CREATE TABLE points (id bigint);
-    CREATE MATERIALIZED VIEW IF NOT EXISTS points_view AS SELECT id FROM points;
 CreateMaterializedView:
   current: |
     CREATE TABLE public.users (
@@ -56,16 +69,16 @@ CreateMaterializedView:
       user_id BIGINT,
       is_deleted boolean
     );
-    CREATE MATERIALIZED VIEW public.view_user_posts
-      AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
+    CREATE MATERIALIZED VIEW public.view_user_posts AS
+      SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
   output: |
-    CREATE MATERIALIZED VIEW public.view_user_posts
-      AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
+    CREATE MATERIALIZED VIEW public.view_user_posts AS
+      SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
 DropMaterializedView:
   current: |
     CREATE TABLE points (id bigint);
-    CREATE MATERIALIZED VIEW IF NOT EXISTS points_view
-      AS SELECT id FROM points;
+    CREATE MATERIALIZED VIEW IF NOT EXISTS points_view AS
+      SELECT id FROM points;
   desired: |
     CREATE TABLE points (id bigint);
   output: |
@@ -219,8 +232,8 @@ ReplaceViewWithChangeCondition:
       bar text
     );
 
-    CREATE VIEW v
-      AS SELECT
+    CREATE VIEW v AS
+      SELECT
         foo,
         bar
       FROM hoge
@@ -419,3 +432,44 @@ ExtractInMaterializedView:
         COUNT(*) AS event_count
       FROM events
       GROUP BY event_year, event_month;
+ExtractBasicFields:
+  desired: |
+    CREATE TABLE events (
+      id bigint,
+      created_at timestamp
+    );
+    CREATE VIEW extract_view AS
+      SELECT
+        EXTRACT(year FROM created_at) AS year_value,
+        EXTRACT(month FROM created_at) AS month_value,
+        EXTRACT(day FROM created_at) AS day_value,
+        EXTRACT(hour FROM created_at) AS hour_value,
+        EXTRACT(minute FROM created_at) AS minute_value,
+        EXTRACT(second FROM created_at) AS second_value,
+        EXTRACT(epoch FROM created_at) AS epoch_value,
+        EXTRACT(dow FROM created_at) AS dow_value,
+        EXTRACT(doy FROM created_at) AS doy_value,
+        EXTRACT(week FROM created_at) AS week_value,
+        EXTRACT(quarter FROM created_at) AS quarter_value
+      FROM events;
+ExtractWithAge:
+  desired: |
+    CREATE TABLE user_info (
+      user_id varchar,
+      birthdate timestamp with time zone
+    );
+    CREATE VIEW age_view AS
+      SELECT
+        user_id,
+        EXTRACT(year FROM age(birthdate)) AS age_years,
+        EXTRACT(month FROM age(birthdate)) AS age_months
+      FROM user_info;
+CastBpchar:
+  desired: |
+    CREATE TABLE public.dummy_table (
+      "col" character(30)
+    );
+    CREATE VIEW public.dummy_view AS
+      SELECT dummy_table.col
+      FROM dummy_table
+      WHERE (dummy_table.col <> 'dummy value'::bpchar);
