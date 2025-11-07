@@ -56,15 +56,18 @@ CreateMaterializedView:
       user_id BIGINT,
       is_deleted boolean
     );
-    CREATE MATERIALIZED VIEW public.view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
+    CREATE MATERIALIZED VIEW public.view_user_posts
+      AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
   output: |
-    CREATE MATERIALIZED VIEW public.view_user_posts AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
+    CREATE MATERIALIZED VIEW public.view_user_posts
+      AS SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
 DropMaterializedView:
   current: |
-    CREATE TABLE "public"."points" (id bigint);
-    CREATE MATERIALIZED VIEW IF NOT EXISTS "public"."points_view" AS SELECT id FROM points;
+    CREATE TABLE points (id bigint);
+    CREATE MATERIALIZED VIEW IF NOT EXISTS points_view
+      AS SELECT id FROM points;
   desired: |
-    CREATE TABLE "public"."points" (id bigint);
+    CREATE TABLE points (id bigint);
   output: |
     DROP MATERIALIZED VIEW "public"."points_view";
 MaterializedViewIndex:
@@ -141,8 +144,6 @@ MaterializedViewWithMultipleCTEs:
     SELECT au.user_id, uc.session_count
     FROM active_users au
     JOIN user_counts uc ON au.user_id = uc.user_id;
-# Test cases for set operations in views (UNION, INTERSECT, EXCEPT)
-# These currently fail with the generic parser
 CreateViewWithUnion:
   desired: |
     CREATE VIEW test_view AS SELECT 1 AS id UNION SELECT 2 AS id;
@@ -203,9 +204,9 @@ CreateViewCast:
   output: ''
 ReplaceViewWithChangeCondition:
   current: |
-    CREATE TABLE "public"."hoge" (
-      "foo" text,
-      "bar" text
+    CREATE TABLE hoge (
+      foo text,
+      bar text
     );
     CREATE VIEW v AS
     SELECT
@@ -213,17 +214,17 @@ ReplaceViewWithChangeCondition:
       bar
     FROM hoge;
   desired: |
-    CREATE TABLE "public"."hoge" (
-      "foo" text,
-      "bar" text
+    CREATE TABLE hoge (
+      foo text,
+      bar text
     );
 
-    CREATE VIEW v AS
-    SELECT
-      foo,
-      bar
-    FROM hoge
-      WHERE bar = 'baz';
+    CREATE VIEW v
+      AS SELECT
+        foo,
+        bar
+      FROM hoge
+        WHERE bar = 'baz';
   output: |
     CREATE OR REPLACE VIEW "public"."v" AS select foo, bar from hoge where bar = 'baz';
 ReplaceViewWithAddColumnToTail:
@@ -253,7 +254,7 @@ ReplaceViewWithAddColumnToTail:
     CREATE OR REPLACE VIEW "public"."v" AS select foo, bar, 'x' as added from hoge;
 ReplaceViewWithAddColumnToMiddle:
   current: |
-    CREATE TABLE "public"."hoge" (
+    CREATE TABLE "hoge" (
       "foo" text,
       "bar" text
     );
@@ -263,7 +264,7 @@ ReplaceViewWithAddColumnToMiddle:
       bar
     FROM hoge;
   desired: |
-    CREATE TABLE "public"."hoge" (
+    CREATE TABLE "hoge" (
       "foo" text,
       "bar" text
     );
