@@ -166,6 +166,7 @@ var keywords = map[string]int{
 	"day_minute":             UNUSED,
 	"day_second":             UNUSED,
 	"date":                   DATE,
+	"data":                   DATA,
 	"daterange":              DATERANGE,
 	"datetime":               DATETIME,
 	"datetime2":              DATETIME2,
@@ -895,6 +896,16 @@ func (tkn *Tokenizer) scanIdentifier(firstByte byte, isDbSystemVariable bool) (i
 	lowered := bytes.ToLower(buffer.Bytes())
 	loweredStr := string(lowered)
 	if keywordID, found := keywords[loweredStr]; found {
+		// Context-aware handling for "with" keyword
+		if keywordID == WITH {
+			nextToken := tkn.peekToken()
+
+			// If next token is DATA or NO (for "WITH NO DATA"), this is a data option
+			if nextToken == "data" || nextToken == "no" {
+				return WITH_DATA_OPTION, lowered
+			}
+		}
+
 		return keywordID, lowered
 	}
 	// dual must always be case-insensitive
@@ -1181,6 +1192,47 @@ func (tkn *Tokenizer) next() {
 		tkn.lastChar = uint16(tkn.buf[tkn.bufPos])
 		tkn.bufPos++
 	}
+}
+
+// peekToken peeks ahead to determine the value of the next token
+// without consuming any characters. This is used for context-aware tokenization.
+func (tkn *Tokenizer) peekToken() string {
+	// Save current state
+	savedLastChar := tkn.lastChar
+	savedPosition := tkn.Position
+	savedBufPos := tkn.bufPos
+
+	for tkn.lastChar == ' ' || tkn.lastChar == '\n' || tkn.lastChar == '\r' || tkn.lastChar == '\t' {
+		tkn.next()
+	}
+
+	ch := tkn.lastChar
+	var value string
+
+	if isLetter(ch) {
+		var buffer tokenBuffer
+		buffer.WriteByte(byte(ch))
+		tkn.next()
+		for isLetter(tkn.lastChar) || isDigit(tkn.lastChar) {
+			buffer.WriteByte(byte(tkn.lastChar))
+			tkn.next()
+		}
+		value = strings.ToLower(buffer.String())
+	} else {
+		switch ch {
+		case eofChar:
+			value = ""
+		default:
+			value = string(rune(ch))
+		}
+	}
+
+	// Restore state
+	tkn.lastChar = savedLastChar
+	tkn.Position = savedPosition
+	tkn.bufPos = savedBufPos
+
+	return value
 }
 
 // reset clears any internal state.

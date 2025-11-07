@@ -164,6 +164,8 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				name:         normalizedTableName(mode, stmt.View.Name, defaultSchema),
 				definition:   stmt.View.Definition,
 				columns:      columns,
+				withData:     stmt.View.WithData,
+				withNoData:   stmt.View.WithNoData,
 			}, nil
 		} else if stmt.Action == parser.CreateTrigger {
 			body := []string{}

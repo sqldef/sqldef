@@ -1564,11 +1564,20 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 
 		if currentNormalized != desiredNormalized {
 			viewDefinition := parser.String(desiredView.definition)
+
+			// Build the WITH [NO] DATA clause for materialized views
+			withDataClause := ""
+			if desiredView.withNoData {
+				withDataClause = " WITH NO DATA"
+			} else if desiredView.withData {
+				withDataClause = " WITH DATA"
+			}
+
 			if g.shouldDropAndCreateView(currentView, desiredView) {
 				ddls = append(ddls, fmt.Sprintf("DROP %s %s", desiredView.viewType, g.escapeTableName(viewName)))
-				ddls = append(ddls, fmt.Sprintf("CREATE %s %s AS %s", desiredView.viewType, g.escapeTableName(viewName), viewDefinition))
+				ddls = append(ddls, fmt.Sprintf("CREATE %s %s AS %s%s", desiredView.viewType, g.escapeTableName(viewName), viewDefinition, withDataClause))
 			} else {
-				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE %s %s AS %s", desiredView.viewType, g.escapeTableName(viewName), viewDefinition))
+				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE %s %s AS %s%s", desiredView.viewType, g.escapeTableName(viewName), viewDefinition, withDataClause))
 			}
 		}
 	} else if desiredView.viewType == "SQL SECURITY" {
