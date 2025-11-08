@@ -26,3 +26,8 @@ jobs:
 
       - name: Build ${{ matrix.cmd }} WASM
         run: make build-wasm-${{ matrix.cmd }}
+
+      - name: Verify WASM build
+        run: |
+          file build/js-wasm/${{ matrix.cmd }}.wasm
+          ls -lh build/js-wasm/${{ matrix.cmd }}.wasm
