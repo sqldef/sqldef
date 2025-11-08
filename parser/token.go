@@ -65,6 +65,7 @@ type Tokenizer struct {
 	multi          bool
 	specialComment *Tokenizer
 	mode           ParserMode
+	peeking        bool // true when peeking ahead to avoid infinite recursion
 
 	buf     []byte
 	bufPos  int
@@ -166,6 +167,7 @@ var keywords = map[string]int{
 	"day_minute":             UNUSED,
 	"day_second":             UNUSED,
 	"date":                   DATE,
+	"data":                   DATA,
 	"daterange":              DATERANGE,
 	"datetime":               DATETIME,
 	"datetime2":              DATETIME2,
@@ -895,6 +897,17 @@ func (tkn *Tokenizer) scanIdentifier(firstByte byte, isDbSystemVariable bool) (i
 	lowered := bytes.ToLower(buffer.Bytes())
 	loweredStr := string(lowered)
 	if keywordID, found := keywords[loweredStr]; found {
+		// Context-aware handling for "with" keyword
+		// Only peek if we're not already in a peek operation (prevents infinite recursion)
+		if keywordID == WITH && !tkn.peeking {
+			nextID, _ := tkn.peekToken()
+
+			// If next token is DATA or NO (for "WITH NO DATA"), this is a data option
+			if nextID == DATA || nextID == NO {
+				return WITH_DATA_OPTION, lowered
+			}
+		}
+
 		return keywordID, lowered
 	}
 	// dual must always be case-insensitive
@@ -1181,6 +1194,27 @@ func (tkn *Tokenizer) next() {
 		tkn.lastChar = uint16(tkn.buf[tkn.bufPos])
 		tkn.bufPos++
 	}
+}
+
+// peekToken peeks ahead to determine the next token
+// without consuming any characters. This is used for context-aware tokenization.
+func (tkn *Tokenizer) peekToken() (int, []byte) {
+	// Save current state and restore on exit
+	savedLastChar := tkn.lastChar
+	savedPosition := tkn.Position
+	savedBufPos := tkn.bufPos
+	savedPeeking := tkn.peeking
+
+	defer func() {
+		tkn.peeking = savedPeeking
+		tkn.lastChar = savedLastChar
+		tkn.Position = savedPosition
+		tkn.bufPos = savedBufPos
+	}()
+
+	// Set peeking flag to prevent infinite recursion
+	tkn.peeking = true
+	return tkn.Scan()
 }
 
 // reset clears any internal state.

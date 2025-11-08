@@ -214,6 +214,8 @@ type View struct {
 	definition   parser.SelectStatement
 	indexes      []Index
 	columns      []string
+	withData     bool // true for "WITH DATA"
+	withNoData   bool // true for "WITH NO DATA"
 }
 
 type Trigger struct {

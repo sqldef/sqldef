@@ -1180,6 +1180,8 @@ type View struct {
 	SecurityType string
 	Name         TableName
 	Definition   SelectStatement
+	WithData     bool // true for "WITH DATA"
+	WithNoData   bool // true for "WITH NO DATA"
 }
 
 type Trigger struct {

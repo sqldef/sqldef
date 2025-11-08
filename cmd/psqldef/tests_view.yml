@@ -1,0 +1,475 @@
+View:
+  desired: |
+    CREATE TABLE points (id bigint);
+    CREATE VIEW points_view AS SELECT id FROM points;
+MaterializedView:
+  desired: |
+    CREATE TABLE points (id bigint);
+    CREATE MATERIALIZED VIEW points_view AS SELECT id FROM points;
+MaterializedViewWithData:
+  desired: |
+    CREATE TABLE points (id bigint);
+    CREATE MATERIALIZED VIEW points_view AS SELECT id FROM points WITH DATA;
+MaterializedViewWithNoData:
+  desired: |
+    CREATE TABLE points (id bigint);
+    CREATE MATERIALIZED VIEW points_view AS SELECT id FROM points WITH NO DATA;
+
+ViewDDLsAreEmittedLastWithoutChangingDefinition:
+  current: |
+    CREATE TABLE foos (
+      id bigint PRIMARY KEY
+    );
+  desired: |
+    CREATE VIEW foos_view AS SELECT id, secret FROM foos WHERE secret = false;
+    CREATE TABLE foos (
+      id bigint PRIMARY KEY,
+      secret boolean NOT NULL DEFAULT false
+    );
+  output: |
+    ALTER TABLE "public"."foos" ADD COLUMN "secret" boolean NOT NULL DEFAULT false;
+    CREATE VIEW foos_view AS SELECT id, secret FROM foos WHERE secret = false;
+ViewDDLsAreEmittedLastWithChangingDefinition:
+  current: |
+    CREATE TABLE foos (
+      id bigint PRIMARY KEY
+    );
+    CREATE VIEW foos_view AS SELECT 1 AS dummy;
+  desired: |
+    CREATE VIEW foos_view AS
+      SELECT id, secret FROM foos WHERE secret = false;
+    CREATE TABLE foos (
+      id bigint PRIMARY KEY,
+      secret boolean NOT NULL DEFAULT false
+    );
+  output: |
+    ALTER TABLE "public"."foos" ADD COLUMN "secret" boolean NOT NULL DEFAULT false;
+    DROP VIEW "public"."foos_view";
+    CREATE VIEW "public"."foos_view" AS select id, secret from foos where secret = false;
+CreateMaterializedView:
+  current: |
+    CREATE TABLE public.users (
+      id BIGINT PRIMARY KEY,
+      name character varying(100)
+    );
+    CREATE TABLE public.posts (
+      id BIGINT PRIMARY KEY,
+      name character varying(100),
+      user_id BIGINT,
+      is_deleted boolean
+    );
+  desired: |
+    CREATE TABLE public.users (
+      id BIGINT PRIMARY KEY,
+      name character varying(100)
+    );
+    CREATE TABLE public.posts (
+      id BIGINT PRIMARY KEY,
+      name character varying(100),
+      user_id BIGINT,
+      is_deleted boolean
+    );
+    CREATE MATERIALIZED VIEW public.view_user_posts AS
+      SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
+  output: |
+    CREATE MATERIALIZED VIEW public.view_user_posts AS
+      SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
+DropMaterializedView:
+  current: |
+    CREATE TABLE points (id bigint);
+    CREATE MATERIALIZED VIEW IF NOT EXISTS points_view AS
+      SELECT id FROM points;
+  desired: |
+    CREATE TABLE points (id bigint);
+  output: |
+    DROP MATERIALIZED VIEW "public"."points_view";
+MaterializedViewIndex:
+  desired: |
+    CREATE TABLE IF NOT EXISTS points (
+        id          BIGINT        PRIMARY KEY,
+        tenant_id   BIGINT        NOT NULL,
+        user_id     VARCHAR(100)  NOT NULL,
+        point_type  SMALLINT      NOT NULL,
+        point_value SMALLINT      NOT NULL,
+        created_at  TIMESTAMP     NOT NULL,
+        updated_at  TIMESTAMP     NOT NULL
+    );
+    CREATE INDEX points_idx ON points (tenant_id, user_id, point_type);
+    CREATE MATERIALIZED VIEW IF NOT EXISTS points_view AS
+        SELECT * FROM points
+        WHERE id IN (SELECT MAX(id) AS id
+            FROM points
+            GROUP BY point_type, user_id);
+    CREATE INDEX points_view_idx ON points_view (tenant_id);
+  output: |
+    CREATE TABLE IF NOT EXISTS points (
+        id          BIGINT        PRIMARY KEY,
+        tenant_id   BIGINT        NOT NULL,
+        user_id     VARCHAR(100)  NOT NULL,
+        point_type  SMALLINT      NOT NULL,
+        point_value SMALLINT      NOT NULL,
+        created_at  TIMESTAMP     NOT NULL,
+        updated_at  TIMESTAMP     NOT NULL
+    );
+    CREATE MATERIALIZED VIEW IF NOT EXISTS points_view AS
+        SELECT * FROM points
+        WHERE id IN (SELECT MAX(id) AS id
+            FROM points
+            GROUP BY point_type, user_id);
+    CREATE INDEX points_idx ON points (tenant_id, user_id, point_type);
+    CREATE INDEX points_view_idx ON points_view (tenant_id);
+ViewWithCTE:
+  desired: |
+    CREATE TABLE users (
+      id bigint PRIMARY KEY,
+      active boolean NOT NULL
+    );
+    CREATE VIEW active_users AS
+    WITH recent_users AS (
+      SELECT id FROM users WHERE active = true
+    )
+    SELECT id FROM recent_users;
+MaterializedViewWithCTE:
+  desired: |
+    CREATE TABLE users (
+      id bigint PRIMARY KEY,
+      active boolean NOT NULL
+    );
+    CREATE MATERIALIZED VIEW active_users AS
+    WITH recent_users AS (
+      SELECT id FROM users WHERE active = true
+    )
+    SELECT * FROM recent_users;
+MaterializedViewWithMultipleCTEs:
+  desired: |
+    CREATE TABLE sessions (
+      user_id text NOT NULL,
+      duration double precision NOT NULL,
+      started_at timestamp NOT NULL
+    );
+    CREATE MATERIALIZED VIEW user_stats AS
+    WITH active_users AS (
+      SELECT DISTINCT user_id FROM sessions WHERE duration > 0
+    ),
+    user_counts AS (
+      SELECT user_id, COUNT(*) as session_count FROM sessions GROUP BY user_id
+    )
+    SELECT au.user_id, uc.session_count
+    FROM active_users au
+    JOIN user_counts uc ON au.user_id = uc.user_id;
+CreateViewWithUnion:
+  desired: |
+    CREATE VIEW test_view AS SELECT 1 AS id UNION SELECT 2 AS id;
+CreateViewWithUnionAll:
+  desired: |
+    CREATE VIEW test_view AS SELECT 1 AS id UNION ALL SELECT 2 AS id;
+CreateViewWithIntersect:
+  desired: |
+    CREATE VIEW test_view AS SELECT 1 AS id INTERSECT SELECT 2 AS id;
+CreateViewWithExcept:
+  desired: |
+    CREATE VIEW test_view AS SELECT 1 AS id EXCEPT SELECT 2 AS id;
+CreateMaterializedViewWithUnion:
+  desired: |
+    CREATE MATERIALIZED VIEW test_view AS SELECT 1 AS id UNION SELECT 2 AS id;
+CreateMaterializedViewWithUnionAll:
+  desired: |
+    CREATE MATERIALIZED VIEW test_view AS SELECT 1 AS id UNION ALL SELECT 2 AS id;
+CreateMaterializedViewWithUnionAllMultiple:
+  desired: |
+    CREATE MATERIALIZED VIEW test_view AS
+    SELECT 1 AS id, 'a' AS name
+    UNION ALL
+    SELECT 2 AS id, 'b' AS name
+    UNION ALL
+    SELECT 3 AS id, 'c' AS name;
+ViewWithDateFunction:
+  desired: |
+    CREATE TABLE events (
+      created_at timestamp
+    );
+    CREATE VIEW event_dates AS
+      SELECT date(created_at) AS event_date
+      FROM events;
+MaterializedViewWithDateFunction:
+  desired: |
+    CREATE TABLE activities (
+      occurred_at timestamp
+    );
+    CREATE MATERIALIZED VIEW activity_dates AS
+      SELECT date(occurred_at) AS activity_date
+      FROM activities;
+CreateViewCast:
+  current: |
+    CREATE TABLE "public"."hoge" (
+      "amount" text
+    );
+    CREATE VIEW public.hoge_view AS SELECT (hoge.amount)::numeric(10,2) AS amount_num FROM hoge;
+  desired: |
+    create table hoge (
+      amount text
+    );
+
+    create view hoge_view as
+    select
+      amount::numeric(10,2) as amount_num
+    from hoge;
+  output: ''
+ReplaceViewWithChangeCondition:
+  current: |
+    CREATE TABLE hoge (
+      foo text,
+      bar text
+    );
+    CREATE VIEW v AS
+    SELECT
+      foo,
+      bar
+    FROM hoge;
+  desired: |
+    CREATE TABLE hoge (
+      foo text,
+      bar text
+    );
+
+    CREATE VIEW v AS
+      SELECT
+        foo,
+        bar
+      FROM hoge
+        WHERE bar = 'baz';
+  output: |
+    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar from hoge where bar = 'baz';
+ReplaceViewWithAddColumnToTail:
+  current: |
+    CREATE TABLE "public"."hoge" (
+      "foo" text,
+      "bar" text
+    );
+    CREATE VIEW v AS
+    SELECT
+      foo,
+      bar
+    FROM hoge;
+  desired: |
+    CREATE TABLE "public"."hoge" (
+      "foo" text,
+      "bar" text
+    );
+
+    CREATE VIEW v AS
+    SELECT
+      foo,
+      bar,
+      'x' as added
+     FROM hoge;
+  output: |
+    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar, 'x' as added from hoge;
+ReplaceViewWithAddColumnToMiddle:
+  current: |
+    CREATE TABLE "hoge" (
+      "foo" text,
+      "bar" text
+    );
+    CREATE VIEW v AS
+    SELECT
+      foo,
+      bar
+    FROM hoge;
+  desired: |
+    CREATE TABLE "hoge" (
+      "foo" text,
+      "bar" text
+    );
+
+    CREATE VIEW v AS
+    SELECT
+      foo,
+      'x' as added,
+      bar
+     FROM hoge;
+  output: |
+    DROP VIEW "public"."v";
+    CREATE VIEW "public"."v" AS select foo, 'x' as added, bar from hoge;
+ReplaceViewWithDropColumn:
+  current: |
+    CREATE TABLE "public"."hoge" (
+      "foo" text,
+      "bar" text
+    );
+    CREATE VIEW v AS
+    SELECT
+      foo,
+      bar
+    FROM hoge;
+  desired: |
+    CREATE TABLE "public"."hoge" (
+      "foo" text,
+      "bar" text
+    );
+
+    CREATE VIEW v AS
+    SELECT foo FROM hoge;
+  output: |
+    DROP VIEW "public"."v";
+    CREATE VIEW "public"."v" AS select foo from hoge;
+ReplaceViewWithChangeColumn:
+  current: |
+    CREATE TABLE "public"."hoge" (
+      "foo" text,
+      "bar" text
+    );
+    CREATE VIEW v AS
+    SELECT
+      foo,
+      bar
+    FROM hoge;
+  desired: |
+    CREATE TABLE "public"."hoge" (
+      "foo" text,
+      "bar" text
+    );
+
+    CREATE VIEW v AS
+    SELECT
+      foo,
+      'x' as changed
+    FROM hoge;
+  output: |
+    DROP VIEW "public"."v";
+    CREATE VIEW "public"."v" AS select foo, 'x' as changed from hoge;
+CreateViewWithCastCase:
+  desired: |
+    create table hoge (amount text);
+    create view hoge_view as
+    select
+      '1'::numeric as n,
+      ''::text as t,
+      2::bigint as i,
+      amount::numeric(10,2) as amount_num
+    from hoge;
+CreateViewWithCaseWhen:
+  desired: |
+    create table hoge (
+      amount  text,
+      hoge_type text,
+      payload jsonb
+    );
+    create view hoge_view as
+    select
+      -- pattern 1
+      amount::numeric(10,2) as amount_num1,
+      -- pattern 2
+      (
+        jsonb_extract_path_text(payload, 'amount')
+      )::numeric(10,2) as amount_num2,
+      -- pattern 3
+      (
+        case hoge_type
+          when 'hoge' then jsonb_extract_path_text(payload, 'hoge', 'amount')
+        end
+      )::numeric(10,2) as amount_num3,
+      -- pattern 4
+      (
+        to_timestamp(
+          jsonb_extract_path_text(payload, 'created')::bigint
+        )
+      ) as created,
+      -- pattern 5
+      (
+        cast(
+          to_timestamp(
+            jsonb_extract_path_text(payload, 'created')::bigint
+          ) as date
+        )
+      ) as created_date
+    from hoge;
+CreateViewWithoutFrom:
+  desired: |
+    create view v as select 10 as n;
+ViewWithNullableColumn:
+  desired: |
+    CREATE TABLE users (
+      id INT PRIMARY KEY,
+      name TEXT NULL,
+      deleted BOOLEAN NOT NULL
+    );
+    CREATE VIEW active_users AS
+    SELECT id, name FROM users WHERE NOT deleted;
+ViewWithDistinct:
+  desired: |
+    CREATE TABLE users (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE taggings (
+      user_id INT NOT NULL REFERENCES users(id),
+      tag TEXT NOT NULL
+    );
+    CREATE VIEW tags AS
+    SELECT DISTINCT tag FROM taggings;
+ViewWithGroupByAndHaving:
+  desired: |
+    CREATE TABLE users (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE taggings (
+      user_id INT NOT NULL REFERENCES users(id),
+      tag TEXT NOT NULL
+    );
+    CREATE VIEW tag_counts AS
+    SELECT tag, COUNT(*) AS count
+    FROM taggings GROUP BY tag HAVING COUNT(*) > 1;
+ExtractInMaterializedView:
+  desired: |
+    CREATE TABLE events (
+      event_id bigint,
+      event_timestamp timestamp
+    );
+    CREATE MATERIALIZED VIEW event_stats AS
+      SELECT
+        EXTRACT(year FROM event_timestamp) AS event_year,
+        EXTRACT(month FROM event_timestamp) AS event_month,
+        COUNT(*) AS event_count
+      FROM events
+      GROUP BY event_year, event_month;
+ExtractBasicFields:
+  desired: |
+    CREATE TABLE events (
+      id bigint,
+      created_at timestamp
+    );
+    CREATE VIEW extract_view AS
+      SELECT
+        EXTRACT(year FROM created_at) AS year_value,
+        EXTRACT(month FROM created_at) AS month_value,
+        EXTRACT(day FROM created_at) AS day_value,
+        EXTRACT(hour FROM created_at) AS hour_value,
+        EXTRACT(minute FROM created_at) AS minute_value,
+        EXTRACT(second FROM created_at) AS second_value,
+        EXTRACT(epoch FROM created_at) AS epoch_value,
+        EXTRACT(dow FROM created_at) AS dow_value,
+        EXTRACT(doy FROM created_at) AS doy_value,
+        EXTRACT(week FROM created_at) AS week_value,
+        EXTRACT(quarter FROM created_at) AS quarter_value
+      FROM events;
+ExtractWithAge:
+  desired: |
+    CREATE TABLE user_info (
+      user_id varchar,
+      birthdate timestamp with time zone
+    );
+    CREATE VIEW age_view AS
+      SELECT
+        user_id,
+        EXTRACT(year FROM age(birthdate)) AS age_years,
+        EXTRACT(month FROM age(birthdate)) AS age_months
+      FROM user_info;
+CastBpchar:
+  desired: |
+    CREATE TABLE public.dummy_table (
+      "col" character(30)
+    );
+    CREATE VIEW public.dummy_view AS
+      SELECT dummy_table.col
+      FROM dummy_table
+      WHERE (dummy_table.col <> 'dummy value'::bpchar);

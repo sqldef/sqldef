@@ -209,7 +209,7 @@ func forceEOF(yylex any) {
 %token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD GRANT REVOKE OPTION PRIVILEGES
 %token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION EXCLUDE DOMAIN
 %right <bytes> UNIQUE KEY
-%token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
+%token <bytes> SHOW DESCRIBE EXPLAIN DATE DATA ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
 %token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN
 %token <bytes> STATUS VARIABLES
 %token <bytes> RESTRICT CASCADE NO ACTION
@@ -268,6 +268,9 @@ func forceEOF(yylex any) {
 
 // Match
 %token <bytes> MATCH AGAINST BOOLEAN LANGUAGE WITH WITHOUT PARSER QUERY EXPANSION
+
+// Context-aware WITH tokens
+%token <bytes> WITH_DATA_OPTION
 
 // MySQL reserved words that are unused by this grammar will map to this token.
 %token <bytes> UNUSED
@@ -435,6 +438,7 @@ func forceEOF(yylex any) {
 %type <newQualifierColName> new_qualifier_column_name
 %type <boolVal> deferrable_opt initially_deferred_opt
 %type <boolVal> variadic_opt
+%type <str> with_data_opt
 %type <fkDeferOpts> fk_defer_opts
 %type <domainConstraints> domain_constraints_opt domain_constraint
 %type <arrayConstructor> array_constructor
@@ -707,7 +711,7 @@ create_statement:
       },
     }
   }
-| CREATE MATERIALIZED VIEW if_not_exists_opt table_name AS select_statement
+| CREATE MATERIALIZED VIEW if_not_exists_opt table_name AS select_statement with_data_opt
   {
     $$ = &DDL{
       Action: CreateView,
@@ -715,6 +719,8 @@ create_statement:
         Type: MaterializedViewStr,
         Name: $5.toViewName(),
         Definition: $7,
+        WithData: $8 == "WITH DATA",
+        WithNoData: $8 == "WITH NO DATA",
       },
     }
   }
@@ -6296,8 +6302,22 @@ reserved_keyword:
 | WITH
 | OFF
 
+with_data_opt:
+  {
+    $$ = ""
+  }
+| WITH_DATA_OPTION NO DATA
+  {
+    $$ = "WITH NO DATA"
+  }
+| WITH_DATA_OPTION DATA
+  {
+    $$ = "WITH DATA"
+  }
+
 non_reserved_keyword:
   ACTION
+| DATA
 | DEFINER
 | DOMAIN
 | INVOKER
