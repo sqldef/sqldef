@@ -1,0 +1,57 @@
+name: wasm
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - v*
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+permissions:
+  contents: write
+
+jobs:
+  build-wasm:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        cmd: [mysqldef, psqldef, mssqldef]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version: 1.25
+
+      - name: Build ${{ matrix.cmd }} WASM
+        run: make build-wasm-${{ matrix.cmd }}
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: ${{ matrix.cmd }}-wasm
+          path: build/js-wasm/${{ matrix.cmd }}.wasm
+
+  release-wasm:
+    runs-on: ubuntu-latest
+    needs: build-wasm
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - { uses: actions/download-artifact@v4, with: { name: mysqldef-wasm, path: package/ } }
+      - { uses: actions/download-artifact@v4, with: { name: psqldef-wasm, path: package/ } }
+      - { uses: actions/download-artifact@v4, with: { name: mssqldef-wasm, path: package/ } }
+
+      - name: Upload WASM artifacts to release
+        run: |
+          export VERSION=$(echo "$GITHUB_REF" | sed -e 's!refs/tags/!!')
+          curl -sSfL "https://github.com/tcnksm/ghr/releases/download/${GHR_VERSION}/ghr_${GHR_VERSION}_linux_amd64.tar.gz" | tar xvz
+          "ghr_${GHR_VERSION}_linux_amd64/ghr" -u sqldef -r sqldef -replace -n "$VERSION" "$VERSION" package/
+        env:
+          GHR_VERSION: v0.17.0
+          GITHUB_TOKEN: ${{ github.token }}

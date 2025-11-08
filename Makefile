@@ -11,6 +11,8 @@ MACOS_VERSION := 11.3
 
 ifeq ($(GOOS), windows)
   SUFFIX=.exe
+else ifeq ($(GOOS), js)
+  SUFFIX=.wasm
 else
   SUFFIX=
 endif
@@ -25,7 +27,7 @@ else
   GOTEST := go run gotest.tools/gotestsum@latest --hide-summary=skipped -- $(GOTESTFLAGS)
 endif
 
-.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef test-cov test-cov-xml test-core test test-example test-example-offline
+.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef build-wasm build-wasm-mysqldef build-wasm-psqldef build-wasm-mssqldef test-cov test-cov-xml test-core test test-example test-example-offline
 
 all: build
 
@@ -46,6 +48,20 @@ build-mssqldef:
 build-psqldef:
 	mkdir -p $(BUILD_DIR)
 	cd cmd/psqldef && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/psqldef$(SUFFIX)
+
+build-wasm: build-wasm-mysqldef build-wasm-psqldef build-wasm-mssqldef
+
+build-wasm-mysqldef:
+	mkdir -p build/js-wasm
+	cd cmd/mysqldef && GOOS=js GOARCH=wasm go build $(GOFLAGS) -o ../../build/js-wasm/mysqldef.wasm
+
+build-wasm-psqldef:
+	mkdir -p build/js-wasm
+	cd cmd/psqldef && GOOS=js GOARCH=wasm go build $(GOFLAGS) -o ../../build/js-wasm/psqldef.wasm
+
+build-wasm-mssqldef:
+	mkdir -p build/js-wasm
+	cd cmd/mssqldef && GOOS=js GOARCH=wasm go build $(GOFLAGS) -o ../../build/js-wasm/mssqldef.wasm
 
 clean:
 	rm -rf build package coverage coverage.out coverage.xml
