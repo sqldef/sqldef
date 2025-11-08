@@ -65,6 +65,7 @@ type Tokenizer struct {
 	multi          bool
 	specialComment *Tokenizer
 	mode           ParserMode
+	peeking        bool // true when peeking ahead to avoid infinite recursion
 
 	buf     []byte
 	bufPos  int
@@ -897,11 +898,12 @@ func (tkn *Tokenizer) scanIdentifier(firstByte byte, isDbSystemVariable bool) (i
 	loweredStr := string(lowered)
 	if keywordID, found := keywords[loweredStr]; found {
 		// Context-aware handling for "with" keyword
-		if keywordID == WITH {
-			nextToken := tkn.peekToken()
+		// Only peek if we're not already in a peek operation (prevents infinite recursion)
+		if keywordID == WITH && !tkn.peeking {
+			nextID, _ := tkn.peekToken()
 
 			// If next token is DATA or NO (for "WITH NO DATA"), this is a data option
-			if nextToken == "data" || nextToken == "no" {
+			if nextID == DATA || nextID == NO {
 				return WITH_DATA_OPTION, lowered
 			}
 		}
@@ -1194,45 +1196,25 @@ func (tkn *Tokenizer) next() {
 	}
 }
 
-// peekToken peeks ahead to determine the value of the next token
+// peekToken peeks ahead to determine the next token
 // without consuming any characters. This is used for context-aware tokenization.
-func (tkn *Tokenizer) peekToken() string {
-	// Save current state
+func (tkn *Tokenizer) peekToken() (int, []byte) {
+	// Save current state and restore on exit
 	savedLastChar := tkn.lastChar
 	savedPosition := tkn.Position
 	savedBufPos := tkn.bufPos
+	savedPeeking := tkn.peeking
 
-	for tkn.lastChar == ' ' || tkn.lastChar == '\n' || tkn.lastChar == '\r' || tkn.lastChar == '\t' {
-		tkn.next()
-	}
+	defer func() {
+		tkn.peeking = savedPeeking
+		tkn.lastChar = savedLastChar
+		tkn.Position = savedPosition
+		tkn.bufPos = savedBufPos
+	}()
 
-	ch := tkn.lastChar
-	var value string
-
-	if isLetter(ch) {
-		var buffer tokenBuffer
-		buffer.WriteByte(byte(ch))
-		tkn.next()
-		for isLetter(tkn.lastChar) || isDigit(tkn.lastChar) {
-			buffer.WriteByte(byte(tkn.lastChar))
-			tkn.next()
-		}
-		value = strings.ToLower(buffer.String())
-	} else {
-		switch ch {
-		case eofChar:
-			value = ""
-		default:
-			value = string(rune(ch))
-		}
-	}
-
-	// Restore state
-	tkn.lastChar = savedLastChar
-	tkn.Position = savedPosition
-	tkn.bufPos = savedBufPos
-
-	return value
+	// Set peeking flag to prevent infinite recursion
+	tkn.peeking = true
+	return tkn.Scan()
 }
 
 // reset clears any internal state.
