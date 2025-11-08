@@ -698,18 +698,18 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 	}, nil
 }
 
-func mustConvertToInt(val []byte) int {
-	intVal, err := strconv.Atoi(string(val))
+func mustConvertToInt(val string) int {
+	intVal, err := strconv.Atoi(val)
 	if err != nil {
-		panic(fmt.Errorf("failed to convert %s to int: %w", string(val), err))
+		panic(fmt.Errorf("failed to convert %s to int: %w", val, err))
 	}
 	return intVal
 }
 
-func mustConvertToFloat(val []byte) float64 {
-	floatVal, err := strconv.ParseFloat(string(val), 64)
+func mustConvertToFloat(val string) float64 {
+	floatVal, err := strconv.ParseFloat(val, 64)
 	if err != nil {
-		panic(fmt.Errorf("failed to convert %s to float: %w", string(val), err))
+		panic(fmt.Errorf("failed to convert %s to float: %w", val, err))
 	}
 	return floatVal
 }
@@ -743,20 +743,20 @@ func parseValue(val *parser.SQLVal) *Value {
 
 	ret := Value{
 		valueType: valueType,
-		raw:       string(val.Val),
+		raw:       val.Val,
 	}
 
 	switch valueType {
 	case ValueTypeStr:
-		ret.strVal = string(val.Val)
+		ret.strVal = val.Val
 	case ValueTypeInt:
 		ret.intVal = mustConvertToInt(val.Val)
 	case ValueTypeFloat:
 		ret.floatVal = mustConvertToFloat(val.Val)
 	case ValueTypeBool:
-		ret.bitVal = string(val.Val) == "true"
+		ret.bitVal = val.Val == "true"
 	case ValueTypeBit:
-		ret.bitVal = string(val.Val) == "1"
+		ret.bitVal = val.Val == "1"
 	}
 
 	return &ret

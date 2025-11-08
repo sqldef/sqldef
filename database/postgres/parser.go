@@ -526,15 +526,15 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 	case *pgquery.Node_AConst:
 		switch cNode := node.AConst.Val.(type) {
 		case *pgquery.A_Const_Ival:
-			return parser.NewIntVal(fmt.Append(nil, cNode.Ival.Ival)), nil
+			return parser.NewIntVal(fmt.Sprint(cNode.Ival.Ival)), nil
 		case *pgquery.A_Const_Fval:
-			return parser.NewFloatVal(fmt.Append(nil, cNode.Fval.Fval)), nil
+			return parser.NewFloatVal(fmt.Sprint(cNode.Fval.Fval)), nil
 		case *pgquery.A_Const_Boolval:
 			return parser.NewBoolVal(cNode.Boolval.Boolval), nil
 		case *pgquery.A_Const_Sval:
-			return parser.NewStrVal([]byte(cNode.Sval.Sval)), nil
+			return parser.NewStrVal(cNode.Sval.Sval), nil
 		case *pgquery.A_Const_Bsval:
-			return parser.NewBitVal([]byte(cNode.Bsval.Bsval)), nil
+			return parser.NewBitVal(cNode.Bsval.Bsval), nil
 		case nil:
 			return &parser.NullVal{}, nil
 		default:
@@ -656,7 +656,7 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 			Exprs:     exprs,
 		}, nil
 	case *pgquery.Node_Integer:
-		return parser.NewIntVal(fmt.Append(nil, node.Integer.Ival)), nil
+		return parser.NewIntVal(fmt.Sprint(node.Integer.Ival)), nil
 	case *pgquery.Node_NullTest:
 		expr, err := p.parseExpr(node.NullTest.Arg)
 		if err != nil {
@@ -678,7 +678,7 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 			return nil, fmt.Errorf("unexpected nulltesttype: %d", node.NullTest.Nulltesttype)
 		}
 	case *pgquery.Node_String_:
-		return parser.NewStrVal([]byte(node.String_.Sval)), nil
+		return parser.NewStrVal(node.String_.Sval), nil
 	case *pgquery.Node_TypeCast:
 		expr, err := p.parseExpr(node.TypeCast.Arg)
 		if err != nil {
@@ -720,17 +720,17 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 		case pgquery.SQLValueFunctionOp_SVFOP_CURRENT_TIMESTAMP:
 			return &parser.SQLVal{
 				Type: parser.ValArg,
-				Val:  []byte("current_timestamp"),
+				Val:  "current_timestamp",
 			}, nil
 		case pgquery.SQLValueFunctionOp_SVFOP_CURRENT_TIME:
 			return &parser.SQLVal{
 				Type: parser.ValArg,
-				Val:  []byte("current_time"),
+				Val:  "current_time",
 			}, nil
 		case pgquery.SQLValueFunctionOp_SVFOP_CURRENT_DATE:
 			return &parser.SQLVal{
 				Type: parser.ValArg,
-				Val:  []byte("current_date"),
+				Val:  "current_date",
 			}, nil
 		default:
 			return nil, fmt.Errorf("unexpected SqlvalueFunction: %#v", node)
@@ -1196,7 +1196,7 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 	case *parser.NullVal:
 		return &parser.DefaultDefinition{
 			Expression: parser.DefaultExpression{
-				Expr: parser.NewValArg([]byte("null")),
+				Expr: parser.NewValArg("null"),
 			},
 		}, nil
 	case *parser.SQLVal:
@@ -1230,7 +1230,7 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 			return &parser.DefaultDefinition{
 				Expression: parser.DefaultExpression{
 					Expr: &parser.CastExpr{
-						Expr: parser.NewValArg([]byte("null")),
+						Expr: parser.NewValArg("null"),
 						Type: expr.Type,
 					},
 				},
@@ -1244,7 +1244,7 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 			// Check if this is a redundant cast that should be stripped
 			if sqlVal, ok := expr.Expr.(*parser.SQLVal); ok && sqlVal.Type == parser.StrVal {
 				// Handle numeric string literals vs text strings differently
-				if util.IsNumericString(string(sqlVal.Val)) {
+				if util.IsNumericString(sqlVal.Val) {
 					// PostgreSQL stores negative numbers as string literals with casts like '-20'::integer
 					// Convert these back to plain numeric literals
 					switch typeStr {
