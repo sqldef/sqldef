@@ -1,4 +1,4 @@
-//go:build !wasm
+//go:build js && wasm
 
 package sqlite3
 
@@ -6,8 +6,9 @@ import (
 	"database/sql"
 	"strings"
 
+	_ "github.com/ncruces/go-sqlite3/driver"
+	_ "github.com/ncruces/go-sqlite3/embed"
 	"github.com/sqldef/sqldef/v3/database"
-	_ "modernc.org/sqlite"
 )
 
 type Sqlite3Database struct {
@@ -16,7 +17,7 @@ type Sqlite3Database struct {
 }
 
 func NewDatabase(config database.Config) (database.Database, error) {
-	db, err := sql.Open("sqlite", config.DbName)
+	db, err := sql.Open("sqlite3", config.DbName)
 	if err != nil {
 		return nil, err
 	}
