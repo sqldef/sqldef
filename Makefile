@@ -13,6 +13,8 @@ ifeq ($(GOOS), windows)
   SUFFIX=.exe
 else ifeq ($(GOOS), js)
   SUFFIX=.wasm
+else ifeq ($(GOOS), wasip1)
+  SUFFIX=.wasm
 else
   SUFFIX=
 endif
@@ -27,7 +29,7 @@ else
   GOTEST := go run gotest.tools/gotestsum@latest --hide-summary=skipped -- $(GOTESTFLAGS)
 endif
 
-.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef build-wasm build-wasm-mysqldef build-wasm-psqldef build-wasm-mssqldef build-wasm-sqlite3def test-cov test-cov-xml test-core test test-example test-example-offline
+.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef build-wasm build-wasm-mysqldef build-wasm-mssqldef build-wasm-sqlite3def test-cov test-cov-xml test-core test test-example test-example-offline
 
 all: build
 
@@ -49,23 +51,19 @@ build-psqldef:
 	mkdir -p $(BUILD_DIR)
 	cd cmd/psqldef && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/psqldef$(SUFFIX)
 
-build-wasm: build-wasm-mysqldef build-wasm-psqldef build-wasm-mssqldef build-wasm-sqlite3def
+build-wasm: build-wasm-mysqldef build-wasm-mssqldef build-wasm-sqlite3def
 
 build-wasm-mysqldef:
-	mkdir -p build/js-wasm
-	cd cmd/mysqldef && GOOS=js GOARCH=wasm go build $(GOFLAGS) -o ../../build/js-wasm/mysqldef.wasm
-
-build-wasm-psqldef:
-	mkdir -p build/js-wasm
-	cd cmd/psqldef && GOOS=js GOARCH=wasm go build $(GOFLAGS) -o ../../build/js-wasm/psqldef.wasm
+	mkdir -p build/wasip1-wasm
+	cd cmd/mysqldef && GOOS=wasip1 GOARCH=wasm go build $(GOFLAGS) -o ../../build/wasip1-wasm/mysqldef.wasm
 
 build-wasm-mssqldef:
-	mkdir -p build/js-wasm
-	cd cmd/mssqldef && GOOS=js GOARCH=wasm go build $(GOFLAGS) -o ../../build/js-wasm/mssqldef.wasm
+	mkdir -p build/wasip1-wasm
+	cd cmd/mssqldef && GOOS=wasip1 GOARCH=wasm go build $(GOFLAGS) -o ../../build/wasip1-wasm/mssqldef.wasm
 
 build-wasm-sqlite3def:
-	mkdir -p build/js-wasm
-	cd cmd/sqlite3def && GOOS=js GOARCH=wasm go build $(GOFLAGS) -o ../../build/js-wasm/sqlite3def.wasm
+	mkdir -p build/wasip1-wasm
+	cd cmd/sqlite3def && GOOS=wasip1 GOARCH=wasm go build $(GOFLAGS) -o ../../build/wasip1-wasm/sqlite3def.wasm
 
 clean:
 	rm -rf build package coverage coverage.out coverage.xml

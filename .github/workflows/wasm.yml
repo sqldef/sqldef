@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        cmd: [mysqldef, psqldef, mssqldef, sqlite3def]
+        cmd: [mysqldef, mssqldef, sqlite3def]
       fail-fast: false
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -29,5 +29,11 @@ jobs:
 
       - name: Verify WASM build
         run: |
-          file build/js-wasm/${{ matrix.cmd }}.wasm
-          ls -lh build/js-wasm/${{ matrix.cmd }}.wasm
+          file build/wasip1-wasm/${{ matrix.cmd }}.wasm
+          ls -lh build/wasip1-wasm/${{ matrix.cmd }}.wasm
+
+      - name: Install wazero
+        run: go install github.com/tetratelabs/wazero/cmd/wazero@latest
+
+      - name: Test ${{ matrix.cmd }} offline mode with wazero
+        run: ./example/run-offline-wasi.sh ${{ matrix.cmd }}

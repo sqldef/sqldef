@@ -1,4 +1,4 @@
-//go:build js && wasm
+//go:build (js && wasm) || (wasip1 && wasm)
 
 package sqlite3
 
