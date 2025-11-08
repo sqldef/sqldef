@@ -1005,7 +1005,7 @@ type ForeignKeyDefinition struct {
 type Policy struct {
 	Name       ColIdent
 	Permissive Permissive
-	Scope      []byte
+	Scope      string
 	To         []ColIdent
 	Using      *Where
 	WithCheck  *Where
@@ -1753,60 +1753,58 @@ const (
 // SQLVal represents a single value.
 type SQLVal struct {
 	Type ValType
-	Val  []byte
+	Val  string
 }
 
 // NewStrVal builds a new StrVal.
-func NewStrVal(in []byte) *SQLVal {
+func NewStrVal(in string) *SQLVal {
 	return &SQLVal{Type: StrVal, Val: in}
 }
 
 // NewIntVal builds a new IntVal.
-func NewIntVal(in []byte) *SQLVal {
+func NewIntVal(in string) *SQLVal {
 	return &SQLVal{Type: IntVal, Val: in}
 }
 
 // NewFloatVal builds a new FloatVal.
-func NewFloatVal(in []byte) *SQLVal {
+func NewFloatVal(in string) *SQLVal {
 	return &SQLVal{Type: FloatVal, Val: in}
 }
 
 // NewHexNum builds a new HexNum.
-func NewHexNum(in []byte) *SQLVal {
+func NewHexNum(in string) *SQLVal {
 	return &SQLVal{Type: HexNum, Val: in}
 }
 
 // NewHexVal builds a new HexVal.
-func NewHexVal(in []byte) *SQLVal {
+func NewHexVal(in string) *SQLVal {
 	return &SQLVal{Type: HexVal, Val: in}
 }
 
 // NewBitVal builds a new BitVal containing a bit literal.
-func NewBitVal(in []byte) *SQLVal {
+func NewBitVal(in string) *SQLVal {
 	return &SQLVal{Type: BitVal, Val: in}
 }
 
 // NewValArg builds a new ValArg.
-func NewValArg(in []byte) *SQLVal {
+func NewValArg(in string) *SQLVal {
 	return &SQLVal{Type: ValArg, Val: in}
 }
 
 func NewBoolSQLVal(in bool) *SQLVal {
-	return &SQLVal{Type: ValBool, Val: fmt.Appendf(nil, "%t", in)}
+	return &SQLVal{Type: ValBool, Val: fmt.Sprintf("%t", in)}
 }
 
 // NewUnicode builds a new UnicodeStrVal.
-func NewUnicodeStrVal(in []byte) *SQLVal {
+func NewUnicodeStrVal(in string) *SQLVal {
 	return &SQLVal{Type: UnicodeStrVal, Val: in}
 }
 
-func NewValArgWithOpt(in []byte, opt *SQLVal) *SQLVal {
+func NewValArgWithOpt(in string, opt *SQLVal) *SQLVal {
 	if opt != nil {
-		combined := string(in) + "(" + string(opt.Val) + ")"
-		return NewValArg([]byte(combined))
-	} else {
-		return NewValArg(in)
+		return NewValArg(fmt.Sprintf("%s(%s)", in, opt.Val))
 	}
+	return NewValArg(in)
 }
 
 // Format formats the node.
@@ -1818,25 +1816,25 @@ func (node *SQLVal) Format(buf *nodeBuffer) {
 		buf.WriteRune('N')
 		encodeSQLBytes(node.Val, buf)
 	case IntVal, FloatVal, HexNum:
-		buf.Printf("%s", []byte(node.Val))
+		buf.Printf("%s", node.Val)
 	case HexVal:
-		buf.Printf("X'%s'", []byte(node.Val))
+		buf.Printf("X'%s'", node.Val)
 	case BitVal:
-		buf.Printf("B'%s'", []byte(node.Val))
+		buf.Printf("B'%s'", node.Val)
 	case ValArg:
-		buf.WriteString(string(node.Val))
+		buf.WriteString(node.Val)
 	case ValBool:
-		buf.WriteString(string(node.Val))
+		buf.WriteString(node.Val)
 	default:
 		panic("unexpected")
 	}
 }
 
-func encodeSQLBytes(val []byte, buf *nodeBuffer) {
+func encodeSQLBytes(val string, buf *nodeBuffer) {
 	buf.WriteByte('\'')
 	for _, ch := range val {
-		if encodedChar := sqlEncodeMap[ch]; encodedChar == dontEscape {
-			buf.WriteByte(ch)
+		if encodedChar := sqlEncodeMap[byte(ch)]; encodedChar == dontEscape {
+			buf.WriteRune(ch)
 		} else {
 			buf.WriteByte('\\')
 			buf.WriteByte(encodedChar)
@@ -2776,8 +2774,8 @@ func formatID(buf *nodeBuffer, original, lowered string) {
 	}
 
 	for i, c := range original {
-		if !isLetter(uint16(c)) && (!isDbSystemVariable || !isCarat(uint16(c))) {
-			if i == 0 || !isDigit(uint16(c)) {
+		if !isAsciiLetter(c) && (!isDbSystemVariable || !isCarat(c)) {
+			if i == 0 || !isAsciiDigit(c) {
 				goto mustEscape
 			}
 		}

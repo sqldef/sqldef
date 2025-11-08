@@ -153,28 +153,28 @@ func forceEOF(yylex any) {
 }
 
 %token LEX_ERROR
-%left <bytes> UNION INTERSECT EXCEPT
-%token <bytes> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER BY LIMIT OFFSET FOR DECLARE
-%token <bytes> ALL ANY SOME DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SRID SET LOCK KEYS
-%token <bytes> ROWID STRICT
-%token <bytes> VALUES LAST_INSERT_ID
-%token <bytes> NEXT VALUE SHARE MODE
-%token <bytes> SQL_NO_CACHE SQL_CACHE
-%left <bytes> JOIN STRAIGHT_JOIN LEFT RIGHT INNER OUTER CROSS NATURAL USE FORCE
-%left <bytes> ON USING
+%left <str> UNION INTERSECT EXCEPT
+%token <str> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER BY LIMIT OFFSET FOR DECLARE
+%token <str> ALL ANY SOME DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SRID SET LOCK KEYS
+%token <str> ROWID STRICT
+%token <str> VALUES LAST_INSERT_ID
+%token <str> NEXT VALUE SHARE MODE
+%token <str> SQL_NO_CACHE SQL_CACHE
+%left <str> JOIN STRAIGHT_JOIN LEFT RIGHT INNER OUTER CROSS NATURAL USE FORCE
+%left <str> ON USING
 %token <empty> '(' ',' ')'
-%token <bytes> ID HEX STRING UNICODE_STRING INTEGRAL FLOAT HEXNUM VALUE_ARG LIST_ARG COMMENT COMMENT_KEYWORD BIT_LITERAL
-%token <bytes> NULL TRUE FALSE COLUMNS_UPDATED
-%token <bytes> OFF
-%token <bytes> MAX
+%token <str> ID HEX STRING UNICODE_STRING INTEGRAL FLOAT HEXNUM VALUE_ARG LIST_ARG COMMENT COMMENT_KEYWORD BIT_LITERAL
+%token <str> NULL TRUE FALSE COLUMNS_UPDATED
+%token <str> OFF
+%token <str> MAX
 
 // Precedence dictated by databases. But the sqldef grammar is simplified.
 // Some of these operators don't conflict in our situation. Nevertheless,
 // it's better to have these listed in the correct order. Also, we don't
 // support all operators yet.
-%left <bytes> OR
-%left <bytes> AND
-%right <bytes> NOT '!'
+%left <str> OR
+%left <str> AND
+%right <str> NOT '!'
 /* ---------------- Dangling Else Resolution --------------------------------
  * The following definitions, `NO_ELSE` and `ELSE`, are ordered specifically
  * to resolve the "dangling else" ambiguity. `ELSE` MUST have a higher
@@ -182,22 +182,22 @@ func forceEOF(yylex any) {
  * other keywords are critical for correct parsing.                           */
 %nonassoc NO_ELSE
 /** DO NOT MERGE these definitions. Their separation and order are critical. **/
-%left <bytes> BETWEEN CASE WHEN THEN END
-%left <bytes> ELSE
+%left <str> BETWEEN CASE WHEN THEN END
+%left <str> ELSE
 /* ---------------- End of Dangling Else Resolution ------------------------- */
-%left <bytes> '=' '<' '>' LE GE NE NULL_SAFE_EQUAL IS LIKE REGEXP IN
-%left <bytes> POSIX_REGEX POSIX_REGEX_CI POSIX_NOT_REGEX POSIX_NOT_REGEX_CI
-%left <bytes> PATTERN_LIKE PATTERN_ILIKE PATTERN_NOT_LIKE PATTERN_NOT_ILIKE
-%left <bytes> '|'
-%left <bytes> '&'
-%left <bytes> SHIFT_LEFT SHIFT_RIGHT
-%left <bytes> '+' '-'
-%left <bytes> '*' '/' DIV '%' MOD
-%left <bytes> '^'
-%right <bytes> '~' UNARY
-%left <bytes> COLLATE
-%right <bytes> BINARY UNDERSCORE_BINARY
-%right <bytes> INTERVAL
+%left <str> '=' '<' '>' LE GE NE NULL_SAFE_EQUAL IS LIKE REGEXP IN
+%left <str> POSIX_REGEX POSIX_REGEX_CI POSIX_NOT_REGEX POSIX_NOT_REGEX_CI
+%left <str> PATTERN_LIKE PATTERN_ILIKE PATTERN_NOT_LIKE PATTERN_NOT_ILIKE
+%left <str> '|'
+%left <str> '&'
+%left <str> SHIFT_LEFT SHIFT_RIGHT
+%left <str> '+' '-'
+%left <str> '*' '/' DIV '%' MOD
+%left <str> '^'
+%right <str> '~' UNARY
+%left <str> COLLATE
+%right <str> BINARY UNDERSCORE_BINARY
+%right <str> INTERVAL
 %nonassoc <bytes> '.'
 
 // There is no need to define precedence for the JSON
@@ -206,96 +206,96 @@ func forceEOF(yylex any) {
 %token <empty> JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP
 
 // DDL Tokens
-%token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD GRANT REVOKE OPTION PRIVILEGES
-%token <bytes> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION EXCLUDE DOMAIN
-%right <bytes> UNIQUE KEY
-%token <bytes> SHOW DESCRIBE EXPLAIN DATE DATA ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
-%token <bytes> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN
-%token <bytes> STATUS VARIABLES
-%token <bytes> RESTRICT CASCADE NO ACTION
-%token <bytes> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
-%token <bytes> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS DISTANCE M EUCLIDEAN COSINE
-%token <bytes> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE INSTEAD OF OUTPUT
-%token <bytes> HANDLER CONTINUE EXIT SQLEXCEPTION SQLWARNING SQLSTATE FOUND
-%token <bytes> DEFERRABLE INITIALLY IMMEDIATE DEFERRED
-%token <bytes> CONCURRENTLY ASYNC
-%token <bytes> SQL SECURITY
+%token <str> CREATE ALTER DROP RENAME ANALYZE ADD GRANT REVOKE OPTION PRIVILEGES
+%token <str> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION EXCLUDE DOMAIN
+%right <str> UNIQUE KEY
+%token <str> SHOW DESCRIBE EXPLAIN DATE DATA ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
+%token <str> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN
+%token <str> STATUS VARIABLES
+%token <str> RESTRICT CASCADE NO ACTION
+%token <str> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
+%token <str> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS DISTANCE M EUCLIDEAN COSINE
+%token <str> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE INSTEAD OF OUTPUT
+%token <str> HANDLER CONTINUE EXIT SQLEXCEPTION SQLWARNING SQLSTATE FOUND
+%token <str> DEFERRABLE INITIALLY IMMEDIATE DEFERRED
+%token <str> CONCURRENTLY ASYNC
+%token <str> SQL SECURITY
 
 // Transaction Tokens
-%token <bytes> BEGIN START TRANSACTION COMMIT ROLLBACK
+%token <str> BEGIN START TRANSACTION COMMIT ROLLBACK
 
 // Type Tokens
-%token <bytes> BIT TINYINT SMALLINT SMALLSERIAL MEDIUMINT INT INTEGER SERIAL BIGINT BIGSERIAL INTNUM
-%token <bytes> REAL DOUBLE PRECISION FLOAT_TYPE DECIMAL NUMERIC SMALLMONEY MONEY
-%token <bytes> TIME TIMESTAMP DATETIME YEAR DATETIMEOFFSET DATETIME2 SMALLDATETIME
-%token <bytes> CHAR VARCHAR VARYING BOOL CHARACTER VARBINARY NCHAR NVARCHAR NTEXT UUID
-%token <bytes> TEXT TINYTEXT MEDIUMTEXT LONGTEXT CITEXT
-%token <bytes> TSTZRANGE TSRANGE INT4RANGE INT8RANGE NUMRANGE DATERANGE
-%token <bytes> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON JSONB ENUM
-%token <bytes> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
-%token <bytes> VECTOR
-%token <bytes> VARIADIC ARRAY
-%token <bytes> NOW GETDATE
-%token <bytes> BPCHAR
+%token <str> BIT TINYINT SMALLINT SMALLSERIAL MEDIUMINT INT INTEGER SERIAL BIGINT BIGSERIAL INTNUM
+%token <str> REAL DOUBLE PRECISION FLOAT_TYPE DECIMAL NUMERIC SMALLMONEY MONEY
+%token <str> TIME TIMESTAMP DATETIME YEAR DATETIMEOFFSET DATETIME2 SMALLDATETIME
+%token <str> CHAR VARCHAR VARYING BOOL CHARACTER VARBINARY NCHAR NVARCHAR NTEXT UUID
+%token <str> TEXT TINYTEXT MEDIUMTEXT LONGTEXT CITEXT
+%token <str> TSTZRANGE TSRANGE INT4RANGE INT8RANGE NUMRANGE DATERANGE
+%token <str> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON JSONB ENUM
+%token <str> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
+%token <str> VECTOR
+%token <str> VARIADIC ARRAY
+%token <str> NOW GETDATE
+%token <str> BPCHAR
 
 // Operator Class Tokens
-%right <bytes> TEXT_PATTERN_OPS
+%right <str> TEXT_PATTERN_OPS
 
 // Type Modifiers
-%token <bytes> NULLX AUTO_INCREMENT APPROXNUM SIGNED UNSIGNED ZEROFILL ZONE AUTOINCREMENT
+%token <str> NULLX AUTO_INCREMENT APPROXNUM SIGNED UNSIGNED ZEROFILL ZONE AUTOINCREMENT
 
 // Supported SHOW tokens
-%token <bytes> DATABASES TABLES VSCHEMA_TABLES EXTENDED FULL PROCESSLIST
+%token <str> DATABASES TABLES VSCHEMA_TABLES EXTENDED FULL PROCESSLIST
 
 // SET tokens
-%token <bytes> NAMES CHARSET GLOBAL SESSION ISOLATION LEVEL READ WRITE ONLY REPEATABLE COMMITTED UNCOMMITTED SERIALIZABLE NEW
+%token <str> NAMES CHARSET GLOBAL SESSION ISOLATION LEVEL READ WRITE ONLY REPEATABLE COMMITTED UNCOMMITTED SERIALIZABLE NEW
 
 // SET option tokens
-%token <bytes> CONCAT_NULL_YIELDS_NULL CURSOR_CLOSE_ON_COMMIT QUOTED_IDENTIFIER ARITHABORT FMTONLY NOCOUNT NOEXEC
-%token <bytes> NUMERIC_ROUNDABORT ANSI_DEFAULTS ANSI_NULL_DFLT_OFF ANSI_NULL_DFLT_ON ANSI_NULLS ANSI_PADDING ANSI_WARNINGS
-%token <bytes> FORCEPLAN SHOWPLAN_ALL SHOWPLAN_TEXT SHOWPLAN_XML IMPLICIT_TRANSACTIONS REMOTE_PROC_TRANSACTIONS XACT_ABORT
+%token <str> CONCAT_NULL_YIELDS_NULL CURSOR_CLOSE_ON_COMMIT QUOTED_IDENTIFIER ARITHABORT FMTONLY NOCOUNT NOEXEC
+%token <str> NUMERIC_ROUNDABORT ANSI_DEFAULTS ANSI_NULL_DFLT_OFF ANSI_NULL_DFLT_ON ANSI_NULLS ANSI_PADDING ANSI_WARNINGS
+%token <str> FORCEPLAN SHOWPLAN_ALL SHOWPLAN_TEXT SHOWPLAN_XML IMPLICIT_TRANSACTIONS REMOTE_PROC_TRANSACTIONS XACT_ABORT
 
 // Functions
-%token <bytes> CURRENT_TIMESTAMP DATABASE CURRENT_DATE
-%token <bytes> CURRENT_TIME LOCALTIME LOCALTIMESTAMP
-%token <bytes> UTC_DATE UTC_TIME UTC_TIMESTAMP
-%token <bytes> REPLACE
-%token <bytes> CONVERT CAST
-%token <bytes> SUBSTR SUBSTRING EXTRACT
-%token <bytes> GROUP_CONCAT SEPARATOR
-%token <bytes> INHERIT
-%token <bytes> LEAD LAG
+%token <str> CURRENT_TIMESTAMP DATABASE CURRENT_DATE
+%token <str> CURRENT_TIME LOCALTIME LOCALTIMESTAMP
+%token <str> UTC_DATE UTC_TIME UTC_TIMESTAMP
+%token <str> REPLACE
+%token <str> CONVERT CAST
+%token <str> SUBSTR SUBSTRING EXTRACT
+%token <str> GROUP_CONCAT SEPARATOR
+%token <str> INHERIT
+%token <str> LEAD LAG
 
 // Match
-%token <bytes> MATCH AGAINST BOOLEAN LANGUAGE WITH WITHOUT PARSER QUERY EXPANSION
+%token <str> MATCH AGAINST BOOLEAN LANGUAGE WITH WITHOUT PARSER QUERY EXPANSION
 
 // Context-aware WITH tokens
-%token <bytes> WITH_DATA_OPTION
+%token <str> WITH_DATA_OPTION
 
 // MySQL reserved words that are unused by this grammar will map to this token.
-%token <bytes> UNUSED
+%token <str> UNUSED
 
 // MySQL PostgreSQL GENERATED ALWAYS AS
-%token <bytes> VIRTUAL STORED
+%token <str> VIRTUAL STORED
 // PostgreSQL GENERATED AS IDENTITY
-%token <bytes> GENERATED ALWAYS IDENTITY
+%token <str> GENERATED ALWAYS IDENTITY
 // sequence
-%token <bytes> SEQUENCE INCREMENT MINVALUE CACHE CYCLE OWNED NONE
+%token <str> SEQUENCE INCREMENT MINVALUE CACHE CYCLE OWNED NONE
 
 // SQL Server PRIMARY KEY CLUSTERED
-%token <bytes> CLUSTERED NONCLUSTERED
+%token <str> CLUSTERED NONCLUSTERED
 // SQL Server NOT FOR REPLICATION
-%token <bytes> REPLICATION
+%token <str> REPLICATION
 // SQL SERVER COLUMNSTORE
-%token <bytes> COLUMNSTORE
+%token <str> COLUMNSTORE
 // index
-%token <bytes> INCLUDE
+%token <str> INCLUDE
 
 // table hint
-%token <bytes> HOLDLOCK NOLOCK NOWAIT PAGLOCK ROWLOCK TABLOCK UPDLOCK READUNCOMMITTED
+%token <str> HOLDLOCK NOLOCK NOWAIT PAGLOCK ROWLOCK TABLOCK UPDLOCK READUNCOMMITTED
 
 // SQL SECURITY
-%token <bytes> DEFINER INVOKER
+%token <str> DEFINER INVOKER
 
 %type <statement> statement
 %type <selStmt> select_statement select_statement_core base_select union_rhs
@@ -327,7 +327,7 @@ func forceEOF(yylex any) {
 %type <expr> where_expression_opt
 %type <expr> condition
 %type <boolVal> boolean_value
-%type <bytes> int_value
+%type <str> int_value
 %type <str> compare extract_field
 %type <ins> insert_data
 %type <expr> value value_expression
@@ -357,12 +357,12 @@ func forceEOF(yylex any) {
 %type <updateExprs> on_dup_opt
 %type <updateExprs> update_list
 %type <setExprs> set_list transaction_chars
-%type <bytes> charset_or_character_set
+%type <str> charset_or_character_set
 %type <updateExpr> update_expression
 %type <setExpr> set_expression transaction_char isolation_level
 %type <str> ignore_opt default_opt
 %type <empty> if_not_exists_opt when_expression_opt for_each_row_opt
-%type <bytes> reserved_keyword non_reserved_keyword
+%type <str> reserved_keyword non_reserved_keyword
 %type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt
 %type <boolVal> unique_opt
 %type <expr> charset_value
@@ -373,7 +373,7 @@ func forceEOF(yylex any) {
 %type <convertType> convert_type simple_convert_type
 %type <columnType> column_type
 %type <columnType> bool_type numeric_type time_type char_type spatial_type
-%type <bytes> int_type_keyword float_type_keyword decimal_type_keyword money_type_keyword
+%type <str> int_type_keyword float_type_keyword decimal_type_keyword money_type_keyword
 %type <columnType> int_type_spec float_type_spec decimal_type_spec money_type_spec double_type_spec
 %type <str> precision_opt varying_opt
 %type <optVal> length_opt max_length_opt current_timestamp
@@ -400,18 +400,18 @@ func forceEOF(yylex any) {
 %type <tableOptions> table_option_list
 %type <indexInfo> index_info
 %type <indexColumn> index_column
-%type <bytes> operator_class
+%type <str> operator_class
 %type <indexColumnsOrExpression> index_column_list_or_expression
 %type <indexColumns> index_column_list
 %type <indexPartition> index_partition_opt
 %type <indexOptions> index_option_opt
 %type <indexOption> index_option
 %type <indexOptions> index_option_list mssql_index_option_list
-%type <bytes> policy_as_opt policy_for_opt
+%type <str> policy_as_opt policy_for_opt
 %type <convertType> character_cast_opt
 %type <expr> using_opt with_check_opt
-%left <bytes> TYPECAST CHECK
-%type <bytes> or_replace_opt
+%left <str> TYPECAST CHECK
+%type <str> or_replace_opt
 %type <boolVal> no_inherit_opt
 %type <str> identity_behavior
 %type <sequence> sequence_opt
@@ -446,13 +446,13 @@ func forceEOF(yylex any) {
 %type <expr> array_element
 %type <str> sql_security
 %type <overExpr> over_expression
-%token <bytes> OVER
+%token <str> OVER
 %type <partitionBy> partition_by_list
 %type <partition> partition
 %type <boolVals> unique_clustered_opt
 %type <byt> concurrently_opt
 %type <empty> nonclustered_columnstore
-%type <bytes> bool_option_name
+%type <str> bool_option_name
 %type <strs> bool_option_name_list
 
 %start program
@@ -489,7 +489,7 @@ comment_statement:
       Comment: &Comment{
         ObjectType: "OBJECT_TABLE",
         Object: tableName,
-        Comment: string($6),
+        Comment: $6,
       },
     }
   }
@@ -525,7 +525,7 @@ comment_statement:
       Comment: &Comment{
         ObjectType: "OBJECT_COLUMN",
         Object: colName,
-        Comment: string($6),
+        Comment: $6,
       },
     }
   }
@@ -555,7 +555,7 @@ comment_statement:
       Comment: &Comment{
         ObjectType: "INDEX",
         Object: $4.String(),
-        Comment: string($6),
+        Comment: $6,
       },
     }
   }
@@ -1231,7 +1231,7 @@ create_statement:
     $$ = &DDL{
       Action: CreateExtension,
       Extension: &Extension{
-        Name: string($4),
+        Name: $4,
       },
     }
   }
@@ -1602,11 +1602,11 @@ scroll_opt:
 handler_action:
   CONTINUE
   {
-    $$ = string($1)
+    $$ = $1
   }
 | EXIT
   {
-    $$ = string($1)
+    $$ = $1
   }
 
 handler_condition_list:
@@ -1622,15 +1622,15 @@ handler_condition_list:
 handler_condition:
   INTEGRAL
   {
-    $$ = HandlerCondition{Type: handlerConditionMysqlErrorCode, Value: string($1)}
+    $$ = HandlerCondition{Type: handlerConditionMysqlErrorCode, Value: $1}
   }
 | SQLSTATE STRING
   {
-    $$ = HandlerCondition{Type: handlerConditionSqlstate, Value: string($2)}
+    $$ = HandlerCondition{Type: handlerConditionSqlstate, Value: $2}
   }
 | SQLSTATE VALUE STRING
   {
-    $$ = HandlerCondition{Type: handlerConditionSqlstate, Value: string($3)}
+    $$ = HandlerCondition{Type: handlerConditionSqlstate, Value: $3}
   }
 | SQLWARNING
   {
@@ -1722,19 +1722,19 @@ fetch_opt:
   }
 | NEXT FROM
   {
-    $$ = string($1)
+    $$ = $1
   }
 | PRIOR FROM
   {
-    $$ = string($1)
+    $$ = $1
   }
 | FIRST FROM
   {
-    $$ = string($1)
+    $$ = $1
   }
 | LAST FROM
   {
-    $$ = string($1)
+    $$ = $1
   }
 
 while_statement:
@@ -1779,7 +1779,7 @@ if_statement:
     $$ = &If{
       Condition: $2,
       IfStatements: $4,
-      Keyword: string($3),
+      Keyword: $3,
     }
   }
 | IF expression THEN trigger_statements ';' ELSE trigger_statements ';' END IF
@@ -1788,7 +1788,7 @@ if_statement:
       Condition: $2,
       IfStatements: $4,
       ElseStatements: $7,
-      Keyword: string($3),
+      Keyword: $3,
     }
   }
 // For MSSQL: Decompose into matched and unmatched statements to resolve ambiguity
@@ -1872,39 +1872,39 @@ transaction_char:
   }
 | READ WRITE
   {
-    $$ = &SetExpr{Name: NewColIdent("tx_read_only"), Expr: NewIntVal([]byte("0"))}
+    $$ = &SetExpr{Name: NewColIdent("tx_read_only"), Expr: NewIntVal("0")}
   }
 | READ ONLY
   {
-    $$ = &SetExpr{Name: NewColIdent("tx_read_only"), Expr: NewIntVal([]byte("1"))}
+    $$ = &SetExpr{Name: NewColIdent("tx_read_only"), Expr: NewIntVal("1")}
   }
 
 isolation_level:
   REPEATABLE READ
   {
-    $$ = &SetExpr{Name: NewColIdent("tx_isolation"), Expr: NewStrVal([]byte("repeatable read"))}
+    $$ = &SetExpr{Name: NewColIdent("tx_isolation"), Expr: NewStrVal("repeatable read")}
   }
 | READ COMMITTED
   {
-    $$ = &SetExpr{Name: NewColIdent("tx_isolation"), Expr: NewStrVal([]byte("read committed"))}
+    $$ = &SetExpr{Name: NewColIdent("tx_isolation"), Expr: NewStrVal("read committed")}
   }
 | READ UNCOMMITTED
   {
-    $$ = &SetExpr{Name: NewColIdent("tx_isolation"), Expr: NewStrVal([]byte("read uncommitted"))}
+    $$ = &SetExpr{Name: NewColIdent("tx_isolation"), Expr: NewStrVal("read uncommitted")}
   }
 | SERIALIZABLE
   {
-    $$ = &SetExpr{Name: NewColIdent("tx_isolation"), Expr: NewStrVal([]byte("serializable"))}
+    $$ = &SetExpr{Name: NewColIdent("tx_isolation"), Expr: NewStrVal("serializable")}
   }
 
 sql_security:
   DEFINER
   {
-    $$ = string($1)
+    $$ = $1
   }
 | INVOKER
   {
-    $$ = string($1)
+    $$ = $1
   }
 
 set_session_or_global:
@@ -1988,48 +1988,48 @@ module_arguments:
 trigger_time:
   FOR
   {
-    $$ = string($1)
+    $$ = $1
   }
 | BEFORE
   {
-    $$ = string($1)
+    $$ = $1
   }
 | AFTER
   {
-    $$ = string($1)
+    $$ = $1
   }
 | INSTEAD OF
   {
-    $$ = string($1) + " " + string($2)
+    $$ = $1 + " " + $2
   }
 
 trigger_event:
   INSERT
   {
-    $$ = string($1)
+    $$ = $1
   }
 | UPDATE
   {
-    $$ = string($1)
+    $$ = $1
   }
 | DELETE
   {
-    $$ = string($1)
+    $$ = $1
   }
 /* For SQLite3 */
 | UPDATE OF column_list
   {
-    $$ = string($1)
+    $$ = $1
   }
 
 trigger_event_list:
   trigger_event
   {
-    $$ = []string{string($1)}
+    $$ = []string{$1}
   }
 | trigger_event_list ',' trigger_event
   {
-    $$ = append($$, string($3))
+    $$ = append($$, $3)
   }
 
 trigger_statements:
@@ -2115,8 +2115,8 @@ exec_statement:
   }
 
 exec_keyword:
-  EXEC    { $$ = string($1) }
-| EXECUTE { $$ = string($1) }
+  EXEC    { $$ = $1 }
+| EXECUTE { $$ = $1 }
 
 exec_param_list_opt:
   /* empty */     { $$ = nil }
@@ -2135,7 +2135,7 @@ for_each_row_opt:
 
 policy_as_opt:
   {
-    $$ = nil
+    $$ = ""
   }
 | AS PERMISSIVE
   {
@@ -2148,7 +2148,7 @@ policy_as_opt:
 
 policy_for_opt:
   {
-    $$ = nil
+    $$ = ""
   }
 | FOR ALL
   {
@@ -2200,11 +2200,11 @@ unique_opt:
 
 or_replace_opt:
   {
-    $$ = nil
+    $$ = ""
   }
 | OR REPLACE
   {
-    $$ = nil
+    $$ = ""
   }
 
 drop_statement:
@@ -2273,7 +2273,7 @@ drop_statement:
     $$ = &DDL{
       Action: DropExtension,
       Extension: &Extension{
-        Name: string($3),
+        Name: $3,
       },
     }
   }
@@ -2283,7 +2283,7 @@ drop_statement:
       Action: DropExtension,
       IfExists: true,
       Extension: &Extension{
-        Name: string($5),
+        Name: $5,
       },
     }
   }
@@ -2410,17 +2410,17 @@ column_definition:
   }
 | non_reserved_keyword column_definition_type
   {
-    $$ = &ColumnDefinition{Name: NewColIdent(string($1)), Type: $2}
+    $$ = &ColumnDefinition{Name: NewColIdent($1), Type: $2}
   }
 /* For SQLite3 https://www.sqlite.org/lang_keywords.html */
 | STRING column_definition_type
   {
-    $$ = &ColumnDefinition{Name: NewColIdent(string($1)), Type: $2}
+    $$ = &ColumnDefinition{Name: NewColIdent($1), Type: $2}
   }
 /* SQLite3 */
 | ROWID column_definition_type
   {
-    $$ = &ColumnDefinition{Name: NewColIdent(string($1)), Type: $2}
+    $$ = &ColumnDefinition{Name: NewColIdent($1), Type: $2}
   }
 
 column_type:
@@ -2441,11 +2441,11 @@ column_type:
   }
 | STRING '.' STRING
   {
-    $$ = ColumnType{Type: string($1) + "." + string($3)}
+    $$ = ColumnType{Type: $1 + "." + $3}
   }
 | ID '.' ID
   {
-    $$ = ColumnType{Type: string($1) + "." + string($3)}
+    $$ = ColumnType{Type: $1 + "." + $3}
   }
 
 column_definition_type:
@@ -2771,14 +2771,14 @@ default_value_expression:
         num.Val = num.Val[1:]
         $$ = num
       } else {
-        $$ = NewIntVal(append([]byte("-"), num.Val...))
+        $$ = NewIntVal("-" + string(num.Val))
       }
     } else if num, ok := $2.(*SQLVal); ok && num.Type == FloatVal {
       if num.Val[0] == '-' {
         num.Val = num.Val[1:]
         $$ = num
       } else {
-        $$ = NewFloatVal(append([]byte("-"), num.Val...))
+        $$ = NewFloatVal("-" + string(num.Val))
       }
     } else {
       $$ = &UnaryExpr{Operator: UMinusStr, Expr: $2}
@@ -2804,11 +2804,11 @@ srid_val:
 identity_behavior:
   ALWAYS
   {
-    $$ = string($1)
+    $$ = $1
   }
 | BY DEFAULT
   {
-    $$ = string($1)+" "+string($2)
+    $$ = $1+" "+$2
   }
 
 sequence_opt:
@@ -2990,7 +2990,7 @@ character_cast_opt:
   }
 | TYPECAST BPCHAR
   {
-    $$ = &ConvertType{Type: string($2)}
+    $$ = &ConvertType{Type: $2}
   }
 | TYPECAST column_type array_opt
   {
@@ -3023,7 +3023,7 @@ int_type_keyword:
 int_type_spec:
   int_type_keyword length_opt
   {
-    $$ = ColumnType{Type: string($1), DisplayWidth: $2}
+    $$ = ColumnType{Type: $1, DisplayWidth: $2}
   }
 
 float_type_keyword:
@@ -3033,7 +3033,7 @@ float_type_keyword:
 float_type_spec:
   float_type_keyword float_length_opt
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
     $$.Length = $2.Length
     $$.Scale = $2.Scale
   }
@@ -3045,7 +3045,7 @@ decimal_type_keyword:
 decimal_type_spec:
   decimal_type_keyword decimal_length_opt
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
     $$.Length = $2.Length
     $$.Scale = $2.Scale
   }
@@ -3053,7 +3053,7 @@ decimal_type_spec:
 double_type_spec:
   DOUBLE precision_opt float_length_opt
   {
-    $$ = ColumnType{Type: string($1)+$2}
+    $$ = ColumnType{Type: $1+$2}
     $$.Length = $3.Length
     $$.Scale = $3.Scale
   }
@@ -3064,7 +3064,7 @@ precision_opt:
   }
 | PRECISION
   {
-    $$ = " " + string($1)
+    $$ = " " + $1
   }
 
 float_length_opt:
@@ -3104,170 +3104,170 @@ money_type_keyword:
 money_type_spec:
   money_type_keyword
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 
 time_type:
   DATE
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | TIME length_opt time_zone_opt
   {
-    $$ = ColumnType{Type: string($1), Length: $2, Timezone: $3}
+    $$ = ColumnType{Type: $1, Length: $2, Timezone: $3}
   }
 | TIMESTAMP length_opt time_zone_opt
   {
-    $$ = ColumnType{Type: string($1), Length: $2, Timezone: $3}
+    $$ = ColumnType{Type: $1, Length: $2, Timezone: $3}
   }
 | DATETIME length_opt
   {
-    $$ = ColumnType{Type: string($1), Length: $2}
+    $$ = ColumnType{Type: $1, Length: $2}
   }
 | DATETIME2 length_opt
   {
-    $$ = ColumnType{Type: string($1), Length: $2}
+    $$ = ColumnType{Type: $1, Length: $2}
   }
 | DATETIMEOFFSET length_opt
   {
-    $$ = ColumnType{Type: string($1), Length: $2}
+    $$ = ColumnType{Type: $1, Length: $2}
   }
 | SMALLDATETIME
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | YEAR
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | INTERVAL length_opt
   {
-    $$ = ColumnType{Type: string($1), Length: $2}
+    $$ = ColumnType{Type: $1, Length: $2}
   }
 
 bool_type:
   BOOL
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | BOOLEAN
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 
 char_type:
   CHAR length_opt charset_opt collate_opt
   {
-    $$ = ColumnType{Type: string($1), Length: $2, Charset: $3, Collate: $4}
+    $$ = ColumnType{Type: $1, Length: $2, Charset: $3, Collate: $4}
   }
 | CHARACTER varying_opt length_opt charset_opt collate_opt
   {
-    $$ = ColumnType{Type: string($1)+$2, Length: $3, Charset: $4, Collate: $5}
+    $$ = ColumnType{Type: $1+$2, Length: $3, Charset: $4, Collate: $5}
   }
 | VARCHAR max_length_opt charset_opt collate_opt
   {
-    $$ = ColumnType{Type: string($1), Length: $2, Charset: $3, Collate: $4}
+    $$ = ColumnType{Type: $1, Length: $2, Charset: $3, Collate: $4}
   }
 | NCHAR length_opt charset_opt collate_opt
   {
-    $$ = ColumnType{Type: string($1), Length: $2, Charset: $3, Collate: $4}
+    $$ = ColumnType{Type: $1, Length: $2, Charset: $3, Collate: $4}
   }
 | NVARCHAR max_length_opt charset_opt collate_opt
   {
-    $$ = ColumnType{Type: string($1), Length: $2, Charset: $3, Collate: $4}
+    $$ = ColumnType{Type: $1, Length: $2, Charset: $3, Collate: $4}
   }
 | NTEXT
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | BINARY length_opt
   {
-    $$ = ColumnType{Type: string($1), Length: $2}
+    $$ = ColumnType{Type: $1, Length: $2}
   }
 | VARBINARY max_length_opt
   {
-    $$ = ColumnType{Type: string($1), Length: $2}
+    $$ = ColumnType{Type: $1, Length: $2}
   }
 | TEXT charset_opt collate_opt
   {
-    $$ = ColumnType{Type: string($1), Charset: $2, Collate: $3}
+    $$ = ColumnType{Type: $1, Charset: $2, Collate: $3}
   }
 | TINYTEXT charset_opt collate_opt
   {
-    $$ = ColumnType{Type: string($1), Charset: $2, Collate: $3}
+    $$ = ColumnType{Type: $1, Charset: $2, Collate: $3}
   }
 | MEDIUMTEXT charset_opt collate_opt
   {
-    $$ = ColumnType{Type: string($1), Charset: $2, Collate: $3}
+    $$ = ColumnType{Type: $1, Charset: $2, Collate: $3}
   }
 | LONGTEXT charset_opt collate_opt
   {
-    $$ = ColumnType{Type: string($1), Charset: $2, Collate: $3}
+    $$ = ColumnType{Type: $1, Charset: $2, Collate: $3}
   }
 | CITEXT charset_opt collate_opt
   {
-    $$ = ColumnType{Type: string($1), Charset: $2, Collate: $3}
+    $$ = ColumnType{Type: $1, Charset: $2, Collate: $3}
   }
 | BLOB
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | TINYBLOB
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | MEDIUMBLOB
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | LONGBLOB
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | JSON
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | JSONB
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | UUID
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | TSRANGE
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | TSTZRANGE
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | INT4RANGE
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | INT8RANGE
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | NUMRANGE
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | DATERANGE
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | ENUM '(' enum_values ')' charset_opt collate_opt
   {
-    $$ = ColumnType{Type: string($1), EnumValues: $3, Charset: $5, Collate: $6}
+    $$ = ColumnType{Type: $1, EnumValues: $3, Charset: $5, Collate: $6}
   }
 // need set_values / SetValues ?
 | SET '(' enum_values ')' charset_opt collate_opt
   {
-    $$ = ColumnType{Type: string($1), EnumValues: $3, Charset: $5, Collate: $6}
+    $$ = ColumnType{Type: $1, EnumValues: $3, Charset: $5, Collate: $6}
   }
 
 varying_opt:
@@ -3276,56 +3276,56 @@ varying_opt:
   }
 | VARYING
   {
-    $$ = " " + string($1)
+    $$ = " " + $1
   }
 
 spatial_type:
   GEOMETRY
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | POINT
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | LINESTRING
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | POLYGON
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | GEOMETRYCOLLECTION
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | MULTIPOINT
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | MULTILINESTRING
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | MULTIPOLYGON
   {
-    $$ = ColumnType{Type: string($1)}
+    $$ = ColumnType{Type: $1}
   }
 | VECTOR '(' INTEGRAL ')'
   {
-    $$ = ColumnType{Type: string($1), Length: NewIntVal($3)}
+    $$ = ColumnType{Type: $1, Length: NewIntVal($3)}
   }
 
 enum_values:
   STRING
   {
     $$ = make([]string, 0, 4)
-    $$ = append($$, "'" + string($1) + "'")
+    $$ = append($$, "'" + $1 + "'")
   }
 | enum_values ',' STRING
   {
-    $$ = append($1, "'" + string($3) + "'")
+    $$ = append($1, "'" + $3 + "'")
   }
 
 length_opt:
@@ -3347,8 +3347,8 @@ max_length_opt:
   }
 | '(' ID ')'
   {
-    if !strings.EqualFold(string($2), "max") {
-      yylex.Error(fmt.Sprintf("syntax error around '%s'", string($2)))
+    if !strings.EqualFold($2, "max") {
+      yylex.Error(fmt.Sprintf("syntax error around '%s'", $2))
     }
     $$ = NewStrVal($2)
   }
@@ -3415,11 +3415,11 @@ charset_opt:
   }
 | CHARACTER SET ID
   {
-    $$ = string($3)
+    $$ = $3
   }
 | CHARACTER SET BINARY
   {
-    $$ = string($3)
+    $$ = $3
   }
 
 collate_opt:
@@ -3428,11 +3428,11 @@ collate_opt:
   }
 | BINARY
   {
-    $$ = string($1) // Set pseudo collation "binary" for BINARY attribute (deprecated in future MySQL versions)
+    $$ = $1 // Set pseudo collation "binary" for BINARY attribute (deprecated in future MySQL versions)
   }
 | COLLATE ID
   {
-    $$ = string($2)
+    $$ = $2
   }
 
 index_definition:
@@ -3477,68 +3477,68 @@ mssql_index_option_list:
 index_option:
   USING ID
   {
-    $$ = &IndexOption{Name: string($1), Value: NewStrVal($2)}
+    $$ = &IndexOption{Name: $1, Value: NewStrVal($2)}
   }
 | KEY_BLOCK_SIZE equal_opt INTEGRAL
   {
     // should not be string
-    $$ = &IndexOption{Name: string($1), Value: NewIntVal($3)}
+    $$ = &IndexOption{Name: $1, Value: NewIntVal($3)}
   }
 | COMMENT_KEYWORD STRING
   {
-    $$ = &IndexOption{Name: string($1), Value: NewStrVal($2)}
+    $$ = &IndexOption{Name: $1, Value: NewStrVal($2)}
   }
 | WITH PARSER sql_id
   {
-    $$ = &IndexOption{Name: string($2), Value: NewStrVal([]byte($3.String()))}
+    $$ = &IndexOption{Name: $2, Value: NewStrVal($3.String())}
   }
 | PAD_INDEX '=' on_off
   {
-    $$ = &IndexOption{Name: string($1), Value: $3}
+    $$ = &IndexOption{Name: $1, Value: $3}
   }
 | FILLFACTOR '=' INTEGRAL
   {
-    $$ = &IndexOption{Name: string($1), Value: NewIntVal($3)}
+    $$ = &IndexOption{Name: $1, Value: NewIntVal($3)}
   }
 | FILLFACTOR '=' STRING
   {
-    $$ = &IndexOption{Name: string($1), Value: NewStrVal($3)}
+    $$ = &IndexOption{Name: $1, Value: NewStrVal($3)}
   }
 | IGNORE_DUP_KEY '=' on_off
   {
-    $$ = &IndexOption{Name: string($1), Value: $3}
+    $$ = &IndexOption{Name: $1, Value: $3}
   }
 | STATISTICS_NORECOMPUTE '=' on_off
   {
-    $$ = &IndexOption{Name: string($1), Value: $3}
+    $$ = &IndexOption{Name: $1, Value: $3}
   }
 | STATISTICS_INCREMENTAL '=' on_off
   {
-    $$ = &IndexOption{Name: string($1), Value: $3}
+    $$ = &IndexOption{Name: $1, Value: $3}
   }
 | ALLOW_ROW_LOCKS '=' on_off
   {
-    $$ = &IndexOption{Name: string($1), Value: $3}
+    $$ = &IndexOption{Name: $1, Value: $3}
   }
 | ALLOW_PAGE_LOCKS '=' on_off
   {
-    $$ = &IndexOption{Name: string($1), Value: $3}
+    $$ = &IndexOption{Name: $1, Value: $3}
   }
 | DISTANCE '=' index_distance_option_value
   {
-    $$ = &IndexOption{Name: string($1), Value: $3}
+    $$ = &IndexOption{Name: $1, Value: $3}
   }
 | M '=' INTEGRAL
   {
-    $$ = &IndexOption{Name: string($1), Value: NewIntVal($3)}
+    $$ = &IndexOption{Name: $1, Value: NewIntVal($3)}
   }
 | M '=' STRING
   {
-    $$ = &IndexOption{Name: string($1), Value: NewStrVal($3)}
+    $$ = &IndexOption{Name: $1, Value: NewStrVal($3)}
   }
 | ID '=' vector_option_value
   {
-    id := strings.Trim(strings.ToLower(string($1)), "`")
+    id := strings.Trim(strings.ToLower($1), "`")
     $$ = &IndexOption{Name: id, Value: $3}
   }
 
@@ -3550,7 +3550,7 @@ equal_opt:
   }
 | '='
   {
-    $$ = string($1)
+    $$ = $1
   }
 
 on_off:
@@ -3604,57 +3604,57 @@ index_partition_opt:
 index_info:
   SPATIAL index_or_key ID
   {
-    $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(string($3)), Spatial: true, Unique: false}
+    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3), Spatial: true, Unique: false}
   }
 | FULLTEXT index_or_key ID
   {
-    $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(string($3)), Fulltext: true}
+    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3), Fulltext: true}
   }
 | FULLTEXT ID
   {
-    $$ = &IndexInfo{Type: string($1), Name: NewColIdent(string($2)), Fulltext: true}
+    $$ = &IndexInfo{Type: $1, Name: NewColIdent($2), Fulltext: true}
   }
 | VECTOR INDEX ID
   {
-    $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(string($3)), Vector: true}
+    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3), Vector: true}
   }
 | VECTOR INDEX
   {
-    $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(""), Vector: true}
+    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent(""), Vector: true}
   }
 | VECTOR KEY ID
   {
-    $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(string($3)), Vector: true}
+    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3), Vector: true}
   }
 | UNIQUE index_or_key ID
   {
-    $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(string($3)), Unique: true}
+    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3), Unique: true}
   }
 | UNIQUE ID
   {
-    $$ = &IndexInfo{Type: string($1), Name: NewColIdent(string($2)), Unique: true}
+    $$ = &IndexInfo{Type: $1, Name: NewColIdent($2), Unique: true}
   }
 | UNIQUE INDEX
   {
-    $$ = &IndexInfo{Type: string($1), Name: NewColIdent(""), Unique: true}
+    $$ = &IndexInfo{Type: $1, Name: NewColIdent(""), Unique: true}
   }
 | index_or_key ID clustered_opt
   {
-    $$ = &IndexInfo{Type: string($1), Name: NewColIdent(string($2)), Unique: false, Clustered: $3}
+    $$ = &IndexInfo{Type: $1, Name: NewColIdent($2), Unique: false, Clustered: $3}
   }
 | index_or_key ID UNIQUE clustered_opt
   {
-    $$ = &IndexInfo{Type: string($1), Name: NewColIdent(string($2)), Unique: true, Clustered: $4}
+    $$ = &IndexInfo{Type: $1, Name: NewColIdent($2), Unique: true, Clustered: $4}
   }
 
 index_or_key:
   INDEX
   {
-    $$ = string($1)
+    $$ = $1
   }
 | KEY
   {
-    $$ = string($1)
+    $$ = $1
   }
 
 index_column_list_or_expression:
@@ -3680,20 +3680,20 @@ index_column:
   }
 | non_reserved_keyword length_opt asc_desc_opt
   {
-    $$ = IndexColumn{Column: NewColIdent(string($1)), Length: $2, Direction: $3}
+    $$ = IndexColumn{Column: NewColIdent($1), Length: $2, Direction: $3}
   }
 /* For PostgreSQL */
 | KEY length_opt
   {
-    $$ = IndexColumn{Column: NewColIdent(string($1)), Length: $2}
+    $$ = IndexColumn{Column: NewColIdent($1), Length: $2}
   }
 | sql_id operator_class
   {
-    $$ = IndexColumn{Column: $1, OperatorClass: string($2)}
+    $$ = IndexColumn{Column: $1, OperatorClass: $2}
   }
 | non_reserved_keyword operator_class
   {
-    $$ = IndexColumn{Column: NewColIdent(string($1)), OperatorClass: string($2)}
+    $$ = IndexColumn{Column: NewColIdent($1), OperatorClass: $2}
   }
 | '(' expression ')' asc_desc_opt
   {
@@ -3707,9 +3707,12 @@ index_column:
 // https://www.postgresql.org/docs/9.5/brin-builtin-opclasses.html
 operator_class:
   TEXT_PATTERN_OPS
+  {
+    $$ = $1
+  }
 | sql_id
   {
-    $$ = []byte($1.String())
+    $$ = $1.String()
   }
 
 foreign_key_definition:
@@ -3796,7 +3799,7 @@ primary_key_definition:
   CONSTRAINT sql_id PRIMARY KEY clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
   {
     $$ = &IndexDefinition{
-      Info: &IndexInfo{Type: string($3) + " " + string($4), Name: $2, Primary: true, Unique: true, Clustered: $5},
+      Info: &IndexInfo{Type: $3 + " " + $4, Name: $2, Primary: true, Unique: true, Clustered: $5},
       Columns: $7,
       Options: $9,
       Partition: $10,
@@ -3806,7 +3809,7 @@ primary_key_definition:
 | PRIMARY KEY clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
   {
     $$ = &IndexDefinition{
-      Info: &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent("PRIMARY"), Primary: true, Unique: true, Clustered: $3},
+      Info: &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent("PRIMARY"), Primary: true, Unique: true, Clustered: $3},
       Columns: $5,
       Options: $7,
       Partition: $8,
@@ -3817,7 +3820,7 @@ unique_definition:
   CONSTRAINT sql_id UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
   {
     $$ = &IndexDefinition{
-      Info: &IndexInfo{Type: string($3), Name: $2, Primary: false, Unique: true, Clustered: $4},
+      Info: &IndexInfo{Type: $3, Name: $2, Primary: false, Unique: true, Clustered: $4},
       Columns: $6,
       Options: $8,
       Partition: $9,
@@ -3828,7 +3831,7 @@ unique_definition:
 | UNIQUE clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt deferrable_opt initially_deferred_opt
   {
     $$ = &IndexDefinition{
-      Info: &IndexInfo{Type: string($1), Primary: false, Unique: true, Clustered: $2},
+      Info: &IndexInfo{Type: $1, Primary: false, Unique: true, Clustered: $2},
       Columns: $4,
       Options: $6,
       Partition: $7,
@@ -4039,7 +4042,7 @@ privilege:
   }
 | ALL
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 | ALL PRIVILEGES
   {
@@ -4047,15 +4050,15 @@ privilege:
   }
 | REFERENCES
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 | TRIGGER
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 | TRUNCATE
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 
 privilege_list:
@@ -4076,7 +4079,7 @@ grantee:
   }
 | PUBLIC
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 
 grantee_list:
@@ -4098,7 +4101,7 @@ table_option_list:
 | table_option_list table_opt_name '=' table_opt_value
   {
     $$ = $1
-    $$[string($2)] = string($4)
+    $$[$2] = $4
   }
 /* For SQLite3 // SQLite Syntax: table-options https://www.sqlite.org/syntax/table-options.html */
 | sqlite3_table_opt
@@ -4125,7 +4128,7 @@ table_opt_name:
   }
 | COMMENT_KEYWORD
   {
-    $$ = string($1)
+    $$ = $1
   }
 
 table_opt_value:
@@ -4135,11 +4138,11 @@ table_opt_value:
   }
 | STRING
   {
-    $$ = "'" + string($1) + "'"
+    $$ = "'" + $1 + "'"
   }
 | INTEGRAL
   {
-    $$ = string($1)
+    $$ = $1
   }
 
 comment_opt:
@@ -4158,7 +4161,7 @@ comment_list:
   }
 | comment_list COMMENT
   {
-    $$ = append($1, $2)
+    $$ = append($1, []byte($2))
   }
 
 union_op:
@@ -4276,7 +4279,7 @@ col_alias:
   sql_id
 | STRING
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 
 over_expression:
@@ -4359,35 +4362,35 @@ table_hint_list:
 table_hint:
   HOLDLOCK
   {
-    $$ = string($1)
+    $$ = $1
   }
 | NOLOCK
   {
-    $$ = string($1)
+    $$ = $1
   }
 | NOWAIT
   {
-    $$ = string($1)
+    $$ = $1
   }
 | PAGLOCK
   {
-    $$ = string($1)
+    $$ = $1
   }
 | ROWLOCK
   {
-    $$ = string($1)
+    $$ = $1
   }
 | TABLOCK
   {
-    $$ = string($1)
+    $$ = $1
   }
 | UPDLOCK
   {
-    $$ = string($1)
+    $$ = $1
   }
 | READUNCOMMITTED
   {
-    $$ = string($1)
+    $$ = $1
   }
 
 aliased_table_name:
@@ -4621,7 +4624,7 @@ expression:
   }
 | expression OUTPUT
   {
-    $$ = &SuffixExpr{Expr: $1, Suffix: string($2)}
+    $$ = &SuffixExpr{Expr: $1, Suffix: $2}
   }
 | value_expression
   {
@@ -4639,7 +4642,7 @@ default_opt:
   }
 | openb ID closeb
   {
-    $$ = string($2)
+    $$ = $2
   }
 
 boolean_value:
@@ -4955,7 +4958,7 @@ value_expression:
         num.Val = num.Val[1:]
         $$ = num
       } else {
-        $$ = NewIntVal(append([]byte("-"), num.Val...))
+        $$ = NewIntVal("-" + string(num.Val))
       }
     } else {
       $$ = &UnaryExpr{Operator: UMinusStr, Expr: $2}
@@ -5035,7 +5038,7 @@ value_expression:
   }
 | CURRENT_USER
   {
-    $$ = &ColName{Name: NewColIdent(string($1))}
+    $$ = &ColName{Name: NewColIdent($1)}
   }
 
 /*
@@ -5057,11 +5060,11 @@ function_call_generic:
   }
 | LAG openb select_expression_list closeb over_expression
   {
-    $$ = &FuncExpr{Name: NewColIdent(string($1)), Exprs: $3, Over: $5}
+    $$ = &FuncExpr{Name: NewColIdent($1), Exprs: $3, Over: $5}
   }
 | LEAD openb select_expression_list closeb over_expression
   {
-    $$ = &FuncExpr{Name: NewColIdent(string($1)), Exprs: $3, Over: $5}
+    $$ = &FuncExpr{Name: NewColIdent($1), Exprs: $3, Over: $5}
   }
 | table_id '.' reserved_sql_id openb select_expression_list_opt closeb
   {
@@ -5161,15 +5164,15 @@ function_call_keyword:
   }
 | UUID openb closeb
   {
-    $$ = &FuncExpr{Name: NewColIdent(string($1))}
+    $$ = &FuncExpr{Name: NewColIdent($1)}
   }
 | NOW openb closeb
   {
-    $$ = &FuncExpr{Name: NewColIdent(string($1))}
+    $$ = &FuncExpr{Name: NewColIdent($1)}
   }
 | GETDATE openb closeb
   {
-    $$ = &FuncExpr{Name: NewColIdent(string($1))}
+    $$ = &FuncExpr{Name: NewColIdent($1)}
   }
 | DATE openb select_expression_list closeb
   {
@@ -5192,7 +5195,7 @@ function_call_nonkeyword:
 // for MSSQL
   CURRENT_TIMESTAMP
   {
-    $$ = &ColName{Name: NewColIdent(string($1))}
+    $$ = &ColName{Name: NewColIdent($1)}
   }
 | CURRENT_TIMESTAMP openb closeb
   {
@@ -5268,7 +5271,7 @@ extract_field:
   }
 | YEAR
   {
-    $$ = string($1)
+    $$ = $1
   }
 
 match_option:
@@ -5296,145 +5299,145 @@ match_option:
 charset:
   ID
   {
-    $$ = string($1)
+    $$ = $1
   }
 | STRING
   {
-    $$ = string($1)
+    $$ = $1
   }
 
 convert_type:
   BINARY length_opt
   {
-    $$ = &ConvertType{Type: string($1), Length: $2}
+    $$ = &ConvertType{Type: $1, Length: $2}
   }
 | CHAR length_opt charset_opt
   {
-    $$ = &ConvertType{Type: string($1), Length: $2, Charset: $3, Operator: CharacterSetStr}
+    $$ = &ConvertType{Type: $1, Length: $2, Charset: $3, Operator: CharacterSetStr}
   }
 | CHAR length_opt ID
   {
-    $$ = &ConvertType{Type: string($1), Length: $2, Charset: string($3)}
+    $$ = &ConvertType{Type: $1, Length: $2, Charset: $3}
   }
 | DATE
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | DATETIME length_opt
   {
-    $$ = &ConvertType{Type: string($1), Length: $2}
+    $$ = &ConvertType{Type: $1, Length: $2}
   }
 | decimal_type_keyword decimal_length_opt
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
     $$.Length = $2.Length
     $$.Scale = $2.Scale
   }
 | float_type_keyword float_length_opt
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
     $$.Length = $2.Length
     $$.Scale = $2.Scale
   }
 | money_type_keyword
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | DOUBLE precision_opt float_length_opt
   {
-    $$ = &ConvertType{Type: string($1)+$2}
+    $$ = &ConvertType{Type: $1+$2}
     $$.Length = $3.Length
     $$.Scale = $3.Scale
   }
 | JSON
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | JSONB
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | SIGNED
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | SIGNED INTEGER
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | TIME length_opt
   {
-    $$ = &ConvertType{Type: string($1), Length: $2}
+    $$ = &ConvertType{Type: $1, Length: $2}
   }
 | UNSIGNED
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | UNSIGNED INTEGER
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | int_type_keyword length_opt
   {
-    $$ = &ConvertType{Type: string($1), Length: $2}
+    $$ = &ConvertType{Type: $1, Length: $2}
   }
 | DATETIME2 length_opt
   {
-    $$ = &ConvertType{Type: string($1), Length: $2}
+    $$ = &ConvertType{Type: $1, Length: $2}
   }
 | DATETIMEOFFSET length_opt
   {
-    $$ = &ConvertType{Type: string($1), Length: $2}
+    $$ = &ConvertType{Type: $1, Length: $2}
   }
 | SMALLDATETIME
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | TEXT
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | VARCHAR length_opt
   {
-    $$ = &ConvertType{Type: string($1), Length: $2}
+    $$ = &ConvertType{Type: $1, Length: $2}
   }
 | NCHAR length_opt
   {
-    $$ = &ConvertType{Type: string($1), Length: $2}
+    $$ = &ConvertType{Type: $1, Length: $2}
   }
 | NTEXT
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | NVARCHAR length_opt
   {
-    $$ = &ConvertType{Type: string($1), Length: $2}
+    $$ = &ConvertType{Type: $1, Length: $2}
   }
 | VARBINARY length_opt
   {
-    $$ = &ConvertType{Type: string($1), Length: $2}
+    $$ = &ConvertType{Type: $1, Length: $2}
   }
 
 simple_convert_type:
   BINARY
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | CHARACTER VARYING
   {
-    $$ = &ConvertType{Type: string($1)+" "+string($2)}
+    $$ = &ConvertType{Type: $1+" "+$2}
   }
 | DATE
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | DATETIME
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | int_type_keyword
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | bool_type
   {
@@ -5442,79 +5445,79 @@ simple_convert_type:
   }
 | TEXT
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | UUID
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | NUMERIC
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | DECIMAL
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | NUMERIC '(' INTEGRAL ',' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3), Scale: NewIntVal($5)}
+    $$ = &ConvertType{Type: $1, Length: NewIntVal($3), Scale: NewIntVal($5)}
   }
 | DECIMAL '(' INTEGRAL ',' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3), Scale: NewIntVal($5)}
+    $$ = &ConvertType{Type: $1, Length: NewIntVal($3), Scale: NewIntVal($5)}
   }
 | VARCHAR '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+    $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
   }
 | CHARACTER VARYING '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: string($1) + " " + string($2), Length: NewIntVal($4)}
+    $$ = &ConvertType{Type: $1 + " " + $2, Length: NewIntVal($4)}
   }
 | CHAR '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+    $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
   }
 | CHARACTER '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+    $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
   }
 | BIT '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+    $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
   }
 | NUMERIC '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+    $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
   }
 | DECIMAL '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+    $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
   }
 | TIMESTAMP '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+    $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
   }
 | TIMESTAMP
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | TIME '(' INTEGRAL ')'
   {
-    $$ = &ConvertType{Type: string($1), Length: NewIntVal($3)}
+    $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
   }
 | TIME
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | INTERVAL
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 | REAL
   {
-    $$ = &ConvertType{Type: string($1)}
+    $$ = &ConvertType{Type: $1}
   }
 
 expression_opt:
@@ -5532,7 +5535,7 @@ separator_opt:
   }
 | SEPARATOR STRING
   {
-    $$ = " separator '"+string($2)+"'"
+    $$ = " separator '"+$2+"'"
   }
 
 when_expression_list:
@@ -5572,7 +5575,7 @@ column_name:
   }
 | non_reserved_keyword
   {
-    $$ = &ColName{Name: NewColIdent(string($1))}
+    $$ = &ColName{Name: NewColIdent($1)}
   }
 | VALUE
   {
@@ -5646,7 +5649,7 @@ int_value:
   }
 | '-' INTEGRAL
   {
-    $$ = append([]byte("-"), $2...)
+    $$ = "-" + $2
   }
 
 group_by_opt:
@@ -5807,11 +5810,11 @@ ins_column:
   }
 | reserved_keyword
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 | non_reserved_keyword
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 
 on_dup_opt:
@@ -5888,11 +5891,11 @@ set_list:
 set_expression:
   reserved_sql_id '=' ON
   {
-    $$ = &SetExpr{Name: $1, Expr: NewStrVal([]byte("on"))}
+    $$ = &SetExpr{Name: $1, Expr: NewStrVal("on")}
   }
 | reserved_sql_id '=' OFF
   {
-    $$ = &SetExpr{Name: $1, Expr: NewStrVal([]byte("off"))}
+    $$ = &SetExpr{Name: $1, Expr: NewStrVal("off")}
   }
 | reserved_sql_id '=' expression
   {
@@ -5905,7 +5908,7 @@ set_expression:
   }
 | charset_or_character_set charset_value collate_opt
   {
-    $$ = &SetExpr{Name: NewColIdent(string($1)), Expr: $2}
+    $$ = &SetExpr{Name: NewColIdent($1), Expr: $2}
   }
 
 set_option_statement:
@@ -5924,14 +5927,14 @@ charset_or_character_set:
   CHARSET
 | CHARACTER SET
   {
-    $$ = []byte("charset")
+    $$ = "charset"
   }
 | NAMES
 
 charset_value:
   sql_id
   {
-    $$ = NewStrVal([]byte($1.String()))
+    $$ = NewStrVal($1.String())
   }
 | STRING
   {
@@ -5955,72 +5958,72 @@ ignore_opt:
 sql_id:
   ID
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 
 reserved_sql_id:
   sql_id
 | CHARSET
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 | KEY_BLOCK_SIZE
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 | VALUE
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 | TEXT
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 | TINYTEXT
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 | MEDIUMTEXT
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 | LONGTEXT
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 | CITEXT
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 | reserved_keyword
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 | non_reserved_keyword
   {
-    $$ = NewColIdent(string($1))
+    $$ = NewColIdent($1)
   }
 
 table_id:
   ID
   {
-    $$ = NewTableIdent(string($1))
+    $$ = NewTableIdent($1)
   }
 | non_reserved_keyword
   {
-    $$ = NewTableIdent(string($1))
+    $$ = NewTableIdent($1)
   }
 /* For SQLite3 https://www.sqlite.org/lang_keywords.html */
 | STRING
   {
-    $$ = NewTableIdent(string($1))
+    $$ = NewTableIdent($1)
   }
 
 reserved_table_id:
   table_id
 | reserved_keyword
   {
-    $$ = NewTableIdent(string($1))
+    $$ = NewTableIdent($1)
   }
 
 deferrable_opt:
@@ -6131,11 +6134,11 @@ array_element:
 bool_option_name_list:
   bool_option_name
   {
-    $$ = []string{string($1)}
+    $$ = []string{$1}
   }
 | bool_option_name_list ',' bool_option_name
   {
-    $$ = append($$, string($3))
+    $$ = append($$, $3)
   }
 
 bool_option_name:

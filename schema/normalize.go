@@ -449,7 +449,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			funcName := strings.ToLower(e.Name.String())
 			switch funcName {
 			case "current_date", "current_time", "current_timestamp":
-				return parser.NewValArg([]byte(funcName))
+				return parser.NewValArg(funcName)
 			}
 		}
 
@@ -506,7 +506,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				if sqlVal, ok := normalizedExpr.(*parser.SQLVal); ok && sqlVal.Type == parser.StrVal {
 					// Check if the string looks like a number (PostgreSQL stores negative numbers as string literals with casts)
 					// Only treat it as numeric if it's purely digits/decimal, not a date/time string
-					if util.IsNumericString(string(sqlVal.Val)) {
+					if util.IsNumericString(sqlVal.Val) {
 						// PostgreSQL stores negative numbers as string literals with casts like '-20'::integer
 						// We need to convert these back to plain numeric literals
 						switch typeStr {
@@ -533,9 +533,9 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// PostgreSQL stores DEFAULT NULL as NULL::type, but we normalize to just null
 				// (matching the lexer's keyword normalization to lowercase)
 				if sqlVal, ok := normalizedExpr.(*parser.SQLVal); ok && sqlVal.Type == parser.ValArg {
-					if strings.EqualFold(string(sqlVal.Val), "null") {
+					if strings.EqualFold(sqlVal.Val, "null") {
 						// Strip all type casts on NULL and return lowercase null (matching lexer)
-						return parser.NewValArg([]byte("null"))
+						return parser.NewValArg("null")
 					}
 				}
 				// Preserve all other casts (interval, bpchar, json, jsonb, etc.)
@@ -637,7 +637,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 						// Double negative: --N → N
 						return parser.NewIntVal(sqlVal.Val[1:])
 					} else {
-						return parser.NewIntVal(append([]byte("-"), sqlVal.Val...))
+						return parser.NewIntVal("-" + sqlVal.Val)
 					}
 				case parser.FloatVal:
 					// Create negative float: -N.M
@@ -645,7 +645,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 						// Double negative: --N.M → N.M
 						return parser.NewFloatVal(sqlVal.Val[1:])
 					} else {
-						return parser.NewFloatVal(append([]byte("-"), sqlVal.Val...))
+						return parser.NewFloatVal("-" + sqlVal.Val)
 					}
 				}
 			case parser.UPlusStr:
