@@ -1,3 +1,8 @@
+## [v3.6.1](https://github.com/sqldef/sqldef/compare/v3.6.0...v3.6.1) - 2025-11-08
+- psqldef: support `CREATE MATERIALIZED VIEW ... WITH [NO] DATA` (with_data_opt) by @gfx in https://github.com/sqldef/sqldef/pull/921
+- Change runner from ubuntu-latest to ubuntu-slim for tagpr.yml by @gfx in https://github.com/sqldef/sqldef/pull/923
+- remove unecessary string <-> []byte conversions by @gfx in https://github.com/sqldef/sqldef/pull/924
+
 ## [v3.6.0](https://github.com/sqldef/sqldef/compare/v3.5.1...v3.6.0) - 2025-11-07
 - psqldef: CREATE / ALTER / DROP DOMAIN by @gfx in https://github.com/sqldef/sqldef/pull/919
 
