@@ -791,7 +791,16 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						return ddls, err
 					}
 
-					if desiredColumn.generated != nil {
+					// MySQL doesn't support changing VIRTUAL <-> STORED using CHANGE COLUMN.
+					// We need to use DROP + ADD when the generated column storage type changes.
+					useDropAdd := false
+					if desiredColumn.generated != nil && currentColumn.generated != nil {
+						if desiredColumn.generated.generatedType != currentColumn.generated.generatedType {
+							useDropAdd = true
+						}
+					}
+
+					if useDropAdd {
 						ddl1 := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name))
 						ddl2 := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableName(desired.table.name), definition)
 						after := " FIRST"
