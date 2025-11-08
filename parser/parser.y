@@ -63,8 +63,6 @@ func forceEOF(yylex any) {
   ddl                      *DDL
   ins                      *Insert
   byt                      byte
-  bytes                    []byte
-  bytes2                   [][]byte
   str                      string
   strs                     []string
   selectExprs              SelectExprs
@@ -198,7 +196,7 @@ func forceEOF(yylex any) {
 %left <str> COLLATE
 %right <str> BINARY UNDERSCORE_BINARY
 %right <str> INTERVAL
-%nonassoc <bytes> '.'
+%nonassoc <str> '.'
 
 // There is no need to define precedence for the JSON
 // operators because the syntax is restricted enough that
@@ -308,7 +306,7 @@ func forceEOF(yylex any) {
 %type <statement> create_statement alter_statement drop_statement comment_statement
 %type <statement> set_option_statement set_bool_option_statement
 %type <ddl> create_table_prefix
-%type <bytes2> comment_opt comment_list
+%type <strs> comment_opt comment_list
 %type <str> union_op insert_or_replace exec_keyword
 %type <str> distinct_opt straight_join_opt cache_opt match_option separator_opt
 %type <expr> like_escape_opt
@@ -4161,7 +4159,7 @@ comment_list:
   }
 | comment_list COMMENT
   {
-    $$ = append($1, []byte($2))
+    $$ = append($1, $2)
   }
 
 union_op:

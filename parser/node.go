@@ -1166,7 +1166,7 @@ func (node *SetBoolOption) Format(buf *nodeBuffer) {
 }
 
 // Comments represents a list of comments.
-type Comments [][]byte
+type Comments []string
 
 // Format formats the node.
 func (node Comments) Format(buf *nodeBuffer) {
