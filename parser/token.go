@@ -19,9 +19,9 @@ package parser
 import (
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 type ParserMode int
@@ -50,7 +50,6 @@ func ParseDDL(sql string, mode ParserMode) (Statement, error) {
 // Tokenizer is the struct used to generate SQL
 // tokens for the parser.
 type Tokenizer struct {
-	InStream       io.Reader
 	AllowComments  bool
 	ForceEOF       bool
 	lastChar       rune
@@ -66,17 +65,16 @@ type Tokenizer struct {
 	mode           ParserMode
 	peeking        bool // true when peeking ahead to avoid infinite recursion
 
-	buf     []byte
+	buf     string
 	bufPos  int
 	bufSize int
 }
 
 // NewTokenizer creates a new Tokenizer for a given SQL string.
 func NewTokenizer(sql string, mode ParserMode) *Tokenizer {
-	buf := []byte(sql)
 	return &Tokenizer{
-		buf:     buf,
-		bufSize: len(buf),
+		buf:     sql,
+		bufSize: len(sql),
 		mode:    mode,
 	}
 }
@@ -617,7 +615,7 @@ func (tkn *Tokenizer) getLineInfo(position int) (lineNum int, lineContent string
 
 	// Extract the line content
 	if lineStart <= len(tkn.buf) && lineEnd <= len(tkn.buf) {
-		lineContent = string(tkn.buf[lineStart:lineEnd])
+		lineContent = tkn.buf[lineStart:lineEnd]
 	}
 
 	// Calculate column number (position within the line)
@@ -628,7 +626,7 @@ func (tkn *Tokenizer) getLineInfo(position int) (lineNum int, lineContent string
 
 // Error is called by go yacc if there's a parsing error.
 func (tkn *Tokenizer) Error(err string) {
-	var buf tokenBuffer
+	var buf strings.Builder
 
 	lineNum, lineContent, columnNum := tkn.getLineInfo(tkn.Position)
 
@@ -755,9 +753,7 @@ func (tkn *Tokenizer) Scan() (int, string) {
 			return int(ch), ""
 		case '?':
 			tkn.posVarIndex++
-			var buf tokenBuffer
-			fmt.Fprintf(&buf, ":v%d", tkn.posVarIndex)
-			return VALUE_ARG, buf.String()
+			return VALUE_ARG, fmt.Sprintf(":v%d", tkn.posVarIndex)
 		case '.':
 			if isAsciiDigit(tkn.lastChar) {
 				return tkn.scanNumber(true)
@@ -887,7 +883,7 @@ func (tkn *Tokenizer) skipBlank() {
 }
 
 func (tkn *Tokenizer) scanIdentifier(firstByte byte, isDbSystemVariable bool) (int, string) {
-	var buffer tokenBuffer
+	var buffer strings.Builder
 	buffer.WriteByte(firstByte)
 	for isAsciiLetter(tkn.lastChar) || isAsciiDigit(tkn.lastChar) || (isDbSystemVariable && isCarat(tkn.lastChar)) {
 		buffer.WriteByte(byte(tkn.lastChar))
@@ -920,7 +916,7 @@ func (tkn *Tokenizer) scanIdentifier(firstByte byte, isDbSystemVariable bool) (i
 }
 
 func (tkn *Tokenizer) scanHex() (int, string) {
-	var buffer tokenBuffer
+	var buffer strings.Builder
 	tkn.scanMantissa(16, &buffer)
 	if tkn.lastChar != '\'' {
 		return LEX_ERROR, buffer.String()
@@ -933,7 +929,7 @@ func (tkn *Tokenizer) scanHex() (int, string) {
 }
 
 func (tkn *Tokenizer) scanBitLiteral() (int, string) {
-	var buffer tokenBuffer
+	var buffer strings.Builder
 	tkn.scanMantissa(2, &buffer)
 	if tkn.lastChar != '\'' {
 		return LEX_ERROR, buffer.String()
@@ -943,7 +939,7 @@ func (tkn *Tokenizer) scanBitLiteral() (int, string) {
 }
 
 func (tkn *Tokenizer) scanLiteralIdentifier(sepChar rune) (int, string) {
-	var buffer tokenBuffer
+	var buffer strings.Builder
 	backTickSeen := false
 	for {
 		if backTickSeen {
@@ -974,7 +970,7 @@ func (tkn *Tokenizer) scanLiteralIdentifier(sepChar rune) (int, string) {
 }
 
 func (tkn *Tokenizer) scanBindVar() (int, string) {
-	var buffer tokenBuffer
+	var buffer strings.Builder
 	buffer.WriteByte(byte(tkn.lastChar))
 	token := VALUE_ARG
 	tkn.next()
@@ -998,7 +994,7 @@ func (tkn *Tokenizer) scanBindVar() (int, string) {
 	return token, buffer.String()
 }
 
-func (tkn *Tokenizer) scanMantissa(base int, buffer *tokenBuffer) {
+func (tkn *Tokenizer) scanMantissa(base int, buffer *strings.Builder) {
 	for digitVal(tkn.lastChar) < base {
 		tkn.consumeNext(buffer)
 	}
@@ -1006,7 +1002,7 @@ func (tkn *Tokenizer) scanMantissa(base int, buffer *tokenBuffer) {
 
 func (tkn *Tokenizer) scanNumber(seenDecimalPoint bool) (int, string) {
 	token := INTEGRAL
-	var buffer tokenBuffer
+	var buffer strings.Builder
 	if seenDecimalPoint {
 		token = FLOAT
 		buffer.WriteByte('.')
@@ -1053,7 +1049,7 @@ exit:
 }
 
 func (tkn *Tokenizer) scanString(delim rune, typ int) (int, string) {
-	var buffer tokenBuffer
+	var buffer strings.Builder
 	for {
 		ch := tkn.lastChar
 		if ch == eofChar {
@@ -1062,18 +1058,18 @@ func (tkn *Tokenizer) scanString(delim rune, typ int) (int, string) {
 		}
 
 		if ch != delim && ch != '\\' {
-			buffer.WriteByte(byte(ch))
+			buffer.WriteRune(ch)
 
-			// Scan ahead to the next interesting character.
 			start := tkn.bufPos
+			delimByte := byte(delim)
 			for ; tkn.bufPos < tkn.bufSize; tkn.bufPos++ {
-				ch = rune(tkn.buf[tkn.bufPos])
-				if ch == delim || ch == '\\' {
+				b := tkn.buf[tkn.bufPos]
+				if b == delimByte || b == '\\' {
 					break
 				}
 			}
 
-			buffer.Write(tkn.buf[start:tkn.bufPos])
+			buffer.WriteString(tkn.buf[start:tkn.bufPos])
 			tkn.Position += (tkn.bufPos - start)
 
 			if tkn.bufPos >= tkn.bufSize {
@@ -1083,10 +1079,10 @@ func (tkn *Tokenizer) scanString(delim rune, typ int) (int, string) {
 				continue
 			}
 
-			tkn.bufPos++
-			tkn.Position++
+			tkn.next()
+			continue
 		}
-		tkn.next() // Read one past the delim or escape character.
+		tkn.next()
 
 		if ch == '\\' {
 			if tkn.lastChar == eofChar {
@@ -1112,7 +1108,7 @@ func (tkn *Tokenizer) scanString(delim rune, typ int) (int, string) {
 }
 
 func (tkn *Tokenizer) scanCommentType1(prefix string) (int, string) {
-	var buffer tokenBuffer
+	var buffer strings.Builder
 	buffer.WriteString(prefix)
 	for tkn.lastChar != eofChar {
 		if tkn.lastChar == '\n' {
@@ -1125,7 +1121,7 @@ func (tkn *Tokenizer) scanCommentType1(prefix string) (int, string) {
 }
 
 func (tkn *Tokenizer) scanCommentType2() (int, string) {
-	var buffer tokenBuffer
+	var buffer strings.Builder
 	buffer.WriteString("/*")
 	for {
 		if tkn.lastChar == '*' {
@@ -1145,7 +1141,7 @@ func (tkn *Tokenizer) scanCommentType2() (int, string) {
 }
 
 func (tkn *Tokenizer) scanMySQLSpecificComment() (int, string) {
-	var buffer tokenBuffer
+	var buffer strings.Builder
 	buffer.WriteString("/*!")
 	tkn.next()
 	for {
@@ -1167,7 +1163,7 @@ func (tkn *Tokenizer) scanMySQLSpecificComment() (int, string) {
 	return tkn.Scan()
 }
 
-func (tkn *Tokenizer) consumeNext(buffer *tokenBuffer) {
+func (tkn *Tokenizer) consumeNext(buffer *strings.Builder) {
 	if tkn.lastChar == eofChar {
 		// This should never happen.
 		panic("unexpected EOF")
@@ -1177,24 +1173,16 @@ func (tkn *Tokenizer) consumeNext(buffer *tokenBuffer) {
 }
 
 func (tkn *Tokenizer) next() {
-	if tkn.bufPos >= tkn.bufSize && tkn.InStream != nil {
-		// Try and refill the buffer
-		var err error
-		tkn.bufPos = 0
-		if tkn.bufSize, err = tkn.InStream.Read(tkn.buf); err != io.EOF && err != nil {
-			tkn.LastError = err
-		}
-	}
-
 	if tkn.bufPos >= tkn.bufSize {
 		if tkn.lastChar != eofChar {
 			tkn.Position++
 			tkn.lastChar = eofChar
 		}
 	} else {
-		tkn.Position++
-		tkn.lastChar = rune(tkn.buf[tkn.bufPos])
-		tkn.bufPos++
+		r, size := utf8.DecodeRuneInString(tkn.buf[tkn.bufPos:])
+		tkn.Position += size
+		tkn.lastChar = r
+		tkn.bufPos += size
 	}
 }
 
@@ -1267,9 +1255,4 @@ func digitVal(ch rune) int {
 
 func isAsciiDigit(ch rune) bool {
 	return '0' <= ch && ch <= '9'
-}
-
-// tokenBuffer extends strings.Builder to provide Bytes() shorthand
-type tokenBuffer struct {
-	strings.Builder
 }
