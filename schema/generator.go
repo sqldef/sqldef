@@ -510,8 +510,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		if g.mode != GeneratorModeSQLite3 {
 			continue
 		}
-		desitedTrigger := findTriggerByName(g.desiredTriggers, currentTrigger.name)
-		if desitedTrigger == nil {
+		desiredTrigger := findTriggerByName(g.desiredTriggers, currentTrigger.name)
+		if desiredTrigger == nil {
 			ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeSQLName(currentTrigger.name)))
 			continue
 		}
