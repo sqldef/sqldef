@@ -791,7 +791,25 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						return ddls, err
 					}
 
-					if desiredColumn.generated != nil {
+					// MySQL has limitations (Error 3106) with generated columns that require using
+					// DROP COLUMN + ADD COLUMN instead of CHANGE COLUMN in these cases:
+					// 1. Changing storage type (VIRTUAL <-> STORED)
+					// 2. Converting regular column to generated column
+					// 3. Converting generated column to regular column
+					// For all other generated column modifications (expression changes, attribute changes, etc.),
+					// CHANGE COLUMN works correctly and is more efficient than DROP+ADD.
+					useDropAdd := false
+					if desiredColumn.generated != nil && currentColumn.generated != nil {
+						// Both columns are generated - check if storage type is changing
+						if desiredColumn.generated.generatedType != currentColumn.generated.generatedType {
+							useDropAdd = true
+						}
+					} else if (desiredColumn.generated == nil) != (currentColumn.generated == nil) {
+						// One column is generated and the other is not - MySQL requires DROP+ADD
+						useDropAdd = true
+					}
+
+					if useDropAdd {
 						ddl1 := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name))
 						ddl2 := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableName(desired.table.name), definition)
 						after := " FIRST"
