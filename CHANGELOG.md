@@ -1,3 +1,8 @@
+## [v3.6.2](https://github.com/sqldef/sqldef/compare/v3.6.1...v3.6.2) - 2025-11-09
+- Use CHANGE COLUMN instead of DROP+ADD for generated column modifications by @Copilot in https://github.com/sqldef/sqldef/pull/926
+- make parser buffer from []byte to string by @gfx in https://github.com/sqldef/sqldef/pull/927
+- fix a typo in code by @gfx in https://github.com/sqldef/sqldef/pull/929
+
 ## [v3.6.1](https://github.com/sqldef/sqldef/compare/v3.6.0...v3.6.1) - 2025-11-08
 - psqldef: support `CREATE MATERIALIZED VIEW ... WITH [NO] DATA` (with_data_opt) by @gfx in https://github.com/sqldef/sqldef/pull/921
 - Change runner from ubuntu-latest to ubuntu-slim for tagpr.yml by @gfx in https://github.com/sqldef/sqldef/pull/923
