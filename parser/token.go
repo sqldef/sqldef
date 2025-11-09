@@ -27,7 +27,6 @@ import (
 type ParserMode int
 
 const (
-	defaultBufSize = 4096
 	eofChar        = 0x100
 
 	ParserModeMysql = ParserMode(iota)
@@ -1205,16 +1204,6 @@ func (tkn *Tokenizer) peekToken() (int, string) {
 	// Set peeking flag to prevent infinite recursion
 	tkn.peeking = true
 	return tkn.Scan()
-}
-
-// reset clears any internal state.
-func (tkn *Tokenizer) reset() {
-	tkn.ParseTree = nil
-	tkn.partialDDL = nil
-	tkn.specialComment = nil
-	tkn.posVarIndex = 0
-	tkn.nesting = 0
-	tkn.ForceEOF = false
 }
 
 // extractMysqlComment extracts the version and SQL from a comment-only query
