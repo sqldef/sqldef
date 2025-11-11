@@ -58,7 +58,6 @@ type Tokenizer struct {
 	posVarIndex    int
 	ParseTree      Statement
 	partialDDL     *DDL
-	nesting        int
 	multi          bool
 	specialComment *Tokenizer
 	mode           ParserMode

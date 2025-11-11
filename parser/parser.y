@@ -34,18 +34,6 @@ func setDDL(yylex any, ddl *DDL) {
   yylex.(*Tokenizer).partialDDL = ddl
 }
 
-func incNesting(yylex any) bool {
-  yylex.(*Tokenizer).nesting++
-  if yylex.(*Tokenizer).nesting == 200 {
-    return true
-  }
-  return false
-}
-
-func decNesting(yylex any) {
-  yylex.(*Tokenizer).nesting--
-}
-
 // forceEOF forces the lexer to end prematurely. Not all SQL statements
 // are supported by the Parser, thus calling forceEOF will make the lexer
 // return EOF early.
@@ -1376,7 +1364,7 @@ common_table_expr_list:
   }
 
 common_table_expr:
-  table_id AS openb select_statement closeb
+  table_id AS '(' select_statement ')'
   {
     $$ = &CommonTableExpr{Name: $1, Definition: $4}
   }
@@ -1428,7 +1416,7 @@ union_rhs:
   {
     $$ = $1
   }
-| openb with_clause_opt select_statement_core order_by_opt limit_opt lock_opt closeb
+| '(' with_clause_opt select_statement_core order_by_opt limit_opt lock_opt ')'
   {
     switch core := $3.(type) {
     case *Select:
@@ -1521,7 +1509,7 @@ opt_partition_clause:
   {
     $$ = nil
   }
-| PARTITION openb partition_list closeb
+| PARTITION '(' partition_list ')'
   {
     $$ = $3
   }
@@ -2106,7 +2094,7 @@ exec_statement:
     // EXEC sp_name param1, param2
     $$ = &Exec{Action: $1, Name: $2, Exprs: $3}
   }
-| exec_keyword openb exec_param_list_opt closeb
+| exec_keyword '(' exec_param_list_opt ')'
   {
     // EXEC ('SELECT * FROM ...')
     $$ = &Exec{Action: $1, Exprs: $3}
@@ -2521,7 +2509,7 @@ column_definition_type:
     $1.KeyOpt = colKeyUnique
     $$ = $1
   }
-| column_definition_type CHECK not_for_replication_opt openb expression closeb no_inherit_opt
+| column_definition_type CHECK not_for_replication_opt '(' expression ')' no_inherit_opt
   {
     $1.Check = &CheckDefinition{
       Where: *NewWhere(WhereStr, $5),
@@ -2530,7 +2518,7 @@ column_definition_type:
     }
     $$ = $1
   }
-| column_definition_type CONSTRAINT sql_id CHECK not_for_replication_opt openb expression closeb no_inherit_opt
+| column_definition_type CONSTRAINT sql_id CHECK not_for_replication_opt '(' expression ')' no_inherit_opt
   {
     $1.Check = &CheckDefinition{
       ConstraintName: $3,
@@ -2710,7 +2698,7 @@ default_value_expression:
   {
     $$ = NewBoolSQLVal(bool($1))
   }
-| NOW openb closeb
+| NOW '(' ')'
   {
     $$ = NewBitVal($1)
   }
@@ -2972,14 +2960,14 @@ domain_constraint:
     $$.collation = $2.String()
     $$.checks = nil
   }
-| CHECK openb expression closeb
+| CHECK '(' expression ')'
   {
     $$.defaultDef = nil
     $$.notNull = false
     $$.collation = ""
     $$.checks = []*CheckDefinition{{Where: *NewWhere(WhereStr, $3)}}
   }
-| CONSTRAINT sql_id CHECK openb expression closeb
+| CONSTRAINT sql_id CHECK '(' expression ')'
   {
     $$.defaultDef = nil
     $$.notNull = false
@@ -3599,7 +3587,7 @@ index_partition_opt:
   {
     $$ = &IndexPartition{Name: $2.String()}
   }
-| ON sql_id openb sql_id closeb
+| ON sql_id '(' sql_id ')'
   {
     $$ = &IndexPartition{Name: $2.String(), Column: $4.String()}
   }
@@ -3843,7 +3831,7 @@ unique_definition:
   }
 
 check_definition:
-  CONSTRAINT sql_id CHECK openb expression closeb no_inherit_opt
+  CONSTRAINT sql_id CHECK '(' expression ')' no_inherit_opt
   {
     $$ = &CheckDefinition{
       ConstraintName: $2,
@@ -3852,7 +3840,7 @@ check_definition:
     }
   }
 /* For SQLite3 // SQLite Syntax: table-options https://www.sqlite.org/syntax/table-options.html */
-| CHECK openb expression closeb no_inherit_opt
+| CHECK '(' expression ')' no_inherit_opt
   {
     $$ = &CheckDefinition{
       Where: *NewWhere(WhereStr, $3),
@@ -4289,19 +4277,19 @@ over_expression:
   {
     $$ = nil
   }
-| OVER openb closeb
+| OVER '(' ')'
   {
     $$ = &OverExpr{}
   }
-| OVER openb PARTITION BY partition_by_list closeb
+| OVER '(' PARTITION BY partition_by_list ')'
   {
     $$ = &OverExpr{PartitionBy: $5}
   }
-| OVER openb order_by_opt closeb
+| OVER '(' order_by_opt ')'
   {
     $$ = &OverExpr{OrderBy: $3}
   }
-| OVER openb PARTITION BY partition_by_list order_by_opt closeb
+| OVER '(' PARTITION BY partition_by_list order_by_opt ')'
   {
     $$ = &OverExpr{PartitionBy: $5, OrderBy: $6}
   }
@@ -4338,7 +4326,7 @@ table_factor:
   {
     $$ = &AliasedTableExpr{Expr:$1, As: $3}
   }
-| openb table_references closeb
+| '(' table_references ')'
   {
     $$ = &ParenTableExpr{Exprs: $2}
   }
@@ -4401,7 +4389,7 @@ aliased_table_name:
   {
     $$ = &AliasedTableExpr{Expr:$1, As: $2, IndexHints: $3, TableHints: $4}
   }
-| table_name PARTITION openb partition_list closeb as_opt_id index_hint_list table_hint_opt
+| table_name PARTITION '(' partition_list ')' as_opt_id index_hint_list table_hint_opt
   {
     $$ = &AliasedTableExpr{Expr:$1, Partitions: $4, As: $6, IndexHints: $7, TableHints: $8}
   }
@@ -4573,15 +4561,15 @@ index_hint_list:
   {
     $$ = nil
   }
-| USE INDEX openb column_list closeb
+| USE INDEX '(' column_list ')'
   {
     $$ = &IndexHints{Type: UseStr, Indexes: $4}
   }
-| IGNORE INDEX openb column_list closeb
+| IGNORE INDEX '(' column_list ')'
   {
     $$ = &IndexHints{Type: IgnoreStr, Indexes: $4}
   }
-| FORCE INDEX openb column_list closeb
+| FORCE INDEX '(' column_list ')'
   {
     $$ = &IndexHints{Type: ForceStr, Indexes: $4}
   }
@@ -4643,7 +4631,7 @@ default_opt:
   {
     $$ = ""
   }
-| openb ID closeb
+| '(' ID ')'
   {
     $$ = $2
   }
@@ -4712,15 +4700,15 @@ condition:
     $$ = &ExistsExpr{Subquery: $2}
   }
 /* For MSSQL */
-| UPDATE openb column_name closeb
+| UPDATE '(' column_name ')'
   {
     $$ = &UpdateFuncExpr{Name: $3}
   }
-| COLUMNS_UPDATED openb closeb
+| COLUMNS_UPDATED '(' ')'
   {
     $$ = &UpdateFuncExpr{Name: nil}
   }
-| openb condition closeb
+| '(' condition ')'
   {
     $$ = &ParenExpr{Expr: $2}
   }
@@ -4837,7 +4825,7 @@ col_tuple:
   }
 
 subquery:
-  openb select_statement closeb
+  '(' select_statement ')'
   {
     $$ = &Subquery{$2}
   }
@@ -5049,27 +5037,27 @@ value_expression:
  * introduce side effects due to being a simple identifier
  */
 function_call_generic:
-  sql_id openb select_expression_list_opt closeb
+  sql_id '(' select_expression_list_opt ')'
   {
     $$ = &FuncExpr{Name: $1, Exprs: $3}
   }
-| sql_id openb DISTINCT select_expression_list closeb
+| sql_id '(' DISTINCT select_expression_list ')'
   {
     $$ = &FuncExpr{Name: $1, Distinct: true, Exprs: $4}
   }
-| sql_id openb select_expression_list closeb over_expression
+| sql_id '(' select_expression_list ')' over_expression
   {
     $$ = &FuncExpr{Name: $1, Exprs: $3, Over: $5}
   }
-| LAG openb select_expression_list closeb over_expression
+| LAG '(' select_expression_list ')' over_expression
   {
     $$ = &FuncExpr{Name: NewColIdent($1), Exprs: $3, Over: $5}
   }
-| LEAD openb select_expression_list closeb over_expression
+| LEAD '(' select_expression_list ')' over_expression
   {
     $$ = &FuncExpr{Name: NewColIdent($1), Exprs: $3, Over: $5}
   }
-| table_id '.' reserved_sql_id openb select_expression_list_opt closeb
+| table_id '.' reserved_sql_id '(' select_expression_list_opt ')'
   {
     $$ = &FuncExpr{Qualifier: $1, Name: $3, Exprs: $5}
   }
@@ -5079,76 +5067,76 @@ function_call_generic:
  * as a result
  */
 function_call_keyword:
-  LEFT openb select_expression_list closeb
+  LEFT '(' select_expression_list ')'
   {
     $$ = &FuncExpr{Name: NewColIdent("left"), Exprs: $3}
   }
-| RIGHT openb select_expression_list closeb
+| RIGHT '(' select_expression_list ')'
   {
     $$ = &FuncExpr{Name: NewColIdent("right"), Exprs: $3}
   }
-| CONVERT openb expression ',' convert_type closeb
+| CONVERT '(' expression ',' convert_type ')'
   {
     $$ = &ConvertExpr{Expr: $3, Type: $5}
   }
 // for MSSQL
-| CONVERT openb convert_type ',' expression closeb
+| CONVERT '(' convert_type ',' expression ')'
   {
     $$ = &ConvertExpr{Action: Type1stStr, Type: $3, Expr: $5}
   }
-| CONVERT openb convert_type ',' expression ',' value_expression closeb
+| CONVERT '(' convert_type ',' expression ',' value_expression ')'
   {
     $$ = &ConvertExpr{Action: Type1stStr, Type: $3, Expr: $5, Style: $7}
    }
-| CAST openb expression AS convert_type closeb
+| CAST '(' expression AS convert_type ')'
   {
     $$ = &ConvertExpr{Action: CastStr, Expr: $3, Type: $5}
   }
-| CONVERT openb expression USING charset closeb
+| CONVERT '(' expression USING charset ')'
   {
     $$ = &ConvertUsingExpr{Expr: $3, Type: $5}
   }
-| SUBSTR openb select_expression ',' value_expression closeb
+| SUBSTR '(' select_expression ',' value_expression ')'
   {
     $$ = &SubstrExpr{Name: $3, From: $5, To: nil}
   }
-| SUBSTR openb select_expression ',' value_expression ',' value_expression closeb
+| SUBSTR '(' select_expression ',' value_expression ',' value_expression ')'
   {
     $$ = &SubstrExpr{Name: $3, From: $5, To: $7}
   }
-| SUBSTR openb select_expression FROM value_expression closeb
+| SUBSTR '(' select_expression FROM value_expression ')'
   {
     $$ = &SubstrExpr{Name: $3, From: $5, To: nil}
   }
-| SUBSTR openb select_expression FROM value_expression FOR value_expression closeb
+| SUBSTR '(' select_expression FROM value_expression FOR value_expression ')'
   {
     $$ = &SubstrExpr{Name: $3, From: $5, To: $7}
   }
-| SUBSTRING openb select_expression ',' value_expression closeb
+| SUBSTRING '(' select_expression ',' value_expression ')'
   {
     $$ = &SubstrExpr{Name: $3, From: $5, To: nil}
   }
-| SUBSTRING openb select_expression ',' value_expression ',' value_expression closeb
+| SUBSTRING '(' select_expression ',' value_expression ',' value_expression ')'
   {
     $$ = &SubstrExpr{Name: $3, From: $5, To: $7}
   }
-| SUBSTRING openb select_expression FROM value_expression closeb
+| SUBSTRING '(' select_expression FROM value_expression ')'
   {
     $$ = &SubstrExpr{Name: $3, From: $5, To: nil}
   }
-| SUBSTRING openb select_expression FROM value_expression FOR value_expression closeb
+| SUBSTRING '(' select_expression FROM value_expression FOR value_expression ')'
   {
     $$ = &SubstrExpr{Name: $3, From: $5, To: $7}
   }
-| EXTRACT openb extract_field FROM value_expression closeb
+| EXTRACT '(' extract_field FROM value_expression ')'
   {
     $$ = &ExtractExpr{Field: $3, Source: $5}
   }
-| MATCH openb select_expression_list closeb AGAINST openb value_expression match_option closeb
+| MATCH '(' select_expression_list ')' AGAINST '(' value_expression match_option ')'
   {
     $$ = &MatchExpr{Columns: $3, Expr: $7, Option: $8}
   }
-| GROUP_CONCAT openb distinct_opt select_expression_list order_by_opt separator_opt closeb
+| GROUP_CONCAT '(' distinct_opt select_expression_list order_by_opt separator_opt ')'
   {
     $$ = &GroupConcatExpr{Distinct: $3, Exprs: $4, OrderBy: $5, Separator: $6}
   }
@@ -5156,7 +5144,7 @@ function_call_keyword:
   {
     $$ = &CaseExpr{Expr: $2, Whens: $3, Else: $4}
   }
-| VALUES openb column_name closeb
+| VALUES '(' column_name ')'
   {
     $$ = &ValuesFuncExpr{Name: $3}
   }
@@ -5165,27 +5153,27 @@ function_call_keyword:
   {
     $$ = &NextSeqValExpr{SequenceName: $4}
   }
-| UUID openb closeb
+| UUID '(' ')'
   {
     $$ = &FuncExpr{Name: NewColIdent($1)}
   }
-| NOW openb closeb
+| NOW '(' ')'
   {
     $$ = &FuncExpr{Name: NewColIdent($1)}
   }
-| GETDATE openb closeb
+| GETDATE '(' ')'
   {
     $$ = &FuncExpr{Name: NewColIdent($1)}
   }
-| DATE openb select_expression_list closeb
+| DATE '(' select_expression_list ')'
   {
     $$ = &FuncExpr{Name: NewColIdent("date"), Exprs: $3}
   }
-| TIME openb select_expression_list closeb
+| TIME '(' select_expression_list ')'
   {
     $$ = &FuncExpr{Name: NewColIdent("time"), Exprs: $3}
   }
-| TIMESTAMP openb select_expression_list closeb
+| TIMESTAMP '(' select_expression_list ')'
   {
     $$ = &FuncExpr{Name: NewColIdent("timestamp"), Exprs: $3}
   }
@@ -5200,7 +5188,7 @@ function_call_nonkeyword:
   {
     $$ = &ColName{Name: NewColIdent($1)}
   }
-| CURRENT_TIMESTAMP openb closeb
+| CURRENT_TIMESTAMP '(' ')'
   {
     $$ = &FuncExpr{Name:NewColIdent("current_timestamp")}
   }
@@ -5243,26 +5231,26 @@ function_call_nonkeyword:
 
 func_datetime_precision_opt:
 /* empty */
-| openb closeb
+| '(' ')'
 
 /*
  * Function calls using non reserved keywords with *normal* syntax forms. Because
  * the names are non-reserved, they need a dedicated rule so as not to conflict
  */
 function_call_conflict:
-  IF openb select_expression_list closeb
+  IF '(' select_expression_list ')'
   {
     $$ = &FuncExpr{Name: NewColIdent("if"), Exprs: $3}
   }
-| DATABASE openb select_expression_list_opt closeb
+| DATABASE '(' select_expression_list_opt ')'
   {
     $$ = &FuncExpr{Name: NewColIdent("database"), Exprs: $3}
   }
-| MOD openb select_expression_list closeb
+| MOD '(' select_expression_list ')'
   {
     $$ = &FuncExpr{Name: NewColIdent("mod"), Exprs: $3}
   }
-| REPLACE openb select_expression_list closeb
+| REPLACE '(' select_expression_list ')'
   {
     $$ = &FuncExpr{Name: NewColIdent("replace"), Exprs: $3}
   }
@@ -5773,20 +5761,20 @@ insert_data:
   {
     $$ = &Insert{Rows: $1}
   }
-| openb select_statement closeb
+| '(' select_statement ')'
   {
     // Drop the redundant parenthesis.
     $$ = &Insert{Rows: $2}
   }
-| openb ins_column_list closeb VALUES tuple_list
+| '(' ins_column_list ')' VALUES tuple_list
   {
     $$ = &Insert{Columns: $2, Rows: $5}
   }
-| openb ins_column_list closeb select_statement
+| '(' ins_column_list ')' select_statement
   {
     $$ = &Insert{Columns: $2, Rows: $4}
   }
-| openb ins_column_list closeb openb select_statement closeb
+| '(' ins_column_list ')' '(' select_statement ')'
   {
     // Drop the redundant parenthesis.
     $$ = &Insert{Columns: $2, Rows: $5}
@@ -5844,13 +5832,13 @@ tuple_or_empty:
   {
     $$ = $1
   }
-| openb closeb
+| '(' ')'
   {
     $$ = ValTuple{}
   }
 
 row_tuple:
-  openb expression_list closeb
+  '(' expression_list ')'
   {
     $$ = ValTuple($2)
   }
@@ -6337,18 +6325,3 @@ non_reserved_keyword:
 | RESTRICT
 | CASCADE
 | OPTION
-
-openb:
-  '('
-  {
-    if incNesting(yylex) {
-      yylex.Error("max nesting level reached")
-      return 1
-    }
-  }
-
-closeb:
-  ')'
-  {
-    decNesting(yylex)
-  }
