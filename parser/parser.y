@@ -2673,6 +2673,11 @@ default_value_expression:
       $$ = NewStrVal($1)
     }
   }
+| sql_id STRING
+  {
+    // MySQL charset introducer syntax: _charset_name'string'
+    $$ = NewStrVal($2)
+  }
 | UNICODE_STRING
   {
     $$ = NewUnicodeStrVal($1)
