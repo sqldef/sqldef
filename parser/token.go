@@ -50,7 +50,6 @@ func ParseDDL(sql string, mode ParserMode) (Statement, error) {
 // tokens for the parser.
 type Tokenizer struct {
 	AllowComments  bool
-	ForceEOF       bool
 	lastChar       rune
 	Position       int
 	lastToken      string
@@ -77,16 +76,12 @@ func NewTokenizer(sql string, mode ParserMode) *Tokenizer {
 	}
 }
 
-// keywords is a map of mysql keywords that fall into two categories:
-// 1) keywords considered reserved by MySQL
-// 2) keywords for us to handle specially in sql.y
+// keywords maps keyword strings to their token IDs.
+// Keywords marked as UNUSED are recognized but not actively used in the grammar.
 //
-// Those marked as UNUSED are likely reserved keywords. We add them here so that
-// when rewriting queries we can properly backtick quote them so they don't cause issues
-//
-// NOTE: If you add new keywords, add them also to the reserved_keywords or
-// non_reserved_keywords grammar in sql.y -- this will allow the keyword to be used
-// in identifiers. See the docs for each grammar to determine which one to put it into.
+// When adding new keywords, also add them to either the reserved_keyword or
+// non_reserved_keyword grammar in parser.y. This allows the keyword to be used
+// as an identifier in certain contexts.
 var keywords = map[string]int{
 	"accessible":             UNUSED,
 	"action":                 ACTION,
@@ -506,7 +501,8 @@ var keywords = map[string]int{
 	"statistics_norecompute": STATISTICS_NORECOMPUTE,
 	"lead":                   LEAD,
 	"lag":                    LAG,
-	// SET options
+
+	// SET options for SQL Server
 	"concat_null_yields_null":  CONCAT_NULL_YIELDS_NULL,
 	"cursor_close_on_commit":   CURSOR_CLOSE_ON_COMMIT,
 	"quoted_identifier":        QUOTED_IDENTIFIER,
@@ -533,6 +529,28 @@ var keywords = map[string]int{
 // keywordStrings contains the reverse mapping of token to keyword strings
 var keywordStrings = map[int]string{}
 
+var encodeRef = map[byte]byte{
+	'\x00': '0',
+	'\'':   '\'',
+	'"':    '"',
+	'\b':   'b',
+	'\n':   'n',
+	'\r':   'r',
+	'\t':   't',
+	26:     'Z', // ctl-Z
+	'\\':   '\\',
+}
+
+// sqlEncodeMap specifies how to escape binary data with '\'.
+// Complies to http://dev.mysql.com/doc/refman/5.1/en/string-syntax.html
+var sqlEncodeMap [256]byte
+
+// sqlDecodeMap is the reverse of sqlEncodeMap
+var sqlDecodeMap [256]byte
+
+// dontEscape tells you if a character should not be escaped.
+var dontEscape = byte(255)
+
 func init() {
 	// Convert keywords to keywordStrings
 	for str, id := range keywords {
@@ -555,28 +573,6 @@ func init() {
 		}
 	}
 }
-
-var encodeRef = map[byte]byte{
-	'\x00': '0',
-	'\'':   '\'',
-	'"':    '"',
-	'\b':   'b',
-	'\n':   'n',
-	'\r':   'r',
-	'\t':   't',
-	26:     'Z', // ctl-Z
-	'\\':   '\\',
-}
-
-// sqlEncodeMap specifies how to escape binary data with '\'.
-// Complies to http://dev.mysql.com/doc/refman/5.1/en/string-syntax.html
-var sqlEncodeMap [256]byte
-
-// sqlDecodeMap is the reverse of sqlEncodeMap
-var sqlDecodeMap [256]byte
-
-// dontEscape tells you if a character should not be escaped.
-var dontEscape = byte(255)
 
 // Lex returns the next token form the Tokenizer.
 // This function is used by go yacc.
@@ -671,14 +667,9 @@ func (tkn *Tokenizer) Scan() (int, string) {
 		tkn.next()
 	}
 
-	if tkn.ForceEOF {
-		tkn.skipStatement()
-		return 0, ""
-	}
-
 	tkn.skipBlank()
 	switch ch := tkn.lastChar; {
-	case isAsciiLetter(ch):
+	case isIdentifierFirstChar(ch):
 		tkn.next()
 		if ch == 'X' || ch == 'x' {
 			if tkn.lastChar == '\'' {
@@ -884,7 +875,7 @@ func (tkn *Tokenizer) skipBlank() {
 func (tkn *Tokenizer) scanIdentifier(firstChar rune, isDbSystemVariable bool) (int, string) {
 	var buffer strings.Builder
 	buffer.WriteRune(firstChar)
-	for isAsciiLetter(tkn.lastChar) || isAsciiDigit(tkn.lastChar) || (isDbSystemVariable && isCarat(tkn.lastChar)) {
+	for isIdentifierFirstChar(tkn.lastChar) || isAsciiDigit(tkn.lastChar) || (isDbSystemVariable && isIdentifierMetaChar(tkn.lastChar)) {
 		buffer.WriteRune(tkn.lastChar)
 		tkn.next()
 	}
@@ -983,10 +974,10 @@ func (tkn *Tokenizer) scanBindVar() (int, string) {
 		buffer.WriteRune(tkn.lastChar)
 		tkn.next()
 	}
-	if !isAsciiLetter(tkn.lastChar) {
+	if !isIdentifierFirstChar(tkn.lastChar) {
 		return LEX_ERROR, buffer.String()
 	}
-	for isAsciiLetter(tkn.lastChar) || isAsciiDigit(tkn.lastChar) || tkn.lastChar == '.' {
+	for isIdentifierFirstChar(tkn.lastChar) || isAsciiDigit(tkn.lastChar) || tkn.lastChar == '.' {
 		buffer.WriteRune(tkn.lastChar)
 		tkn.next()
 	}
@@ -1040,7 +1031,7 @@ exponent:
 
 exit:
 	// A letter cannot immediately follow a number.
-	if isAsciiLetter(tkn.lastChar) {
+	if isIdentifierFirstChar(tkn.lastChar) {
 		return LEX_ERROR, buffer.String()
 	}
 
@@ -1222,12 +1213,16 @@ func extractMysqlComment(sql string) (version string, innerSQL string) {
 	return version, innerSQL
 }
 
-func isAsciiLetter(ch rune) bool {
+func isIdentifierFirstChar(ch rune) bool {
 	return 'a' <= ch && ch <= 'z' || 'A' <= ch && ch <= 'Z' || ch == '_' || ch == '@'
 }
 
-func isCarat(ch rune) bool {
+func isIdentifierMetaChar(ch rune) bool {
 	return ch == '.' || ch == '\'' || ch == '"' || ch == '`'
+}
+
+func isAsciiDigit(ch rune) bool {
+	return '0' <= ch && ch <= '9'
 }
 
 func digitVal(ch rune) int {
@@ -1240,8 +1235,4 @@ func digitVal(ch rune) int {
 		return int(ch) - 'A' + 10
 	}
 	return 16 // larger than any legal digit val
-}
-
-func isAsciiDigit(ch rune) bool {
-	return '0' <= ch && ch <= '9'
 }
