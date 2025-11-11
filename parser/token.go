@@ -530,6 +530,28 @@ var keywords = map[string]int{
 // keywordStrings contains the reverse mapping of token to keyword strings
 var keywordStrings = map[int]string{}
 
+var encodeRef = map[byte]byte{
+	'\x00': '0',
+	'\'':   '\'',
+	'"':    '"',
+	'\b':   'b',
+	'\n':   'n',
+	'\r':   'r',
+	'\t':   't',
+	26:     'Z', // ctl-Z
+	'\\':   '\\',
+}
+
+// sqlEncodeMap specifies how to escape binary data with '\'.
+// Complies to http://dev.mysql.com/doc/refman/5.1/en/string-syntax.html
+var sqlEncodeMap [256]byte
+
+// sqlDecodeMap is the reverse of sqlEncodeMap
+var sqlDecodeMap [256]byte
+
+// dontEscape tells you if a character should not be escaped.
+var dontEscape = byte(255)
+
 func init() {
 	// Convert keywords to keywordStrings
 	for str, id := range keywords {
@@ -552,28 +574,6 @@ func init() {
 		}
 	}
 }
-
-var encodeRef = map[byte]byte{
-	'\x00': '0',
-	'\'':   '\'',
-	'"':    '"',
-	'\b':   'b',
-	'\n':   'n',
-	'\r':   'r',
-	'\t':   't',
-	26:     'Z', // ctl-Z
-	'\\':   '\\',
-}
-
-// sqlEncodeMap specifies how to escape binary data with '\'.
-// Complies to http://dev.mysql.com/doc/refman/5.1/en/string-syntax.html
-var sqlEncodeMap [256]byte
-
-// sqlDecodeMap is the reverse of sqlEncodeMap
-var sqlDecodeMap [256]byte
-
-// dontEscape tells you if a character should not be escaped.
-var dontEscape = byte(255)
 
 // Lex returns the next token form the Tokenizer.
 // This function is used by go yacc.
