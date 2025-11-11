@@ -4281,7 +4281,7 @@ over_expression:
   }
 
 window_spec:
-  %prec LOWER_THAN_RPAREN
+  /* empty */ %prec LOWER_THAN_RPAREN
   {
     $$ = &OverExpr{}
   }
