@@ -50,7 +50,6 @@ func ParseDDL(sql string, mode ParserMode) (Statement, error) {
 // tokens for the parser.
 type Tokenizer struct {
 	AllowComments  bool
-	ForceEOF       bool
 	lastChar       rune
 	Position       int
 	lastToken      string
@@ -666,11 +665,6 @@ func (tkn *Tokenizer) Scan() (int, string) {
 	}
 	if tkn.lastChar == 0 {
 		tkn.next()
-	}
-
-	if tkn.ForceEOF {
-		tkn.skipStatement()
-		return 0, ""
 	}
 
 	tkn.skipBlank()

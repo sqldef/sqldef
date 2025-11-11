@@ -34,13 +34,6 @@ func setDDL(yylex any, ddl *DDL) {
   yylex.(*Tokenizer).partialDDL = ddl
 }
 
-// forceEOF forces the lexer to end prematurely. Not all SQL statements
-// are supported by the Parser, thus calling forceEOF will make the lexer
-// return EOF early.
-func forceEOF(yylex any) {
-  yylex.(*Tokenizer).ForceEOF = true
-}
-
 %}
 
 %union {
