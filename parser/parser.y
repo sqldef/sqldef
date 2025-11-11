@@ -2998,9 +2998,7 @@ domain_constraint:
   }
 
 character_cast_opt:
-  {
-    $$ = nil
-  }
+  /* empty */ %prec EMPTY_EXPR { $$ = nil }
 | TYPECAST BPCHAR
   {
     $$ = &ConvertType{Type: $2}
