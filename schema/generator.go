@@ -3623,7 +3623,7 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 	if indexA.vector != indexB.vector {
 		return false
 	}
-	for len(indexA.columns) != len(indexB.columns) {
+	if len(indexA.columns) != len(indexB.columns) {
 		return false
 	}
 	for i, indexAColumn := range indexA.columns {
