@@ -183,6 +183,13 @@ func setDDL(yylex any, ddl *DDL) {
 %left <str> '*' '/' DIV '%' MOD
 %left <str> '^'
 %right <str> '~' UNARY
+/* ---------------- Optional COLLATE Resolution ---------------------------------
+ * LOWER_THAN_COLLATE is used to resolve shift/reduce conflicts in optional
+ * collation contexts (collate_opt). It has lower precedence than COLLATE,
+ * causing the parser to prefer shifting COLLATE over reducing the empty
+ * production in collate_opt.                                                    */
+%nonassoc LOWER_THAN_COLLATE
+/* ---------------- End of Optional COLLATE Resolution ------------------------- */
 %left <str> COLLATE
 %right <str> BINARY UNDERSCORE_BINARY
 %right <str> INTERVAL
@@ -3416,6 +3423,7 @@ charset_opt:
   }
 
 collate_opt:
+  /* empty */ %prec LOWER_THAN_COLLATE
   {
     $$ = ""
   }
