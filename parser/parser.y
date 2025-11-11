@@ -5260,6 +5260,12 @@ function_call_conflict:
   {
     $$ = &FuncExpr{Name: NewColIdent("replace"), Exprs: $3}
   }
+| ROW '(' expression_list ')'
+  {
+    // Normalize ROW() to ValTuple for consistent comparison
+    // Both (a, b) and ROW(a, b) result in the same AST node
+    $$ = ValTuple($3)
+  }
 
 extract_field:
   sql_id
