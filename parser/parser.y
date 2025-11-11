@@ -196,6 +196,18 @@ func setDDL(yylex any, ddl *DDL) {
 %right <str> INTERVAL
 %nonassoc <str> '.'
 
+/* ---------------- Parenthesis Resolution --------------------------------------
+ * These declarations resolve shift/reduce conflicts involving ')'.
+ * LOWER_THAN_RPAREN has lower precedence than ')', causing the parser to prefer
+ * shifting ')' over reducing productions marked with %prec LOWER_THAN_RPAREN.
+ * This resolves conflicts in:
+ * - value: INTEGRAL (vs length_opt: '(' INTEGRAL ')')
+ * - expression: condition (vs condition: '(' condition ')')
+ * - select_expression_list reduction (vs function call completion)            */
+%nonassoc LOWER_THAN_RPAREN
+%left ')'
+/* ---------------- End of Parenthesis Resolution ------------------------------ */
+
 // There is no need to define precedence for the JSON
 // operators because the syntax is restricted enough that
 // they don't cause conflicts.
@@ -442,7 +454,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <exprs> array_element_list
 %type <expr> array_element
 %type <str> sql_security
-%type <overExpr> over_expression
+%type <overExpr> over_expression window_spec
 %token <str> OVER
 %type <partitionBy> partition_by_list
 %type <partition> partition
@@ -4212,7 +4224,7 @@ select_expression_list_opt:
   {
     $$ = nil
   }
-| select_expression_list
+| select_expression_list %prec LOWER_THAN_RPAREN
   {
     $$ = $1
   }
@@ -4269,21 +4281,27 @@ over_expression:
   {
     $$ = nil
   }
-| OVER '(' ')'
+| OVER '(' window_spec ')'
+  {
+    $$ = $3
+  }
+
+window_spec:
+  %prec LOWER_THAN_RPAREN
   {
     $$ = &OverExpr{}
   }
-| OVER '(' PARTITION BY partition_by_list ')'
+| PARTITION BY partition_by_list %prec LOWER_THAN_RPAREN
   {
-    $$ = &OverExpr{PartitionBy: $5}
+    $$ = &OverExpr{PartitionBy: $3}
   }
-| OVER '(' order_by_opt ')'
+| ORDER BY order_list
   {
     $$ = &OverExpr{OrderBy: $3}
   }
-| OVER '(' PARTITION BY partition_by_list order_by_opt ')'
+| PARTITION BY partition_by_list ORDER BY order_list
   {
-    $$ = &OverExpr{PartitionBy: $5, OrderBy: $6}
+    $$ = &OverExpr{PartitionBy: $3, OrderBy: $6}
   }
 
 from_opt:
@@ -4585,7 +4603,7 @@ include_columns_opt:
   }
 
 expression:
-  condition
+  condition %prec LOWER_THAN_RPAREN
   {
     $$ = $1
   }
@@ -5605,7 +5623,7 @@ value:
   {
     $$ = NewBitVal($1)
   }
-| INTEGRAL
+| INTEGRAL %prec LOWER_THAN_RPAREN
   {
     $$ = NewIntVal($1)
   }
