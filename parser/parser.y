@@ -3976,8 +3976,8 @@ deferrable_option:
   }
 | initially_clause
   {
-    // PostgreSQL allows INITIALLY without explicit DEFERRABLE
-    $$ = ConstraintOptions{Deferrable: false, InitiallyDeferred: bool($1)}
+    // Per PostgreSQL, INITIALLY DEFERRED implies DEFERRABLE, INITIALLY IMMEDIATE implies NOT DEFERRABLE
+    $$ = ConstraintOptions{Deferrable: bool($1), InitiallyDeferred: bool($1)}
   }
 
 fk_defer_opts:

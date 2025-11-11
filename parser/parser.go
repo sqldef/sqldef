@@ -8168,8 +8168,8 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser/parser.y:3978
 		{
-			// PostgreSQL allows INITIALLY without explicit DEFERRABLE
-			yyVAL.constraintOpts = ConstraintOptions{Deferrable: false, InitiallyDeferred: bool(yyDollar[1].boolVal)}
+			// Per PostgreSQL, INITIALLY DEFERRED implies DEFERRABLE, INITIALLY IMMEDIATE implies NOT DEFERRABLE
+			yyVAL.constraintOpts = ConstraintOptions{Deferrable: bool(yyDollar[1].boolVal), InitiallyDeferred: bool(yyDollar[1].boolVal)}
 		}
 	case 603:
 		yyDollar = yyS[yypt-0 : yypt+1]
