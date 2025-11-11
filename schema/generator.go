@@ -339,15 +339,6 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			desiredConstraintNames := []string{}
 			for _, desiredFK := range desiredTable.foreignKeys {
 				constraintName := desiredFK.constraintName
-
-				if g.mode == GeneratorModeMysql {
-					// Auto-generate constraint name if not specified (for PostgreSQL)
-					if constraintName == "" && len(desiredFK.indexColumns) > 0 {
-						tableName := extractTableName(desiredTable.name)
-						columnName := desiredFK.indexColumns[0]
-						constraintName = buildPostgresConstraintName(tableName, columnName, "fkey")
-					}
-				}
 				desiredConstraintNames = append(desiredConstraintNames, constraintName)
 			}
 
