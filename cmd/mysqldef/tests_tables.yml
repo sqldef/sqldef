@@ -642,6 +642,26 @@ RenameMultipleIndexes:
     ALTER TABLE `users` RENAME INDEX `idx_email` TO `email_idx`;
     ALTER TABLE `users` RENAME INDEX `idx_username` TO `username_idx`;
 
+RenameTableAndAddIndex:
+  current: |
+    CREATE TABLE old_users (
+      id bigint NOT NULL,
+      email varchar(100),
+      username varchar(50)
+    );
+  desired: |
+    CREATE TABLE users ( -- @renamed from=old_users
+      id bigint NOT NULL,
+      email varchar(100),
+      username varchar(50),
+      KEY email_idx (email),
+      KEY username_idx (username)
+    );
+  output: |
+    ALTER TABLE `old_users` RENAME TO `users`;
+    ALTER TABLE `users` ADD KEY `email_idx` (`email`);
+    ALTER TABLE `users` ADD KEY `username_idx` (`username`);
+
 CreateWithNonReservedKeywordColumns:
   desired: |
     CREATE TABLE test (

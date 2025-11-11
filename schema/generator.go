@@ -2591,14 +2591,14 @@ func isPrimaryKey(column Column, table Table) bool {
 
 // Destructively modify table1 to have table2 columns/indexes
 func mergeTable(table1 *Table, table2 Table) {
+	// Update/add all columns from table2
 	for _, column := range table2.columns {
-		if _, exist := table1.columns[column.name]; exist {
-			table1.columns[column.name] = column
-		}
+		table1.columns[column.name] = column
 	}
 
+	// Add indexes from table2 that don't exist in table1
 	for _, index := range table2.indexes {
-		if slices.Contains(convertIndexesToIndexNames(table1.indexes), index.name) {
+		if !slices.Contains(convertIndexesToIndexNames(table1.indexes), index.name) {
 			table1.indexes = append(table1.indexes, index)
 		}
 	}
