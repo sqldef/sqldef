@@ -77,16 +77,12 @@ func NewTokenizer(sql string, mode ParserMode) *Tokenizer {
 	}
 }
 
-// keywords is a map of mysql keywords that fall into two categories:
-// 1) keywords considered reserved by MySQL
-// 2) keywords for us to handle specially in sql.y
+// keywords maps keyword strings to their token IDs.
+// Keywords marked as UNUSED are recognized but not actively used in the grammar.
 //
-// Those marked as UNUSED are likely reserved keywords. We add them here so that
-// when rewriting queries we can properly backtick quote them so they don't cause issues
-//
-// NOTE: If you add new keywords, add them also to the reserved_keywords or
-// non_reserved_keywords grammar in sql.y -- this will allow the keyword to be used
-// in identifiers. See the docs for each grammar to determine which one to put it into.
+// When adding new keywords, also add them to either the reserved_keyword or
+// non_reserved_keyword grammar in parser.y. This allows the keyword to be used
+// as an identifier in certain contexts.
 var keywords = map[string]int{
 	"accessible":             UNUSED,
 	"action":                 ACTION,
@@ -506,7 +502,8 @@ var keywords = map[string]int{
 	"statistics_norecompute": STATISTICS_NORECOMPUTE,
 	"lead":                   LEAD,
 	"lag":                    LAG,
-	// SET options
+
+	// SET options for SQL Server
 	"concat_null_yields_null":  CONCAT_NULL_YIELDS_NULL,
 	"cursor_close_on_commit":   CURSOR_CLOSE_ON_COMMIT,
 	"quoted_identifier":        QUOTED_IDENTIFIER,
