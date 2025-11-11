@@ -549,9 +549,10 @@ func init() {
 		sqlDecodeMap[i] = dontEscape
 	}
 	for i := range sqlEncodeMap {
-		if to, ok := encodeRef[byte(i)]; ok {
-			sqlEncodeMap[byte(i)] = to
-			sqlDecodeMap[to] = byte(i)
+		b := byte(i)
+		if to, ok := encodeRef[b]; ok {
+			sqlEncodeMap[b] = to
+			sqlDecodeMap[to] = b
 		}
 	}
 }
@@ -704,7 +705,7 @@ func (tkn *Tokenizer) Scan() (int, string) {
 		if ch == '@' && tkn.lastChar == '@' {
 			isDbSystemVariable = true
 		}
-		return tkn.scanIdentifier(byte(ch), isDbSystemVariable)
+		return tkn.scanIdentifier(ch, isDbSystemVariable)
 	case isAsciiDigit(ch):
 		return tkn.scanNumber(false)
 	case ch == ':':
@@ -859,7 +860,7 @@ func (tkn *Tokenizer) Scan() (int, string) {
 			if tkn.mode != ParserModePostgres && ch == '`' {
 				return tkn.scanLiteralIdentifier('`')
 			}
-			return LEX_ERROR, string(rune(ch))
+			return LEX_ERROR, string(ch)
 		}
 	}
 }
@@ -881,11 +882,11 @@ func (tkn *Tokenizer) skipBlank() {
 	}
 }
 
-func (tkn *Tokenizer) scanIdentifier(firstByte byte, isDbSystemVariable bool) (int, string) {
+func (tkn *Tokenizer) scanIdentifier(firstChar rune, isDbSystemVariable bool) (int, string) {
 	var buffer strings.Builder
-	buffer.WriteByte(firstByte)
+	buffer.WriteRune(firstChar)
 	for isAsciiLetter(tkn.lastChar) || isAsciiDigit(tkn.lastChar) || (isDbSystemVariable && isCarat(tkn.lastChar)) {
-		buffer.WriteByte(byte(tkn.lastChar))
+		buffer.WriteRune(tkn.lastChar)
 		tkn.next()
 	}
 	loweredStr := strings.ToLower(buffer.String())
@@ -946,7 +947,7 @@ func (tkn *Tokenizer) scanLiteralIdentifier(sepChar rune) (int, string) {
 				break
 			}
 			backTickSeen = false
-			buffer.WriteByte(byte(sepChar))
+			buffer.WriteRune(sepChar)
 			tkn.next()
 			continue
 		}
@@ -958,7 +959,7 @@ func (tkn *Tokenizer) scanLiteralIdentifier(sepChar rune) (int, string) {
 			// Premature EOF.
 			return LEX_ERROR, buffer.String()
 		default:
-			buffer.WriteByte(byte(tkn.lastChar))
+			buffer.WriteRune(tkn.lastChar)
 		}
 		tkn.next()
 	}
@@ -970,24 +971,24 @@ func (tkn *Tokenizer) scanLiteralIdentifier(sepChar rune) (int, string) {
 
 func (tkn *Tokenizer) scanBindVar() (int, string) {
 	var buffer strings.Builder
-	buffer.WriteByte(byte(tkn.lastChar))
+	buffer.WriteRune(tkn.lastChar)
 	token := VALUE_ARG
 	tkn.next()
 	if tkn.lastChar == ':' {
 		if tkn.mode == ParserModePostgres {
-			buffer.WriteByte(byte(tkn.lastChar))
+			buffer.WriteRune(tkn.lastChar)
 			tkn.next()
 			return TYPECAST, buffer.String()
 		}
 		token = LIST_ARG
-		buffer.WriteByte(byte(tkn.lastChar))
+		buffer.WriteRune(tkn.lastChar)
 		tkn.next()
 	}
 	if !isAsciiLetter(tkn.lastChar) {
 		return LEX_ERROR, buffer.String()
 	}
 	for isAsciiLetter(tkn.lastChar) || isAsciiDigit(tkn.lastChar) || tkn.lastChar == '.' {
-		buffer.WriteByte(byte(tkn.lastChar))
+		buffer.WriteRune(tkn.lastChar)
 		tkn.next()
 	}
 	return token, buffer.String()
@@ -1099,7 +1100,7 @@ func (tkn *Tokenizer) scanString(delim rune, typ int) (int, string) {
 			break
 		}
 
-		buffer.WriteByte(byte(ch))
+		buffer.WriteRune(ch)
 		tkn.next()
 	}
 
@@ -1167,7 +1168,7 @@ func (tkn *Tokenizer) consumeNext(buffer *strings.Builder) {
 		// This should never happen.
 		panic("unexpected EOF")
 	}
-	buffer.WriteByte(byte(tkn.lastChar))
+	buffer.WriteRune(tkn.lastChar)
 	tkn.next()
 }
 
