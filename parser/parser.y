@@ -171,7 +171,6 @@ func setDDL(yylex any, ddl *DDL) {
  * expression-starting keywords (UPDATE, REPLACE), causing the parser to prefer
  * shifting those keywords over reducing the empty production.                  */
 %nonassoc EMPTY_EXPR
-/* Expression-starting keywords that can conflict with optional expressions */
 %left UPDATE REPLACE
 /* ---------------- End of Optional Expression Resolution ---------------------- */
 %left <str> '=' '<' '>' LE GE NE NULL_SAFE_EQUAL IS LIKE REGEXP IN
@@ -3942,12 +3941,12 @@ not_for_replication_opt:
   }
 
 /*
- * Refactored constraint option rules to eliminate shift/reduce conflicts on NOT keyword.
- * Strategy: Factor out multi-word NOT phrases into explicit non-terminals (no empty alternatives).
- * This follows the recommended approach for LALR(1) parsers to resolve structural ambiguities.
+ * Constraint option rules without empty alternatives to avoid shift/reduce conflicts on NOT keyword.
+ * Empty alternatives in deferrable/initially rules would create ambiguity when NOT appears,
+ * since the parser cannot decide whether to reduce the empty production or shift NOT for
+ * "NOT DEFERRABLE" / "NOT FOR REPLICATION".
  */
 
-/* Atomic deferrable clause - no empty alternative */
 deferrable_clause:
   DEFERRABLE
   {
@@ -3958,7 +3957,6 @@ deferrable_clause:
     $$ = BoolVal(false)
   }
 
-/* Atomic initially clause - no empty alternative */
 initially_clause:
   INITIALLY IMMEDIATE
   {
@@ -3969,7 +3967,6 @@ initially_clause:
     $$ = BoolVal(true)
   }
 
-/* Deferrable with optional initially - no empty alternative */
 deferrable_option:
   deferrable_clause
   {
@@ -3985,7 +3982,6 @@ deferrable_option:
     $$ = ConstraintOptions{Deferrable: false, InitiallyDeferred: bool($1)}
   }
 
-/* Refactored fk_defer_opts - reduced from 18 to 4 productions */
 fk_defer_opts:
   /* empty */
   {
