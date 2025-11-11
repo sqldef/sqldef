@@ -123,6 +123,7 @@ func setDDL(yylex any, ddl *DDL) {
     constraintOpts    *ConstraintOptions
     notForReplication bool
   }
+  constraintOpts           ConstraintOptions
   domainConstraints        struct {
     defaultDef *DefaultDefinition
     notNull    bool
@@ -431,9 +432,10 @@ func setDDL(yylex any, ddl *DDL) {
 %type <strs> table_hint_list table_hint_opt
 %type <str> table_hint
 %type <newQualifierColName> new_qualifier_column_name
-%type <boolVal> deferrable_opt initially_deferred_opt
+%type <boolVal> deferrable_opt initially_deferred_opt deferrable_clause initially_clause
 %type <boolVal> variadic_opt
 %type <str> with_data_opt
+%type <constraintOpts> deferrable_option
 %type <fkDeferOpts> fk_defer_opts
 %type <domainConstraints> domain_constraints_opt domain_constraint
 %type <arrayConstructor> array_constructor
@@ -3927,51 +3929,63 @@ not_for_replication_opt:
     $$ = BoolVal(true)
   }
 
-/* Combined rule for foreign key constraint options to avoid reduce/reduce conflicts */
+/*
+ * Refactored constraint option rules to eliminate shift/reduce conflicts on NOT keyword.
+ * Strategy: Factor out multi-word NOT phrases into explicit non-terminals (no empty alternatives).
+ * This follows the recommended approach for LALR(1) parsers to resolve structural ambiguities.
+ */
+
+/* Atomic deferrable clause - no empty alternative */
+deferrable_clause:
+  DEFERRABLE
+  {
+    $$ = BoolVal(true)
+  }
+| NOT DEFERRABLE
+  {
+    $$ = BoolVal(false)
+  }
+
+/* Atomic initially clause - no empty alternative */
+initially_clause:
+  INITIALLY IMMEDIATE
+  {
+    $$ = BoolVal(false)
+  }
+| INITIALLY DEFERRED
+  {
+    $$ = BoolVal(true)
+  }
+
+/* Deferrable with optional initially - no empty alternative */
+deferrable_option:
+  deferrable_clause
+  {
+    $$ = ConstraintOptions{Deferrable: bool($1), InitiallyDeferred: false}
+  }
+| deferrable_clause initially_clause
+  {
+    $$ = ConstraintOptions{Deferrable: bool($1), InitiallyDeferred: bool($2)}
+  }
+| initially_clause
+  {
+    // PostgreSQL allows INITIALLY without explicit DEFERRABLE
+    $$ = ConstraintOptions{Deferrable: false, InitiallyDeferred: bool($1)}
+  }
+
+/* Refactored fk_defer_opts - reduced from 18 to 4 productions */
 fk_defer_opts:
   /* empty */
   {
     $$.constraintOpts = nil
     $$.notForReplication = false
   }
-| DEFERRABLE
+| deferrable_option
   {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: false}
-    $$.notForReplication = false
-  }
-| NOT DEFERRABLE
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
-    $$.notForReplication = false
-  }
-| INITIALLY IMMEDIATE
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
-    $$.notForReplication = false
-  }
-| INITIALLY DEFERRED
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: true}
-    $$.notForReplication = false
-  }
-| DEFERRABLE INITIALLY IMMEDIATE
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: false}
-    $$.notForReplication = false
-  }
-| DEFERRABLE INITIALLY DEFERRED
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: true}
-    $$.notForReplication = false
-  }
-| NOT DEFERRABLE INITIALLY IMMEDIATE
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
-    $$.notForReplication = false
-  }
-| NOT DEFERRABLE INITIALLY DEFERRED
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: true}
+    $$.constraintOpts = &ConstraintOptions{
+      Deferrable:        $1.Deferrable,
+      InitiallyDeferred: $1.InitiallyDeferred,
+    }
     $$.notForReplication = false
   }
 | NOT FOR REPLICATION
@@ -3979,44 +3993,12 @@ fk_defer_opts:
     $$.constraintOpts = nil
     $$.notForReplication = true
   }
-| DEFERRABLE NOT FOR REPLICATION
+| deferrable_option NOT FOR REPLICATION
   {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: false}
-    $$.notForReplication = true
-  }
-| NOT DEFERRABLE NOT FOR REPLICATION
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
-    $$.notForReplication = true
-  }
-| INITIALLY IMMEDIATE NOT FOR REPLICATION
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
-    $$.notForReplication = true
-  }
-| INITIALLY DEFERRED NOT FOR REPLICATION
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: true}
-    $$.notForReplication = true
-  }
-| DEFERRABLE INITIALLY IMMEDIATE NOT FOR REPLICATION
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: false}
-    $$.notForReplication = true
-  }
-| DEFERRABLE INITIALLY DEFERRED NOT FOR REPLICATION
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: true}
-    $$.notForReplication = true
-  }
-| NOT DEFERRABLE INITIALLY IMMEDIATE NOT FOR REPLICATION
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
-    $$.notForReplication = true
-  }
-| NOT DEFERRABLE INITIALLY DEFERRED NOT FOR REPLICATION
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: true}
+    $$.constraintOpts = &ConstraintOptions{
+      Deferrable:        $1.Deferrable,
+      InitiallyDeferred: $1.InitiallyDeferred,
+    }
     $$.notForReplication = true
   }
 
@@ -6033,13 +6015,9 @@ deferrable_opt:
   {
     $$ = BoolVal(false)
   }
-| DEFERRABLE
+| deferrable_clause
   {
-    $$ = BoolVal(true)
-  }
-| NOT DEFERRABLE
-  {
-    $$ = BoolVal(false)
+    $$ = $1
   }
 
 initially_deferred_opt:
@@ -6047,13 +6025,9 @@ initially_deferred_opt:
   {
     $$ = BoolVal(false)
   }
-| INITIALLY DEFERRED
+| initially_clause
   {
-    $$ = BoolVal(true)
-  }
-| INITIALLY IMMEDIATE
-  {
-    $$ = BoolVal(false)
+    $$ = $1
   }
 
 variadic_opt:
