@@ -2774,7 +2774,7 @@ func formatID(buf *nodeBuffer, original, lowered string) {
 	}
 
 	for i, c := range original {
-		if !isAsciiLetter(c) && (!isDbSystemVariable || !isCarat(c)) {
+		if !isIdentifierFirstChar(c) && (!isDbSystemVariable || !isIdentifierMetaChar(c)) {
 			if i == 0 || !isAsciiDigit(c) {
 				goto mustEscape
 			}

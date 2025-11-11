@@ -669,7 +669,7 @@ func (tkn *Tokenizer) Scan() (int, string) {
 
 	tkn.skipBlank()
 	switch ch := tkn.lastChar; {
-	case isAsciiLetter(ch):
+	case isIdentifierFirstChar(ch):
 		tkn.next()
 		if ch == 'X' || ch == 'x' {
 			if tkn.lastChar == '\'' {
@@ -875,7 +875,7 @@ func (tkn *Tokenizer) skipBlank() {
 func (tkn *Tokenizer) scanIdentifier(firstChar rune, isDbSystemVariable bool) (int, string) {
 	var buffer strings.Builder
 	buffer.WriteRune(firstChar)
-	for isAsciiLetter(tkn.lastChar) || isAsciiDigit(tkn.lastChar) || (isDbSystemVariable && isCarat(tkn.lastChar)) {
+	for isIdentifierFirstChar(tkn.lastChar) || isAsciiDigit(tkn.lastChar) || (isDbSystemVariable && isIdentifierMetaChar(tkn.lastChar)) {
 		buffer.WriteRune(tkn.lastChar)
 		tkn.next()
 	}
@@ -974,10 +974,10 @@ func (tkn *Tokenizer) scanBindVar() (int, string) {
 		buffer.WriteRune(tkn.lastChar)
 		tkn.next()
 	}
-	if !isAsciiLetter(tkn.lastChar) {
+	if !isIdentifierFirstChar(tkn.lastChar) {
 		return LEX_ERROR, buffer.String()
 	}
-	for isAsciiLetter(tkn.lastChar) || isAsciiDigit(tkn.lastChar) || tkn.lastChar == '.' {
+	for isIdentifierFirstChar(tkn.lastChar) || isAsciiDigit(tkn.lastChar) || tkn.lastChar == '.' {
 		buffer.WriteRune(tkn.lastChar)
 		tkn.next()
 	}
@@ -1031,7 +1031,7 @@ exponent:
 
 exit:
 	// A letter cannot immediately follow a number.
-	if isAsciiLetter(tkn.lastChar) {
+	if isIdentifierFirstChar(tkn.lastChar) {
 		return LEX_ERROR, buffer.String()
 	}
 
@@ -1213,12 +1213,16 @@ func extractMysqlComment(sql string) (version string, innerSQL string) {
 	return version, innerSQL
 }
 
-func isAsciiLetter(ch rune) bool {
+func isIdentifierFirstChar(ch rune) bool {
 	return 'a' <= ch && ch <= 'z' || 'A' <= ch && ch <= 'Z' || ch == '_' || ch == '@'
 }
 
-func isCarat(ch rune) bool {
+func isIdentifierMetaChar(ch rune) bool {
 	return ch == '.' || ch == '\'' || ch == '"' || ch == '`'
+}
+
+func isAsciiDigit(ch rune) bool {
+	return '0' <= ch && ch <= '9'
 }
 
 func digitVal(ch rune) int {
@@ -1231,8 +1235,4 @@ func digitVal(ch rune) int {
 		return int(ch) - 'A' + 10
 	}
 	return 16 // larger than any legal digit val
-}
-
-func isAsciiDigit(ch rune) bool {
-	return '0' <= ch && ch <= '9'
 }
