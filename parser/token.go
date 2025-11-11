@@ -27,7 +27,7 @@ import (
 type ParserMode int
 
 const (
-	eofChar        = 0x100
+	eofChar = 0x100
 
 	ParserModeMysql = ParserMode(iota)
 	ParserModePostgres

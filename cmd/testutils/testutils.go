@@ -34,8 +34,10 @@ type TestCase struct {
 	Flavor       string   // database flavor (e.g., "mariadb", "mysql")
 	ManagedRoles []string `yaml:"managed_roles"` // Roles whose privileges are managed by sqldef
 	EnableDrop   *bool    `yaml:"enable_drop"`   // Whether to enable DROP/REVOKE operations
+	Offline      bool     `yaml:"offline"`
 	Config       struct { // Optional config settings for the test
 		CreateIndexConcurrently bool `yaml:"create_index_concurrently"`
+		DisableDdlTransaction   bool `yaml:"disable_ddl_transaction"`
 	} `yaml:"config"`
 }
 
@@ -160,7 +162,18 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		}
 	}
 
-	// Prepare current
+	config := database.GeneratorConfig{
+		ManagedRoles:            test.ManagedRoles,
+		EnableDrop:              *test.EnableDrop,
+		CreateIndexConcurrently: test.Config.CreateIndexConcurrently,
+		DisableDdlTransaction:   test.Config.DisableDdlTransaction,
+	}
+
+	if test.Offline {
+		RunOfflineTest(t, test, mode, sqlParser, config, db.GetDefaultSchema())
+		return
+	}
+
 	if test.Current != "" {
 		ddls, err := splitDDLs(mode, sqlParser, test.Current, db.GetDefaultSchema())
 		if err != nil {
@@ -172,12 +185,6 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		}
 	}
 
-	// Set generator config on database so it knows which privileges to include
-	config := database.GeneratorConfig{
-		ManagedRoles:            test.ManagedRoles,
-		EnableDrop:              *test.EnableDrop,
-		CreateIndexConcurrently: test.Config.CreateIndexConcurrently,
-	}
 	db.SetGeneratorConfig(config)
 
 	// Test idempotency of current schema
@@ -234,6 +241,38 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	}
 	if len(ddls) > 0 {
 		t.Errorf("Desired schema is not idempotent. Expected no changes when reapplying desired schema, but got:\n```\n%s```\nThis means the migration didn't apply correctly.", joinDDLs(ddls))
+	}
+}
+
+func RunOfflineTest(t *testing.T, test TestCase, mode schema.GeneratorMode, sqlParser database.Parser, config database.GeneratorConfig, defaultSchema string) {
+	t.Helper()
+
+	currentDDLs := test.Current
+	ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, defaultSchema)
+
+	if test.Error != nil {
+		if err == nil {
+			t.Errorf("expected error: %s, but got no error", *test.Error)
+		} else if err.Error() != *test.Error {
+			t.Errorf("expected error: %s, but got: %s", *test.Error, err.Error())
+		}
+		return
+	}
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := strings.TrimSpace(*test.Output)
+	actual := strings.TrimSpace(joinDDLs(ddls))
+	assert.Equal(t, expected, actual, "Migration output doesn't match expected.")
+
+	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, test.Desired, config, defaultSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ddls) > 0 {
+		t.Errorf("Desired schema is not idempotent. Expected no changes when comparing desired to itself, but got:\n```\n%s```", joinDDLs(ddls))
 	}
 }
 

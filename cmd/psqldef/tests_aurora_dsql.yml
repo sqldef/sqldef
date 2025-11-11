@@ -1,0 +1,39 @@
+# Aurora DSQL tests (PR #903)
+
+CreateIndexAsync:
+  offline: true
+  desired: |
+    CREATE TABLE users (id bigint, email text);
+    CREATE INDEX ASYNC idx_users_email ON users (email);
+
+CreateIndexAsyncWithWhere:
+  offline: true
+  desired: |
+    CREATE TABLE users (id bigint, email text, active boolean);
+    CREATE INDEX ASYNC idx_active_users ON users (email) WHERE active = true;
+
+CreateUniqueIndexAsync:
+  offline: true
+  desired: |
+    CREATE TABLE users (id bigint, email text);
+    CREATE UNIQUE INDEX ASYNC idx_users_email ON users (email);
+
+AddIndexAsync:
+  offline: true
+  current: |
+    CREATE TABLE users (id bigint, email text);
+  desired: |
+    CREATE TABLE users (id bigint, email text);
+    CREATE INDEX ASYNC idx_users_email ON users (email);
+  output: |
+    CREATE INDEX ASYNC idx_users_email ON users (email);
+
+DropAsyncIndex:
+  offline: true
+  current: |
+    CREATE TABLE users (id bigint, email text);
+    CREATE INDEX ASYNC idx_users_email ON users (email);
+  desired: |
+    CREATE TABLE users (id bigint, email text);
+  output: |
+    DROP INDEX "public"."idx_users_email";
