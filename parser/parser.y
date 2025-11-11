@@ -164,6 +164,15 @@ func setDDL(yylex any, ddl *DDL) {
 %left <str> BETWEEN CASE WHEN THEN END
 %left <str> ELSE
 /* ---------------- End of Dangling Else Resolution ------------------------- */
+/* ---------------- Optional Expression Resolution -----------------------------
+ * EMPTY_EXPR is used to resolve shift/reduce conflicts in optional expression
+ * contexts (expression_opt, exec_param_list_opt). It has lower precedence than
+ * expression-starting keywords (UPDATE, REPLACE), causing the parser to prefer
+ * shifting those keywords over reducing the empty production.                  */
+%nonassoc EMPTY_EXPR
+/* Expression-starting keywords that can conflict with optional expressions */
+%left UPDATE REPLACE
+/* ---------------- End of Optional Expression Resolution ---------------------- */
 %left <str> '=' '<' '>' LE GE NE NULL_SAFE_EQUAL IS LIKE REGEXP IN
 %left <str> POSIX_REGEX POSIX_REGEX_CI POSIX_NOT_REGEX POSIX_NOT_REGEX_CI
 %left <str> PATTERN_LIKE PATTERN_ILIKE PATTERN_NOT_LIKE PATTERN_NOT_ILIKE
@@ -2098,7 +2107,7 @@ exec_keyword:
 | EXECUTE { $$ = $1 }
 
 exec_param_list_opt:
-  /* empty */     { $$ = nil }
+  /* empty */ %prec EMPTY_EXPR { $$ = nil }
 | expression_list { $$ = $1 }
 
 return_statement:
@@ -5505,6 +5514,7 @@ simple_convert_type:
   }
 
 expression_opt:
+  /* empty */ %prec EMPTY_EXPR
   {
     $$ = nil
   }
