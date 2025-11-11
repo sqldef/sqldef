@@ -11,10 +11,11 @@ Each command follows the same pattern: it accepts connection parameters similar 
 
 ## General Rules
 
-* Never commit the changes unless the user asks for it.
-* Write comments to describe what is not obvious in the code. Describing the "why" is a recommended practice.
-* Format SQL statements in string literals.
-* Use `log/slog` to trace internal state of the code. Set `LOG_LEVEL=debug` to enable debug logging.
+* Never commit the changes unless the user asks for it
+* Write comments to describe what is not obvious in the code. Explaining the "why" in comments is a recommended practice
+* Format SQL statements in string literals
+* Use `log/slog` to trace internal state of the code. Set `LOG_LEVEL=debug` to enable debug logging
+* Use `panic` to assert that it is not reachable
 
 ## Build
 
@@ -47,7 +48,7 @@ Usage notes:
   - `PSQLDEF_PARSER=pgquery` - Use only the pgquery parser (no fallback to generic)
   - Not set (default) - Use generic parser with fallback to pgquery
 - The generic parser builds ASTs, and the generator manipulates the ASTs for normalization and comparison. Do not parse strings with regular expressions
-- The pgquery parser is deprecated and will be removed in the future
+- No need to maintain the pgquery parser, which is obsolete and will be removed in the future
 
 ## Local Development
 
@@ -187,6 +188,9 @@ TestCaseName:
 
   # Whether to enable DROP/REVOKE operations (optional, defaults to true)
   enable_drop: false
+
+  # Use offline testing to test features in proprietary SQL dialects such as Aurora DSQL
+  offline: true
 
   # Configuration options for the test (optional)
   config:
