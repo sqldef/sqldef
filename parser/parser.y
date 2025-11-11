@@ -123,6 +123,7 @@ func setDDL(yylex any, ddl *DDL) {
     constraintOpts    *ConstraintOptions
     notForReplication bool
   }
+  constraintOpts           ConstraintOptions
   domainConstraints        struct {
     defaultDef *DefaultDefinition
     notNull    bool
@@ -164,6 +165,14 @@ func setDDL(yylex any, ddl *DDL) {
 %left <str> BETWEEN CASE WHEN THEN END
 %left <str> ELSE
 /* ---------------- End of Dangling Else Resolution ------------------------- */
+/* ---------------- Optional Expression Resolution -----------------------------
+ * EMPTY_EXPR is used to resolve shift/reduce conflicts in optional expression
+ * contexts (expression_opt, exec_param_list_opt). It has lower precedence than
+ * expression-starting keywords (UPDATE, REPLACE), causing the parser to prefer
+ * shifting those keywords over reducing the empty production.                  */
+%nonassoc EMPTY_EXPR
+%left UPDATE REPLACE
+/* ---------------- End of Optional Expression Resolution ---------------------- */
 %left <str> '=' '<' '>' LE GE NE NULL_SAFE_EQUAL IS LIKE REGEXP IN
 %left <str> POSIX_REGEX POSIX_REGEX_CI POSIX_NOT_REGEX POSIX_NOT_REGEX_CI
 %left <str> PATTERN_LIKE PATTERN_ILIKE PATTERN_NOT_LIKE PATTERN_NOT_ILIKE
@@ -174,10 +183,29 @@ func setDDL(yylex any, ddl *DDL) {
 %left <str> '*' '/' DIV '%' MOD
 %left <str> '^'
 %right <str> '~' UNARY
+/* ---------------- Optional COLLATE Resolution ---------------------------------
+ * LOWER_THAN_COLLATE is used to resolve shift/reduce conflicts in optional
+ * collation contexts (collate_opt). It has lower precedence than COLLATE,
+ * causing the parser to prefer shifting COLLATE over reducing the empty
+ * production in collate_opt.                                                    */
+%nonassoc LOWER_THAN_COLLATE
+/* ---------------- End of Optional COLLATE Resolution ------------------------- */
 %left <str> COLLATE
 %right <str> BINARY UNDERSCORE_BINARY
 %right <str> INTERVAL
 %nonassoc <str> '.'
+
+/* ---------------- Parenthesis Resolution --------------------------------------
+ * These declarations resolve shift/reduce conflicts involving ')'.
+ * LOWER_THAN_RPAREN has lower precedence than ')', causing the parser to prefer
+ * shifting ')' over reducing productions marked with %prec LOWER_THAN_RPAREN.
+ * This resolves conflicts in:
+ * - value: INTEGRAL (vs length_opt: '(' INTEGRAL ')')
+ * - expression: condition (vs condition: '(' condition ')')
+ * - select_expression_list reduction (vs function call completion)            */
+%nonassoc LOWER_THAN_RPAREN
+%left ')'
+/* ---------------- End of Parenthesis Resolution ------------------------------ */
 
 // There is no need to define precedence for the JSON
 // operators because the syntax is restricted enough that
@@ -415,16 +443,17 @@ func setDDL(yylex any, ddl *DDL) {
 %type <strs> table_hint_list table_hint_opt
 %type <str> table_hint
 %type <newQualifierColName> new_qualifier_column_name
-%type <boolVal> deferrable_opt initially_deferred_opt
+%type <boolVal> deferrable_opt initially_deferred_opt deferrable_clause initially_clause
 %type <boolVal> variadic_opt
 %type <str> with_data_opt
+%type <constraintOpts> deferrable_option
 %type <fkDeferOpts> fk_defer_opts
 %type <domainConstraints> domain_constraints_opt domain_constraint
 %type <arrayConstructor> array_constructor
 %type <exprs> array_element_list
 %type <expr> array_element
 %type <str> sql_security
-%type <overExpr> over_expression
+%type <overExpr> over_expression window_spec
 %token <str> OVER
 %type <partitionBy> partition_by_list
 %type <partition> partition
@@ -2098,7 +2127,7 @@ exec_keyword:
 | EXECUTE { $$ = $1 }
 
 exec_param_list_opt:
-  /* empty */     { $$ = nil }
+  /* empty */ %prec EMPTY_EXPR { $$ = nil }
 | expression_list { $$ = $1 }
 
 return_statement:
@@ -2969,9 +2998,7 @@ domain_constraint:
   }
 
 character_cast_opt:
-  {
-    $$ = nil
-  }
+  /* empty */ %prec EMPTY_EXPR { $$ = nil }
 | TYPECAST BPCHAR
   {
     $$ = &ConvertType{Type: $2}
@@ -3407,6 +3434,7 @@ charset_opt:
   }
 
 collate_opt:
+  /* empty */ %prec LOWER_THAN_COLLATE
   {
     $$ = ""
   }
@@ -3910,51 +3938,60 @@ not_for_replication_opt:
     $$ = BoolVal(true)
   }
 
-/* Combined rule for foreign key constraint options to avoid reduce/reduce conflicts */
+/*
+ * Constraint option rules without empty alternatives to avoid shift/reduce conflicts on NOT keyword.
+ * Empty alternatives in deferrable/initially rules would create ambiguity when NOT appears,
+ * since the parser cannot decide whether to reduce the empty production or shift NOT for
+ * "NOT DEFERRABLE" / "NOT FOR REPLICATION".
+ */
+
+deferrable_clause:
+  DEFERRABLE
+  {
+    $$ = BoolVal(true)
+  }
+| NOT DEFERRABLE
+  {
+    $$ = BoolVal(false)
+  }
+
+initially_clause:
+  INITIALLY IMMEDIATE
+  {
+    $$ = BoolVal(false)
+  }
+| INITIALLY DEFERRED
+  {
+    $$ = BoolVal(true)
+  }
+
+deferrable_option:
+  deferrable_clause
+  {
+    $$ = ConstraintOptions{Deferrable: bool($1), InitiallyDeferred: false}
+  }
+| deferrable_clause initially_clause
+  {
+    $$ = ConstraintOptions{Deferrable: bool($1), InitiallyDeferred: bool($2)}
+  }
+| initially_clause
+  {
+    // Per PostgreSQL, INITIALLY DEFERRED implies DEFERRABLE, INITIALLY IMMEDIATE implies NOT DEFERRABLE
+    $$ = ConstraintOptions{Deferrable: bool($1), InitiallyDeferred: bool($1)}
+  }
+
 fk_defer_opts:
   /* empty */
   {
     $$.constraintOpts = nil
     $$.notForReplication = false
   }
-| DEFERRABLE
+| deferrable_option
   {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: false}
-    $$.notForReplication = false
-  }
-| NOT DEFERRABLE
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
-    $$.notForReplication = false
-  }
-| INITIALLY IMMEDIATE
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
-    $$.notForReplication = false
-  }
-| INITIALLY DEFERRED
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: true}
-    $$.notForReplication = false
-  }
-| DEFERRABLE INITIALLY IMMEDIATE
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: false}
-    $$.notForReplication = false
-  }
-| DEFERRABLE INITIALLY DEFERRED
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: true}
-    $$.notForReplication = false
-  }
-| NOT DEFERRABLE INITIALLY IMMEDIATE
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
-    $$.notForReplication = false
-  }
-| NOT DEFERRABLE INITIALLY DEFERRED
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: true}
+    $$.constraintOpts = &ConstraintOptions{
+      Deferrable:        $1.Deferrable,
+      InitiallyDeferred: $1.InitiallyDeferred,
+    }
     $$.notForReplication = false
   }
 | NOT FOR REPLICATION
@@ -3962,44 +3999,12 @@ fk_defer_opts:
     $$.constraintOpts = nil
     $$.notForReplication = true
   }
-| DEFERRABLE NOT FOR REPLICATION
+| deferrable_option NOT FOR REPLICATION
   {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: false}
-    $$.notForReplication = true
-  }
-| NOT DEFERRABLE NOT FOR REPLICATION
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
-    $$.notForReplication = true
-  }
-| INITIALLY IMMEDIATE NOT FOR REPLICATION
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
-    $$.notForReplication = true
-  }
-| INITIALLY DEFERRED NOT FOR REPLICATION
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: true}
-    $$.notForReplication = true
-  }
-| DEFERRABLE INITIALLY IMMEDIATE NOT FOR REPLICATION
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: false}
-    $$.notForReplication = true
-  }
-| DEFERRABLE INITIALLY DEFERRED NOT FOR REPLICATION
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: true, InitiallyDeferred: true}
-    $$.notForReplication = true
-  }
-| NOT DEFERRABLE INITIALLY IMMEDIATE NOT FOR REPLICATION
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: false}
-    $$.notForReplication = true
-  }
-| NOT DEFERRABLE INITIALLY DEFERRED NOT FOR REPLICATION
-  {
-    $$.constraintOpts = &ConstraintOptions{Deferrable: false, InitiallyDeferred: true}
+    $$.constraintOpts = &ConstraintOptions{
+      Deferrable:        $1.Deferrable,
+      InitiallyDeferred: $1.InitiallyDeferred,
+    }
     $$.notForReplication = true
   }
 
@@ -4213,7 +4218,7 @@ select_expression_list_opt:
   {
     $$ = nil
   }
-| select_expression_list
+| select_expression_list %prec LOWER_THAN_RPAREN
   {
     $$ = $1
   }
@@ -4270,21 +4275,27 @@ over_expression:
   {
     $$ = nil
   }
-| OVER '(' ')'
+| OVER '(' window_spec ')'
+  {
+    $$ = $3
+  }
+
+window_spec:
+  /* empty */ %prec LOWER_THAN_RPAREN
   {
     $$ = &OverExpr{}
   }
-| OVER '(' PARTITION BY partition_by_list ')'
+| PARTITION BY partition_by_list %prec LOWER_THAN_RPAREN
   {
-    $$ = &OverExpr{PartitionBy: $5}
+    $$ = &OverExpr{PartitionBy: $3}
   }
-| OVER '(' order_by_opt ')'
+| ORDER BY order_list
   {
     $$ = &OverExpr{OrderBy: $3}
   }
-| OVER '(' PARTITION BY partition_by_list order_by_opt ')'
+| PARTITION BY partition_by_list ORDER BY order_list
   {
-    $$ = &OverExpr{PartitionBy: $5, OrderBy: $6}
+    $$ = &OverExpr{PartitionBy: $3, OrderBy: $6}
   }
 
 from_opt:
@@ -4586,7 +4597,7 @@ include_columns_opt:
   }
 
 expression:
-  condition
+  condition %prec LOWER_THAN_RPAREN
   {
     $$ = $1
   }
@@ -5247,6 +5258,12 @@ function_call_conflict:
   {
     $$ = &FuncExpr{Name: NewColIdent("replace"), Exprs: $3}
   }
+| ROW '(' expression_list ')'
+  {
+    // Normalize ROW() to ValTuple for consistent comparison
+    // Both (a, b) and ROW(a, b) result in the same AST node
+    $$ = ValTuple($3)
+  }
 
 extract_field:
   sql_id
@@ -5505,6 +5522,7 @@ simple_convert_type:
   }
 
 expression_opt:
+  /* empty */ %prec EMPTY_EXPR
   {
     $$ = nil
   }
@@ -5605,7 +5623,7 @@ value:
   {
     $$ = NewBitVal($1)
   }
-| INTEGRAL
+| INTEGRAL %prec LOWER_THAN_RPAREN
   {
     $$ = NewIntVal($1)
   }
@@ -6015,13 +6033,9 @@ deferrable_opt:
   {
     $$ = BoolVal(false)
   }
-| DEFERRABLE
+| deferrable_clause
   {
-    $$ = BoolVal(true)
-  }
-| NOT DEFERRABLE
-  {
-    $$ = BoolVal(false)
+    $$ = $1
   }
 
 initially_deferred_opt:
@@ -6029,13 +6043,9 @@ initially_deferred_opt:
   {
     $$ = BoolVal(false)
   }
-| INITIALLY DEFERRED
+| initially_clause
   {
-    $$ = BoolVal(true)
-  }
-| INITIALLY IMMEDIATE
-  {
-    $$ = BoolVal(false)
+    $$ = $1
   }
 
 variadic_opt:

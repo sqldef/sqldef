@@ -564,6 +564,14 @@ CheckConstraint:
     ALTER TABLE "public"."test" ADD CONSTRAINT test_d1_check CHECK (d1 >= '2022-01-01');
     ALTER TABLE "public"."test" ADD CONSTRAINT test_d2_check CHECK (d2 >= '2022-01-01');
 
+CheckConstraintWithRowConstructor:
+  desired: |
+    CREATE TABLE test (
+      a integer,
+      b integer,
+      CONSTRAINT test_check CHECK ((a, b) > (0, 0))
+    );
+
 CompositeForeignKeyConstraint:
   current: |
     CREATE TABLE t1 (
