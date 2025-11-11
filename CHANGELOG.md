@@ -1,3 +1,12 @@
+## [v3.6.4](https://github.com/sqldef/sqldef/compare/v3.6.3...v3.6.4) - 2025-11-11
+- fix wrong use of `for` by @gfx in https://github.com/sqldef/sqldef/pull/935
+- fix mergeTable by @gfx in https://github.com/sqldef/sqldef/pull/937
+- fix: `make test` on task stop causes infinite loop on adding failing tests by @gfx in https://github.com/sqldef/sqldef/pull/938
+- remove openb/closeb rules for simplicity by @gfx in https://github.com/sqldef/sqldef/pull/939
+- cleanup code and comments by @gfx in https://github.com/sqldef/sqldef/pull/940
+- agents.md: mention to `panic` by @gfx in https://github.com/sqldef/sqldef/pull/942
+- reduce shift/reduce conflicts on parser.y: 59 -> 27 by @gfx in https://github.com/sqldef/sqldef/pull/941
+
 ## [v3.6.3](https://github.com/sqldef/sqldef/compare/v3.6.2...v3.6.3) - 2025-11-11
 - offline teting for Aurora DSQL dialect by @gfx in https://github.com/sqldef/sqldef/pull/931
 - clean up byte <-> rune conversion by @gfx in https://github.com/sqldef/sqldef/pull/930
