@@ -1,3 +1,9 @@
+## [v3.6.3](https://github.com/sqldef/sqldef/compare/v3.6.2...v3.6.3) - 2025-11-11
+- offline teting for Aurora DSQL dialect by @gfx in https://github.com/sqldef/sqldef/pull/931
+- clean up byte <-> rune conversion by @gfx in https://github.com/sqldef/sqldef/pull/930
+- remove unused code by @gfx in https://github.com/sqldef/sqldef/pull/933
+- mysqldef: supprot _utf8mb4'...' by @gfx in https://github.com/sqldef/sqldef/pull/934
+
 ## [v3.6.2](https://github.com/sqldef/sqldef/compare/v3.6.1...v3.6.2) - 2025-11-09
 - Use CHANGE COLUMN instead of DROP+ADD for generated column modifications by @Copilot in https://github.com/sqldef/sqldef/pull/926
 - make parser buffer from []byte to string by @gfx in https://github.com/sqldef/sqldef/pull/927
