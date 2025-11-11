@@ -64,6 +64,15 @@ RemoveDefaultExpression:
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json;
   flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
+JsonColumnWithCharsetCastDefault:
+  desired: |
+    CREATE TABLE hello_json_utf8mb4 (
+      id int NOT NULL AUTO_INCREMENT,
+      json_col json NOT NULL DEFAULT (_utf8mb4'{}'),
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+  flavor: mysql  # Different versioning of MariaDB
+  min_version: '8.0.13'
 CollateOnColumn:
   desired: |
     create table users
