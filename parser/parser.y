@@ -152,6 +152,9 @@ func setDDL(yylex any, ddl *DDL) {
 // Some of these operators don't conflict in our situation. Nevertheless,
 // it's better to have these listed in the correct order. Also, we don't
 // support all operators yet.
+// OUTPUT has lower precedence than logical operators (OR, AND, NOT) to ensure
+// expressions like "NOT x OUTPUT" parse as "(NOT x) OUTPUT"
+%left OUTPUT
 %left <str> OR
 %left <str> AND
 %right <str> NOT '!'
