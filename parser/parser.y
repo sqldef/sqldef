@@ -152,6 +152,9 @@ func setDDL(yylex any, ddl *DDL) {
 // Some of these operators don't conflict in our situation. Nevertheless,
 // it's better to have these listed in the correct order. Also, we don't
 // support all operators yet.
+// OUTPUT has lower precedence than logical operators (OR, AND, NOT) to ensure
+// expressions like "NOT x OUTPUT" parse as "(NOT x) OUTPUT"
+%left OUTPUT
 %left <str> OR
 %left <str> AND
 %right <str> NOT '!'
@@ -193,6 +196,22 @@ func setDDL(yylex any, ddl *DDL) {
 %left <str> COLLATE
 %right <str> BINARY UNDERSCORE_BINARY
 %right <str> INTERVAL
+/* ---------------- Optional Timezone Resolution --------------------------------
+ * LOWER_THAN_WITH is used to resolve shift/reduce conflicts in optional timezone
+ * contexts (time_zone_opt). It has lower precedence than WITH/WITHOUT, causing
+ * the parser to prefer shifting WITH/WITHOUT over reducing the empty production
+ * in time_zone_opt.                                                              */
+%nonassoc LOWER_THAN_WITH
+%left <str> WITH WITHOUT
+/* ---------------- End of Optional Timezone Resolution ------------------------ */
+/* ---------------- Optional IF NOT EXISTS Resolution ---------------------------
+ * LOWER_THAN_IF is used to resolve shift/reduce conflicts in optional
+ * if_not_exists_opt contexts. It has lower precedence than IF, causing the
+ * parser to prefer shifting IF (for IF NOT EXISTS) over reducing the empty
+ * production in if_not_exists_opt.                                               */
+%nonassoc LOWER_THAN_IF
+%left <str> IF
+/* ---------------- End of Optional IF NOT EXISTS Resolution ------------------- */
 %nonassoc <str> '.'
 
 /* ---------------- Parenthesis Resolution --------------------------------------
@@ -214,7 +233,7 @@ func setDDL(yylex any, ddl *DDL) {
 
 // DDL Tokens
 %token <str> CREATE ALTER DROP RENAME ANALYZE ADD GRANT REVOKE OPTION PRIVILEGES
-%token <str> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE IF PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION EXCLUDE DOMAIN
+%token <str> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION EXCLUDE DOMAIN
 %right <str> UNIQUE KEY
 %token <str> SHOW DESCRIBE EXPLAIN DATE DATA ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
 %token <str> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN
@@ -274,7 +293,7 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> LEAD LAG
 
 // Match
-%token <str> MATCH AGAINST BOOLEAN LANGUAGE WITH WITHOUT PARSER QUERY EXPANSION
+%token <str> MATCH AGAINST BOOLEAN LANGUAGE PARSER QUERY EXPANSION
 
 // Context-aware WITH tokens
 %token <str> WITH_DATA_OPTION
@@ -1800,7 +1819,7 @@ if_statement:
     }
   }
 // For MSSQL: Decompose into matched and unmatched statements to resolve ambiguity
-| matched_if_statement
+| matched_if_statement %prec NO_ELSE
   {
     $$ = $1
   }
@@ -3366,6 +3385,7 @@ max_length_opt:
 
 
 time_zone_opt:
+  %prec LOWER_THAN_WITH
   {
     $$ = BoolVal(false)
   }
@@ -5500,7 +5520,7 @@ simple_convert_type:
   {
     $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
   }
-| TIMESTAMP
+| TIMESTAMP %prec LOWER_THAN_WITH
   {
     $$ = &ConvertType{Type: $1}
   }
@@ -5508,7 +5528,7 @@ simple_convert_type:
   {
     $$ = &ConvertType{Type: $1, Length: NewIntVal($3)}
   }
-| TIME
+| TIME %prec LOWER_THAN_WITH
   {
     $$ = &ConvertType{Type: $1}
   }
@@ -5948,6 +5968,7 @@ charset_value:
   }
 
 if_not_exists_opt:
+  %prec LOWER_THAN_IF
   { $$ = struct{}{} }
 | IF NOT EXISTS
   { $$ = struct{}{} }
