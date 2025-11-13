@@ -4135,6 +4135,10 @@ table_opt_name:
   {
     $$ = $1 + " " + $2.String()
   }
+| table_opt_name CHARACTER SET
+  {
+    $$ = $1 + " " + "character set"
+  }
 | COMMENT_KEYWORD
   {
     $$ = $1

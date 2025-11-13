@@ -814,3 +814,18 @@ AlterColumnChangeNotNullAndDefault:
   output: |
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(100) NOT NULL DEFAULT 'anonymous';
     ALTER TABLE `users` CHANGE COLUMN `email` `email` varchar(255);
+
+CreateTableWithDefaultCharset:
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(40)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CreateTableWithDefaultCharacterSet:
+  min_version: "8.0"
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(40)
+    ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4;
