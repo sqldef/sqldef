@@ -1,3 +1,7 @@
+## [v3.6.5](https://github.com/sqldef/sqldef/compare/v3.6.4...v3.6.5) - 2025-11-13
+- reduce more conflicts in parser.y: 27 -> 16 by @gfx in https://github.com/sqldef/sqldef/pull/943
+- mysqldef: support CHARACTER SET by @gfx in https://github.com/sqldef/sqldef/pull/945
+
 ## [v3.6.4](https://github.com/sqldef/sqldef/compare/v3.6.3...v3.6.4) - 2025-11-11
 - fix wrong use of `for` by @gfx in https://github.com/sqldef/sqldef/pull/935
 - fix mergeTable by @gfx in https://github.com/sqldef/sqldef/pull/937
