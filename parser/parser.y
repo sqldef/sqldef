@@ -1494,12 +1494,21 @@ insert_statement:
 | insert_or_replace comment_opt ignore_opt into_table_name opt_partition_clause SET update_list on_dup_opt
   {
     cols := make(Columns, 0, len($7))
-    vals := make(ValTuple, 0, len($8))
-    for _, updateList := range $7 {
-      cols = append(cols, updateList.Name.Name)
-      vals = append(vals, updateList.Expr)
+    vals := make(ValTuple, 0, len($7))
+    for _, updateExpr := range $7 {
+      cols = append(cols, updateExpr.Name.Name)
+      vals = append(vals, updateExpr.Expr)
     }
-    $$ = &Insert{Action: $1, Comments: Comments($2), Ignore: $3, Table: $4, Partitions: $5, Columns: cols, Rows: Values{vals}, OnDup: OnDup($8)}
+    $$ = &Insert{
+      Action: $1,
+      Comments: Comments($2),
+      Ignore: $3,
+      Table: $4,
+      Partitions: $5,
+      Columns: cols,
+      Rows: Values{vals},
+      OnDup: OnDup($8),
+    }
   }
 
 insert_or_replace:
