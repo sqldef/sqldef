@@ -1,3 +1,7 @@
+## [v3.6.6](https://github.com/sqldef/sqldef/compare/v3.6.5...v3.6.6) - 2025-11-15
+- parser.y: fix and refactor insert or replace rule by @gfx in https://github.com/sqldef/sqldef/pull/946
+- fix ARRAY normalization in view definition by @gfx in https://github.com/sqldef/sqldef/pull/948
+
 ## [v3.6.5](https://github.com/sqldef/sqldef/compare/v3.6.4...v3.6.5) - 2025-11-13
 - reduce more conflicts in parser.y: 27 -> 16 by @gfx in https://github.com/sqldef/sqldef/pull/943
 - mysqldef: support CHARACTER SET by @gfx in https://github.com/sqldef/sqldef/pull/945
