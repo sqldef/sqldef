@@ -295,7 +295,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			}
 		}
 
-		// For ANY/ALL expressions with ValTuple, sort and deduplicate
+		// For ANY/ALL expressions, normalize the array elements
 		if (anyFlag || allFlag) && !e.Any && !e.All {
 			// This means we just set the flag above from IN conversion
 			// Already handled
@@ -441,18 +441,17 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		})
 		return &parser.ArrayConstructor{Elements: elements}
 	case *parser.FuncExpr:
+		funcName := strings.ToLower(e.Name.String())
 		// For PostgreSQL, normalize date/time function calls to keywords
 		// The generic parser parses CURRENT_DATE in parentheses as a function call,
 		// but without parentheses as a keyword (SQLVal with ValArg type)
 		// e.g., (CURRENT_DATE) -> current_date(), but CURRENT_DATE -> current_date
 		if mode == GeneratorModePostgres && len(e.Exprs) == 0 {
-			funcName := strings.ToLower(e.Name.String())
 			switch funcName {
 			case "current_date", "current_time", "current_timestamp":
 				return parser.NewValArg(funcName)
 			}
 		}
-
 		normalizedExprs := parser.SelectExprs{}
 		for _, arg := range e.Exprs {
 			// For Postgres, check for ARRAY constructors BEFORE normalizing
@@ -460,7 +459,8 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			// but users may write them expanded as 'a', 'b', so we expand for comparison
 			// e.g., jsonb_extract_path_text(payload, ARRAY['amount']) -> jsonb_extract_path_text(payload, 'amount')
 			// e.g., jsonb_extract_path_text(payload, ARRAY['a', 'b']) -> jsonb_extract_path_text(payload, 'a', 'b')
-			if mode == GeneratorModePostgres {
+			// However, do NOT expand for ANY/ALL/SOME functions as they require the ARRAY constructor
+			if mode == GeneratorModePostgres && funcName != "any" && funcName != "all" && funcName != "some" {
 				if aliased, ok := arg.(*parser.AliasedExpr); ok {
 					if arrayConstr, ok := aliased.Expr.(*parser.ArrayConstructor); ok && len(arrayConstr.Elements) > 0 {
 						// Expand ARRAY elements into separate normalized arguments
@@ -739,9 +739,14 @@ func normalizeSelectExprs(exprs parser.SelectExprs, mode GeneratorMode) parser.S
 func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.SelectExpr {
 	switch e := expr.(type) {
 	case *parser.AliasedExpr:
+		as := e.As
+		// For PostgreSQL, strip automatic aliases like ?column?
+		if mode == GeneratorModePostgres && as.String() == "?column?" {
+			as = parser.NewColIdent("")
+		}
 		return &parser.AliasedExpr{
 			Expr: normalizeExpr(e.Expr, mode),
-			As:   e.As,
+			As:   as,
 		}
 	case *parser.StarExpr:
 		return e
