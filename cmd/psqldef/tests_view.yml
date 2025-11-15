@@ -473,3 +473,9 @@ CastBpchar:
       SELECT dummy_table.col
       FROM dummy_table
       WHERE (dummy_table.col <> 'dummy value'::bpchar);
+ViewWithAnyArray:
+  desired: |
+    CREATE VIEW any_array AS SELECT 1 WHERE 1 = ANY(ARRAY[1, 4, 5]);
+MaterializedViewWithAnyArray:
+  desired: |
+    CREATE MATERIALIZED VIEW any_array AS SELECT 1 WHERE 1 = ANY(ARRAY[1, 4, 5]);
