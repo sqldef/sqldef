@@ -317,3 +317,159 @@ func TestIntervalColumnType(t *testing.T) {
 		})
 	}
 }
+
+// TestCTEParsing tests Common Table Expression (WITH clause) support
+func TestCTEParsing(t *testing.T) {
+	testCases := []struct {
+		name        string
+		sql         string
+		shouldParse bool
+		description string
+	}{
+		{
+			name: "Simplest CTE",
+			sql: `CREATE VIEW test_view AS
+WITH cte AS (
+  SELECT 1 as id
+)
+SELECT * FROM cte`,
+			shouldParse: true,
+			description: "Basic CTE should parse successfully",
+		},
+		{
+			name: "CTE with comment after WITH",
+			sql: `CREATE VIEW test_view AS
+WITH
+-- This is a comment
+cte AS (
+  SELECT 1 as id
+)
+SELECT * FROM cte`,
+			shouldParse: true,
+			description: "CTE with comment immediately after WITH should parse",
+		},
+		{
+			name: "Multiple CTEs with comments",
+			sql: `CREATE VIEW test_view AS
+WITH
+-- First CTE
+cte1 AS (
+  SELECT 1 as id
+),
+-- Second CTE
+cte2 AS (
+  SELECT 2 as id
+)
+SELECT * FROM cte1`,
+			shouldParse: true,
+			description: "Multiple CTEs with comments between them should parse",
+		},
+		{
+			name: "CTE with CROSS JOIN",
+			sql: `CREATE VIEW test_view AS
+WITH cte AS (
+  SELECT t1.id, t2.value
+  FROM table1 t1
+  CROSS JOIN table2 t2
+)
+SELECT * FROM cte`,
+			shouldParse: true,
+			description: "CTE containing CROSS JOIN should parse",
+		},
+		{
+			name: "Materialized View with CTE",
+			sql: `CREATE MATERIALIZED VIEW test_view AS
+WITH cte AS (
+  SELECT 1 as id
+)
+SELECT * FROM cte`,
+			shouldParse: true,
+			description: "Materialized view with CTE should parse",
+		},
+		{
+			name: "WITH RECURSIVE - basic",
+			sql: `CREATE VIEW test_view AS
+WITH RECURSIVE cte AS (
+  SELECT 1 as n
+  UNION ALL
+  SELECT n + 1 FROM cte WHERE n < 10
+)
+SELECT * FROM cte`,
+			shouldParse: true,
+			description: "WITH RECURSIVE should parse successfully",
+		},
+		{
+			name: "WITH RECURSIVE - hierarchy traversal",
+			sql: `CREATE VIEW employee_hierarchy AS
+WITH RECURSIVE subordinates AS (
+  SELECT employee_id, manager_id, 1 AS emp_level
+  FROM employees
+  WHERE manager_id IS NULL
+  UNION ALL
+  SELECT e.employee_id, e.manager_id, s.emp_level + 1
+  FROM employees e
+  INNER JOIN subordinates s ON s.employee_id = e.manager_id
+)
+SELECT * FROM subordinates`,
+			shouldParse: true,
+			description: "WITH RECURSIVE for hierarchical queries should parse",
+		},
+		{
+			name: "WITH RECURSIVE in materialized view",
+			sql: `CREATE MATERIALIZED VIEW numbers AS
+WITH RECURSIVE cte AS (
+  SELECT 1 as n
+  UNION ALL
+  SELECT n + 1 FROM cte WHERE n < 100
+)
+SELECT * FROM cte`,
+			shouldParse: true,
+			description: "WITH RECURSIVE in materialized view should parse",
+		},
+		{
+			name: "Complex CTE with multiple CTEs and PostgreSQL functions",
+			sql: `CREATE VIEW v_product_summary AS
+WITH
+-- Calculate counts
+event_counts AS (
+  SELECT
+    p.id AS product_id,
+    e.id AS event_id,
+    COUNT(DISTINCT pe.event_id) AS count_until_event
+  FROM products p
+  CROSS JOIN events e
+  LEFT JOIN product_events pe ON p.id = pe.product_id
+  GROUP BY p.id, e.id
+),
+-- Calculate release date
+release_dates AS (
+  SELECT
+    p.id AS product_id,
+    e.id AS event_id,
+    make_date(p.release_year, p.release_month, 1) AS release_date
+  FROM products p
+  CROSS JOIN events e
+)
+SELECT
+  rd.product_id,
+  rd.event_id,
+  format('%s-%s', rd.release_date, ec.count_until_event) AS summary
+FROM release_dates rd
+LEFT JOIN event_counts ec ON rd.product_id = ec.product_id`,
+			shouldParse: true,
+			description: "Complex CTE with multiple CTEs, comments, CROSS JOIN, and PostgreSQL functions",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseDDL(tc.sql, ParserModePostgres)
+
+			if tc.shouldParse && err != nil {
+				t.Errorf("%s\nSQL: %s\nError: %v", tc.description, tc.sql, err)
+			} else if !tc.shouldParse && err == nil {
+				t.Errorf("Expected parse error but got none.\n%s\nSQL: %s", tc.description, tc.sql)
+			}
+		})
+	}
+}
