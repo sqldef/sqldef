@@ -246,6 +246,7 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> DEFERRABLE INITIALLY IMMEDIATE DEFERRED
 %token <str> CONCURRENTLY ASYNC
 %token <str> SQL SECURITY
+%token <str> RECURSIVE
 
 // Transaction Tokens
 %token <str> BEGIN START TRANSACTION COMMIT ROLLBACK
@@ -1391,7 +1392,11 @@ with_clause_opt:
 with_clause:
   WITH common_table_expr_list
   {
-    $$ = &With{CTEs: $2}
+    $$ = &With{CTEs: $2, Recursive: false}
+  }
+| WITH RECURSIVE common_table_expr_list
+  {
+    $$ = &With{CTEs: $3, Recursive: true}
   }
 
 common_table_expr_list:
@@ -6359,6 +6364,7 @@ non_reserved_keyword:
 | ZONE
 | LEVEL
 | PRIVILEGES
+| RECURSIVE
 | RESTRICT
 | CASCADE
 | OPTION
