@@ -540,7 +540,6 @@ ViewWithMultipleCTEsAndPostgreSQLFunctions:
     );
     CREATE VIEW v_product_summary AS
     WITH
-    -- Calculate counts
     event_counts AS (
       SELECT
         p.id AS product_id,
@@ -551,7 +550,6 @@ ViewWithMultipleCTEsAndPostgreSQLFunctions:
       LEFT JOIN product_events pe ON p.id = pe.product_id
       GROUP BY p.id, e.id
     ),
-    -- Calculate release date
     release_dates AS (
       SELECT
         p.id AS product_id,
