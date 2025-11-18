@@ -1,0 +1,64 @@
+ViewDependsOnView_Simple:
+  desired: |
+    CREATE TABLE users (
+      id integer PRIMARY KEY,
+      name text,
+      active integer
+    );
+    CREATE VIEW active_users AS
+      SELECT id, name FROM users WHERE active = 1;
+    CREATE VIEW active_user_ids AS
+      SELECT id FROM active_users;
+
+ViewDependsOnView_ThreeLevelChain:
+  desired: |
+    CREATE TABLE products (
+      id integer PRIMARY KEY,
+      name text,
+      price real,
+      available integer
+    );
+    CREATE VIEW available_products AS
+      SELECT id, name, price FROM products WHERE available = 1;
+    CREATE VIEW expensive_products AS
+      SELECT id, name FROM available_products WHERE price > 100;
+    CREATE VIEW expensive_product_ids AS
+      SELECT id FROM expensive_products;
+
+ViewDependsOnView_MultipleJoins:
+  desired: |
+    CREATE TABLE orders (
+      id integer PRIMARY KEY,
+      user_id integer,
+      total real
+    );
+    CREATE TABLE order_items (
+      id integer PRIMARY KEY,
+      order_id integer,
+      quantity integer
+    );
+    CREATE VIEW order_summary AS
+      SELECT id, user_id, total FROM orders;
+    CREATE VIEW item_summary AS
+      SELECT id, order_id, quantity FROM order_items;
+    CREATE VIEW complete_order_view AS
+      SELECT o.id, o.user_id, o.total, i.quantity
+      FROM order_summary o
+      JOIN item_summary i ON o.id = i.order_id;
+
+ViewDependsOnView_AggregationChain:
+  desired: |
+    CREATE TABLE sales (
+      id integer PRIMARY KEY,
+      product_id integer,
+      amount real,
+      sale_date text
+    );
+    CREATE VIEW daily_sales AS
+      SELECT product_id, sale_date, SUM(amount) as total
+      FROM sales
+      GROUP BY product_id, sale_date;
+    CREATE VIEW product_totals AS
+      SELECT product_id, SUM(total) as grand_total
+      FROM daily_sales
+      GROUP BY product_id;

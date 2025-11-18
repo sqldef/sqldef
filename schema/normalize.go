@@ -417,15 +417,16 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 	case *parser.ColName:
 		// Normalize column name and qualifier
 		// 1. Remove database-specific quotes/brackets from identifiers
-		// 2. For Postgres, remove table qualifiers from column references
+		// 2. For Postgres and MySQL, remove table qualifiers from column references
 		qualifierStr := ""
 		if e.Qualifier.Name.String() != "" {
 			qualifierStr = normalizeName(e.Qualifier.Name.String())
 		}
 		nameStr := normalizeName(e.Name.String())
 
-		// For Postgres, remove table qualifiers (e.g., "users.name" -> "name")
-		if mode == GeneratorModePostgres {
+		// For Postgres and MySQL, remove table qualifiers (e.g., "users.name" -> "name")
+		// MySQL adds table qualifiers when storing views
+		if mode == GeneratorModePostgres || mode == GeneratorModeMysql {
 			qualifierStr = ""
 		}
 
@@ -503,28 +504,40 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			if e.Type != nil {
 				typeStr := strings.ToLower(e.Type.Type)
 				// Only strip casts on simple string literals (not in expressions)
-				if sqlVal, ok := normalizedExpr.(*parser.SQLVal); ok && sqlVal.Type == parser.StrVal {
-					// Check if the string looks like a number (PostgreSQL stores negative numbers as string literals with casts)
-					// Only treat it as numeric if it's purely digits/decimal, not a date/time string
-					if util.IsNumericString(sqlVal.Val) {
-						// PostgreSQL stores negative numbers as string literals with casts like '-20'::integer
-						// We need to convert these back to plain numeric literals
-						switch typeStr {
-						case "integer", "bigint", "smallint":
-							// Convert numeric string to actual numeric literal
-							// This unwraps '-20'::integer -> -20
-							return parser.NewIntVal(sqlVal.Val)
-						case "numeric", "decimal", "real", "double precision":
-							return parser.NewFloatVal(sqlVal.Val)
+				if sqlVal, ok := normalizedExpr.(*parser.SQLVal); ok {
+					// Handle string literals
+					if sqlVal.Type == parser.StrVal {
+						// Check if the string looks like a number (PostgreSQL stores negative numbers as string literals with casts)
+						// Only treat it as numeric if it's purely digits/decimal, not a date/time string
+						if util.IsNumericString(sqlVal.Val) {
+							// PostgreSQL stores negative numbers as string literals with casts like '-20'::integer
+							// We need to convert these back to plain numeric literals
+							switch typeStr {
+							case "integer", "bigint", "smallint":
+								// Convert numeric string to actual numeric literal
+								// This unwraps '-20'::integer -> -20
+								return parser.NewIntVal(sqlVal.Val)
+							case "numeric", "decimal", "real", "double precision":
+								return parser.NewFloatVal(sqlVal.Val)
+							}
+						} else {
+							// Strip redundant type casts that PostgreSQL adds on non-numeric strings
+							switch typeStr {
+							case "text", "character varying":
+								// Always strip text casts on non-numeric strings
+								return normalizedExpr
+							case "date", "time", "timestamp", "timestamp without time zone":
+								// Strip date/time casts on literals (PostgreSQL adds these for typed literals)
+								return normalizedExpr
+							}
 						}
-					} else {
-						// Strip redundant type casts that PostgreSQL adds on non-numeric strings
+					} else if sqlVal.Type == parser.IntVal || sqlVal.Type == parser.FloatVal {
+						// Handle numeric literals that already have explicit types
+						// PostgreSQL adds redundant casts like 100::numeric or 3.14::double precision
+						// Strip these redundant casts when casting to numeric types
 						switch typeStr {
-						case "text", "character varying":
-							// Always strip text casts on non-numeric strings
-							return normalizedExpr
-						case "date", "time", "timestamp", "timestamp without time zone":
-							// Strip date/time casts on literals (PostgreSQL adds these for typed literals)
+						case "integer", "bigint", "smallint", "numeric", "decimal", "real", "double precision":
+							// The value is already a numeric literal, no cast needed
 							return normalizedExpr
 						}
 					}
@@ -578,12 +591,12 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		}
 	case *parser.ParenExpr:
 		normalizedInner := normalizeExpr(e.Expr, mode)
-		// For PostgreSQL, unwrap parentheses around most expressions to normalize
-		// PostgreSQL adds parentheses around many expressions, but we want a canonical form
+		// For PostgreSQL and MySQL, unwrap parentheses around most expressions to normalize
+		// Both databases add parentheses around many expressions, but we want a canonical form
 		// We always unwrap ParenExpr during normalization to get a canonical form
 		// The only exception is when parentheses are around complex nested expressions
 		// where they're needed for precedence (like CASE inside a larger expression)
-		if mode == GeneratorModePostgres {
+		if mode == GeneratorModePostgres || mode == GeneratorModeMysql {
 			// Preserve parentheses around COLLATE expressions, as they're semantically significant
 			if _, isCollate := normalizedInner.(*parser.CollateExpr); isCollate {
 				return &parser.ParenExpr{
@@ -744,6 +757,16 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 		if mode == GeneratorModePostgres && as.String() == "?column?" {
 			as = parser.NewColIdent("")
 		}
+		// For MySQL, strip redundant aliases where the alias matches the column name
+		// MySQL adds "column_name as column_name" which is redundant
+		if mode == GeneratorModeMysql && as.String() != "" {
+			if colName, ok := e.Expr.(*parser.ColName); ok {
+				if strings.EqualFold(colName.Name.String(), as.String()) {
+					// The alias is the same as the column name, strip it
+					as = parser.NewColIdent("")
+				}
+			}
+		}
 		return &parser.AliasedExpr{
 			Expr: normalizeExpr(e.Expr, mode),
 			As:   as,
@@ -757,9 +780,129 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 
 // normalizeTableExprs normalizes FROM clause table expressions
 func normalizeTableExprs(exprs parser.TableExprs, mode GeneratorMode) parser.TableExprs {
-	// For now, return as-is since table name normalization is less critical
-	// We mainly care about column references in the SELECT and WHERE clauses
-	return exprs
+	normalized := make(parser.TableExprs, len(exprs))
+	for i, expr := range exprs {
+		normalized[i] = normalizeTableExpr(expr, mode)
+	}
+	return normalized
+}
+
+// normalizeTableExpr normalizes a single TableExpr
+func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode) parser.TableExpr {
+	if expr == nil {
+		return nil
+	}
+
+	switch e := expr.(type) {
+	case *parser.AliasedTableExpr:
+		normalizedExpr := e.Expr
+		// For MySQL, normalize table names to remove database prefix
+		// MySQL stores views with database.table references, but we want just table names
+		if mode == GeneratorModeMysql {
+			if tableName, ok := e.Expr.(parser.TableName); ok {
+				// Remove the database/schema part, keep only the table name
+				normalizedExpr = parser.TableName{
+					Schema: parser.TableIdent{}, // Remove schema/database
+					Name:   tableName.Name,
+				}
+			}
+		}
+		return &parser.AliasedTableExpr{
+			Expr:       normalizedExpr,
+			Partitions: e.Partitions,
+			As:         e.As,
+			TableHints: e.TableHints,
+			IndexHints: e.IndexHints,
+		}
+	case *parser.JoinTableExpr:
+		return &parser.JoinTableExpr{
+			LeftExpr:  normalizeTableExpr(e.LeftExpr, mode),
+			Join:      e.Join,
+			RightExpr: normalizeTableExpr(e.RightExpr, mode),
+			Condition: normalizeJoinCondition(e.Condition, mode),
+		}
+	case *parser.ParenTableExpr:
+		// PostgreSQL adds parentheses around JOINs when storing views
+		// Unwrap these to get a canonical form
+		if mode == GeneratorModePostgres && len(e.Exprs) == 1 {
+			// Single expression in parentheses - unwrap it
+			return normalizeTableExpr(e.Exprs[0], mode)
+		}
+		// Multiple expressions or non-Postgres mode - normalize but keep parens
+		normalized := make(parser.TableExprs, len(e.Exprs))
+		for i, expr := range e.Exprs {
+			normalized[i] = normalizeTableExpr(expr, mode)
+		}
+		return &parser.ParenTableExpr{Exprs: normalized}
+	default:
+		return expr
+	}
+}
+
+// normalizeJoinCondition normalizes the JOIN ON/USING condition
+func normalizeJoinCondition(cond parser.JoinCondition, mode GeneratorMode) parser.JoinCondition {
+	if cond.On != nil {
+		// For PostgreSQL and MySQL, preserve table qualifiers in JOIN ON clauses
+		// They're needed for disambiguation (e.g., "u.id = o.user_id")
+		// We only normalize the expression structure (parentheses, etc.), not column qualifiers
+		return parser.JoinCondition{
+			On:    normalizeExprPreservingQualifiers(cond.On, mode),
+			Using: cond.Using,
+		}
+	}
+	return cond
+}
+
+// normalizeExprPreservingQualifiers is like normalizeExpr but preserves table qualifiers in column references
+// This is used for JOIN ON clauses where qualifiers are semantically important
+func normalizeExprPreservingQualifiers(expr parser.Expr, mode GeneratorMode) parser.Expr {
+	if expr == nil {
+		return nil
+	}
+
+	switch e := expr.(type) {
+	case *parser.ColName:
+		// Keep the qualifier but normalize the names to lowercase
+		qualifierStr := ""
+		if e.Qualifier.Name.String() != "" {
+			qualifierStr = normalizeName(e.Qualifier.Name.String())
+		}
+		nameStr := normalizeName(e.Name.String())
+
+		return &parser.ColName{
+			Name: parser.NewColIdent(nameStr),
+			Qualifier: parser.TableName{
+				Name: parser.NewTableIdent(qualifierStr),
+			},
+		}
+	case *parser.AndExpr:
+		return &parser.AndExpr{
+			Left:  normalizeExprPreservingQualifiers(e.Left, mode),
+			Right: normalizeExprPreservingQualifiers(e.Right, mode),
+		}
+	case *parser.OrExpr:
+		return &parser.OrExpr{
+			Left:  normalizeExprPreservingQualifiers(e.Left, mode),
+			Right: normalizeExprPreservingQualifiers(e.Right, mode),
+		}
+	case *parser.ComparisonExpr:
+		return &parser.ComparisonExpr{
+			Operator: normalizeOperator(e.Operator, mode),
+			Left:     normalizeExprPreservingQualifiers(e.Left, mode),
+			Right:    normalizeExprPreservingQualifiers(e.Right, mode),
+			Escape:   normalizeExprPreservingQualifiers(e.Escape, mode),
+		}
+	case *parser.ParenExpr:
+		normalizedInner := normalizeExprPreservingQualifiers(e.Expr, mode)
+		// For PostgreSQL and MySQL, unwrap unnecessary parentheses
+		if mode == GeneratorModePostgres || mode == GeneratorModeMysql {
+			return normalizedInner
+		}
+		return &parser.ParenExpr{Expr: normalizedInner}
+	default:
+		// For other expressions, use the regular normalizeExpr
+		return normalizeExpr(expr, mode)
+	}
 }
 
 // normalizeWhere normalizes WHERE clause

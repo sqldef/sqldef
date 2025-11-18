@@ -77,7 +77,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	desiredDDLs = FilterViews(desiredDDLs, config)
 	desiredDDLs = FilterPrivileges(desiredDDLs, config)
 
-	desiredDDLs = SortTablesByDependencies(desiredDDLs)
+	desiredDDLs = SortTablesByDependencies(desiredDDLs, defaultSchema)
 
 	currentDDLs, err := ParseDDLs(mode, sqlParser, currentSQL, defaultSchema)
 	if err != nil {
@@ -87,7 +87,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	currentDDLs = FilterViews(currentDDLs, config)
 	currentDDLs = FilterPrivileges(currentDDLs, config)
 
-	currentDDLs = SortTablesByDependencies(currentDDLs)
+	currentDDLs = SortTablesByDependencies(currentDDLs, defaultSchema)
 
 	aggregated, err := aggregateDDLsToSchema(currentDDLs)
 	if err != nil {
@@ -4164,66 +4164,6 @@ func containsRegexpString(strs []string, str string) bool {
 		}
 	}
 	return false
-}
-
-// SortTablesByDependencies sorts CREATE TABLE DDLs by foreign key dependencies
-// to ensure tables are created in the correct order (referenced tables before referencing tables)
-// Also ensures CREATE TYPE statements are placed before CREATE TABLE statements that use them
-func SortTablesByDependencies(ddls []DDL) []DDL {
-	// Extract CREATE TABLE DDLs, CREATE TYPE DDLs, and other DDLs
-	var createTables []*CreateTable
-	var createTypes []*Type
-	var otherDDLs []DDL
-
-	for _, ddl := range ddls {
-		if ct, ok := ddl.(*CreateTable); ok {
-			createTables = append(createTables, ct)
-		} else if typ, ok := ddl.(*Type); ok {
-			createTypes = append(createTypes, typ)
-		} else {
-			otherDDLs = append(otherDDLs, ddl)
-		}
-	}
-
-	// If there are no or only one CREATE TABLE, no sorting needed
-	if len(createTables) <= 1 {
-		return ddls
-	}
-
-	// Build dependency graph
-	tableDependencies := make(map[string][]string)
-	for _, ct := range createTables {
-		tableName := ct.table.name
-		// Extract foreign key dependencies
-		deps := []string{}
-		for _, fk := range ct.table.foreignKeys {
-			if fk.referenceName != "" && fk.referenceName != tableName {
-				deps = append(deps, fk.referenceName)
-			}
-		}
-		tableDependencies[tableName] = deps
-	}
-
-	sorted := topologicalSort(createTables, tableDependencies, func(ct *CreateTable) string {
-		return ct.table.name
-	})
-
-	// If circular dependency detected, keep original order
-	if len(sorted) == 0 {
-		return ddls
-	}
-
-	// Rebuild the DDL list with CREATE TYPEs first, then sorted CREATE TABLEs, then other DDLs
-	var result []DDL
-	for _, typ := range createTypes {
-		result = append(result, typ)
-	}
-	for _, ct := range sorted {
-		result = append(result, ct)
-	}
-	result = append(result, otherDDLs...)
-
-	return result
 }
 
 // generateDropTableDDLsWithDependencies generates DROP TABLE statements in the correct order
