@@ -1,14 +1,3 @@
-# Test cases for dependency ordering issues
-# These tests demonstrate scenarios where correct dependency ordering is critical
-# If views/types are created in the wrong order, PostgreSQL will reject the DDL
-
-# ============================================================================
-# View → View Dependencies
-# ============================================================================
-
-# Simple view depending on another view
-# This test ensures views are created in dependency order:
-# users table → active_users view → active_user_ids view
 ViewDependsOnView_Simple:
   desired: |
     CREATE TABLE users (
@@ -21,9 +10,7 @@ ViewDependsOnView_Simple:
     CREATE VIEW active_user_ids AS
       SELECT id FROM active_users;
 
-# View chain (3 levels deep)
-# Tests: products table → available_products view → expensive_products view → expensive_product_ids view
-ViewDependsOnView_Chain:
+ViewDependsOnView_ThreeLevelChain:
   desired: |
     CREATE TABLE products (
       id integer PRIMARY KEY,
@@ -38,8 +25,6 @@ ViewDependsOnView_Chain:
     CREATE VIEW expensive_product_ids AS
       SELECT id FROM expensive_products;
 
-# Multiple views joining other views
-# Tests dependency resolution when views reference multiple other views
 ViewDependsOnView_MultipleJoins:
   desired: |
     CREATE TABLE orders (
@@ -61,8 +46,6 @@ ViewDependsOnView_MultipleJoins:
       FROM order_summary o
       JOIN item_summary i ON o.id = i.order_id;
 
-# Materialized view depending on regular view
-# Tests: sales table → daily_sales view → monthly_sales materialized view
 ViewDependsOnView_MaterializedOnRegular:
   desired: |
     CREATE TABLE sales (
@@ -79,8 +62,6 @@ ViewDependsOnView_MaterializedOnRegular:
       FROM daily_sales
       GROUP BY DATE_TRUNC('month', sale_date);
 
-# View with aggregation based on another aggregated view
-# Tests complex dependency chain with aggregations
 ViewDependsOnView_AggregationChain:
   desired: |
     CREATE TABLE transactions (
@@ -98,12 +79,6 @@ ViewDependsOnView_AggregationChain:
       WHERE total > 1000
       ORDER BY total DESC;
 
-# ============================================================================
-# Cross-Schema Dependencies
-# ============================================================================
-
-# View in one schema referencing table in another schema
-# Tests: schemas created → core.users table → reporting.user_list view
 CrossSchemaDependency_ViewToTable:
   desired: |
     CREATE SCHEMA core;
@@ -115,9 +90,7 @@ CrossSchemaDependency_ViewToTable:
     CREATE VIEW reporting.user_list AS
       SELECT id, username FROM core.users;
 
-# Complex cross-schema dependencies (schema A → schema B → schema C)
-# Tests: schemas → base.raw_events table → derived.processed_events view → analytics.event_summary view
-CrossSchemaDependency_Complex:
+CrossSchemaDependency_ViewChainAcrossThreeSchemas:
   desired: |
     CREATE SCHEMA base;
     CREATE SCHEMA derived;
@@ -133,9 +106,7 @@ CrossSchemaDependency_Complex:
       FROM derived.processed_events
       GROUP BY event_type;
 
-# View referencing table and view from different schemas
-# Tests mixed cross-schema dependencies
-CrossSchemaDependency_MixedReferences:
+CrossSchemaDependency_ViewReferencingTableAndViewFromDifferentSchemas:
   desired: |
     CREATE SCHEMA data;
     CREATE SCHEMA staging;
@@ -157,13 +128,7 @@ CrossSchemaDependency_MixedReferences:
       FROM staging.orders o
       JOIN staging.premium_customers c ON o.customer_id = c.id;
 
-# ============================================================================
-# Updating existing views with dependencies
-# ============================================================================
-
-# Recreating a view that other views depend on
-# This tests that when we update a base view, dependent views must be handled correctly
-ViewDependsOnView_UpdateBaseView:
+ViewDependsOnView_UpdateBaseViewAffectingDependentViews:
   current: |
     CREATE TABLE products (
       id integer PRIMARY KEY,
@@ -188,17 +153,3 @@ ViewDependsOnView_UpdateBaseView:
   output: |
     ALTER TABLE "public"."products" ADD COLUMN "category" text;
     CREATE OR REPLACE VIEW "public"."cheap_products" AS select id, name, category from products where price < 50;
-
-# Circular view dependencies cannot be created (unlike circular FK dependencies)
-# This test is commented out because:
-# 1. The topological sort detects the cycle and falls back to original order
-# 2. DDL generation succeeds (it just uses the original order)
-# 3. The error only occurs during execution when trying to CREATE VIEW v1 (v2 doesn't exist yet)
-# 4. The test framework expects errors during generation, not execution
-# Unlike circular FKs (which can be handled by creating tables first, then adding FKs),
-# circular view dependencies are fundamentally impossible to create.
-# ViewDependsOnView_CircularDependency:
-#   desired: |
-#     CREATE TABLE base (id integer PRIMARY KEY);
-#     CREATE VIEW v1 AS SELECT * FROM v2;
-#     CREATE VIEW v2 AS SELECT * FROM v1;
