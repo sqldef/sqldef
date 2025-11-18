@@ -108,10 +108,10 @@ CrossSchemaDependency_ViewChainAcrossThreeSchemas:
 
 CrossSchemaDependency_ViewReferencingTableAndViewFromDifferentSchemas:
   desired: |
-    CREATE SCHEMA data;
+    CREATE SCHEMA app_data;
     CREATE SCHEMA staging;
     CREATE SCHEMA reports;
-    CREATE TABLE data.customers (
+    CREATE TABLE app_data.customers (
       id integer PRIMARY KEY,
       name text,
       tier text
@@ -122,7 +122,7 @@ CrossSchemaDependency_ViewReferencingTableAndViewFromDifferentSchemas:
       amount numeric(10,2)
     );
     CREATE VIEW staging.premium_customers AS
-      SELECT id, name FROM data.customers WHERE tier = 'premium';
+      SELECT id, name FROM app_data.customers WHERE tier = 'premium';
     CREATE VIEW reports.premium_orders AS
       SELECT o.id, c.name, o.amount
       FROM staging.orders o
