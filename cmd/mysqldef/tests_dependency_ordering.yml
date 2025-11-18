@@ -1,0 +1,35 @@
+# Test cases for dependency ordering issues in MySQL
+# These tests verify that views are created in the correct dependency order
+
+# ============================================================================
+# View → View Dependencies
+# ============================================================================
+
+# Simple view depending on another view
+ViewDependsOnView_Simple:
+  desired: |
+    CREATE TABLE users (
+      id int PRIMARY KEY,
+      name varchar(100),
+      active tinyint(1)
+    );
+    CREATE VIEW active_users AS
+      SELECT id, name FROM users WHERE active = 1;
+    CREATE VIEW active_user_ids AS
+      SELECT id FROM active_users;
+
+# View chain (3 levels deep)
+ViewDependsOnView_Chain:
+  desired: |
+    CREATE TABLE products (
+      id int PRIMARY KEY,
+      name varchar(100),
+      price decimal(10,2),
+      available tinyint(1)
+    );
+    CREATE VIEW available_products AS
+      SELECT id, name, price FROM products WHERE available = 1;
+    CREATE VIEW expensive_products AS
+      SELECT id, name FROM available_products WHERE price > 100;
+    CREATE VIEW expensive_product_ids AS
+      SELECT id FROM expensive_products;

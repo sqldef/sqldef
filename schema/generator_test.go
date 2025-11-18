@@ -147,12 +147,12 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			input:    `select jsonb_extract_path_text(payload, VARIADIC ARRAY['data', 'user', 'name']) from events`,
 			expected: `select jsonb_extract_path_text(payload, 'data', 'user', 'name') from events`,
 		},
-		// Non-PostgreSQL modes should not normalize
+		// MySQL should normalize column qualifiers (MySQL adds database.table.column when storing views)
 		{
-			name:     "MySQL: no normalization",
+			name:     "MySQL: normalize table qualifiers in SELECT",
 			mode:     GeneratorModeMysql,
 			input:    `SELECT users.id, users.name FROM users`,
-			expected: `select users.id, users.name from users`,
+			expected: `select id, name from users`,
 		},
 		{
 			name:     "SQLite3: no normalization",

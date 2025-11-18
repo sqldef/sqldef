@@ -1,0 +1,111 @@
+# Test cases for dependency ordering issues in SQL Server
+# These tests verify that views are created in the correct dependency order
+
+# ============================================================================
+# View → View Dependencies
+# ============================================================================
+
+# Simple view depending on another view
+ViewDependsOnView_Simple:
+  desired: |
+    CREATE TABLE users (
+      id int PRIMARY KEY,
+      name nvarchar(100),
+      active bit
+    );
+    CREATE VIEW active_users AS
+      SELECT id, name FROM users WHERE active = 1;
+    CREATE VIEW active_user_ids AS
+      SELECT id FROM active_users;
+
+# View chain (3 levels deep)
+ViewDependsOnView_Chain:
+  desired: |
+    CREATE TABLE products (
+      id int PRIMARY KEY,
+      name nvarchar(100),
+      price decimal(10,2),
+      available bit
+    );
+    CREATE VIEW available_products AS
+      SELECT id, name, price FROM products WHERE available = 1;
+    CREATE VIEW expensive_products AS
+      SELECT id, name FROM available_products WHERE price > 100;
+    CREATE VIEW expensive_product_ids AS
+      SELECT id FROM expensive_products;
+
+# Multiple views joining other views
+ViewDependsOnView_MultipleJoins:
+  desired: |
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      total decimal(10,2)
+    );
+    CREATE TABLE order_items (
+      id int PRIMARY KEY,
+      order_id int,
+      quantity int
+    );
+    CREATE VIEW order_summary AS
+      SELECT id, user_id, total FROM orders;
+    CREATE VIEW item_summary AS
+      SELECT id, order_id, quantity FROM order_items;
+    CREATE VIEW complete_order_view AS
+      SELECT o.id, o.user_id, o.total, i.quantity
+      FROM order_summary o
+      JOIN item_summary i ON o.id = i.order_id;
+
+# View with aggregation depending on another view
+ViewDependsOnView_Aggregation:
+  desired: |
+    CREATE TABLE sales (
+      id int PRIMARY KEY,
+      product_id int,
+      amount decimal(10,2),
+      sale_date date
+    );
+    CREATE VIEW daily_sales AS
+      SELECT product_id, sale_date, SUM(amount) as total
+      FROM sales
+      GROUP BY product_id, sale_date;
+    CREATE VIEW product_totals AS
+      SELECT product_id, SUM(total) as grand_total
+      FROM daily_sales
+      GROUP BY product_id;
+
+# ============================================================================
+# Cross-Schema Dependencies
+# ============================================================================
+# Note: Cross-schema tests are disabled for MSSQL because MSSQL doesn't export schemas
+# in ExportDDLs(), which causes idempotency test failures. This is a pre-existing MSSQL
+# limitation unrelated to the dependency ordering implementation.
+
+# # View in one schema referencing table in another schema
+# CrossSchemaDependency_ViewToTable:
+#   desired: |
+#     CREATE SCHEMA core;
+#     CREATE SCHEMA reporting;
+#     CREATE TABLE core.users (
+#       id int PRIMARY KEY,
+#       username nvarchar(100)
+#     );
+#     CREATE VIEW reporting.user_list AS
+#       SELECT id, username FROM core.users;
+
+# # Complex cross-schema dependencies
+# CrossSchemaDependency_ViewChain:
+#   desired: |
+#     CREATE SCHEMA base;
+#     CREATE SCHEMA derived;
+#     CREATE SCHEMA analytics;
+#     CREATE TABLE base.raw_events (
+#       id int PRIMARY KEY,
+#       event_type nvarchar(50)
+#     );
+#     CREATE VIEW derived.processed_events AS
+#       SELECT id, event_type FROM base.raw_events WHERE event_type IS NOT NULL;
+#     CREATE VIEW analytics.event_summary AS
+#       SELECT event_type, COUNT(*) as count
+#       FROM derived.processed_events
+#       GROUP BY event_type;
