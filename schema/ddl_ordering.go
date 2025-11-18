@@ -1,69 +1,100 @@
 package schema
 
 import (
+	"sort"
+
 	"github.com/sqldef/sqldef/v3/parser"
 )
 
-// topologicalSort performs a topological sort on items based on their dependencies using
-// depth-first search (DFS). It returns the sorted items in dependency order, or an empty
-// slice if a circular dependency is detected.
+// topologicalSort performs a stable topological sort on items based on their dependencies
+// using Kahn's algorithm (BFS-based). It returns the sorted items in dependency order,
+// or an empty slice if a circular dependency is detected.
 //
-// The algorithm uses DFS with three-color marking (unvisited, visiting, visited) to detect
-// cycles and ensure each node is processed only once.
+// The algorithm is stable: when multiple items have no dependencies between them
+// (independent items), they are output in their original input order. This ensures
+// deterministic and predictable output.
+//
+// Time complexity: O(V + E) where V is the number of items and E is the number of dependencies.
 func topologicalSort[T any](items []T, dependencies map[string][]string, getID func(T) string) []T {
-	var sorted []T
-	visited := make(map[string]bool)
-	visiting := make(map[string]bool)
+	// Build item map and track original indices for stable sorting
 	itemMap := make(map[string]T)
+	itemIndices := make(map[string]int)
+	inDegree := make(map[string]int)
+	dependents := make(map[string][]string)
 
-	// Build item map for quick lookup
-	for _, item := range items {
+	for i, item := range items {
 		id := getID(item)
 		itemMap[id] = item
+		itemIndices[id] = i
+		inDegree[id] = 0
+		dependents[id] = []string{}
 	}
 
-	// DFS visit function
-	var visit func(string) bool
-	visit = func(id string) bool {
-		if visiting[id] {
-			// Circular dependency detected
-			return false
-		}
-		if visited[id] {
-			return true
-		}
-
-		visiting[id] = true
-
-		// Visit dependencies first
-		for _, dep := range dependencies[id] {
-			// Only visit if the dependency is in our current set of items
-			if _, exists := itemMap[dep]; exists {
-				if !visit(dep) {
-					// Circular dependency - abandon sort
-					return false
-				}
-			}
-		}
-
-		visiting[id] = false
-		visited[id] = true
-
-		if item, exists := itemMap[id]; exists {
-			sorted = append(sorted, item)
-		}
-		return true
-	}
-
-	// Visit all items
+	// Calculate in-degrees (number of dependencies each item has)
+	// and build reverse dependency map (dependents) for efficiency
+	// Use items order (not map iteration) for deterministic behavior
 	for _, item := range items {
 		id := getID(item)
-		if !visited[id] {
-			if !visit(id) {
-				// Circular dependency detected, return empty slice
-				return []T{}
+		for _, dep := range dependencies[id] {
+			if _, exists := itemMap[dep]; exists {
+				inDegree[id]++
+				dependents[dep] = append(dependents[dep], id)
 			}
 		}
+	}
+
+	// Priority queue: nodes with zero in-degree, maintained in sorted order by original index
+	// Using a simple slice here; items are kept sorted by original index for stable output
+	type queueItem struct {
+		id    string
+		index int
+	}
+	var queue []queueItem
+
+	// Initialize queue with all nodes that have no dependencies
+	for _, item := range items {
+		id := getID(item)
+		if inDegree[id] == 0 {
+			queue = append(queue, queueItem{id, itemIndices[id]})
+		}
+	}
+
+	// Sort initial queue by original index to ensure stable output
+	sort.Slice(queue, func(i, j int) bool {
+		return queue[i].index < queue[j].index
+	})
+
+	var sorted []T
+
+	for len(queue) > 0 {
+		// Process node with smallest original index (maintains input order for independent items)
+		curr := queue[0]
+		queue = queue[1:]
+
+		sorted = append(sorted, itemMap[curr.id])
+
+		// Reduce in-degree for all items that depend on curr
+		for _, dependentID := range dependents[curr.id] {
+			inDegree[dependentID]--
+			if inDegree[dependentID] == 0 {
+				// This item is now ready (all its dependencies have been processed)
+				// Insert into queue maintaining sorted order by original index
+				newItem := queueItem{dependentID, itemIndices[dependentID]}
+
+				// Binary search to find insertion position
+				pos := sort.Search(len(queue), func(i int) bool {
+					return queue[i].index > newItem.index
+				})
+
+				// Insert at position while maintaining order
+				queue = append(queue[:pos], append([]queueItem{newItem}, queue[pos:]...)...)
+			}
+		}
+	}
+
+	// Check if all nodes were processed (if not, there's a circular dependency)
+	if len(sorted) != len(items) {
+		return []T{} // Circular dependency detected
 	}
 
 	return sorted
