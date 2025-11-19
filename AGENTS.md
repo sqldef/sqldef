@@ -25,7 +25,7 @@ Build all the sqldef commands (`mysqldef`, `psqldef`, `sqlite3def`, `mssqldef`):
 make build
 ```
 
-The executable binaries will be placed in the `build/$os-$arch$/` directory.
+The executable binaries will be placed in the `build/$os-$arch/` directory.
 
 ### The Parser
 
@@ -56,16 +56,16 @@ To have trial and error locally, you can use the following commands:
 
 ```sh
 # psqldef
-build/$os-$arch$/psqldef psqldef_test [args...]
+build/$os-$arch/psqldef psqldef_test [args...]
 
 # mysqldef
-build/$os-$arch$/mysqldef mysqldef_test [args...]
+build/$os-$arch/mysqldef mysqldef_test [args...]
 
 # mssqldef (password is mandatory)
-build/$os-$arch$/mssqldef -PPassw0rd mssqldef_test [args...]
+build/$os-$arch/mssqldef -PPassw0rd mssqldef_test [args...]
 
 # sqlite3def
-build/$os-$arch$/sqlite3def sqlite3def.db [args...]
+build/$os-$arch/sqlite3def sqlite3def.db [args...]
 ```
 
 ## Running Tests
@@ -77,28 +77,6 @@ For development iterations, use these commands to run tests:
 ```sh
 make test # it will take 5 minutes to run
 ```
-
-### Run example scripts
-
-Test all offline mode examples (no database required):
-
-```sh
-make test-example-offline
-```
-
-This runs `./example/run-offline.sh` for all tools (psqldef, mysqldef, sqlite3def, mssqldef). These examples demonstrate offline mode (file-to-file comparison) without requiring database connections.
-
-Test all database mode examples:
-
-```sh
-make test-example
-```
-
-This runs `./example/run.sh` for all tools. You need to have the respective databases running:
-- `./example/run.sh psqldef` - requires PostgreSQL
-- `./example/run.sh mysqldef` - requires MySQL/MariaDB
-- `./example/run.sh sqlite3def` - requires SQLite3 (no server needed)
-- `./example/run.sh mssqldef` - requires SQL Server
 
 ### Run tests for specific `*def` tools
 
@@ -148,55 +126,57 @@ The test files use a YAML format where each top-level key is a test case name, a
 
 ```yaml
 TestCaseName:
-  # Current schema state (optional, defaults to empty schema)
+  # Current schema state (defaults to empty schema)
   current: |
     CREATE TABLE users (
       id bigint NOT NULL
     );
 
-  # Desired schema state (optional, defaults to empty schema)
+  # Desired schema state (defaults to empty schema)
   desired: |
     CREATE TABLE users (
       id bigint NOT NULL,
       name text
     );
 
-  # Expected DDL output (optional, defaults to 'desired' if not specified)
+  # Expected DDL output (defaults to 'desired' if not specified)
   output: |
     ALTER TABLE "public"."users" ADD COLUMN "name" text;
 
-  # Expected error message (optional, defaults to no error)
+  # Expected error message (defaults to no error)
   error: "specific error message"
 
-  # Minimum database version required (optional)
+  # Minimum database version required
   min_version: "10.0"
 
-  # Maximum database version supported (optional)
+  # Maximum database version supported
   max_version: "14.0"
 
-  # Database flavor requirement (optional, mysqldef only)
+  # Database flavor requirement (mysqldef only)
   # Either "mariadb" or "mysql"
   flavor: "mariadb"
 
-  # User to run the test as (optional)
+  # User to run the test as
   user: "testuser"
 
-  # Managed roles for privilege testing (optional, psqldef only)
+  # Managed roles for privilege testing
   managed_roles:
     - readonly_user
     - app_user
 
-  # Whether to enable DROP/REVOKE operations (optional, defaults to true)
+  # Whether to enable DROP/REVOKE operations (defaults to true)
   enable_drop: false
 
-  # Use offline testing to test features in proprietary SQL dialects such as Aurora DSQL
+  # Use offline testing only for proprietary SQL dialects such as Aurora DSQL (defaults to false)
   offline: true
 
-  # Configuration options for the test (optional)
+  # Configuration options for the test
   config:
     # Create indexes concurrently (psqldef only)
     create_index_concurrently: true
 ```
+
+NOTE: `offline: true` should not be used for "tier-1" databases: MySQL, MariaDB, PostgreSQL, SQLite3, SQL Server.
 
 ### Best Practices
 

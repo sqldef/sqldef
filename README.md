@@ -195,6 +195,29 @@ $ go test ./cmd/*def
 $ go test ./cmd/mysqldef -run=TestApply/CreateTable
 ```
 
+### Run example scripts
+
+Test all database mode examples:
+
+```sh
+make test-example
+```
+
+This runs `./example/run.sh` for all tools. You need to have the respective databases running:
+- `./example/run.sh psqldef` - requires PostgreSQL
+- `./example/run.sh mysqldef` - requires MySQL/MariaDB
+- `./example/run.sh sqlite3def` - requires SQLite3 (no server needed)
+- `./example/run.sh mssqldef` - requires SQL Server
+
+Test all offline mode examples (no database required):
+
+```sh
+make test-example-offline
+```
+
+This runs `./example/run-offline.sh` for all tools (psqldef, mysqldef, sqlite3def, mssqldef). These examples demonstrate offline mode (file-to-file comparison) without requiring database connections.
+
+
 ## Contributing
 
 Please file a pull request if you have a feature request.

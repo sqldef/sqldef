@@ -1,0 +1,155 @@
+ViewDependsOnView_Simple:
+  desired: |
+    CREATE TABLE users (
+      id integer PRIMARY KEY,
+      name text,
+      active boolean
+    );
+    CREATE VIEW active_users AS
+      SELECT id, name FROM users WHERE active = true;
+    CREATE VIEW active_user_ids AS
+      SELECT id FROM active_users;
+
+ViewDependsOnView_ThreeLevelChain:
+  desired: |
+    CREATE TABLE products (
+      id integer PRIMARY KEY,
+      name text,
+      price numeric(10,2),
+      available boolean
+    );
+    CREATE VIEW available_products AS
+      SELECT id, name, price FROM products WHERE available = true;
+    CREATE VIEW expensive_products AS
+      SELECT id, name FROM available_products WHERE price > 100;
+    CREATE VIEW expensive_product_ids AS
+      SELECT id FROM expensive_products;
+
+ViewDependsOnView_MultipleJoins:
+  desired: |
+    CREATE TABLE orders (
+      id integer PRIMARY KEY,
+      user_id integer,
+      total numeric(10,2)
+    );
+    CREATE TABLE order_items (
+      id integer PRIMARY KEY,
+      order_id integer,
+      quantity integer
+    );
+    CREATE VIEW order_summary AS
+      SELECT id, user_id, total FROM orders;
+    CREATE VIEW item_summary AS
+      SELECT id, order_id, quantity FROM order_items;
+    CREATE VIEW complete_order_view AS
+      SELECT o.id, o.user_id, o.total, i.quantity
+      FROM order_summary o
+      JOIN item_summary i ON o.id = i.order_id;
+
+ViewDependsOnView_MaterializedOnRegular:
+  desired: |
+    CREATE TABLE sales (
+      id integer PRIMARY KEY,
+      amount numeric(10,2),
+      sale_date date
+    );
+    CREATE VIEW daily_sales AS
+      SELECT sale_date, SUM(amount) as total
+      FROM sales
+      GROUP BY sale_date;
+    CREATE MATERIALIZED VIEW monthly_sales AS
+      SELECT DATE_TRUNC('month', sale_date) as month, SUM(total) as monthly_total
+      FROM daily_sales
+      GROUP BY DATE_TRUNC('month', sale_date);
+
+ViewDependsOnView_AggregationChain:
+  desired: |
+    CREATE TABLE transactions (
+      id integer PRIMARY KEY,
+      category text,
+      amount numeric(10,2),
+      created_at timestamp
+    );
+    CREATE VIEW category_totals AS
+      SELECT category, SUM(amount) as total
+      FROM transactions
+      GROUP BY category;
+    CREATE VIEW top_categories AS
+      SELECT category FROM category_totals
+      WHERE total > 1000
+      ORDER BY total DESC;
+
+CrossSchemaDependency_ViewToTable:
+  desired: |
+    CREATE SCHEMA core;
+    CREATE SCHEMA reporting;
+    CREATE TABLE core.users (
+      id integer PRIMARY KEY,
+      username text
+    );
+    CREATE VIEW reporting.user_list AS
+      SELECT id, username FROM core.users;
+
+CrossSchemaDependency_ViewChainAcrossThreeSchemas:
+  desired: |
+    CREATE SCHEMA base;
+    CREATE SCHEMA derived;
+    CREATE SCHEMA analytics;
+    CREATE TABLE base.raw_events (
+      id integer PRIMARY KEY,
+      event_type text
+    );
+    CREATE VIEW derived.processed_events AS
+      SELECT id, event_type FROM base.raw_events WHERE event_type IS NOT NULL;
+    CREATE VIEW analytics.event_summary AS
+      SELECT event_type, COUNT(*) as count
+      FROM derived.processed_events
+      GROUP BY event_type;
+
+CrossSchemaDependency_ViewReferencingTableAndViewFromDifferentSchemas:
+  desired: |
+    CREATE SCHEMA app_data;
+    CREATE SCHEMA staging;
+    CREATE SCHEMA reports;
+    CREATE TABLE app_data.customers (
+      id integer PRIMARY KEY,
+      name text,
+      tier text
+    );
+    CREATE TABLE staging.orders (
+      id integer PRIMARY KEY,
+      customer_id integer,
+      amount numeric(10,2)
+    );
+    CREATE VIEW staging.premium_customers AS
+      SELECT id, name FROM app_data.customers WHERE tier = 'premium';
+    CREATE VIEW reports.premium_orders AS
+      SELECT o.id, c.name, o.amount
+      FROM staging.orders o
+      JOIN staging.premium_customers c ON o.customer_id = c.id;
+
+ViewDependsOnView_UpdateBaseViewAffectingDependentViews:
+  current: |
+    CREATE TABLE products (
+      id integer PRIMARY KEY,
+      name text,
+      price numeric(10,2)
+    );
+    CREATE VIEW cheap_products AS
+      SELECT id, name FROM products WHERE price < 50;
+    CREATE VIEW cheap_product_names AS
+      SELECT name FROM cheap_products;
+  desired: |
+    CREATE TABLE products (
+      id integer PRIMARY KEY,
+      name text,
+      price numeric(10,2),
+      category text
+    );
+    CREATE VIEW cheap_products AS
+      SELECT id, name, category FROM products WHERE price < 50;
+    CREATE VIEW cheap_product_names AS
+      SELECT name FROM cheap_products;
+  output: |
+    ALTER TABLE "public"."products" ADD COLUMN "category" text;
+    CREATE OR REPLACE VIEW "public"."cheap_products" AS select id, name, category from products where price < 50;
