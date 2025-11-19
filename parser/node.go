@@ -294,7 +294,8 @@ func (node *Union) Format(buf *nodeBuffer) {
 
 // With represents a WITH clause (Common Table Expressions)
 type With struct {
-	CTEs []*CommonTableExpr
+	CTEs      []*CommonTableExpr
+	Recursive bool
 }
 
 // Format formats the node.
@@ -302,7 +303,11 @@ func (node *With) Format(buf *nodeBuffer) {
 	if node == nil || len(node.CTEs) == 0 {
 		return
 	}
-	buf.Printf("WITH ")
+	if node.Recursive {
+		buf.Printf("WITH RECURSIVE ")
+	} else {
+		buf.Printf("WITH ")
+	}
 	for i, cte := range node.CTEs {
 		if i > 0 {
 			buf.Printf(", ")
@@ -1459,6 +1464,7 @@ const (
 	NaturalJoinStr      = "natural join"
 	NaturalLeftJoinStr  = "natural left join"
 	NaturalRightJoinStr = "natural right join"
+	CrossJoinStr        = "cross join"
 )
 
 // Format formats the node.

@@ -479,3 +479,90 @@ ViewWithAnyArray:
 MaterializedViewWithAnyArray:
   desired: |
     CREATE MATERIALIZED VIEW any_array AS SELECT 1 WHERE 1 = ANY(ARRAY[1, 4, 5]);
+
+ViewWithRecursiveCTE:
+  desired: |
+    CREATE VIEW test_view AS
+    WITH RECURSIVE cte AS (
+      SELECT 1 AS n
+      UNION ALL
+      SELECT cte_1.n + 1
+      FROM cte cte_1
+      WHERE cte_1.n < 10
+    )
+    SELECT cte.n
+    FROM cte;
+
+ViewWithRecursiveHierarchy:
+  desired: |
+    CREATE TABLE employees (
+      employee_id int PRIMARY KEY,
+      manager_id int
+    );
+    CREATE VIEW employee_hierarchy AS
+    WITH RECURSIVE subordinates AS (
+      SELECT e.employee_id, e.manager_id, 1 AS emp_level
+      FROM employees e
+      WHERE e.manager_id IS NULL
+      UNION ALL
+      SELECT e.employee_id, e.manager_id, s.emp_level + 1
+      FROM employees e
+      INNER JOIN subordinates s ON s.employee_id = e.manager_id
+    )
+    SELECT employee_id, manager_id, emp_level FROM subordinates;
+
+MaterializedViewWithRecursiveCTE:
+  desired: |
+    CREATE MATERIALIZED VIEW numbers AS
+    WITH RECURSIVE cte AS (
+      SELECT 1 AS n
+      UNION ALL
+      SELECT cte_1.n + 1
+      FROM cte cte_1
+      WHERE cte_1.n < 100
+    )
+    SELECT cte.n
+    FROM cte;
+
+ViewWithMultipleCTEsAndPostgreSQLFunctions:
+  desired: |
+    CREATE TABLE products (
+      id bigint PRIMARY KEY,
+      release_year int NOT NULL,
+      release_month int NOT NULL
+    );
+    CREATE TABLE events (
+      id bigint PRIMARY KEY,
+      event_date date NOT NULL
+    );
+    CREATE TABLE product_events (
+      event_id bigint NOT NULL,
+      product_id bigint NOT NULL,
+      PRIMARY KEY (event_id, product_id)
+    );
+    CREATE VIEW v_product_summary AS
+    WITH
+    event_counts AS (
+      SELECT
+        p.id AS product_id,
+        e.id AS event_id,
+        count(DISTINCT pe.event_id) AS count_until_event
+      FROM products p
+      CROSS JOIN events e
+      LEFT JOIN product_events pe ON p.id = pe.product_id
+      GROUP BY p.id, e.id
+    ),
+    release_dates AS (
+      SELECT
+        p.id AS product_id,
+        e.id AS event_id,
+        make_date(p.release_year, p.release_month, 1) AS release_date
+      FROM products p
+      CROSS JOIN events e
+    )
+    SELECT
+      rd.product_id,
+      rd.event_id,
+      format('%s-%s', rd.release_date, ec.count_until_event) AS summary
+    FROM release_dates rd
+    LEFT JOIN event_counts ec ON rd.product_id = ec.product_id;

@@ -953,7 +953,8 @@ func normalizeWith(with *parser.With, mode GeneratorMode) *parser.With {
 	}
 
 	return &parser.With{
-		CTEs: normalizedCTEs,
+		CTEs:      normalizedCTEs,
+		Recursive: with.Recursive,
 	}
 }
 

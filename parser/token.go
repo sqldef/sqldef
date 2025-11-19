@@ -368,6 +368,7 @@ var keywords = map[string]int{
 	"read_write":             UNUSED,
 	"readuncommitted":        READUNCOMMITTED,
 	"real":                   REAL,
+	"recursive":              RECURSIVE,
 	"references":             REFERENCES,
 	"regexp":                 REGEXP,
 	"release":                UNUSED,
