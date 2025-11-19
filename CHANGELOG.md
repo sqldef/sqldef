@@ -1,3 +1,8 @@
+## [v3.6.7](https://github.com/sqldef/sqldef/compare/v3.6.6...v3.6.7) - 2025-11-19
+- update docs (esp. offline: true should not used for tier-1 DBs) by @gfx in https://github.com/sqldef/sqldef/pull/950
+- Fix DDLs ordering in diff generation by @gfx in https://github.com/sqldef/sqldef/pull/952
+- psqldef: add WITH RECURSIVE CTE support (continuing from #949) by @gfx in https://github.com/sqldef/sqldef/pull/953
+
 ## [v3.6.6](https://github.com/sqldef/sqldef/compare/v3.6.5...v3.6.6) - 2025-11-15
 - parser.y: fix and refactor insert or replace rule by @gfx in https://github.com/sqldef/sqldef/pull/946
 - fix ARRAY normalization in view definition by @gfx in https://github.com/sqldef/sqldef/pull/948
