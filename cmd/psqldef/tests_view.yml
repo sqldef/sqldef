@@ -501,15 +501,15 @@ ViewWithRecursiveHierarchy:
     );
     CREATE VIEW employee_hierarchy AS
     WITH RECURSIVE subordinates AS (
-      SELECT employee_id, manager_id, 1 AS emp_level
-      FROM employees
-      WHERE manager_id IS NULL
+      SELECT e.employee_id, e.manager_id, 1 AS emp_level
+      FROM employees e
+      WHERE e.manager_id IS NULL
       UNION ALL
       SELECT e.employee_id, e.manager_id, s.emp_level + 1
       FROM employees e
       INNER JOIN subordinates s ON s.employee_id = e.manager_id
     )
-    SELECT * FROM subordinates;
+    SELECT employee_id, manager_id, emp_level FROM subordinates;
 
 MaterializedViewWithRecursiveCTE:
   desired: |
@@ -546,7 +546,7 @@ ViewWithMultipleCTEsAndPostgreSQLFunctions:
       SELECT
         p.id AS product_id,
         e.id AS event_id,
-        COUNT(DISTINCT pe.event_id) AS count_until_event
+        count(DISTINCT pe.event_id) AS count_until_event
       FROM products p
       CROSS JOIN events e
       LEFT JOIN product_events pe ON p.id = pe.product_id

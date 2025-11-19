@@ -8865,7 +8865,7 @@ yydefault:
 		yyDollar = yyS[yypt-2 : yypt+1]
 //line parser/parser.y:4530
 		{
-			yyVAL.str = JoinStr
+			yyVAL.str = CrossJoinStr
 		}
 	case 719:
 		yyDollar = yyS[yypt-1 : yypt+1]

@@ -757,9 +757,101 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 
 // normalizeTableExprs normalizes FROM clause table expressions
 func normalizeTableExprs(exprs parser.TableExprs, mode GeneratorMode) parser.TableExprs {
-	// For now, return as-is since table name normalization is less critical
-	// We mainly care about column references in the SELECT and WHERE clauses
-	return exprs
+	if exprs == nil {
+		return nil
+	}
+
+	normalized := make(parser.TableExprs, len(exprs))
+	for i, expr := range exprs {
+		normalized[i] = normalizeTableExpr(expr, mode)
+	}
+	return normalized
+}
+
+// normalizeTableExpr normalizes a single table expression
+func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode) parser.TableExpr {
+	if expr == nil {
+		return nil
+	}
+
+	switch e := expr.(type) {
+	case *parser.AliasedTableExpr:
+		// Normalize the nested expression recursively
+		return &parser.AliasedTableExpr{
+			Expr:       e.Expr,
+			Partitions: e.Partitions,
+			As:         e.As,
+			TableHints: e.TableHints,
+			IndexHints: e.IndexHints,
+		}
+	case *parser.ParenTableExpr:
+		// Normalize parenthesized table expressions by unwrapping them
+		// PostgreSQL may add/remove parentheses in different contexts (e.g., UNION ALL branches)
+		// For comparison purposes, we normalize by removing the parentheses
+		normalized := normalizeTableExprs(e.Exprs, mode)
+		// If there's only one expression, unwrap it
+		if len(normalized) == 1 {
+			return normalized[0]
+		}
+		// Otherwise keep the parentheses
+		return &parser.ParenTableExpr{
+			Exprs: normalized,
+		}
+	case *parser.JoinTableExpr:
+		// Recursively normalize both sides of the join
+		return &parser.JoinTableExpr{
+			LeftExpr:  normalizeTableExpr(e.LeftExpr, mode),
+			Join:      e.Join,
+			RightExpr: normalizeTableExpr(e.RightExpr, mode),
+			Condition: normalizeJoinCondition(e.Condition, mode),
+		}
+	default:
+		return expr
+	}
+}
+
+// normalizeJoinCondition normalizes a join condition
+func normalizeJoinCondition(cond parser.JoinCondition, mode GeneratorMode) parser.JoinCondition {
+	// Normalize the ON expression but preserve table qualifiers
+	// Table qualifiers in join conditions are handled by stripTableQualifiers later
+	// We still need to normalize other aspects like parentheses, case, etc.
+	if cond.On != nil {
+		cond.On = normalizeJoinOnExpr(cond.On, mode)
+	}
+	return cond
+}
+
+// normalizeJoinOnExpr normalizes join ON expressions while preserving table qualifiers
+func normalizeJoinOnExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
+	if expr == nil {
+		return nil
+	}
+
+	switch e := expr.(type) {
+	case *parser.ParenExpr:
+		// Unwrap unnecessary parentheses
+		return normalizeJoinOnExpr(e.Expr, mode)
+	case *parser.AndExpr:
+		return &parser.AndExpr{
+			Left:  normalizeJoinOnExpr(e.Left, mode),
+			Right: normalizeJoinOnExpr(e.Right, mode),
+		}
+	case *parser.OrExpr:
+		return &parser.OrExpr{
+			Left:  normalizeJoinOnExpr(e.Left, mode),
+			Right: normalizeJoinOnExpr(e.Right, mode),
+		}
+	case *parser.ComparisonExpr:
+		return &parser.ComparisonExpr{
+			Left:     normalizeJoinOnExpr(e.Left, mode),
+			Operator: e.Operator,
+			Right:    normalizeJoinOnExpr(e.Right, mode),
+		}
+	default:
+		// For other expression types (ColName, literals, etc.), return as-is
+		// to preserve table qualifiers
+		return expr
+	}
 }
 
 // normalizeWhere normalizes WHERE clause

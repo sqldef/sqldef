@@ -4528,7 +4528,7 @@ inner_join:
   }
 | CROSS JOIN
   {
-    $$ = JoinStr
+    $$ = CrossJoinStr
   }
 
 straight_join:
