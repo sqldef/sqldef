@@ -116,8 +116,7 @@ test-example:
 
 test-cov:
 	rm -rf coverage && mkdir -p coverage
-	GOCOVERDIR=$(shell pwd)/coverage go test $(GOTESTFLAGS) -count=1 ./...
-	go tool covdata textfmt -i=coverage -o coverage.out
+	go test $(GOTESTFLAGS) -coverprofile=coverage.out -coverpkg=./... -count=1 ./...
 	@grep -v -e "parser.y" -e "parser/parser.go" -e "testutils.go" coverage.out > coverage_filtered.out
 	@go tool cover -func=coverage_filtered.out
 	@rm coverage_filtered.out
