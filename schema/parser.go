@@ -407,7 +407,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		foreignKey := ForeignKey{
 			constraintName:    constraintName,
 			indexColumns:      indexColumns,
-			referenceName:     normalizedTableName(mode, parser.TableName{Name: parser.NewTableIdent(parsedCol.Type.References)}, defaultSchema),
+			referenceName:     normalizedTableName(mode, parser.TableName{Name: parser.NewTableIdent(parsedCol.Type.References, false)}, defaultSchema),
 			referenceColumns:  referenceColumns,
 			onDelete:          parser.String(parsedCol.Type.ReferenceOnDelete),
 			onUpdate:          parser.String(parsedCol.Type.ReferenceOnUpdate),

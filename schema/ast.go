@@ -423,7 +423,7 @@ func (t *Table) PrimaryKey() *Index {
 	for _, column := range t.columns {
 		if column.keyOption == ColumnKeyPrimary {
 			primaryColumns = append(primaryColumns, IndexColumn{
-				columnExpr: &parser.ColName{Name: parser.NewColIdent(column.name)},
+				columnExpr: &parser.ColName{Name: parser.NewColIdent(column.name, false)},
 			})
 		}
 	}

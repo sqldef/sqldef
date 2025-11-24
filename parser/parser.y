@@ -45,6 +45,7 @@ func setDDL(yylex any, ddl *DDL) {
   ins                      *Insert
   byt                      byte
   str                      string
+  identStr                 struct { val string; quoted bool }
   strs                     []string
   selectExprs              SelectExprs
   selectExpr               SelectExpr
@@ -143,7 +144,8 @@ func setDDL(yylex any, ddl *DDL) {
 %left <str> JOIN STRAIGHT_JOIN LEFT RIGHT INNER OUTER CROSS NATURAL USE FORCE
 %left <str> ON USING
 %token <empty> '(' ',' ')'
-%token <str> ID HEX STRING UNICODE_STRING INTEGRAL FLOAT HEXNUM VALUE_ARG LIST_ARG COMMENT COMMENT_KEYWORD BIT_LITERAL
+%token <identStr> ID
+%token <str> HEX STRING UNICODE_STRING INTEGRAL FLOAT HEXNUM VALUE_ARG LIST_ARG COMMENT COMMENT_KEYWORD BIT_LITERAL
 %token <str> NULL TRUE FALSE COLUMNS_UPDATED
 %token <str> OFF
 %token <str> MAX
@@ -602,7 +604,7 @@ create_statement:
       NewName: $7,
       IndexSpec: &IndexSpec{
         Name: $5,
-        Type: NewColIdent(""),
+        Type: NewColIdent("", false),
         Unique: bool($2[0]),
         Clustered: bool($2[1]),
         Async: $4 == byte(2),
@@ -623,8 +625,8 @@ create_statement:
       Table: $6,
       NewName: $6,
       IndexSpec: &IndexSpec{
-        Name: NewColIdent(""),
-        Type: NewColIdent(""),
+        Name: NewColIdent("", false),
+        Type: NewColIdent("", false),
         Unique: bool($2[0]),
         Clustered: bool($2[1]),
         Async: $4 == byte(2),
@@ -689,7 +691,7 @@ create_statement:
       NewName: $6,
       IndexSpec: &IndexSpec{
         Name: $4,
-        Type: NewColIdent(""),
+        Type: NewColIdent("", false),
         Unique: false,
         Clustered: false,
         ColumnStore: true,
@@ -709,7 +711,7 @@ create_statement:
       NewName: $6,
       IndexSpec: &IndexSpec{
         Name: $4,
-        Type: NewColIdent("VECTOR"),
+        Type: NewColIdent("VECTOR", false),
         Vector: true,
         Options: $10,
       },
@@ -1913,29 +1915,29 @@ transaction_char:
   }
 | READ WRITE
   {
-    $$ = &SetExpr{Name: NewColIdent("tx_read_only"), Expr: NewIntVal("0")}
+    $$ = &SetExpr{Name: NewColIdent("tx_read_only", false), Expr: NewIntVal("0")}
   }
 | READ ONLY
   {
-    $$ = &SetExpr{Name: NewColIdent("tx_read_only"), Expr: NewIntVal("1")}
+    $$ = &SetExpr{Name: NewColIdent("tx_read_only", false), Expr: NewIntVal("1")}
   }
 
 isolation_level:
   REPEATABLE READ
   {
-    $$ = &SetExpr{Name: NewColIdent("tx_isolation"), Expr: NewStrVal("repeatable read")}
+    $$ = &SetExpr{Name: NewColIdent("tx_isolation", false), Expr: NewStrVal("repeatable read")}
   }
 | READ COMMITTED
   {
-    $$ = &SetExpr{Name: NewColIdent("tx_isolation"), Expr: NewStrVal("read committed")}
+    $$ = &SetExpr{Name: NewColIdent("tx_isolation", false), Expr: NewStrVal("read committed")}
   }
 | READ UNCOMMITTED
   {
-    $$ = &SetExpr{Name: NewColIdent("tx_isolation"), Expr: NewStrVal("read uncommitted")}
+    $$ = &SetExpr{Name: NewColIdent("tx_isolation", false), Expr: NewStrVal("read uncommitted")}
   }
 | SERIALIZABLE
   {
-    $$ = &SetExpr{Name: NewColIdent("tx_isolation"), Expr: NewStrVal("serializable")}
+    $$ = &SetExpr{Name: NewColIdent("tx_isolation", false), Expr: NewStrVal("serializable")}
   }
 
 sql_security:
@@ -2386,7 +2388,7 @@ exclude_definition:
   {
     $$ = &ExclusionDefinition{
       ConstraintName: $2,
-      IndexType: NewColIdent(""), // Default index type
+      IndexType: NewColIdent("", false), // Default index type
       Exclusions: $5,
       Where: NewWhere(WhereStr, $7),
     }
@@ -2440,7 +2442,7 @@ exclude_element:
     // Handle all other operators and GIST-specific operators
     $$ = ExclusionPair{
       Expression: $1,
-      Operator: string($3.val),
+      Operator: $3.String(),
     }
   }
 
@@ -2451,17 +2453,17 @@ column_definition:
   }
 | non_reserved_keyword column_definition_type
   {
-    $$ = &ColumnDefinition{Name: NewColIdent($1), Type: $2}
+    $$ = &ColumnDefinition{Name: NewColIdent($1, false), Type: $2}
   }
 /* For SQLite3 https://www.sqlite.org/lang_keywords.html */
 | STRING column_definition_type
   {
-    $$ = &ColumnDefinition{Name: NewColIdent($1), Type: $2}
+    $$ = &ColumnDefinition{Name: NewColIdent($1, false), Type: $2}
   }
 /* SQLite3 */
 | ROWID column_definition_type
   {
-    $$ = &ColumnDefinition{Name: NewColIdent($1), Type: $2}
+    $$ = &ColumnDefinition{Name: NewColIdent($1, false), Type: $2}
   }
 
 column_type:
@@ -2478,7 +2480,7 @@ column_type:
 // TODO: avoid reduce-reduce conflicts here
 | sql_id
   {
-    $$ = ColumnType{Type: $1.val}
+    $$ = ColumnType{Type: $1.String()}
   }
 | STRING '.' STRING
   {
@@ -2486,7 +2488,7 @@ column_type:
   }
 | ID '.' ID
   {
-    $$ = ColumnType{Type: $1 + "." + $3}
+    $$ = ColumnType{Type: $1.val + "." + $3.val}
   }
 
 column_definition_type:
@@ -2923,7 +2925,7 @@ sequence_opt:
   }
 | sequence_opt OWNED BY table_id '.' reserved_sql_id
   {
-    $1.OwnedBy = string($4.v)+"."+string($6.val)
+    $1.OwnedBy = $4.String() + "." + $6.String()
     $$ = $1
   }
 
@@ -3391,10 +3393,10 @@ max_length_opt:
   }
 | '(' ID ')'
   {
-    if !strings.EqualFold($2, "max") {
-      yylex.Error(fmt.Sprintf("syntax error around '%s'", $2))
+    if !strings.EqualFold($2.val, "max") {
+      yylex.Error(fmt.Sprintf("syntax error around '%s'", $2.val))
     }
-    $$ = NewStrVal($2)
+    $$ = NewStrVal($2.val)
   }
 
 
@@ -3460,7 +3462,7 @@ charset_opt:
   }
 | CHARACTER SET ID
   {
-    $$ = $3
+    $$ = $3.val
   }
 | CHARACTER SET BINARY
   {
@@ -3478,7 +3480,7 @@ collate_opt:
   }
 | COLLATE ID
   {
-    $$ = $2
+    $$ = $2.val
   }
 
 index_definition:
@@ -3523,7 +3525,7 @@ mssql_index_option_list:
 index_option:
   USING ID
   {
-    $$ = &IndexOption{Name: $1, Value: NewStrVal($2)}
+    $$ = &IndexOption{Name: $1, Value: NewStrVal($2.val)}
   }
 | KEY_BLOCK_SIZE equal_opt INTEGRAL
   {
@@ -3584,7 +3586,7 @@ index_option:
   }
 | ID '=' vector_option_value
   {
-    id := strings.Trim(strings.ToLower($1), "`")
+    id := strings.Trim(strings.ToLower($1.val), "`")
     $$ = &IndexOption{Name: id, Value: $3}
   }
 
@@ -3650,47 +3652,47 @@ index_partition_opt:
 index_info:
   SPATIAL index_or_key ID
   {
-    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3), Spatial: true, Unique: false}
+    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3.val, $3.quoted), Spatial: true, Unique: false}
   }
 | FULLTEXT index_or_key ID
   {
-    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3), Fulltext: true}
+    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3.val, $3.quoted), Fulltext: true}
   }
 | FULLTEXT ID
   {
-    $$ = &IndexInfo{Type: $1, Name: NewColIdent($2), Fulltext: true}
+    $$ = &IndexInfo{Type: $1, Name: NewColIdent($2.val, $2.quoted), Fulltext: true}
   }
 | VECTOR INDEX ID
   {
-    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3), Vector: true}
+    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3.val, $3.quoted), Vector: true}
   }
 | VECTOR INDEX
   {
-    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent(""), Vector: true}
+    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent("", false), Vector: true}
   }
 | VECTOR KEY ID
   {
-    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3), Vector: true}
+    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3.val, $3.quoted), Vector: true}
   }
 | UNIQUE index_or_key ID
   {
-    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3), Unique: true}
+    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3.val, $3.quoted), Unique: true}
   }
 | UNIQUE ID
   {
-    $$ = &IndexInfo{Type: $1, Name: NewColIdent($2), Unique: true}
+    $$ = &IndexInfo{Type: $1, Name: NewColIdent($2.val, $2.quoted), Unique: true}
   }
 | UNIQUE INDEX
   {
-    $$ = &IndexInfo{Type: $1, Name: NewColIdent(""), Unique: true}
+    $$ = &IndexInfo{Type: $1, Name: NewColIdent("", false), Unique: true}
   }
 | index_or_key ID clustered_opt
   {
-    $$ = &IndexInfo{Type: $1, Name: NewColIdent($2), Unique: false, Clustered: $3}
+    $$ = &IndexInfo{Type: $1, Name: NewColIdent($2.val, $2.quoted), Unique: false, Clustered: $3}
   }
 | index_or_key ID UNIQUE clustered_opt
   {
-    $$ = &IndexInfo{Type: $1, Name: NewColIdent($2), Unique: true, Clustered: $4}
+    $$ = &IndexInfo{Type: $1, Name: NewColIdent($2.val, $2.quoted), Unique: true, Clustered: $4}
   }
 
 index_or_key:
@@ -3726,12 +3728,12 @@ index_column:
   }
 | non_reserved_keyword length_opt asc_desc_opt
   {
-    $$ = IndexColumn{Column: NewColIdent($1), Length: $2, Direction: $3}
+    $$ = IndexColumn{Column: NewColIdent($1, false), Length: $2, Direction: $3}
   }
 /* For PostgreSQL */
 | KEY length_opt
   {
-    $$ = IndexColumn{Column: NewColIdent($1), Length: $2}
+    $$ = IndexColumn{Column: NewColIdent($1, false), Length: $2}
   }
 | sql_id operator_class
   {
@@ -3739,7 +3741,7 @@ index_column:
   }
 | non_reserved_keyword operator_class
   {
-    $$ = IndexColumn{Column: NewColIdent($1), OperatorClass: $2}
+    $$ = IndexColumn{Column: NewColIdent($1, false), OperatorClass: $2}
   }
 | '(' expression ')' asc_desc_opt
   {
@@ -3770,7 +3772,7 @@ foreign_key_definition:
   }
 | foreign_key_without_options ON DELETE reference_option fk_defer_opts
   {
-    $1.OnUpdate = NewColIdent("")
+    $1.OnUpdate = NewColIdent("", false)
     $1.OnDelete = $4
     $1.ConstraintOptions = $5.constraintOpts
     $1.NotForReplication = $5.notForReplication
@@ -3779,7 +3781,7 @@ foreign_key_definition:
 | foreign_key_without_options ON UPDATE reference_option fk_defer_opts
   {
     $1.OnUpdate = $4
-    $1.OnDelete = NewColIdent("")
+    $1.OnDelete = NewColIdent("", false)
     $1.ConstraintOptions = $5.constraintOpts
     $1.NotForReplication = $5.notForReplication
     $$ = $1
@@ -3826,19 +3828,19 @@ foreign_key_without_options:
 reference_option:
   RESTRICT
   {
-    $$ = NewColIdent("RESTRICT")
+    $$ = NewColIdent("RESTRICT", false)
   }
 | CASCADE
   {
-    $$ = NewColIdent("CASCADE")
+    $$ = NewColIdent("CASCADE", false)
   }
 | SET NULL
   {
-    $$ = NewColIdent("SET NULL")
+    $$ = NewColIdent("SET NULL", false)
   }
 | NO ACTION
   {
-    $$ = NewColIdent("NO ACTION")
+    $$ = NewColIdent("NO ACTION", false)
   }
 
 primary_key_definition:
@@ -3855,7 +3857,7 @@ primary_key_definition:
 | PRIMARY KEY clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
   {
     $$ = &IndexDefinition{
-      Info: &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent("PRIMARY"), Primary: true, Unique: true, Clustered: $3},
+      Info: &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent("PRIMARY", false), Primary: true, Unique: true, Clustered: $3},
       Columns: $5,
       Options: $7,
       Partition: $8,
@@ -4044,7 +4046,7 @@ fk_defer_opts:
 
 sql_id_opt:
   {
-    $$ = NewColIdent("")
+    $$ = NewColIdent("", false)
   }
 | sql_id
 
@@ -4065,23 +4067,23 @@ privilege:
   }
 | ALL
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1, false)
   }
 | ALL PRIVILEGES
   {
-    $$ = NewColIdent("ALL")
+    $$ = NewColIdent("ALL", false)
   }
 | REFERENCES
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1, false)
   }
 | TRIGGER
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1, false)
   }
 | TRUNCATE
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1, false)
   }
 
 privilege_list:
@@ -4102,7 +4104,7 @@ grantee:
   }
 | PUBLIC
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1, false)
   }
 
 grantee_list:
@@ -4306,7 +4308,7 @@ col_alias:
   sql_id
 | STRING
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1, false)
   }
 
 over_expression:
@@ -4506,7 +4508,7 @@ as_opt:
 
 as_opt_id:
   {
-    $$ = NewTableIdent("")
+    $$ = NewTableIdent("", false)
   }
 | table_id
   {
@@ -4675,7 +4677,7 @@ default_opt:
   }
 | '(' ID ')'
   {
-    $$ = $2
+    $$ = $2.val
   }
 
 boolean_value:
@@ -5071,7 +5073,7 @@ value_expression:
   }
 | CURRENT_USER
   {
-    $$ = &ColName{Name: NewColIdent($1)}
+    $$ = &ColName{Name: NewColIdent($1, false)}
   }
 
 /*
@@ -5093,11 +5095,11 @@ function_call_generic:
   }
 | LAG '(' select_expression_list ')' over_expression
   {
-    $$ = &FuncExpr{Name: NewColIdent($1), Exprs: $3, Over: $5}
+    $$ = &FuncExpr{Name: NewColIdent($1, false), Exprs: $3, Over: $5}
   }
 | LEAD '(' select_expression_list ')' over_expression
   {
-    $$ = &FuncExpr{Name: NewColIdent($1), Exprs: $3, Over: $5}
+    $$ = &FuncExpr{Name: NewColIdent($1, false), Exprs: $3, Over: $5}
   }
 | table_id '.' reserved_sql_id '(' select_expression_list_opt ')'
   {
@@ -5111,11 +5113,11 @@ function_call_generic:
 function_call_keyword:
   LEFT '(' select_expression_list ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent("left"), Exprs: $3}
+    $$ = &FuncExpr{Name: NewColIdent("left", false), Exprs: $3}
   }
 | RIGHT '(' select_expression_list ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent("right"), Exprs: $3}
+    $$ = &FuncExpr{Name: NewColIdent("right", false), Exprs: $3}
   }
 | CONVERT '(' expression ',' convert_type ')'
   {
@@ -5197,27 +5199,27 @@ function_call_keyword:
   }
 | UUID '(' ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent($1)}
+    $$ = &FuncExpr{Name: NewColIdent($1, false)}
   }
 | NOW '(' ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent($1)}
+    $$ = &FuncExpr{Name: NewColIdent($1, false)}
   }
 | GETDATE '(' ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent($1)}
+    $$ = &FuncExpr{Name: NewColIdent($1, false)}
   }
 | DATE '(' select_expression_list ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent("date"), Exprs: $3}
+    $$ = &FuncExpr{Name: NewColIdent("date", false), Exprs: $3}
   }
 | TIME '(' select_expression_list ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent("time"), Exprs: $3}
+    $$ = &FuncExpr{Name: NewColIdent("time", false), Exprs: $3}
   }
 | TIMESTAMP '(' select_expression_list ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent("timestamp"), Exprs: $3}
+    $$ = &FuncExpr{Name: NewColIdent("timestamp", false), Exprs: $3}
   }
 
 /*
@@ -5228,43 +5230,43 @@ function_call_nonkeyword:
 // for MSSQL
   CURRENT_TIMESTAMP
   {
-    $$ = &ColName{Name: NewColIdent($1)}
+    $$ = &ColName{Name: NewColIdent($1, false)}
   }
 | CURRENT_TIMESTAMP '(' ')'
   {
-    $$ = &FuncExpr{Name:NewColIdent("current_timestamp")}
+    $$ = &FuncExpr{Name:NewColIdent("current_timestamp", false)}
   }
 | UTC_TIMESTAMP func_datetime_precision_opt
   {
-    $$ = &FuncExpr{Name:NewColIdent("utc_timestamp")}
+    $$ = &FuncExpr{Name:NewColIdent("utc_timestamp", false)}
   }
 | UTC_TIME func_datetime_precision_opt
   {
-    $$ = &FuncExpr{Name:NewColIdent("utc_time")}
+    $$ = &FuncExpr{Name:NewColIdent("utc_time", false)}
   }
 | UTC_DATE func_datetime_precision_opt
   {
-    $$ = &FuncExpr{Name:NewColIdent("utc_date")}
+    $$ = &FuncExpr{Name:NewColIdent("utc_date", false)}
   }
 // now
 | LOCALTIME func_datetime_precision_opt
   {
-    $$ = &FuncExpr{Name:NewColIdent("localtime")}
+    $$ = &FuncExpr{Name:NewColIdent("localtime", false)}
   }
 // now
 | LOCALTIMESTAMP func_datetime_precision_opt
   {
-    $$ = &FuncExpr{Name:NewColIdent("localtimestamp")}
+    $$ = &FuncExpr{Name:NewColIdent("localtimestamp", false)}
   }
 // curdate
 | CURRENT_DATE func_datetime_precision_opt
   {
-    $$ = &FuncExpr{Name:NewColIdent("current_date")}
+    $$ = &FuncExpr{Name:NewColIdent("current_date", false)}
   }
 // curtime
 | CURRENT_TIME func_datetime_precision_opt
   {
-    $$ = &FuncExpr{Name:NewColIdent("current_time")}
+    $$ = &FuncExpr{Name:NewColIdent("current_time", false)}
   }
 | TYPECAST simple_convert_type
   {
@@ -5282,19 +5284,19 @@ func_datetime_precision_opt:
 function_call_conflict:
   IF '(' select_expression_list ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent("if"), Exprs: $3}
+    $$ = &FuncExpr{Name: NewColIdent("if", false), Exprs: $3}
   }
 | DATABASE '(' select_expression_list_opt ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent("database"), Exprs: $3}
+    $$ = &FuncExpr{Name: NewColIdent("database", false), Exprs: $3}
   }
 | MOD '(' select_expression_list ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent("mod"), Exprs: $3}
+    $$ = &FuncExpr{Name: NewColIdent("mod", false), Exprs: $3}
   }
 | REPLACE '(' select_expression_list ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent("replace"), Exprs: $3}
+    $$ = &FuncExpr{Name: NewColIdent("replace", false), Exprs: $3}
   }
 | ROW '(' expression_list ')'
   {
@@ -5338,7 +5340,7 @@ match_option:
 charset:
   ID
   {
-    $$ = $1
+    $$ = $1.val
   }
 | STRING
   {
@@ -5356,7 +5358,7 @@ convert_type:
   }
 | CHAR length_opt ID
   {
-    $$ = &ConvertType{Type: $1, Length: $2, Charset: $3}
+    $$ = &ConvertType{Type: $1, Length: $2, Charset: $3.val}
   }
 | DATE
   {
@@ -5615,11 +5617,11 @@ column_name:
   }
 | non_reserved_keyword
   {
-    $$ = &ColName{Name: NewColIdent($1)}
+    $$ = &ColName{Name: NewColIdent($1, false)}
   }
 | VALUE
   {
-    $$ = &ColName{Name: NewColIdent("VALUE")}
+    $$ = &ColName{Name: NewColIdent("VALUE", false)}
   }
 | table_id '.' reserved_sql_id
   {
@@ -5850,11 +5852,11 @@ ins_column:
   }
 | reserved_keyword
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1, false)
   }
 | non_reserved_keyword
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1, false)
   }
 
 on_dup_opt:
@@ -5944,11 +5946,11 @@ set_expression:
 // MySQL extension of triggers
 | NEW '.' reserved_sql_id '=' expression
   {
-    $$ = &SetExpr{Name: NewColIdent("NEW." + $3.val), Expr: $5}
+    $$ = &SetExpr{Name: NewColIdent("NEW." + $3.String(), false), Expr: $5}
   }
 | charset_or_character_set charset_value collate_opt
   {
-    $$ = &SetExpr{Name: NewColIdent($1), Expr: $2}
+    $$ = &SetExpr{Name: NewColIdent($1, false), Expr: $2}
   }
 
 set_option_statement:
@@ -5999,72 +6001,72 @@ ignore_opt:
 sql_id:
   ID
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1.val, $1.quoted)
   }
 
 reserved_sql_id:
   sql_id
 | CHARSET
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1, false)
   }
 | KEY_BLOCK_SIZE
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1, false)
   }
 | VALUE
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1, false)
   }
 | TEXT
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1, false)
   }
 | TINYTEXT
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1, false)
   }
 | MEDIUMTEXT
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1, false)
   }
 | LONGTEXT
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1, false)
   }
 | CITEXT
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1, false)
   }
 | reserved_keyword
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1, false)
   }
 | non_reserved_keyword
   {
-    $$ = NewColIdent($1)
+    $$ = NewColIdent($1, false)
   }
 
 table_id:
   ID
   {
-    $$ = NewTableIdent($1)
+    $$ = NewTableIdent($1.val, $1.quoted)
   }
 | non_reserved_keyword
   {
-    $$ = NewTableIdent($1)
+    $$ = NewTableIdent($1, false)
   }
 /* For SQLite3 https://www.sqlite.org/lang_keywords.html */
 | STRING
   {
-    $$ = NewTableIdent($1)
+    $$ = NewTableIdent($1, false)
   }
 
 reserved_table_id:
   table_id
 | reserved_keyword
   {
-    $$ = NewTableIdent($1)
+    $$ = NewTableIdent($1, false)
   }
 
 deferrable_opt:

@@ -1102,7 +1102,7 @@ type Use struct {
 
 // Format formats the node.
 func (node *Use) Format(buf *nodeBuffer) {
-	if node.DBName.v != "" {
+	if node.DBName.String() != "" {
 		buf.Printf("use %v", node.DBName)
 	} else {
 		buf.Printf("use")
@@ -1400,7 +1400,7 @@ func (node TableName) isEmpty() bool {
 func (node TableName) toViewName() TableName {
 	return TableName{
 		Schema: node.Schema,
-		Name:   NewTableIdent(strings.ToLower(node.Name.v)),
+		Name:   NewTableIdent(strings.ToLower(node.Name.String()), node.Name.Quoted()),
 	}
 }
 
@@ -2477,60 +2477,6 @@ func (node *SuffixExpr) Format(buf *nodeBuffer) {
 	buf.Printf("%v %s", node.Expr, node.Suffix)
 }
 
-// ColIdent is a case insensitive SQL identifier. It will be escaped with
-// backquotes if necessary.
-type ColIdent struct {
-	// This artifact prevents this struct from being compared
-	// with itself. It consumes no space as long as it's not the
-	// last field in the struct.
-	_            [0]struct{ _ []byte }
-	val          string
-	loweredCache string
-}
-
-// NewColIdent makes a new ColIdent.
-func NewColIdent(str string) ColIdent {
-	return ColIdent{
-		val: str,
-	}
-}
-
-// Format formats the node.
-func (node ColIdent) Format(buf *nodeBuffer) {
-	formatID(buf, node.val, node.lowered())
-}
-
-// isEmpty returns true if the name is empty.
-func (node ColIdent) isEmpty() bool {
-	return node.val == ""
-}
-
-// String returns the unescaped column name. It must
-// not be used for SQL generation. Use parser.String
-// instead. The Stringer conformance is for usage
-// in templates.
-func (node ColIdent) String() string {
-	return node.val
-}
-
-// lowered returns a lower-cased column name.
-// This function should generally be used only for optimizing
-// comparisons.
-func (node ColIdent) lowered() string {
-	if node.val == "" {
-		return ""
-	}
-	if node.loweredCache == "" {
-		node.loweredCache = strings.ToLower(node.val)
-	}
-	return node.loweredCache
-}
-
-// equalString performs a case-insensitive compare with str.
-func (node ColIdent) equalString(str string) bool {
-	return strings.EqualFold(node.val, str)
-}
-
 type DeclareType int
 
 const (
@@ -2744,36 +2690,69 @@ func (node *If) Format(buf *nodeBuffer) {
 	buf.Printf("\nend if")
 }
 
-// TableIdent is a case sensitive SQL identifier.
-// Escaped by Format() if necessary.
-type TableIdent struct {
-	v string
+// Ident represents a SQL identifier with its original name and quote status.
+// This is used to track whether an identifier was quoted in the source SQL,
+// which affects case-sensitivity and normalization behavior.
+type Ident struct {
+	name   string
+	quoted bool
 }
 
-// NewTableIdent creates a new TableIdent.
-func NewTableIdent(str string) TableIdent {
-	return TableIdent{v: str}
+// NewIdent creates a new Ident.
+func NewIdent(name string, quoted bool) Ident {
+	return Ident{name: name, quoted: quoted}
 }
 
-// Format formats the node.
-func (node TableIdent) Format(buf *nodeBuffer) {
-	formatID(buf, node.v, strings.ToLower(node.v))
+// String returns the unescaped name.
+func (n Ident) String() string {
+	return n.name
 }
 
-// isEmpty returns true if TabIdent is empty.
-func (node TableIdent) isEmpty() bool {
-	return node.v == ""
+// Quoted returns true if this identifier was originally quoted in the source SQL.
+func (n Ident) Quoted() bool {
+	return n.quoted
 }
 
-// String returns the unescaped table name. It must
-// not be used for SQL generation. Use parser.String
-// instead. The Stringer conformance is for usage
-// in templates.
-func (node TableIdent) String() string {
-	return node.v
+// isEmpty returns true if the name is empty.
+func (n Ident) isEmpty() bool {
+	return n.name == ""
 }
 
-func formatID(buf *nodeBuffer, original, lowered string) {
+// Format formats the node for SQL generation.
+func (n Ident) Format(buf *nodeBuffer) {
+	formatID(buf, n.name)
+}
+
+// equalString performs a case-insensitive compare with str.
+func (n Ident) equalString(str string) bool {
+	return strings.EqualFold(n.name, str)
+}
+
+// lowered returns a lower-cased name.
+// Deprecated: Use schema.NormalizeIdentifierName for database-aware normalization instead.
+func (n Ident) lowered() string {
+	return strings.ToLower(n.name)
+}
+
+// TableIdent is a SQL identifier for table names.
+// It is an alias to Ident for backward compatibility.
+type TableIdent = Ident
+
+// NewTableIdent creates a new table identifier.
+func NewTableIdent(str string, quoted bool) TableIdent {
+	return NewIdent(str, quoted)
+}
+
+// ColIdent is a SQL identifier for column names.
+// It is an alias to Ident for backward compatibility.
+type ColIdent = Ident
+
+// NewColIdent creates a new column identifier.
+func NewColIdent(str string, quoted bool) ColIdent {
+	return NewIdent(str, quoted)
+}
+
+func formatID(buf *nodeBuffer, original string) {
 	isDbSystemVariable := false
 	if len(original) > 1 && original[:2] == "@@" {
 		isDbSystemVariable = true
