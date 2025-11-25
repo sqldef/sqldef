@@ -369,7 +369,6 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue
 			}
 
-			// Check if index exists in desired state using quote-aware comparison
 			indexExistsInDesired := g.findIndexByIdent(desiredTable.indexes, index.name) != nil
 			// Also check foreign key index names (these are plain strings)
 			if !indexExistsInDesired {
@@ -402,7 +401,6 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Check columns.
 		for _, column := range currentTable.columns {
-			// Use quote-aware comparison to find the column in desired table
 			if g.findColumnByIdent(desiredTable.columns, column.name.Name) != nil {
 				continue // Column is expected to exist.
 			}
@@ -456,11 +454,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted views
 	for _, currentView := range g.currentViews {
-		// Use quote-aware comparison to find the view in desired
 		if g.findViewByIdent(g.desiredViews, currentView.nameIdent) != nil {
 			continue
 		}
-		// Use quote-aware escaping for the view name
 		viewName := g.escapeViewName(currentView)
 		if currentView.viewType == "MATERIALIZED VIEW" {
 			ddls = append(ddls, fmt.Sprintf("DROP MATERIALIZED VIEW %s", viewName))
@@ -471,7 +467,6 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted domains
 	for _, currentDomain := range g.currentDomains {
-		// Use quote-aware comparison to find the domain in desired
 		if g.findDomainByIdent(g.desiredDomains, currentDomain.nameIdent) != nil {
 			continue
 		}
@@ -588,7 +583,6 @@ func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, desiredTabl
 
 	// For DROP COLUMN, use smart escaping: only quote if the column name needs quoting
 	// (has uppercase letters, which indicates it was originally quoted)
-	// Use desiredTable for proper quote-aware table name escaping
 	columnName := g.escapeColumnNameForDrop(column)
 	ddl := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableNameForTable(desiredTable), columnName)
 	return append(ddls, ddl)
@@ -650,7 +644,6 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 		}
 
-		// Use quote-aware comparison to find the current column
 		currentColumn := g.findColumnByIdent(currentTable.columns, desiredColumn.name.Name)
 		if currentColumn == nil || !currentColumn.autoIncrement {
 			// We may not be able to add AUTO_INCREMENT yet. It will be added after adding keys (primary or not) at the "Add new AUTO_INCREMENT" place.
@@ -1059,7 +1052,6 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	// and if primary key changed
 	if g.mode == GeneratorModeMysql {
 		for _, currentColumn := range currentTable.columns {
-			// Use quote-aware comparison to find the desired column
 			desiredColumn := g.findColumnByIdent(desired.table.columns, currentColumn.name.Name)
 			if currentColumn.autoIncrement && (primaryKeysChanged || desiredColumn == nil || !desiredColumn.autoIncrement) {
 				currentColumn.autoIncrement = false
@@ -1212,7 +1204,6 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	// Add new AUTO_INCREMENT after adding index and primary key
 	if g.mode == GeneratorModeMysql {
 		for _, desiredColumn := range desired.table.columns {
-			// Use quote-aware comparison to find the current column
 			currentColumn := g.findColumnByIdent(currentTable.columns, desiredColumn.name.Name)
 			if desiredColumn.autoIncrement && (primaryKeysChanged || currentColumn == nil || !currentColumn.autoIncrement) {
 				definition, err := g.generateColumnDefinition(*desiredColumn, false)
@@ -1600,7 +1591,6 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View) ([]string, error) {
 	var ddls []string
 
-	// Use quote-aware comparison to find the current view
 	currentView := g.findViewByIdent(g.currentViews, desiredView.nameIdent)
 	if currentView == nil {
 		// View not found, add view.
@@ -1733,9 +1723,6 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName string, desiredTrig
 func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 	ddls := []string{}
 
-	// Use quote-aware comparison with schema matching to find the type.
-	// This handles both case-insensitive matching for unquoted names and
-	// types with the same base name in different schemas.
 	if currentType := g.findTypeBySchemaAndIdent(g.currentTypes, desired); currentType != nil {
 		// Type found. Add values if not present.
 		if currentType.enumValues != nil && len(currentType.enumValues) < len(desired.enumValues) {
@@ -2004,9 +1991,7 @@ func (g *Generator) generateDataType(column Column) string {
 		typeName = column.references + typeName
 	}
 
-	// For custom types (domains, etc.) that were originally quoted, use quote-aware escaping
-	// This preserves the quoting for case-sensitive types like domains.
-	// Only apply this when the TypeIdent was explicitly quoted in the original source.
+	// Preserve quoting for case-sensitive types like domains.
 	if column.typeIdent.Quoted {
 		typeName = g.escapeSQLIdent(column.typeIdent)
 	}
@@ -2525,7 +2510,6 @@ func (g *Generator) escapeTableNameForTable(table *Table) string {
 		if schemaName == "" {
 			schemaName = g.defaultSchema
 		}
-		// Schema is always quoted; table name uses quote-aware logic
 		return g.escapeSQLName(schemaName) + "." + g.escapeSQLIdent(table.name.Name)
 	default:
 		return g.escapeSQLIdent(table.name.Name)
@@ -2556,7 +2540,6 @@ func (g *Generator) escapeViewName(view *View) string {
 		} else {
 			schemaName = schemaTable[0]
 		}
-		// Schema is always quoted; view name uses quote-aware logic
 		return g.escapeSQLName(schemaName) + "." + g.escapeSQLIdent(view.nameIdent)
 	default:
 		return g.escapeSQLIdent(view.nameIdent)
@@ -2706,7 +2689,6 @@ func (g *Generator) qualifiedTableNamesEqual(a, b QualifiedTableName) bool {
 	if !strings.EqualFold(aSchemaName, bSchemaName) {
 		return false
 	}
-	// Compare table names using quote-aware comparison
 	return g.identsEqual(a.Name, b.Name)
 }
 
@@ -3223,7 +3205,6 @@ func (g *Generator) findIndexByIdent(indexes []Index, name Ident) *Index {
 }
 
 // findIndexByName finds an index by its name string (legacy, case-sensitive comparison).
-// Use findIndexByIdent for quote-aware comparison.
 func findIndexByName(indexes []Index, name string) *Index {
 	for _, index := range indexes {
 		if index.name.Name == name {
@@ -3417,7 +3398,6 @@ func (g *Generator) findTypeByIdent(types []*Type, ident Ident) *Type {
 // This handles both exact matches and case-insensitive matches for unquoted names.
 func (g *Generator) findTypeBySchemaAndIdent(types []*Type, desiredType *Type) *Type {
 	for _, createType := range types {
-		// Compare using quote-aware identifier equality for the base name
 		if !g.identsEqual(createType.nameIdent, desiredType.nameIdent) {
 			continue
 		}
@@ -3564,7 +3544,6 @@ func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
-	// Use quote-aware comparison for column types when in quote-aware mode
 	useLegacy := true
 	if g.config.LegacyIgnoreQuotes != nil {
 		useLegacy = *g.config.LegacyIgnoreQuotes
