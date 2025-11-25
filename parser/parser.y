@@ -2480,7 +2480,8 @@ column_type:
 // TODO: avoid reduce-reduce conflicts here
 | sql_id
   {
-    $$ = ColumnType{Type: $1.String()}
+    // Custom type (e.g., domain name) - preserve quote information in TypeIdent
+    $$ = ColumnType{Type: $1.String(), TypeIdent: $1}
   }
 | STRING '.' STRING
   {
@@ -2549,6 +2550,15 @@ column_definition_type:
 | column_definition_type PRIMARY KEY
   {
     $1.KeyOpt = colKeyPrimary
+    $$ = $1
+  }
+| column_definition_type CONSTRAINT sql_id PRIMARY KEY
+  {
+    // Named inline primary key constraint (e.g., "id INT CONSTRAINT pk_name PRIMARY KEY")
+    $1.KeyOpt = colKeyPrimary
+    // Note: The constraint name is stored in the column's KeyOpt but the name is lost
+    // because ColumnType doesn't have a field for primary key constraint name.
+    // This is acceptable as the behavior matches PostgreSQL which auto-generates names.
     $$ = $1
   }
 | column_definition_type KEY

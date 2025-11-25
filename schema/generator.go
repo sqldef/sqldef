@@ -163,7 +163,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				// Table not found. Check if it's a rename from another table.
 				if desired.table.renamedFrom != "" {
 					oldTableName := g.normalizeOldTableName(desired.table.renamedFrom, desired.table.name)
-					oldTable := findTableByName(g.currentTables, oldTableName)
+					oldTable := findTableByNameString(g.currentTables, oldTableName)
 					if oldTable != nil {
 						// Found the old table, generate rename DDL
 						renameDDL := g.generateRenameTableDDL(oldTableName, desired.table.name)
@@ -316,7 +316,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Remove dropped tables from currentTables
 		for _, table := range tablesToDrop {
-			g.currentTables = removeTableByName(g.currentTables, table.name)
+			g.currentTables = removeTableByName(g.currentTables, table.name.String())
 		}
 	}
 
@@ -358,7 +358,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue // Exclusion constraint is expected to exist.
 			}
 
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(exclusion.constraintName)))
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(currentTable), g.escapeSQLName(exclusion.constraintName)))
 		}
 
 		// Check indexes
@@ -369,15 +369,15 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue
 			}
 
-			if slices.Contains(convertIndexesToIndexNames(desiredTable.indexes), index.name) ||
-				slices.Contains(convertForeignKeysToIndexNames(desiredTable.foreignKeys), index.name) {
+			if slices.Contains(convertIndexesToIndexNames(desiredTable.indexes), index.name.Name) ||
+				slices.Contains(convertForeignKeysToIndexNames(desiredTable.foreignKeys), index.name.Name) {
 				continue // Index is expected to exist.
 			}
 
 			// Check if this index was renamed (don't drop if it was renamed)
 			isRenamed := false
 			for _, desiredIndex := range desiredTable.indexes {
-				if desiredIndex.renamedFrom == index.name {
+				if desiredIndex.renamedFrom == index.name.Name {
 					isRenamed = true
 					break
 				}
@@ -397,14 +397,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Check columns.
 		for _, column := range currentTable.columns {
-			if _, exist := desiredTable.columns[column.name]; exist {
+			if _, exist := desiredTable.columns[column.name.String()]; exist {
 				continue // Column is expected to exist.
 			}
 
 			// Check if this column is being renamed (not dropped)
 			isRenamed := false
 			for _, desiredColumn := range desiredTable.columns {
-				if desiredColumn.renamedFrom == column.name {
+				if desiredColumn.renamedFrom == column.name.String() {
 					isRenamed = true
 					break
 				}
@@ -412,7 +412,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 			if !isRenamed {
 				// Column is obsoleted. Drop column.
-				columnDDLs := g.generateDDLsForAbsentColumn(currentTable, column.name)
+				columnDDLs := g.generateDDLsForAbsentColumn(currentTable, column)
 				ddls = append(ddls, columnDDLs...)
 				// TODO: simulate to remove column from `currentTable.columns`?
 			}
@@ -423,7 +423,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if slices.Contains(convertPolicyNames(desiredTable.policies), policy.name) {
 				continue
 			}
-			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLName(policy.name), g.escapeTableName(currentTable.name)))
+			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLName(policy.name), g.escapeTableNameForTable(currentTable)))
 		}
 
 		// Check checks.
@@ -441,9 +441,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 			switch g.mode {
 			case GeneratorModePostgres, GeneratorModeMssql, GeneratorModeSQLite3:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(check.constraintName)))
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(currentTable), g.escapeSQLName(check.constraintName)))
 			case GeneratorModeMysql:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(currentTable.name), g.escapeSQLName(check.constraintName)))
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableNameForTable(currentTable), g.escapeSQLName(check.constraintName)))
 			}
 		}
 	}
@@ -565,20 +565,18 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	return ddls, nil
 }
 
-func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, columnName string) []string {
+func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, column *Column) []string {
 	ddls := []string{}
 
 	// Only MSSQL has column default constraints. They need to be deleted before dropping the column.
 	if g.mode == GeneratorModeMssql {
-		for _, column := range currentTable.columns {
-			if column.name == columnName && column.defaultDef != nil && column.defaultDef.constraintName != "" {
-				ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(column.defaultDef.constraintName))
-				ddls = append(ddls, ddl)
-			}
+		if column.defaultDef != nil && column.defaultDef.constraintName != "" {
+			ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(currentTable), g.escapeSQLName(column.defaultDef.constraintName))
+			ddls = append(ddls, ddl)
 		}
 	}
 
-	ddl := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableName(currentTable.name), g.escapeSQLName(columnName))
+	ddl := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableNameForTable(currentTable), g.escapeColumnName(column))
 	return append(ddls, ddl)
 }
 
@@ -600,11 +598,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		if desiredColumn.renamedFrom != "" {
 			if _, conflictExists := desired.table.columns[desiredColumn.renamedFrom]; conflictExists {
 				return ddls, fmt.Errorf("cannot rename column '%s' to '%s' - column '%s' still exists",
-					desiredColumn.renamedFrom, desiredColumn.name, desiredColumn.renamedFrom)
+					desiredColumn.renamedFrom, desiredColumn.name.String(), desiredColumn.renamedFrom)
 			}
 		}
 
-		currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
+		currentColumn := findColumnByName(currentTable.columns, desiredColumn.name.String())
 		if currentColumn == nil || !currentColumn.autoIncrement {
 			// We may not be able to add AUTO_INCREMENT yet. It will be added after adding keys (primary or not) at the "Add new AUTO_INCREMENT" place.
 			// prevent to
@@ -622,16 +620,16 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				switch g.mode {
 				case GeneratorModePostgres:
 					ddl := fmt.Sprintf("ALTER TABLE %s RENAME COLUMN %s TO %s",
-						g.escapeTableName(desired.table.name),
-						g.escapeSQLName(renameFromColumn.name),
-						g.escapeSQLName(desiredColumn.name))
+						g.escapeTableNameForTable(&desired.table),
+						g.escapeSQLName(renameFromColumn.name.String()),
+						g.escapeColumnName(&desiredColumn))
 					ddls = append(ddls, ddl)
 
 					// After renaming, check if type/constraints need to be changed
 					if !g.haveSameDataType(*renameFromColumn, desiredColumn) {
 						ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s",
-							g.escapeTableName(desired.table.name),
-							g.escapeSQLName(desiredColumn.name),
+							g.escapeTableNameForTable(&desired.table),
+							g.escapeColumnName(&desiredColumn),
 							g.generateDataType(desiredColumn))
 						ddls = append(ddls, ddl)
 					}
@@ -639,12 +637,12 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					if !isPrimaryKey(*renameFromColumn, currentTable) {
 						if g.notNull(*renameFromColumn) && !g.notNull(desiredColumn) {
 							ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL",
-								g.escapeTableName(desired.table.name),
-								g.escapeSQLName(desiredColumn.name)))
+								g.escapeTableNameForTable(&desired.table),
+								g.escapeColumnName(&desiredColumn)))
 						} else if !g.notNull(*renameFromColumn) && g.notNull(desiredColumn) {
 							ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL",
-								g.escapeTableName(desired.table.name),
-								g.escapeSQLName(desiredColumn.name)))
+								g.escapeTableNameForTable(&desired.table),
+								g.escapeColumnName(&desiredColumn)))
 						}
 					}
 				case GeneratorModeMysql:
@@ -654,14 +652,18 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						return ddls, err
 					}
 					ddl := fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s",
-						g.escapeTableName(desired.table.name),
-						g.escapeSQLName(renameFromColumn.name),
+						g.escapeTableNameForTable(&desired.table),
+						g.escapeSQLName(renameFromColumn.name.String()),
 						definition)
 					ddls = append(ddls, ddl)
 				case GeneratorModeMssql:
 					// SQL Server uses sp_rename
 					// For sp_rename, we need to handle schema prefixes properly
-					schema, tableName := splitTableName(desired.table.name, g.defaultSchema)
+					schema := desired.table.name.Schema.Name
+					if schema == "" {
+						schema = g.defaultSchema
+					}
+					tableName := desired.table.name.Name.Name
 					var tableRef string
 					if schema != "" && schema != g.defaultSchema {
 						// Only include schema if it's not the default
@@ -672,7 +674,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					ddl := fmt.Sprintf("EXEC sp_rename '%s.%s', '%s', 'COLUMN'",
 						tableRef,
 						renameFromColumn.name,
-						desiredColumn.name)
+						desiredColumn.name.String())
 					ddls = append(ddls, ddl)
 
 					// After renaming, check if type/constraints need to be changed
@@ -711,25 +713,25 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 						// 1. Add new column with desired name and definition
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s",
-							g.escapeTableName(desired.table.name),
+							g.escapeTableNameForTable(&desired.table),
 							definition))
 
 						// 2. Copy data from old column to new column
 						ddls = append(ddls, fmt.Sprintf("UPDATE %s SET %s = %s",
-							g.escapeTableName(desired.table.name),
-							g.escapeSQLName(desiredColumn.name),
-							g.escapeSQLName(renameFromColumn.name)))
+							g.escapeTableNameForTable(&desired.table),
+							g.escapeColumnName(&desiredColumn),
+							g.escapeSQLName(renameFromColumn.name.String())))
 
 						// 3. Drop the old column
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s",
-							g.escapeTableName(desired.table.name),
-							g.escapeSQLName(renameFromColumn.name)))
+							g.escapeTableNameForTable(&desired.table),
+							g.escapeSQLName(renameFromColumn.name.String())))
 					} else {
 						// Simple rename without type change
 						ddl := fmt.Sprintf("ALTER TABLE %s RENAME COLUMN %s TO %s",
-							g.escapeTableName(desired.table.name),
-							g.escapeSQLName(renameFromColumn.name),
-							g.escapeSQLName(desiredColumn.name))
+							g.escapeTableNameForTable(&desired.table),
+							g.escapeSQLName(renameFromColumn.name.String()),
+							g.escapeColumnName(&desiredColumn))
 						ddls = append(ddls, ddl)
 					}
 				default:
@@ -738,7 +740,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					if err != nil {
 						return ddls, err
 					}
-					ddl := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableName(desired.table.name), definition)
+					ddl := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableNameForTable(&desired.table), definition)
 					ddls = append(ddls, ddl)
 				}
 			} else {
@@ -752,15 +754,15 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				var ddl string
 				switch g.mode {
 				case GeneratorModeMssql:
-					ddl = fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), definition)
+					ddl = fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableNameForTable(&desired.table), definition)
 				default:
-					ddl = fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableName(desired.table.name), definition)
+					ddl = fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableNameForTable(&desired.table), definition)
 				}
 
 				if g.mode == GeneratorModeMysql {
 					after := " FIRST"
 					if desiredColumn.position > 0 {
-						after = " AFTER " + g.escapeSQLName(desiredColumns[desiredColumn.position-1].name)
+						after = " AFTER " + g.escapeSQLName(desiredColumns[desiredColumn.position-1].name.String())
 					}
 					ddl += after
 				}
@@ -801,20 +803,20 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 
 					if useDropAdd {
-						ddl1 := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name))
-						ddl2 := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableName(desired.table.name), definition)
+						ddl1 := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableNameForTable(&desired.table), g.escapeColumnName(currentColumn))
+						ddl2 := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableNameForTable(&desired.table), definition)
 						after := " FIRST"
 						if desiredColumn.position > 0 {
-							after = " AFTER " + g.escapeSQLName(desiredColumns[desiredColumn.position-1].name)
+							after = " AFTER " + g.escapeSQLName(desiredColumns[desiredColumn.position-1].name.String())
 						}
 						ddl2 += after
 						ddls = append(ddls, ddl1, ddl2)
 					} else {
-						ddl := fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name), definition)
+						ddl := fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", g.escapeTableNameForTable(&desired.table), g.escapeColumnName(currentColumn), definition)
 						if changeOrder {
 							after := " FIRST"
 							if desiredColumn.position > 0 {
-								after = " AFTER " + g.escapeSQLName(desiredColumns[desiredColumn.position-1].name)
+								after = " AFTER " + g.escapeSQLName(desiredColumns[desiredColumn.position-1].name.String())
 							}
 							ddl += after
 						}
@@ -823,23 +825,23 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				// Add UNIQUE KEY. TODO: Probably it should be just normalized to an index after the parser phase.
-				currentIndex := findIndexByName(currentTable.indexes, desiredColumn.name)
+				currentIndex := findIndexByName(currentTable.indexes, desiredColumn.name.String())
 				if desiredColumn.keyOption.isUnique() && !currentColumn.keyOption.isUnique() && currentIndex == nil { // TODO: deal with a case that the index is not a UNIQUE KEY.
-					ddl := fmt.Sprintf("ALTER TABLE %s ADD UNIQUE KEY %s(%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredColumn.name), g.escapeSQLName(desiredColumn.name))
+					ddl := fmt.Sprintf("ALTER TABLE %s ADD UNIQUE KEY %s(%s)", g.escapeTableNameForTable(&desired.table), g.escapeColumnName(&desiredColumn), g.escapeColumnName(&desiredColumn))
 					ddls = append(ddls, ddl)
 				}
 			case GeneratorModePostgres:
 				if !g.haveSameDataType(*currentColumn, desiredColumn) {
 					// Change type
-					ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name), g.generateDataType(desiredColumn))
+					ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s", g.escapeTableNameForTable(&desired.table), g.escapeColumnName(currentColumn), g.generateDataType(desiredColumn))
 					ddls = append(ddls, ddl)
 				}
 
 				if !isPrimaryKey(*currentColumn, currentTable) { // Primary Key implies NOT NULL
 					if g.notNull(*currentColumn) && !g.notNull(desiredColumn) {
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name)))
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL", g.escapeTableNameForTable(&desired.table), g.escapeColumnName(currentColumn)))
 					} else if !g.notNull(*currentColumn) && g.notNull(desiredColumn) {
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL", g.escapeTableName(desired.table.name), g.escapeSQLName(currentColumn.name)))
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL", g.escapeTableNameForTable(&desired.table), g.escapeColumnName(currentColumn)))
 					}
 				}
 
@@ -847,18 +849,18 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				if !areSameIdentityDefinition(currentColumn.identity, desiredColumn.identity) {
 					if currentColumn.identity == nil {
 						// add
-						alter := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s ADD GENERATED %s AS IDENTITY", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredColumn.name), desiredColumn.identity.behavior)
+						alter := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s ADD GENERATED %s AS IDENTITY", g.escapeTableNameForTable(&desired.table), g.escapeColumnName(&desiredColumn), desiredColumn.identity.behavior)
 						if desiredColumn.sequence != nil {
 							alter += " (" + generateSequenceClause(desiredColumn.sequence) + ")"
 						}
 						ddls = append(ddls, alter)
 					} else if desiredColumn.identity == nil {
 						// remove
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP IDENTITY IF EXISTS", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.name)))
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP IDENTITY IF EXISTS", g.escapeTableNameForTable(&currentTable), g.escapeColumnName(currentColumn)))
 					} else {
 						// set
 						// not support changing sequence
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET GENERATED %s", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredColumn.name), desiredColumn.identity.behavior))
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET GENERATED %s", g.escapeTableNameForTable(&desired.table), g.escapeColumnName(&desiredColumn), desiredColumn.identity.behavior))
 					}
 				}
 
@@ -866,19 +868,19 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				if !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef, desiredColumn.typeName) {
 					if desiredColumn.defaultDef == nil {
 						// drop
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.name)))
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT", g.escapeTableNameForTable(&currentTable), g.escapeColumnName(currentColumn)))
 					} else {
 						// set
 						definition, err := g.generateDefaultDefinition(*desiredColumn.defaultDef)
 						if err != nil {
 							return ddls, err
 						}
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.name), definition))
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s", g.escapeTableNameForTable(&currentTable), g.escapeColumnName(currentColumn), definition))
 					}
 				}
 
-				tableName := extractTableName(desired.table.name)
-				constraintName := buildPostgresConstraintName(tableName, desiredColumn.name, "check")
+				tableName := desired.table.name.Name.Name
+				constraintName := buildPostgresConstraintName(tableName, desiredColumn.name.String(), "check")
 				if desiredColumn.check != nil && desiredColumn.check.constraintName != "" {
 					constraintName = desiredColumn.check.constraintName
 				}
@@ -887,11 +889,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 				if !g.areSameCheckDefinition(currentCheck, desiredColumn.check) { // || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
 					if currentCheck != nil {
-						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), constraintName)
+						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), constraintName)
 						ddls = append(ddls, ddl)
 					}
 					if desiredColumn.check != nil {
-						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), constraintName, g.normalizeCheckExprString(desiredColumn.check.definition))
+						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableNameForTable(&desired.table), constraintName, g.normalizeCheckExprString(desiredColumn.check.definition))
 						if desiredColumn.check.noInherit {
 							ddl += " NO INHERIT"
 						}
@@ -907,7 +909,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					if err != nil {
 						return ddls, err
 					}
-					ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s", g.escapeTableName(desired.table.name), definition)
+					ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s", g.escapeTableNameForTable(&desired.table), definition)
 					ddls = append(ddls, ddl)
 				}
 
@@ -927,11 +929,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 
 					if !skipDrop {
-						tableName := extractTableName(desired.table.name)
-						constraintName := buildPostgresConstraintName(tableName, desiredColumn.name, "check")
+						tableName := desired.table.name.Name.Name
+						constraintName := buildPostgresConstraintName(tableName, desiredColumn.name.String(), "check")
 						if currentColumn.check != nil {
 							currentConstraintName := currentColumn.check.constraintName
-							ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), currentConstraintName)
+							ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), currentConstraintName)
 							ddls = append(ddls, ddl)
 						}
 						if desiredColumn.check != nil {
@@ -943,7 +945,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 							if desiredColumn.check.notForReplication {
 								replicationDefinition = " NOT FOR REPLICATION"
 							}
-							ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableName(desired.table.name), desiredConstraintName, replicationDefinition, g.normalizeCheckExprString(desiredColumn.check.definition))
+							ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableNameForTable(&desired.table), desiredConstraintName, replicationDefinition, g.normalizeCheckExprString(desiredColumn.check.definition))
 							ddls = append(ddls, ddl)
 						}
 					}
@@ -953,14 +955,14 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				if !areSameIdentityDefinition(currentColumn.identity, desiredColumn.identity) {
 					if currentColumn.identity != nil {
 						// remove
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.name)))
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableNameForTable(&currentTable), g.escapeColumnName(currentColumn)))
 					}
 					if desiredColumn.identity != nil {
 						definition, err := g.generateColumnDefinition(desiredColumn, true)
 						if err != nil {
 							return ddls, err
 						}
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), definition))
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableNameForTable(&desired.table), definition))
 					}
 				}
 
@@ -968,7 +970,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				if !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef, desiredColumn.typeName) {
 					if currentColumn.defaultDef != nil {
 						// drop
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.defaultDef.constraintName)))
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&currentTable), g.escapeSQLName(currentColumn.defaultDef.constraintName)))
 					}
 					if desiredColumn.defaultDef != nil {
 						// set
@@ -978,9 +980,9 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						}
 						var ddl string
 						if desiredColumn.defaultDef.constraintName != "" {
-							ddl = fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s %s FOR %s", g.escapeTableName(currentTable.name), g.escapeSQLName(desiredColumn.defaultDef.constraintName), definition, g.escapeSQLName(currentColumn.name))
+							ddl = fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s %s FOR %s", g.escapeTableNameForTable(&currentTable), g.escapeSQLName(desiredColumn.defaultDef.constraintName), definition, g.escapeColumnName(currentColumn))
 						} else {
-							ddl = fmt.Sprintf("ALTER TABLE %s ADD %s FOR %s", g.escapeTableName(currentTable.name), definition, g.escapeSQLName(currentColumn.name))
+							ddl = fmt.Sprintf("ALTER TABLE %s ADD %s FOR %s", g.escapeTableNameForTable(&currentTable), definition, g.escapeColumnName(currentColumn))
 						}
 						ddls = append(ddls, ddl)
 					}
@@ -999,14 +1001,14 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	// and if primary key changed
 	if g.mode == GeneratorModeMysql {
 		for _, currentColumn := range currentTable.columns {
-			desiredColumn := findColumnByName(desired.table.columns, currentColumn.name)
+			desiredColumn := findColumnByName(desired.table.columns, currentColumn.name.String())
 			if currentColumn.autoIncrement && (primaryKeysChanged || desiredColumn == nil || !desiredColumn.autoIncrement) {
 				currentColumn.autoIncrement = false
 				definition, err := g.generateColumnDefinition(*currentColumn, false)
 				if err != nil {
 					return ddls, err
 				}
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentColumn.name), definition))
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", g.escapeTableNameForTable(&currentTable), g.escapeColumnName(currentColumn), definition))
 			}
 		}
 	}
@@ -1014,7 +1016,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	// Examine primary key
 	if primaryKeysChanged {
 		// Check if there are foreign keys referencing this table's primary key
-		referencingFKs := g.findForeignKeysReferencingTable(desired.table.name)
+		referencingFKs := g.findForeignKeysReferencingTable(desired.table.name.String())
 
 		var dropFKDDLs []string
 		var recreateFKDDLs []string
@@ -1041,7 +1043,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				// Update the current state to reflect that we've dropped this FK
 				// This prevents duplicate FK creation when processing the referencing table
 				for _, table := range g.currentTables {
-					if table.name == refFK.tableName {
+					if table.name.String() == refFK.tableName {
 						// Remove the FK from the current table's FK list
 						newFKs := []ForeignKey{}
 						for _, fk := range table.foreignKeys {
@@ -1068,7 +1070,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				var desiredFK *ForeignKey
 				var desiredTableExists bool
 				for _, desiredTable := range g.desiredTables {
-					if desiredTable.name == refFK.tableName {
+					if desiredTable.name.String() == refFK.tableName {
 						desiredTableExists = true
 						for _, fk := range desiredTable.foreignKeys {
 							if fk.constraintName == refFK.foreignKey.constraintName {
@@ -1100,16 +1102,16 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		if currentPrimaryKey != nil {
 			switch g.mode {
 			case GeneratorModeMysql:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", g.escapeTableName(desired.table.name)))
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP PRIMARY KEY", g.escapeTableNameForTable(&desired.table)))
 			case GeneratorModePostgres:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentPrimaryKey.name)))
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLIdent(currentPrimaryKey.name)))
 			case GeneratorModeMssql:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentPrimaryKey.name)))
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLIdent(currentPrimaryKey.name)))
 			default:
 			}
 		}
 		if desiredPrimaryKey != nil {
-			ddls = append(ddls, g.generateAddIndex(desired.table.name, *desiredPrimaryKey))
+			ddls = append(ddls, g.generateAddIndex(desired.table.name.String(), *desiredPrimaryKey))
 		}
 
 		// Store the FK recreation DDLs to be added at the end
@@ -1124,11 +1126,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			continue
 		}
 
-		if currentIndex := findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex != nil {
+		if currentIndex := findIndexByName(currentTable.indexes, desiredIndex.name.Name); currentIndex != nil {
 			// Drop and add index as needed.
 			if !g.areSameIndexes(*currentIndex, desiredIndex) {
-				ddls = append(ddls, g.generateDropIndex(desired.table.name, desiredIndex.name, desiredIndex.constraint))
-				ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
+				ddls = append(ddls, g.generateDropIndex(desired.table.name.String(), desiredIndex.name.Name, desiredIndex.constraint))
+				ddls = append(ddls, g.generateAddIndex(desired.table.name.String(), desiredIndex))
 			}
 		} else {
 			// Check if this is a renamed index
@@ -1139,11 +1141,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 			if renameFromIndex != nil {
 				// Generate RENAME INDEX DDL
-				renameDDLs := g.generateRenameIndex(desired.table.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
+				renameDDLs := g.generateRenameIndex(desired.table.name.String(), renameFromIndex.name.Name, desiredIndex.name.Name, &desiredIndex)
 				ddls = append(ddls, renameDDLs...)
 			} else {
 				// Index not found and not a rename, add index.
-				ddls = append(ddls, g.generateAddIndex(desired.table.name, desiredIndex))
+				ddls = append(ddls, g.generateAddIndex(desired.table.name.String(), desiredIndex))
 			}
 		}
 	}
@@ -1151,13 +1153,13 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	// Add new AUTO_INCREMENT after adding index and primary key
 	if g.mode == GeneratorModeMysql {
 		for _, desiredColumn := range desired.table.columns {
-			currentColumn := findColumnByName(currentTable.columns, desiredColumn.name)
+			currentColumn := findColumnByName(currentTable.columns, desiredColumn.name.String())
 			if desiredColumn.autoIncrement && (primaryKeysChanged || currentColumn == nil || !currentColumn.autoIncrement) {
 				definition, err := g.generateColumnDefinition(*desiredColumn, false)
 				if err != nil {
 					return ddls, err
 				}
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", g.escapeTableName(currentTable.name), g.escapeSQLName(desiredColumn.name), definition))
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", g.escapeTableNameForTable(&currentTable), g.escapeColumnName(desiredColumn), definition))
 			}
 		}
 	}
@@ -1167,7 +1169,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		// Auto-generate constraint name if not specified (for PostgreSQL)
 		constraintName := desiredForeignKey.constraintName
 		if constraintName == "" && g.mode == GeneratorModePostgres && len(desiredForeignKey.indexColumns) > 0 {
-			tableName := extractTableName(desired.table.name)
+			tableName := desired.table.name.Name.Name
 			// Use the first column name for the constraint name (matches PostgreSQL behavior)
 			columnName := desiredForeignKey.indexColumns[0]
 			constraintName = buildPostgresConstraintName(tableName, columnName, "fkey")
@@ -1203,22 +1205,22 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				var dropDDL string
 				switch g.mode {
 				case GeneratorModeMysql:
-					dropDDL = fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentForeignKey.constraintName))
+					dropDDL = fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLName(currentForeignKey.constraintName))
 				case GeneratorModePostgres, GeneratorModeMssql:
-					dropDDL = fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentForeignKey.constraintName))
+					dropDDL = fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLName(currentForeignKey.constraintName))
 				default:
 				}
 				if dropDDL != "" {
-					ddls = append(ddls, dropDDL, fmt.Sprintf("ALTER TABLE %s ADD %s%s", g.escapeTableName(desired.table.name), g.generateForeignKeyDefinition(fkWithName), g.generateConstraintOptions(fkWithName.constraintOptions)))
+					ddls = append(ddls, dropDDL, fmt.Sprintf("ALTER TABLE %s ADD %s%s", g.escapeTableNameForTable(&desired.table), g.generateForeignKeyDefinition(fkWithName), g.generateConstraintOptions(fkWithName.constraintOptions)))
 				}
 			}
 		} else {
 			// Foreign key not found, add foreign key.
 			// But first check if we've already handled this FK during primary key changes
-			fkKey := desired.table.name + ":" + constraintName
+			fkKey := desired.table.name.String() + ":" + constraintName
 			if !g.handledForeignKeys[fkKey] {
 				definition := g.generateForeignKeyDefinition(fkWithName)
-				ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), definition)
+				ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableNameForTable(&desired.table), definition)
 				ddls = append(ddls, ddl)
 			}
 		}
@@ -1237,15 +1239,15 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		if currentExclusion := findExclusionByName(currentTable.exclusions, desiredExclusion.constraintName); currentExclusion != nil {
 			// Drop and add exclusion as needed.
 			if !g.areSameExclusions(*currentExclusion, desiredExclusion) {
-				dropDDL := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentExclusion.constraintName))
+				dropDDL := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLName(currentExclusion.constraintName))
 				if dropDDL != "" {
-					ddls = append(ddls, dropDDL, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), g.generateExclusionDefinition(desiredExclusion)))
+					ddls = append(ddls, dropDDL, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableNameForTable(&desired.table), g.generateExclusionDefinition(desiredExclusion)))
 				}
 			}
 		} else {
 			// Exclusion not found, add exclusion.
 			definition := g.generateExclusionDefinition(desiredExclusion)
-			ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(desired.table.name), definition)
+			ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableNameForTable(&desired.table), definition)
 			ddls = append(ddls, ddl)
 		}
 	}
@@ -1266,11 +1268,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				// Constraint exists but has different definition, need to replace it
 				switch g.mode {
 				case GeneratorModePostgres, GeneratorModeMssql:
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckExprString(desiredCheck.definition)))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLName(currentCheck.constraintName)))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableNameForTable(&desired.table), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckExprString(desiredCheck.definition)))
 				case GeneratorModeMysql:
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(desired.table.name), g.escapeSQLName(currentCheck.constraintName)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckExprString(desiredCheck.definition)))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLName(currentCheck.constraintName)))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableNameForTable(&desired.table), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckExprString(desiredCheck.definition)))
 				case GeneratorModeSQLite3:
 					// SQLite does not support ALTER TABLE for CHECK constraints
 					// Modifying CHECK constraints requires recreating the table, which is not supported
@@ -1283,16 +1285,16 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 		} else {
 			// Constraint doesn't exist, add it
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(desired.table.name), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckExprString(desiredCheck.definition)))
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableNameForTable(&desired.table), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckExprString(desiredCheck.definition)))
 		}
 	}
 
 	// Examine table comment
 	if currentTable.options["comment"] != desired.table.options["comment"] {
 		if desired.table.options["comment"] == "" {
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s COMMENT = ''", g.escapeTableName(desired.table.name)))
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s COMMENT = ''", g.escapeTableNameForTable(&desired.table)))
 		} else {
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s COMMENT = %s", g.escapeTableName(desired.table.name), desired.table.options["comment"]))
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s COMMENT = %s", g.escapeTableNameForTable(&desired.table), desired.table.options["comment"]))
 		}
 	}
 
@@ -1324,11 +1326,11 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 
 	ddls := []string{}
 
-	currentTable := findTableByName(g.currentTables, tableName)
+	currentTable := findTableByNameString(g.currentTables, tableName)
 	if currentTable == nil { // Views or non-existent tables
 		currentView := findViewByName(g.currentViews, tableName)
 		if currentView != nil {
-			currentIndex := findIndexByName(currentView.indexes, desiredIndex.name)
+			currentIndex := findIndexByName(currentView.indexes, desiredIndex.name.Name)
 			if currentIndex == nil {
 				// Index not found, add index.
 				ddls = append(ddls, statement)
@@ -1343,7 +1345,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 				desiredView.indexes = append(desiredView.indexes, desiredIndex)
 			} else {
 				// Check if it's a desired table that hasn't been created yet
-				desiredTable := findTableByName(g.desiredTables, tableName)
+				desiredTable := findTableByNameString(g.desiredTables, tableName)
 				if desiredTable != nil {
 					// Table will be created, add the index
 					ddls = append(ddls, statement)
@@ -1357,7 +1359,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 		return ddls, nil
 	}
 
-	currentIndex := findIndexByName(currentTable.indexes, desiredIndex.name)
+	currentIndex := findIndexByName(currentTable.indexes, desiredIndex.name.Name)
 	if currentIndex == nil {
 		// Check if this is a renamed index
 		var renameFromIndex *Index
@@ -1367,13 +1369,13 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 
 		if renameFromIndex != nil {
 			// Generate RENAME INDEX DDL
-			renameDDLs := g.generateRenameIndex(tableName, renameFromIndex.name, desiredIndex.name, &desiredIndex)
+			renameDDLs := g.generateRenameIndex(tableName, renameFromIndex.name.Name, desiredIndex.name.Name, &desiredIndex)
 			ddls = append(ddls, renameDDLs...)
 
 			// Update the current table's indexes to reflect the rename
 			newIndexes := []Index{}
 			for _, idx := range currentTable.indexes {
-				if idx.name == renameFromIndex.name {
+				if idx.name.Name == renameFromIndex.name.Name {
 					// Replace with the renamed index
 					newIndexes = append(newIndexes, desiredIndex)
 				} else {
@@ -1389,12 +1391,12 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 	} else {
 		// Index found. If it's different, drop and add index.
 		if !g.areSameIndexes(*currentIndex, desiredIndex) {
-			ddls = append(ddls, g.generateDropIndex(currentTable.name, currentIndex.name, currentIndex.constraint))
+			ddls = append(ddls, g.generateDropIndex(currentTable.name.String(), currentIndex.name.Name, currentIndex.constraint))
 			ddls = append(ddls, statement)
 
 			newIndexes := []Index{}
 			for _, currentIndex := range currentTable.indexes {
-				if currentIndex.name == desiredIndex.name {
+				if currentIndex.name.Name == desiredIndex.name.Name {
 					newIndexes = append(newIndexes, desiredIndex)
 				} else {
 					newIndexes = append(newIndexes, currentIndex)
@@ -1404,7 +1406,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 		}
 	}
 
-	desiredTable := findTableByName(g.desiredTables, tableName)
+	desiredTable := findTableByNameString(g.desiredTables, tableName)
 	if desiredTable != nil {
 		desiredTable.indexes = append(desiredTable.indexes, desiredIndex)
 	}
@@ -1415,7 +1417,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 func (g *Generator) generateDDLsForAddForeignKey(tableName string, desiredForeignKey ForeignKey, action string, statement string) ([]string, error) {
 	var ddls []string
 
-	currentTable := findTableByName(g.currentTables, tableName)
+	currentTable := findTableByNameString(g.currentTables, tableName)
 	currentForeignKey := findForeignKeyByName(currentTable.foreignKeys, desiredForeignKey.constraintName)
 	if currentForeignKey == nil {
 		// Foreign Key not found, add foreign key
@@ -1424,13 +1426,13 @@ func (g *Generator) generateDDLsForAddForeignKey(tableName string, desiredForeig
 	} else {
 		// Foreign key found, If it's different, drop and add or alter foreign key.
 		if !g.areSameForeignKeys(*currentForeignKey, desiredForeignKey) {
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentForeignKey.constraintName)))
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(currentTable), g.escapeSQLName(currentForeignKey.constraintName)))
 			ddls = append(ddls, statement)
 		}
 	}
 
 	// Examine indexes in desiredTable to delete obsoleted indexes later
-	desiredTable := findTableByName(g.desiredTables, tableName)
+	desiredTable := findTableByNameString(g.desiredTables, tableName)
 	// Only add to desiredTable.foreignKeys if it doesn't already exist (it may have been pre-populated from aggregation)
 	if !slices.Contains(convertForeignKeysToConstraintNames(desiredTable.foreignKeys), desiredForeignKey.constraintName) {
 		desiredTable.foreignKeys = append(desiredTable.foreignKeys, desiredForeignKey)
@@ -1442,7 +1444,7 @@ func (g *Generator) generateDDLsForAddForeignKey(tableName string, desiredForeig
 func (g *Generator) generateDDLsForAddExclusion(tableName string, desiredExclusion Exclusion, action string, statement string) ([]string, error) {
 	var ddls []string
 
-	currentTable := findTableByName(g.currentTables, tableName)
+	currentTable := findTableByNameString(g.currentTables, tableName)
 	currentExclusion := findExclusionByName(currentTable.exclusions, desiredExclusion.constraintName)
 	if currentExclusion == nil {
 		// Exclusion not found, add exclusion
@@ -1451,13 +1453,13 @@ func (g *Generator) generateDDLsForAddExclusion(tableName string, desiredExclusi
 	} else {
 		// Exclusion key found, If it's different, drop and add or alter exclusion.
 		if !g.areSameExclusions(*currentExclusion, desiredExclusion) {
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentExclusion.constraintName)))
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(currentTable), g.escapeSQLName(currentExclusion.constraintName)))
 			ddls = append(ddls, statement)
 		}
 	}
 
 	// Examine indexes in desiredTable to delete obsoleted indexes later
-	desiredTable := findTableByName(g.desiredTables, tableName)
+	desiredTable := findTableByNameString(g.desiredTables, tableName)
 	// Only add to desiredTable.exclusions if it doesn't already exist (it may have been pre-populated from aggregation)
 	if !slices.Contains(convertExclusionToConstraintNames(desiredTable.exclusions), desiredExclusion.constraintName) {
 		desiredTable.exclusions = append(desiredTable.exclusions, desiredExclusion)
@@ -1469,7 +1471,7 @@ func (g *Generator) generateDDLsForAddExclusion(tableName string, desiredExclusi
 func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy Policy, action string, statement string) ([]string, error) {
 	var ddls []string
 
-	currentTable := findTableByName(g.currentTables, tableName)
+	currentTable := findTableByNameString(g.currentTables, tableName)
 	if currentTable == nil {
 		return nil, fmt.Errorf("%s is performed for inexistent table '%s': '%s'", action, tableName, statement)
 	}
@@ -1482,13 +1484,13 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy 
 	} else {
 		// policy found. If it's different, drop and add or alter policy.
 		if !g.areSamePolicies(*currentPolicy, desiredPolicy) {
-			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLName(currentPolicy.name), g.escapeTableName(currentTable.name)))
+			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLName(currentPolicy.name), g.escapeTableNameForTable(currentTable)))
 			ddls = append(ddls, statement)
 		}
 	}
 
 	// Examine policies in desiredTable to delete obsoleted policies later
-	desiredTable := findTableByName(g.desiredTables, tableName)
+	desiredTable := findTableByNameString(g.desiredTables, tableName)
 	if desiredTable == nil {
 		return nil, fmt.Errorf("%s is performed before create table '%s': '%s'", action, tableName, statement)
 	}
@@ -1837,7 +1839,7 @@ func (g *Generator) generateDDLsForAbsentForeignKey(currentForeignKey ForeignKey
 
 	switch g.mode {
 	case GeneratorModeMysql:
-		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentForeignKey.constraintName)))
+		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", g.escapeTableNameForTable(&currentTable), g.escapeSQLName(currentForeignKey.constraintName)))
 	case GeneratorModePostgres, GeneratorModeMssql:
 		var referencesColumn *Column
 		for _, column := range desiredTable.columns {
@@ -1848,7 +1850,7 @@ func (g *Generator) generateDDLsForAbsentForeignKey(currentForeignKey ForeignKey
 		}
 
 		if referencesColumn == nil {
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentForeignKey.constraintName)))
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&currentTable), g.escapeSQLName(currentForeignKey.constraintName)))
 		}
 	default:
 	}
@@ -1873,10 +1875,10 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 		if primaryKeyColumn == nil {
 			// If nil, it will be `DROP COLUMN`-ed and we can usually ignore it.
 			// However, it seems like you need to explicitly drop it first for MSSQL.
-			if g.mode == GeneratorModeMssql && (primaryKeyColumn == nil || primaryKeyColumn.name != currentIndex.columns[0].ColumnName()) {
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable.name), g.escapeSQLName(currentIndex.name)))
+			if g.mode == GeneratorModeMssql && (primaryKeyColumn == nil || primaryKeyColumn.name.String() != currentIndex.columns[0].ColumnName()) {
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&currentTable), g.escapeSQLIdent(currentIndex.name)))
 			}
-		} else if primaryKeyColumn.name != currentIndex.columns[0].ColumnName() { // TODO: check length of currentIndex.columns
+		} else if primaryKeyColumn.name.String() != currentIndex.columns[0].ColumnName() { // TODO: check length of currentIndex.columns
 			// TODO: handle this. Rename primary key column...?
 			return ddls, fmt.Errorf(
 				"primary key column name of '%s' should be '%s' but currently '%s'. This is not handled yet.",
@@ -1888,7 +1890,7 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 		// Columns become empty if the index is a PostgreSQL's expression index.
 		if len(currentIndex.columns) > 0 {
 			for _, column := range desiredTable.columns {
-				if column.name == currentIndex.columns[0].ColumnName() && column.keyOption.isUnique() {
+				if column.name.String() == currentIndex.columns[0].ColumnName() && column.keyOption.isUnique() {
 					uniqueKeyColumn = column
 					break
 				}
@@ -1897,10 +1899,10 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 
 		if uniqueKeyColumn == nil {
 			// No unique column. Drop unique key index.
-			ddls = append(ddls, g.generateDropIndex(currentTable.name, currentIndex.name, currentIndex.constraint))
+			ddls = append(ddls, g.generateDropIndex(currentTable.name.String(), currentIndex.name.Name, currentIndex.constraint))
 		}
 	} else {
-		ddls = append(ddls, g.generateDropIndex(currentTable.name, currentIndex.name, currentIndex.constraint))
+		ddls = append(ddls, g.generateDropIndex(currentTable.name.String(), currentIndex.name.Name, currentIndex.constraint))
 	}
 
 	return ddls, nil
@@ -1938,6 +1940,13 @@ func (g *Generator) generateDataType(column Column) string {
 		typeName = column.references + typeName
 	}
 
+	// For custom types (domains, etc.) that were originally quoted, use quote-aware escaping
+	// This preserves the quoting for case-sensitive types like domains.
+	// Only apply this when the TypeIdent was explicitly quoted in the original source.
+	if column.typeIdent.Quoted {
+		typeName = g.escapeSQLIdent(column.typeIdent)
+	}
+
 	if column.displayWidth != nil {
 		return fmt.Sprintf("%s(%s)%s", typeName, column.displayWidth.raw, suffix)
 	} else if column.length != nil {
@@ -1959,7 +1968,7 @@ func (g *Generator) generateDataType(column Column) string {
 func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (string, error) {
 	// TODO: make string concatenation faster?
 
-	definition := fmt.Sprintf("%s %s ", g.escapeSQLName(column.name), g.generateDataType(column))
+	definition := fmt.Sprintf("%s %s ", g.escapeColumnName(&column), g.generateDataType(column))
 
 	if column.unsigned {
 		definition += "UNSIGNED "
@@ -2130,7 +2139,7 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 				"CREATE%s%s INDEX %s ON %s",
 				uniqueOption,
 				clusteredOption,
-				g.escapeSQLName(index.name),
+				g.escapeSQLIdent(index.name),
 				g.escapeTableName(table),
 			)
 
@@ -2144,8 +2153,8 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 		} else {
 			ddl = fmt.Sprintf("ALTER TABLE %s ADD", g.escapeTableName(table))
 
-			if index.name != "PRIMARY" {
-				ddl += fmt.Sprintf(" CONSTRAINT %s", g.escapeSQLName(index.name))
+			if index.name.Name != "PRIMARY" {
+				ddl += fmt.Sprintf(" CONSTRAINT %s", g.escapeSQLIdent(index.name))
 			}
 
 			ddl += fmt.Sprintf(" %s%s", strings.ToUpper(index.indexType), clusteredOption)
@@ -2159,8 +2168,8 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 			g.escapeTableName(table),
 		)
 		if strings.EqualFold(index.indexType, "PRIMARY KEY") && index.primary &&
-			(index.name != "" && index.name != "PRIMARY" && index.name != index.columns[0].ColumnName()) {
-			ddl += fmt.Sprintf("CONSTRAINT %s ", g.escapeSQLName(index.name))
+			(index.name.Name != "" && index.name.Name != "PRIMARY" && index.name.Name != index.columns[0].ColumnName()) {
+			ddl += fmt.Sprintf("CONSTRAINT %s ", g.escapeSQLIdent(index.name))
 		}
 		isUniqueConstraint := strings.EqualFold(index.indexType, "UNIQUE")
 		if isUniqueConstraint {
@@ -2175,22 +2184,22 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 
 				// If the current name is just the column name (common with generic parser),
 				// replace it with the PostgreSQL convention
-				if constraintName == columnName {
+				if constraintName.Name == columnName {
 					expectedName := buildPostgresConstraintName(table, columnName, "key")
 					slog.Debug("Auto-generating PostgreSQL UNIQUE constraint name",
 						"table", table,
 						"column", columnName,
-						"original_name", constraintName,
+						"original_name", constraintName.Name,
 						"generated_name", expectedName)
-					constraintName = expectedName
+					constraintName = Ident{Name: expectedName, Quoted: false}
 				} else {
 					slog.Debug("Using existing UNIQUE constraint name",
 						"table", table,
 						"column", columnName,
-						"constraint_name", constraintName)
+						"constraint_name", constraintName.Name)
 				}
 			}
-			ddl += fmt.Sprintf(" %s", g.escapeSQLName(constraintName))
+			ddl += fmt.Sprintf(" %s", g.escapeSQLIdent(constraintName))
 		}
 		if isUniqueConstraint {
 			ddl += " UNIQUE"
@@ -2212,7 +2221,7 @@ func (g *Generator) generateAddIndex(table string, index Index) string {
 		)
 
 		if !index.primary {
-			ddl += fmt.Sprintf(" %s", g.escapeSQLName(index.name))
+			ddl += fmt.Sprintf(" %s", g.escapeSQLIdent(index.name))
 		}
 		constraintOptions := g.generateConstraintOptions(index.constraintOptions)
 		ddl += fmt.Sprintf(" (%s)%s%s", strings.Join(columns, ", "), optionDefinition, constraintOptions)
@@ -2390,7 +2399,7 @@ func (g *Generator) generateRenameIndex(tableName string, oldIndexName string, n
 			if desiredIndex.unique {
 				createStmt += " UNIQUE"
 			}
-			createStmt += fmt.Sprintf(" INDEX %s ON %s", g.escapeSQLName(desiredIndex.name), g.escapeTableName(tableName))
+			createStmt += fmt.Sprintf(" INDEX %s ON %s", g.escapeSQLIdent(desiredIndex.name), g.escapeTableName(tableName))
 
 			// Add column specifications
 			columnStrs := []string{}
@@ -2443,6 +2452,32 @@ func (g *Generator) escapeTableName(name string) string {
 	return g.escapeTableNameSimple(name, false)
 }
 
+// escapeTableNameForTable escapes a table name using quote-aware logic.
+// The schema part is always quoted, while the table name uses quote-aware logic.
+func (g *Generator) escapeTableNameForTable(table *Table) string {
+	switch g.mode {
+	case GeneratorModePostgres, GeneratorModeMssql:
+		schemaName := table.name.Schema.Name
+		if schemaName == "" {
+			schemaName = g.defaultSchema
+		}
+		// Schema is always quoted; table name uses quote-aware logic
+		return g.escapeSQLName(schemaName) + "." + g.escapeSQLIdent(table.name.Name)
+	default:
+		return g.escapeSQLIdent(table.name.Name)
+	}
+}
+
+// escapeColumnName escapes a column name using quote-aware logic.
+func (g *Generator) escapeColumnName(column *Column) string {
+	return g.escapeSQLIdent(column.name.Name)
+}
+
+// escapeIndexName escapes an index name using quote-aware logic.
+func (g *Generator) escapeIndexName(index *Index) string {
+	return g.escapeSQLIdent(index.name)
+}
+
 func (g *Generator) escapeTableNameSimple(name string, withoutSchema bool) string {
 	switch g.mode {
 	case GeneratorModePostgres, GeneratorModeMssql:
@@ -2477,6 +2512,54 @@ func (g *Generator) escapeSQLName(name string) string {
 	}
 }
 
+// escapeSQLIdent escapes an Ident for SQL output, respecting the quote-aware normalization setting.
+// When legacy_name_normalization is false:
+//   - Quoted identifiers preserve their case and are always quoted in output
+//   - Unquoted identifiers are normalized to lowercase and are NOT quoted in output
+func (g *Generator) escapeSQLIdent(ident Ident) string {
+	return g.escapeSQLNameQuoteAware(ident.Name, ident.Quoted)
+}
+
+// escapeSQLNameQuoteAware escapes an identifier name for SQL output,
+// taking into account whether it was originally quoted and the legacy_name_normalization setting.
+// When legacy_name_normalization is false:
+//   - Quoted identifiers preserve their case and are always quoted in output
+//   - Unquoted identifiers are normalized to lowercase and are NOT quoted in output
+//     (unless they contain special characters that require quoting)
+func (g *Generator) escapeSQLNameQuoteAware(name string, wasQuoted bool) string {
+	// Determine if we're using legacy mode
+	useLegacy := true
+	if g.config.LegacyNameNormalization != nil {
+		useLegacy = *g.config.LegacyNameNormalization
+	}
+
+	// Legacy mode: always quote everything (backward compatible behavior)
+	if useLegacy {
+		return g.escapeSQLName(name)
+	}
+
+	// Quote-aware mode
+	switch g.mode {
+	case GeneratorModePostgres:
+		if wasQuoted {
+			// Originally quoted: preserve case and quote in output
+			escaped := strings.ReplaceAll(name, "\"", "\"\"")
+			return fmt.Sprintf("\"%s\"", escaped)
+		}
+		// Originally unquoted: normalize to lowercase and don't quote
+		// (PostgreSQL accepts unquoted lowercase identifiers)
+		return strings.ToLower(name)
+
+	case GeneratorModeMysql, GeneratorModeSQLite3, GeneratorModeMssql:
+		// For other databases, keep legacy behavior for now
+		// TODO: Implement quote-aware logic for MySQL, SQLite3, and MSSQL if needed
+		return g.escapeSQLName(name)
+
+	default:
+		return g.escapeSQLName(name)
+	}
+}
+
 // escapeAndJoinColumns escapes a list of column names and joins them with commas
 func (g *Generator) escapeAndJoinColumns(columns []string) string {
 	escapedColumns := util.TransformSlice(columns, func(col string) string { return g.escapeSQLName(col) })
@@ -2502,16 +2585,15 @@ func (g *Generator) validateAndEscapeGrantee(grantee string) (string, error) {
 	return g.escapeSQLName(grantee), nil
 }
 
-func (g *Generator) normalizeOldTableName(oldName, newName string) string {
+func (g *Generator) normalizeOldTableName(oldName string, newTable QualifiedTableName) string {
 	// Normalize the old table name with schema prefix if needed
 	oldTableName := oldName
 	if g.mode == GeneratorModePostgres || g.mode == GeneratorModeMssql {
-		// If the old name doesn't contain a schema, add the default schema
+		// If the old name doesn't contain a schema, add the schema from the new table name
 		if !strings.Contains(oldTableName, ".") {
-			// Extract schema from the new table name
-			parts := strings.SplitN(newName, ".", 2)
-			if len(parts) == 2 {
-				oldTableName = parts[0] + "." + oldTableName
+			schemaName := newTable.Schema.Name
+			if schemaName != "" {
+				oldTableName = schemaName + "." + oldTableName
 			}
 		}
 	}
@@ -2526,21 +2608,18 @@ func extractTableName(fullName string) string {
 	return fullName
 }
 
-func (g *Generator) generateRenameTableDDL(oldName, newName string) string {
+func (g *Generator) generateRenameTableDDL(oldName string, newTable QualifiedTableName) string {
 	switch g.mode {
 	case GeneratorModePostgres:
 		// For PostgreSQL, RENAME TO should only include the table name without schema
-		// Extract just the table name from the full name
-		newTableName := extractTableName(newName)
 		return fmt.Sprintf("ALTER TABLE %s RENAME TO %s",
 			g.escapeTableName(oldName),
-			g.escapeSQLName(newTableName))
+			g.escapeSQLIdent(newTable.Name))
 	case GeneratorModeMssql:
 		// MSSQL uses sp_rename for renaming tables
 		// Extract just the table names without schema
 		oldTableName := extractTableName(oldName)
-		newTableName := extractTableName(newName)
-		return fmt.Sprintf("EXEC sp_rename '%s', '%s'", oldTableName, newTableName)
+		return fmt.Sprintf("EXEC sp_rename '%s', '%s'", oldTableName, newTable.Name.Name)
 	case GeneratorModeMysql:
 		fallthrough
 	case GeneratorModeSQLite3:
@@ -2548,7 +2627,7 @@ func (g *Generator) generateRenameTableDDL(oldName, newName string) string {
 	default:
 		return fmt.Sprintf("ALTER TABLE %s RENAME TO %s",
 			g.escapeTableName(oldName),
-			g.escapeTableName(newName))
+			g.escapeSQLIdent(newTable.Name))
 	}
 }
 
@@ -2580,7 +2659,7 @@ func isPrimaryKey(column Column, table Table) bool {
 	for _, index := range table.indexes {
 		if index.primary {
 			for _, indexColumn := range index.columns {
-				if indexColumn.ColumnName() == column.name {
+				if indexColumn.ColumnName() == column.name.String() {
 					return true
 				}
 			}
@@ -2593,12 +2672,12 @@ func isPrimaryKey(column Column, table Table) bool {
 func mergeTable(table1 *Table, table2 Table) {
 	// Update/add all columns from table2
 	for _, column := range table2.columns {
-		table1.columns[column.name] = column
+		table1.columns[column.name.String()] = column
 	}
 
 	// Add indexes from table2 that don't exist in table1
 	for _, index := range table2.indexes {
-		if !slices.Contains(convertIndexesToIndexNames(table1.indexes), index.name) {
+		if !slices.Contains(convertIndexesToIndexNames(table1.indexes), index.name.Name) {
 			table1.indexes = append(table1.indexes, index)
 		}
 	}
@@ -2622,7 +2701,7 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 			table := stmt.table // copy table
 			aggregated.Tables = append(aggregated.Tables, &table)
 		case *CreateIndex:
-			table := findTableByName(aggregated.Tables, stmt.tableName)
+			table := findTableByNameString(aggregated.Tables, stmt.tableName)
 			if table == nil {
 				view := findViewByName(aggregated.Views, stmt.tableName)
 				if view == nil {
@@ -2635,42 +2714,42 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 				table.indexes = append(table.indexes, stmt.index)
 			}
 		case *AddIndex:
-			table := findTableByName(aggregated.Tables, stmt.tableName)
+			table := findTableByNameString(aggregated.Tables, stmt.tableName)
 			if table == nil {
 				return nil, fmt.Errorf("ADD INDEX is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 			// TODO: check duplicated creation
 			table.indexes = append(table.indexes, stmt.index)
 		case *AddPrimaryKey:
-			table := findTableByName(aggregated.Tables, stmt.tableName)
+			table := findTableByNameString(aggregated.Tables, stmt.tableName)
 			if table == nil {
 				return nil, fmt.Errorf("ADD PRIMARY KEY is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			newColumns := map[string]*Column{}
 			for _, column := range table.columns {
-				if column.name == stmt.index.columns[0].ColumnName() { // TODO: multi-column primary key?
+				if column.name.String() == stmt.index.columns[0].ColumnName() { // TODO: multi-column primary key?
 					column.keyOption = ColumnKeyPrimary
 				}
-				newColumns[column.name] = column
+				newColumns[column.name.String()] = column
 			}
 			table.columns = newColumns
 		case *AddForeignKey:
-			table := findTableByName(aggregated.Tables, stmt.tableName)
+			table := findTableByNameString(aggregated.Tables, stmt.tableName)
 			if table == nil {
 				return nil, fmt.Errorf("ADD FOREIGN KEY is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			table.foreignKeys = append(table.foreignKeys, stmt.foreignKey)
 		case *AddExclusion:
-			table := findTableByName(aggregated.Tables, stmt.tableName)
+			table := findTableByNameString(aggregated.Tables, stmt.tableName)
 			if table == nil {
 				return nil, fmt.Errorf("ADD EXCLUDE is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			table.exclusions = append(table.exclusions, stmt.exclusion)
 		case *AddPolicy:
-			table := findTableByName(aggregated.Tables, stmt.tableName)
+			table := findTableByNameString(aggregated.Tables, stmt.tableName)
 			if table == nil {
 				return nil, fmt.Errorf("ADD POLICY performed before CREATE TABLE: %s", ddl.Statement())
 			}
@@ -2947,9 +3026,18 @@ func equalPrivileges(a, b []string) bool {
 	return true
 }
 
-func findTableByName(tables []*Table, name string) *Table {
+func findTableByName(tables []*Table, name QualifiedTableName) *Table {
 	for _, table := range tables {
-		if table.name == name {
+		if table.name.String() == name.String() {
+			return table
+		}
+	}
+	return nil
+}
+
+func findTableByNameString(tables []*Table, name string) *Table {
+	for _, table := range tables {
+		if table.name.String() == name {
 			return table
 		}
 	}
@@ -2966,7 +3054,7 @@ func findColumnByName(columns map[string]*Column, name string) *Column {
 
 func findIndexByName(indexes []Index, name string) *Index {
 	for _, index := range indexes {
-		if index.name == name {
+		if index.name.Name == name {
 			return &index
 		}
 	}
@@ -3076,7 +3164,7 @@ func (g *Generator) findForeignKeysReferencingTable(referencedTableName string) 
 					tableName  string
 					foreignKey ForeignKey
 				}{
-					tableName:  table.name,
+					tableName:  table.name.String(),
 					foreignKey: fk,
 				})
 			}
@@ -3573,8 +3661,8 @@ func (g *Generator) areSamePrimaryKeys(primaryKeyA *Index, primaryKeyB *Index) b
 		// ignore the name if one is auto-generated (PK__*) and the other is unnamed/synthetic ("PRIMARY")
 		if g.mode == GeneratorModeMssql && primaryKeyA.primary && primaryKeyB.primary {
 			// Check if one has an auto-generated name and the other is synthetic
-			if (strings.HasPrefix(primaryKeyA.name, "PK__") && primaryKeyB.name == "PRIMARY") ||
-				(strings.HasPrefix(primaryKeyB.name, "PK__") && primaryKeyA.name == "PRIMARY") {
+			if (strings.HasPrefix(primaryKeyA.name.Name, "PK__") && primaryKeyB.name.Name == "PRIMARY") ||
+				(strings.HasPrefix(primaryKeyB.name.Name, "PK__") && primaryKeyA.name.Name == "PRIMARY") {
 				// Compare everything except the name
 				return g.areSamePrimaryKeyColumns(*primaryKeyA, *primaryKeyB)
 			}
@@ -3813,7 +3901,7 @@ func (g *Generator) normalizeReferenceOption(action string) string {
 func convertIndexesToIndexNames(indexes []Index) []string {
 	indexNames := []string{}
 	for _, index := range indexes {
-		indexNames = append(indexNames, index.name)
+		indexNames = append(indexNames, index.name.Name)
 	}
 	return indexNames
 }
@@ -3867,7 +3955,7 @@ func removeTableByName(tables []*Table, name string) []*Table {
 	ret := []*Table{}
 
 	for _, table := range tables {
-		if name == table.name {
+		if name == table.name.String() {
 			removed = true
 		} else {
 			ret = append(ret, table)
@@ -3979,7 +4067,7 @@ func FilterTables(ddls []DDL, config database.GeneratorConfig) []DDL {
 
 		switch stmt := ddl.(type) {
 		case *CreateTable:
-			tables = append(tables, stmt.table.name)
+			tables = append(tables, stmt.table.name.String())
 		case *CreateIndex:
 			tables = append(tables, stmt.tableName)
 		case *AddPrimaryKey:
@@ -4182,26 +4270,26 @@ func (g *Generator) generateDropTableDDLsWithDependencies(tablesToDrop []*Table)
 
 		// First, build a map of tables to be dropped for quick lookup
 		for _, table := range tablesToDrop {
-			tableMap[table.name] = table
-			tableDependencies[table.name] = []string{}
+			tableMap[table.name.String()] = table
+			tableDependencies[table.name.String()] = []string{}
 		}
 
 		// Now build reverse dependencies
 		// For each table, find which other tables (in the drop list) reference it
 		for _, table := range tablesToDrop {
 			for _, fk := range table.foreignKeys {
-				if fk.referenceName != "" && fk.referenceName != table.name {
+				if fk.referenceName != "" && fk.referenceName != table.name.String() {
 					// If the referenced table is also being dropped
 					if _, exists := tableMap[fk.referenceName]; exists {
 						// The referenced table depends on this table being dropped first
-						tableDependencies[fk.referenceName] = append(tableDependencies[fk.referenceName], table.name)
+						tableDependencies[fk.referenceName] = append(tableDependencies[fk.referenceName], table.name.String())
 					}
 				}
 			}
 		}
 
 		sorted := topologicalSort(tablesToDrop, tableDependencies, func(t *Table) string {
-			return t.name
+			return t.name.String()
 		})
 
 		if len(sorted) != 0 {
@@ -4214,7 +4302,7 @@ func (g *Generator) generateDropTableDDLsWithDependencies(tablesToDrop []*Table)
 
 	var ddls []string
 	for _, table := range sortedTablesToDrop {
-		ddls = append(ddls, fmt.Sprintf("DROP TABLE %s", g.escapeTableName(table.name)))
+		ddls = append(ddls, fmt.Sprintf("DROP TABLE %s", g.escapeTableNameForTable(table)))
 	}
 	return ddls
 }

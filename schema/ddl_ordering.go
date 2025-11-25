@@ -139,7 +139,7 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string) []DDL {
 		// Build dependency graph
 		tableDependencies := make(map[string][]string)
 		for _, ct := range createTables {
-			tableName := ct.table.name
+			tableName := ct.table.name.String()
 			// Extract foreign key dependencies
 			deps := []string{}
 			for _, fk := range ct.table.foreignKeys {
@@ -151,7 +151,7 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string) []DDL {
 		}
 
 		sorted := topologicalSort(createTables, tableDependencies, func(ct *CreateTable) string {
-			return ct.table.name
+			return ct.table.name.String()
 		})
 
 		// If circular dependency detected, keep original order
@@ -173,7 +173,7 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string) []DDL {
 		// Create a set of all table and view names for quick lookup
 		allObjectNames := make(map[string]bool)
 		for _, ct := range createTables {
-			allObjectNames[ct.table.name] = true
+			allObjectNames[ct.table.name.String()] = true
 		}
 		for _, view := range views {
 			allObjectNames[view.name] = true

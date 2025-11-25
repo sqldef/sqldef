@@ -312,9 +312,10 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		column := Column{
-			name:                       parsedCol.Name.String(),
+			name:                       QualifiedColumnName{Name: Ident{Name: parsedCol.Name.String(), Quoted: parsedCol.Name.Quoted()}},
 			position:                   i,
 			typeName:                   typeName,
+			typeIdent:                  Ident{Name: parsedCol.Type.TypeIdent.String(), Quoted: parsedCol.Type.TypeIdent.Quoted()},
 			unsigned:                   castBool(parsedCol.Type.Unsigned),
 			notNull:                    castBoolPtr(parsedCol.Type.NotNull),
 			autoIncrement:              castBool(parsedCol.Type.Autoincrement),
@@ -470,8 +471,8 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			indexPartition.column = indexDef.Partition.Column
 		}
 
-		name := indexDef.Info.Name.String()
-		if name == "" {
+		nameIdent := Ident{Name: indexDef.Info.Name.String(), Quoted: indexDef.Info.Name.Quoted()}
+		if nameIdent.Name == "" {
 			// Auto-generate index/constraint name based on database conventions
 			tableName := stmt.Table.Name.String()
 			if tableName == "" {
@@ -480,11 +481,13 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			columnName := indexColumns[0].ColumnName()
 
 			if mode == GeneratorModePostgres && indexDef.Info.Unique && len(indexColumns) == 1 {
-				name = buildPostgresConstraintName(tableName, columnName, "key")
+				nameIdent.Name = buildPostgresConstraintName(tableName, columnName, "key")
 			} else {
 				// For MySQL or multi-column constraints, use just the column name
-				name = columnName
+				nameIdent.Name = columnName
 			}
+			// Auto-generated names are unquoted
+			nameIdent.Quoted = false
 		}
 
 		var constraintOptions *ConstraintOptions
@@ -506,7 +509,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		index := Index{
-			name:      name,
+			name:      nameIdent,
 			indexType: indexDef.Info.Type,
 			columns:   indexColumns,
 			primary:   indexDef.Info.Primary,
@@ -522,7 +525,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		// Parse @renamed annotation for this index
-		if comment, ok := indexComments[name]; ok {
+		if comment, ok := indexComments[nameIdent.Name]; ok {
 			index.renamedFrom = extractRenameFrom(comment)
 		}
 
@@ -582,7 +585,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	}
 
 	return Table{
-		name:        normalizedTableName(mode, stmt.NewName, defaultSchema),
+		name:        parseQualifiedTableName(mode, stmt.NewName, defaultSchema),
 		columns:     columns,
 		indexes:     indexes,
 		checks:      checks,
@@ -657,29 +660,31 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		}
 	}
 
-	name := stmt.IndexSpec.Name.String()
-	if name == "" {
-		name = stmt.Table.Name.String()
+	nameIdent := Ident{Name: stmt.IndexSpec.Name.String(), Quoted: stmt.IndexSpec.Name.Quoted()}
+	if nameIdent.Name == "" {
+		nameIdent.Name = stmt.Table.Name.String()
 		for _, indexColumn := range indexColumns {
-			name += fmt.Sprintf("_%s", indexColumn.ColumnName())
+			nameIdent.Name += fmt.Sprintf("_%s", indexColumn.ColumnName())
 		}
 		// Use PostgreSQL naming convention for UNIQUE constraints
 		if mode == GeneratorModePostgres && stmt.IndexSpec.Unique && len(indexColumns) == 1 {
-			name += "_key"
+			nameIdent.Name += "_key"
 		} else {
-			name += "_idx"
+			nameIdent.Name += "_idx"
 		}
+		// Auto-generated names are unquoted
+		nameIdent.Quoted = false
 	}
 
 	// Extract index comments and look for @renamed annotation
 	indexComments := extractIndexComments(rawDDL, mode)
 	renameFrom := ""
-	if comment, ok := indexComments[name]; ok {
+	if comment, ok := indexComments[nameIdent.Name]; ok {
 		renameFrom = extractRenameFrom(comment)
 	}
 
 	return Index{
-		name:              name,
+		name:              nameIdent,
 		indexType:         "", // not supported in parser yet
 		columns:           indexColumns,
 		primary:           false, // not supported in parser yet
@@ -885,6 +890,25 @@ func parseExclusion(exclusion *parser.ExclusionDefinition) Exclusion {
 		indexType:      indexType,
 		exclusions:     exs,
 		where:          where,
+	}
+}
+
+// parseQualifiedTableName creates a QualifiedTableName from a parser.TableName
+func parseQualifiedTableName(mode GeneratorMode, tableName parser.TableName, defaultSchema string) QualifiedTableName {
+	nameIdent := Ident{Name: tableName.Name.String(), Quoted: tableName.Name.Quoted()}
+
+	var schemaIdent Ident
+	if mode == GeneratorModePostgres || mode == GeneratorModeMssql {
+		if len(tableName.Schema.String()) > 0 {
+			schemaIdent = Ident{Name: tableName.Schema.String(), Quoted: tableName.Schema.Quoted()}
+		} else {
+			schemaIdent = Ident{Name: defaultSchema, Quoted: false}
+		}
+	}
+
+	return QualifiedTableName{
+		Schema: schemaIdent,
+		Name:   nameIdent,
 	}
 }
 

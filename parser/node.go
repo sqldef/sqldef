@@ -718,6 +718,9 @@ type IdentityOpt struct {
 type ColumnType struct {
 	// The base type string
 	Type string
+	// TypeIdent stores the original identifier with quote information for custom types (e.g., domains).
+	// When TypeIdent is set (i.e., not zero value), use TypeIdent.Quoted() to determine quoting.
+	TypeIdent Ident
 
 	// Generic field options.
 	NotNull       *BoolVal

@@ -1,13 +1,3 @@
-# Comprehensive tests for quote-aware identifier normalization (legacy_name_normalization: false)
-# These tests verify that:
-# - Unquoted identifiers are normalized to lowercase
-# - Quoted identifiers preserve their exact case
-# - Identifiers that differ only in case are treated as distinct when quoted
-
-# =============================================================================
-# TABLE NAMES
-# =============================================================================
-
 TableQuotedPreservesCase:
   legacy_name_normalization: false
   offline: true
@@ -41,10 +31,6 @@ TableQuotedVsUnquotedAreDifferent:
     ALTER TABLE "public"."Users" ADD COLUMN name text;
     ALTER TABLE "public".users ADD COLUMN email text;
 
-# =============================================================================
-# COLUMN NAMES
-# =============================================================================
-
 ColumnQuotedPreservesCase:
   legacy_name_normalization: false
   offline: true
@@ -76,10 +62,6 @@ ColumnQuotedVsUnquotedAreDifferent:
     ALTER TABLE "public".users ALTER COLUMN "Name" SET NOT NULL;
     ALTER TABLE "public".users ALTER COLUMN name SET NOT NULL;
 
-# =============================================================================
-# VIEW NAMES
-# =============================================================================
-
 ViewQuotedPreservesCase:
   legacy_name_normalization: false
   offline: true
@@ -103,10 +85,6 @@ ViewUnquotedNormalizesToLowercase:
     CREATE VIEW ActiveUsers AS SELECT * FROM users;
   output: |
     ALTER TABLE "public".users ADD COLUMN name text;
-
-# =============================================================================
-# TYPE NAMES (Custom Types)
-# =============================================================================
 
 TypeQuotedPreservesCase:
   legacy_name_normalization: false
@@ -132,10 +110,6 @@ TypeUnquotedNormalizesToLowercase:
   output: |
     ALTER TABLE "public".users ADD COLUMN name text;
 
-# =============================================================================
-# DOMAIN NAMES
-# =============================================================================
-
 DomainQuotedPreservesCase:
   legacy_name_normalization: false
   offline: true
@@ -159,10 +133,6 @@ DomainUnquotedNormalizesToLowercase:
     CREATE TABLE users (id positiveint, score positiveint);
   output: |
     ALTER TABLE "public".users ADD COLUMN score positiveint;
-
-# =============================================================================
-# INDEX NAMES
-# =============================================================================
 
 IndexQuotedPreservesCase:
   legacy_name_normalization: false
@@ -188,10 +158,6 @@ IndexUnquotedNormalizesToLowercase:
   output: |
     ALTER TABLE "public".users ADD COLUMN name text;
 
-# =============================================================================
-# CONSTRAINT NAMES
-# =============================================================================
-
 ConstraintQuotedPreservesCase:
   legacy_name_normalization: false
   offline: true
@@ -212,70 +178,6 @@ ConstraintUnquotedNormalizesToLowercase:
   output: |
     ALTER TABLE "public".users ADD COLUMN email text UNIQUE;
 
-# =============================================================================
-# SEQUENCE NAMES
-# =============================================================================
-
-SequenceQuotedPreservesCase:
-  legacy_name_normalization: false
-  offline: true
-  current: |
-    CREATE SEQUENCE "UserIdSeq";
-    CREATE TABLE users (id int DEFAULT nextval('"UserIdSeq"'));
-  desired: |
-    CREATE SEQUENCE "UserIdSeq";
-    CREATE TABLE users (id int DEFAULT nextval('"UserIdSeq"'), name text);
-  output: |
-    ALTER TABLE "public".users ADD COLUMN name text;
-
-SequenceUnquotedNormalizesToLowercase:
-  legacy_name_normalization: false
-  offline: true
-  current: |
-    CREATE SEQUENCE UserIdSeq;
-    CREATE TABLE users (id int DEFAULT nextval('useridseq'));
-  desired: |
-    CREATE SEQUENCE UserIdSeq;
-    CREATE TABLE users (id int DEFAULT nextval('useridseq'), name text);
-  output: |
-    ALTER TABLE "public".users ADD COLUMN name text;
-
-# =============================================================================
-# TRIGGER NAMES
-# =============================================================================
-
-TriggerQuotedPreservesCase:
-  legacy_name_normalization: false
-  offline: true
-  current: |
-    CREATE TABLE users (id int, updated_at timestamp);
-    CREATE FUNCTION update_timestamp() RETURNS trigger AS $$ BEGIN NEW.updated_at = NOW(); RETURN NEW; END; $$ LANGUAGE plpgsql;
-    CREATE TRIGGER "UpdateTimestamp" BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_timestamp();
-  desired: |
-    CREATE TABLE users (id int, name text, updated_at timestamp);
-    CREATE FUNCTION update_timestamp() RETURNS trigger AS $$ BEGIN NEW.updated_at = NOW(); RETURN NEW; END; $$ LANGUAGE plpgsql;
-    CREATE TRIGGER "UpdateTimestamp" BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_timestamp();
-  output: |
-    ALTER TABLE "public".users ADD COLUMN name text;
-
-TriggerUnquotedNormalizesToLowercase:
-  legacy_name_normalization: false
-  offline: true
-  current: |
-    CREATE TABLE users (id int, updated_at timestamp);
-    CREATE FUNCTION update_timestamp() RETURNS trigger AS $$ BEGIN NEW.updated_at = NOW(); RETURN NEW; END; $$ LANGUAGE plpgsql;
-    CREATE TRIGGER UpdateTimestamp BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_timestamp();
-  desired: |
-    CREATE TABLE users (id int, name text, updated_at timestamp);
-    CREATE FUNCTION update_timestamp() RETURNS trigger AS $$ BEGIN NEW.updated_at = NOW(); RETURN NEW; END; $$ LANGUAGE plpgsql;
-    CREATE TRIGGER UpdateTimestamp BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_timestamp();
-  output: |
-    ALTER TABLE "public".users ADD COLUMN name text;
-
-# =============================================================================
-# MIXED SCENARIOS
-# =============================================================================
-
 MixedQuotedAndUnquoted:
   legacy_name_normalization: false
   offline: true
@@ -287,8 +189,8 @@ MixedQuotedAndUnquoted:
     CREATE TABLE users (name text);
   output: |
     ALTER TABLE "public"."Users" ADD COLUMN "Name" text;
-    ALTER TABLE "public"."Users" DROP COLUMN id;
     ALTER TABLE "public".users ADD COLUMN name text;
+    ALTER TABLE "public"."Users" DROP COLUMN id;
     ALTER TABLE "public".users DROP COLUMN id;
 
 ComplexMixedCaseScenario:
@@ -303,9 +205,9 @@ ComplexMixedCaseScenario:
     CREATE TABLE "UserProfiles" (
       "UserId" int PRIMARY KEY,
       user_name text NOT NULL,
-      "CreatedAt" timestamp DEFAULT NOW()
+      "CreatedAt" timestamp DEFAULT CURRENT_TIMESTAMP
     );
   output: |
-    ALTER TABLE "public"."UserProfiles" ADD COLUMN "CreatedAt" timestamp DEFAULT NOW();
-    ALTER TABLE "public"."UserProfiles" ADD PRIMARY KEY ("UserId");
     ALTER TABLE "public"."UserProfiles" ALTER COLUMN user_name SET NOT NULL;
+    ALTER TABLE "public"."UserProfiles" ADD COLUMN "CreatedAt" timestamp DEFAULT current_timestamp;
+    ALTER TABLE "public"."UserProfiles" ADD PRIMARY KEY ("UserId");

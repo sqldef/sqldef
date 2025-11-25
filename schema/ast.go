@@ -2,6 +2,42 @@ package schema
 
 import "github.com/sqldef/sqldef/v3/parser"
 
+// Ident represents an identifier with quote information.
+// This is the schema package's own identifier type, independent of parser.Ident.
+type Ident struct {
+	Name   string
+	Quoted bool
+}
+
+func (i Ident) String() string {
+	return i.Name
+}
+
+// QualifiedTableName represents a schema-qualified table name with quote information.
+type QualifiedTableName struct {
+	Schema Ident // empty if not specified (will use default schema)
+	Name   Ident
+}
+
+// String returns the full qualified name as "schema.name" or just "name" if no schema.
+func (q QualifiedTableName) String() string {
+	if q.Schema.Name == "" {
+		return q.Name.Name
+	}
+	return q.Schema.Name + "." + q.Name.Name
+}
+
+// QualifiedColumnName represents a column name with quote information.
+// In column definitions within a table, the table context is implicit.
+type QualifiedColumnName struct {
+	Name Ident
+}
+
+// String returns the column name.
+func (q QualifiedColumnName) String() string {
+	return q.Name.Name
+}
+
 type DDL interface {
 	Statement() string
 }
@@ -64,7 +100,7 @@ type RevokePrivilege struct {
 }
 
 type Table struct {
-	name        string
+	name        QualifiedTableName
 	columns     map[string]*Column
 	indexes     []Index
 	checks      []CheckDefinition
@@ -77,9 +113,10 @@ type Table struct {
 }
 
 type Column struct {
-	name                       string
+	name                       QualifiedColumnName
 	position                   int
 	typeName                   string
+	typeIdent                  Ident // Type name with quote information (for custom types like domains)
 	unsigned                   bool
 	notNull                    *bool
 	autoIncrement              bool
@@ -109,7 +146,7 @@ type Column struct {
 }
 
 type Index struct {
-	name              string
+	name              Ident
 	indexType         string // Parsed only in "create table" but not parsed in "add index". Only used inside `generateDDLsForCreateTable`.
 	columns           []IndexColumn
 	primary           bool
@@ -423,7 +460,7 @@ func (t *Table) PrimaryKey() *Index {
 	for _, column := range t.columns {
 		if column.keyOption == ColumnKeyPrimary {
 			primaryColumns = append(primaryColumns, IndexColumn{
-				columnExpr: &parser.ColName{Name: parser.NewColIdent(column.name, false)},
+				columnExpr: &parser.ColName{Name: parser.NewIdent(column.name.Name.Name, column.name.Name.Quoted)},
 			})
 		}
 	}
@@ -433,7 +470,7 @@ func (t *Table) PrimaryKey() *Index {
 	}
 
 	return &Index{
-		name:      "PRIMARY",
+		name:      Ident{Name: "PRIMARY", Quoted: false},
 		indexType: "primary key",
 		columns:   primaryColumns,
 		primary:   true,
