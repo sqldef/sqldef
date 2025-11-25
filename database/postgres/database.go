@@ -1260,8 +1260,10 @@ func (d *PostgresDatabase) escapeIdentifier(name string) string {
 }
 
 // escapeDataTypeName quotes a data type name appropriately.
-// Built-in types are NOT quoted; only custom types (domains, enums) are quoted.
 // Handles array types and schema-qualified names.
+// Uses case detection to determine if quoting is needed:
+//   - All lowercase names (built-in types or unquoted custom types) are not quoted
+//   - Names with uppercase letters (quoted custom types) are quoted to preserve case
 func (d *PostgresDatabase) escapeDataTypeName(typeName string) string {
 	// Handle array types: preserve the [] suffix
 	arraySuffix := ""
@@ -1276,69 +1278,29 @@ func (d *PostgresDatabase) escapeDataTypeName(typeName string) string {
 	}
 
 	// Handle schema-qualified types (e.g., "public.my_type")
-	// Schema-qualified types are custom types that should be quoted
 	if idx := strings.Index(typeName, "."); idx > 0 {
 		schema := typeName[:idx]
 		baseType := typeName[idx+1:]
-		return d.escapeIdentifier(schema) + "." + d.escapeIdentifier(baseType) + arraySuffix
+		// Quote each part only if it has uppercase letters
+		escapedSchema := schema
+		if strings.ToLower(schema) != schema {
+			escapedSchema = d.escapeIdentifier(schema)
+		}
+		escapedType := baseType
+		if strings.ToLower(baseType) != baseType {
+			escapedType = d.escapeIdentifier(baseType)
+		}
+		return escapedSchema + "." + escapedType + arraySuffix
 	}
 
-	// For simple type names, check if it's a built-in type
-	// Built-in types should NOT be quoted
-	if isBuiltInType(typeName) {
+	// For simple type names, use case detection:
+	// - All lowercase: don't quote (built-in types like "integer", or custom types created without quotes)
+	// - Has uppercase: quote to preserve case (custom types created with quotes like "UserStatus")
+	if strings.ToLower(typeName) == typeName {
 		return typeName + arraySuffix
 	}
 
-	// Custom types (domains, enums) should be quoted to preserve case
 	return d.escapeIdentifier(typeName) + arraySuffix
-}
-
-// isBuiltInType returns true if the type name is a PostgreSQL built-in type
-func isBuiltInType(typeName string) bool {
-	// Extract base type name (remove parameters like (128) from varchar(128))
-	baseName := typeName
-	if idx := strings.Index(typeName, "("); idx > 0 {
-		baseName = typeName[:idx]
-	}
-	baseName = strings.TrimSpace(strings.ToLower(baseName))
-
-	// Common PostgreSQL built-in types
-	builtInTypes := map[string]bool{
-		// Numeric types
-		"smallint": true, "integer": true, "bigint": true, "int": true, "int2": true, "int4": true, "int8": true,
-		"decimal": true, "numeric": true, "real": true, "double precision": true, "float": true, "float4": true, "float8": true,
-		"smallserial": true, "serial": true, "bigserial": true, "serial2": true, "serial4": true, "serial8": true,
-		// Character types
-		"character varying": true, "varchar": true, "character": true, "char": true, "text": true, "bpchar": true,
-		// Binary types
-		"bytea": true,
-		// Date/Time types
-		"timestamp": true, "timestamp without time zone": true, "timestamp with time zone": true, "timestamptz": true,
-		"date": true, "time": true, "time without time zone": true, "time with time zone": true, "timetz": true,
-		"interval": true,
-		// Boolean type
-		"boolean": true, "bool": true,
-		// UUID type
-		"uuid": true,
-		// JSON types
-		"json": true, "jsonb": true,
-		// XML type
-		"xml": true,
-		// Network types
-		"cidr": true, "inet": true, "macaddr": true, "macaddr8": true,
-		// Geometric types
-		"point": true, "line": true, "lseg": true, "box": true, "path": true, "polygon": true, "circle": true,
-		// Range types
-		"int4range": true, "int8range": true, "numrange": true, "tsrange": true, "tstzrange": true, "daterange": true,
-		// Other types
-		"money": true, "bit": true, "bit varying": true, "varbit": true,
-		"tsvector": true, "tsquery": true,
-		"oid": true, "regproc": true, "regprocedure": true, "regoper": true, "regoperator": true,
-		"regclass": true, "regtype": true, "regrole": true, "regnamespace": true, "regconfig": true, "regdictionary": true,
-		// Array types are handled by the arraySuffix logic
-	}
-
-	return builtInTypes[baseName]
 }
 
 func splitTableName(table string, defaultSchema string) (string, string) {
