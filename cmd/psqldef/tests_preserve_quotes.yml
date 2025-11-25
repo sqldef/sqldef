@@ -1,5 +1,5 @@
 TableQuotedPreservesCase:
-  legacy_name_normalization: false
+  legacy_ignore_quotes: false
   current: |
     CREATE TABLE "Users" (id int);
   desired: |
@@ -8,7 +8,7 @@ TableQuotedPreservesCase:
     ALTER TABLE "public"."Users" ADD COLUMN name text;
 
 TableUnquotedNormalizesToLowercase:
-  legacy_name_normalization: false
+  legacy_ignore_quotes: false
   current: |
     CREATE TABLE Users (id int);
   desired: |
@@ -17,7 +17,7 @@ TableUnquotedNormalizesToLowercase:
     ALTER TABLE "public".users ADD COLUMN name text;
 
 TableQuotedVsUnquotedAreDifferent:
-  legacy_name_normalization: false
+  legacy_ignore_quotes: false
   current: |
     CREATE TABLE "Users" (id int);
     CREATE TABLE users (id int);
@@ -29,7 +29,7 @@ TableQuotedVsUnquotedAreDifferent:
     ALTER TABLE "public".users ADD COLUMN email text;
 
 ColumnQuotedPreservesCase:
-  legacy_name_normalization: false
+  legacy_ignore_quotes: false
   current: |
     CREATE TABLE users ("Name" text);
   desired: |
@@ -38,7 +38,7 @@ ColumnQuotedPreservesCase:
     ALTER TABLE "public".users ALTER COLUMN "Name" SET NOT NULL;
 
 ColumnUnquotedNormalizesToLowercase:
-  legacy_name_normalization: false
+  legacy_ignore_quotes: false
   current: |
     CREATE TABLE users (Name text);
   desired: |
@@ -47,7 +47,7 @@ ColumnUnquotedNormalizesToLowercase:
     ALTER TABLE "public".users ALTER COLUMN name SET NOT NULL;
 
 ColumnQuotedVsUnquotedAreDifferent:
-  legacy_name_normalization: false
+  legacy_ignore_quotes: false
   current: |
     CREATE TABLE users ("Name" text, name text);
   desired: |
@@ -57,7 +57,7 @@ ColumnQuotedVsUnquotedAreDifferent:
     ALTER TABLE "public".users ALTER COLUMN name SET NOT NULL;
 
 ViewQuotedPreservesCase:
-  legacy_name_normalization: false
+  legacy_ignore_quotes: false
   current: |
     CREATE TABLE users (id int);
     CREATE VIEW "ActiveUsers" AS SELECT id FROM users;
@@ -68,7 +68,7 @@ ViewQuotedPreservesCase:
     ALTER TABLE "public".users ADD COLUMN name text;
 
 ViewUnquotedNormalizesToLowercase:
-  legacy_name_normalization: false
+  legacy_ignore_quotes: false
   current: |
     CREATE TABLE users (id int);
     CREATE VIEW ActiveUsers AS SELECT id FROM users;
@@ -79,7 +79,7 @@ ViewUnquotedNormalizesToLowercase:
     ALTER TABLE "public".users ADD COLUMN name text;
 
 TypeQuotedPreservesCase:
-  legacy_name_normalization: false
+  legacy_ignore_quotes: false
   current: |
     CREATE TYPE "UserStatus" AS ENUM ('active', 'inactive');
     CREATE TABLE users (id int, status "UserStatus");
@@ -90,7 +90,7 @@ TypeQuotedPreservesCase:
     ALTER TABLE "public".users ADD COLUMN name text;
 
 TypeUnquotedNormalizesToLowercase:
-  legacy_name_normalization: false
+  legacy_ignore_quotes: false
   current: |
     CREATE TYPE UserStatus AS ENUM ('active', 'inactive');
     CREATE TABLE users (id int, status userstatus);
@@ -101,7 +101,7 @@ TypeUnquotedNormalizesToLowercase:
     ALTER TABLE "public".users ADD COLUMN name text;
 
 DomainQuotedPreservesCase:
-  legacy_name_normalization: false
+  legacy_ignore_quotes: false
   current: |
     CREATE DOMAIN "PositiveInt" AS int CHECK (VALUE > 0);
     CREATE TABLE users (id "PositiveInt");
@@ -112,7 +112,7 @@ DomainQuotedPreservesCase:
     ALTER TABLE "public".users ADD COLUMN score "PositiveInt";
 
 DomainUnquotedNormalizesToLowercase:
-  legacy_name_normalization: false
+  legacy_ignore_quotes: false
   current: |
     CREATE DOMAIN PositiveInt AS int CHECK (VALUE > 0);
     CREATE TABLE users (id positiveint);
@@ -123,7 +123,7 @@ DomainUnquotedNormalizesToLowercase:
     ALTER TABLE "public".users ADD COLUMN score positiveint;
 
 IndexQuotedPreservesCase:
-  legacy_name_normalization: false
+  legacy_ignore_quotes: false
   current: |
     CREATE TABLE users (id int, email text);
     CREATE INDEX "EmailIndex" ON users (email);
@@ -134,7 +134,7 @@ IndexQuotedPreservesCase:
     ALTER TABLE "public".users ADD COLUMN name text;
 
 IndexUnquotedNormalizesToLowercase:
-  legacy_name_normalization: false
+  legacy_ignore_quotes: false
   current: |
     CREATE TABLE users (id int, email text);
     CREATE INDEX EmailIndex ON users (email);
@@ -145,7 +145,7 @@ IndexUnquotedNormalizesToLowercase:
     ALTER TABLE "public".users ADD COLUMN name text;
 
 ConstraintQuotedPreservesCase:
-  legacy_name_normalization: false
+  legacy_ignore_quotes: false
   current: |
     CREATE TABLE users (id int CONSTRAINT "PrimaryKey" PRIMARY KEY);
   desired: |
@@ -154,7 +154,7 @@ ConstraintQuotedPreservesCase:
     ALTER TABLE "public".users ADD COLUMN email text UNIQUE;
 
 ConstraintUnquotedNormalizesToLowercase:
-  legacy_name_normalization: false
+  legacy_ignore_quotes: false
   current: |
     CREATE TABLE users (id int CONSTRAINT PrimaryKey PRIMARY KEY);
   desired: |
@@ -163,7 +163,7 @@ ConstraintUnquotedNormalizesToLowercase:
     ALTER TABLE "public".users ADD COLUMN email text UNIQUE;
 
 MixedQuotedAndUnquoted:
-  legacy_name_normalization: false
+  legacy_ignore_quotes: false
   current: |
     CREATE TABLE "Users" (id int);
     CREATE TABLE users (id int);
@@ -177,7 +177,7 @@ MixedQuotedAndUnquoted:
     ALTER TABLE "public".users DROP COLUMN id;
 
 ComplexMixedCaseScenario:
-  legacy_name_normalization: false
+  legacy_ignore_quotes: false
   current: |
     CREATE TABLE "UserProfiles" (
       "UserId" int,

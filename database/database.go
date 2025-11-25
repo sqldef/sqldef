@@ -57,7 +57,7 @@ type GeneratorConfig struct {
 	EnableDrop              bool     // Whether to enable DROP/REVOKE operations
 	CreateIndexConcurrently bool     // Whether to add CONCURRENTLY to CREATE INDEX statements
 	DisableDdlTransaction   bool     // Do not use a transaction for DDL statements
-	LegacyNameNormalization *bool    // nil=legacy(default:true), true=legacy, false=quote-aware normalization
+	LegacyIgnoreQuotes      *bool    // nil or true = ignore quotes (legacy default), false = preserve quotes
 }
 
 type TransactionQueries struct {

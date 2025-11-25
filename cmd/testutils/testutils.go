@@ -24,19 +24,19 @@ import (
 )
 
 type TestCase struct {
-	Current                 string  // default: empty schema
-	Desired                 string  // default: empty schema
-	Output                  *string // default: use Desired as Output
-	Error                   *string // default: nil
-	MinVersion              string  `yaml:"min_version"`
-	MaxVersion              string  `yaml:"max_version"`
-	User                    string
-	Flavor                  string   // database flavor (e.g., "mariadb", "mysql")
-	ManagedRoles            []string `yaml:"managed_roles"`             // Roles whose privileges are managed by sqldef
-	EnableDrop              *bool    `yaml:"enable_drop"`               // Whether to enable DROP/REVOKE operations
-	LegacyNameNormalization *bool    `yaml:"legacy_name_normalization"` // nil=default(true), true=legacy, false=quote-aware
-	Offline                 bool     `yaml:"offline"`
-	Config                  struct { // Optional config settings for the test
+	Current            string  // default: empty schema
+	Desired            string  // default: empty schema
+	Output             *string // default: use Desired as Output
+	Error              *string // default: nil
+	MinVersion         string  `yaml:"min_version"`
+	MaxVersion         string  `yaml:"max_version"`
+	User               string
+	Flavor             string   // database flavor (e.g., "mariadb", "mysql")
+	ManagedRoles       []string `yaml:"managed_roles"`        // Roles whose privileges are managed by sqldef
+	EnableDrop         *bool    `yaml:"enable_drop"`          // Whether to enable DROP/REVOKE operations
+	LegacyIgnoreQuotes *bool    `yaml:"legacy_ignore_quotes"` // nil or true = ignore quotes (legacy default), false = preserve quotes
+	Offline            bool     `yaml:"offline"`
+	Config             struct { // Optional config settings for the test
 		CreateIndexConcurrently bool `yaml:"create_index_concurrently"`
 		DisableDdlTransaction   bool `yaml:"disable_ddl_transaction"`
 	} `yaml:"config"`
@@ -168,7 +168,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		EnableDrop:              *test.EnableDrop,
 		CreateIndexConcurrently: test.Config.CreateIndexConcurrently,
 		DisableDdlTransaction:   test.Config.DisableDdlTransaction,
-		LegacyNameNormalization: test.LegacyNameNormalization,
+		LegacyIgnoreQuotes:      test.LegacyIgnoreQuotes,
 	}
 
 	if test.Offline {

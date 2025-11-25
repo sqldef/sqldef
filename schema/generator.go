@@ -595,13 +595,13 @@ func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, desiredTabl
 }
 
 // escapeColumnNameForDrop escapes a column name for DROP COLUMN statements.
-// In PostgreSQL with legacy_name_normalization=false, we output lowercase column names
+// In PostgreSQL with legacy_ignore_quotes=false, we output lowercase column names
 // without quotes since they don't need quoting. Only columns with uppercase letters
 // (indicating they were originally quoted) are quoted.
 func (g *Generator) escapeColumnNameForDrop(column *Column) string {
 	useLegacy := true
-	if g.config.LegacyNameNormalization != nil {
-		useLegacy = *g.config.LegacyNameNormalization
+	if g.config.LegacyIgnoreQuotes != nil {
+		useLegacy = *g.config.LegacyIgnoreQuotes
 	}
 
 	// Legacy mode or non-PostgreSQL: use existing escaping
@@ -2598,7 +2598,7 @@ func (g *Generator) escapeSQLName(name string) string {
 }
 
 // escapeSQLIdent escapes an Ident for SQL output, respecting the quote-aware normalization setting.
-// When legacy_name_normalization is false:
+// When legacy_ignore_quotes is false:
 //   - Quoted identifiers preserve their case and are always quoted in output
 //   - Unquoted identifiers are normalized to lowercase and are NOT quoted in output
 func (g *Generator) escapeSQLIdent(ident Ident) string {
@@ -2606,16 +2606,16 @@ func (g *Generator) escapeSQLIdent(ident Ident) string {
 }
 
 // escapeSQLNameQuoteAware escapes an identifier name for SQL output,
-// taking into account whether it was originally quoted and the legacy_name_normalization setting.
-// When legacy_name_normalization is false:
+// taking into account whether it was originally quoted and the legacy_ignore_quotes setting.
+// When legacy_ignore_quotes is false:
 //   - Quoted identifiers preserve their case and are always quoted in output
 //   - Unquoted identifiers are normalized to lowercase and are NOT quoted in output
 //     (unless they contain special characters that require quoting)
 func (g *Generator) escapeSQLNameQuoteAware(name string, wasQuoted bool) string {
 	// Determine if we're using legacy mode
 	useLegacy := true
-	if g.config.LegacyNameNormalization != nil {
-		useLegacy = *g.config.LegacyNameNormalization
+	if g.config.LegacyIgnoreQuotes != nil {
+		useLegacy = *g.config.LegacyIgnoreQuotes
 	}
 
 	// Legacy mode: always quote everything (backward compatible behavior)
@@ -2628,8 +2628,7 @@ func (g *Generator) escapeSQLNameQuoteAware(name string, wasQuoted bool) string 
 	case GeneratorModePostgres:
 		if wasQuoted {
 			// Originally quoted: preserve case and quote in output
-			escaped := strings.ReplaceAll(name, "\"", "\"\"")
-			return fmt.Sprintf("\"%s\"", escaped)
+			return g.escapeSQLName(name)
 		}
 		// Originally unquoted: normalize to lowercase and don't quote
 		// (PostgreSQL accepts unquoted lowercase identifiers)
@@ -2646,19 +2645,19 @@ func (g *Generator) escapeSQLNameQuoteAware(name string, wasQuoted bool) string 
 }
 
 // identsEqual compares two Ident values for equality, respecting the quote-aware normalization setting.
-// When legacy_name_normalization is false (quote-aware mode for PostgreSQL):
+// When legacy_ignore_quotes is false (quote-aware mode for PostgreSQL):
 //   - Unquoted identifiers are normalized to lowercase before comparison
 //   - Quoted identifiers preserve their case
 //   - `users` (unquoted) == `"users"` (quoted lowercase) because unquoted normalizes to lowercase
 //   - `"Users"` (quoted) != `"users"` (quoted) because case differs
 //
-// When legacy_name_normalization is true or nil (legacy mode):
+// When legacy_ignore_quotes is true or nil (legacy mode):
 //   - Compare case-insensitively (backward compatible behavior)
 func (g *Generator) identsEqual(a, b Ident) bool {
 	// Determine if we're using legacy mode
 	useLegacy := true
-	if g.config.LegacyNameNormalization != nil {
-		useLegacy = *g.config.LegacyNameNormalization
+	if g.config.LegacyIgnoreQuotes != nil {
+		useLegacy = *g.config.LegacyIgnoreQuotes
 	}
 
 	// Legacy mode: case-insensitive comparison (backward compatible behavior)
@@ -3567,8 +3566,8 @@ func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 	// Use quote-aware comparison for column types when in quote-aware mode
 	useLegacy := true
-	if g.config.LegacyNameNormalization != nil {
-		useLegacy = *g.config.LegacyNameNormalization
+	if g.config.LegacyIgnoreQuotes != nil {
+		useLegacy = *g.config.LegacyIgnoreQuotes
 	}
 
 	if !useLegacy && g.mode == GeneratorModePostgres && (current.typeIdent.Name != "" || desired.typeIdent.Name != "") {
