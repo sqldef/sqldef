@@ -2615,7 +2615,7 @@ func (node *Cursor) Format(buf *nodeBuffer) {
 		if node.Into != nil {
 			prefix := " into "
 			for _, c := range node.Into {
-				buf.Printf("%s%s", prefix, c.lowered())
+				buf.Printf("%s%s", prefix, strings.ToLower(c.String()))
 				prefix = ", "
 			}
 		}
@@ -2737,14 +2737,7 @@ func (n Ident) equalString(str string) bool {
 	return strings.EqualFold(n.name, str)
 }
 
-// lowered returns a lower-cased name.
-// Deprecated: Use schema.NormalizeIdentifierName for database-aware normalization instead.
-func (n Ident) lowered() string {
-	return strings.ToLower(n.name)
-}
-
 // TableIdent is a SQL identifier for table names.
-// It is an alias to Ident for backward compatibility.
 type TableIdent = Ident
 
 // NewTableIdent creates a new table identifier.
@@ -2753,7 +2746,6 @@ func NewTableIdent(str string, quoted bool) TableIdent {
 }
 
 // ColIdent is a SQL identifier for column names.
-// It is an alias to Ident for backward compatibility.
 type ColIdent = Ident
 
 // NewColIdent creates a new column identifier.
