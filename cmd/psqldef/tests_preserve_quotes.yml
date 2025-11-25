@@ -1,6 +1,5 @@
 TableQuotedPreservesCase:
   legacy_name_normalization: false
-  offline: true
   current: |
     CREATE TABLE "Users" (id int);
   desired: |
@@ -10,7 +9,6 @@ TableQuotedPreservesCase:
 
 TableUnquotedNormalizesToLowercase:
   legacy_name_normalization: false
-  offline: true
   current: |
     CREATE TABLE Users (id int);
   desired: |
@@ -20,7 +18,6 @@ TableUnquotedNormalizesToLowercase:
 
 TableQuotedVsUnquotedAreDifferent:
   legacy_name_normalization: false
-  offline: true
   current: |
     CREATE TABLE "Users" (id int);
     CREATE TABLE users (id int);
@@ -33,7 +30,6 @@ TableQuotedVsUnquotedAreDifferent:
 
 ColumnQuotedPreservesCase:
   legacy_name_normalization: false
-  offline: true
   current: |
     CREATE TABLE users ("Name" text);
   desired: |
@@ -43,7 +39,6 @@ ColumnQuotedPreservesCase:
 
 ColumnUnquotedNormalizesToLowercase:
   legacy_name_normalization: false
-  offline: true
   current: |
     CREATE TABLE users (Name text);
   desired: |
@@ -53,7 +48,6 @@ ColumnUnquotedNormalizesToLowercase:
 
 ColumnQuotedVsUnquotedAreDifferent:
   legacy_name_normalization: false
-  offline: true
   current: |
     CREATE TABLE users ("Name" text, name text);
   desired: |
@@ -64,7 +58,6 @@ ColumnQuotedVsUnquotedAreDifferent:
 
 ViewQuotedPreservesCase:
   legacy_name_normalization: false
-  offline: true
   current: |
     CREATE TABLE users (id int);
     CREATE VIEW "ActiveUsers" AS SELECT * FROM users;
@@ -76,7 +69,6 @@ ViewQuotedPreservesCase:
 
 ViewUnquotedNormalizesToLowercase:
   legacy_name_normalization: false
-  offline: true
   current: |
     CREATE TABLE users (id int);
     CREATE VIEW ActiveUsers AS SELECT * FROM users;
@@ -88,7 +80,6 @@ ViewUnquotedNormalizesToLowercase:
 
 TypeQuotedPreservesCase:
   legacy_name_normalization: false
-  offline: true
   current: |
     CREATE TYPE "UserStatus" AS ENUM ('active', 'inactive');
     CREATE TABLE users (id int, status "UserStatus");
@@ -100,7 +91,6 @@ TypeQuotedPreservesCase:
 
 TypeUnquotedNormalizesToLowercase:
   legacy_name_normalization: false
-  offline: true
   current: |
     CREATE TYPE UserStatus AS ENUM ('active', 'inactive');
     CREATE TABLE users (id int, status userstatus);
@@ -112,7 +102,6 @@ TypeUnquotedNormalizesToLowercase:
 
 DomainQuotedPreservesCase:
   legacy_name_normalization: false
-  offline: true
   current: |
     CREATE DOMAIN "PositiveInt" AS int CHECK (VALUE > 0);
     CREATE TABLE users (id "PositiveInt");
@@ -124,7 +113,6 @@ DomainQuotedPreservesCase:
 
 DomainUnquotedNormalizesToLowercase:
   legacy_name_normalization: false
-  offline: true
   current: |
     CREATE DOMAIN PositiveInt AS int CHECK (VALUE > 0);
     CREATE TABLE users (id positiveint);
@@ -136,7 +124,6 @@ DomainUnquotedNormalizesToLowercase:
 
 IndexQuotedPreservesCase:
   legacy_name_normalization: false
-  offline: true
   current: |
     CREATE TABLE users (id int, email text);
     CREATE INDEX "EmailIndex" ON users (email);
@@ -148,7 +135,6 @@ IndexQuotedPreservesCase:
 
 IndexUnquotedNormalizesToLowercase:
   legacy_name_normalization: false
-  offline: true
   current: |
     CREATE TABLE users (id int, email text);
     CREATE INDEX EmailIndex ON users (email);
@@ -160,7 +146,6 @@ IndexUnquotedNormalizesToLowercase:
 
 ConstraintQuotedPreservesCase:
   legacy_name_normalization: false
-  offline: true
   current: |
     CREATE TABLE users (id int CONSTRAINT "PrimaryKey" PRIMARY KEY);
   desired: |
@@ -170,7 +155,6 @@ ConstraintQuotedPreservesCase:
 
 ConstraintUnquotedNormalizesToLowercase:
   legacy_name_normalization: false
-  offline: true
   current: |
     CREATE TABLE users (id int CONSTRAINT PrimaryKey PRIMARY KEY);
   desired: |
@@ -180,7 +164,6 @@ ConstraintUnquotedNormalizesToLowercase:
 
 MixedQuotedAndUnquoted:
   legacy_name_normalization: false
-  offline: true
   current: |
     CREATE TABLE "Users" (id int);
     CREATE TABLE users (id int);
@@ -195,7 +178,6 @@ MixedQuotedAndUnquoted:
 
 ComplexMixedCaseScenario:
   legacy_name_normalization: false
-  offline: true
   current: |
     CREATE TABLE "UserProfiles" (
       "UserId" int,
