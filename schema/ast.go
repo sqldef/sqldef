@@ -332,7 +332,7 @@ type SridDefinition struct {
 
 type CheckDefinition struct {
 	definition        parser.Expr
-	constraintName    string
+	constraintName    Ident
 	notForReplication bool
 	noInherit         bool
 }

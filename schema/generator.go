@@ -433,7 +433,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		// Check checks.
 		for _, check := range currentTable.checks {
 			// First try to find by name
-			if findCheckConstraintInTable(desiredTable, check.constraintName) != nil {
+			if findCheckConstraintInTable(desiredTable, check.constraintName.Name) != nil {
 				continue
 			}
 
@@ -445,9 +445,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 			switch g.mode {
 			case GeneratorModePostgres, GeneratorModeMssql, GeneratorModeSQLite3:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(currentTable), g.escapeSQLName(check.constraintName)))
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(currentTable), g.escapeSQLNameQuoteAware(check.constraintName.Name, check.constraintName.Quoted)))
 			case GeneratorModeMysql:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableNameForTable(currentTable), g.escapeSQLName(check.constraintName)))
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableNameForTable(currentTable), g.escapeSQLNameQuoteAware(check.constraintName.Name, check.constraintName.Quoted)))
 			}
 		}
 	}
@@ -932,19 +932,27 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 				tableName := desired.table.name.Name.Name
 				constraintName := buildPostgresConstraintName(tableName, desiredColumn.name.String(), "check")
-				if desiredColumn.check != nil && desiredColumn.check.constraintName != "" {
-					constraintName = desiredColumn.check.constraintName
+				constraintNameIdent := Ident{Name: constraintName, Quoted: false}
+				if desiredColumn.check != nil && desiredColumn.check.constraintName.Name != "" {
+					constraintName = desiredColumn.check.constraintName.Name
+					constraintNameIdent = desiredColumn.check.constraintName
 				}
 
 				currentCheck := findCheckConstraintInTable(&currentTable, constraintName)
 
 				if !g.areSameCheckDefinition(currentCheck, desiredColumn.check) { // || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
 					if currentCheck != nil {
-						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), constraintName)
+						// Use the current check's ident for dropping if available, otherwise fall back to the computed one
+						dropNameIdent := constraintNameIdent
+						if currentCheck.constraintName.Name != "" {
+							dropNameIdent = currentCheck.constraintName
+						}
+						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLNameQuoteAware(dropNameIdent.Name, dropNameIdent.Quoted))
 						ddls = append(ddls, ddl)
 					}
 					if desiredColumn.check != nil {
-						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableNameForTable(&desired.table), constraintName, g.normalizeCheckExprString(desiredColumn.check.definition))
+						escapedConstraintName := g.escapeSQLNameQuoteAware(constraintNameIdent.Name, constraintNameIdent.Quoted)
+						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableNameForTable(&desired.table), escapedConstraintName, g.normalizeCheckExprString(desiredColumn.check.definition))
 						if desiredColumn.check.noInherit {
 							ddl += " NO INHERIT"
 						}
@@ -971,7 +979,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					if currentColumn.check != nil && desiredColumn.check == nil {
 						// Current has column-level CHECK, desired doesn't
 						// Check if it matches a table-level CHECK in desired
-						if findCheckConstraintByName(desired.table.checks, currentColumn.check.constraintName) != nil ||
+						if findCheckConstraintByName(desired.table.checks, currentColumn.check.constraintName.Name) != nil ||
 							g.findCheckConstraintByDefinitionInList(desired.table.checks, currentColumn.check) != nil {
 							// This column-level CHECK is actually a table-level CHECK
 							// It will be handled in the table-level CHECK processing
@@ -983,20 +991,23 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						tableName := desired.table.name.Name.Name
 						constraintName := buildPostgresConstraintName(tableName, desiredColumn.name.String(), "check")
 						if currentColumn.check != nil {
-							currentConstraintName := currentColumn.check.constraintName
-							ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), currentConstraintName)
+							currentConstraintNameIdent := currentColumn.check.constraintName
+							if currentConstraintNameIdent.Name == "" {
+								currentConstraintNameIdent = Ident{Name: currentColumn.check.constraintName.Name, Quoted: false}
+							}
+							ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLNameQuoteAware(currentConstraintNameIdent.Name, currentConstraintNameIdent.Quoted))
 							ddls = append(ddls, ddl)
 						}
 						if desiredColumn.check != nil {
-							desiredConstraintName := desiredColumn.check.constraintName
-							if desiredConstraintName == "" {
-								desiredConstraintName = constraintName
+							desiredConstraintNameIdent := desiredColumn.check.constraintName
+							if desiredConstraintNameIdent.Name == "" {
+								desiredConstraintNameIdent = Ident{Name: constraintName, Quoted: false}
 							}
 							replicationDefinition := ""
 							if desiredColumn.check.notForReplication {
 								replicationDefinition = " NOT FOR REPLICATION"
 							}
-							ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableNameForTable(&desired.table), desiredConstraintName, replicationDefinition, g.normalizeCheckExprString(desiredColumn.check.definition))
+							ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableNameForTable(&desired.table), g.escapeSQLNameQuoteAware(desiredConstraintNameIdent.Name, desiredConstraintNameIdent.Quoted), replicationDefinition, g.normalizeCheckExprString(desiredColumn.check.definition))
 							ddls = append(ddls, ddl)
 						}
 					}
@@ -1306,7 +1317,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	// Examine each check
 	for _, desiredCheck := range desired.table.checks {
 		// First try to find by name
-		currentCheck := findCheckConstraintInTable(&currentTable, desiredCheck.constraintName)
+		currentCheck := findCheckConstraintInTable(&currentTable, desiredCheck.constraintName.Name)
 
 		// For MySQL and MSSQL, also try to find by definition if not found by name
 		// This handles auto-generated constraint names
@@ -1317,18 +1328,20 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		if currentCheck != nil {
 			if !g.areSameCheckDefinition(currentCheck, &desiredCheck) {
 				// Constraint exists but has different definition, need to replace it
+				currentNameIdent := currentCheck.constraintName
+				desiredNameIdent := desiredCheck.constraintName
 				switch g.mode {
 				case GeneratorModePostgres, GeneratorModeMssql:
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLName(currentCheck.constraintName)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableNameForTable(&desired.table), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckExprString(desiredCheck.definition)))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLNameQuoteAware(currentNameIdent.Name, currentNameIdent.Quoted)))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableNameForTable(&desired.table), g.escapeSQLNameQuoteAware(desiredNameIdent.Name, desiredNameIdent.Quoted), g.normalizeCheckExprString(desiredCheck.definition)))
 				case GeneratorModeMysql:
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLName(currentCheck.constraintName)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableNameForTable(&desired.table), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckExprString(desiredCheck.definition)))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLNameQuoteAware(currentNameIdent.Name, currentNameIdent.Quoted)))
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableNameForTable(&desired.table), g.escapeSQLNameQuoteAware(desiredNameIdent.Name, desiredNameIdent.Quoted), g.normalizeCheckExprString(desiredCheck.definition)))
 				case GeneratorModeSQLite3:
 					// SQLite does not support ALTER TABLE for CHECK constraints
 					// Modifying CHECK constraints requires recreating the table, which is not supported
 				}
-			} else if currentCheck.constraintName != desiredCheck.constraintName {
+			} else if currentCheck.constraintName.Name != desiredCheck.constraintName.Name {
 				// Constraint exists with same definition but different name
 				// Don't generate DDL for renaming - constraint names don't matter if the definition is the same
 				// This handles cases where MSSQL auto-generates names like CK__table__column__hash
@@ -1336,7 +1349,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 		} else {
 			// Constraint doesn't exist, add it
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableNameForTable(&desired.table), g.escapeSQLName(desiredCheck.constraintName), g.normalizeCheckExprString(desiredCheck.definition)))
+			desiredNameIdent := desiredCheck.constraintName
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableNameForTable(&desired.table), g.escapeSQLNameQuoteAware(desiredNameIdent.Name, desiredNameIdent.Quoted), g.normalizeCheckExprString(desiredCheck.definition)))
 		}
 	}
 
@@ -3226,14 +3240,14 @@ func findIndexOptionByName(options []IndexOption, name string) *IndexOption {
 func findCheckConstraintInTable(table *Table, constraintName string) *CheckDefinition {
 	// First, look for table-level check constraints
 	for _, check := range table.checks {
-		if check.constraintName == constraintName {
+		if check.constraintName.Name == constraintName {
 			return &check
 		}
 	}
 
 	// Then, look for column-level check constraints
 	for _, column := range table.columns {
-		if column.check != nil && column.check.constraintName == constraintName {
+		if column.check != nil && column.check.constraintName.Name == constraintName {
 			return column.check
 		}
 	}
@@ -3244,7 +3258,7 @@ func findCheckConstraintInTable(table *Table, constraintName string) *CheckDefin
 // findCheckConstraintByName finds a CHECK constraint in a list by name
 func findCheckConstraintByName(checks []CheckDefinition, constraintName string) *CheckDefinition {
 	for _, check := range checks {
-		if check.constraintName == constraintName {
+		if check.constraintName.Name == constraintName {
 			return &check
 		}
 	}

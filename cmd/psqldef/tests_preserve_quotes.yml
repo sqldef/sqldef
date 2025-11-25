@@ -193,3 +193,111 @@ ComplexMixedCaseScenario:
     ALTER TABLE "public"."UserProfiles" ALTER COLUMN user_name SET NOT NULL;
     ALTER TABLE "public"."UserProfiles" ADD COLUMN "CreatedAt" timestamp DEFAULT current_timestamp;
     ALTER TABLE "public"."UserProfiles" ADD PRIMARY KEY ("UserId");
+
+# Foreign key tests with quoted table/column names
+ForeignKeyToQuotedTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "Users" (
+      "UserId" int PRIMARY KEY
+    );
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int
+    );
+  desired: |
+    CREATE TABLE "Users" (
+      "UserId" int PRIMARY KEY
+    );
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES "Users" ("UserId")
+    );
+  output: |
+    ALTER TABLE "public".orders ADD CONSTRAINT "fk_user" FOREIGN KEY ("user_id") REFERENCES "public"."Users" ("UserId");
+
+ForeignKeyWithQuotedConstraintName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int PRIMARY KEY);
+    CREATE TABLE orders (id int PRIMARY KEY, user_id int);
+  desired: |
+    CREATE TABLE users (id int PRIMARY KEY);
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT "FK_Orders_Users" FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+  output: |
+    ALTER TABLE "public".orders ADD CONSTRAINT "FK_Orders_Users" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id");
+
+ForeignKeyBetweenQuotedAndUnquotedTables:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "Users" ("UserId" int PRIMARY KEY);
+    CREATE TABLE users (id int PRIMARY KEY);
+    CREATE TABLE "Orders" (id int PRIMARY KEY, quoted_user_id int, unquoted_user_id int);
+  desired: |
+    CREATE TABLE "Users" ("UserId" int PRIMARY KEY);
+    CREATE TABLE users (id int PRIMARY KEY);
+    CREATE TABLE "Orders" (
+      id int PRIMARY KEY,
+      quoted_user_id int,
+      unquoted_user_id int,
+      CONSTRAINT "fk_quoted" FOREIGN KEY (quoted_user_id) REFERENCES "Users" ("UserId"),
+      CONSTRAINT fk_unquoted FOREIGN KEY (unquoted_user_id) REFERENCES users (id)
+    );
+  output: |
+    ALTER TABLE "public"."Orders" ADD CONSTRAINT "fk_quoted" FOREIGN KEY ("quoted_user_id") REFERENCES "public"."Users" ("UserId");
+    ALTER TABLE "public"."Orders" ADD CONSTRAINT "fk_unquoted" FOREIGN KEY ("unquoted_user_id") REFERENCES "public"."users" ("id");
+
+# Array type with quoted custom type
+ArrayTypeWithQuotedCustomType:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE "UserRole" AS ENUM ('admin', 'user');
+    CREATE TABLE users (id int);
+  desired: |
+    CREATE TYPE "UserRole" AS ENUM ('admin', 'user');
+    CREATE TABLE users (id int, roles "UserRole"[]);
+  output: |
+    ALTER TABLE "public".users ADD COLUMN roles "UserRole"[];
+
+ArrayTypeWithUnquotedCustomType:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE userrole AS ENUM ('admin', 'user');
+    CREATE TABLE users (id int);
+  desired: |
+    CREATE TYPE userrole AS ENUM ('admin', 'user');
+    CREATE TABLE users (id int, roles userrole[]);
+  output: |
+    ALTER TABLE "public".users ADD COLUMN roles userrole[];
+
+# Check constraint with quoted name - verifies that quoted constraint names preserve case
+CheckConstraintQuotedName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (id int, price int);
+  desired: |
+    CREATE TABLE products (
+      id int,
+      price int CONSTRAINT "Price_Positive" CHECK (price > 0)
+    );
+  output: |
+    ALTER TABLE "public".products ADD CONSTRAINT "Price_Positive" CHECK (price > 0);
+
+# Unique constraint with quoted columns
+UniqueConstraintQuotedColumns:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users ("Email" text, "Username" text);
+  desired: |
+    CREATE TABLE users (
+      "Email" text,
+      "Username" text,
+      CONSTRAINT "unique_email" UNIQUE ("Email")
+    );
+  output: |
+    ALTER TABLE "public"."users" ADD CONSTRAINT "unique_email" UNIQUE ("Email");
