@@ -162,6 +162,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				viewType:     strings.ToUpper(stmt.View.Type),
 				securityType: strings.ToUpper(stmt.View.SecurityType),
 				name:         normalizedTableName(mode, stmt.View.Name, defaultSchema),
+				nameIdent:    Ident{Name: stmt.View.Name.Name.String(), Quoted: stmt.View.Name.Name.Quoted()},
 				definition:   stmt.View.Definition,
 				columns:      columns,
 				withData:     stmt.View.WithData,
@@ -184,6 +185,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 		} else if stmt.Action == parser.CreateType {
 			return &Type{
 				name:       normalizedObjectName(mode, stmt.Type.Name, defaultSchema),
+				nameIdent:  Ident{Name: stmt.Type.Name.Name.String(), Quoted: stmt.Type.Name.Name.Quoted()},
 				statement:  ddl,
 				enumValues: stmt.Type.Type.EnumValues,
 			}, nil
@@ -198,6 +200,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 
 			return &Domain{
 				name:         normalizedObjectName(mode, stmt.Domain.Name, defaultSchema),
+				nameIdent:    Ident{Name: stmt.Domain.Name.Name.String(), Quoted: stmt.Domain.Name.Name.Quoted()},
 				statement:    ddl,
 				dataType:     parser.String(&stmt.Domain.DataType),
 				defaultValue: parseDefaultDefinition(stmt.Domain.Default),

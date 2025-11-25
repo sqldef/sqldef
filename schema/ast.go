@@ -248,6 +248,7 @@ type View struct {
 	viewType     string
 	securityType string
 	name         string
+	nameIdent    Ident // For quote-aware comparison
 	definition   parser.SelectStatement
 	indexes      []Index
 	columns      []string
@@ -339,12 +340,14 @@ type CheckDefinition struct {
 // TODO: include type information
 type Type struct {
 	name       string
+	nameIdent  Ident // For quote-aware comparison
 	statement  string
 	enumValues []string
 }
 
 type Domain struct {
 	name         string
+	nameIdent    Ident // For quote-aware comparison
 	statement    string
 	dataType     string
 	defaultValue *DefaultDefinition

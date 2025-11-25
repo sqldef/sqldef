@@ -183,7 +183,7 @@ func (d *PostgresDatabase) views() ([]string, error) {
 		definition = normalizeDatePartToExtract(definition)
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE VIEW %s AS %s;", schema+"."+name, definition,
+				"CREATE VIEW %s.%s AS %s;", d.escapeIdentifier(schema), d.escapeIdentifier(name), definition,
 			),
 		)
 	}
@@ -223,7 +223,7 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 		definition = normalizeDatePartToExtract(definition)
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE MATERIALIZED VIEW %s AS %s;", schema+"."+name, definition,
+				"CREATE MATERIALIZED VIEW %s.%s AS %s;", d.escapeIdentifier(schema), d.escapeIdentifier(name), definition,
 			),
 		)
 
@@ -323,7 +323,7 @@ func (d *PostgresDatabase) types() ([]string, error) {
 		}
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE TYPE %s.%s AS ENUM (%s);", escapeSQLName(typeSchema), escapeSQLName(typeName), strings.Join(enumLabels, ", "),
+				"CREATE TYPE %s.%s AS ENUM (%s);", d.escapeIdentifier(typeSchema), d.escapeIdentifier(typeName), strings.Join(enumLabels, ", "),
 			),
 		)
 	}
@@ -412,10 +412,10 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 	// Build CREATE DOMAIN statements
 	var ddls []string
 	for _, di := range domains {
-		ddl := fmt.Sprintf("CREATE DOMAIN %s.%s AS %s", escapeSQLName(di.schema), escapeSQLName(di.name), di.dataType)
+		ddl := fmt.Sprintf("CREATE DOMAIN %s.%s AS %s", d.escapeIdentifier(di.schema), d.escapeIdentifier(di.name), di.dataType)
 
 		if di.collation.Valid && di.collation.String != "" && di.collation.String != "default" {
-			ddl += fmt.Sprintf(" COLLATE %s", escapeSQLName(di.collation.String))
+			ddl += fmt.Sprintf(" COLLATE %s", d.escapeIdentifier(di.collation.String))
 		}
 
 		if di.defaultValue.Valid {
@@ -510,19 +510,19 @@ func (d *PostgresDatabase) exportTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get privilege definitions for table %s: %w", table, err)
 	}
-	return buildExportTableDDL(components), nil
+	return d.buildExportTableDDL(components), nil
 }
 
-func buildExportTableDDL(components TableDDLComponents) string {
+func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) string {
 	var queryBuilder strings.Builder
 	schema, table := splitTableName(components.TableName, components.DefaultSchema)
-	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", escapeSQLName(schema), escapeSQLName(table))
+	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", d.escapeIdentifier(schema), d.escapeIdentifier(table))
 	for i, col := range components.Columns {
 		if i > 0 {
 			fmt.Fprint(&queryBuilder, ",")
 		}
 		fmt.Fprint(&queryBuilder, "\n"+indent)
-		fmt.Fprintf(&queryBuilder, "\"%s\" %s", col.Name, col.GetDataType())
+		fmt.Fprintf(&queryBuilder, "%s %s", d.escapeIdentifier(col.Name), d.escapeDataTypeName(col.GetDataType()))
 		if !col.Nullable {
 			fmt.Fprint(&queryBuilder, " NOT NULL")
 		}
@@ -627,13 +627,28 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	      s.column_default,
 	      s.is_nullable,
 	      CASE
+	      -- Domain types ('d') and enum types ('e'): return the type name with schema prefix
+	      WHEN t.typtype IN ('d', 'e') THEN
+	        CASE
+	          WHEN tn.nspname = 'public' THEN t.typname
+	          ELSE tn.nspname || '.' || t.typname
+	        END
 	      WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod)
 	      ELSE s.data_type
 	      END,
-	      format_type(f.atttypid, f.atttypmod),
+	      -- formattedDataType: also return type name for domain and enum types
+	      CASE
+	      WHEN t.typtype IN ('d', 'e') THEN
+	        CASE
+	          WHEN tn.nspname = 'public' THEN t.typname
+	          ELSE tn.nspname || '.' || t.typname
+	        END
+	      ELSE format_type(f.atttypid, f.atttypmod)
+	      END,
 	      s.identity_generation
 	    FROM pg_attribute f
 	    JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
+	    LEFT JOIN pg_namespace tn ON tn.oid = t.typnamespace
 	    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
 	    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
 	    LEFT JOIN information_schema.columns s ON s.column_name = f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
@@ -1235,6 +1250,95 @@ func postgresBuildDSN(config database.Config) string {
 
 func escapeSQLName(name string) string {
 	return fmt.Sprintf("\"%s\"", name)
+}
+
+// escapeIdentifier quotes an identifier for DDL output.
+// Always quotes to preserve the exact case stored in the database.
+// Note: This is a method for consistency with escapeDataTypeName, but doesn't use instance state.
+func (d *PostgresDatabase) escapeIdentifier(name string) string {
+	return escapeSQLName(name)
+}
+
+// escapeDataTypeName quotes a data type name appropriately.
+// Built-in types are NOT quoted; only custom types (domains, enums) are quoted.
+// Handles array types and schema-qualified names.
+func (d *PostgresDatabase) escapeDataTypeName(typeName string) string {
+	// Handle array types: preserve the [] suffix
+	arraySuffix := ""
+	if strings.HasSuffix(typeName, "[]") {
+		arraySuffix = "[]"
+		typeName = strings.TrimSuffix(typeName, "[]")
+	}
+
+	// If already quoted (from format_type()), return as-is
+	if strings.HasPrefix(typeName, "\"") && strings.HasSuffix(typeName, "\"") {
+		return typeName + arraySuffix
+	}
+
+	// Handle schema-qualified types (e.g., "public.my_type")
+	// Schema-qualified types are custom types that should be quoted
+	if idx := strings.Index(typeName, "."); idx > 0 {
+		schema := typeName[:idx]
+		baseType := typeName[idx+1:]
+		return d.escapeIdentifier(schema) + "." + d.escapeIdentifier(baseType) + arraySuffix
+	}
+
+	// For simple type names, check if it's a built-in type
+	// Built-in types should NOT be quoted
+	if isBuiltInType(typeName) {
+		return typeName + arraySuffix
+	}
+
+	// Custom types (domains, enums) should be quoted to preserve case
+	return d.escapeIdentifier(typeName) + arraySuffix
+}
+
+// isBuiltInType returns true if the type name is a PostgreSQL built-in type
+func isBuiltInType(typeName string) bool {
+	// Extract base type name (remove parameters like (128) from varchar(128))
+	baseName := typeName
+	if idx := strings.Index(typeName, "("); idx > 0 {
+		baseName = typeName[:idx]
+	}
+	baseName = strings.TrimSpace(strings.ToLower(baseName))
+
+	// Common PostgreSQL built-in types
+	builtInTypes := map[string]bool{
+		// Numeric types
+		"smallint": true, "integer": true, "bigint": true, "int": true, "int2": true, "int4": true, "int8": true,
+		"decimal": true, "numeric": true, "real": true, "double precision": true, "float": true, "float4": true, "float8": true,
+		"smallserial": true, "serial": true, "bigserial": true, "serial2": true, "serial4": true, "serial8": true,
+		// Character types
+		"character varying": true, "varchar": true, "character": true, "char": true, "text": true, "bpchar": true,
+		// Binary types
+		"bytea": true,
+		// Date/Time types
+		"timestamp": true, "timestamp without time zone": true, "timestamp with time zone": true, "timestamptz": true,
+		"date": true, "time": true, "time without time zone": true, "time with time zone": true, "timetz": true,
+		"interval": true,
+		// Boolean type
+		"boolean": true, "bool": true,
+		// UUID type
+		"uuid": true,
+		// JSON types
+		"json": true, "jsonb": true,
+		// XML type
+		"xml": true,
+		// Network types
+		"cidr": true, "inet": true, "macaddr": true, "macaddr8": true,
+		// Geometric types
+		"point": true, "line": true, "lseg": true, "box": true, "path": true, "polygon": true, "circle": true,
+		// Range types
+		"int4range": true, "int8range": true, "numrange": true, "tsrange": true, "tstzrange": true, "daterange": true,
+		// Other types
+		"money": true, "bit": true, "bit varying": true, "varbit": true,
+		"tsvector": true, "tsquery": true,
+		"oid": true, "regproc": true, "regprocedure": true, "regoper": true, "regoperator": true,
+		"regclass": true, "regtype": true, "regrole": true, "regnamespace": true, "regconfig": true, "regdictionary": true,
+		// Array types are handled by the arraySuffix logic
+	}
+
+	return builtInTypes[baseName]
 }
 
 func splitTableName(table string, defaultSchema string) (string, string) {

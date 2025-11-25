@@ -60,10 +60,10 @@ ViewQuotedPreservesCase:
   legacy_name_normalization: false
   current: |
     CREATE TABLE users (id int);
-    CREATE VIEW "ActiveUsers" AS SELECT * FROM users;
+    CREATE VIEW "ActiveUsers" AS SELECT id FROM users;
   desired: |
     CREATE TABLE users (id int, name text);
-    CREATE VIEW "ActiveUsers" AS SELECT * FROM users;
+    CREATE VIEW "ActiveUsers" AS SELECT id FROM users;
   output: |
     ALTER TABLE "public".users ADD COLUMN name text;
 
@@ -71,10 +71,10 @@ ViewUnquotedNormalizesToLowercase:
   legacy_name_normalization: false
   current: |
     CREATE TABLE users (id int);
-    CREATE VIEW ActiveUsers AS SELECT * FROM users;
+    CREATE VIEW ActiveUsers AS SELECT id FROM users;
   desired: |
     CREATE TABLE users (id int, name text);
-    CREATE VIEW ActiveUsers AS SELECT * FROM users;
+    CREATE VIEW ActiveUsers AS SELECT id FROM users;
   output: |
     ALTER TABLE "public".users ADD COLUMN name text;
 

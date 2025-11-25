@@ -1397,13 +1397,19 @@ func (node TableName) isEmpty() bool {
 	return node.Name.isEmpty()
 }
 
-// toViewName returns a TableName acceptable for use as a VIEW. VIEW names are
-// always lowercase, so toViewName lowercasese the name. Databases are case-sensitive
-// so Schema is left untouched.
+// toViewName returns a TableName acceptable for use as a VIEW.
+// For quoted identifiers, case is preserved (PostgreSQL behavior).
+// For unquoted identifiers, the name is lowercased (PostgreSQL normalizes to lowercase).
+// Schema is left untouched as databases are case-sensitive for schemas.
 func (node TableName) toViewName() TableName {
+	name := node.Name.String()
+	// Only lowercase unquoted identifiers; quoted identifiers preserve their case
+	if !node.Name.Quoted() {
+		name = strings.ToLower(name)
+	}
 	return TableName{
 		Schema: node.Schema,
-		Name:   NewTableIdent(strings.ToLower(node.Name.String()), node.Name.Quoted()),
+		Name:   NewTableIdent(name, node.Name.Quoted()),
 	}
 }
 

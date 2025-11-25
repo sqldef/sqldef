@@ -145,7 +145,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	for _, ddl := range desiredDDLs {
 		switch desired := ddl.(type) {
 		case *CreateTable:
-			if currentTable := findTableByName(g.currentTables, desired.table.name); currentTable != nil {
+			if currentTable := g.findTableByName(g.currentTables, desired.table.name); currentTable != nil {
 				// Table already exists, guess required DDLs.
 				tableDDLs, err := g.generateDDLsForCreateTable(*currentTable, *desired)
 				if err != nil {
@@ -199,7 +199,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				}
 			}
 			// Only add to desiredTables if it doesn't already exist (it may have been pre-populated from aggregation)
-			if findTableByName(g.desiredTables, desired.table.name) == nil {
+			if g.findTableByName(g.desiredTables, desired.table.name) == nil {
 				table := desired.table // copy table
 				g.desiredTables = append(g.desiredTables, &table)
 			}
@@ -303,7 +303,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	var tablesToDrop []*Table
 	for _, currentTable := range g.currentTables {
-		desiredTable := findTableByName(g.desiredTables, currentTable.name)
+		desiredTable := g.findTableByName(g.desiredTables, currentTable.name)
 		if desiredTable == nil {
 			tablesToDrop = append(tablesToDrop, currentTable)
 		}
@@ -322,7 +322,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted indexes, columns in remaining tables
 	for _, currentTable := range g.currentTables {
-		desiredTable := findTableByName(g.desiredTables, currentTable.name)
+		desiredTable := g.findTableByName(g.desiredTables, currentTable.name)
 		if desiredTable == nil {
 			continue // Already handled in drop tables above
 		}
@@ -369,8 +369,13 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue
 			}
 
-			if slices.Contains(convertIndexesToIndexNames(desiredTable.indexes), index.name.Name) ||
-				slices.Contains(convertForeignKeysToIndexNames(desiredTable.foreignKeys), index.name.Name) {
+			// Check if index exists in desired state using quote-aware comparison
+			indexExistsInDesired := g.findIndexByIdent(desiredTable.indexes, index.name) != nil
+			// Also check foreign key index names (these are plain strings)
+			if !indexExistsInDesired {
+				indexExistsInDesired = slices.Contains(convertForeignKeysToIndexNames(desiredTable.foreignKeys), index.name.Name)
+			}
+			if indexExistsInDesired {
 				continue // Index is expected to exist.
 			}
 
@@ -397,7 +402,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Check columns.
 		for _, column := range currentTable.columns {
-			if _, exist := desiredTable.columns[column.name.String()]; exist {
+			// Use quote-aware comparison to find the column in desired table
+			if g.findColumnByIdent(desiredTable.columns, column.name.Name) != nil {
 				continue // Column is expected to exist.
 			}
 
@@ -412,7 +418,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 			if !isRenamed {
 				// Column is obsoleted. Drop column.
-				columnDDLs := g.generateDDLsForAbsentColumn(currentTable, column)
+				columnDDLs := g.generateDDLsForAbsentColumn(currentTable, desiredTable, column)
 				ddls = append(ddls, columnDDLs...)
 				// TODO: simulate to remove column from `currentTable.columns`?
 			}
@@ -450,19 +456,23 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted views
 	for _, currentView := range g.currentViews {
-		if slices.Contains(convertViewNames(g.desiredViews), currentView.name) {
+		// Use quote-aware comparison to find the view in desired
+		if g.findViewByIdent(g.desiredViews, currentView.nameIdent) != nil {
 			continue
 		}
+		// Use quote-aware escaping for the view name
+		viewName := g.escapeViewName(currentView)
 		if currentView.viewType == "MATERIALIZED VIEW" {
-			ddls = append(ddls, fmt.Sprintf("DROP MATERIALIZED VIEW %s", g.escapeTableName(currentView.name)))
+			ddls = append(ddls, fmt.Sprintf("DROP MATERIALIZED VIEW %s", viewName))
 			continue
 		}
-		ddls = append(ddls, fmt.Sprintf("DROP VIEW %s", g.escapeTableName(currentView.name)))
+		ddls = append(ddls, fmt.Sprintf("DROP VIEW %s", viewName))
 	}
 
 	// Clean up obsoleted domains
 	for _, currentDomain := range g.currentDomains {
-		if slices.Contains(convertDomainNames(g.desiredDomains), currentDomain.name) {
+		// Use quote-aware comparison to find the domain in desired
+		if g.findDomainByIdent(g.desiredDomains, currentDomain.nameIdent) != nil {
 			continue
 		}
 		ddls = append(ddls, fmt.Sprintf("DROP DOMAIN %s", currentDomain.name))
@@ -565,19 +575,57 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	return ddls, nil
 }
 
-func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, column *Column) []string {
+func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, desiredTable *Table, column *Column) []string {
 	ddls := []string{}
 
 	// Only MSSQL has column default constraints. They need to be deleted before dropping the column.
 	if g.mode == GeneratorModeMssql {
 		if column.defaultDef != nil && column.defaultDef.constraintName != "" {
-			ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(currentTable), g.escapeSQLName(column.defaultDef.constraintName))
+			ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(desiredTable), g.escapeSQLName(column.defaultDef.constraintName))
 			ddls = append(ddls, ddl)
 		}
 	}
 
-	ddl := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableNameForTable(currentTable), g.escapeColumnName(column))
+	// For DROP COLUMN, use smart escaping: only quote if the column name needs quoting
+	// (has uppercase letters, which indicates it was originally quoted)
+	// Use desiredTable for proper quote-aware table name escaping
+	columnName := g.escapeColumnNameForDrop(column)
+	ddl := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableNameForTable(desiredTable), columnName)
 	return append(ddls, ddl)
+}
+
+// escapeColumnNameForDrop escapes a column name for DROP COLUMN statements.
+// In PostgreSQL with legacy_name_normalization=false, we output lowercase column names
+// without quotes since they don't need quoting. Only columns with uppercase letters
+// (indicating they were originally quoted) are quoted.
+func (g *Generator) escapeColumnNameForDrop(column *Column) string {
+	useLegacy := true
+	if g.config.LegacyNameNormalization != nil {
+		useLegacy = *g.config.LegacyNameNormalization
+	}
+
+	// Legacy mode or non-PostgreSQL: use existing escaping
+	if useLegacy || g.mode != GeneratorModePostgres {
+		return g.escapeColumnName(column)
+	}
+
+	// Quote-aware mode for PostgreSQL:
+	// - If the column name has uppercase letters, it was originally quoted - quote it
+	// - If all lowercase, it was unquoted - don't quote
+	name := column.name.Name.Name
+	needsQuote := false
+	for _, r := range name {
+		if r >= 'A' && r <= 'Z' {
+			needsQuote = true
+			break
+		}
+	}
+
+	if needsQuote {
+		escaped := strings.ReplaceAll(name, "\"", "\"\"")
+		return fmt.Sprintf("\"%s\"", escaped)
+	}
+	return name
 }
 
 // In the caller, `mergeTable` manages `g.currentTables`.
@@ -602,7 +650,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 		}
 
-		currentColumn := findColumnByName(currentTable.columns, desiredColumn.name.String())
+		// Use quote-aware comparison to find the current column
+		currentColumn := g.findColumnByIdent(currentTable.columns, desiredColumn.name.Name)
 		if currentColumn == nil || !currentColumn.autoIncrement {
 			// We may not be able to add AUTO_INCREMENT yet. It will be added after adding keys (primary or not) at the "Add new AUTO_INCREMENT" place.
 			// prevent to
@@ -831,17 +880,26 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					ddls = append(ddls, ddl)
 				}
 			case GeneratorModePostgres:
+				slog.Debug("Comparing column types",
+					"table", desired.table.name.String(),
+					"column", currentColumn.name.String(),
+					"currentTypeName", currentColumn.typeName,
+					"currentTypeIdent", currentColumn.typeIdent,
+					"desiredTypeName", desiredColumn.typeName,
+					"desiredTypeIdent", desiredColumn.typeIdent)
 				if !g.haveSameDataType(*currentColumn, desiredColumn) {
-					// Change type
-					ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s", g.escapeTableNameForTable(&desired.table), g.escapeColumnName(currentColumn), g.generateDataType(desiredColumn))
+					// Change type - use desiredColumn for escaping to match user's quote style
+					ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s", g.escapeTableNameForTable(&desired.table), g.escapeColumnName(&desiredColumn), g.generateDataType(desiredColumn))
 					ddls = append(ddls, ddl)
 				}
 
 				if !isPrimaryKey(*currentColumn, currentTable) { // Primary Key implies NOT NULL
 					if g.notNull(*currentColumn) && !g.notNull(desiredColumn) {
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL", g.escapeTableNameForTable(&desired.table), g.escapeColumnName(currentColumn)))
+						// Use desiredColumn for escaping to match user's quote style
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL", g.escapeTableNameForTable(&desired.table), g.escapeColumnName(&desiredColumn)))
 					} else if !g.notNull(*currentColumn) && g.notNull(desiredColumn) {
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL", g.escapeTableNameForTable(&desired.table), g.escapeColumnName(currentColumn)))
+						// Use desiredColumn for escaping to match user's quote style
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL", g.escapeTableNameForTable(&desired.table), g.escapeColumnName(&desiredColumn)))
 					}
 				}
 
@@ -867,15 +925,15 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				// default
 				if !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef, desiredColumn.typeName) {
 					if desiredColumn.defaultDef == nil {
-						// drop
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT", g.escapeTableNameForTable(&currentTable), g.escapeColumnName(currentColumn)))
+						// drop - use desiredColumn for escaping to match user's quote style
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT", g.escapeTableNameForTable(&desired.table), g.escapeColumnName(&desiredColumn)))
 					} else {
-						// set
+						// set - use desiredColumn for escaping to match user's quote style
 						definition, err := g.generateDefaultDefinition(*desiredColumn.defaultDef)
 						if err != nil {
 							return ddls, err
 						}
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s", g.escapeTableNameForTable(&currentTable), g.escapeColumnName(currentColumn), definition))
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s", g.escapeTableNameForTable(&desired.table), g.escapeColumnName(&desiredColumn), definition))
 					}
 				}
 
@@ -1001,7 +1059,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	// and if primary key changed
 	if g.mode == GeneratorModeMysql {
 		for _, currentColumn := range currentTable.columns {
-			desiredColumn := findColumnByName(desired.table.columns, currentColumn.name.String())
+			// Use quote-aware comparison to find the desired column
+			desiredColumn := g.findColumnByIdent(desired.table.columns, currentColumn.name.Name)
 			if currentColumn.autoIncrement && (primaryKeysChanged || desiredColumn == nil || !desiredColumn.autoIncrement) {
 				currentColumn.autoIncrement = false
 				definition, err := g.generateColumnDefinition(*currentColumn, false)
@@ -1126,7 +1185,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			continue
 		}
 
-		if currentIndex := findIndexByName(currentTable.indexes, desiredIndex.name.Name); currentIndex != nil {
+		if currentIndex := g.findIndexByIdent(currentTable.indexes, desiredIndex.name); currentIndex != nil {
 			// Drop and add index as needed.
 			if !g.areSameIndexes(*currentIndex, desiredIndex) {
 				ddls = append(ddls, g.generateDropIndex(desired.table.name.String(), desiredIndex.name.Name, desiredIndex.constraint))
@@ -1153,7 +1212,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	// Add new AUTO_INCREMENT after adding index and primary key
 	if g.mode == GeneratorModeMysql {
 		for _, desiredColumn := range desired.table.columns {
-			currentColumn := findColumnByName(currentTable.columns, desiredColumn.name.String())
+			// Use quote-aware comparison to find the current column
+			currentColumn := g.findColumnByIdent(currentTable.columns, desiredColumn.name.Name)
 			if desiredColumn.autoIncrement && (primaryKeysChanged || currentColumn == nil || !currentColumn.autoIncrement) {
 				definition, err := g.generateColumnDefinition(*desiredColumn, false)
 				if err != nil {
@@ -1330,7 +1390,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 	if currentTable == nil { // Views or non-existent tables
 		currentView := findViewByName(g.currentViews, tableName)
 		if currentView != nil {
-			currentIndex := findIndexByName(currentView.indexes, desiredIndex.name.Name)
+			currentIndex := g.findIndexByIdent(currentView.indexes, desiredIndex.name)
 			if currentIndex == nil {
 				// Index not found, add index.
 				ddls = append(ddls, statement)
@@ -1359,7 +1419,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 		return ddls, nil
 	}
 
-	currentIndex := findIndexByName(currentTable.indexes, desiredIndex.name.Name)
+	currentIndex := g.findIndexByIdent(currentTable.indexes, desiredIndex.name)
 	if currentIndex == nil {
 		// Check if this is a renamed index
 		var renameFromIndex *Index
@@ -1540,7 +1600,8 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View) ([]string, error) {
 	var ddls []string
 
-	currentView := findViewByName(g.currentViews, viewName)
+	// Use quote-aware comparison to find the current view
+	currentView := g.findViewByIdent(g.currentViews, desiredView.nameIdent)
 	if currentView == nil {
 		// View not found, add view.
 		ddls = append(ddls, desiredView.statement)
@@ -1601,7 +1662,7 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 
 	// Examine policies in desiredTable to delete obsoleted policies later
 	// Only add to desiredViews if it doesn't already exist (it may have been pre-populated from aggregation)
-	if !slices.Contains(convertViewNames(g.desiredViews), desiredView.name) {
+	if g.findViewByIdent(g.desiredViews, desiredView.nameIdent) == nil {
 		g.desiredViews = append(g.desiredViews, desiredView)
 	}
 
@@ -1672,7 +1733,10 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName string, desiredTrig
 func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 	ddls := []string{}
 
-	if currentType := findTypeByName(g.currentTypes, desired.name); currentType != nil {
+	// Use quote-aware comparison with schema matching to find the type.
+	// This handles both case-insensitive matching for unquoted names and
+	// types with the same base name in different schemas.
+	if currentType := g.findTypeBySchemaAndIdent(g.currentTypes, desired); currentType != nil {
 		// Type found. Add values if not present.
 		if currentType.enumValues != nil && len(currentType.enumValues) < len(desired.enumValues) {
 			for _, enumValue := range desired.enumValues {
@@ -1687,7 +1751,7 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 		ddls = append(ddls, desired.statement)
 	}
 	// Only add to desiredTypes if it doesn't already exist (it may have been pre-populated from aggregation)
-	if findTypeByName(g.desiredTypes, desired.name) == nil {
+	if g.findTypeBySchemaAndIdent(g.desiredTypes, desired) == nil {
 		g.desiredTypes = append(g.desiredTypes, desired)
 	}
 
@@ -1697,7 +1761,7 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 func (g *Generator) generateDDLsForCreateDomain(desired *Domain) ([]string, error) {
 	ddls := []string{}
 
-	if currentDomain := findDomainByName(g.currentDomains, desired.name); currentDomain != nil {
+	if currentDomain := g.findDomainByIdent(g.currentDomains, desired.nameIdent); currentDomain != nil {
 		alterDDLs, err := g.generateAlterDomainDDLs(currentDomain, desired)
 		if err != nil {
 			return nil, err
@@ -1707,7 +1771,7 @@ func (g *Generator) generateDDLsForCreateDomain(desired *Domain) ([]string, erro
 		ddls = append(ddls, desired.statement)
 	}
 	// Only add to desiredDomains if it doesn't already exist (it may have been pre-populated from aggregation)
-	if findDomainByName(g.desiredDomains, desired.name) == nil {
+	if g.findDomainByIdent(g.desiredDomains, desired.nameIdent) == nil {
 		g.desiredDomains = append(g.desiredDomains, desired)
 	}
 
@@ -2478,6 +2542,27 @@ func (g *Generator) escapeIndexName(index *Index) string {
 	return g.escapeSQLIdent(index.name)
 }
 
+// escapeViewName escapes a view name using quote-aware logic.
+// The view.name contains the schema-qualified name like "public.viewname".
+// The view.nameIdent contains just the view name with quote information.
+func (g *Generator) escapeViewName(view *View) string {
+	switch g.mode {
+	case GeneratorModePostgres, GeneratorModeMssql:
+		// view.name is like "schema.viewname" or just "viewname"
+		schemaTable := strings.SplitN(view.name, ".", 2)
+		var schemaName string
+		if len(schemaTable) == 1 {
+			schemaName = g.defaultSchema
+		} else {
+			schemaName = schemaTable[0]
+		}
+		// Schema is always quoted; view name uses quote-aware logic
+		return g.escapeSQLName(schemaName) + "." + g.escapeSQLIdent(view.nameIdent)
+	default:
+		return g.escapeSQLIdent(view.nameIdent)
+	}
+}
+
 func (g *Generator) escapeTableNameSimple(name string, withoutSchema bool) string {
 	switch g.mode {
 	case GeneratorModePostgres, GeneratorModeMssql:
@@ -2558,6 +2643,72 @@ func (g *Generator) escapeSQLNameQuoteAware(name string, wasQuoted bool) string 
 	default:
 		return g.escapeSQLName(name)
 	}
+}
+
+// identsEqual compares two Ident values for equality, respecting the quote-aware normalization setting.
+// When legacy_name_normalization is false (quote-aware mode for PostgreSQL):
+//   - Unquoted identifiers are normalized to lowercase before comparison
+//   - Quoted identifiers preserve their case
+//   - `users` (unquoted) == `"users"` (quoted lowercase) because unquoted normalizes to lowercase
+//   - `"Users"` (quoted) != `"users"` (quoted) because case differs
+//
+// When legacy_name_normalization is true or nil (legacy mode):
+//   - Compare case-insensitively (backward compatible behavior)
+func (g *Generator) identsEqual(a, b Ident) bool {
+	// Determine if we're using legacy mode
+	useLegacy := true
+	if g.config.LegacyNameNormalization != nil {
+		useLegacy = *g.config.LegacyNameNormalization
+	}
+
+	// Legacy mode: case-insensitive comparison (backward compatible behavior)
+	if useLegacy {
+		return strings.EqualFold(a.Name, b.Name)
+	}
+
+	// Quote-aware mode (for PostgreSQL)
+	if g.mode == GeneratorModePostgres {
+		// Normalize unquoted identifiers to lowercase (PostgreSQL behavior)
+		// Quoted identifiers preserve their case
+		aName := a.Name
+		bName := b.Name
+		if !a.Quoted {
+			aName = strings.ToLower(aName)
+		}
+		if !b.Quoted {
+			bName = strings.ToLower(bName)
+		}
+		// Compare the normalized names
+		return aName == bName
+	}
+
+	// For other databases, use case-insensitive comparison
+	return strings.EqualFold(a.Name, b.Name)
+}
+
+// qualifiedTableNamesEqual compares two QualifiedTableName values for equality.
+// An empty schema is treated as equivalent to the default schema.
+// Schema names are compared case-insensitively because PostgreSQL schema names
+// from database exports are always quoted but conceptually equivalent to unquoted names.
+func (g *Generator) qualifiedTableNamesEqual(a, b QualifiedTableName) bool {
+	// Normalize empty schemas to the default schema for comparison
+	aSchemaName := a.Schema.Name
+	bSchemaName := b.Schema.Name
+	if aSchemaName == "" && g.defaultSchema != "" {
+		aSchemaName = g.defaultSchema
+	}
+	if bSchemaName == "" && g.defaultSchema != "" {
+		bSchemaName = g.defaultSchema
+	}
+
+	// Compare schema names case-insensitively
+	// Schema names from database exports are always quoted for consistency,
+	// but they should match unquoted schema names (e.g., "public" == public)
+	if !strings.EqualFold(aSchemaName, bSchemaName) {
+		return false
+	}
+	// Compare table names using quote-aware comparison
+	return g.identsEqual(a.Name, b.Name)
 }
 
 // escapeAndJoinColumns escapes a list of column names and joins them with commas
@@ -3026,9 +3177,9 @@ func equalPrivileges(a, b []string) bool {
 	return true
 }
 
-func findTableByName(tables []*Table, name QualifiedTableName) *Table {
+func (g *Generator) findTableByName(tables []*Table, name QualifiedTableName) *Table {
 	for _, table := range tables {
-		if table.name.String() == name.String() {
+		if g.qualifiedTableNamesEqual(table.name, name) {
 			return table
 		}
 	}
@@ -3052,6 +3203,28 @@ func findColumnByName(columns map[string]*Column, name string) *Column {
 	return nil
 }
 
+// findColumnByIdent finds a column using quote-aware comparison
+func (g *Generator) findColumnByIdent(columns map[string]*Column, ident Ident) *Column {
+	for _, column := range columns {
+		if g.identsEqual(column.name.Name, ident) {
+			return column
+		}
+	}
+	return nil
+}
+
+// findIndexByIdent finds an index by its identifier using quote-aware comparison.
+func (g *Generator) findIndexByIdent(indexes []Index, name Ident) *Index {
+	for _, index := range indexes {
+		if g.identsEqual(index.name, name) {
+			return &index
+		}
+	}
+	return nil
+}
+
+// findIndexByName finds an index by its name string (legacy, case-sensitive comparison).
+// Use findIndexByIdent for quote-aware comparison.
 func findIndexByName(indexes []Index, name string) *Index {
 	for _, index := range indexes {
 		if index.name.Name == name {
@@ -3201,6 +3374,16 @@ func findViewByName(views []*View, name string) *View {
 	return nil
 }
 
+// findViewByIdent finds a view using quote-aware comparison
+func (g *Generator) findViewByIdent(views []*View, ident Ident) *View {
+	for _, view := range views {
+		if g.identsEqual(view.nameIdent, ident) {
+			return view
+		}
+	}
+	return nil
+}
+
 func findTriggerByName(triggers []*Trigger, name string) *Trigger {
 	for _, trigger := range triggers {
 		if trigger.name == name {
@@ -3219,9 +3402,61 @@ func findTypeByName(types []*Type, name string) *Type {
 	return nil
 }
 
+// findTypeByIdent finds a type using quote-aware comparison.
+// For schema-qualified types, it first tries to match by nameIdent (base name),
+// but there may be multiple types with the same base name in different schemas.
+func (g *Generator) findTypeByIdent(types []*Type, ident Ident) *Type {
+	for _, createType := range types {
+		if g.identsEqual(createType.nameIdent, ident) {
+			return createType
+		}
+	}
+	return nil
+}
+
+// findTypeBySchemaAndIdent finds a type by matching both schema and name with quote-aware comparison.
+// This handles both exact matches and case-insensitive matches for unquoted names.
+func (g *Generator) findTypeBySchemaAndIdent(types []*Type, desiredType *Type) *Type {
+	for _, createType := range types {
+		// Compare using quote-aware identifier equality for the base name
+		if !g.identsEqual(createType.nameIdent, desiredType.nameIdent) {
+			continue
+		}
+		// Also compare schemas (extract from full name)
+		// Type names are formatted as "schema.typename" or just "typename"
+		currentSchema, _ := g.extractSchemaAndName(createType.name)
+		desiredSchema, _ := g.extractSchemaAndName(desiredType.name)
+
+		// Compare schemas (schemas are typically lowercase, but compare them as-is)
+		if currentSchema == desiredSchema {
+			return createType
+		}
+	}
+	return nil
+}
+
+// extractSchemaAndName extracts schema and name from a qualified name like "schema.name"
+func (g *Generator) extractSchemaAndName(qualifiedName string) (schema string, name string) {
+	parts := strings.SplitN(qualifiedName, ".", 2)
+	if len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	return g.defaultSchema, qualifiedName
+}
+
 func findDomainByName(domains []*Domain, name string) *Domain {
 	for _, domain := range domains {
 		if domain.name == name {
+			return domain
+		}
+	}
+	return nil
+}
+
+// findDomainByIdent finds a domain using quote-aware comparison
+func (g *Generator) findDomainByIdent(domains []*Domain, ident Ident) *Domain {
+	for _, domain := range domains {
+		if g.identsEqual(domain.nameIdent, ident) {
 			return domain
 		}
 	}
@@ -3330,8 +3565,45 @@ func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
-	if normalizeTypeName(current.typeName, g.mode) != normalizeTypeName(desired.typeName, g.mode) {
-		return false
+	// Use quote-aware comparison for column types when in quote-aware mode
+	useLegacy := true
+	if g.config.LegacyNameNormalization != nil {
+		useLegacy = *g.config.LegacyNameNormalization
+	}
+
+	if !useLegacy && g.mode == GeneratorModePostgres && (current.typeIdent.Name != "" || desired.typeIdent.Name != "") {
+		// Quote-aware comparison for custom types (domains, etc.)
+		//
+		// PostgreSQL's format_type returns the internal type name without quotes.
+		// For a domain created with CREATE DOMAIN "PositiveInt", it returns "PositiveInt".
+		// For a domain created with CREATE DOMAIN PositiveInt, it returns "positiveint".
+		//
+		// The canonical form for comparison is:
+		// - Quoted identifiers: use the exact name (case-sensitive)
+		// - Unquoted identifiers: lowercase the name
+		currentCanonical := current.typeIdent.Name
+		desiredCanonical := desired.typeIdent.Name
+		if !current.typeIdent.Quoted {
+			currentCanonical = strings.ToLower(currentCanonical)
+		}
+		if !desired.typeIdent.Quoted {
+			desiredCanonical = strings.ToLower(desiredCanonical)
+		}
+		slog.Debug("haveSameDataType quote-aware comparison",
+			"column", current.name.String(),
+			"current.typeIdent", current.typeIdent,
+			"desired.typeIdent", desired.typeIdent,
+			"currentCanonical", currentCanonical,
+			"desiredCanonical", desiredCanonical,
+			"equal", currentCanonical == desiredCanonical)
+		if currentCanonical != desiredCanonical {
+			return false
+		}
+	} else {
+		// Legacy behavior: case-insensitive normalized comparison
+		if normalizeTypeName(current.typeName, g.mode) != normalizeTypeName(desired.typeName, g.mode) {
+			return false
+		}
 	}
 	if !reflect.DeepEqual(current.enumValues, desired.enumValues) {
 		return false
