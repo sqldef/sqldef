@@ -161,9 +161,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				mergeTable(currentTable, desired.table)
 			} else {
 				// Table not found. Check if it's a rename from another table.
-				if desired.table.renamedFrom != "" {
+				if desired.table.renamedFrom.Name != "" {
 					oldTableName := g.normalizeOldTableName(desired.table.renamedFrom, desired.table.name)
-					oldTable := findTableByNameString(g.currentTables, oldTableName)
+					oldTable := g.findTableByName(g.currentTables, oldTableName)
 					if oldTable != nil {
 						// Found the old table, generate rename DDL
 						renameDDL := g.generateRenameTableDDL(oldTableName, desired.table.name)
@@ -381,7 +381,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			// Check if this index was renamed (don't drop if it was renamed)
 			isRenamed := false
 			for _, desiredIndex := range desiredTable.indexes {
-				if desiredIndex.renamedFrom == index.name.Name {
+				if desiredIndex.renamedFrom.Name != "" && g.identsEqual(desiredIndex.renamedFrom, index.name) {
 					isRenamed = true
 					break
 				}
@@ -408,7 +408,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			// Check if this column is being renamed (not dropped)
 			isRenamed := false
 			for _, desiredColumn := range desiredTable.columns {
-				if desiredColumn.renamedFrom == column.name.String() {
+				if desiredColumn.renamedFrom.Name != "" && g.identsEqual(desiredColumn.renamedFrom, column.name.Name) {
 					isRenamed = true
 					break
 				}
@@ -637,10 +637,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		// deep copy to avoid modifying the original
 		desiredColumn := *desiredColumnPtr
 
-		if desiredColumn.renamedFrom != "" {
-			if _, conflictExists := desired.table.columns[desiredColumn.renamedFrom]; conflictExists {
+		if desiredColumn.renamedFrom.Name != "" {
+			// Check for conflict: can't rename a column if the old name still exists
+			if g.findColumnByIdent(desired.table.columns, desiredColumn.renamedFrom) != nil {
 				return ddls, fmt.Errorf("cannot rename column '%s' to '%s' - column '%s' still exists",
-					desiredColumn.renamedFrom, desiredColumn.name.String(), desiredColumn.renamedFrom)
+					desiredColumn.renamedFrom.Name, desiredColumn.name.String(), desiredColumn.renamedFrom.Name)
 			}
 		}
 
@@ -653,17 +654,19 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		if currentColumn == nil {
 			// Check if this is a renamed column
 			var renameFromColumn *Column
-			if desiredColumn.renamedFrom != "" {
-				renameFromColumn = findColumnByName(currentTable.columns, desiredColumn.renamedFrom)
+			if desiredColumn.renamedFrom.Name != "" {
+				renameFromColumn = g.findColumnByIdent(currentTable.columns, desiredColumn.renamedFrom)
 			}
 
 			if renameFromColumn != nil {
 				// Generate RENAME COLUMN DDL
+				// Use quote info from renamedFrom annotation, not from the found column
+				// (database exports always quote identifiers)
 				switch g.mode {
 				case GeneratorModePostgres:
 					ddl := fmt.Sprintf("ALTER TABLE %s RENAME COLUMN %s TO %s",
 						g.escapeTableNameForTable(&desired.table),
-						g.escapeSQLName(renameFromColumn.name.String()),
+						g.escapeSQLIdent(desiredColumn.renamedFrom),
 						g.escapeColumnName(&desiredColumn))
 					ddls = append(ddls, ddl)
 
@@ -1232,13 +1235,13 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		} else {
 			// Check if this is a renamed index
 			var renameFromIndex *Index
-			if desiredIndex.renamedFrom != "" {
-				renameFromIndex = findIndexByName(currentTable.indexes, desiredIndex.renamedFrom)
+			if desiredIndex.renamedFrom.Name != "" {
+				renameFromIndex = g.findIndexByIdent(currentTable.indexes, desiredIndex.renamedFrom)
 			}
 
 			if renameFromIndex != nil {
 				// Generate RENAME INDEX DDL
-				renameDDLs := g.generateRenameIndex(desired.table.name.String(), renameFromIndex.name.Name, desiredIndex.name.Name, &desiredIndex)
+				renameDDLs := g.generateRenameIndexIdent(desired.table.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
 				ddls = append(ddls, renameDDLs...)
 			} else {
 				// Index not found and not a rename, add index.
@@ -1463,19 +1466,19 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 	if currentIndex == nil {
 		// Check if this is a renamed index
 		var renameFromIndex *Index
-		if desiredIndex.renamedFrom != "" {
-			renameFromIndex = findIndexByName(currentTable.indexes, desiredIndex.renamedFrom)
+		if desiredIndex.renamedFrom.Name != "" {
+			renameFromIndex = g.findIndexByIdent(currentTable.indexes, desiredIndex.renamedFrom)
 		}
 
 		if renameFromIndex != nil {
 			// Generate RENAME INDEX DDL
-			renameDDLs := g.generateRenameIndex(tableName, renameFromIndex.name.Name, desiredIndex.name.Name, &desiredIndex)
+			renameDDLs := g.generateRenameIndexIdent(currentTable.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
 			ddls = append(ddls, renameDDLs...)
 
 			// Update the current table's indexes to reflect the rename
 			newIndexes := []Index{}
 			for _, idx := range currentTable.indexes {
-				if idx.name.Name == renameFromIndex.name.Name {
+				if g.identsEqual(idx.name, renameFromIndex.name) {
 					// Replace with the renamed index
 					newIndexes = append(newIndexes, desiredIndex)
 				} else {
@@ -2522,6 +2525,75 @@ func (g *Generator) generateRenameIndex(tableName string, oldIndexName string, n
 	return ddls
 }
 
+// generateRenameIndexIdent generates DDL statements to rename an index using quote-aware escaping.
+func (g *Generator) generateRenameIndexIdent(tableName QualifiedTableName, oldIndexName Ident, newIndexName Ident, desiredIndex *Index) []string {
+	ddls := []string{}
+
+	switch g.mode {
+	case GeneratorModeMysql:
+		// MySQL uses ALTER TABLE ... RENAME INDEX
+		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s RENAME INDEX %s TO %s",
+			g.escapeQualifiedTableName(tableName),
+			g.escapeSQLIdent(oldIndexName),
+			g.escapeSQLIdent(newIndexName)))
+	case GeneratorModePostgres:
+		// PostgreSQL uses ALTER INDEX ... RENAME TO
+		// Qualify the old index name with schema
+		schemaName := tableName.Schema.Name
+		if schemaName == "" {
+			schemaName = g.defaultSchema
+		}
+		ddls = append(ddls, fmt.Sprintf("ALTER INDEX %s.%s RENAME TO %s",
+			g.escapeSQLName(schemaName),
+			g.escapeSQLIdent(oldIndexName),
+			g.escapeSQLIdent(newIndexName)))
+	case GeneratorModeMssql:
+		// SQL Server uses sp_rename - use raw names without escaping
+		schemaName := tableName.Schema.Name
+		if schemaName == "" {
+			schemaName = g.defaultSchema
+		}
+		var tableRef string
+		if schemaName != "" && schemaName != g.defaultSchema {
+			tableRef = fmt.Sprintf("%s.%s", schemaName, tableName.Name.Name)
+		} else {
+			tableRef = tableName.Name.Name
+		}
+		ddls = append(ddls, fmt.Sprintf("EXEC sp_rename '%s.%s', '%s', 'INDEX'",
+			tableRef,
+			oldIndexName.Name,
+			newIndexName.Name))
+	case GeneratorModeSQLite3:
+		// SQLite doesn't support renaming indexes directly - drop and recreate
+		if desiredIndex != nil {
+			ddls = append(ddls, g.generateDropIndex(tableName.String(), oldIndexName.Name, desiredIndex.constraint))
+
+			createStmt := "CREATE"
+			if desiredIndex.unique {
+				createStmt += " UNIQUE"
+			}
+			createStmt += fmt.Sprintf(" INDEX %s ON %s", g.escapeSQLIdent(desiredIndex.name), g.escapeQualifiedTableName(tableName))
+
+			columnStrs := []string{}
+			for _, column := range desiredIndex.columns {
+				columnStrs = append(columnStrs, g.escapeSQLName(parser.String(column.columnExpr)))
+			}
+			createStmt += fmt.Sprintf(" (%s)", strings.Join(columnStrs, ", "))
+
+			if desiredIndex.where != "" {
+				createStmt += fmt.Sprintf(" WHERE %s", desiredIndex.where)
+			}
+
+			ddls = append(ddls, createStmt)
+		} else {
+			ddls = append(ddls, fmt.Sprintf("-- Warning: Cannot rename index %s to %s in SQLite without index definition",
+				oldIndexName.Name, newIndexName.Name))
+		}
+	}
+
+	return ddls
+}
+
 func (g *Generator) generateDropIndex(tableName string, indexName string, constraint bool) string {
 	switch g.mode {
 	case GeneratorModeMysql:
@@ -2562,6 +2634,21 @@ func (g *Generator) escapeTableNameForTable(table *Table) string {
 		return g.escapeSQLName(schemaName) + "." + g.escapeSQLIdent(table.name.Name)
 	default:
 		return g.escapeSQLIdent(table.name.Name)
+	}
+}
+
+// escapeQualifiedTableName escapes a QualifiedTableName using quote-aware logic.
+// The schema part is always quoted, while the table name uses quote-aware logic.
+func (g *Generator) escapeQualifiedTableName(name QualifiedTableName) string {
+	switch g.mode {
+	case GeneratorModePostgres, GeneratorModeMssql:
+		schemaName := name.Schema.Name
+		if schemaName == "" {
+			schemaName = g.defaultSchema
+		}
+		return g.escapeSQLName(schemaName) + "." + g.escapeSQLIdent(name.Name)
+	default:
+		return g.escapeSQLIdent(name.Name)
 	}
 }
 
@@ -2766,19 +2853,14 @@ func (g *Generator) validateAndEscapeGrantee(grantee string) (string, error) {
 	return g.escapeSQLName(grantee), nil
 }
 
-func (g *Generator) normalizeOldTableName(oldName string, newTable QualifiedTableName) string {
-	// Normalize the old table name with schema prefix if needed
-	oldTableName := oldName
-	if g.mode == GeneratorModePostgres || g.mode == GeneratorModeMssql {
-		// If the old name doesn't contain a schema, add the schema from the new table name
-		if !strings.Contains(oldTableName, ".") {
-			schemaName := newTable.Schema.Name
-			if schemaName != "" {
-				oldTableName = schemaName + "." + oldTableName
-			}
-		}
+// normalizeOldTableName creates a QualifiedTableName from a renamedFrom Ident,
+// using the schema from the new table name if not specified.
+func (g *Generator) normalizeOldTableName(oldName Ident, newTable QualifiedTableName) QualifiedTableName {
+	// Use the schema from the new table name
+	return QualifiedTableName{
+		Schema: newTable.Schema,
+		Name:   oldName,
 	}
-	return oldTableName
 }
 
 // extractTableName extracts the table name from a fully-qualified name (e.g., "schema.table" -> "table")
@@ -2789,25 +2871,25 @@ func extractTableName(fullName string) string {
 	return fullName
 }
 
-func (g *Generator) generateRenameTableDDL(oldName string, newTable QualifiedTableName) string {
+// generateRenameTableDDL generates a DDL statement to rename a table.
+// Uses quote-aware escaping for both old and new table names.
+func (g *Generator) generateRenameTableDDL(oldTable QualifiedTableName, newTable QualifiedTableName) string {
 	switch g.mode {
 	case GeneratorModePostgres:
 		// For PostgreSQL, RENAME TO should only include the table name without schema
 		return fmt.Sprintf("ALTER TABLE %s RENAME TO %s",
-			g.escapeTableName(oldName),
+			g.escapeQualifiedTableName(oldTable),
 			g.escapeSQLIdent(newTable.Name))
 	case GeneratorModeMssql:
 		// MSSQL uses sp_rename for renaming tables
-		// Extract just the table names without schema
-		oldTableName := extractTableName(oldName)
-		return fmt.Sprintf("EXEC sp_rename '%s', '%s'", oldTableName, newTable.Name.Name)
+		return fmt.Sprintf("EXEC sp_rename '%s', '%s'", oldTable.Name.Name, newTable.Name.Name)
 	case GeneratorModeMysql:
 		fallthrough
 	case GeneratorModeSQLite3:
 		fallthrough
 	default:
 		return fmt.Sprintf("ALTER TABLE %s RENAME TO %s",
-			g.escapeTableName(oldName),
+			g.escapeQualifiedTableName(oldTable),
 			g.escapeSQLIdent(newTable.Name))
 	}
 }

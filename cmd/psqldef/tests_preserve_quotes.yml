@@ -542,3 +542,129 @@ DropPrimaryKeyQuotedName:
     CREATE TABLE users (id int NOT NULL);
   output: |
     ALTER TABLE "public".users DROP CONSTRAINT users_pkey;
+
+RenameQuotedColumnToUnquoted:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id int,
+      "UserName" text
+    );
+  desired: |
+    CREATE TABLE users (
+      id int,
+      username text -- @renamed from="UserName"
+    );
+  output: |
+    ALTER TABLE "public".users RENAME COLUMN "UserName" TO username;
+
+RenameUnquotedColumnToQuoted:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id int,
+      username text
+    );
+  desired: |
+    CREATE TABLE users (
+      id int,
+      "UserName" text -- @renamed from=username
+    );
+  output: |
+    ALTER TABLE "public".users RENAME COLUMN username TO "UserName";
+
+RenameQuotedColumnToQuoted:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id int,
+      "OldName" text
+    );
+  desired: |
+    CREATE TABLE users (
+      id int,
+      "NewName" text -- @renamed from="OldName"
+    );
+  output: |
+    ALTER TABLE "public".users RENAME COLUMN "OldName" TO "NewName";
+
+RenameQuotedColumnWithTypeChange:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id int,
+      "UserName" varchar(50)
+    );
+  desired: |
+    CREATE TABLE users (
+      id int,
+      username text NOT NULL -- @renamed from="UserName"
+    );
+  output: |
+    ALTER TABLE "public".users RENAME COLUMN "UserName" TO username;
+    ALTER TABLE "public".users ALTER COLUMN username TYPE text;
+    ALTER TABLE "public".users ALTER COLUMN username SET NOT NULL;
+
+RenameQuotedTableToUnquoted:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "UserAccounts" (
+      id int,
+      name text
+    );
+  desired: |
+    CREATE TABLE user_accounts ( -- @renamed from="UserAccounts"
+      id int,
+      name text
+    );
+  output: |
+    ALTER TABLE "public"."UserAccounts" RENAME TO user_accounts;
+
+RenameUnquotedTableToQuoted:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE user_accounts (
+      id int,
+      name text
+    );
+  desired: |
+    CREATE TABLE "UserAccounts" ( -- @renamed from=user_accounts
+      id int,
+      name text
+    );
+  output: |
+    ALTER TABLE "public".user_accounts RENAME TO "UserAccounts";
+
+RenameQuotedIndexToUnquoted:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id int,
+      email text
+    );
+    CREATE INDEX "EmailIndex" ON users (email);
+  desired: |
+    CREATE TABLE users (
+      id int,
+      email text
+    );
+    CREATE INDEX email_idx /* @renamed from="EmailIndex" */ ON users (email);
+  output: |
+    ALTER INDEX "public"."EmailIndex" RENAME TO email_idx;
+
+RenameUnquotedIndexToQuoted:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id int,
+      email text
+    );
+    CREATE INDEX email_idx ON users (email);
+  desired: |
+    CREATE TABLE users (
+      id int,
+      email text
+    );
+    CREATE INDEX "EmailIndex" /* @renamed from=email_idx */ ON users (email);
+  output: |
+    ALTER INDEX "public".email_idx RENAME TO "EmailIndex";

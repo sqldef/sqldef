@@ -588,7 +588,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	}
 
 	tableComment := extractTableComment(rawDDL, mode)
-	tableRenameFrom := ""
+	var tableRenameFrom Ident
 	if tableComment != "" {
 		tableRenameFrom = extractRenameFrom(tableComment)
 	}
@@ -687,7 +687,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 
 	// Extract index comments and look for @renamed annotation
 	indexComments := extractIndexComments(rawDDL, mode)
-	renameFrom := ""
+	var renameFrom Ident
 	if comment, ok := indexComments[nameIdent.Name]; ok {
 		renameFrom = extractRenameFrom(comment)
 	}
@@ -1086,11 +1086,11 @@ func castBoolPtr(val *parser.BoolVal) *bool {
 	return &ret
 }
 
-// extractRenameFrom extracts the rename annotation from a comment string
-// Supports both @renamed (preferred) and @rename (deprecated)
-// e.g. "-- @renamed from=old_column_name" -> "old_column_name"
-// e.g. "-- @rename from=\"foo bar\"" -> "foo bar"
-func extractRenameFrom(comment string) string {
+// extractRenameFrom extracts the old name from a @renamed annotation.
+// Returns an Ident with both the name and whether it was quoted.
+// e.g., `@renamed from="OldName"` -> Ident{Name: "OldName", Quoted: true}
+// e.g., `@renamed from=oldname` -> Ident{Name: "oldname", Quoted: false}
+func extractRenameFrom(comment string) Ident {
 	// First try to match @renamed (preferred)
 	reRenamed := regexp.MustCompile(`@renamed\s+from=(?:"([^"]+)"|(\S+))`)
 	matches := reRenamed.FindStringSubmatch(comment)
@@ -1110,13 +1110,13 @@ func extractRenameFrom(comment string) string {
 	// matches[0] = full match, matches[1] = quoted, matches[2] = unquoted
 	if len(matches) >= 3 {
 		if matches[1] != "" {
-			return matches[1] // double-quoted identifier
+			return Ident{Name: matches[1], Quoted: true} // double-quoted identifier
 		}
 		if matches[2] != "" {
-			return matches[2] // unquoted identifier
+			return Ident{Name: matches[2], Quoted: false} // unquoted identifier
 		}
 	}
-	return ""
+	return Ident{}
 }
 
 // generatorModeToParserMode converts GeneratorMode to ParserMode
