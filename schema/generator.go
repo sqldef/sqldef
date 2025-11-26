@@ -433,7 +433,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		// Check checks.
 		for _, check := range currentTable.checks {
 			// First try to find by name
-			if findCheckConstraintInTable(desiredTable, check.constraintName.Name) != nil {
+			if g.findCheckConstraintInTable(desiredTable, check.constraintName) != nil {
 				continue
 			}
 
@@ -938,15 +938,40 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					constraintNameIdent = desiredColumn.check.constraintName
 				}
 
-				currentCheck := findCheckConstraintInTable(&currentTable, constraintName)
+				// First, check if the current column has a CHECK constraint
+				// If so, use it directly for comparison instead of searching by the desired name
+				var currentCheck *CheckDefinition
+				if currentColumn.check != nil {
+					// Current column has a CHECK - check if its name matches the desired name
+					if g.identsEqual(currentColumn.check.constraintName, constraintNameIdent) {
+						// Names match (accounting for quoting), use the current column's check
+						currentCheck = currentColumn.check
+					} else {
+						// Names don't match - this is a rename scenario
+						// The current constraint should be dropped and the new one added
+						currentCheck = nil
+					}
+				} else {
+					// Current column has no CHECK, search in table-level constraints
+					currentCheck = g.findCheckConstraintInTable(&currentTable, constraintNameIdent)
+				}
+
+				// Determine if we need to drop the current column's constraint
+				// This handles the case where names are different (quoted vs unquoted)
+				// We need to drop if: current has a check AND (definition differs OR constraint names differ)
+				needDropCurrentColumn := currentColumn.check != nil &&
+					(!g.areSameCheckDefinition(currentColumn.check, desiredColumn.check) ||
+						(desiredColumn.check != nil && !g.identsEqual(currentColumn.check.constraintName, constraintNameIdent)))
 
 				if !g.areSameCheckDefinition(currentCheck, desiredColumn.check) { // || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
+					// Drop the current constraint if it exists
 					if currentCheck != nil {
-						// Use the current check's ident for dropping if available, otherwise fall back to the computed one
-						dropNameIdent := constraintNameIdent
-						if currentCheck.constraintName.Name != "" {
-							dropNameIdent = currentCheck.constraintName
-						}
+						dropNameIdent := currentCheck.constraintName
+						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLNameQuoteAware(dropNameIdent.Name, dropNameIdent.Quoted))
+						ddls = append(ddls, ddl)
+					} else if needDropCurrentColumn {
+						// Current column has a CHECK with a different name that needs to be dropped
+						dropNameIdent := currentColumn.check.constraintName
 						ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLNameQuoteAware(dropNameIdent.Name, dropNameIdent.Quoted))
 						ddls = append(ddls, ddl)
 					}
@@ -979,7 +1004,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					if currentColumn.check != nil && desiredColumn.check == nil {
 						// Current has column-level CHECK, desired doesn't
 						// Check if it matches a table-level CHECK in desired
-						if findCheckConstraintByName(desired.table.checks, currentColumn.check.constraintName.Name) != nil ||
+						if g.findCheckConstraintByName(desired.table.checks, currentColumn.check.constraintName) != nil ||
 							g.findCheckConstraintByDefinitionInList(desired.table.checks, currentColumn.check) != nil {
 							// This column-level CHECK is actually a table-level CHECK
 							// It will be handled in the table-level CHECK processing
@@ -1317,7 +1342,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	// Examine each check
 	for _, desiredCheck := range desired.table.checks {
 		// First try to find by name
-		currentCheck := findCheckConstraintInTable(&currentTable, desiredCheck.constraintName.Name)
+		currentCheck := g.findCheckConstraintInTable(&currentTable, desiredCheck.constraintName)
 
 		// For MySQL and MSSQL, also try to find by definition if not found by name
 		// This handles auto-generated constraint names
@@ -3237,17 +3262,17 @@ func findIndexOptionByName(options []IndexOption, name string) *IndexOption {
 	return nil
 }
 
-func findCheckConstraintInTable(table *Table, constraintName string) *CheckDefinition {
+func (g *Generator) findCheckConstraintInTable(table *Table, constraintName Ident) *CheckDefinition {
 	// First, look for table-level check constraints
 	for _, check := range table.checks {
-		if check.constraintName.Name == constraintName {
+		if g.identsEqual(check.constraintName, constraintName) {
 			return &check
 		}
 	}
 
 	// Then, look for column-level check constraints
 	for _, column := range table.columns {
-		if column.check != nil && column.check.constraintName.Name == constraintName {
+		if column.check != nil && g.identsEqual(column.check.constraintName, constraintName) {
 			return column.check
 		}
 	}
@@ -3256,9 +3281,9 @@ func findCheckConstraintInTable(table *Table, constraintName string) *CheckDefin
 }
 
 // findCheckConstraintByName finds a CHECK constraint in a list by name
-func findCheckConstraintByName(checks []CheckDefinition, constraintName string) *CheckDefinition {
+func (g *Generator) findCheckConstraintByName(checks []CheckDefinition, constraintName Ident) *CheckDefinition {
 	for _, check := range checks {
-		if check.constraintName.Name == constraintName {
+		if g.identsEqual(check.constraintName, constraintName) {
 			return &check
 		}
 	}

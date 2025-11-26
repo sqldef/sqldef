@@ -440,17 +440,23 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 	return ddls, nil
 }
 
+// CheckConstraint holds a CHECK constraint's name and definition.
+type CheckConstraint struct {
+	Name       database.Ident
+	Definition string
+}
+
 type TableDDLComponents struct {
 	TableName         string
 	Columns           []column
-	PrimaryKeyName    string
+	PrimaryKeyName    database.Ident
 	PrimaryKeyCols    []string
 	IndexDefs         []string
 	ForeignDefs       []string
 	ExclusionDefs     []string
 	PolicyDefs        []string
 	Comments          []string
-	CheckConstraints  map[string]string
+	CheckConstraints  []CheckConstraint
 	UniqueConstraints map[string]string
 	PrivilegeDefs     []string
 	DefaultSchema     string
@@ -533,17 +539,17 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 			fmt.Fprintf(&queryBuilder, " GENERATED %s AS IDENTITY", col.IdentityGeneration)
 		}
 		if col.Check != nil {
-			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s %s", col.Check.name, col.Check.definition)
+			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s %s", d.escapeConstraintName(col.Check.name), col.Check.definition)
 		}
 	}
 	if len(components.PrimaryKeyCols) > 0 {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", components.PrimaryKeyName, strings.Join(components.PrimaryKeyCols, "\", \""))
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", d.escapeConstraintName(components.PrimaryKeyName), strings.Join(components.PrimaryKeyCols, "\", \""))
 	}
 
-	for constraintName, constraintDef := range util.CanonicalMapIter(components.CheckConstraints) {
+	for _, check := range components.CheckConstraints {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", constraintName, constraintDef)
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", d.escapeConstraintName(check.Name), check.Definition)
 	}
 
 	fmt.Fprintf(&queryBuilder, "\n);\n")
@@ -575,7 +581,7 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 
 type columnConstraint struct {
 	definition string
-	name       string
+	name       database.Ident
 }
 
 type column struct {
@@ -716,9 +722,10 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 		if checkName != nil && checkDefinition != nil {
 			// Normalize type casts for generic parser compatibility
 			normalizedDef := normalizePostgresTypeCasts(*checkDefinition)
+			// Names with uppercase must have been quoted in PostgreSQL
 			col.Check = &columnConstraint{
 				definition: normalizedDef,
-				name:       *checkName,
+				name:       database.Ident{Name: *checkName, Quoted: strings.ToLower(*checkName) != *checkName},
 			}
 		}
 		cols = append(cols, col)
@@ -812,7 +819,7 @@ func normalizePostgresTypeCasts(sql string) string {
 	return sql
 }
 
-func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[string]string, error) {
+func (d *PostgresDatabase) getTableCheckConstraints(tableName string) ([]CheckConstraint, error) {
 	const query = `SELECT con.conname, pg_get_constraintdef(con.oid, true)
 	FROM   pg_constraint con
 	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
@@ -822,7 +829,7 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[strin
 	AND    cls.relname = $2
 	AND    array_length(con.conkey, 1) > 1;`
 
-	result := map[string]string{}
+	var result []CheckConstraint
 	schema, table := splitTableName(tableName, d.GetDefaultSchema())
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
@@ -839,7 +846,11 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[strin
 		// Normalize type casts for generic parser compatibility
 		// PostgreSQL returns "::time without time zone" but the generic parser expects "::time"
 		constraintDef = normalizePostgresTypeCasts(constraintDef)
-		result[constraintName] = constraintDef
+		// Names with uppercase must have been quoted in PostgreSQL
+		result = append(result, CheckConstraint{
+			Name:       database.Ident{Name: constraintName, Quoted: strings.ToLower(constraintName) != constraintName},
+			Definition: constraintDef,
+		})
 	}
 
 	return result, nil
@@ -934,7 +945,7 @@ WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$
 	return columnNames, nil
 }
 
-func (d *PostgresDatabase) getPrimaryKeyName(table string) (string, error) {
+func (d *PostgresDatabase) getPrimaryKeyName(table string) (database.Ident, error) {
 	schema, table := splitTableName(table, d.GetDefaultSchema())
 	tableWithSchema := fmt.Sprintf("%s.%s", escapeSQLName(schema), escapeSQLName(table))
 	query := fmt.Sprintf(`
@@ -944,7 +955,7 @@ func (d *PostgresDatabase) getPrimaryKeyName(table string) (string, error) {
 	`, tableWithSchema)
 	rows, err := d.db.Query(query)
 	if err != nil {
-		return "", err
+		return database.Ident{}, err
 	}
 	defer rows.Close()
 
@@ -952,12 +963,13 @@ func (d *PostgresDatabase) getPrimaryKeyName(table string) (string, error) {
 	if rows.Next() {
 		err = rows.Scan(&keyName)
 		if err != nil {
-			return "", err
+			return database.Ident{}, err
 		}
 	} else {
-		return "", err
+		return database.Ident{}, err
 	}
-	return keyName, nil
+	// Names with uppercase must have been quoted in PostgreSQL
+	return database.Ident{Name: keyName, Quoted: strings.ToLower(keyName) != keyName}, nil
 }
 
 // refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d
@@ -1250,6 +1262,19 @@ func postgresBuildDSN(config database.Config) string {
 
 func escapeSQLName(name string) string {
 	return fmt.Sprintf("\"%s\"", name)
+}
+
+// escapeConstraintName quotes a constraint name for DDL output.
+// In legacy mode (LegacyIgnoreQuotes=true/nil): don't quote (original behavior).
+// In quote-aware mode (LegacyIgnoreQuotes=false): respect the Ident's Quoted field.
+func (d *PostgresDatabase) escapeConstraintName(ident database.Ident) string {
+	if d.generatorConfig.LegacyIgnoreQuotes == nil || *d.generatorConfig.LegacyIgnoreQuotes {
+		return ident.Name
+	}
+	if ident.Quoted {
+		return escapeSQLName(ident.Name)
+	}
+	return ident.Name
 }
 
 // escapeIdentifier quotes an identifier for DDL output.

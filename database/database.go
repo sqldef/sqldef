@@ -66,6 +66,17 @@ type TransactionQueries struct {
 	Rollback string
 }
 
+// Ident represents an identifier with quote information.
+// This is used across database and schema packages for quote-aware identifier handling.
+type Ident struct {
+	Name   string
+	Quoted bool
+}
+
+func (i Ident) String() string {
+	return i.Name
+}
+
 // Abstraction layer for multiple kinds of databases
 type Database interface {
 	ExportDDLs() (string, error)

@@ -288,6 +288,24 @@ CheckConstraintQuotedName:
   output: |
     ALTER TABLE "public".products ADD CONSTRAINT "Price_Positive" CHECK (price > 0);
 
+# Quoted vs unquoted CHECK constraint names should be treated as different
+# "Price_Check" (quoted) != Price_Check (unquoted, normalizes to price_check)
+CheckConstraintQuotedVsUnquotedName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (
+      id int,
+      price int CONSTRAINT "Price_Check" CHECK (price > 0)
+    );
+  desired: |
+    CREATE TABLE products (
+      id int,
+      price int CONSTRAINT Price_Check CHECK (price > 0)
+    );
+  output: |
+    ALTER TABLE "public".products DROP CONSTRAINT "Price_Check";
+    ALTER TABLE "public".products ADD CONSTRAINT price_check CHECK (price > 0);
+
 # Unique constraint with quoted columns
 UniqueConstraintQuotedColumns:
   legacy_ignore_quotes: false

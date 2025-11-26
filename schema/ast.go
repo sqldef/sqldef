@@ -1,9 +1,11 @@
 package schema
 
-import "github.com/sqldef/sqldef/v3/parser"
+import (
+	"github.com/sqldef/sqldef/v3/parser"
+)
 
 // Ident represents an identifier with quote information.
-// This is the schema package's own identifier type, independent of parser.Ident.
+// Used for quote-aware identifier handling throughout the schema package.
 type Ident struct {
 	Name   string
 	Quoted bool
