@@ -1,3 +1,5 @@
+# This test file is to test `legacy_ignore_quotes: false` behavior.
+
 TableQuotedPreservesCase:
   legacy_ignore_quotes: false
   current: |
@@ -55,6 +57,51 @@ ColumnQuotedVsUnquotedAreDifferent:
   output: |
     ALTER TABLE "public".users ALTER COLUMN "Name" SET NOT NULL;
     ALTER TABLE "public".users ALTER COLUMN name SET NOT NULL;
+
+# Equivalence tests: quoted lowercase should equal unquoted (current=unquoted, desired=quoted)
+# In PostgreSQL, "users" (quoted lowercase) and users (unquoted) refer to the same identifier
+# These test the opposite direction from the tests at the end of this file
+TableUnquotedEqualsQuotedLowercase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int);
+  desired: |
+    CREATE TABLE "users" (id int);
+  output: ""
+
+ColumnUnquotedEqualsQuotedLowercase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (name text);
+  desired: |
+    CREATE TABLE users ("name" text);
+  output: ""
+
+ConstraintUnquotedEqualsQuotedLowercase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id int,
+      email text,
+      CONSTRAINT email_unique UNIQUE (email)
+    );
+  desired: |
+    CREATE TABLE users (
+      id int,
+      email text,
+      CONSTRAINT "email_unique" UNIQUE (email)
+    );
+  output: ""
+
+IndexUnquotedEqualsQuotedLowercase:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int, email text);
+    CREATE INDEX email_idx ON users (email);
+  desired: |
+    CREATE TABLE users (id int, email text);
+    CREATE INDEX "email_idx" ON users (email);
+  output: ""
 
 ViewQuotedPreservesCase:
   legacy_ignore_quotes: false
