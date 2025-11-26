@@ -306,7 +306,6 @@ CheckConstraintQuotedVsUnquotedName:
     ALTER TABLE "public".products DROP CONSTRAINT "Price_Check";
     ALTER TABLE "public".products ADD CONSTRAINT price_check CHECK (price > 0);
 
-# Unique constraint with quoted columns
 UniqueConstraintQuotedColumns:
   legacy_ignore_quotes: false
   current: |
@@ -319,3 +318,227 @@ UniqueConstraintQuotedColumns:
     );
   output: |
     ALTER TABLE "public"."users" ADD CONSTRAINT "unique_email" UNIQUE ("Email");
+
+DropTableQuotedName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "Users" (id int);
+  desired: ""
+  output: |
+    DROP TABLE "public"."Users";
+
+DropTableQuotedVsUnquoted:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "Users" (id int);
+    CREATE TABLE users (id int);
+  desired: |
+    CREATE TABLE users (id int);
+  output: |
+    DROP TABLE "public"."Users";
+
+DropIndexQuotedName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int, email text);
+    CREATE INDEX "EmailIndex" ON users (email);
+  desired: |
+    CREATE TABLE users (id int, email text);
+  output: |
+    DROP INDEX "public"."EmailIndex";
+
+DropIndexQuotedVsUnquoted:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int, email text, name text);
+    CREATE INDEX "NameIndex" ON users (name);
+    CREATE INDEX emailindex ON users (email);
+  desired: |
+    CREATE TABLE users (id int, email text, name text);
+    CREATE INDEX emailindex ON users (email);
+  output: |
+    DROP INDEX "public"."NameIndex";
+
+DropViewQuotedName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int);
+    CREATE VIEW "ActiveUsers" AS SELECT id FROM users;
+  desired: |
+    CREATE TABLE users (id int);
+  output: |
+    DROP VIEW "public"."ActiveUsers";
+
+DropViewQuotedVsUnquoted:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int);
+    CREATE VIEW "ActiveUsers" AS SELECT id FROM users;
+    CREATE VIEW activeusers AS SELECT id FROM users;
+  desired: |
+    CREATE TABLE users (id int);
+    CREATE VIEW activeusers AS SELECT id FROM users;
+  output: |
+    DROP VIEW "public"."ActiveUsers";
+
+DropForeignKeyQuotedName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int PRIMARY KEY);
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT "FK_Orders_Users" FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+  desired: |
+    CREATE TABLE users (id int PRIMARY KEY);
+    CREATE TABLE orders (id int PRIMARY KEY, user_id int);
+  output: |
+    ALTER TABLE "public"."orders" DROP CONSTRAINT "FK_Orders_Users";
+
+DropUniqueConstraintQuotedName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id int,
+      email text,
+      CONSTRAINT "Unique_Email" UNIQUE (email)
+    );
+  desired: |
+    CREATE TABLE users (id int, email text);
+  output: |
+    ALTER TABLE "public"."users" DROP CONSTRAINT "Unique_Email";
+
+DropCheckConstraintQuotedName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (
+      id int,
+      price int,
+      CONSTRAINT "Price_Positive" CHECK (price > 0)
+    );
+  desired: |
+    CREATE TABLE products (id int, price int);
+  output: |
+    ALTER TABLE "public".products DROP CONSTRAINT "Price_Positive";
+
+QuotedReservedWordAsTableName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "select" (id int);
+  desired: |
+    CREATE TABLE "select" (id int, "from" text);
+  output: |
+    ALTER TABLE "public"."select" ADD COLUMN "from" text;
+
+DropQuotedReservedWordTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "table" (id int);
+  desired: ""
+  output: |
+    DROP TABLE "public"."table";
+
+QuotedIdentifierWithSpace:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "User Profiles" (id int);
+  desired: |
+    CREATE TABLE "User Profiles" (id int, "Full Name" text);
+  output: |
+    ALTER TABLE "public"."User Profiles" ADD COLUMN "Full Name" text;
+
+ModifyUniqueConstraintQuotedName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id int,
+      email text,
+      name text,
+      CONSTRAINT "Unique_Email" UNIQUE (email)
+    );
+  desired: |
+    CREATE TABLE users (
+      id int,
+      email text,
+      name text,
+      CONSTRAINT "Unique_Email" UNIQUE (email, name)
+    );
+  output: |
+    ALTER TABLE "public"."users" DROP CONSTRAINT "Unique_Email";
+    ALTER TABLE "public"."users" ADD CONSTRAINT "Unique_Email" UNIQUE ("email", "name");
+
+RenameUniqueConstraintQuotedToUnquoted:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id int,
+      email text,
+      CONSTRAINT "Email_Unique" UNIQUE (email)
+    );
+  desired: |
+    CREATE TABLE users (
+      id int,
+      email text,
+      CONSTRAINT email_unique UNIQUE (email)
+    );
+  output: |
+    ALTER TABLE "public"."users" ADD CONSTRAINT email_unique UNIQUE ("email");
+    ALTER TABLE "public"."users" DROP CONSTRAINT "Email_Unique";
+
+ForeignKeyMixedQuotedReferences:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "Categories" ("CategoryId" int PRIMARY KEY);
+    CREATE TABLE categories (id int PRIMARY KEY);
+    CREATE TABLE products (
+      id int PRIMARY KEY,
+      quoted_cat_id int,
+      unquoted_cat_id int
+    );
+  desired: |
+    CREATE TABLE "Categories" ("CategoryId" int PRIMARY KEY);
+    CREATE TABLE categories (id int PRIMARY KEY);
+    CREATE TABLE products (
+      id int PRIMARY KEY,
+      quoted_cat_id int,
+      unquoted_cat_id int,
+      CONSTRAINT "fk_QuotedCat" FOREIGN KEY (quoted_cat_id) REFERENCES "Categories" ("CategoryId"),
+      CONSTRAINT fk_unquoted_cat FOREIGN KEY (unquoted_cat_id) REFERENCES categories (id)
+    );
+  output: |
+    ALTER TABLE "public".products ADD CONSTRAINT "fk_QuotedCat" FOREIGN KEY ("quoted_cat_id") REFERENCES "public"."Categories" ("CategoryId");
+    ALTER TABLE "public".products ADD CONSTRAINT "fk_unquoted_cat" FOREIGN KEY ("unquoted_cat_id") REFERENCES "public"."categories" ("id");
+
+DropForeignKeyKeepQuotedTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "Users" ("UserId" int PRIMARY KEY);
+    CREATE TABLE "Orders" (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT "FK_Order_User" FOREIGN KEY (user_id) REFERENCES "Users" ("UserId")
+    );
+  desired: |
+    CREATE TABLE "Users" ("UserId" int PRIMARY KEY);
+    CREATE TABLE "Orders" (id int PRIMARY KEY, user_id int);
+  output: |
+    ALTER TABLE "public"."Orders" DROP CONSTRAINT "FK_Order_User";
+
+AddPrimaryKeyQuotedName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "Users" ("UserId" int);
+  desired: |
+    CREATE TABLE "Users" ("UserId" int PRIMARY KEY);
+  output: |
+    ALTER TABLE "public"."Users" ADD PRIMARY KEY ("UserId");
+
+DropPrimaryKeyQuotedName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int PRIMARY KEY);
+  desired: |
+    CREATE TABLE users (id int NOT NULL);
+  output: |
+    ALTER TABLE "public".users DROP CONSTRAINT users_pkey;

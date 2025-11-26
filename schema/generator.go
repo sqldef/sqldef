@@ -956,14 +956,24 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					currentCheck = g.findCheckConstraintInTable(&currentTable, constraintNameIdent)
 				}
 
+				// Check if current column's CHECK matches a table-level CHECK in desired.
+				// PostgreSQL exports single-column CHECKs as column-level, but user may define them as table-level.
+				skipDropBecauseTableLevel := false
+				if currentColumn.check != nil && desiredColumn.check == nil {
+					if g.findCheckConstraintByName(desired.table.checks, currentColumn.check.constraintName) != nil ||
+						g.findCheckConstraintByDefinitionInList(desired.table.checks, currentColumn.check) != nil {
+						skipDropBecauseTableLevel = true
+					}
+				}
+
 				// Determine if we need to drop the current column's constraint
 				// This handles the case where names are different (quoted vs unquoted)
 				// We need to drop if: current has a check AND (definition differs OR constraint names differ)
-				needDropCurrentColumn := currentColumn.check != nil &&
+				needDropCurrentColumn := currentColumn.check != nil && !skipDropBecauseTableLevel &&
 					(!g.areSameCheckDefinition(currentColumn.check, desiredColumn.check) ||
 						(desiredColumn.check != nil && !g.identsEqual(currentColumn.check.constraintName, constraintNameIdent)))
 
-				if !g.areSameCheckDefinition(currentCheck, desiredColumn.check) { // || currentColumn.checkNoInherit != desiredColumn.checkNoInherit {
+				if (!g.areSameCheckDefinition(currentCheck, desiredColumn.check) || needDropCurrentColumn) && !skipDropBecauseTableLevel {
 					// Drop the current constraint if it exists
 					if currentCheck != nil {
 						dropNameIdent := currentCheck.constraintName
