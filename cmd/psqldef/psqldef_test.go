@@ -569,6 +569,35 @@ func TestPsqldefConfigInlineEnableDrop(t *testing.T) {
 	assert.Equal(t, expectedOutput, outConfigInline)
 }
 
+func TestPsqldefConfigLegacyIgnoreQuotes(t *testing.T) {
+	resetTestDatabase()
+
+	// Create a table with unquoted name (normalizes to lowercase in PostgreSQL)
+	mustPgExec(testDatabaseName, `CREATE TABLE users (id bigint NOT NULL PRIMARY KEY);`)
+
+	// Schema file with unquoted table name adding a column
+	tu.WriteFile("schema.sql", tu.StripHeredoc(`
+		CREATE TABLE users (
+		    id bigint NOT NULL PRIMARY KEY,
+		    name text
+		);`,
+	))
+
+	// Test with legacy_ignore_quotes: false via config-inline
+	// In quote-aware mode, unquoted identifiers should output without quotes
+	outQuoteAware := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--config-inline", "legacy_ignore_quotes: false", "--file", "schema.sql")
+	// With legacy_ignore_quotes: false, unquoted table names should not have quotes in output
+	assert.Contains(t, outQuoteAware, `ALTER TABLE "public".users ADD COLUMN name text;`)
+
+	// Test with legacy_ignore_quotes: true (legacy behavior) - should quote everything
+	resetTestDatabase()
+	mustPgExec(testDatabaseName, `CREATE TABLE users (id bigint NOT NULL PRIMARY KEY);`)
+
+	outLegacy := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--config-inline", "legacy_ignore_quotes: true", "--file", "schema.sql")
+	// With legacy_ignore_quotes: true, table names should be quoted
+	assert.Contains(t, outLegacy, `ALTER TABLE "public"."users" ADD COLUMN "name" text;`)
+}
+
 func TestPsqldefExport(t *testing.T) {
 	resetTestDatabase()
 

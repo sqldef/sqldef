@@ -268,6 +268,9 @@ func MergeGeneratorConfig(base, override GeneratorConfig) GeneratorConfig {
 	if override.DisableDdlTransaction {
 		result.DisableDdlTransaction = override.DisableDdlTransaction
 	}
+	if override.LegacyIgnoreQuotes != nil {
+		result.LegacyIgnoreQuotes = override.LegacyIgnoreQuotes
+	}
 
 	return result
 }
@@ -285,6 +288,7 @@ func parseGeneratorConfigFromBytes(buf []byte) GeneratorConfig {
 		EnableDrop              bool     `yaml:"enable_drop"`
 		CreateIndexConcurrently bool     `yaml:"create_index_concurrently"`
 		DisableDdlTransaction   bool     `yaml:"disable_ddl_transaction"`
+		LegacyIgnoreQuotes      *bool    `yaml:"legacy_ignore_quotes"`
 	}
 
 	dec := yaml.NewDecoder(bytes.NewReader(buf), yaml.DisallowUnknownField())
@@ -334,5 +338,6 @@ func parseGeneratorConfigFromBytes(buf []byte) GeneratorConfig {
 		EnableDrop:              config.EnableDrop,
 		CreateIndexConcurrently: config.CreateIndexConcurrently,
 		DisableDdlTransaction:   config.DisableDdlTransaction,
+		LegacyIgnoreQuotes:      config.LegacyIgnoreQuotes,
 	}
 }
