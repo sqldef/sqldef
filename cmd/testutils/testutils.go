@@ -313,7 +313,7 @@ func splitDDLs(mode schema.GeneratorMode, sqlParser database.Parser, str string,
 		return nil, err
 	}
 
-	statements = schema.SortTablesByDependencies(statements, defaultSchema)
+	statements = schema.SortTablesByDependencies(statements, defaultSchema, mode, nil)
 
 	var ddls []string
 	for _, statement := range statements {

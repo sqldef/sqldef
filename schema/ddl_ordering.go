@@ -105,7 +105,7 @@ func topologicalSort[T any](items []T, dependencies map[string][]string, getID f
 // to ensure objects are created in the correct order (dependencies before dependents)
 // Also ensures CREATE TYPE statements are placed before CREATE TABLE statements that use them
 // and CREATE SCHEMA statements are placed at the beginning
-func SortTablesByDependencies(ddls []DDL, defaultSchema string) []DDL {
+func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes *bool) []DDL {
 	// Extract DDLs by type: extensions, schemas, types, domains, tables, views, and other DDLs
 	var createExtensions []*Extension
 	var createSchemas []*Schema
@@ -143,8 +143,13 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string) []DDL {
 			// Extract foreign key dependencies
 			deps := []string{}
 			for _, fk := range ct.table.foreignKeys {
-				if fk.referenceName != "" && fk.referenceName != tableName {
-					deps = append(deps, fk.referenceName)
+				// Skip self-referential FKs using quote-aware comparison
+				if qualifiedTableNamesEqual(ct.table.name, fk.referenceTableName, defaultSchema, mode, legacyIgnoreQuotes) {
+					continue
+				}
+				refTableName := fk.referenceTableName.String()
+				if refTableName != "" {
+					deps = append(deps, refTableName)
 				}
 			}
 			tableDependencies[tableName] = deps

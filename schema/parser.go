@@ -92,11 +92,11 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}, nil
 		} else if stmt.Action == parser.AddForeignKey {
 
-			indexColumns := util.TransformSlice(stmt.ForeignKey.IndexColumns, func(indexColumn parser.ColIdent) string {
-				return indexColumn.String()
+			indexColumns := util.TransformSlice(stmt.ForeignKey.IndexColumns, func(indexColumn parser.ColIdent) Ident {
+				return Ident{Name: indexColumn.String(), Quoted: indexColumn.Quoted()}
 			})
-			referenceColumns := util.TransformSlice(stmt.ForeignKey.ReferenceColumns, func(referenceColumn parser.ColIdent) string {
-				return referenceColumn.String()
+			referenceColumns := util.TransformSlice(stmt.ForeignKey.ReferenceColumns, func(referenceColumn parser.ColIdent) Ident {
+				return Ident{Name: referenceColumn.String(), Quoted: referenceColumn.Quoted()}
 			})
 			var constraintOptions *ConstraintOptions
 			if stmt.ForeignKey.ConstraintOptions != nil {
@@ -110,15 +110,15 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				statement: ddl,
 				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
 				foreignKey: ForeignKey{
-					constraintName:    stmt.ForeignKey.ConstraintName.String(),
-					indexName:         stmt.ForeignKey.IndexName.String(),
-					indexColumns:      indexColumns,
-					referenceName:     normalizedTableName(mode, stmt.ForeignKey.ReferenceName, defaultSchema),
-					referenceColumns:  referenceColumns,
-					onDelete:          stmt.ForeignKey.OnDelete.String(),
-					onUpdate:          stmt.ForeignKey.OnUpdate.String(),
-					notForReplication: stmt.ForeignKey.NotForReplication,
-					constraintOptions: constraintOptions,
+					constraintName:     stmt.ForeignKey.ConstraintName.String(),
+					indexName:          stmt.ForeignKey.IndexName.String(),
+					indexColumns:       indexColumns,
+					referenceTableName: parseQualifiedTableName(mode, stmt.ForeignKey.ReferenceName, defaultSchema),
+					referenceColumns:   referenceColumns,
+					onDelete:           stmt.ForeignKey.OnDelete.String(),
+					onUpdate:           stmt.ForeignKey.OnUpdate.String(),
+					notForReplication:  stmt.ForeignKey.NotForReplication,
+					constraintOptions:  constraintOptions,
 				},
 			}, nil
 		} else if stmt.Action == parser.AddExclusion {
@@ -377,10 +377,10 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		column := columns[parsedCol.Name.String()]
 
 		// Build the foreign key object
-		indexColumns := []string{parsedCol.Name.String()}
+		indexColumns := []Ident{{Name: parsedCol.Name.String(), Quoted: parsedCol.Name.Quoted()}}
 
-		referenceColumns := util.TransformSlice(parsedCol.Type.ReferenceNames, func(refCol parser.ColIdent) string {
-			return refCol.String()
+		referenceColumns := util.TransformSlice(parsedCol.Type.ReferenceNames, func(refCol parser.ColIdent) Ident {
+			return Ident{Name: refCol.String(), Quoted: refCol.Quoted()}
 		})
 
 		constraintName := buildPostgresConstraintName(stmt.NewName.Name.String(), parsedCol.Name.String(), "fkey")
@@ -412,13 +412,13 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		foreignKey := ForeignKey{
-			constraintName:    constraintName,
-			indexColumns:      indexColumns,
-			referenceName:     normalizedTableName(mode, parser.TableName{Name: parser.NewTableIdent(parsedCol.Type.References, false)}, defaultSchema),
-			referenceColumns:  referenceColumns,
-			onDelete:          parser.String(parsedCol.Type.ReferenceOnDelete),
-			onUpdate:          parser.String(parsedCol.Type.ReferenceOnUpdate),
-			constraintOptions: constraintOptions,
+			constraintName:     constraintName,
+			indexColumns:       indexColumns,
+			referenceTableName: parseQualifiedTableNameFromString(mode, parsedCol.Type.References, defaultSchema),
+			referenceColumns:   referenceColumns,
+			onDelete:           parser.String(parsedCol.Type.ReferenceOnDelete),
+			onUpdate:           parser.String(parsedCol.Type.ReferenceOnUpdate),
+			constraintOptions:  constraintOptions,
 		}
 		foreignKeys = append(foreignKeys, foreignKey)
 
@@ -552,12 +552,12 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	}
 
 	for _, foreignKeyDef := range stmt.TableSpec.ForeignKeys {
-		indexColumns := util.TransformSlice(foreignKeyDef.IndexColumns, func(indexColumn parser.ColIdent) string {
-			return indexColumn.String()
+		indexColumns := util.TransformSlice(foreignKeyDef.IndexColumns, func(indexColumn parser.ColIdent) Ident {
+			return Ident{Name: indexColumn.String(), Quoted: indexColumn.Quoted()}
 		})
 
-		referenceColumns := util.TransformSlice(foreignKeyDef.ReferenceColumns, func(referenceColumn parser.ColIdent) string {
-			return referenceColumn.String()
+		referenceColumns := util.TransformSlice(foreignKeyDef.ReferenceColumns, func(referenceColumn parser.ColIdent) Ident {
+			return Ident{Name: referenceColumn.String(), Quoted: referenceColumn.Quoted()}
 		})
 
 		var constraintOptions *ConstraintOptions
@@ -569,15 +569,15 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		foreignKey := ForeignKey{
-			constraintName:    foreignKeyDef.ConstraintName.String(),
-			indexName:         foreignKeyDef.IndexName.String(),
-			indexColumns:      indexColumns,
-			referenceName:     normalizedTableName(mode, foreignKeyDef.ReferenceName, defaultSchema),
-			referenceColumns:  referenceColumns,
-			onDelete:          foreignKeyDef.OnDelete.String(),
-			onUpdate:          foreignKeyDef.OnUpdate.String(),
-			notForReplication: foreignKeyDef.NotForReplication,
-			constraintOptions: constraintOptions,
+			constraintName:     foreignKeyDef.ConstraintName.String(),
+			indexName:          foreignKeyDef.IndexName.String(),
+			indexColumns:       indexColumns,
+			referenceTableName: parseQualifiedTableName(mode, foreignKeyDef.ReferenceName, defaultSchema),
+			referenceColumns:   referenceColumns,
+			onDelete:           foreignKeyDef.OnDelete.String(),
+			onUpdate:           foreignKeyDef.OnUpdate.String(),
+			notForReplication:  foreignKeyDef.NotForReplication,
+			constraintOptions:  constraintOptions,
 		}
 		foreignKeys = append(foreignKeys, foreignKey)
 	}
@@ -913,6 +913,33 @@ func parseQualifiedTableName(mode GeneratorMode, tableName parser.TableName, def
 		} else {
 			schemaIdent = Ident{Name: defaultSchema, Quoted: false}
 		}
+	}
+
+	return QualifiedTableName{
+		Schema: schemaIdent,
+		Name:   nameIdent,
+	}
+}
+
+// parseQualifiedTableNameFromString creates a QualifiedTableName from a string table reference.
+// For column-level REFERENCES where the parser loses quote information, we infer it:
+// - If the name has any uppercase letters, it was likely quoted (quoted preserves case)
+// - If the name is all lowercase, it was likely unquoted (unquoted normalizes to lowercase)
+func parseQualifiedTableNameFromString(mode GeneratorMode, tableRef string, defaultSchema string) QualifiedTableName {
+	// Check if the name has uppercase letters (indicates it was quoted)
+	hasUppercase := false
+	for _, r := range tableRef {
+		if r >= 'A' && r <= 'Z' {
+			hasUppercase = true
+			break
+		}
+	}
+
+	nameIdent := Ident{Name: tableRef, Quoted: hasUppercase}
+
+	var schemaIdent Ident
+	if mode == GeneratorModePostgres || mode == GeneratorModeMssql {
+		schemaIdent = Ident{Name: defaultSchema, Quoted: false}
 	}
 
 	return QualifiedTableName{

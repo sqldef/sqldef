@@ -7,7 +7,7 @@ TableQuotedPreservesCase:
   desired: |
     CREATE TABLE "Users" (id int, name text);
   output: |
-    ALTER TABLE "public"."Users" ADD COLUMN name text;
+    ALTER TABLE public."Users" ADD COLUMN name text;
 
 TableUnquotedNormalizesToLowercase:
   legacy_ignore_quotes: false
@@ -16,7 +16,7 @@ TableUnquotedNormalizesToLowercase:
   desired: |
     CREATE TABLE Users (id int, name text);
   output: |
-    ALTER TABLE "public".users ADD COLUMN name text;
+    ALTER TABLE public.users ADD COLUMN name text;
 
 TableQuotedVsUnquotedAreDifferent:
   legacy_ignore_quotes: false
@@ -27,8 +27,8 @@ TableQuotedVsUnquotedAreDifferent:
     CREATE TABLE "Users" (id int, name text);
     CREATE TABLE users (id int, email text);
   output: |
-    ALTER TABLE "public"."Users" ADD COLUMN name text;
-    ALTER TABLE "public".users ADD COLUMN email text;
+    ALTER TABLE public."Users" ADD COLUMN name text;
+    ALTER TABLE public.users ADD COLUMN email text;
 
 ColumnQuotedPreservesCase:
   legacy_ignore_quotes: false
@@ -37,7 +37,7 @@ ColumnQuotedPreservesCase:
   desired: |
     CREATE TABLE users ("Name" text NOT NULL);
   output: |
-    ALTER TABLE "public".users ALTER COLUMN "Name" SET NOT NULL;
+    ALTER TABLE public.users ALTER COLUMN "Name" SET NOT NULL;
 
 ColumnUnquotedNormalizesToLowercase:
   legacy_ignore_quotes: false
@@ -46,7 +46,7 @@ ColumnUnquotedNormalizesToLowercase:
   desired: |
     CREATE TABLE users (Name text NOT NULL);
   output: |
-    ALTER TABLE "public".users ALTER COLUMN name SET NOT NULL;
+    ALTER TABLE public.users ALTER COLUMN name SET NOT NULL;
 
 ColumnQuotedVsUnquotedAreDifferent:
   legacy_ignore_quotes: false
@@ -55,8 +55,8 @@ ColumnQuotedVsUnquotedAreDifferent:
   desired: |
     CREATE TABLE users ("Name" text NOT NULL, name text NOT NULL);
   output: |
-    ALTER TABLE "public".users ALTER COLUMN "Name" SET NOT NULL;
-    ALTER TABLE "public".users ALTER COLUMN name SET NOT NULL;
+    ALTER TABLE public.users ALTER COLUMN "Name" SET NOT NULL;
+    ALTER TABLE public.users ALTER COLUMN name SET NOT NULL;
 
 # Equivalence tests: quoted lowercase should equal unquoted (current=unquoted, desired=quoted)
 # In PostgreSQL, "users" (quoted lowercase) and users (unquoted) refer to the same identifier
@@ -112,7 +112,7 @@ ViewQuotedPreservesCase:
     CREATE TABLE users (id int, name text);
     CREATE VIEW "ActiveUsers" AS SELECT id FROM users;
   output: |
-    ALTER TABLE "public".users ADD COLUMN name text;
+    ALTER TABLE public.users ADD COLUMN name text;
 
 ViewUnquotedNormalizesToLowercase:
   legacy_ignore_quotes: false
@@ -123,7 +123,7 @@ ViewUnquotedNormalizesToLowercase:
     CREATE TABLE users (id int, name text);
     CREATE VIEW ActiveUsers AS SELECT id FROM users;
   output: |
-    ALTER TABLE "public".users ADD COLUMN name text;
+    ALTER TABLE public.users ADD COLUMN name text;
 
 TypeQuotedPreservesCase:
   legacy_ignore_quotes: false
@@ -134,7 +134,7 @@ TypeQuotedPreservesCase:
     CREATE TYPE "UserStatus" AS ENUM ('active', 'inactive');
     CREATE TABLE users (id int, status "UserStatus", name text);
   output: |
-    ALTER TABLE "public".users ADD COLUMN name text;
+    ALTER TABLE public.users ADD COLUMN name text;
 
 TypeUnquotedNormalizesToLowercase:
   legacy_ignore_quotes: false
@@ -145,7 +145,7 @@ TypeUnquotedNormalizesToLowercase:
     CREATE TYPE UserStatus AS ENUM ('active', 'inactive');
     CREATE TABLE users (id int, status userstatus, name text);
   output: |
-    ALTER TABLE "public".users ADD COLUMN name text;
+    ALTER TABLE public.users ADD COLUMN name text;
 
 DomainQuotedPreservesCase:
   legacy_ignore_quotes: false
@@ -156,7 +156,7 @@ DomainQuotedPreservesCase:
     CREATE DOMAIN "PositiveInt" AS int CHECK (VALUE > 0);
     CREATE TABLE users (id "PositiveInt", score "PositiveInt");
   output: |
-    ALTER TABLE "public".users ADD COLUMN score "PositiveInt";
+    ALTER TABLE public.users ADD COLUMN score "PositiveInt";
 
 DomainUnquotedNormalizesToLowercase:
   legacy_ignore_quotes: false
@@ -167,7 +167,7 @@ DomainUnquotedNormalizesToLowercase:
     CREATE DOMAIN PositiveInt AS int CHECK (VALUE > 0);
     CREATE TABLE users (id positiveint, score positiveint);
   output: |
-    ALTER TABLE "public".users ADD COLUMN score positiveint;
+    ALTER TABLE public.users ADD COLUMN score positiveint;
 
 IndexQuotedPreservesCase:
   legacy_ignore_quotes: false
@@ -178,7 +178,7 @@ IndexQuotedPreservesCase:
     CREATE TABLE users (id int, email text, name text);
     CREATE INDEX "EmailIndex" ON users (email);
   output: |
-    ALTER TABLE "public".users ADD COLUMN name text;
+    ALTER TABLE public.users ADD COLUMN name text;
 
 IndexUnquotedNormalizesToLowercase:
   legacy_ignore_quotes: false
@@ -189,7 +189,7 @@ IndexUnquotedNormalizesToLowercase:
     CREATE TABLE users (id int, email text, name text);
     CREATE INDEX EmailIndex ON users (email);
   output: |
-    ALTER TABLE "public".users ADD COLUMN name text;
+    ALTER TABLE public.users ADD COLUMN name text;
 
 ConstraintQuotedPreservesCase:
   legacy_ignore_quotes: false
@@ -198,7 +198,7 @@ ConstraintQuotedPreservesCase:
   desired: |
     CREATE TABLE users (id int CONSTRAINT "PrimaryKey" PRIMARY KEY, email text UNIQUE);
   output: |
-    ALTER TABLE "public".users ADD COLUMN email text UNIQUE;
+    ALTER TABLE public.users ADD COLUMN email text UNIQUE;
 
 ConstraintUnquotedNormalizesToLowercase:
   legacy_ignore_quotes: false
@@ -207,7 +207,7 @@ ConstraintUnquotedNormalizesToLowercase:
   desired: |
     CREATE TABLE users (id int CONSTRAINT PrimaryKey PRIMARY KEY, email text UNIQUE);
   output: |
-    ALTER TABLE "public".users ADD COLUMN email text UNIQUE;
+    ALTER TABLE public.users ADD COLUMN email text UNIQUE;
 
 MixedQuotedAndUnquoted:
   legacy_ignore_quotes: false
@@ -218,10 +218,10 @@ MixedQuotedAndUnquoted:
     CREATE TABLE "Users" ("Name" text);
     CREATE TABLE users (name text);
   output: |
-    ALTER TABLE "public"."Users" ADD COLUMN "Name" text;
-    ALTER TABLE "public".users ADD COLUMN name text;
-    ALTER TABLE "public"."Users" DROP COLUMN id;
-    ALTER TABLE "public".users DROP COLUMN id;
+    ALTER TABLE public."Users" ADD COLUMN "Name" text;
+    ALTER TABLE public.users ADD COLUMN name text;
+    ALTER TABLE public."Users" DROP COLUMN id;
+    ALTER TABLE public.users DROP COLUMN id;
 
 ComplexMixedCaseScenario:
   legacy_ignore_quotes: false
@@ -237,9 +237,9 @@ ComplexMixedCaseScenario:
       "CreatedAt" timestamp DEFAULT CURRENT_TIMESTAMP
     );
   output: |
-    ALTER TABLE "public"."UserProfiles" ALTER COLUMN user_name SET NOT NULL;
-    ALTER TABLE "public"."UserProfiles" ADD COLUMN "CreatedAt" timestamp DEFAULT current_timestamp;
-    ALTER TABLE "public"."UserProfiles" ADD PRIMARY KEY ("UserId");
+    ALTER TABLE public."UserProfiles" ALTER COLUMN user_name SET NOT NULL;
+    ALTER TABLE public."UserProfiles" ADD COLUMN "CreatedAt" timestamp DEFAULT current_timestamp;
+    ALTER TABLE public."UserProfiles" ADD PRIMARY KEY ("UserId");
 
 ForeignKeyToQuotedTable:
   legacy_ignore_quotes: false
@@ -261,7 +261,7 @@ ForeignKeyToQuotedTable:
       CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES "Users" ("UserId")
     );
   output: |
-    ALTER TABLE "public".orders ADD CONSTRAINT "fk_user" FOREIGN KEY ("user_id") REFERENCES "public"."Users" ("UserId");
+    ALTER TABLE public.orders ADD CONSTRAINT "fk_user" FOREIGN KEY (user_id) REFERENCES public."Users" ("UserId");
 
 ForeignKeyWithQuotedConstraintName:
   legacy_ignore_quotes: false
@@ -276,7 +276,7 @@ ForeignKeyWithQuotedConstraintName:
       CONSTRAINT "FK_Orders_Users" FOREIGN KEY (user_id) REFERENCES users (id)
     );
   output: |
-    ALTER TABLE "public".orders ADD CONSTRAINT "FK_Orders_Users" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id");
+    ALTER TABLE public.orders ADD CONSTRAINT "FK_Orders_Users" FOREIGN KEY (user_id) REFERENCES public.users (id);
 
 ForeignKeyBetweenQuotedAndUnquotedTables:
   legacy_ignore_quotes: false
@@ -295,8 +295,8 @@ ForeignKeyBetweenQuotedAndUnquotedTables:
       CONSTRAINT fk_unquoted FOREIGN KEY (unquoted_user_id) REFERENCES users (id)
     );
   output: |
-    ALTER TABLE "public"."Orders" ADD CONSTRAINT "fk_quoted" FOREIGN KEY ("quoted_user_id") REFERENCES "public"."Users" ("UserId");
-    ALTER TABLE "public"."Orders" ADD CONSTRAINT "fk_unquoted" FOREIGN KEY ("unquoted_user_id") REFERENCES "public"."users" ("id");
+    ALTER TABLE public."Orders" ADD CONSTRAINT "fk_quoted" FOREIGN KEY (quoted_user_id) REFERENCES public."Users" ("UserId");
+    ALTER TABLE public."Orders" ADD CONSTRAINT "fk_unquoted" FOREIGN KEY (unquoted_user_id) REFERENCES public.users (id);
 
 ArrayTypeWithQuotedCustomType:
   legacy_ignore_quotes: false
@@ -307,7 +307,7 @@ ArrayTypeWithQuotedCustomType:
     CREATE TYPE "UserRole" AS ENUM ('admin', 'user');
     CREATE TABLE users (id int, roles "UserRole"[]);
   output: |
-    ALTER TABLE "public".users ADD COLUMN roles "UserRole"[];
+    ALTER TABLE public.users ADD COLUMN roles "UserRole"[];
 
 ArrayTypeWithUnquotedCustomType:
   legacy_ignore_quotes: false
@@ -318,7 +318,7 @@ ArrayTypeWithUnquotedCustomType:
     CREATE TYPE userrole AS ENUM ('admin', 'user');
     CREATE TABLE users (id int, roles userrole[]);
   output: |
-    ALTER TABLE "public".users ADD COLUMN roles userrole[];
+    ALTER TABLE public.users ADD COLUMN roles userrole[];
 
 CheckConstraintQuotedName:
   legacy_ignore_quotes: false
@@ -330,7 +330,7 @@ CheckConstraintQuotedName:
       price int CONSTRAINT "Price_Positive" CHECK (price > 0)
     );
   output: |
-    ALTER TABLE "public".products ADD CONSTRAINT "Price_Positive" CHECK (price > 0);
+    ALTER TABLE public.products ADD CONSTRAINT "Price_Positive" CHECK (price > 0);
 
 CheckConstraintQuotedVsUnquotedName:
   legacy_ignore_quotes: false
@@ -345,8 +345,8 @@ CheckConstraintQuotedVsUnquotedName:
       price int CONSTRAINT Price_Check CHECK (price > 0)
     );
   output: |
-    ALTER TABLE "public".products DROP CONSTRAINT "Price_Check";
-    ALTER TABLE "public".products ADD CONSTRAINT price_check CHECK (price > 0);
+    ALTER TABLE public.products DROP CONSTRAINT "Price_Check";
+    ALTER TABLE public.products ADD CONSTRAINT price_check CHECK (price > 0);
 
 UniqueConstraintQuotedColumns:
   legacy_ignore_quotes: false
@@ -359,7 +359,7 @@ UniqueConstraintQuotedColumns:
       CONSTRAINT "unique_email" UNIQUE ("Email")
     );
   output: |
-    ALTER TABLE "public"."users" ADD CONSTRAINT "unique_email" UNIQUE ("Email");
+    ALTER TABLE public.users ADD CONSTRAINT "unique_email" UNIQUE ("Email");
 
 DropTableQuotedName:
   legacy_ignore_quotes: false
@@ -367,7 +367,7 @@ DropTableQuotedName:
     CREATE TABLE "Users" (id int);
   desired: ""
   output: |
-    DROP TABLE "public"."Users";
+    DROP TABLE public."Users";
 
 DropTableQuotedVsUnquoted:
   legacy_ignore_quotes: false
@@ -377,7 +377,7 @@ DropTableQuotedVsUnquoted:
   desired: |
     CREATE TABLE users (id int);
   output: |
-    DROP TABLE "public"."Users";
+    DROP TABLE public."Users";
 
 DropIndexQuotedName:
   legacy_ignore_quotes: false
@@ -387,7 +387,7 @@ DropIndexQuotedName:
   desired: |
     CREATE TABLE users (id int, email text);
   output: |
-    DROP INDEX "public"."EmailIndex";
+    DROP INDEX public."EmailIndex";
 
 DropIndexQuotedVsUnquoted:
   legacy_ignore_quotes: false
@@ -399,7 +399,7 @@ DropIndexQuotedVsUnquoted:
     CREATE TABLE users (id int, email text, name text);
     CREATE INDEX emailindex ON users (email);
   output: |
-    DROP INDEX "public"."NameIndex";
+    DROP INDEX public."NameIndex";
 
 DropViewQuotedName:
   legacy_ignore_quotes: false
@@ -409,7 +409,7 @@ DropViewQuotedName:
   desired: |
     CREATE TABLE users (id int);
   output: |
-    DROP VIEW "public"."ActiveUsers";
+    DROP VIEW public."ActiveUsers";
 
 DropViewQuotedVsUnquoted:
   legacy_ignore_quotes: false
@@ -421,7 +421,7 @@ DropViewQuotedVsUnquoted:
     CREATE TABLE users (id int);
     CREATE VIEW activeusers AS SELECT id FROM users;
   output: |
-    DROP VIEW "public"."ActiveUsers";
+    DROP VIEW public."ActiveUsers";
 
 DropForeignKeyQuotedName:
   legacy_ignore_quotes: false
@@ -436,8 +436,12 @@ DropForeignKeyQuotedName:
     CREATE TABLE users (id int PRIMARY KEY);
     CREATE TABLE orders (id int PRIMARY KEY, user_id int);
   output: |
-    ALTER TABLE "public"."orders" DROP CONSTRAINT "FK_Orders_Users";
+    ALTER TABLE public."orders" DROP CONSTRAINT "FK_Orders_Users";
 
+# Note: When tables come from database, PostgreSQL always quotes identifiers in exports,
+# so we can't distinguish originally-quoted vs originally-unquoted table names.
+# The default schema "public" is treated as unquoted (lowercase), but the table name
+# "users" remains quoted because the database export quotes all identifiers.
 DropUniqueConstraintQuotedName:
   legacy_ignore_quotes: false
   current: |
@@ -449,7 +453,7 @@ DropUniqueConstraintQuotedName:
   desired: |
     CREATE TABLE users (id int, email text);
   output: |
-    ALTER TABLE "public"."users" DROP CONSTRAINT "Unique_Email";
+    ALTER TABLE public."users" DROP CONSTRAINT "Unique_Email";
 
 DropCheckConstraintQuotedName:
   legacy_ignore_quotes: false
@@ -462,7 +466,7 @@ DropCheckConstraintQuotedName:
   desired: |
     CREATE TABLE products (id int, price int);
   output: |
-    ALTER TABLE "public".products DROP CONSTRAINT "Price_Positive";
+    ALTER TABLE public.products DROP CONSTRAINT "Price_Positive";
 
 QuotedReservedWordAsTableName:
   legacy_ignore_quotes: false
@@ -471,7 +475,7 @@ QuotedReservedWordAsTableName:
   desired: |
     CREATE TABLE "select" (id int, "from" text);
   output: |
-    ALTER TABLE "public"."select" ADD COLUMN "from" text;
+    ALTER TABLE public."select" ADD COLUMN "from" text;
 
 DropQuotedReservedWordTable:
   legacy_ignore_quotes: false
@@ -479,7 +483,7 @@ DropQuotedReservedWordTable:
     CREATE TABLE "table" (id int);
   desired: ""
   output: |
-    DROP TABLE "public"."table";
+    DROP TABLE public."table";
 
 QuotedIdentifierWithSpace:
   legacy_ignore_quotes: false
@@ -488,7 +492,7 @@ QuotedIdentifierWithSpace:
   desired: |
     CREATE TABLE "User Profiles" (id int, "Full Name" text);
   output: |
-    ALTER TABLE "public"."User Profiles" ADD COLUMN "Full Name" text;
+    ALTER TABLE public."User Profiles" ADD COLUMN "Full Name" text;
 
 ModifyUniqueConstraintQuotedName:
   legacy_ignore_quotes: false
@@ -507,8 +511,8 @@ ModifyUniqueConstraintQuotedName:
       CONSTRAINT "Unique_Email" UNIQUE (email, name)
     );
   output: |
-    ALTER TABLE "public"."users" DROP CONSTRAINT "Unique_Email";
-    ALTER TABLE "public"."users" ADD CONSTRAINT "Unique_Email" UNIQUE ("email", "name");
+    ALTER TABLE public.users DROP CONSTRAINT "Unique_Email";
+    ALTER TABLE public.users ADD CONSTRAINT "Unique_Email" UNIQUE ("email", "name");
 
 RenameUniqueConstraintQuotedToUnquoted:
   legacy_ignore_quotes: false
@@ -525,8 +529,8 @@ RenameUniqueConstraintQuotedToUnquoted:
       CONSTRAINT email_unique UNIQUE (email)
     );
   output: |
-    ALTER TABLE "public"."users" ADD CONSTRAINT email_unique UNIQUE ("email");
-    ALTER TABLE "public"."users" DROP CONSTRAINT "Email_Unique";
+    ALTER TABLE public.users ADD CONSTRAINT email_unique UNIQUE ("email");
+    ALTER TABLE public."users" DROP CONSTRAINT "Email_Unique";
 
 ForeignKeyMixedQuotedReferences:
   legacy_ignore_quotes: false
@@ -549,8 +553,8 @@ ForeignKeyMixedQuotedReferences:
       CONSTRAINT fk_unquoted_cat FOREIGN KEY (unquoted_cat_id) REFERENCES categories (id)
     );
   output: |
-    ALTER TABLE "public".products ADD CONSTRAINT "fk_QuotedCat" FOREIGN KEY ("quoted_cat_id") REFERENCES "public"."Categories" ("CategoryId");
-    ALTER TABLE "public".products ADD CONSTRAINT "fk_unquoted_cat" FOREIGN KEY ("unquoted_cat_id") REFERENCES "public"."categories" ("id");
+    ALTER TABLE public.products ADD CONSTRAINT "fk_QuotedCat" FOREIGN KEY (quoted_cat_id) REFERENCES public."Categories" ("CategoryId");
+    ALTER TABLE public.products ADD CONSTRAINT "fk_unquoted_cat" FOREIGN KEY (unquoted_cat_id) REFERENCES public.categories (id);
 
 DropForeignKeyKeepQuotedTable:
   legacy_ignore_quotes: false
@@ -565,7 +569,7 @@ DropForeignKeyKeepQuotedTable:
     CREATE TABLE "Users" ("UserId" int PRIMARY KEY);
     CREATE TABLE "Orders" (id int PRIMARY KEY, user_id int);
   output: |
-    ALTER TABLE "public"."Orders" DROP CONSTRAINT "FK_Order_User";
+    ALTER TABLE public."Orders" DROP CONSTRAINT "FK_Order_User";
 
 AddPrimaryKeyQuotedName:
   legacy_ignore_quotes: false
@@ -574,7 +578,7 @@ AddPrimaryKeyQuotedName:
   desired: |
     CREATE TABLE "Users" ("UserId" int PRIMARY KEY);
   output: |
-    ALTER TABLE "public"."Users" ADD PRIMARY KEY ("UserId");
+    ALTER TABLE public."Users" ADD PRIMARY KEY ("UserId");
 
 DropPrimaryKeyQuotedName:
   legacy_ignore_quotes: false
@@ -583,7 +587,7 @@ DropPrimaryKeyQuotedName:
   desired: |
     CREATE TABLE users (id int NOT NULL);
   output: |
-    ALTER TABLE "public".users DROP CONSTRAINT users_pkey;
+    ALTER TABLE public.users DROP CONSTRAINT users_pkey;
 
 RenameQuotedColumnToUnquoted:
   legacy_ignore_quotes: false
@@ -598,7 +602,7 @@ RenameQuotedColumnToUnquoted:
       username text -- @renamed from="UserName"
     );
   output: |
-    ALTER TABLE "public".users RENAME COLUMN "UserName" TO username;
+    ALTER TABLE public.users RENAME COLUMN "UserName" TO username;
 
 RenameUnquotedColumnToQuoted:
   legacy_ignore_quotes: false
@@ -613,7 +617,7 @@ RenameUnquotedColumnToQuoted:
       "UserName" text -- @renamed from=username
     );
   output: |
-    ALTER TABLE "public".users RENAME COLUMN username TO "UserName";
+    ALTER TABLE public.users RENAME COLUMN username TO "UserName";
 
 RenameQuotedColumnToQuoted:
   legacy_ignore_quotes: false
@@ -628,7 +632,7 @@ RenameQuotedColumnToQuoted:
       "NewName" text -- @renamed from="OldName"
     );
   output: |
-    ALTER TABLE "public".users RENAME COLUMN "OldName" TO "NewName";
+    ALTER TABLE public.users RENAME COLUMN "OldName" TO "NewName";
 
 RenameQuotedColumnWithTypeChange:
   legacy_ignore_quotes: false
@@ -643,9 +647,9 @@ RenameQuotedColumnWithTypeChange:
       username text NOT NULL -- @renamed from="UserName"
     );
   output: |
-    ALTER TABLE "public".users RENAME COLUMN "UserName" TO username;
-    ALTER TABLE "public".users ALTER COLUMN username TYPE text;
-    ALTER TABLE "public".users ALTER COLUMN username SET NOT NULL;
+    ALTER TABLE public.users RENAME COLUMN "UserName" TO username;
+    ALTER TABLE public.users ALTER COLUMN username TYPE text;
+    ALTER TABLE public.users ALTER COLUMN username SET NOT NULL;
 
 RenameQuotedTableToUnquoted:
   legacy_ignore_quotes: false
@@ -660,7 +664,7 @@ RenameQuotedTableToUnquoted:
       name text
     );
   output: |
-    ALTER TABLE "public"."UserAccounts" RENAME TO user_accounts;
+    ALTER TABLE public."UserAccounts" RENAME TO user_accounts;
 
 RenameUnquotedTableToQuoted:
   legacy_ignore_quotes: false
@@ -675,7 +679,7 @@ RenameUnquotedTableToQuoted:
       name text
     );
   output: |
-    ALTER TABLE "public".user_accounts RENAME TO "UserAccounts";
+    ALTER TABLE public.user_accounts RENAME TO "UserAccounts";
 
 RenameQuotedIndexToUnquoted:
   legacy_ignore_quotes: false
@@ -692,7 +696,7 @@ RenameQuotedIndexToUnquoted:
     );
     CREATE INDEX email_idx /* @renamed from="EmailIndex" */ ON users (email);
   output: |
-    ALTER INDEX "public"."EmailIndex" RENAME TO email_idx;
+    ALTER INDEX public."EmailIndex" RENAME TO email_idx;
 
 RenameUnquotedIndexToQuoted:
   legacy_ignore_quotes: false
@@ -709,7 +713,7 @@ RenameUnquotedIndexToQuoted:
     );
     CREATE INDEX "EmailIndex" /* @renamed from=email_idx */ ON users (email);
   output: |
-    ALTER INDEX "public".email_idx RENAME TO "EmailIndex";
+    ALTER INDEX public.email_idx RENAME TO "EmailIndex";
 
 QuotedSchemaName:
   legacy_ignore_quotes: false
@@ -749,7 +753,7 @@ CheckConstraintMixedQuotedColumns:
       CONSTRAINT "Price_Range" CHECK (min_price < max_price)
     );
   output: |
-    ALTER TABLE "public".orders ADD CONSTRAINT "Price_Range" CHECK (min_price < max_price);
+    ALTER TABLE public.orders ADD CONSTRAINT "Price_Range" CHECK (min_price < max_price);
 
 CheckConstraintQuotedConstraintName:
   legacy_ignore_quotes: false
@@ -764,7 +768,7 @@ CheckConstraintQuotedConstraintName:
       price int CONSTRAINT "Positive_Price" CHECK (price > 0)
     );
   output: |
-    ALTER TABLE "public".products ADD CONSTRAINT "Positive_Price" CHECK (price > 0);
+    ALTER TABLE public.products ADD CONSTRAINT "Positive_Price" CHECK (price > 0);
 
 RenameQuotedLowercaseToUnquotedNoOp:
   legacy_ignore_quotes: false
@@ -793,7 +797,7 @@ RenameQuotedMixedCaseToUnquoted:
       username text -- @renamed from="UserName"
     );
   output: |
-    ALTER TABLE "public".users RENAME COLUMN "UserName" TO username;
+    ALTER TABLE public.users RENAME COLUMN "UserName" TO username;
 
 TableQuotedLowercaseEqualsUnquoted:
   legacy_ignore_quotes: false
@@ -802,7 +806,7 @@ TableQuotedLowercaseEqualsUnquoted:
   desired: |
     CREATE TABLE users (id int, name text);
   output: |
-    ALTER TABLE "public".users ADD COLUMN name text;
+    ALTER TABLE public.users ADD COLUMN name text;
 
 IndexQuotedLowercaseEqualsUnquoted:
   legacy_ignore_quotes: false
@@ -855,7 +859,7 @@ ForeignKeyAutoNameWithQuotedColumn:
       "CategoryId" int REFERENCES categories (id)
     );
   output: |
-    ALTER TABLE "public".products ADD CONSTRAINT "products_CategoryId_fkey" FOREIGN KEY ("CategoryId") REFERENCES "public"."categories" ("id");
+    ALTER TABLE public.products ADD CONSTRAINT "products_CategoryId_fkey" FOREIGN KEY ("CategoryId") REFERENCES public.categories (id);
 
 CheckConstraintQuotedMixedCaseName:
   legacy_ignore_quotes: false
@@ -867,7 +871,7 @@ CheckConstraintQuotedMixedCaseName:
       price int CONSTRAINT "PriceMustBePositive" CHECK (price > 0)
     );
   output: |
-    ALTER TABLE "public".products ADD CONSTRAINT "PriceMustBePositive" CHECK (price > 0);
+    ALTER TABLE public.products ADD CONSTRAINT "PriceMustBePositive" CHECK (price > 0);
 
 DropCheckConstraintQuotedMixedCaseName:
   legacy_ignore_quotes: false
@@ -879,7 +883,7 @@ DropCheckConstraintQuotedMixedCaseName:
   desired: |
     CREATE TABLE products (id int, price int);
   output: |
-    ALTER TABLE "public".products DROP CONSTRAINT "PriceMustBePositive";
+    ALTER TABLE public.products DROP CONSTRAINT "PriceMustBePositive";
 
 MultipleColumnsQuotedVsUnquotedSameName:
   legacy_ignore_quotes: false
@@ -896,8 +900,8 @@ MultipleColumnsQuotedVsUnquotedSameName:
       name text NOT NULL
     );
   output: |
-    ALTER TABLE "public".users ALTER COLUMN "Name" SET NOT NULL;
-    ALTER TABLE "public".users ALTER COLUMN name SET NOT NULL;
+    ALTER TABLE public.users ALTER COLUMN "Name" SET NOT NULL;
+    ALTER TABLE public.users ALTER COLUMN name SET NOT NULL;
 
 DropQuotedColumnKeepUnquoted:
   legacy_ignore_quotes: false
@@ -913,7 +917,7 @@ DropQuotedColumnKeepUnquoted:
       name text
     );
   output: |
-    ALTER TABLE "public".users DROP COLUMN "Name";
+    ALTER TABLE public.users DROP COLUMN "Name";
 
 UniqueConstraintOnQuotedColumn:
   legacy_ignore_quotes: false
@@ -929,7 +933,7 @@ UniqueConstraintOnQuotedColumn:
       CONSTRAINT "users_Email_key" UNIQUE ("Email")
     );
   output: |
-    ALTER TABLE "public"."users" ADD CONSTRAINT "users_Email_key" UNIQUE ("Email");
+    ALTER TABLE public.users ADD CONSTRAINT "users_Email_key" UNIQUE ("Email");
 
 PrimaryKeyOnQuotedColumn:
   legacy_ignore_quotes: false
@@ -938,7 +942,7 @@ PrimaryKeyOnQuotedColumn:
   desired: |
     CREATE TABLE users ("UserId" int PRIMARY KEY);
   output: |
-    ALTER TABLE "public"."users" ADD PRIMARY KEY ("UserId");
+    ALTER TABLE public.users ADD PRIMARY KEY ("UserId");
 
 IndexOnMixedQuotedColumns:
   legacy_ignore_quotes: false
@@ -957,3 +961,107 @@ IndexOnMixedQuotedColumns:
     CREATE INDEX name_idx ON users ("FirstName", last_name);
   output: |
     CREATE INDEX name_idx ON users ("FirstName", last_name);
+
+# =============================================================================
+# Edge case tests for Issue 3: Schema name comparison
+# In quote-aware mode, quoted schema "MySchema" should be different from
+# unquoted myschema (which normalizes to lowercase)
+# =============================================================================
+
+QuotedSchemaVsUnquotedSchemaDifferent:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE SCHEMA "MySchema";
+    CREATE TABLE "MySchema".test (id int);
+  desired: |
+    CREATE SCHEMA "MySchema";
+    CREATE TABLE "MySchema".test (id int);
+    CREATE SCHEMA myschema;
+    CREATE TABLE myschema.test (name text);
+  output: |
+    CREATE SCHEMA myschema;
+    CREATE TABLE myschema.test (name text);
+
+QuotedSchemaVsUnquotedSchemaModifyBoth:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE SCHEMA "MySchema";
+    CREATE TABLE "MySchema".users (id int);
+    CREATE SCHEMA myschema;
+    CREATE TABLE myschema.users (id int);
+  desired: |
+    CREATE SCHEMA "MySchema";
+    CREATE TABLE "MySchema".users (id int, quoted_col text);
+    CREATE SCHEMA myschema;
+    CREATE TABLE myschema.users (id int, unquoted_col text);
+  output: |
+    ALTER TABLE "MySchema".users ADD COLUMN quoted_col text;
+    ALTER TABLE myschema.users ADD COLUMN unquoted_col text;
+
+# =============================================================================
+# Edge case tests for Issue 4: escapeAndJoinColumns missing quote-awareness
+# Foreign key columns should preserve quoting: unquoted columns should NOT
+# be quoted in the output in quote-aware mode
+# =============================================================================
+
+# Note: In quote-aware mode, the default schema (public) is unquoted since it was never explicitly quoted.
+# Reference table names are currently always quoted due to implementation limitations
+# (ForeignKey.referenceName is stored as string without quote info).
+# The key behavior being tested is that column names preserve their original quoting.
+
+ForeignKeyUnquotedColumnsNotQuoted:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int PRIMARY KEY);
+    CREATE TABLE orders (id int PRIMARY KEY, user_id int);
+  desired: |
+    CREATE TABLE users (id int PRIMARY KEY);
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+  output: |
+    ALTER TABLE public.orders ADD CONSTRAINT "fk_user" FOREIGN KEY (user_id) REFERENCES public.users (id);
+
+ForeignKeyMixedQuotedColumns:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE parent (
+      "ParentId" int PRIMARY KEY
+    );
+    CREATE TABLE child (
+      id int PRIMARY KEY,
+      "ParentId" int,
+      parent_code text
+    );
+  desired: |
+    CREATE TABLE parent (
+      "ParentId" int PRIMARY KEY
+    );
+    CREATE TABLE child (
+      id int PRIMARY KEY,
+      "ParentId" int,
+      parent_code text,
+      CONSTRAINT fk_parent FOREIGN KEY ("ParentId") REFERENCES parent ("ParentId")
+    );
+  output: |
+    ALTER TABLE public.child ADD CONSTRAINT "fk_parent" FOREIGN KEY ("ParentId") REFERENCES public.parent ("ParentId");
+
+ForeignKeyQuotedColumnToUnquotedColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE categories (category_id int PRIMARY KEY);
+    CREATE TABLE products (
+      id int PRIMARY KEY,
+      "CategoryId" int
+    );
+  desired: |
+    CREATE TABLE categories (category_id int PRIMARY KEY);
+    CREATE TABLE products (
+      id int PRIMARY KEY,
+      "CategoryId" int,
+      CONSTRAINT fk_category FOREIGN KEY ("CategoryId") REFERENCES categories (category_id)
+    );
+  output: |
+    ALTER TABLE public.products ADD CONSTRAINT "fk_category" FOREIGN KEY ("CategoryId") REFERENCES public.categories (category_id);

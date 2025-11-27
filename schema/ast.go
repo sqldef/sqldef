@@ -1,6 +1,8 @@
 package schema
 
 import (
+	"strings"
+
 	"github.com/sqldef/sqldef/v3/parser"
 )
 
@@ -38,6 +40,46 @@ type QualifiedColumnName struct {
 // String returns the column name.
 func (q QualifiedColumnName) String() string {
 	return q.Name.Name
+}
+
+// identsEqual compares two Idents with quote-awareness based on database mode and legacyIgnoreQuotes.
+// For non-PostgreSQL databases, always uses case-insensitive comparison.
+// For PostgreSQL in quote-aware mode, unquoted identifiers are normalized to lowercase.
+func identsEqual(a, b Ident, mode GeneratorMode, legacyIgnoreQuotes *bool) bool {
+	// For non-PostgreSQL databases, always use case-insensitive comparison
+	if mode != GeneratorModePostgres {
+		return strings.EqualFold(a.Name, b.Name)
+	}
+	useLegacy := legacyIgnoreQuotes == nil || *legacyIgnoreQuotes
+	if useLegacy {
+		return strings.EqualFold(a.Name, b.Name)
+	}
+	// Quote-aware comparison: normalize unquoted identifiers to lowercase
+	aName := a.Name
+	bName := b.Name
+	if !a.Quoted {
+		aName = strings.ToLower(aName)
+	}
+	if !b.Quoted {
+		bName = strings.ToLower(bName)
+	}
+	return aName == bName
+}
+
+// qualifiedTableNamesEqual compares two QualifiedTableNames with quote-awareness.
+func qualifiedTableNamesEqual(a, b QualifiedTableName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes *bool) bool {
+	aSchema := a.Schema
+	bSchema := b.Schema
+	if aSchema.Name == "" && defaultSchema != "" {
+		aSchema = Ident{Name: defaultSchema, Quoted: false}
+	}
+	if bSchema.Name == "" && defaultSchema != "" {
+		bSchema = Ident{Name: defaultSchema, Quoted: false}
+	}
+	if !identsEqual(aSchema, bSchema, mode, legacyIgnoreQuotes) {
+		return false
+	}
+	return identsEqual(a.Name, b.Name, mode, legacyIgnoreQuotes)
 }
 
 type DDL interface {
@@ -205,15 +247,15 @@ type ConstraintOptions struct {
 }
 
 type ForeignKey struct {
-	constraintName    string
-	indexName         string
-	indexColumns      []string
-	referenceName     string
-	referenceColumns  []string
-	onDelete          string
-	onUpdate          string
-	notForReplication bool
-	constraintOptions *ConstraintOptions
+	constraintName     string
+	indexName          string
+	indexColumns       []Ident
+	referenceTableName QualifiedTableName
+	referenceColumns   []Ident
+	onDelete           string
+	onUpdate           string
+	notForReplication  bool
+	constraintOptions  *ConstraintOptions
 }
 
 type Exclusion struct {

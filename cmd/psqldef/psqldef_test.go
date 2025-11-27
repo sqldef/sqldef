@@ -586,8 +586,9 @@ func TestPsqldefConfigLegacyIgnoreQuotes(t *testing.T) {
 	// Test with legacy_ignore_quotes: false via config-inline
 	// In quote-aware mode, unquoted identifiers should output without quotes
 	outQuoteAware := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--config-inline", "legacy_ignore_quotes: false", "--file", "schema.sql")
-	// With legacy_ignore_quotes: false, unquoted table names should not have quotes in output
-	assert.Contains(t, outQuoteAware, `ALTER TABLE "public".users ADD COLUMN name text;`)
+	// With legacy_ignore_quotes: false, unquoted table/schema names should not have quotes in output
+	// The default schema "public" in lowercase is treated as unquoted
+	assert.Contains(t, outQuoteAware, `ALTER TABLE public.users ADD COLUMN name text;`)
 
 	// Test with legacy_ignore_quotes: true (legacy behavior) - should quote everything
 	resetTestDatabase()
