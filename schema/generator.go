@@ -331,18 +331,11 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		for _, foreignKey := range currentTable.foreignKeys {
 			// Skip foreign keys without constraint names - they're likely from column-level REFERENCES
 			// that haven't been fully processed yet
-			if foreignKey.constraintName == "" {
+			if foreignKey.constraintName.Name == "" {
 				continue
 			}
 
-			// Generate constraint names for desired foreign keys (for comparison)
-			desiredConstraintNames := []string{}
-			for _, desiredFK := range desiredTable.foreignKeys {
-				constraintName := desiredFK.constraintName
-				desiredConstraintNames = append(desiredConstraintNames, constraintName)
-			}
-
-			if slices.Contains(desiredConstraintNames, foreignKey.constraintName) {
+			if g.findForeignKeyByName(desiredTable.foreignKeys, foreignKey.constraintName) != nil {
 				continue // Foreign key is expected to exist.
 			}
 
@@ -934,11 +927,9 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				tableName := desired.table.name.Name.Name
-				constraintName := buildPostgresConstraintName(tableName, desiredColumn.name.String(), "check")
-				constraintNameIdent := Ident{Name: constraintName, Quoted: false}
+				constraintName := Ident{Name: buildPostgresConstraintName(tableName, desiredColumn.name.String(), "check"), Quoted: false}
 				if desiredColumn.check != nil && desiredColumn.check.constraintName.Name != "" {
-					constraintName = desiredColumn.check.constraintName.Name
-					constraintNameIdent = desiredColumn.check.constraintName
+					constraintName = desiredColumn.check.constraintName
 				}
 
 				// First, check if the current column has a CHECK constraint
@@ -946,7 +937,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				var currentCheck *CheckDefinition
 				if currentColumn.check != nil {
 					// Current column has a CHECK - check if its name matches the desired name
-					if g.identsEqual(currentColumn.check.constraintName, constraintNameIdent) {
+					if g.identsEqual(currentColumn.check.constraintName, constraintName) {
 						// Names match (accounting for quoting), use the current column's check
 						currentCheck = currentColumn.check
 					} else {
@@ -956,7 +947,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 				} else {
 					// Current column has no CHECK, search in table-level constraints
-					currentCheck = g.findCheckConstraintInTable(&currentTable, constraintNameIdent)
+					currentCheck = g.findCheckConstraintInTable(&currentTable, constraintName)
 				}
 
 				// Check if current column's CHECK matches a table-level CHECK in desired.
@@ -974,7 +965,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				// We need to drop if: current has a check AND (definition differs OR constraint names differ)
 				needDropCurrentColumn := currentColumn.check != nil && !skipDropBecauseTableLevel &&
 					(!g.areSameCheckDefinition(currentColumn.check, desiredColumn.check) ||
-						(desiredColumn.check != nil && !g.identsEqual(currentColumn.check.constraintName, constraintNameIdent)))
+						(desiredColumn.check != nil && !g.identsEqual(currentColumn.check.constraintName, constraintName)))
 
 				if (!g.areSameCheckDefinition(currentCheck, desiredColumn.check) || needDropCurrentColumn) && !skipDropBecauseTableLevel {
 					// Drop the current constraint if it exists
@@ -989,7 +980,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						ddls = append(ddls, ddl)
 					}
 					if desiredColumn.check != nil {
-						escapedConstraintName := g.escapeSQLIdent(constraintNameIdent)
+						escapedConstraintName := g.escapeSQLIdent(constraintName)
 						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableNameForTable(&desired.table), escapedConstraintName, g.normalizeCheckExprString(desiredColumn.check.definition))
 						if desiredColumn.check.noInherit {
 							ddl += " NO INHERIT"
@@ -1129,12 +1120,12 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				switch g.mode {
 				case GeneratorModeMysql:
 					dropFKDDL = fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s",
-						g.escapeTableName(refFK.tableName),
-						g.escapeSQLName(refFK.foreignKey.constraintName))
+						g.escapeQualifiedTableName(refFK.tableName),
+						g.escapeSQLIdent(refFK.foreignKey.constraintName))
 				case GeneratorModePostgres, GeneratorModeMssql:
 					dropFKDDL = fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s",
-						g.escapeTableName(refFK.tableName),
-						g.escapeSQLName(refFK.foreignKey.constraintName))
+						g.escapeQualifiedTableName(refFK.tableName),
+						g.escapeSQLIdent(refFK.foreignKey.constraintName))
 				}
 				if dropFKDDL != "" {
 					dropFKDDLs = append(dropFKDDLs, dropFKDDL)
@@ -1143,11 +1134,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				// Update the current state to reflect that we've dropped this FK
 				// This prevents duplicate FK creation when processing the referencing table
 				for _, table := range g.currentTables {
-					if table.name.String() == refFK.tableName {
+					if g.qualifiedTableNamesEqual(table.name, refFK.tableName) {
 						// Remove the FK from the current table's FK list
 						newFKs := []ForeignKey{}
 						for _, fk := range table.foreignKeys {
-							if fk.constraintName != refFK.foreignKey.constraintName {
+							if !identsEqual(fk.constraintName, refFK.foreignKey.constraintName, g.mode, g.config.LegacyIgnoreQuotes) {
 								newFKs = append(newFKs, fk)
 							}
 						}
@@ -1160,8 +1151,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				// PostgreSQL and SQL Server don't create implicit indexes for FKs
 				if g.mode == GeneratorModeMysql {
 					dropIndexDDL := fmt.Sprintf("ALTER TABLE %s DROP INDEX %s",
-						g.escapeTableName(refFK.tableName),
-						g.escapeSQLName(refFK.foreignKey.constraintName))
+						g.escapeQualifiedTableName(refFK.tableName),
+						g.escapeSQLIdent(refFK.foreignKey.constraintName))
 					dropFKDDLs = append(dropFKDDLs, dropIndexDDL)
 				}
 
@@ -1170,10 +1161,10 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				var desiredFK *ForeignKey
 				var desiredTableExists bool
 				for _, desiredTable := range g.desiredTables {
-					if desiredTable.name.String() == refFK.tableName {
+					if g.qualifiedTableNamesEqual(desiredTable.name, refFK.tableName) {
 						desiredTableExists = true
 						for _, fk := range desiredTable.foreignKeys {
-							if fk.constraintName == refFK.foreignKey.constraintName {
+							if identsEqual(fk.constraintName, refFK.foreignKey.constraintName, g.mode, g.config.LegacyIgnoreQuotes) {
 								desiredFK = &fk
 								break
 							}
@@ -1189,7 +1180,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					recreateDDL := g.buildForeignKeyDDL(refFK.tableName, desiredFK)
 					recreateFKDDLs = append(recreateFKDDLs, recreateDDL)
 					// Mark this FK as globally handled so we don't add it again in normal FK processing
-					g.handledForeignKeys[refFK.tableName+":"+desiredFK.constraintName] = true
+					g.handledForeignKeys[refFK.tableName.String()+":"+desiredFK.constraintName.String()] = true
 				}
 				// If the table doesn't exist in desired schema or the FK doesn't exist,
 				// we don't recreate it (it will be dropped with the table)
@@ -1268,14 +1259,15 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	for _, desiredForeignKey := range desired.table.foreignKeys {
 		// Auto-generate constraint name if not specified (for PostgreSQL)
 		constraintName := desiredForeignKey.constraintName
-		if constraintName == "" && g.mode == GeneratorModePostgres && len(desiredForeignKey.indexColumns) > 0 {
+		if constraintName.Name == "" && g.mode == GeneratorModePostgres && len(desiredForeignKey.indexColumns) > 0 {
 			tableName := desired.table.name.Name.Name
 			// Use the first column name for the constraint name (matches PostgreSQL behavior)
 			columnName := desiredForeignKey.indexColumns[0].Name
-			constraintName = buildPostgresConstraintName(tableName, columnName, "fkey")
+			// Generated constraint name is unquoted (normalize to lowercase as PostgreSQL does)
+			constraintName = Ident{Name: strings.ToLower(buildPostgresConstraintName(tableName, columnName, "fkey")), Quoted: false}
 		}
 
-		if len(constraintName) == 0 && g.mode != GeneratorModeSQLite3 {
+		if constraintName.Name == "" && g.mode != GeneratorModeSQLite3 {
 			return ddls, fmt.Errorf(
 				"Foreign key without constraint symbol was found in table '%s' (index name: '%s', columns: %v). "+
 					"Specify the constraint symbol to identify the foreign key.",
@@ -1285,7 +1277,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 		// Create a modified ForeignKey with the generated constraint name if needed
 		fkWithName := desiredForeignKey
-		if desiredForeignKey.constraintName == "" && constraintName != "" {
+		if desiredForeignKey.constraintName.Name == "" && constraintName.Name != "" {
 			fkWithName = ForeignKey{
 				constraintName:     constraintName,
 				indexName:          desiredForeignKey.indexName,
@@ -1299,15 +1291,15 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 		}
 
-		if currentForeignKey := findForeignKeyByName(currentTable.foreignKeys, constraintName); currentForeignKey != nil {
+		if currentForeignKey := g.findForeignKeyByName(currentTable.foreignKeys, constraintName); currentForeignKey != nil {
 			// Drop and add foreign key as needed.
 			if !g.areSameForeignKeys(*currentForeignKey, fkWithName) {
 				var dropDDL string
 				switch g.mode {
 				case GeneratorModeMysql:
-					dropDDL = fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLName(currentForeignKey.constraintName))
+					dropDDL = fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLIdent(currentForeignKey.constraintName))
 				case GeneratorModePostgres, GeneratorModeMssql:
-					dropDDL = fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLName(currentForeignKey.constraintName))
+					dropDDL = fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLIdent(currentForeignKey.constraintName))
 				default:
 				}
 				if dropDDL != "" {
@@ -1317,7 +1309,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		} else {
 			// Foreign key not found, add foreign key.
 			// But first check if we've already handled this FK during primary key changes
-			fkKey := desired.table.name.String() + ":" + constraintName
+			fkKey := desired.table.name.String() + ":" + constraintName.String()
 			if !g.handledForeignKeys[fkKey] {
 				definition := g.generateForeignKeyDefinition(fkWithName)
 				ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableNameForTable(&desired.table), definition)
@@ -1521,7 +1513,7 @@ func (g *Generator) generateDDLsForAddForeignKey(tableName string, desiredForeig
 	var ddls []string
 
 	currentTable := findTableByNameString(g.currentTables, tableName)
-	currentForeignKey := findForeignKeyByName(currentTable.foreignKeys, desiredForeignKey.constraintName)
+	currentForeignKey := g.findForeignKeyByName(currentTable.foreignKeys, desiredForeignKey.constraintName)
 	if currentForeignKey == nil {
 		// Foreign Key not found, add foreign key
 		ddls = append(ddls, statement)
@@ -1529,7 +1521,7 @@ func (g *Generator) generateDDLsForAddForeignKey(tableName string, desiredForeig
 	} else {
 		// Foreign key found, If it's different, drop and add or alter foreign key.
 		if !g.areSameForeignKeys(*currentForeignKey, desiredForeignKey) {
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(currentTable), g.escapeSQLName(currentForeignKey.constraintName)))
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(currentTable), g.escapeSQLIdent(currentForeignKey.constraintName)))
 			ddls = append(ddls, statement)
 		}
 	}
@@ -1537,7 +1529,7 @@ func (g *Generator) generateDDLsForAddForeignKey(tableName string, desiredForeig
 	// Examine indexes in desiredTable to delete obsoleted indexes later
 	desiredTable := findTableByNameString(g.desiredTables, tableName)
 	// Only add to desiredTable.foreignKeys if it doesn't already exist (it may have been pre-populated from aggregation)
-	if !slices.Contains(convertForeignKeysToConstraintNames(desiredTable.foreignKeys), desiredForeignKey.constraintName) {
+	if g.findForeignKeyByName(desiredTable.foreignKeys, desiredForeignKey.constraintName) == nil {
 		desiredTable.foreignKeys = append(desiredTable.foreignKeys, desiredForeignKey)
 	}
 
@@ -1942,7 +1934,7 @@ func (g *Generator) generateDDLsForAbsentForeignKey(currentForeignKey ForeignKey
 
 	switch g.mode {
 	case GeneratorModeMysql:
-		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", g.escapeTableNameForTable(&currentTable), g.escapeSQLName(currentForeignKey.constraintName)))
+		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s", g.escapeTableNameForTable(&desiredTable), g.escapeSQLIdent(currentForeignKey.constraintName)))
 	case GeneratorModePostgres, GeneratorModeMssql:
 		var referencesColumn *Column
 		for _, column := range desiredTable.columns {
@@ -1953,7 +1945,7 @@ func (g *Generator) generateDDLsForAbsentForeignKey(currentForeignKey ForeignKey
 		}
 
 		if referencesColumn == nil {
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&currentTable), g.escapeSQLName(currentForeignKey.constraintName)))
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desiredTable), g.escapeSQLIdent(currentForeignKey.constraintName)))
 		}
 	default:
 	}
@@ -2405,13 +2397,12 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 	// TODO: make string concatenation faster?
 
 	// Empty constraint name is already invalidated in generateDDLsForCreateIndex
-	definition := fmt.Sprintf("CONSTRAINT %s FOREIGN KEY ", g.escapeSQLName(foreignKey.constraintName))
+	definition := fmt.Sprintf("CONSTRAINT %s FOREIGN KEY ", g.escapeSQLIdent(foreignKey.constraintName))
 
 	if len(foreignKey.indexName) > 0 {
 		definition += fmt.Sprintf("%s ", g.escapeSQLName(foreignKey.indexName))
 	}
 
-	// Use quote-aware escaping for column names
 	var indexColumns, referenceColumns []string
 	for _, column := range foreignKey.indexColumns {
 		indexColumns = append(indexColumns, g.escapeSQLIdent(column))
@@ -3313,9 +3304,9 @@ func (g *Generator) findCheckConstraintByDefinition(table *Table, check *CheckDe
 	return nil
 }
 
-func findForeignKeyByName(foreignKeys []ForeignKey, constraintName string) *ForeignKey {
+func (g *Generator) findForeignKeyByName(foreignKeys []ForeignKey, constraintName Ident) *ForeignKey {
 	for _, foreignKey := range foreignKeys {
-		if foreignKey.constraintName == constraintName {
+		if identsEqual(foreignKey.constraintName, constraintName, g.mode, g.config.LegacyIgnoreQuotes) {
 			return &foreignKey
 		}
 	}
@@ -3324,11 +3315,11 @@ func findForeignKeyByName(foreignKeys []ForeignKey, constraintName string) *Fore
 
 // findForeignKeysReferencingTable finds all foreign keys from all tables that reference the given table
 func (g *Generator) findForeignKeysReferencingTable(referencedTable QualifiedTableName) []struct {
-	tableName  string
+	tableName  QualifiedTableName
 	foreignKey ForeignKey
 } {
 	var referencingFKs []struct {
-		tableName  string
+		tableName  QualifiedTableName
 		foreignKey ForeignKey
 	}
 
@@ -3337,10 +3328,10 @@ func (g *Generator) findForeignKeysReferencingTable(referencedTable QualifiedTab
 		for _, fk := range table.foreignKeys {
 			if g.qualifiedTableNamesEqual(fk.referenceTableName, referencedTable) {
 				referencingFKs = append(referencingFKs, struct {
-					tableName  string
+					tableName  QualifiedTableName
 					foreignKey ForeignKey
 				}{
-					tableName:  table.name.String(),
+					tableName:  table.name,
 					foreignKey: fk,
 				})
 			}
@@ -3689,10 +3680,10 @@ func unwrapOutermostParenExpr(expr parser.Expr) parser.Expr {
 	}
 }
 
-func (g *Generator) buildForeignKeyDDL(tableName string, fk *ForeignKey) string {
+func (g *Generator) buildForeignKeyDDL(tableName QualifiedTableName, fk *ForeignKey) string {
 	ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
-		g.escapeTableName(tableName),
-		g.escapeSQLName(fk.constraintName),
+		g.escapeQualifiedTableName(tableName),
+		g.escapeSQLIdent(fk.constraintName),
 		g.escapeAndJoinIdents(fk.indexColumns),
 		g.escapeQualifiedTableName(fk.referenceTableName),
 		g.escapeAndJoinIdents(fk.referenceColumns))
@@ -4168,7 +4159,7 @@ func convertIndexesToIndexNames(indexes []Index) []string {
 func convertForeignKeysToConstraintNames(foreignKeys []ForeignKey) []string {
 	constraintNames := []string{}
 	for _, foreignKey := range foreignKeys {
-		constraintNames = append(constraintNames, foreignKey.constraintName)
+		constraintNames = append(constraintNames, foreignKey.constraintName.String())
 	}
 	return constraintNames
 }
@@ -4186,8 +4177,8 @@ func convertForeignKeysToIndexNames(foreignKeys []ForeignKey) []string {
 	for _, foreignKey := range foreignKeys {
 		if len(foreignKey.indexName) > 0 {
 			indexNames = append(indexNames, foreignKey.indexName)
-		} else if len(foreignKey.constraintName) > 0 {
-			indexNames = append(indexNames, foreignKey.constraintName)
+		} else if foreignKey.constraintName.Name != "" {
+			indexNames = append(indexNames, foreignKey.constraintName.String())
 		} // unexpected to reach else (really?)
 	}
 	return indexNames

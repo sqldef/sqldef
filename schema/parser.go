@@ -110,7 +110,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				statement: ddl,
 				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
 				foreignKey: ForeignKey{
-					constraintName:     stmt.ForeignKey.ConstraintName.String(),
+					constraintName:     Ident{Name: stmt.ForeignKey.ConstraintName.String(), Quoted: stmt.ForeignKey.ConstraintName.Quoted()},
 					indexName:          stmt.ForeignKey.IndexName.String(),
 					indexColumns:       indexColumns,
 					referenceTableName: parseQualifiedTableName(mode, stmt.ForeignKey.ReferenceName, defaultSchema),
@@ -383,7 +383,8 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			return Ident{Name: refCol.String(), Quoted: refCol.Quoted()}
 		})
 
-		constraintName := buildPostgresConstraintName(stmt.NewName.Name.String(), parsedCol.Name.String(), "fkey")
+		// Generated constraint name is unquoted (normalize to lowercase as PostgreSQL does)
+		constraintName := Ident{Name: strings.ToLower(buildPostgresConstraintName(stmt.NewName.Name.String(), parsedCol.Name.String(), "fkey")), Quoted: false}
 
 		// Only create constraintOptions if DEFERRABLE or INITIALLY DEFERRED is explicitly set to true
 		// This ensures we don't create an empty constraintOptions struct that would differ from
@@ -569,7 +570,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		foreignKey := ForeignKey{
-			constraintName:     foreignKeyDef.ConstraintName.String(),
+			constraintName:     Ident{Name: foreignKeyDef.ConstraintName.String(), Quoted: foreignKeyDef.ConstraintName.Quoted()},
 			indexName:          foreignKeyDef.IndexName.String(),
 			indexColumns:       indexColumns,
 			referenceTableName: parseQualifiedTableName(mode, foreignKeyDef.ReferenceName, defaultSchema),

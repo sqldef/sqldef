@@ -261,7 +261,7 @@ ForeignKeyToQuotedTable:
       CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES "Users" ("UserId")
     );
   output: |
-    ALTER TABLE public.orders ADD CONSTRAINT "fk_user" FOREIGN KEY (user_id) REFERENCES public."Users" ("UserId");
+    ALTER TABLE public.orders ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES public."Users" ("UserId");
 
 ForeignKeyWithQuotedConstraintName:
   legacy_ignore_quotes: false
@@ -296,7 +296,7 @@ ForeignKeyBetweenQuotedAndUnquotedTables:
     );
   output: |
     ALTER TABLE public."Orders" ADD CONSTRAINT "fk_quoted" FOREIGN KEY (quoted_user_id) REFERENCES public."Users" ("UserId");
-    ALTER TABLE public."Orders" ADD CONSTRAINT "fk_unquoted" FOREIGN KEY (unquoted_user_id) REFERENCES public.users (id);
+    ALTER TABLE public."Orders" ADD CONSTRAINT fk_unquoted FOREIGN KEY (unquoted_user_id) REFERENCES public.users (id);
 
 ArrayTypeWithQuotedCustomType:
   legacy_ignore_quotes: false
@@ -436,7 +436,7 @@ DropForeignKeyQuotedName:
     CREATE TABLE users (id int PRIMARY KEY);
     CREATE TABLE orders (id int PRIMARY KEY, user_id int);
   output: |
-    ALTER TABLE public."orders" DROP CONSTRAINT "FK_Orders_Users";
+    ALTER TABLE public.orders DROP CONSTRAINT "FK_Orders_Users";
 
 # Note: When tables come from database, PostgreSQL always quotes identifiers in exports,
 # so we can't distinguish originally-quoted vs originally-unquoted table names.
@@ -554,7 +554,7 @@ ForeignKeyMixedQuotedReferences:
     );
   output: |
     ALTER TABLE public.products ADD CONSTRAINT "fk_QuotedCat" FOREIGN KEY (quoted_cat_id) REFERENCES public."Categories" ("CategoryId");
-    ALTER TABLE public.products ADD CONSTRAINT "fk_unquoted_cat" FOREIGN KEY (unquoted_cat_id) REFERENCES public.categories (id);
+    ALTER TABLE public.products ADD CONSTRAINT fk_unquoted_cat FOREIGN KEY (unquoted_cat_id) REFERENCES public.categories (id);
 
 DropForeignKeyKeepQuotedTable:
   legacy_ignore_quotes: false
@@ -859,7 +859,7 @@ ForeignKeyAutoNameWithQuotedColumn:
       "CategoryId" int REFERENCES categories (id)
     );
   output: |
-    ALTER TABLE public.products ADD CONSTRAINT "products_CategoryId_fkey" FOREIGN KEY ("CategoryId") REFERENCES public.categories (id);
+    ALTER TABLE public.products ADD CONSTRAINT products_categoryid_fkey FOREIGN KEY ("CategoryId") REFERENCES public.categories (id);
 
 CheckConstraintQuotedMixedCaseName:
   legacy_ignore_quotes: false
@@ -1022,7 +1022,7 @@ ForeignKeyUnquotedColumnsNotQuoted:
       CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users (id)
     );
   output: |
-    ALTER TABLE public.orders ADD CONSTRAINT "fk_user" FOREIGN KEY (user_id) REFERENCES public.users (id);
+    ALTER TABLE public.orders ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES public.users (id);
 
 ForeignKeyMixedQuotedColumns:
   legacy_ignore_quotes: false
@@ -1046,7 +1046,7 @@ ForeignKeyMixedQuotedColumns:
       CONSTRAINT fk_parent FOREIGN KEY ("ParentId") REFERENCES parent ("ParentId")
     );
   output: |
-    ALTER TABLE public.child ADD CONSTRAINT "fk_parent" FOREIGN KEY ("ParentId") REFERENCES public.parent ("ParentId");
+    ALTER TABLE public.child ADD CONSTRAINT fk_parent FOREIGN KEY ("ParentId") REFERENCES public.parent ("ParentId");
 
 ForeignKeyQuotedColumnToUnquotedColumn:
   legacy_ignore_quotes: false
@@ -1064,4 +1064,70 @@ ForeignKeyQuotedColumnToUnquotedColumn:
       CONSTRAINT fk_category FOREIGN KEY ("CategoryId") REFERENCES categories (category_id)
     );
   output: |
-    ALTER TABLE public.products ADD CONSTRAINT "fk_category" FOREIGN KEY ("CategoryId") REFERENCES public.categories (category_id);
+    ALTER TABLE public.products ADD CONSTRAINT fk_category FOREIGN KEY ("CategoryId") REFERENCES public.categories (category_id);
+
+# =============================================================================
+# Tests for FK constraint name comparison (quote-aware)
+# =============================================================================
+
+# Quoted lowercase FK name equals unquoted FK name - they should be considered the same
+ForeignKeyConstraintQuotedLowercaseEqualsUnquoted:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int PRIMARY KEY);
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT "fk_user" FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+  desired: |
+    CREATE TABLE users (id int PRIMARY KEY);
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+  output: ""
+
+# Quoted mixed-case FK name differs from unquoted FK name
+# "FK_User" (preserves case) is different from fk_user (normalizes to lowercase)
+ForeignKeyConstraintQuotedMixedCaseDiffersFromUnquoted:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int PRIMARY KEY);
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT "FK_User" FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+  desired: |
+    CREATE TABLE users (id int PRIMARY KEY);
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+  output: |
+    ALTER TABLE public.orders ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES public.users (id);
+    ALTER TABLE public.orders DROP CONSTRAINT "FK_User";
+
+# Change quoted FK name to a different quoted name
+ForeignKeyRenameQuotedConstraint:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int PRIMARY KEY);
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT "FK_Old_Name" FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+  desired: |
+    CREATE TABLE users (id int PRIMARY KEY);
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT "FK_New_Name" FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+  output: |
+    ALTER TABLE public.orders ADD CONSTRAINT "FK_New_Name" FOREIGN KEY (user_id) REFERENCES public.users (id);
+    ALTER TABLE public.orders DROP CONSTRAINT "FK_Old_Name";
