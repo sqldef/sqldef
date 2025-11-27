@@ -508,72 +508,80 @@ statement:
 comment_statement:
   COMMENT_KEYWORD ON TABLE table_name IS STRING
   {
-    tableName := ""
+    // Build Object as []Ident: [schema, table] or [table]
+    var obj []Ident
     if !$4.Schema.isEmpty() {
-      tableName = $4.Schema.String() + "."
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
     }
-    tableName += $4.Name.String()
     $$ = &DDL{
       Action: CommentOn,
       Table: $4,
       Comment: &Comment{
         ObjectType: "OBJECT_TABLE",
-        Object: tableName,
+        Object: obj,
         Comment: $6,
       },
     }
   }
 | COMMENT_KEYWORD ON TABLE table_name IS NULL
   {
-    tableName := ""
+    var obj []Ident
     if !$4.Schema.isEmpty() {
-      tableName = $4.Schema.String() + "."
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
     }
-    tableName += $4.Name.String()
     $$ = &DDL{
       Action: CommentOn,
       Table: $4,
       Comment: &Comment{
         ObjectType: "OBJECT_TABLE",
-        Object: tableName,
+        Object: obj,
         Comment: "",
       },
     }
   }
 | COMMENT_KEYWORD ON COLUMN column_name IS STRING
   {
-    colName := ""
+    // Build Object as []Ident: [schema, table, column], [table, column], or [column]
+    var obj []Ident
     if !$4.Qualifier.isEmpty() {
       if !$4.Qualifier.Schema.isEmpty() {
-        colName = $4.Qualifier.Schema.String() + "."
+        obj = []Ident{$4.Qualifier.Schema, $4.Qualifier.Name, $4.Name}
+      } else {
+        obj = []Ident{$4.Qualifier.Name, $4.Name}
       }
-      colName += $4.Qualifier.Name.String() + "."
+    } else {
+      obj = []Ident{$4.Name}
     }
-    colName += $4.Name.String()
     $$ = &DDL{
       Action: CommentOn,
       Comment: &Comment{
         ObjectType: "OBJECT_COLUMN",
-        Object: colName,
+        Object: obj,
         Comment: $6,
       },
     }
   }
 | COMMENT_KEYWORD ON COLUMN column_name IS NULL
   {
-    colName := ""
+    var obj []Ident
     if !$4.Qualifier.isEmpty() {
       if !$4.Qualifier.Schema.isEmpty() {
-        colName = $4.Qualifier.Schema.String() + "."
+        obj = []Ident{$4.Qualifier.Schema, $4.Qualifier.Name, $4.Name}
+      } else {
+        obj = []Ident{$4.Qualifier.Name, $4.Name}
       }
-      colName += $4.Qualifier.Name.String() + "."
+    } else {
+      obj = []Ident{$4.Name}
     }
-    colName += $4.Name.String()
     $$ = &DDL{
       Action: CommentOn,
       Comment: &Comment{
         ObjectType: "OBJECT_COLUMN",
-        Object: colName,
+        Object: obj,
         Comment: "",
       },
     }
@@ -584,7 +592,7 @@ comment_statement:
       Action: CommentOn,
       Comment: &Comment{
         ObjectType: "INDEX",
-        Object: $4.String(),
+        Object: []Ident{$4},
         Comment: $6,
       },
     }

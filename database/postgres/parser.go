@@ -909,11 +909,11 @@ func (p PostgresParser) parseArrayElement(node parser.Expr) (parser.Expr, error)
 }
 
 func (p PostgresParser) parseCommentStmt(stmt *pgquery.CommentStmt) (parser.Statement, error) {
-	var object string
+	var object []parser.Ident
 	switch node := stmt.Object.Node.(type) {
 	case *pgquery.Node_List:
 		var err error
-		object, err = p.parseStringList(node.List)
+		object, err = p.parseIdentList(node.List)
 		if err != nil {
 			return nil, err
 		}
@@ -929,6 +929,20 @@ func (p PostgresParser) parseCommentStmt(stmt *pgquery.CommentStmt) (parser.Stat
 			Comment:    stmt.Comment,
 		},
 	}, nil
+}
+
+// parseIdentList converts a pgquery list of strings to []parser.Ident.
+// pgquery doesn't preserve quoting information, so we assume unquoted (false).
+func (p PostgresParser) parseIdentList(list *pgquery.List) ([]parser.Ident, error) {
+	var idents []parser.Ident
+	for _, node := range list.Items {
+		switch n := node.Node.(type) {
+		case *pgquery.Node_String_:
+			// pgquery doesn't preserve quoting info, assume unquoted
+			idents = append(idents, parser.NewIdent(n.String_.Sval, false))
+		}
+	}
+	return idents, nil
 }
 
 func (p PostgresParser) parseTableName(relation *pgquery.RangeVar) (parser.TableName, error) {

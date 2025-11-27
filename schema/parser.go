@@ -999,32 +999,34 @@ func normalizeCollate(collate string, table parser.TableSpec) string {
 func normalizeTableInComment(mode GeneratorMode, comment *parser.Comment, defaultSchema string) *parser.Comment {
 	switch mode {
 	case GeneratorModePostgres:
-		// Expected format is [schema.]table.column
-		objs := strings.Split(comment.Object, ".")
-		switch len(objs) {
-		case 1, 2:
-			switch comment.ObjectType {
-			case "OBJECT_TABLE":
-				if len(objs) == 1 {
-					// table -> defaultSchema.table
-					objs = append([]string{defaultSchema}, objs...)
-				}
-			case "OBJECT_COLUMN":
-				if len(objs) == 2 {
-					// table.column -> defaultSchema.table.column
-					objs = append([]string{defaultSchema}, objs...)
-				}
+		// Normalize Object []Ident by prepending default schema if missing
+		obj := comment.Object
+		needsSchema := false
+
+		switch comment.ObjectType {
+		case "OBJECT_TABLE":
+			// TABLE comments need [schema, table]
+			if len(obj) == 1 {
+				needsSchema = true
 			}
+		case "OBJECT_COLUMN":
+			// COLUMN comments need [schema, table, column]
+			if len(obj) == 2 {
+				needsSchema = true
+			}
+		}
+
+		if needsSchema {
+			// Prepend default schema (unquoted) to the object
+			schemaIdent := parser.NewIdent(defaultSchema, false)
+			obj = append([]parser.Ident{schemaIdent}, obj...)
 			return &parser.Comment{
 				ObjectType: comment.ObjectType,
-				Object:     strings.Join(objs, "."),
+				Object:     obj,
 				Comment:    comment.Comment,
 			}
-		case 3: // complete-case (schema.table.column). no-op
-			return comment
-		default: // abnormal-case. fallback
-			return comment
 		}
+		return comment
 	default:
 		return comment
 	}

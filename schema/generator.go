@@ -3465,58 +3465,44 @@ func (g *Generator) findDomainByIdent(domains []*Domain, ident Ident) *Domain {
 	return nil
 }
 
-func findCommentByObject(comments []*Comment, object string) *Comment {
+func findCommentByObject(comments []*Comment, object []parser.Ident) *Comment {
 	for _, comment := range comments {
-		if comment.comment.Object == object {
+		if identsSliceEqual(comment.comment.Object, object) {
 			return comment
 		}
 	}
 	return nil
 }
 
+// identsSliceEqual compares two []Ident slices for equality.
+// Comparison is done by the string value of each ident (case-insensitive for unquoted).
+func identsSliceEqual(a, b []parser.Ident) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		// Compare by string value (both quoted and unquoted normalize via String())
+		if a[i].String() != b[i].String() {
+			return false
+		}
+	}
+	return true
+}
+
 // generateCommentNullStatement creates a COMMENT ... IS NULL statement.
 func (g *Generator) generateCommentNullStatement(comment *Comment) string {
 	// Generate the COMMENT statement directly from the AST
-	// The comment.comment contains ObjectType, Object, and Comment fields
 	objectType := comment.comment.ObjectType
-	object := comment.comment.Object
 
-	var sqlObjectType string
-	switch objectType {
-	case "OBJECT_TABLE":
-		sqlObjectType = "TABLE"
-	case "OBJECT_COLUMN":
-		sqlObjectType = "COLUMN"
-	default:
-		// For other object: strip "OBJECT_" prefix if present
-		sqlObjectType = strings.TrimPrefix(objectType, "OBJECT_")
-	}
+	// objectType may be "OBJECT_TABLE", "OBJECT_COLUMN", etc.
+	sqlObjectType := strings.TrimPrefix(objectType, "OBJECT_")
 
-	// Escape the object name appropriately based on object type
-	var escapedObject string
-	if sqlObjectType == "COLUMN" {
-		// For columns, the object is in format "schema.table.column"
-		// We need to escape each part appropriately
-		parts := strings.Split(object, ".")
-		if len(parts) == 3 {
-			// schema.table.column
-			escapedObject = fmt.Sprintf("%s.%s.%s",
-				g.escapeSQLName(parts[0]),
-				g.escapeSQLName(parts[1]),
-				g.escapeSQLName(parts[2]))
-		} else if len(parts) == 2 {
-			// table.column (schema was added during normalization)
-			escapedObject = fmt.Sprintf("%s.%s",
-				g.escapeSQLName(parts[0]),
-				g.escapeSQLName(parts[1]))
-		} else {
-			// Fallback: escape the whole thing
-			escapedObject = g.escapeSQLName(object)
-		}
-	} else {
-		// For tables and other objects, use escapeTableName which handles schema.table format
-		escapedObject = g.escapeTableName(object)
-	}
+	// Escape the object name using structured idents for quote-aware output.
+	// Object is []Ident representing: [schema, table] for TABLE, [schema, table, column] for COLUMN
+	escapedParts := util.TransformSlice(comment.comment.Object, func(ident parser.Ident) string {
+		return g.escapeSQLNameQuoteAware(ident.String(), ident.Quoted())
+	})
+	escapedObject := strings.Join(escapedParts, ".")
 
 	// Generate the COMMENT statement with NULL value
 	// Note: We don't add a trailing semicolon as it's added by joinDDLs

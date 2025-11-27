@@ -1217,7 +1217,7 @@ type Domain struct {
 
 type Comment struct {
 	ObjectType string
-	Object     string
+	Object     []Ident // Parts of the object name: [schema, table] or [schema, table, column]
 	Comment    string
 }
 
