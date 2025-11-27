@@ -927,7 +927,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				tableName := desired.table.name.Name.Name
-				constraintName := Ident{Name: buildPostgresConstraintName(tableName, desiredColumn.name.String(), "check"), Quoted: false}
+				columnName := desiredColumn.name.String()
+				constraintName := buildPostgresConstraintNameIdent(tableName, columnName, "check")
 				if desiredColumn.check != nil && desiredColumn.check.constraintName.Name != "" {
 					constraintName = desiredColumn.check.constraintName
 				}
@@ -981,7 +982,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 					if desiredColumn.check != nil {
 						escapedConstraintName := g.escapeSQLIdent(constraintName)
-						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableNameForTable(&desired.table), escapedConstraintName, g.normalizeCheckExprString(desiredColumn.check.definition))
+						checkExpr := g.normalizeCheckExprString(desiredColumn.check.definition)
+						ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableNameForTable(&desired.table), escapedConstraintName, checkExpr)
 						if desiredColumn.check.noInherit {
 							ddl += " NO INHERIT"
 						}
@@ -1018,7 +1020,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 					if !skipDrop {
 						tableName := desired.table.name.Name.Name
-						constraintName := buildPostgresConstraintName(tableName, desiredColumn.name.String(), "check")
+						columnNameForCheck := desiredColumn.name.String()
+						constraintNameIdent := buildPostgresConstraintNameIdent(tableName, columnNameForCheck, "check")
 						if currentColumn.check != nil {
 							currentConstraintNameIdent := currentColumn.check.constraintName
 							if currentConstraintNameIdent.Name == "" {
@@ -1030,13 +1033,14 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						if desiredColumn.check != nil {
 							desiredConstraintNameIdent := desiredColumn.check.constraintName
 							if desiredConstraintNameIdent.Name == "" {
-								desiredConstraintNameIdent = Ident{Name: constraintName, Quoted: false}
+								desiredConstraintNameIdent = constraintNameIdent
 							}
 							replicationDefinition := ""
 							if desiredColumn.check.notForReplication {
 								replicationDefinition = " NOT FOR REPLICATION"
 							}
-							ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableNameForTable(&desired.table), g.escapeSQLIdent(desiredConstraintNameIdent), replicationDefinition, g.normalizeCheckExprString(desiredColumn.check.definition))
+							checkExprStr := g.normalizeCheckExprString(desiredColumn.check.definition)
+							ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK%s (%s)", g.escapeTableNameForTable(&desired.table), g.escapeSQLIdent(desiredConstraintNameIdent), replicationDefinition, checkExprStr)
 							ddls = append(ddls, ddl)
 						}
 					}
@@ -1263,8 +1267,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			tableName := desired.table.name.Name.Name
 			// Use the first column name for the constraint name (matches PostgreSQL behavior)
 			columnName := desiredForeignKey.indexColumns[0].Name
-			// Generated constraint name is unquoted (normalize to lowercase as PostgreSQL does)
-			constraintName = Ident{Name: strings.ToLower(buildPostgresConstraintName(tableName, columnName, "fkey")), Quoted: false}
+			constraintName = buildPostgresConstraintNameIdent(tableName, columnName, "fkey")
 		}
 
 		if constraintName.Name == "" && g.mode != GeneratorModeSQLite3 {
@@ -2279,13 +2282,12 @@ func (g *Generator) generateAddIndex(table QualifiedTableName, index Index) stri
 				// If the current name is just the column name (common with generic parser),
 				// replace it with the PostgreSQL convention
 				if constraintName.Name == columnName {
-					expectedName := buildPostgresConstraintName(table.Name.Name, columnName, "key")
+					constraintName = buildPostgresConstraintNameIdent(table.Name.Name, columnName, "key")
 					slog.Debug("Auto-generating PostgreSQL UNIQUE constraint name",
 						"table", table.Name.Name,
 						"column", columnName,
-						"original_name", constraintName.Name,
-						"generated_name", expectedName)
-					constraintName = Ident{Name: expectedName, Quoted: false}
+						"generated_name", constraintName.Name,
+						"quoted", constraintName.Quoted)
 				} else {
 					slog.Debug("Using existing UNIQUE constraint name",
 						"table", table.Name.Name,

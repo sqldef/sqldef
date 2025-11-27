@@ -859,7 +859,7 @@ ForeignKeyAutoNameWithQuotedColumn:
       "CategoryId" int REFERENCES categories (id)
     );
   output: |
-    ALTER TABLE public.products ADD CONSTRAINT products_categoryid_fkey FOREIGN KEY ("CategoryId") REFERENCES public.categories (id);
+    ALTER TABLE public.products ADD CONSTRAINT "products_CategoryId_fkey" FOREIGN KEY ("CategoryId") REFERENCES public.categories (id);
 
 CheckConstraintQuotedMixedCaseName:
   legacy_ignore_quotes: false
@@ -1131,3 +1131,64 @@ ForeignKeyRenameQuotedConstraint:
   output: |
     ALTER TABLE public.orders ADD CONSTRAINT "FK_New_Name" FOREIGN KEY (user_id) REFERENCES public.users (id);
     ALTER TABLE public.orders DROP CONSTRAINT "FK_Old_Name";
+
+# Test that auto-generated CHECK constraint names work with unquoted identifiers
+# PostgreSQL normalizes unquoted identifiers to lowercase, so constraint names should match
+CheckConstraintUnquotedIdempotent:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (
+      id int PRIMARY KEY,
+      category_id int CHECK (category_id > 0)
+    );
+  desired: |
+    CREATE TABLE products (
+      id int PRIMARY KEY,
+      category_id int CHECK (category_id > 0)
+    );
+  output: ""
+
+# Test that auto-generated UNIQUE constraint names work with unquoted identifiers
+UniqueConstraintUnquotedIdempotent:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (
+      id int PRIMARY KEY,
+      product_code text UNIQUE
+    );
+  desired: |
+    CREATE TABLE products (
+      id int PRIMARY KEY,
+      product_code text UNIQUE
+    );
+  output: ""
+
+# Test that auto-generated CHECK constraint names preserve case for quoted identifiers
+CheckConstraintQuotedIdempotent:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "Products" (
+      id int PRIMARY KEY,
+      "CategoryId" int CHECK ("CategoryId" > 0)
+    );
+  desired: |
+    CREATE TABLE "Products" (
+      id int PRIMARY KEY,
+      "CategoryId" int CHECK ("CategoryId" > 0)
+    );
+  output: ""
+
+# Test that auto-generated UNIQUE constraint names preserve case for quoted identifiers
+UniqueConstraintQuotedIdempotent:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "Products" (
+      id int PRIMARY KEY,
+      "ProductCode" text UNIQUE
+    );
+  desired: |
+    CREATE TABLE "Products" (
+      id int PRIMARY KEY,
+      "ProductCode" text UNIQUE
+    );
+  output: ""
