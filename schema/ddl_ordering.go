@@ -181,7 +181,7 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 			allObjectNames[ct.table.name.String()] = true
 		}
 		for _, view := range views {
-			allObjectNames[view.name] = true
+			allObjectNames[view.name.String()] = true
 		}
 
 		// Extract dependencies for each view
@@ -196,11 +196,11 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 					filteredDeps = append(filteredDeps, dep)
 				}
 			}
-			viewDependencies[view.name] = filteredDeps
+			viewDependencies[view.name.String()] = filteredDeps
 		}
 
 		sorted := topologicalSort(views, viewDependencies, func(v *View) string {
-			return v.name
+			return v.name.String()
 		})
 
 		// If circular dependency detected, keep original order

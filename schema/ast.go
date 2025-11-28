@@ -298,8 +298,7 @@ type View struct {
 	statement    string
 	viewType     string
 	securityType string
-	name         string
-	nameIdent    Ident // For quote-aware comparison
+	name         QualifiedTableName
 	definition   parser.SelectStatement
 	indexes      []Index
 	columns      []string

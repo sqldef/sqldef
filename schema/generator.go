@@ -234,7 +234,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 			interDDLs = append(interDDLs, policyDDLs...)
 		case *View:
-			ddls, err := g.generateDDLsForCreateView(desired.name, desired)
+			ddls, err := g.generateDDLsForCreateView(desired)
 			if err != nil {
 				return nil, err
 			}
@@ -447,7 +447,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted views
 	for _, currentView := range g.currentViews {
-		if g.findViewByIdent(g.desiredViews, currentView.nameIdent) != nil {
+		if g.findViewByIdent(g.desiredViews, currentView.name.Name) != nil {
 			continue
 		}
 		viewName := g.escapeViewName(currentView)
@@ -1598,10 +1598,10 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 	return false
 }
 
-func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View) ([]string, error) {
+func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, error) {
 	var ddls []string
 
-	currentView := g.findViewByIdent(g.currentViews, desiredView.nameIdent)
+	currentView := g.findViewByIdent(g.currentViews, desiredView.name.Name)
 	if currentView == nil {
 		// View not found, add view.
 		ddls = append(ddls, desiredView.statement)
@@ -1645,24 +1645,26 @@ func (g *Generator) generateDDLsForCreateView(viewName string, desiredView *View
 				withDataClause = " WITH DATA"
 			}
 
+			viewName := g.escapeViewName(desiredView)
 			if g.shouldDropAndCreateView(currentView, desiredView) {
-				ddls = append(ddls, fmt.Sprintf("DROP %s %s", desiredView.viewType, g.escapeTableName(viewName)))
-				ddls = append(ddls, fmt.Sprintf("CREATE %s %s AS %s%s", desiredView.viewType, g.escapeTableName(viewName), viewDefinition, withDataClause))
+				ddls = append(ddls, fmt.Sprintf("DROP %s %s", desiredView.viewType, viewName))
+				ddls = append(ddls, fmt.Sprintf("CREATE %s %s AS %s%s", desiredView.viewType, viewName, viewDefinition, withDataClause))
 			} else {
-				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE %s %s AS %s%s", desiredView.viewType, g.escapeTableName(viewName), viewDefinition, withDataClause))
+				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE %s %s AS %s%s", desiredView.viewType, viewName, viewDefinition, withDataClause))
 			}
 		}
 	} else if desiredView.viewType == "SQL SECURITY" {
 		// VIEW with the specified security type found. If it's different, create or replace view.
 		if !strings.EqualFold(currentView.securityType, desiredView.securityType) {
 			viewDefinition := parser.String(desiredView.definition)
-			ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE SQL SECURITY %s VIEW %s AS %s", desiredView.securityType, g.escapeTableName(viewName), viewDefinition))
+			viewName := g.escapeViewName(desiredView)
+			ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE SQL SECURITY %s VIEW %s AS %s", desiredView.securityType, viewName, viewDefinition))
 		}
 	}
 
 	// Examine policies in desiredTable to delete obsoleted policies later
 	// Only add to desiredViews if it doesn't already exist (it may have been pre-populated from aggregation)
-	if g.findViewByIdent(g.desiredViews, desiredView.nameIdent) == nil {
+	if g.findViewByIdent(g.desiredViews, desiredView.name.Name) == nil {
 		g.desiredViews = append(g.desiredViews, desiredView)
 	}
 
@@ -2539,24 +2541,13 @@ func (g *Generator) escapeColumnName(column *Column) string {
 }
 
 // escapeViewName escapes a view name using quote-aware logic.
-// The view.name contains the schema-qualified name like "public.viewname".
-// The view.nameIdent contains just the view name with quote information.
 func (g *Generator) escapeViewName(view *View) string {
 	switch g.mode {
 	case GeneratorModePostgres, GeneratorModeMssql:
-		// view.name is like "schema.viewname" or just "viewname"
-		schemaTable := strings.SplitN(view.name, ".", 2)
-		var schemaIdent Ident
-		if len(schemaTable) == 1 {
-			schemaIdent = Ident{Name: g.defaultSchema, Quoted: false}
-		} else {
-			// Schema from view.name string doesn't have quote info, assume quoted
-			schemaIdent = Ident{Name: schemaTable[0], Quoted: true}
-		}
-		schema := g.normalizeDefaultSchema(schemaIdent)
-		return g.escapeSQLIdent(schema) + "." + g.escapeSQLIdent(view.nameIdent)
+		schema := g.normalizeDefaultSchema(view.name.Schema)
+		return g.escapeSQLIdent(schema) + "." + g.escapeSQLIdent(view.name.Name)
 	default:
-		return g.escapeSQLIdent(view.nameIdent)
+		return g.escapeSQLIdent(view.name.Name)
 	}
 }
 
@@ -3315,7 +3306,7 @@ func findPolicyByName(policies []Policy, name string) *Policy {
 
 func findViewByName(views []*View, name string) *View {
 	for _, view := range views {
-		if view.name == name {
+		if view.name.String() == name {
 			return view
 		}
 	}
@@ -3325,7 +3316,7 @@ func findViewByName(views []*View, name string) *View {
 // findViewByIdent finds a view using quote-aware comparison
 func (g *Generator) findViewByIdent(views []*View, ident Ident) *View {
 	for _, view := range views {
-		if g.identsEqual(view.nameIdent, ident) {
+		if g.identsEqual(view.name.Name, ident) {
 			return view
 		}
 	}
@@ -4138,7 +4129,7 @@ func convertPolicyNames(policies []Policy) []string {
 }
 
 func convertViewNames(views []*View) []string {
-	return util.TransformSlice(views, func(v *View) string { return v.name })
+	return util.TransformSlice(views, func(v *View) string { return v.name.String() })
 }
 
 func convertDomainNames(domains []*Domain) []string {
@@ -4315,7 +4306,7 @@ func FilterViews(ddls []DDL, config database.GeneratorConfig) []DDL {
 		case *CreateIndex:
 			views = append(views, stmt.tableName)
 		case *View:
-			views = append(views, stmt.name)
+			views = append(views, stmt.name.String())
 		}
 
 		if skipViews(views, config) {
