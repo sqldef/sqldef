@@ -12,6 +12,7 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/sqldef/sqldef/v3/database"
+	"github.com/sqldef/sqldef/v3/parser"
 	schemaLib "github.com/sqldef/sqldef/v3/schema"
 	"github.com/sqldef/sqldef/v3/util"
 )
@@ -1275,10 +1276,17 @@ func (d *PostgresDatabase) escapeConstraintName(ident database.Ident) string {
 }
 
 // escapeIdentifier quotes an identifier for DDL output.
-// Always quotes to preserve the exact case stored in the database.
-// Note: This is a method for consistency with escapeDataTypeName, but doesn't use instance state.
+// In legacy mode: always quote to preserve exact case.
+// In quote-aware mode: use case detection and keyword check.
 func (d *PostgresDatabase) escapeIdentifier(name string) string {
-	return escapeSQLName(name)
+	if d.generatorConfig.LegacyIgnoreQuotes {
+		return escapeSQLName(name)
+	}
+	// Quote-aware mode: quote if name has uppercase letters or is a keyword
+	if strings.ToLower(name) != name || parser.IsKeyword(name) {
+		return escapeSQLName(name)
+	}
+	return name
 }
 
 // escapeDataTypeName quotes a data type name appropriately.

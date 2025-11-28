@@ -531,6 +531,13 @@ var keywords = map[string]int{
 // keywordStrings contains the reverse mapping of token to keyword strings
 var keywordStrings = map[int]string{}
 
+// IsKeyword returns true if the given string is a SQL keyword.
+// The check is case-insensitive.
+func IsKeyword(s string) bool {
+	_, ok := keywords[strings.ToLower(s)]
+	return ok
+}
+
 var encodeRef = map[byte]byte{
 	'\x00': '0',
 	'\'':   '\'',

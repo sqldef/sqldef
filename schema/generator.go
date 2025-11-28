@@ -574,40 +574,8 @@ func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, desiredTabl
 		}
 	}
 
-	// For DROP COLUMN, use smart escaping: only quote if the column name needs quoting
-	// (has uppercase letters, which indicates it was originally quoted)
-	columnName := g.escapeColumnNameForDrop(column)
-	ddl := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableNameForTable(desiredTable), columnName)
+	ddl := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", g.escapeTableNameForTable(desiredTable), g.escapeColumnName(column))
 	return append(ddls, ddl)
-}
-
-// escapeColumnNameForDrop escapes a column name for DROP COLUMN statements.
-// In PostgreSQL with legacy_ignore_quotes=false, we output lowercase column names
-// without quotes since they don't need quoting. Only columns with uppercase letters
-// (indicating they were originally quoted) are quoted.
-func (g *Generator) escapeColumnNameForDrop(column *Column) string {
-	// Legacy mode or non-PostgreSQL: use existing escaping
-	if g.config.LegacyIgnoreQuotes || g.mode != GeneratorModePostgres {
-		return g.escapeColumnName(column)
-	}
-
-	// Quote-aware mode for PostgreSQL:
-	// - If the column name has uppercase letters, it was originally quoted - quote it
-	// - If all lowercase, it was unquoted - don't quote
-	name := column.name.Name.Name
-	needsQuote := false
-	for _, r := range name {
-		if r >= 'A' && r <= 'Z' {
-			needsQuote = true
-			break
-		}
-	}
-
-	if needsQuote {
-		escaped := strings.ReplaceAll(name, "\"", "\"\"")
-		return fmt.Sprintf("\"%s\"", escaped)
-	}
-	return name
 }
 
 // In the caller, `mergeTable` manages `g.currentTables`.
@@ -2568,11 +2536,6 @@ func (g *Generator) escapeQualifiedTableName(name QualifiedTableName) string {
 // escapeColumnName escapes a column name using quote-aware logic.
 func (g *Generator) escapeColumnName(column *Column) string {
 	return g.escapeSQLIdent(column.name.Name)
-}
-
-// escapeIndexName escapes an index name using quote-aware logic.
-func (g *Generator) escapeIndexName(index *Index) string {
-	return g.escapeSQLIdent(index.name)
 }
 
 // escapeViewName escapes a view name using quote-aware logic.

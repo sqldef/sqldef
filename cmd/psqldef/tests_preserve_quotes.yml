@@ -438,10 +438,6 @@ DropForeignKeyQuotedName:
   output: |
     ALTER TABLE public.orders DROP CONSTRAINT "FK_Orders_Users";
 
-# Note: When tables come from database, PostgreSQL always quotes identifiers in exports,
-# so we can't distinguish originally-quoted vs originally-unquoted table names.
-# The default schema "public" is treated as unquoted (lowercase), but the table name
-# "users" remains quoted because the database export quotes all identifiers.
 DropUniqueConstraintQuotedName:
   legacy_ignore_quotes: false
   current: |
@@ -453,7 +449,7 @@ DropUniqueConstraintQuotedName:
   desired: |
     CREATE TABLE users (id int, email text);
   output: |
-    ALTER TABLE public."users" DROP CONSTRAINT "Unique_Email";
+    ALTER TABLE public.users DROP CONSTRAINT "Unique_Email";
 
 DropCheckConstraintQuotedName:
   legacy_ignore_quotes: false
@@ -484,6 +480,26 @@ DropQuotedReservedWordTable:
   desired: ""
   output: |
     DROP TABLE public."table";
+
+# Reserved keywords must be quoted to be used as identifiers.
+# In quote-aware mode, quoted lowercase reserved words should remain quoted.
+QuotedReservedWordTableAddColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "order" (id int);
+  desired: |
+    CREATE TABLE "order" (id int, "group" text NOT NULL);
+  output: |
+    ALTER TABLE public."order" ADD COLUMN "group" text NOT NULL;
+
+QuotedReservedWordTableDropColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "order" (id int, "group" text NOT NULL);
+  desired: |
+    CREATE TABLE "order" (id int);
+  output: |
+    ALTER TABLE public."order" DROP COLUMN "group";
 
 QuotedIdentifierWithSpace:
   legacy_ignore_quotes: false
@@ -530,7 +546,7 @@ RenameUniqueConstraintQuotedToUnquoted:
     );
   output: |
     ALTER TABLE public.users ADD CONSTRAINT email_unique UNIQUE ("email");
-    ALTER TABLE public."users" DROP CONSTRAINT "Email_Unique";
+    ALTER TABLE public.users DROP CONSTRAINT "Email_Unique";
 
 ForeignKeyMixedQuotedReferences:
   legacy_ignore_quotes: false
