@@ -140,12 +140,10 @@ func buildPostgresConstraintName(tableName, columnName, suffix string) string {
 }
 
 // buildPostgresConstraintNameIdent builds a PostgreSQL auto-generated constraint name
-// and returns it as an Ident with Quoted set based on whether the name contains uppercase.
-// PostgreSQL preserves case only for quoted identifiers, so names with uppercase
-// must have originated from quoted table/column names and need to be quoted to reference correctly.
+// and returns it as an Ident with quote information inferred from case.
 func buildPostgresConstraintNameIdent(tableName, columnName, suffix string) Ident {
 	name := buildPostgresConstraintName(tableName, columnName, suffix)
-	return Ident{Name: name, Quoted: strings.ToLower(name) != name}
+	return NewIdentFromGenerated(name)
 }
 
 // normalizeCheckExpr normalizes a CHECK constraint expression AST for comparison

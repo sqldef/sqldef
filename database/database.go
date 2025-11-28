@@ -77,6 +77,17 @@ func (i Ident) String() string {
 	return i.Name
 }
 
+// NewIdentFromDatabase creates an Ident from a database-sourced identifier name.
+// Since the database doesn't store quote information, we infer it from case:
+//   - If the name contains uppercase letters, it must have been quoted
+//     (PostgreSQL folds unquoted identifiers to lowercase)
+//   - If the name is all lowercase, we treat it as unquoted. This is correct because
+//     in PostgreSQL, "users" (quoted lowercase) and users (unquoted) are semantically
+//     equivalent and can be referenced interchangeably.
+func NewIdentFromDatabase(name string) Ident {
+	return Ident{Name: name, Quoted: strings.ToLower(name) != name}
+}
+
 // Abstraction layer for multiple kinds of databases
 type Database interface {
 	ExportDDLs() (string, error)

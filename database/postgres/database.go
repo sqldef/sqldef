@@ -722,10 +722,9 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 		if checkName != nil && checkDefinition != nil {
 			// Normalize type casts for generic parser compatibility
 			normalizedDef := normalizePostgresTypeCasts(*checkDefinition)
-			// Names with uppercase must have been quoted in PostgreSQL
 			col.Check = &columnConstraint{
 				definition: normalizedDef,
-				name:       database.Ident{Name: *checkName, Quoted: strings.ToLower(*checkName) != *checkName},
+				name:       database.NewIdentFromDatabase(*checkName),
 			}
 		}
 		cols = append(cols, col)
@@ -846,9 +845,8 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) ([]CheckCo
 		// Normalize type casts for generic parser compatibility
 		// PostgreSQL returns "::time without time zone" but the generic parser expects "::time"
 		constraintDef = normalizePostgresTypeCasts(constraintDef)
-		// Names with uppercase must have been quoted in PostgreSQL
 		result = append(result, CheckConstraint{
-			Name:       database.Ident{Name: constraintName, Quoted: strings.ToLower(constraintName) != constraintName},
+			Name:       database.NewIdentFromDatabase(constraintName),
 			Definition: constraintDef,
 		})
 	}
@@ -968,8 +966,7 @@ func (d *PostgresDatabase) getPrimaryKeyName(table string) (database.Ident, erro
 	} else {
 		return database.Ident{}, err
 	}
-	// Names with uppercase must have been quoted in PostgreSQL
-	return database.Ident{Name: keyName, Quoted: strings.ToLower(keyName) != keyName}, nil
+	return database.NewIdentFromDatabase(keyName), nil
 }
 
 // refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d

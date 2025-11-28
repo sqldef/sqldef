@@ -17,6 +17,14 @@ func (i Ident) String() string {
 	return i.Name
 }
 
+// NewIdentFromGenerated creates an Ident for auto-generated identifier names
+// (such as constraint names built from table and column names).
+// The Quoted flag is inferred from case: if the name contains uppercase letters,
+// it must have originated from a quoted identifier (PostgreSQL folds unquoted to lowercase).
+func NewIdentFromGenerated(name string) Ident {
+	return Ident{Name: name, Quoted: strings.ToLower(name) != name}
+}
+
 // QualifiedTableName represents a schema-qualified table name with quote information.
 type QualifiedTableName struct {
 	Schema Ident // empty if not specified (will use default schema)
