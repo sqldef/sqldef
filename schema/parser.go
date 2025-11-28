@@ -183,8 +183,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}, nil
 		} else if stmt.Action == parser.CreateType {
 			return &Type{
-				name:       normalizedObjectName(mode, stmt.Type.Name, defaultSchema),
-				nameIdent:  Ident{Name: stmt.Type.Name.Name.String(), Quoted: stmt.Type.Name.Name.Quoted()},
+				name:       normalizeQualifiedObjectName(mode, stmt.Type.Name, defaultSchema),
 				statement:  ddl,
 				enumValues: stmt.Type.Type.EnumValues,
 			}, nil
@@ -198,8 +197,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}
 
 			return &Domain{
-				name:         normalizedObjectName(mode, stmt.Domain.Name, defaultSchema),
-				nameIdent:    Ident{Name: stmt.Domain.Name.Name.String(), Quoted: stmt.Domain.Name.Name.Quoted()},
+				name:         normalizeQualifiedObjectName(mode, stmt.Domain.Name, defaultSchema),
 				statement:    ddl,
 				dataType:     parser.String(&stmt.Domain.DataType),
 				defaultValue: parseDefaultDefinition(stmt.Domain.Default),
@@ -413,7 +411,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		foreignKey := ForeignKey{
 			constraintName:     constraintName,
 			indexColumns:       indexColumns,
-			referenceTableName: parseQualifiedTableNameFromString(mode, parsedCol.Type.References, defaultSchema),
+			referenceTableName: normalizeQualifiedTableNameFromString(mode, parsedCol.Type.References, defaultSchema),
 			referenceColumns:   referenceColumns,
 			onDelete:           parser.String(parsedCol.Type.ReferenceOnDelete),
 			onUpdate:           parser.String(parsedCol.Type.ReferenceOnUpdate),
@@ -920,11 +918,11 @@ func parseQualifiedTableName(mode GeneratorMode, tableName parser.TableName, def
 	}
 }
 
-// parseQualifiedTableNameFromString creates a QualifiedTableName from a string table reference.
+// normalizeQualifiedTableNameFromString creates a QualifiedTableName from a string table reference.
 // For column-level REFERENCES where the parser loses quote information, we infer it:
 // - If the name has any uppercase letters, it was likely quoted (quoted preserves case)
 // - If the name is all lowercase, it was likely unquoted (unquoted normalizes to lowercase)
-func parseQualifiedTableNameFromString(mode GeneratorMode, tableRef string, defaultSchema string) QualifiedTableName {
+func normalizeQualifiedTableNameFromString(mode GeneratorMode, tableRef string, defaultSchema string) QualifiedTableName {
 	// Check if the name has uppercase letters (indicates it was quoted)
 	hasUppercase := false
 	for _, r := range tableRef {
@@ -947,6 +945,25 @@ func parseQualifiedTableNameFromString(mode GeneratorMode, tableRef string, defa
 	}
 }
 
+// normalizeQualifiedObjectName creates a QualifiedTableName from a parser.ObjectName
+func normalizeQualifiedObjectName(mode GeneratorMode, objectName parser.ObjectName, defaultSchema string) QualifiedTableName {
+	nameIdent := Ident{Name: objectName.Name.String(), Quoted: objectName.Name.Quoted()}
+
+	var schemaIdent Ident
+	if mode == GeneratorModePostgres || mode == GeneratorModeMssql {
+		if len(objectName.Schema.String()) > 0 {
+			schemaIdent = Ident{Name: objectName.Schema.String(), Quoted: objectName.Schema.Quoted()}
+		} else {
+			schemaIdent = Ident{Name: defaultSchema, Quoted: false}
+		}
+	}
+
+	return QualifiedTableName{
+		Schema: schemaIdent,
+		Name:   nameIdent,
+	}
+}
+
 // Qualify Postgres/Mssql schema
 func normalizedTableName(mode GeneratorMode, tableName parser.TableName, defaultSchema string) string {
 	table := tableName.Name.String()
@@ -958,19 +975,6 @@ func normalizedTableName(mode GeneratorMode, tableName parser.TableName, default
 		}
 	}
 	return table
-}
-
-// Qualify Postgres/Mssql schema for object names (domains, types, functions, etc.)
-func normalizedObjectName(mode GeneratorMode, objectName parser.ObjectName, defaultSchema string) string {
-	name := objectName.Name.String()
-	if mode == GeneratorModePostgres || mode == GeneratorModeMssql {
-		if len(objectName.Schema.String()) > 0 {
-			name = objectName.Schema.String() + "." + name
-		} else {
-			name = defaultSchema + "." + name
-		}
-	}
-	return name
 }
 
 func normalizedTable(mode GeneratorMode, tableName string, defaultSchema string) string {

@@ -389,15 +389,13 @@ type CheckDefinition struct {
 
 // TODO: include type information
 type Type struct {
-	name       string
-	nameIdent  Ident // For quote-aware comparison
+	name       QualifiedTableName
 	statement  string
 	enumValues []string
 }
 
 type Domain struct {
-	name         string
-	nameIdent    Ident // For quote-aware comparison
+	name         QualifiedTableName
 	statement    string
 	dataType     string
 	defaultValue *DefaultDefinition

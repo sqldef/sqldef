@@ -315,8 +315,8 @@ AlterTypeAddValue:
       event_type eventtype NOT NULL
     );
   output: |
-    ALTER TYPE public.eventtype ADD VALUE 'send_meeting_options';
-    ALTER TYPE public.eventtype ADD VALUE 'update_reactionslot';
+    ALTER TYPE "public"."eventtype" ADD VALUE 'send_meeting_options';
+    ALTER TYPE "public"."eventtype" ADD VALUE 'update_reactionslot';
   min_version: '12'
 AlterTypeAddValueWithSameTypeNameInDifferentSchema:
   current: |
@@ -341,7 +341,7 @@ AlterTypeAddValueWithSameTypeNameInDifferentSchema:
       'de'
     );
   output: |
-    ALTER TYPE schema2.lang ADD VALUE 'de';
+    ALTER TYPE "schema2"."lang" ADD VALUE 'de';
   min_version: '12'
 AddEnumTypeColumn:
   current: |

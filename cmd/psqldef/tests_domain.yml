@@ -215,7 +215,7 @@ AlterDomainSetDefault:
   desired: |
     CREATE DOMAIN status_code AS integer DEFAULT 200;
   output: |
-    ALTER DOMAIN public.status_code SET DEFAULT 200;
+    ALTER DOMAIN "public"."status_code" SET DEFAULT 200;
 
 AlterDomainDropDefault:
   current: |
@@ -223,7 +223,7 @@ AlterDomainDropDefault:
   desired: |
     CREATE DOMAIN status_code AS integer;
   output: |
-    ALTER DOMAIN public.status_code DROP DEFAULT;
+    ALTER DOMAIN "public"."status_code" DROP DEFAULT;
 
 AlterDomainChangeDefault:
   current: |
@@ -231,7 +231,7 @@ AlterDomainChangeDefault:
   desired: |
     CREATE DOMAIN status_code AS integer DEFAULT 404;
   output: |
-    ALTER DOMAIN public.status_code SET DEFAULT 404;
+    ALTER DOMAIN "public"."status_code" SET DEFAULT 404;
 
 AlterDomainSetNotNull:
   current: |
@@ -239,7 +239,7 @@ AlterDomainSetNotNull:
   desired: |
     CREATE DOMAIN email AS text NOT NULL;
   output: |
-    ALTER DOMAIN public.email SET NOT NULL;
+    ALTER DOMAIN "public"."email" SET NOT NULL;
 
 AlterDomainDropNotNull:
   current: |
@@ -247,7 +247,7 @@ AlterDomainDropNotNull:
   desired: |
     CREATE DOMAIN email AS text;
   output: |
-    ALTER DOMAIN public.email DROP NOT NULL;
+    ALTER DOMAIN "public"."email" DROP NOT NULL;
 
 AlterDomainAddCheck:
   current: |
@@ -255,7 +255,7 @@ AlterDomainAddCheck:
   desired: |
     CREATE DOMAIN positive_int AS integer CHECK (VALUE > 0);
   output: |
-    ALTER DOMAIN public.positive_int ADD CHECK (VALUE > 0);
+    ALTER DOMAIN "public"."positive_int" ADD CHECK (VALUE > 0);
 
 AlterDomainAddNamedCheck:
   current: |
@@ -263,7 +263,7 @@ AlterDomainAddNamedCheck:
   desired: |
     CREATE DOMAIN positive_int AS integer CONSTRAINT positive_check CHECK (VALUE > 0);
   output: |
-    ALTER DOMAIN public.positive_int ADD CONSTRAINT positive_check CHECK (VALUE > 0);
+    ALTER DOMAIN "public"."positive_int" ADD CONSTRAINT positive_check CHECK (VALUE > 0);
 
 AlterDomainAddMultipleChecks:
   current: |
@@ -273,5 +273,5 @@ AlterDomainAddMultipleChecks:
       CHECK (VALUE >= 0)
       CHECK (VALUE <= 100);
   output: |
-    ALTER DOMAIN public.valid_score ADD CHECK (VALUE >= 0);
-    ALTER DOMAIN public.valid_score ADD CHECK (VALUE <= 100);
+    ALTER DOMAIN "public"."valid_score" ADD CHECK (VALUE >= 0);
+    ALTER DOMAIN "public"."valid_score" ADD CHECK (VALUE <= 100);

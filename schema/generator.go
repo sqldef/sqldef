@@ -460,10 +460,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted domains
 	for _, currentDomain := range g.currentDomains {
-		if g.findDomainByIdent(g.desiredDomains, currentDomain.nameIdent) != nil {
+		if g.findDomainByIdent(g.desiredDomains, currentDomain.name.Name) != nil {
 			continue
 		}
-		ddls = append(ddls, fmt.Sprintf("DROP DOMAIN %s", currentDomain.name))
+		ddls = append(ddls, fmt.Sprintf("DROP DOMAIN %s", g.escapeDomainName(currentDomain)))
 	}
 
 	// Clean up obsoleted extensions
@@ -1738,9 +1738,10 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 	if currentType := g.findTypeBySchemaAndIdent(g.currentTypes, desired); currentType != nil {
 		// Type found. Add values if not present.
 		if currentType.enumValues != nil && len(currentType.enumValues) < len(desired.enumValues) {
+			typeName := g.escapeTypeName(currentType)
 			for _, enumValue := range desired.enumValues {
 				if !slices.Contains(currentType.enumValues, enumValue) {
-					ddl := fmt.Sprintf("ALTER TYPE %s ADD VALUE %s", currentType.name, enumValue)
+					ddl := fmt.Sprintf("ALTER TYPE %s ADD VALUE %s", typeName, enumValue)
 					ddls = append(ddls, ddl)
 				}
 			}
@@ -1760,7 +1761,7 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 func (g *Generator) generateDDLsForCreateDomain(desired *Domain) ([]string, error) {
 	ddls := []string{}
 
-	if currentDomain := g.findDomainByIdent(g.currentDomains, desired.nameIdent); currentDomain != nil {
+	if currentDomain := g.findDomainByIdent(g.currentDomains, desired.name.Name); currentDomain != nil {
 		alterDDLs, err := g.generateAlterDomainDDLs(currentDomain, desired)
 		if err != nil {
 			return nil, err
@@ -1770,7 +1771,7 @@ func (g *Generator) generateDDLsForCreateDomain(desired *Domain) ([]string, erro
 		ddls = append(ddls, desired.statement)
 	}
 	// Only add to desiredDomains if it doesn't already exist (it may have been pre-populated from aggregation)
-	if g.findDomainByIdent(g.desiredDomains, desired.nameIdent) == nil {
+	if g.findDomainByIdent(g.desiredDomains, desired.name.Name) == nil {
 		g.desiredDomains = append(g.desiredDomains, desired)
 	}
 
@@ -1779,22 +1780,23 @@ func (g *Generator) generateDDLsForCreateDomain(desired *Domain) ([]string, erro
 
 func (g *Generator) generateAlterDomainDDLs(current, desired *Domain) ([]string, error) {
 	var ddls []string
+	domainName := g.escapeDomainName(current)
 
 	if !g.areSameDefaultValue(current.defaultValue, desired.defaultValue, current.dataType) {
 		if desired.defaultValue == nil {
-			ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s DROP DEFAULT", current.name))
+			ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s DROP DEFAULT", domainName))
 		} else {
 			normalizedExpr := normalizeExpr(desired.defaultValue.expression, g.mode)
 			exprStr := parser.String(normalizedExpr)
-			ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s SET DEFAULT %s", current.name, exprStr))
+			ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s SET DEFAULT %s", domainName, exprStr))
 		}
 	}
 
 	if current.notNull != desired.notNull {
 		if desired.notNull {
-			ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s SET NOT NULL", current.name))
+			ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s SET NOT NULL", domainName))
 		} else {
-			ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s DROP NOT NULL", current.name))
+			ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s DROP NOT NULL", domainName))
 		}
 	}
 
@@ -1802,7 +1804,7 @@ func (g *Generator) generateAlterDomainDDLs(current, desired *Domain) ([]string,
 		if !g.findDomainConstraintByExpression(desired.constraints, currentConstraint.expression) {
 			if currentConstraint.name != "" {
 				ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s DROP CONSTRAINT %s",
-					current.name, currentConstraint.name))
+					domainName, currentConstraint.name))
 			}
 		}
 	}
@@ -1812,10 +1814,10 @@ func (g *Generator) generateAlterDomainDDLs(current, desired *Domain) ([]string,
 			exprStr := parser.String(desiredConstraint.expression)
 			if desiredConstraint.name != "" {
 				ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s ADD CONSTRAINT %s CHECK (%s)",
-					current.name, desiredConstraint.name, exprStr))
+					domainName, desiredConstraint.name, exprStr))
 			} else {
 				ddls = append(ddls, fmt.Sprintf("ALTER DOMAIN %s ADD CHECK (%s)",
-					current.name, exprStr))
+					domainName, exprStr))
 			}
 		}
 	}
@@ -2548,6 +2550,28 @@ func (g *Generator) escapeViewName(view *View) string {
 		return g.escapeSQLIdent(schema) + "." + g.escapeSQLIdent(view.name.Name)
 	default:
 		return g.escapeSQLIdent(view.name.Name)
+	}
+}
+
+// escapeTypeName escapes a type name using quote-aware logic.
+func (g *Generator) escapeTypeName(t *Type) string {
+	switch g.mode {
+	case GeneratorModePostgres, GeneratorModeMssql:
+		schema := g.normalizeDefaultSchema(t.name.Schema)
+		return g.escapeSQLIdent(schema) + "." + g.escapeSQLIdent(t.name.Name)
+	default:
+		return g.escapeSQLIdent(t.name.Name)
+	}
+}
+
+// escapeDomainName escapes a domain name using quote-aware logic.
+func (g *Generator) escapeDomainName(d *Domain) string {
+	switch g.mode {
+	case GeneratorModePostgres, GeneratorModeMssql:
+		schema := g.normalizeDefaultSchema(d.name.Schema)
+		return g.escapeSQLIdent(schema) + "." + g.escapeSQLIdent(d.name.Name)
+	default:
+		return g.escapeSQLIdent(d.name.Name)
 	}
 }
 
@@ -3334,7 +3358,7 @@ func findTriggerByName(triggers []*Trigger, name string) *Trigger {
 
 func findTypeByName(types []*Type, name string) *Type {
 	for _, createType := range types {
-		if createType.name == name {
+		if createType.name.String() == name {
 			return createType
 		}
 	}
@@ -3342,11 +3366,11 @@ func findTypeByName(types []*Type, name string) *Type {
 }
 
 // findTypeByIdent finds a type using quote-aware comparison.
-// For schema-qualified types, it first tries to match by nameIdent (base name),
+// For schema-qualified types, it first tries to match by name.Name (base name),
 // but there may be multiple types with the same base name in different schemas.
 func (g *Generator) findTypeByIdent(types []*Type, ident Ident) *Type {
 	for _, createType := range types {
-		if g.identsEqual(createType.nameIdent, ident) {
+		if g.identsEqual(createType.name.Name, ident) {
 			return createType
 		}
 	}
@@ -3357,16 +3381,7 @@ func (g *Generator) findTypeByIdent(types []*Type, ident Ident) *Type {
 // This handles both exact matches and case-insensitive matches for unquoted names.
 func (g *Generator) findTypeBySchemaAndIdent(types []*Type, desiredType *Type) *Type {
 	for _, createType := range types {
-		if !g.identsEqual(createType.nameIdent, desiredType.nameIdent) {
-			continue
-		}
-		// Also compare schemas (extract from full name)
-		// Type names are formatted as "schema.typename" or just "typename"
-		currentSchema, _ := g.extractSchemaAndName(createType.name)
-		desiredSchema, _ := g.extractSchemaAndName(desiredType.name)
-
-		// Compare schemas (schemas are typically lowercase, but compare them as-is)
-		if currentSchema == desiredSchema {
+		if g.qualifiedTableNamesEqual(createType.name, desiredType.name) {
 			return createType
 		}
 	}
@@ -3384,7 +3399,7 @@ func (g *Generator) extractSchemaAndName(qualifiedName string) (schema string, n
 
 func findDomainByName(domains []*Domain, name string) *Domain {
 	for _, domain := range domains {
-		if domain.name == name {
+		if domain.name.String() == name {
 			return domain
 		}
 	}
@@ -3394,7 +3409,7 @@ func findDomainByName(domains []*Domain, name string) *Domain {
 // findDomainByIdent finds a domain using quote-aware comparison
 func (g *Generator) findDomainByIdent(domains []*Domain, ident Ident) *Domain {
 	for _, domain := range domains {
-		if g.identsEqual(domain.nameIdent, ident) {
+		if g.identsEqual(domain.name.Name, ident) {
 			return domain
 		}
 	}
@@ -4133,7 +4148,7 @@ func convertViewNames(views []*View) []string {
 }
 
 func convertDomainNames(domains []*Domain) []string {
-	return util.TransformSlice(domains, func(d *Domain) string { return d.name })
+	return util.TransformSlice(domains, func(d *Domain) string { return d.name.String() })
 }
 
 func convertExtensionNames(extensions []*Extension) []string {
