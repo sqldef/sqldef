@@ -55,10 +55,10 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 
 	opts.Config = func(path string) {
-		configs = append(configs, database.ParseGeneratorConfig(path))
+		configs = append(configs, database.ParseGeneratorConfig(path, false))
 	}
 	opts.ConfigInline = func(yaml string) {
-		configs = append(configs, database.ParseGeneratorConfigString(yaml))
+		configs = append(configs, database.ParseGeneratorConfigString(yaml, false))
 	}
 
 	parser := flags.NewParser(&opts, flags.None)

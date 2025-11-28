@@ -1148,13 +1148,13 @@ func TestMain(m *testing.M) {
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
-	actual := assertApplyOutputWithConfig(t, schema, database.GeneratorConfig{EnableDrop: false})
+	actual := assertApplyOutputWithConfig(t, schema, database.GeneratorConfig{EnableDrop: false, LegacyIgnoreQuotes: true})
 	assert.Equal(t, expected, actual)
 }
 
 func assertApplyOutputWithEnableDrop(t *testing.T, schema string, expected string) {
 	t.Helper()
-	actual := assertApplyOutputWithConfig(t, schema, database.GeneratorConfig{EnableDrop: true})
+	actual := assertApplyOutputWithConfig(t, schema, database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: true})
 	assert.Equal(t, expected, actual)
 }
 
@@ -1331,7 +1331,8 @@ func TestPsqldefDomainWithTargetSchema(t *testing.T) {
 		defer db.Close()
 
 		config := database.GeneratorConfig{
-			TargetSchema: []string{"test_schema_a"},
+			TargetSchema:       []string{"test_schema_a"},
+			LegacyIgnoreQuotes: true,
 		}
 		db.SetGeneratorConfig(config)
 
@@ -1360,7 +1361,8 @@ func TestPsqldefDomainWithTargetSchema(t *testing.T) {
 		defer db.Close()
 
 		config := database.GeneratorConfig{
-			TargetSchema: []string{"test_schema_b"},
+			TargetSchema:       []string{"test_schema_b"},
+			LegacyIgnoreQuotes: true,
 		}
 		db.SetGeneratorConfig(config)
 
@@ -1389,7 +1391,8 @@ func TestPsqldefDomainWithTargetSchema(t *testing.T) {
 		defer db.Close()
 
 		config := database.GeneratorConfig{
-			TargetSchema: []string{"test_schema_a", "test_schema_b"},
+			TargetSchema:       []string{"test_schema_a", "test_schema_b"},
+			LegacyIgnoreQuotes: true,
 		}
 		db.SetGeneratorConfig(config)
 

@@ -57,7 +57,7 @@ type GeneratorConfig struct {
 	EnableDrop              bool     // Whether to enable DROP/REVOKE operations
 	CreateIndexConcurrently bool     // Whether to add CONCURRENTLY to CREATE INDEX statements
 	DisableDdlTransaction   bool     // Do not use a transaction for DDL statements
-	LegacyIgnoreQuotes      *bool    // nil or true = ignore quotes (legacy default), false = preserve quotes
+	LegacyIgnoreQuotes      bool     // true = ignore quotes (legacy), false = preserve quotes
 }
 
 type TransactionQueries struct {
@@ -211,23 +211,23 @@ func MergeGeneratorConfigs(configs []GeneratorConfig) GeneratorConfig {
 	return result
 }
 
-func ParseGeneratorConfigString(yamlString string) GeneratorConfig {
+func ParseGeneratorConfigString(yamlString string, isPostgres bool) GeneratorConfig {
 	if yamlString == "" {
-		return GeneratorConfig{}
+		return GeneratorConfig{LegacyIgnoreQuotes: isPostgres}
 	}
-	return parseGeneratorConfigFromBytes([]byte(yamlString))
+	return parseGeneratorConfigFromBytes([]byte(yamlString), isPostgres)
 }
 
-func ParseGeneratorConfig(configFile string) GeneratorConfig {
+func ParseGeneratorConfig(configFile string, isPostgres bool) GeneratorConfig {
 	if configFile == "" {
-		return GeneratorConfig{}
+		return GeneratorConfig{LegacyIgnoreQuotes: isPostgres}
 	}
 
 	buf, err := os.ReadFile(configFile)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return parseGeneratorConfigFromBytes(buf)
+	return parseGeneratorConfigFromBytes(buf, isPostgres)
 }
 
 // MergeGeneratorConfig merges two configs, with the second one taking precedence
@@ -268,14 +268,13 @@ func MergeGeneratorConfig(base, override GeneratorConfig) GeneratorConfig {
 	if override.DisableDdlTransaction {
 		result.DisableDdlTransaction = override.DisableDdlTransaction
 	}
-	if override.LegacyIgnoreQuotes != nil {
-		result.LegacyIgnoreQuotes = override.LegacyIgnoreQuotes
-	}
+	// LegacyIgnoreQuotes: override always takes precedence (set by first config with database-specific default)
+	result.LegacyIgnoreQuotes = override.LegacyIgnoreQuotes
 
 	return result
 }
 
-func parseGeneratorConfigFromBytes(buf []byte) GeneratorConfig {
+func parseGeneratorConfigFromBytes(buf []byte, isPostgres bool) GeneratorConfig {
 	var config struct {
 		TargetTables            string   `yaml:"target_tables"`
 		SkipTables              string   `yaml:"skip_tables"`
@@ -326,6 +325,13 @@ func parseGeneratorConfigFromBytes(buf []byte) GeneratorConfig {
 	if config.Lock != "" {
 		lock = strings.Trim(config.Lock, "\n")
 	}
+
+	// Apply database-specific default: true for PostgreSQL, false for others
+	legacyIgnoreQuotes := isPostgres
+	if config.LegacyIgnoreQuotes != nil {
+		legacyIgnoreQuotes = *config.LegacyIgnoreQuotes
+	}
+
 	return GeneratorConfig{
 		TargetTables:            targetTables,
 		SkipTables:              skipTables,
@@ -338,6 +344,6 @@ func parseGeneratorConfigFromBytes(buf []byte) GeneratorConfig {
 		EnableDrop:              config.EnableDrop,
 		CreateIndexConcurrently: config.CreateIndexConcurrently,
 		DisableDdlTransaction:   config.DisableDdlTransaction,
-		LegacyIgnoreQuotes:      config.LegacyIgnoreQuotes,
+		LegacyIgnoreQuotes:      legacyIgnoreQuotes,
 	}
 }

@@ -1265,10 +1265,10 @@ func escapeSQLName(name string) string {
 }
 
 // escapeConstraintName quotes a constraint name for DDL output.
-// In legacy mode (LegacyIgnoreQuotes=true/nil): don't quote (original behavior).
+// In legacy mode (LegacyIgnoreQuotes=true): don't quote (original behavior).
 // In quote-aware mode (LegacyIgnoreQuotes=false): respect the Ident's Quoted field.
 func (d *PostgresDatabase) escapeConstraintName(ident database.Ident) string {
-	if d.generatorConfig.LegacyIgnoreQuotes == nil || *d.generatorConfig.LegacyIgnoreQuotes {
+	if d.generatorConfig.LegacyIgnoreQuotes {
 		return ident.Name
 	}
 	if ident.Quoted {

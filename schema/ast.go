@@ -45,13 +45,12 @@ func (q QualifiedColumnName) String() string {
 // identsEqual compares two Idents with quote-awareness based on database mode and legacyIgnoreQuotes.
 // For non-PostgreSQL databases, always uses case-insensitive comparison.
 // For PostgreSQL in quote-aware mode, unquoted identifiers are normalized to lowercase.
-func identsEqual(a, b Ident, mode GeneratorMode, legacyIgnoreQuotes *bool) bool {
+func identsEqual(a, b Ident, mode GeneratorMode, legacyIgnoreQuotes bool) bool {
 	// For non-PostgreSQL databases, always use case-insensitive comparison
 	if mode != GeneratorModePostgres {
 		return strings.EqualFold(a.Name, b.Name)
 	}
-	useLegacy := legacyIgnoreQuotes == nil || *legacyIgnoreQuotes
-	if useLegacy {
+	if legacyIgnoreQuotes {
 		return strings.EqualFold(a.Name, b.Name)
 	}
 	// Quote-aware comparison: normalize unquoted identifiers to lowercase
@@ -67,7 +66,7 @@ func identsEqual(a, b Ident, mode GeneratorMode, legacyIgnoreQuotes *bool) bool 
 }
 
 // qualifiedTableNamesEqual compares two QualifiedTableNames with quote-awareness.
-func qualifiedTableNamesEqual(a, b QualifiedTableName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes *bool) bool {
+func qualifiedTableNamesEqual(a, b QualifiedTableName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool) bool {
 	aSchema := a.Schema
 	bSchema := b.Schema
 	if aSchema.Name == "" && defaultSchema != "" {

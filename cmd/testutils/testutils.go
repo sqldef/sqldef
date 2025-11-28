@@ -163,12 +163,18 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		}
 	}
 
+	// Determine LegacyIgnoreQuotes: use test value if specified, otherwise use database-specific default
+	legacyIgnoreQuotes := mode == schema.GeneratorModePostgres // default: true for PostgreSQL, false for others
+	if test.LegacyIgnoreQuotes != nil {
+		legacyIgnoreQuotes = *test.LegacyIgnoreQuotes
+	}
+
 	config := database.GeneratorConfig{
 		ManagedRoles:            test.ManagedRoles,
 		EnableDrop:              *test.EnableDrop,
 		CreateIndexConcurrently: test.Config.CreateIndexConcurrently,
 		DisableDdlTransaction:   test.Config.DisableDdlTransaction,
-		LegacyIgnoreQuotes:      test.LegacyIgnoreQuotes,
+		LegacyIgnoreQuotes:      legacyIgnoreQuotes,
 	}
 
 	if test.Offline {
@@ -313,7 +319,9 @@ func splitDDLs(mode schema.GeneratorMode, sqlParser database.Parser, str string,
 		return nil, err
 	}
 
-	statements = schema.SortTablesByDependencies(statements, defaultSchema, mode, nil)
+	// Use database-specific default for LegacyIgnoreQuotes
+	legacyIgnoreQuotes := mode == schema.GeneratorModePostgres
+	statements = schema.SortTablesByDependencies(statements, defaultSchema, mode, legacyIgnoreQuotes)
 
 	var ddls []string
 	for _, statement := range statements {
