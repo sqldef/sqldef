@@ -266,7 +266,7 @@ type ForeignKey struct {
 }
 
 type Exclusion struct {
-	constraintName string
+	constraintName Ident
 	indexType      string
 	where          string
 	exclusions     []ExclusionPair
@@ -373,7 +373,7 @@ type Sequence struct {
 
 type DefaultDefinition struct {
 	expression     parser.Expr
-	constraintName string // only for MSSQL
+	constraintName Ident // only for MSSQL
 }
 
 type SridDefinition struct {

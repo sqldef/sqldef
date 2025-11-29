@@ -798,9 +798,9 @@ func parseDefaultDefinition(opt *parser.DefaultDefinition) *DefaultDefinition {
 		return nil
 	}
 
-	var constraintName string
+	var constraintName Ident
 	if opt.ConstraintName.String() != "" {
-		constraintName = opt.ConstraintName.String()
+		constraintName = Ident{Name: opt.ConstraintName.String(), Quoted: opt.ConstraintName.Quoted()}
 	}
 
 	return &DefaultDefinition{
@@ -892,7 +892,7 @@ func parseExclusion(exclusion *parser.ExclusionDefinition) Exclusion {
 		indexType = "BTREE"
 	}
 	return Exclusion{
-		constraintName: exclusion.ConstraintName.String(),
+		constraintName: Ident{Name: exclusion.ConstraintName.String(), Quoted: exclusion.ConstraintName.Quoted()},
 		indexType:      indexType,
 		exclusions:     exs,
 		where:          where,

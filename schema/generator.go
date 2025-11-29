@@ -351,7 +351,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue // Exclusion constraint is expected to exist.
 			}
 
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(currentTable), g.escapeSQLName(exclusion.constraintName)))
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(currentTable), g.escapeSQLIdent(exclusion.constraintName)))
 		}
 
 		// Check indexes
@@ -568,8 +568,8 @@ func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, desiredTabl
 
 	// Only MSSQL has column default constraints. They need to be deleted before dropping the column.
 	if g.mode == GeneratorModeMssql {
-		if column.defaultDef != nil && column.defaultDef.constraintName != "" {
-			ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(desiredTable), g.escapeSQLName(column.defaultDef.constraintName))
+		if column.defaultDef != nil && column.defaultDef.constraintName.Name != "" {
+			ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(desiredTable), g.escapeSQLIdent(column.defaultDef.constraintName))
 			ddls = append(ddls, ddl)
 		}
 	}
@@ -1028,7 +1028,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				if !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef, desiredColumn.typeName) {
 					if currentColumn.defaultDef != nil {
 						// drop
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&currentTable), g.escapeSQLName(currentColumn.defaultDef.constraintName)))
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&currentTable), g.escapeSQLIdent(currentColumn.defaultDef.constraintName)))
 					}
 					if desiredColumn.defaultDef != nil {
 						// set
@@ -1037,8 +1037,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 							return ddls, err
 						}
 						var ddl string
-						if desiredColumn.defaultDef.constraintName != "" {
-							ddl = fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s %s FOR %s", g.escapeTableNameForTable(&currentTable), g.escapeSQLName(desiredColumn.defaultDef.constraintName), definition, g.escapeColumnName(currentColumn))
+						if desiredColumn.defaultDef.constraintName.Name != "" {
+							ddl = fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s %s FOR %s", g.escapeTableNameForTable(&currentTable), g.escapeSQLIdent(desiredColumn.defaultDef.constraintName), definition, g.escapeColumnName(currentColumn))
 						} else {
 							ddl = fmt.Sprintf("ALTER TABLE %s ADD %s FOR %s", g.escapeTableNameForTable(&currentTable), definition, g.escapeColumnName(currentColumn))
 						}
@@ -1286,7 +1286,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	// Examine each exclusion
 	for _, desiredExclusion := range desired.table.exclusions {
-		if len(desiredExclusion.constraintName) == 0 && g.mode != GeneratorModeSQLite3 {
+		if desiredExclusion.constraintName.Name == "" && g.mode != GeneratorModeSQLite3 {
 			return ddls, fmt.Errorf(
 				"Exclusion without constraint symbol was found in table '%s'. "+
 					"Specify the constraint symbol to identify the exclusion.",
@@ -1294,10 +1294,10 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			)
 		}
 
-		if currentExclusion := findExclusionByName(currentTable.exclusions, desiredExclusion.constraintName); currentExclusion != nil {
+		if currentExclusion := g.findExclusionByName(currentTable.exclusions, desiredExclusion.constraintName); currentExclusion != nil {
 			// Drop and add exclusion as needed.
 			if !g.areSameExclusions(*currentExclusion, desiredExclusion) {
-				dropDDL := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLName(currentExclusion.constraintName))
+				dropDDL := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(&desired.table), g.escapeSQLIdent(currentExclusion.constraintName))
 				if dropDDL != "" {
 					ddls = append(ddls, dropDDL, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableNameForTable(&desired.table), g.generateExclusionDefinition(desiredExclusion)))
 				}
@@ -1508,7 +1508,7 @@ func (g *Generator) generateDDLsForAddExclusion(tableName QualifiedTableName, de
 	var ddls []string
 
 	currentTable := g.findTableByName(g.currentTables, tableName)
-	currentExclusion := findExclusionByName(currentTable.exclusions, desiredExclusion.constraintName)
+	currentExclusion := g.findExclusionByName(currentTable.exclusions, desiredExclusion.constraintName)
 	if currentExclusion == nil {
 		// Exclusion not found, add exclusion
 		ddls = append(ddls, statement)
@@ -1516,7 +1516,7 @@ func (g *Generator) generateDDLsForAddExclusion(tableName QualifiedTableName, de
 	} else {
 		// Exclusion key found, If it's different, drop and add or alter exclusion.
 		if !g.areSameExclusions(*currentExclusion, desiredExclusion) {
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(currentTable), g.escapeSQLName(currentExclusion.constraintName)))
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableNameForTable(currentTable), g.escapeSQLIdent(currentExclusion.constraintName)))
 			ddls = append(ddls, statement)
 		}
 	}
@@ -2488,7 +2488,7 @@ func (g *Generator) generateExclusionDefinition(exclusion Exclusion) string {
 	}
 	definition := fmt.Sprintf(
 		"CONSTRAINT %s EXCLUDE USING %s (%s)",
-		g.escapeSQLName(exclusion.constraintName),
+		g.escapeSQLIdent(exclusion.constraintName),
 		exclusion.indexType,
 		strings.Join(ex, ", "),
 	)
@@ -3381,9 +3381,9 @@ func (g *Generator) findForeignKeysReferencingTable(referencedTable QualifiedTab
 	return referencingFKs
 }
 
-func findExclusionByName(exclusions []Exclusion, constraintName string) *Exclusion {
+func (g *Generator) findExclusionByName(exclusions []Exclusion, constraintName Ident) *Exclusion {
 	for _, exclusion := range exclusions {
-		if exclusion.constraintName == constraintName {
+		if g.identsEqual(exclusion.constraintName, constraintName) {
 			return &exclusion
 		}
 	}
@@ -4141,8 +4141,8 @@ func convertForeignKeysToConstraintNames(foreignKeys []ForeignKey) []string {
 	return constraintNames
 }
 
-func convertExclusionToConstraintNames(exclusions []Exclusion) []string {
-	constraintNames := []string{}
+func convertExclusionToConstraintNames(exclusions []Exclusion) []Ident {
+	constraintNames := []Ident{}
 	for _, exclusion := range exclusions {
 		constraintNames = append(constraintNames, exclusion.constraintName)
 	}
