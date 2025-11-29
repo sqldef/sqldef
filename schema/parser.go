@@ -175,8 +175,8 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 
 			return &Trigger{
 				statement: ddl,
-				name:      parser.String(stmt.Trigger.Name),
-				tableName: stmt.Trigger.TableName.Name.String(),
+				name:      Ident{Name: stmt.Trigger.Name.Name.String(), Quoted: stmt.Trigger.Name.Name.Quoted()},
+				tableName: parseQualifiedTableName(mode, stmt.Trigger.TableName, defaultSchema),
 				time:      stmt.Trigger.Time,
 				event:     stmt.Trigger.Event,
 				body:      body,

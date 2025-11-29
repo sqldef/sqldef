@@ -499,9 +499,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		if g.mode != GeneratorModeSQLite3 {
 			continue
 		}
-		desiredTrigger := findTriggerByName(g.desiredTriggers, currentTrigger.name)
+		desiredTrigger := g.findTriggerByName(g.desiredTriggers, currentTrigger.name)
 		if desiredTrigger == nil {
-			ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeSQLName(currentTrigger.name)))
+			ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeSQLIdent(currentTrigger.name)))
 			continue
 		}
 	}
@@ -1688,16 +1688,16 @@ func stripTableQualifiers(sql string) string {
 	return re.ReplaceAllString(sql, "$1")
 }
 
-func (g *Generator) generateDDLsForCreateTrigger(triggerName string, desiredTrigger *Trigger) ([]string, error) {
+func (g *Generator) generateDDLsForCreateTrigger(triggerName Ident, desiredTrigger *Trigger) ([]string, error) {
 	var ddls []string
-	currentTrigger := findTriggerByName(g.currentTriggers, triggerName)
+	currentTrigger := g.findTriggerByName(g.currentTriggers, triggerName)
 
 	var triggerDefinition string
 	switch g.mode {
 	case GeneratorModeMssql:
-		triggerDefinition += fmt.Sprintf("TRIGGER %s ON %s %s %s AS\n%s", g.escapeTableNameSimple(desiredTrigger.name, true), g.escapeTableName(desiredTrigger.tableName), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), strings.Join(desiredTrigger.body, "\n"))
+		triggerDefinition += fmt.Sprintf("TRIGGER %s ON %s %s %s AS\n%s", g.escapeSQLIdent(desiredTrigger.name), g.escapeQualifiedTableName(desiredTrigger.tableName), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), strings.Join(desiredTrigger.body, "\n"))
 	case GeneratorModeMysql:
-		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeSQLName(desiredTrigger.name), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), g.escapeTableName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, "\n"))
+		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeSQLIdent(desiredTrigger.name), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), g.escapeQualifiedTableName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, "\n"))
 	case GeneratorModeSQLite3:
 		triggerDefinition = desiredTrigger.statement
 	default:
@@ -1715,7 +1715,7 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName string, desiredTrig
 		// Trigger found. If it's different, create or replace trigger.
 		if !areSameTriggerDefinition(currentTrigger, desiredTrigger) {
 			if g.mode != GeneratorModeMssql {
-				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeSQLName(triggerName)))
+				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeSQLIdent(triggerName)))
 			}
 			var createPrefix string
 			if g.mode == GeneratorModeMssql {
@@ -1728,7 +1728,7 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName string, desiredTrig
 	}
 
 	// Only add to desiredTriggers if it doesn't already exist (it may have been pre-populated from aggregation)
-	if findTriggerByName(g.desiredTriggers, desiredTrigger.name) == nil {
+	if g.findTriggerByName(g.desiredTriggers, desiredTrigger.name) == nil {
 		g.desiredTriggers = append(g.desiredTriggers, desiredTrigger)
 	}
 
@@ -2590,10 +2590,6 @@ func (g *Generator) generateDropIndex(tableName QualifiedTableName, indexName Id
 	}
 }
 
-func (g *Generator) escapeTableName(name string) string {
-	return g.escapeTableNameSimple(name, false)
-}
-
 // escapeTableNameForTable escapes a table name using quote-aware logic.
 // Both schema and table names use quote-aware logic when legacy_ignore_quotes is false.
 func (g *Generator) escapeTableNameForTable(table *Table) string {
@@ -2653,26 +2649,6 @@ func (g *Generator) escapeDomainName(d *Domain) string {
 		return g.escapeSQLIdent(schema) + "." + g.escapeSQLIdent(d.name.Name)
 	default:
 		return g.escapeSQLIdent(d.name.Name)
-	}
-}
-
-func (g *Generator) escapeTableNameSimple(name string, withoutSchema bool) string {
-	switch g.mode {
-	case GeneratorModePostgres, GeneratorModeMssql:
-		schemaTable := strings.SplitN(name, ".", 2)
-		var schemaName, tableName string
-		if len(schemaTable) == 1 {
-			if withoutSchema {
-				return g.escapeSQLName(name)
-			}
-			schemaName, tableName = g.defaultSchema, schemaTable[0]
-		} else {
-			schemaName, tableName = schemaTable[0], schemaTable[1]
-		}
-
-		return g.escapeSQLName(schemaName) + "." + g.escapeSQLName(tableName)
-	default:
-		return g.escapeSQLName(name)
 	}
 }
 
@@ -3408,9 +3384,9 @@ func (g *Generator) findViewByName(views []*View, name QualifiedTableName) *View
 	return nil
 }
 
-func findTriggerByName(triggers []*Trigger, name string) *Trigger {
+func (g *Generator) findTriggerByName(triggers []*Trigger, name Ident) *Trigger {
 	for _, trigger := range triggers {
-		if trigger.name == name {
+		if g.identsEqual(trigger.name, name) {
 			return trigger
 		}
 	}
