@@ -67,7 +67,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}
 			return &CreateIndex{
 				statement: ddl,
-				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
+				tableName: parseQualifiedTableName(mode, stmt.Table, defaultSchema),
 				index:     index,
 			}, nil
 		} else if stmt.Action == parser.AddIndex {
@@ -77,7 +77,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}
 			return &AddIndex{
 				statement: ddl,
-				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
+				tableName: parseQualifiedTableName(mode, stmt.Table, defaultSchema),
 				index:     index,
 			}, nil
 		} else if stmt.Action == parser.AddPrimaryKey {
@@ -87,7 +87,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}
 			return &AddPrimaryKey{
 				statement: ddl,
-				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
+				tableName: parseQualifiedTableName(mode, stmt.Table, defaultSchema),
 				index:     index,
 			}, nil
 		} else if stmt.Action == parser.AddForeignKey {
@@ -108,7 +108,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 
 			return &AddForeignKey{
 				statement: ddl,
-				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
+				tableName: parseQualifiedTableName(mode, stmt.Table, defaultSchema),
 				foreignKey: ForeignKey{
 					constraintName:     Ident{Name: stmt.ForeignKey.ConstraintName.String(), Quoted: stmt.ForeignKey.ConstraintName.Quoted()},
 					indexName:          stmt.ForeignKey.IndexName.String(),
@@ -124,7 +124,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 		} else if stmt.Action == parser.AddExclusion {
 			return &AddExclusion{
 				statement: ddl,
-				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
+				tableName: parseQualifiedTableName(mode, stmt.Table, defaultSchema),
 				exclusion: parseExclusion(stmt.Exclusion),
 			}, nil
 		} else if stmt.Action == parser.CreatePolicy {
@@ -140,7 +140,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}
 			return &AddPolicy{
 				statement: ddl,
-				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
+				tableName: parseQualifiedTableName(mode, stmt.Table, defaultSchema),
 				policy: Policy{
 					name:       stmt.Policy.Name.String(),
 					permissive: string(stmt.Policy.Permissive),
@@ -232,7 +232,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				normalizedPrivileges := util.TransformSlice(stmt.Grant.Privileges, strings.ToUpper)
 				return &GrantPrivilege{
 					statement:  ddl,
-					tableName:  normalizedTableName(mode, stmt.Table, defaultSchema),
+					tableName:  parseQualifiedTableName(mode, stmt.Table, defaultSchema),
 					grantees:   grantees,
 					privileges: normalizedPrivileges,
 				}, nil
@@ -251,7 +251,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				normalizedPrivileges := util.TransformSlice(stmt.Grant.Privileges, strings.ToUpper)
 				return &RevokePrivilege{
 					statement:     ddl,
-					tableName:     normalizedTableName(mode, stmt.Table, defaultSchema),
+					tableName:     parseQualifiedTableName(mode, stmt.Table, defaultSchema),
 					grantees:      grantees,
 					privileges:    normalizedPrivileges,
 					cascadeOption: stmt.Grant.CascadeOption,
@@ -962,19 +962,6 @@ func normalizeQualifiedObjectName(mode GeneratorMode, objectName parser.ObjectNa
 		Schema: schemaIdent,
 		Name:   nameIdent,
 	}
-}
-
-// Qualify Postgres/Mssql schema
-func normalizedTableName(mode GeneratorMode, tableName parser.TableName, defaultSchema string) string {
-	table := tableName.Name.String()
-	if mode == GeneratorModePostgres || mode == GeneratorModeMssql {
-		if len(tableName.Schema.String()) > 0 {
-			table = tableName.Schema.String() + "." + table
-		} else {
-			table = defaultSchema + "." + table
-		}
-	}
-	return table
 }
 
 func normalizedTable(mode GeneratorMode, tableName string, defaultSchema string) string {

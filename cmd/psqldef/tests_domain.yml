@@ -17,7 +17,7 @@ DropDomain:
     CREATE DOMAIN us_postal_code AS text;
   desired: |
   output: |
-    DROP DOMAIN public.us_postal_code;
+    DROP DOMAIN "public"."us_postal_code";
 
 CreateDomainWithDefault:
   desired: |
@@ -39,8 +39,8 @@ DropDomainMultipleSchemas:
     CREATE DOMAIN public_domain AS integer;
   desired: |
   output: |
-    DROP DOMAIN public.public_domain;
-    DROP DOMAIN test_schema.test_domain;
+    DROP DOMAIN "public"."public_domain";
+    DROP DOMAIN "test_schema"."test_domain";
 
 CreateAndKeepDomainInNonPublicSchema:
   current: |
@@ -103,7 +103,7 @@ DropDomainWithConstraints:
     CREATE DOMAIN email AS text CHECK (VALUE ~ '@');
   desired: |
   output: |
-    DROP DOMAIN public.email;
+    DROP DOMAIN "public"."email";
 
 CreateTableUsingDomain:
   desired: |

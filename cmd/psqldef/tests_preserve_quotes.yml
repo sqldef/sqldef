@@ -191,6 +191,50 @@ IndexUnquotedNormalizesToLowercase:
   output: |
     ALTER TABLE public.users ADD COLUMN name text;
 
+# Test that CREATE INDEX preserves quoted table name (adding index to existing quoted table)
+CreateIndexOnQuotedTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "Users" (id int);
+  desired: |
+    CREATE TABLE "Users" (id int);
+    CREATE INDEX email_idx ON "Users" (id);
+  output: |
+    CREATE INDEX email_idx ON public."Users" (id);
+
+# Test that CREATE INDEX preserves unquoted table name (normalizes to lowercase)
+CreateIndexOnUnquotedTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE Users (id int);
+  desired: |
+    CREATE TABLE Users (id int);
+    CREATE INDEX email_idx ON Users (id);
+  output: |
+    CREATE INDEX email_idx ON public.users (id);
+
+# Test adding index to existing quoted table
+AddIndexToQuotedTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "Users" (id int, email text);
+  desired: |
+    CREATE TABLE "Users" (id int, email text);
+    CREATE INDEX email_idx ON "Users" (email);
+  output: |
+    CREATE INDEX email_idx ON public."Users" (email);
+
+# Test adding index to existing unquoted table
+AddIndexToUnquotedTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE Users (id int, email text);
+  desired: |
+    CREATE TABLE Users (id int, email text);
+    CREATE INDEX email_idx ON Users (email);
+  output: |
+    CREATE INDEX email_idx ON public.users (email);
+
 ConstraintQuotedPreservesCase:
   legacy_ignore_quotes: false
   current: |
@@ -976,7 +1020,7 @@ IndexOnMixedQuotedColumns:
     );
     CREATE INDEX name_idx ON users ("FirstName", last_name);
   output: |
-    CREATE INDEX name_idx ON users ("FirstName", last_name);
+    CREATE INDEX name_idx ON public.users ("FirstName", last_name);
 
 # =============================================================================
 # Edge case tests for Issue 3: Schema name comparison

@@ -100,51 +100,51 @@ type CreateTable struct {
 
 type CreateIndex struct {
 	statement string
-	tableName string
+	tableName QualifiedTableName
 	index     Index
 }
 
 type AddIndex struct {
 	statement  string
-	tableName  string
+	tableName  QualifiedTableName
 	constraint bool
 	index      Index
 }
 
 type AddPrimaryKey struct {
 	statement string
-	tableName string
+	tableName QualifiedTableName
 	index     Index
 }
 
 type AddForeignKey struct {
 	statement  string
-	tableName  string
+	tableName  QualifiedTableName
 	foreignKey ForeignKey
 }
 
 type AddExclusion struct {
 	statement string
-	tableName string
+	tableName QualifiedTableName
 	exclusion Exclusion
 }
 
 type AddPolicy struct {
 	statement string
-	tableName string
+	tableName QualifiedTableName
 	policy    Policy
 }
 
 type GrantPrivilege struct {
 	statement  string
-	tableName  string
+	tableName  QualifiedTableName
 	grantees   []string
 	privileges []string
 }
 
 type RevokePrivilege struct {
 	statement     string
-	tableName     string
+	tableName     QualifiedTableName
 	grantees      []string
 	privileges    []string
 	cascadeOption bool // CASCADE option for REVOKE

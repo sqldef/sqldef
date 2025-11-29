@@ -89,12 +89,12 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 
 	currentDDLs = SortTablesByDependencies(currentDDLs, defaultSchema, mode, config.LegacyIgnoreQuotes)
 
-	aggregated, err := aggregateDDLsToSchema(currentDDLs)
+	aggregated, err := aggregateDDLsToSchema(currentDDLs, mode, defaultSchema, config.LegacyIgnoreQuotes)
 	if err != nil {
 		return nil, err
 	}
 
-	desiredAggregated, err := aggregateDDLsToSchema(desiredDDLs)
+	desiredAggregated, err := aggregateDDLsToSchema(desiredDDLs, mode, defaultSchema, config.LegacyIgnoreQuotes)
 	if err != nil {
 		return nil, err
 	}
@@ -521,7 +521,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 			found := false
 			for _, desiredPriv := range g.desiredPrivileges {
-				if currentPriv.tableName == desiredPriv.tableName &&
+				if g.qualifiedTableNamesEqual(currentPriv.tableName, desiredPriv.tableName) &&
 					len(currentPriv.grantees) > 0 && len(desiredPriv.grantees) > 0 &&
 					currentPriv.grantees[0] == desiredPriv.grantees[0] {
 					found = true
@@ -537,7 +537,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 				revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
 					formatPrivilegesForGrant(currentPriv.privileges),
-					g.escapeTableName(currentPriv.tableName),
+					g.escapeQualifiedTableName(currentPriv.tableName),
 					escapedGrantee)
 				ddls = append(ddls, revoke)
 			}
@@ -1369,27 +1369,29 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 // Shared by `CREATE INDEX` and `ALTER TABLE ADD INDEX`.
 // This manages `g.currentTables` unlike `generateDDLsForCreateTable`...
-func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex Index, action string, statement string) ([]string, error) {
-	// Add CONCURRENTLY to CREATE [UNIQUE] INDEX statements (PostgreSQL only)
-	// This can come from either:
-	// 1. The config flag (g.config.CreateIndexConcurrently)
-	// 2. The parsed DDL (desiredIndex.concurrently)
-	if g.mode == GeneratorModePostgres && action == "CREATE INDEX" && (g.config.CreateIndexConcurrently || desiredIndex.concurrently) {
-		re := regexp.MustCompile(`(?i)^(CREATE\s+(?:UNIQUE\s+)?INDEX)(?:\s+CONCURRENTLY)?(\s+.*)`)
-		statement = re.ReplaceAllString(statement, "${1} CONCURRENTLY${2}")
-	}
-
-	// Add ASYNC to CREATE [UNIQUE] INDEX statements if the index has the async flag (Aurora DSQL)
-	if g.mode == GeneratorModePostgres && action == "CREATE INDEX" && desiredIndex.async {
-		re := regexp.MustCompile(`(?i)^(CREATE\s+(?:UNIQUE\s+)?INDEX)(?:\s+ASYNC)?(\s+.*)`)
-		statement = re.ReplaceAllString(statement, "${1} ASYNC${2}")
+func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedTableName, desiredIndex Index, action string, statement string) ([]string, error) {
+	// For CREATE INDEX, handle statement regeneration based on mode
+	if action == "CREATE INDEX" {
+		if g.mode == GeneratorModePostgres && !g.config.LegacyIgnoreQuotes {
+			// Quote-aware mode: always regenerate to ensure proper schema qualification and quoting
+			if g.config.CreateIndexConcurrently {
+				desiredIndex.concurrently = true
+			}
+			statement = g.generateCreateIndexStatement(tableName, desiredIndex)
+		} else if g.mode == GeneratorModePostgres && g.config.CreateIndexConcurrently && !desiredIndex.concurrently {
+			// Legacy mode with CONCURRENTLY config: insert CONCURRENTLY into original statement
+			// This preserves the original formatting while adding the keyword
+			statement = insertConcurrentlyIntoCreateIndex(statement)
+			desiredIndex.concurrently = true
+		}
+		// Otherwise: use the original statement as-is
 	}
 
 	ddls := []string{}
 
-	currentTable := findTableByNameString(g.currentTables, tableName)
+	currentTable := g.findTableByName(g.currentTables, tableName)
 	if currentTable == nil { // Views or non-existent tables
-		currentView := findViewByName(g.currentViews, tableName)
+		currentView := g.findViewByName(g.currentViews, tableName)
 		if currentView != nil {
 			currentIndex := g.findIndexByIdent(currentView.indexes, desiredIndex.name)
 			if currentIndex == nil {
@@ -1399,14 +1401,14 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 			}
 		} else {
 			// Check if the view exists in desired views (might be created in the same migration)
-			desiredView := findViewByName(g.desiredViews, tableName)
+			desiredView := g.findViewByName(g.desiredViews, tableName)
 			if desiredView != nil {
 				// View will be created, add the index
 				ddls = append(ddls, statement)
 				desiredView.indexes = append(desiredView.indexes, desiredIndex)
 			} else {
 				// Check if it's a desired table that hasn't been created yet
-				desiredTable := findTableByNameString(g.desiredTables, tableName)
+				desiredTable := g.findTableByName(g.desiredTables, tableName)
 				if desiredTable != nil {
 					// Table will be created, add the index
 					ddls = append(ddls, statement)
@@ -1467,7 +1469,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 		}
 	}
 
-	desiredTable := findTableByNameString(g.desiredTables, tableName)
+	desiredTable := g.findTableByName(g.desiredTables, tableName)
 	if desiredTable != nil {
 		desiredTable.indexes = append(desiredTable.indexes, desiredIndex)
 	}
@@ -1475,10 +1477,10 @@ func (g *Generator) generateDDLsForCreateIndex(tableName string, desiredIndex In
 	return ddls, nil
 }
 
-func (g *Generator) generateDDLsForAddForeignKey(tableName string, desiredForeignKey ForeignKey, action string, statement string) ([]string, error) {
+func (g *Generator) generateDDLsForAddForeignKey(tableName QualifiedTableName, desiredForeignKey ForeignKey, action string, statement string) ([]string, error) {
 	var ddls []string
 
-	currentTable := findTableByNameString(g.currentTables, tableName)
+	currentTable := g.findTableByName(g.currentTables, tableName)
 	currentForeignKey := g.findForeignKeyByName(currentTable.foreignKeys, desiredForeignKey.constraintName)
 	if currentForeignKey == nil {
 		// Foreign Key not found, add foreign key
@@ -1493,7 +1495,7 @@ func (g *Generator) generateDDLsForAddForeignKey(tableName string, desiredForeig
 	}
 
 	// Examine indexes in desiredTable to delete obsoleted indexes later
-	desiredTable := findTableByNameString(g.desiredTables, tableName)
+	desiredTable := g.findTableByName(g.desiredTables, tableName)
 	// Only add to desiredTable.foreignKeys if it doesn't already exist (it may have been pre-populated from aggregation)
 	if g.findForeignKeyByName(desiredTable.foreignKeys, desiredForeignKey.constraintName) == nil {
 		desiredTable.foreignKeys = append(desiredTable.foreignKeys, desiredForeignKey)
@@ -1502,10 +1504,10 @@ func (g *Generator) generateDDLsForAddForeignKey(tableName string, desiredForeig
 	return ddls, nil
 }
 
-func (g *Generator) generateDDLsForAddExclusion(tableName string, desiredExclusion Exclusion, action string, statement string) ([]string, error) {
+func (g *Generator) generateDDLsForAddExclusion(tableName QualifiedTableName, desiredExclusion Exclusion, action string, statement string) ([]string, error) {
 	var ddls []string
 
-	currentTable := findTableByNameString(g.currentTables, tableName)
+	currentTable := g.findTableByName(g.currentTables, tableName)
 	currentExclusion := findExclusionByName(currentTable.exclusions, desiredExclusion.constraintName)
 	if currentExclusion == nil {
 		// Exclusion not found, add exclusion
@@ -1520,7 +1522,7 @@ func (g *Generator) generateDDLsForAddExclusion(tableName string, desiredExclusi
 	}
 
 	// Examine indexes in desiredTable to delete obsoleted indexes later
-	desiredTable := findTableByNameString(g.desiredTables, tableName)
+	desiredTable := g.findTableByName(g.desiredTables, tableName)
 	// Only add to desiredTable.exclusions if it doesn't already exist (it may have been pre-populated from aggregation)
 	if !slices.Contains(convertExclusionToConstraintNames(desiredTable.exclusions), desiredExclusion.constraintName) {
 		desiredTable.exclusions = append(desiredTable.exclusions, desiredExclusion)
@@ -1529,12 +1531,13 @@ func (g *Generator) generateDDLsForAddExclusion(tableName string, desiredExclusi
 	return ddls, nil
 }
 
-func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy Policy, action string, statement string) ([]string, error) {
+func (g *Generator) generateDDLsForCreatePolicy(tableName QualifiedTableName, desiredPolicy Policy, action string, statement string) ([]string, error) {
 	var ddls []string
+	tableNameStr := tableName.String()
 
-	currentTable := findTableByNameString(g.currentTables, tableName)
+	currentTable := g.findTableByName(g.currentTables, tableName)
 	if currentTable == nil {
-		return nil, fmt.Errorf("%s is performed for inexistent table '%s': '%s'", action, tableName, statement)
+		return nil, fmt.Errorf("%s is performed for inexistent table '%s': '%s'", action, tableNameStr, statement)
 	}
 
 	currentPolicy := findPolicyByName(currentTable.policies, desiredPolicy.name)
@@ -1551,9 +1554,9 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName string, desiredPolicy 
 	}
 
 	// Examine policies in desiredTable to delete obsoleted policies later
-	desiredTable := findTableByNameString(g.desiredTables, tableName)
+	desiredTable := g.findTableByName(g.desiredTables, tableName)
 	if desiredTable == nil {
-		return nil, fmt.Errorf("%s is performed before create table '%s': '%s'", action, tableName, statement)
+		return nil, fmt.Errorf("%s is performed before create table '%s': '%s'", action, tableNameStr, statement)
 	}
 	// Only add to desiredTable.policies if it doesn't already exist (it may have been pre-populated from aggregation)
 	if !slices.Contains(convertPolicyNames(desiredTable.policies), desiredPolicy.name) {
@@ -2165,6 +2168,84 @@ type AggregatedSchema struct {
 	Extensions []*Extension
 	Schemas    []*Schema
 	Privileges []*GrantPrivilege
+}
+
+// generateCreateIndexStatement generates a CREATE INDEX statement from an Index struct.
+// This is used to regenerate CREATE INDEX statements with proper schema-qualified table names.
+func (g *Generator) generateCreateIndexStatement(table QualifiedTableName, index Index) string {
+	// Build column list with proper quoting
+	columns := []string{}
+	for _, indexColumn := range index.columns {
+		var column string
+		// For simple column references (ColName), use escapeSQLIdent to preserve quoting
+		if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
+			column = g.escapeSQLIdent(Ident{Name: colName.Name.String(), Quoted: colName.Name.Quoted()})
+		} else {
+			// For expressions (functional indexes), use parser.String()
+			column = parser.String(indexColumn.columnExpr)
+		}
+		if indexColumn.length != nil {
+			column += fmt.Sprintf("(%d)", *indexColumn.length)
+		}
+		if indexColumn.direction == DescScr {
+			column += fmt.Sprintf(" %s", indexColumn.direction)
+		}
+		columns = append(columns, column)
+	}
+
+	// Start building the statement
+	// PostgreSQL syntax: CREATE [UNIQUE] INDEX [CONCURRENTLY] name ON table
+	ddl := "CREATE"
+	if index.unique {
+		ddl += " UNIQUE"
+	}
+	ddl += " INDEX"
+	if index.concurrently {
+		ddl += " CONCURRENTLY"
+	}
+	if index.async {
+		ddl += " ASYNC"
+	}
+	ddl += fmt.Sprintf(" %s ON %s", g.escapeSQLIdent(index.name), g.escapeQualifiedTableName(table))
+
+	// Add index method if specified (e.g., USING btree)
+	if index.indexType != "" && !strings.EqualFold(index.indexType, "INDEX") &&
+		!strings.EqualFold(index.indexType, "KEY") &&
+		!strings.EqualFold(index.indexType, "PRIMARY KEY") &&
+		!strings.EqualFold(index.indexType, "UNIQUE") {
+		ddl += fmt.Sprintf(" USING %s", strings.ToLower(index.indexType))
+	}
+
+	ddl += fmt.Sprintf(" (%s)", strings.Join(columns, ", "))
+
+	// Add WHERE clause for partial indexes
+	if index.where != "" {
+		ddl += fmt.Sprintf(" WHERE %s", index.where)
+	}
+
+	// Add index options
+	optionDef := g.generateIndexOptionDefinition(index.options)
+	if optionDef != "" {
+		ddl += optionDef
+	}
+
+	return ddl
+}
+
+// insertConcurrentlyIntoCreateIndex inserts the CONCURRENTLY keyword into a CREATE INDEX statement.
+// It handles both "CREATE INDEX" and "CREATE UNIQUE INDEX" statements.
+func insertConcurrentlyIntoCreateIndex(statement string) string {
+	upperStatement := strings.ToUpper(statement)
+	if idx := strings.Index(upperStatement, "CREATE UNIQUE INDEX "); idx != -1 {
+		insertPos := idx + len("CREATE UNIQUE INDEX ")
+		return statement[:insertPos] + "CONCURRENTLY " + statement[insertPos:]
+	}
+	if idx := strings.Index(upperStatement, "CREATE INDEX "); idx != -1 {
+		insertPos := idx + len("CREATE INDEX ")
+		return statement[:insertPos] + "CONCURRENTLY " + statement[insertPos:]
+	}
+	// Fallback: return original statement
+	return statement
 }
 
 // generateAddIndex generates DDL to add an index.
@@ -2798,7 +2879,7 @@ func mergeTable(table1 *Table, table2 Table) {
 	}
 }
 
-func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
+func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string, legacyIgnoreQuotes bool) (*AggregatedSchema, error) {
 	aggregated := &AggregatedSchema{
 		Tables:     []*Table{},
 		Views:      []*View{},
@@ -2810,15 +2891,16 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 		Schemas:    []*Schema{},
 		Privileges: []*GrantPrivilege{},
 	}
+
 	for _, ddl := range ddls {
 		switch stmt := ddl.(type) {
 		case *CreateTable:
 			table := stmt.table // copy table
 			aggregated.Tables = append(aggregated.Tables, &table)
 		case *CreateIndex:
-			table := findTableByNameString(aggregated.Tables, stmt.tableName)
+			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes)
 			if table == nil {
-				view := findViewByName(aggregated.Views, stmt.tableName)
+				view := findViewQuoteAware(aggregated.Views, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes)
 				if view == nil {
 					return nil, fmt.Errorf("CREATE INDEX is performed before CREATE TABLE: %s", ddl.Statement())
 				}
@@ -2829,14 +2911,14 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 				table.indexes = append(table.indexes, stmt.index)
 			}
 		case *AddIndex:
-			table := findTableByNameString(aggregated.Tables, stmt.tableName)
+			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes)
 			if table == nil {
 				return nil, fmt.Errorf("ADD INDEX is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 			// TODO: check duplicated creation
 			table.indexes = append(table.indexes, stmt.index)
 		case *AddPrimaryKey:
-			table := findTableByNameString(aggregated.Tables, stmt.tableName)
+			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes)
 			if table == nil {
 				return nil, fmt.Errorf("ADD PRIMARY KEY is performed before CREATE TABLE: %s", ddl.Statement())
 			}
@@ -2850,21 +2932,21 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 			}
 			table.columns = newColumns
 		case *AddForeignKey:
-			table := findTableByNameString(aggregated.Tables, stmt.tableName)
+			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes)
 			if table == nil {
 				return nil, fmt.Errorf("ADD FOREIGN KEY is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			table.foreignKeys = append(table.foreignKeys, stmt.foreignKey)
 		case *AddExclusion:
-			table := findTableByNameString(aggregated.Tables, stmt.tableName)
+			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes)
 			if table == nil {
 				return nil, fmt.Errorf("ADD EXCLUDE is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			table.exclusions = append(table.exclusions, stmt.exclusion)
 		case *AddPolicy:
-			table := findTableByNameString(aggregated.Tables, stmt.tableName)
+			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes)
 			if table == nil {
 				return nil, fmt.Errorf("ADD POLICY performed before CREATE TABLE: %s", ddl.Statement())
 			}
@@ -2887,7 +2969,7 @@ func aggregateDDLsToSchema(ddls []DDL) (*AggregatedSchema, error) {
 		case *GrantPrivilege:
 			merged := false
 			for i, existing := range aggregated.Privileges {
-				if existing.tableName == stmt.tableName &&
+				if qualifiedTableNamesEqual(existing.tableName, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes) &&
 					len(existing.grantees) == len(stmt.grantees) {
 					allMatch := true
 					for j, grantee := range existing.grantees {
@@ -2971,7 +3053,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 	for _, grantee := range desired.grantees {
 		existingPrivilegesMap := make(map[string]bool)
 		for _, currentPriv := range g.currentPrivileges {
-			if currentPriv.tableName == desired.tableName {
+			if g.qualifiedTableNamesEqual(currentPriv.tableName, desired.tableName) {
 				if slices.Contains(currentPriv.grantees, grantee) {
 					normalized := normalizePrivilegesForComparison(currentPriv.privileges)
 					for _, priv := range normalized {
@@ -3050,7 +3132,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			}
 			revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
 				strings.Join(privileges, ", "),
-				g.escapeTableName(desired.tableName),
+				g.escapeQualifiedTableName(desired.tableName),
 				escapedGrantee)
 			ddls = append(ddls, revoke)
 		}
@@ -3075,7 +3157,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 		slices.Sort(escapedGrantees)
 		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s",
 			formatPrivilegesForGrant(group.privileges),
-			g.escapeTableName(desired.tableName),
+			g.escapeQualifiedTableName(desired.tableName),
 			strings.Join(escapedGrantees, ", "))
 		ddls = append(ddls, grant)
 	}
@@ -3112,7 +3194,7 @@ func (g *Generator) generateDDLsForRevokePrivilege(desired *RevokePrivilege) ([]
 
 	revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
 		formatPrivilegesForGrant(desired.privileges),
-		g.escapeTableName(desired.tableName),
+		g.escapeQualifiedTableName(desired.tableName),
 		escapedGrantee)
 
 	if desired.cascadeOption {
@@ -3150,20 +3232,23 @@ func (g *Generator) findTableByName(tables []*Table, name QualifiedTableName) *T
 	return nil
 }
 
-func findTableByNameString(tables []*Table, name string) *Table {
+// findTableQuoteAware finds a table using quote-aware comparison without requiring a Generator.
+func findTableQuoteAware(tables []*Table, name QualifiedTableName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool) *Table {
 	for _, table := range tables {
-		if table.name.String() == name {
+		if qualifiedTableNamesEqual(table.name, name, defaultSchema, mode, legacyIgnoreQuotes) {
 			return table
 		}
 	}
 	return nil
 }
 
-func findColumnByName(columns map[string]*Column, name string) *Column {
-	if column, ok := columns[name]; ok {
-		return column
+// findViewQuoteAware finds a view using quote-aware comparison without requiring a Generator.
+func findViewQuoteAware(views []*View, name QualifiedTableName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool) *View {
+	for _, view := range views {
+		if qualifiedTableNamesEqual(view.name, name, defaultSchema, mode, legacyIgnoreQuotes) {
+			return view
+		}
 	}
-
 	return nil
 }
 
@@ -3328,9 +3413,9 @@ func findPolicyByName(policies []Policy, name string) *Policy {
 	return nil
 }
 
-func findViewByName(views []*View, name string) *View {
+func (g *Generator) findViewByName(views []*View, name QualifiedTableName) *View {
 	for _, view := range views {
-		if view.name.String() == name {
+		if g.qualifiedTableNamesEqual(view.name, name) {
 			return view
 		}
 	}
@@ -4274,14 +4359,14 @@ func FilterTables(ddls []DDL, config database.GeneratorConfig) []DDL {
 		case *CreateTable:
 			tables = append(tables, stmt.table.name.String())
 		case *CreateIndex:
-			tables = append(tables, stmt.tableName)
+			tables = append(tables, stmt.tableName.String())
 		case *AddPrimaryKey:
-			tables = append(tables, stmt.tableName)
+			tables = append(tables, stmt.tableName.String())
 		case *AddForeignKey:
-			tables = append(tables, stmt.tableName)
+			tables = append(tables, stmt.tableName.String())
 			tables = append(tables, stmt.foreignKey.referenceTableName.String())
 		case *AddIndex:
-			tables = append(tables, stmt.tableName)
+			tables = append(tables, stmt.tableName.String())
 		}
 
 		if skipTables(tables, config) {
@@ -4319,7 +4404,7 @@ func FilterViews(ddls []DDL, config database.GeneratorConfig) []DDL {
 
 		switch stmt := ddl.(type) {
 		case *CreateIndex:
-			views = append(views, stmt.tableName)
+			views = append(views, stmt.tableName.String())
 		case *View:
 			views = append(views, stmt.name.String())
 		}
