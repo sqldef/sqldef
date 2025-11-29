@@ -2610,13 +2610,13 @@ column_definition_type:
   }
 | column_definition_type REFERENCES table_name
   {
-    $1.References = String($3)
+    $1.References = $3
     $$ = $1
   }
 // PostgreSQL: inline foreign key with constraint options
 | column_definition_type REFERENCES table_name '(' column_list ')' deferrable_opt initially_deferred_opt
   {
-    $1.References           = String($3)
+    $1.References           = $3
     $1.ReferenceNames       = $5
     $1.ReferenceDeferrable  = &$7
     $1.ReferenceInitDeferred = &$8
@@ -2624,7 +2624,7 @@ column_definition_type:
   }
 | column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option fk_defer_opts
   {
-    $1.References            = String($3)
+    $1.References            = $3
     $1.ReferenceNames        = $5
     $1.ReferenceOnDelete     = $9
     if $10.constraintOpts != nil {
@@ -2635,7 +2635,7 @@ column_definition_type:
   }
 | column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option fk_defer_opts
   {
-    $1.References            = String($3)
+    $1.References            = $3
     $1.ReferenceNames        = $5
     $1.ReferenceOnUpdate     = $9
     if $10.constraintOpts != nil {
@@ -2646,7 +2646,7 @@ column_definition_type:
   }
 | column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option ON UPDATE reference_option fk_defer_opts
   {
-    $1.References            = String($3)
+    $1.References            = $3
     $1.ReferenceNames        = $5
     $1.ReferenceOnDelete     = $9
     $1.ReferenceOnUpdate     = $12
@@ -2658,7 +2658,7 @@ column_definition_type:
   }
 | column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option ON DELETE reference_option fk_defer_opts
   {
-    $1.References            = String($3)
+    $1.References            = $3
     $1.ReferenceNames        = $5
     $1.ReferenceOnUpdate     = $9
     $1.ReferenceOnDelete     = $12

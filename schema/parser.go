@@ -283,7 +283,16 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		// Normalize PostgreSQL type aliases from generic parser
 		typeName := parsedCol.Type.Type
 		timezone := castBool(parsedCol.Type.Timezone)
-		references := parsedCol.Type.References
+		// references is used for:
+		// 1. Schema-qualified type names (e.g., "public." for public.mytype) - stored with trailing dot
+		// 2. Simple REFERENCES clause without column names (e.g., "REFERENCES table_name")
+		var references Ident
+
+		// For simple REFERENCES (without column names), store the table name in references
+		// This is separate from the ForeignKey logic which handles REFERENCES with explicit columns
+		if parsedCol.Type.References.Name.String() != "" && len(parsedCol.Type.ReferenceNames) == 0 {
+			references = Ident{Name: parsedCol.Type.References.Name.String(), Quoted: parsedCol.Type.References.Name.Quoted()}
+		}
 
 		if mode == GeneratorModePostgres {
 			// Handle short timezone forms: timestamptz -> timestamp, timetz -> time
@@ -301,11 +310,11 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			// Generic parser stores "schema.type" in typeName field
 			// pgquery parser stores "schema." in references and "type" in typeName
 			// Normalize to the pgquery format for consistent comparison
-			if strings.Contains(typeName, ".") && references == "" {
+			if strings.Contains(typeName, ".") && references.Name == "" {
 				parts := strings.SplitN(typeName, ".", 2)
 				if len(parts) == 2 {
 					// Store schema with trailing dot to match pgquery format
-					references = parts[0] + "."
+					references = Ident{Name: parts[0] + "."}
 					typeName = parts[1]
 				}
 			}
@@ -367,7 +376,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	for _, parsedCol := range stmt.TableSpec.Columns {
 		// Skip if no inline foreign key reference or if it's missing column names
 		// (empty ReferenceNames means it will use the primary key, which is database-specific)
-		if parsedCol.Type.References == "" || len(parsedCol.Type.ReferenceNames) == 0 {
+		if parsedCol.Type.References.Name.String() == "" || len(parsedCol.Type.ReferenceNames) == 0 {
 			continue
 		}
 
@@ -411,7 +420,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		foreignKey := ForeignKey{
 			constraintName:     constraintName,
 			indexColumns:       indexColumns,
-			referenceTableName: normalizeQualifiedNameFromString(mode, parsedCol.Type.References, defaultSchema),
+			referenceTableName: normalizeQualifiedName(mode, parsedCol.Type.References, defaultSchema),
 			referenceColumns:   referenceColumns,
 			onDelete:           parser.String(parsedCol.Type.ReferenceOnDelete),
 			onUpdate:           parser.String(parsedCol.Type.ReferenceOnUpdate),
@@ -421,7 +430,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 
 		// Clear the references field from the column since it's now represented as a foreign key
 		// This prevents it from being used for type qualification
-		column.references = ""
+		column.references = Ident{}
 		column.referenceDeferrable = nil
 		column.referenceInitiallyDeferred = nil
 	}
@@ -918,33 +927,6 @@ func normalizeQualifiedName(mode GeneratorMode, tableName parser.TableName, defa
 	}
 }
 
-// normalizeQualifiedNameFromString creates a QualifiedName from a string table reference.
-// For column-level REFERENCES where the parser loses quote information, we infer it:
-// - If the name has any uppercase letters, it was likely quoted (quoted preserves case)
-// - If the name is all lowercase, it was likely unquoted (unquoted normalizes to lowercase)
-func normalizeQualifiedNameFromString(mode GeneratorMode, tableRef string, defaultSchema string) QualifiedName {
-	// Check if the name has uppercase letters (indicates it was quoted)
-	hasUppercase := false
-	for _, r := range tableRef {
-		if r >= 'A' && r <= 'Z' {
-			hasUppercase = true
-			break
-		}
-	}
-
-	nameIdent := Ident{Name: tableRef, Quoted: hasUppercase}
-
-	var schemaIdent Ident
-	if mode == GeneratorModePostgres || mode == GeneratorModeMssql {
-		schemaIdent = Ident{Name: defaultSchema, Quoted: false}
-	}
-
-	return QualifiedName{
-		Schema: schemaIdent,
-		Name:   nameIdent,
-	}
-}
-
 // normalizeQualifiedObjectName creates a QualifiedName from a parser.ObjectName
 func normalizeQualifiedObjectName(mode GeneratorMode, objectName parser.ObjectName, defaultSchema string) QualifiedName {
 	nameIdent := Ident{Name: objectName.Name.String(), Quoted: objectName.Name.Quoted()}
@@ -964,14 +946,14 @@ func normalizeQualifiedObjectName(mode GeneratorMode, objectName parser.ObjectNa
 	}
 }
 
-func normalizedTable(mode GeneratorMode, tableName string, defaultSchema string) string {
+func normalizedTable(mode GeneratorMode, tableName Ident, defaultSchema string) Ident {
 	switch mode {
 	case GeneratorModePostgres, GeneratorModeMssql:
-		if tableName == "" { // avoid qualifying empty references (e.g., built-in types)
-			return ""
+		if tableName.Name == "" { // avoid qualifying empty references (e.g., built-in types)
+			return Ident{}
 		}
-		schema, table := splitTableName(tableName, defaultSchema)
-		return fmt.Sprintf("%s.%s", schema, table)
+		schema, table := splitTableName(tableName.Name, defaultSchema)
+		return Ident{Name: fmt.Sprintf("%s.%s", schema, table), Quoted: tableName.Quoted}
 	default:
 		return tableName
 	}

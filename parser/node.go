@@ -752,7 +752,7 @@ type ColumnType struct {
 	// Key specification
 	KeyOpt ColumnKeyOption
 
-	References            string
+	References            TableName
 	ReferenceNames        Columns
 	ReferenceOnDelete     ColIdent
 	ReferenceOnUpdate     ColIdent

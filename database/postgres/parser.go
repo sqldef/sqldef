@@ -1424,7 +1424,9 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType
 			}
 		}
 	} else if len(typeNames) == 2 {
-		columnType.References = typeNames[0] + "."
+		// Schema-qualified type: store schema prefix with trailing dot in References.Name
+		// This is for backward compatibility with how the pgquery parser stores schema prefixes
+		columnType.References = parser.TableName{Name: parser.NewIdent(typeNames[0]+".", false)}
 		columnType.Type = typeNames[1]
 	} else {
 		return columnType, fmt.Errorf("unexpected length in parseTypeName: %d", len(typeNames))

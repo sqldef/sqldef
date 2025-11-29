@@ -1911,7 +1911,7 @@ func (g *Generator) generateDDLsForAbsentForeignKey(currentForeignKey ForeignKey
 	case GeneratorModePostgres, GeneratorModeMssql:
 		var referencesColumn *Column
 		for _, column := range desiredTable.columns {
-			if column.references == currentForeignKey.referenceTableName.String() {
+			if column.references.Name == currentForeignKey.referenceTableName.String() {
 				referencesColumn = column
 				break
 			}
@@ -2004,8 +2004,8 @@ func (g *Generator) generateDataType(column Column) string {
 	// 1. references is not empty (including "public." for enum types)
 	// 2. the type name doesn't already contain a dot
 	// 3. it's not a built-in type (built-in types shouldn't have references set to non-empty schema)
-	if g.mode == GeneratorModePostgres && column.references != "" && !strings.Contains(typeName, ".") {
-		typeName = column.references + typeName
+	if g.mode == GeneratorModePostgres && column.references.Name != "" && !strings.Contains(typeName, ".") {
+		typeName = column.references.Name + typeName
 	}
 
 	// Preserve quoting for case-sensitive types like domains.

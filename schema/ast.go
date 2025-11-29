@@ -185,7 +185,7 @@ type Column struct {
 	onUpdate                   *Value
 	comment                    *Value
 	enumValues                 []string
-	references                 string
+	references                 Ident
 	referenceDeferrable        *bool // for Postgres: DEFERRABLE, NOT DEFERRABLE, or nil
 	referenceInitiallyDeferred *bool // for Postgres: INITIALLY DEFERRED, INITIALLY IMMEDIATE, or nil
 	identity                   *Identity

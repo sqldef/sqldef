@@ -6422,14 +6422,14 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:2612
 		{
-			yyDollar[1].columnType.References = String(yyDollar[3].tableName)
+			yyDollar[1].columnType.References = yyDollar[3].tableName
 			yyVAL.columnType = yyDollar[1].columnType
 		}
 	case 321:
 		yyDollar = yyS[yypt-8 : yypt+1]
 //line parser/parser.y:2618
 		{
-			yyDollar[1].columnType.References = String(yyDollar[3].tableName)
+			yyDollar[1].columnType.References = yyDollar[3].tableName
 			yyDollar[1].columnType.ReferenceNames = yyDollar[5].columns
 			yyDollar[1].columnType.ReferenceDeferrable = &yyDollar[7].boolVal
 			yyDollar[1].columnType.ReferenceInitDeferred = &yyDollar[8].boolVal
@@ -6439,7 +6439,7 @@ yydefault:
 		yyDollar = yyS[yypt-10 : yypt+1]
 //line parser/parser.y:2626
 		{
-			yyDollar[1].columnType.References = String(yyDollar[3].tableName)
+			yyDollar[1].columnType.References = yyDollar[3].tableName
 			yyDollar[1].columnType.ReferenceNames = yyDollar[5].columns
 			yyDollar[1].columnType.ReferenceOnDelete = yyDollar[9].colIdent
 			if yyDollar[10].fkDeferOpts.constraintOpts != nil {
@@ -6452,7 +6452,7 @@ yydefault:
 		yyDollar = yyS[yypt-10 : yypt+1]
 //line parser/parser.y:2637
 		{
-			yyDollar[1].columnType.References = String(yyDollar[3].tableName)
+			yyDollar[1].columnType.References = yyDollar[3].tableName
 			yyDollar[1].columnType.ReferenceNames = yyDollar[5].columns
 			yyDollar[1].columnType.ReferenceOnUpdate = yyDollar[9].colIdent
 			if yyDollar[10].fkDeferOpts.constraintOpts != nil {
@@ -6465,7 +6465,7 @@ yydefault:
 		yyDollar = yyS[yypt-13 : yypt+1]
 //line parser/parser.y:2648
 		{
-			yyDollar[1].columnType.References = String(yyDollar[3].tableName)
+			yyDollar[1].columnType.References = yyDollar[3].tableName
 			yyDollar[1].columnType.ReferenceNames = yyDollar[5].columns
 			yyDollar[1].columnType.ReferenceOnDelete = yyDollar[9].colIdent
 			yyDollar[1].columnType.ReferenceOnUpdate = yyDollar[12].colIdent
@@ -6479,7 +6479,7 @@ yydefault:
 		yyDollar = yyS[yypt-13 : yypt+1]
 //line parser/parser.y:2660
 		{
-			yyDollar[1].columnType.References = String(yyDollar[3].tableName)
+			yyDollar[1].columnType.References = yyDollar[3].tableName
 			yyDollar[1].columnType.ReferenceNames = yyDollar[5].columns
 			yyDollar[1].columnType.ReferenceOnUpdate = yyDollar[9].colIdent
 			yyDollar[1].columnType.ReferenceOnDelete = yyDollar[12].colIdent
