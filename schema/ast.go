@@ -39,17 +39,6 @@ func (q QualifiedName) String() string {
 	return q.Schema.Name + "." + q.Name.Name
 }
 
-// QualifiedColumnName represents a column name with quote information.
-// In column definitions within a table, the table context is implicit.
-type QualifiedColumnName struct {
-	Name Ident
-}
-
-// String returns the column name.
-func (q QualifiedColumnName) String() string {
-	return q.Name.Name
-}
-
 // identsEqual compares two Idents with quote-awareness based on database mode and legacyIgnoreQuotes.
 // For non-PostgreSQL databases, always uses case-insensitive comparison.
 // For PostgreSQL in quote-aware mode, unquoted identifiers are normalized to lowercase.
@@ -164,7 +153,7 @@ type Table struct {
 }
 
 type Column struct {
-	name                       QualifiedColumnName
+	name                       Ident
 	position                   int
 	typeName                   string
 	typeIdent                  Ident // Type name with quote information (for custom types like domains)
@@ -511,7 +500,7 @@ func (t *Table) PrimaryKey() *Index {
 	for _, column := range t.columns {
 		if column.keyOption == ColumnKeyPrimary {
 			primaryColumns = append(primaryColumns, IndexColumn{
-				columnExpr: &parser.ColName{Name: parser.NewIdent(column.name.Name.Name, column.name.Name.Quoted)},
+				columnExpr: &parser.ColName{Name: parser.NewIdent(column.name.Name, column.name.Quoted)},
 			})
 		}
 	}

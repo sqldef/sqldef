@@ -321,7 +321,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		column := Column{
-			name:                       QualifiedColumnName{Name: Ident{Name: parsedCol.Name.String(), Quoted: parsedCol.Name.Quoted()}},
+			name:                       Ident{Name: parsedCol.Name.String(), Quoted: parsedCol.Name.Quoted()},
 			position:                   i,
 			typeName:                   typeName,
 			typeIdent:                  Ident{Name: parsedCol.Type.TypeIdent.String(), Quoted: parsedCol.Type.TypeIdent.Quoted()},
