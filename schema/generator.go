@@ -1713,7 +1713,7 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName Ident, desiredTrigg
 		ddls = append(ddls, createPrefix+triggerDefinition)
 	} else {
 		// Trigger found. If it's different, create or replace trigger.
-		if !areSameTriggerDefinition(currentTrigger, desiredTrigger) {
+		if !g.areSameTriggerDefinition(currentTrigger, desiredTrigger) {
 			if g.mode != GeneratorModeMssql {
 				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeSQLIdent(triggerName)))
 			}
@@ -3780,7 +3780,7 @@ func (g *Generator) areSameIdentifiers(current, desired *Value) bool {
 	return strings.EqualFold(current.raw, desired.raw)
 }
 
-func areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
+func (g *Generator) areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 	if triggerA.time != triggerB.time {
 		return false
 	}
@@ -3792,7 +3792,8 @@ func areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 			return false
 		}
 	}
-	if triggerA.tableName != triggerB.tableName {
+	// Compare table names using quote-aware comparison
+	if !g.qualifiedNamesEqual(triggerA.tableName, triggerB.tableName) {
 		return false
 	}
 	if len(triggerA.body) != len(triggerB.body) {
