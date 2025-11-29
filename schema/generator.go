@@ -362,7 +362,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue
 			}
 
-			indexExistsInDesired := g.findIndexByIdent(desiredTable.indexes, index.name) != nil
+			indexExistsInDesired := g.findIndexByName(desiredTable.indexes, index.name) != nil
 			// Also check foreign key index names (these are plain strings)
 			if !indexExistsInDesired {
 				indexExistsInDesired = slices.Contains(convertForeignKeysToIndexNames(desiredTable.foreignKeys), index.name.Name)
@@ -394,7 +394,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Check columns.
 		for _, column := range currentTable.columns {
-			if g.findColumnByIdent(desiredTable.columns, column.name.Name) != nil {
+			if g.findColumnByName(desiredTable.columns, column.name.Name) != nil {
 				continue // Column is expected to exist.
 			}
 
@@ -447,7 +447,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted views
 	for _, currentView := range g.currentViews {
-		if g.findViewByIdent(g.desiredViews, currentView.name.Name) != nil {
+		if g.findViewByName(g.desiredViews, currentView.name) != nil {
 			continue
 		}
 		viewName := g.escapeViewName(currentView)
@@ -460,7 +460,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted domains
 	for _, currentDomain := range g.currentDomains {
-		if g.findDomainByIdent(g.desiredDomains, currentDomain.name.Name) != nil {
+		if g.findDomainByName(g.desiredDomains, currentDomain.name.Name) != nil {
 			continue
 		}
 		ddls = append(ddls, fmt.Sprintf("DROP DOMAIN %s", g.escapeDomainName(currentDomain)))
@@ -595,13 +595,13 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 		if desiredColumn.renamedFrom.Name != "" {
 			// Check for conflict: can't rename a column if the old name still exists
-			if g.findColumnByIdent(desired.table.columns, desiredColumn.renamedFrom) != nil {
+			if g.findColumnByName(desired.table.columns, desiredColumn.renamedFrom) != nil {
 				return ddls, fmt.Errorf("cannot rename column '%s' to '%s' - column '%s' still exists",
 					desiredColumn.renamedFrom.Name, desiredColumn.name.String(), desiredColumn.renamedFrom.Name)
 			}
 		}
 
-		currentColumn := g.findColumnByIdent(currentTable.columns, desiredColumn.name.Name)
+		currentColumn := g.findColumnByName(currentTable.columns, desiredColumn.name.Name)
 		if currentColumn == nil || !currentColumn.autoIncrement {
 			// We may not be able to add AUTO_INCREMENT yet. It will be added after adding keys (primary or not) at the "Add new AUTO_INCREMENT" place.
 			// prevent to
@@ -611,7 +611,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			// Check if this is a renamed column
 			var renameFromColumn *Column
 			if desiredColumn.renamedFrom.Name != "" {
-				renameFromColumn = g.findColumnByIdent(currentTable.columns, desiredColumn.renamedFrom)
+				renameFromColumn = g.findColumnByName(currentTable.columns, desiredColumn.renamedFrom)
 			}
 
 			if renameFromColumn != nil {
@@ -826,7 +826,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				// Add UNIQUE KEY. TODO: Probably it should be just normalized to an index after the parser phase.
-				currentIndex := findIndexByName(currentTable.indexes, desiredColumn.name.String())
+				currentIndex := g.findIndexByName(currentTable.indexes, desiredColumn.name.Name)
 				if desiredColumn.keyOption.isUnique() && !currentColumn.keyOption.isUnique() && currentIndex == nil { // TODO: deal with a case that the index is not a UNIQUE KEY.
 					ddl := fmt.Sprintf("ALTER TABLE %s ADD UNIQUE KEY %s(%s)", g.escapeTableNameForTable(&desired.table), g.escapeColumnName(&desiredColumn), g.escapeColumnName(&desiredColumn))
 					ddls = append(ddls, ddl)
@@ -1059,7 +1059,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	// and if primary key changed
 	if g.mode == GeneratorModeMysql {
 		for _, currentColumn := range currentTable.columns {
-			desiredColumn := g.findColumnByIdent(desired.table.columns, currentColumn.name.Name)
+			desiredColumn := g.findColumnByName(desired.table.columns, currentColumn.name.Name)
 			if currentColumn.autoIncrement && (primaryKeysChanged || desiredColumn == nil || !desiredColumn.autoIncrement) {
 				currentColumn.autoIncrement = false
 				definition, err := g.generateColumnDefinition(*currentColumn, false)
@@ -1184,7 +1184,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			continue
 		}
 
-		if currentIndex := g.findIndexByIdent(currentTable.indexes, desiredIndex.name); currentIndex != nil {
+		if currentIndex := g.findIndexByName(currentTable.indexes, desiredIndex.name); currentIndex != nil {
 			// Drop and add index as needed.
 			if !g.areSameIndexes(*currentIndex, desiredIndex) {
 				ddls = append(ddls, g.generateDropIndex(desired.table.name, desiredIndex.name, desiredIndex.constraint))
@@ -1194,7 +1194,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			// Check if this is a renamed index
 			var renameFromIndex *Index
 			if desiredIndex.renamedFrom.Name != "" {
-				renameFromIndex = g.findIndexByIdent(currentTable.indexes, desiredIndex.renamedFrom)
+				renameFromIndex = g.findIndexByName(currentTable.indexes, desiredIndex.renamedFrom)
 			}
 
 			if renameFromIndex != nil {
@@ -1211,7 +1211,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	// Add new AUTO_INCREMENT after adding index and primary key
 	if g.mode == GeneratorModeMysql {
 		for _, desiredColumn := range desired.table.columns {
-			currentColumn := g.findColumnByIdent(currentTable.columns, desiredColumn.name.Name)
+			currentColumn := g.findColumnByName(currentTable.columns, desiredColumn.name.Name)
 			if desiredColumn.autoIncrement && (primaryKeysChanged || currentColumn == nil || !currentColumn.autoIncrement) {
 				definition, err := g.generateColumnDefinition(*desiredColumn, false)
 				if err != nil {
@@ -1393,7 +1393,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedTableName, des
 	if currentTable == nil { // Views or non-existent tables
 		currentView := g.findViewByName(g.currentViews, tableName)
 		if currentView != nil {
-			currentIndex := g.findIndexByIdent(currentView.indexes, desiredIndex.name)
+			currentIndex := g.findIndexByName(currentView.indexes, desiredIndex.name)
 			if currentIndex == nil {
 				// Index not found, add index.
 				ddls = append(ddls, statement)
@@ -1422,12 +1422,12 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedTableName, des
 		return ddls, nil
 	}
 
-	currentIndex := g.findIndexByIdent(currentTable.indexes, desiredIndex.name)
+	currentIndex := g.findIndexByName(currentTable.indexes, desiredIndex.name)
 	if currentIndex == nil {
 		// Check if this is a renamed index
 		var renameFromIndex *Index
 		if desiredIndex.renamedFrom.Name != "" {
-			renameFromIndex = g.findIndexByIdent(currentTable.indexes, desiredIndex.renamedFrom)
+			renameFromIndex = g.findIndexByName(currentTable.indexes, desiredIndex.renamedFrom)
 		}
 
 		if renameFromIndex != nil {
@@ -1604,7 +1604,7 @@ func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View
 func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, error) {
 	var ddls []string
 
-	currentView := g.findViewByIdent(g.currentViews, desiredView.name.Name)
+	currentView := g.findViewByName(g.currentViews, desiredView.name)
 	if currentView == nil {
 		// View not found, add view.
 		ddls = append(ddls, desiredView.statement)
@@ -1667,7 +1667,7 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 
 	// Examine policies in desiredTable to delete obsoleted policies later
 	// Only add to desiredViews if it doesn't already exist (it may have been pre-populated from aggregation)
-	if g.findViewByIdent(g.desiredViews, desiredView.name.Name) == nil {
+	if g.findViewByName(g.desiredViews, desiredView.name) == nil {
 		g.desiredViews = append(g.desiredViews, desiredView)
 	}
 
@@ -1738,7 +1738,7 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName string, desiredTrig
 func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 	ddls := []string{}
 
-	if currentType := g.findTypeBySchemaAndIdent(g.currentTypes, desired); currentType != nil {
+	if currentType := g.findType(g.currentTypes, desired); currentType != nil {
 		// Type found. Add values if not present.
 		if currentType.enumValues != nil && len(currentType.enumValues) < len(desired.enumValues) {
 			typeName := g.escapeTypeName(currentType)
@@ -1754,7 +1754,7 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 		ddls = append(ddls, desired.statement)
 	}
 	// Only add to desiredTypes if it doesn't already exist (it may have been pre-populated from aggregation)
-	if g.findTypeBySchemaAndIdent(g.desiredTypes, desired) == nil {
+	if g.findType(g.desiredTypes, desired) == nil {
 		g.desiredTypes = append(g.desiredTypes, desired)
 	}
 
@@ -1764,7 +1764,7 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 func (g *Generator) generateDDLsForCreateDomain(desired *Domain) ([]string, error) {
 	ddls := []string{}
 
-	if currentDomain := g.findDomainByIdent(g.currentDomains, desired.name.Name); currentDomain != nil {
+	if currentDomain := g.findDomainByName(g.currentDomains, desired.name.Name); currentDomain != nil {
 		alterDDLs, err := g.generateAlterDomainDDLs(currentDomain, desired)
 		if err != nil {
 			return nil, err
@@ -1774,7 +1774,7 @@ func (g *Generator) generateDDLsForCreateDomain(desired *Domain) ([]string, erro
 		ddls = append(ddls, desired.statement)
 	}
 	// Only add to desiredDomains if it doesn't already exist (it may have been pre-populated from aggregation)
-	if g.findDomainByIdent(g.desiredDomains, desired.name.Name) == nil {
+	if g.findDomainByName(g.desiredDomains, desired.name.Name) == nil {
 		g.desiredDomains = append(g.desiredDomains, desired)
 	}
 
@@ -3252,30 +3252,20 @@ func findViewQuoteAware(views []*View, name QualifiedTableName, defaultSchema st
 	return nil
 }
 
-// findColumnByIdent finds a column using quote-aware comparison
-func (g *Generator) findColumnByIdent(columns map[string]*Column, ident Ident) *Column {
+// findColumnByName finds a column using quote-aware comparison
+func (g *Generator) findColumnByName(columns map[string]*Column, name Ident) *Column {
 	for _, column := range columns {
-		if g.identsEqual(column.name.Name, ident) {
+		if g.identsEqual(column.name.Name, name) {
 			return column
 		}
 	}
 	return nil
 }
 
-// findIndexByIdent finds an index by its identifier using quote-aware comparison.
-func (g *Generator) findIndexByIdent(indexes []Index, name Ident) *Index {
+// findIndexByName finds an index by its identifier using quote-aware comparison.
+func (g *Generator) findIndexByName(indexes []Index, name Ident) *Index {
 	for _, index := range indexes {
 		if g.identsEqual(index.name, name) {
-			return &index
-		}
-	}
-	return nil
-}
-
-// findIndexByName finds an index by its name string (legacy, case-sensitive comparison).
-func findIndexByName(indexes []Index, name string) *Index {
-	for _, index := range indexes {
-		if index.name.Name == name {
 			return &index
 		}
 	}
@@ -3422,16 +3412,6 @@ func (g *Generator) findViewByName(views []*View, name QualifiedTableName) *View
 	return nil
 }
 
-// findViewByIdent finds a view using quote-aware comparison
-func (g *Generator) findViewByIdent(views []*View, ident Ident) *View {
-	for _, view := range views {
-		if g.identsEqual(view.name.Name, ident) {
-			return view
-		}
-	}
-	return nil
-}
-
 func findTriggerByName(triggers []*Trigger, name string) *Trigger {
 	for _, trigger := range triggers {
 		if trigger.name == name {
@@ -3441,30 +3421,9 @@ func findTriggerByName(triggers []*Trigger, name string) *Trigger {
 	return nil
 }
 
-func findTypeByName(types []*Type, name string) *Type {
-	for _, createType := range types {
-		if createType.name.String() == name {
-			return createType
-		}
-	}
-	return nil
-}
-
-// findTypeByIdent finds a type using quote-aware comparison.
-// For schema-qualified types, it first tries to match by name.Name (base name),
-// but there may be multiple types with the same base name in different schemas.
-func (g *Generator) findTypeByIdent(types []*Type, ident Ident) *Type {
-	for _, createType := range types {
-		if g.identsEqual(createType.name.Name, ident) {
-			return createType
-		}
-	}
-	return nil
-}
-
-// findTypeBySchemaAndIdent finds a type by matching both schema and name with quote-aware comparison.
+// findType finds a type by matching both schema and name with quote-aware comparison.
 // This handles both exact matches and case-insensitive matches for unquoted names.
-func (g *Generator) findTypeBySchemaAndIdent(types []*Type, desiredType *Type) *Type {
+func (g *Generator) findType(types []*Type, desiredType *Type) *Type {
 	for _, createType := range types {
 		if g.qualifiedTableNamesEqual(createType.name, desiredType.name) {
 			return createType
@@ -3473,28 +3432,10 @@ func (g *Generator) findTypeBySchemaAndIdent(types []*Type, desiredType *Type) *
 	return nil
 }
 
-// extractSchemaAndName extracts schema and name from a qualified name like "schema.name"
-func (g *Generator) extractSchemaAndName(qualifiedName string) (schema string, name string) {
-	parts := strings.SplitN(qualifiedName, ".", 2)
-	if len(parts) == 2 {
-		return parts[0], parts[1]
-	}
-	return g.defaultSchema, qualifiedName
-}
-
-func findDomainByName(domains []*Domain, name string) *Domain {
+// findDomainByName finds a domain using quote-aware comparison
+func (g *Generator) findDomainByName(domains []*Domain, name Ident) *Domain {
 	for _, domain := range domains {
-		if domain.name.String() == name {
-			return domain
-		}
-	}
-	return nil
-}
-
-// findDomainByIdent finds a domain using quote-aware comparison
-func (g *Generator) findDomainByIdent(domains []*Domain, ident Ident) *Domain {
-	for _, domain := range domains {
-		if g.identsEqual(domain.name.Name, ident) {
+		if g.identsEqual(domain.name.Name, name) {
 			return domain
 		}
 	}
