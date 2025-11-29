@@ -2700,10 +2700,6 @@ func (g *Generator) escapeSQLIdent(ident Ident) string {
 
 // escapeSQLNameQuoteAware escapes an identifier name for SQL output,
 // taking into account whether it was originally quoted and the legacy_ignore_quotes setting.
-// When legacy_ignore_quotes is false:
-//   - Quoted identifiers preserve their case and are always quoted in output
-//   - Unquoted identifiers are normalized to lowercase and are NOT quoted in output
-//     (unless they contain special characters that require quoting)
 func (g *Generator) escapeSQLNameQuoteAware(name string, wasQuoted bool) string {
 	// Legacy mode: always quote everything (backward compatible behavior)
 	if g.config.LegacyIgnoreQuotes {
@@ -2716,18 +2712,18 @@ func (g *Generator) escapeSQLNameQuoteAware(name string, wasQuoted bool) string 
 		if wasQuoted {
 			// Originally quoted: preserve case and quote in output
 			return g.escapeSQLName(name)
+		} else {
+			// Originally unquoted: normalize to lowercase and don't quote
+			return strings.ToLower(name)
 		}
-		// Originally unquoted: normalize to lowercase and don't quote
-		// (PostgreSQL accepts unquoted lowercase identifiers)
-		return strings.ToLower(name)
-
-	case GeneratorModeMysql, GeneratorModeSQLite3, GeneratorModeMssql:
-		// For other databases, keep legacy behavior for now
-		// TODO: Implement quote-aware logic for MySQL, SQLite3, and MSSQL if needed
-		return g.escapeSQLName(name)
-
 	default:
-		return g.escapeSQLName(name)
+		if wasQuoted {
+			// Originally quoted: preserve case and quote in output
+			return g.escapeSQLName(name)
+		} else {
+			// Originally unquoted: do nothing since the RDBMS here is case-insensitive
+			return name
+		}
 	}
 }
 

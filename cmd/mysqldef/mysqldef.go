@@ -26,8 +26,8 @@ var revision = "HEAD"
 // Return parsed options and schema filename
 // TODO: Support `sqldef schema.sql -opt val...`
 func parseOptions(args []string) (database.Config, *sqldef.Options) {
-	// MySQL default: legacy_ignore_quotes is false (quote-aware mode)
-	defaultConfig := database.GeneratorConfig{LegacyIgnoreQuotes: false}
+	// MySQL default: legacy_ignore_quotes is true (legacy mode)
+	defaultConfig := database.GeneratorConfig{LegacyIgnoreQuotes: true}
 	configs := []database.GeneratorConfig{defaultConfig}
 
 	var opts struct {

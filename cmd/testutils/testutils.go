@@ -163,8 +163,8 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		}
 	}
 
-	// Determine LegacyIgnoreQuotes: use test value if specified, otherwise use database-specific default
-	legacyIgnoreQuotes := mode == schema.GeneratorModePostgres // default: true for PostgreSQL, false for others
+	// Determine LegacyIgnoreQuotes: use test value if specified, otherwise default to true (legacy mode)
+	legacyIgnoreQuotes := true // default: true for backward compatibility
 	if test.LegacyIgnoreQuotes != nil {
 		legacyIgnoreQuotes = *test.LegacyIgnoreQuotes
 	}

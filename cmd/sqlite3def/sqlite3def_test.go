@@ -565,7 +565,7 @@ func TestMain(m *testing.M) {
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
-	actual := assertApplyOutputWithConfig(t, schema, database.GeneratorConfig{EnableDrop: false})
+	actual := assertApplyOutputWithConfig(t, schema, database.GeneratorConfig{EnableDrop: false, LegacyIgnoreQuotes: true})
 	assert.Equal(t, expected, actual)
 }
 

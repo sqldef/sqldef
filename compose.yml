@@ -29,7 +29,7 @@ services:
     environment:
       ACCEPT_EULA: 'Y'
       SA_PASSWORD: 'Passw0rd'
-      MSSQL_MEMORY_LIMIT_MB: '2048'
+      MSSQL_MEMORY_LIMIT_MB: '4096'
     ports:
       - '1433:1433'
     tmpfs:
