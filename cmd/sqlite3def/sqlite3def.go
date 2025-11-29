@@ -23,8 +23,9 @@ var revision = "HEAD"
 // Return parsed options and schema filename
 // TODO: Support `sqldef schema.sql -opt val...`
 func parseOptions(args []string) (database.Config, *sqldef.Options) {
-	// Track parsed configs in order
-	var configs []database.GeneratorConfig
+	// SQLite default: legacy_ignore_quotes is false (quote-aware mode)
+	defaultConfig := database.GeneratorConfig{LegacyIgnoreQuotes: false}
+	configs := []database.GeneratorConfig{defaultConfig}
 
 	var opts struct {
 		File       []string `short:"f" long:"file" description:"Read desired SQL from the file, rather than stdin" value-name:"FILENAME" default:"-"`
@@ -41,10 +42,10 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 
 	opts.Config = func(path string) {
-		configs = append(configs, database.ParseGeneratorConfig(path, false))
+		configs = append(configs, database.ParseGeneratorConfig(path, defaultConfig))
 	}
 	opts.ConfigInline = func(yaml string) {
-		configs = append(configs, database.ParseGeneratorConfigString(yaml, false))
+		configs = append(configs, database.ParseGeneratorConfigString(yaml, defaultConfig))
 	}
 
 	parser := flags.NewParser(&opts, flags.None)

@@ -222,23 +222,23 @@ func MergeGeneratorConfigs(configs []GeneratorConfig) GeneratorConfig {
 	return result
 }
 
-func ParseGeneratorConfigString(yamlString string, isPostgres bool) GeneratorConfig {
+func ParseGeneratorConfigString(yamlString string, defaults GeneratorConfig) GeneratorConfig {
 	if yamlString == "" {
-		return GeneratorConfig{LegacyIgnoreQuotes: isPostgres}
+		return defaults
 	}
-	return parseGeneratorConfigFromBytes([]byte(yamlString), isPostgres)
+	return parseGeneratorConfigFromBytes([]byte(yamlString), defaults)
 }
 
-func ParseGeneratorConfig(configFile string, isPostgres bool) GeneratorConfig {
+func ParseGeneratorConfig(configFile string, defaults GeneratorConfig) GeneratorConfig {
 	if configFile == "" {
-		return GeneratorConfig{LegacyIgnoreQuotes: isPostgres}
+		return defaults
 	}
 
 	buf, err := os.ReadFile(configFile)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return parseGeneratorConfigFromBytes(buf, isPostgres)
+	return parseGeneratorConfigFromBytes(buf, defaults)
 }
 
 // MergeGeneratorConfig merges two configs, with the second one taking precedence
@@ -285,7 +285,7 @@ func MergeGeneratorConfig(base, override GeneratorConfig) GeneratorConfig {
 	return result
 }
 
-func parseGeneratorConfigFromBytes(buf []byte, isPostgres bool) GeneratorConfig {
+func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) GeneratorConfig {
 	var config struct {
 		TargetTables            string   `yaml:"target_tables"`
 		SkipTables              string   `yaml:"skip_tables"`
@@ -337,8 +337,8 @@ func parseGeneratorConfigFromBytes(buf []byte, isPostgres bool) GeneratorConfig 
 		lock = strings.Trim(config.Lock, "\n")
 	}
 
-	// Apply database-specific default: true for PostgreSQL, false for others
-	legacyIgnoreQuotes := isPostgres
+	// Use the provided default, override if explicitly set in config
+	legacyIgnoreQuotes := defaults.LegacyIgnoreQuotes
 	if config.LegacyIgnoreQuotes != nil {
 		legacyIgnoreQuotes = *config.LegacyIgnoreQuotes
 	}
