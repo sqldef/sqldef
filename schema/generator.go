@@ -2763,12 +2763,12 @@ func (g *Generator) normalizeDefaultSchema(schema Ident) Ident {
 	return schema
 }
 
-// escapeAndJoinIdents escapes a list of identifiers with comma separation
-func (g *Generator) escapeAndJoinIdents(idents []Ident) string {
-	escapedIdents := util.TransformSlice(idents, func(ident Ident) string {
+// escapeAndJoinNames escapes a list of names with comma separation
+func (g *Generator) escapeAndJoinNames(names []Ident) string {
+	escapedNames := util.TransformSlice(names, func(ident Ident) string {
 		return g.escapeSQLIdent(ident)
 	})
-	return strings.Join(escapedIdents, ", ")
+	return strings.Join(escapedNames, ", ")
 }
 
 // validateAndEscapeGrantee validates and escapes a grantee name to prevent SQL injection
@@ -3661,9 +3661,9 @@ func (g *Generator) buildForeignKeyDDL(tableName QualifiedTableName, fk *Foreign
 	ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
 		g.escapeQualifiedTableName(tableName),
 		g.escapeSQLIdent(fk.constraintName),
-		g.escapeAndJoinIdents(fk.indexColumns),
+		g.escapeAndJoinNames(fk.indexColumns),
 		g.escapeQualifiedTableName(fk.referenceTableName),
-		g.escapeAndJoinIdents(fk.referenceColumns))
+		g.escapeAndJoinNames(fk.referenceColumns))
 
 	if fk.onDelete != "" {
 		ddl += " ON DELETE " + fk.onDelete
