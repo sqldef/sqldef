@@ -144,7 +144,7 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 			deps := []string{}
 			for _, fk := range ct.table.foreignKeys {
 				// Skip self-referential FKs using quote-aware comparison
-				if qualifiedTableNamesEqual(ct.table.name, fk.referenceTableName, defaultSchema, mode, legacyIgnoreQuotes) {
+				if qualifiedNamesEqual(ct.table.name, fk.referenceTableName, defaultSchema, mode, legacyIgnoreQuotes) {
 					continue
 				}
 				refTableName := fk.referenceTableName.String()

@@ -25,14 +25,14 @@ func NewIdentFromGenerated(name string) Ident {
 	return Ident{Name: name, Quoted: strings.ToLower(name) != name}
 }
 
-// QualifiedTableName represents a schema-qualified table name with quote information.
-type QualifiedTableName struct {
+// QualifiedName represents a schema-qualified table name with quote information.
+type QualifiedName struct {
 	Schema Ident // empty if not specified (will use default schema)
 	Name   Ident
 }
 
 // String returns the full qualified name as "schema.name" or just "name" if no schema.
-func (q QualifiedTableName) String() string {
+func (q QualifiedName) String() string {
 	if q.Schema.Name == "" {
 		return q.Name.Name
 	}
@@ -73,8 +73,8 @@ func identsEqual(a, b Ident, mode GeneratorMode, legacyIgnoreQuotes bool) bool {
 	return aName == bName
 }
 
-// qualifiedTableNamesEqual compares two QualifiedTableNames with quote-awareness.
-func qualifiedTableNamesEqual(a, b QualifiedTableName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool) bool {
+// qualifiedNamesEqual compares two QualifiedNames with quote-awareness.
+func qualifiedNamesEqual(a, b QualifiedName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool) bool {
 	aSchema := a.Schema
 	bSchema := b.Schema
 	if aSchema.Name == "" && defaultSchema != "" {
@@ -100,58 +100,58 @@ type CreateTable struct {
 
 type CreateIndex struct {
 	statement string
-	tableName QualifiedTableName
+	tableName QualifiedName
 	index     Index
 }
 
 type AddIndex struct {
 	statement  string
-	tableName  QualifiedTableName
+	tableName  QualifiedName
 	constraint bool
 	index      Index
 }
 
 type AddPrimaryKey struct {
 	statement string
-	tableName QualifiedTableName
+	tableName QualifiedName
 	index     Index
 }
 
 type AddForeignKey struct {
 	statement  string
-	tableName  QualifiedTableName
+	tableName  QualifiedName
 	foreignKey ForeignKey
 }
 
 type AddExclusion struct {
 	statement string
-	tableName QualifiedTableName
+	tableName QualifiedName
 	exclusion Exclusion
 }
 
 type AddPolicy struct {
 	statement string
-	tableName QualifiedTableName
+	tableName QualifiedName
 	policy    Policy
 }
 
 type GrantPrivilege struct {
 	statement  string
-	tableName  QualifiedTableName
+	tableName  QualifiedName
 	grantees   []string
 	privileges []string
 }
 
 type RevokePrivilege struct {
 	statement     string
-	tableName     QualifiedTableName
+	tableName     QualifiedName
 	grantees      []string
 	privileges    []string
 	cascadeOption bool // CASCADE option for REVOKE
 }
 
 type Table struct {
-	name        QualifiedTableName
+	name        QualifiedName
 	columns     map[string]*Column
 	indexes     []Index
 	checks      []CheckDefinition
@@ -257,7 +257,7 @@ type ForeignKey struct {
 	constraintName     Ident
 	indexName          string
 	indexColumns       []Ident
-	referenceTableName QualifiedTableName
+	referenceTableName QualifiedName
 	referenceColumns   []Ident
 	onDelete           string
 	onUpdate           string
@@ -298,7 +298,7 @@ type View struct {
 	statement    string
 	viewType     string
 	securityType string
-	name         QualifiedTableName
+	name         QualifiedName
 	definition   parser.SelectStatement
 	indexes      []Index
 	columns      []string
@@ -309,7 +309,7 @@ type View struct {
 type Trigger struct {
 	statement string
 	name      Ident
-	tableName QualifiedTableName
+	tableName QualifiedName
 	time      string
 	event     []string
 	body      []string
@@ -389,13 +389,13 @@ type CheckDefinition struct {
 
 // TODO: include type information
 type Type struct {
-	name       QualifiedTableName
+	name       QualifiedName
 	statement  string
 	enumValues []string
 }
 
 type Domain struct {
-	name         QualifiedTableName
+	name         QualifiedName
 	statement    string
 	dataType     string
 	defaultValue *DefaultDefinition

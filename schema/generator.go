@@ -521,7 +521,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 			found := false
 			for _, desiredPriv := range g.desiredPrivileges {
-				if g.qualifiedTableNamesEqual(currentPriv.tableName, desiredPriv.tableName) &&
+				if g.qualifiedNamesEqual(currentPriv.tableName, desiredPriv.tableName) &&
 					len(currentPriv.grantees) > 0 && len(desiredPriv.grantees) > 0 &&
 					currentPriv.grantees[0] == desiredPriv.grantees[0] {
 					found = true
@@ -537,7 +537,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 				revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
 					formatPrivilegesForGrant(currentPriv.privileges),
-					g.escapeQualifiedTableName(currentPriv.tableName),
+					g.escapeQualifiedName(currentPriv.tableName),
 					escapedGrantee)
 				ddls = append(ddls, revoke)
 			}
@@ -1087,11 +1087,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				switch g.mode {
 				case GeneratorModeMysql:
 					dropFKDDL = fmt.Sprintf("ALTER TABLE %s DROP FOREIGN KEY %s",
-						g.escapeQualifiedTableName(refFK.tableName),
+						g.escapeQualifiedName(refFK.tableName),
 						g.escapeSQLIdent(refFK.foreignKey.constraintName))
 				case GeneratorModePostgres, GeneratorModeMssql:
 					dropFKDDL = fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s",
-						g.escapeQualifiedTableName(refFK.tableName),
+						g.escapeQualifiedName(refFK.tableName),
 						g.escapeSQLIdent(refFK.foreignKey.constraintName))
 				}
 				if dropFKDDL != "" {
@@ -1101,7 +1101,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				// Update the current state to reflect that we've dropped this FK
 				// This prevents duplicate FK creation when processing the referencing table
 				for _, table := range g.currentTables {
-					if g.qualifiedTableNamesEqual(table.name, refFK.tableName) {
+					if g.qualifiedNamesEqual(table.name, refFK.tableName) {
 						// Remove the FK from the current table's FK list
 						newFKs := []ForeignKey{}
 						for _, fk := range table.foreignKeys {
@@ -1118,7 +1118,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				// PostgreSQL and SQL Server don't create implicit indexes for FKs
 				if g.mode == GeneratorModeMysql {
 					dropIndexDDL := fmt.Sprintf("ALTER TABLE %s DROP INDEX %s",
-						g.escapeQualifiedTableName(refFK.tableName),
+						g.escapeQualifiedName(refFK.tableName),
 						g.escapeSQLIdent(refFK.foreignKey.constraintName))
 					dropFKDDLs = append(dropFKDDLs, dropIndexDDL)
 				}
@@ -1128,7 +1128,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				var desiredFK *ForeignKey
 				var desiredTableExists bool
 				for _, desiredTable := range g.desiredTables {
-					if g.qualifiedTableNamesEqual(desiredTable.name, refFK.tableName) {
+					if g.qualifiedNamesEqual(desiredTable.name, refFK.tableName) {
 						desiredTableExists = true
 						for _, fk := range desiredTable.foreignKeys {
 							if identsEqual(fk.constraintName, refFK.foreignKey.constraintName, g.mode, g.config.LegacyIgnoreQuotes) {
@@ -1369,7 +1369,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 // Shared by `CREATE INDEX` and `ALTER TABLE ADD INDEX`.
 // This manages `g.currentTables` unlike `generateDDLsForCreateTable`...
-func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedTableName, desiredIndex Index, action string, statement string) ([]string, error) {
+func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredIndex Index, action string, statement string) ([]string, error) {
 	// For CREATE INDEX, handle statement regeneration based on mode
 	if action == "CREATE INDEX" {
 		if g.mode == GeneratorModePostgres && !g.config.LegacyIgnoreQuotes {
@@ -1477,7 +1477,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedTableName, des
 	return ddls, nil
 }
 
-func (g *Generator) generateDDLsForAddForeignKey(tableName QualifiedTableName, desiredForeignKey ForeignKey, action string, statement string) ([]string, error) {
+func (g *Generator) generateDDLsForAddForeignKey(tableName QualifiedName, desiredForeignKey ForeignKey, action string, statement string) ([]string, error) {
 	var ddls []string
 
 	currentTable := g.findTableByName(g.currentTables, tableName)
@@ -1504,7 +1504,7 @@ func (g *Generator) generateDDLsForAddForeignKey(tableName QualifiedTableName, d
 	return ddls, nil
 }
 
-func (g *Generator) generateDDLsForAddExclusion(tableName QualifiedTableName, desiredExclusion Exclusion, action string, statement string) ([]string, error) {
+func (g *Generator) generateDDLsForAddExclusion(tableName QualifiedName, desiredExclusion Exclusion, action string, statement string) ([]string, error) {
 	var ddls []string
 
 	currentTable := g.findTableByName(g.currentTables, tableName)
@@ -1531,7 +1531,7 @@ func (g *Generator) generateDDLsForAddExclusion(tableName QualifiedTableName, de
 	return ddls, nil
 }
 
-func (g *Generator) generateDDLsForCreatePolicy(tableName QualifiedTableName, desiredPolicy Policy, action string, statement string) ([]string, error) {
+func (g *Generator) generateDDLsForCreatePolicy(tableName QualifiedName, desiredPolicy Policy, action string, statement string) ([]string, error) {
 	var ddls []string
 	tableNameStr := tableName.String()
 
@@ -1695,9 +1695,9 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName Ident, desiredTrigg
 	var triggerDefinition string
 	switch g.mode {
 	case GeneratorModeMssql:
-		triggerDefinition += fmt.Sprintf("TRIGGER %s ON %s %s %s AS\n%s", g.escapeSQLIdent(desiredTrigger.name), g.escapeQualifiedTableName(desiredTrigger.tableName), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), strings.Join(desiredTrigger.body, "\n"))
+		triggerDefinition += fmt.Sprintf("TRIGGER %s ON %s %s %s AS\n%s", g.escapeSQLIdent(desiredTrigger.name), g.escapeQualifiedName(desiredTrigger.tableName), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), strings.Join(desiredTrigger.body, "\n"))
 	case GeneratorModeMysql:
-		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeSQLIdent(desiredTrigger.name), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), g.escapeQualifiedTableName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, "\n"))
+		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeSQLIdent(desiredTrigger.name), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), g.escapeQualifiedName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, "\n"))
 	case GeneratorModeSQLite3:
 		triggerDefinition = desiredTrigger.statement
 	default:
@@ -2172,7 +2172,7 @@ type AggregatedSchema struct {
 
 // generateCreateIndexStatement generates a CREATE INDEX statement from an Index struct.
 // This is used to regenerate CREATE INDEX statements with proper schema-qualified table names.
-func (g *Generator) generateCreateIndexStatement(table QualifiedTableName, index Index) string {
+func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Index) string {
 	// Build column list with proper quoting
 	columns := []string{}
 	for _, indexColumn := range index.columns {
@@ -2206,7 +2206,7 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedTableName, index
 	if index.async {
 		ddl += " ASYNC"
 	}
-	ddl += fmt.Sprintf(" %s ON %s", g.escapeSQLIdent(index.name), g.escapeQualifiedTableName(table))
+	ddl += fmt.Sprintf(" %s ON %s", g.escapeSQLIdent(index.name), g.escapeQualifiedName(table))
 
 	// Add index method if specified (e.g., USING btree)
 	if index.indexType != "" && !strings.EqualFold(index.indexType, "INDEX") &&
@@ -2249,7 +2249,7 @@ func insertConcurrentlyIntoCreateIndex(statement string) string {
 }
 
 // generateAddIndex generates DDL to add an index.
-func (g *Generator) generateAddIndex(table QualifiedTableName, index Index) string {
+func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 	var uniqueOption string
 	var clusteredOption string
 	if index.unique {
@@ -2285,7 +2285,7 @@ func (g *Generator) generateAddIndex(table QualifiedTableName, index Index) stri
 				uniqueOption,
 				clusteredOption,
 				g.escapeSQLIdent(index.name),
-				g.escapeQualifiedTableName(table),
+				g.escapeQualifiedName(table),
 			)
 
 			// definition of partition is valid only in the syntax `CREATE INDEX ...`
@@ -2296,7 +2296,7 @@ func (g *Generator) generateAddIndex(table QualifiedTableName, index Index) stri
 				}
 			}
 		} else {
-			ddl = fmt.Sprintf("ALTER TABLE %s ADD", g.escapeQualifiedTableName(table))
+			ddl = fmt.Sprintf("ALTER TABLE %s ADD", g.escapeQualifiedName(table))
 
 			if index.name.Name != "PRIMARY" {
 				ddl += fmt.Sprintf(" CONSTRAINT %s", g.escapeSQLIdent(index.name))
@@ -2310,7 +2310,7 @@ func (g *Generator) generateAddIndex(table QualifiedTableName, index Index) stri
 	case GeneratorModePostgres:
 		ddl := fmt.Sprintf(
 			"ALTER TABLE %s ADD ",
-			g.escapeQualifiedTableName(table),
+			g.escapeQualifiedName(table),
 		)
 		if strings.EqualFold(index.indexType, "PRIMARY KEY") && index.primary &&
 			(index.name.Name != "" && index.name.Name != "PRIMARY" && index.name.Name != index.columns[0].ColumnName()) {
@@ -2360,7 +2360,7 @@ func (g *Generator) generateAddIndex(table QualifiedTableName, index Index) stri
 
 		ddl := fmt.Sprintf(
 			"ALTER TABLE %s ADD %s",
-			g.escapeQualifiedTableName(table),
+			g.escapeQualifiedName(table),
 			indexTypeStr,
 		)
 
@@ -2463,7 +2463,7 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 
 	definition += fmt.Sprintf(
 		"(%s) REFERENCES %s (%s) ",
-		strings.Join(indexColumns, ","), g.escapeQualifiedTableName(foreignKey.referenceTableName),
+		strings.Join(indexColumns, ","), g.escapeQualifiedName(foreignKey.referenceTableName),
 		strings.Join(referenceColumns, ","),
 	)
 
@@ -2499,14 +2499,14 @@ func (g *Generator) generateExclusionDefinition(exclusion Exclusion) string {
 }
 
 // generateRenameIndex generates DDL statements to rename an index.
-func (g *Generator) generateRenameIndex(tableName QualifiedTableName, oldIndexName Ident, newIndexName Ident, desiredIndex *Index) []string {
+func (g *Generator) generateRenameIndex(tableName QualifiedName, oldIndexName Ident, newIndexName Ident, desiredIndex *Index) []string {
 	ddls := []string{}
 
 	switch g.mode {
 	case GeneratorModeMysql:
 		// MySQL uses ALTER TABLE ... RENAME INDEX
 		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s RENAME INDEX %s TO %s",
-			g.escapeQualifiedTableName(tableName),
+			g.escapeQualifiedName(tableName),
 			g.escapeSQLIdent(oldIndexName),
 			g.escapeSQLIdent(newIndexName)))
 	case GeneratorModePostgres:
@@ -2542,7 +2542,7 @@ func (g *Generator) generateRenameIndex(tableName QualifiedTableName, oldIndexNa
 			if desiredIndex.unique {
 				createStmt += " UNIQUE"
 			}
-			createStmt += fmt.Sprintf(" INDEX %s ON %s", g.escapeSQLIdent(desiredIndex.name), g.escapeQualifiedTableName(tableName))
+			createStmt += fmt.Sprintf(" INDEX %s ON %s", g.escapeSQLIdent(desiredIndex.name), g.escapeQualifiedName(tableName))
 
 			columnStrs := []string{}
 			for _, column := range desiredIndex.columns {
@@ -2565,13 +2565,13 @@ func (g *Generator) generateRenameIndex(tableName QualifiedTableName, oldIndexNa
 }
 
 // generateDropIndex generates a DDL statement to drop an index.
-func (g *Generator) generateDropIndex(tableName QualifiedTableName, indexName Ident, constraint bool) string {
+func (g *Generator) generateDropIndex(tableName QualifiedName, indexName Ident, constraint bool) string {
 	switch g.mode {
 	case GeneratorModeMysql:
-		return fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", g.escapeQualifiedTableName(tableName), g.escapeSQLIdent(indexName))
+		return fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", g.escapeQualifiedName(tableName), g.escapeSQLIdent(indexName))
 	case GeneratorModePostgres:
 		if constraint {
-			return fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeQualifiedTableName(tableName), g.escapeSQLIdent(indexName))
+			return fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeQualifiedName(tableName), g.escapeSQLIdent(indexName))
 		} else {
 			// For DROP INDEX, we need schema.indexname
 			schema := g.normalizeDefaultSchema(tableName.Schema)
@@ -2579,9 +2579,9 @@ func (g *Generator) generateDropIndex(tableName QualifiedTableName, indexName Id
 		}
 	case GeneratorModeMssql:
 		if constraint {
-			return fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeQualifiedTableName(tableName), g.escapeSQLIdent(indexName))
+			return fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeQualifiedName(tableName), g.escapeSQLIdent(indexName))
 		} else {
-			return fmt.Sprintf("DROP INDEX %s ON %s", g.escapeSQLIdent(indexName), g.escapeQualifiedTableName(tableName))
+			return fmt.Sprintf("DROP INDEX %s ON %s", g.escapeSQLIdent(indexName), g.escapeQualifiedName(tableName))
 		}
 	case GeneratorModeSQLite3:
 		return fmt.Sprintf("DROP INDEX %s", g.escapeSQLIdent(indexName))
@@ -2602,9 +2602,9 @@ func (g *Generator) escapeTableNameForTable(table *Table) string {
 	}
 }
 
-// escapeQualifiedTableName escapes a QualifiedTableName using quote-aware logic.
+// escapeQualifiedName escapes a QualifiedName using quote-aware logic.
 // Both schema and table names use quote-aware logic when legacy_ignore_quotes is false.
-func (g *Generator) escapeQualifiedTableName(name QualifiedTableName) string {
+func (g *Generator) escapeQualifiedName(name QualifiedName) string {
 	switch g.mode {
 	case GeneratorModePostgres, GeneratorModeMssql:
 		schema := g.normalizeDefaultSchema(name.Schema)
@@ -2716,13 +2716,13 @@ func (g *Generator) identsEqual(a, b Ident) bool {
 	return identsEqual(a, b, g.mode, g.config.LegacyIgnoreQuotes)
 }
 
-// qualifiedTableNamesEqual compares two QualifiedTableName values for equality.
+// qualifiedNamesEqual compares two QualifiedName values for equality.
 // An empty schema is treated as equivalent to the default schema.
 // When legacy_ignore_quotes is true (or nil), schema names are compared case-insensitively.
 // When legacy_ignore_quotes is false, schema names use quote-aware comparison
 // (quoted "MySchema" is different from unquoted myschema).
-func (g *Generator) qualifiedTableNamesEqual(a, b QualifiedTableName) bool {
-	return qualifiedTableNamesEqual(a, b, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes)
+func (g *Generator) qualifiedNamesEqual(a, b QualifiedName) bool {
+	return qualifiedNamesEqual(a, b, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes)
 }
 
 // normalizeDefaultSchema returns an Ident for a schema, treating the default schema
@@ -2766,11 +2766,11 @@ func (g *Generator) validateAndEscapeGrantee(grantee string) (string, error) {
 	return g.escapeSQLName(grantee), nil
 }
 
-// normalizeOldTableName creates a QualifiedTableName from a renamedFrom Ident,
+// normalizeOldTableName creates a QualifiedName from a renamedFrom Ident,
 // using the schema from the new table name if not specified.
-func (g *Generator) normalizeOldTableName(oldName Ident, newTable QualifiedTableName) QualifiedTableName {
+func (g *Generator) normalizeOldTableName(oldName Ident, newTable QualifiedName) QualifiedName {
 	// Use the schema from the new table name
-	return QualifiedTableName{
+	return QualifiedName{
 		Schema: newTable.Schema,
 		Name:   oldName,
 	}
@@ -2778,12 +2778,12 @@ func (g *Generator) normalizeOldTableName(oldName Ident, newTable QualifiedTable
 
 // generateRenameTableDDL generates a DDL statement to rename a table.
 // Uses quote-aware escaping for both old and new table names.
-func (g *Generator) generateRenameTableDDL(oldTable QualifiedTableName, newTable QualifiedTableName) string {
+func (g *Generator) generateRenameTableDDL(oldTable QualifiedName, newTable QualifiedName) string {
 	switch g.mode {
 	case GeneratorModePostgres:
 		// For PostgreSQL, RENAME TO should only include the table name without schema
 		return fmt.Sprintf("ALTER TABLE %s RENAME TO %s",
-			g.escapeQualifiedTableName(oldTable),
+			g.escapeQualifiedName(oldTable),
 			g.escapeSQLIdent(newTable.Name))
 	case GeneratorModeMssql:
 		// MSSQL uses sp_rename for renaming tables
@@ -2794,7 +2794,7 @@ func (g *Generator) generateRenameTableDDL(oldTable QualifiedTableName, newTable
 		fallthrough
 	default:
 		return fmt.Sprintf("ALTER TABLE %s RENAME TO %s",
-			g.escapeQualifiedTableName(oldTable),
+			g.escapeQualifiedName(oldTable),
 			g.escapeSQLIdent(newTable.Name))
 	}
 }
@@ -2941,7 +2941,7 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 		case *GrantPrivilege:
 			merged := false
 			for i, existing := range aggregated.Privileges {
-				if qualifiedTableNamesEqual(existing.tableName, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes) &&
+				if qualifiedNamesEqual(existing.tableName, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes) &&
 					len(existing.grantees) == len(stmt.grantees) {
 					allMatch := true
 					for j, grantee := range existing.grantees {
@@ -3025,7 +3025,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 	for _, grantee := range desired.grantees {
 		existingPrivilegesMap := make(map[string]bool)
 		for _, currentPriv := range g.currentPrivileges {
-			if g.qualifiedTableNamesEqual(currentPriv.tableName, desired.tableName) {
+			if g.qualifiedNamesEqual(currentPriv.tableName, desired.tableName) {
 				if slices.Contains(currentPriv.grantees, grantee) {
 					normalized := normalizePrivilegesForComparison(currentPriv.privileges)
 					for _, priv := range normalized {
@@ -3104,7 +3104,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			}
 			revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
 				strings.Join(privileges, ", "),
-				g.escapeQualifiedTableName(desired.tableName),
+				g.escapeQualifiedName(desired.tableName),
 				escapedGrantee)
 			ddls = append(ddls, revoke)
 		}
@@ -3129,7 +3129,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 		slices.Sort(escapedGrantees)
 		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s",
 			formatPrivilegesForGrant(group.privileges),
-			g.escapeQualifiedTableName(desired.tableName),
+			g.escapeQualifiedName(desired.tableName),
 			strings.Join(escapedGrantees, ", "))
 		ddls = append(ddls, grant)
 	}
@@ -3166,7 +3166,7 @@ func (g *Generator) generateDDLsForRevokePrivilege(desired *RevokePrivilege) ([]
 
 	revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
 		formatPrivilegesForGrant(desired.privileges),
-		g.escapeQualifiedTableName(desired.tableName),
+		g.escapeQualifiedName(desired.tableName),
 		escapedGrantee)
 
 	if desired.cascadeOption {
@@ -3195,9 +3195,9 @@ func equalPrivileges(a, b []string) bool {
 	return true
 }
 
-func (g *Generator) findTableByName(tables []*Table, name QualifiedTableName) *Table {
+func (g *Generator) findTableByName(tables []*Table, name QualifiedName) *Table {
 	for _, table := range tables {
-		if g.qualifiedTableNamesEqual(table.name, name) {
+		if g.qualifiedNamesEqual(table.name, name) {
 			return table
 		}
 	}
@@ -3205,9 +3205,9 @@ func (g *Generator) findTableByName(tables []*Table, name QualifiedTableName) *T
 }
 
 // findTableQuoteAware finds a table using quote-aware comparison without requiring a Generator.
-func findTableQuoteAware(tables []*Table, name QualifiedTableName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool) *Table {
+func findTableQuoteAware(tables []*Table, name QualifiedName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool) *Table {
 	for _, table := range tables {
-		if qualifiedTableNamesEqual(table.name, name, defaultSchema, mode, legacyIgnoreQuotes) {
+		if qualifiedNamesEqual(table.name, name, defaultSchema, mode, legacyIgnoreQuotes) {
 			return table
 		}
 	}
@@ -3215,9 +3215,9 @@ func findTableQuoteAware(tables []*Table, name QualifiedTableName, defaultSchema
 }
 
 // findViewQuoteAware finds a view using quote-aware comparison without requiring a Generator.
-func findViewQuoteAware(views []*View, name QualifiedTableName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool) *View {
+func findViewQuoteAware(views []*View, name QualifiedName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool) *View {
 	for _, view := range views {
-		if qualifiedTableNamesEqual(view.name, name, defaultSchema, mode, legacyIgnoreQuotes) {
+		if qualifiedNamesEqual(view.name, name, defaultSchema, mode, legacyIgnoreQuotes) {
 			return view
 		}
 	}
@@ -3330,21 +3330,21 @@ func (g *Generator) findForeignKeyByName(foreignKeys []ForeignKey, constraintNam
 }
 
 // findForeignKeysReferencingTable finds all foreign keys from all tables that reference the given table
-func (g *Generator) findForeignKeysReferencingTable(referencedTable QualifiedTableName) []struct {
-	tableName  QualifiedTableName
+func (g *Generator) findForeignKeysReferencingTable(referencedTable QualifiedName) []struct {
+	tableName  QualifiedName
 	foreignKey ForeignKey
 } {
 	var referencingFKs []struct {
-		tableName  QualifiedTableName
+		tableName  QualifiedName
 		foreignKey ForeignKey
 	}
 
 	// Check all current tables for foreign keys that reference this table
 	for _, table := range g.currentTables {
 		for _, fk := range table.foreignKeys {
-			if g.qualifiedTableNamesEqual(fk.referenceTableName, referencedTable) {
+			if g.qualifiedNamesEqual(fk.referenceTableName, referencedTable) {
 				referencingFKs = append(referencingFKs, struct {
-					tableName  QualifiedTableName
+					tableName  QualifiedName
 					foreignKey ForeignKey
 				}{
 					tableName:  table.name,
@@ -3375,9 +3375,9 @@ func findPolicyByName(policies []Policy, name string) *Policy {
 	return nil
 }
 
-func (g *Generator) findViewByName(views []*View, name QualifiedTableName) *View {
+func (g *Generator) findViewByName(views []*View, name QualifiedName) *View {
 	for _, view := range views {
-		if g.qualifiedTableNamesEqual(view.name, name) {
+		if g.qualifiedNamesEqual(view.name, name) {
 			return view
 		}
 	}
@@ -3397,7 +3397,7 @@ func (g *Generator) findTriggerByName(triggers []*Trigger, name Ident) *Trigger 
 // This handles both exact matches and case-insensitive matches for unquoted names.
 func (g *Generator) findType(types []*Type, desiredType *Type) *Type {
 	for _, createType := range types {
-		if g.qualifiedTableNamesEqual(createType.name, desiredType.name) {
+		if g.qualifiedNamesEqual(createType.name, desiredType.name) {
 			return createType
 		}
 	}
@@ -3633,12 +3633,12 @@ func unwrapOutermostParenExpr(expr parser.Expr) parser.Expr {
 	}
 }
 
-func (g *Generator) buildForeignKeyDDL(tableName QualifiedTableName, fk *ForeignKey) string {
+func (g *Generator) buildForeignKeyDDL(tableName QualifiedName, fk *ForeignKey) string {
 	ddl := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
-		g.escapeQualifiedTableName(tableName),
+		g.escapeQualifiedName(tableName),
 		g.escapeSQLIdent(fk.constraintName),
 		g.escapeAndJoinNames(fk.indexColumns),
-		g.escapeQualifiedTableName(fk.referenceTableName),
+		g.escapeQualifiedName(fk.referenceTableName),
 		g.escapeAndJoinNames(fk.referenceColumns))
 
 	if fk.onDelete != "" {
@@ -4482,7 +4482,7 @@ func (g *Generator) generateDropTableDDLsWithDependencies(tablesToDrop []*Table)
 		for _, table := range tablesToDrop {
 			for _, fk := range table.foreignKeys {
 				// Skip self-referential FKs using quote-aware comparison
-				if g.qualifiedTableNamesEqual(table.name, fk.referenceTableName) {
+				if g.qualifiedNamesEqual(table.name, fk.referenceTableName) {
 					continue
 				}
 				refTableName := fk.referenceTableName.String()

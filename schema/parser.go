@@ -67,7 +67,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}
 			return &CreateIndex{
 				statement: ddl,
-				tableName: parseQualifiedTableName(mode, stmt.Table, defaultSchema),
+				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 				index:     index,
 			}, nil
 		} else if stmt.Action == parser.AddIndex {
@@ -77,7 +77,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}
 			return &AddIndex{
 				statement: ddl,
-				tableName: parseQualifiedTableName(mode, stmt.Table, defaultSchema),
+				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 				index:     index,
 			}, nil
 		} else if stmt.Action == parser.AddPrimaryKey {
@@ -87,7 +87,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}
 			return &AddPrimaryKey{
 				statement: ddl,
-				tableName: parseQualifiedTableName(mode, stmt.Table, defaultSchema),
+				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 				index:     index,
 			}, nil
 		} else if stmt.Action == parser.AddForeignKey {
@@ -108,12 +108,12 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 
 			return &AddForeignKey{
 				statement: ddl,
-				tableName: parseQualifiedTableName(mode, stmt.Table, defaultSchema),
+				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 				foreignKey: ForeignKey{
 					constraintName:     Ident{Name: stmt.ForeignKey.ConstraintName.String(), Quoted: stmt.ForeignKey.ConstraintName.Quoted()},
 					indexName:          stmt.ForeignKey.IndexName.String(),
 					indexColumns:       indexColumns,
-					referenceTableName: parseQualifiedTableName(mode, stmt.ForeignKey.ReferenceName, defaultSchema),
+					referenceTableName: normalizeQualifiedName(mode, stmt.ForeignKey.ReferenceName, defaultSchema),
 					referenceColumns:   referenceColumns,
 					onDelete:           stmt.ForeignKey.OnDelete.String(),
 					onUpdate:           stmt.ForeignKey.OnUpdate.String(),
@@ -124,7 +124,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 		} else if stmt.Action == parser.AddExclusion {
 			return &AddExclusion{
 				statement: ddl,
-				tableName: parseQualifiedTableName(mode, stmt.Table, defaultSchema),
+				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 				exclusion: parseExclusion(stmt.Exclusion),
 			}, nil
 		} else if stmt.Action == parser.CreatePolicy {
@@ -140,7 +140,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}
 			return &AddPolicy{
 				statement: ddl,
-				tableName: parseQualifiedTableName(mode, stmt.Table, defaultSchema),
+				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 				policy: Policy{
 					name:       stmt.Policy.Name.String(),
 					permissive: string(stmt.Policy.Permissive),
@@ -161,7 +161,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				statement:    ddl,
 				viewType:     strings.ToUpper(stmt.View.Type),
 				securityType: strings.ToUpper(stmt.View.SecurityType),
-				name:         parseQualifiedTableName(mode, stmt.View.Name, defaultSchema),
+				name:         normalizeQualifiedName(mode, stmt.View.Name, defaultSchema),
 				definition:   stmt.View.Definition,
 				columns:      columns,
 				withData:     stmt.View.WithData,
@@ -176,7 +176,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			return &Trigger{
 				statement: ddl,
 				name:      Ident{Name: stmt.Trigger.Name.Name.String(), Quoted: stmt.Trigger.Name.Name.Quoted()},
-				tableName: parseQualifiedTableName(mode, stmt.Trigger.TableName, defaultSchema),
+				tableName: normalizeQualifiedName(mode, stmt.Trigger.TableName, defaultSchema),
 				time:      stmt.Trigger.Time,
 				event:     stmt.Trigger.Event,
 				body:      body,
@@ -232,7 +232,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				normalizedPrivileges := util.TransformSlice(stmt.Grant.Privileges, strings.ToUpper)
 				return &GrantPrivilege{
 					statement:  ddl,
-					tableName:  parseQualifiedTableName(mode, stmt.Table, defaultSchema),
+					tableName:  normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 					grantees:   grantees,
 					privileges: normalizedPrivileges,
 				}, nil
@@ -251,7 +251,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				normalizedPrivileges := util.TransformSlice(stmt.Grant.Privileges, strings.ToUpper)
 				return &RevokePrivilege{
 					statement:     ddl,
-					tableName:     parseQualifiedTableName(mode, stmt.Table, defaultSchema),
+					tableName:     normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 					grantees:      grantees,
 					privileges:    normalizedPrivileges,
 					cascadeOption: stmt.Grant.CascadeOption,
@@ -411,7 +411,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		foreignKey := ForeignKey{
 			constraintName:     constraintName,
 			indexColumns:       indexColumns,
-			referenceTableName: normalizeQualifiedTableNameFromString(mode, parsedCol.Type.References, defaultSchema),
+			referenceTableName: normalizeQualifiedNameFromString(mode, parsedCol.Type.References, defaultSchema),
 			referenceColumns:   referenceColumns,
 			onDelete:           parser.String(parsedCol.Type.ReferenceOnDelete),
 			onUpdate:           parser.String(parsedCol.Type.ReferenceOnUpdate),
@@ -569,7 +569,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			constraintName:     Ident{Name: foreignKeyDef.ConstraintName.String(), Quoted: foreignKeyDef.ConstraintName.Quoted()},
 			indexName:          foreignKeyDef.IndexName.String(),
 			indexColumns:       indexColumns,
-			referenceTableName: parseQualifiedTableName(mode, foreignKeyDef.ReferenceName, defaultSchema),
+			referenceTableName: normalizeQualifiedName(mode, foreignKeyDef.ReferenceName, defaultSchema),
 			referenceColumns:   referenceColumns,
 			onDelete:           foreignKeyDef.OnDelete.String(),
 			onUpdate:           foreignKeyDef.OnUpdate.String(),
@@ -591,7 +591,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	}
 
 	return Table{
-		name:        parseQualifiedTableName(mode, stmt.NewName, defaultSchema),
+		name:        normalizeQualifiedName(mode, stmt.NewName, defaultSchema),
 		columns:     columns,
 		indexes:     indexes,
 		checks:      checks,
@@ -899,8 +899,8 @@ func parseExclusion(exclusion *parser.ExclusionDefinition) Exclusion {
 	}
 }
 
-// parseQualifiedTableName creates a QualifiedTableName from a parser.TableName
-func parseQualifiedTableName(mode GeneratorMode, tableName parser.TableName, defaultSchema string) QualifiedTableName {
+// normalizeQualifiedName creates a QualifiedName from a parser.TableName
+func normalizeQualifiedName(mode GeneratorMode, tableName parser.TableName, defaultSchema string) QualifiedName {
 	nameIdent := Ident{Name: tableName.Name.String(), Quoted: tableName.Name.Quoted()}
 
 	var schemaIdent Ident
@@ -912,17 +912,17 @@ func parseQualifiedTableName(mode GeneratorMode, tableName parser.TableName, def
 		}
 	}
 
-	return QualifiedTableName{
+	return QualifiedName{
 		Schema: schemaIdent,
 		Name:   nameIdent,
 	}
 }
 
-// normalizeQualifiedTableNameFromString creates a QualifiedTableName from a string table reference.
+// normalizeQualifiedNameFromString creates a QualifiedName from a string table reference.
 // For column-level REFERENCES where the parser loses quote information, we infer it:
 // - If the name has any uppercase letters, it was likely quoted (quoted preserves case)
 // - If the name is all lowercase, it was likely unquoted (unquoted normalizes to lowercase)
-func normalizeQualifiedTableNameFromString(mode GeneratorMode, tableRef string, defaultSchema string) QualifiedTableName {
+func normalizeQualifiedNameFromString(mode GeneratorMode, tableRef string, defaultSchema string) QualifiedName {
 	// Check if the name has uppercase letters (indicates it was quoted)
 	hasUppercase := false
 	for _, r := range tableRef {
@@ -939,14 +939,14 @@ func normalizeQualifiedTableNameFromString(mode GeneratorMode, tableRef string, 
 		schemaIdent = Ident{Name: defaultSchema, Quoted: false}
 	}
 
-	return QualifiedTableName{
+	return QualifiedName{
 		Schema: schemaIdent,
 		Name:   nameIdent,
 	}
 }
 
-// normalizeQualifiedObjectName creates a QualifiedTableName from a parser.ObjectName
-func normalizeQualifiedObjectName(mode GeneratorMode, objectName parser.ObjectName, defaultSchema string) QualifiedTableName {
+// normalizeQualifiedObjectName creates a QualifiedName from a parser.ObjectName
+func normalizeQualifiedObjectName(mode GeneratorMode, objectName parser.ObjectName, defaultSchema string) QualifiedName {
 	nameIdent := Ident{Name: objectName.Name.String(), Quoted: objectName.Name.Quoted()}
 
 	var schemaIdent Ident
@@ -958,7 +958,7 @@ func normalizeQualifiedObjectName(mode GeneratorMode, objectName parser.ObjectNa
 		}
 	}
 
-	return QualifiedTableName{
+	return QualifiedName{
 		Schema: schemaIdent,
 		Name:   nameIdent,
 	}
