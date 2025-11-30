@@ -665,13 +665,13 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					if schema == "" {
 						schema = g.defaultSchema
 					}
-					tableName := desired.table.name.Name.Name
+					tableName := desired.table.name.Name
 					var tableRef string
 					if schema != "" && schema != g.defaultSchema {
 						// Only include schema if it's not the default
-						tableRef = fmt.Sprintf("%s.%s", schema, tableName)
+						tableRef = fmt.Sprintf("%s.%s", schema, tableName.Name)
 					} else {
-						tableRef = tableName
+						tableRef = tableName.Name
 					}
 					ddl := fmt.Sprintf("EXEC sp_rename '%s.%s', '%s', 'COLUMN'",
 						tableRef,
@@ -690,9 +690,9 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						// Use consistent table name format (without default schema prefix)
 						var escapedTableName string
 						if schema != "" && schema != g.defaultSchema {
-							escapedTableName = g.forceEscapeSQLName(schema) + "." + g.forceEscapeSQLName(tableName)
+							escapedTableName = g.forceEscapeSQLName(schema) + "." + g.escapeSQLIdent(tableName)
 						} else {
-							escapedTableName = g.forceEscapeSQLName(tableName)
+							escapedTableName = g.escapeSQLIdent(tableName)
 						}
 						ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s",
 							escapedTableName,
@@ -722,17 +722,17 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						ddls = append(ddls, fmt.Sprintf("UPDATE %s SET %s = %s",
 							g.escapeTableName(&desired.table),
 							g.escapeColumnName(&desiredColumn),
-							g.forceEscapeSQLName(renameFromColumn.name.String())))
+							g.escapeSQLIdent(renameFromColumn.name)))
 
 						// 3. Drop the old column
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s",
 							g.escapeTableName(&desired.table),
-							g.forceEscapeSQLName(renameFromColumn.name.String())))
+							g.escapeSQLIdent(renameFromColumn.name)))
 					} else {
 						// Simple rename without type change
 						ddl := fmt.Sprintf("ALTER TABLE %s RENAME COLUMN %s TO %s",
 							g.escapeTableName(&desired.table),
-							g.forceEscapeSQLName(renameFromColumn.name.String()),
+							g.escapeSQLIdent(renameFromColumn.name),
 							g.escapeColumnName(&desiredColumn))
 						ddls = append(ddls, ddl)
 					}
@@ -764,7 +764,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				if g.mode == GeneratorModeMysql {
 					after := " FIRST"
 					if desiredColumn.position > 0 {
-						after = " AFTER " + g.forceEscapeSQLName(desiredColumns[desiredColumn.position-1].name.String())
+						after = " AFTER " + g.escapeColumnName(desiredColumns[desiredColumn.position-1])
 					}
 					ddl += after
 				}
@@ -809,7 +809,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						ddl2 := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s", g.escapeTableName(&desired.table), definition)
 						after := " FIRST"
 						if desiredColumn.position > 0 {
-							after = " AFTER " + g.forceEscapeSQLName(desiredColumns[desiredColumn.position-1].name.String())
+							after = " AFTER " + g.escapeColumnName(desiredColumns[desiredColumn.position-1])
 						}
 						ddl2 += after
 						ddls = append(ddls, ddl1, ddl2)
@@ -818,7 +818,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						if changeOrder {
 							after := " FIRST"
 							if desiredColumn.position > 0 {
-								after = " AFTER " + g.forceEscapeSQLName(desiredColumns[desiredColumn.position-1].name.String())
+								after = " AFTER " + g.escapeColumnName(desiredColumns[desiredColumn.position-1])
 							}
 							ddl += after
 						}
@@ -2765,8 +2765,8 @@ func (g *Generator) generateRenameTableDDL(oldTable QualifiedName, newTable Qual
 	case GeneratorModePostgres:
 		// For PostgreSQL, RENAME TO should only include the table name without schema
 		return fmt.Sprintf("ALTER TABLE %s RENAME TO %s",
-			g.escapeQualifiedName(oldTable),
-			g.escapeSQLIdent(newTable.Name))
+			g.escapeQualifiedName(oldTable), // must be qualified
+			g.escapeSQLIdent(newTable.Name)) // must not be qualified
 	case GeneratorModeMssql:
 		// MSSQL uses sp_rename for renaming tables
 		return fmt.Sprintf("EXEC sp_rename '%s', '%s'", oldTable.Name.Name, newTable.Name.Name)
@@ -2776,8 +2776,8 @@ func (g *Generator) generateRenameTableDDL(oldTable QualifiedName, newTable Qual
 		fallthrough
 	default:
 		return fmt.Sprintf("ALTER TABLE %s RENAME TO %s",
-			g.escapeQualifiedName(oldTable),
-			g.escapeSQLIdent(newTable.Name))
+			g.escapeQualifiedName(oldTable), // must be qualified
+			g.escapeSQLIdent(newTable.Name)) // must not be qualified
 	}
 }
 
