@@ -175,7 +175,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 
 			return &Trigger{
 				statement: ddl,
-				name:      Ident{Name: stmt.Trigger.Name.Name.String(), Quoted: stmt.Trigger.Name.Name.Quoted()},
+				name:      normalizeColNameToQualifiedName(mode, stmt.Trigger.Name, defaultSchema),
 				tableName: normalizeQualifiedName(mode, stmt.Trigger.TableName, defaultSchema),
 				time:      stmt.Trigger.Time,
 				event:     stmt.Trigger.Event,
@@ -938,6 +938,32 @@ func normalizeQualifiedObjectName(mode GeneratorMode, objectName parser.ObjectNa
 		} else {
 			schemaIdent = Ident{Name: defaultSchema, Quoted: false}
 		}
+	}
+
+	return QualifiedName{
+		Schema: schemaIdent,
+		Name:   nameIdent,
+	}
+}
+
+// normalizeColNameToQualifiedName creates a QualifiedName from a parser.ColName.
+// This is used for trigger names which can be schema-qualified like [dbo].[trigger_name].
+// Unlike table names, trigger names do not get a default schema if none was specified.
+func normalizeColNameToQualifiedName(mode GeneratorMode, colName *parser.ColName, defaultSchema string) QualifiedName {
+	nameIdent := Ident{Name: colName.Name.String(), Quoted: colName.Name.Quoted()}
+
+	var schemaIdent Ident
+	if mode == GeneratorModePostgres || mode == GeneratorModeMssql {
+		// ColName.Qualifier is a TableName; for trigger schema, the schema is in Qualifier.Schema
+		// For [dbo].[insert_log], Qualifier.Schema = "dbo", Qualifier.Name = ""
+		if len(colName.Qualifier.Schema.String()) > 0 {
+			schemaIdent = Ident{Name: colName.Qualifier.Schema.String(), Quoted: colName.Qualifier.Schema.Quoted()}
+		} else if len(colName.Qualifier.Name.String()) > 0 {
+			// Fallback: if Schema is empty but Name is set, use Name as schema
+			schemaIdent = Ident{Name: colName.Qualifier.Name.String(), Quoted: colName.Qualifier.Name.Quoted()}
+		}
+		// Note: unlike tables, triggers don't get a default schema - if no schema was specified,
+		// we leave it empty to preserve the original behavior
 	}
 
 	return QualifiedName{

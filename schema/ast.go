@@ -297,7 +297,7 @@ type View struct {
 
 type Trigger struct {
 	statement string
-	name      Ident
+	name      QualifiedName
 	tableName QualifiedName
 	time      string
 	event     []string

@@ -501,7 +501,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		}
 		desiredTrigger := g.findTriggerByName(g.desiredTriggers, currentTrigger.name)
 		if desiredTrigger == nil {
-			ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeSQLIdent(currentTrigger.name)))
+			ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(currentTrigger.name)))
 			continue
 		}
 	}
@@ -1688,16 +1688,16 @@ func stripTableQualifiers(sql string) string {
 	return re.ReplaceAllString(sql, "$1")
 }
 
-func (g *Generator) generateDDLsForCreateTrigger(triggerName Ident, desiredTrigger *Trigger) ([]string, error) {
+func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desiredTrigger *Trigger) ([]string, error) {
 	var ddls []string
 	currentTrigger := g.findTriggerByName(g.currentTriggers, triggerName)
 
 	var triggerDefinition string
 	switch g.mode {
 	case GeneratorModeMssql:
-		triggerDefinition += fmt.Sprintf("TRIGGER %s ON %s %s %s AS\n%s", g.escapeSQLIdent(desiredTrigger.name), g.escapeQualifiedName(desiredTrigger.tableName), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), strings.Join(desiredTrigger.body, "\n"))
+		triggerDefinition += fmt.Sprintf("TRIGGER %s ON %s %s %s AS\n%s", g.escapeQualifiedName(desiredTrigger.name), g.escapeQualifiedName(desiredTrigger.tableName), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), strings.Join(desiredTrigger.body, "\n"))
 	case GeneratorModeMysql:
-		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeSQLIdent(desiredTrigger.name), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), g.escapeQualifiedName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, "\n"))
+		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), g.escapeQualifiedName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, "\n"))
 	case GeneratorModeSQLite3:
 		triggerDefinition = desiredTrigger.statement
 	default:
@@ -1715,7 +1715,7 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName Ident, desiredTrigg
 		// Trigger found. If it's different, create or replace trigger.
 		if !g.areSameTriggerDefinition(currentTrigger, desiredTrigger) {
 			if g.mode != GeneratorModeMssql {
-				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeSQLIdent(triggerName)))
+				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(triggerName)))
 			}
 			var createPrefix string
 			if g.mode == GeneratorModeMssql {
@@ -2595,6 +2595,10 @@ func (g *Generator) generateDropIndex(tableName QualifiedName, indexName Ident, 
 func (g *Generator) escapeQualifiedName(name QualifiedName) string {
 	switch g.mode {
 	case GeneratorModePostgres, GeneratorModeMssql:
+		// If schema is empty, don't add schema prefix
+		if name.Schema.Name == "" {
+			return g.escapeSQLIdent(name.Name)
+		}
 		schema := g.normalizeDefaultSchema(name.Schema)
 		return g.escapeSQLIdent(schema) + "." + g.escapeSQLIdent(name.Name)
 	default:
@@ -3360,9 +3364,9 @@ func (g *Generator) findViewByName(views []*View, name QualifiedName) *View {
 	return nil
 }
 
-func (g *Generator) findTriggerByName(triggers []*Trigger, name Ident) *Trigger {
+func (g *Generator) findTriggerByName(triggers []*Trigger, name QualifiedName) *Trigger {
 	for _, trigger := range triggers {
-		if g.identsEqual(trigger.name, name) {
+		if g.qualifiedNamesEqual(trigger.name, name) {
 			return trigger
 		}
 	}
