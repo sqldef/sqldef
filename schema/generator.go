@@ -468,10 +468,11 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted extensions
 	for _, currentExtension := range g.currentExtensions {
-		if slices.Contains(convertExtensionNames(g.desiredExtensions), currentExtension.extension.Name) {
+		extIdent := Ident{Name: currentExtension.extension.Name, Quoted: currentExtension.extension.Quoted}
+		if g.findExtensionByName(g.desiredExtensions, extIdent) != nil {
 			continue
 		}
-		ddls = append(ddls, fmt.Sprintf("DROP EXTENSION %s", g.forceEscapeSQLName(currentExtension.extension.Name)))
+		ddls = append(ddls, fmt.Sprintf("DROP EXTENSION %s", g.escapeSQLIdent(extIdent)))
 	}
 
 	// Clean up obsoleted comments
@@ -1866,8 +1867,9 @@ func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 
 func (g *Generator) generateDDLsForExtension(desired *Extension) ([]string, error) {
 	ddls := []string{}
+	extIdent := Ident{Name: desired.extension.Name, Quoted: desired.extension.Quoted}
 
-	if currentExtension := findExtensionByName(g.currentExtensions, desired.extension.Name); currentExtension == nil {
+	if currentExtension := g.findExtensionByName(g.currentExtensions, extIdent); currentExtension == nil {
 		// Extension not found, add extension.
 		ddls = append(ddls, desired.statement)
 		extension := *desired // copy extension
@@ -1875,7 +1877,7 @@ func (g *Generator) generateDDLsForExtension(desired *Extension) ([]string, erro
 	}
 
 	// Only add to desiredExtensions if it doesn't already exist (it may have been pre-populated from aggregation)
-	if findExtensionByName(g.desiredExtensions, desired.extension.Name) == nil {
+	if g.findExtensionByName(g.desiredExtensions, extIdent) == nil {
 		g.desiredExtensions = append(g.desiredExtensions, desired)
 	}
 
@@ -3438,9 +3440,10 @@ func (g *Generator) generateCommentNullStatement(comment *Comment) string {
 	return fmt.Sprintf("COMMENT ON %s %s IS NULL", sqlObjectType, escapedObject)
 }
 
-func findExtensionByName(extensions []*Extension, name string) *Extension {
+func (g *Generator) findExtensionByName(extensions []*Extension, name Ident) *Extension {
 	for _, extension := range extensions {
-		if extension.extension.Name == name {
+		extIdent := Ident{Name: extension.extension.Name, Quoted: extension.extension.Quoted}
+		if g.identsEqual(extIdent, name) {
 			return extension
 		}
 	}
@@ -4124,10 +4127,6 @@ func convertViewNames(views []*View) []string {
 
 func convertDomainNames(domains []*Domain) []string {
 	return util.TransformSlice(domains, func(d *Domain) string { return d.name.String() })
-}
-
-func convertExtensionNames(extensions []*Extension) []string {
-	return util.TransformSlice(extensions, func(e *Extension) string { return e.extension.Name })
 }
 
 func removeTableByName(tables []*Table, name string) []*Table {

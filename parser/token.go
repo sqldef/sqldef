@@ -594,9 +594,8 @@ func (tkn *Tokenizer) Lex(lval *yySymType) int {
 		typ, val = tkn.Scan()
 	}
 	if typ == ID {
-		// For ID tokens, populate the identStr struct with value and quoted flag
-		lval.identStr.val = val
-		lval.identStr.quoted = tkn.lastIdentifierQuoted
+		// For ID tokens, create an Ident with value and quoted flag
+		lval.ident = NewIdent(val, tkn.lastIdentifierQuoted)
 	} else {
 		// For other tokens, use the str field as before
 		lval.str = val

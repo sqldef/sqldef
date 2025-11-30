@@ -92,10 +92,10 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}, nil
 		} else if stmt.Action == parser.AddForeignKey {
 
-			indexColumns := util.TransformSlice(stmt.ForeignKey.IndexColumns, func(indexColumn parser.ColIdent) Ident {
+			indexColumns := util.TransformSlice(stmt.ForeignKey.IndexColumns, func(indexColumn parser.Ident) Ident {
 				return Ident{Name: indexColumn.String(), Quoted: indexColumn.Quoted()}
 			})
-			referenceColumns := util.TransformSlice(stmt.ForeignKey.ReferenceColumns, func(referenceColumn parser.ColIdent) Ident {
+			referenceColumns := util.TransformSlice(stmt.ForeignKey.ReferenceColumns, func(referenceColumn parser.Ident) Ident {
 				return Ident{Name: referenceColumn.String(), Quoted: referenceColumn.Quoted()}
 			})
 			var constraintOptions *ConstraintOptions
@@ -128,7 +128,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				exclusion: parseExclusion(stmt.Exclusion),
 			}, nil
 		} else if stmt.Action == parser.CreatePolicy {
-			scope := util.TransformSlice(stmt.Policy.To, func(to parser.ColIdent) string {
+			scope := util.TransformSlice(stmt.Policy.To, func(to parser.Ident) string {
 				return to.String()
 			})
 			var using, withCheck parser.Expr
@@ -385,7 +385,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		// Build the foreign key object
 		indexColumns := []Ident{{Name: parsedCol.Name.String(), Quoted: parsedCol.Name.Quoted()}}
 
-		referenceColumns := util.TransformSlice(parsedCol.Type.ReferenceNames, func(refCol parser.ColIdent) Ident {
+		referenceColumns := util.TransformSlice(parsedCol.Type.ReferenceNames, func(refCol parser.Ident) Ident {
 			return Ident{Name: refCol.String(), Quoted: refCol.Quoted()}
 		})
 
@@ -558,11 +558,11 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	}
 
 	for _, foreignKeyDef := range stmt.TableSpec.ForeignKeys {
-		indexColumns := util.TransformSlice(foreignKeyDef.IndexColumns, func(indexColumn parser.ColIdent) Ident {
+		indexColumns := util.TransformSlice(foreignKeyDef.IndexColumns, func(indexColumn parser.Ident) Ident {
 			return Ident{Name: indexColumn.String(), Quoted: indexColumn.Quoted()}
 		})
 
-		referenceColumns := util.TransformSlice(foreignKeyDef.ReferenceColumns, func(referenceColumn parser.ColIdent) Ident {
+		referenceColumns := util.TransformSlice(foreignKeyDef.ReferenceColumns, func(referenceColumn parser.Ident) Ident {
 			return Ident{Name: referenceColumn.String(), Quoted: referenceColumn.Quoted()}
 		})
 
@@ -650,7 +650,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		where = parser.String(expr)
 	}
 
-	includedColumns := util.TransformSlice(stmt.IndexSpec.Included, func(includedColumn parser.ColIdent) string {
+	includedColumns := util.TransformSlice(stmt.IndexSpec.Included, func(includedColumn parser.Ident) string {
 		return includedColumn.String()
 	})
 

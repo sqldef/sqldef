@@ -346,7 +346,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			return arg
 		})
 		// Normalize function name to lowercase (PostgreSQL convention)
-		funcName := parser.NewColIdent(strings.ToLower(e.Name.String()), false)
+		funcName := parser.NewIdent(strings.ToLower(e.Name.String()), false)
 		return &parser.FuncExpr{
 			Qualifier: e.Qualifier,
 			Name:      funcName,
@@ -384,9 +384,9 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		nameStr := normalizeName(e.Name.String())
 
 		return &parser.ColName{
-			Name: parser.NewColIdent(nameStr, false),
+			Name: parser.NewIdent(nameStr, false),
 			Qualifier: parser.TableName{
-				Name: parser.NewTableIdent(qualifierStr, false),
+				Name: parser.NewIdent(qualifierStr, false),
 			},
 		}
 	case *parser.TypedLiteral:
@@ -438,9 +438,9 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		}
 
 		return &parser.ColName{
-			Name: parser.NewColIdent(nameStr, false),
+			Name: parser.NewIdent(nameStr, false),
 			Qualifier: parser.TableName{
-				Name: parser.NewTableIdent(qualifierStr, false),
+				Name: parser.NewIdent(qualifierStr, false),
 			},
 		}
 	case *parser.ArrayConstructor:
@@ -762,7 +762,7 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 		as := e.As
 		// For PostgreSQL, strip automatic aliases like ?column?
 		if mode == GeneratorModePostgres && as.String() == "?column?" {
-			as = parser.NewColIdent("", false)
+			as = parser.NewIdent("", false)
 		}
 		// For MySQL, strip redundant aliases where the alias matches the column name
 		// MySQL adds "column_name as column_name" which is redundant
@@ -770,7 +770,7 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 			if colName, ok := e.Expr.(*parser.ColName); ok {
 				if strings.EqualFold(colName.Name.String(), as.String()) {
 					// The alias is the same as the column name, strip it
-					as = parser.NewColIdent("", false)
+					as = parser.NewIdent("", false)
 				}
 			}
 		}
@@ -809,7 +809,7 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode) parser.TableE
 			if tableName, ok := e.Expr.(parser.TableName); ok {
 				// Remove the database/schema part, keep only the table name
 				normalizedExpr = parser.TableName{
-					Schema: parser.TableIdent{}, // Remove schema/database
+					Schema: parser.Ident{}, // Remove schema/database
 					Name:   tableName.Name,
 				}
 			}
@@ -877,9 +877,9 @@ func normalizeExprPreservingQualifiers(expr parser.Expr, mode GeneratorMode) par
 		nameStr := normalizeName(e.Name.String())
 
 		return &parser.ColName{
-			Name: parser.NewColIdent(nameStr, false),
+			Name: parser.NewIdent(nameStr, false),
 			Qualifier: parser.TableName{
-				Name: parser.NewTableIdent(qualifierStr, false),
+				Name: parser.NewIdent(qualifierStr, false),
 			},
 		}
 	case *parser.AndExpr:

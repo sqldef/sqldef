@@ -319,7 +319,7 @@ func (node *With) Format(buf *nodeBuffer) {
 
 // CommonTableExpr represents a single Common Table Expression in a WITH clause
 type CommonTableExpr struct {
-	Name       TableIdent
+	Name       Ident
 	Columns    Columns
 	Definition SelectStatement
 }
@@ -472,7 +472,7 @@ func (node *MultiStatement) Format(buf *nodeBuffer) {
 // Exec represents a EXEC statement.
 type Exec struct {
 	Action string // EXEC or EXECUTE
-	Name   ColIdent
+	Name   Ident
 	Exprs  Exprs
 }
 
@@ -581,7 +581,7 @@ const (
 // PartitionSpec describe partition actions (for alter and create)
 type PartitionSpec struct {
 	Action      string
-	Name        ColIdent
+	Name        Ident
 	Definitions []*PartitionDefinition
 }
 
@@ -603,7 +603,7 @@ func (node *PartitionSpec) Format(buf *nodeBuffer) {
 
 // PartitionDefinition describes a very minimal partition definition
 type PartitionDefinition struct {
-	Name     ColIdent
+	Name     Ident
 	Limit    Expr
 	Maxvalue bool
 }
@@ -672,7 +672,7 @@ func (ts *TableSpec) addExclusion(exclusion *ExclusionDefinition) {
 
 // ColumnDefinition describes a column in a CREATE TABLE statement
 type ColumnDefinition struct {
-	Name          ColIdent
+	Name          Ident
 	Type          ColumnType
 	InlineComment []byte // For inline comments like -- @renamed from=oldname
 }
@@ -754,8 +754,8 @@ type ColumnType struct {
 
 	References            TableName
 	ReferenceNames        Columns
-	ReferenceOnDelete     ColIdent
-	ReferenceOnUpdate     ColIdent
+	ReferenceOnDelete     Ident
+	ReferenceOnUpdate     Ident
 	ReferenceDeferrable   *BoolVal // for Postgres: DEFERRABLE, NOT DEFERRABLE, or nil
 	ReferenceInitDeferred *BoolVal // for Postgres: INITIALLY DEFERRED, INITIALLY IMMEDIATE, or nil
 
@@ -768,7 +768,7 @@ type ColumnType struct {
 
 type DefaultDefinition struct {
 	Expression     DefaultExpression
-	ConstraintName ColIdent // only for MSSQL
+	ConstraintName Ident // only for MSSQL
 }
 
 type DefaultExpression struct {
@@ -781,7 +781,7 @@ type SridDefinition struct {
 
 type CheckDefinition struct {
 	Where             Where
-	ConstraintName    ColIdent
+	ConstraintName    Ident
 	NotForReplication bool
 	NoInherit         BoolVal
 }
@@ -792,8 +792,8 @@ type ExclusionPair struct {
 }
 
 type ExclusionDefinition struct {
-	ConstraintName ColIdent
-	IndexType      ColIdent
+	ConstraintName Ident
+	IndexType      Ident
 	Exclusions     []ExclusionPair
 	Where          *Where
 }
@@ -905,7 +905,7 @@ func (idx *IndexDefinition) Format(buf *nodeBuffer) {
 // IndexInfo describes the name and type of an index in a CREATE TABLE statement
 type IndexInfo struct {
 	Type      string
-	Name      ColIdent
+	Name      Ident
 	Primary   bool
 	Spatial   bool
 	Unique    bool
@@ -930,7 +930,7 @@ type IndexColumnsOrExpression struct {
 
 // IndexColumn describes a column in an index definition with optional length
 type IndexColumn struct {
-	Column        ColIdent
+	Column        Ident
 	Length        *SQLVal
 	Direction     string
 	OperatorClass string
@@ -976,8 +976,8 @@ const (
 )
 
 type IndexSpec struct {
-	Name              ColIdent
-	Type              ColIdent
+	Name              Ident
+	Type              Ident
 	Unique            bool
 	Primary           bool
 	Vector            bool // for MariaDB vector indexes
@@ -986,7 +986,7 @@ type IndexSpec struct {
 	Concurrently      bool // for PostgreSQL
 	Clustered         bool // for MSSQL
 	ColumnStore       bool // for MSSQL
-	Included          []ColIdent
+	Included          []Ident
 	Where             *Where
 	Options           []*IndexOption
 	Partition         *IndexPartition // for MSSQL
@@ -999,28 +999,29 @@ type ConstraintOptions struct {
 }
 
 type ForeignKeyDefinition struct {
-	ConstraintName    ColIdent
-	IndexName         ColIdent
-	IndexColumns      []ColIdent
+	ConstraintName    Ident
+	IndexName         Ident
+	IndexColumns      []Ident
 	ReferenceName     TableName
-	ReferenceColumns  []ColIdent
-	OnDelete          ColIdent
-	OnUpdate          ColIdent
+	ReferenceColumns  []Ident
+	OnDelete          Ident
+	OnUpdate          Ident
 	NotForReplication bool
 	ConstraintOptions *ConstraintOptions
 }
 
 type Policy struct {
-	Name       ColIdent
+	Name       Ident
 	Permissive Permissive
 	Scope      string
-	To         []ColIdent
+	To         []Ident
 	Using      *Where
 	WithCheck  *Where
 }
 
 type Extension struct {
-	Name string
+	Name   string
+	Quoted bool
 }
 
 type Schema struct {
@@ -1100,7 +1101,7 @@ func (node *ShowFilter) Format(buf *nodeBuffer) {
 
 // Use represents a use statement.
 type Use struct {
-	DBName TableIdent
+	DBName Ident
 }
 
 // Format formats the node.
@@ -1258,7 +1259,7 @@ func (node *StarExpr) Format(buf *nodeBuffer) {
 // AliasedExpr defines an aliased SELECT expression.
 type AliasedExpr struct {
 	Expr Expr
-	As   ColIdent
+	As   Ident
 }
 
 // Format formats the node.
@@ -1270,7 +1271,7 @@ func (node *AliasedExpr) Format(buf *nodeBuffer) {
 }
 
 // Columns represents an insert column list.
-type Columns []ColIdent
+type Columns []Ident
 
 // Format formats the node.
 func (node Columns) Format(buf *nodeBuffer) {
@@ -1333,7 +1334,7 @@ func (*JoinTableExpr) iTableExpr()    {}
 type AliasedTableExpr struct {
 	Expr       SimpleTableExpr
 	Partitions Partitions
-	As         TableIdent
+	As         Ident
 	TableHints []string
 	IndexHints *IndexHints
 }
@@ -1376,8 +1377,8 @@ func (node TableNames) Format(buf *nodeBuffer) {
 
 // TableName represents a table name: [Name] or [Schema].[Name]
 type TableName struct {
-	Schema TableIdent
-	Name   TableIdent
+	Schema Ident
+	Name   Ident
 }
 
 // Format formats the node.
@@ -1409,7 +1410,7 @@ func (node TableName) toViewName() TableName {
 	}
 	return TableName{
 		Schema: node.Schema,
-		Name:   NewTableIdent(name, node.Name.Quoted()),
+		Name:   NewIdent(name, node.Name.Quoted()),
 	}
 }
 
@@ -1417,8 +1418,8 @@ func (node TableName) toViewName() TableName {
 // This is used for objects like domains, types, functions, etc. that can be schema-qualified
 // but are not tables.
 type ObjectName struct {
-	Schema TableIdent
-	Name   TableIdent
+	Schema Ident
+	Name   Ident
 }
 
 // Format formats the node.
@@ -1484,7 +1485,7 @@ func (node *JoinTableExpr) Format(buf *nodeBuffer) {
 // IndexHints represents a list of index hints.
 type IndexHints struct {
 	Type    string
-	Indexes []ColIdent
+	Indexes []Ident
 }
 
 // Index hints.
@@ -1890,7 +1891,7 @@ type ColName struct {
 	// additional data, typically info about which
 	// table or column this node references.
 	Metadata  any
-	Name      ColIdent
+	Name      Ident
 	Qualifier TableName
 }
 
@@ -1904,7 +1905,7 @@ func (node *ColName) Format(buf *nodeBuffer) {
 
 // NewQualifierColName represents a column name with NEW qualifier.
 type NewQualifierColName struct {
-	Name ColIdent
+	Name Ident
 }
 
 // Format formats the node.
@@ -2036,8 +2037,8 @@ func (node *CollateExpr) Format(buf *nodeBuffer) {
 
 // FuncExpr represents a function call that takes SelectExprs.
 type FuncExpr struct {
-	Qualifier TableIdent
-	Name      ColIdent
+	Qualifier Ident
+	Name      Ident
 	Distinct  bool
 	Exprs     SelectExprs
 	Over      *OverExpr
@@ -2060,7 +2061,7 @@ func (node *FuncExpr) Format(buf *nodeBuffer) {
 
 // FuncCallExpr represents a function call that takes Exprs.
 type FuncCallExpr struct {
-	Name  ColIdent
+	Name  Ident
 	Exprs Exprs
 }
 
@@ -2288,7 +2289,7 @@ func (node *Default) Format(buf *nodeBuffer) {
 
 // NextSeqVal represents a NEXT VALUE FOR expression in SQL Server.
 type NextSeqValExpr struct {
-	SequenceName TableIdent
+	SequenceName Ident
 }
 
 // Format formats the node.
@@ -2450,7 +2451,7 @@ func (node SetExprs) Format(buf *nodeBuffer) {
 
 // SetExpr represents a set expression.
 type SetExpr struct {
-	Name ColIdent
+	Name Ident
 	Expr Expr
 }
 
@@ -2518,7 +2519,7 @@ func (node *Declare) Format(buf *nodeBuffer) {
 }
 
 type LocalVariable struct {
-	Name     ColIdent
+	Name     Ident
 	DataType ColumnType
 }
 
@@ -2527,7 +2528,7 @@ func (node *LocalVariable) Format(buf *nodeBuffer) {
 }
 
 type CursorDefinition struct {
-	Name   ColIdent
+	Name   Ident
 	Scroll bool
 	Select SelectStatement
 }
@@ -2601,8 +2602,8 @@ const (
 type Cursor struct {
 	Action     string
 	Fetch      string
-	CursorName ColIdent
-	Into       []ColIdent
+	CursorName Ident
+	Into       []Ident
 }
 
 func (node *Cursor) Format(buf *nodeBuffer) {
@@ -2735,22 +2736,6 @@ func (n Ident) Format(buf *nodeBuffer) {
 // equalString performs a case-insensitive compare with str.
 func (n Ident) equalString(str string) bool {
 	return strings.EqualFold(n.name, str)
-}
-
-// TableIdent is a SQL identifier for table names.
-type TableIdent = Ident
-
-// NewTableIdent creates a new table identifier.
-func NewTableIdent(str string, quoted bool) TableIdent {
-	return NewIdent(str, quoted)
-}
-
-// ColIdent is a SQL identifier for column names.
-type ColIdent = Ident
-
-// NewColIdent creates a new column identifier.
-func NewColIdent(str string, quoted bool) ColIdent {
-	return NewIdent(str, quoted)
 }
 
 func formatID(buf *nodeBuffer, original string) {
