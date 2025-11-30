@@ -417,10 +417,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Check policies.
 		for _, policy := range currentTable.policies {
-			if slices.Contains(convertPolicyNames(desiredTable.policies), policy.name) {
+			if g.findPolicyByName(desiredTable.policies, policy.name) != nil {
 				continue
 			}
-			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.forceEscapeSQLName(policy.name), g.escapeTableName(currentTable)))
+			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLIdent(policy.name), g.escapeTableName(currentTable)))
 		}
 
 		// Check checks.
@@ -1540,7 +1540,7 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName QualifiedName, desired
 		return nil, fmt.Errorf("%s is performed for inexistent table '%s': '%s'", action, tableNameStr, statement)
 	}
 
-	currentPolicy := findPolicyByName(currentTable.policies, desiredPolicy.name)
+	currentPolicy := g.findPolicyByName(currentTable.policies, desiredPolicy.name)
 	if currentPolicy == nil {
 		// Policy not found, add policy.
 		ddls = append(ddls, statement)
@@ -1548,7 +1548,7 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName QualifiedName, desired
 	} else {
 		// policy found. If it's different, drop and add or alter policy.
 		if !g.areSamePolicies(*currentPolicy, desiredPolicy) {
-			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.forceEscapeSQLName(currentPolicy.name), g.escapeTableName(currentTable)))
+			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLIdent(currentPolicy.name), g.escapeTableName(currentTable)))
 			ddls = append(ddls, statement)
 		}
 	}
@@ -1559,7 +1559,7 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName QualifiedName, desired
 		return nil, fmt.Errorf("%s is performed before create table '%s': '%s'", action, tableNameStr, statement)
 	}
 	// Only add to desiredTable.policies if it doesn't already exist (it may have been pre-populated from aggregation)
-	if !slices.Contains(convertPolicyNames(desiredTable.policies), desiredPolicy.name) {
+	if g.findPolicyByName(desiredTable.policies, desiredPolicy.name) == nil {
 		desiredTable.policies = append(desiredTable.policies, desiredPolicy)
 	}
 
@@ -3342,9 +3342,9 @@ func (g *Generator) findExclusionByName(exclusions []Exclusion, constraintName I
 	return nil
 }
 
-func findPolicyByName(policies []Policy, name string) *Policy {
+func (g *Generator) findPolicyByName(policies []Policy, name Ident) *Policy {
 	for _, policy := range policies {
-		if policy.name == name {
+		if g.identsEqual(policy.name, name) {
 			return &policy
 		}
 	}
@@ -4112,10 +4112,6 @@ func convertForeignKeysToIndexNames(foreignKeys []ForeignKey) []string {
 		} // unexpected to reach else (really?)
 	}
 	return indexNames
-}
-
-func convertPolicyNames(policies []Policy) []string {
-	return util.TransformSlice(policies, func(p Policy) string { return p.name })
 }
 
 func convertViewNames(views []*View) []string {

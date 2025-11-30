@@ -142,7 +142,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				statement: ddl,
 				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 				policy: Policy{
-					name:       stmt.Policy.Name.String(),
+					name:       Ident{Name: stmt.Policy.Name.String(), Quoted: stmt.Policy.Name.Quoted()},
 					permissive: string(stmt.Policy.Permissive),
 					scope:      string(stmt.Policy.Scope),
 					roles:      scope,

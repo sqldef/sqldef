@@ -267,7 +267,7 @@ type ExclusionPair struct {
 }
 
 type Policy struct {
-	name          string
+	name          Ident
 	referenceName string
 	permissive    string
 	scope         string
