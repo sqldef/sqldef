@@ -959,8 +959,7 @@ func (p PostgresParser) parseExtensionStmt(stmt *pgquery.CreateExtensionStmt) (p
 	return &parser.DDL{
 		Action: parser.CreateExtension,
 		Extension: &parser.Extension{
-			Name:   stmt.Extname,
-			Quoted: false,
+			Name: parser.NewIdent(stmt.Extname, false),
 		},
 	}, nil
 }

@@ -1020,8 +1020,7 @@ type Policy struct {
 }
 
 type Extension struct {
-	Name   string
-	Quoted bool
+	Name Ident
 }
 
 type Schema struct {

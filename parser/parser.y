@@ -1257,20 +1257,14 @@ create_statement:
   {
     $$ = &DDL{
       Action: CreateExtension,
-      Extension: &Extension{
-        Name: $4.String(),
-        Quoted: $4.Quoted(),
-      },
+      Extension: &Extension{Name: $4},
     }
   }
 | CREATE EXTENSION if_not_exists_opt STRING
   {
     $$ = &DDL{
       Action: CreateExtension,
-      Extension: &Extension{
-        Name: $4,
-        Quoted: false,
-      },
+      Extension: &Extension{Name: NewIdent($4, false)},
     }
   }
 
@@ -2304,10 +2298,7 @@ drop_statement:
   {
     $$ = &DDL{
       Action: DropExtension,
-      Extension: &Extension{
-        Name: $3.String(),
-        Quoted: $3.Quoted(),
-      },
+      Extension: &Extension{Name: $3},
     }
   }
 | DROP EXTENSION IF EXISTS sql_id
@@ -2315,20 +2306,14 @@ drop_statement:
     $$ = &DDL{
       Action: DropExtension,
       IfExists: true,
-      Extension: &Extension{
-        Name: $5.String(),
-        Quoted: $5.Quoted(),
-      },
+      Extension: &Extension{Name: $5},
     }
   }
 | DROP EXTENSION STRING
   {
     $$ = &DDL{
       Action: DropExtension,
-      Extension: &Extension{
-        Name: $3,
-        Quoted: false,
-      },
+      Extension: &Extension{Name: NewIdent($3, false)},
     }
   }
 | DROP EXTENSION IF EXISTS STRING
@@ -2336,10 +2321,7 @@ drop_statement:
     $$ = &DDL{
       Action: DropExtension,
       IfExists: true,
-      Extension: &Extension{
-        Name: $5,
-        Quoted: false,
-      },
+      Extension: &Extension{Name: NewIdent($5, false)},
     }
   }
 

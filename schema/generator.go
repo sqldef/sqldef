@@ -468,7 +468,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted extensions
 	for _, currentExtension := range g.currentExtensions {
-		extIdent := Ident{Name: currentExtension.extension.Name, Quoted: currentExtension.extension.Quoted}
+		extIdent := Ident{Name: currentExtension.extension.Name.String(), Quoted: currentExtension.extension.Name.Quoted()}
 		if g.findExtensionByName(g.desiredExtensions, extIdent) != nil {
 			continue
 		}
@@ -1867,7 +1867,7 @@ func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 
 func (g *Generator) generateDDLsForExtension(desired *Extension) ([]string, error) {
 	ddls := []string{}
-	extIdent := Ident{Name: desired.extension.Name, Quoted: desired.extension.Quoted}
+	extIdent := Ident{Name: desired.extension.Name.String(), Quoted: desired.extension.Name.Quoted()}
 
 	if currentExtension := g.findExtensionByName(g.currentExtensions, extIdent); currentExtension == nil {
 		// Extension not found, add extension.
@@ -3442,7 +3442,7 @@ func (g *Generator) generateCommentNullStatement(comment *Comment) string {
 
 func (g *Generator) findExtensionByName(extensions []*Extension, name Ident) *Extension {
 	for _, extension := range extensions {
-		extIdent := Ident{Name: extension.extension.Name, Quoted: extension.extension.Quoted}
+		extIdent := Ident{Name: extension.extension.Name.String(), Quoted: extension.extension.Name.Quoted()}
 		if g.identsEqual(extIdent, name) {
 			return extension
 		}
