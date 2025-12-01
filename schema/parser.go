@@ -111,7 +111,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 				foreignKey: ForeignKey{
 					constraintName:     Ident{Name: stmt.ForeignKey.ConstraintName.String(), Quoted: stmt.ForeignKey.ConstraintName.Quoted()},
-					indexName:          stmt.ForeignKey.IndexName.String(),
+					indexName:          Ident{Name: stmt.ForeignKey.IndexName.String(), Quoted: stmt.ForeignKey.IndexName.Quoted()},
 					indexColumns:       indexColumns,
 					referenceTableName: normalizeQualifiedName(mode, stmt.ForeignKey.ReferenceName, defaultSchema),
 					referenceColumns:   referenceColumns,
@@ -576,7 +576,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 
 		foreignKey := ForeignKey{
 			constraintName:     Ident{Name: foreignKeyDef.ConstraintName.String(), Quoted: foreignKeyDef.ConstraintName.Quoted()},
-			indexName:          foreignKeyDef.IndexName.String(),
+			indexName:          Ident{Name: foreignKeyDef.IndexName.String(), Quoted: foreignKeyDef.IndexName.Quoted()},
 			indexColumns:       indexColumns,
 			referenceTableName: normalizeQualifiedName(mode, foreignKeyDef.ReferenceName, defaultSchema),
 			referenceColumns:   referenceColumns,

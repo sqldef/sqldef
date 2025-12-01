@@ -1238,7 +1238,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			return ddls, fmt.Errorf(
 				"Foreign key without constraint symbol was found in table '%s' (index name: '%s', columns: %v). "+
 					"Specify the constraint symbol to identify the foreign key.",
-				desired.table.name, desiredForeignKey.indexName, desiredForeignKey.indexColumns,
+				desired.table.name, desiredForeignKey.indexName.Name, desiredForeignKey.indexColumns,
 			)
 		}
 
@@ -2451,8 +2451,8 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 	// Empty constraint name is already invalidated in generateDDLsForCreateIndex
 	definition := fmt.Sprintf("CONSTRAINT %s FOREIGN KEY ", g.escapeSQLIdent(foreignKey.constraintName))
 
-	if len(foreignKey.indexName) > 0 {
-		definition += fmt.Sprintf("%s ", g.forceEscapeSQLName(foreignKey.indexName))
+	if foreignKey.indexName.Name != "" {
+		definition += fmt.Sprintf("%s ", g.escapeSQLIdent(foreignKey.indexName))
 	}
 
 	var indexColumns, referenceColumns []string
@@ -4112,8 +4112,8 @@ func convertExclusionToConstraintNames(exclusions []Exclusion) []Ident {
 func convertForeignKeysToIndexNames(foreignKeys []ForeignKey) []string {
 	indexNames := []string{}
 	for _, foreignKey := range foreignKeys {
-		if len(foreignKey.indexName) > 0 {
-			indexNames = append(indexNames, foreignKey.indexName)
+		if foreignKey.indexName.Name != "" {
+			indexNames = append(indexNames, foreignKey.indexName.Name)
 		} else if foreignKey.constraintName.Name != "" {
 			indexNames = append(indexNames, foreignKey.constraintName.String())
 		} // unexpected to reach else (really?)

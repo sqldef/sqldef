@@ -244,7 +244,7 @@ type ConstraintOptions struct {
 
 type ForeignKey struct {
 	constraintName     Ident
-	indexName          string
+	indexName          Ident
 	indexColumns       []Ident
 	referenceTableName QualifiedName
 	referenceColumns   []Ident
