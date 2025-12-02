@@ -804,7 +804,7 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode) parser.TableE
 			if tableName, ok := e.Expr.(parser.TableName); ok {
 				// Remove the database/schema part, keep only the table name
 				normalizedExpr = parser.TableName{
-					Schema: parser.Ident{}, // Remove schema/database
+					Schema: Ident{}, // Remove schema/database
 					Name:   tableName.Name,
 				}
 			}

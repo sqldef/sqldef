@@ -124,7 +124,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				exclusion: parseExclusion(stmt.Exclusion),
 			}, nil
 		} else if stmt.Action == parser.CreatePolicy {
-			scope := util.TransformSlice(stmt.Policy.To, func(to parser.Ident) string {
+			scope := util.TransformSlice(stmt.Policy.To, func(to Ident) string {
 				return to.Name
 			})
 			var using, withCheck parser.Expr
@@ -638,7 +638,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		where = parser.String(expr)
 	}
 
-	includedColumns := util.TransformSlice(stmt.IndexSpec.Included, func(includedColumn parser.Ident) string {
+	includedColumns := util.TransformSlice(stmt.IndexSpec.Included, func(includedColumn Ident) string {
 		return includedColumn.Name
 	})
 
@@ -999,7 +999,7 @@ func normalizeTableInComment(mode GeneratorMode, comment *parser.Comment, defaul
 		if needsSchema {
 			// Prepend default schema (unquoted) to the object
 			schemaIdent := parser.NewIdent(defaultSchema, false)
-			obj = append([]parser.Ident{schemaIdent}, obj...)
+			obj = append([]Ident{schemaIdent}, obj...)
 			return &parser.Comment{
 				ObjectType: comment.ObjectType,
 				Object:     obj,

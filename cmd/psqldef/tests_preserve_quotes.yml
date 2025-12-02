@@ -1367,3 +1367,120 @@ CheckConstraintWithMixedQuotedColumns:
     );
   output: |
     ALTER TABLE public.users ADD CONSTRAINT date_order CHECK ("StartDate" < end_date);
+
+CommentOnQuotedTable:
+  # COMMENT on a quoted table should preserve the quoted name
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "UserAccounts" (id int);
+  desired: |
+    CREATE TABLE "UserAccounts" (id int);
+    COMMENT ON TABLE "UserAccounts" IS 'User accounts table';
+  output: |
+    COMMENT ON TABLE public."UserAccounts" IS 'User accounts table';
+
+CommentOnUnquotedTable:
+  # COMMENT on an unquoted table should normalize to lowercase
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE UserAccounts (id int);
+  desired: |
+    CREATE TABLE UserAccounts (id int);
+    COMMENT ON TABLE UserAccounts IS 'User accounts table';
+  output: |
+    COMMENT ON TABLE public.useraccounts IS 'User accounts table';
+
+CommentOnQuotedColumn:
+  # COMMENT on a quoted column should preserve the quoted name
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int, "UserName" text);
+  desired: |
+    CREATE TABLE users (id int, "UserName" text);
+    COMMENT ON COLUMN users."UserName" IS 'User display name';
+  output: |
+    COMMENT ON COLUMN public.users."UserName" IS 'User display name';
+
+CommentOnUnquotedColumn:
+  # COMMENT on an unquoted column should normalize to lowercase
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int, UserName text);
+  desired: |
+    CREATE TABLE users (id int, UserName text);
+    COMMENT ON COLUMN users.UserName IS 'User display name';
+  output: |
+    COMMENT ON COLUMN public.users.username IS 'User display name';
+
+CommentOnMixedQuotedTableAndColumn:
+  # COMMENT on a quoted table with quoted column
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "Users" (id int, "Email" text);
+  desired: |
+    CREATE TABLE "Users" (id int, "Email" text);
+    COMMENT ON TABLE "Users" IS 'Users table';
+    COMMENT ON COLUMN "Users"."Email" IS 'User email address';
+  output: |
+    COMMENT ON TABLE public."Users" IS 'Users table';
+    COMMENT ON COLUMN public."Users"."Email" IS 'User email address';
+
+CommentUpdateOnQuotedTable:
+  # Update an existing COMMENT on a quoted table
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "UserProfiles" (id int);
+    COMMENT ON TABLE "UserProfiles" IS 'Old comment';
+  desired: |
+    CREATE TABLE "UserProfiles" (id int);
+    COMMENT ON TABLE "UserProfiles" IS 'New comment';
+  output: |
+    COMMENT ON TABLE public."UserProfiles" IS 'New comment';
+
+CommentRemoveOnQuotedTable:
+  # Remove COMMENT from a quoted table
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "UserProfiles" (id int);
+    COMMENT ON TABLE "UserProfiles" IS 'Table comment';
+  desired: |
+    CREATE TABLE "UserProfiles" (id int);
+  output: |
+    COMMENT ON TABLE public."UserProfiles" IS NULL;
+
+CommentOnBothQuotedAndUnquotedTables:
+  # When both quoted "Users" and unquoted users exist, comments should be distinct
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "Users" (id int);
+    CREATE TABLE users (id int);
+  desired: |
+    CREATE TABLE "Users" (id int);
+    CREATE TABLE users (id int);
+    COMMENT ON TABLE "Users" IS 'Quoted Users table';
+    COMMENT ON TABLE users IS 'Unquoted users table';
+  output: |
+    COMMENT ON TABLE public."Users" IS 'Quoted Users table';
+    COMMENT ON TABLE public.users IS 'Unquoted users table';
+
+CommentIdempotentQuotedTable:
+  # COMMENT on quoted table should be idempotent (no change if already set)
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE "UserData" (id int);
+    COMMENT ON TABLE "UserData" IS 'Same comment';
+  desired: |
+    CREATE TABLE "UserData" (id int);
+    COMMENT ON TABLE "UserData" IS 'Same comment';
+  output: ""
+
+CommentIdempotentQuotedColumn:
+  # COMMENT on quoted column should be idempotent (no change if already set)
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int, "FullName" text);
+    COMMENT ON COLUMN users."FullName" IS 'Full name of user';
+  desired: |
+    CREATE TABLE users (id int, "FullName" text);
+    COMMENT ON COLUMN users."FullName" IS 'Full name of user';
+  output: ""

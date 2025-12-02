@@ -477,7 +477,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	// Clean up obsoleted comments
 	for _, currentComment := range g.currentComments {
 		// Check if this comment still exists in desired comments
-		desiredComment := findCommentByObject(g.desiredComments, currentComment.comment.Object)
+		desiredComment := g.findCommentByObject(g.desiredComments, currentComment.comment.Object)
 		// Only generate NULL statement if the comment is completely absent from desired schema
 		// If desiredComment exists but is empty, it means the desired schema has "COMMENT ... IS NULL",
 		// which will be handled by generateDDLsForComment
@@ -1849,7 +1849,7 @@ func (g *Generator) findDomainConstraintByExpression(constraints []DomainConstra
 func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 	ddls := []string{}
 
-	currentComment := findCommentByObject(g.currentComments, desired.comment.Object)
+	currentComment := g.findCommentByObject(g.currentComments, desired.comment.Object)
 
 	// If both current and desired comments are NULL/empty, no change is needed.
 	if currentComment == nil && desired.comment.Comment == "" {
@@ -1857,11 +1857,47 @@ func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 	}
 
 	if currentComment == nil || currentComment.comment.Comment != desired.comment.Comment {
-		// Comment not found or different, add comment.
-		ddls = append(ddls, desired.statement)
+		// Comment not found or different.
+		// In legacy mode, use the original statement to preserve exact formatting.
+		// In quote-aware mode, generate a normalized statement.
+		if g.config.LegacyIgnoreQuotes {
+			ddls = append(ddls, desired.statement)
+		} else {
+			normalizedStmt := g.generateNormalizedCommentStatement(desired)
+			ddls = append(ddls, normalizedStmt)
+		}
 	}
 
 	return ddls, nil
+}
+
+// generateNormalizedCommentStatement creates a COMMENT statement with normalized identifiers.
+func (g *Generator) generateNormalizedCommentStatement(comment *Comment) string {
+	objectType := comment.comment.ObjectType
+	sqlObjectType := strings.TrimPrefix(objectType, "OBJECT_")
+
+	// Escape the object name using quote-aware output.
+	// Object is []Ident representing: [schema, table] for TABLE, [schema, table, column] for COLUMN
+	// Special handling for the schema part (first element) when it matches the default schema.
+	escapedParts := make([]string, len(comment.comment.Object))
+	for i, ident := range comment.comment.Object {
+		if i == 0 && len(comment.comment.Object) > 1 {
+			// First element is the schema - normalize if it's the default schema
+			normalizedSchema := g.normalizeDefaultSchema(ident)
+			escapedParts[i] = g.escapeSQLIdent(normalizedSchema)
+		} else {
+			escapedParts[i] = g.escapeSQLNameQuoteAware(ident.Name, ident.Quoted)
+		}
+	}
+	escapedObject := strings.Join(escapedParts, ".")
+
+	if comment.comment.Comment == "" {
+		return fmt.Sprintf("COMMENT ON %s %s IS NULL", sqlObjectType, escapedObject)
+	}
+
+	// Escape the comment value (single quotes need to be doubled)
+	escapedComment := strings.ReplaceAll(comment.comment.Comment, "'", "''")
+	return fmt.Sprintf("COMMENT ON %s %s IS '%s'", sqlObjectType, escapedObject, escapedComment)
 }
 
 func (g *Generator) generateDDLsForExtension(desired *Extension) ([]string, error) {
@@ -3411,24 +3447,28 @@ func (g *Generator) findDomainByName(domains []*Domain, name Ident) *Domain {
 	return nil
 }
 
-func findCommentByObject(comments []*Comment, object []parser.Ident) *Comment {
+// findCommentByObject finds a comment by its object path using quote-aware comparison.
+func (g *Generator) findCommentByObject(comments []*Comment, object []Ident) *Comment {
 	for _, comment := range comments {
-		if identsSliceEqual(comment.comment.Object, object) {
+		if g.identsSliceEqual(comment.comment.Object, object) {
 			return comment
 		}
 	}
 	return nil
 }
 
-// identsSliceEqual compares two []Ident slices for equality.
-// Comparison is done by the string value of each ident (case-insensitive for unquoted).
-func identsSliceEqual(a, b []parser.Ident) bool {
+// identsSliceEqual compares two []Ident slices for equality using quote-aware comparison.
+// For PostgreSQL in quote-aware mode (legacy_ignore_quotes: false):
+//   - Quoted identifiers preserve case and are compared case-sensitively
+//   - Unquoted identifiers are normalized to lowercase before comparison
+//
+// For legacy mode or non-PostgreSQL databases, comparison is case-insensitive.
+func (g *Generator) identsSliceEqual(a, b []Ident) bool {
 	if len(a) != len(b) {
 		return false
 	}
 	for i := range a {
-		// Compare by string value (both quoted and unquoted normalize via String())
-		if a[i].Name != b[i].Name {
+		if !g.identsEqual(a[i], b[i]) {
 			return false
 		}
 	}
@@ -3445,9 +3485,17 @@ func (g *Generator) generateCommentNullStatement(comment *Comment) string {
 
 	// Escape the object name using structured idents for quote-aware output.
 	// Object is []Ident representing: [schema, table] for TABLE, [schema, table, column] for COLUMN
-	escapedParts := util.TransformSlice(comment.comment.Object, func(ident parser.Ident) string {
-		return g.escapeSQLNameQuoteAware(ident.Name, ident.Quoted)
-	})
+	// Special handling for the schema part (first element) when it matches the default schema.
+	escapedParts := make([]string, len(comment.comment.Object))
+	for i, ident := range comment.comment.Object {
+		if i == 0 && len(comment.comment.Object) > 1 {
+			// First element is the schema - normalize if it's the default schema
+			normalizedSchema := g.normalizeDefaultSchema(ident)
+			escapedParts[i] = g.escapeSQLIdent(normalizedSchema)
+		} else {
+			escapedParts[i] = g.escapeSQLNameQuoteAware(ident.Name, ident.Quoted)
+		}
+	}
 	escapedObject := strings.Join(escapedParts, ".")
 
 	// Generate the COMMENT statement with NULL value
