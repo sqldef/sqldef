@@ -183,7 +183,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	}
 
 	if test.Current != "" {
-		ddls, err := splitDDLs(mode, sqlParser, test.Current, db.GetDefaultSchema())
+		ddls, err := splitDDLs(mode, sqlParser, test.Current, db.GetDefaultSchema(), legacyIgnoreQuotes)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -313,14 +313,12 @@ func compareVersion(t *testing.T, leftVersion string, rightVersion string) int {
 	return 0
 }
 
-func splitDDLs(mode schema.GeneratorMode, sqlParser database.Parser, str string, defaultSchema string) ([]string, error) {
+func splitDDLs(mode schema.GeneratorMode, sqlParser database.Parser, str string, defaultSchema string, legacyIgnoreQuotes bool) ([]string, error) {
 	statements, err := schema.ParseDDLs(mode, sqlParser, str, defaultSchema)
 	if err != nil {
 		return nil, err
 	}
 
-	// Use database-specific default for LegacyIgnoreQuotes
-	legacyIgnoreQuotes := mode == schema.GeneratorModePostgres
 	statements = schema.SortTablesByDependencies(statements, defaultSchema, mode, legacyIgnoreQuotes)
 
 	var ddls []string
