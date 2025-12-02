@@ -241,7 +241,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		// The generic parser may parse "= ANY(ARRAY[...])" as a FuncExpr on the right side
 		// We need to normalize this to set the Any/All flags properly
 		if funcExpr, ok := right.(*parser.FuncExpr); ok {
-			funcName := strings.ToLower(funcExpr.Name.String())
+			funcName := strings.ToLower(funcExpr.Name.Name)
 			switch funcName {
 			case "any", "some":
 				// Convert "column = ANY(array)" to ComparisonExpr with Any=true
@@ -346,7 +346,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			return arg
 		})
 		// Normalize function name to lowercase (PostgreSQL convention)
-		funcName := parser.NewIdent(strings.ToLower(e.Name.String()), false)
+		funcName := parser.NewIdent(strings.ToLower(e.Name.Name), false)
 		return &parser.FuncExpr{
 			Qualifier: e.Qualifier,
 			Name:      funcName,
@@ -378,10 +378,10 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		return parser.ValTuple(normalizedTuple)
 	case *parser.ColName:
 		qualifierStr := ""
-		if e.Qualifier.Name.String() != "" {
-			qualifierStr = normalizeName(e.Qualifier.Name.String())
+		if e.Qualifier.Name.Name != "" {
+			qualifierStr = normalizeName(e.Qualifier.Name.Name)
 		}
-		nameStr := normalizeName(e.Name.String())
+		nameStr := normalizeName(e.Name.Name)
 
 		return &parser.ColName{
 			Name: parser.NewIdent(nameStr, false),
@@ -426,10 +426,10 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		// 1. Remove database-specific quotes/brackets from identifiers
 		// 2. For Postgres and MySQL, remove table qualifiers from column references
 		qualifierStr := ""
-		if e.Qualifier.Name.String() != "" {
-			qualifierStr = normalizeName(e.Qualifier.Name.String())
+		if e.Qualifier.Name.Name != "" {
+			qualifierStr = normalizeName(e.Qualifier.Name.Name)
 		}
-		nameStr := normalizeName(e.Name.String())
+		nameStr := normalizeName(e.Name.Name)
 
 		// For Postgres and MySQL, remove table qualifiers (e.g., "users.name" -> "name")
 		// MySQL adds table qualifiers when storing views
@@ -449,7 +449,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		})
 		return &parser.ArrayConstructor{Elements: elements}
 	case *parser.FuncExpr:
-		funcName := strings.ToLower(e.Name.String())
+		funcName := strings.ToLower(e.Name.Name)
 		// For PostgreSQL, normalize date/time function calls to keywords
 		// The generic parser parses CURRENT_DATE in parentheses as a function call,
 		// but without parentheses as a keyword (SQLVal with ValArg type)
@@ -761,14 +761,14 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 	case *parser.AliasedExpr:
 		as := e.As
 		// For PostgreSQL, strip automatic aliases like ?column?
-		if mode == GeneratorModePostgres && as.String() == "?column?" {
+		if mode == GeneratorModePostgres && as.Name == "?column?" {
 			as = parser.NewIdent("", false)
 		}
 		// For MySQL, strip redundant aliases where the alias matches the column name
 		// MySQL adds "column_name as column_name" which is redundant
-		if mode == GeneratorModeMysql && as.String() != "" {
+		if mode == GeneratorModeMysql && as.Name != "" {
 			if colName, ok := e.Expr.(*parser.ColName); ok {
-				if strings.EqualFold(colName.Name.String(), as.String()) {
+				if strings.EqualFold(colName.Name.Name, as.Name) {
 					// The alias is the same as the column name, strip it
 					as = parser.NewIdent("", false)
 				}
@@ -871,10 +871,10 @@ func normalizeExprPreservingQualifiers(expr parser.Expr, mode GeneratorMode) par
 	case *parser.ColName:
 		// Keep the qualifier but normalize the names to lowercase
 		qualifierStr := ""
-		if e.Qualifier.Name.String() != "" {
-			qualifierStr = normalizeName(e.Qualifier.Name.String())
+		if e.Qualifier.Name.Name != "" {
+			qualifierStr = normalizeName(e.Qualifier.Name.Name)
 		}
-		nameStr := normalizeName(e.Name.String())
+		nameStr := normalizeName(e.Name.Name)
 
 		return &parser.ColName{
 			Name: parser.NewIdent(nameStr, false),

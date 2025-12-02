@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/goccy/go-yaml"
+	"github.com/sqldef/sqldef/v3/parser"
 )
 
 type Config struct {
@@ -66,16 +67,12 @@ type TransactionQueries struct {
 	Rollback string
 }
 
-// Ident represents an identifier with quote information.
-// This is used across database and schema packages for quote-aware identifier handling.
-type Ident struct {
-	Name   string
-	Quoted bool
-}
+// Ident is an alias for parser.Ident.
+// Represents an identifier with quote information for quote-aware identifier handling.
+type Ident = parser.Ident
 
-func (i Ident) String() string {
-	return i.Name
-}
+// NewIdent is an alias for parser.NewIdent.
+var NewIdent = parser.NewIdent
 
 // NewIdentFromDatabase creates an Ident from a database-sourced identifier name.
 // Since the database doesn't store quote information, we infer it from case:
@@ -86,6 +83,30 @@ func (i Ident) String() string {
 //     equivalent and can be referenced interchangeably.
 func NewIdentFromDatabase(name string) Ident {
 	return Ident{Name: name, Quoted: strings.ToLower(name) != name}
+}
+
+// NewIdentFromGenerated creates an Ident for auto-generated identifier names
+// (such as constraint names built from table and column names).
+// The Quoted flag is inferred from case: if the name contains uppercase letters,
+// it must have originated from a quoted identifier (PostgreSQL folds unquoted to lowercase).
+func NewIdentFromGenerated(name string) Ident {
+	return Ident{Name: name, Quoted: strings.ToLower(name) != name}
+}
+
+// QualifiedName represents a schema-qualified table name with quote information.
+type QualifiedName struct {
+	Schema Ident // empty if not specified (will use default schema)
+	Name   Ident
+}
+
+// RawString returns the raw qualified name as "schema.name" or just "name" if no schema.
+// This is NOT escaped for SQL output and NOT normalized for comparison.
+// Use this for logging, debugging, or map keys.
+func (q QualifiedName) RawString() string {
+	if q.Schema.IsEmpty() {
+		return q.Name.Name
+	}
+	return q.Schema.Name + "." + q.Name.Name
 }
 
 // Abstraction layer for multiple kinds of databases

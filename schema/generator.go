@@ -316,7 +316,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 		// Remove dropped tables from currentTables
 		for _, table := range tablesToDrop {
-			g.currentTables = removeTableByName(g.currentTables, table.name.String())
+			g.currentTables = removeTableByName(g.currentTables, table.name.RawString())
 		}
 	}
 
@@ -331,7 +331,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		for _, foreignKey := range currentTable.foreignKeys {
 			// Skip foreign keys without constraint names - they're likely from column-level REFERENCES
 			// that haven't been fully processed yet
-			if foreignKey.constraintName.Name == "" {
+			if foreignKey.constraintName.IsEmpty() {
 				continue
 			}
 
@@ -468,11 +468,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted extensions
 	for _, currentExtension := range g.currentExtensions {
-		extIdent := Ident{Name: currentExtension.extension.Name.String(), Quoted: currentExtension.extension.Name.Quoted()}
-		if g.findExtensionByName(g.desiredExtensions, extIdent) != nil {
+		if g.findExtensionByName(g.desiredExtensions, currentExtension.extension.Name) != nil {
 			continue
 		}
-		ddls = append(ddls, fmt.Sprintf("DROP EXTENSION %s", g.escapeSQLIdent(extIdent)))
+		ddls = append(ddls, fmt.Sprintf("DROP EXTENSION %s", g.escapeSQLIdent(currentExtension.extension.Name)))
 	}
 
 	// Clean up obsoleted comments
@@ -598,7 +597,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			// Check for conflict: can't rename a column if the old name still exists
 			if g.findColumnByName(desired.table.columns, desiredColumn.renamedFrom) != nil {
 				return ddls, fmt.Errorf("cannot rename column '%s' to '%s' - column '%s' still exists",
-					desiredColumn.renamedFrom.Name, desiredColumn.name.String(), desiredColumn.renamedFrom.Name)
+					desiredColumn.renamedFrom.Name, desiredColumn.name.Name, desiredColumn.renamedFrom.Name)
 			}
 		}
 
@@ -675,8 +674,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					}
 					ddl := fmt.Sprintf("EXEC sp_rename '%s.%s', '%s', 'COLUMN'",
 						tableRef,
-						renameFromColumn.name,
-						desiredColumn.name.String())
+						renameFromColumn.name.Name,
+						desiredColumn.name.Name)
 					ddls = append(ddls, ddl)
 
 					// After renaming, check if type/constraints need to be changed
@@ -834,8 +833,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 			case GeneratorModePostgres:
 				slog.Debug("Comparing column types",
-					"table", desired.table.name.String(),
-					"column", currentColumn.name.String(),
+					"table", desired.table.name.RawString(),
+					"column", currentColumn.name.Name,
 					"currentTypeName", currentColumn.typeName,
 					"currentTypeIdent", currentColumn.typeIdent,
 					"desiredTypeName", desiredColumn.typeName,
@@ -891,7 +890,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				tableName := desired.table.name.Name.Name
-				columnName := desiredColumn.name.String()
+				columnName := desiredColumn.name.Name
 				constraintName := buildPostgresConstraintNameIdent(tableName, columnName, "check")
 				if desiredColumn.check != nil && desiredColumn.check.constraintName.Name != "" {
 					constraintName = desiredColumn.check.constraintName
@@ -984,11 +983,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 					if !skipDrop {
 						tableName := desired.table.name.Name.Name
-						columnNameForCheck := desiredColumn.name.String()
+						columnNameForCheck := desiredColumn.name.Name
 						constraintNameIdent := buildPostgresConstraintNameIdent(tableName, columnNameForCheck, "check")
 						if currentColumn.check != nil {
 							currentConstraintNameIdent := currentColumn.check.constraintName
-							if currentConstraintNameIdent.Name == "" {
+							if currentConstraintNameIdent.IsEmpty() {
 								currentConstraintNameIdent = Ident{Name: currentColumn.check.constraintName.Name, Quoted: false}
 							}
 							ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(&desired.table), g.escapeSQLIdent(currentConstraintNameIdent))
@@ -996,7 +995,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						}
 						if desiredColumn.check != nil {
 							desiredConstraintNameIdent := desiredColumn.check.constraintName
-							if desiredConstraintNameIdent.Name == "" {
+							if desiredConstraintNameIdent.IsEmpty() {
 								desiredConstraintNameIdent = constraintNameIdent
 							}
 							replicationDefinition := ""
@@ -1148,7 +1147,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					recreateDDL := g.buildForeignKeyDDL(refFK.tableName, desiredFK)
 					recreateFKDDLs = append(recreateFKDDLs, recreateDDL)
 					// Mark this FK as globally handled so we don't add it again in normal FK processing
-					g.handledForeignKeys[refFK.tableName.String()+":"+desiredFK.constraintName.String()] = true
+					g.handledForeignKeys[refFK.tableName.RawString()+":"+desiredFK.constraintName.Name] = true
 				}
 				// If the table doesn't exist in desired schema or the FK doesn't exist,
 				// we don't recreate it (it will be dropped with the table)
@@ -1227,24 +1226,24 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 	for _, desiredForeignKey := range desired.table.foreignKeys {
 		// Auto-generate constraint name if not specified (for PostgreSQL)
 		constraintName := desiredForeignKey.constraintName
-		if constraintName.Name == "" && g.mode == GeneratorModePostgres && len(desiredForeignKey.indexColumns) > 0 {
+		if constraintName.IsEmpty() && g.mode == GeneratorModePostgres && len(desiredForeignKey.indexColumns) > 0 {
 			tableName := desired.table.name.Name.Name
 			// Use the first column name for the constraint name (matches PostgreSQL behavior)
 			columnName := desiredForeignKey.indexColumns[0].Name
 			constraintName = buildPostgresConstraintNameIdent(tableName, columnName, "fkey")
 		}
 
-		if constraintName.Name == "" && g.mode != GeneratorModeSQLite3 {
+		if constraintName.IsEmpty() && g.mode != GeneratorModeSQLite3 {
 			return ddls, fmt.Errorf(
 				"Foreign key without constraint symbol was found in table '%s' (index name: '%s', columns: %v). "+
 					"Specify the constraint symbol to identify the foreign key.",
-				desired.table.name, desiredForeignKey.indexName.Name, desiredForeignKey.indexColumns,
+				desired.table.name.RawString(), desiredForeignKey.indexName.Name, desiredForeignKey.indexColumns,
 			)
 		}
 
 		// Create a modified ForeignKey with the generated constraint name if needed
 		fkWithName := desiredForeignKey
-		if desiredForeignKey.constraintName.Name == "" && constraintName.Name != "" {
+		if desiredForeignKey.constraintName.IsEmpty() && constraintName.Name != "" {
 			fkWithName = ForeignKey{
 				constraintName:     constraintName,
 				indexName:          desiredForeignKey.indexName,
@@ -1276,7 +1275,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		} else {
 			// Foreign key not found, add foreign key.
 			// But first check if we've already handled this FK during primary key changes
-			fkKey := desired.table.name.String() + ":" + constraintName.String()
+			fkKey := desired.table.name.RawString() + ":" + constraintName.Name
 			if !g.handledForeignKeys[fkKey] {
 				definition := g.generateForeignKeyDefinition(fkWithName)
 				ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(&desired.table), definition)
@@ -1287,11 +1286,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	// Examine each exclusion
 	for _, desiredExclusion := range desired.table.exclusions {
-		if desiredExclusion.constraintName.Name == "" && g.mode != GeneratorModeSQLite3 {
+		if desiredExclusion.constraintName.IsEmpty() && g.mode != GeneratorModeSQLite3 {
 			return ddls, fmt.Errorf(
 				"Exclusion without constraint symbol was found in table '%s'. "+
 					"Specify the constraint symbol to identify the exclusion.",
-				desired.table.name,
+				desired.table.name.RawString(),
 			)
 		}
 
@@ -1534,7 +1533,7 @@ func (g *Generator) generateDDLsForAddExclusion(tableName QualifiedName, desired
 
 func (g *Generator) generateDDLsForCreatePolicy(tableName QualifiedName, desiredPolicy Policy, action string, statement string) ([]string, error) {
 	var ddls []string
-	tableNameStr := tableName.String()
+	tableNameStr := tableName.RawString()
 
 	currentTable := g.findTableByName(g.currentTables, tableName)
 	if currentTable == nil {
@@ -1626,7 +1625,7 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 		desiredNormalized := strings.ToLower(parser.String(desiredNormalizedAST))
 
 		// Post-normalization fix for generic parser: strip remaining table qualifiers
-		// The generic parser's ColName.String() may not respect the empty qualifier we set
+		// The generic parser's ColName.Name may not respect the empty qualifier we set
 		if g.mode == GeneratorModePostgres {
 			currentNormalized = stripTableQualifiers(currentNormalized)
 			desiredNormalized = stripTableQualifiers(desiredNormalized)
@@ -1867,9 +1866,8 @@ func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 
 func (g *Generator) generateDDLsForExtension(desired *Extension) ([]string, error) {
 	ddls := []string{}
-	extIdent := Ident{Name: desired.extension.Name.String(), Quoted: desired.extension.Name.Quoted()}
 
-	if currentExtension := g.findExtensionByName(g.currentExtensions, extIdent); currentExtension == nil {
+	if currentExtension := g.findExtensionByName(g.currentExtensions, desired.extension.Name); currentExtension == nil {
 		// Extension not found, add extension.
 		ddls = append(ddls, desired.statement)
 		extension := *desired // copy extension
@@ -1877,7 +1875,7 @@ func (g *Generator) generateDDLsForExtension(desired *Extension) ([]string, erro
 	}
 
 	// Only add to desiredExtensions if it doesn't already exist (it may have been pre-populated from aggregation)
-	if g.findExtensionByName(g.desiredExtensions, extIdent) == nil {
+	if g.findExtensionByName(g.desiredExtensions, desired.extension.Name) == nil {
 		g.desiredExtensions = append(g.desiredExtensions, desired)
 	}
 
@@ -1913,7 +1911,7 @@ func (g *Generator) generateDDLsForAbsentForeignKey(currentForeignKey ForeignKey
 	case GeneratorModePostgres, GeneratorModeMssql:
 		var referencesColumn *Column
 		for _, column := range desiredTable.columns {
-			if column.references.Name == currentForeignKey.referenceTableName.String() {
+			if column.references.Name == currentForeignKey.referenceTableName.RawString() {
 				referencesColumn = column
 				break
 			}
@@ -1945,14 +1943,14 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 		if primaryKeyColumn == nil {
 			// If nil, it will be `DROP COLUMN`-ed and we can usually ignore it.
 			// However, it seems like you need to explicitly drop it first for MSSQL.
-			if g.mode == GeneratorModeMssql && (primaryKeyColumn == nil || primaryKeyColumn.name.String() != currentIndex.columns[0].ColumnName()) {
+			if g.mode == GeneratorModeMssql && (primaryKeyColumn == nil || primaryKeyColumn.name.Name != currentIndex.columns[0].ColumnName()) {
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(&currentTable), g.escapeSQLIdent(currentIndex.name)))
 			}
-		} else if primaryKeyColumn.name.String() != currentIndex.columns[0].ColumnName() { // TODO: check length of currentIndex.columns
+		} else if primaryKeyColumn.name.Name != currentIndex.columns[0].ColumnName() { // TODO: check length of currentIndex.columns
 			// TODO: handle this. Rename primary key column...?
 			return ddls, fmt.Errorf(
 				"primary key column name of '%s' should be '%s' but currently '%s'. This is not handled yet.",
-				currentTable.name, primaryKeyColumn.name, currentIndex.columns[0].ColumnName(),
+				currentTable.name.RawString(), primaryKeyColumn.name.Name, currentIndex.columns[0].ColumnName(),
 			)
 		}
 	} else if currentIndex.unique {
@@ -1960,7 +1958,7 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 		// Columns become empty if the index is a PostgreSQL's expression index.
 		if len(currentIndex.columns) > 0 {
 			for _, column := range desiredTable.columns {
-				if column.name.String() == currentIndex.columns[0].ColumnName() && column.keyOption.isUnique() {
+				if column.name.Name == currentIndex.columns[0].ColumnName() && column.keyOption.isUnique() {
 					uniqueKeyColumn = column
 					break
 				}
@@ -2181,9 +2179,9 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 		var column string
 		// For simple column references (ColName), use escapeSQLIdent to preserve quoting
 		if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
-			column = g.escapeSQLIdent(Ident{Name: colName.Name.String(), Quoted: colName.Name.Quoted()})
+			column = g.escapeSQLIdent(colName.Name)
 		} else {
-			// For expressions (functional indexes), use parser.String()
+			// For expressions (functional indexes), use parser.Name
 			column = parser.String(indexColumn.columnExpr)
 		}
 		if indexColumn.length != nil {
@@ -2598,7 +2596,7 @@ func (g *Generator) escapeQualifiedName(name QualifiedName) string {
 	switch g.mode {
 	case GeneratorModePostgres, GeneratorModeMssql:
 		// If schema is empty, don't add schema prefix
-		if name.Schema.Name == "" {
+		if name.Schema.IsEmpty() {
 			return g.escapeSQLIdent(name.Name)
 		}
 		schema := g.normalizeDefaultSchema(name.Schema)
@@ -2712,7 +2710,7 @@ func (g *Generator) qualifiedNamesEqual(a, b QualifiedName) bool {
 // the default schema appears without quotes. For non-default schemas, the original
 // quote status is preserved.
 func (g *Generator) normalizeDefaultSchema(schema Ident) Ident {
-	if schema.Name == "" {
+	if schema.IsEmpty() {
 		return Ident{Name: g.defaultSchema, Quoted: false}
 	}
 	if strings.EqualFold(schema.Name, g.defaultSchema) && strings.ToLower(schema.Name) == schema.Name {
@@ -2809,7 +2807,7 @@ func isPrimaryKey(column Column, table Table) bool {
 	for _, index := range table.indexes {
 		if index.primary {
 			for _, indexColumn := range index.columns {
-				if indexColumn.ColumnName() == column.name.String() {
+				if indexColumn.ColumnName() == column.name.Name {
 					return true
 				}
 			}
@@ -2822,7 +2820,7 @@ func isPrimaryKey(column Column, table Table) bool {
 func mergeTable(table1 *Table, table2 Table) {
 	// Update/add all columns from table2
 	for _, column := range table2.columns {
-		table1.columns[column.name.String()] = column
+		table1.columns[column.name.Name] = column
 	}
 
 	// Add indexes from table2 that don't exist in table1
@@ -2879,10 +2877,10 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 
 			newColumns := map[string]*Column{}
 			for _, column := range table.columns {
-				if column.name.String() == stmt.index.columns[0].ColumnName() { // TODO: multi-column primary key?
+				if column.name.Name == stmt.index.columns[0].ColumnName() { // TODO: multi-column primary key?
 					column.keyOption = ColumnKeyPrimary
 				}
-				newColumns[column.name.String()] = column
+				newColumns[column.name.Name] = column
 			}
 			table.columns = newColumns
 		case *AddForeignKey:
@@ -3413,7 +3411,7 @@ func identsSliceEqual(a, b []parser.Ident) bool {
 	}
 	for i := range a {
 		// Compare by string value (both quoted and unquoted normalize via String())
-		if a[i].String() != b[i].String() {
+		if a[i].Name != b[i].Name {
 			return false
 		}
 	}
@@ -3431,7 +3429,7 @@ func (g *Generator) generateCommentNullStatement(comment *Comment) string {
 	// Escape the object name using structured idents for quote-aware output.
 	// Object is []Ident representing: [schema, table] for TABLE, [schema, table, column] for COLUMN
 	escapedParts := util.TransformSlice(comment.comment.Object, func(ident parser.Ident) string {
-		return g.escapeSQLNameQuoteAware(ident.String(), ident.Quoted())
+		return g.escapeSQLNameQuoteAware(ident.Name, ident.Quoted)
 	})
 	escapedObject := strings.Join(escapedParts, ".")
 
@@ -3442,8 +3440,7 @@ func (g *Generator) generateCommentNullStatement(comment *Comment) string {
 
 func (g *Generator) findExtensionByName(extensions []*Extension, name Ident) *Extension {
 	for _, extension := range extensions {
-		extIdent := Ident{Name: extension.extension.Name.String(), Quoted: extension.extension.Name.Quoted()}
-		if g.identsEqual(extIdent, name) {
+		if g.identsEqual(extension.extension.Name, name) {
 			return extension
 		}
 	}
@@ -3504,7 +3501,7 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 			desiredCanonical = strings.ToLower(desiredCanonical)
 		}
 		slog.Debug("haveSameDataType quote-aware comparison",
-			"column", current.name.String(),
+			"column", current.name.Name,
 			"current.typeIdent", current.typeIdent,
 			"desired.typeIdent", desired.typeIdent,
 			"currentCanonical", currentCanonical,
@@ -4096,7 +4093,7 @@ func convertIndexesToIndexNames(indexes []Index) []string {
 func convertForeignKeysToConstraintNames(foreignKeys []ForeignKey) []string {
 	constraintNames := []string{}
 	for _, foreignKey := range foreignKeys {
-		constraintNames = append(constraintNames, foreignKey.constraintName.String())
+		constraintNames = append(constraintNames, foreignKey.constraintName.Name)
 	}
 	return constraintNames
 }
@@ -4115,18 +4112,18 @@ func convertForeignKeysToIndexNames(foreignKeys []ForeignKey) []string {
 		if foreignKey.indexName.Name != "" {
 			indexNames = append(indexNames, foreignKey.indexName.Name)
 		} else if foreignKey.constraintName.Name != "" {
-			indexNames = append(indexNames, foreignKey.constraintName.String())
+			indexNames = append(indexNames, foreignKey.constraintName.Name)
 		} // unexpected to reach else (really?)
 	}
 	return indexNames
 }
 
 func convertViewNames(views []*View) []string {
-	return util.TransformSlice(views, func(v *View) string { return v.name.String() })
+	return util.TransformSlice(views, func(v *View) string { return v.name.RawString() })
 }
 
 func convertDomainNames(domains []*Domain) []string {
-	return util.TransformSlice(domains, func(d *Domain) string { return d.name.String() })
+	return util.TransformSlice(domains, func(d *Domain) string { return d.name.RawString() })
 }
 
 func removeTableByName(tables []*Table, name string) []*Table {
@@ -4134,7 +4131,7 @@ func removeTableByName(tables []*Table, name string) []*Table {
 	ret := []*Table{}
 
 	for _, table := range tables {
-		if name == table.name.String() {
+		if name == table.name.RawString() {
 			removed = true
 		} else {
 			ret = append(ret, table)
@@ -4246,16 +4243,16 @@ func FilterTables(ddls []DDL, config database.GeneratorConfig) []DDL {
 
 		switch stmt := ddl.(type) {
 		case *CreateTable:
-			tables = append(tables, stmt.table.name.String())
+			tables = append(tables, stmt.table.name.RawString())
 		case *CreateIndex:
-			tables = append(tables, stmt.tableName.String())
+			tables = append(tables, stmt.tableName.RawString())
 		case *AddPrimaryKey:
-			tables = append(tables, stmt.tableName.String())
+			tables = append(tables, stmt.tableName.RawString())
 		case *AddForeignKey:
-			tables = append(tables, stmt.tableName.String())
-			tables = append(tables, stmt.foreignKey.referenceTableName.String())
+			tables = append(tables, stmt.tableName.RawString())
+			tables = append(tables, stmt.foreignKey.referenceTableName.RawString())
 		case *AddIndex:
-			tables = append(tables, stmt.tableName.String())
+			tables = append(tables, stmt.tableName.RawString())
 		}
 
 		if skipTables(tables, config) {
@@ -4293,9 +4290,9 @@ func FilterViews(ddls []DDL, config database.GeneratorConfig) []DDL {
 
 		switch stmt := ddl.(type) {
 		case *CreateIndex:
-			views = append(views, stmt.tableName.String())
+			views = append(views, stmt.tableName.RawString())
 		case *View:
-			views = append(views, stmt.name.String())
+			views = append(views, stmt.name.RawString())
 		}
 
 		if skipViews(views, config) {
@@ -4348,7 +4345,7 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 				sortedPrivs := make([]string, len(stmt.privileges))
 				copy(sortedPrivs, stmt.privileges)
 				slices.Sort(sortedPrivs)
-				key := fmt.Sprintf("%s:%s", stmt.tableName, strings.Join(sortedPrivs, ","))
+				key := fmt.Sprintf("%s:%s", stmt.tableName.RawString(), strings.Join(sortedPrivs, ","))
 
 				if existing, ok := grantsByTableAndPrivs[key]; ok {
 					// Add grantees to existing grant with same table and privileges
@@ -4368,7 +4365,7 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 			// Process each grantee separately and consolidate
 			for _, grantee := range stmt.grantees {
 				if slices.Contains(config.ManagedRoles, grantee) {
-					key := fmt.Sprintf("%s:%s", stmt.tableName, grantee)
+					key := fmt.Sprintf("%s:%s", stmt.tableName.RawString(), grantee)
 					if existing, ok := revokesByTableAndGrantee[key]; ok {
 						// Merge privileges
 						privMap := make(map[string]bool)
@@ -4449,8 +4446,8 @@ func (g *Generator) generateDropTableDDLsWithDependencies(tablesToDrop []*Table)
 
 		// First, build a map of tables to be dropped for quick lookup
 		for _, table := range tablesToDrop {
-			tableMap[table.name.String()] = table
-			tableDependencies[table.name.String()] = []string{}
+			tableMap[table.name.RawString()] = table
+			tableDependencies[table.name.RawString()] = []string{}
 		}
 
 		// Now build reverse dependencies
@@ -4461,19 +4458,19 @@ func (g *Generator) generateDropTableDDLsWithDependencies(tablesToDrop []*Table)
 				if g.qualifiedNamesEqual(table.name, fk.referenceTableName) {
 					continue
 				}
-				refTableName := fk.referenceTableName.String()
+				refTableName := fk.referenceTableName.RawString()
 				if refTableName != "" {
 					// If the referenced table is also being dropped
 					if _, exists := tableMap[refTableName]; exists {
 						// The referenced table depends on this table being dropped first
-						tableDependencies[refTableName] = append(tableDependencies[refTableName], table.name.String())
+						tableDependencies[refTableName] = append(tableDependencies[refTableName], table.name.RawString())
 					}
 				}
 			}
 		}
 
 		sorted := topologicalSort(tablesToDrop, tableDependencies, func(t *Table) string {
-			return t.name.String()
+			return t.name.RawString()
 		})
 
 		if len(sorted) != 0 {

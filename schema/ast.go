@@ -3,41 +3,18 @@ package schema
 import (
 	"strings"
 
+	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/parser"
 )
 
-// Ident represents an identifier with quote information.
-// Used for quote-aware identifier handling throughout the schema package.
-type Ident struct {
-	Name   string
-	Quoted bool
-}
+type (
+	Ident         = database.Ident
+	QualifiedName = database.QualifiedName
+)
 
-func (i Ident) String() string {
-	return i.Name
-}
-
-// NewIdentFromGenerated creates an Ident for auto-generated identifier names
-// (such as constraint names built from table and column names).
-// The Quoted flag is inferred from case: if the name contains uppercase letters,
-// it must have originated from a quoted identifier (PostgreSQL folds unquoted to lowercase).
-func NewIdentFromGenerated(name string) Ident {
-	return Ident{Name: name, Quoted: strings.ToLower(name) != name}
-}
-
-// QualifiedName represents a schema-qualified table name with quote information.
-type QualifiedName struct {
-	Schema Ident // empty if not specified (will use default schema)
-	Name   Ident
-}
-
-// String returns the full qualified name as "schema.name" or just "name" if no schema.
-func (q QualifiedName) String() string {
-	if q.Schema.Name == "" {
-		return q.Name.Name
-	}
-	return q.Schema.Name + "." + q.Name.Name
-}
+var (
+	NewIdentFromGenerated = database.NewIdentFromGenerated
+)
 
 // identsEqual compares two Idents with quote-awareness based on database mode and legacyIgnoreQuotes.
 // For non-PostgreSQL databases, always uses case-insensitive comparison.
@@ -66,10 +43,10 @@ func identsEqual(a, b Ident, mode GeneratorMode, legacyIgnoreQuotes bool) bool {
 func qualifiedNamesEqual(a, b QualifiedName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool) bool {
 	aSchema := a.Schema
 	bSchema := b.Schema
-	if aSchema.Name == "" && defaultSchema != "" {
+	if aSchema.IsEmpty() && defaultSchema != "" {
 		aSchema = Ident{Name: defaultSchema, Quoted: false}
 	}
-	if bSchema.Name == "" && defaultSchema != "" {
+	if bSchema.IsEmpty() && defaultSchema != "" {
 		bSchema = Ident{Name: defaultSchema, Quoted: false}
 	}
 	if !identsEqual(aSchema, bSchema, mode, legacyIgnoreQuotes) {
@@ -215,7 +192,7 @@ type IndexColumn struct {
 func (ic IndexColumn) ColumnName() string {
 	// Check if it's a simple column reference (ColName)
 	if colName, ok := ic.columnExpr.(*parser.ColName); ok {
-		return colName.Name.String()
+		return colName.Name.Name
 	}
 	// For expressions, return the full expression string
 	return parser.String(ic.columnExpr)

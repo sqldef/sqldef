@@ -361,17 +361,13 @@ func extractDependenciesFromSimpleTableExpr(expr parser.SimpleTableExpr, default
 	switch ste := expr.(type) {
 	case parser.TableName:
 		// This is an actual table/view reference
-		// Convert parser.Ident to schema.Ident for normalization
-		schemaIdent := Ident{Name: ste.Schema.String(), Quoted: ste.Schema.Quoted()}
-		nameIdent := Ident{Name: ste.Name.String(), Quoted: ste.Name.Quoted()}
-
-		schema := schemaIdent.Name
+		schema := ste.Schema.Name
 		if schema == "" {
 			schema = defaultSchema
 		} else {
-			schema = normalizeIdentKey(schemaIdent, mode)
+			schema = normalizeIdentKey(ste.Schema, mode)
 		}
-		tableName := normalizeIdentKey(nameIdent, mode)
+		tableName := normalizeIdentKey(ste.Name, mode)
 
 		// Always use schema.tableName format for consistency
 		var fullName string

@@ -508,7 +508,7 @@ comment_statement:
   {
     // Build Object as []Ident: [schema, table] or [table]
     var obj []Ident
-    if !$4.Schema.isEmpty() {
+    if !$4.Schema.IsEmpty() {
       obj = []Ident{$4.Schema, $4.Name}
     } else {
       obj = []Ident{$4.Name}
@@ -526,7 +526,7 @@ comment_statement:
 | COMMENT_KEYWORD ON TABLE table_name IS NULL
   {
     var obj []Ident
-    if !$4.Schema.isEmpty() {
+    if !$4.Schema.IsEmpty() {
       obj = []Ident{$4.Schema, $4.Name}
     } else {
       obj = []Ident{$4.Name}
@@ -545,8 +545,8 @@ comment_statement:
   {
     // Build Object as []Ident: [schema, table, column], [table, column], or [column]
     var obj []Ident
-    if !$4.Qualifier.isEmpty() {
-      if !$4.Qualifier.Schema.isEmpty() {
+    if !$4.Qualifier.IsEmpty() {
+      if !$4.Qualifier.Schema.IsEmpty() {
         obj = []Ident{$4.Qualifier.Schema, $4.Qualifier.Name, $4.Name}
       } else {
         obj = []Ident{$4.Qualifier.Name, $4.Name}
@@ -566,8 +566,8 @@ comment_statement:
 | COMMENT_KEYWORD ON COLUMN column_name IS NULL
   {
     var obj []Ident
-    if !$4.Qualifier.isEmpty() {
-      if !$4.Qualifier.Schema.isEmpty() {
+    if !$4.Qualifier.IsEmpty() {
+      if !$4.Qualifier.Schema.IsEmpty() {
         obj = []Ident{$4.Qualifier.Schema, $4.Qualifier.Name, $4.Name}
       } else {
         obj = []Ident{$4.Qualifier.Name, $4.Name}
@@ -866,11 +866,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($7))
     for i, g := range $7 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($5) == 1 {
@@ -903,11 +903,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($7))
     for i, g := range $7 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($5) == 1 {
@@ -942,11 +942,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($6))
     for i, g := range $6 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($4) == 1 {
@@ -979,11 +979,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($6))
     for i, g := range $6 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($4) == 1 {
@@ -1018,11 +1018,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($7))
     for i, g := range $7 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($5) == 1 {
@@ -1055,11 +1055,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($7))
     for i, g := range $7 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($5) == 1 {
@@ -1094,11 +1094,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($7))
     for i, g := range $7 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($5) == 1 {
@@ -1133,11 +1133,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($6))
     for i, g := range $6 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($4) == 1 {
@@ -1170,11 +1170,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($6))
     for i, g := range $6 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($4) == 1 {
@@ -1209,11 +1209,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($6))
     for i, g := range $6 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($4) == 1 {
@@ -1249,7 +1249,7 @@ create_statement:
     $$ = &DDL{
       Action: CreateSchema,
       Schema: &Schema{
-        Name: $4.String(),
+        Name: $4.Name,
       },
     }
   }
@@ -1691,7 +1691,7 @@ handler_condition:
   }
 | sql_id
   {
-    $$ = HandlerCondition{Type: handlerConditionName, Value: $1.String()}
+    $$ = HandlerCondition{Type: handlerConditionName, Value: $1.Name}
   }
 
 handler_statement:
@@ -2436,7 +2436,7 @@ exclude_element:
     // Handle all other operators and GIST-specific operators
     $$ = ExclusionPair{
       Expression: $1,
-      Operator: $3.String(),
+      Operator: $3.Name,
     }
   }
 
@@ -2475,7 +2475,7 @@ column_type:
 | sql_id
   {
     // Custom type (e.g., domain name) - preserve quote information in TypeIdent
-    $$ = ColumnType{Type: $1.String(), TypeIdent: $1}
+    $$ = ColumnType{Type: $1.Name, TypeIdent: $1}
   }
 | STRING '.' STRING
   {
@@ -2483,7 +2483,7 @@ column_type:
   }
 | ID '.' ID
   {
-    $$ = ColumnType{Type: $1.String() + "." + $3.String()}
+    $$ = ColumnType{Type: $1.Name + "." + $3.Name}
   }
 
 column_definition_type:
@@ -2929,7 +2929,7 @@ sequence_opt:
   }
 | sequence_opt OWNED BY table_id '.' reserved_sql_id
   {
-    $1.OwnedBy = $4.String() + "." + $6.String()
+    $1.OwnedBy = $4.Name + "." + $6.Name
     $$ = $1
   }
 
@@ -3018,7 +3018,7 @@ domain_constraint:
   {
     $$.defaultDef = nil
     $$.notNull = false
-    $$.collation = $2.String()
+    $$.collation = $2.Name
     $$.checks = nil
   }
 | CHECK '(' expression ')'
@@ -3397,10 +3397,10 @@ max_length_opt:
   }
 | '(' ID ')'
   {
-    if !strings.EqualFold($2.String(), "max") {
-      yylex.Error(fmt.Sprintf("syntax error around '%s'", $2.String()))
+    if !strings.EqualFold($2.Name, "max") {
+      yylex.Error(fmt.Sprintf("syntax error around '%s'", $2.Name))
     }
-    $$ = NewStrVal($2.String())
+    $$ = NewStrVal($2.Name)
   }
 
 
@@ -3466,7 +3466,7 @@ charset_opt:
   }
 | CHARACTER SET ID
   {
-    $$ = $3.String()
+    $$ = $3.Name
   }
 | CHARACTER SET BINARY
   {
@@ -3484,7 +3484,7 @@ collate_opt:
   }
 | COLLATE ID
   {
-    $$ = $2.String()
+    $$ = $2.Name
   }
 
 index_definition:
@@ -3529,7 +3529,7 @@ mssql_index_option_list:
 index_option:
   USING ID
   {
-    $$ = &IndexOption{Name: $1, Value: NewStrVal($2.String())}
+    $$ = &IndexOption{Name: $1, Value: NewStrVal($2.Name)}
   }
 | KEY_BLOCK_SIZE equal_opt INTEGRAL
   {
@@ -3542,7 +3542,7 @@ index_option:
   }
 | WITH PARSER sql_id
   {
-    $$ = &IndexOption{Name: $2, Value: NewStrVal($3.String())}
+    $$ = &IndexOption{Name: $2, Value: NewStrVal($3.Name)}
   }
 | PAD_INDEX '=' on_off
   {
@@ -3590,7 +3590,7 @@ index_option:
   }
 | ID '=' vector_option_value
   {
-    id := strings.Trim(strings.ToLower($1.String()), "`")
+    id := strings.Trim(strings.ToLower($1.Name), "`")
     $$ = &IndexOption{Name: id, Value: $3}
   }
 
@@ -3646,11 +3646,11 @@ index_partition_opt:
   }
 | ON sql_id
   {
-    $$ = &IndexPartition{Name: $2.String()}
+    $$ = &IndexPartition{Name: $2.Name}
   }
 | ON sql_id '(' sql_id ')'
   {
-    $$ = &IndexPartition{Name: $2.String(), Column: $4.String()}
+    $$ = &IndexPartition{Name: $2.Name, Column: $4.Name}
   }
 
 index_info:
@@ -3764,7 +3764,7 @@ operator_class:
   }
 | sql_id
   {
-    $$ = $1.String()
+    $$ = $1.Name
   }
 
 foreign_key_definition:
@@ -4152,11 +4152,11 @@ sqlite3_table_opt:
 table_opt_name:
   reserved_sql_id
   {
-    $$ = $1.String()
+    $$ = $1.Name
   }
 | table_opt_name reserved_sql_id
   {
-    $$ = $1 + " " + $2.String()
+    $$ = $1 + " " + $2.Name
   }
 | table_opt_name CHARACTER SET
   {
@@ -4170,7 +4170,7 @@ table_opt_name:
 table_opt_value:
   reserved_sql_id
   {
-    $$ = $1.String()
+    $$ = $1.Name
   }
 | STRING
   {
@@ -4687,7 +4687,7 @@ default_opt:
   }
 | '(' ID ')'
   {
-    $$ = $2.String()
+    $$ = $2.Name
   }
 
 boolean_value:
@@ -5031,7 +5031,7 @@ value_expression:
     // as a function. If support is needed for that,
     // we'll need to revisit this. The solution
     // will be non-trivial because of grammar conflicts.
-    $$ = &IntervalExpr{Expr: $2, Unit: $3.String()}
+    $$ = &IntervalExpr{Expr: $2, Unit: $3.Name}
   }
 | DATE STRING
   {
@@ -5318,7 +5318,7 @@ function_call_conflict:
 extract_field:
   sql_id
   {
-    $$ = $1.String()
+    $$ = $1.Name
   }
 | YEAR
   {
@@ -5350,7 +5350,7 @@ match_option:
 charset:
   ID
   {
-    $$ = $1.String()
+    $$ = $1.Name
   }
 | STRING
   {
@@ -5368,7 +5368,7 @@ convert_type:
   }
 | CHAR length_opt ID
   {
-    $$ = &ConvertType{Type: $1, Length: $2, Charset: $3.String()}
+    $$ = &ConvertType{Type: $1, Length: $2, Charset: $3.Name}
   }
 | DATE
   {
@@ -5956,7 +5956,7 @@ set_expression:
 // MySQL extension of triggers
 | NEW '.' reserved_sql_id '=' expression
   {
-    $$ = &SetExpr{Name: NewIdent("NEW." + $3.String(), false), Expr: $5}
+    $$ = &SetExpr{Name: NewIdent("NEW." + $3.Name, false), Expr: $5}
   }
 | charset_or_character_set charset_value collate_opt
   {
@@ -5986,7 +5986,7 @@ charset_or_character_set:
 charset_value:
   sql_id
   {
-    $$ = NewStrVal($1.String())
+    $$ = NewStrVal($1.Name)
   }
 | STRING
   {

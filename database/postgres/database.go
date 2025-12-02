@@ -17,6 +17,15 @@ import (
 	"github.com/sqldef/sqldef/v3/util"
 )
 
+type (
+	Ident         = database.Ident
+	QualifiedName = database.QualifiedName
+)
+
+var (
+	NewIdentFromDatabase = database.NewIdentFromDatabase
+)
+
 const indent = "    "
 
 type PostgresDatabase struct {
@@ -443,14 +452,14 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 
 // CheckConstraint holds a CHECK constraint's name and definition.
 type CheckConstraint struct {
-	Name       database.Ident
+	Name       Ident
 	Definition string
 }
 
 type TableDDLComponents struct {
 	TableName         string
 	Columns           []column
-	PrimaryKeyName    database.Ident
+	PrimaryKeyName    Ident
 	PrimaryKeyCols    []string
 	IndexDefs         []string
 	ForeignDefs       []string
@@ -582,7 +591,7 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 
 type columnConstraint struct {
 	definition string
-	name       database.Ident
+	name       Ident
 }
 
 type column struct {
@@ -725,7 +734,7 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 			normalizedDef := normalizePostgresTypeCasts(*checkDefinition)
 			col.Check = &columnConstraint{
 				definition: normalizedDef,
-				name:       database.NewIdentFromDatabase(*checkName),
+				name:       NewIdentFromDatabase(*checkName),
 			}
 		}
 		cols = append(cols, col)
@@ -847,7 +856,7 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) ([]CheckCo
 		// PostgreSQL returns "::time without time zone" but the generic parser expects "::time"
 		constraintDef = normalizePostgresTypeCasts(constraintDef)
 		result = append(result, CheckConstraint{
-			Name:       database.NewIdentFromDatabase(constraintName),
+			Name:       NewIdentFromDatabase(constraintName),
 			Definition: constraintDef,
 		})
 	}
@@ -944,7 +953,7 @@ WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$
 	return columnNames, nil
 }
 
-func (d *PostgresDatabase) getPrimaryKeyName(table string) (database.Ident, error) {
+func (d *PostgresDatabase) getPrimaryKeyName(table string) (Ident, error) {
 	schema, table := splitTableName(table, d.GetDefaultSchema())
 	tableWithSchema := fmt.Sprintf("%s.%s", escapeSQLName(schema), escapeSQLName(table))
 	query := fmt.Sprintf(`
@@ -954,7 +963,7 @@ func (d *PostgresDatabase) getPrimaryKeyName(table string) (database.Ident, erro
 	`, tableWithSchema)
 	rows, err := d.db.Query(query)
 	if err != nil {
-		return database.Ident{}, err
+		return Ident{}, err
 	}
 	defer rows.Close()
 
@@ -962,12 +971,12 @@ func (d *PostgresDatabase) getPrimaryKeyName(table string) (database.Ident, erro
 	if rows.Next() {
 		err = rows.Scan(&keyName)
 		if err != nil {
-			return database.Ident{}, err
+			return Ident{}, err
 		}
 	} else {
-		return database.Ident{}, err
+		return Ident{}, err
 	}
-	return database.NewIdentFromDatabase(keyName), nil
+	return NewIdentFromDatabase(keyName), nil
 }
 
 // refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d
@@ -1265,7 +1274,7 @@ func escapeSQLName(name string) string {
 // escapeConstraintName quotes a constraint name for DDL output.
 // In legacy mode (LegacyIgnoreQuotes=true): don't quote (original behavior).
 // In quote-aware mode (LegacyIgnoreQuotes=false): respect the Ident's Quoted field.
-func (d *PostgresDatabase) escapeConstraintName(ident database.Ident) string {
+func (d *PostgresDatabase) escapeConstraintName(ident Ident) string {
 	if d.generatorConfig.LegacyIgnoreQuotes {
 		return ident.Name
 	}

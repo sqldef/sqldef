@@ -4067,7 +4067,7 @@ yydefault:
 		{
 			// Build Object as []Ident: [schema, table] or [table]
 			var obj []Ident
-			if !yyDollar[4].tableName.Schema.isEmpty() {
+			if !yyDollar[4].tableName.Schema.IsEmpty() {
 				obj = []Ident{yyDollar[4].tableName.Schema, yyDollar[4].tableName.Name}
 			} else {
 				obj = []Ident{yyDollar[4].tableName.Name}
@@ -4087,7 +4087,7 @@ yydefault:
 //line parser/parser.y:527
 		{
 			var obj []Ident
-			if !yyDollar[4].tableName.Schema.isEmpty() {
+			if !yyDollar[4].tableName.Schema.IsEmpty() {
 				obj = []Ident{yyDollar[4].tableName.Schema, yyDollar[4].tableName.Name}
 			} else {
 				obj = []Ident{yyDollar[4].tableName.Name}
@@ -4108,8 +4108,8 @@ yydefault:
 		{
 			// Build Object as []Ident: [schema, table, column], [table, column], or [column]
 			var obj []Ident
-			if !yyDollar[4].colName.Qualifier.isEmpty() {
-				if !yyDollar[4].colName.Qualifier.Schema.isEmpty() {
+			if !yyDollar[4].colName.Qualifier.IsEmpty() {
+				if !yyDollar[4].colName.Qualifier.Schema.IsEmpty() {
 					obj = []Ident{yyDollar[4].colName.Qualifier.Schema, yyDollar[4].colName.Qualifier.Name, yyDollar[4].colName.Name}
 				} else {
 					obj = []Ident{yyDollar[4].colName.Qualifier.Name, yyDollar[4].colName.Name}
@@ -4131,8 +4131,8 @@ yydefault:
 //line parser/parser.y:567
 		{
 			var obj []Ident
-			if !yyDollar[4].colName.Qualifier.isEmpty() {
-				if !yyDollar[4].colName.Qualifier.Schema.isEmpty() {
+			if !yyDollar[4].colName.Qualifier.IsEmpty() {
+				if !yyDollar[4].colName.Qualifier.Schema.IsEmpty() {
 					obj = []Ident{yyDollar[4].colName.Qualifier.Schema, yyDollar[4].colName.Qualifier.Name, yyDollar[4].colName.Name}
 				} else {
 					obj = []Ident{yyDollar[4].colName.Qualifier.Name, yyDollar[4].colName.Name}
@@ -4460,11 +4460,11 @@ yydefault:
 		{
 			privs := make([]string, len(yyDollar[2].idents))
 			for i, p := range yyDollar[2].idents {
-				privs[i] = p.String()
+				privs[i] = p.Name
 			}
 			grantees := make([]string, len(yyDollar[7].idents))
 			for i, g := range yyDollar[7].idents {
-				grantees[i] = g.String()
+				grantees[i] = g.Name
 			}
 
 			if len(yyDollar[5].tableNames) == 1 {
@@ -4499,11 +4499,11 @@ yydefault:
 		{
 			privs := make([]string, len(yyDollar[2].idents))
 			for i, p := range yyDollar[2].idents {
-				privs[i] = p.String()
+				privs[i] = p.Name
 			}
 			grantees := make([]string, len(yyDollar[7].idents))
 			for i, g := range yyDollar[7].idents {
-				grantees[i] = g.String()
+				grantees[i] = g.Name
 			}
 
 			if len(yyDollar[5].tableNames) == 1 {
@@ -4540,11 +4540,11 @@ yydefault:
 		{
 			privs := make([]string, len(yyDollar[2].idents))
 			for i, p := range yyDollar[2].idents {
-				privs[i] = p.String()
+				privs[i] = p.Name
 			}
 			grantees := make([]string, len(yyDollar[6].idents))
 			for i, g := range yyDollar[6].idents {
-				grantees[i] = g.String()
+				grantees[i] = g.Name
 			}
 
 			if len(yyDollar[4].tableNames) == 1 {
@@ -4579,11 +4579,11 @@ yydefault:
 		{
 			privs := make([]string, len(yyDollar[2].idents))
 			for i, p := range yyDollar[2].idents {
-				privs[i] = p.String()
+				privs[i] = p.Name
 			}
 			grantees := make([]string, len(yyDollar[6].idents))
 			for i, g := range yyDollar[6].idents {
-				grantees[i] = g.String()
+				grantees[i] = g.Name
 			}
 
 			if len(yyDollar[4].tableNames) == 1 {
@@ -4620,11 +4620,11 @@ yydefault:
 		{
 			privs := make([]string, len(yyDollar[2].idents))
 			for i, p := range yyDollar[2].idents {
-				privs[i] = p.String()
+				privs[i] = p.Name
 			}
 			grantees := make([]string, len(yyDollar[7].idents))
 			for i, g := range yyDollar[7].idents {
-				grantees[i] = g.String()
+				grantees[i] = g.Name
 			}
 
 			if len(yyDollar[5].tableNames) == 1 {
@@ -4659,11 +4659,11 @@ yydefault:
 		{
 			privs := make([]string, len(yyDollar[2].idents))
 			for i, p := range yyDollar[2].idents {
-				privs[i] = p.String()
+				privs[i] = p.Name
 			}
 			grantees := make([]string, len(yyDollar[7].idents))
 			for i, g := range yyDollar[7].idents {
-				grantees[i] = g.String()
+				grantees[i] = g.Name
 			}
 
 			if len(yyDollar[5].tableNames) == 1 {
@@ -4700,11 +4700,11 @@ yydefault:
 		{
 			privs := make([]string, len(yyDollar[2].idents))
 			for i, p := range yyDollar[2].idents {
-				privs[i] = p.String()
+				privs[i] = p.Name
 			}
 			grantees := make([]string, len(yyDollar[7].idents))
 			for i, g := range yyDollar[7].idents {
-				grantees[i] = g.String()
+				grantees[i] = g.Name
 			}
 
 			if len(yyDollar[5].tableNames) == 1 {
@@ -4741,11 +4741,11 @@ yydefault:
 		{
 			privs := make([]string, len(yyDollar[2].idents))
 			for i, p := range yyDollar[2].idents {
-				privs[i] = p.String()
+				privs[i] = p.Name
 			}
 			grantees := make([]string, len(yyDollar[6].idents))
 			for i, g := range yyDollar[6].idents {
-				grantees[i] = g.String()
+				grantees[i] = g.Name
 			}
 
 			if len(yyDollar[4].tableNames) == 1 {
@@ -4780,11 +4780,11 @@ yydefault:
 		{
 			privs := make([]string, len(yyDollar[2].idents))
 			for i, p := range yyDollar[2].idents {
-				privs[i] = p.String()
+				privs[i] = p.Name
 			}
 			grantees := make([]string, len(yyDollar[6].idents))
 			for i, g := range yyDollar[6].idents {
-				grantees[i] = g.String()
+				grantees[i] = g.Name
 			}
 
 			if len(yyDollar[4].tableNames) == 1 {
@@ -4821,11 +4821,11 @@ yydefault:
 		{
 			privs := make([]string, len(yyDollar[2].idents))
 			for i, p := range yyDollar[2].idents {
-				privs[i] = p.String()
+				privs[i] = p.Name
 			}
 			grantees := make([]string, len(yyDollar[6].idents))
 			for i, g := range yyDollar[6].idents {
-				grantees[i] = g.String()
+				grantees[i] = g.Name
 			}
 
 			if len(yyDollar[4].tableNames) == 1 {
@@ -4863,7 +4863,7 @@ yydefault:
 			yyVAL.statement = &DDL{
 				Action: CreateSchema,
 				Schema: &Schema{
-					Name: yyDollar[4].ident.String(),
+					Name: yyDollar[4].ident.Name,
 				},
 			}
 		}
@@ -5376,7 +5376,7 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser/parser.y:1693
 		{
-			yyVAL.handlerCondition = HandlerCondition{Type: handlerConditionName, Value: yyDollar[1].ident.String()}
+			yyVAL.handlerCondition = HandlerCondition{Type: handlerConditionName, Value: yyDollar[1].ident.Name}
 		}
 	case 104:
 		yyDollar = yyS[yypt-1 : yypt+1]
@@ -6207,7 +6207,7 @@ yydefault:
 			// Handle all other operators and GIST-specific operators
 			yyVAL.exclusionPair = ExclusionPair{
 				Expression: yyDollar[1].expr,
-				Operator:   yyDollar[3].ident.String(),
+				Operator:   yyDollar[3].ident.Name,
 			}
 		}
 	case 291:
@@ -6247,7 +6247,7 @@ yydefault:
 //line parser/parser.y:2476
 		{
 			// Custom type (e.g., domain name) - preserve quote information in TypeIdent
-			yyVAL.columnType = ColumnType{Type: yyDollar[1].ident.String(), TypeIdent: yyDollar[1].ident}
+			yyVAL.columnType = ColumnType{Type: yyDollar[1].ident.Name, TypeIdent: yyDollar[1].ident}
 		}
 	case 301:
 		yyDollar = yyS[yypt-3 : yypt+1]
@@ -6259,7 +6259,7 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:2485
 		{
-			yyVAL.columnType = ColumnType{Type: yyDollar[1].ident.String() + "." + yyDollar[3].ident.String()}
+			yyVAL.columnType = ColumnType{Type: yyDollar[1].ident.Name + "." + yyDollar[3].ident.Name}
 		}
 	case 303:
 		yyDollar = yyS[yypt-2 : yypt+1]
@@ -6833,7 +6833,7 @@ yydefault:
 		yyDollar = yyS[yypt-6 : yypt+1]
 //line parser/parser.y:2931
 		{
-			yyDollar[1].sequence.OwnedBy = yyDollar[4].ident.String() + "." + yyDollar[6].ident.String()
+			yyDollar[1].sequence.OwnedBy = yyDollar[4].ident.Name + "." + yyDollar[6].ident.Name
 			yyVAL.sequence = yyDollar[1].sequence
 		}
 	case 377:
@@ -6944,7 +6944,7 @@ yydefault:
 		{
 			yyVAL.domainConstraints.defaultDef = nil
 			yyVAL.domainConstraints.notNull = false
-			yyVAL.domainConstraints.collation = yyDollar[2].ident.String()
+			yyVAL.domainConstraints.collation = yyDollar[2].ident.Name
 			yyVAL.domainConstraints.checks = nil
 		}
 	case 391:
@@ -7414,10 +7414,10 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:3399
 		{
-			if !strings.EqualFold(yyDollar[2].ident.String(), "max") {
-				yylex.Error(fmt.Sprintf("syntax error around '%s'", yyDollar[2].ident.String()))
+			if !strings.EqualFold(yyDollar[2].ident.Name, "max") {
+				yylex.Error(fmt.Sprintf("syntax error around '%s'", yyDollar[2].ident.Name))
 			}
-			yyVAL.optVal = NewStrVal(yyDollar[2].ident.String())
+			yyVAL.optVal = NewStrVal(yyDollar[2].ident.Name)
 		}
 	case 486:
 		yyDollar = yyS[yypt-0 : yypt+1]
@@ -7501,7 +7501,7 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:3468
 		{
-			yyVAL.str = yyDollar[3].ident.String()
+			yyVAL.str = yyDollar[3].ident.Name
 		}
 	case 500:
 		yyDollar = yyS[yypt-3 : yypt+1]
@@ -7525,7 +7525,7 @@ yydefault:
 		yyDollar = yyS[yypt-2 : yypt+1]
 //line parser/parser.y:3486
 		{
-			yyVAL.str = yyDollar[2].ident.String()
+			yyVAL.str = yyDollar[2].ident.Name
 		}
 	case 504:
 		yyDollar = yyS[yypt-6 : yypt+1]
@@ -7579,7 +7579,7 @@ yydefault:
 		yyDollar = yyS[yypt-2 : yypt+1]
 //line parser/parser.y:3531
 		{
-			yyVAL.indexOption = &IndexOption{Name: yyDollar[1].str, Value: NewStrVal(yyDollar[2].ident.String())}
+			yyVAL.indexOption = &IndexOption{Name: yyDollar[1].str, Value: NewStrVal(yyDollar[2].ident.Name)}
 		}
 	case 513:
 		yyDollar = yyS[yypt-3 : yypt+1]
@@ -7598,7 +7598,7 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:3544
 		{
-			yyVAL.indexOption = &IndexOption{Name: yyDollar[2].str, Value: NewStrVal(yyDollar[3].ident.String())}
+			yyVAL.indexOption = &IndexOption{Name: yyDollar[2].str, Value: NewStrVal(yyDollar[3].ident.Name)}
 		}
 	case 516:
 		yyDollar = yyS[yypt-3 : yypt+1]
@@ -7670,7 +7670,7 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:3592
 		{
-			id := strings.Trim(strings.ToLower(yyDollar[1].ident.String()), "`")
+			id := strings.Trim(strings.ToLower(yyDollar[1].ident.Name), "`")
 			yyVAL.indexOption = &IndexOption{Name: id, Value: yyDollar[3].optVal}
 		}
 	case 528:
@@ -7737,13 +7737,13 @@ yydefault:
 		yyDollar = yyS[yypt-2 : yypt+1]
 //line parser/parser.y:3648
 		{
-			yyVAL.indexPartition = &IndexPartition{Name: yyDollar[2].ident.String()}
+			yyVAL.indexPartition = &IndexPartition{Name: yyDollar[2].ident.Name}
 		}
 	case 539:
 		yyDollar = yyS[yypt-5 : yypt+1]
 //line parser/parser.y:3652
 		{
-			yyVAL.indexPartition = &IndexPartition{Name: yyDollar[2].ident.String(), Column: yyDollar[4].ident.String()}
+			yyVAL.indexPartition = &IndexPartition{Name: yyDollar[2].ident.Name, Column: yyDollar[4].ident.Name}
 		}
 	case 540:
 		yyDollar = yyS[yypt-3 : yypt+1]
@@ -7893,7 +7893,7 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser/parser.y:3766
 		{
-			yyVAL.str = yyDollar[1].ident.String()
+			yyVAL.str = yyDollar[1].ident.Name
 		}
 	case 565:
 		yyDollar = yyS[yypt-2 : yypt+1]
@@ -8361,13 +8361,13 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser/parser.y:4154
 		{
-			yyVAL.str = yyDollar[1].ident.String()
+			yyVAL.str = yyDollar[1].ident.Name
 		}
 	case 632:
 		yyDollar = yyS[yypt-2 : yypt+1]
 //line parser/parser.y:4158
 		{
-			yyVAL.str = yyDollar[1].str + " " + yyDollar[2].ident.String()
+			yyVAL.str = yyDollar[1].str + " " + yyDollar[2].ident.Name
 		}
 	case 633:
 		yyDollar = yyS[yypt-3 : yypt+1]
@@ -8385,7 +8385,7 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser/parser.y:4172
 		{
-			yyVAL.str = yyDollar[1].ident.String()
+			yyVAL.str = yyDollar[1].ident.Name
 		}
 	case 636:
 		yyDollar = yyS[yypt-1 : yypt+1]
@@ -9068,7 +9068,7 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:4689
 		{
-			yyVAL.str = yyDollar[2].ident.String()
+			yyVAL.str = yyDollar[2].ident.Name
 		}
 	case 751:
 		yyDollar = yyS[yypt-1 : yypt+1]
@@ -9546,7 +9546,7 @@ yydefault:
 			// as a function. If support is needed for that,
 			// we'll need to revisit this. The solution
 			// will be non-trivial because of grammar conflicts.
-			yyVAL.expr = &IntervalExpr{Expr: yyDollar[2].expr, Unit: yyDollar[3].ident.String()}
+			yyVAL.expr = &IntervalExpr{Expr: yyDollar[2].expr, Unit: yyDollar[3].ident.Name}
 		}
 	case 827:
 		yyDollar = yyS[yypt-2 : yypt+1]
@@ -9912,7 +9912,7 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser/parser.y:5320
 		{
-			yyVAL.str = yyDollar[1].ident.String()
+			yyVAL.str = yyDollar[1].ident.Name
 		}
 	case 893:
 		yyDollar = yyS[yypt-1 : yypt+1]
@@ -9954,7 +9954,7 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser/parser.y:5352
 		{
-			yyVAL.str = yyDollar[1].ident.String()
+			yyVAL.str = yyDollar[1].ident.Name
 		}
 	case 900:
 		yyDollar = yyS[yypt-1 : yypt+1]
@@ -9978,7 +9978,7 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:5370
 		{
-			yyVAL.convertType = &ConvertType{Type: yyDollar[1].str, Length: yyDollar[2].optVal, Charset: yyDollar[3].ident.String()}
+			yyVAL.convertType = &ConvertType{Type: yyDollar[1].str, Length: yyDollar[2].optVal, Charset: yyDollar[3].ident.Name}
 		}
 	case 904:
 		yyDollar = yyS[yypt-1 : yypt+1]
@@ -10761,7 +10761,7 @@ yydefault:
 		yyDollar = yyS[yypt-5 : yypt+1]
 //line parser/parser.y:5958
 		{
-			yyVAL.setExpr = &SetExpr{Name: NewIdent("NEW."+yyDollar[3].ident.String(), false), Expr: yyDollar[5].expr}
+			yyVAL.setExpr = &SetExpr{Name: NewIdent("NEW."+yyDollar[3].ident.Name, false), Expr: yyDollar[5].expr}
 		}
 	case 1032:
 		yyDollar = yyS[yypt-3 : yypt+1]
@@ -10791,7 +10791,7 @@ yydefault:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser/parser.y:5988
 		{
-			yyVAL.expr = NewStrVal(yyDollar[1].ident.String())
+			yyVAL.expr = NewStrVal(yyDollar[1].ident.Name)
 		}
 	case 1039:
 		yyDollar = yyS[yypt-1 : yypt+1]

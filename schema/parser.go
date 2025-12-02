@@ -92,12 +92,8 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}, nil
 		} else if stmt.Action == parser.AddForeignKey {
 
-			indexColumns := util.TransformSlice(stmt.ForeignKey.IndexColumns, func(indexColumn parser.Ident) Ident {
-				return Ident{Name: indexColumn.String(), Quoted: indexColumn.Quoted()}
-			})
-			referenceColumns := util.TransformSlice(stmt.ForeignKey.ReferenceColumns, func(referenceColumn parser.Ident) Ident {
-				return Ident{Name: referenceColumn.String(), Quoted: referenceColumn.Quoted()}
-			})
+			indexColumns := stmt.ForeignKey.IndexColumns
+			referenceColumns := stmt.ForeignKey.ReferenceColumns
 			var constraintOptions *ConstraintOptions
 			if stmt.ForeignKey.ConstraintOptions != nil {
 				constraintOptions = &ConstraintOptions{
@@ -110,13 +106,13 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				statement: ddl,
 				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 				foreignKey: ForeignKey{
-					constraintName:     Ident{Name: stmt.ForeignKey.ConstraintName.String(), Quoted: stmt.ForeignKey.ConstraintName.Quoted()},
-					indexName:          Ident{Name: stmt.ForeignKey.IndexName.String(), Quoted: stmt.ForeignKey.IndexName.Quoted()},
+					constraintName:     stmt.ForeignKey.ConstraintName,
+					indexName:          stmt.ForeignKey.IndexName,
 					indexColumns:       indexColumns,
 					referenceTableName: normalizeQualifiedName(mode, stmt.ForeignKey.ReferenceName, defaultSchema),
 					referenceColumns:   referenceColumns,
-					onDelete:           stmt.ForeignKey.OnDelete.String(),
-					onUpdate:           stmt.ForeignKey.OnUpdate.String(),
+					onDelete:           stmt.ForeignKey.OnDelete.Name,
+					onUpdate:           stmt.ForeignKey.OnUpdate.Name,
 					notForReplication:  stmt.ForeignKey.NotForReplication,
 					constraintOptions:  constraintOptions,
 				},
@@ -129,7 +125,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}, nil
 		} else if stmt.Action == parser.CreatePolicy {
 			scope := util.TransformSlice(stmt.Policy.To, func(to parser.Ident) string {
-				return to.String()
+				return to.Name
 			})
 			var using, withCheck parser.Expr
 			if stmt.Policy.Using != nil {
@@ -142,7 +138,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				statement: ddl,
 				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 				policy: Policy{
-					name:       Ident{Name: stmt.Policy.Name.String(), Quoted: stmt.Policy.Name.Quoted()},
+					name:       stmt.Policy.Name,
 					permissive: string(stmt.Policy.Permissive),
 					scope:      string(stmt.Policy.Scope),
 					roles:      scope,
@@ -290,8 +286,8 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 
 		// For simple REFERENCES (without column names), store the table name in references
 		// This is separate from the ForeignKey logic which handles REFERENCES with explicit columns
-		if parsedCol.Type.References.Name.String() != "" && len(parsedCol.Type.ReferenceNames) == 0 {
-			references = Ident{Name: parsedCol.Type.References.Name.String(), Quoted: parsedCol.Type.References.Name.Quoted()}
+		if !parsedCol.Type.References.Name.IsEmpty() && len(parsedCol.Type.ReferenceNames) == 0 {
+			references = parsedCol.Type.References.Name
 		}
 
 		if mode == GeneratorModePostgres {
@@ -310,7 +306,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			// Generic parser stores "schema.type" in typeName field
 			// pgquery parser stores "schema." in references and "type" in typeName
 			// Normalize to the pgquery format for consistent comparison
-			if strings.Contains(typeName, ".") && references.Name == "" {
+			if strings.Contains(typeName, ".") && references.IsEmpty() {
 				parts := strings.SplitN(typeName, ".", 2)
 				if len(parts) == 2 {
 					// Store schema with trailing dot to match pgquery format
@@ -321,10 +317,10 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		column := Column{
-			name:                       Ident{Name: parsedCol.Name.String(), Quoted: parsedCol.Name.Quoted()},
+			name:                       parsedCol.Name,
 			position:                   i,
 			typeName:                   typeName,
-			typeIdent:                  Ident{Name: parsedCol.Type.TypeIdent.String(), Quoted: parsedCol.Type.TypeIdent.Quoted()},
+			typeIdent:                  parsedCol.Type.TypeIdent,
 			unsigned:                   castBool(parsedCol.Type.Unsigned),
 			notNull:                    castBoolPtr(parsedCol.Type.NotNull),
 			autoIncrement:              castBool(parsedCol.Type.Autoincrement),
@@ -350,7 +346,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		// Parse @renamed annotation for each column
-		if comment, ok := columnComments[parsedCol.Name.String()]; ok {
+		if comment, ok := columnComments[parsedCol.Name.Name]; ok {
 			column.renamedFrom = extractRenameFrom(comment)
 		}
 
@@ -358,14 +354,14 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			column.check = &CheckDefinition{
 				definition: parsedCol.Type.Check.Where.Expr,
 				constraintName: Ident{
-					Name:   parsedCol.Type.Check.ConstraintName.String(),
-					Quoted: parsedCol.Type.Check.ConstraintName.Quoted(),
+					Name:   parsedCol.Type.Check.ConstraintName.Name,
+					Quoted: parsedCol.Type.Check.ConstraintName.Quoted,
 				},
 				notForReplication: parsedCol.Type.Check.NotForReplication,
 				noInherit:         castBool(parsedCol.Type.Check.NoInherit),
 			}
 		}
-		columns[parsedCol.Name.String()] = &column
+		columns[parsedCol.Name.Name] = &column
 	}
 
 	// Convert inline foreign key references to ForeignKey objects
@@ -376,20 +372,17 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	for _, parsedCol := range stmt.TableSpec.Columns {
 		// Skip if no inline foreign key reference or if it's missing column names
 		// (empty ReferenceNames means it will use the primary key, which is database-specific)
-		if parsedCol.Type.References.Name.String() == "" || len(parsedCol.Type.ReferenceNames) == 0 {
+		if parsedCol.Type.References.Name.IsEmpty() || len(parsedCol.Type.ReferenceNames) == 0 {
 			continue
 		}
 
-		column := columns[parsedCol.Name.String()]
+		column := columns[parsedCol.Name.Name]
 
 		// Build the foreign key object
-		indexColumns := []Ident{{Name: parsedCol.Name.String(), Quoted: parsedCol.Name.Quoted()}}
+		indexColumns := []Ident{parsedCol.Name}
+		referenceColumns := parsedCol.Type.ReferenceNames
 
-		referenceColumns := util.TransformSlice(parsedCol.Type.ReferenceNames, func(refCol parser.Ident) Ident {
-			return Ident{Name: refCol.String(), Quoted: refCol.Quoted()}
-		})
-
-		constraintName := buildPostgresConstraintNameIdent(stmt.NewName.Name.String(), parsedCol.Name.String(), "fkey")
+		constraintName := buildPostgresConstraintNameIdent(stmt.NewName.Name.Name, parsedCol.Name.Name, "fkey")
 
 		// Only create constraintOptions if DEFERRABLE or INITIALLY DEFERRED is explicitly set to true
 		// This ensures we don't create an empty constraintOptions struct that would differ from
@@ -463,7 +456,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			// MSSQL: https://learn.microsoft.com/en-us/sql/relational-databases/tables/create-primary-keys#limitations
 			// MySQL: https://dev.mysql.com/doc/refman/8.4/en/create-table.html
 			if indexDef.Info.Primary && (mode == GeneratorModeMssql || mode == GeneratorModeMysql) {
-				if column, ok := columns[column.Column.String()]; ok {
+				if column, ok := columns[column.Column.Name]; ok {
 					val := true
 					column.notNull = &val
 				}
@@ -483,12 +476,12 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			indexPartition.column = indexDef.Partition.Column
 		}
 
-		nameIdent := Ident{Name: indexDef.Info.Name.String(), Quoted: indexDef.Info.Name.Quoted()}
-		if nameIdent.Name == "" {
+		nameIdent := indexDef.Info.Name
+		if nameIdent.IsEmpty() {
 			// Auto-generate index/constraint name based on database conventions
-			tableName := stmt.Table.Name.String()
+			tableName := stmt.Table.Name.Name
 			if tableName == "" {
-				tableName = stmt.NewName.Name.String()
+				tableName = stmt.NewName.Name.Name
 			}
 			columnName := indexColumns[0].ColumnName()
 
@@ -548,8 +541,8 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		check := CheckDefinition{
 			definition: checkDef.Where.Expr,
 			constraintName: Ident{
-				Name:   checkDef.ConstraintName.String(),
-				Quoted: checkDef.ConstraintName.Quoted(),
+				Name:   checkDef.ConstraintName.Name,
+				Quoted: checkDef.ConstraintName.Quoted,
 			},
 			notForReplication: checkDef.NotForReplication,
 			noInherit:         castBool(checkDef.NoInherit),
@@ -558,13 +551,8 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	}
 
 	for _, foreignKeyDef := range stmt.TableSpec.ForeignKeys {
-		indexColumns := util.TransformSlice(foreignKeyDef.IndexColumns, func(indexColumn parser.Ident) Ident {
-			return Ident{Name: indexColumn.String(), Quoted: indexColumn.Quoted()}
-		})
-
-		referenceColumns := util.TransformSlice(foreignKeyDef.ReferenceColumns, func(referenceColumn parser.Ident) Ident {
-			return Ident{Name: referenceColumn.String(), Quoted: referenceColumn.Quoted()}
-		})
+		indexColumns := foreignKeyDef.IndexColumns
+		referenceColumns := foreignKeyDef.ReferenceColumns
 
 		var constraintOptions *ConstraintOptions
 		if foreignKeyDef.ConstraintOptions != nil {
@@ -575,13 +563,13 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		foreignKey := ForeignKey{
-			constraintName:     Ident{Name: foreignKeyDef.ConstraintName.String(), Quoted: foreignKeyDef.ConstraintName.Quoted()},
-			indexName:          Ident{Name: foreignKeyDef.IndexName.String(), Quoted: foreignKeyDef.IndexName.Quoted()},
+			constraintName:     foreignKeyDef.ConstraintName,
+			indexName:          foreignKeyDef.IndexName,
 			indexColumns:       indexColumns,
 			referenceTableName: normalizeQualifiedName(mode, foreignKeyDef.ReferenceName, defaultSchema),
 			referenceColumns:   referenceColumns,
-			onDelete:           foreignKeyDef.OnDelete.String(),
-			onUpdate:           foreignKeyDef.OnUpdate.String(),
+			onDelete:           foreignKeyDef.OnDelete.Name,
+			onUpdate:           foreignKeyDef.OnUpdate.Name,
 			notForReplication:  foreignKeyDef.NotForReplication,
 			constraintOptions:  constraintOptions,
 		}
@@ -651,7 +639,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 	}
 
 	includedColumns := util.TransformSlice(stmt.IndexSpec.Included, func(includedColumn parser.Ident) string {
-		return includedColumn.String()
+		return includedColumn.Name
 	})
 
 	indexOptions := util.TransformSlice(stmt.IndexSpec.Options, func(option *parser.IndexOption) IndexOption {
@@ -675,9 +663,9 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		}
 	}
 
-	nameIdent := Ident{Name: stmt.IndexSpec.Name.String(), Quoted: stmt.IndexSpec.Name.Quoted()}
-	if nameIdent.Name == "" {
-		nameIdent.Name = stmt.Table.Name.String()
+	nameIdent := stmt.IndexSpec.Name
+	if nameIdent.IsEmpty() {
+		nameIdent.Name = stmt.Table.Name.Name
 		for _, indexColumn := range indexColumns {
 			nameIdent.Name += fmt.Sprintf("_%s", indexColumn.ColumnName())
 		}
@@ -808,8 +796,8 @@ func parseDefaultDefinition(opt *parser.DefaultDefinition) *DefaultDefinition {
 	}
 
 	var constraintName Ident
-	if opt.ConstraintName.String() != "" {
-		constraintName = Ident{Name: opt.ConstraintName.String(), Quoted: opt.ConstraintName.Quoted()}
+	if !opt.ConstraintName.IsEmpty() {
+		constraintName = opt.ConstraintName
 	}
 
 	return &DefaultDefinition{
@@ -896,12 +884,12 @@ func parseExclusion(exclusion *parser.ExclusionDefinition) Exclusion {
 		where = parser.String(exclusion.Where.Expr)
 	}
 	// PostgreSQL defaults to btree when no index method is specified
-	indexType := strings.ToUpper(exclusion.IndexType.String())
+	indexType := strings.ToUpper(exclusion.IndexType.Name)
 	if indexType == "" {
 		indexType = "BTREE"
 	}
 	return Exclusion{
-		constraintName: Ident{Name: exclusion.ConstraintName.String(), Quoted: exclusion.ConstraintName.Quoted()},
+		constraintName: exclusion.ConstraintName,
 		indexType:      indexType,
 		exclusions:     exs,
 		where:          where,
@@ -910,12 +898,10 @@ func parseExclusion(exclusion *parser.ExclusionDefinition) Exclusion {
 
 // normalizeQualifiedName creates a QualifiedName from a parser.TableName
 func normalizeQualifiedName(mode GeneratorMode, tableName parser.TableName, defaultSchema string) QualifiedName {
-	nameIdent := Ident{Name: tableName.Name.String(), Quoted: tableName.Name.Quoted()}
-
 	var schemaIdent Ident
 	if mode == GeneratorModePostgres || mode == GeneratorModeMssql {
-		if len(tableName.Schema.String()) > 0 {
-			schemaIdent = Ident{Name: tableName.Schema.String(), Quoted: tableName.Schema.Quoted()}
+		if !tableName.Schema.IsEmpty() {
+			schemaIdent = tableName.Schema
 		} else {
 			schemaIdent = Ident{Name: defaultSchema, Quoted: false}
 		}
@@ -923,18 +909,16 @@ func normalizeQualifiedName(mode GeneratorMode, tableName parser.TableName, defa
 
 	return QualifiedName{
 		Schema: schemaIdent,
-		Name:   nameIdent,
+		Name:   tableName.Name,
 	}
 }
 
 // normalizeQualifiedObjectName creates a QualifiedName from a parser.ObjectName
 func normalizeQualifiedObjectName(mode GeneratorMode, objectName parser.ObjectName, defaultSchema string) QualifiedName {
-	nameIdent := Ident{Name: objectName.Name.String(), Quoted: objectName.Name.Quoted()}
-
 	var schemaIdent Ident
 	if mode == GeneratorModePostgres || mode == GeneratorModeMssql {
-		if len(objectName.Schema.String()) > 0 {
-			schemaIdent = Ident{Name: objectName.Schema.String(), Quoted: objectName.Schema.Quoted()}
+		if !objectName.Schema.IsEmpty() {
+			schemaIdent = objectName.Schema
 		} else {
 			schemaIdent = Ident{Name: defaultSchema, Quoted: false}
 		}
@@ -942,7 +926,7 @@ func normalizeQualifiedObjectName(mode GeneratorMode, objectName parser.ObjectNa
 
 	return QualifiedName{
 		Schema: schemaIdent,
-		Name:   nameIdent,
+		Name:   objectName.Name,
 	}
 }
 
@@ -950,17 +934,15 @@ func normalizeQualifiedObjectName(mode GeneratorMode, objectName parser.ObjectNa
 // This is used for trigger names which can be schema-qualified like [dbo].[trigger_name].
 // Unlike table names, trigger names do not get a default schema if none was specified.
 func normalizeColNameToQualifiedName(mode GeneratorMode, colName *parser.ColName, defaultSchema string) QualifiedName {
-	nameIdent := Ident{Name: colName.Name.String(), Quoted: colName.Name.Quoted()}
-
 	var schemaIdent Ident
 	if mode == GeneratorModePostgres || mode == GeneratorModeMssql {
 		// ColName.Qualifier is a TableName; for trigger schema, the schema is in Qualifier.Schema
 		// For [dbo].[insert_log], Qualifier.Schema = "dbo", Qualifier.Name = ""
-		if len(colName.Qualifier.Schema.String()) > 0 {
-			schemaIdent = Ident{Name: colName.Qualifier.Schema.String(), Quoted: colName.Qualifier.Schema.Quoted()}
-		} else if len(colName.Qualifier.Name.String()) > 0 {
+		if !colName.Qualifier.Schema.IsEmpty() {
+			schemaIdent = colName.Qualifier.Schema
+		} else if !colName.Qualifier.Name.IsEmpty() {
 			// Fallback: if Schema is empty but Name is set, use Name as schema
-			schemaIdent = Ident{Name: colName.Qualifier.Name.String(), Quoted: colName.Qualifier.Name.Quoted()}
+			schemaIdent = colName.Qualifier.Name
 		}
 		// Note: unlike tables, triggers don't get a default schema - if no schema was specified,
 		// we leave it empty to preserve the original behavior
@@ -968,14 +950,14 @@ func normalizeColNameToQualifiedName(mode GeneratorMode, colName *parser.ColName
 
 	return QualifiedName{
 		Schema: schemaIdent,
-		Name:   nameIdent,
+		Name:   colName.Name,
 	}
 }
 
 func normalizedTable(mode GeneratorMode, tableName Ident, defaultSchema string) Ident {
 	switch mode {
 	case GeneratorModePostgres, GeneratorModeMssql:
-		if tableName.Name == "" { // avoid qualifying empty references (e.g., built-in types)
+		if tableName.IsEmpty() { // avoid qualifying empty references (e.g., built-in types)
 			return Ident{}
 		}
 		schema, table := splitTableName(tableName.Name, defaultSchema)

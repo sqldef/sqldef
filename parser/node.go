@@ -180,7 +180,7 @@ func (node *Select) Format(buf *nodeBuffer) {
 	buf.Printf("%vselect %v%s%s%s%v",
 		node.With, node.Comments, node.Cache, node.Distinct, node.Hints, node.SelectExprs,
 	)
-	if node.From.isEmpty() {
+	if node.From.IsEmpty() {
 		buf.Printf(" from dual")
 	} else {
 		buf.Printf(" from %v", node.From)
@@ -401,7 +401,7 @@ type Update struct {
 // Format formats the node.
 func (node *Update) Format(buf *nodeBuffer) {
 	buf.Printf("update %v%v set %v", node.Comments, node.TableExprs, node.Exprs)
-	if !node.From.isEmpty() {
+	if !node.From.IsEmpty() {
 		buf.Printf(" from %v", node.From)
 	}
 	buf.Printf("%v%v%v", node.Where, node.OrderBy, node.Limit)
@@ -478,11 +478,11 @@ type Exec struct {
 
 // Format formats the Exec
 func (node *Exec) Format(buf *nodeBuffer) {
-	if node.Name.isEmpty() {
+	if node.Name.IsEmpty() {
 		buf.Printf("%s (%v)", node.Action, node.Exprs)
 		return
 	}
-	buf.Printf("%s %s %v", node.Action, node.Name.String(), node.Exprs)
+	buf.Printf("%s %s %v", node.Action, node.Name.Name, node.Exprs)
 }
 
 // Return represents a RETURN statement.
@@ -719,7 +719,7 @@ type ColumnType struct {
 	// The base type string
 	Type string
 	// TypeIdent stores the original identifier with quote information for custom types (e.g., domains).
-	// When TypeIdent is set (i.e., not zero value), use TypeIdent.Quoted() to determine quoting.
+	// When TypeIdent is set (i.e., not zero value), use TypeIdent.Quoted to determine quoting.
 	TypeIdent Ident
 
 	// Generic field options.
@@ -941,7 +941,7 @@ func (ic IndexColumn) String() string {
 	if ic.Expression != nil {
 		return String(ic.Expression)
 	}
-	return ic.Column.String()
+	return ic.Column.Name
 }
 
 // LengthScaleOption is used for types that have an optional length
@@ -1070,7 +1070,7 @@ func (node *Show) Format(buf *nodeBuffer) {
 	} else {
 		buf.Printf("show %s %s", node.Scope, node.Type)
 	}
-	if !node.OnTable.Name.isEmpty() {
+	if !node.OnTable.Name.IsEmpty() {
 		buf.Printf(" on %v", node.OnTable)
 	}
 }
@@ -1105,7 +1105,7 @@ type Use struct {
 
 // Format formats the node.
 func (node *Use) Format(buf *nodeBuffer) {
-	if node.DBName.String() != "" {
+	if node.DBName.Name != "" {
 		buf.Printf("use %v", node.DBName)
 	} else {
 		buf.Printf("use")
@@ -1249,7 +1249,7 @@ type StarExpr struct {
 
 // Format formats the node.
 func (node *StarExpr) Format(buf *nodeBuffer) {
-	if !node.TableName.isEmpty() {
+	if !node.TableName.IsEmpty() {
 		buf.Printf("%v.", node.TableName)
 	}
 	buf.Printf("*")
@@ -1264,7 +1264,7 @@ type AliasedExpr struct {
 // Format formats the node.
 func (node *AliasedExpr) Format(buf *nodeBuffer) {
 	buf.Printf("%v", node.Expr)
-	if !node.As.isEmpty() {
+	if !node.As.IsEmpty() {
 		buf.Printf(" as %v", node.As)
 	}
 }
@@ -1313,7 +1313,8 @@ func (node TableExprs) Format(buf *nodeBuffer) {
 	}
 }
 
-func (node TableExprs) isEmpty() bool {
+// IsEmpty returns true if there are no table expressions.
+func (node TableExprs) IsEmpty() bool {
 	return len(node) == 0
 }
 
@@ -1341,7 +1342,7 @@ type AliasedTableExpr struct {
 // Format formats the node.
 func (node *AliasedTableExpr) Format(buf *nodeBuffer) {
 	buf.Printf("%v%v", node.Expr, node.Partitions)
-	if !node.As.isEmpty() {
+	if !node.As.IsEmpty() {
 		buf.Printf(" as %v", node.As)
 	}
 	if len(node.TableHints) != 0 {
@@ -1382,19 +1383,19 @@ type TableName struct {
 
 // Format formats the node.
 func (node TableName) Format(buf *nodeBuffer) {
-	if node.isEmpty() {
+	if node.IsEmpty() {
 		return
 	}
-	if !node.Schema.isEmpty() {
+	if !node.Schema.IsEmpty() {
 		buf.Printf("%v.", node.Schema)
 	}
 	buf.Printf("%v", node.Name)
 }
 
-// isEmpty returns true if TableName is nil or empty.
-func (node TableName) isEmpty() bool {
+// IsEmpty returns true if TableName is nil or empty.
+func (node TableName) IsEmpty() bool {
 	// If Name is empty, Schema is also empty.
-	return node.Name.isEmpty()
+	return node.Name.IsEmpty()
 }
 
 // toViewName returns a TableName acceptable for use as a VIEW.
@@ -1402,14 +1403,14 @@ func (node TableName) isEmpty() bool {
 // For unquoted identifiers, the name is lowercased (PostgreSQL normalizes to lowercase).
 // Schema is left untouched as databases are case-sensitive for schemas.
 func (node TableName) toViewName() TableName {
-	name := node.Name.String()
+	name := node.Name.Name
 	// Only lowercase unquoted identifiers; quoted identifiers preserve their case
-	if !node.Name.Quoted() {
+	if !node.Name.Quoted {
 		name = strings.ToLower(name)
 	}
 	return TableName{
 		Schema: node.Schema,
-		Name:   NewIdent(name, node.Name.Quoted()),
+		Name:   NewIdent(name, node.Name.Quoted),
 	}
 }
 
@@ -1423,7 +1424,7 @@ type ObjectName struct {
 
 // Format formats the node.
 func (node ObjectName) Format(buf *nodeBuffer) {
-	if !node.Schema.isEmpty() {
+	if !node.Schema.IsEmpty() {
 		buf.Printf("%v.", node.Schema)
 	}
 	buf.Printf("%v", node.Name)
@@ -1896,7 +1897,7 @@ type ColName struct {
 
 // Format formats the node.
 func (node *ColName) Format(buf *nodeBuffer) {
-	if !node.Qualifier.isEmpty() {
+	if !node.Qualifier.IsEmpty() {
 		buf.Printf("%v.", node.Qualifier)
 	}
 	buf.Printf("%v", node.Name)
@@ -1910,7 +1911,7 @@ type NewQualifierColName struct {
 // Format formats the node.
 func (node *NewQualifierColName) Format(buf *nodeBuffer) {
 	// We don't have to backtick NEW qualifier.
-	buf.Printf("NEW.%s", node.Name.String())
+	buf.Printf("NEW.%s", node.Name.Name)
 }
 
 // ColTuple represents a list of column values.
@@ -2049,13 +2050,13 @@ func (node *FuncExpr) Format(buf *nodeBuffer) {
 	if node.Distinct {
 		distinct = "distinct "
 	}
-	if !node.Qualifier.isEmpty() {
+	if !node.Qualifier.IsEmpty() {
 		buf.Printf("%v.", node.Qualifier)
 	}
 	// Function names should not be back-quoted even
 	// if they match a reserved word. So, print the
 	// name as is.
-	buf.Printf("%s(%s%v)%v", node.Name.String(), distinct, node.Exprs, node.Over)
+	buf.Printf("%s(%s%v)%v", node.Name.Name, distinct, node.Exprs, node.Over)
 }
 
 // FuncCallExpr represents a function call that takes Exprs.
@@ -2068,7 +2069,7 @@ func (node *FuncCallExpr) Format(buf *nodeBuffer) {
 	// Function names should not be back-quoted even
 	// if they match a reserved word. So, print the
 	// name as is.
-	buf.Printf("%s(%v)", node.Name.String(), node.Exprs)
+	buf.Printf("%s(%v)", node.Name.Name, node.Exprs)
 }
 
 // GroupConcatExpr represents a call to GROUP_CONCAT
@@ -2458,9 +2459,9 @@ type SetExpr struct {
 func (node *SetExpr) Format(buf *nodeBuffer) {
 	// We don't have to backtick set variable names.
 	if node.Name.equalString("charset") || node.Name.equalString("names") {
-		buf.Printf("%s %v", node.Name.String(), node.Expr)
+		buf.Printf("%s %v", node.Name.Name, node.Expr)
 	} else {
-		buf.Printf("%s = %v", node.Name.String(), node.Expr)
+		buf.Printf("%s = %v", node.Name.Name, node.Expr)
 	}
 }
 
@@ -2615,7 +2616,7 @@ func (node *Cursor) Format(buf *nodeBuffer) {
 		if node.Into != nil {
 			prefix := " into "
 			for _, c := range node.Into {
-				buf.Printf("%s%s", prefix, strings.ToLower(c.String()))
+				buf.Printf("%s%s", prefix, strings.ToLower(c.Name))
 				prefix = ", "
 			}
 		}
@@ -2703,38 +2704,28 @@ func (node *If) Format(buf *nodeBuffer) {
 // This is used to track whether an identifier was quoted in the source SQL,
 // which affects case-sensitivity and normalization behavior.
 type Ident struct {
-	name   string
-	quoted bool
+	Name   string
+	Quoted bool
 }
 
 // NewIdent creates a new Ident.
 func NewIdent(name string, quoted bool) Ident {
-	return Ident{name: name, quoted: quoted}
+	return Ident{Name: name, Quoted: quoted}
 }
 
-// String returns the unescaped name.
-func (n Ident) String() string {
-	return n.name
-}
-
-// Quoted returns true if this identifier was originally quoted in the source SQL.
-func (n Ident) Quoted() bool {
-	return n.quoted
-}
-
-// isEmpty returns true if the name is empty.
-func (n Ident) isEmpty() bool {
-	return n.name == ""
+// IsEmpty returns true if the name is empty.
+func (n Ident) IsEmpty() bool {
+	return n.Name == ""
 }
 
 // Format formats the node for SQL generation.
 func (n Ident) Format(buf *nodeBuffer) {
-	formatID(buf, n.name)
+	formatID(buf, n.Name)
 }
 
 // equalString performs a case-insensitive compare with str.
 func (n Ident) equalString(str string) bool {
-	return strings.EqualFold(n.name, str)
+	return strings.EqualFold(n.Name, str)
 }
 
 func formatID(buf *nodeBuffer, original string) {
