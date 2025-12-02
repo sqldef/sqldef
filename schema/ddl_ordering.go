@@ -19,11 +19,10 @@ import (
 func normalizeIdentKey(ident Ident, mode GeneratorMode) string {
 	switch mode {
 	case GeneratorModePostgres:
-		// Unquoted identifiers fold to lowercase, quoted preserve case
-		if !ident.Quoted {
-			return strings.ToLower(ident.Name)
+		if ident.Quoted {
+			return ident.Name
 		}
-		return ident.Name
+		return strings.ToLower(ident.Name)
 	case GeneratorModeSQLite3:
 		// Always case-insensitive, even with quoted identifiers
 		return strings.ToLower(ident.Name)
