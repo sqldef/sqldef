@@ -1252,3 +1252,63 @@ UniqueConstraintQuotedIdempotent:
       "ProductCode" text UNIQUE
     );
   output: ""
+
+ForeignKeyDependencyOrderingQuotedParent:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES "Users" (id)
+    );
+    CREATE TABLE "Users" (id int PRIMARY KEY);
+  output: |
+    CREATE TABLE "Users" (id int PRIMARY KEY);
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES "Users" (id)
+    );
+
+ForeignKeyDependencyOrderingQuotedLowercaseRef:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES "users" (id)
+    );
+    CREATE TABLE users (id int PRIMARY KEY);
+  output: |
+    CREATE TABLE users (id int PRIMARY KEY);
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES "users" (id)
+    );
+
+ForeignKeyDependencyOrderingUnquotedCaseMismatch:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES Users (id)
+    );
+    CREATE TABLE users (id int PRIMARY KEY);
+  output: |
+    CREATE TABLE users (id int PRIMARY KEY);
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES Users (id)
+    );
+
+ViewDependencyOrderingUnquotedCaseMismatch:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE VIEW user_summary AS SELECT id FROM Users;
+    CREATE TABLE users (id int PRIMARY KEY);
+  output: |
+    CREATE TABLE users (id int PRIMARY KEY);
+    CREATE VIEW user_summary AS SELECT id FROM Users;

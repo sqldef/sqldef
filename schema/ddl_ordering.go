@@ -2,9 +2,54 @@ package schema
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/sqldef/sqldef/v3/parser"
 )
+
+// normalizeIdentKey returns a normalized string representation of an Ident
+// for use as a map key in dependency graphs. This ensures that identifiers
+// which refer to the same database object produce the same key.
+//
+// Behavior per database (see identifier-case-sensitivity.md):
+//   - PostgreSQL: Unquoted fold to lowercase, quoted preserve case
+//   - SQLite3: Always case-insensitive (fold all to lowercase)
+//   - MySQL: Preserved as written (OS/setting dependent comparison)
+//   - MSSQL: Preserved as written (collation dependent comparison)
+func normalizeIdentKey(ident Ident, mode GeneratorMode) string {
+	switch mode {
+	case GeneratorModePostgres:
+		// Unquoted identifiers fold to lowercase, quoted preserve case
+		if !ident.Quoted {
+			return strings.ToLower(ident.Name)
+		}
+		return ident.Name
+	case GeneratorModeSQLite3:
+		// Always case-insensitive, even with quoted identifiers
+		return strings.ToLower(ident.Name)
+	default:
+		// MySQL/MSSQL: preserve case as written
+		return ident.Name
+	}
+}
+
+// normalizeNameKey returns a normalized string representation of a
+// QualifiedName for use as a map key in dependency graphs.
+func normalizeNameKey(name QualifiedName, defaultSchema string, mode GeneratorMode) string {
+	schema := name.Schema.Name
+	if schema == "" {
+		schema = defaultSchema
+	} else {
+		schema = normalizeIdentKey(name.Schema, mode)
+	}
+
+	tableName := normalizeIdentKey(name.Name, mode)
+
+	if schema != "" {
+		return schema + "." + tableName
+	}
+	return tableName
+}
 
 // topologicalSort performs a stable topological sort on items based on their dependencies
 // using Kahn's algorithm (BFS-based). It returns the sorted items in dependency order,
@@ -136,10 +181,10 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 	// Sort tables by foreign key dependencies
 	var sortedTables []*CreateTable
 	if len(createTables) > 1 {
-		// Build dependency graph
+		// Build dependency graph using normalized names for consistent matching
 		tableDependencies := make(map[string][]string)
 		for _, ct := range createTables {
-			tableName := ct.table.name.String()
+			tableName := normalizeNameKey(ct.table.name, defaultSchema, mode)
 			// Extract foreign key dependencies
 			deps := []string{}
 			for _, fk := range ct.table.foreignKeys {
@@ -147,7 +192,7 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 				if qualifiedNamesEqual(ct.table.name, fk.referenceTableName, defaultSchema, mode, legacyIgnoreQuotes) {
 					continue
 				}
-				refTableName := fk.referenceTableName.String()
+				refTableName := normalizeNameKey(fk.referenceTableName, defaultSchema, mode)
 				if refTableName != "" {
 					deps = append(deps, refTableName)
 				}
@@ -156,7 +201,7 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 		}
 
 		sorted := topologicalSort(createTables, tableDependencies, func(ct *CreateTable) string {
-			return ct.table.name.String()
+			return normalizeNameKey(ct.table.name, defaultSchema, mode)
 		})
 
 		// If circular dependency detected, keep original order
@@ -172,22 +217,22 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 	// Sort views by view-to-view and view-to-table dependencies
 	var sortedViews []*View
 	if len(views) > 1 {
-		// Build dependency graph for views
+		// Build dependency graph for views using normalized names
 		viewDependencies := make(map[string][]string)
 
 		// Create a set of all table and view names for quick lookup
 		allObjectNames := make(map[string]bool)
 		for _, ct := range createTables {
-			allObjectNames[ct.table.name.String()] = true
+			allObjectNames[normalizeNameKey(ct.table.name, defaultSchema, mode)] = true
 		}
 		for _, view := range views {
-			allObjectNames[view.name.String()] = true
+			allObjectNames[normalizeNameKey(view.name, defaultSchema, mode)] = true
 		}
 
 		// Extract dependencies for each view
 		for _, view := range views {
 			// Use extractViewDependencies to get all dependencies from the view definition
-			deps := extractViewDependencies(view.definition, defaultSchema)
+			deps := extractViewDependencies(view.definition, defaultSchema, mode)
 
 			// Filter to only include dependencies that are in our current set of objects
 			var filteredDeps []string
@@ -196,11 +241,11 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 					filteredDeps = append(filteredDeps, dep)
 				}
 			}
-			viewDependencies[view.name.String()] = filteredDeps
+			viewDependencies[normalizeNameKey(view.name, defaultSchema, mode)] = filteredDeps
 		}
 
 		sorted := topologicalSort(views, viewDependencies, func(v *View) string {
-			return v.name.String()
+			return normalizeNameKey(v.name, defaultSchema, mode)
 		})
 
 		// If circular dependency detected, keep original order
@@ -247,9 +292,10 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 
 // extractViewDependencies extracts all table/view names that a view depends on
 // by walking the SelectStatement AST and collecting TableName references.
-func extractViewDependencies(stmt parser.SelectStatement, defaultSchema string) []string {
+// Returns normalized names suitable for use as dependency graph keys.
+func extractViewDependencies(stmt parser.SelectStatement, defaultSchema string, mode GeneratorMode) []string {
 	deps := make(map[string]bool)
-	extractDependenciesFromSelectStatement(stmt, defaultSchema, deps)
+	extractDependenciesFromSelectStatement(stmt, defaultSchema, mode, deps)
 
 	// Convert map to slice
 	var result []string
@@ -260,66 +306,72 @@ func extractViewDependencies(stmt parser.SelectStatement, defaultSchema string) 
 }
 
 // extractDependenciesFromSelectStatement recursively extracts table/view dependencies from a SelectStatement
-func extractDependenciesFromSelectStatement(stmt parser.SelectStatement, defaultSchema string, deps map[string]bool) {
+func extractDependenciesFromSelectStatement(stmt parser.SelectStatement, defaultSchema string, mode GeneratorMode, deps map[string]bool) {
 	switch s := stmt.(type) {
 	case *parser.Select:
 		// Extract from the FROM clause
-		extractDependenciesFromTableExprs(s.From, defaultSchema, deps)
+		extractDependenciesFromTableExprs(s.From, defaultSchema, mode, deps)
 
 		// Extract from WITH clause (CTE references)
 		if s.With != nil {
-			extractDependenciesFromWith(s.With, defaultSchema, deps)
+			extractDependenciesFromWith(s.With, defaultSchema, mode, deps)
 		}
 	case *parser.Union:
 		// Recursively extract from both sides of the UNION
-		extractDependenciesFromSelectStatement(s.Left, defaultSchema, deps)
-		extractDependenciesFromSelectStatement(s.Right, defaultSchema, deps)
+		extractDependenciesFromSelectStatement(s.Left, defaultSchema, mode, deps)
+		extractDependenciesFromSelectStatement(s.Right, defaultSchema, mode, deps)
 	case *parser.ParenSelect:
 		// Unwrap parenthesized SELECT
-		extractDependenciesFromSelectStatement(s.Select, defaultSchema, deps)
+		extractDependenciesFromSelectStatement(s.Select, defaultSchema, mode, deps)
 	}
 }
 
 // extractDependenciesFromWith extracts dependencies from WITH clause (CTEs)
-func extractDependenciesFromWith(with *parser.With, defaultSchema string, deps map[string]bool) {
+func extractDependenciesFromWith(with *parser.With, defaultSchema string, mode GeneratorMode, deps map[string]bool) {
 	for _, cte := range with.CTEs {
-		extractDependenciesFromSelectStatement(cte.Definition, defaultSchema, deps)
+		extractDependenciesFromSelectStatement(cte.Definition, defaultSchema, mode, deps)
 	}
 }
 
 // extractDependenciesFromTableExprs extracts table/view names from TableExprs
-func extractDependenciesFromTableExprs(exprs parser.TableExprs, defaultSchema string, deps map[string]bool) {
+func extractDependenciesFromTableExprs(exprs parser.TableExprs, defaultSchema string, mode GeneratorMode, deps map[string]bool) {
 	for _, expr := range exprs {
-		extractDependenciesFromTableExpr(expr, defaultSchema, deps)
+		extractDependenciesFromTableExpr(expr, defaultSchema, mode, deps)
 	}
 }
 
 // extractDependenciesFromTableExpr extracts table/view names from a single TableExpr
-func extractDependenciesFromTableExpr(expr parser.TableExpr, defaultSchema string, deps map[string]bool) {
+func extractDependenciesFromTableExpr(expr parser.TableExpr, defaultSchema string, mode GeneratorMode, deps map[string]bool) {
 	switch te := expr.(type) {
 	case *parser.AliasedTableExpr:
 		// Extract from the actual table expression
-		extractDependenciesFromSimpleTableExpr(te.Expr, defaultSchema, deps)
+		extractDependenciesFromSimpleTableExpr(te.Expr, defaultSchema, mode, deps)
 	case *parser.JoinTableExpr:
 		// Recursively extract from both sides of the JOIN
-		extractDependenciesFromTableExpr(te.LeftExpr, defaultSchema, deps)
-		extractDependenciesFromTableExpr(te.RightExpr, defaultSchema, deps)
+		extractDependenciesFromTableExpr(te.LeftExpr, defaultSchema, mode, deps)
+		extractDependenciesFromTableExpr(te.RightExpr, defaultSchema, mode, deps)
 	case *parser.ParenTableExpr:
 		// Recursively extract from parenthesized table expressions
-		extractDependenciesFromTableExprs(te.Exprs, defaultSchema, deps)
+		extractDependenciesFromTableExprs(te.Exprs, defaultSchema, mode, deps)
 	}
 }
 
 // extractDependenciesFromSimpleTableExpr extracts table/view names from SimpleTableExpr
-func extractDependenciesFromSimpleTableExpr(expr parser.SimpleTableExpr, defaultSchema string, deps map[string]bool) {
+func extractDependenciesFromSimpleTableExpr(expr parser.SimpleTableExpr, defaultSchema string, mode GeneratorMode, deps map[string]bool) {
 	switch ste := expr.(type) {
 	case parser.TableName:
 		// This is an actual table/view reference
-		schema := ste.Schema.String()
+		// Convert parser.Ident to schema.Ident for normalization
+		schemaIdent := Ident{Name: ste.Schema.String(), Quoted: ste.Schema.Quoted()}
+		nameIdent := Ident{Name: ste.Name.String(), Quoted: ste.Name.Quoted()}
+
+		schema := schemaIdent.Name
 		if schema == "" {
 			schema = defaultSchema
+		} else {
+			schema = normalizeIdentKey(schemaIdent, mode)
 		}
-		tableName := ste.Name.String()
+		tableName := normalizeIdentKey(nameIdent, mode)
 
 		// Always use schema.tableName format for consistency
 		var fullName string
@@ -331,6 +383,6 @@ func extractDependenciesFromSimpleTableExpr(expr parser.SimpleTableExpr, default
 		deps[fullName] = true
 	case *parser.Subquery:
 		// Recursively extract from subquery
-		extractDependenciesFromSelectStatement(ste.Select, defaultSchema, deps)
+		extractDependenciesFromSelectStatement(ste.Select, defaultSchema, mode, deps)
 	}
 }
