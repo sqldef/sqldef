@@ -74,23 +74,27 @@ type Ident = parser.Ident
 // NewIdent is an alias for parser.NewIdent.
 var NewIdent = parser.NewIdent
 
-// NewIdentFromDatabase creates an Ident from a database-sourced identifier name.
-// Since the database doesn't store quote information, we infer it from case:
+// NewIdentWithQuoteDetected creates an Ident with the Quoted flag inferred from case:
 //   - If the name contains uppercase letters, it must have been quoted
 //     (PostgreSQL folds unquoted identifiers to lowercase)
-//   - If the name is all lowercase, we treat it as unquoted. This is correct because
+//   - If the name is all lowercase, it's treated as unquoted. This is correct because
 //     in PostgreSQL, "users" (quoted lowercase) and users (unquoted) are semantically
 //     equivalent and can be referenced interchangeably.
-func NewIdentFromDatabase(name string) Ident {
-	return Ident{Name: name, Quoted: strings.ToLower(name) != name}
+//
+// Use this for identifiers from the database or auto-generated constraint names.
+func NewIdentWithQuoteDetected(name string) Ident {
+	ident := Ident{Name: name, Quoted: false}
+	return Ident{Name: name, Quoted: !ident.IsLowercase()}
 }
 
-// NewIdentFromGenerated creates an Ident for auto-generated identifier names
-// (such as constraint names built from table and column names).
-// The Quoted flag is inferred from case: if the name contains uppercase letters,
-// it must have originated from a quoted identifier (PostgreSQL folds unquoted to lowercase).
-func NewIdentFromGenerated(name string) Ident {
-	return Ident{Name: name, Quoted: strings.ToLower(name) != name}
+// NewNormalizedIdent normalizes an Ident for comparison:
+//   - Quoted identifiers: preserve case, set Quoted based on whether name has uppercase
+//   - Unquoted identifiers: normalize to lowercase, set Quoted=false
+func NewNormalizedIdent(ident Ident) Ident {
+	if ident.Quoted {
+		return NewIdentWithQuoteDetected(ident.Name)
+	}
+	return Ident{Name: strings.ToLower(ident.Name), Quoted: false}
 }
 
 // QualifiedName represents a schema-qualified table name with quote information.

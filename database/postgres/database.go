@@ -23,7 +23,7 @@ type (
 )
 
 var (
-	NewIdentFromDatabase = database.NewIdentFromDatabase
+	NewIdentWithQuoteDetected = database.NewIdentWithQuoteDetected
 )
 
 const indent = "    "
@@ -734,7 +734,7 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 			normalizedDef := normalizePostgresTypeCasts(*checkDefinition)
 			col.Check = &columnConstraint{
 				definition: normalizedDef,
-				name:       NewIdentFromDatabase(*checkName),
+				name:       NewIdentWithQuoteDetected(*checkName),
 			}
 		}
 		cols = append(cols, col)
@@ -856,7 +856,7 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) ([]CheckCo
 		// PostgreSQL returns "::time without time zone" but the generic parser expects "::time"
 		constraintDef = normalizePostgresTypeCasts(constraintDef)
 		result = append(result, CheckConstraint{
-			Name:       NewIdentFromDatabase(constraintName),
+			Name:       NewIdentWithQuoteDetected(constraintName),
 			Definition: constraintDef,
 		})
 	}
@@ -976,7 +976,7 @@ func (d *PostgresDatabase) getPrimaryKeyName(table string) (Ident, error) {
 	} else {
 		return Ident{}, err
 	}
-	return NewIdentFromDatabase(keyName), nil
+	return NewIdentWithQuoteDetected(keyName), nil
 }
 
 // refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d

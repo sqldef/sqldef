@@ -13,7 +13,8 @@ type (
 )
 
 var (
-	NewIdentFromGenerated = database.NewIdentFromGenerated
+	NewIdentWithQuoteDetected = database.NewIdentWithQuoteDetected
+	NewNormalizedIdent        = database.NewNormalizedIdent
 )
 
 // identsEqual compares two Idents with quote-awareness based on database mode and legacyIgnoreQuotes.

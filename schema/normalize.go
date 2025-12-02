@@ -143,7 +143,7 @@ func buildPostgresConstraintName(tableName, columnName, suffix string) string {
 // and returns it as an Ident with quote information inferred from case.
 func buildPostgresConstraintNameIdent(tableName, columnName, suffix string) Ident {
 	name := buildPostgresConstraintName(tableName, columnName, suffix)
-	return NewIdentFromGenerated(name)
+	return NewIdentWithQuoteDetected(name)
 }
 
 // normalizeCheckExpr normalizes a CHECK constraint expression AST for comparison
@@ -377,17 +377,17 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		})
 		return parser.ValTuple(normalizedTuple)
 	case *parser.ColName:
-		qualifierStr := ""
+		// Normalize column names while preserving quoting information:
+		// - Quoted identifiers that are NOT all lowercase preserve their case and remain quoted
+		// - Quoted identifiers that ARE all lowercase are normalized to unquoted (since "id" = id)
+		// - Unquoted identifiers are normalized to lowercase
+		var qualifier Ident
 		if e.Qualifier.Name.Name != "" {
-			qualifierStr = normalizeName(e.Qualifier.Name.Name)
+			qualifier = NewNormalizedIdent(e.Qualifier.Name)
 		}
-		nameStr := normalizeName(e.Name.Name)
-
 		return &parser.ColName{
-			Name: parser.NewIdent(nameStr, false),
-			Qualifier: parser.TableName{
-				Name: parser.NewIdent(qualifierStr, false),
-			},
+			Name:      NewNormalizedIdent(e.Name),
+			Qualifier: parser.TableName{Name: qualifier},
 		}
 	case *parser.TypedLiteral:
 		// PostgreSQL normalizes typed literals differently based on type:
@@ -422,26 +422,21 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 
 	switch e := expr.(type) {
 	case *parser.ColName:
-		// Normalize column name and qualifier
-		// 1. Remove database-specific quotes/brackets from identifiers
-		// 2. For Postgres and MySQL, remove table qualifiers from column references
-		qualifierStr := ""
-		if e.Qualifier.Name.Name != "" {
-			qualifierStr = normalizeName(e.Qualifier.Name.Name)
-		}
-		nameStr := normalizeName(e.Name.Name)
-
+		// Normalize column name and qualifier while preserving quoting:
+		// - Quoted identifiers that are NOT all lowercase preserve their case and remain quoted
+		// - Quoted identifiers that ARE all lowercase are normalized to unquoted (since "id" = id)
+		// - Unquoted identifiers are normalized to lowercase
 		// For Postgres and MySQL, remove table qualifiers (e.g., "users.name" -> "name")
-		// MySQL adds table qualifiers when storing views
-		if mode == GeneratorModePostgres || mode == GeneratorModeMysql {
-			qualifierStr = ""
+		var qualifier Ident
+		if e.Qualifier.Name.Name != "" {
+			// For Postgres and MySQL, remove table qualifiers
+			if mode != GeneratorModePostgres && mode != GeneratorModeMysql {
+				qualifier = NewNormalizedIdent(e.Qualifier.Name)
+			}
 		}
-
 		return &parser.ColName{
-			Name: parser.NewIdent(nameStr, false),
-			Qualifier: parser.TableName{
-				Name: parser.NewIdent(qualifierStr, false),
-			},
+			Name:      NewNormalizedIdent(e.Name),
+			Qualifier: parser.TableName{Name: qualifier},
 		}
 	case *parser.ArrayConstructor:
 		elements := util.TransformSlice(e.Elements, func(elem parser.Expr) parser.Expr {

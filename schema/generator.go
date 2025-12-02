@@ -2181,8 +2181,13 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 		if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
 			column = g.escapeSQLIdent(colName.Name)
 		} else {
-			// For expressions (functional indexes), use parser.Name
-			column = parser.String(indexColumn.columnExpr)
+			// For expressions (functional indexes), format with quote awareness
+			if !g.config.LegacyIgnoreQuotes {
+				column = g.formatExprQuoteAware(indexColumn.columnExpr)
+			} else {
+				// Legacy mode: use parser.String for backward compatibility
+				column = parser.String(indexColumn.columnExpr)
+			}
 		}
 		if indexColumn.length != nil {
 			column += fmt.Sprintf("(%d)", *indexColumn.length)
@@ -2263,7 +2268,19 @@ func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 
 	columns := []string{}
 	for _, indexColumn := range index.columns {
-		column := g.forceEscapeSQLName(parser.String(indexColumn.columnExpr))
+		var column string
+		// For simple column references (ColName), use escapeSQLIdent to preserve quoting
+		if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
+			column = g.escapeSQLIdent(colName.Name)
+		} else {
+			// For expressions (functional indexes), format with quote awareness
+			if !g.config.LegacyIgnoreQuotes {
+				column = g.formatExprQuoteAware(indexColumn.columnExpr)
+			} else {
+				// Legacy mode: use parser.String for backward compatibility
+				column = parser.String(indexColumn.columnExpr)
+			}
+		}
 		if indexColumn.length != nil {
 			column += fmt.Sprintf("(%d)", *indexColumn.length)
 		}
@@ -3638,9 +3655,91 @@ func (g *Generator) normalizeCheckExprString(expr parser.Expr) string {
 		normalized := normalizeCheckExpr(expr, g.mode)
 		// Unwrap outermost parentheses for consistent output (comparison does this too)
 		normalized = unwrapOutermostParenExpr(normalized)
+		// In quote-aware mode, use formatExprQuoteAware to preserve quoting in column names
+		// In legacy mode, use parser.String for backward compatibility (no quoting in expressions)
+		if !g.config.LegacyIgnoreQuotes {
+			return g.formatExprQuoteAware(normalized)
+		}
 		return parser.String(normalized)
 	}
 	return parser.String(expr)
+}
+
+// formatExprQuoteAware formats an expression with quote-aware column name handling.
+// This walks the AST and uses escapeSQLIdent for column names to preserve quoting.
+func (g *Generator) formatExprQuoteAware(expr parser.Expr) string {
+	if expr == nil {
+		return ""
+	}
+
+	switch e := expr.(type) {
+	case *parser.ColName:
+		var result string
+		if !e.Qualifier.IsEmpty() {
+			result = parser.String(e.Qualifier) + "."
+		}
+		result += g.escapeSQLIdent(e.Name)
+		return result
+	case *parser.ParenExpr:
+		return "(" + g.formatExprQuoteAware(e.Expr) + ")"
+	case *parser.ComparisonExpr:
+		return g.formatExprQuoteAware(e.Left) + " " + e.Operator + " " + g.formatExprQuoteAware(e.Right)
+	case *parser.AndExpr:
+		return g.formatExprQuoteAware(e.Left) + " AND " + g.formatExprQuoteAware(e.Right)
+	case *parser.OrExpr:
+		return g.formatExprQuoteAware(e.Left) + " OR " + g.formatExprQuoteAware(e.Right)
+	case *parser.NotExpr:
+		return "NOT " + g.formatExprQuoteAware(e.Expr)
+	case *parser.BinaryExpr:
+		return g.formatExprQuoteAware(e.Left) + " " + e.Operator + " " + g.formatExprQuoteAware(e.Right)
+	case *parser.UnaryExpr:
+		return e.Operator + g.formatExprQuoteAware(e.Expr)
+	case *parser.IsExpr:
+		// IsExpr has Operator (e.g., "is null", "is not null") and Expr
+		return g.formatExprQuoteAware(e.Expr) + " " + e.Operator
+	case *parser.CastExpr:
+		return g.formatExprQuoteAware(e.Expr) + "::" + parser.String(e.Type)
+	case *parser.FuncExpr:
+		// For function expressions, format arguments with quote awareness
+		// Normalize function name to lowercase (PostgreSQL convention)
+		args := make([]string, len(e.Exprs))
+		for i, arg := range e.Exprs {
+			args[i] = g.formatSelectExprQuoteAware(arg)
+		}
+		funcName := strings.ToLower(e.Name.Name)
+		return funcName + "(" + strings.Join(args, ", ") + ")"
+	case *parser.RangeCond:
+		return g.formatExprQuoteAware(e.Left) + " BETWEEN " + g.formatExprQuoteAware(e.From) + " AND " + g.formatExprQuoteAware(e.To)
+	case *parser.CaseExpr:
+		var result string
+		result = "CASE"
+		if e.Expr != nil {
+			result += " " + g.formatExprQuoteAware(e.Expr)
+		}
+		for _, when := range e.Whens {
+			result += " WHEN " + g.formatExprQuoteAware(when.Cond) + " THEN " + g.formatExprQuoteAware(when.Val)
+		}
+		if e.Else != nil {
+			result += " ELSE " + g.formatExprQuoteAware(e.Else)
+		}
+		result += " END"
+		return result
+	default:
+		// For other expression types, fall back to parser.String
+		return parser.String(expr)
+	}
+}
+
+// formatSelectExprQuoteAware formats a SelectExpr (used in function arguments) with quote awareness.
+func (g *Generator) formatSelectExprQuoteAware(expr parser.SelectExpr) string {
+	switch e := expr.(type) {
+	case *parser.AliasedExpr:
+		return g.formatExprQuoteAware(e.Expr)
+	case *parser.StarExpr:
+		return parser.String(e)
+	default:
+		return parser.String(expr)
+	}
 }
 
 func areSameIdentityDefinition(identityA *Identity, identityB *Identity) bool {
@@ -3906,8 +4005,15 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 			indexB.columns[i].direction = AscScr
 		}
 		// TODO: check length?
-		normalizedA := parser.String(normalizeExpr(indexA.columns[i].columnExpr, g.mode))
-		normalizedB := parser.String(normalizeExpr(indexB.columns[i].columnExpr, g.mode))
+		var normalizedA, normalizedB string
+		if !g.config.LegacyIgnoreQuotes {
+			// Quote-aware mode: use formatExprQuoteAware which respects the Quoted field
+			normalizedA = g.formatExprQuoteAware(normalizeExpr(indexA.columns[i].columnExpr, g.mode))
+			normalizedB = g.formatExprQuoteAware(normalizeExpr(indexB.columns[i].columnExpr, g.mode))
+		} else {
+			normalizedA = parser.String(normalizeExpr(indexA.columns[i].columnExpr, g.mode))
+			normalizedB = parser.String(normalizeExpr(indexB.columns[i].columnExpr, g.mode))
+		}
 		if normalizedA != normalizedB ||
 			indexAColumn.direction != indexB.columns[i].direction {
 			return false
