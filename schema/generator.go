@@ -161,7 +161,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				mergeTable(currentTable, desired.table)
 			} else {
 				// Table not found. Check if it's a rename from another table.
-				if desired.table.renamedFrom.Name != "" {
+				if !desired.table.renamedFrom.IsEmpty() {
 					oldTableName := g.normalizeOldTableName(desired.table.renamedFrom, desired.table.name)
 					oldTable := g.findTableByName(g.currentTables, oldTableName)
 					if oldTable != nil {
@@ -374,7 +374,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			// Check if this index was renamed (don't drop if it was renamed)
 			isRenamed := false
 			for _, desiredIndex := range desiredTable.indexes {
-				if desiredIndex.renamedFrom.Name != "" && g.identsEqual(desiredIndex.renamedFrom, index.name) {
+				if !desiredIndex.renamedFrom.IsEmpty() && g.identsEqual(desiredIndex.renamedFrom, index.name) {
 					isRenamed = true
 					break
 				}
@@ -401,7 +401,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			// Check if this column is being renamed (not dropped)
 			isRenamed := false
 			for _, desiredColumn := range desiredTable.columns {
-				if desiredColumn.renamedFrom.Name != "" && g.identsEqual(desiredColumn.renamedFrom, column.name) {
+				if !desiredColumn.renamedFrom.IsEmpty() && g.identsEqual(desiredColumn.renamedFrom, column.name) {
 					isRenamed = true
 					break
 				}
@@ -568,7 +568,7 @@ func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, desiredTabl
 
 	// Only MSSQL has column default constraints. They need to be deleted before dropping the column.
 	if g.mode == GeneratorModeMssql {
-		if column.defaultDef != nil && column.defaultDef.constraintName.Name != "" {
+		if column.defaultDef != nil && !column.defaultDef.constraintName.IsEmpty() {
 			ddl := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desiredTable), g.escapeSQLIdent(column.defaultDef.constraintName))
 			ddls = append(ddls, ddl)
 		}
@@ -593,7 +593,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		// deep copy to avoid modifying the original
 		desiredColumn := *desiredColumnPtr
 
-		if desiredColumn.renamedFrom.Name != "" {
+		if !desiredColumn.renamedFrom.IsEmpty() {
 			// Check for conflict: can't rename a column if the old name still exists
 			if g.findColumnByName(desired.table.columns, desiredColumn.renamedFrom) != nil {
 				return ddls, fmt.Errorf("cannot rename column '%s' to '%s' - column '%s' still exists",
@@ -610,7 +610,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		if currentColumn == nil {
 			// Check if this is a renamed column
 			var renameFromColumn *Column
-			if desiredColumn.renamedFrom.Name != "" {
+			if !desiredColumn.renamedFrom.IsEmpty() {
 				renameFromColumn = g.findColumnByName(currentTable.columns, desiredColumn.renamedFrom)
 			}
 
@@ -892,7 +892,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				tableName := desired.table.name.Name.Name
 				columnName := desiredColumn.name.Name
 				constraintName := buildPostgresConstraintNameIdent(tableName, columnName, "check")
-				if desiredColumn.check != nil && desiredColumn.check.constraintName.Name != "" {
+				if desiredColumn.check != nil && !desiredColumn.check.constraintName.IsEmpty() {
 					constraintName = desiredColumn.check.constraintName
 				}
 
@@ -1037,7 +1037,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 							return ddls, err
 						}
 						var ddl string
-						if desiredColumn.defaultDef.constraintName.Name != "" {
+						if !desiredColumn.defaultDef.constraintName.IsEmpty() {
 							ddl = fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s %s FOR %s", g.escapeTableName(&currentTable), g.escapeSQLIdent(desiredColumn.defaultDef.constraintName), definition, g.escapeColumnName(currentColumn))
 						} else {
 							ddl = fmt.Sprintf("ALTER TABLE %s ADD %s FOR %s", g.escapeTableName(&currentTable), definition, g.escapeColumnName(currentColumn))
@@ -1193,7 +1193,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		} else {
 			// Check if this is a renamed index
 			var renameFromIndex *Index
-			if desiredIndex.renamedFrom.Name != "" {
+			if !desiredIndex.renamedFrom.IsEmpty() {
 				renameFromIndex = g.findIndexByName(currentTable.indexes, desiredIndex.renamedFrom)
 			}
 
@@ -1243,7 +1243,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 		// Create a modified ForeignKey with the generated constraint name if needed
 		fkWithName := desiredForeignKey
-		if desiredForeignKey.constraintName.IsEmpty() && constraintName.Name != "" {
+		if desiredForeignKey.constraintName.IsEmpty() && !constraintName.IsEmpty() {
 			fkWithName = ForeignKey{
 				constraintName:     constraintName,
 				indexName:          desiredForeignKey.indexName,
@@ -1426,7 +1426,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 	if currentIndex == nil {
 		// Check if this is a renamed index
 		var renameFromIndex *Index
-		if desiredIndex.renamedFrom.Name != "" {
+		if !desiredIndex.renamedFrom.IsEmpty() {
 			renameFromIndex = g.findIndexByName(currentTable.indexes, desiredIndex.renamedFrom)
 		}
 
@@ -2004,7 +2004,7 @@ func (g *Generator) generateDataType(column Column) string {
 	// 1. references is not empty (including "public." for enum types)
 	// 2. the type name doesn't already contain a dot
 	// 3. it's not a built-in type (built-in types shouldn't have references set to non-empty schema)
-	if g.mode == GeneratorModePostgres && column.references.Name != "" && !strings.Contains(typeName, ".") {
+	if g.mode == GeneratorModePostgres && !column.references.IsEmpty() && !strings.Contains(typeName, ".") {
 		typeName = column.references.Name + typeName
 	}
 
@@ -2330,7 +2330,7 @@ func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 			g.escapeQualifiedName(table),
 		)
 		if strings.EqualFold(index.indexType, "PRIMARY KEY") && index.primary &&
-			(index.name.Name != "" && index.name.Name != "PRIMARY" && index.name.Name != index.columns[0].ColumnName()) {
+			(!index.name.IsEmpty() && index.name.Name != "PRIMARY" && index.name.Name != index.columns[0].ColumnName()) {
 			ddl += fmt.Sprintf("CONSTRAINT %s ", g.escapeSQLIdent(index.name))
 		}
 		isUniqueConstraint := strings.EqualFold(index.indexType, "UNIQUE")
@@ -2466,7 +2466,7 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 	// Empty constraint name is already invalidated in generateDDLsForCreateIndex
 	definition := fmt.Sprintf("CONSTRAINT %s FOREIGN KEY ", g.escapeSQLIdent(foreignKey.constraintName))
 
-	if foreignKey.indexName.Name != "" {
+	if !foreignKey.indexName.IsEmpty() {
 		definition += fmt.Sprintf("%s ", g.escapeSQLIdent(foreignKey.indexName))
 	}
 
@@ -3499,7 +3499,7 @@ func (g *Generator) areSameGenerated(generatedA, generatedB *Generated) bool {
 }
 
 func (g *Generator) haveSameDataType(current Column, desired Column) bool {
-	if !g.config.LegacyIgnoreQuotes && g.mode == GeneratorModePostgres && (current.typeIdent.Name != "" || desired.typeIdent.Name != "") {
+	if !g.config.LegacyIgnoreQuotes && g.mode == GeneratorModePostgres && (!current.typeIdent.IsEmpty() || !desired.typeIdent.IsEmpty()) {
 		// Quote-aware comparison for custom types (domains, etc.)
 		//
 		// PostgreSQL's format_type returns the internal type name without quotes.
@@ -4215,9 +4215,9 @@ func convertExclusionToConstraintNames(exclusions []Exclusion) []Ident {
 func convertForeignKeysToIndexNames(foreignKeys []ForeignKey) []string {
 	indexNames := []string{}
 	for _, foreignKey := range foreignKeys {
-		if foreignKey.indexName.Name != "" {
+		if !foreignKey.indexName.IsEmpty() {
 			indexNames = append(indexNames, foreignKey.indexName.Name)
-		} else if foreignKey.constraintName.Name != "" {
+		} else if !foreignKey.constraintName.IsEmpty() {
 			indexNames = append(indexNames, foreignKey.constraintName.Name)
 		} // unexpected to reach else (really?)
 	}

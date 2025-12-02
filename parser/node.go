@@ -1105,7 +1105,7 @@ type Use struct {
 
 // Format formats the node.
 func (node *Use) Format(buf *nodeBuffer) {
-	if node.DBName.Name != "" {
+	if !node.DBName.IsEmpty() {
 		buf.Printf("use %v", node.DBName)
 	} else {
 		buf.Printf("use")

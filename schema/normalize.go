@@ -382,7 +382,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		// - Quoted identifiers that ARE all lowercase are normalized to unquoted (since "id" = id)
 		// - Unquoted identifiers are normalized to lowercase
 		var qualifier Ident
-		if e.Qualifier.Name.Name != "" {
+		if !e.Qualifier.Name.IsEmpty() {
 			qualifier = NewNormalizedIdent(e.Qualifier.Name)
 		}
 		return &parser.ColName{
@@ -428,7 +428,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		// - Unquoted identifiers are normalized to lowercase
 		// For Postgres and MySQL, remove table qualifiers (e.g., "users.name" -> "name")
 		var qualifier Ident
-		if e.Qualifier.Name.Name != "" {
+		if !e.Qualifier.Name.IsEmpty() {
 			// For Postgres and MySQL, remove table qualifiers
 			if mode != GeneratorModePostgres && mode != GeneratorModeMysql {
 				qualifier = NewNormalizedIdent(e.Qualifier.Name)
@@ -761,7 +761,7 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 		}
 		// For MySQL, strip redundant aliases where the alias matches the column name
 		// MySQL adds "column_name as column_name" which is redundant
-		if mode == GeneratorModeMysql && as.Name != "" {
+		if mode == GeneratorModeMysql && !as.IsEmpty() {
 			if colName, ok := e.Expr.(*parser.ColName); ok {
 				if strings.EqualFold(colName.Name.Name, as.Name) {
 					// The alias is the same as the column name, strip it
@@ -866,7 +866,7 @@ func normalizeExprPreservingQualifiers(expr parser.Expr, mode GeneratorMode) par
 	case *parser.ColName:
 		// Keep the qualifier but normalize the names to lowercase
 		qualifierStr := ""
-		if e.Qualifier.Name.Name != "" {
+		if !e.Qualifier.Name.IsEmpty() {
 			qualifierStr = normalizeName(e.Qualifier.Name.Name)
 		}
 		nameStr := normalizeName(e.Name.Name)
