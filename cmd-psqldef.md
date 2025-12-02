@@ -438,4 +438,91 @@ $ psqldef -U postgres dbname \
 | `managed_roles` | array | List of role names whose privileges (GRANT/REVOKE) should be managed. Only privileges for these roles will be applied. |
 | `dump_concurrency` | integer | Number of parallel connections to use when exporting the schema. Improves performance for large schemas. Default is 1. |
 | `create_index_concurrently` | boolean | When true, adds CONCURRENTLY to all CREATE INDEX statements. Default is false. |
+| `legacy_ignore_quotes` | boolean | Controls identifier quoting behavior. When `true` (default), all identifiers are quoted in output. When `false`, identifiers preserve their original quoting from the source SQL. Default is `true` but will change to `false` in the next major version. See [Identifier Quoting](#identifier-quoting) for details. |
+
+## Identifier Quoting
+
+PostgreSQL distinguishes between quoted and unquoted identifiers:
+- **Unquoted identifiers** are normalized to lowercase (e.g., `Users` becomes `users`)
+- **Quoted identifiers** preserve their exact case (e.g., `"Users"` remains `Users`)
+
+The `legacy_ignore_quotes` configuration option controls how psqldef handles this distinction.
+
+### Quote-Aware Mode (`legacy_ignore_quotes: false`)
+
+When set to `false`, psqldef preserves the quoting from your source SQL:
+
+```sql
+-- Source schema (desired.sql)
+CREATE TABLE users (
+    id bigint NOT NULL PRIMARY KEY,
+    name text
+);
+```
+
+```shell
+$ psqldef -U postgres mydb --config-inline="legacy_ignore_quotes: false" < desired.sql
+-- Apply --
+ALTER TABLE public.users ADD COLUMN name text;
+```
+
+In this mode:
+- Unquoted identifiers remain unquoted in generated DDL
+- Quoted identifiers remain quoted in generated DDL
+- This matches PostgreSQL's actual case-sensitivity semantics
+
+### Legacy Mode (`legacy_ignore_quotes: true`)
+
+When set to `true` (current default), all identifiers are quoted in output:
+
+```shell
+$ psqldef -U postgres mydb --config-inline="legacy_ignore_quotes: true" < desired.sql
+-- Apply --
+ALTER TABLE "public"."users" ADD COLUMN "name" text;
+```
+
+**Problem with legacy mode:** It loses the semantic distinction between quoted and unquoted identifiers. Consider this schema with mixed quoting:
+
+```sql
+-- desired.sql: intentionally mixed quoting
+CREATE TABLE users (           -- unquoted: normalizes to lowercase
+    id bigint PRIMARY KEY
+);
+CREATE TABLE "AuditLog" (      -- quoted: preserves exact case
+    id bigint PRIMARY KEY
+);
+```
+
+In legacy mode, the output quotes everything uniformly:
+
+```shell
+$ psqldef -U postgres mydb --export
+CREATE TABLE "public"."users" (
+    "id" bigint NOT NULL
+);
+CREATE TABLE "public"."AuditLog" (
+    "id" bigint NOT NULL
+);
+```
+
+This makes it impossible to tell which identifiers were originally quoted (case-sensitive) vs unquoted (case-insensitive). If you use this exported schema as input, you lose the original intent—`users` is now explicitly quoted when it didn't need to be.
+
+### Migration Guide
+
+The default will change from `true` to `false` in the next major version. To prepare:
+
+1. **Test with `legacy_ignore_quotes: false`** to see if your workflow is affected
+2. **Explicitly set the option** in your configuration to avoid surprises during upgrade:
+
+```yaml
+# config.yml - explicitly set to maintain current behavior
+legacy_ignore_quotes: true
+```
+
+Or to adopt the new behavior early:
+
+```yaml
+# config.yml - opt-in to quote-aware mode
+legacy_ignore_quotes: false
+```
 

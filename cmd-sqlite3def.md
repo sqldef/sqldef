@@ -286,3 +286,4 @@ $ sqlite3def mydb.db \
 | `target_tables` | string | Regular expression patterns (one per line) to specify which tables to manage. Only tables matching these patterns will be processed. |
 | `skip_tables` | string | Regular expression patterns (one per line) to specify which tables to skip. Tables matching these patterns will be ignored. |
 | `skip_views` | string | Regular expression patterns (one per line) to specify which views to skip. |
+| `legacy_ignore_quotes` | boolean | Controls identifier quoting behavior. When `true` (default), all identifiers are quoted in output. When `false`, identifiers preserve their original quoting from the source SQL. Default is `true` but will change to `false` in the next major version. |
