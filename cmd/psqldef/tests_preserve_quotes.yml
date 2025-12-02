@@ -1,5 +1,3 @@
-# This test file is to test `legacy_ignore_quotes: false` behavior.
-
 TableQuotedPreservesCase:
   legacy_ignore_quotes: false
   current: |
@@ -58,9 +56,6 @@ ColumnQuotedVsUnquotedAreDifferent:
     ALTER TABLE public.users ALTER COLUMN "Name" SET NOT NULL;
     ALTER TABLE public.users ALTER COLUMN name SET NOT NULL;
 
-# Equivalence tests: quoted lowercase should equal unquoted (current=unquoted, desired=quoted)
-# In PostgreSQL, "users" (quoted lowercase) and users (unquoted) refer to the same identifier
-# These test the opposite direction from the tests at the end of this file
 TableUnquotedEqualsQuotedLowercase:
   legacy_ignore_quotes: false
   current: |
@@ -191,7 +186,6 @@ IndexUnquotedNormalizesToLowercase:
   output: |
     ALTER TABLE public.users ADD COLUMN name text;
 
-# Test that CREATE INDEX preserves quoted table name (adding index to existing quoted table)
 CreateIndexOnQuotedTable:
   legacy_ignore_quotes: false
   current: |
@@ -202,7 +196,6 @@ CreateIndexOnQuotedTable:
   output: |
     CREATE INDEX email_idx ON public."Users" (id);
 
-# Test that CREATE INDEX preserves unquoted table name (normalizes to lowercase)
 CreateIndexOnUnquotedTable:
   legacy_ignore_quotes: false
   current: |
@@ -213,7 +206,6 @@ CreateIndexOnUnquotedTable:
   output: |
     CREATE INDEX email_idx ON public.users (id);
 
-# Test adding index to existing quoted table
 AddIndexToQuotedTable:
   legacy_ignore_quotes: false
   current: |
@@ -224,7 +216,6 @@ AddIndexToQuotedTable:
   output: |
     CREATE INDEX email_idx ON public."Users" (email);
 
-# Test adding index to existing unquoted table
 AddIndexToUnquotedTable:
   legacy_ignore_quotes: false
   current: |
@@ -525,8 +516,6 @@ DropQuotedReservedWordTable:
   output: |
     DROP TABLE public."table";
 
-# Reserved keywords must be quoted to be used as identifiers.
-# In quote-aware mode, quoted lowercase reserved words should remain quoted.
 QuotedReservedWordTableAddColumn:
   legacy_ignore_quotes: false
   current: |
@@ -1022,12 +1011,6 @@ IndexOnMixedQuotedColumns:
   output: |
     CREATE INDEX name_idx ON public.users ("FirstName", last_name);
 
-# =============================================================================
-# Edge case tests for Issue 3: Schema name comparison
-# In quote-aware mode, quoted schema "MySchema" should be different from
-# unquoted myschema (which normalizes to lowercase)
-# =============================================================================
-
 QuotedSchemaVsUnquotedSchemaDifferent:
   legacy_ignore_quotes: false
   current: |
@@ -1057,17 +1040,6 @@ QuotedSchemaVsUnquotedSchemaModifyBoth:
   output: |
     ALTER TABLE "MySchema".users ADD COLUMN quoted_col text;
     ALTER TABLE myschema.users ADD COLUMN unquoted_col text;
-
-# =============================================================================
-# Edge case tests for Issue 4: escapeAndJoinColumns missing quote-awareness
-# Foreign key columns should preserve quoting: unquoted columns should NOT
-# be quoted in the output in quote-aware mode
-# =============================================================================
-
-# Note: In quote-aware mode, the default schema (public) is unquoted since it was never explicitly quoted.
-# Reference table names are currently always quoted due to implementation limitations
-# (ForeignKey.referenceName is stored as string without quote info).
-# The key behavior being tested is that column names preserve their original quoting.
 
 ForeignKeyUnquotedColumnsNotQuoted:
   legacy_ignore_quotes: false
@@ -1126,11 +1098,6 @@ ForeignKeyQuotedColumnToUnquotedColumn:
   output: |
     ALTER TABLE public.products ADD CONSTRAINT fk_category FOREIGN KEY ("CategoryId") REFERENCES public.categories (category_id);
 
-# =============================================================================
-# Tests for FK constraint name comparison (quote-aware)
-# =============================================================================
-
-# Quoted lowercase FK name equals unquoted FK name - they should be considered the same
 ForeignKeyConstraintQuotedLowercaseEqualsUnquoted:
   legacy_ignore_quotes: false
   current: |
@@ -1149,8 +1116,6 @@ ForeignKeyConstraintQuotedLowercaseEqualsUnquoted:
     );
   output: ""
 
-# Quoted mixed-case FK name differs from unquoted FK name
-# "FK_User" (preserves case) is different from fk_user (normalizes to lowercase)
 ForeignKeyConstraintQuotedMixedCaseDiffersFromUnquoted:
   legacy_ignore_quotes: false
   current: |
@@ -1171,7 +1136,6 @@ ForeignKeyConstraintQuotedMixedCaseDiffersFromUnquoted:
     ALTER TABLE public.orders ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES public.users (id);
     ALTER TABLE public.orders DROP CONSTRAINT "FK_User";
 
-# Change quoted FK name to a different quoted name
 ForeignKeyRenameQuotedConstraint:
   legacy_ignore_quotes: false
   current: |
@@ -1192,8 +1156,6 @@ ForeignKeyRenameQuotedConstraint:
     ALTER TABLE public.orders ADD CONSTRAINT "FK_New_Name" FOREIGN KEY (user_id) REFERENCES public.users (id);
     ALTER TABLE public.orders DROP CONSTRAINT "FK_Old_Name";
 
-# Test that auto-generated CHECK constraint names work with unquoted identifiers
-# PostgreSQL normalizes unquoted identifiers to lowercase, so constraint names should match
 CheckConstraintUnquotedIdempotent:
   legacy_ignore_quotes: false
   current: |
@@ -1208,7 +1170,6 @@ CheckConstraintUnquotedIdempotent:
     );
   output: ""
 
-# Test that auto-generated UNIQUE constraint names work with unquoted identifiers
 UniqueConstraintUnquotedIdempotent:
   legacy_ignore_quotes: false
   current: |
@@ -1223,7 +1184,6 @@ UniqueConstraintUnquotedIdempotent:
     );
   output: ""
 
-# Test that auto-generated CHECK constraint names preserve case for quoted identifiers
 CheckConstraintQuotedIdempotent:
   legacy_ignore_quotes: false
   current: |
@@ -1238,7 +1198,6 @@ CheckConstraintQuotedIdempotent:
     );
   output: ""
 
-# Test that auto-generated UNIQUE constraint names preserve case for quoted identifiers
 UniqueConstraintQuotedIdempotent:
   legacy_ignore_quotes: false
   current: |
