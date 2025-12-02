@@ -2718,13 +2718,6 @@ func (n Ident) IsEmpty() bool {
 	return n.Name == ""
 }
 
-// IsLowercase returns true if the name is all lowercase.
-// This is useful for determining if a quoted lowercase identifier can be
-// normalized to unquoted (since "id" and id are equivalent in PostgreSQL).
-func (n Ident) IsLowercase() bool {
-	return strings.ToLower(n.Name) == n.Name
-}
-
 // Format formats the node for SQL generation.
 func (n Ident) Format(buf *nodeBuffer) {
 	formatID(buf, n.Name)

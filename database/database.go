@@ -83,8 +83,7 @@ var NewIdent = parser.NewIdent
 //
 // Use this for identifiers from the database or auto-generated constraint names.
 func NewIdentWithQuoteDetected(name string) Ident {
-	ident := Ident{Name: name, Quoted: false}
-	return Ident{Name: name, Quoted: !ident.IsLowercase()}
+	return Ident{Name: name, Quoted: strings.ToLower(name) != name}
 }
 
 // NewNormalizedIdent normalizes an Ident for comparison:
