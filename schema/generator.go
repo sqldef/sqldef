@@ -635,7 +635,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						ddls = append(ddls, ddl)
 					}
 
-					if !isPrimaryKey(*renameFromColumn, currentTable) {
+					if !g.isPrimaryKey(*renameFromColumn, currentTable) {
 						if g.notNull(*renameFromColumn) && !g.notNull(desiredColumn) {
 							ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL",
 								g.escapeTableName(&desired.table),
@@ -845,7 +845,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					ddls = append(ddls, ddl)
 				}
 
-				if !isPrimaryKey(*currentColumn, currentTable) { // Primary Key implies NOT NULL
+				if !g.isPrimaryKey(*currentColumn, currentTable) { // Primary Key implies NOT NULL
 					if g.notNull(*currentColumn) && !g.notNull(desiredColumn) {
 						// Use desiredColumn for escaping to match user's quote style
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn)))
@@ -1459,7 +1459,7 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 
 			newIndexes := []Index{}
 			for _, currentIndex := range currentTable.indexes {
-				if currentIndex.name.Name == desiredIndex.name.Name {
+				if g.identsEqual(currentIndex.name, desiredIndex.name) {
 					newIndexes = append(newIndexes, desiredIndex)
 				} else {
 					newIndexes = append(newIndexes, currentIndex)
@@ -1871,14 +1871,10 @@ func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 	return ddls, nil
 }
 
-// generateNormalizedCommentStatement creates a COMMENT statement with normalized identifiers.
-func (g *Generator) generateNormalizedCommentStatement(comment *Comment) string {
-	objectType := comment.comment.ObjectType
-	sqlObjectType := strings.TrimPrefix(objectType, "OBJECT_")
-
-	// Escape the object name using quote-aware output.
-	// Object is []Ident representing: [schema, table] for TABLE, [schema, table, column] for COLUMN
-	// Special handling for the schema part (first element) when it matches the default schema.
+// escapeCommentObject returns the escaped object path for a COMMENT statement.
+// Object is []Ident representing: [schema, table] for TABLE, [schema, table, column] for COLUMN.
+// The schema part (first element) is normalized if it matches the default schema.
+func (g *Generator) escapeCommentObject(comment *Comment) string {
 	escapedParts := make([]string, len(comment.comment.Object))
 	for i, ident := range comment.comment.Object {
 		if i == 0 && len(comment.comment.Object) > 1 {
@@ -1889,7 +1885,13 @@ func (g *Generator) generateNormalizedCommentStatement(comment *Comment) string 
 			escapedParts[i] = g.escapeSQLNameQuoteAware(ident.Name, ident.Quoted)
 		}
 	}
-	escapedObject := strings.Join(escapedParts, ".")
+	return strings.Join(escapedParts, ".")
+}
+
+// generateNormalizedCommentStatement creates a COMMENT statement with normalized identifiers.
+func (g *Generator) generateNormalizedCommentStatement(comment *Comment) string {
+	sqlObjectType := strings.TrimPrefix(comment.comment.ObjectType, "OBJECT_")
+	escapedObject := g.escapeCommentObject(comment)
 
 	if comment.comment.Comment == "" {
 		return fmt.Sprintf("COMMENT ON %s %s IS NULL", sqlObjectType, escapedObject)
@@ -2852,7 +2854,7 @@ func isAddConstraintForeignKey(ddl string) bool {
 	return false
 }
 
-func isPrimaryKey(column Column, table Table) bool {
+func (g *Generator) isPrimaryKey(column Column, table Table) bool {
 	if column.keyOption == ColumnKeyPrimary {
 		return true
 	}
@@ -3477,29 +3479,8 @@ func (g *Generator) identsSliceEqual(a, b []Ident) bool {
 
 // generateCommentNullStatement creates a COMMENT ... IS NULL statement.
 func (g *Generator) generateCommentNullStatement(comment *Comment) string {
-	// Generate the COMMENT statement directly from the AST
-	objectType := comment.comment.ObjectType
-
-	// objectType may be "OBJECT_TABLE", "OBJECT_COLUMN", etc.
-	sqlObjectType := strings.TrimPrefix(objectType, "OBJECT_")
-
-	// Escape the object name using structured idents for quote-aware output.
-	// Object is []Ident representing: [schema, table] for TABLE, [schema, table, column] for COLUMN
-	// Special handling for the schema part (first element) when it matches the default schema.
-	escapedParts := make([]string, len(comment.comment.Object))
-	for i, ident := range comment.comment.Object {
-		if i == 0 && len(comment.comment.Object) > 1 {
-			// First element is the schema - normalize if it's the default schema
-			normalizedSchema := g.normalizeDefaultSchema(ident)
-			escapedParts[i] = g.escapeSQLIdent(normalizedSchema)
-		} else {
-			escapedParts[i] = g.escapeSQLNameQuoteAware(ident.Name, ident.Quoted)
-		}
-	}
-	escapedObject := strings.Join(escapedParts, ".")
-
-	// Generate the COMMENT statement with NULL value
-	// Note: We don't add a trailing semicolon as it's added by joinDDLs
+	sqlObjectType := strings.TrimPrefix(comment.comment.ObjectType, "OBJECT_")
+	escapedObject := g.escapeCommentObject(comment)
 	return fmt.Sprintf("COMMENT ON %s %s IS NULL", sqlObjectType, escapedObject)
 }
 
