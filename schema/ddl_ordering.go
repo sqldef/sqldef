@@ -16,9 +16,11 @@ import (
 //
 // When legacyIgnoreQuotes is false, behavior per database:
 //   - PostgreSQL: Unquoted fold to lowercase, quoted preserve case
-//   - SQLite3: Always case-insensitive (fold all to lowercase)
-//   - MySQL: Preserved as written (OS/setting dependent comparison)
-//   - MSSQL: Preserved as written (collation dependent comparison)
+//   - MySQL/MSSQL/SQLite3: Always case-insensitive (fold all to lowercase)
+//
+// Note: MySQL/MSSQL case sensitivity technically depends on OS/collation settings,
+// but identsEqual always uses case-insensitive comparison for these databases.
+// We must be consistent here to avoid dependency tracking bugs.
 func normalizeIdentKey(ident Ident, mode GeneratorMode, legacyIgnoreQuotes bool) string {
 	// Legacy mode: case-insensitive matching for all databases
 	if legacyIgnoreQuotes {
@@ -31,12 +33,9 @@ func normalizeIdentKey(ident Ident, mode GeneratorMode, legacyIgnoreQuotes bool)
 			return ident.Name
 		}
 		return strings.ToLower(ident.Name)
-	case GeneratorModeSQLite3:
-		// Always case-insensitive, even with quoted identifiers
-		return strings.ToLower(ident.Name)
 	default:
-		// MySQL/MSSQL: preserve case as written
-		return ident.Name
+		// MySQL/MSSQL/SQLite3: always case-insensitive to match identsEqual behavior
+		return strings.ToLower(ident.Name)
 	}
 }
 

@@ -1,0 +1,21 @@
+# Tests for quote-aware mode (legacy_ignore_quotes: false) in MSSQL
+
+ForeignKeyDependencyOrderingCaseMismatch:
+  # MSSQL treats Users and users as the same table (case-insensitive).
+  # Dependency ordering should correctly recognize this and create
+  # users first, then orders.
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES Users (id)
+    );
+    CREATE TABLE users (id int PRIMARY KEY);
+  output: |
+    CREATE TABLE users (id int PRIMARY KEY);
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES Users (id)
+    );
