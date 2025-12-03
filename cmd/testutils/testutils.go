@@ -177,13 +177,17 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		LegacyIgnoreQuotes:      legacyIgnoreQuotes,
 	}
 
+	// Set config first to populate database-specific settings (e.g., MysqlLowerCaseTableNames)
+	db.SetGeneratorConfig(config)
+	config = db.GetGeneratorConfig()
+
 	if test.Offline {
 		RunOfflineTest(t, test, mode, sqlParser, config, db.GetDefaultSchema())
 		return
 	}
 
 	if test.Current != "" {
-		ddls, err := splitDDLs(mode, sqlParser, test.Current, db.GetDefaultSchema(), legacyIgnoreQuotes)
+		ddls, err := splitDDLs(mode, sqlParser, test.Current, db.GetDefaultSchema(), legacyIgnoreQuotes, config.MysqlLowerCaseTableNames)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -192,8 +196,6 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 			t.Fatal(err)
 		}
 	}
-
-	db.SetGeneratorConfig(config)
 
 	// Test idempotency of current schema
 	currentDDLs, err := db.ExportDDLs()
@@ -313,13 +315,13 @@ func compareVersion(t *testing.T, leftVersion string, rightVersion string) int {
 	return 0
 }
 
-func splitDDLs(mode schema.GeneratorMode, sqlParser database.Parser, str string, defaultSchema string, legacyIgnoreQuotes bool) ([]string, error) {
+func splitDDLs(mode schema.GeneratorMode, sqlParser database.Parser, str string, defaultSchema string, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) ([]string, error) {
 	statements, err := schema.ParseDDLs(mode, sqlParser, str, defaultSchema)
 	if err != nil {
 		return nil, err
 	}
 
-	statements = schema.SortTablesByDependencies(statements, defaultSchema, mode, legacyIgnoreQuotes)
+	statements = schema.SortTablesByDependencies(statements, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 
 	var ddls []string
 	for _, statement := range statements {

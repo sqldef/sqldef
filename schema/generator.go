@@ -77,7 +77,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	desiredDDLs = FilterViews(desiredDDLs, config)
 	desiredDDLs = FilterPrivileges(desiredDDLs, config)
 
-	desiredDDLs = SortTablesByDependencies(desiredDDLs, defaultSchema, mode, config.LegacyIgnoreQuotes)
+	desiredDDLs = SortTablesByDependencies(desiredDDLs, defaultSchema, mode, config.LegacyIgnoreQuotes, config.MysqlLowerCaseTableNames)
 
 	currentDDLs, err := ParseDDLs(mode, sqlParser, currentSQL, defaultSchema)
 	if err != nil {
@@ -87,14 +87,14 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	currentDDLs = FilterViews(currentDDLs, config)
 	currentDDLs = FilterPrivileges(currentDDLs, config)
 
-	currentDDLs = SortTablesByDependencies(currentDDLs, defaultSchema, mode, config.LegacyIgnoreQuotes)
+	currentDDLs = SortTablesByDependencies(currentDDLs, defaultSchema, mode, config.LegacyIgnoreQuotes, config.MysqlLowerCaseTableNames)
 
-	aggregated, err := aggregateDDLsToSchema(currentDDLs, mode, defaultSchema, config.LegacyIgnoreQuotes)
+	aggregated, err := aggregateDDLsToSchema(currentDDLs, mode, defaultSchema, config.LegacyIgnoreQuotes, config.MysqlLowerCaseTableNames)
 	if err != nil {
 		return nil, err
 	}
 
-	desiredAggregated, err := aggregateDDLsToSchema(desiredDDLs, mode, defaultSchema, config.LegacyIgnoreQuotes)
+	desiredAggregated, err := aggregateDDLsToSchema(desiredDDLs, mode, defaultSchema, config.LegacyIgnoreQuotes, config.MysqlLowerCaseTableNames)
 	if err != nil {
 		return nil, err
 	}
@@ -1105,7 +1105,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						// Remove the FK from the current table's FK list
 						newFKs := []ForeignKey{}
 						for _, fk := range table.foreignKeys {
-							if !identsEqual(fk.constraintName, refFK.foreignKey.constraintName, g.mode, g.config.LegacyIgnoreQuotes) {
+							if !g.identsEqual(fk.constraintName, refFK.foreignKey.constraintName) {
 								newFKs = append(newFKs, fk)
 							}
 						}
@@ -1131,7 +1131,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					if g.qualifiedNamesEqual(desiredTable.name, refFK.tableName) {
 						desiredTableExists = true
 						for _, fk := range desiredTable.foreignKeys {
-							if identsEqual(fk.constraintName, refFK.foreignKey.constraintName, g.mode, g.config.LegacyIgnoreQuotes) {
+							if g.identsEqual(fk.constraintName, refFK.foreignKey.constraintName) {
 								desiredFK = &fk
 								break
 							}
@@ -2738,7 +2738,9 @@ func (g *Generator) escapeSQLNameQuoteAware(name string, wasQuoted bool) string 
 	}
 }
 
-// identsEqual compares two Ident values for equality, respecting the quote-aware normalization setting.
+// identsEqual compares two Ident values (columns, indexes, constraints) for equality.
+// This does NOT use MysqlLowerCaseTableNames because that only affects table names.
+//
 // When legacy_ignore_quotes is false (quote-aware mode for PostgreSQL):
 //   - Unquoted identifiers are normalized to lowercase before comparison
 //   - Quoted identifiers preserve their case
@@ -2757,7 +2759,7 @@ func (g *Generator) identsEqual(a, b Ident) bool {
 // When legacy_ignore_quotes is false, schema names use quote-aware comparison
 // (quoted "MySchema" is different from unquoted myschema).
 func (g *Generator) qualifiedNamesEqual(a, b QualifiedName) bool {
-	return qualifiedNamesEqual(a, b, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes)
+	return qualifiedNamesEqual(a, b, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
 }
 
 // normalizeDefaultSchema returns an Ident for a schema, treating the default schema
@@ -2895,7 +2897,7 @@ func mergeTable(table1 *Table, table2 Table) {
 	}
 }
 
-func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string, legacyIgnoreQuotes bool) (*AggregatedSchema, error) {
+func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) (*AggregatedSchema, error) {
 	aggregated := &AggregatedSchema{
 		Tables:     []*Table{},
 		Views:      []*View{},
@@ -2914,9 +2916,9 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 			table := stmt.table // copy table
 			aggregated.Tables = append(aggregated.Tables, &table)
 		case *CreateIndex:
-			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes)
+			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 			if table == nil {
-				view := findViewQuoteAware(aggregated.Views, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes)
+				view := findViewQuoteAware(aggregated.Views, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 				if view == nil {
 					return nil, fmt.Errorf("CREATE INDEX is performed before CREATE TABLE: %s", ddl.Statement())
 				}
@@ -2927,14 +2929,14 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 				table.indexes = append(table.indexes, stmt.index)
 			}
 		case *AddIndex:
-			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes)
+			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 			if table == nil {
 				return nil, fmt.Errorf("ADD INDEX is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 			// TODO: check duplicated creation
 			table.indexes = append(table.indexes, stmt.index)
 		case *AddPrimaryKey:
-			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes)
+			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 			if table == nil {
 				return nil, fmt.Errorf("ADD PRIMARY KEY is performed before CREATE TABLE: %s", ddl.Statement())
 			}
@@ -2948,21 +2950,21 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 			}
 			table.columns = newColumns
 		case *AddForeignKey:
-			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes)
+			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 			if table == nil {
 				return nil, fmt.Errorf("ADD FOREIGN KEY is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			table.foreignKeys = append(table.foreignKeys, stmt.foreignKey)
 		case *AddExclusion:
-			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes)
+			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 			if table == nil {
 				return nil, fmt.Errorf("ADD EXCLUDE is performed before CREATE TABLE: %s", ddl.Statement())
 			}
 
 			table.exclusions = append(table.exclusions, stmt.exclusion)
 		case *AddPolicy:
-			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes)
+			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 			if table == nil {
 				return nil, fmt.Errorf("ADD POLICY performed before CREATE TABLE: %s", ddl.Statement())
 			}
@@ -2985,7 +2987,7 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 		case *GrantPrivilege:
 			merged := false
 			for i, existing := range aggregated.Privileges {
-				if qualifiedNamesEqual(existing.tableName, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes) &&
+				if qualifiedNamesEqual(existing.tableName, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) &&
 					len(existing.grantees) == len(stmt.grantees) {
 					allMatch := true
 					for j, grantee := range existing.grantees {
@@ -3249,9 +3251,9 @@ func (g *Generator) findTableByName(tables []*Table, name QualifiedName) *Table 
 }
 
 // findTableQuoteAware finds a table using quote-aware comparison without requiring a Generator.
-func findTableQuoteAware(tables []*Table, name QualifiedName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool) *Table {
+func findTableQuoteAware(tables []*Table, name QualifiedName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) *Table {
 	for _, table := range tables {
-		if qualifiedNamesEqual(table.name, name, defaultSchema, mode, legacyIgnoreQuotes) {
+		if qualifiedNamesEqual(table.name, name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
 			return table
 		}
 	}
@@ -3259,9 +3261,9 @@ func findTableQuoteAware(tables []*Table, name QualifiedName, defaultSchema stri
 }
 
 // findViewQuoteAware finds a view using quote-aware comparison without requiring a Generator.
-func findViewQuoteAware(views []*View, name QualifiedName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool) *View {
+func findViewQuoteAware(views []*View, name QualifiedName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) *View {
 	for _, view := range views {
-		if qualifiedNamesEqual(view.name, name, defaultSchema, mode, legacyIgnoreQuotes) {
+		if qualifiedNamesEqual(view.name, name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
 			return view
 		}
 	}
@@ -3366,7 +3368,7 @@ func (g *Generator) findCheckConstraintByDefinition(table *Table, check *CheckDe
 
 func (g *Generator) findForeignKeyByName(foreignKeys []ForeignKey, constraintName Ident) *ForeignKey {
 	for _, foreignKey := range foreignKeys {
-		if identsEqual(foreignKey.constraintName, constraintName, g.mode, g.config.LegacyIgnoreQuotes) {
+		if g.identsEqual(foreignKey.constraintName, constraintName) {
 			return &foreignKey
 		}
 	}

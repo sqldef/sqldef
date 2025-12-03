@@ -16,12 +16,9 @@ import (
 //
 // When legacyIgnoreQuotes is false, behavior per database:
 //   - PostgreSQL: Unquoted fold to lowercase, quoted preserve case
-//   - MySQL/MSSQL/SQLite3: Always case-insensitive (fold all to lowercase)
-//
-// Note: MySQL/MSSQL case sensitivity technically depends on OS/collation settings,
-// but identsEqual always uses case-insensitive comparison for these databases.
-// We must be consistent here to avoid dependency tracking bugs.
-func normalizeIdentKey(ident Ident, mode GeneratorMode, legacyIgnoreQuotes bool) string {
+//   - MySQL: Respects mysqlLowerCaseTableNames (0=case-sensitive, 1/2=case-insensitive)
+//   - MSSQL/SQLite3: Always case-insensitive (fold all to lowercase)
+func normalizeIdentKey(ident Ident, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) string {
 	// Legacy mode: case-insensitive matching for all databases
 	if legacyIgnoreQuotes {
 		return strings.ToLower(ident.Name)
@@ -33,23 +30,30 @@ func normalizeIdentKey(ident Ident, mode GeneratorMode, legacyIgnoreQuotes bool)
 			return ident.Name
 		}
 		return strings.ToLower(ident.Name)
+	case GeneratorModeMysql:
+		if mysqlLowerCaseTableNames == 0 {
+			// Case-sensitive: preserve case
+			return ident.Name
+		}
+		// Case-insensitive (1 or 2): fold to lowercase
+		return strings.ToLower(ident.Name)
 	default:
-		// MySQL/MSSQL/SQLite3: always case-insensitive to match identsEqual behavior
+		// MSSQL/SQLite3: always case-insensitive
 		return strings.ToLower(ident.Name)
 	}
 }
 
 // normalizeNameKey returns a normalized string representation of a
 // QualifiedName for use as a map key in dependency graphs.
-func normalizeNameKey(name QualifiedName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool) string {
+func normalizeNameKey(name QualifiedName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) string {
 	schema := name.Schema.Name
 	if schema == "" {
 		schema = defaultSchema
 	} else {
-		schema = normalizeIdentKey(name.Schema, mode, legacyIgnoreQuotes)
+		schema = normalizeIdentKey(name.Schema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 	}
 
-	tableName := normalizeIdentKey(name.Name, mode, legacyIgnoreQuotes)
+	tableName := normalizeIdentKey(name.Name, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 
 	if schema != "" {
 		return schema + "." + tableName
@@ -156,7 +160,7 @@ func topologicalSort[T any](items []T, dependencies map[string][]string, getID f
 // to ensure objects are created in the correct order (dependencies before dependents)
 // Also ensures CREATE TYPE statements are placed before CREATE TABLE statements that use them
 // and CREATE SCHEMA statements are placed at the beginning
-func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool) []DDL {
+func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) []DDL {
 	// Extract DDLs by type: extensions, schemas, types, domains, tables, views, and other DDLs
 	var createExtensions []*Extension
 	var createSchemas []*Schema
@@ -190,15 +194,15 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 		// Build dependency graph using normalized names for consistent matching
 		tableDependencies := make(map[string][]string)
 		for _, ct := range createTables {
-			tableName := normalizeNameKey(ct.table.name, defaultSchema, mode, legacyIgnoreQuotes)
+			tableName := normalizeNameKey(ct.table.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 			// Extract foreign key dependencies
 			deps := []string{}
 			for _, fk := range ct.table.foreignKeys {
 				// Skip self-referential FKs using quote-aware comparison
-				if qualifiedNamesEqual(ct.table.name, fk.referenceTableName, defaultSchema, mode, legacyIgnoreQuotes) {
+				if qualifiedNamesEqual(ct.table.name, fk.referenceTableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
 					continue
 				}
-				refTableName := normalizeNameKey(fk.referenceTableName, defaultSchema, mode, legacyIgnoreQuotes)
+				refTableName := normalizeNameKey(fk.referenceTableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 				if refTableName != "" {
 					deps = append(deps, refTableName)
 				}
@@ -207,7 +211,7 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 		}
 
 		sorted := topologicalSort(createTables, tableDependencies, func(ct *CreateTable) string {
-			return normalizeNameKey(ct.table.name, defaultSchema, mode, legacyIgnoreQuotes)
+			return normalizeNameKey(ct.table.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 		})
 
 		// If circular dependency detected, keep original order
@@ -229,16 +233,16 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 		// Create a set of all table and view names for quick lookup
 		allObjectNames := make(map[string]bool)
 		for _, ct := range createTables {
-			allObjectNames[normalizeNameKey(ct.table.name, defaultSchema, mode, legacyIgnoreQuotes)] = true
+			allObjectNames[normalizeNameKey(ct.table.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)] = true
 		}
 		for _, view := range views {
-			allObjectNames[normalizeNameKey(view.name, defaultSchema, mode, legacyIgnoreQuotes)] = true
+			allObjectNames[normalizeNameKey(view.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)] = true
 		}
 
 		// Extract dependencies for each view
 		for _, view := range views {
 			// Use extractViewDependencies to get all dependencies from the view definition
-			deps := extractViewDependencies(view.definition, defaultSchema, mode, legacyIgnoreQuotes)
+			deps := extractViewDependencies(view.definition, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 
 			// Filter to only include dependencies that are in our current set of objects
 			var filteredDeps []string
@@ -247,11 +251,11 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 					filteredDeps = append(filteredDeps, dep)
 				}
 			}
-			viewDependencies[normalizeNameKey(view.name, defaultSchema, mode, legacyIgnoreQuotes)] = filteredDeps
+			viewDependencies[normalizeNameKey(view.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)] = filteredDeps
 		}
 
 		sorted := topologicalSort(views, viewDependencies, func(v *View) string {
-			return normalizeNameKey(v.name, defaultSchema, mode, legacyIgnoreQuotes)
+			return normalizeNameKey(v.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 		})
 
 		// If circular dependency detected, keep original order
@@ -299,9 +303,9 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 // extractViewDependencies extracts all table/view names that a view depends on
 // by walking the SelectStatement AST and collecting TableName references.
 // Returns normalized names suitable for use as dependency graph keys.
-func extractViewDependencies(stmt parser.SelectStatement, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool) []string {
+func extractViewDependencies(stmt parser.SelectStatement, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) []string {
 	deps := make(map[string]bool)
-	extractDependenciesFromSelectStatement(stmt, defaultSchema, mode, legacyIgnoreQuotes, deps)
+	extractDependenciesFromSelectStatement(stmt, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
 
 	// Convert map to slice
 	var result []string
@@ -312,58 +316,58 @@ func extractViewDependencies(stmt parser.SelectStatement, defaultSchema string, 
 }
 
 // extractDependenciesFromSelectStatement recursively extracts table/view dependencies from a SelectStatement
-func extractDependenciesFromSelectStatement(stmt parser.SelectStatement, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, deps map[string]bool) {
+func extractDependenciesFromSelectStatement(stmt parser.SelectStatement, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int, deps map[string]bool) {
 	switch s := stmt.(type) {
 	case *parser.Select:
 		// Extract from the FROM clause
-		extractDependenciesFromTableExprs(s.From, defaultSchema, mode, legacyIgnoreQuotes, deps)
+		extractDependenciesFromTableExprs(s.From, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
 
 		// Extract from WITH clause (CTE references)
 		if s.With != nil {
-			extractDependenciesFromWith(s.With, defaultSchema, mode, legacyIgnoreQuotes, deps)
+			extractDependenciesFromWith(s.With, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
 		}
 	case *parser.Union:
 		// Recursively extract from both sides of the UNION
-		extractDependenciesFromSelectStatement(s.Left, defaultSchema, mode, legacyIgnoreQuotes, deps)
-		extractDependenciesFromSelectStatement(s.Right, defaultSchema, mode, legacyIgnoreQuotes, deps)
+		extractDependenciesFromSelectStatement(s.Left, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+		extractDependenciesFromSelectStatement(s.Right, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
 	case *parser.ParenSelect:
 		// Unwrap parenthesized SELECT
-		extractDependenciesFromSelectStatement(s.Select, defaultSchema, mode, legacyIgnoreQuotes, deps)
+		extractDependenciesFromSelectStatement(s.Select, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
 	}
 }
 
 // extractDependenciesFromWith extracts dependencies from WITH clause (CTEs)
-func extractDependenciesFromWith(with *parser.With, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, deps map[string]bool) {
+func extractDependenciesFromWith(with *parser.With, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int, deps map[string]bool) {
 	for _, cte := range with.CTEs {
-		extractDependenciesFromSelectStatement(cte.Definition, defaultSchema, mode, legacyIgnoreQuotes, deps)
+		extractDependenciesFromSelectStatement(cte.Definition, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
 	}
 }
 
 // extractDependenciesFromTableExprs extracts table/view names from TableExprs
-func extractDependenciesFromTableExprs(exprs parser.TableExprs, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, deps map[string]bool) {
+func extractDependenciesFromTableExprs(exprs parser.TableExprs, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int, deps map[string]bool) {
 	for _, expr := range exprs {
-		extractDependenciesFromTableExpr(expr, defaultSchema, mode, legacyIgnoreQuotes, deps)
+		extractDependenciesFromTableExpr(expr, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
 	}
 }
 
 // extractDependenciesFromTableExpr extracts table/view names from a single TableExpr
-func extractDependenciesFromTableExpr(expr parser.TableExpr, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, deps map[string]bool) {
+func extractDependenciesFromTableExpr(expr parser.TableExpr, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int, deps map[string]bool) {
 	switch te := expr.(type) {
 	case *parser.AliasedTableExpr:
 		// Extract from the actual table expression
-		extractDependenciesFromSimpleTableExpr(te.Expr, defaultSchema, mode, legacyIgnoreQuotes, deps)
+		extractDependenciesFromSimpleTableExpr(te.Expr, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
 	case *parser.JoinTableExpr:
 		// Recursively extract from both sides of the JOIN
-		extractDependenciesFromTableExpr(te.LeftExpr, defaultSchema, mode, legacyIgnoreQuotes, deps)
-		extractDependenciesFromTableExpr(te.RightExpr, defaultSchema, mode, legacyIgnoreQuotes, deps)
+		extractDependenciesFromTableExpr(te.LeftExpr, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+		extractDependenciesFromTableExpr(te.RightExpr, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
 	case *parser.ParenTableExpr:
 		// Recursively extract from parenthesized table expressions
-		extractDependenciesFromTableExprs(te.Exprs, defaultSchema, mode, legacyIgnoreQuotes, deps)
+		extractDependenciesFromTableExprs(te.Exprs, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
 	}
 }
 
 // extractDependenciesFromSimpleTableExpr extracts table/view names from SimpleTableExpr
-func extractDependenciesFromSimpleTableExpr(expr parser.SimpleTableExpr, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, deps map[string]bool) {
+func extractDependenciesFromSimpleTableExpr(expr parser.SimpleTableExpr, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int, deps map[string]bool) {
 	switch ste := expr.(type) {
 	case parser.TableName:
 		// This is an actual table/view reference
@@ -371,9 +375,9 @@ func extractDependenciesFromSimpleTableExpr(expr parser.SimpleTableExpr, default
 		if schema == "" {
 			schema = defaultSchema
 		} else {
-			schema = normalizeIdentKey(ste.Schema, mode, legacyIgnoreQuotes)
+			schema = normalizeIdentKey(ste.Schema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 		}
-		tableName := normalizeIdentKey(ste.Name, mode, legacyIgnoreQuotes)
+		tableName := normalizeIdentKey(ste.Name, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 
 		// Always use schema.tableName format for consistency
 		var fullName string
@@ -385,6 +389,6 @@ func extractDependenciesFromSimpleTableExpr(expr parser.SimpleTableExpr, default
 		deps[fullName] = true
 	case *parser.Subquery:
 		// Recursively extract from subquery
-		extractDependenciesFromSelectStatement(ste.Select, defaultSchema, mode, legacyIgnoreQuotes, deps)
+		extractDependenciesFromSelectStatement(ste.Select, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
 	}
 }

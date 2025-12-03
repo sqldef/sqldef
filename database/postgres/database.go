@@ -54,6 +54,10 @@ func (d *PostgresDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
 	d.config.TargetSchema = config.TargetSchema
 }
 
+func (d *PostgresDatabase) GetGeneratorConfig() database.GeneratorConfig {
+	return d.generatorConfig
+}
+
 func (d *PostgresDatabase) GetTransactionQueries() database.TransactionQueries {
 	return database.TransactionQueries{
 		Begin:    "BEGIN",

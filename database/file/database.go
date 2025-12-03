@@ -9,7 +9,8 @@ import (
 
 // Pseudo database for comparison between files
 type FileDatabase struct {
-	file string
+	file            string
+	generatorConfig database.GeneratorConfig
 }
 
 func NewDatabase(file string) *FileDatabase {
@@ -35,7 +36,11 @@ func (f FileDatabase) GetDefaultSchema() string {
 }
 
 func (d *FileDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
-	// Not implemented for file - privileges not supported yet
+	d.generatorConfig = config
+}
+
+func (d *FileDatabase) GetGeneratorConfig() database.GeneratorConfig {
+	return d.generatorConfig
 }
 
 func (d *FileDatabase) GetTransactionQueries() database.TransactionQueries {

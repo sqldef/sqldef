@@ -1,15 +1,27 @@
 # Tests for quote-aware mode (legacy_ignore_quotes: false) in MySQL
+#
+# IMPORTANT: MySQL table name case sensitivity depends on lower_case_table_names:
+# - 0 (Linux default): Case-sensitive - Users and users are DIFFERENT tables
+# - 1 or 2 (macOS/Windows): Case-insensitive - Users and users are the SAME table
+#
+# These tests are designed for lower_case_table_names=0 (case-sensitive, Linux).
 
-ForeignKeyDependencyOrderingCaseMismatch:
-  # MySQL treats Users and users as the same table (case-insensitive).
-  # Dependency ordering should correctly recognize this and create
-  # users first, then orders.
+# Basic quote-aware test: case-preserving but identical case names work
+BasicQuoteAwareTableCreation:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (id int PRIMARY KEY);
+  output: |
+    CREATE TABLE users (id int PRIMARY KEY);
+
+# FK dependency ordering with consistent case
+ForeignKeyDependencyOrderingConsistentCase:
   legacy_ignore_quotes: false
   desired: |
     CREATE TABLE orders (
       id int PRIMARY KEY,
       user_id int,
-      CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES Users (id)
+      CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users (id)
     );
     CREATE TABLE users (id int PRIMARY KEY);
   output: |
@@ -17,5 +29,96 @@ ForeignKeyDependencyOrderingCaseMismatch:
     CREATE TABLE orders (
       id int PRIMARY KEY,
       user_id int,
-      CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES Users (id)
+      CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users (id)
     );
+
+# Add column with quote-aware mode
+AddColumnQuoteAware:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int PRIMARY KEY);
+  desired: |
+    CREATE TABLE users (id int PRIMARY KEY, name varchar(100));
+  output: |
+    ALTER TABLE users ADD COLUMN name varchar(100) AFTER id;
+
+# Drop column with quote-aware mode
+DropColumnQuoteAware:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int PRIMARY KEY, old_col varchar(50));
+  desired: |
+    CREATE TABLE users (id int PRIMARY KEY);
+  output: |
+    ALTER TABLE users DROP COLUMN `old_col`;
+
+# Modify column with quote-aware mode
+ModifyColumnQuoteAware:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (id int PRIMARY KEY, price int);
+  desired: |
+    CREATE TABLE products (id int PRIMARY KEY, price bigint NOT NULL);
+  output: |
+    ALTER TABLE products CHANGE COLUMN `price` price bigint NOT NULL;
+
+# Add index with quote-aware mode
+AddIndexQuoteAware:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE items (id int PRIMARY KEY, name varchar(100));
+  desired: |
+    CREATE TABLE items (id int PRIMARY KEY, name varchar(100), INDEX idx_name (name));
+  output: |
+    ALTER TABLE items ADD INDEX idx_name (name);
+
+# Drop index with quote-aware mode
+DropIndexQuoteAware:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE items (id int PRIMARY KEY, name varchar(100), INDEX idx_name (name));
+  desired: |
+    CREATE TABLE items (id int PRIMARY KEY, name varchar(100));
+  output: |
+    ALTER TABLE `items` DROP INDEX `idx_name`;
+
+# Demonstrate that lower_case_table_names only affects TABLE names, not column/index names.
+# In MySQL, column and index names are always case-insensitive regardless of lower_case_table_names.
+# This test verifies that a column with different case (Name vs name) is recognized as the same column.
+ColumnNameCaseInsensitive:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int PRIMARY KEY, Name varchar(100));
+  desired: |
+    CREATE TABLE users (id int PRIMARY KEY, name varchar(100), email varchar(200));
+  output: |
+    ALTER TABLE users ADD COLUMN email varchar(200) AFTER name;
+
+# Index name case insensitivity - MySQL index names are case-insensitive
+IndexNameCaseInsensitive:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (id int PRIMARY KEY, name varchar(100), INDEX IDX_NAME (name));
+  desired: |
+    CREATE TABLE products (id int PRIMARY KEY, name varchar(100), INDEX idx_name (name));
+  # No output - index names match case-insensitively
+  output: ""
+
+# Check constraint name case insensitivity - MySQL constraint names are case-insensitive
+CheckConstraintNameCaseInsensitive:
+  legacy_ignore_quotes: false
+  min_version: "8.0.16"
+  current: |
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      quantity int,
+      CONSTRAINT CHK_QUANTITY CHECK (quantity > 0)
+    );
+  desired: |
+    CREATE TABLE orders (
+      id int PRIMARY KEY,
+      quantity int,
+      CONSTRAINT chk_quantity CHECK (quantity > 0)
+    );
+  # No output - constraint names match case-insensitively
+  output: ""

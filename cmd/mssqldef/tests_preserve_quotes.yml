@@ -19,3 +19,23 @@ ForeignKeyDependencyOrderingCaseMismatch:
       user_id int,
       CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES Users (id)
     );
+
+AddColumnCaseMismatch:
+  # Current has USERS, desired has users - should recognize as same table
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE USERS (id int PRIMARY KEY);
+  desired: |
+    CREATE TABLE users (id int PRIMARY KEY, name varchar(100));
+  output: |
+    ALTER TABLE dbo.users ADD name varchar(100);
+
+DropColumnCaseMismatch:
+  # Current has Users, desired has USERS - should recognize as same table
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE Users (id int PRIMARY KEY, old_col varchar(50));
+  desired: |
+    CREATE TABLE USERS (id int PRIMARY KEY);
+  output: |
+    ALTER TABLE dbo.USERS DROP COLUMN [old_col];

@@ -59,6 +59,11 @@ type GeneratorConfig struct {
 	CreateIndexConcurrently bool     // Whether to add CONCURRENTLY to CREATE INDEX statements
 	DisableDdlTransaction   bool     // Do not use a transaction for DDL statements
 	LegacyIgnoreQuotes      bool     // true = ignore quotes (legacy), false = preserve quotes
+
+	// MySQL-specific: value of lower_case_table_names server variable.
+	// 0 = case-sensitive (Linux default), 1 or 2 = case-insensitive (Windows/macOS).
+	// Default is 0 (case-sensitive) for offline mode compatibility.
+	MysqlLowerCaseTableNames int
 }
 
 type TransactionQueries struct {
@@ -119,6 +124,7 @@ type Database interface {
 	Close() error
 	GetDefaultSchema() string
 	SetGeneratorConfig(config GeneratorConfig)
+	GetGeneratorConfig() GeneratorConfig
 	GetTransactionQueries() TransactionQueries
 	GetConfig() Config
 }

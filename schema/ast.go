@@ -17,31 +17,77 @@ var (
 	NewNormalizedIdent        = database.NewNormalizedIdent
 )
 
-// identsEqual compares two Idents with quote-awareness based on database mode and legacyIgnoreQuotes.
-// For non-PostgreSQL databases, always uses case-insensitive comparison.
-// For PostgreSQL in quote-aware mode, unquoted identifiers are normalized to lowercase.
+// identsEqual compares two Idents with quote-awareness based on database mode.
+// This is for general identifiers (columns, indexes, constraints) - NOT table names.
+//
+// For MySQL: Column/index/constraint names are always case-insensitive.
+// For PostgreSQL in quote-aware mode: unquoted identifiers are normalized to lowercase.
+// For other databases: always uses case-insensitive comparison.
 func identsEqual(a, b Ident, mode GeneratorMode, legacyIgnoreQuotes bool) bool {
-	// For non-PostgreSQL databases, always use case-insensitive comparison
-	if mode != GeneratorModePostgres {
-		return strings.EqualFold(a.Name, b.Name)
-	}
 	if legacyIgnoreQuotes {
 		return strings.EqualFold(a.Name, b.Name)
 	}
-	// Quote-aware comparison: normalize unquoted identifiers to lowercase
-	aName := a.Name
-	bName := b.Name
-	if !a.Quoted {
-		aName = strings.ToLower(aName)
+
+	switch mode {
+	case GeneratorModePostgres:
+		// Quote-aware comparison: normalize unquoted identifiers to lowercase
+		aName := a.Name
+		bName := b.Name
+		if !a.Quoted {
+			aName = strings.ToLower(aName)
+		}
+		if !b.Quoted {
+			bName = strings.ToLower(bName)
+		}
+		return aName == bName
+	default:
+		// MySQL/MSSQL/SQLite3: always case-insensitive for non-table identifiers
+		return strings.EqualFold(a.Name, b.Name)
 	}
-	if !b.Quoted {
-		bName = strings.ToLower(bName)
-	}
-	return aName == bName
 }
 
-// qualifiedNamesEqual compares two QualifiedNames with quote-awareness.
-func qualifiedNamesEqual(a, b QualifiedName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool) bool {
+// tableIdentsEqual compares two table/schema name Idents with quote-awareness.
+// This respects MySQL's lower_case_table_names setting which only affects table names.
+//
+// For MySQL: respects mysqlLowerCaseTableNames setting:
+//   - 0 (Linux default): Case-sensitive comparison
+//   - 1 or 2 (Windows/macOS): Case-insensitive comparison
+//
+// For PostgreSQL in quote-aware mode: unquoted identifiers are normalized to lowercase.
+// For other databases: always uses case-insensitive comparison.
+func tableIdentsEqual(a, b Ident, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) bool {
+	if legacyIgnoreQuotes {
+		return strings.EqualFold(a.Name, b.Name)
+	}
+
+	switch mode {
+	case GeneratorModeMysql:
+		if mysqlLowerCaseTableNames == 0 {
+			// Case-sensitive: exact match required
+			return a.Name == b.Name
+		}
+		// Case-insensitive (1 or 2)
+		return strings.EqualFold(a.Name, b.Name)
+	case GeneratorModePostgres:
+		// Quote-aware comparison: normalize unquoted identifiers to lowercase
+		aName := a.Name
+		bName := b.Name
+		if !a.Quoted {
+			aName = strings.ToLower(aName)
+		}
+		if !b.Quoted {
+			bName = strings.ToLower(bName)
+		}
+		return aName == bName
+	default:
+		// MSSQL/SQLite3: always case-insensitive
+		return strings.EqualFold(a.Name, b.Name)
+	}
+}
+
+// qualifiedNamesEqual compares two QualifiedNames (table names) with quote-awareness.
+// Uses tableIdentsEqual since this is specifically for table name comparison.
+func qualifiedNamesEqual(a, b QualifiedName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) bool {
 	aSchema := a.Schema
 	bSchema := b.Schema
 	if aSchema.IsEmpty() && defaultSchema != "" {
@@ -50,10 +96,10 @@ func qualifiedNamesEqual(a, b QualifiedName, defaultSchema string, mode Generato
 	if bSchema.IsEmpty() && defaultSchema != "" {
 		bSchema = Ident{Name: defaultSchema, Quoted: false}
 	}
-	if !identsEqual(aSchema, bSchema, mode, legacyIgnoreQuotes) {
+	if !tableIdentsEqual(aSchema, bSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
 		return false
 	}
-	return identsEqual(a.Name, b.Name, mode, legacyIgnoreQuotes)
+	return tableIdentsEqual(a.Name, b.Name, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 }
 
 type DDL interface {

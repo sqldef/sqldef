@@ -24,10 +24,11 @@ type databaseInfo struct {
 }
 
 type MssqlDatabase struct {
-	config        database.Config
-	db            *sql.DB
-	defaultSchema *string
-	info          databaseInfo
+	config          database.Config
+	db              *sql.DB
+	defaultSchema   *string
+	info            databaseInfo
+	generatorConfig database.GeneratorConfig
 }
 
 func NewDatabase(config database.Config) (database.Database, error) {
@@ -817,7 +818,11 @@ func quoteName(name string) string {
 }
 
 func (d *MssqlDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
-	// Not implemented for mssql - privileges not supported yet
+	d.generatorConfig = config
+}
+
+func (d *MssqlDatabase) GetGeneratorConfig() database.GeneratorConfig {
+	return d.generatorConfig
 }
 
 func (d *MssqlDatabase) GetTransactionQueries() database.TransactionQueries {

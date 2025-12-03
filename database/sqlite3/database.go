@@ -9,8 +9,9 @@ import (
 )
 
 type Sqlite3Database struct {
-	config database.Config
-	db     *sql.DB
+	config          database.Config
+	db              *sql.DB
+	generatorConfig database.GeneratorConfig
 }
 
 func NewDatabase(config database.Config) (database.Database, error) {
@@ -182,7 +183,11 @@ func (d *Sqlite3Database) GetDefaultSchema() string {
 }
 
 func (d *Sqlite3Database) SetGeneratorConfig(config database.GeneratorConfig) {
-	// Not implemented for sqlite3 - privileges not supported
+	d.generatorConfig = config
+}
+
+func (d *Sqlite3Database) GetGeneratorConfig() database.GeneratorConfig {
+	return d.generatorConfig
 }
 
 func (d *Sqlite3Database) GetTransactionQueries() database.TransactionQueries {
