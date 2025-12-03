@@ -1,3 +1,13 @@
+## [v3.7.0](https://github.com/sqldef/sqldef/compare/v3.6.7...v3.7.0) - 2025-12-03
+- Bump golang.org/x/crypto from 0.38.0 to 0.45.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/954
+- Bump modernc.org/sqlite from 1.39.1 to 1.40.1 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/958
+- Bump github.com/microsoft/go-mssqldb from 1.9.3 to 1.9.4 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/959
+- Bump actions/checkout from 5.0.0 to 6.0.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/960
+- Bump docker/setup-qemu-action from 3.6.0 to 3.7.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/961
+- Bump actions/create-github-app-token from 2.1.4 to 2.2.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/962
+- Bump actions/setup-go from 6.0.0 to 6.1.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/963
+- feat: add `legacy_ignore_quotes: false` to preserve quotes in outputs (mainly for psqldef) by @gfx in https://github.com/sqldef/sqldef/pull/957
+
 ## [v3.6.7](https://github.com/sqldef/sqldef/compare/v3.6.6...v3.6.7) - 2025-11-19
 - update docs (esp. offline: true should not used for tier-1 DBs) by @gfx in https://github.com/sqldef/sqldef/pull/950
 - Fix DDLs ordering in diff generation by @gfx in https://github.com/sqldef/sqldef/pull/952
