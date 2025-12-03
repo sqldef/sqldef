@@ -24,8 +24,9 @@ var revision = "HEAD"
 // Return parsed options and schema filename
 // TODO: Support `sqldef schema.sql -opt val...`
 func parseOptions(args []string) (database.Config, *sqldef.Options) {
-	// Track parsed configs in order
-	var configs []database.GeneratorConfig
+	// MSSQL default: legacy_ignore_quotes is true (legacy mode)
+	defaultConfig := database.GeneratorConfig{LegacyIgnoreQuotes: true}
+	configs := []database.GeneratorConfig{defaultConfig}
 
 	var opts struct {
 		User       string   `short:"U" long:"user" description:"MSSQL user name" value-name:"USERNAME" default:"sa"`
@@ -50,10 +51,10 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 
 	opts.Config = func(path string) {
-		configs = append(configs, database.ParseGeneratorConfig(path))
+		configs = append(configs, database.ParseGeneratorConfig(path, defaultConfig))
 	}
 	opts.ConfigInline = func(yaml string) {
-		configs = append(configs, database.ParseGeneratorConfigString(yaml))
+		configs = append(configs, database.ParseGeneratorConfigString(yaml, defaultConfig))
 	}
 
 	parser := flags.NewParser(&opts, flags.None)

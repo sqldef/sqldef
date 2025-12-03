@@ -24,18 +24,19 @@ import (
 )
 
 type TestCase struct {
-	Current      string  // default: empty schema
-	Desired      string  // default: empty schema
-	Output       *string // default: use Desired as Output
-	Error        *string // default: nil
-	MinVersion   string  `yaml:"min_version"`
-	MaxVersion   string  `yaml:"max_version"`
-	User         string
-	Flavor       string   // database flavor (e.g., "mariadb", "mysql")
-	ManagedRoles []string `yaml:"managed_roles"` // Roles whose privileges are managed by sqldef
-	EnableDrop   *bool    `yaml:"enable_drop"`   // Whether to enable DROP/REVOKE operations
-	Offline      bool     `yaml:"offline"`
-	Config       struct { // Optional config settings for the test
+	Current            string  // default: empty schema
+	Desired            string  // default: empty schema
+	Output             *string // default: use Desired as Output
+	Error              *string // default: nil
+	MinVersion         string  `yaml:"min_version"`
+	MaxVersion         string  `yaml:"max_version"`
+	User               string
+	Flavor             string   // database flavor (e.g., "mariadb", "mysql")
+	ManagedRoles       []string `yaml:"managed_roles"`        // Roles whose privileges are managed by sqldef
+	EnableDrop         *bool    `yaml:"enable_drop"`          // Whether to enable DROP/REVOKE operations
+	LegacyIgnoreQuotes *bool    `yaml:"legacy_ignore_quotes"` // nil or true = ignore quotes (legacy default), false = preserve quotes
+	Offline            bool     `yaml:"offline"`
+	Config             struct { // Optional config settings for the test
 		CreateIndexConcurrently bool `yaml:"create_index_concurrently"`
 		DisableDdlTransaction   bool `yaml:"disable_ddl_transaction"`
 	} `yaml:"config"`
@@ -162,12 +163,23 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		}
 	}
 
+	// Determine LegacyIgnoreQuotes: use test value if specified, otherwise default to true (legacy mode)
+	legacyIgnoreQuotes := true // default: true for backward compatibility
+	if test.LegacyIgnoreQuotes != nil {
+		legacyIgnoreQuotes = *test.LegacyIgnoreQuotes
+	}
+
 	config := database.GeneratorConfig{
 		ManagedRoles:            test.ManagedRoles,
 		EnableDrop:              *test.EnableDrop,
 		CreateIndexConcurrently: test.Config.CreateIndexConcurrently,
 		DisableDdlTransaction:   test.Config.DisableDdlTransaction,
+		LegacyIgnoreQuotes:      legacyIgnoreQuotes,
 	}
+
+	// Set config first to populate database-specific settings (e.g., MysqlLowerCaseTableNames)
+	db.SetGeneratorConfig(config)
+	config = db.GetGeneratorConfig()
 
 	if test.Offline {
 		RunOfflineTest(t, test, mode, sqlParser, config, db.GetDefaultSchema())
@@ -175,7 +187,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	}
 
 	if test.Current != "" {
-		ddls, err := splitDDLs(mode, sqlParser, test.Current, db.GetDefaultSchema())
+		ddls, err := splitDDLs(mode, sqlParser, test.Current, db.GetDefaultSchema(), legacyIgnoreQuotes, config.MysqlLowerCaseTableNames)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -184,8 +196,6 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 			t.Fatal(err)
 		}
 	}
-
-	db.SetGeneratorConfig(config)
 
 	// Test idempotency of current schema
 	currentDDLs, err := db.ExportDDLs()
@@ -305,13 +315,13 @@ func compareVersion(t *testing.T, leftVersion string, rightVersion string) int {
 	return 0
 }
 
-func splitDDLs(mode schema.GeneratorMode, sqlParser database.Parser, str string, defaultSchema string) ([]string, error) {
+func splitDDLs(mode schema.GeneratorMode, sqlParser database.Parser, str string, defaultSchema string, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) ([]string, error) {
 	statements, err := schema.ParseDDLs(mode, sqlParser, str, defaultSchema)
 	if err != nil {
 		return nil, err
 	}
 
-	statements = schema.SortTablesByDependencies(statements, defaultSchema)
+	statements = schema.SortTablesByDependencies(statements, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 
 	var ddls []string
 	for _, statement := range statements {

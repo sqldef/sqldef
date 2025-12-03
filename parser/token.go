@@ -49,18 +49,19 @@ func ParseDDL(sql string, mode ParserMode) (Statement, error) {
 // Tokenizer is the struct used to generate SQL
 // tokens for the parser.
 type Tokenizer struct {
-	AllowComments  bool
-	lastChar       rune
-	Position       int
-	lastToken      string
-	LastError      error
-	posVarIndex    int
-	ParseTree      Statement
-	partialDDL     *DDL
-	multi          bool
-	specialComment *Tokenizer
-	mode           ParserMode
-	peeking        bool // true when peeking ahead to avoid infinite recursion
+	AllowComments        bool
+	lastChar             rune
+	Position             int
+	lastToken            string
+	LastError            error
+	posVarIndex          int
+	ParseTree            Statement
+	partialDDL           *DDL
+	multi                bool
+	specialComment       *Tokenizer
+	mode                 ParserMode
+	peeking              bool // true when peeking ahead to avoid infinite recursion
+	lastIdentifierQuoted bool // true if the last scanned identifier was quoted
 
 	buf     string
 	bufPos  int
@@ -530,6 +531,13 @@ var keywords = map[string]int{
 // keywordStrings contains the reverse mapping of token to keyword strings
 var keywordStrings = map[int]string{}
 
+// IsKeyword returns true if the given string is a SQL keyword.
+// The check is case-insensitive.
+func IsKeyword(s string) bool {
+	_, ok := keywords[strings.ToLower(s)]
+	return ok
+}
+
 var encodeRef = map[byte]byte{
 	'\x00': '0',
 	'\'':   '\'',
@@ -585,7 +593,13 @@ func (tkn *Tokenizer) Lex(lval *yySymType) int {
 		}
 		typ, val = tkn.Scan()
 	}
-	lval.str = val
+	if typ == ID {
+		// For ID tokens, create an Ident with value and quoted flag
+		lval.ident = NewIdent(val, tkn.lastIdentifierQuoted)
+	} else {
+		// For other tokens, use the str field as before
+		lval.str = val
+	}
 	tkn.lastToken = val
 	return typ
 }
@@ -899,10 +913,12 @@ func (tkn *Tokenizer) scanIdentifier(firstChar rune, isDbSystemVariable bool) (i
 
 	// dual must always be case-insensitive
 	if loweredStr == "dual" {
+		tkn.lastIdentifierQuoted = false
 		return ID, loweredStr
 	}
 
-	// others are case-sensitive
+	// others are case-sensitive (unquoted identifiers)
+	tkn.lastIdentifierQuoted = false
 	return ID, buffer.String()
 }
 
@@ -957,6 +973,8 @@ func (tkn *Tokenizer) scanLiteralIdentifier(sepChar rune) (int, string) {
 	if buffer.Len() == 0 {
 		return LEX_ERROR, buffer.String()
 	}
+	// Literal identifiers are quoted
+	tkn.lastIdentifierQuoted = true
 	return ID, buffer.String()
 }
 

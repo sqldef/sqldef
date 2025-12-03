@@ -200,7 +200,7 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 			var indexCols []parser.IndexColumn
 			for _, key := range node.Constraint.Keys {
 				indexCol := parser.IndexColumn{
-					Column:    parser.NewColIdent(key.Node.(*pgquery.Node_String_).String_.Sval),
+					Column:    parser.NewIdent(key.Node.(*pgquery.Node_String_).String_.Sval, false),
 					Direction: "asc",
 				}
 				indexCols = append(indexCols, indexCol)
@@ -210,7 +210,7 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 				index := &parser.IndexDefinition{
 					Info: &parser.IndexInfo{
 						Type:      "primary key",
-						Name:      parser.NewColIdent(node.Constraint.Conname),
+						Name:      parser.NewIdent(node.Constraint.Conname, false),
 						Unique:    true,
 						Primary:   true,
 						Clustered: true,
@@ -223,7 +223,7 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 				index := &parser.IndexDefinition{
 					Info: &parser.IndexInfo{
 						Type:   "UNIQUE",
-						Name:   parser.NewColIdent(node.Constraint.Conname),
+						Name:   parser.NewIdent(node.Constraint.Conname, false),
 						Unique: true,
 					},
 					Columns: indexCols,
@@ -247,7 +247,7 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 				}
 				check := &parser.CheckDefinition{
 					Where:          *parser.NewWhere(parser.WhereStr, expr),
-					ConstraintName: parser.NewColIdent(node.Constraint.Conname),
+					ConstraintName: parser.NewIdent(node.Constraint.Conname, false),
 				}
 				checks = append(checks, check)
 			case pgquery.ConstrType_CONSTR_EXCLUSION:
@@ -310,8 +310,8 @@ func (p PostgresParser) parseIndexStmt(stmt *pgquery.IndexStmt) (parser.Statemen
 		Table:   table,
 		NewName: table,
 		IndexSpec: &parser.IndexSpec{
-			Name:   parser.NewColIdent(stmt.Idxname),
-			Type:   parser.NewColIdent(stmt.AccessMethod),
+			Name:   parser.NewIdent(stmt.Idxname, false),
+			Type:   parser.NewIdent(stmt.AccessMethod, false),
 			Unique: stmt.Unique,
 			Async:  false, // go_pgquery doesn't support ASYNC, will be set by generic parser
 			Where:  where,
@@ -383,8 +383,8 @@ func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.Select
 	var aliasName string
 	if len(stmt.FromClause) == 0 {
 		fromTable = parser.TableName{
-			Name:   parser.NewTableIdent(""),
-			Schema: parser.NewTableIdent(""),
+			Name:   parser.NewIdent("", false),
+			Schema: parser.NewIdent("", false),
 		}
 	} else {
 		var err error
@@ -449,7 +449,7 @@ func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.Select
 			&parser.AliasedTableExpr{
 				Expr:       fromTable,
 				TableHints: []string{},
-				As:         parser.NewTableIdent(aliasName),
+				As:         parser.NewIdent(aliasName, false),
 			},
 		},
 		Where:   where,
@@ -486,8 +486,8 @@ func (p PostgresParser) parseResTarget(stmt *pgquery.ResTarget) (parser.SelectEx
 
 			return &parser.StarExpr{
 				TableName: parser.TableName{
-					Name:   parser.NewTableIdent(tableName),
-					Schema: parser.NewTableIdent(schemaName),
+					Name:   parser.NewIdent(tableName, false),
+					Schema: parser.NewIdent(schemaName, false),
 				},
 			}, nil
 		}
@@ -500,7 +500,7 @@ func (p PostgresParser) parseResTarget(stmt *pgquery.ResTarget) (parser.SelectEx
 
 	return &parser.AliasedExpr{
 		Expr: expr,
-		As:   parser.NewColIdent(stmt.Name),
+		As:   parser.NewIdent(stmt.Name, false),
 	}, nil
 }
 
@@ -622,7 +622,7 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 	case *pgquery.Node_ColumnRef:
 		field := node.ColumnRef.Fields[len(node.ColumnRef.Fields)-1] // Ignore table name for easy comparison
 		return &parser.ColName{
-			Name: parser.NewColIdent(field.Node.(*pgquery.Node_String_).String_.Sval),
+			Name: parser.NewIdent(field.Node.(*pgquery.Node_String_).String_.Sval, false),
 		}, nil
 	case *pgquery.Node_FuncCall:
 		var exprs parser.SelectExprs
@@ -651,8 +651,8 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 		}
 
 		return &parser.FuncExpr{
-			Qualifier: parser.NewTableIdent(tableName),
-			Name:      parser.NewColIdent(funcName),
+			Qualifier: parser.NewIdent(tableName, false),
+			Name:      parser.NewIdent(funcName, false),
 			Exprs:     exprs,
 		}, nil
 	case *pgquery.Node_Integer:
@@ -802,7 +802,7 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 			})
 		}
 		return &parser.FuncExpr{
-			Name:  parser.NewColIdent("coalesce"),
+			Name:  parser.NewIdent("coalesce", false),
 			Exprs: selectExprs,
 		}, nil
 	case *pgquery.Node_BooleanTest:
@@ -886,7 +886,7 @@ func (p PostgresParser) parseIndexColumn(stmt *pgquery.Node) (parser.IndexColumn
 				return parser.IndexColumn{}, fmt.Errorf("unexpected direction in parseIndexColumn: %d", node.IndexElem.Ordering)
 			}
 			return parser.IndexColumn{
-				Column:    parser.NewColIdent(node.IndexElem.Name),
+				Column:    parser.NewIdent(node.IndexElem.Name, false),
 				Direction: direction,
 			}, nil
 		}
@@ -909,11 +909,11 @@ func (p PostgresParser) parseArrayElement(node parser.Expr) (parser.Expr, error)
 }
 
 func (p PostgresParser) parseCommentStmt(stmt *pgquery.CommentStmt) (parser.Statement, error) {
-	var object string
+	var object []parser.Ident
 	switch node := stmt.Object.Node.(type) {
 	case *pgquery.Node_List:
 		var err error
-		object, err = p.parseStringList(node.List)
+		object, err = p.parseIdentList(node.List)
 		if err != nil {
 			return nil, err
 		}
@@ -931,13 +931,27 @@ func (p PostgresParser) parseCommentStmt(stmt *pgquery.CommentStmt) (parser.Stat
 	}, nil
 }
 
+// parseIdentList converts a pgquery list of strings to []parser.Ident.
+// pgquery doesn't preserve quoting information, so we assume unquoted (false).
+func (p PostgresParser) parseIdentList(list *pgquery.List) ([]parser.Ident, error) {
+	var idents []parser.Ident
+	for _, node := range list.Items {
+		switch n := node.Node.(type) {
+		case *pgquery.Node_String_:
+			// pgquery doesn't preserve quoting info, assume unquoted
+			idents = append(idents, parser.NewIdent(n.String_.Sval, false))
+		}
+	}
+	return idents, nil
+}
+
 func (p PostgresParser) parseTableName(relation *pgquery.RangeVar) (parser.TableName, error) {
 	if relation.Catalogname != "" {
 		return parser.TableName{}, fmt.Errorf("unhandled node in parseTableName: %#v", relation)
 	}
 	return parser.TableName{
-		Schema: parser.NewTableIdent(relation.Schemaname),
-		Name:   parser.NewTableIdent(relation.Relname),
+		Schema: parser.NewIdent(relation.Schemaname, false),
+		Name:   parser.NewIdent(relation.Relname, false),
 	}, nil
 }
 
@@ -945,7 +959,7 @@ func (p PostgresParser) parseExtensionStmt(stmt *pgquery.CreateExtensionStmt) (p
 	return &parser.DDL{
 		Action: parser.CreateExtension,
 		Extension: &parser.Extension{
-			Name: stmt.Extname,
+			Name: parser.NewIdent(stmt.Extname, false),
 		},
 	}, nil
 }
@@ -973,7 +987,7 @@ func (p PostgresParser) parseConstraint(constraint *pgquery.Constraint, tableNam
 	case pgquery.ConstrType_CONSTR_UNIQUE:
 		cols := util.TransformSlice(constraint.Keys, func(key *pgquery.Node) parser.IndexColumn {
 			return parser.IndexColumn{
-				Column:    parser.NewColIdent(key.Node.(*pgquery.Node_String_).String_.Sval),
+				Column:    parser.NewIdent(key.Node.(*pgquery.Node_String_).String_.Sval, false),
 				Direction: "asc",
 			}
 		})
@@ -982,7 +996,7 @@ func (p PostgresParser) parseConstraint(constraint *pgquery.Constraint, tableNam
 			Table:   tableName,
 			NewName: tableName,
 			IndexSpec: &parser.IndexSpec{
-				Name:       parser.NewColIdent(constraint.Conname),
+				Name:       parser.NewIdent(constraint.Conname, false),
 				Constraint: true,
 				Unique:     true,
 				ConstraintOptions: &parser.ConstraintOptions{
@@ -1043,7 +1057,7 @@ func (p PostgresParser) parseExclusion(constraint *pgquery.Constraint) (*parser.
 			expr = parsedExpr
 		} else {
 			// If there's no expression, just use the column name as an expression
-			expr = &parser.ColName{Name: parser.NewColIdent(excludeElement.Name)}
+			expr = &parser.ColName{Name: parser.NewIdent(excludeElement.Name, false)}
 		}
 
 		opList := nItems[1].GetList()
@@ -1062,21 +1076,21 @@ func (p PostgresParser) parseExclusion(constraint *pgquery.Constraint) (*parser.
 		whereExpr = expr
 	}
 	return &parser.ExclusionDefinition{
-		ConstraintName: parser.NewColIdent(constraint.Conname),
-		IndexType:      parser.NewColIdent(constraint.GetAccessMethod()),
+		ConstraintName: parser.NewIdent(constraint.Conname, false),
+		IndexType:      parser.NewIdent(constraint.GetAccessMethod(), false),
 		Exclusions:     exs,
 		Where:          parser.NewWhere(parser.WhereStr, whereExpr),
 	}, nil
 }
 
 func (p PostgresParser) parseForeignKey(constraint *pgquery.Constraint) (*parser.ForeignKeyDefinition, error) {
-	idxCols := util.TransformSlice(constraint.FkAttrs, func(fkAttr *pgquery.Node) parser.ColIdent {
+	idxCols := util.TransformSlice(constraint.FkAttrs, func(fkAttr *pgquery.Node) parser.Ident {
 		v := fkAttr.Node.(*pgquery.Node_String_).String_.Sval
-		return parser.NewColIdent(v)
+		return parser.NewIdent(v, false)
 	})
-	refCols := util.TransformSlice(constraint.PkAttrs, func(pkAttr *pgquery.Node) parser.ColIdent {
+	refCols := util.TransformSlice(constraint.PkAttrs, func(pkAttr *pgquery.Node) parser.Ident {
 		v := pkAttr.Node.(*pgquery.Node_String_).String_.Sval
-		return parser.NewColIdent(v)
+		return parser.NewIdent(v, false)
 	})
 
 	refName, err := p.parseTableName(constraint.Pktable)
@@ -1084,7 +1098,7 @@ func (p PostgresParser) parseForeignKey(constraint *pgquery.Constraint) (*parser
 		return nil, err
 	}
 	return &parser.ForeignKeyDefinition{
-		ConstraintName:   parser.NewColIdent(constraint.Conname),
+		ConstraintName:   parser.NewIdent(constraint.Conname, false),
 		IndexColumns:     idxCols,
 		ReferenceColumns: refCols,
 		ReferenceName:    refName,
@@ -1097,23 +1111,23 @@ func (p PostgresParser) parseForeignKey(constraint *pgquery.Constraint) (*parser
 	}, nil
 }
 
-func (p PostgresParser) parseFkAction(action string) parser.ColIdent {
+func (p PostgresParser) parseFkAction(action string) parser.Ident {
 	// https://github.com/pganalyze/pg_query_go/blob/v2.2.0/parser/include/nodes/parsenodes.h#L2145-L2149C23
 	switch action {
 	case "a":
 		// pgquery cannot distinguish between unspecified action and no action.
 		// Empty for no action to match existing behavior.
-		return parser.NewColIdent("")
+		return parser.NewIdent("", false)
 	case "r":
-		return parser.NewColIdent("RESTRICT")
+		return parser.NewIdent("RESTRICT", false)
 	case "c":
-		return parser.NewColIdent("CASCADE")
+		return parser.NewIdent("CASCADE", false)
 	case "n":
-		return parser.NewColIdent("SET NULL")
+		return parser.NewIdent("SET NULL", false)
 	case "d":
-		return parser.NewColIdent("SET DEFAULT")
+		return parser.NewIdent("SET DEFAULT", false)
 	default:
-		return parser.NewColIdent("")
+		return parser.NewIdent("", false)
 	}
 }
 
@@ -1157,7 +1171,7 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 			if err != nil {
 				return nil, nil, err
 			}
-			foreignKey.IndexColumns = []parser.ColIdent{parser.NewColIdent(columnDef.Colname)}
+			foreignKey.IndexColumns = []parser.Ident{parser.NewIdent(columnDef.Colname, false)}
 		case pgquery.ConstrType_CONSTR_ATTR_DEFERRABLE:
 			foreignKey.ConstraintOptions.Deferrable = true
 		case pgquery.ConstrType_CONSTR_ATTR_NOT_DEFERRABLE:
@@ -1182,7 +1196,7 @@ func (p PostgresParser) parseColumnDef(columnDef *pgquery.ColumnDef, tableName p
 	}
 
 	return &parser.ColumnDefinition{
-		Name: parser.NewColIdent(columnDef.Colname),
+		Name: parser.NewIdent(columnDef.Colname, false),
 		Type: columnType,
 	}, foreignKey, nil
 }
@@ -1410,7 +1424,9 @@ func (p PostgresParser) parseTypeName(node *pgquery.TypeName) (parser.ColumnType
 			}
 		}
 	} else if len(typeNames) == 2 {
-		columnType.References = typeNames[0] + "."
+		// Schema-qualified type: store schema prefix with trailing dot in References.Name
+		// This is for backward compatibility with how the pgquery parser stores schema prefixes
+		columnType.References = parser.TableName{Name: parser.NewIdent(typeNames[0]+".", false)}
 		columnType.Type = typeNames[1]
 	} else {
 		return columnType, fmt.Errorf("unexpected length in parseTypeName: %d", len(typeNames))
@@ -1478,7 +1494,7 @@ func (p PostgresParser) parseCheckConstraint(constraint *pgquery.Constraint) (*p
 
 	return &parser.CheckDefinition{
 		Where:          *parser.NewWhere(parser.WhereStr, expr),
-		ConstraintName: parser.NewColIdent(constraint.Conname),
+		ConstraintName: parser.NewIdent(constraint.Conname, false),
 		NoInherit:      parser.BoolVal(constraint.IsNoInherit),
 	}, nil
 }

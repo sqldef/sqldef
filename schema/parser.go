@@ -67,7 +67,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}
 			return &CreateIndex{
 				statement: ddl,
-				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
+				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 				index:     index,
 			}, nil
 		} else if stmt.Action == parser.AddIndex {
@@ -77,7 +77,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}
 			return &AddIndex{
 				statement: ddl,
-				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
+				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 				index:     index,
 			}, nil
 		} else if stmt.Action == parser.AddPrimaryKey {
@@ -87,17 +87,13 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}
 			return &AddPrimaryKey{
 				statement: ddl,
-				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
+				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 				index:     index,
 			}, nil
 		} else if stmt.Action == parser.AddForeignKey {
 
-			indexColumns := util.TransformSlice(stmt.ForeignKey.IndexColumns, func(indexColumn parser.ColIdent) string {
-				return indexColumn.String()
-			})
-			referenceColumns := util.TransformSlice(stmt.ForeignKey.ReferenceColumns, func(referenceColumn parser.ColIdent) string {
-				return referenceColumn.String()
-			})
+			indexColumns := stmt.ForeignKey.IndexColumns
+			referenceColumns := stmt.ForeignKey.ReferenceColumns
 			var constraintOptions *ConstraintOptions
 			if stmt.ForeignKey.ConstraintOptions != nil {
 				constraintOptions = &ConstraintOptions{
@@ -108,28 +104,28 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 
 			return &AddForeignKey{
 				statement: ddl,
-				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
+				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 				foreignKey: ForeignKey{
-					constraintName:    stmt.ForeignKey.ConstraintName.String(),
-					indexName:         stmt.ForeignKey.IndexName.String(),
-					indexColumns:      indexColumns,
-					referenceName:     normalizedTableName(mode, stmt.ForeignKey.ReferenceName, defaultSchema),
-					referenceColumns:  referenceColumns,
-					onDelete:          stmt.ForeignKey.OnDelete.String(),
-					onUpdate:          stmt.ForeignKey.OnUpdate.String(),
-					notForReplication: stmt.ForeignKey.NotForReplication,
-					constraintOptions: constraintOptions,
+					constraintName:     stmt.ForeignKey.ConstraintName,
+					indexName:          stmt.ForeignKey.IndexName,
+					indexColumns:       indexColumns,
+					referenceTableName: normalizeQualifiedName(mode, stmt.ForeignKey.ReferenceName, defaultSchema),
+					referenceColumns:   referenceColumns,
+					onDelete:           stmt.ForeignKey.OnDelete.Name,
+					onUpdate:           stmt.ForeignKey.OnUpdate.Name,
+					notForReplication:  stmt.ForeignKey.NotForReplication,
+					constraintOptions:  constraintOptions,
 				},
 			}, nil
 		} else if stmt.Action == parser.AddExclusion {
 			return &AddExclusion{
 				statement: ddl,
-				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
+				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 				exclusion: parseExclusion(stmt.Exclusion),
 			}, nil
 		} else if stmt.Action == parser.CreatePolicy {
-			scope := util.TransformSlice(stmt.Policy.To, func(to parser.ColIdent) string {
-				return to.String()
+			scope := util.TransformSlice(stmt.Policy.To, func(to Ident) string {
+				return to.Name
 			})
 			var using, withCheck parser.Expr
 			if stmt.Policy.Using != nil {
@@ -140,9 +136,9 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}
 			return &AddPolicy{
 				statement: ddl,
-				tableName: normalizedTableName(mode, stmt.Table, defaultSchema),
+				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 				policy: Policy{
-					name:       stmt.Policy.Name.String(),
+					name:       stmt.Policy.Name,
 					permissive: string(stmt.Policy.Permissive),
 					scope:      string(stmt.Policy.Scope),
 					roles:      scope,
@@ -161,7 +157,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				statement:    ddl,
 				viewType:     strings.ToUpper(stmt.View.Type),
 				securityType: strings.ToUpper(stmt.View.SecurityType),
-				name:         normalizedTableName(mode, stmt.View.Name, defaultSchema),
+				name:         normalizeQualifiedName(mode, stmt.View.Name, defaultSchema),
 				definition:   stmt.View.Definition,
 				columns:      columns,
 				withData:     stmt.View.WithData,
@@ -175,15 +171,15 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 
 			return &Trigger{
 				statement: ddl,
-				name:      parser.String(stmt.Trigger.Name),
-				tableName: stmt.Trigger.TableName.Name.String(),
+				name:      normalizeColNameToQualifiedName(mode, stmt.Trigger.Name, defaultSchema),
+				tableName: normalizeQualifiedName(mode, stmt.Trigger.TableName, defaultSchema),
 				time:      stmt.Trigger.Time,
 				event:     stmt.Trigger.Event,
 				body:      body,
 			}, nil
 		} else if stmt.Action == parser.CreateType {
 			return &Type{
-				name:       normalizedObjectName(mode, stmt.Type.Name, defaultSchema),
+				name:       normalizeQualifiedObjectName(mode, stmt.Type.Name, defaultSchema),
 				statement:  ddl,
 				enumValues: stmt.Type.Type.EnumValues,
 			}, nil
@@ -197,7 +193,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			}
 
 			return &Domain{
-				name:         normalizedObjectName(mode, stmt.Domain.Name, defaultSchema),
+				name:         normalizeQualifiedObjectName(mode, stmt.Domain.Name, defaultSchema),
 				statement:    ddl,
 				dataType:     parser.String(&stmt.Domain.DataType),
 				defaultValue: parseDefaultDefinition(stmt.Domain.Default),
@@ -232,7 +228,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				normalizedPrivileges := util.TransformSlice(stmt.Grant.Privileges, strings.ToUpper)
 				return &GrantPrivilege{
 					statement:  ddl,
-					tableName:  normalizedTableName(mode, stmt.Table, defaultSchema),
+					tableName:  normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 					grantees:   grantees,
 					privileges: normalizedPrivileges,
 				}, nil
@@ -251,7 +247,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				normalizedPrivileges := util.TransformSlice(stmt.Grant.Privileges, strings.ToUpper)
 				return &RevokePrivilege{
 					statement:     ddl,
-					tableName:     normalizedTableName(mode, stmt.Table, defaultSchema),
+					tableName:     normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 					grantees:      grantees,
 					privileges:    normalizedPrivileges,
 					cascadeOption: stmt.Grant.CascadeOption,
@@ -283,7 +279,16 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		// Normalize PostgreSQL type aliases from generic parser
 		typeName := parsedCol.Type.Type
 		timezone := castBool(parsedCol.Type.Timezone)
-		references := parsedCol.Type.References
+		// references is used for:
+		// 1. Schema-qualified type names (e.g., "public." for public.mytype) - stored with trailing dot
+		// 2. Simple REFERENCES clause without column names (e.g., "REFERENCES table_name")
+		var references Ident
+
+		// For simple REFERENCES (without column names), store the table name in references
+		// This is separate from the ForeignKey logic which handles REFERENCES with explicit columns
+		if !parsedCol.Type.References.Name.IsEmpty() && len(parsedCol.Type.ReferenceNames) == 0 {
+			references = parsedCol.Type.References.Name
+		}
 
 		if mode == GeneratorModePostgres {
 			// Handle short timezone forms: timestamptz -> timestamp, timetz -> time
@@ -301,20 +306,21 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			// Generic parser stores "schema.type" in typeName field
 			// pgquery parser stores "schema." in references and "type" in typeName
 			// Normalize to the pgquery format for consistent comparison
-			if strings.Contains(typeName, ".") && references == "" {
+			if strings.Contains(typeName, ".") && references.IsEmpty() {
 				parts := strings.SplitN(typeName, ".", 2)
 				if len(parts) == 2 {
 					// Store schema with trailing dot to match pgquery format
-					references = parts[0] + "."
+					references = Ident{Name: parts[0] + "."}
 					typeName = parts[1]
 				}
 			}
 		}
 
 		column := Column{
-			name:                       parsedCol.Name.String(),
+			name:                       parsedCol.Name,
 			position:                   i,
 			typeName:                   typeName,
+			typeIdent:                  parsedCol.Type.TypeIdent,
 			unsigned:                   castBool(parsedCol.Type.Unsigned),
 			notNull:                    castBoolPtr(parsedCol.Type.NotNull),
 			autoIncrement:              castBool(parsedCol.Type.Autoincrement),
@@ -340,19 +346,22 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		// Parse @renamed annotation for each column
-		if comment, ok := columnComments[parsedCol.Name.String()]; ok {
+		if comment, ok := columnComments[parsedCol.Name.Name]; ok {
 			column.renamedFrom = extractRenameFrom(comment)
 		}
 
 		if parsedCol.Type.Check != nil {
 			column.check = &CheckDefinition{
-				definition:        parsedCol.Type.Check.Where.Expr,
-				constraintName:    parser.String(parsedCol.Type.Check.ConstraintName),
+				definition: parsedCol.Type.Check.Where.Expr,
+				constraintName: Ident{
+					Name:   parsedCol.Type.Check.ConstraintName.Name,
+					Quoted: parsedCol.Type.Check.ConstraintName.Quoted,
+				},
 				notForReplication: parsedCol.Type.Check.NotForReplication,
 				noInherit:         castBool(parsedCol.Type.Check.NoInherit),
 			}
 		}
-		columns[parsedCol.Name.String()] = &column
+		columns[parsedCol.Name.Name] = &column
 	}
 
 	// Convert inline foreign key references to ForeignKey objects
@@ -363,20 +372,17 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	for _, parsedCol := range stmt.TableSpec.Columns {
 		// Skip if no inline foreign key reference or if it's missing column names
 		// (empty ReferenceNames means it will use the primary key, which is database-specific)
-		if parsedCol.Type.References == "" || len(parsedCol.Type.ReferenceNames) == 0 {
+		if parsedCol.Type.References.Name.IsEmpty() || len(parsedCol.Type.ReferenceNames) == 0 {
 			continue
 		}
 
-		column := columns[parsedCol.Name.String()]
+		column := columns[parsedCol.Name.Name]
 
 		// Build the foreign key object
-		indexColumns := []string{parsedCol.Name.String()}
+		indexColumns := []Ident{parsedCol.Name}
+		referenceColumns := parsedCol.Type.ReferenceNames
 
-		referenceColumns := util.TransformSlice(parsedCol.Type.ReferenceNames, func(refCol parser.ColIdent) string {
-			return refCol.String()
-		})
-
-		constraintName := buildPostgresConstraintName(stmt.NewName.Name.String(), parsedCol.Name.String(), "fkey")
+		constraintName := buildPostgresConstraintNameIdent(stmt.NewName.Name.Name, parsedCol.Name.Name, "fkey")
 
 		// Only create constraintOptions if DEFERRABLE or INITIALLY DEFERRED is explicitly set to true
 		// This ensures we don't create an empty constraintOptions struct that would differ from
@@ -405,19 +411,19 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		foreignKey := ForeignKey{
-			constraintName:    constraintName,
-			indexColumns:      indexColumns,
-			referenceName:     normalizedTableName(mode, parser.TableName{Name: parser.NewTableIdent(parsedCol.Type.References)}, defaultSchema),
-			referenceColumns:  referenceColumns,
-			onDelete:          parser.String(parsedCol.Type.ReferenceOnDelete),
-			onUpdate:          parser.String(parsedCol.Type.ReferenceOnUpdate),
-			constraintOptions: constraintOptions,
+			constraintName:     constraintName,
+			indexColumns:       indexColumns,
+			referenceTableName: normalizeQualifiedName(mode, parsedCol.Type.References, defaultSchema),
+			referenceColumns:   referenceColumns,
+			onDelete:           parser.String(parsedCol.Type.ReferenceOnDelete),
+			onUpdate:           parser.String(parsedCol.Type.ReferenceOnUpdate),
+			constraintOptions:  constraintOptions,
 		}
 		foreignKeys = append(foreignKeys, foreignKey)
 
 		// Clear the references field from the column since it's now represented as a foreign key
 		// This prevents it from being used for type qualification
-		column.references = ""
+		column.references = Ident{}
 		column.referenceDeferrable = nil
 		column.referenceInitiallyDeferred = nil
 	}
@@ -450,7 +456,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			// MSSQL: https://learn.microsoft.com/en-us/sql/relational-databases/tables/create-primary-keys#limitations
 			// MySQL: https://dev.mysql.com/doc/refman/8.4/en/create-table.html
 			if indexDef.Info.Primary && (mode == GeneratorModeMssql || mode == GeneratorModeMysql) {
-				if column, ok := columns[column.Column.String()]; ok {
+				if column, ok := columns[column.Column.Name]; ok {
 					val := true
 					column.notNull = &val
 				}
@@ -470,20 +476,22 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			indexPartition.column = indexDef.Partition.Column
 		}
 
-		name := indexDef.Info.Name.String()
-		if name == "" {
+		nameIdent := indexDef.Info.Name
+		if nameIdent.IsEmpty() {
 			// Auto-generate index/constraint name based on database conventions
-			tableName := stmt.Table.Name.String()
+			tableName := stmt.Table.Name.Name
 			if tableName == "" {
-				tableName = stmt.NewName.Name.String()
+				tableName = stmt.NewName.Name.Name
 			}
 			columnName := indexColumns[0].ColumnName()
 
 			if mode == GeneratorModePostgres && indexDef.Info.Unique && len(indexColumns) == 1 {
-				name = buildPostgresConstraintName(tableName, columnName, "key")
+				nameIdent = buildPostgresConstraintNameIdent(tableName, columnName, "key")
 			} else {
 				// For MySQL or multi-column constraints, use just the column name
-				name = columnName
+				// Auto-generated names are unquoted
+				nameIdent.Name = columnName
+				nameIdent.Quoted = false
 			}
 		}
 
@@ -506,7 +514,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		index := Index{
-			name:      name,
+			name:      nameIdent,
 			indexType: indexDef.Info.Type,
 			columns:   indexColumns,
 			primary:   indexDef.Info.Primary,
@@ -522,7 +530,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		// Parse @renamed annotation for this index
-		if comment, ok := indexComments[name]; ok {
+		if comment, ok := indexComments[nameIdent.Name]; ok {
 			index.renamedFrom = extractRenameFrom(comment)
 		}
 
@@ -531,8 +539,11 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 
 	for _, checkDef := range stmt.TableSpec.Checks {
 		check := CheckDefinition{
-			definition:        checkDef.Where.Expr,
-			constraintName:    parser.String(checkDef.ConstraintName),
+			definition: checkDef.Where.Expr,
+			constraintName: Ident{
+				Name:   checkDef.ConstraintName.Name,
+				Quoted: checkDef.ConstraintName.Quoted,
+			},
 			notForReplication: checkDef.NotForReplication,
 			noInherit:         castBool(checkDef.NoInherit),
 		}
@@ -540,13 +551,8 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	}
 
 	for _, foreignKeyDef := range stmt.TableSpec.ForeignKeys {
-		indexColumns := util.TransformSlice(foreignKeyDef.IndexColumns, func(indexColumn parser.ColIdent) string {
-			return indexColumn.String()
-		})
-
-		referenceColumns := util.TransformSlice(foreignKeyDef.ReferenceColumns, func(referenceColumn parser.ColIdent) string {
-			return referenceColumn.String()
-		})
+		indexColumns := foreignKeyDef.IndexColumns
+		referenceColumns := foreignKeyDef.ReferenceColumns
 
 		var constraintOptions *ConstraintOptions
 		if foreignKeyDef.ConstraintOptions != nil {
@@ -557,15 +563,15 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		}
 
 		foreignKey := ForeignKey{
-			constraintName:    foreignKeyDef.ConstraintName.String(),
-			indexName:         foreignKeyDef.IndexName.String(),
-			indexColumns:      indexColumns,
-			referenceName:     normalizedTableName(mode, foreignKeyDef.ReferenceName, defaultSchema),
-			referenceColumns:  referenceColumns,
-			onDelete:          foreignKeyDef.OnDelete.String(),
-			onUpdate:          foreignKeyDef.OnUpdate.String(),
-			notForReplication: foreignKeyDef.NotForReplication,
-			constraintOptions: constraintOptions,
+			constraintName:     foreignKeyDef.ConstraintName,
+			indexName:          foreignKeyDef.IndexName,
+			indexColumns:       indexColumns,
+			referenceTableName: normalizeQualifiedName(mode, foreignKeyDef.ReferenceName, defaultSchema),
+			referenceColumns:   referenceColumns,
+			onDelete:           foreignKeyDef.OnDelete.Name,
+			onUpdate:           foreignKeyDef.OnUpdate.Name,
+			notForReplication:  foreignKeyDef.NotForReplication,
+			constraintOptions:  constraintOptions,
 		}
 		foreignKeys = append(foreignKeys, foreignKey)
 	}
@@ -576,13 +582,13 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	}
 
 	tableComment := extractTableComment(rawDDL, mode)
-	tableRenameFrom := ""
+	var tableRenameFrom Ident
 	if tableComment != "" {
 		tableRenameFrom = extractRenameFrom(tableComment)
 	}
 
 	return Table{
-		name:        normalizedTableName(mode, stmt.NewName, defaultSchema),
+		name:        normalizeQualifiedName(mode, stmt.NewName, defaultSchema),
 		columns:     columns,
 		indexes:     indexes,
 		checks:      checks,
@@ -632,8 +638,8 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		where = parser.String(expr)
 	}
 
-	includedColumns := util.TransformSlice(stmt.IndexSpec.Included, func(includedColumn parser.ColIdent) string {
-		return includedColumn.String()
+	includedColumns := util.TransformSlice(stmt.IndexSpec.Included, func(includedColumn Ident) string {
+		return includedColumn.Name
 	})
 
 	indexOptions := util.TransformSlice(stmt.IndexSpec.Options, func(option *parser.IndexOption) IndexOption {
@@ -657,29 +663,31 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		}
 	}
 
-	name := stmt.IndexSpec.Name.String()
-	if name == "" {
-		name = stmt.Table.Name.String()
+	nameIdent := stmt.IndexSpec.Name
+	if nameIdent.IsEmpty() {
+		nameIdent.Name = stmt.Table.Name.Name
 		for _, indexColumn := range indexColumns {
-			name += fmt.Sprintf("_%s", indexColumn.ColumnName())
+			nameIdent.Name += fmt.Sprintf("_%s", indexColumn.ColumnName())
 		}
 		// Use PostgreSQL naming convention for UNIQUE constraints
 		if mode == GeneratorModePostgres && stmt.IndexSpec.Unique && len(indexColumns) == 1 {
-			name += "_key"
+			nameIdent.Name += "_key"
 		} else {
-			name += "_idx"
+			nameIdent.Name += "_idx"
 		}
+		// Auto-generated names are unquoted
+		nameIdent.Quoted = false
 	}
 
 	// Extract index comments and look for @renamed annotation
 	indexComments := extractIndexComments(rawDDL, mode)
-	renameFrom := ""
-	if comment, ok := indexComments[name]; ok {
+	var renameFrom Ident
+	if comment, ok := indexComments[nameIdent.Name]; ok {
 		renameFrom = extractRenameFrom(comment)
 	}
 
 	return Index{
-		name:              name,
+		name:              nameIdent,
 		indexType:         "", // not supported in parser yet
 		columns:           indexColumns,
 		primary:           false, // not supported in parser yet
@@ -787,9 +795,9 @@ func parseDefaultDefinition(opt *parser.DefaultDefinition) *DefaultDefinition {
 		return nil
 	}
 
-	var constraintName string
-	if opt.ConstraintName.String() != "" {
-		constraintName = opt.ConstraintName.String()
+	var constraintName Ident
+	if !opt.ConstraintName.IsEmpty() {
+		constraintName = opt.ConstraintName
 	}
 
 	return &DefaultDefinition{
@@ -876,52 +884,84 @@ func parseExclusion(exclusion *parser.ExclusionDefinition) Exclusion {
 		where = parser.String(exclusion.Where.Expr)
 	}
 	// PostgreSQL defaults to btree when no index method is specified
-	indexType := strings.ToUpper(exclusion.IndexType.String())
+	indexType := strings.ToUpper(exclusion.IndexType.Name)
 	if indexType == "" {
 		indexType = "BTREE"
 	}
 	return Exclusion{
-		constraintName: exclusion.ConstraintName.String(),
+		constraintName: exclusion.ConstraintName,
 		indexType:      indexType,
 		exclusions:     exs,
 		where:          where,
 	}
 }
 
-// Qualify Postgres/Mssql schema
-func normalizedTableName(mode GeneratorMode, tableName parser.TableName, defaultSchema string) string {
-	table := tableName.Name.String()
+// normalizeQualifiedName creates a QualifiedName from a parser.TableName
+func normalizeQualifiedName(mode GeneratorMode, tableName parser.TableName, defaultSchema string) QualifiedName {
+	var schemaIdent Ident
 	if mode == GeneratorModePostgres || mode == GeneratorModeMssql {
-		if len(tableName.Schema.String()) > 0 {
-			table = tableName.Schema.String() + "." + table
+		if !tableName.Schema.IsEmpty() {
+			schemaIdent = tableName.Schema
 		} else {
-			table = defaultSchema + "." + table
+			schemaIdent = Ident{Name: defaultSchema, Quoted: false}
 		}
 	}
-	return table
+
+	return QualifiedName{
+		Schema: schemaIdent,
+		Name:   tableName.Name,
+	}
 }
 
-// Qualify Postgres/Mssql schema for object names (domains, types, functions, etc.)
-func normalizedObjectName(mode GeneratorMode, objectName parser.ObjectName, defaultSchema string) string {
-	name := objectName.Name.String()
+// normalizeQualifiedObjectName creates a QualifiedName from a parser.ObjectName
+func normalizeQualifiedObjectName(mode GeneratorMode, objectName parser.ObjectName, defaultSchema string) QualifiedName {
+	var schemaIdent Ident
 	if mode == GeneratorModePostgres || mode == GeneratorModeMssql {
-		if len(objectName.Schema.String()) > 0 {
-			name = objectName.Schema.String() + "." + name
+		if !objectName.Schema.IsEmpty() {
+			schemaIdent = objectName.Schema
 		} else {
-			name = defaultSchema + "." + name
+			schemaIdent = Ident{Name: defaultSchema, Quoted: false}
 		}
 	}
-	return name
+
+	return QualifiedName{
+		Schema: schemaIdent,
+		Name:   objectName.Name,
+	}
 }
 
-func normalizedTable(mode GeneratorMode, tableName string, defaultSchema string) string {
+// normalizeColNameToQualifiedName creates a QualifiedName from a parser.ColName.
+// This is used for trigger names which can be schema-qualified like [dbo].[trigger_name].
+// Unlike table names, trigger names do not get a default schema if none was specified.
+func normalizeColNameToQualifiedName(mode GeneratorMode, colName *parser.ColName, defaultSchema string) QualifiedName {
+	var schemaIdent Ident
+	if mode == GeneratorModePostgres || mode == GeneratorModeMssql {
+		// ColName.Qualifier is a TableName; for trigger schema, the schema is in Qualifier.Schema
+		// For [dbo].[insert_log], Qualifier.Schema = "dbo", Qualifier.Name = ""
+		if !colName.Qualifier.Schema.IsEmpty() {
+			schemaIdent = colName.Qualifier.Schema
+		} else if !colName.Qualifier.Name.IsEmpty() {
+			// Fallback: if Schema is empty but Name is set, use Name as schema
+			schemaIdent = colName.Qualifier.Name
+		}
+		// Note: unlike tables, triggers don't get a default schema - if no schema was specified,
+		// we leave it empty to preserve the original behavior
+	}
+
+	return QualifiedName{
+		Schema: schemaIdent,
+		Name:   colName.Name,
+	}
+}
+
+func normalizedTable(mode GeneratorMode, tableName Ident, defaultSchema string) Ident {
 	switch mode {
 	case GeneratorModePostgres, GeneratorModeMssql:
-		if tableName == "" { // avoid qualifying empty references (e.g., built-in types)
-			return ""
+		if tableName.IsEmpty() { // avoid qualifying empty references (e.g., built-in types)
+			return Ident{}
 		}
-		schema, table := splitTableName(tableName, defaultSchema)
-		return fmt.Sprintf("%s.%s", schema, table)
+		schema, table := splitTableName(tableName.Name, defaultSchema)
+		return Ident{Name: fmt.Sprintf("%s.%s", schema, table), Quoted: tableName.Quoted}
 	default:
 		return tableName
 	}
@@ -939,32 +979,34 @@ func normalizeCollate(collate string, table parser.TableSpec) string {
 func normalizeTableInComment(mode GeneratorMode, comment *parser.Comment, defaultSchema string) *parser.Comment {
 	switch mode {
 	case GeneratorModePostgres:
-		// Expected format is [schema.]table.column
-		objs := strings.Split(comment.Object, ".")
-		switch len(objs) {
-		case 1, 2:
-			switch comment.ObjectType {
-			case "OBJECT_TABLE":
-				if len(objs) == 1 {
-					// table -> defaultSchema.table
-					objs = append([]string{defaultSchema}, objs...)
-				}
-			case "OBJECT_COLUMN":
-				if len(objs) == 2 {
-					// table.column -> defaultSchema.table.column
-					objs = append([]string{defaultSchema}, objs...)
-				}
+		// Normalize Object []Ident by prepending default schema if missing
+		obj := comment.Object
+		needsSchema := false
+
+		switch comment.ObjectType {
+		case "OBJECT_TABLE":
+			// TABLE comments need [schema, table]
+			if len(obj) == 1 {
+				needsSchema = true
 			}
+		case "OBJECT_COLUMN":
+			// COLUMN comments need [schema, table, column]
+			if len(obj) == 2 {
+				needsSchema = true
+			}
+		}
+
+		if needsSchema {
+			// Prepend default schema (unquoted) to the object
+			schemaIdent := parser.NewIdent(defaultSchema, false)
+			obj = append([]Ident{schemaIdent}, obj...)
 			return &parser.Comment{
 				ObjectType: comment.ObjectType,
-				Object:     strings.Join(objs, "."),
+				Object:     obj,
 				Comment:    comment.Comment,
 			}
-		case 3: // complete-case (schema.table.column). no-op
-			return comment
-		default: // abnormal-case. fallback
-			return comment
 		}
+		return comment
 	default:
 		return comment
 	}
@@ -1053,11 +1095,11 @@ func castBoolPtr(val *parser.BoolVal) *bool {
 	return &ret
 }
 
-// extractRenameFrom extracts the rename annotation from a comment string
-// Supports both @renamed (preferred) and @rename (deprecated)
-// e.g. "-- @renamed from=old_column_name" -> "old_column_name"
-// e.g. "-- @rename from=\"foo bar\"" -> "foo bar"
-func extractRenameFrom(comment string) string {
+// extractRenameFrom extracts the old name from a @renamed annotation.
+// Returns an Ident with both the name and whether it was quoted.
+// e.g., `@renamed from="OldName"` -> Ident{Name: "OldName", Quoted: true}
+// e.g., `@renamed from=oldname` -> Ident{Name: "oldname", Quoted: false}
+func extractRenameFrom(comment string) Ident {
 	// First try to match @renamed (preferred)
 	reRenamed := regexp.MustCompile(`@renamed\s+from=(?:"([^"]+)"|(\S+))`)
 	matches := reRenamed.FindStringSubmatch(comment)
@@ -1077,13 +1119,13 @@ func extractRenameFrom(comment string) string {
 	// matches[0] = full match, matches[1] = quoted, matches[2] = unquoted
 	if len(matches) >= 3 {
 		if matches[1] != "" {
-			return matches[1] // double-quoted identifier
+			return Ident{Name: matches[1], Quoted: true} // double-quoted identifier
 		}
 		if matches[2] != "" {
-			return matches[2] // unquoted identifier
+			return Ident{Name: matches[2], Quoted: false} // unquoted identifier
 		}
 	}
-	return ""
+	return Ident{}
 }
 
 // generatorModeToParserMode converts GeneratorMode to ParserMode

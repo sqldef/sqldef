@@ -139,6 +139,13 @@ func buildPostgresConstraintName(tableName, columnName, suffix string) string {
 	return fmt.Sprintf("%s_%s_%s", truncatedTable, truncatedColumn, suffix)
 }
 
+// buildPostgresConstraintNameIdent builds a PostgreSQL auto-generated constraint name
+// and returns it as an Ident with quote information inferred from case.
+func buildPostgresConstraintNameIdent(tableName, columnName, suffix string) Ident {
+	name := buildPostgresConstraintName(tableName, columnName, suffix)
+	return NewIdentWithQuoteDetected(name)
+}
+
 // normalizeCheckExpr normalizes a CHECK constraint expression AST for comparison
 // mode parameter controls PostgreSQL-specific normalization (IN to ANY conversion)
 func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
@@ -234,7 +241,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		// The generic parser may parse "= ANY(ARRAY[...])" as a FuncExpr on the right side
 		// We need to normalize this to set the Any/All flags properly
 		if funcExpr, ok := right.(*parser.FuncExpr); ok {
-			funcName := strings.ToLower(funcExpr.Name.String())
+			funcName := strings.ToLower(funcExpr.Name.Name)
 			switch funcName {
 			case "any", "some":
 				// Convert "column = ANY(array)" to ComparisonExpr with Any=true
@@ -339,7 +346,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			return arg
 		})
 		// Normalize function name to lowercase (PostgreSQL convention)
-		funcName := parser.NewColIdent(strings.ToLower(e.Name.String()))
+		funcName := parser.NewIdent(strings.ToLower(e.Name.Name), false)
 		return &parser.FuncExpr{
 			Qualifier: e.Qualifier,
 			Name:      funcName,
@@ -370,17 +377,17 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		})
 		return parser.ValTuple(normalizedTuple)
 	case *parser.ColName:
-		qualifierStr := ""
-		if e.Qualifier.Name.String() != "" {
-			qualifierStr = normalizeName(e.Qualifier.Name.String())
+		// Normalize column names while preserving quoting information:
+		// - Quoted identifiers that are NOT all lowercase preserve their case and remain quoted
+		// - Quoted identifiers that ARE all lowercase are normalized to unquoted (since "id" = id)
+		// - Unquoted identifiers are normalized to lowercase
+		var qualifier Ident
+		if !e.Qualifier.Name.IsEmpty() {
+			qualifier = NewNormalizedIdent(e.Qualifier.Name)
 		}
-		nameStr := normalizeName(e.Name.String())
-
 		return &parser.ColName{
-			Name: parser.NewColIdent(nameStr),
-			Qualifier: parser.TableName{
-				Name: parser.NewTableIdent(qualifierStr),
-			},
+			Name:      NewNormalizedIdent(e.Name),
+			Qualifier: parser.TableName{Name: qualifier},
 		}
 	case *parser.TypedLiteral:
 		// PostgreSQL normalizes typed literals differently based on type:
@@ -415,26 +422,21 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 
 	switch e := expr.(type) {
 	case *parser.ColName:
-		// Normalize column name and qualifier
-		// 1. Remove database-specific quotes/brackets from identifiers
-		// 2. For Postgres and MySQL, remove table qualifiers from column references
-		qualifierStr := ""
-		if e.Qualifier.Name.String() != "" {
-			qualifierStr = normalizeName(e.Qualifier.Name.String())
-		}
-		nameStr := normalizeName(e.Name.String())
-
+		// Normalize column name and qualifier while preserving quoting:
+		// - Quoted identifiers that are NOT all lowercase preserve their case and remain quoted
+		// - Quoted identifiers that ARE all lowercase are normalized to unquoted (since "id" = id)
+		// - Unquoted identifiers are normalized to lowercase
 		// For Postgres and MySQL, remove table qualifiers (e.g., "users.name" -> "name")
-		// MySQL adds table qualifiers when storing views
-		if mode == GeneratorModePostgres || mode == GeneratorModeMysql {
-			qualifierStr = ""
+		var qualifier Ident
+		if !e.Qualifier.Name.IsEmpty() {
+			// For Postgres and MySQL, remove table qualifiers
+			if mode != GeneratorModePostgres && mode != GeneratorModeMysql {
+				qualifier = NewNormalizedIdent(e.Qualifier.Name)
+			}
 		}
-
 		return &parser.ColName{
-			Name: parser.NewColIdent(nameStr),
-			Qualifier: parser.TableName{
-				Name: parser.NewTableIdent(qualifierStr),
-			},
+			Name:      NewNormalizedIdent(e.Name),
+			Qualifier: parser.TableName{Name: qualifier},
 		}
 	case *parser.ArrayConstructor:
 		elements := util.TransformSlice(e.Elements, func(elem parser.Expr) parser.Expr {
@@ -442,7 +444,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		})
 		return &parser.ArrayConstructor{Elements: elements}
 	case *parser.FuncExpr:
-		funcName := strings.ToLower(e.Name.String())
+		funcName := strings.ToLower(e.Name.Name)
 		// For PostgreSQL, normalize date/time function calls to keywords
 		// The generic parser parses CURRENT_DATE in parentheses as a function call,
 		// but without parentheses as a keyword (SQLVal with ValArg type)
@@ -754,16 +756,16 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 	case *parser.AliasedExpr:
 		as := e.As
 		// For PostgreSQL, strip automatic aliases like ?column?
-		if mode == GeneratorModePostgres && as.String() == "?column?" {
-			as = parser.NewColIdent("")
+		if mode == GeneratorModePostgres && as.Name == "?column?" {
+			as = parser.NewIdent("", false)
 		}
 		// For MySQL, strip redundant aliases where the alias matches the column name
 		// MySQL adds "column_name as column_name" which is redundant
-		if mode == GeneratorModeMysql && as.String() != "" {
+		if mode == GeneratorModeMysql && !as.IsEmpty() {
 			if colName, ok := e.Expr.(*parser.ColName); ok {
-				if strings.EqualFold(colName.Name.String(), as.String()) {
+				if strings.EqualFold(colName.Name.Name, as.Name) {
 					// The alias is the same as the column name, strip it
-					as = parser.NewColIdent("")
+					as = parser.NewIdent("", false)
 				}
 			}
 		}
@@ -802,7 +804,7 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode) parser.TableE
 			if tableName, ok := e.Expr.(parser.TableName); ok {
 				// Remove the database/schema part, keep only the table name
 				normalizedExpr = parser.TableName{
-					Schema: parser.TableIdent{}, // Remove schema/database
+					Schema: Ident{}, // Remove schema/database
 					Name:   tableName.Name,
 				}
 			}
@@ -864,15 +866,15 @@ func normalizeExprPreservingQualifiers(expr parser.Expr, mode GeneratorMode) par
 	case *parser.ColName:
 		// Keep the qualifier but normalize the names to lowercase
 		qualifierStr := ""
-		if e.Qualifier.Name.String() != "" {
-			qualifierStr = normalizeName(e.Qualifier.Name.String())
+		if !e.Qualifier.Name.IsEmpty() {
+			qualifierStr = normalizeName(e.Qualifier.Name.Name)
 		}
-		nameStr := normalizeName(e.Name.String())
+		nameStr := normalizeName(e.Name.Name)
 
 		return &parser.ColName{
-			Name: parser.NewColIdent(nameStr),
+			Name: parser.NewIdent(nameStr, false),
 			Qualifier: parser.TableName{
-				Name: parser.NewTableIdent(qualifierStr),
+				Name: parser.NewIdent(qualifierStr, false),
 			},
 		}
 	case *parser.AndExpr:

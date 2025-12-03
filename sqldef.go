@@ -25,7 +25,9 @@ type Options struct {
 // Main function shared by all commands
 func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser database.Parser, options *Options) {
 	// Set the generator config on the database for privilege filtering
+	// Note: MySQL will populate MysqlLowerCaseTableNames from the server
 	db.SetGeneratorConfig(options.Config)
+	options.Config = db.GetGeneratorConfig()
 
 	currentDDLs, err := db.ExportDDLs()
 	if err != nil {

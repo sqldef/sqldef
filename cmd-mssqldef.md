@@ -302,3 +302,4 @@ $ mssqldef -U sa -P password123 mydb \
 | `skip_tables` | string | Regular expression patterns (one per line) to specify which tables to skip. Tables matching these patterns will be ignored. |
 | `skip_views` | string | Regular expression patterns (one per line) to specify which views to skip. |
 | `target_schema` | string | Schema names (one per line) to specify which schemas to manage. Only objects in these schemas will be processed. |
+| `legacy_ignore_quotes` | boolean | Controls identifier quoting behavior. When `true` (default), all identifiers are quoted in output. When `false`, identifiers preserve their original quoting from the source SQL. Default is `true` but will change to `false` in the next major version. |

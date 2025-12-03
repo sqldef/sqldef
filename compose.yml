@@ -6,6 +6,7 @@ services:
       MYSQL_ROOT_HOST: '%'
     ports:
       - '3306:3306'
+    restart: on-failure
   mariadb:
     image: mariadb:${MARIADB_VERSION:-11.8}
     environment:
@@ -13,6 +14,7 @@ services:
       MYSQL_ROOT_HOST: '%'
     ports:
       - '3307:3306'
+    restart: on-failure
   postgres:
     image: postgres:${POSTGRES_VERSION:-14}
     # image: hartmutcouk/pg-repack-docker:1.4.6
@@ -21,6 +23,7 @@ services:
       POSTGRES_HOST_AUTH_METHOD: 'trust'
     ports:
       - '5432:5432'
+    restart: on-failure
   mssql:
     # Available versions: https://mcr.microsoft.com/artifact/mar/mssql/server/about
     image: mcr.microsoft.com/mssql/server:${MSSQL_VERSION:-2019-latest}
@@ -29,5 +32,9 @@ services:
     environment:
       ACCEPT_EULA: 'Y'
       SA_PASSWORD: 'Passw0rd'
+      MSSQL_MEMORY_LIMIT_MB: '4096'
     ports:
       - '1433:1433'
+    tmpfs:
+      - /var/opt/mssql
+    restart: on-failure

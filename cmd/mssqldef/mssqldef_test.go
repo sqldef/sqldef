@@ -1047,8 +1047,8 @@ func TestMssqldefCreateTableWithCheck(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, wrapWithTransaction(
-		"ALTER TABLE [dbo].[a] DROP CONSTRAINT a_a_id_check;\nGO\n"+
-			"ALTER TABLE [dbo].[a] ADD CONSTRAINT a_a_id_check CHECK (a_id > (1));\nGO\n"))
+		"ALTER TABLE [dbo].[a] DROP CONSTRAINT [a_a_id_check];\nGO\n"+
+			"ALTER TABLE [dbo].[a] ADD CONSTRAINT [a_a_id_check] CHECK (a_id > (1));\nGO\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 
 	createTable = tu.StripHeredoc(`
@@ -1060,7 +1060,7 @@ func TestMssqldefCreateTableWithCheck(t *testing.T) {
 		`,
 	)
 	assertApplyOutput(t, createTable, wrapWithTransaction(
-		"ALTER TABLE [dbo].[a] DROP CONSTRAINT a_a_id_check;\nGO\n"))
+		"ALTER TABLE [dbo].[a] DROP CONSTRAINT [a_a_id_check];\nGO\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1096,10 +1096,10 @@ func TestMssqldefCreateTableWithCheckWithoutName(t *testing.T) {
 		t.Error("failed to extract check constraint name")
 	}
 	checkConstraintName := strings.Replace((strings.Split(out, "\n")[0]), " ", "", -1)
-	dropConstraint := fmt.Sprintf("ALTER TABLE [dbo].[a] DROP CONSTRAINT %s;\nGO\n", checkConstraintName)
+	dropConstraint := fmt.Sprintf("ALTER TABLE [dbo].[a] DROP CONSTRAINT [%s];\nGO\n", checkConstraintName)
 
 	assertApplyOutput(t, createTable, wrapWithTransaction(
-		dropConstraint+"ALTER TABLE [dbo].[a] ADD CONSTRAINT a_a_id_check CHECK (a_id > (1));\nGO\n"))
+		dropConstraint+"ALTER TABLE [dbo].[a] ADD CONSTRAINT [a_a_id_check] CHECK (a_id > (1));\nGO\n"))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -1208,8 +1208,8 @@ func TestMssqldefCreateTableAddNotForReplication(t *testing.T) {
 	assertApplyOptionsOutput(t, createUsers+createPosts, wrapWithTransaction(
 		"ALTER TABLE [dbo].[posts] DROP COLUMN [post_id];\nGO\n"+
 			"ALTER TABLE [dbo].[posts] ADD [post_id] bigint IDENTITY(1,1) NOT FOR REPLICATION;\nGO\n"+
-			"ALTER TABLE [dbo].[posts] DROP CONSTRAINT posts_view_check;\nGO\n"+
-			"ALTER TABLE [dbo].[posts] ADD CONSTRAINT posts_view_check CHECK NOT FOR REPLICATION (views > (-1));\nGO\n"+
+			"ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_view_check];\nGO\n"+
+			"ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_view_check] CHECK NOT FOR REPLICATION (views > (-1));\nGO\n"+
 			"ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_ibfk_1];\nGO\n"+
 			"ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_ibfk_1] FOREIGN KEY ([user_id]) REFERENCES [dbo].[users] ([id]) NOT FOR REPLICATION;\nGO\n"),
 		"--enable-drop")
@@ -1504,7 +1504,7 @@ func assertApply(t *testing.T, schema string) {
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
 	t.Helper()
-	actual := assertApplyOutputWithConfig(t, schema, database.GeneratorConfig{EnableDrop: false})
+	actual := assertApplyOutputWithConfig(t, schema, database.GeneratorConfig{EnableDrop: false, LegacyIgnoreQuotes: true})
 	assert.Equal(t, expected, actual)
 }
 

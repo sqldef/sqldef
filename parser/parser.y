@@ -45,6 +45,8 @@ func setDDL(yylex any, ddl *DDL) {
   ins                      *Insert
   byt                      byte
   str                      string
+  ident                    Ident
+  idents                   []Ident
   strs                     []string
   selectExprs              SelectExprs
   selectExpr               SelectExpr
@@ -76,9 +78,6 @@ func setDDL(yylex any, ddl *DDL) {
   setExprs                 SetExprs
   updateExpr               *UpdateExpr
   setExpr                  *SetExpr
-  colIdent                 ColIdent
-  colIdents                []ColIdent
-  tableIdent               TableIdent
   convertType              *ConvertType
   aliasedTableName         *AliasedTableExpr
   TableSpec                *TableSpec
@@ -143,7 +142,8 @@ func setDDL(yylex any, ddl *DDL) {
 %left <str> JOIN STRAIGHT_JOIN LEFT RIGHT INNER OUTER CROSS NATURAL USE FORCE
 %left <str> ON USING
 %token <empty> '(' ',' ')'
-%token <str> ID HEX STRING UNICODE_STRING INTEGRAL FLOAT HEXNUM VALUE_ARG LIST_ARG COMMENT COMMENT_KEYWORD BIT_LITERAL
+%token <ident> ID
+%token <str> HEX STRING UNICODE_STRING INTEGRAL FLOAT HEXNUM VALUE_ARG LIST_ARG COMMENT COMMENT_KEYWORD BIT_LITERAL
 %token <str> NULL TRUE FALSE COLUMNS_UPDATED
 %token <str> OFF
 %token <str> MAX
@@ -378,7 +378,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <limit> limit_opt
 %type <str> lock_opt
 %type <columns> ins_column_list column_list
-%type <colIdent> ins_column
+%type <ident> ins_column
 %type <columns> include_columns_opt
 %type <partitions> opt_partition_clause partition_list
 %type <updateExprs> on_dup_opt
@@ -390,10 +390,10 @@ func setDDL(yylex any, ddl *DDL) {
 %type <str> ignore_opt default_opt
 %type <empty> if_not_exists_opt when_expression_opt for_each_row_opt
 %type <str> reserved_keyword non_reserved_keyword
-%type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt
+%type <ident> sql_id reserved_sql_id, col_alias as_ci_opt
 %type <boolVal> unique_opt
 %type <expr> charset_value
-%type <tableIdent> table_id reserved_table_id as_opt_id
+%type <ident> table_id reserved_table_id as_opt_id
 %type <empty> as_opt
 %type <str> charset
 %type <str> set_session_or_global
@@ -417,9 +417,9 @@ func setDDL(yylex any, ddl *DDL) {
 %type <exclusionPairs> exclude_element_list
 %type <exclusionPair> exclude_element
 %type <foreignKeyDefinition> foreign_key_definition foreign_key_without_options
-%type <colIdent> reference_option
-%type <colIdent> sql_id_opt privilege grantee
-%type <colIdents> sql_id_list privilege_list grantee_list
+%type <ident> reference_option
+%type <ident> sql_id_opt privilege grantee
+%type <idents> sql_id_list privilege_list grantee_list
 %type <str> index_or_key
 %type <str> equal_opt
 %type <TableSpec> table_spec table_column_list
@@ -506,72 +506,80 @@ statement:
 comment_statement:
   COMMENT_KEYWORD ON TABLE table_name IS STRING
   {
-    tableName := ""
-    if !$4.Schema.isEmpty() {
-      tableName = $4.Schema.String() + "."
+    // Build Object as []Ident: [schema, table] or [table]
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
     }
-    tableName += $4.Name.String()
     $$ = &DDL{
       Action: CommentOn,
       Table: $4,
       Comment: &Comment{
         ObjectType: "OBJECT_TABLE",
-        Object: tableName,
+        Object: obj,
         Comment: $6,
       },
     }
   }
 | COMMENT_KEYWORD ON TABLE table_name IS NULL
   {
-    tableName := ""
-    if !$4.Schema.isEmpty() {
-      tableName = $4.Schema.String() + "."
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
     }
-    tableName += $4.Name.String()
     $$ = &DDL{
       Action: CommentOn,
       Table: $4,
       Comment: &Comment{
         ObjectType: "OBJECT_TABLE",
-        Object: tableName,
+        Object: obj,
         Comment: "",
       },
     }
   }
 | COMMENT_KEYWORD ON COLUMN column_name IS STRING
   {
-    colName := ""
-    if !$4.Qualifier.isEmpty() {
-      if !$4.Qualifier.Schema.isEmpty() {
-        colName = $4.Qualifier.Schema.String() + "."
+    // Build Object as []Ident: [schema, table, column], [table, column], or [column]
+    var obj []Ident
+    if !$4.Qualifier.IsEmpty() {
+      if !$4.Qualifier.Schema.IsEmpty() {
+        obj = []Ident{$4.Qualifier.Schema, $4.Qualifier.Name, $4.Name}
+      } else {
+        obj = []Ident{$4.Qualifier.Name, $4.Name}
       }
-      colName += $4.Qualifier.Name.String() + "."
+    } else {
+      obj = []Ident{$4.Name}
     }
-    colName += $4.Name.String()
     $$ = &DDL{
       Action: CommentOn,
       Comment: &Comment{
         ObjectType: "OBJECT_COLUMN",
-        Object: colName,
+        Object: obj,
         Comment: $6,
       },
     }
   }
 | COMMENT_KEYWORD ON COLUMN column_name IS NULL
   {
-    colName := ""
-    if !$4.Qualifier.isEmpty() {
-      if !$4.Qualifier.Schema.isEmpty() {
-        colName = $4.Qualifier.Schema.String() + "."
+    var obj []Ident
+    if !$4.Qualifier.IsEmpty() {
+      if !$4.Qualifier.Schema.IsEmpty() {
+        obj = []Ident{$4.Qualifier.Schema, $4.Qualifier.Name, $4.Name}
+      } else {
+        obj = []Ident{$4.Qualifier.Name, $4.Name}
       }
-      colName += $4.Qualifier.Name.String() + "."
+    } else {
+      obj = []Ident{$4.Name}
     }
-    colName += $4.Name.String()
     $$ = &DDL{
       Action: CommentOn,
       Comment: &Comment{
         ObjectType: "OBJECT_COLUMN",
-        Object: colName,
+        Object: obj,
         Comment: "",
       },
     }
@@ -582,7 +590,7 @@ comment_statement:
       Action: CommentOn,
       Comment: &Comment{
         ObjectType: "INDEX",
-        Object: $4.String(),
+        Object: []Ident{$4},
         Comment: $6,
       },
     }
@@ -602,7 +610,7 @@ create_statement:
       NewName: $7,
       IndexSpec: &IndexSpec{
         Name: $5,
-        Type: NewColIdent(""),
+        Type: NewIdent("", false),
         Unique: bool($2[0]),
         Clustered: bool($2[1]),
         Async: $4 == byte(2),
@@ -623,8 +631,8 @@ create_statement:
       Table: $6,
       NewName: $6,
       IndexSpec: &IndexSpec{
-        Name: NewColIdent(""),
-        Type: NewColIdent(""),
+        Name: NewIdent("", false),
+        Type: NewIdent("", false),
         Unique: bool($2[0]),
         Clustered: bool($2[1]),
         Async: $4 == byte(2),
@@ -689,7 +697,7 @@ create_statement:
       NewName: $6,
       IndexSpec: &IndexSpec{
         Name: $4,
-        Type: NewColIdent(""),
+        Type: NewIdent("", false),
         Unique: false,
         Clustered: false,
         ColumnStore: true,
@@ -709,7 +717,7 @@ create_statement:
       NewName: $6,
       IndexSpec: &IndexSpec{
         Name: $4,
-        Type: NewColIdent("VECTOR"),
+        Type: NewIdent("VECTOR", false),
         Vector: true,
         Options: $10,
       },
@@ -858,11 +866,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($7))
     for i, g := range $7 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($5) == 1 {
@@ -895,11 +903,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($7))
     for i, g := range $7 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($5) == 1 {
@@ -934,11 +942,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($6))
     for i, g := range $6 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($4) == 1 {
@@ -971,11 +979,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($6))
     for i, g := range $6 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($4) == 1 {
@@ -1010,11 +1018,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($7))
     for i, g := range $7 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($5) == 1 {
@@ -1047,11 +1055,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($7))
     for i, g := range $7 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($5) == 1 {
@@ -1086,11 +1094,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($7))
     for i, g := range $7 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($5) == 1 {
@@ -1125,11 +1133,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($6))
     for i, g := range $6 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($4) == 1 {
@@ -1162,11 +1170,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($6))
     for i, g := range $6 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($4) == 1 {
@@ -1201,11 +1209,11 @@ create_statement:
   {
     privs := make([]string, len($2))
     for i, p := range $2 {
-      privs[i] = p.String()
+      privs[i] = p.Name
     }
     grantees := make([]string, len($6))
     for i, g := range $6 {
-      grantees[i] = g.String()
+      grantees[i] = g.Name
     }
 
     if len($4) == 1 {
@@ -1241,7 +1249,7 @@ create_statement:
     $$ = &DDL{
       Action: CreateSchema,
       Schema: &Schema{
-        Name: $4.String(),
+        Name: $4.Name,
       },
     }
   }
@@ -1249,18 +1257,14 @@ create_statement:
   {
     $$ = &DDL{
       Action: CreateExtension,
-      Extension: &Extension{
-        Name: $4.String(),
-      },
+      Extension: &Extension{Name: $4},
     }
   }
 | CREATE EXTENSION if_not_exists_opt STRING
   {
     $$ = &DDL{
       Action: CreateExtension,
-      Extension: &Extension{
-        Name: $4,
-      },
+      Extension: &Extension{Name: NewIdent($4, false)},
     }
   }
 
@@ -1687,7 +1691,7 @@ handler_condition:
   }
 | sql_id
   {
-    $$ = HandlerCondition{Type: handlerConditionName, Value: string($1.String())}
+    $$ = HandlerCondition{Type: handlerConditionName, Value: $1.Name}
   }
 
 handler_statement:
@@ -1913,29 +1917,29 @@ transaction_char:
   }
 | READ WRITE
   {
-    $$ = &SetExpr{Name: NewColIdent("tx_read_only"), Expr: NewIntVal("0")}
+    $$ = &SetExpr{Name: NewIdent("tx_read_only", false), Expr: NewIntVal("0")}
   }
 | READ ONLY
   {
-    $$ = &SetExpr{Name: NewColIdent("tx_read_only"), Expr: NewIntVal("1")}
+    $$ = &SetExpr{Name: NewIdent("tx_read_only", false), Expr: NewIntVal("1")}
   }
 
 isolation_level:
   REPEATABLE READ
   {
-    $$ = &SetExpr{Name: NewColIdent("tx_isolation"), Expr: NewStrVal("repeatable read")}
+    $$ = &SetExpr{Name: NewIdent("tx_isolation", false), Expr: NewStrVal("repeatable read")}
   }
 | READ COMMITTED
   {
-    $$ = &SetExpr{Name: NewColIdent("tx_isolation"), Expr: NewStrVal("read committed")}
+    $$ = &SetExpr{Name: NewIdent("tx_isolation", false), Expr: NewStrVal("read committed")}
   }
 | READ UNCOMMITTED
   {
-    $$ = &SetExpr{Name: NewColIdent("tx_isolation"), Expr: NewStrVal("read uncommitted")}
+    $$ = &SetExpr{Name: NewIdent("tx_isolation", false), Expr: NewStrVal("read uncommitted")}
   }
 | SERIALIZABLE
   {
-    $$ = &SetExpr{Name: NewColIdent("tx_isolation"), Expr: NewStrVal("serializable")}
+    $$ = &SetExpr{Name: NewIdent("tx_isolation", false), Expr: NewStrVal("serializable")}
   }
 
 sql_security:
@@ -2294,9 +2298,7 @@ drop_statement:
   {
     $$ = &DDL{
       Action: DropExtension,
-      Extension: &Extension{
-        Name: $3.String(),
-      },
+      Extension: &Extension{Name: $3},
     }
   }
 | DROP EXTENSION IF EXISTS sql_id
@@ -2304,18 +2306,14 @@ drop_statement:
     $$ = &DDL{
       Action: DropExtension,
       IfExists: true,
-      Extension: &Extension{
-        Name: $5.String(),
-      },
+      Extension: &Extension{Name: $5},
     }
   }
 | DROP EXTENSION STRING
   {
     $$ = &DDL{
       Action: DropExtension,
-      Extension: &Extension{
-        Name: $3,
-      },
+      Extension: &Extension{Name: NewIdent($3, false)},
     }
   }
 | DROP EXTENSION IF EXISTS STRING
@@ -2323,9 +2321,7 @@ drop_statement:
     $$ = &DDL{
       Action: DropExtension,
       IfExists: true,
-      Extension: &Extension{
-        Name: $5,
-      },
+      Extension: &Extension{Name: NewIdent($5, false)},
     }
   }
 
@@ -2386,7 +2382,7 @@ exclude_definition:
   {
     $$ = &ExclusionDefinition{
       ConstraintName: $2,
-      IndexType: NewColIdent(""), // Default index type
+      IndexType: NewIdent("", false), // Default index type
       Exclusions: $5,
       Where: NewWhere(WhereStr, $7),
     }
@@ -2440,7 +2436,7 @@ exclude_element:
     // Handle all other operators and GIST-specific operators
     $$ = ExclusionPair{
       Expression: $1,
-      Operator: string($3.val),
+      Operator: $3.Name,
     }
   }
 
@@ -2451,17 +2447,17 @@ column_definition:
   }
 | non_reserved_keyword column_definition_type
   {
-    $$ = &ColumnDefinition{Name: NewColIdent($1), Type: $2}
+    $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
   }
 /* For SQLite3 https://www.sqlite.org/lang_keywords.html */
 | STRING column_definition_type
   {
-    $$ = &ColumnDefinition{Name: NewColIdent($1), Type: $2}
+    $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
   }
 /* SQLite3 */
 | ROWID column_definition_type
   {
-    $$ = &ColumnDefinition{Name: NewColIdent($1), Type: $2}
+    $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
   }
 
 column_type:
@@ -2478,7 +2474,8 @@ column_type:
 // TODO: avoid reduce-reduce conflicts here
 | sql_id
   {
-    $$ = ColumnType{Type: $1.val}
+    // Custom type (e.g., domain name) - preserve quote information in TypeIdent
+    $$ = ColumnType{Type: $1.Name, TypeIdent: $1}
   }
 | STRING '.' STRING
   {
@@ -2486,7 +2483,7 @@ column_type:
   }
 | ID '.' ID
   {
-    $$ = ColumnType{Type: $1 + "." + $3}
+    $$ = ColumnType{Type: $1.Name + "." + $3.Name}
   }
 
 column_definition_type:
@@ -2549,6 +2546,15 @@ column_definition_type:
     $1.KeyOpt = colKeyPrimary
     $$ = $1
   }
+| column_definition_type CONSTRAINT sql_id PRIMARY KEY
+  {
+    // Named inline primary key constraint (e.g., "id INT CONSTRAINT pk_name PRIMARY KEY")
+    $1.KeyOpt = colKeyPrimary
+    // Note: The constraint name is stored in the column's KeyOpt but the name is lost
+    // because ColumnType doesn't have a field for primary key constraint name.
+    // This is acceptable as the behavior matches PostgreSQL which auto-generates names.
+    $$ = $1
+  }
 | column_definition_type KEY
   {
     $1.KeyOpt = colKey
@@ -2590,13 +2596,13 @@ column_definition_type:
   }
 | column_definition_type REFERENCES table_name
   {
-    $1.References = String($3)
+    $1.References = $3
     $$ = $1
   }
 // PostgreSQL: inline foreign key with constraint options
 | column_definition_type REFERENCES table_name '(' column_list ')' deferrable_opt initially_deferred_opt
   {
-    $1.References           = String($3)
+    $1.References           = $3
     $1.ReferenceNames       = $5
     $1.ReferenceDeferrable  = &$7
     $1.ReferenceInitDeferred = &$8
@@ -2604,7 +2610,7 @@ column_definition_type:
   }
 | column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option fk_defer_opts
   {
-    $1.References            = String($3)
+    $1.References            = $3
     $1.ReferenceNames        = $5
     $1.ReferenceOnDelete     = $9
     if $10.constraintOpts != nil {
@@ -2615,7 +2621,7 @@ column_definition_type:
   }
 | column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option fk_defer_opts
   {
-    $1.References            = String($3)
+    $1.References            = $3
     $1.ReferenceNames        = $5
     $1.ReferenceOnUpdate     = $9
     if $10.constraintOpts != nil {
@@ -2626,7 +2632,7 @@ column_definition_type:
   }
 | column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option ON UPDATE reference_option fk_defer_opts
   {
-    $1.References            = String($3)
+    $1.References            = $3
     $1.ReferenceNames        = $5
     $1.ReferenceOnDelete     = $9
     $1.ReferenceOnUpdate     = $12
@@ -2638,7 +2644,7 @@ column_definition_type:
   }
 | column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option ON DELETE reference_option fk_defer_opts
   {
-    $1.References            = String($3)
+    $1.References            = $3
     $1.ReferenceNames        = $5
     $1.ReferenceOnUpdate     = $9
     $1.ReferenceOnDelete     = $12
@@ -2923,7 +2929,7 @@ sequence_opt:
   }
 | sequence_opt OWNED BY table_id '.' reserved_sql_id
   {
-    $1.OwnedBy = string($4.v)+"."+string($6.val)
+    $1.OwnedBy = $4.Name + "." + $6.Name
     $$ = $1
   }
 
@@ -3012,7 +3018,7 @@ domain_constraint:
   {
     $$.defaultDef = nil
     $$.notNull = false
-    $$.collation = $2.String()
+    $$.collation = $2.Name
     $$.checks = nil
   }
 | CHECK '(' expression ')'
@@ -3391,10 +3397,10 @@ max_length_opt:
   }
 | '(' ID ')'
   {
-    if !strings.EqualFold($2, "max") {
-      yylex.Error(fmt.Sprintf("syntax error around '%s'", $2))
+    if !strings.EqualFold($2.Name, "max") {
+      yylex.Error(fmt.Sprintf("syntax error around '%s'", $2.Name))
     }
-    $$ = NewStrVal($2)
+    $$ = NewStrVal($2.Name)
   }
 
 
@@ -3460,7 +3466,7 @@ charset_opt:
   }
 | CHARACTER SET ID
   {
-    $$ = $3
+    $$ = $3.Name
   }
 | CHARACTER SET BINARY
   {
@@ -3478,7 +3484,7 @@ collate_opt:
   }
 | COLLATE ID
   {
-    $$ = $2
+    $$ = $2.Name
   }
 
 index_definition:
@@ -3523,7 +3529,7 @@ mssql_index_option_list:
 index_option:
   USING ID
   {
-    $$ = &IndexOption{Name: $1, Value: NewStrVal($2)}
+    $$ = &IndexOption{Name: $1, Value: NewStrVal($2.Name)}
   }
 | KEY_BLOCK_SIZE equal_opt INTEGRAL
   {
@@ -3536,7 +3542,7 @@ index_option:
   }
 | WITH PARSER sql_id
   {
-    $$ = &IndexOption{Name: $2, Value: NewStrVal($3.String())}
+    $$ = &IndexOption{Name: $2, Value: NewStrVal($3.Name)}
   }
 | PAD_INDEX '=' on_off
   {
@@ -3584,7 +3590,7 @@ index_option:
   }
 | ID '=' vector_option_value
   {
-    id := strings.Trim(strings.ToLower($1), "`")
+    id := strings.Trim(strings.ToLower($1.Name), "`")
     $$ = &IndexOption{Name: id, Value: $3}
   }
 
@@ -3640,57 +3646,57 @@ index_partition_opt:
   }
 | ON sql_id
   {
-    $$ = &IndexPartition{Name: $2.String()}
+    $$ = &IndexPartition{Name: $2.Name}
   }
 | ON sql_id '(' sql_id ')'
   {
-    $$ = &IndexPartition{Name: $2.String(), Column: $4.String()}
+    $$ = &IndexPartition{Name: $2.Name, Column: $4.Name}
   }
 
 index_info:
   SPATIAL index_or_key ID
   {
-    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3), Spatial: true, Unique: false}
+    $$ = &IndexInfo{Type: $1 + " " + $2, Name: $3, Spatial: true, Unique: false}
   }
 | FULLTEXT index_or_key ID
   {
-    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3), Fulltext: true}
+    $$ = &IndexInfo{Type: $1 + " " + $2, Name: $3, Fulltext: true}
   }
 | FULLTEXT ID
   {
-    $$ = &IndexInfo{Type: $1, Name: NewColIdent($2), Fulltext: true}
+    $$ = &IndexInfo{Type: $1, Name: $2, Fulltext: true}
   }
 | VECTOR INDEX ID
   {
-    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3), Vector: true}
+    $$ = &IndexInfo{Type: $1 + " " + $2, Name: $3, Vector: true}
   }
 | VECTOR INDEX
   {
-    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent(""), Vector: true}
+    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewIdent("", false), Vector: true}
   }
 | VECTOR KEY ID
   {
-    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3), Vector: true}
+    $$ = &IndexInfo{Type: $1 + " " + $2, Name: $3, Vector: true}
   }
 | UNIQUE index_or_key ID
   {
-    $$ = &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent($3), Unique: true}
+    $$ = &IndexInfo{Type: $1 + " " + $2, Name: $3, Unique: true}
   }
 | UNIQUE ID
   {
-    $$ = &IndexInfo{Type: $1, Name: NewColIdent($2), Unique: true}
+    $$ = &IndexInfo{Type: $1, Name: $2, Unique: true}
   }
 | UNIQUE INDEX
   {
-    $$ = &IndexInfo{Type: $1, Name: NewColIdent(""), Unique: true}
+    $$ = &IndexInfo{Type: $1, Name: NewIdent("", false), Unique: true}
   }
 | index_or_key ID clustered_opt
   {
-    $$ = &IndexInfo{Type: $1, Name: NewColIdent($2), Unique: false, Clustered: $3}
+    $$ = &IndexInfo{Type: $1, Name: $2, Unique: false, Clustered: $3}
   }
 | index_or_key ID UNIQUE clustered_opt
   {
-    $$ = &IndexInfo{Type: $1, Name: NewColIdent($2), Unique: true, Clustered: $4}
+    $$ = &IndexInfo{Type: $1, Name: $2, Unique: true, Clustered: $4}
   }
 
 index_or_key:
@@ -3726,12 +3732,12 @@ index_column:
   }
 | non_reserved_keyword length_opt asc_desc_opt
   {
-    $$ = IndexColumn{Column: NewColIdent($1), Length: $2, Direction: $3}
+    $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3}
   }
 /* For PostgreSQL */
 | KEY length_opt
   {
-    $$ = IndexColumn{Column: NewColIdent($1), Length: $2}
+    $$ = IndexColumn{Column: NewIdent($1, false), Length: $2}
   }
 | sql_id operator_class
   {
@@ -3739,7 +3745,7 @@ index_column:
   }
 | non_reserved_keyword operator_class
   {
-    $$ = IndexColumn{Column: NewColIdent($1), OperatorClass: $2}
+    $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2}
   }
 | '(' expression ')' asc_desc_opt
   {
@@ -3758,7 +3764,7 @@ operator_class:
   }
 | sql_id
   {
-    $$ = $1.String()
+    $$ = $1.Name
   }
 
 foreign_key_definition:
@@ -3770,7 +3776,7 @@ foreign_key_definition:
   }
 | foreign_key_without_options ON DELETE reference_option fk_defer_opts
   {
-    $1.OnUpdate = NewColIdent("")
+    $1.OnUpdate = NewIdent("", false)
     $1.OnDelete = $4
     $1.ConstraintOptions = $5.constraintOpts
     $1.NotForReplication = $5.notForReplication
@@ -3779,7 +3785,7 @@ foreign_key_definition:
 | foreign_key_without_options ON UPDATE reference_option fk_defer_opts
   {
     $1.OnUpdate = $4
-    $1.OnDelete = NewColIdent("")
+    $1.OnDelete = NewIdent("", false)
     $1.ConstraintOptions = $5.constraintOpts
     $1.NotForReplication = $5.notForReplication
     $$ = $1
@@ -3826,19 +3832,19 @@ foreign_key_without_options:
 reference_option:
   RESTRICT
   {
-    $$ = NewColIdent("RESTRICT")
+    $$ = NewIdent("RESTRICT", false)
   }
 | CASCADE
   {
-    $$ = NewColIdent("CASCADE")
+    $$ = NewIdent("CASCADE", false)
   }
 | SET NULL
   {
-    $$ = NewColIdent("SET NULL")
+    $$ = NewIdent("SET NULL", false)
   }
 | NO ACTION
   {
-    $$ = NewColIdent("NO ACTION")
+    $$ = NewIdent("NO ACTION", false)
   }
 
 primary_key_definition:
@@ -3855,7 +3861,7 @@ primary_key_definition:
 | PRIMARY KEY clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
   {
     $$ = &IndexDefinition{
-      Info: &IndexInfo{Type: $1 + " " + $2, Name: NewColIdent("PRIMARY"), Primary: true, Unique: true, Clustered: $3},
+      Info: &IndexInfo{Type: $1 + " " + $2, Name: NewIdent("PRIMARY", false), Primary: true, Unique: true, Clustered: $3},
       Columns: $5,
       Options: $7,
       Partition: $8,
@@ -4044,14 +4050,17 @@ fk_defer_opts:
 
 sql_id_opt:
   {
-    $$ = NewColIdent("")
+    $$ = NewIdent("", false)
   }
 | sql_id
+  {
+    $$ = $1
+  }
 
 sql_id_list:
   reserved_sql_id
   {
-    $$ = []ColIdent{$1}
+    $$ = []Ident{$1}
   }
 | sql_id_list ',' reserved_sql_id
   {
@@ -4065,29 +4074,29 @@ privilege:
   }
 | ALL
   {
-    $$ = NewColIdent($1)
+    $$ = NewIdent($1, false)
   }
 | ALL PRIVILEGES
   {
-    $$ = NewColIdent("ALL")
+    $$ = NewIdent("ALL", false)
   }
 | REFERENCES
   {
-    $$ = NewColIdent($1)
+    $$ = NewIdent($1, false)
   }
 | TRIGGER
   {
-    $$ = NewColIdent($1)
+    $$ = NewIdent($1, false)
   }
 | TRUNCATE
   {
-    $$ = NewColIdent($1)
+    $$ = NewIdent($1, false)
   }
 
 privilege_list:
   privilege
   {
-    $$ = []ColIdent{$1}
+    $$ = []Ident{$1}
   }
 | privilege_list ',' privilege
   {
@@ -4102,13 +4111,13 @@ grantee:
   }
 | PUBLIC
   {
-    $$ = NewColIdent($1)
+    $$ = NewIdent($1, false)
   }
 
 grantee_list:
   grantee
   {
-    $$ = []ColIdent{$1}
+    $$ = []Ident{$1}
   }
 | grantee_list ',' grantee
   {
@@ -4143,11 +4152,11 @@ sqlite3_table_opt:
 table_opt_name:
   reserved_sql_id
   {
-    $$ = $1.String()
+    $$ = $1.Name
   }
 | table_opt_name reserved_sql_id
   {
-    $$ = $1 + " " + $2.String()
+    $$ = $1 + " " + $2.Name
   }
 | table_opt_name CHARACTER SET
   {
@@ -4161,7 +4170,7 @@ table_opt_name:
 table_opt_value:
   reserved_sql_id
   {
-    $$ = $1.String()
+    $$ = $1.Name
   }
 | STRING
   {
@@ -4291,7 +4300,7 @@ select_expression:
 
 as_ci_opt:
   {
-    $$ = ColIdent{}
+    $$ = Ident{}
   }
 | col_alias
   {
@@ -4304,9 +4313,12 @@ as_ci_opt:
 
 col_alias:
   sql_id
+  {
+    $$ = $1
+  }
 | STRING
   {
-    $$ = NewColIdent($1)
+    $$ = NewIdent($1, false)
   }
 
 over_expression:
@@ -4506,7 +4518,7 @@ as_opt:
 
 as_opt_id:
   {
-    $$ = NewTableIdent("")
+    $$ = NewIdent("", false)
   }
 | table_id
   {
@@ -4675,7 +4687,7 @@ default_opt:
   }
 | '(' ID ')'
   {
-    $$ = $2
+    $$ = $2.Name
   }
 
 boolean_value:
@@ -5019,7 +5031,7 @@ value_expression:
     // as a function. If support is needed for that,
     // we'll need to revisit this. The solution
     // will be non-trivial because of grammar conflicts.
-    $$ = &IntervalExpr{Expr: $2, Unit: $3.String()}
+    $$ = &IntervalExpr{Expr: $2, Unit: $3.Name}
   }
 | DATE STRING
   {
@@ -5071,7 +5083,7 @@ value_expression:
   }
 | CURRENT_USER
   {
-    $$ = &ColName{Name: NewColIdent($1)}
+    $$ = &ColName{Name: NewIdent($1, false)}
   }
 
 /*
@@ -5093,11 +5105,11 @@ function_call_generic:
   }
 | LAG '(' select_expression_list ')' over_expression
   {
-    $$ = &FuncExpr{Name: NewColIdent($1), Exprs: $3, Over: $5}
+    $$ = &FuncExpr{Name: NewIdent($1, false), Exprs: $3, Over: $5}
   }
 | LEAD '(' select_expression_list ')' over_expression
   {
-    $$ = &FuncExpr{Name: NewColIdent($1), Exprs: $3, Over: $5}
+    $$ = &FuncExpr{Name: NewIdent($1, false), Exprs: $3, Over: $5}
   }
 | table_id '.' reserved_sql_id '(' select_expression_list_opt ')'
   {
@@ -5111,11 +5123,11 @@ function_call_generic:
 function_call_keyword:
   LEFT '(' select_expression_list ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent("left"), Exprs: $3}
+    $$ = &FuncExpr{Name: NewIdent("left", false), Exprs: $3}
   }
 | RIGHT '(' select_expression_list ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent("right"), Exprs: $3}
+    $$ = &FuncExpr{Name: NewIdent("right", false), Exprs: $3}
   }
 | CONVERT '(' expression ',' convert_type ')'
   {
@@ -5197,27 +5209,27 @@ function_call_keyword:
   }
 | UUID '(' ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent($1)}
+    $$ = &FuncExpr{Name: NewIdent($1, false)}
   }
 | NOW '(' ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent($1)}
+    $$ = &FuncExpr{Name: NewIdent($1, false)}
   }
 | GETDATE '(' ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent($1)}
+    $$ = &FuncExpr{Name: NewIdent($1, false)}
   }
 | DATE '(' select_expression_list ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent("date"), Exprs: $3}
+    $$ = &FuncExpr{Name: NewIdent("date", false), Exprs: $3}
   }
 | TIME '(' select_expression_list ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent("time"), Exprs: $3}
+    $$ = &FuncExpr{Name: NewIdent("time", false), Exprs: $3}
   }
 | TIMESTAMP '(' select_expression_list ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent("timestamp"), Exprs: $3}
+    $$ = &FuncExpr{Name: NewIdent("timestamp", false), Exprs: $3}
   }
 
 /*
@@ -5228,43 +5240,43 @@ function_call_nonkeyword:
 // for MSSQL
   CURRENT_TIMESTAMP
   {
-    $$ = &ColName{Name: NewColIdent($1)}
+    $$ = &ColName{Name: NewIdent($1, false)}
   }
 | CURRENT_TIMESTAMP '(' ')'
   {
-    $$ = &FuncExpr{Name:NewColIdent("current_timestamp")}
+    $$ = &FuncExpr{Name: NewIdent("current_timestamp", false)}
   }
 | UTC_TIMESTAMP func_datetime_precision_opt
   {
-    $$ = &FuncExpr{Name:NewColIdent("utc_timestamp")}
+    $$ = &FuncExpr{Name: NewIdent("utc_timestamp", false)}
   }
 | UTC_TIME func_datetime_precision_opt
   {
-    $$ = &FuncExpr{Name:NewColIdent("utc_time")}
+    $$ = &FuncExpr{Name: NewIdent("utc_time", false)}
   }
 | UTC_DATE func_datetime_precision_opt
   {
-    $$ = &FuncExpr{Name:NewColIdent("utc_date")}
+    $$ = &FuncExpr{Name: NewIdent("utc_date", false)}
   }
 // now
 | LOCALTIME func_datetime_precision_opt
   {
-    $$ = &FuncExpr{Name:NewColIdent("localtime")}
+    $$ = &FuncExpr{Name: NewIdent("localtime", false)}
   }
 // now
 | LOCALTIMESTAMP func_datetime_precision_opt
   {
-    $$ = &FuncExpr{Name:NewColIdent("localtimestamp")}
+    $$ = &FuncExpr{Name: NewIdent("localtimestamp", false)}
   }
 // curdate
 | CURRENT_DATE func_datetime_precision_opt
   {
-    $$ = &FuncExpr{Name:NewColIdent("current_date")}
+    $$ = &FuncExpr{Name: NewIdent("current_date", false)}
   }
 // curtime
 | CURRENT_TIME func_datetime_precision_opt
   {
-    $$ = &FuncExpr{Name:NewColIdent("current_time")}
+    $$ = &FuncExpr{Name: NewIdent("current_time", false)}
   }
 | TYPECAST simple_convert_type
   {
@@ -5282,19 +5294,19 @@ func_datetime_precision_opt:
 function_call_conflict:
   IF '(' select_expression_list ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent("if"), Exprs: $3}
+    $$ = &FuncExpr{Name: NewIdent("if", false), Exprs: $3}
   }
 | DATABASE '(' select_expression_list_opt ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent("database"), Exprs: $3}
+    $$ = &FuncExpr{Name: NewIdent("database", false), Exprs: $3}
   }
 | MOD '(' select_expression_list ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent("mod"), Exprs: $3}
+    $$ = &FuncExpr{Name: NewIdent("mod", false), Exprs: $3}
   }
 | REPLACE '(' select_expression_list ')'
   {
-    $$ = &FuncExpr{Name: NewColIdent("replace"), Exprs: $3}
+    $$ = &FuncExpr{Name: NewIdent("replace", false), Exprs: $3}
   }
 | ROW '(' expression_list ')'
   {
@@ -5306,7 +5318,7 @@ function_call_conflict:
 extract_field:
   sql_id
   {
-    $$ = $1.String()
+    $$ = $1.Name
   }
 | YEAR
   {
@@ -5338,7 +5350,7 @@ match_option:
 charset:
   ID
   {
-    $$ = $1
+    $$ = $1.Name
   }
 | STRING
   {
@@ -5356,7 +5368,7 @@ convert_type:
   }
 | CHAR length_opt ID
   {
-    $$ = &ConvertType{Type: $1, Length: $2, Charset: $3}
+    $$ = &ConvertType{Type: $1, Length: $2, Charset: $3.Name}
   }
 | DATE
   {
@@ -5615,11 +5627,11 @@ column_name:
   }
 | non_reserved_keyword
   {
-    $$ = &ColName{Name: NewColIdent($1)}
+    $$ = &ColName{Name: NewIdent($1, false)}
   }
 | VALUE
   {
-    $$ = &ColName{Name: NewColIdent("VALUE")}
+    $$ = &ColName{Name: NewIdent("VALUE", false)}
   }
 | table_id '.' reserved_sql_id
   {
@@ -5850,11 +5862,11 @@ ins_column:
   }
 | reserved_keyword
   {
-    $$ = NewColIdent($1)
+    $$ = NewIdent($1, false)
   }
 | non_reserved_keyword
   {
-    $$ = NewColIdent($1)
+    $$ = NewIdent($1, false)
   }
 
 on_dup_opt:
@@ -5944,11 +5956,11 @@ set_expression:
 // MySQL extension of triggers
 | NEW '.' reserved_sql_id '=' expression
   {
-    $$ = &SetExpr{Name: NewColIdent("NEW." + $3.val), Expr: $5}
+    $$ = &SetExpr{Name: NewIdent("NEW." + $3.Name, false), Expr: $5}
   }
 | charset_or_character_set charset_value collate_opt
   {
-    $$ = &SetExpr{Name: NewColIdent($1), Expr: $2}
+    $$ = &SetExpr{Name: NewIdent($1, false), Expr: $2}
   }
 
 set_option_statement:
@@ -5974,7 +5986,7 @@ charset_or_character_set:
 charset_value:
   sql_id
   {
-    $$ = NewStrVal($1.String())
+    $$ = NewStrVal($1.Name)
   }
 | STRING
   {
@@ -5999,72 +6011,72 @@ ignore_opt:
 sql_id:
   ID
   {
-    $$ = NewColIdent($1)
+    $$ = $1
   }
 
 reserved_sql_id:
   sql_id
 | CHARSET
   {
-    $$ = NewColIdent($1)
+    $$ = NewIdent($1, false)
   }
 | KEY_BLOCK_SIZE
   {
-    $$ = NewColIdent($1)
+    $$ = NewIdent($1, false)
   }
 | VALUE
   {
-    $$ = NewColIdent($1)
+    $$ = NewIdent($1, false)
   }
 | TEXT
   {
-    $$ = NewColIdent($1)
+    $$ = NewIdent($1, false)
   }
 | TINYTEXT
   {
-    $$ = NewColIdent($1)
+    $$ = NewIdent($1, false)
   }
 | MEDIUMTEXT
   {
-    $$ = NewColIdent($1)
+    $$ = NewIdent($1, false)
   }
 | LONGTEXT
   {
-    $$ = NewColIdent($1)
+    $$ = NewIdent($1, false)
   }
 | CITEXT
   {
-    $$ = NewColIdent($1)
+    $$ = NewIdent($1, false)
   }
 | reserved_keyword
   {
-    $$ = NewColIdent($1)
+    $$ = NewIdent($1, false)
   }
 | non_reserved_keyword
   {
-    $$ = NewColIdent($1)
+    $$ = NewIdent($1, false)
   }
 
 table_id:
   ID
   {
-    $$ = NewTableIdent($1)
+    $$ = $1
   }
 | non_reserved_keyword
   {
-    $$ = NewTableIdent($1)
+    $$ = NewIdent($1, false)
   }
 /* For SQLite3 https://www.sqlite.org/lang_keywords.html */
 | STRING
   {
-    $$ = NewTableIdent($1)
+    $$ = NewIdent($1, false)
   }
 
 reserved_table_id:
   table_id
 | reserved_keyword
   {
-    $$ = NewTableIdent($1)
+    $$ = NewIdent($1, false)
   }
 
 deferrable_opt:

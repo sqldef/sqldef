@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -13,8 +14,10 @@ import (
 )
 
 type MysqlDatabase struct {
-	config database.Config
-	db     *sql.DB
+	config              database.Config
+	db                  *sql.DB
+	lowerCaseTableNames int // 0 = case-sensitive, 1 or 2 = case-insensitive
+	generatorConfig     database.GeneratorConfig
 }
 
 func NewDatabase(config database.Config) (database.Database, error) {
@@ -30,10 +33,43 @@ func NewDatabase(config database.Config) (database.Database, error) {
 		return nil, err
 	}
 
+	// Query MySQL version and lower_case_table_names for case sensitivity handling
+	lowerCaseTableNames := queryMySQLServerInfo(db)
+
 	return &MysqlDatabase{
-		db:     db,
-		config: config,
+		db:                  db,
+		config:              config,
+		lowerCaseTableNames: lowerCaseTableNames,
 	}, nil
+}
+
+// queryMySQLServerInfo logs the MySQL version and returns the lower_case_table_names setting.
+// This helps debug case sensitivity issues since MySQL behavior differs:
+// - lower_case_table_names=0 (Linux default): Case-sensitive table names
+// - lower_case_table_names=1 or 2 (macOS/Windows): Case-insensitive table names
+func queryMySQLServerInfo(db *sql.DB) int {
+	var version string
+	if err := db.QueryRow("SELECT VERSION()").Scan(&version); err != nil {
+		slog.Debug("Failed to get MySQL version", "error", err)
+	} else {
+		slog.Debug("MySQL server version", "version", version)
+	}
+
+	var varName, lowerCaseTableNames string
+	if err := db.QueryRow("SHOW VARIABLES LIKE 'lower_case_table_names'").Scan(&varName, &lowerCaseTableNames); err != nil {
+		slog.Debug("Failed to get lower_case_table_names", "error", err)
+		return 0 // Default to case-sensitive
+	}
+	slog.Debug("MySQL lower_case_table_names", "value", lowerCaseTableNames)
+
+	switch lowerCaseTableNames {
+	case "1":
+		return 1
+	case "2":
+		return 2
+	default:
+		return 0
+	}
 }
 
 func (d *MysqlDatabase) ExportDDLs() (string, error) {
@@ -208,7 +244,12 @@ func registerTLSConfig(pemPath string) error {
 }
 
 func (d *MysqlDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
-	// Not implemented for mysql - privileges not supported yet
+	config.MysqlLowerCaseTableNames = d.lowerCaseTableNames
+	d.generatorConfig = config
+}
+
+func (d *MysqlDatabase) GetGeneratorConfig() database.GeneratorConfig {
+	return d.generatorConfig
 }
 
 func (d *MysqlDatabase) GetTransactionQueries() database.TransactionQueries {

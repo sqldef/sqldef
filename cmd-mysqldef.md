@@ -432,3 +432,4 @@ $ mysqldef -uroot dbname \
 | `algorithm` | string | Algorithm to use for ALTER TABLE operations (e.g., INPLACE, INSTANT, COPY). Controls how MySQL performs the schema change. |
 | `lock` | string | Lock level to use for ALTER TABLE operations (e.g., NONE, SHARED, EXCLUSIVE). Controls concurrent access during schema changes. |
 | `dump_concurrency` | integer | Number of parallel connections to use when exporting the schema. Improves performance for large schemas. Default is 1. |
+| `legacy_ignore_quotes` | boolean | Controls identifier quoting behavior. When `true` (default), all identifiers are quoted in output. When `false`, identifiers preserve their original quoting from the source SQL. Default is `true` but will change to `false` in the next major version. |

@@ -12,8 +12,18 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/sqldef/sqldef/v3/database"
+	"github.com/sqldef/sqldef/v3/parser"
 	schemaLib "github.com/sqldef/sqldef/v3/schema"
 	"github.com/sqldef/sqldef/v3/util"
+)
+
+type (
+	Ident         = database.Ident
+	QualifiedName = database.QualifiedName
+)
+
+var (
+	NewIdentWithQuoteDetected = database.NewIdentWithQuoteDetected
 )
 
 const indent = "    "
@@ -42,6 +52,10 @@ func (d *PostgresDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
 	// Sync TargetSchema to d.config for backward compatibility
 	// (other methods read from d.config.TargetSchema)
 	d.config.TargetSchema = config.TargetSchema
+}
+
+func (d *PostgresDatabase) GetGeneratorConfig() database.GeneratorConfig {
+	return d.generatorConfig
 }
 
 func (d *PostgresDatabase) GetTransactionQueries() database.TransactionQueries {
@@ -183,7 +197,7 @@ func (d *PostgresDatabase) views() ([]string, error) {
 		definition = normalizeDatePartToExtract(definition)
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE VIEW %s AS %s;", schema+"."+name, definition,
+				"CREATE VIEW %s.%s AS %s;", d.escapeIdentifier(schema), d.escapeIdentifier(name), definition,
 			),
 		)
 	}
@@ -223,7 +237,7 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 		definition = normalizeDatePartToExtract(definition)
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE MATERIALIZED VIEW %s AS %s;", schema+"."+name, definition,
+				"CREATE MATERIALIZED VIEW %s.%s AS %s;", d.escapeIdentifier(schema), d.escapeIdentifier(name), definition,
 			),
 		)
 
@@ -323,7 +337,7 @@ func (d *PostgresDatabase) types() ([]string, error) {
 		}
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE TYPE %s.%s AS ENUM (%s);", escapeSQLName(typeSchema), escapeSQLName(typeName), strings.Join(enumLabels, ", "),
+				"CREATE TYPE %s.%s AS ENUM (%s);", d.escapeIdentifier(typeSchema), d.escapeIdentifier(typeName), strings.Join(enumLabels, ", "),
 			),
 		)
 	}
@@ -412,10 +426,10 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 	// Build CREATE DOMAIN statements
 	var ddls []string
 	for _, di := range domains {
-		ddl := fmt.Sprintf("CREATE DOMAIN %s.%s AS %s", escapeSQLName(di.schema), escapeSQLName(di.name), di.dataType)
+		ddl := fmt.Sprintf("CREATE DOMAIN %s.%s AS %s", d.escapeIdentifier(di.schema), d.escapeIdentifier(di.name), di.dataType)
 
 		if di.collation.Valid && di.collation.String != "" && di.collation.String != "default" {
-			ddl += fmt.Sprintf(" COLLATE %s", escapeSQLName(di.collation.String))
+			ddl += fmt.Sprintf(" COLLATE %s", d.escapeIdentifier(di.collation.String))
 		}
 
 		if di.defaultValue.Valid {
@@ -440,17 +454,23 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 	return ddls, nil
 }
 
+// CheckConstraint holds a CHECK constraint's name and definition.
+type CheckConstraint struct {
+	Name       Ident
+	Definition string
+}
+
 type TableDDLComponents struct {
 	TableName         string
 	Columns           []column
-	PrimaryKeyName    string
+	PrimaryKeyName    Ident
 	PrimaryKeyCols    []string
 	IndexDefs         []string
 	ForeignDefs       []string
 	ExclusionDefs     []string
 	PolicyDefs        []string
 	Comments          []string
-	CheckConstraints  map[string]string
+	CheckConstraints  []CheckConstraint
 	UniqueConstraints map[string]string
 	PrivilegeDefs     []string
 	DefaultSchema     string
@@ -510,19 +530,19 @@ func (d *PostgresDatabase) exportTableDDL(table string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get privilege definitions for table %s: %w", table, err)
 	}
-	return buildExportTableDDL(components), nil
+	return d.buildExportTableDDL(components), nil
 }
 
-func buildExportTableDDL(components TableDDLComponents) string {
+func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) string {
 	var queryBuilder strings.Builder
 	schema, table := splitTableName(components.TableName, components.DefaultSchema)
-	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", escapeSQLName(schema), escapeSQLName(table))
+	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", d.escapeIdentifier(schema), d.escapeIdentifier(table))
 	for i, col := range components.Columns {
 		if i > 0 {
 			fmt.Fprint(&queryBuilder, ",")
 		}
 		fmt.Fprint(&queryBuilder, "\n"+indent)
-		fmt.Fprintf(&queryBuilder, "\"%s\" %s", col.Name, col.GetDataType())
+		fmt.Fprintf(&queryBuilder, "%s %s", d.escapeIdentifier(col.Name), d.escapeDataTypeName(col.GetDataType()))
 		if !col.Nullable {
 			fmt.Fprint(&queryBuilder, " NOT NULL")
 		}
@@ -533,17 +553,17 @@ func buildExportTableDDL(components TableDDLComponents) string {
 			fmt.Fprintf(&queryBuilder, " GENERATED %s AS IDENTITY", col.IdentityGeneration)
 		}
 		if col.Check != nil {
-			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s %s", col.Check.name, col.Check.definition)
+			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s %s", d.escapeConstraintName(col.Check.name), col.Check.definition)
 		}
 	}
 	if len(components.PrimaryKeyCols) > 0 {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", components.PrimaryKeyName, strings.Join(components.PrimaryKeyCols, "\", \""))
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", d.escapeConstraintName(components.PrimaryKeyName), strings.Join(components.PrimaryKeyCols, "\", \""))
 	}
 
-	for constraintName, constraintDef := range util.CanonicalMapIter(components.CheckConstraints) {
+	for _, check := range components.CheckConstraints {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", constraintName, constraintDef)
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", d.escapeConstraintName(check.Name), check.Definition)
 	}
 
 	fmt.Fprintf(&queryBuilder, "\n);\n")
@@ -575,7 +595,7 @@ func buildExportTableDDL(components TableDDLComponents) string {
 
 type columnConstraint struct {
 	definition string
-	name       string
+	name       Ident
 }
 
 type column struct {
@@ -627,13 +647,28 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	      s.column_default,
 	      s.is_nullable,
 	      CASE
+	      -- Domain types ('d') and enum types ('e'): return the type name with schema prefix
+	      WHEN t.typtype IN ('d', 'e') THEN
+	        CASE
+	          WHEN tn.nspname = 'public' THEN t.typname
+	          ELSE tn.nspname || '.' || t.typname
+	        END
 	      WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod)
 	      ELSE s.data_type
 	      END,
-	      format_type(f.atttypid, f.atttypmod),
+	      -- formattedDataType: also return type name for domain and enum types
+	      CASE
+	      WHEN t.typtype IN ('d', 'e') THEN
+	        CASE
+	          WHEN tn.nspname = 'public' THEN t.typname
+	          ELSE tn.nspname || '.' || t.typname
+	        END
+	      ELSE format_type(f.atttypid, f.atttypmod)
+	      END,
 	      s.identity_generation
 	    FROM pg_attribute f
 	    JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
+	    LEFT JOIN pg_namespace tn ON tn.oid = t.typnamespace
 	    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
 	    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
 	    LEFT JOIN information_schema.columns s ON s.column_name = f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
@@ -703,7 +738,7 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 			normalizedDef := normalizePostgresTypeCasts(*checkDefinition)
 			col.Check = &columnConstraint{
 				definition: normalizedDef,
-				name:       *checkName,
+				name:       NewIdentWithQuoteDetected(*checkName),
 			}
 		}
 		cols = append(cols, col)
@@ -797,7 +832,7 @@ func normalizePostgresTypeCasts(sql string) string {
 	return sql
 }
 
-func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[string]string, error) {
+func (d *PostgresDatabase) getTableCheckConstraints(tableName string) ([]CheckConstraint, error) {
 	const query = `SELECT con.conname, pg_get_constraintdef(con.oid, true)
 	FROM   pg_constraint con
 	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
@@ -807,7 +842,7 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[strin
 	AND    cls.relname = $2
 	AND    array_length(con.conkey, 1) > 1;`
 
-	result := map[string]string{}
+	var result []CheckConstraint
 	schema, table := splitTableName(tableName, d.GetDefaultSchema())
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
@@ -824,7 +859,10 @@ func (d *PostgresDatabase) getTableCheckConstraints(tableName string) (map[strin
 		// Normalize type casts for generic parser compatibility
 		// PostgreSQL returns "::time without time zone" but the generic parser expects "::time"
 		constraintDef = normalizePostgresTypeCasts(constraintDef)
-		result[constraintName] = constraintDef
+		result = append(result, CheckConstraint{
+			Name:       NewIdentWithQuoteDetected(constraintName),
+			Definition: constraintDef,
+		})
 	}
 
 	return result, nil
@@ -919,7 +957,7 @@ WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$
 	return columnNames, nil
 }
 
-func (d *PostgresDatabase) getPrimaryKeyName(table string) (string, error) {
+func (d *PostgresDatabase) getPrimaryKeyName(table string) (Ident, error) {
 	schema, table := splitTableName(table, d.GetDefaultSchema())
 	tableWithSchema := fmt.Sprintf("%s.%s", escapeSQLName(schema), escapeSQLName(table))
 	query := fmt.Sprintf(`
@@ -929,7 +967,7 @@ func (d *PostgresDatabase) getPrimaryKeyName(table string) (string, error) {
 	`, tableWithSchema)
 	rows, err := d.db.Query(query)
 	if err != nil {
-		return "", err
+		return Ident{}, err
 	}
 	defer rows.Close()
 
@@ -937,12 +975,12 @@ func (d *PostgresDatabase) getPrimaryKeyName(table string) (string, error) {
 	if rows.Next() {
 		err = rows.Scan(&keyName)
 		if err != nil {
-			return "", err
+			return Ident{}, err
 		}
 	} else {
-		return "", err
+		return Ident{}, err
 	}
-	return keyName, nil
+	return NewIdentWithQuoteDetected(keyName), nil
 }
 
 // refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d
@@ -1235,6 +1273,77 @@ func postgresBuildDSN(config database.Config) string {
 
 func escapeSQLName(name string) string {
 	return fmt.Sprintf("\"%s\"", name)
+}
+
+// escapeConstraintName quotes a constraint name for DDL output.
+// In legacy mode (LegacyIgnoreQuotes=true): don't quote (original behavior).
+// In quote-aware mode (LegacyIgnoreQuotes=false): respect the Ident's Quoted field.
+func (d *PostgresDatabase) escapeConstraintName(ident Ident) string {
+	if d.generatorConfig.LegacyIgnoreQuotes {
+		return ident.Name
+	}
+	if ident.Quoted {
+		return escapeSQLName(ident.Name)
+	}
+	return ident.Name
+}
+
+// escapeIdentifier quotes an identifier for DDL output.
+// In legacy mode: always quote to preserve exact case.
+// In quote-aware mode: use case detection and keyword check.
+func (d *PostgresDatabase) escapeIdentifier(name string) string {
+	if d.generatorConfig.LegacyIgnoreQuotes {
+		return escapeSQLName(name)
+	}
+	// Quote-aware mode: quote if name has uppercase letters or is a keyword
+	if strings.ToLower(name) != name || parser.IsKeyword(name) {
+		return escapeSQLName(name)
+	}
+	return name
+}
+
+// escapeDataTypeName quotes a data type name appropriately.
+// Handles array types and schema-qualified names.
+// Uses case detection to determine if quoting is needed:
+//   - All lowercase names (built-in types or unquoted custom types) are not quoted
+//   - Names with uppercase letters (quoted custom types) are quoted to preserve case
+func (d *PostgresDatabase) escapeDataTypeName(typeName string) string {
+	// Handle array types: preserve the [] suffix
+	arraySuffix := ""
+	if strings.HasSuffix(typeName, "[]") {
+		arraySuffix = "[]"
+		typeName = strings.TrimSuffix(typeName, "[]")
+	}
+
+	// If already quoted (from format_type()), return as-is
+	if strings.HasPrefix(typeName, "\"") && strings.HasSuffix(typeName, "\"") {
+		return typeName + arraySuffix
+	}
+
+	// Handle schema-qualified types (e.g., "public.my_type")
+	if idx := strings.Index(typeName, "."); idx > 0 {
+		schema := typeName[:idx]
+		baseType := typeName[idx+1:]
+		// Quote each part only if it has uppercase letters
+		escapedSchema := schema
+		if strings.ToLower(schema) != schema {
+			escapedSchema = d.escapeIdentifier(schema)
+		}
+		escapedType := baseType
+		if strings.ToLower(baseType) != baseType {
+			escapedType = d.escapeIdentifier(baseType)
+		}
+		return escapedSchema + "." + escapedType + arraySuffix
+	}
+
+	// For simple type names, use case detection:
+	// - All lowercase: don't quote (built-in types like "integer", or custom types created without quotes)
+	// - Has uppercase: quote to preserve case (custom types created with quotes like "UserStatus")
+	if strings.ToLower(typeName) == typeName {
+		return typeName + arraySuffix
+	}
+
+	return d.escapeIdentifier(typeName) + arraySuffix
 }
 
 func splitTableName(table string, defaultSchema string) (string, string) {

@@ -49,8 +49,13 @@ func (d *DryRunDatabase) GetDefaultSchema() string {
 }
 
 func (d *DryRunDatabase) SetGeneratorConfig(config GeneratorConfig) {
-	d.generatorConfig = config
 	d.wrapped.SetGeneratorConfig(config)
+	// Get the config back from wrapped in case it was modified (e.g., MySQL adds lowerCaseTableNames)
+	d.generatorConfig = d.wrapped.GetGeneratorConfig()
+}
+
+func (d *DryRunDatabase) GetGeneratorConfig() GeneratorConfig {
+	return d.generatorConfig
 }
 
 func (d *DryRunDatabase) GetTransactionQueries() TransactionQueries {

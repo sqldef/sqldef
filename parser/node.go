@@ -180,7 +180,7 @@ func (node *Select) Format(buf *nodeBuffer) {
 	buf.Printf("%vselect %v%s%s%s%v",
 		node.With, node.Comments, node.Cache, node.Distinct, node.Hints, node.SelectExprs,
 	)
-	if node.From.isEmpty() {
+	if node.From.IsEmpty() {
 		buf.Printf(" from dual")
 	} else {
 		buf.Printf(" from %v", node.From)
@@ -319,7 +319,7 @@ func (node *With) Format(buf *nodeBuffer) {
 
 // CommonTableExpr represents a single Common Table Expression in a WITH clause
 type CommonTableExpr struct {
-	Name       TableIdent
+	Name       Ident
 	Columns    Columns
 	Definition SelectStatement
 }
@@ -401,7 +401,7 @@ type Update struct {
 // Format formats the node.
 func (node *Update) Format(buf *nodeBuffer) {
 	buf.Printf("update %v%v set %v", node.Comments, node.TableExprs, node.Exprs)
-	if !node.From.isEmpty() {
+	if !node.From.IsEmpty() {
 		buf.Printf(" from %v", node.From)
 	}
 	buf.Printf("%v%v%v", node.Where, node.OrderBy, node.Limit)
@@ -472,17 +472,17 @@ func (node *MultiStatement) Format(buf *nodeBuffer) {
 // Exec represents a EXEC statement.
 type Exec struct {
 	Action string // EXEC or EXECUTE
-	Name   ColIdent
+	Name   Ident
 	Exprs  Exprs
 }
 
 // Format formats the Exec
 func (node *Exec) Format(buf *nodeBuffer) {
-	if node.Name.isEmpty() {
+	if node.Name.IsEmpty() {
 		buf.Printf("%s (%v)", node.Action, node.Exprs)
 		return
 	}
-	buf.Printf("%s %s %v", node.Action, node.Name.String(), node.Exprs)
+	buf.Printf("%s %s %v", node.Action, node.Name.Name, node.Exprs)
 }
 
 // Return represents a RETURN statement.
@@ -581,7 +581,7 @@ const (
 // PartitionSpec describe partition actions (for alter and create)
 type PartitionSpec struct {
 	Action      string
-	Name        ColIdent
+	Name        Ident
 	Definitions []*PartitionDefinition
 }
 
@@ -603,7 +603,7 @@ func (node *PartitionSpec) Format(buf *nodeBuffer) {
 
 // PartitionDefinition describes a very minimal partition definition
 type PartitionDefinition struct {
-	Name     ColIdent
+	Name     Ident
 	Limit    Expr
 	Maxvalue bool
 }
@@ -672,7 +672,7 @@ func (ts *TableSpec) addExclusion(exclusion *ExclusionDefinition) {
 
 // ColumnDefinition describes a column in a CREATE TABLE statement
 type ColumnDefinition struct {
-	Name          ColIdent
+	Name          Ident
 	Type          ColumnType
 	InlineComment []byte // For inline comments like -- @renamed from=oldname
 }
@@ -718,6 +718,9 @@ type IdentityOpt struct {
 type ColumnType struct {
 	// The base type string
 	Type string
+	// TypeIdent stores the original identifier with quote information for custom types (e.g., domains).
+	// When TypeIdent is set (i.e., not zero value), use TypeIdent.Quoted to determine quoting.
+	TypeIdent Ident
 
 	// Generic field options.
 	NotNull       *BoolVal
@@ -749,10 +752,10 @@ type ColumnType struct {
 	// Key specification
 	KeyOpt ColumnKeyOption
 
-	References            string
+	References            TableName
 	ReferenceNames        Columns
-	ReferenceOnDelete     ColIdent
-	ReferenceOnUpdate     ColIdent
+	ReferenceOnDelete     Ident
+	ReferenceOnUpdate     Ident
 	ReferenceDeferrable   *BoolVal // for Postgres: DEFERRABLE, NOT DEFERRABLE, or nil
 	ReferenceInitDeferred *BoolVal // for Postgres: INITIALLY DEFERRED, INITIALLY IMMEDIATE, or nil
 
@@ -765,7 +768,7 @@ type ColumnType struct {
 
 type DefaultDefinition struct {
 	Expression     DefaultExpression
-	ConstraintName ColIdent // only for MSSQL
+	ConstraintName Ident // only for MSSQL
 }
 
 type DefaultExpression struct {
@@ -778,7 +781,7 @@ type SridDefinition struct {
 
 type CheckDefinition struct {
 	Where             Where
-	ConstraintName    ColIdent
+	ConstraintName    Ident
 	NotForReplication bool
 	NoInherit         BoolVal
 }
@@ -789,8 +792,8 @@ type ExclusionPair struct {
 }
 
 type ExclusionDefinition struct {
-	ConstraintName ColIdent
-	IndexType      ColIdent
+	ConstraintName Ident
+	IndexType      Ident
 	Exclusions     []ExclusionPair
 	Where          *Where
 }
@@ -902,7 +905,7 @@ func (idx *IndexDefinition) Format(buf *nodeBuffer) {
 // IndexInfo describes the name and type of an index in a CREATE TABLE statement
 type IndexInfo struct {
 	Type      string
-	Name      ColIdent
+	Name      Ident
 	Primary   bool
 	Spatial   bool
 	Unique    bool
@@ -927,7 +930,7 @@ type IndexColumnsOrExpression struct {
 
 // IndexColumn describes a column in an index definition with optional length
 type IndexColumn struct {
-	Column        ColIdent
+	Column        Ident
 	Length        *SQLVal
 	Direction     string
 	OperatorClass string
@@ -938,7 +941,7 @@ func (ic IndexColumn) String() string {
 	if ic.Expression != nil {
 		return String(ic.Expression)
 	}
-	return ic.Column.String()
+	return ic.Column.Name
 }
 
 // LengthScaleOption is used for types that have an optional length
@@ -973,8 +976,8 @@ const (
 )
 
 type IndexSpec struct {
-	Name              ColIdent
-	Type              ColIdent
+	Name              Ident
+	Type              Ident
 	Unique            bool
 	Primary           bool
 	Vector            bool // for MariaDB vector indexes
@@ -983,7 +986,7 @@ type IndexSpec struct {
 	Concurrently      bool // for PostgreSQL
 	Clustered         bool // for MSSQL
 	ColumnStore       bool // for MSSQL
-	Included          []ColIdent
+	Included          []Ident
 	Where             *Where
 	Options           []*IndexOption
 	Partition         *IndexPartition // for MSSQL
@@ -996,28 +999,28 @@ type ConstraintOptions struct {
 }
 
 type ForeignKeyDefinition struct {
-	ConstraintName    ColIdent
-	IndexName         ColIdent
-	IndexColumns      []ColIdent
+	ConstraintName    Ident
+	IndexName         Ident
+	IndexColumns      []Ident
 	ReferenceName     TableName
-	ReferenceColumns  []ColIdent
-	OnDelete          ColIdent
-	OnUpdate          ColIdent
+	ReferenceColumns  []Ident
+	OnDelete          Ident
+	OnUpdate          Ident
 	NotForReplication bool
 	ConstraintOptions *ConstraintOptions
 }
 
 type Policy struct {
-	Name       ColIdent
+	Name       Ident
 	Permissive Permissive
 	Scope      string
-	To         []ColIdent
+	To         []Ident
 	Using      *Where
 	WithCheck  *Where
 }
 
 type Extension struct {
-	Name string
+	Name Ident
 }
 
 type Schema struct {
@@ -1067,7 +1070,7 @@ func (node *Show) Format(buf *nodeBuffer) {
 	} else {
 		buf.Printf("show %s %s", node.Scope, node.Type)
 	}
-	if !node.OnTable.Name.isEmpty() {
+	if !node.OnTable.Name.IsEmpty() {
 		buf.Printf(" on %v", node.OnTable)
 	}
 }
@@ -1097,12 +1100,12 @@ func (node *ShowFilter) Format(buf *nodeBuffer) {
 
 // Use represents a use statement.
 type Use struct {
-	DBName TableIdent
+	DBName Ident
 }
 
 // Format formats the node.
 func (node *Use) Format(buf *nodeBuffer) {
-	if node.DBName.v != "" {
+	if !node.DBName.IsEmpty() {
 		buf.Printf("use %v", node.DBName)
 	} else {
 		buf.Printf("use")
@@ -1214,7 +1217,7 @@ type Domain struct {
 
 type Comment struct {
 	ObjectType string
-	Object     string
+	Object     []Ident // Parts of the object name: [schema, table] or [schema, table, column]
 	Comment    string
 }
 
@@ -1246,7 +1249,7 @@ type StarExpr struct {
 
 // Format formats the node.
 func (node *StarExpr) Format(buf *nodeBuffer) {
-	if !node.TableName.isEmpty() {
+	if !node.TableName.IsEmpty() {
 		buf.Printf("%v.", node.TableName)
 	}
 	buf.Printf("*")
@@ -1255,19 +1258,19 @@ func (node *StarExpr) Format(buf *nodeBuffer) {
 // AliasedExpr defines an aliased SELECT expression.
 type AliasedExpr struct {
 	Expr Expr
-	As   ColIdent
+	As   Ident
 }
 
 // Format formats the node.
 func (node *AliasedExpr) Format(buf *nodeBuffer) {
 	buf.Printf("%v", node.Expr)
-	if !node.As.isEmpty() {
+	if !node.As.IsEmpty() {
 		buf.Printf(" as %v", node.As)
 	}
 }
 
 // Columns represents an insert column list.
-type Columns []ColIdent
+type Columns []Ident
 
 // Format formats the node.
 func (node Columns) Format(buf *nodeBuffer) {
@@ -1310,7 +1313,8 @@ func (node TableExprs) Format(buf *nodeBuffer) {
 	}
 }
 
-func (node TableExprs) isEmpty() bool {
+// IsEmpty returns true if there are no table expressions.
+func (node TableExprs) IsEmpty() bool {
 	return len(node) == 0
 }
 
@@ -1330,7 +1334,7 @@ func (*JoinTableExpr) iTableExpr()    {}
 type AliasedTableExpr struct {
 	Expr       SimpleTableExpr
 	Partitions Partitions
-	As         TableIdent
+	As         Ident
 	TableHints []string
 	IndexHints *IndexHints
 }
@@ -1338,7 +1342,7 @@ type AliasedTableExpr struct {
 // Format formats the node.
 func (node *AliasedTableExpr) Format(buf *nodeBuffer) {
 	buf.Printf("%v%v", node.Expr, node.Partitions)
-	if !node.As.isEmpty() {
+	if !node.As.IsEmpty() {
 		buf.Printf(" as %v", node.As)
 	}
 	if len(node.TableHints) != 0 {
@@ -1373,34 +1377,40 @@ func (node TableNames) Format(buf *nodeBuffer) {
 
 // TableName represents a table name: [Name] or [Schema].[Name]
 type TableName struct {
-	Schema TableIdent
-	Name   TableIdent
+	Schema Ident
+	Name   Ident
 }
 
 // Format formats the node.
 func (node TableName) Format(buf *nodeBuffer) {
-	if node.isEmpty() {
+	if node.IsEmpty() {
 		return
 	}
-	if !node.Schema.isEmpty() {
+	if !node.Schema.IsEmpty() {
 		buf.Printf("%v.", node.Schema)
 	}
 	buf.Printf("%v", node.Name)
 }
 
-// isEmpty returns true if TableName is nil or empty.
-func (node TableName) isEmpty() bool {
+// IsEmpty returns true if TableName is nil or empty.
+func (node TableName) IsEmpty() bool {
 	// If Name is empty, Schema is also empty.
-	return node.Name.isEmpty()
+	return node.Name.IsEmpty()
 }
 
-// toViewName returns a TableName acceptable for use as a VIEW. VIEW names are
-// always lowercase, so toViewName lowercasese the name. Databases are case-sensitive
-// so Schema is left untouched.
+// toViewName returns a TableName acceptable for use as a VIEW.
+// For quoted identifiers, case is preserved (PostgreSQL behavior).
+// For unquoted identifiers, the name is lowercased (PostgreSQL normalizes to lowercase).
+// Schema is left untouched as databases are case-sensitive for schemas.
 func (node TableName) toViewName() TableName {
+	name := node.Name.Name
+	// Only lowercase unquoted identifiers; quoted identifiers preserve their case
+	if !node.Name.Quoted {
+		name = strings.ToLower(name)
+	}
 	return TableName{
 		Schema: node.Schema,
-		Name:   NewTableIdent(strings.ToLower(node.Name.v)),
+		Name:   NewIdent(name, node.Name.Quoted),
 	}
 }
 
@@ -1408,13 +1418,13 @@ func (node TableName) toViewName() TableName {
 // This is used for objects like domains, types, functions, etc. that can be schema-qualified
 // but are not tables.
 type ObjectName struct {
-	Schema TableIdent
-	Name   TableIdent
+	Schema Ident
+	Name   Ident
 }
 
 // Format formats the node.
 func (node ObjectName) Format(buf *nodeBuffer) {
-	if !node.Schema.isEmpty() {
+	if !node.Schema.IsEmpty() {
 		buf.Printf("%v.", node.Schema)
 	}
 	buf.Printf("%v", node.Name)
@@ -1475,7 +1485,7 @@ func (node *JoinTableExpr) Format(buf *nodeBuffer) {
 // IndexHints represents a list of index hints.
 type IndexHints struct {
 	Type    string
-	Indexes []ColIdent
+	Indexes []Ident
 }
 
 // Index hints.
@@ -1881,13 +1891,13 @@ type ColName struct {
 	// additional data, typically info about which
 	// table or column this node references.
 	Metadata  any
-	Name      ColIdent
+	Name      Ident
 	Qualifier TableName
 }
 
 // Format formats the node.
 func (node *ColName) Format(buf *nodeBuffer) {
-	if !node.Qualifier.isEmpty() {
+	if !node.Qualifier.IsEmpty() {
 		buf.Printf("%v.", node.Qualifier)
 	}
 	buf.Printf("%v", node.Name)
@@ -1895,13 +1905,13 @@ func (node *ColName) Format(buf *nodeBuffer) {
 
 // NewQualifierColName represents a column name with NEW qualifier.
 type NewQualifierColName struct {
-	Name ColIdent
+	Name Ident
 }
 
 // Format formats the node.
 func (node *NewQualifierColName) Format(buf *nodeBuffer) {
 	// We don't have to backtick NEW qualifier.
-	buf.Printf("NEW.%s", node.Name.String())
+	buf.Printf("NEW.%s", node.Name.Name)
 }
 
 // ColTuple represents a list of column values.
@@ -2027,8 +2037,8 @@ func (node *CollateExpr) Format(buf *nodeBuffer) {
 
 // FuncExpr represents a function call that takes SelectExprs.
 type FuncExpr struct {
-	Qualifier TableIdent
-	Name      ColIdent
+	Qualifier Ident
+	Name      Ident
 	Distinct  bool
 	Exprs     SelectExprs
 	Over      *OverExpr
@@ -2040,18 +2050,18 @@ func (node *FuncExpr) Format(buf *nodeBuffer) {
 	if node.Distinct {
 		distinct = "distinct "
 	}
-	if !node.Qualifier.isEmpty() {
+	if !node.Qualifier.IsEmpty() {
 		buf.Printf("%v.", node.Qualifier)
 	}
 	// Function names should not be back-quoted even
 	// if they match a reserved word. So, print the
 	// name as is.
-	buf.Printf("%s(%s%v)%v", node.Name.String(), distinct, node.Exprs, node.Over)
+	buf.Printf("%s(%s%v)%v", node.Name.Name, distinct, node.Exprs, node.Over)
 }
 
 // FuncCallExpr represents a function call that takes Exprs.
 type FuncCallExpr struct {
-	Name  ColIdent
+	Name  Ident
 	Exprs Exprs
 }
 
@@ -2059,7 +2069,7 @@ func (node *FuncCallExpr) Format(buf *nodeBuffer) {
 	// Function names should not be back-quoted even
 	// if they match a reserved word. So, print the
 	// name as is.
-	buf.Printf("%s(%v)", node.Name.String(), node.Exprs)
+	buf.Printf("%s(%v)", node.Name.Name, node.Exprs)
 }
 
 // GroupConcatExpr represents a call to GROUP_CONCAT
@@ -2279,7 +2289,7 @@ func (node *Default) Format(buf *nodeBuffer) {
 
 // NextSeqVal represents a NEXT VALUE FOR expression in SQL Server.
 type NextSeqValExpr struct {
-	SequenceName TableIdent
+	SequenceName Ident
 }
 
 // Format formats the node.
@@ -2441,7 +2451,7 @@ func (node SetExprs) Format(buf *nodeBuffer) {
 
 // SetExpr represents a set expression.
 type SetExpr struct {
-	Name ColIdent
+	Name Ident
 	Expr Expr
 }
 
@@ -2449,9 +2459,9 @@ type SetExpr struct {
 func (node *SetExpr) Format(buf *nodeBuffer) {
 	// We don't have to backtick set variable names.
 	if node.Name.equalString("charset") || node.Name.equalString("names") {
-		buf.Printf("%s %v", node.Name.String(), node.Expr)
+		buf.Printf("%s %v", node.Name.Name, node.Expr)
 	} else {
-		buf.Printf("%s = %v", node.Name.String(), node.Expr)
+		buf.Printf("%s = %v", node.Name.Name, node.Expr)
 	}
 }
 
@@ -2475,60 +2485,6 @@ type SuffixExpr struct {
 // Format formats the node.
 func (node *SuffixExpr) Format(buf *nodeBuffer) {
 	buf.Printf("%v %s", node.Expr, node.Suffix)
-}
-
-// ColIdent is a case insensitive SQL identifier. It will be escaped with
-// backquotes if necessary.
-type ColIdent struct {
-	// This artifact prevents this struct from being compared
-	// with itself. It consumes no space as long as it's not the
-	// last field in the struct.
-	_            [0]struct{ _ []byte }
-	val          string
-	loweredCache string
-}
-
-// NewColIdent makes a new ColIdent.
-func NewColIdent(str string) ColIdent {
-	return ColIdent{
-		val: str,
-	}
-}
-
-// Format formats the node.
-func (node ColIdent) Format(buf *nodeBuffer) {
-	formatID(buf, node.val, node.lowered())
-}
-
-// isEmpty returns true if the name is empty.
-func (node ColIdent) isEmpty() bool {
-	return node.val == ""
-}
-
-// String returns the unescaped column name. It must
-// not be used for SQL generation. Use parser.String
-// instead. The Stringer conformance is for usage
-// in templates.
-func (node ColIdent) String() string {
-	return node.val
-}
-
-// lowered returns a lower-cased column name.
-// This function should generally be used only for optimizing
-// comparisons.
-func (node ColIdent) lowered() string {
-	if node.val == "" {
-		return ""
-	}
-	if node.loweredCache == "" {
-		node.loweredCache = strings.ToLower(node.val)
-	}
-	return node.loweredCache
-}
-
-// equalString performs a case-insensitive compare with str.
-func (node ColIdent) equalString(str string) bool {
-	return strings.EqualFold(node.val, str)
 }
 
 type DeclareType int
@@ -2563,7 +2519,7 @@ func (node *Declare) Format(buf *nodeBuffer) {
 }
 
 type LocalVariable struct {
-	Name     ColIdent
+	Name     Ident
 	DataType ColumnType
 }
 
@@ -2572,7 +2528,7 @@ func (node *LocalVariable) Format(buf *nodeBuffer) {
 }
 
 type CursorDefinition struct {
-	Name   ColIdent
+	Name   Ident
 	Scroll bool
 	Select SelectStatement
 }
@@ -2646,8 +2602,8 @@ const (
 type Cursor struct {
 	Action     string
 	Fetch      string
-	CursorName ColIdent
-	Into       []ColIdent
+	CursorName Ident
+	Into       []Ident
 }
 
 func (node *Cursor) Format(buf *nodeBuffer) {
@@ -2660,7 +2616,7 @@ func (node *Cursor) Format(buf *nodeBuffer) {
 		if node.Into != nil {
 			prefix := " into "
 			for _, c := range node.Into {
-				buf.Printf("%s%s", prefix, c.lowered())
+				buf.Printf("%s%s", prefix, strings.ToLower(c.Name))
 				prefix = ", "
 			}
 		}
@@ -2744,36 +2700,35 @@ func (node *If) Format(buf *nodeBuffer) {
 	buf.Printf("\nend if")
 }
 
-// TableIdent is a case sensitive SQL identifier.
-// Escaped by Format() if necessary.
-type TableIdent struct {
-	v string
+// Ident represents a SQL identifier with its original name and quote status.
+// This is used to track whether an identifier was quoted in the source SQL,
+// which affects case-sensitivity and normalization behavior.
+type Ident struct {
+	Name   string
+	Quoted bool
 }
 
-// NewTableIdent creates a new TableIdent.
-func NewTableIdent(str string) TableIdent {
-	return TableIdent{v: str}
+// NewIdent creates a new Ident.
+func NewIdent(name string, quoted bool) Ident {
+	return Ident{Name: name, Quoted: quoted}
 }
 
-// Format formats the node.
-func (node TableIdent) Format(buf *nodeBuffer) {
-	formatID(buf, node.v, strings.ToLower(node.v))
+// IsEmpty returns true if the name is empty.
+func (n Ident) IsEmpty() bool {
+	return n.Name == ""
 }
 
-// isEmpty returns true if TabIdent is empty.
-func (node TableIdent) isEmpty() bool {
-	return node.v == ""
+// Format formats the node for SQL generation.
+func (n Ident) Format(buf *nodeBuffer) {
+	formatID(buf, n.Name)
 }
 
-// String returns the unescaped table name. It must
-// not be used for SQL generation. Use parser.String
-// instead. The Stringer conformance is for usage
-// in templates.
-func (node TableIdent) String() string {
-	return node.v
+// equalString performs a case-insensitive compare with str.
+func (n Ident) equalString(str string) bool {
+	return strings.EqualFold(n.Name, str)
 }
 
-func formatID(buf *nodeBuffer, original, lowered string) {
+func formatID(buf *nodeBuffer, original string) {
 	isDbSystemVariable := false
 	if len(original) > 1 && original[:2] == "@@" {
 		isDbSystemVariable = true

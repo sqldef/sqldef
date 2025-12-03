@@ -1,0 +1,52 @@
+# Tests for quote-aware mode (legacy_ignore_quotes: false) in SQLite3
+
+ForeignKeyDependencyOrderingCaseMismatch:
+  # SQLite3 treats Users and users as the same table (case-insensitive).
+  # Dependency ordering should correctly recognize this and create
+  # users first, then orders.
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (
+      id integer PRIMARY KEY,
+      user_id integer,
+      FOREIGN KEY (user_id) REFERENCES Users (id)
+    );
+    CREATE TABLE users (id integer PRIMARY KEY);
+  output: |
+    CREATE TABLE users (id integer PRIMARY KEY);
+    CREATE TABLE orders (
+      id integer PRIMARY KEY,
+      user_id integer,
+      FOREIGN KEY (user_id) REFERENCES Users (id)
+    );
+
+AddColumnCaseMismatch:
+  # Current has USERS, desired has users - should recognize as same table
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE USERS (id integer PRIMARY KEY);
+  desired: |
+    CREATE TABLE users (id integer PRIMARY KEY, name text);
+  output: |
+    ALTER TABLE users ADD COLUMN name text;
+
+DropColumnCaseMismatch:
+  # Current has Users, desired has USERS - should recognize as same table
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE Users (id integer PRIMARY KEY, old_col text);
+  desired: |
+    CREATE TABLE USERS (id integer PRIMARY KEY);
+  output: |
+    ALTER TABLE USERS DROP COLUMN old_col;
+
+CreateIndexCaseMismatch:
+  # Create index when table name case differs
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE Products (id integer PRIMARY KEY, name text);
+  desired: |
+    CREATE TABLE products (id integer PRIMARY KEY, name text);
+    CREATE INDEX idx_name ON PRODUCTS (name);
+  output: |
+    CREATE INDEX idx_name ON PRODUCTS (name);

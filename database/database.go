@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/goccy/go-yaml"
+	"github.com/sqldef/sqldef/v3/parser"
 )
 
 type Config struct {
@@ -57,12 +58,63 @@ type GeneratorConfig struct {
 	EnableDrop              bool     // Whether to enable DROP/REVOKE operations
 	CreateIndexConcurrently bool     // Whether to add CONCURRENTLY to CREATE INDEX statements
 	DisableDdlTransaction   bool     // Do not use a transaction for DDL statements
+	LegacyIgnoreQuotes      bool     // true = ignore quotes (legacy), false = preserve quotes
+
+	// MySQL-specific: value of lower_case_table_names server variable.
+	// 0 = case-sensitive (Linux default), 1 or 2 = case-insensitive (Windows/macOS).
+	// Default is 0 (case-sensitive) for offline mode compatibility.
+	MysqlLowerCaseTableNames int
 }
 
 type TransactionQueries struct {
 	Begin    string
 	Commit   string
 	Rollback string
+}
+
+// Ident is an alias for parser.Ident.
+// Represents an identifier with quote information for quote-aware identifier handling.
+type Ident = parser.Ident
+
+// NewIdent is an alias for parser.NewIdent.
+var NewIdent = parser.NewIdent
+
+// NewIdentWithQuoteDetected creates an Ident with the Quoted flag inferred from case:
+//   - If the name contains uppercase letters, it must have been quoted
+//     (PostgreSQL folds unquoted identifiers to lowercase)
+//   - If the name is all lowercase, it's treated as unquoted. This is correct because
+//     in PostgreSQL, "users" (quoted lowercase) and users (unquoted) are semantically
+//     equivalent and can be referenced interchangeably.
+//
+// Use this for identifiers from the database or auto-generated constraint names.
+func NewIdentWithQuoteDetected(name string) Ident {
+	return Ident{Name: name, Quoted: strings.ToLower(name) != name}
+}
+
+// NewNormalizedIdent normalizes an Ident for comparison:
+//   - Quoted identifiers: preserve case, set Quoted based on whether name has uppercase
+//   - Unquoted identifiers: normalize to lowercase, set Quoted=false
+func NewNormalizedIdent(ident Ident) Ident {
+	if ident.Quoted {
+		return NewIdentWithQuoteDetected(ident.Name)
+	}
+	return Ident{Name: strings.ToLower(ident.Name), Quoted: false}
+}
+
+// QualifiedName represents a schema-qualified table name with quote information.
+type QualifiedName struct {
+	Schema Ident // empty if not specified (will use default schema)
+	Name   Ident
+}
+
+// RawString returns the raw qualified name as "schema.name" or just "name" if no schema.
+// This is NOT escaped for SQL output and NOT normalized for comparison.
+// Use this for logging, debugging, or map keys.
+func (q QualifiedName) RawString() string {
+	if q.Schema.IsEmpty() {
+		return q.Name.Name
+	}
+	return q.Schema.Name + "." + q.Name.Name
 }
 
 // Abstraction layer for multiple kinds of databases
@@ -72,6 +124,7 @@ type Database interface {
 	Close() error
 	GetDefaultSchema() string
 	SetGeneratorConfig(config GeneratorConfig)
+	GetGeneratorConfig() GeneratorConfig
 	GetTransactionQueries() TransactionQueries
 	GetConfig() Config
 }
@@ -199,23 +252,23 @@ func MergeGeneratorConfigs(configs []GeneratorConfig) GeneratorConfig {
 	return result
 }
 
-func ParseGeneratorConfigString(yamlString string) GeneratorConfig {
+func ParseGeneratorConfigString(yamlString string, defaults GeneratorConfig) GeneratorConfig {
 	if yamlString == "" {
-		return GeneratorConfig{}
+		return defaults
 	}
-	return parseGeneratorConfigFromBytes([]byte(yamlString))
+	return parseGeneratorConfigFromBytes([]byte(yamlString), defaults)
 }
 
-func ParseGeneratorConfig(configFile string) GeneratorConfig {
+func ParseGeneratorConfig(configFile string, defaults GeneratorConfig) GeneratorConfig {
 	if configFile == "" {
-		return GeneratorConfig{}
+		return defaults
 	}
 
 	buf, err := os.ReadFile(configFile)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return parseGeneratorConfigFromBytes(buf)
+	return parseGeneratorConfigFromBytes(buf, defaults)
 }
 
 // MergeGeneratorConfig merges two configs, with the second one taking precedence
@@ -256,11 +309,13 @@ func MergeGeneratorConfig(base, override GeneratorConfig) GeneratorConfig {
 	if override.DisableDdlTransaction {
 		result.DisableDdlTransaction = override.DisableDdlTransaction
 	}
+	// LegacyIgnoreQuotes: override always takes precedence (set by first config with database-specific default)
+	result.LegacyIgnoreQuotes = override.LegacyIgnoreQuotes
 
 	return result
 }
 
-func parseGeneratorConfigFromBytes(buf []byte) GeneratorConfig {
+func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) GeneratorConfig {
 	var config struct {
 		TargetTables            string   `yaml:"target_tables"`
 		SkipTables              string   `yaml:"skip_tables"`
@@ -273,6 +328,7 @@ func parseGeneratorConfigFromBytes(buf []byte) GeneratorConfig {
 		EnableDrop              bool     `yaml:"enable_drop"`
 		CreateIndexConcurrently bool     `yaml:"create_index_concurrently"`
 		DisableDdlTransaction   bool     `yaml:"disable_ddl_transaction"`
+		LegacyIgnoreQuotes      *bool    `yaml:"legacy_ignore_quotes"`
 	}
 
 	dec := yaml.NewDecoder(bytes.NewReader(buf), yaml.DisallowUnknownField())
@@ -310,6 +366,13 @@ func parseGeneratorConfigFromBytes(buf []byte) GeneratorConfig {
 	if config.Lock != "" {
 		lock = strings.Trim(config.Lock, "\n")
 	}
+
+	// Use the provided default, override if explicitly set in config
+	legacyIgnoreQuotes := defaults.LegacyIgnoreQuotes
+	if config.LegacyIgnoreQuotes != nil {
+		legacyIgnoreQuotes = *config.LegacyIgnoreQuotes
+	}
+
 	return GeneratorConfig{
 		TargetTables:            targetTables,
 		SkipTables:              skipTables,
@@ -322,5 +385,6 @@ func parseGeneratorConfigFromBytes(buf []byte) GeneratorConfig {
 		EnableDrop:              config.EnableDrop,
 		CreateIndexConcurrently: config.CreateIndexConcurrently,
 		DisableDdlTransaction:   config.DisableDdlTransaction,
+		LegacyIgnoreQuotes:      legacyIgnoreQuotes,
 	}
 }

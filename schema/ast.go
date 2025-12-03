@@ -1,6 +1,106 @@
 package schema
 
-import "github.com/sqldef/sqldef/v3/parser"
+import (
+	"strings"
+
+	"github.com/sqldef/sqldef/v3/database"
+	"github.com/sqldef/sqldef/v3/parser"
+)
+
+type (
+	Ident         = database.Ident
+	QualifiedName = database.QualifiedName
+)
+
+var (
+	NewIdentWithQuoteDetected = database.NewIdentWithQuoteDetected
+	NewNormalizedIdent        = database.NewNormalizedIdent
+)
+
+// identsEqual compares two Idents with quote-awareness based on database mode.
+// This is for general identifiers (columns, indexes, constraints) - NOT table names.
+//
+// For MySQL: Column/index/constraint names are always case-insensitive.
+// For PostgreSQL in quote-aware mode: unquoted identifiers are normalized to lowercase.
+// For other databases: always uses case-insensitive comparison.
+func identsEqual(a, b Ident, mode GeneratorMode, legacyIgnoreQuotes bool) bool {
+	if legacyIgnoreQuotes {
+		return strings.EqualFold(a.Name, b.Name)
+	}
+
+	switch mode {
+	case GeneratorModePostgres:
+		// Quote-aware comparison: normalize unquoted identifiers to lowercase
+		aName := a.Name
+		bName := b.Name
+		if !a.Quoted {
+			aName = strings.ToLower(aName)
+		}
+		if !b.Quoted {
+			bName = strings.ToLower(bName)
+		}
+		return aName == bName
+	default:
+		// MySQL/MSSQL/SQLite3: always case-insensitive for non-table identifiers
+		return strings.EqualFold(a.Name, b.Name)
+	}
+}
+
+// tableIdentsEqual compares two table/schema name Idents with quote-awareness.
+// This respects MySQL's lower_case_table_names setting which only affects table names.
+//
+// For MySQL: respects mysqlLowerCaseTableNames setting:
+//   - 0 (Linux default): Case-sensitive comparison
+//   - 1 or 2 (Windows/macOS): Case-insensitive comparison
+//
+// For PostgreSQL in quote-aware mode: unquoted identifiers are normalized to lowercase.
+// For other databases: always uses case-insensitive comparison.
+func tableIdentsEqual(a, b Ident, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) bool {
+	if legacyIgnoreQuotes {
+		return strings.EqualFold(a.Name, b.Name)
+	}
+
+	switch mode {
+	case GeneratorModeMysql:
+		if mysqlLowerCaseTableNames == 0 {
+			// Case-sensitive: exact match required
+			return a.Name == b.Name
+		}
+		// Case-insensitive (1 or 2)
+		return strings.EqualFold(a.Name, b.Name)
+	case GeneratorModePostgres:
+		// Quote-aware comparison: normalize unquoted identifiers to lowercase
+		aName := a.Name
+		bName := b.Name
+		if !a.Quoted {
+			aName = strings.ToLower(aName)
+		}
+		if !b.Quoted {
+			bName = strings.ToLower(bName)
+		}
+		return aName == bName
+	default:
+		// MSSQL/SQLite3: always case-insensitive
+		return strings.EqualFold(a.Name, b.Name)
+	}
+}
+
+// qualifiedNamesEqual compares two QualifiedNames (table names) with quote-awareness.
+// Uses tableIdentsEqual since this is specifically for table name comparison.
+func qualifiedNamesEqual(a, b QualifiedName, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) bool {
+	aSchema := a.Schema
+	bSchema := b.Schema
+	if aSchema.IsEmpty() && defaultSchema != "" {
+		aSchema = Ident{Name: defaultSchema, Quoted: false}
+	}
+	if bSchema.IsEmpty() && defaultSchema != "" {
+		bSchema = Ident{Name: defaultSchema, Quoted: false}
+	}
+	if !tableIdentsEqual(aSchema, bSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
+		return false
+	}
+	return tableIdentsEqual(a.Name, b.Name, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+}
 
 type DDL interface {
 	Statement() string
@@ -13,58 +113,58 @@ type CreateTable struct {
 
 type CreateIndex struct {
 	statement string
-	tableName string
+	tableName QualifiedName
 	index     Index
 }
 
 type AddIndex struct {
 	statement  string
-	tableName  string
+	tableName  QualifiedName
 	constraint bool
 	index      Index
 }
 
 type AddPrimaryKey struct {
 	statement string
-	tableName string
+	tableName QualifiedName
 	index     Index
 }
 
 type AddForeignKey struct {
 	statement  string
-	tableName  string
+	tableName  QualifiedName
 	foreignKey ForeignKey
 }
 
 type AddExclusion struct {
 	statement string
-	tableName string
+	tableName QualifiedName
 	exclusion Exclusion
 }
 
 type AddPolicy struct {
 	statement string
-	tableName string
+	tableName QualifiedName
 	policy    Policy
 }
 
 type GrantPrivilege struct {
 	statement  string
-	tableName  string
+	tableName  QualifiedName
 	grantees   []string
 	privileges []string
 }
 
 type RevokePrivilege struct {
 	statement     string
-	tableName     string
+	tableName     QualifiedName
 	grantees      []string
 	privileges    []string
 	cascadeOption bool // CASCADE option for REVOKE
 }
 
 type Table struct {
-	name        string
+	name        QualifiedName
 	columns     map[string]*Column
 	indexes     []Index
 	checks      []CheckDefinition
@@ -73,13 +173,14 @@ type Table struct {
 	policies    []Policy
 	privileges  []TablePrivilege
 	options     map[string]string
-	renamedFrom string // Previous table name if renamed via @renamed annotation
+	renamedFrom Ident // Previous table name if renamed via @renamed annotation
 }
 
 type Column struct {
-	name                       string
+	name                       Ident
 	position                   int
 	typeName                   string
+	typeIdent                  Ident // Type name with quote information (for custom types like domains)
 	unsigned                   bool
 	notNull                    *bool
 	autoIncrement              bool
@@ -97,19 +198,19 @@ type Column struct {
 	onUpdate                   *Value
 	comment                    *Value
 	enumValues                 []string
-	references                 string
+	references                 Ident
 	referenceDeferrable        *bool // for Postgres: DEFERRABLE, NOT DEFERRABLE, or nil
 	referenceInitiallyDeferred *bool // for Postgres: INITIALLY DEFERRED, INITIALLY IMMEDIATE, or nil
 	identity                   *Identity
 	sequence                   *Sequence
 	generated                  *Generated
-	renamedFrom                string // Previous column name if renamed via @renamed annotation
+	renamedFrom                Ident // Previous column name if renamed via @renamed annotation
 	// TODO: keyopt
 	// XXX: zerofill?
 }
 
 type Index struct {
-	name              string
+	name              Ident
 	indexType         string // Parsed only in "create table" but not parsed in "add index". Only used inside `generateDDLsForCreateTable`.
 	columns           []IndexColumn
 	primary           bool
@@ -124,7 +225,7 @@ type Index struct {
 	clustered         bool           // for MSSQL
 	partition         IndexPartition // for MSSQL
 	options           []IndexOption
-	renamedFrom       string // Previous index name if renamed via @renamed annotation
+	renamedFrom       Ident // Previous index name if renamed via @renamed annotation
 }
 
 type IndexColumn struct {
@@ -138,7 +239,7 @@ type IndexColumn struct {
 func (ic IndexColumn) ColumnName() string {
 	// Check if it's a simple column reference (ColName)
 	if colName, ok := ic.columnExpr.(*parser.ColName); ok {
-		return colName.Name.String()
+		return colName.Name.Name
 	}
 	// For expressions, return the full expression string
 	return parser.String(ic.columnExpr)
@@ -166,19 +267,19 @@ type ConstraintOptions struct {
 }
 
 type ForeignKey struct {
-	constraintName    string
-	indexName         string
-	indexColumns      []string
-	referenceName     string
-	referenceColumns  []string
-	onDelete          string
-	onUpdate          string
-	notForReplication bool
-	constraintOptions *ConstraintOptions
+	constraintName     Ident
+	indexName          Ident
+	indexColumns       []Ident
+	referenceTableName QualifiedName
+	referenceColumns   []Ident
+	onDelete           string
+	onUpdate           string
+	notForReplication  bool
+	constraintOptions  *ConstraintOptions
 }
 
 type Exclusion struct {
-	constraintName string
+	constraintName Ident
 	indexType      string
 	where          string
 	exclusions     []ExclusionPair
@@ -190,7 +291,7 @@ type ExclusionPair struct {
 }
 
 type Policy struct {
-	name          string
+	name          Ident
 	referenceName string
 	permissive    string
 	scope         string
@@ -210,7 +311,7 @@ type View struct {
 	statement    string
 	viewType     string
 	securityType string
-	name         string
+	name         QualifiedName
 	definition   parser.SelectStatement
 	indexes      []Index
 	columns      []string
@@ -220,8 +321,8 @@ type View struct {
 
 type Trigger struct {
 	statement string
-	name      string
-	tableName string
+	name      QualifiedName
+	tableName QualifiedName
 	time      string
 	event     []string
 	body      []string
@@ -285,7 +386,7 @@ type Sequence struct {
 
 type DefaultDefinition struct {
 	expression     parser.Expr
-	constraintName string // only for MSSQL
+	constraintName Ident // only for MSSQL
 }
 
 type SridDefinition struct {
@@ -294,20 +395,20 @@ type SridDefinition struct {
 
 type CheckDefinition struct {
 	definition        parser.Expr
-	constraintName    string
+	constraintName    Ident
 	notForReplication bool
 	noInherit         bool
 }
 
 // TODO: include type information
 type Type struct {
-	name       string
+	name       QualifiedName
 	statement  string
 	enumValues []string
 }
 
 type Domain struct {
-	name         string
+	name         QualifiedName
 	statement    string
 	dataType     string
 	defaultValue *DefaultDefinition
@@ -423,7 +524,7 @@ func (t *Table) PrimaryKey() *Index {
 	for _, column := range t.columns {
 		if column.keyOption == ColumnKeyPrimary {
 			primaryColumns = append(primaryColumns, IndexColumn{
-				columnExpr: &parser.ColName{Name: parser.NewColIdent(column.name)},
+				columnExpr: &parser.ColName{Name: parser.NewIdent(column.name.Name, column.name.Quoted)},
 			})
 		}
 	}
@@ -433,7 +534,7 @@ func (t *Table) PrimaryKey() *Index {
 	}
 
 	return &Index{
-		name:      "PRIMARY",
+		name:      Ident{Name: "PRIMARY", Quoted: false},
 		indexType: "primary key",
 		columns:   primaryColumns,
 		primary:   true,
