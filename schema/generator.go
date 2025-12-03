@@ -4234,14 +4234,6 @@ func convertIndexesToIndexNames(indexes []Index) []string {
 	return indexNames
 }
 
-func convertForeignKeysToConstraintNames(foreignKeys []ForeignKey) []string {
-	constraintNames := []string{}
-	for _, foreignKey := range foreignKeys {
-		constraintNames = append(constraintNames, foreignKey.constraintName.Name)
-	}
-	return constraintNames
-}
-
 func convertExclusionToConstraintNames(exclusions []Exclusion) []Ident {
 	constraintNames := []Ident{}
 	for _, exclusion := range exclusions {
@@ -4260,14 +4252,6 @@ func convertForeignKeysToIndexNames(foreignKeys []ForeignKey) []string {
 		} // unexpected to reach else (really?)
 	}
 	return indexNames
-}
-
-func convertViewNames(views []*View) []string {
-	return util.TransformSlice(views, func(v *View) string { return v.name.RawString() })
-}
-
-func convertDomainNames(domains []*Domain) []string {
-	return util.TransformSlice(domains, func(d *Domain) string { return d.name.RawString() })
 }
 
 func removeTableByName(tables []*Table, name string) []*Table {
