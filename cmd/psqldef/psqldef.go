@@ -37,6 +37,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		Prompt        bool     `long:"password-prompt" description:"Force PostgreSQL user password prompt"`
 		File          []string `short:"f" long:"file" description:"Read desired SQL from the file, rather than stdin" value-name:"FILENAME" default:"-"`
 		DryRun        bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
+		Apply         bool     `long:"apply" description:"Apply DDLs to the database (default, but will require this flag in future versions)"`
 		Export        bool     `long:"export" description:"Just dump the current schema to stdout"`
 		EnableDrop    bool     `long:"enable-drop" description:"Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE"`
 		SkipView      bool     `long:"skip-view" description:"Skip managing views/materialized views"`

@@ -15,6 +15,7 @@ Application Options:
       --password-prompt       Force MSSQL user password prompt
       --file=FILENAME         Read desired SQL from the file, rather than stdin (default: -)
       --dry-run               Don't run DDLs but just show them
+      --apply                 Apply DDLs to the database (default, but will require this flag in future versions)
       --export                Just dump the current schema to stdout
       --enable-drop           Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
       --config=PATH           YAML configuration file (can be specified multiple times)
