@@ -2854,6 +2854,15 @@ func isAddConstraintForeignKey(ddl string) bool {
 	return false
 }
 
+// isPrimaryKey checks if a column is part of the table's primary key.
+//
+// TODO: This function uses direct string comparison (indexColumn.ColumnName() == column.name.Name)
+// instead of quote-aware comparison via identsEqual(). This could cause incorrect results
+// when the column name and index column name have different case representations in the parsed SQL
+// (e.g., column "UserId" vs PRIMARY KEY (userid)). In practice, this doesn't manifest for
+// PostgreSQL because database exports normalize identifiers consistently. However, it could
+// cause issues in offline mode where SQL is parsed directly without database normalization.
+// Consider using g.identsEqual() or normalizeIdentKey() for correctness.
 func (g *Generator) isPrimaryKey(column Column, table Table) bool {
 	if column.keyOption == ColumnKeyPrimary {
 		return true
