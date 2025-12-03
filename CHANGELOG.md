@@ -1,3 +1,6 @@
+## [v3.7.1](https://github.com/sqldef/sqldef/compare/v3.7.0...v3.7.1) - 2025-12-03
+- feat: --apply (the inverse of --dry-run): --dry-run will be the default in the future by @gfx in https://github.com/sqldef/sqldef/pull/966
+
 ## [v3.7.0](https://github.com/sqldef/sqldef/compare/v3.6.7...v3.7.0) - 2025-12-03
 - Bump golang.org/x/crypto from 0.38.0 to 0.45.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/954
 - Bump modernc.org/sqlite from 1.39.1 to 1.40.1 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/958
