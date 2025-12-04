@@ -217,6 +217,7 @@ var keywords = map[string]int{
 	"from":                   FROM,
 	"full":                   FULL,
 	"fulltext":               FULLTEXT,
+	"function":               FUNCTION,
 	"generated":              GENERATED,
 	"geometry":               GEOMETRY,
 	"geometrycollection":     GEOMETRYCOLLECTION,

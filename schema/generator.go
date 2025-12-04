@@ -496,13 +496,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted triggers
 	for _, currentTrigger := range g.currentTriggers {
-		if g.mode != GeneratorModeSQLite3 {
-			continue
-		}
 		desiredTrigger := g.findTriggerByName(g.desiredTriggers, currentTrigger.name)
 		if desiredTrigger == nil {
-			ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(currentTrigger.name)))
-			continue
+			switch g.mode {
+			case GeneratorModePostgres:
+				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s ON %s", g.escapeQualifiedName(currentTrigger.name), g.escapeQualifiedName(currentTrigger.tableName)))
+			case GeneratorModeSQLite3:
+				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(currentTrigger.name)))
+			}
 		}
 	}
 
@@ -1700,6 +1701,8 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desi
 		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), g.escapeQualifiedName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, "\n"))
 	case GeneratorModeSQLite3:
 		triggerDefinition = desiredTrigger.statement
+	case GeneratorModePostgres:
+		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, strings.Join(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, "\n"))
 	default:
 		return ddls, nil
 	}
@@ -1712,18 +1715,21 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desi
 		}
 		ddls = append(ddls, createPrefix+triggerDefinition)
 	} else {
-		// Trigger found. If it's different, create or replace trigger.
+		// Trigger found. If it's different, drop and recreate (or alter for MSSQL).
 		if !g.areSameTriggerDefinition(currentTrigger, desiredTrigger) {
-			if g.mode != GeneratorModeMssql {
+			switch g.mode {
+			case GeneratorModeMssql:
+				ddls = append(ddls, "CREATE OR ALTER "+triggerDefinition)
+			case GeneratorModePostgres:
+				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s ON %s", g.escapeQualifiedName(triggerName), g.escapeQualifiedName(desiredTrigger.tableName)))
+				ddls = append(ddls, "CREATE "+triggerDefinition)
+			case GeneratorModeSQLite3:
 				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(triggerName)))
+				ddls = append(ddls, triggerDefinition)
+			default:
+				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(triggerName)))
+				ddls = append(ddls, "CREATE "+triggerDefinition)
 			}
-			var createPrefix string
-			if g.mode == GeneratorModeMssql {
-				createPrefix = "CREATE OR ALTER "
-			} else if g.mode != GeneratorModeSQLite3 {
-				createPrefix = "CREATE "
-			}
-			ddls = append(ddls, createPrefix+triggerDefinition)
 		}
 	}
 

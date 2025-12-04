@@ -236,7 +236,7 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION EXCLUDE DOMAIN
 %right <str> UNIQUE KEY
 %token <str> SHOW DESCRIBE EXPLAIN DATE DATA ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
-%token <str> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN
+%token <str> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN FUNCTION
 %token <str> STATUS VARIABLES
 %token <str> RESTRICT CASCADE NO ACTION
 %token <str> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
@@ -827,6 +827,84 @@ create_statement:
         Time: $7,
         Event: $8,
         Body: $14,
+      },
+    }
+  }
+/* For PostgreSQL: CREATE TRIGGER ... EXECUTE FUNCTION/PROCEDURE (without FOR EACH ROW) */
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name EXECUTE FUNCTION object_name '(' select_expression_list_opt ')'
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $3},
+        TableName: $7,
+        Time: $4,
+        Event: $5,
+        Body: []Statement{
+          &TriggerFuncExec{
+            Keyword: "FUNCTION",
+            FuncName: $10,
+            Args: SelectExprsToExprs($12),
+          },
+        },
+      },
+    }
+  }
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name EXECUTE PROCEDURE object_name '(' select_expression_list_opt ')'
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $3},
+        TableName: $7,
+        Time: $4,
+        Event: $5,
+        Body: []Statement{
+          &TriggerFuncExec{
+            Keyword: "PROCEDURE",
+            FuncName: $10,
+            Args: SelectExprsToExprs($12),
+          },
+        },
+      },
+    }
+  }
+/* For PostgreSQL: CREATE TRIGGER ... FOR EACH ROW EXECUTE FUNCTION/PROCEDURE */
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW EXECUTE FUNCTION object_name '(' select_expression_list_opt ')'
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $3},
+        TableName: $7,
+        Time: $4,
+        Event: $5,
+        Body: []Statement{
+          &TriggerFuncExec{
+            Keyword: "FUNCTION",
+            FuncName: $13,
+            Args: SelectExprsToExprs($15),
+          },
+        },
+      },
+    }
+  }
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW EXECUTE PROCEDURE object_name '(' select_expression_list_opt ')'
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $3},
+        TableName: $7,
+        Time: $4,
+        Event: $5,
+        Body: []Statement{
+          &TriggerFuncExec{
+            Keyword: "PROCEDURE",
+            FuncName: $13,
+            Args: SelectExprsToExprs($15),
+          },
+        },
       },
     }
   }
@@ -2073,6 +2151,10 @@ trigger_event_list:
     $$ = []string{$1}
   }
 | trigger_event_list ',' trigger_event
+  {
+    $$ = append($$, $3)
+  }
+| trigger_event_list OR trigger_event
   {
     $$ = append($$, $3)
   }

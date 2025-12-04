@@ -86,30 +86,31 @@ type Statement interface {
 	SQLNode
 }
 
-func (*Union) iStatement()          {}
-func (*Select) iStatement()         {}
-func (*Stream) iStatement()         {}
-func (*Insert) iStatement()         {}
-func (*Update) iStatement()         {}
-func (*Delete) iStatement()         {}
-func (*Set) iStatement()            {}
-func (*Declare) iStatement()        {}
-func (*Cursor) iStatement()         {}
-func (*BeginEnd) iStatement()       {}
-func (*While) iStatement()          {}
-func (*If) iStatement()             {}
-func (*DDL) iStatement()            {}
-func (*Show) iStatement()           {}
-func (*Use) iStatement()            {}
-func (*Begin) iStatement()          {}
-func (*Commit) iStatement()         {}
-func (*Rollback) iStatement()       {}
-func (*OtherRead) iStatement()      {}
-func (*OtherAdmin) iStatement()     {}
-func (*SetBoolOption) iStatement()  {}
-func (*MultiStatement) iStatement() {}
-func (*Exec) iStatement()           {}
-func (*Return) iStatement()         {}
+func (*Union) iStatement()           {}
+func (*Select) iStatement()          {}
+func (*Stream) iStatement()          {}
+func (*Insert) iStatement()          {}
+func (*Update) iStatement()          {}
+func (*Delete) iStatement()          {}
+func (*Set) iStatement()             {}
+func (*Declare) iStatement()         {}
+func (*Cursor) iStatement()          {}
+func (*BeginEnd) iStatement()        {}
+func (*While) iStatement()           {}
+func (*If) iStatement()              {}
+func (*DDL) iStatement()             {}
+func (*Show) iStatement()            {}
+func (*Use) iStatement()             {}
+func (*Begin) iStatement()           {}
+func (*Commit) iStatement()          {}
+func (*Rollback) iStatement()        {}
+func (*OtherRead) iStatement()       {}
+func (*OtherAdmin) iStatement()      {}
+func (*SetBoolOption) iStatement()   {}
+func (*MultiStatement) iStatement()  {}
+func (*Exec) iStatement()            {}
+func (*Return) iStatement()          {}
+func (*TriggerFuncExec) iStatement() {}
 
 // ParenSelect can actually not be a top level statement,
 // but we have to allow it because it's a requirement
@@ -1200,6 +1201,24 @@ type Trigger struct {
 	Body      []Statement
 }
 
+// TriggerFuncExec represents PostgreSQL's EXECUTE FUNCTION/PROCEDURE in triggers
+type TriggerFuncExec struct {
+	Keyword  string // "FUNCTION" or "PROCEDURE"
+	FuncName ObjectName
+	Args     Exprs
+}
+
+func (node *TriggerFuncExec) Format(buf *nodeBuffer) {
+	buf.Printf("EXECUTE %s %v(", node.Keyword, node.FuncName)
+	for i, arg := range node.Args {
+		if i > 0 {
+			buf.Printf(", ")
+		}
+		buf.Printf("%v", arg)
+	}
+	buf.Printf(")")
+}
+
 type Type struct {
 	Name       ObjectName
 	Type       ColumnType
@@ -1231,6 +1250,17 @@ func (node SelectExprs) Format(buf *nodeBuffer) {
 		buf.Printf("%s%v", prefix, n)
 		prefix = ", "
 	}
+}
+
+// SelectExprsToExprs converts SelectExprs to Exprs by extracting the Expr from each AliasedExpr.
+func SelectExprsToExprs(selectExprs SelectExprs) Exprs {
+	var exprs Exprs
+	for _, se := range selectExprs {
+		if ae, ok := se.(*AliasedExpr); ok {
+			exprs = append(exprs, ae.Expr)
+		}
+	}
+	return exprs
 }
 
 // SelectExpr represents a SELECT expression.
