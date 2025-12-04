@@ -1,3 +1,7 @@
+## [v3.7.2](https://github.com/sqldef/sqldef/compare/v3.7.1...v3.7.2) - 2025-12-04
+- support triggers in psqldef by @gfx in https://github.com/sqldef/sqldef/pull/968
+- Update Go toolchain to 1.25.5 and dependencies with security patches by @Copilot in https://github.com/sqldef/sqldef/pull/971
+
 ## [v3.7.1](https://github.com/sqldef/sqldef/compare/v3.7.0...v3.7.1) - 2025-12-03
 - feat: --apply (the inverse of --dry-run): --dry-run will be the default in the future by @gfx in https://github.com/sqldef/sqldef/pull/966
 
