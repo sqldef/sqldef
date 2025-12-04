@@ -25,7 +25,7 @@ else
   GOTEST := go run gotest.tools/gotestsum@latest --hide-summary=skipped -- $(GOTESTFLAGS)
 endif
 
-.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef test-cov test-cov-xml test-core test test-example test-example-offline
+.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef test-cov test-cov-xml test-core test test-example test-example-offline vulncheck
 
 all: build
 
@@ -130,6 +130,9 @@ format:
 
 lint:
 	go vet ./...
+
+vulncheck:
+	GOTOOLCHAIN=go1.25.5 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 modernize:
 	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix ./...
