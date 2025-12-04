@@ -10,7 +10,6 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,22 +26,8 @@ const (
 	skipPrefix      = "-- Skipped: "
 )
 
-// loginConfigMutex protects SQL Server login creation operations
-// to prevent conflicts when running tests in parallel.
-// SQL Server logins are server-wide, not database-specific.
-var loginConfigMutex sync.Mutex
-
 func wrapWithTransaction(ddls string) string {
 	return applyPrefix + "BEGIN TRANSACTION;\n" + ddls + "COMMIT TRANSACTION;\n"
-}
-
-// createTestUser creates the mssqldef_user login if it doesn't exist.
-// SQL Server logins are server-wide, so this is called once before all tests.
-func createTestUser() {
-	loginConfigMutex.Lock()
-	defer loginConfigMutex.Unlock()
-
-	mustMssqlExec("master", "IF NOT EXISTS (SELECT name FROM sys.server_principals WHERE name = 'mssqldef_user') CREATE LOGIN mssqldef_user WITH PASSWORD = N'Passw0rd'")
 }
 
 // createTestDatabase creates a new database for a test case with the specified user.
@@ -87,9 +72,7 @@ func connectDatabaseByName(dbName string, user string) (database.Database, error
 }
 
 func TestApply(t *testing.T) {
-	// Create test user once before running tests
-	// SQL Server logins are server-wide, not database-specific
-	createTestUser()
+	resetTestDatabase()
 
 	tests, err := tu.ReadTests("tests*.yml")
 	if err != nil {
@@ -1538,9 +1521,12 @@ func assertApplyOptionsOutput(t *testing.T, schema string, expected string, opti
 }
 
 func resetTestDatabase() {
+	// SQL Server logins are server-wide, not database-specific
 	mustMssqlExec("master", "IF NOT EXISTS (SELECT name FROM sys.server_principals WHERE name = 'mssqldef_user') CREATE LOGIN mssqldef_user WITH PASSWORD = N'Passw0rd'")
+
 	mustMssqlExec("master", "DROP DATABASE IF EXISTS mssqldef_test")
 	mustMssqlExec("master", "CREATE DATABASE mssqldef_test")
+
 	mustMssqlExec("mssqldef_test", "CREATE SCHEMA FOO")
 	mustMssqlExec("mssqldef_test", "CREATE USER mssqldef_user FOR LOGIN mssqldef_user WITH DEFAULT_SCHEMA = FOO")
 	mustMssqlExec("mssqldef_test", "ALTER ROLE db_owner ADD MEMBER mssqldef_user")

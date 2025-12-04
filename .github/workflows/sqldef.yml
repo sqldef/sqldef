@@ -60,7 +60,7 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - run: docker compose up -d
+      - run: docker compose up -d --wait
         env:
           MYSQL_VERSION: ${{ matrix.mysql_version }}
           MARIADB_VERSION: ${{ matrix.mariadb_version }}
