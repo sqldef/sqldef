@@ -210,4 +210,5 @@ Before considering any task complete, run these commands to ensure the code is i
 * `make test`
 * `make modernize`
 * `make lint`
+* `make vulncheck`
 * `make format`
