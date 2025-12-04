@@ -10,7 +10,6 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,8 +26,6 @@ const (
 	skipPrefix      = "-- Skipped: "
 )
 
-var databaseMutex sync.Mutex
-
 func wrapWithTransaction(ddls string) string {
 	return applyPrefix + "BEGIN TRANSACTION;\n" + ddls + "COMMIT TRANSACTION;\n"
 }
@@ -36,9 +33,6 @@ func wrapWithTransaction(ddls string) string {
 // createTestDatabase creates a new database for a test case with the specified user.
 func createTestDatabase(t *testing.T, dbName string, user string) {
 	t.Helper()
-
-	databaseMutex.Lock()
-	defer databaseMutex.Unlock()
 
 	// Drop and create the database
 	mustMssqlExec("master", fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
@@ -1527,9 +1521,6 @@ func assertApplyOptionsOutput(t *testing.T, schema string, expected string, opti
 }
 
 func resetTestDatabase() {
-	databaseMutex.Lock()
-	defer databaseMutex.Unlock()
-
 	// SQL Server logins are server-wide, not database-specific
 	mustMssqlExec("master", "IF NOT EXISTS (SELECT name FROM sys.server_principals WHERE name = 'mssqldef_user') CREATE LOGIN mssqldef_user WITH PASSWORD = N'Passw0rd'")
 
