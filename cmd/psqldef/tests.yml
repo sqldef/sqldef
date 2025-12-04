@@ -3381,4 +3381,3 @@ CreateIndexGenericStorageParameter:
       data text
     );
     CREATE INDEX idx_data ON test_table USING btree (data) WITH (deduplicate_items='on');
-

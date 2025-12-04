@@ -1,0 +1,205 @@
+CreateTriggerBeforeInsert:
+  offline: true
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE TRIGGER set_created_at
+      BEFORE INSERT ON users
+      FOR EACH ROW EXECUTE FUNCTION set_timestamp();
+  output: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE TRIGGER set_created_at before insert ON public.users FOR EACH ROW EXECUTE FUNCTION set_timestamp();
+
+CreateTriggerAfterUpdate:
+  offline: true
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE TRIGGER log_update
+      AFTER UPDATE ON users
+      FOR EACH ROW EXECUTE FUNCTION log_changes();
+  output: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE TRIGGER log_update after update ON public.users FOR EACH ROW EXECUTE FUNCTION log_changes();
+
+CreateTriggerAfterDelete:
+  offline: true
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE TRIGGER archive_deleted
+      AFTER DELETE ON users
+      FOR EACH ROW EXECUTE FUNCTION archive_row();
+  output: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE TRIGGER archive_deleted after delete ON public.users FOR EACH ROW EXECUTE FUNCTION archive_row();
+
+CreateTriggerExecuteProcedure:
+  offline: true
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE TRIGGER validate_user
+      BEFORE INSERT ON users
+      FOR EACH ROW EXECUTE PROCEDURE validate_func();
+  output: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE TRIGGER validate_user before insert ON public.users FOR EACH ROW EXECUTE PROCEDURE validate_func();
+
+CreateTriggerWithMultipleEvents:
+  offline: true
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE device_tests (
+      id serial PRIMARY KEY
+    );
+    CREATE TRIGGER enforce_required_permit
+      BEFORE INSERT OR UPDATE ON device_tests
+      FOR EACH ROW EXECUTE FUNCTION check_trigger();
+  output: |
+    CREATE TABLE device_tests (
+      id serial PRIMARY KEY
+    );
+    CREATE TRIGGER enforce_required_permit before insert OR update ON public.device_tests FOR EACH ROW EXECUTE FUNCTION check_trigger();
+
+CreateTriggerWithThreeEvents:
+  offline: true
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE audit_log (
+      id serial PRIMARY KEY,
+      action text
+    );
+    CREATE TRIGGER audit_all
+      AFTER INSERT OR UPDATE OR DELETE ON audit_log
+      FOR EACH ROW EXECUTE FUNCTION log_all_changes();
+  output: |
+    CREATE TABLE audit_log (
+      id serial PRIMARY KEY,
+      action text
+    );
+    CREATE TRIGGER audit_all after insert OR update OR delete ON public.audit_log FOR EACH ROW EXECUTE FUNCTION log_all_changes();
+
+CreateTriggerWithoutForEachRow:
+  offline: true
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE TRIGGER notify_change
+      AFTER INSERT ON users
+      EXECUTE FUNCTION notify_func();
+  output: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE TRIGGER notify_change after insert ON public.users FOR EACH ROW EXECUTE FUNCTION notify_func();
+
+CreateTriggerWithFunctionArgs:
+  offline: true
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE TRIGGER check_value
+      BEFORE INSERT ON users
+      FOR EACH ROW EXECUTE FUNCTION check_func('arg1', 'arg2');
+  output: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE TRIGGER check_value before insert ON public.users FOR EACH ROW EXECUTE FUNCTION check_func('arg1', 'arg2');
+
+CreateMultipleTriggers:
+  offline: true
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE TRIGGER before_insert_trigger
+      BEFORE INSERT ON users
+      FOR EACH ROW EXECUTE FUNCTION before_insert_func();
+    CREATE TRIGGER after_insert_trigger
+      AFTER INSERT ON users
+      FOR EACH ROW EXECUTE FUNCTION after_insert_func();
+  output: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE TRIGGER before_insert_trigger before insert ON public.users FOR EACH ROW EXECUTE FUNCTION before_insert_func();
+    CREATE TRIGGER after_insert_trigger after insert ON public.users FOR EACH ROW EXECUTE FUNCTION after_insert_func();
+
+DropTrigger:
+  offline: true
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE TRIGGER log_insert
+      AFTER INSERT ON users
+      FOR EACH ROW EXECUTE FUNCTION log_func();
+  desired: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+  output: |
+    DROP TRIGGER log_insert ON public.users;
+
+ModifyTrigger:
+  offline: true
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE TRIGGER log_changes
+      BEFORE INSERT ON users
+      FOR EACH ROW EXECUTE FUNCTION old_func();
+  desired: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text
+    );
+    CREATE TRIGGER log_changes
+      AFTER UPDATE ON users
+      FOR EACH ROW EXECUTE FUNCTION new_func();
+  output: |
+    DROP TRIGGER log_changes ON public.users;
+    CREATE TRIGGER log_changes after update ON public.users FOR EACH ROW EXECUTE FUNCTION new_func();
