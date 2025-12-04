@@ -1,4 +1,4 @@
-FROM golang:1.25.1-alpine AS builder
+FROM golang:1.25.5-alpine AS builder
 
 ARG SQLDEF_TOOL=mysqldef
 
