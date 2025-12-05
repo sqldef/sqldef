@@ -177,6 +177,15 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				event:     stmt.Trigger.Event,
 				body:      body,
 			}, nil
+		} else if stmt.Action == parser.CreateFunction {
+			return &Function{
+				statement:  ddl,
+				name:       normalizeQualifiedObjectName(mode, stmt.Function.Name, defaultSchema),
+				returnType: stmt.Function.ReturnType,
+				body:       stmt.Function.Body,
+				language:   stmt.Function.Language,
+				orReplace:  stmt.Function.OrReplace,
+			}, nil
 		} else if stmt.Action == parser.CreateType {
 			return &Type{
 				name:       normalizeQualifiedObjectName(mode, stmt.Type.Name, defaultSchema),

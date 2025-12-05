@@ -179,7 +179,11 @@ TestCaseName:
     create_index_concurrently: true
 ```
 
-NOTE: `offline: true` should not be used for "tier-1" databases: MySQL, MariaDB, PostgreSQL, SQLite3, SQL Server.
+NOTE: Never use `offline: true` for databases that are tested in GitHub Actions:
+- MySQL (including MariaDB)
+- PostgreSQL
+- SQLite3
+- SQL Server
 
 ### Best Practices
 

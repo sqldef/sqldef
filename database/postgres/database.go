@@ -97,6 +97,12 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 	}
 	ddls = append(ddls, domainDDLs...)
 
+	functionDDLs, err := d.functions()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, functionDDLs...)
+
 	tableNames, err := d.tableNames()
 	if err != nil {
 		return "", err
@@ -112,6 +118,12 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 		return "", err
 	}
 	ddls = append(ddls, tableDDLs...)
+
+	triggerDDLs, err := d.triggers()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, triggerDDLs...)
 
 	viewDDLs, err := d.views()
 	if err != nil {
@@ -450,6 +462,94 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 
 		ddl += ";"
 		ddls = append(ddls, ddl)
+	}
+	return ddls, nil
+}
+
+// functions fetches user-defined functions from the database
+func (d *PostgresDatabase) functions() ([]string, error) {
+	// Query to get user-defined functions (excluding system functions and extension functions)
+	// We use pg_get_functiondef to get the complete function definition
+	rows, err := d.db.Query(`
+		SELECT n.nspname AS func_schema,
+		       p.proname AS func_name,
+		       pg_get_functiondef(p.oid) AS func_def
+		FROM pg_catalog.pg_proc p
+		INNER JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
+		WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+		  AND p.prokind = 'f'
+		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')
+		ORDER BY n.nspname, p.proname;
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ddls []string
+	for rows.Next() {
+		var funcSchema, funcName, funcDef string
+		if err := rows.Scan(&funcSchema, &funcName, &funcDef); err != nil {
+			return nil, err
+		}
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, funcSchema) {
+			continue
+		}
+		// pg_get_functiondef returns the complete CREATE FUNCTION statement
+		// We just need to ensure it ends with a semicolon
+		funcDef = strings.TrimSpace(funcDef)
+		if !strings.HasSuffix(funcDef, ";") {
+			funcDef += ";"
+		}
+		ddls = append(ddls, funcDef)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return ddls, nil
+}
+
+// triggers fetches user-defined triggers from the database
+func (d *PostgresDatabase) triggers() ([]string, error) {
+	// Query to get user-defined triggers (excluding internal triggers and extension triggers)
+	// We use pg_get_triggerdef to get the complete trigger definition
+	rows, err := d.db.Query(`
+		SELECT n.nspname AS trigger_schema,
+		       c.relname AS table_name,
+		       t.tgname AS trigger_name,
+		       pg_get_triggerdef(t.oid) AS trigger_def
+		FROM pg_catalog.pg_trigger t
+		INNER JOIN pg_catalog.pg_class c ON t.tgrelid = c.oid
+		INNER JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+		WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+		  AND NOT t.tgisinternal
+		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = t.oid AND d.deptype = 'e')
+		ORDER BY n.nspname, c.relname, t.tgname;
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ddls []string
+	for rows.Next() {
+		var triggerSchema, tableName, triggerName, triggerDef string
+		if err := rows.Scan(&triggerSchema, &tableName, &triggerName, &triggerDef); err != nil {
+			return nil, err
+		}
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, triggerSchema) {
+			continue
+		}
+		// pg_get_triggerdef returns the complete CREATE TRIGGER statement
+		// We just need to ensure it ends with a semicolon
+		triggerDef = strings.TrimSpace(triggerDef)
+		if !strings.HasSuffix(triggerDef, ";") {
+			triggerDef += ";"
+		}
+		ddls = append(ddls, triggerDef)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return ddls, nil
 }

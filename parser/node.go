@@ -515,6 +515,7 @@ type DDL struct {
 	Policy        *Policy
 	View          *View
 	Trigger       *Trigger
+	Function      *Function
 	Type          *Type
 	Domain        *Domain
 	Comment       *Comment
@@ -533,6 +534,7 @@ const (
 	AddExclusion
 	CommentOn
 	CreateExtension
+	CreateFunction
 	CreateIndex
 	CreatePolicy
 	CreateTable
@@ -1217,6 +1219,25 @@ func (node *TriggerFuncExec) Format(buf *nodeBuffer) {
 		buf.Printf("%v", arg)
 	}
 	buf.Printf(")")
+}
+
+// Function represents a PostgreSQL CREATE FUNCTION statement
+type Function struct {
+	Name       ObjectName
+	Args       []FunctionArg
+	ReturnType string
+	Body       string   // The function body (dollar-quoted string content)
+	Language   string   // e.g., "plpgsql", "sql"
+	OrReplace  bool     // true if CREATE OR REPLACE FUNCTION
+	Options    []string // Additional options like VOLATILE, IMMUTABLE, etc.
+}
+
+// FunctionArg represents a function argument
+type FunctionArg struct {
+	Mode    string // IN, OUT, INOUT, VARIADIC (optional)
+	Name    Ident
+	Type    string
+	Default Expr
 }
 
 type Type struct {
