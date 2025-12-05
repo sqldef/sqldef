@@ -1,3 +1,9 @@
+## [v3.7.3](https://github.com/sqldef/sqldef/compare/v3.7.2...v3.7.3) - 2025-12-05
+- [CI] use go.mod to get toolchain version by @gfx in https://github.com/sqldef/sqldef/pull/972
+- update dockerfile go version by @gfx in https://github.com/sqldef/sqldef/pull/974
+- test: fix flakyness for mssqldef testing by @gfx in https://github.com/sqldef/sqldef/pull/975
+- psqldef: support functions by @gfx in https://github.com/sqldef/sqldef/pull/976
+
 ## [v3.7.2](https://github.com/sqldef/sqldef/compare/v3.7.1...v3.7.2) - 2025-12-04
 - support triggers in psqldef by @gfx in https://github.com/sqldef/sqldef/pull/968
 - Update Go toolchain to 1.25.5 and dependencies with security patches by @Copilot in https://github.com/sqldef/sqldef/pull/971
