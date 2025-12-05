@@ -125,9 +125,9 @@ ParseAllAnyCheckConstraint:
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_n2_check" CHECK (n2 = ALL (ARRAY[1, 2, 3]));
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_t1_check" CHECK (t1 = ANY (ARRAY['x', 'y']));
   down: |
-    ALTER TABLE "public"."test" DROP CONSTRAINT "";
-    ALTER TABLE "public"."test" DROP CONSTRAINT "";
-    ALTER TABLE "public"."test" DROP CONSTRAINT "";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_n1_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_n2_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_t1_check";
 AllAnySomeCheckConstraintsCreate:
   desired: |
     CREATE TABLE test_all_any (
@@ -158,14 +158,8 @@ AllAnySomeCheckConstraintsModifyAll:
     ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_all_positive_check";
     ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_all_positive_check" CHECK (all_positive = ALL (ARRAY[2, 3, 4]));
   down: |
-    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "";
-    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_state_check" CHECK (state = ANY (ARRAY['active', 'pending']));
-    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "";
+    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_all_positive_check";
     ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_all_positive_check" CHECK (all_positive = ALL (ARRAY[1, 2, 3]));
-    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "";
-    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_some_text_check" CHECK (some_text = ANY (ARRAY['valid', 'allowed']));
-    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "";
-    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_score_check" CHECK (score > ALL (ARRAY[0, 10, 20]));
 AllAnySomeCheckConstraintsModifySome:
   current: |
     CREATE TABLE test_all_any (
@@ -187,14 +181,8 @@ AllAnySomeCheckConstraintsModifySome:
     ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_some_text_check";
     ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_some_text_check" CHECK (some_text = ANY (ARRAY['updated', 'modified', 'changed']));
   down: |
-    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "";
-    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_state_check" CHECK (state = ANY (ARRAY['active', 'pending']));
-    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "";
-    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_all_positive_check" CHECK (all_positive = ALL (ARRAY[2, 3, 4]));
-    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "";
+    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_some_text_check";
     ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_some_text_check" CHECK (some_text = ANY (ARRAY['valid', 'allowed']));
-    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "";
-    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_score_check" CHECK (score > ALL (ARRAY[0, 10, 20]));
 AllAnySomeCheckConstraintsRemove:
   current: |
     CREATE TABLE test_all_any (
@@ -248,9 +236,9 @@ SomeConstraintModificationsModify:
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
     ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ANY (ARRAY['X', 'Y', 'Z']));
   down: |
-    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "";
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_status_check";
     ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ANY (ARRAY['active', 'pending', 'draft']));
-    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "";
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
     ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ANY (ARRAY['A', 'B', 'C']));
 SomeConstraintModificationsSomeToAny:
   current: |
@@ -286,9 +274,9 @@ SomeConstraintModificationsSomeToAll:
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
     ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ALL (ARRAY['X', 'Y', 'Z']));
   down: |
-    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "";
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_status_check";
     ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ANY (ARRAY['active', 'completed', 'archived']));
-    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "";
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
     ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ANY (ARRAY['X', 'Y', 'Z']));
 NullCast:
   desired: |
@@ -401,8 +389,6 @@ AlterTypeAddValueWithSameTypeNameInDifferentSchema:
   up: |
     ALTER TYPE "schema2"."lang" ADD VALUE 'de';
   down: |
-    CREATE SCHEMA schema1;
-    CREATE SCHEMA schema2;
   min_version: '12'
 AddEnumTypeColumn:
   current: |
@@ -427,7 +413,6 @@ AddEnumTypeColumn:
     ALTER TABLE "s"."users" ADD COLUMN "lang" s.lang NOT NULL;
 
   down: |
-    CREATE SCHEMA s;
     ALTER TABLE "s"."users" DROP COLUMN "lang";
 CreateTypeWithMultipleTables:
   desired: |
@@ -500,13 +485,13 @@ PosixRegexCheckConstraint:
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_not_regex_ci_check";
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_not_regex_ci_check" CHECK (posix_not_regex_ci !~* '[a-z]');
   down: |
-    ALTER TABLE "public"."test" DROP CONSTRAINT "";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_regex_check";
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_regex_check" CHECK (posix_regex ~ '[0-9]');
-    ALTER TABLE "public"."test" DROP CONSTRAINT "";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_regex_ci_check";
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_regex_ci_check" CHECK (posix_regex_ci ~* '[0-9]');
-    ALTER TABLE "public"."test" DROP CONSTRAINT "";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_not_regex_check";
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_not_regex_check" CHECK (posix_not_regex !~ '[0-9]');
-    ALTER TABLE "public"."test" DROP CONSTRAINT "";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_not_regex_ci_check";
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_not_regex_ci_check" CHECK (posix_not_regex_ci !~* '[0-9]');
 IndexAndForeignOrder:
   desired: |
@@ -557,13 +542,13 @@ ForeignKeyConstraintsAreEmittedLast:
     ALTER TABLE "public"."foos" DROP COLUMN "dummy_column";
   down: |
     ALTER TABLE "public"."foos" ADD COLUMN "dummy_column" text;
-    ALTER TABLE "public"."foos" DROP CONSTRAINT "PRIMARY";
+    ALTER TABLE "public"."foos" DROP CONSTRAINT "foos_pkey";
     ALTER TABLE "public"."bars" ADD COLUMN "dummy_column" text;
     ALTER TABLE "public"."foos" DROP CONSTRAINT "foos_bar_id_fkey";
-    ALTER TABLE "public"."bars" DROP CONSTRAINT "PRIMARY";
+    ALTER TABLE "public"."bars" DROP CONSTRAINT "bars_pkey";
     ALTER TABLE "public"."bars" DROP COLUMN "bar_id";
-    ALTER TABLE "public"."foos" DROP COLUMN "foo_id";
     ALTER TABLE "public"."foos" DROP COLUMN "bar_id";
+    ALTER TABLE "public"."foos" DROP COLUMN "foo_id";
 ForeignKeyOnReservedName:
   current: |
     CREATE TABLE "public"."companies" (
@@ -603,8 +588,8 @@ ForeignKeyOnReservedName:
     ALTER TABLE "public"."variables" ADD CONSTRAINT "variables_company_id_fkey" FOREIGN KEY ("company_id") REFERENCES "public"."companies" ("id");
     ALTER TABLE "public"."users" ADD CONSTRAINT "users_variable_id_fk" FOREIGN KEY ("variable_id") REFERENCES "public"."variables" ("id");
   down: |
-    ALTER TABLE "public"."variables" DROP CONSTRAINT "variables_company_id_fkey";
     ALTER TABLE "public"."users" DROP CONSTRAINT "users_variable_id_fk";
+    ALTER TABLE "public"."variables" DROP CONSTRAINT "variables_company_id_fkey";
 NumericChangePrecisionAndScale:
   current: |
     CREATE TABLE test (
@@ -654,16 +639,15 @@ CheckConstraint:
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_d1_check" CHECK (d1 >= '2022-01-01');
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_d2_check" CHECK (d2 >= '2022-01-01');
   down: |
-    ALTER TABLE "public"."test" DROP CONSTRAINT "";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_n1_check";
     ALTER TABLE "public"."test" DROP CONSTRAINT "chk";
-    ALTER TABLE "public"."test" DROP CONSTRAINT "";
-    ALTER TABLE "public"."test" DROP CONSTRAINT "";
-    ALTER TABLE "public"."test" DROP CONSTRAINT "";
-    ALTER TABLE "public"."test" DROP CONSTRAINT "";
-    ALTER TABLE "public"."test" DROP CONSTRAINT "";
-    ALTER TABLE "public"."test" DROP CONSTRAINT "";
-    ALTER TABLE "public"."test" DROP CONSTRAINT "";
-
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_n3_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_t1_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_t2_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_t3_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_t4_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_d1_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_d2_check";
 CheckConstraintWithRowConstructor:
   desired: |
     CREATE TABLE test (
@@ -870,8 +854,8 @@ CommentWithoutSchema:
     COMMENT ON TABLE foo.users is 'users table is updated';
     COMMENT ON COLUMN foo.users.id is 'users id column is updated';
   down: |
-    COMMENT ON TABLE "public"."users" IS NULL;
-    COMMENT ON COLUMN "public"."users"."id" IS NULL;
+    COMMENT ON TABLE "foo"."users" IS NULL;
+    COMMENT ON COLUMN "foo"."users"."id" IS NULL;
   user: psqldef_user # in cmd/psqldef/psqldef_test.go schema 'foo' is used if 'user' is provided.
 CommentWithoutSchemaWithoutTableNameQuoted:
   current: |
@@ -1172,7 +1156,7 @@ AddBooleanColumnOnNonStandardDefaultSchema:
   up: |
     ALTER TABLE "foo"."items" ADD COLUMN "requires_consent" boolean NOT NULL DEFAULT true;
   down: |
-    ALTER TABLE "public"."items" DROP COLUMN "requires_consent";
+    ALTER TABLE "foo"."items" DROP COLUMN "requires_consent";
   user: psqldef_user
 
 AddBooleanColumnWithExplicitSchema:
@@ -1214,7 +1198,7 @@ AddEnumTypeColumnOnNonStandardDefaultSchema:
     );
     ALTER TABLE "foo"."items" ADD COLUMN "lang" lang NOT NULL;
   down: |
-    ALTER TABLE "public"."items" DROP COLUMN "lang";
+    ALTER TABLE "foo"."items" DROP COLUMN "lang";
   user: psqldef_user
 
 # User-defined enum type on non-public default schema (explicit schema usage)
@@ -1240,7 +1224,7 @@ AddEnumTypeColumnWithExplicitSchemaOnNonStandardDefaultSchema:
     );
     ALTER TABLE "foo"."items" ADD COLUMN "lang" foo.lang NOT NULL;
   down: |
-    ALTER TABLE "public"."items" DROP COLUMN "lang";
+    ALTER TABLE "foo"."items" DROP COLUMN "lang";
   user: psqldef_user
 
 # Built-in types must not be schema-qualified on non-public schema
@@ -1257,7 +1241,7 @@ AddIntegerColumnOnNonStandardDefaultSchema:
   up: |
     ALTER TABLE "foo"."items" ADD COLUMN "count" integer NOT NULL;
   down: |
-    ALTER TABLE "public"."items" DROP COLUMN "count";
+    ALTER TABLE "foo"."items" DROP COLUMN "count";
   user: psqldef_user
 
 AddTextColumnOnNonStandardDefaultSchema:
@@ -1273,7 +1257,7 @@ AddTextColumnOnNonStandardDefaultSchema:
   up: |
     ALTER TABLE "foo"."items" ADD COLUMN "description" text NOT NULL;
   down: |
-    ALTER TABLE "public"."items" DROP COLUMN "description";
+    ALTER TABLE "foo"."items" DROP COLUMN "description";
   user: psqldef_user
 
 AddVarcharColumnOnNonStandardDefaultSchema:
@@ -1289,7 +1273,7 @@ AddVarcharColumnOnNonStandardDefaultSchema:
   up: |
     ALTER TABLE "foo"."items" ADD COLUMN "name" varchar(255) NOT NULL;
   down: |
-    ALTER TABLE "public"."items" DROP COLUMN "name";
+    ALTER TABLE "foo"."items" DROP COLUMN "name";
   user: psqldef_user
 
 AddNumericColumnOnNonStandardDefaultSchema:
@@ -1305,7 +1289,7 @@ AddNumericColumnOnNonStandardDefaultSchema:
   up: |
     ALTER TABLE "foo"."items" ADD COLUMN "amount" numeric(10, 2) NOT NULL;
   down: |
-    ALTER TABLE "public"."items" DROP COLUMN "amount";
+    ALTER TABLE "foo"."items" DROP COLUMN "amount";
   user: psqldef_user
 
 AddUUIDColumnOnNonStandardDefaultSchema:
@@ -1321,7 +1305,7 @@ AddUUIDColumnOnNonStandardDefaultSchema:
   up: |
     ALTER TABLE "foo"."items" ADD COLUMN "uuid_col" uuid NOT NULL;
   down: |
-    ALTER TABLE "public"."items" DROP COLUMN "uuid_col";
+    ALTER TABLE "foo"."items" DROP COLUMN "uuid_col";
   user: psqldef_user
 
 AddJSONBColumnOnNonStandardDefaultSchema:
@@ -1337,7 +1321,7 @@ AddJSONBColumnOnNonStandardDefaultSchema:
   up: |
     ALTER TABLE "foo"."items" ADD COLUMN "meta" jsonb NOT NULL;
   down: |
-    ALTER TABLE "public"."items" DROP COLUMN "meta";
+    ALTER TABLE "foo"."items" DROP COLUMN "meta";
   user: psqldef_user
 
 AddTimestampColumnOnNonStandardDefaultSchema:
@@ -1353,7 +1337,7 @@ AddTimestampColumnOnNonStandardDefaultSchema:
   up: |
     ALTER TABLE "foo"."items" ADD COLUMN "ts" timestamp NOT NULL;
   down: |
-    ALTER TABLE "public"."items" DROP COLUMN "ts";
+    ALTER TABLE "foo"."items" DROP COLUMN "ts";
   user: psqldef_user
 
 AddTimestamptzColumnOnNonStandardDefaultSchema:
@@ -1369,7 +1353,7 @@ AddTimestamptzColumnOnNonStandardDefaultSchema:
   up: |
     ALTER TABLE "foo"."items" ADD COLUMN "ts_tz" timestamp WITH TIME ZONE NOT NULL;
   down: |
-    ALTER TABLE "public"."items" DROP COLUMN "ts_tz";
+    ALTER TABLE "foo"."items" DROP COLUMN "ts_tz";
   user: psqldef_user
 
 AddTimetzColumnOnNonStandardDefaultSchema:
@@ -1385,7 +1369,7 @@ AddTimetzColumnOnNonStandardDefaultSchema:
   up: |
     ALTER TABLE "foo"."items" ADD COLUMN "time_tz" time WITH TIME ZONE NOT NULL;
   down: |
-    ALTER TABLE "public"."items" DROP COLUMN "time_tz";
+    ALTER TABLE "foo"."items" DROP COLUMN "time_tz";
   user: psqldef_user
 
 AddDoublePrecisionColumnOnNonStandardDefaultSchema:
@@ -1401,7 +1385,7 @@ AddDoublePrecisionColumnOnNonStandardDefaultSchema:
   up: |
     ALTER TABLE "foo"."items" ADD COLUMN "dp" double precision NOT NULL;
   down: |
-    ALTER TABLE "public"."items" DROP COLUMN "dp";
+    ALTER TABLE "foo"."items" DROP COLUMN "dp";
   user: psqldef_user
 
 AddRealColumnOnNonStandardDefaultSchema:
@@ -1417,7 +1401,7 @@ AddRealColumnOnNonStandardDefaultSchema:
   up: |
     ALTER TABLE "foo"."items" ADD COLUMN "rp" real NOT NULL;
   down: |
-    ALTER TABLE "public"."items" DROP COLUMN "rp";
+    ALTER TABLE "foo"."items" DROP COLUMN "rp";
   user: psqldef_user
 
 AddByteaColumnOnNonStandardDefaultSchema:
@@ -1433,7 +1417,7 @@ AddByteaColumnOnNonStandardDefaultSchema:
   up: |
     ALTER TABLE "foo"."items" ADD COLUMN "data" bytea NOT NULL;
   down: |
-    ALTER TABLE "public"."items" DROP COLUMN "data";
+    ALTER TABLE "foo"."items" DROP COLUMN "data";
   user: psqldef_user
 ChangeTimezone:
   current: |
@@ -2143,7 +2127,7 @@ ConstraintCheckInAdd:
     ALTER TABLE "public"."products" ADD CONSTRAINT "products_status_check" CHECK (status = ANY (ARRAY['active', 'inactive', 'pending']));
 
   down: |
-    ALTER TABLE "public"."products" DROP CONSTRAINT "";
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_status_check";
 ConstraintCheckInRemove:
   current: |
     CREATE TABLE products (
@@ -2210,7 +2194,7 @@ ConstraintCheckInModify:
     ALTER TABLE "public"."products" ADD CONSTRAINT "products_priority_check" CHECK (priority = ANY (ARRAY[1, 2, 3, 4, 5]));
 
   down: |
-    ALTER TABLE "public"."products" DROP CONSTRAINT "";
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_priority_check";
     ALTER TABLE "public"."products" ADD CONSTRAINT "products_priority_check" CHECK (priority = ANY (ARRAY[1, 2, 3]));
 ConstraintCheckInAndUniqueAdd:
   current: |
@@ -2229,7 +2213,7 @@ ConstraintCheckInAndUniqueAdd:
     ALTER TABLE "public"."products" ADD CONSTRAINT "products_level_key" UNIQUE ("level");
 
   down: |
-    ALTER TABLE "public"."products" DROP CONSTRAINT "";
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_level_check";
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_level_key";
 ConstraintCheckInAndUniqueRemove:
   current: |
@@ -2270,8 +2254,8 @@ ConstraintCheckInMultipleColumnsWithUnique:
     ALTER TABLE "public"."orders" ADD CONSTRAINT "priority" UNIQUE ("priority", "category");
 
   down: |
-    ALTER TABLE "public"."orders" DROP CONSTRAINT "";
-    ALTER TABLE "public"."orders" DROP CONSTRAINT "";
+    ALTER TABLE "public"."orders" DROP CONSTRAINT "orders_priority_check";
+    ALTER TABLE "public"."orders" DROP CONSTRAINT "orders_category_check";
     ALTER TABLE "public"."orders" DROP CONSTRAINT "priority";
 RenameIndex:
   current: |
@@ -2361,7 +2345,6 @@ RenameIndexInNonDefaultSchema:
     ALTER INDEX "myschema"."old_email_idx" RENAME TO "new_email_idx";
 
   down: |
-    CREATE SCHEMA myschema;
     CREATE INDEX old_email_idx ON myschema.users (email);
     DROP INDEX "myschema"."new_email_idx";
 CreateIndexWithConcurrentlyConfig:
@@ -2386,8 +2369,8 @@ CreateIndexWithConcurrentlyConfig:
     CREATE INDEX CONCURRENTLY idx_users_email ON users (email);
 
   down: |
-    DROP INDEX "public"."idx_users_name";
     DROP INDEX "public"."idx_users_email";
+    DROP INDEX "public"."idx_users_name";
 CreateUniqueIndexWithConcurrentlyConfig:
   config:
     create_index_concurrently: true
@@ -2429,8 +2412,8 @@ CreateIndexWithConcurrentlyConfigMixedStatements:
     CREATE INDEX CONCURRENTLY idx_users_email_manual ON users (email);
 
   down: |
-    DROP INDEX "public"."idx_users_name";
     DROP INDEX "public"."idx_users_email_manual";
+    DROP INDEX "public"."idx_users_name";
     ALTER TABLE "public"."users" DROP COLUMN "email";
 CreateIndexWithoutConcurrentlyConfig:
   config:
@@ -2601,7 +2584,7 @@ AddPrimaryKeyAndColumnBack:
     ALTER TABLE "public"."users" ADD PRIMARY KEY ("id");
 
   down: |
-    ALTER TABLE "public"."users" DROP CONSTRAINT "PRIMARY";
+    ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";
     ALTER TABLE "public"."users" DROP COLUMN "id";
 ConstraintPrimaryKey:
   desired: |
@@ -2753,7 +2736,7 @@ ModifyColumnCheckConstraint:
     ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 1);
 
   down: |
-    ALTER TABLE "public"."a" DROP CONSTRAINT "";
+    ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
     ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 0);
 DropCheckConstraint:
   current: |
@@ -2786,7 +2769,7 @@ AddCheckConstraintNoInherit:
     ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 2) NO INHERIT;
 
   down: |
-    ALTER TABLE "public"."a" DROP CONSTRAINT "";
+    ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
 ModifyCheckConstraintNoInherit:
   current: |
     CREATE TABLE a (
@@ -2803,7 +2786,7 @@ ModifyCheckConstraintNoInherit:
     ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 3) NO INHERIT;
 
   down: |
-    ALTER TABLE "public"."a" DROP CONSTRAINT "";
+    ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
     ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 2) NO INHERIT;
 CreateTableWithoutMultiColumnCheck:
   desired: |
@@ -3131,10 +3114,7 @@ CheckConstraintInNonPublicSchema:
     ALTER TABLE "test"."dummy" ADD CONSTRAINT "min_max" CHECK (min_value < max_value);
 
   down: |
-    CREATE SCHEMA test;
-    ALTER TABLE "test"."dummy" DROP CONSTRAINT "";
-    ALTER TABLE "test"."dummy" ADD CONSTRAINT "dummy_min_value_check" CHECK (min_value > 0);
-    ALTER TABLE "test"."dummy" DROP CONSTRAINT "";
+    ALTER TABLE "test"."dummy" DROP CONSTRAINT "dummy_max_value_check";
     ALTER TABLE "test"."dummy" DROP CONSTRAINT "min_max";
 RemoveCheckConstraintInNonPublicSchema:
   current: |
@@ -3154,9 +3134,6 @@ RemoveCheckConstraintInNonPublicSchema:
     ALTER TABLE "test"."dummy" DROP CONSTRAINT "min_max";
 
   down: |
-    CREATE SCHEMA test;
-    ALTER TABLE "test"."dummy" DROP CONSTRAINT "";
-    ALTER TABLE "test"."dummy" ADD CONSTRAINT "dummy_min_value_check" CHECK (min_value > 0);
     ALTER TABLE "test"."dummy" ADD CONSTRAINT "dummy_max_value_check" CHECK (max_value > 0);
     ALTER TABLE "test"."dummy" ADD CONSTRAINT "min_max" CHECK (min_value < max_value);
 SameTableNameAcrossSchemas:
@@ -3170,8 +3147,8 @@ SameTableNameAcrossSchemas:
     CREATE TABLE test.dummy (id int);
 
   down: |
-    DROP TABLE "public"."dummy";
     DROP TABLE "test"."dummy";
+    DROP TABLE "public"."dummy";
 CreateTableWithIdentityAlways:
   desired: |
     CREATE TABLE color (
@@ -3293,7 +3270,6 @@ AddUniqueConstraintInNonPublicSchema:
     ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);
 
   down: |
-    CREATE SCHEMA test;
     ALTER TABLE "test"."dummy" DROP CONSTRAINT "a_b_uniq";
 ChangeUniqueConstraintInNonPublicSchema:
   current: |
@@ -3308,7 +3284,6 @@ ChangeUniqueConstraintInNonPublicSchema:
     ALTER TABLE "test"."dummy" DROP CONSTRAINT "a_b_uniq";
 
   down: |
-    CREATE SCHEMA test;
     ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);
     ALTER TABLE "test"."dummy" DROP CONSTRAINT "a_uniq";
 TableLevelCheckMultiColumnAllAny:

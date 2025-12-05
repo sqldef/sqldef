@@ -38,8 +38,8 @@ ManagedRolesMultipleRoles:
     GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
 
   down: |
+    REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "app_user";
     REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
-    REVOKE SELECT, INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
 ManagedRolesIgnoreUnmanagedRole:
   current: |
     CREATE TABLE users (
@@ -309,8 +309,8 @@ ManagedRolesMultipleTables:
     GRANT SELECT, INSERT, UPDATE ON TABLE "public"."posts" TO "app_user";
 
   down: |
-    REVOKE SELECT, INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
-    REVOKE SELECT, INSERT, UPDATE ON TABLE "public"."posts" FROM "app_user";
+    REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."posts" FROM "app_user";
+    REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "app_user";
 ManagedRolesErrorGrantOption:
   current: |
     CREATE TABLE users (

@@ -278,6 +278,7 @@ ConstraintQuotedPreservesCase:
     ALTER TABLE public.users ADD COLUMN email text UNIQUE;
 
   down: |
+    ALTER TABLE public.users DROP CONSTRAINT "users_email_key";
     ALTER TABLE public.users DROP COLUMN email;
 ConstraintUnquotedNormalizesToLowercase:
   legacy_ignore_quotes: false
@@ -289,6 +290,7 @@ ConstraintUnquotedNormalizesToLowercase:
     ALTER TABLE public.users ADD COLUMN email text UNIQUE;
 
   down: |
+    ALTER TABLE public.users DROP CONSTRAINT "users_email_key";
     ALTER TABLE public.users DROP COLUMN email;
 MixedQuotedAndUnquoted:
   legacy_ignore_quotes: false
@@ -329,7 +331,7 @@ ComplexMixedCaseScenario:
 
   down: |
     ALTER TABLE public."UserProfiles" ALTER COLUMN user_name DROP NOT NULL;
-    ALTER TABLE public."UserProfiles" DROP CONSTRAINT primary;
+    ALTER TABLE public."UserProfiles" DROP CONSTRAINT "UserProfiles_pkey";
     ALTER TABLE public."UserProfiles" DROP COLUMN "CreatedAt";
 ForeignKeyToQuotedTable:
   legacy_ignore_quotes: false
@@ -354,7 +356,7 @@ ForeignKeyToQuotedTable:
     ALTER TABLE public.orders ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES public."Users" ("UserId");
 
   down: |
-    ALTER TABLE public.orders DROP CONSTRAINT fk_user;
+    ALTER TABLE public.orders DROP CONSTRAINT "fk_user";
 ForeignKeyWithQuotedConstraintName:
   legacy_ignore_quotes: false
   current: |
@@ -394,7 +396,7 @@ ForeignKeyBetweenQuotedAndUnquotedTables:
 
   down: |
     ALTER TABLE public."Orders" DROP CONSTRAINT "fk_quoted";
-    ALTER TABLE public."Orders" DROP CONSTRAINT fk_unquoted;
+    ALTER TABLE public."Orders" DROP CONSTRAINT "fk_unquoted";
 ArrayTypeWithQuotedCustomType:
   legacy_ignore_quotes: false
   current: |
@@ -687,7 +689,7 @@ RenameUniqueConstraintQuotedToUnquoted:
 
   down: |
     ALTER TABLE public.users ADD CONSTRAINT "Email_Unique" UNIQUE (email);
-    ALTER TABLE public.users DROP CONSTRAINT email_unique;
+    ALTER TABLE public.users DROP CONSTRAINT "email_unique";
 ForeignKeyMixedQuotedReferences:
   legacy_ignore_quotes: false
   current: |
@@ -714,7 +716,7 @@ ForeignKeyMixedQuotedReferences:
 
   down: |
     ALTER TABLE public.products DROP CONSTRAINT "fk_QuotedCat";
-    ALTER TABLE public.products DROP CONSTRAINT fk_unquoted_cat;
+    ALTER TABLE public.products DROP CONSTRAINT "fk_unquoted_cat";
 DropForeignKeyKeepQuotedTable:
   legacy_ignore_quotes: false
   current: |
@@ -742,7 +744,8 @@ AddPrimaryKeyQuotedName:
     ALTER TABLE public."Users" ADD PRIMARY KEY ("UserId");
 
   down: |
-    ALTER TABLE public."Users" DROP CONSTRAINT primary;
+    ALTER TABLE public."Users" DROP CONSTRAINT "Users_pkey";
+  # BUG: Down migration should also include: ALTER COLUMN "UserId" DROP NOT NULL
 DropPrimaryKeyQuotedName:
   legacy_ignore_quotes: false
   current: |
@@ -1172,7 +1175,8 @@ PrimaryKeyOnQuotedColumn:
     ALTER TABLE public.users ADD PRIMARY KEY ("UserId");
 
   down: |
-    ALTER TABLE public.users DROP CONSTRAINT primary;
+    ALTER TABLE public.users DROP CONSTRAINT users_pkey;
+  # BUG: Down migration should also include: ALTER COLUMN "UserId" DROP NOT NULL
 IndexOnMixedQuotedColumns:
   legacy_ignore_quotes: false
   current: |
@@ -1226,8 +1230,8 @@ QuotedSchemaVsUnquotedSchemaModifyBoth:
     ALTER TABLE myschema.users ADD COLUMN unquoted_col text;
 
   down: |
-    ALTER TABLE "MySchema".users DROP COLUMN quoted_col;
     ALTER TABLE myschema.users DROP COLUMN unquoted_col;
+    ALTER TABLE "MySchema".users DROP COLUMN quoted_col;
 ForeignKeyUnquotedColumnsNotQuoted:
   legacy_ignore_quotes: false
   current: |
@@ -1244,7 +1248,7 @@ ForeignKeyUnquotedColumnsNotQuoted:
     ALTER TABLE public.orders ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES public.users (id);
 
   down: |
-    ALTER TABLE public.orders DROP CONSTRAINT fk_user;
+    ALTER TABLE public.orders DROP CONSTRAINT "fk_user";
 ForeignKeyMixedQuotedColumns:
   legacy_ignore_quotes: false
   current: |
@@ -1270,7 +1274,7 @@ ForeignKeyMixedQuotedColumns:
     ALTER TABLE public.child ADD CONSTRAINT fk_parent FOREIGN KEY ("ParentId") REFERENCES public.parent ("ParentId");
 
   down: |
-    ALTER TABLE public.child DROP CONSTRAINT fk_parent;
+    ALTER TABLE public.child DROP CONSTRAINT "fk_parent";
 ForeignKeyQuotedColumnToUnquotedColumn:
   legacy_ignore_quotes: false
   current: |
@@ -1290,7 +1294,7 @@ ForeignKeyQuotedColumnToUnquotedColumn:
     ALTER TABLE public.products ADD CONSTRAINT fk_category FOREIGN KEY ("CategoryId") REFERENCES public.categories (category_id);
 
   down: |
-    ALTER TABLE public.products DROP CONSTRAINT fk_category;
+    ALTER TABLE public.products DROP CONSTRAINT "fk_category";
 ForeignKeyConstraintQuotedLowercaseEqualsUnquoted:
   legacy_ignore_quotes: false
   current: |
@@ -1332,7 +1336,7 @@ ForeignKeyConstraintQuotedMixedCaseDiffersFromUnquoted:
 
   down: |
     ALTER TABLE public.orders ADD CONSTRAINT "FK_User" FOREIGN KEY (user_id) REFERENCES public.users (id);
-    ALTER TABLE public.orders DROP CONSTRAINT fk_user;
+    ALTER TABLE public.orders DROP CONSTRAINT "fk_user";
 ForeignKeyRenameQuotedConstraint:
   legacy_ignore_quotes: false
   current: |
@@ -1474,8 +1478,8 @@ ForeignKeyDependencyOrderingUnquotedCaseMismatch:
     );
 
   down: |
-    DROP TABLE public.users;
     DROP TABLE public.orders;
+    DROP TABLE public.users;
 ViewDependencyOrderingUnquotedCaseMismatch:
   legacy_ignore_quotes: false
   desired: |
@@ -1507,7 +1511,7 @@ AutoGeneratedConstraintFromQuotedTableAndColumn:
     ALTER TABLE public."Users" ADD CONSTRAINT "Users_OrderId_check" CHECK ("OrderId" > 0);
 
   down: |
-    ALTER TABLE public."Users" DROP CONSTRAINT ;
+    ALTER TABLE public."Users" DROP CONSTRAINT "Users_OrderId_check";
 FunctionalIndexOnQuotedColumn:
   # Functional index with quoted column should preserve quoting in expression
   legacy_ignore_quotes: false
@@ -1558,7 +1562,7 @@ CheckConstraintWithFunctionOnQuotedColumn:
     ALTER TABLE public.users ADD CONSTRAINT "users_UserName_check" CHECK (length("UserName") > 0);
 
   down: |
-    ALTER TABLE public.users DROP CONSTRAINT ;
+    ALTER TABLE public.users DROP CONSTRAINT "users_UserName_check";
 CheckConstraintWithFunctionOnUnquotedColumn:
   # CHECK constraint with function call on unquoted column
   legacy_ignore_quotes: false
@@ -1570,7 +1574,7 @@ CheckConstraintWithFunctionOnUnquotedColumn:
     ALTER TABLE public.users ADD CONSTRAINT users_username_check CHECK (length(username) > 0);
 
   down: |
-    ALTER TABLE public.users DROP CONSTRAINT ;
+    ALTER TABLE public.users DROP CONSTRAINT users_username_check;
 CheckConstraintWithNestedFunctionsQuotedColumn:
   # CHECK constraint with nested function calls on quoted column
   legacy_ignore_quotes: false
@@ -1582,7 +1586,7 @@ CheckConstraintWithNestedFunctionsQuotedColumn:
     ALTER TABLE public.users ADD CONSTRAINT "users_Email_check" CHECK (length(upper("Email")) > 0);
 
   down: |
-    ALTER TABLE public.users DROP CONSTRAINT ;
+    ALTER TABLE public.users DROP CONSTRAINT "users_Email_check";
 CheckConstraintWithMixedQuotedColumns:
   # CHECK constraint comparing quoted and unquoted columns
   legacy_ignore_quotes: false
@@ -1625,7 +1629,7 @@ CommentOnUnquotedTable:
     COMMENT ON TABLE public.useraccounts IS 'User accounts table';
 
   down: |
-    COMMENT ON TABLE public.useraccounts IS NULL;
+    COMMENT ON TABLE public."useraccounts" IS NULL;
 CommentOnQuotedColumn:
   # COMMENT on a quoted column should preserve the quoted name
   legacy_ignore_quotes: false
@@ -1638,7 +1642,7 @@ CommentOnQuotedColumn:
     COMMENT ON COLUMN public.users."UserName" IS 'User display name';
 
   down: |
-    COMMENT ON COLUMN public.users."UserName" IS NULL;
+    COMMENT ON COLUMN public."users"."UserName" IS NULL;
 CommentOnUnquotedColumn:
   # COMMENT on an unquoted column should normalize to lowercase
   legacy_ignore_quotes: false
@@ -1651,7 +1655,7 @@ CommentOnUnquotedColumn:
     COMMENT ON COLUMN public.users.username IS 'User display name';
 
   down: |
-    COMMENT ON COLUMN public.users.username IS NULL;
+    COMMENT ON COLUMN public."users"."username" IS NULL;
 CommentOnMixedQuotedTableAndColumn:
   # COMMENT on a quoted table with quoted column
   legacy_ignore_quotes: false
@@ -1712,7 +1716,7 @@ CommentOnBothQuotedAndUnquotedTables:
 
   down: |
     COMMENT ON TABLE public."Users" IS NULL;
-    COMMENT ON TABLE public.users IS NULL;
+    COMMENT ON TABLE public."users" IS NULL;
 CommentIdempotentQuotedTable:
   # COMMENT on quoted table should be idempotent (no change if already set)
   legacy_ignore_quotes: false

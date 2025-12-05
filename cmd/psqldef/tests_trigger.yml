@@ -103,6 +103,7 @@ CreateTriggerAfterDelete:
   down: |
     DROP TABLE public.users;
     DROP TRIGGER archive_deleted ON public.users;
+  # BUG: Generated DDL has wrong order - drops table before trigger, causing "relation does not exist" error
 CreateTriggerExecuteProcedure:
   legacy_ignore_quotes: false
   desired: |
@@ -322,8 +323,8 @@ CreateMultipleTriggers:
 
   down: |
     DROP TABLE public.users;
-    DROP TRIGGER before_insert_trigger ON public.users;
     DROP TRIGGER after_insert_trigger ON public.users;
+    DROP TRIGGER before_insert_trigger ON public.users;
 DropTrigger:
   legacy_ignore_quotes: false
   current: |

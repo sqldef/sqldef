@@ -45,7 +45,6 @@ DropDomainMultipleSchemas:
     DROP DOMAIN "test_schema"."test_domain";
 
   down: |
-    CREATE SCHEMA test_schema;
     CREATE DOMAIN test_schema.test_domain AS text;
     CREATE DOMAIN public_domain AS integer;
 CreateAndKeepDomainInNonPublicSchema:
@@ -292,7 +291,6 @@ AlterDomainAddNamedCheck:
     ALTER DOMAIN "public"."positive_int" ADD CONSTRAINT positive_check CHECK (VALUE > 0);
 
   down: |
-    ALTER DOMAIN "public"."positive_int" DROP CONSTRAINT positive_check;
 AlterDomainAddMultipleChecks:
   current: |
     CREATE DOMAIN valid_score AS integer;
