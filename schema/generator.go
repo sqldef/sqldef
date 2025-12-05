@@ -1,7 +1,6 @@
 package schema
 
 import (
-	"cmp"
 	"fmt"
 	"log"
 	"log/slog"
@@ -36,6 +35,9 @@ type Generator struct {
 
 	desiredTriggers []*Trigger
 	currentTriggers []*Trigger
+
+	desiredFunctions []*Function
+	currentFunctions []*Function
 
 	desiredTypes []*Type
 	currentTypes []*Type
@@ -107,6 +109,8 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		currentViews:       aggregated.Views,
 		desiredTriggers:    desiredAggregated.Triggers,
 		currentTriggers:    aggregated.Triggers,
+		desiredFunctions:   desiredAggregated.Functions,
+		currentFunctions:   aggregated.Functions,
 		desiredTypes:       desiredAggregated.Types,
 		currentTypes:       aggregated.Types,
 		desiredDomains:     desiredAggregated.Domains,
@@ -245,6 +249,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return nil, err
 			}
 			interDDLs = append(interDDLs, triggerDDLs...)
+		case *Function:
+			functionDDLs, err := g.generateDDLsForCreateFunction(desired)
+			if err != nil {
+				return nil, err
+			}
+			interDDLs = append(interDDLs, functionDDLs...)
 		case *Type:
 			typeDDLs, err := g.generateDDLsForCreateType(desired)
 			if err != nil {
@@ -1741,6 +1751,49 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desi
 	return ddls, nil
 }
 
+// generateDDLsForCreateFunction generates DDLs for CREATE FUNCTION statements
+func (g *Generator) generateDDLsForCreateFunction(desired *Function) ([]string, error) {
+	var ddls []string
+
+	currentFunction := g.findFunctionByName(g.currentFunctions, desired.name)
+	if currentFunction == nil {
+		// Function does not exist, create it
+		ddls = append(ddls, desired.statement)
+	} else if !g.areSameFunctionDefinition(currentFunction, desired) {
+		// Function exists but is different, use CREATE OR REPLACE
+		// Modify the statement to include OR REPLACE if not already present
+		if desired.orReplace {
+			ddls = append(ddls, desired.statement)
+		} else {
+			ddls = append(ddls, "DROP FUNCTION "+g.escapeQualifiedName(currentFunction.name))
+			ddls = append(ddls, desired.statement)
+		}
+	}
+
+	// Track the function as processed
+	if g.findFunctionByName(g.desiredFunctions, desired.name) == nil {
+		g.desiredFunctions = append(g.desiredFunctions, desired)
+	}
+
+	return ddls, nil
+}
+
+func (g *Generator) findFunctionByName(functions []*Function, name QualifiedName) *Function {
+	for _, f := range functions {
+		if qualifiedNamesEqual(f.name, name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames) {
+			return f
+		}
+	}
+	return nil
+}
+
+func (g *Generator) areSameFunctionDefinition(a, b *Function) bool {
+	// Compare function properties
+	return a.returnType == b.returnType &&
+		a.body == b.body &&
+		a.language == b.language
+}
+
 func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 	ddls := []string{}
 
@@ -2206,6 +2259,7 @@ type AggregatedSchema struct {
 	Tables     []*Table
 	Views      []*View
 	Triggers   []*Trigger
+	Functions  []*Function
 	Types      []*Type
 	Domains    []*Domain
 	Comments   []*Comment
@@ -2980,6 +3034,8 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 			aggregated.Views = append(aggregated.Views, stmt)
 		case *Trigger:
 			aggregated.Triggers = append(aggregated.Triggers, stmt)
+		case *Function:
+			aggregated.Functions = append(aggregated.Functions, stmt)
 		case *Type:
 			aggregated.Types = append(aggregated.Types, stmt)
 		case *Domain:
@@ -3936,10 +3992,10 @@ func (g *Generator) areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 	if len(triggerA.event) != len(triggerB.event) {
 		return false
 	}
-	for i := 0; i < len(triggerA.event); i++ {
-		if triggerA.event[i] != triggerB.event[i] {
-			return false
-		}
+	// Sort events before comparison because PostgreSQL reorders them alphabetically
+	// e.g., "INSERT OR UPDATE OR DELETE" becomes "INSERT OR DELETE OR UPDATE" in pg_get_triggerdef
+	if !slices.Equal(util.SortedCopy(triggerA.event), util.SortedCopy(triggerB.event)) {
+		return false
 	}
 	// Compare table names using quote-aware comparison
 	if !g.qualifiedNamesEqual(triggerA.tableName, triggerB.tableName) {
@@ -3951,7 +4007,11 @@ func (g *Generator) areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 	for i := 0; i < len(triggerA.body); i++ {
 		bodyA := strings.ReplaceAll(triggerA.body[i], " ", "")
 		bodyB := strings.ReplaceAll(triggerB.body[i], " ", "")
-		if !strings.EqualFold(bodyA, bodyB) {
+		// Normalize PROCEDURE to FUNCTION for PostgreSQL compatibility
+		// pg_get_triggerdef() always returns EXECUTE FUNCTION even if created with EXECUTE PROCEDURE
+		bodyA = strings.ReplaceAll(strings.ToLower(bodyA), "executeprocedure", "executefunction")
+		bodyB = strings.ReplaceAll(strings.ToLower(bodyB), "executeprocedure", "executefunction")
+		if bodyA != bodyB {
 			return false
 		}
 	}
@@ -4208,14 +4268,10 @@ func (g *Generator) areSamePolicies(policyA, policyB Policy) bool {
 	if len(policyA.roles) != len(policyB.roles) {
 		return false
 	}
-	slices.SortFunc(policyA.roles, func(a, b string) int {
-		return cmp.Compare(a, b)
-	})
-	slices.SortFunc(policyB.roles, func(a, b string) int {
-		return cmp.Compare(a, b)
-	})
-	for i := range policyA.roles {
-		if !strings.EqualFold(policyA.roles[i], policyB.roles[i]) {
+	rolesA := util.SortedCopy(policyA.roles)
+	rolesB := util.SortedCopy(policyB.roles)
+	for i := range rolesA {
+		if !strings.EqualFold(rolesA[i], rolesB[i]) {
 			return false
 		}
 	}
@@ -4478,9 +4534,7 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 
 			if len(includedGrantees) > 0 {
 				// Sort privileges for consistent key
-				sortedPrivs := make([]string, len(stmt.privileges))
-				copy(sortedPrivs, stmt.privileges)
-				slices.Sort(sortedPrivs)
+				sortedPrivs := util.SortedCopy(stmt.privileges)
 				key := fmt.Sprintf("%s:%s", stmt.tableName.RawString(), strings.Join(sortedPrivs, ","))
 
 				if existing, ok := grantsByTableAndPrivs[key]; ok {

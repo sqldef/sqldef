@@ -328,6 +328,16 @@ type Trigger struct {
 	body      []string
 }
 
+// Function represents a PostgreSQL CREATE FUNCTION statement
+type Function struct {
+	statement  string
+	name       QualifiedName
+	returnType string
+	body       string
+	language   string
+	orReplace  bool
+}
+
 type Value struct {
 	valueType ValueType
 	raw       string
@@ -491,6 +501,10 @@ func (v *View) Statement() string {
 
 func (t *Trigger) Statement() string {
 	return t.statement
+}
+
+func (f *Function) Statement() string {
+	return f.statement
 }
 
 func (t *Type) Statement() string {

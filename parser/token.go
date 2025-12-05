@@ -238,6 +238,7 @@ var keywords = map[string]int{
 	"if":                     IF,
 	"ignore":                 IGNORE,
 	"immediate":              IMMEDIATE,
+	"immutable":              IMMUTABLE,
 	"in":                     IN,
 	"include":                INCLUDE,
 	"increment":              INCREMENT,
@@ -385,6 +386,7 @@ var keywords = map[string]int{
 	"resignal":               UNUSED,
 	"restrict":               RESTRICT,
 	"return":                 RETURN,
+	"returns":                RETURNS,
 	"revoke":                 REVOKE,
 	"right":                  RIGHT,
 	"rlike":                  REGEXP,
@@ -405,6 +407,7 @@ var keywords = map[string]int{
 	"serializable":           SERIALIZABLE,
 	"session":                SESSION,
 	"set":                    SET,
+	"setof":                  SETOF,
 	"share":                  SHARE,
 	"show":                   SHOW,
 	"signal":                 UNUSED,
@@ -426,6 +429,7 @@ var keywords = map[string]int{
 	"sql_small_result":       UNUSED,
 	"srid":                   SRID,
 	"ssl":                    UNUSED,
+	"stable":                 STABLE,
 	"start":                  START,
 	"starting":               UNUSED,
 	"status":                 STATUS,
@@ -481,6 +485,7 @@ var keywords = map[string]int{
 	"vector":                 VECTOR,
 	"virtual":                VIRTUAL,
 	"view":                   VIEW,
+	"volatile":               VOLATILE,
 	"vschema_tables":         VSCHEMA_TABLES,
 	"when":                   WHEN,
 	"where":                  WHERE,
@@ -862,6 +867,12 @@ func (tkn *Tokenizer) Scan() (int, string) {
 			} else {
 				return tkn.scanString(ch, STRING)
 			}
+		case '$':
+			// PostgreSQL dollar-quoted strings: $$...$$ or $tag$...$tag$
+			if tkn.mode == ParserModePostgres {
+				return tkn.scanDollarQuotedString()
+			}
+			return LEX_ERROR, string(ch)
 		default:
 			if tkn.mode != ParserModePostgres && ch == '`' {
 				return tkn.scanLiteralIdentifier('`')
@@ -1115,6 +1126,82 @@ func (tkn *Tokenizer) scanString(delim rune, typ int) (int, string) {
 	}
 
 	return typ, buffer.String()
+}
+
+// scanDollarQuotedString scans a PostgreSQL dollar-quoted string.
+// Supports both $$...$$ and $tag$...$tag$ styles.
+func (tkn *Tokenizer) scanDollarQuotedString() (int, string) {
+	var buffer strings.Builder
+
+	// Build the opening delimiter (already consumed the first $)
+	var delimiter strings.Builder
+	delimiter.WriteByte('$')
+
+	// Check if it's $$ or $tag$
+	if tkn.lastChar == '$' {
+		// Simple $$ delimiter
+		delimiter.WriteByte('$')
+		tkn.next()
+	} else if isIdentifierFirstChar(tkn.lastChar) || isAsciiDigit(tkn.lastChar) {
+		// Tagged $tag$ delimiter
+		for isIdentifierFirstChar(tkn.lastChar) || isAsciiDigit(tkn.lastChar) {
+			delimiter.WriteRune(tkn.lastChar)
+			tkn.next()
+		}
+		if tkn.lastChar != '$' {
+			return LEX_ERROR, delimiter.String()
+		}
+		delimiter.WriteByte('$')
+		tkn.next()
+	} else {
+		return LEX_ERROR, "$"
+	}
+
+	delimStr := delimiter.String()
+
+	// Scan until we find the closing delimiter
+	for {
+		if tkn.lastChar == eofChar {
+			return LEX_ERROR, buffer.String()
+		}
+
+		if tkn.lastChar == '$' {
+			// Check if this is the start of the closing delimiter
+			savedPos := tkn.bufPos
+			savedChar := tkn.lastChar
+			savedPosition := tkn.Position
+
+			var potentialDelim strings.Builder
+			potentialDelim.WriteByte('$')
+			tkn.next()
+
+			for isIdentifierFirstChar(tkn.lastChar) || isAsciiDigit(tkn.lastChar) {
+				potentialDelim.WriteRune(tkn.lastChar)
+				tkn.next()
+			}
+
+			if tkn.lastChar == '$' {
+				potentialDelim.WriteByte('$')
+				tkn.next()
+
+				if potentialDelim.String() == delimStr {
+					// Found the closing delimiter
+					return STRING, buffer.String()
+				}
+			}
+
+			// Not the closing delimiter, restore and include in content
+			buffer.WriteString(potentialDelim.String()[:potentialDelim.Len()-1])
+			tkn.bufPos = savedPos
+			tkn.lastChar = savedChar
+			tkn.Position = savedPosition
+			buffer.WriteRune(tkn.lastChar)
+			tkn.next()
+		} else {
+			buffer.WriteRune(tkn.lastChar)
+			tkn.next()
+		}
+	}
 }
 
 func (tkn *Tokenizer) scanCommentType1(prefix string) (int, string) {

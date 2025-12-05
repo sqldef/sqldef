@@ -1,6 +1,7 @@
 package util
 
 import (
+	"cmp"
 	"iter"
 	"slices"
 	"strconv"
@@ -32,6 +33,14 @@ func CanonicalMapIter[T any](m map[string]T) iter.Seq2[string, T] {
 			}
 		}
 	}
+}
+
+// SortedCopy returns a sorted copy of the input slice without modifying the original.
+func SortedCopy[T cmp.Ordered](in []T) []T {
+	out := make([]T, len(in))
+	copy(out, in)
+	slices.Sort(out)
+	return out
 }
 
 func IsIntegerString(s string) bool {

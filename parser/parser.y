@@ -129,6 +129,8 @@ func setDDL(yylex any, ddl *DDL) {
     collation  string
     checks     []*CheckDefinition
   }
+  functionArg              FunctionArg
+  functionArgs             []FunctionArg
 }
 
 %token LEX_ERROR
@@ -236,7 +238,7 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION EXCLUDE DOMAIN
 %right <str> UNIQUE KEY
 %token <str> SHOW DESCRIBE EXPLAIN DATE DATA ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
-%token <str> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN FUNCTION
+%token <str> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN RETURNS FUNCTION
 %token <str> STATUS VARIABLES
 %token <str> RESTRICT CASCADE NO ACTION
 %token <str> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
@@ -247,6 +249,7 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> CONCURRENTLY ASYNC
 %token <str> SQL SECURITY
 %token <str> RECURSIVE
+%token <str> IMMUTABLE STABLE VOLATILE SETOF
 
 // Transaction Tokens
 %token <str> BEGIN START TRANSACTION COMMIT ROLLBACK
@@ -469,6 +472,10 @@ func setDDL(yylex any, ddl *DDL) {
 %type <constraintOpts> deferrable_option
 %type <fkDeferOpts> fk_defer_opts
 %type <domainConstraints> domain_constraints_opt domain_constraint
+%type <functionArgs> function_args_opt function_args
+%type <functionArg> function_arg
+%type <str> function_return_type function_option
+%type <strs> function_options_opt function_options
 %type <arrayConstructor> array_constructor
 %type <exprs> array_element_list
 %type <expr> array_element
@@ -939,6 +946,38 @@ create_statement:
 | CREATE VIRTUAL TABLE if_not_exists_opt table_name USING sql_id module_arguments_opt
   {
     $$ = &DDL{Action: CreateTable, NewName: $5, TableSpec: &TableSpec{}}
+  }
+/* For PostgreSQL: CREATE [OR REPLACE] FUNCTION - format 1: RETURNS type AS body LANGUAGE lang */
+| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' RETURNS function_return_type AS STRING LANGUAGE sql_id function_options_opt
+  {
+    $$ = &DDL{
+      Action: CreateFunction,
+      Function: &Function{
+        Name: $4,
+        Args: $6,
+        ReturnType: $9,
+        Body: $11,
+        Language: $13.Name,
+        OrReplace: $2 != "",
+        Options: $14,
+      },
+    }
+  }
+/* For PostgreSQL: CREATE [OR REPLACE] FUNCTION - format 2: RETURNS type LANGUAGE lang AS body (pg_get_functiondef format) */
+| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' RETURNS function_return_type LANGUAGE sql_id AS STRING function_options_opt
+  {
+    $$ = &DDL{
+      Action: CreateFunction,
+      Function: &Function{
+        Name: $4,
+        Args: $6,
+        ReturnType: $9,
+        Body: $13,
+        Language: $11.Name,
+        OrReplace: $2 != "",
+        Options: $14,
+      },
+    }
   }
 | GRANT privilege_list ON TABLE table_name_list TO grantee_list
   {
@@ -3116,6 +3155,111 @@ domain_constraint:
     $$.notNull = false
     $$.collation = ""
     $$.checks = []*CheckDefinition{{ConstraintName: $2, Where: *NewWhere(WhereStr, $5)}}
+  }
+
+/* Function-related grammar rules for PostgreSQL CREATE FUNCTION */
+function_args_opt:
+  {
+    $$ = nil
+  }
+| function_args
+  {
+    $$ = $1
+  }
+
+function_args:
+  function_arg
+  {
+    $$ = []FunctionArg{$1}
+  }
+| function_args ',' function_arg
+  {
+    $$ = append($1, $3)
+  }
+
+function_arg:
+  sql_id column_type
+  {
+    $$ = FunctionArg{
+      Name: $1,
+      Type: $2.Type,
+    }
+  }
+| column_type
+  {
+    $$ = FunctionArg{
+      Type: $1.Type,
+    }
+  }
+
+function_return_type:
+  TRIGGER
+  {
+    $$ = "TRIGGER"
+  }
+| column_type
+  {
+    $$ = $1.Type
+  }
+| TABLE '(' function_table_columns ')'
+  {
+    $$ = "TABLE"
+  }
+| SETOF column_type
+  {
+    $$ = "SETOF " + $2.Type
+  }
+
+function_table_columns:
+  function_table_column
+| function_table_columns ',' function_table_column
+
+function_table_column:
+  sql_id column_type
+
+function_options_opt:
+  {
+    $$ = nil
+  }
+| function_options
+  {
+    $$ = $1
+  }
+
+function_options:
+  function_option
+  {
+    $$ = []string{$1}
+  }
+| function_options function_option
+  {
+    $$ = append($1, $2)
+  }
+
+function_option:
+  IMMUTABLE
+  {
+    $$ = "IMMUTABLE"
+  }
+| STABLE
+  {
+    $$ = "STABLE"
+  }
+| VOLATILE
+  {
+    $$ = "VOLATILE"
+  }
+| STRICT
+  {
+    $$ = "STRICT"
+  }
+| SECURITY DEFINER
+  {
+    $$ = "SECURITY DEFINER"
+  }
+| SECURITY INVOKER
+  {
+    $$ = "SECURITY INVOKER"
   }
 
 character_cast_opt:

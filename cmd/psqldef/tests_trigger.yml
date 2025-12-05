@@ -1,11 +1,20 @@
+# Test cases for CREATE TRIGGER statements
+# Each test includes the required function definition that the trigger references
+
 CreateTriggerBeforeInsert:
-  offline: true
   legacy_ignore_quotes: false
   desired: |
     CREATE TABLE users (
       id serial PRIMARY KEY,
       name text
     );
+    CREATE FUNCTION set_timestamp()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER set_created_at
       BEFORE INSERT ON users
       FOR EACH ROW EXECUTE FUNCTION set_timestamp();
@@ -14,16 +23,29 @@ CreateTriggerBeforeInsert:
       id serial PRIMARY KEY,
       name text
     );
+    CREATE FUNCTION set_timestamp()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER set_created_at before insert ON public.users FOR EACH ROW EXECUTE FUNCTION set_timestamp();
 
 CreateTriggerAfterUpdate:
-  offline: true
   legacy_ignore_quotes: false
   desired: |
     CREATE TABLE users (
       id serial PRIMARY KEY,
       name text
     );
+    CREATE FUNCTION log_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER log_update
       AFTER UPDATE ON users
       FOR EACH ROW EXECUTE FUNCTION log_changes();
@@ -32,16 +54,29 @@ CreateTriggerAfterUpdate:
       id serial PRIMARY KEY,
       name text
     );
+    CREATE FUNCTION log_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER log_update after update ON public.users FOR EACH ROW EXECUTE FUNCTION log_changes();
 
 CreateTriggerAfterDelete:
-  offline: true
   legacy_ignore_quotes: false
   desired: |
     CREATE TABLE users (
       id serial PRIMARY KEY,
       name text
     );
+    CREATE FUNCTION archive_row()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN OLD;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER archive_deleted
       AFTER DELETE ON users
       FOR EACH ROW EXECUTE FUNCTION archive_row();
@@ -50,16 +85,29 @@ CreateTriggerAfterDelete:
       id serial PRIMARY KEY,
       name text
     );
+    CREATE FUNCTION archive_row()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN OLD;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER archive_deleted after delete ON public.users FOR EACH ROW EXECUTE FUNCTION archive_row();
 
 CreateTriggerExecuteProcedure:
-  offline: true
   legacy_ignore_quotes: false
   desired: |
     CREATE TABLE users (
       id serial PRIMARY KEY,
       name text
     );
+    CREATE FUNCTION validate_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER validate_user
       BEFORE INSERT ON users
       FOR EACH ROW EXECUTE PROCEDURE validate_func();
@@ -68,15 +116,28 @@ CreateTriggerExecuteProcedure:
       id serial PRIMARY KEY,
       name text
     );
+    CREATE FUNCTION validate_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER validate_user before insert ON public.users FOR EACH ROW EXECUTE PROCEDURE validate_func();
 
 CreateTriggerWithMultipleEvents:
-  offline: true
   legacy_ignore_quotes: false
   desired: |
     CREATE TABLE device_tests (
       id serial PRIMARY KEY
     );
+    CREATE FUNCTION check_trigger()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER enforce_required_permit
       BEFORE INSERT OR UPDATE ON device_tests
       FOR EACH ROW EXECUTE FUNCTION check_trigger();
@@ -84,16 +145,29 @@ CreateTriggerWithMultipleEvents:
     CREATE TABLE device_tests (
       id serial PRIMARY KEY
     );
+    CREATE FUNCTION check_trigger()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER enforce_required_permit before insert OR update ON public.device_tests FOR EACH ROW EXECUTE FUNCTION check_trigger();
 
 CreateTriggerWithThreeEvents:
-  offline: true
   legacy_ignore_quotes: false
   desired: |
     CREATE TABLE audit_log (
       id serial PRIMARY KEY,
       action text
     );
+    CREATE FUNCTION log_all_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER audit_all
       AFTER INSERT OR UPDATE OR DELETE ON audit_log
       FOR EACH ROW EXECUTE FUNCTION log_all_changes();
@@ -102,16 +176,29 @@ CreateTriggerWithThreeEvents:
       id serial PRIMARY KEY,
       action text
     );
+    CREATE FUNCTION log_all_changes()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER audit_all after insert OR update OR delete ON public.audit_log FOR EACH ROW EXECUTE FUNCTION log_all_changes();
 
 CreateTriggerWithoutForEachRow:
-  offline: true
   legacy_ignore_quotes: false
   desired: |
     CREATE TABLE users (
       id serial PRIMARY KEY,
       name text
     );
+    CREATE FUNCTION notify_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER notify_change
       AFTER INSERT ON users
       EXECUTE FUNCTION notify_func();
@@ -120,16 +207,29 @@ CreateTriggerWithoutForEachRow:
       id serial PRIMARY KEY,
       name text
     );
+    CREATE FUNCTION notify_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER notify_change after insert ON public.users FOR EACH ROW EXECUTE FUNCTION notify_func();
 
 CreateTriggerWithFunctionArgs:
-  offline: true
   legacy_ignore_quotes: false
   desired: |
     CREATE TABLE users (
       id serial PRIMARY KEY,
       name text
     );
+    CREATE FUNCTION check_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER check_value
       BEFORE INSERT ON users
       FOR EACH ROW EXECUTE FUNCTION check_func('arg1', 'arg2');
@@ -138,16 +238,36 @@ CreateTriggerWithFunctionArgs:
       id serial PRIMARY KEY,
       name text
     );
+    CREATE FUNCTION check_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER check_value before insert ON public.users FOR EACH ROW EXECUTE FUNCTION check_func('arg1', 'arg2');
 
 CreateMultipleTriggers:
-  offline: true
   legacy_ignore_quotes: false
   desired: |
     CREATE TABLE users (
       id serial PRIMARY KEY,
       name text
     );
+    CREATE FUNCTION before_insert_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE FUNCTION after_insert_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER before_insert_trigger
       BEFORE INSERT ON users
       FOR EACH ROW EXECUTE FUNCTION before_insert_func();
@@ -159,17 +279,37 @@ CreateMultipleTriggers:
       id serial PRIMARY KEY,
       name text
     );
+    CREATE FUNCTION before_insert_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE FUNCTION after_insert_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER before_insert_trigger before insert ON public.users FOR EACH ROW EXECUTE FUNCTION before_insert_func();
     CREATE TRIGGER after_insert_trigger after insert ON public.users FOR EACH ROW EXECUTE FUNCTION after_insert_func();
 
 DropTrigger:
-  offline: true
   legacy_ignore_quotes: false
   current: |
     CREATE TABLE users (
       id serial PRIMARY KEY,
       name text
     );
+    CREATE FUNCTION log_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER log_insert
       AFTER INSERT ON users
       FOR EACH ROW EXECUTE FUNCTION log_func();
@@ -178,28 +318,48 @@ DropTrigger:
       id serial PRIMARY KEY,
       name text
     );
+    CREATE FUNCTION log_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
   output: |
     DROP TRIGGER log_insert ON public.users;
 
 ModifyTrigger:
-  offline: true
   legacy_ignore_quotes: false
   current: |
     CREATE TABLE users (
       id serial PRIMARY KEY,
       name text
     );
+    CREATE FUNCTION trigger_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER log_changes
       BEFORE INSERT ON users
-      FOR EACH ROW EXECUTE FUNCTION old_func();
+      FOR EACH ROW EXECUTE FUNCTION trigger_func();
   desired: |
     CREATE TABLE users (
       id serial PRIMARY KEY,
       name text
     );
+    CREATE FUNCTION trigger_func()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
     CREATE TRIGGER log_changes
       AFTER UPDATE ON users
-      FOR EACH ROW EXECUTE FUNCTION new_func();
+      FOR EACH ROW EXECUTE FUNCTION trigger_func();
   output: |
     DROP TRIGGER log_changes ON public.users;
-    CREATE TRIGGER log_changes after update ON public.users FOR EACH ROW EXECUTE FUNCTION new_func();
+    CREATE TRIGGER log_changes after update ON public.users FOR EACH ROW EXECUTE FUNCTION trigger_func();
