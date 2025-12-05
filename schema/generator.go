@@ -470,7 +470,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted domains
 	for _, currentDomain := range g.currentDomains {
-		if g.findDomainByName(g.desiredDomains, currentDomain.name.Name) != nil {
+		if g.findDomainByName(g.desiredDomains, currentDomain.name) != nil {
 			continue
 		}
 		ddls = append(ddls, fmt.Sprintf("DROP DOMAIN %s", g.escapeDomainName(currentDomain)))
@@ -1823,7 +1823,7 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 func (g *Generator) generateDDLsForCreateDomain(desired *Domain) ([]string, error) {
 	ddls := []string{}
 
-	if currentDomain := g.findDomainByName(g.currentDomains, desired.name.Name); currentDomain != nil {
+	if currentDomain := g.findDomainByName(g.currentDomains, desired.name); currentDomain != nil {
 		alterDDLs, err := g.generateAlterDomainDDLs(currentDomain, desired)
 		if err != nil {
 			return nil, err
@@ -1833,7 +1833,7 @@ func (g *Generator) generateDDLsForCreateDomain(desired *Domain) ([]string, erro
 		ddls = append(ddls, desired.statement)
 	}
 	// Only add to desiredDomains if it doesn't already exist (it may have been pre-populated from aggregation)
-	if g.findDomainByName(g.desiredDomains, desired.name.Name) == nil {
+	if g.findDomainByName(g.desiredDomains, desired.name) == nil {
 		g.desiredDomains = append(g.desiredDomains, desired)
 	}
 
@@ -3512,10 +3512,10 @@ func (g *Generator) findType(types []*Type, desiredType *Type) *Type {
 	return nil
 }
 
-// findDomainByName finds a domain using quote-aware comparison
-func (g *Generator) findDomainByName(domains []*Domain, name Ident) *Domain {
+// findDomainByName finds a domain using quote-aware comparison including schema
+func (g *Generator) findDomainByName(domains []*Domain, name QualifiedName) *Domain {
 	for _, domain := range domains {
-		if g.identsEqual(domain.name.Name, name) {
+		if g.qualifiedNamesEqual(domain.name, name) {
 			return domain
 		}
 	}
