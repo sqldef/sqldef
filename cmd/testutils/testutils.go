@@ -26,7 +26,9 @@ import (
 type TestCase struct {
 	Current            string  // default: empty schema
 	Desired            string  // default: empty schema
-	Output             *string // default: use Desired as Output
+	Up                 *string // expected DDL for current → desired migration
+	Down               *string // expected DDL for desired → current migration
+	Output             *string `yaml:"output,omitempty"` // DEPRECATED: use 'up' and 'down' instead
 	Error              *string // default: nil
 	MinVersion         string  `yaml:"min_version"`
 	MaxVersion         string  `yaml:"max_version"`
@@ -124,8 +126,14 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 		}
 
 		for name, test := range tests {
-			if test.Output == nil {
-				test.Output = &test.Desired
+			// Check for deprecated 'output' field
+			if test.Output != nil {
+				log.Fatalf("Test case '%s': The 'output' field is deprecated. Please use 'up' and 'down' instead.\n\nMigration guide:\n  output: |     →  up: |\n    DDL...            DDL...\n                      down: |\n                        REVERSE_DDL...", name)
+			}
+
+			// Validate up/down dependency: both must be present or both must be absent
+			if (test.Up != nil && test.Down == nil) || (test.Up == nil && test.Down != nil) {
+				log.Fatalf("Test case '%s': If 'up' is specified, 'down' must also be specified (and vice versa).\nFor idempotency-only tests, omit both 'up' and 'down'.", name)
 			}
 
 			if test.EnableDrop == nil {
@@ -215,42 +223,115 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if err != nil {
 		log.Fatal(err)
 	}
-	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, db.GetDefaultSchema())
 
-	// Handle expected errors
-	if test.Error != nil {
-		if err == nil {
-			t.Errorf("expected error: %s, but got no error", *test.Error)
-		} else if err.Error() != *test.Error {
-			t.Errorf("expected error: %s, but got: %s", *test.Error, err.Error())
+	if test.Up != nil && test.Down != nil {
+		// Bidirectional migration test
+		// Test forward migration: current → desired should produce Up
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, db.GetDefaultSchema())
+
+		// Handle expected errors
+		if test.Error != nil {
+			if err == nil {
+				t.Errorf("expected error: %s, but got no error", *test.Error)
+			} else if err.Error() != *test.Error {
+				t.Errorf("expected error: %s, but got: %s", *test.Error, err.Error())
+			}
+			return
 		}
-		return
-	}
 
-	if err != nil {
-		t.Fatal(err)
-	}
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	expected := strings.TrimSpace(*test.Output)
-	actual := strings.TrimSpace(joinDDLs(ddls))
-	assert.Equal(t, expected, actual, "Migration output doesn't match expected.")
+		expected := strings.TrimSpace(*test.Up)
+		actual := strings.TrimSpace(joinDDLs(ddls))
+		assert.Equal(t, expected, actual, "Forward migration (up) output doesn't match expected.")
 
-	err = runDDLs(db, ddls, *test.EnableDrop)
-	if err != nil {
-		t.Fatal(err)
-	}
+		err = runDDLs(db, ddls, *test.EnableDrop)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	// Test idempotency of desired schema
-	currentDDLs, err = db.ExportDDLs()
-	if err != nil {
-		log.Fatal(err)
-	}
-	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, db.GetDefaultSchema())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(ddls) > 0 {
-		t.Errorf("Desired schema is not idempotent. Expected no changes when reapplying desired schema, but got:\n```\n%s```\nThis means the migration didn't apply correctly.", joinDDLs(ddls))
+		// Test idempotency of desired schema
+		currentDDLs, err = db.ExportDDLs()
+		if err != nil {
+			log.Fatal(err)
+		}
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, db.GetDefaultSchema())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ddls) > 0 {
+			t.Errorf("Desired schema is not idempotent. Expected no changes when reapplying desired schema, but got:\n```\n%s```\nThis means the forward migration didn't apply correctly.", joinDDLs(ddls))
+		}
+
+		// Test reverse migration: desired → current should produce Down
+		currentDDLs, err = db.ExportDDLs()
+		if err != nil {
+			log.Fatal(err)
+		}
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, currentDDLs, config, db.GetDefaultSchema())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		expected = strings.TrimSpace(*test.Down)
+		actual = strings.TrimSpace(joinDDLs(ddls))
+		assert.Equal(t, expected, actual, "Reverse migration (down) output doesn't match expected.")
+
+		err = runDDLs(db, ddls, *test.EnableDrop)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Test idempotency of current schema after reverse migration
+		currentDDLs, err = db.ExportDDLs()
+		if err != nil {
+			log.Fatal(err)
+		}
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, currentDDLs, config, db.GetDefaultSchema())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ddls) > 0 {
+			t.Errorf("Current schema is not idempotent after reverse migration. Expected no changes when reapplying current schema, but got:\n```\n%s```\nThis means the reverse migration didn't apply correctly.", joinDDLs(ddls))
+		}
+	} else {
+		// Idempotency-only test (neither up nor down specified)
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, db.GetDefaultSchema())
+
+		// Handle expected errors
+		if test.Error != nil {
+			if err == nil {
+				t.Errorf("expected error: %s, but got no error", *test.Error)
+			} else if err.Error() != *test.Error {
+				t.Errorf("expected error: %s, but got: %s", *test.Error, err.Error())
+			}
+			return
+		}
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// For idempotency-only tests, we expect no DDLs (or just apply and test idempotency)
+		err = runDDLs(db, ddls, *test.EnableDrop)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Test idempotency of desired schema
+		currentDDLs, err = db.ExportDDLs()
+		if err != nil {
+			log.Fatal(err)
+		}
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, db.GetDefaultSchema())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ddls) > 0 {
+			t.Errorf("Desired schema is not idempotent. Expected no changes when reapplying desired schema, but got:\n```\n%s```\nThis means the migration didn't apply correctly.", joinDDLs(ddls))
+		}
 	}
 }
 
@@ -258,31 +339,81 @@ func RunOfflineTest(t *testing.T, test TestCase, mode schema.GeneratorMode, sqlP
 	t.Helper()
 
 	currentDDLs := test.Current
-	ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, defaultSchema)
 
-	if test.Error != nil {
-		if err == nil {
-			t.Errorf("expected error: %s, but got no error", *test.Error)
-		} else if err.Error() != *test.Error {
-			t.Errorf("expected error: %s, but got: %s", *test.Error, err.Error())
+	if test.Up != nil && test.Down != nil {
+		// Bidirectional migration test
+		// Test forward migration: current → desired should produce Up
+		ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, defaultSchema)
+
+		if test.Error != nil {
+			if err == nil {
+				t.Errorf("expected error: %s, but got no error", *test.Error)
+			} else if err.Error() != *test.Error {
+				t.Errorf("expected error: %s, but got: %s", *test.Error, err.Error())
+			}
+			return
 		}
-		return
-	}
 
-	if err != nil {
-		t.Fatal(err)
-	}
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	expected := strings.TrimSpace(*test.Output)
-	actual := strings.TrimSpace(joinDDLs(ddls))
-	assert.Equal(t, expected, actual, "Migration output doesn't match expected.")
+		expected := strings.TrimSpace(*test.Up)
+		actual := strings.TrimSpace(joinDDLs(ddls))
+		assert.Equal(t, expected, actual, "Forward migration (up) output doesn't match expected.")
 
-	ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, test.Desired, config, defaultSchema)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(ddls) > 0 {
-		t.Errorf("Desired schema is not idempotent. Expected no changes when comparing desired to itself, but got:\n```\n%s```", joinDDLs(ddls))
+		// Test idempotency of desired schema
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, test.Desired, config, defaultSchema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ddls) > 0 {
+			t.Errorf("Desired schema is not idempotent. Expected no changes when comparing desired to itself, but got:\n```\n%s```", joinDDLs(ddls))
+		}
+
+		// Test reverse migration: desired → current should produce Down
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, test.Desired, config, defaultSchema)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		expected = strings.TrimSpace(*test.Down)
+		actual = strings.TrimSpace(joinDDLs(ddls))
+		assert.Equal(t, expected, actual, "Reverse migration (down) output doesn't match expected.")
+
+		// Test idempotency of current schema
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, test.Current, config, defaultSchema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ddls) > 0 {
+			t.Errorf("Current schema is not idempotent. Expected no changes when comparing current to itself, but got:\n```\n%s```", joinDDLs(ddls))
+		}
+	} else {
+		// Idempotency-only test (neither up nor down specified)
+		ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, defaultSchema)
+
+		if test.Error != nil {
+			if err == nil {
+				t.Errorf("expected error: %s, but got no error", *test.Error)
+			} else if err.Error() != *test.Error {
+				t.Errorf("expected error: %s, but got: %s", *test.Error, err.Error())
+			}
+			return
+		}
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Test idempotency of desired schema
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, test.Desired, config, defaultSchema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ddls) > 0 {
+			t.Errorf("Desired schema is not idempotent. Expected no changes when comparing desired to itself, but got:\n```\n%s```", joinDDLs(ddls))
+		}
 	}
 }
 

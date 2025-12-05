@@ -149,7 +149,9 @@ For schema management tests, in most cases you only need to edit the YAML test f
 
 #### YAML Test Schema
 
-The test files use a YAML format where each top-level key is a test case name, and the value is a `TestCase` object with the following fields:
+The test files use a YAML format where each top-level key is a test case name, and the value is a `TestCase` object. A JSON schema is available at `./cmd/testutils/testcase.schema.json` for IDE support.
+
+Test case fields:
 
 ```yaml
 TestCaseName:
@@ -166,9 +168,15 @@ TestCaseName:
       name text
     );
 
-  # Expected DDL output (defaults to 'desired' if not specified)
-  output: |
+  # Expected DDL for forward migration: current → desired
+  # If specified, 'down' must also be specified
+  up: |
     ALTER TABLE "public"."users" ADD COLUMN "name" text;
+
+  # Expected DDL for reverse migration: desired → current
+  # Required if 'up' is specified
+  down: |
+    ALTER TABLE "public"."users" DROP COLUMN "name";
 
   # Expected error message (defaults to no error)
   error: "specific error message"
@@ -202,6 +210,14 @@ TestCaseName:
     # Create indexes concurrently (psqldef only)
     create_index_concurrently: true
 ```
+
+The `up` and `down` fields work together:
+- If neither is specified: idempotency-only test (verifies `desired` schema is stable)
+- If `up` is specified: `down` must also be specified (bidirectional migration test)
+
+When both are specified, the test runner validates:
+1. `current` → `desired` produces `up`
+2. `desired` → `current` produces `down`
 
 NOTE: Never use `offline: true` for databases that are tested in GitHub Actions:
 - MySQL (including MariaDB)
