@@ -58,17 +58,41 @@ Usage notes:
 To have trial and error locally, you can use the following commands:
 
 ```sh
-# psqldef
-build/$os-$arch/psqldef psqldef_test [args...]
+# psqldef - export current schema
+build/$os-$arch/psqldef psqldef_test --export > schema.sql
 
-# mysqldef
-build/$os-$arch/mysqldef mysqldef_test [args...]
+# psqldef - dry run to preview changes
+build/$os-$arch/psqldef psqldef_test --dry-run --file schema.sql
 
-# mssqldef (password is mandatory)
-build/$os-$arch/mssqldef -PPassw0rd mssqldef_test [args...]
+# psqldef - apply schema from file
+build/$os-$arch/psqldef psqldef_test --apply --file schema.sql
 
-# sqlite3def
-build/$os-$arch/sqlite3def sqlite3def.db [args...]
+# mysqldef - export current schema
+build/$os-$arch/mysqldef mysqldef_test --export > schema.sql
+
+# mysqldef - dry run to preview changes
+build/$os-$arch/mysqldef mysqldef_test --dry-run --file schema.sql
+
+# mysqldef - apply schema from file
+build/$os-$arch/mysqldef mysqldef_test --apply --file schema.sql
+
+# mssqldef - export current schema (password is mandatory)
+build/$os-$arch/mssqldef -PPassw0rd mssqldef_test --export > schema.sql
+
+# mssqldef - dry run to preview changes
+build/$os-$arch/mssqldef -PPassw0rd mssqldef_test --dry-run --file schema.sql
+
+# mssqldef - apply schema from file
+build/$os-$arch/mssqldef -PPassw0rd mssqldef_test --apply --file schema.sql
+
+# sqlite3def - export current schema
+build/$os-$arch/sqlite3def sqlite3def.db --export > schema.sql
+
+# sqlite3def - dry run to preview changes
+build/$os-$arch/sqlite3def sqlite3def.db --dry-run --file schema.sql
+
+# sqlite3def - apply schema from file
+build/$os-$arch/sqlite3def sqlite3def.db --apply --file schema.sql
 ```
 
 ## Running Tests
