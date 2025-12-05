@@ -12,7 +12,7 @@ ForeignKeyDependencyOrderingCaseMismatch:
       FOREIGN KEY (user_id) REFERENCES Users (id)
     );
     CREATE TABLE users (id integer PRIMARY KEY);
-  output: |
+  up: |
     CREATE TABLE users (id integer PRIMARY KEY);
     CREATE TABLE orders (
       id integer PRIMARY KEY,
@@ -20,6 +20,9 @@ ForeignKeyDependencyOrderingCaseMismatch:
       FOREIGN KEY (user_id) REFERENCES Users (id)
     );
 
+  down: |
+    DROP TABLE users;
+    DROP TABLE orders;
 AddColumnCaseMismatch:
   # Current has USERS, desired has users - should recognize as same table
   legacy_ignore_quotes: false
@@ -27,9 +30,11 @@ AddColumnCaseMismatch:
     CREATE TABLE USERS (id integer PRIMARY KEY);
   desired: |
     CREATE TABLE users (id integer PRIMARY KEY, name text);
-  output: |
+  up: |
     ALTER TABLE users ADD COLUMN name text;
 
+  down: |
+    ALTER TABLE USERS DROP COLUMN name;
 DropColumnCaseMismatch:
   # Current has Users, desired has USERS - should recognize as same table
   legacy_ignore_quotes: false
@@ -37,9 +42,11 @@ DropColumnCaseMismatch:
     CREATE TABLE Users (id integer PRIMARY KEY, old_col text);
   desired: |
     CREATE TABLE USERS (id integer PRIMARY KEY);
-  output: |
+  up: |
     ALTER TABLE USERS DROP COLUMN old_col;
 
+  down: |
+    ALTER TABLE Users ADD COLUMN old_col text;
 CreateIndexCaseMismatch:
   # Create index when table name case differs
   legacy_ignore_quotes: false
@@ -48,5 +55,8 @@ CreateIndexCaseMismatch:
   desired: |
     CREATE TABLE products (id integer PRIMARY KEY, name text);
     CREATE INDEX idx_name ON PRODUCTS (name);
-  output: |
+  up: |
     CREATE INDEX idx_name ON PRODUCTS (name);
+
+  down: |
+    DROP INDEX idx_name;

@@ -21,7 +21,12 @@ BooleanValue:
       value7 TINYINT(1) DEFAULT 1,
       value8 TINYINT(1) DEFAULT 1
     );
-  output: |
+  up: |
+  down: |
+    ALTER TABLE `bools` CHANGE COLUMN `value1` `value1` boolean DEFAULT false;
+    ALTER TABLE `bools` CHANGE COLUMN `value2` `value2` boolean DEFAULT false;
+    ALTER TABLE `bools` CHANGE COLUMN `value3` `value3` boolean DEFAULT true;
+    ALTER TABLE `bools` CHANGE COLUMN `value4` `value4` boolean DEFAULT true;
 AddColumnWithDefaultExpression:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY);
@@ -30,8 +35,11 @@ AddColumnWithDefaultExpression:
       id BIGINT PRIMARY KEY,
       friend_ids JSON DEFAULT(JSON_ARRAY())
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD COLUMN `friend_ids` json DEFAULT(JSON_ARRAY()) AFTER `id`;
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
+    ALTER TABLE `users` DROP COLUMN `friend_ids`;
   flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 AddDefaultExpression:
@@ -45,8 +53,11 @@ AddDefaultExpression:
       id BIGINT PRIMARY KEY,
       friend_ids JSON DEFAULT(JSON_ARRAY())
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json DEFAULT(JSON_ARRAY());
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
+    ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json;
   flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 RemoveDefaultExpression:
@@ -60,8 +71,11 @@ RemoveDefaultExpression:
       id BIGINT PRIMARY KEY,
       friend_ids JSON
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json;
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
+    ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json DEFAULT(JSON_ARRAY());
   flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 JsonColumnWithCharsetCastDefault:
@@ -116,8 +130,10 @@ DefaultNull:
       id bigint(20) NOT NULL,
       name varchar(40) DEFAULT NULL
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD COLUMN `name` varchar(40) DEFAULT null AFTER `id`;
+  down: |
+    ALTER TABLE `users` DROP COLUMN `name`;
 AddNotNull:
   current: |
     CREATE TABLE users (
@@ -127,8 +143,10 @@ AddNotNull:
     CREATE TABLE users (
       name varchar(255) NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(255) NOT NULL;
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(255) DEFAULT null;
 CreateTableAddColumnWithCharsetAndNotNull:
   current: |
     CREATE TABLE users (
@@ -141,8 +159,10 @@ CreateTableAddColumnWithCharsetAndNotNull:
       name VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD COLUMN `name` varchar(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL AFTER `id`;
+  down: |
+    ALTER TABLE `users` DROP COLUMN `name`;
 OnUpdate:
   current: |
     CREATE TABLE users (
@@ -156,8 +176,10 @@ OnUpdate:
       updated_at datetime DEFAULT current_timestamp,
       created_at datetime NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `updated_at` `updated_at` datetime DEFAULT current_timestamp;
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `updated_at` `updated_at` datetime DEFAULT current_timestamp ON UPDATE current_timestamp;
 OnUpdateAdd:
   current: |
     CREATE TABLE users (
@@ -171,8 +193,10 @@ OnUpdateAdd:
       updated_at datetime DEFAULT current_timestamp ON UPDATE current_timestamp,
       created_at datetime NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `updated_at` `updated_at` datetime DEFAULT current_timestamp ON UPDATE current_timestamp;
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `updated_at` `updated_at` datetime DEFAULT current_timestamp;
 OnUpdateParentheses:
   current: |
     CREATE TABLE users (
@@ -186,7 +210,8 @@ OnUpdateParentheses:
       updated_at datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
       created_at datetime NOT NULL
     );
-  output: ""
+  up: ""
+  down: ""
 CurrentTimestampWithPrecision:
   current: |
     CREATE TABLE users (
@@ -197,8 +222,10 @@ CurrentTimestampWithPrecision:
       created_at datetime(6) DEFAULT current_timestamp(6),
       updated_at datetime(6) DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6)
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD COLUMN `updated_at` datetime(6) DEFAULT current_timestamp(6) ON UPDATE current_timestamp(6) AFTER `created_at`;
+  down: |
+    ALTER TABLE `users` DROP COLUMN `updated_at`;
 EnumValues:
   current: |
     CREATE TABLE users (
@@ -209,8 +236,10 @@ EnumValues:
       id bigint(20) NOT NULL,
       authorities enum('normal', 'admin') NOT NULL DEFAULT 'normal'
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD COLUMN `authorities` enum('normal', 'admin') NOT NULL DEFAULT 'normal' AFTER `id`;
+  down: |
+    ALTER TABLE `users` DROP COLUMN `authorities`;
 DefaultValue:
   current: |
     CREATE TABLE tools (
@@ -228,9 +257,12 @@ DefaultValue:
       updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `tools` CHANGE COLUMN `created_at` `created_at` datetime NOT NULL DEFAULT current_timestamp;
     ALTER TABLE `tools` CHANGE COLUMN `updated_at` `updated_at` datetime NOT NULL DEFAULT current_timestamp ON UPDATE current_timestamp;
+  down: |
+    ALTER TABLE `tools` CHANGE COLUMN `created_at` `created_at` datetime NOT NULL;
+    ALTER TABLE `tools` CHANGE COLUMN `updated_at` `updated_at` datetime NOT NULL;
 NegativeDefault:
   current: |
     CREATE TABLE items (
@@ -240,8 +272,10 @@ NegativeDefault:
     CREATE TABLE items (
       position float DEFAULT 100
     );
-  output: |
+  up: |
     ALTER TABLE `items` CHANGE COLUMN `position` `position` float DEFAULT 100;
+  down: |
+    ALTER TABLE `items` CHANGE COLUMN `position` `position` float DEFAULT -20;
 DecimalDefault:
   current: |
     CREATE TABLE some_table (
@@ -257,11 +291,16 @@ DecimalDefault:
       v2 decimal(35, 30) DEFAULT  0.1234,
       v3 decimal(35, 30) DEFAULT '1.00000000001234567891234'
     );
-  output: |
+  up: |
     ALTER TABLE `some_table` CHANGE COLUMN `v0` `v0` decimal(5, 2) DEFAULT 0.010000;
     ALTER TABLE `some_table` CHANGE COLUMN `v1` `v1` decimal(5, 2) DEFAULT 1.230000;
     ALTER TABLE `some_table` CHANGE COLUMN `v2` `v2` decimal(35, 30) DEFAULT 0.123400;
     ALTER TABLE `some_table` CHANGE COLUMN `v3` `v3` decimal(35, 30) DEFAULT '1.00000000001234567891234';
+  down: |
+    ALTER TABLE `some_table` CHANGE COLUMN `v0` `v0` decimal(5, 2) DEFAULT 0.000000;
+    ALTER TABLE `some_table` CHANGE COLUMN `v1` `v1` decimal(5, 2) DEFAULT 1.200000;
+    ALTER TABLE `some_table` CHANGE COLUMN `v2` `v2` decimal(35, 30) DEFAULT 0.123450;
+    ALTER TABLE `some_table` CHANGE COLUMN `v3` `v3` decimal(35, 30) DEFAULT '1.0000000000123456789123';
 NegativeDefaultNumbers:
   desired: |
     CREATE TABLE items (
@@ -289,11 +328,16 @@ DefaultString:
       v2 VARCHAR(255) DEFAULT '1.0000',
       v3 VARCHAR(255) DEFAULT '1'
     );
-  output: |
+  up: |
     ALTER TABLE `some_table` CHANGE COLUMN `v0` `v0` varchar(255) DEFAULT 'FOO';
     ALTER TABLE `some_table` CHANGE COLUMN `v1` `v1` varchar(255) DEFAULT 'bar';
     ALTER TABLE `some_table` CHANGE COLUMN `v2` `v2` varchar(255) DEFAULT '1.0000';
     ALTER TABLE `some_table` CHANGE COLUMN `v3` `v3` varchar(255) DEFAULT '1';
+  down: |
+    ALTER TABLE `some_table` CHANGE COLUMN `v0` `v0` varchar(255) DEFAULT 'foo';
+    ALTER TABLE `some_table` CHANGE COLUMN `v1` `v1` varchar(255) DEFAULT 'BAR';
+    ALTER TABLE `some_table` CHANGE COLUMN `v2` `v2` varchar(255) DEFAULT '1.00';
+    ALTER TABLE `some_table` CHANGE COLUMN `v3` `v3` varchar(255) DEFAULT '1.00';
 NumericDecimalDefaults:
   current: |
     CREATE TABLE test (
@@ -307,7 +351,8 @@ NumericDecimalDefaults:
       num numeric(10),
       price decimal(10)
     );
-  output: ""
+  up: ""
+  down: ""
 NumericDecimalExplicit:
   current: |
     CREATE TABLE test (
@@ -325,7 +370,8 @@ NumericDecimalExplicit:
       price1 decimal(12),
       price2 decimal(20, 6)
     );
-  output: ""
+  up: ""
+  down: ""
 TypedLiterals:
   flavor: mysql
   min_version: '8.0'
@@ -342,10 +388,14 @@ TypedLiterals:
       event_timestamp timestamp DEFAULT TIMESTAMP '2024-01-01 12:00:00',
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `events` ADD COLUMN `event_date` date DEFAULT(date '2024-01-01') AFTER `id`;
     ALTER TABLE `events` ADD COLUMN `event_time` time DEFAULT(time '12:00:00') AFTER `event_date`;
     ALTER TABLE `events` ADD COLUMN `event_timestamp` timestamp DEFAULT(timestamp '2024-01-01 12:00:00') AFTER `event_time`;
+  down: |
+    ALTER TABLE `events` DROP COLUMN `event_date`;
+    ALTER TABLE `events` DROP COLUMN `event_time`;
+    ALTER TABLE `events` DROP COLUMN `event_timestamp`;
 TypedLiteralsIdempotency:
   flavor: mysql
   min_version: '8.0'
@@ -365,10 +415,14 @@ TypedLiteralsIdempotency:
       event_timestamp timestamp DEFAULT TIMESTAMP '2024-01-01 12:00:00',
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `events` CHANGE COLUMN `event_date` `event_date` date DEFAULT(date '2024-01-01');
     ALTER TABLE `events` CHANGE COLUMN `event_time` `event_time` time DEFAULT(time '12:00:00');
     ALTER TABLE `events` CHANGE COLUMN `event_timestamp` `event_timestamp` timestamp DEFAULT(timestamp '2024-01-01 12:00:00');
+  down: |
+    ALTER TABLE `events` CHANGE COLUMN `event_date` `event_date` date DEFAULT '2024-01-01';
+    ALTER TABLE `events` CHANGE COLUMN `event_time` `event_time` time DEFAULT '12:00:00';
+    ALTER TABLE `events` CHANGE COLUMN `event_timestamp` `event_timestamp` timestamp DEFAULT '2024-01-01 12:00:00';
 TypedLiteralsChangeDefault:
   flavor: mysql
   min_version: '8.0'
@@ -388,10 +442,14 @@ TypedLiteralsChangeDefault:
       event_timestamp timestamp DEFAULT TIMESTAMP '2024-12-31 23:59:59',
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `events` CHANGE COLUMN `event_date` `event_date` date DEFAULT(date '2024-12-31');
     ALTER TABLE `events` CHANGE COLUMN `event_time` `event_time` time DEFAULT(time '23:59:59');
     ALTER TABLE `events` CHANGE COLUMN `event_timestamp` `event_timestamp` timestamp DEFAULT(timestamp '2024-12-31 23:59:59');
+  down: |
+    ALTER TABLE `events` CHANGE COLUMN `event_date` `event_date` date DEFAULT '2024-01-01';
+    ALTER TABLE `events` CHANGE COLUMN `event_time` `event_time` time DEFAULT '12:00:00';
+    ALTER TABLE `events` CHANGE COLUMN `event_timestamp` `event_timestamp` timestamp DEFAULT '2024-01-01 12:00:00';
 TypedLiteralsInCheck:
   flavor: mysql
   min_version: '8.0'
@@ -408,7 +466,12 @@ TypedLiteralsInCheck:
       PRIMARY KEY (id),
       CONSTRAINT chk_date_range CHECK (event_date >= DATE '2020-01-01' AND event_end_date <= DATE '2030-12-31')
     );
-  output: |
+  up: |
     ALTER TABLE `events` ADD COLUMN `event_date` date AFTER `id`;
     ALTER TABLE `events` ADD COLUMN `event_end_date` date AFTER `event_date`;
     ALTER TABLE `events` ADD CONSTRAINT `chk_date_range` CHECK (event_date >= date '2020-01-01' and event_end_date <= date '2030-12-31');
+
+  down: |
+    ALTER TABLE `events` DROP COLUMN `event_date`;
+    ALTER TABLE `events` DROP COLUMN `event_end_date`;
+    ALTER TABLE `events` DROP CHECK `chk_date_range`;

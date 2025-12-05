@@ -28,7 +28,7 @@ ForeignKeyDependenciesForCreateTables:
       CONSTRAINT [fk_item_id] FOREIGN KEY ([item_id]) REFERENCES [items] ([item_id]),
       CONSTRAINT [fk_user_id] FOREIGN KEY ([user_id]) REFERENCES [users] ([user_id])
     );
-  output: |
+  up: |
     CREATE TABLE [items] (
       [item_id] int NOT NULL,
       [item_name] varchar(100) DEFAULT NULL,
@@ -53,6 +53,10 @@ ForeignKeyDependenciesForCreateTables:
       CONSTRAINT [fk_user_id] FOREIGN KEY ([user_id]) REFERENCES [users] ([user_id])
     );
 
+  down: |
+    DROP TABLE [dbo].[sales];
+    DROP TABLE [dbo].[items];
+    DROP TABLE [dbo].[users];
 # Issue 2: Complex primary key change with foreign key dependencies
 # Changing primary key from single column to composite when foreign keys exist
 ForeignKeyDependenciesPrimaryKeyChange:
@@ -85,7 +89,7 @@ ForeignKeyDependenciesPrimaryKeyChange:
       CONSTRAINT [prices_item_fk] FOREIGN KEY ([supplier_id], [item_id])
         REFERENCES [items] ([supplier_id], [item_id])
     );
-  output: |
+  up: |
     ALTER TABLE [dbo].[items] ALTER COLUMN [supplier_id] int NOT NULL;
     ALTER TABLE [dbo].[item_prices] DROP CONSTRAINT [prices_item_fk];
     ALTER TABLE [dbo].[items] DROP CONSTRAINT [items_pkey];
@@ -93,6 +97,14 @@ ForeignKeyDependenciesPrimaryKeyChange:
     ALTER TABLE [dbo].[item_prices] ADD [supplier_id] int;
     ALTER TABLE [dbo].[item_prices] ADD CONSTRAINT [prices_item_fk] FOREIGN KEY ([supplier_id], [item_id]) REFERENCES [dbo].[items] ([supplier_id], [item_id]);
 
+  down: |
+    ALTER TABLE [dbo].[items] ALTER COLUMN [supplier_id] int;
+    ALTER TABLE [dbo].[item_prices] DROP CONSTRAINT [prices_item_fk];
+    ALTER TABLE [dbo].[items] DROP CONSTRAINT [PRIMARY];
+    ALTER TABLE [dbo].[items] ADD CONSTRAINT [items_pkey] PRIMARY KEY NONCLUSTERED ([item_id]);
+    ALTER TABLE [dbo].[item_prices] ALTER COLUMN [price_id] int NOT NULL;
+    ALTER TABLE [dbo].[item_prices] ADD CONSTRAINT [prices_item_fk] FOREIGN KEY ([item_id]) REFERENCES [dbo].[items] ([item_id]);
+    ALTER TABLE [dbo].[item_prices] DROP COLUMN [supplier_id];
 # Issue 3: Circular foreign key dependencies
 ForeignKeyDependenciesCircular:
   current: |
@@ -118,11 +130,17 @@ ForeignKeyDependenciesCircular:
       [name] NVARCHAR(100),
       CONSTRAINT [emp_dept_fk] FOREIGN KEY ([dept_id]) REFERENCES [departments] ([dept_id])
     );
-  output: |
+  up: |
     ALTER TABLE [dbo].[departments] ADD [manager_id] int;
     ALTER TABLE [dbo].[departments] ADD CONSTRAINT [dept_manager_fk] FOREIGN KEY ([manager_id]) REFERENCES [dbo].[employees] ([emp_id]);
     ALTER TABLE [dbo].[employees] ADD CONSTRAINT [emp_dept_fk] FOREIGN KEY ([dept_id]) REFERENCES [dbo].[departments] ([dept_id]);
 
+  down: |
+    ALTER TABLE [dbo].[departments] ALTER COLUMN [dept_id] int NOT NULL;
+    ALTER TABLE [dbo].[employees] ALTER COLUMN [emp_id] int NOT NULL;
+    ALTER TABLE [dbo].[departments] DROP CONSTRAINT [dept_manager_fk];
+    ALTER TABLE [dbo].[departments] DROP COLUMN [manager_id];
+    ALTER TABLE [dbo].[employees] DROP CONSTRAINT [emp_dept_fk];
 # Issue 4: Add constraint after table creation
 ForeignKeyDependenciesAddConstraintAfterCreation:
   current: |
@@ -146,9 +164,13 @@ ForeignKeyDependenciesAddConstraintAfterCreation:
       [order_date] DATE,
       CONSTRAINT [order_customer_fk] FOREIGN KEY ([customer_id]) REFERENCES [customers] ([customer_id])
     );
-  output: |
+  up: |
     ALTER TABLE [dbo].[orders] ADD CONSTRAINT [order_customer_fk] FOREIGN KEY ([customer_id]) REFERENCES [dbo].[customers] ([customer_id]);
 
+  down: |
+    ALTER TABLE [dbo].[orders] ALTER COLUMN [order_id] int NOT NULL;
+    ALTER TABLE [dbo].[customers] ALTER COLUMN [customer_id] int NOT NULL;
+    ALTER TABLE [dbo].[orders] DROP CONSTRAINT [order_customer_fk];
 # Issue 5: Multiple foreign keys to same table being modified
 ForeignKeyDependenciesMultipleToModifiedTable:
   current: |
@@ -183,7 +205,7 @@ ForeignKeyDependenciesMultipleToModifiedTable:
       CONSTRAINT [posts_reviewer_fk] FOREIGN KEY ([reviewer_tenant_id], [reviewer_id])
         REFERENCES [users] ([tenant_id], [user_id])
     );
-  output: |
+  up: |
     ALTER TABLE [dbo].[users] ADD [tenant_id] int NOT NULL;
     ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_author_fk];
     ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_reviewer_fk];
@@ -194,6 +216,17 @@ ForeignKeyDependenciesMultipleToModifiedTable:
     ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_author_fk] FOREIGN KEY ([author_tenant_id], [author_id]) REFERENCES [dbo].[users] ([tenant_id], [user_id]);
     ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_reviewer_fk] FOREIGN KEY ([reviewer_tenant_id], [reviewer_id]) REFERENCES [dbo].[users] ([tenant_id], [user_id]);
 
+  down: |
+    ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_author_fk];
+    ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_reviewer_fk];
+    ALTER TABLE [dbo].[users] DROP CONSTRAINT [PRIMARY];
+    ALTER TABLE [dbo].[users] ADD CONSTRAINT [users_pkey] PRIMARY KEY NONCLUSTERED ([user_id]);
+    ALTER TABLE [dbo].[posts] ALTER COLUMN [post_id] int NOT NULL;
+    ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_author_fk] FOREIGN KEY ([author_id]) REFERENCES [dbo].[users] ([user_id]);
+    ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_reviewer_fk] FOREIGN KEY ([reviewer_id]) REFERENCES [dbo].[users] ([user_id]);
+    ALTER TABLE [dbo].[users] DROP COLUMN [tenant_id];
+    ALTER TABLE [dbo].[posts] DROP COLUMN [author_tenant_id];
+    ALTER TABLE [dbo].[posts] DROP COLUMN [reviewer_tenant_id];
 # Issue 6: CASCADE options preservation
 ForeignKeyDependenciesCascadeOptionsPreservation:
   current: |
@@ -225,7 +258,7 @@ ForeignKeyDependenciesCascadeOptionsPreservation:
       CONSTRAINT [products_category_fk] FOREIGN KEY ([tenant_id], [category_id])
         REFERENCES [categories] ([tenant_id], [category_id]) ON DELETE CASCADE ON UPDATE CASCADE
     );
-  output: |
+  up: |
     ALTER TABLE [dbo].[categories] ADD [tenant_id] int NOT NULL;
     ALTER TABLE [dbo].[products] DROP CONSTRAINT [products_category_fk];
     ALTER TABLE [dbo].[categories] DROP CONSTRAINT [categories_pkey];
@@ -233,6 +266,14 @@ ForeignKeyDependenciesCascadeOptionsPreservation:
     ALTER TABLE [dbo].[products] ADD [tenant_id] int;
     ALTER TABLE [dbo].[products] ADD CONSTRAINT [products_category_fk] FOREIGN KEY ([tenant_id], [category_id]) REFERENCES [dbo].[categories] ([tenant_id], [category_id]) ON DELETE CASCADE ON UPDATE CASCADE;
 
+  down: |
+    ALTER TABLE [dbo].[products] DROP CONSTRAINT [products_category_fk];
+    ALTER TABLE [dbo].[categories] DROP CONSTRAINT [PRIMARY];
+    ALTER TABLE [dbo].[categories] ADD CONSTRAINT [categories_pkey] PRIMARY KEY NONCLUSTERED ([category_id]);
+    ALTER TABLE [dbo].[products] ALTER COLUMN [product_id] int NOT NULL;
+    ALTER TABLE [dbo].[products] ADD CONSTRAINT [products_category_fk] FOREIGN KEY ([category_id]) REFERENCES [dbo].[categories] ([category_id]) ON DELETE CASCADE ON UPDATE CASCADE;
+    ALTER TABLE [dbo].[categories] DROP COLUMN [tenant_id];
+    ALTER TABLE [dbo].[products] DROP COLUMN [tenant_id];
 ForeignKeyDependenciesMultipleWithIdempotency:
   desired: |
     create table users (
@@ -263,7 +304,7 @@ ForeignKeyDependenciesMultipleWithIdempotency:
       constraint fk_supplier_id_item_id
         foreign key (supplier_id, item_id) references items(supplier_id, item_id)
     );
-  output: |
+  up: |
     create table users (
       user_id int primary key,
       family_name varchar(100) not null,
@@ -290,6 +331,10 @@ ForeignKeyDependenciesMultipleWithIdempotency:
     );
     create unique index uk_email_address on users(email_address);
 
+  down: |
+    DROP TABLE [dbo].[sales];
+    DROP TABLE [dbo].[users];
+    DROP TABLE [dbo].[items];
 ForeignKeyDependenciesMultipleDrops:
   current: |
     create table users (
@@ -321,11 +366,37 @@ ForeignKeyDependenciesMultipleDrops:
         foreign key (supplier_id, item_id) references items(supplier_id, item_id)
     );
   desired: "" # all drops
-  output: |
+  up: |
     DROP TABLE [dbo].[sales];
     DROP TABLE [dbo].[users];
     DROP TABLE [dbo].[items];
 
+  down: |
+    create table users (
+      user_id int primary key,
+      family_name varchar(100) not null,
+      given_name varchar(100) not null,
+      email_address varchar(254) not null
+    );
+    create table items (
+      supplier_id int,
+      item_id int,
+      item_name varchar(100),
+      constraint pk_items primary key (supplier_id, item_id)
+    );
+    create table sales (
+      sales_id int primary key,
+      user_id int not null,
+      supplier_id int,
+      item_id int not null,
+      sales_qty int not null,
+      sales_amt int not null,
+      constraint fk_user_id
+        foreign key (user_id) references users(user_id),
+      constraint fk_supplier_id_item_id
+        foreign key (supplier_id, item_id) references items(supplier_id, item_id)
+    );
+    create unique index uk_email_address on users(email_address);
 # Test case: Primary key column rename with foreign key from table that will be dropped
 # When changing a primary key column and a referencing table will be dropped,
 # we should not try to recreate the foreign key constraint
@@ -346,7 +417,7 @@ ForeignKeyWithPrimaryKeyChangeAndDrop:
       name nvarchar(max),
       CONSTRAINT PK_users PRIMARY KEY (user_id)
     );
-  output: |
+  up: |
     ALTER TABLE [dbo].[users] ADD [user_id] int NOT NULL;
     ALTER TABLE [dbo].[users] ADD [name] nvarchar(max);
     ALTER TABLE [dbo].[taggings] DROP CONSTRAINT [taggings_user_id_fkey];
@@ -354,3 +425,15 @@ ForeignKeyWithPrimaryKeyChangeAndDrop:
     ALTER TABLE [dbo].[users] ADD CONSTRAINT [PK_users] PRIMARY KEY NONCLUSTERED ([user_id]);
     DROP TABLE [dbo].[taggings];
     ALTER TABLE [dbo].[users] DROP COLUMN [id];
+
+  down: |
+    ALTER TABLE [dbo].[users] ADD [id] int NOT NULL;
+    ALTER TABLE [dbo].[users] DROP CONSTRAINT [PK_users];
+    ALTER TABLE [dbo].[users] ADD CONSTRAINT [PK_users] PRIMARY KEY NONCLUSTERED ([id]);
+    CREATE TABLE taggings (
+      user_id int NOT NULL,
+      tag nvarchar(max) NOT NULL,
+      CONSTRAINT taggings_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+    ALTER TABLE [dbo].[users] DROP COLUMN [user_id];
+    ALTER TABLE [dbo].[users] DROP COLUMN [name];

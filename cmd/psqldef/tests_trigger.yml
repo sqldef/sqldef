@@ -18,7 +18,7 @@ CreateTriggerBeforeInsert:
     CREATE TRIGGER set_created_at
       BEFORE INSERT ON users
       FOR EACH ROW EXECUTE FUNCTION set_timestamp();
-  output: |
+  up: |
     CREATE TABLE users (
       id serial PRIMARY KEY,
       name text
@@ -32,6 +32,9 @@ CreateTriggerBeforeInsert:
     $$ LANGUAGE plpgsql;
     CREATE TRIGGER set_created_at before insert ON public.users FOR EACH ROW EXECUTE FUNCTION set_timestamp();
 
+  down: |
+    DROP TABLE public.users;
+    DROP TRIGGER set_created_at ON public.users;
 CreateTriggerAfterUpdate:
   legacy_ignore_quotes: false
   desired: |
@@ -49,7 +52,7 @@ CreateTriggerAfterUpdate:
     CREATE TRIGGER log_update
       AFTER UPDATE ON users
       FOR EACH ROW EXECUTE FUNCTION log_changes();
-  output: |
+  up: |
     CREATE TABLE users (
       id serial PRIMARY KEY,
       name text
@@ -63,6 +66,9 @@ CreateTriggerAfterUpdate:
     $$ LANGUAGE plpgsql;
     CREATE TRIGGER log_update after update ON public.users FOR EACH ROW EXECUTE FUNCTION log_changes();
 
+  down: |
+    DROP TABLE public.users;
+    DROP TRIGGER log_update ON public.users;
 CreateTriggerAfterDelete:
   legacy_ignore_quotes: false
   desired: |
@@ -80,7 +86,7 @@ CreateTriggerAfterDelete:
     CREATE TRIGGER archive_deleted
       AFTER DELETE ON users
       FOR EACH ROW EXECUTE FUNCTION archive_row();
-  output: |
+  up: |
     CREATE TABLE users (
       id serial PRIMARY KEY,
       name text
@@ -94,6 +100,9 @@ CreateTriggerAfterDelete:
     $$ LANGUAGE plpgsql;
     CREATE TRIGGER archive_deleted after delete ON public.users FOR EACH ROW EXECUTE FUNCTION archive_row();
 
+  down: |
+    DROP TABLE public.users;
+    DROP TRIGGER archive_deleted ON public.users;
 CreateTriggerExecuteProcedure:
   legacy_ignore_quotes: false
   desired: |
@@ -111,7 +120,7 @@ CreateTriggerExecuteProcedure:
     CREATE TRIGGER validate_user
       BEFORE INSERT ON users
       FOR EACH ROW EXECUTE PROCEDURE validate_func();
-  output: |
+  up: |
     CREATE TABLE users (
       id serial PRIMARY KEY,
       name text
@@ -125,6 +134,9 @@ CreateTriggerExecuteProcedure:
     $$ LANGUAGE plpgsql;
     CREATE TRIGGER validate_user before insert ON public.users FOR EACH ROW EXECUTE PROCEDURE validate_func();
 
+  down: |
+    DROP TABLE public.users;
+    DROP TRIGGER validate_user ON public.users;
 CreateTriggerWithMultipleEvents:
   legacy_ignore_quotes: false
   desired: |
@@ -141,7 +153,7 @@ CreateTriggerWithMultipleEvents:
     CREATE TRIGGER enforce_required_permit
       BEFORE INSERT OR UPDATE ON device_tests
       FOR EACH ROW EXECUTE FUNCTION check_trigger();
-  output: |
+  up: |
     CREATE TABLE device_tests (
       id serial PRIMARY KEY
     );
@@ -154,6 +166,9 @@ CreateTriggerWithMultipleEvents:
     $$ LANGUAGE plpgsql;
     CREATE TRIGGER enforce_required_permit before insert OR update ON public.device_tests FOR EACH ROW EXECUTE FUNCTION check_trigger();
 
+  down: |
+    DROP TABLE public.device_tests;
+    DROP TRIGGER enforce_required_permit ON public.device_tests;
 CreateTriggerWithThreeEvents:
   legacy_ignore_quotes: false
   desired: |
@@ -171,7 +186,7 @@ CreateTriggerWithThreeEvents:
     CREATE TRIGGER audit_all
       AFTER INSERT OR UPDATE OR DELETE ON audit_log
       FOR EACH ROW EXECUTE FUNCTION log_all_changes();
-  output: |
+  up: |
     CREATE TABLE audit_log (
       id serial PRIMARY KEY,
       action text
@@ -185,6 +200,9 @@ CreateTriggerWithThreeEvents:
     $$ LANGUAGE plpgsql;
     CREATE TRIGGER audit_all after insert OR update OR delete ON public.audit_log FOR EACH ROW EXECUTE FUNCTION log_all_changes();
 
+  down: |
+    DROP TABLE public.audit_log;
+    DROP TRIGGER audit_all ON public.audit_log;
 CreateTriggerWithoutForEachRow:
   legacy_ignore_quotes: false
   desired: |
@@ -202,7 +220,7 @@ CreateTriggerWithoutForEachRow:
     CREATE TRIGGER notify_change
       AFTER INSERT ON users
       EXECUTE FUNCTION notify_func();
-  output: |
+  up: |
     CREATE TABLE users (
       id serial PRIMARY KEY,
       name text
@@ -216,6 +234,9 @@ CreateTriggerWithoutForEachRow:
     $$ LANGUAGE plpgsql;
     CREATE TRIGGER notify_change after insert ON public.users FOR EACH ROW EXECUTE FUNCTION notify_func();
 
+  down: |
+    DROP TABLE public.users;
+    DROP TRIGGER notify_change ON public.users;
 CreateTriggerWithFunctionArgs:
   legacy_ignore_quotes: false
   desired: |
@@ -233,7 +254,7 @@ CreateTriggerWithFunctionArgs:
     CREATE TRIGGER check_value
       BEFORE INSERT ON users
       FOR EACH ROW EXECUTE FUNCTION check_func('arg1', 'arg2');
-  output: |
+  up: |
     CREATE TABLE users (
       id serial PRIMARY KEY,
       name text
@@ -247,6 +268,9 @@ CreateTriggerWithFunctionArgs:
     $$ LANGUAGE plpgsql;
     CREATE TRIGGER check_value before insert ON public.users FOR EACH ROW EXECUTE FUNCTION check_func('arg1', 'arg2');
 
+  down: |
+    DROP TABLE public.users;
+    DROP TRIGGER check_value ON public.users;
 CreateMultipleTriggers:
   legacy_ignore_quotes: false
   desired: |
@@ -274,7 +298,7 @@ CreateMultipleTriggers:
     CREATE TRIGGER after_insert_trigger
       AFTER INSERT ON users
       FOR EACH ROW EXECUTE FUNCTION after_insert_func();
-  output: |
+  up: |
     CREATE TABLE users (
       id serial PRIMARY KEY,
       name text
@@ -296,6 +320,10 @@ CreateMultipleTriggers:
     CREATE TRIGGER before_insert_trigger before insert ON public.users FOR EACH ROW EXECUTE FUNCTION before_insert_func();
     CREATE TRIGGER after_insert_trigger after insert ON public.users FOR EACH ROW EXECUTE FUNCTION after_insert_func();
 
+  down: |
+    DROP TABLE public.users;
+    DROP TRIGGER before_insert_trigger ON public.users;
+    DROP TRIGGER after_insert_trigger ON public.users;
 DropTrigger:
   legacy_ignore_quotes: false
   current: |
@@ -325,9 +353,11 @@ DropTrigger:
       RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
-  output: |
+  up: |
     DROP TRIGGER log_insert ON public.users;
 
+  down: |
+    CREATE TRIGGER log_insert after insert ON public.users FOR EACH ROW EXECUTE FUNCTION log_func();
 ModifyTrigger:
   legacy_ignore_quotes: false
   current: |
@@ -360,6 +390,10 @@ ModifyTrigger:
     CREATE TRIGGER log_changes
       AFTER UPDATE ON users
       FOR EACH ROW EXECUTE FUNCTION trigger_func();
-  output: |
+  up: |
     DROP TRIGGER log_changes ON public.users;
     CREATE TRIGGER log_changes after update ON public.users FOR EACH ROW EXECUTE FUNCTION trigger_func();
+
+  down: |
+    DROP TRIGGER log_changes ON public.users;
+    CREATE TRIGGER log_changes before insert ON public.users FOR EACH ROW EXECUTE FUNCTION trigger_func();

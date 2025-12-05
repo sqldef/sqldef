@@ -21,8 +21,10 @@ MysqlSecurityTypeView:
       is_deleted tinyint(1)
     );
     CREATE SQL SECURITY INVOKER VIEW `foo` AS select u.id as id, p.id as post_id, 'xxx' as name from (mysqldef_test.users as u join mysqldef_test.posts as p on ((u.id = p.user_id)));
-  output: |
+  up: |
     CREATE OR REPLACE SQL SECURITY INVOKER VIEW `foo` AS select u.id as id, p.id as post_id, 'xxx' as name from (mysqldef_test.users as u join mysqldef_test.posts as p on ((u.id = p.user_id)));
+  down: |
+    CREATE OR REPLACE SQL SECURITY DEFINER VIEW `foo` AS select u.id as id, p.id as post_id, 'xxx' as name from (mysqldef_test.users as u join mysqldef_test.posts as p on ((u.id = p.user_id)));
 CreateTriggerWithComplexStatements:
   desired: |
     CREATE TABLE test_trigger (
@@ -45,7 +47,7 @@ CreateTriggerWithComplexStatements:
     end if;
     set NEW.updated_at = now();
     end;
-  output: |
+  up: |
     CREATE TABLE test_trigger (
       id int(10) unsigned NOT NULL AUTO_INCREMENT,
       name varchar(255) COLLATE utf8mb4_bin NOT NULL,
@@ -66,6 +68,8 @@ CreateTriggerWithComplexStatements:
     end if;
     set NEW.updated_at = now();
     end;
+  down: |
+    DROP TABLE `test_trigger`;
 CreateTriggerWithMultipleStatements:
   desired: |
     CREATE TABLE test_trigger (
@@ -80,7 +84,7 @@ CreateTriggerWithMultipleStatements:
     set NEW.updated_at = now();
     set NEW.modified_at = now();
     end;
-  output: |
+  up: |
     CREATE TABLE test_trigger (
       id int(11) NOT NULL AUTO_INCREMENT,
       created_at datetime NOT NULL,
@@ -93,6 +97,8 @@ CreateTriggerWithMultipleStatements:
     set NEW.updated_at = now();
     set NEW.modified_at = now();
     end;
+  down: |
+    DROP TABLE `test_trigger`;
 View:
   desired: |
     CREATE TABLE users (
@@ -126,8 +132,10 @@ ViewUpdate:
       is_deleted tinyint(1)
     );
     CREATE VIEW foo AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
-  output: |
+  up: |
     CREATE OR REPLACE VIEW `foo` AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
+  down: |
+    CREATE OR REPLACE VIEW `foo` AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on ((u.id = p.user_id)));
   flavor: mysql  # MariaDB handles view formatting differently than MySQL
 ViewDropsWhenEmptyDesired:
   current: |
@@ -141,10 +149,20 @@ ViewDropsWhenEmptyDesired:
     );
     CREATE VIEW foo AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
   desired: |
-  output: |
+  up: |
     DROP TABLE `posts`;
     DROP TABLE `users`;
     DROP VIEW `foo`;
+  down: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL
+    );
+    CREATE TABLE posts (
+      id bigint(20) NOT NULL,
+      user_id bigint(20) NOT NULL,
+      is_deleted tinyint(1)
+    );
+    CREATE VIEW foo AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
   flavor: mysql  # MariaDB shows unexpected view changes in idempotency tests
 TriggerInsert:
   desired: |
@@ -181,9 +199,12 @@ TriggerInsertUpdate:
       dt datetime
     );
     CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());
-  output: |
+  up: |
     DROP TRIGGER `insert_log`;
     CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());
+  down: |
+    DROP TRIGGER `insert_log`;
+    CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());
 TriggerInsertBeforeUpdate:
   current: |
     CREATE TABLE users (
@@ -208,8 +229,10 @@ TriggerInsertBeforeUpdate:
     );
     CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());
     CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());
-  output: |
+  up: |
     CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());
+  down: |
+    
 TriggerInsertBeforeUpdateChange:
   current: |
     CREATE TABLE users (
@@ -235,9 +258,12 @@ TriggerInsertBeforeUpdateChange:
     );
     CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());
     CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());
-  output: |
+  up: |
     DROP TRIGGER `insert_log_before_update`;
     CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert_users', now());
+  down: |
+    DROP TRIGGER `insert_log_before_update`;
+    CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());
 TriggerSetNew:
   desired: |
     CREATE TABLE users (
@@ -268,8 +294,10 @@ TriggerSetNewComplex:
     );
     CREATE TRIGGER `set_logical_uniqueness_on_users` before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = 1;
     CREATE TRIGGER `set_logical_uniqueness_on_users2` before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = case when NEW.deleted_at is null then 1 when NEW.deleted_at is not null then null end;
-  output: |
+  up: |
     CREATE TRIGGER `set_logical_uniqueness_on_users2` before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = case when NEW.deleted_at is null then 1 when NEW.deleted_at is not null then null end;
+  down: |
+    
 TriggerBeginEnd:
   desired: |
     CREATE TABLE test_trigger (
@@ -336,7 +364,7 @@ TriggerSubtractionWithoutSpace:
     CREATE TRIGGER `test_trigger_BEFORE_INSERT` before insert ON `test_trigger` FOR EACH ROW begin
     set NEW.status = 1+1-1;
     end;
-  output: |
+  up: |
     CREATE TABLE test_trigger (
       id int(11) NOT NULL AUTO_INCREMENT,
       `status` int(4),
@@ -345,6 +373,8 @@ TriggerSubtractionWithoutSpace:
     CREATE TRIGGER `test_trigger_BEFORE_INSERT` before insert ON `test_trigger` FOR EACH ROW begin
     set NEW.status = 1 + 1 - 1;
     end;
+  down: |
+    DROP TABLE `test_trigger`;
 TriggerNonReservedWordInInsertList:
   desired: |
     CREATE TABLE users (
@@ -384,7 +414,7 @@ TriggerWithDeclareContinueHandler:
         NEW.id, NEW.col_a, NEW.col_b, NEW.created_at, NEW.updated_at
       );
     END;
-  output: |
+  up: |
     CREATE TABLE example_table (
       id int NOT NULL,
       col_a varchar(255),
@@ -406,6 +436,9 @@ TriggerWithDeclareContinueHandler:
     end;
     replace into example_table_new(id, col_a, col_b, created_at, updated_at) values (NEW.id, NEW.col_a, NEW.col_b, NEW.created_at, NEW.updated_at);
     end;
+  down: |
+    DROP TABLE `example_table`;
+    DROP TABLE `example_table_new`;
 TriggerWithDeclareExitHandler:
   desired: |
     CREATE TABLE example_table (
@@ -419,7 +452,7 @@ TriggerWithDeclareExitHandler:
       DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN END;
       SET NEW.name = UPPER(NEW.name);
     END;
-  output: |
+  up: |
     CREATE TABLE example_table (
       id int NOT NULL,
       name varchar(255)
@@ -431,6 +464,8 @@ TriggerWithDeclareExitHandler:
     end;
     set NEW.name = UPPER(NEW.name);
     end;
+  down: |
+    DROP TABLE `example_table`;
 TriggerWithDeclareHandlerSqlstate:
   desired: |
     CREATE TABLE example_table (
@@ -444,7 +479,7 @@ TriggerWithDeclareHandlerSqlstate:
       DECLARE CONTINUE HANDLER FOR SQLSTATE '23000' SET @x = 1;
       INSERT INTO example_table VALUES (NEW.id, NEW.name);
     END;
-  output: |
+  up: |
     CREATE TABLE example_table (
       id int NOT NULL,
       name varchar(255)
@@ -455,6 +490,8 @@ TriggerWithDeclareHandlerSqlstate:
     set @x = 1;
     insert into example_table values (NEW.id, NEW.name);
     end;
+  down: |
+    DROP TABLE `example_table`;
 TriggerWithDeclareHandlerMultipleStatements:
   desired: |
     CREATE TABLE example_table (
@@ -475,7 +512,7 @@ TriggerWithDeclareHandlerMultipleStatements:
       END;
       INSERT INTO example_table VALUES (NEW.id, NEW.name);
     END;
-  output: |
+  up: |
     CREATE TABLE example_table (
       id int NOT NULL,
       name varchar(255)
@@ -493,3 +530,7 @@ TriggerWithDeclareHandlerMultipleStatements:
     insert into example_table values (NEW.id, NEW.name);
     end;
 
+
+  down: |
+    DROP TABLE `example_table`;
+    DROP TABLE `error_log`;

@@ -25,9 +25,11 @@ AddIndexAsync:
   desired: |
     CREATE TABLE users (id bigint, email text);
     CREATE INDEX ASYNC idx_users_email ON users (email);
-  output: |
+  up: |
     CREATE INDEX ASYNC idx_users_email ON users (email);
 
+  down: |
+    DROP INDEX "public"."idx_users_email";
 DropAsyncIndex:
   offline: true
   current: |
@@ -35,5 +37,8 @@ DropAsyncIndex:
     CREATE INDEX ASYNC idx_users_email ON users (email);
   desired: |
     CREATE TABLE users (id bigint, email text);
-  output: |
+  up: |
     DROP INDEX "public"."idx_users_email";
+
+  down: |
+    CREATE INDEX ASYNC idx_users_email ON users (email);

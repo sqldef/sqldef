@@ -37,13 +37,15 @@ PartitionByRange:
      PARTITION p202111 VALUES LESS THAN ('2021-12-01'),
      PARTITION p202112 VALUES LESS THAN ('2022-01-01'),
      PARTITION pmax VALUES LESS THAN MAXVALUE) */;
-  output: |
+  up: |
     CREATE TABLE `users` (
       `uuid` varchar(37) NOT NULL,
       `name` varchar(255) DEFAULT NULL,
       `joined` date NOT NULL,
       PRIMARY KEY (`uuid`,`joined`)
     ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+  down: |
+    DROP TABLE `users`;
 CreateTableWithSpatialTypesAndSpatialKey:
   current: |
     CREATE TABLE users (
@@ -55,9 +57,12 @@ CreateTableWithSpatialTypesAndSpatialKey:
       location point NOT NULL,
       SPATIAL KEY index_users_location (location)
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD COLUMN `location` point NOT NULL AFTER `id`;
     ALTER TABLE `users` ADD SPATIAL KEY `index_users_location` (`location`);
+  down: |
+    ALTER TABLE `users` DROP INDEX `index_users_location`;
+    ALTER TABLE `users` DROP COLUMN `location`;
 CreateTableWithSpatialTypesSRIDSpecified:
   current: |
     CREATE TABLE users (
@@ -68,8 +73,10 @@ CreateTableWithSpatialTypesSRIDSpecified:
       id bigint(20) NOT NULL,
       location point NOT NULL /*!80003 SRID 4326 */
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD COLUMN `location` point NOT NULL /*!80003 SRID 4326 */ AFTER `id`;
+  down: |
+    ALTER TABLE `users` DROP COLUMN `location`;
 ColumnLiteral:
   desired: |
     CREATE TABLE users (
@@ -96,8 +103,10 @@ KeywordIndexColumnsAddIndex:
       `character` varchar(255) COLLATE utf8mb4_bin DEFAULT NULL,
       KEY `index_character`(`character`)
     );
-  output: |
+  up: |
     ALTER TABLE `tools` ADD KEY `index_character` (`character`);
+  down: |
+    ALTER TABLE `tools` DROP INDEX `index_character`;
 MysqlDoubleDashComment:
   desired: |
     -- comment 1
@@ -105,7 +114,10 @@ MysqlDoubleDashComment:
       id bigint NOT NULL
     );
     -- comment 2
-  output: |
+  up: |
     CREATE TABLE users(
       id bigint NOT NULL
     );
+
+  down: |
+    DROP TABLE `users`;

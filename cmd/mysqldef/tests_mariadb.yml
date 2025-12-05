@@ -7,13 +7,15 @@ CreateVectorIndex:
       PRIMARY KEY (id)
     );
     CREATE VECTOR INDEX idx_vector ON vectors (vector_col);
-  output: |
+  up: |
     CREATE TABLE vectors (
       id int(10) unsigned NOT NULL AUTO_INCREMENT,
       vector_col VECTOR(3) NOT NULL,
       PRIMARY KEY (id)
     );
     CREATE VECTOR INDEX idx_vector ON vectors (vector_col);
+  down: |
+    DROP TABLE `vectors`;
   flavor: mariadb
 CreateVectorIndexWithOptions:
   desired: |
@@ -23,13 +25,15 @@ CreateVectorIndexWithOptions:
       PRIMARY KEY (id)
     );
     CREATE VECTOR INDEX idx_vector_cosine ON vectors (vector_col) DISTANCE=COSINE M=16;
-  output: |
+  up: |
     CREATE TABLE vectors (
       id int(10) unsigned NOT NULL AUTO_INCREMENT,
       vector_col VECTOR(512) NOT NULL,
       PRIMARY KEY (id)
     );
     CREATE VECTOR INDEX idx_vector_cosine ON vectors (vector_col) DISTANCE=COSINE M=16;
+  down: |
+    DROP TABLE `vectors`;
   flavor: mariadb
 AddVectorIndex:
   current: |
@@ -45,8 +49,10 @@ AddVectorIndex:
       PRIMARY KEY (id),
       VECTOR INDEX idx_vector (vector_col)
     );
-  output: |
+  up: |
     ALTER TABLE `vectors` ADD VECTOR INDEX `idx_vector` (`vector_col`);
+  down: |
+    ALTER TABLE `vectors` DROP INDEX `idx_vector`;
   flavor: mariadb
 DropVectorIndex:
   current: |
@@ -62,8 +68,10 @@ DropVectorIndex:
       vector_col VECTOR(512) NOT NULL,
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `vectors` DROP INDEX `idx_vector`;
+  down: |
+    ALTER TABLE `vectors` ADD VECTOR INDEX `idx_vector` (`vector_col`);
   flavor: mariadb
 
 # MariaDB-Compatible Alternatives to MySQL-only Tests
@@ -77,8 +85,11 @@ AddColumnWithDefaultExpressionMariaDB:
       id BIGINT PRIMARY KEY,
       data LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT '[]' CHECK (json_valid(data))
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD COLUMN `data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT '[]' CHECK (json_valid(data)) AFTER `id`;
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
+    ALTER TABLE `users` DROP COLUMN `data`;
   flavor: mariadb
 
 AddDefaultExpressionMariaDB:
@@ -92,8 +103,11 @@ AddDefaultExpressionMariaDB:
       id BIGINT PRIMARY KEY,
       data LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT '[]' CHECK (json_valid(data))
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `data` `data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT '[]' CHECK (json_valid(data));
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
+    ALTER TABLE `users` CHANGE COLUMN `data` `data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin CHECK (json_valid(data));
   flavor: mariadb
 
 RemoveDefaultExpressionMariaDB:
@@ -107,8 +121,11 @@ RemoveDefaultExpressionMariaDB:
       id BIGINT PRIMARY KEY,
       data LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin CHECK (json_valid(data))
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `data` `data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin CHECK (json_valid(data));
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
+    ALTER TABLE `users` CHANGE COLUMN `data` `data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT '[]' CHECK (json_valid(data));
   flavor: mariadb
 
 # MariaDB doesn't support CHECK constraints the same way as MySQL 8.0
@@ -131,12 +148,14 @@ FulltextIndexMariaDB:
       title varchar(40) DEFAULT NULL,
       FULLTEXT KEY title_fulltext_index (title)
     );
-  output: |
+  up: |
     CREATE TABLE posts (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
       title varchar(40) DEFAULT NULL,
       FULLTEXT KEY title_fulltext_index (title)
     );
+  down: |
+    DROP TABLE `posts`;
   flavor: mariadb
 
 FulltextIndexDropMariaDB:
@@ -151,8 +170,10 @@ FulltextIndexDropMariaDB:
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
       title varchar(40) DEFAULT NULL
     );
-  output: |
+  up: |
     ALTER TABLE `posts` DROP INDEX `title_fulltext_index`;
+  down: |
+    ALTER TABLE `posts` ADD FULLTEXT KEY `title_fulltext_index` (`title`);
   flavor: mariadb
 
 FulltextIndexReAddMariaDB:
@@ -167,8 +188,10 @@ FulltextIndexReAddMariaDB:
       title varchar(40) DEFAULT NULL,
       FULLTEXT KEY title_fulltext_index (title)
     );
-  output: |
+  up: |
     ALTER TABLE `posts` ADD FULLTEXT KEY `title_fulltext_index` (`title`);
+  down: |
+    ALTER TABLE `posts` DROP INDEX `title_fulltext_index`;
   flavor: mariadb
 
 # MariaDB view tests - using SQL SECURITY DEFINER format
@@ -206,8 +229,10 @@ ViewDropMariaDB:
       user_id bigint(20) NOT NULL,
       is_deleted tinyint(1)
     );
-  output: |
+  up: |
     DROP VIEW `user_posts`;
+  down: |
+    CREATE SQL SECURITY DEFINER VIEW user_posts AS select `mysqldef_test`.`users`.`id` AS `user_id`, `mysqldef_test`.`posts`.`id` AS `post_id`, `mysqldef_test`.`posts`.`is_deleted` AS `deleted` from (`mysqldef_test`.`users` join `mysqldef_test`.`posts` on(`mysqldef_test`.`users`.`id` = `mysqldef_test`.`posts`.`user_id`));
   flavor: mariadb
 
 ViewSecurityTypeMariaDB:
@@ -231,8 +256,10 @@ ViewSecurityTypeMariaDB:
       user_id bigint(20) NOT NULL
     );
     CREATE SQL SECURITY INVOKER VIEW user_posts AS select mysqldef_test.users.id as id, mysqldef_test.posts.id as post_id from (mysqldef_test.users join mysqldef_test.posts on (mysqldef_test.users.id = mysqldef_test.posts.user_id));
-  output: |
+  up: |
     CREATE OR REPLACE SQL SECURITY INVOKER VIEW `user_posts` AS select mysqldef_test.users.id as id, mysqldef_test.posts.id as post_id from (mysqldef_test.users join mysqldef_test.posts on (mysqldef_test.users.id = mysqldef_test.posts.user_id));
+  down: |
+    CREATE OR REPLACE SQL SECURITY DEFINER VIEW `user_posts` AS select mysqldef_test.users.id as id, mysqldef_test.posts.id as post_id from (mysqldef_test.users join mysqldef_test.posts on (mysqldef_test.users.id = mysqldef_test.posts.user_id));
   flavor: mariadb
 
 # MariaDB AUTO_INCREMENT handling (compatible with older MySQL behavior)
@@ -247,8 +274,10 @@ CreateTableRemoveAutoIncrementMariaDB:
       id bigint(20) NOT NULL PRIMARY KEY,
       name varchar(20)
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
   flavor: mariadb
 
 CreateTableRemoveAutoIncrementPrimaryKeyMariaDB:
@@ -261,10 +290,14 @@ CreateTableRemoveAutoIncrementPrimaryKeyMariaDB:
     CREATE TABLE friends (
       created_at datetime NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
     ALTER TABLE `friends` DROP PRIMARY KEY;
     ALTER TABLE `friends` DROP COLUMN `id`;
+  down: |
+    ALTER TABLE `friends` ADD COLUMN `id` bigint(20) NOT NULL FIRST;
+    ALTER TABLE `friends` ADD PRIMARY KEY (`id`);
+    ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
   flavor: mariadb
 
 CreateTableWithAutoIncrementPrimaryKeyAndAddMorePrimaryKeyMariaDB:
@@ -282,10 +315,15 @@ CreateTableWithAutoIncrementPrimaryKeyAndAddMorePrimaryKeyMariaDB:
       created_at datetime NOT NULL,
       PRIMARY KEY (`id`, `other_id`)
     );
-  output: |
+  up: |
     ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
     ALTER TABLE `friends` DROP PRIMARY KEY;
     ALTER TABLE `friends` ADD PRIMARY KEY (`id`, `other_id`);
+    ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
+  down: |
+    ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
+    ALTER TABLE `friends` DROP PRIMARY KEY;
+    ALTER TABLE `friends` ADD PRIMARY KEY (`id`);
     ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
   flavor: mariadb
 
@@ -318,11 +356,16 @@ ChangeGenerateColumnVirtualToStoredMariaDB:
       name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) STORED,
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `test_table` DROP COLUMN `test_expr`;
     ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED AFTER `test_value`;
     ALTER TABLE `test_table` DROP COLUMN `name`;
     ALTER TABLE `test_table` ADD COLUMN `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED AFTER `data`;
+  down: |
+    ALTER TABLE `test_table` DROP COLUMN `test_expr`;
+    ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL AFTER `test_value`;
+    ALTER TABLE `test_table` DROP COLUMN `name`;
+    ALTER TABLE `test_table` ADD COLUMN `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) VIRTUAL AFTER `data`;
   flavor: mariadb
 
 # MariaDB collate tests

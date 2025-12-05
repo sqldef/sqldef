@@ -26,9 +26,12 @@ ViewDDLsAreEmittedLastWithoutChangingDefinition:
       id bigint PRIMARY KEY,
       secret boolean NOT NULL DEFAULT false
     );
-  output: |
+  up: |
     ALTER TABLE "public"."foos" ADD COLUMN "secret" boolean NOT NULL DEFAULT false;
     CREATE VIEW foos_view AS SELECT id, secret FROM foos WHERE secret = false;
+  down: |
+    ALTER TABLE "public"."foos" DROP COLUMN "secret";
+    DROP VIEW "public"."foos_view";
 ViewDDLsAreEmittedLastWithChangingDefinition:
   current: |
     CREATE TABLE foos (
@@ -42,10 +45,14 @@ ViewDDLsAreEmittedLastWithChangingDefinition:
       id bigint PRIMARY KEY,
       secret boolean NOT NULL DEFAULT false
     );
-  output: |
+  up: |
     ALTER TABLE "public"."foos" ADD COLUMN "secret" boolean NOT NULL DEFAULT false;
     DROP VIEW "public"."foos_view";
     CREATE VIEW "public"."foos_view" AS select id, secret from foos where secret = false;
+  down: |
+    DROP VIEW "public"."foos_view";
+    CREATE VIEW "public"."foos_view" AS select 1 as dummy from dual;
+    ALTER TABLE "public"."foos" DROP COLUMN "secret";
 CreateMaterializedView:
   current: |
     CREATE TABLE public.users (
@@ -71,9 +78,11 @@ CreateMaterializedView:
     );
     CREATE MATERIALIZED VIEW public.view_user_posts AS
       SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
-  output: |
+  up: |
     CREATE MATERIALIZED VIEW public.view_user_posts AS
       SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
+  down: |
+    DROP MATERIALIZED VIEW "public"."view_user_posts";
 DropMaterializedView:
   current: |
     CREATE TABLE points (id bigint);
@@ -81,8 +90,11 @@ DropMaterializedView:
       SELECT id FROM points;
   desired: |
     CREATE TABLE points (id bigint);
-  output: |
+  up: |
     DROP MATERIALIZED VIEW "public"."points_view";
+  down: |
+    CREATE MATERIALIZED VIEW IF NOT EXISTS points_view AS
+      SELECT id FROM points;
 MaterializedViewIndex:
   desired: |
     CREATE TABLE IF NOT EXISTS points (
@@ -101,7 +113,7 @@ MaterializedViewIndex:
             FROM points
             GROUP BY point_type, user_id);
     CREATE INDEX points_view_idx ON points_view (tenant_id);
-  output: |
+  up: |
     CREATE TABLE IF NOT EXISTS points (
         id          BIGINT        PRIMARY KEY,
         tenant_id   BIGINT        NOT NULL,
@@ -118,6 +130,9 @@ MaterializedViewIndex:
             GROUP BY point_type, user_id);
     CREATE INDEX points_idx ON points (tenant_id, user_id, point_type);
     CREATE INDEX points_view_idx ON points_view (tenant_id);
+  down: |
+    DROP TABLE "public"."points";
+    DROP MATERIALIZED VIEW "public"."points_view";
 ViewWithCTE:
   desired: |
     CREATE TABLE users (
@@ -214,7 +229,9 @@ CreateViewCast:
     select
       amount::numeric(10,2) as amount_num
     from hoge;
-  output: ''
+  up: ''
+  down: |
+    
 ReplaceViewWithChangeCondition:
   current: |
     CREATE TABLE hoge (
@@ -238,8 +255,10 @@ ReplaceViewWithChangeCondition:
         bar
       FROM hoge
         WHERE bar = 'baz';
-  output: |
+  up: |
     CREATE OR REPLACE VIEW "public"."v" AS select foo, bar from hoge where bar = 'baz';
+  down: |
+    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar from hoge;
 ReplaceViewWithAddColumnToTail:
   current: |
     CREATE TABLE "public"."hoge" (
@@ -263,8 +282,11 @@ ReplaceViewWithAddColumnToTail:
       bar,
       'x' as added
      FROM hoge;
-  output: |
+  up: |
     CREATE OR REPLACE VIEW "public"."v" AS select foo, bar, 'x' as added from hoge;
+  down: |
+    DROP VIEW "public"."v";
+    CREATE VIEW "public"."v" AS select foo, bar from hoge;
 ReplaceViewWithAddColumnToMiddle:
   current: |
     CREATE TABLE "hoge" (
@@ -288,9 +310,12 @@ ReplaceViewWithAddColumnToMiddle:
       'x' as added,
       bar
      FROM hoge;
-  output: |
+  up: |
     DROP VIEW "public"."v";
     CREATE VIEW "public"."v" AS select foo, 'x' as added, bar from hoge;
+  down: |
+    DROP VIEW "public"."v";
+    CREATE VIEW "public"."v" AS select foo, bar from hoge;
 ReplaceViewWithDropColumn:
   current: |
     CREATE TABLE "public"."hoge" (
@@ -310,9 +335,11 @@ ReplaceViewWithDropColumn:
 
     CREATE VIEW v AS
     SELECT foo FROM hoge;
-  output: |
+  up: |
     DROP VIEW "public"."v";
     CREATE VIEW "public"."v" AS select foo from hoge;
+  down: |
+    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar from hoge;
 ReplaceViewWithChangeColumn:
   current: |
     CREATE TABLE "public"."hoge" (
@@ -335,9 +362,12 @@ ReplaceViewWithChangeColumn:
       foo,
       'x' as changed
     FROM hoge;
-  output: |
+  up: |
     DROP VIEW "public"."v";
     CREATE VIEW "public"."v" AS select foo, 'x' as changed from hoge;
+  down: |
+    DROP VIEW "public"."v";
+    CREATE VIEW "public"."v" AS select foo, bar from hoge;
 CreateViewWithCastCase:
   desired: |
     create table hoge (amount text);

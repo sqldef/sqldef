@@ -16,9 +16,11 @@ DropDomain:
   current: |
     CREATE DOMAIN us_postal_code AS text;
   desired: |
-  output: |
+  up: |
     DROP DOMAIN "public"."us_postal_code";
 
+  down: |
+    CREATE DOMAIN us_postal_code AS text;
 CreateDomainWithDefault:
   desired: |
     CREATE DOMAIN status_code AS integer DEFAULT 200;
@@ -38,26 +40,34 @@ DropDomainMultipleSchemas:
     CREATE DOMAIN test_schema.test_domain AS text;
     CREATE DOMAIN public_domain AS integer;
   desired: |
-  output: |
+  up: |
     DROP DOMAIN "public"."public_domain";
     DROP DOMAIN "test_schema"."test_domain";
 
+  down: |
+    CREATE SCHEMA test_schema;
+    CREATE DOMAIN test_schema.test_domain AS text;
+    CREATE DOMAIN public_domain AS integer;
 CreateAndKeepDomainInNonPublicSchema:
   current: |
     CREATE SCHEMA test_schema;
   desired: |
     CREATE SCHEMA test_schema;
     CREATE DOMAIN test_schema.my_domain AS text;
-  output: |
+  up: |
     CREATE DOMAIN test_schema.my_domain AS text;
 
+  down: |
+    DROP DOMAIN "test_schema"."my_domain";
 UnqualifiedAndQualifiedAreSame:
   current: |
     CREATE DOMAIN email AS text;
   desired: |
     CREATE DOMAIN public.email AS text;
-  output: |
+  up: |
 
+  down: |
+    
 MixedQualifiedAndUnqualifiedDomains:
   desired: |
     CREATE DOMAIN email AS text;
@@ -90,8 +100,10 @@ DomainWithCheckIsIdempotent:
     CREATE DOMAIN positive_int AS integer CHECK (VALUE > 0);
   desired: |
     CREATE DOMAIN positive_int AS integer CHECK (VALUE > 0);
-  output: |
+  up: |
 
+  down: |
+    
 CreateDomainCheckAndNotNull:
   desired: |
     CREATE DOMAIN username AS text
@@ -102,9 +114,11 @@ DropDomainWithConstraints:
   current: |
     CREATE DOMAIN email AS text CHECK (VALUE ~ '@');
   desired: |
-  output: |
+  up: |
     DROP DOMAIN "public"."email";
 
+  down: |
+    CREATE DOMAIN email AS text CHECK (VALUE ~ '@');
 CreateTableUsingDomain:
   desired: |
     CREATE DOMAIN email AS text CHECK (VALUE ~ '@');
@@ -214,57 +228,71 @@ AlterDomainSetDefault:
     CREATE DOMAIN status_code AS integer;
   desired: |
     CREATE DOMAIN status_code AS integer DEFAULT 200;
-  output: |
+  up: |
     ALTER DOMAIN "public"."status_code" SET DEFAULT 200;
 
+  down: |
+    ALTER DOMAIN "public"."status_code" DROP DEFAULT;
 AlterDomainDropDefault:
   current: |
     CREATE DOMAIN status_code AS integer DEFAULT 200;
   desired: |
     CREATE DOMAIN status_code AS integer;
-  output: |
+  up: |
     ALTER DOMAIN "public"."status_code" DROP DEFAULT;
 
+  down: |
+    ALTER DOMAIN "public"."status_code" SET DEFAULT 200;
 AlterDomainChangeDefault:
   current: |
     CREATE DOMAIN status_code AS integer DEFAULT 200;
   desired: |
     CREATE DOMAIN status_code AS integer DEFAULT 404;
-  output: |
+  up: |
     ALTER DOMAIN "public"."status_code" SET DEFAULT 404;
 
+  down: |
+    ALTER DOMAIN "public"."status_code" SET DEFAULT 200;
 AlterDomainSetNotNull:
   current: |
     CREATE DOMAIN email AS text;
   desired: |
     CREATE DOMAIN email AS text NOT NULL;
-  output: |
+  up: |
     ALTER DOMAIN "public"."email" SET NOT NULL;
 
+  down: |
+    ALTER DOMAIN "public"."email" DROP NOT NULL;
 AlterDomainDropNotNull:
   current: |
     CREATE DOMAIN email AS text NOT NULL;
   desired: |
     CREATE DOMAIN email AS text;
-  output: |
+  up: |
     ALTER DOMAIN "public"."email" DROP NOT NULL;
 
+  down: |
+    ALTER DOMAIN "public"."email" SET NOT NULL;
 AlterDomainAddCheck:
   current: |
     CREATE DOMAIN positive_int AS integer;
   desired: |
     CREATE DOMAIN positive_int AS integer CHECK (VALUE > 0);
-  output: |
+  up: |
     ALTER DOMAIN "public"."positive_int" ADD CHECK (VALUE > 0);
 
+  down: |
+    
 AlterDomainAddNamedCheck:
   current: |
     CREATE DOMAIN positive_int AS integer;
   desired: |
     CREATE DOMAIN positive_int AS integer CONSTRAINT positive_check CHECK (VALUE > 0);
-  output: |
+  up: |
     ALTER DOMAIN "public"."positive_int" ADD CONSTRAINT positive_check CHECK (VALUE > 0);
 
+  down: |
+    ALTER DOMAIN "public"."positive_int" DROP CONSTRAINT positive_check;
 AlterDomainAddMultipleChecks:
   current: |
     CREATE DOMAIN valid_score AS integer;
@@ -272,6 +300,9 @@ AlterDomainAddMultipleChecks:
     CREATE DOMAIN valid_score AS integer
       CHECK (VALUE >= 0)
       CHECK (VALUE <= 100);
-  output: |
+  up: |
     ALTER DOMAIN "public"."valid_score" ADD CHECK (VALUE >= 0);
     ALTER DOMAIN "public"."valid_score" ADD CHECK (VALUE <= 100);
+
+  down: |
+    

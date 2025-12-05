@@ -150,6 +150,11 @@ ViewDependsOnView_UpdateBaseViewAffectingDependentViews:
       SELECT id, name, category FROM products WHERE price < 50;
     CREATE VIEW cheap_product_names AS
       SELECT name FROM cheap_products;
-  output: |
+  up: |
     ALTER TABLE "public"."products" ADD COLUMN "category" text;
     CREATE OR REPLACE VIEW "public"."cheap_products" AS select id, name, category from products where price < 50;
+
+  down: |
+    DROP VIEW "public"."cheap_products";
+    CREATE VIEW "public"."cheap_products" AS select id, name from products where price < 50;
+    ALTER TABLE "public"."products" DROP COLUMN "category";

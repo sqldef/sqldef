@@ -24,8 +24,12 @@ DropTable:
       name varchar(40) DEFAULT NULL,
       created_at datetime NOT NULL
     );
-  output: |
+  up: |
     DROP TABLE `bigdata`;
+  down: |
+    CREATE TABLE bigdata (
+      data bigint
+    );
 CreateTableWithImplicitNotNull:
   desired: |
     CREATE TABLE users (
@@ -44,8 +48,10 @@ CreateTableDropPrimaryKey:
       id bigint NOT NULL,
       name varchar(20)
     );
-  output: |
+  up: |
     ALTER TABLE `users` DROP PRIMARY KEY;
+  down: |
+    ALTER TABLE `users` ADD PRIMARY KEY (`id`);
 CreateTableAddPrimaryKeyInColumn:
   current: |
     CREATE TABLE users (
@@ -57,9 +63,11 @@ CreateTableAddPrimaryKeyInColumn:
       id bigint NOT NULL,
       name varchar(20) PRIMARY KEY
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(20) NOT NULL;
     ALTER TABLE `users` ADD PRIMARY KEY (`name`);
+  down: |
+    ALTER TABLE `users` DROP PRIMARY KEY;
 CreateTableAddPrimaryKey:
   current: |
     CREATE TABLE users (
@@ -72,8 +80,10 @@ CreateTableAddPrimaryKey:
       name varchar(20),
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD PRIMARY KEY (`id`);
+  down: |
+    ALTER TABLE `users` DROP PRIMARY KEY;
 CreateTableAddAutoIncrement:
   current: |
     CREATE TABLE users (
@@ -85,8 +95,10 @@ CreateTableAddAutoIncrement:
       id bigint(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
       name varchar(20)
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
 AlterTableAddSetTypeColumn:
   current: |
     CREATE TABLE alarm (id BIGINT PRIMARY KEY);
@@ -95,8 +107,11 @@ AlterTableAddSetTypeColumn:
       id BIGINT PRIMARY KEY,
       dayOfWeek SET('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun') NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE `alarm` ADD COLUMN `dayOfWeek` set('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun') NOT NULL AFTER `id`;
+  down: |
+    ALTER TABLE `alarm` CHANGE COLUMN `id` `id` bigint NOT NULL;
+    ALTER TABLE `alarm` DROP COLUMN `dayOfWeek`;
 CreateTableWithKeyBlockSize:
   desired: |
     CREATE TABLE users (
@@ -113,8 +128,11 @@ AlterTableColumnFractionalSecondsPart:
       id bigint(20) PRIMARY KEY,
       created_at datetime(3) NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `created_at` `created_at` datetime(3) NOT NULL;
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
+    ALTER TABLE `users` CHANGE COLUMN `created_at` `created_at` datetime NOT NULL;
 TableComment:
   current: |
     CREATE TABLE `prefecture` (
@@ -128,8 +146,10 @@ TableComment:
       `name` varchar(50) NOT NULL COMMENT '都道府県名',
       PRIMARY KEY (`id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='都道府県マスター';
-  output: |
+  up: |
     ALTER TABLE `prefecture` COMMENT = '都道府県マスター';
+  down: |
+    ALTER TABLE `prefecture` COMMENT = '';
 RemoveTableComment:
   current: |
     CREATE TABLE `prefecture` (
@@ -143,8 +163,10 @@ RemoveTableComment:
       `name` varchar(50) NOT NULL COMMENT '都道府県名',
       PRIMARY KEY (`id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-  output: |
+  up: |
     ALTER TABLE `prefecture` COMMENT = '';
+  down: |
+    ALTER TABLE `prefecture` COMMENT = '都道府県マスター';
 CreateTableChangePrimaryKey:
   current: |
     CREATE TABLE friends (
@@ -159,9 +181,12 @@ CreateTableChangePrimaryKey:
       created_at datetime NOT NULL,
       PRIMARY KEY (user_id, friend_id)
     );
-  output: |
+  up: |
     ALTER TABLE `friends` DROP PRIMARY KEY;
     ALTER TABLE `friends` ADD PRIMARY KEY (`user_id`, `friend_id`);
+  down: |
+    ALTER TABLE `friends` DROP PRIMARY KEY;
+    ALTER TABLE `friends` ADD PRIMARY KEY (`user_id`);
 CreateTableChangePrimaryKeyWithComment:
   current: |
     CREATE TABLE friends (
@@ -176,9 +201,12 @@ CreateTableChangePrimaryKeyWithComment:
       created_at datetime NOT NULL,
       PRIMARY KEY (user_id, friend_id) COMMENT 'new primary key'
     );
-  output: |
+  up: |
     ALTER TABLE `friends` DROP PRIMARY KEY;
     ALTER TABLE `friends` ADD PRIMARY KEY (`user_id`, `friend_id`) COMMENT 'new primary key';
+  down: |
+    ALTER TABLE `friends` DROP PRIMARY KEY;
+    ALTER TABLE `friends` ADD PRIMARY KEY (`user_id`);
 CreateTableAddAutoIncrementPrimaryKey:
   current: |
     CREATE TABLE users (
@@ -190,10 +218,14 @@ CreateTableAddAutoIncrementPrimaryKey:
       name varchar(20),
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD COLUMN `id` bigint NOT NULL FIRST;
     ALTER TABLE `users` ADD PRIMARY KEY (`id`);
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
+    ALTER TABLE `users` DROP PRIMARY KEY;
+    ALTER TABLE `users` DROP COLUMN `id`;
 CreateTableKeepAutoIncrement:
   current: |
     CREATE TABLE users (
@@ -207,8 +239,10 @@ CreateTableKeepAutoIncrement:
       password char(128) COLLATE utf8mb4_bin DEFAULT NULL,
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` int(11) NOT NULL AUTO_INCREMENT;
 AddColumn:
   current: |
     CREATE TABLE users (
@@ -221,8 +255,10 @@ AddColumn:
       name varchar(40) DEFAULT NULL,
       created_at datetime NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD COLUMN `created_at` datetime NOT NULL AFTER `name`;
+  down: |
+    ALTER TABLE `users` DROP COLUMN `created_at`;
 DropColumn:
   current: |
     CREATE TABLE users (
@@ -235,8 +271,10 @@ DropColumn:
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
       created_at datetime NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE `users` DROP COLUMN `name`;
+  down: |
+    ALTER TABLE `users` ADD COLUMN `name` varchar(40) DEFAULT null AFTER `id`;
 AddColumnAfter:
   current: |
     CREATE TABLE users (
@@ -249,8 +287,10 @@ AddColumnAfter:
       name varchar(40) NOT NULL,
       created_at datetime NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD COLUMN `name` varchar(40) NOT NULL AFTER `id`;
+  down: |
+    ALTER TABLE `users` DROP COLUMN `name`;
 AddColumnWithNull:
   current: |
     CREATE TABLE users (
@@ -263,8 +303,11 @@ AddColumnWithNull:
       name varchar(40) DEFAULT NULL,
       created_at timestamp NULL DEFAULT NULL
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD COLUMN `created_at` timestamp NULL DEFAULT null AFTER `name`;
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
+    ALTER TABLE `users` DROP COLUMN `created_at`;
 ChangeColumn:
   current: |
     CREATE TABLE users (
@@ -276,9 +319,12 @@ ChangeColumn:
       id bigint UNSIGNED NOT NULL,
       name char(40)
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint UNSIGNED NOT NULL;
     ALTER TABLE `users` CHANGE COLUMN `name` `name` char(40);
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` int UNSIGNED NOT NULL;
+    ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(40);
 ChangeColumnLength:
   current: |
     CREATE TABLE users (
@@ -290,8 +336,10 @@ ChangeColumnLength:
       id int UNSIGNED NOT NULL,
       name varchar(1000) COLLATE utf8mb4_bin DEFAULT NULL
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(1000) COLLATE utf8mb4_bin DEFAULT null;
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(255) COLLATE utf8mb4_bin DEFAULT null;
 ChangeColumnBinary:
   current: |
     CREATE TABLE users (
@@ -301,8 +349,10 @@ ChangeColumnBinary:
     CREATE TABLE users (
       word varchar(64) BINARY NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `word` `word` varchar(64) COLLATE utf8mb4_bin NOT NULL;
+  down: |
+    
 ChangeColumnCollate:
   current: |
     CREATE TABLE users (
@@ -312,8 +362,10 @@ ChangeColumnCollate:
     CREATE TABLE users (
       password char(128) CHARACTER SET latin1 COLLATE latin1_bin
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `password` `password` char(128) CHARACTER SET latin1 COLLATE latin1_bin;
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `password` `password` char(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
 ChangeEnumColumn:
   current: |
     CREATE TABLE users (
@@ -323,8 +375,10 @@ ChangeEnumColumn:
     CREATE TABLE users (
       active enum("active", "inactive")
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `active` `active` enum('active', 'inactive');
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `active` `active` enum('active');
 ChangeComment:
   current: |
     CREATE TABLE users (
@@ -334,8 +388,10 @@ ChangeComment:
     CREATE TABLE users (
       created_at datetime COMMENT 'created time'
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `created_at` `created_at` datetime COMMENT 'created time';
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `created_at` `created_at` datetime COMMENT 'created at';
 SwapColumn:
   current: |
     CREATE TABLE users (
@@ -353,9 +409,11 @@ SwapColumn:
       created_at datetime NOT NULL,
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `nickname` `nickname` varchar(20) NOT NULL AFTER `id`;
 
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(40) NOT NULL AFTER `id`;
 RenameColumn:
   current: |
     CREATE TABLE users (
@@ -369,9 +427,12 @@ RenameColumn:
       user_name text, -- @renamed from=username
       age integer
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `username` `user_name` text;
 
+  down: |
+    ALTER TABLE `users` ADD COLUMN `username` text AFTER `id`;
+    ALTER TABLE `users` DROP COLUMN `user_name`;
 RenameColumnWithTypeChange:
   current: |
     CREATE TABLE users (
@@ -385,9 +446,12 @@ RenameColumnWithTypeChange:
       user_name text NOT NULL, -- @renamed from=username
       age integer
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `username` `user_name` text NOT NULL;
 
+  down: |
+    ALTER TABLE `users` ADD COLUMN `username` varchar(100) AFTER `id`;
+    ALTER TABLE `users` DROP COLUMN `user_name`;
 RenameColumnIdempotency:
   current: |
     CREATE TABLE users (
@@ -401,7 +465,8 @@ RenameColumnIdempotency:
       user_name text, -- @renamed from=username
       age integer
     );
-  output: ""
+  up: ""
+  down: ""
 
 RenameColumnConflictingNames:
   current: |
@@ -433,9 +498,12 @@ RenameColumnQuotedDoubleQuotes:
       foobar text, -- @renamed from="foo bar"
       age integer
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `foo bar` `foobar` text;
 
+  down: |
+    ALTER TABLE `users` ADD COLUMN `foo bar` text AFTER `id`;
+    ALTER TABLE `users` DROP COLUMN `foobar`;
 RenameColumnWithSpecialChars:
   current: |
     CREATE TABLE users (
@@ -449,9 +517,12 @@ RenameColumnWithSpecialChars:
       column_with_underscore varchar(50), -- @renamed from="column-with-dash"
       age integer
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `column-with-dash` `column_with_underscore` varchar(50);
 
+  down: |
+    ALTER TABLE `users` ADD COLUMN `column-with-dash` varchar(50) AFTER `id`;
+    ALTER TABLE `users` DROP COLUMN `column_with_underscore`;
 RenameColumnWithDot:
   current: |
     CREATE TABLE users (
@@ -465,9 +536,12 @@ RenameColumnWithDot:
       special_column text NOT NULL, -- @renamed from="special.column"
       age integer
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `special.column` `special_column` text NOT NULL;
 
+  down: |
+    ALTER TABLE `users` ADD COLUMN `special.column` text NOT NULL AFTER `id`;
+    ALTER TABLE `users` DROP COLUMN `special_column`;
 RenameColumnWithCStyleComment:
   current: |
     CREATE TABLE users (
@@ -481,9 +555,12 @@ RenameColumnWithCStyleComment:
       user_name varchar(100), /* @renamed from=username */
       age integer
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `username` `user_name` varchar(100);
 
+  down: |
+    ALTER TABLE `users` ADD COLUMN `username` varchar(100) AFTER `id`;
+    ALTER TABLE `users` DROP COLUMN `user_name`;
 RenameMultipleColumns:
   current: |
     CREATE TABLE users (
@@ -499,10 +576,15 @@ RenameMultipleColumns:
       email_address varchar(100), -- @renamed from="email@address"
       age integer
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `user name` `username` text;
     ALTER TABLE `users` CHANGE COLUMN `email@address` `email_address` varchar(100);
 
+  down: |
+    ALTER TABLE `users` ADD COLUMN `user name` text AFTER `id`;
+    ALTER TABLE `users` ADD COLUMN `email@address` varchar(100) AFTER `user name`;
+    ALTER TABLE `users` DROP COLUMN `email_address`;
+    ALTER TABLE `users` DROP COLUMN `username`;
 RenameTable:
   current: |
     CREATE TABLE user_accounts (
@@ -516,9 +598,16 @@ RenameTable:
       username text,
       age integer
     );
-  output: |
+  up: |
     ALTER TABLE `user_accounts` RENAME TO `users`;
 
+  down: |
+    CREATE TABLE user_accounts (
+      id bigint NOT NULL,
+      username text,
+      age integer
+    );
+    DROP TABLE `users`;
 RenameTableWithCommentVariant:
   current: |
     CREATE TABLE old_users (
@@ -530,9 +619,15 @@ RenameTableWithCommentVariant:
       id bigint NOT NULL,
       name text
     );
-  output: |
+  up: |
     ALTER TABLE `old_users` RENAME TO `new_users`;
 
+  down: |
+    CREATE TABLE old_users (
+      id bigint NOT NULL,
+      name text
+    );
+    DROP TABLE `new_users`;
 RenameTableWithQuotedName:
   current: |
     CREATE TABLE `user accounts` (
@@ -544,9 +639,15 @@ RenameTableWithQuotedName:
       id bigint NOT NULL,
       name text
     );
-  output: |
+  up: |
     ALTER TABLE `user accounts` RENAME TO `user_profiles`;
 
+  down: |
+    CREATE TABLE `user accounts` (
+      id bigint NOT NULL,
+      name text
+    );
+    DROP TABLE `user_profiles`;
 RenameTableAndMultipleColumnChanges:
   current: |
     CREATE TABLE old_accounts (
@@ -562,7 +663,7 @@ RenameTableAndMultipleColumnChanges:
       is_active boolean DEFAULT true,
       created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
-  output: |
+  up: |
     ALTER TABLE `old_accounts` RENAME TO `accounts`;
     ALTER TABLE `accounts` CHANGE COLUMN `user_name` `username` varchar(100);
     ALTER TABLE `accounts` CHANGE COLUMN `is_active` `is_active` boolean DEFAULT true;
@@ -571,6 +672,14 @@ RenameTableAndMultipleColumnChanges:
     ALTER TABLE `accounts` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
     ALTER TABLE `accounts` DROP COLUMN `old_field`;
 
+  down: |
+    CREATE TABLE old_accounts (
+      id bigint NOT NULL,
+      user_name varchar(50),
+      is_active boolean,
+      old_field text
+    );
+    DROP TABLE `accounts`;
 RenameIndex:
   current: |
     CREATE TABLE users (
@@ -586,9 +695,12 @@ RenameIndex:
       username varchar(100),
       INDEX new_email_idx (email) -- @renamed from=old_email_idx
     );
-  output: |
+  up: |
     ALTER TABLE `users` RENAME INDEX `old_email_idx` TO `new_email_idx`;
 
+  down: |
+    ALTER TABLE `users` ADD INDEX `old_email_idx` (`email`);
+    ALTER TABLE `users` DROP INDEX `new_email_idx`;
 RenameIndexStandalone:
   current: |
     CREATE TABLE users (
@@ -602,9 +714,12 @@ RenameIndexStandalone:
       email varchar(255)
     );
     CREATE INDEX user_email_idx /* @renamed from=email_idx */ ON users (email);
-  output: |
+  up: |
     ALTER TABLE `users` RENAME INDEX `email_idx` TO `user_email_idx`;
 
+  down: |
+    CREATE INDEX email_idx ON users (email);
+    ALTER TABLE `users` DROP INDEX `user_email_idx`;
 RenameUniqueIndex:
   current: |
     CREATE TABLE users (
@@ -618,9 +733,12 @@ RenameUniqueIndex:
       email varchar(255),
       UNIQUE KEY unique_email (email) -- @renamed from=old_unique_email
     );
-  output: |
+  up: |
     ALTER TABLE `users` RENAME INDEX `old_unique_email` TO `unique_email`;
 
+  down: |
+    ALTER TABLE `users` ADD UNIQUE KEY `old_unique_email` (`email`);
+    ALTER TABLE `users` DROP INDEX `unique_email`;
 RenameMultipleIndexes:
   current: |
     CREATE TABLE users (
@@ -638,10 +756,15 @@ RenameMultipleIndexes:
       INDEX email_idx (email), -- @renamed from=idx_email
       INDEX username_idx (username) -- @renamed from=idx_username
     );
-  output: |
+  up: |
     ALTER TABLE `users` RENAME INDEX `idx_email` TO `email_idx`;
     ALTER TABLE `users` RENAME INDEX `idx_username` TO `username_idx`;
 
+  down: |
+    ALTER TABLE `users` ADD INDEX `idx_email` (`email`);
+    ALTER TABLE `users` ADD INDEX `idx_username` (`username`);
+    ALTER TABLE `users` DROP INDEX `email_idx`;
+    ALTER TABLE `users` DROP INDEX `username_idx`;
 RenameTableAndAddIndex:
   current: |
     CREATE TABLE old_users (
@@ -657,11 +780,18 @@ RenameTableAndAddIndex:
       KEY email_idx (email),
       KEY username_idx (username)
     );
-  output: |
+  up: |
     ALTER TABLE `old_users` RENAME TO `users`;
     ALTER TABLE `users` ADD KEY `email_idx` (`email`);
     ALTER TABLE `users` ADD KEY `username_idx` (`username`);
 
+  down: |
+    CREATE TABLE old_users (
+      id bigint NOT NULL,
+      email varchar(100),
+      username varchar(50)
+    );
+    DROP TABLE `users`;
 CreateWithNonReservedKeywordColumns:
   desired: |
     CREATE TABLE test (
@@ -702,7 +832,7 @@ CreateTableWithFunctionalIndex:
     UNIQUE KEY `app_badge_tag_pk` (`badge_id`,((case when (`design_id` is null) then _utf8mb4'' else `design_id` end)),((case when (`color_id` is null) then _utf8mb4'' else `color_id` end))),
     KEY `app_badge_tag_design_id_index` (`design_id`)
     );
-  output: |
+  up: |
     CREATE TABLE `app_badge_tag` (
     `tag_id` varchar(255) NOT NULL,
     `badge_id` varchar(32) NOT NULL,
@@ -713,6 +843,8 @@ CreateTableWithFunctionalIndex:
     UNIQUE KEY `app_badge_tag_pk` (`badge_id`,((case when (`design_id` is null) then _utf8mb4'' else `design_id` end)),((case when (`color_id` is null) then _utf8mb4'' else `color_id` end))),
     KEY `app_badge_tag_design_id_index` (`design_id`)
     );
+  down: |
+    DROP TABLE `app_badge_tag`;
 AlterColumnSetDefault:
   current: |
     CREATE TABLE users (
@@ -726,10 +858,13 @@ AlterColumnSetDefault:
       status varchar(20) DEFAULT 'active',
       priority int DEFAULT 1
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `status` `status` varchar(20) DEFAULT 'active';
     ALTER TABLE `users` CHANGE COLUMN `priority` `priority` int DEFAULT 1;
 
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `status` `status` varchar(20);
+    ALTER TABLE `users` CHANGE COLUMN `priority` `priority` int;
 AlterColumnDropDefault:
   current: |
     CREATE TABLE users (
@@ -743,10 +878,13 @@ AlterColumnDropDefault:
       status varchar(20),
       priority int
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `status` `status` varchar(20);
     ALTER TABLE `users` CHANGE COLUMN `priority` `priority` int;
 
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `status` `status` varchar(20) DEFAULT 'active';
+    ALTER TABLE `users` CHANGE COLUMN `priority` `priority` int DEFAULT 1;
 AlterColumnChangeDefault:
   current: |
     CREATE TABLE users (
@@ -760,10 +898,13 @@ AlterColumnChangeDefault:
       status varchar(20) DEFAULT 'active',
       is_active boolean DEFAULT true
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `status` `status` varchar(20) DEFAULT 'active';
     ALTER TABLE `users` CHANGE COLUMN `is_active` `is_active` boolean DEFAULT true;
 
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `status` `status` varchar(20) DEFAULT 'pending';
+    ALTER TABLE `users` CHANGE COLUMN `is_active` `is_active` boolean DEFAULT false;
 AlterColumnSetNotNull:
   current: |
     CREATE TABLE users (
@@ -777,10 +918,13 @@ AlterColumnSetNotNull:
       name varchar(100) NOT NULL,
       email varchar(255) NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(100) NOT NULL;
     ALTER TABLE `users` CHANGE COLUMN `email` `email` varchar(255) NOT NULL;
 
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(100);
+    ALTER TABLE `users` CHANGE COLUMN `email` `email` varchar(255);
 AlterColumnDropNotNull:
   current: |
     CREATE TABLE users (
@@ -794,10 +938,13 @@ AlterColumnDropNotNull:
       name varchar(100),
       email varchar(255)
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(100);
     ALTER TABLE `users` CHANGE COLUMN `email` `email` varchar(255);
 
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(100) NOT NULL;
+    ALTER TABLE `users` CHANGE COLUMN `email` `email` varchar(255) NOT NULL;
 AlterColumnChangeNotNullAndDefault:
   current: |
     CREATE TABLE users (
@@ -811,10 +958,13 @@ AlterColumnChangeNotNullAndDefault:
       name varchar(100) NOT NULL DEFAULT 'anonymous',
       email varchar(255)
     );
-  output: |
+  up: |
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(100) NOT NULL DEFAULT 'anonymous';
     ALTER TABLE `users` CHANGE COLUMN `email` `email` varchar(255);
 
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(100);
+    ALTER TABLE `users` CHANGE COLUMN `email` `email` varchar(255) NOT NULL DEFAULT 'unknown@example.com';
 CreateTableWithDefaultCharset:
   desired: |
     CREATE TABLE users (
