@@ -1543,14 +1543,6 @@ CreateSchemasWithDomains:
     CREATE DOMAIN test_schema_b.amount AS integer CHECK (VALUE < 0);
     CREATE DOMAIN test_schema_a.email AS text CHECK (VALUE ~ '@');
     CREATE DOMAIN test_schema_b.status AS text DEFAULT 'pending';
-  output: |
-    CREATE SCHEMA test_schema_a;
-    CREATE SCHEMA test_schema_b;
-    CREATE DOMAIN test_schema_a.amount AS integer CHECK (VALUE > 0);
-    CREATE DOMAIN test_schema_b.amount AS integer CHECK (VALUE < 0);
-    CREATE DOMAIN test_schema_a.email AS text CHECK (VALUE ~ '@');
-    CREATE DOMAIN test_schema_b.status AS text DEFAULT 'pending';
-
 
 ExcludeConstraintWithCreateTable:
   desired: |
