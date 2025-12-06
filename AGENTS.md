@@ -236,43 +236,6 @@ NOTE: Never use `offline: true` for databases that are tested in GitHub Actions:
    ```
 * **Check test coverage**: When you edit source code, check the coverage report to ensure the code is covered by tests.
 
-### Tool: fix-tests (Automated Test Expectation Updater)
-
-Location: `cmd/fix-tests/main.go`
-
-Purpose: Automatically fixes failing bidirectional migration tests by updating test expectations to match actual DDL output.
-
-Usage:
-```bash
-# Build the tool
-cd cmd/fix-tests && go build -o ../../build/fix-tests
-
-# Run from project root
-./build/fix-tests
-```
-
-How it works:
-1. Runs `go test ./cmd/psqldef -json` to get structured test output
-2. Parses test failures to extract expected vs actual DDL
-3. For failures in "Phase 3: Reverse Migration" (down migrations):
-   - Automatically updates the YAML test file's `down:` field
-   - Replaces expected DDL with actual DDL
-   - Preserves YAML formatting and structure
-4. Categorizes failures (statement ordering, missing statements, etc.)
-5. Reports which tests were fixed
-
-When to use:
-- After fixing DDL generation bugs - run this to update test expectations
-- When statement ordering changes but semantics are correct
-- To batch-update many tests after a systematic fix
-
-Limitations:
-- Only fixes "Phase 3" failures (reverse migration expectation mismatches)
-- Doesn't fix Phase 1, 2, or 4 failures (those indicate real bugs)
-- Doesn't fix DDL application errors (like "relation does not exist")
-- Manual review recommended after running
-
-
 ## Documentation
 
 There are markdown files to describe the usage of each command. Keep them up to date:
