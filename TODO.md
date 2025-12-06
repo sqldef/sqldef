@@ -2,7 +2,7 @@
 
 This document includes TODOs for future improvements.
 
-NOTE: do n
+NOTE: do not keep the resolved issues here
 
 ## The `splitDDLs` function
 
