@@ -443,6 +443,29 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			// TODO: simulate to remove index from `currentTable.indexes`?
 		}
 
+		// Check CHECK constraints BEFORE dropping columns.
+		// This is important because CHECK constraints may reference columns that are about to be dropped.
+		// Databases require CHECK constraints to be dropped before the columns they reference.
+		for _, check := range currentTable.checks {
+			// First try to find by name
+			if g.findCheckConstraintInTable(desiredTable, check.constraintName) != nil {
+				continue
+			}
+
+			// For MySQL and MSSQL, also check if this constraint matches any column-level CHECK by definition
+			// This handles auto-generated constraint names for column-level CHECKs
+			if (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) && g.findCheckConstraintByDefinition(desiredTable, &check) != nil {
+				continue
+			}
+
+			switch g.mode {
+			case GeneratorModePostgres, GeneratorModeMssql, GeneratorModeSQLite3:
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
+			case GeneratorModeMysql:
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
+			}
+		}
+
 		// Check columns.
 		// Use sorted columns to ensure deterministic DDL ordering
 		// Drop columns in reverse order (last column first) to be more intuitive
@@ -476,27 +499,6 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue
 			}
 			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLIdent(policy.name), g.escapeTableName(currentTable)))
-		}
-
-		// Check checks.
-		for _, check := range currentTable.checks {
-			// First try to find by name
-			if g.findCheckConstraintInTable(desiredTable, check.constraintName) != nil {
-				continue
-			}
-
-			// For MySQL and MSSQL, also check if this constraint matches any column-level CHECK by definition
-			// This handles auto-generated constraint names for column-level CHECKs
-			if (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) && g.findCheckConstraintByDefinition(desiredTable, &check) != nil {
-				continue
-			}
-
-			switch g.mode {
-			case GeneratorModePostgres, GeneratorModeMssql, GeneratorModeSQLite3:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
-			case GeneratorModeMysql:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
-			}
 		}
 	}
 
@@ -709,9 +711,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					ddls = append(ddls, ddl)
 
 					// After renaming, check if type/constraints need to be changed
-					if !g.haveSameDataType(*renameFromColumn, desiredColumn) ||
+					// Skip if the column is part of the current primary key - the primary key handling logic
+					// will properly handle foreign key dependencies
+					if !g.isPrimaryKey(*renameFromColumn, currentTable) && (!g.haveSameDataType(*renameFromColumn, desiredColumn) ||
 						!g.areSameDefaultValue(renameFromColumn.defaultDef, desiredColumn.defaultDef, desiredColumn.typeName) ||
-						(g.notNull(*renameFromColumn) != g.notNull(desiredColumn)) {
+						(g.notNull(*renameFromColumn) != g.notNull(desiredColumn))) {
 						definition, err := g.generateColumnDefinition(desiredColumn, false)
 						if err != nil {
 							return ddls, err
@@ -999,7 +1003,9 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 				// TODO: support adding a column's `references`
 			case GeneratorModeMssql:
-				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) {
+				// Skip if the column is part of the current primary key - the primary key handling logic
+				// will properly handle foreign key dependencies when the PK changes
+				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) && !g.isPrimaryKey(*currentColumn, currentTable) {
 					// Change column definition
 					definition, err := g.generateColumnDefinition(desiredColumn, false)
 					if err != nil {
@@ -1125,7 +1131,18 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		// If there are foreign keys referencing this table,
 		// we need to drop them first before modifying the primary key
 		if len(referencingFKs) > 0 {
+			// Track dropped FKs to avoid duplicates using normalized names for case-insensitive comparison
+			droppedFKs := make(map[string]bool)
 			for _, refFK := range referencingFKs {
+				// Create a unique key for this FK using normalized names
+				normalizedTableName := normalizeNameKey(refFK.tableName, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+				normalizedConstraintName := normalizeIdentKey(refFK.foreignKey.constraintName, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+				fkKey := normalizedTableName + ":" + normalizedConstraintName
+				if droppedFKs[fkKey] {
+					continue // Already processed this FK
+				}
+				droppedFKs[fkKey] = true
+
 				var dropFKDDL string
 				switch g.mode {
 				case GeneratorModeMysql:
@@ -1190,7 +1207,10 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					recreateDDL := g.buildForeignKeyDDL(refFK.tableName, desiredFK)
 					recreateFKDDLs = append(recreateFKDDLs, recreateDDL)
 					// Mark this FK as globally handled so we don't add it again in normal FK processing
-					g.handledForeignKeys[refFK.tableName.RawString()+":"+desiredFK.constraintName.Name] = true
+					// Use normalized names for case-insensitive deduplication
+					normalizedTableName := normalizeNameKey(refFK.tableName, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+					normalizedConstraintName := normalizeIdentKey(desiredFK.constraintName, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+					g.handledForeignKeys[normalizedTableName+":"+normalizedConstraintName] = true
 				}
 				// If the table doesn't exist in desired schema or the FK doesn't exist,
 				// we don't recreate it (it will be dropped with the table)
@@ -1232,7 +1252,17 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 								g.escapeTableName(&desired.table),
 								g.escapeColumnName(desiredColumn),
 								definition))
-						case GeneratorModePostgres, GeneratorModeMssql:
+						case GeneratorModeMssql:
+							// MSSQL doesn't support ALTER COLUMN ... DROP NOT NULL either
+							// Instead, we use ALTER COLUMN with the full column definition
+							definition, err := g.generateColumnDefinition(*desiredColumn, false)
+							if err != nil {
+								return ddls, err
+							}
+							ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s",
+								g.escapeTableName(&desired.table),
+								definition))
+						case GeneratorModePostgres:
 							ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL",
 								g.escapeTableName(&desired.table),
 								g.escapeColumnName(desiredColumn)))
@@ -1348,7 +1378,9 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		} else {
 			// Foreign key not found, add foreign key.
 			// But first check if we've already handled this FK during primary key changes
-			fkKey := desired.table.name.RawString() + ":" + constraintName.Name
+			normalizedTableName := normalizeNameKey(desired.table.name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+			normalizedConstraintName := normalizeIdentKey(constraintName, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+			fkKey := normalizedTableName + ":" + normalizedConstraintName
 			if !g.handledForeignKeys[fkKey] {
 				definition := g.generateForeignKeyDefinition(fkWithName)
 				ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(&desired.table), definition)

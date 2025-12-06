@@ -155,6 +155,7 @@ The test files use a YAML format where each top-level key is a test case name, a
 Test case fields:
 
 ```yaml
+# yaml-language-server: $schema=../testutils/testcase.schema.json
 TestCaseName:
   # Current schema state (defaults to empty schema)
   current: |
@@ -233,9 +234,6 @@ NOTE: Never use `offline: true` for databases that are tested in GitHub Actions:
    # Example: Testing all index-related features
    go test ./cmd/psqldef -run='TestApply/Index.*'
    ```
-*  **Test both directions**: When testing schema changes, consider testing both:
-   - Adding features (no `current`, only `desired`)
-   - Modifying existing schemas (`current` → `desired`)
 * **Check test coverage**: When you edit source code, check the coverage report to ensure the code is covered by tests.
 
 ### Tool: fix-tests (Automated Test Expectation Updater)

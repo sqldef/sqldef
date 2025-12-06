@@ -465,6 +465,6 @@ TypedLiteralsInCheck:
     ALTER TABLE `events` ADD CONSTRAINT `chk_date_range` CHECK (event_date >= date '2020-01-01' and event_end_date <= date '2030-12-31');
 
   down: |
+    ALTER TABLE `events` DROP CHECK `chk_date_range`;
     ALTER TABLE `events` DROP COLUMN `event_end_date`;
     ALTER TABLE `events` DROP COLUMN `event_date`;
-    ALTER TABLE `events` DROP CHECK `chk_date_range`;
