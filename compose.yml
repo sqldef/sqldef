@@ -1,7 +1,7 @@
 services:
   mysql:
     image: mysql:${MYSQL_VERSION:-8.0}
-    platform: linux/amd64
+    # platform: linux/amd64 # needed on macos to run mysql:5.7
     environment:
       MYSQL_ALLOW_EMPTY_PASSWORD: 'true'
       MYSQL_ROOT_HOST: '%'
