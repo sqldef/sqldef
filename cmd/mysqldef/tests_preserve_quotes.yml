@@ -15,7 +15,7 @@ BasicQuoteAwareTableCreation:
     CREATE TABLE users (id int PRIMARY KEY);
 
   down: |
-    DROP TABLE users;
+    DROP TABLE `users`;
 # FK dependency ordering with consistent case
 ForeignKeyDependencyOrderingConsistentCase:
   legacy_ignore_quotes: false
@@ -35,8 +35,8 @@ ForeignKeyDependencyOrderingConsistentCase:
     );
 
   down: |
-    DROP TABLE orders;
-    DROP TABLE users;
+    DROP TABLE `orders`;
+    DROP TABLE `users`;
 # Add column with quote-aware mode
 AddColumnQuoteAware:
   legacy_ignore_quotes: false
@@ -48,8 +48,7 @@ AddColumnQuoteAware:
     ALTER TABLE users ADD COLUMN name varchar(100) AFTER id;
 
   down: |
-    ALTER TABLE users CHANGE COLUMN id id int NOT NULL;
-    ALTER TABLE users DROP COLUMN name;
+    ALTER TABLE users DROP COLUMN `name`;
 # Drop column with quote-aware mode
 DropColumnQuoteAware:
   legacy_ignore_quotes: false
@@ -61,7 +60,6 @@ DropColumnQuoteAware:
     ALTER TABLE users DROP COLUMN `old_col`;
 
   down: |
-    ALTER TABLE users CHANGE COLUMN id id int NOT NULL;
     ALTER TABLE users ADD COLUMN old_col varchar(50) AFTER id;
 # Modify column with quote-aware mode
 ModifyColumnQuoteAware:
@@ -74,8 +72,7 @@ ModifyColumnQuoteAware:
     ALTER TABLE products CHANGE COLUMN `price` price bigint NOT NULL;
 
   down: |
-    ALTER TABLE products CHANGE COLUMN id id int NOT NULL;
-    ALTER TABLE products CHANGE COLUMN price price int;
+    ALTER TABLE products CHANGE COLUMN `price` price int;
 # Add index with quote-aware mode
 AddIndexQuoteAware:
   legacy_ignore_quotes: false
@@ -87,8 +84,7 @@ AddIndexQuoteAware:
     ALTER TABLE items ADD INDEX idx_name (name);
 
   down: |
-    ALTER TABLE items CHANGE COLUMN id id int NOT NULL;
-    ALTER TABLE items DROP INDEX idx_name;
+    ALTER TABLE `items` DROP INDEX `idx_name`;
 # Drop index with quote-aware mode
 DropIndexQuoteAware:
   legacy_ignore_quotes: false
@@ -100,7 +96,6 @@ DropIndexQuoteAware:
     ALTER TABLE `items` DROP INDEX `idx_name`;
 
   down: |
-    ALTER TABLE items CHANGE COLUMN id id int NOT NULL;
     ALTER TABLE items ADD INDEX idx_name (name);
 # Demonstrate that lower_case_table_names only affects TABLE names, not column/index names.
 # In MySQL, column and index names are always case-insensitive regardless of lower_case_table_names.
@@ -115,8 +110,7 @@ ColumnNameCaseInsensitive:
     ALTER TABLE users ADD COLUMN email varchar(200) AFTER name;
 
   down: |
-    ALTER TABLE users CHANGE COLUMN id id int NOT NULL;
-    ALTER TABLE users DROP COLUMN email;
+    ALTER TABLE users DROP COLUMN `email`;
 # Index name case insensitivity - MySQL index names are case-insensitive
 IndexNameCaseInsensitive:
   legacy_ignore_quotes: false

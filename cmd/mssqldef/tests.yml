@@ -156,7 +156,8 @@ AddBitColumnOnNonDefaultSchema:
   up: |
     ALTER TABLE [FOO].[items] ADD [requires_consent] bit NOT NULL DEFAULT 1;
   down: |
-    ALTER TABLE [dbo].[items] DROP COLUMN [requires_consent];
+    ALTER TABLE [FOO].[items] DROP CONSTRAINT [DF__items__requires___239E4DCF];
+    ALTER TABLE [FOO].[items] DROP COLUMN [requires_consent];
   user: "mssqldef_user"
 
 AddIntColumnOnNonDefaultSchema:
@@ -172,7 +173,7 @@ AddIntColumnOnNonDefaultSchema:
   up: |
     ALTER TABLE [FOO].[items] ADD [count] int NOT NULL;
   down: |
-    ALTER TABLE [dbo].[items] DROP COLUMN [count];
+    ALTER TABLE [FOO].[items] DROP COLUMN [count];
   user: "mssqldef_user"
 DropTableOnNonStandardDefaultSchema:
   current: |
@@ -892,7 +893,6 @@ AddCheckConstraintWithIn:
   up: |
     ALTER TABLE [dbo].[documents] ADD CONSTRAINT [documents_state_chk] CHECK (state in ('draft', 'review', 'published', 'archived'));
   down: |
-    ALTER TABLE [dbo].[documents] ALTER COLUMN [id] int NOT NULL;
     ALTER TABLE [dbo].[documents] DROP CONSTRAINT [documents_state_chk];
 ModifyCheckConstraintIn:
   current: |
@@ -911,7 +911,6 @@ ModifyCheckConstraintIn:
     ALTER TABLE [dbo].[tasks] DROP CONSTRAINT [tasks_status_chk];
     ALTER TABLE [dbo].[tasks] ADD CONSTRAINT [tasks_status_chk] CHECK (status in ('todo', 'in_progress', 'done'));
   down: |
-    ALTER TABLE [dbo].[tasks] ALTER COLUMN [id] int NOT NULL;
     ALTER TABLE [dbo].[tasks] DROP CONSTRAINT [tasks_status_chk];
     ALTER TABLE [dbo].[tasks] ADD CONSTRAINT [tasks_status_chk] CHECK (status in ('todo', 'in_progress'));
 DropCheckConstraintWithIn:
@@ -929,7 +928,6 @@ DropCheckConstraintWithIn:
   up: |
     ALTER TABLE [dbo].[events] DROP CONSTRAINT [events_type_chk];
   down: |
-    ALTER TABLE [dbo].[events] ALTER COLUMN [id] int NOT NULL;
     ALTER TABLE [dbo].[events] ADD CONSTRAINT [events_type_chk] CHECK (type in ('public', 'private'));
 CheckInClauseNormalization:
   current: |

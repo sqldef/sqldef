@@ -56,25 +56,35 @@ func main() {
 }
 
 func run() error {
+	// Determine which package to test
+	pkg := "./cmd/psqldef"
+	if len(os.Args) > 1 && os.Args[1] != "" && !strings.HasSuffix(os.Args[1], ".json") {
+		pkg = os.Args[1]
+	}
+
 	// Read test results from file
 	var testOutput []byte
 	var err error
 
-	if len(os.Args) > 1 {
+	if len(os.Args) > 2 || (len(os.Args) > 1 && strings.HasSuffix(os.Args[1], ".json")) {
 		// Read from file specified as argument
-		testOutput, err = os.ReadFile(os.Args[1])
+		fileArg := os.Args[1]
+		if len(os.Args) > 2 {
+			fileArg = os.Args[2]
+		}
+		testOutput, err = os.ReadFile(fileArg)
 		if err != nil {
 			return fmt.Errorf("failed to read test results file: %w", err)
 		}
 	} else {
 		// Run tests and collect failures
-		testOutput, err = runTests()
+		testOutput, err = runTests(pkg)
 		if err != nil {
 			return fmt.Errorf("failed to run tests: %w", err)
 		}
 	}
 
-	failures, err := parseTestResults(testOutput)
+	failures, err := parseTestResults(testOutput, pkg)
 	if err != nil {
 		return fmt.Errorf("failed to parse test results: %w", err)
 	}
@@ -106,8 +116,8 @@ func run() error {
 	return nil
 }
 
-func runTests() ([]byte, error) {
-	cmd := exec.Command("go", "test", "./cmd/psqldef", "-json")
+func runTests(pkg string) ([]byte, error) {
+	cmd := exec.Command("go", "test", pkg, "-json")
 	cmd.Dir = "/Users/goro/ghq/github.com/sqldef/sqldef"
 
 	output, err := cmd.CombinedOutput()
@@ -121,7 +131,7 @@ func runTests() ([]byte, error) {
 	return output, nil
 }
 
-func parseTestResults(output []byte) ([]TestFailure, error) {
+func parseTestResults(output []byte, pkg string) ([]TestFailure, error) {
 	// Parse JSON test output
 	var failures []TestFailure
 	scanner := bufio.NewScanner(bytes.NewReader(output))
@@ -158,7 +168,7 @@ func parseTestResults(output []byte) ([]TestFailure, error) {
 				processedTests[event.Test] = true
 				// Parse the failure output
 				if buf, ok := testOutputs[event.Test]; ok {
-					failure := parseTestFailure(event.Test, buf.String())
+					failure := parseTestFailure(event.Test, buf.String(), pkg)
 					if failure != nil {
 						failures = append(failures, *failure)
 					}
@@ -170,7 +180,7 @@ func parseTestResults(output []byte) ([]TestFailure, error) {
 	return failures, nil
 }
 
-func parseTestFailure(testName, output string) *TestFailure {
+func parseTestFailure(testName, output, pkg string) *TestFailure {
 	// Extract the test case name (remove TestApply/ prefix)
 	testCaseName := strings.TrimPrefix(testName, "TestApply/")
 
@@ -194,7 +204,7 @@ func parseTestFailure(testName, output string) *TestFailure {
 	actual := unescapeString(actualMatch[1])
 
 	// Find the YAML file containing this test
-	yamlFile := findYamlFile(testCaseName)
+	yamlFile := findYamlFile(testCaseName, pkg)
 	if yamlFile == "" {
 		log.Printf("Could not find YAML file for test: %s", testCaseName)
 		return nil
@@ -216,21 +226,22 @@ func unescapeString(s string) string {
 	return s
 }
 
-func findYamlFile(testName string) string {
-	yamlFiles := []string{
-		"/Users/goro/ghq/github.com/sqldef/sqldef/cmd/psqldef/tests.yml",
-		"/Users/goro/ghq/github.com/sqldef/sqldef/cmd/psqldef/tests_preserve_quotes.yml",
-		"/Users/goro/ghq/github.com/sqldef/sqldef/cmd/psqldef/tests_aurora_dsql.yml",
-		"/Users/goro/ghq/github.com/sqldef/sqldef/cmd/psqldef/tests_dependency_ordering.yml",
-		"/Users/goro/ghq/github.com/sqldef/sqldef/cmd/psqldef/tests_domain.yml",
-		"/Users/goro/ghq/github.com/sqldef/sqldef/cmd/psqldef/tests_fk_deps.yml",
-		"/Users/goro/ghq/github.com/sqldef/sqldef/cmd/psqldef/tests_function.yml",
-		"/Users/goro/ghq/github.com/sqldef/sqldef/cmd/psqldef/tests_managed_roles.yml",
-		"/Users/goro/ghq/github.com/sqldef/sqldef/cmd/psqldef/tests_trigger.yml",
-		"/Users/goro/ghq/github.com/sqldef/sqldef/cmd/psqldef/tests_view.yml",
+func findYamlFile(testName, pkg string) string {
+	// Extract the directory name from the package path
+	// e.g., "./cmd/psqldef" -> "psqldef"
+	parts := strings.Split(pkg, "/")
+	dirName := parts[len(parts)-1]
+
+	baseDir := "/Users/goro/ghq/github.com/sqldef/sqldef/cmd"
+	dirPath := filepath.Join(baseDir, dirName)
+
+	// Find all .yml files in the specific directory
+	matches, err := filepath.Glob(filepath.Join(dirPath, "*.yml"))
+	if err != nil {
+		return ""
 	}
 
-	for _, yamlFile := range yamlFiles {
+	for _, yamlFile := range matches {
 		data, err := os.ReadFile(yamlFile)
 		if err != nil {
 			continue

@@ -21,8 +21,8 @@ ForeignKeyDependencyOrderingCaseMismatch:
     );
 
   down: |
-    DROP TABLE dbo.users;
     DROP TABLE dbo.orders;
+    DROP TABLE dbo.users;
 AddColumnCaseMismatch:
   # Current has USERS, desired has users - should recognize as same table
   legacy_ignore_quotes: false
@@ -34,8 +34,7 @@ AddColumnCaseMismatch:
     ALTER TABLE dbo.users ADD name varchar(100);
 
   down: |
-    ALTER TABLE dbo.USERS ALTER COLUMN id int NOT NULL;
-    ALTER TABLE dbo.USERS DROP COLUMN name;
+    ALTER TABLE dbo.USERS DROP COLUMN [name];
 DropColumnCaseMismatch:
   # Current has Users, desired has USERS - should recognize as same table
   legacy_ignore_quotes: false
@@ -47,5 +46,4 @@ DropColumnCaseMismatch:
     ALTER TABLE dbo.USERS DROP COLUMN [old_col];
 
   down: |
-    ALTER TABLE dbo.Users ALTER COLUMN id int NOT NULL;
     ALTER TABLE dbo.Users ADD old_col varchar(50);

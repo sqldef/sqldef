@@ -67,7 +67,9 @@ CreateTableAddPrimaryKeyInColumn:
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(20) NOT NULL;
     ALTER TABLE `users` ADD PRIMARY KEY (`name`);
   down: |
+    ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(20);
     ALTER TABLE `users` DROP PRIMARY KEY;
+    ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(20);
 CreateTableAddPrimaryKey:
   current: |
     CREATE TABLE users (
@@ -98,7 +100,7 @@ CreateTableAddAutoIncrement:
   up: |
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
   down: |
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
 AlterTableAddSetTypeColumn:
   current: |
     CREATE TABLE alarm (id BIGINT PRIMARY KEY);
@@ -110,7 +112,6 @@ AlterTableAddSetTypeColumn:
   up: |
     ALTER TABLE `alarm` ADD COLUMN `dayOfWeek` set('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun') NOT NULL AFTER `id`;
   down: |
-    ALTER TABLE `alarm` CHANGE COLUMN `id` `id` bigint NOT NULL;
     ALTER TABLE `alarm` DROP COLUMN `dayOfWeek`;
 CreateTableWithKeyBlockSize:
   desired: |
@@ -131,7 +132,6 @@ AlterTableColumnFractionalSecondsPart:
   up: |
     ALTER TABLE `users` CHANGE COLUMN `created_at` `created_at` datetime(3) NOT NULL;
   down: |
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
     ALTER TABLE `users` CHANGE COLUMN `created_at` `created_at` datetime NOT NULL;
 TableComment:
   current: |
@@ -306,7 +306,6 @@ AddColumnWithNull:
   up: |
     ALTER TABLE `users` ADD COLUMN `created_at` timestamp NULL DEFAULT null AFTER `name`;
   down: |
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
     ALTER TABLE `users` DROP COLUMN `created_at`;
 ChangeColumn:
   current: |

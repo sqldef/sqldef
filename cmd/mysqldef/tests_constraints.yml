@@ -48,8 +48,8 @@ AddForeignKeyWithAlter:
   up: |
     ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;
   down: |
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
     ALTER TABLE `posts` DROP FOREIGN KEY `posts_ibfk_1`;
+    ALTER TABLE `posts` DROP INDEX `posts_ibfk_1`;
 CreateTableForeignKey:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY);
@@ -67,8 +67,8 @@ CreateTableForeignKey:
   up: |
     ALTER TABLE `posts` ADD CONSTRAINT `posts_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
   down: |
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
     ALTER TABLE `posts` DROP FOREIGN KEY `posts_ibfk_1`;
+    ALTER TABLE `posts` DROP INDEX `posts_ibfk_1`;
 CreateTableForeignKeyWithOptions:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY);
@@ -88,7 +88,6 @@ CreateTableForeignKeyWithOptions:
     ALTER TABLE `posts` DROP FOREIGN KEY `posts_ibfk_1`;
     ALTER TABLE `posts` ADD CONSTRAINT `posts_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
   down: |
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
     ALTER TABLE `posts` DROP FOREIGN KEY `posts_ibfk_1`;
     ALTER TABLE `posts` ADD CONSTRAINT `posts_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
 DropForeignKey:
@@ -109,7 +108,6 @@ DropForeignKey:
     ALTER TABLE `posts` DROP FOREIGN KEY `posts_ibfk_1`;
     ALTER TABLE `posts` DROP INDEX `posts_ibfk_1`;
   down: |
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
     ALTER TABLE `posts` ADD CONSTRAINT `posts_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 CheckInClauseInteger:
   desired: |
@@ -158,7 +156,6 @@ AddCheckConstraintWithIn:
   up: |
     ALTER TABLE `documents` ADD CONSTRAINT `documents_state_chk` CHECK (state in ('draft', 'review', 'published', 'archived'));
   down: |
-    ALTER TABLE `documents` CHANGE COLUMN `id` `id` int NOT NULL;
     ALTER TABLE `documents` DROP CHECK `documents_state_chk`;
   flavor: mysql
   min_version: '8.0'
@@ -179,7 +176,6 @@ ModifyCheckConstraintIn:
     ALTER TABLE `tasks` DROP CHECK `tasks_status_chk`;
     ALTER TABLE `tasks` ADD CONSTRAINT `tasks_status_chk` CHECK (status in ('todo', 'in_progress', 'done'));
   down: |
-    ALTER TABLE `tasks` CHANGE COLUMN `id` `id` int NOT NULL;
     ALTER TABLE `tasks` DROP CHECK `tasks_status_chk`;
     ALTER TABLE `tasks` ADD CONSTRAINT `tasks_status_chk` CHECK (status in ('todo', 'in_progress'));
   flavor: mysql
@@ -199,7 +195,6 @@ DropCheckConstraintWithIn:
   up: |
     ALTER TABLE `events` DROP CHECK `events_type_chk`;
   down: |
-    ALTER TABLE `events` CHANGE COLUMN `id` `id` int NOT NULL;
     ALTER TABLE `events` ADD CONSTRAINT `events_type_chk` CHECK (type in ('public', 'private'));
   flavor: mysql
   min_version: '8.0'

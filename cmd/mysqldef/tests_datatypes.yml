@@ -23,10 +23,6 @@ BooleanValue:
     );
   up: |
   down: |
-    ALTER TABLE `bools` CHANGE COLUMN `value1` `value1` boolean DEFAULT false;
-    ALTER TABLE `bools` CHANGE COLUMN `value2` `value2` boolean DEFAULT false;
-    ALTER TABLE `bools` CHANGE COLUMN `value3` `value3` boolean DEFAULT true;
-    ALTER TABLE `bools` CHANGE COLUMN `value4` `value4` boolean DEFAULT true;
 AddColumnWithDefaultExpression:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY);
@@ -38,7 +34,6 @@ AddColumnWithDefaultExpression:
   up: |
     ALTER TABLE `users` ADD COLUMN `friend_ids` json DEFAULT(JSON_ARRAY()) AFTER `id`;
   down: |
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
     ALTER TABLE `users` DROP COLUMN `friend_ids`;
   flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
@@ -56,7 +51,6 @@ AddDefaultExpression:
   up: |
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json DEFAULT(JSON_ARRAY());
   down: |
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json;
   flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
@@ -74,7 +68,6 @@ RemoveDefaultExpression:
   up: |
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json;
   down: |
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json DEFAULT(JSON_ARRAY());
   flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
@@ -393,9 +386,9 @@ TypedLiterals:
     ALTER TABLE `events` ADD COLUMN `event_time` time DEFAULT(time '12:00:00') AFTER `event_date`;
     ALTER TABLE `events` ADD COLUMN `event_timestamp` timestamp DEFAULT(timestamp '2024-01-01 12:00:00') AFTER `event_time`;
   down: |
-    ALTER TABLE `events` DROP COLUMN `event_date`;
-    ALTER TABLE `events` DROP COLUMN `event_time`;
     ALTER TABLE `events` DROP COLUMN `event_timestamp`;
+    ALTER TABLE `events` DROP COLUMN `event_time`;
+    ALTER TABLE `events` DROP COLUMN `event_date`;
 TypedLiteralsIdempotency:
   flavor: mysql
   min_version: '8.0'
@@ -472,6 +465,6 @@ TypedLiteralsInCheck:
     ALTER TABLE `events` ADD CONSTRAINT `chk_date_range` CHECK (event_date >= date '2020-01-01' and event_end_date <= date '2030-12-31');
 
   down: |
-    ALTER TABLE `events` DROP COLUMN `event_date`;
     ALTER TABLE `events` DROP COLUMN `event_end_date`;
+    ALTER TABLE `events` DROP COLUMN `event_date`;
     ALTER TABLE `events` DROP CHECK `chk_date_range`;

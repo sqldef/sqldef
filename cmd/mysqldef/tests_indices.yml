@@ -320,8 +320,8 @@ CreateIndex:
     CREATE INDEX index_name ON users (name);
     CREATE UNIQUE INDEX index_created_at ON users (created_at);
   down: |
-    ALTER TABLE `users` DROP INDEX `index_name`;
     ALTER TABLE `users` DROP INDEX `index_created_at`;
+    ALTER TABLE `users` DROP INDEX `index_name`;
 CreateIndexDrop:
   current: |
     CREATE TABLE users (
@@ -362,8 +362,8 @@ CreateTableKey:
     ALTER TABLE `users` ADD KEY `index_name` (`name`);
     ALTER TABLE `users` ADD UNIQUE KEY `index_created_at` (`created_at`);
   down: |
-    ALTER TABLE `users` DROP INDEX `index_name`;
     ALTER TABLE `users` DROP INDEX `index_created_at`;
+    ALTER TABLE `users` DROP INDEX `index_name`;
 CreateTableWithUniqueColumnDrop:
   current: |
     CREATE TABLE users (
@@ -378,7 +378,6 @@ CreateTableWithUniqueColumnDrop:
     ALTER TABLE `users` DROP INDEX `name`;
     ALTER TABLE `users` DROP COLUMN `name`;
   down: |
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
     ALTER TABLE `users` ADD COLUMN `name` varchar(40) UNIQUE AFTER `id`;
 CreateTableWithUniqueColumn:
   current: |
@@ -393,7 +392,7 @@ CreateTableWithUniqueColumn:
   up: |
     ALTER TABLE `users` ADD COLUMN `name` varchar(40) UNIQUE AFTER `id`;
   down: |
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
+    ALTER TABLE `users` DROP INDEX `name`;
     ALTER TABLE `users` DROP COLUMN `name`;
 CreateTableChangeUniqueColumn:
   current: |
@@ -407,7 +406,7 @@ CreateTableChangeUniqueColumn:
   up: |
     ALTER TABLE `users` ADD UNIQUE KEY `name`(`name`);
   down: |
-    
+    ALTER TABLE `users` DROP INDEX `name`;
 IndexWithDot:
   current: |
     CREATE TABLE users (

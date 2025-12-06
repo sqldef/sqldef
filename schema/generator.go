@@ -1220,7 +1220,23 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					desiredColumn := g.findColumnByName(desired.table.columns, colName.Name)
 					if desiredColumn != nil && (desiredColumn.notNull == nil || !*desiredColumn.notNull) {
 						// Column should be nullable, remove the implicit NOT NULL
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL", g.escapeTableName(&desired.table), g.escapeColumnName(desiredColumn)))
+						switch g.mode {
+						case GeneratorModeMysql:
+							// MySQL doesn't support ALTER COLUMN ... DROP NOT NULL
+							// Instead, we use CHANGE COLUMN with the full column definition
+							definition, err := g.generateColumnDefinition(*desiredColumn, true)
+							if err != nil {
+								return ddls, err
+							}
+							ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s",
+								g.escapeTableName(&desired.table),
+								g.escapeColumnName(desiredColumn),
+								definition))
+						case GeneratorModePostgres, GeneratorModeMssql:
+							ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL",
+								g.escapeTableName(&desired.table),
+								g.escapeColumnName(desiredColumn)))
+						}
 					}
 				}
 			}
