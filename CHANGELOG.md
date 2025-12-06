@@ -1,3 +1,8 @@
+## [v3.7.4](https://github.com/sqldef/sqldef/compare/v3.7.3...v3.7.4) - 2025-12-06
+- [doc] add `v4-migration.md` to describe incoming incompatible changes by @gfx in https://github.com/sqldef/sqldef/pull/977
+- psqldef: fix an issue that cross-schema domains are not correctly handled by @gfx in https://github.com/sqldef/sqldef/pull/979
+- parser: allow spatial type keywords as identifiers by @178inaba in https://github.com/sqldef/sqldef/pull/980
+
 ## [v3.7.3](https://github.com/sqldef/sqldef/compare/v3.7.2...v3.7.3) - 2025-12-05
 - [CI] use go.mod to get toolchain version by @gfx in https://github.com/sqldef/sqldef/pull/972
 - update dockerfile go version by @gfx in https://github.com/sqldef/sqldef/pull/974
