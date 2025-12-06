@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 # Test cases for foreign key dependency handling in SQL Server
 
 # Issue 1: order of create tables with foreign key constraints
@@ -52,7 +54,6 @@ ForeignKeyDependenciesForCreateTables:
       CONSTRAINT [fk_item_id] FOREIGN KEY ([item_id]) REFERENCES [items] ([item_id]),
       CONSTRAINT [fk_user_id] FOREIGN KEY ([user_id]) REFERENCES [users] ([user_id])
     );
-
   down: |
     DROP TABLE [dbo].[sales];
     DROP TABLE [dbo].[items];
@@ -96,7 +97,6 @@ ForeignKeyDependenciesPrimaryKeyChange:
     ALTER TABLE [dbo].[items] ADD CONSTRAINT [items_pkey] PRIMARY KEY NONCLUSTERED ([supplier_id], [item_id]);
     ALTER TABLE [dbo].[item_prices] ADD [supplier_id] int;
     ALTER TABLE [dbo].[item_prices] ADD CONSTRAINT [prices_item_fk] FOREIGN KEY ([supplier_id], [item_id]) REFERENCES [dbo].[items] ([supplier_id], [item_id]);
-
   down: |
     ALTER TABLE [dbo].[item_prices] DROP CONSTRAINT [prices_item_fk];
     ALTER TABLE [dbo].[items] DROP CONSTRAINT [items_pkey];
@@ -133,7 +133,6 @@ ForeignKeyDependenciesCircular:
     ALTER TABLE [dbo].[departments] ADD [manager_id] int;
     ALTER TABLE [dbo].[departments] ADD CONSTRAINT [dept_manager_fk] FOREIGN KEY ([manager_id]) REFERENCES [dbo].[employees] ([emp_id]);
     ALTER TABLE [dbo].[employees] ADD CONSTRAINT [emp_dept_fk] FOREIGN KEY ([dept_id]) REFERENCES [dbo].[departments] ([dept_id]);
-
   down: |
     ALTER TABLE [dbo].[departments] DROP CONSTRAINT [dept_manager_fk];
     ALTER TABLE [dbo].[departments] DROP COLUMN [manager_id];
@@ -163,7 +162,6 @@ ForeignKeyDependenciesAddConstraintAfterCreation:
     );
   up: |
     ALTER TABLE [dbo].[orders] ADD CONSTRAINT [order_customer_fk] FOREIGN KEY ([customer_id]) REFERENCES [dbo].[customers] ([customer_id]);
-
   down: |
     ALTER TABLE [dbo].[orders] DROP CONSTRAINT [order_customer_fk];
 # Issue 5: Multiple foreign keys to same table being modified
@@ -210,7 +208,6 @@ ForeignKeyDependenciesMultipleToModifiedTable:
     ALTER TABLE [dbo].[posts] ADD [reviewer_tenant_id] int;
     ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_author_fk] FOREIGN KEY ([author_tenant_id], [author_id]) REFERENCES [dbo].[users] ([tenant_id], [user_id]);
     ALTER TABLE [dbo].[posts] ADD CONSTRAINT [posts_reviewer_fk] FOREIGN KEY ([reviewer_tenant_id], [reviewer_id]) REFERENCES [dbo].[users] ([tenant_id], [user_id]);
-
   down: |
     ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_author_fk];
     ALTER TABLE [dbo].[posts] DROP CONSTRAINT [posts_reviewer_fk];
@@ -259,7 +256,6 @@ ForeignKeyDependenciesCascadeOptionsPreservation:
     ALTER TABLE [dbo].[categories] ADD CONSTRAINT [categories_pkey] PRIMARY KEY NONCLUSTERED ([tenant_id], [category_id]);
     ALTER TABLE [dbo].[products] ADD [tenant_id] int;
     ALTER TABLE [dbo].[products] ADD CONSTRAINT [products_category_fk] FOREIGN KEY ([tenant_id], [category_id]) REFERENCES [dbo].[categories] ([tenant_id], [category_id]) ON DELETE CASCADE ON UPDATE CASCADE;
-
   down: |
     ALTER TABLE [dbo].[products] DROP CONSTRAINT [products_category_fk];
     ALTER TABLE [dbo].[categories] DROP CONSTRAINT [categories_pkey];
@@ -323,7 +319,6 @@ ForeignKeyDependenciesMultipleWithIdempotency:
         foreign key (supplier_id, item_id) references items(supplier_id, item_id)
     );
     create unique index uk_email_address on users(email_address);
-
   down: |
     DROP TABLE [dbo].[sales];
     DROP TABLE [dbo].[users];
@@ -363,7 +358,6 @@ ForeignKeyDependenciesMultipleDrops:
     DROP TABLE [dbo].[sales];
     DROP TABLE [dbo].[users];
     DROP TABLE [dbo].[items];
-
   down: |
     create table users (
       user_id int primary key,
@@ -418,7 +412,6 @@ ForeignKeyWithPrimaryKeyChangeAndDrop:
     ALTER TABLE [dbo].[users] ADD CONSTRAINT [PK_users] PRIMARY KEY NONCLUSTERED ([user_id]);
     DROP TABLE [dbo].[taggings];
     ALTER TABLE [dbo].[users] DROP COLUMN [id];
-
   down: |
     ALTER TABLE [dbo].[users] ADD [id] int NOT NULL;
     ALTER TABLE [dbo].[users] DROP CONSTRAINT [PK_users];
@@ -462,16 +455,16 @@ ForeignKeyDependenciesPrimaryKeyChangeMixedCase:
         REFERENCES [Items] ([supplier_id], [item_id])
     );
   up: |
-    ALTER TABLE [dbo].[Items] ALTER COLUMN [supplier_id] int NOT NULL;
-    ALTER TABLE [dbo].[item_prices] DROP CONSTRAINT [Prices_Item_FK];
-    ALTER TABLE [dbo].[Items] DROP CONSTRAINT [Items_PKey];
-    ALTER TABLE [dbo].[Items] ADD CONSTRAINT [items_pkey] PRIMARY KEY NONCLUSTERED ([supplier_id], [item_id]);
-    ALTER TABLE [dbo].[item_prices] ADD [supplier_id] int;
-    ALTER TABLE [dbo].[item_prices] ADD CONSTRAINT [prices_item_fk] FOREIGN KEY ([supplier_id], [item_id]) REFERENCES [dbo].[Items] ([supplier_id], [item_id]);
-  down: |
     ALTER TABLE [dbo].[items] ALTER COLUMN [supplier_id] int NOT NULL;
     ALTER TABLE [dbo].[item_prices] DROP CONSTRAINT [Prices_Item_FK];
     ALTER TABLE [dbo].[items] DROP CONSTRAINT [Items_PKey];
     ALTER TABLE [dbo].[items] ADD CONSTRAINT [items_pkey] PRIMARY KEY NONCLUSTERED ([supplier_id], [item_id]);
     ALTER TABLE [dbo].[ITEM_PRICES] ADD [supplier_id] int;
     ALTER TABLE [dbo].[item_prices] ADD CONSTRAINT [prices_item_fk] FOREIGN KEY ([supplier_id], [item_id]) REFERENCES [dbo].[Items] ([supplier_id], [item_id]);
+  down: |
+    ALTER TABLE [dbo].[item_prices] DROP CONSTRAINT [prices_item_fk];
+    ALTER TABLE [dbo].[Items] DROP CONSTRAINT [items_pkey];
+    ALTER TABLE [dbo].[Items] ALTER COLUMN [supplier_id] int;
+    ALTER TABLE [dbo].[Items] ADD CONSTRAINT [Items_PKey] PRIMARY KEY NONCLUSTERED ([item_id]);
+    ALTER TABLE [dbo].[item_prices] ADD CONSTRAINT [Prices_Item_FK] FOREIGN KEY ([item_id]) REFERENCES [dbo].[items] ([item_id]);
+    ALTER TABLE [dbo].[item_prices] DROP COLUMN [supplier_id];

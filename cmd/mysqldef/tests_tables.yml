@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 CreateTable:
   desired: |
     CREATE TABLE users (
@@ -350,8 +352,7 @@ ChangeColumnBinary:
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   up: |
     ALTER TABLE `users` CHANGE COLUMN `word` `word` varchar(64) COLLATE utf8mb4_bin NOT NULL;
-  down: |
-    
+  down: ""
 ChangeColumnCollate:
   current: |
     CREATE TABLE users (
@@ -410,7 +411,6 @@ SwapColumn:
     );
   up: |
     ALTER TABLE `users` CHANGE COLUMN `nickname` `nickname` varchar(20) NOT NULL AFTER `id`;
-
   down: |
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(40) NOT NULL AFTER `id`;
 RenameColumn:
@@ -428,7 +428,6 @@ RenameColumn:
     );
   up: |
     ALTER TABLE `users` CHANGE COLUMN `username` `user_name` text;
-
   down: |
     ALTER TABLE `users` ADD COLUMN `username` text AFTER `id`;
     ALTER TABLE `users` DROP COLUMN `user_name`;
@@ -447,7 +446,6 @@ RenameColumnWithTypeChange:
     );
   up: |
     ALTER TABLE `users` CHANGE COLUMN `username` `user_name` text NOT NULL;
-
   down: |
     ALTER TABLE `users` ADD COLUMN `username` varchar(100) AFTER `id`;
     ALTER TABLE `users` DROP COLUMN `user_name`;
@@ -499,7 +497,6 @@ RenameColumnQuotedDoubleQuotes:
     );
   up: |
     ALTER TABLE `users` CHANGE COLUMN `foo bar` `foobar` text;
-
   down: |
     ALTER TABLE `users` ADD COLUMN `foo bar` text AFTER `id`;
     ALTER TABLE `users` DROP COLUMN `foobar`;
@@ -518,7 +515,6 @@ RenameColumnWithSpecialChars:
     );
   up: |
     ALTER TABLE `users` CHANGE COLUMN `column-with-dash` `column_with_underscore` varchar(50);
-
   down: |
     ALTER TABLE `users` ADD COLUMN `column-with-dash` varchar(50) AFTER `id`;
     ALTER TABLE `users` DROP COLUMN `column_with_underscore`;
@@ -537,7 +533,6 @@ RenameColumnWithDot:
     );
   up: |
     ALTER TABLE `users` CHANGE COLUMN `special.column` `special_column` text NOT NULL;
-
   down: |
     ALTER TABLE `users` ADD COLUMN `special.column` text NOT NULL AFTER `id`;
     ALTER TABLE `users` DROP COLUMN `special_column`;
@@ -556,7 +551,6 @@ RenameColumnWithCStyleComment:
     );
   up: |
     ALTER TABLE `users` CHANGE COLUMN `username` `user_name` varchar(100);
-
   down: |
     ALTER TABLE `users` ADD COLUMN `username` varchar(100) AFTER `id`;
     ALTER TABLE `users` DROP COLUMN `user_name`;
@@ -578,7 +572,6 @@ RenameMultipleColumns:
   up: |
     ALTER TABLE `users` CHANGE COLUMN `user name` `username` text;
     ALTER TABLE `users` CHANGE COLUMN `email@address` `email_address` varchar(100);
-
   down: |
     ALTER TABLE `users` ADD COLUMN `user name` text AFTER `id`;
     ALTER TABLE `users` ADD COLUMN `email@address` varchar(100) AFTER `user name`;
@@ -599,7 +592,6 @@ RenameTable:
     );
   up: |
     ALTER TABLE `user_accounts` RENAME TO `users`;
-
   down: |
     CREATE TABLE user_accounts (
       id bigint NOT NULL,
@@ -620,7 +612,6 @@ RenameTableWithCommentVariant:
     );
   up: |
     ALTER TABLE `old_users` RENAME TO `new_users`;
-
   down: |
     CREATE TABLE old_users (
       id bigint NOT NULL,
@@ -640,7 +631,6 @@ RenameTableWithQuotedName:
     );
   up: |
     ALTER TABLE `user accounts` RENAME TO `user_profiles`;
-
   down: |
     CREATE TABLE `user accounts` (
       id bigint NOT NULL,
@@ -670,7 +660,6 @@ RenameTableAndMultipleColumnChanges:
     ALTER TABLE `accounts` ADD PRIMARY KEY (`id`);
     ALTER TABLE `accounts` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
     ALTER TABLE `accounts` DROP COLUMN `old_field`;
-
   down: |
     CREATE TABLE old_accounts (
       id bigint NOT NULL,
@@ -696,7 +685,6 @@ RenameIndex:
     );
   up: |
     ALTER TABLE `users` RENAME INDEX `old_email_idx` TO `new_email_idx`;
-
   down: |
     ALTER TABLE `users` ADD INDEX `old_email_idx` (`email`);
     ALTER TABLE `users` DROP INDEX `new_email_idx`;
@@ -715,7 +703,6 @@ RenameIndexStandalone:
     CREATE INDEX user_email_idx /* @renamed from=email_idx */ ON users (email);
   up: |
     ALTER TABLE `users` RENAME INDEX `email_idx` TO `user_email_idx`;
-
   down: |
     CREATE INDEX email_idx ON users (email);
     ALTER TABLE `users` DROP INDEX `user_email_idx`;
@@ -734,7 +721,6 @@ RenameUniqueIndex:
     );
   up: |
     ALTER TABLE `users` RENAME INDEX `old_unique_email` TO `unique_email`;
-
   down: |
     ALTER TABLE `users` ADD UNIQUE KEY `old_unique_email` (`email`);
     ALTER TABLE `users` DROP INDEX `unique_email`;
@@ -758,7 +744,6 @@ RenameMultipleIndexes:
   up: |
     ALTER TABLE `users` RENAME INDEX `idx_email` TO `email_idx`;
     ALTER TABLE `users` RENAME INDEX `idx_username` TO `username_idx`;
-
   down: |
     ALTER TABLE `users` ADD INDEX `idx_email` (`email`);
     ALTER TABLE `users` ADD INDEX `idx_username` (`username`);
@@ -783,7 +768,6 @@ RenameTableAndAddIndex:
     ALTER TABLE `old_users` RENAME TO `users`;
     ALTER TABLE `users` ADD KEY `email_idx` (`email`);
     ALTER TABLE `users` ADD KEY `username_idx` (`username`);
-
   down: |
     CREATE TABLE old_users (
       id bigint NOT NULL,
@@ -860,7 +844,6 @@ AlterColumnSetDefault:
   up: |
     ALTER TABLE `users` CHANGE COLUMN `status` `status` varchar(20) DEFAULT 'active';
     ALTER TABLE `users` CHANGE COLUMN `priority` `priority` int DEFAULT 1;
-
   down: |
     ALTER TABLE `users` CHANGE COLUMN `status` `status` varchar(20);
     ALTER TABLE `users` CHANGE COLUMN `priority` `priority` int;
@@ -880,7 +863,6 @@ AlterColumnDropDefault:
   up: |
     ALTER TABLE `users` CHANGE COLUMN `status` `status` varchar(20);
     ALTER TABLE `users` CHANGE COLUMN `priority` `priority` int;
-
   down: |
     ALTER TABLE `users` CHANGE COLUMN `status` `status` varchar(20) DEFAULT 'active';
     ALTER TABLE `users` CHANGE COLUMN `priority` `priority` int DEFAULT 1;
@@ -900,7 +882,6 @@ AlterColumnChangeDefault:
   up: |
     ALTER TABLE `users` CHANGE COLUMN `status` `status` varchar(20) DEFAULT 'active';
     ALTER TABLE `users` CHANGE COLUMN `is_active` `is_active` boolean DEFAULT true;
-
   down: |
     ALTER TABLE `users` CHANGE COLUMN `status` `status` varchar(20) DEFAULT 'pending';
     ALTER TABLE `users` CHANGE COLUMN `is_active` `is_active` boolean DEFAULT false;
@@ -920,7 +901,6 @@ AlterColumnSetNotNull:
   up: |
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(100) NOT NULL;
     ALTER TABLE `users` CHANGE COLUMN `email` `email` varchar(255) NOT NULL;
-
   down: |
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(100);
     ALTER TABLE `users` CHANGE COLUMN `email` `email` varchar(255);
@@ -940,7 +920,6 @@ AlterColumnDropNotNull:
   up: |
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(100);
     ALTER TABLE `users` CHANGE COLUMN `email` `email` varchar(255);
-
   down: |
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(100) NOT NULL;
     ALTER TABLE `users` CHANGE COLUMN `email` `email` varchar(255) NOT NULL;
@@ -960,7 +939,6 @@ AlterColumnChangeNotNullAndDefault:
   up: |
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(100) NOT NULL DEFAULT 'anonymous';
     ALTER TABLE `users` CHANGE COLUMN `email` `email` varchar(255);
-
   down: |
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(100);
     ALTER TABLE `users` CHANGE COLUMN `email` `email` varchar(255) NOT NULL DEFAULT 'unknown@example.com';

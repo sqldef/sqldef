@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 # Test cases to reproduce issues mentioned in the Qiita article
 # https://qiita.com/abe_masanori/items/7fd2a470e7eba2f255a4
 
@@ -57,7 +59,6 @@ ForeignKeyDependenciesForCreateTables:
       CONSTRAINT `fk_item_id` FOREIGN KEY (`item_id`) REFERENCES `items` (`item_id`),
       CONSTRAINT `fk_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
   down: |
     DROP TABLE `sales`;
     DROP TABLE `items`;
@@ -102,7 +103,6 @@ ForeignKeyDependenciesPrimaryKeyChange:
     ALTER TABLE `items` ADD PRIMARY KEY (`supplier_id`, `item_id`);
     ALTER TABLE `item_prices` ADD COLUMN `supplier_id` int AFTER `item_id`;
     ALTER TABLE `item_prices` ADD CONSTRAINT `prices_item_fk` FOREIGN KEY (`supplier_id`, `item_id`) REFERENCES `items` (`supplier_id`, `item_id`);
-
   down: |
     ALTER TABLE `items` CHANGE COLUMN `supplier_id` `supplier_id` int;
     ALTER TABLE `item_prices` DROP FOREIGN KEY `prices_item_fk`;
@@ -144,7 +144,6 @@ ForeignKeyDependenciesCircular:
     ALTER TABLE `employees` ADD CONSTRAINT `emp_dept_fk` FOREIGN KEY (`dept_id`) REFERENCES `departments` (`dept_id`);
     ALTER TABLE `departments` ADD CONSTRAINT `dept_manager_fk`
       FOREIGN KEY (`manager_id`) REFERENCES `employees` (`emp_id`);
-
   down: |
     ALTER TABLE `departments` DROP FOREIGN KEY `dept_manager_fk`;
     ALTER TABLE `departments` DROP INDEX `dept_manager_fk`;
@@ -178,7 +177,6 @@ ForeignKeyDependenciesAddConstraintAfterCreation:
   up: |
     ALTER TABLE `orders` ADD CONSTRAINT `order_customer_fk`
       FOREIGN KEY (`customer_id`) REFERENCES `customers` (`customer_id`);
-
   down: |
     ALTER TABLE `orders` DROP FOREIGN KEY `order_customer_fk`;
     ALTER TABLE `orders` DROP INDEX `order_customer_fk`;
@@ -226,7 +224,6 @@ ForeignKeyDependenciesMultipleToModifiedTable:
     ALTER TABLE `posts` ADD COLUMN `reviewer_tenant_id` int AFTER `reviewer_id`;
     ALTER TABLE `posts` ADD CONSTRAINT `posts_author_fk` FOREIGN KEY (`author_tenant_id`, `author_id`) REFERENCES `users` (`tenant_id`, `user_id`);
     ALTER TABLE `posts` ADD CONSTRAINT `posts_reviewer_fk` FOREIGN KEY (`reviewer_tenant_id`, `reviewer_id`) REFERENCES `users` (`tenant_id`, `user_id`);
-
   down: |
     ALTER TABLE `posts` DROP FOREIGN KEY `posts_author_fk`;
     ALTER TABLE `posts` DROP INDEX `posts_author_fk`;
@@ -296,7 +293,6 @@ ForeignKeyDependenciesMultipleWithIdempotency:
         foreign key (supplier_id, item_id) references items(supplier_id, item_id)
     );
     create unique index uk_email_address on users(email_address);
-
   down: |
     DROP TABLE `sales`;
     DROP TABLE `items`;
@@ -336,7 +332,6 @@ ForeignKeyDependenciesMultipleDrops:
     DROP TABLE `sales`;
     DROP TABLE `items`;
     DROP TABLE `users`;
-
   down: |
     create table users (
       user_id integer primary key,
@@ -390,7 +385,6 @@ ForeignKeyWithPrimaryKeyChangeAndDrop:
     ALTER TABLE `users` ADD PRIMARY KEY (`user_id`);
     DROP TABLE `taggings`;
     ALTER TABLE `users` DROP COLUMN `id`;
-
   down: |
     ALTER TABLE `users` ADD COLUMN `id` integer NOT NULL FIRST;
     ALTER TABLE `users` DROP PRIMARY KEY;

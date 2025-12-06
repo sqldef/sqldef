@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 BooleanValue:
   current: |
     CREATE TABLE bools (
@@ -203,8 +205,6 @@ OnUpdateParentheses:
       updated_at datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
       created_at datetime NOT NULL
     );
-  up: ""
-  down: ""
 CurrentTimestampWithPrecision:
   current: |
     CREATE TABLE users (
@@ -344,8 +344,6 @@ NumericDecimalDefaults:
       num numeric(10),
       price decimal(10)
     );
-  up: ""
-  down: ""
 NumericDecimalExplicit:
   current: |
     CREATE TABLE test (
@@ -363,8 +361,6 @@ NumericDecimalExplicit:
       price1 decimal(12),
       price2 decimal(20, 6)
     );
-  up: ""
-  down: ""
 TypedLiterals:
   flavor: mysql
   min_version: '8.0'
@@ -463,7 +459,6 @@ TypedLiteralsInCheck:
     ALTER TABLE `events` ADD COLUMN `event_date` date AFTER `id`;
     ALTER TABLE `events` ADD COLUMN `event_end_date` date AFTER `event_date`;
     ALTER TABLE `events` ADD CONSTRAINT `chk_date_range` CHECK (event_date >= date '2020-01-01' and event_end_date <= date '2030-12-31');
-
   down: |
     ALTER TABLE `events` DROP CHECK `chk_date_range`;
     ALTER TABLE `events` DROP COLUMN `event_end_date`;

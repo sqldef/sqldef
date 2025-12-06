@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 # Tests for quote-aware mode (legacy_ignore_quotes: false) in MySQL
 #
 # IMPORTANT: MySQL table name case sensitivity depends on lower_case_table_names:
@@ -13,7 +15,6 @@ BasicQuoteAwareTableCreation:
     CREATE TABLE users (id int PRIMARY KEY);
   up: |
     CREATE TABLE users (id int PRIMARY KEY);
-
   down: |
     DROP TABLE `users`;
 # FK dependency ordering with consistent case
@@ -33,7 +34,6 @@ ForeignKeyDependencyOrderingConsistentCase:
       user_id int,
       CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users (id)
     );
-
   down: |
     DROP TABLE `orders`;
     DROP TABLE `users`;
@@ -46,7 +46,6 @@ AddColumnQuoteAware:
     CREATE TABLE users (id int PRIMARY KEY, name varchar(100));
   up: |
     ALTER TABLE users ADD COLUMN name varchar(100) AFTER id;
-
   down: |
     ALTER TABLE users DROP COLUMN `name`;
 # Drop column with quote-aware mode
@@ -58,7 +57,6 @@ DropColumnQuoteAware:
     CREATE TABLE users (id int PRIMARY KEY);
   up: |
     ALTER TABLE users DROP COLUMN `old_col`;
-
   down: |
     ALTER TABLE users ADD COLUMN old_col varchar(50) AFTER id;
 # Modify column with quote-aware mode
@@ -70,7 +68,6 @@ ModifyColumnQuoteAware:
     CREATE TABLE products (id int PRIMARY KEY, price bigint NOT NULL);
   up: |
     ALTER TABLE products CHANGE COLUMN `price` price bigint NOT NULL;
-
   down: |
     ALTER TABLE products CHANGE COLUMN `price` price int;
 # Add index with quote-aware mode
@@ -82,7 +79,6 @@ AddIndexQuoteAware:
     CREATE TABLE items (id int PRIMARY KEY, name varchar(100), INDEX idx_name (name));
   up: |
     ALTER TABLE items ADD INDEX idx_name (name);
-
   down: |
     ALTER TABLE `items` DROP INDEX `idx_name`;
 # Drop index with quote-aware mode
@@ -94,7 +90,6 @@ DropIndexQuoteAware:
     CREATE TABLE items (id int PRIMARY KEY, name varchar(100));
   up: |
     ALTER TABLE `items` DROP INDEX `idx_name`;
-
   down: |
     ALTER TABLE items ADD INDEX idx_name (name);
 # Demonstrate that lower_case_table_names only affects TABLE names, not column/index names.
@@ -108,7 +103,6 @@ ColumnNameCaseInsensitive:
     CREATE TABLE users (id int PRIMARY KEY, name varchar(100), email varchar(200));
   up: |
     ALTER TABLE users ADD COLUMN email varchar(200) AFTER name;
-
   down: |
     ALTER TABLE users DROP COLUMN `email`;
 # Index name case insensitivity - MySQL index names are case-insensitive
@@ -139,5 +133,3 @@ CheckConstraintNameCaseInsensitive:
       CONSTRAINT chk_quantity CHECK (quantity > 0)
     );
   # No output - constraint names match case-insensitively
-  up: ""
-  down: ""

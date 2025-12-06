@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 View:
   desired: |
     CREATE TABLE points (id bigint);
@@ -230,8 +232,7 @@ CreateViewCast:
       amount::numeric(10,2) as amount_num
     from hoge;
   up: ''
-  down: |
-    
+  down: ""
 ReplaceViewWithChangeCondition:
   current: |
     CREATE TABLE hoge (

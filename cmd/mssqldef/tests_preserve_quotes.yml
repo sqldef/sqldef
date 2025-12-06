@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 # Tests for quote-aware mode (legacy_ignore_quotes: false) in MSSQL
 
 ForeignKeyDependencyOrderingCaseMismatch:
@@ -19,7 +21,6 @@ ForeignKeyDependencyOrderingCaseMismatch:
       user_id int,
       CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES Users (id)
     );
-
   down: |
     DROP TABLE dbo.orders;
     DROP TABLE dbo.users;
@@ -32,7 +33,6 @@ AddColumnCaseMismatch:
     CREATE TABLE users (id int PRIMARY KEY, name varchar(100));
   up: |
     ALTER TABLE dbo.users ADD name varchar(100);
-
   down: |
     ALTER TABLE dbo.USERS DROP COLUMN [name];
 DropColumnCaseMismatch:
@@ -44,6 +44,5 @@ DropColumnCaseMismatch:
     CREATE TABLE USERS (id int PRIMARY KEY);
   up: |
     ALTER TABLE dbo.USERS DROP COLUMN [old_col];
-
   down: |
     ALTER TABLE dbo.Users ADD old_col varchar(50);

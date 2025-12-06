@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 CreateDomain:
   desired: |
     CREATE DOMAIN us_postal_code AS text;
@@ -18,7 +20,6 @@ DropDomain:
   desired: |
   up: |
     DROP DOMAIN "public"."us_postal_code";
-
   down: |
     CREATE DOMAIN us_postal_code AS text;
 CreateDomainWithDefault:
@@ -43,7 +44,6 @@ DropDomainMultipleSchemas:
   up: |
     DROP DOMAIN "public"."public_domain";
     DROP DOMAIN "test_schema"."test_domain";
-
   down: |
     CREATE DOMAIN test_schema.test_domain AS text;
     CREATE DOMAIN public_domain AS integer;
@@ -55,7 +55,6 @@ CreateAndKeepDomainInNonPublicSchema:
     CREATE DOMAIN test_schema.my_domain AS text;
   up: |
     CREATE DOMAIN test_schema.my_domain AS text;
-
   down: |
     DROP DOMAIN "test_schema"."my_domain";
 UnqualifiedAndQualifiedAreSame:
@@ -64,9 +63,7 @@ UnqualifiedAndQualifiedAreSame:
   desired: |
     CREATE DOMAIN public.email AS text;
   up: |
-
-  down: |
-    
+  down: ""
 MixedQualifiedAndUnqualifiedDomains:
   desired: |
     CREATE DOMAIN email AS text;
@@ -100,9 +97,7 @@ DomainWithCheckIsIdempotent:
   desired: |
     CREATE DOMAIN positive_int AS integer CHECK (VALUE > 0);
   up: |
-
-  down: |
-    
+  down: ""
 CreateDomainCheckAndNotNull:
   desired: |
     CREATE DOMAIN username AS text
@@ -115,7 +110,6 @@ DropDomainWithConstraints:
   desired: |
   up: |
     DROP DOMAIN "public"."email";
-
   down: |
     CREATE DOMAIN email AS text CHECK (VALUE ~ '@');
 CreateTableUsingDomain:
@@ -229,7 +223,6 @@ AlterDomainSetDefault:
     CREATE DOMAIN status_code AS integer DEFAULT 200;
   up: |
     ALTER DOMAIN "public"."status_code" SET DEFAULT 200;
-
   down: |
     ALTER DOMAIN "public"."status_code" DROP DEFAULT;
 AlterDomainDropDefault:
@@ -239,7 +232,6 @@ AlterDomainDropDefault:
     CREATE DOMAIN status_code AS integer;
   up: |
     ALTER DOMAIN "public"."status_code" DROP DEFAULT;
-
   down: |
     ALTER DOMAIN "public"."status_code" SET DEFAULT 200;
 AlterDomainChangeDefault:
@@ -249,7 +241,6 @@ AlterDomainChangeDefault:
     CREATE DOMAIN status_code AS integer DEFAULT 404;
   up: |
     ALTER DOMAIN "public"."status_code" SET DEFAULT 404;
-
   down: |
     ALTER DOMAIN "public"."status_code" SET DEFAULT 200;
 AlterDomainSetNotNull:
@@ -259,7 +250,6 @@ AlterDomainSetNotNull:
     CREATE DOMAIN email AS text NOT NULL;
   up: |
     ALTER DOMAIN "public"."email" SET NOT NULL;
-
   down: |
     ALTER DOMAIN "public"."email" DROP NOT NULL;
 AlterDomainDropNotNull:
@@ -269,7 +259,6 @@ AlterDomainDropNotNull:
     CREATE DOMAIN email AS text;
   up: |
     ALTER DOMAIN "public"."email" DROP NOT NULL;
-
   down: |
     ALTER DOMAIN "public"."email" SET NOT NULL;
 AlterDomainAddCheck:
@@ -279,9 +268,7 @@ AlterDomainAddCheck:
     CREATE DOMAIN positive_int AS integer CHECK (VALUE > 0);
   up: |
     ALTER DOMAIN "public"."positive_int" ADD CHECK (VALUE > 0);
-
-  down: |
-    
+  down: ""
 AlterDomainAddNamedCheck:
   current: |
     CREATE DOMAIN positive_int AS integer;
@@ -289,7 +276,6 @@ AlterDomainAddNamedCheck:
     CREATE DOMAIN positive_int AS integer CONSTRAINT positive_check CHECK (VALUE > 0);
   up: |
     ALTER DOMAIN "public"."positive_int" ADD CONSTRAINT positive_check CHECK (VALUE > 0);
-
   down: |
 AlterDomainAddMultipleChecks:
   current: |
@@ -301,6 +287,4 @@ AlterDomainAddMultipleChecks:
   up: |
     ALTER DOMAIN "public"."valid_score" ADD CHECK (VALUE >= 0);
     ALTER DOMAIN "public"."valid_score" ADD CHECK (VALUE <= 100);
-
-  down: |
-    
+  down: ""

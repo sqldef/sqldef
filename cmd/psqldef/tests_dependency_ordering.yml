@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 ViewDependsOnView_Simple:
   desired: |
     CREATE TABLE users (
@@ -153,7 +155,6 @@ ViewDependsOnView_UpdateBaseViewAffectingDependentViews:
   up: |
     ALTER TABLE "public"."products" ADD COLUMN "category" text;
     CREATE OR REPLACE VIEW "public"."cheap_products" AS select id, name, category from products where price < 50;
-
   down: |
     DROP VIEW "public"."cheap_product_names";
     DROP VIEW "public"."cheap_products";

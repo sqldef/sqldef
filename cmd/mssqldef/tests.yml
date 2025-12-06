@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 CreateTable:
   desired: |
     CREATE TABLE bigdata (
@@ -62,7 +64,6 @@ IndexesOnChangedFilter:
   up: |
     DROP INDEX [idx_v] ON [dbo].[v];
     CREATE INDEX idx_v ON v (v_int, v_nvarchar) WHERE (v_int IS NOT NULL AND v_nvarchar IS NOT NULL);
-
   down: |
     DROP INDEX [idx_v] ON [dbo].[v];
     CREATE INDEX idx_v ON v (v_int, v_nvarchar) WHERE (v_int IS NOT NULL);
@@ -112,7 +113,6 @@ DropColumnStoreIndex:
     );
   up: |
     DROP INDEX [idx_v] ON [dbo].[v];
-
   down: |
     CREATE NONCLUSTERED COLUMNSTORE INDEX idx_v ON v (v_int, v_nvarchar);
 DropTableOnNonDefaultSchema:
@@ -129,7 +129,6 @@ DropTableOnNonDefaultSchema:
     );
   up: |
     DROP TABLE [FOO].[bigdata2];
-
   down: |
     CREATE TABLE FOO.bigdata2 (
       data bigint
@@ -261,8 +260,6 @@ IndexColumnOrder:
       v2 int,
       CONSTRAINT [v_pk] PRIMARY KEY CLUSTERED ([v2] ASC, [v1] ASC)
     );
-  up: ""
-  down: ""
 ReservedWordColumnName:
   current: |
     CREATE TABLE v(
@@ -274,8 +271,6 @@ ReservedWordColumnName:
       [V_INT] int,
       [TIMESTAMP] datetime
     );
-  up: ""
-  down: ""
 ChangePrimaryKey:
   current: |
     CREATE TABLE v (
@@ -309,8 +304,6 @@ PercentConstraintName:
     CREATE TABLE [dbo].[percent_test] (
       [test%] int CONSTRAINT [DF_percent_test_test%] DEFAULT (NULL)
     );
-  up: ""
-  down: ""
 UpdateWithFromAndWhere:
   desired: |
     CREATE TABLE reservation (
@@ -438,8 +431,7 @@ DeclareVariable:
     set @date = getdate()
     insert into logs select id, @date from inserted
     end;
-  down: |
-    
+  down: ""
 CovertCurrentTimestampWithStyle:
   current: |
     CREATE TABLE users (
@@ -463,8 +455,7 @@ CovertCurrentTimestampWithStyle:
     begin
     set @datetime = cast(convert(varchar, current_timestamp, 110) as datetime)
     end;
-  down: |
-    
+  down: ""
 TableHint:
   desired: |
     CREATE TABLE users (
@@ -525,8 +516,7 @@ WhileLoopFetchIntoMulti:
     close cur
     deallocate cur
     end;
-  down: |
-    
+  down: ""
 TriggerNameWithSchema:
   desired: |
     CREATE TABLE users (
@@ -586,8 +576,7 @@ DanglingElse:
     begin
     set nocount off
     end;
-  down: |
-    
+  down: ""
 Execute:
   desired: |
     CREATE TABLE users (
@@ -656,7 +645,6 @@ RenameColumnWithTypeChange:
   up: |
     EXEC sp_rename 'users.username', 'user_name', 'COLUMN';
     ALTER TABLE [users] ALTER COLUMN [user_name] text NOT NULL;
-
   down: |
     ALTER TABLE [dbo].[users] ADD [username] varchar(100);
     ALTER TABLE [dbo].[users] DROP COLUMN [user_name];
@@ -675,7 +663,6 @@ RenameTable:
     );
   up: |
     EXEC sp_rename 'user_accounts', 'users';
-
   down: |
     CREATE TABLE user_accounts (
       id bigint NOT NULL,
@@ -696,7 +683,6 @@ RenameTableWithCommentVariant:
     );
   up: |
     EXEC sp_rename 'old_users', 'new_users';
-
   down: |
     CREATE TABLE old_users (
       id bigint NOT NULL,
@@ -716,7 +702,6 @@ RenameTableWithQuotedName:
     );
   up: |
     EXEC sp_rename 'user_accounts', 'user_profiles';
-
   down: |
     CREATE TABLE [user_accounts] (
       id bigint NOT NULL,
@@ -744,7 +729,6 @@ RenameTableAndMultipleChanges:
     ALTER TABLE [dbo].[accounts] ADD DEFAULT 1 FOR [is_active];
     ALTER TABLE [dbo].[accounts] ADD PRIMARY KEY CLUSTERED ([id]);
     ALTER TABLE [dbo].[accounts] DROP COLUMN [old_field];
-
   down: |
     CREATE TABLE old_accounts (
       id bigint NOT NULL,
@@ -770,7 +754,6 @@ RenameIndex:
     CREATE INDEX new_email_idx /* @renamed from=old_email_idx */ ON users (email);
   up: |
     EXEC sp_rename 'users.old_email_idx', 'new_email_idx', 'INDEX';
-
   down: |
     CREATE INDEX old_email_idx ON users (email);
     DROP INDEX [new_email_idx] ON [dbo].[users];
@@ -791,7 +774,6 @@ RenameIndexInTable:
     );
   up: |
     EXEC sp_rename 'users.idx_email', 'email_idx', 'INDEX';
-
   down: |
     CREATE NONCLUSTERED INDEX [idx_email] ON [dbo].[users] ([email]);
     DROP INDEX [email_idx] ON [dbo].[users];
@@ -815,7 +797,6 @@ RenameMultipleIndexes:
   up: |
     EXEC sp_rename 'users.idx_email', 'email_idx', 'INDEX';
     EXEC sp_rename 'users.idx_username', 'username_idx', 'INDEX';
-
   down: |
     CREATE INDEX idx_email ON users (email);
     CREATE INDEX idx_username ON users (username);
@@ -838,7 +819,6 @@ RenameUniqueConstraint:
     );
   up: |
     EXEC sp_rename 'users.old_unique_email', 'unique_email', 'INDEX';
-
   down: |
     CREATE UNIQUE NONCLUSTERED INDEX [old_unique_email] ON [dbo].[users] ([email]);
     ALTER TABLE [dbo].[users] DROP CONSTRAINT [unique_email];
@@ -942,8 +922,6 @@ CheckInClauseNormalization:
       state varchar(20),
       CONSTRAINT workflows_state_chk CHECK (state IN ('active', 'paused', 'stopped'))
     );
-  up: ""
-  down: ""
 CheckTableLevelToColumnLevel:
   current: |
     CREATE TABLE orders (
@@ -956,8 +934,6 @@ CheckTableLevelToColumnLevel:
       id int PRIMARY KEY,
       status varchar(20) CHECK (status IN ('pending', 'shipped', 'delivered'))
     );
-  up: ""
-  down: ""
 CheckTableLevelToUnnamedColumnLevel:
   current: |
     CREATE TABLE payments (
@@ -970,8 +946,6 @@ CheckTableLevelToUnnamedColumnLevel:
       id int PRIMARY KEY,
       method varchar(20) CHECK (method IN ('card', 'cash', 'transfer'))
     );
-  up: ""
-  down: ""
 CheckDuplicateValuesInOrChain:
   current: |
     CREATE TABLE items (
@@ -985,8 +959,6 @@ CheckDuplicateValuesInOrChain:
       category varchar(20),
       CONSTRAINT items_category_chk CHECK (category IN ('electronics', 'clothing'))
     );
-  up: ""
-  down: ""
 DecimalDefault:
   desired: |
     CREATE TABLE some_table (
@@ -1020,8 +992,6 @@ NumericDecimalDefaults:
       num numeric(18),
       price decimal(18)
     );
-  up: ""
-  down: ""
 NumericDecimalExplicit:
   current: |
     CREATE TABLE test (
@@ -1039,8 +1009,6 @@ NumericDecimalExplicit:
       price1 decimal(12),
       price2 decimal(20, 6)
     );
-  up: ""
-  down: ""
 AlterColumnSetDefault:
   current: |
     CREATE TABLE users (
@@ -1057,7 +1025,6 @@ AlterColumnSetDefault:
   up: |
     ALTER TABLE [dbo].[users] ADD CONSTRAINT [DF_users_status] DEFAULT 'active' FOR [status];
     ALTER TABLE [dbo].[users] ADD CONSTRAINT [DF_users_priority] DEFAULT 1 FOR [priority];
-
   down: |
     ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_users_status];
     ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_users_priority];
@@ -1077,7 +1044,6 @@ AlterColumnDropDefault:
   up: |
     ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_users_status];
     ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_users_priority];
-
   down: |
     ALTER TABLE [dbo].[users] ADD CONSTRAINT [DF_users_status] DEFAULT 'active' FOR [status];
     ALTER TABLE [dbo].[users] ADD CONSTRAINT [DF_users_priority] DEFAULT 1 FOR [priority];
@@ -1099,7 +1065,6 @@ AlterColumnChangeDefault:
     ALTER TABLE [dbo].[users] ADD CONSTRAINT [DF_users_status] DEFAULT 'active' FOR [status];
     ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_users_is_active];
     ALTER TABLE [dbo].[users] ADD CONSTRAINT [DF_users_is_active] DEFAULT 1 FOR [is_active];
-
   down: |
     ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_users_status];
     ALTER TABLE [dbo].[users] ADD CONSTRAINT [DF_users_status] DEFAULT 'pending' FOR [status];
@@ -1121,7 +1086,6 @@ AlterColumnSetNotNull:
   up: |
     ALTER TABLE [dbo].[users] ALTER COLUMN [name] varchar(100) NOT NULL;
     ALTER TABLE [dbo].[users] ALTER COLUMN [email] varchar(255) NOT NULL;
-
   down: |
     ALTER TABLE [dbo].[users] ALTER COLUMN [name] varchar(100);
     ALTER TABLE [dbo].[users] ALTER COLUMN [email] varchar(255);
@@ -1160,7 +1124,6 @@ VarcharMaxExchange:
   up: |
     ALTER TABLE [dbo].[test_table] ALTER COLUMN [col1] varchar(max);
     ALTER TABLE [dbo].[test_table] ALTER COLUMN [col2] varchar(100);
-
   down: |
     ALTER TABLE [dbo].[test_table] ALTER COLUMN [col1] varchar(100);
     ALTER TABLE [dbo].[test_table] ALTER COLUMN [col2] varchar(max);

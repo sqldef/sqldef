@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 MysqlSecurityTypeView:
   current: |
     CREATE TABLE `users` (
@@ -231,8 +233,7 @@ TriggerInsertBeforeUpdate:
     CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());
   up: |
     CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());
-  down: |
-    
+  down: ""
 TriggerInsertBeforeUpdateChange:
   current: |
     CREATE TABLE users (
@@ -296,8 +297,7 @@ TriggerSetNewComplex:
     CREATE TRIGGER `set_logical_uniqueness_on_users2` before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = case when NEW.deleted_at is null then 1 when NEW.deleted_at is not null then null end;
   up: |
     CREATE TRIGGER `set_logical_uniqueness_on_users2` before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = case when NEW.deleted_at is null then 1 when NEW.deleted_at is not null then null end;
-  down: |
-    
+  down: ""
 TriggerBeginEnd:
   desired: |
     CREATE TABLE test_trigger (
@@ -529,7 +529,6 @@ TriggerWithDeclareHandlerMultipleStatements:
     end;
     insert into example_table values (NEW.id, NEW.name);
     end;
-
 
   down: |
     DROP TABLE `error_log`;

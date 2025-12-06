@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 CreateTableUniqueIndex:
   desired: |
     CREATE TABLE items (
@@ -105,8 +107,6 @@ IndexOptionCaseInsensitive:
       id int(11) NOT NULL,
       KEY index_id (id) using btree
     );
-  up: ""
-  down: ""
 IndexOptionNoUsing:
   current: |
     CREATE TABLE users (
@@ -118,8 +118,6 @@ IndexOptionNoUsing:
       id int(11) NOT NULL,
       KEY index_id (id)
     );
-  up: ""
-  down: ""
 IndexOptionAddWithoutUsing:
   current: |
     CREATE TABLE users (
@@ -145,8 +143,6 @@ IndexOptionAddWithoutUsingThenWith:
       id int(11) NOT NULL,
       KEY index_id (id) USING BTREE
     );
-  up: ""
-  down: ""
 MultipleColumnIndexesOption:
   current: |
     CREATE TABLE users (
@@ -180,8 +176,6 @@ MultipleColumnIndexesOptionCaseInsensitive:
       role_type int(1) NOT NULL,
       INDEX index_id (registered_at, role_type) using btree
     );
-  up: ""
-  down: ""
 MultipleColumnIndexesOptionNoUsing:
   current: |
     CREATE TABLE users (
@@ -197,8 +191,6 @@ MultipleColumnIndexesOptionNoUsing:
       role_type int(1) NOT NULL,
       INDEX index_id (registered_at, role_type)
     );
-  up: ""
-  down: ""
 MultipleColumnIndexesOptionAddWithoutUsing:
   current: |
     CREATE TABLE users (
@@ -232,8 +224,6 @@ MultipleColumnIndexesOptionAddWithoutUsingThenWith:
       role_type int(1) NOT NULL,
       INDEX index_id (registered_at, role_type) USING BTREE
     );
-  up: ""
-  down: ""
 MultipleColumnIndexesOptionAddWithoutUsingThenCaseInsensitive:
   current: |
     CREATE TABLE users (
@@ -249,8 +239,6 @@ MultipleColumnIndexesOptionAddWithoutUsingThenCaseInsensitive:
       role_type int(1) NOT NULL,
       INDEX index_id (registered_at, role_type) using btree
     );
-  up: ""
-  down: ""
 FulltextIndex:
   desired: |
     CREATE TABLE posts (
@@ -445,7 +433,6 @@ ChangeIndexCombination:
     ALTER TABLE `users` ADD KEY `index_users1` (`account_id`, `name`);
     ALTER TABLE `users` DROP INDEX `index_users2`;
     ALTER TABLE `users` ADD KEY `index_users2` (`account_id`);
-
   down: |
     ALTER TABLE `users` DROP INDEX `index_users1`;
     ALTER TABLE `users` ADD KEY `index_users1` (`account_id`);

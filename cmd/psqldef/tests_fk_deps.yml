@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 # Test cases for foreign key dependency handling in PostgreSQL
 
 # Issue 1: order of create tables with foreign key constraints
@@ -64,7 +66,6 @@ ForeignKeyDependenciesPrimaryKeyChange:
     ALTER TABLE "public"."items" ADD PRIMARY KEY ("supplier_id", "item_id");
     ALTER TABLE "public"."item_prices" ADD COLUMN "supplier_id" integer;
     ALTER TABLE "public"."item_prices" ADD CONSTRAINT "prices_item_fk" FOREIGN KEY ("supplier_id", "item_id") REFERENCES "public"."items" ("supplier_id", "item_id");
-
   down: |
     ALTER TABLE "public"."item_prices" DROP CONSTRAINT "prices_item_fk";
     ALTER TABLE "public"."items" DROP CONSTRAINT "items_pkey";
@@ -102,7 +103,6 @@ ForeignKeyDependenciesCircular:
     ALTER TABLE "public"."departments" ADD COLUMN "manager_id" integer;
     ALTER TABLE "public"."departments" ADD CONSTRAINT "dept_manager_fk" FOREIGN KEY ("manager_id") REFERENCES "public"."employees" ("emp_id");
     ALTER TABLE "public"."employees" ADD CONSTRAINT "emp_dept_fk" FOREIGN KEY ("dept_id") REFERENCES "public"."departments" ("dept_id");
-
   down: |
     ALTER TABLE "public"."departments" DROP CONSTRAINT "dept_manager_fk";
     ALTER TABLE "public"."departments" DROP COLUMN "manager_id";
@@ -132,7 +132,6 @@ ForeignKeyDependenciesAddConstraintAfterCreation:
     );
   up: |
     ALTER TABLE "public"."orders" ADD CONSTRAINT "order_customer_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."customers" ("customer_id");
-
   down: |
     ALTER TABLE "public"."orders" DROP CONSTRAINT "order_customer_fk";
 # Issue 5: Multiple foreign keys to same table being modified
@@ -177,7 +176,6 @@ ForeignKeyDependenciesMultipleToModifiedTable:
     ALTER TABLE "public"."posts" ADD COLUMN "reviewer_tenant_id" integer;
     ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_author_fk" FOREIGN KEY ("author_tenant_id", "author_id") REFERENCES "public"."users" ("tenant_id", "user_id");
     ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_reviewer_fk" FOREIGN KEY ("reviewer_tenant_id", "reviewer_id") REFERENCES "public"."users" ("tenant_id", "user_id");
-
   down: |
     ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_author_fk";
     ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_reviewer_fk";
@@ -225,7 +223,6 @@ ForeignKeyDependenciesCascadeOptionsPreservation:
     ALTER TABLE "public"."categories" ADD PRIMARY KEY ("tenant_id", "category_id");
     ALTER TABLE "public"."products" ADD COLUMN "tenant_id" integer;
     ALTER TABLE "public"."products" ADD CONSTRAINT "products_category_fk" FOREIGN KEY ("tenant_id", "category_id") REFERENCES "public"."categories" ("tenant_id", "category_id") ON DELETE CASCADE ON UPDATE CASCADE;
-
   down: |
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_category_fk";
     ALTER TABLE "public"."categories" DROP CONSTRAINT "categories_pkey";
@@ -288,7 +285,6 @@ ForeignKeyDependenciesMultipleWithIdempotency:
     );
     create unique index uk_email_address on users(email_address);
 
-
   down: |
     DROP TABLE "public"."sales";
     DROP TABLE "public"."items";
@@ -328,7 +324,6 @@ ForeignKeyDependenciesMultipleDrops:
     DROP TABLE "public"."sales";
     DROP TABLE "public"."items";
     DROP TABLE "public"."users";
-
   down: |
     create table users (
       user_id integer primary key,
@@ -381,7 +376,6 @@ ForeignKeyWithPrimaryKeyChangeAndDrop:
     ALTER TABLE "public"."users" ADD PRIMARY KEY ("user_id");
     DROP TABLE "public"."taggings";
     ALTER TABLE "public"."users" DROP COLUMN "id";
-
   down: |
     ALTER TABLE "public"."users" ADD COLUMN "id" integer NOT NULL;
     ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";

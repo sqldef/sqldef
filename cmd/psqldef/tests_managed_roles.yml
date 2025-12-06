@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 ManagedRolesBasicGrant:
   current: |
     CREATE TABLE users (
@@ -14,7 +16,6 @@ ManagedRolesBasicGrant:
     - readonly_user
   up: |
     GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
-
   down: |
     REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
 ManagedRolesMultipleRoles:
@@ -36,7 +37,6 @@ ManagedRolesMultipleRoles:
   up: |
     GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
     GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
-
   down: |
     REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "app_user";
     REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
@@ -57,7 +57,6 @@ ManagedRolesIgnoreUnmanagedRole:
     - readonly_user
   up: |
     GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
-
   down: |
     REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
 ManagedRolesEmptyListNoChanges:
@@ -94,7 +93,6 @@ ManagedRolesAddPrivileges:
     - app_user
   up: |
     GRANT INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
-
   down: |
     REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
 ManagedRolesRevoke:
@@ -114,7 +112,6 @@ ManagedRolesRevoke:
     - app_user
   up: |
     REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
-
   down: |
     GRANT INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
 ManagedRolesRevokeAll:
@@ -133,7 +130,6 @@ ManagedRolesRevokeAll:
     - app_user
   up: |
     REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "app_user";
-
   down: |
     GRANT INSERT, SELECT, UPDATE ON TABLE "public"."users" TO "app_user";
 ManagedRolesPublic:
@@ -152,7 +148,6 @@ ManagedRolesPublic:
     - PUBLIC
   up: |
     GRANT SELECT ON TABLE "public"."users" TO PUBLIC;
-
   down: |
     REVOKE SELECT ON TABLE "public"."users" FROM PUBLIC;
 ManagedRolesAllPrivileges:
@@ -171,7 +166,6 @@ ManagedRolesAllPrivileges:
     - admin_role
   up: |
     GRANT ALL PRIVILEGES ON TABLE "public"."users" TO "admin_role";
-
   down: |
     REVOKE ALL PRIVILEGES ON TABLE "public"."users" FROM "admin_role";
 ManagedRolesIdempotent:
@@ -230,9 +224,7 @@ ManagedRolesMultipleGrantees:
     - admin_role
   up: |
     GRANT SELECT ON TABLE "public"."users" TO "admin_role", "app_user", "readonly_user";
-
-  down: |
-    
+  down: ""
 ManagedRolesPartialGrantees:
   enable_drop: false
   current: |
@@ -253,9 +245,7 @@ ManagedRolesPartialGrantees:
   up: |
     GRANT SELECT ON TABLE "public"."users" TO "user2";
     GRANT INSERT, UPDATE ON TABLE "public"."users" TO "user2", "user4";
-
-  down: |
-    
+  down: ""
 ManagedRolesOverlapping:
   enable_drop: false
   current: |
@@ -279,9 +269,7 @@ ManagedRolesOverlapping:
     GRANT INSERT ON TABLE "public"."users" TO "user1";
     GRANT SELECT, INSERT ON TABLE "public"."users" TO "user2";
     GRANT UPDATE, DELETE ON TABLE "public"."users" TO "user1", "user3";
-
-  down: |
-    
+  down: ""
 ManagedRolesMultipleTables:
   current: |
     CREATE TABLE users (
@@ -307,7 +295,6 @@ ManagedRolesMultipleTables:
   up: |
     GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
     GRANT SELECT, INSERT, UPDATE ON TABLE "public"."posts" TO "app_user";
-
   down: |
     REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."posts" FROM "app_user";
     REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "app_user";
@@ -361,7 +348,6 @@ ManagedRolesPartialRevokeFromAll:
     - admin_role
   up: |
     REVOKE DELETE, REFERENCES, TRIGGER, TRUNCATE ON TABLE "public"."users" FROM "admin_role";
-
   down: |
     GRANT DELETE, REFERENCES, TRIGGER, TRUNCATE ON TABLE "public"."users" TO "admin_role";
 ManagedRolesSpecialCharacters:
@@ -386,7 +372,6 @@ ManagedRolesSpecialCharacters:
     GRANT SELECT ON TABLE "public"."users" TO "user-with-dash";
     GRANT INSERT ON TABLE "public"."users" TO "user.with.dot";
     GRANT UPDATE ON TABLE "public"."users" TO "user@domain.com";
-
   down: |
     REVOKE SELECT ON TABLE "public"."users" FROM "user-with-dash";
     REVOKE INSERT ON TABLE "public"."users" FROM "user.with.dot";
@@ -409,7 +394,6 @@ ManagedRolesMixedGrantRevoke:
   up: |
     REVOKE DELETE, INSERT ON TABLE "public"."users" FROM "app_user";
     GRANT UPDATE ON TABLE "public"."users" TO "app_user";
-
   down: |
     REVOKE UPDATE ON TABLE "public"."users" FROM "app_user";
     GRANT INSERT, DELETE ON TABLE "public"."users" TO "app_user";

@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 CreateTable:
   desired: |
     CREATE TABLE users (
@@ -37,8 +39,7 @@ CreateTableQuotes:
       id integer primary key
     );
   up: ''
-  down: |
-    
+  down: ""
 CreateTableWithAutoincrement:
   desired: |
     CREATE TABLE users (
@@ -166,7 +167,6 @@ RenameColumn:
     );
   up: |
     ALTER TABLE `users` RENAME COLUMN `username` TO `user_name`;
-
   down: |
     ALTER TABLE `users` ADD COLUMN `username` text;
     ALTER TABLE `users` DROP COLUMN `user_name`;
@@ -187,7 +187,6 @@ RenameColumnWithTypeChange:
     ALTER TABLE `users` ADD COLUMN `user_name` text NOT NULL;
     UPDATE `users` SET `user_name` = `username`;
     ALTER TABLE `users` DROP COLUMN `username`;
-
   down: |
     ALTER TABLE `users` ADD COLUMN `username` varchar(100);
     ALTER TABLE `users` DROP COLUMN `user_name`;
@@ -206,7 +205,6 @@ RenameTable:
     );
   up: |
     ALTER TABLE `user_accounts` RENAME TO `users`;
-
   down: |
     CREATE TABLE user_accounts (
       id bigint NOT NULL,
@@ -227,7 +225,6 @@ RenameTableWithCommentVariant:
     );
   up: |
     ALTER TABLE `old_users` RENAME TO `new_users`;
-
   down: |
     CREATE TABLE old_users (
       id bigint NOT NULL,
@@ -247,7 +244,6 @@ RenameTableWithQuotedName:
     );
   up: |
     ALTER TABLE `user accounts` RENAME TO `user_profiles`;
-
   down: |
     CREATE TABLE "user accounts" (
       id bigint NOT NULL,
@@ -276,7 +272,6 @@ RenameTableAndMultipleColumnChanges:
     ALTER TABLE `accounts` DROP COLUMN `user_name`;
     ALTER TABLE `accounts` ADD COLUMN `created_at` timestamp DEFAULT current_timestamp;
     ALTER TABLE `accounts` DROP COLUMN `old_field`;
-
   down: |
     CREATE TABLE old_accounts (
       id bigint NOT NULL,
@@ -303,7 +298,6 @@ RenameIndex:
   up: |
     DROP INDEX `old_email_idx`;
     CREATE INDEX `new_email_idx` ON `users` (`email`);
-
   down: |
     CREATE INDEX old_email_idx ON users (email);
     DROP INDEX `new_email_idx`;
@@ -329,7 +323,6 @@ RenameMultipleIndexes:
     CREATE INDEX `email_idx` ON `users` (`email`);
     DROP INDEX `idx_username`;
     CREATE INDEX `username_idx` ON `users` (`username`);
-
   down: |
     CREATE INDEX idx_email ON users (email);
     CREATE INDEX idx_username ON users (username);
@@ -353,7 +346,6 @@ RenameUniqueIndex:
   up: |
     DROP INDEX `old_unique_email`;
     CREATE UNIQUE INDEX `unique_email` ON `users` (`email`);
-
   down: |
     CREATE UNIQUE INDEX old_unique_email ON users (email);
     DROP INDEX `unique_email`;
@@ -391,8 +383,6 @@ NumericDecimalWithoutPrecision:
       num numeric,
       price decimal
     );
-  up: ""
-  down: ""
 NumericDecimalExplicit:
   current: |
     CREATE TABLE test (
@@ -410,5 +400,3 @@ NumericDecimalExplicit:
       price1 decimal(12),
       price2 decimal(20, 6)
     );
-  up: ""
-  down: ""

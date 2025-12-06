@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 TableQuotedPreservesCase:
   legacy_ignore_quotes: false
   current: |
@@ -6,7 +8,6 @@ TableQuotedPreservesCase:
     CREATE TABLE "Users" (id int, name text);
   up: |
     ALTER TABLE public."Users" ADD COLUMN name text;
-
   down: |
     ALTER TABLE public."Users" DROP COLUMN name;
 TableUnquotedNormalizesToLowercase:
@@ -17,7 +18,6 @@ TableUnquotedNormalizesToLowercase:
     CREATE TABLE Users (id int, name text);
   up: |
     ALTER TABLE public.users ADD COLUMN name text;
-
   down: |
     ALTER TABLE public.users DROP COLUMN name;
 TableQuotedVsUnquotedAreDifferent:
@@ -31,7 +31,6 @@ TableQuotedVsUnquotedAreDifferent:
   up: |
     ALTER TABLE public."Users" ADD COLUMN name text;
     ALTER TABLE public.users ADD COLUMN email text;
-
   down: |
     ALTER TABLE public."Users" DROP COLUMN name;
     ALTER TABLE public.users DROP COLUMN email;
@@ -43,7 +42,6 @@ ColumnQuotedPreservesCase:
     CREATE TABLE users ("Name" text NOT NULL);
   up: |
     ALTER TABLE public.users ALTER COLUMN "Name" SET NOT NULL;
-
   down: |
     ALTER TABLE public.users ALTER COLUMN "Name" DROP NOT NULL;
 ColumnUnquotedNormalizesToLowercase:
@@ -54,7 +52,6 @@ ColumnUnquotedNormalizesToLowercase:
     CREATE TABLE users (Name text NOT NULL);
   up: |
     ALTER TABLE public.users ALTER COLUMN name SET NOT NULL;
-
   down: |
     ALTER TABLE public.users ALTER COLUMN name DROP NOT NULL;
 ColumnQuotedVsUnquotedAreDifferent:
@@ -66,7 +63,6 @@ ColumnQuotedVsUnquotedAreDifferent:
   up: |
     ALTER TABLE public.users ALTER COLUMN "Name" SET NOT NULL;
     ALTER TABLE public.users ALTER COLUMN name SET NOT NULL;
-
   down: |
     ALTER TABLE public.users ALTER COLUMN "Name" DROP NOT NULL;
     ALTER TABLE public.users ALTER COLUMN name DROP NOT NULL;
@@ -126,7 +122,6 @@ ViewQuotedPreservesCase:
     CREATE VIEW "ActiveUsers" AS SELECT id FROM users;
   up: |
     ALTER TABLE public.users ADD COLUMN name text;
-
   down: |
     ALTER TABLE public.users DROP COLUMN name;
 ViewUnquotedNormalizesToLowercase:
@@ -139,7 +134,6 @@ ViewUnquotedNormalizesToLowercase:
     CREATE VIEW ActiveUsers AS SELECT id FROM users;
   up: |
     ALTER TABLE public.users ADD COLUMN name text;
-
   down: |
     ALTER TABLE public.users DROP COLUMN name;
 TypeQuotedPreservesCase:
@@ -152,7 +146,6 @@ TypeQuotedPreservesCase:
     CREATE TABLE users (id int, status "UserStatus", name text);
   up: |
     ALTER TABLE public.users ADD COLUMN name text;
-
   down: |
     ALTER TABLE public.users DROP COLUMN name;
 TypeUnquotedNormalizesToLowercase:
@@ -165,7 +158,6 @@ TypeUnquotedNormalizesToLowercase:
     CREATE TABLE users (id int, status userstatus, name text);
   up: |
     ALTER TABLE public.users ADD COLUMN name text;
-
   down: |
     ALTER TABLE public.users DROP COLUMN name;
 DomainQuotedPreservesCase:
@@ -178,7 +170,6 @@ DomainQuotedPreservesCase:
     CREATE TABLE users (id "PositiveInt", score "PositiveInt");
   up: |
     ALTER TABLE public.users ADD COLUMN score "PositiveInt";
-
   down: |
     ALTER TABLE public.users DROP COLUMN score;
 DomainUnquotedNormalizesToLowercase:
@@ -191,7 +182,6 @@ DomainUnquotedNormalizesToLowercase:
     CREATE TABLE users (id positiveint, score positiveint);
   up: |
     ALTER TABLE public.users ADD COLUMN score positiveint;
-
   down: |
     ALTER TABLE public.users DROP COLUMN score;
 IndexQuotedPreservesCase:
@@ -204,7 +194,6 @@ IndexQuotedPreservesCase:
     CREATE INDEX "EmailIndex" ON users (email);
   up: |
     ALTER TABLE public.users ADD COLUMN name text;
-
   down: |
     ALTER TABLE public.users DROP COLUMN name;
 IndexUnquotedNormalizesToLowercase:
@@ -217,7 +206,6 @@ IndexUnquotedNormalizesToLowercase:
     CREATE INDEX EmailIndex ON users (email);
   up: |
     ALTER TABLE public.users ADD COLUMN name text;
-
   down: |
     ALTER TABLE public.users DROP COLUMN name;
 CreateIndexOnQuotedTable:
@@ -229,7 +217,6 @@ CreateIndexOnQuotedTable:
     CREATE INDEX email_idx ON "Users" (id);
   up: |
     CREATE INDEX email_idx ON public."Users" (id);
-
   down: |
     DROP INDEX public.email_idx;
 CreateIndexOnUnquotedTable:
@@ -241,7 +228,6 @@ CreateIndexOnUnquotedTable:
     CREATE INDEX email_idx ON Users (id);
   up: |
     CREATE INDEX email_idx ON public.users (id);
-
   down: |
     DROP INDEX public.email_idx;
 AddIndexToQuotedTable:
@@ -253,7 +239,6 @@ AddIndexToQuotedTable:
     CREATE INDEX email_idx ON "Users" (email);
   up: |
     CREATE INDEX email_idx ON public."Users" (email);
-
   down: |
     DROP INDEX public.email_idx;
 AddIndexToUnquotedTable:
@@ -265,7 +250,6 @@ AddIndexToUnquotedTable:
     CREATE INDEX email_idx ON Users (email);
   up: |
     CREATE INDEX email_idx ON public.users (email);
-
   down: |
     DROP INDEX public.email_idx;
 ConstraintQuotedPreservesCase:
@@ -276,7 +260,6 @@ ConstraintQuotedPreservesCase:
     CREATE TABLE users (id int CONSTRAINT "PrimaryKey" PRIMARY KEY, email text UNIQUE);
   up: |
     ALTER TABLE public.users ADD COLUMN email text UNIQUE;
-
   down: |
     ALTER TABLE public.users DROP CONSTRAINT "users_email_key";
     ALTER TABLE public.users DROP COLUMN email;
@@ -288,7 +271,6 @@ ConstraintUnquotedNormalizesToLowercase:
     CREATE TABLE users (id int CONSTRAINT PrimaryKey PRIMARY KEY, email text UNIQUE);
   up: |
     ALTER TABLE public.users ADD COLUMN email text UNIQUE;
-
   down: |
     ALTER TABLE public.users DROP CONSTRAINT "users_email_key";
     ALTER TABLE public.users DROP COLUMN email;
@@ -305,7 +287,6 @@ MixedQuotedAndUnquoted:
     ALTER TABLE public.users ADD COLUMN name text;
     ALTER TABLE public."Users" DROP COLUMN id;
     ALTER TABLE public.users DROP COLUMN id;
-
   down: |
     ALTER TABLE public."Users" ADD COLUMN id integer;
     ALTER TABLE public.users ADD COLUMN id integer;
@@ -328,7 +309,6 @@ ComplexMixedCaseScenario:
     ALTER TABLE public."UserProfiles" ALTER COLUMN user_name SET NOT NULL;
     ALTER TABLE public."UserProfiles" ADD COLUMN "CreatedAt" timestamp DEFAULT current_timestamp;
     ALTER TABLE public."UserProfiles" ADD PRIMARY KEY ("UserId");
-
   down: |
     ALTER TABLE public."UserProfiles" ALTER COLUMN user_name DROP NOT NULL;
     ALTER TABLE public."UserProfiles" DROP CONSTRAINT "UserProfiles_pkey";
@@ -355,7 +335,6 @@ ForeignKeyToQuotedTable:
     );
   up: |
     ALTER TABLE public.orders ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES public."Users" ("UserId");
-
   down: |
     ALTER TABLE public.orders DROP CONSTRAINT "fk_user";
 ForeignKeyWithQuotedConstraintName:
@@ -372,7 +351,6 @@ ForeignKeyWithQuotedConstraintName:
     );
   up: |
     ALTER TABLE public.orders ADD CONSTRAINT "FK_Orders_Users" FOREIGN KEY (user_id) REFERENCES public.users (id);
-
   down: |
     ALTER TABLE public.orders DROP CONSTRAINT "FK_Orders_Users";
 ForeignKeyBetweenQuotedAndUnquotedTables:
@@ -394,7 +372,6 @@ ForeignKeyBetweenQuotedAndUnquotedTables:
   up: |
     ALTER TABLE public."Orders" ADD CONSTRAINT "fk_quoted" FOREIGN KEY (quoted_user_id) REFERENCES public."Users" ("UserId");
     ALTER TABLE public."Orders" ADD CONSTRAINT fk_unquoted FOREIGN KEY (unquoted_user_id) REFERENCES public.users (id);
-
   down: |
     ALTER TABLE public."Orders" DROP CONSTRAINT "fk_quoted";
     ALTER TABLE public."Orders" DROP CONSTRAINT "fk_unquoted";
@@ -408,7 +385,6 @@ ArrayTypeWithQuotedCustomType:
     CREATE TABLE users (id int, roles "UserRole"[]);
   up: |
     ALTER TABLE public.users ADD COLUMN roles "UserRole"[];
-
   down: |
     ALTER TABLE public.users DROP COLUMN roles;
 ArrayTypeWithUnquotedCustomType:
@@ -421,7 +397,6 @@ ArrayTypeWithUnquotedCustomType:
     CREATE TABLE users (id int, roles userrole[]);
   up: |
     ALTER TABLE public.users ADD COLUMN roles userrole[];
-
   down: |
     ALTER TABLE public.users DROP COLUMN roles;
 CheckConstraintQuotedName:
@@ -435,7 +410,6 @@ CheckConstraintQuotedName:
     );
   up: |
     ALTER TABLE public.products ADD CONSTRAINT "Price_Positive" CHECK (price > 0);
-
   down: |
     ALTER TABLE public.products DROP CONSTRAINT "Price_Positive";
 CheckConstraintQuotedVsUnquotedName:
@@ -453,7 +427,6 @@ CheckConstraintQuotedVsUnquotedName:
   up: |
     ALTER TABLE public.products DROP CONSTRAINT "Price_Check";
     ALTER TABLE public.products ADD CONSTRAINT price_check CHECK (price > 0);
-
   down: |
     ALTER TABLE public.products DROP CONSTRAINT price_check;
     ALTER TABLE public.products ADD CONSTRAINT "Price_Check" CHECK (price > 0);
@@ -469,7 +442,6 @@ UniqueConstraintQuotedColumns:
     );
   up: |
     ALTER TABLE public.users ADD CONSTRAINT "unique_email" UNIQUE ("Email");
-
   down: |
     ALTER TABLE public.users DROP CONSTRAINT "unique_email";
 DropTableQuotedName:
@@ -479,7 +451,6 @@ DropTableQuotedName:
   desired: ""
   up: |
     DROP TABLE public."Users";
-
   down: |
     CREATE TABLE "Users" (id int);
 DropTableQuotedVsUnquoted:
@@ -491,7 +462,6 @@ DropTableQuotedVsUnquoted:
     CREATE TABLE users (id int);
   up: |
     DROP TABLE public."Users";
-
   down: |
     CREATE TABLE "Users" (id int);
 DropIndexQuotedName:
@@ -503,7 +473,6 @@ DropIndexQuotedName:
     CREATE TABLE users (id int, email text);
   up: |
     DROP INDEX public."EmailIndex";
-
   down: |
     CREATE INDEX "EmailIndex" ON public.users (email);
 DropIndexQuotedVsUnquoted:
@@ -517,7 +486,6 @@ DropIndexQuotedVsUnquoted:
     CREATE INDEX emailindex ON users (email);
   up: |
     DROP INDEX public."NameIndex";
-
   down: |
     CREATE INDEX "NameIndex" ON public.users (name);
 DropViewQuotedName:
@@ -529,7 +497,6 @@ DropViewQuotedName:
     CREATE TABLE users (id int);
   up: |
     DROP VIEW public."ActiveUsers";
-
   down: |
     CREATE VIEW "ActiveUsers" AS SELECT id FROM users;
 DropViewQuotedVsUnquoted:
@@ -543,7 +510,6 @@ DropViewQuotedVsUnquoted:
     CREATE VIEW activeusers AS SELECT id FROM users;
   up: |
     DROP VIEW public."ActiveUsers";
-
   down: |
     CREATE VIEW "ActiveUsers" AS SELECT id FROM users;
 DropForeignKeyQuotedName:
@@ -560,7 +526,6 @@ DropForeignKeyQuotedName:
     CREATE TABLE orders (id int PRIMARY KEY, user_id int);
   up: |
     ALTER TABLE public.orders DROP CONSTRAINT "FK_Orders_Users";
-
   down: |
     ALTER TABLE public.orders ADD CONSTRAINT "FK_Orders_Users" FOREIGN KEY (user_id) REFERENCES public.users (id);
 DropUniqueConstraintQuotedName:
@@ -575,7 +540,6 @@ DropUniqueConstraintQuotedName:
     CREATE TABLE users (id int, email text);
   up: |
     ALTER TABLE public.users DROP CONSTRAINT "Unique_Email";
-
   down: |
     ALTER TABLE public.users ADD CONSTRAINT "Unique_Email" UNIQUE (email);
 DropCheckConstraintQuotedName:
@@ -590,7 +554,6 @@ DropCheckConstraintQuotedName:
     CREATE TABLE products (id int, price int);
   up: |
     ALTER TABLE public.products DROP CONSTRAINT "Price_Positive";
-
   down: |
     ALTER TABLE public.products ADD CONSTRAINT "Price_Positive" CHECK (price > 0);
 QuotedReservedWordAsTableName:
@@ -601,7 +564,6 @@ QuotedReservedWordAsTableName:
     CREATE TABLE "select" (id int, "from" text);
   up: |
     ALTER TABLE public."select" ADD COLUMN "from" text;
-
   down: |
     ALTER TABLE public."select" DROP COLUMN "from";
 DropQuotedReservedWordTable:
@@ -611,7 +573,6 @@ DropQuotedReservedWordTable:
   desired: ""
   up: |
     DROP TABLE public."table";
-
   down: |
     CREATE TABLE "table" (id int);
 QuotedReservedWordTableAddColumn:
@@ -622,7 +583,6 @@ QuotedReservedWordTableAddColumn:
     CREATE TABLE "order" (id int, "group" text NOT NULL);
   up: |
     ALTER TABLE public."order" ADD COLUMN "group" text NOT NULL;
-
   down: |
     ALTER TABLE public."order" DROP COLUMN "group";
 QuotedReservedWordTableDropColumn:
@@ -633,7 +593,6 @@ QuotedReservedWordTableDropColumn:
     CREATE TABLE "order" (id int);
   up: |
     ALTER TABLE public."order" DROP COLUMN "group";
-
   down: |
     ALTER TABLE public."order" ADD COLUMN "group" text NOT NULL;
 QuotedIdentifierWithSpace:
@@ -644,7 +603,6 @@ QuotedIdentifierWithSpace:
     CREATE TABLE "User Profiles" (id int, "Full Name" text);
   up: |
     ALTER TABLE public."User Profiles" ADD COLUMN "Full Name" text;
-
   down: |
     ALTER TABLE public."User Profiles" DROP COLUMN "Full Name";
 ModifyUniqueConstraintQuotedName:
@@ -666,7 +624,6 @@ ModifyUniqueConstraintQuotedName:
   up: |
     ALTER TABLE public.users DROP CONSTRAINT "Unique_Email";
     ALTER TABLE public.users ADD CONSTRAINT "Unique_Email" UNIQUE (email, name);
-
   down: |
     ALTER TABLE public.users DROP CONSTRAINT "Unique_Email";
     ALTER TABLE public.users ADD CONSTRAINT "Unique_Email" UNIQUE (email);
@@ -687,7 +644,6 @@ RenameUniqueConstraintQuotedToUnquoted:
   up: |
     ALTER TABLE public.users ADD CONSTRAINT email_unique UNIQUE (email);
     ALTER TABLE public.users DROP CONSTRAINT "Email_Unique";
-
   down: |
     ALTER TABLE public.users ADD CONSTRAINT "Email_Unique" UNIQUE (email);
     ALTER TABLE public.users DROP CONSTRAINT "email_unique";
@@ -714,7 +670,6 @@ ForeignKeyMixedQuotedReferences:
   up: |
     ALTER TABLE public.products ADD CONSTRAINT "fk_QuotedCat" FOREIGN KEY (quoted_cat_id) REFERENCES public."Categories" ("CategoryId");
     ALTER TABLE public.products ADD CONSTRAINT fk_unquoted_cat FOREIGN KEY (unquoted_cat_id) REFERENCES public.categories (id);
-
   down: |
     ALTER TABLE public.products DROP CONSTRAINT "fk_QuotedCat";
     ALTER TABLE public.products DROP CONSTRAINT "fk_unquoted_cat";
@@ -732,7 +687,6 @@ DropForeignKeyKeepQuotedTable:
     CREATE TABLE "Orders" (id int PRIMARY KEY, user_id int);
   up: |
     ALTER TABLE public."Orders" DROP CONSTRAINT "FK_Order_User";
-
   down: |
     ALTER TABLE public."Orders" ADD CONSTRAINT "FK_Order_User" FOREIGN KEY (user_id) REFERENCES public."Users" ("UserId");
 AddPrimaryKeyQuotedName:
@@ -743,7 +697,6 @@ AddPrimaryKeyQuotedName:
     CREATE TABLE "Users" ("UserId" int PRIMARY KEY);
   up: |
     ALTER TABLE public."Users" ADD PRIMARY KEY ("UserId");
-
   down: |
     ALTER TABLE public."Users" DROP CONSTRAINT "Users_pkey";
     ALTER TABLE public."Users" ALTER COLUMN "UserId" DROP NOT NULL;
@@ -756,7 +709,6 @@ DropPrimaryKeyQuotedName:
     CREATE TABLE users (id int NOT NULL);
   up: |
     ALTER TABLE public.users DROP CONSTRAINT users_pkey;
-
   down: |
     ALTER TABLE public.users ALTER COLUMN id DROP NOT NULL;
     ALTER TABLE public.users ADD PRIMARY KEY (id);
@@ -774,7 +726,6 @@ RenameQuotedColumnToUnquoted:
     );
   up: |
     ALTER TABLE public.users RENAME COLUMN "UserName" TO username;
-
   down: |
     ALTER TABLE public.users ADD COLUMN "UserName" text;
     ALTER TABLE public.users DROP COLUMN username;
@@ -792,7 +743,6 @@ RenameUnquotedColumnToQuoted:
     );
   up: |
     ALTER TABLE public.users RENAME COLUMN username TO "UserName";
-
   down: |
     ALTER TABLE public.users ADD COLUMN username text;
     ALTER TABLE public.users DROP COLUMN "UserName";
@@ -810,7 +760,6 @@ RenameQuotedColumnToQuoted:
     );
   up: |
     ALTER TABLE public.users RENAME COLUMN "OldName" TO "NewName";
-
   down: |
     ALTER TABLE public.users ADD COLUMN "OldName" text;
     ALTER TABLE public.users DROP COLUMN "NewName";
@@ -830,7 +779,6 @@ RenameQuotedColumnWithTypeChange:
     ALTER TABLE public.users RENAME COLUMN "UserName" TO username;
     ALTER TABLE public.users ALTER COLUMN username TYPE text;
     ALTER TABLE public.users ALTER COLUMN username SET NOT NULL;
-
   down: |
     ALTER TABLE public.users ADD COLUMN "UserName" varchar(50);
     ALTER TABLE public.users DROP COLUMN username;
@@ -848,7 +796,6 @@ RenameQuotedTableToUnquoted:
     );
   up: |
     ALTER TABLE public."UserAccounts" RENAME TO user_accounts;
-
   down: |
     CREATE TABLE "UserAccounts" (
       id int,
@@ -869,7 +816,6 @@ RenameUnquotedTableToQuoted:
     );
   up: |
     ALTER TABLE public.user_accounts RENAME TO "UserAccounts";
-
   down: |
     CREATE TABLE user_accounts (
       id int,
@@ -892,7 +838,6 @@ RenameQuotedIndexToUnquoted:
     CREATE INDEX email_idx /* @renamed from="EmailIndex" */ ON users (email);
   up: |
     ALTER INDEX public."EmailIndex" RENAME TO email_idx;
-
   down: |
     CREATE INDEX "EmailIndex" ON public.users (email);
     DROP INDEX public.email_idx;
@@ -912,7 +857,6 @@ RenameUnquotedIndexToQuoted:
     CREATE INDEX "EmailIndex" /* @renamed from=email_idx */ ON users (email);
   up: |
     ALTER INDEX public.email_idx RENAME TO "EmailIndex";
-
   down: |
     CREATE INDEX email_idx ON public.users (email);
     DROP INDEX public."EmailIndex";
@@ -926,7 +870,6 @@ QuotedSchemaName:
     CREATE TABLE "MySchema"."Users" (id int, name text);
   up: |
     ALTER TABLE "MySchema"."Users" ADD COLUMN name text;
-
   down: |
     ALTER TABLE "MySchema"."Users" DROP COLUMN name;
 QuotedSchemaWithUnquotedTable:
@@ -939,7 +882,6 @@ QuotedSchemaWithUnquotedTable:
     CREATE TABLE "MySchema".users (id int, name text);
   up: |
     ALTER TABLE "MySchema".users ADD COLUMN name text;
-
   down: |
     ALTER TABLE "MySchema".users DROP COLUMN name;
 CheckConstraintMixedQuotedColumns:
@@ -959,7 +901,6 @@ CheckConstraintMixedQuotedColumns:
     );
   up: |
     ALTER TABLE public.orders ADD CONSTRAINT "Price_Range" CHECK (min_price < max_price);
-
   down: |
     ALTER TABLE public.orders DROP CONSTRAINT "Price_Range";
 CheckConstraintQuotedConstraintName:
@@ -976,7 +917,6 @@ CheckConstraintQuotedConstraintName:
     );
   up: |
     ALTER TABLE public.products ADD CONSTRAINT "Positive_Price" CHECK (price > 0);
-
   down: |
     ALTER TABLE public.products DROP CONSTRAINT "Positive_Price";
 RenameQuotedLowercaseToUnquotedNoOp:
@@ -1008,7 +948,6 @@ RenameQuotedMixedCaseToUnquoted:
     );
   up: |
     ALTER TABLE public.users RENAME COLUMN "UserName" TO username;
-
   down: |
     ALTER TABLE public.users ADD COLUMN "UserName" text;
     ALTER TABLE public.users DROP COLUMN username;
@@ -1020,7 +959,6 @@ TableQuotedLowercaseEqualsUnquoted:
     CREATE TABLE users (id int, name text);
   up: |
     ALTER TABLE public.users ADD COLUMN name text;
-
   down: |
     ALTER TABLE public."users" DROP COLUMN name;
 IndexQuotedLowercaseEqualsUnquoted:
@@ -1060,7 +998,6 @@ CreateUnquotedWhenQuotedMixedCaseExists:
     CREATE TABLE users (id int);
   up: |
     CREATE TABLE users (id int);
-
   down: |
     DROP TABLE public.users;
 ForeignKeyAutoNameWithQuotedColumn:
@@ -1079,7 +1016,6 @@ ForeignKeyAutoNameWithQuotedColumn:
     );
   up: |
     ALTER TABLE public.products ADD CONSTRAINT "products_CategoryId_fkey" FOREIGN KEY ("CategoryId") REFERENCES public.categories (id);
-
   down: |
     ALTER TABLE public.products DROP CONSTRAINT "products_CategoryId_fkey";
 CheckConstraintQuotedMixedCaseName:
@@ -1093,7 +1029,6 @@ CheckConstraintQuotedMixedCaseName:
     );
   up: |
     ALTER TABLE public.products ADD CONSTRAINT "PriceMustBePositive" CHECK (price > 0);
-
   down: |
     ALTER TABLE public.products DROP CONSTRAINT "PriceMustBePositive";
 DropCheckConstraintQuotedMixedCaseName:
@@ -1107,7 +1042,6 @@ DropCheckConstraintQuotedMixedCaseName:
     CREATE TABLE products (id int, price int);
   up: |
     ALTER TABLE public.products DROP CONSTRAINT "PriceMustBePositive";
-
   down: |
     ALTER TABLE public.products ADD CONSTRAINT "PriceMustBePositive" CHECK (price > 0);
 MultipleColumnsQuotedVsUnquotedSameName:
@@ -1127,7 +1061,6 @@ MultipleColumnsQuotedVsUnquotedSameName:
   up: |
     ALTER TABLE public.users ALTER COLUMN "Name" SET NOT NULL;
     ALTER TABLE public.users ALTER COLUMN name SET NOT NULL;
-
   down: |
     ALTER TABLE public.users ALTER COLUMN "Name" DROP NOT NULL;
     ALTER TABLE public.users ALTER COLUMN name DROP NOT NULL;
@@ -1146,7 +1079,6 @@ DropQuotedColumnKeepUnquoted:
     );
   up: |
     ALTER TABLE public.users DROP COLUMN "Name";
-
   down: |
     ALTER TABLE public.users ADD COLUMN "Name" text;
 UniqueConstraintOnQuotedColumn:
@@ -1164,7 +1096,6 @@ UniqueConstraintOnQuotedColumn:
     );
   up: |
     ALTER TABLE public.users ADD CONSTRAINT "users_Email_key" UNIQUE ("Email");
-
   down: |
     ALTER TABLE public.users DROP CONSTRAINT "users_Email_key";
 PrimaryKeyOnQuotedColumn:
@@ -1175,7 +1106,6 @@ PrimaryKeyOnQuotedColumn:
     CREATE TABLE users ("UserId" int PRIMARY KEY);
   up: |
     ALTER TABLE public.users ADD PRIMARY KEY ("UserId");
-
   down: |
     ALTER TABLE public.users DROP CONSTRAINT users_pkey;
     ALTER TABLE public.users ALTER COLUMN "UserId" DROP NOT NULL;
@@ -1197,7 +1127,6 @@ IndexOnMixedQuotedColumns:
     CREATE INDEX name_idx ON users ("FirstName", last_name);
   up: |
     CREATE INDEX name_idx ON public.users ("FirstName", last_name);
-
   down: |
     DROP INDEX public.name_idx;
 QuotedSchemaVsUnquotedSchemaDifferent:
@@ -1213,7 +1142,6 @@ QuotedSchemaVsUnquotedSchemaDifferent:
   up: |
     CREATE SCHEMA myschema;
     CREATE TABLE myschema.test (name text);
-
   down: |
     DROP TABLE myschema.test;
 QuotedSchemaVsUnquotedSchemaModifyBoth:
@@ -1231,7 +1159,6 @@ QuotedSchemaVsUnquotedSchemaModifyBoth:
   up: |
     ALTER TABLE "MySchema".users ADD COLUMN quoted_col text;
     ALTER TABLE myschema.users ADD COLUMN unquoted_col text;
-
   down: |
     ALTER TABLE "MySchema".users DROP COLUMN quoted_col;
     ALTER TABLE myschema.users DROP COLUMN unquoted_col;
@@ -1249,7 +1176,6 @@ ForeignKeyUnquotedColumnsNotQuoted:
     );
   up: |
     ALTER TABLE public.orders ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES public.users (id);
-
   down: |
     ALTER TABLE public.orders DROP CONSTRAINT "fk_user";
 ForeignKeyMixedQuotedColumns:
@@ -1275,7 +1201,6 @@ ForeignKeyMixedQuotedColumns:
     );
   up: |
     ALTER TABLE public.child ADD CONSTRAINT fk_parent FOREIGN KEY ("ParentId") REFERENCES public.parent ("ParentId");
-
   down: |
     ALTER TABLE public.child DROP CONSTRAINT "fk_parent";
 ForeignKeyQuotedColumnToUnquotedColumn:
@@ -1295,7 +1220,6 @@ ForeignKeyQuotedColumnToUnquotedColumn:
     );
   up: |
     ALTER TABLE public.products ADD CONSTRAINT fk_category FOREIGN KEY ("CategoryId") REFERENCES public.categories (category_id);
-
   down: |
     ALTER TABLE public.products DROP CONSTRAINT "fk_category";
 ForeignKeyConstraintQuotedLowercaseEqualsUnquoted:
@@ -1336,7 +1260,6 @@ ForeignKeyConstraintQuotedMixedCaseDiffersFromUnquoted:
   up: |
     ALTER TABLE public.orders ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES public.users (id);
     ALTER TABLE public.orders DROP CONSTRAINT "FK_User";
-
   down: |
     ALTER TABLE public.orders ADD CONSTRAINT "FK_User" FOREIGN KEY (user_id) REFERENCES public.users (id);
     ALTER TABLE public.orders DROP CONSTRAINT "fk_user";
@@ -1359,7 +1282,6 @@ ForeignKeyRenameQuotedConstraint:
   up: |
     ALTER TABLE public.orders ADD CONSTRAINT "FK_New_Name" FOREIGN KEY (user_id) REFERENCES public.users (id);
     ALTER TABLE public.orders DROP CONSTRAINT "FK_Old_Name";
-
   down: |
     ALTER TABLE public.orders ADD CONSTRAINT "FK_Old_Name" FOREIGN KEY (user_id) REFERENCES public.users (id);
     ALTER TABLE public.orders DROP CONSTRAINT "FK_New_Name";
@@ -1439,7 +1361,6 @@ ForeignKeyDependencyOrderingQuotedParent:
       user_id int,
       CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES "Users" (id)
     );
-
   down: |
     DROP TABLE public.orders;
     DROP TABLE public."Users";
@@ -1459,7 +1380,6 @@ ForeignKeyDependencyOrderingQuotedLowercaseRef:
       user_id int,
       CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES "users" (id)
     );
-
   down: |
     DROP TABLE public.orders;
     DROP TABLE public.users;
@@ -1479,7 +1399,6 @@ ForeignKeyDependencyOrderingUnquotedCaseMismatch:
       user_id int,
       CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES Users (id)
     );
-
   down: |
     DROP TABLE public.orders;
     DROP TABLE public.users;
@@ -1491,7 +1410,6 @@ ViewDependencyOrderingUnquotedCaseMismatch:
   up: |
     CREATE TABLE users (id int PRIMARY KEY);
     CREATE VIEW user_summary AS SELECT id FROM Users;
-
   down: |
     DROP VIEW public.user_summary;
     DROP TABLE public.users;
@@ -1512,7 +1430,6 @@ AutoGeneratedConstraintFromQuotedTableAndColumn:
     );
   up: |
     ALTER TABLE public."Users" ADD CONSTRAINT "Users_OrderId_check" CHECK ("OrderId" > 0);
-
   down: |
     ALTER TABLE public."Users" DROP CONSTRAINT "Users_OrderId_check";
 FunctionalIndexOnQuotedColumn:
@@ -1525,7 +1442,6 @@ FunctionalIndexOnQuotedColumn:
     CREATE INDEX username_lower_idx ON users (LOWER("UserName"));
   up: |
     CREATE INDEX username_lower_idx ON public.users (lower("UserName"));
-
   down: |
     DROP INDEX public.username_lower_idx;
 FunctionalIndexOnUnquotedColumn:
@@ -1538,7 +1454,6 @@ FunctionalIndexOnUnquotedColumn:
     CREATE INDEX username_lower_idx ON users (LOWER(username));
   up: |
     CREATE INDEX username_lower_idx ON public.users (lower(username));
-
   down: |
     DROP INDEX public.username_lower_idx;
 FunctionalIndexOnQuotedTable:
@@ -1551,7 +1466,6 @@ FunctionalIndexOnQuotedTable:
     CREATE INDEX email_lower_idx ON "Users" (LOWER("Email"));
   up: |
     CREATE INDEX email_lower_idx ON public."Users" (lower("Email"));
-
   down: |
     DROP INDEX public.email_lower_idx;
 CheckConstraintWithFunctionOnQuotedColumn:
@@ -1563,7 +1477,6 @@ CheckConstraintWithFunctionOnQuotedColumn:
     CREATE TABLE users (id int, "UserName" text CHECK (LENGTH("UserName") > 0));
   up: |
     ALTER TABLE public.users ADD CONSTRAINT "users_UserName_check" CHECK (length("UserName") > 0);
-
   down: |
     ALTER TABLE public.users DROP CONSTRAINT "users_UserName_check";
 CheckConstraintWithFunctionOnUnquotedColumn:
@@ -1575,7 +1488,6 @@ CheckConstraintWithFunctionOnUnquotedColumn:
     CREATE TABLE users (id int, username text CHECK (LENGTH(username) > 0));
   up: |
     ALTER TABLE public.users ADD CONSTRAINT users_username_check CHECK (length(username) > 0);
-
   down: |
     ALTER TABLE public.users DROP CONSTRAINT users_username_check;
 CheckConstraintWithNestedFunctionsQuotedColumn:
@@ -1587,7 +1499,6 @@ CheckConstraintWithNestedFunctionsQuotedColumn:
     CREATE TABLE users (id int, "Email" text CHECK (LENGTH(UPPER("Email")) > 0));
   up: |
     ALTER TABLE public.users ADD CONSTRAINT "users_Email_check" CHECK (length(upper("Email")) > 0);
-
   down: |
     ALTER TABLE public.users DROP CONSTRAINT "users_Email_check";
 CheckConstraintWithMixedQuotedColumns:
@@ -1604,7 +1515,6 @@ CheckConstraintWithMixedQuotedColumns:
     );
   up: |
     ALTER TABLE public.users ADD CONSTRAINT date_order CHECK ("StartDate" < end_date);
-
   down: |
     ALTER TABLE public.users DROP CONSTRAINT date_order;
 CommentOnQuotedTable:
@@ -1617,7 +1527,6 @@ CommentOnQuotedTable:
     COMMENT ON TABLE "UserAccounts" IS 'User accounts table';
   up: |
     COMMENT ON TABLE public."UserAccounts" IS 'User accounts table';
-
   down: |
     COMMENT ON TABLE public."UserAccounts" IS NULL;
 CommentOnUnquotedTable:
@@ -1630,7 +1539,6 @@ CommentOnUnquotedTable:
     COMMENT ON TABLE UserAccounts IS 'User accounts table';
   up: |
     COMMENT ON TABLE public.useraccounts IS 'User accounts table';
-
   down: |
     COMMENT ON TABLE public.useraccounts IS NULL;
 CommentOnQuotedColumn:
@@ -1643,7 +1551,6 @@ CommentOnQuotedColumn:
     COMMENT ON COLUMN users."UserName" IS 'User display name';
   up: |
     COMMENT ON COLUMN public.users."UserName" IS 'User display name';
-
   down: |
     COMMENT ON COLUMN public.users."UserName" IS NULL;
 CommentOnUnquotedColumn:
@@ -1656,7 +1563,6 @@ CommentOnUnquotedColumn:
     COMMENT ON COLUMN users.UserName IS 'User display name';
   up: |
     COMMENT ON COLUMN public.users.username IS 'User display name';
-
   down: |
     COMMENT ON COLUMN public.users.username IS NULL;
 CommentOnMixedQuotedTableAndColumn:
@@ -1671,7 +1577,6 @@ CommentOnMixedQuotedTableAndColumn:
   up: |
     COMMENT ON TABLE public."Users" IS 'Users table';
     COMMENT ON COLUMN public."Users"."Email" IS 'User email address';
-
   down: |
     COMMENT ON TABLE public."Users" IS NULL;
     COMMENT ON COLUMN public."Users"."Email" IS NULL;
@@ -1686,7 +1591,6 @@ CommentUpdateOnQuotedTable:
     COMMENT ON TABLE "UserProfiles" IS 'New comment';
   up: |
     COMMENT ON TABLE public."UserProfiles" IS 'New comment';
-
   down: |
     COMMENT ON TABLE public."UserProfiles" IS 'Old comment';
 CommentRemoveOnQuotedTable:
@@ -1699,7 +1603,6 @@ CommentRemoveOnQuotedTable:
     CREATE TABLE "UserProfiles" (id int);
   up: |
     COMMENT ON TABLE public."UserProfiles" IS NULL;
-
   down: |
     COMMENT ON TABLE public."UserProfiles" IS 'Table comment';
 CommentOnBothQuotedAndUnquotedTables:
@@ -1716,7 +1619,6 @@ CommentOnBothQuotedAndUnquotedTables:
   up: |
     COMMENT ON TABLE public."Users" IS 'Quoted Users table';
     COMMENT ON TABLE public.users IS 'Unquoted users table';
-
   down: |
     COMMENT ON TABLE public."Users" IS NULL;
     COMMENT ON TABLE public.users IS NULL;
@@ -1741,5 +1643,3 @@ CommentIdempotentQuotedColumn:
   desired: |
     CREATE TABLE users (id int, "FullName" text);
     COMMENT ON COLUMN users."FullName" IS 'Full name of user';
-  up: ""
-  down: ""
