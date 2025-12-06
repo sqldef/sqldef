@@ -787,6 +787,24 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 
 // normalizeTableExprs normalizes FROM clause table expressions
 func normalizeTableExprs(exprs parser.TableExprs, mode GeneratorMode) parser.TableExprs {
+	// For PostgreSQL, filter out "dual" table references since PostgreSQL doesn't support it
+	// The parser adds "from dual" for SELECT statements without FROM, but PostgreSQL allows FROM-less SELECT
+	if mode == GeneratorModePostgres {
+		var filtered parser.TableExprs
+		for _, expr := range exprs {
+			// Check if this is a reference to the "dual" table
+			if aliasedExpr, ok := expr.(*parser.AliasedTableExpr); ok {
+				if tableName, ok := aliasedExpr.Expr.(parser.TableName); ok {
+					if strings.EqualFold(tableName.Name.Name, "dual") {
+						continue // Skip dual table references for PostgreSQL
+					}
+				}
+			}
+			filtered = append(filtered, expr)
+		}
+		exprs = filtered
+	}
+
 	normalized := make(parser.TableExprs, len(exprs))
 	for i, expr := range exprs {
 		normalized[i] = normalizeTableExpr(expr, mode)

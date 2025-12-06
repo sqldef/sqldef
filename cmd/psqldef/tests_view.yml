@@ -51,7 +51,7 @@ ViewDDLsAreEmittedLastWithChangingDefinition:
     CREATE VIEW "public"."foos_view" AS select id, secret from foos where secret = false;
   down: |
     DROP VIEW "public"."foos_view";
-    CREATE VIEW "public"."foos_view" AS select 1 as dummy from dual;
+    CREATE VIEW "public"."foos_view" AS select 1 as dummy;
     ALTER TABLE "public"."foos" DROP COLUMN "secret";
 CreateMaterializedView:
   current: |

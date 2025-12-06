@@ -132,6 +132,19 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	return generator.generateDDLs(desiredDDLs)
 }
 
+// getSortedColumns converts a column map to a slice sorted by position.
+// This ensures deterministic iteration order for DDL generation.
+func getSortedColumns(columns map[string]*Column) []*Column {
+	result := make([]*Column, 0, len(columns))
+	for _, col := range columns {
+		result = append(result, col)
+	}
+	slices.SortFunc(result, func(a, b *Column) int {
+		return a.position - b.position
+	})
+	return result
+}
+
 // Main part of DDL generation
 func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	// These variables are used to control the output order of the DDL.
@@ -431,14 +444,18 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		}
 
 		// Check columns.
-		for _, column := range currentTable.columns {
+		// Use sorted columns to ensure deterministic DDL ordering
+		// Drop columns in reverse order (last column first) to be more intuitive
+		sortedColumns := getSortedColumns(currentTable.columns)
+		for i := len(sortedColumns) - 1; i >= 0; i-- {
+			column := sortedColumns[i]
 			if g.findColumnByName(desiredTable.columns, column.name) != nil {
 				continue // Column is expected to exist.
 			}
 
 			// Check if this column is being renamed (not dropped)
 			isRenamed := false
-			for _, desiredColumn := range desiredTable.columns {
+			for _, desiredColumn := range getSortedColumns(desiredTable.columns) {
 				if !desiredColumn.renamedFrom.IsEmpty() && g.identsEqual(desiredColumn.renamedFrom, column.name) {
 					isRenamed = true
 					break
@@ -858,33 +875,46 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					ddls = append(ddls, ddl)
 				}
 
-				if !g.isPrimaryKey(*currentColumn, currentTable) { // Primary Key implies NOT NULL
+				// Handle IDENTITY and NOT NULL in the correct order for PostgreSQL:
+				// - When adding IDENTITY: must SET NOT NULL first (IDENTITY requires NOT NULL)
+				// - When removing IDENTITY: must DROP IDENTITY first (can't drop NOT NULL from IDENTITY column)
+				addingIdentity := currentColumn.identity == nil && desiredColumn.identity != nil
+				removingIdentity := currentColumn.identity != nil && desiredColumn.identity == nil
+
+				// Step 1: When removing IDENTITY, drop it first
+				if removingIdentity {
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP IDENTITY IF EXISTS", g.escapeTableName(&currentTable), g.escapeColumnName(currentColumn)))
+				}
+
+				// Step 2: When adding IDENTITY, set NOT NULL first if needed
+				if addingIdentity && !g.isPrimaryKey(*currentColumn, currentTable) && !g.notNull(*currentColumn) {
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn)))
+				}
+
+				// Step 3: Add or modify IDENTITY
+				if addingIdentity {
+					alter := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s ADD GENERATED %s AS IDENTITY", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn), desiredColumn.identity.behavior)
+					if desiredColumn.sequence != nil {
+						alter += " (" + generateSequenceClause(desiredColumn.sequence) + ")"
+					}
+					ddls = append(ddls, alter)
+				} else if currentColumn.identity != nil && desiredColumn.identity != nil && !areSameIdentityDefinition(currentColumn.identity, desiredColumn.identity) {
+					// Modify existing IDENTITY (not adding or removing)
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET GENERATED %s", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn), desiredColumn.identity.behavior))
+				}
+
+				// Step 4: Handle NOT NULL changes unrelated to IDENTITY
+				if !addingIdentity && !removingIdentity && !g.isPrimaryKey(*currentColumn, currentTable) {
 					if g.notNull(*currentColumn) && !g.notNull(desiredColumn) {
-						// Use desiredColumn for escaping to match user's quote style
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn)))
 					} else if !g.notNull(*currentColumn) && g.notNull(desiredColumn) {
-						// Use desiredColumn for escaping to match user's quote style
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn)))
 					}
 				}
 
-				// GENERATED AS IDENTITY
-				if !areSameIdentityDefinition(currentColumn.identity, desiredColumn.identity) {
-					if currentColumn.identity == nil {
-						// add
-						alter := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s ADD GENERATED %s AS IDENTITY", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn), desiredColumn.identity.behavior)
-						if desiredColumn.sequence != nil {
-							alter += " (" + generateSequenceClause(desiredColumn.sequence) + ")"
-						}
-						ddls = append(ddls, alter)
-					} else if desiredColumn.identity == nil {
-						// remove
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP IDENTITY IF EXISTS", g.escapeTableName(&currentTable), g.escapeColumnName(currentColumn)))
-					} else {
-						// set
-						// not support changing sequence
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET GENERATED %s", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn), desiredColumn.identity.behavior))
-					}
+				// Step 5: After removing IDENTITY, drop NOT NULL if needed
+				if removingIdentity && !g.isPrimaryKey(*currentColumn, currentTable) && g.notNull(*currentColumn) && !g.notNull(desiredColumn) {
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn)))
 				}
 
 				// default
@@ -1666,6 +1696,10 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 
 		if currentNormalized != desiredNormalized {
 			viewDefinition := parser.String(desiredView.definition)
+			// PostgreSQL doesn't support "from dual" - remove it for PostgreSQL views
+			if g.mode == GeneratorModePostgres {
+				viewDefinition = g.stripFromDual(viewDefinition)
+			}
 
 			// Build the WITH [NO] DATA clause for materialized views
 			withDataClause := ""
@@ -1677,8 +1711,30 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 
 			viewName := g.escapeViewName(desiredView)
 			if g.shouldDropAndCreateView(currentView, desiredView) {
+				// When dropping views that may have dependents, we need to handle them
+				// For PostgreSQL, find dependent views and recreate them after
+				var dependentViewDDLs []string
+				if g.mode == GeneratorModePostgres {
+					// Find all views that depend on this view
+					dependentViews := g.findDependentViews(desiredView.name)
+					// Drop them first (in reverse dependency order)
+					for i := len(dependentViews) - 1; i >= 0; i-- {
+						depView := dependentViews[i]
+						ddls = append(ddls, fmt.Sprintf("DROP %s %s", depView.viewType, g.escapeViewName(depView)))
+					}
+					// Store DDLs to recreate dependent views after the base view
+					for _, depView := range dependentViews {
+						depViewDef := parser.String(depView.definition)
+						if g.mode == GeneratorModePostgres {
+							depViewDef = g.stripFromDual(depViewDef)
+						}
+						dependentViewDDLs = append(dependentViewDDLs, fmt.Sprintf("CREATE %s %s AS %s", depView.viewType, g.escapeViewName(depView), depViewDef))
+					}
+				}
 				ddls = append(ddls, fmt.Sprintf("DROP %s %s", desiredView.viewType, viewName))
 				ddls = append(ddls, fmt.Sprintf("CREATE %s %s AS %s%s", desiredView.viewType, viewName, viewDefinition, withDataClause))
+				// Recreate dependent views
+				ddls = append(ddls, dependentViewDDLs...)
 			} else {
 				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE %s %s AS %s%s", desiredView.viewType, viewName, viewDefinition, withDataClause))
 			}
@@ -1687,6 +1743,10 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 		// VIEW with the specified security type found. If it's different, create or replace view.
 		if !strings.EqualFold(currentView.securityType, desiredView.securityType) {
 			viewDefinition := parser.String(desiredView.definition)
+			// PostgreSQL doesn't support "from dual" - remove it for PostgreSQL views
+			if g.mode == GeneratorModePostgres {
+				viewDefinition = g.stripFromDual(viewDefinition)
+			}
 			viewName := g.escapeViewName(desiredView)
 			ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE SQL SECURITY %s VIEW %s AS %s", desiredView.securityType, viewName, viewDefinition))
 		}
@@ -1699,6 +1759,63 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 	}
 
 	return ddls, nil
+}
+
+// findDependentViews finds all views that reference the given view name in their definitions.
+// Returns views in topological order (views with no dependents first, most dependent last).
+// Uses the proper dependency extraction from ddl_ordering.go.
+func (g *Generator) findDependentViews(viewName QualifiedName) []*View {
+	// Normalize the target view name for comparison
+	targetName := normalizeNameKey(viewName, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+
+	// Build dependency graph for all views
+	viewDeps := make(map[string][]string)
+	viewMap := make(map[string]*View)
+
+	for _, view := range g.desiredViews {
+		normalizedName := normalizeNameKey(view.name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+		viewMap[normalizedName] = view
+
+		// Extract dependencies using the proper AST-based extraction
+		if view.definition != nil {
+			deps := extractViewDependencies(view.definition, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+			viewDeps[normalizedName] = deps
+		}
+	}
+
+	// Find views that directly or indirectly depend on the target view
+	var dependents []*View
+	for viewKey, deps := range util.CanonicalMapIter(viewDeps) {
+		// Skip the target view itself
+		if viewKey == targetName {
+			continue
+		}
+
+		// Check if this view depends on the target view
+		if slices.Contains(deps, targetName) {
+			dependents = append(dependents, viewMap[viewKey])
+		}
+	}
+
+	// Sort dependents in topological order using the dependency graph
+	if len(dependents) > 1 {
+		sorted := topologicalSort(dependents, viewDeps, func(v *View) string {
+			return normalizeNameKey(v.name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+		})
+		if len(sorted) > 0 {
+			dependents = sorted
+		}
+	}
+
+	return dependents
+}
+
+// stripFromDual removes " from dual" from SQL statements for PostgreSQL compatibility.
+// PostgreSQL doesn't have a dual table, but the parser adds it for SELECT statements without FROM.
+func (g *Generator) stripFromDual(sql string) string {
+	// Use case-insensitive regex to remove " from dual" at the end or before WHERE/ORDER BY/LIMIT
+	re := regexp.MustCompile(`(?i)\s+from\s+dual\b`)
+	return re.ReplaceAllString(sql, "")
 }
 
 // stripTableQualifiers removes table qualifiers from column references in SQL
@@ -3221,7 +3338,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 	}
 
 	if g.config.EnableDrop {
-		for grantee, privileges := range revokesByGrantee {
+		for grantee, privileges := range util.CanonicalMapIter(revokesByGrantee) {
 			escapedGrantee, err := g.validateAndEscapeGrantee(grantee)
 			if err != nil {
 				return nil, err

@@ -391,5 +391,5 @@ ForeignKeyWithPrimaryKeyChangeAndDrop:
       tag text NOT NULL,
       CONSTRAINT taggings_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id)
     );
-    ALTER TABLE "public"."users" DROP COLUMN "user_id";
     ALTER TABLE "public"."users" DROP COLUMN "name";
+    ALTER TABLE "public"."users" DROP COLUMN "user_id";

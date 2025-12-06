@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/sqldef/sqldef/v3/parser"
+	"github.com/sqldef/sqldef/v3/util"
 )
 
 // normalizeIdentKey returns a normalized string representation of an Ident
@@ -307,9 +308,9 @@ func extractViewDependencies(stmt parser.SelectStatement, defaultSchema string, 
 	deps := make(map[string]bool)
 	extractDependenciesFromSelectStatement(stmt, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
 
-	// Convert map to slice
+	// Convert map to slice in deterministic order
 	var result []string
-	for dep := range deps {
+	for dep := range util.CanonicalMapIter(deps) {
 		result = append(result, dep)
 	}
 	return result

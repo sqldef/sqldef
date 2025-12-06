@@ -3,7 +3,7 @@
 /cmd/sqlite3def/sqlite3def
 /cmd/sqlite3def/sqlite3def_test
 /cmd/mssqldef/mssqldef
-/build/*/*
+/build/*
 /package/*
 *.sql
 *.db
