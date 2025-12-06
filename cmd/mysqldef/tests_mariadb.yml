@@ -90,7 +90,6 @@ AddColumnWithDefaultExpressionMariaDB:
   up: |
     ALTER TABLE `users` ADD COLUMN `data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT '[]' CHECK (json_valid(data)) AFTER `id`;
   down: |
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
     ALTER TABLE `users` DROP COLUMN `data`;
   flavor: mariadb
 
@@ -108,7 +107,6 @@ AddDefaultExpressionMariaDB:
   up: |
     ALTER TABLE `users` CHANGE COLUMN `data` `data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT '[]' CHECK (json_valid(data));
   down: |
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
     ALTER TABLE `users` CHANGE COLUMN `data` `data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin CHECK (json_valid(data));
   flavor: mariadb
 
@@ -126,7 +124,6 @@ RemoveDefaultExpressionMariaDB:
   up: |
     ALTER TABLE `users` CHANGE COLUMN `data` `data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin CHECK (json_valid(data));
   down: |
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
     ALTER TABLE `users` CHANGE COLUMN `data` `data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT '[]' CHECK (json_valid(data));
   flavor: mariadb
 
