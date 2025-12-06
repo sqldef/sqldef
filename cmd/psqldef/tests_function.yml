@@ -62,5 +62,5 @@ CreateOrReplaceFunctionWithTrigger:
     CREATE TRIGGER enforce_required_permit before insert OR update ON public.device_tests FOR EACH ROW EXECUTE FUNCTION check_test_type_requires_permit();
 
   down: |
-    DROP TABLE public.device_tests;
     DROP TRIGGER enforce_required_permit ON public.device_tests;
+    DROP TABLE public.device_tests;

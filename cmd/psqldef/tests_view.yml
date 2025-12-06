@@ -30,8 +30,8 @@ ViewDDLsAreEmittedLastWithoutChangingDefinition:
     ALTER TABLE "public"."foos" ADD COLUMN "secret" boolean NOT NULL DEFAULT false;
     CREATE VIEW foos_view AS SELECT id, secret FROM foos WHERE secret = false;
   down: |
-    ALTER TABLE "public"."foos" DROP COLUMN "secret";
     DROP VIEW "public"."foos_view";
+    ALTER TABLE "public"."foos" DROP COLUMN "secret";
 ViewDDLsAreEmittedLastWithChangingDefinition:
   current: |
     CREATE TABLE foos (
@@ -131,8 +131,8 @@ MaterializedViewIndex:
     CREATE INDEX points_idx ON points (tenant_id, user_id, point_type);
     CREATE INDEX points_view_idx ON points_view (tenant_id);
   down: |
-    DROP TABLE "public"."points";
     DROP MATERIALIZED VIEW "public"."points_view";
+    DROP TABLE "public"."points";
 ViewWithCTE:
   desired: |
     CREATE TABLE users (

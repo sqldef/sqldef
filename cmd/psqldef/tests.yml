@@ -547,8 +547,8 @@ ForeignKeyConstraintsAreEmittedLast:
     ALTER TABLE "public"."foos" DROP CONSTRAINT "foos_bar_id_fkey";
     ALTER TABLE "public"."bars" DROP CONSTRAINT "bars_pkey";
     ALTER TABLE "public"."bars" DROP COLUMN "bar_id";
-    ALTER TABLE "public"."foos" DROP COLUMN "bar_id";
     ALTER TABLE "public"."foos" DROP COLUMN "foo_id";
+    ALTER TABLE "public"."foos" DROP COLUMN "bar_id";
 ForeignKeyOnReservedName:
   current: |
     CREATE TABLE "public"."companies" (
@@ -3147,8 +3147,8 @@ SameTableNameAcrossSchemas:
     CREATE TABLE test.dummy (id int);
 
   down: |
-    DROP TABLE "test"."dummy";
     DROP TABLE "public"."dummy";
+    DROP TABLE "test"."dummy";
 CreateTableWithIdentityAlways:
   desired: |
     CREATE TABLE color (
@@ -3553,9 +3553,9 @@ TypedLiterals:
     ALTER TABLE "public"."events" ADD COLUMN "event_time" time DEFAULT '12:00:00';
     ALTER TABLE "public"."events" ADD COLUMN "event_timestamp" timestamp DEFAULT '2024-01-01 12:00:00';
   down: |
+    ALTER TABLE "public"."events" DROP COLUMN "event_timestamp";
     ALTER TABLE "public"."events" DROP COLUMN "event_date";
     ALTER TABLE "public"."events" DROP COLUMN "event_time";
-    ALTER TABLE "public"."events" DROP COLUMN "event_timestamp";
 TypedLiteralsIdempotency:
   current: |
     CREATE TABLE events (
@@ -3672,7 +3672,7 @@ ChangeMultiDimensionalArrayDefault:
     ALTER TABLE "public"."matrices" ALTER COLUMN "matrix_2d" SET DEFAULT ARRAY[ARRAY[1, 2]];
 
   down: |
-    ALTER TABLE "public"."matrices" ALTER COLUMN "matrix_2d" SET DEFAULT ARRAY[];
+    ALTER TABLE "public"."matrices" ALTER COLUMN "matrix_2d" SET DEFAULT ARRAY[]::integer[];
 # PostgreSQL treats int[], int[][], int[][][] all as int[] internally
 MultiDimensionalArrayEquivalence1D2D:
   current: |

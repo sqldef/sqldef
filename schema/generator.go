@@ -311,6 +311,34 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	ddls = append(ddls, foreignKeyDDLs...)
 	ddls = append(ddls, exclusionDDLs...)
 
+	// Clean up obsoleted triggers BEFORE dropping tables
+	// Triggers must be dropped before their associated tables to avoid "relation does not exist" errors
+	for _, currentTrigger := range g.currentTriggers {
+		desiredTrigger := g.findTriggerByName(g.desiredTriggers, currentTrigger.name)
+		if desiredTrigger == nil {
+			switch g.mode {
+			case GeneratorModePostgres:
+				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s ON %s", g.escapeQualifiedName(currentTrigger.name), g.escapeQualifiedName(currentTrigger.tableName)))
+			case GeneratorModeSQLite3:
+				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(currentTrigger.name)))
+			}
+		}
+	}
+
+	// Clean up obsoleted views BEFORE dropping columns
+	// Views must be dropped before columns they depend on to avoid "other objects depend on it" errors
+	for _, currentView := range g.currentViews {
+		if g.findViewByName(g.desiredViews, currentView.name) != nil {
+			continue
+		}
+		viewName := g.escapeViewName(currentView)
+		if currentView.viewType == "MATERIALIZED VIEW" {
+			ddls = append(ddls, fmt.Sprintf("DROP MATERIALIZED VIEW %s", viewName))
+			continue
+		}
+		ddls = append(ddls, fmt.Sprintf("DROP VIEW %s", viewName))
+	}
+
 	var tablesToDrop []*Table
 	for _, currentTable := range g.currentTables {
 		desiredTable := g.findTableByName(g.desiredTables, currentTable.name)
@@ -455,19 +483,6 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		}
 	}
 
-	// Clean up obsoleted views
-	for _, currentView := range g.currentViews {
-		if g.findViewByName(g.desiredViews, currentView.name) != nil {
-			continue
-		}
-		viewName := g.escapeViewName(currentView)
-		if currentView.viewType == "MATERIALIZED VIEW" {
-			ddls = append(ddls, fmt.Sprintf("DROP MATERIALIZED VIEW %s", viewName))
-			continue
-		}
-		ddls = append(ddls, fmt.Sprintf("DROP VIEW %s", viewName))
-	}
-
 	// Clean up obsoleted domains
 	for _, currentDomain := range g.currentDomains {
 		if g.findDomainByName(g.desiredDomains, currentDomain.name.Name) != nil {
@@ -500,19 +515,6 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if nullStmt != "" {
 				slog.Debug("Generated NULL statement", "stmt", nullStmt)
 				ddls = append(ddls, nullStmt)
-			}
-		}
-	}
-
-	// Clean up obsoleted triggers
-	for _, currentTrigger := range g.currentTriggers {
-		desiredTrigger := g.findTriggerByName(g.desiredTriggers, currentTrigger.name)
-		if desiredTrigger == nil {
-			switch g.mode {
-			case GeneratorModePostgres:
-				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s ON %s", g.escapeQualifiedName(currentTrigger.name), g.escapeQualifiedName(currentTrigger.tableName)))
-			case GeneratorModeSQLite3:
-				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(currentTrigger.name)))
 			}
 		}
 	}
@@ -1177,6 +1179,20 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			case GeneratorModeMssql:
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(&desired.table), g.escapeSQLIdent(currentPrimaryKey.name)))
 			default:
+			}
+
+			// When dropping PRIMARY KEY, also drop implicit NOT NULL if the column should be nullable
+			// PRIMARY KEY implicitly adds NOT NULL, so we need to remove it when reverting
+			for _, pkCol := range currentPrimaryKey.columns {
+				// Extract column name from the index column expression
+				if colName, ok := pkCol.columnExpr.(*parser.ColName); ok {
+					// Find the column in the desired table to check if it should be nullable
+					desiredColumn := g.findColumnByName(desired.table.columns, colName.Name)
+					if desiredColumn != nil && (desiredColumn.notNull == nil || !*desiredColumn.notNull) {
+						// Column should be nullable, remove the implicit NOT NULL
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL", g.escapeTableName(&desired.table), g.escapeColumnName(desiredColumn)))
+					}
+				}
 			}
 		}
 		if desiredPrimaryKey != nil {

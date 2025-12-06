@@ -1274,7 +1274,7 @@ func (d *PostgresDatabase) getComments(table string) ([]string, error) {
 		if err := tableRows.Scan(&comment); err != nil {
 			return nil, err
 		}
-		ddls = append(ddls, fmt.Sprintf("COMMENT ON TABLE \"%s\".\"%s\" IS %s;", schema, table, schemaLib.StringConstant(comment)))
+		ddls = append(ddls, fmt.Sprintf("COMMENT ON TABLE %s.%s IS %s;", d.escapeIdentifier(schema), d.escapeIdentifier(table), schemaLib.StringConstant(comment)))
 	}
 
 	// Column comments
@@ -1302,7 +1302,7 @@ func (d *PostgresDatabase) getComments(table string) ([]string, error) {
 		if err := columnRows.Scan(&columnName, &comment); err != nil {
 			return nil, err
 		}
-		ddls = append(ddls, fmt.Sprintf("COMMENT ON COLUMN \"%s\".\"%s\".\"%s\" IS %s;", schema, table, columnName, schemaLib.StringConstant(comment)))
+		ddls = append(ddls, fmt.Sprintf("COMMENT ON COLUMN %s.%s.%s IS %s;", d.escapeIdentifier(schema), d.escapeIdentifier(table), d.escapeIdentifier(columnName), schemaLib.StringConstant(comment)))
 	}
 
 	return ddls, nil
