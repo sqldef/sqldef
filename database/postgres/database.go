@@ -149,7 +149,7 @@ func (d *PostgresDatabase) tableNames() ([]string, error) {
 		and c.relpersistence in ('p', 'u')
 		and c.relispartition = false
 		and not exists (select * from pg_catalog.pg_depend d where c.oid = d.objid and d.deptype = 'e')
-		order by relname asc;
+		order by n.nspname asc, relname asc;
 	`)
 	if err != nil {
 		return nil, err
