@@ -1,5 +1,9 @@
 # TODO for future improvements
 
+This document includes TODOs for future improvements.
+
+NOTE: do not keep the resolved issues here
+
 ## The `splitDDLs` function
 
 The `splitDDLs()` function in `database/parser.go` has comments:
@@ -10,4 +14,3 @@ The `splitDDLs()` function in `database/parser.go` has comments:
 ```
 
 So once the parser is capable of splitting statements by itself, we can remove this function.
-

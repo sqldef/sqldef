@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 ConstraintCheck:
   desired: |
     CREATE TABLE `books` (
@@ -45,8 +47,11 @@ AddForeignKeyWithAlter:
       user_id bigint
     );
     ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;
-  output: |
+  up: |
     ALTER TABLE posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;
+  down: |
+    ALTER TABLE `posts` DROP FOREIGN KEY `posts_ibfk_1`;
+    ALTER TABLE `posts` DROP INDEX `posts_ibfk_1`;
 CreateTableForeignKey:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY);
@@ -61,8 +66,11 @@ CreateTableForeignKey:
       user_id bigint,
       CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id)
     );
-  output: |
+  up: |
     ALTER TABLE `posts` ADD CONSTRAINT `posts_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
+  down: |
+    ALTER TABLE `posts` DROP FOREIGN KEY `posts_ibfk_1`;
+    ALTER TABLE `posts` DROP INDEX `posts_ibfk_1`;
 CreateTableForeignKeyWithOptions:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY);
@@ -78,9 +86,12 @@ CreateTableForeignKeyWithOptions:
       user_id bigint,
       CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
     );
-  output: |
+  up: |
     ALTER TABLE `posts` DROP FOREIGN KEY `posts_ibfk_1`;
     ALTER TABLE `posts` ADD CONSTRAINT `posts_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+  down: |
+    ALTER TABLE `posts` DROP FOREIGN KEY `posts_ibfk_1`;
+    ALTER TABLE `posts` ADD CONSTRAINT `posts_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
 DropForeignKey:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY);
@@ -95,9 +106,11 @@ DropForeignKey:
       content text,
       user_id bigint
     );
-  output: |
+  up: |
     ALTER TABLE `posts` DROP FOREIGN KEY `posts_ibfk_1`;
     ALTER TABLE `posts` DROP INDEX `posts_ibfk_1`;
+  down: |
+    ALTER TABLE `posts` ADD CONSTRAINT `posts_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 CheckInClauseInteger:
   desired: |
     CREATE TABLE `products` (
@@ -142,8 +155,10 @@ AddCheckConstraintWithIn:
       `state` varchar(20),
       CONSTRAINT `documents_state_chk` CHECK (`state` IN ('draft', 'review', 'published', 'archived'))
     );
-  output: |
+  up: |
     ALTER TABLE `documents` ADD CONSTRAINT `documents_state_chk` CHECK (state in ('draft', 'review', 'published', 'archived'));
+  down: |
+    ALTER TABLE `documents` DROP CHECK `documents_state_chk`;
   flavor: mysql
   min_version: '8.0'
 ModifyCheckConstraintIn:
@@ -159,9 +174,12 @@ ModifyCheckConstraintIn:
       `status` varchar(20),
       CONSTRAINT `tasks_status_chk` CHECK (`status` IN ('todo', 'in_progress', 'done'))
     );
-  output: |
+  up: |
     ALTER TABLE `tasks` DROP CHECK `tasks_status_chk`;
     ALTER TABLE `tasks` ADD CONSTRAINT `tasks_status_chk` CHECK (status in ('todo', 'in_progress', 'done'));
+  down: |
+    ALTER TABLE `tasks` DROP CHECK `tasks_status_chk`;
+    ALTER TABLE `tasks` ADD CONSTRAINT `tasks_status_chk` CHECK (status in ('todo', 'in_progress'));
   flavor: mysql
   min_version: '8.0'
 DropCheckConstraintWithIn:
@@ -176,8 +194,10 @@ DropCheckConstraintWithIn:
       `id` int PRIMARY KEY,
       `type` varchar(20)
     );
-  output: |
+  up: |
     ALTER TABLE `events` DROP CHECK `events_type_chk`;
+  down: |
+    ALTER TABLE `events` ADD CONSTRAINT `events_type_chk` CHECK (type in ('public', 'private'));
   flavor: mysql
   min_version: '8.0'
 CheckInClauseWithNegation:
@@ -211,7 +231,8 @@ CheckInClauseNormalization:
       `state` varchar(20),
       CONSTRAINT `workflows_state_chk` CHECK (`state` IN ('active', 'paused', 'stopped'))
     );
-  output: ""
+  up: ""
+  down: ""
   min_version: '8.0'
 CheckTableLevelToColumnLevel:
   current: |
@@ -225,7 +246,8 @@ CheckTableLevelToColumnLevel:
       `id` int PRIMARY KEY,
       `status` varchar(20) CHECK (`status` IN ('pending', 'shipped', 'delivered'))
     );
-  output: ""
+  up: ""
+  down: ""
   flavor: mysql
   min_version: '8.0'
 CheckTableLevelToUnnamedColumnLevel:
@@ -240,7 +262,8 @@ CheckTableLevelToUnnamedColumnLevel:
       `id` int PRIMARY KEY,
       `method` varchar(20) CHECK (`method` IN ('card', 'cash', 'transfer'))
     );
-  output: ""
+  up: ""
+  down: ""
   flavor: mysql
   min_version: '8.0'
 CheckDuplicateValuesInOrChain:
@@ -256,7 +279,8 @@ CheckDuplicateValuesInOrChain:
       `category` varchar(20),
       CONSTRAINT `items_category_chk` CHECK (`category` IN ('electronics', 'clothing'))
     );
-  output: ""
+  up: ""
+  down: ""
   flavor: mysql
   min_version: '8.0'
 CheckRowValueConstructorMultipleInnerValues:
@@ -272,9 +296,12 @@ CheckRowValueConstructorMultipleInnerValues:
       `col_b` int,
       CONSTRAINT `test_multi_chk` CHECK ((`col_a`, `col_b`) IN ((1, 3), (2, 4)))
     );
-  output: |
+  up: |
     ALTER TABLE `test_multi` DROP CHECK `test_multi_chk`;
     ALTER TABLE `test_multi` ADD CONSTRAINT `test_multi_chk` CHECK ((col_a, col_b) in ((1, 3), (2, 4)));
+  down: |
+    ALTER TABLE `test_multi` DROP CHECK `test_multi_chk`;
+    ALTER TABLE `test_multi` ADD CONSTRAINT `test_multi_chk` CHECK ((col_a, col_b) in ((3, 1), (2, 4)));
   flavor: mysql
   min_version: '8.0'
 CheckRowValueConstructorOuterOrderShouldMatch:
@@ -290,6 +317,7 @@ CheckRowValueConstructorOuterOrderShouldMatch:
       `col_b` int,
       CONSTRAINT `test_outer_chk` CHECK ((`col_a`, `col_b`) IN ((3, 4), (1, 2)))
     );
-  output: ""
+  up: ""
+  down: ""
   flavor: mysql
   min_version: '8.0'

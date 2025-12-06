@@ -401,7 +401,7 @@ func TestMssqldefCreateView(t *testing.T) {
 	skipDropView := "-- Skipped: DROP VIEW [dbo].[view_users];\n"
 	assertApplyOutput(t, createTable+createView, wrapWithTransaction(createView+skipDropView))
 	assertApplyOutput(t, createTable+createView, wrapWithTransaction(skipDropView))
-	assertApplyOutput(t, "", wrapWithTransaction("-- Skipped: DROP TABLE [dbo].[users];\n-- Skipped: DROP VIEW [dbo].[view_users];\n-- Skipped: DROP VIEW [dbo].[view_users_new];\n"))
+	assertApplyOutput(t, "", wrapWithTransaction("-- Skipped: DROP VIEW [dbo].[view_users];\n-- Skipped: DROP VIEW [dbo].[view_users_new];\n-- Skipped: DROP TABLE [dbo].[users];\n"))
 }
 
 func TestMssqldefTrigger(t *testing.T) {

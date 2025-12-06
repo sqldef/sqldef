@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/sqldef/sqldef/cmd/testutils/testcase.schema.json",
+  "title": "sqldef Test Case Schema",
+  "description": "Schema for sqldef YAML test files that define schema migration test cases",
+  "type": "object",
+  "additionalProperties": {
+    "$ref": "#/$defs/TestCase"
+  },
+  "$defs": {
+    "TestCase": {
+      "type": "object",
+      "description": "A single test case for schema migration testing",
+      "properties": {
+        "current": {
+          "type": "string",
+          "description": "The current schema state (SQL DDL statements). Defaults to empty schema if omitted."
+        },
+        "desired": {
+          "type": "string",
+          "description": "The desired schema state (SQL DDL statements). Defaults to empty schema if omitted."
+        },
+        "up": {
+          "type": "string",
+          "description": "Expected DDL output for migrating from current to desired schema (current → desired). If specified, 'down' must also be specified."
+        },
+        "down": {
+          "type": "string",
+          "description": "Expected DDL output for migrating from desired to current schema (desired → current). Required if 'up' is specified."
+        },
+        "error": {
+          "type": "string",
+          "description": "Expected error message. If specified, the test expects this error to occur."
+        },
+        "min_version": {
+          "type": "string",
+          "description": "Minimum database version required to run this test (e.g., \"10.0\")",
+          "pattern": "^[0-9]+(\\.[0-9]+)*$"
+        },
+        "max_version": {
+          "type": "string",
+          "description": "Maximum database version supported for this test (e.g., \"14.0\")",
+          "pattern": "^[0-9]+(\\.[0-9]+)*$"
+        },
+        "user": {
+          "type": "string",
+          "description": "Database user to run the test as"
+        },
+        "flavor": {
+          "type": "string",
+          "description": "Database flavor requirement (mysqldef only)",
+          "enum": ["mysql", "mariadb"]
+        },
+        "managed_roles": {
+          "type": "array",
+          "description": "Roles whose privileges are managed by sqldef for privilege testing",
+          "items": {
+            "type": "string"
+          }
+        },
+        "enable_drop": {
+          "type": "boolean",
+          "description": "Whether to enable DROP/REVOKE operations. Defaults to true.",
+          "default": true
+        },
+        "legacy_ignore_quotes": {
+          "type": "boolean",
+          "description": "Quote handling mode. true (default) = always quote identifiers, false = quote only when source is quoted"
+        },
+        "offline": {
+          "type": "boolean",
+          "description": "Use offline testing only (no database connection). Use for proprietary SQL dialects like Aurora DSQL.",
+          "default": false
+        },
+        "config": {
+          "type": "object",
+          "description": "Optional configuration settings for the test",
+          "properties": {
+            "create_index_concurrently": {
+              "type": "boolean",
+              "description": "Create indexes concurrently (psqldef only)",
+              "default": false
+            },
+            "disable_ddl_transaction": {
+              "type": "boolean",
+              "description": "Disable DDL transaction wrapping",
+              "default": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "dependencies": {
+        "up": ["down"],
+        "down": ["up"]
+      },
+      "additionalProperties": false
+    }
+  }
+}

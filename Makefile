@@ -89,15 +89,13 @@ test-mysqldef:
 	MYSQL_FLAVOR=$${MYSQL_FLAVOR:-mysql} $(GOTEST) ./cmd/mysqldef
 
 test-psqldef:
-	$(GOTEST) ./cmd/psqldef
-	$(GOTEST) ./database/postgres
+	$(GOTEST) ./cmd/psqldef ./database/postgres
 
 test-sqlite3def:
 	$(GOTEST) ./cmd/sqlite3def
 
 test-mssqldef:
-	$(GOTEST) ./cmd/mssqldef
-	$(GOTEST) ./database/mssql
+	$(GOTEST) ./cmd/mssqldef ./database/mssql
 
 test-core:
 	$(GOTEST) ./parser ./schema ./util
