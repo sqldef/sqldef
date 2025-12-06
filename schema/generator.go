@@ -1744,10 +1744,6 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 
 		if currentNormalized != desiredNormalized {
 			viewDefinition := parser.String(desiredView.definition)
-			// PostgreSQL doesn't support "from dual" - remove it for PostgreSQL views
-			if g.mode == GeneratorModePostgres {
-				viewDefinition = g.stripFromDual(viewDefinition)
-			}
 
 			// Build the WITH [NO] DATA clause for materialized views
 			withDataClause := ""
@@ -1773,9 +1769,6 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 					// Store DDLs to recreate dependent views after the base view
 					for _, depView := range dependentViews {
 						depViewDef := parser.String(depView.definition)
-						if g.mode == GeneratorModePostgres {
-							depViewDef = g.stripFromDual(depViewDef)
-						}
 						dependentViewDDLs = append(dependentViewDDLs, fmt.Sprintf("CREATE %s %s AS %s", depView.viewType, g.escapeViewName(depView), depViewDef))
 					}
 				}
@@ -1791,10 +1784,6 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 		// VIEW with the specified security type found. If it's different, create or replace view.
 		if !strings.EqualFold(currentView.securityType, desiredView.securityType) {
 			viewDefinition := parser.String(desiredView.definition)
-			// PostgreSQL doesn't support "from dual" - remove it for PostgreSQL views
-			if g.mode == GeneratorModePostgres {
-				viewDefinition = g.stripFromDual(viewDefinition)
-			}
 			viewName := g.escapeViewName(desiredView)
 			ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE SQL SECURITY %s VIEW %s AS %s", desiredView.securityType, viewName, viewDefinition))
 		}
@@ -1856,14 +1845,6 @@ func (g *Generator) findDependentViews(viewName QualifiedName) []*View {
 	}
 
 	return dependents
-}
-
-// stripFromDual removes " from dual" from SQL statements for PostgreSQL compatibility.
-// PostgreSQL doesn't have a dual table, but the parser adds it for SELECT statements without FROM.
-func (g *Generator) stripFromDual(sql string) string {
-	// Use case-insensitive regex to remove " from dual" at the end or before WHERE/ORDER BY/LIMIT
-	re := regexp.MustCompile(`(?i)\s+from\s+dual\b`)
-	return re.ReplaceAllString(sql, "")
 }
 
 // stripTableQualifiers removes table qualifiers from column references in SQL

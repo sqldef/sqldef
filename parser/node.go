@@ -181,9 +181,7 @@ func (node *Select) Format(buf *nodeBuffer) {
 	buf.Printf("%vselect %v%s%s%s%v",
 		node.With, node.Comments, node.Cache, node.Distinct, node.Hints, node.SelectExprs,
 	)
-	if node.From.IsEmpty() {
-		buf.Printf(" from dual")
-	} else {
+	if !node.From.IsEmpty() {
 		buf.Printf(" from %v", node.From)
 	}
 	buf.Printf("%v%v%v%v%v%s",
