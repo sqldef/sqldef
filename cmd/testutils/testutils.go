@@ -391,7 +391,7 @@ func RunOfflineTest(t *testing.T, test TestCase, mode schema.GeneratorMode, sqlP
 		}
 	} else {
 		// Idempotency-only test (neither up nor down specified)
-		ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, defaultSchema)
+		_, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, defaultSchema)
 
 		if test.Error != nil {
 			if err == nil {
@@ -407,7 +407,7 @@ func RunOfflineTest(t *testing.T, test TestCase, mode schema.GeneratorMode, sqlP
 		}
 
 		// Test idempotency of desired schema
-		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, test.Desired, config, defaultSchema)
+		ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, test.Desired, config, defaultSchema)
 		if err != nil {
 			t.Fatal(err)
 		}
