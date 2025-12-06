@@ -176,7 +176,7 @@ TestCaseName:
     ALTER TABLE "public"."users" ADD COLUMN "name" text;
 
   # Expected DDL for reverse migration: desired → current
-  # Required if 'up' is specified
+  # Required if 'up' is specified (empty string is allowed for empty DDL)
   down: |
     ALTER TABLE "public"."users" DROP COLUMN "name";
 
