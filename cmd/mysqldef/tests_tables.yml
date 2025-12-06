@@ -104,6 +104,7 @@ CreateTableAddAutoIncrement:
   down: |
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
   flavor: mysql
+  min_version: '8.0'
 CreateTableAddAutoIncrementMariaDB:
   current: |
     CREATE TABLE users (
@@ -246,6 +247,7 @@ CreateTableAddAutoIncrementPrimaryKey:
     ALTER TABLE `users` DROP PRIMARY KEY;
     ALTER TABLE `users` DROP COLUMN `id`;
   flavor: mysql
+  min_version: '8.0'
 CreateTableAddAutoIncrementPrimaryKeyMariaDB:
   current: |
     CREATE TABLE users (

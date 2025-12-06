@@ -17,6 +17,23 @@ CreateTableRemoveAutoIncrement57:
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
   flavor: mysql # Different versioning of MariaDB
   max_version: '5.7'
+CreateTableAddAutoIncrement57:
+  current: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL PRIMARY KEY,
+      name varchar(20)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name varchar(20)
+    );
+  up: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
+  flavor: mysql
+  max_version: '5.7'
 CreateTableRemoveAutoIncrementPrimaryKey57:
   current: |
     CREATE TABLE friends (
@@ -36,4 +53,25 @@ CreateTableRemoveAutoIncrementPrimaryKey57:
     ALTER TABLE `friends` ADD PRIMARY KEY (`id`);
     ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
   flavor: mysql # Different versioning of MariaDB
+  max_version: '5.7'
+CreateTableAddAutoIncrementPrimaryKey57:
+  current: |
+    CREATE TABLE users (
+      name varchar(20)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL AUTO_INCREMENT,
+      name varchar(20),
+      PRIMARY KEY (id)
+    );
+  up: |
+    ALTER TABLE `users` ADD COLUMN `id` bigint NOT NULL FIRST;
+    ALTER TABLE `users` ADD PRIMARY KEY (`id`);
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
+    ALTER TABLE `users` DROP PRIMARY KEY;
+    ALTER TABLE `users` DROP COLUMN `id`;
+  flavor: mysql
   max_version: '5.7'

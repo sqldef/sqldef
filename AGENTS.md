@@ -123,6 +123,12 @@ For MariaDB testing:
 MYSQL_FLAVOR=mariadb MYSQL_PORT=3307 go test ./cmd/mysqldef
 ```
 
+If you encounter `tls: handshake failure` errors with MySQL 5.7, enable RSA key exchange:
+
+```sh
+GODEBUG=tlsrsakex=1 go test ./cmd/mysqldef
+```
+
 For test coverage:
 
 ```sh
