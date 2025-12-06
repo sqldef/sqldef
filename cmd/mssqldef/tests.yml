@@ -352,6 +352,7 @@ TriggerIfWithoutBeginEnd:
     update u set name = i.name + '+1' from users as u join inserted as i on u.id = i.id
     end;
   down: |
+    DROP TRIGGER [update_name_trigger];
     DROP TABLE [dbo].[users];
 TriggerIfWithBeginEnd:
   desired: |
@@ -385,6 +386,7 @@ TriggerIfWithBeginEnd:
     end
     end;
   down: |
+    DROP TRIGGER [update_name_trigger];
     DROP TABLE [dbo].[users];
 CollateOnColumn:
   desired: |
@@ -431,7 +433,8 @@ DeclareVariable:
     set @date = getdate()
     insert into logs select id, @date from inserted
     end;
-  down: ""
+  down: |
+    DROP TRIGGER [insert_log];
 CovertCurrentTimestampWithStyle:
   current: |
     CREATE TABLE users (
@@ -455,7 +458,8 @@ CovertCurrentTimestampWithStyle:
     begin
     set @datetime = cast(convert(varchar, current_timestamp, 110) as datetime)
     end;
-  down: ""
+  down: |
+    DROP TRIGGER [insert_log];
 TableHint:
   desired: |
     CREATE TABLE users (
@@ -516,7 +520,8 @@ WhileLoopFetchIntoMulti:
     close cur
     deallocate cur
     end;
-  down: ""
+  down: |
+    DROP TRIGGER [insert_log];
 TriggerNameWithSchema:
   desired: |
     CREATE TABLE users (
@@ -576,7 +581,8 @@ DanglingElse:
     begin
     set nocount off
     end;
-  down: ""
+  down: |
+    DROP TRIGGER [insert_log];
 Execute:
   desired: |
     CREATE TABLE users (

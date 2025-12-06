@@ -334,6 +334,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s ON %s", g.escapeQualifiedName(currentTrigger.name), g.escapeQualifiedName(currentTrigger.tableName)))
 			case GeneratorModeSQLite3:
 				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(currentTrigger.name)))
+			case GeneratorModeMssql:
+				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(currentTrigger.name)))
 			}
 		}
 	}
