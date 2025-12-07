@@ -2,7 +2,10 @@
 
 ```
 Usage:
-  sqlite3def [OPTIONS] [FILENAME|current.sql] < desired.sql
+  sqlite3def [OPTION]... FILENAME --export
+  sqlite3def [OPTION]... FILENAME --apply < desired.sql
+  sqlite3def [OPTION]... FILENAME --dry-run < desired.sql
+  sqlite3def [OPTION]... current.sql < desired.sql
 
 Application Options:
   -f, --file=FILENAME         Read desired SQL from the file, rather than stdin (default: -)
@@ -58,7 +61,7 @@ CREATE INDEX idx_users_email ON users(email);
 COMMIT;
 
 # Apply DDLs
-$ sqlite3def mydb.db < schema.sql
+$ sqlite3def mydb.db --apply < schema.sql
 -- Apply --
 BEGIN;
 ALTER TABLE users ADD COLUMN email TEXT NOT NULL;
@@ -66,15 +69,15 @@ CREATE INDEX idx_users_email ON users(email);
 COMMIT;
 
 # Operations are idempotent - safe to run multiple times
-$ sqlite3def mydb.db < schema.sql
+$ sqlite3def mydb.db --apply < schema.sql
 -- Nothing is modified --
 
 # Run without dropping tables and columns
-$ sqlite3def mydb.db < schema.sql
+$ sqlite3def mydb.db --apply < schema.sql
 -- Skipped: DROP TABLE old_users;
 
 # Run with drop operations enabled
-$ sqlite3def mydb.db --enable-drop < schema.sql
+$ sqlite3def mydb.db --apply --enable-drop < schema.sql
 -- Apply --
 BEGIN;
 DROP TABLE old_users;
@@ -89,13 +92,13 @@ skip_tables: |
   sqlite_.*
   temp_.*
 EOF
-$ sqlite3def mydb.db --config=config.yml < schema.sql
+$ sqlite3def mydb.db --apply --config=config.yml < schema.sql
 
 # Use inline YAML configuration
-$ sqlite3def mydb.db --config-inline="skip_tables: backup_.*" < schema.sql
+$ sqlite3def mydb.db --apply --config-inline="skip_tables: backup_.*" < schema.sql
 
 # Multiple configs (later values override earlier ones)
-$ sqlite3def mydb.db --config=config.yml --config-inline="target_tables: users" < schema.sql
+$ sqlite3def mydb.db --apply --config=config.yml --config-inline="target_tables: users" < schema.sql
 ```
 
 ## Offline Mode (File-to-File Comparison)
@@ -108,7 +111,7 @@ When the filename argument ends with `.sql`, sqlite3def operates in offline mode
 
 ```shell
 # Normal mode: connects to database file
-$ sqlite3def mydb.db < schema.sql
+$ sqlite3def mydb.db --apply < schema.sql
 
 # Offline mode: compares two files (no database connection)
 $ sqlite3def current.sql < desired.sql
@@ -260,19 +263,19 @@ Configuration can be provided through YAML files (`--config`) or inline YAML str
 ### Using Configuration Files
 
 ```shell
-$ sqlite3def mydb.db --config config.yml < schema.sql
+$ sqlite3def mydb.db --apply --config config.yml < schema.sql
 ```
 
 ### Using Inline Configuration
 
 ```shell
-$ sqlite3def mydb.db --config-inline 'enable_drop: true' < schema.sql
+$ sqlite3def mydb.db --apply --config-inline 'enable_drop: true' < schema.sql
 ```
 
 ### Combining Multiple Configurations
 
 ```shell
-$ sqlite3def mydb.db \
+$ sqlite3def mydb.db --apply \
   --config base.yml \
   --config-inline 'skip_tables: [logs, temp_data]' \
   --config-inline 'enable_drop: true' \

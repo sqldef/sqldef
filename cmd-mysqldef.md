@@ -4,7 +4,10 @@
 
 ```
 Usage:
-  mysqldef [OPTIONS] [database|current.sql] < desired.sql
+  mysqldef [OPTION]... DATABASE --export
+  mysqldef [OPTION]... DATABASE --apply < desired.sql
+  mysqldef [OPTION]... DATABASE --dry-run < desired.sql
+  mysqldef [OPTION]... current.sql < desired.sql
 
 Application Options:
   -u, --user=USERNAME               MySQL user name (default: root)
@@ -74,27 +77,27 @@ ALTER TABLE user ADD COLUMN created_at datetime NOT NULL ;
 ALTER TABLE user ADD INDEX index_name(name);
 
 # Apply DDLs
-$ mysqldef -uroot test < schema.sql
+$ mysqldef -uroot test --apply < schema.sql
 -- Apply --
 ALTER TABLE user ADD COLUMN created_at datetime NOT NULL ;
 ALTER TABLE user ADD INDEX index_name(name);
 
 # Operations are idempotent - safe to run multiple times
-$ mysqldef -uroot test < schema.sql
+$ mysqldef -uroot test --apply < schema.sql
 -- Nothing is modified --
 
 # Run without dropping tables and columns
-$ mysqldef -uroot test < schema.sql
+$ mysqldef -uroot test --apply < schema.sql
 -- Skipped: DROP TABLE users;
 
 # Run with drop operations enabled
-$ mysqldef -uroot test --enable-drop < schema.sql
+$ mysqldef -uroot test --apply --enable-drop < schema.sql
 -- Apply --
 DROP TABLE users;
 
 # Skip tables matching patterns (supports regular expressions)
 $ echo "user\n.*_bk\n.*_[0-9]{8}" > skip-tables
-$ mysqldef -uroot test --skip-file skip-tables < schema.sql
+$ mysqldef -uroot test --apply --skip-file skip-tables < schema.sql
 
 # Use config file to control schema management
 $ cat > config.yml <<EOF
@@ -107,13 +110,13 @@ algorithm: INPLACE
 lock: NONE
 dump_concurrency: 8
 EOF
-$ mysqldef -uroot test --config=config.yml < schema.sql
+$ mysqldef -uroot test --apply --config=config.yml < schema.sql
 
 # Use inline YAML configuration
-$ mysqldef -uroot test --config-inline="skip_tables: temp_.*" < schema.sql
+$ mysqldef -uroot test --apply --config-inline="skip_tables: temp_.*" < schema.sql
 
 # Multiple configs (later values override earlier ones)
-$ mysqldef -uroot test --config=config.yml --config-inline="algorithm: INSTANT" < schema.sql
+$ mysqldef -uroot test --apply --config=config.yml --config-inline="algorithm: INSTANT" < schema.sql
 ```
 
 ## Offline Mode (File-to-File Comparison)
@@ -126,7 +129,7 @@ When the database argument ends with `.sql`, mysqldef operates in offline mode:
 
 ```shell
 # Normal mode: connects to database
-$ mysqldef -uroot mydb < schema.sql
+$ mysqldef -uroot mydb --apply < schema.sql
 
 # Offline mode: compares two files (no database connection)
 $ mysqldef current.sql < desired.sql
@@ -403,19 +406,19 @@ Configuration can be provided through YAML files (`--config`) or inline YAML str
 ### Using Configuration Files
 
 ```shell
-$ mysqldef -uroot dbname --config config.yml < schema.sql
+$ mysqldef -uroot dbname --apply --config config.yml < schema.sql
 ```
 
 ### Using Inline Configuration
 
 ```shell
-$ mysqldef -uroot dbname --config-inline 'enable_drop: true' < schema.sql
+$ mysqldef -uroot dbname --apply --config-inline 'enable_drop: true' < schema.sql
 ```
 
 ### Combining Multiple Configurations
 
 ```shell
-$ mysqldef -uroot dbname \
+$ mysqldef -uroot dbname --apply \
   --config base.yml \
   --config-inline 'skip_tables: [logs, temp_data]' \
   --config-inline 'enable_drop: true' \

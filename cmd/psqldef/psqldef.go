@@ -60,7 +60,10 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 
 	parser := flags.NewParser(&opts, flags.None)
-	parser.Usage = "[OPTION]... [DBNAME|current.sql] < desired.sql"
+	parser.Usage = `[OPTION]... DBNAME --export
+  psqldef [OPTION]... DBNAME --apply < desired.sql
+  psqldef [OPTION]... DBNAME --dry-run < desired.sql
+  psqldef [OPTION]... current.sql < desired.sql`
 	args, err := parser.ParseArgs(args)
 	if err != nil {
 		log.Fatal(err)
