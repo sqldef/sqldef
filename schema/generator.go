@@ -132,6 +132,19 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	return generator.generateDDLs(desiredDDLs)
 }
 
+// getSortedColumns converts a column map to a slice sorted by position.
+// This ensures deterministic iteration order for DDL generation.
+func getSortedColumns(columns map[string]*Column) []*Column {
+	result := make([]*Column, 0, len(columns))
+	for _, col := range columns {
+		result = append(result, col)
+	}
+	slices.SortFunc(result, func(a, b *Column) int {
+		return a.position - b.position
+	})
+	return result
+}
+
 // Main part of DDL generation
 func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	// These variables are used to control the output order of the DDL.
@@ -311,6 +324,36 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	ddls = append(ddls, foreignKeyDDLs...)
 	ddls = append(ddls, exclusionDDLs...)
 
+	// Clean up obsoleted triggers BEFORE dropping tables
+	// Triggers must be dropped before their associated tables to avoid "relation does not exist" errors
+	for _, currentTrigger := range g.currentTriggers {
+		desiredTrigger := g.findTriggerByName(g.desiredTriggers, currentTrigger.name)
+		if desiredTrigger == nil {
+			switch g.mode {
+			case GeneratorModePostgres:
+				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s ON %s", g.escapeQualifiedName(currentTrigger.name), g.escapeQualifiedName(currentTrigger.tableName)))
+			case GeneratorModeSQLite3:
+				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(currentTrigger.name)))
+			case GeneratorModeMssql:
+				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(currentTrigger.name)))
+			}
+		}
+	}
+
+	// Clean up obsoleted views BEFORE dropping columns
+	// Views must be dropped before columns they depend on to avoid "other objects depend on it" errors
+	for _, currentView := range g.currentViews {
+		if g.findViewByName(g.desiredViews, currentView.name) != nil {
+			continue
+		}
+		viewName := g.escapeViewName(currentView)
+		if currentView.viewType == "MATERIALIZED VIEW" {
+			ddls = append(ddls, fmt.Sprintf("DROP MATERIALIZED VIEW %s", viewName))
+			continue
+		}
+		ddls = append(ddls, fmt.Sprintf("DROP VIEW %s", viewName))
+	}
+
 	var tablesToDrop []*Table
 	for _, currentTable := range g.currentTables {
 		desiredTable := g.findTableByName(g.desiredTables, currentTable.name)
@@ -402,15 +445,42 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			// TODO: simulate to remove index from `currentTable.indexes`?
 		}
 
+		// Check CHECK constraints BEFORE dropping columns.
+		// This is important because CHECK constraints may reference columns that are about to be dropped.
+		// Databases require CHECK constraints to be dropped before the columns they reference.
+		for _, check := range currentTable.checks {
+			// First try to find by name
+			if g.findCheckConstraintInTable(desiredTable, check.constraintName) != nil {
+				continue
+			}
+
+			// For MySQL and MSSQL, also check if this constraint matches any column-level CHECK by definition
+			// This handles auto-generated constraint names for column-level CHECKs
+			if (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) && g.findCheckConstraintByDefinition(desiredTable, &check) != nil {
+				continue
+			}
+
+			switch g.mode {
+			case GeneratorModePostgres, GeneratorModeMssql, GeneratorModeSQLite3:
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
+			case GeneratorModeMysql:
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
+			}
+		}
+
 		// Check columns.
-		for _, column := range currentTable.columns {
+		// Use sorted columns to ensure deterministic DDL ordering
+		// Drop columns in reverse order (last column first) to be more intuitive
+		sortedColumns := getSortedColumns(currentTable.columns)
+		for i := len(sortedColumns) - 1; i >= 0; i-- {
+			column := sortedColumns[i]
 			if g.findColumnByName(desiredTable.columns, column.name) != nil {
 				continue // Column is expected to exist.
 			}
 
 			// Check if this column is being renamed (not dropped)
 			isRenamed := false
-			for _, desiredColumn := range desiredTable.columns {
+			for _, desiredColumn := range getSortedColumns(desiredTable.columns) {
 				if !desiredColumn.renamedFrom.IsEmpty() && g.identsEqual(desiredColumn.renamedFrom, column.name) {
 					isRenamed = true
 					break
@@ -432,40 +502,6 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLIdent(policy.name), g.escapeTableName(currentTable)))
 		}
-
-		// Check checks.
-		for _, check := range currentTable.checks {
-			// First try to find by name
-			if g.findCheckConstraintInTable(desiredTable, check.constraintName) != nil {
-				continue
-			}
-
-			// For MySQL and MSSQL, also check if this constraint matches any column-level CHECK by definition
-			// This handles auto-generated constraint names for column-level CHECKs
-			if (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) && g.findCheckConstraintByDefinition(desiredTable, &check) != nil {
-				continue
-			}
-
-			switch g.mode {
-			case GeneratorModePostgres, GeneratorModeMssql, GeneratorModeSQLite3:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
-			case GeneratorModeMysql:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
-			}
-		}
-	}
-
-	// Clean up obsoleted views
-	for _, currentView := range g.currentViews {
-		if g.findViewByName(g.desiredViews, currentView.name) != nil {
-			continue
-		}
-		viewName := g.escapeViewName(currentView)
-		if currentView.viewType == "MATERIALIZED VIEW" {
-			ddls = append(ddls, fmt.Sprintf("DROP MATERIALIZED VIEW %s", viewName))
-			continue
-		}
-		ddls = append(ddls, fmt.Sprintf("DROP VIEW %s", viewName))
 	}
 
 	// Clean up obsoleted domains
@@ -500,19 +536,6 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if nullStmt != "" {
 				slog.Debug("Generated NULL statement", "stmt", nullStmt)
 				ddls = append(ddls, nullStmt)
-			}
-		}
-	}
-
-	// Clean up obsoleted triggers
-	for _, currentTrigger := range g.currentTriggers {
-		desiredTrigger := g.findTriggerByName(g.desiredTriggers, currentTrigger.name)
-		if desiredTrigger == nil {
-			switch g.mode {
-			case GeneratorModePostgres:
-				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s ON %s", g.escapeQualifiedName(currentTrigger.name), g.escapeQualifiedName(currentTrigger.tableName)))
-			case GeneratorModeSQLite3:
-				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(currentTrigger.name)))
 			}
 		}
 	}
@@ -690,9 +713,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					ddls = append(ddls, ddl)
 
 					// After renaming, check if type/constraints need to be changed
-					if !g.haveSameDataType(*renameFromColumn, desiredColumn) ||
+					// Skip if the column is part of the current primary key - the primary key handling logic
+					// will properly handle foreign key dependencies
+					if !g.isPrimaryKey(*renameFromColumn, currentTable) && (!g.haveSameDataType(*renameFromColumn, desiredColumn) ||
 						!g.areSameDefaultValue(renameFromColumn.defaultDef, desiredColumn.defaultDef, desiredColumn.typeName) ||
-						(g.notNull(*renameFromColumn) != g.notNull(desiredColumn)) {
+						(g.notNull(*renameFromColumn) != g.notNull(desiredColumn))) {
 						definition, err := g.generateColumnDefinition(desiredColumn, false)
 						if err != nil {
 							return ddls, err
@@ -856,33 +881,46 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					ddls = append(ddls, ddl)
 				}
 
-				if !g.isPrimaryKey(*currentColumn, currentTable) { // Primary Key implies NOT NULL
+				// Handle IDENTITY and NOT NULL in the correct order for PostgreSQL:
+				// - When adding IDENTITY: must SET NOT NULL first (IDENTITY requires NOT NULL)
+				// - When removing IDENTITY: must DROP IDENTITY first (can't drop NOT NULL from IDENTITY column)
+				addingIdentity := currentColumn.identity == nil && desiredColumn.identity != nil
+				removingIdentity := currentColumn.identity != nil && desiredColumn.identity == nil
+
+				// Step 1: When removing IDENTITY, drop it first
+				if removingIdentity {
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP IDENTITY IF EXISTS", g.escapeTableName(&currentTable), g.escapeColumnName(currentColumn)))
+				}
+
+				// Step 2: When adding IDENTITY, set NOT NULL first if needed
+				if addingIdentity && !g.isPrimaryKey(*currentColumn, currentTable) && !g.notNull(*currentColumn) {
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn)))
+				}
+
+				// Step 3: Add or modify IDENTITY
+				if addingIdentity {
+					alter := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s ADD GENERATED %s AS IDENTITY", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn), desiredColumn.identity.behavior)
+					if desiredColumn.sequence != nil {
+						alter += " (" + generateSequenceClause(desiredColumn.sequence) + ")"
+					}
+					ddls = append(ddls, alter)
+				} else if currentColumn.identity != nil && desiredColumn.identity != nil && !areSameIdentityDefinition(currentColumn.identity, desiredColumn.identity) {
+					// Modify existing IDENTITY (not adding or removing)
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET GENERATED %s", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn), desiredColumn.identity.behavior))
+				}
+
+				// Step 4: Handle NOT NULL changes unrelated to IDENTITY
+				if !addingIdentity && !removingIdentity && !g.isPrimaryKey(*currentColumn, currentTable) {
 					if g.notNull(*currentColumn) && !g.notNull(desiredColumn) {
-						// Use desiredColumn for escaping to match user's quote style
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn)))
 					} else if !g.notNull(*currentColumn) && g.notNull(desiredColumn) {
-						// Use desiredColumn for escaping to match user's quote style
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn)))
 					}
 				}
 
-				// GENERATED AS IDENTITY
-				if !areSameIdentityDefinition(currentColumn.identity, desiredColumn.identity) {
-					if currentColumn.identity == nil {
-						// add
-						alter := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s ADD GENERATED %s AS IDENTITY", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn), desiredColumn.identity.behavior)
-						if desiredColumn.sequence != nil {
-							alter += " (" + generateSequenceClause(desiredColumn.sequence) + ")"
-						}
-						ddls = append(ddls, alter)
-					} else if desiredColumn.identity == nil {
-						// remove
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP IDENTITY IF EXISTS", g.escapeTableName(&currentTable), g.escapeColumnName(currentColumn)))
-					} else {
-						// set
-						// not support changing sequence
-						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET GENERATED %s", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn), desiredColumn.identity.behavior))
-					}
+				// Step 5: After removing IDENTITY, drop NOT NULL if needed
+				if removingIdentity && !g.isPrimaryKey(*currentColumn, currentTable) && g.notNull(*currentColumn) && !g.notNull(desiredColumn) {
+					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn)))
 				}
 
 				// default
@@ -967,7 +1005,9 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 				// TODO: support adding a column's `references`
 			case GeneratorModeMssql:
-				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) {
+				// Skip if the column is part of the current primary key - the primary key handling logic
+				// will properly handle foreign key dependencies when the PK changes
+				if !g.haveSameColumnDefinition(*currentColumn, desiredColumn) && !g.isPrimaryKey(*currentColumn, currentTable) {
 					// Change column definition
 					definition, err := g.generateColumnDefinition(desiredColumn, false)
 					if err != nil {
@@ -1093,7 +1133,18 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		// If there are foreign keys referencing this table,
 		// we need to drop them first before modifying the primary key
 		if len(referencingFKs) > 0 {
+			// Track dropped FKs to avoid duplicates using normalized names for case-insensitive comparison
+			droppedFKs := make(map[string]bool)
 			for _, refFK := range referencingFKs {
+				// Create a unique key for this FK using normalized names
+				normalizedTableName := normalizeNameKey(refFK.tableName, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+				normalizedConstraintName := normalizeIdentKey(refFK.foreignKey.constraintName, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+				fkKey := normalizedTableName + ":" + normalizedConstraintName
+				if droppedFKs[fkKey] {
+					continue // Already processed this FK
+				}
+				droppedFKs[fkKey] = true
+
 				var dropFKDDL string
 				switch g.mode {
 				case GeneratorModeMysql:
@@ -1158,7 +1209,10 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					recreateDDL := g.buildForeignKeyDDL(refFK.tableName, desiredFK)
 					recreateFKDDLs = append(recreateFKDDLs, recreateDDL)
 					// Mark this FK as globally handled so we don't add it again in normal FK processing
-					g.handledForeignKeys[refFK.tableName.RawString()+":"+desiredFK.constraintName.Name] = true
+					// Use normalized names for case-insensitive deduplication
+					normalizedTableName := normalizeNameKey(refFK.tableName, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+					normalizedConstraintName := normalizeIdentKey(desiredFK.constraintName, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+					g.handledForeignKeys[normalizedTableName+":"+normalizedConstraintName] = true
 				}
 				// If the table doesn't exist in desired schema or the FK doesn't exist,
 				// we don't recreate it (it will be dropped with the table)
@@ -1177,6 +1231,46 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			case GeneratorModeMssql:
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(&desired.table), g.escapeSQLIdent(currentPrimaryKey.name)))
 			default:
+			}
+
+			// When dropping PRIMARY KEY, also drop implicit NOT NULL if the column should be nullable
+			// PRIMARY KEY implicitly adds NOT NULL, so we need to remove it when reverting
+			for _, pkCol := range currentPrimaryKey.columns {
+				// Extract column name from the index column expression
+				if colName, ok := pkCol.columnExpr.(*parser.ColName); ok {
+					// Find the column in the desired table to check if it should be nullable
+					desiredColumn := g.findColumnByName(desired.table.columns, colName.Name)
+					if desiredColumn != nil && (desiredColumn.notNull == nil || !*desiredColumn.notNull) {
+						// Column should be nullable, remove the implicit NOT NULL
+						switch g.mode {
+						case GeneratorModeMysql:
+							// MySQL doesn't support ALTER COLUMN ... DROP NOT NULL
+							// Instead, we use CHANGE COLUMN with the full column definition
+							definition, err := g.generateColumnDefinition(*desiredColumn, true)
+							if err != nil {
+								return ddls, err
+							}
+							ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s",
+								g.escapeTableName(&desired.table),
+								g.escapeColumnName(desiredColumn),
+								definition))
+						case GeneratorModeMssql:
+							// MSSQL doesn't support ALTER COLUMN ... DROP NOT NULL either
+							// Instead, we use ALTER COLUMN with the full column definition
+							definition, err := g.generateColumnDefinition(*desiredColumn, false)
+							if err != nil {
+								return ddls, err
+							}
+							ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s",
+								g.escapeTableName(&desired.table),
+								definition))
+						case GeneratorModePostgres:
+							ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL",
+								g.escapeTableName(&desired.table),
+								g.escapeColumnName(desiredColumn)))
+						}
+					}
+				}
 			}
 		}
 		if desiredPrimaryKey != nil {
@@ -1286,7 +1380,9 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		} else {
 			// Foreign key not found, add foreign key.
 			// But first check if we've already handled this FK during primary key changes
-			fkKey := desired.table.name.RawString() + ":" + constraintName.Name
+			normalizedTableName := normalizeNameKey(desired.table.name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+			normalizedConstraintName := normalizeIdentKey(constraintName, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+			fkKey := normalizedTableName + ":" + normalizedConstraintName
 			if !g.handledForeignKeys[fkKey] {
 				definition := g.generateForeignKeyDefinition(fkWithName)
 				ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(&desired.table), definition)
@@ -1661,8 +1757,27 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 
 			viewName := g.escapeViewName(desiredView)
 			if g.shouldDropAndCreateView(currentView, desiredView) {
+				// When dropping views that may have dependents, we need to handle them
+				// For PostgreSQL, find dependent views and recreate them after
+				var dependentViewDDLs []string
+				if g.mode == GeneratorModePostgres {
+					// Find all views that depend on this view
+					dependentViews := g.findDependentViews(desiredView.name)
+					// Drop them first (in reverse dependency order)
+					for i := len(dependentViews) - 1; i >= 0; i-- {
+						depView := dependentViews[i]
+						ddls = append(ddls, fmt.Sprintf("DROP %s %s", depView.viewType, g.escapeViewName(depView)))
+					}
+					// Store DDLs to recreate dependent views after the base view
+					for _, depView := range dependentViews {
+						depViewDef := parser.String(depView.definition)
+						dependentViewDDLs = append(dependentViewDDLs, fmt.Sprintf("CREATE %s %s AS %s", depView.viewType, g.escapeViewName(depView), depViewDef))
+					}
+				}
 				ddls = append(ddls, fmt.Sprintf("DROP %s %s", desiredView.viewType, viewName))
 				ddls = append(ddls, fmt.Sprintf("CREATE %s %s AS %s%s", desiredView.viewType, viewName, viewDefinition, withDataClause))
+				// Recreate dependent views
+				ddls = append(ddls, dependentViewDDLs...)
 			} else {
 				ddls = append(ddls, fmt.Sprintf("CREATE OR REPLACE %s %s AS %s%s", desiredView.viewType, viewName, viewDefinition, withDataClause))
 			}
@@ -1683,6 +1798,55 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 	}
 
 	return ddls, nil
+}
+
+// findDependentViews finds all views that reference the given view name in their definitions.
+// Returns views in topological order (views with no dependents first, most dependent last).
+// Uses the proper dependency extraction from ddl_ordering.go.
+func (g *Generator) findDependentViews(viewName QualifiedName) []*View {
+	// Normalize the target view name for comparison
+	targetName := normalizeNameKey(viewName, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+
+	// Build dependency graph for all views
+	viewDeps := make(map[string][]string)
+	viewMap := make(map[string]*View)
+
+	for _, view := range g.desiredViews {
+		normalizedName := normalizeNameKey(view.name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+		viewMap[normalizedName] = view
+
+		// Extract dependencies using the proper AST-based extraction
+		if view.definition != nil {
+			deps := extractViewDependencies(view.definition, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+			viewDeps[normalizedName] = deps
+		}
+	}
+
+	// Find views that directly or indirectly depend on the target view
+	var dependents []*View
+	for viewKey, deps := range util.CanonicalMapIter(viewDeps) {
+		// Skip the target view itself
+		if viewKey == targetName {
+			continue
+		}
+
+		// Check if this view depends on the target view
+		if slices.Contains(deps, targetName) {
+			dependents = append(dependents, viewMap[viewKey])
+		}
+	}
+
+	// Sort dependents in topological order using the dependency graph
+	if len(dependents) > 1 {
+		sorted := topologicalSort(dependents, viewDeps, func(v *View) string {
+			return normalizeNameKey(v.name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+		})
+		if len(sorted) > 0 {
+			dependents = sorted
+		}
+	}
+
+	return dependents
 }
 
 // stripTableQualifiers removes table qualifiers from column references in SQL
@@ -3205,7 +3369,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 	}
 
 	if g.config.EnableDrop {
-		for grantee, privileges := range revokesByGrantee {
+		for grantee, privileges := range util.CanonicalMapIter(revokesByGrantee) {
 			escapedGrantee, err := g.validateAndEscapeGrantee(grantee)
 			if err != nil {
 				return nil, err

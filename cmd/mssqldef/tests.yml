@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 CreateTable:
   desired: |
     CREATE TABLE bigdata (
@@ -8,8 +10,12 @@ DropTable:
     CREATE TABLE bigdata (
       data bigint
     );
-  output: |
+  up: |
     DROP TABLE [dbo].[bigdata];
+  down: |
+    CREATE TABLE bigdata (
+      data bigint
+    );
 TestMssqldefColumnLiteral:
   desired: |
     CREATE TABLE v (
@@ -55,10 +61,12 @@ IndexesOnChangedFilter:
       v_nvarchar nvarchar(30)
     );
     CREATE INDEX idx_v ON v (v_int, v_nvarchar) WHERE (v_int IS NOT NULL AND v_nvarchar IS NOT NULL);
-  output: |
+  up: |
     DROP INDEX [idx_v] ON [dbo].[v];
     CREATE INDEX idx_v ON v (v_int, v_nvarchar) WHERE (v_int IS NOT NULL AND v_nvarchar IS NOT NULL);
-
+  down: |
+    DROP INDEX [idx_v] ON [dbo].[v];
+    CREATE INDEX idx_v ON v (v_int, v_nvarchar) WHERE (v_int IS NOT NULL);
 CreateColumnStoreIndex:
   current: |
     CREATE TABLE v (
@@ -71,8 +79,10 @@ CreateColumnStoreIndex:
       v_nvarchar nvarchar(30)
     );
     CREATE NONCLUSTERED COLUMNSTORE INDEX idx_v ON v (v_int, v_nvarchar);
-  output: |
+  up: |
     CREATE NONCLUSTERED COLUMNSTORE INDEX idx_v ON v (v_int, v_nvarchar);
+  down: |
+    DROP INDEX [idx_v] ON [dbo].[v];
 CreateColumnStoreIndexWithoutKeyword:
   current:
     CREATE TABLE v (
@@ -85,8 +95,10 @@ CreateColumnStoreIndexWithoutKeyword:
       v_nvarchar nvarchar(30)
     );
     CREATE COLUMNSTORE INDEX idx_v ON v (v_int, v_nvarchar);
-  output: |
+  up: |
     CREATE COLUMNSTORE INDEX idx_v ON v (v_int, v_nvarchar);
+  down: |
+    DROP INDEX [idx_v] ON [dbo].[v];
 DropColumnStoreIndex:
   current: |
     CREATE TABLE v (
@@ -99,9 +111,10 @@ DropColumnStoreIndex:
       v_int int,
       v_nvarchar nvarchar(30)
     );
-  output: |
+  up: |
     DROP INDEX [idx_v] ON [dbo].[v];
-
+  down: |
+    CREATE NONCLUSTERED COLUMNSTORE INDEX idx_v ON v (v_int, v_nvarchar);
 DropTableOnNonDefaultSchema:
   current: |
     CREATE TABLE FOO.bigdata1 (
@@ -114,9 +127,12 @@ DropTableOnNonDefaultSchema:
     CREATE TABLE FOO.bigdata1 (
       data bigint
     );
-  output: |
+  up: |
     DROP TABLE [FOO].[bigdata2];
-
+  down: |
+    CREATE TABLE FOO.bigdata2 (
+      data bigint
+    );
 CreateTableOnNonStandardDefaultSchema:
   desired: |
     CREATE TABLE v (
@@ -136,9 +152,14 @@ AddBitColumnOnNonDefaultSchema:
       id int,
       requires_consent bit NOT NULL DEFAULT 1
     );
-  output: |
+  up: |
     ALTER TABLE [FOO].[items] ADD [requires_consent] bit NOT NULL DEFAULT 1;
+  down: |
+    ALTER TABLE [FOO].[items] DROP CONSTRAINT [DF__items__requires___239E4DCF];
+    ALTER TABLE [FOO].[items] DROP COLUMN [requires_consent];
   user: "mssqldef_user"
+  min_version: '2019' # auto-generated constraint name depends on a specific version
+  max_version: '2019' # auto-generated constraint name depends on a specific version
 
 AddIntColumnOnNonDefaultSchema:
   current: |
@@ -150,8 +171,10 @@ AddIntColumnOnNonDefaultSchema:
       id int,
       count int NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE [FOO].[items] ADD [count] int NOT NULL;
+  down: |
+    ALTER TABLE [FOO].[items] DROP COLUMN [count];
   user: "mssqldef_user"
 DropTableOnNonStandardDefaultSchema:
   current: |
@@ -159,16 +182,24 @@ DropTableOnNonStandardDefaultSchema:
       v_int int,
       v_nvarchar nvarchar(30)
     );
-  output: |
+  up: |
     DROP TABLE [FOO].[v];
+  down: |
+    CREATE TABLE v (
+      v_int int,
+      v_nvarchar nvarchar(30)
+    );
   user: "mssqldef_user"
 MultipleView:
   current: |
     CREATE VIEW v1 AS SELECT 1 AS N;
     CREATE VIEW v2 AS SELECT 2 AS N;
-  output: |
+  up: |
     DROP VIEW [dbo].[v1];
     DROP VIEW [dbo].[v2];
+  down: |
+    CREATE VIEW v1 AS SELECT 1 AS N;
+    CREATE VIEW v2 AS SELECT 2 AS N;
 UnicodeString:
   desired: |
     CREATE VIEW v AS SELECT Session_Context(N'key') AS x;
@@ -231,7 +262,6 @@ IndexColumnOrder:
       v2 int,
       CONSTRAINT [v_pk] PRIMARY KEY CLUSTERED ([v2] ASC, [v1] ASC)
     );
-  output: ""
 ReservedWordColumnName:
   current: |
     CREATE TABLE v(
@@ -243,7 +273,6 @@ ReservedWordColumnName:
       [V_INT] int,
       [TIMESTAMP] datetime
     );
-  output: ""
 ChangePrimaryKey:
   current: |
     CREATE TABLE v (
@@ -257,9 +286,12 @@ ChangePrimaryKey:
       v2 int NOT NULL,
       CONSTRAINT [v_pk] PRIMARY KEY CLUSTERED ([v2])
     )
-  output: |
+  up: |
     ALTER TABLE [dbo].[v] DROP CONSTRAINT [v_pk];
     ALTER TABLE [dbo].[v] ADD CONSTRAINT [v_pk] PRIMARY KEY CLUSTERED ([v2]);
+  down: |
+    ALTER TABLE [dbo].[v] DROP CONSTRAINT [v_pk];
+    ALTER TABLE [dbo].[v] ADD CONSTRAINT [v_pk] PRIMARY KEY CLUSTERED ([v1]);
 CreateViewWithMultiline:
   desired: |
     CREATE VIEW v AS
@@ -274,7 +306,6 @@ PercentConstraintName:
     CREATE TABLE [dbo].[percent_test] (
       [test%] int CONSTRAINT [DF_percent_test_test%] DEFAULT (NULL)
     );
-  output: ""
 UpdateWithFromAndWhere:
   desired: |
     CREATE TABLE reservation (
@@ -291,8 +322,10 @@ ViewWithHeaderComment:
   desired: |
     -- DUAL view
     CREATE VIEW DUAL AS SELECT 'X' AS X;
-  output: |
+  up: |
     CREATE VIEW DUAL AS SELECT 'X' AS X;
+  down: |
+    DROP VIEW [dbo].[dual];
 TriggerIfWithoutBeginEnd:
   desired: |
     CREATE TABLE users (
@@ -310,7 +343,7 @@ TriggerIfWithoutBeginEnd:
             FROM users AS u
                 INNER JOIN inserted AS i ON u.id = i.id
         END
-  output: |
+  up: |
     CREATE TABLE users (
         id   int          not null,
         name varchar(255) not null
@@ -320,6 +353,9 @@ TriggerIfWithoutBeginEnd:
     begin
     update u set name = i.name + '+1' from users as u join inserted as i on u.id = i.id
     end;
+  down: |
+    DROP TRIGGER [update_name_trigger];
+    DROP TABLE [dbo].[users];
 TriggerIfWithBeginEnd:
   desired: |
     CREATE TABLE users (
@@ -339,7 +375,7 @@ TriggerIfWithBeginEnd:
                     INNER JOIN inserted AS i ON u.id = i.id
             END
     END
-  output: |
+  up: |
     CREATE TABLE users (
         id   int          not null,
         name varchar(255) not null
@@ -351,6 +387,9 @@ TriggerIfWithBeginEnd:
     update u set name = i.name + '+1' from users as u join inserted as i on u.id = i.id
     end
     end;
+  down: |
+    DROP TRIGGER [update_name_trigger];
+    DROP TABLE [dbo].[users];
 CollateOnColumn:
   desired: |
     create table users (
@@ -387,7 +426,7 @@ DeclareVariable:
         set @date = GETDATE()
         insert into logs select id, @date from inserted
     end
-  output: |
+  up: |
     CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
     declare
     @date datetime
@@ -396,6 +435,8 @@ DeclareVariable:
     set @date = getdate()
     insert into logs select id, @date from inserted
     end;
+  down: |
+    DROP TRIGGER [insert_log];
 CovertCurrentTimestampWithStyle:
   current: |
     CREATE TABLE users (
@@ -412,13 +453,15 @@ CovertCurrentTimestampWithStyle:
     begin
         set @datetime = CAST(CONVERT(VARCHAR, CURRENT_TIMESTAMP, 110) AS datetime)
     end
-  output: |
+  up: |
     CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
     declare
     @datetime datetime
     begin
     set @datetime = cast(convert(varchar, current_timestamp, 110) as datetime)
     end;
+  down: |
+    DROP TRIGGER [insert_log];
 TableHint:
   desired: |
     CREATE TABLE users (
@@ -460,7 +503,7 @@ WhileLoopFetchIntoMulti:
       CLOSE cur
       DEALLOCATE cur
     end
-  output: |
+  up: |
     CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
     declare
     @code varchar(20)
@@ -479,6 +522,8 @@ WhileLoopFetchIntoMulti:
     close cur
     deallocate cur
     end;
+  down: |
+    DROP TRIGGER [insert_log];
 TriggerNameWithSchema:
   desired: |
     CREATE TABLE users (
@@ -506,7 +551,7 @@ DanglingElse:
     IF UPDATE(name) BEGIN set nocount on END ELSE set nocount off
     IF UPDATE(name) BEGIN set nocount on END ELSE BEGIN set nocount off END
     ;
-  output: |
+  up: |
     CREATE TRIGGER [insert_log] ON [dbo].[users] after insert AS
     if UPDATE(name)
     set nocount on
@@ -538,6 +583,8 @@ DanglingElse:
     begin
     set nocount off
     end;
+  down: |
+    DROP TRIGGER [insert_log];
 Execute:
   desired: |
     CREATE TABLE users (
@@ -585,8 +632,11 @@ RenameColumn:
       user_name text, -- @renamed from=username
       age integer
     );
-  output: |
+  up: |
     EXEC sp_rename 'users.username', 'user_name', 'COLUMN';
+  down: |
+    ALTER TABLE [dbo].[users] ADD [username] text;
+    ALTER TABLE [dbo].[users] DROP COLUMN [user_name];
 RenameColumnWithTypeChange:
   current: |
     CREATE TABLE users (
@@ -600,10 +650,12 @@ RenameColumnWithTypeChange:
       user_name text NOT NULL, -- @renamed from=username
       age integer
     );
-  output: |
+  up: |
     EXEC sp_rename 'users.username', 'user_name', 'COLUMN';
     ALTER TABLE [users] ALTER COLUMN [user_name] text NOT NULL;
-
+  down: |
+    ALTER TABLE [dbo].[users] ADD [username] varchar(100);
+    ALTER TABLE [dbo].[users] DROP COLUMN [user_name];
 RenameTable:
   current: |
     CREATE TABLE user_accounts (
@@ -617,9 +669,15 @@ RenameTable:
       username text,
       age integer
     );
-  output: |
+  up: |
     EXEC sp_rename 'user_accounts', 'users';
-
+  down: |
+    CREATE TABLE user_accounts (
+      id bigint NOT NULL,
+      username text,
+      age integer
+    );
+    DROP TABLE [dbo].[users];
 RenameTableWithCommentVariant:
   current: |
     CREATE TABLE old_users (
@@ -631,9 +689,14 @@ RenameTableWithCommentVariant:
       id bigint NOT NULL,
       name text
     );
-  output: |
+  up: |
     EXEC sp_rename 'old_users', 'new_users';
-
+  down: |
+    CREATE TABLE old_users (
+      id bigint NOT NULL,
+      name text
+    );
+    DROP TABLE [dbo].[new_users];
 RenameTableWithQuotedName:
   current: |
     CREATE TABLE [user_accounts] (
@@ -645,9 +708,14 @@ RenameTableWithQuotedName:
       id bigint NOT NULL,
       name text
     );
-  output: |
+  up: |
     EXEC sp_rename 'user_accounts', 'user_profiles';
-
+  down: |
+    CREATE TABLE [user_accounts] (
+      id bigint NOT NULL,
+      name text
+    );
+    DROP TABLE [dbo].[user_profiles];
 RenameTableAndMultipleChanges:
   current: |
     CREATE TABLE old_accounts (
@@ -662,14 +730,21 @@ RenameTableAndMultipleChanges:
       username varchar(100) NOT NULL, -- @renamed from=user_name
       is_active bit DEFAULT 1
     );
-  output: |
+  up: |
     EXEC sp_rename 'old_accounts', 'accounts';
     EXEC sp_rename 'accounts.user_name', 'username', 'COLUMN';
     ALTER TABLE [accounts] ALTER COLUMN [username] varchar(100) NOT NULL;
     ALTER TABLE [dbo].[accounts] ADD DEFAULT 1 FOR [is_active];
     ALTER TABLE [dbo].[accounts] ADD PRIMARY KEY CLUSTERED ([id]);
     ALTER TABLE [dbo].[accounts] DROP COLUMN [old_field];
-
+  down: |
+    CREATE TABLE old_accounts (
+      id bigint NOT NULL,
+      user_name varchar(50),
+      is_active bit,
+      old_field text
+    );
+    DROP TABLE [dbo].[accounts];
 RenameIndex:
   current: |
     CREATE TABLE users (
@@ -685,9 +760,11 @@ RenameIndex:
       username varchar(100)
     );
     CREATE INDEX new_email_idx /* @renamed from=old_email_idx */ ON users (email);
-  output: |
+  up: |
     EXEC sp_rename 'users.old_email_idx', 'new_email_idx', 'INDEX';
-
+  down: |
+    CREATE INDEX old_email_idx ON users (email);
+    DROP INDEX [new_email_idx] ON [dbo].[users];
 RenameIndexInTable:
   current: |
     CREATE TABLE users (
@@ -703,9 +780,11 @@ RenameIndexInTable:
       username varchar(100),
       INDEX email_idx (email) -- @renamed from=idx_email
     );
-  output: |
+  up: |
     EXEC sp_rename 'users.idx_email', 'email_idx', 'INDEX';
-
+  down: |
+    CREATE NONCLUSTERED INDEX [idx_email] ON [dbo].[users] ([email]);
+    DROP INDEX [email_idx] ON [dbo].[users];
 RenameMultipleIndexes:
   current: |
     CREATE TABLE users (
@@ -723,10 +802,14 @@ RenameMultipleIndexes:
     );
     CREATE INDEX email_idx /* @renamed from=idx_email */ ON users (email);
     CREATE INDEX username_idx /* @renamed from=idx_username */ ON users (username);
-  output: |
+  up: |
     EXEC sp_rename 'users.idx_email', 'email_idx', 'INDEX';
     EXEC sp_rename 'users.idx_username', 'username_idx', 'INDEX';
-
+  down: |
+    CREATE INDEX idx_email ON users (email);
+    CREATE INDEX idx_username ON users (username);
+    DROP INDEX [email_idx] ON [dbo].[users];
+    DROP INDEX [username_idx] ON [dbo].[users];
 RenameUniqueConstraint:
   current: |
     CREATE TABLE users (
@@ -742,9 +825,11 @@ RenameUniqueConstraint:
       username varchar(100),
       CONSTRAINT unique_email UNIQUE (email) -- @renamed from=old_unique_email
     );
-  output: |
+  up: |
     EXEC sp_rename 'users.old_unique_email', 'unique_email', 'INDEX';
-
+  down: |
+    CREATE UNIQUE NONCLUSTERED INDEX [old_unique_email] ON [dbo].[users] ([email]);
+    ALTER TABLE [dbo].[users] DROP CONSTRAINT [unique_email];
 IdentityWithNegativeValue:
   desired: |
     CREATE TABLE test_identity_negative1 (
@@ -793,8 +878,10 @@ AddCheckConstraintWithIn:
       state varchar(20),
       CONSTRAINT documents_state_chk CHECK (state IN ('draft', 'review', 'published', 'archived'))
     );
-  output: |
+  up: |
     ALTER TABLE [dbo].[documents] ADD CONSTRAINT [documents_state_chk] CHECK (state in ('draft', 'review', 'published', 'archived'));
+  down: |
+    ALTER TABLE [dbo].[documents] DROP CONSTRAINT [documents_state_chk];
 ModifyCheckConstraintIn:
   current: |
     CREATE TABLE tasks (
@@ -808,9 +895,12 @@ ModifyCheckConstraintIn:
       status varchar(20),
       CONSTRAINT tasks_status_chk CHECK (status IN ('todo', 'in_progress', 'done'))
     );
-  output: |
+  up: |
     ALTER TABLE [dbo].[tasks] DROP CONSTRAINT [tasks_status_chk];
     ALTER TABLE [dbo].[tasks] ADD CONSTRAINT [tasks_status_chk] CHECK (status in ('todo', 'in_progress', 'done'));
+  down: |
+    ALTER TABLE [dbo].[tasks] DROP CONSTRAINT [tasks_status_chk];
+    ALTER TABLE [dbo].[tasks] ADD CONSTRAINT [tasks_status_chk] CHECK (status in ('todo', 'in_progress'));
 DropCheckConstraintWithIn:
   current: |
     CREATE TABLE events (
@@ -823,8 +913,10 @@ DropCheckConstraintWithIn:
       id int PRIMARY KEY,
       type varchar(20)
     );
-  output: |
+  up: |
     ALTER TABLE [dbo].[events] DROP CONSTRAINT [events_type_chk];
+  down: |
+    ALTER TABLE [dbo].[events] ADD CONSTRAINT [events_type_chk] CHECK (type in ('public', 'private'));
 CheckInClauseNormalization:
   current: |
     CREATE TABLE workflows (
@@ -838,7 +930,6 @@ CheckInClauseNormalization:
       state varchar(20),
       CONSTRAINT workflows_state_chk CHECK (state IN ('active', 'paused', 'stopped'))
     );
-  output: ""
 CheckTableLevelToColumnLevel:
   current: |
     CREATE TABLE orders (
@@ -851,7 +942,6 @@ CheckTableLevelToColumnLevel:
       id int PRIMARY KEY,
       status varchar(20) CHECK (status IN ('pending', 'shipped', 'delivered'))
     );
-  output: ""
 CheckTableLevelToUnnamedColumnLevel:
   current: |
     CREATE TABLE payments (
@@ -864,7 +954,6 @@ CheckTableLevelToUnnamedColumnLevel:
       id int PRIMARY KEY,
       method varchar(20) CHECK (method IN ('card', 'cash', 'transfer'))
     );
-  output: ""
 CheckDuplicateValuesInOrChain:
   current: |
     CREATE TABLE items (
@@ -878,7 +967,6 @@ CheckDuplicateValuesInOrChain:
       category varchar(20),
       CONSTRAINT items_category_chk CHECK (category IN ('electronics', 'clothing'))
     );
-  output: ""
 DecimalDefault:
   desired: |
     CREATE TABLE some_table (
@@ -912,7 +1000,6 @@ NumericDecimalDefaults:
       num numeric(18),
       price decimal(18)
     );
-  output: ""
 NumericDecimalExplicit:
   current: |
     CREATE TABLE test (
@@ -930,7 +1017,6 @@ NumericDecimalExplicit:
       price1 decimal(12),
       price2 decimal(20, 6)
     );
-  output: ""
 AlterColumnSetDefault:
   current: |
     CREATE TABLE users (
@@ -944,10 +1030,12 @@ AlterColumnSetDefault:
       status varchar(20) CONSTRAINT [DF_users_status] DEFAULT 'active',
       priority int CONSTRAINT [DF_users_priority] DEFAULT 1
     );
-  output: |
+  up: |
     ALTER TABLE [dbo].[users] ADD CONSTRAINT [DF_users_status] DEFAULT 'active' FOR [status];
     ALTER TABLE [dbo].[users] ADD CONSTRAINT [DF_users_priority] DEFAULT 1 FOR [priority];
-
+  down: |
+    ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_users_status];
+    ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_users_priority];
 AlterColumnDropDefault:
   current: |
     CREATE TABLE users (
@@ -961,10 +1049,12 @@ AlterColumnDropDefault:
       status varchar(20),
       priority int
     );
-  output: |
+  up: |
     ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_users_status];
     ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_users_priority];
-
+  down: |
+    ALTER TABLE [dbo].[users] ADD CONSTRAINT [DF_users_status] DEFAULT 'active' FOR [status];
+    ALTER TABLE [dbo].[users] ADD CONSTRAINT [DF_users_priority] DEFAULT 1 FOR [priority];
 AlterColumnChangeDefault:
   current: |
     CREATE TABLE users (
@@ -978,12 +1068,16 @@ AlterColumnChangeDefault:
       status varchar(20) CONSTRAINT [DF_users_status] DEFAULT 'active',
       is_active bit CONSTRAINT [DF_users_is_active] DEFAULT 1
     );
-  output: |
+  up: |
     ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_users_status];
     ALTER TABLE [dbo].[users] ADD CONSTRAINT [DF_users_status] DEFAULT 'active' FOR [status];
     ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_users_is_active];
     ALTER TABLE [dbo].[users] ADD CONSTRAINT [DF_users_is_active] DEFAULT 1 FOR [is_active];
-
+  down: |
+    ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_users_status];
+    ALTER TABLE [dbo].[users] ADD CONSTRAINT [DF_users_status] DEFAULT 'pending' FOR [status];
+    ALTER TABLE [dbo].[users] DROP CONSTRAINT [DF_users_is_active];
+    ALTER TABLE [dbo].[users] ADD CONSTRAINT [DF_users_is_active] DEFAULT 0 FOR [is_active];
 AlterColumnSetNotNull:
   current: |
     CREATE TABLE users (
@@ -997,10 +1091,12 @@ AlterColumnSetNotNull:
       name varchar(100) NOT NULL,
       email varchar(255) NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE [dbo].[users] ALTER COLUMN [name] varchar(100) NOT NULL;
     ALTER TABLE [dbo].[users] ALTER COLUMN [email] varchar(255) NOT NULL;
-
+  down: |
+    ALTER TABLE [dbo].[users] ALTER COLUMN [name] varchar(100);
+    ALTER TABLE [dbo].[users] ALTER COLUMN [email] varchar(255);
 AlterColumnDropNotNull:
   current: |
     CREATE TABLE users (
@@ -1014,9 +1110,12 @@ AlterColumnDropNotNull:
       name varchar(100),
       email varchar(255)
     );
-  output: |
+  up: |
     ALTER TABLE [dbo].[users] ALTER COLUMN [name] varchar(100);
     ALTER TABLE [dbo].[users] ALTER COLUMN [email] varchar(255);
+  down: |
+    ALTER TABLE [dbo].[users] ALTER COLUMN [name] varchar(100) NOT NULL;
+    ALTER TABLE [dbo].[users] ALTER COLUMN [email] varchar(255) NOT NULL;
 VarcharMaxExchange:
   current: |
     CREATE TABLE test_table (
@@ -1030,6 +1129,9 @@ VarcharMaxExchange:
       col1 varchar(max),
       col2 varchar(100)
     );
-  output: |
+  up: |
     ALTER TABLE [dbo].[test_table] ALTER COLUMN [col1] varchar(max);
     ALTER TABLE [dbo].[test_table] ALTER COLUMN [col2] varchar(100);
+  down: |
+    ALTER TABLE [dbo].[test_table] ALTER COLUMN [col1] varchar(100);
+    ALTER TABLE [dbo].[test_table] ALTER COLUMN [col2] varchar(max);

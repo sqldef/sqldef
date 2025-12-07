@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 CreateTableGeneratedAlwaysAs80:
   desired: |
     CREATE TABLE `test_table` (
@@ -22,8 +24,10 @@ CreateTableGeneratedAlwaysAsChangeExpr80:
       test_expr varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) VIRTUAL,
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `test_table` CHANGE COLUMN `test_expr` `test_expr` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) VIRTUAL;
+  down: |
+    ALTER TABLE `test_table` CHANGE COLUMN `test_expr` `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL;
   flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 CreateTableGeneratedAlwaysAsAbbreviation80:
@@ -51,8 +55,10 @@ CreateTableGeneratedAlwaysAsAbbreviationChangeExpr80:
       test_expr varchar(45) AS ((test_value / test_value) * 2) STORED NOT NULL,
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `test_table` CHANGE COLUMN `test_expr` `test_expr` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) STORED NOT NULL;
+  down: |
+    ALTER TABLE `test_table` CHANGE COLUMN `test_expr` `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED NOT NULL;
   flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 ChangeGenerateColumnGemerayedAlwaysAs:
@@ -85,8 +91,10 @@ ChangeGenerateColumnJsonExpressionChange:
       name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) VIRTUAL,
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `test_table` CHANGE COLUMN `name` `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) VIRTUAL;
+  down: |
+    ALTER TABLE `test_table` CHANGE COLUMN `name` `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name1')) VIRTUAL;
   flavor: mysql  # MariaDB handles generated column comparison differently, shows extra JSON column changes
 ChangeGenerateColumnVirtualToStored:
   current: |
@@ -107,11 +115,16 @@ ChangeGenerateColumnVirtualToStored:
       name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) STORED,
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `test_table` DROP COLUMN `test_expr`;
     ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED AFTER `test_value`;
     ALTER TABLE `test_table` DROP COLUMN `name`;
     ALTER TABLE `test_table` ADD COLUMN `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED AFTER `data`;
+  down: |
+    ALTER TABLE `test_table` DROP COLUMN `test_expr`;
+    ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL AFTER `test_value`;
+    ALTER TABLE `test_table` DROP COLUMN `name`;
+    ALTER TABLE `test_table` ADD COLUMN `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) VIRTUAL AFTER `data`;
   flavor: mysql  # MariaDB shows unexpected JSON column changes in idempotency tests
 ChangeGenerateColumnStoredToVirtual:
   current: |
@@ -132,11 +145,16 @@ ChangeGenerateColumnStoredToVirtual:
       name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) VIRTUAL,
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `test_table` DROP COLUMN `test_expr`;
     ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL AFTER `test_value`;
     ALTER TABLE `test_table` DROP COLUMN `name`;
     ALTER TABLE `test_table` ADD COLUMN `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) VIRTUAL AFTER `data`;
+  down: |
+    ALTER TABLE `test_table` DROP COLUMN `test_expr`;
+    ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED AFTER `test_value`;
+    ALTER TABLE `test_table` DROP COLUMN `name`;
+    ALTER TABLE `test_table` ADD COLUMN `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED AFTER `data`;
   flavor: mysql  # MariaDB shows unexpected JSON column changes in idempotency tests
 ChangeGenerateColumnSpacingIgnored:
   current: |
@@ -157,7 +175,8 @@ ChangeGenerateColumnSpacingIgnored:
       name varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED,
       PRIMARY KEY (id)
     );
-  output: ""
+  up: ""
+  down: ""
   flavor: mysql  # MariaDB shows unexpected JSON column changes in idempotency tests
 ChangeGenerateColumnAddNotNull:
   current: |
@@ -178,9 +197,12 @@ ChangeGenerateColumnAddNotNull:
       name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) STORED NOT NULL,
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `test_table` CHANGE COLUMN `test_expr` `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED NOT NULL;
     ALTER TABLE `test_table` CHANGE COLUMN `name` `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED NOT NULL;
+  down: |
+    ALTER TABLE `test_table` CHANGE COLUMN `test_expr` `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED;
+    ALTER TABLE `test_table` CHANGE COLUMN `name` `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED;
   flavor: mysql  # MariaDB syntax error with STORED NOT NULL on generated columns
 ChangeGenerateColumnExpressionComplexity:
   current: |
@@ -201,8 +223,10 @@ ChangeGenerateColumnExpressionComplexity:
       name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) STORED NOT NULL,
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `test_table` CHANGE COLUMN `test_expr` `test_expr` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) STORED NOT NULL;
+  down: |
+    ALTER TABLE `test_table` CHANGE COLUMN `test_expr` `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED NOT NULL;
   flavor: mysql  # MariaDB syntax error with generated columns and NOT NULL
 ChangeGenerateColumnSubstrFunction:
   current: |
@@ -223,8 +247,10 @@ ChangeGenerateColumnSubstrFunction:
       name varchar(20) GENERATED ALWAYS AS (substr('test_value', 1, 2)) STORED NOT NULL,
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `test_table` CHANGE COLUMN `name` `name` varchar(20) GENERATED ALWAYS AS (substr('test_value', 1, 2)) STORED NOT NULL;
+  down: |
+    ALTER TABLE `test_table` CHANGE COLUMN `name` `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED NOT NULL;
   flavor: mysql  # MariaDB syntax error with generated columns and NOT NULL constraint
 ChangeGenerateColumnSubstringFunction:
   current: |
@@ -245,8 +271,10 @@ ChangeGenerateColumnSubstringFunction:
       name varchar(20) GENERATED ALWAYS AS (substring('test_value', 2, 2)) STORED NOT NULL,
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `test_table` CHANGE COLUMN `name` `name` varchar(20) GENERATED ALWAYS AS (substr('test_value', 2, 2)) STORED NOT NULL;
+  down: |
+    ALTER TABLE `test_table` CHANGE COLUMN `name` `name` varchar(20) GENERATED ALWAYS AS (substr('test_value', 1, 2)) STORED NOT NULL;
   flavor: mysql  # MariaDB syntax error with generated columns and NOT NULL
 ChangeGenerateColumnRegularToGenerated:
   current: |
@@ -265,9 +293,12 @@ ChangeGenerateColumnRegularToGenerated:
       computed_value int(11) GENERATED ALWAYS AS (base_value * 2) VIRTUAL,
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `test_table` DROP COLUMN `computed_value`;
     ALTER TABLE `test_table` ADD COLUMN `computed_value` int(11) GENERATED ALWAYS AS (base_value * 2) VIRTUAL AFTER `base_value`;
+  down: |
+    ALTER TABLE `test_table` DROP COLUMN `computed_value`;
+    ALTER TABLE `test_table` ADD COLUMN `computed_value` int(11) AFTER `base_value`;
   flavor: mysql  # MariaDB may handle this differently
 ChangeGenerateColumnGeneratedToRegular:
   current: |
@@ -286,7 +317,10 @@ ChangeGenerateColumnGeneratedToRegular:
       computed_value int(11),
       PRIMARY KEY (id)
     );
-  output: |
+  up: |
     ALTER TABLE `test_table` DROP COLUMN `computed_value`;
     ALTER TABLE `test_table` ADD COLUMN `computed_value` int(11) AFTER `base_value`;
+  down: |
+    ALTER TABLE `test_table` DROP COLUMN `computed_value`;
+    ALTER TABLE `test_table` ADD COLUMN `computed_value` int(11) GENERATED ALWAYS AS (base_value * 2) VIRTUAL AFTER `base_value`;
   flavor: mysql  # MariaDB may handle this differently

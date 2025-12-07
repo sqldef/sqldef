@@ -572,12 +572,17 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				// PostgreSQL normalizes ARRAY[expr::type]::type[] to ARRAY[(expr)::type]
 				// The array typecast is redundant since the ARRAY constructor already produces the right type
 				// e.g., ARRAY[current_date::text]::text[] -> ARRAY[(CURRENT_DATE)::text]
-				if _, isArrayConstructor := normalizedExpr.(*parser.ArrayConstructor); isArrayConstructor {
+				// HOWEVER: Empty arrays (ARRAY[]) NEED the typecast or PostgreSQL can't determine the type
+				if arrayConstructor, isArrayConstructor := normalizedExpr.(*parser.ArrayConstructor); isArrayConstructor {
 					// Check if this is an array type cast (type string ends with [])
 					if strings.HasSuffix(typeStr, "[]") {
 						// This is an array type (e.g., text[], int[])
-						// Strip the redundant array typecast and return just the ARRAY constructor
-						return normalizedExpr
+						// Only strip the typecast if the array is NOT empty
+						if len(arrayConstructor.Elements) > 0 {
+							// Non-empty array: strip the redundant typecast
+							return normalizedExpr
+						}
+						// Empty array: preserve the typecast (ARRAY[]::int[] is required)
 					}
 				}
 			}

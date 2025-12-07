@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 CreateTableUniqueIndex:
   desired: |
     CREATE TABLE items (
@@ -19,8 +21,10 @@ CreateTableAddIndexWithKeyLength:
       PRIMARY KEY (id),
       INDEX index_name(name(255))
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD INDEX `index_name` (`name`(255));
+  down: |
+    ALTER TABLE `users` DROP INDEX `index_name`;
 AddIndex:
   current: |
     CREATE TABLE users (
@@ -35,8 +39,10 @@ AddIndex:
       created_at datetime NOT NULL
     );
     ALTER TABLE `users` ADD UNIQUE INDEX `index_name`(`name`);
-  output: |
+  up: |
     ALTER TABLE `users` ADD UNIQUE INDEX `index_name`(`name`);
+  down: |
+    ALTER TABLE `users` DROP INDEX `index_name`;
 ChangeIndexColumns:
   current: |
     CREATE TABLE users (
@@ -52,9 +58,12 @@ ChangeIndexColumns:
       created_at datetime NOT NULL
     );
     ALTER TABLE `users` ADD INDEX `index_name`(`name`, `created_at`);
-  output: |
+  up: |
     ALTER TABLE `users` DROP INDEX `index_name`;
     ALTER TABLE `users` ADD INDEX `index_name`(`name`, `created_at`);
+  down: |
+    ALTER TABLE `users` DROP INDEX `index_name`;
+    ALTER TABLE `users` ADD UNIQUE INDEX `index_name`(`name`);
 AddIndexWithKeyLength:
   current: |
     CREATE TABLE users (
@@ -69,8 +78,10 @@ AddIndexWithKeyLength:
       PRIMARY KEY (id)
     );
     ALTER TABLE `users` ADD INDEX `index_name`(`name`(255));
-  output: |
+  up: |
     ALTER TABLE `users` ADD INDEX `index_name`(`name`(255));
+  down: |
+    ALTER TABLE `users` DROP INDEX `index_name`;
 IndexOption:
   current: |
     CREATE TABLE users (
@@ -81,8 +92,10 @@ IndexOption:
       id int(11) NOT NULL,
       KEY index_id (id) USING BTREE
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD KEY `index_id` (`id`) using BTREE;
+  down: |
+    ALTER TABLE `users` DROP INDEX `index_id`;
 IndexOptionCaseInsensitive:
   current: |
     CREATE TABLE users (
@@ -94,7 +107,6 @@ IndexOptionCaseInsensitive:
       id int(11) NOT NULL,
       KEY index_id (id) using btree
     );
-  output: ""
 IndexOptionNoUsing:
   current: |
     CREATE TABLE users (
@@ -106,7 +118,6 @@ IndexOptionNoUsing:
       id int(11) NOT NULL,
       KEY index_id (id)
     );
-  output: ""
 IndexOptionAddWithoutUsing:
   current: |
     CREATE TABLE users (
@@ -117,8 +128,10 @@ IndexOptionAddWithoutUsing:
       id int(11) NOT NULL,
       KEY index_id (id)
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD KEY `index_id` (`id`);
+  down: |
+    ALTER TABLE `users` DROP INDEX `index_id`;
 IndexOptionAddWithoutUsingThenWith:
   current: |
     CREATE TABLE users (
@@ -130,7 +143,6 @@ IndexOptionAddWithoutUsingThenWith:
       id int(11) NOT NULL,
       KEY index_id (id) USING BTREE
     );
-  output: ""
 MultipleColumnIndexesOption:
   current: |
     CREATE TABLE users (
@@ -145,8 +157,10 @@ MultipleColumnIndexesOption:
       role_type int(1) NOT NULL,
       INDEX index_id (registered_at, role_type) USING BTREE
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD INDEX `index_id` (`registered_at`, `role_type`) using BTREE;
+  down: |
+    ALTER TABLE `users` DROP INDEX `index_id`;
 MultipleColumnIndexesOptionCaseInsensitive:
   current: |
     CREATE TABLE users (
@@ -162,7 +176,6 @@ MultipleColumnIndexesOptionCaseInsensitive:
       role_type int(1) NOT NULL,
       INDEX index_id (registered_at, role_type) using btree
     );
-  output: ""
 MultipleColumnIndexesOptionNoUsing:
   current: |
     CREATE TABLE users (
@@ -178,7 +191,6 @@ MultipleColumnIndexesOptionNoUsing:
       role_type int(1) NOT NULL,
       INDEX index_id (registered_at, role_type)
     );
-  output: ""
 MultipleColumnIndexesOptionAddWithoutUsing:
   current: |
     CREATE TABLE users (
@@ -193,8 +205,10 @@ MultipleColumnIndexesOptionAddWithoutUsing:
       role_type int(1) NOT NULL,
       INDEX index_id (registered_at, role_type)
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD INDEX `index_id` (`registered_at`, `role_type`);
+  down: |
+    ALTER TABLE `users` DROP INDEX `index_id`;
 MultipleColumnIndexesOptionAddWithoutUsingThenWith:
   current: |
     CREATE TABLE users (
@@ -210,7 +224,6 @@ MultipleColumnIndexesOptionAddWithoutUsingThenWith:
       role_type int(1) NOT NULL,
       INDEX index_id (registered_at, role_type) USING BTREE
     );
-  output: ""
 MultipleColumnIndexesOptionAddWithoutUsingThenCaseInsensitive:
   current: |
     CREATE TABLE users (
@@ -226,7 +239,6 @@ MultipleColumnIndexesOptionAddWithoutUsingThenCaseInsensitive:
       role_type int(1) NOT NULL,
       INDEX index_id (registered_at, role_type) using btree
     );
-  output: ""
 FulltextIndex:
   desired: |
     CREATE TABLE posts (
@@ -234,12 +246,14 @@ FulltextIndex:
       title varchar(40) DEFAULT NULL,
       FULLTEXT KEY title_fulltext_index (title) /*!50100 WITH PARSER ngram */
     );
-  output: |
+  up: |
     CREATE TABLE posts (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
       title varchar(40) DEFAULT NULL,
       FULLTEXT KEY title_fulltext_index (title) /*!50100 WITH PARSER ngram */
     );
+  down: |
+    DROP TABLE `posts`;
   flavor: mysql  # MariaDB doesn't support ngram parser
 FulltextIndexDrop:
   current: |
@@ -253,8 +267,10 @@ FulltextIndexDrop:
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
       title varchar(40) DEFAULT NULL
     );
-  output: |
+  up: |
     ALTER TABLE `posts` DROP INDEX `title_fulltext_index`;
+  down: |
+    ALTER TABLE `posts` ADD FULLTEXT KEY `title_fulltext_index` (`title`) WITH parser ngram;
   flavor: mysql  # MariaDB doesn't support ngram parser
 FulltextIndexReAdd:
   current: |
@@ -268,8 +284,10 @@ FulltextIndexReAdd:
       title varchar(40) DEFAULT NULL,
       FULLTEXT KEY title_fulltext_index (title) /*!50100 WITH PARSER ngram */
     );
-  output: |
+  up: |
     ALTER TABLE `posts` ADD FULLTEXT KEY `title_fulltext_index` (`title`) WITH parser ngram;
+  down: |
+    ALTER TABLE `posts` DROP INDEX `title_fulltext_index`;
   flavor: mysql  # MariaDB doesn't support ngram parser
 CreateIndex:
   current: |
@@ -286,9 +304,12 @@ CreateIndex:
     );
     CREATE INDEX index_name ON users (name);
     CREATE UNIQUE INDEX index_created_at ON users (created_at);
-  output: |
+  up: |
     CREATE INDEX index_name ON users (name);
     CREATE UNIQUE INDEX index_created_at ON users (created_at);
+  down: |
+    ALTER TABLE `users` DROP INDEX `index_created_at`;
+    ALTER TABLE `users` DROP INDEX `index_name`;
 CreateIndexDrop:
   current: |
     CREATE TABLE users (
@@ -304,9 +325,12 @@ CreateIndexDrop:
       name varchar(40) DEFAULT NULL,
       created_at datetime NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE `users` DROP INDEX `index_created_at`;
     ALTER TABLE `users` DROP INDEX `index_name`;
+  down: |
+    CREATE INDEX index_name ON users (name);
+    CREATE UNIQUE INDEX index_created_at ON users (created_at);
 CreateTableKey:
   current: |
     CREATE TABLE users (
@@ -322,9 +346,12 @@ CreateTableKey:
       KEY index_name(name),
       UNIQUE KEY index_created_at(created_at)
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD KEY `index_name` (`name`);
     ALTER TABLE `users` ADD UNIQUE KEY `index_created_at` (`created_at`);
+  down: |
+    ALTER TABLE `users` DROP INDEX `index_created_at`;
+    ALTER TABLE `users` DROP INDEX `index_name`;
 CreateTableWithUniqueColumnDrop:
   current: |
     CREATE TABLE users (
@@ -335,9 +362,11 @@ CreateTableWithUniqueColumnDrop:
     CREATE TABLE users (
       id BIGINT PRIMARY KEY
     );
-  output: |
+  up: |
     ALTER TABLE `users` DROP INDEX `name`;
     ALTER TABLE `users` DROP COLUMN `name`;
+  down: |
+    ALTER TABLE `users` ADD COLUMN `name` varchar(40) UNIQUE AFTER `id`;
 CreateTableWithUniqueColumn:
   current: |
     CREATE TABLE users (
@@ -348,8 +377,11 @@ CreateTableWithUniqueColumn:
       id BIGINT PRIMARY KEY,
       name varchar(40) UNIQUE
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD COLUMN `name` varchar(40) UNIQUE AFTER `id`;
+  down: |
+    ALTER TABLE `users` DROP INDEX `name`;
+    ALTER TABLE `users` DROP COLUMN `name`;
 CreateTableChangeUniqueColumn:
   current: |
     CREATE TABLE users (
@@ -359,8 +391,10 @@ CreateTableChangeUniqueColumn:
     CREATE TABLE users (
       name varchar(40) UNIQUE
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD UNIQUE KEY `name`(`name`);
+  down: |
+    ALTER TABLE `users` DROP INDEX `name`;
 IndexWithDot:
   current: |
     CREATE TABLE users (
@@ -373,8 +407,10 @@ IndexWithDot:
       `account_id` BIGINT,
       KEY `account.id`(account_id)
     );
-  output: |
+  up: |
     ALTER TABLE `users` ADD KEY `account.id` (`account_id`);
+  down: |
+    ALTER TABLE `users` DROP INDEX `account.id`;
 ChangeIndexCombination:
   current: |
     CREATE TABLE users (
@@ -392,8 +428,13 @@ ChangeIndexCombination:
       KEY `index_users1`(account_id, name),
       KEY `index_users2`(account_id)
     );
-  output: |
+  up: |
     ALTER TABLE `users` DROP INDEX `index_users1`;
     ALTER TABLE `users` ADD KEY `index_users1` (`account_id`, `name`);
     ALTER TABLE `users` DROP INDEX `index_users2`;
     ALTER TABLE `users` ADD KEY `index_users2` (`account_id`);
+  down: |
+    ALTER TABLE `users` DROP INDEX `index_users1`;
+    ALTER TABLE `users` ADD KEY `index_users1` (`account_id`);
+    ALTER TABLE `users` DROP INDEX `index_users2`;
+    ALTER TABLE `users` ADD KEY `index_users2` (`account_id`, `name`);

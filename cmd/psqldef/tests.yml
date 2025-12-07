@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 CreateTable:
   desired: |
     CREATE TABLE users (
@@ -24,8 +26,12 @@ DropTable:
       name text,
       age integer
     );
-  output: |
+  up: |
     DROP TABLE "public"."bigdata";
+  down: |
+    CREATE TABLE bigdata (
+      data bigint
+    );
 EmptyTable:
   desired: |
     CREATE TABLE public.test ();
@@ -58,8 +64,10 @@ CreateTableWithDefaultContainingQuote:
     CREATE TABLE test (
       thing text default 'it''s free real estate'
     );
-  output: |
+  up: |
     ALTER TABLE "public"."test" ADD COLUMN "thing" text DEFAULT 'it''s free real estate';
+  down: |
+    ALTER TABLE "public"."test" DROP COLUMN "thing";
 CreateTableChangeDefaultBoolean:
   current: |
     CREATE TABLE test (
@@ -69,8 +77,10 @@ CreateTableChangeDefaultBoolean:
     CREATE TABLE test (
       col boolean default false
     );
-  output: |
+  up: |
     ALTER TABLE "public"."test" ALTER COLUMN "col" SET DEFAULT false;
+  down: |
+    ALTER TABLE "public"."test" ALTER COLUMN "col" SET DEFAULT true;
 ParseTextCheckConstraint:
   current: |
     CREATE TABLE test (
@@ -80,8 +90,10 @@ ParseTextCheckConstraint:
     CREATE TABLE test (
       col text NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_col_check";
+  down: |
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_col_check" CHECK (col <> '');
 CheckConstraintWithReservedWordColumnName:
   desired: |
     CREATE TABLE test (
@@ -98,8 +110,10 @@ DropPrimaryKey:
       id bigint NOT NULL,
       name text
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";
+  down: |
+    ALTER TABLE "public"."users" ADD PRIMARY KEY ("id");
 ParseAllAnyCheckConstraint:
   current: |
     CREATE TABLE test (
@@ -113,10 +127,14 @@ ParseAllAnyCheckConstraint:
       n2 int CHECK (n2 = ALL (ARRAY[1, 2, 3])),
       t1 text CHECK (t1 = SOME (ARRAY['x', 'y']))
     );
-  output: |
+  up: |
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_n1_check" CHECK (n1 = ANY (ARRAY[1, 2, 3]));
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_n2_check" CHECK (n2 = ALL (ARRAY[1, 2, 3]));
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_t1_check" CHECK (t1 = ANY (ARRAY['x', 'y']));
+  down: |
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_n1_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_n2_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_t1_check";
 AllAnySomeCheckConstraintsCreate:
   desired: |
     CREATE TABLE test_all_any (
@@ -143,9 +161,12 @@ AllAnySomeCheckConstraintsModifyAll:
       some_text TEXT CHECK (some_text = SOME (ARRAY['valid', 'allowed'])),
       score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
     );
-  output: |
+  up: |
     ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_all_positive_check";
     ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_all_positive_check" CHECK (all_positive = ALL (ARRAY[2, 3, 4]));
+  down: |
+    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_all_positive_check";
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_all_positive_check" CHECK (all_positive = ALL (ARRAY[1, 2, 3]));
 AllAnySomeCheckConstraintsModifySome:
   current: |
     CREATE TABLE test_all_any (
@@ -163,9 +184,12 @@ AllAnySomeCheckConstraintsModifySome:
       some_text TEXT CHECK (some_text = SOME (ARRAY['updated', 'modified', 'changed'])),
       score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
     );
-  output: |
+  up: |
     ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_some_text_check";
     ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_some_text_check" CHECK (some_text = ANY (ARRAY['updated', 'modified', 'changed']));
+  down: |
+    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_some_text_check";
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_some_text_check" CHECK (some_text = ANY (ARRAY['valid', 'allowed']));
 AllAnySomeCheckConstraintsRemove:
   current: |
     CREATE TABLE test_all_any (
@@ -183,11 +207,16 @@ AllAnySomeCheckConstraintsRemove:
       some_text TEXT,
       score INTEGER
     );
-  output: |
+  up: |
     ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_state_check";
     ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_all_positive_check";
     ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_some_text_check";
     ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_score_check";
+  down: |
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_state_check" CHECK (state = ANY (ARRAY['active', 'pending']));
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_all_positive_check" CHECK (all_positive = ALL (ARRAY[2, 3, 4]));
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_some_text_check" CHECK (some_text = ANY (ARRAY['updated', 'modified', 'changed']));
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_score_check" CHECK (score > ALL (ARRAY[0, 10, 20]));
 SomeConstraintModificationsCreate:
   desired: |
     CREATE TABLE test_some_modify (
@@ -208,11 +237,16 @@ SomeConstraintModificationsModify:
       status TEXT CHECK (status = SOME (ARRAY['active', 'completed', 'archived'])),
       category TEXT CHECK (category = SOME (ARRAY['X', 'Y', 'Z']))
     );
-  output: |
+  up: |
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_status_check";
     ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ANY (ARRAY['active', 'completed', 'archived']));
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
     ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ANY (ARRAY['X', 'Y', 'Z']));
+  down: |
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_status_check";
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ANY (ARRAY['active', 'pending', 'draft']));
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ANY (ARRAY['A', 'B', 'C']));
 SomeConstraintModificationsSomeToAny:
   current: |
     CREATE TABLE test_some_modify (
@@ -226,7 +260,6 @@ SomeConstraintModificationsSomeToAny:
       status TEXT CHECK (status = ANY (ARRAY['active', 'completed', 'archived'])),
       category TEXT CHECK (category = ANY (ARRAY['X', 'Y', 'Z']))
     );
-  output: ""
 SomeConstraintModificationsSomeToAll:
   current: |
     CREATE TABLE test_some_modify (
@@ -240,11 +273,16 @@ SomeConstraintModificationsSomeToAll:
       status TEXT CHECK (status = ALL (ARRAY['active', 'completed', 'archived'])),
       category TEXT CHECK (category = ALL (ARRAY['X', 'Y', 'Z']))
     );
-  output: |
+  up: |
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_status_check";
     ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ALL (ARRAY['active', 'completed', 'archived']));
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
     ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ALL (ARRAY['X', 'Y', 'Z']));
+  down: |
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_status_check";
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ANY (ARRAY['active', 'completed', 'archived']));
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ANY (ARRAY['X', 'Y', 'Z']));
 NullCast:
   desired: |
     CREATE TABLE public.test (
@@ -268,8 +306,10 @@ CreateIndexConcurrently:
       name VARCHAR(128) DEFAULT 'konsumer'
     );
     CREATE INDEX CONCURRENTLY username on users (name);
-  output: |
+  up: |
     CREATE INDEX CONCURRENTLY username on users (name);
+  down: |
+    DROP INDEX "public"."username";
 CreateIndexWithCoalesce:
   current: |
     CREATE TABLE users (
@@ -282,8 +322,10 @@ CreateIndexWithCoalesce:
       user_name TEXT
     );
     CREATE INDEX create_index_with_function_call ON users (name, COALESCE(user_name, 'NO_NAME'::TEXT));
-  output: |
+  up: |
     CREATE INDEX create_index_with_function_call ON users (name, COALESCE(user_name, 'NO_NAME'::TEXT));
+  down: |
+    DROP INDEX "public"."create_index_with_function_call";
 CreateIndexWithBoolExpr:
   current: |
     CREATE TABLE users (
@@ -294,8 +336,10 @@ CreateIndexWithBoolExpr:
       is_active BOOLEAN
     );
     CREATE INDEX create_index_with_bool ON users ((CASE WHEN is_active IS TRUE THEN 1 ELSE 0 END));
-  output: |
+  up: |
     CREATE INDEX create_index_with_bool ON users ((CASE WHEN is_active IS TRUE THEN 1 ELSE 0 END));
+  down: |
+    DROP INDEX "public"."create_index_with_bool";
 AlterTypeAddValue:
   current: |
     CREATE TYPE eventtype AS ENUM (
@@ -319,9 +363,10 @@ AlterTypeAddValue:
       id UUID NOT NULL PRIMARY KEY,
       event_type eventtype NOT NULL
     );
-  output: |
+  up: |
     ALTER TYPE "public"."eventtype" ADD VALUE 'send_meeting_options';
     ALTER TYPE "public"."eventtype" ADD VALUE 'update_reactionslot';
+  down: ""
   min_version: '12'
 AlterTypeAddValueWithSameTypeNameInDifferentSchema:
   current: |
@@ -345,8 +390,9 @@ AlterTypeAddValueWithSameTypeNameInDifferentSchema:
       'en',
       'de'
     );
-  output: |
+  up: |
     ALTER TYPE "schema2"."lang" ADD VALUE 'de';
+  down: ""
   min_version: '12'
 AddEnumTypeColumn:
   current: |
@@ -363,13 +409,14 @@ AddEnumTypeColumn:
       id UUID NOT NULL PRIMARY KEY,
       lang s.lang NOT NULL
     );
-  output: |
+  up: |
     CREATE TYPE s.lang AS ENUM (
       'ja',
       'en'
     );
     ALTER TABLE "s"."users" ADD COLUMN "lang" s.lang NOT NULL;
-
+  down: |
+    ALTER TABLE "s"."users" DROP COLUMN "lang";
 CreateTypeWithMultipleTables:
   desired: |
     CREATE TYPE order_status AS ENUM ('pending', 'shipped');
@@ -431,7 +478,7 @@ PosixRegexCheckConstraint:
       posix_not_regex    text NOT NULL CHECK (posix_not_regex    !~  '[a-z]'),
       posix_not_regex_ci text NOT NULL CHECK (posix_not_regex_ci !~* '[a-z]')
     );
-  output: |
+  up: |
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_regex_check";
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_regex_check" CHECK (posix_regex ~ '[a-z]');
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_regex_ci_check";
@@ -440,6 +487,15 @@ PosixRegexCheckConstraint:
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_not_regex_check" CHECK (posix_not_regex !~ '[a-z]');
     ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_not_regex_ci_check";
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_not_regex_ci_check" CHECK (posix_not_regex_ci !~* '[a-z]');
+  down: |
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_regex_check";
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_regex_check" CHECK (posix_regex ~ '[0-9]');
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_regex_ci_check";
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_regex_ci_check" CHECK (posix_regex_ci ~* '[0-9]');
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_not_regex_check";
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_not_regex_check" CHECK (posix_not_regex !~ '[0-9]');
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_not_regex_ci_check";
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_not_regex_ci_check" CHECK (posix_not_regex_ci !~* '[0-9]');
 IndexAndForeignOrder:
   desired: |
     CREATE TABLE posts (
@@ -452,7 +508,7 @@ IndexAndForeignOrder:
       id bigint NOT NULL
     );
     CREATE UNIQUE INDEX uniq_idx ON users (id);
-  output: |
+  up: |
     CREATE TABLE posts (
       id bigint NOT NULL,
       user_id bigint NOT NULL,
@@ -463,6 +519,9 @@ IndexAndForeignOrder:
     );
     CREATE UNIQUE INDEX uniq_idx ON users (id);
     ALTER TABLE posts ADD CONSTRAINT "user_id_key" FOREIGN KEY ("user_id") REFERENCES users ("id");
+  down: |
+    DROP TABLE "public"."posts";
+    DROP TABLE "public"."users";
 ForeignKeyConstraintsAreEmittedLast:
   current: |
     CREATE TABLE foos ( dummy_column text );
@@ -475,7 +534,7 @@ ForeignKeyConstraintsAreEmittedLast:
     CREATE TABLE bars (
       bar_id bigint PRIMARY KEY
     );
-  output: |
+  up: |
     ALTER TABLE "public"."bars" ADD COLUMN "bar_id" bigint NOT NULL;
     ALTER TABLE "public"."bars" ADD PRIMARY KEY ("bar_id");
     ALTER TABLE "public"."foos" ADD COLUMN "foo_id" bigint NOT NULL;
@@ -484,6 +543,15 @@ ForeignKeyConstraintsAreEmittedLast:
     ALTER TABLE "public"."foos" ADD CONSTRAINT "foos_bar_id_fkey" FOREIGN KEY ("bar_id") REFERENCES "public"."bars" ("bar_id");
     ALTER TABLE "public"."bars" DROP COLUMN "dummy_column";
     ALTER TABLE "public"."foos" DROP COLUMN "dummy_column";
+  down: |
+    ALTER TABLE "public"."foos" ADD COLUMN "dummy_column" text;
+    ALTER TABLE "public"."foos" DROP CONSTRAINT "foos_pkey";
+    ALTER TABLE "public"."bars" ADD COLUMN "dummy_column" text;
+    ALTER TABLE "public"."foos" DROP CONSTRAINT "foos_bar_id_fkey";
+    ALTER TABLE "public"."bars" DROP CONSTRAINT "bars_pkey";
+    ALTER TABLE "public"."bars" DROP COLUMN "bar_id";
+    ALTER TABLE "public"."foos" DROP COLUMN "bar_id";
+    ALTER TABLE "public"."foos" DROP COLUMN "foo_id";
 ForeignKeyOnReservedName:
   current: |
     CREATE TABLE "public"."companies" (
@@ -519,9 +587,12 @@ ForeignKeyOnReservedName:
       name VARCHAR(100),
       CONSTRAINT users_variable_id_fk FOREIGN KEY (variable_id) REFERENCES variables(id)
     );
-  output: |
+  up: |
     ALTER TABLE "public"."variables" ADD CONSTRAINT "variables_company_id_fkey" FOREIGN KEY ("company_id") REFERENCES "public"."companies" ("id");
     ALTER TABLE "public"."users" ADD CONSTRAINT "users_variable_id_fk" FOREIGN KEY ("variable_id") REFERENCES "public"."variables" ("id");
+  down: |
+    ALTER TABLE "public"."users" DROP CONSTRAINT "users_variable_id_fk";
+    ALTER TABLE "public"."variables" DROP CONSTRAINT "variables_company_id_fkey";
 NumericChangePrecisionAndScale:
   current: |
     CREATE TABLE test (
@@ -531,8 +602,10 @@ NumericChangePrecisionAndScale:
     CREATE TABLE test (
       num numeric (10, 2)
     );
-  output: |
+  up: |
     ALTER TABLE "public"."test" ALTER COLUMN "num" TYPE numeric(10, 2);
+  down: |
+    ALTER TABLE "public"."test" ALTER COLUMN "num" TYPE numeric(10, 3);
 CheckConstraint:
   current: |
     CREATE TABLE test (
@@ -558,7 +631,7 @@ CheckConstraint:
       d1 date CHECK (d1 >= '2022-01-01'::date),
       d2 date CHECK (d2 >= date '2022-01-01')
     );
-  output: |
+  up: |
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_n1_check" CHECK (n1 = 0 or not n1 > 10 and n1 is not null);
     ALTER TABLE "public"."test" ADD CONSTRAINT "chk" CHECK (n2 > 0);
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_n3_check" CHECK (n3 > 0) NO INHERIT;
@@ -568,7 +641,16 @@ CheckConstraint:
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_t4_check" CHECK (t4 ~ '[0-9]');
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_d1_check" CHECK (d1 >= '2022-01-01');
     ALTER TABLE "public"."test" ADD CONSTRAINT "test_d2_check" CHECK (d2 >= '2022-01-01');
-
+  down: |
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_n1_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "chk";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_n3_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_t1_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_t2_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_t3_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_t4_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_d1_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_d2_check";
 CheckConstraintWithRowConstructor:
   desired: |
     CREATE TABLE test (
@@ -601,8 +683,10 @@ CompositeForeignKeyConstraint:
       PRIMARY KEY (id1, id2),
       CONSTRAINT fk FOREIGN KEY (id1, id2) REFERENCES t1 (id1, id2)
     );
-  output: |
+  up: |
     ALTER TABLE "public"."t2" ADD CONSTRAINT "fk" FOREIGN KEY ("id1","id2") REFERENCES "public"."t1" ("id1","id2");
+  down: |
+    ALTER TABLE "public"."t2" DROP CONSTRAINT "fk";
 IntervalExpression:
   desired: |
     CREATE TABLE points (id bigint, created_at timestamp, main_type text, sub_type text, user_id bigint);
@@ -637,10 +721,14 @@ Comment:
     COMMENT ON TABLE public.hoge is 'hoge table';
     COMMENT ON COLUMN public.hoge.id is 'hoge id';
     COMMENT ON COLUMN public.hoge.foo is 'foo comment';
-  output: |
+  up: |
     COMMENT ON TABLE public.hoge is 'hoge table';
     COMMENT ON COLUMN public.hoge.id is 'hoge id';
     COMMENT ON COLUMN public.hoge.foo is 'foo comment';
+  down: |
+    COMMENT ON TABLE "public"."hoge" IS NULL;
+    COMMENT ON COLUMN "public"."hoge"."id" IS NULL;
+    COMMENT ON COLUMN "public"."hoge"."foo" IS NULL;
 MultipleComments:
   current: |
     CREATE TABLE "public"."hoge" (
@@ -665,8 +753,10 @@ MultipleComments:
 
     COMMENT ON COLUMN public.hoge.id is 'hoge id';
     COMMENT ON COLUMN public.bar.id is 'bar id';
-  output: |
+  up: |
     COMMENT ON COLUMN public.bar.id is 'bar id';
+  down: |
+    COMMENT ON COLUMN "public"."bar"."id" IS NULL;
 UpdateComment:
   current: |
     CREATE TABLE "public"."hoge" (
@@ -696,9 +786,12 @@ UpdateComment:
     COMMENT ON COLUMN public.hoge.id is 'hoge id updated';
     COMMENT ON TABLE public.bar is 'bar table';
     COMMENT ON COLUMN public.bar.id is 'bar id';
-  output: |
+  up: |
     COMMENT ON TABLE public.hoge is 'hoge table updated';
     COMMENT ON COLUMN public.hoge.id is 'hoge id updated';
+  down: |
+    COMMENT ON TABLE public.hoge is 'hoge table';
+    COMMENT ON COLUMN public.hoge.id is 'hoge id';
 CommentOnNonStandardDefaultSchema:
   current: |
     CREATE TABLE foo.users (
@@ -710,11 +803,14 @@ CommentOnNonStandardDefaultSchema:
     );
     COMMENT ON TABLE foo.users is 'users table updated';
     COMMENT ON COLUMN foo.users.id is 'users id';
-  output: |
+  up: |
     COMMENT ON TABLE foo.users is 'users table updated';
     COMMENT ON COLUMN foo.users.id is 'users id';
+  down: |
+    COMMENT ON TABLE "foo"."users" IS NULL;
+    COMMENT ON COLUMN "foo"."users"."id" IS NULL;
   user: psqldef_user
-# This test removes existing comments by setting them to NULL
+
 CommentUnset:
   current: |
     CREATE TABLE users (
@@ -728,9 +824,12 @@ CommentUnset:
     );
     COMMENT ON TABLE users IS NULL;
     COMMENT ON COLUMN users.id IS null;
-  output: |
+  up: |
     COMMENT ON TABLE public.users IS NULL;
     COMMENT ON COLUMN public.users.id IS null;
+  down: |
+    COMMENT ON TABLE public.users IS 'users table is before update';
+    COMMENT ON COLUMN public.users.id IS 'users id column is before update';
 CommentNullWhenAlreadyNull:
   current: |
     CREATE TABLE "status" (
@@ -741,7 +840,6 @@ CommentNullWhenAlreadyNull:
       "id" bigint NOT NULL
     );
     COMMENT ON COLUMN "status"."id" IS NULL;
-  output: ""
 CommentWithoutSchema:
   current: |
     CREATE TABLE users (
@@ -753,9 +851,12 @@ CommentWithoutSchema:
     );
     COMMENT ON TABLE users is 'users table is updated';
     COMMENT ON COLUMN users.id is 'users id column is updated';
-  output: |
+  up: |
     COMMENT ON TABLE foo.users is 'users table is updated';
     COMMENT ON COLUMN foo.users.id is 'users id column is updated';
+  down: |
+    COMMENT ON TABLE "foo"."users" IS NULL;
+    COMMENT ON COLUMN "foo"."users"."id" IS NULL;
   user: psqldef_user # in cmd/psqldef/psqldef_test.go schema 'foo' is used if 'user' is provided.
 CommentWithoutSchemaWithoutTableNameQuoted:
   current: |
@@ -772,10 +873,14 @@ CommentWithoutSchemaWithoutTableNameQuoted:
     COMMENT ON COLUMN users.id IS 'users.id column is updated';
     COMMENT ON COLUMN users."update" IS '"users."update" column is updated';
   # Default schema 'public' is needed be prefixed in output to prevent false positive detection of DDL change.
-  output: |
+  up: |
     COMMENT ON TABLE public.users IS 'users table is updated';
     COMMENT ON COLUMN public.users.id IS 'users.id column is updated';
     COMMENT ON COLUMN public.users."update" IS '"users."update" column is updated';
+  down: |
+    COMMENT ON TABLE "public"."users" IS NULL;
+    COMMENT ON COLUMN "public"."users"."id" IS NULL;
+    COMMENT ON COLUMN "public"."users"."update" IS NULL;
 CommentWithoutSchemaWithTableNameQuoted:
   current: |
     CREATE TABLE "select" (
@@ -791,11 +896,14 @@ CommentWithoutSchemaWithTableNameQuoted:
     COMMENT ON COLUMN "select".id IS '"select".id column is updated';
     COMMENT ON COLUMN "select"."update" IS '"select"."update" column is updated';
   # Default schema 'public' is needed be prefixed in output to prevent false positive detection of DDL change.
-  output: |
+  up: |
     COMMENT ON TABLE public."select" IS '"select" table is updated';
     COMMENT ON COLUMN public."select".id IS '"select".id column is updated';
     COMMENT ON COLUMN public."select"."update" IS '"select"."update" column is updated';
-
+  down: |
+    COMMENT ON TABLE "public"."select" IS NULL;
+    COMMENT ON COLUMN "public"."select"."id" IS NULL;
+    COMMENT ON COLUMN "public"."select"."update" IS NULL;
 CommentContainingQuote:
   current: |
     CREATE TABLE public.test (
@@ -807,37 +915,49 @@ CommentContainingQuote:
     );
     COMMENT ON TABLE public.test is 'World''s best table';
     COMMENT ON COLUMN public.test.email is 'The user''s contact email address.';
-  output: |
+  up: |
     COMMENT ON TABLE public.test is 'World''s best table';
     COMMENT ON COLUMN public.test.email is 'The user''s contact email address.';
+  down: |
+    COMMENT ON TABLE "public"."test" IS NULL;
+    COMMENT ON COLUMN "public"."test"."email" IS NULL;
 CreateExtension:
   current: |
     CREATE EXTENSION pgcrypto;
   desired: |
     CREATE EXTENSION pgcrypto;
     CREATE EXTENSION btree_gist;
-  output: |
+  up: |
     CREATE EXTENSION btree_gist;
+  down: |
+    DROP EXTENSION "btree_gist";
 DropExtension:
   current: |
     CREATE EXTENSION pgcrypto;
     CREATE EXTENSION btree_gist;
   desired:
     CREATE EXTENSION btree_gist;
-  output: |
+  up: |
     DROP EXTENSION "pgcrypto";
+  down: |
+    CREATE EXTENSION pgcrypto;
 CreateExtensionIfNotExists:
   desired: |
     CREATE EXTENSION IF NOT EXISTS pgcrypto;
-  output: |
+  up: |
     CREATE EXTENSION IF NOT EXISTS pgcrypto;
+  down: |
+    DROP EXTENSION "pgcrypto";
 CreateExtensionOrder:
   desired: |
     CREATE TABLE hoge (id UUID DEFAULT gen_random_uuid());
     CREATE EXTENSION IF NOT EXISTS pgcrypto;
-  output: |
+  up: |
     CREATE EXTENSION IF NOT EXISTS pgcrypto;
     CREATE TABLE hoge (id UUID DEFAULT gen_random_uuid());
+  down: |
+    DROP TABLE "public"."hoge";
+    DROP EXTENSION "pgcrypto";
 CreateTableAlterColumn:
   current: |
     CREATE TABLE users (
@@ -849,8 +969,10 @@ CreateTableAlterColumn:
       id bigint NOT NULL,
       name varchar(40)
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" ALTER COLUMN "name" TYPE varchar(40);
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" TYPE text;
 CreateTableAddColumn:
   current: |
     CREATE TABLE users (
@@ -863,8 +985,10 @@ CreateTableAddColumn:
       name text,
       age integer
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" ADD COLUMN "age" integer;
+  down: |
+    ALTER TABLE "public"."users" DROP COLUMN "age";
 CreateTableDropColumn:
   current: |
     CREATE TABLE users (
@@ -877,8 +1001,10 @@ CreateTableDropColumn:
       id bigint NOT NULL,
       age integer
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" DROP COLUMN "name";
+  down: |
+    ALTER TABLE "public"."users" ADD COLUMN "name" text;
 IndexesOnExpressions:
   current: |
     CREATE TABLE public.test (
@@ -889,8 +1015,10 @@ IndexesOnExpressions:
       col JSONB
     );
     CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo', 'bar'));
-  output: |
+  up: |
     CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo', 'bar'));
+  down: |
+    DROP INDEX "public"."function_index";
 IndexesOnChangedExpressions:
   current: |
     CREATE TABLE public.test (
@@ -902,9 +1030,12 @@ IndexesOnChangedExpressions:
       col JSONB
     );
     CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo'));
-  output: |
+  up: |
     DROP INDEX "public"."function_index";
     CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo'));
+  down: |
+    DROP INDEX "public"."function_index";
+    CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo', 'bar'));
 EscapeUniqueIndexQuery:
   current: |
     CREATE TABLE "userTable" (
@@ -919,8 +1050,10 @@ EscapeUniqueIndexQuery:
         "lastName" text
     );
     ALTER TABLE "public"."userTable" ADD CONSTRAINT "uq:fullName" UNIQUE ("firstName", "lastName");
-  output: |
+  up: |
     ALTER TABLE "public"."userTable" ADD CONSTRAINT "uq:fullName" UNIQUE ("firstName", "lastName");
+  down: |
+    ALTER TABLE "public"."userTable" DROP CONSTRAINT "uq:fullName";
 AddArrayColumn:
   current: |
     CREATE TABLE users (
@@ -931,8 +1064,10 @@ AddArrayColumn:
       id integer,
       name integer[]
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" ADD COLUMN "name" integer[];
+  down: |
+    ALTER TABLE "public"."users" DROP COLUMN "name";
 AddForeignKeyWithAlter:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY);
@@ -947,8 +1082,10 @@ AddForeignKeyWithAlter:
       user_id bigint
     );
     ALTER TABLE ONLY public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;
-  output: |
+  up: |
     ALTER TABLE ONLY public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;
+  down: |
+    ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";
 AddDifferentForeignKeyWithSameName:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY);
@@ -964,9 +1101,12 @@ AddDifferentForeignKeyWithSameName:
       user_id bigint
     );
     ALTER TABLE ONLY public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON UPDATE CASCADE;
-  output: |
+  up: |
     ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";
     ALTER TABLE ONLY public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON UPDATE CASCADE;
+  down: |
+    ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";
+    ALTER TABLE ONLY public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;
 CreateTableOnNonStandardDefaultSchema:
   desired: |
     CREATE TABLE users (
@@ -994,8 +1134,12 @@ DropTableOnNonStandardDefaultSchema:
       name text,
       age integer
     );
-  output: |
+  up: |
     DROP TABLE "foo"."bigdata";
+  down: |
+    CREATE TABLE bigdata (
+      data bigint
+    );
   user: psqldef_user
 
 # Regression: boolean type must not be schema-qualified on non-public schema
@@ -1009,8 +1153,10 @@ AddBooleanColumnOnNonStandardDefaultSchema:
       id integer,
       requires_consent boolean NOT NULL DEFAULT true
     );
-  output: |
+  up: |
     ALTER TABLE "foo"."items" ADD COLUMN "requires_consent" boolean NOT NULL DEFAULT true;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "requires_consent";
   user: psqldef_user
 
 AddBooleanColumnWithExplicitSchema:
@@ -1023,8 +1169,10 @@ AddBooleanColumnWithExplicitSchema:
       id integer,
       requires_consent boolean NOT NULL DEFAULT true
     );
-  output: |
+  up: |
     ALTER TABLE "foo"."items" ADD COLUMN "requires_consent" boolean NOT NULL DEFAULT true;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "requires_consent";
   user: psqldef_user
 
 # User-defined enum type on non-public default schema (unqualified type usage)
@@ -1043,12 +1191,14 @@ AddEnumTypeColumnOnNonStandardDefaultSchema:
       id integer,
       lang lang NOT NULL
     );
-  output: |
+  up: |
     CREATE TYPE lang AS ENUM (
       'ja',
       'en'
     );
     ALTER TABLE "foo"."items" ADD COLUMN "lang" lang NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "lang";
   user: psqldef_user
 
 # User-defined enum type on non-public default schema (explicit schema usage)
@@ -1067,12 +1217,14 @@ AddEnumTypeColumnWithExplicitSchemaOnNonStandardDefaultSchema:
       id integer,
       lang foo.lang NOT NULL
     );
-  output: |
+  up: |
     CREATE TYPE foo.lang AS ENUM (
       'ja',
       'en'
     );
     ALTER TABLE "foo"."items" ADD COLUMN "lang" foo.lang NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "lang";
   user: psqldef_user
 
 # Built-in types must not be schema-qualified on non-public schema
@@ -1086,8 +1238,10 @@ AddIntegerColumnOnNonStandardDefaultSchema:
       id integer,
       count integer NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "foo"."items" ADD COLUMN "count" integer NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "count";
   user: psqldef_user
 
 AddTextColumnOnNonStandardDefaultSchema:
@@ -1100,8 +1254,10 @@ AddTextColumnOnNonStandardDefaultSchema:
       id integer,
       description text NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "foo"."items" ADD COLUMN "description" text NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "description";
   user: psqldef_user
 
 AddVarcharColumnOnNonStandardDefaultSchema:
@@ -1114,8 +1270,10 @@ AddVarcharColumnOnNonStandardDefaultSchema:
       id integer,
       name varchar(255) NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "foo"."items" ADD COLUMN "name" varchar(255) NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "name";
   user: psqldef_user
 
 AddNumericColumnOnNonStandardDefaultSchema:
@@ -1128,8 +1286,10 @@ AddNumericColumnOnNonStandardDefaultSchema:
       id integer,
       amount numeric(10, 2) NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "foo"."items" ADD COLUMN "amount" numeric(10, 2) NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "amount";
   user: psqldef_user
 
 AddUUIDColumnOnNonStandardDefaultSchema:
@@ -1142,8 +1302,10 @@ AddUUIDColumnOnNonStandardDefaultSchema:
       id integer,
       uuid_col uuid NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "foo"."items" ADD COLUMN "uuid_col" uuid NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "uuid_col";
   user: psqldef_user
 
 AddJSONBColumnOnNonStandardDefaultSchema:
@@ -1156,8 +1318,10 @@ AddJSONBColumnOnNonStandardDefaultSchema:
       id integer,
       meta jsonb NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "foo"."items" ADD COLUMN "meta" jsonb NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "meta";
   user: psqldef_user
 
 AddTimestampColumnOnNonStandardDefaultSchema:
@@ -1170,8 +1334,10 @@ AddTimestampColumnOnNonStandardDefaultSchema:
       id integer,
       ts timestamp NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "foo"."items" ADD COLUMN "ts" timestamp NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "ts";
   user: psqldef_user
 
 AddTimestamptzColumnOnNonStandardDefaultSchema:
@@ -1184,8 +1350,10 @@ AddTimestamptzColumnOnNonStandardDefaultSchema:
       id integer,
       ts_tz timestamptz NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "foo"."items" ADD COLUMN "ts_tz" timestamp WITH TIME ZONE NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "ts_tz";
   user: psqldef_user
 
 AddTimetzColumnOnNonStandardDefaultSchema:
@@ -1198,8 +1366,10 @@ AddTimetzColumnOnNonStandardDefaultSchema:
       id integer,
       time_tz timetz NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "foo"."items" ADD COLUMN "time_tz" time WITH TIME ZONE NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "time_tz";
   user: psqldef_user
 
 AddDoublePrecisionColumnOnNonStandardDefaultSchema:
@@ -1212,8 +1382,10 @@ AddDoublePrecisionColumnOnNonStandardDefaultSchema:
       id integer,
       dp double precision NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "foo"."items" ADD COLUMN "dp" double precision NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "dp";
   user: psqldef_user
 
 AddRealColumnOnNonStandardDefaultSchema:
@@ -1226,8 +1398,10 @@ AddRealColumnOnNonStandardDefaultSchema:
       id integer,
       rp real NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "foo"."items" ADD COLUMN "rp" real NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "rp";
   user: psqldef_user
 
 AddByteaColumnOnNonStandardDefaultSchema:
@@ -1240,8 +1414,10 @@ AddByteaColumnOnNonStandardDefaultSchema:
       id integer,
       data bytea NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "foo"."items" ADD COLUMN "data" bytea NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "data";
   user: psqldef_user
 ChangeTimezone:
   current: |
@@ -1266,7 +1442,7 @@ ChangeTimezone:
       time_at3 time WITH TIME ZONE NOT NULL,
       time_at4 time WITH TIME ZONE NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at1" TYPE timestamp;
     ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at2" TYPE timestamp;
     ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at3" TYPE timestamp WITH TIME ZONE;
@@ -1275,6 +1451,15 @@ ChangeTimezone:
     ALTER TABLE "public"."test" ALTER COLUMN "time_at2" TYPE time;
     ALTER TABLE "public"."test" ALTER COLUMN "time_at3" TYPE time WITH TIME ZONE;
     ALTER TABLE "public"."test" ALTER COLUMN "time_at4" TYPE time WITH TIME ZONE;
+  down: |
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at1" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at2" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at3" TYPE timestamp;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at4" TYPE timestamp;
+    ALTER TABLE "public"."test" ALTER COLUMN "time_at1" TYPE time WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "time_at2" TYPE time WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "time_at3" TYPE time;
+    ALTER TABLE "public"."test" ALTER COLUMN "time_at4" TYPE time;
 ChangeTimezoneSyntax:
   current: |
     CREATE TABLE test (
@@ -1300,11 +1485,16 @@ ChangeTimezoneSyntax:
       timestamp_plain_tz    timestamptz,
       timestamp_plain_plain timestamp
     );
-  output: |
+  up: |
     ALTER TABLE "public"."test" ALTER COLUMN "timestamp_wtz_plain" TYPE timestamp;
     ALTER TABLE "public"."test" ALTER COLUMN "timestamp_tz_plain" TYPE timestamp;
     ALTER TABLE "public"."test" ALTER COLUMN "timestamp_plain_wtz" TYPE timestamp WITH TIME ZONE;
     ALTER TABLE "public"."test" ALTER COLUMN "timestamp_plain_tz" TYPE timestamp WITH TIME ZONE;
+  down: |
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_wtz_plain" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_tz_plain" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_plain_wtz" TYPE timestamp;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_plain_tz" TYPE timestamp;
 CreateTableAddTimestampColumn:
   current: |
     CREATE TABLE users (
@@ -1320,9 +1510,12 @@ CreateTableAddTimestampColumn:
       timestamp_with_tz timestamp WITH TIME ZONE,
       timestamp_without_tz timestamp WITHOUT TIME ZONE
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" ADD COLUMN "timestamp_with_tz" timestamp WITH TIME ZONE;
     ALTER TABLE "public"."users" ADD COLUMN "timestamp_without_tz" timestamp;
+  down: |
+    ALTER TABLE "public"."users" DROP COLUMN "timestamp_without_tz";
+    ALTER TABLE "public"."users" DROP COLUMN "timestamp_with_tz";
 AddColumnWithDefaultExpression:
   current: |
     CREATE EXTENSION "uuid-ossp";
@@ -1333,8 +1526,10 @@ AddColumnWithDefaultExpression:
       id bigint NOT NULL,
       "key" uuid NOT NULL DEFAULT uuid_generate_v4()
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" ADD COLUMN "key" uuid NOT NULL DEFAULT uuid_generate_v4();
+  down: |
+    ALTER TABLE "public"."users" DROP COLUMN "key";
 AddDefaultExpression:
   current: |
     CREATE EXTENSION "uuid-ossp";
@@ -1348,8 +1543,10 @@ AddDefaultExpression:
       id bigint NOT NULL,
       "key" uuid NOT NULL DEFAULT uuid_generate_v4()
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" ALTER COLUMN "key" SET DEFAULT uuid_generate_v4();
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "key" DROP DEFAULT;
 RemoveDefaultExpression:
   current: |
     CREATE EXTENSION "uuid-ossp";
@@ -1363,8 +1560,10 @@ RemoveDefaultExpression:
       id bigint NOT NULL,
       "key" uuid NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" ALTER COLUMN "key" DROP DEFAULT;
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "key" SET DEFAULT uuid_generate_v4();
 ChangeDefaultExpressionWithAddition:
   current: |
     CREATE TABLE public.foo (
@@ -1374,8 +1573,10 @@ ChangeDefaultExpressionWithAddition:
     CREATE TABLE public.foo (
       expires_at timestamp with time zone NOT NULL DEFAULT (CURRENT_TIMESTAMP + '3 days'::interval)
     );
-  output: |
+  up: |
     ALTER TABLE "public"."foo" ALTER COLUMN "expires_at" SET DEFAULT current_timestamp + '3 days'::interval;
+  down: |
+    ALTER TABLE "public"."foo" ALTER COLUMN "expires_at" SET DEFAULT current_timestamp + '1 day'::interval;
 CreateTableAddAbsentForeignKey:
   current: |
     CREATE TABLE users (
@@ -1393,8 +1594,10 @@ CreateTableAddAbsentForeignKey:
       content TEXT,
       user_id INT REFERENCES users(id)
     );
-  output: |
+  up: |
     ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id");
+  down: |
+    ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_user_id_fkey";
 CreateTableWithConstraintOptions:
   current: |
     CREATE TABLE images (
@@ -1430,13 +1633,20 @@ CreateTableWithConstraintOptions:
       CONSTRAINT image_owner_fk FOREIGN KEY (image_owner_type, image_owner_id) REFERENCES image_owners(type, id) ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE,
       CONSTRAINT image_order_unique UNIQUE (image_owner_type, image_owner_id, image_order) DEFERRABLE INITIALLY DEFERRED
     );
-  output: |
+  up: |
     ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_order_unique";
     ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_order_unique" UNIQUE ("image_owner_type", "image_owner_id", "image_order") DEFERRABLE INITIALLY DEFERRED;
     ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_bindings_image_id_fkey";
     ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_owner_fk";
     ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_bindings_image_id_fkey" FOREIGN KEY ("image_id") REFERENCES "public"."images" ("id") ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE;
     ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_owner_fk" FOREIGN KEY ("image_owner_type","image_owner_id") REFERENCES "public"."image_owners" ("type","id") ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE;
+  down: |
+    ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_order_unique";
+    ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_order_unique" UNIQUE ("image_owner_type", "image_owner_id", "image_order");
+    ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_bindings_image_id_fkey";
+    ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_owner_fk";
+    ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_bindings_image_id_fkey" FOREIGN KEY ("image_id") REFERENCES "public"."images" ("id") ON DELETE CASCADE;
+    ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_owner_fk" FOREIGN KEY ("image_owner_type","image_owner_id") REFERENCES "public"."image_owners" ("type","id") ON DELETE CASCADE;
 CreateTableWithForeignKeyAndGeneratedColumn:
   min_version: '12'
   desired: |
@@ -1535,11 +1745,12 @@ CreateSchema:
     CREATE TABLE foo.test (id int);
     CREATE SCHEMA foo;
     CREATE SCHEMA IF NOT EXISTS bar;
-  output: |
+  up: |
     CREATE SCHEMA foo;
     CREATE SCHEMA IF NOT EXISTS bar;
     CREATE TABLE foo.test (id int);
-
+  down: |
+    DROP TABLE "foo"."test";
 CreateSchemasWithDomains:
   desired: |
     CREATE SCHEMA test_schema_a;
@@ -1575,10 +1786,12 @@ ExcludeConstraintChange:
       event_end tstzrange NOT NULL,
       CONSTRAINT ex EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&)
     );
-  output: |
+  up: |
     ALTER TABLE "public"."exclude_example" DROP CONSTRAINT "ex";
     ALTER TABLE "public"."exclude_example" ADD CONSTRAINT "ex" EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&);
-
+  down: |
+    ALTER TABLE "public"."exclude_example" DROP CONSTRAINT "ex";
+    ALTER TABLE "public"."exclude_example" ADD CONSTRAINT "ex" EXCLUDE USING BTREE (name WITH =);
 ExcludeConstraintDropAndAdd:
   current: |
     CREATE TABLE exclude_example (
@@ -1594,10 +1807,12 @@ ExcludeConstraintDropAndAdd:
       event_end tstzrange NOT NULL,
       CONSTRAINT ex2 EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&)
     );
-  output: |
+  up: |
     ALTER TABLE "public"."exclude_example" ADD CONSTRAINT "ex2" EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&);
     ALTER TABLE "public"."exclude_example" DROP CONSTRAINT "ex1";
-
+  down: |
+    ALTER TABLE "public"."exclude_example" ADD CONSTRAINT "ex1" EXCLUDE USING BTREE (name WITH =);
+    ALTER TABLE "public"."exclude_example" DROP CONSTRAINT "ex2";
 ExcludeConstraintWithAlterTable:
   current: |
     CREATE TABLE exclude_example (
@@ -1613,9 +1828,12 @@ ExcludeConstraintWithAlterTable:
       event_end tstzrange NOT NULL
     );
     ALTER TABLE exclude_example ADD CONSTRAINT ex2 EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&);
-  output: |
+  up: |
     ALTER TABLE exclude_example ADD CONSTRAINT ex2 EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&);
     ALTER TABLE "public"."exclude_example" DROP CONSTRAINT "ex1";
+  down: |
+    ALTER TABLE exclude_example ADD CONSTRAINT ex1 EXCLUDE (name WITH =);
+    ALTER TABLE "public"."exclude_example" DROP CONSTRAINT "ex2";
 CollateOnColumn:
   desired: |
     create table users
@@ -1641,9 +1859,11 @@ RenameColumn:
       user_name text, -- @renamed from=username
       age integer
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" RENAME COLUMN "username" TO "user_name";
-
+  down: |
+    ALTER TABLE "public"."users" ADD COLUMN "username" text;
+    ALTER TABLE "public"."users" DROP COLUMN "user_name";
 RenameColumnWithTypeChange:
   current: |
     CREATE TABLE users (
@@ -1657,11 +1877,13 @@ RenameColumnWithTypeChange:
       user_name text NOT NULL, -- @renamed from=username
       age integer
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" RENAME COLUMN "username" TO "user_name";
     ALTER TABLE "public"."users" ALTER COLUMN "user_name" TYPE text;
     ALTER TABLE "public"."users" ALTER COLUMN "user_name" SET NOT NULL;
-
+  down: |
+    ALTER TABLE "public"."users" ADD COLUMN "username" varchar(100);
+    ALTER TABLE "public"."users" DROP COLUMN "user_name";
 RenameColumnIdempotency:
   current: |
     CREATE TABLE users (
@@ -1675,7 +1897,6 @@ RenameColumnIdempotency:
       user_name text, -- @renamed from=username
       age integer
     );
-  output: ""
 
 RenameColumnConflictingNames:
   current: |
@@ -1707,9 +1928,11 @@ RenameColumnQuotedDoubleQuotes:
       foobar text, -- @renamed from="foo bar"
       age integer
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" RENAME COLUMN "foo bar" TO "foobar";
-
+  down: |
+    ALTER TABLE "public"."users" ADD COLUMN "foo bar" text;
+    ALTER TABLE "public"."users" DROP COLUMN "foobar";
 RenameColumnWithSpecialChars:
   current: |
     CREATE TABLE users (
@@ -1723,9 +1946,11 @@ RenameColumnWithSpecialChars:
       column_with_underscore varchar(50), -- @renamed from="column-with-dash"
       age integer
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" RENAME COLUMN "column-with-dash" TO "column_with_underscore";
-
+  down: |
+    ALTER TABLE "public"."users" ADD COLUMN "column-with-dash" varchar(50);
+    ALTER TABLE "public"."users" DROP COLUMN "column_with_underscore";
 RenameColumnWithDot:
   current: |
     CREATE TABLE users (
@@ -1739,9 +1964,11 @@ RenameColumnWithDot:
       special_column text NOT NULL, -- @renamed from="special.column"
       age integer
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" RENAME COLUMN "special.column" TO "special_column";
-
+  down: |
+    ALTER TABLE "public"."users" ADD COLUMN "special.column" text NOT NULL;
+    ALTER TABLE "public"."users" DROP COLUMN "special_column";
 RenameMultipleColumns:
   current: |
     CREATE TABLE users (
@@ -1757,10 +1984,14 @@ RenameMultipleColumns:
       email_address varchar(100), -- @renamed from="email@address"
       age integer
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" RENAME COLUMN "user name" TO "username";
     ALTER TABLE "public"."users" RENAME COLUMN "email@address" TO "email_address";
-
+  down: |
+    ALTER TABLE "public"."users" ADD COLUMN "user name" text;
+    ALTER TABLE "public"."users" ADD COLUMN "email@address" varchar(100);
+    ALTER TABLE "public"."users" DROP COLUMN "email_address";
+    ALTER TABLE "public"."users" DROP COLUMN "username";
 RenameTable:
   current: |
     CREATE TABLE user_accounts (
@@ -1774,9 +2005,15 @@ RenameTable:
       username text,
       age integer
     );
-  output: |
+  up: |
     ALTER TABLE "public"."user_accounts" RENAME TO "users";
-
+  down: |
+    CREATE TABLE user_accounts (
+      id bigint NOT NULL,
+      username text,
+      age integer
+    );
+    DROP TABLE "public"."users";
 RenameTableWithCommentVariant:
   current: |
     CREATE TABLE old_users (
@@ -1788,9 +2025,14 @@ RenameTableWithCommentVariant:
       id bigint NOT NULL,
       name text
     );
-  output: |
+  up: |
     ALTER TABLE "public"."old_users" RENAME TO "new_users";
-
+  down: |
+    CREATE TABLE old_users (
+      id bigint NOT NULL,
+      name text
+    );
+    DROP TABLE "public"."new_users";
 RenameTableWithQuotedName:
   current: |
     CREATE TABLE "user accounts" (
@@ -1802,9 +2044,14 @@ RenameTableWithQuotedName:
       id bigint NOT NULL,
       name text
     );
-  output: |
+  up: |
     ALTER TABLE "public"."user accounts" RENAME TO "user_profiles";
-
+  down: |
+    CREATE TABLE "user accounts" (
+      id bigint NOT NULL,
+      name text
+    );
+    DROP TABLE "public"."user_profiles";
 RenameTableAndMultipleChanges:
   current: |
     CREATE TABLE old_accounts (
@@ -1820,7 +2067,7 @@ RenameTableAndMultipleChanges:
       is_active boolean DEFAULT true,
       created_at timestamp DEFAULT CURRENT_TIMESTAMP
     );
-  output: |
+  up: |
     ALTER TABLE "public"."old_accounts" RENAME TO "accounts";
     ALTER TABLE "public"."accounts" RENAME COLUMN "user_name" TO "username";
     ALTER TABLE "public"."accounts" ALTER COLUMN "username" TYPE varchar(100);
@@ -1829,7 +2076,14 @@ RenameTableAndMultipleChanges:
     ALTER TABLE "public"."accounts" ADD COLUMN "created_at" timestamp DEFAULT current_timestamp;
     ALTER TABLE "public"."accounts" ADD PRIMARY KEY ("id");
     ALTER TABLE "public"."accounts" DROP COLUMN "old_field";
-
+  down: |
+    CREATE TABLE old_accounts (
+      id bigint NOT NULL,
+      user_name varchar(50),
+      is_active boolean,
+      old_field text
+    );
+    DROP TABLE "public"."accounts";
 ConstraintCheckInWithUniqueCreate:
   current: |
     CREATE TABLE users (
@@ -1844,13 +2098,14 @@ ConstraintCheckInWithUniqueCreate:
       age INTEGER CHECK (age IN (0, 1, 2, 3, 4, 5)),
       UNIQUE (age)
     );
-  output: |
+  up: |
     CREATE TABLE animals (
       id serial,
       age INTEGER CHECK (age IN (0, 1, 2, 3, 4, 5)),
       UNIQUE (age)
     );
-
+  down: |
+    DROP TABLE "public"."animals";
 ConstraintCheckInAdd:
   current: |
     CREATE TABLE products (
@@ -1862,9 +2117,10 @@ ConstraintCheckInAdd:
       id serial,
       status text CHECK (status IN ('active', 'inactive', 'pending'))
     );
-  output: |
+  up: |
     ALTER TABLE "public"."products" ADD CONSTRAINT "products_status_check" CHECK (status = ANY (ARRAY['active', 'inactive', 'pending']));
-
+  down: |
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_status_check";
 ConstraintCheckInRemove:
   current: |
     CREATE TABLE products (
@@ -1876,9 +2132,10 @@ ConstraintCheckInRemove:
       id serial,
       status text
     );
-  output: |
+  up: |
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_status_check";
-
+  down: |
+    ALTER TABLE "public"."products" ADD CONSTRAINT "products_status_check" CHECK (status = ANY (ARRAY['active', 'inactive', 'pending']));
 ConstraintUniqueAdd:
   current: |
     CREATE TABLE products (
@@ -1891,9 +2148,10 @@ ConstraintUniqueAdd:
       sku text,
       UNIQUE (sku)
     );
-  output: |
+  up: |
     ALTER TABLE "public"."products" ADD CONSTRAINT "products_sku_key" UNIQUE ("sku");
-
+  down: |
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_sku_key";
 ConstraintUniqueRemove:
   current: |
     CREATE TABLE products (
@@ -1906,9 +2164,10 @@ ConstraintUniqueRemove:
       id serial,
       sku text
     );
-  output: |
+  up: |
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_sku_key";
-
+  down: |
+    ALTER TABLE "public"."products" ADD CONSTRAINT "products_sku_key" UNIQUE ("sku");
 ConstraintCheckInModify:
   current: |
     CREATE TABLE products (
@@ -1920,10 +2179,12 @@ ConstraintCheckInModify:
       id serial,
       priority integer CHECK (priority IN (1, 2, 3, 4, 5))
     );
-  output: |
+  up: |
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_priority_check";
     ALTER TABLE "public"."products" ADD CONSTRAINT "products_priority_check" CHECK (priority = ANY (ARRAY[1, 2, 3, 4, 5]));
-
+  down: |
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_priority_check";
+    ALTER TABLE "public"."products" ADD CONSTRAINT "products_priority_check" CHECK (priority = ANY (ARRAY[1, 2, 3]));
 ConstraintCheckInAndUniqueAdd:
   current: |
     CREATE TABLE products (
@@ -1936,10 +2197,12 @@ ConstraintCheckInAndUniqueAdd:
       level integer CHECK (level IN (1, 2, 3, 4)),
       UNIQUE (level)
     );
-  output: |
+  up: |
     ALTER TABLE "public"."products" ADD CONSTRAINT "products_level_check" CHECK (level = ANY (ARRAY[1, 2, 3, 4]));
     ALTER TABLE "public"."products" ADD CONSTRAINT "products_level_key" UNIQUE ("level");
-
+  down: |
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_level_check";
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_level_key";
 ConstraintCheckInAndUniqueRemove:
   current: |
     CREATE TABLE products (
@@ -1952,10 +2215,12 @@ ConstraintCheckInAndUniqueRemove:
       id serial,
       level integer
     );
-  output: |
+  up: |
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_level_check";
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_level_key";
-
+  down: |
+    ALTER TABLE "public"."products" ADD CONSTRAINT "products_level_check" CHECK (level = ANY (ARRAY[1, 2, 3, 4]));
+    ALTER TABLE "public"."products" ADD CONSTRAINT "products_level_key" UNIQUE ("level");
 ConstraintCheckInMultipleColumnsWithUnique:
   current: |
     CREATE TABLE orders (
@@ -1970,11 +2235,14 @@ ConstraintCheckInMultipleColumnsWithUnique:
       category integer CHECK (category IN (10, 20, 30, 40)),
       UNIQUE (priority, category)
     );
-  output: |
+  up: |
     ALTER TABLE "public"."orders" ADD CONSTRAINT "orders_priority_check" CHECK (priority = ANY (ARRAY[1, 2, 3]));
     ALTER TABLE "public"."orders" ADD CONSTRAINT "orders_category_check" CHECK (category = ANY (ARRAY[10, 20, 30, 40]));
     ALTER TABLE "public"."orders" ADD CONSTRAINT "priority" UNIQUE ("priority", "category");
-
+  down: |
+    ALTER TABLE "public"."orders" DROP CONSTRAINT "orders_priority_check";
+    ALTER TABLE "public"."orders" DROP CONSTRAINT "orders_category_check";
+    ALTER TABLE "public"."orders" DROP CONSTRAINT "priority";
 RenameIndex:
   current: |
     CREATE TABLE users (
@@ -1990,9 +2258,11 @@ RenameIndex:
       username varchar(100)
     );
     CREATE INDEX new_email_idx /* @renamed from=old_email_idx */ ON users (email);
-  output: |
+  up: |
     ALTER INDEX "public"."old_email_idx" RENAME TO "new_email_idx";
-
+  down: |
+    CREATE INDEX old_email_idx ON users (email);
+    DROP INDEX "public"."new_email_idx";
 RenameIndexInTable:
   current: |
     CREATE TABLE users (
@@ -2008,9 +2278,11 @@ RenameIndexInTable:
       username varchar(100),
       CONSTRAINT unique_email UNIQUE (email) -- @renamed from=old_unique_email
     );
-  output: |
+  up: |
     ALTER INDEX "public"."old_unique_email" RENAME TO "unique_email";
-
+  down: |
+    ALTER TABLE "public"."users" ADD CONSTRAINT "old_unique_email" UNIQUE ("email");
+    ALTER TABLE "public"."users" DROP CONSTRAINT "unique_email";
 RenameMultipleIndexes:
   current: |
     CREATE TABLE users (
@@ -2028,10 +2300,14 @@ RenameMultipleIndexes:
     );
     CREATE INDEX email_idx /* @renamed from=idx_email */ ON users (email);
     CREATE INDEX username_idx /* @renamed from=idx_username */ ON users (username);
-  output: |
+  up: |
     ALTER INDEX "public"."idx_email" RENAME TO "email_idx";
     ALTER INDEX "public"."idx_username" RENAME TO "username_idx";
-
+  down: |
+    CREATE INDEX idx_email ON users (email);
+    CREATE INDEX idx_username ON users (username);
+    DROP INDEX "public"."email_idx";
+    DROP INDEX "public"."username_idx";
 RenameIndexInNonDefaultSchema:
   current: |
     CREATE SCHEMA myschema;
@@ -2048,9 +2324,11 @@ RenameIndexInNonDefaultSchema:
       username varchar(100)
     );
     CREATE INDEX new_email_idx /* @renamed from=old_email_idx */ ON myschema.users (email);
-  output: |
+  up: |
     ALTER INDEX "myschema"."old_email_idx" RENAME TO "new_email_idx";
-
+  down: |
+    CREATE INDEX old_email_idx ON myschema.users (email);
+    DROP INDEX "myschema"."new_email_idx";
 CreateIndexWithConcurrentlyConfig:
   config:
     create_index_concurrently: true
@@ -2068,10 +2346,12 @@ CreateIndexWithConcurrentlyConfig:
     );
     CREATE INDEX idx_users_name ON users (name);
     CREATE INDEX idx_users_email ON users (email);
-  output: |
+  up: |
     CREATE INDEX CONCURRENTLY idx_users_name ON users (name);
     CREATE INDEX CONCURRENTLY idx_users_email ON users (email);
-
+  down: |
+    DROP INDEX "public"."idx_users_email";
+    DROP INDEX "public"."idx_users_name";
 CreateUniqueIndexWithConcurrentlyConfig:
   config:
     create_index_concurrently: true
@@ -2086,9 +2366,10 @@ CreateUniqueIndexWithConcurrentlyConfig:
       sku VARCHAR(100)
     );
     CREATE UNIQUE INDEX idx_products_sku ON products (sku);
-  output: |
+  up: |
     CREATE UNIQUE INDEX CONCURRENTLY idx_products_sku ON products (sku);
-
+  down: |
+    DROP INDEX "public"."idx_products_sku";
 CreateIndexWithConcurrentlyConfigMixedStatements:
   config:
     create_index_concurrently: true
@@ -2105,11 +2386,14 @@ CreateIndexWithConcurrentlyConfigMixedStatements:
     );
     CREATE INDEX idx_users_name ON users (name);
     CREATE INDEX CONCURRENTLY idx_users_email_manual ON users (email);
-  output: |
+  up: |
     ALTER TABLE "public"."users" ADD COLUMN "email" varchar(255);
     CREATE INDEX CONCURRENTLY idx_users_name ON users (name);
     CREATE INDEX CONCURRENTLY idx_users_email_manual ON users (email);
-
+  down: |
+    DROP INDEX "public"."idx_users_email_manual";
+    DROP INDEX "public"."idx_users_name";
+    ALTER TABLE "public"."users" DROP COLUMN "email";
 CreateIndexWithoutConcurrentlyConfig:
   config:
     create_index_concurrently: false
@@ -2124,9 +2408,10 @@ CreateIndexWithoutConcurrentlyConfig:
       name VARCHAR(128)
     );
     CREATE INDEX idx_users_name ON users (name);
-  output: |
+  up: |
     CREATE INDEX idx_users_name ON users (name);
-
+  down: |
+    DROP INDEX "public"."idx_users_name";
 CreateIdentityColumnWithNegativeValue:
   desired: |
     CREATE TABLE test_sequence_negative (
@@ -2167,7 +2452,6 @@ CreateTableWithCheckConstraints:
       name                  VARCHAR(255) NOT NULL,
       CONSTRAINT c_lowercase_name CHECK (((name)::TEXT = LOWER((name)::TEXT)))
     );
-  output: ""
 
 CreateTableWithCurrentTimestamp:
   desired: |
@@ -2184,9 +2468,10 @@ DropTimestampDefault:
     CREATE TABLE timestamps (
       created_at timestamp
     );
-  output: |
+  up: |
     ALTER TABLE "public"."timestamps" ALTER COLUMN "created_at" DROP DEFAULT;
-
+  down: |
+    ALTER TABLE "public"."timestamps" ALTER COLUMN "created_at" SET DEFAULT current_timestamp;
 AddTimestampDefaultBack:
   current: |
     CREATE TABLE timestamps (
@@ -2196,9 +2481,10 @@ AddTimestampDefaultBack:
     CREATE TABLE timestamps (
       created_at timestamp default current_timestamp
     );
-  output: |
+  up: |
     ALTER TABLE "public"."timestamps" ALTER COLUMN "created_at" SET DEFAULT current_timestamp;
-
+  down: |
+    ALTER TABLE "public"."timestamps" ALTER COLUMN "created_at" DROP DEFAULT;
 CreateTableWithoutNotNull:
   desired: |
     CREATE TABLE users (
@@ -2214,9 +2500,10 @@ AddNotNullConstraint:
     CREATE TABLE users (
       name text NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
-
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
 DropNotNullConstraint:
   current: |
     CREATE TABLE users (
@@ -2226,9 +2513,10 @@ DropNotNullConstraint:
     CREATE TABLE users (
       name text
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
-
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
 CreateTableWithPrimaryKey:
   desired: |
     CREATE TABLE users (
@@ -2246,10 +2534,12 @@ DropPrimaryKeyAndColumn:
     CREATE TABLE users (
       name text
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";
     ALTER TABLE "public"."users" DROP COLUMN "id";
-
+  down: |
+    ALTER TABLE "public"."users" ADD COLUMN "id" bigint NOT NULL;
+    ALTER TABLE "public"."users" ADD PRIMARY KEY ("id");
 AddPrimaryKeyAndColumnBack:
   current: |
     CREATE TABLE users (
@@ -2260,10 +2550,12 @@ AddPrimaryKeyAndColumnBack:
       id bigint NOT NULL PRIMARY KEY,
       name text
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" ADD COLUMN "id" bigint NOT NULL;
     ALTER TABLE "public"."users" ADD PRIMARY KEY ("id");
-
+  down: |
+    ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";
+    ALTER TABLE "public"."users" DROP COLUMN "id";
 ConstraintPrimaryKey:
   desired: |
     CREATE TABLE users (
@@ -2294,9 +2586,10 @@ AddForeignKeyConstraint:
       user_id bigint,
       CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id)
     );
-  output: |
+  up: |
     ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id");
-
+  down: |
+    ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";
 ModifyForeignKeyActions:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY);
@@ -2312,10 +2605,12 @@ ModifyForeignKeyActions:
       user_id bigint,
       CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
     );
-  output: |
+  up: |
     ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";
     ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
+  down: |
+    ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";
+    ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id");
 RemoveForeignKeyConstraint:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY);
@@ -2330,9 +2625,10 @@ RemoveForeignKeyConstraint:
       content text,
       user_id bigint
     );
-  output: |
+  up: |
     ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";
-
+  down: |
+    ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id") ON DELETE SET NULL ON UPDATE CASCADE;
 CreateTableWithReferences:
   desired: |
     CREATE TABLE a (
@@ -2366,10 +2662,11 @@ DropReferences:
       a_id INTEGER,
       a_my_text TEXT NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "public"."b" DROP CONSTRAINT "b_a_id_fkey";
     ALTER TABLE "public"."b" DROP CONSTRAINT "b_a_my_text_fkey";
-
+  down: |
+    ALTER TABLE "public"."b" ADD CONSTRAINT "b_a_my_text_fkey" FOREIGN KEY ("a_my_text") REFERENCES "public"."a" ("my_text");
 ReferencesWithOnDeleteCascade:
   desired: |
     CREATE TABLE customers (
@@ -2400,10 +2697,12 @@ ModifyColumnCheckConstraint:
       a_id INTEGER PRIMARY KEY CHECK (a_id > 1),
       my_text TEXT UNIQUE NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
     ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 1);
-
+  down: |
+    ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
+    ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 0);
 DropCheckConstraint:
   current: |
     CREATE TABLE a (
@@ -2415,9 +2714,10 @@ DropCheckConstraint:
       a_id INTEGER PRIMARY KEY,
       my_text TEXT UNIQUE NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
-
+  down: |
+    ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 1);
 AddCheckConstraintNoInherit:
   current: |
     CREATE TABLE a (
@@ -2429,9 +2729,10 @@ AddCheckConstraintNoInherit:
       a_id INTEGER PRIMARY KEY CHECK (a_id > 2) NO INHERIT,
       my_text TEXT UNIQUE NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 2) NO INHERIT;
-
+  down: |
+    ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
 ModifyCheckConstraintNoInherit:
   current: |
     CREATE TABLE a (
@@ -2443,10 +2744,12 @@ ModifyCheckConstraintNoInherit:
       a_id INTEGER PRIMARY KEY CHECK (a_id > 3) NO INHERIT,
       my_text TEXT UNIQUE NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
     ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 3) NO INHERIT;
-
+  down: |
+    ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
+    ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 2) NO INHERIT;
 CreateTableWithoutMultiColumnCheck:
   desired: |
     CREATE TABLE orders (
@@ -2472,9 +2775,10 @@ AddMultiColumnCheck:
       store_table VARCHAR(255),
       CONSTRAINT check_customer_or_table CHECK (store_table is not null and customer is null or store_table is null and customer is not null)
     );
-  output: |
+  up: |
     ALTER TABLE "public"."orders" ADD CONSTRAINT "check_customer_or_table" CHECK (store_table is not null and customer is null or store_table is null and customer is not null);
-
+  down: |
+    ALTER TABLE "public"."orders" DROP CONSTRAINT "check_customer_or_table";
 DropMultiColumnCheck:
   current: |
     CREATE TABLE orders (
@@ -2491,18 +2795,20 @@ DropMultiColumnCheck:
       customer VARCHAR(255),
       store_table VARCHAR(255)
     );
-  output: |
+  up: |
     ALTER TABLE "public"."orders" DROP CONSTRAINT "check_customer_or_table";
-
+  down: |
+    ALTER TABLE "public"."orders" ADD CONSTRAINT "check_customer_or_table" CHECK (store_table is not null and customer is null or store_table is null and customer is not null);
 CreatePolicy:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
   desired: |
     CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
     CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((current_user)::integer = 1);
-  output: |
+  up: |
     CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((current_user)::integer = 1);
-
+  down: |
+    DROP POLICY "p_users" ON "public"."users";
 ModifyPolicyToRestrictive:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
@@ -2510,10 +2816,12 @@ ModifyPolicyToRestrictive:
   desired: |
     CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
     CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (id = (current_user)::integer);
-  output: |
+  up: |
     DROP POLICY "p_users" ON "public"."users";
     CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (id = (current_user)::integer);
-
+  down: |
+    DROP POLICY "p_users" ON "public"."users";
+    CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((current_user)::integer = 1);
 ModifyPolicyUsing:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
@@ -2521,19 +2829,22 @@ ModifyPolicyUsing:
   desired: |
     CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
     CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);
-  output: |
+  up: |
     DROP POLICY "p_users" ON "public"."users";
     CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);
-
+  down: |
+    DROP POLICY "p_users" ON "public"."users";
+    CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (id = (current_user)::integer);
 DropPolicy:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
     CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);
   desired: |
     CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
-  output: |
+  up: |
     DROP POLICY "p_users" ON "public"."users";
-
+  down: |
+    CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);
 AddUniqueConstraint:
   current: |
     create table dummy(
@@ -2548,9 +2859,10 @@ AddUniqueConstraint:
       column_c int not null
     );
     alter table dummy add constraint dummy_uniq unique (column_a, column_b);
-  output: |
+  up: |
     alter table dummy add constraint dummy_uniq unique (column_a, column_b);
-
+  down: |
+    ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
 UniqueConstraintNotDeferrable:
   current: |
     create table dummy(
@@ -2566,7 +2878,6 @@ UniqueConstraintNotDeferrable:
       column_c int not null
     );
     alter table dummy add constraint dummy_uniq unique (column_a, column_b) not deferrable initially immediate;
-  output: ""
 
 ModifyUniqueConstraintToDeferrable:
   current: |
@@ -2583,10 +2894,12 @@ ModifyUniqueConstraintToDeferrable:
       column_c int not null
     );
     alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable;
-  output: |
+  up: |
     ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
     alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable;
-
+  down: |
+    ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) not deferrable initially immediate;
 ModifyUniqueConstraintToInitiallyDeferred:
   current: |
     create table dummy(
@@ -2602,10 +2915,12 @@ ModifyUniqueConstraintToInitiallyDeferred:
       column_c int not null
     );
     alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable initially deferred;
-  output: |
+  up: |
     ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
     alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable initially deferred;
-
+  down: |
+    ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable;
 RevertUniqueConstraintToNotDeferrable:
   current: |
     create table dummy(
@@ -2621,10 +2936,12 @@ RevertUniqueConstraintToNotDeferrable:
       column_c int not null
     );
     alter table dummy add constraint dummy_uniq unique (column_a, column_b);
-  output: |
+  up: |
     ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
     alter table dummy add constraint dummy_uniq unique (column_a, column_b);
-
+  down: |
+    ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable initially deferred;
 DropUniqueConstraint:
   current: |
     create table dummy(
@@ -2639,9 +2956,10 @@ DropUniqueConstraint:
       column_b int not null,
       column_c int not null
     );
-  output: |
+  up: |
     ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
-
+  down: |
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b);
 IndexOnReservedWordColumn:
   desired: |
     CREATE TABLE users (
@@ -2721,10 +3039,11 @@ CreateTableInNonPublicSchema:
   desired: |
     CREATE SCHEMA test;
     CREATE TABLE test.users (id serial primary key);
-  output: |
+  up: |
     CREATE SCHEMA test;
     CREATE TABLE test.users (id serial primary key);
-
+  down: |
+    DROP TABLE "test"."users";
 CheckConstraintInNonPublicSchema:
   current: |
     CREATE SCHEMA test;
@@ -2738,10 +3057,12 @@ CheckConstraintInNonPublicSchema:
       max_value INT CHECK (max_value > 0),
       CONSTRAINT min_max CHECK (min_value < max_value)
     );
-  output: |
+  up: |
     ALTER TABLE "test"."dummy" ADD CONSTRAINT "dummy_max_value_check" CHECK (max_value > 0);
     ALTER TABLE "test"."dummy" ADD CONSTRAINT "min_max" CHECK (min_value < max_value);
-
+  down: |
+    ALTER TABLE "test"."dummy" DROP CONSTRAINT "dummy_max_value_check";
+    ALTER TABLE "test"."dummy" DROP CONSTRAINT "min_max";
 RemoveCheckConstraintInNonPublicSchema:
   current: |
     CREATE SCHEMA test;
@@ -2755,20 +3076,24 @@ RemoveCheckConstraintInNonPublicSchema:
       min_value INT CHECK (min_value > 0),
       max_value INT
     );
-  output: |
+  up: |
     ALTER TABLE "test"."dummy" DROP CONSTRAINT "dummy_max_value_check";
     ALTER TABLE "test"."dummy" DROP CONSTRAINT "min_max";
-
+  down: |
+    ALTER TABLE "test"."dummy" ADD CONSTRAINT "dummy_max_value_check" CHECK (max_value > 0);
+    ALTER TABLE "test"."dummy" ADD CONSTRAINT "min_max" CHECK (min_value < max_value);
 SameTableNameAcrossSchemas:
   desired: |
     CREATE SCHEMA test;
     CREATE TABLE dummy (id int);
     CREATE TABLE test.dummy (id int);
-  output: |
+  up: |
     CREATE SCHEMA test;
     CREATE TABLE dummy (id int);
     CREATE TABLE test.dummy (id int);
-
+  down: |
+    DROP TABLE "public"."dummy";
+    DROP TABLE "test"."dummy";
 CreateTableWithIdentityAlways:
   desired: |
     CREATE TABLE color (
@@ -2787,9 +3112,10 @@ AddIdentityToExistingColumn:
       color_id INT GENERATED BY DEFAULT AS IDENTITY,
       color_name VARCHAR NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "public"."color" ALTER COLUMN "color_id" ADD GENERATED BY DEFAULT AS IDENTITY;
-
+  down: |
+    ALTER TABLE "public"."color" ALTER COLUMN "color_id" DROP IDENTITY IF EXISTS;
 RemoveIdentityFromColumn:
   current: |
     CREATE TABLE color (
@@ -2801,9 +3127,10 @@ RemoveIdentityFromColumn:
       color_id INT NOT NULL,
       color_name VARCHAR NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "public"."color" ALTER COLUMN "color_id" DROP IDENTITY IF EXISTS;
-
+  down: |
+    ALTER TABLE "public"."color" ALTER COLUMN "color_id" ADD GENERATED BY DEFAULT AS IDENTITY;
 ChangeIdentityFromByDefaultToAlways:
   current: |
     CREATE TABLE color (
@@ -2815,9 +3142,10 @@ ChangeIdentityFromByDefaultToAlways:
       color_id INT GENERATED ALWAYS AS IDENTITY,
       color_name VARCHAR NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "public"."color" ALTER COLUMN "color_id" SET GENERATED ALWAYS;
-
+  down: |
+    ALTER TABLE "public"."color" ALTER COLUMN "color_id" SET GENERATED BY DEFAULT;
 IdentityWithSequenceOptions:
   desired: |
     CREATE TABLE voltages (
@@ -2837,7 +3165,6 @@ IdentitySequenceOptionsIgnored:
       volt int GENERATED BY DEFAULT AS IDENTITY
         (START WITH -100 INCREMENT BY 5 MINVALUE -100 MAXVALUE 100)
     );
-  output: ""
 
 AddIdentityWithSequenceToExistingColumn:
   current: |
@@ -2849,10 +3176,12 @@ AddIdentityWithSequenceToExistingColumn:
       volt int GENERATED BY DEFAULT AS IDENTITY
         (START WITH -100 INCREMENT BY 5 MINVALUE -100 MAXVALUE 100)
     );
-  output: |
+  up: |
     ALTER TABLE "public"."voltages" ALTER COLUMN "volt" SET NOT NULL;
     ALTER TABLE "public"."voltages" ALTER COLUMN "volt" ADD GENERATED BY DEFAULT AS IDENTITY (START WITH -100 INCREMENT BY 5 MINVALUE -100 MAXVALUE 100);
-
+  down: |
+    ALTER TABLE "public"."voltages" ALTER COLUMN "volt" DROP IDENTITY IF EXISTS;
+    ALTER TABLE "public"."voltages" ALTER COLUMN "volt" DROP NOT NULL;
 AddNewIdentityColumnWithSequence:
   current: |
     CREATE TABLE voltages (
@@ -2864,9 +3193,10 @@ AddNewIdentityColumnWithSequence:
       volt int GENERATED BY DEFAULT AS IDENTITY
         (START WITH -100 INCREMENT BY 5 MINVALUE -100 MAXVALUE 100)
     );
-  output: |
+  up: |
     ALTER TABLE "public"."voltages" ADD COLUMN "volt" integer GENERATED BY DEFAULT AS IDENTITY (START WITH -100 INCREMENT BY 5 MINVALUE -100 MAXVALUE 100);
-
+  down: |
+    ALTER TABLE "public"."voltages" DROP COLUMN "volt";
 AddUniqueConstraintInNonPublicSchema:
   current: |
     CREATE SCHEMA test;
@@ -2874,9 +3204,10 @@ AddUniqueConstraintInNonPublicSchema:
   desired: |
     CREATE TABLE test.dummy (a int, b int);
     ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);
-  output: |
+  up: |
     ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);
-
+  down: |
+    ALTER TABLE "test"."dummy" DROP CONSTRAINT "a_b_uniq";
 ChangeUniqueConstraintInNonPublicSchema:
   current: |
     CREATE SCHEMA test;
@@ -2885,10 +3216,12 @@ ChangeUniqueConstraintInNonPublicSchema:
   desired: |
     CREATE TABLE test.dummy (a int, b int);
     ALTER TABLE test.dummy ADD CONSTRAINT a_uniq UNIQUE (a) DEFERRABLE INITIALLY DEFERRED;
-  output: |
+  up: |
     ALTER TABLE test.dummy ADD CONSTRAINT a_uniq UNIQUE (a) DEFERRABLE INITIALLY DEFERRED;
     ALTER TABLE "test"."dummy" DROP CONSTRAINT "a_b_uniq";
-
+  down: |
+    ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);
+    ALTER TABLE "test"."dummy" DROP CONSTRAINT "a_uniq";
 TableLevelCheckMultiColumnAllAny:
   desired: |
     CREATE TABLE multi_check_test (
@@ -2922,9 +3255,12 @@ ModifyTableLevelCheckMultiColumnAllAny:
         (state = ALL (ARRAY['inactive']) AND priority = ANY (ARRAY[0]))
       )
     );
-  output: |
+  up: |
     ALTER TABLE "public"."multi_check_test" DROP CONSTRAINT "valid_state_priority";
     ALTER TABLE "public"."multi_check_test" ADD CONSTRAINT "valid_state_priority" CHECK (state = ANY (ARRAY['active', 'pending', 'waiting']) and priority >= ALL (ARRAY[1, 2]) or state = ALL (ARRAY['inactive']) and priority = ANY (ARRAY[0]));
+  down: |
+    ALTER TABLE "public"."multi_check_test" DROP CONSTRAINT "valid_state_priority";
+    ALTER TABLE "public"."multi_check_test" ADD CONSTRAINT "valid_state_priority" CHECK (state = ANY (ARRAY['active', 'pending']) and priority >= ALL (ARRAY[1, 2]) or state = ALL (ARRAY['inactive']) and priority = ANY (ARRAY[0]));
 DecimalDefault:
   current: |
     CREATE TABLE some_table (
@@ -2940,11 +3276,16 @@ DecimalDefault:
       v2 decimal(30, 20) DEFAULT  0.1234,
       v3 decimal(30, 20) DEFAULT '0.00000000001234567891'
     );
-  output: |
+  up: |
     ALTER TABLE "public"."some_table" ALTER COLUMN "v0" SET DEFAULT 0.010000;
     ALTER TABLE "public"."some_table" ALTER COLUMN "v1" SET DEFAULT 1.230000;
     ALTER TABLE "public"."some_table" ALTER COLUMN "v2" SET DEFAULT 0.123400;
     ALTER TABLE "public"."some_table" ALTER COLUMN "v3" SET DEFAULT '0.00000000001234567891';
+  down: |
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v0" SET DEFAULT 0.000000;
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v1" SET DEFAULT 1.200000;
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v2" SET DEFAULT 0.123450;
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v3" SET DEFAULT '0.0000000000123456789';
 NegativeDefaultNumbers:
   desired: |
     CREATE TABLE items (
@@ -2968,9 +3309,12 @@ DefaultString:
       v0 TEXT DEFAULT 'FOO',
       v1 TEXT DEFAULT 'bar'
     );
-  output: |
+  up: |
     ALTER TABLE "public"."some_table" ALTER COLUMN "v0" SET DEFAULT 'FOO';
     ALTER TABLE "public"."some_table" ALTER COLUMN "v1" SET DEFAULT 'bar';
+  down: |
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v0" SET DEFAULT 'foo';
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v1" SET DEFAULT 'BAR';
 NumericDecimalVariablePrecision:
   current: |
     CREATE TABLE test (
@@ -2984,7 +3328,6 @@ NumericDecimalVariablePrecision:
       num numeric,
       price decimal
     );
-  output: ""
 NumericDecimalExplicit:
   current: |
     CREATE TABLE test (
@@ -3002,7 +3345,6 @@ NumericDecimalExplicit:
       price1 decimal(12),
       price2 decimal(20, 6)
     );
-  output: ""
 AlterColumnSetDefault:
   current: |
     CREATE TABLE users (
@@ -3016,10 +3358,12 @@ AlterColumnSetDefault:
       status varchar(20) DEFAULT 'active',
       priority int DEFAULT 1
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" ALTER COLUMN "status" SET DEFAULT 'active';
     ALTER TABLE "public"."users" ALTER COLUMN "priority" SET DEFAULT 1;
-
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "status" DROP DEFAULT;
+    ALTER TABLE "public"."users" ALTER COLUMN "priority" DROP DEFAULT;
 AlterColumnDropDefault:
   current: |
     CREATE TABLE users (
@@ -3033,10 +3377,12 @@ AlterColumnDropDefault:
       status varchar(20),
       priority int
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" ALTER COLUMN "status" DROP DEFAULT;
     ALTER TABLE "public"."users" ALTER COLUMN "priority" DROP DEFAULT;
-
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "status" SET DEFAULT 'active';
+    ALTER TABLE "public"."users" ALTER COLUMN "priority" SET DEFAULT 1;
 AlterColumnChangeDefault:
   current: |
     CREATE TABLE users (
@@ -3050,10 +3396,12 @@ AlterColumnChangeDefault:
       status varchar(20) DEFAULT 'active',
       is_active boolean DEFAULT true
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" ALTER COLUMN "status" SET DEFAULT 'active';
     ALTER TABLE "public"."users" ALTER COLUMN "is_active" SET DEFAULT true;
-
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "status" SET DEFAULT 'pending';
+    ALTER TABLE "public"."users" ALTER COLUMN "is_active" SET DEFAULT false;
 AlterColumnSetNotNull:
   current: |
     CREATE TABLE users (
@@ -3067,10 +3415,12 @@ AlterColumnSetNotNull:
       name varchar(100) NOT NULL,
       email varchar(255) NOT NULL
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
     ALTER TABLE "public"."users" ALTER COLUMN "email" SET NOT NULL;
-
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "email" DROP NOT NULL;
 AlterColumnDropNotNull:
   current: |
     CREATE TABLE users (
@@ -3084,10 +3434,12 @@ AlterColumnDropNotNull:
       name varchar(100),
       email varchar(255)
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
     ALTER TABLE "public"."users" ALTER COLUMN "email" DROP NOT NULL;
-
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "email" SET NOT NULL;
 AlterColumnChangeNotNullAndDefault:
   current: |
     CREATE TABLE users (
@@ -3101,11 +3453,16 @@ AlterColumnChangeNotNullAndDefault:
       name varchar(100) NOT NULL DEFAULT 'anonymous',
       email varchar(255)
     );
-  output: |
+  up: |
     ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
     ALTER TABLE "public"."users" ALTER COLUMN "name" SET DEFAULT 'anonymous';
     ALTER TABLE "public"."users" ALTER COLUMN "email" DROP NOT NULL;
     ALTER TABLE "public"."users" ALTER COLUMN "email" DROP DEFAULT;
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP DEFAULT;
+    ALTER TABLE "public"."users" ALTER COLUMN "email" SET NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "email" SET DEFAULT 'unknown@example.com';
 TypedLiterals:
   current: |
     CREATE TABLE events (
@@ -3118,10 +3475,14 @@ TypedLiterals:
       event_time time DEFAULT TIME '12:00:00',
       event_timestamp timestamp DEFAULT TIMESTAMP '2024-01-01 12:00:00'
     );
-  output: |
+  up: |
     ALTER TABLE "public"."events" ADD COLUMN "event_date" date DEFAULT '2024-01-01';
     ALTER TABLE "public"."events" ADD COLUMN "event_time" time DEFAULT '12:00:00';
     ALTER TABLE "public"."events" ADD COLUMN "event_timestamp" timestamp DEFAULT '2024-01-01 12:00:00';
+  down: |
+    ALTER TABLE "public"."events" DROP COLUMN "event_timestamp";
+    ALTER TABLE "public"."events" DROP COLUMN "event_time";
+    ALTER TABLE "public"."events" DROP COLUMN "event_date";
 TypedLiteralsIdempotency:
   current: |
     CREATE TABLE events (
@@ -3137,7 +3498,6 @@ TypedLiteralsIdempotency:
       event_time time DEFAULT TIME '12:00:00',
       event_timestamp timestamp DEFAULT TIMESTAMP '2024-01-01 12:00:00'
     );
-  output: ""
 TypedLiteralsChangeDefault:
   current: |
     CREATE TABLE events (
@@ -3153,10 +3513,14 @@ TypedLiteralsChangeDefault:
       event_time time DEFAULT TIME '23:59:59',
       event_timestamp timestamp DEFAULT TIMESTAMP '2024-12-31 23:59:59'
     );
-  output: |
+  up: |
     ALTER TABLE "public"."events" ALTER COLUMN "event_date" SET DEFAULT '2024-12-31';
     ALTER TABLE "public"."events" ALTER COLUMN "event_time" SET DEFAULT '23:59:59';
     ALTER TABLE "public"."events" ALTER COLUMN "event_timestamp" SET DEFAULT '2024-12-31 23:59:59';
+  down: |
+    ALTER TABLE "public"."events" ALTER COLUMN "event_date" SET DEFAULT '2024-01-01';
+    ALTER TABLE "public"."events" ALTER COLUMN "event_time" SET DEFAULT '12:00:00';
+    ALTER TABLE "public"."events" ALTER COLUMN "event_timestamp" SET DEFAULT '2024-01-01 12:00:00';
 TypedLiteralsInCheckWithCast:
   current: |
     CREATE TABLE events (
@@ -3169,11 +3533,14 @@ TypedLiteralsInCheckWithCast:
       event_time time CHECK (event_time >= time '09:00:00'),
       event_end_date date CHECK (event_end_date <= DATE '2030-12-31')
     );
-  output: |
+  up: |
     ALTER TABLE "public"."events" ADD COLUMN "event_date" date CHECK (event_date >= '2020-01-01');
     ALTER TABLE "public"."events" ADD COLUMN "event_time" time CHECK (event_time >= '09:00:00'::time);
     ALTER TABLE "public"."events" ADD COLUMN "event_end_date" date CHECK (event_end_date <= '2030-12-31');
-
+  down: |
+    ALTER TABLE "public"."events" DROP COLUMN "event_end_date";
+    ALTER TABLE "public"."events" DROP COLUMN "event_time";
+    ALTER TABLE "public"."events" DROP COLUMN "event_date";
 # Multi-dimensional array support
 CreateTableWithMultiDimensionalArrays:
   desired: |
@@ -3194,9 +3561,10 @@ AddMultiDimensionalArrayColumn:
       id serial PRIMARY KEY,
       matrix_2d int[][]
     );
-  output: |
+  up: |
     ALTER TABLE "public"."matrices" ADD COLUMN "matrix_2d" integer[];
-
+  down: |
+    ALTER TABLE "public"."matrices" DROP COLUMN "matrix_2d";
 MultiDimensionalArrayWithDefaultEmpty:
   desired: |
     CREATE TABLE matrices (
@@ -3223,8 +3591,10 @@ ChangeMultiDimensionalArrayDefault:
       id serial PRIMARY KEY,
       matrix_2d int[][] DEFAULT ARRAY[ARRAY[1, 2]]
     );
-  output: |
+  up: |
     ALTER TABLE "public"."matrices" ALTER COLUMN "matrix_2d" SET DEFAULT ARRAY[ARRAY[1, 2]];
+  down: |
+    ALTER TABLE "public"."matrices" ALTER COLUMN "matrix_2d" SET DEFAULT ARRAY[]::integer[];
 
 # PostgreSQL treats int[], int[][], int[][][] all as int[] internally
 MultiDimensionalArrayEquivalence1D2D:
@@ -3236,8 +3606,6 @@ MultiDimensionalArrayEquivalence1D2D:
     CREATE TABLE test (
       arr int[][]
     );
-  output: ""
-
 MultiDimensionalArrayEquivalence2D3D:
   current: |
     CREATE TABLE test (
@@ -3247,8 +3615,6 @@ MultiDimensionalArrayEquivalence2D3D:
     CREATE TABLE test (
       arr int[][][]
     );
-  output: ""
-
 
 # This ensures the parser handles storage parameters like fillfactor='70'
 CreateIndexWithStorageParameterString:
@@ -3326,8 +3692,6 @@ CreateIndexWithStringifiedIntParameter:
       data text
     );
     CREATE INDEX idx_data ON test_table USING btree (data) WITH (fillfactor='70');
-  output: ""
-
 
 # Note: The parser can handle arbitrary storage parameter names (e.g., custom_param='value')
 # but PostgreSQL itself validates and rejects unrecognized parameters at runtime.
@@ -3355,7 +3719,6 @@ CreateIndexConcurrentlyWithUsingAndInclude:
     CREATE INDEX CONCURRENTLY idx_sku_include ON products USING btree (sku) INCLUDE (name, price);
 
 
-
 # Test for CREATE INDEX with fillfactor parameter variations
 # Ensures both integer and string values work and are treated as equivalent (main fix)
 CreateIndexFillfactorVariations:
@@ -3373,7 +3736,6 @@ CreateIndexFillfactorVariations:
     );
     CREATE INDEX idx1 ON test_table USING btree (data) WITH (fillfactor='70');
     CREATE INDEX idx2 ON test_table USING btree (id) WITH (fillfactor=80);
-  output: ""
 
 CreateIndexUsingIncludeWhere:
   desired: |

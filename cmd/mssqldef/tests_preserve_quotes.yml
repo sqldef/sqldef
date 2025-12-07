@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 # Tests for quote-aware mode (legacy_ignore_quotes: false) in MSSQL
 
 ForeignKeyDependencyOrderingCaseMismatch:
@@ -12,14 +14,16 @@ ForeignKeyDependencyOrderingCaseMismatch:
       CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES Users (id)
     );
     CREATE TABLE users (id int PRIMARY KEY);
-  output: |
+  up: |
     CREATE TABLE users (id int PRIMARY KEY);
     CREATE TABLE orders (
       id int PRIMARY KEY,
       user_id int,
       CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES Users (id)
     );
-
+  down: |
+    DROP TABLE dbo.orders;
+    DROP TABLE dbo.users;
 AddColumnCaseMismatch:
   # Current has USERS, desired has users - should recognize as same table
   legacy_ignore_quotes: false
@@ -27,9 +31,10 @@ AddColumnCaseMismatch:
     CREATE TABLE USERS (id int PRIMARY KEY);
   desired: |
     CREATE TABLE users (id int PRIMARY KEY, name varchar(100));
-  output: |
+  up: |
     ALTER TABLE dbo.users ADD name varchar(100);
-
+  down: |
+    ALTER TABLE dbo.USERS DROP COLUMN [name];
 DropColumnCaseMismatch:
   # Current has Users, desired has USERS - should recognize as same table
   legacy_ignore_quotes: false
@@ -37,5 +42,7 @@ DropColumnCaseMismatch:
     CREATE TABLE Users (id int PRIMARY KEY, old_col varchar(50));
   desired: |
     CREATE TABLE USERS (id int PRIMARY KEY);
-  output: |
+  up: |
     ALTER TABLE dbo.USERS DROP COLUMN [old_col];
+  down: |
+    ALTER TABLE dbo.Users ADD old_col varchar(50);

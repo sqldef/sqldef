@@ -79,6 +79,7 @@ func TestApply(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	version := mustGetMssqlVersion()
 	sqlParser := mssql.NewParser()
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -103,7 +104,7 @@ func TestApply(t *testing.T) {
 			}
 			defer db.Close()
 
-			tu.RunTest(t, db, test, schema.GeneratorModeMssql, sqlParser, "", "")
+			tu.RunTest(t, db, test, schema.GeneratorModeMssql, sqlParser, version, "")
 		})
 	}
 }
@@ -401,7 +402,7 @@ func TestMssqldefCreateView(t *testing.T) {
 	skipDropView := "-- Skipped: DROP VIEW [dbo].[view_users];\n"
 	assertApplyOutput(t, createTable+createView, wrapWithTransaction(createView+skipDropView))
 	assertApplyOutput(t, createTable+createView, wrapWithTransaction(skipDropView))
-	assertApplyOutput(t, "", wrapWithTransaction("-- Skipped: DROP TABLE [dbo].[users];\n-- Skipped: DROP VIEW [dbo].[view_users];\n-- Skipped: DROP VIEW [dbo].[view_users_new];\n"))
+	assertApplyOutput(t, "", wrapWithTransaction("-- Skipped: DROP VIEW [dbo].[view_users];\n-- Skipped: DROP VIEW [dbo].[view_users_new];\n-- Skipped: DROP TABLE [dbo].[users];\n"))
 }
 
 func TestMssqldefTrigger(t *testing.T) {
@@ -1551,6 +1552,45 @@ func connectDatabaseByUser(user string) (database.Database, error) {
 		Port:     1433,
 		DbName:   "mssqldef_test",
 	})
+}
+
+// mustGetMssqlVersion retrieves the SQL Server marketing year (e.g., "2019", "2022") and panics on error.
+// The mapping is based on SQL Server's internal major version number:
+// - 13 = 2016, 14 = 2017, 15 = 2019, 16 = 2022, 17 = 2025
+func mustGetMssqlVersion() string {
+	db, err := mssql.NewDatabase(database.Config{
+		User:     "sa",
+		Password: "Passw0rd",
+		Host:     "127.0.0.1",
+		Port:     1433,
+		DbName:   "master",
+	})
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	var majorVersion int
+	err = db.DB().QueryRow("SELECT CAST(SERVERPROPERTY('ProductMajorVersion') AS INT)").Scan(&majorVersion)
+	if err != nil {
+		panic(err)
+	}
+
+	// Map internal major version to marketing year
+	switch majorVersion {
+	case 13:
+		return "2016"
+	case 14:
+		return "2017"
+	case 15:
+		return "2019"
+	case 16:
+		return "2022"
+	case 17:
+		return "2025"
+	default:
+		panic(fmt.Sprintf("unknown SQL Server major version: %d. Please add a mapping to mustGetMssqlVersion()", majorVersion))
+	}
 }
 
 // mssqlQuery executes a query against the database and returns rows as string

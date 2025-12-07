@@ -1,6 +1,7 @@
 services:
   mysql:
     image: mysql:${MYSQL_VERSION:-8.0}
+    # platform: linux/amd64 # needed on macos to run mysql:5.7
     environment:
       MYSQL_ALLOW_EMPTY_PASSWORD: 'true'
       MYSQL_ROOT_HOST: '%'
@@ -16,7 +17,7 @@ services:
       - '3307:3306'
     restart: on-failure
   postgres:
-    image: postgres:${POSTGRES_VERSION:-14}
+    image: postgres:${POSTGRES_VERSION:-18}
     # image: hartmutcouk/pg-repack-docker:1.4.6
     environment:
       POSTGRES_USER: 'postgres'
@@ -26,7 +27,7 @@ services:
     restart: on-failure
   mssql:
     # Available versions: https://mcr.microsoft.com/artifact/mar/mssql/server/about
-    image: mcr.microsoft.com/mssql/server:${MSSQL_VERSION:-2019-latest}
+    image: mcr.microsoft.com/mssql/server:${MSSQL_VERSION:-2022-latest}
     platform: linux/amd64
     user: root
     environment:

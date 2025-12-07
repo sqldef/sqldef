@@ -52,6 +52,7 @@ Usage notes:
   - Not set (default) - Use generic parser with fallback to pgquery
 - The generic parser builds ASTs, and the generator manipulates the ASTs for normalization and comparison. Do not parse strings with regular expressions
 - No need to maintain the pgquery parser, which is obsolete and will be removed in the future
+- Be careful to iterate a map because the iteration order is not deterministic. Use `util.CanonicalMapIter` to iterate maps in a deterministic order.
 
 ## Local Development
 
@@ -122,6 +123,12 @@ For MariaDB testing:
 MYSQL_FLAVOR=mariadb MYSQL_PORT=3307 go test ./cmd/mysqldef
 ```
 
+If you encounter `tls: handshake failure` errors with MySQL 5.7, enable RSA key exchange:
+
+```sh
+GODEBUG=tlsrsakex=1 go test ./cmd/mysqldef
+```
+
 For test coverage:
 
 ```sh
@@ -149,9 +156,12 @@ For schema management tests, in most cases you only need to edit the YAML test f
 
 #### YAML Test Schema
 
-The test files use a YAML format where each top-level key is a test case name, and the value is a `TestCase` object with the following fields:
+The test files use a YAML format where each top-level key is a test case name, and the value is a `TestCase` object. A JSON schema is available at `./cmd/testutils/testcase.schema.json` for IDE support.
+
+Test case fields:
 
 ```yaml
+# yaml-language-server: $schema=../testutils/testcase.schema.json
 TestCaseName:
   # Current schema state (defaults to empty schema)
   current: |
@@ -166,9 +176,15 @@ TestCaseName:
       name text
     );
 
-  # Expected DDL output (defaults to 'desired' if not specified)
-  output: |
+  # Expected DDL for forward migration: current → desired
+  # If specified, 'down' must also be specified
+  up: |
     ALTER TABLE "public"."users" ADD COLUMN "name" text;
+
+  # Expected DDL for reverse migration: desired → current
+  # Required if 'up' is specified (empty string is allowed for empty DDL)
+  down: |
+    ALTER TABLE "public"."users" DROP COLUMN "name";
 
   # Expected error message (defaults to no error)
   error: "specific error message"
@@ -203,6 +219,14 @@ TestCaseName:
     create_index_concurrently: true
 ```
 
+The `up` and `down` fields work together:
+- If neither is specified: idempotency-only test (verifies `desired` schema is stable)
+- If `up` is specified: `down` must also be specified (bidirectional migration test)
+
+When both are specified, the test runner validates:
+1. `current` → `desired` produces `up`
+2. `desired` → `current` produces `down`
+
 NOTE: Never use `offline: true` for databases that are tested in GitHub Actions:
 - MySQL (including MariaDB)
 - PostgreSQL
@@ -216,9 +240,6 @@ NOTE: Never use `offline: true` for databases that are tested in GitHub Actions:
    # Example: Testing all index-related features
    go test ./cmd/psqldef -run='TestApply/Index.*'
    ```
-*  **Test both directions**: When testing schema changes, consider testing both:
-   - Adding features (no `current`, only `desired`)
-   - Modifying existing schemas (`current` → `desired`)
 * **Check test coverage**: When you edit source code, check the coverage report to ensure the code is covered by tests.
 
 ## Documentation

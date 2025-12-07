@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
 ManagedRolesBasicGrant:
   current: |
     CREATE TABLE users (
@@ -12,9 +14,10 @@ ManagedRolesBasicGrant:
     GRANT SELECT ON TABLE users TO readonly_user;
   managed_roles:
     - readonly_user
-  output: |
+  up: |
     GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
-
+  down: |
+    REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
 ManagedRolesMultipleRoles:
   current: |
     CREATE TABLE users (
@@ -31,10 +34,12 @@ ManagedRolesMultipleRoles:
   managed_roles:
     - readonly_user
     - app_user
-  output: |
+  up: |
     GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
     GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
-
+  down: |
+    REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "app_user";
+    REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
 ManagedRolesIgnoreUnmanagedRole:
   current: |
     CREATE TABLE users (
@@ -50,9 +55,10 @@ ManagedRolesIgnoreUnmanagedRole:
     GRANT ALL PRIVILEGES ON TABLE "public"."users" TO "admin_role";
   managed_roles:
     - readonly_user
-  output: |
+  up: |
     GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
-
+  down: |
+    REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
 ManagedRolesEmptyListNoChanges:
   current: |
     CREATE TABLE users (
@@ -67,7 +73,8 @@ ManagedRolesEmptyListNoChanges:
     );
     GRANT SELECT ON TABLE users TO readonly_user;
   managed_roles: []
-  output: ""
+  up: ""
+  down: ""
 
 ManagedRolesAddPrivileges:
   current: |
@@ -84,9 +91,10 @@ ManagedRolesAddPrivileges:
     GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
   managed_roles:
     - app_user
-  output: |
+  up: |
     GRANT INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
-
+  down: |
+    REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
 ManagedRolesRevoke:
   current: |
     CREATE TABLE users (
@@ -102,9 +110,10 @@ ManagedRolesRevoke:
     GRANT SELECT ON TABLE users TO app_user;
   managed_roles:
     - app_user
-  output: |
+  up: |
     REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
-
+  down: |
+    GRANT INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
 ManagedRolesRevokeAll:
   current: |
     CREATE TABLE users (
@@ -119,9 +128,10 @@ ManagedRolesRevokeAll:
     );
   managed_roles:
     - app_user
-  output: |
+  up: |
     REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "app_user";
-
+  down: |
+    GRANT INSERT, SELECT, UPDATE ON TABLE "public"."users" TO "app_user";
 ManagedRolesPublic:
   current: |
     CREATE TABLE users (
@@ -136,9 +146,10 @@ ManagedRolesPublic:
     GRANT SELECT ON TABLE "public"."users" TO PUBLIC;
   managed_roles:
     - PUBLIC
-  output: |
+  up: |
     GRANT SELECT ON TABLE "public"."users" TO PUBLIC;
-
+  down: |
+    REVOKE SELECT ON TABLE "public"."users" FROM PUBLIC;
 ManagedRolesAllPrivileges:
   current: |
     CREATE TABLE users (
@@ -153,9 +164,10 @@ ManagedRolesAllPrivileges:
     GRANT ALL PRIVILEGES ON TABLE "public"."users" TO "admin_role";
   managed_roles:
     - admin_role
-  output: |
+  up: |
     GRANT ALL PRIVILEGES ON TABLE "public"."users" TO "admin_role";
-
+  down: |
+    REVOKE ALL PRIVILEGES ON TABLE "public"."users" FROM "admin_role";
 ManagedRolesIdempotent:
   current: |
     CREATE TABLE users (
@@ -171,7 +183,8 @@ ManagedRolesIdempotent:
     GRANT SELECT ON TABLE users TO readonly_user;
   managed_roles:
     - readonly_user
-  output: ""
+  up: ""
+  down: ""
 
 ManagedRolesNoRevokeWithoutDrop:
   current: |
@@ -189,7 +202,8 @@ ManagedRolesNoRevokeWithoutDrop:
   managed_roles:
     - app_user
   enable_drop: false
-  output: ""
+  up: ""
+  down: ""
 
 ManagedRolesMultipleGrantees:
   enable_drop: false
@@ -208,9 +222,9 @@ ManagedRolesMultipleGrantees:
     - readonly_user
     - app_user
     - admin_role
-  output: |
+  up: |
     GRANT SELECT ON TABLE "public"."users" TO "admin_role", "app_user", "readonly_user";
-
+  down: ""
 ManagedRolesPartialGrantees:
   enable_drop: false
   current: |
@@ -228,10 +242,10 @@ ManagedRolesPartialGrantees:
   managed_roles:
     - user2
     - user4
-  output: |
+  up: |
     GRANT SELECT ON TABLE "public"."users" TO "user2";
     GRANT INSERT, UPDATE ON TABLE "public"."users" TO "user2", "user4";
-
+  down: ""
 ManagedRolesOverlapping:
   enable_drop: false
   current: |
@@ -251,11 +265,11 @@ ManagedRolesOverlapping:
     - user1
     - user2
     - user3
-  output: |
+  up: |
     GRANT INSERT ON TABLE "public"."users" TO "user1";
     GRANT SELECT, INSERT ON TABLE "public"."users" TO "user2";
     GRANT UPDATE, DELETE ON TABLE "public"."users" TO "user1", "user3";
-
+  down: ""
 ManagedRolesMultipleTables:
   current: |
     CREATE TABLE users (
@@ -278,10 +292,12 @@ ManagedRolesMultipleTables:
     GRANT SELECT, INSERT, UPDATE ON TABLE users, posts TO app_user;
   managed_roles:
     - app_user
-  output: |
+  up: |
     GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
     GRANT SELECT, INSERT, UPDATE ON TABLE "public"."posts" TO "app_user";
-
+  down: |
+    REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."posts" FROM "app_user";
+    REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "app_user";
 ManagedRolesErrorGrantOption:
   current: |
     CREATE TABLE users (
@@ -330,9 +346,10 @@ ManagedRolesPartialRevokeFromAll:
     GRANT SELECT, INSERT, UPDATE ON TABLE users TO admin_role;
   managed_roles:
     - admin_role
-  output: |
+  up: |
     REVOKE DELETE, REFERENCES, TRIGGER, TRUNCATE ON TABLE "public"."users" FROM "admin_role";
-
+  down: |
+    GRANT DELETE, REFERENCES, TRIGGER, TRUNCATE ON TABLE "public"."users" TO "admin_role";
 ManagedRolesSpecialCharacters:
   current: |
     CREATE TABLE users (
@@ -351,11 +368,14 @@ ManagedRolesSpecialCharacters:
     - user-with-dash
     - user.with.dot
     - user@domain.com
-  output: |
+  up: |
     GRANT SELECT ON TABLE "public"."users" TO "user-with-dash";
     GRANT INSERT ON TABLE "public"."users" TO "user.with.dot";
     GRANT UPDATE ON TABLE "public"."users" TO "user@domain.com";
-
+  down: |
+    REVOKE SELECT ON TABLE "public"."users" FROM "user-with-dash";
+    REVOKE INSERT ON TABLE "public"."users" FROM "user.with.dot";
+    REVOKE UPDATE ON TABLE "public"."users" FROM "user@domain.com";
 ManagedRolesMixedGrantRevoke:
   current: |
     CREATE TABLE users (
@@ -371,6 +391,9 @@ ManagedRolesMixedGrantRevoke:
     GRANT SELECT, UPDATE ON TABLE users TO app_user;
   managed_roles:
     - app_user
-  output: |
+  up: |
     REVOKE DELETE, INSERT ON TABLE "public"."users" FROM "app_user";
     GRANT UPDATE ON TABLE "public"."users" TO "app_user";
+  down: |
+    REVOKE UPDATE ON TABLE "public"."users" FROM "app_user";
+    GRANT INSERT, DELETE ON TABLE "public"."users" TO "app_user";
