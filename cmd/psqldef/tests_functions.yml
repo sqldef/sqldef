@@ -261,19 +261,16 @@ CreateFunctionWithSetSearchPath:
     END;
     $$ LANGUAGE plpgsql SET search_path = public, pg_temp;
 
-# Note: Testing SET with quoted parameter names like "TimeZone" has comparison issues
-# because PostgreSQL exports it differently. This test is disabled until the
-# function comparison logic is improved.
-# CreateFunctionWithSetTimeZone:
-#   legacy_ignore_quotes: false
-#   desired: |
-#     CREATE FUNCTION get_utc_time()
-#       RETURNS timestamptz AS
-#     $$
-#     BEGIN
-#       RETURN NOW();
-#     END;
-#     $$ LANGUAGE plpgsql SET "TimeZone" = 'UTC';
+CreateFunctionWithSetTimeZone:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION get_utc_time()
+      RETURNS timestamp with time zone AS
+    $$
+    BEGIN
+      RETURN NOW();
+    END;
+    $$ LANGUAGE plpgsql SET timezone = 'UTC';
 
 CreateFunctionWithMultipleSet:
   legacy_ignore_quotes: false

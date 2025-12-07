@@ -3217,7 +3217,12 @@ function_return_type:
   }
 | column_type
   {
-    $$ = $1.Type
+    // Handle timestamp/time with time zone types
+    if $1.Timezone {
+      $$ = $1.Type + " with time zone"
+    } else {
+      $$ = $1.Type
+    }
   }
 | TABLE '(' function_table_columns ')'
   {
@@ -3225,7 +3230,12 @@ function_return_type:
   }
 | SETOF column_type
   {
-    $$ = "SETOF " + $2.Type
+    // Handle timestamp/time with time zone types in SETOF
+    if $2.Timezone {
+      $$ = "SETOF " + $2.Type + " with time zone"
+    } else {
+      $$ = "SETOF " + $2.Type
+    }
   }
 
 function_table_columns:

@@ -185,6 +185,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				body:       stmt.Function.Body,
 				language:   stmt.Function.Language,
 				orReplace:  stmt.Function.OrReplace,
+				options:    stmt.Function.Options,
 			}, nil
 		} else if stmt.Action == parser.CreateType {
 			return &Type{
