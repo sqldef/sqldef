@@ -9,7 +9,7 @@ services:
       - '3306:3306'
     restart: on-failure
   mariadb:
-    image: mariadb:${MARIADB_VERSION:-12.2}
+    image: mariadb:${MARIADB_VERSION:-11.8}
     environment:
       MYSQL_ALLOW_EMPTY_PASSWORD: 'true'
       MYSQL_ROOT_HOST: '%'
