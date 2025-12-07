@@ -27,7 +27,7 @@ services:
     restart: on-failure
   mssql:
     # Available versions: https://mcr.microsoft.com/artifact/mar/mssql/server/about
-    image: mcr.microsoft.com/mssql/server:${MSSQL_VERSION:-2022-latest}
+    image: mcr.microsoft.com/mssql/server:${MSSQL_VERSION:-2025-latest}
     platform: linux/amd64
     user: root
     environment:
