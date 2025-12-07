@@ -402,6 +402,30 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			// TODO: simulate to remove index from `currentTable.indexes`?
 		}
 
+		// Check checks.
+		// NOTE: This must be done before dropping columns, because PostgreSQL automatically
+		// drops constraints that reference a dropped column (CASCADE behavior).
+		// If we drop the column first, the subsequent DROP CONSTRAINT will fail.
+		for _, check := range currentTable.checks {
+			// First try to find by name
+			if g.findCheckConstraintInTable(desiredTable, check.constraintName) != nil {
+				continue
+			}
+
+			// For MySQL and MSSQL, also check if this constraint matches any column-level CHECK by definition
+			// This handles auto-generated constraint names for column-level CHECKs
+			if (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) && g.findCheckConstraintByDefinition(desiredTable, &check) != nil {
+				continue
+			}
+
+			switch g.mode {
+			case GeneratorModePostgres, GeneratorModeMssql, GeneratorModeSQLite3:
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
+			case GeneratorModeMysql:
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
+			}
+		}
+
 		// Check columns.
 		for _, column := range currentTable.columns {
 			if g.findColumnByName(desiredTable.columns, column.name) != nil {
@@ -431,27 +455,6 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue
 			}
 			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLIdent(policy.name), g.escapeTableName(currentTable)))
-		}
-
-		// Check checks.
-		for _, check := range currentTable.checks {
-			// First try to find by name
-			if g.findCheckConstraintInTable(desiredTable, check.constraintName) != nil {
-				continue
-			}
-
-			// For MySQL and MSSQL, also check if this constraint matches any column-level CHECK by definition
-			// This handles auto-generated constraint names for column-level CHECKs
-			if (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) && g.findCheckConstraintByDefinition(desiredTable, &check) != nil {
-				continue
-			}
-
-			switch g.mode {
-			case GeneratorModePostgres, GeneratorModeMssql, GeneratorModeSQLite3:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
-			case GeneratorModeMysql:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
-			}
 		}
 	}
 

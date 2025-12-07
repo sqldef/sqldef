@@ -153,3 +153,28 @@ ViewDependsOnView_UpdateBaseViewAffectingDependentViews:
   output: |
     ALTER TABLE "public"."products" ADD COLUMN "category" text;
     CREATE OR REPLACE VIEW "public"."cheap_products" AS select id, name, category from products where price < 50;
+
+# DROP CONSTRAINT should be executed before DROP COLUMN when the constraint references the column.
+# PostgreSQL automatically drops constraints that reference a dropped column (CASCADE behavior),
+# so if DROP COLUMN runs first, the subsequent DROP CONSTRAINT will fail with "constraint does not exist".
+# Note: check_col1_positive (which only references col1) is not explicitly dropped because
+# PostgreSQL will automatically drop it when col1 is dropped.
+DropColumnWithReferencingCheckConstraint:
+  current: |
+    CREATE TABLE test (
+      id bigserial NOT NULL PRIMARY KEY,
+      col1 integer NOT NULL,
+      col2 text NOT NULL,
+      CONSTRAINT check_col1_positive CHECK (col1 > 0),
+      CONSTRAINT check_col1_col2 CHECK (col1 < 100 OR col2 <> '')
+    );
+  desired: |
+    CREATE TABLE test (
+      id bigserial NOT NULL PRIMARY KEY,
+      col3 bigint NOT NULL,
+      col2 text NOT NULL
+    );
+  output: |
+    ALTER TABLE "public"."test" ADD COLUMN "col3" bigint NOT NULL;
+    ALTER TABLE "public"."test" DROP CONSTRAINT "check_col1_col2";
+    ALTER TABLE "public"."test" DROP COLUMN "col1";
