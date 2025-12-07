@@ -1,3 +1,6 @@
+## [v3.7.5](https://github.com/sqldef/sqldef/compare/v3.7.4...v3.7.5) - 2025-12-07
+- Fix: edge case issues; changing the YAML test format for the contributors to make sure writing forward and backward migrations by @gfx in https://github.com/sqldef/sqldef/pull/981
+
 ## [v3.7.4](https://github.com/sqldef/sqldef/compare/v3.7.3...v3.7.4) - 2025-12-06
 - [doc] add `v4-migration.md` to describe incoming incompatible changes by @gfx in https://github.com/sqldef/sqldef/pull/977
 - psqldef: fix an issue that cross-schema domains are not correctly handled by @gfx in https://github.com/sqldef/sqldef/pull/979
