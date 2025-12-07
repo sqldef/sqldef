@@ -48,7 +48,7 @@ jobs:
             mariadb_version: '11.8'
           - target: mysqldef
             mysql_flavor: mariadb
-            mariadb_version: '12.2'
+            mariadb_version: '12.1'
 
           # PostgreSQL https://www.postgresql.org/docs/release/
           - target: psqldef
