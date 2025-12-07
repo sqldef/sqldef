@@ -165,7 +165,7 @@ https://github.com/sqldef/sqldef-preview-action
 
 sqldef is tested against the following database versions in CI:
 
-- **MySQL**: Latest version and all currently supported versions (5.7, 8.0, 8.4, 9.0)
+- **MySQL**: Latest version and all currently supported versions (5.7, 8.0, 8.4, 9)
 - **MariaDB**: Latest version and all currently supported versions (11.8, 12.1)
 - **PostgreSQL**: Latest version and all currently supported versions (14, 15, 16, 17, 18)
 - **SQL Server**: Latest version and all currently supported versions (2019, 2025)
