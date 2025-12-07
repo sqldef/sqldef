@@ -243,13 +243,15 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> RESTRICT CASCADE NO ACTION
 %token <str> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
 %token <str> PAD_INDEX FILLFACTOR IGNORE_DUP_KEY STATISTICS_NORECOMPUTE STATISTICS_INCREMENTAL ALLOW_ROW_LOCKS ALLOW_PAGE_LOCKS DISTANCE M EUCLIDEAN COSINE
-%token <str> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE INSTEAD OF OUTPUT
+%token <str> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE INSTEAD OF OUTPUT INPUT
 %token <str> HANDLER CONTINUE EXIT SQLEXCEPTION SQLWARNING SQLSTATE FOUND
 %token <str> DEFERRABLE INITIALLY IMMEDIATE DEFERRED
 %token <str> CONCURRENTLY ASYNC
 %token <str> SQL SECURITY
 %token <str> RECURSIVE
 %token <str> IMMUTABLE STABLE VOLATILE SETOF
+%token <str> LEAKPROOF CALLED COST ROWS
+%token <str> PARALLEL SAFE UNSAFE RESTRICTED
 
 // Transaction Tokens
 %token <str> BEGIN START TRANSACTION COMMIT ROLLBACK
@@ -474,7 +476,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <domainConstraints> domain_constraints_opt domain_constraint
 %type <functionArgs> function_args_opt function_args
 %type <functionArg> function_arg
-%type <str> function_return_type function_option
+%type <str> function_return_type function_option set_value_list set_value
 %type <strs> function_options_opt function_options
 %type <arrayConstructor> array_constructor
 %type <exprs> array_element_list
@@ -948,7 +950,7 @@ create_statement:
     $$ = &DDL{Action: CreateTable, NewName: $5, TableSpec: &TableSpec{}}
   }
 /* For PostgreSQL: CREATE [OR REPLACE] FUNCTION - format 1: RETURNS type AS body LANGUAGE lang */
-| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' RETURNS function_return_type AS STRING LANGUAGE sql_id function_options_opt
+| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' RETURNS function_return_type AS STRING LANGUAGE reserved_sql_id function_options_opt
   {
     $$ = &DDL{
       Action: CreateFunction,
@@ -964,7 +966,7 @@ create_statement:
     }
   }
 /* For PostgreSQL: CREATE [OR REPLACE] FUNCTION - format 2: RETURNS type LANGUAGE lang AS body (pg_get_functiondef format) */
-| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' RETURNS function_return_type LANGUAGE sql_id AS STRING function_options_opt
+| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' RETURNS function_return_type LANGUAGE reserved_sql_id AS STRING function_options_opt
   {
     $$ = &DDL{
       Action: CreateFunction,
@@ -976,6 +978,22 @@ create_statement:
         Language: $11.Name,
         OrReplace: $2 != "",
         Options: $14,
+      },
+    }
+  }
+/* For PostgreSQL: CREATE [OR REPLACE] FUNCTION - format 3: RETURNS type LANGUAGE lang options AS body (pg_get_functiondef format with options before AS) */
+| CREATE or_replace_opt FUNCTION object_name '(' function_args_opt ')' RETURNS function_return_type LANGUAGE reserved_sql_id function_options AS STRING
+  {
+    $$ = &DDL{
+      Action: CreateFunction,
+      Function: &Function{
+        Name: $4,
+        Args: $6,
+        ReturnType: $9,
+        Body: $14,
+        Language: $11.Name,
+        OrReplace: $2 != "",
+        Options: $12,
       },
     }
   }
@@ -3253,6 +3271,14 @@ function_option:
   {
     $$ = "STRICT"
   }
+| CALLED ON NULL INPUT
+  {
+    $$ = "CALLED ON NULL INPUT"
+  }
+| RETURNS NULL ON NULL INPUT
+  {
+    $$ = "RETURNS NULL ON NULL INPUT"
+  }
 | SECURITY DEFINER
   {
     $$ = "SECURITY DEFINER"
@@ -3260,6 +3286,62 @@ function_option:
 | SECURITY INVOKER
   {
     $$ = "SECURITY INVOKER"
+  }
+| LEAKPROOF
+  {
+    $$ = "LEAKPROOF"
+  }
+| PARALLEL SAFE
+  {
+    $$ = "PARALLEL SAFE"
+  }
+| PARALLEL UNSAFE
+  {
+    $$ = "PARALLEL UNSAFE"
+  }
+| PARALLEL RESTRICTED
+  {
+    $$ = "PARALLEL RESTRICTED"
+  }
+| COST INTEGRAL
+  {
+    $$ = "COST " + $2
+  }
+| COST FLOAT
+  {
+    $$ = "COST " + $2
+  }
+| ROWS INTEGRAL
+  {
+    $$ = "ROWS " + $2
+  }
+| ROWS FLOAT
+  {
+    $$ = "ROWS " + $2
+  }
+| SET sql_id '=' set_value_list
+  {
+    $$ = "SET " + $2.Name + " = " + $4
+  }
+| SET sql_id TO set_value_list
+  {
+    $$ = "SET " + $2.Name + " = " + $4
+  }
+
+set_value_list:
+  set_value
+  {
+    $$ = $1
+  }
+| set_value_list ',' set_value
+  {
+    $$ = $1 + ", " + $3
+  }
+
+set_value:
+  value_expression
+  {
+    $$ = String($1)
   }
 
 character_cast_opt:
@@ -6591,21 +6673,30 @@ with_data_opt:
 
 non_reserved_keyword:
   ACTION
+| CALLED
+| COST
 | DATA
 | DEFINER
 | DOMAIN
 | GEOMETRY
 | GEOMETRYCOLLECTION
 | INVOKER
+| LEAKPROOF
 | LINESTRING
 | MULTILINESTRING
 | MULTIPOINT
 | MULTIPOLYGON
+| PARALLEL
 | POINT
 | POLICY
 | POLYGON
+| RESTRICTED
+| ROWS
+| SAFE
+| SQL
 | TYPE
 | STATUS
+| UNSAFE
 | VARIABLES
 | ZONE
 | LEVEL
