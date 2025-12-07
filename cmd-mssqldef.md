@@ -85,11 +85,8 @@ COMMIT;
 $ mssqldef -U sa -P password123 mydb --apply < schema.sql
 -- Nothing is modified --
 
-# Run without dropping tables and columns
-$ mssqldef -U sa -P password123 mydb --apply < schema.sql
--- Skipped: DROP TABLE dbo.old_users;
-
-# Run with drop operations enabled
+# By default, DROP operations are skipped (safe mode)
+# To enable DROP TABLE, DROP COLUMN, etc., use --enable-drop
 $ mssqldef -U sa -P password123 mydb --apply --enable-drop < schema.sql
 -- Apply --
 BEGIN TRANSACTION;

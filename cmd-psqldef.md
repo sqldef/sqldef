@@ -94,11 +94,8 @@ COMMIT;
 $ psqldef -U postgres test --apply < schema.sql
 -- Nothing is modified --
 
-# Run without dropping tables and columns
-$ psqldef -U postgres test --apply < schema.sql
--- Skipped: DROP TABLE users;
-
-# Run with drop operations enabled
+# By default, DROP operations are skipped (safe mode)
+# To enable DROP TABLE, DROP COLUMN, etc., use --enable-drop
 $ psqldef -U postgres test --apply --enable-drop < schema.sql
 -- Apply --
 BEGIN;

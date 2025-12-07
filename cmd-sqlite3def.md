@@ -72,11 +72,8 @@ COMMIT;
 $ sqlite3def mydb.db --apply < schema.sql
 -- Nothing is modified --
 
-# Run without dropping tables and columns
-$ sqlite3def mydb.db --apply < schema.sql
--- Skipped: DROP TABLE old_users;
-
-# Run with drop operations enabled
+# By default, DROP operations are skipped (safe mode)
+# To enable DROP TABLE, DROP COLUMN, etc., use --enable-drop
 $ sqlite3def mydb.db --apply --enable-drop < schema.sql
 -- Apply --
 BEGIN;

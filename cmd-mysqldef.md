@@ -86,18 +86,11 @@ ALTER TABLE user ADD INDEX index_name(name);
 $ mysqldef -uroot test --apply < schema.sql
 -- Nothing is modified --
 
-# Run without dropping tables and columns
-$ mysqldef -uroot test --apply < schema.sql
--- Skipped: DROP TABLE users;
-
-# Run with drop operations enabled
+# By default, DROP operations are skipped (safe mode)
+# To enable DROP TABLE, DROP COLUMN, etc., use --enable-drop
 $ mysqldef -uroot test --apply --enable-drop < schema.sql
 -- Apply --
 DROP TABLE users;
-
-# Skip tables matching patterns (supports regular expressions)
-$ echo "user\n.*_bk\n.*_[0-9]{8}" > skip-tables
-$ mysqldef -uroot test --apply --skip-file skip-tables < schema.sql
 
 # Use config file to control schema management
 $ cat > config.yml <<EOF
