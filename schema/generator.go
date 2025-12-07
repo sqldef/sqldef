@@ -1953,9 +1953,100 @@ func (g *Generator) findFunctionByName(functions []*Function, name QualifiedName
 
 func (g *Generator) areSameFunctionDefinition(a, b *Function) bool {
 	// Compare function properties
-	return a.returnType == b.returnType &&
-		a.body == b.body &&
-		a.language == b.language
+	if a.returnType != b.returnType ||
+		a.body != b.body ||
+		a.language != b.language {
+		return false
+	}
+
+	// Compare options (order-independent, case-insensitive for option names)
+	return g.areSameFunctionOptions(a.options, b.options)
+}
+
+// areSameFunctionOptions compares two sets of function options.
+// Options are compared in a normalized way to handle differences in formatting.
+func (g *Generator) areSameFunctionOptions(a, b []string) bool {
+	// Normalize and filter out default options
+	normalizedA := normalizeFunctionOptions(a)
+	normalizedB := normalizeFunctionOptions(b)
+
+	if len(normalizedA) != len(normalizedB) {
+		return false
+	}
+
+	slices.Sort(normalizedA)
+	slices.Sort(normalizedB)
+
+	for i := range normalizedA {
+		if normalizedA[i] != normalizedB[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// normalizeFunctionOptions normalizes a list of function options for comparison.
+// It removes default options that PostgreSQL doesn't export.
+func normalizeFunctionOptions(options []string) []string {
+	// PostgreSQL default options (not exported by pg_get_functiondef)
+	defaultOptions := map[string]bool{
+		"volatile":             true, // default volatility
+		"called on null input": true, // default null behavior
+		"security invoker":     true, // default security
+		"parallel unsafe":      true, // default parallel safety
+	}
+
+	var result []string
+	for _, opt := range options {
+		normalized := normalizeFunctionOption(opt)
+		// Skip default options
+		if !defaultOptions[normalized] {
+			result = append(result, normalized)
+		}
+	}
+	return result
+}
+
+// normalizeFunctionOption normalizes a function option for comparison.
+// Handles differences like:
+// - "TimeZone" vs timezone (quoted vs unquoted identifiers)
+// - SET x TO y vs SET x = y
+// - 'value' vs value (quoted vs unquoted values)
+// - RETURNS NULL ON NULL INPUT vs STRICT
+// - Case differences
+func normalizeFunctionOption(opt string) string {
+	opt = strings.TrimSpace(opt)
+	opt = strings.ToLower(opt)
+
+	// Remove double quotes from identifiers (e.g., "timezone" -> timezone)
+	opt = strings.ReplaceAll(opt, "\"", "")
+
+	// Remove single quotes from values (e.g., 'public' -> public)
+	// This normalizes SET search_path = 'public', 'pg_temp' to SET search_path = public, pg_temp
+	opt = strings.ReplaceAll(opt, "'", "")
+
+	// Normalize SET clause: replace " to " with " = " for consistency
+	// Match patterns like "set x to y" and convert to "set x = y"
+	if strings.HasPrefix(opt, "set ") {
+		// Replace " to " with " = " but be careful not to replace within values
+		// Simple approach: replace the first occurrence of " to " after "set "
+		parts := strings.SplitN(opt, " to ", 2)
+		if len(parts) == 2 {
+			opt = parts[0] + " = " + parts[1]
+		}
+	}
+
+	// Normalize whitespace
+	opt = strings.Join(strings.Fields(opt), " ")
+
+	// Normalize equivalent options
+	// RETURNS NULL ON NULL INPUT is equivalent to STRICT
+	if opt == "returns null on null input" {
+		opt = "strict"
+	}
+
+	return opt
 }
 
 func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {

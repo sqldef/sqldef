@@ -336,6 +336,7 @@ type Function struct {
 	body       string
 	language   string
 	orReplace  bool
+	options    []string // Additional options like IMMUTABLE, SECURITY DEFINER, SET timezone = 'UTC', etc.
 }
 
 type Value struct {

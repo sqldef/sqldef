@@ -1,0 +1,337 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
+# Test cases for CREATE FUNCTION statements
+# https://www.postgresql.org/docs/current/sql-createfunction.html
+
+CreateFunctionReturnsTrigger:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE device_tests (
+      id serial PRIMARY KEY,
+      test_type text,
+      permit text
+    );
+    CREATE FUNCTION check_test_type_requires_permit()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      IF NEW.test_type = 'required' AND NEW.permit IS NULL THEN
+        RAISE EXCEPTION 'Permit is required for this status value';
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+
+CreateOrReplaceFunctionWithTrigger:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE device_tests (
+      id serial PRIMARY KEY,
+      test_type text,
+      permit text
+    );
+    CREATE OR REPLACE FUNCTION check_test_type_requires_permit()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      IF NEW.test_type = 'required' AND NEW.permit IS NULL THEN
+        RAISE EXCEPTION 'Permit is required for this status value';
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER enforce_required_permit
+      BEFORE INSERT OR UPDATE ON device_tests
+      FOR EACH ROW EXECUTE FUNCTION check_test_type_requires_permit();
+  up: |
+    CREATE TABLE device_tests (
+      id serial PRIMARY KEY,
+      test_type text,
+      permit text
+    );
+    CREATE OR REPLACE FUNCTION check_test_type_requires_permit()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      IF NEW.test_type = 'required' AND NEW.permit IS NULL THEN
+        RAISE EXCEPTION 'Permit is required for this status value';
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER enforce_required_permit before insert OR update ON public.device_tests FOR EACH ROW EXECUTE FUNCTION check_test_type_requires_permit();
+  down: |
+    DROP TRIGGER enforce_required_permit ON public.device_tests;
+    DROP TABLE public.device_tests;
+
+# Volatility: IMMUTABLE, STABLE, VOLATILE
+
+CreateFunctionImmutable:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION add_numbers(a integer, b integer)
+      RETURNS integer AS
+    $$
+    BEGIN
+      RETURN a + b;
+    END;
+    $$ LANGUAGE plpgsql IMMUTABLE;
+
+CreateFunctionStable:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION get_current_date()
+      RETURNS date AS
+    $$
+    BEGIN
+      RETURN CURRENT_DATE;
+    END;
+    $$ LANGUAGE plpgsql STABLE;
+
+CreateFunctionVolatile:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION get_random_value()
+      RETURNS double precision AS
+    $$
+    BEGIN
+      RETURN random();
+    END;
+    $$ LANGUAGE plpgsql VOLATILE;
+
+# Null handling: CALLED ON NULL INPUT, RETURNS NULL ON NULL INPUT, STRICT
+
+CreateFunctionCalledOnNullInput:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION handle_null(val text)
+      RETURNS text AS
+    $$
+    BEGIN
+      IF val IS NULL THEN
+        RETURN 'was null';
+      END IF;
+      RETURN val;
+    END;
+    $$ LANGUAGE plpgsql CALLED ON NULL INPUT;
+
+CreateFunctionReturnsNullOnNullInput:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION double_value(val integer)
+      RETURNS integer AS
+    $$
+    BEGIN
+      RETURN val * 2;
+    END;
+    $$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
+
+CreateFunctionStrict:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION triple_value(val integer)
+      RETURNS integer AS
+    $$
+    BEGIN
+      RETURN val * 3;
+    END;
+    $$ LANGUAGE plpgsql STRICT;
+
+# Security: SECURITY DEFINER, SECURITY INVOKER
+
+CreateFunctionSecurityDefiner:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION secure_function()
+      RETURNS void AS
+    $$
+    BEGIN
+      -- runs with owner privileges
+    END;
+    $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CreateFunctionSecurityInvoker:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION normal_function()
+      RETURNS void AS
+    $$
+    BEGIN
+      -- runs with caller privileges
+    END;
+    $$ LANGUAGE plpgsql SECURITY INVOKER;
+
+# LEAKPROOF
+
+CreateFunctionLeakproof:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION safe_compare(a text, b text)
+      RETURNS boolean AS
+    $$
+    BEGIN
+      RETURN a = b;
+    END;
+    $$ LANGUAGE plpgsql IMMUTABLE LEAKPROOF;
+
+# Parallel safety: PARALLEL UNSAFE, PARALLEL RESTRICTED, PARALLEL SAFE
+
+CreateFunctionParallelUnsafe:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION unsafe_parallel()
+      RETURNS void AS
+    $$
+    BEGIN
+      -- cannot run in parallel
+    END;
+    $$ LANGUAGE plpgsql PARALLEL UNSAFE;
+
+CreateFunctionParallelRestricted:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION restricted_parallel()
+      RETURNS void AS
+    $$
+    BEGIN
+      -- runs only in leader
+    END;
+    $$ LANGUAGE plpgsql PARALLEL RESTRICTED;
+
+CreateFunctionParallelSafe:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION safe_parallel(val integer)
+      RETURNS integer AS
+    $$
+    BEGIN
+      RETURN val * 2;
+    END;
+    $$ LANGUAGE plpgsql PARALLEL SAFE;
+
+# Cost and Rows
+
+CreateFunctionWithCost:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION expensive_function(val integer)
+      RETURNS integer AS
+    $$
+    BEGIN
+      RETURN val;
+    END;
+    $$ LANGUAGE plpgsql COST 1000;
+
+CreateFunctionWithRows:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION generate_series_custom(n integer)
+      RETURNS SETOF integer AS
+    $$
+    BEGIN
+      FOR i IN 1..n LOOP
+        RETURN NEXT i;
+      END LOOP;
+    END;
+    $$ LANGUAGE plpgsql ROWS 100;
+
+CreateFunctionWithCostAndRows:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION expensive_set_function(n integer)
+      RETURNS SETOF integer AS
+    $$
+    BEGIN
+      FOR i IN 1..n LOOP
+        RETURN NEXT i;
+      END LOOP;
+    END;
+    $$ LANGUAGE plpgsql COST 500 ROWS 50;
+
+# SET configuration parameter
+
+CreateFunctionWithSetSearchPath:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION secure_lookup()
+      RETURNS void AS
+    $$
+    BEGIN
+      -- lookup with fixed search_path
+    END;
+    $$ LANGUAGE plpgsql SET search_path = public, pg_temp;
+
+CreateFunctionWithSetTimeZone:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION get_utc_time()
+      RETURNS timestamp with time zone AS
+    $$
+    BEGIN
+      RETURN NOW();
+    END;
+    $$ LANGUAGE plpgsql SET timezone = 'UTC';
+
+CreateFunctionWithMultipleSet:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION configured_function()
+      RETURNS void AS
+    $$
+    BEGIN
+      -- function with multiple SET parameters
+    END;
+    $$ LANGUAGE plpgsql
+       SET search_path = public
+       SET statement_timeout = '30s';
+
+# Multiple attributes combined
+
+CreateFunctionWithMultipleAttributes:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION compute_hash(val text)
+      RETURNS text AS
+    $$
+    BEGIN
+      RETURN md5(val);
+    END;
+    $$ LANGUAGE plpgsql
+       IMMUTABLE
+       STRICT
+       PARALLEL SAFE
+       COST 10;
+
+CreateFunctionSecurityDefinerWithSearchPath:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION admin_operation()
+      RETURNS void AS
+    $$
+    BEGIN
+      -- secure admin operation
+    END;
+    $$ LANGUAGE plpgsql
+       SECURITY DEFINER
+       STABLE
+       SET search_path = admin, pg_temp;
+
+# SQL language functions (default language when sql_body is used)
+
+CreateFunctionSqlLanguage:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION square(val integer)
+      RETURNS integer AS
+    $$
+      SELECT val * val;
+    $$ LANGUAGE sql IMMUTABLE;
+
+CreateFunctionSqlStrict:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION concat_strings(a text, b text)
+      RETURNS text AS
+    $$
+      SELECT a || b;
+    $$ LANGUAGE sql IMMUTABLE STRICT;
