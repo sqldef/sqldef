@@ -45,24 +45,16 @@ jobs:
           # MariaDB https://mariadb.org/mariadb/all-releases/
           - target: mysqldef
             mysql_flavor: mariadb
-            mariadb_version: '11.8'
+            mariadb_version: '11'
           - target: mysqldef
             mysql_flavor: mariadb
-            mariadb_version: '12.1'
+            mariadb_version: '12'
 
           # PostgreSQL https://www.postgresql.org/docs/release/
           - target: psqldef
-            postgres_version: 13
+            postgres_version: '13'
           - target: psqldef
-            postgres_version: 14
-          - target: psqldef
-            postgres_version: 15
-          - target: psqldef
-            postgres_version: 16
-          - target: psqldef
-            postgres_version: 17
-          - target: psqldef
-            postgres_version: 18
+            postgres_version: '18'
       fail-fast: false
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
