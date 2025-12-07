@@ -56,7 +56,7 @@ Show the migrations that will be applied without executing them (e.g., `ALTER TA
 #### 4. Apply Changes
 
 ```shell
-$sqldef [connection-options] < schema.sql
+$sqldef [connection-options] --apply < schema.sql
 ```
 
 Apply the necessary DDLs to transform current schema to desired state.

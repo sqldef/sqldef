@@ -100,16 +100,16 @@ case "$TOOL" in
 
         # Apply changes
         echo -e "${GREEN}6. Applying schema changes${NC}"
-        echo -e "${YELLOW}Command: psqldef -U $USER $DB < schema.sql${NC}"
+        echo -e "${YELLOW}Command: psqldef -U $USER $DB --apply < schema.sql${NC}"
         echo ""
-        "$BINARY" -U "$USER" "$DB" < "$SCHEMA_DIR/schema.sql"
+        "$BINARY" -U "$USER" "$DB" --apply < "$SCHEMA_DIR/schema.sql"
         echo ""
 
         # Verify idempotency
         echo -e "${GREEN}7. Verifying idempotency (running again)${NC}"
-        echo -e "${YELLOW}Command: psqldef -U $USER $DB < schema.sql${NC}"
+        echo -e "${YELLOW}Command: psqldef -U $USER $DB --apply < schema.sql${NC}"
         echo ""
-        "$BINARY" -U "$USER" "$DB" < "$SCHEMA_DIR/schema.sql"
+        "$BINARY" -U "$USER" "$DB" --apply < "$SCHEMA_DIR/schema.sql"
         echo ""
 
         # Export final schema
@@ -165,16 +165,16 @@ case "$TOOL" in
 
         # Apply changes
         echo -e "${GREEN}6. Applying schema changes${NC}"
-        echo -e "${YELLOW}Command: mysqldef -u$USER $DB < schema.sql${NC}"
+        echo -e "${YELLOW}Command: mysqldef -u$USER $DB --apply < schema.sql${NC}"
         echo ""
-        "$BINARY" -u"$USER" "$DB" < "$SCHEMA_DIR/schema.sql"
+        "$BINARY" -u"$USER" "$DB" --apply < "$SCHEMA_DIR/schema.sql"
         echo ""
 
         # Verify idempotency
         echo -e "${GREEN}7. Verifying idempotency (running again)${NC}"
-        echo -e "${YELLOW}Command: mysqldef -u$USER $DB < schema.sql${NC}"
+        echo -e "${YELLOW}Command: mysqldef -u$USER $DB --apply < schema.sql${NC}"
         echo ""
-        "$BINARY" -u"$USER" "$DB" < "$SCHEMA_DIR/schema.sql"
+        "$BINARY" -u"$USER" "$DB" --apply < "$SCHEMA_DIR/schema.sql"
         echo ""
 
         # Export final schema
@@ -227,16 +227,16 @@ case "$TOOL" in
 
         # Apply changes
         echo -e "${GREEN}6. Applying schema changes${NC}"
-        echo -e "${YELLOW}Command: sqlite3def $DB < schema.sql${NC}"
+        echo -e "${YELLOW}Command: sqlite3def $DB --apply < schema.sql${NC}"
         echo ""
-        "$BINARY" "$DB" < "$SCHEMA_DIR/schema.sql"
+        "$BINARY" "$DB" --apply < "$SCHEMA_DIR/schema.sql"
         echo ""
 
         # Verify idempotency
         echo -e "${GREEN}7. Verifying idempotency (running again)${NC}"
-        echo -e "${YELLOW}Command: sqlite3def $DB < schema.sql${NC}"
+        echo -e "${YELLOW}Command: sqlite3def $DB --apply < schema.sql${NC}"
         echo ""
-        "$BINARY" "$DB" < "$SCHEMA_DIR/schema.sql"
+        "$BINARY" "$DB" --apply < "$SCHEMA_DIR/schema.sql"
         echo ""
 
         # Export final schema
@@ -292,16 +292,16 @@ case "$TOOL" in
 
         # Apply changes
         echo -e "${GREEN}6. Applying schema changes${NC}"
-        echo -e "${YELLOW}Command: mssqldef -U $USER -P *** -h $HOST $DB < schema.sql${NC}"
+        echo -e "${YELLOW}Command: mssqldef -U $USER -P *** -h $HOST $DB --apply < schema.sql${NC}"
         echo ""
-        "$BINARY" -U "$USER" -P "$PASSWORD" -h "$HOST" "$DB" < "$SCHEMA_DIR/schema.sql"
+        "$BINARY" -U "$USER" -P "$PASSWORD" -h "$HOST" "$DB" --apply < "$SCHEMA_DIR/schema.sql"
         echo ""
 
         # Verify idempotency
         echo -e "${GREEN}7. Verifying idempotency (running again)${NC}"
-        echo -e "${YELLOW}Command: mssqldef -U $USER -P *** -h $HOST $DB < schema.sql${NC}"
+        echo -e "${YELLOW}Command: mssqldef -U $USER -P *** -h $HOST $DB --apply < schema.sql${NC}"
         echo ""
-        "$BINARY" -U "$USER" -P "$PASSWORD" -h "$HOST" "$DB" < "$SCHEMA_DIR/schema.sql"
+        "$BINARY" -U "$USER" -P "$PASSWORD" -h "$HOST" "$DB" --apply < "$SCHEMA_DIR/schema.sql"
         echo ""
 
         # Export final schema

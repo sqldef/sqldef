@@ -2,7 +2,10 @@
 
 ```
 Usage:
-  mssqldef [OPTIONS] [database|current.sql] < desired.sql
+  mssqldef [OPTION]... DATABASE --export
+  mssqldef [OPTION]... DATABASE --apply < desired.sql
+  mssqldef [OPTION]... DATABASE --dry-run < desired.sql
+  mssqldef [OPTION]... current.sql < desired.sql
 
 Application Options:
   -U, --user=USERNAME         MSSQL user name (default: sa)
@@ -70,7 +73,7 @@ CREATE INDEX IX_users_email ON dbo.users(email);
 COMMIT;
 
 # Apply DDLs
-$ mssqldef -U sa -P password123 mydb < schema.sql
+$ mssqldef -U sa -P password123 mydb --apply < schema.sql
 -- Apply --
 BEGIN TRANSACTION;
 ALTER TABLE dbo.users ADD email NVARCHAR(320) NOT NULL;
@@ -79,15 +82,12 @@ CREATE INDEX IX_users_email ON dbo.users(email);
 COMMIT;
 
 # Operations are idempotent - safe to run multiple times
-$ mssqldef -U sa -P password123 mydb < schema.sql
+$ mssqldef -U sa -P password123 mydb --apply < schema.sql
 -- Nothing is modified --
 
-# Run without dropping tables and columns
-$ mssqldef -U sa -P password123 mydb < schema.sql
--- Skipped: DROP TABLE dbo.old_users;
-
-# Run with drop operations enabled
-$ mssqldef -U sa -P password123 mydb --enable-drop < schema.sql
+# By default, DROP operations are skipped (safe mode)
+# To enable DROP TABLE, DROP COLUMN, etc., use --enable-drop
+$ mssqldef -U sa -P password123 mydb --apply --enable-drop < schema.sql
 -- Apply --
 BEGIN TRANSACTION;
 DROP TABLE dbo.old_users;
@@ -102,13 +102,13 @@ skip_tables: |
   sys\..*
   temp_.*
 EOF
-$ mssqldef -U sa -P password123 mydb --config=config.yml < schema.sql
+$ mssqldef -U sa -P password123 mydb --apply --config=config.yml < schema.sql
 
 # Use inline YAML configuration
-$ mssqldef -U sa -P password123 mydb --config-inline="skip_tables: backup_.*" < schema.sql
+$ mssqldef -U sa -P password123 mydb --apply --config-inline="skip_tables: backup_.*" < schema.sql
 
 # Multiple configs (later values override earlier ones)
-$ mssqldef -U sa -P password123 mydb --config=base.yml --config-inline="target_tables: dbo\..*" < schema.sql
+$ mssqldef -U sa -P password123 mydb --apply --config=base.yml --config-inline="target_tables: dbo\..*" < schema.sql
 ```
 
 ## Offline Mode (File-to-File Comparison)
@@ -121,7 +121,7 @@ When the database argument ends with `.sql`, mssqldef operates in offline mode:
 
 ```shell
 # Normal mode: connects to database
-$ mssqldef -U sa -P password123 mydb < schema.sql
+$ mssqldef -U sa -P password123 mydb --apply < schema.sql
 
 # Offline mode: compares two files (no database connection)
 $ mssqldef current.sql < desired.sql
@@ -275,19 +275,19 @@ Configuration can be provided through YAML files (`--config`) or inline YAML str
 ### Using Configuration Files
 
 ```shell
-$ mssqldef -U sa -P password123 mydb --config config.yml < schema.sql
+$ mssqldef -U sa -P password123 mydb --apply --config config.yml < schema.sql
 ```
 
 ### Using Inline Configuration
 
 ```shell
-$ mssqldef -U sa -P password123 mydb --config-inline 'enable_drop: true' < schema.sql
+$ mssqldef -U sa -P password123 mydb --apply --config-inline 'enable_drop: true' < schema.sql
 ```
 
 ### Combining Multiple Configurations
 
 ```shell
-$ mssqldef -U sa -P password123 mydb \
+$ mssqldef -U sa -P password123 mydb --apply \
   --config base.yml \
   --config-inline 'skip_tables: [logs, temp_data]' \
   --config-inline 'enable_drop: true' \

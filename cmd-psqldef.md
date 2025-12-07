@@ -4,7 +4,10 @@
 
 ```
 Usage:
-  psqldef [OPTION]... [DBNAME|current.sql] < desired.sql
+  psqldef [OPTION]... DBNAME --export
+  psqldef [OPTION]... DBNAME --apply < desired.sql
+  psqldef [OPTION]... DBNAME --dry-run < desired.sql
+  psqldef [OPTION]... current.sql < desired.sql
 
 Application Options:
   -U, --user=USERNAME         PostgreSQL user name (default: postgres)
@@ -80,7 +83,7 @@ ALTER TABLE users DROP COLUMN name;
 COMMIT;
 
 # Apply DDLs
-$ psqldef -U postgres test < schema.sql
+$ psqldef -U postgres test --apply < schema.sql
 -- Apply --
 BEGIN;
 DROP TABLE bigdata;
@@ -88,15 +91,12 @@ ALTER TABLE users DROP COLUMN name;
 COMMIT;
 
 # Operations are idempotent - safe to run multiple times
-$ psqldef -U postgres test < schema.sql
+$ psqldef -U postgres test --apply < schema.sql
 -- Nothing is modified --
 
-# Run without dropping tables and columns
-$ psqldef -U postgres test < schema.sql
--- Skipped: DROP TABLE users;
-
-# Run with drop operations enabled
-$ psqldef -U postgres test --enable-drop < schema.sql
+# By default, DROP operations are skipped (safe mode)
+# To enable DROP TABLE, DROP COLUMN, etc., use --enable-drop
+$ psqldef -U postgres test --apply --enable-drop < schema.sql
 -- Apply --
 BEGIN;
 DROP TABLE users;
@@ -131,13 +131,13 @@ enable_drop: true
 dump_concurrency: 4
 create_index_concurrently: true
 EOF
-$ psqldef -U postgres test --config=config.yml < schema.sql
+$ psqldef -U postgres test --apply --config=config.yml < schema.sql
 
 # Use inline YAML configuration with managed roles
-$ psqldef -U postgres test --config-inline="managed_roles: [readonly_user, app_user]" < schema.sql
+$ psqldef -U postgres test --apply --config-inline="managed_roles: [readonly_user, app_user]" < schema.sql
 
 # Multiple configs (later values override earlier ones)
-$ psqldef -U postgres test --config=base.yml --config-inline="skip_tables: archived_.*" < schema.sql
+$ psqldef -U postgres test --apply --config=base.yml --config-inline="skip_tables: archived_.*" < schema.sql
 ```
 
 ## Offline Mode (File-to-File Comparison)
@@ -150,7 +150,7 @@ When the database argument ends with `.sql`, psqldef operates in offline mode:
 
 ```shell
 # Normal mode: connects to database
-$ psqldef -U postgres mydb < schema.sql
+$ psqldef -U postgres mydb --apply < schema.sql
 
 # Offline mode: compares two files (no database connection)
 $ psqldef current.sql < desired.sql
@@ -239,10 +239,10 @@ To create indexes without blocking writes, use the `create_index_concurrently` c
 $ cat > config.yml <<EOF
 create_index_concurrently: true
 EOF
-$ psqldef -U postgres test --config=config.yml < schema.sql
+$ psqldef -U postgres test --apply --config=config.yml < schema.sql
 
 # Using inline configuration
-$ psqldef -U postgres test --config-inline="create_index_concurrently: true" < schema.sql
+$ psqldef -U postgres test --apply --config-inline="create_index_concurrently: true" < schema.sql
 
 # Example output with create_index_concurrently enabled
 -- Apply --
@@ -408,19 +408,19 @@ Configuration can be provided through YAML files (`--config`) or inline YAML str
 ### Using Configuration Files
 
 ```shell
-$ psqldef -U postgres dbname --config config.yml < schema.sql
+$ psqldef -U postgres dbname --apply --config config.yml < schema.sql
 ```
 
 ### Using Inline Configuration
 
 ```shell
-$ psqldef -U postgres dbname --config-inline 'enable_drop: true' < schema.sql
+$ psqldef -U postgres dbname --apply --config-inline 'enable_drop: true' < schema.sql
 ```
 
 ### Combining Multiple Configurations
 
 ```shell
-$ psqldef -U postgres dbname \
+$ psqldef -U postgres dbname --apply \
   --config base.yml \
   --config-inline 'managed_roles: [app_user, readonly]' \
   --config-inline 'enable_drop: true' \
@@ -462,7 +462,7 @@ CREATE TABLE users (
 ```
 
 ```shell
-$ psqldef -U postgres mydb --config-inline="legacy_ignore_quotes: false" < desired.sql
+$ psqldef -U postgres mydb --apply --config-inline="legacy_ignore_quotes: false" < desired.sql
 -- Apply --
 ALTER TABLE public.users ADD COLUMN name text;
 ```
@@ -477,7 +477,7 @@ In this mode:
 When set to `true` (current default), all identifiers are quoted in output:
 
 ```shell
-$ psqldef -U postgres mydb --config-inline="legacy_ignore_quotes: true" < desired.sql
+$ psqldef -U postgres mydb --apply --config-inline="legacy_ignore_quotes: true" < desired.sql
 -- Apply --
 ALTER TABLE "public"."users" ADD COLUMN "name" text;
 ```
