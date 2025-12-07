@@ -1,3 +1,10 @@
+## [v3.7.6](https://github.com/sqldef/sqldef/compare/v3.7.5...v3.7.6) - 2025-12-07
+- [CI] add mssql 2025, mariadb 12.1 to the test matrix by @gfx in https://github.com/sqldef/sqldef/pull/983
+- cleanup CI test matrix by @gfx in https://github.com/sqldef/sqldef/pull/986
+- sqlite3def: change to use double quotes to quote identifiers (std SQL style) by @gfx in https://github.com/sqldef/sqldef/pull/987
+- psqldef: more function attributes by @gfx in https://github.com/sqldef/sqldef/pull/988
+- support TiDB via mysqldef by @gfx in https://github.com/sqldef/sqldef/pull/989
+
 ## [v3.7.5](https://github.com/sqldef/sqldef/compare/v3.7.4...v3.7.5) - 2025-12-07
 - Fix: edge case issues; changing the YAML test format for the contributors to make sure writing forward and backward migrations by @gfx in https://github.com/sqldef/sqldef/pull/981
 
