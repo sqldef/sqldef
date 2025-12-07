@@ -48,8 +48,8 @@
         },
         "flavor": {
           "type": "string",
-          "description": "Database flavor requirement (mysqldef only)",
-          "enum": ["mysql", "mariadb"]
+          "description": "Database flavor requirement (mysqldef only). Use '!' prefix to exclude a flavor (e.g., '!tidb' to skip on TiDB)",
+          "enum": ["mysql", "mariadb", "tidb", "!mysql", "!mariadb", "!tidb"]
         },
         "managed_roles": {
           "type": "array",

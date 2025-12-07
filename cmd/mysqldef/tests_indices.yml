@@ -353,6 +353,7 @@ CreateTableKey:
     ALTER TABLE `users` DROP INDEX `index_created_at`;
     ALTER TABLE `users` DROP INDEX `index_name`;
 CreateTableWithUniqueColumnDrop:
+  flavor: "!tidb"  # TiDB does not support ADD COLUMN with UNIQUE constraint
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -368,6 +369,7 @@ CreateTableWithUniqueColumnDrop:
   down: |
     ALTER TABLE `users` ADD COLUMN `name` varchar(40) UNIQUE AFTER `id`;
 CreateTableWithUniqueColumn:
+  flavor: "!tidb"  # TiDB does not support ADD COLUMN with UNIQUE constraint
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY

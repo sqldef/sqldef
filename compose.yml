@@ -16,6 +16,11 @@ services:
     ports:
       - '3307:3306'
     restart: on-failure
+  tidb:
+    image: pingcap/tidb:${TIDB_VERSION:-v8.5.4}
+    ports:
+      - '4000:4000'
+    restart: on-failure
   postgres:
     image: postgres:${POSTGRES_VERSION:-18}
     # image: hartmutcouk/pg-repack-docker:1.4.6

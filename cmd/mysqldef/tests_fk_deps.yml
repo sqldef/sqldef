@@ -68,6 +68,7 @@ ForeignKeyDependenciesForCreateTables:
 # This test demonstrates the limitation when trying to change a primary key
 # that is referenced by foreign keys
 ForeignKeyDependenciesPrimaryKeyChange:
+  flavor: "!tidb"  # TiDB doesn't support DROP PRIMARY KEY on clustered index
   current: |
     CREATE TABLE `items` (
       `item_id` int PRIMARY KEY,
@@ -182,6 +183,7 @@ ForeignKeyDependenciesAddConstraintAfterCreation:
     ALTER TABLE `orders` DROP INDEX `order_customer_fk`;
 # Issue 5: Multiple foreign keys to same table being modified
 ForeignKeyDependenciesMultipleToModifiedTable:
+  flavor: "!tidb"  # TiDB doesn't support DROP PRIMARY KEY on clustered index
   current: |
     CREATE TABLE `users` (
       `user_id` int PRIMARY KEY,
@@ -362,6 +364,7 @@ ForeignKeyDependenciesMultipleDrops:
 # When changing a primary key column and a referencing table will be dropped,
 # we should not try to recreate the foreign key constraint
 ForeignKeyWithPrimaryKeyChangeAndDrop:
+  flavor: "!tidb"  # TiDB doesn't support DROP PRIMARY KEY on clustered index
   current: |
     CREATE TABLE users (
       id integer PRIMARY KEY

@@ -145,6 +145,18 @@ func getSortedColumns(columns map[string]*Column) []*Column {
 	return result
 }
 
+// sortIndexesByName returns indexes sorted by name.
+// This ensures deterministic DDL ordering when processing indexes from the database,
+// which may return indexes in different orders (e.g., MySQL vs TiDB).
+func sortIndexesByName(indexes []Index) []Index {
+	result := make([]Index, len(indexes))
+	copy(result, indexes)
+	slices.SortFunc(result, func(a, b Index) int {
+		return strings.Compare(a.name.Name, b.name.Name)
+	})
+	return result
+}
+
 // Main part of DDL generation
 func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	// These variables are used to control the output order of the DDL.
@@ -408,7 +420,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		}
 
 		// Check indexes
-		for _, index := range currentTable.indexes {
+		// Sort current indexes by name for deterministic DDL ordering (DB may return indexes in different order)
+		for _, index := range sortIndexesByName(currentTable.indexes) {
 
 			// Alter statement for primary key index should be generated above.
 			if index.primary {

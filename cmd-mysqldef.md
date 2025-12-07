@@ -434,3 +434,26 @@ $ mysqldef -uroot dbname \
 | `lock` | string | Lock level to use for ALTER TABLE operations (e.g., NONE, SHARED, EXCLUSIVE). Controls concurrent access during schema changes. |
 | `dump_concurrency` | integer | Number of parallel connections to use when exporting the schema. Improves performance for large schemas. Default is 1. |
 | `legacy_ignore_quotes` | boolean | Controls identifier quoting behavior. When `true` (default), all identifiers are quoted in output. When `false`, identifiers preserve their original quoting from the source SQL. Default is `true` but will change to `false` in the next major version. |
+
+## MariaDB Compatibility
+
+mysqldef is compatible with [MariaDB](https://mariadb.org/), a MySQL-compatible database.
+
+## TiDB Compatibility
+
+mysqldef is compatible with [TiDB](https://www.pingcap.com/tidb/), a MySQL-compatible distributed database. TiDB uses port 4000 by default.
+
+### Caveats: CHECK Constraints
+
+TiDB disables CHECK constraint support by default. To use CHECK constraints with mysqldef, enable them in TiDB:
+
+```sql
+SET GLOBAL tidb_enable_check_constraint = ON;
+```
+
+This setting:
+- Is a global-only variable (cannot be set per session)
+- Requires SUPER privilege to change
+- Does not persist across TiDB restarts (must be set in TiDB configuration for persistence)
+
+Without this setting, CHECK constraints in your schema will be silently ignored by TiDB.

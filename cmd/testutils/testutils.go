@@ -160,14 +160,24 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		t.Skipf("Version '%s' is larger than max_version '%s'", version, test.MaxVersion)
 	}
 	// If test requires a specific flavor, check if it matches the current environment
+	// Supports both positive (flavor: mariadb) and negative (flavor: !tidb) matching
 	if test.Flavor != "" {
 		// If no flavor is explicitly set, default to "mysql" for MySQL tests
 		currentFlavor := allowedFlavor
 		if currentFlavor == "" && mode == schema.GeneratorModeMysql {
 			currentFlavor = "mysql"
 		}
-		if test.Flavor != currentFlavor {
-			t.Skipf("Test flavor '%s' does not match current flavor '%s'", test.Flavor, currentFlavor)
+		if after, ok := strings.CutPrefix(test.Flavor, "!"); ok {
+			// Negative match: skip if current flavor matches the excluded flavor
+			excludedFlavor := after
+			if excludedFlavor == currentFlavor {
+				t.Skipf("Test excludes flavor '%s' (current flavor)", excludedFlavor)
+			}
+		} else {
+			// Positive match: skip if current flavor doesn't match
+			if test.Flavor != currentFlavor {
+				t.Skipf("Test flavor '%s' does not match current flavor '%s'", test.Flavor, currentFlavor)
+			}
 		}
 	}
 
@@ -428,11 +438,11 @@ func compareVersion(t *testing.T, leftVersion string, rightVersion string) int {
 	length := min(len(leftVersions), len(rightVersions))
 
 	for i := range length {
-		left, err := strconv.Atoi(leftVersions[i])
+		left, err := parseVersionSegment(leftVersions[i])
 		if err != nil {
 			t.Fatal(err)
 		}
-		right, err := strconv.Atoi(rightVersions[i])
+		right, err := parseVersionSegment(rightVersions[i])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -444,6 +454,20 @@ func compareVersion(t *testing.T, leftVersion string, rightVersion string) int {
 		}
 	}
 	return 0
+}
+
+// parseVersionSegment extracts the leading numeric part from a version segment.
+// This handles formats like "8" -> 8, "4-TiDB-v8" -> 4, "11-MariaDB" -> 11
+func parseVersionSegment(segment string) (int, error) {
+	// Find the first non-digit character
+	end := 0
+	for end < len(segment) && segment[end] >= '0' && segment[end] <= '9' {
+		end++
+	}
+	if end == 0 {
+		return 0, fmt.Errorf("no numeric prefix in version segment: %q", segment)
+	}
+	return strconv.Atoi(segment[:end])
 }
 
 func splitDDLs(mode schema.GeneratorMode, sqlParser database.Parser, str string, defaultSchema string, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) ([]string, error) {

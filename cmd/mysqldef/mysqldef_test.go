@@ -39,6 +39,10 @@ func getMySQLPort() int {
 			return port
 		}
 	}
+	// TiDB defaults to port 4000
+	if os.Getenv("MYSQL_FLAVOR") == "tidb" {
+		return 4000
+	}
 	return 3306
 }
 
@@ -187,6 +191,9 @@ func TestMysqldefDryRun(t *testing.T) {
 }
 
 func TestMysqldefExport(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "tidb" {
+		t.Skip("TiDB does not support triggers")
+	}
 	resetTestDatabase()
 	out := mustExecuteMySQLDef(t, "mysqldef_test", "--export")
 	assert.Equal(t, "-- No table exists --\n", out)
@@ -204,6 +211,9 @@ func TestMysqldefExport(t *testing.T) {
 }
 
 func TestMysqldefExportConcurrently(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "tidb" {
+		t.Skip("TiDB has charset handling differences")
+	}
 	resetTestDatabase()
 
 	ddls := "CREATE TABLE `users_1` (\n" +
@@ -377,6 +387,9 @@ func TestMysqldefConfigInlineSkipTables(t *testing.T) {
 }
 
 func TestMysqldefConfigIncludesAlgorithm(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "tidb" {
+		t.Skip("TiDB has collation handling differences")
+	}
 	resetTestDatabase()
 
 	createTable := tu.StripHeredoc(`
@@ -408,6 +421,9 @@ func TestMysqldefConfigIncludesAlgorithm(t *testing.T) {
 }
 
 func TestMysqldefConfigIncludesLock(t *testing.T) {
+	if os.Getenv("MYSQL_FLAVOR") == "tidb" {
+		t.Skip("TiDB has collation handling differences")
+	}
 	resetTestDatabase()
 
 	createTable := tu.StripHeredoc(`
@@ -493,6 +509,7 @@ func TestMain(m *testing.M) {
 	}
 
 	waitForMySQL()
+	configureTiDB()
 	resetTestDatabase()
 	tu.BuildForTest()
 	status := m.Run()
@@ -500,6 +517,27 @@ func TestMain(m *testing.M) {
 	os.Remove("schema.sql")
 	os.Remove("config.yml")
 	os.Exit(status)
+}
+
+// configureTiDB enables TiDB-specific settings required for full compatibility.
+// TiDB disables CHECK constraint support by default; this enables it for testing.
+func configureTiDB() {
+	if os.Getenv("MYSQL_FLAVOR") != "tidb" {
+		return
+	}
+
+	dsn := fmt.Sprintf("root@tcp(127.0.0.1:%d)/", getMySQLPort())
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to connect to TiDB: %v", err))
+	}
+	defer db.Close()
+
+	// Enable CHECK constraint support (disabled by default in TiDB)
+	_, err = db.Exec("SET GLOBAL tidb_enable_check_constraint = ON")
+	if err != nil {
+		panic(fmt.Sprintf("Failed to enable CHECK constraints in TiDB: %v", err))
+	}
 }
 
 func assertApply(t *testing.T, schema string) {
