@@ -161,6 +161,18 @@ There's a GitHub Action that can preview changes to your database schema:
 
 https://github.com/sqldef/sqldef-preview-action
 
+## Testing Policy
+
+sqldef is tested against the following database versions in CI:
+
+- **MySQL**: Latest version and all currently supported versions (5.7, 8.0, 8.4, 9.x)
+- **MariaDB**: Latest version and all currently supported versions (11.x, 12.x)
+- **PostgreSQL**: Latest version and all currently supported versions (14, 15, 16, 17, 18)
+- **SQL Server**: Latest version and all currently supported versions (2019, 2025)
+- **SQLite**: Latest version only
+
+We remove database versions from the test matrix when they reach End-of-Life (EOL). This ensures sqldef is tested against versions that are actively maintained and receive security updates.
+
 ## Development
 
 If you update `parser/parser.y`, run:

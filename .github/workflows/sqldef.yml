@@ -52,8 +52,6 @@ jobs:
 
           # PostgreSQL https://www.postgresql.org/docs/release/
           - target: psqldef
-            postgres_version: 13
-          - target: psqldef
             postgres_version: 14
           - target: psqldef
             postgres_version: 15
