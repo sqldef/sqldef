@@ -28,6 +28,7 @@ MysqlSecurityTypeView:
   down: |
     CREATE OR REPLACE SQL SECURITY DEFINER VIEW `foo` AS select u.id as id, p.id as post_id, 'xxx' as name from (mysqldef_test.users as u join mysqldef_test.posts as p on ((u.id = p.user_id)));
 CreateTriggerWithComplexStatements:
+  flavor: "!tidb"
   desired: |
     CREATE TABLE test_trigger (
       id int(10) unsigned NOT NULL AUTO_INCREMENT,
@@ -73,6 +74,7 @@ CreateTriggerWithComplexStatements:
   down: |
     DROP TABLE `test_trigger`;
 CreateTriggerWithMultipleStatements:
+  flavor: "!tidb"
   desired: |
     CREATE TABLE test_trigger (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -167,6 +169,7 @@ ViewDropsWhenEmptyDesired:
     CREATE VIEW foo AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
   flavor: mysql  # MariaDB shows unexpected view changes in idempotency tests
 TriggerInsert:
+  flavor: "!tidb"
   desired: |
     CREATE TABLE users (
       id bigint NOT NULL,
@@ -179,6 +182,7 @@ TriggerInsert:
     );
     CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());
 TriggerInsertUpdate:
+  flavor: "!tidb"
   current: |
     CREATE TABLE users (
       id bigint NOT NULL,
@@ -208,6 +212,7 @@ TriggerInsertUpdate:
     DROP TRIGGER `insert_log`;
     CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());
 TriggerInsertBeforeUpdate:
+  flavor: "!tidb"
   current: |
     CREATE TABLE users (
       id bigint NOT NULL,
@@ -235,6 +240,7 @@ TriggerInsertBeforeUpdate:
     CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());
   down: ""
 TriggerInsertBeforeUpdateChange:
+  flavor: "!tidb"
   current: |
     CREATE TABLE users (
       id bigint NOT NULL,
@@ -266,6 +272,7 @@ TriggerInsertBeforeUpdateChange:
     DROP TRIGGER `insert_log_before_update`;
     CREATE TRIGGER `insert_log_before_update` before update ON `users` FOR EACH ROW insert into log(log, dt) values ('insert', now());
 TriggerSetNew:
+  flavor: "!tidb"
   desired: |
     CREATE TABLE users (
       id int unsigned NOT NULL AUTO_INCREMENT,
@@ -276,6 +283,7 @@ TriggerSetNew:
     );
     CREATE TRIGGER `set_logical_uniqueness_on_users` before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = 1;
 TriggerSetNewComplex:
+  flavor: "!tidb"
   current: |
     CREATE TABLE users (
       id int unsigned NOT NULL AUTO_INCREMENT,
@@ -299,6 +307,7 @@ TriggerSetNewComplex:
     CREATE TRIGGER `set_logical_uniqueness_on_users2` before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = case when NEW.deleted_at is null then 1 when NEW.deleted_at is not null then null end;
   down: ""
 TriggerBeginEnd:
+  flavor: "!tidb"
   desired: |
     CREATE TABLE test_trigger (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -308,6 +317,7 @@ TriggerBeginEnd:
     set NEW.id = NEW.id + 10;
     end;
 TriggerIf:
+  flavor: "!tidb"
   desired: |
     CREATE TABLE test_trigger (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -321,6 +331,7 @@ TriggerIf:
     end if;
     end;
 TriggerUpdate:
+  flavor: "!tidb"
   desired: |
     CREATE TABLE t1 (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -333,6 +344,7 @@ TriggerUpdate:
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
     CREATE TRIGGER `t2_BEFORE_DELETE` before delete ON `t2` FOR EACH ROW update t1 set t2_id = null where t1.t2_id = OLD.id;
 TriggerSelect:
+  flavor: "!tidb"
   desired: |
     CREATE TABLE users (
       id int unsigned NOT NULL AUTO_INCREMENT,
@@ -343,6 +355,7 @@ TriggerSelect:
     );
     CREATE TRIGGER `set_logical_uniqueness_on_users` before update ON `users` FOR EACH ROW set NEW.logical_uniqueness = (select 1 from dual);
 TriggerUseReservedWordsAsColumn:
+  flavor: "!tidb"
   desired: |
     CREATE TABLE test_trigger (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -355,6 +368,7 @@ TriggerUseReservedWordsAsColumn:
     set NEW.interval = 0;
     end;
 TriggerSubtractionWithoutSpace:
+  flavor: "!tidb"
   desired: |
     CREATE TABLE test_trigger (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -376,6 +390,7 @@ TriggerSubtractionWithoutSpace:
   down: |
     DROP TABLE `test_trigger`;
 TriggerNonReservedWordInInsertList:
+  flavor: "!tidb"
   desired: |
     CREATE TABLE users (
       id bigint NOT NULL,
@@ -388,6 +403,7 @@ TriggerNonReservedWordInInsertList:
     );
     CREATE TRIGGER `insert_log` after insert ON `users` FOR EACH ROW insert into log(status, off) values (0, 0);
 TriggerWithDeclareContinueHandler:
+  flavor: "!tidb"
   desired: |
     CREATE TABLE example_table (
       id int NOT NULL,
@@ -440,6 +456,7 @@ TriggerWithDeclareContinueHandler:
     DROP TABLE `example_table`;
     DROP TABLE `example_table_new`;
 TriggerWithDeclareExitHandler:
+  flavor: "!tidb"
   desired: |
     CREATE TABLE example_table (
       id int NOT NULL,
@@ -467,6 +484,7 @@ TriggerWithDeclareExitHandler:
   down: |
     DROP TABLE `example_table`;
 TriggerWithDeclareHandlerSqlstate:
+  flavor: "!tidb"
   desired: |
     CREATE TABLE example_table (
       id int NOT NULL,
@@ -493,6 +511,7 @@ TriggerWithDeclareHandlerSqlstate:
   down: |
     DROP TABLE `example_table`;
 TriggerWithDeclareHandlerMultipleStatements:
+  flavor: "!tidb"
   desired: |
     CREATE TABLE example_table (
       id int NOT NULL,

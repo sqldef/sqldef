@@ -50,6 +50,11 @@ jobs:
             mysql_flavor: mariadb
             mariadb_version: '12'
 
+          # TiDB https://docs.pingcap.com/tidb/stable/release-notes
+          - target: mysqldef
+            mysql_flavor: tidb
+            tidb_version: 'v8.5'
+
           # PostgreSQL https://www.postgresql.org/docs/release/
           - target: psqldef
             postgres_version: '13'
@@ -66,6 +71,7 @@ jobs:
         env:
           MYSQL_VERSION: ${{ matrix.mysql_version }}
           MARIADB_VERSION: ${{ matrix.mariadb_version }}
+          TIDB_VERSION: ${{ matrix.tidb_version }}
           POSTGRES_VERSION: ${{ matrix.postgres_version }}
           MSSQL_VERSION: ${{ matrix.mssql_version }}
       - run: make deps
@@ -90,6 +96,7 @@ jobs:
         env:
           MYSQL_VERSION: ${{ matrix.mysql_version }}
           MARIADB_VERSION: ${{ matrix.mariadb_version }}
+          TIDB_VERSION: ${{ matrix.tidb_version }}
           POSTGRES_VERSION: ${{ matrix.postgres_version }}
           MSSQL_VERSION: ${{ matrix.mssql_version }}
 

@@ -40,6 +40,7 @@ CreateTableWithImplicitNotNull:
       created_at datetime NOT NULL
     );
 CreateTableDropPrimaryKey:
+  flavor: "!tidb"  # TiDB doesn't support DROP PRIMARY KEY on clustered index
   current: |
     CREATE TABLE users (
       id bigint NOT NULL PRIMARY KEY,
@@ -188,6 +189,7 @@ RemoveTableComment:
   down: |
     ALTER TABLE `prefecture` COMMENT = '都道府県マスター';
 CreateTableChangePrimaryKey:
+  flavor: "!tidb"  # TiDB doesn't support DROP PRIMARY KEY on clustered index
   current: |
     CREATE TABLE friends (
       user_id bigint NOT NULL PRIMARY KEY,
@@ -208,6 +210,7 @@ CreateTableChangePrimaryKey:
     ALTER TABLE `friends` DROP PRIMARY KEY;
     ALTER TABLE `friends` ADD PRIMARY KEY (`user_id`);
 CreateTableChangePrimaryKeyWithComment:
+  flavor: "!tidb"  # TiDB doesn't support DROP PRIMARY KEY on clustered index
   current: |
     CREATE TABLE friends (
       user_id bigint NOT NULL PRIMARY KEY,
@@ -269,6 +272,7 @@ CreateTableAddAutoIncrementPrimaryKeyMariaDB:
     ALTER TABLE `users` DROP COLUMN `id`;
   flavor: mariadb
 CreateTableKeepAutoIncrement:
+  flavor: "!tidb"  # TiDB does not allow setting AUTO_INCREMENT on existing columns
   current: |
     CREATE TABLE users (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -367,6 +371,7 @@ ChangeColumn:
     ALTER TABLE `users` CHANGE COLUMN `id` `id` int UNSIGNED NOT NULL;
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(40);
 ChangeColumnLength:
+  flavor: "!tidb"  # TiDB has column length change handling differences
   current: |
     CREATE TABLE users (
       id int UNSIGNED NOT NULL,
@@ -382,6 +387,7 @@ ChangeColumnLength:
   down: |
     ALTER TABLE `users` CHANGE COLUMN `name` `name` varchar(255) COLLATE utf8mb4_bin DEFAULT null;
 ChangeColumnBinary:
+  flavor: "!tidb"  # TiDB has collation handling differences
   current: |
     CREATE TABLE users (
       word varchar(64) NOT NULL
@@ -394,6 +400,7 @@ ChangeColumnBinary:
     ALTER TABLE `users` CHANGE COLUMN `word` `word` varchar(64) COLLATE utf8mb4_bin NOT NULL;
   down: ""
 ChangeColumnCollate:
+  flavor: "!tidb"  # TiDB doesn't support charset changes (e.g., utf8mb4 to latin1)
   current: |
     CREATE TABLE users (
       password char(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin
@@ -678,6 +685,7 @@ RenameTableWithQuotedName:
     );
     DROP TABLE `user_profiles`;
 RenameTableAndMultipleColumnChanges:
+  flavor: "!tidb"  # TiDB does not allow setting AUTO_INCREMENT on existing columns
   current: |
     CREATE TABLE old_accounts (
       id bigint NOT NULL,
@@ -816,6 +824,7 @@ RenameTableAndAddIndex:
     );
     DROP TABLE `users`;
 CreateWithNonReservedKeywordColumns:
+  flavor: "!tidb"  # TiDB doesn't support triggers
   desired: |
     CREATE TABLE test (
         age INTEGER,

@@ -234,6 +234,7 @@ EnumValues:
   down: |
     ALTER TABLE `users` DROP COLUMN `authorities`;
 DefaultValue:
+  flavor: "!tidb"  # TiDB has default value handling differences
   current: |
     CREATE TABLE tools (
       id int(10) unsigned NOT NULL AUTO_INCREMENT,

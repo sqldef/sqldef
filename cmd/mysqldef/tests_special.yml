@@ -49,6 +49,7 @@ PartitionByRange:
   down: |
     DROP TABLE `users`;
 CreateTableWithSpatialTypesAndSpatialKey:
+  flavor: "!tidb"  # TiDB has limited support for spatial types
   current: |
     CREATE TABLE users (
       id bigint(20) NOT NULL
@@ -66,6 +67,7 @@ CreateTableWithSpatialTypesAndSpatialKey:
     ALTER TABLE `users` DROP INDEX `index_users_location`;
     ALTER TABLE `users` DROP COLUMN `location`;
 CreateTableWithSpatialTypesSRIDSpecified:
+  flavor: "!tidb"  # TiDB has limited support for spatial types
   current: |
     CREATE TABLE users (
       id bigint(20) NOT NULL
@@ -91,11 +93,13 @@ HyphenNames:
       `id-bar_baz` bigint NOT NULL
     );
 KeywordIndexColumns:
+  flavor: "!tidb"  # TiDB has collation handling differences
   desired: |
     CREATE TABLE tools (
       `character` varchar(255) COLLATE utf8mb4_bin DEFAULT NULL
     );
 KeywordIndexColumnsAddIndex:
+  flavor: "!tidb"  # TiDB has collation handling differences
   current: |
     CREATE TABLE tools (
       `character` varchar(255) COLLATE utf8mb4_bin DEFAULT NULL
