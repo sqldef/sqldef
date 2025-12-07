@@ -424,7 +424,7 @@ func compareVersion(t *testing.T, leftVersion string, rightVersion string) int {
 	leftVersions := strings.Split(leftVersion, ".")
 	rightVersions := strings.Split(rightVersion, ".")
 
-	// Compare only specified segments
+	// Compare only specified segments (e.g., "10.0" vs "10" -> compare "10" and "10")
 	length := min(len(leftVersions), len(rightVersions))
 
 	for i := range length {
