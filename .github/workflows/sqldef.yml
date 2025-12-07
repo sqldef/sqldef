@@ -53,7 +53,7 @@ jobs:
           # TiDB https://docs.pingcap.com/tidb/stable/release-notes
           - target: mysqldef
             mysql_flavor: tidb
-            tidb_version: 'v8.5'
+            tidb_version: 'v8.5.4'
 
           # PostgreSQL https://www.postgresql.org/docs/release/
           - target: psqldef
