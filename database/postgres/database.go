@@ -1341,13 +1341,19 @@ func postgresBuildDSN(config database.Config) string {
 	password := config.Password
 	database := config.DbName
 	host := ""
+	var options []string
+
 	if config.Socket == "" {
 		host = fmt.Sprintf("%s:%d", config.Host, config.Port)
 	} else {
-		host = config.Socket
+		// We want to use either:
+		// - postgres://user:@%2Fvar%2Frun%2Fpostgresql/dbname
+		// - postgres://user:@/dbname?host=/var/run/postgresql
+		// As the first form would be rejected by the URL parser,
+		// we resort to the second form.
+		options = append(options, fmt.Sprintf("host=%s", config.Socket))
 	}
 
-	var options []string
 	// Use config.SslMode if set, otherwise check environment variable
 	if config.SslMode != "" {
 		options = append(options, fmt.Sprintf("sslmode=%s", config.SslMode))
