@@ -1,0 +1,422 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
+TriggerBeforeDelete:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      typ TEXT NOT NULL,
+      typ_id integer NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      typ TEXT NOT NULL,
+      typ_id integer NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TRIGGER users_delete BEFORE DELETE ON users
+    BEGIN
+      delete from logs where typ = 'user' and typ_id = OLD.id;
+    END;
+  up: |
+    CREATE TRIGGER users_delete BEFORE DELETE ON users
+    BEGIN
+      delete from logs where typ = 'user' and typ_id = OLD.id;
+    END;
+  down: |
+    DROP TRIGGER users_delete;
+
+TriggerAfterUpdate:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      typ TEXT NOT NULL,
+      typ_id integer NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      typ TEXT NOT NULL,
+      typ_id integer NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TRIGGER users_update AFTER UPDATE ON users
+    BEGIN
+      delete from logs where typ = 'user' and typ_id = OLD.id;
+      insert into logs(typ, typ_id, body) values ('user', NEW.id, 'updated user');
+    END;
+  up: |
+    CREATE TRIGGER users_update AFTER UPDATE ON users
+    BEGIN
+      delete from logs where typ = 'user' and typ_id = OLD.id;
+      insert into logs(typ, typ_id, body) values ('user', NEW.id, 'updated user');
+    END;
+  down: |
+    DROP TRIGGER users_update;
+
+TriggerInsteadOfInsertOnView:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE VIEW user_view AS SELECT * FROM users;
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE VIEW user_view AS SELECT * FROM users;
+    CREATE TRIGGER user_view_update INSTEAD OF INSERT ON user_view
+    BEGIN
+      insert into users(id, age) values (NEW.id, NEW.age);
+    END;
+  up: |
+    CREATE TRIGGER user_view_update INSTEAD OF INSERT ON user_view
+    BEGIN
+      insert into users(id, age) values (NEW.id, NEW.age);
+    END;
+  down: |
+    DROP TRIGGER user_view_update;
+
+TriggerUpdateOfSingleColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      typ TEXT NOT NULL,
+      typ_id integer NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      typ TEXT NOT NULL,
+      typ_id integer NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TRIGGER users_update_of_id AFTER UPDATE OF id ON users
+    BEGIN
+      delete from logs where typ = 'user' and typ_id = OLD.id;
+      insert into logs(typ, typ_id, body) values ('user', NEW.id, 'updated user');
+    END;
+  up: |
+    CREATE TRIGGER users_update_of_id AFTER UPDATE OF id ON users
+    BEGIN
+      delete from logs where typ = 'user' and typ_id = OLD.id;
+      insert into logs(typ, typ_id, body) values ('user', NEW.id, 'updated user');
+    END;
+  down: |
+    DROP TRIGGER users_update_of_id;
+
+TriggerUpdateOfMultipleColumns:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      typ TEXT NOT NULL,
+      typ_id integer NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      typ TEXT NOT NULL,
+      typ_id integer NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TRIGGER users_update_of_id_and_age AFTER UPDATE OF id, age ON users
+    BEGIN
+      delete from logs where typ = 'user' and typ_id = OLD.id;
+      insert into logs(typ, typ_id, body) values ('user', NEW.id, 'updated user');
+    END;
+  up: |
+    CREATE TRIGGER users_update_of_id_and_age AFTER UPDATE OF id, age ON users
+    BEGIN
+      delete from logs where typ = 'user' and typ_id = OLD.id;
+      insert into logs(typ, typ_id, body) values ('user', NEW.id, 'updated user');
+    END;
+  down: |
+    DROP TRIGGER users_update_of_id_and_age;
+
+TriggerForEachRow:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      typ TEXT NOT NULL,
+      typ_id integer NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      typ TEXT NOT NULL,
+      typ_id integer NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TRIGGER users_delete_for_each_row BEFORE DELETE ON users FOR EACH ROW
+    BEGIN
+      delete from logs where typ = 'user' and typ_id = OLD.id;
+    END;
+  up: |
+    CREATE TRIGGER users_delete_for_each_row BEFORE DELETE ON users FOR EACH ROW
+    BEGIN
+      delete from logs where typ = 'user' and typ_id = OLD.id;
+    END;
+  down: |
+    DROP TRIGGER users_delete_for_each_row;
+
+TriggerWhen:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      typ TEXT NOT NULL,
+      typ_id integer NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      typ TEXT NOT NULL,
+      typ_id integer NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TRIGGER users_delete_when BEFORE DELETE ON users
+    WHEN OLD.age > 20
+    BEGIN
+      delete from logs where typ = 'user' and typ_id = OLD.id;
+    END;
+  up: |
+    CREATE TRIGGER users_delete_when BEFORE DELETE ON users
+    WHEN OLD.age > 20
+    BEGIN
+      delete from logs where typ = 'user' and typ_id = OLD.id;
+    END;
+  down: |
+    DROP TRIGGER users_delete_when;
+
+TriggerForEachRowAndWhen:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      typ TEXT NOT NULL,
+      typ_id integer NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      typ TEXT NOT NULL,
+      typ_id integer NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TRIGGER users_delete_for_each_row_and_when BEFORE DELETE ON users FOR EACH ROW
+    WHEN OLD.age > 20
+    BEGIN
+      delete from logs where typ = 'user' and typ_id = OLD.id;
+    END;
+  up: |
+    CREATE TRIGGER users_delete_for_each_row_and_when BEFORE DELETE ON users FOR EACH ROW
+    WHEN OLD.age > 20
+    BEGIN
+      delete from logs where typ = 'user' and typ_id = OLD.id;
+    END;
+  down: |
+    DROP TRIGGER users_delete_for_each_row_and_when;
+
+TriggerIfNotExists:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      typ TEXT NOT NULL,
+      typ_id integer NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      typ TEXT NOT NULL,
+      typ_id integer NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TRIGGER IF NOT EXISTS users_insert AFTER INSERT ON users
+    BEGIN
+      insert into logs(typ, typ_id, body) values ('user', NEW.id, 'inserted user');
+    END;
+  up: |
+    CREATE TRIGGER IF NOT EXISTS users_insert AFTER INSERT ON users
+    BEGIN
+      insert into logs(typ, typ_id, body) values ('user', NEW.id, 'inserted user');
+    END;
+  down: |
+    DROP TRIGGER users_insert;
+
+DropTrigger:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TRIGGER users_insert AFTER INSERT ON users
+    BEGIN
+      insert into logs(body) values ('inserted user');
+    END;
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  up: |
+    DROP TRIGGER users_insert;
+  down: |
+    CREATE TRIGGER users_insert AFTER INSERT ON users
+    BEGIN
+      insert into logs(body) values ('inserted user');
+    END;
+
+ChangeTrigger:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE IF NOT EXISTS users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      typ TEXT NOT NULL,
+      typ_id integer NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TRIGGER users_insert AFTER INSERT ON users
+    BEGIN
+      insert into logs(typ, typ_id, body) values ('user', NEW.id, 'inserted user');
+    END;
+  desired: |
+    CREATE TABLE IF NOT EXISTS users (
+      id integer NOT NULL PRIMARY KEY,
+      age integer NOT NULL
+    );
+    CREATE TABLE logs (
+      id integer NOT NULL PRIMARY KEY,
+      typ TEXT NOT NULL,
+      typ_id integer NOT NULL,
+      body TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TRIGGER users_insert AFTER INSERT ON users
+    BEGIN
+      insert into logs(typ, typ_id, body) values ('user', NEW.id, 'user inserted');
+    END;
+  up: |
+    DROP TRIGGER users_insert;
+    CREATE TRIGGER users_insert AFTER INSERT ON users
+    BEGIN
+      insert into logs(typ, typ_id, body) values ('user', NEW.id, 'user inserted');
+    END;
+  down: |
+    DROP TRIGGER users_insert;
+    CREATE TRIGGER users_insert AFTER INSERT ON users
+    BEGIN
+      insert into logs(typ, typ_id, body) values ('user', NEW.id, 'inserted user');
+    END;

@@ -2913,15 +2913,15 @@ func (g *Generator) escapeDomainName(d *Domain) string {
 
 func (g *Generator) forceEscapeSQLName(name string) string {
 	switch g.mode {
-	case GeneratorModePostgres:
-		escaped := strings.ReplaceAll(name, "\"", "\"\"")
-		return fmt.Sprintf("\"%s\"", escaped)
 	case GeneratorModeMssql:
 		escaped := strings.ReplaceAll(name, "]", "]]")
 		return fmt.Sprintf("[%s]", escaped)
-	default:
+	case GeneratorModeMysql:
 		escaped := strings.ReplaceAll(name, "`", "``")
 		return fmt.Sprintf("`%s`", escaped)
+	default: // standard SQL (PostgreSQL, SQLite)
+		escaped := strings.ReplaceAll(name, "\"", "\"\"")
+		return fmt.Sprintf("\"%s\"", escaped)
 	}
 }
 

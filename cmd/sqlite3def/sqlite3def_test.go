@@ -92,7 +92,7 @@ func TestSQLite3defDropTable(t *testing.T) {
 
 	tu.WriteFile("schema.sql", "")
 
-	dropTable := "DROP TABLE `users`;\n"
+	dropTable := "DROP TABLE \"users\";\n"
 	out := tu.MustExecute(t, "./sqlite3def", "sqlite3def_test", "--enable-drop", "--file", "schema.sql")
 	assert.Equal(t, wrapWithTransaction(dropTable), out)
 }
@@ -110,7 +110,7 @@ func TestSQLite3defConfigInlineEnableDrop(t *testing.T) {
 
 	tu.WriteFile("schema.sql", "")
 
-	dropTable := "DROP TABLE `users`;\n"
+	dropTable := "DROP TABLE \"users\";\n"
 	expectedOutput := wrapWithTransaction(dropTable)
 
 	outFlag := tu.MustExecute(t, "./sqlite3def", "sqlite3def_test", "--enable-drop", "--file", "schema.sql")
@@ -204,7 +204,7 @@ func TestSQLite3defConfigMerge(t *testing.T) {
 	// inline config should override file config, so posts will be skipped instead of users_10
 	// This means users_10 will be dropped (skipped without --enable-drop) and posts will be kept
 	apply := tu.MustExecute(t, "./sqlite3def", "--config", "config.yml", "--config-inline", "skip_tables: posts", "--file", "schema.sql", "sqlite3def_test")
-	assert.Equal(t, wrapWithTransaction("-- Skipped: DROP TABLE `users_10`;\n"), apply)
+	assert.Equal(t, wrapWithTransaction("-- Skipped: DROP TABLE \"users_10\";\n"), apply)
 }
 
 func TestSQLite3defMultipleConfigs(t *testing.T) {
@@ -230,7 +230,7 @@ func TestSQLite3defMultipleConfigs(t *testing.T) {
 	// users_10 is NOT in the final skip list, so it will be dropped
 	// comments IS in the final skip list, so it won't be touched (even though it's not in schema.sql)
 	apply := tu.MustExecute(t, "./sqlite3def", "--config", "config1.yml", "--config", "config2.yml", "--config", "config3.yml", "--file", "schema.sql", "sqlite3def_test")
-	assert.Equal(t, wrapWithTransaction("-- Skipped: DROP TABLE `users_10`;\n"), apply)
+	assert.Equal(t, wrapWithTransaction("-- Skipped: DROP TABLE \"users_10\";\n"), apply)
 }
 
 func TestSQLite3defMultipleInlineConfigs(t *testing.T) {
@@ -306,164 +306,6 @@ func TestSQLite3defVirtualTable(t *testing.T) {
 	assert.Equal(t, nothingModified, actual)
 }
 
-// https://www.sqlite.org/lang_createtrigger.html
-func TestSQLite3defCreateTrigger(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := tu.StripHeredoc(`
-		CREATE TABLE users (
-		  id integer NOT NULL PRIMARY KEY,
-		  age integer NOT NULL
-		);
-		CREATE TABLE logs (
-		  id integer NOT NULL PRIMARY KEY,
-		  typ TEXT NOT NULL,
-		  typ_id integer NOT NULL,
-		  body TEXT NOT NULL,
-		  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);
-		create view user_view as select * from users;
-	`)
-	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
-	assertApplyOutput(t, createTable, nothingModified)
-
-	queries := map[string]string{
-		"before, delete": `
-			CREATE TRIGGER users_delete BEFORE DELETE ON users
-			BEGIN
-				delete from logs where typ = 'user' and typ_id = OLD.id;
-			END;
-		`,
-		"after, update": `
-			CREATE TRIGGER users_update AFTER UPDATE ON users
-			BEGIN
-				delete from logs where typ = 'user' and typ_id = OLD.id;
-				insert into logs(typ, typ_id, body) values ('user', NEW.id, 'updated user');
-			END;
-		`,
-		"instead of, insert": `
-			CREATE TRIGGER user_view_update INSTEAD OF INSERT ON user_view
-			BEGIN
-				insert into users(id, age) values (NEW.id, NEW.age);
-			END;
-		`,
-		"update of the single column": `
-			CREATE TRIGGER users_update_of_id AFTER UPDATE OF id ON users
-			BEGIN
-				delete from logs where typ = 'user' and typ_id = OLD.id;
-				insert into logs(typ, typ_id, body) values ('user', NEW.id, 'updated user');
-			END;
-		`,
-		"update of multiple columns": `
-			CREATE TRIGGER users_update_of_id_and_age AFTER UPDATE OF id,age ON users
-			BEGIN
-				delete from logs where typ = 'user' and typ_id = OLD.id;
-				insert into logs(typ, typ_id, body) values ('user', NEW.id, 'updated user');
-			END;
-		`,
-		"for each row": `
-			CREATE TRIGGER users_delete_for_each_row BEFORE DELETE ON users FOR EACH ROW
-			BEGIN
-				delete from logs where typ = 'user' and typ_id = OLD.id;
-			END;
-		`,
-		"when": `
-			CREATE TRIGGER users_delete_when BEFORE DELETE ON users
-			WHEN OLD.age > 20
-			BEGIN
-				delete from logs where typ = 'user' and typ_id = OLD.id;
-			END;
-		`,
-		"for each row, when": `
-			CREATE TRIGGER users_delete_for_each_row_and_when BEFORE DELETE ON users FOR EACH ROW
-			WHEN OLD.age > 20
-			BEGIN
-				delete from logs where typ = 'user' and typ_id = OLD.id;
-			END;
-		`,
-	}
-
-	var createTrigger string
-	for _, q := range queries {
-		createTrigger += tu.StripHeredoc(q)
-	}
-
-	// The iteration order of a map is random,
-	// so SQL that needs guaranteed order should be written separately.
-	createTrigger += tu.StripHeredoc(`
-		CREATE TRIGGER IF NOT EXISTS users_insert after insert ON users
-		BEGIN
-			insert into logs(typ, typ_id, body) values ('user', NEW.id, 'inserted user');
-		END;
-	`)
-
-	assertApplyOutput(t, createTable+createTrigger, wrapWithTransaction(createTrigger))
-	assertApplyOutput(t, createTable+createTrigger, nothingModified)
-}
-
-func TestSQLite3defDropTrigger(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := tu.StripHeredoc(`
-		CREATE TABLE users (
-		  id integer NOT NULL PRIMARY KEY,
-		  age integer NOT NULL
-		);
-		CREATE TABLE logs (
-		  id integer NOT NULL PRIMARY KEY,
-		  body TEXT NOT NULL,
-		  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);
-	`)
-	createTrigger := tu.StripHeredoc(`
-		CREATE TRIGGER ` + "`users_insert`" + ` after insert ON ` + "`users`" + `
-		BEGIN
-			insert into logs(typ, typ_id, body) values ('user', NEW.id, 'inserted user');
-		END;
-	`)
-	assertApplyOutput(t, createTable+createTrigger, wrapWithTransaction(createTable+createTrigger))
-	assertApplyOutput(t, createTable+createTrigger, nothingModified)
-
-	assertApplyOutput(t, createTable, wrapWithTransaction("-- Skipped: DROP TRIGGER `users_insert`;\n"))
-	assertApplyOptionsOutput(t, createTable, wrapWithTransaction("DROP TRIGGER `users_insert`;\n"), "--enable-drop")
-	assertApplyOutput(t, createTable, nothingModified)
-}
-
-func TestSQLite3defChangeTrigger(t *testing.T) {
-	resetTestDatabase()
-
-	createTable := tu.StripHeredoc(`
-		CREATE TABLE IF NOT EXISTS users (
-		  id integer NOT NULL PRIMARY KEY,
-		  age integer NOT NULL
-		);
-		CREATE TABLE logs (
-		  id integer NOT NULL PRIMARY KEY,
-		  typ TEXT NOT NULL,
-		  typ_id integer NOT NULL,
-		  body TEXT NOT NULL,
-		  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);
-	`)
-	createTrigger := tu.StripHeredoc(`
-		CREATE TRIGGER ` + "`users_insert`" + ` after insert ON ` + "`users`" + `
-		BEGIN
-			insert into logs(typ, typ_id, body) values ('user', NEW.id, 'inserted user');
-		END;
-	`)
-	assertApplyOutput(t, createTable+createTrigger, wrapWithTransaction(createTable+createTrigger))
-	assertApplyOutput(t, createTable+createTrigger, nothingModified)
-
-	changeTrigger := tu.StripHeredoc(`
-		CREATE TRIGGER ` + "`users_insert`" + ` after insert ON ` + "`users`" + `
-		BEGIN
-			insert into logs(typ, typ_id, body) values ('user', NEW.id, 'user inserted');
-		END;
-	`)
-	assertApplyOptionsOutput(t, createTable+changeTrigger, wrapWithTransaction("DROP TRIGGER `users_insert`;\n"+changeTrigger), "--enable-drop")
-	assertApplyOutput(t, createTable+changeTrigger, nothingModified)
-}
-
 func TestSQLite3defHelp(t *testing.T) {
 	_, err := tu.Execute("./sqlite3def", "--help")
 	if err != nil {
@@ -509,7 +351,7 @@ func TestDeprecatedRenameAnnotation(t *testing.T) {
 	}
 
 	// Verify that the rename operation actually worked
-	if !strings.Contains(out, "ALTER TABLE `users` RENAME COLUMN `username` TO `user_name`;") {
+	if !strings.Contains(out, "ALTER TABLE \"users\" RENAME COLUMN \"username\" TO \"user_name\";") {
 		t.Errorf("Expected rename operation not found in output:\n%s", out)
 	}
 
@@ -547,7 +389,7 @@ func TestDeprecatedRenameAnnotation(t *testing.T) {
 	}
 
 	// Should still perform the rename
-	if !strings.Contains(out, "ALTER TABLE `users` RENAME COLUMN `old_name` TO `new_name`;") {
+	if !strings.Contains(out, "ALTER TABLE \"users\" RENAME COLUMN \"old_name\" TO \"new_name\";") {
 		t.Errorf("Expected rename operation not found for @renamed annotation:\n%s", out)
 	}
 }
