@@ -1,18 +1,8 @@
 # yaml-language-server: $schema=../testutils/testcase.schema.json
-# Tests for --enable-drop behavior with various DROP operations
+# Tests for enable_drop: false behavior (DROP statements are commented out)
+# The enable_drop: true behavior is tested in other test files.
 
-DropTableWithEnableDrop:
-  # DROP TABLE is executed when enable_drop: true
-  current: |
-    CREATE TABLE users (id bigint NOT NULL);
-  desired: ""
-  up: |
-    DROP TABLE `users`;
-  down: |
-    CREATE TABLE users (id bigint NOT NULL);
-
-DropTableWithoutEnableDrop:
-  # DROP TABLE is commented out when enable_drop: false
+DropTableSkipped:
   enable_drop: false
   current: |
     CREATE TABLE users (id bigint NOT NULL);
@@ -21,24 +11,7 @@ DropTableWithoutEnableDrop:
     -- Skipped: DROP TABLE `users`;
   down: ""
 
-DropColumnWithEnableDrop:
-  # DROP COLUMN is executed when enable_drop: true
-  current: |
-    CREATE TABLE users (
-      id bigint NOT NULL,
-      name varchar(100)
-    );
-  desired: |
-    CREATE TABLE users (
-      id bigint NOT NULL
-    );
-  up: |
-    ALTER TABLE `users` DROP COLUMN `name`;
-  down: |
-    ALTER TABLE `users` ADD COLUMN `name` varchar(100) AFTER `id`;
-
-DropColumnWithoutEnableDrop:
-  # DROP COLUMN is commented out when enable_drop: false
+DropColumnSkipped:
   enable_drop: false
   current: |
     CREATE TABLE users (
@@ -53,26 +26,7 @@ DropColumnWithoutEnableDrop:
     -- Skipped: ALTER TABLE `users` DROP COLUMN `name`;
   down: ""
 
-DropIndexWithEnableDrop:
-  # DROP INDEX is executed when enable_drop: true
-  current: |
-    CREATE TABLE users (
-      id bigint NOT NULL,
-      email varchar(255),
-      INDEX idx_email (email)
-    );
-  desired: |
-    CREATE TABLE users (
-      id bigint NOT NULL,
-      email varchar(255)
-    );
-  up: |
-    ALTER TABLE `users` DROP INDEX `idx_email`;
-  down: |
-    ALTER TABLE `users` ADD INDEX `idx_email` (`email`);
-
-DropIndexWithoutEnableDrop:
-  # DROP INDEX is commented out when enable_drop: false
+DropIndexSkipped:
   enable_drop: false
   current: |
     CREATE TABLE users (

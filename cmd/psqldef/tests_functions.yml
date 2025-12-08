@@ -63,6 +63,7 @@ CreateOrReplaceFunctionWithTrigger:
   down: |
     DROP TRIGGER enforce_required_permit ON public.device_tests;
     DROP TABLE public.device_tests;
+    DROP FUNCTION public.check_test_type_requires_permit;
 
 # Volatility: IMMUTABLE, STABLE, VOLATILE
 

@@ -545,6 +545,7 @@ const (
 	RevokePrivilege
 	DropIndex
 	DropExtension
+	DropPolicy
 )
 
 // View types

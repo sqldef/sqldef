@@ -533,6 +533,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		ddls = append(ddls, fmt.Sprintf("DROP EXTENSION %s", g.escapeSQLIdent(currentExtension.extension.Name)))
 	}
 
+	// Clean up obsoleted functions
+	for _, currentFunction := range g.currentFunctions {
+		if g.findFunctionByName(g.desiredFunctions, currentFunction.name) != nil {
+			continue
+		}
+		ddls = append(ddls, fmt.Sprintf("DROP FUNCTION %s", g.escapeQualifiedName(currentFunction.name)))
+	}
+
 	// Clean up obsoleted comments
 	for _, currentComment := range g.currentComments {
 		// Check if this comment still exists in desired comments

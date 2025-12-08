@@ -36,6 +36,7 @@ CreateTriggerBeforeInsert:
   down: |
     DROP TRIGGER set_created_at ON public.users;
     DROP TABLE public.users;
+    DROP FUNCTION public.set_timestamp;
 CreateTriggerAfterUpdate:
   legacy_ignore_quotes: false
   desired: |
@@ -69,6 +70,7 @@ CreateTriggerAfterUpdate:
   down: |
     DROP TRIGGER log_update ON public.users;
     DROP TABLE public.users;
+    DROP FUNCTION public.log_changes;
 CreateTriggerAfterDelete:
   legacy_ignore_quotes: false
   desired: |
@@ -102,6 +104,7 @@ CreateTriggerAfterDelete:
   down: |
     DROP TRIGGER archive_deleted ON public.users;
     DROP TABLE public.users;
+    DROP FUNCTION public.archive_row;
 CreateTriggerExecuteProcedure:
   legacy_ignore_quotes: false
   desired: |
@@ -135,6 +138,7 @@ CreateTriggerExecuteProcedure:
   down: |
     DROP TRIGGER validate_user ON public.users;
     DROP TABLE public.users;
+    DROP FUNCTION public.validate_func;
 CreateTriggerWithMultipleEvents:
   legacy_ignore_quotes: false
   desired: |
@@ -166,6 +170,7 @@ CreateTriggerWithMultipleEvents:
   down: |
     DROP TRIGGER enforce_required_permit ON public.device_tests;
     DROP TABLE public.device_tests;
+    DROP FUNCTION public.check_trigger;
 CreateTriggerWithThreeEvents:
   legacy_ignore_quotes: false
   desired: |
@@ -199,6 +204,7 @@ CreateTriggerWithThreeEvents:
   down: |
     DROP TRIGGER audit_all ON public.audit_log;
     DROP TABLE public.audit_log;
+    DROP FUNCTION public.log_all_changes;
 CreateTriggerWithoutForEachRow:
   legacy_ignore_quotes: false
   desired: |
@@ -232,6 +238,7 @@ CreateTriggerWithoutForEachRow:
   down: |
     DROP TRIGGER notify_change ON public.users;
     DROP TABLE public.users;
+    DROP FUNCTION public.notify_func;
 CreateTriggerWithFunctionArgs:
   legacy_ignore_quotes: false
   desired: |
@@ -265,6 +272,7 @@ CreateTriggerWithFunctionArgs:
   down: |
     DROP TRIGGER check_value ON public.users;
     DROP TABLE public.users;
+    DROP FUNCTION public.check_func;
 CreateMultipleTriggers:
   legacy_ignore_quotes: false
   desired: |
@@ -317,6 +325,8 @@ CreateMultipleTriggers:
     DROP TRIGGER after_insert_trigger ON public.users;
     DROP TRIGGER before_insert_trigger ON public.users;
     DROP TABLE public.users;
+    DROP FUNCTION public.after_insert_func;
+    DROP FUNCTION public.before_insert_func;
 DropTrigger:
   legacy_ignore_quotes: false
   current: |

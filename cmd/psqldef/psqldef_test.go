@@ -457,12 +457,16 @@ func TestPsqldefCreateTableWithExpressionStored(t *testing.T) {
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
-// TestPsqldefFunctionAsDefault cannot be migrated: CREATE FUNCTION not supported by parser
+// TestPsqldefFunctionAsDefault tests that tables with column defaults referencing functions work correctly.
+// The function is created manually first (outside sqldef), then the table references it.
+// Since the function is not in the desired schema, sqldef will try to drop it (but PostgreSQL
+// will prevent this because the table depends on it).
 func TestPsqldefFunctionAsDefault(t *testing.T) {
 	for _, tc := range publicAndNonPublicSchemaTestCases {
 		resetTestDatabase()
 		mustPgExec(testDatabaseName, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s;", tc.Schema))
 
+		// Create function manually (outside sqldef) - this simulates a pre-existing function
 		mustPgExec(testDatabaseName, fmt.Sprintf(tu.StripHeredoc(`
 			CREATE FUNCTION %s.my_func()
 			RETURNS int
@@ -484,8 +488,12 @@ func TestPsqldefFunctionAsDefault(t *testing.T) {
 			  not_null timestamp not null default now(),
 			  same_schema int default %s.my_func()
 			);`), tc.Schema, tc.Schema)
-		assertApplyOutput(t, createTable, wrapWithTransaction(createTable+"\n"))
-		assertApplyOutput(t, createTable, nothingModified)
+
+		// First apply creates the table. The orphaned function drop is skipped (enable_drop=false by default).
+		expectedOutput := fmt.Sprintf("%s\n-- Skipped: DROP FUNCTION %q.\"my_func\";\n", createTable, tc.Schema)
+		assertApplyOutput(t, createTable, wrapWithTransaction(expectedOutput))
+		// Second apply: orphaned function drop is still skipped, so it appears again
+		assertApplyOutput(t, createTable, wrapWithTransaction(fmt.Sprintf("-- Skipped: DROP FUNCTION %q.\"my_func\";\n", tc.Schema)))
 	}
 }
 

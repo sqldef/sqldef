@@ -1,18 +1,8 @@
 # yaml-language-server: $schema=../testutils/testcase.schema.json
-# Tests for --enable-drop behavior with various DROP operations
+# Tests for enable_drop: false behavior (DROP/REVOKE statements are commented out)
+# The enable_drop: true behavior is tested in other test files.
 
-DropDomainWithEnableDrop:
-  # DROP DOMAIN is executed when enable_drop: true
-  current: |
-    CREATE DOMAIN email AS TEXT;
-  desired: ""
-  up: |
-    DROP DOMAIN "public"."email";
-  down: |
-    CREATE DOMAIN email AS TEXT;
-
-DropDomainWithoutEnableDrop:
-  # DROP DOMAIN is commented out when enable_drop: false
+DropDomainSkipped:
   enable_drop: false
   current: |
     CREATE DOMAIN email AS TEXT;
@@ -21,19 +11,7 @@ DropDomainWithoutEnableDrop:
     -- Skipped: DROP DOMAIN "public"."email";
   down: ""
 
-DropExtensionWithEnableDrop:
-  # DROP EXTENSION is executed when enable_drop: true
-  min_version: "9.1"
-  current: |
-    CREATE EXTENSION IF NOT EXISTS btree_gist;
-  desired: ""
-  up: |
-    DROP EXTENSION "btree_gist";
-  down: |
-    CREATE EXTENSION IF NOT EXISTS btree_gist;
-
-DropExtensionWithoutEnableDrop:
-  # DROP EXTENSION is commented out when enable_drop: false
+DropExtensionSkipped:
   min_version: "9.1"
   enable_drop: false
   current: |
@@ -43,25 +21,42 @@ DropExtensionWithoutEnableDrop:
     -- Skipped: DROP EXTENSION "btree_gist";
   down: ""
 
-# Note: DROP POLICY tests require pgquery parser and are covered in tests.yml
-
-RevokeWithEnableDrop:
-  # REVOKE is executed when enable_drop: true
+DropPolicySkipped:
+  enable_drop: false
   current: |
     CREATE TABLE users (id bigint);
-    GRANT SELECT, INSERT ON TABLE "public"."users" TO "app_user";
+    CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);
   desired: |
     CREATE TABLE users (id bigint);
-    GRANT SELECT ON TABLE users TO app_user;
-  managed_roles:
-    - app_user
   up: |
-    REVOKE INSERT ON TABLE "public"."users" FROM "app_user";
-  down: |
-    GRANT INSERT ON TABLE "public"."users" TO "app_user";
+    -- Skipped: DROP POLICY "p_users" ON "public"."users";
+  down: ""
 
-RevokeWithoutEnableDrop:
-  # REVOKE is commented out when enable_drop: false
+DropTriggerSkipped:
+  enable_drop: false
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id serial PRIMARY KEY);
+    CREATE FUNCTION log_func() RETURNS TRIGGER AS $$ BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_insert AFTER INSERT ON users FOR EACH ROW EXECUTE FUNCTION log_func();
+  desired: |
+    CREATE TABLE users (id serial PRIMARY KEY);
+    CREATE FUNCTION log_func() RETURNS TRIGGER AS $$ BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql;
+  up: |
+    -- Skipped: DROP TRIGGER log_insert ON public.users;
+  down: ""
+
+DropFunctionSkipped:
+  enable_drop: false
+  legacy_ignore_quotes: false
+  current: |
+    CREATE FUNCTION add_one(x integer) RETURNS integer AS $$ BEGIN RETURN x + 1; END; $$ LANGUAGE plpgsql;
+  desired: ""
+  up: |
+    -- Skipped: DROP FUNCTION public.add_one;
+  down: ""
+
+RevokePrivilegeSkipped:
   enable_drop: false
   current: |
     CREATE TABLE users (id bigint);
@@ -75,8 +70,8 @@ RevokeWithoutEnableDrop:
     -- Skipped: REVOKE INSERT ON TABLE "public"."users" FROM "app_user";
   down: ""
 
-ManagedRolesRevokeWithoutDrop:
-  # Tests that REVOKE is commented out when enable_drop: false
+RevokeMultiplePrivilegesSkipped:
+  enable_drop: false
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -91,12 +86,11 @@ ManagedRolesRevokeWithoutDrop:
     GRANT SELECT ON TABLE users TO app_user;
   managed_roles:
     - app_user
-  enable_drop: false
   up: |
     -- Skipped: REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
   down: ""
 
-ManagedRolesMultipleGrantees:
+GrantMultipleGranteesRevokeSkipped2:
   enable_drop: false
   current: |
     CREATE TABLE users (
@@ -120,7 +114,7 @@ ManagedRolesMultipleGrantees:
     -- Skipped: REVOKE SELECT ON TABLE "public"."users" FROM "app_user";
     -- Skipped: REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
 
-ManagedRolesPartialGrantees:
+GrantPartialGranteesRevokeSkipped:
   enable_drop: false
   current: |
     CREATE TABLE users (
@@ -144,7 +138,7 @@ ManagedRolesPartialGrantees:
     -- Skipped: REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "user2";
     -- Skipped: REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "user4";
 
-ManagedRolesOverlapping:
+GrantOverlappingRevokeSkipped:
   enable_drop: false
   current: |
     CREATE TABLE users (
