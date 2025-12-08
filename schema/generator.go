@@ -604,7 +604,49 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		}
 	}
 
+	// Comment out DROP/REVOKE statements when enable_drop is false
+	if !g.config.EnableDrop {
+		ddls = commentOutDropStatements(ddls)
+	}
+
 	return ddls, nil
+}
+
+// commentOutDropStatements converts DROP/REVOKE statements to SQL comments.
+// This makes the output testable and visible in --dry-run output.
+func commentOutDropStatements(ddls []string) []string {
+	result := make([]string, len(ddls))
+	for i, ddl := range ddls {
+		if isDropStatement(ddl) {
+			result[i] = "-- Skipped: " + ddl
+		} else {
+			result[i] = ddl
+		}
+	}
+	return result
+}
+
+// isDropStatement checks if a DDL statement is a DROP or REVOKE statement.
+// Note: DROP CONSTRAINT and DROP CHECK are NOT included because they are
+// required for non-destructive schema changes (e.g., changing defaults).
+func isDropStatement(ddl string) bool {
+	return strings.Contains(ddl, "DROP TABLE") ||
+		strings.Contains(ddl, "DROP SCHEMA") ||
+		strings.Contains(ddl, "DROP COLUMN") ||
+		strings.Contains(ddl, "DROP ROLE") ||
+		strings.Contains(ddl, "DROP USER") ||
+		strings.Contains(ddl, "DROP FUNCTION") ||
+		strings.Contains(ddl, "DROP PROCEDURE") ||
+		strings.Contains(ddl, "DROP TRIGGER") ||
+		strings.Contains(ddl, "DROP VIEW") ||
+		strings.Contains(ddl, "DROP MATERIALIZED VIEW") ||
+		strings.Contains(ddl, "DROP INDEX") ||
+		strings.Contains(ddl, "DROP SEQUENCE") ||
+		strings.Contains(ddl, "DROP TYPE") ||
+		strings.Contains(ddl, "DROP DOMAIN") ||
+		strings.Contains(ddl, "DROP EXTENSION") ||
+		strings.Contains(ddl, "DROP POLICY") ||
+		strings.Contains(ddl, "REVOKE ")
 }
 
 func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, desiredTable *Table, column *Column) []string {

@@ -134,7 +134,7 @@ func isDryRun(d Database) bool {
 	return isDryRun
 }
 
-func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddlSuffix string, logger Logger) error {
+func RunDDLs(d Database, ddls []string, beforeApply string, ddlSuffix string, logger Logger) error {
 	if isDryRun(d) {
 		logger.Println("-- dry run --")
 	} else {
@@ -182,12 +182,13 @@ func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddl
 
 	// DDLs in transaction
 	for _, ddl := range ddlsInTx {
-		// Skip the DDL that contains destructive operations unless enableDrop.
-		if !enableDrop && IsDropStatement(ddl) {
-			logger.Printf("-- Skipped: %s;\n", ddl)
+		logger.Printf("%s;\n", ddl)
+
+		if strings.HasPrefix(ddl, "-- ") {
+			// Skip commented DDLs (e.g., "-- Skipped: ...")
 			continue
 		}
-		logger.Printf("%s;\n", ddl)
+
 		logger.Print(ddlSuffix)
 		_, err = transaction.Exec(ddl)
 		if err != nil {
@@ -207,17 +208,14 @@ func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddl
 
 	// DDLs not in transaction
 	for _, ddl := range ddlsNotInTx {
-		// Skip the DDL that contains destructive operations unless enableDrop.
-		if !enableDrop && IsDropStatement(ddl) {
-			logger.Printf("-- Skipped: %s;\n", ddl)
-			continue
-		}
-
 		logger.Printf("%s;\n", ddl)
-		logger.Print(ddlSuffix)
-		_, err = d.DB().Exec(ddl)
-		if err != nil {
-			return err
+		// Skip ddlSuffix and execution for commented DDLs (e.g., "-- Skipped: ...")
+		if !strings.HasPrefix(ddl, "-- ") {
+			logger.Print(ddlSuffix)
+			_, err = d.DB().Exec(ddl)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -226,26 +224,6 @@ func RunDDLs(d Database, ddls []string, enableDrop bool, beforeApply string, ddl
 func TransactionSupported(ddl string) bool {
 	ddlLower := strings.ToLower(ddl)
 	return !strings.Contains(ddlLower, "concurrently") && !strings.Contains(ddlLower, "async")
-}
-
-func IsDropStatement(ddl string) bool {
-	return strings.Contains(ddl, "DROP TABLE") ||
-		strings.Contains(ddl, "DROP SCHEMA") ||
-		strings.Contains(ddl, "DROP COLUMN") ||
-		strings.Contains(ddl, "DROP ROLE") ||
-		strings.Contains(ddl, "DROP USER") ||
-		strings.Contains(ddl, "DROP FUNCTION") ||
-		strings.Contains(ddl, "DROP PROCEDURE") ||
-		strings.Contains(ddl, "DROP TRIGGER") ||
-		strings.Contains(ddl, "DROP VIEW") ||
-		strings.Contains(ddl, "DROP MATERIALIZED VIEW") ||
-		strings.Contains(ddl, "DROP INDEX") ||
-		strings.Contains(ddl, "DROP SEQUENCE") ||
-		strings.Contains(ddl, "DROP TYPE") ||
-		strings.Contains(ddl, "DROP DOMAIN") ||
-		strings.Contains(ddl, "DROP EXTENSION") ||
-		strings.Contains(ddl, "DROP POLICY") ||
-		strings.Contains(ddl, "REVOKE ")
 }
 
 func MergeGeneratorConfigs(configs []GeneratorConfig) GeneratorConfig {

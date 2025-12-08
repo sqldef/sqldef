@@ -12,13 +12,13 @@ DropTableWithEnableDrop:
     CREATE TABLE users (id bigint NOT NULL);
 
 DropTableWithoutEnableDrop:
-  # DROP TABLE is generated but skipped when enable_drop: false
+  # DROP TABLE is commented out when enable_drop: false
   enable_drop: false
   current: |
     CREATE TABLE users (id bigint NOT NULL);
   desired: ""
   up: |
-    DROP TABLE `users`;
+    -- Skipped: DROP TABLE `users`;
   down: ""
 
 DropColumnWithEnableDrop:
@@ -38,7 +38,7 @@ DropColumnWithEnableDrop:
     ALTER TABLE `users` ADD COLUMN `name` varchar(100) AFTER `id`;
 
 DropColumnWithoutEnableDrop:
-  # DROP COLUMN is generated but skipped when enable_drop: false
+  # DROP COLUMN is commented out when enable_drop: false
   enable_drop: false
   current: |
     CREATE TABLE users (
@@ -50,7 +50,7 @@ DropColumnWithoutEnableDrop:
       id bigint NOT NULL
     );
   up: |
-    ALTER TABLE `users` DROP COLUMN `name`;
+    -- Skipped: ALTER TABLE `users` DROP COLUMN `name`;
   down: ""
 
 DropIndexWithEnableDrop:
@@ -72,7 +72,7 @@ DropIndexWithEnableDrop:
     ALTER TABLE `users` ADD INDEX `idx_email` (`email`);
 
 DropIndexWithoutEnableDrop:
-  # DROP INDEX is generated but skipped when enable_drop: false
+  # DROP INDEX is commented out when enable_drop: false
   enable_drop: false
   current: |
     CREATE TABLE users (
@@ -86,5 +86,5 @@ DropIndexWithoutEnableDrop:
       email varchar(255)
     );
   up: |
-    ALTER TABLE `users` DROP INDEX `idx_email`;
+    -- Skipped: ALTER TABLE `users` DROP INDEX `idx_email`;
   down: ""

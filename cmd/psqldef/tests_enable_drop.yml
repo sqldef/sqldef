@@ -12,13 +12,13 @@ DropDomainWithEnableDrop:
     CREATE DOMAIN email AS TEXT;
 
 DropDomainWithoutEnableDrop:
-  # DROP DOMAIN is generated but skipped when enable_drop: false
+  # DROP DOMAIN is commented out when enable_drop: false
   enable_drop: false
   current: |
     CREATE DOMAIN email AS TEXT;
   desired: ""
   up: |
-    DROP DOMAIN "public"."email";
+    -- Skipped: DROP DOMAIN "public"."email";
   down: ""
 
 DropExtensionWithEnableDrop:
@@ -33,14 +33,14 @@ DropExtensionWithEnableDrop:
     CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 DropExtensionWithoutEnableDrop:
-  # DROP EXTENSION is generated but skipped when enable_drop: false
+  # DROP EXTENSION is commented out when enable_drop: false
   min_version: "9.1"
   enable_drop: false
   current: |
     CREATE EXTENSION IF NOT EXISTS btree_gist;
   desired: ""
   up: |
-    DROP EXTENSION "btree_gist";
+    -- Skipped: DROP EXTENSION "btree_gist";
   down: ""
 
 # Note: DROP POLICY tests require pgquery parser and are covered in tests.yml
@@ -61,7 +61,7 @@ RevokeWithEnableDrop:
     GRANT INSERT ON TABLE "public"."users" TO "app_user";
 
 RevokeWithoutEnableDrop:
-  # REVOKE is generated but skipped when enable_drop: false
+  # REVOKE is commented out when enable_drop: false
   enable_drop: false
   current: |
     CREATE TABLE users (id bigint);
@@ -72,5 +72,103 @@ RevokeWithoutEnableDrop:
   managed_roles:
     - app_user
   up: |
-    REVOKE INSERT ON TABLE "public"."users" FROM "app_user";
+    -- Skipped: REVOKE INSERT ON TABLE "public"."users" FROM "app_user";
   down: ""
+
+ManagedRolesRevokeWithoutDrop:
+  # Tests that REVOKE is commented out when enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+  managed_roles:
+    - app_user
+  enable_drop: false
+  up: |
+    -- Skipped: REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
+  down: ""
+
+ManagedRolesMultipleGrantees:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user, app_user, admin_role;
+  managed_roles:
+    - readonly_user
+    - app_user
+    - admin_role
+  up: |
+    GRANT SELECT ON TABLE "public"."users" TO "admin_role", "app_user", "readonly_user";
+  down: |
+    -- Skipped: REVOKE SELECT ON TABLE "public"."users" FROM "admin_role";
+    -- Skipped: REVOKE SELECT ON TABLE "public"."users" FROM "app_user";
+    -- Skipped: REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
+
+ManagedRolesPartialGrantees:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO user1, user2, user3;
+    GRANT INSERT, UPDATE ON TABLE users TO user2, user4;
+  managed_roles:
+    - user2
+    - user4
+  up: |
+    GRANT SELECT ON TABLE "public"."users" TO "user2";
+    GRANT INSERT, UPDATE ON TABLE "public"."users" TO "user2", "user4";
+  down: |
+    -- Skipped: REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "user2";
+    -- Skipped: REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "user4";
+
+ManagedRolesOverlapping:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO user1;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT ON TABLE users TO user1, user2;
+    GRANT UPDATE, DELETE ON TABLE users TO user1, user3;
+  managed_roles:
+    - user1
+    - user2
+    - user3
+  up: |
+    GRANT INSERT ON TABLE "public"."users" TO "user1";
+    GRANT SELECT, INSERT ON TABLE "public"."users" TO "user2";
+    -- Skipped: REVOKE SELECT ON TABLE "public"."users" FROM "user1";
+    GRANT UPDATE, DELETE ON TABLE "public"."users" TO "user1", "user3";
+  down: |
+    -- Skipped: REVOKE DELETE, INSERT, UPDATE ON TABLE "public"."users" FROM "user1";
+    -- Skipped: REVOKE INSERT, SELECT ON TABLE "public"."users" FROM "user2";
+    -- Skipped: REVOKE DELETE, UPDATE ON TABLE "public"."users" FROM "user3";

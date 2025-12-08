@@ -12,13 +12,13 @@ DropTableWithEnableDrop:
     CREATE TABLE users (id integer NOT NULL);
 
 DropTableWithoutEnableDrop:
-  # DROP TABLE is generated but skipped when enable_drop: false
+  # DROP TABLE is commented out when enable_drop: false
   enable_drop: false
   current: |
     CREATE TABLE users (id integer NOT NULL);
   desired: ""
   up: |
-    DROP TABLE "users";
+    -- Skipped: DROP TABLE "users";
   down: ""
 
 DropColumnWithEnableDrop:
@@ -38,7 +38,7 @@ DropColumnWithEnableDrop:
     ALTER TABLE "users" ADD COLUMN "name" text;
 
 DropColumnWithoutEnableDrop:
-  # DROP COLUMN is generated but skipped when enable_drop: false
+  # DROP COLUMN is commented out when enable_drop: false
   enable_drop: false
   current: |
     CREATE TABLE users (
@@ -50,7 +50,7 @@ DropColumnWithoutEnableDrop:
       id integer NOT NULL
     );
   up: |
-    ALTER TABLE "users" DROP COLUMN "name";
+    -- Skipped: ALTER TABLE "users" DROP COLUMN "name";
   down: ""
 
 DropIndexWithEnableDrop:
@@ -72,7 +72,7 @@ DropIndexWithEnableDrop:
     CREATE INDEX idx_email ON users (email);
 
 DropIndexWithoutEnableDrop:
-  # DROP INDEX is generated but skipped when enable_drop: false
+  # DROP INDEX is commented out when enable_drop: false
   enable_drop: false
   current: |
     CREATE TABLE users (
@@ -86,5 +86,5 @@ DropIndexWithoutEnableDrop:
       email text
     );
   up: |
-    DROP INDEX "idx_email";
+    -- Skipped: DROP INDEX "idx_email";
   down: ""
