@@ -54,7 +54,7 @@ type GeneratorConfig struct {
 	Algorithm               string
 	Lock                    string
 	DumpConcurrency         int
-	ManagedRoles            []string // Roles whose privileges are managed by sqldef
+	ManagedRoles            []string // Roles whose privileges are managed by sqldef (empty means no privileges are managed)
 	EnableDrop              bool     // Whether to enable DROP/REVOKE operations
 	CreateIndexConcurrently bool     // Whether to add CONCURRENTLY to CREATE INDEX statements
 	DisableDdlTransaction   bool     // Do not use a transaction for DDL statements

@@ -557,8 +557,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		for _, currentPriv := range g.currentPrivileges {
 			// Check each grantee individually for orphaned privileges
 			for _, grantee := range currentPriv.grantees {
-				// Skip if this grantee is not in managed roles (when managed roles are configured)
-				if len(g.config.ManagedRoles) > 0 && !slices.Contains(g.config.ManagedRoles, grantee) {
+				// Skip if managed roles is empty (means "manage no roles") or grantee is not in managed roles
+				if len(g.config.ManagedRoles) == 0 || !slices.Contains(g.config.ManagedRoles, grantee) {
 					continue
 				}
 

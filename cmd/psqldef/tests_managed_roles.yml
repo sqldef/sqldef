@@ -76,6 +76,23 @@ ManagedRolesEmptyListNoChanges:
   up: ""
   down: ""
 
+ManagedRolesEmptyListIgnoresOrphans:
+  # Empty managed_roles means "manage no roles", so orphaned privileges should be ignored
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  managed_roles: []
+  up: ""
+  down: ""
+
 ManagedRolesAddPrivileges:
   current: |
     CREATE TABLE users (

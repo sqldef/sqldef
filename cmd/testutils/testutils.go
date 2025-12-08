@@ -34,7 +34,7 @@ type TestCase struct {
 	MaxVersion         string  `yaml:"max_version"`
 	User               string
 	Flavor             string   // database flavor (e.g., "mariadb", "mysql")
-	ManagedRoles       []string `yaml:"managed_roles"`        // Roles whose privileges are managed by sqldef
+	ManagedRoles       []string `yaml:"managed_roles"`        // Roles whose privileges are managed by sqldef (empty means no privileges are managed)
 	EnableDrop         *bool    `yaml:"enable_drop"`          // Whether to enable DROP/REVOKE operations
 	LegacyIgnoreQuotes *bool    `yaml:"legacy_ignore_quotes"` // nil or true = ignore quotes (legacy default), false = preserve quotes
 	Offline            bool     `yaml:"offline"`
