@@ -17,14 +17,14 @@ import (
 //go:embed VERSION
 var version string
 
-// Version is the version of sqldef read from VERSION file.
-var Version = strings.TrimSpace(version)
+// GetVersion returns the version of sqldef read from VERSION file.
+func GetVersion() string {
+	return strings.TrimSpace(version)
+}
 
-// Revision is the git revision of sqldef.
+// GetRevision returns the git revision of sqldef.
 // It is automatically populated from Go's embedded VCS info.
-var Revision = getRevision()
-
-func getRevision() string {
+func GetRevision() string {
 	if info, ok := debug.ReadBuildInfo(); ok {
 		for _, setting := range info.Settings {
 			if setting.Key == "vcs.revision" && len(setting.Value) >= 7 {

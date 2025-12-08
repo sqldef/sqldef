@@ -66,12 +66,12 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 
 	if opts.Help {
 		parser.WriteHelp(os.Stdout)
-		fmt.Printf("\nFor more information, see: https://github.com/sqldef/sqldef/blob/v%s/cmd-mssqldef.md\n", sqldef.Version)
+		fmt.Printf("\nFor more information, see: https://github.com/sqldef/sqldef/blob/v%s/cmd-mssqldef.md\n", sqldef.GetVersion())
 		os.Exit(0)
 	}
 
 	if opts.Version {
-		fmt.Printf("%s (%s)\n", sqldef.Version, sqldef.Revision)
+		fmt.Printf("%s (%s)\n", sqldef.GetVersion(), sqldef.GetRevision())
 		os.Exit(0)
 	}
 
