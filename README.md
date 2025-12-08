@@ -6,8 +6,7 @@ With sqldef, you maintain a single SQL file with your complete schema. To modify
 
 Each database gets its own command (`mysqldef`, `psqldef`, `sqlite3def`, `mssqldef`) that mimics the connection options of the native database client, making it familiar and easy to integrate into existing workflows. The tool comes as a single binary with no dependencies, and provides idempotent operations that are safe to run multiple times.
 
-This is inspired by [Ridgepole](https://github.com/ridgepole/ridgepole) but using SQL,
-so there's no need to remember Ruby DSL.
+This is inspired by [Ridgepole](https://github.com/ridgepole/ridgepole), which uses Ruby DSL. However, sqldef uses plain SQL, so all you need to remember is SQL.
 
 ![demo](./demo.gif)
 
@@ -126,7 +125,7 @@ https://hub.docker.com/u/sqldef
 
 ### Linux
 
-Debian packages might be supported in the future, but for now they have not been implemented yet.
+Debian packages are not currently available. Use the pre-built binaries or Docker images instead.
 
 ```shell
 # mysqldef
