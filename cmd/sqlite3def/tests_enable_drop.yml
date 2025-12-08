@@ -11,6 +11,30 @@ DropTableSkipped:
     -- Skipped: DROP TABLE "users";
   down: ""
 
+DropViewSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id integer NOT NULL, name text);
+    CREATE VIEW users_view AS SELECT id, name FROM users;
+  desired: |
+    CREATE TABLE users (id integer NOT NULL, name text);
+  up: |
+    -- Skipped: DROP VIEW "users_view";
+  down: ""
+
+DropTriggerSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id integer NOT NULL, name text);
+    CREATE TABLE audit (msg text);
+    CREATE TRIGGER users_delete BEFORE DELETE ON users BEGIN INSERT INTO audit VALUES('deleted'); END;
+  desired: |
+    CREATE TABLE users (id integer NOT NULL, name text);
+    CREATE TABLE audit (msg text);
+  up: |
+    -- Skipped: DROP TRIGGER "users_delete";
+  down: ""
+
 DropColumnSkipped:
   enable_drop: false
   current: |

@@ -11,6 +11,17 @@ DropTableSkipped:
     -- Skipped: DROP TABLE `users`;
   down: ""
 
+DropViewSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id bigint NOT NULL, name varchar(100));
+    CREATE VIEW users_view AS SELECT id, name FROM users;
+  desired: |
+    CREATE TABLE users (id bigint NOT NULL, name varchar(100));
+  up: |
+    -- Skipped: DROP VIEW `users_view`;
+  down: ""
+
 DropColumnSkipped:
   enable_drop: false
   current: |

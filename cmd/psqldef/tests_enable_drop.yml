@@ -56,6 +56,78 @@ DropFunctionSkipped:
     -- Skipped: DROP FUNCTION public.add_one;
   down: ""
 
+DropTableSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id bigint NOT NULL);
+  desired: ""
+  up: |
+    -- Skipped: DROP TABLE "public"."users";
+  down: ""
+
+DropColumnSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL
+    );
+  up: |
+    -- Skipped: ALTER TABLE "public"."users" DROP COLUMN "name";
+  down: ""
+
+DropIndexSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255)
+    );
+    CREATE INDEX idx_email ON users (email);
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255)
+    );
+  up: |
+    -- Skipped: DROP INDEX "public"."idx_email";
+  down: ""
+
+DropViewSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id bigint NOT NULL, name text);
+    CREATE VIEW users_view AS SELECT id, name FROM users;
+  desired: |
+    CREATE TABLE users (id bigint NOT NULL, name text);
+  up: |
+    -- Skipped: DROP VIEW "public"."users_view";
+  down: ""
+
+DropMaterializedViewSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id bigint NOT NULL, name text);
+    CREATE MATERIALIZED VIEW users_mat AS SELECT id, name FROM users;
+  desired: |
+    CREATE TABLE users (id bigint NOT NULL, name text);
+  up: |
+    -- Skipped: DROP MATERIALIZED VIEW "public"."users_mat";
+  down: ""
+
+DropTypeSkipped:
+  enable_drop: false
+  current: |
+    CREATE TYPE status AS ENUM ('active', 'inactive');
+  desired: ""
+  up: |
+    -- Skipped: DROP TYPE "public"."status";
+  down: ""
+
 RevokePrivilegeSkipped:
   enable_drop: false
   current: |

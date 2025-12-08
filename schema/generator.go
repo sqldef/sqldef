@@ -541,6 +541,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		ddls = append(ddls, fmt.Sprintf("DROP FUNCTION %s", g.escapeQualifiedName(currentFunction.name)))
 	}
 
+	// Clean up obsoleted types
+	for _, currentType := range g.currentTypes {
+		if g.findType(g.desiredTypes, currentType) != nil {
+			continue
+		}
+		ddls = append(ddls, fmt.Sprintf("DROP TYPE %s", g.escapeTypeName(currentType)))
+	}
+
 	// Clean up obsoleted comments
 	for _, currentComment := range g.currentComments {
 		// Check if this comment still exists in desired comments

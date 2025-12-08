@@ -417,6 +417,7 @@ AddEnumTypeColumn:
     ALTER TABLE "s"."users" ADD COLUMN "lang" s.lang NOT NULL;
   down: |
     ALTER TABLE "s"."users" DROP COLUMN "lang";
+    DROP TYPE "s"."lang";
 CreateTypeWithMultipleTables:
   desired: |
     CREATE TYPE order_status AS ENUM ('pending', 'shipped');
@@ -1199,6 +1200,7 @@ AddEnumTypeColumnOnNonStandardDefaultSchema:
     ALTER TABLE "foo"."items" ADD COLUMN "lang" lang NOT NULL;
   down: |
     ALTER TABLE "foo"."items" DROP COLUMN "lang";
+    DROP TYPE "foo"."lang";
   user: psqldef_user
 
 # User-defined enum type on non-public default schema (explicit schema usage)
@@ -1225,6 +1227,7 @@ AddEnumTypeColumnWithExplicitSchemaOnNonStandardDefaultSchema:
     ALTER TABLE "foo"."items" ADD COLUMN "lang" foo.lang NOT NULL;
   down: |
     ALTER TABLE "foo"."items" DROP COLUMN "lang";
+    DROP TYPE "foo"."lang";
   user: psqldef_user
 
 # Built-in types must not be schema-qualified on non-public schema
