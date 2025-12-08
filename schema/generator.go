@@ -555,39 +555,35 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	if g.mode == GeneratorModePostgres {
 		for _, currentPriv := range g.currentPrivileges {
-			hasIncludedGrantee := false
+			// Check each grantee individually for orphaned privileges
 			for _, grantee := range currentPriv.grantees {
-				if slices.Contains(g.config.ManagedRoles, grantee) {
-					hasIncludedGrantee = true
-					break
-				}
-			}
-			if len(currentPriv.grantees) > 0 && !hasIncludedGrantee {
-				continue
-			}
-
-			found := false
-			for _, desiredPriv := range g.desiredPrivileges {
-				// Check if the current grantee is in any of the desired grantees
-				if g.qualifiedNamesEqual(currentPriv.tableName, desiredPriv.tableName) &&
-					len(currentPriv.grantees) > 0 && len(desiredPriv.grantees) > 0 &&
-					slices.Contains(desiredPriv.grantees, currentPriv.grantees[0]) {
-					found = true
-					break
-				}
-			}
-
-			if !found {
-				escapedGrantee, err := g.validateAndEscapeGrantee(currentPriv.grantees[0])
-				if err != nil {
-					return nil, err
+				// Skip if this grantee is not in managed roles (when managed roles are configured)
+				if len(g.config.ManagedRoles) > 0 && !slices.Contains(g.config.ManagedRoles, grantee) {
+					continue
 				}
 
-				revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
-					formatPrivilegesForGrant(currentPriv.privileges),
-					g.escapeQualifiedName(currentPriv.tableName),
-					escapedGrantee)
-				ddls = append(ddls, revoke)
+				// Check if this grantee exists in any desired privilege for the same table
+				found := false
+				for _, desiredPriv := range g.desiredPrivileges {
+					if g.qualifiedNamesEqual(currentPriv.tableName, desiredPriv.tableName) &&
+						slices.Contains(desiredPriv.grantees, grantee) {
+						found = true
+						break
+					}
+				}
+
+				if !found {
+					escapedGrantee, err := g.validateAndEscapeGrantee(grantee)
+					if err != nil {
+						return nil, err
+					}
+
+					revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
+						formatPrivilegesForGrant(currentPriv.privileges),
+						g.escapeQualifiedName(currentPriv.tableName),
+						escapedGrantee)
+					ddls = append(ddls, revoke)
+				}
 			}
 		}
 	}

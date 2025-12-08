@@ -228,6 +228,9 @@ ManagedRolesMultipleGrantees:
     GRANT SELECT ON TABLE "public"."users" TO "admin_role", "app_user", "readonly_user";
   down: |
     REVOKE SELECT ON TABLE "public"."users" FROM "admin_role";
+    REVOKE SELECT ON TABLE "public"."users" FROM "app_user";
+    REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
+
 ManagedRolesPartialGrantees:
   enable_drop: false
   current: |
