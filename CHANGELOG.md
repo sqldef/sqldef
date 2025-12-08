@@ -1,3 +1,7 @@
+## [v3.7.9](https://github.com/sqldef/sqldef/compare/v3.7.8...v3.7.9) - 2025-12-08
+- fix behavior of `--enable-drop` / `enable_drop: true` by @gfx in https://github.com/sqldef/sqldef/pull/997
+- doc: clarify sentences by @gfx in https://github.com/sqldef/sqldef/pull/999
+
 ## [v3.7.8](https://github.com/sqldef/sqldef/compare/v3.7.7...v3.7.8) - 2025-12-08
 - [doc] mention to supported DB (esp. we've started to support TiDB) by @gfx in https://github.com/sqldef/sqldef/pull/994
 - chore: remove -ldflags from build options by @gfx in https://github.com/sqldef/sqldef/pull/996
