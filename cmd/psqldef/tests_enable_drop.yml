@@ -166,7 +166,6 @@ ManagedRolesOverlapping:
   up: |
     GRANT INSERT ON TABLE "public"."users" TO "user1";
     GRANT SELECT, INSERT ON TABLE "public"."users" TO "user2";
-    -- Skipped: REVOKE SELECT ON TABLE "public"."users" FROM "user1";
     GRANT UPDATE, DELETE ON TABLE "public"."users" TO "user1", "user3";
   down: |
     -- Skipped: REVOKE DELETE, INSERT, UPDATE ON TABLE "public"."users" FROM "user1";

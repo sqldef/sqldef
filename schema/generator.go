@@ -3470,7 +3470,22 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			}
 			for _, priv := range existingNormalized {
 				if !desiredMap[priv] {
-					privilegesToRevoke = append(privilegesToRevoke, priv)
+					// Before revoking, check if this privilege is granted by any other
+					// desired GRANT statement for the same grantee and table
+					grantedByOtherStatement := false
+					for _, otherDesired := range g.desiredPrivileges {
+						if g.qualifiedNamesEqual(otherDesired.tableName, desired.tableName) &&
+							slices.Contains(otherDesired.grantees, grantee) {
+							otherNormalized := normalizePrivilegesForComparison(otherDesired.privileges)
+							if slices.Contains(otherNormalized, priv) {
+								grantedByOtherStatement = true
+								break
+							}
+						}
+					}
+					if !grantedByOtherStatement {
+						privilegesToRevoke = append(privilegesToRevoke, priv)
+					}
 				}
 			}
 			if len(privilegesToRevoke) > 0 {
