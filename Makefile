@@ -1,7 +1,5 @@
 # This doesn't work for psqldef due to lib/pq
-VERSION := $(shell cat VERSION)
-REVISION := $(shell git describe --always)
-GOFLAGS := -tags netgo -installsuffix netgo -ldflags '-w -s -X main.version=$(VERSION) -X main.revision=$(REVISION)'
+GOFLAGS := -tags netgo -installsuffix netgo -ldflags '-w -s'
 GOVERSION=$(shell go version)
 GOOS ?= $(word 1,$(subst /, ,$(lastword $(GOVERSION))))
 GOARCH ?= $(word 2,$(subst /, ,$(lastword $(GOVERSION))))

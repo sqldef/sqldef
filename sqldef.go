@@ -1,16 +1,39 @@
 package sqldef
 
 import (
+	_ "embed"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"runtime/debug"
 	"strings"
 
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/schema"
 	"github.com/sqldef/sqldef/v3/util"
 )
+
+//go:embed VERSION
+var version string
+
+// GetVersion returns the version of sqldef read from VERSION file.
+func GetVersion() string {
+	return strings.TrimSpace(version)
+}
+
+// GetRevision returns the git revision of sqldef.
+// It is automatically populated from Go's embedded VCS info.
+func GetRevision() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range info.Settings {
+			if setting.Key == "vcs.revision" && len(setting.Value) >= 7 {
+				return setting.Value[:7]
+			}
+		}
+	}
+	return "HEAD"
+}
 
 type Options struct {
 	DesiredDDLs string
