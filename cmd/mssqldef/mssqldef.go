@@ -17,10 +17,6 @@ import (
 	"golang.org/x/term"
 )
 
-// version and revision are set via -ldflags
-var version = "dev"
-var revision = "HEAD"
-
 // Return parsed options and schema filename
 // TODO: Support `sqldef schema.sql -opt val...`
 func parseOptions(args []string) (database.Config, *sqldef.Options) {
@@ -70,18 +66,12 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 
 	if opts.Help {
 		parser.WriteHelp(os.Stdout)
-		var gitRef string
-		if version != "dev" {
-			gitRef = "v" + version
-		} else {
-			gitRef = "master"
-		}
-		fmt.Printf("\nFor more information, see: https://github.com/sqldef/sqldef/blob/%s/cmd-mssqldef.md\n", gitRef)
+		fmt.Printf("\nFor more information, see: https://github.com/sqldef/sqldef/blob/v%s/cmd-mssqldef.md\n", sqldef.Version)
 		os.Exit(0)
 	}
 
 	if opts.Version {
-		fmt.Printf("%s (%s)\n", version, revision)
+		fmt.Printf("%s (%s)\n", sqldef.Version, sqldef.Revision)
 		os.Exit(0)
 	}
 
