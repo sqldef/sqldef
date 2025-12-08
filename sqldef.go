@@ -40,16 +40,12 @@ type Options struct {
 	CurrentFile string
 	DryRun      bool
 	Export      bool
-	EnableDrop  bool
 	BeforeApply string
 	Config      database.GeneratorConfig
 }
 
 // Main function shared by all commands
 func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser database.Parser, options *Options) {
-	// Merge EnableDrop from command-line flag into Config for the generator
-	options.Config.EnableDrop = options.EnableDrop
-
 	// Set the generator config on the database for privilege filtering
 	// Note: MySQL will populate MysqlLowerCaseTableNames from the server
 	db.SetGeneratorConfig(options.Config)
