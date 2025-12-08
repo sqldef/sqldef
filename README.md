@@ -11,6 +11,15 @@ so there's no need to remember Ruby DSL.
 
 ![demo](./demo.gif)
 
+## Supported Databases
+
+- mysqldef - MySQL, MariaDB, and TiDB
+- psqldef - PostgreSQL
+- sqlite3def - SQLite3
+- mssqldef - SQL Server
+
+See [CI workflow](.github/workflows/sqldef.yml) for tested versions.
+
 ## Usage
 
 ### Basic Workflow
