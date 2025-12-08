@@ -1,3 +1,7 @@
+## [v3.7.8](https://github.com/sqldef/sqldef/compare/v3.7.7...v3.7.8) - 2025-12-08
+- [doc] mention to supported DB (esp. we've started to support TiDB) by @gfx in https://github.com/sqldef/sqldef/pull/994
+- chore: remove -ldflags from build options by @gfx in https://github.com/sqldef/sqldef/pull/996
+
 ## [v3.7.7](https://github.com/sqldef/sqldef/compare/v3.7.6...v3.7.7) - 2025-12-07
 - [doc] use --apply everywhere by @gfx in https://github.com/sqldef/sqldef/pull/990
 - fix: postgres connection through UDS by @qnighy in https://github.com/sqldef/sqldef/pull/992
