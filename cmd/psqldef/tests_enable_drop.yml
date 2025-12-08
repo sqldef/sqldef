@@ -1,0 +1,76 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+# Tests for --enable-drop behavior with various DROP operations
+
+DropDomainWithEnableDrop:
+  # DROP DOMAIN is executed when enable_drop: true
+  current: |
+    CREATE DOMAIN email AS TEXT;
+  desired: ""
+  up: |
+    DROP DOMAIN "public"."email";
+  down: |
+    CREATE DOMAIN email AS TEXT;
+
+DropDomainWithoutEnableDrop:
+  # DROP DOMAIN is generated but skipped when enable_drop: false
+  enable_drop: false
+  current: |
+    CREATE DOMAIN email AS TEXT;
+  desired: ""
+  up: |
+    DROP DOMAIN "public"."email";
+  down: ""
+
+DropExtensionWithEnableDrop:
+  # DROP EXTENSION is executed when enable_drop: true
+  min_version: "9.1"
+  current: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+  desired: ""
+  up: |
+    DROP EXTENSION "btree_gist";
+  down: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+DropExtensionWithoutEnableDrop:
+  # DROP EXTENSION is generated but skipped when enable_drop: false
+  min_version: "9.1"
+  enable_drop: false
+  current: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+  desired: ""
+  up: |
+    DROP EXTENSION "btree_gist";
+  down: ""
+
+# Note: DROP POLICY tests require pgquery parser and are covered in tests.yml
+
+RevokeWithEnableDrop:
+  # REVOKE is executed when enable_drop: true
+  current: |
+    CREATE TABLE users (id bigint);
+    GRANT SELECT, INSERT ON TABLE "public"."users" TO "app_user";
+  desired: |
+    CREATE TABLE users (id bigint);
+    GRANT SELECT ON TABLE users TO app_user;
+  managed_roles:
+    - app_user
+  up: |
+    REVOKE INSERT ON TABLE "public"."users" FROM "app_user";
+  down: |
+    GRANT INSERT ON TABLE "public"."users" TO "app_user";
+
+RevokeWithoutEnableDrop:
+  # REVOKE is generated but skipped when enable_drop: false
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id bigint);
+    GRANT SELECT, INSERT ON TABLE "public"."users" TO "app_user";
+  desired: |
+    CREATE TABLE users (id bigint);
+    GRANT SELECT ON TABLE users TO app_user;
+  managed_roles:
+    - app_user
+  up: |
+    REVOKE INSERT ON TABLE "public"."users" FROM "app_user";
+  down: ""

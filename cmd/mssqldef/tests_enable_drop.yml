@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+# Tests for --enable-drop behavior with various DROP operations
+
+DropTableWithEnableDrop:
+  # DROP TABLE is executed when enable_drop: true
+  current: |
+    CREATE TABLE users (id bigint NOT NULL);
+  desired: ""
+  up: |
+    DROP TABLE [dbo].[users];
+  down: |
+    CREATE TABLE users (id bigint NOT NULL);
+
+DropTableWithoutEnableDrop:
+  # DROP TABLE is generated but skipped when enable_drop: false
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id bigint NOT NULL);
+  desired: ""
+  up: |
+    DROP TABLE [dbo].[users];
+  down: ""
+
+DropColumnWithEnableDrop:
+  # DROP COLUMN is executed when enable_drop: true
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL
+    );
+  up: |
+    ALTER TABLE [dbo].[users] DROP COLUMN [name];
+  down: |
+    ALTER TABLE [dbo].[users] ADD [name] varchar(100);
+
+DropColumnWithoutEnableDrop:
+  # DROP COLUMN is generated but skipped when enable_drop: false
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL
+    );
+  up: |
+    ALTER TABLE [dbo].[users] DROP COLUMN [name];
+  down: ""
+
+DropIndexWithEnableDrop:
+  # DROP INDEX is executed when enable_drop: true
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255)
+    );
+    CREATE INDEX idx_email ON users (email);
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255)
+    );
+  up: |
+    DROP INDEX [idx_email] ON [dbo].[users];
+  down: |
+    CREATE INDEX idx_email ON users (email);
+
+DropIndexWithoutEnableDrop:
+  # DROP INDEX is generated but skipped when enable_drop: false
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255)
+    );
+    CREATE INDEX idx_email ON users (email);
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255)
+    );
+  up: |
+    DROP INDEX [idx_email] ON [dbo].[users];
+  down: ""

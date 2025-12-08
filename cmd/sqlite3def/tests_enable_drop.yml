@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+# Tests for --enable-drop behavior with various DROP operations
+
+DropTableWithEnableDrop:
+  # DROP TABLE is executed when enable_drop: true
+  current: |
+    CREATE TABLE users (id integer NOT NULL);
+  desired: ""
+  up: |
+    DROP TABLE "users";
+  down: |
+    CREATE TABLE users (id integer NOT NULL);
+
+DropTableWithoutEnableDrop:
+  # DROP TABLE is generated but skipped when enable_drop: false
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id integer NOT NULL);
+  desired: ""
+  up: |
+    DROP TABLE "users";
+  down: ""
+
+DropColumnWithEnableDrop:
+  # DROP COLUMN is executed when enable_drop: true
+  current: |
+    CREATE TABLE users (
+      id integer NOT NULL,
+      name text
+    );
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL
+    );
+  up: |
+    ALTER TABLE "users" DROP COLUMN "name";
+  down: |
+    ALTER TABLE "users" ADD COLUMN "name" text;
+
+DropColumnWithoutEnableDrop:
+  # DROP COLUMN is generated but skipped when enable_drop: false
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id integer NOT NULL,
+      name text
+    );
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL
+    );
+  up: |
+    ALTER TABLE "users" DROP COLUMN "name";
+  down: ""
+
+DropIndexWithEnableDrop:
+  # DROP INDEX is executed when enable_drop: true
+  current: |
+    CREATE TABLE users (
+      id integer NOT NULL,
+      email text
+    );
+    CREATE INDEX idx_email ON users (email);
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL,
+      email text
+    );
+  up: |
+    DROP INDEX "idx_email";
+  down: |
+    CREATE INDEX idx_email ON users (email);
+
+DropIndexWithoutEnableDrop:
+  # DROP INDEX is generated but skipped when enable_drop: false
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id integer NOT NULL,
+      email text
+    );
+    CREATE INDEX idx_email ON users (email);
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL,
+      email text
+    );
+  up: |
+    DROP INDEX "idx_email";
+  down: ""

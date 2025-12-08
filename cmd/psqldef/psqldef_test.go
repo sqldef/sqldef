@@ -1301,9 +1301,9 @@ func TestPsqldefCreateDomain(t *testing.T) {
 			assertApplyOutput(t, createDomain+createDomainWithConstraints, wrapWithTransaction(createDomainWithConstraints))
 			assertApplyOutput(t, createDomain+createDomainWithConstraints, nothingModified)
 
-			// Test dropping a domain
-			assertApplyOutput(t, createDomain, wrapWithTransaction(fmt.Sprintf("DROP DOMAIN \"%s\".\"positive_int\";\n", tc.Schema)))
-			assertApplyOutput(t, createDomain, nothingModified)
+			// Test dropping a domain (requires enable_drop)
+			assertApplyOutputWithEnableDrop(t, createDomain, wrapWithTransaction(fmt.Sprintf("DROP DOMAIN \"%s\".\"positive_int\";\n", tc.Schema)))
+			assertApplyOutputWithEnableDrop(t, createDomain, nothingModified)
 		})
 	}
 }

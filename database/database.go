@@ -241,7 +241,11 @@ func IsDropStatement(ddl string) bool {
 		strings.Contains(ddl, "DROP MATERIALIZED VIEW") ||
 		strings.Contains(ddl, "DROP INDEX") ||
 		strings.Contains(ddl, "DROP SEQUENCE") ||
-		strings.Contains(ddl, "DROP TYPE")
+		strings.Contains(ddl, "DROP TYPE") ||
+		strings.Contains(ddl, "DROP DOMAIN") ||
+		strings.Contains(ddl, "DROP EXTENSION") ||
+		strings.Contains(ddl, "DROP POLICY") ||
+		strings.Contains(ddl, "REVOKE ")
 }
 
 func MergeGeneratorConfigs(configs []GeneratorConfig) GeneratorConfig {

@@ -553,7 +553,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		}
 	}
 
-	if g.config.EnableDrop && g.mode == GeneratorModePostgres {
+	if g.mode == GeneratorModePostgres {
 		for _, currentPriv := range g.currentPrivileges {
 			hasIncludedGrantee := false
 			for _, grantee := range currentPriv.grantees {
@@ -568,9 +568,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 			found := false
 			for _, desiredPriv := range g.desiredPrivileges {
+				// Check if the current grantee is in any of the desired grantees
 				if g.qualifiedNamesEqual(currentPriv.tableName, desiredPriv.tableName) &&
 					len(currentPriv.grantees) > 0 && len(desiredPriv.grantees) > 0 &&
-					currentPriv.grantees[0] == desiredPriv.grantees[0] {
+					slices.Contains(desiredPriv.grantees, currentPriv.grantees[0]) {
 					found = true
 					break
 				}
@@ -3472,18 +3473,16 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 		}
 	}
 
-	if g.config.EnableDrop {
-		for grantee, privileges := range util.CanonicalMapIter(revokesByGrantee) {
-			escapedGrantee, err := g.validateAndEscapeGrantee(grantee)
-			if err != nil {
-				return nil, err
-			}
-			revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
-				strings.Join(privileges, ", "),
-				g.escapeQualifiedName(desired.tableName),
-				escapedGrantee)
-			ddls = append(ddls, revoke)
+	for grantee, privileges := range util.CanonicalMapIter(revokesByGrantee) {
+		escapedGrantee, err := g.validateAndEscapeGrantee(grantee)
+		if err != nil {
+			return nil, err
 		}
+		revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
+			strings.Join(privileges, ", "),
+			g.escapeQualifiedName(desired.tableName),
+			escapedGrantee)
+		ddls = append(ddls, revoke)
 	}
 
 	var privilegeKeys []string
@@ -3528,11 +3527,6 @@ func (g *Generator) generateDDLsForRevokePrivilege(desired *RevokePrivilege) ([]
 		if !hasIncludedGrantee {
 			return []string{}, nil
 		}
-	}
-
-	// Only process REVOKE if EnableDrop is true
-	if !g.config.EnableDrop {
-		return []string{}, nil
 	}
 
 	escapedGrantee, err := g.validateAndEscapeGrantee(desired.grantees[0])

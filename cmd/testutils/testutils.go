@@ -271,8 +271,14 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		if err != nil {
 			t.Fatalf("[Phase 2: Idempotency Check] Failed to generate DDLs: %v", err)
 		}
-		if len(ddls) > 0 {
-			t.Errorf("[Phase 2: Idempotency Check] desired → desired should produce no DDL, but got:\n```\n%s```\nThis means the forward migration didn't apply correctly.", joinDDLs(ddls))
+		// When enable_drop is false, drop statements are generated but not applied,
+		// so they're expected to appear again. Filter them out for idempotency check.
+		ddlsForIdempotency := ddls
+		if !*test.EnableDrop {
+			ddlsForIdempotency = filterNonDropDDLs(ddls)
+		}
+		if len(ddlsForIdempotency) > 0 {
+			t.Errorf("[Phase 2: Idempotency Check] desired → desired should produce no DDL, but got:\n```\n%s```\nThis means the forward migration didn't apply correctly.", joinDDLs(ddlsForIdempotency))
 		}
 
 		// PHASE 3: Test reverse migration (desired → current) should produce Down
@@ -303,8 +309,14 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		if err != nil {
 			t.Fatalf("[Phase 4: Idempotency Check] Failed to generate DDLs: %v", err)
 		}
-		if len(ddls) > 0 {
-			t.Errorf("[Phase 4: Idempotency Check] current → current should produce no DDL after reverse migration, but got:\n```\n%s```\nThis means the reverse migration didn't apply correctly.", joinDDLs(ddls))
+		// When enable_drop is false, drop statements are generated but not applied,
+		// so they're expected to appear again. Filter them out for idempotency check.
+		ddlsForIdempotency = ddls
+		if !*test.EnableDrop {
+			ddlsForIdempotency = filterNonDropDDLs(ddls)
+		}
+		if len(ddlsForIdempotency) > 0 {
+			t.Errorf("[Phase 4: Idempotency Check] current → current should produce no DDL after reverse migration, but got:\n```\n%s```\nThis means the reverse migration didn't apply correctly.", joinDDLs(ddlsForIdempotency))
 		}
 	} else {
 		// Idempotency-only test (neither up nor down specified)
@@ -502,6 +514,19 @@ func joinDDLs(ddls []string) string {
 		builder.WriteString(";\n")
 	}
 	return builder.String()
+}
+
+// filterNonDropDDLs filters out DROP/REVOKE statements from the DDL list.
+// This is used for idempotency checks when enable_drop is false, because
+// drop statements are generated but not applied, so they're expected to appear again.
+func filterNonDropDDLs(ddls []string) []string {
+	var result []string
+	for _, ddl := range ddls {
+		if !database.IsDropStatement(ddl) {
+			result = append(result, ddl)
+		}
+	}
+	return result
 }
 
 // MustExecute executes a command within a test and fails the test if it errors.

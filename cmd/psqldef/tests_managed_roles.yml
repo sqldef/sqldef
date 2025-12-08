@@ -186,7 +186,8 @@ ManagedRolesIdempotent:
   up: ""
   down: ""
 
-ManagedRolesNoRevokeWithoutDrop:
+ManagedRolesRevokeWithoutDrop:
+  # Tests that REVOKE is generated but skipped when enable_drop: false
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -202,7 +203,8 @@ ManagedRolesNoRevokeWithoutDrop:
   managed_roles:
     - app_user
   enable_drop: false
-  up: ""
+  up: |
+    REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
   down: ""
 
 ManagedRolesMultipleGrantees:
@@ -224,7 +226,8 @@ ManagedRolesMultipleGrantees:
     - admin_role
   up: |
     GRANT SELECT ON TABLE "public"."users" TO "admin_role", "app_user", "readonly_user";
-  down: ""
+  down: |
+    REVOKE SELECT ON TABLE "public"."users" FROM "admin_role";
 ManagedRolesPartialGrantees:
   enable_drop: false
   current: |
@@ -245,7 +248,9 @@ ManagedRolesPartialGrantees:
   up: |
     GRANT SELECT ON TABLE "public"."users" TO "user2";
     GRANT INSERT, UPDATE ON TABLE "public"."users" TO "user2", "user4";
-  down: ""
+  down: |
+    REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "user2";
+    REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "user4";
 ManagedRolesOverlapping:
   enable_drop: false
   current: |
@@ -268,8 +273,12 @@ ManagedRolesOverlapping:
   up: |
     GRANT INSERT ON TABLE "public"."users" TO "user1";
     GRANT SELECT, INSERT ON TABLE "public"."users" TO "user2";
+    REVOKE SELECT ON TABLE "public"."users" FROM "user1";
     GRANT UPDATE, DELETE ON TABLE "public"."users" TO "user1", "user3";
-  down: ""
+  down: |
+    REVOKE DELETE, INSERT, UPDATE ON TABLE "public"."users" FROM "user1";
+    REVOKE INSERT, SELECT ON TABLE "public"."users" FROM "user2";
+    REVOKE DELETE, UPDATE ON TABLE "public"."users" FROM "user3";
 ManagedRolesMultipleTables:
   current: |
     CREATE TABLE users (
