@@ -533,6 +533,22 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		ddls = append(ddls, fmt.Sprintf("DROP EXTENSION %s", g.escapeSQLIdent(currentExtension.extension.Name)))
 	}
 
+	// Clean up obsoleted functions
+	for _, currentFunction := range g.currentFunctions {
+		if g.findFunctionByName(g.desiredFunctions, currentFunction.name) != nil {
+			continue
+		}
+		ddls = append(ddls, fmt.Sprintf("DROP FUNCTION %s", g.escapeQualifiedName(currentFunction.name)))
+	}
+
+	// Clean up obsoleted types
+	for _, currentType := range g.currentTypes {
+		if g.findType(g.desiredTypes, currentType) != nil {
+			continue
+		}
+		ddls = append(ddls, fmt.Sprintf("DROP TYPE %s", g.escapeTypeName(currentType)))
+	}
+
 	// Clean up obsoleted comments
 	for _, currentComment := range g.currentComments {
 		// Check if this comment still exists in desired comments
@@ -553,40 +569,37 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		}
 	}
 
-	if g.config.EnableDrop && g.mode == GeneratorModePostgres {
+	if g.mode == GeneratorModePostgres {
 		for _, currentPriv := range g.currentPrivileges {
-			hasIncludedGrantee := false
+			// Check each grantee individually for orphaned privileges
 			for _, grantee := range currentPriv.grantees {
-				if slices.Contains(g.config.ManagedRoles, grantee) {
-					hasIncludedGrantee = true
-					break
-				}
-			}
-			if len(currentPriv.grantees) > 0 && !hasIncludedGrantee {
-				continue
-			}
-
-			found := false
-			for _, desiredPriv := range g.desiredPrivileges {
-				if g.qualifiedNamesEqual(currentPriv.tableName, desiredPriv.tableName) &&
-					len(currentPriv.grantees) > 0 && len(desiredPriv.grantees) > 0 &&
-					currentPriv.grantees[0] == desiredPriv.grantees[0] {
-					found = true
-					break
-				}
-			}
-
-			if !found {
-				escapedGrantee, err := g.validateAndEscapeGrantee(currentPriv.grantees[0])
-				if err != nil {
-					return nil, err
+				// Skip if managed roles is empty (means "manage no roles") or grantee is not in managed roles
+				if len(g.config.ManagedRoles) == 0 || !slices.Contains(g.config.ManagedRoles, grantee) {
+					continue
 				}
 
-				revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
-					formatPrivilegesForGrant(currentPriv.privileges),
-					g.escapeQualifiedName(currentPriv.tableName),
-					escapedGrantee)
-				ddls = append(ddls, revoke)
+				// Check if this grantee exists in any desired privilege for the same table
+				found := false
+				for _, desiredPriv := range g.desiredPrivileges {
+					if g.qualifiedNamesEqual(currentPriv.tableName, desiredPriv.tableName) &&
+						slices.Contains(desiredPriv.grantees, grantee) {
+						found = true
+						break
+					}
+				}
+
+				if !found {
+					escapedGrantee, err := g.validateAndEscapeGrantee(grantee)
+					if err != nil {
+						return nil, err
+					}
+
+					revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
+						formatPrivilegesForGrant(currentPriv.privileges),
+						g.escapeQualifiedName(currentPriv.tableName),
+						escapedGrantee)
+					ddls = append(ddls, revoke)
+				}
 			}
 		}
 	}
@@ -607,7 +620,49 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		}
 	}
 
+	// Comment out DROP/REVOKE statements when enable_drop is false
+	if !g.config.EnableDrop {
+		ddls = commentOutDropStatements(ddls)
+	}
+
 	return ddls, nil
+}
+
+// commentOutDropStatements converts DROP/REVOKE statements to SQL comments.
+// This makes the output testable and visible in --dry-run output.
+func commentOutDropStatements(ddls []string) []string {
+	result := make([]string, len(ddls))
+	for i, ddl := range ddls {
+		if isDropStatement(ddl) {
+			result[i] = "-- Skipped: " + ddl
+		} else {
+			result[i] = ddl
+		}
+	}
+	return result
+}
+
+// isDropStatement checks if a DDL statement is a DROP or REVOKE statement.
+// Note: DROP CONSTRAINT and DROP CHECK are NOT included because they are
+// required for non-destructive schema changes (e.g., changing defaults).
+func isDropStatement(ddl string) bool {
+	return strings.Contains(ddl, "DROP TABLE") ||
+		strings.Contains(ddl, "DROP SCHEMA") ||
+		strings.Contains(ddl, "DROP COLUMN") ||
+		strings.Contains(ddl, "DROP ROLE") ||
+		strings.Contains(ddl, "DROP USER") ||
+		strings.Contains(ddl, "DROP FUNCTION") ||
+		strings.Contains(ddl, "DROP PROCEDURE") ||
+		strings.Contains(ddl, "DROP TRIGGER") ||
+		strings.Contains(ddl, "DROP VIEW") ||
+		strings.Contains(ddl, "DROP MATERIALIZED VIEW") ||
+		strings.Contains(ddl, "DROP INDEX") ||
+		strings.Contains(ddl, "DROP SEQUENCE") ||
+		strings.Contains(ddl, "DROP TYPE") ||
+		strings.Contains(ddl, "DROP DOMAIN") ||
+		strings.Contains(ddl, "DROP EXTENSION") ||
+		strings.Contains(ddl, "DROP POLICY") ||
+		strings.Contains(ddl, "REVOKE ")
 }
 
 func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, desiredTable *Table, column *Column) []string {
@@ -3431,7 +3486,22 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			}
 			for _, priv := range existingNormalized {
 				if !desiredMap[priv] {
-					privilegesToRevoke = append(privilegesToRevoke, priv)
+					// Before revoking, check if this privilege is granted by any other
+					// desired GRANT statement for the same grantee and table
+					grantedByOtherStatement := false
+					for _, otherDesired := range g.desiredPrivileges {
+						if g.qualifiedNamesEqual(otherDesired.tableName, desired.tableName) &&
+							slices.Contains(otherDesired.grantees, grantee) {
+							otherNormalized := normalizePrivilegesForComparison(otherDesired.privileges)
+							if slices.Contains(otherNormalized, priv) {
+								grantedByOtherStatement = true
+								break
+							}
+						}
+					}
+					if !grantedByOtherStatement {
+						privilegesToRevoke = append(privilegesToRevoke, priv)
+					}
 				}
 			}
 			if len(privilegesToRevoke) > 0 {
@@ -3472,18 +3542,16 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 		}
 	}
 
-	if g.config.EnableDrop {
-		for grantee, privileges := range util.CanonicalMapIter(revokesByGrantee) {
-			escapedGrantee, err := g.validateAndEscapeGrantee(grantee)
-			if err != nil {
-				return nil, err
-			}
-			revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
-				strings.Join(privileges, ", "),
-				g.escapeQualifiedName(desired.tableName),
-				escapedGrantee)
-			ddls = append(ddls, revoke)
+	for grantee, privileges := range util.CanonicalMapIter(revokesByGrantee) {
+		escapedGrantee, err := g.validateAndEscapeGrantee(grantee)
+		if err != nil {
+			return nil, err
 		}
+		revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
+			strings.Join(privileges, ", "),
+			g.escapeQualifiedName(desired.tableName),
+			escapedGrantee)
+		ddls = append(ddls, revoke)
 	}
 
 	var privilegeKeys []string
@@ -3528,11 +3596,6 @@ func (g *Generator) generateDDLsForRevokePrivilege(desired *RevokePrivilege) ([]
 		if !hasIncludedGrantee {
 			return []string{}, nil
 		}
-	}
-
-	// Only process REVOKE if EnableDrop is true
-	if !g.config.EnableDrop {
-		return []string{}, nil
 	}
 
 	escapedGrantee, err := g.validateAndEscapeGrantee(desired.grantees[0])

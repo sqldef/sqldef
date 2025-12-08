@@ -90,14 +90,13 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	config := database.MergeGeneratorConfigs(configs)
 
 	if opts.EnableDrop {
-		config.EnableDrop = opts.EnableDrop
+		config.EnableDrop = true
 	}
 
 	options := sqldef.Options{
 		DesiredDDLs: desiredDDLs,
 		DryRun:      opts.DryRun,
 		Export:      opts.Export,
-		EnableDrop:  opts.EnableDrop || config.EnableDrop,
 		BeforeApply: opts.BeforeApply,
 		Config:      config,
 	}

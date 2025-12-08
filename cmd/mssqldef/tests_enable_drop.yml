@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+# Tests for enable_drop: false behavior (DROP statements are commented out)
+# The enable_drop: true behavior is tested in other test files.
+
+DropTableSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id bigint NOT NULL);
+  desired: ""
+  up: |
+    -- Skipped: DROP TABLE [dbo].[users];
+  down: ""
+
+DropViewSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id bigint NOT NULL, name varchar(100));
+    CREATE VIEW users_view AS SELECT id, name FROM users;
+  desired: |
+    CREATE TABLE users (id bigint NOT NULL, name varchar(100));
+  up: |
+    -- Skipped: DROP VIEW [dbo].[users_view];
+  down: ""
+
+DropColumnSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL
+    );
+  up: |
+    -- Skipped: ALTER TABLE [dbo].[users] DROP COLUMN [name];
+  down: ""
+
+DropIndexSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255)
+    );
+    CREATE INDEX idx_email ON users (email);
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255)
+    );
+  up: |
+    -- Skipped: DROP INDEX [idx_email] ON [dbo].[users];
+  down: ""

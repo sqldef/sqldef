@@ -2463,6 +2463,24 @@ drop_statement:
       Extension: &Extension{Name: NewIdent($5, false)},
     }
   }
+/* DROP POLICY statement */
+| DROP POLICY sql_id ON table_name
+  {
+    $$ = &DDL{
+      Action: DropPolicy,
+      Table: $5,
+      Policy: &Policy{Name: $3},
+    }
+  }
+| DROP POLICY IF EXISTS sql_id ON table_name
+  {
+    $$ = &DDL{
+      Action: DropPolicy,
+      IfExists: true,
+      Table: $7,
+      Policy: &Policy{Name: $5},
+    }
+  }
 
 create_table_prefix:
   CREATE TABLE if_not_exists_opt table_name

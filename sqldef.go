@@ -40,7 +40,6 @@ type Options struct {
 	CurrentFile string
 	DryRun      bool
 	Export      bool
-	EnableDrop  bool
 	BeforeApply string
 	Config      database.GeneratorConfig
 }
@@ -107,7 +106,7 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 		db = dryRunDB
 	}
 
-	err = database.RunDDLs(db, ddls, options.EnableDrop, options.BeforeApply, ddlSuffix, database.StdoutLogger{})
+	err = database.RunDDLs(db, ddls, options.BeforeApply, ddlSuffix, database.StdoutLogger{})
 	if err != nil {
 		log.Fatal(err)
 	}

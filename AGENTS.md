@@ -2,20 +2,20 @@
 
 This project provides four schema management commands:
 
-- **mysqldef** - MySQL schema management (mimics `mysql` CLI options)
-- **psqldef** - PostgreSQL schema management (mimics `psql` CLI options)
-- **mssqldef** - SQL Server schema management (mimics `sqlcmd` CLI options)
-- **sqlite3def** - SQLite3 schema management (mimics `sqlite3` CLI options)
+- `mysqldef` - MySQL schema management (mimics `mysql` CLI options)
+- `psqldef` - PostgreSQL schema management (mimics `psql` CLI options)
+- `mssqldef` - SQL Server schema management (mimics `sqlcmd` CLI options)
+- `sqlite3def` - SQLite3 schema management (mimics `sqlite3` CLI options)
 
-Each command follows the same pattern: it accepts connection parameters similar to those of the corresponding database CLI tool and applies schema changes idempotently.
+Each command follows the same pattern: it accepts connection parameters similar to those of the corresponding database CLI tool and applies schema changes idempotently to match the desired state.
 
 ## General Rules
 
-* Never commit the changes unless the user asks for it
-* Write comments to describe what is not obvious in the code. Explaining the "why" in comments is a recommended practice
+* Never commit changes unless the user explicitly requests it
+* Write comments to explain non-obvious code. Focus on explaining the "why" rather than the "what"
 * Format SQL statements in string literals
-* Use `log/slog` to trace internal state of the code. Set `LOG_LEVEL=debug` to enable debug logging
-* Use `panic` to assert that it is not reachable
+* Use `log/slog` to trace internal state. Set `LOG_LEVEL=debug` to enable debug logging
+* Use `panic` to assert unreachable code paths
 * Be aware of the two escaping modes:
   * `legacy_ignore_quotes: true` (the default, backward compatible mode) generates SQL with always quoted identifiers
   * `legacy_ignore_quotes: false` (quote-aware mode) generates SQL with identifiers quoted only when they are quoted in the source SQL
@@ -46,13 +46,13 @@ Requirements:
 
 Usage notes:
 - `psqldef` uses the **generic parser** by default with fallback to `go-pgquery` (native PostgreSQL parser)
-- Always set `PSQLDEF_PARSER=generic` environment variable on development:
+- During development, always set `PSQLDEF_PARSER=generic`:
   - `PSQLDEF_PARSER=generic` - Use only the generic parser (no fallback to pgquery)
   - `PSQLDEF_PARSER=pgquery` - Use only the pgquery parser (no fallback to generic)
   - Not set (default) - Use generic parser with fallback to pgquery
-- The generic parser builds ASTs, and the generator manipulates the ASTs for normalization and comparison. Do not parse strings with regular expressions
-- No need to maintain the pgquery parser, which is obsolete and will be removed in the future
-- Be careful to iterate a map because the iteration order is not deterministic. Use `util.CanonicalMapIter` to iterate maps in a deterministic order.
+- The generic parser builds ASTs, which the generator manipulates for normalization and comparison. Do not parse strings with regular expressions
+- The pgquery parser is obsolete and will be removed in the future; no maintenance is needed
+- Map iteration order is non-deterministic. Use `util.CanonicalMapIter` to iterate maps in a deterministic order
 
 ## Local Development
 
@@ -103,7 +103,7 @@ For development iterations, use these commands to run tests:
 ### Run all tests
 
 ```sh
-make test # it will take 5 minutes to run
+make test  # Takes approximately 10 minutes to complete
 ```
 
 ### Run tests for specific `*def` tools
@@ -121,6 +121,12 @@ For MariaDB testing:
 
 ```sh
 MYSQL_FLAVOR=mariadb MYSQL_PORT=3307 go test ./cmd/mysqldef
+```
+
+For TiDB testing:
+
+```sh
+MYSQL_FLAVOR=tidb MYSQL_PORT=4000 go test ./cmd/mysqldef
 ```
 
 If you encounter `tls: handshake failure` errors with MySQL 5.7, enable RSA key exchange:
@@ -148,20 +154,19 @@ go test ./cmd/mysqldef -run=TestApply/CreateTable
 go test ./cmd/*def -run=TestApply/AddColumn
 ```
 
-The test name pattern follows the format `TestApply/<TestCaseName>`, where `<TestCaseName>` corresponds to the test scenarios defined in the YAML test files.
+The test name pattern follows the format `TestApply/<TestCaseName>`, where `<TestCaseName>` matches the test case names defined in the YAML test files.
 
-### How to Write Tests
+### YAML test files
 
-For schema management tests, in most cases you only need to edit the YAML test files.
+For schema management tests, you typically only need to edit the YAML test files.
 
-#### YAML Test Schema
-
-The test files use a YAML format where each top-level key is a test case name, and the value is a `TestCase` object. A JSON schema is available at `./cmd/testutils/testcase.schema.json` for IDE support.
+The test files use a YAML format where each top-level key is a test case name and the value is a `TestCase` object. A JSON schema is available at `./cmd/testutils/testcase.schema.json` for IDE autocomplete and validation.
 
 Test case fields:
 
 ```yaml
 # yaml-language-server: $schema=../testutils/testcase.schema.json
+
 TestCaseName:
   # Current schema state (defaults to empty schema)
   current: |
@@ -196,7 +201,7 @@ TestCaseName:
   max_version: "14.0"
 
   # Database flavor requirement (mysqldef only)
-  # Either "mariadb" or "mysql"
+  # One of "mysql", "mariadb", "tidb"
   flavor: "mariadb"
 
   # User to run the test as
@@ -220,31 +225,26 @@ TestCaseName:
 ```
 
 The `up` and `down` fields work together:
-- If neither is specified: idempotency-only test (verifies `desired` schema is stable)
+- If neither is specified: idempotency-only test (verifies the `desired` schema is stable)
 - If `up` is specified: `down` must also be specified (bidirectional migration test)
 
 When both are specified, the test runner validates:
-1. `current` → `desired` produces `up`
-2. `desired` → `current` produces `down`
+1. Migration from `current` to `desired` produces `up`
+2. Migration from `desired` to `current` produces `down`
 
-NOTE: Never use `offline: true` for databases that are tested in GitHub Actions:
-- MySQL (including MariaDB)
-- PostgreSQL
-- SQLite3
-- SQL Server
+#### Notes for Writing Tests
 
-### Best Practices
-
-* **Use consistent prefixes**: When adding related test cases, use the same prefix for test names. This allows you to run all related tests with a simple pattern:
-   ```sh
-   # Example: Testing all index-related features
-   go test ./cmd/psqldef -run='TestApply/Index.*'
-   ```
-* **Check test coverage**: When you edit source code, check the coverage report to ensure the code is covered by tests.
+* YAML test cases default to `enable_drop: true`, which differs from the default behavior of sqldef tools
+* Never use `offline: true` for databases tested in GitHub Actions:
+  - MySQL, MariaDB, and TiDB
+  - PostgreSQL
+  - SQLite3
+  - SQL Server
+* Check test coverage: when editing source code, verify the coverage report to ensure new code is covered by tests
 
 ## Documentation
 
-There are markdown files to describe the usage of each command. Keep them up to date:
+Markdown files document the usage of each command. Keep them up to date:
 
 * `cmd-psqldef.md` for `psqldef`
 * `cmd-mysqldef.md` for `mysqldef`
@@ -253,7 +253,7 @@ There are markdown files to describe the usage of each command. Keep them up to 
 
 ## Task Completion Checklist
 
-Before considering any task complete, run these commands to ensure the code is in a good state:
+Before considering a task complete, run these commands to ensure the code is in a good state:
 
 * `make build`
 * `make test`

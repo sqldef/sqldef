@@ -34,7 +34,7 @@ type TestCase struct {
 	MaxVersion         string  `yaml:"max_version"`
 	User               string
 	Flavor             string   // database flavor (e.g., "mariadb", "mysql")
-	ManagedRoles       []string `yaml:"managed_roles"`        // Roles whose privileges are managed by sqldef
+	ManagedRoles       []string `yaml:"managed_roles"`        // Roles whose privileges are managed by sqldef (empty means no privileges are managed)
 	EnableDrop         *bool    `yaml:"enable_drop"`          // Whether to enable DROP/REVOKE operations
 	LegacyIgnoreQuotes *bool    `yaml:"legacy_ignore_quotes"` // nil or true = ignore quotes (legacy default), false = preserve quotes
 	Offline            bool     `yaml:"offline"`
@@ -209,7 +209,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = runDDLs(db, ddls, *test.EnableDrop)
+		err = runDDLs(db, ddls)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -257,7 +257,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		actual := strings.TrimSpace(joinDDLs(ddls))
 		assert.Equal(t, expected, actual, "[Phase 1: Forward Migration] current → desired should produce 'up' DDL")
 
-		err = runDDLs(db, ddls, *test.EnableDrop)
+		err = runDDLs(db, ddls)
 		if err != nil {
 			t.Fatalf("[Phase 1: Forward Migration] Failed to apply DDLs: %v", err)
 		}
@@ -271,8 +271,10 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		if err != nil {
 			t.Fatalf("[Phase 2: Idempotency Check] Failed to generate DDLs: %v", err)
 		}
-		if len(ddls) > 0 {
-			t.Errorf("[Phase 2: Idempotency Check] desired → desired should produce no DDL, but got:\n```\n%s```\nThis means the forward migration didn't apply correctly.", joinDDLs(ddls))
+		// Filter out skipped DDLs for idempotency check because they weren't applied
+		ddlsForIdempotency := filterSkippedDDLs(ddls)
+		if len(ddlsForIdempotency) > 0 {
+			t.Errorf("[Phase 2: Idempotency Check] desired → desired should produce no DDL, but got:\n```\n%s```\nThis means the forward migration didn't apply correctly.", joinDDLs(ddlsForIdempotency))
 		}
 
 		// PHASE 3: Test reverse migration (desired → current) should produce Down
@@ -289,7 +291,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		actual = strings.TrimSpace(joinDDLs(ddls))
 		assert.Equal(t, expected, actual, "[Phase 3: Reverse Migration] desired → current should produce 'down' DDL")
 
-		err = runDDLs(db, ddls, *test.EnableDrop)
+		err = runDDLs(db, ddls)
 		if err != nil {
 			t.Fatalf("[Phase 3: Reverse Migration] Failed to apply DDLs: %v", err)
 		}
@@ -303,8 +305,10 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		if err != nil {
 			t.Fatalf("[Phase 4: Idempotency Check] Failed to generate DDLs: %v", err)
 		}
-		if len(ddls) > 0 {
-			t.Errorf("[Phase 4: Idempotency Check] current → current should produce no DDL after reverse migration, but got:\n```\n%s```\nThis means the reverse migration didn't apply correctly.", joinDDLs(ddls))
+		// Filter out skipped DDLs for idempotency check because they weren't applied
+		ddlsForIdempotency = filterSkippedDDLs(ddls)
+		if len(ddlsForIdempotency) > 0 {
+			t.Errorf("[Phase 4: Idempotency Check] current → current should produce no DDL after reverse migration, but got:\n```\n%s```\nThis means the reverse migration didn't apply correctly.", joinDDLs(ddlsForIdempotency))
 		}
 	} else {
 		// Idempotency-only test (neither up nor down specified)
@@ -325,7 +329,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		}
 
 		// For idempotency-only tests, we expect no DDLs (or just apply and test idempotency)
-		err = runDDLs(db, ddls, *test.EnableDrop)
+		err = runDDLs(db, ddls)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -485,14 +489,14 @@ func splitDDLs(mode schema.GeneratorMode, sqlParser database.Parser, str string,
 	return ddls, nil
 }
 
-func runDDLs(db database.Database, ddls []string, enableDrop bool) error {
+func runDDLs(db database.Database, ddls []string) error {
 	var logger database.Logger
 	if !testing.Verbose() {
 		logger = database.NullLogger{}
 	} else {
 		logger = database.StdoutLogger{}
 	}
-	return database.RunDDLs(db, ddls, enableDrop /* beforeApply */, "" /* ddlSuffix */, "", logger)
+	return database.RunDDLs(db, ddls, "" /* beforeApply */, "" /* ddlSuffix */, logger)
 }
 
 func joinDDLs(ddls []string) string {
@@ -502,6 +506,19 @@ func joinDDLs(ddls []string) string {
 		builder.WriteString(";\n")
 	}
 	return builder.String()
+}
+
+// filterSkippedDDLs removes DDLs that were commented out (skipped) from the list.
+// This is used for idempotency checks because skipped DDLs represent intentionally
+// unapplied changes that will naturally reappear on subsequent comparisons.
+func filterSkippedDDLs(ddls []string) []string {
+	var result []string
+	for _, ddl := range ddls {
+		if !strings.HasPrefix(ddl, "-- Skipped:") {
+			result = append(result, ddl)
+		}
+	}
+	return result
 }
 
 // MustExecute executes a command within a test and fails the test if it errors.
@@ -588,7 +605,7 @@ func ApplyWithOutput(db database.Database, mode schema.GeneratorMode, sqlParser 
 		ddlSuffix = ""
 	}
 
-	err = database.RunDDLs(db, ddls, config.EnableDrop, "" /* beforeApply */, ddlSuffix, logger)
+	err = database.RunDDLs(db, ddls, "" /* beforeApply */, ddlSuffix, logger)
 	if err != nil {
 		return "", err
 	}

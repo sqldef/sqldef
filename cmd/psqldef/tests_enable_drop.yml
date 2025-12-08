@@ -1,0 +1,239 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+# Tests for enable_drop: false behavior (DROP/REVOKE statements are commented out)
+# The enable_drop: true behavior is tested in other test files.
+
+DropDomainSkipped:
+  enable_drop: false
+  current: |
+    CREATE DOMAIN email AS TEXT;
+  desired: ""
+  up: |
+    -- Skipped: DROP DOMAIN "public"."email";
+  down: ""
+
+DropExtensionSkipped:
+  min_version: "9.1"
+  enable_drop: false
+  current: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+  desired: ""
+  up: |
+    -- Skipped: DROP EXTENSION "btree_gist";
+  down: ""
+
+DropPolicySkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id bigint);
+    CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);
+  desired: |
+    CREATE TABLE users (id bigint);
+  up: |
+    -- Skipped: DROP POLICY "p_users" ON "public"."users";
+  down: ""
+
+DropTriggerSkipped:
+  enable_drop: false
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id serial PRIMARY KEY);
+    CREATE FUNCTION log_func() RETURNS TRIGGER AS $$ BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_insert AFTER INSERT ON users FOR EACH ROW EXECUTE FUNCTION log_func();
+  desired: |
+    CREATE TABLE users (id serial PRIMARY KEY);
+    CREATE FUNCTION log_func() RETURNS TRIGGER AS $$ BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql;
+  up: |
+    -- Skipped: DROP TRIGGER log_insert ON public.users;
+  down: ""
+
+DropFunctionSkipped:
+  enable_drop: false
+  legacy_ignore_quotes: false
+  current: |
+    CREATE FUNCTION add_one(x integer) RETURNS integer AS $$ BEGIN RETURN x + 1; END; $$ LANGUAGE plpgsql;
+  desired: ""
+  up: |
+    -- Skipped: DROP FUNCTION public.add_one;
+  down: ""
+
+DropTableSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id bigint NOT NULL);
+  desired: ""
+  up: |
+    -- Skipped: DROP TABLE "public"."users";
+  down: ""
+
+DropColumnSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL
+    );
+  up: |
+    -- Skipped: ALTER TABLE "public"."users" DROP COLUMN "name";
+  down: ""
+
+DropIndexSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255)
+    );
+    CREATE INDEX idx_email ON users (email);
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255)
+    );
+  up: |
+    -- Skipped: DROP INDEX "public"."idx_email";
+  down: ""
+
+DropViewSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id bigint NOT NULL, name text);
+    CREATE VIEW users_view AS SELECT id, name FROM users;
+  desired: |
+    CREATE TABLE users (id bigint NOT NULL, name text);
+  up: |
+    -- Skipped: DROP VIEW "public"."users_view";
+  down: ""
+
+DropMaterializedViewSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id bigint NOT NULL, name text);
+    CREATE MATERIALIZED VIEW users_mat AS SELECT id, name FROM users;
+  desired: |
+    CREATE TABLE users (id bigint NOT NULL, name text);
+  up: |
+    -- Skipped: DROP MATERIALIZED VIEW "public"."users_mat";
+  down: ""
+
+DropTypeSkipped:
+  enable_drop: false
+  current: |
+    CREATE TYPE status AS ENUM ('active', 'inactive');
+  desired: ""
+  up: |
+    -- Skipped: DROP TYPE "public"."status";
+  down: ""
+
+RevokePrivilegeSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id bigint);
+    GRANT SELECT, INSERT ON TABLE "public"."users" TO "app_user";
+  desired: |
+    CREATE TABLE users (id bigint);
+    GRANT SELECT ON TABLE users TO app_user;
+  managed_roles:
+    - app_user
+  up: |
+    -- Skipped: REVOKE INSERT ON TABLE "public"."users" FROM "app_user";
+  down: ""
+
+RevokeMultiplePrivilegesSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+  managed_roles:
+    - app_user
+  up: |
+    -- Skipped: REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
+  down: ""
+
+GrantMultipleGranteesRevokeSkipped2:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user, app_user, admin_role;
+  managed_roles:
+    - readonly_user
+    - app_user
+    - admin_role
+  up: |
+    GRANT SELECT ON TABLE "public"."users" TO "admin_role", "app_user", "readonly_user";
+  down: |
+    -- Skipped: REVOKE SELECT ON TABLE "public"."users" FROM "admin_role";
+    -- Skipped: REVOKE SELECT ON TABLE "public"."users" FROM "app_user";
+    -- Skipped: REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
+
+GrantPartialGranteesRevokeSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO user1, user2, user3;
+    GRANT INSERT, UPDATE ON TABLE users TO user2, user4;
+  managed_roles:
+    - user2
+    - user4
+  up: |
+    GRANT SELECT ON TABLE "public"."users" TO "user2";
+    GRANT INSERT, UPDATE ON TABLE "public"."users" TO "user2", "user4";
+  down: |
+    -- Skipped: REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "user2";
+    -- Skipped: REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "user4";
+
+GrantOverlappingRevokeSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO user1;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT ON TABLE users TO user1, user2;
+    GRANT UPDATE, DELETE ON TABLE users TO user1, user3;
+  managed_roles:
+    - user1
+    - user2
+    - user3
+  up: |
+    GRANT INSERT ON TABLE "public"."users" TO "user1";
+    GRANT SELECT, INSERT ON TABLE "public"."users" TO "user2";
+    GRANT UPDATE, DELETE ON TABLE "public"."users" TO "user1", "user3";
+  down: |
+    -- Skipped: REVOKE DELETE, INSERT, UPDATE ON TABLE "public"."users" FROM "user1";
+    -- Skipped: REVOKE INSERT, SELECT ON TABLE "public"."users" FROM "user2";
+    -- Skipped: REVOKE DELETE, UPDATE ON TABLE "public"."users" FROM "user3";

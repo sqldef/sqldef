@@ -76,6 +76,23 @@ ManagedRolesEmptyListNoChanges:
   up: ""
   down: ""
 
+ManagedRolesEmptyListIgnoresOrphans:
+  # Empty managed_roles means "manage no roles", so orphaned privileges should be ignored
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  managed_roles: []
+  up: ""
+  down: ""
+
 ManagedRolesAddPrivileges:
   current: |
     CREATE TABLE users (
@@ -186,68 +203,9 @@ ManagedRolesIdempotent:
   up: ""
   down: ""
 
-ManagedRolesNoRevokeWithoutDrop:
-  current: |
-    CREATE TABLE users (
-      id BIGINT PRIMARY KEY,
-      name VARCHAR(100)
-    );
-    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
-  desired: |
-    CREATE TABLE users (
-      id BIGINT PRIMARY KEY,
-      name VARCHAR(100)
-    );
-    GRANT SELECT ON TABLE users TO app_user;
-  managed_roles:
-    - app_user
-  enable_drop: false
-  up: ""
-  down: ""
-
-ManagedRolesMultipleGrantees:
-  enable_drop: false
-  current: |
-    CREATE TABLE users (
-      id BIGINT PRIMARY KEY,
-      name VARCHAR(100)
-    );
-  desired: |
-    CREATE TABLE users (
-      id BIGINT PRIMARY KEY,
-      name VARCHAR(100)
-    );
-    GRANT SELECT ON TABLE users TO readonly_user, app_user, admin_role;
-  managed_roles:
-    - readonly_user
-    - app_user
-    - admin_role
-  up: |
-    GRANT SELECT ON TABLE "public"."users" TO "admin_role", "app_user", "readonly_user";
-  down: ""
-ManagedRolesPartialGrantees:
-  enable_drop: false
-  current: |
-    CREATE TABLE users (
-      id BIGINT PRIMARY KEY,
-      name VARCHAR(100)
-    );
-  desired: |
-    CREATE TABLE users (
-      id BIGINT PRIMARY KEY,
-      name VARCHAR(100)
-    );
-    GRANT SELECT ON TABLE users TO user1, user2, user3;
-    GRANT INSERT, UPDATE ON TABLE users TO user2, user4;
-  managed_roles:
-    - user2
-    - user4
-  up: |
-    GRANT SELECT ON TABLE "public"."users" TO "user2";
-    GRANT INSERT, UPDATE ON TABLE "public"."users" TO "user2", "user4";
-  down: ""
-ManagedRolesOverlapping:
-  enable_drop: false
+ManagedRolesOverlappingWithEnableDrop:
+  # Tests that overlapping GRANT statements don't cause incorrect REVOKEs
+  # user1 should retain SELECT because it's granted by the first GRANT statement
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -269,7 +227,11 @@ ManagedRolesOverlapping:
     GRANT INSERT ON TABLE "public"."users" TO "user1";
     GRANT SELECT, INSERT ON TABLE "public"."users" TO "user2";
     GRANT UPDATE, DELETE ON TABLE "public"."users" TO "user1", "user3";
-  down: ""
+  down: |
+    REVOKE DELETE, INSERT, UPDATE ON TABLE "public"."users" FROM "user1";
+    REVOKE INSERT, SELECT ON TABLE "public"."users" FROM "user2";
+    REVOKE DELETE, UPDATE ON TABLE "public"."users" FROM "user3";
+
 ManagedRolesMultipleTables:
   current: |
     CREATE TABLE users (

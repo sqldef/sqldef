@@ -1,0 +1,68 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+# Tests for enable_drop: false behavior (DROP statements are commented out)
+# The enable_drop: true behavior is tested in other test files.
+
+DropTableSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id integer NOT NULL);
+  desired: ""
+  up: |
+    -- Skipped: DROP TABLE "users";
+  down: ""
+
+DropViewSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id integer NOT NULL, name text);
+    CREATE VIEW users_view AS SELECT id, name FROM users;
+  desired: |
+    CREATE TABLE users (id integer NOT NULL, name text);
+  up: |
+    -- Skipped: DROP VIEW "users_view";
+  down: ""
+
+DropTriggerSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (id integer NOT NULL, name text);
+    CREATE TABLE audit (msg text);
+    CREATE TRIGGER users_delete BEFORE DELETE ON users BEGIN INSERT INTO audit VALUES('deleted'); END;
+  desired: |
+    CREATE TABLE users (id integer NOT NULL, name text);
+    CREATE TABLE audit (msg text);
+  up: |
+    -- Skipped: DROP TRIGGER "users_delete";
+  down: ""
+
+DropColumnSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id integer NOT NULL,
+      name text
+    );
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL
+    );
+  up: |
+    -- Skipped: ALTER TABLE "users" DROP COLUMN "name";
+  down: ""
+
+DropIndexSkipped:
+  enable_drop: false
+  current: |
+    CREATE TABLE users (
+      id integer NOT NULL,
+      email text
+    );
+    CREATE INDEX idx_email ON users (email);
+  desired: |
+    CREATE TABLE users (
+      id integer NOT NULL,
+      email text
+    );
+  up: |
+    -- Skipped: DROP INDEX "idx_email";
+  down: ""
