@@ -1,3 +1,6 @@
+## [v3.7.11](https://github.com/sqldef/sqldef/compare/v3.7.10...v3.7.11) - 2025-12-09
+- fix: drop foreign key constraints before dropping referenced table by @178inaba in https://github.com/sqldef/sqldef/pull/1001
+
 ## [v3.7.10](https://github.com/sqldef/sqldef/compare/v3.7.9...v3.7.10) - 2025-12-09
 - fix psqldef syntax error issues by @gfx in https://github.com/sqldef/sqldef/pull/1000
 
