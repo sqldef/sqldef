@@ -229,9 +229,10 @@ type Index struct {
 }
 
 type IndexColumn struct {
-	columnExpr parser.Expr // never nil as it's always initialized in the parser
-	length     *int
-	direction  string
+	columnExpr    parser.Expr // never nil as it's always initialized in the parser
+	length        *int
+	direction     string
+	operatorClass string
 }
 
 // ColumnName returns the column name if this is a simple column reference.

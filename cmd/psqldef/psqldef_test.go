@@ -8,6 +8,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -25,6 +26,7 @@ const (
 	nothingModified  = "-- Nothing is modified --\n"
 	defaultUser      = "postgres"
 	testDatabaseName = "psqldef_test"
+	defaultPort      = 5432
 )
 
 type dbConfig struct {
@@ -41,6 +43,36 @@ var defaultDbConfig = dbConfig{
 // to prevent "tuple concurrently updated" errors when running tests in parallel.
 var roleConfigMutex sync.Mutex
 
+// getPostgresPort returns the port to use for connecting to PostgreSQL.
+// pgvector flavor uses port 55432, standard PostgreSQL uses 5432.
+// PGPORT environment variable overrides the default port.
+func getPostgresPort() int {
+	if port, ok := os.LookupEnv("PGPORT"); ok {
+		if portInt, err := strconv.Atoi(port); err == nil {
+			return portInt
+		}
+	}
+	return defaultPort
+}
+
+func getPostgresHost() string {
+	if host, ok := os.LookupEnv("PGHOST"); ok {
+		return host
+	}
+	return "127.0.0.1"
+}
+
+// getPostgresFlavor returns the current PostgreSQL flavor from environment.
+func getPostgresFlavor() string {
+	return os.Getenv("PG_FLAVOR")
+}
+
+// psqldefArgs returns the base arguments for psqldef command including port.
+func psqldefArgs(args ...string) []string {
+	baseArgs := []string{"-U", defaultUser, "-p", fmt.Sprintf("%d", getPostgresPort())}
+	return append(baseArgs, args...)
+}
+
 func connectDatabase(config dbConfig) (database.Database, error) {
 	var user string
 	if config.User != "" {
@@ -51,8 +83,8 @@ func connectDatabase(config dbConfig) (database.Database, error) {
 
 	return postgres.NewDatabase(database.Config{
 		User:    user,
-		Host:    "127.0.0.1",
-		Port:    5432,
+		Host:    getPostgresHost(),
+		Port:    getPostgresPort(),
 		DbName:  config.DbName,
 		SslMode: "disable",
 	})
@@ -192,6 +224,7 @@ func TestApply(t *testing.T) {
 
 	version := mustGetServerVersion()
 	sqlParser := postgres.NewParser()
+	pgFlavor := getPostgresFlavor()
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -212,7 +245,7 @@ func TestApply(t *testing.T) {
 			}
 			defer db.Close()
 
-			tu.RunTest(t, db, test, schema.GeneratorModePostgres, sqlParser, version, "")
+			tu.RunTest(t, db, test, schema.GeneratorModePostgres, sqlParser, version, pgFlavor)
 		})
 	}
 }
@@ -524,8 +557,8 @@ func TestPsqldefDryRun(t *testing.T) {
 	    );`,
 	))
 
-	dryRun := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--dry-run", "--file", "schema.sql")
-	apply := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
+	dryRun := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--dry-run", "--file", "schema.sql")...)
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--file", "schema.sql")...)
 	assert.Equal(t, strings.Replace(apply, "Apply", "dry run", 1), dryRun)
 }
 
@@ -545,7 +578,7 @@ func TestPsqldefDropTable(t *testing.T) {
 	tu.WriteFile("schema.sql", "")
 
 	dropTable := `DROP TABLE "public"."users";`
-	out := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--enable-drop", "--file", "schema.sql")
+	out := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--enable-drop", "--file", "schema.sql")...)
 	assert.Equal(t, wrapWithTransaction(dropTable+"\n"), out)
 }
 
@@ -568,12 +601,12 @@ func TestPsqldefConfigInlineEnableDrop(t *testing.T) {
 	dropTable := `DROP TABLE "public"."users";`
 	expectedOutput := wrapWithTransaction(dropTable + "\n")
 
-	outFlag := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--enable-drop", "--file", "schema.sql")
+	outFlag := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--enable-drop", "--file", "schema.sql")...)
 	assert.Equal(t, expectedOutput, outFlag)
 
 	mustPgExec(testDatabaseName, ddl)
 
-	outConfigInline := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--config-inline", "enable_drop: true", "--file", "schema.sql")
+	outConfigInline := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--config-inline", "enable_drop: true", "--file", "schema.sql")...)
 	assert.Equal(t, expectedOutput, outConfigInline)
 }
 
@@ -593,7 +626,7 @@ func TestPsqldefConfigLegacyIgnoreQuotes(t *testing.T) {
 
 	// Test with legacy_ignore_quotes: false via config-inline
 	// In quote-aware mode, unquoted identifiers should output without quotes
-	outQuoteAware := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--config-inline", "legacy_ignore_quotes: false", "--file", "schema.sql")
+	outQuoteAware := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--config-inline", "legacy_ignore_quotes: false", "--file", "schema.sql")...)
 	// With legacy_ignore_quotes: false, unquoted table/schema names should not have quotes in output
 	// The default schema "public" in lowercase is treated as unquoted
 	assert.Contains(t, outQuoteAware, `ALTER TABLE public.users ADD COLUMN name text;`)
@@ -602,7 +635,7 @@ func TestPsqldefConfigLegacyIgnoreQuotes(t *testing.T) {
 	resetTestDatabase()
 	mustPgExec(testDatabaseName, `CREATE TABLE users (id bigint NOT NULL PRIMARY KEY);`)
 
-	outLegacy := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--config-inline", "legacy_ignore_quotes: true", "--file", "schema.sql")
+	outLegacy := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--config-inline", "legacy_ignore_quotes: true", "--file", "schema.sql")...)
 	// With legacy_ignore_quotes: true, table names should be quoted
 	assert.Contains(t, outLegacy, `ALTER TABLE "public"."users" ADD COLUMN "name" text;`)
 }
@@ -680,19 +713,19 @@ func TestPsqldefExportConcurrency(t *testing.T) {
 		`,
 	))
 
-	outputDefault := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export")
+	outputDefault := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export")...)
 
 	tu.WriteFile("config.yml", "dump_concurrency: 0")
-	outputNoConcurrency := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export", "--config", "config.yml")
+	outputNoConcurrency := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export", "--config", "config.yml")...)
 
 	tu.WriteFile("config.yml", "dump_concurrency: 1")
-	outputConcurrency1 := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export", "--config", "config.yml")
+	outputConcurrency1 := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export", "--config", "config.yml")...)
 
 	tu.WriteFile("config.yml", "dump_concurrency: 10")
-	outputConcurrency10 := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export", "--config", "config.yml")
+	outputConcurrency10 := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export", "--config", "config.yml")...)
 
 	tu.WriteFile("config.yml", "dump_concurrency: -1")
-	outputConcurrencyNoLimit := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export", "--config", "config.yml")
+	outputConcurrencyNoLimit := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export", "--config", "config.yml")...)
 
 	assert.Equal(t, tu.StripHeredoc(`
 		CREATE TABLE "public"."users_1" (
@@ -729,7 +762,7 @@ func TestPsqldefSkipView(t *testing.T) {
 
 	tu.WriteFile("schema.sql", createTable)
 
-	output := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--skip-view", "-f", "schema.sql")
+	output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--skip-view", "-f", "schema.sql")...)
 	assert.Equal(t, nothingModified, output)
 }
 
@@ -742,7 +775,7 @@ func TestPsqldefSkipExtension(t *testing.T) {
 
 	tu.WriteFile("schema.sql", "")
 
-	output := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--skip-extension", "-f", "schema.sql")
+	output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--skip-extension", "-f", "schema.sql")...)
 	assert.Equal(t, nothingModified, output)
 }
 
@@ -758,12 +791,12 @@ func TestPsqldefBeforeApply(t *testing.T) {
 	createTable := "CREATE TABLE dummy (id int);"
 	tu.WriteFile("schema.sql", createTable)
 
-	dryRun := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--before-apply", beforeApply, "--dry-run")
-	apply := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--before-apply", beforeApply)
+	dryRun := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--before-apply", beforeApply, "--dry-run")...)
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--before-apply", beforeApply)...)
 	assert.Equal(t, strings.Replace(apply, "Apply", "dry run", 1), dryRun)
 	assert.Equal(t, applyPrefix+"BEGIN;\n"+beforeApply+"\n"+createTable+"\nCOMMIT;\n", apply)
 
-	apply = tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--before-apply", beforeApply)
+	apply = tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--before-apply", beforeApply)...)
 	assert.Equal(t, nothingModified, apply)
 
 	owner, err := pgQuery(testDatabaseName, "SELECT tableowner FROM pg_tables WHERE tablename = 'dummy'")
@@ -796,7 +829,7 @@ func TestPsqldefConfigIncludesTargetTables(t *testing.T) {
 
 	tu.WriteFile("config.yml", "target_tables: |\n  public\\.users\n  public\\.users_\\d\n")
 
-	apply := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
 	assert.Equal(t, nothingModified, apply)
 }
 
@@ -816,7 +849,7 @@ func TestPsqldefConfigIncludesTargetSchema(t *testing.T) {
 
 	tu.WriteFile("config.yml", "target_schema: schema_a\n")
 
-	apply := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
 	assert.Equal(t, nothingModified, apply)
 
 	// multiple targets
@@ -834,7 +867,7 @@ func TestPsqldefConfigIncludesTargetSchema(t *testing.T) {
   schema_a
   schema_b`)
 
-	apply = tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply = tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
 	assert.Equal(t, nothingModified, apply)
 }
 
@@ -868,10 +901,10 @@ func TestPsqldefConfigIncludesTargetSchemaWithViews(t *testing.T) {
 
 	tu.WriteFile("config.yml", "target_schema: bar\n")
 
-	apply := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
 	assert.Equal(t, wrapWithTransaction(schema), apply)
 
-	apply = tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply = tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
 	assert.Equal(t, nothingModified, apply)
 }
 
@@ -898,7 +931,7 @@ func TestPsqldefConfigIncludesSkipTables(t *testing.T) {
 
 	tu.WriteFile("config.yml", "skip_tables: |\n  public\\.users_10\n")
 
-	apply := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
 	assert.Equal(t, nothingModified, apply)
 }
 
@@ -921,7 +954,7 @@ func TestPsqldefConfigIncludesSkipViews(t *testing.T) {
 
 	tu.WriteFile("config.yml", "skip_views: |\n  public\\.views_10\n")
 
-	apply := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "-f", "schema.sql", "--config", "config.yml")
+	apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql", "--config", "config.yml")...)
 	assert.Equal(t, nothingModified, apply)
 }
 
@@ -1046,8 +1079,8 @@ func TestPsqldefTransactionBoundariesWithConcurrentIndex(t *testing.T) {
 			CREATE INDEX CONCURRENTLY idx_users_email ON users (email);
 			CREATE INDEX idx_users_age ON users (age);`))
 
-		dryRun := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--dry-run", "--file", "schema.sql")
-		apply := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
+		dryRun := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--dry-run", "--file", "schema.sql")...)
+		apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--file", "schema.sql")...)
 
 		// Verify that dry run output matches apply output (except for the prefix)
 		assert.Equal(t, strings.Replace(apply, "Apply", "dry run", 1), dryRun)
@@ -1137,7 +1170,7 @@ func TestPsqldefReindexConcurrently(t *testing.T) {
 			CREATE INDEX idx_users_age ON users (age);`))
 
 		// Verify that regular operations still work
-		output := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--file", "schema.sql")
+		output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--file", "schema.sql")...)
 		assert.Equal(t, nothingModified, output)
 	})
 }
@@ -1188,7 +1221,7 @@ func assertApplyOutputWithConfig(t *testing.T, desiredSchema string, config data
 
 func assertExportOutput(t *testing.T, expected string) {
 	t.Helper()
-	actual := tu.MustExecute(t, "./psqldef", "-Upostgres", testDatabaseName, "--export")
+	actual := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export")...)
 	assert.Equal(t, expected, actual)
 }
 

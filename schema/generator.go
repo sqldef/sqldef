@@ -2621,6 +2621,9 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 		if indexColumn.direction == DescScr {
 			column += fmt.Sprintf(" %s", indexColumn.direction)
 		}
+		if indexColumn.operatorClass != "" {
+			column += " " + indexColumn.operatorClass
+		}
 		columns = append(columns, column)
 	}
 
@@ -2712,6 +2715,9 @@ func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 		}
 		if indexColumn.direction == DescScr {
 			column += fmt.Sprintf(" %s", indexColumn.direction)
+		}
+		if indexColumn.operatorClass != "" {
+			column += " " + indexColumn.operatorClass
 		}
 		columns = append(columns, column)
 	}
@@ -2868,6 +2874,11 @@ func (g *Generator) generateIndexOptionDefinition(indexOptions []IndexOption) st
 					optionValue = indexOption.value.raw
 				}
 				return fmt.Sprintf("%s = %s", indexOption.optionName, optionValue)
+			})
+			optionDefinition = fmt.Sprintf(" WITH (%s)", strings.Join(options, ", "))
+		case GeneratorModePostgres:
+			options := util.TransformSlice(indexOptions, func(indexOption IndexOption) string {
+				return fmt.Sprintf("%s = %s", indexOption.optionName, indexOption.value.raw)
 			})
 			optionDefinition = fmt.Sprintf(" WITH (%s)", strings.Join(options, ", "))
 		}

@@ -25,41 +25,58 @@ jobs:
           # SQL Server https://mcr.microsoft.com/artifact/mar/mssql/server/about
           - target: mssqldef
             mssql_version: '2019-latest'
+            service: mssql
           - target: mssqldef
             mssql_version: '2025-latest'
+            service: mssql
 
             # MySQL https://docs.oracle.com/en-us/iaas/mysql-database/doc/mysql-server-versions.html
           - target: mysqldef
             mysql_flavor: mysql
             mysql_version: '5.7'
+            service: mysql
           - target: mysqldef
             mysql_flavor: mysql
             mysql_version: '8.0'
+            service: mysql
           - target: mysqldef
             mysql_flavor: mysql
             mysql_version: '8.4'
+            service: mysql
           - target: mysqldef
             mysql_flavor: mysql
             mysql_version: '9'
+            service: mysql
 
           # MariaDB https://mariadb.org/mariadb/all-releases/
           - target: mysqldef
             mysql_flavor: mariadb
             mariadb_version: '11'
+            service: mariadb
           - target: mysqldef
             mysql_flavor: mariadb
             mariadb_version: '12'
+            service: mariadb
 
           # TiDB https://docs.pingcap.com/tidb/stable/release-notes
           - target: mysqldef
             mysql_flavor: tidb
             tidb_version: 'v8.5.4'
+            service: tidb
 
           # PostgreSQL https://www.postgresql.org/docs/release/
           - target: psqldef
             postgres_version: '13'
+            service: postgres
           - target: psqldef
             postgres_version: '18'
+            service: postgres
+
+          # pgvector https://github.com/pgvector/pgvector
+          - target: psqldef
+            pg_flavor: pgvector
+            pgvector_version: '0.8.1-pg18-trixie'
+            service: pgvector
       fail-fast: false
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
@@ -67,12 +84,14 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - run: docker compose up -d --wait
+      - run: docker compose up -d --wait ${{ matrix.service }}
+        if: matrix.service
         env:
           MYSQL_VERSION: ${{ matrix.mysql_version }}
           MARIADB_VERSION: ${{ matrix.mariadb_version }}
           TIDB_VERSION: ${{ matrix.tidb_version }}
           POSTGRES_VERSION: ${{ matrix.postgres_version }}
+          PGVECTOR_VERSION: ${{ matrix.pgvector_version }}
           MSSQL_VERSION: ${{ matrix.mssql_version }}
       - run: make deps
       - run: echo "GODEBUG=tlsrsakex=1" >> $GITHUB_ENV
@@ -81,23 +100,28 @@ jobs:
         if: matrix.mysql_flavor
       - run: echo "MYSQL_PORT=3307" >> $GITHUB_ENV
         if: matrix.mysql_flavor == 'mariadb'
+      - run: echo "PG_FLAVOR=${{ matrix.pg_flavor }}" >> $GITHUB_ENV
+        if: matrix.pg_flavor
+      - run: echo "PGPORT=55432" >> $GITHUB_ENV
+        if: matrix.pg_flavor == 'pgvector'
       - run: echo "PSQLDEF_PARSER=generic" >> $GITHUB_ENV
         if: matrix.target == 'psqldef'
       - run: make test-${{ matrix.target }}
         id: test
       - name: Show docker compose logs on failure
-        if: failure() && steps.test.outcome == 'failure'
+        if: failure() && steps.test.outcome == 'failure' && matrix.service
         run: |
           echo "=== Docker Compose Services Status ==="
-          docker compose ps
+          docker compose ps ${{ matrix.service }}
           echo ""
           echo "=== Docker Compose Logs ==="
-          docker compose logs --timestamps
+          docker compose logs --timestamps ${{ matrix.service }}
         env:
           MYSQL_VERSION: ${{ matrix.mysql_version }}
           MARIADB_VERSION: ${{ matrix.mariadb_version }}
           TIDB_VERSION: ${{ matrix.tidb_version }}
           POSTGRES_VERSION: ${{ matrix.postgres_version }}
+          PGVECTOR_VERSION: ${{ matrix.pgvector_version }}
           MSSQL_VERSION: ${{ matrix.mssql_version }}
 
   integrity:

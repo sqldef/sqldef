@@ -117,6 +117,12 @@ go test ./cmd/sqlite3def
 go test ./cmd/mssqldef
 ```
 
+For pgvector testing:
+
+```sh
+PG_FLAVOR=pgvector PGPORT=55432 go test ./cmd/psqldef
+```
+
 For MariaDB testing:
 
 ```sh

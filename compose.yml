@@ -30,6 +30,14 @@ services:
     ports:
       - '5432:5432'
     restart: on-failure
+  pgvector:
+    image: pgvector/pgvector:${PGVECTOR_VERSION:-0.8.1-pg18-trixie}
+    environment:
+      POSTGRES_USER: 'postgres'
+      POSTGRES_HOST_AUTH_METHOD: 'trust'
+    ports:
+      - '55432:5432'
+    restart: on-failure
   mssql:
     # Available versions: https://mcr.microsoft.com/artifact/mar/mssql/server/about
     image: mcr.microsoft.com/mssql/server:${MSSQL_VERSION:-2025-latest}

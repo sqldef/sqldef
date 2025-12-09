@@ -48,8 +48,8 @@
         },
         "flavor": {
           "type": "string",
-          "description": "Database flavor requirement (mysqldef only). Use '!' prefix to exclude a flavor (e.g., '!tidb' to skip on TiDB)",
-          "enum": ["mysql", "mariadb", "tidb", "!mysql", "!mariadb", "!tidb"]
+          "description": "Database flavor requirement. Use '!' prefix to exclude a flavor (e.g., '!tidb' to skip on TiDB). MySQL flavors: mysql, mariadb, tidb. PostgreSQL flavors: pgvector.",
+          "enum": ["mysql", "mariadb", "tidb", "!mysql", "!mariadb", "!tidb", "pgvector", "!pgvector"]
         },
         "managed_roles": {
           "type": "array",

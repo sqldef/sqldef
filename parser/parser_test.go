@@ -473,3 +473,42 @@ LEFT JOIN event_counts ec ON rd.product_id = ec.product_id`,
 		})
 	}
 }
+
+// TestInvalidCustomOperators tests that invalid PostgreSQL custom operators produce errors
+func TestInvalidCustomOperators(t *testing.T) {
+	testCases := []struct {
+		name        string
+		sql         string
+		description string
+	}{
+		{
+			name:        "Operator containing --",
+			sql:         "CREATE VIEW v AS SELECT a <-- b FROM t",
+			description: "Operators cannot contain -- (comment sequence)",
+		},
+		{
+			name:        "Operator containing /*",
+			sql:         "CREATE VIEW v AS SELECT a </* b FROM t",
+			description: "Operators cannot contain /* (comment sequence)",
+		},
+		{
+			name:        "Operator ending in - without special char",
+			sql:         "CREATE VIEW v AS SELECT a <- b FROM t",
+			description: "Multi-char operators ending in - must contain ~ ! @ # % ^ & | ` ?",
+		},
+		{
+			name:        "Operator ending in + without special char",
+			sql:         "CREATE VIEW v AS SELECT a <+ b FROM t",
+			description: "Multi-char operators ending in + must contain ~ ! @ # % ^ & | ` ?",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseDDL(tc.sql, ParserModePostgres)
+			if err == nil {
+				t.Errorf("Expected parse error but got none.\n%s\nSQL: %s", tc.description, tc.sql)
+			}
+		})
+	}
+}

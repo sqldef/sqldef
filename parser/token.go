@@ -824,11 +824,21 @@ func (tkn *Tokenizer) Scan() (int, string) {
 				switch tkn.lastChar {
 				case '>':
 					tkn.next()
+					if tkn.mode == ParserModePostgres {
+						// PostgreSQL user-defined operator starting with '<='
+						// e.g., pgvector cosine distance: <=>
+						return CUSTOM_OP, "<=>"
+					}
 					return NULL_SAFE_EQUAL, ""
 				default:
 					return LE, ""
 				}
 			default:
+				if tkn.mode == ParserModePostgres && isOperatorChar(tkn.lastChar) {
+					// PostgreSQL user-defined operator starting with '<'
+					// e.g., pgvector: <->, <#>, <+>
+					return tkn.scanCustomOp('<')
+				}
 				return int(ch), ""
 			}
 		case '>':
@@ -1351,4 +1361,70 @@ func digitVal(ch rune) int {
 		return int(ch) - 'A' + 10
 	}
 	return 16 // larger than any legal digit val
+}
+
+// isOperatorChar returns true if ch is a valid PostgreSQL operator character.
+// PostgreSQL allows: + - * / < > = ~ ! @ # % ^ & | ` ?
+func isOperatorChar(ch rune) bool {
+	switch ch {
+	case '+', '-', '*', '/', '<', '>', '=', '~', '!', '@', '#', '%', '^', '&', '|', '`', '?':
+		return true
+	}
+	return false
+}
+
+// isSpecialOperatorChar returns true if ch is a "special" operator character.
+// Multi-char operators ending in + or - must contain at least one of these.
+func isSpecialOperatorChar(ch rune) bool {
+	switch ch {
+	case '~', '!', '@', '#', '%', '^', '&', '|', '`', '?':
+		return true
+	}
+	return false
+}
+
+// scanCustomOp scans a PostgreSQL user-defined operator starting with the given character.
+// Called after the first character has been consumed and we've confirmed the next char is a valid operator char.
+//
+// PostgreSQL operator rules:
+// - Cannot contain -- or /* (comment sequences)
+// - Multi-char operators ending in + or - must contain at least one of: ~ ! @ # % ^ & | ` ?
+func (tkn *Tokenizer) scanCustomOp(firstChar rune) (int, string) {
+	var buffer strings.Builder
+	buffer.WriteRune(firstChar)
+
+	hasSpecialChar := isSpecialOperatorChar(firstChar)
+	prevChar := firstChar
+
+	// Consume operator characters
+	for isOperatorChar(tkn.lastChar) {
+		ch := tkn.lastChar
+
+		// Check for prohibited comment sequences: -- and /*
+		if (prevChar == '-' && ch == '-') || (prevChar == '/' && ch == '*') {
+			// Put back this character and return what we have so far (minus the prev char)
+			// This is tricky - for now, return a lex error for invalid operators
+			return LEX_ERROR, buffer.String()
+		}
+
+		if isSpecialOperatorChar(ch) {
+			hasSpecialChar = true
+		}
+
+		buffer.WriteRune(ch)
+		prevChar = ch
+		tkn.next()
+	}
+
+	op := buffer.String()
+
+	// Multi-char operators ending in + or - must contain a special char
+	if len(op) > 1 {
+		lastChar := op[len(op)-1]
+		if (lastChar == '+' || lastChar == '-') && !hasSpecialChar {
+			return LEX_ERROR, op
+		}
+	}
+
+	return CUSTOM_OP, op
 }
