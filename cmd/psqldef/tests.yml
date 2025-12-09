@@ -3761,3 +3761,19 @@ CreateIndexGenericStorageParameter:
       data text
     );
     CREATE INDEX idx_data ON test_table USING btree (data) WITH (deduplicate_items='on');
+
+CreateIndexWithStorageParameterAndWhere:
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      status text
+    );
+    CREATE INDEX idx_status ON test_table USING btree (status) WITH (fillfactor='70') WHERE status = 'active';
+
+CreateIndexWithDateColumn:
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      "date" date
+    );
+    CREATE INDEX idx_date ON test_table USING btree (date);

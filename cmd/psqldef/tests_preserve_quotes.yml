@@ -1643,3 +1643,12 @@ CommentIdempotentQuotedColumn:
   desired: |
     CREATE TABLE users (id int, "FullName" text);
     COMMENT ON COLUMN users."FullName" IS 'Full name of user';
+
+CreateIndexWithDateColumn_QuoteAware:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      "date" date
+    );
+    CREATE INDEX idx_date ON test_table USING btree (date);

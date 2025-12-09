@@ -394,7 +394,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <setExpr> set_expression transaction_char isolation_level
 %type <str> ignore_opt default_opt
 %type <empty> if_not_exists_opt when_expression_opt for_each_row_opt
-%type <str> reserved_keyword non_reserved_keyword
+%type <str> reserved_keyword non_reserved_keyword col_name_keyword
 %type <ident> sql_id reserved_sql_id, col_alias as_ci_opt
 %type <boolVal> unique_opt
 %type <expr> charset_value
@@ -674,7 +674,7 @@ create_statement:
     }
   }
 /* For PostgreSQL */
-| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' include_columns_opt index_option_opt where_expression_opt
   {
     indexSpec := &IndexSpec{
       Name: $5,
@@ -682,11 +682,11 @@ create_statement:
       Unique: bool($2[0]),
       Async: $4 == byte(2),
       Concurrently: $4 == byte(1),
-      Where: NewWhere(WhereStr, $14),
+      Where: NewWhere(WhereStr, $15),
       Included: $13,
     }
-    if $15 != nil && len($15) > 0 {
-      indexSpec.Options = $15
+    if $14 != nil && len($14) > 0 {
+      indexSpec.Options = $14
     }
     $$ = &DDL{
       Action: CreateIndex,
@@ -4070,16 +4070,19 @@ index_column:
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3}
   }
-/* For PostgreSQL */
-| KEY length_opt
+| col_name_keyword length_opt asc_desc_opt
   {
-    $$ = IndexColumn{Column: NewIdent($1, false), Length: $2}
+    $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3}
   }
 | sql_id operator_class
   {
     $$ = IndexColumn{Column: $1, OperatorClass: $2}
   }
 | non_reserved_keyword operator_class
+  {
+    $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2}
+  }
+| col_name_keyword operator_class
   {
     $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2}
   }
@@ -6733,3 +6736,13 @@ non_reserved_keyword:
 | RESTRICT
 | CASCADE
 | OPTION
+
+// col_name_keyword: keywords that can be used as column names in index definitions.
+// PostgreSQL allows these as unquoted identifiers in certain contexts.
+// https://www.postgresql.org/docs/current/sql-keywords-appendix.html
+col_name_keyword:
+  DATE
+| KEY
+| TIME
+| TIMESTAMP
+| VALUE
