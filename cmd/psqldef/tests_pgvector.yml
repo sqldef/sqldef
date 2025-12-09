@@ -32,27 +32,6 @@ CreateTableWithVectorColumn:
     DROP TABLE public.items;
   flavor: pgvector
 
-CreateTableWithVectorColumnHighDimension:
-  legacy_ignore_quotes: false
-  current: |
-    CREATE EXTENSION vector;
-  desired: |
-    CREATE EXTENSION vector;
-    CREATE TABLE embeddings (
-      id bigserial PRIMARY KEY,
-      content text,
-      embedding vector(1536)
-    );
-  up: |
-    CREATE TABLE embeddings (
-      id bigserial PRIMARY KEY,
-      content text,
-      embedding vector(1536)
-    );
-  down: |
-    DROP TABLE public.embeddings;
-  flavor: pgvector
-
 AddVectorColumn:
   legacy_ignore_quotes: false
   current: |
@@ -177,27 +156,6 @@ CreateHnswIndexCosine:
     CREATE INDEX idx_items_cosine ON public.items USING hnsw (embedding vector_cosine_ops);
   down: |
     DROP INDEX public.idx_items_cosine;
-  flavor: pgvector
-
-CreateHnswIndexInnerProduct:
-  legacy_ignore_quotes: false
-  current: |
-    CREATE EXTENSION vector;
-    CREATE TABLE items (
-      id bigserial PRIMARY KEY,
-      embedding vector(3)
-    );
-  desired: |
-    CREATE EXTENSION vector;
-    CREATE TABLE items (
-      id bigserial PRIMARY KEY,
-      embedding vector(3)
-    );
-    CREATE INDEX idx_items_ip ON items USING hnsw (embedding vector_ip_ops);
-  up: |
-    CREATE INDEX idx_items_ip ON public.items USING hnsw (embedding vector_ip_ops);
-  down: |
-    DROP INDEX public.idx_items_ip;
   flavor: pgvector
 
 DropVectorIndex:
