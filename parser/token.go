@@ -827,7 +827,7 @@ func (tkn *Tokenizer) Scan() (int, string) {
 					if tkn.mode == ParserModePostgres {
 						// PostgreSQL user-defined operator starting with '<='
 						// e.g., pgvector cosine distance: <=>
-						return LT_CUSTOM_OP, "<=>"
+						return CUSTOM_OP, "<=>"
 					}
 					return NULL_SAFE_EQUAL, ""
 				default:
@@ -837,7 +837,7 @@ func (tkn *Tokenizer) Scan() (int, string) {
 				if tkn.mode == ParserModePostgres && isOperatorChar(tkn.lastChar) {
 					// PostgreSQL user-defined operator starting with '<'
 					// e.g., pgvector: <->, <#>, <+>
-					return tkn.scanLtCustomOp()
+					return tkn.scanCustomOp('<')
 				}
 				return int(ch), ""
 			}
@@ -1383,18 +1383,18 @@ func isSpecialOperatorChar(ch rune) bool {
 	return false
 }
 
-// scanLtCustomOp scans a PostgreSQL user-defined operator starting with '<'.
-// Called after '<' has been consumed and we've confirmed the next char is a valid operator char.
+// scanCustomOp scans a PostgreSQL user-defined operator starting with the given character.
+// Called after the first character has been consumed and we've confirmed the next char is a valid operator char.
 //
 // PostgreSQL operator rules:
 // - Cannot contain -- or /* (comment sequences)
 // - Multi-char operators ending in + or - must contain at least one of: ~ ! @ # % ^ & | ` ?
-func (tkn *Tokenizer) scanLtCustomOp() (int, string) {
+func (tkn *Tokenizer) scanCustomOp(firstChar rune) (int, string) {
 	var buffer strings.Builder
-	buffer.WriteByte('<')
+	buffer.WriteRune(firstChar)
 
-	hasSpecialChar := false
-	prevChar := '<'
+	hasSpecialChar := isSpecialOperatorChar(firstChar)
+	prevChar := firstChar
 
 	// Consume operator characters
 	for isOperatorChar(tkn.lastChar) {
@@ -1426,5 +1426,5 @@ func (tkn *Tokenizer) scanLtCustomOp() (int, string) {
 		}
 	}
 
-	return LT_CUSTOM_OP, op
+	return CUSTOM_OP, op
 }

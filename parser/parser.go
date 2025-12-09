@@ -228,7 +228,7 @@ const PATTERN_NOT_LIKE = 57447
 const PATTERN_NOT_ILIKE = 57448
 const SHIFT_LEFT = 57449
 const SHIFT_RIGHT = 57450
-const LT_CUSTOM_OP = 57451
+const CUSTOM_OP = 57451
 const DIV = 57452
 const MOD = 57453
 const UNARY = 57454
@@ -667,7 +667,7 @@ var yyToknames = [...]string{
 	"SHIFT_RIGHT",
 	"'+'",
 	"'-'",
-	"LT_CUSTOM_OP",
+	"CUSTOM_OP",
 	"'*'",
 	"'/'",
 	"DIV",
@@ -10389,7 +10389,7 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:5297
 		{
-			// PostgreSQL user-defined operators starting with '<' and ending with '>'
+			// PostgreSQL user-defined operators
 			// e.g., pgvector: <-> (L2), <=> (cosine), <#> (inner product), <+> (L1)
 			yyVAL.expr = &BinaryExpr{Left: yyDollar[1].expr, Operator: yyDollar[2].str, Right: yyDollar[3].expr}
 		}

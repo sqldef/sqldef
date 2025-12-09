@@ -185,7 +185,7 @@ func setDDL(yylex any, ddl *DDL) {
 %left <str> '&'
 %left <str> SHIFT_LEFT SHIFT_RIGHT
 %left <str> '+' '-'
-%left <str> LT_CUSTOM_OP
+%left <str> CUSTOM_OP
 %left <str> '*' '/' DIV '%' MOD
 %left <str> '^'
 %right <str> '~' UNARY
@@ -5293,9 +5293,9 @@ value_expression:
   {
     $$ = &BinaryExpr{Left: $1, Operator: ShiftRightStr, Right: $3}
   }
-| value_expression LT_CUSTOM_OP value_expression
+| value_expression CUSTOM_OP value_expression
   {
-    // PostgreSQL user-defined operators starting with '<' and ending with '>'
+    // PostgreSQL user-defined operators
     // e.g., pgvector: <-> (L2), <=> (cosine), <#> (inner product), <+> (L1)
     $$ = &BinaryExpr{Left: $1, Operator: $2, Right: $3}
   }
