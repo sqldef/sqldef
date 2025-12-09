@@ -131,6 +131,8 @@ func setDDL(yylex any, ddl *DDL) {
   }
   functionArg              FunctionArg
   functionArgs             []FunctionArg
+  roleOption               RoleOption
+  roleOptions              []RoleOption
 }
 
 %token LEX_ERROR
@@ -297,6 +299,11 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> GROUP_CONCAT SEPARATOR
 %token <str> INHERIT
 %token <str> LEAD LAG
+
+// Role management tokens (PostgreSQL)
+%token <str> ROLE LOGIN NOLOGIN SUPERUSER NOSUPERUSER CREATEDB NOCREATEDB
+%token <str> CREATEROLE NOCREATEROLE NOINHERIT BYPASSRLS NOBYPASSRLS
+%token <str> NOREPLICATION CONNECTION ENCRYPTED VALID PASSWORD UNTIL
 
 // Match
 %token <str> MATCH AGAINST BOOLEAN LANGUAGE PARSER QUERY EXPANSION
@@ -476,6 +483,8 @@ func setDDL(yylex any, ddl *DDL) {
 %type <domainConstraints> domain_constraints_opt domain_constraint
 %type <functionArgs> function_args_opt function_args
 %type <functionArg> function_arg
+%type <roleOption> role_option
+%type <roleOptions> role_option_list
 %type <str> function_return_type function_option set_value_list set_value
 %type <strs> function_options_opt function_options
 %type <arrayConstructor> array_constructor
@@ -1402,6 +1411,27 @@ create_statement:
       Extension: &Extension{Name: NewIdent($4, false)},
     }
   }
+| CREATE ROLE sql_id role_option_list
+  {
+    $$ = &DDL{
+      Action: CreateRole,
+      Role: &Role{
+        Name: $3,
+        Options: $4,
+      },
+    }
+  }
+| CREATE ROLE IF NOT EXISTS sql_id role_option_list
+  {
+    $$ = &DDL{
+      Action: CreateRole,
+      Role: &Role{
+        Name: $6,
+        Options: $7,
+        IfNotExists: true,
+      },
+    }
+  }
 
 alter_statement:
   ALTER ignore_opt TABLE table_name ADD unique_opt alter_object_type_index sql_id '(' index_column_list ')'
@@ -1512,6 +1542,16 @@ alter_statement:
       Table: $5,
       NewName: $5,
       ForeignKey: $7,
+    }
+  }
+| ALTER ROLE sql_id role_option_list
+  {
+    $$ = &DDL{
+      Action: AlterRole,
+      Role: &Role{
+        Name: $3,
+        Options: $4,
+      },
     }
   }
 
@@ -2470,6 +2510,26 @@ drop_statement:
       Action: DropPolicy,
       Table: $5,
       Policy: &Policy{Name: $3},
+    }
+  }
+/* DROP ROLE statement */
+| DROP ROLE sql_id
+  {
+    $$ = &DDL{
+      Action: DropRole,
+      Role: &Role{
+        Name: $3,
+      },
+    }
+  }
+| DROP ROLE IF EXISTS sql_id
+  {
+    $$ = &DDL{
+      Action: DropRole,
+      Role: &Role{
+        Name: $5,
+        IfExists: true,
+      },
     }
   }
 | DROP POLICY IF EXISTS sql_id ON table_name
@@ -4461,6 +4521,94 @@ grantee_list:
 | grantee_list ',' grantee
   {
     $$ = append($1, $3)
+  }
+
+/* Role option list for CREATE ROLE / ALTER ROLE */
+role_option_list:
+  {
+    $$ = []RoleOption{}
+  }
+| role_option_list role_option
+  {
+    $$ = append($1, $2)
+  }
+
+role_option:
+  LOGIN
+  {
+    $$ = RoleOption{Type: RoleOptLogin, BoolValue: true}
+  }
+| NOLOGIN
+  {
+    $$ = RoleOption{Type: RoleOptLogin, BoolValue: false}
+  }
+| SUPERUSER
+  {
+    $$ = RoleOption{Type: RoleOptSuperuser, BoolValue: true}
+  }
+| NOSUPERUSER
+  {
+    $$ = RoleOption{Type: RoleOptSuperuser, BoolValue: false}
+  }
+| CREATEDB
+  {
+    $$ = RoleOption{Type: RoleOptCreateDB, BoolValue: true}
+  }
+| NOCREATEDB
+  {
+    $$ = RoleOption{Type: RoleOptCreateDB, BoolValue: false}
+  }
+| CREATEROLE
+  {
+    $$ = RoleOption{Type: RoleOptCreateRole, BoolValue: true}
+  }
+| NOCREATEROLE
+  {
+    $$ = RoleOption{Type: RoleOptCreateRole, BoolValue: false}
+  }
+| INHERIT
+  {
+    $$ = RoleOption{Type: RoleOptInherit, BoolValue: true}
+  }
+| NOINHERIT
+  {
+    $$ = RoleOption{Type: RoleOptInherit, BoolValue: false}
+  }
+| REPLICATION
+  {
+    $$ = RoleOption{Type: RoleOptReplication, BoolValue: true}
+  }
+| NOREPLICATION
+  {
+    $$ = RoleOption{Type: RoleOptReplication, BoolValue: false}
+  }
+| BYPASSRLS
+  {
+    $$ = RoleOption{Type: RoleOptBypassRLS, BoolValue: true}
+  }
+| NOBYPASSRLS
+  {
+    $$ = RoleOption{Type: RoleOptBypassRLS, BoolValue: false}
+  }
+| CONNECTION LIMIT INTEGRAL
+  {
+    $$ = RoleOption{Type: RoleOptConnectionLimit, StringValue: $3}
+  }
+| PASSWORD STRING
+  {
+    $$ = RoleOption{Type: RoleOptPassword, StringValue: $2}
+  }
+| PASSWORD NULL
+  {
+    $$ = RoleOption{Type: RoleOptPassword, IsNull: true}
+  }
+| ENCRYPTED PASSWORD STRING
+  {
+    $$ = RoleOption{Type: RoleOptPassword, StringValue: $3}
+  }
+| VALID UNTIL STRING
+  {
+    $$ = RoleOption{Type: RoleOptValidUntil, StringValue: $3}
   }
 
 // rather than explicitly parsing the various keywords for table options,

@@ -1,5 +1,8 @@
 # yaml-language-server: $schema=../testutils/testcase.schema.json
 
+# Managed roles tests: When managed_roles is set, privileges for those roles are managed.
+# With manage_privileges_only: true, only GRANT/REVOKE are managed (no CREATE/ALTER/DROP ROLE).
+
 ManagedRolesBasicGrant:
   current: |
     CREATE TABLE users (
@@ -14,10 +17,12 @@ ManagedRolesBasicGrant:
     GRANT SELECT ON TABLE users TO readonly_user;
   managed_roles:
     - readonly_user
+  manage_privileges_only: true
   up: |
     GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
   down: |
     REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
+
 ManagedRolesMultipleRoles:
   current: |
     CREATE TABLE users (
@@ -34,13 +39,16 @@ ManagedRolesMultipleRoles:
   managed_roles:
     - readonly_user
     - app_user
+  manage_privileges_only: true
   up: |
     GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
     GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
   down: |
     REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "app_user";
     REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
+
 ManagedRolesIgnoreUnmanagedRole:
+  # admin_role is not in managed_roles, so its GRANT is ignored
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -55,11 +63,14 @@ ManagedRolesIgnoreUnmanagedRole:
     GRANT ALL PRIVILEGES ON TABLE "public"."users" TO "admin_role";
   managed_roles:
     - readonly_user
+  manage_privileges_only: true
   up: |
     GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
   down: |
     REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
+
 ManagedRolesEmptyListNoChanges:
+  # Empty managed_roles means "manage no roles", so no privilege or role changes
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -73,11 +84,12 @@ ManagedRolesEmptyListNoChanges:
     );
     GRANT SELECT ON TABLE users TO readonly_user;
   managed_roles: []
+  manage_privileges_only: true
   up: ""
   down: ""
 
 ManagedRolesEmptyListIgnoresOrphans:
-  # Empty managed_roles means "manage no roles", so orphaned privileges should be ignored
+  # Empty managed_roles means "manage no roles", so orphaned privileges and roles should be ignored
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -90,6 +102,7 @@ ManagedRolesEmptyListIgnoresOrphans:
       name VARCHAR(100)
     );
   managed_roles: []
+  manage_privileges_only: true
   up: ""
   down: ""
 
@@ -108,10 +121,12 @@ ManagedRolesAddPrivileges:
     GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
   managed_roles:
     - app_user
+  manage_privileges_only: true
   up: |
     GRANT INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
   down: |
     REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
+
 ManagedRolesRevoke:
   current: |
     CREATE TABLE users (
@@ -127,11 +142,14 @@ ManagedRolesRevoke:
     GRANT SELECT ON TABLE users TO app_user;
   managed_roles:
     - app_user
+  manage_privileges_only: true
   up: |
     REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
   down: |
     GRANT INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+
 ManagedRolesRevokeAll:
+  # When role is managed but no longer has any GRANT in desired, revoke all privileges
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -145,11 +163,14 @@ ManagedRolesRevokeAll:
     );
   managed_roles:
     - app_user
+  manage_privileges_only: true
   up: |
     REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "app_user";
   down: |
     GRANT INSERT, SELECT, UPDATE ON TABLE "public"."users" TO "app_user";
+
 ManagedRolesPublic:
+  # PUBLIC is a special pseudo-role in PostgreSQL, no CREATE ROLE needed
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -163,10 +184,12 @@ ManagedRolesPublic:
     GRANT SELECT ON TABLE "public"."users" TO PUBLIC;
   managed_roles:
     - PUBLIC
+  manage_privileges_only: true
   up: |
     GRANT SELECT ON TABLE "public"."users" TO PUBLIC;
   down: |
     REVOKE SELECT ON TABLE "public"."users" FROM PUBLIC;
+
 ManagedRolesAllPrivileges:
   current: |
     CREATE TABLE users (
@@ -181,10 +204,12 @@ ManagedRolesAllPrivileges:
     GRANT ALL PRIVILEGES ON TABLE "public"."users" TO "admin_role";
   managed_roles:
     - admin_role
+  manage_privileges_only: true
   up: |
     GRANT ALL PRIVILEGES ON TABLE "public"."users" TO "admin_role";
   down: |
     REVOKE ALL PRIVILEGES ON TABLE "public"."users" FROM "admin_role";
+
 ManagedRolesIdempotent:
   current: |
     CREATE TABLE users (
@@ -200,10 +225,11 @@ ManagedRolesIdempotent:
     GRANT SELECT ON TABLE users TO readonly_user;
   managed_roles:
     - readonly_user
+  manage_privileges_only: true
   up: ""
   down: ""
 
-ManagedRolesOverlappingWithEnableDrop:
+ManagedRolesOverlappingGrants:
   # Tests that overlapping GRANT statements don't cause incorrect REVOKEs
   # user1 should retain SELECT because it's granted by the first GRANT statement
   current: |
@@ -223,6 +249,7 @@ ManagedRolesOverlappingWithEnableDrop:
     - user1
     - user2
     - user3
+  manage_privileges_only: true
   up: |
     GRANT INSERT ON TABLE "public"."users" TO "user1";
     GRANT SELECT, INSERT ON TABLE "public"."users" TO "user2";
@@ -254,12 +281,14 @@ ManagedRolesMultipleTables:
     GRANT SELECT, INSERT, UPDATE ON TABLE users, posts TO app_user;
   managed_roles:
     - app_user
+  manage_privileges_only: true
   up: |
     GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
     GRANT SELECT, INSERT, UPDATE ON TABLE "public"."posts" TO "app_user";
   down: |
     REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."posts" FROM "app_user";
     REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "app_user";
+
 ManagedRolesErrorGrantOption:
   current: |
     CREATE TABLE users (
@@ -274,6 +303,7 @@ ManagedRolesErrorGrantOption:
     grant select on table users to readonly_user with grant option;
   managed_roles:
     - readonly_user
+  manage_privileges_only: true
   error: "WITH GRANT OPTION is not supported yet"
 
 ManagedRolesErrorCascade:
@@ -291,6 +321,7 @@ ManagedRolesErrorCascade:
     revoke select on table users from readonly_user cascade;
   managed_roles:
     - readonly_user
+  manage_privileges_only: true
   error: "CASCADE/RESTRICT options are not supported yet"
 
 ManagedRolesPartialRevokeFromAll:
@@ -308,10 +339,12 @@ ManagedRolesPartialRevokeFromAll:
     GRANT SELECT, INSERT, UPDATE ON TABLE users TO admin_role;
   managed_roles:
     - admin_role
+  manage_privileges_only: true
   up: |
     REVOKE DELETE, REFERENCES, TRIGGER, TRUNCATE ON TABLE "public"."users" FROM "admin_role";
   down: |
     GRANT DELETE, REFERENCES, TRIGGER, TRUNCATE ON TABLE "public"."users" TO "admin_role";
+
 ManagedRolesSpecialCharacters:
   current: |
     CREATE TABLE users (
@@ -330,6 +363,7 @@ ManagedRolesSpecialCharacters:
     - user-with-dash
     - user.with.dot
     - user@domain.com
+  manage_privileges_only: true
   up: |
     GRANT SELECT ON TABLE "public"."users" TO "user-with-dash";
     GRANT INSERT ON TABLE "public"."users" TO "user.with.dot";
@@ -338,6 +372,7 @@ ManagedRolesSpecialCharacters:
     REVOKE SELECT ON TABLE "public"."users" FROM "user-with-dash";
     REVOKE INSERT ON TABLE "public"."users" FROM "user.with.dot";
     REVOKE UPDATE ON TABLE "public"."users" FROM "user@domain.com";
+
 ManagedRolesMixedGrantRevoke:
   current: |
     CREATE TABLE users (
@@ -353,9 +388,60 @@ ManagedRolesMixedGrantRevoke:
     GRANT SELECT, UPDATE ON TABLE users TO app_user;
   managed_roles:
     - app_user
+  manage_privileges_only: true
   up: |
     REVOKE DELETE, INSERT ON TABLE "public"."users" FROM "app_user";
     GRANT UPDATE ON TABLE "public"."users" TO "app_user";
   down: |
     REVOKE UPDATE ON TABLE "public"."users" FROM "app_user";
     GRANT INSERT, DELETE ON TABLE "public"."users" TO "app_user";
+
+# Test DROP ROLE when role is removed from desired schema
+# These tests use offline mode because role lifecycle operations are non-transactional
+ManagedRolesDropRole:
+  offline: true
+  current: |
+    CREATE ROLE orphan_role;
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO orphan_role;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  managed_roles:
+    - orphan_role
+  enable_drop: true
+  up: |
+    REVOKE ALL ON TABLE "public"."users" FROM "orphan_role";
+    DROP ROLE "orphan_role";
+  down: |
+    CREATE ROLE "orphan_role";
+    GRANT SELECT ON TABLE "public"."users" TO "orphan_role";
+
+ManagedRolesDropRoleDisabled:
+  offline: true
+  current: |
+    CREATE ROLE orphan_role;
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO orphan_role;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  managed_roles:
+    - orphan_role
+  enable_drop: false
+  up: |
+    -- Skipped: REVOKE ALL ON TABLE "public"."users" FROM "orphan_role";
+    -- Skipped: DROP ROLE "orphan_role";
+  down: |
+    CREATE ROLE "orphan_role";
+    GRANT SELECT ON TABLE "public"."users" TO "orphan_role";

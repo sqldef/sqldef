@@ -138,6 +138,7 @@ RevokePrivilegeSkipped:
     GRANT SELECT ON TABLE users TO app_user;
   managed_roles:
     - app_user
+  manage_privileges_only: true
   up: |
     -- Skipped: REVOKE INSERT ON TABLE "public"."users" FROM "app_user";
   down: ""
@@ -158,6 +159,7 @@ RevokeMultiplePrivilegesSkipped:
     GRANT SELECT ON TABLE users TO app_user;
   managed_roles:
     - app_user
+  manage_privileges_only: true
   up: |
     -- Skipped: REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
   down: ""
@@ -179,6 +181,7 @@ GrantMultipleGranteesRevokeSkipped2:
     - readonly_user
     - app_user
     - admin_role
+  manage_privileges_only: true
   up: |
     GRANT SELECT ON TABLE "public"."users" TO "admin_role", "app_user", "readonly_user";
   down: |
@@ -203,6 +206,7 @@ GrantPartialGranteesRevokeSkipped:
   managed_roles:
     - user2
     - user4
+  manage_privileges_only: true
   up: |
     GRANT SELECT ON TABLE "public"."users" TO "user2";
     GRANT INSERT, UPDATE ON TABLE "public"."users" TO "user2", "user4";
@@ -229,6 +233,7 @@ GrantOverlappingRevokeSkipped:
     - user1
     - user2
     - user3
+  manage_privileges_only: true
   up: |
     GRANT INSERT ON TABLE "public"."users" TO "user1";
     GRANT SELECT, INSERT ON TABLE "public"."users" TO "user2";

@@ -60,6 +60,9 @@ type Generator struct {
 	desiredPrivileges []*GrantPrivilege
 	currentPrivileges []*GrantPrivilege
 
+	desiredRoles []*CreateRole
+	currentRoles []*CreateRole
+
 	defaultSchema string
 
 	algorithm string
@@ -78,6 +81,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	desiredDDLs = FilterTables(desiredDDLs, config)
 	desiredDDLs = FilterViews(desiredDDLs, config)
 	desiredDDLs = FilterPrivileges(desiredDDLs, config)
+	desiredDDLs = FilterRoles(desiredDDLs, config)
 
 	desiredDDLs = SortTablesByDependencies(desiredDDLs, defaultSchema, mode, config.LegacyIgnoreQuotes, config.MysqlLowerCaseTableNames)
 
@@ -88,6 +92,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	currentDDLs = FilterTables(currentDDLs, config)
 	currentDDLs = FilterViews(currentDDLs, config)
 	currentDDLs = FilterPrivileges(currentDDLs, config)
+	currentDDLs = FilterRoles(currentDDLs, config)
 
 	currentDDLs = SortTablesByDependencies(currentDDLs, defaultSchema, mode, config.LegacyIgnoreQuotes, config.MysqlLowerCaseTableNames)
 
@@ -123,6 +128,8 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		currentSchemas:     aggregated.Schemas,
 		desiredPrivileges:  desiredAggregated.Privileges,
 		currentPrivileges:  aggregated.Privileges,
+		desiredRoles:       desiredAggregated.Roles,
+		currentRoles:       aggregated.Roles,
 		defaultSchema:      defaultSchema,
 		algorithm:          config.Algorithm,
 		lock:               config.Lock,
@@ -322,6 +329,20 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return nil, err
 			}
 			interDDLs = append(interDDLs, revokeDDLs...)
+		case *CreateRole:
+			roleDDLs, err := g.generateDDLsForCreateRole(desired)
+			if err != nil {
+				return nil, err
+			}
+			createSchemaDDLs = append(createSchemaDDLs, roleDDLs...) // Roles before tables
+		case *AlterRole:
+			roleDDLs, err := g.generateDDLsForAlterRole(desired)
+			if err != nil {
+				return nil, err
+			}
+			interDDLs = append(interDDLs, roleDDLs...)
+		case *DropRole:
+			// DROP ROLE is handled as orphan cleanup at the end
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in generateDDLs: %v", desired)
 		}
@@ -575,11 +596,34 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	}
 
 	if g.mode == GeneratorModePostgres {
+		// Identify roles that will be dropped (exist in current but not in desired, and are in managed_roles).
+		// Only consider role lifecycle management if either current or desired schema has role definitions.
+		// This ensures that schemas that only manage privileges (GRANT/REVOKE) don't inadvertently drop roles.
+		// We need to skip orphan privilege handling for roles being dropped since we'll use REVOKE ALL instead.
+		rolesToBeDropped := make(map[string]bool)
+		hasRoleDefinitions := len(g.currentRoles) > 0 || len(g.desiredRoles) > 0
+		if hasRoleDefinitions {
+			for _, currentRole := range g.currentRoles {
+				if len(g.config.ManagedRoles) == 0 || !slices.Contains(g.config.ManagedRoles, currentRole.role.name) {
+					continue
+				}
+				desiredRole := g.findRoleByName(g.desiredRoles, currentRole.role.name)
+				if desiredRole == nil {
+					rolesToBeDropped[currentRole.role.name] = true
+				}
+			}
+		}
+
 		for _, currentPriv := range g.currentPrivileges {
 			// Check each grantee individually for orphaned privileges
 			for _, grantee := range currentPriv.grantees {
 				// Skip if managed roles is empty (means "manage no roles") or grantee is not in managed roles
 				if len(g.config.ManagedRoles) == 0 || !slices.Contains(g.config.ManagedRoles, grantee) {
+					continue
+				}
+
+				// Skip if this role is being dropped - we'll use REVOKE ALL instead
+				if rolesToBeDropped[grantee] {
 					continue
 				}
 
@@ -606,6 +650,29 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 					ddls = append(ddls, revoke)
 				}
 			}
+		}
+
+		// Handle orphan roles: generate REVOKE ALL and DROP ROLE for roles being dropped
+		// rolesToBeDropped was already computed above when skipping orphan privilege handling
+		// Use CanonicalMapIter for deterministic output order
+		for roleName := range util.CanonicalMapIter(rolesToBeDropped) {
+			// Generate REVOKE ALL for each table where this role has privileges
+			for _, currentPriv := range g.currentPrivileges {
+				if slices.Contains(currentPriv.grantees, roleName) {
+					escapedGrantee, err := g.validateAndEscapeGrantee(roleName)
+					if err != nil {
+						return nil, err
+					}
+					revoke := fmt.Sprintf("REVOKE ALL ON TABLE %s FROM %s",
+						g.escapeQualifiedName(currentPriv.tableName),
+						escapedGrantee)
+					ddls = append(ddls, revoke)
+				}
+			}
+
+			// Generate DROP ROLE statement
+			dropStmt := fmt.Sprintf("DROP ROLE %s", g.escapeSQLIdent(Ident{Name: roleName, Quoted: true}))
+			ddls = append(ddls, dropStmt)
 		}
 	}
 
@@ -2594,6 +2661,7 @@ type AggregatedSchema struct {
 	Extensions []*Extension
 	Schemas    []*Schema
 	Privileges []*GrantPrivilege
+	Roles      []*CreateRole
 }
 
 // generateCreateIndexStatement generates a CREATE INDEX statement from an Index struct.
@@ -3296,6 +3364,7 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 		Extensions: []*Extension{},
 		Schemas:    []*Schema{},
 		Privileges: []*GrantPrivilege{},
+		Roles:      []*CreateRole{},
 	}
 
 	for _, ddl := range ddls {
@@ -3412,6 +3481,20 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 			// Note: REVOKE statements in desired schemas are not recommended
 			// The desired schema should describe the target state with GRANTs only
 			// This case is kept for backwards compatibility but may be removed
+		case *CreateRole:
+			// For CREATE ROLE, we treat it similar to CREATE TABLE - add to the list
+			// ALTER ROLE in desired schema means the role should have those attributes
+			aggregated.Roles = append(aggregated.Roles, stmt)
+		case *AlterRole:
+			// ALTER ROLE in desired means the role should have those attributes
+			// Convert it to CreateRole for tracking
+			aggregated.Roles = append(aggregated.Roles, &CreateRole{
+				statement: stmt.statement,
+				role:      stmt.role,
+			})
+		case *DropRole:
+			// DROP ROLE in desired schema is unusual - skip it
+			// The absence of a role in desired schema + enable_drop will generate DROP
 		default:
 			return nil, fmt.Errorf("unexpected ddl type in convertDDLsToTablesAndViews: %#v", stmt)
 		}
@@ -3621,6 +3704,196 @@ func (g *Generator) generateDDLsForRevokePrivilege(desired *RevokePrivilege) ([]
 	// The state should only be updated after DDLs are successfully applied
 
 	return []string{revoke}, nil
+}
+
+// generateDDLsForCreateRole generates DDLs for creating or altering a role.
+// If the role already exists, it generates ALTER ROLE statements for any differences.
+func (g *Generator) generateDDLsForCreateRole(desired *CreateRole) ([]string, error) {
+	// Check if role exists in current state
+	currentRole := g.findRoleByName(g.currentRoles, desired.role.name)
+
+	if currentRole == nil {
+		// Role doesn't exist, generate CREATE ROLE
+		return []string{g.generateCreateRoleStatement(&desired.role)}, nil
+	}
+
+	// Role exists, generate ALTER ROLE if attributes differ
+	return g.generateAlterRoleStatements(&currentRole.role, &desired.role), nil
+}
+
+// generateDDLsForAlterRole generates DDLs for altering an existing role.
+func (g *Generator) generateDDLsForAlterRole(desired *AlterRole) ([]string, error) {
+	currentRole := g.findRoleByName(g.currentRoles, desired.role.name)
+	if currentRole == nil {
+		// Role doesn't exist - create it
+		return []string{g.generateCreateRoleStatement(&desired.role)}, nil
+	}
+
+	return g.generateAlterRoleStatements(&currentRole.role, &desired.role), nil
+}
+
+// findRoleByName finds a role by name in the given list (case-sensitive).
+func (g *Generator) findRoleByName(roles []*CreateRole, name string) *CreateRole {
+	for _, role := range roles {
+		if role.role.name == name {
+			return role
+		}
+	}
+	return nil
+}
+
+// generateCreateRoleStatement generates a CREATE ROLE statement from a RoleDefinition.
+func (g *Generator) generateCreateRoleStatement(role *RoleDefinition) string {
+	var parts []string
+	parts = append(parts, "CREATE ROLE")
+	if role.ifNotExists {
+		parts = append(parts, "IF NOT EXISTS")
+	}
+	parts = append(parts, g.escapeSQLIdent(Ident{Name: role.name, Quoted: true}))
+
+	// Add role options
+	parts = append(parts, g.generateRoleOptions(role)...)
+
+	return strings.Join(parts, " ")
+}
+
+// generateAlterRoleStatements generates ALTER ROLE statements for changed attributes.
+func (g *Generator) generateAlterRoleStatements(current, desired *RoleDefinition) []string {
+	var options []string
+
+	// Compare each attribute and add to options if different
+	if desired.canLogin != nil && (current.canLogin == nil || *current.canLogin != *desired.canLogin) {
+		if *desired.canLogin {
+			options = append(options, "LOGIN")
+		} else {
+			options = append(options, "NOLOGIN")
+		}
+	}
+	if desired.superuser != nil && (current.superuser == nil || *current.superuser != *desired.superuser) {
+		if *desired.superuser {
+			options = append(options, "SUPERUSER")
+		} else {
+			options = append(options, "NOSUPERUSER")
+		}
+	}
+	if desired.createDB != nil && (current.createDB == nil || *current.createDB != *desired.createDB) {
+		if *desired.createDB {
+			options = append(options, "CREATEDB")
+		} else {
+			options = append(options, "NOCREATEDB")
+		}
+	}
+	if desired.createRole != nil && (current.createRole == nil || *current.createRole != *desired.createRole) {
+		if *desired.createRole {
+			options = append(options, "CREATEROLE")
+		} else {
+			options = append(options, "NOCREATEROLE")
+		}
+	}
+	if desired.inherit != nil && (current.inherit == nil || *current.inherit != *desired.inherit) {
+		if *desired.inherit {
+			options = append(options, "INHERIT")
+		} else {
+			options = append(options, "NOINHERIT")
+		}
+	}
+	if desired.replication != nil && (current.replication == nil || *current.replication != *desired.replication) {
+		if *desired.replication {
+			options = append(options, "REPLICATION")
+		} else {
+			options = append(options, "NOREPLICATION")
+		}
+	}
+	if desired.bypassRLS != nil && (current.bypassRLS == nil || *current.bypassRLS != *desired.bypassRLS) {
+		if *desired.bypassRLS {
+			options = append(options, "BYPASSRLS")
+		} else {
+			options = append(options, "NOBYPASSRLS")
+		}
+	}
+	if desired.connectionLimit != nil && (current.connectionLimit == nil || *current.connectionLimit != *desired.connectionLimit) {
+		options = append(options, fmt.Sprintf("CONNECTION LIMIT %d", *desired.connectionLimit))
+	}
+	if desired.validUntil != nil && (current.validUntil == nil || *current.validUntil != *desired.validUntil) {
+		options = append(options, fmt.Sprintf("VALID UNTIL '%s'", *desired.validUntil))
+	}
+	// Note: PASSWORD is not compared because we can't retrieve it from the database
+
+	if len(options) == 0 {
+		return nil // No changes needed
+	}
+
+	return []string{fmt.Sprintf("ALTER ROLE %s %s",
+		g.escapeSQLIdent(Ident{Name: desired.name, Quoted: true}),
+		strings.Join(options, " "))}
+}
+
+// generateRoleOptions generates role option strings from a RoleDefinition.
+func (g *Generator) generateRoleOptions(role *RoleDefinition) []string {
+	var options []string
+
+	if role.canLogin != nil {
+		if *role.canLogin {
+			options = append(options, "LOGIN")
+		} else {
+			options = append(options, "NOLOGIN")
+		}
+	}
+	if role.superuser != nil {
+		if *role.superuser {
+			options = append(options, "SUPERUSER")
+		} else {
+			options = append(options, "NOSUPERUSER")
+		}
+	}
+	if role.createDB != nil {
+		if *role.createDB {
+			options = append(options, "CREATEDB")
+		} else {
+			options = append(options, "NOCREATEDB")
+		}
+	}
+	if role.createRole != nil {
+		if *role.createRole {
+			options = append(options, "CREATEROLE")
+		} else {
+			options = append(options, "NOCREATEROLE")
+		}
+	}
+	if role.inherit != nil {
+		if *role.inherit {
+			options = append(options, "INHERIT")
+		} else {
+			options = append(options, "NOINHERIT")
+		}
+	}
+	if role.replication != nil {
+		if *role.replication {
+			options = append(options, "REPLICATION")
+		} else {
+			options = append(options, "NOREPLICATION")
+		}
+	}
+	if role.bypassRLS != nil {
+		if *role.bypassRLS {
+			options = append(options, "BYPASSRLS")
+		} else {
+			options = append(options, "NOBYPASSRLS")
+		}
+	}
+	if role.connectionLimit != nil {
+		options = append(options, fmt.Sprintf("CONNECTION LIMIT %d", *role.connectionLimit))
+	}
+	if role.passwordIsNull {
+		options = append(options, "PASSWORD NULL")
+	} else if role.password != nil {
+		options = append(options, fmt.Sprintf("PASSWORD '%s'", *role.password))
+	}
+	if role.validUntil != nil {
+		options = append(options, fmt.Sprintf("VALID UNTIL '%s'", *role.validUntil))
+	}
+
+	return options
 }
 
 func equalPrivileges(a, b []string) bool {
@@ -4935,6 +5208,63 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 		filtered = append(filtered, revokesByTableAndGrantee[key])
 	}
 
+	return filtered
+}
+
+// FilterRoles filters role DDLs based on managed_roles and manage_privileges_only configuration.
+// Only CREATE ROLE/ALTER ROLE/DROP ROLE for roles in managed_roles are kept.
+// If manage_privileges_only is true, all role lifecycle DDLs are skipped (only GRANT/REVOKE are managed).
+func FilterRoles(ddls []DDL, config database.GeneratorConfig) []DDL {
+	// If manage_privileges_only is true, skip all role lifecycle DDLs
+	// This allows managing only GRANT/REVOKE without CREATE/ALTER/DROP ROLE
+	if config.ManagePrivilegesOnly {
+		filtered := []DDL{}
+		for _, ddl := range ddls {
+			switch ddl.(type) {
+			case *CreateRole, *AlterRole, *DropRole:
+				continue
+			default:
+				filtered = append(filtered, ddl)
+			}
+		}
+		return filtered
+	}
+
+	// If no roles specified, exclude all role-related DDLs
+	if len(config.ManagedRoles) == 0 {
+		filtered := []DDL{}
+		for _, ddl := range ddls {
+			switch ddl.(type) {
+			case *CreateRole, *AlterRole, *DropRole:
+				// Skip all role-related DDLs
+				continue
+			default:
+				filtered = append(filtered, ddl)
+			}
+		}
+		return filtered
+	}
+
+	// Filter roles to only include those in managed_roles
+	filtered := []DDL{}
+	for _, ddl := range ddls {
+		switch stmt := ddl.(type) {
+		case *CreateRole:
+			if slices.Contains(config.ManagedRoles, stmt.role.name) {
+				filtered = append(filtered, ddl)
+			}
+		case *AlterRole:
+			if slices.Contains(config.ManagedRoles, stmt.role.name) {
+				filtered = append(filtered, ddl)
+			}
+		case *DropRole:
+			if slices.Contains(config.ManagedRoles, stmt.roleName) {
+				filtered = append(filtered, ddl)
+			}
+		default:
+			filtered = append(filtered, ddl)
+		}
+	}
 	return filtered
 }
 

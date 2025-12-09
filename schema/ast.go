@@ -163,6 +163,46 @@ type RevokePrivilege struct {
 	cascadeOption bool // CASCADE option for REVOKE
 }
 
+// CreateRole represents a CREATE ROLE statement
+type CreateRole struct {
+	statement string
+	role      RoleDefinition
+}
+
+// AlterRole represents an ALTER ROLE statement
+type AlterRole struct {
+	statement string
+	role      RoleDefinition
+}
+
+// DropRole represents a DROP ROLE statement
+type DropRole struct {
+	statement string
+	roleName  string
+	ifExists  bool
+}
+
+// RoleDefinition holds the parsed role information
+type RoleDefinition struct {
+	name            string
+	canLogin        *bool   // LOGIN/NOLOGIN (nil means use default)
+	superuser       *bool   // SUPERUSER/NOSUPERUSER
+	createDB        *bool   // CREATEDB/NOCREATEDB
+	createRole      *bool   // CREATEROLE/NOCREATEROLE
+	inherit         *bool   // INHERIT/NOINHERIT
+	replication     *bool   // REPLICATION/NOREPLICATION
+	bypassRLS       *bool   // BYPASSRLS/NOBYPASSRLS
+	connectionLimit *int    // CONNECTION LIMIT (-1 means no limit, nil means use default)
+	password        *string // PASSWORD (nil means not set)
+	passwordIsNull  bool    // true if PASSWORD NULL was specified
+	validUntil      *string // VALID UNTIL timestamp (nil means not set)
+	ifNotExists     bool    // for CREATE ROLE IF NOT EXISTS
+}
+
+func (c *CreateRole) Statement() string { return c.statement }
+func (a *AlterRole) Statement() string  { return a.statement }
+func (d *DropRole) Statement() string   { return d.statement }
+
 type Table struct {
 	name        QualifiedName
 	columns     map[string]*Column

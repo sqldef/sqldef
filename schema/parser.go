@@ -264,6 +264,22 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				}, nil
 			}
 			return nil, fmt.Errorf("no grantees specified in REVOKE statement")
+		} else if stmt.Action == parser.CreateRole {
+			return &CreateRole{
+				statement: ddl,
+				role:      parseRoleDefinition(stmt.Role),
+			}, nil
+		} else if stmt.Action == parser.AlterRole {
+			return &AlterRole{
+				statement: ddl,
+				role:      parseRoleDefinition(stmt.Role),
+			}, nil
+		} else if stmt.Action == parser.DropRole {
+			return &DropRole{
+				statement: ddl,
+				roleName:  stmt.Role.Name.Name,
+				ifExists:  stmt.Role.IfExists,
+			}, nil
 		} else {
 			return nil, fmt.Errorf(
 				"unsupported type of DDL action '%d': %s",
@@ -273,6 +289,54 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 	default:
 		return nil, fmt.Errorf("unsupported type of SQL (only DDL is supported): %s", ddl)
 	}
+}
+
+// parseRoleDefinition converts parser.Role to schema.RoleDefinition
+func parseRoleDefinition(role *parser.Role) RoleDefinition {
+	def := RoleDefinition{
+		name:        role.Name.Name,
+		ifNotExists: role.IfNotExists,
+	}
+
+	for _, opt := range role.Options {
+		switch opt.Type {
+		case parser.RoleOptLogin:
+			v := opt.BoolValue
+			def.canLogin = &v
+		case parser.RoleOptSuperuser:
+			v := opt.BoolValue
+			def.superuser = &v
+		case parser.RoleOptCreateDB:
+			v := opt.BoolValue
+			def.createDB = &v
+		case parser.RoleOptCreateRole:
+			v := opt.BoolValue
+			def.createRole = &v
+		case parser.RoleOptInherit:
+			v := opt.BoolValue
+			def.inherit = &v
+		case parser.RoleOptReplication:
+			v := opt.BoolValue
+			def.replication = &v
+		case parser.RoleOptBypassRLS:
+			v := opt.BoolValue
+			def.bypassRLS = &v
+		case parser.RoleOptConnectionLimit:
+			if v, err := strconv.Atoi(opt.StringValue); err == nil {
+				def.connectionLimit = &v
+			}
+		case parser.RoleOptPassword:
+			if opt.IsNull {
+				def.passwordIsNull = true
+			} else {
+				def.password = &opt.StringValue
+			}
+		case parser.RoleOptValidUntil:
+			def.validUntil = &opt.StringValue
+		}
+	}
+
+	return def
 }
 
 func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawDDL string) (Table, error) {

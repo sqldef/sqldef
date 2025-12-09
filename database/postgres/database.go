@@ -73,6 +73,13 @@ func (d *PostgresDatabase) GetConfig() database.Config {
 func (d *PostgresDatabase) ExportDDLs() (string, error) {
 	var ddls []string
 
+	// Export roles first (before schemas) since they might be referenced by privileges
+	roleDDLs, err := d.roles()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, roleDDLs...)
+
 	schemaDDLs, err := d.schemas()
 	if err != nil {
 		return "", err
@@ -1518,4 +1525,109 @@ func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
 	}
 
 	return privilegeDefs, nil
+}
+
+// roles returns CREATE ROLE statements for all managed roles.
+// Only roles specified in ManagedRoles configuration are exported.
+func (d *PostgresDatabase) roles() ([]string, error) {
+	// If no roles are specified to manage, don't query roles at all
+	if len(d.generatorConfig.ManagedRoles) == 0 {
+		return []string{}, nil
+	}
+
+	rolePlaceholders := make([]string, len(d.generatorConfig.ManagedRoles))
+	queryArgs := make([]any, len(d.generatorConfig.ManagedRoles))
+	for i, role := range d.generatorConfig.ManagedRoles {
+		rolePlaceholders[i] = fmt.Sprintf("$%d", i+1)
+		queryArgs[i] = role
+	}
+	roleFilter := strings.Join(rolePlaceholders, ", ")
+
+	query := fmt.Sprintf(`
+		SELECT
+			rolname,
+			rolsuper,
+			rolcanlogin,
+			rolinherit,
+			rolcreaterole,
+			rolcreatedb,
+			rolreplication,
+			rolbypassrls,
+			rolconnlimit,
+			rolvaliduntil
+		FROM pg_roles
+		WHERE rolname IN (%s)
+		  AND rolname NOT LIKE 'pg_%%'
+		ORDER BY rolname
+	`, roleFilter)
+
+	rows, err := d.db.Query(query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query roles: %w", err)
+	}
+	defer rows.Close()
+
+	var roleDefs []string
+	for rows.Next() {
+		var rolname string
+		var rolsuper, rolcanlogin, rolinherit, rolcreaterole, rolcreatedb, rolreplication, rolbypassrls bool
+		var rolconnlimit int
+		var rolvaliduntil sql.NullString
+		if err := rows.Scan(&rolname, &rolsuper, &rolcanlogin, &rolinherit, &rolcreaterole, &rolcreatedb, &rolreplication, &rolbypassrls, &rolconnlimit, &rolvaliduntil); err != nil {
+			return nil, fmt.Errorf("failed to scan role row: %w", err)
+		}
+
+		// Build CREATE ROLE statement
+		var options []string
+		if rolcanlogin {
+			options = append(options, "LOGIN")
+		} else {
+			options = append(options, "NOLOGIN")
+		}
+		if rolsuper {
+			options = append(options, "SUPERUSER")
+		} else {
+			options = append(options, "NOSUPERUSER")
+		}
+		if rolcreatedb {
+			options = append(options, "CREATEDB")
+		} else {
+			options = append(options, "NOCREATEDB")
+		}
+		if rolcreaterole {
+			options = append(options, "CREATEROLE")
+		} else {
+			options = append(options, "NOCREATEROLE")
+		}
+		if rolinherit {
+			options = append(options, "INHERIT")
+		} else {
+			options = append(options, "NOINHERIT")
+		}
+		if rolreplication {
+			options = append(options, "REPLICATION")
+		} else {
+			options = append(options, "NOREPLICATION")
+		}
+		if rolbypassrls {
+			options = append(options, "BYPASSRLS")
+		} else {
+			options = append(options, "NOBYPASSRLS")
+		}
+		if rolconnlimit != -1 {
+			options = append(options, fmt.Sprintf("CONNECTION LIMIT %d", rolconnlimit))
+		}
+		if rolvaliduntil.Valid && rolvaliduntil.String != "" {
+			options = append(options, fmt.Sprintf("VALID UNTIL '%s'", rolvaliduntil.String))
+		}
+
+		createRole := fmt.Sprintf("CREATE ROLE %s %s;", escapeSQLName(rolname), strings.Join(options, " "))
+		roleDefs = append(roleDefs, createRole)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate role rows: %w", err)
+	}
+
+	return roleDefs, nil
 }

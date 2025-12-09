@@ -1,0 +1,427 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
+# CREATE ROLE tests for parsing and DDL generation
+# All tests use offline mode because role operations are non-transactional in PostgreSQL
+
+CreateRoleBasic:
+  offline: true
+  current: ""
+  desired: |
+    CREATE ROLE test_role;
+  managed_roles:
+    - test_role
+  up: |
+    CREATE ROLE "test_role";
+  down: |
+    DROP ROLE "test_role";
+
+CreateRoleWithLogin:
+  offline: true
+  current: ""
+  desired: |
+    CREATE ROLE test_user LOGIN;
+  managed_roles:
+    - test_user
+  up: |
+    CREATE ROLE "test_user" LOGIN;
+  down: |
+    DROP ROLE "test_user";
+
+CreateRoleWithNologin:
+  offline: true
+  current: ""
+  desired: |
+    CREATE ROLE test_role NOLOGIN;
+  managed_roles:
+    - test_role
+  up: |
+    CREATE ROLE "test_role" NOLOGIN;
+  down: |
+    DROP ROLE "test_role";
+
+CreateRoleWithSuperuser:
+  offline: true
+  current: ""
+  desired: |
+    CREATE ROLE super_user SUPERUSER;
+  managed_roles:
+    - super_user
+  up: |
+    CREATE ROLE "super_user" SUPERUSER;
+  down: |
+    DROP ROLE "super_user";
+
+CreateRoleWithCreatedb:
+  offline: true
+  current: ""
+  desired: |
+    CREATE ROLE db_creator CREATEDB;
+  managed_roles:
+    - db_creator
+  up: |
+    CREATE ROLE "db_creator" CREATEDB;
+  down: |
+    DROP ROLE "db_creator";
+
+CreateRoleWithCreaterole:
+  offline: true
+  current: ""
+  desired: |
+    CREATE ROLE role_admin CREATEROLE;
+  managed_roles:
+    - role_admin
+  up: |
+    CREATE ROLE "role_admin" CREATEROLE;
+  down: |
+    DROP ROLE "role_admin";
+
+CreateRoleWithInherit:
+  offline: true
+  current: ""
+  desired: |
+    CREATE ROLE inherit_role INHERIT;
+  managed_roles:
+    - inherit_role
+  up: |
+    CREATE ROLE "inherit_role" INHERIT;
+  down: |
+    DROP ROLE "inherit_role";
+
+CreateRoleWithNoinherit:
+  offline: true
+  current: ""
+  desired: |
+    CREATE ROLE no_inherit_role NOINHERIT;
+  managed_roles:
+    - no_inherit_role
+  up: |
+    CREATE ROLE "no_inherit_role" NOINHERIT;
+  down: |
+    DROP ROLE "no_inherit_role";
+
+CreateRoleWithReplication:
+  offline: true
+  current: ""
+  desired: |
+    CREATE ROLE repl_user REPLICATION;
+  managed_roles:
+    - repl_user
+  up: |
+    CREATE ROLE "repl_user" REPLICATION;
+  down: |
+    DROP ROLE "repl_user";
+
+CreateRoleWithBypassrls:
+  offline: true
+  current: ""
+  desired: |
+    CREATE ROLE rls_bypass BYPASSRLS;
+  managed_roles:
+    - rls_bypass
+  up: |
+    CREATE ROLE "rls_bypass" BYPASSRLS;
+  down: |
+    DROP ROLE "rls_bypass";
+
+CreateRoleWithConnectionLimit:
+  offline: true
+  current: ""
+  desired: |
+    CREATE ROLE limited_user CONNECTION LIMIT 10;
+  managed_roles:
+    - limited_user
+  up: |
+    CREATE ROLE "limited_user" CONNECTION LIMIT 10;
+  down: |
+    DROP ROLE "limited_user";
+
+CreateRoleWithPassword:
+  offline: true
+  current: ""
+  desired: |
+    CREATE ROLE secure_user PASSWORD 'secret123';
+  managed_roles:
+    - secure_user
+  up: |
+    CREATE ROLE "secure_user" PASSWORD 'secret123';
+  down: |
+    DROP ROLE "secure_user";
+
+CreateRoleWithValidUntil:
+  offline: true
+  current: ""
+  desired: |
+    CREATE ROLE temp_user VALID UNTIL '2025-12-31';
+  managed_roles:
+    - temp_user
+  up: |
+    CREATE ROLE "temp_user" VALID UNTIL '2025-12-31';
+  down: |
+    DROP ROLE "temp_user";
+
+CreateRoleFullAttributes:
+  offline: true
+  current: ""
+  desired: |
+    CREATE ROLE app_admin LOGIN SUPERUSER CREATEDB CREATEROLE INHERIT REPLICATION BYPASSRLS CONNECTION LIMIT 100;
+  managed_roles:
+    - app_admin
+  up: |
+    CREATE ROLE "app_admin" LOGIN SUPERUSER CREATEDB CREATEROLE INHERIT REPLICATION BYPASSRLS CONNECTION LIMIT 100;
+  down: |
+    DROP ROLE "app_admin";
+
+CreateRoleMultipleRoles:
+  offline: true
+  current: ""
+  desired: |
+    CREATE ROLE role1 LOGIN;
+    CREATE ROLE role2 NOLOGIN CREATEDB;
+  managed_roles:
+    - role1
+    - role2
+  up: |
+    CREATE ROLE "role1" LOGIN;
+    CREATE ROLE "role2" NOLOGIN CREATEDB;
+  down: |
+    DROP ROLE "role1";
+    DROP ROLE "role2";
+
+CreateRoleIgnoreUnmanagedRole:
+  offline: true
+  current: ""
+  desired: |
+    CREATE ROLE managed_role LOGIN;
+    CREATE ROLE unmanaged_role CREATEDB;
+  managed_roles:
+    - managed_role
+  up: |
+    CREATE ROLE "managed_role" LOGIN;
+  down: |
+    DROP ROLE "managed_role";
+
+CreateRoleEmptyManagedRolesIgnoresAll:
+  offline: true
+  current: ""
+  desired: |
+    CREATE ROLE some_role LOGIN;
+  managed_roles: []
+  up: ""
+  down: ""
+
+CreateRoleIdempotent:
+  offline: true
+  current: |
+    CREATE ROLE existing_role LOGIN;
+  desired: |
+    CREATE ROLE existing_role LOGIN;
+  managed_roles:
+    - existing_role
+  up: ""
+  down: ""
+
+# ALTER ROLE tests
+AlterRoleChangeLogin:
+  offline: true
+  current: |
+    CREATE ROLE test_role NOLOGIN;
+  desired: |
+    CREATE ROLE test_role LOGIN;
+  managed_roles:
+    - test_role
+  up: |
+    ALTER ROLE "test_role" LOGIN;
+  down: |
+    ALTER ROLE "test_role" NOLOGIN;
+
+AlterRoleChangeSuperuser:
+  offline: true
+  current: |
+    CREATE ROLE test_role NOSUPERUSER;
+  desired: |
+    CREATE ROLE test_role SUPERUSER;
+  managed_roles:
+    - test_role
+  up: |
+    ALTER ROLE "test_role" SUPERUSER;
+  down: |
+    ALTER ROLE "test_role" NOSUPERUSER;
+
+AlterRoleChangeCreatedb:
+  offline: true
+  current: |
+    CREATE ROLE test_role NOCREATEDB;
+  desired: |
+    CREATE ROLE test_role CREATEDB;
+  managed_roles:
+    - test_role
+  up: |
+    ALTER ROLE "test_role" CREATEDB;
+  down: |
+    ALTER ROLE "test_role" NOCREATEDB;
+
+AlterRoleChangeCreaterole:
+  offline: true
+  current: |
+    CREATE ROLE test_role NOCREATEROLE;
+  desired: |
+    CREATE ROLE test_role CREATEROLE;
+  managed_roles:
+    - test_role
+  up: |
+    ALTER ROLE "test_role" CREATEROLE;
+  down: |
+    ALTER ROLE "test_role" NOCREATEROLE;
+
+AlterRoleChangeInherit:
+  offline: true
+  current: |
+    CREATE ROLE test_role NOINHERIT;
+  desired: |
+    CREATE ROLE test_role INHERIT;
+  managed_roles:
+    - test_role
+  up: |
+    ALTER ROLE "test_role" INHERIT;
+  down: |
+    ALTER ROLE "test_role" NOINHERIT;
+
+AlterRoleChangeReplication:
+  offline: true
+  current: |
+    CREATE ROLE test_role NOREPLICATION;
+  desired: |
+    CREATE ROLE test_role REPLICATION;
+  managed_roles:
+    - test_role
+  up: |
+    ALTER ROLE "test_role" REPLICATION;
+  down: |
+    ALTER ROLE "test_role" NOREPLICATION;
+
+AlterRoleChangeBypassrls:
+  offline: true
+  current: |
+    CREATE ROLE test_role NOBYPASSRLS;
+  desired: |
+    CREATE ROLE test_role BYPASSRLS;
+  managed_roles:
+    - test_role
+  up: |
+    ALTER ROLE "test_role" BYPASSRLS;
+  down: |
+    ALTER ROLE "test_role" NOBYPASSRLS;
+
+AlterRoleChangeConnectionLimit:
+  offline: true
+  current: |
+    CREATE ROLE test_role CONNECTION LIMIT 5;
+  desired: |
+    CREATE ROLE test_role CONNECTION LIMIT 10;
+  managed_roles:
+    - test_role
+  up: |
+    ALTER ROLE "test_role" CONNECTION LIMIT 10;
+  down: |
+    ALTER ROLE "test_role" CONNECTION LIMIT 5;
+
+AlterRoleChangeValidUntil:
+  offline: true
+  current: |
+    CREATE ROLE test_role VALID UNTIL '2024-01-01';
+  desired: |
+    CREATE ROLE test_role VALID UNTIL '2025-12-31';
+  managed_roles:
+    - test_role
+  up: |
+    ALTER ROLE "test_role" VALID UNTIL '2025-12-31';
+  down: |
+    ALTER ROLE "test_role" VALID UNTIL '2024-01-01';
+
+AlterRoleMultipleAttributes:
+  offline: true
+  current: |
+    CREATE ROLE test_role NOLOGIN NOCREATEDB NOSUPERUSER;
+  desired: |
+    CREATE ROLE test_role LOGIN CREATEDB SUPERUSER;
+  managed_roles:
+    - test_role
+  up: |
+    ALTER ROLE "test_role" LOGIN SUPERUSER CREATEDB;
+  down: |
+    ALTER ROLE "test_role" NOLOGIN NOSUPERUSER NOCREATEDB;
+
+# DROP ROLE tests
+DropRoleWhenEnableDropTrue:
+  offline: true
+  current: |
+    CREATE ROLE orphan_role LOGIN;
+  desired: ""
+  managed_roles:
+    - orphan_role
+  enable_drop: true
+  up: |
+    DROP ROLE "orphan_role";
+  down: |
+    CREATE ROLE "orphan_role" LOGIN;
+
+DropRoleWhenEnableDropFalse:
+  offline: true
+  current: |
+    CREATE ROLE orphan_role LOGIN;
+  desired: ""
+  managed_roles:
+    - orphan_role
+  enable_drop: false
+  up: |
+    -- Skipped: DROP ROLE "orphan_role";
+  down: |
+    CREATE ROLE "orphan_role" LOGIN;
+
+DropRoleOnlyManagedRoles:
+  # Role not in managed_roles should not be dropped
+  offline: true
+  current: |
+    CREATE ROLE managed_orphan LOGIN;
+    CREATE ROLE unmanaged_orphan LOGIN;
+  desired: ""
+  managed_roles:
+    - managed_orphan
+  enable_drop: true
+  up: |
+    DROP ROLE "managed_orphan";
+  down: |
+    CREATE ROLE "managed_orphan" LOGIN;
+
+CreateRoleWithSpecialCharacters:
+  offline: true
+  current: ""
+  desired: |
+    CREATE ROLE "user-with-dash" LOGIN;
+    CREATE ROLE "user.with.dot" LOGIN;
+    CREATE ROLE "user@domain.com" LOGIN;
+  managed_roles:
+    - user-with-dash
+    - user.with.dot
+    - user@domain.com
+  up: |
+    CREATE ROLE "user-with-dash" LOGIN;
+    CREATE ROLE "user.with.dot" LOGIN;
+    CREATE ROLE "user@domain.com" LOGIN;
+  down: |
+    DROP ROLE "user-with-dash";
+    DROP ROLE "user.with.dot";
+    DROP ROLE "user@domain.com";
+
+AlterRoleStatement:
+  offline: true
+  current: |
+    CREATE ROLE test_role NOLOGIN NOCREATEDB;
+  desired: |
+    ALTER ROLE test_role LOGIN CREATEDB;
+  managed_roles:
+    - test_role
+  up: |
+    ALTER ROLE "test_role" LOGIN CREATEDB;
+  down: |
+    ALTER ROLE "test_role" NOLOGIN NOCREATEDB;

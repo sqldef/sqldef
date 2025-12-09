@@ -58,6 +58,11 @@
             "type": "string"
           }
         },
+        "manage_privileges_only": {
+          "type": "boolean",
+          "description": "Skip CREATE/ALTER/DROP ROLE operations, manage only GRANT/REVOKE privileges. Useful when roles are managed externally.",
+          "default": false
+        },
         "enable_drop": {
           "type": "boolean",
           "description": "Whether to enable DROP/REVOKE operations. Defaults to true.",

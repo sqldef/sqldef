@@ -24,21 +24,22 @@ import (
 )
 
 type TestCase struct {
-	Current            string  // default: empty schema
-	Desired            string  // default: empty schema
-	Up                 *string // expected DDL for current → desired migration
-	Down               *string // expected DDL for desired → current migration
-	Output             *string `yaml:"output,omitempty"` // DEPRECATED: use 'up' and 'down' instead
-	Error              *string // default: nil
-	MinVersion         string  `yaml:"min_version"`
-	MaxVersion         string  `yaml:"max_version"`
-	User               string
-	Flavor             string   // database flavor (e.g., "mariadb", "mysql")
-	ManagedRoles       []string `yaml:"managed_roles"`        // Roles whose privileges are managed by sqldef (empty means no privileges are managed)
-	EnableDrop         *bool    `yaml:"enable_drop"`          // Whether to enable DROP/REVOKE operations
-	LegacyIgnoreQuotes *bool    `yaml:"legacy_ignore_quotes"` // nil or true = ignore quotes (legacy default), false = preserve quotes
-	Offline            bool     `yaml:"offline"`
-	Config             struct { // Optional config settings for the test
+	Current              string  // default: empty schema
+	Desired              string  // default: empty schema
+	Up                   *string // expected DDL for current → desired migration
+	Down                 *string // expected DDL for desired → current migration
+	Output               *string `yaml:"output,omitempty"` // DEPRECATED: use 'up' and 'down' instead
+	Error                *string // default: nil
+	MinVersion           string  `yaml:"min_version"`
+	MaxVersion           string  `yaml:"max_version"`
+	User                 string
+	Flavor               string   // database flavor (e.g., "mariadb", "mysql")
+	ManagedRoles         []string `yaml:"managed_roles"`          // Roles whose privileges are managed by sqldef (empty means no privileges are managed)
+	ManagePrivilegesOnly bool     `yaml:"manage_privileges_only"` // Skip CREATE/ALTER/DROP ROLE, manage only GRANT/REVOKE privileges
+	EnableDrop           *bool    `yaml:"enable_drop"`            // Whether to enable DROP/REVOKE operations
+	LegacyIgnoreQuotes   *bool    `yaml:"legacy_ignore_quotes"`   // nil or true = ignore quotes (legacy default), false = preserve quotes
+	Offline              bool     `yaml:"offline"`
+	Config               struct { // Optional config settings for the test
 		CreateIndexConcurrently bool `yaml:"create_index_concurrently"`
 		DisableDdlTransaction   bool `yaml:"disable_ddl_transaction"`
 	} `yaml:"config"`
@@ -189,6 +190,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 
 	config := database.GeneratorConfig{
 		ManagedRoles:            test.ManagedRoles,
+		ManagePrivilegesOnly:    test.ManagePrivilegesOnly,
 		EnableDrop:              *test.EnableDrop,
 		CreateIndexConcurrently: test.Config.CreateIndexConcurrently,
 		DisableDdlTransaction:   test.Config.DisableDdlTransaction,

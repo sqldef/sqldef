@@ -520,6 +520,7 @@ type DDL struct {
 	Extension     *Extension
 	Schema        *Schema
 	Grant         *Grant
+	Role          *Role
 }
 
 type DDLAction int
@@ -546,6 +547,9 @@ const (
 	DropIndex
 	DropExtension
 	DropPolicy
+	CreateRole
+	AlterRole
+	DropRole
 )
 
 // View types
@@ -1036,6 +1040,38 @@ type Grant struct {
 	Grantees        []string
 	WithGrantOption bool // Not supported - parser will error if WITH GRANT OPTION is used
 	CascadeOption   bool // Not supported - parser will error if CASCADE/RESTRICT is used
+}
+
+// Role represents a PostgreSQL role definition for CREATE ROLE, ALTER ROLE, DROP ROLE
+type Role struct {
+	Name        Ident
+	Options     []RoleOption
+	IfNotExists bool // for CREATE ROLE IF NOT EXISTS
+	IfExists    bool // for DROP ROLE IF EXISTS
+}
+
+// RoleOptionType identifies the type of role option
+type RoleOptionType int
+
+const (
+	RoleOptLogin RoleOptionType = iota
+	RoleOptSuperuser
+	RoleOptCreateDB
+	RoleOptCreateRole
+	RoleOptInherit
+	RoleOptReplication
+	RoleOptBypassRLS
+	RoleOptConnectionLimit
+	RoleOptPassword
+	RoleOptValidUntil
+)
+
+// RoleOption represents a single role option (e.g., LOGIN, SUPERUSER, CONNECTION LIMIT 10)
+type RoleOption struct {
+	Type        RoleOptionType
+	BoolValue   bool   // for boolean options (LOGIN/NOLOGIN, etc.)
+	StringValue string // for PASSWORD, VALID UNTIL, CONNECTION LIMIT (as string)
+	IsNull      bool   // for PASSWORD NULL
 }
 
 type Permissive string
