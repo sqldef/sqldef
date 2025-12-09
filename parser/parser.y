@@ -6737,8 +6737,8 @@ non_reserved_keyword:
 | CASCADE
 | OPTION
 
-// col_name_keyword: type keywords that can be used as column names in index definitions.
-// These are type keywords that PostgreSQL allows as identifiers in column contexts.
+// col_name_keyword: keywords that can be used as column names in index definitions.
+// PostgreSQL allows these as unquoted identifiers in certain contexts.
 // https://www.postgresql.org/docs/current/sql-keywords-appendix.html
 col_name_keyword:
   DATE
