@@ -31,8 +31,7 @@ services:
       - '5432:5432'
     restart: on-failure
   pgvector:
-    image: ankane/pgvector:v0.5.1
-    # image: pgvector/pgvector:${PGVECTOR_VERSION:-0.8.1-pg18-trixie}
+    image: pgvector/pgvector:${PGVECTOR_VERSION:-0.8.1-pg18-trixie}
     environment:
       POSTGRES_USER: 'postgres'
       POSTGRES_HOST_AUTH_METHOD: 'trust'
