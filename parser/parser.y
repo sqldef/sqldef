@@ -394,8 +394,8 @@ func setDDL(yylex any, ddl *DDL) {
 %type <setExpr> set_expression transaction_char isolation_level
 %type <str> ignore_opt default_opt
 %type <empty> if_not_exists_opt when_expression_opt for_each_row_opt
-%type <str> reserved_keyword non_reserved_keyword col_name_keyword
-%type <ident> sql_id reserved_sql_id, col_alias as_ci_opt
+%type <str> reserved_keyword non_reserved_keyword col_name_keyword type_func_name_keyword
+%type <ident> sql_id reserved_sql_id extension_name, col_alias as_ci_opt
 %type <boolVal> unique_opt
 %type <expr> charset_value
 %type <ident> table_id reserved_table_id as_opt_id
@@ -1388,18 +1388,11 @@ create_statement:
       },
     }
   }
-| CREATE EXTENSION if_not_exists_opt reserved_sql_id
+| CREATE EXTENSION if_not_exists_opt extension_name
   {
     $$ = &DDL{
       Action: CreateExtension,
       Extension: &Extension{Name: $4},
-    }
-  }
-| CREATE EXTENSION if_not_exists_opt STRING
-  {
-    $$ = &DDL{
-      Action: CreateExtension,
-      Extension: &Extension{Name: NewIdent($4, false)},
     }
   }
 
@@ -2433,34 +2426,19 @@ drop_statement:
     }
   }
 /* DROP EXTENSION statement */
-| DROP EXTENSION sql_id
+| DROP EXTENSION extension_name
   {
     $$ = &DDL{
       Action: DropExtension,
       Extension: &Extension{Name: $3},
     }
   }
-| DROP EXTENSION IF EXISTS sql_id
+| DROP EXTENSION IF EXISTS extension_name
   {
     $$ = &DDL{
       Action: DropExtension,
       IfExists: true,
       Extension: &Extension{Name: $5},
-    }
-  }
-| DROP EXTENSION STRING
-  {
-    $$ = &DDL{
-      Action: DropExtension,
-      Extension: &Extension{Name: NewIdent($3, false)},
-    }
-  }
-| DROP EXTENSION IF EXISTS STRING
-  {
-    $$ = &DDL{
-      Action: DropExtension,
-      IfExists: true,
-      Extension: &Extension{Name: NewIdent($5, false)},
     }
   }
 /* DROP POLICY statement */
@@ -6418,6 +6396,19 @@ reserved_table_id:
     $$ = NewIdent($1, false)
   }
 
+// extension_name: identifiers that can be used as PostgreSQL extension names.
+// This includes reserved_sql_id plus type-related keywords.
+extension_name:
+  reserved_sql_id
+| STRING
+  {
+    $$ = NewIdent($1, false)
+  }
+| type_func_name_keyword
+  {
+    $$ = NewIdent($1, false)
+  }
+
 deferrable_opt:
   /* empty */
   {
@@ -6729,7 +6720,6 @@ non_reserved_keyword:
 | STATUS
 | UNSAFE
 | VARIABLES
-| VECTOR
 | ZONE
 | LEVEL
 | PRIVILEGES
@@ -6747,3 +6737,58 @@ col_name_keyword:
 | TIME
 | TIMESTAMP
 | VALUE
+
+// type_func_name_keyword: keywords that are type or function names.
+// These can be used as identifiers in contexts like CREATE EXTENSION.
+// Following PostgreSQL's keyword classification pattern.
+type_func_name_keyword:
+  ARRAY
+| BIGINT
+| BIGSERIAL
+| BIT
+| BLOB
+| BOOL
+| BPCHAR
+| CHAR
+| CHARACTER
+| DATETIME
+| DATETIME2
+| DATETIMEOFFSET
+| DATERANGE
+| DECIMAL
+| DOUBLE
+| ENUM
+| FLOAT_TYPE
+| GETDATE
+| INT
+| INT4RANGE
+| INT8RANGE
+| INTEGER
+| JSON
+| JSONB
+| LONGBLOB
+| MEDIUMBLOB
+| MEDIUMINT
+| MONEY
+| NCHAR
+| NOW
+| NTEXT
+| NUMERIC
+| NUMRANGE
+| NVARCHAR
+| REAL
+| SERIAL
+| SMALLDATETIME
+| SMALLINT
+| SMALLMONEY
+| SMALLSERIAL
+| TINYBLOB
+| TINYINT
+| TSRANGE
+| TSTZRANGE
+| UUID
+| VARBINARY
+| VARCHAR
+| VARYING
+| VECTOR
+| YEAR
