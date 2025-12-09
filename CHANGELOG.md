@@ -1,3 +1,6 @@
+## [v3.7.10](https://github.com/sqldef/sqldef/compare/v3.7.9...v3.7.10) - 2025-12-09
+- fix psqldef syntax error issues by @gfx in https://github.com/sqldef/sqldef/pull/1000
+
 ## [v3.7.9](https://github.com/sqldef/sqldef/compare/v3.7.8...v3.7.9) - 2025-12-08
 - fix behavior of `--enable-drop` / `enable_drop: true` by @gfx in https://github.com/sqldef/sqldef/pull/997
 - doc: clarify sentences by @gfx in https://github.com/sqldef/sqldef/pull/999
