@@ -819,11 +819,48 @@ func (tkn *Tokenizer) Scan() (int, string) {
 			case '<':
 				tkn.next()
 				return SHIFT_LEFT, ""
+			case '-':
+				// pgvector L2 distance operator: <->
+				tkn.next()
+				if tkn.lastChar == '>' {
+					tkn.next()
+					return VECTOR_L2_DISTANCE_OP, ""
+				}
+				// Not a valid operator, return '<' and let '-' be handled next
+				tkn.bufPos-- // put back '-'
+				tkn.lastChar = '-'
+				return int(ch), ""
+			case '#':
+				// pgvector inner product operator: <#>
+				tkn.next()
+				if tkn.lastChar == '>' {
+					tkn.next()
+					return VECTOR_INNER_PRODUCT_OP, ""
+				}
+				// Not a valid operator, return '<' and let '#' be handled next
+				tkn.bufPos-- // put back '#'
+				tkn.lastChar = '#'
+				return int(ch), ""
+			case '+':
+				// pgvector L1 distance operator: <+>
+				tkn.next()
+				if tkn.lastChar == '>' {
+					tkn.next()
+					return VECTOR_L1_DISTANCE_OP, ""
+				}
+				// Not a valid operator, return '<' and let '+' be handled next
+				tkn.bufPos-- // put back '+'
+				tkn.lastChar = '+'
+				return int(ch), ""
 			case '=':
 				tkn.next()
 				switch tkn.lastChar {
 				case '>':
 					tkn.next()
+					if tkn.mode == ParserModePostgres {
+						// pgvector cosine distance operator: <=>
+						return VECTOR_COSINE_DISTANCE_OP, ""
+					}
 					return NULL_SAFE_EQUAL, ""
 				default:
 					return LE, ""

@@ -2020,6 +2020,12 @@ const (
 	ModStr        = "%"
 	ShiftLeftStr  = "<<"
 	ShiftRightStr = ">>"
+
+	// pgvector operators
+	L2DistanceStr     = "<->" // Euclidean distance
+	CosineDistanceStr = "<=>" // Cosine distance
+	InnerProductStr   = "<#>" // Negative inner product
+	L1DistanceStr     = "<+>" // Manhattan/L1 distance
 )
 
 // Format formats the node.
