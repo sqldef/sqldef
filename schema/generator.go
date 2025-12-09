@@ -404,6 +404,11 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue // Foreign key is expected to exist.
 			}
 
+			// Skip if referenced table is being dropped - already handled in generateDropTableDDLsWithDependencies
+			if g.findTableByName(g.desiredTables, foreignKey.referenceTableName) == nil {
+				continue
+			}
+
 			// The foreign key seems obsoleted. Check and drop it as needed.
 			foreignKeyDDLs := g.generateDDLsForAbsentForeignKey(foreignKey, *currentTable, *desiredTable)
 			ddls = append(ddls, foreignKeyDDLs...)
@@ -4953,8 +4958,16 @@ func containsRegexpString(strs []string, str string) bool {
 
 // generateDropTableDDLsWithDependencies generates DROP TABLE statements in the correct order
 // considering foreign key dependencies. Tables that reference other tables are dropped first.
+// It also generates DROP CONSTRAINT statements for foreign keys from tables that will NOT be
+// dropped but reference tables that WILL be dropped.
 func (g *Generator) generateDropTableDDLsWithDependencies(tablesToDrop []*Table) []string {
 	var sortedTablesToDrop []*Table
+
+	// Build a set of tables to be dropped for quick lookup
+	tablesToDropSet := make(map[string]bool)
+	for _, table := range tablesToDrop {
+		tablesToDropSet[table.name.RawString()] = true
+	}
 
 	if len(tablesToDrop) <= 1 {
 		// If there are no or only one table to drop, no sorting needed.
@@ -5003,6 +5016,38 @@ func (g *Generator) generateDropTableDDLsWithDependencies(tablesToDrop []*Table)
 	}
 
 	var ddls []string
+
+	// Drop foreign key constraints from tables that will NOT be dropped
+	// but reference tables that WILL be dropped
+	for _, currentTable := range g.currentTables {
+		// Skip tables that will be dropped (their FKs will be dropped with the table)
+		if tablesToDropSet[currentTable.name.RawString()] {
+			continue
+		}
+
+		for _, fk := range currentTable.foreignKeys {
+			// Skip foreign keys without constraint names
+			if fk.constraintName.IsEmpty() {
+				continue
+			}
+
+			// Skip self-referential FKs
+			if g.qualifiedNamesEqual(currentTable.name, fk.referenceTableName) {
+				continue
+			}
+
+			refTableName := fk.referenceTableName.RawString()
+			// If the referenced table is being dropped, we need to drop this FK first
+			if tablesToDropSet[refTableName] {
+				ddls = append(ddls, fmt.Sprintf(
+					"ALTER TABLE %s DROP CONSTRAINT %s",
+					g.escapeTableName(currentTable),
+					g.escapeSQLIdent(fk.constraintName),
+				))
+			}
+		}
+	}
+
 	for _, table := range sortedTablesToDrop {
 		ddls = append(ddls, fmt.Sprintf("DROP TABLE %s", g.escapeTableName(table)))
 	}
