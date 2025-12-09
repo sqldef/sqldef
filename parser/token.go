@@ -819,53 +819,26 @@ func (tkn *Tokenizer) Scan() (int, string) {
 			case '<':
 				tkn.next()
 				return SHIFT_LEFT, ""
-			case '-':
-				// pgvector L2 distance operator: <->
-				tkn.next()
-				if tkn.lastChar == '>' {
-					tkn.next()
-					return VECTOR_L2_DISTANCE_OP, ""
-				}
-				// Not a valid operator, return '<' and let '-' be handled next
-				tkn.bufPos-- // put back '-'
-				tkn.lastChar = '-'
-				return int(ch), ""
-			case '#':
-				// pgvector inner product operator: <#>
-				tkn.next()
-				if tkn.lastChar == '>' {
-					tkn.next()
-					return VECTOR_INNER_PRODUCT_OP, ""
-				}
-				// Not a valid operator, return '<' and let '#' be handled next
-				tkn.bufPos-- // put back '#'
-				tkn.lastChar = '#'
-				return int(ch), ""
-			case '+':
-				// pgvector L1 distance operator: <+>
-				tkn.next()
-				if tkn.lastChar == '>' {
-					tkn.next()
-					return VECTOR_L1_DISTANCE_OP, ""
-				}
-				// Not a valid operator, return '<' and let '+' be handled next
-				tkn.bufPos-- // put back '+'
-				tkn.lastChar = '+'
-				return int(ch), ""
 			case '=':
 				tkn.next()
 				switch tkn.lastChar {
 				case '>':
 					tkn.next()
 					if tkn.mode == ParserModePostgres {
-						// pgvector cosine distance operator: <=>
-						return VECTOR_COSINE_DISTANCE_OP, ""
+						// PostgreSQL user-defined operator starting with '<='
+						// e.g., pgvector cosine distance: <=>
+						return LT_CUSTOM_OP, "<=>"
 					}
 					return NULL_SAFE_EQUAL, ""
 				default:
 					return LE, ""
 				}
 			default:
+				if tkn.mode == ParserModePostgres && isOperatorChar(tkn.lastChar) {
+					// PostgreSQL user-defined operator starting with '<'
+					// e.g., pgvector: <->, <#>, <+>
+					return tkn.scanLtCustomOp()
+				}
 				return int(ch), ""
 			}
 		case '>':
@@ -1388,4 +1361,70 @@ func digitVal(ch rune) int {
 		return int(ch) - 'A' + 10
 	}
 	return 16 // larger than any legal digit val
+}
+
+// isOperatorChar returns true if ch is a valid PostgreSQL operator character.
+// PostgreSQL allows: + - * / < > = ~ ! @ # % ^ & | ` ?
+func isOperatorChar(ch rune) bool {
+	switch ch {
+	case '+', '-', '*', '/', '<', '>', '=', '~', '!', '@', '#', '%', '^', '&', '|', '`', '?':
+		return true
+	}
+	return false
+}
+
+// isSpecialOperatorChar returns true if ch is a "special" operator character.
+// Multi-char operators ending in + or - must contain at least one of these.
+func isSpecialOperatorChar(ch rune) bool {
+	switch ch {
+	case '~', '!', '@', '#', '%', '^', '&', '|', '`', '?':
+		return true
+	}
+	return false
+}
+
+// scanLtCustomOp scans a PostgreSQL user-defined operator starting with '<'.
+// Called after '<' has been consumed and we've confirmed the next char is a valid operator char.
+//
+// PostgreSQL operator rules:
+// - Cannot contain -- or /* (comment sequences)
+// - Multi-char operators ending in + or - must contain at least one of: ~ ! @ # % ^ & | ` ?
+func (tkn *Tokenizer) scanLtCustomOp() (int, string) {
+	var buffer strings.Builder
+	buffer.WriteByte('<')
+
+	hasSpecialChar := false
+	prevChar := '<'
+
+	// Consume operator characters
+	for isOperatorChar(tkn.lastChar) {
+		ch := tkn.lastChar
+
+		// Check for prohibited comment sequences: -- and /*
+		if (prevChar == '-' && ch == '-') || (prevChar == '/' && ch == '*') {
+			// Put back this character and return what we have so far (minus the prev char)
+			// This is tricky - for now, return a lex error for invalid operators
+			return LEX_ERROR, buffer.String()
+		}
+
+		if isSpecialOperatorChar(ch) {
+			hasSpecialChar = true
+		}
+
+		buffer.WriteRune(ch)
+		prevChar = ch
+		tkn.next()
+	}
+
+	op := buffer.String()
+
+	// Multi-char operators ending in + or - must contain a special char
+	if len(op) > 1 {
+		lastChar := op[len(op)-1]
+		if (lastChar == '+' || lastChar == '-') && !hasSpecialChar {
+			return LEX_ERROR, op
+		}
+	}
+
+	return LT_CUSTOM_OP, op
 }

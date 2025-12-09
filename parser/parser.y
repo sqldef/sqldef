@@ -185,7 +185,7 @@ func setDDL(yylex any, ddl *DDL) {
 %left <str> '&'
 %left <str> SHIFT_LEFT SHIFT_RIGHT
 %left <str> '+' '-'
-%left <str> VECTOR_L2_DISTANCE_OP VECTOR_COSINE_DISTANCE_OP VECTOR_INNER_PRODUCT_OP VECTOR_L1_DISTANCE_OP
+%left <str> LT_CUSTOM_OP
 %left <str> '*' '/' DIV '%' MOD
 %left <str> '^'
 %right <str> '~' UNARY
@@ -5293,21 +5293,11 @@ value_expression:
   {
     $$ = &BinaryExpr{Left: $1, Operator: ShiftRightStr, Right: $3}
   }
-| value_expression VECTOR_L2_DISTANCE_OP value_expression
+| value_expression LT_CUSTOM_OP value_expression
   {
-    $$ = &BinaryExpr{Left: $1, Operator: L2DistanceStr, Right: $3}
-  }
-| value_expression VECTOR_COSINE_DISTANCE_OP value_expression
-  {
-    $$ = &BinaryExpr{Left: $1, Operator: CosineDistanceStr, Right: $3}
-  }
-| value_expression VECTOR_INNER_PRODUCT_OP value_expression
-  {
-    $$ = &BinaryExpr{Left: $1, Operator: InnerProductStr, Right: $3}
-  }
-| value_expression VECTOR_L1_DISTANCE_OP value_expression
-  {
-    $$ = &BinaryExpr{Left: $1, Operator: L1DistanceStr, Right: $3}
+    // PostgreSQL user-defined operators starting with '<' and ending with '>'
+    // e.g., pgvector: <-> (L2), <=> (cosine), <#> (inner product), <+> (L1)
+    $$ = &BinaryExpr{Left: $1, Operator: $2, Right: $3}
   }
 | column_name JSON_EXTRACT_OP value
   {
