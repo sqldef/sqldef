@@ -280,3 +280,103 @@ ChangeVectorDimension:
   down: |
     ALTER TABLE public.items ALTER COLUMN embedding TYPE vector(3);
   flavor: pgvector
+
+CreateViewWithL2Distance:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+    CREATE VIEW items_by_distance AS
+      SELECT id, embedding <-> '[1,2,3]'::vector AS distance
+      FROM items;
+  up: |
+    CREATE VIEW items_by_distance AS
+      SELECT id, embedding <-> '[1,2,3]'::vector AS distance
+      FROM items;
+  down: |
+    DROP VIEW public.items_by_distance;
+  flavor: pgvector
+
+CreateViewWithCosineDistance:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+    CREATE VIEW items_by_cosine AS
+      SELECT id, embedding <=> '[1,2,3]'::vector AS distance
+      FROM items;
+  up: |
+    CREATE VIEW items_by_cosine AS
+      SELECT id, embedding <=> '[1,2,3]'::vector AS distance
+      FROM items;
+  down: |
+    DROP VIEW public.items_by_cosine;
+  flavor: pgvector
+
+CreateViewWithInnerProduct:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+    CREATE VIEW items_by_inner_product AS
+      SELECT id, embedding <#> '[1,2,3]'::vector AS negative_inner_product
+      FROM items;
+  up: |
+    CREATE VIEW items_by_inner_product AS
+      SELECT id, embedding <#> '[1,2,3]'::vector AS negative_inner_product
+      FROM items;
+  down: |
+    DROP VIEW public.items_by_inner_product;
+  flavor: pgvector
+
+CreateViewWithL1Distance:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+    CREATE VIEW items_by_l1 AS
+      SELECT id, embedding <+> '[1,2,3]'::vector AS l1_distance
+      FROM items;
+  up: |
+    CREATE VIEW items_by_l1 AS
+      SELECT id, embedding <+> '[1,2,3]'::vector AS l1_distance
+      FROM items;
+  down: |
+    DROP VIEW public.items_by_l1;
+  flavor: pgvector

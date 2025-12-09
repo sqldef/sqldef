@@ -74,7 +74,7 @@ jobs:
 
           # pgvector https://github.com/pgvector/pgvector
           - target: psqldef
-            postgres_flavor: pgvector
+            pg_flavor: pgvector
             pgvector_version: '0.8.1-pg18-trixie'
             service: pgvector
       fail-fast: false
@@ -100,8 +100,10 @@ jobs:
         if: matrix.mysql_flavor
       - run: echo "MYSQL_PORT=3307" >> $GITHUB_ENV
         if: matrix.mysql_flavor == 'mariadb'
-      - run: echo "POSTGRES_FLAVOR=${{ matrix.postgres_flavor }}" >> $GITHUB_ENV
-        if: matrix.postgres_flavor
+      - run: echo "PG_FLAVOR=${{ matrix.pg_flavor }}" >> $GITHUB_ENV
+        if: matrix.pg_flavor
+      - run: echo "PGPORT=55432" >> $GITHUB_ENV
+        if: matrix.pg_flavor == 'pgvector'
       - run: echo "PSQLDEF_PARSER=generic" >> $GITHUB_ENV
         if: matrix.target == 'psqldef'
       - run: make test-${{ matrix.target }}
