@@ -1,3 +1,6 @@
+## [v3.8.0](https://github.com/sqldef/sqldef/compare/v3.7.11...v3.8.0) - 2025-12-09
+- pseldef: support  features around pgvector by @gfx in https://github.com/sqldef/sqldef/pull/1004
+
 ## [v3.7.11](https://github.com/sqldef/sqldef/compare/v3.7.10...v3.7.11) - 2025-12-09
 - fix: drop foreign key constraints before dropping referenced table by @178inaba in https://github.com/sqldef/sqldef/pull/1001
 
