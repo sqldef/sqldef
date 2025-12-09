@@ -394,7 +394,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <setExpr> set_expression transaction_char isolation_level
 %type <str> ignore_opt default_opt
 %type <empty> if_not_exists_opt when_expression_opt for_each_row_opt
-%type <str> reserved_keyword non_reserved_keyword
+%type <str> reserved_keyword non_reserved_keyword col_name_keyword
 %type <ident> sql_id reserved_sql_id, col_alias as_ci_opt
 %type <boolVal> unique_opt
 %type <expr> charset_value
@@ -4070,16 +4070,19 @@ index_column:
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3}
   }
-/* For PostgreSQL */
-| KEY length_opt
+| col_name_keyword length_opt asc_desc_opt
   {
-    $$ = IndexColumn{Column: NewIdent($1, false), Length: $2}
+    $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3}
   }
 | sql_id operator_class
   {
     $$ = IndexColumn{Column: $1, OperatorClass: $2}
   }
 | non_reserved_keyword operator_class
+  {
+    $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2}
+  }
+| col_name_keyword operator_class
   {
     $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2}
   }
@@ -6733,3 +6736,13 @@ non_reserved_keyword:
 | RESTRICT
 | CASCADE
 | OPTION
+
+// col_name_keyword: type keywords that can be used as column names in index definitions.
+// These are type keywords that PostgreSQL allows as identifiers in column contexts.
+// https://www.postgresql.org/docs/current/sql-keywords-appendix.html
+col_name_keyword:
+  DATE
+| KEY
+| TIME
+| TIMESTAMP
+| VALUE

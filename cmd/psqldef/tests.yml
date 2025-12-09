@@ -3771,3 +3771,12 @@ CreateIndexWithStorageParameterAndWhere:
       status text
     );
     CREATE INDEX idx_status ON test_table USING btree (status) WITH (fillfactor='70') WHERE status = 'active';
+
+# Test for CREATE INDEX with reserved keyword column name (date)
+CreateIndexWithDateColumn:
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      "date" date
+    );
+    CREATE INDEX idx_date ON test_table USING btree (date);
