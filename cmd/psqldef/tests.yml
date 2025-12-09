@@ -3761,3 +3761,13 @@ CreateIndexGenericStorageParameter:
       data text
     );
     CREATE INDEX idx_data ON test_table USING btree (data) WITH (deduplicate_items='on');
+
+# Test for CREATE INDEX with WITH and WHERE clauses together
+# PostgreSQL syntax requires WITH before WHERE
+CreateIndexWithStorageParameterAndWhere:
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      status text
+    );
+    CREATE INDEX idx_status ON test_table USING btree (status) WITH (fillfactor='70') WHERE status = 'active';

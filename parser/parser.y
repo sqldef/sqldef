@@ -674,7 +674,7 @@ create_statement:
     }
   }
 /* For PostgreSQL */
-| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' include_columns_opt index_option_opt where_expression_opt
   {
     indexSpec := &IndexSpec{
       Name: $5,
@@ -682,11 +682,11 @@ create_statement:
       Unique: bool($2[0]),
       Async: $4 == byte(2),
       Concurrently: $4 == byte(1),
-      Where: NewWhere(WhereStr, $14),
+      Where: NewWhere(WhereStr, $15),
       Included: $13,
     }
-    if $15 != nil && len($15) > 0 {
-      indexSpec.Options = $15
+    if $14 != nil && len($14) > 0 {
+      indexSpec.Options = $14
     }
     $$ = &DDL{
       Action: CreateIndex,
