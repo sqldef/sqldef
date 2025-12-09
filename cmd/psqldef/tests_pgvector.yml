@@ -1,0 +1,282 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+
+# pgvector Extension Tests
+# These tests require the pgvector extension to be available in PostgreSQL
+
+CreateVectorExtension:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE EXTENSION vector;
+  up: |
+    CREATE EXTENSION vector;
+  down: |
+    DROP EXTENSION "vector";
+  flavor: pgvector
+
+CreateTableWithVectorColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+  up: |
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+  down: |
+    DROP TABLE public.items;
+  flavor: pgvector
+
+CreateTableWithVectorColumnHighDimension:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE embeddings (
+      id bigserial PRIMARY KEY,
+      content text,
+      embedding vector(1536)
+    );
+  up: |
+    CREATE TABLE embeddings (
+      id bigserial PRIMARY KEY,
+      content text,
+      embedding vector(1536)
+    );
+  down: |
+    DROP TABLE public.embeddings;
+  flavor: pgvector
+
+AddVectorColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      name text
+    );
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      name text,
+      embedding vector(384)
+    );
+  up: |
+    ALTER TABLE public.items ADD COLUMN embedding vector(384);
+  down: |
+    ALTER TABLE public.items DROP COLUMN embedding;
+  flavor: pgvector
+
+DropVectorColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      name text,
+      embedding vector(384)
+    );
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      name text
+    );
+  up: |
+    ALTER TABLE public.items DROP COLUMN embedding;
+  down: |
+    ALTER TABLE public.items ADD COLUMN embedding vector(384);
+  flavor: pgvector
+
+CreateIvfflatIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+    CREATE INDEX idx_items_embedding ON items USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
+  up: |
+    CREATE INDEX idx_items_embedding ON public.items USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
+  down: |
+    DROP INDEX public.idx_items_embedding;
+  flavor: pgvector
+
+CreateHnswIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+    CREATE INDEX idx_items_hnsw ON items USING hnsw (embedding vector_l2_ops);
+  up: |
+    CREATE INDEX idx_items_hnsw ON public.items USING hnsw (embedding vector_l2_ops);
+  down: |
+    DROP INDEX public.idx_items_hnsw;
+  flavor: pgvector
+
+CreateHnswIndexWithOptions:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+    CREATE INDEX idx_items_hnsw ON items USING hnsw (embedding vector_l2_ops) WITH (m = 16, ef_construction = 64);
+  up: |
+    CREATE INDEX idx_items_hnsw ON public.items USING hnsw (embedding vector_l2_ops) WITH (m = 16, ef_construction = 64);
+  down: |
+    DROP INDEX public.idx_items_hnsw;
+  flavor: pgvector
+
+CreateHnswIndexCosine:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+    CREATE INDEX idx_items_cosine ON items USING hnsw (embedding vector_cosine_ops);
+  up: |
+    CREATE INDEX idx_items_cosine ON public.items USING hnsw (embedding vector_cosine_ops);
+  down: |
+    DROP INDEX public.idx_items_cosine;
+  flavor: pgvector
+
+CreateHnswIndexInnerProduct:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+    CREATE INDEX idx_items_ip ON items USING hnsw (embedding vector_ip_ops);
+  up: |
+    CREATE INDEX idx_items_ip ON public.items USING hnsw (embedding vector_ip_ops);
+  down: |
+    DROP INDEX public.idx_items_ip;
+  flavor: pgvector
+
+DropVectorIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+    CREATE INDEX idx_items_embedding ON items USING hnsw (embedding vector_l2_ops);
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+  up: |
+    DROP INDEX public.idx_items_embedding;
+  down: |
+    CREATE INDEX idx_items_embedding ON public.items USING hnsw (embedding vector_l2_ops);
+  flavor: pgvector
+
+MultipleVectorColumns:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE documents (
+      id bigserial PRIMARY KEY,
+      title_embedding vector(384),
+      content_embedding vector(1536)
+    );
+  up: |
+    CREATE TABLE documents (
+      id bigserial PRIMARY KEY,
+      title_embedding vector(384),
+      content_embedding vector(1536)
+    );
+  down: |
+    DROP TABLE public.documents;
+  flavor: pgvector
+
+VectorColumnNotNull:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3) NOT NULL
+    );
+  up: |
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3) NOT NULL
+    );
+  down: |
+    DROP TABLE public.items;
+  flavor: pgvector
+
+ChangeVectorDimension:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(3)
+    );
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      embedding vector(384)
+    );
+  up: |
+    ALTER TABLE public.items ALTER COLUMN embedding TYPE vector(384);
+  down: |
+    ALTER TABLE public.items ALTER COLUMN embedding TYPE vector(3);
+  flavor: pgvector

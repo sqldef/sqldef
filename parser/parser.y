@@ -6729,6 +6729,7 @@ non_reserved_keyword:
 | STATUS
 | UNSAFE
 | VARIABLES
+| VECTOR
 | ZONE
 | LEVEL
 | PRIVILEGES

@@ -25,6 +25,8 @@ const (
 	nothingModified  = "-- Nothing is modified --\n"
 	defaultUser      = "postgres"
 	testDatabaseName = "psqldef_test"
+	defaultPort      = 5432
+	pgvectorPort     = 55432
 )
 
 type dbConfig struct {
@@ -41,6 +43,20 @@ var defaultDbConfig = dbConfig{
 // to prevent "tuple concurrently updated" errors when running tests in parallel.
 var roleConfigMutex sync.Mutex
 
+// getPostgresPort returns the port to use for connecting to PostgreSQL.
+// pgvector flavor uses port 55432, standard PostgreSQL uses 5432.
+func getPostgresPort() int {
+	if os.Getenv("POSTGRES_FLAVOR") == "pgvector" {
+		return pgvectorPort
+	}
+	return defaultPort
+}
+
+// getPostgresFlavor returns the current PostgreSQL flavor from environment.
+func getPostgresFlavor() string {
+	return os.Getenv("POSTGRES_FLAVOR")
+}
+
 func connectDatabase(config dbConfig) (database.Database, error) {
 	var user string
 	if config.User != "" {
@@ -52,7 +68,7 @@ func connectDatabase(config dbConfig) (database.Database, error) {
 	return postgres.NewDatabase(database.Config{
 		User:    user,
 		Host:    "127.0.0.1",
-		Port:    5432,
+		Port:    getPostgresPort(),
 		DbName:  config.DbName,
 		SslMode: "disable",
 	})
@@ -192,6 +208,7 @@ func TestApply(t *testing.T) {
 
 	version := mustGetServerVersion()
 	sqlParser := postgres.NewParser()
+	pgFlavor := getPostgresFlavor()
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -212,7 +229,7 @@ func TestApply(t *testing.T) {
 			}
 			defer db.Close()
 
-			tu.RunTest(t, db, test, schema.GeneratorModePostgres, sqlParser, version, "")
+			tu.RunTest(t, db, test, schema.GeneratorModePostgres, sqlParser, version, pgFlavor)
 		})
 	}
 }

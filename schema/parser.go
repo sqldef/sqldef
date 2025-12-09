@@ -456,9 +456,10 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			indexColumns = append(
 				indexColumns,
 				IndexColumn{
-					columnExpr: columnExpr,
-					length:     length,
-					direction:  column.Direction,
+					columnExpr:    columnExpr,
+					length:        length,
+					direction:     column.Direction,
+					operatorClass: column.OperatorClass,
 				},
 			)
 
@@ -631,9 +632,10 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		indexColumns = append(
 			indexColumns,
 			IndexColumn{
-				columnExpr: columnExpr,
-				length:     length,
-				direction:  column.Direction,
+				columnExpr:    columnExpr,
+				length:        length,
+				direction:     column.Direction,
+				operatorClass: column.OperatorClass,
 			},
 		)
 	}
@@ -698,7 +700,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 
 	return Index{
 		name:              nameIdent,
-		indexType:         "", // not supported in parser yet
+		indexType:         stmt.IndexSpec.Type.Name,
 		columns:           indexColumns,
 		primary:           false, // not supported in parser yet
 		unique:            stmt.IndexSpec.Unique,
