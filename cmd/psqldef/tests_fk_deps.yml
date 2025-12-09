@@ -387,3 +387,88 @@ ForeignKeyWithPrimaryKeyChangeAndDrop:
     );
     ALTER TABLE "public"."users" DROP COLUMN "name";
     ALTER TABLE "public"."users" DROP COLUMN "user_id";
+
+# Test case: Drop referenced table when another table has a foreign key referencing it
+# When dropping a table that is referenced by a foreign key from a table that will NOT be dropped,
+# we need to drop the foreign key constraint first before dropping the table.
+DropReferencedTableWithRemainingForeignKey:
+  current: |
+    CREATE TABLE departments (
+      dept_id int PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE TABLE employees (
+      emp_id int PRIMARY KEY,
+      dept_id int,
+      CONSTRAINT emp_dept_fk FOREIGN KEY (dept_id) REFERENCES departments(dept_id)
+    );
+  desired: |
+    CREATE TABLE employees (
+      emp_id int PRIMARY KEY,
+      dept_id int
+    );
+  up: |
+    ALTER TABLE "public"."employees" DROP CONSTRAINT "emp_dept_fk";
+    DROP TABLE "public"."departments";
+  down: |
+    CREATE TABLE departments (
+      dept_id int PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    ALTER TABLE "public"."employees" ADD CONSTRAINT "emp_dept_fk" FOREIGN KEY ("dept_id") REFERENCES "public"."departments" ("dept_id");
+
+# Test case: Drop referenced table when multiple tables have foreign keys referencing it
+DropReferencedTableWithMultipleForeignKeys:
+  current: |
+    CREATE TABLE users (
+      user_id int PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE TABLE sales (
+      sales_id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT sales_user_fk FOREIGN KEY (user_id) REFERENCES users(user_id)
+    );
+    CREATE TABLE items (
+      item_id int PRIMARY KEY,
+      user_id int,
+      CONSTRAINT items_user_fk FOREIGN KEY (user_id) REFERENCES users(user_id)
+    );
+  desired: |
+    CREATE TABLE sales (
+      sales_id int PRIMARY KEY,
+      user_id int
+    );
+    CREATE TABLE items (
+      item_id int PRIMARY KEY,
+      user_id int
+    );
+  up: |
+    ALTER TABLE "public"."items" DROP CONSTRAINT "items_user_fk";
+    ALTER TABLE "public"."sales" DROP CONSTRAINT "sales_user_fk";
+    DROP TABLE "public"."users";
+  down: |
+    CREATE TABLE users (
+      user_id int PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    ALTER TABLE "public"."sales" ADD CONSTRAINT "sales_user_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("user_id");
+    ALTER TABLE "public"."items" ADD CONSTRAINT "items_user_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("user_id");
+
+# Test case: Self-referencing foreign key - table can be dropped without extra DROP CONSTRAINT
+DropTableWithSelfReferencingForeignKey:
+  current: |
+    CREATE TABLE departments (
+      dept_id int PRIMARY KEY,
+      parent_dept_id int,
+      CONSTRAINT dept_parent_fk FOREIGN KEY (parent_dept_id) REFERENCES departments(dept_id)
+    );
+  desired: ""
+  up: |
+    DROP TABLE "public"."departments";
+  down: |
+    CREATE TABLE departments (
+      dept_id int PRIMARY KEY,
+      parent_dept_id int,
+      CONSTRAINT dept_parent_fk FOREIGN KEY (parent_dept_id) REFERENCES departments(dept_id)
+    );
