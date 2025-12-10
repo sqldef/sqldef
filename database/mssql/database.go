@@ -569,7 +569,19 @@ func (d *MssqlDatabase) getIndexDefs(table string) []*indexDef {
 	}
 }
 
+// foreignKeyInfo holds the aggregated information for a composite foreign key
+type foreignKeyInfo struct {
+	constraintName    string
+	columns           []string
+	foreignTableName  string
+	foreignColumns    []string
+	foreignUpdateRule string
+	foreignDeleteRule string
+	notForReplication bool
+}
+
 func (d *MssqlDatabase) updateForeignDefs() error {
+	// Order by constraint_column_id to get columns in the correct order for composite keys
 	query := `SELECT
 	SCHEMA_NAME(obj.schema_id),
     obj.name as table_name,
@@ -579,11 +591,13 @@ func (d *MssqlDatabase) updateForeignDefs() error {
     COL_NAME(f.referenced_object_id, fc.referenced_column_id) as ref_column_name,
     f.update_referential_action_desc,
 	f.delete_referential_action_desc,
-	f.is_not_for_replication
+	f.is_not_for_replication,
+	fc.constraint_column_id
 FROM sys.objects obj
 INNER JOIN sys.foreign_keys f ON f.parent_object_id = obj.object_id
 INNER JOIN sys.foreign_key_columns fc ON f.object_id = fc.constraint_object_id
-WHERE obj.type = 'U'`
+WHERE obj.type = 'U'
+ORDER BY SCHEMA_NAME(obj.schema_id), obj.name, f.name, fc.constraint_column_id`
 
 	rows, err := d.db.Query(query)
 	if err != nil {
@@ -591,25 +605,66 @@ WHERE obj.type = 'U'`
 	}
 	defer rows.Close()
 
-	defs := make(map[string][]string)
+	// First pass: aggregate columns by constraint name
+	// Key: schema.table:constraint_name
+	fkInfos := make(map[string]*foreignKeyInfo)
+	tableConstraints := make(map[string][]string) // schema.table -> list of constraint names (in order)
 
 	for rows.Next() {
 		var schemaName, tableName, constraintName, columnName, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule string
 		var notForReplication bool
+		var columnId int
 
-		err = rows.Scan(&schemaName, &tableName, &constraintName, &columnName, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule, &notForReplication)
+		err = rows.Scan(&schemaName, &tableName, &constraintName, &columnName, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule, &notForReplication, &columnId)
 		if err != nil {
 			return err
 		}
-		foreignUpdateRule = strings.Replace(foreignUpdateRule, "_", " ", -1)
-		foreignDeleteRule = strings.Replace(foreignDeleteRule, "_", " ", -1)
 
-		def := fmt.Sprintf("CONSTRAINT [%s] FOREIGN KEY ([%s]) REFERENCES [%s] ([%s]) ON UPDATE %s ON DELETE %s", constraintName, columnName, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule)
-		if notForReplication {
-			def += " NOT FOR REPLICATION"
+		tableKey := schemaName + "." + tableName
+		fkKey := tableKey + ":" + constraintName
+
+		if fk, exists := fkInfos[fkKey]; exists {
+			// Add column to existing FK
+			fk.columns = append(fk.columns, columnName)
+			fk.foreignColumns = append(fk.foreignColumns, foreignColumnName)
+		} else {
+			// New FK
+			foreignUpdateRule = strings.Replace(foreignUpdateRule, "_", " ", -1)
+			foreignDeleteRule = strings.Replace(foreignDeleteRule, "_", " ", -1)
+
+			fkInfos[fkKey] = &foreignKeyInfo{
+				constraintName:    constraintName,
+				columns:           []string{columnName},
+				foreignTableName:  foreignTableName,
+				foreignColumns:    []string{foreignColumnName},
+				foreignUpdateRule: foreignUpdateRule,
+				foreignDeleteRule: foreignDeleteRule,
+				notForReplication: notForReplication,
+			}
+			tableConstraints[tableKey] = append(tableConstraints[tableKey], constraintName)
 		}
+	}
 
-		defs[schemaName+"."+tableName] = append(defs[schemaName+"."+tableName], def)
+	// Second pass: generate FK definitions
+	defs := make(map[string][]string)
+	for tableKey, constraintNames := range tableConstraints {
+		for _, constraintName := range constraintNames {
+			fkKey := tableKey + ":" + constraintName
+			fk := fkInfos[fkKey]
+
+			// Build column list: [col1],[col2],...
+			columns := "[" + strings.Join(fk.columns, "],[") + "]"
+			foreignColumns := "[" + strings.Join(fk.foreignColumns, "],[") + "]"
+
+			def := fmt.Sprintf("CONSTRAINT [%s] FOREIGN KEY (%s) REFERENCES [%s] (%s) ON UPDATE %s ON DELETE %s",
+				fk.constraintName, columns, fk.foreignTableName, foreignColumns,
+				fk.foreignUpdateRule, fk.foreignDeleteRule)
+			if fk.notForReplication {
+				def += " NOT FOR REPLICATION"
+			}
+
+			defs[tableKey] = append(defs[tableKey], def)
+		}
 	}
 
 	d.info.foreignDefs = defs

@@ -3830,8 +3830,10 @@ func (g *Generator) findForeignKeyByColumns(foreignKeys []ForeignKey, desired Fo
 	return nil
 }
 
-// findMatchingDesiredForeignKey finds a desired foreign key that matches the current FK by columns.
-// This is used to check if a current FK (with an auto-generated name) matches an unnamed desired FK.
+// findMatchingDesiredForeignKey finds a desired foreign key that matches the current FK by source columns.
+// This is used to check if a current FK (with an auto-generated name) should be kept or dropped.
+// We only match by source columns (not reference table) because the reference table might change
+// when modifying an FK - in that case, we want to keep the FK for modification rather than dropping it.
 func (g *Generator) findMatchingDesiredForeignKey(desiredForeignKeys []ForeignKey, current ForeignKey) *ForeignKey {
 	for i := range desiredForeignKeys {
 		fk := &desiredForeignKeys[i]
@@ -3839,11 +3841,25 @@ func (g *Generator) findMatchingDesiredForeignKey(desiredForeignKeys []ForeignKe
 		if !fk.constraintName.IsEmpty() {
 			continue
 		}
-		if g.foreignKeysMatchByColumns(*fk, current) {
+		if g.foreignKeysMatchBySourceColumns(*fk, current) {
 			return fk
 		}
 	}
 	return nil
+}
+
+// foreignKeysMatchBySourceColumns checks if two foreign keys have the same source columns.
+// This is used to determine if an FK should be kept for modification (even if reference table changes).
+func (g *Generator) foreignKeysMatchBySourceColumns(fk1, fk2 ForeignKey) bool {
+	if len(fk1.indexColumns) != len(fk2.indexColumns) {
+		return false
+	}
+	for j, col := range fk1.indexColumns {
+		if !g.identsEqual(col, fk2.indexColumns[j]) {
+			return false
+		}
+	}
+	return true
 }
 
 // foreignKeysMatchByColumns checks if two foreign keys match by their columns and reference table/columns.
@@ -4670,6 +4686,32 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 }
 
 func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB ForeignKey) bool {
+	// Compare index columns (source columns of the FK)
+	if len(foreignKeyA.indexColumns) != len(foreignKeyB.indexColumns) {
+		return false
+	}
+	for i, col := range foreignKeyA.indexColumns {
+		if !g.identsEqual(col, foreignKeyB.indexColumns[i]) {
+			return false
+		}
+	}
+
+	// Compare reference table
+	if !g.qualifiedNamesEqual(foreignKeyA.referenceTableName, foreignKeyB.referenceTableName) {
+		return false
+	}
+
+	// Compare reference columns
+	if len(foreignKeyA.referenceColumns) != len(foreignKeyB.referenceColumns) {
+		return false
+	}
+	for i, col := range foreignKeyA.referenceColumns {
+		if !g.identsEqual(col, foreignKeyB.referenceColumns[i]) {
+			return false
+		}
+	}
+
+	// Compare ON UPDATE/DELETE actions
 	if g.normalizeReferenceOption(foreignKeyA.onUpdate) != g.normalizeReferenceOption(foreignKeyB.onUpdate) {
 		return false
 	}

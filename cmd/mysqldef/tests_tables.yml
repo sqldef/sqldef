@@ -1067,3 +1067,81 @@ MultipleUnnamedForeignKeys:
       FOREIGN KEY (category_id) REFERENCES categories(id),
       FOREIGN KEY (tag_id) REFERENCES tags(id)
     );
+
+# Test dropping an unnamed FK: The FK in current state has a database-generated name (e.g., posts_ibfk_1),
+# but after dropping, the desired state has no FK. This verifies that column-based matching
+# correctly identifies the FK to drop even when the desired schema has no FK at all.
+DropUnnamedForeignKey:
+  current: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY
+    );
+
+    CREATE TABLE posts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      user_id BIGINT UNSIGNED,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY
+    );
+
+    CREATE TABLE posts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      user_id BIGINT UNSIGNED
+    );
+
+# Test modifying an unnamed FK to reference a different table.
+# The FK in current state references users(id), but desired references admins(id).
+# This verifies that column-based matching detects the FK needs to be recreated.
+ModifyUnnamedForeignKey:
+  current: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY
+    );
+
+    CREATE TABLE admins (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY
+    );
+
+    CREATE TABLE posts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      author_id BIGINT UNSIGNED,
+      FOREIGN KEY (author_id) REFERENCES users(id)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY
+    );
+
+    CREATE TABLE admins (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY
+    );
+
+    CREATE TABLE posts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      author_id BIGINT UNSIGNED,
+      FOREIGN KEY (author_id) REFERENCES admins(id)
+    );
+
+CompositeUnnamedForeignKey:
+  desired: |
+    CREATE TABLE tenants (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY
+    );
+
+    CREATE TABLE users (
+      tenant_id BIGINT UNSIGNED NOT NULL,
+      user_id BIGINT UNSIGNED NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      PRIMARY KEY (tenant_id, user_id)
+    );
+
+    CREATE TABLE posts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      tenant_id BIGINT UNSIGNED NOT NULL,
+      author_id BIGINT UNSIGNED NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      FOREIGN KEY (tenant_id, author_id) REFERENCES users(tenant_id, user_id)
+    );
