@@ -1005,3 +1005,66 @@ CreateTableWithDefaultCharacterSet:
       id bigint NOT NULL,
       name varchar(40)
     ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4;
+
+AddColumnCheckAndIndex:
+  min_version: "8.0"
+  current: |
+    CREATE TABLE authors (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(255) NOT NULL
+    ) Engine=InnoDB DEFAULT CHARSET=utf8mb4;
+
+    CREATE TABLE books (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      author_id BIGINT UNSIGNED NOT NULL,
+      price DECIMAL(10, 2) NOT NULL,
+      FOREIGN KEY (author_id) REFERENCES authors(id)
+    ) Engine=InnoDB DEFAULT CHARSET=utf8mb4;
+  desired: |
+    CREATE TABLE authors (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(255) NOT NULL
+    ) Engine=InnoDB DEFAULT CHARSET=utf8mb4;
+
+    CREATE TABLE books (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      author_id BIGINT UNSIGNED NOT NULL,
+      price DECIMAL(10, 2) NOT NULL,
+      stock INT NOT NULL DEFAULT 0,
+      FOREIGN KEY (author_id) REFERENCES authors(id),
+      CHECK (price > 0),
+      CHECK (stock >= 0),
+      INDEX idx_author (author_id),
+      INDEX idx_price (price)
+    ) Engine=InnoDB DEFAULT CHARSET=utf8mb4;
+
+MultipleUnnamedForeignKeys:
+
+  desired: |
+    CREATE TABLE users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(255) NOT NULL
+    );
+
+    CREATE TABLE categories (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(255) NOT NULL
+    );
+
+    CREATE TABLE tags (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(255) NOT NULL
+    );
+
+    CREATE TABLE articles (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      author_id BIGINT UNSIGNED NOT NULL,
+      category_id BIGINT UNSIGNED NOT NULL,
+      tag_id BIGINT UNSIGNED,
+      FOREIGN KEY (author_id) REFERENCES users(id),
+      FOREIGN KEY (category_id) REFERENCES categories(id),
+      FOREIGN KEY (tag_id) REFERENCES tags(id)
+    );

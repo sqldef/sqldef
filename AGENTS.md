@@ -19,6 +19,7 @@ Each command follows the same pattern: it accepts connection parameters similar 
 * Be aware of the two escaping modes:
   * `legacy_ignore_quotes: true` (the default, backward compatible mode) generates SQL with always quoted identifiers
   * `legacy_ignore_quotes: false` (quote-aware mode) generates SQL with identifiers quoted only when they are quoted in the source SQL
+* If you found unsupported features, don't "fix" tests by rewriting not to use such features. Instead, comment out the test case and mark it as `FIXME`
 
 ## Build
 
