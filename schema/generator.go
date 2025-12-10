@@ -571,7 +571,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		}
 
 		// Check if this comment still exists in desired comments
-		desiredComment := g.findCommentByObject(g.desiredComments, currentComment.comment.Object)
+		desiredComment := g.findCommentByObject(g.desiredComments, &currentComment.comment)
 		// Only generate NULL statement if the comment is completely absent from desired schema
 		// If desiredComment exists but is empty, it means the desired schema has "COMMENT ... IS NULL",
 		// which will be handled by generateDDLsForComment
@@ -581,10 +581,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				"object", currentComment.comment.Object,
 				"statement", currentComment.statement)
 			nullStmt := g.generateCommentNullStatement(currentComment)
-			if nullStmt != "" {
-				slog.Debug("Generated NULL statement", "stmt", nullStmt)
-				ddls = append(ddls, nullStmt)
-			}
+			slog.Debug("Generated NULL statement", "stmt", nullStmt)
+			ddls = append(ddls, nullStmt)
 		}
 	}
 
@@ -2250,7 +2248,7 @@ func (g *Generator) findDomainConstraintByExpression(constraints []DomainConstra
 func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 	ddls := []string{}
 
-	currentComment := g.findCommentByObject(g.currentComments, desired.comment.Object)
+	currentComment := g.findCommentByObject(g.currentComments, &desired.comment)
 
 	// If both current and desired comments are NULL/empty, no change is needed.
 	if currentComment == nil && desired.comment.Comment == "" {
@@ -2258,15 +2256,9 @@ func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 	}
 
 	if currentComment == nil || currentComment.comment.Comment != desired.comment.Comment {
-		// Comment not found or different.
-		// In legacy mode, use the original statement to preserve exact formatting.
-		// In quote-aware mode, generate a normalized statement.
-		if g.config.LegacyIgnoreQuotes {
-			ddls = append(ddls, desired.statement)
-		} else {
-			normalizedStmt := g.generateNormalizedCommentStatement(desired)
-			ddls = append(ddls, normalizedStmt)
-		}
+		// Comment not found or different. Generate statement from normalized AST.
+		normalizedStmt := g.generateNormalizedCommentStatement(desired)
+		ddls = append(ddls, normalizedStmt)
 	}
 
 	return ddls, nil
@@ -2274,11 +2266,13 @@ func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 
 // escapeCommentObject returns the escaped object path for a COMMENT statement.
 // Object is []Ident representing: [schema, table] for TABLE, [schema, table, column] for COLUMN.
-// The schema part (first element) is normalized if it matches the default schema.
+// The object is first normalized (schema prepended if missing), then the schema part
+// is normalized if it matches the default schema.
 func (g *Generator) escapeCommentObject(comment *Comment) string {
-	escapedParts := make([]string, len(comment.comment.Object))
-	for i, ident := range comment.comment.Object {
-		if i == 0 && len(comment.comment.Object) > 1 {
+	normalizedObject := normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema)
+	escapedParts := make([]string, len(normalizedObject))
+	for i, ident := range normalizedObject {
+		if i == 0 && len(normalizedObject) > 1 {
 			// First element is the schema - normalize if it's the default schema
 			normalizedSchema := g.normalizeDefaultSchema(ident)
 			escapedParts[i] = g.escapeSQLIdent(normalizedSchema)
@@ -3884,9 +3878,12 @@ func (g *Generator) findDomainByName(domains []*Domain, name QualifiedName) *Dom
 }
 
 // findCommentByObject finds a comment by its object path using quote-aware comparison.
-func (g *Generator) findCommentByObject(comments []*Comment, object []Ident) *Comment {
+// Objects are normalized (schema prepended if missing) before comparison.
+func (g *Generator) findCommentByObject(comments []*Comment, targetComment *parser.Comment) *Comment {
+	normalizedTarget := normalizeCommentObject(targetComment, g.mode, g.defaultSchema)
 	for _, comment := range comments {
-		if g.identsSliceEqual(comment.comment.Object, object) {
+		normalizedCandidate := normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema)
+		if g.identsSliceEqual(normalizedCandidate, normalizedTarget) {
 			return comment
 		}
 	}
