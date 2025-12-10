@@ -2,9 +2,8 @@ package testutils
 
 import (
 	"bytes"
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
+	"hash/fnv"
 	"log"
 	"log/slog"
 	"os"
@@ -62,7 +61,7 @@ func init() {
 
 // CreateTestDatabaseName generates a unique database name for a test case.
 // The name is sanitized to be a valid database name (lowercase, alphanumeric + underscore)
-// and uses MD5 hash to ensure uniqueness.
+// and uses FNV hash to ensure uniqueness.
 //
 // Parameters:
 //   - testName: The test name to sanitize
@@ -98,10 +97,10 @@ func CreateTestDatabaseName(testName string, dbLimit int) string {
 	}
 
 	// Create a short hash from the full test name for uniqueness
-	hash := md5.Sum([]byte(testName))
-	hashStr := hex.EncodeToString(hash[:])[:hashLen]
+	hash := fnv.New32a()
+	hash.Write([]byte(testName))
 
-	return fmt.Sprintf("%s%s_%s", prefix, sanitized, hashStr)
+	return fmt.Sprintf("%s%s_%x", prefix, sanitized, hash.Sum32())
 }
 
 func ReadTests(pattern string) (map[string]TestCase, error) {
@@ -165,7 +164,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	t.Helper()
 
 	if test.MinVersion != "" && compareVersion(t, version, test.MinVersion) < 0 {
-		t.Skipf("Version '%s' is smaller than min_version '%s'", version, test.MaxVersion)
+		t.Skipf("Version '%s' is smaller than min_version '%s'", version, test.MinVersion)
 	}
 	if test.MaxVersion != "" && compareVersion(t, version, test.MaxVersion) > 0 {
 		t.Skipf("Version '%s' is larger than max_version '%s'", version, test.MaxVersion)
@@ -229,7 +228,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	// Test idempotency of current schema
 	currentDDLs, err := db.ExportDDLs()
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 	ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, currentDDLs, config, db.GetDefaultSchema())
 	if err != nil {
@@ -242,7 +241,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	// Main test
 	currentDDLs, err = db.ExportDDLs()
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
 	if test.Up != nil && test.Down != nil {
@@ -276,7 +275,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		// PHASE 2: Test idempotency of desired schema
 		currentDDLs, err = db.ExportDDLs()
 		if err != nil {
-			log.Fatal(err)
+			t.Fatal(err)
 		}
 		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, db.GetDefaultSchema())
 		if err != nil {
@@ -291,7 +290,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		// PHASE 3: Test reverse migration (desired → current) should produce Down
 		currentDDLs, err = db.ExportDDLs()
 		if err != nil {
-			log.Fatal(err)
+			t.Fatal(err)
 		}
 		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, currentDDLs, config, db.GetDefaultSchema())
 		if err != nil {
@@ -310,7 +309,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		// PHASE 4: Test idempotency of current schema after reverse migration
 		currentDDLs, err = db.ExportDDLs()
 		if err != nil {
-			log.Fatal(err)
+			t.Fatal(err)
 		}
 		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, currentDDLs, config, db.GetDefaultSchema())
 		if err != nil {
@@ -348,7 +347,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		// Test idempotency of desired schema
 		currentDDLs, err = db.ExportDDLs()
 		if err != nil {
-			log.Fatal(err)
+			t.Fatal(err)
 		}
 		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, db.GetDefaultSchema())
 		if err != nil {
