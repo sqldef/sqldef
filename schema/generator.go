@@ -1845,12 +1845,6 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 		currentNormalized := strings.ToLower(parser.String(currentNormalizedAST))
 		desiredNormalized := strings.ToLower(parser.String(desiredNormalizedAST))
 
-		// Post-normalization fix for generic parser: strip remaining table qualifiers
-		// The generic parser's ColName.Name may not respect the empty qualifier we set
-		if g.mode == GeneratorModePostgres {
-			currentNormalized = stripTableQualifiers(currentNormalized)
-			desiredNormalized = stripTableQualifiers(desiredNormalized)
-		}
 		slog.Debug("Comparing view definitions",
 			"current_before_norm", parser.String(currentView.definition),
 			"desired_before_norm", parser.String(desiredView.definition),
@@ -1961,20 +1955,6 @@ func (g *Generator) findDependentViews(viewName QualifiedName) []*View {
 	}
 
 	return dependents
-}
-
-// stripTableQualifiers removes table qualifiers from column references in SQL
-// E.g., "users.name" -> "name", "t.id" -> "id"
-// This is needed for PostgreSQL 13-15 where table qualifiers are included in column references.
-func stripTableQualifiers(sql string) string {
-	// Match table.column patterns where:
-	// - table name is [a-z_][a-z0-9_]* (identifier)
-	// - followed by a dot
-	// - followed by column name [a-z_][a-z0-9_]* (identifier)
-	// We use word boundaries to avoid matching within quoted strings
-	re := regexp.MustCompile(`\b[a-z_][a-z0-9_]*\.([a-z_][a-z0-9_]*)\b`)
-	// Replace "table.column" with just "column" (keeping capture group 1)
-	return re.ReplaceAllString(sql, "$1")
 }
 
 func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desiredTrigger *Trigger) ([]string, error) {
