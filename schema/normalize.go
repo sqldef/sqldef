@@ -176,9 +176,24 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				return normalizeCheckExpr(e.Expr, mode)
 			}
 
+			// Remove redundant array typecasts on ARRAY constructors
+			// PostgreSQL normalizes ARRAY['a'::varchar]::text[] to ARRAY['a'::varchar::text]
+			// by pushing down the array typecast to each element. Since we strip ::text casts
+			// on elements, we also need to strip ::text[] on the ARRAY constructor itself.
+			// e.g., ARRAY['a'::varchar]::text[] -> ARRAY['a'::varchar] (after stripping ::text[])
+			//       ARRAY['a'::varchar::text]   -> ARRAY['a'::varchar] (after stripping ::text on element)
+			// Empty arrays (ARRAY[]) need the typecast or PostgreSQL can't determine the type.
+			normalizedExpr := normalizeCheckExpr(e.Expr, mode)
+			if arrayConstructor, isArrayConstructor := normalizedExpr.(*parser.ArrayConstructor); isArrayConstructor {
+				if strings.HasSuffix(typeStr, "[]") && len(arrayConstructor.Elements) > 0 {
+					// Non-empty array with array typecast: strip the redundant typecast
+					return normalizedExpr
+				}
+			}
+
 			// For time types, keep the cast but use normalized type name
 			return &parser.CastExpr{
-				Expr: normalizeCheckExpr(e.Expr, mode),
+				Expr: normalizedExpr,
 				Type: &parser.ConvertType{Type: normalizedTypeStr},
 			}
 		}
