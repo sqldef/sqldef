@@ -1,3 +1,7 @@
+## [v3.8.4](https://github.com/sqldef/sqldef/compare/v3.8.3...v3.8.4) - 2025-12-10
+- fix: mssql-specific inline FOREIGN KEY REFERENCES by @gfx in https://github.com/sqldef/sqldef/pull/1018
+- [test] use fnv for faster hash; use t.Fatal; fix messages by @gfx in https://github.com/sqldef/sqldef/pull/1020
+
 ## [v3.8.3](https://github.com/sqldef/sqldef/compare/v3.8.2...v3.8.3) - 2025-12-10
 - fix: skip COMMENT cleanup for dropped tables in psqldef by @178inaba in https://github.com/sqldef/sqldef/pull/1012
 - refactor comment normalizations by @gfx in https://github.com/sqldef/sqldef/pull/1013
