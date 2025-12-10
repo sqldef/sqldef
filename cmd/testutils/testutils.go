@@ -100,7 +100,7 @@ func CreateTestDatabaseName(testName string, dbLimit int) string {
 	hash := fnv.New32a()
 	hash.Write([]byte(testName))
 
-	return fmt.Sprintf("%s%s_%x", prefix, sanitized, hash.Sum32())
+	return fmt.Sprintf("%s%s_%08x", prefix, sanitized, hash.Sum32())
 }
 
 func ReadTests(pattern string) (map[string]TestCase, error) {
