@@ -3853,7 +3853,7 @@ func (g *Generator) foreignKeysMatchByColumns(fk1, fk2 ForeignKey) bool {
 		return false
 	}
 	for j, col := range fk1.indexColumns {
-		if !g.identsEqual(NewIdentWithQuoteDetected(col.Name), NewIdentWithQuoteDetected(fk2.indexColumns[j].Name)) {
+		if !g.identsEqual(col, fk2.indexColumns[j]) {
 			return false
 		}
 	}
@@ -3878,21 +3878,41 @@ func (g *Generator) foreignKeysMatchByColumns(fk1, fk2 ForeignKey) bool {
 
 // indexSupportsUnnamedForeignKey checks if an index supports an unnamed foreign key.
 // MySQL creates implicit indexes for foreign keys, named after the first column.
-// This function checks if the index name matches any unnamed FK's first column.
+// TiDB creates implicit indexes with names like fk_1, fk_2, etc.
+// This function checks if the index supports any unnamed FK by:
+// 1. Matching index name to the FK's first column (MySQL behavior)
+// 2. Matching index columns to the FK's columns (TiDB and general case)
 func (g *Generator) indexSupportsUnnamedForeignKey(index Index, foreignKeys []ForeignKey) bool {
 	for _, fk := range foreignKeys {
 		// Only check unnamed FKs
 		if !fk.constraintName.IsEmpty() {
 			continue
 		}
-		// Check if index name matches the first column of the FK
 		if len(fk.indexColumns) > 0 {
-			if g.identsEqual(index.name, NewIdentWithQuoteDetected(fk.indexColumns[0].Name)) {
+			// Check if index name matches the first column of the FK (MySQL behavior)
+			if g.identsEqual(index.name, fk.indexColumns[0]) {
+				return true
+			}
+			// Check if index columns match the FK columns (TiDB behavior: fk_N naming)
+			if g.indexColumnsMatchForeignKey(index, fk) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// indexColumnsMatchForeignKey checks if the index columns match the foreign key columns.
+func (g *Generator) indexColumnsMatchForeignKey(index Index, fk ForeignKey) bool {
+	if len(index.columns) != len(fk.indexColumns) {
+		return false
+	}
+	for i, col := range index.columns {
+		if !g.identsEqual(NewIdentWithQuoteDetected(col.ColumnName()), fk.indexColumns[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // findForeignKeysReferencingTable finds all foreign keys from all tables that reference the given table
