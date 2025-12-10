@@ -212,9 +212,10 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				constraints:  constraints,
 			}, nil
 		} else if stmt.Action == parser.CommentOn {
+			// Store raw AST and DDL; normalization is handled by the generator
 			return &Comment{
-				statement: normalizeTableInCommentOnStmt(mode, stmt.Comment, ddl, defaultSchema),
-				comment:   *normalizeTableInComment(mode, stmt.Comment, defaultSchema),
+				statement: ddl,
+				comment:   *stmt.Comment,
 			}, nil
 		} else if stmt.Action == parser.CreateExtension {
 			return &Extension{
@@ -985,111 +986,6 @@ func normalizeCollate(collate string, table parser.TableSpec) string {
 		return table.Options["default charset"] + "_bin"
 	} else {
 		return collate
-	}
-}
-
-func normalizeTableInComment(mode GeneratorMode, comment *parser.Comment, defaultSchema string) *parser.Comment {
-	switch mode {
-	case GeneratorModePostgres:
-		// Normalize Object []Ident by prepending default schema if missing
-		obj := comment.Object
-		needsSchema := false
-
-		switch comment.ObjectType {
-		case "OBJECT_TABLE":
-			// TABLE comments need [schema, table]
-			if len(obj) == 1 {
-				needsSchema = true
-			}
-		case "OBJECT_COLUMN":
-			// COLUMN comments need [schema, table, column]
-			if len(obj) == 2 {
-				needsSchema = true
-			}
-		}
-
-		if needsSchema {
-			// Prepend default schema (unquoted) to the object
-			schemaIdent := parser.NewIdent(defaultSchema, false)
-			obj = append([]Ident{schemaIdent}, obj...)
-			return &parser.Comment{
-				ObjectType: comment.ObjectType,
-				Object:     obj,
-				Comment:    comment.Comment,
-			}
-		}
-		return comment
-	default:
-		return comment
-	}
-}
-
-var regexCommentOnClause = regexp.MustCompile(`(?i)^(\s*COMMENT\s+ON\s+(?:TABLE|COLUMN)\s+)(?P<dotConcatTblObjs>.*)(\s+IS\s+(?:'[^']*'|NULL)\s*$)`)
-
-// Assume that give 'defaultSchema' is not quoted with double-quote and not surrounded with whitespaces.
-func normalizeTableInCommentOnStmt(mode GeneratorMode, comment *parser.Comment, ddl string, defaultSchema string) string {
-	if defaultSchema == "" {
-		return ddl // fallback
-	}
-	if mode != GeneratorModePostgres {
-		return ddl // no special handling for non-Postgres
-	} else {
-		// Ignore line comment
-		if ok, _ := regexp.MatchString(`^\s*--`, ddl); ok {
-			// err is returned from MatchString only when pattern is invalid, so just ignore.
-			return ddl
-		}
-		matches := regexCommentOnClause.FindStringSubmatch(ddl)
-		if len(matches) != 4 {
-			// Neither table nor column name is found in COMMENT
-			return ddl // fallback
-		}
-		objs := make([]string, 0, 3) // objects of 'schema, table, and column'
-		sb := strings.Builder{}
-		q := false // true if in double quoting.
-		for _, c := range matches[2] {
-			switch c {
-			case '.':
-				if q { // '.' is a char if double-quoted.
-					sb.WriteRune(c)
-				} else { // "." is a separator.
-					if sb.Len() > 0 { // separate with '.' if not separated by `"` previously.
-						objs = append(objs, sb.String())
-						sb.Reset()
-					}
-				}
-			case '"': // If either schema, table or column is double-quoted.
-				sb.WriteRune(c)
-				if q { // End double quoting.
-					objs = append(objs, sb.String())
-					sb.Reset()
-				}
-				q = !q
-			default:
-				sb.WriteRune(c)
-			}
-		}
-		if sb.Len() > 0 { // flush buffer.
-			objs = append(objs, sb.String())
-			sb.Reset()
-		}
-		switch l := len(objs); {
-		case l == 1 || l == 2:
-			switch comment.ObjectType {
-			case "OBJECT_TABLE":
-				if len(objs) == 1 {
-					return fmt.Sprintf(`%s%s.%s%s`, matches[1], defaultSchema, objs[0], matches[3])
-				}
-			case "OBJECT_COLUMN":
-				if len(objs) == 2 {
-					return fmt.Sprintf(`%s%s.%s.%s%s`, matches[1], defaultSchema, objs[0], objs[1], matches[3])
-				}
-			}
-		case l == 3:
-			return ddl // no need to normalize.
-		}
-		// fallback in other exceptional cases
-		return ddl
 	}
 }
 

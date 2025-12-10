@@ -1212,3 +1212,35 @@ func tryConvertOrChainToIn(orExpr *parser.OrExpr) parser.Expr {
 		Right:    parser.ValTuple(sortedValues),
 	}
 }
+
+// normalizeCommentObject returns a normalized object path for a COMMENT statement.
+// For PostgreSQL, this prepends the default schema if missing:
+//   - OBJECT_TABLE: [table] -> [schema, table]
+//   - OBJECT_COLUMN: [table, column] -> [schema, table, column]
+//
+// For other databases or when schema is already present, returns the original object.
+func normalizeCommentObject(comment *parser.Comment, mode GeneratorMode, defaultSchema string) []Ident {
+	if mode != GeneratorModePostgres || defaultSchema == "" {
+		return comment.Object
+	}
+
+	var needsSchema bool
+	switch comment.ObjectType {
+	case "OBJECT_TABLE":
+		// TABLE comments need [schema, table]
+		needsSchema = len(comment.Object) == 1
+	case "OBJECT_COLUMN":
+		// COLUMN comments need [schema, table, column]
+		needsSchema = len(comment.Object) == 2
+	default:
+		panic("unexpected comment object type: " + comment.ObjectType)
+	}
+
+	if !needsSchema {
+		return comment.Object
+	}
+
+	// Prepend default schema (unquoted)
+	schemaIdent := parser.NewIdent(defaultSchema, false)
+	return append([]Ident{schemaIdent}, comment.Object...)
+}
