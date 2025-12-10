@@ -3829,3 +3829,89 @@ CheckConstraintWithArrayTypeCast:
 #     -- Skipped: DROP INDEX "public"."ix_test_session_id";
 #     -- Skipped: CREATE UNIQUE INDEX ix_test_session_id ON public.test_index_uniqueness USING btree (session_id);
 #   down: ""
+
+# Test: DROP TABLE should not generate COMMENT ON TABLE ... IS NULL for the dropped table
+# PostgreSQL automatically removes table comments when the table is dropped.
+DropTableWithComment:
+  current: |
+    CREATE TABLE foo (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON TABLE foo IS 'foo table';
+  desired: ""
+  up: |
+    DROP TABLE "public"."foo";
+  down: |
+    CREATE TABLE foo (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON TABLE public.foo IS 'foo table';
+
+DropTableWithColumnComment:
+  current: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON COLUMN users.name IS 'User name';
+  desired: ""
+  up: |
+    DROP TABLE "public"."users";
+  down: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON COLUMN public.users.name IS 'User name';
+
+DropTableWithBothTableAndColumnComments:
+  current: |
+    CREATE TABLE products (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL,
+      price integer NOT NULL
+    );
+    COMMENT ON TABLE products IS 'Product catalog';
+    COMMENT ON COLUMN products.name IS 'Product name';
+    COMMENT ON COLUMN products.price IS 'Product price in cents';
+  desired: ""
+  up: |
+    DROP TABLE "public"."products";
+  down: |
+    CREATE TABLE products (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL,
+      price integer NOT NULL
+    );
+    COMMENT ON TABLE public.products IS 'Product catalog';
+    COMMENT ON COLUMN public.products.name IS 'Product name';
+    COMMENT ON COLUMN public.products.price IS 'Product price in cents';
+
+DropOneTableWithCommentKeepAnother:
+  current: |
+    CREATE TABLE foo (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON TABLE foo IS 'foo table';
+    CREATE TABLE bar (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON TABLE bar IS 'bar table';
+  desired: |
+    CREATE TABLE bar (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON TABLE bar IS 'bar table';
+  up: |
+    DROP TABLE "public"."foo";
+  down: |
+    CREATE TABLE foo (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON TABLE public.foo IS 'foo table';
