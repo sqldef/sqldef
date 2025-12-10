@@ -1840,10 +1840,6 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 	} else if desiredView.viewType == "VIEW" { // TODO: Fix the definition comparison for materialized views and enable this
 		// View found. If it's different, create or replace view.
 		// Use AST-based comparison
-		if currentView.definition == nil || desiredView.definition == nil {
-			panic(fmt.Sprintf("View.definition must not be nil (currentView.definition=%v, desiredView.definition=%v)", currentView.definition, desiredView.definition))
-		}
-
 		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode)
 		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode)
 		currentNormalized := strings.ToLower(parser.String(currentNormalizedAST))
@@ -4238,10 +4234,6 @@ func (g *Generator) areSameCheckDefinition(checkA *CheckDefinition, checkB *Chec
 		return false
 	}
 
-	if checkA.definition == nil || checkB.definition == nil {
-		panic(fmt.Sprintf("CheckDefinition.definitionAST must not be nil (checkA.definitionAST=%v, checkB.definitionAST=%v)", checkA.definition, checkB.definition))
-	}
-
 	normalizedA := normalizeCheckExpr(checkA.definition, g.mode)
 	normalizedB := normalizeCheckExpr(checkB.definition, g.mode)
 
@@ -4740,12 +4732,10 @@ func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB Forei
 		}
 	}
 
-	// Compare reference table
 	if !g.qualifiedNamesEqual(foreignKeyA.referenceTableName, foreignKeyB.referenceTableName) {
 		return false
 	}
 
-	// Compare reference columns
 	if len(foreignKeyA.referenceColumns) != len(foreignKeyB.referenceColumns) {
 		return false
 	}
@@ -4937,10 +4927,6 @@ func generateSequenceClause(sequence *Sequence) string {
 }
 
 func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinition) (string, error) {
-	if defaultDefinition.expression == nil {
-		return "", fmt.Errorf("default expression is nil")
-	}
-
 	// Type assertion: Check if it's a simple SQLVal
 	if sqlVal, ok := defaultDefinition.expression.(*parser.SQLVal); ok {
 		// Simple value path - maintain existing formatting behavior

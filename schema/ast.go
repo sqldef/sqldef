@@ -314,7 +314,7 @@ type View struct {
 	viewType     string
 	securityType string
 	name         QualifiedName
-	definition   parser.SelectStatement
+	definition   parser.SelectStatement // never nil
 	indexes      []Index
 	columns      []string
 	withData     bool // true for "WITH DATA"
@@ -398,7 +398,7 @@ type Sequence struct {
 }
 
 type DefaultDefinition struct {
-	expression     parser.Expr
+	expression     parser.Expr // never nil
 	constraintName Ident // only for MSSQL
 }
 
@@ -407,7 +407,7 @@ type SridDefinition struct {
 }
 
 type CheckDefinition struct {
-	definition        parser.Expr
+	definition        parser.Expr // never nil
 	constraintName    Ident
 	notForReplication bool
 	noInherit         bool
