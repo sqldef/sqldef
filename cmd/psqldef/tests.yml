@@ -3830,6 +3830,124 @@ CheckConstraintWithArrayTypeCast:
 #     -- Skipped: CREATE UNIQUE INDEX ix_test_session_id ON public.test_index_uniqueness USING btree (session_id);
 #   down: ""
 
+UnnamedForeignKey:
+  desired: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE posts (
+      id BIGINT NOT NULL PRIMARY KEY,
+      user_id BIGINT,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+MultipleUnnamedForeignKeys:
+  desired: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL
+    );
+
+    CREATE TABLE categories (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL
+    );
+
+    CREATE TABLE tags (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL
+    );
+
+    CREATE TABLE articles (
+      id BIGINT NOT NULL PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      author_id BIGINT NOT NULL,
+      category_id BIGINT NOT NULL,
+      tag_id BIGINT,
+      FOREIGN KEY (author_id) REFERENCES users(id),
+      FOREIGN KEY (category_id) REFERENCES categories(id),
+      FOREIGN KEY (tag_id) REFERENCES tags(id)
+    );
+
+# Test dropping an unnamed FK: The FK in current state has a database-generated name
+# (e.g., posts_user_id_fkey), but after dropping, the desired state has no FK.
+# This verifies that column-based matching correctly identifies the FK to drop.
+DropUnnamedForeignKey:
+  current: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE posts (
+      id BIGINT NOT NULL PRIMARY KEY,
+      user_id BIGINT,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE posts (
+      id BIGINT NOT NULL PRIMARY KEY,
+      user_id BIGINT
+    );
+
+# Test modifying an unnamed FK to reference a different table.
+# The FK in current state references users(id), but desired references admins(id).
+# This verifies that column-based matching detects the FK needs to be recreated.
+ModifyUnnamedForeignKey:
+  current: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE admins (
+      id BIGINT NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE posts (
+      id BIGINT NOT NULL PRIMARY KEY,
+      author_id BIGINT,
+      FOREIGN KEY (author_id) REFERENCES users(id)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE admins (
+      id BIGINT NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE posts (
+      id BIGINT NOT NULL PRIMARY KEY,
+      author_id BIGINT,
+      FOREIGN KEY (author_id) REFERENCES admins(id)
+    );
+
+CompositeUnnamedForeignKey:
+  desired: |
+    CREATE TABLE tenants (
+      id BIGINT NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE users (
+      tenant_id BIGINT NOT NULL,
+      user_id BIGINT NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      PRIMARY KEY (tenant_id, user_id)
+    );
+
+    CREATE TABLE posts (
+      id BIGINT NOT NULL PRIMARY KEY,
+      tenant_id BIGINT NOT NULL,
+      author_id BIGINT NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      FOREIGN KEY (tenant_id, author_id) REFERENCES users(tenant_id, user_id)
+    );
+
 # Test: DROP TABLE should not generate COMMENT ON TABLE ... IS NULL for the dropped table
 # PostgreSQL automatically removes table comments when the table is dropped.
 DropTableWithComment:
@@ -3847,7 +3965,7 @@ DropTableWithComment:
       id serial PRIMARY KEY,
       name varchar(100) NOT NULL
     );
-    COMMENT ON TABLE public.foo IS 'foo table';
+    COMMENT ON TABLE "public"."foo" IS 'foo table';
 
 DropTableWithColumnComment:
   current: |
@@ -3864,7 +3982,7 @@ DropTableWithColumnComment:
       id serial PRIMARY KEY,
       name varchar(100) NOT NULL
     );
-    COMMENT ON COLUMN public.users.name IS 'User name';
+    COMMENT ON COLUMN "public"."users"."name" IS 'User name';
 
 DropTableWithBothTableAndColumnComments:
   current: |
@@ -3885,9 +4003,9 @@ DropTableWithBothTableAndColumnComments:
       name varchar(100) NOT NULL,
       price integer NOT NULL
     );
-    COMMENT ON TABLE public.products IS 'Product catalog';
-    COMMENT ON COLUMN public.products.name IS 'Product name';
-    COMMENT ON COLUMN public.products.price IS 'Product price in cents';
+    COMMENT ON TABLE "public"."products" IS 'Product catalog';
+    COMMENT ON COLUMN "public"."products"."name" IS 'Product name';
+    COMMENT ON COLUMN "public"."products"."price" IS 'Product price in cents';
 
 DropOneTableWithCommentKeepAnother:
   current: |
@@ -3914,4 +4032,4 @@ DropOneTableWithCommentKeepAnother:
       id serial PRIMARY KEY,
       name varchar(100) NOT NULL
     );
-    COMMENT ON TABLE public.foo IS 'foo table';
+    COMMENT ON TABLE "public"."foo" IS 'foo table';

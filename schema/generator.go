@@ -406,7 +406,16 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue
 			}
 
-			if g.findForeignKeyByName(desiredTable.foreignKeys, foreignKey.constraintName) != nil {
+			// Check if FK exists in desired state by name
+			fkExpectedToExist := g.findForeignKeyByName(desiredTable.foreignKeys, foreignKey.constraintName) != nil
+
+			// Also check if there's a matching FK by columns (for unnamed FKs in desired schema)
+			// This applies to all databases that support named FK constraints (not SQLite3)
+			if !fkExpectedToExist && g.mode != GeneratorModeSQLite3 {
+				fkExpectedToExist = g.findMatchingDesiredForeignKey(desiredTable.foreignKeys, foreignKey) != nil
+			}
+
+			if fkExpectedToExist {
 				continue // Foreign key is expected to exist.
 			}
 
@@ -443,6 +452,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			// Also check foreign key index names (these are plain strings)
 			if !indexExistsInDesired {
 				indexExistsInDesired = slices.Contains(convertForeignKeysToIndexNames(desiredTable.foreignKeys), index.name.Name)
+			}
+			// For MySQL, also check if this index supports an unnamed FK (the FK index name might be the column name)
+			if !indexExistsInDesired && g.mode == GeneratorModeMysql {
+				indexExistsInDesired = g.indexSupportsUnnamedForeignKey(index, desiredTable.foreignKeys)
 			}
 			if indexExistsInDesired {
 				continue // Index is expected to exist.
@@ -1414,21 +1427,36 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	// Examine each foreign key
 	for _, desiredForeignKey := range desired.table.foreignKeys {
-		// Auto-generate constraint name if not specified (for PostgreSQL)
+		// Auto-generate constraint name if not specified
 		constraintName := desiredForeignKey.constraintName
-		if constraintName.IsEmpty() && g.mode == GeneratorModePostgres && len(desiredForeignKey.indexColumns) > 0 {
-			tableName := desired.table.name.Name.Name
-			// Use the first column name for the constraint name (matches PostgreSQL behavior)
-			columnName := desiredForeignKey.indexColumns[0].Name
-			constraintName = buildPostgresConstraintNameIdent(tableName, columnName, "fkey")
-		}
+		var matchedCurrentFK *ForeignKey
 
-		if constraintName.IsEmpty() && g.mode != GeneratorModeSQLite3 {
-			return ddls, fmt.Errorf(
-				"Foreign key without constraint symbol was found in table '%s' (index name: '%s', columns: %v). "+
-					"Specify the constraint symbol to identify the foreign key.",
-				desired.table.name.RawString(), desiredForeignKey.indexName.Name, desiredForeignKey.indexColumns,
-			)
+		if constraintName.IsEmpty() && len(desiredForeignKey.indexColumns) > 0 && g.mode != GeneratorModeSQLite3 {
+			// When desired FK has no explicit constraint name, first try to find
+			// a matching FK in current state by columns. This handles the case where
+			// databases auto-generate names (e.g., MySQL's "books_ibfk_1", PostgreSQL's
+			// "table_column_fkey", or MSSQL's "FK__posts__user_id__...") but the user's
+			// schema doesn't specify a name.
+			matchedCurrentFK = g.findForeignKeyByColumns(currentTable.foreignKeys, desiredForeignKey)
+			if matchedCurrentFK != nil {
+				// Use the existing constraint name from the current state
+				constraintName = matchedCurrentFK.constraintName
+			}
+
+			// If no matching FK found in current state, generate a deterministic name
+			if constraintName.IsEmpty() {
+				tableName := desired.table.name.Name.Name
+				// Use the first column name for the constraint name
+				columnName := desiredForeignKey.indexColumns[0].Name
+				switch g.mode {
+				case GeneratorModePostgres:
+					constraintName = buildPostgresConstraintNameIdent(tableName, columnName, "fkey")
+				case GeneratorModeMysql:
+					constraintName = buildMysqlForeignKeyNameIdent(tableName, columnName)
+				case GeneratorModeMssql:
+					constraintName = buildMssqlForeignKeyNameIdent(tableName, columnName)
+				}
+			}
 		}
 
 		// Create a modified ForeignKey with the generated constraint name if needed
@@ -1447,7 +1475,12 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			}
 		}
 
-		if currentForeignKey := g.findForeignKeyByName(currentTable.foreignKeys, constraintName); currentForeignKey != nil {
+		// Use the matched FK from earlier if we found one, otherwise look up by name
+		currentForeignKey := matchedCurrentFK
+		if currentForeignKey == nil {
+			currentForeignKey = g.findForeignKeyByName(currentTable.foreignKeys, constraintName)
+		}
+		if currentForeignKey != nil {
 			// Drop and add foreign key as needed.
 			if !g.areSameForeignKeys(*currentForeignKey, fkWithName) {
 				var dropDDL string
@@ -3792,6 +3825,120 @@ func (g *Generator) findForeignKeyByName(foreignKeys []ForeignKey, constraintNam
 	return nil
 }
 
+// findForeignKeyByColumns finds a foreign key by matching its columns and reference table/columns.
+// This is used when the desired FK has no explicit constraint name, to match against existing FKs
+// that may have auto-generated names (e.g., MySQL's "table_ibfk_N" pattern).
+func (g *Generator) findForeignKeyByColumns(foreignKeys []ForeignKey, desired ForeignKey) *ForeignKey {
+	for i := range foreignKeys {
+		fk := &foreignKeys[i]
+		if g.foreignKeysMatchByColumns(*fk, desired) {
+			return fk
+		}
+	}
+	return nil
+}
+
+// findMatchingDesiredForeignKey finds a desired foreign key that matches the current FK by source columns.
+// This is used to check if a current FK (with an auto-generated name) should be kept or dropped.
+// We only match by source columns (not reference table) because the reference table might change
+// when modifying an FK - in that case, we want to keep the FK for modification rather than dropping it.
+func (g *Generator) findMatchingDesiredForeignKey(desiredForeignKeys []ForeignKey, current ForeignKey) *ForeignKey {
+	for i := range desiredForeignKeys {
+		fk := &desiredForeignKeys[i]
+		// Only match against desired FKs that don't have explicit names
+		if !fk.constraintName.IsEmpty() {
+			continue
+		}
+		if g.foreignKeysMatchBySourceColumns(*fk, current) {
+			return fk
+		}
+	}
+	return nil
+}
+
+// foreignKeysMatchBySourceColumns checks if two foreign keys have the same source columns.
+// This is used to determine if an FK should be kept for modification (even if reference table changes).
+func (g *Generator) foreignKeysMatchBySourceColumns(fk1, fk2 ForeignKey) bool {
+	if len(fk1.indexColumns) != len(fk2.indexColumns) {
+		return false
+	}
+	for j, col := range fk1.indexColumns {
+		if !g.identsEqual(col, fk2.indexColumns[j]) {
+			return false
+		}
+	}
+	return true
+}
+
+// foreignKeysMatchByColumns checks if two foreign keys match by their columns and reference table/columns.
+func (g *Generator) foreignKeysMatchByColumns(fk1, fk2 ForeignKey) bool {
+	// Match by index columns
+	if len(fk1.indexColumns) != len(fk2.indexColumns) {
+		return false
+	}
+	for j, col := range fk1.indexColumns {
+		if !g.identsEqual(col, fk2.indexColumns[j]) {
+			return false
+		}
+	}
+
+	// Match by reference table
+	if !g.qualifiedNamesEqual(fk1.referenceTableName, fk2.referenceTableName) {
+		return false
+	}
+
+	// Match by reference columns
+	if len(fk1.referenceColumns) != len(fk2.referenceColumns) {
+		return false
+	}
+	for j, col := range fk1.referenceColumns {
+		if !g.identsEqual(col, fk2.referenceColumns[j]) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// indexSupportsUnnamedForeignKey checks if an index supports an unnamed foreign key.
+// MySQL creates implicit indexes for foreign keys, named after the first column.
+// TiDB creates implicit indexes with names like fk_1, fk_2, etc.
+// This function checks if the index supports any unnamed FK by:
+// 1. Matching index name to the FK's first column (MySQL behavior)
+// 2. Matching index columns to the FK's columns (TiDB and general case)
+func (g *Generator) indexSupportsUnnamedForeignKey(index Index, foreignKeys []ForeignKey) bool {
+	for _, fk := range foreignKeys {
+		// Only check unnamed FKs
+		if !fk.constraintName.IsEmpty() {
+			continue
+		}
+		if len(fk.indexColumns) > 0 {
+			// Check if index name matches the first column of the FK (MySQL behavior)
+			if g.identsEqual(index.name, fk.indexColumns[0]) {
+				return true
+			}
+			// Check if index columns match the FK columns (TiDB behavior: fk_N naming)
+			if g.indexColumnsMatchForeignKey(index, fk) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// indexColumnsMatchForeignKey checks if the index columns match the foreign key columns.
+func (g *Generator) indexColumnsMatchForeignKey(index Index, fk ForeignKey) bool {
+	if len(index.columns) != len(fk.indexColumns) {
+		return false
+	}
+	for i, col := range index.columns {
+		if !g.identsEqual(NewIdentWithQuoteDetected(col.ColumnName()), fk.indexColumns[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 // findForeignKeysReferencingTable finds all foreign keys from all tables that reference the given table
 func (g *Generator) findForeignKeysReferencingTable(referencedTable QualifiedName) []struct {
 	tableName  QualifiedName
@@ -4583,6 +4730,32 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 }
 
 func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB ForeignKey) bool {
+	// Compare index columns (source columns of the FK)
+	if len(foreignKeyA.indexColumns) != len(foreignKeyB.indexColumns) {
+		return false
+	}
+	for i, col := range foreignKeyA.indexColumns {
+		if !g.identsEqual(col, foreignKeyB.indexColumns[i]) {
+			return false
+		}
+	}
+
+	// Compare reference table
+	if !g.qualifiedNamesEqual(foreignKeyA.referenceTableName, foreignKeyB.referenceTableName) {
+		return false
+	}
+
+	// Compare reference columns
+	if len(foreignKeyA.referenceColumns) != len(foreignKeyB.referenceColumns) {
+		return false
+	}
+	for i, col := range foreignKeyA.referenceColumns {
+		if !g.identsEqual(col, foreignKeyB.referenceColumns[i]) {
+			return false
+		}
+	}
+
+	// Compare ON UPDATE/DELETE actions
 	if g.normalizeReferenceOption(foreignKeyA.onUpdate) != g.normalizeReferenceOption(foreignKeyB.onUpdate) {
 		return false
 	}

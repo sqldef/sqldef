@@ -237,6 +237,7 @@ type IndexColumn struct {
 
 // ColumnName returns the column name if this is a simple column reference.
 // For functional indexes or expressions, it returns the string representation.
+// FIXME: parser.String(ic.columnExpr) is not actually a correct column name.
 func (ic IndexColumn) ColumnName() string {
 	// Check if it's a simple column reference (ColName)
 	if colName, ok := ic.columnExpr.(*parser.ColName); ok {
