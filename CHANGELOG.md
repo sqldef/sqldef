@@ -1,3 +1,8 @@
+## [v3.8.1](https://github.com/sqldef/sqldef/compare/v3.8.0...v3.8.1) - 2025-12-10
+- fix a syntax error around type casts in psqldef by @gfx in https://github.com/sqldef/sqldef/pull/1006
+- fix: psqldef normalization issue around typecast by @gfx in https://github.com/sqldef/sqldef/pull/1008
+- add a TODO test (won't fix for now), and let tu to handle errors by @gfx in https://github.com/sqldef/sqldef/pull/1009
+
 ## [v3.8.0](https://github.com/sqldef/sqldef/compare/v3.7.11...v3.8.0) - 2025-12-09
 - pseldef: support  features around pgvector by @gfx in https://github.com/sqldef/sqldef/pull/1004
 
