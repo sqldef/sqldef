@@ -2790,6 +2790,13 @@ column_definition_type:
     }
     $$ = $1
   }
+// for MSSQL: column-level FOREIGN KEY REFERENCES syntax
+| column_definition_type FOREIGN KEY REFERENCES table_name '(' column_list ')'
+  {
+    $1.References     = $5
+    $1.ReferenceNames = $7
+    $$ = $1
+  }
 // for MySQL and PostgreSQL
 | column_definition_type AS '(' expression ')' VIRTUAL
   {

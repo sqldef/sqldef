@@ -393,7 +393,12 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		indexColumns := []Ident{parsedCol.Name}
 		referenceColumns := parsedCol.Type.ReferenceNames
 
-		constraintName := buildPostgresConstraintNameIdent(stmt.NewName.Name.Name, parsedCol.Name.Name, "fkey")
+		// Leave constraint name empty for inline FK references.
+		// The generator will handle matching by columns against existing FKs
+		// (which may have auto-generated names like MySQL's "table_ibfk_N",
+		// PostgreSQL's "table_column_fkey", or MSSQL's "FK__table__column__...")
+		// or generate an appropriate name if creating a new FK.
+		var constraintName Ident
 
 		// Only create constraintOptions if DEFERRABLE or INITIALLY DEFERRED is explicitly set to true
 		// This ensures we don't create an empty constraintOptions struct that would differ from

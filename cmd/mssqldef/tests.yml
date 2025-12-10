@@ -1253,3 +1253,19 @@ CompositeUnnamedForeignKey:
       title VARCHAR(255) NOT NULL,
       FOREIGN KEY (tenant_id, author_id) REFERENCES users(tenant_id, user_id)
     );
+
+# Test inline `FOREIGN KEY REFERENCES` syntax (column-level FK) which is valid T-SQL.
+# This is an idempotency-only test to verify the parser handles this syntax correctly.
+InlineForeignKeyReferences:
+  desired: |
+    CREATE TABLE authors (
+      id BIGINT IDENTITY(1,1) PRIMARY KEY,
+      name NVARCHAR(255) NOT NULL
+    );
+
+    CREATE TABLE books (
+      id BIGINT IDENTITY(1,1) PRIMARY KEY,
+      title NVARCHAR(255) NOT NULL,
+      author_id BIGINT NOT NULL FOREIGN KEY REFERENCES authors(id),
+      price DECIMAL(10, 2) NOT NULL
+    );
