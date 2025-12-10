@@ -48,6 +48,9 @@ type Generator struct {
 	// Track FKs that have been handled during primary key changes
 	handledForeignKeys map[string]bool
 
+	// Track tables that have been dropped to skip COMMENT cleanup for them
+	droppedTables map[string]bool
+
 	desiredComments []*Comment
 	currentComments []*Comment
 
@@ -128,6 +131,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		lock:               config.Lock,
 		config:             config,
 		handledForeignKeys: make(map[string]bool),
+		droppedTables:      make(map[string]bool),
 	}
 	return generator.generateDDLs(desiredDDLs)
 }
@@ -379,9 +383,11 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		dropTableDDLs := g.generateDropTableDDLsWithDependencies(tablesToDrop)
 		ddls = append(ddls, dropTableDDLs...)
 
-		// Remove dropped tables from currentTables
+		// Remove dropped tables from currentTables and track them for later
+		// (to skip generating COMMENT cleanup DDLs for dropped tables)
 		for _, table := range tablesToDrop {
 			g.currentTables = removeTableByName(g.currentTables, table.name.RawString())
+			g.droppedTables[table.name.RawString()] = true
 		}
 	}
 
@@ -556,6 +562,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 	// Clean up obsoleted comments
 	for _, currentComment := range g.currentComments {
+		// Skip comments for tables that have been dropped
+		// PostgreSQL automatically removes comments when the table is dropped
+		if g.isCommentOnDroppedTable(currentComment) {
+			slog.Debug("Skipping comment cleanup for dropped table",
+				"object", currentComment.comment.Object)
+			continue
+		}
+
 		// Check if this comment still exists in desired comments
 		desiredComment := g.findCommentByObject(g.desiredComments, currentComment.comment.Object)
 		// Only generate NULL statement if the comment is completely absent from desired schema
@@ -3877,6 +3891,39 @@ func (g *Generator) findCommentByObject(comments []*Comment, object []Ident) *Co
 		}
 	}
 	return nil
+}
+
+// isCommentOnDroppedTable checks if a comment belongs to a table that has been dropped.
+// This is used to skip generating COMMENT ... IS NULL for dropped tables,
+// since PostgreSQL automatically removes comments when a table is dropped.
+func (g *Generator) isCommentOnDroppedTable(comment *Comment) bool {
+	objectType := comment.comment.ObjectType
+	object := comment.comment.Object
+
+	// Extract table qualified name from the comment object
+	// OBJECT_TABLE: object = [schema, table]
+	// OBJECT_COLUMN: object = [schema, table, column]
+	switch objectType {
+	case "OBJECT_TABLE", "OBJECT_COLUMN":
+		// Both types have [schema, table, ...] structure
+	default:
+		return false
+	}
+
+	var tableName QualifiedName
+	if len(object) >= 2 {
+		tableName = QualifiedName{
+			Schema: object[0],
+			Name:   object[1],
+		}
+	} else if len(object) == 1 {
+		tableName = QualifiedName{
+			Schema: parser.NewIdent(g.defaultSchema, false),
+			Name:   object[0],
+		}
+	}
+
+	return g.droppedTables[tableName.RawString()]
 }
 
 // identsSliceEqual compares two []Ident slices for equality using quote-aware comparison.
