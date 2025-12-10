@@ -3965,7 +3965,7 @@ DropTableWithComment:
       id serial PRIMARY KEY,
       name varchar(100) NOT NULL
     );
-    COMMENT ON TABLE public.foo IS 'foo table';
+    COMMENT ON TABLE "public"."foo" IS 'foo table';
 
 DropTableWithColumnComment:
   current: |
@@ -3982,7 +3982,7 @@ DropTableWithColumnComment:
       id serial PRIMARY KEY,
       name varchar(100) NOT NULL
     );
-    COMMENT ON COLUMN public.users.name IS 'User name';
+    COMMENT ON COLUMN "public"."users"."name" IS 'User name';
 
 DropTableWithBothTableAndColumnComments:
   current: |
@@ -4003,9 +4003,9 @@ DropTableWithBothTableAndColumnComments:
       name varchar(100) NOT NULL,
       price integer NOT NULL
     );
-    COMMENT ON TABLE public.products IS 'Product catalog';
-    COMMENT ON COLUMN public.products.name IS 'Product name';
-    COMMENT ON COLUMN public.products.price IS 'Product price in cents';
+    COMMENT ON TABLE "public"."products" IS 'Product catalog';
+    COMMENT ON COLUMN "public"."products"."name" IS 'Product name';
+    COMMENT ON COLUMN "public"."products"."price" IS 'Product price in cents';
 
 DropOneTableWithCommentKeepAnother:
   current: |
@@ -4032,4 +4032,4 @@ DropOneTableWithCommentKeepAnother:
       id serial PRIMARY KEY,
       name varchar(100) NOT NULL
     );
-    COMMENT ON TABLE public.foo IS 'foo table';
+    COMMENT ON TABLE "public"."foo" IS 'foo table';
