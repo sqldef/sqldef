@@ -338,3 +338,29 @@ CreateViewWithL1Distance:
   down: |
     DROP VIEW public.items_by_l1;
   flavor: pgvector
+
+# Partial index with storage options
+# This test ensures WITH clause appears before WHERE clause in CREATE INDEX
+# PostgreSQL syntax: CREATE INDEX ... USING method (columns) WITH (options) WHERE predicate
+CreatePartialIndexWithStorageOptions:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      status text,
+      embedding vector(3)
+    );
+  desired: |
+    CREATE EXTENSION vector;
+    CREATE TABLE items (
+      id bigserial PRIMARY KEY,
+      status text,
+      embedding vector(3)
+    );
+    CREATE INDEX idx_items_partial ON items USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100) WHERE status = 'active';
+  up: |
+    CREATE INDEX idx_items_partial ON public.items USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100) WHERE status = 'active';
+  down: |
+    DROP INDEX public.idx_items_partial;
+  flavor: pgvector
