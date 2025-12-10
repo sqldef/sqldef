@@ -3353,17 +3353,28 @@ set_value:
 
 character_cast_opt:
   /* empty */ %prec EMPTY_EXPR { $$ = nil }
-| TYPECAST BPCHAR
+| TYPECAST BPCHAR character_cast_opt
   {
-    $$ = &ConvertType{Type: $2}
-  }
-| TYPECAST column_type array_opt
-  {
-    typeName := $2.Type
-    if $3 {
-      typeName = typeName + "[]"
+    // Return the innermost type for chained casts like ::bpchar::text
+    // The final cast in the chain is what matters
+    if $3 != nil {
+      $$ = $3
+    } else {
+      $$ = &ConvertType{Type: $2}
     }
-    $$ = &ConvertType{Type: typeName}
+  }
+| TYPECAST column_type array_opt character_cast_opt
+  {
+    // Return the innermost type for chained casts like ::varchar::text
+    if $4 != nil {
+      $$ = $4
+    } else {
+      typeName := $2.Type
+      if $3 {
+        typeName = typeName + "[]"
+      }
+      $$ = &ConvertType{Type: typeName}
+    }
   }
 
 numeric_type:

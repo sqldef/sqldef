@@ -3777,3 +3777,12 @@ CreateIndexWithDateColumn:
       "date" date
     );
     CREATE INDEX idx_date ON test_table USING btree (date);
+
+# Test for CHECK constraint with type cast inside ARRAY elements
+# PostgreSQL exports CHECK constraints with explicit type casts like 'value'::varchar::text
+CheckConstraintWithTypeCastInArray:
+  desired: |
+    CREATE TABLE test_check_typecast (
+      id serial PRIMARY KEY,
+      status character varying CONSTRAINT test_check_typecast_status_check CHECK (status::text = ANY (ARRAY['active'::character varying::text, 'pending'::character varying::text]))
+    );
