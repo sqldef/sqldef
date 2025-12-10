@@ -1135,3 +1135,43 @@ VarcharMaxExchange:
   down: |
     ALTER TABLE [dbo].[test_table] ALTER COLUMN [col1] varchar(100);
     ALTER TABLE [dbo].[test_table] ALTER COLUMN [col2] varchar(max);
+
+UnnamedForeignKey:
+  desired: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE posts (
+      id BIGINT NOT NULL PRIMARY KEY,
+      user_id BIGINT,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+MultipleUnnamedForeignKeys:
+  desired: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL
+    );
+
+    CREATE TABLE categories (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL
+    );
+
+    CREATE TABLE tags (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL
+    );
+
+    CREATE TABLE articles (
+      id BIGINT NOT NULL PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      author_id BIGINT NOT NULL,
+      category_id BIGINT NOT NULL,
+      tag_id BIGINT,
+      FOREIGN KEY (author_id) REFERENCES users(id),
+      FOREIGN KEY (category_id) REFERENCES categories(id),
+      FOREIGN KEY (tag_id) REFERENCES tags(id)
+    );

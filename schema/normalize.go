@@ -161,6 +161,24 @@ func buildMysqlForeignKeyNameIdent(tableName, columnName string) Ident {
 	return NewIdentWithQuoteDetected(name)
 }
 
+// buildMssqlForeignKeyName builds a MSSQL auto-generated foreign key constraint name
+// using the format FK_{table}_{column}.
+// Note: This is NOT the same as MSSQL's native auto-generated names which use
+// the format FK__{table}__{column}__{hash} (e.g., "FK__posts__user_id__4CA06362").
+// We use a deterministic column-based name for consistency and predictability.
+func buildMssqlForeignKeyName(tableName, columnName string) string {
+	return fmt.Sprintf("FK_%s_%s", tableName, columnName)
+}
+
+// buildMssqlForeignKeyNameIdent builds a MSSQL auto-generated foreign key constraint name
+// and returns it as an Ident.
+// Note: This is NOT the same as MSSQL's native auto-generated names which include
+// a hash suffix. We use a deterministic column-based name for consistency.
+func buildMssqlForeignKeyNameIdent(tableName, columnName string) Ident {
+	name := buildMssqlForeignKeyName(tableName, columnName)
+	return NewIdentWithQuoteDetected(name)
+}
+
 // normalizeCheckExpr normalizes a CHECK constraint expression AST for comparison
 // mode parameter controls PostgreSQL-specific normalization (IN to ANY conversion)
 func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {

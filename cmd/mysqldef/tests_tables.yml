@@ -1041,7 +1041,6 @@ AddColumnCheckAndIndex:
     ) Engine=InnoDB DEFAULT CHARSET=utf8mb4;
 
 MultipleUnnamedForeignKeys:
-
   desired: |
     CREATE TABLE users (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,

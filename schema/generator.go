@@ -403,8 +403,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			// Check if FK exists in desired state by name
 			fkExpectedToExist := g.findForeignKeyByName(desiredTable.foreignKeys, foreignKey.constraintName) != nil
 
-			// For MySQL, also check if there's a matching FK by columns (for unnamed FKs in desired schema)
-			if !fkExpectedToExist && g.mode == GeneratorModeMysql {
+			// Also check if there's a matching FK by columns (for unnamed FKs in desired schema)
+			// This applies to all databases that support named FK constraints (not SQLite3)
+			if !fkExpectedToExist && g.mode != GeneratorModeSQLite3 {
 				fkExpectedToExist = g.findMatchingDesiredForeignKey(desiredTable.foreignKeys, foreignKey) != nil
 			}
 
@@ -1418,17 +1419,16 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		constraintName := desiredForeignKey.constraintName
 		var matchedCurrentFK *ForeignKey
 
-		if constraintName.IsEmpty() && len(desiredForeignKey.indexColumns) > 0 {
+		if constraintName.IsEmpty() && len(desiredForeignKey.indexColumns) > 0 && g.mode != GeneratorModeSQLite3 {
 			// When desired FK has no explicit constraint name, first try to find
 			// a matching FK in current state by columns. This handles the case where
-			// MySQL auto-generates names like "books_ibfk_1" but the user's schema
-			// doesn't specify a name.
-			if g.mode == GeneratorModeMysql {
-				matchedCurrentFK = g.findForeignKeyByColumns(currentTable.foreignKeys, desiredForeignKey)
-				if matchedCurrentFK != nil {
-					// Use the existing constraint name from the current state
-					constraintName = matchedCurrentFK.constraintName
-				}
+			// databases auto-generate names (e.g., MySQL's "books_ibfk_1", PostgreSQL's
+			// "table_column_fkey", or MSSQL's "FK__posts__user_id__...") but the user's
+			// schema doesn't specify a name.
+			matchedCurrentFK = g.findForeignKeyByColumns(currentTable.foreignKeys, desiredForeignKey)
+			if matchedCurrentFK != nil {
+				// Use the existing constraint name from the current state
+				constraintName = matchedCurrentFK.constraintName
 			}
 
 			// If no matching FK found in current state, generate a deterministic name
@@ -1441,16 +1441,10 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					constraintName = buildPostgresConstraintNameIdent(tableName, columnName, "fkey")
 				case GeneratorModeMysql:
 					constraintName = buildMysqlForeignKeyNameIdent(tableName, columnName)
+				case GeneratorModeMssql:
+					constraintName = buildMssqlForeignKeyNameIdent(tableName, columnName)
 				}
 			}
-		}
-
-		if constraintName.IsEmpty() && g.mode != GeneratorModeSQLite3 {
-			return ddls, fmt.Errorf(
-				"Foreign key without constraint symbol was found in table '%s' (index name: '%s', columns: %v). "+
-					"Specify the constraint symbol to identify the foreign key.",
-				desired.table.name.RawString(), desiredForeignKey.indexName.Name, desiredForeignKey.indexColumns,
-			)
 		}
 
 		// Create a modified ForeignKey with the generated constraint name if needed
