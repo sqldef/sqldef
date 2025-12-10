@@ -723,9 +723,9 @@ Comment:
     COMMENT ON COLUMN public.hoge.id is 'hoge id';
     COMMENT ON COLUMN public.hoge.foo is 'foo comment';
   up: |
-    COMMENT ON TABLE public.hoge is 'hoge table';
-    COMMENT ON COLUMN public.hoge.id is 'hoge id';
-    COMMENT ON COLUMN public.hoge.foo is 'foo comment';
+    COMMENT ON TABLE "public"."hoge" IS 'hoge table';
+    COMMENT ON COLUMN "public"."hoge"."id" IS 'hoge id';
+    COMMENT ON COLUMN "public"."hoge"."foo" IS 'foo comment';
   down: |
     COMMENT ON TABLE "public"."hoge" IS NULL;
     COMMENT ON COLUMN "public"."hoge"."id" IS NULL;
@@ -755,7 +755,7 @@ MultipleComments:
     COMMENT ON COLUMN public.hoge.id is 'hoge id';
     COMMENT ON COLUMN public.bar.id is 'bar id';
   up: |
-    COMMENT ON COLUMN public.bar.id is 'bar id';
+    COMMENT ON COLUMN "public"."bar"."id" IS 'bar id';
   down: |
     COMMENT ON COLUMN "public"."bar"."id" IS NULL;
 UpdateComment:
@@ -788,11 +788,11 @@ UpdateComment:
     COMMENT ON TABLE public.bar is 'bar table';
     COMMENT ON COLUMN public.bar.id is 'bar id';
   up: |
-    COMMENT ON TABLE public.hoge is 'hoge table updated';
-    COMMENT ON COLUMN public.hoge.id is 'hoge id updated';
+    COMMENT ON TABLE "public"."hoge" IS 'hoge table updated';
+    COMMENT ON COLUMN "public"."hoge"."id" IS 'hoge id updated';
   down: |
-    COMMENT ON TABLE public.hoge is 'hoge table';
-    COMMENT ON COLUMN public.hoge.id is 'hoge id';
+    COMMENT ON TABLE "public"."hoge" IS 'hoge table';
+    COMMENT ON COLUMN "public"."hoge"."id" IS 'hoge id';
 CommentOnNonStandardDefaultSchema:
   current: |
     CREATE TABLE foo.users (
@@ -805,8 +805,8 @@ CommentOnNonStandardDefaultSchema:
     COMMENT ON TABLE foo.users is 'users table updated';
     COMMENT ON COLUMN foo.users.id is 'users id';
   up: |
-    COMMENT ON TABLE foo.users is 'users table updated';
-    COMMENT ON COLUMN foo.users.id is 'users id';
+    COMMENT ON TABLE "foo"."users" IS 'users table updated';
+    COMMENT ON COLUMN "foo"."users"."id" IS 'users id';
   down: |
     COMMENT ON TABLE "foo"."users" IS NULL;
     COMMENT ON COLUMN "foo"."users"."id" IS NULL;
@@ -826,11 +826,11 @@ CommentUnset:
     COMMENT ON TABLE users IS NULL;
     COMMENT ON COLUMN users.id IS null;
   up: |
-    COMMENT ON TABLE public.users IS NULL;
-    COMMENT ON COLUMN public.users.id IS null;
+    COMMENT ON TABLE "public"."users" IS NULL;
+    COMMENT ON COLUMN "public"."users"."id" IS NULL;
   down: |
-    COMMENT ON TABLE public.users IS 'users table is before update';
-    COMMENT ON COLUMN public.users.id IS 'users id column is before update';
+    COMMENT ON TABLE "public"."users" IS 'users table is before update';
+    COMMENT ON COLUMN "public"."users"."id" IS 'users id column is before update';
 CommentNullWhenAlreadyNull:
   current: |
     CREATE TABLE "status" (
@@ -853,8 +853,8 @@ CommentWithoutSchema:
     COMMENT ON TABLE users is 'users table is updated';
     COMMENT ON COLUMN users.id is 'users id column is updated';
   up: |
-    COMMENT ON TABLE foo.users is 'users table is updated';
-    COMMENT ON COLUMN foo.users.id is 'users id column is updated';
+    COMMENT ON TABLE "foo"."users" IS 'users table is updated';
+    COMMENT ON COLUMN "foo"."users"."id" IS 'users id column is updated';
   down: |
     COMMENT ON TABLE "foo"."users" IS NULL;
     COMMENT ON COLUMN "foo"."users"."id" IS NULL;
@@ -875,9 +875,9 @@ CommentWithoutSchemaWithoutTableNameQuoted:
     COMMENT ON COLUMN users."update" IS '"users."update" column is updated';
   # Default schema 'public' is needed be prefixed in output to prevent false positive detection of DDL change.
   up: |
-    COMMENT ON TABLE public.users IS 'users table is updated';
-    COMMENT ON COLUMN public.users.id IS 'users.id column is updated';
-    COMMENT ON COLUMN public.users."update" IS '"users."update" column is updated';
+    COMMENT ON TABLE "public"."users" IS 'users table is updated';
+    COMMENT ON COLUMN "public"."users"."id" IS 'users.id column is updated';
+    COMMENT ON COLUMN "public"."users"."update" IS '"users."update" column is updated';
   down: |
     COMMENT ON TABLE "public"."users" IS NULL;
     COMMENT ON COLUMN "public"."users"."id" IS NULL;
@@ -898,9 +898,9 @@ CommentWithoutSchemaWithTableNameQuoted:
     COMMENT ON COLUMN "select"."update" IS '"select"."update" column is updated';
   # Default schema 'public' is needed be prefixed in output to prevent false positive detection of DDL change.
   up: |
-    COMMENT ON TABLE public."select" IS '"select" table is updated';
-    COMMENT ON COLUMN public."select".id IS '"select".id column is updated';
-    COMMENT ON COLUMN public."select"."update" IS '"select"."update" column is updated';
+    COMMENT ON TABLE "public"."select" IS '"select" table is updated';
+    COMMENT ON COLUMN "public"."select"."id" IS '"select".id column is updated';
+    COMMENT ON COLUMN "public"."select"."update" IS '"select"."update" column is updated';
   down: |
     COMMENT ON TABLE "public"."select" IS NULL;
     COMMENT ON COLUMN "public"."select"."id" IS NULL;
@@ -917,8 +917,8 @@ CommentContainingQuote:
     COMMENT ON TABLE public.test is 'World''s best table';
     COMMENT ON COLUMN public.test.email is 'The user''s contact email address.';
   up: |
-    COMMENT ON TABLE public.test is 'World''s best table';
-    COMMENT ON COLUMN public.test.email is 'The user''s contact email address.';
+    COMMENT ON TABLE "public"."test" IS 'World''s best table';
+    COMMENT ON COLUMN "public"."test"."email" IS 'The user''s contact email address.';
   down: |
     COMMENT ON TABLE "public"."test" IS NULL;
     COMMENT ON COLUMN "public"."test"."email" IS NULL;
@@ -3947,3 +3947,89 @@ CompositeUnnamedForeignKey:
       title VARCHAR(255) NOT NULL,
       FOREIGN KEY (tenant_id, author_id) REFERENCES users(tenant_id, user_id)
     );
+
+# Test: DROP TABLE should not generate COMMENT ON TABLE ... IS NULL for the dropped table
+# PostgreSQL automatically removes table comments when the table is dropped.
+DropTableWithComment:
+  current: |
+    CREATE TABLE foo (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON TABLE foo IS 'foo table';
+  desired: ""
+  up: |
+    DROP TABLE "public"."foo";
+  down: |
+    CREATE TABLE foo (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON TABLE public.foo IS 'foo table';
+
+DropTableWithColumnComment:
+  current: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON COLUMN users.name IS 'User name';
+  desired: ""
+  up: |
+    DROP TABLE "public"."users";
+  down: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON COLUMN public.users.name IS 'User name';
+
+DropTableWithBothTableAndColumnComments:
+  current: |
+    CREATE TABLE products (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL,
+      price integer NOT NULL
+    );
+    COMMENT ON TABLE products IS 'Product catalog';
+    COMMENT ON COLUMN products.name IS 'Product name';
+    COMMENT ON COLUMN products.price IS 'Product price in cents';
+  desired: ""
+  up: |
+    DROP TABLE "public"."products";
+  down: |
+    CREATE TABLE products (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL,
+      price integer NOT NULL
+    );
+    COMMENT ON TABLE public.products IS 'Product catalog';
+    COMMENT ON COLUMN public.products.name IS 'Product name';
+    COMMENT ON COLUMN public.products.price IS 'Product price in cents';
+
+DropOneTableWithCommentKeepAnother:
+  current: |
+    CREATE TABLE foo (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON TABLE foo IS 'foo table';
+    CREATE TABLE bar (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON TABLE bar IS 'bar table';
+  desired: |
+    CREATE TABLE bar (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON TABLE bar IS 'bar table';
+  up: |
+    DROP TABLE "public"."foo";
+  down: |
+    CREATE TABLE foo (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON TABLE public.foo IS 'foo table';
