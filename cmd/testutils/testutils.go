@@ -111,6 +111,9 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 	}
 
 	ret := map[string]TestCase{}
+	// Track which file each test case came from for better error messages
+	testFileMap := map[string]string{}
+
 	for _, file := range files {
 		var tests map[string]*TestCase
 
@@ -122,27 +125,35 @@ func ReadTests(pattern string) (map[string]TestCase, error) {
 		dec := yaml.NewDecoder(bytes.NewReader(buf), yaml.DisallowUnknownField())
 		err = dec.Decode(&tests)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%s: %w", file, err)
 		}
 
 		for name, test := range tests {
 			// Check for deprecated 'output' field
 			if test.Output != nil {
-				log.Fatalf("Test case '%s': The 'output' field is deprecated. Please use 'up' and 'down' instead.\n\nMigration guide:\n  output: |     →  up: |\n    DDL...            DDL...\n                      down: |\n                        REVERSE_DDL...", name)
+				return nil, fmt.Errorf(`%s: test case '%s': the 'output' field is deprecated. Please use 'up' and 'down' instead.
+
+Migration guide:
+  output: |     →  up: |
+    DDL...            DDL...
+                      down: |
+                        REVERSE_DDL...`, file, name)
 			}
 
 			// Validate up/down dependency: both must be present or both must be absent
 			if (test.Up != nil && test.Down == nil) || (test.Up == nil && test.Down != nil) {
-				log.Fatalf("Test case '%s': If 'up' is specified, 'down' must also be specified (and vice versa).\nFor idempotency-only tests, omit both 'up' and 'down'.", name)
+				return nil, fmt.Errorf(`%s: test case '%s': if 'up' is specified, 'down' must also be specified (and vice versa).
+For idempotency-only tests, omit both 'up' and 'down'.`, file, name)
 			}
 
 			if test.EnableDrop == nil {
 				enableDrop := true // defaults to true
 				test.EnableDrop = &enableDrop
 			}
-			if _, ok := ret[name]; ok {
-				log.Fatalf("There are multiple test cases named '%s'", name)
+			if existingFile, ok := testFileMap[name]; ok {
+				return nil, fmt.Errorf("duplicate test case name '%s': defined in both '%s' and '%s'", name, existingFile, file)
 			}
+			testFileMap[name] = file
 			ret[name] = *test
 		}
 	}

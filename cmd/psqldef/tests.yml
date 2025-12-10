@@ -3802,3 +3802,30 @@ CheckConstraintWithArrayTypeCast:
       id serial PRIMARY KEY,
       reference_image_type character varying CONSTRAINT test_array_typecast_check CHECK (reference_image_type IS NULL OR (reference_image_type::text = ANY (ARRAY['user_uploaded'::character varying, 'common'::character varying, 'generated'::character varying]::text[])))
     );
+
+# TODO: Fix this test - when enable_drop is false and DROP INDEX is skipped,
+# the corresponding CREATE INDEX should also be skipped to avoid "relation already exists" error.
+#
+# Test for changing index uniqueness when enable_drop is false (the default)
+# When an index changes from non-unique to unique, psqldef needs to DROP then CREATE.
+# If DROP is skipped (enable_drop: false), CREATE should also be skipped to avoid
+# "relation already exists" error.
+# ChangeIndexUniquenessWithEnableDropFalse:
+#   enable_drop: false
+#   current: |
+#     CREATE TABLE test_index_uniqueness (
+#       id serial PRIMARY KEY,
+#       session_id character varying NOT NULL
+#     );
+#     CREATE INDEX ix_test_session_id ON public.test_index_uniqueness USING btree (session_id);
+#   desired: |
+#     CREATE TABLE test_index_uniqueness (
+#       id serial PRIMARY KEY,
+#       session_id character varying NOT NULL
+#     );
+#     CREATE UNIQUE INDEX ix_test_session_id ON public.test_index_uniqueness USING btree (session_id);
+#   # Both DROP and CREATE should be skipped when enable_drop is false
+#   up: |
+#     -- Skipped: DROP INDEX "public"."ix_test_session_id";
+#     -- Skipped: CREATE UNIQUE INDEX ix_test_session_id ON public.test_index_uniqueness USING btree (session_id);
+#   down: ""
