@@ -1,3 +1,6 @@
+## [v3.8.2](https://github.com/sqldef/sqldef/compare/v3.8.1...v3.8.2) - 2025-12-10
+- fix a wrong index option ordering in generator for psqldef by @gfx in https://github.com/sqldef/sqldef/pull/1010
+
 ## [v3.8.1](https://github.com/sqldef/sqldef/compare/v3.8.0...v3.8.1) - 2025-12-10
 - fix a syntax error around type casts in psqldef by @gfx in https://github.com/sqldef/sqldef/pull/1006
 - fix: psqldef normalization issue around typecast by @gfx in https://github.com/sqldef/sqldef/pull/1008
