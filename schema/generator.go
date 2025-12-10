@@ -2652,15 +2652,15 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 
 	ddl += fmt.Sprintf(" (%s)", strings.Join(columns, ", "))
 
-	// Add WHERE clause for partial indexes
-	if index.where != "" {
-		ddl += fmt.Sprintf(" WHERE %s", index.where)
-	}
-
-	// Add index options
+	// Add index options (WITH clause must come before WHERE in PostgreSQL)
 	optionDef := g.generateIndexOptionDefinition(index.options)
 	if optionDef != "" {
 		ddl += optionDef
+	}
+
+	// Add WHERE clause for partial indexes
+	if index.where != "" {
+		ddl += fmt.Sprintf(" WHERE %s", index.where)
 	}
 
 	return ddl
