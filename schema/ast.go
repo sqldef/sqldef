@@ -399,7 +399,7 @@ type Sequence struct {
 
 type DefaultDefinition struct {
 	expression     parser.Expr // never nil
-	constraintName Ident // only for MSSQL
+	constraintName Ident       // only for MSSQL
 }
 
 type SridDefinition struct {
