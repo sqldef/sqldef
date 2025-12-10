@@ -3786,3 +3786,19 @@ CheckConstraintWithTypeCastInArray:
       id serial PRIMARY KEY,
       status character varying CONSTRAINT test_check_typecast_status_check CHECK (status::text = ANY (ARRAY['active'::character varying::text, 'pending'::character varying::text]))
     );
+
+# Test for CHECK constraint where ARRAY has outer type cast (ARRAY[...]::text[])
+# PostgreSQL normalizes ARRAY['a'::varchar, 'b'::varchar]::text[] to ARRAY['a'::varchar::text, 'b'::varchar::text]
+CheckConstraintWithArrayTypeCast:
+  # The current state uses the PostgreSQL-normalized form (type cast on each element)
+  current: |
+    CREATE TABLE test_array_typecast (
+      id serial PRIMARY KEY,
+      reference_image_type character varying CONSTRAINT test_array_typecast_check CHECK (reference_image_type IS NULL OR (reference_image_type::text = ANY (ARRAY['user_uploaded'::character varying::text, 'common'::character varying::text, 'generated'::character varying::text])))
+    );
+  # The desired state uses the outer type cast form (type cast on the whole ARRAY)
+  desired: |
+    CREATE TABLE test_array_typecast (
+      id serial PRIMARY KEY,
+      reference_image_type character varying CONSTRAINT test_array_typecast_check CHECK (reference_image_type IS NULL OR (reference_image_type::text = ANY (ARRAY['user_uploaded'::character varying, 'common'::character varying, 'generated'::character varying]::text[])))
+    );
