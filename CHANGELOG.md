@@ -1,3 +1,9 @@
+## [v3.8.3](https://github.com/sqldef/sqldef/compare/v3.8.2...v3.8.3) - 2025-12-10
+- fix: skip COMMENT cleanup for dropped tables in psqldef by @178inaba in https://github.com/sqldef/sqldef/pull/1012
+- refactor comment normalizations by @gfx in https://github.com/sqldef/sqldef/pull/1013
+- support unnnamed FKs for mysqldef and mssqldef by @gfx in https://github.com/sqldef/sqldef/pull/1014
+- remove trivial comments and useless nil check by @gfx in https://github.com/sqldef/sqldef/pull/1016
+
 ## [v3.8.2](https://github.com/sqldef/sqldef/compare/v3.8.1...v3.8.2) - 2025-12-10
 - fix a wrong index option ordering in generator for psqldef by @gfx in https://github.com/sqldef/sqldef/pull/1010
 
