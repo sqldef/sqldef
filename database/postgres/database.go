@@ -321,13 +321,17 @@ func (d *PostgresDatabase) extensions() ([]string, error) {
 }
 
 func (d *PostgresDatabase) types() ([]string, error) {
+	// Use quote_literal() to properly escape enum labels containing special characters
+	// (single quotes, spaces, etc.) and preserve the order with enumsortorder
 	rows, err := d.db.Query(`
-		select n.nspname as type_schema, t.typname, string_agg(e.enumlabel, ' ')
-		from pg_enum e
-		join pg_type t on e.enumtypid = t.oid
-		inner join pg_catalog.pg_namespace n on t.typnamespace = n.oid
-		where not exists (select * from pg_depend d where d.objid = t.oid and d.deptype = 'e')
-		group by n.nspname, t.typname;
+		SELECT n.nspname AS type_schema,
+		       t.typname,
+		       string_agg(quote_literal(e.enumlabel), ', ' ORDER BY e.enumsortorder)
+		FROM pg_enum e
+		JOIN pg_type t ON e.enumtypid = t.oid
+		INNER JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
+		WHERE NOT EXISTS (SELECT * FROM pg_depend d WHERE d.objid = t.oid AND d.deptype = 'e')
+		GROUP BY n.nspname, t.typname;
 	`)
 	if err != nil {
 		return nil, err
@@ -336,20 +340,16 @@ func (d *PostgresDatabase) types() ([]string, error) {
 
 	var ddls []string
 	for rows.Next() {
-		var typeSchema, typeName, labels string
-		if err := rows.Scan(&typeSchema, &typeName, &labels); err != nil {
+		var typeSchema, typeName, enumLabels string
+		if err := rows.Scan(&typeSchema, &typeName, &enumLabels); err != nil {
 			return nil, err
 		}
 		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, typeSchema) {
 			continue
 		}
-		enumLabels := []string{}
-		for label := range strings.SplitSeq(labels, " ") {
-			enumLabels = append(enumLabels, fmt.Sprintf("'%s'", label))
-		}
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE TYPE %s.%s AS ENUM (%s);", d.escapeIdentifier(typeSchema), d.escapeIdentifier(typeName), strings.Join(enumLabels, ", "),
+				"CREATE TYPE %s.%s AS ENUM (%s);", d.escapeIdentifier(typeSchema), d.escapeIdentifier(typeName), enumLabels,
 			),
 		)
 	}
