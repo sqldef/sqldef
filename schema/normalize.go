@@ -1151,12 +1151,12 @@ func sortPrivilegesByCanonicalOrder(privileges []string) {
 // sortAndDeduplicateValues sorts and deduplicates a slice of expressions based on their string representation.
 // This ensures that semantically equivalent lists are treated as identical regardless of order or duplicates.
 // For example: [b, a, b] becomes [a, b]
-func sortAndDeduplicateValues[Expr parser.Expr](values []Expr) []Expr {
+func sortAndDeduplicateValues[T parser.Expr](values []T) []T {
 	if len(values) <= 1 {
 		return values
 	}
 
-	slices.SortFunc(values, func(a, b Expr) int {
+	slices.SortFunc(values, func(a, b T) int {
 		return cmp.Compare(parser.String(a), parser.String(b))
 	})
 
