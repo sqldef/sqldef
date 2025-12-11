@@ -22,6 +22,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var stripHeredocRegex = regexp.MustCompilePOSIX("^\t*")
+
 type TestCase struct {
 	Current            string  // default: empty schema
 	Desired            string  // default: empty schema
@@ -70,7 +72,7 @@ func init() {
 //   - SQL Server: 128 characters
 //
 // The resulting format is: sqldef_test_{sanitized}_{hash}
-// where hash is the first 8 characters of the MD5 hash of the original test name.
+// where hash is the first 8 characters of the FNV-1a hash (in hex) of the original test name.
 func CreateTestDatabaseName(testName string, dbLimit int) string {
 	const prefix = "sqldef_test_"
 	const hashLen = 8
@@ -100,7 +102,7 @@ func CreateTestDatabaseName(testName string, dbLimit int) string {
 	hash := fnv.New32a()
 	hash.Write([]byte(testName))
 
-	return fmt.Sprintf("%s%s_%08x", prefix, sanitized, hash.Sum32())
+	return fmt.Sprintf("%s%s_%0*x", prefix, sanitized, hashLen, hash.Sum32())
 }
 
 func ReadTests(pattern string) (map[string]TestCase, error) {
@@ -682,6 +684,5 @@ func WriteFile(path string, content string) {
 
 func StripHeredoc(heredoc string) string {
 	heredoc = strings.TrimPrefix(heredoc, "\n")
-	re := regexp.MustCompilePOSIX("^\t*")
-	return re.ReplaceAllLiteralString(heredoc, "")
+	return stripHeredocRegex.ReplaceAllLiteralString(heredoc, "")
 }
