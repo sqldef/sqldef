@@ -51,7 +51,7 @@ clean:
 	rm -f cmd/mysqldef/mysqldef.exe cmd/psqldef/psqldef.exe cmd/sqlite3def/sqlite3def.exe cmd/mssqldef/mssqldef.exe
 
 deps:
-	go get -t ./...
+	go mod tidy -v
 
 goyacc:
 	@if ! which goyacc > /dev/null; then \
