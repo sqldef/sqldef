@@ -646,14 +646,13 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		)
 	}
 
-	where := ""
+	var where parser.Expr
 	if stmt.IndexSpec.Where != nil && stmt.IndexSpec.Where.Type == parser.WhereStr {
-		expr := stmt.IndexSpec.Where.Expr
+		where = stmt.IndexSpec.Where.Expr
 		// remove root paren expression
-		if parenExpr, ok := expr.(*parser.ParenExpr); ok {
-			expr = parenExpr.Expr
+		if parenExpr, ok := where.(*parser.ParenExpr); ok {
+			where = parenExpr.Expr
 		}
-		where = parser.String(expr)
 	}
 
 	includedColumns := util.TransformSlice(stmt.IndexSpec.Included, func(includedColumn Ident) string {
@@ -897,9 +896,9 @@ func parseExclusion(exclusion *parser.ExclusionDefinition) Exclusion {
 			operator:   exclusion.Operator,
 		})
 	}
-	var where string
+	var where parser.Expr
 	if exclusion.Where != nil {
-		where = parser.String(exclusion.Where.Expr)
+		where = exclusion.Where.Expr
 	}
 	// PostgreSQL defaults to btree when no index method is specified
 	indexType := strings.ToUpper(exclusion.IndexType.Name)

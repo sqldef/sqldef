@@ -935,6 +935,8 @@ type IndexColumn struct {
 	Column        Ident
 	Length        *SQLVal
 	Direction     string
+	NullsOrdering string // "first" or "last" for NULLS FIRST/LAST
+	Collation     string // Collation name for COLLATE
 	OperatorClass string
 	Expression    Expr // For functional indexes like ((CASE WHEN ...))
 }
@@ -986,6 +988,7 @@ type IndexSpec struct {
 	Constraint        bool
 	Async             bool // for Aurora DSQL
 	Concurrently      bool // for PostgreSQL
+	NullsNotDistinct  bool // for PostgreSQL 15+ UNIQUE indexes
 	Clustered         bool // for MSSQL
 	ColumnStore       bool // for MSSQL
 	Included          []Ident
@@ -2392,6 +2395,12 @@ type Order struct {
 const (
 	AscScr  = "asc"
 	DescScr = "desc"
+)
+
+// IndexColumn.NullsOrdering
+const (
+	NullsFirst = "first"
+	NullsLast  = "last"
 )
 
 // Format formats the node.

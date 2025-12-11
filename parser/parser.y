@@ -248,6 +248,7 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> HANDLER CONTINUE EXIT SQLEXCEPTION SQLWARNING SQLSTATE FOUND
 %token <str> DEFERRABLE INITIALLY IMMEDIATE DEFERRED
 %token <str> CONCURRENTLY ASYNC
+%token <str> NULLS
 %token <str> SQL SECURITY
 %token <str> RECURSIVE
 %token <str> IMMUTABLE STABLE VOLATILE SETOF
@@ -380,7 +381,8 @@ func setDDL(yylex any, ddl *DDL) {
 %type <expr> having_opt
 %type <orderBy> order_by_opt order_list
 %type <order> order
-%type <str> asc_desc_opt
+%type <str> asc_desc_opt nulls_ordering_opt
+%type <boolVal> nulls_not_distinct_opt
 %type <limit> limit_opt
 %type <str> lock_opt
 %type <columns> ins_column_list column_list
@@ -612,7 +614,7 @@ create_statement:
     $1.TableSpec = $2
     $$ = $1
   }
-| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
       Action: CreateIndex,
@@ -625,16 +627,17 @@ create_statement:
         Clustered: bool($2[1]),
         Async: $4 == byte(2),
         Concurrently: $4 == byte(1),
-        Included: $11,
-        Where: NewWhere(WhereStr, $12),
-        Options: $13,
-        Partition: $14,
+        NullsNotDistinct: bool($11),
+        Included: $12,
+        Where: NewWhere(WhereStr, $13),
+        Options: $14,
+        Partition: $15,
       },
       IndexCols: $9.IndexCols,
       IndexExpr: $9.IndexExpr,
     }
   }
-| CREATE unique_clustered_opt INDEX concurrently_opt ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt ON table_name '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
       Action: CreateIndex,
@@ -647,10 +650,11 @@ create_statement:
         Clustered: bool($2[1]),
         Async: $4 == byte(2),
         Concurrently: $4 == byte(1),
-        Included: $10,
-        Where: NewWhere(WhereStr, $11),
-        Options: $12,
-        Partition: $13,
+        NullsNotDistinct: bool($10),
+        Included: $11,
+        Where: NewWhere(WhereStr, $12),
+        Options: $13,
+        Partition: $14,
       },
       IndexCols: $8.IndexCols,
       IndexExpr: $8.IndexExpr,
@@ -675,7 +679,7 @@ create_statement:
     }
   }
 /* For PostgreSQL */
-| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' include_columns_opt index_option_opt where_expression_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt index_option_opt where_expression_opt
   {
     indexSpec := &IndexSpec{
       Name: $5,
@@ -683,11 +687,12 @@ create_statement:
       Unique: bool($2[0]),
       Async: $4 == byte(2),
       Concurrently: $4 == byte(1),
-      Where: NewWhere(WhereStr, $15),
-      Included: $13,
+      NullsNotDistinct: bool($13),
+      Where: NewWhere(WhereStr, $16),
+      Included: $14,
     }
-    if $14 != nil && len($14) > 0 {
-      indexSpec.Options = $14
+    if $15 != nil && len($15) > 0 {
+      indexSpec.Options = $15
     }
     $$ = &DDL{
       Action: CreateIndex,
@@ -4063,37 +4068,49 @@ index_column_list:
   }
 
 index_column:
-  sql_id length_opt asc_desc_opt
+  sql_id length_opt asc_desc_opt nulls_ordering_opt
   {
-    $$ = IndexColumn{Column: $1, Length: $2, Direction: $3}
+    $$ = IndexColumn{Column: $1, Length: $2, Direction: $3, NullsOrdering: $4}
   }
-| non_reserved_keyword length_opt asc_desc_opt
+| non_reserved_keyword length_opt asc_desc_opt nulls_ordering_opt
   {
-    $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3}
+    $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3, NullsOrdering: $4}
   }
-| col_name_keyword length_opt asc_desc_opt
+| col_name_keyword length_opt asc_desc_opt nulls_ordering_opt
   {
-    $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3}
+    $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3, NullsOrdering: $4}
   }
-| sql_id operator_class
+| sql_id COLLATE charset asc_desc_opt nulls_ordering_opt
   {
-    $$ = IndexColumn{Column: $1, OperatorClass: $2}
+    $$ = IndexColumn{Column: $1, Collation: $3, Direction: $4, NullsOrdering: $5}
   }
-| non_reserved_keyword operator_class
+| non_reserved_keyword COLLATE charset asc_desc_opt nulls_ordering_opt
   {
-    $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2}
+    $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
   }
-| col_name_keyword operator_class
+| col_name_keyword COLLATE charset asc_desc_opt nulls_ordering_opt
   {
-    $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2}
+    $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
   }
-| '(' expression ')' asc_desc_opt
+| sql_id operator_class asc_desc_opt nulls_ordering_opt
   {
-    $$ = IndexColumn{Expression: $2, Direction: $4}
+    $$ = IndexColumn{Column: $1, OperatorClass: $2, Direction: $3, NullsOrdering: $4}
   }
-| function_call_generic asc_desc_opt
+| non_reserved_keyword operator_class asc_desc_opt nulls_ordering_opt
   {
-    $$ = IndexColumn{Expression: $1, Direction: $2}
+    $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2, Direction: $3, NullsOrdering: $4}
+  }
+| col_name_keyword operator_class asc_desc_opt nulls_ordering_opt
+  {
+    $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2, Direction: $3, NullsOrdering: $4}
+  }
+| '(' expression ')' asc_desc_opt nulls_ordering_opt
+  {
+    $$ = IndexColumn{Expression: $2, Direction: $4, NullsOrdering: $5}
+  }
+| function_call_generic asc_desc_opt nulls_ordering_opt
+  {
+    $$ = IndexColumn{Expression: $1, Direction: $2, NullsOrdering: $3}
   }
 
 // https://www.postgresql.org/docs/9.5/brin-builtin-opclasses.html
@@ -6132,6 +6149,28 @@ asc_desc_opt:
 | DESC
   {
     $$ = DescScr
+  }
+
+nulls_ordering_opt:
+  {
+    $$ = ""
+  }
+| NULLS FIRST
+  {
+    $$ = NullsFirst
+  }
+| NULLS LAST
+  {
+    $$ = NullsLast
+  }
+
+nulls_not_distinct_opt:
+  {
+    $$ = BoolVal(false)
+  }
+| NULLS NOT DISTINCT
+  {
+    $$ = BoolVal(true)
   }
 
 limit_opt:

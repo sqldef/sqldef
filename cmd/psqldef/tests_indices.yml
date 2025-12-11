@@ -474,18 +474,41 @@ GistIndexWithTstzrange:
     CREATE TABLE events (id integer, event_range tstzrange);
     CREATE INDEX idx_event_range ON events USING gist (event_range);
 
-# Index with multiple operator classes
 IndexWithMultipleOpClasses:
   legacy_ignore_quotes: false
   desired: |
     CREATE TABLE test (name text, code text);
     CREATE INDEX idx_multi_opclass ON test (name text_pattern_ops, code varchar_pattern_ops);
 
-# BRIN index
 BrinIndex:
   legacy_ignore_quotes: false
   desired: |
     CREATE TABLE timeseries (ts timestamp, val numeric);
     CREATE INDEX idx_ts_brin ON timeseries USING brin (ts);
 
-# Generated column with complex expression
+PartialIndexWithComplexWhere:
+  desired: |
+    CREATE TABLE orders (id integer, status text, amount numeric, created_at timestamp);
+    CREATE INDEX idx_recent_large_orders ON orders (status)
+    WHERE amount > 1000 AND created_at > '2024-01-01 00:00:00'::timestamp;
+
+IndexWithNullsNotDistinct:
+  min_version: "15"
+  desired: |
+    CREATE TABLE test (id integer, val text);
+    CREATE UNIQUE INDEX idx_val ON test (val) NULLS NOT DISTINCT;
+
+IndexWithCollate:
+  desired: |
+    CREATE TABLE test_names (name text);
+    CREATE INDEX idx_name_ci ON test_names (name COLLATE "C");
+
+IndexWithNullsOrdering:
+  desired: |
+    CREATE TABLE test (a integer, b integer);
+    CREATE INDEX idx_ab ON test (a ASC NULLS FIRST, b DESC NULLS LAST);
+
+IndexWithExpressionLower:
+  desired: |
+    CREATE TABLE users (email text);
+    CREATE INDEX idx_email_lower ON users (LOWER(email));

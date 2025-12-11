@@ -529,9 +529,15 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			normalized := normalizeSelectExpr(arg, mode)
 			normalizedExprs = append(normalizedExprs, normalized)
 		}
+		// Normalize function name to lowercase for PostgreSQL (PostgreSQL stores functions in lowercase)
+		// For MySQL, preserve the original case as MySQL preserves case for function names
+		normalizedName := e.Name
+		if mode == GeneratorModePostgres {
+			normalizedName = parser.NewIdent(funcName, e.Name.Quoted)
+		}
 		return &parser.FuncExpr{
 			Qualifier: e.Qualifier,
-			Name:      e.Name,
+			Name:      normalizedName,
 			Distinct:  e.Distinct,
 			Exprs:     normalizedExprs,
 			Over:      e.Over,

@@ -334,6 +334,7 @@ var keywords = map[string]int{
 	"no_write_to_binlog":     UNUSED,
 	"ntext":                  NTEXT,
 	"null":                   NULL,
+	"nulls":                  NULLS,
 	"numeric":                NUMERIC,
 	"numrange":               NUMRANGE,
 	"nvarchar":               NVARCHAR,

@@ -2696,8 +2696,8 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 	}
 
 	// Add WHERE clause for partial indexes
-	if index.where != "" {
-		ddl += fmt.Sprintf(" WHERE %s", index.where)
+	if index.where != nil {
+		ddl += fmt.Sprintf(" WHERE %s", parser.String(index.where))
 	}
 
 	return ddl
@@ -2983,8 +2983,8 @@ func (g *Generator) generateExclusionDefinition(exclusion Exclusion) string {
 		exclusion.indexType,
 		strings.Join(ex, ", "),
 	)
-	if exclusion.where != "" {
-		definition += fmt.Sprintf(" WHERE (%s)", exclusion.where)
+	if exclusion.where != nil {
+		definition += fmt.Sprintf(" WHERE (%s)", parser.String(exclusion.where))
 	}
 	return definition
 }
@@ -3041,8 +3041,8 @@ func (g *Generator) generateRenameIndex(tableName QualifiedName, oldIndexName Id
 			}
 			createStmt += fmt.Sprintf(" (%s)", strings.Join(columnStrs, ", "))
 
-			if desiredIndex.where != "" {
-				createStmt += fmt.Sprintf(" WHERE %s", desiredIndex.where)
+			if desiredIndex.where != nil {
+				createStmt += fmt.Sprintf(" WHERE %s", parser.String(desiredIndex.where))
 			}
 
 			ddls = append(ddls, createStmt)
@@ -4655,7 +4655,7 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 			return false
 		}
 	}
-	if indexA.where != indexB.where {
+	if !g.areSameWhereClause(indexA.where, indexB.where) {
 		return false
 	}
 
@@ -4721,6 +4721,31 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 	return true
 }
 
+func (g *Generator) areSameWhereClause(whereA, whereB parser.Expr) bool {
+	// Both nil
+	if whereA == nil && whereB == nil {
+		return true
+	}
+	// One is nil and the other is not
+	if whereA == nil || whereB == nil {
+		return false
+	}
+
+	normalizedA := normalizeExpr(whereA, g.mode)
+	normalizedB := normalizeExpr(whereB, g.mode)
+
+	var strA, strB string
+	if !g.config.LegacyIgnoreQuotes {
+		strA = g.formatExprQuoteAware(normalizedA)
+		strB = g.formatExprQuoteAware(normalizedB)
+	} else {
+		strA = parser.String(normalizedA)
+		strB = parser.String(normalizedB)
+	}
+
+	return strA == strB
+}
+
 func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB ForeignKey) bool {
 	// Compare index columns (source columns of the FK)
 	if len(foreignKeyA.indexColumns) != len(foreignKeyB.indexColumns) {
@@ -4777,7 +4802,7 @@ func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion
 	if len(exclusionA.exclusions) != len(exclusionB.exclusions) {
 		return false
 	}
-	if exclusionA.where != exclusionB.where {
+	if !g.areSameWhereClause(exclusionA.where, exclusionB.where) {
 		return false
 	}
 	for i := range exclusionA.exclusions {
