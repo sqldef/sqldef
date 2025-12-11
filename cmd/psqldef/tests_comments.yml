@@ -1,0 +1,218 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+Comment:
+  current: |
+    CREATE TABLE "public"."hoge" (
+      "id" bigserial NOT NULL,
+      "foo" text NOT NULL DEFAULT ''::text,
+      PRIMARY KEY ("id")
+    );
+  desired: |
+    CREATE TABLE "public"."hoge" (
+        "id" bigserial NOT NULL,
+        "foo" text NOT NULL DEFAULT ''::text,
+        PRIMARY KEY ("id")
+    );
+
+    COMMENT ON TABLE public.hoge is 'hoge table';
+    COMMENT ON COLUMN public.hoge.id is 'hoge id';
+    COMMENT ON COLUMN public.hoge.foo is 'foo comment';
+  up: |
+    COMMENT ON TABLE "public"."hoge" IS 'hoge table';
+    COMMENT ON COLUMN "public"."hoge"."id" IS 'hoge id';
+    COMMENT ON COLUMN "public"."hoge"."foo" IS 'foo comment';
+  down: |
+    COMMENT ON TABLE "public"."hoge" IS NULL;
+    COMMENT ON COLUMN "public"."hoge"."id" IS NULL;
+    COMMENT ON COLUMN "public"."hoge"."foo" IS NULL;
+MultipleComments:
+  current: |
+    CREATE TABLE "public"."hoge" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+    CREATE TABLE "public"."bar" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+
+    COMMENT ON COLUMN public.hoge.id is 'hoge id';
+  desired: |
+    CREATE TABLE "public"."hoge" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+    CREATE TABLE "public"."bar" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+
+    COMMENT ON COLUMN public.hoge.id is 'hoge id';
+    COMMENT ON COLUMN public.bar.id is 'bar id';
+  up: |
+    COMMENT ON COLUMN "public"."bar"."id" IS 'bar id';
+  down: |
+    COMMENT ON COLUMN "public"."bar"."id" IS NULL;
+UpdateComment:
+  current: |
+    CREATE TABLE "public"."hoge" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+    CREATE TABLE "public"."bar" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+
+    COMMENT ON TABLE public.hoge is 'hoge table';
+    COMMENT ON COLUMN public.hoge.id is 'hoge id';
+    COMMENT ON TABLE public.bar is 'bar table';
+    COMMENT ON COLUMN public.bar.id is 'bar id';
+  desired: |
+    CREATE TABLE "public"."hoge" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+    CREATE TABLE "public"."bar" (
+      "id" bigserial NOT NULL,
+      PRIMARY KEY ("id")
+    );
+
+    COMMENT ON TABLE public.hoge is 'hoge table updated';
+    COMMENT ON COLUMN public.hoge.id is 'hoge id updated';
+    COMMENT ON TABLE public.bar is 'bar table';
+    COMMENT ON COLUMN public.bar.id is 'bar id';
+  up: |
+    COMMENT ON TABLE "public"."hoge" IS 'hoge table updated';
+    COMMENT ON COLUMN "public"."hoge"."id" IS 'hoge id updated';
+  down: |
+    COMMENT ON TABLE "public"."hoge" IS 'hoge table';
+    COMMENT ON COLUMN "public"."hoge"."id" IS 'hoge id';
+CommentOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE foo.users (
+      id bigint
+    );
+  desired: |
+    CREATE TABLE foo.users (
+      id bigint
+    );
+    COMMENT ON TABLE foo.users is 'users table updated';
+    COMMENT ON COLUMN foo.users.id is 'users id';
+  up: |
+    COMMENT ON TABLE "foo"."users" IS 'users table updated';
+    COMMENT ON COLUMN "foo"."users"."id" IS 'users id';
+  down: |
+    COMMENT ON TABLE "foo"."users" IS NULL;
+    COMMENT ON COLUMN "foo"."users"."id" IS NULL;
+  user: psqldef_user
+
+CommentUnset:
+  current: |
+    CREATE TABLE users (
+      id bigint
+    );
+    COMMENT ON TABLE users IS 'users table is before update';
+    COMMENT ON COLUMN users.id IS 'users id column is before update';
+  desired: |
+    CREATE TABLE users (
+      id bigint
+    );
+    COMMENT ON TABLE users IS NULL;
+    COMMENT ON COLUMN users.id IS null;
+  up: |
+    COMMENT ON TABLE "public"."users" IS NULL;
+    COMMENT ON COLUMN "public"."users"."id" IS NULL;
+  down: |
+    COMMENT ON TABLE "public"."users" IS 'users table is before update';
+    COMMENT ON COLUMN "public"."users"."id" IS 'users id column is before update';
+CommentNullWhenAlreadyNull:
+  current: |
+    CREATE TABLE "status" (
+      "id" bigint NOT NULL
+    );
+  desired: |
+    CREATE TABLE "status" (
+      "id" bigint NOT NULL
+    );
+    COMMENT ON COLUMN "status"."id" IS NULL;
+CommentWithoutSchema:
+  current: |
+    CREATE TABLE users (
+      id bigint
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint
+    );
+    COMMENT ON TABLE users is 'users table is updated';
+    COMMENT ON COLUMN users.id is 'users id column is updated';
+  up: |
+    COMMENT ON TABLE "foo"."users" IS 'users table is updated';
+    COMMENT ON COLUMN "foo"."users"."id" IS 'users id column is updated';
+  down: |
+    COMMENT ON TABLE "foo"."users" IS NULL;
+    COMMENT ON COLUMN "foo"."users"."id" IS NULL;
+  user: psqldef_user # in cmd/psqldef/psqldef_test.go schema 'foo' is used if 'user' is provided.
+CommentWithoutSchemaWithoutTableNameQuoted:
+  current: |
+    CREATE TABLE users (
+      id bigint,
+      "update" boolean
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint,
+      "update" boolean
+    );
+    COMMENT ON TABLE users IS 'users table is updated';
+    COMMENT ON COLUMN users.id IS 'users.id column is updated';
+    COMMENT ON COLUMN users."update" IS '"users."update" column is updated';
+  # Default schema 'public' is needed be prefixed in output to prevent false positive detection of DDL change.
+  up: |
+    COMMENT ON TABLE "public"."users" IS 'users table is updated';
+    COMMENT ON COLUMN "public"."users"."id" IS 'users.id column is updated';
+    COMMENT ON COLUMN "public"."users"."update" IS '"users."update" column is updated';
+  down: |
+    COMMENT ON TABLE "public"."users" IS NULL;
+    COMMENT ON COLUMN "public"."users"."id" IS NULL;
+    COMMENT ON COLUMN "public"."users"."update" IS NULL;
+CommentWithoutSchemaWithTableNameQuoted:
+  current: |
+    CREATE TABLE "select" (
+      id bigint,
+      "update" boolean
+    );
+  desired: |
+    CREATE TABLE "select" (
+      id bigint,
+      "update" boolean
+    );
+    COMMENT ON TABLE "select" IS '"select" table is updated';
+    COMMENT ON COLUMN "select".id IS '"select".id column is updated';
+    COMMENT ON COLUMN "select"."update" IS '"select"."update" column is updated';
+  # Default schema 'public' is needed be prefixed in output to prevent false positive detection of DDL change.
+  up: |
+    COMMENT ON TABLE "public"."select" IS '"select" table is updated';
+    COMMENT ON COLUMN "public"."select"."id" IS '"select".id column is updated';
+    COMMENT ON COLUMN "public"."select"."update" IS '"select"."update" column is updated';
+  down: |
+    COMMENT ON TABLE "public"."select" IS NULL;
+    COMMENT ON COLUMN "public"."select"."id" IS NULL;
+    COMMENT ON COLUMN "public"."select"."update" IS NULL;
+CommentContainingQuote:
+  current: |
+    CREATE TABLE public.test (
+      email text
+    );
+  desired: |
+    CREATE TABLE public.test (
+      email text
+    );
+    COMMENT ON TABLE public.test is 'World''s best table';
+    COMMENT ON COLUMN public.test.email is 'The user''s contact email address.';
+  up: |
+    COMMENT ON TABLE "public"."test" IS 'World''s best table';
+    COMMENT ON COLUMN "public"."test"."email" IS 'The user''s contact email address.';
+  down: |
+    COMMENT ON TABLE "public"."test" IS NULL;
+    COMMENT ON COLUMN "public"."test"."email" IS NULL;

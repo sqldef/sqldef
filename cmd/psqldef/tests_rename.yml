@@ -1,0 +1,239 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+RenameColumn:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      username text,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      user_name text, -- @renamed from=username
+      age integer
+    );
+  up: |
+    ALTER TABLE "public"."users" RENAME COLUMN "username" TO "user_name";
+  down: |
+    ALTER TABLE "public"."users" ADD COLUMN "username" text;
+    ALTER TABLE "public"."users" DROP COLUMN "user_name";
+RenameColumnWithTypeChange:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      username varchar(100),
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      user_name text NOT NULL, -- @renamed from=username
+      age integer
+    );
+  up: |
+    ALTER TABLE "public"."users" RENAME COLUMN "username" TO "user_name";
+    ALTER TABLE "public"."users" ALTER COLUMN "user_name" TYPE text;
+    ALTER TABLE "public"."users" ALTER COLUMN "user_name" SET NOT NULL;
+  down: |
+    ALTER TABLE "public"."users" ADD COLUMN "username" varchar(100);
+    ALTER TABLE "public"."users" DROP COLUMN "user_name";
+RenameColumnIdempotency:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      user_name text,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      user_name text, -- @renamed from=username
+      age integer
+    );
+
+RenameColumnConflictingNames:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      username text,
+      user_name varchar(50),
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      username text,
+      user_name varchar(100), -- @renamed from=username
+      age integer
+    );
+  error: "cannot rename column 'username' to 'user_name' - column 'username' still exists"
+
+RenameColumnQuotedDoubleQuotes:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      "foo bar" text,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      foobar text, -- @renamed from="foo bar"
+      age integer
+    );
+  up: |
+    ALTER TABLE "public"."users" RENAME COLUMN "foo bar" TO "foobar";
+  down: |
+    ALTER TABLE "public"."users" ADD COLUMN "foo bar" text;
+    ALTER TABLE "public"."users" DROP COLUMN "foobar";
+RenameColumnWithSpecialChars:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      "column-with-dash" varchar(50),
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      column_with_underscore varchar(50), -- @renamed from="column-with-dash"
+      age integer
+    );
+  up: |
+    ALTER TABLE "public"."users" RENAME COLUMN "column-with-dash" TO "column_with_underscore";
+  down: |
+    ALTER TABLE "public"."users" ADD COLUMN "column-with-dash" varchar(50);
+    ALTER TABLE "public"."users" DROP COLUMN "column_with_underscore";
+RenameColumnWithDot:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      "special.column" text NOT NULL,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      special_column text NOT NULL, -- @renamed from="special.column"
+      age integer
+    );
+  up: |
+    ALTER TABLE "public"."users" RENAME COLUMN "special.column" TO "special_column";
+  down: |
+    ALTER TABLE "public"."users" ADD COLUMN "special.column" text NOT NULL;
+    ALTER TABLE "public"."users" DROP COLUMN "special_column";
+RenameMultipleColumns:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      "user name" text,
+      "email@address" varchar(100),
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      username text, -- @renamed from="user name"
+      email_address varchar(100), -- @renamed from="email@address"
+      age integer
+    );
+  up: |
+    ALTER TABLE "public"."users" RENAME COLUMN "user name" TO "username";
+    ALTER TABLE "public"."users" RENAME COLUMN "email@address" TO "email_address";
+  down: |
+    ALTER TABLE "public"."users" ADD COLUMN "user name" text;
+    ALTER TABLE "public"."users" ADD COLUMN "email@address" varchar(100);
+    ALTER TABLE "public"."users" DROP COLUMN "email_address";
+    ALTER TABLE "public"."users" DROP COLUMN "username";
+RenameTable:
+  current: |
+    CREATE TABLE user_accounts (
+      id bigint NOT NULL,
+      username text,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users ( -- @renamed from=user_accounts
+      id bigint NOT NULL,
+      username text,
+      age integer
+    );
+  up: |
+    ALTER TABLE "public"."user_accounts" RENAME TO "users";
+  down: |
+    CREATE TABLE user_accounts (
+      id bigint NOT NULL,
+      username text,
+      age integer
+    );
+    DROP TABLE "public"."users";
+RenameTableWithCommentVariant:
+  current: |
+    CREATE TABLE old_users (
+      id bigint NOT NULL,
+      name text
+    );
+  desired: |
+    CREATE TABLE new_users /* @renamed from=old_users */ (
+      id bigint NOT NULL,
+      name text
+    );
+  up: |
+    ALTER TABLE "public"."old_users" RENAME TO "new_users";
+  down: |
+    CREATE TABLE old_users (
+      id bigint NOT NULL,
+      name text
+    );
+    DROP TABLE "public"."new_users";
+RenameTableWithQuotedName:
+  current: |
+    CREATE TABLE "user accounts" (
+      id bigint NOT NULL,
+      name text
+    );
+  desired: |
+    CREATE TABLE "user_profiles" ( -- @renamed from="user accounts"
+      id bigint NOT NULL,
+      name text
+    );
+  up: |
+    ALTER TABLE "public"."user accounts" RENAME TO "user_profiles";
+  down: |
+    CREATE TABLE "user accounts" (
+      id bigint NOT NULL,
+      name text
+    );
+    DROP TABLE "public"."user_profiles";
+RenameTableAndMultipleChanges:
+  current: |
+    CREATE TABLE old_accounts (
+      id bigint NOT NULL,
+      user_name varchar(50),
+      is_active boolean,
+      old_field text
+    );
+  desired: |
+    CREATE TABLE accounts ( -- @renamed from=old_accounts
+      id bigint NOT NULL PRIMARY KEY,
+      username varchar(100) NOT NULL, -- @renamed from=user_name
+      is_active boolean DEFAULT true,
+      created_at timestamp DEFAULT CURRENT_TIMESTAMP
+    );
+  up: |
+    ALTER TABLE "public"."old_accounts" RENAME TO "accounts";
+    ALTER TABLE "public"."accounts" RENAME COLUMN "user_name" TO "username";
+    ALTER TABLE "public"."accounts" ALTER COLUMN "username" TYPE varchar(100);
+    ALTER TABLE "public"."accounts" ALTER COLUMN "username" SET NOT NULL;
+    ALTER TABLE "public"."accounts" ALTER COLUMN "is_active" SET DEFAULT true;
+    ALTER TABLE "public"."accounts" ADD COLUMN "created_at" timestamp DEFAULT current_timestamp;
+    ALTER TABLE "public"."accounts" ADD PRIMARY KEY ("id");
+    ALTER TABLE "public"."accounts" DROP COLUMN "old_field";
+  down: |
+    CREATE TABLE old_accounts (
+      id bigint NOT NULL,
+      user_name varchar(50),
+      is_active boolean,
+      old_field text
+    );
+    DROP TABLE "public"."accounts";

@@ -336,3 +336,13 @@ CreateFunctionSqlStrict:
     $$
       SELECT a || b;
     $$ LANGUAGE sql IMMUTABLE STRICT;
+
+FunctionReturningTable:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE FUNCTION get_users()
+    RETURNS TABLE(id integer, name text) AS $$
+    BEGIN
+      RETURN QUERY SELECT 1, 'test'::text;
+    END;
+    $$ LANGUAGE plpgsql;

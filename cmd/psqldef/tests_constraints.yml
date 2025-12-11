@@ -1,0 +1,1494 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+DropPrimaryKey:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text
+    );
+  up: |
+    ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";
+  down: |
+    ALTER TABLE "public"."users" ADD PRIMARY KEY ("id");
+ParseTextCheckConstraint:
+  current: |
+    CREATE TABLE test (
+      col text NOT NULL CHECK (col <> ''::text)
+    );
+  desired: |
+    CREATE TABLE test (
+      col text NOT NULL
+    );
+  up: |
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_col_check";
+  down: |
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_col_check" CHECK (col <> '');
+CheckConstraintWithReservedWordColumnName:
+  desired: |
+    CREATE TABLE test (
+      "point" integer NOT NULL CONSTRAINT check_point CHECK (point > 0)
+    );
+ParseAllAnyCheckConstraint:
+  current: |
+    CREATE TABLE test (
+      n1 int,
+      n2 int,
+      t1 text
+    );
+  desired: |
+    CREATE TABLE test (
+      n1 int CHECK (n1 = ANY (ARRAY[1, 2, 3])),
+      n2 int CHECK (n2 = ALL (ARRAY[1, 2, 3])),
+      t1 text CHECK (t1 = SOME (ARRAY['x', 'y']))
+    );
+  up: |
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_n1_check" CHECK (n1 = ANY (ARRAY[1, 2, 3]));
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_n2_check" CHECK (n2 = ALL (ARRAY[1, 2, 3]));
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_t1_check" CHECK (t1 = ANY (ARRAY['x', 'y']));
+  down: |
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_n1_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_n2_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_t1_check";
+AllAnySomeCheckConstraintsCreate:
+  desired: |
+    CREATE TABLE test_all_any (
+      id INTEGER PRIMARY KEY,
+      state TEXT CHECK (state = ANY (ARRAY['active', 'pending'])),
+      all_positive INTEGER CHECK (all_positive = ALL (ARRAY[1, 2, 3])),
+      some_text TEXT CHECK (some_text = SOME (ARRAY['valid', 'allowed'])),
+      score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
+    );
+AllAnySomeCheckConstraintsModifyAll:
+  current: |
+    CREATE TABLE test_all_any (
+      id INTEGER PRIMARY KEY,
+      state TEXT CHECK (state = ANY (ARRAY['active', 'pending'])),
+      all_positive INTEGER CHECK (all_positive = ALL (ARRAY[1, 2, 3])),
+      some_text TEXT CHECK (some_text = SOME (ARRAY['valid', 'allowed'])),
+      score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
+    );
+  desired: |
+    CREATE TABLE test_all_any (
+      id INTEGER PRIMARY KEY,
+      state TEXT CHECK (state = ANY (ARRAY['active', 'pending'])),
+      all_positive INTEGER CHECK (all_positive = ALL (ARRAY[2, 3, 4])),
+      some_text TEXT CHECK (some_text = SOME (ARRAY['valid', 'allowed'])),
+      score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
+    );
+  up: |
+    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_all_positive_check";
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_all_positive_check" CHECK (all_positive = ALL (ARRAY[2, 3, 4]));
+  down: |
+    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_all_positive_check";
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_all_positive_check" CHECK (all_positive = ALL (ARRAY[1, 2, 3]));
+AllAnySomeCheckConstraintsModifySome:
+  current: |
+    CREATE TABLE test_all_any (
+      id INTEGER PRIMARY KEY,
+      state TEXT CHECK (state = ANY (ARRAY['active', 'pending'])),
+      all_positive INTEGER CHECK (all_positive = ALL (ARRAY[2, 3, 4])),
+      some_text TEXT CHECK (some_text = SOME (ARRAY['valid', 'allowed'])),
+      score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
+    );
+  desired: |
+    CREATE TABLE test_all_any (
+      id INTEGER PRIMARY KEY,
+      state TEXT CHECK (state = ANY (ARRAY['active', 'pending'])),
+      all_positive INTEGER CHECK (all_positive = ALL (ARRAY[2, 3, 4])),
+      some_text TEXT CHECK (some_text = SOME (ARRAY['updated', 'modified', 'changed'])),
+      score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
+    );
+  up: |
+    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_some_text_check";
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_some_text_check" CHECK (some_text = ANY (ARRAY['updated', 'modified', 'changed']));
+  down: |
+    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_some_text_check";
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_some_text_check" CHECK (some_text = ANY (ARRAY['valid', 'allowed']));
+AllAnySomeCheckConstraintsRemove:
+  current: |
+    CREATE TABLE test_all_any (
+      id INTEGER PRIMARY KEY,
+      state TEXT CHECK (state = ANY (ARRAY['active', 'pending'])),
+      all_positive INTEGER CHECK (all_positive = ALL (ARRAY[2, 3, 4])),
+      some_text TEXT CHECK (some_text = SOME (ARRAY['updated', 'modified', 'changed'])),
+      score INTEGER CHECK (score > ALL (ARRAY[0, 10, 20]))
+    );
+  desired: |
+    CREATE TABLE test_all_any (
+      id INTEGER PRIMARY KEY,
+      state TEXT,
+      all_positive INTEGER,
+      some_text TEXT,
+      score INTEGER
+    );
+  up: |
+    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_state_check";
+    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_all_positive_check";
+    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_some_text_check";
+    ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_score_check";
+  down: |
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_state_check" CHECK (state = ANY (ARRAY['active', 'pending']));
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_all_positive_check" CHECK (all_positive = ALL (ARRAY[2, 3, 4]));
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_some_text_check" CHECK (some_text = ANY (ARRAY['updated', 'modified', 'changed']));
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_score_check" CHECK (score > ALL (ARRAY[0, 10, 20]));
+SomeConstraintModificationsCreate:
+  desired: |
+    CREATE TABLE test_some_modify (
+      id INTEGER PRIMARY KEY,
+      status TEXT CHECK (status = SOME (ARRAY['active', 'pending', 'draft'])),
+      category TEXT CHECK (category = SOME (ARRAY['A', 'B', 'C']))
+    );
+SomeConstraintModificationsModify:
+  current: |
+    CREATE TABLE test_some_modify (
+      id INTEGER PRIMARY KEY,
+      status TEXT CHECK (status = SOME (ARRAY['active', 'pending', 'draft'])),
+      category TEXT CHECK (category = SOME (ARRAY['A', 'B', 'C']))
+    );
+  desired: |
+    CREATE TABLE test_some_modify (
+      id INTEGER PRIMARY KEY,
+      status TEXT CHECK (status = SOME (ARRAY['active', 'completed', 'archived'])),
+      category TEXT CHECK (category = SOME (ARRAY['X', 'Y', 'Z']))
+    );
+  up: |
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_status_check";
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ANY (ARRAY['active', 'completed', 'archived']));
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ANY (ARRAY['X', 'Y', 'Z']));
+  down: |
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_status_check";
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ANY (ARRAY['active', 'pending', 'draft']));
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ANY (ARRAY['A', 'B', 'C']));
+SomeConstraintModificationsSomeToAny:
+  current: |
+    CREATE TABLE test_some_modify (
+      id INTEGER PRIMARY KEY,
+      status TEXT CHECK (status = SOME (ARRAY['active', 'completed', 'archived'])),
+      category TEXT CHECK (category = SOME (ARRAY['X', 'Y', 'Z']))
+    );
+  desired: |
+    CREATE TABLE test_some_modify (
+      id INTEGER PRIMARY KEY,
+      status TEXT CHECK (status = ANY (ARRAY['active', 'completed', 'archived'])),
+      category TEXT CHECK (category = ANY (ARRAY['X', 'Y', 'Z']))
+    );
+SomeConstraintModificationsSomeToAll:
+  current: |
+    CREATE TABLE test_some_modify (
+      id INTEGER PRIMARY KEY,
+      status TEXT CHECK (status = SOME (ARRAY['active', 'completed', 'archived'])),
+      category TEXT CHECK (category = SOME (ARRAY['X', 'Y', 'Z']))
+    );
+  desired: |
+    CREATE TABLE test_some_modify (
+      id INTEGER PRIMARY KEY,
+      status TEXT CHECK (status = ALL (ARRAY['active', 'completed', 'archived'])),
+      category TEXT CHECK (category = ALL (ARRAY['X', 'Y', 'Z']))
+    );
+  up: |
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_status_check";
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ALL (ARRAY['active', 'completed', 'archived']));
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ALL (ARRAY['X', 'Y', 'Z']));
+  down: |
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_status_check";
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ANY (ARRAY['active', 'completed', 'archived']));
+    ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ANY (ARRAY['X', 'Y', 'Z']));
+PosixRegexCheckConstraint:
+  current: |
+    CREATE TABLE test (
+      posix_regex        text NOT NULL CHECK (posix_regex        ~   '[0-9]'),
+      posix_regex_ci     text NOT NULL CHECK (posix_regex_ci     ~*  '[0-9]'),
+      posix_not_regex    text NOT NULL CHECK (posix_not_regex    !~  '[0-9]'),
+      posix_not_regex_ci text NOT NULL CHECK (posix_not_regex_ci !~* '[0-9]')
+    );
+  desired: |
+    CREATE TABLE test (
+      posix_regex        text NOT NULL CHECK (posix_regex        ~   '[a-z]'),
+      posix_regex_ci     text NOT NULL CHECK (posix_regex_ci     ~*  '[a-z]'),
+      posix_not_regex    text NOT NULL CHECK (posix_not_regex    !~  '[a-z]'),
+      posix_not_regex_ci text NOT NULL CHECK (posix_not_regex_ci !~* '[a-z]')
+    );
+  up: |
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_regex_check";
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_regex_check" CHECK (posix_regex ~ '[a-z]');
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_regex_ci_check";
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_regex_ci_check" CHECK (posix_regex_ci ~* '[a-z]');
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_not_regex_check";
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_not_regex_check" CHECK (posix_not_regex !~ '[a-z]');
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_not_regex_ci_check";
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_not_regex_ci_check" CHECK (posix_not_regex_ci !~* '[a-z]');
+  down: |
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_regex_check";
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_regex_check" CHECK (posix_regex ~ '[0-9]');
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_regex_ci_check";
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_regex_ci_check" CHECK (posix_regex_ci ~* '[0-9]');
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_not_regex_check";
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_not_regex_check" CHECK (posix_not_regex !~ '[0-9]');
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_posix_not_regex_ci_check";
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_posix_not_regex_ci_check" CHECK (posix_not_regex_ci !~* '[0-9]');
+ForeignKeyConstraintsAreEmittedLast:
+  current: |
+    CREATE TABLE foos ( dummy_column text );
+    CREATE TABLE bars ( dummy_column text );
+  desired: |
+    CREATE TABLE foos (
+      foo_id bigint PRIMARY KEY,
+      bar_id bigint NOT NULL REFERENCES bars (bar_id)
+    );
+    CREATE TABLE bars (
+      bar_id bigint PRIMARY KEY
+    );
+  up: |
+    ALTER TABLE "public"."bars" ADD COLUMN "bar_id" bigint NOT NULL;
+    ALTER TABLE "public"."bars" ADD PRIMARY KEY ("bar_id");
+    ALTER TABLE "public"."foos" ADD COLUMN "foo_id" bigint NOT NULL;
+    ALTER TABLE "public"."foos" ADD COLUMN "bar_id" bigint NOT NULL;
+    ALTER TABLE "public"."foos" ADD PRIMARY KEY ("foo_id");
+    ALTER TABLE "public"."foos" ADD CONSTRAINT "foos_bar_id_fkey" FOREIGN KEY ("bar_id") REFERENCES "public"."bars" ("bar_id");
+    ALTER TABLE "public"."bars" DROP COLUMN "dummy_column";
+    ALTER TABLE "public"."foos" DROP COLUMN "dummy_column";
+  down: |
+    ALTER TABLE "public"."foos" ADD COLUMN "dummy_column" text;
+    ALTER TABLE "public"."foos" DROP CONSTRAINT "foos_pkey";
+    ALTER TABLE "public"."bars" ADD COLUMN "dummy_column" text;
+    ALTER TABLE "public"."foos" DROP CONSTRAINT "foos_bar_id_fkey";
+    ALTER TABLE "public"."bars" DROP CONSTRAINT "bars_pkey";
+    ALTER TABLE "public"."bars" DROP COLUMN "bar_id";
+    ALTER TABLE "public"."foos" DROP COLUMN "bar_id";
+    ALTER TABLE "public"."foos" DROP COLUMN "foo_id";
+ForeignKeyOnReservedName:
+  current: |
+    CREATE TABLE "public"."companies" (
+      "id" character varying(100) NOT NULL,
+      PRIMARY KEY ("id")
+    );
+
+    CREATE TABLE "public"."variables" (
+      "id" character varying(100) NOT NULL,
+      "company_id" character varying(100) NOT NULL,
+      PRIMARY KEY ("id")
+    );
+
+    CREATE TABLE "public"."users" (
+      "id" character varying(100) NOT NULL,
+      "variable_id" character varying(100) NOT NULL,
+      "name" character varying(100),
+      PRIMARY KEY ("id")
+    );
+  desired: |
+    CREATE TABLE IF NOT EXISTS companies (
+      id VARCHAR(100) PRIMARY KEY
+    );
+
+    CREATE TABLE IF NOT EXISTS variables (
+      id VARCHAR(100) PRIMARY KEY,
+      company_id VARCHAR(100) NOT NULL REFERENCES companies(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id VARCHAR(100) PRIMARY KEY,
+      variable_id VARCHAR(100) NOT NULL,
+      name VARCHAR(100),
+      CONSTRAINT users_variable_id_fk FOREIGN KEY (variable_id) REFERENCES variables(id)
+    );
+  up: |
+    ALTER TABLE "public"."variables" ADD CONSTRAINT "variables_company_id_fkey" FOREIGN KEY ("company_id") REFERENCES "public"."companies" ("id");
+    ALTER TABLE "public"."users" ADD CONSTRAINT "users_variable_id_fk" FOREIGN KEY ("variable_id") REFERENCES "public"."variables" ("id");
+  down: |
+    ALTER TABLE "public"."users" DROP CONSTRAINT "users_variable_id_fk";
+    ALTER TABLE "public"."variables" DROP CONSTRAINT "variables_company_id_fkey";
+CheckConstraint:
+  current: |
+    CREATE TABLE test (
+      n1 integer,
+      n2 integer,
+      n3 integer,
+      t1 text,
+      t2 text,
+      t3 text,
+      t4 varchar(10),
+      d1 date,
+      d2 date
+    );
+  desired: |
+    CREATE TABLE test (
+      n1 integer CHECK (n1 = 0 or not n1 > 10 and n1 IS NOT NULL),
+      n2 integer CONSTRAINT chk CHECK (n2 > 0),
+      n3 integer CHECK (n3 > 0) NO INHERIT,
+      t1 text CHECK (t1 like 'x'),
+      t2 text CHECK (t2 not like 'x'),
+      t3 text CHECK (t3 <> ''::text),
+      t4 varchar(10) CHECK (t4::text ~ '[0-9]'),
+      d1 date CHECK (d1 >= '2022-01-01'::date),
+      d2 date CHECK (d2 >= date '2022-01-01')
+    );
+  up: |
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_n1_check" CHECK (n1 = 0 or not n1 > 10 and n1 is not null);
+    ALTER TABLE "public"."test" ADD CONSTRAINT "chk" CHECK (n2 > 0);
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_n3_check" CHECK (n3 > 0) NO INHERIT;
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_t1_check" CHECK (t1 ~~ 'x');
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_t2_check" CHECK (t2 !~~ 'x');
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_t3_check" CHECK (t3 <> '');
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_t4_check" CHECK (t4 ~ '[0-9]');
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_d1_check" CHECK (d1 >= '2022-01-01');
+    ALTER TABLE "public"."test" ADD CONSTRAINT "test_d2_check" CHECK (d2 >= '2022-01-01');
+  down: |
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_n1_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "chk";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_n3_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_t1_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_t2_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_t3_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_t4_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_d1_check";
+    ALTER TABLE "public"."test" DROP CONSTRAINT "test_d2_check";
+CheckConstraintWithRowConstructor:
+  desired: |
+    CREATE TABLE test (
+      a integer,
+      b integer,
+      CONSTRAINT test_check CHECK ((a, b) > (0, 0))
+    );
+
+CompositeForeignKeyConstraint:
+  current: |
+    CREATE TABLE t1 (
+      id1 int not null,
+      id2 int not null,
+      PRIMARY KEY (id1, id2)
+    );
+    CREATE TABLE t2 (
+      id1 int not null,
+      id2 int not null,
+      PRIMARY KEY (id1, id2)
+    );
+  desired: |
+    CREATE TABLE t1 (
+      id1 int not null,
+      id2 int not null,
+      PRIMARY KEY (id1, id2)
+    );
+    CREATE TABLE t2 (
+      id1 int not null,
+      id2 int not null,
+      PRIMARY KEY (id1, id2),
+      CONSTRAINT fk FOREIGN KEY (id1, id2) REFERENCES t1 (id1, id2)
+    );
+  up: |
+    ALTER TABLE "public"."t2" ADD CONSTRAINT "fk" FOREIGN KEY ("id1","id2") REFERENCES "public"."t1" ("id1","id2");
+  down: |
+    ALTER TABLE "public"."t2" DROP CONSTRAINT "fk";
+AddForeignKeyWithAlter:
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint
+    );
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint
+    );
+    ALTER TABLE ONLY public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;
+  up: |
+    ALTER TABLE ONLY public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;
+  down: |
+    ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";
+AddDifferentForeignKeyWithSameName:
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint
+    );
+    ALTER TABLE ONLY public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint
+    );
+    ALTER TABLE ONLY public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON UPDATE CASCADE;
+  up: |
+    ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";
+    ALTER TABLE ONLY public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON UPDATE CASCADE;
+  down: |
+    ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";
+    ALTER TABLE ONLY public.posts ADD CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE;
+CreateTableAddAbsentForeignKey:
+  current: |
+    CREATE TABLE users (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE posts (
+      content TEXT,
+      user_id INT
+    );
+  desired: |
+    CREATE TABLE users (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE posts (
+      content TEXT,
+      user_id INT REFERENCES users(id)
+    );
+  up: |
+    ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id");
+  down: |
+    ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_user_id_fkey";
+CreateTableWithConstraintOptions:
+  current: |
+    CREATE TABLE images (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE image_owners (
+      id INT,
+      type VARCHAR(20) NOT NULL,
+      PRIMARY KEY (type, id)
+    );
+    CREATE TABLE image_bindings (
+      image_id INT REFERENCES images(id) ON DELETE CASCADE,
+      image_order INT NOT NULL,
+      image_owner_type VARCHAR(20) NOT NULL,
+      image_owner_id INT NOT NULL,
+      CONSTRAINT image_owner_fk FOREIGN KEY (image_owner_type, image_owner_id) REFERENCES image_owners(type, id) ON DELETE CASCADE,
+      CONSTRAINT image_order_unique UNIQUE (image_owner_type, image_owner_id, image_order)
+    );
+  desired: |
+    CREATE TABLE images (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE image_owners (
+      id INT,
+      type VARCHAR(20) NOT NULL,
+      PRIMARY KEY (type, id)
+    );
+    CREATE TABLE image_bindings (
+      image_id INT REFERENCES images(id) ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE,
+      image_order INT NOT NULL,
+      image_owner_type VARCHAR(20) NOT NULL,
+      image_owner_id INT NOT NULL,
+      CONSTRAINT image_owner_fk FOREIGN KEY (image_owner_type, image_owner_id) REFERENCES image_owners(type, id) ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE,
+      CONSTRAINT image_order_unique UNIQUE (image_owner_type, image_owner_id, image_order) DEFERRABLE INITIALLY DEFERRED
+    );
+  up: |
+    ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_order_unique";
+    ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_order_unique" UNIQUE ("image_owner_type", "image_owner_id", "image_order") DEFERRABLE INITIALLY DEFERRED;
+    ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_bindings_image_id_fkey";
+    ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_owner_fk";
+    ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_bindings_image_id_fkey" FOREIGN KEY ("image_id") REFERENCES "public"."images" ("id") ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE;
+    ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_owner_fk" FOREIGN KEY ("image_owner_type","image_owner_id") REFERENCES "public"."image_owners" ("type","id") ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE;
+  down: |
+    ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_order_unique";
+    ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_order_unique" UNIQUE ("image_owner_type", "image_owner_id", "image_order");
+    ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_bindings_image_id_fkey";
+    ALTER TABLE "public"."image_bindings" DROP CONSTRAINT "image_owner_fk";
+    ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_bindings_image_id_fkey" FOREIGN KEY ("image_id") REFERENCES "public"."images" ("id") ON DELETE CASCADE;
+    ALTER TABLE "public"."image_bindings" ADD CONSTRAINT "image_owner_fk" FOREIGN KEY ("image_owner_type","image_owner_id") REFERENCES "public"."image_owners" ("type","id") ON DELETE CASCADE;
+CreateTableWithForeignKeyAndGeneratedColumn:
+  min_version: '12'
+  desired: |
+    CREATE TABLE users (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE emails (
+      user_id INT NOT NULL,
+      local_part VARCHAR(100) NOT NULL,
+      domain VARCHAR(100) NOT NULL,
+      lower_address TEXT GENERATED ALWAYS AS (LOWER(local_part || '@' || domain)) STORED NOT NULL,
+      PRIMARY KEY (domain, local_part),
+      CONSTRAINT user_fk FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+LongAutoGeneratedForeignKeyConstraint:
+  desired: |
+    CREATE TABLE users (
+      id INT PRIMARY KEY
+    );
+    CREATE TABLE loooooooooooooooooooooooooooooooooooooooong_table_63_characters (
+      -- loooooooooooooooooooooooooooooooooooooooong_table_63_cha_a_fkey
+      a INT NOT NULL REFERENCES users (id)
+    );
+    CREATE TABLE loooooong_table_29_characters (
+      -- loooooong_table_29_characters_loooong_column_28_characters_fkey
+      loooong_column_28_characters INT NOT NULL REFERENCES users (id),
+
+      -- loooooong_table_29_characters_looooong_column_29_character_fkey
+      looooong_column_29_characters INT NOT NULL REFERENCES users (id)
+    );
+    CREATE TABLE looooooong_table_30_characters (
+      -- looooooong_table_30_character_looooong_column_29_character_fkey
+      looooong_column_29_characters INT NOT NULL REFERENCES users (id),
+
+      -- looooooong_table_30_character_loooong_column_28_characters_fkey
+      loooong_column_28_characters INT NOT NULL REFERENCES users (id),
+
+      -- looooooong_table_30_characters_looong_column_27_characters_fkey
+      looong_column_27_characters INT NOT NULL REFERENCES users (id)
+    );
+    CREATE TABLE a (
+      -- a_looooooooooooooooooooooooooooooooong_column_57_character_fkey
+      looooooooooooooooooooooooooooooooong_column_57_characters INT NOT NULL REFERENCES users (id),
+
+      -- a_loooooooooooooooooooooooooooooooong_column_56_characters_fkey
+      loooooooooooooooooooooooooooooooong_column_56_characters INT NOT NULL REFERENCES users (id)
+    );
+LongAutoGeneratedCheckConstraint:
+  desired: |
+    CREATE TABLE loooooooooooooooooooooooooooooooooooooooong_table_63_characters (
+      -- loooooooooooooooooooooooooooooooooooooooong_table_63_ch_a_check
+      a INT NOT NULL CHECK (a > 0)
+    );
+    CREATE TABLE loooooong_table_29_characters (
+      -- loooooong_table_29_characters_looong_column_27_characters_check
+      looong_column_27_characters INT NOT NULL CHECK (looong_column_27_characters > 0),
+
+      -- loooooong_table_29_characters_loooong_column_28_character_check
+      loooong_column_28_characters INT NOT NULL CHECK (loooong_column_28_characters > 0),
+
+      -- loooooong_table_29_character_looooong_column_29_character_check
+      looooong_column_29_characters INT NOT NULL CHECK (looooong_column_29_characters > 0)
+    );
+    CREATE TABLE looooooong_table_30_characters (
+      -- looooooong_table_30_characters_loong_column_26_characters_check
+      loong_column_26_characters INT NOT NULL CHECK (loong_column_26_characters > 0),
+
+      -- looooooong_table_30_character_looong_column_27_characters_check
+      looong_column_27_characters INT NOT NULL CHECK (looong_column_27_characters > 0),
+
+      -- looooooong_table_30_characte_loooong_column_28_characters_check
+      loooong_column_28_characters INT NOT NULL CHECK (loooong_column_28_characters > 0)
+    );
+    CREATE TABLE a (
+      -- a_loooooooooooooooooooooooooooooooong_column_56_character_check
+      loooooooooooooooooooooooooooooooong_column_56_characters INT NOT NULL CHECK (loooooooooooooooooooooooooooooooong_column_56_characters > 0),
+
+      -- a_looooooooooooooooooooooooooooooong_column_55_characters_check
+      looooooooooooooooooooooooooooooong_column_55_characters INT NOT NULL CHECK (looooooooooooooooooooooooooooooong_column_55_characters > 0)
+    );
+
+ExcludeConstraintWithCreateTable:
+  desired: |
+    CREATE TABLE exclude_example (
+      name varchar(255),
+      event_start tstzrange NOT NULL,
+      event_end tstzrange NOT NULL,
+      CONSTRAINT ex1 EXCLUDE (name WITH =),
+      CONSTRAINT ex2 EXCLUDE (lower(name::text) WITH =) where (name::text <> ''),
+      CONSTRAINT ex3 EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&)
+    );
+
+ExcludeConstraintChange:
+  current: |
+    CREATE TABLE exclude_example (
+      name varchar(255),
+      event_start tstzrange NOT NULL,
+      event_end tstzrange NOT NULL,
+      CONSTRAINT ex EXCLUDE (name WITH =)
+    );
+  desired: |
+    CREATE TABLE exclude_example (
+      name varchar(255),
+      event_start tstzrange NOT NULL,
+      event_end tstzrange NOT NULL,
+      CONSTRAINT ex EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&)
+    );
+  up: |
+    ALTER TABLE "public"."exclude_example" DROP CONSTRAINT "ex";
+    ALTER TABLE "public"."exclude_example" ADD CONSTRAINT "ex" EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&);
+  down: |
+    ALTER TABLE "public"."exclude_example" DROP CONSTRAINT "ex";
+    ALTER TABLE "public"."exclude_example" ADD CONSTRAINT "ex" EXCLUDE USING BTREE (name WITH =);
+ExcludeConstraintDropAndAdd:
+  current: |
+    CREATE TABLE exclude_example (
+      name varchar(255),
+      event_start tstzrange NOT NULL,
+      event_end tstzrange NOT NULL,
+      CONSTRAINT ex1 EXCLUDE (name WITH =)
+    );
+  desired: |
+    CREATE TABLE exclude_example (
+      name varchar(255),
+      event_start tstzrange NOT NULL,
+      event_end tstzrange NOT NULL,
+      CONSTRAINT ex2 EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&)
+    );
+  up: |
+    ALTER TABLE "public"."exclude_example" ADD CONSTRAINT "ex2" EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&);
+    ALTER TABLE "public"."exclude_example" DROP CONSTRAINT "ex1";
+  down: |
+    ALTER TABLE "public"."exclude_example" ADD CONSTRAINT "ex1" EXCLUDE USING BTREE (name WITH =);
+    ALTER TABLE "public"."exclude_example" DROP CONSTRAINT "ex2";
+ExcludeConstraintWithAlterTable:
+  current: |
+    CREATE TABLE exclude_example (
+      name varchar(255),
+      event_start tstzrange NOT NULL,
+      event_end tstzrange NOT NULL
+    );
+    ALTER TABLE exclude_example ADD CONSTRAINT ex1 EXCLUDE (name WITH =);
+  desired: |
+    CREATE TABLE exclude_example (
+      name varchar(255),
+      event_start tstzrange NOT NULL,
+      event_end tstzrange NOT NULL
+    );
+    ALTER TABLE exclude_example ADD CONSTRAINT ex2 EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&);
+  up: |
+    ALTER TABLE exclude_example ADD CONSTRAINT ex2 EXCLUDE USING GIST (event_start WITH &&, event_end WITH &&);
+    ALTER TABLE "public"."exclude_example" DROP CONSTRAINT "ex1";
+  down: |
+    ALTER TABLE exclude_example ADD CONSTRAINT ex1 EXCLUDE (name WITH =);
+    ALTER TABLE "public"."exclude_example" DROP CONSTRAINT "ex2";
+ConstraintCheckInWithUniqueCreate:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL
+    );
+    CREATE TABLE animals (
+      id serial,
+      age INTEGER CHECK (age IN (0, 1, 2, 3, 4, 5)),
+      UNIQUE (age)
+    );
+  up: |
+    CREATE TABLE animals (
+      id serial,
+      age INTEGER CHECK (age IN (0, 1, 2, 3, 4, 5)),
+      UNIQUE (age)
+    );
+  down: |
+    DROP TABLE "public"."animals";
+ConstraintCheckInAdd:
+  current: |
+    CREATE TABLE products (
+      id serial,
+      status text
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (status IN ('active', 'inactive', 'pending'))
+    );
+  up: |
+    ALTER TABLE "public"."products" ADD CONSTRAINT "products_status_check" CHECK (status = ANY (ARRAY['active', 'inactive', 'pending']));
+  down: |
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_status_check";
+ConstraintCheckInRemove:
+  current: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (status IN ('active', 'inactive', 'pending'))
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text
+    );
+  up: |
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_status_check";
+  down: |
+    ALTER TABLE "public"."products" ADD CONSTRAINT "products_status_check" CHECK (status = ANY (ARRAY['active', 'inactive', 'pending']));
+ConstraintUniqueAdd:
+  current: |
+    CREATE TABLE products (
+      id serial,
+      sku text
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      sku text,
+      UNIQUE (sku)
+    );
+  up: |
+    ALTER TABLE "public"."products" ADD CONSTRAINT "products_sku_key" UNIQUE ("sku");
+  down: |
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_sku_key";
+ConstraintUniqueRemove:
+  current: |
+    CREATE TABLE products (
+      id serial,
+      sku text,
+      UNIQUE (sku)
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      sku text
+    );
+  up: |
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_sku_key";
+  down: |
+    ALTER TABLE "public"."products" ADD CONSTRAINT "products_sku_key" UNIQUE ("sku");
+ConstraintCheckInModify:
+  current: |
+    CREATE TABLE products (
+      id serial,
+      priority integer CHECK (priority IN (1, 2, 3))
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      priority integer CHECK (priority IN (1, 2, 3, 4, 5))
+    );
+  up: |
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_priority_check";
+    ALTER TABLE "public"."products" ADD CONSTRAINT "products_priority_check" CHECK (priority = ANY (ARRAY[1, 2, 3, 4, 5]));
+  down: |
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_priority_check";
+    ALTER TABLE "public"."products" ADD CONSTRAINT "products_priority_check" CHECK (priority = ANY (ARRAY[1, 2, 3]));
+ConstraintCheckInAndUniqueAdd:
+  current: |
+    CREATE TABLE products (
+      id serial,
+      level integer
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      level integer CHECK (level IN (1, 2, 3, 4)),
+      UNIQUE (level)
+    );
+  up: |
+    ALTER TABLE "public"."products" ADD CONSTRAINT "products_level_check" CHECK (level = ANY (ARRAY[1, 2, 3, 4]));
+    ALTER TABLE "public"."products" ADD CONSTRAINT "products_level_key" UNIQUE ("level");
+  down: |
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_level_check";
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_level_key";
+ConstraintCheckInAndUniqueRemove:
+  current: |
+    CREATE TABLE products (
+      id serial,
+      level integer CHECK (level IN (1, 2, 3, 4)),
+      UNIQUE (level)
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      level integer
+    );
+  up: |
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_level_check";
+    ALTER TABLE "public"."products" DROP CONSTRAINT "products_level_key";
+  down: |
+    ALTER TABLE "public"."products" ADD CONSTRAINT "products_level_check" CHECK (level = ANY (ARRAY[1, 2, 3, 4]));
+    ALTER TABLE "public"."products" ADD CONSTRAINT "products_level_key" UNIQUE ("level");
+ConstraintCheckInMultipleColumnsWithUnique:
+  current: |
+    CREATE TABLE orders (
+      id serial,
+      priority integer,
+      category integer
+    );
+  desired: |
+    CREATE TABLE orders (
+      id serial,
+      priority integer CHECK (priority IN (1, 2, 3)),
+      category integer CHECK (category IN (10, 20, 30, 40)),
+      UNIQUE (priority, category)
+    );
+  up: |
+    ALTER TABLE "public"."orders" ADD CONSTRAINT "orders_priority_check" CHECK (priority = ANY (ARRAY[1, 2, 3]));
+    ALTER TABLE "public"."orders" ADD CONSTRAINT "orders_category_check" CHECK (category = ANY (ARRAY[10, 20, 30, 40]));
+    ALTER TABLE "public"."orders" ADD CONSTRAINT "priority" UNIQUE ("priority", "category");
+  down: |
+    ALTER TABLE "public"."orders" DROP CONSTRAINT "orders_priority_check";
+    ALTER TABLE "public"."orders" DROP CONSTRAINT "orders_category_check";
+    ALTER TABLE "public"."orders" DROP CONSTRAINT "priority";
+CreateTableWithCheckConstraints:
+  current: |
+    CREATE TABLE "public"."domains" (
+      "id" serial NOT NULL,
+      "name" character varying(255) NOT NULL CONSTRAINT c_lowercase_name CHECK (name::text = lower(name::text)),
+      PRIMARY KEY ("id")
+    );
+  desired: |
+    CREATE TABLE "public"."domains" (
+      id                    SERIAL PRIMARY KEY,
+      name                  VARCHAR(255) NOT NULL,
+      CONSTRAINT c_lowercase_name CHECK (((name)::TEXT = LOWER((name)::TEXT)))
+    );
+
+CreateTableWithPrimaryKey:
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+
+DropPrimaryKeyAndColumn:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+  desired: |
+    CREATE TABLE users (
+      name text
+    );
+  up: |
+    ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";
+    ALTER TABLE "public"."users" DROP COLUMN "id";
+  down: |
+    ALTER TABLE "public"."users" ADD COLUMN "id" bigint NOT NULL;
+    ALTER TABLE "public"."users" ADD PRIMARY KEY ("id");
+AddPrimaryKeyAndColumnBack:
+  current: |
+    CREATE TABLE users (
+      name text
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL PRIMARY KEY,
+      name text
+    );
+  up: |
+    ALTER TABLE "public"."users" ADD COLUMN "id" bigint NOT NULL;
+    ALTER TABLE "public"."users" ADD PRIMARY KEY ("id");
+  down: |
+    ALTER TABLE "public"."users" DROP CONSTRAINT "users_pkey";
+    ALTER TABLE "public"."users" DROP COLUMN "id";
+ConstraintPrimaryKey:
+  desired: |
+    CREATE TABLE users (
+      a integer,
+      b integer,
+      CONSTRAINT a_b_pkey PRIMARY KEY (a, b)
+    );
+
+CreateTablesWithoutForeignKey:
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint
+    );
+
+AddForeignKeyConstraint:
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint
+    );
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint,
+      CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+  up: |
+    ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id");
+  down: |
+    ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";
+ModifyForeignKeyActions:
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint,
+      CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint,
+      CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+    );
+  up: |
+    ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";
+    ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  down: |
+    ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";
+    ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id");
+RemoveForeignKeyConstraint:
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint,
+      CONSTRAINT posts_ibfk_1 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+    );
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY);
+    CREATE TABLE posts (
+      content text,
+      user_id bigint
+    );
+  up: |
+    ALTER TABLE "public"."posts" DROP CONSTRAINT "posts_ibfk_1";
+  down: |
+    ALTER TABLE "public"."posts" ADD CONSTRAINT "posts_ibfk_1" FOREIGN KEY ("user_id") REFERENCES "public"."users" ("id") ON DELETE SET NULL ON UPDATE CASCADE;
+CreateTableWithReferences:
+  desired: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY,
+      my_text TEXT UNIQUE NOT NULL
+    );
+    CREATE TABLE b (
+      b_id INTEGER PRIMARY KEY,
+      a_id INTEGER REFERENCES a,
+      a_my_text TEXT NOT NULL REFERENCES a (my_text)
+    );
+
+DropReferences:
+  current: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY,
+      my_text TEXT UNIQUE NOT NULL
+    );
+    CREATE TABLE b (
+      b_id INTEGER PRIMARY KEY,
+      a_id INTEGER REFERENCES a,
+      a_my_text TEXT NOT NULL REFERENCES a (my_text)
+    );
+  desired: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY,
+      my_text TEXT UNIQUE NOT NULL
+    );
+    CREATE TABLE b (
+      b_id INTEGER PRIMARY KEY,
+      a_id INTEGER,
+      a_my_text TEXT NOT NULL
+    );
+  up: |
+    ALTER TABLE "public"."b" DROP CONSTRAINT "b_a_id_fkey";
+    ALTER TABLE "public"."b" DROP CONSTRAINT "b_a_my_text_fkey";
+  down: |
+    ALTER TABLE "public"."b" ADD CONSTRAINT "b_a_my_text_fkey" FOREIGN KEY ("a_my_text") REFERENCES "public"."a" ("my_text");
+ReferencesWithOnDeleteCascade:
+  desired: |
+    CREATE TABLE customers (
+      id UUID NOT NULL PRIMARY KEY,
+      customer_name VARCHAR(255) NOT NULL
+    );
+    CREATE TABLE orders (
+      id UUID NOT NULL PRIMARY KEY,
+      order_number VARCHAR(255) NOT NULL,
+      customer UUID REFERENCES customers(id) ON DELETE CASCADE
+    );
+
+ColumnCheckConstraint:
+  desired: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY CHECK (a_id > 0),
+      my_text TEXT UNIQUE NOT NULL
+    );
+
+ModifyColumnCheckConstraint:
+  current: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY CHECK (a_id > 0),
+      my_text TEXT UNIQUE NOT NULL
+    );
+  desired: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY CHECK (a_id > 1),
+      my_text TEXT UNIQUE NOT NULL
+    );
+  up: |
+    ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
+    ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 1);
+  down: |
+    ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
+    ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 0);
+DropCheckConstraint:
+  current: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY CHECK (a_id > 1),
+      my_text TEXT UNIQUE NOT NULL
+    );
+  desired: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY,
+      my_text TEXT UNIQUE NOT NULL
+    );
+  up: |
+    ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
+  down: |
+    ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 1);
+AddCheckConstraintNoInherit:
+  current: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY,
+      my_text TEXT UNIQUE NOT NULL
+    );
+  desired: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY CHECK (a_id > 2) NO INHERIT,
+      my_text TEXT UNIQUE NOT NULL
+    );
+  up: |
+    ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 2) NO INHERIT;
+  down: |
+    ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
+ModifyCheckConstraintNoInherit:
+  current: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY CHECK (a_id > 2) NO INHERIT,
+      my_text TEXT UNIQUE NOT NULL
+    );
+  desired: |
+    CREATE TABLE a (
+      a_id INTEGER PRIMARY KEY CHECK (a_id > 3) NO INHERIT,
+      my_text TEXT UNIQUE NOT NULL
+    );
+  up: |
+    ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
+    ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 3) NO INHERIT;
+  down: |
+    ALTER TABLE "public"."a" DROP CONSTRAINT "a_a_id_check";
+    ALTER TABLE "public"."a" ADD CONSTRAINT "a_a_id_check" CHECK (a_id > 2) NO INHERIT;
+CreateTableWithoutMultiColumnCheck:
+  desired: |
+    CREATE TABLE orders (
+      id UUID NOT NULL PRIMARY KEY,
+      order_number VARCHAR(255) NOT NULL,
+      customer VARCHAR(255),
+      store_table VARCHAR(255)
+    );
+
+AddMultiColumnCheck:
+  current: |
+    CREATE TABLE orders (
+      id UUID NOT NULL PRIMARY KEY,
+      order_number VARCHAR(255) NOT NULL,
+      customer VARCHAR(255),
+      store_table VARCHAR(255)
+    );
+  desired: |
+    CREATE TABLE orders (
+      id UUID NOT NULL PRIMARY KEY,
+      order_number VARCHAR(255) NOT NULL,
+      customer VARCHAR(255),
+      store_table VARCHAR(255),
+      CONSTRAINT check_customer_or_table CHECK (store_table is not null and customer is null or store_table is null and customer is not null)
+    );
+  up: |
+    ALTER TABLE "public"."orders" ADD CONSTRAINT "check_customer_or_table" CHECK (store_table is not null and customer is null or store_table is null and customer is not null);
+  down: |
+    ALTER TABLE "public"."orders" DROP CONSTRAINT "check_customer_or_table";
+DropMultiColumnCheck:
+  current: |
+    CREATE TABLE orders (
+      id UUID NOT NULL PRIMARY KEY,
+      order_number VARCHAR(255) NOT NULL,
+      customer VARCHAR(255),
+      store_table VARCHAR(255),
+      CONSTRAINT check_customer_or_table CHECK (store_table is not null and customer is null or store_table is null and customer is not null)
+    );
+  desired: |
+    CREATE TABLE orders (
+      id UUID NOT NULL PRIMARY KEY,
+      order_number VARCHAR(255) NOT NULL,
+      customer VARCHAR(255),
+      store_table VARCHAR(255)
+    );
+  up: |
+    ALTER TABLE "public"."orders" DROP CONSTRAINT "check_customer_or_table";
+  down: |
+    ALTER TABLE "public"."orders" ADD CONSTRAINT "check_customer_or_table" CHECK (store_table is not null and customer is null or store_table is null and customer is not null);
+AddUniqueConstraint:
+  current: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+  desired: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b);
+  up: |
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b);
+  down: |
+    ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
+UniqueConstraintNotDeferrable:
+  current: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b);
+  desired: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) not deferrable initially immediate;
+
+ModifyUniqueConstraintToDeferrable:
+  current: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) not deferrable initially immediate;
+  desired: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable;
+  up: |
+    ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable;
+  down: |
+    ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) not deferrable initially immediate;
+ModifyUniqueConstraintToInitiallyDeferred:
+  current: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable;
+  desired: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable initially deferred;
+  up: |
+    ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable initially deferred;
+  down: |
+    ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable;
+RevertUniqueConstraintToNotDeferrable:
+  current: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable initially deferred;
+  desired: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b);
+  up: |
+    ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b);
+  down: |
+    ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b) deferrable initially deferred;
+DropUniqueConstraint:
+  current: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b);
+  desired: |
+    create table dummy(
+      column_a int not null,
+      column_b int not null,
+      column_c int not null
+    );
+  up: |
+    ALTER TABLE "public"."dummy" DROP CONSTRAINT "dummy_uniq";
+  down: |
+    alter table dummy add constraint dummy_uniq unique (column_a, column_b);
+CheckConstraintInNonPublicSchema:
+  current: |
+    CREATE SCHEMA test;
+    CREATE TABLE test.dummy (
+      min_value INT CHECK (min_value > 0),
+      max_value INT
+    );
+  desired: |
+    CREATE TABLE test.dummy (
+      min_value INT CHECK (min_value > 0),
+      max_value INT CHECK (max_value > 0),
+      CONSTRAINT min_max CHECK (min_value < max_value)
+    );
+  up: |
+    ALTER TABLE "test"."dummy" ADD CONSTRAINT "dummy_max_value_check" CHECK (max_value > 0);
+    ALTER TABLE "test"."dummy" ADD CONSTRAINT "min_max" CHECK (min_value < max_value);
+  down: |
+    ALTER TABLE "test"."dummy" DROP CONSTRAINT "dummy_max_value_check";
+    ALTER TABLE "test"."dummy" DROP CONSTRAINT "min_max";
+RemoveCheckConstraintInNonPublicSchema:
+  current: |
+    CREATE SCHEMA test;
+    CREATE TABLE test.dummy (
+      min_value INT CHECK (min_value > 0),
+      max_value INT CHECK (max_value > 0),
+      CONSTRAINT min_max CHECK (min_value < max_value)
+    );
+  desired: |
+    CREATE TABLE test.dummy (
+      min_value INT CHECK (min_value > 0),
+      max_value INT
+    );
+  up: |
+    ALTER TABLE "test"."dummy" DROP CONSTRAINT "dummy_max_value_check";
+    ALTER TABLE "test"."dummy" DROP CONSTRAINT "min_max";
+  down: |
+    ALTER TABLE "test"."dummy" ADD CONSTRAINT "dummy_max_value_check" CHECK (max_value > 0);
+    ALTER TABLE "test"."dummy" ADD CONSTRAINT "min_max" CHECK (min_value < max_value);
+AddUniqueConstraintInNonPublicSchema:
+  current: |
+    CREATE SCHEMA test;
+    CREATE TABLE test.dummy (a int, b int);
+  desired: |
+    CREATE TABLE test.dummy (a int, b int);
+    ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);
+  up: |
+    ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);
+  down: |
+    ALTER TABLE "test"."dummy" DROP CONSTRAINT "a_b_uniq";
+ChangeUniqueConstraintInNonPublicSchema:
+  current: |
+    CREATE SCHEMA test;
+    CREATE TABLE test.dummy (a int, b int);
+    ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);
+  desired: |
+    CREATE TABLE test.dummy (a int, b int);
+    ALTER TABLE test.dummy ADD CONSTRAINT a_uniq UNIQUE (a) DEFERRABLE INITIALLY DEFERRED;
+  up: |
+    ALTER TABLE test.dummy ADD CONSTRAINT a_uniq UNIQUE (a) DEFERRABLE INITIALLY DEFERRED;
+    ALTER TABLE "test"."dummy" DROP CONSTRAINT "a_b_uniq";
+  down: |
+    ALTER TABLE test.dummy ADD CONSTRAINT a_b_uniq UNIQUE (a, b);
+    ALTER TABLE "test"."dummy" DROP CONSTRAINT "a_uniq";
+TableLevelCheckMultiColumnAllAny:
+  desired: |
+    CREATE TABLE multi_check_test (
+      id INTEGER PRIMARY KEY,
+      state TEXT NOT NULL,
+      priority INTEGER NOT NULL,
+      CONSTRAINT valid_state_priority CHECK (
+        (state = ANY (ARRAY['active', 'pending']) AND priority >= ALL (ARRAY[1, 2])) OR
+        (state = ALL (ARRAY['inactive']) AND priority = ANY (ARRAY[0]))
+      )
+    );
+
+ModifyTableLevelCheckMultiColumnAllAny:
+  current: |
+    CREATE TABLE multi_check_test (
+      id INTEGER PRIMARY KEY,
+      state TEXT NOT NULL,
+      priority INTEGER NOT NULL,
+      CONSTRAINT valid_state_priority CHECK (
+        (state = ANY (ARRAY['active', 'pending']) AND priority >= ALL (ARRAY[1, 2])) OR
+        (state = ALL (ARRAY['inactive']) AND priority = ANY (ARRAY[0]))
+      )
+    );
+  desired: |
+    CREATE TABLE multi_check_test (
+      id INTEGER PRIMARY KEY,
+      state TEXT NOT NULL,
+      priority INTEGER NOT NULL,
+      CONSTRAINT valid_state_priority CHECK (
+        (state = ANY (ARRAY['active', 'pending', 'waiting']) AND priority >= ALL (ARRAY[1, 2])) OR
+        (state = ALL (ARRAY['inactive']) AND priority = ANY (ARRAY[0]))
+      )
+    );
+  up: |
+    ALTER TABLE "public"."multi_check_test" DROP CONSTRAINT "valid_state_priority";
+    ALTER TABLE "public"."multi_check_test" ADD CONSTRAINT "valid_state_priority" CHECK (state = ANY (ARRAY['active', 'pending', 'waiting']) and priority >= ALL (ARRAY[1, 2]) or state = ALL (ARRAY['inactive']) and priority = ANY (ARRAY[0]));
+  down: |
+    ALTER TABLE "public"."multi_check_test" DROP CONSTRAINT "valid_state_priority";
+    ALTER TABLE "public"."multi_check_test" ADD CONSTRAINT "valid_state_priority" CHECK (state = ANY (ARRAY['active', 'pending']) and priority >= ALL (ARRAY[1, 2]) or state = ALL (ARRAY['inactive']) and priority = ANY (ARRAY[0]));
+CheckConstraintWithTypeCastInArray:
+  desired: |
+    CREATE TABLE test_check_typecast (
+      id serial PRIMARY KEY,
+      status character varying CONSTRAINT test_check_typecast_status_check CHECK (status::text = ANY (ARRAY['active'::character varying::text, 'pending'::character varying::text]))
+    );
+
+# Test for CHECK constraint where ARRAY has outer type cast (ARRAY[...]::text[])
+# PostgreSQL normalizes ARRAY['a'::varchar, 'b'::varchar]::text[] to ARRAY['a'::varchar::text, 'b'::varchar::text]
+CheckConstraintWithArrayTypeCast:
+  # The current state uses the PostgreSQL-normalized form (type cast on each element)
+  current: |
+    CREATE TABLE test_array_typecast (
+      id serial PRIMARY KEY,
+      reference_image_type character varying CONSTRAINT test_array_typecast_check CHECK (reference_image_type IS NULL OR (reference_image_type::text = ANY (ARRAY['user_uploaded'::character varying::text, 'common'::character varying::text, 'generated'::character varying::text])))
+    );
+  # The desired state uses the outer type cast form (type cast on the whole ARRAY)
+  desired: |
+    CREATE TABLE test_array_typecast (
+      id serial PRIMARY KEY,
+      reference_image_type character varying CONSTRAINT test_array_typecast_check CHECK (reference_image_type IS NULL OR (reference_image_type::text = ANY (ARRAY['user_uploaded'::character varying, 'common'::character varying, 'generated'::character varying]::text[])))
+    );
+
+# TODO: Fix this test - when enable_drop is false and DROP INDEX is skipped,
+# the corresponding CREATE INDEX should also be skipped to avoid "relation already exists" error.
+#
+# Test for changing index uniqueness when enable_drop is false (the default)
+# When an index changes from non-unique to unique, psqldef needs to DROP then CREATE.
+# If DROP is skipped (enable_drop: false), CREATE should also be skipped to avoid
+# "relation already exists" error.
+# ChangeIndexUniquenessWithEnableDropFalse:
+#   enable_drop: false
+#   current: |
+#     CREATE TABLE test_index_uniqueness (
+#       id serial PRIMARY KEY,
+#       session_id character varying NOT NULL
+#     );
+#     CREATE INDEX ix_test_session_id ON public.test_index_uniqueness USING btree (session_id);
+#   desired: |
+#     CREATE TABLE test_index_uniqueness (
+#       id serial PRIMARY KEY,
+#       session_id character varying NOT NULL
+#     );
+#     CREATE UNIQUE INDEX ix_test_session_id ON public.test_index_uniqueness USING btree (session_id);
+#   # Both DROP and CREATE should be skipped when enable_drop is false
+#   up: |
+#     -- Skipped: DROP INDEX "public"."ix_test_session_id";
+#     -- Skipped: CREATE UNIQUE INDEX ix_test_session_id ON public.test_index_uniqueness USING btree (session_id);
+#   down: ""
+
+UnnamedForeignKey:
+  desired: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE posts (
+      id BIGINT NOT NULL PRIMARY KEY,
+      user_id BIGINT,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+MultipleUnnamedForeignKeys:
+  desired: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL
+    );
+
+    CREATE TABLE categories (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL
+    );
+
+    CREATE TABLE tags (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL
+    );
+
+    CREATE TABLE articles (
+      id BIGINT NOT NULL PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      author_id BIGINT NOT NULL,
+      category_id BIGINT NOT NULL,
+      tag_id BIGINT,
+      FOREIGN KEY (author_id) REFERENCES users(id),
+      FOREIGN KEY (category_id) REFERENCES categories(id),
+      FOREIGN KEY (tag_id) REFERENCES tags(id)
+    );
+
+# Test dropping an unnamed FK: The FK in current state has a database-generated name
+# (e.g., posts_user_id_fkey), but after dropping, the desired state has no FK.
+# This verifies that column-based matching correctly identifies the FK to drop.
+DropUnnamedForeignKey:
+  current: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE posts (
+      id BIGINT NOT NULL PRIMARY KEY,
+      user_id BIGINT,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE posts (
+      id BIGINT NOT NULL PRIMARY KEY,
+      user_id BIGINT
+    );
+
+# Test modifying an unnamed FK to reference a different table.
+# The FK in current state references users(id), but desired references admins(id).
+# This verifies that column-based matching detects the FK needs to be recreated.
+ModifyUnnamedForeignKey:
+  current: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE admins (
+      id BIGINT NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE posts (
+      id BIGINT NOT NULL PRIMARY KEY,
+      author_id BIGINT,
+      FOREIGN KEY (author_id) REFERENCES users(id)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE admins (
+      id BIGINT NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE posts (
+      id BIGINT NOT NULL PRIMARY KEY,
+      author_id BIGINT,
+      FOREIGN KEY (author_id) REFERENCES admins(id)
+    );
+
+CompositeUnnamedForeignKey:
+  desired: |
+    CREATE TABLE tenants (
+      id BIGINT NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE users (
+      tenant_id BIGINT NOT NULL,
+      user_id BIGINT NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      PRIMARY KEY (tenant_id, user_id)
+    );
+
+    CREATE TABLE posts (
+      id BIGINT NOT NULL PRIMARY KEY,
+      tenant_id BIGINT NOT NULL,
+      author_id BIGINT NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      FOREIGN KEY (tenant_id, author_id) REFERENCES users(tenant_id, user_id)
+    );
+
+# Test: DROP TABLE should not generate COMMENT ON TABLE ... IS NULL for the dropped table
+# PostgreSQL automatically removes table comments when the table is dropped.

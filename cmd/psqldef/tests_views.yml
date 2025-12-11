@@ -597,3 +597,32 @@ ViewWithMultipleCTEsAndPostgreSQLFunctions:
       format('%s-%s', rd.release_date, ec.count_until_event) AS summary
     FROM release_dates rd
     LEFT JOIN event_counts ec ON rd.product_id = ec.product_id;
+
+# View with WINDOW function (OVER clause)
+ViewWithWindowFunction:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE sales (id integer, amount numeric, sale_date date);
+    CREATE VIEW sales_with_running_total AS
+    SELECT id, amount, sale_date,
+           SUM(amount) OVER (ORDER BY sale_date) AS running_total
+    FROM sales;
+
+# View with WINDOW function and PARTITION BY
+ViewWithWindowPartition:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE sales (id integer, category text, amount numeric, sale_date date);
+    CREATE VIEW category_running_totals AS
+    SELECT id, category, amount, sale_date,
+           SUM(amount) OVER (PARTITION BY category ORDER BY sale_date) AS running_total
+    FROM sales;
+
+# View with JSON -> and ->> operators
+ViewWithJsonOperators:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE json_data (id integer, data jsonb);
+    CREATE VIEW json_view AS
+    SELECT id, data -> 'name' AS name, data ->> 'email' AS email
+    FROM json_data;

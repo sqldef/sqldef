@@ -1,0 +1,1005 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+CreateTableWithDefault:
+  desired: |
+    CREATE TABLE users (
+      profile character varying(50) NOT NULL DEFAULT ''::character varying,
+      default_int int default 20,
+      default_bool bool default true,
+      default_numeric numeric(5) default 42.195,
+      default_fixed_char character(3) default 'JPN'::bpchar,
+      default_text text default ''::text,
+      default_json json default '[]'::json,
+      default_jsonb jsonb default '[]'::jsonb,
+      default_current_timestamp timestamp default CURRENT_TIMESTAMP,
+      default_current_date date default CURRENT_DATE,
+      default_current_time time default CURRENT_TIME,
+      default_date_text text DEFAULT CURRENT_TIMESTAMP::date::text,
+      default_now timestamp default now(),
+      default_array_int int[] default '{}'::int[],
+      default_array_constructor int[] DEFAULT ARRAY[]::int[],
+      default_array_element_typecast text[] DEFAULT ARRAY[current_date::text]::text[],
+      joined_at timestamp with time zone NOT NULL DEFAULT '0001-01-01 00:00:00'::timestamp without time zone,
+      created_at timestamp with time zone DEFAULT now()
+    );
+CreateTableWithDefaultContainingQuote:
+  current: |
+    CREATE TABLE test ();
+  desired: |
+    CREATE TABLE test (
+      thing text default 'it''s free real estate'
+    );
+  up: |
+    ALTER TABLE "public"."test" ADD COLUMN "thing" text DEFAULT 'it''s free real estate';
+  down: |
+    ALTER TABLE "public"."test" DROP COLUMN "thing";
+CreateTableChangeDefaultBoolean:
+  current: |
+    CREATE TABLE test (
+      col boolean default true
+    );
+  desired: |
+    CREATE TABLE test (
+      col boolean default false
+    );
+  up: |
+    ALTER TABLE "public"."test" ALTER COLUMN "col" SET DEFAULT false;
+  down: |
+    ALTER TABLE "public"."test" ALTER COLUMN "col" SET DEFAULT true;
+NullCast:
+  desired: |
+    CREATE TABLE public.test (
+      "item" character varying(16) DEFAULT NULL
+    );
+NumericCast:
+  desired: |
+    CREATE TABLE public.test_table (
+      "item" numeric
+    );
+    CREATE VIEW public.test_view AS SELECT t.item FROM test_table t WHERE (t.item = (0)::numeric);
+UUIDCast:
+  desired: |
+    CREATE TABLE public.test_table (
+      "id" uuid NOT NULL,
+      "tenant_id" uuid NOT NULL,
+      PRIMARY KEY ("id", "tenant_id")
+    );
+    CREATE POLICY tenant_isolation_policy ON test_table AS PERMISSIVE FOR ALL TO public
+    USING (current_schema()::uuid = current_database()::uuid);
+TypeColumn:
+  desired: |
+    CREATE TABLE "public"."test_table" (
+      "id" bigint NOT NULL,
+      "type" character varying(10)
+    );
+    CREATE VIEW public.test_view AS SELECT test_table.id, test_table."type" FROM test_table;
+NumericChangePrecisionAndScale:
+  current: |
+    CREATE TABLE test (
+      num numeric (10, 3)
+    );
+  desired: |
+    CREATE TABLE test (
+      num numeric (10, 2)
+    );
+  up: |
+    ALTER TABLE "public"."test" ALTER COLUMN "num" TYPE numeric(10, 2);
+  down: |
+    ALTER TABLE "public"."test" ALTER COLUMN "num" TYPE numeric(10, 3);
+IntervalExpression:
+  desired: |
+    CREATE TABLE points (id bigint, created_at timestamp, main_type text, sub_type text, user_id bigint);
+    CREATE MATERIALIZED VIEW IF NOT EXISTS points_view AS
+    SELECT * FROM points
+    WHERE id IN (
+      SELECT MAX(id) AS id
+      FROM points
+      WHERE to_timestamp(concat(to_char(current_date - INTERVAL '1 YEAR' + INTERVAL '1 DAY', 'YYYY-MM-DD'), ' 00:00:00'), 'YYYY-MM-DD HH24:MI:SS') < created_at
+      AND created_at <= to_timestamp(concat(to_char(current_date, 'YYYY-MM-DD'), ' 23:59:59'), 'YYYY-MM-DD HH24:MI:SS')
+      GROUP BY main_type, sub_type, user_id
+    );
+IntervalType:
+  desired: |
+    CREATE TABLE public.test (
+      col interval
+    );
+AddArrayColumn:
+  current: |
+    CREATE TABLE users (
+      id integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id integer,
+      name integer[]
+    );
+  up: |
+    ALTER TABLE "public"."users" ADD COLUMN "name" integer[];
+  down: |
+    ALTER TABLE "public"."users" DROP COLUMN "name";
+AddBooleanColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      requires_consent boolean NOT NULL DEFAULT true
+    );
+  up: |
+    ALTER TABLE "foo"."items" ADD COLUMN "requires_consent" boolean NOT NULL DEFAULT true;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "requires_consent";
+  user: psqldef_user
+
+AddBooleanColumnWithExplicitSchema:
+  current: |
+    CREATE TABLE foo.items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE foo.items (
+      id integer,
+      requires_consent boolean NOT NULL DEFAULT true
+    );
+  up: |
+    ALTER TABLE "foo"."items" ADD COLUMN "requires_consent" boolean NOT NULL DEFAULT true;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "requires_consent";
+  user: psqldef_user
+
+# User-defined enum type on non-public default schema (unqualified type usage)
+AddIntegerColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      count integer NOT NULL
+    );
+  up: |
+    ALTER TABLE "foo"."items" ADD COLUMN "count" integer NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "count";
+  user: psqldef_user
+
+AddTextColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      description text NOT NULL
+    );
+  up: |
+    ALTER TABLE "foo"."items" ADD COLUMN "description" text NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "description";
+  user: psqldef_user
+
+AddVarcharColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      name varchar(255) NOT NULL
+    );
+  up: |
+    ALTER TABLE "foo"."items" ADD COLUMN "name" varchar(255) NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "name";
+  user: psqldef_user
+
+AddNumericColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      amount numeric(10, 2) NOT NULL
+    );
+  up: |
+    ALTER TABLE "foo"."items" ADD COLUMN "amount" numeric(10, 2) NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "amount";
+  user: psqldef_user
+
+AddUUIDColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      uuid_col uuid NOT NULL
+    );
+  up: |
+    ALTER TABLE "foo"."items" ADD COLUMN "uuid_col" uuid NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "uuid_col";
+  user: psqldef_user
+
+AddJSONBColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      meta jsonb NOT NULL
+    );
+  up: |
+    ALTER TABLE "foo"."items" ADD COLUMN "meta" jsonb NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "meta";
+  user: psqldef_user
+
+AddTimestampColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      ts timestamp NOT NULL
+    );
+  up: |
+    ALTER TABLE "foo"."items" ADD COLUMN "ts" timestamp NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "ts";
+  user: psqldef_user
+
+AddTimestamptzColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      ts_tz timestamptz NOT NULL
+    );
+  up: |
+    ALTER TABLE "foo"."items" ADD COLUMN "ts_tz" timestamp WITH TIME ZONE NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "ts_tz";
+  user: psqldef_user
+
+AddTimetzColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      time_tz timetz NOT NULL
+    );
+  up: |
+    ALTER TABLE "foo"."items" ADD COLUMN "time_tz" time WITH TIME ZONE NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "time_tz";
+  user: psqldef_user
+
+AddDoublePrecisionColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      dp double precision NOT NULL
+    );
+  up: |
+    ALTER TABLE "foo"."items" ADD COLUMN "dp" double precision NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "dp";
+  user: psqldef_user
+
+AddRealColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      rp real NOT NULL
+    );
+  up: |
+    ALTER TABLE "foo"."items" ADD COLUMN "rp" real NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "rp";
+  user: psqldef_user
+
+AddByteaColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TABLE items (
+      id integer,
+      data bytea NOT NULL
+    );
+  up: |
+    ALTER TABLE "foo"."items" ADD COLUMN "data" bytea NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "data";
+  user: psqldef_user
+ChangeTimezone:
+  current: |
+    CREATE TABLE test (
+      timestamp_at1 timestamp with time zone NOT NULL,
+      timestamp_at2 timestamp with time zone NOT NULL,
+      timestamp_at3 timestamp NOT NULL,
+      timestamp_at4 timestamp WITHOUT TIME ZONE NOT NULL,
+      time_at1 time WITH TIME ZONE NOT NULL,
+      time_at2 time WITH TIME ZONE NOT NULL,
+      time_at3 time NOT NULL,
+      time_at4 time WITHOUT TIME ZONE NOT NULL
+    );
+  desired: |
+    CREATE TABLE test (
+      timestamp_at1 timestamp WITHOUT TIME ZONE NOT NULL,
+      timestamp_at2 timestamp NOT NULL,
+      timestamp_at3 timestamp WITH TIME ZONE NOT NULL,
+      timestamp_at4 timestamp WITH TIME ZONE NOT NULL,
+      time_at1 time WITHOUT TIME ZONE NOT NULL,
+      time_at2 time NOT NULL,
+      time_at3 time WITH TIME ZONE NOT NULL,
+      time_at4 time WITH TIME ZONE NOT NULL
+    );
+  up: |
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at1" TYPE timestamp;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at2" TYPE timestamp;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at3" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at4" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "time_at1" TYPE time;
+    ALTER TABLE "public"."test" ALTER COLUMN "time_at2" TYPE time;
+    ALTER TABLE "public"."test" ALTER COLUMN "time_at3" TYPE time WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "time_at4" TYPE time WITH TIME ZONE;
+  down: |
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at1" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at2" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at3" TYPE timestamp;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at4" TYPE timestamp;
+    ALTER TABLE "public"."test" ALTER COLUMN "time_at1" TYPE time WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "time_at2" TYPE time WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "time_at3" TYPE time;
+    ALTER TABLE "public"."test" ALTER COLUMN "time_at4" TYPE time;
+ChangeTimezoneSyntax:
+  current: |
+    CREATE TABLE test (
+      timestamp_wtz_wtz     timestamp with time zone,
+      timestamp_wtz_tz      timestamp with time zone,
+      timestamp_wtz_plain   timestamp with time zone,
+      timestamp_tz_wtz      timestamptz,
+      timestamp_tz_tz       timestamptz,
+      timestamp_tz_plain    timestamptz,
+      timestamp_plain_wtz   timestamp,
+      timestamp_plain_tz    timestamp,
+      timestamp_plain_plain timestamp
+    );
+  desired: |
+    CREATE TABLE test (
+      timestamp_wtz_wtz     timestamp with time zone,
+      timestamp_wtz_tz      timestamptz,
+      timestamp_wtz_plain   timestamp,
+      timestamp_tz_wtz      timestamp with time zone,
+      timestamp_tz_tz       timestamptz,
+      timestamp_tz_plain    timestamp,
+      timestamp_plain_wtz   timestamp with time zone,
+      timestamp_plain_tz    timestamptz,
+      timestamp_plain_plain timestamp
+    );
+  up: |
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_wtz_plain" TYPE timestamp;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_tz_plain" TYPE timestamp;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_plain_wtz" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_plain_tz" TYPE timestamp WITH TIME ZONE;
+  down: |
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_wtz_plain" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_tz_plain" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_plain_wtz" TYPE timestamp;
+    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_plain_tz" TYPE timestamp;
+CreateTableAddTimestampColumn:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      age integer,
+      timestamp_with_tz timestamp WITH TIME ZONE,
+      timestamp_without_tz timestamp WITHOUT TIME ZONE
+    );
+  up: |
+    ALTER TABLE "public"."users" ADD COLUMN "timestamp_with_tz" timestamp WITH TIME ZONE;
+    ALTER TABLE "public"."users" ADD COLUMN "timestamp_without_tz" timestamp;
+  down: |
+    ALTER TABLE "public"."users" DROP COLUMN "timestamp_without_tz";
+    ALTER TABLE "public"."users" DROP COLUMN "timestamp_with_tz";
+AddColumnWithDefaultExpression:
+  current: |
+    CREATE EXTENSION "uuid-ossp";
+    CREATE TABLE users (id bigint NOT NULL);
+  desired: |
+    CREATE EXTENSION "uuid-ossp";
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      "key" uuid NOT NULL DEFAULT uuid_generate_v4()
+    );
+  up: |
+    ALTER TABLE "public"."users" ADD COLUMN "key" uuid NOT NULL DEFAULT uuid_generate_v4();
+  down: |
+    ALTER TABLE "public"."users" DROP COLUMN "key";
+AddDefaultExpression:
+  current: |
+    CREATE EXTENSION "uuid-ossp";
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      "key" uuid NOT NULL
+    );
+  desired: |
+    CREATE EXTENSION "uuid-ossp";
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      "key" uuid NOT NULL DEFAULT uuid_generate_v4()
+    );
+  up: |
+    ALTER TABLE "public"."users" ALTER COLUMN "key" SET DEFAULT uuid_generate_v4();
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "key" DROP DEFAULT;
+RemoveDefaultExpression:
+  current: |
+    CREATE EXTENSION "uuid-ossp";
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      "key" uuid NOT NULL DEFAULT uuid_generate_v4()
+    );
+  desired: |
+    CREATE EXTENSION "uuid-ossp";
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      "key" uuid NOT NULL
+    );
+  up: |
+    ALTER TABLE "public"."users" ALTER COLUMN "key" DROP DEFAULT;
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "key" SET DEFAULT uuid_generate_v4();
+ChangeDefaultExpressionWithAddition:
+  current: |
+    CREATE TABLE public.foo (
+      expires_at timestamp with time zone NOT NULL DEFAULT (CURRENT_TIMESTAMP + '1 day'::interval)
+    );
+  desired: |
+    CREATE TABLE public.foo (
+      expires_at timestamp with time zone NOT NULL DEFAULT (CURRENT_TIMESTAMP + '3 days'::interval)
+    );
+  up: |
+    ALTER TABLE "public"."foo" ALTER COLUMN "expires_at" SET DEFAULT current_timestamp + '3 days'::interval;
+  down: |
+    ALTER TABLE "public"."foo" ALTER COLUMN "expires_at" SET DEFAULT current_timestamp + '1 day'::interval;
+CaseWithoutArgument:
+  desired: |
+    CREATE TABLE permissions (
+      name TEXT NOT NULL,
+      admin BOOLEAN NOT NULL,
+      CONSTRAINT admin_name CHECK (
+        CASE
+          WHEN admin THEN name LIKE 'admin%'
+          ELSE true
+        END
+      )
+    );
+CollateOnColumn:
+  desired: |
+    create table users
+    (
+        id   int          not null,
+        name varchar(255) not null
+    );
+    create view user_view as
+    select users.id,
+          (users.name collate "ja-JP-x-icu") as name
+    from users;
+
+CreateTableWithCurrentTimestamp:
+  desired: |
+    CREATE TABLE timestamps (
+      created_at timestamp default current_timestamp
+    );
+
+DropTimestampDefault:
+  current: |
+    CREATE TABLE timestamps (
+      created_at timestamp default current_timestamp
+    );
+  desired: |
+    CREATE TABLE timestamps (
+      created_at timestamp
+    );
+  up: |
+    ALTER TABLE "public"."timestamps" ALTER COLUMN "created_at" DROP DEFAULT;
+  down: |
+    ALTER TABLE "public"."timestamps" ALTER COLUMN "created_at" SET DEFAULT current_timestamp;
+AddTimestampDefaultBack:
+  current: |
+    CREATE TABLE timestamps (
+      created_at timestamp
+    );
+  desired: |
+    CREATE TABLE timestamps (
+      created_at timestamp default current_timestamp
+    );
+  up: |
+    ALTER TABLE "public"."timestamps" ALTER COLUMN "created_at" SET DEFAULT current_timestamp;
+  down: |
+    ALTER TABLE "public"."timestamps" ALTER COLUMN "created_at" DROP DEFAULT;
+CreateTableWithoutNotNull:
+  desired: |
+    CREATE TABLE users (
+      name text
+    );
+
+AddNotNullConstraint:
+  current: |
+    CREATE TABLE users (
+      name text
+    );
+  desired: |
+    CREATE TABLE users (
+      name text NOT NULL
+    );
+  up: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
+DropNotNullConstraint:
+  current: |
+    CREATE TABLE users (
+      name text NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      name text
+    );
+  up: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
+ColumnWithQuotes:
+  desired: |
+    CREATE TABLE users (
+      "id" bigint NOT NULL,
+      "name" text,
+      "age" integer
+    );
+
+PostgreSQLDataTypes:
+  desired: |
+    CREATE TABLE users (
+      c_array integer array,
+      c_array_bracket integer[],
+      c_bigint bigint,
+      c_bigserial bigserial,
+      c_bit bit,
+      c_bit_2 bit(2),
+      c_bool bool,
+      c_boolean boolean,
+      c_char_10 char(10),
+      c_character_20 character(20),
+      c_character_varying_30 character varying(30),
+      c_date date,
+      c_double_precision double precision,
+      c_json json,
+      c_jsonb jsonb,
+      c_timestamp timestamp,
+      c_timestamp_6 timestamp(6),
+      c_timestamp_tz timestamp with time zone,
+      c_timestamp_tz_6 timestamp(6) with time zone,
+      c_timestamp_tz_6_notnull timestamp(6) with time zone not null,
+      c_time time,
+      c_time_6 time(6),
+      c_time_tz time with time zone,
+      c_time_tz_6 time(6) with time zone,
+      c_time_tz_6_notnull time(6) with time zone not null,
+      c_int int,
+      c_integer integer,
+      c_serial serial,
+      c_text text,
+      c_uuid uuid,
+      c_varchar_40 varchar(40)
+    );
+
+DecimalDefault:
+  current: |
+    CREATE TABLE some_table (
+      v0 decimal(5, 2) DEFAULT 0.0,
+      v1 decimal(5, 2) DEFAULT 1.2,
+      v2 decimal(30, 20) DEFAULT  0.12345,
+      v3 decimal(30, 20) DEFAULT '0.0000000000123456789'
+    );
+  desired: |
+    CREATE TABLE some_table (
+      v0 decimal(5, 2) DEFAULT 0.01,
+      v1 decimal(5, 2) DEFAULT 1.23,
+      v2 decimal(30, 20) DEFAULT  0.1234,
+      v3 decimal(30, 20) DEFAULT '0.00000000001234567891'
+    );
+  up: |
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v0" SET DEFAULT 0.010000;
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v1" SET DEFAULT 1.230000;
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v2" SET DEFAULT 0.123400;
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v3" SET DEFAULT '0.00000000001234567891';
+  down: |
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v0" SET DEFAULT 0.000000;
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v1" SET DEFAULT 1.200000;
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v2" SET DEFAULT 0.123450;
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v3" SET DEFAULT '0.0000000000123456789';
+NegativeDefaultNumbers:
+  desired: |
+    CREATE TABLE items (
+      v0 float DEFAULT - 20,
+      v1 float DEFAULT -3.14,
+      v6 float DEFAULT -20,
+      v7 decimal(5, 2) DEFAULT -20.0,
+      v8 decimal(5, 2) DEFAULT 20.0,
+      v9 decimal(5, 2) DEFAULT 0.0,
+      v10 decimal(10, 4) DEFAULT 0.001,
+      v11 decimal(10, 4) DEFAULT -0.001
+    );
+DefaultString:
+  current: |
+    CREATE TABLE some_table (
+      v0 TEXT DEFAULT 'foo',
+      v1 TEXT DEFAULT 'BAR'
+    );
+  desired: |
+    CREATE TABLE some_table (
+      v0 TEXT DEFAULT 'FOO',
+      v1 TEXT DEFAULT 'bar'
+    );
+  up: |
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v0" SET DEFAULT 'FOO';
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v1" SET DEFAULT 'bar';
+  down: |
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v0" SET DEFAULT 'foo';
+    ALTER TABLE "public"."some_table" ALTER COLUMN "v1" SET DEFAULT 'BAR';
+NumericDecimalVariablePrecision:
+  current: |
+    CREATE TABLE test (
+      id int,
+      num numeric,
+      price decimal
+    );
+  desired: |
+    CREATE TABLE test (
+      id int,
+      num numeric,
+      price decimal
+    );
+NumericDecimalExplicit:
+  current: |
+    CREATE TABLE test (
+      id int,
+      num1 numeric(10),
+      num2 numeric(15, 4),
+      price1 decimal(12),
+      price2 decimal(20, 6)
+    );
+  desired: |
+    CREATE TABLE test (
+      id int,
+      num1 numeric(10),
+      num2 numeric(15, 4),
+      price1 decimal(12),
+      price2 decimal(20, 6)
+    );
+AlterColumnSetDefault:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20),
+      priority int
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20) DEFAULT 'active',
+      priority int DEFAULT 1
+    );
+  up: |
+    ALTER TABLE "public"."users" ALTER COLUMN "status" SET DEFAULT 'active';
+    ALTER TABLE "public"."users" ALTER COLUMN "priority" SET DEFAULT 1;
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "status" DROP DEFAULT;
+    ALTER TABLE "public"."users" ALTER COLUMN "priority" DROP DEFAULT;
+AlterColumnDropDefault:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20) DEFAULT 'active',
+      priority int DEFAULT 1
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20),
+      priority int
+    );
+  up: |
+    ALTER TABLE "public"."users" ALTER COLUMN "status" DROP DEFAULT;
+    ALTER TABLE "public"."users" ALTER COLUMN "priority" DROP DEFAULT;
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "status" SET DEFAULT 'active';
+    ALTER TABLE "public"."users" ALTER COLUMN "priority" SET DEFAULT 1;
+AlterColumnChangeDefault:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20) DEFAULT 'pending',
+      is_active boolean DEFAULT false
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      status varchar(20) DEFAULT 'active',
+      is_active boolean DEFAULT true
+    );
+  up: |
+    ALTER TABLE "public"."users" ALTER COLUMN "status" SET DEFAULT 'active';
+    ALTER TABLE "public"."users" ALTER COLUMN "is_active" SET DEFAULT true;
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "status" SET DEFAULT 'pending';
+    ALTER TABLE "public"."users" ALTER COLUMN "is_active" SET DEFAULT false;
+AlterColumnSetNotNull:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100),
+      email varchar(255)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100) NOT NULL,
+      email varchar(255) NOT NULL
+    );
+  up: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "email" SET NOT NULL;
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "email" DROP NOT NULL;
+AlterColumnDropNotNull:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100) NOT NULL,
+      email varchar(255) NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100),
+      email varchar(255)
+    );
+  up: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "email" DROP NOT NULL;
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "email" SET NOT NULL;
+AlterColumnChangeNotNullAndDefault:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100),
+      email varchar(255) NOT NULL DEFAULT 'unknown@example.com'
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(100) NOT NULL DEFAULT 'anonymous',
+      email varchar(255)
+    );
+  up: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "name" SET DEFAULT 'anonymous';
+    ALTER TABLE "public"."users" ALTER COLUMN "email" DROP NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "email" DROP DEFAULT;
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP DEFAULT;
+    ALTER TABLE "public"."users" ALTER COLUMN "email" SET NOT NULL;
+    ALTER TABLE "public"."users" ALTER COLUMN "email" SET DEFAULT 'unknown@example.com';
+TypedLiterals:
+  current: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY
+    );
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      event_date date DEFAULT DATE '2024-01-01',
+      event_time time DEFAULT TIME '12:00:00',
+      event_timestamp timestamp DEFAULT TIMESTAMP '2024-01-01 12:00:00'
+    );
+  up: |
+    ALTER TABLE "public"."events" ADD COLUMN "event_date" date DEFAULT '2024-01-01';
+    ALTER TABLE "public"."events" ADD COLUMN "event_time" time DEFAULT '12:00:00';
+    ALTER TABLE "public"."events" ADD COLUMN "event_timestamp" timestamp DEFAULT '2024-01-01 12:00:00';
+  down: |
+    ALTER TABLE "public"."events" DROP COLUMN "event_timestamp";
+    ALTER TABLE "public"."events" DROP COLUMN "event_time";
+    ALTER TABLE "public"."events" DROP COLUMN "event_date";
+TypedLiteralsIdempotency:
+  current: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      event_date date DEFAULT DATE '2024-01-01',
+      event_time time DEFAULT TIME '12:00:00',
+      event_timestamp timestamp DEFAULT TIMESTAMP '2024-01-01 12:00:00'
+    );
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      event_date date DEFAULT DATE '2024-01-01',
+      event_time time DEFAULT TIME '12:00:00',
+      event_timestamp timestamp DEFAULT TIMESTAMP '2024-01-01 12:00:00'
+    );
+TypedLiteralsChangeDefault:
+  current: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      event_date date DEFAULT DATE '2024-01-01',
+      event_time time DEFAULT TIME '12:00:00',
+      event_timestamp timestamp DEFAULT TIMESTAMP '2024-01-01 12:00:00'
+    );
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      event_date date DEFAULT DATE '2024-12-31',
+      event_time time DEFAULT TIME '23:59:59',
+      event_timestamp timestamp DEFAULT TIMESTAMP '2024-12-31 23:59:59'
+    );
+  up: |
+    ALTER TABLE "public"."events" ALTER COLUMN "event_date" SET DEFAULT '2024-12-31';
+    ALTER TABLE "public"."events" ALTER COLUMN "event_time" SET DEFAULT '23:59:59';
+    ALTER TABLE "public"."events" ALTER COLUMN "event_timestamp" SET DEFAULT '2024-12-31 23:59:59';
+  down: |
+    ALTER TABLE "public"."events" ALTER COLUMN "event_date" SET DEFAULT '2024-01-01';
+    ALTER TABLE "public"."events" ALTER COLUMN "event_time" SET DEFAULT '12:00:00';
+    ALTER TABLE "public"."events" ALTER COLUMN "event_timestamp" SET DEFAULT '2024-01-01 12:00:00';
+TypedLiteralsInCheckWithCast:
+  current: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY
+    );
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      event_date date CHECK (event_date >= '2020-01-01'::date),
+      event_time time CHECK (event_time >= time '09:00:00'),
+      event_end_date date CHECK (event_end_date <= DATE '2030-12-31')
+    );
+  up: |
+    ALTER TABLE "public"."events" ADD COLUMN "event_date" date CHECK (event_date >= '2020-01-01');
+    ALTER TABLE "public"."events" ADD COLUMN "event_time" time CHECK (event_time >= '09:00:00'::time);
+    ALTER TABLE "public"."events" ADD COLUMN "event_end_date" date CHECK (event_end_date <= '2030-12-31');
+  down: |
+    ALTER TABLE "public"."events" DROP COLUMN "event_end_date";
+    ALTER TABLE "public"."events" DROP COLUMN "event_time";
+    ALTER TABLE "public"."events" DROP COLUMN "event_date";
+# Multi-dimensional array support
+CreateTableWithMultiDimensionalArrays:
+  desired: |
+    CREATE TABLE matrices (
+      id serial PRIMARY KEY,
+      matrix_2d int[][],
+      matrix_3d text[][][],
+      coords double precision[][]
+    );
+
+AddMultiDimensionalArrayColumn:
+  current: |
+    CREATE TABLE matrices (
+      id serial PRIMARY KEY
+    );
+  desired: |
+    CREATE TABLE matrices (
+      id serial PRIMARY KEY,
+      matrix_2d int[][]
+    );
+  up: |
+    ALTER TABLE "public"."matrices" ADD COLUMN "matrix_2d" integer[];
+  down: |
+    ALTER TABLE "public"."matrices" DROP COLUMN "matrix_2d";
+MultiDimensionalArrayWithDefaultEmpty:
+  desired: |
+    CREATE TABLE matrices (
+      id serial PRIMARY KEY,
+      matrix_2d int[][] DEFAULT ARRAY[]::int[],
+      matrix_3d text[][][] DEFAULT ARRAY[]::text[]
+    );
+
+MultiDimensionalArrayWithNestedConstructor:
+  desired: |
+    CREATE TABLE matrices (
+      id serial PRIMARY KEY,
+      matrix_2d int[][] DEFAULT ARRAY[ARRAY[1, 2], ARRAY[3, 4]]
+    );
+
+ChangeMultiDimensionalArrayDefault:
+  current: |
+    CREATE TABLE matrices (
+      id serial PRIMARY KEY,
+      matrix_2d int[][] DEFAULT ARRAY[]::int[]
+    );
+  desired: |
+    CREATE TABLE matrices (
+      id serial PRIMARY KEY,
+      matrix_2d int[][] DEFAULT ARRAY[ARRAY[1, 2]]
+    );
+  up: |
+    ALTER TABLE "public"."matrices" ALTER COLUMN "matrix_2d" SET DEFAULT ARRAY[ARRAY[1, 2]];
+  down: |
+    ALTER TABLE "public"."matrices" ALTER COLUMN "matrix_2d" SET DEFAULT ARRAY[]::integer[];
+
+# PostgreSQL treats int[], int[][], int[][][] all as int[] internally
+MultiDimensionalArrayEquivalence1D2D:
+  current: |
+    CREATE TABLE test (
+      arr int[]
+    );
+  desired: |
+    CREATE TABLE test (
+      arr int[][]
+    );
+MultiDimensionalArrayEquivalence2D3D:
+  current: |
+    CREATE TABLE test (
+      arr int[][]
+    );
+  desired: |
+    CREATE TABLE test (
+      arr int[][][]
+    );
+
+# This ensures the parser handles storage parameters like fillfactor='70'
+DefaultValueWithArrayTypeCast:
+  desired: |
+    CREATE TABLE settings (
+      id serial,
+      allowed_values text[] DEFAULT ARRAY['option1', 'option2']::text[]
+    );
+
+# Test for CREATE INDEX with string value for integer parameter
+# PostgreSQL exports integer parameters as strings, ensure idempotency
+ColumnWithCollation:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE test (
+      name text COLLATE "en_US"
+    );
+
+# Function returning TABLE

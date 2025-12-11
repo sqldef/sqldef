@@ -1,0 +1,173 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+AlterTypeAddValue:
+  current: |
+    CREATE TYPE eventtype AS ENUM (
+      'example',
+      'send_message'
+    );
+
+    CREATE TABLE events (
+      id UUID NOT NULL PRIMARY KEY,
+      event_type eventtype NOT NULL
+    );
+  desired: |
+    CREATE TYPE eventtype AS ENUM (
+      'example',
+      'send_message',
+      'send_meeting_options',
+      'update_reactionslot'
+    );
+
+    CREATE TABLE events (
+      id UUID NOT NULL PRIMARY KEY,
+      event_type eventtype NOT NULL
+    );
+  up: |
+    ALTER TYPE "public"."eventtype" ADD VALUE 'send_meeting_options';
+    ALTER TYPE "public"."eventtype" ADD VALUE 'update_reactionslot';
+  down: ""
+  min_version: '12'
+AlterTypeAddValueWithSameTypeNameInDifferentSchema:
+  current: |
+    CREATE SCHEMA schema1;
+    CREATE SCHEMA schema2;
+    CREATE TYPE schema1.lang AS ENUM (
+      'ja',
+      'en'
+    );
+    CREATE TYPE schema2.lang AS ENUM (
+      'ja',
+      'en'
+    );
+  desired: |
+    CREATE TYPE schema1.lang AS ENUM (
+      'ja',
+      'en'
+    );
+    CREATE TYPE schema2.lang AS ENUM (
+      'ja',
+      'en',
+      'de'
+    );
+  up: |
+    ALTER TYPE "schema2"."lang" ADD VALUE 'de';
+  down: ""
+  min_version: '12'
+AddEnumTypeColumn:
+  current: |
+    CREATE SCHEMA s;
+    CREATE TABLE s.users (
+      id UUID NOT NULL PRIMARY KEY
+    );
+  desired: |
+    CREATE TYPE s.lang AS ENUM (
+      'ja',
+      'en'
+    );
+    CREATE TABLE s.users (
+      id UUID NOT NULL PRIMARY KEY,
+      lang s.lang NOT NULL
+    );
+  up: |
+    CREATE TYPE s.lang AS ENUM (
+      'ja',
+      'en'
+    );
+    ALTER TABLE "s"."users" ADD COLUMN "lang" s.lang NOT NULL;
+  down: |
+    ALTER TABLE "s"."users" DROP COLUMN "lang";
+    DROP TYPE "s"."lang";
+CreateTypeWithMultipleTables:
+  desired: |
+    CREATE TYPE order_status AS ENUM ('pending', 'shipped');
+    CREATE TABLE customers (
+      id SERIAL PRIMARY KEY
+    );
+    CREATE TABLE orders (
+      id SERIAL PRIMARY KEY,
+      status order_status NOT NULL
+    );
+
+CreateMultipleTypesWithMultipleTables:
+  desired: |
+    CREATE TYPE order_status AS ENUM ('pending', 'shipped', 'delivered');
+    CREATE TYPE payment_method AS ENUM ('credit_card', 'paypal', 'bank_transfer');
+    CREATE TABLE customers (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL
+    );
+    CREATE TABLE orders (
+      id SERIAL PRIMARY KEY,
+      customer_id INTEGER REFERENCES customers(id),
+      status order_status NOT NULL,
+      payment payment_method NOT NULL
+    );
+
+AddEnumTypeColumnOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TYPE lang AS ENUM (
+      'ja',
+      'en'
+    );
+
+    CREATE TABLE items (
+      id integer,
+      lang lang NOT NULL
+    );
+  up: |
+    CREATE TYPE lang AS ENUM (
+      'ja',
+      'en'
+    );
+    ALTER TABLE "foo"."items" ADD COLUMN "lang" lang NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "lang";
+    DROP TYPE "foo"."lang";
+  user: psqldef_user
+
+# User-defined enum type on non-public default schema (explicit schema usage)
+AddEnumTypeColumnWithExplicitSchemaOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE items (
+      id integer
+    );
+  desired: |
+    CREATE TYPE foo.lang AS ENUM (
+      'ja',
+      'en'
+    );
+
+    CREATE TABLE items (
+      id integer,
+      lang foo.lang NOT NULL
+    );
+  up: |
+    CREATE TYPE foo.lang AS ENUM (
+      'ja',
+      'en'
+    );
+    ALTER TABLE "foo"."items" ADD COLUMN "lang" foo.lang NOT NULL;
+  down: |
+    ALTER TABLE "foo"."items" DROP COLUMN "lang";
+    DROP TYPE "foo"."lang";
+  user: psqldef_user
+
+# Built-in types must not be schema-qualified on non-public schema
+CreateTypeEnum:
+  desired: |
+    CREATE TYPE "public"."country" AS ENUM ('us', 'jp');
+    CREATE TABLE users (
+      id SERIAL PRIMARY KEY,
+      country "public"."country" NOT NULL DEFAULT 'jp'::country
+    );
+
+EnumWithSpecialCharValues:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TYPE status_type AS ENUM ('in-progress', 'on-hold', 'n/a');
+
+# Column with explicit collation
