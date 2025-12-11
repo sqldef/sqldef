@@ -354,6 +354,7 @@ var keywords = map[string]int{
 	"outfile":                UNUSED,
 	"output":                 OUTPUT,
 	"over":                   OVER,
+	"overlaps":               OVERLAPS,
 	"owned":                  OWNED,
 	"paglock":                PAGLOCK,
 	"parallel":               PARALLEL,

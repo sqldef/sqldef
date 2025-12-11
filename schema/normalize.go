@@ -413,6 +413,27 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Expr:     normalizeCheckExpr(e.Expr, mode),
 		}
 	case *parser.RangeCond:
+		// PostgreSQL normalizes BETWEEN to >= AND <=
+		// e.g., "score BETWEEN 0 AND 100" becomes "score >= 0 AND score <= 100"
+		if mode == GeneratorModePostgres {
+			left := normalizeCheckExpr(e.Left, mode)
+			from := normalizeCheckExpr(e.From, mode)
+			to := normalizeCheckExpr(e.To, mode)
+
+			if e.Operator == parser.BetweenStr {
+				// x BETWEEN a AND b -> x >= a AND x <= b
+				return &parser.AndExpr{
+					Left:  &parser.ComparisonExpr{Left: left, Operator: parser.GreaterEqualStr, Right: from},
+					Right: &parser.ComparisonExpr{Left: left, Operator: parser.LessEqualStr, Right: to},
+				}
+			} else if e.Operator == parser.NotBetweenStr {
+				// x NOT BETWEEN a AND b -> x < a OR x > b
+				return &parser.OrExpr{
+					Left:  &parser.ComparisonExpr{Left: left, Operator: parser.LessThanStr, Right: from},
+					Right: &parser.ComparisonExpr{Left: left, Operator: parser.GreaterThanStr, Right: to},
+				}
+			}
+		}
 		return &parser.RangeCond{
 			Operator: e.Operator,
 			Left:     normalizeCheckExpr(e.Left, mode),

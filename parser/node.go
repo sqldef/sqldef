@@ -1717,6 +1717,9 @@ const (
 	PosixRegexCiStr      = "~*"
 	PosixNotRegexStr     = "!~"
 	PosixNotRegexCiStr   = "!~*"
+	IsDistinctFromStr    = "is distinct from"
+	IsNotDistinctFromStr = "is not distinct from"
+	OverlapsStr          = "overlaps"
 )
 
 // Format formats the node.

@@ -1490,5 +1490,28 @@ CompositeUnnamedForeignKey:
       FOREIGN KEY (tenant_id, author_id) REFERENCES users(tenant_id, user_id)
     );
 
-# Test: DROP TABLE should not generate COMMENT ON TABLE ... IS NULL for the dropped table
-# PostgreSQL automatically removes table comments when the table is dropped.
+CheckConstraintWithBetween:
+  desired: |
+    CREATE TABLE test (
+      score integer CHECK (score BETWEEN 0 AND 100)
+    );
+CheckConstraintWithOverlaps:
+  desired: |
+    CREATE TABLE bookings (
+      start_date date NOT NULL,
+      end_date date NOT NULL,
+      CHECK ((start_date, end_date) OVERLAPS (start_date, end_date))
+    );
+CheckConstraintWithIsDistinctFrom:
+  desired: |
+    CREATE TABLE test (
+      a integer,
+      b integer,
+      CHECK (a IS DISTINCT FROM b)
+    );
+CheckConstraintWithCoalesce:
+  desired: |
+    CREATE TABLE test (
+      val integer,
+      CHECK (COALESCE(val, 0) >= 0)
+    );

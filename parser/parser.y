@@ -167,7 +167,7 @@ func setDDL(yylex any, ddl *DDL) {
  * other keywords are critical for correct parsing.                           */
 %nonassoc NO_ELSE
 /** DO NOT MERGE these definitions. Their separation and order are critical. **/
-%left <str> BETWEEN CASE WHEN THEN END
+%left <str> BETWEEN CASE WHEN THEN END OVERLAPS
 %left <str> ELSE
 /* ---------------- End of Dangling Else Resolution ------------------------- */
 /* ---------------- Optional Expression Resolution -----------------------------
@@ -5028,6 +5028,18 @@ expression:
   {
     $$ = &IsExpr{Operator: $3, Expr: $1}
   }
+| expression IS DISTINCT FROM expression %prec IS
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: IsDistinctFromStr, Right: $5}
+  }
+| expression IS NOT DISTINCT FROM expression %prec IS
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: IsNotDistinctFromStr, Right: $6}
+  }
+| expression OVERLAPS expression %prec BETWEEN
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: OverlapsStr, Right: $3}
+  }
 | expression OUTPUT
   {
     $$ = &SuffixExpr{Expr: $1, Suffix: $2}
@@ -6720,6 +6732,7 @@ reserved_keyword:
 | OR
 | ORDER
 | OUTER
+| OVERLAPS
 | PARTITION
 | PAGLOCK
 | PRIOR

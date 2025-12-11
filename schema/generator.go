@@ -491,9 +491,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue
 			}
 
-			// For MySQL and MSSQL, also check if this constraint matches any column-level CHECK by definition
-			// This handles auto-generated constraint names for column-level CHECKs
-			if (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) && g.findCheckConstraintByDefinition(desiredTable, &check) != nil {
+			// Also check if this constraint matches any CHECK by definition
+			// This handles auto-generated constraint names for column-level CHECKs (MySQL/MSSQL)
+			// and unnamed CHECK constraints in the desired schema (PostgreSQL)
+			if g.findCheckConstraintByDefinition(desiredTable, &check) != nil {
 				continue
 			}
 
@@ -1540,9 +1541,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		// First try to find by name
 		currentCheck := g.findCheckConstraintInTable(&currentTable, desiredCheck.constraintName)
 
-		// For MySQL and MSSQL, also try to find by definition if not found by name
-		// This handles auto-generated constraint names
-		if currentCheck == nil && (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) {
+		// Also try to find by definition if not found by name
+		// This handles auto-generated constraint names for MySQL/MSSQL, and
+		// for PostgreSQL when the desired constraint has no explicit name
+		if currentCheck == nil && (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql ||
+			(g.mode == GeneratorModePostgres && desiredCheck.constraintName.Name == "")) {
 			currentCheck = g.findCheckConstraintByDefinition(&currentTable, &desiredCheck)
 		}
 
