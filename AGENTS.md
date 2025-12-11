@@ -247,7 +247,7 @@ When both are specified, the test runner validates:
   - PostgreSQL
   - SQLite3
   - SQL Server
-* Check test coverage: when editing source code, verify the coverage report to ensure new code is covered by tests
+* Add `legacy_ignore_quotes: false` for new test cases. This is the default behavior in the future.
 
 ## Documentation
 

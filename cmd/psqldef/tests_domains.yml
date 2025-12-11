@@ -288,3 +288,19 @@ AlterDomainAddMultipleChecks:
     ALTER DOMAIN "public"."valid_score" ADD CHECK (VALUE >= 0);
     ALTER DOMAIN "public"."valid_score" ADD CHECK (VALUE <= 100);
   down: ""
+
+# Domain based on another domain
+DomainBasedOnDomain:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN base_text AS text;
+    CREATE DOMAIN derived_text AS base_text CHECK (length(VALUE) > 0);
+
+# Domain with multiple constraints having same type (named constraints)
+DomainWithMultipleSameTypeConstraints:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DOMAIN bounded_int AS integer
+      CONSTRAINT min_bound CHECK (VALUE >= 0)
+      CONSTRAINT max_bound CHECK (VALUE <= 1000)
+      CONSTRAINT not_42 CHECK (VALUE <> 42);

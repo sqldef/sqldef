@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+CreateExtension:
+  current: |
+    CREATE EXTENSION pgcrypto;
+  desired: |
+    CREATE EXTENSION pgcrypto;
+    CREATE EXTENSION btree_gist;
+  up: |
+    CREATE EXTENSION btree_gist;
+  down: |
+    DROP EXTENSION "btree_gist";
+DropExtension:
+  current: |
+    CREATE EXTENSION pgcrypto;
+    CREATE EXTENSION btree_gist;
+  desired:
+    CREATE EXTENSION btree_gist;
+  up: |
+    DROP EXTENSION "pgcrypto";
+  down: |
+    CREATE EXTENSION pgcrypto;
+CreateExtensionIfNotExists:
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+  up: |
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+  down: |
+    DROP EXTENSION "pgcrypto";
+CreateExtensionOrder:
+  desired: |
+    CREATE TABLE hoge (id UUID DEFAULT gen_random_uuid());
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+  up: |
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+    CREATE TABLE hoge (id UUID DEFAULT gen_random_uuid());
+  down: |
+    DROP TABLE "public"."hoge";
+    DROP EXTENSION "pgcrypto";

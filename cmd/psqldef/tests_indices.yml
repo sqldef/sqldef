@@ -1,0 +1,491 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+CreateIndexConcurrently:
+  current: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(128) DEFAULT 'konsumer'
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(128) DEFAULT 'konsumer'
+    );
+    CREATE INDEX CONCURRENTLY username on users (name);
+  up: |
+    CREATE INDEX CONCURRENTLY username on users (name);
+  down: |
+    DROP INDEX "public"."username";
+CreateIndexWithCoalesce:
+  current: |
+    CREATE TABLE users (
+      name TEXT,
+      user_name TEXT
+    );
+  desired: |
+    CREATE TABLE users (
+      name TEXT,
+      user_name TEXT
+    );
+    CREATE INDEX create_index_with_function_call ON users (name, COALESCE(user_name, 'NO_NAME'::TEXT));
+  up: |
+    CREATE INDEX create_index_with_function_call ON users (name, COALESCE(user_name, 'NO_NAME'::TEXT));
+  down: |
+    DROP INDEX "public"."create_index_with_function_call";
+CreateIndexWithBoolExpr:
+  current: |
+    CREATE TABLE users (
+      is_active BOOLEAN
+    );
+  desired: |
+    CREATE TABLE users (
+      is_active BOOLEAN
+    );
+    CREATE INDEX create_index_with_bool ON users ((CASE WHEN is_active IS TRUE THEN 1 ELSE 0 END));
+  up: |
+    CREATE INDEX create_index_with_bool ON users ((CASE WHEN is_active IS TRUE THEN 1 ELSE 0 END));
+  down: |
+    DROP INDEX "public"."create_index_with_bool";
+CreateIndexWithoutName:
+  desired: |
+    CREATE TABLE "user" (id BIGINT NOT NULL);
+    CREATE INDEX ON "user" (id);
+IndexAndForeignOrder:
+  desired: |
+    CREATE TABLE posts (
+      id bigint NOT NULL,
+      user_id bigint NOT NULL,
+      PRIMARY KEY ("id")
+    );
+    ALTER TABLE posts ADD CONSTRAINT "user_id_key" FOREIGN KEY ("user_id") REFERENCES users ("id");
+    CREATE TABLE users (
+      id bigint NOT NULL
+    );
+    CREATE UNIQUE INDEX uniq_idx ON users (id);
+  up: |
+    CREATE TABLE posts (
+      id bigint NOT NULL,
+      user_id bigint NOT NULL,
+      PRIMARY KEY ("id")
+    );
+    CREATE TABLE users (
+      id bigint NOT NULL
+    );
+    CREATE UNIQUE INDEX uniq_idx ON users (id);
+    ALTER TABLE posts ADD CONSTRAINT "user_id_key" FOREIGN KEY ("user_id") REFERENCES users ("id");
+  down: |
+    DROP TABLE "public"."posts";
+    DROP TABLE "public"."users";
+IndexesOnExpressions:
+  current: |
+    CREATE TABLE public.test (
+      col JSONB
+    );
+  desired: |
+    CREATE TABLE public.test (
+      col JSONB
+    );
+    CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo', 'bar'));
+  up: |
+    CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo', 'bar'));
+  down: |
+    DROP INDEX "public"."function_index";
+IndexesOnChangedExpressions:
+  current: |
+    CREATE TABLE public.test (
+      col JSONB
+    );
+    CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo', 'bar'));
+  desired: |
+    CREATE TABLE public.test (
+      col JSONB
+    );
+    CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo'));
+  up: |
+    DROP INDEX "public"."function_index";
+    CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo'));
+  down: |
+    DROP INDEX "public"."function_index";
+    CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo', 'bar'));
+EscapeUniqueIndexQuery:
+  current: |
+    CREATE TABLE "userTable" (
+        id uuid NOT NULL,
+        "firstName" text,
+        "lastName" text
+    );
+  desired: |
+    CREATE TABLE "userTable" (
+        id uuid NOT NULL,
+        "firstName" text,
+        "lastName" text
+    );
+    ALTER TABLE "public"."userTable" ADD CONSTRAINT "uq:fullName" UNIQUE ("firstName", "lastName");
+  up: |
+    ALTER TABLE "public"."userTable" ADD CONSTRAINT "uq:fullName" UNIQUE ("firstName", "lastName");
+  down: |
+    ALTER TABLE "public"."userTable" DROP CONSTRAINT "uq:fullName";
+IndexOnReservedWordColumn:
+  desired: |
+    CREATE TABLE users (
+      "key" text
+    );
+    CREATE INDEX "index_name" on users (key);
+
+IndexWithOperatorClass:
+  desired: |
+    CREATE TABLE products (
+      name VARCHAR(255)
+    );
+    CREATE INDEX product_name_autocomplete_index ON products(name text_pattern_ops);
+
+IndexWithUsing:
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+    CREATE TABLE products (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL
+    );
+    CREATE INDEX idx_trgm_name ON products USING gin (name gin_trgm_ops);
+
+RenameIndex:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100)
+    );
+    CREATE INDEX old_email_idx ON users (email);
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100)
+    );
+    CREATE INDEX new_email_idx /* @renamed from=old_email_idx */ ON users (email);
+  up: |
+    ALTER INDEX "public"."old_email_idx" RENAME TO "new_email_idx";
+  down: |
+    CREATE INDEX old_email_idx ON users (email);
+    DROP INDEX "public"."new_email_idx";
+RenameIndexInTable:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100),
+      CONSTRAINT old_unique_email UNIQUE (email)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100),
+      CONSTRAINT unique_email UNIQUE (email) -- @renamed from=old_unique_email
+    );
+  up: |
+    ALTER INDEX "public"."old_unique_email" RENAME TO "unique_email";
+  down: |
+    ALTER TABLE "public"."users" ADD CONSTRAINT "old_unique_email" UNIQUE ("email");
+    ALTER TABLE "public"."users" DROP CONSTRAINT "unique_email";
+RenameMultipleIndexes:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100)
+    );
+    CREATE INDEX idx_email ON users (email);
+    CREATE INDEX idx_username ON users (username);
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100)
+    );
+    CREATE INDEX email_idx /* @renamed from=idx_email */ ON users (email);
+    CREATE INDEX username_idx /* @renamed from=idx_username */ ON users (username);
+  up: |
+    ALTER INDEX "public"."idx_email" RENAME TO "email_idx";
+    ALTER INDEX "public"."idx_username" RENAME TO "username_idx";
+  down: |
+    CREATE INDEX idx_email ON users (email);
+    CREATE INDEX idx_username ON users (username);
+    DROP INDEX "public"."email_idx";
+    DROP INDEX "public"."username_idx";
+RenameIndexInNonDefaultSchema:
+  current: |
+    CREATE SCHEMA myschema;
+    CREATE TABLE myschema.users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100)
+    );
+    CREATE INDEX old_email_idx ON myschema.users (email);
+  desired: |
+    CREATE TABLE myschema.users (
+      id bigint NOT NULL,
+      email varchar(255),
+      username varchar(100)
+    );
+    CREATE INDEX new_email_idx /* @renamed from=old_email_idx */ ON myschema.users (email);
+  up: |
+    ALTER INDEX "myschema"."old_email_idx" RENAME TO "new_email_idx";
+  down: |
+    CREATE INDEX old_email_idx ON myschema.users (email);
+    DROP INDEX "myschema"."new_email_idx";
+CreateIndexWithConcurrentlyConfig:
+  config:
+    create_index_concurrently: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(128),
+      email VARCHAR(255)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(128),
+      email VARCHAR(255)
+    );
+    CREATE INDEX idx_users_name ON users (name);
+    CREATE INDEX idx_users_email ON users (email);
+  up: |
+    CREATE INDEX CONCURRENTLY idx_users_name ON users (name);
+    CREATE INDEX CONCURRENTLY idx_users_email ON users (email);
+  down: |
+    DROP INDEX "public"."idx_users_email";
+    DROP INDEX "public"."idx_users_name";
+CreateUniqueIndexWithConcurrentlyConfig:
+  config:
+    create_index_concurrently: true
+  current: |
+    CREATE TABLE products (
+      id BIGINT NOT NULL PRIMARY KEY,
+      sku VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE products (
+      id BIGINT NOT NULL PRIMARY KEY,
+      sku VARCHAR(100)
+    );
+    CREATE UNIQUE INDEX idx_products_sku ON products (sku);
+  up: |
+    CREATE UNIQUE INDEX CONCURRENTLY idx_products_sku ON products (sku);
+  down: |
+    DROP INDEX "public"."idx_products_sku";
+CreateIndexWithConcurrentlyConfigMixedStatements:
+  config:
+    create_index_concurrently: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(128)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(128),
+      email VARCHAR(255)
+    );
+    CREATE INDEX idx_users_name ON users (name);
+    CREATE INDEX CONCURRENTLY idx_users_email_manual ON users (email);
+  up: |
+    ALTER TABLE "public"."users" ADD COLUMN "email" varchar(255);
+    CREATE INDEX CONCURRENTLY idx_users_name ON users (name);
+    CREATE INDEX CONCURRENTLY idx_users_email_manual ON users (email);
+  down: |
+    DROP INDEX "public"."idx_users_email_manual";
+    DROP INDEX "public"."idx_users_name";
+    ALTER TABLE "public"."users" DROP COLUMN "email";
+CreateIndexWithoutConcurrentlyConfig:
+  config:
+    create_index_concurrently: false
+  current: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(128)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT NOT NULL PRIMARY KEY,
+      name VARCHAR(128)
+    );
+    CREATE INDEX idx_users_name ON users (name);
+  up: |
+    CREATE INDEX idx_users_name ON users (name);
+  down: |
+    DROP INDEX "public"."idx_users_name";
+CreateIndexWithStorageParameterString:
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      data text
+    );
+    CREATE INDEX idx_data ON test_table USING hash (data) WITH (fillfactor='70');
+
+CreateIndexWithStorageParameterInt:
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      data text
+    );
+    CREATE INDEX idx_data ON test_table USING btree (data) WITH (fillfactor=70);
+
+
+CreateIndexWithUsingAndInclude:
+  desired: |
+    CREATE TABLE users (
+      id serial,
+      email text,
+      name text,
+      created_at timestamp
+    );
+    CREATE INDEX idx_email_include_name ON users USING btree (email) INCLUDE (name);
+
+CreateIndexWithUsingIncludeWhere:
+  desired: |
+    CREATE TABLE orders (
+      id serial,
+      user_id int,
+      status text,
+      total numeric
+    );
+    CREATE INDEX idx_active_orders ON orders USING btree (user_id, status) INCLUDE (total) WHERE status = 'active';
+
+CreateIndexWithMultipleStorageParameters:
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      data text
+    );
+    CREATE INDEX idx_data_multi ON test_table USING btree (data) WITH (fillfactor='70', deduplicate_items='on');
+
+CreateIndexWithOperatorClassAndWith:
+  desired: |
+    CREATE TABLE text_data (
+      id serial,
+      content text
+    );
+    CREATE INDEX idx_content_pattern ON text_data USING btree (content text_pattern_ops) WITH (fillfactor=90);
+
+CreateIndexWithStringifiedIntParameter:
+  current: |
+    CREATE TABLE test_table (
+      id serial,
+      data text
+    );
+    CREATE INDEX idx_data ON test_table USING btree (data) WITH (fillfactor=70);
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      data text
+    );
+    CREATE INDEX idx_data ON test_table USING btree (data) WITH (fillfactor='70');
+
+# Note: The parser can handle arbitrary storage parameter names (e.g., custom_param='value')
+# but PostgreSQL itself validates and rejects unrecognized parameters at runtime.
+# This is expected PostgreSQL behavior, not a parser limitation.
+
+CreateIndexWithMultipleIncludeColumns:
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      sku text,
+      name text,
+      price numeric,
+      stock int
+    );
+    CREATE INDEX idx_sku_multi_include ON products USING btree (sku) INCLUDE (name, price, stock);
+
+CreateIndexConcurrentlyWithUsingAndInclude:
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      sku text,
+      name text,
+      price numeric
+    );
+    CREATE INDEX CONCURRENTLY idx_sku_include ON products USING btree (sku) INCLUDE (name, price);
+
+
+# Test for CREATE INDEX with fillfactor parameter variations
+# Ensures both integer and string values work and are treated as equivalent (main fix)
+CreateIndexFillfactorVariations:
+  current: |
+    CREATE TABLE test_table (
+      id serial,
+      data text
+    );
+    CREATE INDEX idx1 ON test_table USING btree (data) WITH (fillfactor=70);
+    CREATE INDEX idx2 ON test_table USING btree (id) WITH (fillfactor='80');
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      data text
+    );
+    CREATE INDEX idx1 ON test_table USING btree (data) WITH (fillfactor='70');
+    CREATE INDEX idx2 ON test_table USING btree (id) WITH (fillfactor=80);
+
+CreateIndexUsingIncludeWhere:
+  desired: |
+    CREATE TABLE orders (
+      id serial,
+      user_id int,
+      status text,
+      total numeric
+    );
+    CREATE INDEX idx_orders_active ON orders USING btree (user_id, status)
+      INCLUDE (total)
+      WHERE status = 'active';
+
+# Test for CREATE INDEX with generic storage parameter names
+# Parser accepts any parameter name (PostgreSQL validates at runtime)
+CreateIndexGenericStorageParameter:
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      data text
+    );
+    CREATE INDEX idx_data ON test_table USING btree (data) WITH (deduplicate_items='on');
+
+CreateIndexWithStorageParameterAndWhere:
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      status text
+    );
+    CREATE INDEX idx_status ON test_table USING btree (status) WITH (fillfactor='70') WHERE status = 'active';
+
+CreateIndexWithDateColumn:
+  desired: |
+    CREATE TABLE test_table (
+      id serial,
+      "date" date
+    );
+    CREATE INDEX idx_date ON test_table USING btree (date);
+
+# Test for CHECK constraint with type cast inside ARRAY elements
+# PostgreSQL exports CHECK constraints with explicit type casts like 'value'::varchar::text
+GistIndexWithTstzrange:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE TABLE events (id integer, event_range tstzrange);
+    CREATE INDEX idx_event_range ON events USING gist (event_range);
+
+# Index with multiple operator classes
+IndexWithMultipleOpClasses:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE test (name text, code text);
+    CREATE INDEX idx_multi_opclass ON test (name text_pattern_ops, code varchar_pattern_ops);
+
+# BRIN index
+BrinIndex:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE timeseries (ts timestamp, val numeric);
+    CREATE INDEX idx_ts_brin ON timeseries USING brin (ts);
+
+# Generated column with complex expression

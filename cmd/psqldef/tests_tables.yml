@@ -1,0 +1,251 @@
+# yaml-language-server: $schema=../testutils/testcase.schema.json
+CreateTable:
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      age integer
+    );
+    CREATE TABLE bigdata (
+      data bigint
+    );
+DropTable:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      age integer
+    );
+    CREATE TABLE bigdata (
+      data bigint
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      age integer
+    );
+  up: |
+    DROP TABLE "public"."bigdata";
+  down: |
+    CREATE TABLE bigdata (
+      data bigint
+    );
+EmptyTable:
+  desired: |
+    CREATE TABLE public.test ();
+CreateTableAlterColumn:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name varchar(40)
+    );
+  up: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" TYPE varchar(40);
+  down: |
+    ALTER TABLE "public"."users" ALTER COLUMN "name" TYPE text;
+CreateTableAddColumn:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      age integer
+    );
+  up: |
+    ALTER TABLE "public"."users" ADD COLUMN "age" integer;
+  down: |
+    ALTER TABLE "public"."users" DROP COLUMN "age";
+CreateTableDropColumn:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      age integer
+    );
+  up: |
+    ALTER TABLE "public"."users" DROP COLUMN "name";
+  down: |
+    ALTER TABLE "public"."users" ADD COLUMN "name" text;
+CreateTableOnNonStandardDefaultSchema:
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      age integer
+    );
+    CREATE TABLE bigdata (
+      data bigint
+    );
+  user: psqldef_user
+DropTableOnNonStandardDefaultSchema:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      age integer
+    );
+    CREATE TABLE bigdata (
+      data bigint
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      name text,
+      age integer
+    );
+  up: |
+    DROP TABLE "foo"."bigdata";
+  down: |
+    CREATE TABLE bigdata (
+      data bigint
+    );
+  user: psqldef_user
+
+# Regression: boolean type must not be schema-qualified on non-public schema
+CreateTableInNonPublicSchema:
+  desired: |
+    CREATE SCHEMA test;
+    CREATE TABLE test.users (id serial primary key);
+  up: |
+    CREATE SCHEMA test;
+    CREATE TABLE test.users (id serial primary key);
+  down: |
+    DROP TABLE "test"."users";
+SameTableNameAcrossSchemas:
+  desired: |
+    CREATE SCHEMA test;
+    CREATE TABLE dummy (id int);
+    CREATE TABLE test.dummy (id int);
+  up: |
+    CREATE SCHEMA test;
+    CREATE TABLE dummy (id int);
+    CREATE TABLE test.dummy (id int);
+  down: |
+    DROP TABLE "public"."dummy";
+    DROP TABLE "test"."dummy";
+GeneratedColumnComplexExpression:
+  legacy_ignore_quotes: false
+  min_version: "12"
+  desired: |
+    CREATE TABLE orders (
+      quantity integer NOT NULL,
+      unit_price numeric(10,2) NOT NULL,
+      discount_pct numeric(5,2) DEFAULT 0,
+      total numeric(10,2) GENERATED ALWAYS AS (quantity * unit_price * (1 - discount_pct / 100)) STORED
+    );
+
+# Generated column referencing multiple columns
+GeneratedColumnMultipleRefs:
+  legacy_ignore_quotes: false
+  min_version: "12"
+  desired: |
+    CREATE TABLE users (
+      first_name text NOT NULL,
+      middle_name text,
+      last_name text NOT NULL,
+      full_name text GENERATED ALWAYS AS (
+        COALESCE(first_name || ' ' || middle_name || ' ', first_name || ' ') || last_name
+      ) STORED
+    );
+
+# Enum with special characters in values
+DropTableWithComment:
+  current: |
+    CREATE TABLE foo (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON TABLE foo IS 'foo table';
+  desired: ""
+  up: |
+    DROP TABLE "public"."foo";
+  down: |
+    CREATE TABLE foo (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON TABLE "public"."foo" IS 'foo table';
+
+DropTableWithColumnComment:
+  current: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON COLUMN users.name IS 'User name';
+  desired: ""
+  up: |
+    DROP TABLE "public"."users";
+  down: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON COLUMN "public"."users"."name" IS 'User name';
+
+DropTableWithBothTableAndColumnComments:
+  current: |
+    CREATE TABLE products (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL,
+      price integer NOT NULL
+    );
+    COMMENT ON TABLE products IS 'Product catalog';
+    COMMENT ON COLUMN products.name IS 'Product name';
+    COMMENT ON COLUMN products.price IS 'Product price in cents';
+  desired: ""
+  up: |
+    DROP TABLE "public"."products";
+  down: |
+    CREATE TABLE products (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL,
+      price integer NOT NULL
+    );
+    COMMENT ON TABLE "public"."products" IS 'Product catalog';
+    COMMENT ON COLUMN "public"."products"."name" IS 'Product name';
+    COMMENT ON COLUMN "public"."products"."price" IS 'Product price in cents';
+
+DropOneTableWithCommentKeepAnother:
+  current: |
+    CREATE TABLE foo (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON TABLE foo IS 'foo table';
+    CREATE TABLE bar (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON TABLE bar IS 'bar table';
+  desired: |
+    CREATE TABLE bar (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON TABLE bar IS 'bar table';
+  up: |
+    DROP TABLE "public"."foo";
+  down: |
+    CREATE TABLE foo (
+      id serial PRIMARY KEY,
+      name varchar(100) NOT NULL
+    );
+    COMMENT ON TABLE "public"."foo" IS 'foo table';
+
+# GiST index with tstzrange type
