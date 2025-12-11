@@ -756,6 +756,7 @@ type ColumnType struct {
 
 	References            TableName
 	ReferenceNames        Columns
+	ReferenceMatch        Ident // for Postgres: MATCH FULL, MATCH PARTIAL, MATCH SIMPLE
 	ReferenceOnDelete     Ident
 	ReferenceOnUpdate     Ident
 	ReferenceDeferrable   *BoolVal // for Postgres: DEFERRABLE, NOT DEFERRABLE, or nil
@@ -1009,6 +1010,7 @@ type ForeignKeyDefinition struct {
 	IndexColumns      []Ident
 	ReferenceName     TableName
 	ReferenceColumns  []Ident
+	Match             Ident // for Postgres: MATCH FULL, MATCH PARTIAL, MATCH SIMPLE
 	OnDelete          Ident
 	OnUpdate          Ident
 	NotForReplication bool

@@ -431,8 +431,8 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			indexColumns:       indexColumns,
 			referenceTableName: normalizeQualifiedName(mode, parsedCol.Type.References, defaultSchema),
 			referenceColumns:   referenceColumns,
-			onDelete:           parser.String(parsedCol.Type.ReferenceOnDelete),
-			onUpdate:           parser.String(parsedCol.Type.ReferenceOnUpdate),
+			onDelete:           parsedCol.Type.ReferenceOnDelete.Name,
+			onUpdate:           parsedCol.Type.ReferenceOnUpdate.Name,
 			constraintOptions:  constraintOptions,
 		}
 		foreignKeys = append(foreignKeys, foreignKey)

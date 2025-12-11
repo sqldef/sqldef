@@ -301,7 +301,7 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> LEAD LAG
 
 // Match
-%token <str> MATCH AGAINST BOOLEAN LANGUAGE PARSER QUERY EXPANSION
+%token <str> MATCH AGAINST BOOLEAN LANGUAGE PARSER QUERY EXPANSION PARTIAL SIMPLE
 
 // Context-aware WITH tokens
 %token <str> WITH_DATA_OPTION
@@ -425,7 +425,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <exclusionPairs> exclude_element_list
 %type <exclusionPair> exclude_element
 %type <foreignKeyDefinition> foreign_key_definition foreign_key_without_options
-%type <ident> reference_option
+%type <ident> reference_option match_type_opt
 %type <ident> sql_id_opt privilege grantee
 %type <idents> sql_id_list privilege_list grantee_list
 %type <str> index_or_key
@@ -2741,57 +2741,62 @@ column_definition_type:
     $$ = $1
   }
 // PostgreSQL: inline foreign key with constraint options
-| column_definition_type REFERENCES table_name '(' column_list ')' deferrable_opt initially_deferred_opt
+| column_definition_type REFERENCES table_name '(' column_list ')' match_type_opt deferrable_opt initially_deferred_opt
   {
     $1.References           = $3
     $1.ReferenceNames       = $5
-    $1.ReferenceDeferrable  = &$7
-    $1.ReferenceInitDeferred = &$8
+    $1.ReferenceMatch       = $7
+    $1.ReferenceDeferrable  = &$8
+    $1.ReferenceInitDeferred = &$9
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option fk_defer_opts
+| column_definition_type REFERENCES table_name '(' column_list ')' match_type_opt ON DELETE reference_option fk_defer_opts
   {
     $1.References            = $3
     $1.ReferenceNames        = $5
-    $1.ReferenceOnDelete     = $9
-    if $10.constraintOpts != nil {
-      $1.ReferenceDeferrable  = NewBoolVal($10.constraintOpts.Deferrable)
-      $1.ReferenceInitDeferred = NewBoolVal($10.constraintOpts.InitiallyDeferred)
+    $1.ReferenceMatch        = $7
+    $1.ReferenceOnDelete     = $10
+    if $11.constraintOpts != nil {
+      $1.ReferenceDeferrable  = NewBoolVal($11.constraintOpts.Deferrable)
+      $1.ReferenceInitDeferred = NewBoolVal($11.constraintOpts.InitiallyDeferred)
     }
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option fk_defer_opts
+| column_definition_type REFERENCES table_name '(' column_list ')' match_type_opt ON UPDATE reference_option fk_defer_opts
   {
     $1.References            = $3
     $1.ReferenceNames        = $5
-    $1.ReferenceOnUpdate     = $9
-    if $10.constraintOpts != nil {
-      $1.ReferenceDeferrable  = NewBoolVal($10.constraintOpts.Deferrable)
-      $1.ReferenceInitDeferred = NewBoolVal($10.constraintOpts.InitiallyDeferred)
+    $1.ReferenceMatch        = $7
+    $1.ReferenceOnUpdate     = $10
+    if $11.constraintOpts != nil {
+      $1.ReferenceDeferrable  = NewBoolVal($11.constraintOpts.Deferrable)
+      $1.ReferenceInitDeferred = NewBoolVal($11.constraintOpts.InitiallyDeferred)
     }
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option ON UPDATE reference_option fk_defer_opts
+| column_definition_type REFERENCES table_name '(' column_list ')' match_type_opt ON DELETE reference_option ON UPDATE reference_option fk_defer_opts
   {
     $1.References            = $3
     $1.ReferenceNames        = $5
-    $1.ReferenceOnDelete     = $9
-    $1.ReferenceOnUpdate     = $12
-    if $13.constraintOpts != nil {
-      $1.ReferenceDeferrable  = NewBoolVal($13.constraintOpts.Deferrable)
-      $1.ReferenceInitDeferred = NewBoolVal($13.constraintOpts.InitiallyDeferred)
+    $1.ReferenceMatch        = $7
+    $1.ReferenceOnDelete     = $10
+    $1.ReferenceOnUpdate     = $13
+    if $14.constraintOpts != nil {
+      $1.ReferenceDeferrable  = NewBoolVal($14.constraintOpts.Deferrable)
+      $1.ReferenceInitDeferred = NewBoolVal($14.constraintOpts.InitiallyDeferred)
     }
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option ON DELETE reference_option fk_defer_opts
+| column_definition_type REFERENCES table_name '(' column_list ')' match_type_opt ON UPDATE reference_option ON DELETE reference_option fk_defer_opts
   {
     $1.References            = $3
     $1.ReferenceNames        = $5
-    $1.ReferenceOnUpdate     = $9
-    $1.ReferenceOnDelete     = $12
-    if $13.constraintOpts != nil {
-      $1.ReferenceDeferrable  = NewBoolVal($13.constraintOpts.Deferrable)
-      $1.ReferenceInitDeferred = NewBoolVal($13.constraintOpts.InitiallyDeferred)
+    $1.ReferenceMatch        = $7
+    $1.ReferenceOnUpdate     = $10
+    $1.ReferenceOnDelete     = $13
+    if $14.constraintOpts != nil {
+      $1.ReferenceDeferrable  = NewBoolVal($14.constraintOpts.Deferrable)
+      $1.ReferenceInitDeferred = NewBoolVal($14.constraintOpts.InitiallyDeferred)
     }
     $$ = $1
   }
@@ -4202,6 +4207,27 @@ reference_option:
 | NO ACTION
   {
     $$ = NewIdent("NO ACTION", false)
+  }
+| SET DEFAULT
+  {
+    $$ = NewIdent("SET DEFAULT", false)
+  }
+
+match_type_opt:
+  {
+    $$ = Ident{}
+  }
+| MATCH FULL
+  {
+    $$ = NewIdent("MATCH FULL", false)
+  }
+| MATCH PARTIAL
+  {
+    $$ = NewIdent("MATCH PARTIAL", false)
+  }
+| MATCH SIMPLE
+  {
+    $$ = NewIdent("MATCH SIMPLE", false)
   }
 
 primary_key_definition:
