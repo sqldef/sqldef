@@ -142,7 +142,7 @@ If you encounter `tls: handshake failure` errors with MySQL 5.7, enable RSA key 
 GODEBUG=tlsrsakex=1 go test ./cmd/mysqldef
 ```
 
-The tests for mssqldef are flaky due to mssql instance issues. In such a case, restart it with `docker compose restart mssql && docker compose wait mssql`, and run the tests again.
+The tests for mssqldef are flaky due to mssql instance issues. In such a case, restart it with `docker compose down mssql && docker compose up -d --wait mssql`, and run the tests again.
 
 For test coverage:
 
