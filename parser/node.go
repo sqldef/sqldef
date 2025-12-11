@@ -1260,9 +1260,10 @@ type Domain struct {
 }
 
 type Comment struct {
-	ObjectType string
-	Object     []Ident // Parts of the object name: [schema, table] or [schema, table, column]
-	Comment    string
+	ObjectType   string
+	Object       []Ident // Parts of the object name: [schema, table] or [schema, table, column]
+	Comment      string
+	FunctionArgs []FunctionArg // For COMMENT ON FUNCTION, stores the function signature
 }
 
 // SelectExprs represents SELECT expressions.

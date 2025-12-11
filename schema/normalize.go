@@ -1277,6 +1277,8 @@ func tryConvertOrChainToIn(orExpr *parser.OrExpr) parser.Expr {
 // For PostgreSQL, this prepends the default schema if missing:
 //   - OBJECT_TABLE: [table] -> [schema, table]
 //   - OBJECT_COLUMN: [table, column] -> [schema, table, column]
+//   - INDEX/VIEW/TYPE/DOMAIN/FUNCTION: [name] -> [schema, name]
+//   - CONSTRAINT/TRIGGER: [name, table] -> [name, schema, table]
 //
 // For other databases or when schema is already present, returns the original object.
 func normalizeCommentObject(comment *parser.Comment, mode GeneratorMode, defaultSchema string) []Ident {
@@ -1286,12 +1288,20 @@ func normalizeCommentObject(comment *parser.Comment, mode GeneratorMode, default
 
 	var needsSchema bool
 	switch comment.ObjectType {
-	case "OBJECT_TABLE":
-		// TABLE comments need [schema, table]
+	case "OBJECT_TABLE", "OBJECT_INDEX", "OBJECT_VIEW", "OBJECT_TYPE", "OBJECT_DOMAIN", "OBJECT_FUNCTION":
+		// These types need [schema, name]
 		needsSchema = len(comment.Object) == 1
 	case "OBJECT_COLUMN":
 		// COLUMN comments need [schema, table, column]
 		needsSchema = len(comment.Object) == 2
+	case "OBJECT_CONSTRAINT", "OBJECT_TRIGGER":
+		// These types need [name, schema, table] - schema is inserted at position 1
+		needsSchema = len(comment.Object) == 2
+		if needsSchema {
+			schemaIdent := parser.NewIdent(defaultSchema, false)
+			return []Ident{comment.Object[0], schemaIdent, comment.Object[1]}
+		}
+		return comment.Object
 	default:
 		panic("unexpected comment object type: " + comment.ObjectType)
 	}

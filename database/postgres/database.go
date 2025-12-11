@@ -181,7 +181,8 @@ func (d *PostgresDatabase) views() ([]string, error) {
 	}
 
 	rows, err := d.db.Query(`
-		select n.nspname as table_schema, c.relname as table_name, pg_get_viewdef(c.oid) as definition
+		select n.nspname as table_schema, c.relname as table_name, pg_get_viewdef(c.oid) as definition,
+		       obj_description(c.oid, 'pg_class') as view_comment
 		from pg_catalog.pg_class c inner join pg_catalog.pg_namespace n on c.relnamespace = n.oid
 		where n.nspname not in ('information_schema', 'pg_catalog')
 		and c.relkind = 'v'
@@ -195,7 +196,8 @@ func (d *PostgresDatabase) views() ([]string, error) {
 	var ddls []string
 	for rows.Next() {
 		var schema, name, definition string
-		if err := rows.Scan(&schema, &name, &definition); err != nil {
+		var viewComment sql.NullString
+		if err := rows.Scan(&schema, &name, &definition, &viewComment); err != nil {
 			return nil, err
 		}
 		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, schema) {
@@ -212,6 +214,14 @@ func (d *PostgresDatabase) views() ([]string, error) {
 				"CREATE VIEW %s.%s AS %s;", d.escapeIdentifier(schema), d.escapeIdentifier(name), definition,
 			),
 		)
+
+		// Add comment if exists
+		if viewComment.Valid {
+			ddls = append(ddls, fmt.Sprintf(
+				"COMMENT ON VIEW %s.%s IS %s;",
+				d.escapeIdentifier(schema), d.escapeIdentifier(name), schemaLib.StringConstant(viewComment.String),
+			))
+		}
 	}
 	return ddls, nil
 }
@@ -326,12 +336,13 @@ func (d *PostgresDatabase) types() ([]string, error) {
 	rows, err := d.db.Query(`
 		SELECT n.nspname AS type_schema,
 		       t.typname,
-		       string_agg(quote_literal(e.enumlabel), ', ' ORDER BY e.enumsortorder)
+		       string_agg(quote_literal(e.enumlabel), ', ' ORDER BY e.enumsortorder),
+		       obj_description(t.oid, 'pg_type')
 		FROM pg_enum e
 		JOIN pg_type t ON e.enumtypid = t.oid
 		INNER JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
 		WHERE NOT EXISTS (SELECT * FROM pg_depend d WHERE d.objid = t.oid AND d.deptype = 'e')
-		GROUP BY n.nspname, t.typname;
+		GROUP BY n.nspname, t.typname, t.oid;
 	`)
 	if err != nil {
 		return nil, err
@@ -341,7 +352,8 @@ func (d *PostgresDatabase) types() ([]string, error) {
 	var ddls []string
 	for rows.Next() {
 		var typeSchema, typeName, enumLabels string
-		if err := rows.Scan(&typeSchema, &typeName, &enumLabels); err != nil {
+		var comment sql.NullString
+		if err := rows.Scan(&typeSchema, &typeName, &enumLabels, &comment); err != nil {
 			return nil, err
 		}
 		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, typeSchema) {
@@ -352,6 +364,12 @@ func (d *PostgresDatabase) types() ([]string, error) {
 				"CREATE TYPE %s.%s AS ENUM (%s);", d.escapeIdentifier(typeSchema), d.escapeIdentifier(typeName), enumLabels,
 			),
 		)
+		if comment.Valid {
+			ddls = append(ddls, fmt.Sprintf(
+				"COMMENT ON TYPE %s.%s IS %s;",
+				d.escapeIdentifier(typeSchema), d.escapeIdentifier(typeName), schemaLib.StringConstant(comment.String),
+			))
+		}
 	}
 	return ddls, nil
 }
@@ -363,7 +381,8 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 		       pg_catalog.format_type(t.typbasetype, t.typtypmod) AS data_type,
 		       t.typdefault AS default_value,
 		       t.typnotnull AS not_null,
-		       c.collname AS collation
+		       c.collname AS collation,
+		       obj_description(t.oid, 'pg_type') AS domain_comment
 		FROM pg_catalog.pg_type t
 		INNER JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
 		LEFT JOIN pg_catalog.pg_collation c ON t.typcollation = c.oid AND t.typcollation <> 0
@@ -381,12 +400,13 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 		schema, name, dataType  string
 		defaultValue, collation sql.NullString
 		notNull                 bool
+		comment                 sql.NullString
 	}
 
 	var domains []domainInfo
 	for rows.Next() {
 		var di domainInfo
-		if err := rows.Scan(&di.schema, &di.name, &di.dataType, &di.defaultValue, &di.notNull, &di.collation); err != nil {
+		if err := rows.Scan(&di.schema, &di.name, &di.dataType, &di.defaultValue, &di.notNull, &di.collation, &di.comment); err != nil {
 			return nil, err
 		}
 		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, di.schema) {
@@ -462,6 +482,14 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 
 		ddl += ";"
 		ddls = append(ddls, ddl)
+
+		// Add comment if exists
+		if di.comment.Valid {
+			ddls = append(ddls, fmt.Sprintf(
+				"COMMENT ON DOMAIN %s.%s IS %s;",
+				d.escapeIdentifier(di.schema), d.escapeIdentifier(di.name), schemaLib.StringConstant(di.comment.String),
+			))
+		}
 	}
 	return ddls, nil
 }
@@ -470,10 +498,13 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 func (d *PostgresDatabase) functions() ([]string, error) {
 	// Query to get user-defined functions (excluding system functions and extension functions)
 	// We use pg_get_functiondef to get the complete function definition
+	// pg_get_function_identity_arguments gives us the function signature for comments
 	rows, err := d.db.Query(`
 		SELECT n.nspname AS func_schema,
 		       p.proname AS func_name,
-		       pg_get_functiondef(p.oid) AS func_def
+		       pg_get_functiondef(p.oid) AS func_def,
+		       pg_get_function_identity_arguments(p.oid) AS func_args,
+		       obj_description(p.oid, 'pg_proc') AS func_comment
 		FROM pg_catalog.pg_proc p
 		INNER JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
 		WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
@@ -488,8 +519,9 @@ func (d *PostgresDatabase) functions() ([]string, error) {
 
 	var ddls []string
 	for rows.Next() {
-		var funcSchema, funcName, funcDef string
-		if err := rows.Scan(&funcSchema, &funcName, &funcDef); err != nil {
+		var funcSchema, funcName, funcDef, funcArgs string
+		var funcComment sql.NullString
+		if err := rows.Scan(&funcSchema, &funcName, &funcDef, &funcArgs, &funcComment); err != nil {
 			return nil, err
 		}
 		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, funcSchema) {
@@ -502,6 +534,14 @@ func (d *PostgresDatabase) functions() ([]string, error) {
 			funcDef += ";"
 		}
 		ddls = append(ddls, funcDef)
+
+		// Add comment if exists
+		if funcComment.Valid {
+			ddls = append(ddls, fmt.Sprintf(
+				"COMMENT ON FUNCTION %s.%s(%s) IS %s;",
+				d.escapeIdentifier(funcSchema), d.escapeIdentifier(funcName), funcArgs, schemaLib.StringConstant(funcComment.String),
+			))
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -517,7 +557,8 @@ func (d *PostgresDatabase) triggers() ([]string, error) {
 		SELECT n.nspname AS trigger_schema,
 		       c.relname AS table_name,
 		       t.tgname AS trigger_name,
-		       pg_get_triggerdef(t.oid) AS trigger_def
+		       pg_get_triggerdef(t.oid) AS trigger_def,
+		       obj_description(t.oid, 'pg_trigger') AS trigger_comment
 		FROM pg_catalog.pg_trigger t
 		INNER JOIN pg_catalog.pg_class c ON t.tgrelid = c.oid
 		INNER JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
@@ -534,7 +575,8 @@ func (d *PostgresDatabase) triggers() ([]string, error) {
 	var ddls []string
 	for rows.Next() {
 		var triggerSchema, tableName, triggerName, triggerDef string
-		if err := rows.Scan(&triggerSchema, &tableName, &triggerName, &triggerDef); err != nil {
+		var triggerComment sql.NullString
+		if err := rows.Scan(&triggerSchema, &tableName, &triggerName, &triggerDef, &triggerComment); err != nil {
 			return nil, err
 		}
 		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, triggerSchema) {
@@ -547,6 +589,14 @@ func (d *PostgresDatabase) triggers() ([]string, error) {
 			triggerDef += ";"
 		}
 		ddls = append(ddls, triggerDef)
+
+		// Add comment if exists
+		if triggerComment.Valid {
+			ddls = append(ddls, fmt.Sprintf(
+				"COMMENT ON TRIGGER %s ON %s.%s IS %s;",
+				d.escapeIdentifier(triggerName), d.escapeIdentifier(triggerSchema), d.escapeIdentifier(tableName), schemaLib.StringConstant(triggerComment.String),
+			))
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1303,6 +1353,52 @@ func (d *PostgresDatabase) getComments(table string) ([]string, error) {
 			return nil, err
 		}
 		ddls = append(ddls, fmt.Sprintf("COMMENT ON COLUMN %s.%s.%s IS %s;", d.escapeIdentifier(schema), d.escapeIdentifier(table), d.escapeIdentifier(columnName), schemaLib.StringConstant(comment)))
+	}
+
+	// Index comments (for indexes on this table)
+	indexRows, err := d.db.Query(`
+		SELECT i.relname AS index_name, obj_description(i.oid, 'pg_class') AS comment
+		FROM pg_class t
+		JOIN pg_namespace n ON n.oid = t.relnamespace
+		JOIN pg_index ix ON t.oid = ix.indrelid
+		JOIN pg_class i ON i.oid = ix.indexrelid
+		WHERE t.relkind IN ('r', 'p')
+		  AND n.nspname = $1
+		  AND t.relname = $2
+		  AND obj_description(i.oid, 'pg_class') IS NOT NULL
+	`, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer indexRows.Close()
+	for indexRows.Next() {
+		var indexName, comment string
+		if err := indexRows.Scan(&indexName, &comment); err != nil {
+			return nil, err
+		}
+		ddls = append(ddls, fmt.Sprintf("COMMENT ON INDEX %s.%s IS %s;", d.escapeIdentifier(schema), d.escapeIdentifier(indexName), schemaLib.StringConstant(comment)))
+	}
+
+	// Constraint comments
+	constraintRows, err := d.db.Query(`
+		SELECT con.conname AS constraint_name, obj_description(con.oid, 'pg_constraint') AS comment
+		FROM pg_constraint con
+		JOIN pg_class c ON c.oid = con.conrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = $1
+		  AND c.relname = $2
+		  AND obj_description(con.oid, 'pg_constraint') IS NOT NULL
+	`, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer constraintRows.Close()
+	for constraintRows.Next() {
+		var constraintName, comment string
+		if err := constraintRows.Scan(&constraintName, &comment); err != nil {
+			return nil, err
+		}
+		ddls = append(ddls, fmt.Sprintf("COMMENT ON CONSTRAINT %s ON %s.%s IS %s;", d.escapeIdentifier(constraintName), d.escapeIdentifier(schema), d.escapeIdentifier(table), schemaLib.StringConstant(comment)))
 	}
 
 	return ddls, nil

@@ -2302,10 +2302,19 @@ func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 // is normalized if it matches the default schema.
 func (g *Generator) escapeCommentObject(comment *Comment) string {
 	normalizedObject := normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema)
+
+	// Determine schema position based on object type
+	// CONSTRAINT and TRIGGER have schema at position 1: [name, schema, table]
+	// All others have schema at position 0: [schema, name, ...]
+	schemaPos := 0
+	if comment.comment.ObjectType == "OBJECT_CONSTRAINT" || comment.comment.ObjectType == "OBJECT_TRIGGER" {
+		schemaPos = 1
+	}
+
 	escapedParts := make([]string, len(normalizedObject))
 	for i, ident := range normalizedObject {
-		if i == 0 && len(normalizedObject) > 1 {
-			// First element is the schema - normalize if it's the default schema
+		if i == schemaPos && len(normalizedObject) > 1 {
+			// This element is the schema - normalize if it's the default schema
 			normalizedSchema := g.normalizeDefaultSchema(ident)
 			escapedParts[i] = g.escapeSQLIdent(normalizedSchema)
 		} else {
@@ -2320,13 +2329,43 @@ func (g *Generator) generateNormalizedCommentStatement(comment *Comment) string 
 	sqlObjectType := strings.TrimPrefix(comment.comment.ObjectType, "OBJECT_")
 	escapedObject := g.escapeCommentObject(comment)
 
+	// Build the SQL statement based on object type
+	var objectClause string
+	switch comment.comment.ObjectType {
+	case "OBJECT_CONSTRAINT", "OBJECT_TRIGGER":
+		// These have syntax: COMMENT ON CONSTRAINT/TRIGGER name ON [schema.]table IS ...
+		parts := strings.SplitN(escapedObject, ".", 2)
+		if len(parts) == 2 {
+			objectClause = fmt.Sprintf("%s %s ON %s", sqlObjectType, parts[0], parts[1])
+		} else {
+			objectClause = fmt.Sprintf("%s %s", sqlObjectType, escapedObject)
+		}
+	case "OBJECT_FUNCTION":
+		// FUNCTION has syntax: COMMENT ON FUNCTION [schema.]name(args) IS ...
+		funcSignature := g.buildFunctionSignature(comment)
+		objectClause = fmt.Sprintf("%s %s", sqlObjectType, funcSignature)
+	default:
+		// Standard syntax: COMMENT ON TYPE [schema.]name IS ...
+		objectClause = fmt.Sprintf("%s %s", sqlObjectType, escapedObject)
+	}
+
 	if comment.comment.Comment == "" {
-		return fmt.Sprintf("COMMENT ON %s %s IS NULL", sqlObjectType, escapedObject)
+		return fmt.Sprintf("COMMENT ON %s IS NULL", objectClause)
 	}
 
 	// Escape the comment value (single quotes need to be doubled)
 	escapedComment := strings.ReplaceAll(comment.comment.Comment, "'", "''")
-	return fmt.Sprintf("COMMENT ON %s %s IS '%s'", sqlObjectType, escapedObject, escapedComment)
+	return fmt.Sprintf("COMMENT ON %s IS '%s'", objectClause, escapedComment)
+}
+
+// buildFunctionSignature builds a function signature string for COMMENT ON FUNCTION.
+func (g *Generator) buildFunctionSignature(comment *Comment) string {
+	escapedObject := g.escapeCommentObject(comment)
+	var args []string
+	for _, arg := range comment.comment.FunctionArgs {
+		args = append(args, arg.Type)
+	}
+	return fmt.Sprintf("%s(%s)", escapedObject, strings.Join(args, ", "))
 }
 
 func (g *Generator) generateDDLsForExtension(desired *Extension) ([]string, error) {
@@ -4089,9 +4128,9 @@ func (g *Generator) identsSliceEqual(a, b []Ident) bool {
 
 // generateCommentNullStatement creates a COMMENT ... IS NULL statement.
 func (g *Generator) generateCommentNullStatement(comment *Comment) string {
-	sqlObjectType := strings.TrimPrefix(comment.comment.ObjectType, "OBJECT_")
-	escapedObject := g.escapeCommentObject(comment)
-	return fmt.Sprintf("COMMENT ON %s %s IS NULL", sqlObjectType, escapedObject)
+	nullComment := *comment
+	nullComment.comment.Comment = ""
+	return g.generateNormalizedCommentStatement(&nullComment)
 }
 
 func (g *Generator) findExtensionByName(extensions []*Extension, name Ident) *Extension {

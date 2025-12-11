@@ -596,14 +596,251 @@ comment_statement:
       },
     }
   }
-| COMMENT_KEYWORD ON INDEX sql_id IS STRING
+| COMMENT_KEYWORD ON INDEX table_name IS STRING
   {
+    // Build Object as []Ident: [schema, index] or [index]
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
     $$ = &DDL{
       Action: CommentOn,
       Comment: &Comment{
-        ObjectType: "INDEX",
-        Object: []Ident{$4},
+        ObjectType: "OBJECT_INDEX",
+        Object: obj,
         Comment: $6,
+      },
+    }
+  }
+| COMMENT_KEYWORD ON INDEX table_name IS NULL
+  {
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_INDEX",
+        Object: obj,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT_KEYWORD ON CONSTRAINT sql_id ON table_name IS STRING
+  {
+    // Build Object as []Ident: [constraint, schema, table] or [constraint, table]
+    var obj []Ident
+    if !$6.Schema.IsEmpty() {
+      obj = []Ident{$4, $6.Schema, $6.Name}
+    } else {
+      obj = []Ident{$4, $6.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_CONSTRAINT",
+        Object: obj,
+        Comment: $8,
+      },
+    }
+  }
+| COMMENT_KEYWORD ON CONSTRAINT sql_id ON table_name IS NULL
+  {
+    var obj []Ident
+    if !$6.Schema.IsEmpty() {
+      obj = []Ident{$4, $6.Schema, $6.Name}
+    } else {
+      obj = []Ident{$4, $6.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_CONSTRAINT",
+        Object: obj,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT_KEYWORD ON VIEW table_name IS STRING
+  {
+    // Build Object as []Ident: [schema, view] or [view]
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_VIEW",
+        Object: obj,
+        Comment: $6,
+      },
+    }
+  }
+| COMMENT_KEYWORD ON VIEW table_name IS NULL
+  {
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_VIEW",
+        Object: obj,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT_KEYWORD ON FUNCTION object_name '(' function_args_opt ')' IS STRING
+  {
+    // Build Object as []Ident: [schema, function] or [function]
+    // FunctionArgs stored separately
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_FUNCTION",
+        Object: obj,
+        FunctionArgs: $6,
+        Comment: $9,
+      },
+    }
+  }
+| COMMENT_KEYWORD ON FUNCTION object_name '(' function_args_opt ')' IS NULL
+  {
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_FUNCTION",
+        Object: obj,
+        FunctionArgs: $6,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT_KEYWORD ON TYPE table_name IS STRING
+  {
+    // Build Object as []Ident: [schema, type] or [type]
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_TYPE",
+        Object: obj,
+        Comment: $6,
+      },
+    }
+  }
+| COMMENT_KEYWORD ON TYPE table_name IS NULL
+  {
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_TYPE",
+        Object: obj,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT_KEYWORD ON DOMAIN table_name IS STRING
+  {
+    // Build Object as []Ident: [schema, domain] or [domain]
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_DOMAIN",
+        Object: obj,
+        Comment: $6,
+      },
+    }
+  }
+| COMMENT_KEYWORD ON DOMAIN table_name IS NULL
+  {
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_DOMAIN",
+        Object: obj,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT_KEYWORD ON TRIGGER sql_id ON table_name IS STRING
+  {
+    // Build Object as []Ident: [trigger, schema, table] or [trigger, table]
+    var obj []Ident
+    if !$6.Schema.IsEmpty() {
+      obj = []Ident{$4, $6.Schema, $6.Name}
+    } else {
+      obj = []Ident{$4, $6.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_TRIGGER",
+        Object: obj,
+        Comment: $8,
+      },
+    }
+  }
+| COMMENT_KEYWORD ON TRIGGER sql_id ON table_name IS NULL
+  {
+    var obj []Ident
+    if !$6.Schema.IsEmpty() {
+      obj = []Ident{$4, $6.Schema, $6.Name}
+    } else {
+      obj = []Ident{$4, $6.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_TRIGGER",
+        Object: obj,
+        Comment: "",
       },
     }
   }
