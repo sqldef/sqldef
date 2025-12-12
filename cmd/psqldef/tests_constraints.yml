@@ -1491,11 +1491,13 @@ CompositeUnnamedForeignKey:
     );
 
 CheckConstraintWithBetween:
+  legacy_ignore_quotes: false
   desired: |
     CREATE TABLE test (
       score integer CHECK (score BETWEEN 0 AND 100)
     );
 CheckConstraintWithOverlaps:
+  legacy_ignore_quotes: false
   # PostgreSQL 13 converts OVERLAPS operator to "overlaps"() function call with type casts
   # making idempotency impossible. PostgreSQL 14+ preserves the operator syntax.
   min_version: "14"
@@ -1506,6 +1508,7 @@ CheckConstraintWithOverlaps:
       CHECK ((start_date, end_date) OVERLAPS (start_date, end_date))
     );
 CheckConstraintWithIsDistinctFrom:
+  legacy_ignore_quotes: false
   desired: |
     CREATE TABLE test (
       a integer,
@@ -1513,6 +1516,7 @@ CheckConstraintWithIsDistinctFrom:
       CHECK (a IS DISTINCT FROM b)
     );
 CheckConstraintWithCoalesce:
+  legacy_ignore_quotes: false
   desired: |
     CREATE TABLE test (
       val integer,
