@@ -15,10 +15,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	tu "github.com/sqldef/sqldef/v3/cmd/testutils"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/database/postgres"
 	"github.com/sqldef/sqldef/v3/schema"
+	tu "github.com/sqldef/sqldef/v3/testutil"
 )
 
 const (

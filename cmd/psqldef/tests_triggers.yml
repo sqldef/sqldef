@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../testutils/testcase.schema.json
+# yaml-language-server: $schema=../../testutil/testcase.schema.json
 
 # Test cases for CREATE TRIGGER statements
 # Each test includes the required function definition that the trigger references

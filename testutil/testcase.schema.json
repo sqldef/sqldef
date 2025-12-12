@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/sqldef/sqldef/cmd/testutils/testcase.schema.json",
+  "$id": "https://github.com/sqldef/sqldef/testutil/testcase.schema.json",
   "title": "sqldef Test Case Schema",
   "description": "Schema for sqldef YAML test files that define schema migration test cases",
   "type": "object",

@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../testutils/testcase.schema.json
+# yaml-language-server: $schema=../../testutil/testcase.schema.json
 
 # Test cases for foreign key dependency handling in PostgreSQL
 

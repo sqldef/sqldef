@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../testutils/testcase.schema.json
+# yaml-language-server: $schema=../../testutil/testcase.schema.json
 # Tests for enable_drop: false behavior (DROP/REVOKE statements are commented out)
 # The enable_drop: true behavior is tested in other test files.
 
