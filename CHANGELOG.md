@@ -1,3 +1,10 @@
+## [v3.8.5](https://github.com/sqldef/sqldef/compare/v3.8.4...v3.8.5) - 2025-12-12
+- chore: fix documentation and code quality issues in testutils by @Copilot in https://github.com/sqldef/sqldef/pull/1021
+- chore: rename generic type parameter to avoid shadowing parser.Expr by @Copilot in https://github.com/sqldef/sqldef/pull/1022
+- chore: use `go mod tidy` to maintain deps by @gfx in https://github.com/sqldef/sqldef/pull/1024
+- psqldef:  split tests by @gfx in https://github.com/sqldef/sqldef/pull/1025
+- fix edge case issues in psqldef by @gfx in https://github.com/sqldef/sqldef/pull/1026
+
 ## [v3.8.4](https://github.com/sqldef/sqldef/compare/v3.8.3...v3.8.4) - 2025-12-10
 - fix: mssql-specific inline FOREIGN KEY REFERENCES by @gfx in https://github.com/sqldef/sqldef/pull/1018
 - [test] use fnv for faster hash; use t.Fatal; fix messages by @gfx in https://github.com/sqldef/sqldef/pull/1020
