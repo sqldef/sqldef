@@ -2295,11 +2295,11 @@ func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 	return ddls, nil
 }
 
-// escapeCommentObject returns the escaped object path for a COMMENT statement.
+// escapeCommentObjectParts returns the escaped object parts for a COMMENT statement.
 // Object is []Ident representing: [schema, table] for TABLE, [schema, table, column] for COLUMN.
 // The object is first normalized (schema prepended if missing), then the schema part
 // is normalized if it matches the default schema.
-func (g *Generator) escapeCommentObject(comment *Comment) string {
+func (g *Generator) escapeCommentObjectParts(comment *Comment) []string {
 	normalizedObject := normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema)
 
 	// Determine schema position based on object type
@@ -2320,24 +2320,26 @@ func (g *Generator) escapeCommentObject(comment *Comment) string {
 			escapedParts[i] = g.escapeSQLNameQuoteAware(ident.Name, ident.Quoted)
 		}
 	}
-	return strings.Join(escapedParts, ".")
+	return escapedParts
 }
 
 // generateNormalizedCommentStatement creates a COMMENT statement with normalized identifiers.
 func (g *Generator) generateNormalizedCommentStatement(comment *Comment) string {
 	sqlObjectType := strings.TrimPrefix(comment.comment.ObjectType, "OBJECT_")
-	escapedObject := g.escapeCommentObject(comment)
+	parts := g.escapeCommentObjectParts(comment)
 
 	// Build the SQL statement based on object type
 	var objectClause string
 	switch comment.comment.ObjectType {
 	case "OBJECT_CONSTRAINT", "OBJECT_TRIGGER":
 		// These have syntax: COMMENT ON CONSTRAINT/TRIGGER name ON [schema.]table IS ...
-		parts := strings.SplitN(escapedObject, ".", 2)
-		if len(parts) == 2 {
-			objectClause = fmt.Sprintf("%s %s ON %s", sqlObjectType, parts[0], parts[1])
+		// parts is [name, schema, table] or [name, table]
+		if len(parts) >= 2 {
+			name := parts[0]
+			tablePath := strings.Join(parts[1:], ".")
+			objectClause = fmt.Sprintf("%s %s ON %s", sqlObjectType, name, tablePath)
 		} else {
-			objectClause = fmt.Sprintf("%s %s", sqlObjectType, escapedObject)
+			objectClause = fmt.Sprintf("%s %s", sqlObjectType, strings.Join(parts, "."))
 		}
 	case "OBJECT_FUNCTION":
 		// FUNCTION has syntax: COMMENT ON FUNCTION [schema.]name(args) IS ...
@@ -2345,7 +2347,7 @@ func (g *Generator) generateNormalizedCommentStatement(comment *Comment) string 
 		objectClause = fmt.Sprintf("%s %s", sqlObjectType, funcSignature)
 	default:
 		// Standard syntax: COMMENT ON TYPE [schema.]name IS ...
-		objectClause = fmt.Sprintf("%s %s", sqlObjectType, escapedObject)
+		objectClause = fmt.Sprintf("%s %s", sqlObjectType, strings.Join(parts, "."))
 	}
 
 	if comment.comment.Comment == "" {
@@ -2359,7 +2361,8 @@ func (g *Generator) generateNormalizedCommentStatement(comment *Comment) string 
 
 // buildFunctionSignature builds a function signature string for COMMENT ON FUNCTION.
 func (g *Generator) buildFunctionSignature(comment *Comment) string {
-	escapedObject := g.escapeCommentObject(comment)
+	parts := g.escapeCommentObjectParts(comment)
+	escapedObject := strings.Join(parts, ".")
 	var args []string
 	for _, arg := range comment.comment.FunctionArgs {
 		args = append(args, arg.Type)

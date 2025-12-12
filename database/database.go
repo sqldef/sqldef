@@ -79,16 +79,44 @@ type Ident = parser.Ident
 // NewIdent is an alias for parser.NewIdent.
 var NewIdent = parser.NewIdent
 
-// NewIdentWithQuoteDetected creates an Ident with the Quoted flag inferred from case:
+// NewIdentWithQuoteDetected creates an Ident with the Quoted flag inferred from content:
 //   - If the name contains uppercase letters, it must have been quoted
 //     (PostgreSQL folds unquoted identifiers to lowercase)
-//   - If the name is all lowercase, it's treated as unquoted. This is correct because
-//     in PostgreSQL, "users" (quoted lowercase) and users (unquoted) are semantically
-//     equivalent and can be referenced interchangeably.
+//   - If the name contains special characters (dots, spaces, etc.), it requires quoting
+//   - If the name is all lowercase without special chars, it's treated as unquoted.
+//     This is correct because in PostgreSQL, "users" (quoted lowercase) and users
+//     (unquoted) are semantically equivalent and can be referenced interchangeably.
 //
 // Use this for identifiers from the database or auto-generated constraint names.
 func NewIdentWithQuoteDetected(name string) Ident {
-	return Ident{Name: name, Quoted: strings.ToLower(name) != name}
+	return Ident{Name: name, Quoted: NeedsQuoting(name)}
+}
+
+// NeedsQuoting returns true if an identifier needs to be quoted in SQL.
+// An identifier needs quoting if it:
+//   - contains uppercase letters (PostgreSQL folds unquoted to lowercase)
+//   - contains special characters that aren't allowed in unquoted identifiers
+//   - doesn't start with a letter or underscore
+func NeedsQuoting(name string) bool {
+	if name == "" {
+		return false
+	}
+	// Check if it has uppercase letters
+	if strings.ToLower(name) != name {
+		return true
+	}
+	// Check first character: must be letter or underscore for unquoted identifiers
+	first := rune(name[0])
+	if !((first >= 'a' && first <= 'z') || first == '_') {
+		return true
+	}
+	// Check remaining characters: letters, digits, underscores, or $ are allowed
+	for _, r := range name[1:] {
+		if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '$') {
+			return true
+		}
+	}
+	return false
 }
 
 // NewNormalizedIdent normalizes an Ident for comparison:

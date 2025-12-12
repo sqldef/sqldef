@@ -1488,13 +1488,13 @@ func (d *PostgresDatabase) escapeConstraintName(ident Ident) string {
 
 // escapeIdentifier quotes an identifier for DDL output.
 // In legacy mode: always quote to preserve exact case.
-// In quote-aware mode: use case detection and keyword check.
+// In quote-aware mode: use case detection, special char detection, and keyword check.
 func (d *PostgresDatabase) escapeIdentifier(name string) string {
 	if d.generatorConfig.LegacyIgnoreQuotes {
 		return escapeSQLName(name)
 	}
-	// Quote-aware mode: quote if name has uppercase letters or is a keyword
-	if strings.ToLower(name) != name || parser.IsKeyword(name) {
+	// Quote-aware mode: quote if name needs quoting or is a keyword
+	if database.NeedsQuoting(name) || parser.IsKeyword(name) {
 		return escapeSQLName(name)
 	}
 	return name

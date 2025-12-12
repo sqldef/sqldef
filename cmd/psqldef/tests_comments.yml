@@ -314,3 +314,22 @@ CommentOnTrigger:
     COMMENT ON TRIGGER test_trigger ON public.test IS 'Trigger comment';
   down: |
     COMMENT ON TRIGGER test_trigger ON public.test IS NULL;
+
+# Test constraint name containing a dot (edge case for string splitting)
+CommentOnConstraintWithDotInName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE test (
+      id integer,
+      CONSTRAINT "my.constraint" CHECK (id > 0)
+    );
+  desired: |
+    CREATE TABLE test (
+      id integer,
+      CONSTRAINT "my.constraint" CHECK (id > 0)
+    );
+    COMMENT ON CONSTRAINT "my.constraint" ON test IS 'Constraint with dot in name';
+  up: |
+    COMMENT ON CONSTRAINT "my.constraint" ON public.test IS 'Constraint with dot in name';
+  down: |
+    COMMENT ON CONSTRAINT "my.constraint" ON public.test IS NULL;
