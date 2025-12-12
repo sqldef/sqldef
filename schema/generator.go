@@ -51,6 +51,10 @@ type Generator struct {
 	// Track tables that have been dropped to skip COMMENT cleanup for them
 	droppedTables map[string]bool
 
+	// Map index names to their owning tables (for comment cleanup after table drops)
+	// Key is "schema.index_name", value is the table's QualifiedName
+	indexToTable map[string]QualifiedName
+
 	desiredComments []*Comment
 	currentComments []*Comment
 
@@ -132,21 +136,11 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		config:             config,
 		handledForeignKeys: make(map[string]bool),
 		droppedTables:      make(map[string]bool),
+		indexToTable:       make(map[string]QualifiedName),
 	}
+	// Build index-to-table mapping before any tables are dropped
+	generator.buildIndexToTableMap()
 	return generator.generateDDLs(desiredDDLs)
-}
-
-// getSortedColumns converts a column map to a slice sorted by position.
-// This ensures deterministic iteration order for DDL generation.
-func getSortedColumns(columns map[string]*Column) []*Column {
-	result := make([]*Column, 0, len(columns))
-	for _, col := range columns {
-		result = append(result, col)
-	}
-	slices.SortFunc(result, func(a, b *Column) int {
-		return a.position - b.position
-	})
-	return result
 }
 
 // sortIndexesByName returns indexes sorted by name.
@@ -170,6 +164,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	createSchemaDDLs := []string{}
 	interDDLs := []string{}
 	indexDDLs := []string{}
+	indexCommentDDLs := []string{} // Comments on indexes must come after CREATE INDEX
 	foreignKeyDDLs := []string{}
 	exclusionDDLs := []string{}
 	viewDDLs := []string{}
@@ -301,7 +296,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, commentDDLs...)
+			// Index comments must come after CREATE INDEX statements
+			if desired.comment.ObjectType == "OBJECT_INDEX" {
+				indexCommentDDLs = append(indexCommentDDLs, commentDDLs...)
+			} else {
+				interDDLs = append(interDDLs, commentDDLs...)
+			}
 		case *Extension:
 			extensionDDLs, err := g.generateDDLsForExtension(desired)
 			if err != nil {
@@ -337,6 +337,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	ddls = append(ddls, interDDLs...)
 	ddls = append(ddls, viewDDLs...)
 	ddls = append(ddls, indexDDLs...)
+	ddls = append(ddls, indexCommentDDLs...) // Index comments must come after CREATE INDEX
 	ddls = append(ddls, foreignKeyDDLs...)
 	ddls = append(ddls, exclusionDDLs...)
 
@@ -491,9 +492,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue
 			}
 
-			// For MySQL and MSSQL, also check if this constraint matches any column-level CHECK by definition
-			// This handles auto-generated constraint names for column-level CHECKs
-			if (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) && g.findCheckConstraintByDefinition(desiredTable, &check) != nil {
+			// Also check if this constraint matches any CHECK by definition
+			// This handles auto-generated constraint names for column-level CHECKs (MySQL/MSSQL)
+			// and unnamed CHECK constraints in the desired schema (PostgreSQL)
+			if g.findCheckConstraintByDefinition(desiredTable, &check) != nil {
 				continue
 			}
 
@@ -1540,9 +1542,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		// First try to find by name
 		currentCheck := g.findCheckConstraintInTable(&currentTable, desiredCheck.constraintName)
 
-		// For MySQL and MSSQL, also try to find by definition if not found by name
-		// This handles auto-generated constraint names
-		if currentCheck == nil && (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql) {
+		// Also try to find by definition if not found by name
+		// This handles auto-generated constraint names for MySQL/MSSQL, and
+		// for PostgreSQL when the desired constraint has no explicit name
+		if currentCheck == nil && (g.mode == GeneratorModeMysql || g.mode == GeneratorModeMssql ||
+			(g.mode == GeneratorModePostgres && desiredCheck.constraintName.Name == "")) {
 			currentCheck = g.findCheckConstraintByDefinition(&currentTable, &desiredCheck)
 		}
 
@@ -1839,9 +1843,10 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 		g.currentViews = append(g.currentViews, &view)
 	} else if desiredView.viewType == "VIEW" { // TODO: Fix the definition comparison for materialized views and enable this
 		// View found. If it's different, create or replace view.
-		// Use AST-based comparison
-		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode)
-		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode)
+		// Use AST-based comparison with table lookup for SELECT * expansion
+		tableLookup := g.createTableLookup()
+		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode, tableLookup)
+		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode, tableLookup)
 		currentNormalized := strings.ToLower(parser.String(currentNormalizedAST))
 		desiredNormalized := strings.ToLower(parser.String(desiredNormalizedAST))
 
@@ -1975,6 +1980,17 @@ func stripTableQualifiers(sql string) string {
 	re := regexp.MustCompile(`\b[a-z_][a-z0-9_]*\.([a-z_][a-z0-9_]*)\b`)
 	// Replace "table.column" with just "column" (keeping capture group 1)
 	return re.ReplaceAllString(sql, "$1")
+}
+
+// createTableLookup returns a TableLookupFunc that looks up tables from both
+// desired and current table lists.
+func (g *Generator) createTableLookup() TableLookupFunc {
+	return func(name QualifiedName) *Table {
+		if table := g.findTableByName(g.desiredTables, name); table != nil {
+			return table
+		}
+		return g.findTableByName(g.currentTables, name)
+	}
 }
 
 func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desiredTrigger *Trigger) ([]string, error) {
@@ -2293,37 +2309,79 @@ func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 	return ddls, nil
 }
 
-// escapeCommentObject returns the escaped object path for a COMMENT statement.
+// escapeCommentObjectParts returns the escaped object parts for a COMMENT statement.
 // Object is []Ident representing: [schema, table] for TABLE, [schema, table, column] for COLUMN.
 // The object is first normalized (schema prepended if missing), then the schema part
 // is normalized if it matches the default schema.
-func (g *Generator) escapeCommentObject(comment *Comment) string {
+func (g *Generator) escapeCommentObjectParts(comment *Comment) []string {
 	normalizedObject := normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema)
+
+	// Determine schema position based on object type
+	// CONSTRAINT and TRIGGER have schema at position 1: [name, schema, table]
+	// All others have schema at position 0: [schema, name, ...]
+	schemaPos := 0
+	if comment.comment.ObjectType == "OBJECT_CONSTRAINT" || comment.comment.ObjectType == "OBJECT_TRIGGER" {
+		schemaPos = 1
+	}
+
 	escapedParts := make([]string, len(normalizedObject))
 	for i, ident := range normalizedObject {
-		if i == 0 && len(normalizedObject) > 1 {
-			// First element is the schema - normalize if it's the default schema
+		if i == schemaPos && len(normalizedObject) > 1 {
+			// This element is the schema - normalize if it's the default schema
 			normalizedSchema := g.normalizeDefaultSchema(ident)
 			escapedParts[i] = g.escapeSQLIdent(normalizedSchema)
 		} else {
 			escapedParts[i] = g.escapeSQLNameQuoteAware(ident.Name, ident.Quoted)
 		}
 	}
-	return strings.Join(escapedParts, ".")
+	return escapedParts
 }
 
 // generateNormalizedCommentStatement creates a COMMENT statement with normalized identifiers.
 func (g *Generator) generateNormalizedCommentStatement(comment *Comment) string {
 	sqlObjectType := strings.TrimPrefix(comment.comment.ObjectType, "OBJECT_")
-	escapedObject := g.escapeCommentObject(comment)
+	parts := g.escapeCommentObjectParts(comment)
+
+	// Build the SQL statement based on object type
+	var objectClause string
+	switch comment.comment.ObjectType {
+	case "OBJECT_CONSTRAINT", "OBJECT_TRIGGER":
+		// These have syntax: COMMENT ON CONSTRAINT/TRIGGER name ON [schema.]table IS ...
+		// parts is [name, schema, table] or [name, table]
+		if len(parts) >= 2 {
+			name := parts[0]
+			tablePath := strings.Join(parts[1:], ".")
+			objectClause = fmt.Sprintf("%s %s ON %s", sqlObjectType, name, tablePath)
+		} else {
+			objectClause = fmt.Sprintf("%s %s", sqlObjectType, strings.Join(parts, "."))
+		}
+	case "OBJECT_FUNCTION":
+		// FUNCTION has syntax: COMMENT ON FUNCTION [schema.]name(args) IS ...
+		funcSignature := g.buildFunctionSignature(comment)
+		objectClause = fmt.Sprintf("%s %s", sqlObjectType, funcSignature)
+	default:
+		// Standard syntax: COMMENT ON TYPE [schema.]name IS ...
+		objectClause = fmt.Sprintf("%s %s", sqlObjectType, strings.Join(parts, "."))
+	}
 
 	if comment.comment.Comment == "" {
-		return fmt.Sprintf("COMMENT ON %s %s IS NULL", sqlObjectType, escapedObject)
+		return fmt.Sprintf("COMMENT ON %s IS NULL", objectClause)
 	}
 
 	// Escape the comment value (single quotes need to be doubled)
 	escapedComment := strings.ReplaceAll(comment.comment.Comment, "'", "''")
-	return fmt.Sprintf("COMMENT ON %s %s IS '%s'", sqlObjectType, escapedObject, escapedComment)
+	return fmt.Sprintf("COMMENT ON %s IS '%s'", objectClause, escapedComment)
+}
+
+// buildFunctionSignature builds a function signature string for COMMENT ON FUNCTION.
+func (g *Generator) buildFunctionSignature(comment *Comment) string {
+	parts := g.escapeCommentObjectParts(comment)
+	escapedObject := strings.Join(parts, ".")
+	var args []string
+	for _, arg := range comment.comment.FunctionArgs {
+		args = append(args, arg.Type)
+	}
+	return fmt.Sprintf("%s(%s)", escapedObject, strings.Join(args, ", "))
 }
 
 func (g *Generator) generateDDLsForExtension(desired *Extension) ([]string, error) {
@@ -2696,8 +2754,8 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 	}
 
 	// Add WHERE clause for partial indexes
-	if index.where != "" {
-		ddl += fmt.Sprintf(" WHERE %s", index.where)
+	if index.where != nil {
+		ddl += fmt.Sprintf(" WHERE %s", parser.String(index.where))
 	}
 
 	return ddl
@@ -2983,8 +3041,8 @@ func (g *Generator) generateExclusionDefinition(exclusion Exclusion) string {
 		exclusion.indexType,
 		strings.Join(ex, ", "),
 	)
-	if exclusion.where != "" {
-		definition += fmt.Sprintf(" WHERE (%s)", exclusion.where)
+	if exclusion.where != nil {
+		definition += fmt.Sprintf(" WHERE (%s)", parser.String(exclusion.where))
 	}
 	return definition
 }
@@ -3041,8 +3099,8 @@ func (g *Generator) generateRenameIndex(tableName QualifiedName, oldIndexName Id
 			}
 			createStmt += fmt.Sprintf(" (%s)", strings.Join(columnStrs, ", "))
 
-			if desiredIndex.where != "" {
-				createStmt += fmt.Sprintf(" WHERE %s", desiredIndex.where)
+			if desiredIndex.where != nil {
+				createStmt += fmt.Sprintf(" WHERE %s", parser.String(desiredIndex.where))
 			}
 
 			ddls = append(ddls, createStmt)
@@ -4025,6 +4083,9 @@ func (g *Generator) findDomainByName(domains []*Domain, name QualifiedName) *Dom
 func (g *Generator) findCommentByObject(comments []*Comment, targetComment *parser.Comment) *Comment {
 	normalizedTarget := normalizeCommentObject(targetComment, g.mode, g.defaultSchema)
 	for _, comment := range comments {
+		if comment.comment.ObjectType != targetComment.ObjectType {
+			continue
+		}
 		normalizedCandidate := normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema)
 		if g.identsSliceEqual(normalizedCandidate, normalizedTarget) {
 			return comment
@@ -4040,30 +4101,100 @@ func (g *Generator) isCommentOnDroppedTable(comment *Comment) bool {
 	objectType := comment.comment.ObjectType
 	object := comment.comment.Object
 
-	// Extract table qualified name from the comment object
-	// OBJECT_TABLE: object = [schema, table]
-	// OBJECT_COLUMN: object = [schema, table, column]
+	// Extract table qualified name based on object type
+	// Different object types have different structures:
+	// - OBJECT_TABLE: [schema, table]
+	// - OBJECT_COLUMN: [schema, table, column]
+	// - OBJECT_CONSTRAINT: [constraint, schema, table]
+	// - OBJECT_TRIGGER: [trigger, schema, table]
+	// - OBJECT_INDEX: [schema, index] - need to look up table from index
+	var tableName QualifiedName
+
 	switch objectType {
 	case "OBJECT_TABLE", "OBJECT_COLUMN":
-		// Both types have [schema, table, ...] structure
+		// Structure: [schema, table, ...] or [table, ...]
+		if len(object) >= 2 {
+			tableName = QualifiedName{
+				Schema: object[0],
+				Name:   object[1],
+			}
+		} else if len(object) == 1 {
+			tableName = QualifiedName{
+				Schema: parser.NewIdent(g.defaultSchema, false),
+				Name:   object[0],
+			}
+		}
+
+	case "OBJECT_CONSTRAINT", "OBJECT_TRIGGER":
+		// Structure: [name, schema, table] or [name, table]
+		if len(object) >= 3 {
+			tableName = QualifiedName{
+				Schema: object[1],
+				Name:   object[2],
+			}
+		} else if len(object) == 2 {
+			tableName = QualifiedName{
+				Schema: parser.NewIdent(g.defaultSchema, false),
+				Name:   object[1],
+			}
+		}
+
+	case "OBJECT_INDEX":
+		// Structure: [schema, index] or [index]
+		// Need to find which table this index belongs to
+		tableName = g.findTableForIndex(object)
+
 	default:
 		return false
 	}
 
-	var tableName QualifiedName
-	if len(object) >= 2 {
-		tableName = QualifiedName{
-			Schema: object[0],
-			Name:   object[1],
-		}
-	} else if len(object) == 1 {
-		tableName = QualifiedName{
-			Schema: parser.NewIdent(g.defaultSchema, false),
-			Name:   object[0],
-		}
+	if tableName.IsEmpty() {
+		return false
 	}
 
 	return g.droppedTables[tableName.RawString()]
+}
+
+// buildIndexToTableMap builds a mapping from index names to their owning tables.
+// This must be called before any tables are dropped, as it uses currentTables.
+func (g *Generator) buildIndexToTableMap() {
+	for _, table := range g.currentTables {
+		tableSchema := table.name.Schema
+		if tableSchema.IsEmpty() {
+			tableSchema = parser.NewIdent(g.defaultSchema, false)
+		}
+
+		for _, idx := range table.indexes {
+			key := g.indexMapKey(tableSchema, idx.name)
+			g.indexToTable[key] = table.name
+		}
+	}
+}
+
+// findTableForIndex finds the table that owns the given index.
+// object is [schema, index] or [index] from an OBJECT_INDEX comment.
+// Returns empty QualifiedName if the index is not found.
+func (g *Generator) findTableForIndex(object []Ident) QualifiedName {
+	var indexSchema, indexName Ident
+	if len(object) >= 2 {
+		indexSchema = object[0]
+		indexName = object[1]
+	} else if len(object) == 1 {
+		indexSchema = parser.NewIdent(g.defaultSchema, false)
+		indexName = object[0]
+	} else {
+		return QualifiedName{}
+	}
+
+	key := g.indexMapKey(indexSchema, indexName)
+	return g.indexToTable[key]
+}
+
+// indexMapKey generates a map key for index lookup using quote-aware normalization.
+func (g *Generator) indexMapKey(schema, name Ident) string {
+	schemaKey := normalizeIdentKey(schema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	nameKey := normalizeIdentKey(name, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	return schemaKey + "." + nameKey
 }
 
 // identsSliceEqual compares two []Ident slices for equality using quote-aware comparison.
@@ -4086,9 +4217,9 @@ func (g *Generator) identsSliceEqual(a, b []Ident) bool {
 
 // generateCommentNullStatement creates a COMMENT ... IS NULL statement.
 func (g *Generator) generateCommentNullStatement(comment *Comment) string {
-	sqlObjectType := strings.TrimPrefix(comment.comment.ObjectType, "OBJECT_")
-	escapedObject := g.escapeCommentObject(comment)
-	return fmt.Sprintf("COMMENT ON %s %s IS NULL", sqlObjectType, escapedObject)
+	nullComment := *comment
+	nullComment.comment.Comment = ""
+	return g.generateNormalizedCommentStatement(&nullComment)
 }
 
 func (g *Generator) findExtensionByName(extensions []*Extension, name Ident) *Extension {
@@ -4655,7 +4786,7 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 			return false
 		}
 	}
-	if indexA.where != indexB.where {
+	if !g.areSameWhereClause(indexA.where, indexB.where) {
 		return false
 	}
 
@@ -4721,6 +4852,31 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 	return true
 }
 
+func (g *Generator) areSameWhereClause(whereA, whereB parser.Expr) bool {
+	// Both nil
+	if whereA == nil && whereB == nil {
+		return true
+	}
+	// One is nil and the other is not
+	if whereA == nil || whereB == nil {
+		return false
+	}
+
+	normalizedA := normalizeExpr(whereA, g.mode)
+	normalizedB := normalizeExpr(whereB, g.mode)
+
+	var strA, strB string
+	if !g.config.LegacyIgnoreQuotes {
+		strA = g.formatExprQuoteAware(normalizedA)
+		strB = g.formatExprQuoteAware(normalizedB)
+	} else {
+		strA = parser.String(normalizedA)
+		strB = parser.String(normalizedB)
+	}
+
+	return strA == strB
+}
+
 func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB ForeignKey) bool {
 	// Compare index columns (source columns of the FK)
 	if len(foreignKeyA.indexColumns) != len(foreignKeyB.indexColumns) {
@@ -4777,7 +4933,7 @@ func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion
 	if len(exclusionA.exclusions) != len(exclusionB.exclusions) {
 		return false
 	}
-	if exclusionA.where != exclusionB.where {
+	if !g.areSameWhereClause(exclusionA.where, exclusionB.where) {
 		return false
 	}
 	for i := range exclusionA.exclusions {

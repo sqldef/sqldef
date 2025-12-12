@@ -756,6 +756,7 @@ type ColumnType struct {
 
 	References            TableName
 	ReferenceNames        Columns
+	ReferenceMatch        Ident // for Postgres: MATCH FULL, MATCH PARTIAL, MATCH SIMPLE
 	ReferenceOnDelete     Ident
 	ReferenceOnUpdate     Ident
 	ReferenceDeferrable   *BoolVal // for Postgres: DEFERRABLE, NOT DEFERRABLE, or nil
@@ -935,6 +936,8 @@ type IndexColumn struct {
 	Column        Ident
 	Length        *SQLVal
 	Direction     string
+	NullsOrdering string // "first" or "last" for NULLS FIRST/LAST
+	Collation     string // Collation name for COLLATE
 	OperatorClass string
 	Expression    Expr // For functional indexes like ((CASE WHEN ...))
 }
@@ -986,6 +989,7 @@ type IndexSpec struct {
 	Constraint        bool
 	Async             bool // for Aurora DSQL
 	Concurrently      bool // for PostgreSQL
+	NullsNotDistinct  bool // for PostgreSQL 15+ UNIQUE indexes
 	Clustered         bool // for MSSQL
 	ColumnStore       bool // for MSSQL
 	Included          []Ident
@@ -1006,6 +1010,7 @@ type ForeignKeyDefinition struct {
 	IndexColumns      []Ident
 	ReferenceName     TableName
 	ReferenceColumns  []Ident
+	Match             Ident // for Postgres: MATCH FULL, MATCH PARTIAL, MATCH SIMPLE
 	OnDelete          Ident
 	OnUpdate          Ident
 	NotForReplication bool
@@ -1255,9 +1260,10 @@ type Domain struct {
 }
 
 type Comment struct {
-	ObjectType string
-	Object     []Ident // Parts of the object name: [schema, table] or [schema, table, column]
-	Comment    string
+	ObjectType   string
+	Object       []Ident // Parts of the object name: [schema, table] or [schema, table, column]
+	Comment      string
+	FunctionArgs []FunctionArg // For COMMENT ON FUNCTION, stores the function signature
 }
 
 // SelectExprs represents SELECT expressions.
@@ -1714,6 +1720,9 @@ const (
 	PosixRegexCiStr      = "~*"
 	PosixNotRegexStr     = "!~"
 	PosixNotRegexCiStr   = "!~*"
+	IsDistinctFromStr    = "is distinct from"
+	IsNotDistinctFromStr = "is not distinct from"
+	OverlapsStr          = "overlaps"
 )
 
 // Format formats the node.
@@ -2392,6 +2401,12 @@ type Order struct {
 const (
 	AscScr  = "asc"
 	DescScr = "desc"
+)
+
+// IndexColumn.NullsOrdering
+const (
+	NullsFirst = "first"
+	NullsLast  = "last"
 )
 
 // Format formats the node.

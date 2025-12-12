@@ -4,6 +4,16 @@ View:
   desired: |
     CREATE TABLE points (id bigint);
     CREATE VIEW points_view AS SELECT id FROM points;
+
+# PostgreSQL expands SELECT * to explicit column names when storing view definitions.
+# This test verifies that views with SELECT * are correctly compared and don't cause
+# unnecessary view recreation.
+ViewWithSelectStar:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (id integer, name text);
+    CREATE VIEW users_view AS SELECT * FROM users;
+
 MaterializedView:
   desired: |
     CREATE TABLE points (id bigint);

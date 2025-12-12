@@ -431,8 +431,8 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			indexColumns:       indexColumns,
 			referenceTableName: normalizeQualifiedName(mode, parsedCol.Type.References, defaultSchema),
 			referenceColumns:   referenceColumns,
-			onDelete:           parser.String(parsedCol.Type.ReferenceOnDelete),
-			onUpdate:           parser.String(parsedCol.Type.ReferenceOnUpdate),
+			onDelete:           parsedCol.Type.ReferenceOnDelete.Name,
+			onUpdate:           parsedCol.Type.ReferenceOnUpdate.Name,
 			constraintOptions:  constraintOptions,
 		}
 		foreignKeys = append(foreignKeys, foreignKey)
@@ -646,14 +646,13 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		)
 	}
 
-	where := ""
+	var where parser.Expr
 	if stmt.IndexSpec.Where != nil && stmt.IndexSpec.Where.Type == parser.WhereStr {
-		expr := stmt.IndexSpec.Where.Expr
+		where = stmt.IndexSpec.Where.Expr
 		// remove root paren expression
-		if parenExpr, ok := expr.(*parser.ParenExpr); ok {
-			expr = parenExpr.Expr
+		if parenExpr, ok := where.(*parser.ParenExpr); ok {
+			where = parenExpr.Expr
 		}
-		where = parser.String(expr)
 	}
 
 	includedColumns := util.TransformSlice(stmt.IndexSpec.Included, func(includedColumn Ident) string {
@@ -897,14 +896,15 @@ func parseExclusion(exclusion *parser.ExclusionDefinition) Exclusion {
 			operator:   exclusion.Operator,
 		})
 	}
-	var where string
+	var where parser.Expr
 	if exclusion.Where != nil {
-		where = parser.String(exclusion.Where.Expr)
+		where = exclusion.Where.Expr
 	}
 	// PostgreSQL defaults to btree when no index method is specified
-	indexType := strings.ToUpper(exclusion.IndexType.Name)
+	// Normalize to lowercase to match PostgreSQL's pg_get_constraintdef output
+	indexType := strings.ToLower(exclusion.IndexType.Name)
 	if indexType == "" {
-		indexType = "BTREE"
+		indexType = "btree"
 	}
 	return Exclusion{
 		constraintName: exclusion.ConstraintName,

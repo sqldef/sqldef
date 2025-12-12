@@ -220,7 +220,7 @@ type Index struct {
 	async             bool // for Aurora DSQL
 	concurrently      bool // for PostgreSQL
 	constraintOptions *ConstraintOptions
-	where             string         // for Postgres `Partial Indexes`
+	where             parser.Expr    // for Postgres `Partial Indexes`
 	included          []string       // for MSSQL
 	clustered         bool           // for MSSQL
 	partition         IndexPartition // for MSSQL
@@ -283,7 +283,7 @@ type ForeignKey struct {
 type Exclusion struct {
 	constraintName Ident
 	indexType      string
-	where          string
+	where          parser.Expr
 	exclusions     []ExclusionPair
 }
 

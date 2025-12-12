@@ -472,3 +472,40 @@ DropTableWithSelfReferencingForeignKey:
       parent_dept_id int,
       CONSTRAINT dept_parent_fk FOREIGN KEY (parent_dept_id) REFERENCES departments(dept_id)
     );
+
+
+ForeignKeyOnDeleteSetDefault:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE parent (id integer PRIMARY KEY);
+    CREATE TABLE child (
+      id integer PRIMARY KEY,
+      parent_id integer DEFAULT 1 REFERENCES parent(id) ON DELETE SET DEFAULT
+    );
+
+ForeignKeyOnUpdateSetDefault:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE parent (id integer PRIMARY KEY);
+    CREATE TABLE child (
+      id integer PRIMARY KEY,
+      parent_id integer DEFAULT 1 REFERENCES parent(id) ON UPDATE SET DEFAULT
+    );
+
+ForeignKeyMatchFull:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE parent (id integer PRIMARY KEY);
+    CREATE TABLE child (
+      id integer PRIMARY KEY,
+      parent_id integer REFERENCES parent(id) MATCH FULL
+    );
+
+ForeignKeyMatchSimple:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE parent (id integer PRIMARY KEY);
+    CREATE TABLE child (
+      id integer PRIMARY KEY,
+      parent_id integer REFERENCES parent(id) MATCH SIMPLE
+    );

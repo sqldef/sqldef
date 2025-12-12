@@ -1,4 +1,5 @@
 # yaml-language-server: $schema=../testutils/testcase.schema.json
+
 AlterTypeAddValue:
   current: |
     CREATE TYPE eventtype AS ENUM (
@@ -156,7 +157,6 @@ AddEnumTypeColumnWithExplicitSchemaOnNonStandardDefaultSchema:
     DROP TYPE "foo"."lang";
   user: psqldef_user
 
-# Built-in types must not be schema-qualified on non-public schema
 CreateTypeEnum:
   desired: |
     CREATE TYPE "public"."country" AS ENUM ('us', 'jp');
@@ -170,4 +170,7 @@ EnumWithSpecialCharValues:
   desired: |
     CREATE TYPE status_type AS ENUM ('in-progress', 'on-hold', 'n/a');
 
-# Column with explicit collation
+EnumWithQuotedValues:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TYPE quote_type AS ENUM ('it''s', 'value with "quotes"');

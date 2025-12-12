@@ -12,7 +12,6 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/sqldef/sqldef/v3/database"
-	"github.com/sqldef/sqldef/v3/parser"
 	schemaLib "github.com/sqldef/sqldef/v3/schema"
 	"github.com/sqldef/sqldef/v3/util"
 )
@@ -181,7 +180,8 @@ func (d *PostgresDatabase) views() ([]string, error) {
 	}
 
 	rows, err := d.db.Query(`
-		select n.nspname as table_schema, c.relname as table_name, pg_get_viewdef(c.oid) as definition
+		select n.nspname as table_schema, c.relname as table_name, pg_get_viewdef(c.oid) as definition,
+		       obj_description(c.oid, 'pg_class') as view_comment
 		from pg_catalog.pg_class c inner join pg_catalog.pg_namespace n on c.relnamespace = n.oid
 		where n.nspname not in ('information_schema', 'pg_catalog')
 		and c.relkind = 'v'
@@ -195,7 +195,8 @@ func (d *PostgresDatabase) views() ([]string, error) {
 	var ddls []string
 	for rows.Next() {
 		var schema, name, definition string
-		if err := rows.Scan(&schema, &name, &definition); err != nil {
+		var viewComment sql.NullString
+		if err := rows.Scan(&schema, &name, &definition, &viewComment); err != nil {
 			return nil, err
 		}
 		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, schema) {
@@ -209,9 +210,17 @@ func (d *PostgresDatabase) views() ([]string, error) {
 		definition = normalizeDatePartToExtract(definition)
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE VIEW %s.%s AS %s;", d.escapeIdentifier(schema), d.escapeIdentifier(name), definition,
+				"CREATE VIEW %s.%s AS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(name), definition,
 			),
 		)
+
+		// Add comment if exists
+		if viewComment.Valid {
+			ddls = append(ddls, fmt.Sprintf(
+				"COMMENT ON VIEW %s.%s IS %s;",
+				d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(name), schemaLib.StringConstant(viewComment.String),
+			))
+		}
 	}
 	return ddls, nil
 }
@@ -249,7 +258,7 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 		definition = normalizeDatePartToExtract(definition)
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE MATERIALIZED VIEW %s.%s AS %s;", d.escapeIdentifier(schema), d.escapeIdentifier(name), definition,
+				"CREATE MATERIALIZED VIEW %s.%s AS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(name), definition,
 			),
 		)
 
@@ -284,7 +293,7 @@ func (d *PostgresDatabase) schemas() ([]string, error) {
 		}
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE SCHEMA %s;", escapeSQLName(name),
+				"CREATE SCHEMA %s;", d.quoteIdentifierIfNeeded(name),
 			),
 		)
 	}
@@ -313,7 +322,7 @@ func (d *PostgresDatabase) extensions() ([]string, error) {
 		}
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE EXTENSION %s;", escapeSQLName(name),
+				"CREATE EXTENSION %s;", d.quoteIdentifierIfNeeded(name),
 			),
 		)
 	}
@@ -321,13 +330,18 @@ func (d *PostgresDatabase) extensions() ([]string, error) {
 }
 
 func (d *PostgresDatabase) types() ([]string, error) {
+	// Use quote_literal() to properly escape enum labels containing special characters
+	// (single quotes, spaces, etc.) and preserve the order with enumsortorder
 	rows, err := d.db.Query(`
-		select n.nspname as type_schema, t.typname, string_agg(e.enumlabel, ' ')
-		from pg_enum e
-		join pg_type t on e.enumtypid = t.oid
-		inner join pg_catalog.pg_namespace n on t.typnamespace = n.oid
-		where not exists (select * from pg_depend d where d.objid = t.oid and d.deptype = 'e')
-		group by n.nspname, t.typname;
+		SELECT n.nspname AS type_schema,
+		       t.typname,
+		       string_agg(quote_literal(e.enumlabel), ', ' ORDER BY e.enumsortorder),
+		       obj_description(t.oid, 'pg_type')
+		FROM pg_enum e
+		JOIN pg_type t ON e.enumtypid = t.oid
+		INNER JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
+		WHERE NOT EXISTS (SELECT * FROM pg_depend d WHERE d.objid = t.oid AND d.deptype = 'e')
+		GROUP BY n.nspname, t.typname, t.oid;
 	`)
 	if err != nil {
 		return nil, err
@@ -336,22 +350,25 @@ func (d *PostgresDatabase) types() ([]string, error) {
 
 	var ddls []string
 	for rows.Next() {
-		var typeSchema, typeName, labels string
-		if err := rows.Scan(&typeSchema, &typeName, &labels); err != nil {
+		var typeSchema, typeName, enumLabels string
+		var comment sql.NullString
+		if err := rows.Scan(&typeSchema, &typeName, &enumLabels, &comment); err != nil {
 			return nil, err
 		}
 		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, typeSchema) {
 			continue
 		}
-		enumLabels := []string{}
-		for label := range strings.SplitSeq(labels, " ") {
-			enumLabels = append(enumLabels, fmt.Sprintf("'%s'", label))
-		}
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE TYPE %s.%s AS ENUM (%s);", d.escapeIdentifier(typeSchema), d.escapeIdentifier(typeName), strings.Join(enumLabels, ", "),
+				"CREATE TYPE %s.%s AS ENUM (%s);", d.quoteIdentifierIfNeeded(typeSchema), d.quoteIdentifierIfNeeded(typeName), enumLabels,
 			),
 		)
+		if comment.Valid {
+			ddls = append(ddls, fmt.Sprintf(
+				"COMMENT ON TYPE %s.%s IS %s;",
+				d.quoteIdentifierIfNeeded(typeSchema), d.quoteIdentifierIfNeeded(typeName), schemaLib.StringConstant(comment.String),
+			))
+		}
 	}
 	return ddls, nil
 }
@@ -363,7 +380,8 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 		       pg_catalog.format_type(t.typbasetype, t.typtypmod) AS data_type,
 		       t.typdefault AS default_value,
 		       t.typnotnull AS not_null,
-		       c.collname AS collation
+		       c.collname AS collation,
+		       obj_description(t.oid, 'pg_type') AS domain_comment
 		FROM pg_catalog.pg_type t
 		INNER JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
 		LEFT JOIN pg_catalog.pg_collation c ON t.typcollation = c.oid AND t.typcollation <> 0
@@ -381,12 +399,13 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 		schema, name, dataType  string
 		defaultValue, collation sql.NullString
 		notNull                 bool
+		comment                 sql.NullString
 	}
 
 	var domains []domainInfo
 	for rows.Next() {
 		var di domainInfo
-		if err := rows.Scan(&di.schema, &di.name, &di.dataType, &di.defaultValue, &di.notNull, &di.collation); err != nil {
+		if err := rows.Scan(&di.schema, &di.name, &di.dataType, &di.defaultValue, &di.notNull, &di.collation, &di.comment); err != nil {
 			return nil, err
 		}
 		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, di.schema) {
@@ -438,10 +457,10 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 	// Build CREATE DOMAIN statements
 	var ddls []string
 	for _, di := range domains {
-		ddl := fmt.Sprintf("CREATE DOMAIN %s.%s AS %s", d.escapeIdentifier(di.schema), d.escapeIdentifier(di.name), di.dataType)
+		ddl := fmt.Sprintf("CREATE DOMAIN %s.%s AS %s", d.quoteIdentifierIfNeeded(di.schema), d.quoteIdentifierIfNeeded(di.name), di.dataType)
 
 		if di.collation.Valid && di.collation.String != "" && di.collation.String != "default" {
-			ddl += fmt.Sprintf(" COLLATE %s", d.escapeIdentifier(di.collation.String))
+			ddl += fmt.Sprintf(" COLLATE %s", d.quoteIdentifierIfNeeded(di.collation.String))
 		}
 
 		if di.defaultValue.Valid {
@@ -462,6 +481,14 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 
 		ddl += ";"
 		ddls = append(ddls, ddl)
+
+		// Add comment if exists
+		if di.comment.Valid {
+			ddls = append(ddls, fmt.Sprintf(
+				"COMMENT ON DOMAIN %s.%s IS %s;",
+				d.quoteIdentifierIfNeeded(di.schema), d.quoteIdentifierIfNeeded(di.name), schemaLib.StringConstant(di.comment.String),
+			))
+		}
 	}
 	return ddls, nil
 }
@@ -470,10 +497,13 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 func (d *PostgresDatabase) functions() ([]string, error) {
 	// Query to get user-defined functions (excluding system functions and extension functions)
 	// We use pg_get_functiondef to get the complete function definition
+	// pg_get_function_identity_arguments gives us the function signature for comments
 	rows, err := d.db.Query(`
 		SELECT n.nspname AS func_schema,
 		       p.proname AS func_name,
-		       pg_get_functiondef(p.oid) AS func_def
+		       pg_get_functiondef(p.oid) AS func_def,
+		       pg_get_function_identity_arguments(p.oid) AS func_args,
+		       obj_description(p.oid, 'pg_proc') AS func_comment
 		FROM pg_catalog.pg_proc p
 		INNER JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
 		WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
@@ -488,8 +518,9 @@ func (d *PostgresDatabase) functions() ([]string, error) {
 
 	var ddls []string
 	for rows.Next() {
-		var funcSchema, funcName, funcDef string
-		if err := rows.Scan(&funcSchema, &funcName, &funcDef); err != nil {
+		var funcSchema, funcName, funcDef, funcArgs string
+		var funcComment sql.NullString
+		if err := rows.Scan(&funcSchema, &funcName, &funcDef, &funcArgs, &funcComment); err != nil {
 			return nil, err
 		}
 		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, funcSchema) {
@@ -502,6 +533,14 @@ func (d *PostgresDatabase) functions() ([]string, error) {
 			funcDef += ";"
 		}
 		ddls = append(ddls, funcDef)
+
+		// Add comment if exists
+		if funcComment.Valid {
+			ddls = append(ddls, fmt.Sprintf(
+				"COMMENT ON FUNCTION %s.%s(%s) IS %s;",
+				d.quoteIdentifierIfNeeded(funcSchema), d.quoteIdentifierIfNeeded(funcName), funcArgs, schemaLib.StringConstant(funcComment.String),
+			))
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -517,7 +556,8 @@ func (d *PostgresDatabase) triggers() ([]string, error) {
 		SELECT n.nspname AS trigger_schema,
 		       c.relname AS table_name,
 		       t.tgname AS trigger_name,
-		       pg_get_triggerdef(t.oid) AS trigger_def
+		       pg_get_triggerdef(t.oid) AS trigger_def,
+		       obj_description(t.oid, 'pg_trigger') AS trigger_comment
 		FROM pg_catalog.pg_trigger t
 		INNER JOIN pg_catalog.pg_class c ON t.tgrelid = c.oid
 		INNER JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
@@ -534,7 +574,8 @@ func (d *PostgresDatabase) triggers() ([]string, error) {
 	var ddls []string
 	for rows.Next() {
 		var triggerSchema, tableName, triggerName, triggerDef string
-		if err := rows.Scan(&triggerSchema, &tableName, &triggerName, &triggerDef); err != nil {
+		var triggerComment sql.NullString
+		if err := rows.Scan(&triggerSchema, &tableName, &triggerName, &triggerDef, &triggerComment); err != nil {
 			return nil, err
 		}
 		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, triggerSchema) {
@@ -547,6 +588,14 @@ func (d *PostgresDatabase) triggers() ([]string, error) {
 			triggerDef += ";"
 		}
 		ddls = append(ddls, triggerDef)
+
+		// Add comment if exists
+		if triggerComment.Valid {
+			ddls = append(ddls, fmt.Sprintf(
+				"COMMENT ON TRIGGER %s ON %s.%s IS %s;",
+				d.quoteIdentifierIfNeeded(triggerName), d.quoteIdentifierIfNeeded(triggerSchema), d.quoteIdentifierIfNeeded(tableName), schemaLib.StringConstant(triggerComment.String),
+			))
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -636,13 +685,13 @@ func (d *PostgresDatabase) exportTableDDL(table string) (string, error) {
 func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) string {
 	var queryBuilder strings.Builder
 	schema, table := splitTableName(components.TableName, components.DefaultSchema)
-	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", d.escapeIdentifier(schema), d.escapeIdentifier(table))
+	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s.%s (", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table))
 	for i, col := range components.Columns {
 		if i > 0 {
 			fmt.Fprint(&queryBuilder, ",")
 		}
 		fmt.Fprint(&queryBuilder, "\n"+indent)
-		fmt.Fprintf(&queryBuilder, "%s %s", d.escapeIdentifier(col.Name), d.escapeDataTypeName(col.GetDataType()))
+		fmt.Fprintf(&queryBuilder, "%s %s", d.quoteIdentifierIfNeeded(col.Name), d.escapeDataTypeName(col.GetDataType()))
 		if !col.Nullable {
 			fmt.Fprint(&queryBuilder, " NOT NULL")
 		}
@@ -653,17 +702,17 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 			fmt.Fprintf(&queryBuilder, " GENERATED %s AS IDENTITY", col.IdentityGeneration)
 		}
 		if col.Check != nil {
-			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s %s", d.escapeConstraintName(col.Check.name), col.Check.definition)
+			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s %s", d.quoteIdent(col.Check.name), col.Check.definition)
 		}
 	}
 	if len(components.PrimaryKeyCols) > 0 {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", d.escapeConstraintName(components.PrimaryKeyName), strings.Join(components.PrimaryKeyCols, "\", \""))
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", d.quoteIdent(components.PrimaryKeyName), strings.Join(components.PrimaryKeyCols, "\", \""))
 	}
 
 	for _, check := range components.CheckConstraints {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", d.escapeConstraintName(check.Name), check.Definition)
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", d.quoteIdent(check.Name), check.Definition)
 	}
 
 	fmt.Fprintf(&queryBuilder, "\n);\n")
@@ -925,10 +974,6 @@ func normalizePostgresTypeCasts(sql string) string {
 	re = regexp.MustCompile(`'([^']+)'::timestamp without time zone`)
 	sql = re.ReplaceAllString(sql, "timestamp '$1'")
 
-	// For with time zone variants, keep as cast since TypedLiteral doesn't support them well
-	sql = strings.ReplaceAll(sql, "::timestamp with time zone", "::timestamptz")
-	sql = strings.ReplaceAll(sql, "::time with time zone", "::timetz")
-
 	return sql
 }
 
@@ -992,8 +1037,8 @@ func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]st
 		}
 
 		result[constraintName] = fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s",
-			escapeSQLName(schema), escapeSQLName(table),
-			escapeSQLName(constraintName), constraintDef,
+			d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table),
+			d.quoteIdentifierIfNeeded(constraintName), constraintDef,
 		)
 	}
 
@@ -1023,7 +1068,10 @@ func (d *PostgresDatabase) getExclusionDefs(tableName string) ([]string, error) 
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s", schema, table, constraintName, constraintDef))
+		result = append(result, fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s",
+			d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table),
+			d.quoteIdentifierIfNeeded(constraintName), constraintDef,
+		))
 	}
 
 	return result, nil
@@ -1059,7 +1107,7 @@ WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$
 
 func (d *PostgresDatabase) getPrimaryKeyName(table string) (Ident, error) {
 	schema, table := splitTableName(table, d.GetDefaultSchema())
-	tableWithSchema := fmt.Sprintf("%s.%s", escapeSQLName(schema), escapeSQLName(table))
+	tableWithSchema := fmt.Sprintf("%s.%s", forceQuoteIdentifier(schema), forceQuoteIdentifier(table))
 	query := fmt.Sprintf(`
 		SELECT conname
 		FROM pg_constraint
@@ -1181,11 +1229,11 @@ func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 		c := constraints[key]
 		var escapedColumns []string
 		for i := range c.columns {
-			escapedColumns = append(escapedColumns, escapeSQLName(c.columns[i]))
+			escapedColumns = append(escapedColumns, d.quoteIdentifierIfNeeded(c.columns[i]))
 		}
 		var escapedForeignColumns []string
 		for i := range c.foreignColumns {
-			escapedForeignColumns = append(escapedForeignColumns, escapeSQLName(c.foreignColumns[i]))
+			escapedForeignColumns = append(escapedForeignColumns, d.quoteIdentifierIfNeeded(c.foreignColumns[i]))
 		}
 		var constraintOptions string
 		if c.deferrable {
@@ -1197,8 +1245,8 @@ func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 		}
 		def := fmt.Sprintf(
 			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s (%s) ON UPDATE %s ON DELETE %s%s",
-			escapeSQLName(c.tableSchema), escapeSQLName(c.tableName), escapeSQLName(c.constraintName), strings.Join(escapedColumns, ", "),
-			escapeSQLName(c.foreignTableSchema), escapeSQLName(c.foreignTableName), strings.Join(escapedForeignColumns, ", "), c.foreignUpdateRule, c.foreignDeleteRule,
+			d.quoteIdentifierIfNeeded(c.tableSchema), d.quoteIdentifierIfNeeded(c.tableName), d.quoteIdentifierIfNeeded(c.constraintName), strings.Join(escapedColumns, ", "),
+			d.quoteIdentifierIfNeeded(c.foreignTableSchema), d.quoteIdentifierIfNeeded(c.foreignTableName), strings.Join(escapedForeignColumns, ", "), c.foreignUpdateRule, c.foreignDeleteRule,
 			constraintOptions,
 		)
 		defs = append(defs, def)
@@ -1274,7 +1322,7 @@ func (d *PostgresDatabase) getComments(table string) ([]string, error) {
 		if err := tableRows.Scan(&comment); err != nil {
 			return nil, err
 		}
-		ddls = append(ddls, fmt.Sprintf("COMMENT ON TABLE %s.%s IS %s;", d.escapeIdentifier(schema), d.escapeIdentifier(table), schemaLib.StringConstant(comment)))
+		ddls = append(ddls, fmt.Sprintf("COMMENT ON TABLE %s.%s IS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table), schemaLib.StringConstant(comment)))
 	}
 
 	// Column comments
@@ -1302,7 +1350,53 @@ func (d *PostgresDatabase) getComments(table string) ([]string, error) {
 		if err := columnRows.Scan(&columnName, &comment); err != nil {
 			return nil, err
 		}
-		ddls = append(ddls, fmt.Sprintf("COMMENT ON COLUMN %s.%s.%s IS %s;", d.escapeIdentifier(schema), d.escapeIdentifier(table), d.escapeIdentifier(columnName), schemaLib.StringConstant(comment)))
+		ddls = append(ddls, fmt.Sprintf("COMMENT ON COLUMN %s.%s.%s IS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table), d.quoteIdentifierIfNeeded(columnName), schemaLib.StringConstant(comment)))
+	}
+
+	// Index comments (for indexes on this table)
+	indexRows, err := d.db.Query(`
+		SELECT i.relname AS index_name, obj_description(i.oid, 'pg_class') AS comment
+		FROM pg_class t
+		JOIN pg_namespace n ON n.oid = t.relnamespace
+		JOIN pg_index ix ON t.oid = ix.indrelid
+		JOIN pg_class i ON i.oid = ix.indexrelid
+		WHERE t.relkind IN ('r', 'p')
+		  AND n.nspname = $1
+		  AND t.relname = $2
+		  AND obj_description(i.oid, 'pg_class') IS NOT NULL
+	`, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer indexRows.Close()
+	for indexRows.Next() {
+		var indexName, comment string
+		if err := indexRows.Scan(&indexName, &comment); err != nil {
+			return nil, err
+		}
+		ddls = append(ddls, fmt.Sprintf("COMMENT ON INDEX %s.%s IS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(indexName), schemaLib.StringConstant(comment)))
+	}
+
+	// Constraint comments
+	constraintRows, err := d.db.Query(`
+		SELECT con.conname AS constraint_name, obj_description(con.oid, 'pg_constraint') AS comment
+		FROM pg_constraint con
+		JOIN pg_class c ON c.oid = con.conrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = $1
+		  AND c.relname = $2
+		  AND obj_description(con.oid, 'pg_constraint') IS NOT NULL
+	`, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer constraintRows.Close()
+	for constraintRows.Next() {
+		var constraintName, comment string
+		if err := constraintRows.Scan(&constraintName, &comment); err != nil {
+			return nil, err
+		}
+		ddls = append(ddls, fmt.Sprintf("COMMENT ON CONSTRAINT %s ON %s.%s IS %s;", d.quoteIdentifierIfNeeded(constraintName), d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table), schemaLib.StringConstant(comment)))
 	}
 
 	return ddls, nil
@@ -1377,33 +1471,32 @@ func postgresBuildDSN(config database.Config) string {
 	return fmt.Sprintf("postgres://%s:%s@%s/%s?%s", url.QueryEscape(user), url.QueryEscape(password), host, database, strings.Join(options, "&"))
 }
 
-func escapeSQLName(name string) string {
+func forceQuoteIdentifier(name string) string {
 	return fmt.Sprintf("\"%s\"", name)
 }
 
-// escapeConstraintName quotes a constraint name for DDL output.
+// quoteIdent quotes a constraint name for DDL output.
 // In legacy mode (LegacyIgnoreQuotes=true): don't quote (original behavior).
 // In quote-aware mode (LegacyIgnoreQuotes=false): respect the Ident's Quoted field.
-func (d *PostgresDatabase) escapeConstraintName(ident Ident) string {
+func (d *PostgresDatabase) quoteIdent(ident Ident) string {
 	if d.generatorConfig.LegacyIgnoreQuotes {
 		return ident.Name
 	}
 	if ident.Quoted {
-		return escapeSQLName(ident.Name)
+		return forceQuoteIdentifier(ident.Name)
 	}
 	return ident.Name
 }
 
-// escapeIdentifier quotes an identifier for DDL output.
+// quoteIdentifierIfNeeded quotes an identifier for DDL output.
 // In legacy mode: always quote to preserve exact case.
-// In quote-aware mode: use case detection and keyword check.
-func (d *PostgresDatabase) escapeIdentifier(name string) string {
+// In quote-aware mode: quote only when necessary (non-standard chars or keywords).
+func (d *PostgresDatabase) quoteIdentifierIfNeeded(name string) string {
 	if d.generatorConfig.LegacyIgnoreQuotes {
-		return escapeSQLName(name)
+		return forceQuoteIdentifier(name)
 	}
-	// Quote-aware mode: quote if name has uppercase letters or is a keyword
-	if strings.ToLower(name) != name || parser.IsKeyword(name) {
-		return escapeSQLName(name)
+	if database.NeedsQuoting(name) {
+		return forceQuoteIdentifier(name)
 	}
 	return name
 }
@@ -1433,11 +1526,11 @@ func (d *PostgresDatabase) escapeDataTypeName(typeName string) string {
 		// Quote each part only if it has uppercase letters
 		escapedSchema := schema
 		if strings.ToLower(schema) != schema {
-			escapedSchema = d.escapeIdentifier(schema)
+			escapedSchema = d.quoteIdentifierIfNeeded(schema)
 		}
 		escapedType := baseType
 		if strings.ToLower(baseType) != baseType {
-			escapedType = d.escapeIdentifier(baseType)
+			escapedType = d.quoteIdentifierIfNeeded(baseType)
 		}
 		return escapedSchema + "." + escapedType + arraySuffix
 	}
@@ -1449,7 +1542,7 @@ func (d *PostgresDatabase) escapeDataTypeName(typeName string) string {
 		return typeName + arraySuffix
 	}
 
-	return d.escapeIdentifier(typeName) + arraySuffix
+	return d.quoteIdentifierIfNeeded(typeName) + arraySuffix
 }
 
 func splitTableName(table string, defaultSchema string) (string, string) {
@@ -1510,7 +1603,7 @@ func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
 		escapedGrantee := grantee
 		if grantee != "PUBLIC" {
 			// PUBLIC is a special keyword and should not be quoted
-			escapedGrantee = escapeSQLName(grantee)
+			escapedGrantee = d.quoteIdentifierIfNeeded(grantee)
 		}
 
 		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s", privileges, table, escapedGrantee)

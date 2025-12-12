@@ -167,7 +167,7 @@ func setDDL(yylex any, ddl *DDL) {
  * other keywords are critical for correct parsing.                           */
 %nonassoc NO_ELSE
 /** DO NOT MERGE these definitions. Their separation and order are critical. **/
-%left <str> BETWEEN CASE WHEN THEN END
+%left <str> BETWEEN CASE WHEN THEN END OVERLAPS
 %left <str> ELSE
 /* ---------------- End of Dangling Else Resolution ------------------------- */
 /* ---------------- Optional Expression Resolution -----------------------------
@@ -248,6 +248,7 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> HANDLER CONTINUE EXIT SQLEXCEPTION SQLWARNING SQLSTATE FOUND
 %token <str> DEFERRABLE INITIALLY IMMEDIATE DEFERRED
 %token <str> CONCURRENTLY ASYNC
+%token <str> NULLS
 %token <str> SQL SECURITY
 %token <str> RECURSIVE
 %token <str> IMMUTABLE STABLE VOLATILE SETOF
@@ -300,7 +301,7 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> LEAD LAG
 
 // Match
-%token <str> MATCH AGAINST BOOLEAN LANGUAGE PARSER QUERY EXPANSION
+%token <str> MATCH AGAINST BOOLEAN LANGUAGE PARSER QUERY EXPANSION PARTIAL SIMPLE
 
 // Context-aware WITH tokens
 %token <str> WITH_DATA_OPTION
@@ -380,7 +381,8 @@ func setDDL(yylex any, ddl *DDL) {
 %type <expr> having_opt
 %type <orderBy> order_by_opt order_list
 %type <order> order
-%type <str> asc_desc_opt
+%type <str> asc_desc_opt nulls_ordering_opt
+%type <boolVal> nulls_not_distinct_opt
 %type <limit> limit_opt
 %type <str> lock_opt
 %type <columns> ins_column_list column_list
@@ -423,7 +425,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <exclusionPairs> exclude_element_list
 %type <exclusionPair> exclude_element
 %type <foreignKeyDefinition> foreign_key_definition foreign_key_without_options
-%type <ident> reference_option
+%type <ident> reference_option match_type_opt
 %type <ident> sql_id_opt privilege grantee
 %type <idents> sql_id_list privilege_list grantee_list
 %type <str> index_or_key
@@ -594,14 +596,251 @@ comment_statement:
       },
     }
   }
-| COMMENT_KEYWORD ON INDEX sql_id IS STRING
+| COMMENT_KEYWORD ON INDEX table_name IS STRING
   {
+    // Build Object as []Ident: [schema, index] or [index]
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
     $$ = &DDL{
       Action: CommentOn,
       Comment: &Comment{
-        ObjectType: "INDEX",
-        Object: []Ident{$4},
+        ObjectType: "OBJECT_INDEX",
+        Object: obj,
         Comment: $6,
+      },
+    }
+  }
+| COMMENT_KEYWORD ON INDEX table_name IS NULL
+  {
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_INDEX",
+        Object: obj,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT_KEYWORD ON CONSTRAINT sql_id ON table_name IS STRING
+  {
+    // Build Object as []Ident: [constraint, schema, table] or [constraint, table]
+    var obj []Ident
+    if !$6.Schema.IsEmpty() {
+      obj = []Ident{$4, $6.Schema, $6.Name}
+    } else {
+      obj = []Ident{$4, $6.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_CONSTRAINT",
+        Object: obj,
+        Comment: $8,
+      },
+    }
+  }
+| COMMENT_KEYWORD ON CONSTRAINT sql_id ON table_name IS NULL
+  {
+    var obj []Ident
+    if !$6.Schema.IsEmpty() {
+      obj = []Ident{$4, $6.Schema, $6.Name}
+    } else {
+      obj = []Ident{$4, $6.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_CONSTRAINT",
+        Object: obj,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT_KEYWORD ON VIEW table_name IS STRING
+  {
+    // Build Object as []Ident: [schema, view] or [view]
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_VIEW",
+        Object: obj,
+        Comment: $6,
+      },
+    }
+  }
+| COMMENT_KEYWORD ON VIEW table_name IS NULL
+  {
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_VIEW",
+        Object: obj,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT_KEYWORD ON FUNCTION object_name '(' function_args_opt ')' IS STRING
+  {
+    // Build Object as []Ident: [schema, function] or [function]
+    // FunctionArgs stored separately
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_FUNCTION",
+        Object: obj,
+        FunctionArgs: $6,
+        Comment: $9,
+      },
+    }
+  }
+| COMMENT_KEYWORD ON FUNCTION object_name '(' function_args_opt ')' IS NULL
+  {
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_FUNCTION",
+        Object: obj,
+        FunctionArgs: $6,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT_KEYWORD ON TYPE table_name IS STRING
+  {
+    // Build Object as []Ident: [schema, type] or [type]
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_TYPE",
+        Object: obj,
+        Comment: $6,
+      },
+    }
+  }
+| COMMENT_KEYWORD ON TYPE table_name IS NULL
+  {
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_TYPE",
+        Object: obj,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT_KEYWORD ON DOMAIN table_name IS STRING
+  {
+    // Build Object as []Ident: [schema, domain] or [domain]
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_DOMAIN",
+        Object: obj,
+        Comment: $6,
+      },
+    }
+  }
+| COMMENT_KEYWORD ON DOMAIN table_name IS NULL
+  {
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_DOMAIN",
+        Object: obj,
+        Comment: "",
+      },
+    }
+  }
+| COMMENT_KEYWORD ON TRIGGER sql_id ON table_name IS STRING
+  {
+    // Build Object as []Ident: [trigger, schema, table] or [trigger, table]
+    var obj []Ident
+    if !$6.Schema.IsEmpty() {
+      obj = []Ident{$4, $6.Schema, $6.Name}
+    } else {
+      obj = []Ident{$4, $6.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_TRIGGER",
+        Object: obj,
+        Comment: $8,
+      },
+    }
+  }
+| COMMENT_KEYWORD ON TRIGGER sql_id ON table_name IS NULL
+  {
+    var obj []Ident
+    if !$6.Schema.IsEmpty() {
+      obj = []Ident{$4, $6.Schema, $6.Name}
+    } else {
+      obj = []Ident{$4, $6.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_TRIGGER",
+        Object: obj,
+        Comment: "",
       },
     }
   }
@@ -612,7 +851,7 @@ create_statement:
     $1.TableSpec = $2
     $$ = $1
   }
-| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
       Action: CreateIndex,
@@ -625,16 +864,17 @@ create_statement:
         Clustered: bool($2[1]),
         Async: $4 == byte(2),
         Concurrently: $4 == byte(1),
-        Included: $11,
-        Where: NewWhere(WhereStr, $12),
-        Options: $13,
-        Partition: $14,
+        NullsNotDistinct: bool($11),
+        Included: $12,
+        Where: NewWhere(WhereStr, $13),
+        Options: $14,
+        Partition: $15,
       },
       IndexCols: $9.IndexCols,
       IndexExpr: $9.IndexExpr,
     }
   }
-| CREATE unique_clustered_opt INDEX concurrently_opt ON table_name '(' index_column_list_or_expression ')' include_columns_opt where_expression_opt index_option_opt index_partition_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt ON table_name '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
       Action: CreateIndex,
@@ -647,10 +887,11 @@ create_statement:
         Clustered: bool($2[1]),
         Async: $4 == byte(2),
         Concurrently: $4 == byte(1),
-        Included: $10,
-        Where: NewWhere(WhereStr, $11),
-        Options: $12,
-        Partition: $13,
+        NullsNotDistinct: bool($10),
+        Included: $11,
+        Where: NewWhere(WhereStr, $12),
+        Options: $13,
+        Partition: $14,
       },
       IndexCols: $8.IndexCols,
       IndexExpr: $8.IndexExpr,
@@ -675,7 +916,7 @@ create_statement:
     }
   }
 /* For PostgreSQL */
-| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' include_columns_opt index_option_opt where_expression_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt index_option_opt where_expression_opt
   {
     indexSpec := &IndexSpec{
       Name: $5,
@@ -683,11 +924,12 @@ create_statement:
       Unique: bool($2[0]),
       Async: $4 == byte(2),
       Concurrently: $4 == byte(1),
-      Where: NewWhere(WhereStr, $15),
-      Included: $13,
+      NullsNotDistinct: bool($13),
+      Where: NewWhere(WhereStr, $16),
+      Included: $14,
     }
-    if $14 != nil && len($14) > 0 {
-      indexSpec.Options = $14
+    if $15 != nil && len($15) > 0 {
+      indexSpec.Options = $15
     }
     $$ = &DDL{
       Action: CreateIndex,
@@ -2736,57 +2978,62 @@ column_definition_type:
     $$ = $1
   }
 // PostgreSQL: inline foreign key with constraint options
-| column_definition_type REFERENCES table_name '(' column_list ')' deferrable_opt initially_deferred_opt
+| column_definition_type REFERENCES table_name '(' column_list ')' match_type_opt deferrable_opt initially_deferred_opt
   {
     $1.References           = $3
     $1.ReferenceNames       = $5
-    $1.ReferenceDeferrable  = &$7
-    $1.ReferenceInitDeferred = &$8
+    $1.ReferenceMatch       = $7
+    $1.ReferenceDeferrable  = &$8
+    $1.ReferenceInitDeferred = &$9
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option fk_defer_opts
+| column_definition_type REFERENCES table_name '(' column_list ')' match_type_opt ON DELETE reference_option fk_defer_opts
   {
     $1.References            = $3
     $1.ReferenceNames        = $5
-    $1.ReferenceOnDelete     = $9
-    if $10.constraintOpts != nil {
-      $1.ReferenceDeferrable  = NewBoolVal($10.constraintOpts.Deferrable)
-      $1.ReferenceInitDeferred = NewBoolVal($10.constraintOpts.InitiallyDeferred)
+    $1.ReferenceMatch        = $7
+    $1.ReferenceOnDelete     = $10
+    if $11.constraintOpts != nil {
+      $1.ReferenceDeferrable  = NewBoolVal($11.constraintOpts.Deferrable)
+      $1.ReferenceInitDeferred = NewBoolVal($11.constraintOpts.InitiallyDeferred)
     }
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option fk_defer_opts
+| column_definition_type REFERENCES table_name '(' column_list ')' match_type_opt ON UPDATE reference_option fk_defer_opts
   {
     $1.References            = $3
     $1.ReferenceNames        = $5
-    $1.ReferenceOnUpdate     = $9
-    if $10.constraintOpts != nil {
-      $1.ReferenceDeferrable  = NewBoolVal($10.constraintOpts.Deferrable)
-      $1.ReferenceInitDeferred = NewBoolVal($10.constraintOpts.InitiallyDeferred)
+    $1.ReferenceMatch        = $7
+    $1.ReferenceOnUpdate     = $10
+    if $11.constraintOpts != nil {
+      $1.ReferenceDeferrable  = NewBoolVal($11.constraintOpts.Deferrable)
+      $1.ReferenceInitDeferred = NewBoolVal($11.constraintOpts.InitiallyDeferred)
     }
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' ON DELETE reference_option ON UPDATE reference_option fk_defer_opts
+| column_definition_type REFERENCES table_name '(' column_list ')' match_type_opt ON DELETE reference_option ON UPDATE reference_option fk_defer_opts
   {
     $1.References            = $3
     $1.ReferenceNames        = $5
-    $1.ReferenceOnDelete     = $9
-    $1.ReferenceOnUpdate     = $12
-    if $13.constraintOpts != nil {
-      $1.ReferenceDeferrable  = NewBoolVal($13.constraintOpts.Deferrable)
-      $1.ReferenceInitDeferred = NewBoolVal($13.constraintOpts.InitiallyDeferred)
+    $1.ReferenceMatch        = $7
+    $1.ReferenceOnDelete     = $10
+    $1.ReferenceOnUpdate     = $13
+    if $14.constraintOpts != nil {
+      $1.ReferenceDeferrable  = NewBoolVal($14.constraintOpts.Deferrable)
+      $1.ReferenceInitDeferred = NewBoolVal($14.constraintOpts.InitiallyDeferred)
     }
     $$ = $1
   }
-| column_definition_type REFERENCES table_name '(' column_list ')' ON UPDATE reference_option ON DELETE reference_option fk_defer_opts
+| column_definition_type REFERENCES table_name '(' column_list ')' match_type_opt ON UPDATE reference_option ON DELETE reference_option fk_defer_opts
   {
     $1.References            = $3
     $1.ReferenceNames        = $5
-    $1.ReferenceOnUpdate     = $9
-    $1.ReferenceOnDelete     = $12
-    if $13.constraintOpts != nil {
-      $1.ReferenceDeferrable  = NewBoolVal($13.constraintOpts.Deferrable)
-      $1.ReferenceInitDeferred = NewBoolVal($13.constraintOpts.InitiallyDeferred)
+    $1.ReferenceMatch        = $7
+    $1.ReferenceOnUpdate     = $10
+    $1.ReferenceOnDelete     = $13
+    if $14.constraintOpts != nil {
+      $1.ReferenceDeferrable  = NewBoolVal($14.constraintOpts.Deferrable)
+      $1.ReferenceInitDeferred = NewBoolVal($14.constraintOpts.InitiallyDeferred)
     }
     $$ = $1
   }
@@ -4063,37 +4310,49 @@ index_column_list:
   }
 
 index_column:
-  sql_id length_opt asc_desc_opt
+  sql_id length_opt asc_desc_opt nulls_ordering_opt
   {
-    $$ = IndexColumn{Column: $1, Length: $2, Direction: $3}
+    $$ = IndexColumn{Column: $1, Length: $2, Direction: $3, NullsOrdering: $4}
   }
-| non_reserved_keyword length_opt asc_desc_opt
+| non_reserved_keyword length_opt asc_desc_opt nulls_ordering_opt
   {
-    $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3}
+    $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3, NullsOrdering: $4}
   }
-| col_name_keyword length_opt asc_desc_opt
+| col_name_keyword length_opt asc_desc_opt nulls_ordering_opt
   {
-    $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3}
+    $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3, NullsOrdering: $4}
   }
-| sql_id operator_class
+| sql_id COLLATE charset asc_desc_opt nulls_ordering_opt
   {
-    $$ = IndexColumn{Column: $1, OperatorClass: $2}
+    $$ = IndexColumn{Column: $1, Collation: $3, Direction: $4, NullsOrdering: $5}
   }
-| non_reserved_keyword operator_class
+| non_reserved_keyword COLLATE charset asc_desc_opt nulls_ordering_opt
   {
-    $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2}
+    $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
   }
-| col_name_keyword operator_class
+| col_name_keyword COLLATE charset asc_desc_opt nulls_ordering_opt
   {
-    $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2}
+    $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
   }
-| '(' expression ')' asc_desc_opt
+| sql_id operator_class asc_desc_opt nulls_ordering_opt
   {
-    $$ = IndexColumn{Expression: $2, Direction: $4}
+    $$ = IndexColumn{Column: $1, OperatorClass: $2, Direction: $3, NullsOrdering: $4}
   }
-| function_call_generic asc_desc_opt
+| non_reserved_keyword operator_class asc_desc_opt nulls_ordering_opt
   {
-    $$ = IndexColumn{Expression: $1, Direction: $2}
+    $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2, Direction: $3, NullsOrdering: $4}
+  }
+| col_name_keyword operator_class asc_desc_opt nulls_ordering_opt
+  {
+    $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2, Direction: $3, NullsOrdering: $4}
+  }
+| '(' expression ')' asc_desc_opt nulls_ordering_opt
+  {
+    $$ = IndexColumn{Expression: $2, Direction: $4, NullsOrdering: $5}
+  }
+| function_call_generic asc_desc_opt nulls_ordering_opt
+  {
+    $$ = IndexColumn{Expression: $1, Direction: $2, NullsOrdering: $3}
   }
 
 // https://www.postgresql.org/docs/9.5/brin-builtin-opclasses.html
@@ -4185,6 +4444,27 @@ reference_option:
 | NO ACTION
   {
     $$ = NewIdent("NO ACTION", false)
+  }
+| SET DEFAULT
+  {
+    $$ = NewIdent("SET DEFAULT", false)
+  }
+
+match_type_opt:
+  {
+    $$ = Ident{}
+  }
+| MATCH FULL
+  {
+    $$ = NewIdent("MATCH FULL", false)
+  }
+| MATCH PARTIAL
+  {
+    $$ = NewIdent("MATCH PARTIAL", false)
+  }
+| MATCH SIMPLE
+  {
+    $$ = NewIdent("MATCH SIMPLE", false)
   }
 
 primary_key_definition:
@@ -5010,6 +5290,18 @@ expression:
 | expression IS is_suffix
   {
     $$ = &IsExpr{Operator: $3, Expr: $1}
+  }
+| expression IS DISTINCT FROM expression %prec IS
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: IsDistinctFromStr, Right: $5}
+  }
+| expression IS NOT DISTINCT FROM expression %prec IS
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: IsNotDistinctFromStr, Right: $6}
+  }
+| expression OVERLAPS expression %prec BETWEEN
+  {
+    $$ = &ComparisonExpr{Left: $1, Operator: OverlapsStr, Right: $3}
   }
 | expression OUTPUT
   {
@@ -6134,6 +6426,28 @@ asc_desc_opt:
     $$ = DescScr
   }
 
+nulls_ordering_opt:
+  {
+    $$ = ""
+  }
+| NULLS FIRST
+  {
+    $$ = NullsFirst
+  }
+| NULLS LAST
+  {
+    $$ = NullsLast
+  }
+
+nulls_not_distinct_opt:
+  {
+    $$ = BoolVal(false)
+  }
+| NULLS NOT DISTINCT
+  {
+    $$ = BoolVal(true)
+  }
+
 limit_opt:
   {
     $$ = nil
@@ -6681,6 +6995,7 @@ reserved_keyword:
 | OR
 | ORDER
 | OUTER
+| OVERLAPS
 | PARTITION
 | PAGLOCK
 | PRIOR
