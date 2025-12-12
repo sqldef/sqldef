@@ -261,7 +261,7 @@ ConstraintQuotedPreservesCase:
   up: |
     ALTER TABLE public.users ADD COLUMN email text UNIQUE;
   down: |
-    ALTER TABLE public.users DROP CONSTRAINT "users_email_key";
+    ALTER TABLE public.users DROP CONSTRAINT users_email_key;
     ALTER TABLE public.users DROP COLUMN email;
 ConstraintUnquotedNormalizesToLowercase:
   legacy_ignore_quotes: false
@@ -272,7 +272,7 @@ ConstraintUnquotedNormalizesToLowercase:
   up: |
     ALTER TABLE public.users ADD COLUMN email text UNIQUE;
   down: |
-    ALTER TABLE public.users DROP CONSTRAINT "users_email_key";
+    ALTER TABLE public.users DROP CONSTRAINT users_email_key;
     ALTER TABLE public.users DROP COLUMN email;
 MixedQuotedAndUnquoted:
   legacy_ignore_quotes: false
@@ -336,7 +336,7 @@ ForeignKeyToQuotedTable:
   up: |
     ALTER TABLE public.orders ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES public."Users" ("UserId");
   down: |
-    ALTER TABLE public.orders DROP CONSTRAINT "fk_user";
+    ALTER TABLE public.orders DROP CONSTRAINT fk_user;
 ForeignKeyWithQuotedConstraintName:
   legacy_ignore_quotes: false
   current: |
@@ -373,8 +373,8 @@ ForeignKeyBetweenQuotedAndUnquotedTables:
     ALTER TABLE public."Orders" ADD CONSTRAINT "fk_quoted" FOREIGN KEY (quoted_user_id) REFERENCES public."Users" ("UserId");
     ALTER TABLE public."Orders" ADD CONSTRAINT fk_unquoted FOREIGN KEY (unquoted_user_id) REFERENCES public.users (id);
   down: |
-    ALTER TABLE public."Orders" DROP CONSTRAINT "fk_quoted";
-    ALTER TABLE public."Orders" DROP CONSTRAINT "fk_unquoted";
+    ALTER TABLE public."Orders" DROP CONSTRAINT fk_quoted;
+    ALTER TABLE public."Orders" DROP CONSTRAINT fk_unquoted;
 ArrayTypeWithQuotedCustomType:
   legacy_ignore_quotes: false
   current: |
@@ -438,12 +438,12 @@ UniqueConstraintQuotedColumns:
     CREATE TABLE users (
       "Email" text,
       "Username" text,
-      CONSTRAINT "unique_email" UNIQUE ("Email")
+      CONSTRAINT unique_email UNIQUE ("Email")
     );
   up: |
-    ALTER TABLE public.users ADD CONSTRAINT "unique_email" UNIQUE ("Email");
+    ALTER TABLE public.users ADD CONSTRAINT unique_email UNIQUE ("Email");
   down: |
-    ALTER TABLE public.users DROP CONSTRAINT "unique_email";
+    ALTER TABLE public.users DROP CONSTRAINT unique_email;
 DropTableQuotedName:
   legacy_ignore_quotes: false
   current: |
@@ -646,7 +646,7 @@ RenameUniqueConstraintQuotedToUnquoted:
     ALTER TABLE public.users DROP CONSTRAINT "Email_Unique";
   down: |
     ALTER TABLE public.users ADD CONSTRAINT "Email_Unique" UNIQUE (email);
-    ALTER TABLE public.users DROP CONSTRAINT "email_unique";
+    ALTER TABLE public.users DROP CONSTRAINT email_unique;
 ForeignKeyMixedQuotedReferences:
   legacy_ignore_quotes: false
   current: |
@@ -672,7 +672,7 @@ ForeignKeyMixedQuotedReferences:
     ALTER TABLE public.products ADD CONSTRAINT fk_unquoted_cat FOREIGN KEY (unquoted_cat_id) REFERENCES public.categories (id);
   down: |
     ALTER TABLE public.products DROP CONSTRAINT "fk_QuotedCat";
-    ALTER TABLE public.products DROP CONSTRAINT "fk_unquoted_cat";
+    ALTER TABLE public.products DROP CONSTRAINT fk_unquoted_cat;
 DropForeignKeyKeepQuotedTable:
   legacy_ignore_quotes: false
   current: |
@@ -1177,7 +1177,7 @@ ForeignKeyUnquotedColumnsNotQuoted:
   up: |
     ALTER TABLE public.orders ADD CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES public.users (id);
   down: |
-    ALTER TABLE public.orders DROP CONSTRAINT "fk_user";
+    ALTER TABLE public.orders DROP CONSTRAINT fk_user;
 ForeignKeyMixedQuotedColumns:
   legacy_ignore_quotes: false
   current: |
@@ -1202,7 +1202,7 @@ ForeignKeyMixedQuotedColumns:
   up: |
     ALTER TABLE public.child ADD CONSTRAINT fk_parent FOREIGN KEY ("ParentId") REFERENCES public.parent ("ParentId");
   down: |
-    ALTER TABLE public.child DROP CONSTRAINT "fk_parent";
+    ALTER TABLE public.child DROP CONSTRAINT fk_parent;
 ForeignKeyQuotedColumnToUnquotedColumn:
   legacy_ignore_quotes: false
   current: |
@@ -1221,7 +1221,7 @@ ForeignKeyQuotedColumnToUnquotedColumn:
   up: |
     ALTER TABLE public.products ADD CONSTRAINT fk_category FOREIGN KEY ("CategoryId") REFERENCES public.categories (category_id);
   down: |
-    ALTER TABLE public.products DROP CONSTRAINT "fk_category";
+    ALTER TABLE public.products DROP CONSTRAINT fk_category;
 ForeignKeyConstraintQuotedLowercaseEqualsUnquoted:
   legacy_ignore_quotes: false
   current: |
@@ -1262,7 +1262,7 @@ ForeignKeyConstraintQuotedMixedCaseDiffersFromUnquoted:
     ALTER TABLE public.orders DROP CONSTRAINT "FK_User";
   down: |
     ALTER TABLE public.orders ADD CONSTRAINT "FK_User" FOREIGN KEY (user_id) REFERENCES public.users (id);
-    ALTER TABLE public.orders DROP CONSTRAINT "fk_user";
+    ALTER TABLE public.orders DROP CONSTRAINT fk_user;
 ForeignKeyRenameQuotedConstraint:
   legacy_ignore_quotes: false
   current: |

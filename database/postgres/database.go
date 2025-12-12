@@ -293,7 +293,7 @@ func (d *PostgresDatabase) schemas() ([]string, error) {
 		}
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE SCHEMA %s;", forceQuoteIdentifier(name),
+				"CREATE SCHEMA %s;", d.quoteIdentifierIfNeeded(name),
 			),
 		)
 	}
@@ -322,7 +322,7 @@ func (d *PostgresDatabase) extensions() ([]string, error) {
 		}
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE EXTENSION %s;", forceQuoteIdentifier(name),
+				"CREATE EXTENSION %s;", d.quoteIdentifierIfNeeded(name),
 			),
 		)
 	}
@@ -1037,8 +1037,8 @@ func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]st
 		}
 
 		result[constraintName] = fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s",
-			forceQuoteIdentifier(schema), forceQuoteIdentifier(table),
-			forceQuoteIdentifier(constraintName), constraintDef,
+			d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table),
+			d.quoteIdentifierIfNeeded(constraintName), constraintDef,
 		)
 	}
 
@@ -1068,7 +1068,10 @@ func (d *PostgresDatabase) getExclusionDefs(tableName string) ([]string, error) 
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s", schema, table, constraintName, constraintDef))
+		result = append(result, fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s",
+			d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table),
+			d.quoteIdentifierIfNeeded(constraintName), constraintDef,
+		))
 	}
 
 	return result, nil
@@ -1226,11 +1229,11 @@ func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 		c := constraints[key]
 		var escapedColumns []string
 		for i := range c.columns {
-			escapedColumns = append(escapedColumns, forceQuoteIdentifier(c.columns[i]))
+			escapedColumns = append(escapedColumns, d.quoteIdentifierIfNeeded(c.columns[i]))
 		}
 		var escapedForeignColumns []string
 		for i := range c.foreignColumns {
-			escapedForeignColumns = append(escapedForeignColumns, forceQuoteIdentifier(c.foreignColumns[i]))
+			escapedForeignColumns = append(escapedForeignColumns, d.quoteIdentifierIfNeeded(c.foreignColumns[i]))
 		}
 		var constraintOptions string
 		if c.deferrable {
@@ -1242,8 +1245,8 @@ func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 		}
 		def := fmt.Sprintf(
 			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s (%s) ON UPDATE %s ON DELETE %s%s",
-			forceQuoteIdentifier(c.tableSchema), forceQuoteIdentifier(c.tableName), forceQuoteIdentifier(c.constraintName), strings.Join(escapedColumns, ", "),
-			forceQuoteIdentifier(c.foreignTableSchema), forceQuoteIdentifier(c.foreignTableName), strings.Join(escapedForeignColumns, ", "), c.foreignUpdateRule, c.foreignDeleteRule,
+			d.quoteIdentifierIfNeeded(c.tableSchema), d.quoteIdentifierIfNeeded(c.tableName), d.quoteIdentifierIfNeeded(c.constraintName), strings.Join(escapedColumns, ", "),
+			d.quoteIdentifierIfNeeded(c.foreignTableSchema), d.quoteIdentifierIfNeeded(c.foreignTableName), strings.Join(escapedForeignColumns, ", "), c.foreignUpdateRule, c.foreignDeleteRule,
 			constraintOptions,
 		)
 		defs = append(defs, def)
@@ -1600,7 +1603,7 @@ func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
 		escapedGrantee := grantee
 		if grantee != "PUBLIC" {
 			// PUBLIC is a special keyword and should not be quoted
-			escapedGrantee = forceQuoteIdentifier(grantee)
+			escapedGrantee = d.quoteIdentifierIfNeeded(grantee)
 		}
 
 		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s", privileges, table, escapedGrantee)
