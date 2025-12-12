@@ -169,12 +169,12 @@ The test name pattern follows the format `TestApply/<TestCaseName>`, where `<Tes
 
 For schema management tests, you typically only need to edit the YAML test files.
 
-The test files use a YAML format where each top-level key is a test case name and the value is a `TestCase` object. A JSON schema is available at `./cmd/testutils/testcase.schema.json` for IDE autocomplete and validation.
+The test files use a YAML format where each top-level key is a test case name and the value is a `TestCase` object. A JSON schema is available at `./testutil/testcase.schema.json` for IDE autocomplete and validation.
 
 Test case fields:
 
 ```yaml
-# yaml-language-server: $schema=../testutils/testcase.schema.json
+# yaml-language-server: $schema=../../testutil/testcase.schema.json
 
 TestCaseName:
   # Current schema state (defaults to empty schema)

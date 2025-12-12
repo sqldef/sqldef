@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../testutils/testcase.schema.json
+# yaml-language-server: $schema=../../testutil/testcase.schema.json
 
 # Test cases to reproduce issues mentioned in the Qiita article
 # https://qiita.com/abe_masanori/items/7fd2a470e7eba2f255a4

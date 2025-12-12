@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../testutils/testcase.schema.json
+# yaml-language-server: $schema=../../testutil/testcase.schema.json
 
 # pgvector Extension Tests
 # These tests require the pgvector extension to be available in PostgreSQL

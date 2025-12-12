@@ -1,6 +1,6 @@
 {
   "yaml.schemas": {
-    "./cmd/testutils/testcase.schema.json": [
+    "./testutil/testcase.schema.json": [
       "cmd/*/tests*.yml",
     ]
   }
