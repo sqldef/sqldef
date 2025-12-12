@@ -122,15 +122,17 @@ func hasNonStandardChars(name string) bool {
 	if strings.ToLower(name) != name {
 		return true
 	}
-	// Check first character: must be letter or underscore for unquoted identifiers
-	first := rune(name[0])
-	if !((first >= 'a' && first <= 'z') || first == '_') {
-		return true
-	}
-	// Check remaining characters: letters, digits, underscores, or $ are allowed
-	for _, r := range name[1:] {
-		if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '$') {
-			return true
+	for i, r := range name {
+		if i == 0 {
+			// First character: must be letter or underscore
+			if !((r >= 'a' && r <= 'z') || r == '_') {
+				return true
+			}
+		} else {
+			// Remaining characters: letters, digits, underscores, or $ are allowed
+			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '$') {
+				return true
+			}
 		}
 	}
 	return false
