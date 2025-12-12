@@ -293,7 +293,7 @@ func (d *PostgresDatabase) schemas() ([]string, error) {
 		}
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE SCHEMA %s;", escapeSQLName(name),
+				"CREATE SCHEMA %s;", forceQuoteIdentifier(name),
 			),
 		)
 	}
@@ -322,7 +322,7 @@ func (d *PostgresDatabase) extensions() ([]string, error) {
 		}
 		ddls = append(
 			ddls, fmt.Sprintf(
-				"CREATE EXTENSION %s;", escapeSQLName(name),
+				"CREATE EXTENSION %s;", forceQuoteIdentifier(name),
 			),
 		)
 	}
@@ -702,17 +702,17 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 			fmt.Fprintf(&queryBuilder, " GENERATED %s AS IDENTITY", col.IdentityGeneration)
 		}
 		if col.Check != nil {
-			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s %s", d.escapeConstraintName(col.Check.name), col.Check.definition)
+			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s %s", d.quoteIdent(col.Check.name), col.Check.definition)
 		}
 	}
 	if len(components.PrimaryKeyCols) > 0 {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", d.escapeConstraintName(components.PrimaryKeyName), strings.Join(components.PrimaryKeyCols, "\", \""))
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", d.quoteIdent(components.PrimaryKeyName), strings.Join(components.PrimaryKeyCols, "\", \""))
 	}
 
 	for _, check := range components.CheckConstraints {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", d.escapeConstraintName(check.Name), check.Definition)
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s %s", d.quoteIdent(check.Name), check.Definition)
 	}
 
 	fmt.Fprintf(&queryBuilder, "\n);\n")
@@ -1037,8 +1037,8 @@ func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]st
 		}
 
 		result[constraintName] = fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s",
-			escapeSQLName(schema), escapeSQLName(table),
-			escapeSQLName(constraintName), constraintDef,
+			forceQuoteIdentifier(schema), forceQuoteIdentifier(table),
+			forceQuoteIdentifier(constraintName), constraintDef,
 		)
 	}
 
@@ -1104,7 +1104,7 @@ WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$
 
 func (d *PostgresDatabase) getPrimaryKeyName(table string) (Ident, error) {
 	schema, table := splitTableName(table, d.GetDefaultSchema())
-	tableWithSchema := fmt.Sprintf("%s.%s", escapeSQLName(schema), escapeSQLName(table))
+	tableWithSchema := fmt.Sprintf("%s.%s", forceQuoteIdentifier(schema), forceQuoteIdentifier(table))
 	query := fmt.Sprintf(`
 		SELECT conname
 		FROM pg_constraint
@@ -1226,11 +1226,11 @@ func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 		c := constraints[key]
 		var escapedColumns []string
 		for i := range c.columns {
-			escapedColumns = append(escapedColumns, escapeSQLName(c.columns[i]))
+			escapedColumns = append(escapedColumns, forceQuoteIdentifier(c.columns[i]))
 		}
 		var escapedForeignColumns []string
 		for i := range c.foreignColumns {
-			escapedForeignColumns = append(escapedForeignColumns, escapeSQLName(c.foreignColumns[i]))
+			escapedForeignColumns = append(escapedForeignColumns, forceQuoteIdentifier(c.foreignColumns[i]))
 		}
 		var constraintOptions string
 		if c.deferrable {
@@ -1242,8 +1242,8 @@ func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 		}
 		def := fmt.Sprintf(
 			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s (%s) ON UPDATE %s ON DELETE %s%s",
-			escapeSQLName(c.tableSchema), escapeSQLName(c.tableName), escapeSQLName(c.constraintName), strings.Join(escapedColumns, ", "),
-			escapeSQLName(c.foreignTableSchema), escapeSQLName(c.foreignTableName), strings.Join(escapedForeignColumns, ", "), c.foreignUpdateRule, c.foreignDeleteRule,
+			forceQuoteIdentifier(c.tableSchema), forceQuoteIdentifier(c.tableName), forceQuoteIdentifier(c.constraintName), strings.Join(escapedColumns, ", "),
+			forceQuoteIdentifier(c.foreignTableSchema), forceQuoteIdentifier(c.foreignTableName), strings.Join(escapedForeignColumns, ", "), c.foreignUpdateRule, c.foreignDeleteRule,
 			constraintOptions,
 		)
 		defs = append(defs, def)
@@ -1468,19 +1468,19 @@ func postgresBuildDSN(config database.Config) string {
 	return fmt.Sprintf("postgres://%s:%s@%s/%s?%s", url.QueryEscape(user), url.QueryEscape(password), host, database, strings.Join(options, "&"))
 }
 
-func escapeSQLName(name string) string {
+func forceQuoteIdentifier(name string) string {
 	return fmt.Sprintf("\"%s\"", name)
 }
 
-// escapeConstraintName quotes a constraint name for DDL output.
+// quoteIdent quotes a constraint name for DDL output.
 // In legacy mode (LegacyIgnoreQuotes=true): don't quote (original behavior).
 // In quote-aware mode (LegacyIgnoreQuotes=false): respect the Ident's Quoted field.
-func (d *PostgresDatabase) escapeConstraintName(ident Ident) string {
+func (d *PostgresDatabase) quoteIdent(ident Ident) string {
 	if d.generatorConfig.LegacyIgnoreQuotes {
 		return ident.Name
 	}
 	if ident.Quoted {
-		return escapeSQLName(ident.Name)
+		return forceQuoteIdentifier(ident.Name)
 	}
 	return ident.Name
 }
@@ -1490,10 +1490,10 @@ func (d *PostgresDatabase) escapeConstraintName(ident Ident) string {
 // In quote-aware mode: quote only when necessary (non-standard chars or keywords).
 func (d *PostgresDatabase) quoteIdentifierIfNeeded(name string) string {
 	if d.generatorConfig.LegacyIgnoreQuotes {
-		return escapeSQLName(name)
+		return forceQuoteIdentifier(name)
 	}
 	if database.NeedsQuoting(name) {
-		return escapeSQLName(name)
+		return forceQuoteIdentifier(name)
 	}
 	return name
 }
@@ -1600,7 +1600,7 @@ func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
 		escapedGrantee := grantee
 		if grantee != "PUBLIC" {
 			// PUBLIC is a special keyword and should not be quoted
-			escapedGrantee = escapeSQLName(grantee)
+			escapedGrantee = forceQuoteIdentifier(grantee)
 		}
 
 		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s", privileges, table, escapedGrantee)
