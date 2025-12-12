@@ -1496,6 +1496,9 @@ CheckConstraintWithBetween:
       score integer CHECK (score BETWEEN 0 AND 100)
     );
 CheckConstraintWithOverlaps:
+  # PostgreSQL 13 converts OVERLAPS operator to "overlaps"() function call with type casts
+  # making idempotency impossible. PostgreSQL 14+ preserves the operator syntax.
+  min_version: "14"
   desired: |
     CREATE TABLE bookings (
       start_date date NOT NULL,

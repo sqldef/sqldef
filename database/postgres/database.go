@@ -975,10 +975,6 @@ func normalizePostgresTypeCasts(sql string) string {
 	re = regexp.MustCompile(`'([^']+)'::timestamp without time zone`)
 	sql = re.ReplaceAllString(sql, "timestamp '$1'")
 
-	// For with time zone variants, keep as cast since TypedLiteral doesn't support them well
-	sql = strings.ReplaceAll(sql, "::timestamp with time zone", "::timestamptz")
-	sql = strings.ReplaceAll(sql, "::time with time zone", "::timetz")
-
 	return sql
 }
 
