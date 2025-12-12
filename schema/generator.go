@@ -51,6 +51,10 @@ type Generator struct {
 	// Track tables that have been dropped to skip COMMENT cleanup for them
 	droppedTables map[string]bool
 
+	// Map index names to their owning tables (for comment cleanup after table drops)
+	// Key is "schema.index_name", value is the table's QualifiedName
+	indexToTable map[string]QualifiedName
+
 	desiredComments []*Comment
 	currentComments []*Comment
 
@@ -132,7 +136,10 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		config:             config,
 		handledForeignKeys: make(map[string]bool),
 		droppedTables:      make(map[string]bool),
+		indexToTable:       make(map[string]QualifiedName),
 	}
+	// Build index-to-table mapping before any tables are dropped
+	generator.buildIndexToTableMap()
 	return generator.generateDDLs(desiredDDLs)
 }
 
@@ -157,6 +164,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	createSchemaDDLs := []string{}
 	interDDLs := []string{}
 	indexDDLs := []string{}
+	indexCommentDDLs := []string{} // Comments on indexes must come after CREATE INDEX
 	foreignKeyDDLs := []string{}
 	exclusionDDLs := []string{}
 	viewDDLs := []string{}
@@ -288,7 +296,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			interDDLs = append(interDDLs, commentDDLs...)
+			// Index comments must come after CREATE INDEX statements
+			if desired.comment.ObjectType == "OBJECT_INDEX" {
+				indexCommentDDLs = append(indexCommentDDLs, commentDDLs...)
+			} else {
+				interDDLs = append(interDDLs, commentDDLs...)
+			}
 		case *Extension:
 			extensionDDLs, err := g.generateDDLsForExtension(desired)
 			if err != nil {
@@ -324,6 +337,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	ddls = append(ddls, interDDLs...)
 	ddls = append(ddls, viewDDLs...)
 	ddls = append(ddls, indexDDLs...)
+	ddls = append(ddls, indexCommentDDLs...) // Index comments must come after CREATE INDEX
 	ddls = append(ddls, foreignKeyDDLs...)
 	ddls = append(ddls, exclusionDDLs...)
 
@@ -4069,6 +4083,9 @@ func (g *Generator) findDomainByName(domains []*Domain, name QualifiedName) *Dom
 func (g *Generator) findCommentByObject(comments []*Comment, targetComment *parser.Comment) *Comment {
 	normalizedTarget := normalizeCommentObject(targetComment, g.mode, g.defaultSchema)
 	for _, comment := range comments {
+		if comment.comment.ObjectType != targetComment.ObjectType {
+			continue
+		}
 		normalizedCandidate := normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema)
 		if g.identsSliceEqual(normalizedCandidate, normalizedTarget) {
 			return comment
@@ -4084,30 +4101,100 @@ func (g *Generator) isCommentOnDroppedTable(comment *Comment) bool {
 	objectType := comment.comment.ObjectType
 	object := comment.comment.Object
 
-	// Extract table qualified name from the comment object
-	// OBJECT_TABLE: object = [schema, table]
-	// OBJECT_COLUMN: object = [schema, table, column]
+	// Extract table qualified name based on object type
+	// Different object types have different structures:
+	// - OBJECT_TABLE: [schema, table]
+	// - OBJECT_COLUMN: [schema, table, column]
+	// - OBJECT_CONSTRAINT: [constraint, schema, table]
+	// - OBJECT_TRIGGER: [trigger, schema, table]
+	// - OBJECT_INDEX: [schema, index] - need to look up table from index
+	var tableName QualifiedName
+
 	switch objectType {
 	case "OBJECT_TABLE", "OBJECT_COLUMN":
-		// Both types have [schema, table, ...] structure
+		// Structure: [schema, table, ...] or [table, ...]
+		if len(object) >= 2 {
+			tableName = QualifiedName{
+				Schema: object[0],
+				Name:   object[1],
+			}
+		} else if len(object) == 1 {
+			tableName = QualifiedName{
+				Schema: parser.NewIdent(g.defaultSchema, false),
+				Name:   object[0],
+			}
+		}
+
+	case "OBJECT_CONSTRAINT", "OBJECT_TRIGGER":
+		// Structure: [name, schema, table] or [name, table]
+		if len(object) >= 3 {
+			tableName = QualifiedName{
+				Schema: object[1],
+				Name:   object[2],
+			}
+		} else if len(object) == 2 {
+			tableName = QualifiedName{
+				Schema: parser.NewIdent(g.defaultSchema, false),
+				Name:   object[1],
+			}
+		}
+
+	case "OBJECT_INDEX":
+		// Structure: [schema, index] or [index]
+		// Need to find which table this index belongs to
+		tableName = g.findTableForIndex(object)
+
 	default:
 		return false
 	}
 
-	var tableName QualifiedName
-	if len(object) >= 2 {
-		tableName = QualifiedName{
-			Schema: object[0],
-			Name:   object[1],
-		}
-	} else if len(object) == 1 {
-		tableName = QualifiedName{
-			Schema: parser.NewIdent(g.defaultSchema, false),
-			Name:   object[0],
-		}
+	if tableName.IsEmpty() {
+		return false
 	}
 
 	return g.droppedTables[tableName.RawString()]
+}
+
+// buildIndexToTableMap builds a mapping from index names to their owning tables.
+// This must be called before any tables are dropped, as it uses currentTables.
+func (g *Generator) buildIndexToTableMap() {
+	for _, table := range g.currentTables {
+		tableSchema := table.name.Schema
+		if tableSchema.IsEmpty() {
+			tableSchema = parser.NewIdent(g.defaultSchema, false)
+		}
+
+		for _, idx := range table.indexes {
+			key := g.indexMapKey(tableSchema, idx.name)
+			g.indexToTable[key] = table.name
+		}
+	}
+}
+
+// findTableForIndex finds the table that owns the given index.
+// object is [schema, index] or [index] from an OBJECT_INDEX comment.
+// Returns empty QualifiedName if the index is not found.
+func (g *Generator) findTableForIndex(object []Ident) QualifiedName {
+	var indexSchema, indexName Ident
+	if len(object) >= 2 {
+		indexSchema = object[0]
+		indexName = object[1]
+	} else if len(object) == 1 {
+		indexSchema = parser.NewIdent(g.defaultSchema, false)
+		indexName = object[0]
+	} else {
+		return QualifiedName{}
+	}
+
+	key := g.indexMapKey(indexSchema, indexName)
+	return g.indexToTable[key]
+}
+
+// indexMapKey generates a map key for index lookup using quote-aware normalization.
+func (g *Generator) indexMapKey(schema, name Ident) string {
+	schemaKey := normalizeIdentKey(schema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	nameKey := normalizeIdentKey(name, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	return schemaKey + "." + nameKey
 }
 
 // identsSliceEqual compares two []Ident slices for equality using quote-aware comparison.

@@ -333,3 +333,82 @@ CommentOnConstraintWithDotInName:
     COMMENT ON CONSTRAINT "my.constraint" ON public.test IS 'Constraint with dot in name';
   down: |
     COMMENT ON CONSTRAINT "my.constraint" ON public.test IS NULL;
+
+# Test that comments on different object types with the same name are handled correctly.
+# This tests the fix for findCommentByObject which must check ObjectType, not just Object name.
+CommentOnDifferentObjectTypesWithSameName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE test (id integer);
+    CREATE INDEX foo ON test (id);
+    CREATE TYPE foo AS ENUM ('a', 'b');
+    COMMENT ON INDEX foo IS 'index comment';
+    COMMENT ON TYPE foo IS 'type comment';
+  desired: |
+    CREATE TABLE test (id integer);
+    CREATE INDEX foo ON test (id);
+    CREATE TYPE foo AS ENUM ('a', 'b');
+    COMMENT ON INDEX foo IS 'index comment';
+    COMMENT ON TYPE foo IS 'updated type comment';
+  up: |
+    COMMENT ON TYPE public.foo IS 'updated type comment';
+  down: |
+    COMMENT ON TYPE public.foo IS 'type comment';
+
+# Test that constraint comments are not cleaned up when the table is dropped.
+# PostgreSQL automatically removes constraint comments when the table is dropped.
+DropTableWithConstraintComment:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE test (
+      id integer,
+      CONSTRAINT test_check CHECK (id > 0)
+    );
+    COMMENT ON CONSTRAINT test_check ON test IS 'Check constraint comment';
+  desired: ""
+  up: |
+    DROP TABLE public.test;
+  down: |
+    CREATE TABLE test (
+      id integer,
+      CONSTRAINT test_check CHECK (id > 0)
+    );
+    COMMENT ON CONSTRAINT test_check ON public.test IS 'Check constraint comment';
+
+# Test that index comments are not cleaned up when the table is dropped.
+# PostgreSQL automatically removes index comments when the table is dropped.
+DropTableWithIndexComment:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE test (id integer);
+    CREATE INDEX idx_test ON test (id);
+    COMMENT ON INDEX idx_test IS 'Index comment';
+  desired: ""
+  up: |
+    DROP TABLE public.test;
+  down: |
+    CREATE TABLE test (id integer);
+    CREATE INDEX idx_test ON public.test (id);
+    COMMENT ON INDEX public.idx_test IS 'Index comment';
+
+# Test that quoted index names are handled correctly when dropping tables.
+# "MyIndex" (quoted) and myindex (unquoted) are different indexes in PostgreSQL.
+DropTableWithQuotedIndexComment:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE test1 (id integer);
+    CREATE INDEX "MyIndex" ON test1 (id);
+    COMMENT ON INDEX "MyIndex" IS 'Quoted index comment';
+    CREATE TABLE test2 (id integer);
+    CREATE INDEX myindex ON test2 (id);
+    COMMENT ON INDEX myindex IS 'Unquoted index comment';
+  desired: |
+    CREATE TABLE test2 (id integer);
+    CREATE INDEX myindex ON test2 (id);
+    COMMENT ON INDEX myindex IS 'Unquoted index comment';
+  up: |
+    DROP TABLE public.test1;
+  down: |
+    CREATE TABLE test1 (id integer);
+    CREATE INDEX "MyIndex" ON public.test1 (id);
+    COMMENT ON INDEX public."MyIndex" IS 'Quoted index comment';
