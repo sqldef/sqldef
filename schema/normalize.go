@@ -815,6 +815,32 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			return normalizeExpr(e.Value, mode)
 		}
 		return expr
+	case *parser.CubeExpr:
+		normalizedExprs := make(parser.Exprs, len(e.Exprs))
+		for i, expr := range e.Exprs {
+			normalizedExprs[i] = normalizeExpr(expr, mode)
+		}
+		return &parser.CubeExpr{Exprs: normalizedExprs}
+	case *parser.RollupExpr:
+		normalizedExprs := make(parser.Exprs, len(e.Exprs))
+		for i, expr := range e.Exprs {
+			normalizedExprs[i] = normalizeExpr(expr, mode)
+		}
+		return &parser.RollupExpr{Exprs: normalizedExprs}
+	case *parser.GroupingSetsExpr:
+		normalizedSets := make([]parser.Exprs, len(e.Sets))
+		for i, set := range e.Sets {
+			if set == nil {
+				normalizedSets[i] = nil
+			} else {
+				normalizedExprs := make(parser.Exprs, len(set))
+				for j, expr := range set {
+					normalizedExprs[j] = normalizeExpr(expr, mode)
+				}
+				normalizedSets[i] = normalizedExprs
+			}
+		}
+		return &parser.GroupingSetsExpr{Sets: normalizedSets}
 	default:
 		// For literals and other types, return as-is
 		return expr
@@ -838,6 +864,16 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 		// For PostgreSQL, strip automatic aliases like ?column?
 		if mode == GeneratorModePostgres && as.Name == "?column?" {
 			as = parser.NewIdent("", false)
+		}
+		// For PostgreSQL, strip automatic aliases that match the function name
+		// PostgreSQL adds "sum(x) as sum", "count(*) as count", etc.
+		if mode == GeneratorModePostgres && !as.IsEmpty() {
+			if funcExpr, ok := e.Expr.(*parser.FuncExpr); ok {
+				if strings.EqualFold(funcExpr.Name.Name, as.Name) {
+					// The alias is the same as the function name, strip it
+					as = parser.NewIdent("", false)
+				}
+			}
 		}
 		// For MySQL, strip redundant aliases where the alias matches the column name
 		// MySQL adds "column_name as column_name" which is redundant
@@ -889,12 +925,20 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode) parser.TableE
 				}
 			}
 		}
+		// Normalize subqueries within table expressions
+		if subquery, ok := e.Expr.(*parser.Subquery); ok {
+			normalizedExpr = &parser.Subquery{
+				Select: normalizeViewDefinition(subquery.Select, mode, nil),
+			}
+		}
 		return &parser.AliasedTableExpr{
-			Expr:       normalizedExpr,
-			Partitions: e.Partitions,
-			As:         e.As,
-			TableHints: e.TableHints,
-			IndexHints: e.IndexHints,
+			Lateral:     e.Lateral,
+			Expr:        normalizedExpr,
+			Partitions:  e.Partitions,
+			As:          e.As,
+			TableHints:  e.TableHints,
+			IndexHints:  e.IndexHints,
+			TableSample: e.TableSample,
 		}
 	case *parser.JoinTableExpr:
 		return &parser.JoinTableExpr{

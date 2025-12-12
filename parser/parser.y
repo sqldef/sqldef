@@ -131,6 +131,7 @@ func setDDL(yylex any, ddl *DDL) {
   }
   functionArg              FunctionArg
   functionArgs             []FunctionArg
+  exprsList                []Exprs
 }
 
 %token LEX_ERROR
@@ -249,6 +250,9 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> DEFERRABLE INITIALLY IMMEDIATE DEFERRED
 %token <str> CONCURRENTLY ASYNC
 %token <str> NULLS
+%token <str> FILTER WITHIN LATERAL
+%token <str> TABLESAMPLE BERNOULLI SYSTEM
+%token <str> CUBE ROLLUP GROUPING SETS
 %token <str> SQL SECURITY
 %token <str> RECURSIVE
 %token <str> IMMUTABLE STABLE VOLATILE SETOF
@@ -377,7 +381,9 @@ func setDDL(yylex any, ddl *DDL) {
 %type <whens> when_expression_list
 %type <when> when_expression
 %type <expr> expression_opt else_expression_opt
-%type <exprs> group_by_opt
+%type <exprs> group_by_opt group_by_list grouping_set
+%type <expr> group_by_element
+%type <exprsList> grouping_set_list
 %type <expr> having_opt
 %type <orderBy> order_by_opt order_list
 %type <order> order
@@ -5004,6 +5010,10 @@ table_factor:
   {
     $$ = &AliasedTableExpr{Expr:$1, As: $3}
   }
+| LATERAL subquery as_opt table_id
+  {
+    $$ = &AliasedTableExpr{Lateral: true, Expr:$2, As: $4}
+  }
 | '(' table_references ')'
   {
     $$ = &ParenTableExpr{Exprs: $2}
@@ -5066,6 +5076,14 @@ aliased_table_name:
   table_name as_opt_id index_hint_list table_hint_opt
   {
     $$ = &AliasedTableExpr{Expr:$1, As: $2, IndexHints: $3, TableHints: $4}
+  }
+| table_name TABLESAMPLE BERNOULLI '(' expression ')' as_opt_id
+  {
+    $$ = &AliasedTableExpr{Expr:$1, TableSample: &TableSample{Method: "bernoulli", Percent: $5}, As: $7}
+  }
+| table_name TABLESAMPLE SYSTEM '(' expression ')' as_opt_id
+  {
+    $$ = &AliasedTableExpr{Expr:$1, TableSample: &TableSample{Method: "system", Percent: $5}, As: $7}
   }
 | table_name PARTITION '(' partition_list ')' as_opt_id index_hint_list table_hint_opt
   {
@@ -5745,6 +5763,14 @@ function_call_generic:
   {
     $$ = &FuncExpr{Name: $1, Exprs: $3, Over: $5}
   }
+| sql_id '(' select_expression_list ')' FILTER '(' WHERE expression ')' over_expression
+  {
+    $$ = &FuncExpr{Name: $1, Exprs: $3, Filter: &Where{Type: WhereStr, Expr: $8}, Over: $10}
+  }
+| sql_id '(' select_expression_list ')' WITHIN GROUP '(' ORDER BY order_list ')' over_expression
+  {
+    $$ = &FuncExpr{Name: $1, Exprs: $3, WithinGroup: $10, Over: $12}
+  }
 | LAG '(' select_expression_list ')' over_expression
   {
     $$ = &FuncExpr{Name: NewIdent($1, false), Exprs: $3, Over: $5}
@@ -6358,9 +6384,57 @@ group_by_opt:
   {
     $$ = nil
   }
-| GROUP BY expression_list
+| GROUP BY group_by_list
   {
     $$ = $3
+  }
+
+group_by_list:
+  group_by_element
+  {
+    $$ = Exprs{$1}
+  }
+| group_by_list ',' group_by_element
+  {
+    $$ = append($1, $3)
+  }
+
+group_by_element:
+  expression
+  {
+    $$ = $1
+  }
+| CUBE '(' expression_list ')'
+  {
+    $$ = &CubeExpr{Exprs: $3}
+  }
+| ROLLUP '(' expression_list ')'
+  {
+    $$ = &RollupExpr{Exprs: $3}
+  }
+| GROUPING SETS '(' grouping_set_list ')'
+  {
+    $$ = &GroupingSetsExpr{Sets: $4}
+  }
+
+grouping_set_list:
+  grouping_set
+  {
+    $$ = []Exprs{$1}
+  }
+| grouping_set_list ',' grouping_set
+  {
+    $$ = append($1, $3)
+  }
+
+grouping_set:
+  '(' ')'
+  {
+    $$ = nil
+  }
+| '(' expression_list ')'
+  {
+    $$ = $2
   }
 
 having_opt:
@@ -6408,9 +6482,9 @@ order_list:
   }
 
 order:
-  expression asc_desc_opt
+  expression asc_desc_opt nulls_ordering_opt
   {
-    $$ = &Order{Expr: $1, Direction: $2}
+    $$ = &Order{Expr: $1, Direction: $2, NullsOrdering: $3}
   }
 
 asc_desc_opt:

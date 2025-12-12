@@ -1384,20 +1384,39 @@ func (*AliasedTableExpr) iTableExpr() {}
 func (*ParenTableExpr) iTableExpr()   {}
 func (*JoinTableExpr) iTableExpr()    {}
 
+// TableSample represents a TABLESAMPLE clause.
+type TableSample struct {
+	Method  string // "bernoulli" or "system"
+	Percent Expr
+}
+
+// Format formats the node.
+func (node *TableSample) Format(buf *nodeBuffer) {
+	buf.Printf(" tablesample %s(%v)", node.Method, node.Percent)
+}
+
 // AliasedTableExpr represents a table expression
 // coupled with an optional alias or index hint.
 // If As is empty, no alias was used.
 type AliasedTableExpr struct {
-	Expr       SimpleTableExpr
-	Partitions Partitions
-	As         Ident
-	TableHints []string
-	IndexHints *IndexHints
+	Lateral     bool
+	Expr        SimpleTableExpr
+	Partitions  Partitions
+	As          Ident
+	TableHints  []string
+	IndexHints  *IndexHints
+	TableSample *TableSample
 }
 
 // Format formats the node.
 func (node *AliasedTableExpr) Format(buf *nodeBuffer) {
+	if node.Lateral {
+		buf.Printf("lateral ")
+	}
 	buf.Printf("%v%v", node.Expr, node.Partitions)
+	if node.TableSample != nil {
+		buf.Printf("%v", node.TableSample)
+	}
 	if !node.As.IsEmpty() {
 		buf.Printf(" as %v", node.As)
 	}
@@ -2096,11 +2115,13 @@ func (node *CollateExpr) Format(buf *nodeBuffer) {
 
 // FuncExpr represents a function call that takes SelectExprs.
 type FuncExpr struct {
-	Qualifier Ident
-	Name      Ident
-	Distinct  bool
-	Exprs     SelectExprs
-	Over      *OverExpr
+	Qualifier   Ident
+	Name        Ident
+	Distinct    bool
+	Exprs       SelectExprs
+	Filter      *Where  // FILTER (WHERE ...)
+	WithinGroup OrderBy // WITHIN GROUP (ORDER BY ...)
+	Over        *OverExpr
 }
 
 // Format formats the node.
@@ -2115,7 +2136,14 @@ func (node *FuncExpr) Format(buf *nodeBuffer) {
 	// Function names should not be back-quoted even
 	// if they match a reserved word. So, print the
 	// name as is.
-	buf.Printf("%s(%s%v)%v", node.Name.Name, distinct, node.Exprs, node.Over)
+	buf.Printf("%s(%s%v)", node.Name.Name, distinct, node.Exprs)
+	if node.Filter != nil {
+		buf.Printf(" filter(%v)", node.Filter)
+	}
+	if node.WithinGroup != nil {
+		buf.Printf(" within group (%v)", node.WithinGroup)
+	}
+	buf.Printf("%v", node.Over)
 }
 
 // FuncCallExpr represents a function call that takes Exprs.
@@ -2379,6 +2407,68 @@ func (node GroupBy) Format(buf *nodeBuffer) {
 	}
 }
 
+// CubeExpr represents a CUBE(...) expression in GROUP BY.
+type CubeExpr struct {
+	Exprs Exprs
+}
+
+// Format formats the node.
+func (node *CubeExpr) Format(buf *nodeBuffer) {
+	buf.Printf("cube (")
+	prefix := ""
+	for _, e := range node.Exprs {
+		buf.Printf("%s%v", prefix, e)
+		prefix = ", "
+	}
+	buf.Printf(")")
+}
+
+func (*CubeExpr) iExpr() {}
+
+// RollupExpr represents a ROLLUP(...) expression in GROUP BY.
+type RollupExpr struct {
+	Exprs Exprs
+}
+
+// Format formats the node.
+func (node *RollupExpr) Format(buf *nodeBuffer) {
+	buf.Printf("rollup (")
+	prefix := ""
+	for _, e := range node.Exprs {
+		buf.Printf("%s%v", prefix, e)
+		prefix = ", "
+	}
+	buf.Printf(")")
+}
+
+func (*RollupExpr) iExpr() {}
+
+// GroupingSetsExpr represents a GROUPING SETS(...) expression in GROUP BY.
+type GroupingSetsExpr struct {
+	Sets []Exprs // Each set is a list of expressions (can be empty for "()")
+}
+
+// Format formats the node.
+func (node *GroupingSetsExpr) Format(buf *nodeBuffer) {
+	buf.Printf("grouping sets (")
+	for i, set := range node.Sets {
+		if i > 0 {
+			buf.Printf(", ")
+		}
+		buf.Printf("(")
+		for j, e := range set {
+			if j > 0 {
+				buf.Printf(", ")
+			}
+			buf.Printf("%v", e)
+		}
+		buf.Printf(")")
+	}
+	buf.Printf(")")
+}
+
+func (*GroupingSetsExpr) iExpr() {}
+
 // OrderBy represents an ORDER By clause.
 type OrderBy []*Order
 
@@ -2393,8 +2483,9 @@ func (node OrderBy) Format(buf *nodeBuffer) {
 
 // Order represents an ordering expression.
 type Order struct {
-	Expr      Expr
-	Direction string
+	Expr          Expr
+	Direction     string
+	NullsOrdering string // "" or "first" or "last"
 }
 
 // Order.Direction and IndexColumn.Direction
@@ -2423,6 +2514,9 @@ func (node *Order) Format(buf *nodeBuffer) {
 	}
 
 	buf.Printf("%v %s", node.Expr, node.Direction)
+	if node.NullsOrdering != "" {
+		buf.Printf(" nulls %s", node.NullsOrdering)
+	}
 }
 
 // PartitionBy represents a PARTITION BY clause.

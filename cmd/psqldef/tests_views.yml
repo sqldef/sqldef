@@ -608,7 +608,6 @@ ViewWithMultipleCTEsAndPostgreSQLFunctions:
     FROM release_dates rd
     LEFT JOIN event_counts ec ON rd.product_id = ec.product_id;
 
-# View with WINDOW function (OVER clause)
 ViewWithWindowFunction:
   legacy_ignore_quotes: false
   desired: |
@@ -618,7 +617,6 @@ ViewWithWindowFunction:
            SUM(amount) OVER (ORDER BY sale_date) AS running_total
     FROM sales;
 
-# View with WINDOW function and PARTITION BY
 ViewWithWindowPartition:
   legacy_ignore_quotes: false
   desired: |
@@ -628,7 +626,6 @@ ViewWithWindowPartition:
            SUM(amount) OVER (PARTITION BY category ORDER BY sale_date) AS running_total
     FROM sales;
 
-# View with JSON -> and ->> operators
 ViewWithJsonOperators:
   legacy_ignore_quotes: false
   desired: |
@@ -636,3 +633,72 @@ ViewWithJsonOperators:
     CREATE VIEW json_view AS
     SELECT id, data -> 'name' AS name, data ->> 'email' AS email
     FROM json_data;
+
+ViewWithLateralJoin:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (id integer, customer_id integer, total numeric);
+    CREATE VIEW top_orders AS
+    SELECT c.id, t.total
+    FROM (SELECT DISTINCT customer_id as id FROM orders) as c,
+    LATERAL (SELECT total FROM orders WHERE customer_id = c.id ORDER BY total DESC LIMIT 1) as t;
+
+ViewWithNullsOrdering:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE items (id integer, priority integer);
+    CREATE VIEW items_ordered AS
+    SELECT * FROM items ORDER BY priority NULLS LAST;
+
+ViewWithFilterClause:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE sales (id integer, status text, amount numeric);
+    CREATE VIEW sales_summary AS
+    SELECT
+      COUNT(*) AS total_count,
+      COUNT(*) FILTER (WHERE status = 'completed') AS completed_count
+    FROM sales;
+
+ViewWithWithinGroup:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE measurements (val numeric);
+    CREATE VIEW measurement_stats AS
+    SELECT
+      percentile_cont(0.5) WITHIN GROUP (ORDER BY val) AS median
+    FROM measurements;
+
+ViewWithGroupingSets:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE sales (region text, product text, amount numeric);
+    CREATE VIEW sales_grouping AS
+    SELECT region, product, SUM(amount)
+    FROM sales
+    GROUP BY GROUPING SETS ((region), (product), ());
+
+ViewWithCube:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE sales (region text, product text, amount numeric);
+    CREATE VIEW sales_cube AS
+    SELECT region, product, SUM(amount)
+    FROM sales
+    GROUP BY CUBE (region, product);
+
+ViewWithRollup:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE sales (region text, product text, amount numeric);
+    CREATE VIEW sales_rollup AS
+    SELECT region, product, SUM(amount)
+    FROM sales
+    GROUP BY ROLLUP (region, product);
+
+ViewWithTableSample:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE large_data (id integer, data text);
+    CREATE VIEW sampled_data AS
+    SELECT * FROM large_data TABLESAMPLE BERNOULLI (10);
