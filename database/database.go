@@ -87,17 +87,34 @@ var NewIdent = parser.NewIdent
 //     This is correct because in PostgreSQL, "users" (quoted lowercase) and users
 //     (unquoted) are semantically equivalent and can be referenced interchangeably.
 //
+// Note: This does NOT check for reserved keywords. Keywords are handled separately
+// at DDL output time because:
+//   - The Quoted flag represents whether quoting is needed to preserve the identifier's form
+//   - Keyword escaping is a SQL syntax requirement, not an identifier property
+//
 // Use this for identifiers from the database or auto-generated constraint names.
 func NewIdentWithQuoteDetected(name string) Ident {
-	return Ident{Name: name, Quoted: NeedsQuoting(name)}
+	return Ident{Name: name, Quoted: hasNonStandardChars(name)}
 }
 
-// NeedsQuoting returns true if an identifier needs to be quoted in SQL.
-// An identifier needs quoting if it:
-//   - contains uppercase letters (PostgreSQL folds unquoted to lowercase)
-//   - contains special characters that aren't allowed in unquoted identifiers
-//   - doesn't start with a letter or underscore
+// NeedsQuoting returns true if an identifier needs to be quoted in SQL output.
+// This is the complete check for DDL generation, combining:
+//   - Non-standard characters (uppercase, special chars, invalid start)
+//   - Reserved keywords
+//
+// Use this when generating SQL output to determine if quoting is required.
 func NeedsQuoting(name string) bool {
+	return hasNonStandardChars(name) || parser.IsKeyword(name)
+}
+
+// hasNonStandardChars returns true if an identifier contains characters
+// that require quoting to preserve the identifier's form. This checks:
+//   - Uppercase letters (PostgreSQL folds unquoted to lowercase)
+//   - Special characters that aren't allowed in unquoted identifiers
+//   - Invalid first character (must be letter or underscore)
+//
+// This does NOT check for reserved keywords - use NeedsQuoting for that.
+func hasNonStandardChars(name string) bool {
 	if name == "" {
 		return false
 	}
