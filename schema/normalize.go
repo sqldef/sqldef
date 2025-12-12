@@ -1030,7 +1030,7 @@ func normalizeWith(with *parser.With, mode GeneratorMode) *parser.With {
 		normalizedCTEs[i] = &parser.CommonTableExpr{
 			Name:       cte.Name,
 			Columns:    cte.Columns,
-			Definition: normalizeViewDefinition(cte.Definition, mode),
+			Definition: normalizeViewDefinition(cte.Definition, mode, nil),
 		}
 	}
 
@@ -1040,21 +1040,36 @@ func normalizeWith(with *parser.With, mode GeneratorMode) *parser.With {
 	}
 }
 
+// TableLookupFunc is a function type for looking up a table by name.
+// Used by normalizeViewDefinition to expand SELECT * expressions.
+type TableLookupFunc func(name QualifiedName) *Table
+
 // normalizeViewDefinition normalizes a view definition AST for comparison.
 // This function removes database-specific formatting differences that don't affect the logical meaning.
-func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode) parser.SelectStatement {
+// If tableLookup is provided, SELECT * expressions are expanded to explicit column names
+// (PostgreSQL expands * when storing view definitions).
+func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode, tableLookup TableLookupFunc) parser.SelectStatement {
 	if stmt == nil {
 		return nil
 	}
 
 	switch s := stmt.(type) {
 	case *parser.Select:
+		selectExprs := s.SelectExprs
+		// Expand SELECT * if we have table lookup capability
+		if tableLookup != nil && hasStarExpr(selectExprs) {
+			if tableName := extractTableNameFromFrom(s.From); !tableName.IsEmpty() {
+				if table := tableLookup(tableName); table != nil {
+					selectExprs = expandStarExpr(selectExprs, table)
+				}
+			}
+		}
 		return &parser.Select{
 			Cache:       s.Cache,
 			Comments:    nil, // Remove comments for view comparison - they don't affect semantic meaning
 			Distinct:    s.Distinct,
 			Hints:       s.Hints,
-			SelectExprs: normalizeSelectExprs(s.SelectExprs, mode),
+			SelectExprs: normalizeSelectExprs(selectExprs, mode),
 			From:        normalizeTableExprs(s.From, mode),
 			Where:       normalizeWhere(s.Where, mode),
 			GroupBy:     normalizeGroupBy(s.GroupBy, mode),
@@ -1067,8 +1082,8 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode) pa
 	case *parser.Union:
 		return &parser.Union{
 			Type:    s.Type,
-			Left:    normalizeViewDefinition(s.Left, mode),
-			Right:   normalizeViewDefinition(s.Right, mode),
+			Left:    normalizeViewDefinition(s.Left, mode, tableLookup),
+			Right:   normalizeViewDefinition(s.Right, mode, tableLookup),
 			OrderBy: normalizeOrderBy(s.OrderBy, mode),
 			Limit:   s.Limit,
 			Lock:    s.Lock,
@@ -1077,6 +1092,77 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode) pa
 	default:
 		return stmt
 	}
+}
+
+// hasStarExpr checks if there's a StarExpr in the SELECT list.
+func hasStarExpr(exprs parser.SelectExprs) bool {
+	for _, expr := range exprs {
+		if _, ok := expr.(*parser.StarExpr); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// extractTableNameFromFrom extracts the table name from a simple FROM clause.
+// Returns empty QualifiedName if the FROM clause is complex (joins, subqueries, etc.)
+func extractTableNameFromFrom(from parser.TableExprs) QualifiedName {
+	if len(from) != 1 {
+		return QualifiedName{}
+	}
+
+	switch expr := from[0].(type) {
+	case *parser.AliasedTableExpr:
+		if tableName, ok := expr.Expr.(parser.TableName); ok {
+			return QualifiedName{
+				Schema: tableName.Schema,
+				Name:   tableName.Name,
+			}
+		}
+	}
+
+	return QualifiedName{}
+}
+
+// getSortedColumns converts a column map to a slice sorted by position.
+// This is necessary because Go maps have non-deterministic iteration order,
+// but column order matters for:
+// - DDL generation (columns should appear in their original declaration order)
+// - SELECT * expansion (PostgreSQL expands * to columns in ordinal position order)
+func getSortedColumns(columns map[string]*Column) []*Column {
+	result := make([]*Column, 0, len(columns))
+	for _, col := range columns {
+		result = append(result, col)
+	}
+	slices.SortFunc(result, func(a, b *Column) int {
+		return a.position - b.position
+	})
+	return result
+}
+
+// expandStarExpr replaces StarExpr with explicit column references.
+func expandStarExpr(exprs parser.SelectExprs, table *Table) parser.SelectExprs {
+	var result parser.SelectExprs
+
+	for _, expr := range exprs {
+		switch expr.(type) {
+		case *parser.StarExpr:
+			// Get columns sorted by position to match PostgreSQL's expansion order
+			columns := getSortedColumns(table.columns)
+			for _, col := range columns {
+				colRef := &parser.AliasedExpr{
+					Expr: &parser.ColName{
+						Name: col.name,
+					},
+				}
+				result = append(result, colRef)
+			}
+		default:
+			result = append(result, expr)
+		}
+	}
+
+	return result
 }
 
 // normalizeViewColumnsFromDefinition extracts and normalizes column names from a view definition.

@@ -249,21 +249,19 @@ CommentOnConstraint:
   down: |
     COMMENT ON CONSTRAINT test_pkey ON public.test IS NULL;
 
-# FIXME: View idempotency issue - PostgreSQL normalizes SELECT to lowercase,
-# causing view recreation. This is unrelated to COMMENT ON support.
-#CommentOnView:
-#  legacy_ignore_quotes: false
-#  current: |
-#    CREATE TABLE test (id integer);
-#    CREATE VIEW test_view AS SELECT * FROM test;
-#  desired: |
-#    CREATE TABLE test (id integer);
-#    CREATE VIEW test_view AS SELECT * FROM test;
-#    COMMENT ON VIEW test_view IS 'This is a test view';
-#  up: |
-#    COMMENT ON VIEW public.test_view IS 'This is a test view';
-#  down: |
-#    COMMENT ON VIEW public.test_view IS NULL;
+CommentOnView:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE test (id integer);
+    CREATE VIEW test_view AS SELECT id FROM test;
+  desired: |
+    CREATE TABLE test (id integer);
+    CREATE VIEW test_view AS SELECT id FROM test;
+    COMMENT ON VIEW test_view IS 'This is a test view';
+  up: |
+    COMMENT ON VIEW public.test_view IS 'This is a test view';
+  down: |
+    COMMENT ON VIEW public.test_view IS NULL;
 
 CommentOnFunction:
   legacy_ignore_quotes: false

@@ -107,6 +107,11 @@ type QualifiedName struct {
 	Name   Ident
 }
 
+// IsEmpty returns true if the qualified name has no name set.
+func (q QualifiedName) IsEmpty() bool {
+	return q.Name.IsEmpty()
+}
+
 // RawString returns the raw qualified name as "schema.name" or just "name" if no schema.
 // This is NOT escaped for SQL output and NOT normalized for comparison.
 // Use this for logging, debugging, or map keys.

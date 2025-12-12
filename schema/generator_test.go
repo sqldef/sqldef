@@ -176,7 +176,7 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			assert.Equal(t, parser.CreateView, ddl.Action)
 			assert.NotNil(t, ddl.View.Definition, "Definition should not be nil")
 
-			normalized := normalizeViewDefinition(ddl.View.Definition, g.mode)
+			normalized := normalizeViewDefinition(ddl.View.Definition, g.mode, nil)
 			actual := strings.ToLower(parser.String(normalized))
 
 			assert.Equal(t, tt.expected, actual)

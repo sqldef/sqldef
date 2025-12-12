@@ -136,19 +136,6 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	return generator.generateDDLs(desiredDDLs)
 }
 
-// getSortedColumns converts a column map to a slice sorted by position.
-// This ensures deterministic iteration order for DDL generation.
-func getSortedColumns(columns map[string]*Column) []*Column {
-	result := make([]*Column, 0, len(columns))
-	for _, col := range columns {
-		result = append(result, col)
-	}
-	slices.SortFunc(result, func(a, b *Column) int {
-		return a.position - b.position
-	})
-	return result
-}
-
 // sortIndexesByName returns indexes sorted by name.
 // This ensures deterministic DDL ordering when processing indexes from the database,
 // which may return indexes in different orders (e.g., MySQL vs TiDB).
@@ -1842,9 +1829,10 @@ func (g *Generator) generateDDLsForCreateView(desiredView *View) ([]string, erro
 		g.currentViews = append(g.currentViews, &view)
 	} else if desiredView.viewType == "VIEW" { // TODO: Fix the definition comparison for materialized views and enable this
 		// View found. If it's different, create or replace view.
-		// Use AST-based comparison
-		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode)
-		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode)
+		// Use AST-based comparison with table lookup for SELECT * expansion
+		tableLookup := g.createTableLookup()
+		currentNormalizedAST := normalizeViewDefinition(currentView.definition, g.mode, tableLookup)
+		desiredNormalizedAST := normalizeViewDefinition(desiredView.definition, g.mode, tableLookup)
 		currentNormalized := strings.ToLower(parser.String(currentNormalizedAST))
 		desiredNormalized := strings.ToLower(parser.String(desiredNormalizedAST))
 
@@ -1978,6 +1966,17 @@ func stripTableQualifiers(sql string) string {
 	re := regexp.MustCompile(`\b[a-z_][a-z0-9_]*\.([a-z_][a-z0-9_]*)\b`)
 	// Replace "table.column" with just "column" (keeping capture group 1)
 	return re.ReplaceAllString(sql, "$1")
+}
+
+// createTableLookup returns a TableLookupFunc that looks up tables from both
+// desired and current table lists.
+func (g *Generator) createTableLookup() TableLookupFunc {
+	return func(name QualifiedName) *Table {
+		if table := g.findTableByName(g.desiredTables, name); table != nil {
+			return table
+		}
+		return g.findTableByName(g.currentTables, name)
+	}
 }
 
 func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desiredTrigger *Trigger) ([]string, error) {
