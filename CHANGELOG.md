@@ -1,3 +1,6 @@
+## [v3.8.8](https://github.com/sqldef/sqldef/compare/v3.8.7...v3.8.8) - 2025-12-13
+- support year(4) for mysqldef, even if deprdcated by @gfx in https://github.com/sqldef/sqldef/pull/1034
+
 ## [v3.8.7](https://github.com/sqldef/sqldef/compare/v3.8.6...v3.8.7) - 2025-12-13
 - fix: allow some keywords as column name aliases by @gfx in https://github.com/sqldef/sqldef/pull/1032
 
