@@ -238,8 +238,8 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> CREATE ALTER DROP RENAME ANALYZE ADD GRANT REVOKE OPTION PRIVILEGES
 %token <str> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION EXCLUDE DOMAIN
 %right <str> UNIQUE KEY
-%token <str> SHOW DESCRIBE EXPLAIN DATE DATA ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
-%token <str> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN RETURNS FUNCTION
+%token <str> SHOW DESCRIBE EXPLAIN DATE DATA ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE ENGINE
+%token <str> MAXVALUE PARTITION PARTITIONS REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN RETURNS FUNCTION RANGE LIST HASH LINEAR COLUMNS
 %token <str> STATUS VARIABLES
 %token <str> RESTRICT CASCADE NO ACTION
 %token <str> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
@@ -851,6 +851,14 @@ create_statement:
     $1.TableSpec = $2
     $$ = $1
   }
+/* PostgreSQL CREATE TABLE ... PARTITION OF ... FOR VALUES ... */
+| create_table_prefix PARTITION OF table_name partition_bound_spec
+  {
+    // Partition child table - parsed but the partition info is discarded
+    // The table is created with empty TableSpec for now
+    $1.TableSpec = &TableSpec{}
+    $$ = $1
+  }
 | CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
@@ -898,7 +906,7 @@ create_statement:
     }
   }
 /* For MySQL */
-| CREATE unique_clustered_opt INDEX concurrently_opt sql_id USING sql_id ON table_name '(' index_column_list ')' index_option_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id USING reserved_sql_id ON table_name '(' index_column_list ')' index_option_opt
   {
     $$ = &DDL{
       Action: CreateIndex,
@@ -916,7 +924,7 @@ create_statement:
     }
   }
 /* For PostgreSQL */
-| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name USING sql_id '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt index_option_opt where_expression_opt
+| CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name USING reserved_sql_id '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt index_option_opt where_expression_opt
   {
     indexSpec := &IndexSpec{
       Name: $5,
@@ -2711,10 +2719,139 @@ create_table_prefix:
   }
 
 table_spec:
-  '(' table_column_list ')' table_option_list
+  '(' table_column_list ')' table_option_list table_partition_by_opt
   {
     $$ = $2
     $$.Options = $4
+    // $5 (partition clause) is parsed but discarded for now
+  }
+
+// PostgreSQL PARTITION BY clause for partitioned tables
+// Also supports MySQL partition syntax
+table_partition_by_opt:
+  {
+    // empty - no partition clause
+  }
+/* RANGE partitioning - PostgreSQL and MySQL */
+| PARTITION BY RANGE '(' expression_list ')' mysql_partition_defs_opt
+  {
+    // PARTITION BY RANGE - parsed but discarded
+  }
+/* RANGE COLUMNS partitioning - MySQL only */
+| PARTITION BY RANGE COLUMNS '(' column_list ')' mysql_partition_defs_opt
+  {
+    // PARTITION BY RANGE COLUMNS - parsed but discarded
+  }
+/* LIST partitioning - PostgreSQL and MySQL */
+| PARTITION BY LIST '(' expression_list ')' mysql_partition_defs_opt
+  {
+    // PARTITION BY LIST - parsed but discarded
+  }
+/* LIST COLUMNS partitioning - MySQL only */
+| PARTITION BY LIST COLUMNS '(' column_list ')' mysql_partition_defs_opt
+  {
+    // PARTITION BY LIST COLUMNS - parsed but discarded
+  }
+/* HASH partitioning - PostgreSQL and MySQL */
+| PARTITION BY HASH '(' expression_list ')' mysql_partitions_opt
+  {
+    // PARTITION BY HASH - parsed but discarded
+  }
+/* KEY partitioning - MySQL only */
+| PARTITION BY KEY '(' column_list ')' mysql_partitions_opt
+  {
+    // PARTITION BY KEY - parsed but discarded
+  }
+| PARTITION BY KEY '(' ')' mysql_partitions_opt
+  {
+    // PARTITION BY KEY () - empty column list for MySQL
+  }
+/* LINEAR HASH partitioning - MySQL only */
+| PARTITION BY LINEAR HASH '(' expression_list ')' mysql_partitions_opt
+  {
+    // PARTITION BY LINEAR HASH - parsed but discarded
+  }
+/* LINEAR KEY partitioning - MySQL only */
+| PARTITION BY LINEAR KEY '(' column_list ')' mysql_partitions_opt
+  {
+    // PARTITION BY LINEAR KEY - parsed but discarded
+  }
+| PARTITION BY LINEAR KEY '(' ')' mysql_partitions_opt
+  {
+    // PARTITION BY LINEAR KEY () - empty column list for MySQL
+  }
+
+// MySQL PARTITIONS n clause (optional, for HASH/KEY partitioning)
+mysql_partitions_opt:
+  {
+    // empty
+  }
+| PARTITIONS INTEGRAL
+  {
+    // PARTITIONS n - parsed but discarded
+  }
+
+// MySQL partition definitions (optional, for RANGE/LIST partitioning)
+mysql_partition_defs_opt:
+  {
+    // empty
+  }
+| '(' mysql_partition_def_list ')'
+  {
+    // partition definitions - parsed but discarded
+  }
+
+mysql_partition_def_list:
+  mysql_partition_def
+  {
+    // single partition def
+  }
+| mysql_partition_def_list ',' mysql_partition_def
+  {
+    // multiple partition defs
+  }
+
+mysql_partition_def:
+  PARTITION sql_id VALUES LESS THAN '(' expression_list ')' partition_engine_opt
+  {
+    // PARTITION name VALUES LESS THAN (expr) - parsed but discarded
+  }
+| PARTITION sql_id VALUES LESS THAN '(' MAXVALUE ')' partition_engine_opt
+  {
+    // PARTITION name VALUES LESS THAN (MAXVALUE) - parsed but discarded
+  }
+| PARTITION sql_id VALUES LESS THAN MAXVALUE partition_engine_opt
+  {
+    // PARTITION name VALUES LESS THAN MAXVALUE - parsed but discarded
+  }
+| PARTITION sql_id VALUES IN '(' expression_list ')' partition_engine_opt
+  {
+    // PARTITION name VALUES IN (value_list) - for LIST partitioning
+  }
+
+// Optional ENGINE clause for partition definitions (MariaDB exports this)
+partition_engine_opt:
+  {
+    // empty
+  }
+| ENGINE '=' reserved_sql_id
+  {
+    // ENGINE = InnoDB - parsed but discarded
+  }
+
+// PostgreSQL partition bound specification for child partitions
+partition_bound_spec:
+  FOR VALUES FROM '(' expression_list ')' TO '(' expression_list ')'
+  {
+    // RANGE partition bound - parsed but discarded
+  }
+| FOR VALUES IN '(' expression_list ')'
+  {
+    // LIST partition bound - parsed but discarded
+  }
+| DEFAULT
+  {
+    // DEFAULT partition - parsed but discarded
   }
 
 table_column_list:
@@ -2765,11 +2902,11 @@ exclude_definition:
       Where: NewWhere(WhereStr, $7),
     }
   }
-| CONSTRAINT sql_id EXCLUDE USING sql_id '(' exclude_element_list ')' where_expression_opt
+| CONSTRAINT sql_id EXCLUDE USING reserved_sql_id '(' exclude_element_list ')' where_expression_opt
   {
     $$ = &ExclusionDefinition{
       ConstraintName: $2,
-      IndexType: $5, // GIST, btree, etc.
+      IndexType: $5, // GIST, btree, hash, etc.
       Exclusions: $7,
       Where: NewWhere(WhereStr, $9),
     }
@@ -7088,6 +7225,13 @@ non_reserved_keyword:
 | RESTRICT
 | CASCADE
 | OPTION
+| RANGE
+| LIST
+| HASH
+| LINEAR
+| COLUMNS
+| PARTITIONS
+| ENGINE
 
 // col_name_keyword: keywords that can be used as column names in index definitions.
 // PostgreSQL allows these as unquoted identifiers in certain contexts.

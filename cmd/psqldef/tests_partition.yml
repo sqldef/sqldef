@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=../../testutil/testcase.schema.json
+# PostgreSQL partition syntax tests
+# These tests verify parsing only since partition tables are typically skipped in schema management
+
+PartitionByRange:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL
+    ) PARTITION BY RANGE (created_at);
+
+PartitionByList:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      region text NOT NULL
+    ) PARTITION BY LIST (region);
+
+PartitionByHash:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE sessions (
+      id bigint NOT NULL,
+      user_id bigint NOT NULL
+    ) PARTITION BY HASH (user_id);
+
+PartitionByRangeMultipleColumns:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE events (
+      id bigint NOT NULL,
+      event_year int NOT NULL,
+      event_month int NOT NULL
+    ) PARTITION BY RANGE (event_year, event_month);
+
+PartitionOfForValuesRange:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE logs_2024_01 PARTITION OF logs
+      FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
+
+PartitionOfForValuesIn:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE orders_us PARTITION OF orders
+      FOR VALUES IN ('US', 'CA', 'MX');
+
+PartitionOfDefault:
+  legacy_ignore_quotes: false
+  offline: true
+  desired: |
+    CREATE TABLE logs_default PARTITION OF logs DEFAULT;
