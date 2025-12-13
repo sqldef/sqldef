@@ -4944,6 +4944,10 @@ col_alias:
   {
     $$ = NewIdent($1, false)
   }
+| col_name_keyword
+  {
+    $$ = NewIdent($1, false)
+  }
 
 over_expression:
   {

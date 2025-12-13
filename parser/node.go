@@ -643,11 +643,11 @@ func (ts *TableSpec) Format(buf *nodeBuffer) {
 		buf.Printf(",\n\t%v", idx)
 	}
 
-	options := ""
+	var options strings.Builder
 	for key, value := range ts.Options {
-		options += " " + key + "=" + value
+		options.WriteString(" " + key + "=" + value)
 	}
-	buf.Printf("\n)%s", strings.Replace(options, ", ", ",\n  ", -1))
+	buf.Printf("\n)%s", strings.Replace(options.String(), ", ", ",\n  ", -1))
 }
 
 // addColumn appends the given column to the list in the spec
