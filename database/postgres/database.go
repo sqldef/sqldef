@@ -457,30 +457,31 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 	// Build CREATE DOMAIN statements
 	var ddls []string
 	for _, di := range domains {
-		ddl := fmt.Sprintf("CREATE DOMAIN %s.%s AS %s", d.quoteIdentifierIfNeeded(di.schema), d.quoteIdentifierIfNeeded(di.name), di.dataType)
+		var ddl strings.Builder
+		ddl.WriteString(fmt.Sprintf("CREATE DOMAIN %s.%s AS %s", d.quoteIdentifierIfNeeded(di.schema), d.quoteIdentifierIfNeeded(di.name), di.dataType))
 
 		if di.collation.Valid && di.collation.String != "" && di.collation.String != "default" {
-			ddl += fmt.Sprintf(" COLLATE %s", d.quoteIdentifierIfNeeded(di.collation.String))
+			ddl.WriteString(fmt.Sprintf(" COLLATE %s", d.quoteIdentifierIfNeeded(di.collation.String)))
 		}
 
 		if di.defaultValue.Valid {
-			ddl += fmt.Sprintf(" DEFAULT %s", di.defaultValue.String)
+			ddl.WriteString(fmt.Sprintf(" DEFAULT %s", di.defaultValue.String))
 		}
 
 		if di.notNull {
-			ddl += " NOT NULL"
+			ddl.WriteString(" NOT NULL")
 		}
 
 		// Add all CHECK constraints
 		key := di.schema + "." + di.name
 		if constraints, ok := constraintsMap[key]; ok {
 			for _, constraintDef := range constraints {
-				ddl += fmt.Sprintf(" %s", constraintDef)
+				ddl.WriteString(fmt.Sprintf(" %s", constraintDef))
 			}
 		}
 
-		ddl += ";"
-		ddls = append(ddls, ddl)
+		ddl.WriteString(";")
+		ddls = append(ddls, ddl.String())
 
 		// Add comment if exists
 		if di.comment.Valid {

@@ -628,6 +628,31 @@ ViewWithWindowPartition:
            SUM(amount) OVER (PARTITION BY category ORDER BY sale_date) AS running_total
     FROM sales;
 
+ViewWithNestedCaseAndValueAlias:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE VIEW nested_case AS
+    SELECT CASE
+      WHEN 1 > 0 THEN 3
+      ELSE CASE 4 + 1
+        WHEN 1 THEN 1
+        ELSE NULL
+      END
+    END AS value;
+
+ViewWithColNameKeywordAliases:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE test_data (id integer);
+    CREATE VIEW keyword_aliases AS
+    SELECT
+      1 AS value,
+      2 AS key,
+      3 AS date,
+      4 AS time,
+      5 AS timestamp
+    FROM test_data;
+
 # View with JSON -> and ->> operators
 ViewWithJsonOperators:
   legacy_ignore_quotes: false
