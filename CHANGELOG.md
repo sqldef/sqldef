@@ -1,3 +1,6 @@
+## [v3.8.7](https://github.com/sqldef/sqldef/compare/v3.8.6...v3.8.7) - 2025-12-13
+- fix: allow some keywords as column name aliases by @gfx in https://github.com/sqldef/sqldef/pull/1032
+
 ## [v3.8.6](https://github.com/sqldef/sqldef/compare/v3.8.5...v3.8.6) - 2025-12-13
 - chore: move cmd/testutils/ to testutil/ to follow Go convention by @gfx in https://github.com/sqldef/sqldef/pull/1027
 - chore: update agent stuff by @gfx in https://github.com/sqldef/sqldef/pull/1029
