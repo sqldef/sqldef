@@ -246,6 +246,7 @@ The `up` and `down` fields must both be specified or both be omitted:
   - SQLite3
   - SQL Server
 * Add `legacy_ignore_quotes: false` for new test cases. This is the default behavior in the future.
+* Do not add a comment to a test case. Instead, describe what is tested in the test case name.
 
 ## Documentation
 

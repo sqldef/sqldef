@@ -48,6 +48,138 @@ PartitionByRange:
     ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
   down: |
     DROP TABLE `users`;
+
+# https://github.com/sqldef/sqldef/discussions/635
+PartitionByRangeWithToDays:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE api_log (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      biz_no varchar(60) DEFAULT NULL,
+      host_app varchar(255) DEFAULT NULL,
+      host_ip varchar(255) DEFAULT NULL,
+      target_app varchar(255) DEFAULT NULL,
+      uri varchar(255) DEFAULT NULL,
+      request_time datetime DEFAULT NULL,
+      response_time datetime DEFAULT NULL,
+      date_created datetime NOT NULL,
+      PRIMARY KEY (id, date_created)
+    )
+    PARTITION BY RANGE (TO_DAYS(date_created))
+    (PARTITION p20240624 VALUES LESS THAN (739400),
+     PARTITION p20240625 VALUES LESS THAN (739401),
+     PARTITION p20240626 VALUES LESS THAN (739402),
+     PARTITION p20240627 VALUES LESS THAN (739403),
+     PARTITION p20240628 VALUES LESS THAN (739404),
+     PARTITION p20240629 VALUES LESS THAN (739405));
+
+PartitionByRangeColumns:
+  legacy_ignore_quotes: false
+  flavor: "!tidb"  # TiDB has limited support for RANGE COLUMNS
+  desired: |
+    CREATE TABLE orders (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      order_date date NOT NULL,
+      region varchar(20) NOT NULL,
+      amount decimal(10,2) DEFAULT NULL,
+      PRIMARY KEY (id, order_date, region)
+    )
+    PARTITION BY RANGE COLUMNS (order_date)
+    (PARTITION p_2024_q1 VALUES LESS THAN ('2024-04-01'),
+     PARTITION p_2024_q2 VALUES LESS THAN ('2024-07-01'),
+     PARTITION p_2024_q3 VALUES LESS THAN ('2024-10-01'),
+     PARTITION p_2024_q4 VALUES LESS THAN ('2025-01-01'),
+     PARTITION p_max VALUES LESS THAN (MAXVALUE));
+
+PartitionByHash:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE sessions (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      user_id bigint(20) NOT NULL,
+      created_at datetime NOT NULL,
+      PRIMARY KEY (id, user_id)
+    )
+    PARTITION BY HASH (user_id);
+
+PartitionByHashWithPartitions:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE cache_data (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      cache_key varchar(255) NOT NULL,
+      cache_value text,
+      PRIMARY KEY (id, cache_key)
+    )
+    PARTITION BY HASH (id)
+    PARTITIONS 4;
+
+PartitionByLinearHash:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE events (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      event_type int NOT NULL,
+      created_at datetime NOT NULL,
+      PRIMARY KEY (id, event_type)
+    )
+    PARTITION BY LINEAR HASH (event_type);
+
+PartitionByKey:
+  legacy_ignore_quotes: false
+  flavor: "!tidb"  # TiDB has limited support for KEY partitioning
+  desired: |
+    CREATE TABLE messages (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      sender_id bigint(20) NOT NULL,
+      receiver_id bigint(20) NOT NULL,
+      created_at datetime NOT NULL,
+      PRIMARY KEY (id, sender_id, receiver_id)
+    )
+    PARTITION BY KEY (sender_id, receiver_id);
+
+PartitionByLinearKey:
+  legacy_ignore_quotes: false
+  flavor: "!tidb"  # TiDB has limited support for KEY partitioning
+  desired: |
+    CREATE TABLE logs (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      log_date date NOT NULL,
+      log_level int NOT NULL,
+      PRIMARY KEY (id, log_date)
+    )
+    PARTITION BY LINEAR KEY (log_date);
+
+PartitionByList:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE regional_sales (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      region_code int NOT NULL,
+      amount decimal(10,2) DEFAULT NULL,
+      PRIMARY KEY (id, region_code)
+    )
+    PARTITION BY LIST (region_code)
+    (PARTITION p_north VALUES IN (1, 2, 3),
+     PARTITION p_south VALUES IN (4, 5, 6),
+     PARTITION p_east VALUES IN (7, 8, 9),
+     PARTITION p_west VALUES IN (10, 11, 12));
+
+PartitionByListColumns:
+  legacy_ignore_quotes: false
+  flavor: "!tidb"  # TiDB has limited support for LIST COLUMNS
+  desired: |
+    CREATE TABLE country_sales (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      country varchar(10) NOT NULL,
+      amount decimal(10,2) DEFAULT NULL,
+      PRIMARY KEY (id, country)
+    )
+    PARTITION BY LIST COLUMNS (country)
+    (PARTITION p_americas VALUES IN ('US', 'CA', 'MX'),
+     PARTITION p_europe VALUES IN ('UK', 'DE', 'FR'),
+     PARTITION p_asia VALUES IN ('JP', 'CN', 'KR'));
+
 CreateTableWithSpatialTypesAndSpatialKey:
   flavor: "!tidb"  # TiDB has limited support for spatial types
   current: |

@@ -103,6 +103,7 @@ func setDDL(yylex any, ddl *DDL) {
   partDefs                 []*PartitionDefinition
   partDef                  *PartitionDefinition
   partSpec                 *PartitionSpec
+  tablePartition           *TablePartition
   showFilter               *ShowFilter
   sequence                 *Sequence
   blockStatement           []Statement
@@ -239,7 +240,7 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION EXCLUDE DOMAIN
 %right <str> UNIQUE KEY
 %token <str> SHOW DESCRIBE EXPLAIN DATE DATA ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE
-%token <str> MAXVALUE PARTITION REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN RETURNS FUNCTION
+%token <str> MAXVALUE PARTITION PARTITIONS REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN RETURNS FUNCTION RANGE HASH LIST LINEAR COLUMNS
 %token <str> STATUS VARIABLES
 %token <str> RESTRICT CASCADE NO ACTION
 %token <str> PERMISSIVE RESTRICTIVE PUBLIC CURRENT_USER SESSION_USER
@@ -433,6 +434,12 @@ func setDDL(yylex any, ddl *DDL) {
 %type <TableSpec> table_spec table_column_list
 %type <str> table_opt_name table_opt_value
 %type <tableOptions> table_option_list
+%type <tablePartition> table_partition_opt
+%type <partDefs> table_partition_definition_list
+%type <partDef> table_partition_definition
+%type <exprs> partition_value_list
+%type <expr> partition_value
+%type <str> partitions_opt
 %type <indexInfo> index_info
 %type <indexColumn> index_column
 %type <str> operator_class
@@ -2711,10 +2718,11 @@ create_table_prefix:
   }
 
 table_spec:
-  '(' table_column_list ')' table_option_list
+  '(' table_column_list ')' table_option_list table_partition_opt
   {
     $$ = $2
     $$.Options = $4
+    $$.Partition = $5
   }
 
 table_column_list:
@@ -4799,6 +4807,111 @@ table_opt_value:
 | INTEGRAL
   {
     $$ = $1
+  }
+
+table_partition_opt:
+  {
+    $$ = nil
+  }
+| PARTITION BY RANGE '(' expression ')' '(' table_partition_definition_list ')'
+  {
+    $$ = &TablePartition{Type: "RANGE", Expr: $5, Definitions: $8}
+  }
+| PARTITION BY RANGE COLUMNS '(' sql_id_list ')' '(' table_partition_definition_list ')'
+  {
+    $$ = &TablePartition{Type: "RANGE", Columns: $6, Definitions: $9}
+  }
+| PARTITION BY LIST '(' expression ')' '(' table_partition_definition_list ')'
+  {
+    $$ = &TablePartition{Type: "LIST", Expr: $5, Definitions: $8}
+  }
+| PARTITION BY LIST COLUMNS '(' sql_id_list ')' '(' table_partition_definition_list ')'
+  {
+    $$ = &TablePartition{Type: "LIST", Columns: $6, Definitions: $9}
+  }
+| PARTITION BY HASH '(' expression ')' partitions_opt
+  {
+    $$ = &TablePartition{Type: "HASH", Expr: $5, Partitions: $7}
+  }
+| PARTITION BY LINEAR HASH '(' expression ')' partitions_opt
+  {
+    $$ = &TablePartition{Type: "HASH", Linear: true, Expr: $6, Partitions: $8}
+  }
+| PARTITION BY KEY '(' sql_id_list ')' partitions_opt
+  {
+    $$ = &TablePartition{Type: "KEY", Columns: $5, Partitions: $7}
+  }
+| PARTITION BY LINEAR KEY '(' sql_id_list ')' partitions_opt
+  {
+    $$ = &TablePartition{Type: "KEY", Linear: true, Columns: $6, Partitions: $8}
+  }
+
+partitions_opt:
+  {
+    $$ = ""
+  }
+| PARTITIONS INTEGRAL
+  {
+    $$ = $2
+  }
+
+table_partition_definition_list:
+  table_partition_definition
+  {
+    $$ = []*PartitionDefinition{$1}
+  }
+| table_partition_definition_list ',' table_partition_definition
+  {
+    $$ = append($1, $3)
+  }
+
+table_partition_definition:
+  PARTITION sql_id VALUES LESS THAN '(' partition_value_list ')' partition_options_opt
+  {
+    $$ = &PartitionDefinition{Name: $2, Limit: ValTuple($7)}
+  }
+| PARTITION sql_id VALUES LESS THAN MAXVALUE partition_options_opt
+  {
+    $$ = &PartitionDefinition{Name: $2, Maxvalue: true}
+  }
+| PARTITION sql_id VALUES IN '(' expression_list ')' partition_options_opt
+  {
+    // For LIST partitions with explicit values
+    $$ = &PartitionDefinition{Name: $2, Limit: ValTuple($6), IsList: true}
+  }
+| PARTITION sql_id partition_options_opt
+  {
+    // For HASH/KEY partitions with just a name
+    $$ = &PartitionDefinition{Name: $2}
+  }
+
+partition_options_opt:
+  {
+    // empty
+  }
+| reserved_sql_id '=' reserved_sql_id
+  {
+    // MariaDB exports ENGINE = InnoDB for each partition, ignore it
+  }
+
+partition_value_list:
+  partition_value
+  {
+    $$ = Exprs{$1}
+  }
+| partition_value_list ',' partition_value
+  {
+    $$ = append($1, $3)
+  }
+
+partition_value:
+  expression
+  {
+    $$ = $1
+  }
+| MAXVALUE
+  {
+    $$ = &SQLVal{Type: StrVal, Val: "MAXVALUE"}
   }
 
 comment_opt:
@@ -7056,6 +7169,7 @@ with_data_opt:
 non_reserved_keyword:
   ACTION
 | CALLED
+| COLUMNS
 | COST
 | DATA
 | DEFINER
@@ -7063,16 +7177,21 @@ non_reserved_keyword:
 | DOMAIN
 | GEOMETRY
 | GEOMETRYCOLLECTION
+| HASH
 | INVOKER
 | LEAKPROOF
+| LINEAR
 | LINESTRING
+| LIST
 | MULTILINESTRING
 | MULTIPOINT
 | MULTIPOLYGON
 | PARALLEL
+| PARTITIONS
 | POINT
 | POLICY
 | POLYGON
+| RANGE
 | RESTRICTED
 | ROWS
 | SAFE

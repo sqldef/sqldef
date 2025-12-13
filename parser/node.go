@@ -603,19 +603,72 @@ func (node *PartitionSpec) Format(buf *nodeBuffer) {
 	}
 }
 
-// PartitionDefinition describes a very minimal partition definition
+// PartitionDefinition describes a partition definition in CREATE TABLE
 type PartitionDefinition struct {
 	Name     Ident
-	Limit    Expr
-	Maxvalue bool
+	Limit    Expr // For RANGE: single expr or ValTuple; For LIST: ValTuple
+	Maxvalue bool // For RANGE with bare MAXVALUE (without parentheses)
+	IsList   bool // true for LIST partition (VALUES IN), false for RANGE (VALUES LESS THAN)
 }
 
 // Format formats the node
 func (node *PartitionDefinition) Format(buf *nodeBuffer) {
-	if !node.Maxvalue {
-		buf.Printf("partition %v values less than (%v)", node.Name, node.Limit)
-	} else {
-		buf.Printf("partition %v values less than (maxvalue)", node.Name)
+	buf.Printf("partition %v", node.Name)
+	if node.Maxvalue {
+		buf.Printf(" values less than maxvalue")
+	} else if node.Limit != nil {
+		if node.IsList {
+			buf.Printf(" values in %v", node.Limit)
+		} else {
+			buf.Printf(" values less than %v", node.Limit)
+		}
+	}
+}
+
+// TablePartition describes the partition clause in a CREATE TABLE statement
+type TablePartition struct {
+	Type        string // RANGE, LIST, HASH, KEY
+	Linear      bool
+	Expr        Expr    // For RANGE/LIST/HASH (expr)
+	Columns     []Ident // For RANGE COLUMNS/LIST COLUMNS/KEY
+	Partitions  string  // PARTITIONS num
+	Definitions []*PartitionDefinition
+}
+
+// Format formats the node
+func (node *TablePartition) Format(buf *nodeBuffer) {
+	if node == nil {
+		return
+	}
+	buf.Printf("\npartition by ")
+	if node.Linear {
+		buf.Printf("linear ")
+	}
+	buf.Printf("%s", strings.ToLower(node.Type))
+	if len(node.Columns) > 0 {
+		buf.Printf(" columns(")
+		for i, col := range node.Columns {
+			if i > 0 {
+				buf.Printf(", ")
+			}
+			buf.Printf("%v", col)
+		}
+		buf.Printf(")")
+	} else if node.Expr != nil {
+		buf.Printf("(%v)", node.Expr)
+	}
+	if node.Partitions != "" {
+		buf.Printf("\npartitions %s", node.Partitions)
+	}
+	if len(node.Definitions) > 0 {
+		buf.Printf("\n(")
+		for i, pd := range node.Definitions {
+			if i > 0 {
+				buf.Printf(",\n ")
+			}
+			buf.Printf("%v", pd)
+		}
+		buf.Printf(")")
 	}
 }
 
@@ -627,6 +680,7 @@ type TableSpec struct {
 	Checks      []*CheckDefinition
 	Exclusions  []*ExclusionDefinition // for Postgres
 	Options     map[string]string
+	Partition   *TablePartition // for MySQL table partitioning
 }
 
 // Format formats the node.
