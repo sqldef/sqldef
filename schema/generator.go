@@ -45,6 +45,9 @@ type Generator struct {
 	desiredDomains []*Domain
 	currentDomains []*Domain
 
+	desiredPartitionOfs []*CreatePartitionOf
+	currentPartitionOfs []*CreatePartitionOf
+
 	// Track FKs that have been handled during primary key changes
 	handledForeignKeys map[string]bool
 
@@ -109,34 +112,36 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	}
 
 	generator := Generator{
-		mode:               mode,
-		desiredTables:      desiredAggregated.Tables,
-		currentTables:      aggregated.Tables,
-		desiredViews:       desiredAggregated.Views,
-		currentViews:       aggregated.Views,
-		desiredTriggers:    desiredAggregated.Triggers,
-		currentTriggers:    aggregated.Triggers,
-		desiredFunctions:   desiredAggregated.Functions,
-		currentFunctions:   aggregated.Functions,
-		desiredTypes:       desiredAggregated.Types,
-		currentTypes:       aggregated.Types,
-		desiredDomains:     desiredAggregated.Domains,
-		currentDomains:     aggregated.Domains,
-		desiredComments:    desiredAggregated.Comments,
-		currentComments:    aggregated.Comments,
-		desiredExtensions:  desiredAggregated.Extensions,
-		currentExtensions:  aggregated.Extensions,
-		desiredSchemas:     desiredAggregated.Schemas,
-		currentSchemas:     aggregated.Schemas,
-		desiredPrivileges:  desiredAggregated.Privileges,
-		currentPrivileges:  aggregated.Privileges,
-		defaultSchema:      defaultSchema,
-		algorithm:          config.Algorithm,
-		lock:               config.Lock,
-		config:             config,
-		handledForeignKeys: make(map[string]bool),
-		droppedTables:      make(map[string]bool),
-		indexToTable:       make(map[string]QualifiedName),
+		mode:                mode,
+		desiredTables:       desiredAggregated.Tables,
+		currentTables:       aggregated.Tables,
+		desiredViews:        desiredAggregated.Views,
+		currentViews:        aggregated.Views,
+		desiredTriggers:     desiredAggregated.Triggers,
+		currentTriggers:     aggregated.Triggers,
+		desiredFunctions:    desiredAggregated.Functions,
+		currentFunctions:    aggregated.Functions,
+		desiredTypes:        desiredAggregated.Types,
+		currentTypes:        aggregated.Types,
+		desiredDomains:      desiredAggregated.Domains,
+		currentDomains:      aggregated.Domains,
+		desiredPartitionOfs: desiredAggregated.PartitionOfs,
+		currentPartitionOfs: aggregated.PartitionOfs,
+		desiredComments:     desiredAggregated.Comments,
+		currentComments:     aggregated.Comments,
+		desiredExtensions:   desiredAggregated.Extensions,
+		currentExtensions:   aggregated.Extensions,
+		desiredSchemas:      desiredAggregated.Schemas,
+		currentSchemas:      aggregated.Schemas,
+		desiredPrivileges:   desiredAggregated.Privileges,
+		currentPrivileges:   aggregated.Privileges,
+		defaultSchema:       defaultSchema,
+		algorithm:           config.Algorithm,
+		lock:                config.Lock,
+		config:              config,
+		handledForeignKeys:  make(map[string]bool),
+		droppedTables:       make(map[string]bool),
+		indexToTable:        make(map[string]QualifiedName),
 	}
 	// Build index-to-table mapping before any tables are dropped
 	generator.buildIndexToTableMap()
@@ -231,6 +236,16 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				table := desired.table // copy table
 				g.desiredTables = append(g.desiredTables, &table)
 			}
+		case *CreatePartitionOf:
+			// Check if this partition child table already exists
+			currentPartition := g.findPartitionOfByName(g.currentPartitionOfs, desired.tableName)
+			if currentPartition == nil {
+				// Partition child table doesn't exist, create it
+				interDDLs = append(interDDLs, desired.statement)
+				partitionOf := *desired // copy
+				g.currentPartitionOfs = append(g.currentPartitionOfs, &partitionOf)
+			}
+			// For now, we don't support modifying partition bounds - only create or keep as-is
 		case *CreateIndex:
 			idxDDLs, err := g.generateDDLsForCreateIndex(desired.tableName, desired.index, "CREATE INDEX", ddl.Statement())
 			if err != nil {
@@ -2679,16 +2694,17 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 }
 
 type AggregatedSchema struct {
-	Tables     []*Table
-	Views      []*View
-	Triggers   []*Trigger
-	Functions  []*Function
-	Types      []*Type
-	Domains    []*Domain
-	Comments   []*Comment
-	Extensions []*Extension
-	Schemas    []*Schema
-	Privileges []*GrantPrivilege
+	Tables       []*Table
+	PartitionOfs []*CreatePartitionOf // PostgreSQL partition child tables
+	Views        []*View
+	Triggers     []*Trigger
+	Functions    []*Function
+	Types        []*Type
+	Domains      []*Domain
+	Comments     []*Comment
+	Extensions   []*Extension
+	Schemas      []*Schema
+	Privileges   []*GrantPrivilege
 }
 
 // generateCreateIndexStatement generates a CREATE INDEX statement from an Index struct.
@@ -3393,15 +3409,16 @@ func mergeTable(table1 *Table, table2 Table) {
 
 func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) (*AggregatedSchema, error) {
 	aggregated := &AggregatedSchema{
-		Tables:     []*Table{},
-		Views:      []*View{},
-		Triggers:   []*Trigger{},
-		Types:      []*Type{},
-		Domains:    []*Domain{},
-		Comments:   []*Comment{},
-		Extensions: []*Extension{},
-		Schemas:    []*Schema{},
-		Privileges: []*GrantPrivilege{},
+		Tables:       []*Table{},
+		PartitionOfs: []*CreatePartitionOf{},
+		Views:        []*View{},
+		Triggers:     []*Trigger{},
+		Types:        []*Type{},
+		Domains:      []*Domain{},
+		Comments:     []*Comment{},
+		Extensions:   []*Extension{},
+		Schemas:      []*Schema{},
+		Privileges:   []*GrantPrivilege{},
 	}
 
 	for _, ddl := range ddls {
@@ -3409,6 +3426,10 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 		case *CreateTable:
 			table := stmt.table // copy table
 			aggregated.Tables = append(aggregated.Tables, &table)
+		case *CreatePartitionOf:
+			// Copy the partition of statement
+			partitionOf := *stmt
+			aggregated.PartitionOfs = append(aggregated.PartitionOfs, &partitionOf)
 		case *CreateIndex:
 			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 			if table == nil {
@@ -3749,6 +3770,15 @@ func (g *Generator) findTableByName(tables []*Table, name QualifiedName) *Table 
 	for _, table := range tables {
 		if g.qualifiedNamesEqual(table.name, name) {
 			return table
+		}
+	}
+	return nil
+}
+
+func (g *Generator) findPartitionOfByName(partitionOfs []*CreatePartitionOf, name QualifiedName) *CreatePartitionOf {
+	for _, partitionOf := range partitionOfs {
+		if g.qualifiedNamesEqual(partitionOf.tableName, name) {
+			return partitionOf
 		}
 	}
 	return nil

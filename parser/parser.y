@@ -131,6 +131,7 @@ func setDDL(yylex any, ddl *DDL) {
   }
   functionArg              FunctionArg
   functionArgs             []FunctionArg
+  partitionBoundSpec       *PartitionBoundSpec
 }
 
 %token LEX_ERROR
@@ -489,6 +490,7 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> OVER
 %type <partitionBy> partition_by_list
 %type <partition> partition
+%type <partitionBoundSpec> partition_bound_spec
 %type <boolVals> unique_clustered_opt
 %type <byt> concurrently_opt
 %type <empty> nonclustered_columnstore
@@ -854,9 +856,10 @@ create_statement:
 /* PostgreSQL CREATE TABLE ... PARTITION OF ... FOR VALUES ... */
 | create_table_prefix PARTITION OF table_name partition_bound_spec
   {
-    // Partition child table - parsed but the partition info is discarded
-    // The table is created with empty TableSpec for now
-    $1.TableSpec = &TableSpec{}
+    $1.PartitionOf = &PartitionOfSpec{
+      ParentTable: $4,
+      BoundSpec:   $5,
+    }
     $$ = $1
   }
 | CREATE unique_clustered_opt INDEX concurrently_opt sql_id ON table_name '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt where_expression_opt index_option_opt index_partition_opt
@@ -2843,15 +2846,15 @@ partition_engine_opt:
 partition_bound_spec:
   FOR VALUES FROM '(' expression_list ')' TO '(' expression_list ')'
   {
-    // RANGE partition bound - parsed but discarded
+    $$ = &PartitionBoundSpec{From: $5, To: $9}
   }
 | FOR VALUES IN '(' expression_list ')'
   {
-    // LIST partition bound - parsed but discarded
+    $$ = &PartitionBoundSpec{In: $5}
   }
 | DEFAULT
   {
-    // DEFAULT partition - parsed but discarded
+    $$ = &PartitionBoundSpec{IsDefault: true}
   }
 
 table_column_list:

@@ -1,10 +1,7 @@
 # yaml-language-server: $schema=../../testutil/testcase.schema.json
-# PostgreSQL partition syntax tests
-# These tests verify parsing only since partition tables are typically skipped in schema management
 
 PartitionByRange:
   legacy_ignore_quotes: false
-  offline: true
   desired: |
     CREATE TABLE logs (
       id bigint NOT NULL,
@@ -13,7 +10,6 @@ PartitionByRange:
 
 PartitionByList:
   legacy_ignore_quotes: false
-  offline: true
   desired: |
     CREATE TABLE orders (
       id bigint NOT NULL,
@@ -22,7 +18,6 @@ PartitionByList:
 
 PartitionByHash:
   legacy_ignore_quotes: false
-  offline: true
   desired: |
     CREATE TABLE sessions (
       id bigint NOT NULL,
@@ -31,7 +26,6 @@ PartitionByHash:
 
 PartitionByRangeMultipleColumns:
   legacy_ignore_quotes: false
-  offline: true
   desired: |
     CREATE TABLE events (
       id bigint NOT NULL,
@@ -41,20 +35,45 @@ PartitionByRangeMultipleColumns:
 
 PartitionOfForValuesRange:
   legacy_ignore_quotes: false
-  offline: true
+  current: |
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL
+    ) PARTITION BY RANGE (created_at);
   desired: |
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL
+    ) PARTITION BY RANGE (created_at);
     CREATE TABLE logs_2024_01 PARTITION OF logs
       FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
 
 PartitionOfForValuesIn:
   legacy_ignore_quotes: false
-  offline: true
+  current: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      region text NOT NULL
+    ) PARTITION BY LIST (region);
   desired: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      region text NOT NULL
+    ) PARTITION BY LIST (region);
     CREATE TABLE orders_us PARTITION OF orders
       FOR VALUES IN ('US', 'CA', 'MX');
 
 PartitionOfDefault:
   legacy_ignore_quotes: false
-  offline: true
+  current: |
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL
+    ) PARTITION BY RANGE (created_at);
   desired: |
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL
+    ) PARTITION BY RANGE (created_at);
     CREATE TABLE logs_default PARTITION OF logs DEFAULT;
+

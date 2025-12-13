@@ -163,6 +163,25 @@ type RevokePrivilege struct {
 	cascadeOption bool // CASCADE option for REVOKE
 }
 
+// CreatePartitionOf represents a PostgreSQL CREATE TABLE ... PARTITION OF statement
+type CreatePartitionOf struct {
+	statement   string
+	tableName   QualifiedName
+	parentTable QualifiedName
+	boundSpec   PartitionBound
+}
+
+// PartitionBound represents the partition bound specification
+type PartitionBound struct {
+	// For RANGE partitions: FROM (values) TO (values)
+	From parser.Exprs
+	To   parser.Exprs
+	// For LIST partitions: IN (values)
+	In parser.Exprs
+	// For DEFAULT partition
+	IsDefault bool
+}
+
 type Table struct {
 	name        QualifiedName
 	columns     map[string]*Column
@@ -496,6 +515,10 @@ func (g *GrantPrivilege) Statement() string {
 
 func (r *RevokePrivilege) Statement() string {
 	return r.statement
+}
+
+func (c *CreatePartitionOf) Statement() string {
+	return c.statement
 }
 
 func (v *View) Statement() string {

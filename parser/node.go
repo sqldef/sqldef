@@ -505,6 +505,7 @@ type DDL struct {
 	IfNotExists   bool
 	TableSpec     *TableSpec
 	PartitionSpec *PartitionSpec
+	PartitionOf   *PartitionOfSpec // PostgreSQL PARTITION OF clause
 	IndexSpec     *IndexSpec
 	IndexCols     []IndexColumn
 	IndexExpr     Expr
@@ -520,6 +521,23 @@ type DDL struct {
 	Extension     *Extension
 	Schema        *Schema
 	Grant         *Grant
+}
+
+// PartitionOfSpec represents PostgreSQL CREATE TABLE ... PARTITION OF syntax
+type PartitionOfSpec struct {
+	ParentTable TableName
+	BoundSpec   *PartitionBoundSpec
+}
+
+// PartitionBoundSpec represents the partition bound (FOR VALUES ... or DEFAULT)
+type PartitionBoundSpec struct {
+	// For RANGE partitions: FROM (expr_list) TO (expr_list)
+	From Exprs
+	To   Exprs
+	// For LIST partitions: IN (expr_list)
+	In Exprs
+	// For DEFAULT partition
+	IsDefault bool
 }
 
 type DDLAction int
@@ -559,7 +577,10 @@ const (
 func (node *DDL) Format(buf *nodeBuffer) {
 	switch node.Action {
 	case CreateTable:
-		if node.TableSpec == nil {
+		if node.PartitionOf != nil {
+			buf.Printf("create table %v partition of %v", node.NewName, node.PartitionOf.ParentTable)
+			node.PartitionOf.BoundSpec.Format(buf)
+		} else if node.TableSpec == nil {
 			buf.Printf("create table %v", node.NewName)
 		} else {
 			buf.Printf("create table %v %v", node.NewName, node.TableSpec)
@@ -572,6 +593,17 @@ func (node *DDL) Format(buf *nodeBuffer) {
 		}
 	default:
 		panic(fmt.Sprintf("unexpected action: %v", node.Action))
+	}
+}
+
+// Format formats the PartitionBoundSpec node.
+func (node *PartitionBoundSpec) Format(buf *nodeBuffer) {
+	if node.IsDefault {
+		buf.WriteString(" default")
+	} else if node.In != nil {
+		buf.Printf(" for values in (%v)", node.In)
+	} else if node.From != nil && node.To != nil {
+		buf.Printf(" for values from (%v) to (%v)", node.From, node.To)
 	}
 }
 
