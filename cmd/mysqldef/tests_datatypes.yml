@@ -464,3 +464,37 @@ TypedLiteralsInCheck:
     ALTER TABLE `events` DROP CHECK `chk_date_range`;
     ALTER TABLE `events` DROP COLUMN `event_end_date`;
     ALTER TABLE `events` DROP COLUMN `event_date`;
+YearWithLength:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE test (
+      id bigint unsigned NOT NULL AUTO_INCREMENT,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE test (
+      id bigint unsigned NOT NULL AUTO_INCREMENT,
+      year_field year(4) NOT NULL,
+      PRIMARY KEY (id)
+    );
+  up: |
+    ALTER TABLE test ADD COLUMN year_field year(4) NOT NULL AFTER id;
+  down: |
+    ALTER TABLE test DROP COLUMN `year_field`;
+YearWithoutLength:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE test (
+      id bigint unsigned NOT NULL AUTO_INCREMENT,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE test (
+      id bigint unsigned NOT NULL AUTO_INCREMENT,
+      year_field year NOT NULL,
+      PRIMARY KEY (id)
+    );
+  up: |
+    ALTER TABLE test ADD COLUMN year_field year NOT NULL AFTER id;
+  down: |
+    ALTER TABLE test DROP COLUMN `year_field`;
