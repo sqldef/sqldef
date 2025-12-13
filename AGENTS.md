@@ -233,13 +233,9 @@ TestCaseName:
     create_index_concurrently: true
 ```
 
-The `up` and `down` fields work together:
-- If neither is specified: idempotency-only test (verifies the `desired` schema is stable)
-- If `up` is specified: `down` must also be specified (bidirectional migration test)
-
-When both are specified, the test runner validates:
-1. Migration from `current` to `desired` produces `up`
-2. Migration from `desired` to `current` produces `down`
+The `up` and `down` fields must both be specified or both be omitted:
+- Both specified: asserts `current → desired` produces `up` and `desired → current` produces `down`
+- Both omitted: idempotency-only test; DDLs are applied but not asserted (must be valid SQL unless `offline: true`)
 
 #### Notes for Writing Tests
 
