@@ -24,6 +24,7 @@ func GetVersion() string {
 
 // GetRevision returns the git revision of sqldef.
 // It is automatically populated from Go's embedded VCS info.
+// Returns empty string if vcs.revision is not available (e.g., when built without .git directory).
 func GetRevision() string {
 	if info, ok := debug.ReadBuildInfo(); ok {
 		for _, setting := range info.Settings {
@@ -32,7 +33,16 @@ func GetRevision() string {
 			}
 		}
 	}
-	return "HEAD"
+	return ""
+}
+
+// GetFullVersion returns the version string for --version output.
+// Returns "X.Y.Z (abc1234)" if revision is available, otherwise just "X.Y.Z".
+func GetFullVersion() string {
+	if rev := GetRevision(); rev != "" {
+		return fmt.Sprintf("%s (%s)", GetVersion(), rev)
+	}
+	return GetVersion()
 }
 
 type Options struct {

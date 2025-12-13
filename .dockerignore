@@ -1,5 +1,6 @@
 *.sql
 .dockerignore
+.git
 .github
 .gitignore
 /.docker
@@ -19,3 +20,4 @@ README.md
 compose.yml
 demo.gif
 y.output
+example
