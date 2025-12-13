@@ -72,7 +72,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 
 	if opts.Version {
-		fmt.Printf("%s (%s)\n", sqldef.GetVersion(), sqldef.GetRevision())
+		fmt.Println(sqldef.GetFullVersion())
 		os.Exit(0)
 	}
 

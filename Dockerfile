@@ -4,7 +4,7 @@ FROM golang:1.25.5-alpine AS builder
 ARG SQLDEF_TOOL=mysqldef
 
 # Install build dependencies
-RUN apk add --no-cache git make
+RUN apk add --no-cache make
 
 WORKDIR /work
 
