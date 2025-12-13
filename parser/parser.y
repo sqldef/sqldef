@@ -3766,9 +3766,9 @@ time_type:
   {
     $$ = ColumnType{Type: $1}
   }
-| YEAR
+| YEAR length_opt
   {
-    $$ = ColumnType{Type: $1}
+    $$ = ColumnType{Type: $1, Length: $2}
   }
 | INTERVAL length_opt
   {

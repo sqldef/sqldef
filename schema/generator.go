@@ -4309,6 +4309,17 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 	currentScale := current.scale
 	desiredScale := desired.scale
 
+	// Normalize length for MySQL YEAR type.
+	// MySQL's YEAR(4) is deprecated and equivalent to YEAR. MySQL's SHOW CREATE TABLE
+	// returns just "year" without a length, so we ignore the length for comparison.
+	if g.mode == GeneratorModeMysql {
+		normalizedType := normalizeTypeName(current.typeName, g.mode)
+		if normalizedType == "year" {
+			currentLength = nil
+			desiredLength = nil
+		}
+	}
+
 	// Normalize default precision/scale for numeric/decimal types.
 	if g.mode == GeneratorModeMssql || g.mode == GeneratorModeMysql {
 		normalizedType := normalizeTypeName(current.typeName, g.mode)
