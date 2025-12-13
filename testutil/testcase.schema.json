@@ -22,11 +22,11 @@
         },
         "up": {
           "type": "string",
-          "description": "Expected DDL output for migrating from current to desired schema (current → desired). If specified, 'down' must also be specified."
+          "description": "Expected DDL output for migrating from current to desired schema (current → desired). If specified, 'down' must also be specified. If both 'up' and 'down' are omitted, the test becomes an idempotency-only test where DDLs are generated and applied but not asserted."
         },
         "down": {
           "type": "string",
-          "description": "Expected DDL output for migrating from desired to current schema (desired → current). Required if 'up' is specified."
+          "description": "Expected DDL output for migrating from desired to current schema (desired → current). Required if 'up' is specified. If both 'up' and 'down' are omitted, the test becomes an idempotency-only test where DDLs are generated and applied but not asserted."
         },
         "error": {
           "type": "string",
