@@ -1,3 +1,9 @@
+## [v3.8.6](https://github.com/sqldef/sqldef/compare/v3.8.5...v3.8.6) - 2025-12-13
+- chore: move cmd/testutils/ to testutil/ to follow Go convention by @gfx in https://github.com/sqldef/sqldef/pull/1027
+- chore: update agent stuff by @gfx in https://github.com/sqldef/sqldef/pull/1029
+- CI: add merge_group for merge queue by @gfx in https://github.com/sqldef/sqldef/pull/1031
+- chore: make docker build faster, exlucde .git in Dockerfile by @gfx in https://github.com/sqldef/sqldef/pull/1030
+
 ## [v3.8.5](https://github.com/sqldef/sqldef/compare/v3.8.4...v3.8.5) - 2025-12-12
 - chore: fix documentation and code quality issues in testutils by @Copilot in https://github.com/sqldef/sqldef/pull/1021
 - chore: rename generic type parameter to avoid shadowing parser.Expr by @Copilot in https://github.com/sqldef/sqldef/pull/1022
