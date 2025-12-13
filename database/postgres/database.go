@@ -140,16 +140,25 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 }
 
 func (d *PostgresDatabase) tableNames() ([]string, error) {
-	rows, err := d.db.Query(`
-		select n.nspname as table_schema, relname as table_name from pg_catalog.pg_class c
-		inner join pg_catalog.pg_namespace n on c.relnamespace = n.oid
-		where n.nspname not in ('information_schema', 'pg_catalog')
-		and c.relkind in ('r', 'p')
-		and c.relpersistence in ('p', 'u')
-		and c.relispartition = false
-		and not exists (select * from pg_catalog.pg_depend d where c.oid = d.objid and d.deptype = 'e')
-		order by n.nspname asc, relname asc;
-	`)
+	// When SkipPartition is true, exclude partitioned parent tables (relkind='p').
+	// Otherwise, include both regular tables ('r') and partitioned parent tables ('p').
+	relkindCondition := "c.relkind in ('r', 'p')"
+	if d.config.SkipPartition {
+		relkindCondition = "c.relkind = 'r'"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT n.nspname AS table_schema, relname AS table_name FROM pg_catalog.pg_class c
+		INNER JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+		WHERE n.nspname NOT IN ('information_schema', 'pg_catalog')
+		AND %s
+		AND c.relpersistence IN ('p', 'u')
+		AND c.relispartition = false
+		AND NOT EXISTS (SELECT * FROM pg_catalog.pg_depend d WHERE c.oid = d.objid AND d.deptype = 'e')
+		ORDER BY n.nspname ASC, relname ASC;
+	`, relkindCondition)
+
+	rows, err := d.db.Query(query)
 	if err != nil {
 		return nil, err
 	}

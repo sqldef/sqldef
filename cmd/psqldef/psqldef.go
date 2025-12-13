@@ -38,6 +38,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		EnableDrop    bool     `long:"enable-drop" description:"Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE"`
 		SkipView      bool     `long:"skip-view" description:"Skip managing views/materialized views"`
 		SkipExtension bool     `long:"skip-extension" description:"Skip managing extensions"`
+		SkipPartition bool     `long:"skip-partition" description:"Skip managing partitioned tables"`
 		BeforeApply   string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs" value-name:"SQL"`
 
 		// Custom handlers for config flags to preserve order
@@ -139,6 +140,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		Port:                  int(opts.Port),
 		SkipView:              opts.SkipView,
 		SkipExtension:         opts.SkipExtension,
+		SkipPartition:         opts.SkipPartition,
 		TargetSchema:          options.Config.TargetSchema,
 		DumpConcurrency:       options.Config.DumpConcurrency,
 		DisableDdlTransaction: options.Config.DisableDdlTransaction,
