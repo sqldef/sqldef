@@ -137,7 +137,7 @@ func setDDL(yylex any, ddl *DDL) {
 
 %token LEX_ERROR
 %left <str> UNION INTERSECT EXCEPT
-%token <str> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER BY LIMIT OFFSET FOR DECLARE
+%token <str> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER LIMIT OFFSET FOR DECLARE
 %token <str> ALL ANY SOME DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SRID SET LOCK KEYS
 %token <str> ROWID STRICT
 %token <str> VALUES LAST_INSERT_ID
@@ -230,6 +230,17 @@ func setDDL(yylex any, ddl *DDL) {
 %nonassoc LOWER_THAN_RPAREN
 %left ')'
 /* ---------------- End of Parenthesis Resolution ------------------------------ */
+
+/* ---------------- PARTITION BY Resolution -------------------------------------
+ * Resolves shift/reduce conflict when PARTITION appears in table options context.
+ * When parsing "CREATE TABLE t (...) PARTITION BY ...", after seeing PARTITION,
+ * the parser must choose between:
+ * - Shift BY to continue parsing PARTITION BY clause
+ * - Reduce PARTITION as non_reserved_keyword (for table_opt_name)
+ * We prefer shifting BY, so LOWER_THAN_BY has lower precedence than BY.          */
+%nonassoc LOWER_THAN_BY
+%left <str> BY
+/* ---------------- End of PARTITION BY Resolution ------------------------------ */
 
 // There is no need to define precedence for the JSON
 // operators because the syntax is restricted enough that
@@ -7148,7 +7159,6 @@ reserved_keyword:
 | ORDER
 | OUTER
 | OVERLAPS
-| PARTITION
 | PAGLOCK
 | PRIOR
 | READUNCOMMITTED
@@ -7242,6 +7252,7 @@ non_reserved_keyword:
 | LINEAR
 | COLUMNS
 | PARTITIONS
+| PARTITION %prec LOWER_THAN_BY
 | ENGINE
 
 // col_name_keyword: keywords that can be used as column names in index definitions.
