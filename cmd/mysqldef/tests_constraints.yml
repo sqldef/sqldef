@@ -321,3 +321,14 @@ CheckRowValueConstructorOuterOrderShouldMatch:
   down: ""
   flavor: mysql
   min_version: '8.0'
+
+# Table with CHECK constraint via COMMENT (works on both MySQL and MariaDB)
+TableWithCommentAndDefaults:
+  desired: |
+    CREATE TABLE `books` (
+      `id` int(10) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      `type` VARCHAR(255) NOT NULL COMMENT 'manga, novel',
+      `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      `deleted_at` datetime DEFAULT null
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;

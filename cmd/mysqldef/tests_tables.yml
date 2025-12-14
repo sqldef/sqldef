@@ -1145,3 +1145,12 @@ CompositeUnnamedForeignKey:
       title VARCHAR(255) NOT NULL,
       FOREIGN KEY (tenant_id, author_id) REFERENCES users(tenant_id, user_id)
     );
+
+# Table with collate on table level (works on both MySQL and MariaDB)
+CollateOnTable:
+  desired: |
+    create table users
+    (
+        id   int          not null,
+        name varchar(255) not null
+    ) COLLATE=utf8mb4_general_ci;

@@ -440,3 +440,54 @@ ChangeIndexCombination:
     ALTER TABLE `users` ADD KEY `index_users1` (`account_id`);
     ALTER TABLE `users` DROP INDEX `index_users2`;
     ALTER TABLE `users` ADD KEY `index_users2` (`account_id`, `name`);
+
+# Basic fulltext indexes (works on both MySQL and MariaDB, without ngram parser)
+FulltextIndexBasic:
+  desired: |
+    CREATE TABLE posts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      title varchar(40) DEFAULT NULL,
+      FULLTEXT KEY title_fulltext_index (title)
+    );
+  up: |
+    CREATE TABLE posts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      title varchar(40) DEFAULT NULL,
+      FULLTEXT KEY title_fulltext_index (title)
+    );
+  down: |
+    DROP TABLE `posts`;
+
+FulltextIndexDropBasic:
+  current: |
+    CREATE TABLE posts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      title varchar(40) DEFAULT NULL,
+      FULLTEXT KEY title_fulltext_index (title)
+    );
+  desired: |
+    CREATE TABLE posts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      title varchar(40) DEFAULT NULL
+    );
+  up: |
+    ALTER TABLE `posts` DROP INDEX `title_fulltext_index`;
+  down: |
+    ALTER TABLE `posts` ADD FULLTEXT KEY `title_fulltext_index` (`title`);
+
+FulltextIndexReAddBasic:
+  current: |
+    CREATE TABLE posts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      title varchar(40) DEFAULT NULL
+    );
+  desired: |
+    CREATE TABLE posts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      title varchar(40) DEFAULT NULL,
+      FULLTEXT KEY title_fulltext_index (title)
+    );
+  up: |
+    ALTER TABLE `posts` ADD FULLTEXT KEY `title_fulltext_index` (`title`);
+  down: |
+    ALTER TABLE `posts` DROP INDEX `title_fulltext_index`;

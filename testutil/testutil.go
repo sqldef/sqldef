@@ -173,6 +173,11 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	}
 	// If test requires a specific flavor, check if it matches the current environment
 	// Supports both positive (flavor: mariadb) and negative (flavor: !tidb) matching
+	// Instead of skipping mismatched tests, we run them and expect them to fail.
+	// This validates that flavor annotations are correct - if a test passes on a
+	// non-matching flavor, the annotation should be removed or corrected.
+	var expectFailure bool
+	var flavorMismatchMsg string
 	if test.Flavor != "" {
 		// If no flavor is explicitly set, default to "mysql" for MySQL tests
 		currentFlavor := allowedFlavor
@@ -180,17 +185,27 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 			currentFlavor = "mysql"
 		}
 		if after, ok := strings.CutPrefix(test.Flavor, "!"); ok {
-			// Negative match: skip if current flavor matches the excluded flavor
+			// Negative match: test excludes this flavor, expect failure if running on excluded flavor
 			excludedFlavor := after
 			if excludedFlavor == currentFlavor {
-				t.Skipf("Test excludes flavor '%s' (current flavor)", excludedFlavor)
+				expectFailure = true
+				flavorMismatchMsg = fmt.Sprintf("Test passed but it excludes flavor '%s' (current flavor). The flavor annotation may be incorrect - consider removing 'flavor: !%s' if the test works on this flavor.", excludedFlavor, excludedFlavor)
 			}
 		} else {
-			// Positive match: skip if current flavor doesn't match
+			// Positive match: test requires specific flavor, expect failure on other flavors
 			if test.Flavor != currentFlavor {
-				t.Skipf("Test flavor '%s' does not match current flavor '%s'", test.Flavor, currentFlavor)
+				expectFailure = true
+				flavorMismatchMsg = fmt.Sprintf("Test passed but flavor '%s' doesn't match current flavor '%s'. The flavor annotation may be incorrect - consider removing 'flavor: %s' if the test works on other flavors.", test.Flavor, currentFlavor, test.Flavor)
 			}
 		}
+	}
+
+	if expectFailure {
+		defer func() {
+			if !t.Failed() {
+				t.Error(flavorMismatchMsg)
+			}
+		}()
 	}
 
 	// Determine LegacyIgnoreQuotes: use test value if specified, otherwise default to true (legacy mode)

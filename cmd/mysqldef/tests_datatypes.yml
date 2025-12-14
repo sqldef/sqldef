@@ -498,3 +498,11 @@ YearWithoutLength:
     ALTER TABLE test ADD COLUMN year_field year NOT NULL AFTER id;
   down: |
     ALTER TABLE test DROP COLUMN `year_field`;
+
+# UUID using standard functions (works on both MySQL and MariaDB)
+UUIDBinary:
+  desired: |
+    CREATE TABLE users (
+      id BINARY(16) NOT NULL DEFAULT (UNHEX(REPLACE(UUID(), '-', ''))),
+      PRIMARY KEY (id)
+    );

@@ -552,3 +552,66 @@ TriggerWithDeclareHandlerMultipleStatements:
   down: |
     DROP TABLE `error_log`;
     DROP TABLE `example_table`;
+
+# View tests (works on both MySQL and MariaDB)
+ViewBasic:
+  desired: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL
+    );
+    CREATE TABLE posts (
+      id bigint(20) NOT NULL,
+      user_id bigint(20) NOT NULL
+    );
+    CREATE SQL SECURITY DEFINER VIEW user_posts AS select `mysqldef_test`.`users`.`id` AS `user_id`, `mysqldef_test`.`posts`.`id` AS `post_id` from (`mysqldef_test`.`users` join `mysqldef_test`.`posts` on(`mysqldef_test`.`users`.`id` = `mysqldef_test`.`posts`.`user_id`));
+
+ViewDrop:
+  current: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL
+    );
+    CREATE TABLE posts (
+      id bigint(20) NOT NULL,
+      user_id bigint(20) NOT NULL,
+      is_deleted tinyint(1)
+    );
+    CREATE SQL SECURITY DEFINER VIEW user_posts AS select `mysqldef_test`.`users`.`id` AS `user_id`, `mysqldef_test`.`posts`.`id` AS `post_id`, `mysqldef_test`.`posts`.`is_deleted` AS `deleted` from (`mysqldef_test`.`users` join `mysqldef_test`.`posts` on(`mysqldef_test`.`users`.`id` = `mysqldef_test`.`posts`.`user_id`));
+  desired: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL
+    );
+    CREATE TABLE posts (
+      id bigint(20) NOT NULL,
+      user_id bigint(20) NOT NULL,
+      is_deleted tinyint(1)
+    );
+  up: |
+    DROP VIEW `user_posts`;
+  down: |
+    CREATE SQL SECURITY DEFINER VIEW user_posts AS select `mysqldef_test`.`users`.`id` AS `user_id`, `mysqldef_test`.`posts`.`id` AS `post_id`, `mysqldef_test`.`posts`.`is_deleted` AS `deleted` from (`mysqldef_test`.`users` join `mysqldef_test`.`posts` on(`mysqldef_test`.`users`.`id` = `mysqldef_test`.`posts`.`user_id`));
+
+ViewSecurityType:
+  current: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL,
+      name varchar(50) NOT NULL
+    );
+    CREATE TABLE posts (
+      id bigint(20) NOT NULL,
+      user_id bigint(20) NOT NULL
+    );
+    CREATE SQL SECURITY DEFINER VIEW user_posts AS select mysqldef_test.users.id as id, mysqldef_test.posts.id as post_id from (mysqldef_test.users join mysqldef_test.posts on (mysqldef_test.users.id = mysqldef_test.posts.user_id));
+  desired: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL,
+      name varchar(50) NOT NULL
+    );
+    CREATE TABLE posts (
+      id bigint(20) NOT NULL,
+      user_id bigint(20) NOT NULL
+    );
+    CREATE SQL SECURITY INVOKER VIEW user_posts AS select mysqldef_test.users.id as id, mysqldef_test.posts.id as post_id from (mysqldef_test.users join mysqldef_test.posts on (mysqldef_test.users.id = mysqldef_test.posts.user_id));
+  up: |
+    CREATE OR REPLACE SQL SECURITY INVOKER VIEW `user_posts` AS select mysqldef_test.users.id as id, mysqldef_test.posts.id as post_id from (mysqldef_test.users join mysqldef_test.posts on (mysqldef_test.users.id = mysqldef_test.posts.user_id));
+  down: |
+    CREATE OR REPLACE SQL SECURITY DEFINER VIEW `user_posts` AS select mysqldef_test.users.id as id, mysqldef_test.posts.id as post_id from (mysqldef_test.users join mysqldef_test.posts on (mysqldef_test.users.id = mysqldef_test.posts.user_id));

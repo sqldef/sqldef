@@ -324,3 +324,34 @@ ChangeGenerateColumnGeneratedToRegular:
     ALTER TABLE `test_table` DROP COLUMN `computed_value`;
     ALTER TABLE `test_table` ADD COLUMN `computed_value` int(11) GENERATED ALWAYS AS (base_value * 2) VIRTUAL AFTER `base_value`;
   flavor: mysql  # MariaDB may handle this differently
+
+# Change generated column from VIRTUAL to STORED with CHECK constraint (works on both MySQL and MariaDB)
+ChangeGenerateColumnVirtualToStoredWithCheck:
+  current: |
+    CREATE TABLE test_table (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      test_value varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
+      test_expr varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL,
+      data LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(data)),
+      name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) VIRTUAL,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE test_table (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      test_value varchar(45) GENERATED ALWAYS AS ('test') VIRTUAL,
+      test_expr varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED,
+      data LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(data)),
+      name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name2')) STORED,
+      PRIMARY KEY (id)
+    );
+  up: |
+    ALTER TABLE `test_table` DROP COLUMN `test_expr`;
+    ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED AFTER `test_value`;
+    ALTER TABLE `test_table` DROP COLUMN `name`;
+    ALTER TABLE `test_table` ADD COLUMN `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED AFTER `data`;
+  down: |
+    ALTER TABLE `test_table` DROP COLUMN `test_expr`;
+    ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL AFTER `test_value`;
+    ALTER TABLE `test_table` DROP COLUMN `name`;
+    ALTER TABLE `test_table` ADD COLUMN `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) VIRTUAL AFTER `data`;
