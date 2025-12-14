@@ -1,6 +1,5 @@
 # yaml-language-server: $schema=../../testutil/testcase.schema.json
 
-# Test parsing PARTITION BY RANGE with year() function inside MySQL version comments
 PartitionByRangeWithYearFunc:
   legacy_ignore_quotes: false
   desired: |
@@ -42,7 +41,6 @@ PartitionByRangeWithToDays:
 
 PartitionByRangeColumns:
   legacy_ignore_quotes: false
-  flavor: "!tidb"  # TiDB has limited support for RANGE COLUMNS
   desired: |
     CREATE TABLE orders (
       id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -94,7 +92,6 @@ PartitionByLinearHash:
 
 PartitionByKey:
   legacy_ignore_quotes: false
-  flavor: "!tidb"  # TiDB has limited support for KEY partitioning
   desired: |
     CREATE TABLE messages (
       id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -107,7 +104,6 @@ PartitionByKey:
 
 PartitionByLinearKey:
   legacy_ignore_quotes: false
-  flavor: "!tidb"  # TiDB has limited support for KEY partitioning
   desired: |
     CREATE TABLE logs (
       id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -134,7 +130,6 @@ PartitionByList:
 
 PartitionByListColumns:
   legacy_ignore_quotes: false
-  flavor: "!tidb"  # TiDB has limited support for LIST COLUMNS
   desired: |
     CREATE TABLE country_sales (
       id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -147,10 +142,8 @@ PartitionByListColumns:
      PARTITION p_europe VALUES IN ('UK', 'DE', 'FR'),
      PARTITION p_asia VALUES IN ('JP', 'CN', 'KR'));
 
-# Idempotency test: verify RANGE partitioned table definitions are preserved
 PartitionByRangeIdempotent:
   legacy_ignore_quotes: false
-  flavor: "!tidb"  # TiDB has different partition handling
   current: |
     CREATE TABLE sales_history (
       id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -176,7 +169,6 @@ PartitionByRangeIdempotent:
   up: ""
   down: ""
 
-# Idempotency test: verify LIST partitioned table definitions are preserved
 PartitionByListIdempotent:
   legacy_ignore_quotes: false
   current: |
@@ -204,10 +196,8 @@ PartitionByListIdempotent:
   up: ""
   down: ""
 
-# Test adding a new partition to an existing RANGE partitioned table
 PartitionByRangeAddPartition:
   legacy_ignore_quotes: false
-  flavor: "!tidb"
   current: |
     CREATE TABLE sales_history (
       id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -234,11 +224,9 @@ PartitionByRangeAddPartition:
   down: |
     ALTER TABLE sales_history DROP PARTITION p2024;
 
-# Test dropping a partition from an existing RANGE partitioned table
 PartitionByRangeDropPartition:
   legacy_ignore_quotes: false
   enable_drop: true
-  flavor: "!tidb"
   current: |
     CREATE TABLE sales_history (
       id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -265,7 +253,6 @@ PartitionByRangeDropPartition:
   down: |
     ALTER TABLE sales_history ADD PARTITION (PARTITION p2024 VALUES LESS THAN (2025));
 
-# Test adding a new partition to an existing LIST partitioned table
 PartitionByListAddPartition:
   legacy_ignore_quotes: false
   current: |
@@ -294,7 +281,34 @@ PartitionByListAddPartition:
   down: |
     ALTER TABLE regional_sales DROP PARTITION p_east;
 
-# Test dropping a partition from an existing LIST partitioned table
+PartitionByListAddPartitionWithQuotes:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE regional_sales (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      region_code int NOT NULL,
+      amount decimal(10,2) DEFAULT NULL,
+      PRIMARY KEY (id, region_code)
+    )
+    PARTITION BY LIST (region_code)
+    (PARTITION `p north` VALUES IN (1, 2, 3),
+     PARTITION `p south` VALUES IN (4, 5, 6));
+  desired: |
+    CREATE TABLE regional_sales (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      region_code int NOT NULL,
+      amount decimal(10,2) DEFAULT NULL,
+      PRIMARY KEY (id, region_code)
+    )
+    PARTITION BY LIST (region_code)
+    (PARTITION `p north` VALUES IN (1, 2, 3),
+     PARTITION `p south` VALUES IN (4, 5, 6),
+     PARTITION `p east` VALUES IN (7, 8, 9));
+  up: |
+    ALTER TABLE regional_sales ADD PARTITION (PARTITION `p east` VALUES IN (7, 8, 9));
+  down: |
+    ALTER TABLE regional_sales DROP PARTITION `p east`;
+
 PartitionByListDropPartition:
   legacy_ignore_quotes: false
   enable_drop: true
@@ -327,7 +341,6 @@ PartitionByListDropPartition:
 PartitionDropBlockedWhenDisabled:
   legacy_ignore_quotes: false
   enable_drop: false
-  flavor: "!tidb"
   current: |
     CREATE TABLE sales_history (
       id bigint(20) NOT NULL AUTO_INCREMENT,

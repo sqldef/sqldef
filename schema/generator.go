@@ -1684,7 +1684,9 @@ func (g *Generator) generatePartitionDDLs(currentTable Table, desiredTable Table
 // generateAddPartitionDDL generates ALTER TABLE ADD PARTITION statement
 func (g *Generator) generateAddPartitionDDL(table Table, part PartitionDefinition) string {
 	tableName := g.escapeTableName(&table)
-	partName := g.escapeSQLIdent(part.Name)
+	// Quote partition name only if it needs quoting (contains special chars/spaces)
+	// Don't preserve quotes from source since MariaDB quotes differently than MySQL
+	partName := g.escapePartitionName(part.Name.Name)
 
 	if part.In != nil {
 		// LIST partition: VALUES IN (...)
@@ -1707,8 +1709,19 @@ func (g *Generator) generateAddPartitionDDL(table Table, part PartitionDefinitio
 // generateDropPartitionDDL generates ALTER TABLE DROP PARTITION statement
 func (g *Generator) generateDropPartitionDDL(table Table, part PartitionDefinition) string {
 	tableName := g.escapeTableName(&table)
-	partName := g.escapeSQLIdent(part.Name)
+	// Quote partition name only if it needs quoting (contains special chars/spaces)
+	// Don't preserve quotes from source since MariaDB quotes differently than MySQL
+	partName := g.escapePartitionName(part.Name.Name)
 	return fmt.Sprintf("ALTER TABLE %s DROP PARTITION %s", tableName, partName)
+}
+
+// escapePartitionName quotes a partition name only if it needs quoting.
+// MySQL/MariaDB partition names need quoting if they contain spaces or special characters.
+func (g *Generator) escapePartitionName(name string) string {
+	if database.NeedsQuoting(name) {
+		return g.forceEscapeSQLName(name)
+	}
+	return name
 }
 
 // formatExprs formats parser.Exprs for use in DDL statements
