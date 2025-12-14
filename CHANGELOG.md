@@ -1,3 +1,8 @@
+## [v3.8.9](https://github.com/sqldef/sqldef/compare/v3.8.8...v3.8.9) - 2025-12-14
+- cleanup go.mod by merging require blocks by @gfx in https://github.com/sqldef/sqldef/pull/1038
+- setup codecov by @gfx in https://github.com/sqldef/sqldef/pull/1040
+- fix catalog access for Aurora DSQL by @gfx in https://github.com/sqldef/sqldef/pull/1041
+
 ## [v3.8.8](https://github.com/sqldef/sqldef/compare/v3.8.7...v3.8.8) - 2025-12-14
 - support `YEAR(4)` for mysqldef, even if deprdcated by @gfx in https://github.com/sqldef/sqldef/pull/1034
 - support PARTITION for mysqldef and psqldef, adding --skip-partition to psqldef by @gfx in https://github.com/sqldef/sqldef/pull/1036
