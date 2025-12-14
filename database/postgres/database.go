@@ -35,9 +35,10 @@ type PostgresDatabase struct {
 }
 
 func NewDatabase(config database.Config) (database.Database, error) {
-	db, err := sql.Open("postgres", postgresBuildDSN(config))
+	dsn := postgresBuildDSN(config)
+	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open PostgreSQL connection: %w", err)
 	}
 
 	return &PostgresDatabase{
@@ -157,7 +158,7 @@ func (d *PostgresDatabase) tableNames() ([]string, error) {
 	query := fmt.Sprintf(`
 		SELECT n.nspname AS table_schema, relname AS table_name FROM pg_catalog.pg_class c
 		INNER JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-		WHERE n.nspname NOT IN ('information_schema', 'pg_catalog')
+		WHERE n.nspname NOT IN ('information_schema', 'pg_catalog', 'sys')
 		AND %s
 		AND c.relpersistence IN ('p', 'u')
 		AND c.relispartition = false
@@ -209,7 +210,7 @@ func (d *PostgresDatabase) partitionChildTables() ([]string, error) {
 		INNER JOIN pg_catalog.pg_class pc ON i.inhparent = pc.oid
 		INNER JOIN pg_catalog.pg_namespace pn ON pc.relnamespace = pn.oid
 		WHERE c.relispartition = true
-		AND n.nspname NOT IN ('information_schema', 'pg_catalog')
+		AND n.nspname NOT IN ('information_schema', 'pg_catalog', 'sys')
 		AND NOT EXISTS (SELECT * FROM pg_catalog.pg_depend d WHERE c.oid = d.objid AND d.deptype = 'e')
 		ORDER BY n.nspname ASC, c.relname ASC;
 	`
@@ -263,7 +264,7 @@ func (d *PostgresDatabase) views() ([]string, error) {
 		select n.nspname as table_schema, c.relname as table_name, pg_get_viewdef(c.oid) as definition,
 		       obj_description(c.oid, 'pg_class') as view_comment
 		from pg_catalog.pg_class c inner join pg_catalog.pg_namespace n on c.relnamespace = n.oid
-		where n.nspname not in ('information_schema', 'pg_catalog')
+		where n.nspname not in ('information_schema', 'pg_catalog', 'sys')
 		and c.relkind = 'v'
 		and not exists (select * from pg_catalog.pg_depend d where c.oid = d.objid and d.deptype = 'e')
 	`)
@@ -358,7 +359,7 @@ func (d *PostgresDatabase) schemas() ([]string, error) {
 		SELECT schema_name
 		FROM information_schema.schemata
 		WHERE schema_name NOT LIKE 'pg_%%'
-		AND schema_name not in ('information_schema', 'public');
+		AND schema_name not in ('information_schema', 'public', 'sys');
 	`)
 	if err != nil {
 		return nil, err
@@ -466,7 +467,7 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 		INNER JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
 		LEFT JOIN pg_catalog.pg_collation c ON t.typcollation = c.oid AND t.typcollation <> 0
 		WHERE t.typtype = 'd'
-		  AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+		  AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'sys')
 		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = t.oid AND d.deptype = 'e')
 		ORDER BY n.nspname, t.typname;
 	`)
@@ -507,7 +508,7 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 		INNER JOIN pg_catalog.pg_type t ON con.contypid = t.oid
 		INNER JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
 		WHERE t.typtype = 'd'
-		  AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+		  AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'sys')
 		ORDER BY n.nspname, t.typname, con.conname;
 	`)
 	if err != nil {
@@ -587,7 +588,7 @@ func (d *PostgresDatabase) functions() ([]string, error) {
 		       obj_description(p.oid, 'pg_proc') AS func_comment
 		FROM pg_catalog.pg_proc p
 		INNER JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
-		WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+		WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'sys')
 		  AND p.prokind = 'f'
 		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')
 		ORDER BY n.nspname, p.proname;
@@ -642,7 +643,7 @@ func (d *PostgresDatabase) triggers() ([]string, error) {
 		FROM pg_catalog.pg_trigger t
 		INNER JOIN pg_catalog.pg_class c ON t.tgrelid = c.oid
 		INNER JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-		WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+		WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'sys')
 		  AND NOT t.tgisinternal
 		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = t.oid AND d.deptype = 'e')
 		ORDER BY n.nspname, c.relname, t.tgname;
@@ -1512,44 +1513,42 @@ func (d *PostgresDatabase) GetDefaultSchema() string {
 }
 
 func postgresBuildDSN(config database.Config) string {
-	user := config.User
-	password := config.Password
-	database := config.DbName
-	host := ""
-	var options []string
+	dsn := &url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(config.User, config.Password),
+		Path:   "/" + config.DbName,
+	}
+
+	options := url.Values{}
 
 	if config.Socket == "" {
-		host = fmt.Sprintf("%s:%d", config.Host, config.Port)
+		dsn.Host = fmt.Sprintf("%s:%d", config.Host, config.Port)
 	} else {
-		// We want to use either:
-		// - postgres://user:@%2Fvar%2Frun%2Fpostgresql/dbname
-		// - postgres://user:@/dbname?host=/var/run/postgresql
-		// As the first form would be rejected by the URL parser,
-		// we resort to the second form.
-		options = append(options, fmt.Sprintf("host=%s", config.Socket))
+		// Socket connection uses the host query parameter
+		options.Set("host", config.Socket)
 	}
 
 	// Use config.SslMode if set, otherwise check environment variable
 	if config.SslMode != "" {
-		options = append(options, fmt.Sprintf("sslmode=%s", config.SslMode))
+		options.Set("sslmode", config.SslMode)
 	} else if sslmode, ok := os.LookupEnv("PGSSLMODE"); ok {
-		options = append(options, fmt.Sprintf("sslmode=%s", sslmode))
+		options.Set("sslmode", sslmode)
 	}
 
-	if sslrootcert, ok := os.LookupEnv("PGSSLROOTCERT"); ok { // TODO: have this in database.Config, or standardize config with DSN?
-		options = append(options, fmt.Sprintf("sslrootcert=%s", sslrootcert))
+	// TODO: Add SslRootCert, SslCert, SslKey fields to database.Config for consistency with SslMode,
+	// or allow passing a raw DSN string to avoid field-by-field mapping entirely.
+	if sslrootcert, ok := os.LookupEnv("PGSSLROOTCERT"); ok {
+		options.Set("sslrootcert", sslrootcert)
+	}
+	if sslcert, ok := os.LookupEnv("PGSSLCERT"); ok {
+		options.Set("sslcert", sslcert)
+	}
+	if sslkey, ok := os.LookupEnv("PGSSLKEY"); ok {
+		options.Set("sslkey", sslkey)
 	}
 
-	if sslcert, ok := os.LookupEnv("PGSSLCERT"); ok { // TODO: have this in database.Config, or standardize config with DSN?
-		options = append(options, fmt.Sprintf("sslcert=%s", sslcert))
-	}
-
-	if sslkey, ok := os.LookupEnv("PGSSLKEY"); ok { // TODO: have this in database.Config, or standardize config with DSN?
-		options = append(options, fmt.Sprintf("sslkey=%s", sslkey))
-	}
-
-	// `QueryEscape` instead of `PathEscape` so that colon can be escaped.
-	return fmt.Sprintf("postgres://%s:%s@%s/%s?%s", url.QueryEscape(user), url.QueryEscape(password), host, database, strings.Join(options, "&"))
+	dsn.RawQuery = options.Encode()
+	return dsn.String()
 }
 
 func forceQuoteIdentifier(name string) string {
