@@ -26,6 +26,7 @@ BooleanValue:
   up: |
   down: |
 AddColumnWithDefaultExpression:
+  flavor: mysql
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY);
   desired: |
@@ -37,9 +38,9 @@ AddColumnWithDefaultExpression:
     ALTER TABLE `users` ADD COLUMN `friend_ids` json DEFAULT(JSON_ARRAY()) AFTER `id`;
   down: |
     ALTER TABLE `users` DROP COLUMN `friend_ids`;
-  flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 AddDefaultExpression:
+  flavor: "!mariadb"
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -54,9 +55,9 @@ AddDefaultExpression:
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json DEFAULT(JSON_ARRAY());
   down: |
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json;
-  flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 RemoveDefaultExpression:
+  flavor: "!mariadb"
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -71,18 +72,18 @@ RemoveDefaultExpression:
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json;
   down: |
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json DEFAULT(JSON_ARRAY());
-  flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 JsonColumnWithCharsetCastDefault:
+  flavor: "!mariadb"
   desired: |
     CREATE TABLE hello_json_utf8mb4 (
       id int NOT NULL AUTO_INCREMENT,
       json_col json NOT NULL DEFAULT (_utf8mb4'{}'),
       PRIMARY KEY (id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
-  flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0.13'
 CollateOnColumn:
+  flavor: "!mariadb"
   desired: |
     create table users
     (
@@ -93,7 +94,6 @@ CollateOnColumn:
     select u.id as id,
            (u.name collate `utf8mb4_unicode_ci`) as name
     from mysqldef_test.users as u;
-  flavor: mysql  # MariaDB shows unexpected view changes in idempotency tests
 AutoIncrementNotNull:
   desired: |
     CREATE TABLE users1 (
@@ -441,7 +441,7 @@ TypedLiteralsChangeDefault:
     ALTER TABLE `events` CHANGE COLUMN `event_time` `event_time` time DEFAULT '12:00:00';
     ALTER TABLE `events` CHANGE COLUMN `event_timestamp` `event_timestamp` timestamp DEFAULT '2024-01-01 12:00:00';
 TypedLiteralsInCheck:
-  flavor: mysql
+  flavor: "!mariadb"
   min_version: '8.0'
   current: |
     CREATE TABLE events (
@@ -499,8 +499,9 @@ YearWithoutLength:
   down: |
     ALTER TABLE test DROP COLUMN `year_field`;
 
-# UUID using standard functions (works on both MySQL and MariaDB)
+# UUID using standard functions (works on MySQL and MariaDB, not on TiDB)
 UUIDBinary:
+  flavor: "!tidb"
   desired: |
     CREATE TABLE users (
       id BINARY(16) NOT NULL DEFAULT (UNHEX(REPLACE(UUID(), '-', ''))),

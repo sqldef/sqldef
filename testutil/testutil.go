@@ -171,42 +171,6 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	if test.MaxVersion != "" && compareVersion(t, version, test.MaxVersion) > 0 {
 		t.Skipf("Version '%s' is larger than max_version '%s'", version, test.MaxVersion)
 	}
-	// If test requires a specific flavor, check if it matches the current environment
-	// Supports both positive (flavor: mariadb) and negative (flavor: !tidb) matching
-	// Instead of skipping mismatched tests, we run them and expect them to fail.
-	// This validates that flavor annotations are correct - if a test passes on a
-	// non-matching flavor, the annotation should be removed or corrected.
-	var expectFailure bool
-	var flavorMismatchMsg string
-	if test.Flavor != "" {
-		// If no flavor is explicitly set, default to "mysql" for MySQL tests
-		currentFlavor := allowedFlavor
-		if currentFlavor == "" && mode == schema.GeneratorModeMysql {
-			currentFlavor = "mysql"
-		}
-		if after, ok := strings.CutPrefix(test.Flavor, "!"); ok {
-			// Negative match: test excludes this flavor, expect failure if running on excluded flavor
-			excludedFlavor := after
-			if excludedFlavor == currentFlavor {
-				expectFailure = true
-				flavorMismatchMsg = fmt.Sprintf("Test passed but it excludes flavor '%s' (current flavor). The flavor annotation may be incorrect - consider removing 'flavor: !%s' if the test works on this flavor.", excludedFlavor, excludedFlavor)
-			}
-		} else {
-			// Positive match: test requires specific flavor, expect failure on other flavors
-			if test.Flavor != currentFlavor {
-				expectFailure = true
-				flavorMismatchMsg = fmt.Sprintf("Test passed but flavor '%s' doesn't match current flavor '%s'. The flavor annotation may be incorrect - consider removing 'flavor: %s' if the test works on other flavors.", test.Flavor, currentFlavor, test.Flavor)
-			}
-		}
-	}
-
-	if expectFailure {
-		defer func() {
-			if !t.Failed() {
-				t.Error(flavorMismatchMsg)
-			}
-		}()
-	}
 
 	// Determine LegacyIgnoreQuotes: use test value if specified, otherwise default to true (legacy mode)
 	legacyIgnoreQuotes := true // default: true for backward compatibility
@@ -225,6 +189,56 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	// Set config first to populate database-specific settings (e.g., MysqlLowerCaseTableNames)
 	db.SetGeneratorConfig(config)
 	config = db.GetGeneratorConfig()
+
+	// If test requires a specific flavor, check if it matches the current environment
+	// Supports both positive (flavor: mariadb) and negative (flavor: !tidb) matching
+	// Instead of skipping mismatched tests, we run them and expect them to fail.
+	// This validates that flavor annotations are correct - if a test passes on a
+	// non-matching flavor, the annotation should be removed or corrected.
+	var expectFailure bool
+	var currentFlavor string
+	if test.Flavor != "" {
+		// If no flavor is explicitly set, default to "mysql" for MySQL tests
+		currentFlavor = allowedFlavor
+		if currentFlavor == "" && mode == schema.GeneratorModeMysql {
+			currentFlavor = "mysql"
+		}
+
+		if after, ok := strings.CutPrefix(test.Flavor, "!"); ok {
+			// Negative match: test excludes this flavor, expect failure if running on excluded flavor
+			excludedFlavor := after
+			if excludedFlavor == currentFlavor {
+				expectFailure = true
+			}
+		} else {
+			// Positive match: test requires specific flavor, expect failure on other flavors
+			if test.Flavor != currentFlavor {
+				expectFailure = true
+			}
+		}
+	}
+
+	// Create error collector for expected failure mode
+	collector := &errorCollector{t: t, expectFailure: expectFailure}
+
+	runTestImplWithCollector(collector, db, test, mode, sqlParser, config, version)
+
+	// Check results for expected failure mode
+	if expectFailure {
+		if collector.hasErrors {
+			// Test failed as expected - flavor annotation is correct
+			t.Skipf("Correctly fails on non-matching flavor (test requires '%s', running on '%s')", test.Flavor, currentFlavor)
+		} else {
+			// Test passed when it should have failed - flavor annotation is wrong
+			t.Errorf("Test passed but flavor '%s' doesn't match current flavor '%s'. The flavor annotation may be incorrect - consider removing 'flavor: %s' if the test works on other flavors.", test.Flavor, currentFlavor, test.Flavor)
+		}
+	}
+}
+
+func runTestImpl(t *testing.T, db database.Database, test TestCase, mode schema.GeneratorMode, sqlParser database.Parser, config database.GeneratorConfig, version string) {
+	t.Helper()
+
+	legacyIgnoreQuotes := config.LegacyIgnoreQuotes
 
 	if test.Offline {
 		RunOfflineTest(t, test, mode, sqlParser, config, db.GetDefaultSchema())
@@ -700,4 +714,335 @@ func WriteFile(path string, content string) {
 func StripHeredoc(heredoc string) string {
 	heredoc = strings.TrimPrefix(heredoc, "\n")
 	return stripHeredocRegex.ReplaceAllLiteralString(heredoc, "")
+}
+
+// errorCollector is used to intercept test failures when running in "expect failure" mode.
+// When a test's flavor doesn't match the current environment, we expect the test to fail.
+// This collector captures errors instead of failing the test immediately, allowing us to
+// verify the failure behavior at the end.
+type errorCollector struct {
+	t             *testing.T
+	expectFailure bool
+	hasErrors     bool
+	errors        []string
+}
+
+func (c *errorCollector) Helper() {}
+
+func (c *errorCollector) Error(args ...any) {
+	msg := fmt.Sprint(args...)
+	c.hasErrors = true
+	c.errors = append(c.errors, msg)
+	if !c.expectFailure {
+		c.t.Error(args...)
+	}
+}
+
+func (c *errorCollector) Errorf(format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	c.hasErrors = true
+	c.errors = append(c.errors, msg)
+	if !c.expectFailure {
+		c.t.Errorf(format, args...)
+	}
+}
+
+func (c *errorCollector) Fatal(args ...any) {
+	msg := fmt.Sprint(args...)
+	c.hasErrors = true
+	c.errors = append(c.errors, msg)
+	if !c.expectFailure {
+		c.t.Fatal(args...)
+	}
+	// In expectFailure mode, panic to stop test execution (will be recovered)
+	panic(errorCollectorStop{})
+}
+
+func (c *errorCollector) Fatalf(format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	c.hasErrors = true
+	c.errors = append(c.errors, msg)
+	if !c.expectFailure {
+		c.t.Fatalf(format, args...)
+	}
+	// In expectFailure mode, panic to stop test execution (will be recovered)
+	panic(errorCollectorStop{})
+}
+
+// errorCollectorStop is a special panic value used to stop test execution
+// in expectFailure mode without actually failing the test.
+type errorCollectorStop struct{}
+
+// runTestImplWithCollector runs the test implementation with error collection support.
+// When expectFailure is true, errors are collected instead of failing the test immediately.
+func runTestImplWithCollector(collector *errorCollector, db database.Database, test TestCase, mode schema.GeneratorMode, sqlParser database.Parser, config database.GeneratorConfig, version string) {
+	if collector.expectFailure {
+		// Recover from panics caused by Fatal/Fatalf in expectFailure mode
+		defer func() {
+			if r := recover(); r != nil {
+				if _, ok := r.(errorCollectorStop); !ok {
+					// Re-panic if it's not our stop signal
+					panic(r)
+				}
+				// Otherwise, the test stopped due to an expected failure
+			}
+		}()
+	}
+
+	runTestImplWithReporter(collector, db, test, mode, sqlParser, config)
+}
+
+// testReporter is an interface for reporting test failures, allowing us to
+// intercept failures when testing flavor mismatches.
+type testReporter interface {
+	Helper()
+	Error(args ...any)
+	Errorf(format string, args ...any)
+	Fatal(args ...any)
+	Fatalf(format string, args ...any)
+}
+
+func runTestImplWithReporter(r testReporter, db database.Database, test TestCase, mode schema.GeneratorMode, sqlParser database.Parser, config database.GeneratorConfig) {
+	r.Helper()
+
+	legacyIgnoreQuotes := config.LegacyIgnoreQuotes
+
+	if test.Offline {
+		runOfflineTestWithReporter(r, test, mode, sqlParser, config, db.GetDefaultSchema())
+		return
+	}
+
+	if test.Current != "" {
+		ddls, err := splitDDLs(mode, sqlParser, test.Current, db.GetDefaultSchema(), legacyIgnoreQuotes, config.MysqlLowerCaseTableNames)
+		if err != nil {
+			r.Fatal(err)
+		}
+		err = runDDLs(db, ddls)
+		if err != nil {
+			r.Fatal(err)
+		}
+	}
+
+	// Test idempotency of current schema
+	currentDDLs, err := db.ExportDDLs()
+	if err != nil {
+		r.Fatal(err)
+	}
+	ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, currentDDLs, config, db.GetDefaultSchema())
+	if err != nil {
+		r.Fatal(err)
+	}
+	if len(ddls) > 0 {
+		r.Errorf("Current schema is not idempotent. Expected no changes when reapplying current schema, but got:\n```\n%s```\nThis means the current schema state didn't apply correctly or has conflicting/duplicate statements.", joinDDLs(ddls))
+	}
+
+	// Main test
+	currentDDLs, err = db.ExportDDLs()
+	if err != nil {
+		r.Fatal(err)
+	}
+
+	if test.Up != nil && test.Down != nil {
+		// Bidirectional migration test
+		// PHASE 1: Test forward migration (current → desired) should produce Up
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, db.GetDefaultSchema())
+
+		// Handle expected errors
+		if test.Error != nil {
+			if err == nil {
+				r.Errorf("[Phase 1: Forward Migration] expected error: %s, but got no error", *test.Error)
+			} else if err.Error() != *test.Error {
+				r.Errorf("[Phase 1: Forward Migration] expected error: %s, but got: %s", *test.Error, err.Error())
+			}
+			return
+		}
+
+		if err != nil {
+			r.Fatalf("[Phase 1: Forward Migration] Failed to generate DDLs: %v", err)
+		}
+
+		expected := strings.TrimSpace(*test.Up)
+		actual := strings.TrimSpace(joinDDLs(ddls))
+		if expected != actual {
+			r.Errorf("[Phase 1: Forward Migration] current → desired should produce 'up' DDL\nExpected:\n%s\nActual:\n%s", expected, actual)
+		}
+
+		err = runDDLs(db, ddls)
+		if err != nil {
+			r.Fatalf("[Phase 1: Forward Migration] Failed to apply DDLs: %v", err)
+		}
+
+		// PHASE 2: Test idempotency of desired schema
+		currentDDLs, err = db.ExportDDLs()
+		if err != nil {
+			r.Fatal(err)
+		}
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, db.GetDefaultSchema())
+		if err != nil {
+			r.Fatalf("[Phase 2: Idempotency Check] Failed to generate DDLs: %v", err)
+		}
+		// Filter out skipped DDLs for idempotency check because they weren't applied
+		ddlsForIdempotency := filterSkippedDDLs(ddls)
+		if len(ddlsForIdempotency) > 0 {
+			r.Errorf("[Phase 2: Idempotency Check] desired → desired should produce no DDL, but got:\n```\n%s```\nThis means the forward migration didn't apply correctly.", joinDDLs(ddlsForIdempotency))
+		}
+
+		// PHASE 3: Test reverse migration (desired → current) should produce Down
+		currentDDLs, err = db.ExportDDLs()
+		if err != nil {
+			r.Fatal(err)
+		}
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, currentDDLs, config, db.GetDefaultSchema())
+		if err != nil {
+			r.Fatalf("[Phase 3: Reverse Migration] Failed to generate DDLs: %v", err)
+		}
+
+		expected = strings.TrimSpace(*test.Down)
+		actual = strings.TrimSpace(joinDDLs(ddls))
+		if expected != actual {
+			r.Errorf("[Phase 3: Reverse Migration] desired → current should produce 'down' DDL\nExpected:\n%s\nActual:\n%s", expected, actual)
+		}
+
+		err = runDDLs(db, ddls)
+		if err != nil {
+			r.Fatalf("[Phase 3: Reverse Migration] Failed to apply DDLs: %v", err)
+		}
+
+		// PHASE 4: Test idempotency of current schema after reverse migration
+		currentDDLs, err = db.ExportDDLs()
+		if err != nil {
+			r.Fatal(err)
+		}
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, currentDDLs, config, db.GetDefaultSchema())
+		if err != nil {
+			r.Fatalf("[Phase 4: Idempotency Check] Failed to generate DDLs: %v", err)
+		}
+		// Filter out skipped DDLs for idempotency check because they weren't applied
+		ddlsForIdempotency = filterSkippedDDLs(ddls)
+		if len(ddlsForIdempotency) > 0 {
+			r.Errorf("[Phase 4: Idempotency Check] current → current should produce no DDL after reverse migration, but got:\n```\n%s```\nThis means the reverse migration didn't apply correctly.", joinDDLs(ddlsForIdempotency))
+		}
+	} else {
+		// Idempotency-only test (neither up nor down specified)
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, db.GetDefaultSchema())
+
+		// Handle expected errors
+		if test.Error != nil {
+			if err == nil {
+				r.Errorf("expected error: %s, but got no error", *test.Error)
+			} else if err.Error() != *test.Error {
+				r.Errorf("expected error: %s, but got: %s", *test.Error, err.Error())
+			}
+			return
+		}
+
+		if err != nil {
+			r.Fatal(err)
+		}
+
+		// For idempotency-only tests, we expect no DDLs (or just apply and test idempotency)
+		err = runDDLs(db, ddls)
+		if err != nil {
+			r.Fatal(err)
+		}
+
+		// Test idempotency of desired schema
+		currentDDLs, err = db.ExportDDLs()
+		if err != nil {
+			r.Fatal(err)
+		}
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, db.GetDefaultSchema())
+		if err != nil {
+			r.Fatal(err)
+		}
+		if len(ddls) > 0 {
+			r.Errorf("Desired schema is not idempotent. Expected no changes when reapplying desired schema, but got:\n```\n%s```\nThis means the migration didn't apply correctly.", joinDDLs(ddls))
+		}
+	}
+}
+
+func runOfflineTestWithReporter(r testReporter, test TestCase, mode schema.GeneratorMode, sqlParser database.Parser, config database.GeneratorConfig, defaultSchema string) {
+	r.Helper()
+
+	currentDDLs := test.Current
+
+	if test.Up != nil && test.Down != nil {
+		// Bidirectional migration test (offline mode)
+		// PHASE 1: Test forward migration (current → desired) should produce Up
+		ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, defaultSchema)
+
+		if test.Error != nil {
+			if err == nil {
+				r.Errorf("[Offline Phase 1: Forward Migration] expected error: %s, but got no error", *test.Error)
+			} else if err.Error() != *test.Error {
+				r.Errorf("[Offline Phase 1: Forward Migration] expected error: %s, but got: %s", *test.Error, err.Error())
+			}
+			return
+		}
+
+		if err != nil {
+			r.Fatalf("[Offline Phase 1: Forward Migration] Failed to generate DDLs: %v", err)
+		}
+
+		expected := strings.TrimSpace(*test.Up)
+		actual := strings.TrimSpace(joinDDLs(ddls))
+		if expected != actual {
+			r.Errorf("[Offline Phase 1: Forward Migration] current → desired should produce 'up' DDL\nExpected:\n%s\nActual:\n%s", expected, actual)
+		}
+
+		// PHASE 2: Test idempotency of desired schema
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, test.Desired, config, defaultSchema)
+		if err != nil {
+			r.Fatalf("[Offline Phase 2: Idempotency Check] Failed to generate DDLs: %v", err)
+		}
+		if len(ddls) > 0 {
+			r.Errorf("[Offline Phase 2: Idempotency Check] desired → desired should produce no DDL, but got:\n```\n%s```", joinDDLs(ddls))
+		}
+
+		// PHASE 3: Test reverse migration (desired → current) should produce Down
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, test.Desired, config, defaultSchema)
+		if err != nil {
+			r.Fatalf("[Offline Phase 3: Reverse Migration] Failed to generate DDLs: %v", err)
+		}
+
+		expected = strings.TrimSpace(*test.Down)
+		actual = strings.TrimSpace(joinDDLs(ddls))
+		if expected != actual {
+			r.Errorf("[Offline Phase 3: Reverse Migration] desired → current should produce 'down' DDL\nExpected:\n%s\nActual:\n%s", expected, actual)
+		}
+
+		// PHASE 4: Test idempotency of current schema
+		ddls, err = schema.GenerateIdempotentDDLs(mode, sqlParser, test.Current, test.Current, config, defaultSchema)
+		if err != nil {
+			r.Fatalf("[Offline Phase 4: Idempotency Check] Failed to generate DDLs: %v", err)
+		}
+		if len(ddls) > 0 {
+			r.Errorf("[Offline Phase 4: Idempotency Check] current → current should produce no DDL, but got:\n```\n%s```", joinDDLs(ddls))
+		}
+	} else {
+		// Idempotency-only test (neither up nor down specified)
+		_, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, currentDDLs, config, defaultSchema)
+
+		if test.Error != nil {
+			if err == nil {
+				r.Errorf("expected error: %s, but got no error", *test.Error)
+			} else if err.Error() != *test.Error {
+				r.Errorf("expected error: %s, but got: %s", *test.Error, err.Error())
+			}
+			return
+		}
+
+		if err != nil {
+			r.Fatal(err)
+		}
+
+		// Test idempotency of desired schema
+		ddls, err := schema.GenerateIdempotentDDLs(mode, sqlParser, test.Desired, test.Desired, config, defaultSchema)
+		if err != nil {
+			r.Fatal(err)
+		}
+		if len(ddls) > 0 {
+			r.Errorf("Desired schema is not idempotent. Expected no changes when comparing desired to itself, but got:\n```\n%s```", joinDDLs(ddls))
+		}
+	}
 }

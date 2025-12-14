@@ -104,6 +104,7 @@ CreateTriggerWithMultipleStatements:
   down: |
     DROP TABLE `test_trigger`;
 View:
+  flavor: "!tidb"
   desired: |
     CREATE TABLE users (
       id bigint(20) NOT NULL
@@ -114,8 +115,8 @@ View:
       is_deleted tinyint(1)
     );
     CREATE VIEW foo AS select u.id as id, p.id as post_id from  (mysqldef_test.users as u join mysqldef_test.posts as p on ((u.id = p.user_id)));
-  flavor: mysql  # MariaDB shows unexpected view changes in idempotency tests
 ViewUpdate:
+  flavor: "!tidb"
   current: |
     CREATE TABLE users (
       id bigint(20) NOT NULL
@@ -140,8 +141,8 @@ ViewUpdate:
     CREATE OR REPLACE VIEW `foo` AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
   down: |
     CREATE OR REPLACE VIEW `foo` AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on ((u.id = p.user_id)));
-  flavor: mysql  # MariaDB handles view formatting differently than MySQL
 ViewDropsWhenEmptyDesired:
+  flavor: "!tidb"
   current: |
     CREATE TABLE users (
       id bigint(20) NOT NULL
@@ -167,7 +168,6 @@ ViewDropsWhenEmptyDesired:
       is_deleted tinyint(1)
     );
     CREATE VIEW foo AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on (((u.id = p.user_id) and (p.is_deleted = 0))));
-  flavor: mysql  # MariaDB shows unexpected view changes in idempotency tests
 TriggerInsert:
   flavor: "!tidb"
   desired: |

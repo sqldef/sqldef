@@ -441,8 +441,9 @@ ChangeIndexCombination:
     ALTER TABLE `users` DROP INDEX `index_users2`;
     ALTER TABLE `users` ADD KEY `index_users2` (`account_id`, `name`);
 
-# Basic fulltext indexes (works on both MySQL and MariaDB, without ngram parser)
+# Basic fulltext indexes (works on MySQL and MariaDB, not on TiDB)
 FulltextIndexBasic:
+  flavor: "!tidb"
   desired: |
     CREATE TABLE posts (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -459,6 +460,7 @@ FulltextIndexBasic:
     DROP TABLE `posts`;
 
 FulltextIndexDropBasic:
+  flavor: "!tidb"
   current: |
     CREATE TABLE posts (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -476,6 +478,7 @@ FulltextIndexDropBasic:
     ALTER TABLE `posts` ADD FULLTEXT KEY `title_fulltext_index` (`title`);
 
 FulltextIndexReAddBasic:
+  flavor: "!tidb"
   current: |
     CREATE TABLE posts (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,

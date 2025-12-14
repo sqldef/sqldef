@@ -188,10 +188,10 @@ TestCaseName:
   # Maximum database version supported
   max_version: "14.0"
 
-  # Database flavor requirement (test runs on all flavors but must fail on non-matching ones)
+  # Database flavor requirement for flavor-specific features
   # One of "mysql", "mariadb", "tidb" for mysqldef, and "pgvector" for psqldef
-  # - "mariadb": test must pass on MariaDB, must fail on MySQL/TiDB
-  # - "!tidb": test must pass on MySQL/MariaDB, must fail on TiDB
+  # Supports positive and negative matching like "!tidb" to exclude TiDB
+  # See "Flavor Behavior" section below for details
   flavor: "mariadb"
 
   # User to run the test as
@@ -223,7 +223,18 @@ The `up` and `down` fields must both be specified or both be omitted:
 - Both specified: asserts `current → desired` produces `up` and `desired → current` produces `down`
 - Both omitted: idempotency-only test; DDLs are applied but not asserted (must be valid SQL unless `offline: true`)
 
-Tests run on all flavors regardless of `flavor` setting. A test with `flavor: "mariadb"` must pass on MariaDB and fail on other flavors. If a test passes on a non-matching flavor, the test fails—this indicates the `flavor` annotation should be removed.
+#### Flavor Behavior
+
+The `flavor` field controls flavor-specific test behavior, which validates that tests correctly fail on non-matching flavors:
+
+| Scenario | Result |
+|----------|--------|
+| Flavor matches, test passes | PASS |
+| Flavor matches, test fails | FAIL |
+| Flavor doesn't match, test fails | SKIP |
+| Flavor doesn't match, test passes | FAIL |
+
+This design ensures that flavor annotations are accurate. If you add `flavor: mariadb` to a test, the test must actually fail on MySQL/TiDB. If it passes, the flavor annotation is wrong and should be removed.
 
 #### Notes for Writing Tests
 

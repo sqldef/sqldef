@@ -10,6 +10,7 @@ CreateTableGeneratedAlwaysAs80:
     );
   min_version: '8.0'
 CreateTableGeneratedAlwaysAsChangeExpr80:
+  flavor: "!mariadb"
   current: |
     CREATE TABLE `test_table` (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -28,9 +29,9 @@ CreateTableGeneratedAlwaysAsChangeExpr80:
     ALTER TABLE `test_table` CHANGE COLUMN `test_expr` `test_expr` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) VIRTUAL;
   down: |
     ALTER TABLE `test_table` CHANGE COLUMN `test_expr` `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL;
-  flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 CreateTableGeneratedAlwaysAsAbbreviation80:
+  flavor: "!mariadb"
   desired: |
     CREATE TABLE `test_table` (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -38,9 +39,9 @@ CreateTableGeneratedAlwaysAsAbbreviation80:
       test_expr varchar(45) AS (test_value / test_value) STORED NOT NULL,
       PRIMARY KEY (id)
     );
-  flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 CreateTableGeneratedAlwaysAsAbbreviationChangeExpr80:
+  flavor: mysql
   current: |
     CREATE TABLE `test_table` (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -59,9 +60,9 @@ CreateTableGeneratedAlwaysAsAbbreviationChangeExpr80:
     ALTER TABLE `test_table` CHANGE COLUMN `test_expr` `test_expr` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) STORED NOT NULL;
   down: |
     ALTER TABLE `test_table` CHANGE COLUMN `test_expr` `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED NOT NULL;
-  flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 ChangeGenerateColumnGemerayedAlwaysAs:
+  flavor: "!mariadb"
   desired: |
     CREATE TABLE test_table (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -71,8 +72,8 @@ ChangeGenerateColumnGemerayedAlwaysAs:
       name varchar(20) GENERATED ALWAYS AS (json_extract(data,'$.name1')) VIRTUAL,
       PRIMARY KEY (id)
     );
-  flavor: mysql  # MariaDB shows unexpected JSON column changes in idempotency tests
 ChangeGenerateColumnJsonExpressionChange:
+  flavor: "!mariadb"
   current: |
     CREATE TABLE test_table (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -95,8 +96,8 @@ ChangeGenerateColumnJsonExpressionChange:
     ALTER TABLE `test_table` CHANGE COLUMN `name` `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) VIRTUAL;
   down: |
     ALTER TABLE `test_table` CHANGE COLUMN `name` `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name1')) VIRTUAL;
-  flavor: mysql  # MariaDB handles generated column comparison differently, shows extra JSON column changes
 ChangeGenerateColumnVirtualToStored:
+  flavor: mysql
   current: |
     CREATE TABLE test_table (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -125,8 +126,8 @@ ChangeGenerateColumnVirtualToStored:
     ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) VIRTUAL AFTER `test_value`;
     ALTER TABLE `test_table` DROP COLUMN `name`;
     ALTER TABLE `test_table` ADD COLUMN `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) VIRTUAL AFTER `data`;
-  flavor: mysql  # MariaDB shows unexpected JSON column changes in idempotency tests
 ChangeGenerateColumnStoredToVirtual:
+  flavor: mysql
   current: |
     CREATE TABLE test_table (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -155,8 +156,8 @@ ChangeGenerateColumnStoredToVirtual:
     ALTER TABLE `test_table` ADD COLUMN `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED AFTER `test_value`;
     ALTER TABLE `test_table` DROP COLUMN `name`;
     ALTER TABLE `test_table` ADD COLUMN `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED AFTER `data`;
-  flavor: mysql  # MariaDB shows unexpected JSON column changes in idempotency tests
 ChangeGenerateColumnSpacingIgnored:
+  flavor: "!mariadb"
   current: |
     CREATE TABLE test_table (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -177,8 +178,8 @@ ChangeGenerateColumnSpacingIgnored:
     );
   up: ""
   down: ""
-  flavor: mysql  # MariaDB shows unexpected JSON column changes in idempotency tests
 ChangeGenerateColumnAddNotNull:
+  flavor: "!mariadb"
   current: |
     CREATE TABLE test_table (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -203,8 +204,8 @@ ChangeGenerateColumnAddNotNull:
   down: |
     ALTER TABLE `test_table` CHANGE COLUMN `test_expr` `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED;
     ALTER TABLE `test_table` CHANGE COLUMN `name` `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED;
-  flavor: mysql  # MariaDB syntax error with STORED NOT NULL on generated columns
 ChangeGenerateColumnExpressionComplexity:
+  flavor: mysql
   current: |
     CREATE TABLE test_table (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -227,8 +228,8 @@ ChangeGenerateColumnExpressionComplexity:
     ALTER TABLE `test_table` CHANGE COLUMN `test_expr` `test_expr` varchar(45) GENERATED ALWAYS AS ((test_value / test_value) * 2) STORED NOT NULL;
   down: |
     ALTER TABLE `test_table` CHANGE COLUMN `test_expr` `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED NOT NULL;
-  flavor: mysql  # MariaDB syntax error with generated columns and NOT NULL
 ChangeGenerateColumnSubstrFunction:
+  flavor: mysql
   current: |
     CREATE TABLE test_table (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -251,8 +252,8 @@ ChangeGenerateColumnSubstrFunction:
     ALTER TABLE `test_table` CHANGE COLUMN `name` `name` varchar(20) GENERATED ALWAYS AS (substr('test_value', 1, 2)) STORED NOT NULL;
   down: |
     ALTER TABLE `test_table` CHANGE COLUMN `name` `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED NOT NULL;
-  flavor: mysql  # MariaDB syntax error with generated columns and NOT NULL constraint
 ChangeGenerateColumnSubstringFunction:
+  flavor: mysql
   current: |
     CREATE TABLE test_table (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -275,7 +276,6 @@ ChangeGenerateColumnSubstringFunction:
     ALTER TABLE `test_table` CHANGE COLUMN `name` `name` varchar(20) GENERATED ALWAYS AS (substr('test_value', 2, 2)) STORED NOT NULL;
   down: |
     ALTER TABLE `test_table` CHANGE COLUMN `name` `name` varchar(20) GENERATED ALWAYS AS (substr('test_value', 1, 2)) STORED NOT NULL;
-  flavor: mysql  # MariaDB syntax error with generated columns and NOT NULL
 ChangeGenerateColumnRegularToGenerated:
   current: |
     CREATE TABLE test_table (
@@ -299,7 +299,6 @@ ChangeGenerateColumnRegularToGenerated:
   down: |
     ALTER TABLE `test_table` DROP COLUMN `computed_value`;
     ALTER TABLE `test_table` ADD COLUMN `computed_value` int(11) AFTER `base_value`;
-  flavor: mysql  # MariaDB may handle this differently
 ChangeGenerateColumnGeneratedToRegular:
   current: |
     CREATE TABLE test_table (
@@ -323,10 +322,10 @@ ChangeGenerateColumnGeneratedToRegular:
   down: |
     ALTER TABLE `test_table` DROP COLUMN `computed_value`;
     ALTER TABLE `test_table` ADD COLUMN `computed_value` int(11) GENERATED ALWAYS AS (base_value * 2) VIRTUAL AFTER `base_value`;
-  flavor: mysql  # MariaDB may handle this differently
 
-# Change generated column from VIRTUAL to STORED with CHECK constraint (works on both MySQL and MariaDB)
+# Change generated column from VIRTUAL to STORED with CHECK constraint (works on MySQL and MariaDB, not on TiDB)
 ChangeGenerateColumnVirtualToStoredWithCheck:
+  flavor: "!tidb"
   current: |
     CREATE TABLE test_table (
       id int(11) NOT NULL AUTO_INCREMENT,

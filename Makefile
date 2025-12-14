@@ -103,7 +103,7 @@ test-example-offline:
 	./example/run-offline.sh sqlite3def
 	./example/run-offline.sh mssqldef
 
-test-all-flavors: test-mysqldef test-psqldef test-sqlite3def test-mssqldef
+test-all-flavors: test
 	MYSQL_FLAVOR=mariadb MYSQL_PORT=3307 $(GOTEST) ./cmd/mysqldef
 	MYSQL_FLAVOR=tidb MYSQL_PORT=4000 $(GOTEST) ./cmd/mysqldef
 	PG_FLAVOR=pgvector PGPORT=55432 $(GOTEST) ./cmd/psqldef
