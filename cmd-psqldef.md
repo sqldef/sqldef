@@ -22,6 +22,7 @@ Application Options:
       --enable-drop           Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
       --skip-view             Skip managing views/materialized views
       --skip-extension        Skip managing extensions
+      --skip-partition        Skip managing partitioned tables
       --before-apply=SQL      Execute the given string before applying the regular DDLs
       --config=PATH           YAML configuration file (can be specified multiple times)
       --config-inline=YAML    YAML configuration as inline string (can be specified multiple times)

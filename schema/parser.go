@@ -51,6 +51,10 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 	switch stmt := stmt.(type) {
 	case *parser.DDL:
 		if stmt.Action == parser.CreateTable {
+			// Handle PARTITION OF tables differently
+			if stmt.PartitionOf != nil {
+				return parsePartitionOf(mode, stmt, defaultSchema, ddl)
+			}
 			// TODO: handle other create DDL as error?
 			table, err := parseTable(mode, stmt, defaultSchema, ddl)
 			if err != nil {
@@ -274,6 +278,31 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 	default:
 		return nil, fmt.Errorf("unsupported type of SQL (only DDL is supported): %s", ddl)
 	}
+}
+
+// parsePartitionOf handles CREATE TABLE ... PARTITION OF statements
+func parsePartitionOf(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawDDL string) (*CreatePartitionOf, error) {
+	tableName := normalizeQualifiedName(mode, stmt.NewName, defaultSchema)
+	parentTable := normalizeQualifiedName(mode, stmt.PartitionOf.ParentTable, defaultSchema)
+
+	bound := PartitionBound{}
+	if stmt.PartitionOf.BoundSpec != nil {
+		if stmt.PartitionOf.BoundSpec.IsDefault {
+			bound.IsDefault = true
+		} else if stmt.PartitionOf.BoundSpec.In != nil {
+			bound.In = stmt.PartitionOf.BoundSpec.In
+		} else if stmt.PartitionOf.BoundSpec.From != nil {
+			bound.From = stmt.PartitionOf.BoundSpec.From
+			bound.To = stmt.PartitionOf.BoundSpec.To
+		}
+	}
+
+	return &CreatePartitionOf{
+		statement:   rawDDL,
+		tableName:   tableName,
+		parentTable: parentTable,
+		boundSpec:   bound,
+	}, nil
 }
 
 func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawDDL string) (Table, error) {
@@ -604,6 +633,22 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		tableRenameFrom = extractRenameFrom(tableComment)
 	}
 
+	// Parse partition information
+	var partition *TablePartition
+	if stmt.TableSpec.Partition != nil {
+		partition = &TablePartition{
+			Type: stmt.TableSpec.Partition.Type,
+			Definitions: util.TransformSlice(stmt.TableSpec.Partition.Definitions, func(def *parser.PartitionDefinition) PartitionDefinition {
+				return PartitionDefinition{
+					Name:     def.Name,
+					LessThan: def.LessThan,
+					In:       def.In,
+					Maxvalue: def.Maxvalue,
+				}
+			}),
+		}
+	}
+
 	return Table{
 		name:        normalizeQualifiedName(mode, stmt.NewName, defaultSchema),
 		columns:     columns,
@@ -613,6 +658,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		exclusions:  exclusions,
 		options:     stmt.TableSpec.Options,
 		renamedFrom: tableRenameFrom,
+		partition:   partition,
 	}, nil
 }
 

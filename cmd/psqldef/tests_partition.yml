@@ -1,0 +1,130 @@
+# yaml-language-server: $schema=../../testutil/testcase.schema.json
+
+PartitionByRange:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL
+    ) PARTITION BY RANGE (created_at);
+
+PartitionByList:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      region text NOT NULL
+    ) PARTITION BY LIST (region);
+
+PartitionByHash:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE sessions (
+      id bigint NOT NULL,
+      user_id bigint NOT NULL
+    ) PARTITION BY HASH (user_id);
+
+PartitionByRangeMultipleColumns:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE events (
+      id bigint NOT NULL,
+      event_year int NOT NULL,
+      event_month int NOT NULL
+    ) PARTITION BY RANGE (event_year, event_month);
+
+PartitionOfForValuesRange:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL
+    ) PARTITION BY RANGE (created_at);
+  desired: |
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL
+    ) PARTITION BY RANGE (created_at);
+    CREATE TABLE logs_2024_01 PARTITION OF logs
+      FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
+
+PartitionOfForValuesIn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      region text NOT NULL
+    ) PARTITION BY LIST (region);
+  desired: |
+    CREATE TABLE orders (
+      id bigint NOT NULL,
+      region text NOT NULL
+    ) PARTITION BY LIST (region);
+    CREATE TABLE orders_us PARTITION OF orders
+      FOR VALUES IN ('US', 'CA', 'MX');
+
+PartitionOfDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL
+    ) PARTITION BY RANGE (created_at);
+  desired: |
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL
+    ) PARTITION BY RANGE (created_at);
+    CREATE TABLE logs_default PARTITION OF logs DEFAULT;
+
+# Test adding a second partition to an existing partitioned table
+PartitionOfAddSecondPartition:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL
+    ) PARTITION BY RANGE (created_at);
+    CREATE TABLE logs_2024_01 PARTITION OF logs
+      FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
+  desired: |
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL
+    ) PARTITION BY RANGE (created_at);
+    CREATE TABLE logs_2024_01 PARTITION OF logs
+      FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
+    CREATE TABLE logs_2024_02 PARTITION OF logs
+      FOR VALUES FROM ('2024-02-01') TO ('2024-03-01');
+  up: |
+    CREATE TABLE logs_2024_02 PARTITION OF logs
+      FOR VALUES FROM ('2024-02-01') TO ('2024-03-01');
+  down: |
+    DROP TABLE public.logs_2024_02;
+
+# Test dropping a partition from an existing partitioned table
+PartitionOfDropPartition:
+  legacy_ignore_quotes: false
+  enable_drop: true
+  current: |
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL
+    ) PARTITION BY RANGE (created_at);
+    CREATE TABLE logs_2024_01 PARTITION OF logs
+      FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
+    CREATE TABLE logs_2024_02 PARTITION OF logs
+      FOR VALUES FROM ('2024-02-01') TO ('2024-03-01');
+  desired: |
+    CREATE TABLE logs (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL
+    ) PARTITION BY RANGE (created_at);
+    CREATE TABLE logs_2024_01 PARTITION OF logs
+      FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
+  up: |
+    DROP TABLE public.logs_2024_02;
+  down: |
+    CREATE TABLE logs_2024_02 PARTITION OF logs
+      FOR VALUES FROM ('2024-02-01') TO ('2024-03-01');
+

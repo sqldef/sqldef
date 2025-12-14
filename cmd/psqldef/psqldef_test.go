@@ -779,6 +779,34 @@ func TestPsqldefSkipExtension(t *testing.T) {
 	assert.Equal(t, nothingModified, output)
 }
 
+func TestPsqldefSkipPartition(t *testing.T) {
+	resetTestDatabase()
+
+	createRegularTable := "CREATE TABLE users (id bigint);\n"
+	createPartitionedTable := tu.StripHeredoc(`
+		CREATE TABLE logs (
+		    id bigint,
+		    created_at timestamp NOT NULL
+		) PARTITION BY RANGE (created_at);
+		CREATE TABLE logs_2024_01 PARTITION OF logs
+		    FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
+	`)
+	exportRegularTable := tu.StripHeredoc(`
+		CREATE TABLE "public"."users" (
+		    "id" bigint
+		);
+	`)
+
+	assertApplyOutput(t, createRegularTable+createPartitionedTable, wrapWithTransaction(createRegularTable+createPartitionedTable))
+	tu.WriteFile("schema.sql", createRegularTable)
+
+	output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--skip-partition", "-f", "schema.sql")...)
+	assert.Equal(t, nothingModified, output)
+
+	exportOutput := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--skip-partition", "--export")...)
+	assert.Equal(t, exportRegularTable, exportOutput)
+}
+
 func TestPsqldefBeforeApply(t *testing.T) {
 	resetTestDatabase()
 

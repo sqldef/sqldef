@@ -163,6 +163,25 @@ type RevokePrivilege struct {
 	cascadeOption bool // CASCADE option for REVOKE
 }
 
+// CreatePartitionOf represents a PostgreSQL CREATE TABLE ... PARTITION OF statement
+type CreatePartitionOf struct {
+	statement   string
+	tableName   QualifiedName
+	parentTable QualifiedName
+	boundSpec   PartitionBound
+}
+
+// PartitionBound represents the partition bound specification
+type PartitionBound struct {
+	// For RANGE partitions: FROM (values) TO (values)
+	From parser.Exprs
+	To   parser.Exprs
+	// For LIST partitions: IN (values)
+	In parser.Exprs
+	// For DEFAULT partition
+	IsDefault bool
+}
+
 type Table struct {
 	name        QualifiedName
 	columns     map[string]*Column
@@ -173,7 +192,22 @@ type Table struct {
 	policies    []Policy
 	privileges  []TablePrivilege
 	options     map[string]string
-	renamedFrom Ident // Previous table name if renamed via @renamed annotation
+	renamedFrom Ident           // Previous table name if renamed via @renamed annotation
+	partition   *TablePartition // Partition definition (MySQL/MariaDB)
+}
+
+// TablePartition represents partition information for a table
+type TablePartition struct {
+	Type        string                // RANGE, RANGE COLUMNS, LIST, LIST COLUMNS, HASH, LINEAR HASH, KEY, LINEAR KEY
+	Definitions []PartitionDefinition // Individual partition definitions
+}
+
+// PartitionDefinition represents a single partition
+type PartitionDefinition struct {
+	Name     Ident
+	LessThan parser.Exprs // For RANGE: VALUES LESS THAN
+	In       parser.Exprs // For LIST: VALUES IN
+	Maxvalue bool         // For VALUES LESS THAN MAXVALUE
 }
 
 type Column struct {
@@ -496,6 +530,10 @@ func (g *GrantPrivilege) Statement() string {
 
 func (r *RevokePrivilege) Statement() string {
 	return r.statement
+}
+
+func (c *CreatePartitionOf) Statement() string {
+	return c.statement
 }
 
 func (v *View) Statement() string {
