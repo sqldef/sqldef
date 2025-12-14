@@ -499,9 +499,10 @@ YearWithoutLength:
   down: |
     ALTER TABLE test DROP COLUMN `year_field`;
 
-# UUID using standard functions (works on MySQL and MariaDB, not on TiDB)
+# UUID using standard functions (works on MySQL 8.0+ and MariaDB, not on TiDB)
 UUIDBinary:
   flavor: "!tidb"
+  min_version: '8.0'
   desired: |
     CREATE TABLE users (
       id BINARY(16) NOT NULL DEFAULT (UNHEX(REPLACE(UUID(), '-', ''))),

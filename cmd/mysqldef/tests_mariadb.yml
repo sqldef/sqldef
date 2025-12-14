@@ -128,6 +128,47 @@ RemoveDefaultExpressionMariaDB:
   flavor: mariadb
 
 # MariaDB AUTO_INCREMENT handling (compatible with older MySQL behavior)
+# Note: min_version: '10.0' ensures these only run on MariaDB (10.x+), not MySQL (5.7/8.x)
+CreateTableAddAutoIncrementMariaDB:
+  current: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL PRIMARY KEY,
+      name varchar(20)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name varchar(20)
+    );
+  up: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
+  flavor: mariadb
+  min_version: '10.0'
+
+CreateTableAddAutoIncrementPrimaryKeyMariaDB:
+  current: |
+    CREATE TABLE users (
+      name varchar(20)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL AUTO_INCREMENT,
+      name varchar(20),
+      PRIMARY KEY (id)
+    );
+  up: |
+    ALTER TABLE `users` ADD COLUMN `id` bigint NOT NULL FIRST;
+    ALTER TABLE `users` ADD PRIMARY KEY (`id`);
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
+  down: |
+    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
+    ALTER TABLE `users` DROP PRIMARY KEY;
+    ALTER TABLE `users` DROP COLUMN `id`;
+  flavor: mariadb
+  min_version: '10.0'
+
 CreateTableRemoveAutoIncrementMariaDB:
   current: |
     CREATE TABLE users (
@@ -144,6 +185,7 @@ CreateTableRemoveAutoIncrementMariaDB:
   down: |
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
   flavor: mariadb
+  min_version: '10.0'
 
 CreateTableRemoveAutoIncrementPrimaryKeyMariaDB:
   current: |
@@ -164,6 +206,7 @@ CreateTableRemoveAutoIncrementPrimaryKeyMariaDB:
     ALTER TABLE `friends` ADD PRIMARY KEY (`id`);
     ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
   flavor: mariadb
+  min_version: '10.0'
 
 CreateTableWithAutoIncrementPrimaryKeyAndAddMorePrimaryKeyMariaDB:
   current: |
@@ -191,3 +234,4 @@ CreateTableWithAutoIncrementPrimaryKeyAndAddMorePrimaryKeyMariaDB:
     ALTER TABLE `friends` ADD PRIMARY KEY (`id`);
     ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
   flavor: mariadb
+  min_version: '10.0'

@@ -71,3 +71,29 @@ CreateTableAddAutoIncrementPrimaryKey57:
     ALTER TABLE `users` DROP PRIMARY KEY;
     ALTER TABLE `users` DROP COLUMN `id`;
   max_version: '5.7'
+CreateTableWithAutoIncrementPrimaryKeyAndAddMorePrimaryKey57:
+  current: |
+    CREATE TABLE friends (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      other_id bigint(20) NOT NULL,
+      created_at datetime NOT NULL,
+      PRIMARY KEY (`id`)
+    );
+  desired: |
+    CREATE TABLE friends (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      other_id bigint(20) NOT NULL,
+      created_at datetime NOT NULL,
+      PRIMARY KEY (`id`, `other_id`)
+    );
+  up: |
+    ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
+    ALTER TABLE `friends` DROP PRIMARY KEY;
+    ALTER TABLE `friends` ADD PRIMARY KEY (`id`, `other_id`);
+    ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
+  down: |
+    ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
+    ALTER TABLE `friends` DROP PRIMARY KEY;
+    ALTER TABLE `friends` ADD PRIMARY KEY (`id`);
+    ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
+  max_version: '5.7'
