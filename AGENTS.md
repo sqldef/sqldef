@@ -262,6 +262,6 @@ Markdown files document the usage of each command. Keep them up to date:
 Before considering a task complete, run these commands to ensure the code is in a good state:
 
 * `make build`
-* `make test`
+* `make test-all-flavors`
 * `make format`
 * `make lint`

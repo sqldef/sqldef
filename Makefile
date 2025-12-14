@@ -22,7 +22,7 @@ else
   GOTEST := go run gotest.tools/gotestsum@latest --hide-summary=skipped -- $(GOTESTFLAGS)
 endif
 
-.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef test-cov test-cov-xml test-core test test-example test-example-offline vulncheck
+.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef test-cov test-cov-xml test-core test test-example test-example-offline test-all-flavors vulncheck
 
 all: build
 
@@ -102,6 +102,11 @@ test-example-offline:
 	./example/run-offline.sh mysqldef
 	./example/run-offline.sh sqlite3def
 	./example/run-offline.sh mssqldef
+
+test-all-flavors: test-mysqldef test-psqldef test-sqlite3def test-mssqldef
+	MYSQL_FLAVOR=mariadb MYSQL_PORT=3307 $(GOTEST) ./cmd/mysqldef
+	MYSQL_FLAVOR=tidb MYSQL_PORT=4000 $(GOTEST) ./cmd/mysqldef
+	PG_FLAVOR=pgvector PGPORT=55432 $(GOTEST) ./cmd/psqldef
 
 test-example:
 	./example/run.sh psqldef
