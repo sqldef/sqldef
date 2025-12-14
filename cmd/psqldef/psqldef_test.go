@@ -35,7 +35,6 @@ type dbConfig struct {
 }
 
 var defaultDbConfig = dbConfig{
-	User:   defaultUser,
 	DbName: testDatabaseName,
 }
 
@@ -67,9 +66,43 @@ func getPostgresFlavor() string {
 	return os.Getenv("PG_FLAVOR")
 }
 
-// psqldefArgs returns the base arguments for psqldef command including port.
+// getPostgresSslMode returns the SSL mode for PostgreSQL connections.
+// PGSSLMODE environment variable overrides the default "disable".
+func getPostgresSslMode() string {
+	if sslMode, ok := os.LookupEnv("PGSSLMODE"); ok {
+		return sslMode
+	}
+	return "disable"
+}
+
+// getPostgresPassword returns the password for PostgreSQL connections.
+// PGPASSWORD environment variable overrides the default empty string.
+func getPostgresPassword() string {
+	return os.Getenv("PGPASSWORD")
+}
+
+// getPostgresUser returns the user for PostgreSQL connections.
+// PGUSER environment variable overrides the default "postgres".
+func getPostgresUser() string {
+	if user, ok := os.LookupEnv("PGUSER"); ok {
+		return user
+	}
+	return defaultUser
+}
+
+// psqldefArgs returns the base arguments for psqldef command including port, host, password, and SSL mode.
 func psqldefArgs(args ...string) []string {
-	baseArgs := []string{"-U", defaultUser, "-p", fmt.Sprintf("%d", getPostgresPort())}
+	baseArgs := []string{
+		"-U", getPostgresUser(),
+		"-h", getPostgresHost(),
+		"-p", fmt.Sprintf("%d", getPostgresPort()),
+	}
+	if password := getPostgresPassword(); password != "" {
+		baseArgs = append(baseArgs, "-W", password)
+	}
+	if sslMode := getPostgresSslMode(); sslMode != "disable" {
+		baseArgs = append(baseArgs, "--ssl-mode", sslMode)
+	}
 	return append(baseArgs, args...)
 }
 
@@ -78,15 +111,16 @@ func connectDatabase(config dbConfig) (database.Database, error) {
 	if config.User != "" {
 		user = config.User
 	} else {
-		user = defaultUser
+		user = getPostgresUser()
 	}
 
 	return postgres.NewDatabase(database.Config{
-		User:    user,
-		Host:    getPostgresHost(),
-		Port:    getPostgresPort(),
-		DbName:  config.DbName,
-		SslMode: "disable",
+		User:     user,
+		Password: getPostgresPassword(),
+		Host:     getPostgresHost(),
+		Port:     getPostgresPort(),
+		DbName:   config.DbName,
+		SslMode:  getPostgresSslMode(),
 	})
 }
 
@@ -97,7 +131,7 @@ func wrapWithTransaction(ddls string) string {
 // pgQuery executes a query against the database and returns rows as string
 func pgQuery(dbName string, query string) (string, error) {
 	db, err := connectDatabase(dbConfig{
-		User:   defaultUser,
+		User:   getPostgresUser(),
 		DbName: dbName,
 	})
 	if err != nil {
@@ -111,7 +145,7 @@ func pgQuery(dbName string, query string) (string, error) {
 // pgExec executes a statement against the database (doesn't return rows)
 func pgExec(dbName string, statement string) error {
 	db, err := connectDatabase(dbConfig{
-		User:   defaultUser,
+		User:   getPostgresUser(),
 		DbName: dbName,
 	})
 	if err != nil {
