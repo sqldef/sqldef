@@ -1,0 +1,15 @@
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 10%
+    patch:
+      default:
+        target: auto
+
+ignore:
+  - "parser/parser.go"
+  - "parser/parser.y"
+  - "**/*_test.go"
+  - "testutil/**"

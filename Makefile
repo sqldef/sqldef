@@ -22,7 +22,7 @@ else
   GOTEST := go run gotest.tools/gotestsum@latest --hide-summary=skipped -- $(GOTESTFLAGS)
 endif
 
-.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef test-cov test-cov-xml test-core test test-example test-example-offline test-all-flavors vulncheck
+.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef test test-mysqldef test-psqldef test-sqlite3def test-mssqldef test-cov test-cov-xml test-core test-example test-example-offline test-all-flavors vulncheck
 
 all: build
 
@@ -45,7 +45,7 @@ build-psqldef:
 	cd cmd/psqldef && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GOFLAGS) -o ../../$(BUILD_DIR)/psqldef$(SUFFIX)
 
 clean:
-	rm -rf build package coverage coverage.out coverage.xml
+	rm -rf build package coverage.out coverage.xml
 	rm -f cmd/mysqldef/mysqldef cmd/psqldef/psqldef cmd/sqlite3def/sqlite3def cmd/mssqldef/mssqldef
 	rm -f cmd/mysqldef/mysqldef.exe cmd/psqldef/psqldef.exe cmd/sqlite3def/sqlite3def.exe cmd/mssqldef/mssqldef.exe
 
@@ -115,9 +115,7 @@ test-example:
 	./example/run.sh mssqldef
 
 test-cov:
-	rm -rf coverage && mkdir -p coverage
-	GOCOVERDIR=$(shell pwd)/coverage go test $(GOTESTFLAGS) -count=1 ./...
-	go tool covdata textfmt -i=coverage -o coverage.out
+	go test $(GOTESTFLAGS) -coverprofile=coverage.out -coverpkg=./... ./...
 	@grep -v -e "parser.y" -e "parser/parser.go" -e "testutils.go" coverage.out > coverage_filtered.out
 	@go tool cover -func=coverage_filtered.out
 	@rm coverage_filtered.out

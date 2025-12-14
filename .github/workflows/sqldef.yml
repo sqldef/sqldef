@@ -110,6 +110,30 @@ jobs:
         if: matrix.target == 'psqldef'
       - run: make test-${{ matrix.target }}
         id: test
+        env:
+          GOTESTFLAGS: -coverprofile=coverage.out -coverpkg=./...
+
+      - name: Generate coverage artifact name
+        id: coverage-name
+        run: |
+          NAME="${{ matrix.target }}"
+          [ -n "${{ matrix.mysql_flavor }}" ] && NAME="${NAME}-${{ matrix.mysql_flavor }}"
+          [ -n "${{ matrix.mysql_version }}" ] && NAME="${NAME}-${{ matrix.mysql_version }}"
+          [ -n "${{ matrix.mariadb_version }}" ] && NAME="${NAME}-${{ matrix.mariadb_version }}"
+          [ -n "${{ matrix.tidb_version }}" ] && NAME="${NAME}-${{ matrix.tidb_version }}"
+          [ -n "${{ matrix.postgres_version }}" ] && NAME="${NAME}-${{ matrix.postgres_version }}"
+          [ -n "${{ matrix.pg_flavor }}" ] && NAME="${NAME}-${{ matrix.pg_flavor }}"
+          [ -n "${{ matrix.pgvector_version }}" ] && NAME="${NAME}-${{ matrix.pgvector_version }}"
+          [ -n "${{ matrix.mssql_version }}" ] && NAME="${NAME}-${{ matrix.mssql_version }}"
+          echo "name=${NAME}" >> $GITHUB_OUTPUT
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ steps.coverage-name.outputs.name }}
+          path: coverage.out
+          retention-days: 1
+
       - name: Show docker compose logs on failure
         if: failure() && steps.test.outcome == 'failure' && matrix.service
         run: |
@@ -125,6 +149,55 @@ jobs:
           POSTGRES_VERSION: ${{ matrix.postgres_version }}
           PGVECTOR_VERSION: ${{ matrix.pgvector_version }}
           MSSQL_VERSION: ${{ matrix.mssql_version }}
+
+  upload-coverage:
+    runs-on: ubuntu-latest
+    needs: test
+    if: always() && !contains(needs.test.result, 'cancelled')
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        with:
+          go-version-file: go.mod
+
+      - name: Download all coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: coverage-reports
+          merge-multiple: false
+
+      - name: Merge coverage reports
+        run: |
+          echo "=== Downloaded artifacts ==="
+          find coverage-reports -type f -name '*.out' | head -20
+
+          # Check if any coverage files exist
+          shopt -s nullglob
+          files=(coverage-reports/*/coverage.out)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No coverage files found"
+            exit 1
+          fi
+          echo "Found ${#files[@]} coverage files"
+
+          # Filter out parser.go and parser.y from each coverage file before merging
+          for f in "${files[@]}"; do
+            echo "Processing: $f"
+            grep -v -e "parser.y" -e "parser/parser.go" "$f" > "$f.filtered" && mv "$f.filtered" "$f"
+          done
+
+          # Use gocovmerge to merge all coverage files
+          go install github.com/wadey/gocovmerge@latest
+          gocovmerge "${files[@]}" > coverage.out
+          go tool cover -func=coverage.out | tail -1
+
+      - name: Upload coverage to codecov.io
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.out
+          fail_ci_if_error: false
 
   integrity:
     runs-on: ubuntu-latest
