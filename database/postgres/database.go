@@ -118,6 +118,13 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 	}
 	ddls = append(ddls, tableDDLs...)
 
+	// Export partition child tables (CREATE TABLE ... PARTITION OF)
+	partitionDDLs, err := d.partitionChildTables()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, partitionDDLs...)
+
 	triggerDDLs, err := d.triggers()
 	if err != nil {
 		return "", err
@@ -140,16 +147,25 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 }
 
 func (d *PostgresDatabase) tableNames() ([]string, error) {
-	rows, err := d.db.Query(`
-		select n.nspname as table_schema, relname as table_name from pg_catalog.pg_class c
-		inner join pg_catalog.pg_namespace n on c.relnamespace = n.oid
-		where n.nspname not in ('information_schema', 'pg_catalog')
-		and c.relkind in ('r', 'p')
-		and c.relpersistence in ('p', 'u')
-		and c.relispartition = false
-		and not exists (select * from pg_catalog.pg_depend d where c.oid = d.objid and d.deptype = 'e')
-		order by n.nspname asc, relname asc;
-	`)
+	// When SkipPartition is true, exclude partitioned parent tables (relkind='p').
+	// Otherwise, include both regular tables ('r') and partitioned parent tables ('p').
+	relkindCondition := "c.relkind in ('r', 'p')"
+	if d.config.SkipPartition {
+		relkindCondition = "c.relkind = 'r'"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT n.nspname AS table_schema, relname AS table_name FROM pg_catalog.pg_class c
+		INNER JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+		WHERE n.nspname NOT IN ('information_schema', 'pg_catalog')
+		AND %s
+		AND c.relpersistence IN ('p', 'u')
+		AND c.relispartition = false
+		AND NOT EXISTS (SELECT * FROM pg_catalog.pg_depend d WHERE c.oid = d.objid AND d.deptype = 'e')
+		ORDER BY n.nspname ASC, relname ASC;
+	`, relkindCondition)
+
+	rows, err := d.db.Query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +182,71 @@ func (d *PostgresDatabase) tableNames() ([]string, error) {
 		}
 		tables = append(tables, schema+"."+name)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return tables, nil
+}
+
+// partitionChildTables exports CREATE TABLE ... PARTITION OF statements for partition child tables
+func (d *PostgresDatabase) partitionChildTables() ([]string, error) {
+	// Skip partition child tables when SkipPartition is enabled
+	if d.config.SkipPartition {
+		return []string{}, nil
+	}
+
+	// Query partition child tables with their parent table name and partition bound
+	query := `
+		SELECT
+			n.nspname AS partition_schema,
+			c.relname AS partition_name,
+			pn.nspname AS parent_schema,
+			pc.relname AS parent_name,
+			pg_get_expr(c.relpartbound, c.oid) AS partition_bound
+		FROM pg_catalog.pg_class c
+		INNER JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+		INNER JOIN pg_catalog.pg_inherits i ON c.oid = i.inhrelid
+		INNER JOIN pg_catalog.pg_class pc ON i.inhparent = pc.oid
+		INNER JOIN pg_catalog.pg_namespace pn ON pc.relnamespace = pn.oid
+		WHERE c.relispartition = true
+		AND n.nspname NOT IN ('information_schema', 'pg_catalog')
+		AND NOT EXISTS (SELECT * FROM pg_catalog.pg_depend d WHERE c.oid = d.objid AND d.deptype = 'e')
+		ORDER BY n.nspname ASC, c.relname ASC;
+	`
+
+	rows, err := d.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ddls []string
+	for rows.Next() {
+		var partitionSchema, partitionName, parentSchema, parentName, partitionBound string
+		if err := rows.Scan(&partitionSchema, &partitionName, &parentSchema, &parentName, &partitionBound); err != nil {
+			return nil, err
+		}
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, partitionSchema) {
+			continue
+		}
+
+		// Build the CREATE TABLE ... PARTITION OF statement
+		partitionTable := fmt.Sprintf("%s.%s",
+			d.quoteIdentifierIfNeeded(partitionSchema),
+			d.quoteIdentifierIfNeeded(partitionName))
+		parentTableStr := fmt.Sprintf("%s.%s",
+			d.quoteIdentifierIfNeeded(parentSchema),
+			d.quoteIdentifierIfNeeded(parentName))
+
+		ddl := fmt.Sprintf("CREATE TABLE %s PARTITION OF %s\n  %s;",
+			partitionTable, parentTableStr, partitionBound)
+		ddls = append(ddls, ddl)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return ddls, nil
 }
 
 var (

@@ -12,14 +12,14 @@ Each command follows the same pattern: it accepts connection parameters similar 
 ## General Rules
 
 * Never commit changes unless the user explicitly requests it
-* Write comments to explain non-obvious code. Focus on explaining the "why" rather than the "what"
-* Format SQL statements in string literals
+* Only write comments to explain non-obvious code. Focus on explaining the "why" rather than the "what"
+* Format SQL in string literals
 * Use `log/slog` to trace internal state. Set `LOG_LEVEL=debug` to enable debug logging
 * Use `panic` to assert unreachable code paths
 * Be aware of the two escaping modes:
-  * `legacy_ignore_quotes: true` (the default, backward compatible mode) generates SQL with always quoted identifiers
-  * `legacy_ignore_quotes: false` (quote-aware mode) generates SQL with identifiers quoted only when they are quoted in the source SQL
-* If you found unsupported features, don't "fix" tests by rewriting not to use such features. Instead, comment out the test case and mark it as `FIXME`
+  * `legacy_ignore_quotes: true` (default; backward-compatible) generates SQL with identifiers always quoted
+  * `legacy_ignore_quotes: false` (quote-aware) generates SQL with identifiers quoted only when they are quoted in the input SQL
+* If you encounter an unsupported feature, don't rewrite tests to avoid it. Instead, comment out the test case and mark it as `FIXME`
 
 ## Build
 
@@ -29,7 +29,7 @@ Build all the sqldef commands (`mysqldef`, `psqldef`, `sqlite3def`, `mssqldef`):
 make build
 ```
 
-The executable binaries will be placed in the `build/$os-$arch/` directory.
+The executable binaries will be placed in the `build/$os-$arch/` directory, where `$os` is `go env GOOS` and `$arch` is `go env GOARCH`.
 
 ### The Parser
 
@@ -42,7 +42,7 @@ make parser-v  # same as above, also writes a conflict report to y.output
 
 Requirements:
 - No reduce/reduce conflicts are allowed
-- No more shift/reduce conflicts are allowed unless absolutely necessary
+- Do not introduce new shift/reduce conflicts unless absolutely necessary
 - To resolve conflicts, use `make parser-v` and inspect `y.output`
 
 Usage notes:
@@ -51,50 +51,29 @@ Usage notes:
   - `PSQLDEF_PARSER=generic` - Use only the generic parser (no fallback to pgquery)
   - `PSQLDEF_PARSER=pgquery` - Use only the pgquery parser (no fallback to generic)
   - Not set (default) - Use generic parser with fallback to pgquery
-- The generic parser builds ASTs, which the generator manipulates for normalization and comparison. Do not parse strings with regular expressions
+- The generic parser builds ASTs that the generator uses for normalization and comparison. Do not parse SQL with regular expressions
 - The pgquery parser is obsolete and will be removed in the future; no maintenance is needed
 - Map iteration order is non-deterministic. Use `util.CanonicalMapIter` to iterate maps in a deterministic order
 
 ## Local Development
 
-To have trial and error locally, you can use the following commands:
+For local iteration, the typical workflow is:
 
 ```sh
-# psqldef - export current schema
-build/$os-$arch/psqldef psqldef_test --export > schema.sql
+# Pick a tool/target (where $os is `go env GOOS` and $arch is `go env GOARCH`):
+TOOL="build/$(go env-$arch/psqldef psqldef_test"
+# TOOL="build/$os-$arch/mysqldef mysqldef_test"
+# TOOL="build/$os-$arch/sqlite3def sqlite3def.db"
+# TOOL="build/$os-$arch/mssqldef -PPassw0rd mssqldef_test" # password is mandatory
 
-# psqldef - dry run to preview changes
-build/$os-$arch/psqldef psqldef_test --dry-run --file schema.sql
+# Export current schema
+$TOOL --export > schema.sql
 
-# psqldef - apply schema from file
-build/$os-$arch/psqldef psqldef_test --apply --file schema.sql
+# Preview changes (dry run)
+$TOOL --dry-run --file schema.sql
 
-# mysqldef - export current schema
-build/$os-$arch/mysqldef mysqldef_test --export > schema.sql
-
-# mysqldef - dry run to preview changes
-build/$os-$arch/mysqldef mysqldef_test --dry-run --file schema.sql
-
-# mysqldef - apply schema from file
-build/$os-$arch/mysqldef mysqldef_test --apply --file schema.sql
-
-# mssqldef - export current schema (password is mandatory)
-build/$os-$arch/mssqldef -PPassw0rd mssqldef_test --export > schema.sql
-
-# mssqldef - dry run to preview changes
-build/$os-$arch/mssqldef -PPassw0rd mssqldef_test --dry-run --file schema.sql
-
-# mssqldef - apply schema from file
-build/$os-$arch/mssqldef -PPassw0rd mssqldef_test --apply --file schema.sql
-
-# sqlite3def - export current schema
-build/$os-$arch/sqlite3def sqlite3def.db --export > schema.sql
-
-# sqlite3def - dry run to preview changes
-build/$os-$arch/sqlite3def sqlite3def.db --dry-run --file schema.sql
-
-# sqlite3def - apply schema from file
-build/$os-$arch/sqlite3def sqlite3def.db --apply --file schema.sql
+# Apply schema from file
+$TOOL --apply --file schema.sql
 ```
 
 ## Running Tests
@@ -107,7 +86,7 @@ For development iterations, use these commands to run tests:
 make test  # Takes approximately 10 minutes to complete
 ```
 
-### Run tests for specific `*def` tools
+### Run tests for a specific sqldef tool
 
 The test runner is `gotestsum`, which is a wrapper around `go test` that provides a more readable output.
 
@@ -142,7 +121,7 @@ If you encounter `tls: handshake failure` errors with MySQL 5.7, enable RSA key 
 GODEBUG=tlsrsakex=1 go test ./cmd/mysqldef
 ```
 
-The tests for mssqldef are flaky due to mssql instance issues. In such a case, restart it with `docker compose down mssql && docker compose up -d --wait mssql`, and run the tests again.
+The tests for mssqldef are flaky due to SQL Server instance issues. In that case, restart it with `docker compose down mssql && docker compose up -d --wait mssql`, then run the tests again.
 
 For test coverage:
 
@@ -209,8 +188,10 @@ TestCaseName:
   # Maximum database version supported
   max_version: "14.0"
 
-  # Database flavor requirement (mysqldef only)
-  # One of "mysql", "mariadb", "tidb"
+  # Database flavor requirement for flavor-specific features
+  # One of "mysql", "mariadb", "tidb" for mysqldef, and "pgvector" for psqldef
+  # Supports positive and negative matching like "!tidb" to exclude TiDB
+  # See "Flavor Behavior" section below for details
   flavor: "mariadb"
 
   # User to run the test as
@@ -227,6 +208,11 @@ TestCaseName:
   # Use offline testing only for proprietary SQL dialects such as Aurora DSQL (defaults to false)
   offline: true
 
+  # Quote handling mode
+  # true = ignore quotes (incorrectly ignore case-sensitivity; legacy default)
+  # false = preserve quotes (correctly handle case-sensitivity; future default)
+  legacy_ignore_quotes: false
+
   # Configuration options for the test
   config:
     # Create indexes concurrently (psqldef only)
@@ -237,6 +223,19 @@ The `up` and `down` fields must both be specified or both be omitted:
 - Both specified: asserts `current → desired` produces `up` and `desired → current` produces `down`
 - Both omitted: idempotency-only test; DDLs are applied but not asserted (must be valid SQL unless `offline: true`)
 
+#### Flavor Behavior
+
+The `flavor` field controls flavor-specific test behavior, which validates that tests correctly fail on non-matching flavors:
+
+| Scenario | Result |
+|----------|--------|
+| Flavor matches, test passes | PASS |
+| Flavor matches, test fails | FAIL |
+| Flavor doesn't match, test fails | SKIP |
+| Flavor doesn't match, test passes | FAIL |
+
+This design ensures that flavor annotations are accurate. If you add `flavor: mariadb` to a test, the test must actually fail on MySQL/TiDB. If it passes, the flavor annotation is wrong and should be removed.
+
 #### Notes for Writing Tests
 
 * YAML test cases default to `enable_drop: true`, which differs from the default behavior of sqldef tools
@@ -246,6 +245,7 @@ The `up` and `down` fields must both be specified or both be omitted:
   - SQLite3
   - SQL Server
 * Add `legacy_ignore_quotes: false` for new test cases. This is the default behavior in the future.
+* Do not add trivial comments to test cases. Instead, describe what is tested in test case names.
 
 ## Documentation
 
@@ -261,8 +261,6 @@ Markdown files document the usage of each command. Keep them up to date:
 Before considering a task complete, run these commands to ensure the code is in a good state:
 
 * `make build`
-* `make test`
-* `make modernize`
-* `make lint`
-* `make vulncheck`
+* `make test-all-flavors`
 * `make format`
+* `make lint`

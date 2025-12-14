@@ -12,6 +12,7 @@ ConstraintCheck:
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
   min_version: '8.0'
 ColumnCheck:
+  flavor: "!mariadb"
   desired: |
     CREATE TABLE `books` (
       `id` int(10) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -20,7 +21,6 @@ ColumnCheck:
       `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       `deleted_at` datetime DEFAULT null
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;
-  flavor: mysql  # Different versioning of MariaDB
   min_version: '8.0'
 ForeignKeyNormalizeRestrict:
   desired: |
@@ -144,6 +144,7 @@ CheckInClauseWithMultipleConditions:
     );
   min_version: '8.0'
 AddCheckConstraintWithIn:
+  flavor: "!mariadb"
   current: |
     CREATE TABLE `documents` (
       `id` int PRIMARY KEY,
@@ -159,9 +160,9 @@ AddCheckConstraintWithIn:
     ALTER TABLE `documents` ADD CONSTRAINT `documents_state_chk` CHECK (state in ('draft', 'review', 'published', 'archived'));
   down: |
     ALTER TABLE `documents` DROP CHECK `documents_state_chk`;
-  flavor: mysql
   min_version: '8.0'
 ModifyCheckConstraintIn:
+  flavor: "!mariadb"
   current: |
     CREATE TABLE `tasks` (
       `id` int PRIMARY KEY,
@@ -180,9 +181,9 @@ ModifyCheckConstraintIn:
   down: |
     ALTER TABLE `tasks` DROP CHECK `tasks_status_chk`;
     ALTER TABLE `tasks` ADD CONSTRAINT `tasks_status_chk` CHECK (status in ('todo', 'in_progress'));
-  flavor: mysql
   min_version: '8.0'
 DropCheckConstraintWithIn:
+  flavor: "!mariadb"
   current: |
     CREATE TABLE `events` (
       `id` int PRIMARY KEY,
@@ -198,7 +199,6 @@ DropCheckConstraintWithIn:
     ALTER TABLE `events` DROP CHECK `events_type_chk`;
   down: |
     ALTER TABLE `events` ADD CONSTRAINT `events_type_chk` CHECK (type in ('public', 'private'));
-  flavor: mysql
   min_version: '8.0'
 CheckInClauseWithNegation:
   desired: |
@@ -248,7 +248,6 @@ CheckTableLevelToColumnLevel:
     );
   up: ""
   down: ""
-  flavor: mysql
   min_version: '8.0'
 CheckTableLevelToUnnamedColumnLevel:
   current: |
@@ -264,7 +263,6 @@ CheckTableLevelToUnnamedColumnLevel:
     );
   up: ""
   down: ""
-  flavor: mysql
   min_version: '8.0'
 CheckDuplicateValuesInOrChain:
   current: |
@@ -281,9 +279,9 @@ CheckDuplicateValuesInOrChain:
     );
   up: ""
   down: ""
-  flavor: mysql
   min_version: '8.0'
 CheckRowValueConstructorMultipleInnerValues:
+  flavor: "!mariadb"
   current: |
     CREATE TABLE `test_multi` (
       `col_a` int,
@@ -302,7 +300,6 @@ CheckRowValueConstructorMultipleInnerValues:
   down: |
     ALTER TABLE `test_multi` DROP CHECK `test_multi_chk`;
     ALTER TABLE `test_multi` ADD CONSTRAINT `test_multi_chk` CHECK ((col_a, col_b) in ((3, 1), (2, 4)));
-  flavor: mysql
   min_version: '8.0'
 CheckRowValueConstructorOuterOrderShouldMatch:
   current: |
@@ -319,5 +316,15 @@ CheckRowValueConstructorOuterOrderShouldMatch:
     );
   up: ""
   down: ""
-  flavor: mysql
   min_version: '8.0'
+
+# Table with CHECK constraint via COMMENT (works on both MySQL and MariaDB)
+TableWithCommentAndDefaults:
+  desired: |
+    CREATE TABLE `books` (
+      `id` int(10) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      `type` VARCHAR(255) NOT NULL COMMENT 'manga, novel',
+      `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      `deleted_at` datetime DEFAULT null
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin ROW_FORMAT=DYNAMIC;

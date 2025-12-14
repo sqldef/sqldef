@@ -45,6 +45,9 @@ type Generator struct {
 	desiredDomains []*Domain
 	currentDomains []*Domain
 
+	desiredPartitionOfs []*CreatePartitionOf
+	currentPartitionOfs []*CreatePartitionOf
+
 	// Track FKs that have been handled during primary key changes
 	handledForeignKeys map[string]bool
 
@@ -109,34 +112,36 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	}
 
 	generator := Generator{
-		mode:               mode,
-		desiredTables:      desiredAggregated.Tables,
-		currentTables:      aggregated.Tables,
-		desiredViews:       desiredAggregated.Views,
-		currentViews:       aggregated.Views,
-		desiredTriggers:    desiredAggregated.Triggers,
-		currentTriggers:    aggregated.Triggers,
-		desiredFunctions:   desiredAggregated.Functions,
-		currentFunctions:   aggregated.Functions,
-		desiredTypes:       desiredAggregated.Types,
-		currentTypes:       aggregated.Types,
-		desiredDomains:     desiredAggregated.Domains,
-		currentDomains:     aggregated.Domains,
-		desiredComments:    desiredAggregated.Comments,
-		currentComments:    aggregated.Comments,
-		desiredExtensions:  desiredAggregated.Extensions,
-		currentExtensions:  aggregated.Extensions,
-		desiredSchemas:     desiredAggregated.Schemas,
-		currentSchemas:     aggregated.Schemas,
-		desiredPrivileges:  desiredAggregated.Privileges,
-		currentPrivileges:  aggregated.Privileges,
-		defaultSchema:      defaultSchema,
-		algorithm:          config.Algorithm,
-		lock:               config.Lock,
-		config:             config,
-		handledForeignKeys: make(map[string]bool),
-		droppedTables:      make(map[string]bool),
-		indexToTable:       make(map[string]QualifiedName),
+		mode:                mode,
+		desiredTables:       desiredAggregated.Tables,
+		currentTables:       aggregated.Tables,
+		desiredViews:        desiredAggregated.Views,
+		currentViews:        aggregated.Views,
+		desiredTriggers:     desiredAggregated.Triggers,
+		currentTriggers:     aggregated.Triggers,
+		desiredFunctions:    desiredAggregated.Functions,
+		currentFunctions:    aggregated.Functions,
+		desiredTypes:        desiredAggregated.Types,
+		currentTypes:        aggregated.Types,
+		desiredDomains:      desiredAggregated.Domains,
+		currentDomains:      aggregated.Domains,
+		desiredPartitionOfs: desiredAggregated.PartitionOfs,
+		currentPartitionOfs: aggregated.PartitionOfs,
+		desiredComments:     desiredAggregated.Comments,
+		currentComments:     aggregated.Comments,
+		desiredExtensions:   desiredAggregated.Extensions,
+		currentExtensions:   aggregated.Extensions,
+		desiredSchemas:      desiredAggregated.Schemas,
+		currentSchemas:      aggregated.Schemas,
+		desiredPrivileges:   desiredAggregated.Privileges,
+		currentPrivileges:   aggregated.Privileges,
+		defaultSchema:       defaultSchema,
+		algorithm:           config.Algorithm,
+		lock:                config.Lock,
+		config:              config,
+		handledForeignKeys:  make(map[string]bool),
+		droppedTables:       make(map[string]bool),
+		indexToTable:        make(map[string]QualifiedName),
 	}
 	// Build index-to-table mapping before any tables are dropped
 	generator.buildIndexToTableMap()
@@ -231,6 +236,16 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				table := desired.table // copy table
 				g.desiredTables = append(g.desiredTables, &table)
 			}
+		case *CreatePartitionOf:
+			// Check if this partition child table already exists
+			currentPartition := g.findPartitionOfByName(g.currentPartitionOfs, desired.tableName)
+			if currentPartition == nil {
+				// Partition child table doesn't exist, create it
+				interDDLs = append(interDDLs, desired.statement)
+				partitionOf := *desired // copy
+				g.currentPartitionOfs = append(g.currentPartitionOfs, &partitionOf)
+			}
+			// For now, we don't support modifying partition bounds - only create or keep as-is
 		case *CreateIndex:
 			idxDDLs, err := g.generateDDLsForCreateIndex(desired.tableName, desired.index, "CREATE INDEX", ddl.Statement())
 			if err != nil {
@@ -389,6 +404,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		for _, table := range tablesToDrop {
 			g.currentTables = removeTableByName(g.currentTables, table.name.RawString())
 			g.droppedTables[table.name.RawString()] = true
+		}
+	}
+
+	// Drop partition child tables that no longer exist in desired schema
+	for _, currentPartition := range g.currentPartitionOfs {
+		desiredPartition := g.findPartitionOfByName(g.desiredPartitionOfs, currentPartition.tableName)
+		if desiredPartition == nil {
+			ddls = append(ddls, fmt.Sprintf("DROP TABLE %s", g.escapeQualifiedName(currentPartition.tableName)))
 		}
 	}
 
@@ -694,6 +717,7 @@ func isDropStatement(ddl string) bool {
 		strings.Contains(ddl, "DROP DOMAIN") ||
 		strings.Contains(ddl, "DROP EXTENSION") ||
 		strings.Contains(ddl, "DROP POLICY") ||
+		strings.Contains(ddl, "DROP PARTITION") ||
 		strings.Contains(ddl, "REVOKE ")
 }
 
@@ -1588,12 +1612,125 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		}
 	}
 
+	// Compare partitions (MySQL/MariaDB only)
+	if g.mode == GeneratorModeMysql {
+		partitionDDLs := g.generatePartitionDDLs(currentTable, desired.table)
+		ddls = append(ddls, partitionDDLs...)
+	}
+
 	// Add FK recreation DDLs at the end (they will be executed after all table modifications)
 	if len(fkRecreationDDLs) > 0 {
 		ddls = append(ddls, fkRecreationDDLs...)
 	}
 
 	return ddls, nil
+}
+
+// generatePartitionDDLs compares partitions between current and desired tables
+// and generates ADD PARTITION / DROP PARTITION statements
+func (g *Generator) generatePartitionDDLs(currentTable Table, desiredTable Table) []string {
+	ddls := []string{}
+
+	// If neither has partitions, nothing to do
+	if currentTable.partition == nil && desiredTable.partition == nil {
+		return ddls
+	}
+
+	// If only current has partitions (desired removes all partitioning), we don't handle
+	// removing partitioning entirely - that would require REMOVE PARTITIONING
+	if desiredTable.partition == nil {
+		return ddls
+	}
+
+	// If only desired has partitions, the table creation should handle it
+	if currentTable.partition == nil {
+		return ddls
+	}
+
+	// Both have partitions - compare partition definitions
+	// Find partitions to add (in desired but not in current)
+	for _, desiredPart := range desiredTable.partition.Definitions {
+		found := false
+		for _, currentPart := range currentTable.partition.Definitions {
+			if g.identsEqual(desiredPart.Name, currentPart.Name) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			ddl := g.generateAddPartitionDDL(desiredTable, desiredPart)
+			ddls = append(ddls, ddl)
+		}
+	}
+
+	// Find partitions to drop (in current but not in desired)
+	for _, currentPart := range currentTable.partition.Definitions {
+		found := false
+		for _, desiredPart := range desiredTable.partition.Definitions {
+			if g.identsEqual(currentPart.Name, desiredPart.Name) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			ddl := g.generateDropPartitionDDL(desiredTable, currentPart)
+			ddls = append(ddls, ddl)
+		}
+	}
+
+	return ddls
+}
+
+// generateAddPartitionDDL generates ALTER TABLE ADD PARTITION statement
+func (g *Generator) generateAddPartitionDDL(table Table, part PartitionDefinition) string {
+	tableName := g.escapeTableName(&table)
+	// Quote partition name only if it needs quoting (contains special chars/spaces)
+	// Don't preserve quotes from source since MariaDB quotes differently than MySQL
+	partName := g.escapePartitionName(part.Name.Name)
+
+	if part.In != nil {
+		// LIST partition: VALUES IN (...)
+		return fmt.Sprintf("ALTER TABLE %s ADD PARTITION (PARTITION %s VALUES IN (%s))",
+			tableName, partName, g.formatExprs(part.In))
+	} else if part.Maxvalue {
+		// RANGE partition: VALUES LESS THAN MAXVALUE
+		return fmt.Sprintf("ALTER TABLE %s ADD PARTITION (PARTITION %s VALUES LESS THAN MAXVALUE)",
+			tableName, partName)
+	} else if part.LessThan != nil {
+		// RANGE partition: VALUES LESS THAN (...)
+		return fmt.Sprintf("ALTER TABLE %s ADD PARTITION (PARTITION %s VALUES LESS THAN (%s))",
+			tableName, partName, g.formatExprs(part.LessThan))
+	}
+
+	// Fallback (shouldn't happen with valid partition definitions)
+	return ""
+}
+
+// generateDropPartitionDDL generates ALTER TABLE DROP PARTITION statement
+func (g *Generator) generateDropPartitionDDL(table Table, part PartitionDefinition) string {
+	tableName := g.escapeTableName(&table)
+	// Quote partition name only if it needs quoting (contains special chars/spaces)
+	// Don't preserve quotes from source since MariaDB quotes differently than MySQL
+	partName := g.escapePartitionName(part.Name.Name)
+	return fmt.Sprintf("ALTER TABLE %s DROP PARTITION %s", tableName, partName)
+}
+
+// escapePartitionName quotes a partition name only if it needs quoting.
+// MySQL/MariaDB partition names need quoting if they contain spaces or special characters.
+func (g *Generator) escapePartitionName(name string) string {
+	if database.NeedsQuoting(name) {
+		return g.forceEscapeSQLName(name)
+	}
+	return name
+}
+
+// formatExprs formats parser.Exprs for use in DDL statements
+func (g *Generator) formatExprs(exprs parser.Exprs) string {
+	parts := make([]string, len(exprs))
+	for i, expr := range exprs {
+		parts[i] = parser.String(expr)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // Shared by `CREATE INDEX` and `ALTER TABLE ADD INDEX`.
@@ -2679,16 +2816,17 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 }
 
 type AggregatedSchema struct {
-	Tables     []*Table
-	Views      []*View
-	Triggers   []*Trigger
-	Functions  []*Function
-	Types      []*Type
-	Domains    []*Domain
-	Comments   []*Comment
-	Extensions []*Extension
-	Schemas    []*Schema
-	Privileges []*GrantPrivilege
+	Tables       []*Table
+	PartitionOfs []*CreatePartitionOf // PostgreSQL partition child tables
+	Views        []*View
+	Triggers     []*Trigger
+	Functions    []*Function
+	Types        []*Type
+	Domains      []*Domain
+	Comments     []*Comment
+	Extensions   []*Extension
+	Schemas      []*Schema
+	Privileges   []*GrantPrivilege
 }
 
 // generateCreateIndexStatement generates a CREATE INDEX statement from an Index struct.
@@ -3393,15 +3531,16 @@ func mergeTable(table1 *Table, table2 Table) {
 
 func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) (*AggregatedSchema, error) {
 	aggregated := &AggregatedSchema{
-		Tables:     []*Table{},
-		Views:      []*View{},
-		Triggers:   []*Trigger{},
-		Types:      []*Type{},
-		Domains:    []*Domain{},
-		Comments:   []*Comment{},
-		Extensions: []*Extension{},
-		Schemas:    []*Schema{},
-		Privileges: []*GrantPrivilege{},
+		Tables:       []*Table{},
+		PartitionOfs: []*CreatePartitionOf{},
+		Views:        []*View{},
+		Triggers:     []*Trigger{},
+		Types:        []*Type{},
+		Domains:      []*Domain{},
+		Comments:     []*Comment{},
+		Extensions:   []*Extension{},
+		Schemas:      []*Schema{},
+		Privileges:   []*GrantPrivilege{},
 	}
 
 	for _, ddl := range ddls {
@@ -3409,6 +3548,10 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 		case *CreateTable:
 			table := stmt.table // copy table
 			aggregated.Tables = append(aggregated.Tables, &table)
+		case *CreatePartitionOf:
+			// Copy the partition of statement
+			partitionOf := *stmt
+			aggregated.PartitionOfs = append(aggregated.PartitionOfs, &partitionOf)
 		case *CreateIndex:
 			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 			if table == nil {
@@ -3749,6 +3892,15 @@ func (g *Generator) findTableByName(tables []*Table, name QualifiedName) *Table 
 	for _, table := range tables {
 		if g.qualifiedNamesEqual(table.name, name) {
 			return table
+		}
+	}
+	return nil
+}
+
+func (g *Generator) findPartitionOfByName(partitionOfs []*CreatePartitionOf, name QualifiedName) *CreatePartitionOf {
+	for _, partitionOf := range partitionOfs {
+		if g.qualifiedNamesEqual(partitionOf.tableName, name) {
+			return partitionOf
 		}
 	}
 	return nil

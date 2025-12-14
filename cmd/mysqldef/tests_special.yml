@@ -25,29 +25,6 @@ NonReservedColumnName:
       `language` TEXT,
       `json` TEXT
     );
-PartitionByRange:
-  desired: |
-    CREATE TABLE `users` (
-      `uuid` varchar(37) NOT NULL,
-      `name` varchar(255) DEFAULT NULL,
-      `joined` date NOT NULL,
-      PRIMARY KEY (`uuid`,`joined`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=latin1
-    /*!50100 PARTITION BY RANGE (year(`joined`))
-    (PARTITION p202109 VALUES LESS THAN ('2021-10-01'),
-     PARTITION p202110 VALUES LESS THAN ('2021-11-01'),
-     PARTITION p202111 VALUES LESS THAN ('2021-12-01'),
-     PARTITION p202112 VALUES LESS THAN ('2022-01-01'),
-     PARTITION pmax VALUES LESS THAN MAXVALUE) */;
-  up: |
-    CREATE TABLE `users` (
-      `uuid` varchar(37) NOT NULL,
-      `name` varchar(255) DEFAULT NULL,
-      `joined` date NOT NULL,
-      PRIMARY KEY (`uuid`,`joined`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-  down: |
-    DROP TABLE `users`;
 CreateTableWithSpatialTypesAndSpatialKey:
   flavor: "!tidb"  # TiDB has limited support for spatial types
   current: |

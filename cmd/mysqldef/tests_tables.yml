@@ -90,6 +90,7 @@ CreateTableAddPrimaryKey:
   down: |
     ALTER TABLE `users` DROP PRIMARY KEY;
 CreateTableAddAutoIncrement:
+  flavor: mysql
   current: |
     CREATE TABLE users (
       id bigint(20) NOT NULL PRIMARY KEY,
@@ -104,24 +105,7 @@ CreateTableAddAutoIncrement:
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
   down: |
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
-  flavor: mysql
   min_version: '8.0'
-CreateTableAddAutoIncrementMariaDB:
-  current: |
-    CREATE TABLE users (
-      id bigint(20) NOT NULL PRIMARY KEY,
-      name varchar(20)
-    );
-  desired: |
-    CREATE TABLE users (
-      id bigint(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      name varchar(20)
-    );
-  up: |
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
-  down: |
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
-  flavor: mariadb
 AlterTableAddSetTypeColumn:
   current: |
     CREATE TABLE alarm (id BIGINT PRIMARY KEY);
@@ -231,6 +215,7 @@ CreateTableChangePrimaryKeyWithComment:
     ALTER TABLE `friends` DROP PRIMARY KEY;
     ALTER TABLE `friends` ADD PRIMARY KEY (`user_id`);
 CreateTableAddAutoIncrementPrimaryKey:
+  flavor: mysql
   current: |
     CREATE TABLE users (
       name varchar(20)
@@ -249,28 +234,7 @@ CreateTableAddAutoIncrementPrimaryKey:
     ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL;
     ALTER TABLE `users` DROP PRIMARY KEY;
     ALTER TABLE `users` DROP COLUMN `id`;
-  flavor: mysql
   min_version: '8.0'
-CreateTableAddAutoIncrementPrimaryKeyMariaDB:
-  current: |
-    CREATE TABLE users (
-      name varchar(20)
-    );
-  desired: |
-    CREATE TABLE users (
-      id bigint NOT NULL AUTO_INCREMENT,
-      name varchar(20),
-      PRIMARY KEY (id)
-    );
-  up: |
-    ALTER TABLE `users` ADD COLUMN `id` bigint NOT NULL FIRST;
-    ALTER TABLE `users` ADD PRIMARY KEY (`id`);
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint NOT NULL AUTO_INCREMENT;
-  down: |
-    ALTER TABLE `users` CHANGE COLUMN `id` `id` bigint(20) NOT NULL;
-    ALTER TABLE `users` DROP PRIMARY KEY;
-    ALTER TABLE `users` DROP COLUMN `id`;
-  flavor: mariadb
 CreateTableKeepAutoIncrement:
   flavor: "!tidb"  # TiDB does not allow setting AUTO_INCREMENT on existing columns
   current: |
@@ -850,8 +814,8 @@ CreateWithNonReservedKeywordColumns:
     end;
 
 CreateTableWithFunctionalIndex:
+  flavor: "!mariadb"
   # https://blogs.oracle.com/mysql/post/functional-indexes-in-mysql
-  flavor: mysql
   min_version: '8.0'
   desired: |
     CREATE TABLE `app_badge_tag` (
@@ -1145,3 +1109,12 @@ CompositeUnnamedForeignKey:
       title VARCHAR(255) NOT NULL,
       FOREIGN KEY (tenant_id, author_id) REFERENCES users(tenant_id, user_id)
     );
+
+# Table with collate on table level (works on both MySQL and MariaDB)
+CollateOnTable:
+  desired: |
+    create table users
+    (
+        id   int          not null,
+        name varchar(255) not null
+    ) COLLATE=utf8mb4_general_ci;

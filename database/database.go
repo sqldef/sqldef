@@ -21,6 +21,7 @@ type Config struct {
 	Socket        string
 	SkipView      bool
 	SkipExtension bool
+	SkipPartition bool
 
 	// Only MySQL
 	MySQLEnableCleartextPlugin bool

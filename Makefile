@@ -1,8 +1,7 @@
 # This doesn't work for psqldef due to lib/pq
 GOFLAGS := -tags netgo -installsuffix netgo -ldflags '-w -s'
-GOVERSION=$(shell go version)
-GOOS ?= $(word 1,$(subst /, ,$(lastword $(GOVERSION))))
-GOARCH ?= $(word 2,$(subst /, ,$(lastword $(GOVERSION))))
+GOOS ?= $(shell go env GOOS)
+GOARCH ?= $(shell go env GOARCH)
 BUILD_DIR=build/$(GOOS)-$(GOARCH)
 SQLDEF=$(shell pwd)
 MACOS_VERSION := 11.3
@@ -23,7 +22,7 @@ else
   GOTEST := go run gotest.tools/gotestsum@latest --hide-summary=skipped -- $(GOTESTFLAGS)
 endif
 
-.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef test-cov test-cov-xml test-core test test-example test-example-offline vulncheck
+.PHONY: all build clean deps goyacc package package-zip package-targz parser parser-v build-mysqldef build-sqlite3def build-mssqldef build-psqldef test-cov test-cov-xml test-core test test-example test-example-offline test-all-flavors vulncheck
 
 all: build
 
@@ -103,6 +102,11 @@ test-example-offline:
 	./example/run-offline.sh mysqldef
 	./example/run-offline.sh sqlite3def
 	./example/run-offline.sh mssqldef
+
+test-all-flavors: test
+	MYSQL_FLAVOR=mariadb MYSQL_PORT=3307 $(GOTEST) ./cmd/mysqldef
+	MYSQL_FLAVOR=tidb MYSQL_PORT=4000 $(GOTEST) ./cmd/mysqldef
+	PG_FLAVOR=pgvector PGPORT=55432 $(GOTEST) ./cmd/psqldef
 
 test-example:
 	./example/run.sh psqldef
