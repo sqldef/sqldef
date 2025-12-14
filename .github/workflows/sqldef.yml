@@ -169,9 +169,27 @@ jobs:
 
       - name: Merge coverage reports
         run: |
+          echo "=== Downloaded artifacts ==="
+          find coverage-reports -type f -name '*.out' | head -20
+
+          # Check if any coverage files exist
+          shopt -s nullglob
+          files=(coverage-reports/*/coverage.out)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No coverage files found"
+            exit 1
+          fi
+          echo "Found ${#files[@]} coverage files"
+
+          # Filter out parser.go and parser.y from each coverage file before merging
+          for f in "${files[@]}"; do
+            echo "Processing: $f"
+            grep -v -e "parser.y" -e "parser/parser.go" "$f" > "$f.filtered" && mv "$f.filtered" "$f"
+          done
+
+          # Use gocovmerge to merge all coverage files
           go install github.com/wadey/gocovmerge@latest
-          find coverage-reports -name 'coverage.out' -exec echo "Found: {}" \;
-          gocovmerge coverage-reports/*/coverage.out > coverage.out
+          gocovmerge "${files[@]}" > coverage.out
           go tool cover -func=coverage.out | tail -1
 
       - name: Upload coverage to codecov.io
