@@ -635,19 +635,63 @@ func (node *PartitionSpec) Format(buf *nodeBuffer) {
 	}
 }
 
-// PartitionDefinition describes a very minimal partition definition
+// PartitionDefinition describes a partition definition for RANGE or LIST partitions
 type PartitionDefinition struct {
 	Name     Ident
-	Limit    Expr
-	Maxvalue bool
+	Limit    Expr  // For single-value LESS THAN (legacy)
+	LessThan Exprs // For RANGE: VALUES LESS THAN (expr_list)
+	In       Exprs // For LIST: VALUES IN (expr_list)
+	Maxvalue bool  // For LESS THAN MAXVALUE
 }
 
 // Format formats the node
 func (node *PartitionDefinition) Format(buf *nodeBuffer) {
-	if !node.Maxvalue {
-		buf.Printf("partition %v values less than (%v)", node.Name, node.Limit)
-	} else {
+	if node.In != nil {
+		buf.Printf("partition %v values in (%v)", node.Name, node.In)
+	} else if node.Maxvalue {
 		buf.Printf("partition %v values less than (maxvalue)", node.Name)
+	} else if node.LessThan != nil {
+		buf.Printf("partition %v values less than (%v)", node.Name, node.LessThan)
+	} else if node.Limit != nil {
+		buf.Printf("partition %v values less than (%v)", node.Name, node.Limit)
+	}
+}
+
+// TablePartition represents PARTITION BY clause for MySQL/MariaDB
+type TablePartition struct {
+	Type        string                 // RANGE, RANGE COLUMNS, LIST, LIST COLUMNS, HASH, LINEAR HASH, KEY, LINEAR KEY
+	Columns     []Ident                // For RANGE COLUMNS, LIST COLUMNS, KEY (column names)
+	Expr        Exprs                  // For RANGE, LIST, HASH (expression list)
+	Partitions  int                    // For PARTITIONS n (0 if not specified)
+	Definitions []*PartitionDefinition // Individual partition definitions
+}
+
+// Format formats the node
+func (p *TablePartition) Format(buf *nodeBuffer) {
+	buf.Printf("partition by %s", strings.ToLower(p.Type))
+	if p.Columns != nil {
+		// RANGE COLUMNS, LIST COLUMNS, KEY
+		var cols []string
+		for _, c := range p.Columns {
+			cols = append(cols, String(&c))
+		}
+		buf.Printf(" (%s)", strings.Join(cols, ", "))
+	} else if p.Expr != nil {
+		// RANGE, LIST, HASH
+		buf.Printf(" (%v)", p.Expr)
+	}
+	if p.Partitions > 0 {
+		buf.Printf(" partitions %d", p.Partitions)
+	}
+	if len(p.Definitions) > 0 {
+		buf.Printf("\n(")
+		for i, def := range p.Definitions {
+			if i > 0 {
+				buf.Printf(",\n ")
+			}
+			def.Format(buf)
+		}
+		buf.Printf(")")
 	}
 }
 
@@ -659,6 +703,7 @@ type TableSpec struct {
 	Checks      []*CheckDefinition
 	Exclusions  []*ExclusionDefinition // for Postgres
 	Options     map[string]string
+	Partition   *TablePartition // Partition definition (MySQL/MariaDB)
 }
 
 // Format formats the node.
@@ -679,7 +724,11 @@ func (ts *TableSpec) Format(buf *nodeBuffer) {
 	for key, value := range ts.Options {
 		options.WriteString(" " + key + "=" + value)
 	}
-	buf.Printf("\n)%s", strings.Replace(options.String(), ", ", ",\n  ", -1))
+	buf.Printf("\n)%s", strings.ReplaceAll(options.String(), ", ", ",\n  "))
+	if ts.Partition != nil {
+		buf.Printf("\n")
+		ts.Partition.Format(buf)
+	}
 }
 
 // addColumn appends the given column to the list in the spec

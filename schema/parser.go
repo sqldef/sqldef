@@ -633,6 +633,22 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		tableRenameFrom = extractRenameFrom(tableComment)
 	}
 
+	// Parse partition information
+	var partition *TablePartition
+	if stmt.TableSpec.Partition != nil {
+		partition = &TablePartition{
+			Type: stmt.TableSpec.Partition.Type,
+			Definitions: util.TransformSlice(stmt.TableSpec.Partition.Definitions, func(def *parser.PartitionDefinition) PartitionDefinition {
+				return PartitionDefinition{
+					Name:     def.Name,
+					LessThan: def.LessThan,
+					In:       def.In,
+					Maxvalue: def.Maxvalue,
+				}
+			}),
+		}
+	}
+
 	return Table{
 		name:        normalizeQualifiedName(mode, stmt.NewName, defaultSchema),
 		columns:     columns,
@@ -642,6 +658,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 		exclusions:  exclusions,
 		options:     stmt.TableSpec.Options,
 		renamedFrom: tableRenameFrom,
+		partition:   partition,
 	}, nil
 }
 

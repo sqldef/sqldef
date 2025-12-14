@@ -12,14 +12,14 @@ Each command follows the same pattern: it accepts connection parameters similar 
 ## General Rules
 
 * Never commit changes unless the user explicitly requests it
-* Write comments to explain non-obvious code. Focus on explaining the "why" rather than the "what"
+* Only write comments to explain non-obvious code. Focus on explaining the "why" rather than the "what"
 * Format SQL statements in string literals
 * Use `log/slog` to trace internal state. Set `LOG_LEVEL=debug` to enable debug logging
 * Use `panic` to assert unreachable code paths
 * Be aware of the two escaping modes:
   * `legacy_ignore_quotes: true` (the default, backward compatible mode) generates SQL with always quoted identifiers
   * `legacy_ignore_quotes: false` (quote-aware mode) generates SQL with identifiers quoted only when they are quoted in the source SQL
-* If you found unsupported features, don't "fix" tests by rewriting not to use such features. Instead, comment out the test case and mark it as `FIXME`
+* If you found unsupported features, don't rewrite tests to avoid using such features. Instead, comment out the test case and mark it as `FIXME`
 
 ## Build
 
@@ -29,7 +29,7 @@ Build all the sqldef commands (`mysqldef`, `psqldef`, `sqlite3def`, `mssqldef`):
 make build
 ```
 
-The executable binaries will be placed in the `build/$os-$arch/` directory.
+The executable binaries will be placed in the `build/$os-$arch/` directory, where `$os` is `go env GOOS` and `$arch` is `go env GOARCH`.
 
 ### The Parser
 
@@ -246,7 +246,7 @@ The `up` and `down` fields must both be specified or both be omitted:
   - SQLite3
   - SQL Server
 * Add `legacy_ignore_quotes: false` for new test cases. This is the default behavior in the future.
-* Do not add a trivial comment to a test case. Instead, describe what is tested in the test case name.
+* Do not add trivial comments to test cases. Instead, describe what is tested in test case names.
 
 ## Documentation
 
@@ -263,7 +263,5 @@ Before considering a task complete, run these commands to ensure the code is in 
 
 * `make build`
 * `make test`
-* `make modernize`
-* `make lint`
-* `make vulncheck`
 * `make format`
+* `make lint`

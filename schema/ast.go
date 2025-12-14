@@ -192,7 +192,22 @@ type Table struct {
 	policies    []Policy
 	privileges  []TablePrivilege
 	options     map[string]string
-	renamedFrom Ident // Previous table name if renamed via @renamed annotation
+	renamedFrom Ident           // Previous table name if renamed via @renamed annotation
+	partition   *TablePartition // Partition definition (MySQL/MariaDB)
+}
+
+// TablePartition represents partition information for a table
+type TablePartition struct {
+	Type        string                // RANGE, RANGE COLUMNS, LIST, LIST COLUMNS, HASH, LINEAR HASH, KEY, LINEAR KEY
+	Definitions []PartitionDefinition // Individual partition definitions
+}
+
+// PartitionDefinition represents a single partition
+type PartitionDefinition struct {
+	Name     Ident
+	LessThan parser.Exprs // For RANGE: VALUES LESS THAN
+	In       parser.Exprs // For LIST: VALUES IN
+	Maxvalue bool         // For VALUES LESS THAN MAXVALUE
 }
 
 type Column struct {

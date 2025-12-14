@@ -1,6 +1,7 @@
 # yaml-language-server: $schema=../../testutil/testcase.schema.json
 
-PartitionByRange:
+# Test parsing PARTITION BY RANGE with year() function inside MySQL version comments
+PartitionByRangeWithYearFunc:
   legacy_ignore_quotes: false
   desired: |
     CREATE TABLE `users` (
@@ -10,20 +11,11 @@ PartitionByRange:
       PRIMARY KEY (`uuid`,`joined`)
     ) ENGINE=InnoDB DEFAULT CHARSET=latin1
     /*!50100 PARTITION BY RANGE (year(`joined`))
-    (PARTITION p202109 VALUES LESS THAN ('2021-10-01'),
-     PARTITION p202110 VALUES LESS THAN ('2021-11-01'),
-     PARTITION p202111 VALUES LESS THAN ('2021-12-01'),
-     PARTITION p202112 VALUES LESS THAN ('2022-01-01'),
+    (PARTITION p2021 VALUES LESS THAN (2022),
+     PARTITION p2022 VALUES LESS THAN (2023),
+     PARTITION p2023 VALUES LESS THAN (2024),
+     PARTITION p2024 VALUES LESS THAN (2025),
      PARTITION pmax VALUES LESS THAN MAXVALUE) */;
-  up: |
-    CREATE TABLE `users` (
-      `uuid` varchar(37) NOT NULL,
-      `name` varchar(255) DEFAULT NULL,
-      `joined` date NOT NULL,
-      PRIMARY KEY (`uuid`,`joined`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-  down: |
-    DROP TABLE `users`;
 
 PartitionByRangeWithToDays:
   legacy_ignore_quotes: false
@@ -154,3 +146,180 @@ PartitionByListColumns:
     (PARTITION p_americas VALUES IN ('US', 'CA', 'MX'),
      PARTITION p_europe VALUES IN ('UK', 'DE', 'FR'),
      PARTITION p_asia VALUES IN ('JP', 'CN', 'KR'));
+
+# Idempotency test: verify RANGE partitioned table definitions are preserved
+PartitionByRangeIdempotent:
+  legacy_ignore_quotes: false
+  flavor: "!tidb"  # TiDB has different partition handling
+  current: |
+    CREATE TABLE sales_history (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      year_num int NOT NULL,
+      amount decimal(10,2) DEFAULT NULL,
+      PRIMARY KEY (id, year_num)
+    )
+    PARTITION BY RANGE (year_num)
+    (PARTITION p2022 VALUES LESS THAN (2023),
+     PARTITION p2023 VALUES LESS THAN (2024),
+     PARTITION p2024 VALUES LESS THAN (2025));
+  desired: |
+    CREATE TABLE sales_history (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      year_num int NOT NULL,
+      amount decimal(10,2) DEFAULT NULL,
+      PRIMARY KEY (id, year_num)
+    )
+    PARTITION BY RANGE (year_num)
+    (PARTITION p2022 VALUES LESS THAN (2023),
+     PARTITION p2023 VALUES LESS THAN (2024),
+     PARTITION p2024 VALUES LESS THAN (2025));
+  up: ""
+  down: ""
+
+# Idempotency test: verify LIST partitioned table definitions are preserved
+PartitionByListIdempotent:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE regional_data (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      region_code int NOT NULL,
+      data_value varchar(255) DEFAULT NULL,
+      PRIMARY KEY (id, region_code)
+    )
+    PARTITION BY LIST (region_code)
+    (PARTITION p_north VALUES IN (1, 2),
+     PARTITION p_south VALUES IN (3, 4),
+     PARTITION p_east VALUES IN (5, 6));
+  desired: |
+    CREATE TABLE regional_data (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      region_code int NOT NULL,
+      data_value varchar(255) DEFAULT NULL,
+      PRIMARY KEY (id, region_code)
+    )
+    PARTITION BY LIST (region_code)
+    (PARTITION p_north VALUES IN (1, 2),
+     PARTITION p_south VALUES IN (3, 4),
+     PARTITION p_east VALUES IN (5, 6));
+  up: ""
+  down: ""
+
+# Test adding a new partition to an existing RANGE partitioned table
+PartitionByRangeAddPartition:
+  legacy_ignore_quotes: false
+  flavor: "!tidb"
+  current: |
+    CREATE TABLE sales_history (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      year_num int NOT NULL,
+      amount decimal(10,2) DEFAULT NULL,
+      PRIMARY KEY (id, year_num)
+    )
+    PARTITION BY RANGE (year_num)
+    (PARTITION p2022 VALUES LESS THAN (2023),
+     PARTITION p2023 VALUES LESS THAN (2024));
+  desired: |
+    CREATE TABLE sales_history (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      year_num int NOT NULL,
+      amount decimal(10,2) DEFAULT NULL,
+      PRIMARY KEY (id, year_num)
+    )
+    PARTITION BY RANGE (year_num)
+    (PARTITION p2022 VALUES LESS THAN (2023),
+     PARTITION p2023 VALUES LESS THAN (2024),
+     PARTITION p2024 VALUES LESS THAN (2025));
+  up: |
+    ALTER TABLE sales_history ADD PARTITION (PARTITION p2024 VALUES LESS THAN (2025));
+  down: |
+    ALTER TABLE sales_history DROP PARTITION p2024;
+
+# Test dropping a partition from an existing RANGE partitioned table
+PartitionByRangeDropPartition:
+  legacy_ignore_quotes: false
+  enable_drop: true
+  flavor: "!tidb"
+  current: |
+    CREATE TABLE sales_history (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      year_num int NOT NULL,
+      amount decimal(10,2) DEFAULT NULL,
+      PRIMARY KEY (id, year_num)
+    )
+    PARTITION BY RANGE (year_num)
+    (PARTITION p2022 VALUES LESS THAN (2023),
+     PARTITION p2023 VALUES LESS THAN (2024),
+     PARTITION p2024 VALUES LESS THAN (2025));
+  desired: |
+    CREATE TABLE sales_history (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      year_num int NOT NULL,
+      amount decimal(10,2) DEFAULT NULL,
+      PRIMARY KEY (id, year_num)
+    )
+    PARTITION BY RANGE (year_num)
+    (PARTITION p2022 VALUES LESS THAN (2023),
+     PARTITION p2023 VALUES LESS THAN (2024));
+  up: |
+    ALTER TABLE sales_history DROP PARTITION p2024;
+  down: |
+    ALTER TABLE sales_history ADD PARTITION (PARTITION p2024 VALUES LESS THAN (2025));
+
+# Test adding a new partition to an existing LIST partitioned table
+PartitionByListAddPartition:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE regional_sales (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      region_code int NOT NULL,
+      amount decimal(10,2) DEFAULT NULL,
+      PRIMARY KEY (id, region_code)
+    )
+    PARTITION BY LIST (region_code)
+    (PARTITION p_north VALUES IN (1, 2, 3),
+     PARTITION p_south VALUES IN (4, 5, 6));
+  desired: |
+    CREATE TABLE regional_sales (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      region_code int NOT NULL,
+      amount decimal(10,2) DEFAULT NULL,
+      PRIMARY KEY (id, region_code)
+    )
+    PARTITION BY LIST (region_code)
+    (PARTITION p_north VALUES IN (1, 2, 3),
+     PARTITION p_south VALUES IN (4, 5, 6),
+     PARTITION p_east VALUES IN (7, 8, 9));
+  up: |
+    ALTER TABLE regional_sales ADD PARTITION (PARTITION p_east VALUES IN (7, 8, 9));
+  down: |
+    ALTER TABLE regional_sales DROP PARTITION p_east;
+
+# Test dropping a partition from an existing LIST partitioned table
+PartitionByListDropPartition:
+  legacy_ignore_quotes: false
+  enable_drop: true
+  current: |
+    CREATE TABLE regional_sales (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      region_code int NOT NULL,
+      amount decimal(10,2) DEFAULT NULL,
+      PRIMARY KEY (id, region_code)
+    )
+    PARTITION BY LIST (region_code)
+    (PARTITION p_north VALUES IN (1, 2, 3),
+     PARTITION p_south VALUES IN (4, 5, 6),
+     PARTITION p_east VALUES IN (7, 8, 9));
+  desired: |
+    CREATE TABLE regional_sales (
+      id bigint(20) NOT NULL AUTO_INCREMENT,
+      region_code int NOT NULL,
+      amount decimal(10,2) DEFAULT NULL,
+      PRIMARY KEY (id, region_code)
+    )
+    PARTITION BY LIST (region_code)
+    (PARTITION p_north VALUES IN (1, 2, 3),
+     PARTITION p_south VALUES IN (4, 5, 6));
+  up: |
+    ALTER TABLE regional_sales DROP PARTITION p_east;
+  down: |
+    ALTER TABLE regional_sales ADD PARTITION (PARTITION p_east VALUES IN (7, 8, 9));

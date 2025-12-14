@@ -407,6 +407,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		}
 	}
 
+	// Drop partition child tables that no longer exist in desired schema
+	for _, currentPartition := range g.currentPartitionOfs {
+		desiredPartition := g.findPartitionOfByName(g.desiredPartitionOfs, currentPartition.tableName)
+		if desiredPartition == nil {
+			ddls = append(ddls, fmt.Sprintf("DROP TABLE %s", g.escapeQualifiedName(currentPartition.tableName)))
+		}
+	}
+
 	// Clean up obsoleted indexes, columns in remaining tables
 	for _, currentTable := range g.currentTables {
 		desiredTable := g.findTableByName(g.desiredTables, currentTable.name)
@@ -1603,12 +1611,112 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		}
 	}
 
+	// Compare partitions (MySQL/MariaDB only)
+	if g.mode == GeneratorModeMysql {
+		partitionDDLs := g.generatePartitionDDLs(currentTable, desired.table)
+		ddls = append(ddls, partitionDDLs...)
+	}
+
 	// Add FK recreation DDLs at the end (they will be executed after all table modifications)
 	if len(fkRecreationDDLs) > 0 {
 		ddls = append(ddls, fkRecreationDDLs...)
 	}
 
 	return ddls, nil
+}
+
+// generatePartitionDDLs compares partitions between current and desired tables
+// and generates ADD PARTITION / DROP PARTITION statements
+func (g *Generator) generatePartitionDDLs(currentTable Table, desiredTable Table) []string {
+	ddls := []string{}
+
+	// If neither has partitions, nothing to do
+	if currentTable.partition == nil && desiredTable.partition == nil {
+		return ddls
+	}
+
+	// If only current has partitions (desired removes all partitioning), we don't handle
+	// removing partitioning entirely - that would require REMOVE PARTITIONING
+	if desiredTable.partition == nil {
+		return ddls
+	}
+
+	// If only desired has partitions, the table creation should handle it
+	if currentTable.partition == nil {
+		return ddls
+	}
+
+	// Both have partitions - compare partition definitions
+	// Find partitions to add (in desired but not in current)
+	for _, desiredPart := range desiredTable.partition.Definitions {
+		found := false
+		for _, currentPart := range currentTable.partition.Definitions {
+			if g.identsEqual(desiredPart.Name, currentPart.Name) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			ddl := g.generateAddPartitionDDL(desiredTable, desiredPart)
+			ddls = append(ddls, ddl)
+		}
+	}
+
+	// Find partitions to drop (in current but not in desired)
+	for _, currentPart := range currentTable.partition.Definitions {
+		found := false
+		for _, desiredPart := range desiredTable.partition.Definitions {
+			if g.identsEqual(currentPart.Name, desiredPart.Name) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			ddl := g.generateDropPartitionDDL(desiredTable, currentPart)
+			ddls = append(ddls, ddl)
+		}
+	}
+
+	return ddls
+}
+
+// generateAddPartitionDDL generates ALTER TABLE ADD PARTITION statement
+func (g *Generator) generateAddPartitionDDL(table Table, part PartitionDefinition) string {
+	tableName := g.escapeTableName(&table)
+	partName := g.escapeSQLIdent(part.Name)
+
+	if part.In != nil {
+		// LIST partition: VALUES IN (...)
+		return fmt.Sprintf("ALTER TABLE %s ADD PARTITION (PARTITION %s VALUES IN (%s))",
+			tableName, partName, g.formatExprs(part.In))
+	} else if part.Maxvalue {
+		// RANGE partition: VALUES LESS THAN MAXVALUE
+		return fmt.Sprintf("ALTER TABLE %s ADD PARTITION (PARTITION %s VALUES LESS THAN MAXVALUE)",
+			tableName, partName)
+	} else if part.LessThan != nil {
+		// RANGE partition: VALUES LESS THAN (...)
+		return fmt.Sprintf("ALTER TABLE %s ADD PARTITION (PARTITION %s VALUES LESS THAN (%s))",
+			tableName, partName, g.formatExprs(part.LessThan))
+	}
+
+	// Fallback (shouldn't happen with valid partition definitions)
+	return ""
+}
+
+// generateDropPartitionDDL generates ALTER TABLE DROP PARTITION statement
+func (g *Generator) generateDropPartitionDDL(table Table, part PartitionDefinition) string {
+	tableName := g.escapeTableName(&table)
+	partName := g.escapeSQLIdent(part.Name)
+	return fmt.Sprintf("ALTER TABLE %s DROP PARTITION %s", tableName, partName)
+}
+
+// formatExprs formats parser.Exprs for use in DDL statements
+func (g *Generator) formatExprs(exprs parser.Exprs) string {
+	parts := make([]string, len(exprs))
+	for i, expr := range exprs {
+		parts[i] = parser.String(expr)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // Shared by `CREATE INDEX` and `ALTER TABLE ADD INDEX`.

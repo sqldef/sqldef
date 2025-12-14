@@ -132,6 +132,7 @@ func setDDL(yylex any, ddl *DDL) {
   functionArg              FunctionArg
   functionArgs             []FunctionArg
   partitionBoundSpec       *PartitionBoundSpec
+  tablePartition           *TablePartition
 }
 
 %token LEX_ERROR
@@ -491,6 +492,9 @@ func setDDL(yylex any, ddl *DDL) {
 %type <partitionBy> partition_by_list
 %type <partition> partition
 %type <partitionBoundSpec> partition_bound_spec
+%type <tablePartition> table_partition_by_opt
+%type <partDef> mysql_partition_def
+%type <partDefs> mysql_partition_def_list mysql_partition_defs_opt
 %type <boolVals> unique_clustered_opt
 %type <byt> concurrently_opt
 %type <empty> nonclustered_columnstore
@@ -2726,110 +2730,110 @@ table_spec:
   {
     $$ = $2
     $$.Options = $4
-    // $5 (partition clause) is parsed but discarded for now
+    $$.Partition = $5
   }
 
 // PostgreSQL PARTITION BY clause for partitioned tables
 // Also supports MySQL partition syntax
 table_partition_by_opt:
   {
-    // empty - no partition clause
+    $$ = nil
   }
 /* RANGE partitioning - PostgreSQL and MySQL */
 | PARTITION BY RANGE '(' expression_list ')' mysql_partition_defs_opt
   {
-    // PARTITION BY RANGE - parsed but discarded
+    $$ = &TablePartition{Type: "RANGE", Expr: $5, Definitions: $7}
   }
 /* RANGE COLUMNS partitioning - MySQL only */
 | PARTITION BY RANGE COLUMNS '(' column_list ')' mysql_partition_defs_opt
   {
-    // PARTITION BY RANGE COLUMNS - parsed but discarded
+    $$ = &TablePartition{Type: "RANGE COLUMNS", Columns: $6, Definitions: $8}
   }
 /* LIST partitioning - PostgreSQL and MySQL */
 | PARTITION BY LIST '(' expression_list ')' mysql_partition_defs_opt
   {
-    // PARTITION BY LIST - parsed but discarded
+    $$ = &TablePartition{Type: "LIST", Expr: $5, Definitions: $7}
   }
 /* LIST COLUMNS partitioning - MySQL only */
 | PARTITION BY LIST COLUMNS '(' column_list ')' mysql_partition_defs_opt
   {
-    // PARTITION BY LIST COLUMNS - parsed but discarded
+    $$ = &TablePartition{Type: "LIST COLUMNS", Columns: $6, Definitions: $8}
   }
 /* HASH partitioning - PostgreSQL and MySQL */
 | PARTITION BY HASH '(' expression_list ')' mysql_partitions_opt
   {
-    // PARTITION BY HASH - parsed but discarded
+    $$ = &TablePartition{Type: "HASH", Expr: $5}
   }
 /* KEY partitioning - MySQL only */
 | PARTITION BY KEY '(' column_list ')' mysql_partitions_opt
   {
-    // PARTITION BY KEY - parsed but discarded
+    $$ = &TablePartition{Type: "KEY", Columns: $5}
   }
 | PARTITION BY KEY '(' ')' mysql_partitions_opt
   {
-    // PARTITION BY KEY () - empty column list for MySQL
+    $$ = &TablePartition{Type: "KEY", Columns: nil}
   }
 /* LINEAR HASH partitioning - MySQL only */
 | PARTITION BY LINEAR HASH '(' expression_list ')' mysql_partitions_opt
   {
-    // PARTITION BY LINEAR HASH - parsed but discarded
+    $$ = &TablePartition{Type: "LINEAR HASH", Expr: $6}
   }
 /* LINEAR KEY partitioning - MySQL only */
 | PARTITION BY LINEAR KEY '(' column_list ')' mysql_partitions_opt
   {
-    // PARTITION BY LINEAR KEY - parsed but discarded
+    $$ = &TablePartition{Type: "LINEAR KEY", Columns: $6}
   }
 | PARTITION BY LINEAR KEY '(' ')' mysql_partitions_opt
   {
-    // PARTITION BY LINEAR KEY () - empty column list for MySQL
+    $$ = &TablePartition{Type: "LINEAR KEY", Columns: nil}
   }
 
 // MySQL PARTITIONS n clause (optional, for HASH/KEY partitioning)
 mysql_partitions_opt:
   {
-    // empty
+    // empty - number of partitions not specified
   }
 | PARTITIONS INTEGRAL
   {
-    // PARTITIONS n - parsed but discarded
+    // PARTITIONS n - not stored as we don't need it for ADD/DROP PARTITION
   }
 
 // MySQL partition definitions (optional, for RANGE/LIST partitioning)
 mysql_partition_defs_opt:
   {
-    // empty
+    $$ = nil
   }
 | '(' mysql_partition_def_list ')'
   {
-    // partition definitions - parsed but discarded
+    $$ = $2
   }
 
 mysql_partition_def_list:
   mysql_partition_def
   {
-    // single partition def
+    $$ = []*PartitionDefinition{$1}
   }
 | mysql_partition_def_list ',' mysql_partition_def
   {
-    // multiple partition defs
+    $$ = append($1, $3)
   }
 
 mysql_partition_def:
   PARTITION sql_id VALUES LESS THAN '(' expression_list ')' partition_engine_opt
   {
-    // PARTITION name VALUES LESS THAN (expr) - parsed but discarded
+    $$ = &PartitionDefinition{Name: $2, LessThan: $7}
   }
 | PARTITION sql_id VALUES LESS THAN '(' MAXVALUE ')' partition_engine_opt
   {
-    // PARTITION name VALUES LESS THAN (MAXVALUE) - parsed but discarded
+    $$ = &PartitionDefinition{Name: $2, Maxvalue: true}
   }
 | PARTITION sql_id VALUES LESS THAN MAXVALUE partition_engine_opt
   {
-    // PARTITION name VALUES LESS THAN MAXVALUE - parsed but discarded
+    $$ = &PartitionDefinition{Name: $2, Maxvalue: true}
   }
 | PARTITION sql_id VALUES IN '(' expression_list ')' partition_engine_opt
   {
-    // PARTITION name VALUES IN (value_list) - for LIST partitioning
+    $$ = &PartitionDefinition{Name: $2, In: $6}
   }
 
 // Optional ENGINE clause for partition definitions (MariaDB exports this)
@@ -6016,6 +6020,10 @@ function_call_keyword:
 | TIMESTAMP '(' select_expression_list ')'
   {
     $$ = &FuncExpr{Name: NewIdent("timestamp", false), Exprs: $3}
+  }
+| YEAR '(' select_expression_list ')'
+  {
+    $$ = &FuncExpr{Name: NewIdent("year", false), Exprs: $3}
   }
 
 /*

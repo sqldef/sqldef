@@ -99,6 +99,8 @@ func trimMarginComments(sql string) string {
 
 // trailingCommentStart returns the first index of trailing comments.
 // If there are no trailing comments, returns the length of the input string.
+// NOTE: MySQL version comments (/*!NNNNN ... */) are NOT treated as comments
+// because they contain SQL code that should be executed.
 func trailingCommentStart(text string) (start int) {
 	hasComment := false
 	reducedLen := len(text)
@@ -118,6 +120,15 @@ func trailingCommentStart(text string) (start int) {
 		startCommentPos := strings.LastIndex(text[:reducedLen-2], "/*")
 		if startCommentPos < 0 {
 			// Badly formatted sql :/
+			break
+		}
+
+		// Check if this is a MySQL version comment (/*!NNNNN ... */)
+		// These are NOT actual comments - they contain SQL code that should be executed
+		// when the server version is >= NNNNN
+		commentStart := text[startCommentPos:]
+		if len(commentStart) >= 3 && commentStart[2] == '!' {
+			// This is a MySQL version comment, don't treat it as a trailing comment
 			break
 		}
 
