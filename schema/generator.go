@@ -717,6 +717,7 @@ func isDropStatement(ddl string) bool {
 		strings.Contains(ddl, "DROP DOMAIN") ||
 		strings.Contains(ddl, "DROP EXTENSION") ||
 		strings.Contains(ddl, "DROP POLICY") ||
+		strings.Contains(ddl, "DROP PARTITION") ||
 		strings.Contains(ddl, "REVOKE ")
 }
 

@@ -182,6 +182,9 @@ func (d *PostgresDatabase) tableNames() ([]string, error) {
 		}
 		tables = append(tables, schema+"."+name)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return tables, nil
 }
 
@@ -238,6 +241,9 @@ func (d *PostgresDatabase) partitionChildTables() ([]string, error) {
 		ddl := fmt.Sprintf("CREATE TABLE %s PARTITION OF %s\n  %s;",
 			partitionTable, parentTableStr, partitionBound)
 		ddls = append(ddls, ddl)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	return ddls, nil
