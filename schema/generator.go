@@ -4355,8 +4355,17 @@ func (g *Generator) trackDroppedColumn(table *Table, column *Column) {
 	if tableSchema.IsEmpty() {
 		tableSchema = parser.NewIdent(g.defaultSchema, false)
 	}
-	key := fmt.Sprintf("%s.%s.%s", tableSchema.Name, table.name.Name.Name, column.name.Name)
+	key := g.droppedColumnKey(tableSchema, table.name.Name, column.name)
 	g.droppedColumns[key] = true
+}
+
+// droppedColumnKey returns a normalized key for tracking dropped columns.
+// Uses normalizeIdentKey to handle case-insensitive matching for unquoted identifiers.
+func (g *Generator) droppedColumnKey(schema, table, column Ident) string {
+	schemaKey := normalizeIdentKey(schema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	tableKey := normalizeIdentKey(table, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	columnKey := normalizeIdentKey(column, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	return fmt.Sprintf("%s.%s.%s", schemaKey, tableKey, columnKey)
 }
 
 // isCommentOnDroppedColumn checks if a comment belongs to a column that has been dropped.
@@ -4369,20 +4378,20 @@ func (g *Generator) isCommentOnDroppedColumn(comment *Comment) bool {
 
 	object := comment.comment.Object
 	// Column comment structure: [schema, table, column] or [table, column]
-	var schema, table, column string
+	var schemaIdent, tableIdent, columnIdent Ident
 	if len(object) >= 3 {
-		schema = object[0].Name
-		table = object[1].Name
-		column = object[2].Name
+		schemaIdent = object[0]
+		tableIdent = object[1]
+		columnIdent = object[2]
 	} else if len(object) == 2 {
-		schema = g.defaultSchema
-		table = object[0].Name
-		column = object[1].Name
+		schemaIdent = parser.NewIdent(g.defaultSchema, false)
+		tableIdent = object[0]
+		columnIdent = object[1]
 	} else {
 		return false
 	}
 
-	key := fmt.Sprintf("%s.%s.%s", schema, table, column)
+	key := g.droppedColumnKey(schemaIdent, tableIdent, columnIdent)
 	return g.droppedColumns[key]
 }
 
