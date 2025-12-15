@@ -4,7 +4,6 @@ GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 BUILD_DIR=build/$(GOOS)-$(GOARCH)
 SQLDEF=$(shell pwd)
-MACOS_VERSION := 11.3
 
 ifeq ($(GOOS), windows)
   SUFFIX=.exe
