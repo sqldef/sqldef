@@ -7,7 +7,7 @@ coverage:
     patch:
       default:
         target: auto
-        threshold: 50%
+        threshold: 0%
 
 ignore:
   - "parser/parser.go"
