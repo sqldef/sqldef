@@ -1002,4 +1002,72 @@ ColumnWithCollation:
       name text COLLATE "en_US"
     );
 
+SerialToBigserial:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id serial NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigserial NOT NULL
+    );
+  up: |
+    ALTER TABLE public.users ALTER COLUMN id TYPE bigint;
+    ALTER SEQUENCE public.users_id_seq AS bigint;
+  down: |
+    ALTER TABLE public.users ALTER COLUMN id TYPE integer;
+    ALTER SEQUENCE public.users_id_seq AS integer;
+
+BigserialToSerial:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id bigserial NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id serial NOT NULL
+    );
+  up: |
+    ALTER TABLE public.users ALTER COLUMN id TYPE integer;
+    ALTER SEQUENCE public.users_id_seq AS integer;
+  down: |
+    ALTER TABLE public.users ALTER COLUMN id TYPE bigint;
+    ALTER SEQUENCE public.users_id_seq AS bigint;
+
+SmallserialToSerial:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id smallserial NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id serial NOT NULL
+    );
+  up: |
+    ALTER TABLE public.users ALTER COLUMN id TYPE integer;
+    ALTER SEQUENCE public.users_id_seq AS integer;
+  down: |
+    ALTER TABLE public.users ALTER COLUMN id TYPE smallint;
+    ALTER SEQUENCE public.users_id_seq AS smallint;
+
+SerialToSmallserial:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id serial NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id smallserial NOT NULL
+    );
+  up: |
+    ALTER TABLE public.users ALTER COLUMN id TYPE smallint;
+    ALTER SEQUENCE public.users_id_seq AS smallint;
+  down: |
+    ALTER TABLE public.users ALTER COLUMN id TYPE integer;
+    ALTER SEQUENCE public.users_id_seq AS integer;
+
 # Function returning TABLE
