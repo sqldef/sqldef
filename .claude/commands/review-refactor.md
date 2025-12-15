@@ -4,4 +4,4 @@ Review the changes in the branch `git diff $(git symbolic-ref refs/remotes/origi
 * Find low-quality code: useless branches, defensive programming, duplicated code
 * Find comments that are not helpful: trivia, obvious, stale
 
-After the code review, make the next actions if necessary.
+After the code review, take the next actions if necessary.
