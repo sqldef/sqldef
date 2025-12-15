@@ -1000,9 +1000,19 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					"desiredTypeName", desiredColumn.typeName,
 					"desiredTypeIdent", desiredColumn.typeIdent)
 				if !g.haveSameDataType(*currentColumn, desiredColumn) {
-					// Change type - use desiredColumn for escaping to match user's quote style
-					ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn), g.generateDataType(desiredColumn))
-					ddls = append(ddls, ddl)
+					// Serial types require changing both column type and sequence type
+					if isPostgresSerialType(currentColumn.typeName) && isPostgresSerialType(desiredColumn.typeName) {
+						underlyingType := getSerialUnderlyingType(desiredColumn.typeName)
+						ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s",
+							g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn), underlyingType)
+						ddls = append(ddls, ddl)
+						seqDDL := g.generateSerialSequenceAlterDDL(&desired.table, &desiredColumn, underlyingType)
+						ddls = append(ddls, seqDDL)
+					} else {
+						// Change type - use desiredColumn for escaping to match user's quote style
+						ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn), g.generateDataType(desiredColumn))
+						ddls = append(ddls, ddl)
+					}
 				}
 
 				// Handle IDENTITY and NOT NULL in the correct order for PostgreSQL:
@@ -5246,6 +5256,16 @@ func removeTableByName(tables []*Table, name string) []*Table {
 		log.Fatalf("Failed to removeTableByName: Table `%s` is not found in `%v`", name, tables)
 	}
 	return ret
+}
+
+func (g *Generator) generateSerialSequenceAlterDDL(table *Table, column *Column, underlyingType string) string {
+	schemaIdent := g.normalizeDefaultSchema(table.name.Schema)
+	tableName := table.name.Name.Name
+	columnName := column.name.Name
+
+	seqName := fmt.Sprintf("%s_%s_seq", tableName, columnName)
+	seqIdent := Ident{Name: seqName, Quoted: false}
+	return fmt.Sprintf("ALTER SEQUENCE %s.%s AS %s", g.escapeSQLIdent(schemaIdent), g.escapeSQLIdent(seqIdent), underlyingType)
 }
 
 func generateSequenceClause(sequence *Sequence) string {

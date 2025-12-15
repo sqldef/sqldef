@@ -36,6 +36,12 @@ var (
 		"time with time zone":         "time",
 		"time without time zone":      "time",
 	}
+	// PostgreSQL serial types to their underlying integer types
+	postgresSerialTypes = map[string]string{
+		"smallserial": "smallint",
+		"serial":      "integer",
+		"bigserial":   "bigint",
+	}
 	mssqlDataTypeAliases = map[string]string{}
 	mysqlDataTypeAliases = map[string]string{
 		"boolean": "tinyint",
@@ -1394,4 +1400,13 @@ func normalizeCommentObject(comment *parser.Comment, mode GeneratorMode, default
 	// Prepend default schema (unquoted)
 	schemaIdent := parser.NewIdent(defaultSchema, false)
 	return append([]Ident{schemaIdent}, comment.Object...)
+}
+
+func isPostgresSerialType(typeName string) bool {
+	_, ok := postgresSerialTypes[strings.ToLower(typeName)]
+	return ok
+}
+
+func getSerialUnderlyingType(typeName string) string {
+	return postgresSerialTypes[strings.ToLower(typeName)]
 }
