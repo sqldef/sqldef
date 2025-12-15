@@ -67,6 +67,23 @@ CREATE TABLEE posts (id INT)": syntax error at line 2, column 8 near 'create'
   CREATE TABLEE posts (id INT)
          ^`,
 		},
+		// Trailing comma errors
+		{
+			name: "Trailing comma in CREATE TABLE",
+			sql:  "CREATE TABLE test (id INT,)",
+			mode: ParserModeSQLite3,
+			expectedErr: `found syntax error when parsing DDL "CREATE TABLE test (id INT,)": trailing comma is not allowed in column definitions at line 1, column 28
+  CREATE TABLE test (id INT,)
+                             ^`,
+		},
+		{
+			name: "Trailing comma with multiple columns",
+			sql:  "CREATE TABLE test (id INT, name TEXT,)",
+			mode: ParserModeMysql,
+			expectedErr: `found syntax error when parsing DDL "CREATE TABLE test (id INT, name TEXT,)": trailing comma is not allowed in column definitions at line 1, column 39
+  CREATE TABLE test (id INT, name TEXT,)
+                                        ^`,
+		},
 	}
 
 	for _, tc := range testCases {

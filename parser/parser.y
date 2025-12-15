@@ -2746,6 +2746,13 @@ table_spec:
     $$.Options = $4
     $$.Partition = $5
   }
+| '(' table_column_list ',' error ')' table_option_list table_partition_by_opt
+  {
+    yylex.Error("trailing comma is not allowed in column definitions")
+    $$ = $2
+    $$.Options = $6
+    $$.Partition = $7
+  }
 
 // PostgreSQL PARTITION BY clause for partitioned tables
 // Also supports MySQL partition syntax

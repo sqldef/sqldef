@@ -43,6 +43,12 @@ func ParseDDL(sql string, mode ParserMode) (Statement, error) {
 			"found syntax error when parsing DDL \"%s\": %v", sql, tokenizer.LastError,
 		)
 	}
+	// yyParse returns 0 when error recovery rules are triggered, so check LastError
+	if tokenizer.LastError != nil {
+		return nil, fmt.Errorf(
+			"found syntax error when parsing DDL \"%s\": %v", sql, tokenizer.LastError,
+		)
+	}
 	return tokenizer.ParseTree, nil
 }
 
