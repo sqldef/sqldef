@@ -1,3 +1,7 @@
+## [v3.8.10](https://github.com/sqldef/sqldef/compare/v3.8.9...v3.8.10) - 2025-12-15
+- Standardize PostgreSQL environment variables and add shell quoting in test-aurora-dsql.sh by @Copilot in https://github.com/sqldef/sqldef/pull/1042
+- fix: handle trigger event correctly in psqldef by @gfx in https://github.com/sqldef/sqldef/pull/1044
+
 ## [v3.8.9](https://github.com/sqldef/sqldef/compare/v3.8.8...v3.8.9) - 2025-12-14
 - cleanup go.mod by merging require blocks by @gfx in https://github.com/sqldef/sqldef/pull/1038
 - setup codecov by @gfx in https://github.com/sqldef/sqldef/pull/1040
