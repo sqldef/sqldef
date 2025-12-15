@@ -133,6 +133,8 @@ func setDDL(yylex any, ddl *DDL) {
   functionArgs             []FunctionArg
   partitionBoundSpec       *PartitionBoundSpec
   tablePartition           *TablePartition
+  triggerEvent             TriggerEvent
+  triggerEvents            []TriggerEvent
 }
 
 %token LEX_ERROR
@@ -470,8 +472,9 @@ func setDDL(yylex any, ddl *DDL) {
 %type <optVal> on_off
 %type <optVal> index_distance_option_value
 %type <optVal> vector_option_value
-%type <str> trigger_time trigger_event fetch_opt
-%type <strs> trigger_event_list
+%type <str> trigger_time fetch_opt
+%type <triggerEvent> trigger_event
+%type <triggerEvents> trigger_event_list
 %type <blockStatement> trigger_statements statement_block
 %type <statement> trigger_statement
 %type <localVariable> local_variable
@@ -2448,26 +2451,26 @@ trigger_time:
 trigger_event:
   INSERT
   {
-    $$ = $1
+    $$ = TriggerEvent{Type: $1}
   }
 | UPDATE
   {
-    $$ = $1
+    $$ = TriggerEvent{Type: $1}
   }
 | DELETE
   {
-    $$ = $1
+    $$ = TriggerEvent{Type: $1}
   }
-/* For SQLite3 */
+/* For SQLite3 and PostgreSQL */
 | UPDATE OF column_list
   {
-    $$ = $1
+    $$ = TriggerEvent{Type: $1, Columns: $3}
   }
 
 trigger_event_list:
   trigger_event
   {
-    $$ = []string{$1}
+    $$ = []TriggerEvent{$1}
   }
 | trigger_event_list ',' trigger_event
   {

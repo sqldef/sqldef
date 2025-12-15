@@ -168,17 +168,22 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				withNoData:   stmt.View.WithNoData,
 			}, nil
 		} else if stmt.Action == parser.CreateTrigger {
-			body := []string{}
-			for _, triggerStatement := range stmt.Trigger.Body {
-				body = append(body, parser.String(triggerStatement))
-			}
+			body := util.TransformSlice(stmt.Trigger.Body, func(s parser.Statement) string {
+				return parser.String(s)
+			})
+			events := util.TransformSlice(stmt.Trigger.Event, func(e parser.TriggerEvent) TriggerEvent {
+				return TriggerEvent{
+					eventType: e.Type,
+					columns:   e.Columns,
+				}
+			})
 
 			return &Trigger{
 				statement: ddl,
 				name:      normalizeColNameToQualifiedName(mode, stmt.Trigger.Name, defaultSchema),
 				tableName: normalizeQualifiedName(mode, stmt.Trigger.TableName, defaultSchema),
 				time:      stmt.Trigger.Time,
-				event:     stmt.Trigger.Event,
+				event:     events,
 				body:      body,
 			}, nil
 		} else if stmt.Action == parser.CreateFunction {

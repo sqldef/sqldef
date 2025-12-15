@@ -398,3 +398,75 @@ ModifyTrigger:
   down: |
     DROP TRIGGER log_changes ON public.users;
     CREATE TRIGGER log_changes before insert ON public.users FOR EACH ROW EXECUTE FUNCTION trigger_func();
+
+CreateTriggerUpdateOfColumn:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE addresses (
+      id serial PRIMARY KEY,
+      street1 varchar
+    );
+    CREATE FUNCTION addresses_street1_titlecase()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER addresses_street1_titlecase_trigger
+      BEFORE INSERT OR UPDATE OF street1 ON addresses
+      FOR EACH ROW EXECUTE FUNCTION addresses_street1_titlecase();
+  up: |
+    CREATE TABLE addresses (
+      id serial PRIMARY KEY,
+      street1 varchar
+    );
+    CREATE FUNCTION addresses_street1_titlecase()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER addresses_street1_titlecase_trigger before insert OR update OF street1 ON public.addresses FOR EACH ROW EXECUTE FUNCTION addresses_street1_titlecase();
+  down: |
+    DROP TRIGGER addresses_street1_titlecase_trigger ON public.addresses;
+    DROP TABLE public.addresses;
+    DROP FUNCTION public.addresses_street1_titlecase;
+
+CreateTriggerUpdateOfMultipleColumns:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE addresses (
+      id serial PRIMARY KEY,
+      street1 varchar,
+      street2 varchar
+    );
+    CREATE FUNCTION addresses_update_check()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER addresses_update_trigger
+      BEFORE UPDATE OF street1, street2 ON addresses
+      FOR EACH ROW EXECUTE FUNCTION addresses_update_check();
+  up: |
+    CREATE TABLE addresses (
+      id serial PRIMARY KEY,
+      street1 varchar,
+      street2 varchar
+    );
+    CREATE FUNCTION addresses_update_check()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER addresses_update_trigger before update OF street1, street2 ON public.addresses FOR EACH ROW EXECUTE FUNCTION addresses_update_check();
+  down: |
+    DROP TRIGGER addresses_update_trigger ON public.addresses;
+    DROP TABLE public.addresses;
+    DROP FUNCTION public.addresses_update_check;

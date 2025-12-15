@@ -355,12 +355,18 @@ type View struct {
 	withNoData   bool // true for "WITH NO DATA"
 }
 
+// TriggerEvent represents a single trigger event (INSERT, UPDATE, DELETE, or UPDATE OF columns)
+type TriggerEvent struct {
+	eventType string  // "INSERT", "UPDATE", "DELETE"
+	columns   []Ident // For UPDATE OF col1, col2 - nil for INSERT/DELETE/plain UPDATE
+}
+
 type Trigger struct {
 	statement string
 	name      QualifiedName
 	tableName QualifiedName
 	time      string
-	event     []string
+	event     []TriggerEvent
 	body      []string
 }
 
