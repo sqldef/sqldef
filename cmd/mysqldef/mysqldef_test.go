@@ -120,7 +120,7 @@ func TestMysqldefCreateTableSyntaxError(t *testing.T) {
 	resetTestDatabase()
 	assertApplyFailure(t,
 		"CREATE TABLE users (id bigint,);",
-		`found syntax error when parsing DDL "CREATE TABLE users (id bigint,)": syntax error at line 1, column 32
+		`found syntax error when parsing DDL "CREATE TABLE users (id bigint,)": trailing comma is not allowed in column definitions at line 1, column 32
   CREATE TABLE users (id bigint,)
                                  ^
 `)
