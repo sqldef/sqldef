@@ -1,3 +1,15 @@
+## [v3.8.11](https://github.com/sqldef/sqldef/compare/v3.8.10...v3.8.11) - 2025-12-15
+- chore: tweak for codecov by @gfx in https://github.com/sqldef/sqldef/pull/1045
+- chore: cleanup type checks by @gfx in https://github.com/sqldef/sqldef/pull/1047
+- [claude-code] review commands: /review-feat, /review-fix, and /review-refactor by @gfx in https://github.com/sqldef/sqldef/pull/1048
+- support SERIAL faimly in psqldef by @gfx in https://github.com/sqldef/sqldef/pull/1049
+- Fix grammar error in review-refactor.md by @Copilot in https://github.com/sqldef/sqldef/pull/1050
+- Fix grammar: 'a issue' → 'an issue' by @Copilot in https://github.com/sqldef/sqldef/pull/1051
+- mysqldef: support CONSTRAINT with UNIQUE (c1, c2) by @gfx in https://github.com/sqldef/sqldef/pull/1052
+- chore: handle trailing comma in column definitions  in parser.y by @gfx in https://github.com/sqldef/sqldef/pull/1053
+- .codecov.yml: do not check coverage rate for patches by @gfx in https://github.com/sqldef/sqldef/pull/1054
+- fix: skip COMMENT cleanup for dropped columns in psqldef by @178inaba in https://github.com/sqldef/sqldef/pull/1055
+
 ## [v3.8.10](https://github.com/sqldef/sqldef/compare/v3.8.9...v3.8.10) - 2025-12-15
 - Standardize PostgreSQL environment variables and add shell quoting in test-aurora-dsql.sh by @Copilot in https://github.com/sqldef/sqldef/pull/1042
 - fix: handle trigger event correctly in psqldef by @gfx in https://github.com/sqldef/sqldef/pull/1044
