@@ -1257,34 +1257,27 @@ func (p PostgresParser) parseDefaultValue(rawExpr *pgquery.Node) (*parser.Defaul
 			typeStr := strings.ToLower(expr.Type.Type)
 			// Check if this is a redundant cast that should be stripped
 			if sqlVal, ok := expr.Expr.(*parser.SQLVal); ok && sqlVal.Type == parser.StrVal {
-				// Handle numeric string literals vs text strings differently
-				if util.IsNumericString(sqlVal.Val) {
-					// PostgreSQL stores negative numbers as string literals with casts like '-20'::integer
-					// Convert these back to plain numeric literals
-					switch typeStr {
-					case "integer", "bigint", "smallint":
-						return &parser.DefaultDefinition{
-							Expression: parser.DefaultExpression{
-								Expr: parser.NewIntVal(sqlVal.Val),
-							},
-						}, nil
-					case "numeric", "decimal", "real", "double precision":
-						return &parser.DefaultDefinition{
-							Expression: parser.DefaultExpression{
-								Expr: parser.NewFloatVal(sqlVal.Val),
-							},
-						}, nil
-					}
-				} else {
-					// Strip redundant text casts on non-numeric string literals
-					switch typeStr {
-					case "text", "character varying", "varchar":
-						return &parser.DefaultDefinition{
-							Expression: parser.DefaultExpression{
-								Expr: sqlVal,
-							},
-						}, nil
-					}
+				switch typeStr {
+				case "integer", "bigint", "smallint":
+					return &parser.DefaultDefinition{
+						Expression: parser.DefaultExpression{
+							Expr: parser.NewIntVal(sqlVal.Val),
+						},
+					}, nil
+				case "numeric", "decimal", "real", "double precision":
+					return &parser.DefaultDefinition{
+						Expression: parser.DefaultExpression{
+							Expr: parser.NewFloatVal(sqlVal.Val),
+						},
+					}, nil
+				case "text", "character varying", "varchar":
+					return &parser.DefaultDefinition{
+						Expression: parser.DefaultExpression{
+							Expr: sqlVal,
+						},
+					}, nil
+				default:
+					slog.Debug("unhandled cast type in parseDefaultValue", "type", typeStr)
 				}
 			}
 		}

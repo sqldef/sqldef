@@ -3,6 +3,7 @@ package schema
 import (
 	"cmp"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -584,29 +585,23 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				if sqlVal, ok := normalizedExpr.(*parser.SQLVal); ok {
 					// Handle string literals
 					if sqlVal.Type == parser.StrVal {
-						// Check if the string looks like a number (PostgreSQL stores negative numbers as string literals with casts)
-						// Only treat it as numeric if it's purely digits/decimal, not a date/time string
-						if util.IsNumericString(sqlVal.Val) {
-							// PostgreSQL stores negative numbers as string literals with casts like '-20'::integer
-							// We need to convert these back to plain numeric literals
-							switch typeStr {
-							case "integer", "bigint", "smallint":
-								// Convert numeric string to actual numeric literal
-								// This unwraps '-20'::integer -> -20
-								return parser.NewIntVal(sqlVal.Val)
-							case "numeric", "decimal", "real", "double precision":
-								return parser.NewFloatVal(sqlVal.Val)
-							}
-						} else {
-							// Strip redundant type casts that PostgreSQL adds on non-numeric strings
-							switch typeStr {
-							case "text", "character varying":
-								// Always strip text casts on non-numeric strings
-								return normalizedExpr
-							case "date", "time", "timestamp", "timestamp without time zone":
-								// Strip date/time casts on literals (PostgreSQL adds these for typed literals)
-								return normalizedExpr
-							}
+						// PostgreSQL stores negative numbers as string literals with casts like '-20'::integer
+						// We convert these back to plain numeric literals
+						switch typeStr {
+						case "integer", "bigint", "smallint":
+							// Convert numeric string to actual numeric literal
+							// This unwraps '-20'::integer -> -20
+							return parser.NewIntVal(sqlVal.Val)
+						case "numeric", "decimal", "real", "double precision":
+							return parser.NewFloatVal(sqlVal.Val)
+						case "text", "character varying":
+							// Strip redundant text casts on string literals
+							return normalizedExpr
+						case "date", "time", "timestamp", "timestamp without time zone":
+							// Strip date/time casts on literals (PostgreSQL adds these for typed literals)
+							return normalizedExpr
+						default:
+							slog.Debug("unhandled cast type in normalizeCastExpr", "type", typeStr)
 						}
 					} else if sqlVal.Type == parser.IntVal || sqlVal.Type == parser.FloatVal {
 						// Handle numeric literals that already have explicit types

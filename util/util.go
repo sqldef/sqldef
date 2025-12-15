@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"iter"
 	"slices"
-	"strconv"
 )
 
 // TransformSlice applies the converter to each element in the input slice and returns a new slice.
@@ -41,14 +40,4 @@ func SortedCopy[T cmp.Ordered](in []T) []T {
 	copy(out, in)
 	slices.Sort(out)
 	return out
-}
-
-func IsIntegerString(s string) bool {
-	_, err := strconv.Atoi(s)
-	return err == nil
-}
-
-func IsNumericString(s string) bool {
-	_, err := strconv.ParseFloat(s, 64)
-	return err == nil
 }
