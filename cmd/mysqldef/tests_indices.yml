@@ -1,5 +1,35 @@
 # yaml-language-server: $schema=../../testutil/testcase.schema.json
 
+CreateTableConstraintUnique:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE foo (
+      a INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      b INT NOT NULL,
+      c INT NOT NULL,
+      CONSTRAINT b_c_uk UNIQUE (b, c)
+    );
+
+AddConstraintUnique:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE foo (
+      a INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      b INT NOT NULL,
+      c INT NOT NULL
+    );
+  desired: |
+    CREATE TABLE foo (
+      a INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      b INT NOT NULL,
+      c INT NOT NULL,
+      CONSTRAINT b_c_uk UNIQUE (b, c)
+    );
+  up: |
+    ALTER TABLE foo ADD UNIQUE b_c_uk (b, c);
+  down: |
+    ALTER TABLE `foo` DROP INDEX `b_c_uk`;
+
 CreateTableUniqueIndex:
   desired: |
     CREATE TABLE items (

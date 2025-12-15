@@ -5042,9 +5042,10 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		}
 	}
 
-	// For MSSQL UNIQUE constraints, constraintOptions don't matter
-	// They're only used for PostgreSQL deferrable constraints
-	if g.mode != GeneratorModeMssql {
+	// For MSSQL and MySQL, constraint vs index distinction doesn't matter
+	// MSSQL: doesn't support PostgreSQL-style deferrable constraint options
+	// MySQL: CONSTRAINT name UNIQUE and UNIQUE KEY name are equivalent
+	if g.mode != GeneratorModeMssql && g.mode != GeneratorModeMysql {
 		if indexA.constraint != indexB.constraint {
 			return false
 		}

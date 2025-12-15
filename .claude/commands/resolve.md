@@ -5,3 +5,10 @@ $ARGUMENTS
 At first, add a minimum reproducible test case for the issue. Make sure it fails.
 
 Then, investigate the issue carefully, and resolve it.
+
+
+## Rules
+
+* No need to add comments to test cases.
+* Make test cases to have both up and down migrations.
+* Test cases should be syntactically MECE.
