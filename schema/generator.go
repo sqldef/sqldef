@@ -2130,6 +2130,24 @@ func (g *Generator) createTableLookup() TableLookupFunc {
 	}
 }
 
+func (g *Generator) formatTriggerEvent(event TriggerEvent) string {
+	if len(event.columns) == 0 {
+		return event.eventType
+	}
+	escapedCols := util.TransformSlice(event.columns, func(col Ident) string {
+		return g.escapeSQLIdent(col)
+	})
+	return event.eventType + " OF " + strings.Join(escapedCols, ", ")
+}
+
+func (g *Generator) formatTriggerEvents(events []TriggerEvent, sep string) string {
+	var parts []string
+	for _, event := range events {
+		parts = append(parts, g.formatTriggerEvent(event))
+	}
+	return strings.Join(parts, sep)
+}
+
 func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desiredTrigger *Trigger) ([]string, error) {
 	var ddls []string
 	currentTrigger := g.findTriggerByName(g.currentTriggers, triggerName)
@@ -2137,13 +2155,13 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desi
 	var triggerDefinition string
 	switch g.mode {
 	case GeneratorModeMssql:
-		triggerDefinition += fmt.Sprintf("TRIGGER %s ON %s %s %s AS\n%s", g.escapeQualifiedName(desiredTrigger.name), g.escapeQualifiedName(desiredTrigger.tableName), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), strings.Join(desiredTrigger.body, "\n"))
+		triggerDefinition += fmt.Sprintf("TRIGGER %s ON %s %s %s AS\n%s", g.escapeQualifiedName(desiredTrigger.name), g.escapeQualifiedName(desiredTrigger.tableName), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, ", "), strings.Join(desiredTrigger.body, "\n"))
 	case GeneratorModeMysql:
-		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, strings.Join(desiredTrigger.event, ", "), g.escapeQualifiedName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, "\n"))
+		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, ", "), g.escapeQualifiedName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, "\n"))
 	case GeneratorModeSQLite3:
 		triggerDefinition = desiredTrigger.statement
 	case GeneratorModePostgres:
-		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, strings.Join(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, "\n"))
+		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, "\n"))
 	default:
 		return ddls, nil
 	}
@@ -4809,16 +4827,37 @@ func (g *Generator) areSameIdentifiers(current, desired *Value) bool {
 	return strings.EqualFold(current.raw, desired.raw)
 }
 
+// areSameEvents compares two TriggerEvent slices for equality.
+// Events are sorted before comparison because PostgreSQL reorders them alphabetically
+// e.g., "INSERT OR UPDATE OR DELETE" becomes "INSERT OR DELETE OR UPDATE" in pg_get_triggerdef
+func areSameEvents(eventsA, eventsB []TriggerEvent) bool {
+	if len(eventsA) != len(eventsB) {
+		return false
+	}
+
+	toKey := func(event TriggerEvent) string {
+		if len(event.columns) == 0 {
+			return strings.ToLower(event.eventType)
+		}
+		cols := util.TransformSlice(event.columns, func(col Ident) string {
+			return strings.ToLower(col.Name)
+		})
+		slices.Sort(cols)
+		return strings.ToLower(event.eventType) + " OF " + strings.Join(cols, ",")
+	}
+
+	keysA := util.TransformSlice(eventsA, toKey)
+	keysB := util.TransformSlice(eventsB, toKey)
+	slices.Sort(keysA)
+	slices.Sort(keysB)
+	return slices.Equal(keysA, keysB)
+}
+
 func (g *Generator) areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 	if triggerA.time != triggerB.time {
 		return false
 	}
-	if len(triggerA.event) != len(triggerB.event) {
-		return false
-	}
-	// Sort events before comparison because PostgreSQL reorders them alphabetically
-	// e.g., "INSERT OR UPDATE OR DELETE" becomes "INSERT OR DELETE OR UPDATE" in pg_get_triggerdef
-	if !slices.Equal(util.SortedCopy(triggerA.event), util.SortedCopy(triggerB.event)) {
+	if !areSameEvents(triggerA.event, triggerB.event) {
 		return false
 	}
 	// Compare table names using quote-aware comparison
