@@ -412,3 +412,60 @@ DropTableWithQuotedIndexComment:
     CREATE TABLE test1 (id integer);
     CREATE INDEX "MyIndex" ON public.test1 (id);
     COMMENT ON INDEX public."MyIndex" IS 'Quoted index comment';
+
+# Test that column comments are not cleaned up when the column is dropped.
+# PostgreSQL automatically removes column comments when the column is dropped.
+DropColumnWithComment:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE hoge (
+      id serial PRIMARY KEY,
+      foo text,
+      bar text,
+      baz text
+    );
+    COMMENT ON COLUMN hoge.foo IS 'foo column';
+    COMMENT ON COLUMN hoge.bar IS 'bar column';
+    COMMENT ON COLUMN hoge.baz IS 'baz column';
+  desired: |
+    CREATE TABLE hoge (
+      id serial PRIMARY KEY
+    );
+  up: |
+    ALTER TABLE public.hoge DROP COLUMN baz;
+    ALTER TABLE public.hoge DROP COLUMN bar;
+    ALTER TABLE public.hoge DROP COLUMN foo;
+  down: |
+    ALTER TABLE public.hoge ADD COLUMN foo text;
+    ALTER TABLE public.hoge ADD COLUMN bar text;
+    ALTER TABLE public.hoge ADD COLUMN baz text;
+    COMMENT ON COLUMN public.hoge.foo IS 'foo column';
+    COMMENT ON COLUMN public.hoge.bar IS 'bar column';
+    COMMENT ON COLUMN public.hoge.baz IS 'baz column';
+
+# Test that column comment cleanup only skips dropped columns, not all columns.
+# Other column comments should still be cleaned up.
+DropColumnWithCommentAndKeepOther:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE hoge (
+      id integer,
+      foo text,
+      bar text
+    );
+    COMMENT ON COLUMN hoge.id IS 'id column';
+    COMMENT ON COLUMN hoge.foo IS 'foo column';
+    COMMENT ON COLUMN hoge.bar IS 'bar column';
+  desired: |
+    CREATE TABLE hoge (
+      id integer,
+      bar text
+    );
+    COMMENT ON COLUMN hoge.id IS 'id column';
+  up: |
+    ALTER TABLE public.hoge DROP COLUMN foo;
+    COMMENT ON COLUMN public.hoge.bar IS NULL;
+  down: |
+    ALTER TABLE public.hoge ADD COLUMN foo text;
+    COMMENT ON COLUMN public.hoge.foo IS 'foo column';
+    COMMENT ON COLUMN public.hoge.bar IS 'bar column';

@@ -54,6 +54,10 @@ type Generator struct {
 	// Track tables that have been dropped to skip COMMENT cleanup for them
 	droppedTables map[string]bool
 
+	// Track columns that have been dropped to skip COMMENT cleanup for them
+	// Key is "schema.table.column"
+	droppedColumns map[string]bool
+
 	// Map index names to their owning tables (for comment cleanup after table drops)
 	// Key is "schema.index_name", value is the table's QualifiedName
 	indexToTable map[string]QualifiedName
@@ -141,6 +145,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		config:              config,
 		handledForeignKeys:  make(map[string]bool),
 		droppedTables:       make(map[string]bool),
+		droppedColumns:      make(map[string]bool),
 		indexToTable:        make(map[string]QualifiedName),
 	}
 	// Build index-to-table mapping before any tables are dropped
@@ -553,7 +558,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				// Column is obsoleted. Drop column.
 				columnDDLs := g.generateDDLsForAbsentColumn(currentTable, desiredTable, column)
 				ddls = append(ddls, columnDDLs...)
-				// TODO: simulate to remove column from `currentTable.columns`?
+				// Track dropped column for later (to skip generating COMMENT cleanup DDLs)
+				g.trackDroppedColumn(currentTable, column)
 			}
 		}
 
@@ -604,6 +610,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		// PostgreSQL automatically removes comments when the table is dropped
 		if g.isCommentOnDroppedTable(currentComment) {
 			slog.Debug("Skipping comment cleanup for dropped table",
+				"object", currentComment.comment.Object)
+			continue
+		}
+
+		// Skip comments for columns that have been dropped
+		// PostgreSQL automatically removes column comments when the column is dropped
+		if g.isCommentOnDroppedColumn(currentComment) {
+			slog.Debug("Skipping comment cleanup for dropped column",
 				"object", currentComment.comment.Object)
 			continue
 		}
@@ -4333,6 +4347,43 @@ func (g *Generator) isCommentOnDroppedTable(comment *Comment) bool {
 	}
 
 	return g.droppedTables[tableName.RawString()]
+}
+
+// trackDroppedColumn records a column as dropped for later use in comment cleanup.
+func (g *Generator) trackDroppedColumn(table *Table, column *Column) {
+	tableSchema := table.name.Schema
+	if tableSchema.IsEmpty() {
+		tableSchema = parser.NewIdent(g.defaultSchema, false)
+	}
+	key := fmt.Sprintf("%s.%s.%s", tableSchema.Name, table.name.Name.Name, column.name.Name)
+	g.droppedColumns[key] = true
+}
+
+// isCommentOnDroppedColumn checks if a comment belongs to a column that has been dropped.
+// This is used to skip generating COMMENT ... IS NULL for dropped columns,
+// since PostgreSQL automatically removes column comments when the column is dropped.
+func (g *Generator) isCommentOnDroppedColumn(comment *Comment) bool {
+	if comment.comment.ObjectType != "OBJECT_COLUMN" {
+		return false
+	}
+
+	object := comment.comment.Object
+	// Column comment structure: [schema, table, column] or [table, column]
+	var schema, table, column string
+	if len(object) >= 3 {
+		schema = object[0].Name
+		table = object[1].Name
+		column = object[2].Name
+	} else if len(object) == 2 {
+		schema = g.defaultSchema
+		table = object[0].Name
+		column = object[1].Name
+	} else {
+		return false
+	}
+
+	key := fmt.Sprintf("%s.%s.%s", schema, table, column)
+	return g.droppedColumns[key]
 }
 
 // buildIndexToTableMap builds a mapping from index names to their owning tables.
