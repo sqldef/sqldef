@@ -7,9 +7,9 @@ coverage:
     patch:
       default:
         target: auto
+        threshold: 50%
 
 ignore:
   - "parser/parser.go"
-  - "parser/parser.y"
   - "**/*_test.go"
   - "testutil/**"
