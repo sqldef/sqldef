@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"sync/atomic"
 	"testing"
 )
 
@@ -15,8 +14,6 @@ type DummyUnixSocket struct {
 	Dir      string // Directory containing the socket
 	Path     string // Full path to the socket file
 	listener net.Listener
-	tmpDir   string
-	closed   atomic.Bool
 }
 
 // StartDummyUnixSocket creates a dummy Unix socket that accepts connections
@@ -47,7 +44,6 @@ func StartDummyUnixSocket(t *testing.T, dirPrefix, socketName string) *DummyUnix
 		Dir:      tmpDir,
 		Path:     socketPath,
 		listener: listener,
-		tmpDir:   tmpDir,
 	}
 
 	go sock.acceptLoop()
@@ -69,9 +65,6 @@ func (s *DummyUnixSocket) acceptLoop() {
 
 // Close shuts down the socket and cleans up temporary files.
 func (s *DummyUnixSocket) Close() {
-	if s.closed.Swap(true) {
-		return
-	}
 	s.listener.Close()
-	os.RemoveAll(s.tmpDir)
+	os.RemoveAll(s.Dir)
 }
