@@ -1,3 +1,6 @@
+## [v3.8.12](https://github.com/sqldef/sqldef/compare/v3.8.11...v3.8.12) - 2025-12-16
+- macos is no longer needed to build sqldef (because of CGO_ENABLED=0) by @gfx in https://github.com/sqldef/sqldef/pull/1056
+
 ## [v3.8.11](https://github.com/sqldef/sqldef/compare/v3.8.10...v3.8.11) - 2025-12-15
 - chore: tweak for codecov by @gfx in https://github.com/sqldef/sqldef/pull/1045
 - chore: cleanup type checks by @gfx in https://github.com/sqldef/sqldef/pull/1047
