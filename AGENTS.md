@@ -20,6 +20,7 @@ Each command follows the same pattern: it accepts connection parameters similar 
   * `legacy_ignore_quotes: true` (default; backward-compatible) generates SQL with identifiers always quoted
   * `legacy_ignore_quotes: false` (quote-aware) generates SQL with identifiers quoted only when they are quoted in the input SQL
 * If you encounter an unsupported feature, don't rewrite tests to avoid it. Instead, comment out the test case and mark it as `FIXME`
+* Avoid defensive programming
 
 ## Build
 
