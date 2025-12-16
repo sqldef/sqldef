@@ -251,6 +251,8 @@ jobs:
           - { GOOS: linux,   GOARCH: '386', EXT: tar.gz }
           - { GOOS: linux,   GOARCH: arm64, EXT: tar.gz }
           - { GOOS: linux,   GOARCH: arm,   EXT: tar.gz }
+          - { GOOS: darwin,  GOARCH: amd64, EXT: zip }
+          - { GOOS: darwin,  GOARCH: arm64, EXT: zip }
           - { GOOS: windows, GOARCH: amd64, EXT: zip }
     if: startsWith(github.ref, 'refs/tags/')
     steps:
@@ -269,37 +271,12 @@ jobs:
           name: sqldef-${{ matrix.GOOS }}-${{ matrix.GOARCH }}
           path: package/*def_${{ matrix.GOOS }}_${{ matrix.GOARCH }}.${{ matrix.EXT }}
 
-  package-macos:
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        include:
-          - { GOOS: darwin, GOARCH: amd64, EXT: zip }
-          - { GOOS: darwin, GOARCH: arm64, EXT: zip }
-      fail-fast: false
-    if: startsWith(github.ref, 'refs/tags/')
-    steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
-      - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
-        with:
-          go-version-file: go.mod
-
-      - name: make package-${{ matrix.EXT }}
-        run: make package-${{ matrix.EXT }} GOOS=${{ matrix.GOOS }} GOARCH=${{ matrix.GOARCH }}
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
-        with:
-          name: sqldef-${{ matrix.GOOS }}-${{ matrix.GOARCH }}
-          path: package/*def_${{ matrix.GOOS }}_${{ matrix.GOARCH }}.${{ matrix.EXT }}
-
   release:
     runs-on: ubuntu-latest
     needs:
       - test
       - integrity
       - package
-      - package-macos
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
