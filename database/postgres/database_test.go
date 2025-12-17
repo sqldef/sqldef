@@ -301,7 +301,7 @@ func setupTestDatabase(t *testing.T) *PostgresDatabase {
 		sslMode = s
 	}
 
-	dbName := "psqldef_test"
+	dbName := "psqldef_database_test"
 
 	// Connect to postgres database to recreate test database
 	adminDSN := fmt.Sprintf("postgres://%s:%s@%s:%d/postgres?sslmode=%s",
