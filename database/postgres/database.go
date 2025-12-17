@@ -162,7 +162,7 @@ func (d *PostgresDatabase) tableNames() ([]string, error) {
 		AND %s
 		AND c.relpersistence IN ('p', 'u')
 		AND c.relispartition = false
-		AND NOT EXISTS (SELECT * FROM pg_catalog.pg_depend d WHERE c.oid = d.objid AND d.deptype = 'e')
+		AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_depend d WHERE c.oid = d.objid AND d.classid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'pg_class') AND d.deptype = 'e')
 		ORDER BY n.nspname ASC, relname ASC;
 	`, relkindCondition)
 
@@ -211,7 +211,7 @@ func (d *PostgresDatabase) partitionChildTables() ([]string, error) {
 		INNER JOIN pg_catalog.pg_namespace pn ON pc.relnamespace = pn.oid
 		WHERE c.relispartition = true
 		AND n.nspname NOT IN ('information_schema', 'pg_catalog', 'sys')
-		AND NOT EXISTS (SELECT * FROM pg_catalog.pg_depend d WHERE c.oid = d.objid AND d.deptype = 'e')
+		AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_depend d WHERE c.oid = d.objid AND d.classid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'pg_class') AND d.deptype = 'e')
 		ORDER BY n.nspname ASC, c.relname ASC;
 	`
 
@@ -266,7 +266,7 @@ func (d *PostgresDatabase) views() ([]string, error) {
 		from pg_catalog.pg_class c inner join pg_catalog.pg_namespace n on c.relnamespace = n.oid
 		where n.nspname not in ('information_schema', 'pg_catalog', 'sys')
 		and c.relkind = 'v'
-		and not exists (select * from pg_catalog.pg_depend d where c.oid = d.objid and d.deptype = 'e')
+		and not exists (select 1 from pg_catalog.pg_depend d where c.oid = d.objid and d.classid = (select oid from pg_catalog.pg_class where relname = 'pg_class') and d.deptype = 'e')
 	`)
 	if err != nil {
 		return nil, err
@@ -315,7 +315,7 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 		select n.nspname as schemaname, c.relname as matviewname, pg_get_viewdef(c.oid) as definition
 		from pg_catalog.pg_class c inner join pg_catalog.pg_namespace n on c.relnamespace = n.oid
 		where c.relkind = 'm'
-		and not exists (select * from pg_catalog.pg_depend d where c.oid = d.objid and d.deptype = 'e')
+		and not exists (select 1 from pg_catalog.pg_depend d where c.oid = d.objid and d.classid = (select oid from pg_catalog.pg_class where relname = 'pg_class') and d.deptype = 'e')
 	`)
 	if err != nil {
 		return nil, err
@@ -421,7 +421,7 @@ func (d *PostgresDatabase) types() ([]string, error) {
 		FROM pg_enum e
 		JOIN pg_type t ON e.enumtypid = t.oid
 		INNER JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
-		WHERE NOT EXISTS (SELECT * FROM pg_depend d WHERE d.objid = t.oid AND d.deptype = 'e')
+		WHERE NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = t.oid AND d.classid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'pg_type') AND d.deptype = 'e')
 		GROUP BY n.nspname, t.typname, t.oid;
 	`)
 	if err != nil {
@@ -468,7 +468,7 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 		LEFT JOIN pg_catalog.pg_collation c ON t.typcollation = c.oid AND t.typcollation <> 0
 		WHERE t.typtype = 'd'
 		  AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'sys')
-		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = t.oid AND d.deptype = 'e')
+		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = t.oid AND d.classid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'pg_type') AND d.deptype = 'e')
 		ORDER BY n.nspname, t.typname;
 	`)
 	if err != nil {
@@ -590,7 +590,7 @@ func (d *PostgresDatabase) functions() ([]string, error) {
 		INNER JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
 		WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'sys')
 		  AND p.prokind = 'f'
-		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')
+		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.classid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'pg_proc') AND d.deptype = 'e')
 		ORDER BY n.nspname, p.proname;
 	`)
 	if err != nil {
@@ -645,7 +645,7 @@ func (d *PostgresDatabase) triggers() ([]string, error) {
 		INNER JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 		WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'sys')
 		  AND NOT t.tgisinternal
-		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = t.oid AND d.deptype = 'e')
+		  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = t.oid AND d.classid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'pg_trigger') AND d.deptype = 'e')
 		ORDER BY n.nspname, c.relname, t.tgname;
 	`)
 	if err != nil {
