@@ -1,3 +1,7 @@
+## [v3.8.13](https://github.com/sqldef/sqldef/compare/v3.8.12...v3.8.13) - 2025-12-17
+- add tests for unix domain socket by @gfx in https://github.com/sqldef/sqldef/pull/1058
+- psqldef: Fix handling duplicated PostgreSQL OID from extension by @chumaltd in https://github.com/sqldef/sqldef/pull/1061
+
 ## [v3.8.12](https://github.com/sqldef/sqldef/compare/v3.8.11...v3.8.12) - 2025-12-16
 - macos is no longer needed to build sqldef (because of CGO_ENABLED=0) by @gfx in https://github.com/sqldef/sqldef/pull/1056
 
