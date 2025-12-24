@@ -58,6 +58,10 @@ type Generator struct {
 	// Key is "schema.table.column"
 	droppedColumns map[string]bool
 
+	// Track indexes that have been dropped to skip COMMENT cleanup for them
+	// Key is "schema.index_name"
+	droppedIndexes map[string]bool
+
 	// Map index names to their owning tables (for comment cleanup after table drops)
 	// Key is "schema.index_name", value is the table's QualifiedName
 	indexToTable map[string]QualifiedName
@@ -146,6 +150,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		handledForeignKeys:  make(map[string]bool),
 		droppedTables:       make(map[string]bool),
 		droppedColumns:      make(map[string]bool),
+		droppedIndexes:      make(map[string]bool),
 		indexToTable:        make(map[string]QualifiedName),
 	}
 	// Build index-to-table mapping before any tables are dropped
@@ -508,6 +513,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return ddls, err
 			}
 			ddls = append(ddls, indexDDLs...)
+			g.trackDroppedIndex(currentTable, index)
 			// TODO: simulate to remove index from `currentTable.indexes`?
 		}
 
@@ -618,6 +624,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		// PostgreSQL automatically removes column comments when the column is dropped
 		if g.isCommentOnDroppedColumn(currentComment) {
 			slog.Debug("Skipping comment cleanup for dropped column",
+				"object", currentComment.comment.Object)
+			continue
+		}
+
+		// Skip comments for indexes that have been dropped
+		// PostgreSQL automatically removes index comments when the index is dropped
+		if g.isCommentOnDroppedIndex(currentComment) {
+			slog.Debug("Skipping comment cleanup for dropped index",
 				"object", currentComment.comment.Object)
 			continue
 		}
@@ -4393,6 +4407,47 @@ func (g *Generator) isCommentOnDroppedColumn(comment *Comment) bool {
 
 	key := g.droppedColumnKey(schemaIdent, tableIdent, columnIdent)
 	return g.droppedColumns[key]
+}
+
+// trackDroppedIndex records an index as dropped for later use in comment cleanup.
+func (g *Generator) trackDroppedIndex(table *Table, index Index) {
+	tableSchema := table.name.Schema
+	if tableSchema.IsEmpty() {
+		tableSchema = parser.NewIdent(g.defaultSchema, false)
+	}
+	key := g.droppedIndexKey(tableSchema, index.name)
+	g.droppedIndexes[key] = true
+}
+
+// droppedIndexKey returns a normalized key for tracking dropped indexes.
+func (g *Generator) droppedIndexKey(schema, indexName Ident) string {
+	schemaKey := normalizeIdentKey(schema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	indexKey := normalizeIdentKey(indexName, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames)
+	return fmt.Sprintf("%s.%s", schemaKey, indexKey)
+}
+
+// isCommentOnDroppedIndex checks if a comment belongs to an index that has been dropped.
+// This is used to skip generating COMMENT ... IS NULL for dropped indexes,
+// since PostgreSQL automatically removes index comments when the index is dropped.
+func (g *Generator) isCommentOnDroppedIndex(comment *Comment) bool {
+	if comment.comment.ObjectType != "OBJECT_INDEX" {
+		return false
+	}
+
+	object := comment.comment.Object
+	var schemaIdent, indexIdent Ident
+	if len(object) >= 2 {
+		schemaIdent = object[0]
+		indexIdent = object[1]
+	} else if len(object) == 1 {
+		schemaIdent = parser.NewIdent(g.defaultSchema, false)
+		indexIdent = object[0]
+	} else {
+		return false
+	}
+
+	key := g.droppedIndexKey(schemaIdent, indexIdent)
+	return g.droppedIndexes[key]
 }
 
 // buildIndexToTableMap builds a mapping from index names to their owning tables.
