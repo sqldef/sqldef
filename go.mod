@@ -2,7 +2,7 @@ module github.com/sqldef/sqldef/v3
 
 go 1.25
 
-toolchain go1.25.5 // must sync with Dockerfile
+toolchain go1.26rc1 // must sync with Dockerfile
 
 require (
 	github.com/go-sql-driver/mysql v1.9.3

@@ -131,8 +131,8 @@ lint:
 vulncheck:
 	GOTOOLCHAIN=auto go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
-modernize:
-	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix ./...
+fix:
+	go fix ./...
 
 touch:
 	touch parser/parser.y
