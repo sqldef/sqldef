@@ -1108,10 +1108,7 @@ func parseEnumValuesWithRename(ddl string, rawValues []string, mode GeneratorMod
 	for i, value := range rawValues {
 		strippedValue := stripQuotes(value)
 		if comment, exists := valueComments[strippedValue]; exists {
-			renamed := extractRenameFrom(comment)
-			if !renamed.IsEmpty() {
-				result[i].renamedFrom = renamed.Name
-			}
+			result[i].renamedFrom = extractRenameFrom(comment)
 		}
 	}
 	return result

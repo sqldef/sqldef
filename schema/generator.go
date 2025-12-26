@@ -2366,10 +2366,10 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 
 		// Handle RENAME VALUE for values with @renamed annotation in desired
 		for _, enumValue := range desired.enumValues {
-			if enumValue.renamedFrom != "" {
-				if containsEnumValue(currentType.enumValues, enumValue.renamedFrom) {
+			if !enumValue.renamedFrom.IsEmpty() {
+				if containsEnumValue(currentType.enumValues, enumValue.renamedFrom.Name) {
 					ddl := fmt.Sprintf("ALTER TYPE %s RENAME VALUE '%s' TO '%s'",
-						typeName, enumValue.renamedFrom, stripQuotes(enumValue.value))
+						typeName, enumValue.renamedFrom.Name, stripQuotes(enumValue.value))
 					ddls = append(ddls, ddl)
 				}
 			}
@@ -2377,7 +2377,7 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 
 		// Handle ADD VALUE for new values (not renamed)
 		for _, enumValue := range desired.enumValues {
-			if enumValue.renamedFrom == "" && !containsEnumValue(currentType.enumValues, enumValue.value) {
+			if enumValue.renamedFrom.IsEmpty() && !containsEnumValue(currentType.enumValues, enumValue.value) {
 				ddl := fmt.Sprintf("ALTER TYPE %s ADD VALUE '%s'", typeName, stripQuotes(enumValue.value))
 				ddls = append(ddls, ddl)
 			}

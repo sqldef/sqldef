@@ -456,7 +456,7 @@ type CheckDefinition struct {
 // EnumValue represents a single enum value with optional rename information
 type EnumValue struct {
 	value       string
-	renamedFrom string // empty if not renamed
+	renamedFrom Ident // Previous enum value if renamed via @renamed annotation
 }
 
 // TODO: include type information
