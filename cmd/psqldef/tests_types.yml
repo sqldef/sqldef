@@ -174,3 +174,83 @@ EnumWithQuotedValues:
   legacy_ignore_quotes: false
   desired: |
     CREATE TYPE quote_type AS ENUM ('it''s', 'value with "quotes"');
+
+RenameEnumValue:
+  min_version: '10'
+  current: |
+    CREATE TYPE status AS ENUM ('active', 'pending', 'inactive');
+  desired: |
+    CREATE TYPE status AS ENUM (
+      'active',
+      'waiting' /* @renamed from=pending */,
+      'inactive'
+    );
+  up: |
+    ALTER TYPE "public"."status" RENAME VALUE 'pending' TO 'waiting';
+  down: |
+    ALTER TYPE "public"."status" ADD VALUE 'pending';
+
+RenameEnumValueLineComment:
+  min_version: '10'
+  current: |
+    CREATE TYPE priority AS ENUM ('low', 'high');
+  desired: |
+    CREATE TYPE priority AS ENUM (
+      'minor', -- @renamed from=low
+      'high'
+    );
+  up: |
+    ALTER TYPE "public"."priority" RENAME VALUE 'low' TO 'minor';
+  down: |
+    ALTER TYPE "public"."priority" ADD VALUE 'low';
+
+RenameMultipleEnumValues:
+  min_version: '10'
+  current: |
+    CREATE TYPE level AS ENUM ('low', 'medium', 'high');
+  desired: |
+    CREATE TYPE level AS ENUM (
+      'minor' /* @renamed from=low */,
+      'normal' /* @renamed from=medium */,
+      'critical' /* @renamed from=high */
+    );
+  up: |
+    ALTER TYPE "public"."level" RENAME VALUE 'low' TO 'minor';
+    ALTER TYPE "public"."level" RENAME VALUE 'medium' TO 'normal';
+    ALTER TYPE "public"."level" RENAME VALUE 'high' TO 'critical';
+  down: |
+    ALTER TYPE "public"."level" ADD VALUE 'low';
+    ALTER TYPE "public"."level" ADD VALUE 'medium';
+    ALTER TYPE "public"."level" ADD VALUE 'high';
+
+RenameAndAddEnumValue:
+  min_version: '10'
+  current: |
+    CREATE TYPE workflow AS ENUM ('active', 'pending');
+  desired: |
+    CREATE TYPE workflow AS ENUM (
+      'active',
+      'waiting' /* @renamed from=pending */,
+      'archived'
+    );
+  up: |
+    ALTER TYPE "public"."workflow" RENAME VALUE 'pending' TO 'waiting';
+    ALTER TYPE "public"."workflow" ADD VALUE 'archived';
+  down: |
+    ALTER TYPE "public"."workflow" ADD VALUE 'pending';
+
+RenameEnumValueWithSchema:
+  min_version: '10'
+  current: |
+    CREATE SCHEMA myschema;
+    CREATE TYPE myschema.status AS ENUM ('active', 'pending');
+  desired: |
+    CREATE SCHEMA myschema;
+    CREATE TYPE myschema.status AS ENUM (
+      'active',
+      'waiting' /* @renamed from=pending */
+    );
+  up: |
+    ALTER TYPE "myschema"."status" RENAME VALUE 'pending' TO 'waiting';
+  down: |
+    ALTER TYPE "myschema"."status" ADD VALUE 'pending';

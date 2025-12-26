@@ -402,6 +402,44 @@ The rename annotation also works for unique indexes:
 CREATE UNIQUE INDEX unique_email /* @renamed from=old_unique_email */ ON users (email);
 ```
 
+### Enum Value Renaming
+
+psqldef supports renaming enum values using the `-- @renamed from=old_value` or `/* @renamed from=old_value */` annotation (PostgreSQL 10+):
+
+```sql
+CREATE TYPE status AS ENUM (
+  'active',
+  'waiting' /* @renamed from=pending */,
+  'inactive'
+);
+```
+
+This generates:
+```sql
+ALTER TYPE status RENAME VALUE 'pending' TO 'waiting';
+```
+
+You can also use line comments:
+
+```sql
+CREATE TYPE priority AS ENUM (
+  'minor', -- @renamed from=low
+  'high'
+);
+```
+
+Multiple values can be renamed at once:
+
+```sql
+CREATE TYPE level AS ENUM (
+  'minor' /* @renamed from=low */,
+  'normal' /* @renamed from=medium */,
+  'critical' /* @renamed from=high */
+);
+```
+
+Note: After the migration is complete, you can remove the `@renamed` annotation from your schema file. The annotation is only needed during the migration process.
+
 ## Configuration
 
 Configuration can be provided through YAML files (`--config`) or inline YAML strings (`--config-inline`). Multiple configurations can be specified and will be merged in order.

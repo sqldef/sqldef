@@ -197,10 +197,11 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				options:    stmt.Function.Options,
 			}, nil
 		} else if stmt.Action == parser.CreateType {
+			enumValues := parseEnumValuesWithRename(ddl, stmt.Type.Type.EnumValues)
 			return &Type{
 				name:       normalizeQualifiedObjectName(mode, stmt.Type.Name, defaultSchema),
 				statement:  ddl,
-				enumValues: stmt.Type.Type.EnumValues,
+				enumValues: enumValues,
 			}, nil
 		} else if stmt.Action == parser.CreateDomain {
 			var constraints []DomainConstraint
@@ -1090,6 +1091,41 @@ func extractRenameFrom(comment string) Ident {
 		}
 	}
 	return Ident{}
+}
+
+// parseEnumValuesWithRename parses enum values from DDL and extracts @renamed annotations.
+// It looks for patterns like: 'value' /* @renamed from=old_value */ or 'value' -- @renamed from=old_value
+func parseEnumValuesWithRename(ddl string, rawValues []string) []EnumValue {
+	result := make([]EnumValue, len(rawValues))
+	for i, value := range rawValues {
+		result[i] = EnumValue{value: value}
+	}
+
+	// Pattern to match enum value followed by comment with @renamed annotation
+	// Matches: 'value' /* @renamed from=xxx */ or 'value', -- @renamed from=xxx
+	// Note: rawValues already include single quotes (e.g., "'waiting'")
+	for i, value := range rawValues {
+		// Escape special regex characters in the value (value already includes single quotes)
+		escapedValue := regexp.QuoteMeta(value)
+		// Pattern: 'value' followed by optional comma, whitespace, and comment
+		pattern := escapedValue + `\s*,?\s*(?:/\*\s*(@renamed\s+from=(?:"[^"]+"|[^,)\s]+))\s*\*/|--\s*(@renamed\s+from=(?:"[^"]+"|[^\n,]+)))`
+		re := regexp.MustCompile(pattern)
+		matches := re.FindStringSubmatch(ddl)
+		if len(matches) >= 3 {
+			// matches[1] is block comment, matches[2] is line comment
+			comment := matches[1]
+			if comment == "" {
+				comment = matches[2]
+			}
+			if comment != "" {
+				renamed := extractRenameFrom(comment)
+				if !renamed.IsEmpty() {
+					result[i].renamedFrom = renamed.Name
+				}
+			}
+		}
+	}
+	return result
 }
 
 // generatorModeToParserMode converts GeneratorMode to ParserMode
