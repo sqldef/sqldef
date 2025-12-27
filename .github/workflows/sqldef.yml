@@ -207,9 +207,6 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Install goyacc
-        run: make goyacc
-
       - name: Remove existing parser.go to force regeneration
         run: rm -f parser/parser.go
 
