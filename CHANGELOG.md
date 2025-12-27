@@ -1,3 +1,10 @@
+## [v3.8.14](https://github.com/sqldef/sqldef/compare/v3.8.13...v3.8.14) - 2025-12-27
+- add regression tests for #1061 by @gfx in https://github.com/sqldef/sqldef/pull/1062
+- fix: skip COMMENT cleanup for dropped indexes in psqldef by @178inaba in https://github.com/sqldef/sqldef/pull/1064
+- Support RENAME VALUE for PostgreSQL ENUM types by @178inaba in https://github.com/sqldef/sqldef/pull/1065
+- refactor: cleanup Makefile by @gfx in https://github.com/sqldef/sqldef/pull/1067
+- Fix parser to store enum values without quotes by @178inaba in https://github.com/sqldef/sqldef/pull/1068
+
 ## [v3.8.13](https://github.com/sqldef/sqldef/compare/v3.8.12...v3.8.13) - 2025-12-17
 - add tests for unix domain socket by @gfx in https://github.com/sqldef/sqldef/pull/1058
 - psqldef: Fix handling duplicated PostgreSQL OID from extension by @chumaltd in https://github.com/sqldef/sqldef/pull/1061
