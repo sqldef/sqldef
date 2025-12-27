@@ -2383,7 +2383,7 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 			if !enumValue.renamedFrom.IsEmpty() {
 				if containsEnumValue(currentType.enumValues, enumValue.renamedFrom.Name) {
 					ddl := fmt.Sprintf("ALTER TYPE %s RENAME VALUE '%s' TO '%s'",
-						typeName, enumValue.renamedFrom.Name, stripQuotes(enumValue.value))
+						typeName, enumValue.renamedFrom.Name, enumValue.value)
 					ddls = append(ddls, ddl)
 				}
 			}
@@ -2392,7 +2392,7 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 		// Handle ADD VALUE for new values (not renamed)
 		for _, enumValue := range desired.enumValues {
 			if enumValue.renamedFrom.IsEmpty() && !containsEnumValue(currentType.enumValues, enumValue.value) {
-				ddl := fmt.Sprintf("ALTER TYPE %s ADD VALUE '%s'", typeName, stripQuotes(enumValue.value))
+				ddl := fmt.Sprintf("ALTER TYPE %s ADD VALUE '%s'", typeName, enumValue.value)
 				ddls = append(ddls, ddl)
 			}
 		}
@@ -2409,23 +2409,13 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 }
 
 // containsEnumValue checks if the given value exists in the enum values.
-// The value parameter can be either quoted ('value') or unquoted (value).
 func containsEnumValue(enumValues []EnumValue, value string) bool {
-	unquotedValue := stripQuotes(value)
 	for _, ev := range enumValues {
-		if stripQuotes(ev.value) == unquotedValue {
+		if ev.value == value {
 			return true
 		}
 	}
 	return false
-}
-
-// stripQuotes removes surrounding single quotes from a string if present
-func stripQuotes(s string) string {
-	if len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'' {
-		return s[1 : len(s)-1]
-	}
-	return s
 }
 
 func (g *Generator) generateDDLsForCreateDomain(desired *Domain) ([]string, error) {
@@ -2767,7 +2757,11 @@ func (g *Generator) generateDataType(column Column) string {
 	} else {
 		switch column.typeName {
 		case "enum", "set":
-			return fmt.Sprintf("%s(%s)%s", column.typeName, strings.Join(column.enumValues, ", "), suffix)
+			quotedValues := make([]string, len(column.enumValues))
+			for i, v := range column.enumValues {
+				quotedValues[i] = "'" + v + "'"
+			}
+			return fmt.Sprintf("%s(%s)%s", column.typeName, strings.Join(quotedValues, ", "), suffix)
 		default:
 			return fmt.Sprintf("%s%s", typeName, suffix)
 		}

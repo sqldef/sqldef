@@ -9153,13 +9153,13 @@ yydefault:
 //line parser/parser.y:4121
 		{
 			yyVAL.strs = make([]string, 0, 4)
-			yyVAL.strs = append(yyVAL.strs, "'"+yyDollar[1].str+"'")
+			yyVAL.strs = append(yyVAL.strs, yyDollar[1].str)
 		}
 	case 568:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:4126
 		{
-			yyVAL.strs = append(yyDollar[1].strs, "'"+yyDollar[3].str+"'")
+			yyVAL.strs = append(yyDollar[1].strs, yyDollar[3].str)
 		}
 	case 569:
 		yyDollar = yyS[yypt-0 : yypt+1]

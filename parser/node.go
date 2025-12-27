@@ -894,7 +894,11 @@ func (ct *ColumnType) Format(buf *nodeBuffer) {
 	}
 
 	if ct.EnumValues != nil {
-		buf.Printf("(%s)", strings.Join(ct.EnumValues, ", "))
+		quotedValues := make([]string, len(ct.EnumValues))
+		for i, v := range ct.EnumValues {
+			quotedValues[i] = "'" + v + "'"
+		}
+		buf.Printf("(%s)", strings.Join(quotedValues, ", "))
 	}
 
 	if ct.Unsigned {
