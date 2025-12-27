@@ -1104,10 +1104,9 @@ func parseEnumValuesWithRename(ddl string, rawValues []string, mode GeneratorMod
 	// Extract comments using tokenizer-based approach
 	valueComments := extractEnumValueComments(ddl, mode)
 
-	// Match comments to enum values by their stripped value (without quotes)
+	// Match comments to enum values
 	for i, value := range rawValues {
-		strippedValue := stripQuotes(value)
-		if comment, exists := valueComments[strippedValue]; exists {
+		if comment, exists := valueComments[value]; exists {
 			result[i].renamedFrom = extractRenameFrom(comment)
 		}
 	}

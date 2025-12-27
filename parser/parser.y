@@ -4120,11 +4120,11 @@ enum_values:
   STRING
   {
     $$ = make([]string, 0, 4)
-    $$ = append($$, "'" + $1 + "'")
+    $$ = append($$, $1)
   }
 | enum_values ',' STRING
   {
-    $$ = append($1, "'" + $3 + "'")
+    $$ = append($1, $3)
   }
 
 length_opt:
