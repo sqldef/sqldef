@@ -197,10 +197,11 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				options:    stmt.Function.Options,
 			}, nil
 		} else if stmt.Action == parser.CreateType {
+			enumValues := parseEnumValuesWithRename(ddl, stmt.Type.Type.EnumValues, mode)
 			return &Type{
 				name:       normalizeQualifiedObjectName(mode, stmt.Type.Name, defaultSchema),
 				statement:  ddl,
-				enumValues: stmt.Type.Type.EnumValues,
+				enumValues: enumValues,
 			}, nil
 		} else if stmt.Action == parser.CreateDomain {
 			var constraints []DomainConstraint
@@ -1090,6 +1091,120 @@ func extractRenameFrom(comment string) Ident {
 		}
 	}
 	return Ident{}
+}
+
+// parseEnumValuesWithRename parses enum values from DDL and extracts @renamed annotations.
+// It looks for patterns like: 'value' /* @renamed from=old_value */ or 'value' -- @renamed from=old_value
+func parseEnumValuesWithRename(ddl string, rawValues []string, mode GeneratorMode) []EnumValue {
+	result := make([]EnumValue, len(rawValues))
+	for i, value := range rawValues {
+		result[i] = EnumValue{value: value}
+	}
+
+	// Extract comments using tokenizer-based approach
+	valueComments := extractEnumValueComments(ddl, mode)
+
+	// Match comments to enum values by their stripped value (without quotes)
+	for i, value := range rawValues {
+		strippedValue := stripQuotes(value)
+		if comment, exists := valueComments[strippedValue]; exists {
+			result[i].renamedFrom = extractRenameFrom(comment)
+		}
+	}
+	return result
+}
+
+// extractEnumValueComments extracts inline comments from a CREATE TYPE ... AS ENUM statement
+// and maps them to enum values
+func extractEnumValueComments(rawDDL string, mode GeneratorMode) map[string]string {
+	comments := make(map[string]string)
+
+	tokenizer := parser.NewTokenizer(rawDDL, generatorModeToParserMode(mode))
+	tokenizer.AllowComments = true
+
+	var foundCreate bool
+	var foundType bool
+	var foundAs bool
+	var inEnumDef bool
+	var parenDepth int
+	var currentEnumValue string
+
+	for {
+		tok, val := tokenizer.Scan()
+		if tok == 0 {
+			break // EOF
+		}
+
+		// Track CREATE TYPE ... AS ENUM sequence
+		if tok == parser.CREATE {
+			foundCreate = true
+			continue
+		}
+
+		if foundCreate && tok == parser.TYPE {
+			foundCreate = false
+			foundType = true
+			continue
+		}
+
+		// Reset if CREATE is not followed by TYPE
+		if foundCreate && tok != parser.TYPE {
+			foundCreate = false
+		}
+
+		if foundType && tok == parser.AS {
+			foundAs = true
+			continue
+		}
+
+		if foundAs && tok == parser.ENUM {
+			foundAs = false
+			foundType = false
+			// Wait for opening parenthesis
+			continue
+		}
+
+		// Reset AS if not followed by ENUM
+		if foundAs && tok != parser.ENUM {
+			foundAs = false
+		}
+
+		// Track parentheses for enum values
+		switch tok {
+		case '(':
+			if foundType || foundAs {
+				// Skip table name parentheses, wait for ENUM keyword
+				continue
+			}
+			parenDepth++
+			if parenDepth == 1 {
+				inEnumDef = true
+			}
+		case ')':
+			parenDepth--
+			if parenDepth == 0 {
+				inEnumDef = false
+				foundType = false
+			}
+		case ',':
+			// After a comma, expect a new enum value
+			// Don't clear currentEnumValue yet - the comment might come after the comma
+		case parser.STRING:
+			if inEnumDef && parenDepth == 1 {
+				// Strip quotes from the value for the map key
+				currentEnumValue = string(val)
+			}
+		case parser.COMMENT:
+			if inEnumDef && currentEnumValue != "" && parenDepth == 1 {
+				comment := strings.TrimSpace(string(val))
+				if _, exists := comments[currentEnumValue]; !exists {
+					comments[currentEnumValue] = comment
+				}
+			}
+		}
+	}
+
+	return comments
 }
 
 // generatorModeToParserMode converts GeneratorMode to ParserMode

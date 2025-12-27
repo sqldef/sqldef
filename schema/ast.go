@@ -453,11 +453,17 @@ type CheckDefinition struct {
 	noInherit         bool
 }
 
+// EnumValue represents a single enum value with optional rename information
+type EnumValue struct {
+	value       string
+	renamedFrom Ident // Previous enum value if renamed via @renamed annotation
+}
+
 // TODO: include type information
 type Type struct {
 	name       QualifiedName
 	statement  string
-	enumValues []string
+	enumValues []EnumValue
 }
 
 type Domain struct {
