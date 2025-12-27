@@ -443,6 +443,48 @@ DropColumnWithComment:
     COMMENT ON COLUMN public.hoge.bar IS 'bar column';
     COMMENT ON COLUMN public.hoge.baz IS 'baz column';
 
+# Test that index comments are not cleaned up when the index itself is dropped (not the table).
+# PostgreSQL automatically removes index comments when the index is dropped.
+DropIndexWithComment:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE hoge (id integer);
+    CREATE INDEX idx_hoge ON hoge (id);
+    COMMENT ON INDEX idx_hoge IS 'hoge index';
+  desired: |
+    CREATE TABLE hoge (id integer);
+  up: |
+    DROP INDEX public.idx_hoge;
+  down: |
+    CREATE INDEX idx_hoge ON public.hoge (id);
+    COMMENT ON INDEX public.idx_hoge IS 'hoge index';
+
+# Test that index comment cleanup only skips dropped indexes, not all indexes.
+# Other index comments should still be cleaned up.
+DropIndexWithCommentAndKeepOther:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE hoge (
+      id integer,
+      foo text
+    );
+    CREATE INDEX idx_hoge_id ON hoge (id);
+    CREATE INDEX idx_hoge_foo ON hoge (foo);
+    COMMENT ON INDEX idx_hoge_id IS 'id index';
+    COMMENT ON INDEX idx_hoge_foo IS 'foo index';
+  desired: |
+    CREATE TABLE hoge (
+      id integer,
+      foo text
+    );
+    CREATE INDEX idx_hoge_id ON hoge (id);
+    COMMENT ON INDEX idx_hoge_id IS 'id index';
+  up: |
+    DROP INDEX public.idx_hoge_foo;
+  down: |
+    CREATE INDEX idx_hoge_foo ON public.hoge (foo);
+    COMMENT ON INDEX public.idx_hoge_foo IS 'foo index';
+
 # Test that column comment cleanup only skips dropped columns, not all columns.
 # Other column comments should still be cleaned up.
 DropColumnWithCommentAndKeepOther:
