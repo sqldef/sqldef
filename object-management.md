@@ -48,7 +48,7 @@ manage:
       drop: false
     - target: 'temp_.*'
       drop: true
-    - target: 'staging\..*'
+    - schema: staging
       drop: true
     - drop: false
 
@@ -63,7 +63,7 @@ manage:
     - drop: true
 
   function:
-    - target: 'utils\..*'
+    - schema: utils
       drop: false
 
   procedure:
@@ -71,7 +71,7 @@ manage:
       drop: false
 
   trigger:
-    - target: '.*\.audit_.*'
+    - target: 'audit_.*'
       drop: false
 
   sequence:
@@ -82,7 +82,7 @@ manage:
     - drop: false
 
   policy:
-    - target: '.*\.tenant_.*'
+    - target: 'tenant_.*'
       drop: false
 
   extension:
@@ -113,12 +113,14 @@ manage:
 
 | Field | Description | Default |
 |-------|-------------|---------|
-| `default_schema` | Schema for patterns without `\.` prefix (psqldef/mssqldef only) | Database default (`public` / `dbo`) |
+| `default_schema` | Default schema for entries without `schema` field (psqldef/mssqldef only) | Database default (`public` / `dbo`) |
 
 ### Entry Fields
 
 | Field | Description | Default |
 |-------|-------------|---------|
+| `schema` | Schema to match (literal or regexp pattern); psqldef/mssqldef only | value of `default_schema` |
+| `table` | Table to match (literal or regexp pattern); trigger/policy only | (matches all tables in matched schema) |
 | `target` | Regexp pattern to match object names | (matches all) |
 | `drop` | Allow DROP of the object itself | `false` |
 | `drop_column` | Allow ALTER TABLE ... DROP COLUMN (table only) | value of `drop` |
@@ -136,21 +138,40 @@ Patterns use **regular expressions** with implicit anchoring (`^pattern$`):
 | `temp_\d+` | `temp_1`, `temp_123`, etc. |
 | (omitted) | All objects |
 
-### Schema Resolution (PostgreSQL/SQL Server)
+### Schema Field (PostgreSQL/SQL Server)
 
-For databases with schemas, patterns are matched against **fully qualified names** (`schema.name`):
+For databases with schemas, use the `schema` field to specify which schema(s) to match:
 
-| Pattern | Matches |
-|---------|---------|
-| `users` | `{default_schema}.users` |
-| `staging\.users` | `staging.users` |
-| `staging\..*` | All in `staging` schema |
-| (omitted) | All objects in all schemas |
+| `schema` | `target` | Matches |
+|----------|----------|---------|
+| (omitted) | `users` | `{default_schema}.users` |
+| `staging` | `users` | `staging.users` |
+| `staging` | (omitted) | All objects in `staging` schema |
+| `'.*'` | `temp_.*` | `temp_*` tables in any schema |
+| (omitted) | (omitted) | All objects in `default_schema` |
 
 Rules:
-- Patterns without `\.` are prefixed with `default_schema` before matching
-- Patterns with `\.` match against the full `schema.name`
-- Using `default_schema` with mysqldef/sqlite3def is an error
+- `schema` field accepts a literal string or a regexp pattern
+- If `schema` is omitted, `default_schema` is used
+- `target` matches against object names only (not qualified names)
+- Using `schema` or `default_schema` with mysqldef/sqlite3def is an error
+
+### Trigger/Policy Fields
+
+For triggers and policies, use both `schema` and `table` fields:
+
+| `schema` | `table` | `target` | Matches |
+|----------|---------|----------|---------|
+| (omitted) | (omitted) | (omitted) | All triggers/policies in `default_schema` |
+| `public` | (omitted) | (omitted) | All triggers/policies in `public` schema |
+| `staging` | `users` | (omitted) | All triggers/policies on `staging.users` |
+| (omitted) | `foo_.*` | `audit_.*` | `audit_*` triggers/policies on `{default_schema}.foo_*` tables |
+| `'.*'` | `'.*'` | (omitted) | All triggers/policies in all schemas |
+
+Rules:
+- `schema` defaults to `default_schema`
+- `table` defaults to all tables in the matched schema
+- `target` matches against trigger/policy names only
 
 ## Behavior
 
@@ -165,12 +186,9 @@ Rules:
 
 ### Pattern Matching
 - **First match wins**: entries are evaluated in order
-- Patterns match against fully qualified names:
-  - Schemas: `name`
-  - Tables, views, functions, etc.: `schema.name` (or `name` for MySQL/SQLite)
-  - Triggers: `schema.table.trigger_name` (or `table.trigger_name`)
-  - Policies: `schema.table.policy_name`
-  - Extensions: `name`
+- `schema` field matches against schema names (PostgreSQL/SQL Server only)
+- `table` field matches against table names (triggers/policies only)
+- `target` field matches against object names
 - Case sensitivity follows the database's rules
 
 ### Pattern Ordering
@@ -320,7 +338,7 @@ Note: Owned objects are exempt from dependency validation. A table can have unma
 | `target_tables` | `manage.table[].target` |
 | `skip_tables` | Use allow-list instead |
 | `skip_views` | Use allow-list instead |
-| `target_schema` | Use `default_schema` or schema prefix |
+| `target_schema` | Use `default_schema` or `schema` field |
 | `--skip-view` | Omit `view` from `manage` |
 | `--skip-extension` | Omit `extension` from `manage` |
 | `--skip-partition` | Set `partition: false` on table entries |
@@ -384,7 +402,7 @@ manage:
   default_schema: app
 
   table:
-    - target: 'staging\..*'
+    - schema: staging
       drop: true
     - drop: false
 
@@ -397,11 +415,11 @@ manage:
 ```yaml
 manage:
   table:
-    - target: '.*\..*'
+    - schema: '.*'
       drop: false
 ```
 
-Note: Pattern `.*\..*` matches any `schema.table`. Tables are matched against their fully qualified names.
+Note: `schema: '.*'` matches any schema. Combined with omitted `target`, this matches all tables in all schemas.
 
 ### Complex patterns
 
