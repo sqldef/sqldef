@@ -17,10 +17,9 @@ Limitations:
 
 ## Design Principles
 
-This specification balances two goals:
-
-1. **Development flexibility**: Fine-grained control over which objects are managed and what operations are allowed
-2. **Backward compatibility**: Existing configurations continue to work; new features don't break current behavior
+* Easy things should be easy, and hard things should be possible.
+* Fine-grained control over which objects are managed and what operations are allowed
+* Existing configurations continue to work; new features don't break current behavior
 
 ## Proposed Solution
 
@@ -39,21 +38,16 @@ manage:
 
   schema:
     - target: 'public'
-      drop: false
     - target: 'staging'
       drop: true
 
   table:
-    - target: 'users'
-      drop: false
     - target: 'temp_.*'
       drop: true
     - schema: staging
       drop: true
-    - drop: false
 
   view:
-    - drop: false
 
   materialized_view:
     - target: 'cached_.*'
@@ -64,32 +58,24 @@ manage:
 
   function:
     - schema: utils
-      drop: false
 
   procedure:
     - target: 'sync_.*'
-      drop: false
 
   trigger:
     - target: 'audit_.*'
-      drop: false
 
   sequence:
     - target: '.*_seq'
-      drop: false
 
   type:
-    - drop: false
 
   policy:
     - target: 'tenant_.*'
-      drop: false
 
   extension:
     - target: 'pgcrypto'
-      drop: false
     - target: 'uuid-ossp'
-      drop: false
 ```
 
 ### MySQL/SQLite Example
@@ -97,11 +83,8 @@ manage:
 ```yaml
 manage:
   table:
-    - target: 'users'
-      drop: false
     - target: 'temp_.*'
       drop: true
-    - drop: false
 
   index:
     - drop: true
@@ -198,10 +181,8 @@ List patterns from most specific to most general:
 manage:
   table:
     - target: 'users'
-      drop: false
     - target: 'temp_.*'
       drop: true
-    - drop: false
 ```
 
 ## Drop Control
@@ -220,10 +201,8 @@ The `drop`, `drop_column`, and `drop_constraint` fields control destructive oper
 manage:
   table:
     - target: 'users'
-      drop: false
 
     - target: 'orders'
-      drop: false
       drop_column: true
       drop_constraint: true
 
@@ -266,7 +245,6 @@ Examples:
 ```yaml
 manage:
   table:
-    - drop: false
   # function: not listed → error if any table uses a function in DEFAULT, CHECK, etc.
 ```
 
@@ -274,7 +252,6 @@ manage:
 ```yaml
 manage:
   trigger:
-    - drop: false
   # table: not listed → error if any trigger references an unmanaged table
 ```
 
@@ -308,7 +285,6 @@ CREATE TABLE users (
 ```yaml
 manage:
   table:
-    - drop: false
   # index: not listed → owned indexes implicitly managed
 ```
 
@@ -319,7 +295,6 @@ manage:
 ```yaml
 manage:
   table:
-    - drop: false
 
   index:
     - target: 'custom_.*'
@@ -378,10 +353,8 @@ manage:
 manage:
   table:
     - target: 'users'
-      drop: false
     - target: 'temp_.*'
       drop: true
-    - drop: false
 ```
 
 ### Allow dropping indexes but not tables
@@ -389,7 +362,6 @@ manage:
 ```yaml
 manage:
   table:
-    - drop: false
 
   index:
     - drop: true
@@ -404,19 +376,16 @@ manage:
   table:
     - schema: staging
       drop: true
-    - drop: false
 
   function:
-    - drop: false
 ```
 
-### Multitenancy (manage all schemas)
+### Schema-based multi-tenancy (manage all schemas)
 
 ```yaml
 manage:
   table:
     - schema: '.*'
-      drop: false
 ```
 
 Note: `schema: '.*'` matches any schema. Combined with omitted `target`, this matches all tables in all schemas.
@@ -428,7 +397,6 @@ manage:
   table:
     - target: 'archive_\d{4}'
       drop: true
-    - drop: false
 ```
 
 ### Skip partition management
@@ -437,6 +405,5 @@ manage:
 manage:
   table:
     - target: 'orders'
-      drop: false
       partition: false
 ```
