@@ -1,4 +1,4 @@
-# Object Management Configuration Specification
+# Object Management
 
 ## Problem Statement
 
@@ -17,7 +17,7 @@ Limitations:
 
 ## Design Principles
 
-* Easy things should be easy, and hard things should be possible.
+* Easy things should be easy, and complex things should be possible.
 * Fine-grained control over which objects are managed and what operations are allowed
 * Existing configurations continue to work; new features don't break current behavior
 
@@ -76,6 +76,11 @@ manage:
   extension:
     - target: 'pgcrypto'
     - target: 'uuid-ossp'
+
+  privilege:
+    - target: 'readonly_.*'
+    - target: 'temp_.*'
+      drop: true  # allows REVOKE
 ```
 
 ### MySQL/SQLite Example
@@ -102,22 +107,25 @@ manage:
 
 | Field | Description | Default |
 |-------|-------------|---------|
-| `schema` | Schema to match (literal or regexp pattern); psqldef/mssqldef only | value of `default_schema` |
-| `table` | Table to match (literal or regexp pattern); trigger/policy only | (matches all tables in matched schema) |
+| `schema` | Schema to match (regexp pattern); psqldef/mssqldef only | value of `default_schema` |
+| `table` | Table to match (regexp pattern); trigger/policy only | (matches all tables in matched schema) |
 | `target` | Regexp pattern to match object names | (matches all) |
 | `drop` | Allow DROP of the object itself | `false` |
 | `drop_column` | Allow ALTER TABLE ... DROP COLUMN (table only) | value of `drop` |
 | `drop_constraint` | Allow ALTER TABLE ... DROP CONSTRAINT (table only) | value of `drop` |
-| `partition` | Manage partitions of this table (table only) | `true` |
+| `partition` | Manage partition DDL for this table (table only); see Partition Handling | `true` |
 
 ## Pattern Syntax
 
-Patterns use **regular expressions** with implicit anchoring (`^pattern$`):
+The `target`, `schema`, and `table` fields use **regular expressions** with implicit anchoring.
+
+Patterns are automatically wrapped with `^` and `$` anchors, so `users` matches exactly `users`, not `all_users` or `users_backup`. To match substrings, use `.*` explicitly (e.g., `.*users.*`).
 
 | Pattern | Matches |
 |---------|---------|
 | `users` | Exactly `users` |
 | `users_.*` | `users_`, `users_archive`, `users_backup`, etc. |
+| `.*_users` | `app_users`, `admin_users`, etc. |
 | `temp_\d+` | `temp_1`, `temp_123`, etc. |
 | (omitted) | All objects |
 
@@ -134,10 +142,27 @@ For databases with schemas, use the `schema` field to specify which schema(s) to
 | (omitted) | (omitted) | All objects in `default_schema` |
 
 Rules:
-- `schema` field accepts a literal string or a regexp pattern
+- `schema` field is a regexp pattern (literal names work as-is since they match themselves)
 - If `schema` is omitted, `default_schema` is used
 - `target` matches against object names only (not qualified names)
 - Using `schema` or `default_schema` with mysqldef/sqlite3def is an error
+
+### Partition Handling
+
+Partition tables are regular tables and follow normal matching rules. To manage a partitioned table and its partitions, both must match patterns:
+
+```yaml
+manage:
+  table:
+    - target: 'orders'
+      partition: true
+    - target: 'orders_\d{4}'  # partitions need explicit matching
+```
+
+| `partition` value | Behavior |
+|-------------------|----------|
+| `true` (default) | Partition DDL (ATTACH/DETACH PARTITION, etc.) is managed for this table |
+| `false` | Partition DDL is ignored; useful when partitions are managed externally |
 
 ### Trigger/Policy Fields
 
@@ -162,6 +187,7 @@ Rules:
 - Only listed object types are managed (allow-list)
 - Within each type, only objects matching patterns are managed
 - Non-matching objects are ignored with NOTICE log (suppress with `--quiet`)
+- An empty section (e.g., `view:` with no entries) means all objects of that type are managed with `drop: false`
 
 ### When `manage:` is NOT specified
 - All objects are managed (current default behavior)
@@ -191,7 +217,8 @@ The `drop`, `drop_column`, and `drop_constraint` fields control destructive oper
 
 | Field | Scope | Operations |
 |-------|-------|------------|
-| `drop` | Object | DROP TABLE, DROP VIEW, DROP INDEX, REVOKE, etc. |
+| `drop` | Object | DROP TABLE, DROP VIEW, DROP INDEX, etc. |
+| `drop` | Privilege | REVOKE (for `privilege:` entries only) |
 | `drop_column` | Column | ALTER TABLE ... DROP COLUMN |
 | `drop_constraint` | Constraint | ALTER TABLE ... DROP CONSTRAINT |
 
@@ -226,8 +253,32 @@ manage:
 | `type` | ✓ | - | ✓ | - |
 | `policy` | ✓ | - | - | - |
 | `extension` | ✓ | - | - | - |
+| `privilege` | ✓ | ✓ | ✓ | - |
 
-Using an unsupported object type is an error.
+Using an unsupported object type emits a warning and is ignored.
+
+## Privilege Management
+
+The `privilege:` section controls which roles/users' privileges are managed. sqldef does not create or drop roles/users—only GRANT/REVOKE on managed objects.
+
+```yaml
+manage:
+  privilege:
+    - target: 'readonly_user'
+    - target: 'app_.*'
+      drop: true  # allows REVOKE
+
+  table:
+    - target: 'users'
+```
+
+Behavior:
+- `target` matches role/user names (regexp pattern)
+- Roles/users must already exist (created externally)
+- `drop: false` (default): only GRANT operations
+- `drop: true`: both GRANT and REVOKE operations
+- Privileges are managed only on objects listed in other `manage:` sections
+- Roles are cluster-global in PostgreSQL; sqldef manages privileges per-database
 
 ## Schema Management
 
@@ -237,7 +288,7 @@ The `schema:` section (psqldef/mssqldef only) controls CREATE/DROP SCHEMA:
 
 ## Dependency Validation
 
-If a managed object references an unmanaged object, sqldef **errors** and refuses to apply.
+If a managed object references an unmanaged object, sqldef **errors** and refuses to apply. This validation runs in both `--dry-run` and `--apply` modes.
 
 Examples:
 
@@ -255,55 +306,33 @@ manage:
   # table: not listed → error if any trigger references an unmanaged table
 ```
 
+**Explicit index on managed table:**
+```yaml
+manage:
+  table:
+  # index: not listed → error if CREATE INDEX exists on a managed table
+```
+
+Note: Indexes created implicitly by constraints (PRIMARY KEY, UNIQUE) are part of the table definition and don't require separate declaration in `index:`.
+
+Error messages include suggestions for resolving the issue:
+
+```
+error: managed table "users" references unmanaged function "generate_uuid"
+
+To fix this, add the function to your configuration:
+
+  manage:
+    table:
+      ...
+    function:
+      - target: 'generate_uuid'
+```
+
 This ensures:
 - No broken references at apply time
 - Users explicitly manage all dependencies
 - No orphaned or stale dependent objects
-
-## Implicit Objects
-
-Objects "owned" by a managed object are **implicitly managed**:
-
-| Parent | Owned Objects |
-|--------|---------------|
-| Table with `PRIMARY KEY` | Index for the primary key |
-| Table with `UNIQUE` | Index for the unique constraint |
-| Table with `SERIAL`/`BIGSERIAL` | Sequence for the column |
-| Table with `IDENTITY` | Sequence for the column |
-
-Example:
-
-```sql
-CREATE TABLE users (
-  id SERIAL PRIMARY KEY,
-  email TEXT UNIQUE
-);
-```
-
-**Default behavior** (object type section not listed):
-
-```yaml
-manage:
-  table:
-  # index: not listed → owned indexes implicitly managed
-```
-
-`users_pkey` and `users_email_key` are implicitly managed with the table.
-
-**Explicit override** (object type section listed):
-
-```yaml
-manage:
-  table:
-
-  index:
-    - target: 'custom_.*'
-      drop: true
-```
-
-Listing `index:` opts into explicit control. Only indexes matching the patterns are managed.
-
-Note: Owned objects are exempt from dependency validation. A table can have unmanaged owned indexes without triggering an error, because they are part of the table definition itself.
 
 ## Deprecation Path
 
@@ -317,11 +346,45 @@ Note: Owned objects are exempt from dependency validation. A table can have unma
 | `--skip-view` | Omit `view` from `manage` |
 | `--skip-extension` | Omit `extension` from `manage` |
 | `--skip-partition` | Set `partition: false` on table entries |
+| `managed_roles` | `manage.privilege[].target` |
 
 Transition:
 1. Both old and new options work
 2. If `manage:` is specified, deprecated options are ignored
 3. Emit deprecation warnings when mixing old and new options
+
+## Configuration Generation
+
+sqldef provides a way to generate a `manage:` configuration listing all supported object types for the tool. This helps users:
+
+1. **Migrate from deprecated options** - start with a complete configuration and customize
+2. **Discover available object types** - see what can be managed
+3. **Bootstrap new projects** - get a working configuration quickly
+
+Example output for psqldef:
+
+```yaml
+manage:
+  schema:
+  table:
+  view:
+  materialized_view:
+  index:
+  function:
+  procedure:
+  trigger:
+  sequence:
+  type:
+  policy:
+  extension:
+  privilege:
+```
+
+Users can then:
+- Remove object types they don't want managed
+- Add `target:` patterns to filter specific objects
+- Add `drop: true` to entries where destructive operations are allowed
+- Add `privilege:` entries for roles/users whose privileges should be managed
 
 ## Examples
 
