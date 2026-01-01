@@ -115,6 +115,7 @@ manage:
 | `drop` | Allow DROP of the object itself | `false` |
 | `drop_column` | Allow ALTER TABLE ... DROP COLUMN (table only) | value of `drop` |
 | `drop_constraint` | Allow ALTER TABLE ... DROP CONSTRAINT (table only) | value of `drop` |
+| `drop_index` | Allow DROP INDEX on this table (table only) | value of `drop` |
 | `partition` | Manage partition DDL for this table (table only); see Partition Handling | `true` |
 
 ## Pattern Syntax
@@ -190,6 +191,7 @@ Rules:
 - Within each type, only objects matching patterns are managed
 - Non-matching objects are skipped (see Skipped Object Notices)
 - An empty section (e.g., `view:` with no entries) means all objects of that type are managed with `drop: false`
+- Managing an object type includes CREATE and ALTER operations; DROP is controlled separately by the `drop` field
 
 ### When `manage:` is NOT specified
 - All objects are managed (current default behavior)
@@ -219,7 +221,7 @@ When an object exists in the database but doesn't match any pattern, sqldef logs
 
 ## Drop Control
 
-The `drop`, `drop_column`, and `drop_constraint` fields control destructive operations:
+The `drop`, `drop_column`, `drop_constraint`, and `drop_index` fields control destructive operations:
 
 | Field | Scope | Operations |
 |-------|-------|------------|
@@ -227,8 +229,9 @@ The `drop`, `drop_column`, and `drop_constraint` fields control destructive oper
 | `drop` | Privilege | REVOKE (for `privilege:` entries only) |
 | `drop_column` | Column | ALTER TABLE ... DROP COLUMN |
 | `drop_constraint` | Constraint | ALTER TABLE ... DROP CONSTRAINT |
+| `drop_index` | Index | DROP INDEX (on table entries) |
 
-`drop_column` and `drop_constraint` inherit from `drop` by default:
+`drop_column`, `drop_constraint`, and `drop_index` inherit from `drop` by default:
 
 ```yaml
 manage:
@@ -238,6 +241,7 @@ manage:
     - target: 'orders'
       drop_column: true
       drop_constraint: true
+      drop_index: true
 
     - target: 'temp_.*'
       drop: true
@@ -342,6 +346,10 @@ This ensures:
 - No broken references at apply time
 - Users explicitly manage all dependencies
 - No orphaned or stale dependent objects
+
+### Cross-Schema References
+
+When a managed object references an object in an unmanaged schema (e.g., a foreign key from `public.orders` to `staging.users` where only `public` is managed), sqldef emits a **warning** but proceeds. This allows schemas to be managed independently while alerting users to external dependencies.
 
 ## Deprecation Path
 
