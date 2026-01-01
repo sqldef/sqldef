@@ -70,6 +70,8 @@ manage:
 
   type:
 
+  domain:
+
   policy:
     - target: 'tenant_.*'
 
@@ -257,6 +259,7 @@ Note: These settings control explicit destructive operations only. Implicit drop
 | `trigger` | ✓ | ✓ | ✓ | ✓ |
 | `sequence` | ✓ | - | ✓ | - |
 | `type` | ✓ | - | ✓ | - |
+| `domain` | ✓ | - | - | - |
 | `policy` | ✓ | - | - | - |
 | `extension` | ✓ | - | - | - |
 | `privilege` | ✓ | ✓ | ✓ | - |
@@ -381,6 +384,7 @@ manage:
   trigger:
   sequence:
   type:
+  domain:
   policy:
   extension:
   privilege:
