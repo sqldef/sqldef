@@ -184,7 +184,7 @@ Rules:
 ## Behavior
 
 ### When `manage:` is specified
-- Only listed object types are managed (allow-list)
+- Object types not listed are ignored (allow-list model)
 - Within each type, only objects matching patterns are managed
 - Non-matching objects are skipped (see Skipped Object Notices)
 - An empty section (e.g., `view:` with no entries) means all objects of that type are managed with `drop: false`
@@ -265,7 +265,7 @@ Using an unsupported object type emits a warning and is ignored.
 
 ## Privilege Management
 
-The `privilege:` section controls which roles/users' privileges are managed. sqldef does not create or drop roles/users—only GRANT/REVOKE on managed objects.
+The `privilege:` section controls which roles/users' privileges are managed. sqldef manages only GRANT/REVOKE statements on managed objects; it does not create or drop roles/users.
 
 ```yaml
 manage:
