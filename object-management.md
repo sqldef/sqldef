@@ -17,7 +17,7 @@ Limitations:
 
 ## Design Principles
 
-* Easy things should be easy, and complex things should be possible.
+* Easy things should be easy, and hard things should be possible.
 * Fine-grained control over which objects are managed and what operations are allowed
 * Existing configurations continue to work; new features don't break current behavior
 
@@ -138,7 +138,7 @@ For databases with schemas, use the `schema` field to specify which schema(s) to
 | (omitted) | `users` | `{default_schema}.users` |
 | `staging` | `users` | `staging.users` |
 | `staging` | (omitted) | All objects in `staging` schema |
-| `'.*'` | `temp_.*` | `temp_*` tables in any schema |
+| `'.*'` | `temp_.*` | `/^temp_.*$/` tables in any schema |
 | (omitted) | (omitted) | All objects in `default_schema` |
 
 Rules:
@@ -173,7 +173,7 @@ For triggers and policies, use both `schema` and `table` fields:
 | (omitted) | (omitted) | (omitted) | All triggers/policies in `default_schema` |
 | `public` | (omitted) | (omitted) | All triggers/policies in `public` schema |
 | `staging` | `users` | (omitted) | All triggers/policies on `staging.users` |
-| (omitted) | `foo_.*` | `audit_.*` | `audit_*` triggers/policies on `{default_schema}.foo_*` tables |
+| (omitted) | `foo_.*` | `audit_.*` | `/^audit_.*$/` triggers/policies on `/^foo_.*$/` tables in `{default_schema}` |
 | `'.*'` | `'.*'` | (omitted) | All triggers/policies in all schemas |
 
 Rules:
@@ -186,7 +186,7 @@ Rules:
 ### When `manage:` is specified
 - Only listed object types are managed (allow-list)
 - Within each type, only objects matching patterns are managed
-- Non-matching objects are ignored with NOTICE log (suppress with `--quiet`)
+- Non-matching objects are skipped (see Skipped Object Notices)
 - An empty section (e.g., `view:` with no entries) means all objects of that type are managed with `drop: false`
 
 ### When `manage:` is NOT specified
@@ -210,6 +210,10 @@ manage:
     - target: 'temp_.*'
       drop: true
 ```
+
+### Skipped Object Notices
+
+When an object exists in the database but doesn't match any pattern, sqldef logs a notice and skips it. This helps catch unintentional configuration gaps. Suppress with `--quiet`.
 
 ## Drop Control
 
@@ -236,6 +240,8 @@ manage:
     - target: 'temp_.*'
       drop: true
 ```
+
+Note: These settings control explicit destructive operations only. Implicit drops may still occur as side effects of other schema changes (e.g., dropping a column implicitly drops its constraints, changing a column type may recreate constraints). sqldef does not block such implicit operations.
 
 ## Supported Object Types
 
