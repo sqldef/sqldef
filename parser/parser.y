@@ -534,6 +534,7 @@ statement:
 | alter_statement
 | drop_statement
 | comment_statement
+| set_statement
 
 comment_statement:
   COMMENT_KEYWORD ON TABLE table_name IS STRING
@@ -6795,6 +6796,19 @@ set_expression:
     $$ = &SetExpr{Name: $1, Expr: NewStrVal("off")}
   }
 | reserved_sql_id '=' expression
+  {
+    $$ = &SetExpr{Name: $1, Expr: $3}
+  }
+// PostgreSQL alternative syntax: SET name TO value
+| reserved_sql_id TO ON
+  {
+    $$ = &SetExpr{Name: $1, Expr: NewStrVal("on")}
+  }
+| reserved_sql_id TO OFF
+  {
+    $$ = &SetExpr{Name: $1, Expr: NewStrVal("off")}
+  }
+| reserved_sql_id TO expression
   {
     $$ = &SetExpr{Name: $1, Expr: $3}
   }
