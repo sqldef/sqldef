@@ -128,7 +128,7 @@ jobs:
           echo "name=${NAME}" >> $GITHUB_OUTPUT
 
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: coverage-${{ steps.coverage-name.outputs.name }}
           path: coverage.out
@@ -263,7 +263,7 @@ jobs:
           make package-${{ matrix.EXT }} GOOS=${{ matrix.GOOS }} GOARCH=${{ matrix.GOARCH }}
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: sqldef-${{ matrix.GOOS }}-${{ matrix.GOARCH }}
           path: package/*def_${{ matrix.GOOS }}_${{ matrix.GOARCH }}.${{ matrix.EXT }}
