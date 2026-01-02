@@ -1,3 +1,17 @@
+## [v3.9.0](https://github.com/sqldef/sqldef/compare/v3.8.14...v3.9.0) - 2026-01-02
+- build(deps): bump actions/upload-artifact from 4 to 6 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1073
+- build(deps): bump github.com/goccy/go-yaml from 1.19.0 to 1.19.1 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1076
+- build(deps): bump golang.org/x/term from 0.37.0 to 0.38.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1075
+- build(deps): bump github.com/microsoft/go-mssqldb from 1.9.4 to 1.9.5 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1077
+- build(deps): bump actions/download-artifact from 4 to 7 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1080
+- build(deps): bump docker/setup-buildx-action from 3.11.1 to 3.12.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1081
+- build(deps): bump actions/create-github-app-token from 2.2.0 to 2.2.1 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1082
+- build(deps): bump modernc.org/sqlite from 1.40.1 to 1.41.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1074
+- build(deps): bump docker/metadata-action from 5.8.0 to 5.10.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1078
+- build(deps): bump golang.org/x/sync from 0.18.0 to 0.19.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1079
+- feat: let psqldef parse SET statatements (but ignored) by @gfx in https://github.com/sqldef/sqldef/pull/1084
+- chore: disable labels for dependabot PRs (semver labels makes tagpr confused) by @gfx in https://github.com/sqldef/sqldef/pull/1085
+
 ## [v3.8.14](https://github.com/sqldef/sqldef/compare/v3.8.13...v3.8.14) - 2025-12-27
 - add regression tests for #1061 by @gfx in https://github.com/sqldef/sqldef/pull/1062
 - fix: skip COMMENT cleanup for dropped indexes in psqldef by @178inaba in https://github.com/sqldef/sqldef/pull/1064
