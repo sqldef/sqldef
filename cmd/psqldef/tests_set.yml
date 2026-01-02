@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=../../testutil/testcase.schema.json
+
+# https://github.com/sqldef/sqldef/discussions/1071
+# SET statements from pg_dump are parsed but ignored (they're session settings, not schema objects)
+
+SetStatementTimeout:
+  legacy_ignore_quotes: false
+  desired: |
+    SET statement_timeout = 0;
+    CREATE TABLE users (id bigint NOT NULL);
+  up: |
+    CREATE TABLE users (id bigint NOT NULL);
+  down: |
+    DROP TABLE public.users;
+
+SetSearchPath:
+  legacy_ignore_quotes: false
+  desired: |
+    SET search_path = public;
+    CREATE TABLE items (id bigint NOT NULL);
+  up: |
+    CREATE TABLE items (id bigint NOT NULL);
+  down: |
+    DROP TABLE public.items;
+
+SetClientEncoding:
+  legacy_ignore_quotes: false
+  desired: |
+    SET client_encoding = 'UTF8';
+    CREATE TABLE products (id bigint NOT NULL);
+  up: |
+    CREATE TABLE products (id bigint NOT NULL);
+  down: |
+    DROP TABLE public.products;
+
+SetSearchPathTo:
+  legacy_ignore_quotes: false
+  desired: |
+    SET search_path TO myschema;
+    CREATE TABLE orders (id bigint NOT NULL);
+  up: |
+    CREATE TABLE orders (id bigint NOT NULL);
+  down: |
+    DROP TABLE public.orders;

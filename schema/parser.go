@@ -32,14 +32,18 @@ func ParseDDLs(mode GeneratorMode, sqlParser database.Parser, sql string, defaul
 				if err != nil {
 					return result, err
 				}
-				result = append(result, parsed)
+				if parsed != nil {
+					result = append(result, parsed)
+				}
 			}
 		} else {
 			parsed, err := parseDDL(mode, ddl.DDL, ddl.Statement, defaultSchema)
 			if err != nil {
 				return result, err
 			}
-			result = append(result, parsed)
+			if parsed != nil {
+				result = append(result, parsed)
+			}
 		}
 	}
 	return result, nil
@@ -281,6 +285,9 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				stmt.Action, ddl,
 			)
 		}
+	case *parser.Set:
+		// SET statements are parsed but ignored - they're session-level settings, not schema objects
+		return nil, nil
 	default:
 		return nil, fmt.Errorf("unsupported type of SQL (only DDL is supported): %s", ddl)
 	}
