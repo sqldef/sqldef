@@ -1,3 +1,7 @@
+# yaml-language-server: $schema=https://json.schemastore.org/dependabot-2.0.json
+#
+# ref. https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
+
 version: 2
 updates:
   - package-ecosystem: "gomod"
@@ -6,21 +10,18 @@ updates:
       interval: "monthly"
     cooldown:
       default-days: 7
-    labels:
-      - "dependencies"
+    labels: []
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "monthly"
     cooldown:
       default-days: 7
-    labels:
-      - "dependencies"
+    labels: []
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
     cooldown:
       default-days: 7
-    labels:
-      - "dependencies"
+    labels: []
