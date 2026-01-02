@@ -6,7 +6,7 @@ toolchain go1.25.5 // must sync with Dockerfile
 
 require (
 	github.com/go-sql-driver/mysql v1.9.3
-	github.com/goccy/go-yaml v1.19.0
+	github.com/goccy/go-yaml v1.19.1
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/k0kubun/pp/v3 v3.5.0
 	github.com/lib/pq v1.10.9
