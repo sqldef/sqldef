@@ -1,3 +1,9 @@
+## [v3.9.1](https://github.com/sqldef/sqldef/compare/v3.9.0...v3.9.1) - 2026-01-04
+- build(deps): bump Songmu/tagpr from 1.9.0 to 1.10.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1086
+- build(deps): bump actions/checkout from 6.0.0 to 6.0.1 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1087
+- build(deps): bump actions/attest-build-provenance from 3.0.0 to 3.1.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1088
+- feat: DISTINCT ON for psqldef by @gfx in https://github.com/sqldef/sqldef/pull/1093
+
 ## [v3.9.0](https://github.com/sqldef/sqldef/compare/v3.8.14...v3.9.0) - 2026-01-02
 - build(deps): bump actions/upload-artifact from 4 to 6 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1073
 - build(deps): bump github.com/goccy/go-yaml from 1.19.0 to 1.19.1 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1076
