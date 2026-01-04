@@ -3,11 +3,9 @@ coverage:
     project:
       default:
         target: auto
-        threshold: 10%
     patch:
       default:
         target: auto
-        threshold: 0%
 
 ignore:
   - "parser/parser.go"
