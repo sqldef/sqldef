@@ -84,7 +84,44 @@ $sqldef current.sql < desired.sql
 
 See the command documentation for more details on offline mode features.
 
-### Examples
+### Renaming Tables, Columns, and Indexes
+
+sqldef supports renaming tables, columns, and indexes using the `-- @renamed from=old_name` annotation.
+
+Given the current schema:
+
+```sql
+CREATE TABLE user_accounts (
+  id INTEGER PRIMARY KEY,
+  username TEXT,
+  age INTEGER
+);
+```
+
+And the desired schema with `@renamed` annotation:
+
+```sql
+CREATE TABLE users ( -- @renamed from=user_accounts
+  id INTEGER PRIMARY KEY,
+  username TEXT,
+  age INTEGER
+);
+```
+
+This generates the following migration:
+
+```sql
+ALTER TABLE user_accounts RENAME TO users;
+```
+
+## Command Documentation
+
+* [mysqldef](./cmd-mysqldef.md)
+* [psqldef](./cmd-psqldef.md)
+* [sqlite3def](./cmd-sqlite3def.md)
+* [mssqldef](./cmd-mssqldef.md)
+
+## Examples
 
 See practical examples in the [example](./example) directory:
 
@@ -101,13 +138,6 @@ See practical examples in the [example](./example) directory:
 ./example/run-offline.sh sqlite3def   # SQLite3
 ./example/run-offline.sh mssqldef     # SQL Server
 ```
-
-### Command Documentation
-
-* [mysqldef](./cmd-mysqldef.md)
-* [psqldef](./cmd-psqldef.md)
-* [sqlite3def](./cmd-sqlite3def.md)
-* [mssqldef](./cmd-mssqldef.md)
 
 ## Installation
 
