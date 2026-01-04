@@ -402,9 +402,17 @@ func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.Select
 		}
 	}
 
-	var distinct string
+	var distinct *parser.DistinctClause
 	if stmt.DistinctClause != nil {
-		distinct = parser.DistinctStr
+		distinct = &parser.DistinctClause{}
+		// pgquery's DistinctClause contains the DISTINCT ON expressions, if any
+		for _, node := range stmt.DistinctClause {
+			expr, err := p.parseExpr(node)
+			if err != nil {
+				return nil, err
+			}
+			distinct.On = append(distinct.On, expr)
+		}
 	}
 
 	var where *parser.Where
