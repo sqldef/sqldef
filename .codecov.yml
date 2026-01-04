@@ -1,12 +1,3 @@
-coverage:
-  status:
-    project:
-      default:
-        target: auto
-    patch:
-      default:
-        target: auto
-
 ignore:
   - "parser/parser.go"
   - "**/*_test.go"
