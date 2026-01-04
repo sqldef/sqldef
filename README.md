@@ -114,6 +114,8 @@ This generates the following migration:
 ALTER TABLE user_accounts RENAME TO users;
 ```
 
+Also `@renamed` works for columns, indexes, and ENUM values. See command documentation for more details.
+
 ## Command Documentation
 
 * [mysqldef](./cmd-mysqldef.md)
