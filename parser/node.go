@@ -135,7 +135,7 @@ func (*ParenSelect) iSelectStatement() {}
 type Select struct {
 	Cache       string
 	Comments    Comments
-	Distinct    string
+	Distinct    *DistinctClause
 	Hints       string
 	SelectExprs SelectExprs
 	From        TableExprs
@@ -148,9 +148,25 @@ type Select struct {
 	With        *With
 }
 
-// Select.Distinct
+// DistinctClause represents DISTINCT or DISTINCT ON (exprs) in a SELECT statement.
+type DistinctClause struct {
+	On Exprs // nil for plain DISTINCT, non-nil for DISTINCT ON (exprs)
+}
+
+// Format formats the node.
+func (node *DistinctClause) Format(buf *nodeBuffer) {
+	if node == nil {
+		return
+	}
+	if len(node.On) > 0 {
+		buf.Printf("distinct on (%v) ", node.On)
+	} else {
+		buf.Printf("distinct ")
+	}
+}
+
+// Select.Hints
 const (
-	DistinctStr      = "distinct "
 	StraightJoinHint = "straight_join "
 )
 
@@ -178,7 +194,7 @@ func (node *Select) setLimit(limit *Limit) {
 
 // Format formats the node.
 func (node *Select) Format(buf *nodeBuffer) {
-	buf.Printf("%vselect %v%s%s%s%v",
+	buf.Printf("%vselect %v%s%v%s%v",
 		node.With, node.Comments, node.Cache, node.Distinct, node.Hints, node.SelectExprs,
 	)
 	if !node.From.IsEmpty() {

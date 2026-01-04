@@ -135,6 +135,7 @@ func setDDL(yylex any, ddl *DDL) {
   tablePartition           *TablePartition
   triggerEvent             TriggerEvent
   triggerEvents            []TriggerEvent
+  distinctClause           *DistinctClause
 }
 
 %token LEX_ERROR
@@ -359,7 +360,8 @@ func setDDL(yylex any, ddl *DDL) {
 %type <ddl> create_table_prefix
 %type <strs> comment_opt comment_list
 %type <str> union_op insert_or_replace exec_keyword
-%type <str> distinct_opt straight_join_opt cache_opt match_option separator_opt
+%type <distinctClause> distinct_opt
+%type <str> group_concat_distinct_opt straight_join_opt cache_opt match_option separator_opt
 %type <expr> like_escape_opt
 %type <selectExprs> select_expression_list select_expression_list_opt
 %type <selectExpr> select_expression
@@ -5031,11 +5033,24 @@ cache_opt:
 
 distinct_opt:
   {
+    $$ = nil
+  }
+| DISTINCT
+  {
+    $$ = &DistinctClause{}
+  }
+| DISTINCT ON '(' expression_list ')'
+  {
+    $$ = &DistinctClause{On: $4}
+  }
+
+group_concat_distinct_opt:
+  {
     $$ = ""
   }
 | DISTINCT
   {
-    $$ = DistinctStr
+    $$ = "distinct "
   }
 
 straight_join_opt:
@@ -6002,7 +6017,7 @@ function_call_keyword:
   {
     $$ = &MatchExpr{Columns: $3, Expr: $7, Option: $8}
   }
-| GROUP_CONCAT '(' distinct_opt select_expression_list order_by_opt separator_opt ')'
+| GROUP_CONCAT '(' group_concat_distinct_opt select_expression_list order_by_opt separator_opt ')'
   {
     $$ = &GroupConcatExpr{Distinct: $3, Exprs: $4, OrderBy: $5, Separator: $6}
   }

@@ -661,3 +661,35 @@ ViewWithJsonOperators:
     CREATE VIEW json_view AS
     SELECT id, data -> 'name' AS name, data ->> 'email' AS email
     FROM json_data;
+
+ViewWithDistinctOn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE carrier (carrier text);
+  desired: |
+    CREATE TABLE carrier (carrier text);
+    CREATE VIEW carrier_current AS
+    SELECT DISTINCT ON (c.carrier) c.carrier
+    FROM carrier c;
+  up: |
+    CREATE VIEW carrier_current AS
+    SELECT DISTINCT ON (c.carrier) c.carrier
+    FROM carrier c;
+  down: |
+    DROP VIEW public.carrier_current;
+
+ViewWithDistinctOnMultipleColumns:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE orders (customer_id int, order_date date, amount int);
+  desired: |
+    CREATE TABLE orders (customer_id int, order_date date, amount int);
+    CREATE VIEW latest_orders AS
+    SELECT DISTINCT ON (customer_id, order_date) customer_id, order_date, amount
+    FROM orders;
+  up: |
+    CREATE VIEW latest_orders AS
+    SELECT DISTINCT ON (customer_id, order_date) customer_id, order_date, amount
+    FROM orders;
+  down: |
+    DROP VIEW public.latest_orders;
