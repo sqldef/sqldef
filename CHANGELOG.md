@@ -1,3 +1,7 @@
+## [v3.9.2](https://github.com/sqldef/sqldef/compare/v3.9.1...v3.9.2) - 2026-01-04
+- chore: no status check is required for coverage rate by @gfx in https://github.com/sqldef/sqldef/pull/1094
+- doc: add Renaming section to README by @gfx in https://github.com/sqldef/sqldef/pull/1095
+
 ## [v3.9.1](https://github.com/sqldef/sqldef/compare/v3.9.0...v3.9.1) - 2026-01-04
 - build(deps): bump Songmu/tagpr from 1.9.0 to 1.10.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1086
 - build(deps): bump actions/checkout from 6.0.0 to 6.0.1 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1087
