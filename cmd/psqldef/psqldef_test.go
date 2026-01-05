@@ -1237,6 +1237,111 @@ func TestPsqldefReindexConcurrently(t *testing.T) {
 	})
 }
 
+func TestPsqldefDisableDdlTransaction(t *testing.T) {
+	// Test: With disable_ddl_transaction enabled, all DDLs run outside transaction
+	t.Run("AllDDLsOutsideTransaction", func(t *testing.T) {
+		resetTestDatabase()
+		mustPgExec(testDatabaseName, tu.StripHeredoc(`
+			CREATE TABLE users (
+			    id bigint NOT NULL PRIMARY KEY,
+			    email text
+			);`))
+
+		tu.WriteFile("schema.sql", tu.StripHeredoc(`
+			CREATE TABLE users (
+			    id bigint NOT NULL PRIMARY KEY,
+			    email text,
+			    name text
+			);
+			CREATE INDEX idx_users_email ON users (email);`))
+
+		output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--config-inline", "disable_ddl_transaction: true", "--file", "schema.sql")...)
+
+		// With disable_ddl_transaction: true, there should be no BEGIN/COMMIT
+		assert.NotContains(t, output, "BEGIN;")
+		assert.NotContains(t, output, "COMMIT;")
+		assert.Contains(t, output, `ALTER TABLE "public"."users" ADD COLUMN "name" text;`)
+		assert.Contains(t, output, `CREATE INDEX idx_users_email ON users (email);`)
+	})
+
+	// Test: Without disable_ddl_transaction, DDLs are wrapped in transaction
+	t.Run("DDLsInTransactionByDefault", func(t *testing.T) {
+		resetTestDatabase()
+		mustPgExec(testDatabaseName, tu.StripHeredoc(`
+			CREATE TABLE users (
+			    id bigint NOT NULL PRIMARY KEY,
+			    email text
+			);`))
+
+		tu.WriteFile("schema.sql", tu.StripHeredoc(`
+			CREATE TABLE users (
+			    id bigint NOT NULL PRIMARY KEY,
+			    email text,
+			    age integer
+			);`))
+
+		output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--file", "schema.sql")...)
+
+		// Without disable_ddl_transaction, DDLs should be wrapped in BEGIN/COMMIT
+		assert.Contains(t, output, "BEGIN;")
+		assert.Contains(t, output, "COMMIT;")
+		assert.Contains(t, output, `ALTER TABLE "public"."users" ADD COLUMN "age" integer;`)
+	})
+
+	// Test: Mixed DDLs with disable_ddl_transaction (multiple statements)
+	t.Run("MultipleDDLsOutsideTransaction", func(t *testing.T) {
+		resetTestDatabase()
+		mustPgExec(testDatabaseName, tu.StripHeredoc(`
+			CREATE TABLE users (
+			    id bigint NOT NULL PRIMARY KEY
+			);`))
+
+		tu.WriteFile("schema.sql", tu.StripHeredoc(`
+			CREATE TABLE users (
+			    id bigint NOT NULL PRIMARY KEY,
+			    email text,
+			    name text,
+			    age integer
+			);
+			CREATE INDEX idx_users_email ON users (email);
+			CREATE INDEX idx_users_name ON users (name);`))
+
+		output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--config-inline", "disable_ddl_transaction: true", "--file", "schema.sql")...)
+
+		// All DDLs should run outside transaction
+		assert.NotContains(t, output, "BEGIN;")
+		assert.NotContains(t, output, "COMMIT;")
+		assert.Contains(t, output, `ALTER TABLE "public"."users" ADD COLUMN "email" text;`)
+		assert.Contains(t, output, `ALTER TABLE "public"."users" ADD COLUMN "name" text;`)
+		assert.Contains(t, output, `ALTER TABLE "public"."users" ADD COLUMN "age" integer;`)
+		assert.Contains(t, output, `CREATE INDEX idx_users_email ON users (email);`)
+		assert.Contains(t, output, `CREATE INDEX idx_users_name ON users (name);`)
+	})
+
+	// Test: dry-run also respects disable_ddl_transaction
+	t.Run("DryRunWithDisableDdlTransaction", func(t *testing.T) {
+		resetTestDatabase()
+		mustPgExec(testDatabaseName, tu.StripHeredoc(`
+			CREATE TABLE users (
+			    id bigint NOT NULL PRIMARY KEY
+			);`))
+
+		tu.WriteFile("schema.sql", tu.StripHeredoc(`
+			CREATE TABLE users (
+			    id bigint NOT NULL PRIMARY KEY,
+			    status text
+			);`))
+
+		dryRun := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--config-inline", "disable_ddl_transaction: true", "--dry-run", "--file", "schema.sql")...)
+		apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--config-inline", "disable_ddl_transaction: true", "--file", "schema.sql")...)
+
+		// dry-run and apply should have the same structure (except prefix)
+		assert.Equal(t, strings.Replace(apply, "Apply", "dry run", 1), dryRun)
+		assert.NotContains(t, dryRun, "BEGIN;")
+		assert.NotContains(t, dryRun, "COMMIT;")
+	})
+}
+
 func TestMain(m *testing.M) {
 	resetTestDatabase()
 	tu.BuildForTest()
