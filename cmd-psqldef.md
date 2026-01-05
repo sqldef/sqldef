@@ -478,6 +478,7 @@ $ psqldef -U postgres dbname --apply \
 | `managed_roles` | array | List of role names whose privileges (GRANT/REVOKE) should be managed. Only privileges for these roles will be applied. If not specified or empty, no privileges are managed. |
 | `dump_concurrency` | integer | Number of parallel connections to use when exporting the schema. Improves performance for large schemas. Default is 1. |
 | `create_index_concurrently` | boolean | When true, adds CONCURRENTLY to all CREATE INDEX statements. Default is false. |
+| `disable_ddl_transaction` | boolean | When true, all DDL statements are executed outside of transactions. Required for Aurora DSQL which does not support transactional DDL. Default is false. |
 | `legacy_ignore_quotes` | boolean | Controls identifier quoting behavior. When `true` (default), all identifiers are quoted in output. When `false`, identifiers preserve their original quoting from the source SQL. Default is `true` but will change to `false` in the next major version. See [Identifier Quoting](#identifier-quoting) for details. |
 
 ## Identifier Quoting
