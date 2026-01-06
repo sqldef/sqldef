@@ -8,7 +8,7 @@ DropDomainSkipped:
     CREATE DOMAIN email AS TEXT;
   desired: ""
   up: |
-    -- Skipped: DROP DOMAIN "public"."email";
+    -- Skipped: DROP DOMAIN "email";
   down: ""
 
 DropExtensionSkipped:
@@ -29,7 +29,7 @@ DropPolicySkipped:
   desired: |
     CREATE TABLE users (id bigint);
   up: |
-    -- Skipped: DROP POLICY "p_users" ON "public"."users";
+    -- Skipped: DROP POLICY "p_users" ON "users";
   down: ""
 
 DropTriggerSkipped:
@@ -43,7 +43,7 @@ DropTriggerSkipped:
     CREATE TABLE users (id serial PRIMARY KEY);
     CREATE FUNCTION log_func() RETURNS TRIGGER AS $$ BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql;
   up: |
-    -- Skipped: DROP TRIGGER log_insert ON public.users;
+    -- Skipped: DROP TRIGGER log_insert ON users;
   down: ""
 
 DropFunctionSkipped:
@@ -53,7 +53,7 @@ DropFunctionSkipped:
     CREATE FUNCTION add_one(x integer) RETURNS integer AS $$ BEGIN RETURN x + 1; END; $$ LANGUAGE plpgsql;
   desired: ""
   up: |
-    -- Skipped: DROP FUNCTION public.add_one;
+    -- Skipped: DROP FUNCTION add_one;
   down: ""
 
 DropTableSkipped:
@@ -62,7 +62,7 @@ DropTableSkipped:
     CREATE TABLE users (id bigint NOT NULL);
   desired: ""
   up: |
-    -- Skipped: DROP TABLE "public"."users";
+    -- Skipped: DROP TABLE "users";
   down: ""
 
 DropColumnSkipped:
@@ -77,7 +77,7 @@ DropColumnSkipped:
       id bigint NOT NULL
     );
   up: |
-    -- Skipped: ALTER TABLE "public"."users" DROP COLUMN "name";
+    -- Skipped: ALTER TABLE "users" DROP COLUMN "name";
   down: ""
 
 DropIndexSkipped:
@@ -94,7 +94,7 @@ DropIndexSkipped:
       email varchar(255)
     );
   up: |
-    -- Skipped: DROP INDEX "public"."idx_email";
+    -- Skipped: DROP INDEX "idx_email";
   down: ""
 
 DropViewSkipped:
@@ -105,7 +105,7 @@ DropViewSkipped:
   desired: |
     CREATE TABLE users (id bigint NOT NULL, name text);
   up: |
-    -- Skipped: DROP VIEW "public"."users_view";
+    -- Skipped: DROP VIEW "users_view";
   down: ""
 
 DropMaterializedViewSkipped:
@@ -116,7 +116,7 @@ DropMaterializedViewSkipped:
   desired: |
     CREATE TABLE users (id bigint NOT NULL, name text);
   up: |
-    -- Skipped: DROP MATERIALIZED VIEW "public"."users_mat";
+    -- Skipped: DROP MATERIALIZED VIEW "users_mat";
   down: ""
 
 DropTypeSkipped:
@@ -125,21 +125,21 @@ DropTypeSkipped:
     CREATE TYPE status AS ENUM ('active', 'inactive');
   desired: ""
   up: |
-    -- Skipped: DROP TYPE "public"."status";
+    -- Skipped: DROP TYPE "status";
   down: ""
 
 RevokePrivilegeSkipped:
   enable_drop: false
   current: |
     CREATE TABLE users (id bigint);
-    GRANT SELECT, INSERT ON TABLE "public"."users" TO "app_user";
+    GRANT SELECT, INSERT ON TABLE "users" TO "app_user";
   desired: |
     CREATE TABLE users (id bigint);
     GRANT SELECT ON TABLE users TO app_user;
   managed_roles:
     - app_user
   up: |
-    -- Skipped: REVOKE INSERT ON TABLE "public"."users" FROM "app_user";
+    -- Skipped: REVOKE INSERT ON TABLE "users" FROM "app_user";
   down: ""
 
 RevokeMultiplePrivilegesSkipped:
@@ -149,7 +149,7 @@ RevokeMultiplePrivilegesSkipped:
       id BIGINT PRIMARY KEY,
       name VARCHAR(100)
     );
-    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user";
+    GRANT SELECT, INSERT, UPDATE ON TABLE "users" TO "app_user";
   desired: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -159,7 +159,7 @@ RevokeMultiplePrivilegesSkipped:
   managed_roles:
     - app_user
   up: |
-    -- Skipped: REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "app_user";
+    -- Skipped: REVOKE INSERT, UPDATE ON TABLE "users" FROM "app_user";
   down: ""
 
 GrantMultipleGranteesRevokeSkipped2:
@@ -180,11 +180,11 @@ GrantMultipleGranteesRevokeSkipped2:
     - app_user
     - admin_role
   up: |
-    GRANT SELECT ON TABLE "public"."users" TO "admin_role", "app_user", "readonly_user";
+    GRANT SELECT ON TABLE "users" TO "admin_role", "app_user", "readonly_user";
   down: |
-    -- Skipped: REVOKE SELECT ON TABLE "public"."users" FROM "admin_role";
-    -- Skipped: REVOKE SELECT ON TABLE "public"."users" FROM "app_user";
-    -- Skipped: REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
+    -- Skipped: REVOKE SELECT ON TABLE "users" FROM "admin_role";
+    -- Skipped: REVOKE SELECT ON TABLE "users" FROM "app_user";
+    -- Skipped: REVOKE SELECT ON TABLE "users" FROM "readonly_user";
 
 GrantPartialGranteesRevokeSkipped:
   enable_drop: false
@@ -204,11 +204,11 @@ GrantPartialGranteesRevokeSkipped:
     - user2
     - user4
   up: |
-    GRANT SELECT ON TABLE "public"."users" TO "user2";
-    GRANT INSERT, UPDATE ON TABLE "public"."users" TO "user2", "user4";
+    GRANT SELECT ON TABLE "users" TO "user2";
+    GRANT INSERT, UPDATE ON TABLE "users" TO "user2", "user4";
   down: |
-    -- Skipped: REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "user2";
-    -- Skipped: REVOKE INSERT, UPDATE ON TABLE "public"."users" FROM "user4";
+    -- Skipped: REVOKE INSERT, SELECT, UPDATE ON TABLE "users" FROM "user2";
+    -- Skipped: REVOKE INSERT, UPDATE ON TABLE "users" FROM "user4";
 
 GrantOverlappingRevokeSkipped:
   enable_drop: false
@@ -230,10 +230,10 @@ GrantOverlappingRevokeSkipped:
     - user2
     - user3
   up: |
-    GRANT INSERT ON TABLE "public"."users" TO "user1";
-    GRANT SELECT, INSERT ON TABLE "public"."users" TO "user2";
-    GRANT UPDATE, DELETE ON TABLE "public"."users" TO "user1", "user3";
+    GRANT INSERT ON TABLE "users" TO "user1";
+    GRANT SELECT, INSERT ON TABLE "users" TO "user2";
+    GRANT UPDATE, DELETE ON TABLE "users" TO "user1", "user3";
   down: |
-    -- Skipped: REVOKE DELETE, INSERT, UPDATE ON TABLE "public"."users" FROM "user1";
-    -- Skipped: REVOKE INSERT, SELECT ON TABLE "public"."users" FROM "user2";
-    -- Skipped: REVOKE DELETE, UPDATE ON TABLE "public"."users" FROM "user3";
+    -- Skipped: REVOKE DELETE, INSERT, UPDATE ON TABLE "users" FROM "user1";
+    -- Skipped: REVOKE INSERT, SELECT ON TABLE "users" FROM "user2";
+    -- Skipped: REVOKE DELETE, UPDATE ON TABLE "users" FROM "user3";

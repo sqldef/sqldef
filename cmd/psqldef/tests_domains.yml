@@ -19,7 +19,7 @@ DropDomain:
     CREATE DOMAIN us_postal_code AS text;
   desired: |
   up: |
-    DROP DOMAIN "public"."us_postal_code";
+    DROP DOMAIN "us_postal_code";
   down: |
     CREATE DOMAIN us_postal_code AS text;
 CreateDomainWithDefault:
@@ -42,7 +42,7 @@ DropDomainMultipleSchemas:
     CREATE DOMAIN public_domain AS integer;
   desired: |
   up: |
-    DROP DOMAIN "public"."public_domain";
+    DROP DOMAIN "public_domain";
     DROP DOMAIN "test_schema"."test_domain";
   down: |
     CREATE DOMAIN test_schema.test_domain AS text;
@@ -109,7 +109,7 @@ DropDomainWithConstraints:
     CREATE DOMAIN email AS text CHECK (VALUE ~ '@');
   desired: |
   up: |
-    DROP DOMAIN "public"."email";
+    DROP DOMAIN "email";
   down: |
     CREATE DOMAIN email AS text CHECK (VALUE ~ '@');
 CreateTableUsingDomain:
@@ -222,52 +222,52 @@ AlterDomainSetDefault:
   desired: |
     CREATE DOMAIN status_code AS integer DEFAULT 200;
   up: |
-    ALTER DOMAIN "public"."status_code" SET DEFAULT 200;
+    ALTER DOMAIN "status_code" SET DEFAULT 200;
   down: |
-    ALTER DOMAIN "public"."status_code" DROP DEFAULT;
+    ALTER DOMAIN "status_code" DROP DEFAULT;
 AlterDomainDropDefault:
   current: |
     CREATE DOMAIN status_code AS integer DEFAULT 200;
   desired: |
     CREATE DOMAIN status_code AS integer;
   up: |
-    ALTER DOMAIN "public"."status_code" DROP DEFAULT;
+    ALTER DOMAIN "status_code" DROP DEFAULT;
   down: |
-    ALTER DOMAIN "public"."status_code" SET DEFAULT 200;
+    ALTER DOMAIN "status_code" SET DEFAULT 200;
 AlterDomainChangeDefault:
   current: |
     CREATE DOMAIN status_code AS integer DEFAULT 200;
   desired: |
     CREATE DOMAIN status_code AS integer DEFAULT 404;
   up: |
-    ALTER DOMAIN "public"."status_code" SET DEFAULT 404;
+    ALTER DOMAIN "status_code" SET DEFAULT 404;
   down: |
-    ALTER DOMAIN "public"."status_code" SET DEFAULT 200;
+    ALTER DOMAIN "status_code" SET DEFAULT 200;
 AlterDomainSetNotNull:
   current: |
     CREATE DOMAIN email AS text;
   desired: |
     CREATE DOMAIN email AS text NOT NULL;
   up: |
-    ALTER DOMAIN "public"."email" SET NOT NULL;
+    ALTER DOMAIN "email" SET NOT NULL;
   down: |
-    ALTER DOMAIN "public"."email" DROP NOT NULL;
+    ALTER DOMAIN "email" DROP NOT NULL;
 AlterDomainDropNotNull:
   current: |
     CREATE DOMAIN email AS text NOT NULL;
   desired: |
     CREATE DOMAIN email AS text;
   up: |
-    ALTER DOMAIN "public"."email" DROP NOT NULL;
+    ALTER DOMAIN "email" DROP NOT NULL;
   down: |
-    ALTER DOMAIN "public"."email" SET NOT NULL;
+    ALTER DOMAIN "email" SET NOT NULL;
 AlterDomainAddCheck:
   current: |
     CREATE DOMAIN positive_int AS integer;
   desired: |
     CREATE DOMAIN positive_int AS integer CHECK (VALUE > 0);
   up: |
-    ALTER DOMAIN "public"."positive_int" ADD CHECK (VALUE > 0);
+    ALTER DOMAIN "positive_int" ADD CHECK (VALUE > 0);
   down: ""
 AlterDomainAddNamedCheck:
   current: |
@@ -275,7 +275,7 @@ AlterDomainAddNamedCheck:
   desired: |
     CREATE DOMAIN positive_int AS integer CONSTRAINT positive_check CHECK (VALUE > 0);
   up: |
-    ALTER DOMAIN "public"."positive_int" ADD CONSTRAINT positive_check CHECK (VALUE > 0);
+    ALTER DOMAIN "positive_int" ADD CONSTRAINT positive_check CHECK (VALUE > 0);
   down: |
 AlterDomainAddMultipleChecks:
   current: |
@@ -285,8 +285,8 @@ AlterDomainAddMultipleChecks:
       CHECK (VALUE >= 0)
       CHECK (VALUE <= 100);
   up: |
-    ALTER DOMAIN "public"."valid_score" ADD CHECK (VALUE >= 0);
-    ALTER DOMAIN "public"."valid_score" ADD CHECK (VALUE <= 100);
+    ALTER DOMAIN "valid_score" ADD CHECK (VALUE >= 0);
+    ALTER DOMAIN "valid_score" ADD CHECK (VALUE <= 100);
   down: ""
 
 # Domain based on another domain

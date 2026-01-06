@@ -26,14 +26,14 @@ DropTable:
       age integer
     );
   up: |
-    DROP TABLE "public"."bigdata";
+    DROP TABLE "bigdata";
   down: |
     CREATE TABLE bigdata (
       data bigint
     );
 EmptyTable:
   desired: |
-    CREATE TABLE public.test ();
+    CREATE TABLE test ();
 CreateTableAlterColumn:
   current: |
     CREATE TABLE users (
@@ -46,9 +46,9 @@ CreateTableAlterColumn:
       name varchar(40)
     );
   up: |
-    ALTER TABLE "public"."users" ALTER COLUMN "name" TYPE varchar(40);
+    ALTER TABLE "users" ALTER COLUMN "name" TYPE varchar(40);
   down: |
-    ALTER TABLE "public"."users" ALTER COLUMN "name" TYPE text;
+    ALTER TABLE "users" ALTER COLUMN "name" TYPE text;
 CreateTableAddColumn:
   current: |
     CREATE TABLE users (
@@ -62,9 +62,9 @@ CreateTableAddColumn:
       age integer
     );
   up: |
-    ALTER TABLE "public"."users" ADD COLUMN "age" integer;
+    ALTER TABLE "users" ADD COLUMN "age" integer;
   down: |
-    ALTER TABLE "public"."users" DROP COLUMN "age";
+    ALTER TABLE "users" DROP COLUMN "age";
 CreateTableDropColumn:
   current: |
     CREATE TABLE users (
@@ -78,9 +78,9 @@ CreateTableDropColumn:
       age integer
     );
   up: |
-    ALTER TABLE "public"."users" DROP COLUMN "name";
+    ALTER TABLE "users" DROP COLUMN "name";
   down: |
-    ALTER TABLE "public"."users" ADD COLUMN "name" text;
+    ALTER TABLE "users" ADD COLUMN "name" text;
 CreateTableOnNonStandardDefaultSchema:
   desired: |
     CREATE TABLE users (
@@ -109,7 +109,7 @@ DropTableOnNonStandardDefaultSchema:
       age integer
     );
   up: |
-    DROP TABLE "foo"."bigdata";
+    DROP TABLE "bigdata";
   down: |
     CREATE TABLE bigdata (
       data bigint
@@ -136,7 +136,7 @@ SameTableNameAcrossSchemas:
     CREATE TABLE dummy (id int);
     CREATE TABLE test.dummy (id int);
   down: |
-    DROP TABLE "public"."dummy";
+    DROP TABLE "dummy";
     DROP TABLE "test"."dummy";
 GeneratedColumnComplexExpression:
   legacy_ignore_quotes: false
@@ -173,13 +173,13 @@ DropTableWithComment:
     COMMENT ON TABLE foo IS 'foo table';
   desired: ""
   up: |
-    DROP TABLE "public"."foo";
+    DROP TABLE "foo";
   down: |
     CREATE TABLE foo (
       id serial PRIMARY KEY,
       name varchar(100) NOT NULL
     );
-    COMMENT ON TABLE "public"."foo" IS 'foo table';
+    COMMENT ON TABLE "foo" IS 'foo table';
 
 DropTableWithColumnComment:
   current: |
@@ -190,13 +190,13 @@ DropTableWithColumnComment:
     COMMENT ON COLUMN users.name IS 'User name';
   desired: ""
   up: |
-    DROP TABLE "public"."users";
+    DROP TABLE "users";
   down: |
     CREATE TABLE users (
       id serial PRIMARY KEY,
       name varchar(100) NOT NULL
     );
-    COMMENT ON COLUMN "public"."users"."name" IS 'User name';
+    COMMENT ON COLUMN "users"."name" IS 'User name';
 
 DropTableWithBothTableAndColumnComments:
   current: |
@@ -210,16 +210,16 @@ DropTableWithBothTableAndColumnComments:
     COMMENT ON COLUMN products.price IS 'Product price in cents';
   desired: ""
   up: |
-    DROP TABLE "public"."products";
+    DROP TABLE "products";
   down: |
     CREATE TABLE products (
       id serial PRIMARY KEY,
       name varchar(100) NOT NULL,
       price integer NOT NULL
     );
-    COMMENT ON TABLE "public"."products" IS 'Product catalog';
-    COMMENT ON COLUMN "public"."products"."name" IS 'Product name';
-    COMMENT ON COLUMN "public"."products"."price" IS 'Product price in cents';
+    COMMENT ON TABLE "products" IS 'Product catalog';
+    COMMENT ON COLUMN "products"."name" IS 'Product name';
+    COMMENT ON COLUMN "products"."price" IS 'Product price in cents';
 
 DropOneTableWithCommentKeepAnother:
   current: |
@@ -240,12 +240,12 @@ DropOneTableWithCommentKeepAnother:
     );
     COMMENT ON TABLE bar IS 'bar table';
   up: |
-    DROP TABLE "public"."foo";
+    DROP TABLE "foo";
   down: |
     CREATE TABLE foo (
       id serial PRIMARY KEY,
       name varchar(100) NOT NULL
     );
-    COMMENT ON TABLE "public"."foo" IS 'foo table';
+    COMMENT ON TABLE "foo" IS 'foo table';
 
 # GiST index with tstzrange type

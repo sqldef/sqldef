@@ -29,9 +29,9 @@ CreateTableWithDefaultContainingQuote:
       thing text default 'it''s free real estate'
     );
   up: |
-    ALTER TABLE "public"."test" ADD COLUMN "thing" text DEFAULT 'it''s free real estate';
+    ALTER TABLE "test" ADD COLUMN "thing" text DEFAULT 'it''s free real estate';
   down: |
-    ALTER TABLE "public"."test" DROP COLUMN "thing";
+    ALTER TABLE "test" DROP COLUMN "thing";
 CreateTableChangeDefaultBoolean:
   current: |
     CREATE TABLE test (
@@ -42,23 +42,23 @@ CreateTableChangeDefaultBoolean:
       col boolean default false
     );
   up: |
-    ALTER TABLE "public"."test" ALTER COLUMN "col" SET DEFAULT false;
+    ALTER TABLE "test" ALTER COLUMN "col" SET DEFAULT false;
   down: |
-    ALTER TABLE "public"."test" ALTER COLUMN "col" SET DEFAULT true;
+    ALTER TABLE "test" ALTER COLUMN "col" SET DEFAULT true;
 NullCast:
   desired: |
-    CREATE TABLE public.test (
+    CREATE TABLE test (
       "item" character varying(16) DEFAULT NULL
     );
 NumericCast:
   desired: |
-    CREATE TABLE public.test_table (
+    CREATE TABLE test_table (
       "item" numeric
     );
-    CREATE VIEW public.test_view AS SELECT t.item FROM test_table t WHERE (t.item = (0)::numeric);
+    CREATE VIEW test_view AS SELECT t.item FROM test_table t WHERE (t.item = (0)::numeric);
 UUIDCast:
   desired: |
-    CREATE TABLE public.test_table (
+    CREATE TABLE test_table (
       "id" uuid NOT NULL,
       "tenant_id" uuid NOT NULL,
       PRIMARY KEY ("id", "tenant_id")
@@ -67,11 +67,11 @@ UUIDCast:
     USING (current_schema()::uuid = current_database()::uuid);
 TypeColumn:
   desired: |
-    CREATE TABLE "public"."test_table" (
+    CREATE TABLE "test_table" (
       "id" bigint NOT NULL,
       "type" character varying(10)
     );
-    CREATE VIEW public.test_view AS SELECT test_table.id, test_table."type" FROM test_table;
+    CREATE VIEW test_view AS SELECT test_table.id, test_table."type" FROM test_table;
 NumericChangePrecisionAndScale:
   current: |
     CREATE TABLE test (
@@ -82,9 +82,9 @@ NumericChangePrecisionAndScale:
       num numeric (10, 2)
     );
   up: |
-    ALTER TABLE "public"."test" ALTER COLUMN "num" TYPE numeric(10, 2);
+    ALTER TABLE "test" ALTER COLUMN "num" TYPE numeric(10, 2);
   down: |
-    ALTER TABLE "public"."test" ALTER COLUMN "num" TYPE numeric(10, 3);
+    ALTER TABLE "test" ALTER COLUMN "num" TYPE numeric(10, 3);
 IntervalExpression:
   desired: |
     CREATE TABLE points (id bigint, created_at timestamp, main_type text, sub_type text, user_id bigint);
@@ -99,7 +99,7 @@ IntervalExpression:
     );
 IntervalType:
   desired: |
-    CREATE TABLE public.test (
+    CREATE TABLE test (
       col interval
     );
 AddArrayColumn:
@@ -113,9 +113,9 @@ AddArrayColumn:
       name integer[]
     );
   up: |
-    ALTER TABLE "public"."users" ADD COLUMN "name" integer[];
+    ALTER TABLE "users" ADD COLUMN "name" integer[];
   down: |
-    ALTER TABLE "public"."users" DROP COLUMN "name";
+    ALTER TABLE "users" DROP COLUMN "name";
 AddBooleanColumnOnNonStandardDefaultSchema:
   current: |
     CREATE TABLE items (
@@ -127,9 +127,9 @@ AddBooleanColumnOnNonStandardDefaultSchema:
       requires_consent boolean NOT NULL DEFAULT true
     );
   up: |
-    ALTER TABLE "foo"."items" ADD COLUMN "requires_consent" boolean NOT NULL DEFAULT true;
+    ALTER TABLE "items" ADD COLUMN "requires_consent" boolean NOT NULL DEFAULT true;
   down: |
-    ALTER TABLE "foo"."items" DROP COLUMN "requires_consent";
+    ALTER TABLE "items" DROP COLUMN "requires_consent";
   user: psqldef_user
 
 AddBooleanColumnWithExplicitSchema:
@@ -143,9 +143,9 @@ AddBooleanColumnWithExplicitSchema:
       requires_consent boolean NOT NULL DEFAULT true
     );
   up: |
-    ALTER TABLE "foo"."items" ADD COLUMN "requires_consent" boolean NOT NULL DEFAULT true;
+    ALTER TABLE "items" ADD COLUMN "requires_consent" boolean NOT NULL DEFAULT true;
   down: |
-    ALTER TABLE "foo"."items" DROP COLUMN "requires_consent";
+    ALTER TABLE "items" DROP COLUMN "requires_consent";
   user: psqldef_user
 
 # User-defined enum type on non-public default schema (unqualified type usage)
@@ -160,9 +160,9 @@ AddIntegerColumnOnNonStandardDefaultSchema:
       count integer NOT NULL
     );
   up: |
-    ALTER TABLE "foo"."items" ADD COLUMN "count" integer NOT NULL;
+    ALTER TABLE "items" ADD COLUMN "count" integer NOT NULL;
   down: |
-    ALTER TABLE "foo"."items" DROP COLUMN "count";
+    ALTER TABLE "items" DROP COLUMN "count";
   user: psqldef_user
 
 AddTextColumnOnNonStandardDefaultSchema:
@@ -176,9 +176,9 @@ AddTextColumnOnNonStandardDefaultSchema:
       description text NOT NULL
     );
   up: |
-    ALTER TABLE "foo"."items" ADD COLUMN "description" text NOT NULL;
+    ALTER TABLE "items" ADD COLUMN "description" text NOT NULL;
   down: |
-    ALTER TABLE "foo"."items" DROP COLUMN "description";
+    ALTER TABLE "items" DROP COLUMN "description";
   user: psqldef_user
 
 AddVarcharColumnOnNonStandardDefaultSchema:
@@ -192,9 +192,9 @@ AddVarcharColumnOnNonStandardDefaultSchema:
       name varchar(255) NOT NULL
     );
   up: |
-    ALTER TABLE "foo"."items" ADD COLUMN "name" varchar(255) NOT NULL;
+    ALTER TABLE "items" ADD COLUMN "name" varchar(255) NOT NULL;
   down: |
-    ALTER TABLE "foo"."items" DROP COLUMN "name";
+    ALTER TABLE "items" DROP COLUMN "name";
   user: psqldef_user
 
 AddNumericColumnOnNonStandardDefaultSchema:
@@ -208,9 +208,9 @@ AddNumericColumnOnNonStandardDefaultSchema:
       amount numeric(10, 2) NOT NULL
     );
   up: |
-    ALTER TABLE "foo"."items" ADD COLUMN "amount" numeric(10, 2) NOT NULL;
+    ALTER TABLE "items" ADD COLUMN "amount" numeric(10, 2) NOT NULL;
   down: |
-    ALTER TABLE "foo"."items" DROP COLUMN "amount";
+    ALTER TABLE "items" DROP COLUMN "amount";
   user: psqldef_user
 
 AddUUIDColumnOnNonStandardDefaultSchema:
@@ -224,9 +224,9 @@ AddUUIDColumnOnNonStandardDefaultSchema:
       uuid_col uuid NOT NULL
     );
   up: |
-    ALTER TABLE "foo"."items" ADD COLUMN "uuid_col" uuid NOT NULL;
+    ALTER TABLE "items" ADD COLUMN "uuid_col" uuid NOT NULL;
   down: |
-    ALTER TABLE "foo"."items" DROP COLUMN "uuid_col";
+    ALTER TABLE "items" DROP COLUMN "uuid_col";
   user: psqldef_user
 
 AddJSONBColumnOnNonStandardDefaultSchema:
@@ -240,9 +240,9 @@ AddJSONBColumnOnNonStandardDefaultSchema:
       meta jsonb NOT NULL
     );
   up: |
-    ALTER TABLE "foo"."items" ADD COLUMN "meta" jsonb NOT NULL;
+    ALTER TABLE "items" ADD COLUMN "meta" jsonb NOT NULL;
   down: |
-    ALTER TABLE "foo"."items" DROP COLUMN "meta";
+    ALTER TABLE "items" DROP COLUMN "meta";
   user: psqldef_user
 
 AddTimestampColumnOnNonStandardDefaultSchema:
@@ -256,9 +256,9 @@ AddTimestampColumnOnNonStandardDefaultSchema:
       ts timestamp NOT NULL
     );
   up: |
-    ALTER TABLE "foo"."items" ADD COLUMN "ts" timestamp NOT NULL;
+    ALTER TABLE "items" ADD COLUMN "ts" timestamp NOT NULL;
   down: |
-    ALTER TABLE "foo"."items" DROP COLUMN "ts";
+    ALTER TABLE "items" DROP COLUMN "ts";
   user: psqldef_user
 
 AddTimestamptzColumnOnNonStandardDefaultSchema:
@@ -272,9 +272,9 @@ AddTimestamptzColumnOnNonStandardDefaultSchema:
       ts_tz timestamptz NOT NULL
     );
   up: |
-    ALTER TABLE "foo"."items" ADD COLUMN "ts_tz" timestamp WITH TIME ZONE NOT NULL;
+    ALTER TABLE "items" ADD COLUMN "ts_tz" timestamp WITH TIME ZONE NOT NULL;
   down: |
-    ALTER TABLE "foo"."items" DROP COLUMN "ts_tz";
+    ALTER TABLE "items" DROP COLUMN "ts_tz";
   user: psqldef_user
 
 AddTimetzColumnOnNonStandardDefaultSchema:
@@ -288,9 +288,9 @@ AddTimetzColumnOnNonStandardDefaultSchema:
       time_tz timetz NOT NULL
     );
   up: |
-    ALTER TABLE "foo"."items" ADD COLUMN "time_tz" time WITH TIME ZONE NOT NULL;
+    ALTER TABLE "items" ADD COLUMN "time_tz" time WITH TIME ZONE NOT NULL;
   down: |
-    ALTER TABLE "foo"."items" DROP COLUMN "time_tz";
+    ALTER TABLE "items" DROP COLUMN "time_tz";
   user: psqldef_user
 
 AddDoublePrecisionColumnOnNonStandardDefaultSchema:
@@ -304,9 +304,9 @@ AddDoublePrecisionColumnOnNonStandardDefaultSchema:
       dp double precision NOT NULL
     );
   up: |
-    ALTER TABLE "foo"."items" ADD COLUMN "dp" double precision NOT NULL;
+    ALTER TABLE "items" ADD COLUMN "dp" double precision NOT NULL;
   down: |
-    ALTER TABLE "foo"."items" DROP COLUMN "dp";
+    ALTER TABLE "items" DROP COLUMN "dp";
   user: psqldef_user
 
 AddRealColumnOnNonStandardDefaultSchema:
@@ -320,9 +320,9 @@ AddRealColumnOnNonStandardDefaultSchema:
       rp real NOT NULL
     );
   up: |
-    ALTER TABLE "foo"."items" ADD COLUMN "rp" real NOT NULL;
+    ALTER TABLE "items" ADD COLUMN "rp" real NOT NULL;
   down: |
-    ALTER TABLE "foo"."items" DROP COLUMN "rp";
+    ALTER TABLE "items" DROP COLUMN "rp";
   user: psqldef_user
 
 AddByteaColumnOnNonStandardDefaultSchema:
@@ -336,9 +336,9 @@ AddByteaColumnOnNonStandardDefaultSchema:
       data bytea NOT NULL
     );
   up: |
-    ALTER TABLE "foo"."items" ADD COLUMN "data" bytea NOT NULL;
+    ALTER TABLE "items" ADD COLUMN "data" bytea NOT NULL;
   down: |
-    ALTER TABLE "foo"."items" DROP COLUMN "data";
+    ALTER TABLE "items" DROP COLUMN "data";
   user: psqldef_user
 ChangeTimezone:
   current: |
@@ -364,23 +364,23 @@ ChangeTimezone:
       time_at4 time WITH TIME ZONE NOT NULL
     );
   up: |
-    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at1" TYPE timestamp;
-    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at2" TYPE timestamp;
-    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at3" TYPE timestamp WITH TIME ZONE;
-    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at4" TYPE timestamp WITH TIME ZONE;
-    ALTER TABLE "public"."test" ALTER COLUMN "time_at1" TYPE time;
-    ALTER TABLE "public"."test" ALTER COLUMN "time_at2" TYPE time;
-    ALTER TABLE "public"."test" ALTER COLUMN "time_at3" TYPE time WITH TIME ZONE;
-    ALTER TABLE "public"."test" ALTER COLUMN "time_at4" TYPE time WITH TIME ZONE;
+    ALTER TABLE "test" ALTER COLUMN "timestamp_at1" TYPE timestamp;
+    ALTER TABLE "test" ALTER COLUMN "timestamp_at2" TYPE timestamp;
+    ALTER TABLE "test" ALTER COLUMN "timestamp_at3" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "test" ALTER COLUMN "timestamp_at4" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "test" ALTER COLUMN "time_at1" TYPE time;
+    ALTER TABLE "test" ALTER COLUMN "time_at2" TYPE time;
+    ALTER TABLE "test" ALTER COLUMN "time_at3" TYPE time WITH TIME ZONE;
+    ALTER TABLE "test" ALTER COLUMN "time_at4" TYPE time WITH TIME ZONE;
   down: |
-    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at1" TYPE timestamp WITH TIME ZONE;
-    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at2" TYPE timestamp WITH TIME ZONE;
-    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at3" TYPE timestamp;
-    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_at4" TYPE timestamp;
-    ALTER TABLE "public"."test" ALTER COLUMN "time_at1" TYPE time WITH TIME ZONE;
-    ALTER TABLE "public"."test" ALTER COLUMN "time_at2" TYPE time WITH TIME ZONE;
-    ALTER TABLE "public"."test" ALTER COLUMN "time_at3" TYPE time;
-    ALTER TABLE "public"."test" ALTER COLUMN "time_at4" TYPE time;
+    ALTER TABLE "test" ALTER COLUMN "timestamp_at1" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "test" ALTER COLUMN "timestamp_at2" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "test" ALTER COLUMN "timestamp_at3" TYPE timestamp;
+    ALTER TABLE "test" ALTER COLUMN "timestamp_at4" TYPE timestamp;
+    ALTER TABLE "test" ALTER COLUMN "time_at1" TYPE time WITH TIME ZONE;
+    ALTER TABLE "test" ALTER COLUMN "time_at2" TYPE time WITH TIME ZONE;
+    ALTER TABLE "test" ALTER COLUMN "time_at3" TYPE time;
+    ALTER TABLE "test" ALTER COLUMN "time_at4" TYPE time;
 ChangeTimezoneSyntax:
   current: |
     CREATE TABLE test (
@@ -407,15 +407,15 @@ ChangeTimezoneSyntax:
       timestamp_plain_plain timestamp
     );
   up: |
-    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_wtz_plain" TYPE timestamp;
-    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_tz_plain" TYPE timestamp;
-    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_plain_wtz" TYPE timestamp WITH TIME ZONE;
-    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_plain_tz" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "test" ALTER COLUMN "timestamp_wtz_plain" TYPE timestamp;
+    ALTER TABLE "test" ALTER COLUMN "timestamp_tz_plain" TYPE timestamp;
+    ALTER TABLE "test" ALTER COLUMN "timestamp_plain_wtz" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "test" ALTER COLUMN "timestamp_plain_tz" TYPE timestamp WITH TIME ZONE;
   down: |
-    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_wtz_plain" TYPE timestamp WITH TIME ZONE;
-    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_tz_plain" TYPE timestamp WITH TIME ZONE;
-    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_plain_wtz" TYPE timestamp;
-    ALTER TABLE "public"."test" ALTER COLUMN "timestamp_plain_tz" TYPE timestamp;
+    ALTER TABLE "test" ALTER COLUMN "timestamp_wtz_plain" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "test" ALTER COLUMN "timestamp_tz_plain" TYPE timestamp WITH TIME ZONE;
+    ALTER TABLE "test" ALTER COLUMN "timestamp_plain_wtz" TYPE timestamp;
+    ALTER TABLE "test" ALTER COLUMN "timestamp_plain_tz" TYPE timestamp;
 CreateTableAddTimestampColumn:
   current: |
     CREATE TABLE users (
@@ -432,11 +432,11 @@ CreateTableAddTimestampColumn:
       timestamp_without_tz timestamp WITHOUT TIME ZONE
     );
   up: |
-    ALTER TABLE "public"."users" ADD COLUMN "timestamp_with_tz" timestamp WITH TIME ZONE;
-    ALTER TABLE "public"."users" ADD COLUMN "timestamp_without_tz" timestamp;
+    ALTER TABLE "users" ADD COLUMN "timestamp_with_tz" timestamp WITH TIME ZONE;
+    ALTER TABLE "users" ADD COLUMN "timestamp_without_tz" timestamp;
   down: |
-    ALTER TABLE "public"."users" DROP COLUMN "timestamp_without_tz";
-    ALTER TABLE "public"."users" DROP COLUMN "timestamp_with_tz";
+    ALTER TABLE "users" DROP COLUMN "timestamp_without_tz";
+    ALTER TABLE "users" DROP COLUMN "timestamp_with_tz";
 AddColumnWithDefaultExpression:
   current: |
     CREATE EXTENSION "uuid-ossp";
@@ -448,9 +448,9 @@ AddColumnWithDefaultExpression:
       "key" uuid NOT NULL DEFAULT uuid_generate_v4()
     );
   up: |
-    ALTER TABLE "public"."users" ADD COLUMN "key" uuid NOT NULL DEFAULT uuid_generate_v4();
+    ALTER TABLE "users" ADD COLUMN "key" uuid NOT NULL DEFAULT uuid_generate_v4();
   down: |
-    ALTER TABLE "public"."users" DROP COLUMN "key";
+    ALTER TABLE "users" DROP COLUMN "key";
 AddDefaultExpression:
   current: |
     CREATE EXTENSION "uuid-ossp";
@@ -465,9 +465,9 @@ AddDefaultExpression:
       "key" uuid NOT NULL DEFAULT uuid_generate_v4()
     );
   up: |
-    ALTER TABLE "public"."users" ALTER COLUMN "key" SET DEFAULT uuid_generate_v4();
+    ALTER TABLE "users" ALTER COLUMN "key" SET DEFAULT uuid_generate_v4();
   down: |
-    ALTER TABLE "public"."users" ALTER COLUMN "key" DROP DEFAULT;
+    ALTER TABLE "users" ALTER COLUMN "key" DROP DEFAULT;
 RemoveDefaultExpression:
   current: |
     CREATE EXTENSION "uuid-ossp";
@@ -482,22 +482,22 @@ RemoveDefaultExpression:
       "key" uuid NOT NULL
     );
   up: |
-    ALTER TABLE "public"."users" ALTER COLUMN "key" DROP DEFAULT;
+    ALTER TABLE "users" ALTER COLUMN "key" DROP DEFAULT;
   down: |
-    ALTER TABLE "public"."users" ALTER COLUMN "key" SET DEFAULT uuid_generate_v4();
+    ALTER TABLE "users" ALTER COLUMN "key" SET DEFAULT uuid_generate_v4();
 ChangeDefaultExpressionWithAddition:
   current: |
-    CREATE TABLE public.foo (
+    CREATE TABLE foo (
       expires_at timestamp with time zone NOT NULL DEFAULT (CURRENT_TIMESTAMP + '1 day'::interval)
     );
   desired: |
-    CREATE TABLE public.foo (
+    CREATE TABLE foo (
       expires_at timestamp with time zone NOT NULL DEFAULT (CURRENT_TIMESTAMP + '3 days'::interval)
     );
   up: |
-    ALTER TABLE "public"."foo" ALTER COLUMN "expires_at" SET DEFAULT current_timestamp + '3 days'::interval;
+    ALTER TABLE "foo" ALTER COLUMN "expires_at" SET DEFAULT current_timestamp + '3 days'::interval;
   down: |
-    ALTER TABLE "public"."foo" ALTER COLUMN "expires_at" SET DEFAULT current_timestamp + '1 day'::interval;
+    ALTER TABLE "foo" ALTER COLUMN "expires_at" SET DEFAULT current_timestamp + '1 day'::interval;
 CaseWithoutArgument:
   desired: |
     CREATE TABLE permissions (
@@ -538,9 +538,9 @@ DropTimestampDefault:
       created_at timestamp
     );
   up: |
-    ALTER TABLE "public"."timestamps" ALTER COLUMN "created_at" DROP DEFAULT;
+    ALTER TABLE "timestamps" ALTER COLUMN "created_at" DROP DEFAULT;
   down: |
-    ALTER TABLE "public"."timestamps" ALTER COLUMN "created_at" SET DEFAULT current_timestamp;
+    ALTER TABLE "timestamps" ALTER COLUMN "created_at" SET DEFAULT current_timestamp;
 AddTimestampDefaultBack:
   current: |
     CREATE TABLE timestamps (
@@ -551,9 +551,9 @@ AddTimestampDefaultBack:
       created_at timestamp default current_timestamp
     );
   up: |
-    ALTER TABLE "public"."timestamps" ALTER COLUMN "created_at" SET DEFAULT current_timestamp;
+    ALTER TABLE "timestamps" ALTER COLUMN "created_at" SET DEFAULT current_timestamp;
   down: |
-    ALTER TABLE "public"."timestamps" ALTER COLUMN "created_at" DROP DEFAULT;
+    ALTER TABLE "timestamps" ALTER COLUMN "created_at" DROP DEFAULT;
 CreateTableWithoutNotNull:
   desired: |
     CREATE TABLE users (
@@ -570,9 +570,9 @@ AddNotNullConstraint:
       name text NOT NULL
     );
   up: |
-    ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
+    ALTER TABLE "users" ALTER COLUMN "name" SET NOT NULL;
   down: |
-    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
+    ALTER TABLE "users" ALTER COLUMN "name" DROP NOT NULL;
 DropNotNullConstraint:
   current: |
     CREATE TABLE users (
@@ -583,9 +583,9 @@ DropNotNullConstraint:
       name text
     );
   up: |
-    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
+    ALTER TABLE "users" ALTER COLUMN "name" DROP NOT NULL;
   down: |
-    ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
+    ALTER TABLE "users" ALTER COLUMN "name" SET NOT NULL;
 ColumnWithQuotes:
   desired: |
     CREATE TABLE users (
@@ -646,15 +646,15 @@ DecimalDefault:
       v3 decimal(30, 20) DEFAULT '0.00000000001234567891'
     );
   up: |
-    ALTER TABLE "public"."some_table" ALTER COLUMN "v0" SET DEFAULT 0.010000;
-    ALTER TABLE "public"."some_table" ALTER COLUMN "v1" SET DEFAULT 1.230000;
-    ALTER TABLE "public"."some_table" ALTER COLUMN "v2" SET DEFAULT 0.123400;
-    ALTER TABLE "public"."some_table" ALTER COLUMN "v3" SET DEFAULT '0.00000000001234567891';
+    ALTER TABLE "some_table" ALTER COLUMN "v0" SET DEFAULT 0.010000;
+    ALTER TABLE "some_table" ALTER COLUMN "v1" SET DEFAULT 1.230000;
+    ALTER TABLE "some_table" ALTER COLUMN "v2" SET DEFAULT 0.123400;
+    ALTER TABLE "some_table" ALTER COLUMN "v3" SET DEFAULT '0.00000000001234567891';
   down: |
-    ALTER TABLE "public"."some_table" ALTER COLUMN "v0" SET DEFAULT 0.000000;
-    ALTER TABLE "public"."some_table" ALTER COLUMN "v1" SET DEFAULT 1.200000;
-    ALTER TABLE "public"."some_table" ALTER COLUMN "v2" SET DEFAULT 0.123450;
-    ALTER TABLE "public"."some_table" ALTER COLUMN "v3" SET DEFAULT '0.0000000000123456789';
+    ALTER TABLE "some_table" ALTER COLUMN "v0" SET DEFAULT 0.000000;
+    ALTER TABLE "some_table" ALTER COLUMN "v1" SET DEFAULT 1.200000;
+    ALTER TABLE "some_table" ALTER COLUMN "v2" SET DEFAULT 0.123450;
+    ALTER TABLE "some_table" ALTER COLUMN "v3" SET DEFAULT '0.0000000000123456789';
 NegativeDefaultNumbers:
   desired: |
     CREATE TABLE items (
@@ -679,11 +679,11 @@ DefaultString:
       v1 TEXT DEFAULT 'bar'
     );
   up: |
-    ALTER TABLE "public"."some_table" ALTER COLUMN "v0" SET DEFAULT 'FOO';
-    ALTER TABLE "public"."some_table" ALTER COLUMN "v1" SET DEFAULT 'bar';
+    ALTER TABLE "some_table" ALTER COLUMN "v0" SET DEFAULT 'FOO';
+    ALTER TABLE "some_table" ALTER COLUMN "v1" SET DEFAULT 'bar';
   down: |
-    ALTER TABLE "public"."some_table" ALTER COLUMN "v0" SET DEFAULT 'foo';
-    ALTER TABLE "public"."some_table" ALTER COLUMN "v1" SET DEFAULT 'BAR';
+    ALTER TABLE "some_table" ALTER COLUMN "v0" SET DEFAULT 'foo';
+    ALTER TABLE "some_table" ALTER COLUMN "v1" SET DEFAULT 'BAR';
 NumericDecimalVariablePrecision:
   current: |
     CREATE TABLE test (
@@ -728,11 +728,11 @@ AlterColumnSetDefault:
       priority int DEFAULT 1
     );
   up: |
-    ALTER TABLE "public"."users" ALTER COLUMN "status" SET DEFAULT 'active';
-    ALTER TABLE "public"."users" ALTER COLUMN "priority" SET DEFAULT 1;
+    ALTER TABLE "users" ALTER COLUMN "status" SET DEFAULT 'active';
+    ALTER TABLE "users" ALTER COLUMN "priority" SET DEFAULT 1;
   down: |
-    ALTER TABLE "public"."users" ALTER COLUMN "status" DROP DEFAULT;
-    ALTER TABLE "public"."users" ALTER COLUMN "priority" DROP DEFAULT;
+    ALTER TABLE "users" ALTER COLUMN "status" DROP DEFAULT;
+    ALTER TABLE "users" ALTER COLUMN "priority" DROP DEFAULT;
 AlterColumnDropDefault:
   current: |
     CREATE TABLE users (
@@ -747,11 +747,11 @@ AlterColumnDropDefault:
       priority int
     );
   up: |
-    ALTER TABLE "public"."users" ALTER COLUMN "status" DROP DEFAULT;
-    ALTER TABLE "public"."users" ALTER COLUMN "priority" DROP DEFAULT;
+    ALTER TABLE "users" ALTER COLUMN "status" DROP DEFAULT;
+    ALTER TABLE "users" ALTER COLUMN "priority" DROP DEFAULT;
   down: |
-    ALTER TABLE "public"."users" ALTER COLUMN "status" SET DEFAULT 'active';
-    ALTER TABLE "public"."users" ALTER COLUMN "priority" SET DEFAULT 1;
+    ALTER TABLE "users" ALTER COLUMN "status" SET DEFAULT 'active';
+    ALTER TABLE "users" ALTER COLUMN "priority" SET DEFAULT 1;
 AlterColumnChangeDefault:
   current: |
     CREATE TABLE users (
@@ -766,11 +766,11 @@ AlterColumnChangeDefault:
       is_active boolean DEFAULT true
     );
   up: |
-    ALTER TABLE "public"."users" ALTER COLUMN "status" SET DEFAULT 'active';
-    ALTER TABLE "public"."users" ALTER COLUMN "is_active" SET DEFAULT true;
+    ALTER TABLE "users" ALTER COLUMN "status" SET DEFAULT 'active';
+    ALTER TABLE "users" ALTER COLUMN "is_active" SET DEFAULT true;
   down: |
-    ALTER TABLE "public"."users" ALTER COLUMN "status" SET DEFAULT 'pending';
-    ALTER TABLE "public"."users" ALTER COLUMN "is_active" SET DEFAULT false;
+    ALTER TABLE "users" ALTER COLUMN "status" SET DEFAULT 'pending';
+    ALTER TABLE "users" ALTER COLUMN "is_active" SET DEFAULT false;
 AlterColumnSetNotNull:
   current: |
     CREATE TABLE users (
@@ -785,11 +785,11 @@ AlterColumnSetNotNull:
       email varchar(255) NOT NULL
     );
   up: |
-    ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
-    ALTER TABLE "public"."users" ALTER COLUMN "email" SET NOT NULL;
+    ALTER TABLE "users" ALTER COLUMN "name" SET NOT NULL;
+    ALTER TABLE "users" ALTER COLUMN "email" SET NOT NULL;
   down: |
-    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
-    ALTER TABLE "public"."users" ALTER COLUMN "email" DROP NOT NULL;
+    ALTER TABLE "users" ALTER COLUMN "name" DROP NOT NULL;
+    ALTER TABLE "users" ALTER COLUMN "email" DROP NOT NULL;
 AlterColumnDropNotNull:
   current: |
     CREATE TABLE users (
@@ -804,11 +804,11 @@ AlterColumnDropNotNull:
       email varchar(255)
     );
   up: |
-    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
-    ALTER TABLE "public"."users" ALTER COLUMN "email" DROP NOT NULL;
+    ALTER TABLE "users" ALTER COLUMN "name" DROP NOT NULL;
+    ALTER TABLE "users" ALTER COLUMN "email" DROP NOT NULL;
   down: |
-    ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
-    ALTER TABLE "public"."users" ALTER COLUMN "email" SET NOT NULL;
+    ALTER TABLE "users" ALTER COLUMN "name" SET NOT NULL;
+    ALTER TABLE "users" ALTER COLUMN "email" SET NOT NULL;
 AlterColumnChangeNotNullAndDefault:
   current: |
     CREATE TABLE users (
@@ -823,15 +823,15 @@ AlterColumnChangeNotNullAndDefault:
       email varchar(255)
     );
   up: |
-    ALTER TABLE "public"."users" ALTER COLUMN "name" SET NOT NULL;
-    ALTER TABLE "public"."users" ALTER COLUMN "name" SET DEFAULT 'anonymous';
-    ALTER TABLE "public"."users" ALTER COLUMN "email" DROP NOT NULL;
-    ALTER TABLE "public"."users" ALTER COLUMN "email" DROP DEFAULT;
+    ALTER TABLE "users" ALTER COLUMN "name" SET NOT NULL;
+    ALTER TABLE "users" ALTER COLUMN "name" SET DEFAULT 'anonymous';
+    ALTER TABLE "users" ALTER COLUMN "email" DROP NOT NULL;
+    ALTER TABLE "users" ALTER COLUMN "email" DROP DEFAULT;
   down: |
-    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP NOT NULL;
-    ALTER TABLE "public"."users" ALTER COLUMN "name" DROP DEFAULT;
-    ALTER TABLE "public"."users" ALTER COLUMN "email" SET NOT NULL;
-    ALTER TABLE "public"."users" ALTER COLUMN "email" SET DEFAULT 'unknown@example.com';
+    ALTER TABLE "users" ALTER COLUMN "name" DROP NOT NULL;
+    ALTER TABLE "users" ALTER COLUMN "name" DROP DEFAULT;
+    ALTER TABLE "users" ALTER COLUMN "email" SET NOT NULL;
+    ALTER TABLE "users" ALTER COLUMN "email" SET DEFAULT 'unknown@example.com';
 TypedLiterals:
   current: |
     CREATE TABLE events (
@@ -845,13 +845,13 @@ TypedLiterals:
       event_timestamp timestamp DEFAULT TIMESTAMP '2024-01-01 12:00:00'
     );
   up: |
-    ALTER TABLE "public"."events" ADD COLUMN "event_date" date DEFAULT '2024-01-01';
-    ALTER TABLE "public"."events" ADD COLUMN "event_time" time DEFAULT '12:00:00';
-    ALTER TABLE "public"."events" ADD COLUMN "event_timestamp" timestamp DEFAULT '2024-01-01 12:00:00';
+    ALTER TABLE "events" ADD COLUMN "event_date" date DEFAULT '2024-01-01';
+    ALTER TABLE "events" ADD COLUMN "event_time" time DEFAULT '12:00:00';
+    ALTER TABLE "events" ADD COLUMN "event_timestamp" timestamp DEFAULT '2024-01-01 12:00:00';
   down: |
-    ALTER TABLE "public"."events" DROP COLUMN "event_timestamp";
-    ALTER TABLE "public"."events" DROP COLUMN "event_time";
-    ALTER TABLE "public"."events" DROP COLUMN "event_date";
+    ALTER TABLE "events" DROP COLUMN "event_timestamp";
+    ALTER TABLE "events" DROP COLUMN "event_time";
+    ALTER TABLE "events" DROP COLUMN "event_date";
 TypedLiteralsIdempotency:
   current: |
     CREATE TABLE events (
@@ -883,13 +883,13 @@ TypedLiteralsChangeDefault:
       event_timestamp timestamp DEFAULT TIMESTAMP '2024-12-31 23:59:59'
     );
   up: |
-    ALTER TABLE "public"."events" ALTER COLUMN "event_date" SET DEFAULT '2024-12-31';
-    ALTER TABLE "public"."events" ALTER COLUMN "event_time" SET DEFAULT '23:59:59';
-    ALTER TABLE "public"."events" ALTER COLUMN "event_timestamp" SET DEFAULT '2024-12-31 23:59:59';
+    ALTER TABLE "events" ALTER COLUMN "event_date" SET DEFAULT '2024-12-31';
+    ALTER TABLE "events" ALTER COLUMN "event_time" SET DEFAULT '23:59:59';
+    ALTER TABLE "events" ALTER COLUMN "event_timestamp" SET DEFAULT '2024-12-31 23:59:59';
   down: |
-    ALTER TABLE "public"."events" ALTER COLUMN "event_date" SET DEFAULT '2024-01-01';
-    ALTER TABLE "public"."events" ALTER COLUMN "event_time" SET DEFAULT '12:00:00';
-    ALTER TABLE "public"."events" ALTER COLUMN "event_timestamp" SET DEFAULT '2024-01-01 12:00:00';
+    ALTER TABLE "events" ALTER COLUMN "event_date" SET DEFAULT '2024-01-01';
+    ALTER TABLE "events" ALTER COLUMN "event_time" SET DEFAULT '12:00:00';
+    ALTER TABLE "events" ALTER COLUMN "event_timestamp" SET DEFAULT '2024-01-01 12:00:00';
 TypedLiteralsInCheckWithCast:
   current: |
     CREATE TABLE events (
@@ -903,13 +903,13 @@ TypedLiteralsInCheckWithCast:
       event_end_date date CHECK (event_end_date <= DATE '2030-12-31')
     );
   up: |
-    ALTER TABLE "public"."events" ADD COLUMN "event_date" date CHECK (event_date >= '2020-01-01');
-    ALTER TABLE "public"."events" ADD COLUMN "event_time" time CHECK (event_time >= '09:00:00'::time);
-    ALTER TABLE "public"."events" ADD COLUMN "event_end_date" date CHECK (event_end_date <= '2030-12-31');
+    ALTER TABLE "events" ADD COLUMN "event_date" date CHECK (event_date >= '2020-01-01');
+    ALTER TABLE "events" ADD COLUMN "event_time" time CHECK (event_time >= '09:00:00'::time);
+    ALTER TABLE "events" ADD COLUMN "event_end_date" date CHECK (event_end_date <= '2030-12-31');
   down: |
-    ALTER TABLE "public"."events" DROP COLUMN "event_end_date";
-    ALTER TABLE "public"."events" DROP COLUMN "event_time";
-    ALTER TABLE "public"."events" DROP COLUMN "event_date";
+    ALTER TABLE "events" DROP COLUMN "event_end_date";
+    ALTER TABLE "events" DROP COLUMN "event_time";
+    ALTER TABLE "events" DROP COLUMN "event_date";
 # Multi-dimensional array support
 CreateTableWithMultiDimensionalArrays:
   desired: |
@@ -931,9 +931,9 @@ AddMultiDimensionalArrayColumn:
       matrix_2d int[][]
     );
   up: |
-    ALTER TABLE "public"."matrices" ADD COLUMN "matrix_2d" integer[];
+    ALTER TABLE "matrices" ADD COLUMN "matrix_2d" integer[];
   down: |
-    ALTER TABLE "public"."matrices" DROP COLUMN "matrix_2d";
+    ALTER TABLE "matrices" DROP COLUMN "matrix_2d";
 MultiDimensionalArrayWithDefaultEmpty:
   desired: |
     CREATE TABLE matrices (
@@ -961,9 +961,9 @@ ChangeMultiDimensionalArrayDefault:
       matrix_2d int[][] DEFAULT ARRAY[ARRAY[1, 2]]
     );
   up: |
-    ALTER TABLE "public"."matrices" ALTER COLUMN "matrix_2d" SET DEFAULT ARRAY[ARRAY[1, 2]];
+    ALTER TABLE "matrices" ALTER COLUMN "matrix_2d" SET DEFAULT ARRAY[ARRAY[1, 2]];
   down: |
-    ALTER TABLE "public"."matrices" ALTER COLUMN "matrix_2d" SET DEFAULT ARRAY[]::integer[];
+    ALTER TABLE "matrices" ALTER COLUMN "matrix_2d" SET DEFAULT ARRAY[]::integer[];
 
 # PostgreSQL treats int[], int[][], int[][][] all as int[] internally
 MultiDimensionalArrayEquivalence1D2D:
@@ -1013,11 +1013,11 @@ SerialToBigserial:
       id bigserial NOT NULL
     );
   up: |
-    ALTER TABLE public.users ALTER COLUMN id TYPE bigint;
-    ALTER SEQUENCE public.users_id_seq AS bigint;
+    ALTER TABLE users ALTER COLUMN id TYPE bigint;
+    ALTER SEQUENCE users_id_seq AS bigint;
   down: |
-    ALTER TABLE public.users ALTER COLUMN id TYPE integer;
-    ALTER SEQUENCE public.users_id_seq AS integer;
+    ALTER TABLE users ALTER COLUMN id TYPE integer;
+    ALTER SEQUENCE users_id_seq AS integer;
 
 BigserialToSerial:
   legacy_ignore_quotes: false
@@ -1030,11 +1030,11 @@ BigserialToSerial:
       id serial NOT NULL
     );
   up: |
-    ALTER TABLE public.users ALTER COLUMN id TYPE integer;
-    ALTER SEQUENCE public.users_id_seq AS integer;
+    ALTER TABLE users ALTER COLUMN id TYPE integer;
+    ALTER SEQUENCE users_id_seq AS integer;
   down: |
-    ALTER TABLE public.users ALTER COLUMN id TYPE bigint;
-    ALTER SEQUENCE public.users_id_seq AS bigint;
+    ALTER TABLE users ALTER COLUMN id TYPE bigint;
+    ALTER SEQUENCE users_id_seq AS bigint;
 
 SmallserialToSerial:
   legacy_ignore_quotes: false
@@ -1047,11 +1047,11 @@ SmallserialToSerial:
       id serial NOT NULL
     );
   up: |
-    ALTER TABLE public.users ALTER COLUMN id TYPE integer;
-    ALTER SEQUENCE public.users_id_seq AS integer;
+    ALTER TABLE users ALTER COLUMN id TYPE integer;
+    ALTER SEQUENCE users_id_seq AS integer;
   down: |
-    ALTER TABLE public.users ALTER COLUMN id TYPE smallint;
-    ALTER SEQUENCE public.users_id_seq AS smallint;
+    ALTER TABLE users ALTER COLUMN id TYPE smallint;
+    ALTER SEQUENCE users_id_seq AS smallint;
 
 SerialToSmallserial:
   legacy_ignore_quotes: false
@@ -1064,10 +1064,10 @@ SerialToSmallserial:
       id smallserial NOT NULL
     );
   up: |
-    ALTER TABLE public.users ALTER COLUMN id TYPE smallint;
-    ALTER SEQUENCE public.users_id_seq AS smallint;
+    ALTER TABLE users ALTER COLUMN id TYPE smallint;
+    ALTER SEQUENCE users_id_seq AS smallint;
   down: |
-    ALTER TABLE public.users ALTER COLUMN id TYPE integer;
-    ALTER SEQUENCE public.users_id_seq AS integer;
+    ALTER TABLE users ALTER COLUMN id TYPE integer;
+    ALTER SEQUENCE users_id_seq AS integer;
 
 # Function returning TABLE

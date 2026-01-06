@@ -34,6 +34,7 @@ type Config struct {
 
 	// Only PostgreSQL
 	TargetSchema []string
+	SearchPath   string // Sets search_path at connection time for schema isolation
 
 	// Only MySQL and PostgreSQL
 	DumpConcurrency int

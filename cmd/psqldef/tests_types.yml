@@ -24,8 +24,8 @@ AlterTypeAddValue:
       event_type eventtype NOT NULL
     );
   up: |
-    ALTER TYPE "public"."eventtype" ADD VALUE 'send_meeting_options';
-    ALTER TYPE "public"."eventtype" ADD VALUE 'update_reactionslot';
+    ALTER TYPE "eventtype" ADD VALUE 'send_meeting_options';
+    ALTER TYPE "eventtype" ADD VALUE 'update_reactionslot';
   down: ""
   min_version: '12'
 AlterTypeAddValueWithSameTypeNameInDifferentSchema:
@@ -124,10 +124,10 @@ AddEnumTypeColumnOnNonStandardDefaultSchema:
       'ja',
       'en'
     );
-    ALTER TABLE "foo"."items" ADD COLUMN "lang" lang NOT NULL;
+    ALTER TABLE "items" ADD COLUMN "lang" lang NOT NULL;
   down: |
-    ALTER TABLE "foo"."items" DROP COLUMN "lang";
-    DROP TYPE "foo"."lang";
+    ALTER TABLE "items" DROP COLUMN "lang";
+    DROP TYPE "lang";
   user: psqldef_user
 
 # User-defined enum type on non-public default schema (explicit schema usage)
@@ -151,18 +151,18 @@ AddEnumTypeColumnWithExplicitSchemaOnNonStandardDefaultSchema:
       'ja',
       'en'
     );
-    ALTER TABLE "foo"."items" ADD COLUMN "lang" foo.lang NOT NULL;
+    ALTER TABLE "items" ADD COLUMN "lang" foo.lang NOT NULL;
   down: |
-    ALTER TABLE "foo"."items" DROP COLUMN "lang";
-    DROP TYPE "foo"."lang";
+    ALTER TABLE "items" DROP COLUMN "lang";
+    DROP TYPE "lang";
   user: psqldef_user
 
 CreateTypeEnum:
   desired: |
-    CREATE TYPE "public"."country" AS ENUM ('us', 'jp');
+    CREATE TYPE "country" AS ENUM ('us', 'jp');
     CREATE TABLE users (
       id SERIAL PRIMARY KEY,
-      country "public"."country" NOT NULL DEFAULT 'jp'::country
+      country "country" NOT NULL DEFAULT 'jp'::country
     );
 
 EnumWithSpecialCharValues:
@@ -186,9 +186,9 @@ RenameEnumValue:
       'inactive'
     );
   up: |
-    ALTER TYPE "public"."status" RENAME VALUE 'pending' TO 'waiting';
+    ALTER TYPE "status" RENAME VALUE 'pending' TO 'waiting';
   down: |
-    ALTER TYPE "public"."status" ADD VALUE 'pending';
+    ALTER TYPE "status" ADD VALUE 'pending';
 
 RenameEnumValueLineComment:
   min_version: '10'
@@ -200,9 +200,9 @@ RenameEnumValueLineComment:
       'high'
     );
   up: |
-    ALTER TYPE "public"."priority" RENAME VALUE 'low' TO 'minor';
+    ALTER TYPE "priority" RENAME VALUE 'low' TO 'minor';
   down: |
-    ALTER TYPE "public"."priority" ADD VALUE 'low';
+    ALTER TYPE "priority" ADD VALUE 'low';
 
 RenameMultipleEnumValues:
   min_version: '10'
@@ -215,13 +215,13 @@ RenameMultipleEnumValues:
       'critical' /* @renamed from=high */
     );
   up: |
-    ALTER TYPE "public"."level" RENAME VALUE 'low' TO 'minor';
-    ALTER TYPE "public"."level" RENAME VALUE 'medium' TO 'normal';
-    ALTER TYPE "public"."level" RENAME VALUE 'high' TO 'critical';
+    ALTER TYPE "level" RENAME VALUE 'low' TO 'minor';
+    ALTER TYPE "level" RENAME VALUE 'medium' TO 'normal';
+    ALTER TYPE "level" RENAME VALUE 'high' TO 'critical';
   down: |
-    ALTER TYPE "public"."level" ADD VALUE 'low';
-    ALTER TYPE "public"."level" ADD VALUE 'medium';
-    ALTER TYPE "public"."level" ADD VALUE 'high';
+    ALTER TYPE "level" ADD VALUE 'low';
+    ALTER TYPE "level" ADD VALUE 'medium';
+    ALTER TYPE "level" ADD VALUE 'high';
 
 RenameAndAddEnumValue:
   min_version: '10'
@@ -234,10 +234,10 @@ RenameAndAddEnumValue:
       'archived'
     );
   up: |
-    ALTER TYPE "public"."workflow" RENAME VALUE 'pending' TO 'waiting';
-    ALTER TYPE "public"."workflow" ADD VALUE 'archived';
+    ALTER TYPE "workflow" RENAME VALUE 'pending' TO 'waiting';
+    ALTER TYPE "workflow" ADD VALUE 'archived';
   down: |
-    ALTER TYPE "public"."workflow" ADD VALUE 'pending';
+    ALTER TYPE "workflow" ADD VALUE 'pending';
 
 RenameEnumValueWithSchema:
   min_version: '10'

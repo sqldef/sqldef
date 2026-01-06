@@ -100,7 +100,7 @@ PartitionOfAddSecondPartition:
     CREATE TABLE logs_2024_02 PARTITION OF logs
       FOR VALUES FROM ('2024-02-01') TO ('2024-03-01');
   down: |
-    DROP TABLE public.logs_2024_02;
+    DROP TABLE logs_2024_02;
 
 # Test dropping a partition from an existing partitioned table
 PartitionOfDropPartition:
@@ -123,7 +123,7 @@ PartitionOfDropPartition:
     CREATE TABLE logs_2024_01 PARTITION OF logs
       FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
   up: |
-    DROP TABLE public.logs_2024_02;
+    DROP TABLE logs_2024_02;
   down: |
     CREATE TABLE logs_2024_02 PARTITION OF logs
       FOR VALUES FROM ('2024-02-01') TO ('2024-03-01');

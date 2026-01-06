@@ -11,7 +11,7 @@ SetStatementTimeout:
   up: |
     CREATE TABLE users (id bigint NOT NULL);
   down: |
-    DROP TABLE public.users;
+    DROP TABLE users;
 
 SetSearchPath:
   legacy_ignore_quotes: false
@@ -21,7 +21,7 @@ SetSearchPath:
   up: |
     CREATE TABLE items (id bigint NOT NULL);
   down: |
-    DROP TABLE public.items;
+    DROP TABLE items;
 
 SetClientEncoding:
   legacy_ignore_quotes: false
@@ -31,7 +31,7 @@ SetClientEncoding:
   up: |
     CREATE TABLE products (id bigint NOT NULL);
   down: |
-    DROP TABLE public.products;
+    DROP TABLE products;
 
 SetSearchPathTo:
   legacy_ignore_quotes: false
@@ -41,4 +41,4 @@ SetSearchPathTo:
   up: |
     CREATE TABLE orders (id bigint NOT NULL);
   down: |
-    DROP TABLE public.orders;
+    DROP TABLE orders;

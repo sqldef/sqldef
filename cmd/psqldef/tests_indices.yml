@@ -14,7 +14,7 @@ CreateIndexConcurrently:
   up: |
     CREATE INDEX CONCURRENTLY username on users (name);
   down: |
-    DROP INDEX "public"."username";
+    DROP INDEX "username";
 CreateIndexWithCoalesce:
   current: |
     CREATE TABLE users (
@@ -30,7 +30,7 @@ CreateIndexWithCoalesce:
   up: |
     CREATE INDEX create_index_with_function_call ON users (name, COALESCE(user_name, 'NO_NAME'::TEXT));
   down: |
-    DROP INDEX "public"."create_index_with_function_call";
+    DROP INDEX "create_index_with_function_call";
 CreateIndexWithBoolExpr:
   current: |
     CREATE TABLE users (
@@ -44,7 +44,7 @@ CreateIndexWithBoolExpr:
   up: |
     CREATE INDEX create_index_with_bool ON users ((CASE WHEN is_active IS TRUE THEN 1 ELSE 0 END));
   down: |
-    DROP INDEX "public"."create_index_with_bool";
+    DROP INDEX "create_index_with_bool";
 CreateIndexWithoutName:
   desired: |
     CREATE TABLE "user" (id BIGINT NOT NULL);
@@ -73,39 +73,39 @@ IndexAndForeignOrder:
     CREATE UNIQUE INDEX uniq_idx ON users (id);
     ALTER TABLE posts ADD CONSTRAINT "user_id_key" FOREIGN KEY ("user_id") REFERENCES users ("id");
   down: |
-    DROP TABLE "public"."posts";
-    DROP TABLE "public"."users";
+    DROP TABLE "posts";
+    DROP TABLE "users";
 IndexesOnExpressions:
   current: |
-    CREATE TABLE public.test (
+    CREATE TABLE test (
       col JSONB
     );
   desired: |
-    CREATE TABLE public.test (
+    CREATE TABLE test (
       col JSONB
     );
-    CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo', 'bar'));
+    CREATE UNIQUE INDEX function_index ON test (jsonb_extract_path_text(col, 'foo', 'bar'));
   up: |
-    CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo', 'bar'));
+    CREATE UNIQUE INDEX function_index ON test (jsonb_extract_path_text(col, 'foo', 'bar'));
   down: |
-    DROP INDEX "public"."function_index";
+    DROP INDEX "function_index";
 IndexesOnChangedExpressions:
   current: |
-    CREATE TABLE public.test (
+    CREATE TABLE test (
       col JSONB
     );
-    CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo', 'bar'));
+    CREATE UNIQUE INDEX function_index ON test (jsonb_extract_path_text(col, 'foo', 'bar'));
   desired: |
-    CREATE TABLE public.test (
+    CREATE TABLE test (
       col JSONB
     );
-    CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo'));
+    CREATE UNIQUE INDEX function_index ON test (jsonb_extract_path_text(col, 'foo'));
   up: |
-    DROP INDEX "public"."function_index";
-    CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo'));
+    DROP INDEX "function_index";
+    CREATE UNIQUE INDEX function_index ON test (jsonb_extract_path_text(col, 'foo'));
   down: |
-    DROP INDEX "public"."function_index";
-    CREATE UNIQUE INDEX function_index ON public.test (jsonb_extract_path_text(col, 'foo', 'bar'));
+    DROP INDEX "function_index";
+    CREATE UNIQUE INDEX function_index ON test (jsonb_extract_path_text(col, 'foo', 'bar'));
 EscapeUniqueIndexQuery:
   current: |
     CREATE TABLE "userTable" (
@@ -119,11 +119,11 @@ EscapeUniqueIndexQuery:
         "firstName" text,
         "lastName" text
     );
-    ALTER TABLE "public"."userTable" ADD CONSTRAINT "uq:fullName" UNIQUE ("firstName", "lastName");
+    ALTER TABLE "userTable" ADD CONSTRAINT "uq:fullName" UNIQUE ("firstName", "lastName");
   up: |
-    ALTER TABLE "public"."userTable" ADD CONSTRAINT "uq:fullName" UNIQUE ("firstName", "lastName");
+    ALTER TABLE "userTable" ADD CONSTRAINT "uq:fullName" UNIQUE ("firstName", "lastName");
   down: |
-    ALTER TABLE "public"."userTable" DROP CONSTRAINT "uq:fullName";
+    ALTER TABLE "userTable" DROP CONSTRAINT "uq:fullName";
 IndexOnReservedWordColumn:
   desired: |
     CREATE TABLE users (
@@ -163,10 +163,10 @@ RenameIndex:
     );
     CREATE INDEX new_email_idx /* @renamed from=old_email_idx */ ON users (email);
   up: |
-    ALTER INDEX "public"."old_email_idx" RENAME TO "new_email_idx";
+    ALTER INDEX "old_email_idx" RENAME TO "new_email_idx";
   down: |
     CREATE INDEX old_email_idx ON users (email);
-    DROP INDEX "public"."new_email_idx";
+    DROP INDEX "new_email_idx";
 RenameIndexInTable:
   current: |
     CREATE TABLE users (
@@ -183,10 +183,10 @@ RenameIndexInTable:
       CONSTRAINT unique_email UNIQUE (email) -- @renamed from=old_unique_email
     );
   up: |
-    ALTER INDEX "public"."old_unique_email" RENAME TO "unique_email";
+    ALTER INDEX "old_unique_email" RENAME TO "unique_email";
   down: |
-    ALTER TABLE "public"."users" ADD CONSTRAINT "old_unique_email" UNIQUE ("email");
-    ALTER TABLE "public"."users" DROP CONSTRAINT "unique_email";
+    ALTER TABLE "users" ADD CONSTRAINT "old_unique_email" UNIQUE ("email");
+    ALTER TABLE "users" DROP CONSTRAINT "unique_email";
 RenameMultipleIndexes:
   current: |
     CREATE TABLE users (
@@ -205,13 +205,13 @@ RenameMultipleIndexes:
     CREATE INDEX email_idx /* @renamed from=idx_email */ ON users (email);
     CREATE INDEX username_idx /* @renamed from=idx_username */ ON users (username);
   up: |
-    ALTER INDEX "public"."idx_email" RENAME TO "email_idx";
-    ALTER INDEX "public"."idx_username" RENAME TO "username_idx";
+    ALTER INDEX "idx_email" RENAME TO "email_idx";
+    ALTER INDEX "idx_username" RENAME TO "username_idx";
   down: |
     CREATE INDEX idx_email ON users (email);
     CREATE INDEX idx_username ON users (username);
-    DROP INDEX "public"."email_idx";
-    DROP INDEX "public"."username_idx";
+    DROP INDEX "email_idx";
+    DROP INDEX "username_idx";
 RenameIndexInNonDefaultSchema:
   current: |
     CREATE SCHEMA myschema;
@@ -254,8 +254,8 @@ CreateIndexWithConcurrentlyConfig:
     CREATE INDEX CONCURRENTLY idx_users_name ON users (name);
     CREATE INDEX CONCURRENTLY idx_users_email ON users (email);
   down: |
-    DROP INDEX "public"."idx_users_email";
-    DROP INDEX "public"."idx_users_name";
+    DROP INDEX "idx_users_email";
+    DROP INDEX "idx_users_name";
 CreateUniqueIndexWithConcurrentlyConfig:
   config:
     create_index_concurrently: true
@@ -273,7 +273,7 @@ CreateUniqueIndexWithConcurrentlyConfig:
   up: |
     CREATE UNIQUE INDEX CONCURRENTLY idx_products_sku ON products (sku);
   down: |
-    DROP INDEX "public"."idx_products_sku";
+    DROP INDEX "idx_products_sku";
 CreateIndexWithConcurrentlyConfigMixedStatements:
   config:
     create_index_concurrently: true
@@ -291,13 +291,13 @@ CreateIndexWithConcurrentlyConfigMixedStatements:
     CREATE INDEX idx_users_name ON users (name);
     CREATE INDEX CONCURRENTLY idx_users_email_manual ON users (email);
   up: |
-    ALTER TABLE "public"."users" ADD COLUMN "email" varchar(255);
+    ALTER TABLE "users" ADD COLUMN "email" varchar(255);
     CREATE INDEX CONCURRENTLY idx_users_name ON users (name);
     CREATE INDEX CONCURRENTLY idx_users_email_manual ON users (email);
   down: |
-    DROP INDEX "public"."idx_users_email_manual";
-    DROP INDEX "public"."idx_users_name";
-    ALTER TABLE "public"."users" DROP COLUMN "email";
+    DROP INDEX "idx_users_email_manual";
+    DROP INDEX "idx_users_name";
+    ALTER TABLE "users" DROP COLUMN "email";
 CreateIndexWithoutConcurrentlyConfig:
   config:
     create_index_concurrently: false
@@ -315,7 +315,7 @@ CreateIndexWithoutConcurrentlyConfig:
   up: |
     CREATE INDEX idx_users_name ON users (name);
   down: |
-    DROP INDEX "public"."idx_users_name";
+    DROP INDEX "idx_users_name";
 CreateIndexWithStorageParameterString:
   desired: |
     CREATE TABLE test_table (
