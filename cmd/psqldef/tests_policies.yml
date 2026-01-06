@@ -8,7 +8,7 @@ CreatePolicy:
   up: |
     CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((current_user)::integer = 1);
   down: |
-    DROP POLICY "p_users" ON "public"."users";
+    DROP POLICY "p_users" ON "users";
 ModifyPolicyToRestrictive:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
@@ -17,10 +17,10 @@ ModifyPolicyToRestrictive:
     CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
     CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (id = (current_user)::integer);
   up: |
-    DROP POLICY "p_users" ON "public"."users";
+    DROP POLICY "p_users" ON "users";
     CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (id = (current_user)::integer);
   down: |
-    DROP POLICY "p_users" ON "public"."users";
+    DROP POLICY "p_users" ON "users";
     CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer) WITH CHECK ((current_user)::integer = 1);
 ModifyPolicyUsing:
   current: |
@@ -30,10 +30,10 @@ ModifyPolicyUsing:
     CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
     CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);
   up: |
-    DROP POLICY "p_users" ON "public"."users";
+    DROP POLICY "p_users" ON "users";
     CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);
   down: |
-    DROP POLICY "p_users" ON "public"."users";
+    DROP POLICY "p_users" ON "users";
     CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (id = (current_user)::integer);
 DropPolicy:
   current: |
@@ -42,6 +42,6 @@ DropPolicy:
   desired: |
     CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
   up: |
-    DROP POLICY "p_users" ON "public"."users";
+    DROP POLICY "p_users" ON "users";
   down: |
     CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);

@@ -34,5 +34,5 @@ CreateExtensionOrder:
     CREATE EXTENSION IF NOT EXISTS pgcrypto;
     CREATE TABLE hoge (id UUID DEFAULT gen_random_uuid());
   down: |
-    DROP TABLE "public"."hoge";
+    DROP TABLE "hoge";
     DROP EXTENSION "pgcrypto";

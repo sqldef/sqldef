@@ -29,7 +29,7 @@ CreateTableWithVectorColumn:
       embedding vector(3)
     );
   down: |
-    DROP TABLE public.items;
+    DROP TABLE items;
   flavor: pgvector
 
 AddVectorColumn:
@@ -48,9 +48,9 @@ AddVectorColumn:
       embedding vector(384)
     );
   up: |
-    ALTER TABLE public.items ADD COLUMN embedding vector(384);
+    ALTER TABLE items ADD COLUMN embedding vector(384);
   down: |
-    ALTER TABLE public.items DROP COLUMN embedding;
+    ALTER TABLE items DROP COLUMN embedding;
   flavor: pgvector
 
 DropVectorColumn:
@@ -69,9 +69,9 @@ DropVectorColumn:
       name text
     );
   up: |
-    ALTER TABLE public.items DROP COLUMN embedding;
+    ALTER TABLE items DROP COLUMN embedding;
   down: |
-    ALTER TABLE public.items ADD COLUMN embedding vector(384);
+    ALTER TABLE items ADD COLUMN embedding vector(384);
   flavor: pgvector
 
 CreateIvfflatIndex:
@@ -90,9 +90,9 @@ CreateIvfflatIndex:
     );
     CREATE INDEX idx_items_embedding ON items USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
   up: |
-    CREATE INDEX idx_items_embedding ON public.items USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
+    CREATE INDEX idx_items_embedding ON items USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
   down: |
-    DROP INDEX public.idx_items_embedding;
+    DROP INDEX idx_items_embedding;
   flavor: pgvector
 
 CreateHnswIndex:
@@ -111,9 +111,9 @@ CreateHnswIndex:
     );
     CREATE INDEX idx_items_hnsw ON items USING hnsw (embedding vector_l2_ops);
   up: |
-    CREATE INDEX idx_items_hnsw ON public.items USING hnsw (embedding vector_l2_ops);
+    CREATE INDEX idx_items_hnsw ON items USING hnsw (embedding vector_l2_ops);
   down: |
-    DROP INDEX public.idx_items_hnsw;
+    DROP INDEX idx_items_hnsw;
   flavor: pgvector
 
 CreateHnswIndexWithOptions:
@@ -132,9 +132,9 @@ CreateHnswIndexWithOptions:
     );
     CREATE INDEX idx_items_hnsw ON items USING hnsw (embedding vector_l2_ops) WITH (m = 16, ef_construction = 64);
   up: |
-    CREATE INDEX idx_items_hnsw ON public.items USING hnsw (embedding vector_l2_ops) WITH (m = 16, ef_construction = 64);
+    CREATE INDEX idx_items_hnsw ON items USING hnsw (embedding vector_l2_ops) WITH (m = 16, ef_construction = 64);
   down: |
-    DROP INDEX public.idx_items_hnsw;
+    DROP INDEX idx_items_hnsw;
   flavor: pgvector
 
 CreateHnswIndexCosine:
@@ -153,9 +153,9 @@ CreateHnswIndexCosine:
     );
     CREATE INDEX idx_items_cosine ON items USING hnsw (embedding vector_cosine_ops);
   up: |
-    CREATE INDEX idx_items_cosine ON public.items USING hnsw (embedding vector_cosine_ops);
+    CREATE INDEX idx_items_cosine ON items USING hnsw (embedding vector_cosine_ops);
   down: |
-    DROP INDEX public.idx_items_cosine;
+    DROP INDEX idx_items_cosine;
   flavor: pgvector
 
 DropVectorIndex:
@@ -174,9 +174,9 @@ DropVectorIndex:
       embedding vector(3)
     );
   up: |
-    DROP INDEX public.idx_items_embedding;
+    DROP INDEX idx_items_embedding;
   down: |
-    CREATE INDEX idx_items_embedding ON public.items USING hnsw (embedding vector_l2_ops);
+    CREATE INDEX idx_items_embedding ON items USING hnsw (embedding vector_l2_ops);
   flavor: pgvector
 
 MultipleVectorColumns:
@@ -197,7 +197,7 @@ MultipleVectorColumns:
       content_embedding vector(1536)
     );
   down: |
-    DROP TABLE public.documents;
+    DROP TABLE documents;
   flavor: pgvector
 
 VectorColumnNotNull:
@@ -216,7 +216,7 @@ VectorColumnNotNull:
       embedding vector(3) NOT NULL
     );
   down: |
-    DROP TABLE public.items;
+    DROP TABLE items;
   flavor: pgvector
 
 ChangeVectorDimension:
@@ -234,9 +234,9 @@ ChangeVectorDimension:
       embedding vector(384)
     );
   up: |
-    ALTER TABLE public.items ALTER COLUMN embedding TYPE vector(384);
+    ALTER TABLE items ALTER COLUMN embedding TYPE vector(384);
   down: |
-    ALTER TABLE public.items ALTER COLUMN embedding TYPE vector(3);
+    ALTER TABLE items ALTER COLUMN embedding TYPE vector(3);
   flavor: pgvector
 
 CreateViewWithL2Distance:
@@ -261,7 +261,7 @@ CreateViewWithL2Distance:
       SELECT id, embedding <-> '[1,2,3]'::vector AS distance
       FROM items;
   down: |
-    DROP VIEW public.items_by_distance;
+    DROP VIEW items_by_distance;
   flavor: pgvector
 
 CreateViewWithCosineDistance:
@@ -286,7 +286,7 @@ CreateViewWithCosineDistance:
       SELECT id, embedding <=> '[1,2,3]'::vector AS distance
       FROM items;
   down: |
-    DROP VIEW public.items_by_cosine;
+    DROP VIEW items_by_cosine;
   flavor: pgvector
 
 CreateViewWithInnerProduct:
@@ -311,7 +311,7 @@ CreateViewWithInnerProduct:
       SELECT id, embedding <#> '[1,2,3]'::vector AS negative_inner_product
       FROM items;
   down: |
-    DROP VIEW public.items_by_inner_product;
+    DROP VIEW items_by_inner_product;
   flavor: pgvector
 
 CreateViewWithL1Distance:
@@ -336,7 +336,7 @@ CreateViewWithL1Distance:
       SELECT id, embedding <+> '[1,2,3]'::vector AS l1_distance
       FROM items;
   down: |
-    DROP VIEW public.items_by_l1;
+    DROP VIEW items_by_l1;
   flavor: pgvector
 
 # Partial index with storage options
@@ -360,7 +360,7 @@ CreatePartialIndexWithStorageOptions:
     );
     CREATE INDEX idx_items_partial ON items USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100) WHERE status = 'active';
   up: |
-    CREATE INDEX idx_items_partial ON public.items USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100) WHERE status = 'active';
+    CREATE INDEX idx_items_partial ON items USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100) WHERE status = 'active';
   down: |
-    DROP INDEX public.idx_items_partial;
+    DROP INDEX idx_items_partial;
   flavor: pgvector

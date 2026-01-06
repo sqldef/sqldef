@@ -13,10 +13,10 @@ RenameColumn:
       age integer
     );
   up: |
-    ALTER TABLE "public"."users" RENAME COLUMN "username" TO "user_name";
+    ALTER TABLE "users" RENAME COLUMN "username" TO "user_name";
   down: |
-    ALTER TABLE "public"."users" ADD COLUMN "username" text;
-    ALTER TABLE "public"."users" DROP COLUMN "user_name";
+    ALTER TABLE "users" ADD COLUMN "username" text;
+    ALTER TABLE "users" DROP COLUMN "user_name";
 RenameColumnWithTypeChange:
   current: |
     CREATE TABLE users (
@@ -31,12 +31,12 @@ RenameColumnWithTypeChange:
       age integer
     );
   up: |
-    ALTER TABLE "public"."users" RENAME COLUMN "username" TO "user_name";
-    ALTER TABLE "public"."users" ALTER COLUMN "user_name" TYPE text;
-    ALTER TABLE "public"."users" ALTER COLUMN "user_name" SET NOT NULL;
+    ALTER TABLE "users" RENAME COLUMN "username" TO "user_name";
+    ALTER TABLE "users" ALTER COLUMN "user_name" TYPE text;
+    ALTER TABLE "users" ALTER COLUMN "user_name" SET NOT NULL;
   down: |
-    ALTER TABLE "public"."users" ADD COLUMN "username" varchar(100);
-    ALTER TABLE "public"."users" DROP COLUMN "user_name";
+    ALTER TABLE "users" ADD COLUMN "username" varchar(100);
+    ALTER TABLE "users" DROP COLUMN "user_name";
 RenameColumnIdempotency:
   current: |
     CREATE TABLE users (
@@ -82,10 +82,10 @@ RenameColumnQuotedDoubleQuotes:
       age integer
     );
   up: |
-    ALTER TABLE "public"."users" RENAME COLUMN "foo bar" TO "foobar";
+    ALTER TABLE "users" RENAME COLUMN "foo bar" TO "foobar";
   down: |
-    ALTER TABLE "public"."users" ADD COLUMN "foo bar" text;
-    ALTER TABLE "public"."users" DROP COLUMN "foobar";
+    ALTER TABLE "users" ADD COLUMN "foo bar" text;
+    ALTER TABLE "users" DROP COLUMN "foobar";
 RenameColumnWithSpecialChars:
   current: |
     CREATE TABLE users (
@@ -100,10 +100,10 @@ RenameColumnWithSpecialChars:
       age integer
     );
   up: |
-    ALTER TABLE "public"."users" RENAME COLUMN "column-with-dash" TO "column_with_underscore";
+    ALTER TABLE "users" RENAME COLUMN "column-with-dash" TO "column_with_underscore";
   down: |
-    ALTER TABLE "public"."users" ADD COLUMN "column-with-dash" varchar(50);
-    ALTER TABLE "public"."users" DROP COLUMN "column_with_underscore";
+    ALTER TABLE "users" ADD COLUMN "column-with-dash" varchar(50);
+    ALTER TABLE "users" DROP COLUMN "column_with_underscore";
 RenameColumnWithDot:
   current: |
     CREATE TABLE users (
@@ -118,10 +118,10 @@ RenameColumnWithDot:
       age integer
     );
   up: |
-    ALTER TABLE "public"."users" RENAME COLUMN "special.column" TO "special_column";
+    ALTER TABLE "users" RENAME COLUMN "special.column" TO "special_column";
   down: |
-    ALTER TABLE "public"."users" ADD COLUMN "special.column" text NOT NULL;
-    ALTER TABLE "public"."users" DROP COLUMN "special_column";
+    ALTER TABLE "users" ADD COLUMN "special.column" text NOT NULL;
+    ALTER TABLE "users" DROP COLUMN "special_column";
 RenameMultipleColumns:
   current: |
     CREATE TABLE users (
@@ -138,13 +138,13 @@ RenameMultipleColumns:
       age integer
     );
   up: |
-    ALTER TABLE "public"."users" RENAME COLUMN "user name" TO "username";
-    ALTER TABLE "public"."users" RENAME COLUMN "email@address" TO "email_address";
+    ALTER TABLE "users" RENAME COLUMN "user name" TO "username";
+    ALTER TABLE "users" RENAME COLUMN "email@address" TO "email_address";
   down: |
-    ALTER TABLE "public"."users" ADD COLUMN "user name" text;
-    ALTER TABLE "public"."users" ADD COLUMN "email@address" varchar(100);
-    ALTER TABLE "public"."users" DROP COLUMN "email_address";
-    ALTER TABLE "public"."users" DROP COLUMN "username";
+    ALTER TABLE "users" ADD COLUMN "user name" text;
+    ALTER TABLE "users" ADD COLUMN "email@address" varchar(100);
+    ALTER TABLE "users" DROP COLUMN "email_address";
+    ALTER TABLE "users" DROP COLUMN "username";
 RenameTable:
   current: |
     CREATE TABLE user_accounts (
@@ -159,14 +159,14 @@ RenameTable:
       age integer
     );
   up: |
-    ALTER TABLE "public"."user_accounts" RENAME TO "users";
+    ALTER TABLE "user_accounts" RENAME TO "users";
   down: |
     CREATE TABLE user_accounts (
       id bigint NOT NULL,
       username text,
       age integer
     );
-    DROP TABLE "public"."users";
+    DROP TABLE "users";
 RenameTableWithCommentVariant:
   current: |
     CREATE TABLE old_users (
@@ -179,13 +179,13 @@ RenameTableWithCommentVariant:
       name text
     );
   up: |
-    ALTER TABLE "public"."old_users" RENAME TO "new_users";
+    ALTER TABLE "old_users" RENAME TO "new_users";
   down: |
     CREATE TABLE old_users (
       id bigint NOT NULL,
       name text
     );
-    DROP TABLE "public"."new_users";
+    DROP TABLE "new_users";
 RenameTableWithQuotedName:
   current: |
     CREATE TABLE "user accounts" (
@@ -198,13 +198,13 @@ RenameTableWithQuotedName:
       name text
     );
   up: |
-    ALTER TABLE "public"."user accounts" RENAME TO "user_profiles";
+    ALTER TABLE "user accounts" RENAME TO "user_profiles";
   down: |
     CREATE TABLE "user accounts" (
       id bigint NOT NULL,
       name text
     );
-    DROP TABLE "public"."user_profiles";
+    DROP TABLE "user_profiles";
 RenameTableAndMultipleChanges:
   current: |
     CREATE TABLE old_accounts (
@@ -221,14 +221,14 @@ RenameTableAndMultipleChanges:
       created_at timestamp DEFAULT CURRENT_TIMESTAMP
     );
   up: |
-    ALTER TABLE "public"."old_accounts" RENAME TO "accounts";
-    ALTER TABLE "public"."accounts" RENAME COLUMN "user_name" TO "username";
-    ALTER TABLE "public"."accounts" ALTER COLUMN "username" TYPE varchar(100);
-    ALTER TABLE "public"."accounts" ALTER COLUMN "username" SET NOT NULL;
-    ALTER TABLE "public"."accounts" ALTER COLUMN "is_active" SET DEFAULT true;
-    ALTER TABLE "public"."accounts" ADD COLUMN "created_at" timestamp DEFAULT current_timestamp;
-    ALTER TABLE "public"."accounts" ADD PRIMARY KEY ("id");
-    ALTER TABLE "public"."accounts" DROP COLUMN "old_field";
+    ALTER TABLE "old_accounts" RENAME TO "accounts";
+    ALTER TABLE "accounts" RENAME COLUMN "user_name" TO "username";
+    ALTER TABLE "accounts" ALTER COLUMN "username" TYPE varchar(100);
+    ALTER TABLE "accounts" ALTER COLUMN "username" SET NOT NULL;
+    ALTER TABLE "accounts" ALTER COLUMN "is_active" SET DEFAULT true;
+    ALTER TABLE "accounts" ADD COLUMN "created_at" timestamp DEFAULT current_timestamp;
+    ALTER TABLE "accounts" ADD PRIMARY KEY ("id");
+    ALTER TABLE "accounts" DROP COLUMN "old_field";
   down: |
     CREATE TABLE old_accounts (
       id bigint NOT NULL,
@@ -236,4 +236,4 @@ RenameTableAndMultipleChanges:
       is_active boolean,
       old_field text
     );
-    DROP TABLE "public"."accounts";
+    DROP TABLE "accounts";

@@ -30,8 +30,10 @@ const (
 )
 
 type dbConfig struct {
-	User   string
-	DbName string
+	User         string
+	DbName       string
+	SearchPath   string   // Schema name to set as search_path for test isolation
+	TargetSchema []string // Schemas to include when dumping DDLs (for schema-based isolation)
 }
 
 var defaultDbConfig = dbConfig{
@@ -41,6 +43,11 @@ var defaultDbConfig = dbConfig{
 // roleConfigMutex protects role configuration operations (CREATE ROLE, ALTER ROLE)
 // to prevent "tuple concurrently updated" errors when running tests in parallel.
 var roleConfigMutex sync.Mutex
+
+// schemaDDLMutex protects schema creation and drop operations to prevent
+// "could not open relation with OID" errors when DROP SCHEMA CASCADE invalidates
+// OIDs that other concurrent sessions are using.
+var schemaDDLMutex sync.Mutex
 
 // getPostgresPort returns the port to use for connecting to PostgreSQL.
 // pgvector flavor uses port 55432, standard PostgreSQL uses 5432.
@@ -115,12 +122,14 @@ func connectDatabase(config dbConfig) (database.Database, error) {
 	}
 
 	return postgres.NewDatabase(database.Config{
-		User:     user,
-		Password: getPostgresPassword(),
-		Host:     getPostgresHost(),
-		Port:     getPostgresPort(),
-		DbName:   config.DbName,
-		SslMode:  getPostgresSslMode(),
+		User:         user,
+		Password:     getPostgresPassword(),
+		Host:         getPostgresHost(),
+		Port:         getPostgresPort(),
+		DbName:       config.DbName,
+		SslMode:      getPostgresSslMode(),
+		SearchPath:   config.SearchPath,
+		TargetSchema: config.TargetSchema,
 	})
 }
 
@@ -246,6 +255,41 @@ func dropTestDatabase(dbName string) {
 	_ = pgExec(defaultDatabaseName, fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
 }
 
+// createTestSchema creates a new schema for a test case.
+// This is used for schema-based test isolation which is faster than database isolation
+// and compatible with Aurora DSQL which doesn't support CREATE/DROP DATABASE.
+func createTestSchema(t *testing.T, schemaName string) {
+	t.Helper()
+	schemaDDLMutex.Lock()
+	defer schemaDDLMutex.Unlock()
+	mustPgExec(testDatabaseName, fmt.Sprintf("DROP SCHEMA IF EXISTS %s CASCADE", schemaName))
+	mustPgExec(testDatabaseName, fmt.Sprintf("CREATE SCHEMA %s", schemaName))
+}
+
+// dropTestSchema drops a test schema. This is used in cleanup.
+func dropTestSchema(schemaName string) {
+	schemaDDLMutex.Lock()
+	defer schemaDDLMutex.Unlock()
+	_ = pgExec(testDatabaseName, fmt.Sprintf("DROP SCHEMA IF EXISTS %s CASCADE", schemaName))
+}
+
+// testNeedsDatabaseIsolation checks if a test needs database-level isolation.
+// Tests that create schemas, extensions, or have specific users need database isolation.
+// Tests that explicitly reference public. schema also need database isolation to test
+// schema equivalence (e.g., UnqualifiedAndQualifiedAreSame).
+func testNeedsDatabaseIsolation(test tu.TestCase) bool {
+	combined := strings.ToUpper(test.Current) + strings.ToUpper(test.Desired)
+	if strings.Contains(combined, "CREATE SCHEMA") ||
+		strings.Contains(combined, "CREATE EXTENSION") ||
+		strings.Contains(combined, "DROP EXTENSION") {
+		return true
+	}
+	// Check for explicit public. schema references (e.g., "public.tablename", "public.domainname")
+	// These tests verify schema equivalence and need the actual public schema
+	combinedLower := strings.ToLower(test.Current) + strings.ToLower(test.Desired)
+	return strings.Contains(combinedLower, "public.")
+}
+
 func TestApply(t *testing.T) {
 	// Create all test roles once before running tests
 	// PostgreSQL roles are cluster-wide, not database-specific
@@ -261,25 +305,51 @@ func TestApply(t *testing.T) {
 	pgFlavor := getPostgresFlavor()
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
+			// Schema-based isolation is used by default.
+			// Tests run sequentially to avoid PostgreSQL catalog OID race conditions.
+			// Tests with users or that create schemas/extensions need database isolation.
+			needsDbIsolation := test.User != "" || testNeedsDatabaseIsolation(test)
 
-			dbName := tu.CreateTestDatabaseName(name, 63)
-			createTestDatabase(t, dbName, test.User)
+			if needsDbIsolation {
+				// Database-based isolation for complex tests
+				dbName := tu.CreateTestDatabaseName(name, 63)
+				createTestDatabase(t, dbName, test.User)
 
-			t.Cleanup(func() {
-				dropTestDatabase(dbName)
-			})
+				t.Cleanup(func() {
+					dropTestDatabase(dbName)
+				})
 
-			db, err := connectDatabase(dbConfig{
-				User:   test.User,
-				DbName: dbName,
-			})
-			if err != nil {
-				t.Fatal(err)
+				db, err := connectDatabase(dbConfig{
+					User:   test.User,
+					DbName: dbName,
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer db.Close()
+
+				tu.RunTest(t, db, test, schema.GeneratorModePostgres, sqlParser, version, pgFlavor)
+			} else {
+				// Schema-based isolation (default, Aurora DSQL compatible)
+				schemaName := tu.CreateTestDatabaseName(name, 63)
+				createTestSchema(t, schemaName)
+
+				t.Cleanup(func() {
+					dropTestSchema(schemaName)
+				})
+
+				db, err := connectDatabase(dbConfig{
+					DbName:       testDatabaseName,
+					SearchPath:   schemaName,
+					TargetSchema: []string{schemaName},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer db.Close()
+
+				tu.RunTest(t, db, test, schema.GeneratorModePostgres, sqlParser, version, pgFlavor)
 			}
-			defer db.Close()
-
-			tu.RunTest(t, db, test, schema.GeneratorModePostgres, sqlParser, version, pgFlavor)
 		})
 	}
 }
@@ -389,11 +459,22 @@ func TestPsqldefCreateView(t *testing.T) {
 			assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
 
 			createView = fmt.Sprintf("CREATE VIEW %s.view_user_posts AS SELECT p.id from (%s p INNER JOIN %s u ON ((p.user_id = u.id))) WHERE (p.is_deleted = FALSE);\n", tc.Schema, posts, users)
-			assertApplyOutput(t, createUsers+createPosts+createView, wrapWithTransaction(fmt.Sprintf(`CREATE OR REPLACE VIEW "%s"."view_user_posts" AS select p.id from (%s as p join %s as u on ((p.user_id = u.id))) where (p.is_deleted = false);`+"\n", tc.Schema, posts, users)))
+			// For public schema, omit the schema prefix in expected output; for non-public schemas, include it
+			var replaceViewDDL, skipDropViewDDL, dropViewDDL string
+			if tc.Schema == "public" {
+				replaceViewDDL = fmt.Sprintf(`CREATE OR REPLACE VIEW "view_user_posts" AS select p.id from (%s as p join %s as u on ((p.user_id = u.id))) where (p.is_deleted = false);`+"\n", posts, users)
+				skipDropViewDDL = `-- Skipped: DROP VIEW "view_user_posts";` + "\n"
+				dropViewDDL = `DROP VIEW "view_user_posts";` + "\n"
+			} else {
+				replaceViewDDL = fmt.Sprintf(`CREATE OR REPLACE VIEW "%s"."view_user_posts" AS select p.id from (%s as p join %s as u on ((p.user_id = u.id))) where (p.is_deleted = false);`+"\n", tc.Schema, posts, users)
+				skipDropViewDDL = fmt.Sprintf(`-- Skipped: DROP VIEW "%s"."view_user_posts";`, tc.Schema) + "\n"
+				dropViewDDL = fmt.Sprintf(`DROP VIEW "%s"."view_user_posts";`, tc.Schema) + "\n"
+			}
+			assertApplyOutput(t, createUsers+createPosts+createView, wrapWithTransaction(replaceViewDDL))
 			assertApplyOutput(t, createUsers+createPosts+createView, nothingModified)
 
-			assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(fmt.Sprintf(`-- Skipped: DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n"))
-			assertApplyOutputWithEnableDrop(t, createUsers+createPosts, wrapWithTransaction(fmt.Sprintf(`DROP VIEW "%s"."view_user_posts";`, tc.Schema)+"\n"))
+			assertApplyOutput(t, createUsers+createPosts, wrapWithTransaction(skipDropViewDDL))
+			assertApplyOutputWithEnableDrop(t, createUsers+createPosts, wrapWithTransaction(dropViewDDL))
 			assertApplyOutput(t, createUsers+createPosts, nothingModified)
 		})
 	}
@@ -422,7 +503,14 @@ func TestPsqldefCreateMaterializedView(t *testing.T) {
 			assertApplyOutput(t, createUsers+createPosts+createMaterializedView, wrapWithTransaction(fmt.Sprintf("CREATE MATERIALIZED VIEW %s.view_user_posts AS SELECT p.id FROM (%s as p JOIN %s as u ON ((p.user_id = u.id)));\n", tc.Schema, posts, users)))
 			assertApplyOutput(t, createUsers+createPosts+createMaterializedView, nothingModified)
 
-			assertApplyOutputWithEnableDrop(t, createUsers+createPosts, wrapWithTransaction(fmt.Sprintf(`DROP MATERIALIZED VIEW "%s"."view_user_posts";`, tc.Schema)+"\n"))
+			// For public schema, omit the schema prefix; for non-public schemas, include it
+			var dropMaterializedViewDDL string
+			if tc.Schema == "public" {
+				dropMaterializedViewDDL = `DROP MATERIALIZED VIEW "view_user_posts";` + "\n"
+			} else {
+				dropMaterializedViewDDL = fmt.Sprintf(`DROP MATERIALIZED VIEW "%s"."view_user_posts";`, tc.Schema) + "\n"
+			}
+			assertApplyOutputWithEnableDrop(t, createUsers+createPosts, wrapWithTransaction(dropMaterializedViewDDL))
 			assertApplyOutput(t, createUsers+createPosts, nothingModified)
 		})
 	}
@@ -445,8 +533,15 @@ func TestPsqldefCreateIndex(t *testing.T) {
 			createIndex2 := fmt.Sprintf(`CREATE UNIQUE INDEX index_age on %s.users (age);`, tc.Schema)
 			createIndex3 := fmt.Sprintf(`CREATE INDEX index_name on %s.users (name, id);`, tc.Schema)
 			createIndex4 := fmt.Sprintf(`CREATE UNIQUE INDEX index_name on %s.users (name) WHERE age > 20;`, tc.Schema)
-			dropIndex1 := fmt.Sprintf(`DROP INDEX "%s"."index_name";`, tc.Schema)
-			dropIndex2 := fmt.Sprintf(`DROP INDEX "%s"."index_age";`, tc.Schema)
+			// For public schema, omit the schema prefix; for non-public schemas, include it
+			var dropIndex1, dropIndex2 string
+			if tc.Schema == "public" {
+				dropIndex1 = `DROP INDEX "index_name";`
+				dropIndex2 = `DROP INDEX "index_age";`
+			} else {
+				dropIndex1 = fmt.Sprintf(`DROP INDEX "%s"."index_name";`, tc.Schema)
+				dropIndex2 = fmt.Sprintf(`DROP INDEX "%s"."index_age";`, tc.Schema)
+			}
 
 			assertApplyOutput(t, createTable+createIndex1+createIndex2, wrapWithTransaction(createTable+"\n"+
 				createIndex1+"\n"+
@@ -557,10 +652,17 @@ func TestPsqldefFunctionAsDefault(t *testing.T) {
 			);`), tc.Schema, tc.Schema)
 
 		// First apply creates the table. The orphaned function drop is skipped (enable_drop=false by default).
-		expectedOutput := fmt.Sprintf("%s\n-- Skipped: DROP FUNCTION %q.\"my_func\";\n", createTable, tc.Schema)
+		// For public schema, the prefix is omitted; for non-public schemas, it's included
+		var dropFunctionDDL string
+		if tc.Schema == "public" {
+			dropFunctionDDL = "-- Skipped: DROP FUNCTION \"my_func\";\n"
+		} else {
+			dropFunctionDDL = fmt.Sprintf("-- Skipped: DROP FUNCTION %q.\"my_func\";\n", tc.Schema)
+		}
+		expectedOutput := fmt.Sprintf("%s\n%s", createTable, dropFunctionDDL)
 		assertApplyOutput(t, createTable, wrapWithTransaction(expectedOutput))
 		// Second apply: orphaned function drop is still skipped, so it appears again
-		assertApplyOutput(t, createTable, wrapWithTransaction(fmt.Sprintf("-- Skipped: DROP FUNCTION %q.\"my_func\";\n", tc.Schema)))
+		assertApplyOutput(t, createTable, wrapWithTransaction(dropFunctionDDL))
 	}
 }
 
@@ -611,7 +713,7 @@ func TestPsqldefDropTable(t *testing.T) {
 
 	tu.WriteFile("schema.sql", "")
 
-	dropTable := `DROP TABLE "public"."users";`
+	dropTable := `DROP TABLE "users";`
 	out := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--enable-drop", "--file", "schema.sql")...)
 	assert.Equal(t, wrapWithTransaction(dropTable+"\n"), out)
 }
@@ -632,7 +734,7 @@ func TestPsqldefConfigInlineEnableDrop(t *testing.T) {
 
 	tu.WriteFile("schema.sql", "")
 
-	dropTable := `DROP TABLE "public"."users";`
+	dropTable := `DROP TABLE "users";`
 	expectedOutput := wrapWithTransaction(dropTable + "\n")
 
 	outFlag := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--enable-drop", "--file", "schema.sql")...)
@@ -660,18 +762,17 @@ func TestPsqldefConfigLegacyIgnoreQuotes(t *testing.T) {
 
 	// Test with legacy_ignore_quotes: false via config-inline
 	// In quote-aware mode, unquoted identifiers should output without quotes
+	// Schema prefix is omitted when it matches the default (public)
 	outQuoteAware := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--config-inline", "legacy_ignore_quotes: false", "--file", "schema.sql")...)
-	// With legacy_ignore_quotes: false, unquoted table/schema names should not have quotes in output
-	// The default schema "public" in lowercase is treated as unquoted
-	assert.Contains(t, outQuoteAware, `ALTER TABLE public.users ADD COLUMN name text;`)
+	assert.Contains(t, outQuoteAware, `ALTER TABLE users ADD COLUMN name text;`)
 
 	// Test with legacy_ignore_quotes: true (legacy behavior) - should quote everything
+	// Schema prefix is still omitted when it matches the default
 	resetTestDatabase()
 	mustPgExec(testDatabaseName, `CREATE TABLE users (id bigint NOT NULL PRIMARY KEY);`)
 
 	outLegacy := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--config-inline", "legacy_ignore_quotes: true", "--file", "schema.sql")...)
-	// With legacy_ignore_quotes: true, table names should be quoted
-	assert.Contains(t, outLegacy, `ALTER TABLE "public"."users" ADD COLUMN "name" text;`)
+	assert.Contains(t, outLegacy, `ALTER TABLE "users" ADD COLUMN "name" text;`)
 }
 
 func TestPsqldefExport(t *testing.T) {
@@ -1081,8 +1182,8 @@ func TestPsqldefTransactionBoundariesWithConcurrentIndex(t *testing.T) {
 		// Regular DDLs should be in transaction, concurrent indexes outside
 		expected := applyPrefix + tu.StripHeredoc(`
 			BEGIN;
-			ALTER TABLE "public"."users" ADD COLUMN "age" integer;
-			ALTER TABLE "public"."users" ADD COLUMN "name" text;
+			ALTER TABLE "users" ADD COLUMN "age" integer;
+			ALTER TABLE "users" ADD COLUMN "name" text;
 			CREATE INDEX idx_users_age ON users (age);
 			COMMIT;
 			CREATE INDEX CONCURRENTLY idx_users_email ON users (email);
@@ -1116,8 +1217,8 @@ func TestPsqldefTransactionBoundariesWithConcurrentIndex(t *testing.T) {
 		// This test may need adjustment based on actual behavior
 		// For now, we'll test that regular DROP INDEX is in transaction
 		expected := wrapWithTransaction(tu.StripHeredoc(`
-			DROP INDEX "public"."idx_users_age";
-			DROP INDEX "public"."idx_users_email";
+			DROP INDEX "idx_users_age";
+			DROP INDEX "idx_users_email";
 		`))
 
 		assertApplyOutputWithEnableDrop(t, schema, expected)
@@ -1150,7 +1251,7 @@ func TestPsqldefTransactionBoundariesWithConcurrentIndex(t *testing.T) {
 		// Verify the structure of the output
 		expectedStructure := "-- dry run --\n" + tu.StripHeredoc(`
 			BEGIN;
-			ALTER TABLE "public"."users" ADD COLUMN "age" integer;
+			ALTER TABLE "users" ADD COLUMN "age" integer;
 			CREATE INDEX idx_users_age ON users (age);
 			COMMIT;
 			CREATE INDEX CONCURRENTLY idx_users_email ON users (email);
@@ -1193,8 +1294,8 @@ func TestPsqldefTransactionBoundariesWithConcurrentIndex(t *testing.T) {
 
 		expected := applyPrefix + tu.StripHeredoc(`
 			BEGIN;
-			ALTER TABLE "public"."users" ADD COLUMN "name" text;
-			ALTER TABLE "public"."orders" ADD COLUMN "created_at" timestamp;
+			ALTER TABLE "users" ADD COLUMN "name" text;
+			ALTER TABLE "orders" ADD COLUMN "created_at" timestamp;
 			CREATE INDEX idx_orders_status ON orders (status);
 			COMMIT;
 			CREATE INDEX CONCURRENTLY idx_users_email ON users (email);
@@ -1260,7 +1361,7 @@ func TestPsqldefDisableDdlTransaction(t *testing.T) {
 		// With disable_ddl_transaction: true, there should be no BEGIN/COMMIT
 		assert.NotContains(t, output, "BEGIN;")
 		assert.NotContains(t, output, "COMMIT;")
-		assert.Contains(t, output, `ALTER TABLE "public"."users" ADD COLUMN "name" text;`)
+		assert.Contains(t, output, `ALTER TABLE "users" ADD COLUMN "name" text;`)
 		assert.Contains(t, output, `CREATE INDEX idx_users_email ON users (email);`)
 	})
 
@@ -1285,7 +1386,7 @@ func TestPsqldefDisableDdlTransaction(t *testing.T) {
 		// Without disable_ddl_transaction, DDLs should be wrapped in BEGIN/COMMIT
 		assert.Contains(t, output, "BEGIN;")
 		assert.Contains(t, output, "COMMIT;")
-		assert.Contains(t, output, `ALTER TABLE "public"."users" ADD COLUMN "age" integer;`)
+		assert.Contains(t, output, `ALTER TABLE "users" ADD COLUMN "age" integer;`)
 	})
 
 	// Test: Mixed DDLs with disable_ddl_transaction (multiple statements)
@@ -1311,9 +1412,9 @@ func TestPsqldefDisableDdlTransaction(t *testing.T) {
 		// All DDLs should run outside transaction
 		assert.NotContains(t, output, "BEGIN;")
 		assert.NotContains(t, output, "COMMIT;")
-		assert.Contains(t, output, `ALTER TABLE "public"."users" ADD COLUMN "email" text;`)
-		assert.Contains(t, output, `ALTER TABLE "public"."users" ADD COLUMN "name" text;`)
-		assert.Contains(t, output, `ALTER TABLE "public"."users" ADD COLUMN "age" integer;`)
+		assert.Contains(t, output, `ALTER TABLE "users" ADD COLUMN "email" text;`)
+		assert.Contains(t, output, `ALTER TABLE "users" ADD COLUMN "name" text;`)
+		assert.Contains(t, output, `ALTER TABLE "users" ADD COLUMN "age" integer;`)
 		assert.Contains(t, output, `CREATE INDEX idx_users_email ON users (email);`)
 		assert.Contains(t, output, `CREATE INDEX idx_users_name ON users (name);`)
 	})
@@ -1510,7 +1611,14 @@ func TestPsqldefCreateDomain(t *testing.T) {
 			assertApplyOutput(t, createDomain+createDomainWithConstraints, nothingModified)
 
 			// Test dropping a domain (requires enable_drop)
-			assertApplyOutputWithEnableDrop(t, createDomain, wrapWithTransaction(fmt.Sprintf("DROP DOMAIN \"%s\".\"positive_int\";\n", tc.Schema)))
+			// For public schema, the prefix is omitted; for non-public schemas, it's included
+			var dropDomainDDL string
+			if tc.Schema == "public" {
+				dropDomainDDL = "DROP DOMAIN \"positive_int\";\n"
+			} else {
+				dropDomainDDL = fmt.Sprintf("DROP DOMAIN \"%s\".\"positive_int\";\n", tc.Schema)
+			}
+			assertApplyOutputWithEnableDrop(t, createDomain, wrapWithTransaction(dropDomainDDL))
 			assertApplyOutputWithEnableDrop(t, createDomain, nothingModified)
 		})
 	}

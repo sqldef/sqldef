@@ -39,11 +39,11 @@ ViewDDLsAreEmittedLastWithoutChangingDefinition:
       secret boolean NOT NULL DEFAULT false
     );
   up: |
-    ALTER TABLE "public"."foos" ADD COLUMN "secret" boolean NOT NULL DEFAULT false;
+    ALTER TABLE "foos" ADD COLUMN "secret" boolean NOT NULL DEFAULT false;
     CREATE VIEW foos_view AS SELECT id, secret FROM foos WHERE secret = false;
   down: |
-    DROP VIEW "public"."foos_view";
-    ALTER TABLE "public"."foos" DROP COLUMN "secret";
+    DROP VIEW "foos_view";
+    ALTER TABLE "foos" DROP COLUMN "secret";
 ViewDDLsAreEmittedLastWithChangingDefinition:
   current: |
     CREATE TABLE foos (
@@ -58,43 +58,43 @@ ViewDDLsAreEmittedLastWithChangingDefinition:
       secret boolean NOT NULL DEFAULT false
     );
   up: |
-    ALTER TABLE "public"."foos" ADD COLUMN "secret" boolean NOT NULL DEFAULT false;
-    DROP VIEW "public"."foos_view";
-    CREATE VIEW "public"."foos_view" AS select id, secret from foos where secret = false;
+    ALTER TABLE "foos" ADD COLUMN "secret" boolean NOT NULL DEFAULT false;
+    DROP VIEW "foos_view";
+    CREATE VIEW "foos_view" AS select id, secret from foos where secret = false;
   down: |
-    DROP VIEW "public"."foos_view";
-    CREATE VIEW "public"."foos_view" AS select 1 as dummy;
-    ALTER TABLE "public"."foos" DROP COLUMN "secret";
+    DROP VIEW "foos_view";
+    CREATE VIEW "foos_view" AS select 1 as dummy;
+    ALTER TABLE "foos" DROP COLUMN "secret";
 CreateMaterializedView:
   current: |
-    CREATE TABLE public.users (
+    CREATE TABLE users (
       id BIGINT PRIMARY KEY,
       name character varying(100)
     );
-    CREATE TABLE public.posts (
+    CREATE TABLE posts (
       id BIGINT PRIMARY KEY,
       name character varying(100),
       user_id BIGINT,
       is_deleted boolean
     );
   desired: |
-    CREATE TABLE public.users (
+    CREATE TABLE users (
       id BIGINT PRIMARY KEY,
       name character varying(100)
     );
-    CREATE TABLE public.posts (
+    CREATE TABLE posts (
       id BIGINT PRIMARY KEY,
       name character varying(100),
       user_id BIGINT,
       is_deleted boolean
     );
-    CREATE MATERIALIZED VIEW public.view_user_posts AS
+    CREATE MATERIALIZED VIEW view_user_posts AS
       SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
   up: |
-    CREATE MATERIALIZED VIEW public.view_user_posts AS
+    CREATE MATERIALIZED VIEW view_user_posts AS
       SELECT p.id FROM (posts as p JOIN users as u ON ((p.user_id = u.id)));
   down: |
-    DROP MATERIALIZED VIEW "public"."view_user_posts";
+    DROP MATERIALIZED VIEW "view_user_posts";
 DropMaterializedView:
   current: |
     CREATE TABLE points (id bigint);
@@ -103,7 +103,7 @@ DropMaterializedView:
   desired: |
     CREATE TABLE points (id bigint);
   up: |
-    DROP MATERIALIZED VIEW "public"."points_view";
+    DROP MATERIALIZED VIEW "points_view";
   down: |
     CREATE MATERIALIZED VIEW IF NOT EXISTS points_view AS
       SELECT id FROM points;
@@ -143,8 +143,8 @@ MaterializedViewIndex:
     CREATE INDEX points_idx ON points (tenant_id, user_id, point_type);
     CREATE INDEX points_view_idx ON points_view (tenant_id);
   down: |
-    DROP MATERIALIZED VIEW "public"."points_view";
-    DROP TABLE "public"."points";
+    DROP MATERIALIZED VIEW "points_view";
+    DROP TABLE "points";
 ViewWithCTE:
   desired: |
     CREATE TABLE users (
@@ -228,10 +228,10 @@ MaterializedViewWithDateFunction:
       FROM activities;
 CreateViewCast:
   current: |
-    CREATE TABLE "public"."hoge" (
+    CREATE TABLE "hoge" (
       "amount" text
     );
-    CREATE VIEW public.hoge_view AS SELECT (hoge.amount)::numeric(10,2) AS amount_num FROM hoge;
+    CREATE VIEW hoge_view AS SELECT (hoge.amount)::numeric(10,2) AS amount_num FROM hoge;
   desired: |
     create table hoge (
       amount text
@@ -267,12 +267,12 @@ ReplaceViewWithChangeCondition:
       FROM hoge
         WHERE bar = 'baz';
   up: |
-    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar from hoge where bar = 'baz';
+    CREATE OR REPLACE VIEW "v" AS select foo, bar from hoge where bar = 'baz';
   down: |
-    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar from hoge;
+    CREATE OR REPLACE VIEW "v" AS select foo, bar from hoge;
 ReplaceViewWithAddColumnToTail:
   current: |
-    CREATE TABLE "public"."hoge" (
+    CREATE TABLE "hoge" (
       "foo" text,
       "bar" text
     );
@@ -282,7 +282,7 @@ ReplaceViewWithAddColumnToTail:
       bar
     FROM hoge;
   desired: |
-    CREATE TABLE "public"."hoge" (
+    CREATE TABLE "hoge" (
       "foo" text,
       "bar" text
     );
@@ -294,10 +294,10 @@ ReplaceViewWithAddColumnToTail:
       'x' as added
      FROM hoge;
   up: |
-    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar, 'x' as added from hoge;
+    CREATE OR REPLACE VIEW "v" AS select foo, bar, 'x' as added from hoge;
   down: |
-    DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select foo, bar from hoge;
+    DROP VIEW "v";
+    CREATE VIEW "v" AS select foo, bar from hoge;
 ReplaceViewWithAddColumnToMiddle:
   current: |
     CREATE TABLE "hoge" (
@@ -322,14 +322,14 @@ ReplaceViewWithAddColumnToMiddle:
       bar
      FROM hoge;
   up: |
-    DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select foo, 'x' as added, bar from hoge;
+    DROP VIEW "v";
+    CREATE VIEW "v" AS select foo, 'x' as added, bar from hoge;
   down: |
-    DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select foo, bar from hoge;
+    DROP VIEW "v";
+    CREATE VIEW "v" AS select foo, bar from hoge;
 ReplaceViewWithDropColumn:
   current: |
-    CREATE TABLE "public"."hoge" (
+    CREATE TABLE "hoge" (
       "foo" text,
       "bar" text
     );
@@ -339,7 +339,7 @@ ReplaceViewWithDropColumn:
       bar
     FROM hoge;
   desired: |
-    CREATE TABLE "public"."hoge" (
+    CREATE TABLE "hoge" (
       "foo" text,
       "bar" text
     );
@@ -347,13 +347,13 @@ ReplaceViewWithDropColumn:
     CREATE VIEW v AS
     SELECT foo FROM hoge;
   up: |
-    DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select foo from hoge;
+    DROP VIEW "v";
+    CREATE VIEW "v" AS select foo from hoge;
   down: |
-    CREATE OR REPLACE VIEW "public"."v" AS select foo, bar from hoge;
+    CREATE OR REPLACE VIEW "v" AS select foo, bar from hoge;
 ReplaceViewWithChangeColumn:
   current: |
-    CREATE TABLE "public"."hoge" (
+    CREATE TABLE "hoge" (
       "foo" text,
       "bar" text
     );
@@ -363,7 +363,7 @@ ReplaceViewWithChangeColumn:
       bar
     FROM hoge;
   desired: |
-    CREATE TABLE "public"."hoge" (
+    CREATE TABLE "hoge" (
       "foo" text,
       "bar" text
     );
@@ -374,11 +374,11 @@ ReplaceViewWithChangeColumn:
       'x' as changed
     FROM hoge;
   up: |
-    DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select foo, 'x' as changed from hoge;
+    DROP VIEW "v";
+    CREATE VIEW "v" AS select foo, 'x' as changed from hoge;
   down: |
-    DROP VIEW "public"."v";
-    CREATE VIEW "public"."v" AS select foo, bar from hoge;
+    DROP VIEW "v";
+    CREATE VIEW "v" AS select foo, bar from hoge;
 CreateViewWithCastCase:
   desired: |
     create table hoge (amount text);
@@ -507,10 +507,10 @@ ExtractWithAge:
       FROM user_info;
 CastBpchar:
   desired: |
-    CREATE TABLE public.dummy_table (
+    CREATE TABLE dummy_table (
       "col" character(30)
     );
-    CREATE VIEW public.dummy_view AS
+    CREATE VIEW dummy_view AS
       SELECT dummy_table.col
       FROM dummy_table
       WHERE (dummy_table.col <> 'dummy value'::bpchar);
@@ -676,7 +676,7 @@ ViewWithDistinctOn:
     SELECT DISTINCT ON (c.carrier) c.carrier
     FROM carrier c;
   down: |
-    DROP VIEW public.carrier_current;
+    DROP VIEW carrier_current;
 
 ViewWithDistinctOnMultipleColumns:
   legacy_ignore_quotes: false
@@ -692,4 +692,4 @@ ViewWithDistinctOnMultipleColumns:
     SELECT DISTINCT ON (customer_id, order_date) customer_id, order_date, amount
     FROM orders;
   down: |
-    DROP VIEW public.latest_orders;
+    DROP VIEW latest_orders;

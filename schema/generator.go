@@ -2525,7 +2525,7 @@ func (g *Generator) generateDDLsForComment(desired *Comment) ([]string, error) {
 // escapeCommentObjectParts returns the escaped object parts for a COMMENT statement.
 // Object is []Ident representing: [schema, table] for TABLE, [schema, table, column] for COLUMN.
 // The object is first normalized (schema prepended if missing), then the schema part
-// is normalized if it matches the default schema.
+// is omitted if it matches the default schema.
 func (g *Generator) escapeCommentObjectParts(comment *Comment) []string {
 	normalizedObject := normalizeCommentObject(&comment.comment, g.mode, g.defaultSchema)
 
@@ -2537,14 +2537,17 @@ func (g *Generator) escapeCommentObjectParts(comment *Comment) []string {
 		schemaPos = 1
 	}
 
-	escapedParts := make([]string, len(normalizedObject))
+	escapedParts := []string{}
 	for i, ident := range normalizedObject {
 		if i == schemaPos && len(normalizedObject) > 1 {
-			// This element is the schema - normalize if it's the default schema
+			// This element is the schema - omit if it matches the default schema
 			normalizedSchema := g.normalizeDefaultSchema(ident)
-			escapedParts[i] = g.escapeSQLIdent(normalizedSchema)
+			if strings.EqualFold(normalizedSchema.Name, g.defaultSchema) {
+				continue // Skip the schema part
+			}
+			escapedParts = append(escapedParts, g.escapeSQLIdent(normalizedSchema))
 		} else {
-			escapedParts[i] = g.escapeSQLNameQuoteAware(ident.Name, ident.Quoted)
+			escapedParts = append(escapedParts, g.escapeSQLNameQuoteAware(ident.Name, ident.Quoted))
 		}
 	}
 	return escapedParts
@@ -3278,11 +3281,8 @@ func (g *Generator) generateRenameIndex(tableName QualifiedName, oldIndexName Id
 			g.escapeSQLIdent(newIndexName)))
 	case GeneratorModePostgres:
 		// PostgreSQL uses ALTER INDEX ... RENAME TO
-		// Qualify the old index name with schema
-		schema := g.normalizeDefaultSchema(tableName.Schema)
-		ddls = append(ddls, fmt.Sprintf("ALTER INDEX %s.%s RENAME TO %s",
-			g.escapeSQLIdent(schema),
-			g.escapeSQLIdent(oldIndexName),
+		ddls = append(ddls, fmt.Sprintf("ALTER INDEX %s RENAME TO %s",
+			g.buildEscapedQualifiedName(tableName.Schema, oldIndexName),
 			g.escapeSQLIdent(newIndexName)))
 	case GeneratorModeMssql:
 		// SQL Server uses sp_rename - use raw names without escaping
@@ -3340,9 +3340,7 @@ func (g *Generator) generateDropIndex(tableName QualifiedName, indexName Ident, 
 		if constraint {
 			return fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeQualifiedName(tableName), g.escapeSQLIdent(indexName))
 		} else {
-			// For DROP INDEX, we need schema.indexname
-			schema := g.normalizeDefaultSchema(tableName.Schema)
-			return fmt.Sprintf("DROP INDEX %s.%s", g.escapeSQLIdent(schema), g.escapeSQLIdent(indexName))
+			return fmt.Sprintf("DROP INDEX %s", g.buildEscapedQualifiedName(tableName.Schema, indexName))
 		}
 	case GeneratorModeMssql:
 		if constraint {
@@ -3359,17 +3357,36 @@ func (g *Generator) generateDropIndex(tableName QualifiedName, indexName Ident, 
 
 // escapeQualifiedName escapes a QualifiedName using quote-aware logic.
 // Both schema and table names use quote-aware logic when legacy_ignore_quotes is false.
+// For PostgreSQL and MSSQL, omits schema prefix when it matches the default schema (from search_path).
 func (g *Generator) escapeQualifiedName(name QualifiedName) string {
+	return g.buildEscapedQualifiedName(name.Schema, name.Name)
+}
+
+// buildEscapedQualifiedName returns "schema"."name" for non-default schema, "name" for default schema.
+// For PostgreSQL, omits schema prefix when it matches the current default schema (search_path).
+// For MSSQL, always includes the schema prefix.
+func (g *Generator) buildEscapedQualifiedName(schema Ident, name Ident) string {
 	switch g.mode {
-	case GeneratorModePostgres, GeneratorModeMssql:
+	case GeneratorModePostgres:
 		// If schema is empty, don't add schema prefix
-		if name.Schema.IsEmpty() {
-			return g.escapeSQLIdent(name.Name)
+		if schema.IsEmpty() {
+			return g.escapeSQLIdent(name)
 		}
-		schema := g.normalizeDefaultSchema(name.Schema)
-		return g.escapeSQLIdent(schema) + "." + g.escapeSQLIdent(name.Name)
+		normalizedSchema := g.normalizeDefaultSchema(schema)
+		// Omit schema prefix if it matches the default schema (from search_path)
+		if strings.EqualFold(normalizedSchema.Name, g.defaultSchema) {
+			return g.escapeSQLIdent(name)
+		}
+		return g.escapeSQLIdent(normalizedSchema) + "." + g.escapeSQLIdent(name)
+	case GeneratorModeMssql:
+		// If schema is empty, don't add schema prefix
+		if schema.IsEmpty() {
+			return g.escapeSQLIdent(name)
+		}
+		normalizedSchema := g.normalizeDefaultSchema(schema)
+		return g.escapeSQLIdent(normalizedSchema) + "." + g.escapeSQLIdent(name)
 	default:
-		return g.escapeSQLIdent(name.Name)
+		return g.escapeSQLIdent(name)
 	}
 }
 
@@ -5399,13 +5416,12 @@ func removeTableByName(tables []*Table, name string) []*Table {
 }
 
 func (g *Generator) generateSerialSequenceAlterDDL(table *Table, column *Column, underlyingType string) string {
-	schemaIdent := g.normalizeDefaultSchema(table.name.Schema)
 	tableName := table.name.Name.Name
 	columnName := column.name.Name
 
 	seqName := fmt.Sprintf("%s_%s_seq", tableName, columnName)
 	seqIdent := Ident{Name: seqName, Quoted: false}
-	return fmt.Sprintf("ALTER SEQUENCE %s.%s AS %s", g.escapeSQLIdent(schemaIdent), g.escapeSQLIdent(seqIdent), underlyingType)
+	return fmt.Sprintf("ALTER SEQUENCE %s AS %s", g.buildEscapedQualifiedName(table.name.Schema, seqIdent), underlyingType)
 }
 
 func generateSequenceClause(sequence *Sequence) string {

@@ -32,11 +32,11 @@ CreateTriggerBeforeInsert:
       RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
-    CREATE TRIGGER set_created_at before insert ON public.users FOR EACH ROW EXECUTE FUNCTION set_timestamp();
+    CREATE TRIGGER set_created_at before insert ON users FOR EACH ROW EXECUTE FUNCTION set_timestamp();
   down: |
-    DROP TRIGGER set_created_at ON public.users;
-    DROP TABLE public.users;
-    DROP FUNCTION public.set_timestamp;
+    DROP TRIGGER set_created_at ON users;
+    DROP TABLE users;
+    DROP FUNCTION set_timestamp;
 CreateTriggerAfterUpdate:
   legacy_ignore_quotes: false
   desired: |
@@ -66,11 +66,11 @@ CreateTriggerAfterUpdate:
       RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
-    CREATE TRIGGER log_update after update ON public.users FOR EACH ROW EXECUTE FUNCTION log_changes();
+    CREATE TRIGGER log_update after update ON users FOR EACH ROW EXECUTE FUNCTION log_changes();
   down: |
-    DROP TRIGGER log_update ON public.users;
-    DROP TABLE public.users;
-    DROP FUNCTION public.log_changes;
+    DROP TRIGGER log_update ON users;
+    DROP TABLE users;
+    DROP FUNCTION log_changes;
 CreateTriggerAfterDelete:
   legacy_ignore_quotes: false
   desired: |
@@ -100,11 +100,11 @@ CreateTriggerAfterDelete:
       RETURN OLD;
     END;
     $$ LANGUAGE plpgsql;
-    CREATE TRIGGER archive_deleted after delete ON public.users FOR EACH ROW EXECUTE FUNCTION archive_row();
+    CREATE TRIGGER archive_deleted after delete ON users FOR EACH ROW EXECUTE FUNCTION archive_row();
   down: |
-    DROP TRIGGER archive_deleted ON public.users;
-    DROP TABLE public.users;
-    DROP FUNCTION public.archive_row;
+    DROP TRIGGER archive_deleted ON users;
+    DROP TABLE users;
+    DROP FUNCTION archive_row;
 CreateTriggerExecuteProcedure:
   legacy_ignore_quotes: false
   desired: |
@@ -134,11 +134,11 @@ CreateTriggerExecuteProcedure:
       RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
-    CREATE TRIGGER validate_user before insert ON public.users FOR EACH ROW EXECUTE PROCEDURE validate_func();
+    CREATE TRIGGER validate_user before insert ON users FOR EACH ROW EXECUTE PROCEDURE validate_func();
   down: |
-    DROP TRIGGER validate_user ON public.users;
-    DROP TABLE public.users;
-    DROP FUNCTION public.validate_func;
+    DROP TRIGGER validate_user ON users;
+    DROP TABLE users;
+    DROP FUNCTION validate_func;
 CreateTriggerWithMultipleEvents:
   legacy_ignore_quotes: false
   desired: |
@@ -166,11 +166,11 @@ CreateTriggerWithMultipleEvents:
       RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
-    CREATE TRIGGER enforce_required_permit before insert OR update ON public.device_tests FOR EACH ROW EXECUTE FUNCTION check_trigger();
+    CREATE TRIGGER enforce_required_permit before insert OR update ON device_tests FOR EACH ROW EXECUTE FUNCTION check_trigger();
   down: |
-    DROP TRIGGER enforce_required_permit ON public.device_tests;
-    DROP TABLE public.device_tests;
-    DROP FUNCTION public.check_trigger;
+    DROP TRIGGER enforce_required_permit ON device_tests;
+    DROP TABLE device_tests;
+    DROP FUNCTION check_trigger;
 CreateTriggerWithThreeEvents:
   legacy_ignore_quotes: false
   desired: |
@@ -200,11 +200,11 @@ CreateTriggerWithThreeEvents:
       RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
-    CREATE TRIGGER audit_all after insert OR update OR delete ON public.audit_log FOR EACH ROW EXECUTE FUNCTION log_all_changes();
+    CREATE TRIGGER audit_all after insert OR update OR delete ON audit_log FOR EACH ROW EXECUTE FUNCTION log_all_changes();
   down: |
-    DROP TRIGGER audit_all ON public.audit_log;
-    DROP TABLE public.audit_log;
-    DROP FUNCTION public.log_all_changes;
+    DROP TRIGGER audit_all ON audit_log;
+    DROP TABLE audit_log;
+    DROP FUNCTION log_all_changes;
 CreateTriggerWithoutForEachRow:
   legacy_ignore_quotes: false
   desired: |
@@ -234,11 +234,11 @@ CreateTriggerWithoutForEachRow:
       RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
-    CREATE TRIGGER notify_change after insert ON public.users FOR EACH ROW EXECUTE FUNCTION notify_func();
+    CREATE TRIGGER notify_change after insert ON users FOR EACH ROW EXECUTE FUNCTION notify_func();
   down: |
-    DROP TRIGGER notify_change ON public.users;
-    DROP TABLE public.users;
-    DROP FUNCTION public.notify_func;
+    DROP TRIGGER notify_change ON users;
+    DROP TABLE users;
+    DROP FUNCTION notify_func;
 CreateTriggerWithFunctionArgs:
   legacy_ignore_quotes: false
   desired: |
@@ -268,11 +268,11 @@ CreateTriggerWithFunctionArgs:
       RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
-    CREATE TRIGGER check_value before insert ON public.users FOR EACH ROW EXECUTE FUNCTION check_func('arg1', 'arg2');
+    CREATE TRIGGER check_value before insert ON users FOR EACH ROW EXECUTE FUNCTION check_func('arg1', 'arg2');
   down: |
-    DROP TRIGGER check_value ON public.users;
-    DROP TABLE public.users;
-    DROP FUNCTION public.check_func;
+    DROP TRIGGER check_value ON users;
+    DROP TABLE users;
+    DROP FUNCTION check_func;
 CreateMultipleTriggers:
   legacy_ignore_quotes: false
   desired: |
@@ -319,14 +319,14 @@ CreateMultipleTriggers:
       RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
-    CREATE TRIGGER before_insert_trigger before insert ON public.users FOR EACH ROW EXECUTE FUNCTION before_insert_func();
-    CREATE TRIGGER after_insert_trigger after insert ON public.users FOR EACH ROW EXECUTE FUNCTION after_insert_func();
+    CREATE TRIGGER before_insert_trigger before insert ON users FOR EACH ROW EXECUTE FUNCTION before_insert_func();
+    CREATE TRIGGER after_insert_trigger after insert ON users FOR EACH ROW EXECUTE FUNCTION after_insert_func();
   down: |
-    DROP TRIGGER after_insert_trigger ON public.users;
-    DROP TRIGGER before_insert_trigger ON public.users;
-    DROP TABLE public.users;
-    DROP FUNCTION public.after_insert_func;
-    DROP FUNCTION public.before_insert_func;
+    DROP TRIGGER after_insert_trigger ON users;
+    DROP TRIGGER before_insert_trigger ON users;
+    DROP TABLE users;
+    DROP FUNCTION after_insert_func;
+    DROP FUNCTION before_insert_func;
 DropTrigger:
   legacy_ignore_quotes: false
   current: |
@@ -357,9 +357,9 @@ DropTrigger:
     END;
     $$ LANGUAGE plpgsql;
   up: |
-    DROP TRIGGER log_insert ON public.users;
+    DROP TRIGGER log_insert ON users;
   down: |
-    CREATE TRIGGER log_insert after insert ON public.users FOR EACH ROW EXECUTE FUNCTION log_func();
+    CREATE TRIGGER log_insert after insert ON users FOR EACH ROW EXECUTE FUNCTION log_func();
 ModifyTrigger:
   legacy_ignore_quotes: false
   current: |
@@ -393,11 +393,11 @@ ModifyTrigger:
       AFTER UPDATE ON users
       FOR EACH ROW EXECUTE FUNCTION trigger_func();
   up: |
-    DROP TRIGGER log_changes ON public.users;
-    CREATE TRIGGER log_changes after update ON public.users FOR EACH ROW EXECUTE FUNCTION trigger_func();
+    DROP TRIGGER log_changes ON users;
+    CREATE TRIGGER log_changes after update ON users FOR EACH ROW EXECUTE FUNCTION trigger_func();
   down: |
-    DROP TRIGGER log_changes ON public.users;
-    CREATE TRIGGER log_changes before insert ON public.users FOR EACH ROW EXECUTE FUNCTION trigger_func();
+    DROP TRIGGER log_changes ON users;
+    CREATE TRIGGER log_changes before insert ON users FOR EACH ROW EXECUTE FUNCTION trigger_func();
 
 CreateTriggerUpdateOfColumn:
   legacy_ignore_quotes: false
@@ -428,11 +428,11 @@ CreateTriggerUpdateOfColumn:
       RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
-    CREATE TRIGGER addresses_street1_titlecase_trigger before insert OR update OF street1 ON public.addresses FOR EACH ROW EXECUTE FUNCTION addresses_street1_titlecase();
+    CREATE TRIGGER addresses_street1_titlecase_trigger before insert OR update OF street1 ON addresses FOR EACH ROW EXECUTE FUNCTION addresses_street1_titlecase();
   down: |
-    DROP TRIGGER addresses_street1_titlecase_trigger ON public.addresses;
-    DROP TABLE public.addresses;
-    DROP FUNCTION public.addresses_street1_titlecase;
+    DROP TRIGGER addresses_street1_titlecase_trigger ON addresses;
+    DROP TABLE addresses;
+    DROP FUNCTION addresses_street1_titlecase;
 
 CreateTriggerUpdateOfMultipleColumns:
   legacy_ignore_quotes: false
@@ -465,8 +465,8 @@ CreateTriggerUpdateOfMultipleColumns:
       RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
-    CREATE TRIGGER addresses_update_trigger before update OF street1, street2 ON public.addresses FOR EACH ROW EXECUTE FUNCTION addresses_update_check();
+    CREATE TRIGGER addresses_update_trigger before update OF street1, street2 ON addresses FOR EACH ROW EXECUTE FUNCTION addresses_update_check();
   down: |
-    DROP TRIGGER addresses_update_trigger ON public.addresses;
-    DROP TABLE public.addresses;
-    DROP FUNCTION public.addresses_update_check;
+    DROP TRIGGER addresses_update_trigger ON addresses;
+    DROP TABLE addresses;
+    DROP FUNCTION addresses_update_check;

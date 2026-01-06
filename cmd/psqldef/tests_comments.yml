@@ -1,92 +1,92 @@
 # yaml-language-server: $schema=../../testutil/testcase.schema.json
 Comment:
   current: |
-    CREATE TABLE "public"."hoge" (
+    CREATE TABLE "hoge" (
       "id" bigserial NOT NULL,
       "foo" text NOT NULL DEFAULT ''::text,
       PRIMARY KEY ("id")
     );
   desired: |
-    CREATE TABLE "public"."hoge" (
+    CREATE TABLE "hoge" (
         "id" bigserial NOT NULL,
         "foo" text NOT NULL DEFAULT ''::text,
         PRIMARY KEY ("id")
     );
 
-    COMMENT ON TABLE public.hoge is 'hoge table';
-    COMMENT ON COLUMN public.hoge.id is 'hoge id';
-    COMMENT ON COLUMN public.hoge.foo is 'foo comment';
+    COMMENT ON TABLE hoge is 'hoge table';
+    COMMENT ON COLUMN hoge.id is 'hoge id';
+    COMMENT ON COLUMN hoge.foo is 'foo comment';
   up: |
-    COMMENT ON TABLE "public"."hoge" IS 'hoge table';
-    COMMENT ON COLUMN "public"."hoge"."id" IS 'hoge id';
-    COMMENT ON COLUMN "public"."hoge"."foo" IS 'foo comment';
+    COMMENT ON TABLE "hoge" IS 'hoge table';
+    COMMENT ON COLUMN "hoge"."id" IS 'hoge id';
+    COMMENT ON COLUMN "hoge"."foo" IS 'foo comment';
   down: |
-    COMMENT ON TABLE "public"."hoge" IS NULL;
-    COMMENT ON COLUMN "public"."hoge"."id" IS NULL;
-    COMMENT ON COLUMN "public"."hoge"."foo" IS NULL;
+    COMMENT ON TABLE "hoge" IS NULL;
+    COMMENT ON COLUMN "hoge"."id" IS NULL;
+    COMMENT ON COLUMN "hoge"."foo" IS NULL;
 MultipleComments:
   current: |
-    CREATE TABLE "public"."hoge" (
+    CREATE TABLE "hoge" (
       "id" bigserial NOT NULL,
       PRIMARY KEY ("id")
     );
-    CREATE TABLE "public"."bar" (
+    CREATE TABLE "bar" (
       "id" bigserial NOT NULL,
       PRIMARY KEY ("id")
     );
 
-    COMMENT ON COLUMN public.hoge.id is 'hoge id';
+    COMMENT ON COLUMN hoge.id is 'hoge id';
   desired: |
-    CREATE TABLE "public"."hoge" (
+    CREATE TABLE "hoge" (
       "id" bigserial NOT NULL,
       PRIMARY KEY ("id")
     );
-    CREATE TABLE "public"."bar" (
+    CREATE TABLE "bar" (
       "id" bigserial NOT NULL,
       PRIMARY KEY ("id")
     );
 
-    COMMENT ON COLUMN public.hoge.id is 'hoge id';
-    COMMENT ON COLUMN public.bar.id is 'bar id';
+    COMMENT ON COLUMN hoge.id is 'hoge id';
+    COMMENT ON COLUMN bar.id is 'bar id';
   up: |
-    COMMENT ON COLUMN "public"."bar"."id" IS 'bar id';
+    COMMENT ON COLUMN "bar"."id" IS 'bar id';
   down: |
-    COMMENT ON COLUMN "public"."bar"."id" IS NULL;
+    COMMENT ON COLUMN "bar"."id" IS NULL;
 UpdateComment:
   current: |
-    CREATE TABLE "public"."hoge" (
+    CREATE TABLE "hoge" (
       "id" bigserial NOT NULL,
       PRIMARY KEY ("id")
     );
-    CREATE TABLE "public"."bar" (
+    CREATE TABLE "bar" (
       "id" bigserial NOT NULL,
       PRIMARY KEY ("id")
     );
 
-    COMMENT ON TABLE public.hoge is 'hoge table';
-    COMMENT ON COLUMN public.hoge.id is 'hoge id';
-    COMMENT ON TABLE public.bar is 'bar table';
-    COMMENT ON COLUMN public.bar.id is 'bar id';
+    COMMENT ON TABLE hoge is 'hoge table';
+    COMMENT ON COLUMN hoge.id is 'hoge id';
+    COMMENT ON TABLE bar is 'bar table';
+    COMMENT ON COLUMN bar.id is 'bar id';
   desired: |
-    CREATE TABLE "public"."hoge" (
+    CREATE TABLE "hoge" (
       "id" bigserial NOT NULL,
       PRIMARY KEY ("id")
     );
-    CREATE TABLE "public"."bar" (
+    CREATE TABLE "bar" (
       "id" bigserial NOT NULL,
       PRIMARY KEY ("id")
     );
 
-    COMMENT ON TABLE public.hoge is 'hoge table updated';
-    COMMENT ON COLUMN public.hoge.id is 'hoge id updated';
-    COMMENT ON TABLE public.bar is 'bar table';
-    COMMENT ON COLUMN public.bar.id is 'bar id';
+    COMMENT ON TABLE hoge is 'hoge table updated';
+    COMMENT ON COLUMN hoge.id is 'hoge id updated';
+    COMMENT ON TABLE bar is 'bar table';
+    COMMENT ON COLUMN bar.id is 'bar id';
   up: |
-    COMMENT ON TABLE "public"."hoge" IS 'hoge table updated';
-    COMMENT ON COLUMN "public"."hoge"."id" IS 'hoge id updated';
+    COMMENT ON TABLE "hoge" IS 'hoge table updated';
+    COMMENT ON COLUMN "hoge"."id" IS 'hoge id updated';
   down: |
-    COMMENT ON TABLE "public"."hoge" IS 'hoge table';
-    COMMENT ON COLUMN "public"."hoge"."id" IS 'hoge id';
+    COMMENT ON TABLE "hoge" IS 'hoge table';
+    COMMENT ON COLUMN "hoge"."id" IS 'hoge id';
 CommentOnNonStandardDefaultSchema:
   current: |
     CREATE TABLE foo.users (
@@ -99,11 +99,11 @@ CommentOnNonStandardDefaultSchema:
     COMMENT ON TABLE foo.users is 'users table updated';
     COMMENT ON COLUMN foo.users.id is 'users id';
   up: |
-    COMMENT ON TABLE "foo"."users" IS 'users table updated';
-    COMMENT ON COLUMN "foo"."users"."id" IS 'users id';
+    COMMENT ON TABLE "users" IS 'users table updated';
+    COMMENT ON COLUMN "users"."id" IS 'users id';
   down: |
-    COMMENT ON TABLE "foo"."users" IS NULL;
-    COMMENT ON COLUMN "foo"."users"."id" IS NULL;
+    COMMENT ON TABLE "users" IS NULL;
+    COMMENT ON COLUMN "users"."id" IS NULL;
   user: psqldef_user
 
 CommentUnset:
@@ -120,11 +120,11 @@ CommentUnset:
     COMMENT ON TABLE users IS NULL;
     COMMENT ON COLUMN users.id IS null;
   up: |
-    COMMENT ON TABLE "public"."users" IS NULL;
-    COMMENT ON COLUMN "public"."users"."id" IS NULL;
+    COMMENT ON TABLE "users" IS NULL;
+    COMMENT ON COLUMN "users"."id" IS NULL;
   down: |
-    COMMENT ON TABLE "public"."users" IS 'users table is before update';
-    COMMENT ON COLUMN "public"."users"."id" IS 'users id column is before update';
+    COMMENT ON TABLE "users" IS 'users table is before update';
+    COMMENT ON COLUMN "users"."id" IS 'users id column is before update';
 CommentNullWhenAlreadyNull:
   current: |
     CREATE TABLE "status" (
@@ -147,11 +147,11 @@ CommentWithoutSchema:
     COMMENT ON TABLE users is 'users table is updated';
     COMMENT ON COLUMN users.id is 'users id column is updated';
   up: |
-    COMMENT ON TABLE "foo"."users" IS 'users table is updated';
-    COMMENT ON COLUMN "foo"."users"."id" IS 'users id column is updated';
+    COMMENT ON TABLE "users" IS 'users table is updated';
+    COMMENT ON COLUMN "users"."id" IS 'users id column is updated';
   down: |
-    COMMENT ON TABLE "foo"."users" IS NULL;
-    COMMENT ON COLUMN "foo"."users"."id" IS NULL;
+    COMMENT ON TABLE "users" IS NULL;
+    COMMENT ON COLUMN "users"."id" IS NULL;
   user: psqldef_user # in cmd/psqldef/psqldef_test.go schema 'foo' is used if 'user' is provided.
 CommentWithoutSchemaWithoutTableNameQuoted:
   current: |
@@ -169,13 +169,13 @@ CommentWithoutSchemaWithoutTableNameQuoted:
     COMMENT ON COLUMN users."update" IS '"users."update" column is updated';
   # Default schema 'public' is needed be prefixed in output to prevent false positive detection of DDL change.
   up: |
-    COMMENT ON TABLE "public"."users" IS 'users table is updated';
-    COMMENT ON COLUMN "public"."users"."id" IS 'users.id column is updated';
-    COMMENT ON COLUMN "public"."users"."update" IS '"users."update" column is updated';
+    COMMENT ON TABLE "users" IS 'users table is updated';
+    COMMENT ON COLUMN "users"."id" IS 'users.id column is updated';
+    COMMENT ON COLUMN "users"."update" IS '"users."update" column is updated';
   down: |
-    COMMENT ON TABLE "public"."users" IS NULL;
-    COMMENT ON COLUMN "public"."users"."id" IS NULL;
-    COMMENT ON COLUMN "public"."users"."update" IS NULL;
+    COMMENT ON TABLE "users" IS NULL;
+    COMMENT ON COLUMN "users"."id" IS NULL;
+    COMMENT ON COLUMN "users"."update" IS NULL;
 CommentWithoutSchemaWithTableNameQuoted:
   current: |
     CREATE TABLE "select" (
@@ -192,30 +192,30 @@ CommentWithoutSchemaWithTableNameQuoted:
     COMMENT ON COLUMN "select"."update" IS '"select"."update" column is updated';
   # Default schema 'public' is needed be prefixed in output to prevent false positive detection of DDL change.
   up: |
-    COMMENT ON TABLE "public"."select" IS '"select" table is updated';
-    COMMENT ON COLUMN "public"."select"."id" IS '"select".id column is updated';
-    COMMENT ON COLUMN "public"."select"."update" IS '"select"."update" column is updated';
+    COMMENT ON TABLE "select" IS '"select" table is updated';
+    COMMENT ON COLUMN "select"."id" IS '"select".id column is updated';
+    COMMENT ON COLUMN "select"."update" IS '"select"."update" column is updated';
   down: |
-    COMMENT ON TABLE "public"."select" IS NULL;
-    COMMENT ON COLUMN "public"."select"."id" IS NULL;
-    COMMENT ON COLUMN "public"."select"."update" IS NULL;
+    COMMENT ON TABLE "select" IS NULL;
+    COMMENT ON COLUMN "select"."id" IS NULL;
+    COMMENT ON COLUMN "select"."update" IS NULL;
 CommentContainingQuote:
   current: |
-    CREATE TABLE public.test (
+    CREATE TABLE test (
       email text
     );
   desired: |
-    CREATE TABLE public.test (
+    CREATE TABLE test (
       email text
     );
-    COMMENT ON TABLE public.test is 'World''s best table';
-    COMMENT ON COLUMN public.test.email is 'The user''s contact email address.';
+    COMMENT ON TABLE test is 'World''s best table';
+    COMMENT ON COLUMN test.email is 'The user''s contact email address.';
   up: |
-    COMMENT ON TABLE "public"."test" IS 'World''s best table';
-    COMMENT ON COLUMN "public"."test"."email" IS 'The user''s contact email address.';
+    COMMENT ON TABLE "test" IS 'World''s best table';
+    COMMENT ON COLUMN "test"."email" IS 'The user''s contact email address.';
   down: |
-    COMMENT ON TABLE "public"."test" IS NULL;
-    COMMENT ON COLUMN "public"."test"."email" IS NULL;
+    COMMENT ON TABLE "test" IS NULL;
+    COMMENT ON COLUMN "test"."email" IS NULL;
 
 CommentOnIndex:
   legacy_ignore_quotes: false
@@ -227,9 +227,9 @@ CommentOnIndex:
     CREATE INDEX idx_test ON test (id);
     COMMENT ON INDEX idx_test IS 'Index comment';
   up: |
-    COMMENT ON INDEX public.idx_test IS 'Index comment';
+    COMMENT ON INDEX idx_test IS 'Index comment';
   down: |
-    COMMENT ON INDEX public.idx_test IS NULL;
+    COMMENT ON INDEX idx_test IS NULL;
 
 CommentOnConstraint:
   legacy_ignore_quotes: false
@@ -245,9 +245,9 @@ CommentOnConstraint:
     );
     COMMENT ON CONSTRAINT test_pkey ON test IS 'Primary key constraint';
   up: |
-    COMMENT ON CONSTRAINT test_pkey ON public.test IS 'Primary key constraint';
+    COMMENT ON CONSTRAINT test_pkey ON test IS 'Primary key constraint';
   down: |
-    COMMENT ON CONSTRAINT test_pkey ON public.test IS NULL;
+    COMMENT ON CONSTRAINT test_pkey ON test IS NULL;
 
 CommentOnView:
   legacy_ignore_quotes: false
@@ -259,9 +259,9 @@ CommentOnView:
     CREATE VIEW test_view AS SELECT id FROM test;
     COMMENT ON VIEW test_view IS 'This is a test view';
   up: |
-    COMMENT ON VIEW public.test_view IS 'This is a test view';
+    COMMENT ON VIEW test_view IS 'This is a test view';
   down: |
-    COMMENT ON VIEW public.test_view IS NULL;
+    COMMENT ON VIEW test_view IS NULL;
 
 CommentOnFunction:
   legacy_ignore_quotes: false
@@ -271,9 +271,9 @@ CommentOnFunction:
     CREATE FUNCTION test_func() RETURNS void AS $$ BEGIN END; $$ LANGUAGE plpgsql;
     COMMENT ON FUNCTION test_func() IS 'This is a test function';
   up: |
-    COMMENT ON FUNCTION public.test_func() IS 'This is a test function';
+    COMMENT ON FUNCTION test_func() IS 'This is a test function';
   down: |
-    COMMENT ON FUNCTION public.test_func() IS NULL;
+    COMMENT ON FUNCTION test_func() IS NULL;
 
 CommentOnType:
   legacy_ignore_quotes: false
@@ -283,9 +283,9 @@ CommentOnType:
     CREATE TYPE status_type AS ENUM ('active', 'inactive');
     COMMENT ON TYPE status_type IS 'Status enumeration type';
   up: |
-    COMMENT ON TYPE public.status_type IS 'Status enumeration type';
+    COMMENT ON TYPE status_type IS 'Status enumeration type';
   down: |
-    COMMENT ON TYPE public.status_type IS NULL;
+    COMMENT ON TYPE status_type IS NULL;
 
 CommentOnDomain:
   legacy_ignore_quotes: false
@@ -295,9 +295,9 @@ CommentOnDomain:
     CREATE DOMAIN email AS text;
     COMMENT ON DOMAIN email IS 'Email address domain';
   up: |
-    COMMENT ON DOMAIN public.email IS 'Email address domain';
+    COMMENT ON DOMAIN email IS 'Email address domain';
   down: |
-    COMMENT ON DOMAIN public.email IS NULL;
+    COMMENT ON DOMAIN email IS NULL;
 
 CommentOnTrigger:
   legacy_ignore_quotes: false
@@ -311,9 +311,9 @@ CommentOnTrigger:
     CREATE TRIGGER test_trigger BEFORE INSERT ON test FOR EACH ROW EXECUTE FUNCTION trigger_func();
     COMMENT ON TRIGGER test_trigger ON test IS 'Trigger comment';
   up: |
-    COMMENT ON TRIGGER test_trigger ON public.test IS 'Trigger comment';
+    COMMENT ON TRIGGER test_trigger ON test IS 'Trigger comment';
   down: |
-    COMMENT ON TRIGGER test_trigger ON public.test IS NULL;
+    COMMENT ON TRIGGER test_trigger ON test IS NULL;
 
 # Test constraint name containing a dot (edge case for string splitting)
 CommentOnConstraintWithDotInName:
@@ -330,9 +330,9 @@ CommentOnConstraintWithDotInName:
     );
     COMMENT ON CONSTRAINT "my.constraint" ON test IS 'Constraint with dot in name';
   up: |
-    COMMENT ON CONSTRAINT "my.constraint" ON public.test IS 'Constraint with dot in name';
+    COMMENT ON CONSTRAINT "my.constraint" ON test IS 'Constraint with dot in name';
   down: |
-    COMMENT ON CONSTRAINT "my.constraint" ON public.test IS NULL;
+    COMMENT ON CONSTRAINT "my.constraint" ON test IS NULL;
 
 # Test that comments on different object types with the same name are handled correctly.
 # This tests the fix for findCommentByObject which must check ObjectType, not just Object name.
@@ -351,9 +351,9 @@ CommentOnDifferentObjectTypesWithSameName:
     COMMENT ON INDEX foo IS 'index comment';
     COMMENT ON TYPE foo IS 'updated type comment';
   up: |
-    COMMENT ON TYPE public.foo IS 'updated type comment';
+    COMMENT ON TYPE foo IS 'updated type comment';
   down: |
-    COMMENT ON TYPE public.foo IS 'type comment';
+    COMMENT ON TYPE foo IS 'type comment';
 
 # Test that constraint comments are not cleaned up when the table is dropped.
 # PostgreSQL automatically removes constraint comments when the table is dropped.
@@ -367,13 +367,13 @@ DropTableWithConstraintComment:
     COMMENT ON CONSTRAINT test_check ON test IS 'Check constraint comment';
   desired: ""
   up: |
-    DROP TABLE public.test;
+    DROP TABLE test;
   down: |
     CREATE TABLE test (
       id integer,
       CONSTRAINT test_check CHECK (id > 0)
     );
-    COMMENT ON CONSTRAINT test_check ON public.test IS 'Check constraint comment';
+    COMMENT ON CONSTRAINT test_check ON test IS 'Check constraint comment';
 
 # Test that index comments are not cleaned up when the table is dropped.
 # PostgreSQL automatically removes index comments when the table is dropped.
@@ -385,11 +385,11 @@ DropTableWithIndexComment:
     COMMENT ON INDEX idx_test IS 'Index comment';
   desired: ""
   up: |
-    DROP TABLE public.test;
+    DROP TABLE test;
   down: |
     CREATE TABLE test (id integer);
-    CREATE INDEX idx_test ON public.test (id);
-    COMMENT ON INDEX public.idx_test IS 'Index comment';
+    CREATE INDEX idx_test ON test (id);
+    COMMENT ON INDEX idx_test IS 'Index comment';
 
 # Test that quoted index names are handled correctly when dropping tables.
 # "MyIndex" (quoted) and myindex (unquoted) are different indexes in PostgreSQL.
@@ -407,11 +407,11 @@ DropTableWithQuotedIndexComment:
     CREATE INDEX myindex ON test2 (id);
     COMMENT ON INDEX myindex IS 'Unquoted index comment';
   up: |
-    DROP TABLE public.test1;
+    DROP TABLE test1;
   down: |
     CREATE TABLE test1 (id integer);
-    CREATE INDEX "MyIndex" ON public.test1 (id);
-    COMMENT ON INDEX public."MyIndex" IS 'Quoted index comment';
+    CREATE INDEX "MyIndex" ON test1 (id);
+    COMMENT ON INDEX "MyIndex" IS 'Quoted index comment';
 
 # Test that column comments are not cleaned up when the column is dropped.
 # PostgreSQL automatically removes column comments when the column is dropped.
@@ -432,16 +432,16 @@ DropColumnWithComment:
       id serial PRIMARY KEY
     );
   up: |
-    ALTER TABLE public.hoge DROP COLUMN baz;
-    ALTER TABLE public.hoge DROP COLUMN bar;
-    ALTER TABLE public.hoge DROP COLUMN foo;
+    ALTER TABLE hoge DROP COLUMN baz;
+    ALTER TABLE hoge DROP COLUMN bar;
+    ALTER TABLE hoge DROP COLUMN foo;
   down: |
-    ALTER TABLE public.hoge ADD COLUMN foo text;
-    ALTER TABLE public.hoge ADD COLUMN bar text;
-    ALTER TABLE public.hoge ADD COLUMN baz text;
-    COMMENT ON COLUMN public.hoge.foo IS 'foo column';
-    COMMENT ON COLUMN public.hoge.bar IS 'bar column';
-    COMMENT ON COLUMN public.hoge.baz IS 'baz column';
+    ALTER TABLE hoge ADD COLUMN foo text;
+    ALTER TABLE hoge ADD COLUMN bar text;
+    ALTER TABLE hoge ADD COLUMN baz text;
+    COMMENT ON COLUMN hoge.foo IS 'foo column';
+    COMMENT ON COLUMN hoge.bar IS 'bar column';
+    COMMENT ON COLUMN hoge.baz IS 'baz column';
 
 # Test that index comments are not cleaned up when the index itself is dropped (not the table).
 # PostgreSQL automatically removes index comments when the index is dropped.
@@ -454,10 +454,10 @@ DropIndexWithComment:
   desired: |
     CREATE TABLE hoge (id integer);
   up: |
-    DROP INDEX public.idx_hoge;
+    DROP INDEX idx_hoge;
   down: |
-    CREATE INDEX idx_hoge ON public.hoge (id);
-    COMMENT ON INDEX public.idx_hoge IS 'hoge index';
+    CREATE INDEX idx_hoge ON hoge (id);
+    COMMENT ON INDEX idx_hoge IS 'hoge index';
 
 # Test that index comment cleanup only skips dropped indexes, not all indexes.
 # Other index comments should still be cleaned up.
@@ -480,10 +480,10 @@ DropIndexWithCommentAndKeepOther:
     CREATE INDEX idx_hoge_id ON hoge (id);
     COMMENT ON INDEX idx_hoge_id IS 'id index';
   up: |
-    DROP INDEX public.idx_hoge_foo;
+    DROP INDEX idx_hoge_foo;
   down: |
-    CREATE INDEX idx_hoge_foo ON public.hoge (foo);
-    COMMENT ON INDEX public.idx_hoge_foo IS 'foo index';
+    CREATE INDEX idx_hoge_foo ON hoge (foo);
+    COMMENT ON INDEX idx_hoge_foo IS 'foo index';
 
 # Test that column comment cleanup only skips dropped columns, not all columns.
 # Other column comments should still be cleaned up.
@@ -505,9 +505,9 @@ DropColumnWithCommentAndKeepOther:
     );
     COMMENT ON COLUMN hoge.id IS 'id column';
   up: |
-    ALTER TABLE public.hoge DROP COLUMN foo;
-    COMMENT ON COLUMN public.hoge.bar IS NULL;
+    ALTER TABLE hoge DROP COLUMN foo;
+    COMMENT ON COLUMN hoge.bar IS NULL;
   down: |
-    ALTER TABLE public.hoge ADD COLUMN foo text;
-    COMMENT ON COLUMN public.hoge.foo IS 'foo column';
-    COMMENT ON COLUMN public.hoge.bar IS 'bar column';
+    ALTER TABLE hoge ADD COLUMN foo text;
+    COMMENT ON COLUMN hoge.foo IS 'foo column';
+    COMMENT ON COLUMN hoge.bar IS 'bar column';

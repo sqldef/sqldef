@@ -51,7 +51,11 @@ func (d *PostgresDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
 	d.generatorConfig = config
 	// Sync TargetSchema to d.config for backward compatibility
 	// (other methods read from d.config.TargetSchema)
-	d.config.TargetSchema = config.TargetSchema
+	// Only overwrite if the new config specifies TargetSchema;
+	// preserve the initial config value (e.g., from connection-time settings)
+	if config.TargetSchema != nil {
+		d.config.TargetSchema = config.TargetSchema
+	}
 }
 
 func (d *PostgresDatabase) GetGeneratorConfig() database.GeneratorConfig {
@@ -879,9 +883,10 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	      s.is_nullable,
 	      CASE
 	      -- Domain types ('d') and enum types ('e'): return the type name with schema prefix
+	      -- Omit schema prefix if type is in the same schema as the table ($1)
 	      WHEN t.typtype IN ('d', 'e') THEN
 	        CASE
-	          WHEN tn.nspname = 'public' THEN t.typname
+	          WHEN tn.nspname = $1 THEN t.typname
 	          ELSE tn.nspname || '.' || t.typname
 	        END
 	      WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod)
@@ -891,7 +896,7 @@ func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
 	      CASE
 	      WHEN t.typtype IN ('d', 'e') THEN
 	        CASE
-	          WHEN tn.nspname = 'public' THEN t.typname
+	          WHEN tn.nspname = $1 THEN t.typname
 	          ELSE tn.nspname || '.' || t.typname
 	        END
 	      ELSE format_type(f.atttypid, f.atttypmod)
@@ -1545,6 +1550,11 @@ func postgresBuildDSN(config database.Config) string {
 	}
 	if sslkey, ok := os.LookupEnv("PGSSLKEY"); ok {
 		options.Set("sslkey", sslkey)
+	}
+
+	// Set search_path at connection time for schema isolation
+	if config.SearchPath != "" {
+		options.Set("search_path", config.SearchPath)
 	}
 
 	dsn.RawQuery = options.Encode()

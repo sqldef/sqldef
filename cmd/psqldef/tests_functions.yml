@@ -59,11 +59,11 @@ CreateOrReplaceFunctionWithTrigger:
       RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
-    CREATE TRIGGER enforce_required_permit before insert OR update ON public.device_tests FOR EACH ROW EXECUTE FUNCTION check_test_type_requires_permit();
+    CREATE TRIGGER enforce_required_permit before insert OR update ON device_tests FOR EACH ROW EXECUTE FUNCTION check_test_type_requires_permit();
   down: |
-    DROP TRIGGER enforce_required_permit ON public.device_tests;
-    DROP TABLE public.device_tests;
-    DROP FUNCTION public.check_test_type_requires_permit;
+    DROP TRIGGER enforce_required_permit ON device_tests;
+    DROP TABLE device_tests;
+    DROP FUNCTION check_test_type_requires_permit;
 
 # Volatility: IMMUTABLE, STABLE, VOLATILE
 
