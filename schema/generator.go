@@ -211,6 +211,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						// Found the old table, generate rename DDL
 						renameDDL := g.generateRenameTableDDL(oldTableName, desired.table.name)
 						interDDLs = append(interDDLs, renameDDL)
+						// PostgreSQL automatically transfers comments when renaming tables
+						g.droppedTables[oldTableName.RawString()] = true
 
 						// Update the old table's name to the new name
 						oldTable.name = desired.table.name
@@ -811,6 +813,8 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						g.escapeSQLIdent(desiredColumn.renamedFrom),
 						g.escapeColumnName(&desiredColumn))
 					ddls = append(ddls, ddl)
+					// PostgreSQL automatically transfers comments when renaming columns
+					g.trackDroppedColumn(&currentTable, renameFromColumn)
 
 					// After renaming, check if type/constraints need to be changed
 					if !g.haveSameDataType(*renameFromColumn, desiredColumn) {
@@ -1838,6 +1842,8 @@ func (g *Generator) generateDDLsForCreateIndex(tableName QualifiedName, desiredI
 			// Generate RENAME INDEX DDL
 			renameDDLs := g.generateRenameIndex(currentTable.name, renameFromIndex.name, desiredIndex.name, &desiredIndex)
 			ddls = append(ddls, renameDDLs...)
+			// PostgreSQL automatically transfers comments when renaming indexes
+			g.trackDroppedIndex(currentTable, *renameFromIndex)
 
 			// Update the current table's indexes to reflect the rename
 			newIndexes := []Index{}
