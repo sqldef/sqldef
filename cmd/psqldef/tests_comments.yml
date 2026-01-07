@@ -511,3 +511,65 @@ DropColumnWithCommentAndKeepOther:
     ALTER TABLE public.hoge ADD COLUMN foo text;
     COMMENT ON COLUMN public.hoge.foo IS 'foo column';
     COMMENT ON COLUMN public.hoge.bar IS 'bar column';
+
+RenameColumnWithComment:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      username text
+    );
+    COMMENT ON COLUMN users.username IS 'user name';
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      user_name text -- @renamed from=username
+    );
+    COMMENT ON COLUMN users.user_name IS 'user name column';
+  up: |
+    ALTER TABLE public.users RENAME COLUMN username TO user_name;
+    COMMENT ON COLUMN public.users.user_name IS 'user name column';
+  down: |
+    ALTER TABLE public.users ADD COLUMN username text;
+    COMMENT ON COLUMN public.users.username IS 'user name';
+    ALTER TABLE public.users DROP COLUMN user_name;
+
+RenameTableWithComment:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE old_users (
+      id bigint NOT NULL
+    );
+    COMMENT ON TABLE old_users IS 'Users table';
+  desired: |
+    CREATE TABLE new_users ( -- @renamed from=old_users
+      id bigint NOT NULL
+    );
+    COMMENT ON TABLE new_users IS 'New users table';
+  up: |
+    ALTER TABLE public.old_users RENAME TO new_users;
+    COMMENT ON TABLE public.new_users IS 'New users table';
+  down: |
+    CREATE TABLE old_users (
+      id bigint NOT NULL
+    );
+    COMMENT ON TABLE public.old_users IS 'Users table';
+    DROP TABLE public.new_users;
+
+RenameIndexWithComment:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE test (id integer);
+    CREATE INDEX old_idx ON test (id);
+    COMMENT ON INDEX old_idx IS 'Old index';
+  desired: |
+    CREATE TABLE test (id integer);
+    CREATE INDEX new_idx /* @renamed from=old_idx */ ON test (id);
+    COMMENT ON INDEX new_idx IS 'New index';
+  up: |
+    ALTER INDEX public.old_idx RENAME TO new_idx;
+    COMMENT ON INDEX public.new_idx IS 'New index';
+  down: |
+    CREATE INDEX old_idx ON public.test (id);
+    COMMENT ON INDEX public.old_idx IS 'Old index';
+    DROP INDEX public.new_idx;
