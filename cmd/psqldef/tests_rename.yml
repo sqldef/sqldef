@@ -237,3 +237,22 @@ RenameTableAndMultipleChanges:
       old_field text
     );
     DROP TABLE "public"."accounts";
+RenameColumnWithInlineUniqueConstraint:
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      username varchar(100) NOT NULL UNIQUE,
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      user_name varchar(100) NOT NULL UNIQUE, -- @renamed from=username
+      age integer
+    );
+  up: |
+    ALTER TABLE "public"."users" RENAME COLUMN "username" TO "user_name";
+  down: |
+    ALTER TABLE "public"."users" ADD COLUMN "username" varchar(100) NOT NULL UNIQUE;
+    ALTER TABLE "public"."users" DROP CONSTRAINT "users_username_key";
+    ALTER TABLE "public"."users" DROP COLUMN "user_name";

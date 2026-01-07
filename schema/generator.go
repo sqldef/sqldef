@@ -2696,8 +2696,13 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 		var uniqueKeyColumn *Column
 		// Columns become empty if the index is a PostgreSQL's expression index.
 		if len(currentIndex.columns) > 0 {
+			currentColName := currentIndex.columns[0].ColumnName()
 			for _, column := range desiredTable.columns {
-				if column.name.Name == currentIndex.columns[0].ColumnName() && column.keyOption.isUnique() {
+				// Match by current name or by renamed-from name
+				// (PostgreSQL automatically updates constraint column references on RENAME COLUMN)
+				nameMatches := column.name.Name == currentColName ||
+					(!column.renamedFrom.IsEmpty() && column.renamedFrom.Name == currentColName)
+				if nameMatches && column.keyOption.isUnique() {
 					uniqueKeyColumn = column
 					break
 				}
