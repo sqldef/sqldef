@@ -1,3 +1,7 @@
+## [v3.9.3](https://github.com/sqldef/sqldef/compare/v3.9.2...v3.9.3) - 2026-01-07
+- doc: add doc for disable_ddl_transation by @gfx in https://github.com/sqldef/sqldef/pull/1098
+- fix: skip comment cleanup for renamed objects in psqldef by @178inaba in https://github.com/sqldef/sqldef/pull/1101
+
 ## [v3.9.2](https://github.com/sqldef/sqldef/compare/v3.9.1...v3.9.2) - 2026-01-04
 - chore: no status check is required for coverage rate by @gfx in https://github.com/sqldef/sqldef/pull/1094
 - doc: add Renaming section to README by @gfx in https://github.com/sqldef/sqldef/pull/1095
