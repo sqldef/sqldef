@@ -142,11 +142,12 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 
 	if opts.Prompt {
-		fmt.Printf("Enter Password: ")
+		fmt.Fprint(os.Stderr, "Enter Password: ")
 		pass, err := term.ReadPassword(int(syscall.Stdin))
 		if err != nil {
 			log.Fatal(err)
 		}
+		fmt.Fprintln(os.Stderr)
 		password = string(pass)
 	}
 
