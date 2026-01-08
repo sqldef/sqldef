@@ -4490,6 +4490,10 @@ index_column:
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3, NullsOrdering: $4}
   }
+| type_func_name_keyword length_opt asc_desc_opt nulls_ordering_opt
+  {
+    $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3, NullsOrdering: $4}
+  }
 | sql_id COLLATE charset asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: $1, Collation: $3, Direction: $4, NullsOrdering: $5}
@@ -4502,6 +4506,10 @@ index_column:
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
   }
+| type_func_name_keyword COLLATE charset asc_desc_opt nulls_ordering_opt
+  {
+    $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
+  }
 | sql_id operator_class asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: $1, OperatorClass: $2, Direction: $3, NullsOrdering: $4}
@@ -4511,6 +4519,10 @@ index_column:
     $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2, Direction: $3, NullsOrdering: $4}
   }
 | col_name_keyword operator_class asc_desc_opt nulls_ordering_opt
+  {
+    $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2, Direction: $3, NullsOrdering: $4}
+  }
+| type_func_name_keyword operator_class asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2, Direction: $3, NullsOrdering: $4}
   }

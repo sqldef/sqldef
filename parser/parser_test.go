@@ -491,6 +491,108 @@ LEFT JOIN event_counts ec ON rd.product_id = ec.product_id`,
 	}
 }
 
+// TestTypeKeywordsAsIndexColumns tests that type keywords (uuid, int, bigint, etc.)
+// can be used as unquoted column names in index definitions
+func TestTypeKeywordsAsIndexColumns(t *testing.T) {
+	testCases := []struct {
+		name        string
+		sql         string
+		shouldParse bool
+		description string
+	}{
+		// UNIQUE constraint with type keywords as column names
+		{
+			name:        "UNIQUE constraint with uuid column",
+			sql:         `ALTER TABLE "test" ADD CONSTRAINT "test_uuid_key" UNIQUE (uuid)`,
+			shouldParse: true,
+			description: "uuid should be usable as unquoted column name in UNIQUE constraint",
+		},
+		{
+			name:        "UNIQUE constraint with int column",
+			sql:         `ALTER TABLE "test" ADD CONSTRAINT "test_int_key" UNIQUE (int)`,
+			shouldParse: true,
+			description: "int should be usable as unquoted column name in UNIQUE constraint",
+		},
+		{
+			name:        "UNIQUE constraint with bigint column",
+			sql:         `ALTER TABLE "test" ADD CONSTRAINT "test_bigint_key" UNIQUE (bigint)`,
+			shouldParse: true,
+			description: "bigint should be usable as unquoted column name in UNIQUE constraint",
+		},
+		{
+			name:        "UNIQUE constraint with json column",
+			sql:         `ALTER TABLE "test" ADD CONSTRAINT "test_json_key" UNIQUE (json)`,
+			shouldParse: true,
+			description: "json should be usable as unquoted column name in UNIQUE constraint",
+		},
+		{
+			name:        "UNIQUE constraint with varchar column",
+			sql:         `ALTER TABLE "test" ADD CONSTRAINT "test_varchar_key" UNIQUE (varchar)`,
+			shouldParse: true,
+			description: "varchar should be usable as unquoted column name in UNIQUE constraint",
+		},
+		// PRIMARY KEY with type keywords
+		{
+			name:        "PRIMARY KEY with uuid column",
+			sql:         `ALTER TABLE ONLY "test" ADD CONSTRAINT "test_pkey" PRIMARY KEY (uuid)`,
+			shouldParse: true,
+			description: "uuid should be usable as unquoted column name in PRIMARY KEY",
+		},
+		// CREATE INDEX with type keywords
+		{
+			name:        "CREATE INDEX on uuid column",
+			sql:         `CREATE INDEX idx_uuid ON test (uuid)`,
+			shouldParse: true,
+			description: "uuid should be usable as unquoted column name in CREATE INDEX",
+		},
+		{
+			name:        "CREATE UNIQUE INDEX on int column",
+			sql:         `CREATE UNIQUE INDEX idx_int ON test (int)`,
+			shouldParse: true,
+			description: "int should be usable as unquoted column name in CREATE UNIQUE INDEX",
+		},
+		// Multiple columns including type keywords
+		{
+			name:        "UNIQUE constraint with multiple columns including uuid",
+			sql:         `ALTER TABLE "test" ADD CONSTRAINT "test_multi_key" UNIQUE (name, uuid)`,
+			shouldParse: true,
+			description: "uuid should work alongside regular column names",
+		},
+		{
+			name:        "CREATE INDEX with multiple type keyword columns",
+			sql:         `CREATE INDEX idx_multi ON test (uuid, int, bigint)`,
+			shouldParse: true,
+			description: "Multiple type keywords should be usable together",
+		},
+		// Quoted versions should also work
+		{
+			name:        "UNIQUE constraint with quoted uuid column",
+			sql:         `ALTER TABLE "test" ADD CONSTRAINT "test_uuid_key" UNIQUE ("uuid")`,
+			shouldParse: true,
+			description: "Quoted uuid should also parse successfully",
+		},
+		// CREATE TABLE with inline UNIQUE constraint using quoted uuid column name
+		{
+			name:        "CREATE TABLE with inline UNIQUE on quoted uuid column",
+			sql:         `CREATE TABLE test ("uuid" UUID NOT NULL, CONSTRAINT test_uuid_key UNIQUE (uuid))`,
+			shouldParse: true,
+			description: "Inline UNIQUE constraint should work with uuid column name",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseDDL(tc.sql, ParserModePostgres)
+
+			if tc.shouldParse && err != nil {
+				t.Errorf("%s\nSQL: %s\nError: %v", tc.description, tc.sql, err)
+			} else if !tc.shouldParse && err == nil {
+				t.Errorf("Expected parse error but got none.\n%s\nSQL: %s", tc.description, tc.sql)
+			}
+		})
+	}
+}
+
 // TestInvalidCustomOperators tests that invalid PostgreSQL custom operators produce errors
 func TestInvalidCustomOperators(t *testing.T) {
 	testCases := []struct {
