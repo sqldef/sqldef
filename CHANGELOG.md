@@ -1,3 +1,8 @@
+## [v3.9.4](https://github.com/sqldef/sqldef/compare/v3.9.3...v3.9.4) - 2026-01-08
+- Tweak `--password-prompt` behavior by @moznion in https://github.com/sqldef/sqldef/pull/1102
+- fix: preserve unique constraint when renaming column in psqldef by @178inaba in https://github.com/sqldef/sqldef/pull/1103
+- Allow type keywords as unquoted index column names by @moznion in https://github.com/sqldef/sqldef/pull/1104
+
 ## [v3.9.3](https://github.com/sqldef/sqldef/compare/v3.9.2...v3.9.3) - 2026-01-07
 - doc: add doc for disable_ddl_transation by @gfx in https://github.com/sqldef/sqldef/pull/1098
 - fix: skip comment cleanup for renamed objects in psqldef by @178inaba in https://github.com/sqldef/sqldef/pull/1101
