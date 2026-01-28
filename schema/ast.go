@@ -613,3 +613,47 @@ func (t *Table) PrimaryKey() *Index {
 func (keyOption ColumnKeyOption) isUnique() bool {
 	return keyOption == ColumnKeyUnique || keyOption == ColumnKeyUniqueKey
 }
+
+func DesiredScope(ddls []DDL, export bool, drop bool) database.MigrationScope {
+	if export || drop {
+		return FullScope()
+	}
+	scope := database.MigrationScope{}
+	for _, ddl := range ddls {
+		switch ddl.(type) {
+		case *CreatePartitionOf:
+			scope.Partition = true
+		case *CreateTable:
+			scope.Table = true
+		case *Domain:
+			scope.Domain = true
+		case *Extension:
+			scope.Extension = true
+		case *Function:
+			scope.Function = true
+		case *Schema:
+			scope.Schema = true
+		case *Trigger:
+			scope.Trigger = true
+		case *Type:
+			scope.Type = true
+		case *View:
+			scope.View = true
+		}
+	}
+	return scope
+}
+
+func FullScope() database.MigrationScope {
+	return database.MigrationScope{
+		Domain:    true,
+		Extension: true,
+		Function:  true,
+		Partition: true,
+		Schema:    true,
+		Table:     true,
+		Trigger:   true,
+		Type:      true,
+		View:      true,
+	}
+}

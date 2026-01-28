@@ -7,8 +7,7 @@ DropTableSkipped:
   current: |
     CREATE TABLE users (id integer NOT NULL);
   desired: ""
-  up: |
-    -- Skipped: DROP TABLE "users";
+  up: ""
   down: ""
 
 DropViewSkipped:
@@ -18,8 +17,7 @@ DropViewSkipped:
     CREATE VIEW users_view AS SELECT id, name FROM users;
   desired: |
     CREATE TABLE users (id integer NOT NULL, name text);
-  up: |
-    -- Skipped: DROP VIEW "users_view";
+  up: ""
   down: ""
 
 DropTriggerSkipped:
@@ -31,8 +29,7 @@ DropTriggerSkipped:
   desired: |
     CREATE TABLE users (id integer NOT NULL, name text);
     CREATE TABLE audit (msg text);
-  up: |
-    -- Skipped: DROP TRIGGER "users_delete";
+  up: ""
   down: ""
 
 DropColumnSkipped:

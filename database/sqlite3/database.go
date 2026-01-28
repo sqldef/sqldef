@@ -12,6 +12,7 @@ type Sqlite3Database struct {
 	config          database.Config
 	db              *sql.DB
 	generatorConfig database.GeneratorConfig
+	migrationScope  database.MigrationScope
 }
 
 func NewDatabase(config database.Config) (database.Database, error) {
@@ -28,37 +29,44 @@ func NewDatabase(config database.Config) (database.Database, error) {
 
 func (d *Sqlite3Database) ExportDDLs() (string, error) {
 	var ddls []string
+	scope := d.GetMigrationScope()
 
-	tableNames, err := d.tableNames()
-	if err != nil {
-		return "", err
-	}
-	for _, tableName := range tableNames {
-		ddl, err := d.exportTableDDL(tableName)
+	if scope.Table {
+		tableNames, err := d.tableNames()
 		if err != nil {
 			return "", err
 		}
+		for _, tableName := range tableNames {
+			ddl, err := d.exportTableDDL(tableName)
+			if err != nil {
+				return "", err
+			}
 
-		ddls = append(ddls, ddl)
+			ddls = append(ddls, ddl)
+		}
+
+		indexDDLs, err := d.indexes()
+		if err != nil {
+			return "", err
+		}
+		ddls = append(ddls, indexDDLs...)
 	}
 
-	viewDDLs, err := d.views()
-	if err != nil {
-		return "", err
+	if scope.View {
+		viewDDLs, err := d.views()
+		if err != nil {
+			return "", err
+		}
+		ddls = append(ddls, viewDDLs...)
 	}
-	ddls = append(ddls, viewDDLs...)
 
-	indexDDLs, err := d.indexes()
-	if err != nil {
-		return "", err
+	if scope.Trigger {
+		triggerDDLs, err := d.triggers()
+		if err != nil {
+			return "", err
+		}
+		ddls = append(ddls, triggerDDLs...)
 	}
-	ddls = append(ddls, indexDDLs...)
-
-	triggerDDLs, err := d.triggers()
-	if err != nil {
-		return "", err
-	}
-	ddls = append(ddls, triggerDDLs...)
 
 	return strings.Join(ddls, "\n\n"), nil
 }
@@ -200,4 +208,12 @@ func (d *Sqlite3Database) GetTransactionQueries() database.TransactionQueries {
 
 func (d *Sqlite3Database) GetConfig() database.Config {
 	return d.config
+}
+
+func (d *Sqlite3Database) SetMigrationScope(scope database.MigrationScope) {
+	d.migrationScope = scope
+}
+
+func (d *Sqlite3Database) GetMigrationScope() database.MigrationScope {
+	return d.migrationScope
 }
