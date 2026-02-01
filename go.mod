@@ -8,7 +8,7 @@ require (
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/goccy/go-yaml v1.19.1
 	github.com/jessevdk/go-flags v1.6.1
-	github.com/k0kubun/pp/v3 v3.5.0
+	github.com/k0kubun/pp/v3 v3.5.1
 	github.com/lib/pq v1.10.9
 	github.com/microsoft/go-mssqldb v1.9.5
 	github.com/pganalyze/pg_query_go/v6 v6.1.0
@@ -42,7 +42,7 @@ require (
 	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/exp v0.0.0-20251125195548-87e1e737ad39 // indirect
 	golang.org/x/sys v0.39.0 // indirect
-	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/text v0.32.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
