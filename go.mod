@@ -10,7 +10,7 @@ require (
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/k0kubun/pp/v3 v3.5.0
 	github.com/lib/pq v1.10.9
-	github.com/microsoft/go-mssqldb v1.9.5
+	github.com/microsoft/go-mssqldb v1.9.6
 	github.com/pganalyze/pg_query_go/v6 v6.1.0
 	github.com/stretchr/testify v1.11.1
 	github.com/wasilibs/go-pgquery v0.0.0-20250409022910-10ac41983c07
