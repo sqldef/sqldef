@@ -16,7 +16,7 @@ require (
 	github.com/wasilibs/go-pgquery v0.0.0-20250409022910-10ac41983c07
 	golang.org/x/sync v0.19.0
 	golang.org/x/term v0.38.0
-	modernc.org/sqlite v1.41.0
+	modernc.org/sqlite v1.44.3
 )
 
 require (
@@ -46,7 +46,7 @@ require (
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	modernc.org/libc v1.67.1 // indirect
+	modernc.org/libc v1.67.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
