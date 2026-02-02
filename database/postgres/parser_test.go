@@ -137,6 +137,6 @@ func TestCreateFunctionWithPgquery(t *testing.T) {
 	funcStmt := statements[0].Statement
 	_, ok := funcStmt.(*parser.Ignore)
 	if !ok {
-		t.Fatalf("expected Ignore, got %T", funcStmt)
+		t.Errorf("expected Ignore, got %T", funcStmt)
 	}
 }
