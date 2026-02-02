@@ -2934,3 +2934,9 @@ type ArrayConstructor struct {
 func (node *ArrayConstructor) Format(buf *nodeBuffer) {
 	buf.Printf("ARRAY[%v]", node.Elements)
 }
+
+// Ignored node
+type Ignore struct{}
+
+func (*Ignore) iStatement()        {}
+func (*Ignore) Format(*nodeBuffer) {}

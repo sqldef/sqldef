@@ -165,6 +165,9 @@ func (p PostgresParser) parseStmt(node *pgquery.Node) (parser.Statement, error) 
 		return p.parseCreateSchemaStmt(stmt.CreateSchemaStmt)
 	case *pgquery.Node_GrantStmt:
 		return p.parseGrantStmt(stmt.GrantStmt)
+	case *pgquery.Node_CreateFunctionStmt:
+		// In pgquery parser, CreateFunctionStmt is ignored.
+		return &parser.Ignore{}, nil
 	default:
 		return nil, fmt.Errorf("unknown node in parseStmt: %#v", stmt)
 	}
