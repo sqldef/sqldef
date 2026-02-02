@@ -114,7 +114,8 @@ CREATE INDEX ASYNC username on users (name);`
 }
 
 func TestCreateFunctionWithPgquery(t *testing.T) {
-	postgresParser := NewParserWithMode(PsqldefParserModePgquery)
+	t.Setenv("PSQLDEF_PARSER", "pgquery")
+	postgresParser := NewParser()
 
 	statements, err := postgresParser.Parse(`
     CREATE FUNCTION increment(i integer) RETURNS integer
