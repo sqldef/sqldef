@@ -7300,6 +7300,7 @@ non_reserved_keyword:
 | RANGE
 | LIST
 | HASH
+| INCREMENT
 | LINEAR
 | COLUMNS
 | PARTITIONS

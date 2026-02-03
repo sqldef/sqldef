@@ -346,3 +346,28 @@ FunctionReturningTable:
       RETURN QUERY SELECT 1, 'test'::text;
     END;
     $$ LANGUAGE plpgsql;
+
+# Test that reserved keywords can be used as function names
+# "increment" is a reserved keyword in the generic parser, so it should be quoted or
+# handled specially when used as a function name
+# https://github.com/sqldef/sqldef/pull/1116
+CreateOrReplaceFunctionNamedIncrement:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE OR REPLACE FUNCTION increment(i integer)
+      RETURNS integer AS
+    $$
+    BEGIN
+      RETURN i + 1;
+    END;
+    $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE OR REPLACE FUNCTION increment(i integer)
+      RETURNS integer AS
+    $$
+    BEGIN
+      RETURN i + 1;
+    END;
+    $$ LANGUAGE plpgsql;
+  up: ""
+  down: ""
