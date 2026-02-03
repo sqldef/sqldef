@@ -2682,7 +2682,7 @@ func (g *Generator) generateDDLsForAbsentIndex(currentIndex Index, currentTable 
 		if primaryKeyColumn == nil {
 			// If nil, it will be `DROP COLUMN`-ed and we can usually ignore it.
 			// However, it seems like you need to explicitly drop it first for MSSQL.
-			if g.mode == GeneratorModeMssql && (primaryKeyColumn == nil || primaryKeyColumn.name.Name != currentIndex.columns[0].ColumnName()) {
+			if g.mode == GeneratorModeMssql {
 				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(&currentTable), g.escapeSQLIdent(currentIndex.name)))
 			}
 		} else if primaryKeyColumn.name.Name != currentIndex.columns[0].ColumnName() { // TODO: check length of currentIndex.columns
