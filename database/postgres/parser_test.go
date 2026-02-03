@@ -112,3 +112,32 @@ CREATE INDEX ASYNC username on users (name);`
 		t.Errorf("expected ASYNC in generated DDL, got: %s", generatedDDL)
 	}
 }
+
+func TestCreateFunctionWithPgquery(t *testing.T) {
+	t.Setenv("PSQLDEF_PARSER", "pgquery")
+	postgresParser := NewParser()
+
+	statements, err := postgresParser.Parse(`
+    CREATE FUNCTION increment(i integer) RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+      BEGIN
+        RETURN i + 1;
+      END;
+    $$;
+	`)
+
+	if err != nil {
+		t.Fatalf("failed to parse CREATE FUNCTION: %v", err)
+	}
+
+	if len(statements) != 1 {
+		t.Fatalf("expected 1 statement, got %d", len(statements))
+	}
+
+	funcStmt := statements[0].Statement
+	_, ok := funcStmt.(*parser.Ignore)
+	if !ok {
+		t.Errorf("expected Ignore, got %T", funcStmt)
+	}
+}

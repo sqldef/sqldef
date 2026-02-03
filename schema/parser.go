@@ -288,6 +288,8 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 	case *parser.Set:
 		// SET statements are parsed but ignored - they're session-level settings, not schema objects
 		return nil, nil
+	case *parser.Ignore:
+		return nil, nil
 	default:
 		return nil, fmt.Errorf("unsupported type of SQL (only DDL is supported): %s", ddl)
 	}
