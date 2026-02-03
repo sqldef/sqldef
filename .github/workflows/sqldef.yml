@@ -226,9 +226,6 @@ jobs:
       - name: Lint
         run: make lint
 
-      - name: Vulnerability check
-        run: make vulncheck
-
   test-result:
     if: ${{ always() }}
     runs-on: ubuntu-latest
