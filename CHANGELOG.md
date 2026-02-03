@@ -1,3 +1,9 @@
+## [v3.9.5](https://github.com/sqldef/sqldef/compare/v3.9.4...v3.9.5) - 2026-02-03
+- update deps, removing vulncheck in CI by @gfx in https://github.com/sqldef/sqldef/pull/1118
+- chore: Remove unnecessary "if" condtion by @winebarrel in https://github.com/sqldef/sqldef/pull/1117
+- Ignore CreateFunctionStmt node when using pgquery parser by @winebarrel in https://github.com/sqldef/sqldef/pull/1116
+- allow using increment as a function name  by @gfx in https://github.com/sqldef/sqldef/pull/1120
+
 ## [v3.9.4](https://github.com/sqldef/sqldef/compare/v3.9.3...v3.9.4) - 2026-01-08
 - Tweak `--password-prompt` behavior by @moznion in https://github.com/sqldef/sqldef/pull/1102
 - fix: preserve unique constraint when renaming column in psqldef by @178inaba in https://github.com/sqldef/sqldef/pull/1103
