@@ -237,7 +237,7 @@ func RunDDLs(d Database, ddls []string, beforeApply string, ddlSuffix string, lo
 	for _, ddl := range ddlsInTx {
 		logger.Printf("%s;\n", ddl)
 
-		if strings.HasPrefix(ddl, "-- ") {
+		if strings.HasPrefix(ddl, "-- ") && !strings.Contains(strings.TrimSpace(ddl), "\n") {
 			// Skip commented DDLs (e.g., "-- Skipped: ...")
 			continue
 		}
@@ -263,7 +263,7 @@ func RunDDLs(d Database, ddls []string, beforeApply string, ddlSuffix string, lo
 	for _, ddl := range ddlsNotInTx {
 		logger.Printf("%s;\n", ddl)
 		// Skip ddlSuffix and execution for commented DDLs (e.g., "-- Skipped: ...")
-		if !strings.HasPrefix(ddl, "-- ") {
+		if !strings.HasPrefix(ddl, "-- ") && !strings.Contains(strings.TrimSpace(ddl), "\n") {
 			logger.Print(ddlSuffix)
 			_, err = d.DB().Exec(ddl)
 			if err != nil {
