@@ -56,9 +56,10 @@ clean:
 	rm -f cmd/mysqldef/mysqldef.exe cmd/psqldef/psqldef.exe cmd/sqlite3def/sqlite3def.exe cmd/mssqldef/mssqldef.exe
 .PHONY: clean
 
-deps:
-	go mod tidy -v
-.PHONY: deps
+update-deps:
+	go get -u ./...
+	go mod tidy
+.PHONY: update-deps
 
 package-zip: build
 	mkdir -p package
