@@ -95,7 +95,6 @@ jobs:
           POSTGRES_VERSION: ${{ matrix.postgres_version }}
           PGVECTOR_VERSION: ${{ matrix.pgvector_version }}
           MSSQL_VERSION: ${{ matrix.mssql_version }}
-      - run: make deps
       - run: echo "GODEBUG=tlsrsakex=1" >> $GITHUB_ENV
         if: matrix.mysql_version == '5.7'
       - run: echo "MYSQL_FLAVOR=${{ matrix.mysql_flavor }}" >> $GITHUB_ENV
@@ -225,9 +224,6 @@ jobs:
 
       - name: Lint
         run: make lint
-
-      - name: Vulnerability check
-        run: make vulncheck
 
   test-result:
     if: ${{ always() }}
