@@ -1,3 +1,6 @@
+## [v3.9.7](https://github.com/sqldef/sqldef/compare/v3.9.6...v3.9.7) - 2026-02-05
+- Allow non-reserved keyword as table-id by @winebarrel in https://github.com/sqldef/sqldef/pull/1125
+
 ## [v3.9.6](https://github.com/sqldef/sqldef/compare/v3.9.5...v3.9.6) - 2026-02-04
 - Fix line comment check: Do not skip comment includes multi-line SQL by @winebarrel in https://github.com/sqldef/sqldef/pull/1121
 - Add isSingleLineComment() by @winebarrel in https://github.com/sqldef/sqldef/pull/1123
