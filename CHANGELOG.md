@@ -1,3 +1,7 @@
+## [v3.9.6](https://github.com/sqldef/sqldef/compare/v3.9.5...v3.9.6) - 2026-02-04
+- Fix line comment check: Do not skip comment includes multi-line SQL by @winebarrel in https://github.com/sqldef/sqldef/pull/1121
+- Add isSingleLineComment() by @winebarrel in https://github.com/sqldef/sqldef/pull/1123
+
 ## [v3.9.5](https://github.com/sqldef/sqldef/compare/v3.9.4...v3.9.5) - 2026-02-03
 - update deps, removing vulncheck in CI by @gfx in https://github.com/sqldef/sqldef/pull/1118
 - chore: Remove unnecessary "if" condtion by @winebarrel in https://github.com/sqldef/sqldef/pull/1117
