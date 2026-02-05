@@ -174,6 +174,10 @@ CreateIndexWithFuncCall:
 CreateIndexConcurrently:
   sql: |
     CREATE INDEX CONCURRENTLY username on users (name);
+CreateIndexWithUnusedToken:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE INDEX lines_number on lines using btree (number asc);
 AlterTableUnique:
   compare_with_generic_parser: true
   sql: |

@@ -6957,6 +6957,11 @@ table_id:
   {
     $$ = NewIdent($1, false)
   }
+/* For PostgreSQL. Allow UNUSED tokens as table-id https://www.postgresql.org/docs/current/sql-keywords-appendix.html */
+| UNUSED
+  {
+    $$ = NewIdent($1, false)
+  }
 
 reserved_table_id:
   table_id
