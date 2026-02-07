@@ -1118,3 +1118,10 @@ CollateOnTable:
         id   int          not null,
         name varchar(255) not null
     ) COLLATE=utf8mb4_general_ci;
+
+UseStatement:
+  desired: |
+    use test_db;
+    CREATE TABLE bigdata (
+      data bigint
+    );
