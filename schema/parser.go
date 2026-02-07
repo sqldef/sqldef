@@ -285,8 +285,8 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				stmt.Action, ddl,
 			)
 		}
-	case *parser.Set:
-		// SET statements are parsed but ignored - they're session-level settings, not schema objects
+	case *parser.Set, *parser.Use:
+		// SET & USE statements are parsed but ignored - they're session-level settings, not schema objects
 		return nil, nil
 	case *parser.Ignore:
 		return nil, nil

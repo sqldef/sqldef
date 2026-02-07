@@ -352,7 +352,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <withClause> with_clause_opt with_clause
 %type <commonTableExprs> common_table_expr_list
 %type <commonTableExpr> common_table_expr
-%type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement
+%type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement use_statement
 %type <statement> if_statement matched_if_statement unmatched_if_statement trigger_statement_not_if
 %type <blockStatement> simple_if_body
 %type <statement> create_statement alter_statement drop_statement comment_statement
@@ -537,6 +537,13 @@ statement:
 | drop_statement
 | comment_statement
 | set_statement
+| use_statement
+
+use_statement:
+  USE sql_id
+  {
+    $$ = &Use{ DBName: $2 }
+  }
 
 comment_statement:
   COMMENT_KEYWORD ON TABLE table_name IS STRING
