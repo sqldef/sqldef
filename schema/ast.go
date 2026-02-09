@@ -370,6 +370,20 @@ type Trigger struct {
 	body      []string
 }
 
+// Event represents a MySQL scheduled event for schema comparison and DDL generation.
+// Events are compared by schedule, completion, status, comment, and body.
+// Definer is stored but excluded from comparison (MySQL normalizes it in SHOW CREATE EVENT).
+type Event struct {
+	statement    string
+	name         QualifiedName
+	definer      string
+	schedule     string // e.g., "EVERY 1 DAY", "AT '2024-01-01'"
+	onCompletion string // "PRESERVE", "NOT PRESERVE", or ""
+	status       string // "ENABLE", "DISABLE", "DISABLE ON REPLICA", or ""
+	comment      string
+	body         []string
+}
+
 // Function represents a PostgreSQL CREATE FUNCTION statement
 type Function struct {
 	statement  string
@@ -554,6 +568,10 @@ func (v *View) Statement() string {
 
 func (t *Trigger) Statement() string {
 	return t.statement
+}
+
+func (e *Event) Statement() string {
+	return e.statement
 }
 
 func (f *Function) Statement() string {

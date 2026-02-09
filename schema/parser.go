@@ -190,6 +190,20 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				event:     events,
 				body:      body,
 			}, nil
+		} else if stmt.Action == parser.CreateEvent {
+			body := util.TransformSlice(stmt.Event.Body, func(s parser.Statement) string {
+				return parser.String(s)
+			})
+			return &Event{
+				statement:    ddl,
+				name:         normalizeColNameToQualifiedName(mode, stmt.Event.Name, defaultSchema),
+				definer:      stmt.Event.Definer,
+				schedule:     stmt.Event.Schedule,
+				onCompletion: stmt.Event.OnCompletion,
+				status:       stmt.Event.Status,
+				comment:      stmt.Event.Comment,
+				body:         body,
+			}, nil
 		} else if stmt.Action == parser.CreateFunction {
 			return &Function{
 				statement:  ddl,

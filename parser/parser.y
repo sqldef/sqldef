@@ -347,6 +347,9 @@ func setDDL(yylex any, ddl *DDL) {
 // SQL SECURITY
 %token <str> DEFINER INVOKER
 
+// MySQL EVENT tokens
+%token <str> EVENT SCHEDULE EVERY COMPLETION PRESERVE ENABLE DISABLE REPLICA SLAVE STARTS ENDS AT DO
+
 %type <statement> statement
 %type <selStmt> select_statement select_statement_core base_select union_rhs
 %type <withClause> with_clause_opt with_clause
@@ -516,6 +519,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <empty> nonclustered_columnstore
 %type <str> bool_option_name
 %type <strs> bool_option_name_list
+%type <str> event_schedule event_on_completion_opt event_status_opt event_comment_opt event_definer_user
 
 %start program
 
@@ -1189,6 +1193,67 @@ create_statement:
             Args: SelectExprsToExprs($15),
           },
         },
+      },
+    }
+  }
+/* For MySQL: CREATE EVENT */
+| CREATE EVENT sql_id ON SCHEDULE event_schedule event_on_completion_opt event_status_opt event_comment_opt DO trigger_statements
+  {
+    $$ = &DDL{
+      Action: CreateEvent,
+      Event: &Event{
+        Name: &ColName{Name: $3},
+        Schedule: $6,
+        OnCompletion: $7,
+        Status: $8,
+        Comment: $9,
+        Body: $11,
+      },
+    }
+  }
+| CREATE EVENT IF NOT EXISTS sql_id ON SCHEDULE event_schedule event_on_completion_opt event_status_opt event_comment_opt DO trigger_statements
+  {
+    $$ = &DDL{
+      Action: CreateEvent,
+      Event: &Event{
+        Name: &ColName{Name: $6},
+        IfNotExists: true,
+        Schedule: $9,
+        OnCompletion: $10,
+        Status: $11,
+        Comment: $12,
+        Body: $14,
+      },
+    }
+  }
+| CREATE DEFINER '=' event_definer_user EVENT sql_id ON SCHEDULE event_schedule event_on_completion_opt event_status_opt event_comment_opt DO trigger_statements
+  {
+    $$ = &DDL{
+      Action: CreateEvent,
+      Event: &Event{
+        Name: &ColName{Name: $6},
+        Definer: $4,
+        Schedule: $9,
+        OnCompletion: $10,
+        Status: $11,
+        Comment: $12,
+        Body: $14,
+      },
+    }
+  }
+| CREATE DEFINER '=' event_definer_user EVENT IF NOT EXISTS sql_id ON SCHEDULE event_schedule event_on_completion_opt event_status_opt event_comment_opt DO trigger_statements
+  {
+    $$ = &DDL{
+      Action: CreateEvent,
+      Event: &Event{
+        Name: &ColName{Name: $9},
+        IfNotExists: true,
+        Definer: $4,
+        Schedule: $12,
+        OnCompletion: $13,
+        Status: $14,
+        Comment: $15,
+        Body: $17,
       },
     }
   }
@@ -2482,6 +2547,94 @@ trigger_event_list:
 | trigger_event_list OR trigger_event
   {
     $$ = append($$, $3)
+  }
+
+// MySQL EVENT schedule, ON COMPLETION, status, and comment clauses.
+// Schedule is stored as a raw string to avoid complex expression grammar for timestamp arithmetic.
+event_schedule:
+  EVERY value_expression table_id
+  {
+    $$ = fmt.Sprintf("EVERY %s %s", String($2), $3.Name)
+  }
+| EVERY value_expression table_id STARTS value_expression
+  {
+    $$ = fmt.Sprintf("EVERY %s %s STARTS %s", String($2), $3.Name, String($5))
+  }
+| EVERY value_expression table_id STARTS value_expression ENDS value_expression
+  {
+    $$ = fmt.Sprintf("EVERY %s %s STARTS %s ENDS %s", String($2), $3.Name, String($5), String($7))
+  }
+| EVERY value_expression table_id ENDS value_expression
+  {
+    $$ = fmt.Sprintf("EVERY %s %s ENDS %s", String($2), $3.Name, String($5))
+  }
+| AT value_expression
+  {
+    $$ = fmt.Sprintf("AT %s", String($2))
+  }
+
+event_on_completion_opt:
+  /* empty */
+  {
+    $$ = ""
+  }
+| ON COMPLETION PRESERVE
+  {
+    $$ = "PRESERVE"
+  }
+| ON COMPLETION NOT PRESERVE
+  {
+    $$ = "NOT PRESERVE"
+  }
+
+event_status_opt:
+  /* empty */
+  {
+    $$ = ""
+  }
+| ENABLE
+  {
+    $$ = "ENABLE"
+  }
+| DISABLE
+  {
+    $$ = "DISABLE"
+  }
+| DISABLE ON REPLICA
+  {
+    $$ = "DISABLE ON REPLICA"
+  }
+| DISABLE ON SLAVE
+  {
+    $$ = "DISABLE ON SLAVE"
+  }
+
+event_comment_opt:
+  /* empty */
+  {
+    $$ = ""
+  }
+| COMMENT_KEYWORD STRING
+  {
+    $$ = $2
+  }
+
+// event_definer_user matches MySQL DEFINER user specifications:
+// - Single-quoted: 'user'@'host' (user-written SQL)
+// - Backtick-quoted: `user`@`host` (SHOW CREATE EVENT output)
+// - CURRENT_USER keyword
+event_definer_user:
+  STRING ID STRING
+  {
+    $$ = fmt.Sprintf("'%s'@'%s'", $1, $3)
+  }
+| sql_id ID sql_id
+  {
+    $$ = fmt.Sprintf("`%s`@`%s`", $1.Name, $3.Name)
+  }
+| CURRENT_USER
+  {
+    $$ = "CURRENT_USER"
   }
 
 trigger_statements:
@@ -7311,6 +7464,19 @@ non_reserved_keyword:
 | PARTITIONS
 | PARTITION %prec LOWER_THAN_BY
 | ENGINE
+| AT
+| DO
+| EVENT
+| EVERY
+| SCHEDULE
+| COMPLETION
+| PRESERVE
+| ENABLE
+| DISABLE
+| REPLICA
+| SLAVE
+| STARTS
+| ENDS
 
 // col_name_keyword: keywords that can be used as column names in index definitions.
 // PostgreSQL allows these as unquoted identifiers in certain contexts.
