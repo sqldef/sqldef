@@ -36,6 +36,9 @@ type Generator struct {
 	desiredTriggers []*Trigger
 	currentTriggers []*Trigger
 
+	desiredEvents []*Event
+	currentEvents []*Event
+
 	desiredFunctions []*Function
 	currentFunctions []*Function
 
@@ -127,6 +130,8 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 		currentViews:        aggregated.Views,
 		desiredTriggers:     desiredAggregated.Triggers,
 		currentTriggers:     aggregated.Triggers,
+		desiredEvents:       desiredAggregated.Events,
+		currentEvents:       aggregated.Events,
 		desiredFunctions:    desiredAggregated.Functions,
 		currentFunctions:    aggregated.Functions,
 		desiredTypes:        desiredAggregated.Types,
@@ -300,6 +305,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return nil, err
 			}
 			interDDLs = append(interDDLs, triggerDDLs...)
+		case *Event:
+			eventDDLs, err := g.generateDDLsForCreateEvent(desired)
+			if err != nil {
+				return nil, err
+			}
+			interDDLs = append(interDDLs, eventDDLs...)
 		case *Function:
 			functionDDLs, err := g.generateDDLsForCreateFunction(desired)
 			if err != nil {
@@ -381,6 +392,13 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			case GeneratorModeMssql:
 				ddls = append(ddls, fmt.Sprintf("DROP TRIGGER %s", g.escapeQualifiedName(currentTrigger.name)))
 			}
+		}
+	}
+
+	// Clean up obsoleted events
+	for _, currentEvent := range g.currentEvents {
+		if g.findEventByName(g.desiredEvents, currentEvent.name) == nil {
+			ddls = append(ddls, fmt.Sprintf("DROP EVENT %s", g.escapeQualifiedName(currentEvent.name)))
 		}
 	}
 
@@ -2911,6 +2929,7 @@ type AggregatedSchema struct {
 	PartitionOfs []*CreatePartitionOf // PostgreSQL partition child tables
 	Views        []*View
 	Triggers     []*Trigger
+	Events       []*Event
 	Functions    []*Function
 	Types        []*Type
 	Domains      []*Domain
@@ -3626,6 +3645,7 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 		PartitionOfs: []*CreatePartitionOf{},
 		Views:        []*View{},
 		Triggers:     []*Trigger{},
+		Events:       []*Event{},
 		Types:        []*Type{},
 		Domains:      []*Domain{},
 		Comments:     []*Comment{},
@@ -3702,6 +3722,8 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 			aggregated.Views = append(aggregated.Views, stmt)
 		case *Trigger:
 			aggregated.Triggers = append(aggregated.Triggers, stmt)
+		case *Event:
+			aggregated.Events = append(aggregated.Events, stmt)
 		case *Function:
 			aggregated.Functions = append(aggregated.Functions, stmt)
 		case *Type:
@@ -5039,6 +5061,130 @@ func (g *Generator) areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 		}
 	}
 	return true
+}
+
+func (g *Generator) findEventByName(events []*Event, name QualifiedName) *Event {
+	for _, event := range events {
+		if g.qualifiedNamesEqual(event.name, name) {
+			return event
+		}
+	}
+	return nil
+}
+
+// generateDDLsForCreateEvent generates DDLs for MySQL CREATE EVENT statements.
+// Uses ALTER EVENT for modifications instead of DROP+CREATE.
+func (g *Generator) generateDDLsForCreateEvent(desiredEvent *Event) ([]string, error) {
+	var ddls []string
+	currentEvent := g.findEventByName(g.currentEvents, desiredEvent.name)
+
+	if currentEvent == nil {
+		ddls = append(ddls, desiredEvent.statement)
+	} else if !g.areSameEventDefinition(currentEvent, desiredEvent) {
+		ddls = append(ddls, g.generateAlterEvent(desiredEvent))
+	}
+
+	if g.findEventByName(g.desiredEvents, desiredEvent.name) == nil {
+		g.desiredEvents = append(g.desiredEvents, desiredEvent)
+	}
+
+	return ddls, nil
+}
+
+// generateAlterEvent builds a MySQL ALTER EVENT statement from an Event struct.
+// All clauses are always emitted with MySQL defaults for empty values, because
+// ALTER EVENT only modifies the clauses you specify and preserves the rest.
+func (g *Generator) generateAlterEvent(event *Event) string {
+	var buf strings.Builder
+	buf.WriteString("ALTER EVENT ")
+	buf.WriteString(g.escapeQualifiedName(event.name))
+
+	if event.schedule != "" {
+		buf.WriteString(" ON SCHEDULE ")
+		buf.WriteString(event.schedule)
+	}
+	if event.onCompletion != "" {
+		buf.WriteString(" ON COMPLETION ")
+		buf.WriteString(event.onCompletion)
+	} else {
+		buf.WriteString(" ON COMPLETION NOT PRESERVE")
+	}
+	if event.status != "" {
+		buf.WriteString(" ")
+		buf.WriteString(event.status)
+	} else {
+		buf.WriteString(" ENABLE")
+	}
+	buf.WriteString(" COMMENT '")
+	buf.WriteString(event.comment) // empty string is valid: removes comment
+	buf.WriteString("'")
+	if len(event.body) > 0 {
+		buf.WriteString(" DO ")
+		buf.WriteString(strings.Join(event.body, "\n"))
+	}
+
+	return buf.String()
+}
+
+func (g *Generator) areSameEventDefinition(a, b *Event) bool {
+	if !strings.EqualFold(normalizeEventSchedule(a.schedule), normalizeEventSchedule(b.schedule)) {
+		return false
+	}
+	if normalizeEventOnCompletion(a.onCompletion) != normalizeEventOnCompletion(b.onCompletion) {
+		return false
+	}
+	if normalizeEventStatus(a.status) != normalizeEventStatus(b.status) {
+		return false
+	}
+	if a.comment != b.comment {
+		return false
+	}
+	if len(a.body) != len(b.body) {
+		return false
+	}
+	for i := range a.body {
+		bodyA := strings.ReplaceAll(a.body[i], " ", "")
+		bodyB := strings.ReplaceAll(b.body[i], " ", "")
+		if !strings.EqualFold(bodyA, bodyB) {
+			return false
+		}
+	}
+	return true
+}
+
+// normalizeEventSchedule strips MySQL's auto-generated STARTS timestamp from
+// EVERY schedules. MySQL always adds STARTS even if not specified by the user.
+func normalizeEventSchedule(s string) string {
+	upper := strings.ToUpper(s)
+	if !strings.HasPrefix(upper, "EVERY ") {
+		return s
+	}
+	if idx := strings.Index(upper, " STARTS "); idx != -1 {
+		endsIdx := strings.Index(upper[idx:], " ENDS ")
+		if endsIdx != -1 {
+			return s[:idx] + s[idx+endsIdx:]
+		}
+		return s[:idx]
+	}
+	return s
+}
+
+// normalizeEventOnCompletion normalizes MySQL's ON COMPLETION default.
+// MySQL defaults to NOT PRESERVE when not specified.
+func normalizeEventOnCompletion(s string) string {
+	if s == "" || strings.EqualFold(s, "NOT PRESERVE") {
+		return "NOT PRESERVE"
+	}
+	return strings.ToUpper(s)
+}
+
+// normalizeEventStatus normalizes MySQL's event status default.
+// MySQL defaults to ENABLE when not specified.
+func normalizeEventStatus(s string) string {
+	if s == "" || strings.EqualFold(s, "ENABLE") {
+		return "ENABLE"
+	}
+	return strings.ToUpper(s)
 }
 
 func isNullValue(value *Value) bool {
