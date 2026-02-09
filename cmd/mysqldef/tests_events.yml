@@ -41,7 +41,7 @@ CreateEventWithAtSchedule:
   legacy_ignore_quotes: false
   desired: |
     CREATE EVENT `one_time_task`
-    ON SCHEDULE AT '2099-01-01 00:00:00'
+    ON SCHEDULE AT '2035-01-01 00:00:00'
     ON COMPLETION PRESERVE
     DO DELETE FROM records WHERE created_at < NOW() - INTERVAL 90 DAY;
 
