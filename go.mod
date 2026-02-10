@@ -9,7 +9,7 @@ require (
 	github.com/goccy/go-yaml v1.19.2
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/k0kubun/pp/v3 v3.5.1
-	github.com/lib/pq v1.11.1
+	github.com/lib/pq v1.11.2
 	github.com/microsoft/go-mssqldb v1.9.6
 	github.com/pganalyze/pg_query_go/v6 v6.2.2
 	github.com/stretchr/testify v1.11.1
