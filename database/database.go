@@ -23,6 +23,9 @@ type Config struct {
 	SkipExtension bool
 	SkipPartition bool
 
+	// Only PostgreSQL
+	SkipFunction bool
+
 	// Only MySQL
 	MySQLEnableCleartextPlugin bool
 

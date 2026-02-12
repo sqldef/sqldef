@@ -577,6 +577,10 @@ func (d *PostgresDatabase) domains() ([]string, error) {
 
 // functions fetches user-defined functions from the database
 func (d *PostgresDatabase) functions() ([]string, error) {
+	if d.config.SkipFunction {
+		return []string{}, nil
+	}
+
 	// Query to get user-defined functions (excluding system functions and extension functions)
 	// We use pg_get_functiondef to get the complete function definition
 	// pg_get_function_identity_arguments gives us the function signature for comments
