@@ -261,13 +261,15 @@ EnumTypeDefaultIdempotent:
     CREATE TYPE order_status AS ENUM ('pending', 'shipped');
     CREATE TABLE orders (
       id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-      status order_status NOT NULL DEFAULT 'pending'
+      status order_status NOT NULL DEFAULT 'pending',
+      status_with_cast order_status NOT NULL DEFAULT 'pending'::order_status
     );
   desired: |
     CREATE TYPE order_status AS ENUM ('pending', 'shipped');
     CREATE TABLE orders (
       id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-      status order_status NOT NULL DEFAULT 'pending'
+      status order_status NOT NULL DEFAULT 'pending',
+      status_with_cast order_status NOT NULL DEFAULT 'pending'::order_status
     );
   up: ""
   down: ""
