@@ -66,6 +66,14 @@ func (d *DryRunDatabase) GetConfig() Config {
 	return d.wrapped.GetConfig()
 }
 
+func (d *DryRunDatabase) SetMigrationScope(scope MigrationScope) {
+	d.wrapped.SetMigrationScope(scope)
+}
+
+func (d *DryRunDatabase) GetMigrationScope() MigrationScope {
+	return d.wrapped.GetMigrationScope()
+}
+
 type dryRunDriver struct {
 	txQueries TransactionQueries
 }

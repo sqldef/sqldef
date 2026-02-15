@@ -7,8 +7,7 @@ DropDomainSkipped:
   current: |
     CREATE DOMAIN email AS TEXT;
   desired: ""
-  up: |
-    -- Skipped: DROP DOMAIN "public"."email";
+  up: ""
   down: ""
 
 DropExtensionSkipped:
@@ -17,8 +16,7 @@ DropExtensionSkipped:
   current: |
     CREATE EXTENSION IF NOT EXISTS btree_gist;
   desired: ""
-  up: |
-    -- Skipped: DROP EXTENSION "btree_gist";
+  up: ""
   down: ""
 
 DropPolicySkipped:
@@ -42,8 +40,7 @@ DropTriggerSkipped:
   desired: |
     CREATE TABLE users (id serial PRIMARY KEY);
     CREATE FUNCTION log_func() RETURNS TRIGGER AS $$ BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql;
-  up: |
-    -- Skipped: DROP TRIGGER log_insert ON public.users;
+  up: ""
   down: ""
 
 DropFunctionSkipped:
@@ -52,8 +49,7 @@ DropFunctionSkipped:
   current: |
     CREATE FUNCTION add_one(x integer) RETURNS integer AS $$ BEGIN RETURN x + 1; END; $$ LANGUAGE plpgsql;
   desired: ""
-  up: |
-    -- Skipped: DROP FUNCTION public.add_one;
+  up: ""
   down: ""
 
 DropTableSkipped:
@@ -61,8 +57,7 @@ DropTableSkipped:
   current: |
     CREATE TABLE users (id bigint NOT NULL);
   desired: ""
-  up: |
-    -- Skipped: DROP TABLE "public"."users";
+  up: ""
   down: ""
 
 DropColumnSkipped:
@@ -104,8 +99,7 @@ DropViewSkipped:
     CREATE VIEW users_view AS SELECT id, name FROM users;
   desired: |
     CREATE TABLE users (id bigint NOT NULL, name text);
-  up: |
-    -- Skipped: DROP VIEW "public"."users_view";
+  up: ""
   down: ""
 
 DropMaterializedViewSkipped:
@@ -115,8 +109,7 @@ DropMaterializedViewSkipped:
     CREATE MATERIALIZED VIEW users_mat AS SELECT id, name FROM users;
   desired: |
     CREATE TABLE users (id bigint NOT NULL, name text);
-  up: |
-    -- Skipped: DROP MATERIALIZED VIEW "public"."users_mat";
+  up: ""
   down: ""
 
 DropTypeSkipped:
@@ -124,8 +117,7 @@ DropTypeSkipped:
   current: |
     CREATE TYPE status AS ENUM ('active', 'inactive');
   desired: ""
-  up: |
-    -- Skipped: DROP TYPE "public"."status";
+  up: ""
   down: ""
 
 RevokePrivilegeSkipped:
