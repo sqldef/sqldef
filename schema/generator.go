@@ -4880,6 +4880,12 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 	normalizedCurrent := normalizeExpr(currentDefault.expression, g.mode)
 	normalizedDesired := normalizeExpr(desiredDefault.expression, g.mode)
 
+	// Unwrap identity casts: when a cast type matches the column type, strip the cast.
+	// PostgreSQL stores ENUM/domain defaults with explicit casts (e.g., 'pending'::order_status),
+	// but users write DEFAULT 'pending' without the cast. Both are semantically identical.
+	normalizedCurrent = unwrapIdentityCast(normalizedCurrent, columnType, g.mode)
+	normalizedDesired = unwrapIdentityCast(normalizedDesired, columnType, g.mode)
+
 	// Check if both are simple SQLVal (vs complex expressions) after normalization
 	currSQLVal, currentIsSQLVal := normalizedCurrent.(*parser.SQLVal)
 	desSQLVal, desiredIsSQLVal := normalizedDesired.(*parser.SQLVal)
@@ -4916,6 +4922,21 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 		"columnType", columnType,
 	)
 	return strings.EqualFold(currentExprSchema, desiredExprSchema) && strings.EqualFold(currentExpr, desiredExpr)
+}
+
+// unwrapIdentityCast strips a type cast when the cast type matches the column type.
+// PostgreSQL stores defaults for ENUM/domain columns with explicit casts
+// (e.g., 'pending'::order_status), but these are identity casts that should be
+// treated as equivalent to the uncast value.
+func unwrapIdentityCast(expr parser.Expr, columnType string, mode GeneratorMode) parser.Expr {
+	castExpr, ok := expr.(*parser.CastExpr)
+	if !ok || castExpr.Type == nil {
+		return expr
+	}
+	if strings.EqualFold(normalizeTypeName(castExpr.Type.Type, mode), normalizeTypeName(columnType, mode)) {
+		return castExpr.Expr
+	}
+	return expr
 }
 
 // isNumericColumnType determines if a column type should be compared numerically.
