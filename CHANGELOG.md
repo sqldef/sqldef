@@ -1,3 +1,9 @@
+## [v3.9.8](https://github.com/sqldef/sqldef/compare/v3.9.7...v3.9.8) - 2026-02-15
+- Roll github.com/lib/pq v1.11.2 by @sorah in https://github.com/sqldef/sqldef/pull/1132
+- Support USE statement by @chi-bd in https://github.com/sqldef/sqldef/pull/1129
+- Update Go to 1.26.0 by @178inaba in https://github.com/sqldef/sqldef/pull/1136
+- Fix unnecessary ALTER for ENUM type default values in psqldef by @178inaba in https://github.com/sqldef/sqldef/pull/1135
+
 ## [v3.9.7](https://github.com/sqldef/sqldef/compare/v3.9.6...v3.9.7) - 2026-02-05
 - Allow non-reserved keyword as table-id by @winebarrel in https://github.com/sqldef/sqldef/pull/1125
 
