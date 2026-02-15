@@ -1,5 +1,5 @@
 # must sync with go.mod
-FROM golang:1.25.5-alpine AS builder
+FROM golang:1.26.0-alpine AS builder
 
 ARG SQLDEF_TOOL=mysqldef
 
