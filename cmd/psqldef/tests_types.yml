@@ -254,3 +254,22 @@ RenameEnumValueWithSchema:
     ALTER TYPE "myschema"."status" RENAME VALUE 'pending' TO 'waiting';
   down: |
     ALTER TYPE "myschema"."status" ADD VALUE 'pending';
+
+EnumTypeDefaultIdempotent:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE order_status AS ENUM ('pending', 'shipped');
+    CREATE TABLE orders (
+      id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      status order_status NOT NULL DEFAULT 'pending',
+      status_with_cast order_status NOT NULL DEFAULT 'pending'::order_status
+    );
+  desired: |
+    CREATE TYPE order_status AS ENUM ('pending', 'shipped');
+    CREATE TABLE orders (
+      id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      status order_status NOT NULL DEFAULT 'pending',
+      status_with_cast order_status NOT NULL DEFAULT 'pending'::order_status
+    );
+  up: ""
+  down: ""
