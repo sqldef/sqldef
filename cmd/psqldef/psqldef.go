@@ -39,6 +39,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		SkipView      bool     `long:"skip-view" description:"Skip managing views/materialized views"`
 		SkipExtension bool     `long:"skip-extension" description:"Skip managing extensions"`
 		SkipPartition bool     `long:"skip-partition" description:"Skip managing partitioned tables"`
+		SkipFunction  bool     `long:"skip-function" description:"Skip managing functions"`
 		BeforeApply   string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs" value-name:"SQL"`
 
 		// Custom handlers for config flags to preserve order
@@ -142,6 +143,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		SkipView:              opts.SkipView,
 		SkipExtension:         opts.SkipExtension,
 		SkipPartition:         opts.SkipPartition,
+		SkipFunction:          opts.SkipFunction,
 		TargetSchema:          options.Config.TargetSchema,
 		DumpConcurrency:       options.Config.DumpConcurrency,
 		DisableDdlTransaction: options.Config.DisableDdlTransaction,

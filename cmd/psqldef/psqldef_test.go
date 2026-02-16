@@ -813,6 +813,23 @@ func TestPsqldefSkipExtension(t *testing.T) {
 	assert.Equal(t, nothingModified, output)
 }
 
+func TestPsqldefSkipFunction(t *testing.T) {
+	resetTestDatabase()
+
+	createFunction := `CREATE OR REPLACE FUNCTION quote(sql varchar) RETURNS varchar AS $$
+  BEGIN
+    RETURN '"' || sql || '"';
+  END;
+  $$ LANGUAGE plpgsql;`
+
+	mustPgExec(testDatabaseName, createFunction)
+
+	tu.WriteFile("schema.sql", "")
+
+	output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--skip-function", "-f", "schema.sql")...)
+	assert.Equal(t, nothingModified, output)
+}
+
 func TestPsqldefSkipPartition(t *testing.T) {
 	resetTestDatabase()
 
