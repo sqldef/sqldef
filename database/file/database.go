@@ -11,6 +11,7 @@ import (
 type FileDatabase struct {
 	file            string
 	generatorConfig database.GeneratorConfig
+	migrationScope  database.MigrationScope
 }
 
 func NewDatabase(file string) *FileDatabase {
@@ -53,4 +54,12 @@ func (d *FileDatabase) GetTransactionQueries() database.TransactionQueries {
 
 func (d *FileDatabase) GetConfig() database.Config {
 	return database.Config{}
+}
+
+func (d *FileDatabase) SetMigrationScope(scope database.MigrationScope) {
+	d.migrationScope = scope
+}
+
+func (d *FileDatabase) GetMigrationScope() database.MigrationScope {
+	return d.migrationScope
 }
