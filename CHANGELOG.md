@@ -1,3 +1,9 @@
+## [v3.10.0](https://github.com/sqldef/sqldef/compare/v3.9.8...v3.10.0) - 2026-02-21
+- build(deps): bump actions/attest-build-provenance from 3.1.0 to 3.2.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1138
+- build(deps): bump docker/login-action from 3.6.0 to 3.7.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1139
+- build(deps): bump docker/build-push-action from 6.16.0 to 6.19.2 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1140
+- build(deps): bump filippo.io/edwards25519 from 1.1.0 to 1.1.1 in the go_modules group across 1 directory by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1137
+
 ## [v3.9.8](https://github.com/sqldef/sqldef/compare/v3.9.7...v3.9.8) - 2026-02-15
 - Roll github.com/lib/pq v1.11.2 by @sorah in https://github.com/sqldef/sqldef/pull/1132
 - Support USE statement by @chi-bd in https://github.com/sqldef/sqldef/pull/1129
