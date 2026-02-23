@@ -273,6 +273,24 @@ func TestExtensionOIDCollisionForFunctions(t *testing.T) {
 		funcOID, pgTypeClassID)
 }
 
+func TestSkipFunction(t *testing.T) {
+	db := setupTestDatabase(t)
+	db.config.SkipFunction = true
+	defer db.Close()
+
+	// Create a function
+	_, err := db.DB().Exec(`CREATE OR REPLACE FUNCTION quote(sql varchar) RETURNS varchar AS $$
+    BEGIN
+      RETURN '"' || sql || '"';
+    END;
+    $$ LANGUAGE plpgsql;`)
+	require.NoError(t, err)
+
+	exported, err := db.ExportDDLs()
+	require.NoError(t, err)
+	assert.Empty(t, exported)
+}
+
 // Helper functions
 
 func setupTestDatabase(t *testing.T) *PostgresDatabase {
