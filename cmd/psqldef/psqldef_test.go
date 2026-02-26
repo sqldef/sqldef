@@ -8,6 +8,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -1617,4 +1618,37 @@ func TestPsqldefDomainWithTargetSchema(t *testing.T) {
 		assert.Contains(t, exported, `CREATE DOMAIN "test_schema_a"."email"`)
 		assert.Contains(t, exported, `CREATE DOMAIN "test_schema_b"."status"`)
 	})
+}
+
+func TestPsqldefConstraintWithPgqueryFallback(t *testing.T) {
+	resetTestDatabase()
+	t.Setenv("PSQLDEF_PARSER", "")
+
+	ddl := tu.StripHeredoc(`
+		CREATE TABLE users (
+        user_id uuid PRIMARY KEY
+    );
+    CREATE TABLE user_profiles (
+        profile_id uuid PRIMARY KEY,
+        user_id uuid,
+        status VARCHAR(255)
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_profiles_status ON user_profiles (status);
+    ALTER TABLE user_profiles ADD CONSTRAINT fk_user_profiles_user
+            FOREIGN KEY(user_id) REFERENCES users(user_id) ON UPDATE NO ACTION ON DELETE RESTRICT;
+	`)
+
+	// Apply the DDL to set up the database state
+	mustPgExec(testDatabaseName, ddl)
+
+	tu.WriteFile("schema.sql", ddl)
+
+	output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "-f", "schema.sql")...)
+	// strip warning
+	reg := regexp.MustCompile(".*WARN[^\n]*\n")
+	if !reg.MatchString(output) {
+		t.Fatalf("expected warning about pg_query fallback, but got: %s", output)
+	}
+	output = reg.ReplaceAllString(output, "")
+	assert.Equal(t, nothingModified, output)
 }

@@ -5213,16 +5213,13 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		if indexA.constraint != indexB.constraint {
 			return false
 		}
-		if (indexA.constraintOptions != nil) != (indexB.constraintOptions != nil) {
+		deferrableA, initiallyDeferredA := g.normalizeConstraintOptions(indexA.constraintOptions)
+		deferrableB, initiallyDeferredB := g.normalizeConstraintOptions(indexB.constraintOptions)
+		if deferrableA != deferrableB {
 			return false
 		}
-		if indexA.constraintOptions != nil && indexB.constraintOptions != nil {
-			if indexA.constraintOptions.deferrable != indexB.constraintOptions.deferrable {
-				return false
-			}
-			if indexA.constraintOptions.initiallyDeferred != indexB.constraintOptions.initiallyDeferred {
-				return false
-			}
+		if initiallyDeferredA != initiallyDeferredB {
+			return false
 		}
 	}
 
@@ -5288,19 +5285,24 @@ func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB Forei
 	if foreignKeyA.notForReplication != foreignKeyB.notForReplication {
 		return false
 	}
-	if (foreignKeyA.constraintOptions != nil) != (foreignKeyB.constraintOptions != nil) {
+	deferrableA, initiallyDeferredA := g.normalizeConstraintOptions(foreignKeyA.constraintOptions)
+	deferrableB, initiallyDeferredB := g.normalizeConstraintOptions(foreignKeyB.constraintOptions)
+	if deferrableA != deferrableB {
 		return false
 	}
-	if foreignKeyA.constraintOptions != nil && foreignKeyB.constraintOptions != nil {
-		if foreignKeyA.constraintOptions.deferrable != foreignKeyB.constraintOptions.deferrable {
-			return false
-		}
-		if foreignKeyA.constraintOptions.initiallyDeferred != foreignKeyB.constraintOptions.initiallyDeferred {
-			return false
-		}
+	if initiallyDeferredA != initiallyDeferredB {
+		return false
 	}
 
 	return true
+}
+
+func (g *Generator) normalizeConstraintOptions(constraintOptions *ConstraintOptions) (bool, bool) {
+	if constraintOptions == nil {
+		return false, false
+	}
+
+	return constraintOptions.deferrable, constraintOptions.initiallyDeferred
 }
 
 func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion) bool {
