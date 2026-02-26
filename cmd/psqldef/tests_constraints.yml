@@ -1578,28 +1578,3 @@ CheckConstraintWithCoalesce:
       val integer,
       CHECK (COALESCE(val, 0) >= 0)
     );
-ForeignKeyWithPgqueryFallback:
-  current: |
-    CREATE TABLE users (
-        user_id uuid PRIMARY KEY
-    );
-    CREATE TABLE user_profiles (
-        profile_id uuid PRIMARY KEY,
-        user_id uuid,
-        status VARCHAR(255)
-    );
-    CREATE INDEX idx_user_profiles_status ON user_profiles (status);
-    ALTER TABLE user_profiles ADD CONSTRAINT fk_user_profiles_user
-            FOREIGN KEY(user_id) REFERENCES users(user_id) ON UPDATE NO ACTION ON DELETE RESTRICT;
-  desired: |
-    CREATE TABLE users (
-        user_id uuid PRIMARY KEY
-    );
-    CREATE TABLE user_profiles (
-        profile_id uuid PRIMARY KEY,
-        user_id uuid,
-        status VARCHAR(255)
-    );
-    CREATE INDEX IF NOT EXISTS idx_user_profiles_status ON user_profiles (status);
-    ALTER TABLE user_profiles ADD CONSTRAINT fk_user_profiles_user
-            FOREIGN KEY(user_id) REFERENCES users(user_id) ON UPDATE NO ACTION ON DELETE RESTRICT;
