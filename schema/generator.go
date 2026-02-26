@@ -5213,16 +5213,13 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		if indexA.constraint != indexB.constraint {
 			return false
 		}
-		if (indexA.constraintOptions != nil) != (indexB.constraintOptions != nil) {
+		deferrableA, initiallyDeferredA := g.normalizeConstraintOptions(indexA.constraintOptions)
+		deferrableB, initiallyDeferredB := g.normalizeConstraintOptions(indexB.constraintOptions)
+		if deferrableA != deferrableB {
 			return false
 		}
-		if indexA.constraintOptions != nil && indexB.constraintOptions != nil {
-			if indexA.constraintOptions.deferrable != indexB.constraintOptions.deferrable {
-				return false
-			}
-			if indexA.constraintOptions.initiallyDeferred != indexB.constraintOptions.initiallyDeferred {
-				return false
-			}
+		if initiallyDeferredA != initiallyDeferredB {
+			return false
 		}
 	}
 
