@@ -30,6 +30,7 @@ const indent = "    "
 type PostgresDatabase struct {
 	config          database.Config
 	generatorConfig database.GeneratorConfig
+	migrationScope  database.MigrationScope
 	db              *sql.DB
 	defaultSchema   *string
 }
@@ -70,79 +71,106 @@ func (d *PostgresDatabase) GetConfig() database.Config {
 	return d.config
 }
 
+func (d *PostgresDatabase) SetMigrationScope(scope database.MigrationScope) {
+	d.migrationScope = scope
+}
+
+func (d *PostgresDatabase) GetMigrationScope() database.MigrationScope {
+	return d.migrationScope
+}
+
 func (d *PostgresDatabase) ExportDDLs() (string, error) {
 	var ddls []string
+	scope := d.GetMigrationScope()
 
-	schemaDDLs, err := d.schemas()
-	if err != nil {
-		return "", err
-	}
-	ddls = append(ddls, schemaDDLs...)
-
-	extensionDDLs, err := d.extensions()
-	if err != nil {
-		return "", err
-	}
-	ddls = append(ddls, extensionDDLs...)
-
-	typeDDLs, err := d.types()
-	if err != nil {
-		return "", err
-	}
-	ddls = append(ddls, typeDDLs...)
-
-	domainDDLs, err := d.domains()
-	if err != nil {
-		return "", err
-	}
-	ddls = append(ddls, domainDDLs...)
-
-	functionDDLs, err := d.functions()
-	if err != nil {
-		return "", err
-	}
-	ddls = append(ddls, functionDDLs...)
-
-	tableNames, err := d.tableNames()
-	if err != nil {
-		return "", err
+	if scope.Schema {
+		schemaDDLs, err := d.schemas()
+		if err != nil {
+			return "", err
+		}
+		ddls = append(ddls, schemaDDLs...)
 	}
 
-	tableDDLs, err := database.ConcurrentMapFuncWithError(
-		tableNames,
-		d.config.DumpConcurrency,
-		func(tableName string) (string, error) {
-			return d.exportTableDDL(tableName)
-		})
-	if err != nil {
-		return "", err
+	if scope.Extension {
+		extensionDDLs, err := d.extensions()
+		if err != nil {
+			return "", err
+		}
+		ddls = append(ddls, extensionDDLs...)
 	}
-	ddls = append(ddls, tableDDLs...)
 
-	// Export partition child tables (CREATE TABLE ... PARTITION OF)
-	partitionDDLs, err := d.partitionChildTables()
-	if err != nil {
-		return "", err
+	if scope.Type {
+		typeDDLs, err := d.types()
+		if err != nil {
+			return "", err
+		}
+		ddls = append(ddls, typeDDLs...)
 	}
-	ddls = append(ddls, partitionDDLs...)
 
-	triggerDDLs, err := d.triggers()
-	if err != nil {
-		return "", err
+	if scope.Domain {
+		domainDDLs, err := d.domains()
+		if err != nil {
+			return "", err
+		}
+		ddls = append(ddls, domainDDLs...)
 	}
-	ddls = append(ddls, triggerDDLs...)
 
-	viewDDLs, err := d.views()
-	if err != nil {
-		return "", err
+	if scope.Function {
+		functionDDLs, err := d.functions()
+		if err != nil {
+			return "", err
+		}
+		ddls = append(ddls, functionDDLs...)
 	}
-	ddls = append(ddls, viewDDLs...)
 
-	matViewDDLs, err := d.materializedViews()
-	if err != nil {
-		return "", err
+	if scope.Table {
+		tableNames, err := d.tableNames()
+		if err != nil {
+			return "", err
+		}
+
+		tableDDLs, err := database.ConcurrentMapFuncWithError(
+			tableNames,
+			d.config.DumpConcurrency,
+			func(tableName string) (string, error) {
+				return d.exportTableDDL(tableName)
+			})
+		if err != nil {
+			return "", err
+		}
+		ddls = append(ddls, tableDDLs...)
+
+		if scope.Partition {
+			// Export partition child tables (CREATE TABLE ... PARTITION OF)
+			partitionDDLs, err := d.partitionChildTables()
+			if err != nil {
+				return "", err
+			}
+			ddls = append(ddls, partitionDDLs...)
+		}
 	}
-	ddls = append(ddls, matViewDDLs...)
+
+	if scope.Trigger {
+		triggerDDLs, err := d.triggers()
+		if err != nil {
+			return "", err
+		}
+		ddls = append(ddls, triggerDDLs...)
+	}
+
+	if scope.View {
+		viewDDLs, err := d.views()
+		if err != nil {
+			return "", err
+		}
+		ddls = append(ddls, viewDDLs...)
+
+		matViewDDLs, err := d.materializedViews()
+		if err != nil {
+			return "", err
+		}
+		ddls = append(ddls, matViewDDLs...)
+	}
 
 	return strings.Join(ddls, "\n\n"), nil
 }

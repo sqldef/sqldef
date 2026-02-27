@@ -386,6 +386,13 @@ func (l *stringLogger) String() string {
 func ApplyWithOutput(db database.Database, mode schema.GeneratorMode, sqlParser database.Parser, desiredDDLs string, config database.GeneratorConfig) (string, error) {
 	db.SetGeneratorConfig(config)
 
+	desired, err := schema.ParseDDLs(mode, sqlParser, desiredDDLs, db.GetDefaultSchema())
+	if err != nil {
+		return "", err
+	}
+	scope := schema.DesiredScope(desired, false, true)
+	db.SetMigrationScope(scope)
+
 	currentDDLs, err := db.ExportDDLs()
 	if err != nil {
 		return "", err
@@ -586,6 +593,12 @@ func runTestImplWithReporter(r testReporter, db database.Database, test TestCase
 	}
 
 	// Test idempotency of current schema
+	desiredDDLs, err := schema.ParseDDLs(mode, sqlParser, test.Current, db.GetDefaultSchema())
+	if err != nil && test.Error == nil {
+		r.Fatal(err)
+	}
+	scope := schema.DesiredScope(desiredDDLs, false, config.EnableDrop)
+	db.SetMigrationScope(scope)
 	currentDDLs, err := db.ExportDDLs()
 	if err != nil {
 		r.Fatal(err)
@@ -599,6 +612,12 @@ func runTestImplWithReporter(r testReporter, db database.Database, test TestCase
 	}
 
 	// Main test
+	desiredDDLs, err = schema.ParseDDLs(mode, sqlParser, test.Desired, db.GetDefaultSchema())
+	if err != nil && test.Error == nil {
+		r.Fatal(err)
+	}
+	scope = schema.DesiredScope(desiredDDLs, false, config.EnableDrop)
+	db.SetMigrationScope(scope)
 	currentDDLs, err = db.ExportDDLs()
 	if err != nil {
 		r.Fatal(err)
@@ -650,6 +669,12 @@ func runTestImplWithReporter(r testReporter, db database.Database, test TestCase
 		}
 
 		// PHASE 3: Test reverse migration (desired → current) should produce Down
+		desiredDDLs, err := schema.ParseDDLs(mode, sqlParser, test.Current, db.GetDefaultSchema())
+		if err != nil && test.Error == nil {
+			r.Fatal(err)
+		}
+		scope := schema.DesiredScope(desiredDDLs, false, config.EnableDrop)
+		db.SetMigrationScope(scope)
 		currentDDLs, err = db.ExportDDLs()
 		if err != nil {
 			r.Fatal(err)

@@ -7,8 +7,7 @@ DropTableSkipped:
   current: |
     CREATE TABLE users (id bigint NOT NULL);
   desired: ""
-  up: |
-    -- Skipped: DROP TABLE `users`;
+  up: ""
   down: ""
 
 DropViewSkipped:
@@ -18,8 +17,7 @@ DropViewSkipped:
     CREATE VIEW users_view AS SELECT id, name FROM users;
   desired: |
     CREATE TABLE users (id bigint NOT NULL, name varchar(100));
-  up: |
-    -- Skipped: DROP VIEW `users_view`;
+  up: ""
   down: ""
 
 DropColumnSkipped:

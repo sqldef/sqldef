@@ -61,12 +61,19 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 	db.SetGeneratorConfig(options.Config)
 	options.Config = db.GetGeneratorConfig()
 
+	defaultSchema := db.GetDefaultSchema()
+	desiredDDLs, err := schema.ParseDDLs(generatorMode, sqlParser, options.DesiredDDLs, defaultSchema)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	scope := schema.DesiredScope(desiredDDLs, options.Export, options.Config.EnableDrop)
+	db.SetMigrationScope(scope)
+
 	currentDDLs, err := db.ExportDDLs()
 	if err != nil {
 		log.Fatalf("Error on ExportDDLs: %s", err)
 	}
-
-	defaultSchema := db.GetDefaultSchema()
 
 	var ddlSuffix string
 	if generatorMode == schema.GeneratorModeMssql {
