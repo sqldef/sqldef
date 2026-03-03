@@ -517,3 +517,12 @@ IndexWithExpressionLower:
   desired: |
     CREATE TABLE users (email text);
     CREATE INDEX idx_email_lower ON users (LOWER(email));
+
+IndexWithCondition:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+        user_id uuid PRIMARY KEY,
+        status VARCHAR(255)
+    );
+    CREATE UNIQUE INDEX idx_users_status_is_active ON users (status) WHERE status = 'active';

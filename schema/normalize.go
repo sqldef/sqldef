@@ -620,6 +620,15 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 						}
 					}
 				}
+				// Strip redundant text/character varying casts on column names
+				// PostgreSQL adds these implicitly when comparing varchar columns
+				// e.g., (status)::text = 'active'::text → status = 'active'
+				if _, isColName := normalizedExpr.(*parser.ColName); isColName {
+					if typeStr == "text" || typeStr == "character varying" {
+						return normalizedExpr
+					}
+				}
+
 				// Strip redundant casts on NULL values and normalize to lowercase
 				// PostgreSQL stores DEFAULT NULL as NULL::type, but we normalize to just null
 				// (matching the lexer's keyword normalization to lowercase)
