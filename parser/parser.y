@@ -913,6 +913,30 @@ create_statement:
       IndexExpr: $9.IndexExpr,
     }
   }
+/* For PostgreSQL: CREATE INDEX IF NOT EXISTS */
+| CREATE unique_clustered_opt INDEX concurrently_opt IF NOT EXISTS sql_id ON table_name '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt where_expression_opt index_option_opt index_partition_opt
+  {
+    $$ = &DDL{
+      Action: CreateIndex,
+      Table: $10,
+      NewName: $10,
+      IndexSpec: &IndexSpec{
+        Name: $8,
+        Type: NewIdent("", false),
+        Unique: bool($2[0]),
+        Clustered: bool($2[1]),
+        Async: $4 == byte(2),
+        Concurrently: $4 == byte(1),
+        NullsNotDistinct: bool($14),
+        Included: $15,
+        Where: NewWhere(WhereStr, $16),
+        Options: $17,
+        Partition: $18,
+      },
+      IndexCols: $12.IndexCols,
+      IndexExpr: $12.IndexExpr,
+    }
+  }
 | CREATE unique_clustered_opt INDEX concurrently_opt ON table_name '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt where_expression_opt index_option_opt index_partition_opt
   {
     $$ = &DDL{
@@ -977,6 +1001,31 @@ create_statement:
       IndexSpec: indexSpec,
       IndexCols: $11.IndexCols,
       IndexExpr: $11.IndexExpr,
+    }
+  }
+/* For PostgreSQL: CREATE INDEX IF NOT EXISTS ... USING */
+| CREATE unique_clustered_opt INDEX concurrently_opt IF NOT EXISTS sql_id ON table_name USING reserved_sql_id '(' index_column_list_or_expression ')' nulls_not_distinct_opt include_columns_opt index_option_opt where_expression_opt
+  {
+    indexSpec := &IndexSpec{
+      Name: $8,
+      Type: $12,
+      Unique: bool($2[0]),
+      Async: $4 == byte(2),
+      Concurrently: $4 == byte(1),
+      NullsNotDistinct: bool($16),
+      Where: NewWhere(WhereStr, $19),
+      Included: $17,
+    }
+    if $18 != nil && len($18) > 0 {
+      indexSpec.Options = $18
+    }
+    $$ = &DDL{
+      Action: CreateIndex,
+      Table: $10,
+      NewName: $10,
+      IndexSpec: indexSpec,
+      IndexCols: $14.IndexCols,
+      IndexExpr: $14.IndexExpr,
     }
   }
 /* For SQL Server */
