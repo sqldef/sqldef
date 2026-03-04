@@ -1,3 +1,14 @@
+## [v3.10.0](https://github.com/sqldef/sqldef/compare/v3.9.8...v3.10.0) - 2026-03-04
+- build(deps): bump actions/attest-build-provenance from 3.1.0 to 3.2.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1138
+- build(deps): bump docker/login-action from 3.6.0 to 3.7.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1139
+- build(deps): bump docker/build-push-action from 6.16.0 to 6.19.2 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1140
+- build(deps): bump filippo.io/edwards25519 from 1.1.0 to 1.1.1 in the go_modules group across 1 directory by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1137
+- build(deps): bump golang.org/x/term from 0.39.0 to 0.40.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1144
+- Strip redundant casts around text/character varying by @wreulicke in https://github.com/sqldef/sqldef/pull/1143
+- build(deps): bump modernc.org/sqlite from 1.44.3 to 1.46.1 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1145
+- Support CREATE INDEX IF NOT EXISTS in generic parser (#1142) by @gfx in https://github.com/sqldef/sqldef/pull/1146
+- Fix foreign key idempotency failure when pgquery fallback occurs (#1147) by @gfx in https://github.com/sqldef/sqldef/pull/1148
+
 ## [v3.9.8](https://github.com/sqldef/sqldef/compare/v3.9.7...v3.9.8) - 2026-02-15
 - Roll github.com/lib/pq v1.11.2 by @sorah in https://github.com/sqldef/sqldef/pull/1132
 - Support USE statement by @chi-bd in https://github.com/sqldef/sqldef/pull/1129
