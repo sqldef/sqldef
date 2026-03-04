@@ -1546,6 +1546,105 @@ CompositeUnnamedForeignKey:
       FOREIGN KEY (tenant_id, author_id) REFERENCES users(tenant_id, user_id)
     );
 
+AddForeignKeyOnDeleteRestrict:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id bigint PRIMARY KEY);
+    CREATE TABLE posts (
+      id bigint PRIMARY KEY,
+      user_id bigint
+    );
+  desired: |
+    CREATE TABLE users (id bigint PRIMARY KEY);
+    CREATE TABLE posts (
+      id bigint PRIMARY KEY,
+      user_id bigint
+    );
+    ALTER TABLE posts ADD CONSTRAINT posts_user_fk
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE RESTRICT;
+  up: |
+    ALTER TABLE posts ADD CONSTRAINT posts_user_fk
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE RESTRICT;
+  down: |
+    ALTER TABLE public.posts DROP CONSTRAINT posts_user_fk;
+
+AddForeignKeyOnDeleteNoAction:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id bigint PRIMARY KEY);
+    CREATE TABLE posts (
+      id bigint PRIMARY KEY,
+      user_id bigint
+    );
+  desired: |
+    CREATE TABLE users (id bigint PRIMARY KEY);
+    CREATE TABLE posts (
+      id bigint PRIMARY KEY,
+      user_id bigint
+    );
+    ALTER TABLE posts ADD CONSTRAINT posts_user_fk
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE NO ACTION;
+  up: |
+    ALTER TABLE posts ADD CONSTRAINT posts_user_fk
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE NO ACTION;
+  down: |
+    ALTER TABLE public.posts DROP CONSTRAINT posts_user_fk;
+
+AddForeignKeyOnUpdateNoActionOnDeleteRestrict:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (user_id uuid PRIMARY KEY);
+    CREATE TABLE user_profiles (
+      profile_id uuid PRIMARY KEY,
+      user_id uuid,
+      status VARCHAR(255)
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_profiles_status ON user_profiles (status);
+  desired: |
+    CREATE TABLE users (user_id uuid PRIMARY KEY);
+    CREATE TABLE user_profiles (
+      profile_id uuid PRIMARY KEY,
+      user_id uuid,
+      status VARCHAR(255)
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_profiles_status ON user_profiles (status);
+    ALTER TABLE user_profiles ADD CONSTRAINT fk_user_profiles_user
+      FOREIGN KEY (user_id) REFERENCES users (user_id)
+      ON UPDATE NO ACTION ON DELETE RESTRICT;
+  up: |
+    ALTER TABLE user_profiles ADD CONSTRAINT fk_user_profiles_user
+      FOREIGN KEY (user_id) REFERENCES users (user_id)
+      ON UPDATE NO ACTION ON DELETE RESTRICT;
+  down: |
+    ALTER TABLE public.user_profiles DROP CONSTRAINT fk_user_profiles_user;
+
+ChangeForeignKeyOnDeleteOption:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id bigint PRIMARY KEY);
+    CREATE TABLE posts (
+      id bigint PRIMARY KEY,
+      user_id bigint
+    );
+    ALTER TABLE posts ADD CONSTRAINT posts_user_fk
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE RESTRICT;
+  desired: |
+    CREATE TABLE users (id bigint PRIMARY KEY);
+    CREATE TABLE posts (
+      id bigint PRIMARY KEY,
+      user_id bigint
+    );
+    ALTER TABLE posts ADD CONSTRAINT posts_user_fk
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE;
+  up: |
+    ALTER TABLE public.posts DROP CONSTRAINT posts_user_fk;
+    ALTER TABLE posts ADD CONSTRAINT posts_user_fk
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE;
+  down: |
+    ALTER TABLE public.posts DROP CONSTRAINT posts_user_fk;
+    ALTER TABLE posts ADD CONSTRAINT posts_user_fk
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE RESTRICT;
+
 CheckConstraintWithBetween:
   legacy_ignore_quotes: false
   desired: |

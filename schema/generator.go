@@ -5288,14 +5288,21 @@ func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB Forei
 	if foreignKeyA.notForReplication != foreignKeyB.notForReplication {
 		return false
 	}
-	if (foreignKeyA.constraintOptions != nil) != (foreignKeyB.constraintOptions != nil) {
-		return false
-	}
-	if foreignKeyA.constraintOptions != nil && foreignKeyB.constraintOptions != nil {
-		if foreignKeyA.constraintOptions.deferrable != foreignKeyB.constraintOptions.deferrable {
-			return false
+	optsA := foreignKeyA.constraintOptions
+	optsB := foreignKeyB.constraintOptions
+	// Treat nil as equivalent to &ConstraintOptions{false, false} (the default).
+	// The pgquery parser always creates a non-nil ConstraintOptions even without
+	// a DEFERRABLE clause, while the generic parser creates nil.
+	if optsA != nil || optsB != nil {
+		da, ia := false, false
+		if optsA != nil {
+			da, ia = optsA.deferrable, optsA.initiallyDeferred
 		}
-		if foreignKeyA.constraintOptions.initiallyDeferred != foreignKeyB.constraintOptions.initiallyDeferred {
+		db, ib := false, false
+		if optsB != nil {
+			db, ib = optsB.deferrable, optsB.initiallyDeferred
+		}
+		if da != db || ia != ib {
 			return false
 		}
 	}

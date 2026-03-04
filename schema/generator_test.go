@@ -394,6 +394,35 @@ func TestCheckConstraintIdempotencyWithMySQLFormat(t *testing.T) {
 	assert.Equal(t, str1, str2, "CHECK constraints should be idempotent despite MySQL's formatting")
 }
 
+func TestAreSameForeignKeysConstraintOptionsNilVsDefault(t *testing.T) {
+	g := &Generator{mode: GeneratorModePostgres}
+
+	fkNil := ForeignKey{
+		constraintName:     Ident{Name: "fk_test"},
+		indexColumns:       []Ident{{Name: "user_id"}},
+		referenceTableName: QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "users"}},
+		referenceColumns:   []Ident{{Name: "user_id"}},
+		onDelete:           "RESTRICT",
+		onUpdate:           "NO ACTION",
+		constraintOptions:  nil,
+	}
+
+	fkDefault := ForeignKey{
+		constraintName:     Ident{Name: "fk_test"},
+		indexColumns:       []Ident{{Name: "user_id"}},
+		referenceTableName: QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "users"}},
+		referenceColumns:   []Ident{{Name: "user_id"}},
+		onDelete:           "RESTRICT",
+		onUpdate:           "NO ACTION",
+		constraintOptions:  &ConstraintOptions{deferrable: false, initiallyDeferred: false},
+	}
+
+	assert.True(t, g.areSameForeignKeys(fkNil, fkDefault),
+		"FK with nil ConstraintOptions and FK with default ConstraintOptions{false, false} should be considered the same")
+	assert.True(t, g.areSameForeignKeys(fkDefault, fkNil),
+		"FK with default ConstraintOptions{false, false} and FK with nil ConstraintOptions should be considered the same")
+}
+
 func TestCheckConstraintMSSQLInVsOrNormalization(t *testing.T) {
 	// Test that MSSQL's OR chain is normalized to IN and matches user's IN clause
 
