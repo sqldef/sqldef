@@ -526,3 +526,57 @@ IndexWithCondition:
         status VARCHAR(255)
     );
     CREATE UNIQUE INDEX idx_users_status_is_active ON users (status) WHERE status = 'active';
+
+CreateIndexIfNotExists:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      user_id uuid PRIMARY KEY,
+      name text
+    );
+  desired: |
+    CREATE TABLE users (
+      user_id uuid PRIMARY KEY,
+      name text
+    );
+    CREATE INDEX IF NOT EXISTS idx_users_name ON users (name);
+  up: |
+    CREATE INDEX idx_users_name ON public.users (name);
+  down: |
+    DROP INDEX public.idx_users_name;
+
+CreateIndexIfNotExistsUsing:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      user_id uuid PRIMARY KEY,
+      name text
+    );
+  desired: |
+    CREATE TABLE users (
+      user_id uuid PRIMARY KEY,
+      name text
+    );
+    CREATE INDEX IF NOT EXISTS idx_users_name ON users USING btree (name);
+  up: |
+    CREATE INDEX idx_users_name ON public.users USING btree (name);
+  down: |
+    DROP INDEX public.idx_users_name;
+
+CreateUniqueIndexIfNotExists:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      user_id uuid PRIMARY KEY,
+      email text
+    );
+  desired: |
+    CREATE TABLE users (
+      user_id uuid PRIMARY KEY,
+      email text
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users (email);
+  up: |
+    CREATE UNIQUE INDEX idx_users_email ON public.users (email);
+  down: |
+    DROP INDEX public.idx_users_email;
