@@ -208,3 +208,57 @@ ClusteredChangedWarning:
     -- Warning: CLUSTERED/NONCLUSTERED attribute of PRIMARY KEY on t differs but cannot be changed after table creation;
   down: |
     -- Warning: CLUSTERED/NONCLUSTERED attribute of PRIMARY KEY on t differs but cannot be changed after table creation;
+
+CreateTableWithExpressionIndex:
+  flavor: "!mariadb"
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL AUTO_INCREMENT,
+      name varchar(255),
+      PRIMARY KEY (id),
+      KEY idx_lower ((lower(name)))
+    );
+
+AddExpressionIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE t (
+      id bigint NOT NULL AUTO_INCREMENT,
+      name varchar(255),
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL AUTO_INCREMENT,
+      name varchar(255),
+      PRIMARY KEY (id),
+      KEY idx_lower ((lower(name)))
+    );
+  up: |
+    ALTER TABLE t ADD KEY idx_lower (lower(name));
+  down: |
+    ALTER TABLE t DROP INDEX idx_lower;
+
+DropExpressionIndex:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE TABLE t (
+      id bigint NOT NULL AUTO_INCREMENT,
+      name varchar(255),
+      PRIMARY KEY (id),
+      KEY idx_lower ((lower(name)))
+    );
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL AUTO_INCREMENT,
+      name varchar(255),
+      PRIMARY KEY (id)
+    );
+  up: |
+    ALTER TABLE t DROP INDEX idx_lower;
+  down: |
+    ALTER TABLE t ADD KEY idx_lower (lower(name));
