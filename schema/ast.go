@@ -218,6 +218,9 @@ type Column struct {
 	unsigned                   bool
 	notNull                    *bool
 	autoIncrement              bool
+	autoRandom                 bool
+	autoRandomShardBits        int
+	autoRandomRange            int
 	array                      bool
 	defaultDef                 *DefaultDefinition
 	sridDef                    *SridDefinition

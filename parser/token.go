@@ -105,6 +105,7 @@ var keywords = map[string]int{
 	"asc":                    ASC,
 	"asensitive":             UNUSED,
 	"auto_increment":         AUTO_INCREMENT,
+	"auto_random":            AUTO_RANDOM,
 	"autoincrement":          AUTOINCREMENT,
 	"before":                 BEFORE,
 	"begin":                  BEGIN,
@@ -805,7 +806,7 @@ func (tkn *Tokenizer) Scan() (int, string) {
 				case '!':
 					return tkn.scanMySQLSpecificComment()
 				default:
-					return tkn.scanCommentType2()
+					return tkn.scanCommentType2OrTiDBComment()
 				}
 			default:
 				return int(ch), ""
@@ -1251,25 +1252,6 @@ func (tkn *Tokenizer) scanCommentType1(prefix string) (int, string) {
 	return COMMENT, buffer.String()
 }
 
-func (tkn *Tokenizer) scanCommentType2() (int, string) {
-	var buffer strings.Builder
-	buffer.WriteString("/*")
-	for {
-		if tkn.lastChar == '*' {
-			tkn.consumeNext(&buffer)
-			if tkn.lastChar == '/' {
-				tkn.consumeNext(&buffer)
-				break
-			}
-			continue
-		}
-		if tkn.lastChar == eofChar {
-			return LEX_ERROR, buffer.String()
-		}
-		tkn.consumeNext(&buffer)
-	}
-	return COMMENT, buffer.String()
-}
 
 func (tkn *Tokenizer) scanMySQLSpecificComment() (int, string) {
 	var buffer strings.Builder
@@ -1292,6 +1274,52 @@ func (tkn *Tokenizer) scanMySQLSpecificComment() (int, string) {
 	_, sql := extractMysqlComment(buffer.String())
 	tkn.specialComment = NewTokenizer(sql, tkn.mode)
 	return tkn.Scan()
+}
+
+// scanCommentType2OrTiDBComment reads a block comment and checks if it's a
+// TiDB-specific comment like /*T![auto_rand] AUTO_RANDOM(5) */.
+// If so, the inner SQL is expanded into the token stream via specialComment.
+func (tkn *Tokenizer) scanCommentType2OrTiDBComment() (int, string) {
+	var buffer strings.Builder
+	buffer.WriteString("/*")
+	for {
+		if tkn.lastChar == '*' {
+			tkn.consumeNext(&buffer)
+			if tkn.lastChar == '/' {
+				tkn.consumeNext(&buffer)
+				break
+			}
+			continue
+		}
+		if tkn.lastChar == eofChar {
+			return LEX_ERROR, buffer.String()
+		}
+		tkn.consumeNext(&buffer)
+	}
+
+	comment := buffer.String()
+	if innerSQL, ok := extractTiDBComment(comment); ok {
+		tkn.specialComment = NewTokenizer(innerSQL, tkn.mode)
+		return tkn.Scan()
+	}
+
+	return COMMENT, comment
+}
+
+// extractTiDBComment extracts the SQL from a TiDB-specific comment
+// such as /*T![auto_rand] AUTO_RANDOM(5) */
+func extractTiDBComment(comment string) (string, bool) {
+	// comment format: /*T![feature_name] SQL */
+	inner := comment[2 : len(comment)-2] // strip /* and */
+	if !strings.HasPrefix(inner, "T![") {
+		return "", false
+	}
+	closeBracket := strings.Index(inner, "]")
+	if closeBracket == -1 {
+		return "", false
+	}
+	sql := strings.TrimSpace(inner[closeBracket+1:])
+	return sql, true
 }
 
 func (tkn *Tokenizer) consumeNext(buffer *strings.Builder) {

@@ -795,6 +795,9 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			// prevent to
 			desiredColumn.autoIncrement = false
 		}
+		if currentColumn == nil || !currentColumn.autoRandom {
+			desiredColumn.autoRandom = false
+		}
 		if currentColumn == nil {
 			// Check if this is a renamed column
 			var renameFromColumn *Column
@@ -1272,13 +1275,23 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	primaryKeysChanged := !g.areSamePrimaryKeys(currentPrimaryKey, desiredPrimaryKey)
 
-	// Remove old AUTO_INCREMENT from deleted column before deleting key (primary or not)
+	// Remove old AUTO_INCREMENT/AUTO_RANDOM from deleted column before deleting key (primary or not)
 	// and if primary key changed
 	if g.mode == GeneratorModeMysql {
 		for _, currentColumn := range currentTable.columns {
 			desiredColumn := g.findColumnByName(desired.table.columns, currentColumn.name)
+			needsChange := false
 			if currentColumn.autoIncrement && (primaryKeysChanged || desiredColumn == nil || !desiredColumn.autoIncrement) {
 				currentColumn.autoIncrement = false
+				needsChange = true
+			}
+			if currentColumn.autoRandom && (primaryKeysChanged || desiredColumn == nil || !desiredColumn.autoRandom) {
+				currentColumn.autoRandom = false
+				currentColumn.autoRandomShardBits = 0
+				currentColumn.autoRandomRange = 0
+				needsChange = true
+			}
+			if needsChange {
 				definition, err := g.generateColumnDefinition(*currentColumn, false)
 				if err != nil {
 					return ddls, err
@@ -1479,11 +1492,18 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		}
 	}
 
-	// Add new AUTO_INCREMENT after adding index and primary key
+	// Add new AUTO_INCREMENT/AUTO_RANDOM after adding index and primary key
 	if g.mode == GeneratorModeMysql {
 		for _, desiredColumn := range desired.table.columns {
 			currentColumn := g.findColumnByName(currentTable.columns, desiredColumn.name)
+			needsChange := false
 			if desiredColumn.autoIncrement && (primaryKeysChanged || currentColumn == nil || !currentColumn.autoIncrement) {
+				needsChange = true
+			}
+			if desiredColumn.autoRandom && (primaryKeysChanged || currentColumn == nil || !currentColumn.autoRandom) {
+				needsChange = true
+			}
+			if needsChange {
 				definition, err := g.generateColumnDefinition(*desiredColumn, false)
 				if err != nil {
 					return ddls, err
@@ -2849,6 +2869,19 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 			return "", fmt.Errorf("%s in column: %#v", "The AUTO_INCREMENT attribute cannot be used in a generated column definition.", column)
 		}
 		definition += "AUTO_INCREMENT "
+	}
+
+	if column.autoRandom {
+		definition += "AUTO_RANDOM"
+		if column.autoRandomShardBits > 0 {
+			if column.autoRandomRange > 0 {
+				definition += fmt.Sprintf("(%d, %d) ", column.autoRandomShardBits, column.autoRandomRange)
+			} else {
+				definition += fmt.Sprintf("(%d) ", column.autoRandomShardBits)
+			}
+		} else {
+			definition += " "
+		}
 	}
 
 	if column.onUpdate != nil {
@@ -4571,7 +4604,7 @@ func findSchemaByName(schemas []*Schema, name string) *Schema {
 }
 
 func (g *Generator) haveSameColumnDefinition(current Column, desired Column) bool {
-	// Not examining AUTO_INCREMENT and UNIQUE KEY because it'll be added in a later stage
+	// Not examining AUTO_INCREMENT, AUTO_RANDOM, and UNIQUE KEY because it'll be added in a later stage
 	return g.haveSameDataType(current, desired) &&
 		(current.unsigned == desired.unsigned) &&
 		((current.notNull != nil && *current.notNull) == ((desired.notNull != nil && *desired.notNull) || desired.keyOption == ColumnKeyPrimary)) && // `PRIMARY KEY` implies `NOT NULL`
