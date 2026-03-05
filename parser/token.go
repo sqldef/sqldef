@@ -1252,7 +1252,6 @@ func (tkn *Tokenizer) scanCommentType1(prefix string) (int, string) {
 	return COMMENT, buffer.String()
 }
 
-
 func (tkn *Tokenizer) scanMySQLSpecificComment() (int, string) {
 	var buffer strings.Builder
 	buffer.WriteString("/*!")
@@ -1316,6 +1315,14 @@ func extractTiDBComment(comment string) (string, bool) {
 	}
 	closeBracket := strings.Index(inner, "]")
 	if closeBracket == -1 {
+		return "", false
+	}
+	feature := inner[3:closeBracket]
+	switch feature {
+	case "auto_rand":
+		// Supported features: expand the inner SQL into the token stream
+	default:
+		// Unsupported features (e.g. clustered_index): ignore
 		return "", false
 	}
 	sql := strings.TrimSpace(inner[closeBracket+1:])

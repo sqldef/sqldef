@@ -605,6 +605,7 @@ func TestAutoRandom(t *testing.T) {
 		{"shard and range", "CREATE TABLE t (id bigint AUTO_RANDOM(5, 54), PRIMARY KEY (id))", 5, 54},
 		{"tidb comment", "CREATE TABLE t (id bigint /*T![auto_rand] AUTO_RANDOM(5) */ NOT NULL, PRIMARY KEY (id))", 5, 0},
 	}
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			tree, err := ParseDDL(tc.sql, ParserModeMysql)
@@ -623,6 +624,19 @@ func TestAutoRandom(t *testing.T) {
 				t.Errorf("expected Range=%d, got %d", tc.rangeBits, col.Type.AutoRandomRange)
 			}
 		})
+	}
+}
+
+func TestUnsupportedTiDBComment(t *testing.T) {
+	// Unsupported TiDB comments like /*T![clustered_index] CLUSTERED */ should be ignored
+	sql := "CREATE TABLE t (id bigint NOT NULL, PRIMARY KEY (id) /*T![clustered_index] CLUSTERED */)"
+	tree, err := ParseDDL(sql, ParserModeMysql)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	ddl := tree.(*DDL)
+	if ddl.TableSpec == nil {
+		t.Fatal("expected TableSpec")
 	}
 }
 
