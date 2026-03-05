@@ -593,6 +593,53 @@ func TestTypeKeywordsAsIndexColumns(t *testing.T) {
 	}
 }
 
+func TestAutoRandom(t *testing.T) {
+	testCases := []struct {
+		name      string
+		sql       string
+		shardBits int
+		rangeBits int
+	}{
+		{"bare", "CREATE TABLE t (id bigint AUTO_RANDOM, PRIMARY KEY (id))", 0, 0},
+		{"shard bits", "CREATE TABLE t (id bigint AUTO_RANDOM(5), PRIMARY KEY (id))", 5, 0},
+		{"shard and range", "CREATE TABLE t (id bigint AUTO_RANDOM(5, 54), PRIMARY KEY (id))", 5, 54},
+		{"tidb comment", "CREATE TABLE t (id bigint /*T![auto_rand] AUTO_RANDOM(5) */ NOT NULL, PRIMARY KEY (id))", 5, 0},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := ParseDDL(tc.sql, ParserModeMysql)
+			if err != nil {
+				t.Fatalf("parse error: %v", err)
+			}
+			ddl := tree.(*DDL)
+			col := ddl.TableSpec.Columns[0]
+			if !bool(col.Type.AutoRandom) {
+				t.Error("expected AutoRandom=true")
+			}
+			if col.Type.AutoRandomShardBits != tc.shardBits {
+				t.Errorf("expected ShardBits=%d, got %d", tc.shardBits, col.Type.AutoRandomShardBits)
+			}
+			if col.Type.AutoRandomRange != tc.rangeBits {
+				t.Errorf("expected Range=%d, got %d", tc.rangeBits, col.Type.AutoRandomRange)
+			}
+		})
+	}
+}
+
+func TestUnsupportedTiDBComment(t *testing.T) {
+	// Unsupported TiDB comments like /*T![clustered_index] CLUSTERED */ should be ignored
+	sql := "CREATE TABLE t (id bigint NOT NULL, PRIMARY KEY (id) /*T![clustered_index] CLUSTERED */)"
+	tree, err := ParseDDL(sql, ParserModeMysql)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	ddl := tree.(*DDL)
+	if ddl.TableSpec == nil {
+		t.Fatal("expected TableSpec")
+	}
+}
+
 // TestInvalidCustomOperators tests that invalid PostgreSQL custom operators produce errors
 func TestInvalidCustomOperators(t *testing.T) {
 	testCases := []struct {

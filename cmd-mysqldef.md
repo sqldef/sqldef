@@ -453,3 +453,16 @@ This setting:
 - Does not persist across TiDB restarts (must be set in TiDB configuration for persistence)
 
 Without this setting, CHECK constraints in your schema will be silently ignored by TiDB.
+
+### AUTO_RANDOM
+
+mysqldef supports TiDB's `AUTO_RANDOM` attribute for primary key columns. This distributes row IDs randomly across shards to avoid write hotspots.
+
+```sql
+CREATE TABLE t (
+  id bigint AUTO_RANDOM,
+  PRIMARY KEY (id)
+);
+```
+
+mysqldef also parses the TiDB-specific comment format from `SHOW CREATE TABLE` output (`/*T![auto_rand] AUTO_RANDOM(5) */`).
