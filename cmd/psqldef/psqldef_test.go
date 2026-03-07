@@ -559,14 +559,9 @@ func TestPsqldefFunctionAsDefault(t *testing.T) {
 		// First apply creates the table. The orphaned function drop is skipped (enable_drop=false by default).
 		expectedOutput := fmt.Sprintf("%s\n-- Skipped: DROP FUNCTION %q.\"my_func\";\n", createTable, tc.Schema)
 		assertApplyOutput(t, createTable, wrapWithTransaction(expectedOutput))
-		// The second apply differs by search_path. In public schema it is a true no-op,
-		// while a non-public schema still surfaces the unmanaged helper function as a
-		// skipped drop.
-		if tc.Schema == "public" {
-			assertApplyOutput(t, createTable, nothingModified)
-		} else {
-			assertApplyOutput(t, createTable, wrapWithTransaction(fmt.Sprintf("-- Skipped: DROP FUNCTION %q.\"my_func\";\n", tc.Schema)))
-		}
+		// The unmanaged helper function remains outside the desired schema, so the
+		// second apply still reports the skipped drop instead of becoming a no-op.
+		assertApplyOutput(t, createTable, wrapWithTransaction(fmt.Sprintf("-- Skipped: DROP FUNCTION %q.\"my_func\";\n", tc.Schema)))
 	}
 }
 
