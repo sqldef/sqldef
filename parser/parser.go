@@ -8304,7 +8304,7 @@ yydefault:
 		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:3377
 		{
-			yyVAL.expr = NewBitVal(yyDollar[1].str)
+			yyVAL.expr = &FuncExpr{Name: NewIdent(yyDollar[1].str, false)}
 		}
 	case 400:
 		yyDollar = yyS[yypt-1 : yypt+1]
