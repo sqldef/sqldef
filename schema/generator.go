@@ -5232,6 +5232,9 @@ func (g *Generator) formatIndexExprForComparison(expr parser.Expr) string {
 		}
 		if g.mode == GeneratorModeMssql {
 			if colName, ok := normalized.(*parser.ColName); ok {
+				// SQL Server metadata does not preserve whether a simple identifier was
+				// written as `name` or `[name]`, so compare index/PK column refs by their
+				// underlying identifier instead of their exported bracket style.
 				return strings.ToLower(colName.Name.Name)
 			}
 		}

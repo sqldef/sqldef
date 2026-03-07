@@ -42,6 +42,9 @@ func (p MssqlParser) Parse(sql string) ([]database.DDLStatement, error) {
 	return result, nil
 }
 
+// normalizeMssqlSyntax rewrites a few SQL Server export patterns into forms the
+// generic parser already understands. Each pass must preserve comments, quoted
+// strings, and bracketed identifiers so only real SQL tokens are rewritten.
 func normalizeMssqlSyntax(sql string) string {
 	sql = normalizeDefaultExpressions(sql)
 	sql = normalizeBracketedCastTypes(sql)
@@ -49,6 +52,9 @@ func normalizeMssqlSyntax(sql string) string {
 	return normalizeQualifiedReservedIdentifiers(sql)
 }
 
+// SQL Server exports DEFAULT constraints as nested parenthesized expressions
+// like DEFAULT ((0)) or DEFAULT (newid()). The generic parser only needs the
+// underlying expression, so collapse the redundant outer parentheses here.
 func normalizeDefaultExpressions(sql string) string {
 	var b strings.Builder
 
@@ -184,6 +190,10 @@ func normalizeBareReservedIdentifiers(sql string) string {
 	return b.String()
 }
 
+// SQL Server can export bracketed built-in cast targets and reserved identifiers
+// in positions where the generic grammar only accepts plain type names or normal
+// identifiers. Normalize those edge cases here instead of teaching the grammar
+// every SQL Server-only spelling variant.
 func normalizeBracketedCastTypes(sql string) string {
 	var b strings.Builder
 

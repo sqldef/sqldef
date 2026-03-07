@@ -1930,6 +1930,8 @@ top_opt:
   {
     $$ = nil
   }
+// SQL Server TOP belongs syntactically to SELECT, not LIMIT/OFFSET, so model it
+// here to keep the generic grammar's ordering and conflict surface manageable.
 | TOP INTEGRAL
   {
     $$ = NewIntVal($2)

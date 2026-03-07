@@ -873,6 +873,8 @@ func forceQuoteName(name string) string {
 }
 
 func (d *MssqlDatabase) quoteIdentifier(name string) string {
+	// SQL Server exports are canonicalized with brackets so round-trips are stable
+	// even when the original schema mixed quoted and unquoted identifier styles.
 	return forceQuoteName(name)
 }
 

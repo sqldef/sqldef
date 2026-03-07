@@ -137,7 +137,7 @@ type Select struct {
 	Comments    Comments
 	Distinct    *DistinctClause
 	Hints       string
-	Top         Expr
+	Top         Expr // SQL Server TOP n / TOP (n), emitted before the select list
 	SelectExprs SelectExprs
 	From        TableExprs
 	Where       *Where
