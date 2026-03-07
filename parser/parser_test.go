@@ -491,6 +491,20 @@ LEFT JOIN event_counts ec ON rd.product_id = ec.product_id`,
 	}
 }
 
+func TestNowFunctionInDefaultExpression(t *testing.T) {
+	sql := "CREATE TABLE test (pk timestamp primary key default now())"
+
+	statement, err := ParseDDL(sql, ParserModePostgres)
+	if err != nil {
+		t.Fatalf("failed to parse NOW() default expression: %v", err)
+	}
+
+	got := String(statement)
+	if got != "create table test (\n\tpk timestamp default(now()) primary key\n)" {
+		t.Fatalf("unexpected normalized SQL:\n%s", got)
+	}
+}
+
 // TestTypeKeywordsAsIndexColumns tests that type keywords (uuid, int, bigint, etc.)
 // can be used as unquoted column names in index definitions
 func TestTypeKeywordsAsIndexColumns(t *testing.T) {
