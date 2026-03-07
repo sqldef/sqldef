@@ -137,10 +137,10 @@ func (d *MssqlDatabase) exportTableDDL(table string) (string, error) {
 	indexDefs := d.getIndexDefs(table)
 	foreignDefs := d.getForeignDefs(table)
 	checkDefs := d.getCheckDefs(table)
-	return buildExportTableDDL(table, cols, indexDefs, foreignDefs, checkDefs), nil
+	return d.buildExportTableDDL(table, cols, indexDefs, foreignDefs, checkDefs), nil
 }
 
-func buildExportTableDDL(table string, columns []column, indexDefs []*indexDef, foreignDefs []string, checkDefs []string) string {
+func (d *MssqlDatabase) buildExportTableDDL(table string, columns []column, indexDefs []*indexDef, foreignDefs []string, checkDefs []string) string {
 	var queryBuilder strings.Builder
 	fmt.Fprintf(&queryBuilder, "CREATE TABLE %s (", table)
 	for i, col := range columns {
@@ -148,7 +148,7 @@ func buildExportTableDDL(table string, columns []column, indexDefs []*indexDef, 
 			fmt.Fprint(&queryBuilder, ",")
 		}
 		fmt.Fprint(&queryBuilder, "\n"+indent)
-		fmt.Fprintf(&queryBuilder, "%s %s", quoteName(col.Name), col.dataType)
+		fmt.Fprintf(&queryBuilder, "%s %s", d.quoteIdentifier(col.Name), col.dataType)
 		if length, ok := col.getLength(); ok {
 			fmt.Fprintf(&queryBuilder, "(%s)", length)
 		}
@@ -156,7 +156,7 @@ func buildExportTableDDL(table string, columns []column, indexDefs []*indexDef, 
 			fmt.Fprint(&queryBuilder, " NOT NULL")
 		}
 		if col.DefaultName != "" {
-			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s DEFAULT %s", quoteName(col.DefaultName), col.DefaultVal)
+			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s DEFAULT %s", d.quoteIdentifier(col.DefaultName), col.DefaultVal)
 		}
 		if col.Identity != nil {
 			fmt.Fprintf(&queryBuilder, " IDENTITY(%s,%s)", col.Identity.SeedValue, col.Identity.IncrementValue)
@@ -165,7 +165,7 @@ func buildExportTableDDL(table string, columns []column, indexDefs []*indexDef, 
 			}
 		}
 		if col.Check != nil {
-			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s CHECK", quoteName(col.Check.Name))
+			fmt.Fprintf(&queryBuilder, " CONSTRAINT %s CHECK", d.quoteIdentifier(col.Check.Name))
 			if col.Check.NotForReplication {
 				fmt.Fprint(&queryBuilder, " NOT FOR REPLICATION")
 			}
@@ -179,7 +179,7 @@ func buildExportTableDDL(table string, columns []column, indexDefs []*indexDef, 
 			continue
 		}
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY", quoteName(indexDef.name))
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY", d.quoteIdentifier(indexDef.name))
 
 		if indexDef.indexType == "CLUSTERED" || indexDef.indexType == "NONCLUSTERED" {
 			fmt.Fprintf(&queryBuilder, " %s", indexDef.indexType)
@@ -203,7 +203,7 @@ func buildExportTableDDL(table string, columns []column, indexDefs []*indexDef, 
 			continue
 		}
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s UNIQUE", quoteName(indexDef.name))
+		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s UNIQUE", d.quoteIdentifier(indexDef.name))
 
 		if indexDef.indexType == "CLUSTERED" || indexDef.indexType == "NONCLUSTERED" {
 			fmt.Fprintf(&queryBuilder, " %s", indexDef.indexType)
@@ -240,7 +240,7 @@ func buildExportTableDDL(table string, columns []column, indexDefs []*indexDef, 
 			fmt.Fprintf(&queryBuilder, " %s", indexDef.indexType)
 		}
 		if !indexDef.constraint {
-			fmt.Fprintf(&queryBuilder, " INDEX [%s] ON %s", indexDef.name, table)
+			fmt.Fprintf(&queryBuilder, " INDEX %s ON %s", d.quoteIdentifier(indexDef.name), table)
 		}
 		if indexDef.indexType == "NONCLUSTERED COLUMNSTORE" {
 			fmt.Fprintf(&queryBuilder, " (%s)", strings.Join(indexDef.included, ", "))
@@ -529,7 +529,7 @@ ORDER BY obj.object_id, ind.index_id, ic.key_ordinal
 			indexes[indexName] = definition
 		}
 
-		columnDefinition := quoteName(columnName)
+		columnDefinition := d.quoteIdentifier(columnName)
 
 		if isIncluded {
 			definition.included = append(definition.included, columnDefinition)
@@ -653,11 +653,11 @@ ORDER BY SCHEMA_NAME(obj.schema_id), obj.name, f.name, fc.constraint_column_id`
 			fk := fkInfos[fkKey]
 
 			// Build column list: [col1],[col2],...
-			columns := "[" + strings.Join(fk.columns, "],[") + "]"
-			foreignColumns := "[" + strings.Join(fk.foreignColumns, "],[") + "]"
+			columns := d.joinQuotedIdentifiers(fk.columns)
+			foreignColumns := d.joinQuotedIdentifiers(fk.foreignColumns)
 
-			def := fmt.Sprintf("CONSTRAINT [%s] FOREIGN KEY (%s) REFERENCES [%s] (%s) ON UPDATE %s ON DELETE %s",
-				fk.constraintName, columns, fk.foreignTableName, foreignColumns,
+			def := fmt.Sprintf("CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s) ON UPDATE %s ON DELETE %s",
+				d.quoteIdentifier(fk.constraintName), columns, d.quoteIdentifier(fk.foreignTableName), foreignColumns,
 				fk.foreignUpdateRule, fk.foreignDeleteRule)
 			if fk.notForReplication {
 				def += " NOT FOR REPLICATION"
@@ -713,7 +713,7 @@ func (d *MssqlDatabase) updateCheckDefs() error {
 			return err
 		}
 
-		def := fmt.Sprintf("CONSTRAINT [%s] CHECK %s", constraintName, checkDefinition)
+		def := fmt.Sprintf("CONSTRAINT %s CHECK %s", d.quoteIdentifier(constraintName), checkDefinition)
 		defs[schemaName+"."+tableName] = append(defs[schemaName+"."+tableName], def)
 	}
 
@@ -868,8 +868,20 @@ func splitTableName(table string, defaultSchmea string) (string, string) {
 	return schema, table
 }
 
-func quoteName(name string) string {
+func forceQuoteName(name string) string {
 	return "[" + strings.ReplaceAll(name, "]", "]]") + "]"
+}
+
+func (d *MssqlDatabase) quoteIdentifier(name string) string {
+	return forceQuoteName(name)
+}
+
+func (d *MssqlDatabase) joinQuotedIdentifiers(names []string) string {
+	quoted := make([]string, 0, len(names))
+	for _, name := range names {
+		quoted = append(quoted, d.quoteIdentifier(name))
+	}
+	return strings.Join(quoted, ", ")
 }
 
 func (d *MssqlDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
