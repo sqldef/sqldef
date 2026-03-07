@@ -2708,6 +2708,10 @@ using_opt:
   {
     $$ = $2
   }
+| USING '(' expression ')'
+  {
+    $$ = &ParenExpr{Expr: $3}
+  }
 
 with_check_opt:
   {
@@ -2716,6 +2720,10 @@ with_check_opt:
 | WITH CHECK expression
   {
     $$ = $3
+  }
+| WITH CHECK '(' expression ')'
+  {
+    $$ = &ParenExpr{Expr: $4}
   }
 
 unique_opt:
@@ -3394,11 +3402,23 @@ default_value_expression:
   {
     $$ = NewBoolSQLVal(bool($1))
   }
-| NOW '(' ')'
+| '(' expression ')'
   {
-    $$ = NewBitVal($1)
+    $$ = &ParenExpr{Expr: $2}
   }
 | function_call_generic
+  {
+    $$ = $1
+  }
+| function_call_keyword
+  {
+    $$ = $1
+  }
+| function_call_nonkeyword
+  {
+    $$ = $1
+  }
+| function_call_conflict
   {
     $$ = $1
   }
@@ -6080,7 +6100,11 @@ value_expression:
  * introduce side effects due to being a simple identifier
  */
 function_call_generic:
-  sql_id '(' select_expression_list_opt ')'
+  sql_id '(' ')'
+  {
+    $$ = &FuncExpr{Name: $1}
+  }
+| sql_id '(' select_expression_list ')'
   {
     $$ = &FuncExpr{Name: $1, Exprs: $3}
   }
