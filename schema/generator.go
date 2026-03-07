@@ -5117,8 +5117,8 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 			dirB = AscScr
 		}
 
-		normalizedA := parser.String(normalizeExpr(indexA.columns[i].columnExpr, g.mode))
-		normalizedB := parser.String(normalizeExpr(indexB.columns[i].columnExpr, g.mode))
+		normalizedA := g.formatIndexExprForComparison(indexA.columns[i].columnExpr)
+		normalizedB := g.formatIndexExprForComparison(indexB.columns[i].columnExpr)
 		if normalizedA != normalizedB || dirA != dirB {
 			return false
 		}
@@ -5149,14 +5149,8 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		}
 		// TODO: check length?
 		var normalizedA, normalizedB string
-		if !g.config.LegacyIgnoreQuotes {
-			// Quote-aware mode: use formatExprQuoteAware which respects the Quoted field
-			normalizedA = g.formatExprQuoteAware(normalizeExpr(indexA.columns[i].columnExpr, g.mode))
-			normalizedB = g.formatExprQuoteAware(normalizeExpr(indexB.columns[i].columnExpr, g.mode))
-		} else {
-			normalizedA = parser.String(normalizeExpr(indexA.columns[i].columnExpr, g.mode))
-			normalizedB = parser.String(normalizeExpr(indexB.columns[i].columnExpr, g.mode))
-		}
+		normalizedA = g.formatIndexExprForComparison(indexA.columns[i].columnExpr)
+		normalizedB = g.formatIndexExprForComparison(indexB.columns[i].columnExpr)
 		if normalizedA != normalizedB ||
 			indexAColumn.direction != indexB.columns[i].direction {
 			return false
@@ -5227,6 +5221,26 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 	}
 
 	return true
+}
+
+func (g *Generator) formatIndexExprForComparison(expr parser.Expr) string {
+	normalized := normalizeExpr(expr, g.mode)
+
+	if !g.config.LegacyIgnoreQuotes {
+		if g.mode == GeneratorModePostgres {
+			return g.formatExprQuoteAware(normalized)
+		}
+		if g.mode == GeneratorModeMssql {
+			if colName, ok := normalized.(*parser.ColName); ok {
+				// SQL Server metadata does not preserve whether a simple identifier was
+				// written as `name` or `[name]`, so compare index/PK column refs by their
+				// underlying identifier instead of their exported bracket style.
+				return strings.ToLower(colName.Name.Name)
+			}
+		}
+	}
+
+	return parser.String(normalized)
 }
 
 func (g *Generator) areSameWhereClause(whereA, whereB parser.Expr) bool {

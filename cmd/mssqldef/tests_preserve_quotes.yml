@@ -46,3 +46,25 @@ DropColumnCaseMismatch:
     ALTER TABLE dbo.USERS DROP COLUMN [old_col];
   down: |
     ALTER TABLE dbo.Users ADD old_col varchar(50);
+
+DropColumnBracketedIdentifier:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE USERS (id int PRIMARY KEY, [old_col] varchar(50));
+  desired: |
+    CREATE TABLE USERS (id int PRIMARY KEY);
+  up: |
+    ALTER TABLE dbo.USERS DROP COLUMN [old_col];
+  down: |
+    ALTER TABLE dbo.USERS ADD [old_col] varchar(50);
+
+AddColumnBracketedIdentifier:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id int PRIMARY KEY);
+  desired: |
+    CREATE TABLE users (id int PRIMARY KEY, [name] varchar(100));
+  up: |
+    ALTER TABLE dbo.users ADD [name] varchar(100);
+  down: |
+    ALTER TABLE dbo.users DROP COLUMN [name];

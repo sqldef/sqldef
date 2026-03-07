@@ -2,13 +2,14 @@
 //
 // Test requirement:
 //   - go command
-//   - `sqlcmd -Usa -PPassw0rd` must succeed
+//   - `sqlcmd` must be able to connect with the configured test credentials
 package main
 
 import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -26,8 +27,86 @@ const (
 	skipPrefix      = "-- Skipped: "
 )
 
+type mssqlTestConfig struct {
+	host          string
+	port          int
+	adminUser     string
+	adminPassword string
+	userPassword  string
+}
+
 func wrapWithTransaction(ddls string) string {
 	return applyPrefix + "BEGIN TRANSACTION;\n" + ddls + "COMMIT TRANSACTION;\n"
+}
+
+// getMssqlTestConfig allows the integration tests to target an existing local SQL Server instance.
+// Environment variables:
+// - MSSQLDEF_TEST_HOST
+// - MSSQLDEF_TEST_PORT
+// - MSSQLDEF_TEST_ADMIN_USER
+// - MSSQLDEF_TEST_ADMIN_PASSWORD
+// - MSSQLDEF_TEST_USER_PASSWORD
+func getMssqlTestConfig() mssqlTestConfig {
+	port := 1433
+	if envPort := os.Getenv("MSSQLDEF_TEST_PORT"); envPort != "" {
+		parsedPort, err := strconv.Atoi(envPort)
+		if err != nil {
+			panic(fmt.Sprintf("invalid MSSQLDEF_TEST_PORT: %s", envPort))
+		}
+		port = parsedPort
+	}
+
+	adminPassword := os.Getenv("MSSQLDEF_TEST_ADMIN_PASSWORD")
+	if adminPassword == "" {
+		adminPassword = "Passw0rd"
+	}
+
+	userPassword := os.Getenv("MSSQLDEF_TEST_USER_PASSWORD")
+	if userPassword == "" {
+		userPassword = "Passw0rd"
+	}
+
+	host := os.Getenv("MSSQLDEF_TEST_HOST")
+	if host == "" {
+		host = "127.0.0.1"
+	}
+
+	adminUser := os.Getenv("MSSQLDEF_TEST_ADMIN_USER")
+	if adminUser == "" {
+		adminUser = "sa"
+	}
+
+	return mssqlTestConfig{
+		host:          host,
+		port:          port,
+		adminUser:     adminUser,
+		adminPassword: adminPassword,
+		userPassword:  userPassword,
+	}
+}
+
+func mssqlCLIArgs(dbName string, args ...string) []string {
+	config := getMssqlTestConfig()
+	base := []string{
+		"-U", config.adminUser,
+		"-P", config.adminPassword,
+		"-h", config.host,
+		"-p", strconv.Itoa(config.port),
+		dbName,
+	}
+	return append(base, args...)
+}
+
+func mssqlSQLCmdArgs(dbName string, query string) []string {
+	config := getMssqlTestConfig()
+	return []string{
+		"-S", fmt.Sprintf("%s,%d", config.host, config.port),
+		"-U", config.adminUser,
+		"-P", config.adminPassword,
+		"-d", dbName,
+		"-h", "-1",
+		"-Q", query,
+	}
 }
 
 // createTestDatabase creates a new database for a test case with the specified user.
@@ -57,16 +136,17 @@ func dropTestDatabase(dbName string) {
 
 // connectDatabaseByName connects to a specific database with the given user.
 func connectDatabaseByName(dbName string, user string) (database.Database, error) {
-	password := "Passw0rd"
-	if user == "sa" {
-		password = "Passw0rd"
+	config := getMssqlTestConfig()
+	password := config.userPassword
+	if user == config.adminUser {
+		password = config.adminPassword
 	}
 
 	return mssql.NewDatabase(database.Config{
 		User:     user,
 		Password: password,
-		Host:     "127.0.0.1",
-		Port:     1433,
+		Host:     config.host,
+		Port:     config.port,
 		DbName:   dbName,
 	})
 }
@@ -340,7 +420,20 @@ func TestMssqldefCreateTableWithDefault(t *testing.T) {
 		GO
 		`,
 	)
-	assertApplyOutput(t, createTable, wrapWithTransaction(createTable))
+	expected := tu.StripHeredoc(`
+		CREATE TABLE users (
+		  profile varchar(50) NOT NULL DEFAULT '',
+		  default_int int default 20,
+		  default_bool bit default 1,
+		  default_numeric numeric(5) default 42.195,
+		  default_fixed_char varchar(3) default 'JPN',
+		  default_text text default '',
+		  default_date datetimeoffset default getdate()
+		);
+		GO
+		`,
+	)
+	assertApplyOutput(t, createTable, wrapWithTransaction(expected))
 	assertApplyOutput(t, createTable, nothingModified)
 }
 
@@ -635,14 +728,14 @@ func TestMssqldefCreateTableDropColumnWithDefault(t *testing.T) {
 	assertApply(t, createTable)
 
 	// extract name of default constraint from sql server
-	out, err := tu.Execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", tu.StripHeredoc(`
+	out, err := mssqlQuery("mssqldef_test", tu.StripHeredoc(`
 		SELECT OBJECT_NAME(c.default_object_id) FROM sys.columns c WHERE c.object_id = OBJECT_ID('dbo.users', 'U') AND c.default_object_id != 0;
 		`,
 	))
 	if err != nil {
-		t.Error("failed to extract default object id")
+		t.Fatalf("failed to extract default object id: %v", err)
 	}
-	dfConstraintName := strings.Replace((strings.Split(out, "\n")[0]), " ", "", -1)
+	dfConstraintName := strings.TrimSpace(strings.Split(out, "\n")[0])
 	dropConstraint := fmt.Sprintf("ALTER TABLE [dbo].[users] DROP CONSTRAINT [%s];\nGO\n", dfConstraintName)
 
 	createTable = tu.StripHeredoc(`
@@ -747,14 +840,14 @@ func TestMssqldefCreateTableDropPrimaryKey(t *testing.T) {
 	assertApply(t, createTable)
 
 	// extract name of primary key constraint from sql server
-	out, err := tu.Execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", tu.StripHeredoc(`
+	out, err := mssqlQuery("mssqldef_test", tu.StripHeredoc(`
 		SELECT kc.name FROM sys.key_constraints kc WHERE kc.parent_object_id=OBJECT_ID('users', 'U') AND kc.[type]='PK';
 		`,
 	))
 	if err != nil {
-		t.Error("failed to extract primary key id")
+		t.Fatalf("failed to extract primary key id: %v", err)
 	}
-	pkConstraintName := strings.Replace((strings.Split(out, "\n")[0]), " ", "", -1)
+	pkConstraintName := strings.TrimSpace(strings.Split(out, "\n")[0])
 	dropConstraint := fmt.Sprintf("ALTER TABLE [dbo].[users] DROP CONSTRAINT [%s];\nGO\n", pkConstraintName)
 
 	createTable = tu.StripHeredoc(`
@@ -1072,14 +1165,14 @@ func TestMssqldefCreateTableWithCheckWithoutName(t *testing.T) {
 	)
 
 	// extract name of check constraint from sql server
-	out, err := tu.Execute("sqlcmd", "-Usa", "-PPassw0rd", "-dmssqldef_test", "-h", "-1", "-Q", tu.StripHeredoc(`
+	out, err := mssqlQuery("mssqldef_test", tu.StripHeredoc(`
 		SELECT name FROM sys.check_constraints cc WHERE cc.parent_object_id = OBJECT_ID('dbo.a', 'U');
 		`,
 	))
 	if err != nil {
-		t.Error("failed to extract check constraint name")
+		t.Fatalf("failed to extract check constraint name: %v", err)
 	}
-	checkConstraintName := strings.Replace((strings.Split(out, "\n")[0]), " ", "", -1)
+	checkConstraintName := strings.TrimSpace(strings.Split(out, "\n")[0])
 	dropConstraint := fmt.Sprintf("ALTER TABLE [dbo].[a] DROP CONSTRAINT [%s];\nGO\n", checkConstraintName)
 
 	assertApplyOutput(t, createTable, wrapWithTransaction(
@@ -1301,8 +1394,8 @@ func TestMssqldefDryRun(t *testing.T) {
 		`,
 	))
 
-	dryRun := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--dry-run", "--file", "schema.sql")
-	apply := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql")
+	dryRun := tu.MustExecute(t, "./mssqldef", mssqlCLIArgs("mssqldef_test", "--dry-run", "--file", "schema.sql")...)
+	apply := tu.MustExecute(t, "./mssqldef", mssqlCLIArgs("mssqldef_test", "--file", "schema.sql")...)
 	assert.Equal(t, strings.Replace(apply, "Apply", "dry run", 1), dryRun)
 }
 
@@ -1324,7 +1417,7 @@ func TestMssqldefDropTable(t *testing.T) {
 		GO
 		`,
 	)
-	out := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--enable-drop", "--file", "schema.sql")
+	out := tu.MustExecute(t, "./mssqldef", mssqlCLIArgs("mssqldef_test", "--enable-drop", "--file", "schema.sql")...)
 	assert.Equal(t, wrapWithTransaction(dropTable), out)
 }
 
@@ -1350,18 +1443,18 @@ func TestMssqldefConfigInlineEnableDrop(t *testing.T) {
 	)
 	expectedOutput := wrapWithTransaction(dropTable)
 
-	outFlag := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--enable-drop", "--file", "schema.sql")
+	outFlag := tu.MustExecute(t, "./mssqldef", mssqlCLIArgs("mssqldef_test", "--enable-drop", "--file", "schema.sql")...)
 	assert.Equal(t, expectedOutput, outFlag)
 
 	mustMssqlExec("mssqldef_test", ddl)
 
-	outConfigInline := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--config-inline", "enable_drop: true", "--file", "schema.sql")
+	outConfigInline := tu.MustExecute(t, "./mssqldef", mssqlCLIArgs("mssqldef_test", "--config-inline", "enable_drop: true", "--file", "schema.sql")...)
 	assert.Equal(t, expectedOutput, outConfigInline)
 }
 
 func TestMssqldefExport(t *testing.T) {
 	resetTestDatabase()
-	out := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")
+	out := tu.MustExecute(t, "./mssqldef", mssqlCLIArgs("mssqldef_test", "--export")...)
 	assert.Equal(t, "-- No table exists --\n", out)
 
 	mustMssqlExec("mssqldef_test", tu.StripHeredoc(`
@@ -1378,7 +1471,7 @@ func TestMssqldefExport(t *testing.T) {
 		);
 		`,
 	))
-	out = tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")
+	out = tu.MustExecute(t, "./mssqldef", mssqlCLIArgs("mssqldef_test", "--export")...)
 	assert.Equal(t, tu.StripHeredoc(`
 		CREATE TABLE dbo.v (
 		    [v_int] int NOT NULL,
@@ -1410,7 +1503,7 @@ func TestMssqldefExportConstraint(t *testing.T) {
 
 	mustMssqlExec("mssqldef_test", sql)
 
-	out := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--export")
+	out := tu.MustExecute(t, "./mssqldef", mssqlCLIArgs("mssqldef_test", "--export")...)
 	assert.Equal(t, sql+"GO\n", out)
 }
 
@@ -1437,7 +1530,7 @@ func TestMssqldefConfigIncludesTargetTables(t *testing.T) {
 	tu.WriteFile("schema.sql", usersTable+users1Table)
 	tu.WriteFile("config.yml", "target_tables: |\n  dbo\\.users\n  dbo\\.users_\\d\n")
 
-	apply := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	apply := tu.MustExecute(t, "./mssqldef", mssqlCLIArgs("mssqldef_test", "--config", "config.yml", "--file", "schema.sql")...)
 	assert.Equal(t, nothingModified, apply)
 }
 
@@ -1452,7 +1545,7 @@ func TestMssqldefConfigIncludesSkipTables(t *testing.T) {
 	tu.WriteFile("schema.sql", usersTable+users1Table)
 	tu.WriteFile("config.yml", "skip_tables: |\n  dbo\\.users_10\n")
 
-	apply := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--config", "config.yml", "--file", "schema.sql")
+	apply := tu.MustExecute(t, "./mssqldef", mssqlCLIArgs("mssqldef_test", "--config", "config.yml", "--file", "schema.sql")...)
 	assert.Equal(t, nothingModified, apply)
 }
 
@@ -1466,7 +1559,7 @@ func TestMssqldefConfigInlineSkipTables(t *testing.T) {
 
 	tu.WriteFile("schema.sql", usersTable+users1Table)
 
-	apply := tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--config-inline", "skip_tables: dbo\\.users_10", "--file", "schema.sql")
+	apply := tu.MustExecute(t, "./mssqldef", mssqlCLIArgs("mssqldef_test", "--config-inline", "skip_tables: dbo\\.users_10", "--file", "schema.sql")...)
 	assert.Equal(t, nothingModified, apply)
 }
 
@@ -1483,7 +1576,7 @@ func TestMain(m *testing.M) {
 func assertApply(t *testing.T, schema string) {
 	t.Helper()
 	tu.WriteFile("schema.sql", schema)
-	tu.MustExecute(t, "./mssqldef", "-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql")
+	tu.MustExecute(t, "./mssqldef", mssqlCLIArgs("mssqldef_test", "--file", "schema.sql")...)
 }
 
 func assertApplyOutput(t *testing.T, schema string, expected string) {
@@ -1514,16 +1607,18 @@ func assertApplyOptionsOutput(t *testing.T, schema string, expected string, opti
 	t.Helper()
 	tu.WriteFile("schema.sql", schema)
 	args := append([]string{
-		"-Usa", "-PPassw0rd", "mssqldef_test", "--file", "schema.sql",
-	}, options...)
+	}, mssqlCLIArgs("mssqldef_test", "--file", "schema.sql")...)
+	args = append(args, options...)
 
 	actual := tu.MustExecute(t, "./mssqldef", args...)
 	assert.Equal(t, expected, actual)
 }
 
 func resetTestDatabase() {
+	config := getMssqlTestConfig()
+
 	// SQL Server logins are server-wide, not database-specific
-	mustMssqlExec("master", "IF NOT EXISTS (SELECT name FROM sys.server_principals WHERE name = 'mssqldef_user') CREATE LOGIN mssqldef_user WITH PASSWORD = N'Passw0rd'")
+	mustMssqlExec("master", fmt.Sprintf("IF NOT EXISTS (SELECT name FROM sys.server_principals WHERE name = 'mssqldef_user') CREATE LOGIN mssqldef_user WITH PASSWORD = N'%s'", config.userPassword))
 
 	mustMssqlExec("master", "DROP DATABASE IF EXISTS mssqldef_test")
 	mustMssqlExec("master", "CREATE DATABASE mssqldef_test")
@@ -1535,21 +1630,23 @@ func resetTestDatabase() {
 }
 
 func connectDatabase() (database.Database, error) {
+	config := getMssqlTestConfig()
 	return mssql.NewDatabase(database.Config{
-		User:     "sa",
-		Password: "Passw0rd",
-		Host:     "127.0.0.1",
-		Port:     1433,
+		User:     config.adminUser,
+		Password: config.adminPassword,
+		Host:     config.host,
+		Port:     config.port,
 		DbName:   "mssqldef_test",
 	})
 }
 
 func connectDatabaseByUser(user string) (database.Database, error) {
+	config := getMssqlTestConfig()
 	return mssql.NewDatabase(database.Config{
 		User:     user,
-		Password: "Passw0rd",
-		Host:     "127.0.0.1",
-		Port:     1433,
+		Password: config.userPassword,
+		Host:     config.host,
+		Port:     config.port,
 		DbName:   "mssqldef_test",
 	})
 }
@@ -1558,11 +1655,12 @@ func connectDatabaseByUser(user string) (database.Database, error) {
 // The mapping is based on SQL Server's internal major version number:
 // - 13 = 2016, 14 = 2017, 15 = 2019, 16 = 2022, 17 = 2025
 func mustGetMssqlVersion() string {
+	config := getMssqlTestConfig()
 	db, err := mssql.NewDatabase(database.Config{
-		User:     "sa",
-		Password: "Passw0rd",
-		Host:     "127.0.0.1",
-		Port:     1433,
+		User:     config.adminUser,
+		Password: config.adminPassword,
+		Host:     config.host,
+		Port:     config.port,
 		DbName:   "master",
 	})
 	if err != nil {
@@ -1595,11 +1693,12 @@ func mustGetMssqlVersion() string {
 
 // mssqlQuery executes a query against the database and returns rows as string
 func mssqlQuery(dbName string, query string) (string, error) {
+	config := getMssqlTestConfig()
 	db, err := mssql.NewDatabase(database.Config{
-		User:     "sa",
-		Password: "Passw0rd",
-		Host:     "127.0.0.1",
-		Port:     1433,
+		User:     config.adminUser,
+		Password: config.adminPassword,
+		Host:     config.host,
+		Port:     config.port,
 		DbName:   dbName,
 	})
 	if err != nil {
@@ -1612,11 +1711,12 @@ func mssqlQuery(dbName string, query string) (string, error) {
 
 // mssqlExec executes a statement against the database (doesn't return rows)
 func mssqlExec(dbName string, statement string) error {
+	config := getMssqlTestConfig()
 	db, err := mssql.NewDatabase(database.Config{
-		User:     "sa",
-		Password: "Passw0rd",
-		Host:     "127.0.0.1",
-		Port:     1433,
+		User:     config.adminUser,
+		Password: config.adminPassword,
+		Host:     config.host,
+		Port:     config.port,
 		DbName:   dbName,
 	})
 	if err != nil {

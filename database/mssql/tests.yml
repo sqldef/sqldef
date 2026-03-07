@@ -11,3 +11,166 @@ MultiStatementWithGo: |
   GO
 GoKeywordInStringLiteral: |
   CREATE VIEW v AS SELECT 'GO in string literal';
+
+RowNumberOverPartitionBy: |
+  CREATE VIEW [dbo].[DuplicatedValueListView] AS
+  WITH cte AS (
+    SELECT
+      CustomerProductId,
+      CustomFieldId,
+      ROW_NUMBER() OVER (
+        PARTITION BY CustomerProductId, CustomFieldId
+        ORDER BY CreatedDate DESC
+      ) AS [rn]
+    FROM CustomerProductFieldValue
+  )
+  SELECT *
+  FROM cte
+  WHERE [rn] >= 2;
+
+DefaultNewSequentialId: |
+  CREATE TABLE dbo.FileData (
+    [FileDataId] uniqueidentifier NOT NULL CONSTRAINT [DF_FileData_FileDataId] DEFAULT (newsequentialid())
+  );
+
+DefaultNewId: |
+  CREATE TABLE dbo.FileData (
+    [FileDataId] uniqueidentifier NOT NULL CONSTRAINT [DF_FileData_FileDataId] DEFAULT newid()
+  );
+
+DefaultDoubleParentheses: |
+  CREATE TABLE dbo.Dictionary (
+    [IsDeleted] bit NOT NULL CONSTRAINT [DF_Dictionary_IsDeleted] DEFAULT ((0))
+  );
+
+StringAggWithinGroup: |
+  CREATE VIEW [dbo].[ExportTemplateListView] AS
+  SELECT
+    ISNULL((
+      SELECT STRING_AGG(CAST(Customer.[Name] AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY Customer.[Name])
+      FROM Customer
+    ), '') AS CustomerNames;
+
+OpenJsonInFrom: |
+  CREATE VIEW [dbo].[DictionaryValueListView] AS
+  SELECT
+    value
+  FROM OPENJSON(DictionaryValue.[Synonyms]);
+
+OpenJsonWithSchema: |
+  CREATE VIEW [dbo].[CombinedProductTypeSearchView] AS
+  SELECT COUNT(*)
+  FROM OPENJSON(Variants) WITH (Variant VARCHAR(100) '$');
+
+CrossApplyStringSplit: |
+  CREATE VIEW [dbo].[CustomFieldTagsView] AS
+  SELECT DISTINCT value AS Tag
+  FROM [CustomField]
+  CROSS APPLY STRING_SPLIT([Tags], ';') s
+  WHERE value <> '';
+
+OuterApplyTopSubquery: |
+  CREATE VIEW [dbo].[OperationResultListView] AS
+  SELECT oi.OperationInputId
+  FROM dbo.OperationInput AS oi
+  INNER JOIN dbo.OperationBatch AS ob ON ob.OperationBatchId = oi.OperationBatchId
+  OUTER APPLY (
+    SELECT TOP 1 img.GuidValue
+    FROM dbo.OperationInputValue AS img
+    WHERE img.OperationInputId = oi.OperationInputId
+    ORDER BY img.CreatedDate
+  ) AS img;
+
+ForXmlPathValueMethod: |
+  CREATE VIEW [dbo].[ImageExtractInputDetailView] AS
+  SELECT (
+    SELECT ',"' + CAST(OperationInputValue.GuidValue AS varchar(36)) + '"'
+    FROM OperationInputValue
+    ORDER BY OperationInputValue.OperationInputValueId
+    FOR XML PATH(''), TYPE
+  ).value('.', 'nvarchar(max)') AS ImageThumbnailIds
+  FROM OperationInput;
+
+ForJsonPath: |
+  CREATE VIEW [dbo].[ProductTypeStagingDetailListView] AS
+  SELECT (
+    SELECT [StagingProductSizeId] AS Id
+    FROM StagingProductSize
+    FOR JSON PATH
+  ) AS StagingSizeIds
+  FROM ProductType;
+
+CorrelatedSubqueryTableAlias: |
+  CREATE VIEW ManagerAreaView AS
+  SELECT *,
+    (
+      SELECT RegionName
+      FROM PrincipalOutlet
+      WHERE PrincipalOutlet.PrincipalOutletId = m.PrincipalOutletId
+        AND PrincipalOutlet.IsDeleted = 0
+    ) AS Region
+  FROM Manager m
+  WHERE m.IsDeleted = 0;
+
+QualifiedDateColumn: |
+  CREATE VIEW UpliftSchedulePrincipalView AS
+  SELECT UpliftSchedule.Date
+  FROM UpliftSchedulePrinciple usp
+  INNER JOIN UpliftSchedule ON UpliftSchedule.UpliftScheduleId = usp.UpliftScheduleId
+  WHERE usp.IsDeleted = 0;
+
+CastUniqueIdentifier: |
+  CREATE VIEW IncompleteUpliftRequestListView AS
+  SELECT CAST(JSON_VALUE(IncompleteUpliftRequest.[UpliftRequestData], '$.authRequestId') AS UNIQUEIDENTIFIER) AS [AuthRequestId]
+  FROM IncompleteUpliftRequest;
+
+TryCastInt: |
+  CREATE VIEW [dbo].[SystemUserListView] AS
+  SELECT TRY_CAST(j.[value] AS int) AS LinkedSystemUserId
+  FROM OPENJSON(SystemUser.LinkedSystemUserIds) j;
+
+BracketedCastDate: |
+  CREATE VIEW [dbo].[AntelSealCompletionLogListView] AS
+  SELECT CAST(GETDATE() AS [Date]) AS MissingSealsTodayDate;
+
+BareCommentColumn: |
+  CREATE VIEW Session2DetailView AS
+  SELECT (
+    SELECT Comment
+    FROM SessionRating2
+    WHERE SessionRating2.SessionId = Session2.[Session2Id]
+  ) AS RatingComment
+  FROM Session2
+  WHERE Session2.IsDeleted = 0;
+
+SysUtcDateTimeInCte: |
+  CREATE VIEW [OnTheMoveListView] AS
+  WITH UtcToday AS (
+    SELECT CAST(SYSUTCDATETIME() AS DATE) AS TodayUtc
+  )
+  SELECT d.TodayUtc
+  FROM UtcToday d;
+
+TrimWithFrom: |
+  CREATE VIEW [dbo].[FieldValuesView] AS
+  SELECT TRIM(';' FROM StringValue) AS TrimmedValue
+  FROM JobProductFieldValue;
+
+SelectTop: |
+  CREATE VIEW [dbo].[PackConfigGroupListView] AS
+  SELECT ISNULL((
+    SELECT TOP 1 CustomerProductListView.SKU
+    FROM CustomerProductListView
+    WHERE CustomerProductListView.CustomerProductId = PackConfigGroup.EachProductId
+  ), '') AS EachSku
+  FROM PackConfigGroup;
+
+ValuesTableInFrom: |
+  CREATE VIEW [dbo].[CustomerProductListView] AS
+  SELECT ISNULL((
+    SELECT Max(v)
+    FROM (
+      VALUES (SiloProduct.ImportedOn), (cp.ImportedOn)
+    ) AS value(v)
+  ), '0001-01-01') AS UpdatedOn
+  FROM dbo.CustomerProduct cp;
