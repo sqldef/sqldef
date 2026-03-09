@@ -1,0 +1,23 @@
+go: downloading github.com/jessevdk/go-flags v1.6.1
+go: downloading github.com/goccy/go-yaml v1.19.2
+go: downloading github.com/stretchr/testify v1.11.1
+go: downloading github.com/k0kubun/pp/v3 v3.5.1
+go: downloading golang.org/x/sync v0.19.0
+go: downloading golang.org/x/term v0.40.0
+go: downloading github.com/microsoft/go-mssqldb v1.9.6
+go: downloading golang.org/x/sys v0.41.0
+go: downloading github.com/mattn/go-colorable v0.1.14
+go: downloading golang.org/x/text v0.33.0
+go: downloading github.com/davecgh/go-spew v1.1.1
+go: downloading gopkg.in/yaml.v3 v3.0.1
+go: downloading github.com/pmezard/go-difflib v1.0.0
+go: downloading github.com/golang-sql/sqlexp v0.1.0
+go: downloading github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9
+go: downloading github.com/google/uuid v1.6.0
+go: downloading github.com/shopspring/decimal v1.4.0
+go: downloading golang.org/x/crypto v0.47.0
+go: downloading github.com/mattn/go-isatty v0.0.20
+{"Time":"2026-03-07T16:01:46.659242178Z","Action":"start","Package":"github.com/sqldef/sqldef/v3/cmd/mssqldef"}
+{"Time":"2026-03-07T16:01:47.173998693Z","Action":"output","Package":"github.com/sqldef/sqldef/v3/cmd/mssqldef","Output":"exit status 1\n"}
+{"Time":"2026-03-07T16:01:47.174028568Z","Action":"output","Package":"github.com/sqldef/sqldef/v3/cmd/mssqldef","Output":"FAIL\tgithub.com/sqldef/sqldef/v3/cmd/mssqldef\t0.515s\n"}
+{"Time":"2026-03-07T16:01:47.174039057Z","Action":"fail","Package":"github.com/sqldef/sqldef/v3/cmd/mssqldef","Elapsed":0.515}

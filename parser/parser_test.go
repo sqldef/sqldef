@@ -645,3 +645,55 @@ func TestInvalidCustomOperators(t *testing.T) {
 		})
 	}
 }
+
+func TestDefaultFunctionExpressions(t *testing.T) {
+	testCases := []struct {
+		name string
+		sql  string
+		mode ParserMode
+	}{
+		{
+			name: "MySQL JSON_ARRAY default wrapped in parentheses",
+			sql:  "CREATE TABLE t (id bigint, friend_ids JSON DEFAULT(JSON_ARRAY()))",
+			mode: ParserModeMysql,
+		},
+		{
+			name: "Postgres uuid_generate_v4 default",
+			sql:  "CREATE TABLE t (id uuid DEFAULT uuid_generate_v4())",
+			mode: ParserModePostgres,
+		},
+		{
+			name: "Postgres gen_random_uuid default",
+			sql:  "CREATE TABLE t (id uuid DEFAULT gen_random_uuid())",
+			mode: ParserModePostgres,
+		},
+		{
+			name: "Postgres now default stays a function call",
+			sql:  "CREATE TABLE t (created_at timestamp DEFAULT now())",
+			mode: ParserModePostgres,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := ParseDDL(tc.sql, tc.mode); err != nil {
+				t.Fatalf("ParseDDL(%q) failed: %v", tc.sql, err)
+			}
+		})
+	}
+}
+
+func TestCreatePolicyPredicates(t *testing.T) {
+	testCases := []string{
+		"CREATE POLICY p ON t AS PERMISSIVE FOR ALL TO public USING (current_schema() = current_database())",
+		"CREATE POLICY p ON t AS PERMISSIVE FOR ALL TO public USING (current_schema()::uuid = current_database()::uuid)",
+	}
+
+	for _, sql := range testCases {
+		t.Run(sql, func(t *testing.T) {
+			if _, err := ParseDDL(sql, ParserModePostgres); err != nil {
+				t.Fatalf("ParseDDL(%q) failed: %v", sql, err)
+			}
+		})
+	}
+}

@@ -22,6 +22,12 @@ Each command follows the same pattern: it accepts connection parameters similar 
 * If you encounter an unsupported feature, don't rewrite tests to avoid it. Instead, comment out the test case and mark it as `FIXME`
 * Avoid defensive programming
 
+## Environment
+
+* The repository currently requires Go `1.26` as declared in `go.mod`. If `go test` or `go build` fails because `go` is missing or too old, use a Go 1.26 environment before debugging project code.
+* If local Go is unavailable, a containerized workflow is acceptable. Prefer a local `golang:1.26` image and run commands from a real workspace copy, not a generated binary checked into the repo.
+* Do not commit generated test executables or scratch binaries such as `/.tmp-mssqldef.test`.
+
 ## Build
 
 Build all the sqldef commands (`mysqldef`, `psqldef`, `sqlite3def`, `mssqldef`):
@@ -98,6 +104,13 @@ go test ./cmd/sqlite3def
 go test ./cmd/mssqldef
 ```
 
+Notes:
+
+* `sqlite3def` does not require an external database service and is a good first cross-engine smoke test.
+* `psqldef` tests require a live PostgreSQL instance. If one is not already running locally, start one with Docker and point the tests at it with `PGHOST` and `PGPORT`.
+* `mssqldef` tests require a live SQL Server instance. The integration harness supports `MSSQLDEF_TEST_HOST`, `MSSQLDEF_TEST_PORT`, `MSSQLDEF_TEST_ADMIN_USER`, `MSSQLDEF_TEST_ADMIN_PASSWORD`, and `MSSQLDEF_TEST_USER_PASSWORD`.
+* When rerunning `mssqldef` against an existing SQL Server instance, remember that `mssqldef_user` is a server-level login. If it already exists with a different password, either align `MSSQLDEF_TEST_USER_PASSWORD` with that login or recreate the login before assuming a parser regression.
+
 For pgvector testing:
 
 ```sh
@@ -123,6 +136,24 @@ GODEBUG=tlsrsakex=1 go test ./cmd/mysqldef
 ```
 
 The tests for mssqldef are flaky due to SQL Server instance issues. In that case, restart it with `docker compose down mssql && docker compose up -d --wait mssql`, then run the tests again.
+
+For PostgreSQL container testing, a minimal local setup looks like:
+
+```sh
+docker run --rm -p 55433:5432 -e POSTGRES_HOST_AUTH_METHOD=trust postgres:18
+PGHOST=127.0.0.1 PGPORT=55433 go test ./cmd/psqldef
+```
+
+For SQL Server container testing against an existing local instance, prefer explicit env vars:
+
+```sh
+MSSQLDEF_TEST_HOST=127.0.0.1 \
+MSSQLDEF_TEST_PORT=1433 \
+MSSQLDEF_TEST_ADMIN_USER=sa \
+MSSQLDEF_TEST_ADMIN_PASSWORD=Passw0rd \
+MSSQLDEF_TEST_USER_PASSWORD=Passw0rd \
+go test ./cmd/mssqldef
+```
 
 For test coverage:
 
