@@ -9105,12 +9105,12 @@ yydefault:
 		{
 			yyVAL.expr = NewBoolSQLVal(bool(yyDollar[1].boolVal))
 		}
-case 404:
-	yyDollar = yyS[yypt-3 : yypt+1]
+	case 404:
+		yyDollar = yyS[yypt-3 : yypt+1]
 //line parser/parser.y:3406
-	{
-		yyVAL.expr = &ParenExpr{Expr: yyDollar[2].expr}
-	}
+		{
+			yyVAL.expr = &ParenExpr{Expr: yyDollar[2].expr}
+		}
 	case 405:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line parser/parser.y:3410
