@@ -62,6 +62,10 @@ CreateTableWithSchema:
     CREATE TABLE public.bigdata (
       data bigint
     );
+CreatePolicyWithUuidCast:
+  sql: |
+    CREATE POLICY tenant_isolation_policy ON test_table AS PERMISSIVE FOR ALL TO public
+    USING (current_schema()::uuid = current_database()::uuid);
 CreateTableWithNotNull:
   compare_with_generic_parser: true
   sql: |
