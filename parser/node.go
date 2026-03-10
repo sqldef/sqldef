@@ -827,14 +827,17 @@ type ColumnType struct {
 	TypeIdent Ident
 
 	// Generic field options.
-	NotNull       *BoolVal
-	Autoincrement BoolVal
-	Default       *DefaultDefinition
-	Srid          *SridDefinition
-	OnUpdate      *SQLVal
-	Comment       *SQLVal
-	Check         *CheckDefinition
-	Array         BoolVal
+	NotNull             *BoolVal
+	Autoincrement       BoolVal
+	AutoRandom          BoolVal
+	AutoRandomShardBits int
+	AutoRandomRange     int
+	Default             *DefaultDefinition
+	Srid                *SridDefinition
+	OnUpdate            *SQLVal
+	Comment             *SQLVal
+	Check               *CheckDefinition
+	Array               BoolVal
 
 	// Numeric field options
 	Length       *SQLVal

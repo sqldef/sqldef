@@ -1125,3 +1125,99 @@ UseStatement:
     CREATE TABLE bigdata (
       data bigint
     );
+
+CreateTableAutoRandom:
+  flavor: tidb
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      id bigint AUTO_RANDOM,
+      PRIMARY KEY (id)
+    );
+
+CreateTableAutoRandomWithShardBits:
+  flavor: tidb
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      id bigint AUTO_RANDOM(5),
+      PRIMARY KEY (id)
+    );
+
+CreateTableAutoRandomWithShardBitsAndRange:
+  flavor: tidb
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      id bigint AUTO_RANDOM(5, 54),
+      PRIMARY KEY (id)
+    );
+
+CreateTableAutoRandomTiDBComment:
+  flavor: tidb
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      id bigint /*T![auto_rand] AUTO_RANDOM(5) */ NOT NULL,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE t (
+      id bigint AUTO_RANDOM(5) NOT NULL,
+      PRIMARY KEY (id)
+    );
+
+AddAutoRandom:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE t (
+      id bigint NOT NULL,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE t (
+      id bigint AUTO_RANDOM NOT NULL,
+      PRIMARY KEY (id)
+    );
+  up: |
+    ALTER TABLE t CHANGE COLUMN id id bigint NOT NULL AUTO_RANDOM;
+  down: |
+    ALTER TABLE t CHANGE COLUMN id id bigint NOT NULL;
+
+AddAutoRandomWithShardBits:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE t (
+      id bigint NOT NULL,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE t (
+      id bigint AUTO_RANDOM(5) NOT NULL,
+      PRIMARY KEY (id)
+    );
+  up: |
+    ALTER TABLE t CHANGE COLUMN id id bigint NOT NULL AUTO_RANDOM(5);
+  down: |
+    ALTER TABLE t CHANGE COLUMN id id bigint NOT NULL;
+
+RemoveAutoRandom:
+  legacy_ignore_quotes: false
+  offline: true
+  enable_drop: true
+  current: |
+    CREATE TABLE t (
+      id bigint AUTO_RANDOM(5) NOT NULL,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE t (
+      id bigint NOT NULL,
+      PRIMARY KEY (id)
+    );
+  up: |
+    ALTER TABLE t CHANGE COLUMN id id bigint NOT NULL;
+  down: |
+    ALTER TABLE t CHANGE COLUMN id id bigint NOT NULL AUTO_RANDOM(5);

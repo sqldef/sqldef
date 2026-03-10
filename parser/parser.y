@@ -19,6 +19,7 @@ package parser
 
 import (
   "fmt"
+  "strconv"
   "strings"
 )
 
@@ -294,7 +295,7 @@ func setDDL(yylex any, ddl *DDL) {
 %right <str> TEXT_PATTERN_OPS
 
 // Type Modifiers
-%token <str> NULLX AUTO_INCREMENT APPROXNUM SIGNED UNSIGNED ZEROFILL ZONE AUTOINCREMENT
+%token <str> NULLX AUTO_INCREMENT AUTO_RANDOM APPROXNUM SIGNED UNSIGNED ZEROFILL ZONE AUTOINCREMENT
 
 // Supported SHOW tokens
 %token <str> DATABASES TABLES VSCHEMA_TABLES EXTENDED FULL PROCESSLIST
@@ -3170,6 +3171,27 @@ column_definition_type:
 | column_definition_type AUTOINCREMENT
   {
     $1.Autoincrement = BoolVal(true)
+    $$ = $1
+  }
+| column_definition_type AUTO_RANDOM
+  {
+    $1.AutoRandom = BoolVal(true)
+    $$ = $1
+  }
+| column_definition_type AUTO_RANDOM '(' INTEGRAL ')'
+  {
+    $1.AutoRandom = BoolVal(true)
+    shardBits, _ := strconv.Atoi($4)
+    $1.AutoRandomShardBits = shardBits
+    $$ = $1
+  }
+| column_definition_type AUTO_RANDOM '(' INTEGRAL ',' INTEGRAL ')'
+  {
+    $1.AutoRandom = BoolVal(true)
+    shardBits, _ := strconv.Atoi($4)
+    rangeBits, _ := strconv.Atoi($6)
+    $1.AutoRandomShardBits = shardBits
+    $1.AutoRandomRange = rangeBits
     $$ = $1
   }
 | column_definition_type PRIMARY KEY
@@ -7354,6 +7376,7 @@ reserved_keyword:
 | AS
 | ASC
 | AUTO_INCREMENT
+| AUTO_RANDOM
 | AUTOINCREMENT
 | BEFORE
 | BETWEEN
