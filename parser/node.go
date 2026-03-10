@@ -1034,7 +1034,7 @@ type IndexInfo struct {
 	Unique    bool
 	Fulltext  bool
 	Vector    bool
-	Clustered BoolVal
+	Clustered *bool
 }
 
 // Format formats the node.
@@ -2106,6 +2106,26 @@ type NullVal struct{}
 // Format formats the node.
 func (node *NullVal) Format(buf *nodeBuffer) {
 	buf.Printf("null")
+}
+
+func optBoolTrue() *bool  { b := true; return &b }
+func optBoolFalse() *bool { b := false; return &b }
+func OptBoolTrue() *bool  { return optBoolTrue() }
+func OptBoolFalse() *bool { return optBoolFalse() }
+
+func optBoolFromBoolVal(v BoolVal) *bool {
+	if v {
+		return optBoolTrue()
+	}
+	return nil
+}
+
+// coalesceOptBool returns the first non-nil *bool, or nil if both are nil.
+func coalesceOptBool(a, b *bool) *bool {
+	if a != nil {
+		return a
+	}
+	return b
 }
 
 // BoolVal is true or false.

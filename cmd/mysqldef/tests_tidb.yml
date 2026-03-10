@@ -191,7 +191,7 @@ CreateTableNonclusteredPrimaryKey:
       PRIMARY KEY (id) /*T![clustered_index] NONCLUSTERED */
     );
 
-ClusteredIgnoredInComparison:
+ClusteredChangedWarning:
   legacy_ignore_quotes: false
   offline: true
   current: |
@@ -202,7 +202,9 @@ ClusteredIgnoredInComparison:
   desired: |
     CREATE TABLE t (
       id bigint NOT NULL,
-      PRIMARY KEY (id)
+      PRIMARY KEY (id) NONCLUSTERED
     );
-  up: ""
-  down: ""
+  up: |
+    -- Warning: CLUSTERED/NONCLUSTERED attribute of PRIMARY KEY on t differs but cannot be changed after table creation;
+  down: |
+    -- Warning: CLUSTERED/NONCLUSTERED attribute of PRIMARY KEY on t differs but cannot be changed after table creation;

@@ -66,6 +66,7 @@ func setDDL(yylex any, ddl *DDL) {
   exprs                    Exprs
   boolVal                  BoolVal
   boolVals                 []BoolVal
+  optBool                  *bool
   colTuple                 ColTuple
   values                   Values
   valTuple                 ValTuple
@@ -475,7 +476,8 @@ func setDDL(yylex any, ddl *DDL) {
 %type <boolVal> no_inherit_opt
 %type <str> identity_behavior
 %type <sequence> sequence_opt
-%type <boolVal> clustered_opt not_for_replication_opt
+%type <optBool> clustered_opt
+%type <boolVal> not_for_replication_opt
 %type <defaultExpression> default_definition
 %type <expr> default_value_expression
 %type <optVal> srid_definition srid_val
@@ -4836,7 +4838,7 @@ match_type_opt:
 primary_key_definition:
   CONSTRAINT sql_id PRIMARY KEY clustered_opt '(' index_column_list ')' clustered_opt index_option_opt index_partition_opt
   {
-    clustered := $5 || $9
+    clustered := coalesceOptBool($5, $9)
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: $3 + " " + $4, Name: $2, Primary: true, Unique: true, Clustered: clustered},
       Columns: $7,
@@ -4847,7 +4849,7 @@ primary_key_definition:
 /* For SQLite3 // SQLite Syntax: table-constraint https://www.sqlite.org/syntax/table-constraint.html */
 | PRIMARY KEY clustered_opt '(' index_column_list ')' clustered_opt index_option_opt index_partition_opt
   {
-    clustered := $3 || $7
+    clustered := coalesceOptBool($3, $7)
     $$ = &IndexDefinition{
       Info: &IndexInfo{Type: $1 + " " + $2, Name: NewIdent("PRIMARY", false), Primary: true, Unique: true, Clustered: clustered},
       Columns: $5,
@@ -4897,18 +4899,20 @@ check_definition:
     }
   }
 
-/* For SQL Server */
+/* For SQL Server and TiDB */
 clustered_opt:
   {
-    $$ = BoolVal(false)
+    $$ = nil
   }
 | CLUSTERED
   {
-    $$ = BoolVal(true)
+    b := true
+    $$ = &b
   }
 | NONCLUSTERED
   {
-    $$ = BoolVal(false)
+    b := false
+    $$ = &b
   }
 
 /* For SQL Server */

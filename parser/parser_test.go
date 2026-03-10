@@ -651,12 +651,12 @@ func TestTiDBComments(t *testing.T) {
 		{
 			name:      "clustered_index",
 			sql:       "CREATE TABLE t (id bigint NOT NULL, PRIMARY KEY (id) /*T![clustered_index] CLUSTERED */)",
-			clustered: boolPtr(true),
+			clustered: new(true),
 		},
 		{
 			name:      "nonclustered_index",
 			sql:       "CREATE TABLE t (id bigint NOT NULL AUTO_INCREMENT, PRIMARY KEY (id) /*T![clustered_index] NONCLUSTERED */)",
-			clustered: boolPtr(false),
+			clustered: new(false),
 		},
 		{
 			name:    "auto_id_cache",
@@ -697,7 +697,7 @@ func TestTiDBComments(t *testing.T) {
 			if tc.clustered != nil {
 				for _, idx := range ddl.TableSpec.Indexes {
 					if idx.Info.Primary {
-						if bool(idx.Info.Clustered) != *tc.clustered {
+						if idx.Info.Clustered == nil || *idx.Info.Clustered != *tc.clustered {
 							t.Errorf("PRIMARY KEY Clustered: expected %v, got %v", *tc.clustered, idx.Info.Clustered)
 						}
 					}
@@ -707,7 +707,8 @@ func TestTiDBComments(t *testing.T) {
 	}
 }
 
-func boolPtr(b bool) *bool { return &b }
+//go:fix inline
+func boolPtr(b bool) *bool { return new(b) }
 
 // TestInvalidCustomOperators tests that invalid PostgreSQL custom operators produce errors
 func TestInvalidCustomOperators(t *testing.T) {
