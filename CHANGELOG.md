@@ -1,3 +1,7 @@
+## [v3.10.1](https://github.com/sqldef/sqldef/compare/v3.10.0...v3.10.1) - 2026-03-09
+- Improve SQL Server parser coverage and stabilize MSSQL schema round-trips - against real databases by @dylanvdmerwe in https://github.com/sqldef/sqldef/pull/1150
+- Fix PostgreSQL parser fallback gaps for CREATE POLICY and NOW() defaults by @dylanvdmerwe in https://github.com/sqldef/sqldef/pull/1151
+
 ## [v3.10.0](https://github.com/sqldef/sqldef/compare/v3.9.8...v3.10.0) - 2026-03-04
 - build(deps): bump actions/attest-build-provenance from 3.1.0 to 3.2.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1138
 - build(deps): bump docker/login-action from 3.6.0 to 3.7.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1139
