@@ -462,6 +462,7 @@ Without this setting, CHECK constraints in your schema will be silently ignored 
 | `SHARD_ROW_ID_BITS` | Distributes row IDs across shards for tables without a clustered primary key. | `/*T! SHARD_ROW_ID_BITS=4 */` | `CREATE TABLE t (...) SHARD_ROW_ID_BITS=4` |
 | `PRE_SPLIT_REGIONS` | Pre-splits table regions at creation time. Used with `SHARD_ROW_ID_BITS`. | `/*T! PRE_SPLIT_REGIONS=3 */` | `CREATE TABLE t (...) PRE_SPLIT_REGIONS=3` |
 | `AUTO_ID_CACHE` | Controls how many auto-increment or auto-random IDs are cached per TiDB node. `AUTO_ID_CACHE=1` gives centralized allocation for monotonic IDs. | `/*T![auto_id_cache] AUTO_ID_CACHE=1 */` | `CREATE TABLE t (...) AUTO_ID_CACHE=1` |
+| `CLUSTERED` / `NONCLUSTERED` | Controls whether the primary key uses clustered index storage. TiDB adds this to `SHOW CREATE TABLE` output. Differences are ignored during comparison (immutable after creation). | `/*T![clustered_index] CLUSTERED */` | `PRIMARY KEY (id) CLUSTERED` |
 
 mysqldef automatically parses TiDB-specific comment formats (`/*T![feature] ... */` and `/*T! ... */`) from `SHOW CREATE TABLE` output, so schema management works seamlessly with existing TiDB tables.
 

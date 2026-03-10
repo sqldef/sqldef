@@ -643,29 +643,30 @@ func TestAutoRandom(t *testing.T) {
 
 func TestTiDBComments(t *testing.T) {
 	testCases := []struct {
-		name    string
-		sql     string
-		options map[string]string
+		name      string
+		sql       string
+		options   map[string]string
+		clustered *bool
 	}{
 		{
-			"clustered_index",
-			"CREATE TABLE t (id bigint NOT NULL, PRIMARY KEY (id) /*T![clustered_index] CLUSTERED */)",
-			nil,
+			name:      "clustered_index",
+			sql:       "CREATE TABLE t (id bigint NOT NULL, PRIMARY KEY (id) /*T![clustered_index] CLUSTERED */)",
+			clustered: boolPtr(true),
 		},
 		{
-			"nonclustered_index",
-			"CREATE TABLE t (id bigint NOT NULL AUTO_INCREMENT, PRIMARY KEY (id) /*T![clustered_index] NONCLUSTERED */)",
-			nil,
+			name:      "nonclustered_index",
+			sql:       "CREATE TABLE t (id bigint NOT NULL AUTO_INCREMENT, PRIMARY KEY (id) /*T![clustered_index] NONCLUSTERED */)",
+			clustered: boolPtr(false),
 		},
 		{
-			"auto_id_cache",
-			"CREATE TABLE t (id bigint NOT NULL, PRIMARY KEY (id)) /*T![auto_id_cache] AUTO_ID_CACHE=1 */",
-			map[string]string{"AUTO_ID_CACHE": "1"},
+			name:    "auto_id_cache",
+			sql:     "CREATE TABLE t (id bigint NOT NULL, PRIMARY KEY (id)) /*T![auto_id_cache] AUTO_ID_CACHE=1 */",
+			options: map[string]string{"AUTO_ID_CACHE": "1"},
 		},
 		{
-			"shard_row_id_bits",
-			"CREATE TABLE t (a int, b int) /*T! SHARD_ROW_ID_BITS=4 PRE_SPLIT_REGIONS=3 */",
-			map[string]string{"SHARD_ROW_ID_BITS": "4", "PRE_SPLIT_REGIONS": "3"},
+			name:    "shard_row_id_bits",
+			sql:     "CREATE TABLE t (a int, b int) /*T! SHARD_ROW_ID_BITS=4 PRE_SPLIT_REGIONS=3 */",
+			options: map[string]string{"SHARD_ROW_ID_BITS": "4", "PRE_SPLIT_REGIONS": "3"},
 		},
 		{
 			"empty_ungated_comment",
@@ -693,9 +694,20 @@ func TestTiDBComments(t *testing.T) {
 					t.Errorf("option %q: expected %q, got %q", key, expected, actual)
 				}
 			}
+			if tc.clustered != nil {
+				for _, idx := range ddl.TableSpec.Indexes {
+					if idx.Info.Primary {
+						if bool(idx.Info.Clustered) != *tc.clustered {
+							t.Errorf("PRIMARY KEY Clustered: expected %v, got %v", *tc.clustered, idx.Info.Clustered)
+						}
+					}
+				}
+			}
 		})
 	}
 }
+
+func boolPtr(b bool) *bool { return &b }
 
 // TestInvalidCustomOperators tests that invalid PostgreSQL custom operators produce errors
 func TestInvalidCustomOperators(t *testing.T) {

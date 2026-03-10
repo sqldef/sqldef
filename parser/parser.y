@@ -4834,23 +4834,25 @@ match_type_opt:
   }
 
 primary_key_definition:
-  CONSTRAINT sql_id PRIMARY KEY clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
+  CONSTRAINT sql_id PRIMARY KEY clustered_opt '(' index_column_list ')' clustered_opt index_option_opt index_partition_opt
   {
+    clustered := $5 || $9
     $$ = &IndexDefinition{
-      Info: &IndexInfo{Type: $3 + " " + $4, Name: $2, Primary: true, Unique: true, Clustered: $5},
+      Info: &IndexInfo{Type: $3 + " " + $4, Name: $2, Primary: true, Unique: true, Clustered: clustered},
       Columns: $7,
-      Options: $9,
-      Partition: $10,
+      Options: $10,
+      Partition: $11,
     }
   }
 /* For SQLite3 // SQLite Syntax: table-constraint https://www.sqlite.org/syntax/table-constraint.html */
-| PRIMARY KEY clustered_opt '(' index_column_list ')' index_option_opt index_partition_opt
+| PRIMARY KEY clustered_opt '(' index_column_list ')' clustered_opt index_option_opt index_partition_opt
   {
+    clustered := $3 || $7
     $$ = &IndexDefinition{
-      Info: &IndexInfo{Type: $1 + " " + $2, Name: NewIdent("PRIMARY", false), Primary: true, Unique: true, Clustered: $3},
+      Info: &IndexInfo{Type: $1 + " " + $2, Name: NewIdent("PRIMARY", false), Primary: true, Unique: true, Clustered: clustered},
       Columns: $5,
-      Options: $7,
-      Partition: $8,
+      Options: $8,
+      Partition: $9,
     }
   }
 
