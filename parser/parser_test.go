@@ -491,6 +491,20 @@ LEFT JOIN event_counts ec ON rd.product_id = ec.product_id`,
 	}
 }
 
+func TestNowFunctionInDefaultExpression(t *testing.T) {
+	sql := "CREATE TABLE test (pk timestamp primary key default now())"
+
+	statement, err := ParseDDL(sql, ParserModePostgres)
+	if err != nil {
+		t.Fatalf("failed to parse NOW() default expression: %v", err)
+	}
+
+	got := String(statement)
+	if got != "create table test (\n\tpk timestamp default(now()) primary key\n)" {
+		t.Fatalf("unexpected normalized SQL:\n%s", got)
+	}
+}
+
 // TestTypeKeywordsAsIndexColumns tests that type keywords (uuid, int, bigint, etc.)
 // can be used as unquoted column names in index definitions
 func TestTypeKeywordsAsIndexColumns(t *testing.T) {
@@ -674,6 +688,58 @@ func TestInvalidCustomOperators(t *testing.T) {
 			_, err := ParseDDL(tc.sql, ParserModePostgres)
 			if err == nil {
 				t.Errorf("Expected parse error but got none.\n%s\nSQL: %s", tc.description, tc.sql)
+			}
+		})
+	}
+}
+
+func TestDefaultFunctionExpressions(t *testing.T) {
+	testCases := []struct {
+		name string
+		sql  string
+		mode ParserMode
+	}{
+		{
+			name: "MySQL JSON_ARRAY default wrapped in parentheses",
+			sql:  "CREATE TABLE t (id bigint, friend_ids JSON DEFAULT(JSON_ARRAY()))",
+			mode: ParserModeMysql,
+		},
+		{
+			name: "Postgres uuid_generate_v4 default",
+			sql:  "CREATE TABLE t (id uuid DEFAULT uuid_generate_v4())",
+			mode: ParserModePostgres,
+		},
+		{
+			name: "Postgres gen_random_uuid default",
+			sql:  "CREATE TABLE t (id uuid DEFAULT gen_random_uuid())",
+			mode: ParserModePostgres,
+		},
+		{
+			name: "Postgres now default stays a function call",
+			sql:  "CREATE TABLE t (created_at timestamp DEFAULT now())",
+			mode: ParserModePostgres,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := ParseDDL(tc.sql, tc.mode); err != nil {
+				t.Fatalf("ParseDDL(%q) failed: %v", tc.sql, err)
+			}
+		})
+	}
+}
+
+func TestCreatePolicyPredicates(t *testing.T) {
+	testCases := []string{
+		"CREATE POLICY p ON t AS PERMISSIVE FOR ALL TO public USING (current_schema() = current_database())",
+		"CREATE POLICY p ON t AS PERMISSIVE FOR ALL TO public USING (current_schema()::uuid = current_database()::uuid)",
+	}
+
+	for _, sql := range testCases {
+		t.Run(sql, func(t *testing.T) {
+			if _, err := ParseDDL(sql, ParserModePostgres); err != nil {
+				t.Fatalf("ParseDDL(%q) failed: %v", sql, err)
 			}
 		})
 	}

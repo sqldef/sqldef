@@ -117,6 +117,8 @@ func setDDL(yylex any, ddl *DDL) {
   overExpr                 *OverExpr
   partitionBy              PartitionBy
   partition                *Partition
+  openJSONSchema           OpenJSONSchema
+  openJSONSchemaItem       *OpenJSONSchemaItem
   handlerCondition         HandlerCondition
   handlerConditions        []HandlerCondition
   fkDeferOpts              struct {
@@ -141,7 +143,7 @@ func setDDL(yylex any, ddl *DDL) {
 
 %token LEX_ERROR
 %left <str> UNION INTERSECT EXCEPT
-%token <str> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER LIMIT OFFSET FOR DECLARE
+%token <str> SELECT STREAM INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER LIMIT OFFSET FOR DECLARE TOP
 %token <str> ALL ANY SOME DISTINCT AS EXISTS ASC DESC INTO DUPLICATE DEFAULT SRID SET LOCK KEYS
 %token <str> ROWID STRICT
 %token <str> VALUES LAST_INSERT_ID
@@ -279,7 +281,7 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> BIT TINYINT SMALLINT SMALLSERIAL MEDIUMINT INT INTEGER SERIAL BIGINT BIGSERIAL INTNUM
 %token <str> REAL DOUBLE PRECISION FLOAT_TYPE DECIMAL NUMERIC SMALLMONEY MONEY
 %token <str> TIME TIMESTAMP DATETIME YEAR DATETIMEOFFSET DATETIME2 SMALLDATETIME
-%token <str> CHAR VARCHAR VARYING BOOL CHARACTER VARBINARY NCHAR NVARCHAR NTEXT UUID
+%token <str> CHAR VARCHAR VARYING BOOL CHARACTER VARBINARY NCHAR NVARCHAR NTEXT UUID UNIQUEIDENTIFIER
 %token <str> TEXT TINYTEXT MEDIUMTEXT LONGTEXT CITEXT
 %token <str> TSTZRANGE TSRANGE INT4RANGE INT8RANGE NUMRANGE DATERANGE
 %token <str> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON JSONB ENUM
@@ -311,17 +313,18 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> CURRENT_TIME LOCALTIME LOCALTIMESTAMP
 %token <str> UTC_DATE UTC_TIME UTC_TIMESTAMP
 %token <str> REPLACE
-%token <str> CONVERT CAST
-%token <str> SUBSTR SUBSTRING EXTRACT
-%token <str> GROUP_CONCAT SEPARATOR
+%token <str> CONVERT CAST TRY_CAST
+%token <str> SUBSTR SUBSTRING EXTRACT TRIM
+%token <str> GROUP_CONCAT SEPARATOR WITHIN
 %token <str> INHERIT
-%token <str> LEAD LAG
+%token <str> LEAD LAG GETUTCDATE NEWID SYSUTCDATETIME NEWSEQUENTIALID OPENJSON STRING_SPLIT
 
 // Match
 %token <str> MATCH AGAINST BOOLEAN LANGUAGE PARSER QUERY EXPANSION PARTIAL SIMPLE
 
 // Context-aware WITH tokens
 %token <str> WITH_DATA_OPTION
+%token <str> APPLY
 
 // MySQL reserved words that are unused by this grammar will map to this token.
 %token <str> UNUSED
@@ -397,6 +400,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <expr> expression_opt else_expression_opt
 %type <exprs> group_by_opt
 %type <expr> having_opt
+%type <expr> top_opt
 %type <orderBy> order_by_opt order_list
 %type <order> order
 %type <str> asc_desc_opt nulls_ordering_opt
@@ -421,6 +425,8 @@ func setDDL(yylex any, ddl *DDL) {
 %type <expr> charset_value
 %type <ident> table_id reserved_table_id as_opt_id
 %type <empty> as_opt
+%type <openJSONSchema> openjson_with_opt openjson_schema_list
+%type <openJSONSchemaItem> openjson_schema_item
 %type <str> charset
 %type <str> set_session_or_global
 %type <convertType> convert_type simple_convert_type
@@ -1916,9 +1922,24 @@ select_statement_core:
 
 // base_select is an unparenthesized SELECT with no order by clause or beyond.
 base_select:
-  SELECT comment_opt cache_opt distinct_opt straight_join_opt select_expression_list from_opt where_expression_opt group_by_opt having_opt
+  SELECT comment_opt cache_opt distinct_opt straight_join_opt top_opt select_expression_list from_opt where_expression_opt group_by_opt having_opt
   {
-    $$ = &Select{Comments: Comments($2), Cache: $3, Distinct: $4, Hints: $5, SelectExprs: $6, From: $7, Where: NewWhere(WhereStr, $8), GroupBy: GroupBy($9), Having: NewWhere(HavingStr, $10)}
+    $$ = &Select{Comments: Comments($2), Cache: $3, Distinct: $4, Hints: $5, Top: $6, SelectExprs: $7, From: $8, Where: NewWhere(WhereStr, $9), GroupBy: GroupBy($10), Having: NewWhere(HavingStr, $11)}
+  }
+
+top_opt:
+  {
+    $$ = nil
+  }
+// SQL Server TOP belongs syntactically to SELECT, not LIMIT/OFFSET, so model it
+// here to keep the generic grammar's ordering and conflict surface manageable.
+| TOP INTEGRAL
+  {
+    $$ = NewIntVal($2)
+  }
+| TOP '(' INTEGRAL ')'
+  {
+    $$ = NewIntVal($3)
   }
 
 union_rhs:
@@ -2688,6 +2709,10 @@ using_opt:
   {
     $$ = $2
   }
+| USING '(' expression ')'
+  {
+    $$ = &ParenExpr{Expr: $3}
+  }
 
 with_check_opt:
   {
@@ -2696,6 +2721,10 @@ with_check_opt:
 | WITH CHECK expression
   {
     $$ = $3
+  }
+| WITH CHECK '(' expression ')'
+  {
+    $$ = &ParenExpr{Expr: $4}
   }
 
 unique_opt:
@@ -3395,13 +3424,33 @@ default_value_expression:
   {
     $$ = NewBoolSQLVal(bool($1))
   }
-| NOW '(' ')'
+| '(' expression ')'
   {
-    $$ = NewBitVal($1)
+    $$ = &ParenExpr{Expr: $2}
   }
 | function_call_generic
   {
     $$ = $1
+  }
+| function_call_keyword
+  {
+    $$ = $1
+  }
+| function_call_nonkeyword
+  {
+    $$ = $1
+  }
+| function_call_conflict
+  {
+    $$ = $1
+  }
+| NEWID '(' ')'
+  {
+    $$ = &FuncExpr{Name: NewIdent($1, false)}
+  }
+| NEWSEQUENTIALID '(' ')'
+  {
+    $$ = &FuncExpr{Name: NewIdent($1, false)}
   }
 | DATE STRING
   {
@@ -4109,6 +4158,10 @@ char_type:
     $$ = ColumnType{Type: $1}
   }
 | UUID
+  {
+    $$ = ColumnType{Type: $1}
+  }
+| UNIQUEIDENTIFIER
   {
     $$ = ColumnType{Type: $1}
   }
@@ -5275,6 +5328,18 @@ table_factor:
   {
     $$ = $1
   }
+| OPENJSON '(' select_expression_list ')' openjson_with_opt as_opt_id
+  {
+    $$ = &AliasedTableExpr{Expr: &OpenJSONTableExpr{Exprs: $3, With: $5}, As: $6}
+  }
+| STRING_SPLIT '(' select_expression_list ')' as_opt_id
+  {
+    $$ = &AliasedTableExpr{Expr: &FuncExpr{Name: NewIdent($1, false), Exprs: $3}, As: $5}
+  }
+| '(' VALUES tuple_list ')' AS col_alias '(' column_list ')'
+  {
+    $$ = &AliasedTableExpr{Expr: $3, As: $6, Columns: $8}
+  }
 | subquery as_opt table_id
   {
     $$ = &AliasedTableExpr{Expr:$1, As: $3}
@@ -5282,6 +5347,43 @@ table_factor:
 | '(' table_references ')'
   {
     $$ = &ParenTableExpr{Exprs: $2}
+  }
+
+openjson_with_opt:
+  {
+    $$ = nil
+  }
+| WITH '(' openjson_schema_list ')'
+  {
+    $$ = $3
+  }
+
+openjson_schema_list:
+  openjson_schema_item
+  {
+    $$ = OpenJSONSchema{$1}
+  }
+| openjson_schema_list ',' openjson_schema_item
+  {
+    $$ = append($1, $3)
+  }
+
+openjson_schema_item:
+  reserved_sql_id column_type STRING
+  {
+    $$ = &OpenJSONSchemaItem{Name: $1, Type: $2, Path: $3}
+  }
+| reserved_sql_id column_type STRING AS JSON
+  {
+    $$ = &OpenJSONSchemaItem{Name: $1, Type: $2, Path: $3, AsJSON: true}
+  }
+| reserved_sql_id column_type
+  {
+    $$ = &OpenJSONSchemaItem{Name: $1, Type: $2}
+  }
+| reserved_sql_id column_type AS JSON
+  {
+    $$ = &OpenJSONSchemaItem{Name: $1, Type: $2, AsJSON: true}
   }
 
 table_hint_opt:
@@ -5378,6 +5480,14 @@ join_table:
   table_reference inner_join table_factor join_condition_opt
   {
     $$ = &JoinTableExpr{LeftExpr: $1, Join: $2, RightExpr: $3, Condition: $4}
+  }
+| table_reference CROSS APPLY table_factor
+  {
+    $$ = &JoinTableExpr{LeftExpr: $1, Join: CrossApplyStr, RightExpr: $4}
+  }
+| table_reference OUTER APPLY table_factor
+  {
+    $$ = &JoinTableExpr{LeftExpr: $1, Join: OuterApplyStr, RightExpr: $4}
   }
 | table_reference straight_join table_factor on_expression_opt
   {
@@ -5990,6 +6100,10 @@ value_expression:
   {
     $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: "time without time zone"}}
   }
+| subquery '.' col_alias '(' expression_list ')'
+  {
+    $$ = &MethodCallExpr{Receiver: $1, Name: $3, Exprs: $5}
+  }
 | function_call_generic
 | function_call_keyword
 | function_call_nonkeyword
@@ -6008,13 +6122,25 @@ value_expression:
  * introduce side effects due to being a simple identifier
  */
 function_call_generic:
-  sql_id '(' select_expression_list_opt ')'
+  sql_id '(' ')'
+  {
+    $$ = &FuncExpr{Name: $1}
+  }
+| sql_id '(' select_expression_list ')'
   {
     $$ = &FuncExpr{Name: $1, Exprs: $3}
   }
 | sql_id '(' DISTINCT select_expression_list ')'
   {
     $$ = &FuncExpr{Name: $1, Distinct: true, Exprs: $4}
+  }
+| sql_id '(' select_expression_list ')' WITHIN GROUP '(' ORDER BY order_list ')'
+  {
+    $$ = &FuncExpr{Name: $1, Exprs: $3, WithinGroup: $10}
+  }
+| sql_id '(' ')' OVER '(' window_spec ')'
+  {
+    $$ = &FuncExpr{Name: $1, Over: $6}
   }
 | sql_id '(' select_expression_list ')' over_expression
   {
@@ -6062,6 +6188,18 @@ function_call_keyword:
 | CAST '(' expression AS convert_type ')'
   {
     $$ = &ConvertExpr{Action: CastStr, Expr: $3, Type: $5}
+  }
+| TRY_CAST '(' expression AS convert_type ')'
+  {
+    $$ = &ConvertExpr{Action: TryCastStr, Expr: $3, Type: $5}
+  }
+| TRIM '(' expression FROM expression ')'
+  {
+    $$ = &TrimExpr{TrimChar: $3, String: $5}
+  }
+| TRIM '(' expression ')'
+  {
+    $$ = &TrimExpr{String: $3}
   }
 | CONVERT '(' expression USING charset ')'
   {
@@ -6199,6 +6337,22 @@ function_call_nonkeyword:
   {
     $$ = &FuncExpr{Name: NewIdent("current_time", false)}
   }
+| GETUTCDATE '(' ')'
+  {
+    $$ = &FuncExpr{Name: NewIdent($1, false)}
+  }
+| NEWID '(' ')'
+  {
+    $$ = &FuncExpr{Name: NewIdent($1, false)}
+  }
+| SYSUTCDATETIME '(' ')'
+  {
+    $$ = &FuncExpr{Name: NewIdent($1, false)}
+  }
+| NEWSEQUENTIALID '(' ')'
+  {
+    $$ = &FuncExpr{Name: NewIdent($1, false)}
+  }
 | TYPECAST simple_convert_type
   {
     $$ = &ConvertExpr{Type: $2}
@@ -6282,6 +6436,10 @@ convert_type:
   BINARY length_opt
   {
     $$ = &ConvertType{Type: $1, Length: $2}
+  }
+| UNIQUEIDENTIFIER
+  {
+    $$ = &ConvertType{Type: $1}
   }
 | CHAR length_opt charset_opt
   {
@@ -6369,7 +6527,7 @@ convert_type:
   {
     $$ = &ConvertType{Type: $1}
   }
-| VARCHAR length_opt
+| VARCHAR max_length_opt
   {
     $$ = &ConvertType{Type: $1, Length: $2}
   }
@@ -6381,11 +6539,11 @@ convert_type:
   {
     $$ = &ConvertType{Type: $1}
   }
-| NVARCHAR length_opt
+| NVARCHAR max_length_opt
   {
     $$ = &ConvertType{Type: $1, Length: $2}
   }
-| VARBINARY length_opt
+| VARBINARY max_length_opt
   {
     $$ = &ConvertType{Type: $1, Length: $2}
   }
@@ -6420,6 +6578,10 @@ simple_convert_type:
     $$ = &ConvertType{Type: $1}
   }
 | UUID
+  {
+    $$ = &ConvertType{Type: $1}
+  }
+| UNIQUEIDENTIFIER
   {
     $$ = &ConvertType{Type: $1}
   }
@@ -6755,6 +6917,14 @@ lock_opt:
 | LOCK IN SHARE MODE
   {
     $$ = ShareModeStr
+  }
+| FOR ID ID '(' STRING ')' ',' TYPE
+  {
+    $$ = " for xml path(" + String(NewStrVal($5)) + "), type"
+  }
+| FOR JSON ID
+  {
+    $$ = " for json path"
   }
 
 // insert_data expands all combinations into a single rule.
@@ -7384,6 +7554,7 @@ non_reserved_keyword:
 | RANGE
 | LIST
 | HASH
+| M
 | INCREMENT
 | LINEAR
 | COLUMNS
