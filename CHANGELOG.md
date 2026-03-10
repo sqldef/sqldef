@@ -1,3 +1,6 @@
+## [v3.10.2](https://github.com/sqldef/sqldef/compare/v3.10.1...v3.10.2) - 2026-03-10
+- Support TiDB AUTO_RANDOM column attribute by @y-kawawa in https://github.com/sqldef/sqldef/pull/1149
+
 ## [v3.10.1](https://github.com/sqldef/sqldef/compare/v3.10.0...v3.10.1) - 2026-03-09
 - Improve SQL Server parser coverage and stabilize MSSQL schema round-trips - against real databases by @dylanvdmerwe in https://github.com/sqldef/sqldef/pull/1150
 - Fix PostgreSQL parser fallback gaps for CREATE POLICY and NOW() defaults by @dylanvdmerwe in https://github.com/sqldef/sqldef/pull/1151
