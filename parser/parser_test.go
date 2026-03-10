@@ -641,16 +641,49 @@ func TestAutoRandom(t *testing.T) {
 	}
 }
 
-func TestUnsupportedTiDBComment(t *testing.T) {
-	// Unsupported TiDB comments like /*T![clustered_index] CLUSTERED */ should be ignored
-	sql := "CREATE TABLE t (id bigint NOT NULL, PRIMARY KEY (id) /*T![clustered_index] CLUSTERED */)"
-	tree, err := ParseDDL(sql, ParserModeMysql)
-	if err != nil {
-		t.Fatalf("parse error: %v", err)
+func TestTiDBComments(t *testing.T) {
+	testCases := []struct {
+		name    string
+		sql     string
+		options map[string]string
+	}{
+		{
+			"clustered_index",
+			"CREATE TABLE t (id bigint NOT NULL, PRIMARY KEY (id) /*T![clustered_index] CLUSTERED */)",
+			nil,
+		},
+		{
+			"nonclustered_index",
+			"CREATE TABLE t (id bigint NOT NULL AUTO_INCREMENT, PRIMARY KEY (id) /*T![clustered_index] NONCLUSTERED */)",
+			nil,
+		},
+		{
+			"auto_id_cache",
+			"CREATE TABLE t (id bigint NOT NULL, PRIMARY KEY (id)) /*T![auto_id_cache] AUTO_ID_CACHE=1 */",
+			map[string]string{"AUTO_ID_CACHE": "1"},
+		},
+		{
+			"shard_row_id_bits",
+			"CREATE TABLE t (a int, b int) /*T! SHARD_ROW_ID_BITS=4 PRE_SPLIT_REGIONS=3 */",
+			map[string]string{"SHARD_ROW_ID_BITS": "4", "PRE_SPLIT_REGIONS": "3"},
+		},
 	}
-	ddl := tree.(*DDL)
-	if ddl.TableSpec == nil {
-		t.Fatal("expected TableSpec")
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := ParseDDL(tc.sql, ParserModeMysql)
+			if err != nil {
+				t.Fatalf("parse error: %v", err)
+			}
+			ddl := tree.(*DDL)
+			if ddl.TableSpec == nil {
+				t.Fatal("expected TableSpec")
+			}
+			for key, expected := range tc.options {
+				if actual := ddl.TableSpec.Options[key]; actual != expected {
+					t.Errorf("option %q: expected %q, got %q", key, expected, actual)
+				}
+			}
+		})
 	}
 }
 
