@@ -667,6 +667,16 @@ func TestTiDBComments(t *testing.T) {
 			"CREATE TABLE t (a int, b int) /*T! SHARD_ROW_ID_BITS=4 PRE_SPLIT_REGIONS=3 */",
 			map[string]string{"SHARD_ROW_ID_BITS": "4", "PRE_SPLIT_REGIONS": "3"},
 		},
+		{
+			"empty_ungated_comment",
+			"CREATE TABLE t (a int) /*T! */",
+			nil,
+		},
+		{
+			"unclosed_feature_bracket",
+			"CREATE TABLE t (a int) /*T![unclosed */",
+			nil,
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
