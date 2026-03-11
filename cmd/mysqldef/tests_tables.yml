@@ -1221,3 +1221,82 @@ RemoveAutoRandom:
     ALTER TABLE t CHANGE COLUMN id id bigint NOT NULL;
   down: |
     ALTER TABLE t CHANGE COLUMN id id bigint NOT NULL AUTO_RANDOM(5);
+
+CreateTableAutoRandomWithAutoIdCache:
+  flavor: tidb
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      id bigint AUTO_RANDOM,
+      PRIMARY KEY (id)
+    );
+
+CreateTableAutoIdCache:
+  flavor: tidb
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      id bigint AUTO_INCREMENT,
+      PRIMARY KEY (id)
+    ) AUTO_ID_CACHE=1;
+
+ChangeAutoIdCache:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE t (
+      id bigint AUTO_INCREMENT,
+      PRIMARY KEY (id)
+    ) AUTO_ID_CACHE=100;
+  desired: |
+    CREATE TABLE t (
+      id bigint AUTO_INCREMENT,
+      PRIMARY KEY (id)
+    ) AUTO_ID_CACHE=1;
+  up: |
+    ALTER TABLE t AUTO_ID_CACHE = 1;
+  down: |
+    ALTER TABLE t AUTO_ID_CACHE = 100;
+
+CreateTableShardRowIdBits:
+  flavor: tidb
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      a int,
+      b int
+    ) SHARD_ROW_ID_BITS=4 PRE_SPLIT_REGIONS=3;
+
+ChangeShardRowIdBits:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE t (
+      a int
+    ) SHARD_ROW_ID_BITS=4;
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) SHARD_ROW_ID_BITS=2;
+  up: |
+    ALTER TABLE t SHARD_ROW_ID_BITS = 2;
+  down: |
+    ALTER TABLE t SHARD_ROW_ID_BITS = 4;
+
+AddShardRowIdBits:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE t (
+      a int
+    );
+  desired: |
+    CREATE TABLE t (
+      a int
+    ) SHARD_ROW_ID_BITS=4 PRE_SPLIT_REGIONS=3;
+  up: |
+    ALTER TABLE t SHARD_ROW_ID_BITS = 4;
+    ALTER TABLE t PRE_SPLIT_REGIONS = 3;
+  down: |
+    ALTER TABLE t SHARD_ROW_ID_BITS = 0;
+    ALTER TABLE t PRE_SPLIT_REGIONS = 0;

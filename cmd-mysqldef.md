@@ -454,15 +454,15 @@ This setting:
 
 Without this setting, CHECK constraints in your schema will be silently ignored by TiDB.
 
-### AUTO_RANDOM
+### Supported TiDB Features
 
-mysqldef supports TiDB's `AUTO_RANDOM` attribute for primary key columns. This distributes row IDs randomly across shards to avoid write hotspots.
+| Feature | Description | TiDB Comment Format | Example |
+|---------|-------------|---------------------|---------|
+| `AUTO_RANDOM` | Distributes row IDs randomly across shards to avoid write hotspots. Applied to primary key columns. | `/*T![auto_rand] AUTO_RANDOM(5) */` | `id bigint AUTO_RANDOM` |
+| `SHARD_ROW_ID_BITS` | Distributes row IDs across shards for tables without a clustered primary key. | `/*T! SHARD_ROW_ID_BITS=4 */` | `CREATE TABLE t (...) SHARD_ROW_ID_BITS=4` |
+| `PRE_SPLIT_REGIONS` | Pre-splits table regions at creation time. Used with `SHARD_ROW_ID_BITS`. | `/*T! PRE_SPLIT_REGIONS=3 */` | `CREATE TABLE t (...) PRE_SPLIT_REGIONS=3` |
+| `AUTO_ID_CACHE` | Controls how many auto-increment or auto-random IDs are cached per TiDB node. `AUTO_ID_CACHE=1` gives centralized allocation for monotonic IDs. | `/*T![auto_id_cache] AUTO_ID_CACHE=1 */` | `CREATE TABLE t (...) AUTO_ID_CACHE=1` |
 
-```sql
-CREATE TABLE t (
-  id bigint AUTO_RANDOM,
-  PRIMARY KEY (id)
-);
-```
+mysqldef automatically parses TiDB-specific comment formats (`/*T![feature] ... */` and `/*T! ... */`) from `SHOW CREATE TABLE` output, so schema management works seamlessly with existing TiDB tables.
 
-mysqldef also parses the TiDB-specific comment format from `SHOW CREATE TABLE` output (`/*T![auto_rand] AUTO_RANDOM(5) */`).
+For `SHARD_ROW_ID_BITS`, `PRE_SPLIT_REGIONS`, and `AUTO_ID_CACHE`, mysqldef detects changes and generates `ALTER TABLE` statements accordingly.

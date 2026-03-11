@@ -24,6 +24,24 @@ const (
 	GeneratorModeMssql
 )
 
+// tidbTableOption defines a TiDB-specific table option that the generator
+// should compare between current and desired schemas.
+type tidbTableOption struct {
+	key          string // option key as it appears in the options map (e.g. "SHARD_ROW_ID_BITS")
+	defaultValue string // value to use when the option is removed from desired
+}
+
+// tidbTableOptions is the single source of truth for TiDB table options
+// that the generator manages. When adding a new TiDB table option:
+//  1. Add an entry here
+//  2. If the option uses /*T![feature] ... */ comment syntax,
+//     add the feature name to extractTiDBComment in parser/token.go
+var tidbTableOptions = []tidbTableOption{
+	{key: "SHARD_ROW_ID_BITS", defaultValue: "0"},
+	{key: "PRE_SPLIT_REGIONS", defaultValue: "0"},
+	{key: "AUTO_ID_CACHE", defaultValue: "0"},
+}
+
 // This struct holds simulated schema states during GenerateIdempotentDDLs().
 type Generator struct {
 	mode          GeneratorMode
@@ -1671,6 +1689,20 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s COMMENT = ''", g.escapeTableName(&desired.table)))
 		} else {
 			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s COMMENT = %s", g.escapeTableName(&desired.table), desired.table.options["comment"]))
+		}
+	}
+
+	// Examine TiDB table options
+	if g.mode == GeneratorModeMysql {
+		for _, opt := range tidbTableOptions {
+			currentVal := currentTable.options[opt.key]
+			desiredVal := desired.table.options[opt.key]
+			if currentVal != desiredVal {
+				if desiredVal == "" {
+					desiredVal = opt.defaultValue
+				}
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s %s = %s", g.escapeTableName(&desired.table), opt.key, desiredVal))
+			}
 		}
 	}
 
