@@ -18,6 +18,7 @@ type MysqlDatabase struct {
 	db                  *sql.DB
 	lowerCaseTableNames int // 0 = case-sensitive, 1 or 2 = case-insensitive
 	generatorConfig     database.GeneratorConfig
+	migrationScope      database.MigrationScope
 }
 
 func NewDatabase(config database.Config) (database.Database, error) {
@@ -74,33 +75,40 @@ func queryMySQLServerInfo(db *sql.DB) int {
 
 func (d *MysqlDatabase) ExportDDLs() (string, error) {
 	var ddls []string
+	scope := d.GetMigrationScope()
 
-	tableNames, err := d.tableNames()
-	if err != nil {
-		return "", err
+	if scope.Table {
+		tableNames, err := d.tableNames()
+		if err != nil {
+			return "", err
+		}
+		tableDDLs, err := database.ConcurrentMapFuncWithError(
+			tableNames,
+			d.config.DumpConcurrency,
+			func(tableName string) (string, error) {
+				return d.exportTableDDL(tableName)
+			})
+		if err != nil {
+			return "", err
+		}
+		ddls = append(ddls, tableDDLs...)
 	}
-	tableDDLs, err := database.ConcurrentMapFuncWithError(
-		tableNames,
-		d.config.DumpConcurrency,
-		func(tableName string) (string, error) {
-			return d.exportTableDDL(tableName)
-		})
-	if err != nil {
-		return "", err
-	}
-	ddls = append(ddls, tableDDLs...)
 
-	viewDDLs, err := d.views()
-	if err != nil {
-		return "", err
+	if scope.View {
+		viewDDLs, err := d.views()
+		if err != nil {
+			return "", err
+		}
+		ddls = append(ddls, viewDDLs...)
 	}
-	ddls = append(ddls, viewDDLs...)
 
-	triggerDDLs, err := d.triggers()
-	if err != nil {
-		return "", err
+	if scope.Trigger {
+		triggerDDLs, err := d.triggers()
+		if err != nil {
+			return "", err
+		}
+		ddls = append(ddls, triggerDDLs...)
 	}
-	ddls = append(ddls, triggerDDLs...)
 
 	return strings.Join(ddls, "\n\n"), nil
 }
@@ -262,4 +270,12 @@ func (d *MysqlDatabase) GetTransactionQueries() database.TransactionQueries {
 
 func (d *MysqlDatabase) GetConfig() database.Config {
 	return d.config
+}
+
+func (d *MysqlDatabase) SetMigrationScope(scope database.MigrationScope) {
+	d.migrationScope = scope
+}
+
+func (d *MysqlDatabase) GetMigrationScope() database.MigrationScope {
+	return d.migrationScope
 }
