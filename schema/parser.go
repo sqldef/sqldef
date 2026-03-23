@@ -333,6 +333,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 	for i, parsedCol := range stmt.TableSpec.Columns {
 		// Normalize PostgreSQL type aliases from generic parser
 		typeName := parsedCol.Type.Type
+		typeIdent := parsedCol.Type.TypeIdent
 		timezone := castBool(parsedCol.Type.Timezone)
 		// references is used for:
 		// 1. Schema-qualified type names (e.g., "public." for public.mytype) - stored with trailing dot
@@ -347,13 +348,16 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 
 		if mode == GeneratorModePostgres {
 			// Handle short timezone forms: timestamptz -> timestamp, timetz -> time
-			// The generic parser may parse these as identifiers without setting Timezone flag
-			switch typeName {
+			// The generic parser parses these as custom identifiers without setting Timezone flag.
+			// Clear typeIdent so the quote-aware comparison path doesn't see a stale name.
+			switch strings.ToLower(typeName) {
 			case "timestamptz":
 				typeName = "timestamp"
+				typeIdent = Ident{}
 				timezone = true
 			case "timetz":
 				typeName = "time"
+				typeIdent = Ident{}
 				timezone = true
 			}
 
@@ -375,7 +379,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			name:                       parsedCol.Name,
 			position:                   i,
 			typeName:                   typeName,
-			typeIdent:                  parsedCol.Type.TypeIdent,
+			typeIdent:                  typeIdent,
 			unsigned:                   castBool(parsedCol.Type.Unsigned),
 			notNull:                    castBoolPtr(parsedCol.Type.NotNull),
 			autoIncrement:              castBool(parsedCol.Type.Autoincrement),
