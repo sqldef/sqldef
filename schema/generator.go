@@ -2981,6 +2981,9 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 		if indexColumn.operatorClass != "" {
 			column += " " + indexColumn.operatorClass
 		}
+		if indexColumn.withoutOverlaps {
+			column += " WITHOUT OVERLAPS"
+		}
 		columns = append(columns, column)
 	}
 
@@ -3075,6 +3078,9 @@ func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 		}
 		if indexColumn.operatorClass != "" {
 			column += " " + indexColumn.operatorClass
+		}
+		if indexColumn.withoutOverlaps {
+			column += " WITHOUT OVERLAPS"
 		}
 		columns = append(columns, column)
 	}
@@ -3265,11 +3271,19 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 	}
 
 	var indexColumns, referenceColumns []string
-	for _, column := range foreignKey.indexColumns {
-		indexColumns = append(indexColumns, g.escapeSQLIdent(column))
+	for i, column := range foreignKey.indexColumns {
+		escaped := g.escapeSQLIdent(column)
+		if foreignKey.period && i == len(foreignKey.indexColumns)-1 {
+			escaped = "PERIOD " + escaped
+		}
+		indexColumns = append(indexColumns, escaped)
 	}
-	for _, column := range foreignKey.referenceColumns {
-		referenceColumns = append(referenceColumns, g.escapeSQLIdent(column))
+	for i, column := range foreignKey.referenceColumns {
+		escaped := g.escapeSQLIdent(column)
+		if foreignKey.period && i == len(foreignKey.referenceColumns)-1 {
+			escaped = "PERIOD " + escaped
+		}
+		referenceColumns = append(referenceColumns, escaped)
 	}
 
 	definition += fmt.Sprintf(
@@ -5155,6 +5169,9 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 		if normalizedA != normalizedB || dirA != dirB {
 			return false
 		}
+		if indexA.columns[i].withoutOverlaps != indexB.columns[i].withoutOverlaps {
+			return false
+		}
 	}
 	// For primary keys, we don't need to check other properties like where, included, options
 	return true
@@ -5186,6 +5203,9 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		normalizedB = g.formatIndexExprForComparison(indexB.columns[i].columnExpr)
 		if normalizedA != normalizedB ||
 			indexAColumn.direction != indexB.columns[i].direction {
+			return false
+		}
+		if indexA.columns[i].withoutOverlaps != indexB.columns[i].withoutOverlaps {
 			return false
 		}
 	}
@@ -5333,6 +5353,9 @@ func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB Forei
 		return false
 	}
 	if foreignKeyA.notForReplication != foreignKeyB.notForReplication {
+		return false
+	}
+	if foreignKeyA.period != foreignKeyB.period {
 		return false
 	}
 	optsA := foreignKeyA.constraintOptions

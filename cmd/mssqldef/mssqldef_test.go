@@ -1606,8 +1606,7 @@ func assertApplyOutputWithConfig(t *testing.T, desiredSchema string, config data
 func assertApplyOptionsOutput(t *testing.T, schema string, expected string, options ...string) {
 	t.Helper()
 	tu.WriteFile("schema.sql", schema)
-	args := append([]string{
-	}, mssqlCLIArgs("mssqldef_test", "--file", "schema.sql")...)
+	args := append([]string{}, mssqlCLIArgs("mssqldef_test", "--file", "schema.sql")...)
 	args = append(args, options...)
 
 	actual := tu.MustExecute(t, "./mssqldef", args...)

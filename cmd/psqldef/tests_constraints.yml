@@ -1677,3 +1677,225 @@ CheckConstraintWithCoalesce:
       val integer,
       CHECK (COALESCE(val, 0) >= 0)
     );
+
+PrimaryKeyWithoutOverlaps:
+  legacy_ignore_quotes: false
+  min_version: "18.0"
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE TABLE reservations (
+      id integer NOT NULL,
+      valid_range daterange NOT NULL,
+      CONSTRAINT reservations_pk PRIMARY KEY (id, valid_range WITHOUT OVERLAPS)
+    );
+
+# FIXME: Unnamed WITHOUT OVERLAPS constraints are not idempotent because
+# PG auto-generates a constraint name that doesn't match on re-apply.
+# This is a pre-existing issue with unnamed constraints, not specific to WITHOUT OVERLAPS.
+#PrimaryKeyWithoutOverlapsUnnamed:
+#  legacy_ignore_quotes: false
+#  min_version: "18.0"
+#  desired: |
+#    CREATE TABLE reservations (
+#      id integer NOT NULL,
+#      valid_range daterange NOT NULL,
+#      PRIMARY KEY (id, valid_range WITHOUT OVERLAPS)
+#    );
+
+UniqueWithoutOverlaps:
+  legacy_ignore_quotes: false
+  min_version: "18.0"
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE TABLE reservations (
+      id integer NOT NULL,
+      room_id integer NOT NULL,
+      valid_range daterange NOT NULL,
+      CONSTRAINT reservations_uq UNIQUE (room_id, valid_range WITHOUT OVERLAPS)
+    );
+
+# FIXME: Unnamed WITHOUT OVERLAPS constraints are not idempotent (same issue as above).
+#UniqueWithoutOverlapsUnnamed:
+#  legacy_ignore_quotes: false
+#  min_version: "18.0"
+#  desired: |
+#    CREATE TABLE reservations (
+#      id integer NOT NULL,
+#      room_id integer NOT NULL,
+#      valid_range daterange NOT NULL,
+#      UNIQUE (room_id, valid_range WITHOUT OVERLAPS)
+#    );
+
+ForeignKeyWithPeriod:
+  legacy_ignore_quotes: false
+  min_version: "18.0"
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE TABLE parents (
+      id integer NOT NULL,
+      valid_range daterange NOT NULL,
+      CONSTRAINT parents_pk PRIMARY KEY (id, valid_range WITHOUT OVERLAPS)
+    );
+    CREATE TABLE children (
+      id integer NOT NULL,
+      parent_id integer NOT NULL,
+      valid_range daterange NOT NULL,
+      CONSTRAINT children_fk FOREIGN KEY (parent_id, PERIOD valid_range) REFERENCES parents (id, PERIOD valid_range)
+    );
+
+AddPrimaryKeyWithoutOverlaps:
+  legacy_ignore_quotes: false
+  min_version: "18.0"
+  current: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE TABLE reservations (
+      id integer NOT NULL,
+      valid_range daterange NOT NULL
+    );
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE TABLE reservations (
+      id integer NOT NULL,
+      valid_range daterange NOT NULL,
+      CONSTRAINT reservations_pk PRIMARY KEY (id, valid_range WITHOUT OVERLAPS)
+    );
+  up: |
+    ALTER TABLE public.reservations ADD CONSTRAINT reservations_pk PRIMARY KEY (id, valid_range WITHOUT OVERLAPS);
+  down: |
+    ALTER TABLE public.reservations DROP CONSTRAINT reservations_pk;
+
+AddUniqueWithoutOverlaps:
+  legacy_ignore_quotes: false
+  min_version: "18.0"
+  current: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE TABLE reservations (
+      id integer NOT NULL,
+      room_id integer NOT NULL,
+      valid_range daterange NOT NULL
+    );
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE TABLE reservations (
+      id integer NOT NULL,
+      room_id integer NOT NULL,
+      valid_range daterange NOT NULL,
+      CONSTRAINT reservations_uq UNIQUE (room_id, valid_range WITHOUT OVERLAPS)
+    );
+  up: |
+    ALTER TABLE public.reservations ADD CONSTRAINT reservations_uq UNIQUE (room_id, valid_range WITHOUT OVERLAPS);
+  down: |
+    ALTER TABLE public.reservations DROP CONSTRAINT reservations_uq;
+
+AddForeignKeyWithPeriod:
+  legacy_ignore_quotes: false
+  min_version: "18.0"
+  current: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE TABLE parents (
+      id integer NOT NULL,
+      valid_range daterange NOT NULL,
+      CONSTRAINT parents_pk PRIMARY KEY (id, valid_range WITHOUT OVERLAPS)
+    );
+    CREATE TABLE children (
+      id integer NOT NULL,
+      parent_id integer NOT NULL,
+      valid_range daterange NOT NULL
+    );
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE TABLE parents (
+      id integer NOT NULL,
+      valid_range daterange NOT NULL,
+      CONSTRAINT parents_pk PRIMARY KEY (id, valid_range WITHOUT OVERLAPS)
+    );
+    CREATE TABLE children (
+      id integer NOT NULL,
+      parent_id integer NOT NULL,
+      valid_range daterange NOT NULL,
+      CONSTRAINT children_fk FOREIGN KEY (parent_id, PERIOD valid_range) REFERENCES parents (id, PERIOD valid_range)
+    );
+  up: |
+    ALTER TABLE public.children ADD CONSTRAINT children_fk FOREIGN KEY (parent_id,PERIOD valid_range) REFERENCES public.parents (id,PERIOD valid_range);
+  down: |
+    ALTER TABLE public.children DROP CONSTRAINT children_fk;
+
+DropPrimaryKeyWithoutOverlaps:
+  legacy_ignore_quotes: false
+  min_version: "18.0"
+  current: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE TABLE reservations (
+      id integer NOT NULL,
+      valid_range daterange NOT NULL,
+      CONSTRAINT reservations_pk PRIMARY KEY (id, valid_range WITHOUT OVERLAPS)
+    );
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE TABLE reservations (
+      id integer NOT NULL,
+      valid_range daterange NOT NULL
+    );
+  up: |
+    ALTER TABLE public.reservations DROP CONSTRAINT reservations_pk;
+  down: |
+    ALTER TABLE public.reservations ADD CONSTRAINT reservations_pk PRIMARY KEY (id, valid_range WITHOUT OVERLAPS);
+
+DropForeignKeyWithPeriod:
+  legacy_ignore_quotes: false
+  min_version: "18.0"
+  current: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE TABLE parents (
+      id integer NOT NULL,
+      valid_range daterange NOT NULL,
+      CONSTRAINT parents_pk PRIMARY KEY (id, valid_range WITHOUT OVERLAPS)
+    );
+    CREATE TABLE children (
+      id integer NOT NULL,
+      parent_id integer NOT NULL,
+      valid_range daterange NOT NULL,
+      CONSTRAINT children_fk FOREIGN KEY (parent_id, PERIOD valid_range) REFERENCES parents (id, PERIOD valid_range)
+    );
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE TABLE parents (
+      id integer NOT NULL,
+      valid_range daterange NOT NULL,
+      CONSTRAINT parents_pk PRIMARY KEY (id, valid_range WITHOUT OVERLAPS)
+    );
+    CREATE TABLE children (
+      id integer NOT NULL,
+      parent_id integer NOT NULL,
+      valid_range daterange NOT NULL
+    );
+  up: |
+    ALTER TABLE public.children DROP CONSTRAINT children_fk;
+  down: |
+    ALTER TABLE public.children ADD CONSTRAINT children_fk FOREIGN KEY (parent_id,PERIOD valid_range) REFERENCES public.parents (id,PERIOD valid_range);
+
+ChangePrimaryKeyToWithoutOverlaps:
+  legacy_ignore_quotes: false
+  min_version: "18.0"
+  current: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE TABLE reservations (
+      id integer NOT NULL,
+      valid_range daterange NOT NULL,
+      CONSTRAINT reservations_pk PRIMARY KEY (id, valid_range)
+    );
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE TABLE reservations (
+      id integer NOT NULL,
+      valid_range daterange NOT NULL,
+      CONSTRAINT reservations_pk PRIMARY KEY (id, valid_range WITHOUT OVERLAPS)
+    );
+  up: |
+    ALTER TABLE public.reservations DROP CONSTRAINT reservations_pk;
+    ALTER TABLE public.reservations ADD CONSTRAINT reservations_pk PRIMARY KEY (id, valid_range WITHOUT OVERLAPS);
+  down: |
+    ALTER TABLE public.reservations DROP CONSTRAINT reservations_pk;
+    ALTER TABLE public.reservations ADD CONSTRAINT reservations_pk PRIMARY KEY (id, valid_range);
+
+

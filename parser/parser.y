@@ -266,6 +266,7 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> BEFORE AFTER EACH ROW SCROLL CURSOR OPEN CLOSE FETCH PRIOR FIRST LAST DEALLOCATE INSTEAD OF OUTPUT INPUT
 %token <str> HANDLER CONTINUE EXIT SQLEXCEPTION SQLWARNING SQLSTATE FOUND
 %token <str> DEFERRABLE INITIALLY IMMEDIATE DEFERRED
+%token <str> PERIOD
 %token <str> CONCURRENTLY ASYNC
 %token <str> NULLS
 %token <str> SQL SECURITY
@@ -3091,6 +3092,10 @@ column_definition:
   {
     $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
   }
+| PERIOD column_definition_type
+  {
+    $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
+  }
 
 column_type:
   numeric_type unsigned_opt zero_fill_opt
@@ -4669,6 +4674,30 @@ index_column:
   {
     $$ = IndexColumn{Expression: $1, Direction: $2, NullsOrdering: $3}
   }
+| sql_id WITHOUT OVERLAPS
+  {
+    $$ = IndexColumn{Column: $1, WithoutOverlaps: true}
+  }
+| non_reserved_keyword WITHOUT OVERLAPS
+  {
+    $$ = IndexColumn{Column: NewIdent($1, false), WithoutOverlaps: true}
+  }
+| col_name_keyword WITHOUT OVERLAPS
+  {
+    $$ = IndexColumn{Column: NewIdent($1, false), WithoutOverlaps: true}
+  }
+| PERIOD length_opt asc_desc_opt nulls_ordering_opt
+  {
+    $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3, NullsOrdering: $4}
+  }
+| PERIOD WITHOUT OVERLAPS
+  {
+    $$ = IndexColumn{Column: NewIdent($1, false), WithoutOverlaps: true}
+  }
+| type_func_name_keyword WITHOUT OVERLAPS
+  {
+    $$ = IndexColumn{Column: NewIdent($1, false), WithoutOverlaps: true}
+  }
 
 // https://www.postgresql.org/docs/9.5/brin-builtin-opclasses.html
 operator_class:
@@ -4740,6 +4769,28 @@ foreign_key_without_options:
       IndexColumns: $5,
       ReferenceName: $8,
       ReferenceColumns: $10,
+    }
+  }
+/* PostgreSQL 18+ temporal FK: FOREIGN KEY (col, PERIOD range_col) REFERENCES ... (col, PERIOD range_col) */
+| CONSTRAINT sql_id_opt FOREIGN KEY sql_id_opt '(' sql_id_list ',' PERIOD reserved_sql_id ')' REFERENCES table_name '(' sql_id_list ',' PERIOD reserved_sql_id ')'
+  {
+    $$ = &ForeignKeyDefinition{
+      ConstraintName: $2,
+      IndexName: $5,
+      IndexColumns: append($7, $10),
+      ReferenceName: $13,
+      ReferenceColumns: append($15, $18),
+      Period: true,
+    }
+  }
+| FOREIGN KEY sql_id_opt '(' sql_id_list ',' PERIOD reserved_sql_id ')' REFERENCES table_name '(' sql_id_list ',' PERIOD reserved_sql_id ')'
+  {
+    $$ = &ForeignKeyDefinition{
+      IndexName: $3,
+      IndexColumns: append($5, $8),
+      ReferenceName: $11,
+      ReferenceColumns: append($13, $16),
+      Period: true,
     }
   }
 

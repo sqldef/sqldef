@@ -32,6 +32,7 @@ type PostgresDatabase struct {
 	generatorConfig database.GeneratorConfig
 	db              *sql.DB
 	defaultSchema   *string
+	hasConperiod    *bool // cached: whether pg_constraint has conperiod column (PG18+)
 }
 
 func NewDatabase(config database.Config) (database.Database, error) {
@@ -56,6 +57,26 @@ func (d *PostgresDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
 
 func (d *PostgresDatabase) GetGeneratorConfig() database.GeneratorConfig {
 	return d.generatorConfig
+}
+
+// supportsConperiod returns true if pg_constraint has the conperiod column (PG18+).
+// The result is cached after the first call.
+func (d *PostgresDatabase) supportsConperiod() bool {
+	if d.hasConperiod != nil {
+		return *d.hasConperiod
+	}
+	var exists bool
+	err := d.db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM pg_attribute
+			WHERE attrelid = 'pg_constraint'::regclass AND attname = 'conperiod'
+		)
+	`).Scan(&exists)
+	if err != nil {
+		exists = false
+	}
+	d.hasConperiod = &exists
+	return exists
 }
 
 func (d *PostgresDatabase) GetTransactionQueries() database.TransactionQueries {
@@ -696,6 +717,7 @@ type TableDDLComponents struct {
 	Columns           []column
 	PrimaryKeyName    Ident
 	PrimaryKeyCols    []string
+	PrimaryKeyPeriod  bool
 	IndexDefs         []string
 	ForeignDefs       []string
 	ExclusionDefs     []string
@@ -724,10 +746,12 @@ func (d *PostgresDatabase) exportTableDDL(table string) (string, error) {
 	}
 	// if pkey cols exist, retrieve the pkey name
 	if len(components.PrimaryKeyCols) > 0 {
-		components.PrimaryKeyName, err = d.getPrimaryKeyName(table)
-		if err != nil {
-			return "", fmt.Errorf("failed to get primary key name for table %s: %w", table, err)
+		pkInfo, pkErr := d.getPrimaryKeyInfo(table)
+		if pkErr != nil {
+			return "", fmt.Errorf("failed to get primary key name for table %s: %w", table, pkErr)
 		}
+		components.PrimaryKeyName = pkInfo.name
+		components.PrimaryKeyPeriod = pkInfo.period
 	}
 	components.IndexDefs, err = d.getIndexDefs(table)
 	if err != nil {
@@ -789,7 +813,20 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 	}
 	if len(components.PrimaryKeyCols) > 0 {
 		fmt.Fprint(&queryBuilder, ",\n"+indent)
-		fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", d.quoteIdent(components.PrimaryKeyName), strings.Join(components.PrimaryKeyCols, "\", \""))
+		if components.PrimaryKeyPeriod {
+			lastIdx := len(components.PrimaryKeyCols) - 1
+			var quotedCols []string
+			for i, col := range components.PrimaryKeyCols {
+				quoted := fmt.Sprintf("\"%s\"", col)
+				if i == lastIdx {
+					quoted += " WITHOUT OVERLAPS"
+				}
+				quotedCols = append(quotedCols, quoted)
+			}
+			fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (%s)", d.quoteIdent(components.PrimaryKeyName), strings.Join(quotedCols, ", "))
+		} else {
+			fmt.Fprintf(&queryBuilder, "CONSTRAINT %s PRIMARY KEY (\"%s\")", d.quoteIdent(components.PrimaryKeyName), strings.Join(components.PrimaryKeyCols, "\", \""))
+		}
 	}
 
 	for _, check := range components.CheckConstraints {
@@ -1187,35 +1224,54 @@ WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$
 	return columnNames, nil
 }
 
-func (d *PostgresDatabase) getPrimaryKeyName(table string) (Ident, error) {
+type primaryKeyInfo struct {
+	name   Ident
+	period bool
+}
+
+func (d *PostgresDatabase) getPrimaryKeyInfo(table string) (primaryKeyInfo, error) {
 	schema, table := splitTableName(table, d.GetDefaultSchema())
 	tableWithSchema := fmt.Sprintf("%s.%s", forceQuoteIdentifier(schema), forceQuoteIdentifier(table))
+
+	var selectCols string
+	if d.supportsConperiod() {
+		selectCols = "conname, conperiod"
+	} else {
+		selectCols = "conname, false"
+	}
 	query := fmt.Sprintf(`
-		SELECT conname
+		SELECT %s
 		FROM pg_constraint
 		WHERE conrelid = '%s'::regclass AND contype = 'p'
-	`, tableWithSchema)
+	`, selectCols, tableWithSchema)
 	rows, err := d.db.Query(query)
 	if err != nil {
-		return Ident{}, err
+		return primaryKeyInfo{}, err
 	}
 	defer rows.Close()
 
 	var keyName string
+	var period bool
 	if rows.Next() {
-		err = rows.Scan(&keyName)
+		err = rows.Scan(&keyName, &period)
 		if err != nil {
-			return Ident{}, err
+			return primaryKeyInfo{}, err
 		}
 	} else {
-		return Ident{}, err
+		return primaryKeyInfo{}, err
 	}
-	return NewIdentWithQuoteDetected(keyName), nil
+	return primaryKeyInfo{name: NewIdentWithQuoteDetected(keyName), period: period}, nil
 }
 
 // refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d
 func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
-	const query = `SELECT
+	var periodCol string
+	if d.supportsConperiod() {
+		periodCol = "c.conperiod"
+	} else {
+		periodCol = "false"
+	}
+	query := fmt.Sprintf(`SELECT
 		nc.nspname AS constraint_schema,
 		n1.nspname AS table_schema,
 		c.conname  AS constraint_name,
@@ -1239,7 +1295,8 @@ func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 			WHEN 'a' THEN 'NO ACTION'
 		END AS foreign_delete_rule,
 		c.condeferrable AS deferrable,
-		c.condeferred AS initially_deferred
+		c.condeferred AS initially_deferred,
+		%s AS period
 	FROM pg_constraint      AS c
 	INNER JOIN pg_namespace AS nc ON nc.oid = c.connamespace
 	INNER JOIN pg_class     AS r1 ON r1.oid = c.conrelid
@@ -1255,7 +1312,7 @@ func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 		AND a2.attnum   = k.key2
 	WHERE c.contype = 'f' AND n1.nspname = $1 AND r1.relname = $2
 	ORDER BY constraint_schema, constraint_name, k.ordinality
-	`
+	`, periodCol)
 	schema, table := splitTableName(table, d.GetDefaultSchema())
 	rows, err := d.db.Query(query, schema, table)
 	if err != nil {
@@ -1269,15 +1326,15 @@ func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 	type constraint struct {
 		tableSchema, constraintName, tableName, foreignTableSchema, foreignTableName, foreignUpdateRule, foreignDeleteRule string
 		columns, foreignColumns                                                                                            []string
-		deferrable, initiallyDeferred                                                                                      bool
+		deferrable, initiallyDeferred, period                                                                              bool
 	}
 
 	constraints := make(map[identifier]constraint)
 
 	for rows.Next() {
 		var constraintSchema, tableSchema, constraintName, tableName, columnName, foreignTableSchema, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule string
-		var deferrable, initiallyDeferred bool
-		err = rows.Scan(&constraintSchema, &tableSchema, &constraintName, &tableName, &columnName, &foreignTableSchema, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule, &deferrable, &initiallyDeferred)
+		var deferrable, initiallyDeferred, period bool
+		err = rows.Scan(&constraintSchema, &tableSchema, &constraintName, &tableName, &columnName, &foreignTableSchema, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule, &deferrable, &initiallyDeferred, &period)
 		if err != nil {
 			return nil, err
 		}
@@ -1286,7 +1343,7 @@ func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 			constraints[key] = constraint{
 				tableSchema, constraintName, tableName, foreignTableSchema, foreignTableName, foreignUpdateRule, foreignDeleteRule,
 				[]string{}, []string{},
-				deferrable, initiallyDeferred,
+				deferrable, initiallyDeferred, period,
 			}
 		}
 		c := constraints[key]
@@ -1311,11 +1368,19 @@ func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
 		c := constraints[key]
 		var escapedColumns []string
 		for i := range c.columns {
-			escapedColumns = append(escapedColumns, d.quoteIdentifierIfNeeded(c.columns[i]))
+			escaped := d.quoteIdentifierIfNeeded(c.columns[i])
+			if c.period && i == len(c.columns)-1 {
+				escaped = "PERIOD " + escaped
+			}
+			escapedColumns = append(escapedColumns, escaped)
 		}
 		var escapedForeignColumns []string
 		for i := range c.foreignColumns {
-			escapedForeignColumns = append(escapedForeignColumns, d.quoteIdentifierIfNeeded(c.foreignColumns[i]))
+			escaped := d.quoteIdentifierIfNeeded(c.foreignColumns[i])
+			if c.period && i == len(c.foreignColumns)-1 {
+				escaped = "PERIOD " + escaped
+			}
+			escapedForeignColumns = append(escapedForeignColumns, escaped)
 		}
 		var constraintOptions string
 		if c.deferrable {

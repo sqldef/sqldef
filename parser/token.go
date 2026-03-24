@@ -371,6 +371,7 @@ var keywords = map[string]int{
 	"parallel":               PARALLEL,
 	"parser":                 PARSER,
 	"partial":                PARTIAL,
+	"period":                 PERIOD,
 	"partition":              PARTITION,
 	"partitions":             PARTITIONS,
 	"permissive":             PERMISSIVE,

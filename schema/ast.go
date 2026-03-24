@@ -266,10 +266,11 @@ type Index struct {
 }
 
 type IndexColumn struct {
-	columnExpr    parser.Expr // never nil as it's always initialized in the parser
-	length        *int
-	direction     string
-	operatorClass string
+	columnExpr      parser.Expr // never nil as it's always initialized in the parser
+	length          *int
+	direction       string
+	operatorClass   string
+	withoutOverlaps bool
 }
 
 // ColumnName returns the column name if this is a simple column reference.
@@ -315,6 +316,7 @@ type ForeignKey struct {
 	onUpdate           string
 	notForReplication  bool
 	constraintOptions  *ConstraintOptions
+	period             bool
 }
 
 type Exclusion struct {

@@ -148,14 +148,14 @@ func TestCreatePolicyWithPgquery(t *testing.T) {
 	t.Setenv("PSQLDEF_PARSER", "pgquery")
 
 	tests := []struct {
-		name            string
-		sql             string
-		wantTable       string
-		wantPermissive  parser.Permissive
-		wantScope       string
-		wantRoles       []string
-		wantUsing       string
-		wantWithCheck   string
+		name           string
+		sql            string
+		wantTable      string
+		wantPermissive parser.Permissive
+		wantScope      string
+		wantRoles      []string
+		wantUsing      string
+		wantWithCheck  string
 	}{
 		{
 			name: "permissive policy with public role and predicates",
