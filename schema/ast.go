@@ -266,10 +266,11 @@ type Index struct {
 }
 
 type IndexColumn struct {
-	columnExpr      parser.Expr // never nil as it's always initialized in the parser
-	length          *int
-	direction       string
-	operatorClass   string
+	columnExpr    parser.Expr // never nil as it's always initialized in the parser
+	length        *int
+	direction     string
+	operatorClass string
+
 	withoutOverlaps bool
 }
 

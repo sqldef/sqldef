@@ -746,9 +746,9 @@ func (d *PostgresDatabase) exportTableDDL(table string) (string, error) {
 	}
 	// if pkey cols exist, retrieve the pkey name
 	if len(components.PrimaryKeyCols) > 0 {
-		pkInfo, pkErr := d.getPrimaryKeyInfo(table)
-		if pkErr != nil {
-			return "", fmt.Errorf("failed to get primary key name for table %s: %w", table, pkErr)
+		pkInfo, err := d.getPrimaryKeyInfo(table)
+		if err != nil {
+			return "", fmt.Errorf("failed to get primary key name for table %s: %w", table, err)
 		}
 		components.PrimaryKeyName = pkInfo.name
 		components.PrimaryKeyPeriod = pkInfo.period

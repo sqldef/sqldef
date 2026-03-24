@@ -1053,13 +1053,14 @@ type IndexColumnsOrExpression struct {
 
 // IndexColumn describes a column in an index definition with optional length
 type IndexColumn struct {
-	Column          Ident
-	Length          *SQLVal
-	Direction       string
-	NullsOrdering   string // "first" or "last" for NULLS FIRST/LAST
-	Collation       string // Collation name for COLLATE
-	OperatorClass   string
-	Expression      Expr // For functional indexes like ((CASE WHEN ...))
+	Column        Ident
+	Length        *SQLVal
+	Direction     string
+	NullsOrdering string // "first" or "last" for NULLS FIRST/LAST
+	Collation     string // Collation name for COLLATE
+	OperatorClass string
+	Expression    Expr // For functional indexes like ((CASE WHEN ...))
+
 	WithoutOverlaps bool // For PostgreSQL 18+ temporal PRIMARY KEY / UNIQUE constraints
 }
 
