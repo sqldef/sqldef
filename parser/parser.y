@@ -455,7 +455,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <str> index_or_key
 %type <str> equal_opt
 %type <TableSpec> table_spec table_column_list
-%type <str> table_opt_name table_opt_value
+%type <str> table_opt_name table_opt_value sqlite3_table_opt
 %type <tableOptions> table_option_list
 %type <indexInfo> index_info
 %type <indexColumn> index_column
@@ -3109,6 +3109,10 @@ column_type:
     // Custom type (e.g., domain name) - preserve quote information in TypeIdent
     $$ = ColumnType{Type: $1.Name, TypeIdent: $1}
   }
+| ANY
+  {
+    $$ = ColumnType{Type: "ANY"}
+  }
 | STRING '.' STRING
   {
     $$ = ColumnType{Type: $1 + "." + $3}
@@ -5069,16 +5073,23 @@ table_option_list:
 /* For SQLite3 // SQLite Syntax: table-options https://www.sqlite.org/syntax/table-options.html */
 | sqlite3_table_opt
   {
-    $$ = map[string]string{}
+    $$ = map[string]string{$1: ""}
   }
 | table_option_list ',' sqlite3_table_opt
   {
     $$ = $1
+    $$[$3] = ""
   }
 
 sqlite3_table_opt:
-  WITHOUT ROWID {}
-| STRICT {}
+  WITHOUT ROWID
+  {
+    $$ = "WITHOUT ROWID"
+  }
+| STRICT
+  {
+    $$ = "STRICT"
+  }
 
 table_opt_name:
   reserved_sql_id

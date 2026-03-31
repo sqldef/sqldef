@@ -126,6 +126,51 @@ TableOptions:
       id integer PRIMARY KEY,
       data text
     ) STRICT, WITHOUT ROWID;
+  legacy_ignore_quotes: false
+StrictTableWithAnyType:
+  desired: |
+    CREATE TABLE flexible(
+      id integer PRIMARY KEY,
+      name text NOT NULL,
+      data ANY
+    ) STRICT;
+  legacy_ignore_quotes: false
+AddColumnToStrictTable:
+  current: |
+    CREATE TABLE config(
+      id integer PRIMARY KEY
+    ) STRICT;
+  desired: |
+    CREATE TABLE config(
+      id integer PRIMARY KEY,
+      payload ANY
+    ) STRICT;
+  up: |
+    ALTER TABLE config ADD COLUMN payload ANY;
+  down: |
+    ALTER TABLE config DROP COLUMN payload;
+  legacy_ignore_quotes: false
+WithoutRowidOnly:
+  desired: |
+    CREATE TABLE lookup(
+      name text PRIMARY KEY,
+      data text
+    ) WITHOUT ROWID;
+  legacy_ignore_quotes: false
+StrictWithoutRowidAndAnyType:
+  desired: |
+    CREATE TABLE kv(
+      id integer PRIMARY KEY,
+      data ANY
+    ) STRICT, WITHOUT ROWID;
+  legacy_ignore_quotes: false
+StrictOnly:
+  desired: |
+    CREATE TABLE items(
+      id integer PRIMARY KEY,
+      name text
+    ) STRICT;
+  legacy_ignore_quotes: false
 ForeignKeyConstraint:
   desired: |
     CREATE TABLE artist(

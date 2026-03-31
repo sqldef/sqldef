@@ -18,6 +18,7 @@ package parser
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -741,11 +742,21 @@ func (ts *TableSpec) Format(buf *nodeBuffer) {
 		buf.Printf(",\n\t%v", idx)
 	}
 
-	var options strings.Builder
+	var kvOptions strings.Builder
+	var sqliteOpts []string
 	for key, value := range ts.Options {
-		options.WriteString(" " + key + "=" + value)
+		if value == "" {
+			sqliteOpts = append(sqliteOpts, key)
+		} else {
+			kvOptions.WriteString(" " + key + "=" + value)
+		}
 	}
-	buf.Printf("\n)%s", strings.ReplaceAll(options.String(), ", ", ",\n  "))
+	if len(sqliteOpts) > 0 {
+		sort.Strings(sqliteOpts)
+		buf.Printf("\n) %s", strings.Join(sqliteOpts, ", "))
+	} else {
+		buf.Printf("\n)%s", strings.ReplaceAll(kvOptions.String(), ", ", ",\n  "))
+	}
 	if ts.Partition != nil {
 		buf.Printf("\n")
 		ts.Partition.Format(buf)
