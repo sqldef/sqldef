@@ -730,6 +730,48 @@ func TestDefaultFunctionExpressions(t *testing.T) {
 	}
 }
 
+func TestSQLiteTableOptions(t *testing.T) {
+	testCases := []struct {
+		name string
+		sql  string
+		want string
+	}{
+		{
+			"strict",
+			"CREATE TABLE t (id integer PRIMARY KEY) STRICT",
+			"create table t (\n\tid integer primary key\n) STRICT",
+		},
+		{
+			"without rowid",
+			"CREATE TABLE t (id integer PRIMARY KEY) WITHOUT ROWID",
+			"create table t (\n\tid integer primary key\n) WITHOUT ROWID",
+		},
+		{
+			"strict and without rowid",
+			"CREATE TABLE t (id integer PRIMARY KEY, data text) STRICT, WITHOUT ROWID",
+			"create table t (\n\tid integer primary key,\n\tdata text\n) STRICT, WITHOUT ROWID",
+		},
+		{
+			"any type in strict table",
+			"CREATE TABLE t (id integer PRIMARY KEY, data ANY) STRICT",
+			"create table t (\n\tid integer primary key,\n\tdata ANY\n) STRICT",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := ParseDDL(tc.sql, ParserModeSQLite3)
+			if err != nil {
+				t.Fatalf("parse error: %v", err)
+			}
+			got := String(tree)
+			if got != tc.want {
+				t.Errorf("got:\n%s\nwant:\n%s", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCreatePolicyPredicates(t *testing.T) {
 	testCases := []string{
 		"CREATE POLICY p ON t AS PERMISSIVE FOR ALL TO public USING (current_schema() = current_database())",
