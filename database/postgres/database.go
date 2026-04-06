@@ -1409,19 +1409,19 @@ func (d *PostgresDatabase) getComments(table string) ([]string, error) {
 
 	// Column comments
 	columnRows, err := d.db.Query(`
-		select
-			c.column_name, pgd.description
-		from pg_catalog.pg_statio_all_tables as st
-		inner join pg_catalog.pg_description pgd on (
-			pgd.objoid = st.relid
-		)
-		inner join information_schema.columns c on (
-			pgd.objsubid   = c.ordinal_position and
-			c.table_schema = st.schemaname and
-			c.table_name   = st.relname and
-			c.table_schema = $1 and
-			st.relname = $2
-		);
+		SELECT
+			a.attname AS column_name,
+			col_description(a.attrelid, a.attnum) AS comment
+		FROM pg_catalog.pg_attribute a
+		JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind IN ('r', 'p')
+		  AND n.nspname = $1
+		  AND c.relname = $2
+		  AND a.attnum > 0
+		  AND NOT a.attisdropped
+		  AND col_description(a.attrelid, a.attnum) IS NOT NULL
+		ORDER BY a.attnum;
 	`, schema, table)
 	if err != nil {
 		return nil, err

@@ -273,6 +273,30 @@ func TestExtensionOIDCollisionForFunctions(t *testing.T) {
 		funcOID, pgTypeClassID)
 }
 
+func TestExportDDLsIncludesColumnComments(t *testing.T) {
+	db := setupTestDatabase(t)
+	defer db.Close()
+
+	_, err := db.DB().Exec(`
+		CREATE TABLE comment_target (
+			id bigint PRIMARY KEY,
+			note text
+		);
+		COMMENT ON COLUMN comment_target.id IS 'identifier';
+		COMMENT ON COLUMN comment_target.note IS 'memo';
+	`)
+	require.NoError(t, err)
+
+	db.SetGeneratorConfig(database.GeneratorConfig{
+		LegacyIgnoreQuotes: true,
+	})
+	exported, err := db.ExportDDLs()
+	require.NoError(t, err)
+
+	assert.Contains(t, exported, `COMMENT ON COLUMN "public"."comment_target"."id" IS 'identifier';`)
+	assert.Contains(t, exported, `COMMENT ON COLUMN "public"."comment_target"."note" IS 'memo';`)
+}
+
 // Helper functions
 
 func setupTestDatabase(t *testing.T) *PostgresDatabase {
