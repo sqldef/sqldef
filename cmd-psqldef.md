@@ -23,6 +23,8 @@ Application Options:
       --skip-view             Skip managing views/materialized views
       --skip-extension        Skip managing extensions
       --skip-partition        Skip managing partitioned tables
+      --disable-ddl-transaction
+                              Execute DDL statements outside a transaction block
       --before-apply=SQL      Execute the given string before applying the regular DDLs
       --config=PATH           YAML configuration file (can be specified multiple times)
       --config-inline=YAML    YAML configuration as inline string (can be specified multiple times)
@@ -139,7 +141,12 @@ $ psqldef -U postgres test --apply --config-inline="managed_roles: [readonly_use
 
 # Multiple configs (later values override earlier ones)
 $ psqldef -U postgres test --apply --config=base.yml --config-inline="skip_tables: archived_.*" < schema.sql
+
+# Execute DDLs outside a transaction block
+$ psqldef -U postgres test --apply --disable-ddl-transaction < schema.sql
 ```
+
+Use `--disable-ddl-transaction` for PostgreSQL-compatible databases that reject multiple DDL statements in one transaction block, such as Aurora DSQL. This flag is equivalent to `--config-inline "disable_ddl_transaction: true"`.
 
 ## Offline Mode (File-to-File Comparison)
 
@@ -566,4 +573,3 @@ Or to adopt the new behavior early:
 # config.yml - opt-in to quote-aware mode
 legacy_ignore_quotes: false
 ```
-

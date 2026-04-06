@@ -1033,6 +1033,20 @@ func TestPsqldefHelp(t *testing.T) {
 	}
 }
 
+func TestParseOptionsDisableDdlTransactionFlag(t *testing.T) {
+	dbConfig, options := parseOptions([]string{"testdb", "--export", "--disable-ddl-transaction"})
+
+	assert.True(t, dbConfig.DisableDdlTransaction)
+	assert.True(t, options.Config.DisableDdlTransaction)
+}
+
+func TestParseOptionsDisableDdlTransactionFlagOverridesConfig(t *testing.T) {
+	dbConfig, options := parseOptions([]string{"testdb", "--export", "--config-inline", "disable_ddl_transaction: false", "--disable-ddl-transaction"})
+
+	assert.True(t, dbConfig.DisableDdlTransaction)
+	assert.True(t, options.Config.DisableDdlTransaction)
+}
+
 func TestPsqldefTransactionBoundariesWithConcurrentIndex(t *testing.T) {
 	resetTestDatabase()
 
@@ -1239,6 +1253,31 @@ func TestPsqldefReindexConcurrently(t *testing.T) {
 }
 
 func TestPsqldefDisableDdlTransaction(t *testing.T) {
+	// Test: CLI flag exposes the same behavior as disable_ddl_transaction config
+	t.Run("AllDDLsOutsideTransactionByFlag", func(t *testing.T) {
+		resetTestDatabase()
+		mustPgExec(testDatabaseName, tu.StripHeredoc(`
+			CREATE TABLE users (
+			    id bigint NOT NULL PRIMARY KEY,
+			    email text
+			);`))
+
+		tu.WriteFile("schema.sql", tu.StripHeredoc(`
+			CREATE TABLE users (
+			    id bigint NOT NULL PRIMARY KEY,
+			    email text,
+			    name text
+			);
+			CREATE INDEX idx_users_email ON users (email);`))
+
+		output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--disable-ddl-transaction", "--file", "schema.sql")...)
+
+		assert.NotContains(t, output, "BEGIN;")
+		assert.NotContains(t, output, "COMMIT;")
+		assert.Contains(t, output, `ALTER TABLE "public"."users" ADD COLUMN "name" text;`)
+		assert.Contains(t, output, `CREATE INDEX idx_users_email ON users (email);`)
+	})
+
 	// Test: With disable_ddl_transaction enabled, all DDLs run outside transaction
 	t.Run("AllDDLsOutsideTransaction", func(t *testing.T) {
 		resetTestDatabase()
@@ -1340,6 +1379,47 @@ func TestPsqldefDisableDdlTransaction(t *testing.T) {
 		assert.Equal(t, strings.Replace(apply, "Apply", "dry run", 1), dryRun)
 		assert.NotContains(t, dryRun, "BEGIN;")
 		assert.NotContains(t, dryRun, "COMMIT;")
+	})
+
+	t.Run("DryRunWithDisableDdlTransactionByFlag", func(t *testing.T) {
+		resetTestDatabase()
+		mustPgExec(testDatabaseName, tu.StripHeredoc(`
+			CREATE TABLE users (
+			    id bigint NOT NULL PRIMARY KEY
+			);`))
+
+		tu.WriteFile("schema.sql", tu.StripHeredoc(`
+			CREATE TABLE users (
+			    id bigint NOT NULL PRIMARY KEY,
+			    status text
+			);`))
+
+		dryRun := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--disable-ddl-transaction", "--dry-run", "--file", "schema.sql")...)
+		apply := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--disable-ddl-transaction", "--file", "schema.sql")...)
+
+		assert.Equal(t, strings.Replace(apply, "Apply", "dry run", 1), dryRun)
+		assert.NotContains(t, dryRun, "BEGIN;")
+		assert.NotContains(t, dryRun, "COMMIT;")
+	})
+
+	t.Run("FlagTakesPrecedenceOverConfigInline", func(t *testing.T) {
+		resetTestDatabase()
+		mustPgExec(testDatabaseName, tu.StripHeredoc(`
+			CREATE TABLE users (
+			    id bigint NOT NULL PRIMARY KEY
+			);`))
+
+		tu.WriteFile("schema.sql", tu.StripHeredoc(`
+			CREATE TABLE users (
+			    id bigint NOT NULL PRIMARY KEY,
+			    status text
+			);`))
+
+		output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--config-inline", "disable_ddl_transaction: false", "--disable-ddl-transaction", "--file", "schema.sql")...)
+
+		assert.NotContains(t, output, "BEGIN;")
+		assert.NotContains(t, output, "COMMIT;")
+		assert.Contains(t, output, `ALTER TABLE "public"."users" ADD COLUMN "status" text;`)
 	})
 }
 

@@ -26,20 +26,21 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	configs := []database.GeneratorConfig{defaultConfig}
 
 	var opts struct {
-		User          string   `short:"U" long:"user" description:"PostgreSQL user name" value-name:"USERNAME" default:"postgres"`
-		Password      string   `short:"W" long:"password" description:"PostgreSQL user password, overridden by $PGPASSWORD" value-name:"PASSWORD"`
-		Host          string   `short:"h" long:"host" description:"Host or socket directory to connect to the PostgreSQL server" value-name:"HOSTNAME" default:"127.0.0.1"`
-		Port          uint     `short:"p" long:"port" description:"Port used for the connection" value-name:"PORT" default:"5432"`
-		Prompt        bool     `long:"password-prompt" description:"Force PostgreSQL user password prompt"`
-		File          []string `short:"f" long:"file" description:"Read desired SQL from the file, rather than stdin" value-name:"FILENAME" default:"-"`
-		DryRun        bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
-		Apply         bool     `long:"apply" description:"Apply DDLs to the database (default, but will require this flag in future versions)"`
-		Export        bool     `long:"export" description:"Just dump the current schema to stdout"`
-		EnableDrop    bool     `long:"enable-drop" description:"Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE"`
-		SkipView      bool     `long:"skip-view" description:"Skip managing views/materialized views"`
-		SkipExtension bool     `long:"skip-extension" description:"Skip managing extensions"`
-		SkipPartition bool     `long:"skip-partition" description:"Skip managing partitioned tables"`
-		BeforeApply   string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs" value-name:"SQL"`
+		User                  string   `short:"U" long:"user" description:"PostgreSQL user name" value-name:"USERNAME" default:"postgres"`
+		Password              string   `short:"W" long:"password" description:"PostgreSQL user password, overridden by $PGPASSWORD" value-name:"PASSWORD"`
+		Host                  string   `short:"h" long:"host" description:"Host or socket directory to connect to the PostgreSQL server" value-name:"HOSTNAME" default:"127.0.0.1"`
+		Port                  uint     `short:"p" long:"port" description:"Port used for the connection" value-name:"PORT" default:"5432"`
+		Prompt                bool     `long:"password-prompt" description:"Force PostgreSQL user password prompt"`
+		File                  []string `short:"f" long:"file" description:"Read desired SQL from the file, rather than stdin" value-name:"FILENAME" default:"-"`
+		DryRun                bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
+		Apply                 bool     `long:"apply" description:"Apply DDLs to the database (default, but will require this flag in future versions)"`
+		Export                bool     `long:"export" description:"Just dump the current schema to stdout"`
+		EnableDrop            bool     `long:"enable-drop" description:"Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE"`
+		SkipView              bool     `long:"skip-view" description:"Skip managing views/materialized views"`
+		SkipExtension         bool     `long:"skip-extension" description:"Skip managing extensions"`
+		SkipPartition         bool     `long:"skip-partition" description:"Skip managing partitioned tables"`
+		DisableDdlTransaction bool     `long:"disable-ddl-transaction" description:"Execute DDL statements outside a transaction block"`
+		BeforeApply           string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs" value-name:"SQL"`
 
 		// Custom handlers for config flags to preserve order
 		Config       func(string) `long:"config" description:"YAML configuration file (can be specified multiple times)" value-name:"PATH"`
@@ -92,6 +93,9 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 
 	if opts.EnableDrop {
 		config.EnableDrop = true
+	}
+	if opts.DisableDdlTransaction {
+		config.DisableDdlTransaction = true
 	}
 
 	options := sqldef.Options{
