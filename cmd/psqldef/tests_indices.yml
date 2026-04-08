@@ -507,6 +507,20 @@ PartialIndexWithWhereNotIn:
     CREATE INDEX idx_non_cancelled ON orders (id)
     WHERE status NOT IN ('cancelled', 'deleted');
 
+PartialIndexWithWhereInUnsorted:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE UNIQUE INDEX uk_orders_status ON orders (id)
+    WHERE status IN ('pending', 'active');
+
+PartialIndexWithWhereNotInUnsorted:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE INDEX idx_non_cancelled ON orders (id)
+    WHERE status NOT IN ('deleted', 'cancelled');
+
 IndexWithNullsNotDistinct:
   legacy_ignore_quotes: false
   min_version: "15"

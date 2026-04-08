@@ -767,13 +767,13 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			}
 		}
 
-		// For existing ANY/ALL expressions, normalize the array elements.
+		// For existing ANY/ALL expressions, normalize and sort the array elements.
 		if anyFlag || allFlag {
 			if arrayConst, ok := right.(*parser.ArrayConstructor); ok {
 				normalizedElements := util.TransformSlice(arrayConst.Elements, func(elem parser.Expr) parser.Expr {
 					return normalizeExpr(elem, mode)
 				})
-				right = &parser.ArrayConstructor{Elements: normalizedElements}
+				right = &parser.ArrayConstructor{Elements: sortAndDeduplicateValues(normalizedElements)}
 			}
 		}
 

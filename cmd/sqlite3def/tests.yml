@@ -425,6 +425,16 @@ PartialIndexWithWhereNotIn:
     CREATE TABLE orders (id integer, status text);
     CREATE INDEX idx_non_cancelled ON orders (id)
     WHERE status NOT IN ('cancelled', 'deleted');
+PartialIndexWithWhereInUnsorted:
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE INDEX idx_active ON orders (id)
+    WHERE status IN ('pending', 'active');
+PartialIndexWithWhereNotInUnsorted:
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE INDEX idx_non_cancelled ON orders (id)
+    WHERE status NOT IN ('deleted', 'cancelled');
 NumericDecimalWithoutPrecision:
   current: |
     CREATE TABLE test (
