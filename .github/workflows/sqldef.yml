@@ -127,7 +127,7 @@ jobs:
           echo "name=${NAME}" >> $GITHUB_OUTPUT
 
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v7.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: coverage-${{ steps.coverage-name.outputs.name }}
           path: coverage.out
@@ -160,7 +160,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Download all coverage artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           pattern: coverage-*
           path: coverage-reports
@@ -192,7 +192,7 @@ jobs:
           go tool cover -func=coverage.out | tail -1
 
       - name: Upload coverage to codecov.io
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5.5.4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.out
