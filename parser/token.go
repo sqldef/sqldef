@@ -1343,10 +1343,10 @@ func extractTiDBComment(comment string) (string, bool) {
 	}
 	feature := inner[3:closeBracket]
 	switch feature {
-	case "auto_rand", "auto_id_cache":
+	case "auto_rand", "auto_id_cache", "clustered_index":
 		// Supported features: expand the inner SQL into the token stream
 	default:
-		// Unsupported features (e.g. clustered_index): ignore
+		// Unsupported features: ignore
 		return "", false
 	}
 	sql := strings.TrimSpace(inner[closeBracket+1:])

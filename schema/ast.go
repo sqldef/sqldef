@@ -259,7 +259,7 @@ type Index struct {
 	constraintOptions *ConstraintOptions
 	where             parser.Expr    // for Postgres `Partial Indexes`
 	included          []string       // for MSSQL
-	clustered         bool           // for MSSQL
+	clustered         *bool          // nil=unspecified, true=CLUSTERED, false=NONCLUSTERED
 	partition         IndexPartition // for MSSQL
 	options           []IndexOption
 	renamedFrom       Ident // Previous index name if renamed via @renamed annotation
@@ -612,8 +612,20 @@ func (t *Table) PrimaryKey() *Index {
 		columns:   primaryColumns,
 		primary:   true,
 		unique:    true,
-		clustered: true,
+		clustered: new(true),
 	}
+}
+
+//go:fix inline
+func boolPtr(b bool) *bool { return new(b) }
+
+// clusteredBoolToPtr converts a plain bool (from IndexSpec.Clustered) to *bool.
+// true → &true, false → nil (treat as unspecified).
+func clusteredBoolToPtr(b bool) *bool {
+	if b {
+		return new(true)
+	}
+	return nil
 }
 
 func (keyOption ColumnKeyOption) isUnique() bool {

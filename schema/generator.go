@@ -1319,6 +1319,15 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		}
 	}
 
+	// Warn if CLUSTERED/NONCLUSTERED attribute differs (immutable after creation).
+	// Only warn when both sides have an explicit clustered attribute (non-nil).
+	if g.mode == GeneratorModeMysql && currentPrimaryKey != nil && desiredPrimaryKey != nil &&
+		currentPrimaryKey.clustered != nil && desiredPrimaryKey.clustered != nil &&
+		*currentPrimaryKey.clustered != *desiredPrimaryKey.clustered {
+		ddls = append(ddls, fmt.Sprintf("-- Warning: CLUSTERED/NONCLUSTERED attribute of PRIMARY KEY on %s differs but cannot be changed after table creation",
+			g.escapeTableName(&desired.table)))
+	}
+
 	// Examine primary key
 	if primaryKeysChanged {
 		// Check if there are foreign keys referencing this table's primary key
@@ -3081,8 +3090,12 @@ func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 	if index.unique {
 		uniqueOption = " UNIQUE"
 	}
-	if index.clustered {
-		clusteredOption = " CLUSTERED"
+	if index.clustered != nil {
+		if *index.clustered {
+			clusteredOption = " CLUSTERED"
+		} else {
+			clusteredOption = " NONCLUSTERED"
+		}
 	} else {
 		clusteredOption = " NONCLUSTERED"
 	}

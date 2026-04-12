@@ -218,7 +218,7 @@ func (p PostgresParser) parseCreateStmt(stmt *pgquery.CreateStmt) (parser.Statem
 						Name:      parser.NewIdent(node.Constraint.Conname, false),
 						Unique:    true,
 						Primary:   true,
-						Clustered: true,
+						Clustered: parser.OptBoolTrue(),
 					},
 					Columns: indexCols,
 					Options: []*parser.IndexOption{},

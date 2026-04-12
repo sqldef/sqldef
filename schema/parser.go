@@ -590,7 +590,7 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			primary:   indexDef.Info.Primary,
 			unique:    indexDef.Info.Unique,
 			vector:    indexDef.Info.Vector,
-			clustered: bool(indexDef.Info.Clustered),
+			clustered: indexDef.Info.Clustered,
 			options:   indexOptions,
 			partition: indexPartition,
 
@@ -786,7 +786,7 @@ func parseIndex(stmt *parser.DDL, rawDDL string, mode GeneratorMode) (Index, err
 		async:             stmt.IndexSpec.Async,
 		concurrently:      stmt.IndexSpec.Concurrently,
 		constraintOptions: constraintOptions,
-		clustered:         stmt.IndexSpec.Clustered,
+		clustered:         clusteredBoolToPtr(stmt.IndexSpec.Clustered),
 		where:             where,
 		included:          includedColumns,
 		options:           indexOptions,
