@@ -3096,8 +3096,6 @@ func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 		} else {
 			clusteredOption = " NONCLUSTERED"
 		}
-	} else if g.mode == GeneratorModeMssql {
-		clusteredOption = " CLUSTERED"
 	} else {
 		clusteredOption = " NONCLUSTERED"
 	}

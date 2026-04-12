@@ -612,7 +612,7 @@ func (t *Table) PrimaryKey() *Index {
 		columns:   primaryColumns,
 		primary:   true,
 		unique:    true,
-		clustered: nil,
+		clustered: new(true),
 	}
 }
 
