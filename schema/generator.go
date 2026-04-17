@@ -5117,6 +5117,12 @@ func (g *Generator) areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 	if !g.qualifiedNamesEqual(triggerA.tableName, triggerB.tableName) {
 		return false
 	}
+	// Compare WHEN conditions
+	whenA := strings.ReplaceAll(strings.ToLower(triggerA.whenCondition), " ", "")
+	whenB := strings.ReplaceAll(strings.ToLower(triggerB.whenCondition), " ", "")
+	if whenA != whenB {
+		return false
+	}
 	if len(triggerA.body) != len(triggerB.body) {
 		return false
 	}

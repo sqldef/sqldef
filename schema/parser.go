@@ -183,13 +183,19 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				}
 			})
 
+			var whenCondition string
+			if stmt.Trigger.When != nil {
+				whenCondition = parser.String(stmt.Trigger.When)
+			}
+
 			return &Trigger{
-				statement: ddl,
-				name:      normalizeColNameToQualifiedName(mode, stmt.Trigger.Name, defaultSchema),
-				tableName: normalizeQualifiedName(mode, stmt.Trigger.TableName, defaultSchema),
-				time:      stmt.Trigger.Time,
-				event:     events,
-				body:      body,
+				statement:     ddl,
+				name:          normalizeColNameToQualifiedName(mode, stmt.Trigger.Name, defaultSchema),
+				tableName:     normalizeQualifiedName(mode, stmt.Trigger.TableName, defaultSchema),
+				time:          stmt.Trigger.Time,
+				event:         events,
+				whenCondition: whenCondition,
+				body:          body,
 			}, nil
 		} else if stmt.Action == parser.CreateFunction {
 			return &Function{
