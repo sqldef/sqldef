@@ -491,6 +491,20 @@ LEFT JOIN event_counts ec ON rd.product_id = ec.product_id`,
 	}
 }
 
+func TestNowFunctionInDefaultExpression(t *testing.T) {
+	sql := "CREATE TABLE test (pk timestamp primary key default now())"
+
+	statement, err := ParseDDL(sql, ParserModePostgres)
+	if err != nil {
+		t.Fatalf("failed to parse NOW() default expression: %v", err)
+	}
+
+	got := String(statement)
+	if got != "create table test (\n\tpk timestamp default(now()) primary key\n)" {
+		t.Fatalf("unexpected normalized SQL:\n%s", got)
+	}
+}
+
 // TestTypeKeywordsAsIndexColumns tests that type keywords (uuid, int, bigint, etc.)
 // can be used as unquoted column names in index definitions
 func TestTypeKeywordsAsIndexColumns(t *testing.T) {
@@ -593,6 +607,96 @@ func TestTypeKeywordsAsIndexColumns(t *testing.T) {
 	}
 }
 
+func TestAutoRandom(t *testing.T) {
+	testCases := []struct {
+		name      string
+		sql       string
+		shardBits int
+		rangeBits int
+	}{
+		{"bare", "CREATE TABLE t (id bigint AUTO_RANDOM, PRIMARY KEY (id))", 0, 0},
+		{"shard bits", "CREATE TABLE t (id bigint AUTO_RANDOM(5), PRIMARY KEY (id))", 5, 0},
+		{"shard and range", "CREATE TABLE t (id bigint AUTO_RANDOM(5, 54), PRIMARY KEY (id))", 5, 54},
+		{"tidb comment", "CREATE TABLE t (id bigint /*T![auto_rand] AUTO_RANDOM(5) */ NOT NULL, PRIMARY KEY (id))", 5, 0},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := ParseDDL(tc.sql, ParserModeMysql)
+			if err != nil {
+				t.Fatalf("parse error: %v", err)
+			}
+			ddl := tree.(*DDL)
+			col := ddl.TableSpec.Columns[0]
+			if !bool(col.Type.AutoRandom) {
+				t.Error("expected AutoRandom=true")
+			}
+			if col.Type.AutoRandomShardBits != tc.shardBits {
+				t.Errorf("expected ShardBits=%d, got %d", tc.shardBits, col.Type.AutoRandomShardBits)
+			}
+			if col.Type.AutoRandomRange != tc.rangeBits {
+				t.Errorf("expected Range=%d, got %d", tc.rangeBits, col.Type.AutoRandomRange)
+			}
+		})
+	}
+}
+
+func TestTiDBComments(t *testing.T) {
+	testCases := []struct {
+		name    string
+		sql     string
+		options map[string]string
+	}{
+		{
+			"clustered_index",
+			"CREATE TABLE t (id bigint NOT NULL, PRIMARY KEY (id) /*T![clustered_index] CLUSTERED */)",
+			nil,
+		},
+		{
+			"nonclustered_index",
+			"CREATE TABLE t (id bigint NOT NULL AUTO_INCREMENT, PRIMARY KEY (id) /*T![clustered_index] NONCLUSTERED */)",
+			nil,
+		},
+		{
+			"auto_id_cache",
+			"CREATE TABLE t (id bigint NOT NULL, PRIMARY KEY (id)) /*T![auto_id_cache] AUTO_ID_CACHE=1 */",
+			map[string]string{"AUTO_ID_CACHE": "1"},
+		},
+		{
+			"shard_row_id_bits",
+			"CREATE TABLE t (a int, b int) /*T! SHARD_ROW_ID_BITS=4 PRE_SPLIT_REGIONS=3 */",
+			map[string]string{"SHARD_ROW_ID_BITS": "4", "PRE_SPLIT_REGIONS": "3"},
+		},
+		{
+			"empty_ungated_comment",
+			"CREATE TABLE t (a int) /*T! */",
+			nil,
+		},
+		{
+			"unclosed_feature_bracket",
+			"CREATE TABLE t (a int) /*T![unclosed */",
+			nil,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := ParseDDL(tc.sql, ParserModeMysql)
+			if err != nil {
+				t.Fatalf("parse error: %v", err)
+			}
+			ddl := tree.(*DDL)
+			if ddl.TableSpec == nil {
+				t.Fatal("expected TableSpec")
+			}
+			for key, expected := range tc.options {
+				if actual := ddl.TableSpec.Options[key]; actual != expected {
+					t.Errorf("option %q: expected %q, got %q", key, expected, actual)
+				}
+			}
+		})
+	}
+}
+
 // TestInvalidCustomOperators tests that invalid PostgreSQL custom operators produce errors
 func TestInvalidCustomOperators(t *testing.T) {
 	testCases := []struct {
@@ -627,6 +731,100 @@ func TestInvalidCustomOperators(t *testing.T) {
 			_, err := ParseDDL(tc.sql, ParserModePostgres)
 			if err == nil {
 				t.Errorf("Expected parse error but got none.\n%s\nSQL: %s", tc.description, tc.sql)
+			}
+		})
+	}
+}
+
+func TestDefaultFunctionExpressions(t *testing.T) {
+	testCases := []struct {
+		name string
+		sql  string
+		mode ParserMode
+	}{
+		{
+			name: "MySQL JSON_ARRAY default wrapped in parentheses",
+			sql:  "CREATE TABLE t (id bigint, friend_ids JSON DEFAULT(JSON_ARRAY()))",
+			mode: ParserModeMysql,
+		},
+		{
+			name: "Postgres uuid_generate_v4 default",
+			sql:  "CREATE TABLE t (id uuid DEFAULT uuid_generate_v4())",
+			mode: ParserModePostgres,
+		},
+		{
+			name: "Postgres gen_random_uuid default",
+			sql:  "CREATE TABLE t (id uuid DEFAULT gen_random_uuid())",
+			mode: ParserModePostgres,
+		},
+		{
+			name: "Postgres now default stays a function call",
+			sql:  "CREATE TABLE t (created_at timestamp DEFAULT now())",
+			mode: ParserModePostgres,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := ParseDDL(tc.sql, tc.mode); err != nil {
+				t.Fatalf("ParseDDL(%q) failed: %v", tc.sql, err)
+			}
+		})
+	}
+}
+
+func TestSQLiteTableOptions(t *testing.T) {
+	testCases := []struct {
+		name string
+		sql  string
+		want string
+	}{
+		{
+			"strict",
+			"CREATE TABLE t (id integer PRIMARY KEY) STRICT",
+			"create table t (\n\tid integer primary key\n) STRICT",
+		},
+		{
+			"without rowid",
+			"CREATE TABLE t (id integer PRIMARY KEY) WITHOUT ROWID",
+			"create table t (\n\tid integer primary key\n) WITHOUT ROWID",
+		},
+		{
+			"strict and without rowid",
+			"CREATE TABLE t (id integer PRIMARY KEY, data text) STRICT, WITHOUT ROWID",
+			"create table t (\n\tid integer primary key,\n\tdata text\n) STRICT, WITHOUT ROWID",
+		},
+		{
+			"any type in strict table",
+			"CREATE TABLE t (id integer PRIMARY KEY, data ANY) STRICT",
+			"create table t (\n\tid integer primary key,\n\tdata ANY\n) STRICT",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := ParseDDL(tc.sql, ParserModeSQLite3)
+			if err != nil {
+				t.Fatalf("parse error: %v", err)
+			}
+			got := String(tree)
+			if got != tc.want {
+				t.Errorf("got:\n%s\nwant:\n%s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCreatePolicyPredicates(t *testing.T) {
+	testCases := []string{
+		"CREATE POLICY p ON t AS PERMISSIVE FOR ALL TO public USING (current_schema() = current_database())",
+		"CREATE POLICY p ON t AS PERMISSIVE FOR ALL TO public USING (current_schema()::uuid = current_database()::uuid)",
+	}
+
+	for _, sql := range testCases {
+		t.Run(sql, func(t *testing.T) {
+			if _, err := ParseDDL(sql, ParserModePostgres); err != nil {
+				t.Fatalf("ParseDDL(%q) failed: %v", sql, err)
 			}
 		})
 	}

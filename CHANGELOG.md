@@ -1,3 +1,44 @@
+## [v4.0.0](https://github.com/sqldef/sqldef/compare/v3.10.1...v4.0.0) - 2026-04-08
+- Support TiDB AUTO_RANDOM column attribute by @y-kawawa in https://github.com/sqldef/sqldef/pull/1149
+- sqlite3: support strict and without rowid by @dgllghr in https://github.com/sqldef/sqldef/pull/1166
+- build(deps): bump golang.org/x/term from 0.40.0 to 0.41.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1175
+- build(deps): bump actions/upload-artifact from 6.0.0 to 7.0.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1168
+- build(deps): bump actions/create-github-app-token from 2.2.1 to 3.0.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1170
+- build(deps): bump github.com/lib/pq from 1.11.2 to 1.12.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1171
+- build(deps): bump golang.org/x/sync from 0.19.0 to 0.20.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1174
+- build(deps): bump docker/setup-buildx-action from 3.12.0 to 4.0.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1176
+- build(deps): bump modernc.org/sqlite from 1.46.1 to 1.47.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1169
+- build(deps): bump docker/setup-qemu-action from 3.7.0 to 4.0.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1172
+- build(deps): bump github.com/microsoft/go-mssqldb from 1.9.6 to 1.9.8 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1173
+- build(deps): bump docker/login-action from 3.7.0 to 4.0.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1167
+- Fix partial index WHERE IN clause idempotency in psqldef by @shiroemons in https://github.com/sqldef/sqldef/pull/1179
+- Add --disable-ddl-transaction flag to psqldef by @kurochan in https://github.com/sqldef/sqldef/pull/1177
+- Add support for TiDB table options (SHARD_ROW_ID_BITS, PRE_SPLIT_REGIONS, AUTO_ID_CACHE) by @y-kawawa in https://github.com/sqldef/sqldef/pull/1157
+- Fix TIMESTAMPTZ/TIMETZ idempotency in generic parser by @y-kawawa in https://github.com/sqldef/sqldef/pull/1162
+- feat: Support PostgreSQL 18 temporal constraints (WITHOUT OVERLAPS & PERIOD) by @kenchan0130 in https://github.com/sqldef/sqldef/pull/1163
+- postgres: use col_description() when exporting column comments by @kurochan in https://github.com/sqldef/sqldef/pull/1178
+
+## [v3.10.1](https://github.com/sqldef/sqldef/compare/v3.10.0...v3.10.1) - 2026-03-09
+- Improve SQL Server parser coverage and stabilize MSSQL schema round-trips - against real databases by @dylanvdmerwe in https://github.com/sqldef/sqldef/pull/1150
+- Fix PostgreSQL parser fallback gaps for CREATE POLICY and NOW() defaults by @dylanvdmerwe in https://github.com/sqldef/sqldef/pull/1151
+
+## [v3.10.0](https://github.com/sqldef/sqldef/compare/v3.9.8...v3.10.0) - 2026-03-04
+- build(deps): bump actions/attest-build-provenance from 3.1.0 to 3.2.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1138
+- build(deps): bump docker/login-action from 3.6.0 to 3.7.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1139
+- build(deps): bump docker/build-push-action from 6.16.0 to 6.19.2 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1140
+- build(deps): bump filippo.io/edwards25519 from 1.1.0 to 1.1.1 in the go_modules group across 1 directory by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1137
+- build(deps): bump golang.org/x/term from 0.39.0 to 0.40.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1144
+- Strip redundant casts around text/character varying by @wreulicke in https://github.com/sqldef/sqldef/pull/1143
+- build(deps): bump modernc.org/sqlite from 1.44.3 to 1.46.1 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1145
+- Support CREATE INDEX IF NOT EXISTS in generic parser (#1142) by @gfx in https://github.com/sqldef/sqldef/pull/1146
+- Fix foreign key idempotency failure when pgquery fallback occurs (#1147) by @gfx in https://github.com/sqldef/sqldef/pull/1148
+
+## [v3.9.8](https://github.com/sqldef/sqldef/compare/v3.9.7...v3.9.8) - 2026-02-15
+- Roll github.com/lib/pq v1.11.2 by @sorah in https://github.com/sqldef/sqldef/pull/1132
+- Support USE statement by @chi-bd in https://github.com/sqldef/sqldef/pull/1129
+- Update Go to 1.26.0 by @178inaba in https://github.com/sqldef/sqldef/pull/1136
+- Fix unnecessary ALTER for ENUM type default values in psqldef by @178inaba in https://github.com/sqldef/sqldef/pull/1135
+
 ## [v3.9.7](https://github.com/sqldef/sqldef/compare/v3.9.6...v3.9.7) - 2026-02-05
 - Allow non-reserved keyword as table-id by @winebarrel in https://github.com/sqldef/sqldef/pull/1125
 

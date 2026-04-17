@@ -106,6 +106,7 @@ var keywords = map[string]int{
 	"asensitive":             UNUSED,
 	"at":                     AT,
 	"auto_increment":         AUTO_INCREMENT,
+	"auto_random":            AUTO_RANDOM,
 	"autoincrement":          AUTOINCREMENT,
 	"before":                 BEFORE,
 	"begin":                  BEGIN,
@@ -378,6 +379,7 @@ var keywords = map[string]int{
 	"parallel":               PARALLEL,
 	"parser":                 PARSER,
 	"partial":                PARTIAL,
+	"period":                 PERIOD,
 	"partition":              PARTITION,
 	"partitions":             PARTITIONS,
 	"permissive":             PERMISSIVE,
@@ -487,6 +489,7 @@ var keywords = map[string]int{
 	"tinyint":                TINYINT,
 	"tinytext":               TINYTEXT,
 	"to":                     TO,
+	"top":                    TOP,
 	"trailing":               UNUSED,
 	"transaction":            TRANSACTION,
 	"trigger":                TRIGGER,
@@ -510,6 +513,7 @@ var keywords = map[string]int{
 	"utc_date":               UTC_DATE,
 	"utc_time":               UTC_TIME,
 	"utc_timestamp":          UTC_TIMESTAMP,
+	"uniqueidentifier":       UNIQUEIDENTIFIER,
 	"uuid":                   UUID,
 	"value":                  VALUE,
 	"values":                 VALUES,
@@ -546,6 +550,16 @@ var keywords = map[string]int{
 	"statistics_norecompute": STATISTICS_NORECOMPUTE,
 	"lead":                   LEAD,
 	"lag":                    LAG,
+	"getutcdate":             GETUTCDATE,
+	"newid":                  NEWID,
+	"sysutcdatetime":         SYSUTCDATETIME,
+	"newsequentialid":        NEWSEQUENTIALID,
+	"openjson":               OPENJSON,
+	"string_split":           STRING_SPLIT,
+	"apply":                  APPLY,
+	"within":                 WITHIN,
+	"trim":                   TRIM,
+	"try_cast":               TRY_CAST,
 
 	// SET options for SQL Server
 	"concat_null_yields_null":  CONCAT_NULL_YIELDS_NULL,
@@ -816,9 +830,9 @@ func (tkn *Tokenizer) Scan() (int, string) {
 				tkn.next()
 				switch tkn.lastChar {
 				case '!':
-					return tkn.scanMySQLSpecificComment()
-				default:
 					return tkn.scanCommentType2()
+				default:
+					return tkn.scanCommentType2OrTiDBComment()
 				}
 			default:
 				return int(ch), ""
@@ -1266,26 +1280,6 @@ func (tkn *Tokenizer) scanCommentType1(prefix string) (int, string) {
 
 func (tkn *Tokenizer) scanCommentType2() (int, string) {
 	var buffer strings.Builder
-	buffer.WriteString("/*")
-	for {
-		if tkn.lastChar == '*' {
-			tkn.consumeNext(&buffer)
-			if tkn.lastChar == '/' {
-				tkn.consumeNext(&buffer)
-				break
-			}
-			continue
-		}
-		if tkn.lastChar == eofChar {
-			return LEX_ERROR, buffer.String()
-		}
-		tkn.consumeNext(&buffer)
-	}
-	return COMMENT, buffer.String()
-}
-
-func (tkn *Tokenizer) scanMySQLSpecificComment() (int, string) {
-	var buffer strings.Builder
 	buffer.WriteString("/*!")
 	tkn.next()
 	for {
@@ -1305,6 +1299,71 @@ func (tkn *Tokenizer) scanMySQLSpecificComment() (int, string) {
 	_, sql := extractMysqlComment(buffer.String())
 	tkn.specialComment = NewTokenizer(sql, tkn.mode)
 	return tkn.Scan()
+}
+
+// scanCommentType2OrTiDBComment reads a block comment and checks if it's a
+// TiDB-specific comment like /*T![auto_rand] AUTO_RANDOM(5) */.
+// If so, the inner SQL is expanded into the token stream via specialComment.
+func (tkn *Tokenizer) scanCommentType2OrTiDBComment() (int, string) {
+	var buffer strings.Builder
+	buffer.WriteString("/*")
+	for {
+		if tkn.lastChar == '*' {
+			tkn.consumeNext(&buffer)
+			if tkn.lastChar == '/' {
+				tkn.consumeNext(&buffer)
+				break
+			}
+			continue
+		}
+		if tkn.lastChar == eofChar {
+			return LEX_ERROR, buffer.String()
+		}
+		tkn.consumeNext(&buffer)
+	}
+	comment := buffer.String()
+	if innerSQL, ok := extractTiDBComment(comment); ok {
+		tkn.specialComment = NewTokenizer(innerSQL, tkn.mode)
+		return tkn.Scan()
+	}
+
+	return COMMENT, comment
+}
+
+// extractTiDBComment extracts the SQL from a TiDB-specific comment.
+// Two formats are supported:
+//   - /*T![feature_name] SQL */ — feature-gated (e.g. auto_rand, clustered_index)
+//   - /*T! SQL */               — ungated (e.g. SHARD_ROW_ID_BITS, PRE_SPLIT_REGIONS)
+func extractTiDBComment(comment string) (string, bool) {
+	inner := comment[2 : len(comment)-2] // strip /* and */
+	if !strings.HasPrefix(inner, "T!") {
+		return "", false
+	}
+
+	// Ungated form: /*T! SQL */
+	if !strings.HasPrefix(inner, "T![") {
+		sql := strings.TrimSpace(inner[2:])
+		if sql == "" {
+			return "", false
+		}
+		return sql, true
+	}
+
+	// Feature-gated form: /*T![feature_name] SQL */
+	closeBracket := strings.Index(inner, "]")
+	if closeBracket == -1 {
+		return "", false
+	}
+	feature := inner[3:closeBracket]
+	switch feature {
+	case "auto_rand", "auto_id_cache":
+		// Supported features: expand the inner SQL into the token stream
+	default:
+		// Unsupported features (e.g. clustered_index): ignore
+		return "", false
+	}
+	sql := strings.TrimSpace(inner[closeBracket+1:])
+	return sql, true
 }
 
 func (tkn *Tokenizer) consumeNext(buffer *strings.Builder) {

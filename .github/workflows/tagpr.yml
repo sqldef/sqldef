@@ -14,7 +14,7 @@ jobs:
     steps:
     - name: Generate token
       id: generate_token
-      uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+      uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
       with:
         app-id: ${{ secrets.GH_APP_ID }}
         private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
@@ -25,6 +25,6 @@ jobs:
       with:
         token: ${{ steps.generate_token.outputs.token }}
 
-    - uses: Songmu/tagpr@75738aa2880a03a1036bc5bd90ef49853427ec65 # v1.10.0
+    - uses: Songmu/tagpr@e7ae290f5cc5faabfdb4d131f8e4ce073ad8b3e2 # v1.18.0
       env:
         GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}

@@ -163,6 +163,8 @@ func (p PostgresParser) parseStmt(node *pgquery.Node) (parser.Statement, error) 
 		return p.parseAlterTableStmt(stmt.AlterTableStmt)
 	case *pgquery.Node_CreateSchemaStmt:
 		return p.parseCreateSchemaStmt(stmt.CreateSchemaStmt)
+	case *pgquery.Node_CreatePolicyStmt:
+		return p.parseCreatePolicyStmt(stmt.CreatePolicyStmt)
 	case *pgquery.Node_GrantStmt:
 		return p.parseGrantStmt(stmt.GrantStmt)
 	case *pgquery.Node_CreateFunctionStmt:
@@ -1508,6 +1510,66 @@ func (p PostgresParser) parseCreateSchemaStmt(stmt *pgquery.CreateSchemaStmt) (p
 		Action: parser.CreateSchema,
 		Schema: &parser.Schema{
 			Name: stmt.Schemaname,
+		},
+	}, nil
+}
+
+func (p PostgresParser) parseCreatePolicyStmt(stmt *pgquery.CreatePolicyStmt) (parser.Statement, error) {
+	tableName, err := p.parseTableName(stmt.Table)
+	if err != nil {
+		return nil, err
+	}
+
+	permissive := parser.Permissive("RESTRICTIVE")
+	if stmt.Permissive {
+		permissive = parser.Permissive("PERMISSIVE")
+	}
+
+	var roles []parser.Ident
+	for _, roleNode := range stmt.Roles {
+		roleSpec, ok := roleNode.Node.(*pgquery.Node_RoleSpec)
+		if !ok {
+			return nil, fmt.Errorf("unexpected role type in create policy statement")
+		}
+
+		switch roleSpec.RoleSpec.Roletype {
+		case pgquery.RoleSpecType_ROLESPEC_CSTRING:
+			roles = append(roles, parser.NewIdent(roleSpec.RoleSpec.Rolename, false))
+		case pgquery.RoleSpecType_ROLESPEC_PUBLIC:
+			roles = append(roles, parser.NewIdent("public", false))
+		default:
+			return nil, fmt.Errorf("unsupported role type in create policy statement")
+		}
+	}
+
+	var using *parser.Where
+	if stmt.Qual != nil {
+		expr, err := p.parseExpr(stmt.Qual)
+		if err != nil {
+			return nil, err
+		}
+		using = parser.NewWhere(parser.WhereStr, expr)
+	}
+
+	var withCheck *parser.Where
+	if stmt.WithCheck != nil {
+		expr, err := p.parseExpr(stmt.WithCheck)
+		if err != nil {
+			return nil, err
+		}
+		withCheck = parser.NewWhere(parser.WhereStr, expr)
+	}
+
+	return &parser.DDL{
+		Action: parser.CreatePolicy,
+		Table:  tableName,
+		Policy: &parser.Policy{
+			Name:       parser.NewIdent(stmt.PolicyName, false),
+			Permissive: permissive,
+			Scope:      strings.ToUpper(stmt.CmdName),
+			To:         roles,
+			Using:      using,
+			WithCheck:  withCheck,
 		},
 	}, nil
 }

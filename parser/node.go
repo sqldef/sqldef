@@ -18,6 +18,7 @@ package parser
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -137,6 +138,7 @@ type Select struct {
 	Comments    Comments
 	Distinct    *DistinctClause
 	Hints       string
+	Top         Expr // SQL Server TOP n / TOP (n), emitted before the select list
 	SelectExprs SelectExprs
 	From        TableExprs
 	Where       *Where
@@ -194,9 +196,13 @@ func (node *Select) setLimit(limit *Limit) {
 
 // Format formats the node.
 func (node *Select) Format(buf *nodeBuffer) {
-	buf.Printf("%vselect %v%s%v%s%v",
-		node.With, node.Comments, node.Cache, node.Distinct, node.Hints, node.SelectExprs,
+	buf.Printf("%vselect %v%s%v%s",
+		node.With, node.Comments, node.Cache, node.Distinct, node.Hints,
 	)
+	if node.Top != nil {
+		buf.Printf("top %v ", node.Top)
+	}
+	buf.Printf("%v", node.SelectExprs)
 	if !node.From.IsEmpty() {
 		buf.Printf(" from %v", node.From)
 	}
@@ -738,11 +744,21 @@ func (ts *TableSpec) Format(buf *nodeBuffer) {
 		buf.Printf(",\n\t%v", idx)
 	}
 
-	var options strings.Builder
+	var kvOptions strings.Builder
+	var sqliteOpts []string
 	for key, value := range ts.Options {
-		options.WriteString(" " + key + "=" + value)
+		if value == "" {
+			sqliteOpts = append(sqliteOpts, key)
+		} else {
+			kvOptions.WriteString(" " + key + "=" + value)
+		}
 	}
-	buf.Printf("\n)%s", strings.ReplaceAll(options.String(), ", ", ",\n  "))
+	if len(sqliteOpts) > 0 {
+		sort.Strings(sqliteOpts)
+		buf.Printf("\n) %s", strings.Join(sqliteOpts, ", "))
+	} else {
+		buf.Printf("\n)%s", strings.ReplaceAll(kvOptions.String(), ", ", ",\n  "))
+	}
 	if ts.Partition != nil {
 		buf.Printf("\n")
 		ts.Partition.Format(buf)
@@ -824,14 +840,17 @@ type ColumnType struct {
 	TypeIdent Ident
 
 	// Generic field options.
-	NotNull       *BoolVal
-	Autoincrement BoolVal
-	Default       *DefaultDefinition
-	Srid          *SridDefinition
-	OnUpdate      *SQLVal
-	Comment       *SQLVal
-	Check         *CheckDefinition
-	Array         BoolVal
+	NotNull             *BoolVal
+	Autoincrement       BoolVal
+	AutoRandom          BoolVal
+	AutoRandomShardBits int
+	AutoRandomRange     int
+	Default             *DefaultDefinition
+	Srid                *SridDefinition
+	OnUpdate            *SQLVal
+	Comment             *SQLVal
+	Check               *CheckDefinition
+	Array               BoolVal
 
 	// Numeric field options
 	Length       *SQLVal
@@ -1043,6 +1062,8 @@ type IndexColumn struct {
 	Collation     string // Collation name for COLLATE
 	OperatorClass string
 	Expression    Expr // For functional indexes like ((CASE WHEN ...))
+
+	WithoutOverlaps bool // For PostgreSQL 18+ temporal PRIMARY KEY / UNIQUE constraints
 }
 
 func (ic IndexColumn) String() string {
@@ -1118,6 +1139,7 @@ type ForeignKeyDefinition struct {
 	OnUpdate          Ident
 	NotForReplication bool
 	ConstraintOptions *ConstraintOptions
+	Period            bool // For PostgreSQL 18+ temporal FOREIGN KEY constraints (PERIOD on last column)
 }
 
 type Policy struct {
@@ -1513,6 +1535,7 @@ type AliasedTableExpr struct {
 	Expr       SimpleTableExpr
 	Partitions Partitions
 	As         Ident
+	Columns    Columns
 	TableHints []string
 	IndexHints *IndexHints
 }
@@ -1522,6 +1545,9 @@ func (node *AliasedTableExpr) Format(buf *nodeBuffer) {
 	buf.Printf("%v%v", node.Expr, node.Partitions)
 	if !node.As.IsEmpty() {
 		buf.Printf(" as %v", node.As)
+		if len(node.Columns) > 0 {
+			buf.Printf("(%v)", node.Columns)
+		}
 	}
 	if len(node.TableHints) != 0 {
 		buf.Printf(" with(%s)", strings.Join(node.TableHints, ", "))
@@ -1538,8 +1564,53 @@ type SimpleTableExpr interface {
 	SQLNode
 }
 
-func (TableName) iSimpleTableExpr() {}
-func (*Subquery) iSimpleTableExpr() {}
+func (TableName) iSimpleTableExpr()          {}
+func (*Subquery) iSimpleTableExpr()          {}
+func (*FuncExpr) iSimpleTableExpr()          {}
+func (*OpenJSONTableExpr) iSimpleTableExpr() {}
+func (Values) iSimpleTableExpr()             {}
+
+// OpenJSONTableExpr represents a SQL Server OPENJSON table expression.
+type OpenJSONTableExpr struct {
+	Exprs SelectExprs
+	With  OpenJSONSchema
+}
+
+func (node *OpenJSONTableExpr) Format(buf *nodeBuffer) {
+	buf.Printf("openjson(%v)", node.Exprs)
+	if len(node.With) > 0 {
+		buf.Printf(" with (%v)", node.With)
+	}
+}
+
+// OpenJSONSchema represents the OPENJSON WITH column schema.
+type OpenJSONSchema []*OpenJSONSchemaItem
+
+func (node OpenJSONSchema) Format(buf *nodeBuffer) {
+	var prefix string
+	for _, n := range node {
+		buf.Printf("%s%v", prefix, n)
+		prefix = ", "
+	}
+}
+
+// OpenJSONSchemaItem represents a single OPENJSON WITH column definition.
+type OpenJSONSchemaItem struct {
+	Name   Ident
+	Type   ColumnType
+	Path   string
+	AsJSON bool
+}
+
+func (node *OpenJSONSchemaItem) Format(buf *nodeBuffer) {
+	buf.Printf("%v %v", node.Name, &node.Type)
+	if node.Path != "" {
+		buf.Printf(" %v", NewStrVal(node.Path))
+	}
+	if node.AsJSON {
+		buf.Printf(" as json")
+	}
+}
 
 // TableNames is a list of TableName.
 type TableNames []TableName
@@ -1653,6 +1724,8 @@ const (
 	NaturalLeftJoinStr  = "natural left join"
 	NaturalRightJoinStr = "natural right join"
 	CrossJoinStr        = "cross join"
+	CrossApplyStr       = "cross apply"
+	OuterApplyStr       = "outer apply"
 )
 
 // Format formats the node.
@@ -1751,6 +1824,8 @@ func (*ExtractExpr) iExpr()         {}
 func (*ConvertUsingExpr) iExpr()    {}
 func (*MatchExpr) iExpr()           {}
 func (*GroupConcatExpr) iExpr()     {}
+func (*TrimExpr) iExpr()            {}
+func (*MethodCallExpr) iExpr()      {}
 func (*OverExpr) iExpr()            {}
 func (*Default) iExpr()             {}
 func (*ArrayConstructor) iExpr()    {}
@@ -2218,11 +2293,12 @@ func (node *CollateExpr) Format(buf *nodeBuffer) {
 
 // FuncExpr represents a function call that takes SelectExprs.
 type FuncExpr struct {
-	Qualifier Ident
-	Name      Ident
-	Distinct  bool
-	Exprs     SelectExprs
-	Over      *OverExpr
+	Qualifier   Ident
+	Name        Ident
+	Distinct    bool
+	Exprs       SelectExprs
+	WithinGroup OrderBy
+	Over        *OverExpr
 }
 
 // Format formats the node.
@@ -2237,7 +2313,13 @@ func (node *FuncExpr) Format(buf *nodeBuffer) {
 	// Function names should not be back-quoted even
 	// if they match a reserved word. So, print the
 	// name as is.
-	buf.Printf("%s(%s%v)%v", node.Name.Name, distinct, node.Exprs, node.Over)
+	buf.Printf("%s(%s%v)", node.Name.Name, distinct, node.Exprs)
+	if len(node.WithinGroup) > 0 {
+		buf.Printf(" within group(")
+		node.WithinGroup.Format(buf)
+		buf.Printf(")")
+	}
+	buf.Printf("%v", node.Over)
 }
 
 // FuncCallExpr represents a function call that takes Exprs.
@@ -2321,6 +2403,32 @@ func (node *SubstrExpr) Format(buf *nodeBuffer) {
 	}
 }
 
+// TrimExpr represents a TRIM expression.
+type TrimExpr struct {
+	TrimChar Expr
+	String   Expr
+}
+
+// Format formats the node.
+func (node *TrimExpr) Format(buf *nodeBuffer) {
+	if node.TrimChar == nil {
+		buf.Printf("trim(%v)", node.String)
+		return
+	}
+	buf.Printf("trim(%v from %v)", node.TrimChar, node.String)
+}
+
+// MethodCallExpr represents a SQL Server method call on an expression.
+type MethodCallExpr struct {
+	Receiver Expr
+	Name     Ident
+	Exprs    Exprs
+}
+
+func (node *MethodCallExpr) Format(buf *nodeBuffer) {
+	buf.Printf("%v.%s(%v)", node.Receiver, node.Name.Name, node.Exprs)
+}
+
 // ExtractExpr represents EXTRACT(field FROM source)
 type ExtractExpr struct {
 	Field  string
@@ -2345,6 +2453,7 @@ func (node *CastExpr) Format(buf *nodeBuffer) {
 // Convert types
 const (
 	CastStr    = "cast"
+	TryCastStr = "try_cast"
 	Type1stStr = "type1st"
 )
 
@@ -2361,6 +2470,9 @@ func (node *ConvertExpr) Format(buf *nodeBuffer) {
 	switch node.Action {
 	case CastStr:
 		buf.Printf("cast(%v as %v)", node.Expr, node.Type)
+		return
+	case TryCastStr:
+		buf.Printf("try_cast(%v as %v)", node.Expr, node.Type)
 		return
 	case Type1stStr:
 		if node.Style != nil {

@@ -123,12 +123,11 @@ func trailingCommentStart(text string) (start int) {
 			break
 		}
 
-		// Check if this is a MySQL version comment (/*!NNNNN ... */)
-		// These are NOT actual comments - they contain SQL code that should be executed
-		// when the server version is >= NNNNN
+		// Check if this is a MySQL version comment (/*!NNNNN ... */) or
+		// a TiDB extension comment (/*T! ... */ or /*T![feature] ... */).
+		// These are NOT actual comments - they contain SQL code that should be executed.
 		commentStart := text[startCommentPos:]
-		if len(commentStart) >= 3 && commentStart[2] == '!' {
-			// This is a MySQL version comment, don't treat it as a trailing comment
+		if len(commentStart) >= 3 && (commentStart[2] == '!' || strings.HasPrefix(commentStart, "/*T!")) {
 			break
 		}
 

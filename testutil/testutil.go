@@ -347,7 +347,7 @@ func MustExecuteNoTest(command string, args ...string) string {
 // BuildForTest builds the current package, adding -cover flag if GOCOVERDIR is set.
 // Use this in TestMain to build binaries that support coverage collection.
 func BuildForTest() {
-	args := []string{"build"}
+	args := []string{"build", "-buildvcs=false"}
 	if os.Getenv("GOCOVERDIR") != "" {
 		args = append(args, "-cover")
 	}

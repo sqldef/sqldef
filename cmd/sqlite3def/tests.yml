@@ -126,6 +126,51 @@ TableOptions:
       id integer PRIMARY KEY,
       data text
     ) STRICT, WITHOUT ROWID;
+  legacy_ignore_quotes: false
+StrictTableWithAnyType:
+  desired: |
+    CREATE TABLE flexible(
+      id integer PRIMARY KEY,
+      name text NOT NULL,
+      data ANY
+    ) STRICT;
+  legacy_ignore_quotes: false
+AddColumnToStrictTable:
+  current: |
+    CREATE TABLE config(
+      id integer PRIMARY KEY
+    ) STRICT;
+  desired: |
+    CREATE TABLE config(
+      id integer PRIMARY KEY,
+      payload ANY
+    ) STRICT;
+  up: |
+    ALTER TABLE config ADD COLUMN payload ANY;
+  down: |
+    ALTER TABLE config DROP COLUMN payload;
+  legacy_ignore_quotes: false
+WithoutRowidOnly:
+  desired: |
+    CREATE TABLE lookup(
+      name text PRIMARY KEY,
+      data text
+    ) WITHOUT ROWID;
+  legacy_ignore_quotes: false
+StrictWithoutRowidAndAnyType:
+  desired: |
+    CREATE TABLE kv(
+      id integer PRIMARY KEY,
+      data ANY
+    ) STRICT, WITHOUT ROWID;
+  legacy_ignore_quotes: false
+StrictOnly:
+  desired: |
+    CREATE TABLE items(
+      id integer PRIMARY KEY,
+      name text
+    ) STRICT;
+  legacy_ignore_quotes: false
 ForeignKeyConstraint:
   desired: |
     CREATE TABLE artist(
@@ -370,6 +415,26 @@ RenameIndexWithWhereClause:
   down: |
     CREATE INDEX old_active_users ON users (email) WHERE is_active = 1;
     DROP INDEX "active_users_idx";
+PartialIndexWithWhereIn:
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE INDEX idx_active ON orders (id)
+    WHERE status IN ('active', 'pending');
+PartialIndexWithWhereNotIn:
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE INDEX idx_non_cancelled ON orders (id)
+    WHERE status NOT IN ('cancelled', 'deleted');
+PartialIndexWithWhereInUnsorted:
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE INDEX idx_active ON orders (id)
+    WHERE status IN ('pending', 'active');
+PartialIndexWithWhereNotInUnsorted:
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE INDEX idx_non_cancelled ON orders (id)
+    WHERE status NOT IN ('deleted', 'cancelled');
 NumericDecimalWithoutPrecision:
   current: |
     CREATE TABLE test (

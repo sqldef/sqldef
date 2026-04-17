@@ -1269,3 +1269,10 @@ InlineForeignKeyReferences:
       author_id BIGINT NOT NULL FOREIGN KEY REFERENCES authors(id),
       price DECIMAL(10, 2) NOT NULL
     );
+
+UseStatement:
+  desired: |
+    use test_db;
+    CREATE TABLE bigdata (
+      data bigint
+    );

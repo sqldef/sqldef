@@ -416,6 +416,42 @@ ChangeTimezoneSyntax:
     ALTER TABLE "public"."test" ALTER COLUMN "timestamp_tz_plain" TYPE timestamp WITH TIME ZONE;
     ALTER TABLE "public"."test" ALTER COLUMN "timestamp_plain_wtz" TYPE timestamp;
     ALTER TABLE "public"."test" ALTER COLUMN "timestamp_plain_tz" TYPE timestamp;
+
+# Regression test: TIMESTAMPTZ and "timestamp with time zone" must be treated as identical.
+# PostgreSQL exports "timestamp with time zone" but users may write TIMESTAMPTZ in desired SQL.
+# https://github.com/sqldef/sqldef/discussions/1154
+TimestamptzIdempotency:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE users (
+      id uuid PRIMARY KEY,
+      create_time timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  desired: |
+    CREATE TABLE users (
+      id uuid PRIMARY KEY,
+      create_time TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  up: ""
+  down: ""
+
+TimetzIdempotency:
+  legacy_ignore_quotes: false
+  offline: true
+  current: |
+    CREATE TABLE users (
+      id uuid PRIMARY KEY,
+      event_time time with time zone NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id uuid PRIMARY KEY,
+      event_time TIMETZ NOT NULL
+    );
+  up: ""
+  down: ""
+
 CreateTableAddTimestampColumn:
   current: |
     CREATE TABLE users (

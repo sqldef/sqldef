@@ -1,0 +1,210 @@
+# yaml-language-server: $schema=../../testutil/testcase.schema.json
+
+SqlServerBuiltinDefaultsAndQualifiedDate:
+  desired: |
+    CREATE TABLE FileData (
+      FileDataId uniqueidentifier NOT NULL DEFAULT newid(),
+      SequentialFileDataId uniqueidentifier NOT NULL DEFAULT newsequentialid()
+    );
+
+    CREATE TABLE UpliftSchedule (
+      UpliftScheduleId int NOT NULL,
+      [Date] date NOT NULL,
+      CONSTRAINT PK_UpliftSchedule PRIMARY KEY CLUSTERED (UpliftScheduleId)
+    );
+
+    CREATE TABLE UpliftSchedulePrinciple (
+      UpliftScheduleId int NOT NULL,
+      IsDeleted bit NOT NULL DEFAULT 0
+    );
+
+    CREATE VIEW UpliftSchedulePrincipalView AS
+    SELECT UpliftSchedule.Date
+    FROM UpliftSchedulePrinciple usp
+    INNER JOIN UpliftSchedule
+      ON UpliftSchedule.UpliftScheduleId = usp.UpliftScheduleId
+    WHERE usp.IsDeleted = 0;
+  legacy_ignore_quotes: false
+
+SqlServerOpenJsonTryCastAndForJson:
+  desired: |
+    CREATE TABLE SystemUser (
+      SystemUserId int NOT NULL,
+      LinkedSystemUserIds nvarchar(max) NOT NULL,
+      IsDeleted bit NOT NULL DEFAULT 0,
+      CONSTRAINT PK_SystemUser PRIMARY KEY CLUSTERED (SystemUserId)
+    );
+
+    CREATE VIEW SystemUserListView AS
+    SELECT
+      SU.SystemUserId,
+      ISNULL((
+        SELECT TRY_CAST(j.[value] AS int) AS LinkedUserId
+        FROM OPENJSON(SU.LinkedSystemUserIds) j
+        FOR JSON PATH
+      ), '[]') AS LinkedUserIdsJson,
+      ISNULL((
+        SELECT COUNT(*)
+        FROM OPENJSON(SU.LinkedSystemUserIds) WITH (Id int '$')
+      ), 0) AS LinkedUserCount,
+      ISNULL((
+        SELECT STRING_AGG(CAST(LU.SystemUserId AS nvarchar(max)), ', ')
+        FROM OPENJSON(SU.LinkedSystemUserIds) j
+        INNER JOIN dbo.SystemUser LU
+          ON LU.SystemUserId = TRY_CAST(j.[value] AS int)
+         AND LU.IsDeleted = 0
+      ), '') AS LinkedUserIds
+    FROM dbo.SystemUser SU
+    WHERE SU.IsDeleted = 0;
+  legacy_ignore_quotes: false
+
+SqlServerApplyAndSysUtcDateTime:
+  desired: |
+    CREATE TABLE SystemUser (
+      SystemUserId int NOT NULL,
+      FullName nvarchar(200) NOT NULL,
+      UtcOffset int NOT NULL,
+      AllowAttendanceOnMobile bit NOT NULL DEFAULT 0,
+      ProfileImageUrl nvarchar(200) NOT NULL,
+      IsDeleted bit NOT NULL DEFAULT 0,
+      CONSTRAINT PK_SystemUser_Attendance PRIMARY KEY CLUSTERED (SystemUserId)
+    );
+
+    CREATE TABLE AttendanceSession (
+      AttendanceSessionId int NOT NULL,
+      SystemUserId int NOT NULL,
+      SessionDate datetime2 NOT NULL,
+      IsDeleted bit NOT NULL DEFAULT 0,
+      CONSTRAINT PK_AttendanceSession PRIMARY KEY CLUSTERED (AttendanceSessionId)
+    );
+
+    CREATE TABLE AttendanceEvent (
+      AttendanceEventId int NOT NULL,
+      AttendanceSessionId int NOT NULL,
+      EventDate datetime2 NOT NULL,
+      Latitude float NOT NULL,
+      Longitude float NOT NULL,
+      [Location] nvarchar(200) NOT NULL,
+      FromApp bit NOT NULL DEFAULT 0,
+      IsDeleted bit NOT NULL DEFAULT 0,
+      CONSTRAINT PK_AttendanceEvent PRIMARY KEY CLUSTERED (AttendanceEventId)
+    );
+
+    CREATE TABLE SystemUserLocationLog (
+      SystemUserLocationLogId int NOT NULL,
+      SystemUserId int NOT NULL,
+      EventDate datetime2 NOT NULL,
+      Latitude float NOT NULL,
+      Longitude float NOT NULL,
+      IsMoving bit NOT NULL DEFAULT 0,
+      AppLocationGps bit NOT NULL DEFAULT 0,
+      Speed float NOT NULL,
+      FromApp bit NOT NULL DEFAULT 0,
+      IsDeleted bit NOT NULL DEFAULT 0,
+      CONSTRAINT PK_SystemUserLocationLog PRIMARY KEY CLUSTERED (SystemUserLocationLogId)
+    );
+
+    CREATE VIEW OnTheMoveListView AS
+    WITH UtcToday AS (
+      SELECT CAST(SYSUTCDATETIME() AS DATE) AS TodayUtc
+    )
+    SELECT
+      SU.SystemUserId,
+      LOC.SystemUserLocationLogId,
+      SESS.ClockedInTime,
+      CLOCK.ClockInLocation
+    FROM SystemUser AS SU
+    CROSS JOIN UtcToday D
+    CROSS APPLY (
+      SELECT TOP (1)
+        S.AttendanceSessionId,
+        S.SessionDate AS ClockedInTime
+      FROM AttendanceSession AS S
+      WHERE S.IsDeleted = 0
+        AND S.SystemUserId = SU.SystemUserId
+      ORDER BY S.SessionDate ASC
+    ) AS SESS
+    OUTER APPLY (
+      SELECT TOP (1)
+        AE.[Location] AS ClockInLocation
+      FROM AttendanceEvent AS AE
+      WHERE AE.IsDeleted = 0
+        AND AE.AttendanceSessionId = SESS.AttendanceSessionId
+        AND AE.FromApp = 1
+      ORDER BY AE.EventDate ASC, AE.AttendanceEventId ASC
+    ) AS CLOCK
+    CROSS APPLY (
+      SELECT TOP (1)
+        L.SystemUserLocationLogId
+      FROM SystemUserLocationLog AS L
+      WHERE L.IsDeleted = 0
+        AND L.FromApp = 1
+        AND L.SystemUserId = SU.SystemUserId
+        AND L.Latitude <> 0
+        AND L.Longitude <> 0
+      ORDER BY L.EventDate DESC, L.SystemUserLocationLogId DESC
+    ) AS LOC
+    WHERE SU.IsDeleted = 0
+      AND SU.AllowAttendanceOnMobile = 1;
+  legacy_ignore_quotes: false
+
+SqlServerForXmlValueAndReservedIdentifiers:
+  desired: |
+    CREATE TABLE Session2 (
+      Session2Id int NOT NULL,
+      TemplateData nvarchar(max) NOT NULL,
+      IsDeleted bit NOT NULL DEFAULT 0,
+      CONSTRAINT PK_Session2 PRIMARY KEY CLUSTERED (Session2Id)
+    );
+
+    CREATE TABLE SessionRating2 (
+      SessionId int NOT NULL,
+      Comment nvarchar(200) NOT NULL
+    );
+
+    CREATE TABLE OperationInput (
+      OperationInputId int NOT NULL,
+      IsDeleted bit NOT NULL DEFAULT 0,
+      CONSTRAINT PK_OperationInput PRIMARY KEY CLUSTERED (OperationInputId)
+    );
+
+    CREATE TABLE OperationInputValue (
+      OperationInputValueId int NOT NULL,
+      OperationInputId int NOT NULL,
+      GuidValue uniqueidentifier NOT NULL,
+      InputField int NOT NULL,
+      StringValue nvarchar(max) NOT NULL DEFAULT '',
+      IsDeleted bit NOT NULL DEFAULT 0,
+      CONSTRAINT PK_OperationInputValue PRIMARY KEY CLUSTERED (OperationInputValueId)
+    );
+
+    CREATE VIEW Session2DetailView AS
+    SELECT
+      Session2.Session2Id,
+      CAST(JSON_VALUE(Session2.TemplateData, '$.recordAudio') AS BIT) AS RecordAudio,
+      (
+        SELECT Comment
+        FROM SessionRating2
+        WHERE SessionRating2.SessionId = Session2.Session2Id
+      ) AS RatingComment
+    FROM Session2
+    WHERE Session2.IsDeleted = 0;
+
+    CREATE VIEW ImageExtractInputDetailView AS
+    SELECT
+      OperationInput.OperationInputId,
+      ISNULL(
+        '[' + STUFF((
+          SELECT ',"' + CAST(OperationInputValue.GuidValue AS varchar(36)) + '"'
+          FROM OperationInputValue
+          WHERE OperationInputValue.IsDeleted = 0
+            AND OperationInputValue.InputField = 5
+            AND OperationInputValue.OperationInputId = OperationInput.OperationInputId
+          ORDER BY OperationInputValue.OperationInputValueId
+          FOR XML PATH(''), TYPE
+        ).value('.', 'nvarchar(max)'), 1, 1, '') + ']',
+        '[]'
+      ) AS ImageThumbnailIds
+    FROM OperationInput
+    WHERE OperationInput.IsDeleted = 0;
+  legacy_ignore_quotes: false

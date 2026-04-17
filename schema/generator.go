@@ -24,6 +24,24 @@ const (
 	GeneratorModeMssql
 )
 
+// tidbTableOption defines a TiDB-specific table option that the generator
+// should compare between current and desired schemas.
+type tidbTableOption struct {
+	key          string // option key as it appears in the options map (e.g. "SHARD_ROW_ID_BITS")
+	defaultValue string // value to use when the option is removed from desired
+}
+
+// tidbTableOptions is the single source of truth for TiDB table options
+// that the generator manages. When adding a new TiDB table option:
+//  1. Add an entry here
+//  2. If the option uses /*T![feature] ... */ comment syntax,
+//     add the feature name to extractTiDBComment in parser/token.go
+var tidbTableOptions = []tidbTableOption{
+	{key: "SHARD_ROW_ID_BITS", defaultValue: "0"},
+	{key: "PRE_SPLIT_REGIONS", defaultValue: "0"},
+	{key: "AUTO_ID_CACHE", defaultValue: "0"},
+}
+
 // This struct holds simulated schema states during GenerateIdempotentDDLs().
 type Generator struct {
 	mode          GeneratorMode
@@ -813,6 +831,9 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			// prevent to
 			desiredColumn.autoIncrement = false
 		}
+		if currentColumn == nil || !currentColumn.autoRandom {
+			desiredColumn.autoRandom = false
+		}
 		if currentColumn == nil {
 			// Check if this is a renamed column
 			var renameFromColumn *Column
@@ -1290,13 +1311,23 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	primaryKeysChanged := !g.areSamePrimaryKeys(currentPrimaryKey, desiredPrimaryKey)
 
-	// Remove old AUTO_INCREMENT from deleted column before deleting key (primary or not)
+	// Remove old AUTO_INCREMENT/AUTO_RANDOM from deleted column before deleting key (primary or not)
 	// and if primary key changed
 	if g.mode == GeneratorModeMysql {
 		for _, currentColumn := range currentTable.columns {
 			desiredColumn := g.findColumnByName(desired.table.columns, currentColumn.name)
+			needsChange := false
 			if currentColumn.autoIncrement && (primaryKeysChanged || desiredColumn == nil || !desiredColumn.autoIncrement) {
 				currentColumn.autoIncrement = false
+				needsChange = true
+			}
+			if currentColumn.autoRandom && (primaryKeysChanged || desiredColumn == nil || !desiredColumn.autoRandom) {
+				currentColumn.autoRandom = false
+				currentColumn.autoRandomShardBits = 0
+				currentColumn.autoRandomRange = 0
+				needsChange = true
+			}
+			if needsChange {
 				definition, err := g.generateColumnDefinition(*currentColumn, false)
 				if err != nil {
 					return ddls, err
@@ -1497,11 +1528,18 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		}
 	}
 
-	// Add new AUTO_INCREMENT after adding index and primary key
+	// Add new AUTO_INCREMENT/AUTO_RANDOM after adding index and primary key
 	if g.mode == GeneratorModeMysql {
 		for _, desiredColumn := range desired.table.columns {
 			currentColumn := g.findColumnByName(currentTable.columns, desiredColumn.name)
+			needsChange := false
 			if desiredColumn.autoIncrement && (primaryKeysChanged || currentColumn == nil || !currentColumn.autoIncrement) {
+				needsChange = true
+			}
+			if desiredColumn.autoRandom && (primaryKeysChanged || currentColumn == nil || !currentColumn.autoRandom) {
+				needsChange = true
+			}
+			if needsChange {
 				definition, err := g.generateColumnDefinition(*desiredColumn, false)
 				if err != nil {
 					return ddls, err
@@ -1669,6 +1707,20 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s COMMENT = ''", g.escapeTableName(&desired.table)))
 		} else {
 			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s COMMENT = %s", g.escapeTableName(&desired.table), desired.table.options["comment"]))
+		}
+	}
+
+	// Examine TiDB table options
+	if g.mode == GeneratorModeMysql {
+		for _, opt := range tidbTableOptions {
+			currentVal := currentTable.options[opt.key]
+			desiredVal := desired.table.options[opt.key]
+			if currentVal != desiredVal {
+				if desiredVal == "" {
+					desiredVal = opt.defaultValue
+				}
+				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s %s = %s", g.escapeTableName(&desired.table), opt.key, desiredVal))
+			}
 		}
 	}
 
@@ -2869,6 +2921,19 @@ func (g *Generator) generateColumnDefinition(column Column, enableUnique bool) (
 		definition += "AUTO_INCREMENT "
 	}
 
+	if column.autoRandom {
+		definition += "AUTO_RANDOM"
+		if column.autoRandomShardBits > 0 {
+			if column.autoRandomRange > 0 {
+				definition += fmt.Sprintf("(%d, %d) ", column.autoRandomShardBits, column.autoRandomRange)
+			} else {
+				definition += fmt.Sprintf("(%d) ", column.autoRandomShardBits)
+			}
+		} else {
+			definition += " "
+		}
+	}
+
 	if column.onUpdate != nil {
 		definition += fmt.Sprintf("ON UPDATE %s ", column.onUpdate.raw)
 	}
@@ -2967,6 +3032,9 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 		if indexColumn.operatorClass != "" {
 			column += " " + indexColumn.operatorClass
 		}
+		if indexColumn.withoutOverlaps {
+			column += " WITHOUT OVERLAPS"
+		}
 		columns = append(columns, column)
 	}
 
@@ -3061,6 +3129,9 @@ func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 		}
 		if indexColumn.operatorClass != "" {
 			column += " " + indexColumn.operatorClass
+		}
+		if indexColumn.withoutOverlaps {
+			column += " WITHOUT OVERLAPS"
 		}
 		columns = append(columns, column)
 	}
@@ -3251,11 +3322,19 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 	}
 
 	var indexColumns, referenceColumns []string
-	for _, column := range foreignKey.indexColumns {
-		indexColumns = append(indexColumns, g.escapeSQLIdent(column))
+	for i, column := range foreignKey.indexColumns {
+		escaped := g.escapeSQLIdent(column)
+		if foreignKey.period && i == len(foreignKey.indexColumns)-1 {
+			escaped = "PERIOD " + escaped
+		}
+		indexColumns = append(indexColumns, escaped)
 	}
-	for _, column := range foreignKey.referenceColumns {
-		referenceColumns = append(referenceColumns, g.escapeSQLIdent(column))
+	for i, column := range foreignKey.referenceColumns {
+		escaped := g.escapeSQLIdent(column)
+		if foreignKey.period && i == len(foreignKey.referenceColumns)-1 {
+			escaped = "PERIOD " + escaped
+		}
+		referenceColumns = append(referenceColumns, escaped)
 	}
 
 	definition += fmt.Sprintf(
@@ -4593,7 +4672,7 @@ func findSchemaByName(schemas []*Schema, name string) *Schema {
 }
 
 func (g *Generator) haveSameColumnDefinition(current Column, desired Column) bool {
-	// Not examining AUTO_INCREMENT and UNIQUE KEY because it'll be added in a later stage
+	// Not examining AUTO_INCREMENT, AUTO_RANDOM, and UNIQUE KEY because it'll be added in a later stage
 	return g.haveSameDataType(current, desired) &&
 		(current.unsigned == desired.unsigned) &&
 		((current.notNull != nil && *current.notNull) == ((desired.notNull != nil && *desired.notNull) || desired.keyOption == ColumnKeyPrimary)) && // `PRIMARY KEY` implies `NOT NULL`
@@ -4899,8 +4978,12 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 		"desiredExpr", parser.String(desiredDefault.expression),
 		"columnType", columnType,
 	)
-	normalizedCurrent := normalizeExpr(currentDefault.expression, g.mode)
-	normalizedDesired := normalizeExpr(desiredDefault.expression, g.mode)
+
+	// Strip type casts remaining after normalizeExpr (e.g., custom types like ENUMs/domains).
+	// PostgreSQL stores defaults with explicit casts (e.g., 'pending'::order_status),
+	// but users write DEFAULT 'pending' without the cast. Both are semantically identical.
+	normalizedCurrent := unwrapCast(normalizeExpr(currentDefault.expression, g.mode))
+	normalizedDesired := unwrapCast(normalizeExpr(desiredDefault.expression, g.mode))
 
 	// Check if both are simple SQLVal (vs complex expressions) after normalization
 	currSQLVal, currentIsSQLVal := normalizedCurrent.(*parser.SQLVal)
@@ -4938,6 +5021,16 @@ func (g *Generator) areSameDefaultValue(currentDefault *DefaultDefinition, desir
 		"columnType", columnType,
 	)
 	return strings.EqualFold(currentExprSchema, desiredExprSchema) && strings.EqualFold(currentExpr, desiredExpr)
+}
+
+// unwrapCast strips a type cast from an expression, returning the inner expression.
+// This handles custom type casts (e.g., ENUM, domain) that normalizeExpr does not strip.
+func unwrapCast(expr parser.Expr) parser.Expr {
+	castExpr, ok := expr.(*parser.CastExpr)
+	if !ok {
+		return expr
+	}
+	return castExpr.Expr
 }
 
 // isNumericColumnType determines if a column type should be compared numerically.
@@ -5249,9 +5342,12 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 			dirB = AscScr
 		}
 
-		normalizedA := parser.String(normalizeExpr(indexA.columns[i].columnExpr, g.mode))
-		normalizedB := parser.String(normalizeExpr(indexB.columns[i].columnExpr, g.mode))
+		normalizedA := g.formatIndexExprForComparison(indexA.columns[i].columnExpr)
+		normalizedB := g.formatIndexExprForComparison(indexB.columns[i].columnExpr)
 		if normalizedA != normalizedB || dirA != dirB {
+			return false
+		}
+		if indexA.columns[i].withoutOverlaps != indexB.columns[i].withoutOverlaps {
 			return false
 		}
 	}
@@ -5281,16 +5377,13 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 		}
 		// TODO: check length?
 		var normalizedA, normalizedB string
-		if !g.config.LegacyIgnoreQuotes {
-			// Quote-aware mode: use formatExprQuoteAware which respects the Quoted field
-			normalizedA = g.formatExprQuoteAware(normalizeExpr(indexA.columns[i].columnExpr, g.mode))
-			normalizedB = g.formatExprQuoteAware(normalizeExpr(indexB.columns[i].columnExpr, g.mode))
-		} else {
-			normalizedA = parser.String(normalizeExpr(indexA.columns[i].columnExpr, g.mode))
-			normalizedB = parser.String(normalizeExpr(indexB.columns[i].columnExpr, g.mode))
-		}
+		normalizedA = g.formatIndexExprForComparison(indexA.columns[i].columnExpr)
+		normalizedB = g.formatIndexExprForComparison(indexB.columns[i].columnExpr)
 		if normalizedA != normalizedB ||
 			indexAColumn.direction != indexB.columns[i].direction {
+			return false
+		}
+		if indexA.columns[i].withoutOverlaps != indexB.columns[i].withoutOverlaps {
 			return false
 		}
 	}
@@ -5361,6 +5454,26 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 	return true
 }
 
+func (g *Generator) formatIndexExprForComparison(expr parser.Expr) string {
+	normalized := normalizeExpr(expr, g.mode)
+
+	if !g.config.LegacyIgnoreQuotes {
+		if g.mode == GeneratorModePostgres {
+			return g.formatExprQuoteAware(normalized)
+		}
+		if g.mode == GeneratorModeMssql {
+			if colName, ok := normalized.(*parser.ColName); ok {
+				// SQL Server metadata does not preserve whether a simple identifier was
+				// written as `name` or `[name]`, so compare index/PK column refs by their
+				// underlying identifier instead of their exported bracket style.
+				return strings.ToLower(colName.Name.Name)
+			}
+		}
+	}
+
+	return parser.String(normalized)
+}
+
 func (g *Generator) areSameWhereClause(whereA, whereB parser.Expr) bool {
 	// Both nil
 	if whereA == nil && whereB == nil {
@@ -5420,14 +5533,24 @@ func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB Forei
 	if foreignKeyA.notForReplication != foreignKeyB.notForReplication {
 		return false
 	}
-	if (foreignKeyA.constraintOptions != nil) != (foreignKeyB.constraintOptions != nil) {
+	if foreignKeyA.period != foreignKeyB.period {
 		return false
 	}
-	if foreignKeyA.constraintOptions != nil && foreignKeyB.constraintOptions != nil {
-		if foreignKeyA.constraintOptions.deferrable != foreignKeyB.constraintOptions.deferrable {
-			return false
+	optsA := foreignKeyA.constraintOptions
+	optsB := foreignKeyB.constraintOptions
+	// Treat nil as equivalent to &ConstraintOptions{false, false} (the default).
+	// The pgquery parser always creates a non-nil ConstraintOptions even without
+	// a DEFERRABLE clause, while the generic parser creates nil.
+	if optsA != nil || optsB != nil {
+		da, ia := false, false
+		if optsA != nil {
+			da, ia = optsA.deferrable, optsA.initiallyDeferred
 		}
-		if foreignKeyA.constraintOptions.initiallyDeferred != foreignKeyB.constraintOptions.initiallyDeferred {
+		db, ib := false, false
+		if optsB != nil {
+			db, ib = optsB.deferrable, optsB.initiallyDeferred
+		}
+		if da != db || ia != ib {
 			return false
 		}
 	}
