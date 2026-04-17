@@ -2257,7 +2257,11 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desi
 	case GeneratorModeSQLite3:
 		triggerDefinition = desiredTrigger.statement
 	case GeneratorModePostgres:
-		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, "\n"))
+		whenClause := ""
+		if desiredTrigger.whenCondition != "" {
+			whenClause = "WHEN " + desiredTrigger.whenCondition + " "
+		}
+		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s%s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), whenClause, strings.Join(desiredTrigger.body, "\n"))
 	default:
 		return ddls, nil
 	}
