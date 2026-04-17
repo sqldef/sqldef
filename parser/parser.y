@@ -419,7 +419,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <updateExpr> update_expression
 %type <setExpr> set_expression transaction_char isolation_level
 %type <str> ignore_opt default_opt
-%type <empty> if_not_exists_opt for_each_row_opt
+%type <empty> if_not_exists_opt
 %type <expr> when_expression_opt
 %type <str> reserved_keyword non_reserved_keyword col_name_keyword type_func_name_keyword
 %type <ident> sql_id reserved_sql_id extension_name, col_alias as_ci_opt
@@ -1152,8 +1152,8 @@ create_statement:
       },
     }
   }
-/* For SQLite3 */
-| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt BEGIN statement_block ';' END
+/* For SQLite3 (without FOR EACH ROW) */
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name when_expression_opt BEGIN statement_block ';' END
   {
     $$ = &DDL{
       Action: CreateTrigger,
@@ -1162,12 +1162,27 @@ create_statement:
         TableName: $7,
         Time: $4,
         Event: $5,
-        When: $9,
-        Body: $11,
+        When: $8,
+        Body: $10,
       },
     }
   }
-| CREATE TRIGGER IF NOT EXISTS sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt BEGIN statement_block ';' END
+/* For SQLite3 (with FOR EACH ROW) */
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW when_expression_opt BEGIN statement_block ';' END
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $3},
+        TableName: $7,
+        Time: $4,
+        Event: $5,
+        When: $11,
+        Body: $13,
+      },
+    }
+  }
+| CREATE TRIGGER IF NOT EXISTS sql_id trigger_time trigger_event_list ON table_name when_expression_opt BEGIN statement_block ';' END
   {
     $$ = &DDL{
       Action: CreateTrigger,
@@ -1176,13 +1191,27 @@ create_statement:
         TableName: $10,
         Time: $7,
         Event: $8,
-        When: $12,
-        Body: $14,
+        When: $11,
+        Body: $13,
       },
     }
   }
-/* For PostgreSQL: CREATE TRIGGER ... [FOR EACH ROW] [WHEN (...)] EXECUTE FUNCTION/PROCEDURE */
-| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt EXECUTE FUNCTION object_name '(' select_expression_list_opt ')'
+| CREATE TRIGGER IF NOT EXISTS sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW when_expression_opt BEGIN statement_block ';' END
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $6},
+        TableName: $10,
+        Time: $7,
+        Event: $8,
+        When: $14,
+        Body: $16,
+      },
+    }
+  }
+/* For PostgreSQL: CREATE TRIGGER ... [WHEN (...)] EXECUTE FUNCTION/PROCEDURE (without FOR EACH ROW) */
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name when_expression_opt EXECUTE FUNCTION object_name '(' select_expression_list_opt ')'
   {
     $$ = &DDL{
       Action: CreateTrigger,
@@ -1191,18 +1220,18 @@ create_statement:
         TableName: $7,
         Time: $4,
         Event: $5,
-        When: $9,
+        When: $8,
         Body: []Statement{
           &TriggerFuncExec{
             Keyword: "FUNCTION",
-            FuncName: $12,
-            Args: SelectExprsToExprs($14),
+            FuncName: $11,
+            Args: SelectExprsToExprs($13),
           },
         },
       },
     }
   }
-| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name for_each_row_opt when_expression_opt EXECUTE PROCEDURE object_name '(' select_expression_list_opt ')'
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name when_expression_opt EXECUTE PROCEDURE object_name '(' select_expression_list_opt ')'
   {
     $$ = &DDL{
       Action: CreateTrigger,
@@ -1211,12 +1240,92 @@ create_statement:
         TableName: $7,
         Time: $4,
         Event: $5,
-        When: $9,
+        When: $8,
         Body: []Statement{
           &TriggerFuncExec{
             Keyword: "PROCEDURE",
-            FuncName: $12,
-            Args: SelectExprsToExprs($14),
+            FuncName: $11,
+            Args: SelectExprsToExprs($13),
+          },
+        },
+      },
+    }
+  }
+/* For PostgreSQL: CREATE TRIGGER ... FOR EACH ROW EXECUTE FUNCTION/PROCEDURE */
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW EXECUTE FUNCTION object_name '(' select_expression_list_opt ')'
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $3},
+        TableName: $7,
+        Time: $4,
+        Event: $5,
+        Body: []Statement{
+          &TriggerFuncExec{
+            Keyword: "FUNCTION",
+            FuncName: $13,
+            Args: SelectExprsToExprs($15),
+          },
+        },
+      },
+    }
+  }
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW EXECUTE PROCEDURE object_name '(' select_expression_list_opt ')'
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $3},
+        TableName: $7,
+        Time: $4,
+        Event: $5,
+        Body: []Statement{
+          &TriggerFuncExec{
+            Keyword: "PROCEDURE",
+            FuncName: $13,
+            Args: SelectExprsToExprs($15),
+          },
+        },
+      },
+    }
+  }
+/* For PostgreSQL: CREATE TRIGGER ... FOR EACH ROW WHEN (...) EXECUTE FUNCTION/PROCEDURE */
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW WHEN '(' expression ')' EXECUTE FUNCTION object_name '(' select_expression_list_opt ')'
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $3},
+        TableName: $7,
+        Time: $4,
+        Event: $5,
+        When: &ParenExpr{Expr: $13},
+        Body: []Statement{
+          &TriggerFuncExec{
+            Keyword: "FUNCTION",
+            FuncName: $17,
+            Args: SelectExprsToExprs($19),
+          },
+        },
+      },
+    }
+  }
+| CREATE TRIGGER sql_id trigger_time trigger_event_list ON table_name FOR EACH ROW WHEN '(' expression ')' EXECUTE PROCEDURE object_name '(' select_expression_list_opt ')'
+  {
+    $$ = &DDL{
+      Action: CreateTrigger,
+      Trigger: &Trigger{
+        Name: &ColName{Name: $3},
+        TableName: $7,
+        Time: $4,
+        Event: $5,
+        When: &ParenExpr{Expr: $13},
+        Body: []Statement{
+          &TriggerFuncExec{
+            Keyword: "PROCEDURE",
+            FuncName: $17,
+            Args: SelectExprsToExprs($19),
           },
         },
       },
@@ -2624,11 +2733,6 @@ return_statement:
   {
     $$ = &Return{ Expr: $2 }
   }
-
-for_each_row_opt:
-  { $$ = struct{}{} }
-| FOR EACH ROW
-  { $$ = struct{}{} }
 
 policy_as_opt:
   {
