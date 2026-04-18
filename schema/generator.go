@@ -5122,8 +5122,10 @@ func (g *Generator) areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 		return false
 	}
 	// Compare WHEN conditions
-	whenA := strings.ReplaceAll(strings.ToLower(triggerA.whenCondition), " ", "")
-	whenB := strings.ReplaceAll(strings.ToLower(triggerB.whenCondition), " ", "")
+	// Normalize: lowercase, remove spaces, strip matching outer parentheses
+	// pg_get_triggerdef() may wrap the condition in extra parentheses
+	whenA := stripMatchingOuterParens(strings.ReplaceAll(strings.ToLower(triggerA.whenCondition), " ", ""))
+	whenB := stripMatchingOuterParens(strings.ReplaceAll(strings.ToLower(triggerB.whenCondition), " ", ""))
 	if whenA != whenB {
 		return false
 	}
@@ -5142,6 +5144,31 @@ func (g *Generator) areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 		}
 	}
 	return true
+}
+
+// stripMatchingOuterParens removes matching outer parentheses from a string.
+// e.g., "((a>0))" → "a>0", but "(a)or(b)" is unchanged because the outer parens don't match.
+func stripMatchingOuterParens(s string) string {
+	for len(s) >= 2 && s[0] == '(' && s[len(s)-1] == ')' {
+		depth := 0
+		outerMatch := true
+		for i := 0; i < len(s); i++ {
+			if s[i] == '(' {
+				depth++
+			} else if s[i] == ')' {
+				depth--
+			}
+			if depth == 0 && i < len(s)-1 {
+				outerMatch = false
+				break
+			}
+		}
+		if !outerMatch {
+			break
+		}
+		s = s[1 : len(s)-1]
+	}
+	return s
 }
 
 func isNullValue(value *Value) bool {
