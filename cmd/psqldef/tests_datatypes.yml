@@ -940,12 +940,34 @@ TypedLiteralsInCheckWithCast:
     );
   up: |
     ALTER TABLE "public"."events" ADD COLUMN "event_date" date CHECK (event_date >= '2020-01-01');
-    ALTER TABLE "public"."events" ADD COLUMN "event_time" time CHECK (event_time >= '09:00:00'::time);
+    ALTER TABLE "public"."events" ADD COLUMN "event_time" time CHECK (event_time >= '09:00:00');
     ALTER TABLE "public"."events" ADD COLUMN "event_end_date" date CHECK (event_end_date <= '2030-12-31');
   down: |
     ALTER TABLE "public"."events" DROP COLUMN "event_end_date";
     ALTER TABLE "public"."events" DROP COLUMN "event_time";
     ALTER TABLE "public"."events" DROP COLUMN "event_date";
+CheckWithTimeColumnBareLiteralIsIdempotent:
+  desired: |
+    CREATE TABLE samples (
+      id bigserial PRIMARY KEY,
+      flag boolean NOT NULL DEFAULT false,
+      start_at time NOT NULL,
+      end_at time NOT NULL,
+      CHECK (start_at <> end_at),
+      CHECK (
+        NOT flag
+        OR (start_at >= '00:00:00' AND end_at <= '06:00:00' AND start_at < end_at)
+      )
+    );
+  legacy_ignore_quotes: false
+CheckWithExplicitTimeCastIsIdempotent:
+  desired: |
+    CREATE TABLE samples (
+      id bigserial PRIMARY KEY,
+      start_at time NOT NULL,
+      CHECK (start_at >= '00:00:00'::time)
+    );
+  legacy_ignore_quotes: false
 # Multi-dimensional array support
 CreateTableWithMultiDimensionalArrays:
   desired: |
