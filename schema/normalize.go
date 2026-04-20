@@ -211,7 +211,6 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 
 			// Remove date/timestamp casts from string literals
 			// PostgreSQL simplifies '2020-01-01'::date to '2020-01-01' in CHECK constraints
-			// But keeps time casts: time '09:00:00' becomes '09:00:00'::time
 			if normalizedTypeStr == "date" || normalizedTypeStr == "timestamp" {
 				return normalizeCheckExpr(e.Expr, mode)
 			}
@@ -466,22 +465,10 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Qualifier: parser.TableName{Name: qualifier},
 		}
 	case *parser.TypedLiteral:
-		// PostgreSQL normalizes typed literals differently based on type:
-		// - DATE 'value' -> 'value' (removes type prefix)
-		// - TIMESTAMP 'value' -> 'value' (removes type prefix)
-		// - TIME 'value' -> 'value'::time (converts to cast expression)
-		// - TIMETZ 'value' -> 'value'::timetz (converts to cast expression)
-		typeStr := strings.ToLower(e.Type)
-
-		// For time types, convert to cast expression
-		if strings.HasPrefix(typeStr, "time") {
-			return &parser.CastExpr{
-				Expr: normalizeCheckExpr(e.Value, mode),
-				Type: &parser.ConvertType{Type: typeStr},
-			}
-		}
-
-		// For date/timestamp, remove the type prefix
+		// Strip the type prefix for all temporal literals.
+		// PostgreSQL's pg_get_constraintdef emits typed literals for time/timestamp/date
+		// when comparing to typed columns, but user SQL often writes bare literals.
+		// Dropping the type prefix on both sides makes them compare equal.
 		return normalizeCheckExpr(e.Value, mode)
 	default:
 		// For all other expression types (literals, etc.), return as-is
