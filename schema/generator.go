@@ -2275,7 +2275,11 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desi
 	case GeneratorModeSQLite3:
 		triggerDefinition = desiredTrigger.statement
 	case GeneratorModePostgres:
-		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), strings.Join(desiredTrigger.body, "\n"))
+		whenClause := ""
+		if desiredTrigger.whenCondition != "" {
+			whenClause = "WHEN " + desiredTrigger.whenCondition + " "
+		}
+		triggerDefinition += fmt.Sprintf("TRIGGER %s %s %s ON %s FOR EACH ROW %s%s", g.escapeQualifiedName(desiredTrigger.name), desiredTrigger.time, g.formatTriggerEvents(desiredTrigger.event, " OR "), g.escapeQualifiedName(desiredTrigger.tableName), whenClause, strings.Join(desiredTrigger.body, "\n"))
 	default:
 		return ddls, nil
 	}
@@ -5139,6 +5143,14 @@ func (g *Generator) areSameTriggerDefinition(triggerA, triggerB *Trigger) bool {
 	if !g.qualifiedNamesEqual(triggerA.tableName, triggerB.tableName) {
 		return false
 	}
+	// Compare WHEN conditions
+	// Normalize: lowercase, remove spaces, strip matching outer parentheses
+	// pg_get_triggerdef() may wrap the condition in extra parentheses
+	whenA := stripMatchingOuterParens(strings.ReplaceAll(strings.ToLower(triggerA.whenCondition), " ", ""))
+	whenB := stripMatchingOuterParens(strings.ReplaceAll(strings.ToLower(triggerB.whenCondition), " ", ""))
+	if whenA != whenB {
+		return false
+	}
 	if len(triggerA.body) != len(triggerB.body) {
 		return false
 	}
@@ -5278,6 +5290,31 @@ func normalizeEventStatus(s string) string {
 		return "ENABLE"
 	}
 	return strings.ToUpper(s)
+}
+
+// stripMatchingOuterParens removes matching outer parentheses from a string.
+// e.g., "((a>0))" → "a>0", but "(a)or(b)" is unchanged because the outer parens don't match.
+func stripMatchingOuterParens(s string) string {
+	for len(s) >= 2 && s[0] == '(' && s[len(s)-1] == ')' {
+		depth := 0
+		outerMatch := true
+		for i := 0; i < len(s); i++ {
+			if s[i] == '(' {
+				depth++
+			} else if s[i] == ')' {
+				depth--
+			}
+			if depth == 0 && i < len(s)-1 {
+				outerMatch = false
+				break
+			}
+		}
+		if !outerMatch {
+			break
+		}
+		s = s[1 : len(s)-1]
+	}
+	return s
 }
 
 func isNullValue(value *Value) bool {

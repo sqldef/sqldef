@@ -368,12 +368,13 @@ type TriggerEvent struct {
 }
 
 type Trigger struct {
-	statement string
-	name      QualifiedName
-	tableName QualifiedName
-	time      string
-	event     []TriggerEvent
-	body      []string
+	statement     string
+	name          QualifiedName
+	tableName     QualifiedName
+	time          string
+	event         []TriggerEvent
+	whenCondition string
+	body          []string
 }
 
 // Event represents a MySQL scheduled event for schema comparison and DDL generation.

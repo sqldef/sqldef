@@ -470,3 +470,75 @@ CreateTriggerUpdateOfMultipleColumns:
     DROP TRIGGER addresses_update_trigger ON public.addresses;
     DROP TABLE public.addresses;
     DROP FUNCTION public.addresses_update_check;
+
+CreateTriggerWithWhenClause:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text,
+      updated_at timestamp
+    );
+    CREATE FUNCTION log_update()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_name_change
+      AFTER UPDATE ON users
+      FOR EACH ROW WHEN (OLD.name IS DISTINCT FROM NEW.name) EXECUTE FUNCTION log_update();
+  up: |
+    CREATE TABLE users (
+      id serial PRIMARY KEY,
+      name text,
+      updated_at timestamp
+    );
+    CREATE FUNCTION log_update()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER log_name_change after update ON public.users FOR EACH ROW WHEN (OLD.name is distinct from NEW.name) EXECUTE FUNCTION log_update();
+  down: |
+    DROP TRIGGER log_name_change ON public.users;
+    DROP TABLE public.users;
+    DROP FUNCTION public.log_update;
+
+CreateTriggerWithWhenClauseProcedure:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE items (
+      id serial PRIMARY KEY,
+      status smallint
+    );
+    CREATE FUNCTION track_status()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER track_status_change
+      AFTER UPDATE ON items
+      FOR EACH ROW WHEN (OLD.status IS DISTINCT FROM NEW.status) EXECUTE PROCEDURE track_status();
+  up: |
+    CREATE TABLE items (
+      id serial PRIMARY KEY,
+      status smallint
+    );
+    CREATE FUNCTION track_status()
+      RETURNS TRIGGER AS
+    $$
+    BEGIN
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    CREATE TRIGGER track_status_change after update ON public.items FOR EACH ROW WHEN (OLD.status is distinct from NEW.status) EXECUTE PROCEDURE track_status();
+  down: |
+    DROP TRIGGER track_status_change ON public.items;
+    DROP TABLE public.items;
+    DROP FUNCTION public.track_status;

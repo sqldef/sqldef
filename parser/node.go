@@ -1335,6 +1335,7 @@ type Trigger struct {
 	TableName TableName
 	Time      string
 	Event     []TriggerEvent
+	When      Expr
 	Body      []Statement
 }
 
