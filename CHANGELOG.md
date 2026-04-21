@@ -4,7 +4,7 @@
 - Fix CHECK constraint idempotency for time columns with bare literals in psqldef by @shiroemons in https://github.com/sqldef/sqldef/pull/1187
 - feat: support WHEN clause in PostgreSQL trigger definitions by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1186
 
-## [v4.0.0](https://github.com/sqldef/sqldef/compare/v3.10.1...v4.0.0) - 2026-04-08
+## [v3.11.0](https://github.com/sqldef/sqldef/compare/v3.10.1...v3.11.0) - 2026-04-08
 - Support TiDB AUTO_RANDOM column attribute by @y-kawawa in https://github.com/sqldef/sqldef/pull/1149
 - sqlite3: support strict and without rowid by @dgllghr in https://github.com/sqldef/sqldef/pull/1166
 - build(deps): bump golang.org/x/term from 0.40.0 to 0.41.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1175
