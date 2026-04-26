@@ -231,6 +231,7 @@ func (d *PostgresDatabase) partitionChildTables() ([]string, error) {
 		INNER JOIN pg_catalog.pg_class pc ON i.inhparent = pc.oid
 		INNER JOIN pg_catalog.pg_namespace pn ON pc.relnamespace = pn.oid
 		WHERE c.relispartition = true
+		AND c.relpartbound IS NOT NULL
 		AND n.nspname NOT IN ('information_schema', 'pg_catalog', 'sys')
 		AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_depend d WHERE c.oid = d.objid AND d.classid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'pg_class') AND d.deptype = 'e')
 		ORDER BY n.nspname ASC, c.relname ASC;
