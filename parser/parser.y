@@ -740,6 +740,42 @@ comment_statement:
       },
     }
   }
+
+| COMMENT_KEYWORD ON SCHEMA table_name IS STRING
+  {
+    // Build Object as []Ident: [schema]
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_SCHEMA",
+        Object: obj,
+        Comment: $6,
+      },
+    }
+  }
+| COMMENT_KEYWORD ON SCHEMA table_name IS NULL
+  {
+    var obj []Ident
+    if !$4.Schema.IsEmpty() {
+      obj = []Ident{$4.Schema, $4.Name}
+    } else {
+      obj = []Ident{$4.Name}
+    }
+    $$ = &DDL{
+      Action: CommentOn,
+      Comment: &Comment{
+        ObjectType: "OBJECT_SCHEMA",
+        Object: obj,
+        Comment: "",
+      },
+    }
+  }
 | COMMENT_KEYWORD ON FUNCTION object_name '(' function_args_opt ')' IS STRING
   {
     // Build Object as []Ident: [schema, function] or [function]

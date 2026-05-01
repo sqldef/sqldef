@@ -378,7 +378,7 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 
 func (d *PostgresDatabase) schemas() ([]string, error) {
 	rows, err := d.db.Query(`
-		SELECT schema_name
+		SELECT schema_name, obj_description(schema_name::regnamespace) as schema_comment
 		FROM information_schema.schemata
 		WHERE schema_name NOT LIKE 'pg_%%'
 		AND schema_name not in ('information_schema', 'public', 'sys');
@@ -391,7 +391,9 @@ func (d *PostgresDatabase) schemas() ([]string, error) {
 	var ddls []string
 	for rows.Next() {
 		var name string
-		if err := rows.Scan(&name); err != nil {
+		var schemaComment sql.NullString
+
+		if err := rows.Scan(&name, &schemaComment); err != nil {
 			return nil, err
 		}
 		ddls = append(
@@ -399,6 +401,14 @@ func (d *PostgresDatabase) schemas() ([]string, error) {
 				"CREATE SCHEMA %s;", d.quoteIdentifierIfNeeded(name),
 			),
 		)
+
+		// Add comment if exists
+		if schemaComment.Valid {
+			ddls = append(ddls, fmt.Sprintf(
+				"COMMENT ON SCHEMA %s IS %s;",
+				name, schemaLib.StringConstant(schemaComment.String),
+			))
+		}
 	}
 	return ddls, nil
 }
