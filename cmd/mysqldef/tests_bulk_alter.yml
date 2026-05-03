@@ -1,0 +1,149 @@
+# yaml-language-server: $schema=../../testutil/testcase.schema.json
+
+# These cases exercise bulk_alter: a table's add/change ALTERs and its later
+# drop ALTERs are fused into one `ALTER TABLE t a1, a2, ...` statement.
+#
+# TiDB note: bundles that contain `ADD COLUMN ... AFTER <col-added-in-the
+# -same-ALTER>` fail on TiDB because it cannot resolve the just-added column
+# in subsequent subcommands of the same statement (MySQL processes the
+# subcommands sequentially and accepts this). Tests that emit such a bundle
+# are marked `flavor: !tidb`.
+# Ref. https://docs.pingcap.com/tidb/stable/sql-statement-alter-table/
+
+BulkAlterAddDropColumns:
+  legacy_ignore_quotes: false
+  flavor: "!tidb"
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      c int
+    );
+  desired: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      a int,
+      b int
+    );
+  up: |
+    ALTER TABLE patients ADD COLUMN a int AFTER id, ADD COLUMN b int AFTER a, DROP COLUMN `c`;
+  down: |
+    ALTER TABLE patients ADD COLUMN c int AFTER id, DROP COLUMN `b`, DROP COLUMN `a`;
+
+BulkAlterDisabledByDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      c int
+    );
+  desired: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      a int,
+      b int
+    );
+  up: |
+    ALTER TABLE patients ADD COLUMN a int AFTER id;
+    ALTER TABLE patients ADD COLUMN b int AFTER a;
+    ALTER TABLE patients DROP COLUMN `c`;
+  down: |
+    ALTER TABLE patients ADD COLUMN c int AFTER id;
+    ALTER TABLE patients DROP COLUMN `b`;
+    ALTER TABLE patients DROP COLUMN `a`;
+
+BulkAlterQuotedTableNames:
+  flavor: "!tidb"
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      c int
+    );
+  desired: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      a int,
+      b int
+    );
+  up: |
+    ALTER TABLE `patients` ADD COLUMN `a` int AFTER `id`, ADD COLUMN `b` int AFTER `a`, DROP COLUMN `c`;
+  down: |
+    ALTER TABLE `patients` ADD COLUMN `c` int AFTER `id`, DROP COLUMN `b`, DROP COLUMN `a`;
+
+BulkAlterPerTableScope:
+  legacy_ignore_quotes: false
+  flavor: "!tidb"
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE a (
+      id bigint NOT NULL
+    );
+    CREATE TABLE b (
+      id bigint NOT NULL
+    );
+  desired: |
+    CREATE TABLE a (
+      id bigint NOT NULL,
+      x int,
+      y int
+    );
+    CREATE TABLE b (
+      id bigint NOT NULL,
+      x int,
+      y int
+    );
+  up: |
+    ALTER TABLE a ADD COLUMN x int AFTER id, ADD COLUMN y int AFTER x;
+    ALTER TABLE b ADD COLUMN x int AFTER id, ADD COLUMN y int AFTER x;
+  down: |
+    ALTER TABLE a DROP COLUMN `y`, DROP COLUMN `x`;
+    ALTER TABLE b DROP COLUMN `y`, DROP COLUMN `x`;
+
+BulkAlterKeepsDropStandaloneWhenDropDisabled:
+  legacy_ignore_quotes: false
+  flavor: "!tidb"
+  enable_drop: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      c int
+    );
+  desired: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      a int,
+      b int
+    );
+  up: |
+    ALTER TABLE patients ADD COLUMN a int AFTER id, ADD COLUMN b int AFTER a;
+    -- Skipped: ALTER TABLE patients DROP COLUMN `c`;
+  down: |
+    -- Skipped: ALTER TABLE patients DROP COLUMN `b`;
+    -- Skipped: ALTER TABLE patients DROP COLUMN `a`;
+
+BulkAlterFusesCleanupIndexDropInQuoteAwareMode:
+  legacy_ignore_quotes: false
+  flavor: "!tidb"
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE items (
+      id bigint NOT NULL,
+      c int,
+      KEY idx_c (c)
+    );
+  desired: |
+    CREATE TABLE items (
+      id bigint NOT NULL,
+      a int
+    );
+  up: |
+    ALTER TABLE items ADD COLUMN a int AFTER id, DROP INDEX `idx_c`, DROP COLUMN `c`;
+  down: |
+    ALTER TABLE items ADD COLUMN c int AFTER id, ADD KEY idx_c (c), DROP COLUMN `a`;

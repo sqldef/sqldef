@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/parser"
 	"github.com/stretchr/testify/assert"
 )
@@ -450,6 +451,90 @@ func TestAreSameForeignKeysConstraintOptionsNilVsDefault(t *testing.T) {
 		"FK with nil ConstraintOptions and FK with default ConstraintOptions{false, false} should be considered the same")
 	assert.True(t, g.areSameForeignKeys(fkDefault, fkNil),
 		"FK with default ConstraintOptions{false, false} and FK with nil ConstraintOptions should be considered the same")
+}
+
+func TestAlterBundler(t *testing.T) {
+	g := &Generator{mode: GeneratorModeMysql, config: database.GeneratorConfig{EnableDrop: true}}
+	tableA := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
+	tableB := &Table{name: QualifiedName{Name: Ident{Name: "b"}}}
+
+	bundler := newAlterBundler(g, true)
+
+	slotA := bundler.emit(tableA, "ALTER TABLE a ADD COLUMN x int")
+	assert.NotEqual(t, "ALTER TABLE a ADD COLUMN x int", slotA, "first action should be replaced by a placeholder")
+
+	slotB := bundler.emit(tableB, "ALTER TABLE b ADD COLUMN z int")
+	assert.NotEqual(t, slotA, slotB, "each table gets its own placeholder")
+
+	folded := bundler.emit(tableA, "ALTER TABLE a DROP COLUMN y")
+	assert.Equal(t, "", folded, "subsequent same-table action should fold, not emit")
+
+	other := bundler.emit(tableA, "DROP INDEX idx ON a")
+	assert.Equal(t, "DROP INDEX idx ON a", other, "non-ALTER statement should pass through")
+
+	ddls := bundler.finalize([]string{slotA, slotB, "DROP INDEX idx ON a"})
+	assert.Equal(t, []string{
+		"ALTER TABLE a ADD COLUMN x int, DROP COLUMN y",
+		"ALTER TABLE b ADD COLUMN z int",
+		"DROP INDEX idx ON a",
+	}, ddls)
+}
+
+// A table's ALTER TABLE actions can be escaped with the desired schema's quoting
+// (diff phase) or the current schema's quoting (cleanup DROP INDEX/CONSTRAINT).
+// In quote-aware mode these differ, but both must fold into one bundle.
+func TestAlterBundlerFusesMixedQuoting(t *testing.T) {
+	g := &Generator{mode: GeneratorModeMysql, config: database.GeneratorConfig{EnableDrop: true}}
+	desiredTable := &Table{name: QualifiedName{Name: Ident{Name: "patients", Quoted: false}}}
+
+	bundler := newAlterBundler(g, true)
+
+	// Diff phase emits with the desired (unquoted) table name.
+	slot := bundler.emit(desiredTable, "ALTER TABLE patients ADD COLUMN a int")
+	assert.Equal(t, "ALTER TABLE patients ", slot)
+
+	// Cleanup emits DROP INDEX with the current (backtick-quoted) table name.
+	folded := bundler.emit(desiredTable, "ALTER TABLE `patients` DROP INDEX `idx_c`")
+	assert.Equal(t, "", folded, "the differently-quoted drop should fold into the same bundle")
+
+	ddls := bundler.finalize([]string{slot})
+	assert.Equal(t, []string{
+		"ALTER TABLE patients ADD COLUMN a int, DROP INDEX `idx_c`",
+	}, ddls)
+}
+
+// With enable_drop disabled, a drop must not be fused with non-drop actions:
+// commentOutDropStatements would otherwise comment out the whole statement and
+// silently skip the ADD/MODIFY actions too.
+func TestAlterBundlerKeepsDropsStandaloneWhenDropDisabled(t *testing.T) {
+	g := &Generator{mode: GeneratorModeMysql, config: database.GeneratorConfig{EnableDrop: false}}
+	table := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
+
+	bundler := newAlterBundler(g, true)
+
+	slot := bundler.emit(table, "ALTER TABLE a ADD COLUMN x int")
+	assert.Equal(t, "ALTER TABLE a ", slot, "non-drop action starts a bundle")
+
+	drop := bundler.emit(table, "ALTER TABLE a DROP COLUMN y")
+	assert.Equal(t, "ALTER TABLE a DROP COLUMN y", drop, "drop stays standalone so it can be commented out individually")
+
+	ddls := bundler.finalize([]string{slot, "ALTER TABLE a DROP COLUMN y"})
+	assert.Equal(t, []string{
+		"ALTER TABLE a ADD COLUMN x int",
+		"ALTER TABLE a DROP COLUMN y",
+	}, ddls)
+}
+
+func TestAlterBundlerDisabledPassesThrough(t *testing.T) {
+	g := &Generator{mode: GeneratorModeMysql}
+	table := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
+	bundler := newAlterBundler(g, false)
+
+	stmt := bundler.emit(table, "ALTER TABLE a ADD COLUMN x int")
+	assert.Equal(t, "ALTER TABLE a ADD COLUMN x int", stmt)
+
+	ddls := bundler.finalize([]string{stmt})
+	assert.Equal(t, []string{"ALTER TABLE a ADD COLUMN x int"}, ddls)
 }
 
 func TestCheckConstraintMSSQLInVsOrNormalization(t *testing.T) {

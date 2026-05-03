@@ -209,6 +209,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	exclusionDDLs := []string{}
 	viewDDLs := []string{}
 
+	// bulkAlter fuses per-table ALTER TABLE actions when --bulk-alter is set (MySQL only).
+	bulkAlter := newAlterBundler(g, g.config.BulkAlter && g.mode == GeneratorModeMysql)
+
 	// Incrementally examine desiredDDLs
 	for _, ddl := range desiredDDLs {
 		switch desired := ddl.(type) {
@@ -222,8 +225,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				for _, tableDDL := range tableDDLs {
 					if isAddConstraintForeignKey(tableDDL) {
 						foreignKeyDDLs = append(foreignKeyDDLs, tableDDL)
-					} else {
-						interDDLs = append(interDDLs, tableDDL)
+					} else if out := bulkAlter.emit(&desired.table, tableDDL); out != "" {
+						interDDLs = append(interDDLs, out)
 					}
 				}
 				mergeTable(currentTable, desired.table)
@@ -250,8 +253,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						for _, tableDDL := range tableDDLs {
 							if isAddConstraintForeignKey(tableDDL) {
 								foreignKeyDDLs = append(foreignKeyDDLs, tableDDL)
-							} else {
-								interDDLs = append(interDDLs, tableDDL)
+							} else if out := bulkAlter.emit(&desired.table, tableDDL); out != "" {
+								interDDLs = append(interDDLs, out)
 							}
 						}
 						mergeTable(oldTable, desired.table)
@@ -471,11 +474,21 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		}
 	}
 
-	// Clean up obsoleted indexes, columns in remaining tables
+	// Clean up obsoleted indexes, columns in remaining tables. Cleanup drops are
+	// routed through appendDDL so bulk_alter can fuse them with the table's
+	// diff-phase ALTER TABLE.
 	for _, currentTable := range g.currentTables {
 		desiredTable := g.findTableByName(g.desiredTables, currentTable.name)
 		if desiredTable == nil {
 			continue // Already handled in drop tables above
+		}
+
+		appendDDL := func(in ...string) {
+			for _, ddl := range in {
+				if out := bulkAlter.emit(desiredTable, ddl); out != "" {
+					ddls = append(ddls, out)
+				}
+			}
 		}
 
 		// Table is expected to exist. Drop foreign keys prior to index deletion
@@ -506,7 +519,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 			// The foreign key seems obsoleted. Check and drop it as needed.
 			foreignKeyDDLs := g.generateDDLsForAbsentForeignKey(foreignKey, *currentTable, *desiredTable)
-			ddls = append(ddls, foreignKeyDDLs...)
+			appendDDL(foreignKeyDDLs...)
 			// TODO: simulate to remove foreign key from `currentTable.foreignKeys`?
 		}
 
@@ -521,7 +534,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue
 			}
 
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(exclusion.constraintName)))
+			appendDDL(fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(exclusion.constraintName)))
 		}
 
 		// Check indexes
@@ -563,7 +576,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return ddls, err
 			}
-			ddls = append(ddls, indexDDLs...)
+			appendDDL(indexDDLs...)
 			g.trackDroppedIndex(currentTable, index)
 			// TODO: simulate to remove index from `currentTable.indexes`?
 		}
@@ -588,7 +601,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			// MySQL 8.0.16+, MariaDB 10.2+, TiDB, PostgreSQL, MSSQL, SQLite. MySQL
 			// 5.7 parses but does not enforce CHECK, so this branch never fires for
 			// it. MariaDB does not accept DROP CHECK <name>, only DROP CONSTRAINT.
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
+			appendDDL(fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
 		}
 
 		// Check columns.
@@ -613,7 +626,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if !isRenamed {
 				// Column is obsoleted. Drop column.
 				columnDDLs := g.generateDDLsForAbsentColumn(currentTable, desiredTable, column)
-				ddls = append(ddls, columnDDLs...)
+				appendDDL(columnDDLs...)
 				// Track dropped column for later (to skip generating COMMENT cleanup DDLs)
 				g.trackDroppedColumn(currentTable, column)
 			}
@@ -624,7 +637,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if g.findPolicyByName(desiredTable.policies, policy.name) != nil {
 				continue
 			}
-			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLIdent(policy.name), g.escapeTableName(currentTable)))
+			appendDDL(fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLIdent(policy.name), g.escapeTableName(currentTable)))
 		}
 
 		// Check row level security.
@@ -635,6 +648,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DISABLE ROW LEVEL SECURITY", g.escapeTableName(currentTable)))
 		}
 	}
+
+	// Must run before the ALGORITHM/LOCK suffixing and drop-commenting below so
+	// those passes see each table's fused statement, not the placeholder.
+	ddls = bulkAlter.finalize(ddls)
 
 	// Clean up obsoleted domains
 	for _, currentDomain := range g.currentDomains {
@@ -815,6 +832,106 @@ func isDropStatement(ddl string) bool {
 		strings.Contains(ddl, "DISABLE ROW LEVEL SECURITY") ||
 		strings.Contains(ddl, "NO FORCE ROW LEVEL SECURITY") ||
 		strings.Contains(ddl, "REVOKE ")
+}
+
+// alterTablePrefix returns "ALTER TABLE <escaped-table-name> ", the prefix the
+// generator prepends to every ALTER TABLE statement for the table.
+func (g *Generator) alterTablePrefix(table *Table) string {
+	return "ALTER TABLE " + g.escapeTableName(table) + " "
+}
+
+// alterBundler fuses the ALTER TABLE actions on one table into a single
+// `ALTER TABLE t a1, a2, ...` statement (--bulk-alter, MySQL only). The caller
+// passes emit() the owning *Table, so the table is known structurally rather
+// than rediscovered from the statement text. See emit and finalize.
+type alterBundler struct {
+	g       *Generator
+	enabled bool
+	byTable map[string]*alterBundle // keyed by ALTER TABLE prefix
+}
+
+// alterBundle accumulates the action texts of one table's ALTER TABLE
+// statements, sharing the common prefix `ALTER TABLE <name> `.
+type alterBundle struct {
+	prefix  string
+	actions []string
+}
+
+func (b *alterBundle) render() string {
+	return b.prefix + strings.Join(b.actions, ", ")
+}
+
+func newAlterBundler(g *Generator, enabled bool) *alterBundler {
+	b := &alterBundler{g: g, enabled: enabled}
+	if enabled {
+		b.byTable = map[string]*alterBundle{}
+	}
+	return b
+}
+
+// emit records stmt as an action of table's bundle and returns what to append
+// in its place. When bundling is off, or stmt is not an ALTER TABLE for table,
+// stmt is returned unchanged. The first action for a table returns a
+// placeholder (the table's prefix, which no complete statement equals) holding
+// the bundle's position; later actions fold in and return "" (append nothing).
+// finalize later rewrites the placeholder into the fused statement.
+func (b *alterBundler) emit(table *Table, stmt string) string {
+	if !b.enabled {
+		return stmt
+	}
+	// When drops are disabled they are commented out individually later by
+	// commentOutDropStatements. Fusing a drop with non-drop actions would make
+	// the whole statement match isDropStatement, so the entire ALTER TABLE
+	// (including its ADD/MODIFY actions) would be commented out. Keep such
+	// statements standalone so only the drop itself is skipped.
+	if !b.g.config.EnableDrop && isDropStatement(stmt) {
+		return stmt
+	}
+	// The bundle key uses the desired table's quoting, matching the diff phase.
+	// Cleanup DROP INDEX / DROP CONSTRAINT statements escape the table with the
+	// current schema's quoting, which can differ in quote-aware mode, so accept
+	// either quoting of the same table name.
+	key := b.g.alterTablePrefix(table)
+	action, ok := b.cutAlterPrefix(table, stmt)
+	if !ok {
+		return stmt // not a plain ALTER TABLE for this table
+	}
+	if bundle := b.byTable[key]; bundle != nil {
+		bundle.actions = append(bundle.actions, action)
+		return ""
+	}
+	b.byTable[key] = &alterBundle{prefix: key, actions: []string{action}}
+	return key
+}
+
+// cutAlterPrefix strips the "ALTER TABLE <name> " prefix for table from stmt,
+// accepting both the unquoted and quoted forms of the table name. The diff phase
+// escapes the table with the desired schema's quoting while some cleanup drops
+// use the current schema's quoting; in quote-aware mode these differ, and both
+// must fold into the same bundle. Returns the remaining action text and whether
+// a prefix matched.
+func (b *alterBundler) cutAlterPrefix(table *Table, stmt string) (string, bool) {
+	raw := table.name.Name.Name
+	for _, name := range []string{raw, b.g.forceEscapeSQLName(raw)} {
+		if action, ok := strings.CutPrefix(stmt, "ALTER TABLE "+name+" "); ok {
+			return action, true
+		}
+	}
+	return "", false
+}
+
+// finalize rewrites each table's placeholder into its fused ALTER TABLE
+// statement, mutating ddls in place.
+func (b *alterBundler) finalize(ddls []string) []string {
+	if !b.enabled {
+		return ddls
+	}
+	for i, ddl := range ddls {
+		if bundle, ok := b.byTable[ddl]; ok {
+			ddls[i] = bundle.render()
+		}
+	}
+	return ddls
 }
 
 func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, desiredTable *Table, column *Column) []string {
