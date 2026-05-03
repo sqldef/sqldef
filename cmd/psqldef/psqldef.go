@@ -40,6 +40,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		SkipExtension         bool     `long:"skip-extension" description:"Skip managing extensions"`
 		SkipPartition         bool     `long:"skip-partition" description:"Skip managing partitioned tables"`
 		DisableDdlTransaction bool     `long:"disable-ddl-transaction" description:"Execute DDL statements outside a transaction block"`
+		BulkAlter             bool     `long:"bulk-alter" description:"Bundle multiple ALTER TABLE actions on the same table into a single statement"`
 		BeforeApply           string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs" value-name:"SQL"`
 
 		// Custom handlers for config flags to preserve order
@@ -96,6 +97,9 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 	if opts.DisableDdlTransaction {
 		config.DisableDdlTransaction = true
+	}
+	if opts.BulkAlter {
+		config.BulkAlter = true
 	}
 
 	options := sqldef.Options{

@@ -42,6 +42,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		Export                bool     `long:"export" description:"Just dump the current schema to stdout"`
 		EnableDrop            bool     `long:"enable-drop" description:"Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE"`
 		SkipView              bool     `long:"skip-view" description:"Skip managing views (temporary feature, to be removed later)"`
+		BulkAlter             bool     `long:"bulk-alter" description:"Bundle multiple ALTER TABLE actions on the same table into a single statement"`
 		BeforeApply           string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs" value-name:"SQL"`
 
 		// Custom handlers for config flags to preserve order
@@ -95,6 +96,9 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 
 	if opts.EnableDrop {
 		config.EnableDrop = true
+	}
+	if opts.BulkAlter {
+		config.BulkAlter = true
 	}
 
 	options := sqldef.Options{

@@ -423,6 +423,88 @@ func TestAreSameForeignKeysConstraintOptionsNilVsDefault(t *testing.T) {
 		"FK with default ConstraintOptions{false, false} and FK with nil ConstraintOptions should be considered the same")
 }
 
+func TestSplitAlterTablePrefix(t *testing.T) {
+	tests := []struct {
+		name       string
+		stmt       string
+		wantPrefix string
+		wantAction string
+		wantOk     bool
+	}{
+		{
+			name:       "PostgreSQL quoted qualified",
+			stmt:       `ALTER TABLE "public"."users" ADD COLUMN "name" text`,
+			wantPrefix: `ALTER TABLE "public"."users" `,
+			wantAction: `ADD COLUMN "name" text`,
+			wantOk:     true,
+		},
+		{
+			name:       "MySQL backtick qualified",
+			stmt:       "ALTER TABLE `db`.`users` ADD COLUMN `name` text",
+			wantPrefix: "ALTER TABLE `db`.`users` ",
+			wantAction: "ADD COLUMN `name` text",
+			wantOk:     true,
+		},
+		{
+			name:       "Unquoted single segment",
+			stmt:       "ALTER TABLE users ADD COLUMN name text",
+			wantPrefix: "ALTER TABLE users ",
+			wantAction: "ADD COLUMN name text",
+			wantOk:     true,
+		},
+		{
+			name:       "Quoted name with doubled-quote escape",
+			stmt:       `ALTER TABLE "weird""tbl" ADD COLUMN x int`,
+			wantPrefix: `ALTER TABLE "weird""tbl" `,
+			wantAction: "ADD COLUMN x int",
+			wantOk:     true,
+		},
+		// Negative cases: not an ALTER TABLE the helper should bundle.
+		{name: "Not ALTER TABLE", stmt: "CREATE TABLE t (id int)", wantOk: false},
+		{name: "ALTER TABLE only", stmt: "ALTER TABLE ", wantOk: false},
+		{name: "Missing space after name", stmt: "ALTER TABLE users", wantOk: false},
+		{name: "Empty name", stmt: "ALTER TABLE  ADD COLUMN x int", wantOk: false},
+		{name: "Leading dot", stmt: "ALTER TABLE .users ADD COLUMN x int", wantOk: false},
+		{name: "Dot then invalid", stmt: "ALTER TABLE public. ADD COLUMN x int", wantOk: false},
+		{name: "Unterminated quote", stmt: `ALTER TABLE "users ADD COLUMN x int`, wantOk: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prefix, action, ok := splitAlterTablePrefix(tt.stmt)
+			assert.Equal(t, tt.wantOk, ok)
+			if ok {
+				assert.Equal(t, tt.wantPrefix, prefix)
+				assert.Equal(t, tt.wantAction, action)
+			}
+		})
+	}
+}
+
+func TestIsUnbundleableAlterAction(t *testing.T) {
+	bundleable := []string{
+		"ADD COLUMN x int",
+		"DROP COLUMN x",
+		"ALTER COLUMN x TYPE bigint",
+		"ADD CONSTRAINT chk CHECK (x > 0)",
+		"DROP CONSTRAINT chk",
+	}
+	for _, a := range bundleable {
+		assert.False(t, isUnbundleableAlterAction(a), "%q should be bundleable", a)
+	}
+	unbundleable := []string{
+		"RENAME COLUMN a TO b",
+		"RENAME TO new_name",
+		"RENAME CONSTRAINT old TO new",
+		"SET SCHEMA other",
+		"OWNER TO admin",
+		"ATTACH PARTITION p1 FOR VALUES IN (1)",
+		"DETACH PARTITION p1",
+	}
+	for _, a := range unbundleable {
+		assert.True(t, isUnbundleableAlterAction(a), "%q should not be bundleable", a)
+	}
+}
+
 func TestCheckConstraintMSSQLInVsOrNormalization(t *testing.T) {
 	// Test that MSSQL's OR chain is normalized to IN and matches user's IN clause
 

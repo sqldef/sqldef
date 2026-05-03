@@ -25,6 +25,7 @@ Application Options:
       --skip-partition        Skip managing partitioned tables
       --disable-ddl-transaction
                               Execute DDL statements outside a transaction block
+      --bulk-alter            Bundle multiple ALTER TABLE actions on the same table into a single statement
       --before-apply=SQL      Execute the given string before applying the regular DDLs
       --config=PATH           YAML configuration file (can be specified multiple times)
       --config-inline=YAML    YAML configuration as inline string (can be specified multiple times)
@@ -144,9 +145,14 @@ $ psqldef -U postgres test --apply --config=base.yml --config-inline="skip_table
 
 # Execute DDLs outside a transaction block
 $ psqldef -U postgres test --apply --disable-ddl-transaction < schema.sql
+
+# Bundle multiple ALTER TABLE actions on the same table
+$ psqldef -U postgres test --apply --bulk-alter < schema.sql
 ```
 
 Use `--disable-ddl-transaction` for PostgreSQL-compatible databases that reject multiple DDL statements in one transaction block, such as Aurora DSQL. This flag is equivalent to `--config-inline "disable_ddl_transaction: true"`.
+
+Use `--bulk-alter` to combine multiple per-table ALTER actions (column adds, type changes, constraint adds, column drops, etc.) into a single `ALTER TABLE t a1, a2, ...` statement. This reduces DDL lock acquisitions on large tables to one per migration per table. RENAME forms (`RENAME COLUMN`, `RENAME TO`, `RENAME CONSTRAINT`) cannot be bundled per PostgreSQL grammar and remain as separate statements; index and foreign-key creation/drop also remain separate. This flag is equivalent to `--config-inline "bulk_alter: true"`.
 
 ## Offline Mode (File-to-File Comparison)
 
@@ -486,6 +492,7 @@ $ psqldef -U postgres dbname --apply \
 | `dump_concurrency` | integer | Number of parallel connections to use when exporting the schema. Improves performance for large schemas. Default is 1. |
 | `create_index_concurrently` | boolean | When true, adds CONCURRENTLY to all CREATE INDEX statements. Default is false. |
 | `disable_ddl_transaction` | boolean | When true, all DDL statements are executed outside of transactions. Required for Aurora DSQL which does not support transactional DDL. Default is false. |
+| `bulk_alter` | boolean | When true, multiple ALTER actions on the same table are bundled into a single `ALTER TABLE t a1, a2, ...` statement (acquires one DDL lock per migration per table instead of one per action). RENAME forms and CREATE/DROP INDEX/FOREIGN KEY remain separate. Equivalent to `--bulk-alter`. Default is false. |
 | `legacy_ignore_quotes` | boolean | Controls identifier quoting behavior. When `true` (default), all identifiers are quoted in output. When `false`, identifiers preserve their original quoting from the source SQL. Default is `true` but will change to `false` in the next major version. See [Identifier Quoting](#identifier-quoting) for details. |
 
 ## Identifier Quoting

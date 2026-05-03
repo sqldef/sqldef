@@ -25,6 +25,7 @@ Application Options:
       --export                      Just dump the current schema to stdout
       --enable-drop                 Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE
       --skip-view                   Skip managing views (temporary feature, to be removed later)
+      --bulk-alter                  Bundle multiple ALTER TABLE actions on the same table into a single statement
       --before-apply=SQL            Execute the given string before applying the regular DDLs
       --config=PATH                 YAML configuration file (can be specified multiple times)
       --config-inline=YAML          YAML configuration as inline string (can be specified multiple times)
@@ -429,6 +430,7 @@ $ mysqldef -uroot dbname --apply \
 | `algorithm` | string | Algorithm to use for ALTER TABLE operations (e.g., INPLACE, INSTANT, COPY). Controls how MySQL performs the schema change. |
 | `lock` | string | Lock level to use for ALTER TABLE operations (e.g., NONE, SHARED, EXCLUSIVE). Controls concurrent access during schema changes. |
 | `dump_concurrency` | integer | Number of parallel connections to use when exporting the schema. Improves performance for large schemas. Default is 1. |
+| `bulk_alter` | boolean | When true, multiple ALTER actions on the same table are bundled into a single `ALTER TABLE t a1, a2, ...` statement (acquires one DDL lock per migration per table instead of one per action). RENAME forms and CREATE/DROP INDEX/FOREIGN KEY remain separate. Equivalent to `--bulk-alter`. Default is false. **TiDB caveat:** TiDB validates the entire `ALTER TABLE` against the pre-execution schema, so a bundled `ADD COLUMN ... AFTER <col-added-in-the-same-statement>` is rejected (see [TiDB ALTER TABLE docs](https://docs.pingcap.com/tidb/stable/sql-statement-alter-table/)). Avoid `bulk_alter` on TiDB if your schema causes column adds with `AFTER` to reference newly-added columns. |
 | `legacy_ignore_quotes` | boolean | Controls identifier quoting behavior. When `true` (default), all identifiers are quoted in output. When `false`, identifiers preserve their original quoting from the source SQL. Default is `true` but will change to `false` in the next major version. |
 
 ## MariaDB Compatibility

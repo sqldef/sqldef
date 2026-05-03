@@ -445,11 +445,39 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		}
 	}
 
-	// Clean up obsoleted indexes, columns in remaining tables
+	// Clean up obsoleted indexes, columns in remaining tables.
+	//
+	// When BulkAlter is enabled, the per-table cleanup ALTER TABLE statements
+	// are accumulated into per-table buffers (rather than appended to ddls
+	// directly) and then merged into the same-table interDDLs ALTER TABLE
+	// bundle, so a single ALTER TABLE per table covers both adds and drops.
+	bulkAlterEnabled := g.config.BulkAlter && (g.mode == GeneratorModePostgres || g.mode == GeneratorModeMysql)
+	var cleanupOrder []*cleanupBuffer
+
 	for _, currentTable := range g.currentTables {
 		desiredTable := g.findTableByName(g.desiredTables, currentTable.name)
 		if desiredTable == nil {
 			continue // Already handled in drop tables above
+		}
+
+		var buf *cleanupBuffer
+		appendDDL := func(ddl string) {
+			if !bulkAlterEnabled {
+				ddls = append(ddls, ddl)
+				return
+			}
+			if buf == nil {
+				buf = &cleanupBuffer{
+					desiredPrefix: g.alterTablePrefix(desiredTable),
+					currentPrefix: g.alterTablePrefix(currentTable),
+				}
+				cleanupOrder = append(cleanupOrder, buf)
+			}
+			if strings.HasPrefix(ddl, alterTableHead) {
+				buf.alters = append(buf.alters, ddl)
+			} else {
+				buf.nonAlters = append(buf.nonAlters, ddl)
+			}
 		}
 
 		// Table is expected to exist. Drop foreign keys prior to index deletion
@@ -480,7 +508,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 			// The foreign key seems obsoleted. Check and drop it as needed.
 			foreignKeyDDLs := g.generateDDLsForAbsentForeignKey(foreignKey, *currentTable, *desiredTable)
-			ddls = append(ddls, foreignKeyDDLs...)
+			for _, ddl := range foreignKeyDDLs {
+				appendDDL(ddl)
+			}
 			// TODO: simulate to remove foreign key from `currentTable.foreignKeys`?
 		}
 
@@ -490,7 +520,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue // Exclusion constraint is expected to exist.
 			}
 
-			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(exclusion.constraintName)))
+			appendDDL(fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(exclusion.constraintName)))
 		}
 
 		// Check indexes
@@ -532,7 +562,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if err != nil {
 				return ddls, err
 			}
-			ddls = append(ddls, indexDDLs...)
+			for _, ddl := range indexDDLs {
+				appendDDL(ddl)
+			}
 			g.trackDroppedIndex(currentTable, index)
 			// TODO: simulate to remove index from `currentTable.indexes`?
 		}
@@ -555,9 +587,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 			switch g.mode {
 			case GeneratorModePostgres, GeneratorModeMssql, GeneratorModeSQLite3:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
+				appendDDL(fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
 			case GeneratorModeMysql:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
+				appendDDL(fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
 			}
 		}
 
@@ -583,7 +615,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if !isRenamed {
 				// Column is obsoleted. Drop column.
 				columnDDLs := g.generateDDLsForAbsentColumn(currentTable, desiredTable, column)
-				ddls = append(ddls, columnDDLs...)
+				for _, ddl := range columnDDLs {
+					appendDDL(ddl)
+				}
 				// Track dropped column for later (to skip generating COMMENT cleanup DDLs)
 				g.trackDroppedColumn(currentTable, column)
 			}
@@ -594,8 +628,19 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			if g.findPolicyByName(desiredTable.policies, policy.name) != nil {
 				continue
 			}
-			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLIdent(policy.name), g.escapeTableName(currentTable)))
+			appendDDL(fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLIdent(policy.name), g.escapeTableName(currentTable)))
 		}
+	}
+
+	// When BulkAlter is enabled, splice per-table cleanup output into ddls so
+	// that ALTER TABLE statements are adjacent to (and can be merged with)
+	// the table's interDDLs entries. Non-ALTER cleanup (DROP INDEX,
+	// DROP POLICY) is placed BEFORE the bundle so dependent objects are gone
+	// before columns are dropped. After splicing, mergeAdjacentAlterTable
+	// collapses the now-adjacent same-table ALTER TABLE statements.
+	if bulkAlterEnabled {
+		ddls = g.applyCleanupBuffers(ddls, cleanupOrder)
+		ddls = g.mergeAdjacentAlterTable(ddls)
 	}
 
 	// Clean up obsoleted domains
@@ -767,6 +812,220 @@ func isDropStatement(ddl string) bool {
 		strings.Contains(ddl, "DROP POLICY") ||
 		strings.Contains(ddl, "DROP PARTITION") ||
 		strings.Contains(ddl, "REVOKE ")
+}
+
+// alterTableHead is the literal prefix shared by every ALTER TABLE statement
+// the generator emits.
+const alterTableHead = "ALTER TABLE "
+
+// alterTablePrefix returns "ALTER TABLE <escaped-table-name> " — the prefix
+// used to identify same-table ALTER statements during bulk-alter merging.
+func (g *Generator) alterTablePrefix(table *Table) string {
+	return alterTableHead + g.escapeTableName(table) + " "
+}
+
+// cleanupBuffer accumulates per-table cleanup DDLs (drops) when BulkAlter is
+// enabled, so that ALTER TABLE drops can be merged with the same table's
+// interDDLs ALTER TABLE adds via applyCleanupBuffers + mergeAdjacentAlterTable.
+//
+// desiredPrefix and currentPrefix cache the table's `ALTER TABLE <name> `
+// prefix so applyCleanupBuffers can match against ddls without re-escaping
+// the table name on every lookup.
+type cleanupBuffer struct {
+	desiredPrefix string
+	currentPrefix string
+	nonAlters     []string // DROP INDEX, DROP POLICY (cannot live inside an ALTER TABLE action list)
+	alters        []string // ALTER TABLE statements that can be bundled
+}
+
+// isUnbundleableAlterAction returns true when an ALTER TABLE action keyword
+// cannot appear in a comma-separated action list. PostgreSQL grammar exposes
+// these as separate top-level forms; MySQL accepts some of them in the list
+// but bundling RENAME with structural actions is risky and rarely useful.
+func isUnbundleableAlterAction(action string) bool {
+	upper := strings.ToUpper(action)
+	return strings.HasPrefix(upper, "RENAME") ||
+		strings.HasPrefix(upper, "SET SCHEMA") ||
+		strings.HasPrefix(upper, "OWNER TO") ||
+		strings.HasPrefix(upper, "ATTACH PARTITION") ||
+		strings.HasPrefix(upper, "DETACH PARTITION")
+}
+
+// applyCleanupBuffers splices per-table cleanup statements into ddls in a
+// single pass, placing cleanup ALTER TABLE statements adjacent to the table's
+// last interDDLs ALTER entry so a subsequent merge pass can collapse them.
+//
+// Non-ALTER cleanup (DROP INDEX, DROP POLICY) is placed directly BEFORE the
+// interDDLs ALTER (so dependent objects are removed before columns are
+// dropped); cleanup ALTERs are placed directly AFTER it. If the table has no
+// interDDLs ALTER, its cleanup is appended at the end of ddls (matching the
+// original cleanup-phase position).
+//
+// Time complexity: O(N + B) where N is len(ddls) and B is total cleanup
+// statements, instead of the O(N*B) repeated backwards-scan approach.
+func (g *Generator) applyCleanupBuffers(ddls []string, buffers []*cleanupBuffer) []string {
+	if len(buffers) == 0 {
+		return ddls
+	}
+	// Build prefix → last index map in a single forward scan.
+	lastPos := make(map[string]int, len(buffers))
+	for i, ddl := range ddls {
+		prefix, _, ok := splitAlterTablePrefix(ddl)
+		if ok {
+			lastPos[prefix] = i
+		}
+	}
+	// Resolve each buffer to either an insertion position or end-of-ddls
+	// fallback. Different tables produce distinct prefixes, so positions
+	// don't collide across buffers.
+	type splice struct {
+		nonAlters []string
+		alters    []string
+	}
+	posSplices := make(map[int]splice, len(buffers))
+	var endSplices []splice
+	totalExtra := 0
+	for _, buf := range buffers {
+		totalExtra += len(buf.nonAlters) + len(buf.alters)
+		pos, ok := lastPos[buf.desiredPrefix]
+		if !ok && buf.currentPrefix != buf.desiredPrefix {
+			pos, ok = lastPos[buf.currentPrefix]
+		}
+		if !ok {
+			endSplices = append(endSplices, splice{nonAlters: buf.nonAlters, alters: buf.alters})
+			continue
+		}
+		posSplices[pos] = splice{nonAlters: buf.nonAlters, alters: buf.alters}
+	}
+	// Single rebuild pass.
+	out := make([]string, 0, len(ddls)+totalExtra)
+	for i, ddl := range ddls {
+		if sp, ok := posSplices[i]; ok {
+			out = append(out, sp.nonAlters...)
+			out = append(out, ddl)
+			out = append(out, sp.alters...)
+			continue
+		}
+		out = append(out, ddl)
+	}
+	for _, sp := range endSplices {
+		out = append(out, sp.nonAlters...)
+		out = append(out, sp.alters...)
+	}
+	return out
+}
+
+// mergeAdjacentAlterTable merges adjacent ALTER TABLE statements that target
+// the same table into a single comma-separated statement. Statements with
+// unbundleable actions (RENAME ...) act as boundaries.
+//
+// Used as a post-pass after spliceCleanup so that interDDLs and cleanup ALTER
+// TABLE statements for a single table collapse into one.
+func (g *Generator) mergeAdjacentAlterTable(ddls []string) []string {
+	if len(ddls) <= 1 {
+		return ddls
+	}
+	out := make([]string, 0, len(ddls))
+	i := 0
+	for i < len(ddls) {
+		prefix, action, ok := splitAlterTablePrefix(ddls[i])
+		if !ok || isUnbundleableAlterAction(action) {
+			out = append(out, ddls[i])
+			i++
+			continue
+		}
+		actions := []string{action}
+		j := i + 1
+		for j < len(ddls) {
+			p2, a2, ok2 := splitAlterTablePrefix(ddls[j])
+			if !ok2 || p2 != prefix || isUnbundleableAlterAction(a2) {
+				break
+			}
+			actions = append(actions, a2)
+			j++
+		}
+		if len(actions) == 1 {
+			out = append(out, ddls[i])
+		} else {
+			out = append(out, prefix+strings.Join(actions, ", "))
+		}
+		i = j
+	}
+	return out
+}
+
+// splitAlterTablePrefix splits an ALTER TABLE statement into the prefix
+// (`ALTER TABLE <table> `) and the action (the remainder). Returns ok=false
+// when the statement is not an ALTER TABLE or the table name token cannot be
+// parsed.
+//
+// The table name token follows the SQL identifier rules used by the
+// generator's escape helpers in PostgreSQL/MySQL mode: an optional quoted
+// (`"name"`, "`name`") or unquoted segment, optionally followed by `.` and
+// another such segment. MSSQL bracket-quoting (`[name]`) is intentionally
+// not handled because bulk_alter is gated to PostgreSQL/MySQL only.
+//
+// This function is intended for parsing DDL strings produced by this
+// generator (which always start with `ALTER TABLE <escaped-name> ...` and
+// never use modifiers like `IF EXISTS` or `ONLY`). It is NOT a general SQL
+// parser. If the generator is extended to emit alternate ALTER TABLE forms,
+// this helper must be updated to recognize them.
+func splitAlterTablePrefix(stmt string) (prefix, action string, ok bool) {
+	if !strings.HasPrefix(stmt, alterTableHead) {
+		return "", "", false
+	}
+	rest := stmt[len(alterTableHead):]
+	nameLen := scanQualifiedSQLName(rest)
+	if nameLen == 0 || nameLen >= len(rest) || rest[nameLen] != ' ' {
+		return "", "", false
+	}
+	prefix = stmt[:len(alterTableHead)+nameLen+1]
+	action = rest[nameLen+1:]
+	return prefix, action, true
+}
+
+func scanQualifiedSQLName(s string) int {
+	first := scanSQLNameSegment(s)
+	if first == 0 {
+		return 0
+	}
+	if first >= len(s) || s[first] != '.' {
+		return first
+	}
+	second := scanSQLNameSegment(s[first+1:])
+	if second == 0 {
+		return first
+	}
+	return first + 1 + second
+}
+
+func scanSQLNameSegment(s string) int {
+	if len(s) == 0 {
+		return 0
+	}
+	if q := s[0]; q == '"' || q == '`' {
+		for i := 1; i < len(s); i++ {
+			if s[i] != q {
+				continue
+			}
+			if i+1 < len(s) && s[i+1] == q {
+				i++ // doubled quote: skip escape pair
+				continue
+			}
+			return i + 1
+		}
+		return 0
+	}
+	i := 0
+	for i < len(s) {
+		c := s[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$' {
+			i++
+			continue
+		}
+		break
+	}
+	return i
 }
 
 func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, desiredTable *Table, column *Column) []string {
