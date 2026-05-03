@@ -3,9 +3,17 @@
 # bulk_alter merges multiple ALTER actions on the same table into a single
 # `ALTER TABLE t a1, a2, ...` statement, fusing the interDDLs (adds/changes)
 # phase with the cleanup (drops) phase per table to minimize DDL locks.
+#
+# TiDB note: bundles that contain `ADD COLUMN ... AFTER <col-added-in-the
+# -same-ALTER>` fail on TiDB because it cannot resolve the just-added column
+# in subsequent subcommands of the same statement (MySQL processes the
+# subcommands sequentially and accepts this). Tests that emit such a bundle
+# are marked `flavor: !tidb`.
+# Ref. https://docs.pingcap.com/tidb/stable/sql-statement-alter-table/
 
 BulkAlterAddDropColumns:
   legacy_ignore_quotes: false
+  flavor: "!tidb"
   config:
     bulk_alter: true
   current: |
@@ -49,6 +57,7 @@ BulkAlterDisabledByDefault:
 # Exercises the backtick-quoted identifier path of splitAlterTablePrefix
 # using the legacy_ignore_quotes default (true).
 BulkAlterQuotedTableNames:
+  flavor: "!tidb"
   config:
     bulk_alter: true
   current: |
@@ -69,6 +78,7 @@ BulkAlterQuotedTableNames:
 
 BulkAlterPerTableScope:
   legacy_ignore_quotes: false
+  flavor: "!tidb"
   config:
     bulk_alter: true
   current: |
