@@ -102,6 +102,12 @@ func (d *MysqlDatabase) ExportDDLs() (string, error) {
 	}
 	ddls = append(ddls, triggerDDLs...)
 
+	eventDDLs, err := d.events()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, eventDDLs...)
+
 	return strings.Join(ddls, "\n\n"), nil
 }
 
@@ -190,6 +196,35 @@ func (d *MysqlDatabase) triggers() ([]string, error) {
 			return nil, err
 		}
 		ddls = append(ddls, fmt.Sprintf("CREATE TRIGGER %s %s %s ON %s FOR EACH ROW %s;", trigger, timing, event, table, statement))
+	}
+	return ddls, nil
+}
+
+// events exports MySQL scheduled events via SHOW CREATE EVENT.
+// SHOW CREATE EVENT returns 7 columns: Event, sql_mode, time_zone, Create Event,
+// character_set_client, collation_connection, Database Collation.
+func (d *MysqlDatabase) events() ([]string, error) {
+	rows, err := d.db.Query(fmt.Sprintf(`
+		SELECT EVENT_NAME FROM INFORMATION_SCHEMA.EVENTS
+		WHERE EVENT_SCHEMA = '%s'
+	`, d.config.DbName))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ddls []string
+	for rows.Next() {
+		var eventName string
+		if err = rows.Scan(&eventName); err != nil {
+			return nil, err
+		}
+
+		var name, sqlMode, timeZone, createEvent, characterSetClient, collationConnection, databaseCollation string
+		if err = d.db.QueryRow(fmt.Sprintf("SHOW CREATE EVENT `%s`", eventName)).Scan(&name, &sqlMode, &timeZone, &createEvent, &characterSetClient, &collationConnection, &databaseCollation); err != nil {
+			return nil, err
+		}
+		ddls = append(ddls, createEvent+";")
 	}
 	return ddls, nil
 }

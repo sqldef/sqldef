@@ -536,6 +536,7 @@ type DDL struct {
 	Policy        *Policy
 	View          *View
 	Trigger       *Trigger
+	Event         *Event
 	Function      *Function
 	Type          *Type
 	Domain        *Domain
@@ -577,6 +578,7 @@ const (
 	CreatePolicy
 	CreateTable
 	CreateTrigger
+	CreateEvent
 	CreateType
 	CreateView
 	CreateSchema
@@ -1335,6 +1337,19 @@ type Trigger struct {
 	Event     []TriggerEvent
 	When      Expr
 	Body      []Statement
+}
+
+// Event represents a MySQL CREATE EVENT statement.
+// MySQL events are scheduled tasks that execute SQL statements at specified intervals or times.
+type Event struct {
+	Name         *ColName
+	IfNotExists  bool
+	Definer      string      // MySQL DEFINER clause (e.g., "'user'@'host'" or "CURRENT_USER")
+	Schedule     string      // Raw schedule clause (e.g., "EVERY 1 DAY" or "AT '2024-01-01'")
+	OnCompletion string      // "PRESERVE", "NOT PRESERVE", or ""
+	Status       string      // "ENABLE", "DISABLE", "DISABLE ON REPLICA", "DISABLE ON SLAVE", or ""
+	Comment      string      // empty if not specified
+	Body         []Statement // Reuses trigger_statements grammar
 }
 
 // TriggerFuncExec represents PostgreSQL's EXECUTE FUNCTION/PROCEDURE in triggers

@@ -1,0 +1,156 @@
+# yaml-language-server: $schema=../../testutil/testcase.schema.json
+
+CreateSimpleEvent:
+  flavor: "!tidb"
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE EVENT `daily_cleanup`
+    ON SCHEDULE EVERY 1 DAY
+    COMMENT 'purge old data'
+    DO DELETE FROM old_records WHERE created_at < NOW() - INTERVAL 30 DAY;
+
+CreateEventWithDefiner:
+  flavor: "!tidb"
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE DEFINER='root'@'%' EVENT `daily_cleanup`
+    ON SCHEDULE EVERY 1 DAY
+    ON COMPLETION PRESERVE
+    DO DELETE FROM old_records WHERE created_at < NOW() - INTERVAL 30 DAY;
+
+CreateEventWithCompoundBody:
+  flavor: "!tidb"
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE EVENT `daily_cleanup`
+    ON SCHEDULE EVERY 1 DAY
+    DO BEGIN
+      DELETE FROM old_records WHERE created_at < NOW() - INTERVAL 30 DAY;
+    END;
+
+CreateEventWithCompoundInterval:
+  flavor: "!tidb"
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE EVENT `delete_expired`
+    ON SCHEDULE EVERY '1 4' DAY_HOUR
+    DO DELETE FROM `records` WHERE `expire_at` < NOW();
+
+CreateEventWithAtSchedule:
+  flavor: "!tidb"
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE EVENT `one_time_task`
+    ON SCHEDULE AT '2035-01-01 00:00:00'
+    ON COMPLETION PRESERVE
+    DO DELETE FROM records WHERE created_at < NOW() - INTERVAL 90 DAY;
+
+AlterEventSchedule:
+  flavor: "!tidb"
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EVENT `cleanup`
+    ON SCHEDULE EVERY 1 DAY
+    DO DELETE FROM records;
+  desired: |
+    CREATE EVENT `cleanup`
+    ON SCHEDULE EVERY 2 HOUR
+    DO DELETE FROM records;
+  up: |
+    ALTER EVENT `cleanup` ON SCHEDULE EVERY 2 HOUR ON COMPLETION NOT PRESERVE ENABLE COMMENT '' DO delete from records;
+  down: |
+    ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY ON COMPLETION NOT PRESERVE ENABLE COMMENT '' DO delete from records;
+
+AlterEventBody:
+  flavor: "!tidb"
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EVENT `cleanup`
+    ON SCHEDULE EVERY 1 DAY
+    DO DELETE FROM records;
+  desired: |
+    CREATE EVENT `cleanup`
+    ON SCHEDULE EVERY 1 DAY
+    DO DELETE FROM records WHERE created_at < NOW() - INTERVAL 30 DAY;
+  up: |
+    ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY ON COMPLETION NOT PRESERVE ENABLE COMMENT '' DO delete from records where created_at < now() - interval 30 DAY;
+  down: |
+    ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY ON COMPLETION NOT PRESERVE ENABLE COMMENT '' DO delete from records;
+
+AlterEventOnCompletion:
+  flavor: "!tidb"
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EVENT `cleanup`
+    ON SCHEDULE EVERY 1 DAY
+    DO DELETE FROM records;
+  desired: |
+    CREATE EVENT `cleanup`
+    ON SCHEDULE EVERY 1 DAY
+    ON COMPLETION PRESERVE
+    DO DELETE FROM records;
+  up: |
+    ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY ON COMPLETION PRESERVE ENABLE COMMENT '' DO delete from records;
+  down: |
+    ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY ON COMPLETION NOT PRESERVE ENABLE COMMENT '' DO delete from records;
+
+AlterEventComment:
+  flavor: "!tidb"
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EVENT `cleanup`
+    ON SCHEDULE EVERY 1 DAY
+    DO DELETE FROM records;
+  desired: |
+    CREATE EVENT `cleanup`
+    ON SCHEDULE EVERY 1 DAY
+    COMMENT 'purge old data'
+    DO DELETE FROM records;
+  up: |
+    ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY ON COMPLETION NOT PRESERVE ENABLE COMMENT 'purge old data' DO delete from records;
+  down: |
+    ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY ON COMPLETION NOT PRESERVE ENABLE COMMENT '' DO delete from records;
+
+AlterEventDisable:
+  flavor: "!tidb"
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EVENT `cleanup`
+    ON SCHEDULE EVERY 1 DAY
+    DO DELETE FROM records;
+  desired: |
+    CREATE EVENT `cleanup`
+    ON SCHEDULE EVERY 1 DAY
+    DISABLE
+    DO DELETE FROM records;
+  up: |
+    ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY ON COMPLETION NOT PRESERVE DISABLE COMMENT '' DO delete from records;
+  down: |
+    ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY ON COMPLETION NOT PRESERVE ENABLE COMMENT '' DO delete from records;
+
+AlterEventMultipleChanges:
+  flavor: "!tidb"
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EVENT `cleanup`
+    ON SCHEDULE EVERY 1 DAY
+    DO DELETE FROM records;
+  desired: |
+    CREATE EVENT `cleanup`
+    ON SCHEDULE EVERY 2 HOUR
+    ON COMPLETION PRESERVE
+    COMMENT 'purge old data'
+    DO DELETE FROM records WHERE created_at < NOW() - INTERVAL 7 DAY;
+  up: |
+    ALTER EVENT `cleanup` ON SCHEDULE EVERY 2 HOUR ON COMPLETION PRESERVE ENABLE COMMENT 'purge old data' DO delete from records where created_at < now() - interval 7 DAY;
+  down: |
+    ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY ON COMPLETION NOT PRESERVE ENABLE COMMENT '' DO delete from records;
+
+DropEvent:
+  flavor: "!tidb"
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EVENT `cleanup`
+    ON SCHEDULE EVERY 1 DAY
+    DO DELETE FROM records;
+  desired: ""
