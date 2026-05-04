@@ -9,14 +9,14 @@ require (
 	github.com/goccy/go-yaml v1.19.2
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/k0kubun/pp/v3 v3.5.1
-	github.com/lib/pq v1.12.0
+	github.com/lib/pq v1.12.3
 	github.com/microsoft/go-mssqldb v1.9.8
 	github.com/pganalyze/pg_query_go/v6 v6.2.2
 	github.com/stretchr/testify v1.11.1
 	github.com/wasilibs/go-pgquery v0.0.0-20250409022910-10ac41983c07
 	golang.org/x/sync v0.20.0
 	golang.org/x/term v0.41.0
-	modernc.org/sqlite v1.47.0
+	modernc.org/sqlite v1.50.0
 )
 
 require (
@@ -42,7 +42,7 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	modernc.org/libc v1.70.0 // indirect
+	modernc.org/libc v1.72.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
