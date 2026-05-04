@@ -3152,6 +3152,10 @@ column_definition:
   {
     $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
   }
+| KEY column_definition_type
+  {
+    $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
+  }
 /* For SQLite3 https://www.sqlite.org/lang_keywords.html */
 | STRING column_definition_type
   {
