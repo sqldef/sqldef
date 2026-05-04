@@ -248,7 +248,7 @@ DropOneTableWithCommentKeepAnother:
     );
     COMMENT ON TABLE "public"."foo" IS 'foo table';
 
-ColumnNamedKey:
+ColumnNamedKeyIdempotent:
   legacy_ignore_quotes: false
   current: |
     CREATE TABLE users (
