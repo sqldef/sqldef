@@ -305,6 +305,8 @@ func (d *PostgresDatabase) views() ([]string, error) {
 		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, schema) {
 			continue
 		}
+		// Normalize PostgreSQL-specific syntax for generic parser compatibility
+		definition = normalizeDatePartToExtract(definition)
 		ddls = append(
 			ddls, fmt.Sprintf(
 				"CREATE VIEW %s.%s AS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(name), definition,
