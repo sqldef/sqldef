@@ -378,7 +378,7 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 
 func (d *PostgresDatabase) schemas() ([]string, error) {
 	rows, err := d.db.Query(`
-		SELECT schema_name, obj_description(to_regnamespace('schema_name')) as schema_comment
+		SELECT schema_name, obj_description(to_regnamespace(schema_name)) as schema_comment
 		FROM information_schema.schemata
 		WHERE schema_name NOT LIKE 'pg_%%'
 		AND schema_name not in ('information_schema', 'public', 'sys');
