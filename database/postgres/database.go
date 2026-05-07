@@ -305,10 +305,6 @@ func (d *PostgresDatabase) views() ([]string, error) {
 		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, schema) {
 			continue
 		}
-		definition = strings.TrimSpace(definition)
-		definition = strings.ReplaceAll(definition, "\n", " ")
-		definition = suffixSemicolon.ReplaceAllString(definition, "")
-		definition = spaces.ReplaceAllString(definition, " ")
 		// Normalize PostgreSQL-specific syntax for generic parser compatibility
 		definition = normalizeDatePartToExtract(definition)
 		ddls = append(
