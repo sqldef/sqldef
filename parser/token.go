@@ -967,6 +967,13 @@ func (tkn *Tokenizer) scanIdentifier(firstChar rune, isDbSystemVariable bool) (i
 			}
 		}
 
+		// PostgreSQL treats KEY as a non-reserved keyword usable as an unquoted
+		// column name. Surface a distinct PG_KEY token so the grammar can accept
+		// `key text NOT NULL` without colliding with MySQL's inline `KEY idx_name (col)`.
+		if keywordID == KEY && tkn.mode == ParserModePostgres {
+			return PG_KEY, loweredStr
+		}
+
 		// keyword is case-insensitive
 		return keywordID, loweredStr
 	}

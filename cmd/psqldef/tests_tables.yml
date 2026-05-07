@@ -248,4 +248,45 @@ DropOneTableWithCommentKeepAnother:
     );
     COMMENT ON TABLE "public"."foo" IS 'foo table';
 
+ColumnNamedKeyIdempotent:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      key text NOT NULL,
+      PRIMARY KEY (id, key)
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      key text NOT NULL,
+      PRIMARY KEY (id, key)
+    );
+  up: ""
+  down: ""
+
+ColumnNamedKeyAddedAlongsideFunction:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE OR REPLACE FUNCTION set_updated_at() RETURNS TRIGGER AS $$
+    BEGIN NEW.updated_at = CURRENT_TIMESTAMP; RETURN NEW; END;
+    $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE OR REPLACE FUNCTION set_updated_at() RETURNS TRIGGER AS $$
+    BEGIN NEW.updated_at = CURRENT_TIMESTAMP; RETURN NEW; END;
+    $$ LANGUAGE plpgsql;
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      key text NOT NULL,
+      PRIMARY KEY (id, key)
+    );
+  up: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      key text NOT NULL,
+      PRIMARY KEY (id, key)
+    );
+  down: |
+    DROP TABLE public.users;
+
 # GiST index with tstzrange type
