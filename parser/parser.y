@@ -4545,6 +4545,14 @@ index_option:
   {
     $$ = &IndexOption{Name: $1, Value: NewStrVal($2.Name)}
   }
+/* HASH is a reserved token (used by PARTITION BY HASH) but MariaDB allows it
+ * inline as an index_type after USING, e.g. UNIQUE KEY k (k) USING HASH.
+ * Without this rule, the lexer emits the HASH token instead of an ID and the
+ * generic `USING ID` rule no longer matches. Regression introduced in #1036. */
+| USING HASH
+  {
+    $$ = &IndexOption{Name: $1, Value: NewStrVal(strings.ToUpper($2))}
+  }
 | KEY_BLOCK_SIZE equal_opt INTEGRAL
   {
     // should not be string
