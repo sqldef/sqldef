@@ -44,11 +44,6 @@ CreateOrReplaceFunctionWithTrigger:
       BEFORE INSERT OR UPDATE ON device_tests
       FOR EACH ROW EXECUTE FUNCTION check_test_type_requires_permit();
   up: |
-    CREATE TABLE device_tests (
-      id serial PRIMARY KEY,
-      test_type text,
-      permit text
-    );
     CREATE OR REPLACE FUNCTION check_test_type_requires_permit()
       RETURNS TRIGGER AS
     $$
@@ -59,6 +54,11 @@ CreateOrReplaceFunctionWithTrigger:
       RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
+    CREATE TABLE device_tests (
+      id serial PRIMARY KEY,
+      test_type text,
+      permit text
+    );
     CREATE TRIGGER enforce_required_permit before insert OR update ON public.device_tests FOR EACH ROW EXECUTE FUNCTION check_test_type_requires_permit();
   down: |
     DROP TRIGGER enforce_required_permit ON public.device_tests;

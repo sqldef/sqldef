@@ -161,3 +161,29 @@ ViewDependsOnView_UpdateBaseViewAffectingDependentViews:
     CREATE VIEW "public"."cheap_products" AS select id, name from products where price < 50;
     CREATE VIEW "public"."cheap_product_names" AS select name from cheap_products;
     ALTER TABLE "public"."products" DROP COLUMN "category";
+
+FunctionBeforeTable_ColumnDefault:
+  desired: |
+    CREATE FUNCTION generate_item_id() RETURNS text AS $$ BEGIN RETURN 'item_' || md5(random()::text); END; $$ LANGUAGE plpgsql VOLATILE;
+    CREATE TABLE items (
+      id text NOT NULL DEFAULT generate_item_id() PRIMARY KEY,
+      name text
+    );
+
+FunctionBeforeTable_AlterAddColumnDefault:
+  current: |
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY
+    );
+  desired: |
+    CREATE FUNCTION generate_item_id() RETURNS text AS $$ BEGIN RETURN 'item_' || md5(random()::text); END; $$ LANGUAGE plpgsql VOLATILE;
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY,
+      external_id text NOT NULL DEFAULT generate_item_id()
+    );
+  up: |
+    CREATE FUNCTION generate_item_id() RETURNS text AS $$ BEGIN RETURN 'item_' || md5(random()::text); END; $$ LANGUAGE plpgsql VOLATILE;
+    ALTER TABLE "public"."items" ADD COLUMN "external_id" text NOT NULL DEFAULT generate_item_id();
+  down: |
+    ALTER TABLE "public"."items" DROP COLUMN "external_id";
+    DROP FUNCTION "public"."generate_item_id";

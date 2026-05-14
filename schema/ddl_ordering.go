@@ -162,11 +162,12 @@ func topologicalSort[T any](items []T, dependencies map[string][]string, getID f
 // Also ensures CREATE TYPE statements are placed before CREATE TABLE statements that use them
 // and CREATE SCHEMA statements are placed at the beginning
 func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) []DDL {
-	// Extract DDLs by type: extensions, schemas, types, domains, tables, views, and other DDLs
+	// Extract DDLs by type: extensions, schemas, types, domains, functions, tables, views, and other DDLs
 	var createExtensions []*Extension
 	var createSchemas []*Schema
 	var createTypes []*Type
 	var createDomains []*Domain
+	var createFunctions []*Function
 	var createTables []*CreateTable
 	var views []*View
 	var otherDDLs []DDL
@@ -180,6 +181,8 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 			createTypes = append(createTypes, typ)
 		} else if domain, ok := ddl.(*Domain); ok {
 			createDomains = append(createDomains, domain)
+		} else if fn, ok := ddl.(*Function); ok {
+			createFunctions = append(createFunctions, fn)
 		} else if ct, ok := ddl.(*CreateTable); ok {
 			createTables = append(createTables, ct)
 		} else if view, ok := ddl.(*View); ok {
@@ -272,11 +275,12 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 	// Rebuild the DDL list in dependency order:
 	// 1. CREATE EXTENSIONs (must exist before functions/types that use them)
 	// 2. CREATE SCHEMAs (must exist before any objects in those schemas)
-	// 3. CREATE TYPEs (may be used by tables and domains)
-	// 4. CREATE DOMAINs (may be used by tables)
-	// 5. CREATE TABLEs (sorted by FK dependencies)
-	// 6. VIEWs (sorted by view dependencies)
-	// 7. Other DDLs (triggers, comments, indexes, foreign keys, etc.)
+	// 3. CREATE TYPEs (may be used by tables, domains, and functions)
+	// 4. CREATE DOMAINs (may be used by tables and functions)
+	// 5. CREATE FUNCTIONs (may be referenced by table column DEFAULT/CHECK/generated)
+	// 6. CREATE TABLEs (sorted by FK dependencies)
+	// 7. VIEWs (sorted by view dependencies)
+	// 8. Other DDLs (triggers, comments, indexes, foreign keys, etc.)
 	var result []DDL
 	for _, ext := range createExtensions {
 		result = append(result, ext)
@@ -289,6 +293,9 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 	}
 	for _, domain := range createDomains {
 		result = append(result, domain)
+	}
+	for _, fn := range createFunctions {
+		result = append(result, fn)
 	}
 	for _, ct := range sortedTables {
 		result = append(result, ct)
