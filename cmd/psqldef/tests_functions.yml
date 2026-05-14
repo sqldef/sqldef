@@ -371,3 +371,29 @@ CreateOrReplaceFunctionNamedIncrement:
     $$ LANGUAGE plpgsql;
   up: ""
   down: ""
+
+# Argument DEFAULT values and modes: ensures functions with default-valued
+# arguments parse on the generic parser without falling back to pgquery (which
+# silently drops the function and triggers a spurious DROP on the next apply).
+CreateFunctionWithDefaultArgs:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE OR REPLACE FUNCTION concat_with_default(
+      count int DEFAULT 1,
+      sep text DEFAULT '-'
+    ) RETURNS text AS $$
+    BEGIN
+      RETURN '';
+    END
+    $$ LANGUAGE plpgsql VOLATILE;
+  desired: |
+    CREATE OR REPLACE FUNCTION concat_with_default(
+      count int DEFAULT 1,
+      sep text DEFAULT '-'
+    ) RETURNS text AS $$
+    BEGIN
+      RETURN '';
+    END
+    $$ LANGUAGE plpgsql VOLATILE;
+  up: ""
+  down: ""
