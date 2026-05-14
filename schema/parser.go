@@ -198,9 +198,17 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				body:          body,
 			}, nil
 		} else if stmt.Action == parser.CreateFunction {
+			var args []FunctionArg
+			for _, arg := range stmt.Function.Args {
+				args = append(args, FunctionArg{
+					name: arg.Name,
+					typ:  arg.Type,
+				})
+			}
 			return &Function{
 				statement:  ddl,
 				name:       normalizeQualifiedObjectName(mode, stmt.Function.Name, defaultSchema),
+				args:       args,
 				returnType: stmt.Function.ReturnType,
 				body:       stmt.Function.Body,
 				language:   stmt.Function.Language,
@@ -962,6 +970,7 @@ func parseGenerated(genc *parser.GeneratedColumn) *Generated {
 	}
 	return &Generated{
 		expr:          parser.String(genc.Expr),
+		exprAST:       genc.Expr,
 		generatedType: typ,
 	}
 }

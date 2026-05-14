@@ -381,11 +381,19 @@ type Trigger struct {
 type Function struct {
 	statement  string
 	name       QualifiedName
+	args       []FunctionArg
 	returnType string
 	body       string
 	language   string
 	orReplace  bool
 	options    []string // Additional options like IMMUTABLE, SECURITY DEFINER, SET timezone = 'UTC', etc.
+}
+
+// FunctionArg is the schema-level representation of a function argument.
+// Used by dependency analysis to detect Function -> Type/Domain edges.
+type FunctionArg struct {
+	name Ident
+	typ  string
 }
 
 type Value struct {
@@ -490,6 +498,7 @@ type DomainConstraint struct {
 
 type Generated struct {
 	expr          string
+	exprAST       parser.Expr // preserved for dependency analysis (function calls in the expression)
 	generatedType GeneratedType
 }
 
