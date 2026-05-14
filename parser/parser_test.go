@@ -829,3 +829,124 @@ func TestCreatePolicyPredicates(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateFunctionArgDefaultsAndModes(t *testing.T) {
+	type expectedArg struct {
+		Mode       string
+		Name       string
+		Type       string
+		HasDefault bool
+		Default    string
+	}
+
+	testCases := []struct {
+		name string
+		sql  string
+		want []expectedArg
+	}{
+		{
+			name: "DEFAULT integer literal",
+			sql:  "CREATE FUNCTION f(size int DEFAULT 16) RETURNS text AS $$ SELECT '' $$ LANGUAGE sql",
+			want: []expectedArg{
+				{Name: "size", Type: "int", HasDefault: true, Default: "16"},
+			},
+		},
+		{
+			name: "DEFAULT string literal",
+			sql:  "CREATE FUNCTION f(s text DEFAULT 'abc') RETURNS text AS $$ SELECT s $$ LANGUAGE sql",
+			want: []expectedArg{
+				{Name: "s", Type: "text", HasDefault: true, Default: "'abc'"},
+			},
+		},
+		{
+			name: "mixed required and default arg",
+			sql:  "CREATE FUNCTION f(a int, b int DEFAULT 0) RETURNS int AS $$ SELECT a + b $$ LANGUAGE sql",
+			want: []expectedArg{
+				{Name: "a", Type: "int"},
+				{Name: "b", Type: "int", HasDefault: true, Default: "0"},
+			},
+		},
+		{
+			name: "IN and OUT argument modes",
+			sql:  "CREATE FUNCTION f(IN a int, OUT b int) RETURNS int AS $$ SELECT a $$ LANGUAGE sql",
+			want: []expectedArg{
+				{Mode: "IN", Name: "a", Type: "int"},
+				{Mode: "OUT", Name: "b", Type: "int"},
+			},
+		},
+		{
+			name: "VARIADIC argument mode",
+			sql:  "CREATE FUNCTION f(VARIADIC a int[]) RETURNS int AS $$ SELECT 0 $$ LANGUAGE sql",
+			want: []expectedArg{
+				{Mode: "VARIADIC", Name: "a", Type: "int[]"},
+			},
+		},
+		{
+			name: "equals-sign default form",
+			sql:  "CREATE FUNCTION f(a int = 5) RETURNS int AS $$ SELECT a $$ LANGUAGE sql",
+			want: []expectedArg{
+				{Name: "a", Type: "int", HasDefault: true, Default: "5"},
+			},
+		},
+		{
+			name: "multi-arg CREATE OR REPLACE with DEFAULTs",
+			sql: `CREATE OR REPLACE FUNCTION concat_strings(
+    count int DEFAULT 1,
+    sep text DEFAULT '-'
+) RETURNS text AS $$
+DECLARE
+    result text := '';
+BEGIN
+    RETURN result;
+END
+$$ LANGUAGE plpgsql VOLATILE`,
+			want: []expectedArg{
+				{Name: "count", Type: "int", HasDefault: true, Default: "1"},
+				{Name: "sep", Type: "text", HasDefault: true, Default: "'-'"},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			stmt, err := ParseDDL(tc.sql, ParserModePostgres)
+			if err != nil {
+				t.Fatalf("ParseDDL failed: %v", err)
+			}
+			ddl, ok := stmt.(*DDL)
+			if !ok {
+				t.Fatalf("expected *DDL, got %T", stmt)
+			}
+			if ddl.Action != CreateFunction {
+				t.Fatalf("expected CreateFunction action, got %v", ddl.Action)
+			}
+			if ddl.Function == nil {
+				t.Fatalf("expected non-nil Function")
+			}
+			if got, want := len(ddl.Function.Args), len(tc.want); got != want {
+				t.Fatalf("expected %d args, got %d", want, got)
+			}
+			for i, want := range tc.want {
+				got := ddl.Function.Args[i]
+				if got.Mode != want.Mode {
+					t.Errorf("arg[%d] Mode: got %q, want %q", i, got.Mode, want.Mode)
+				}
+				if got.Name.Name != want.Name {
+					t.Errorf("arg[%d] Name: got %q, want %q", i, got.Name.Name, want.Name)
+				}
+				if got.Type != want.Type {
+					t.Errorf("arg[%d] Type: got %q, want %q", i, got.Type, want.Type)
+				}
+				if want.HasDefault {
+					if got.Default == nil {
+						t.Errorf("arg[%d] Default: got nil, want %q", i, want.Default)
+					} else if s := String(got.Default); s != want.Default {
+						t.Errorf("arg[%d] Default: got %q, want %q", i, s, want.Default)
+					}
+				} else if got.Default != nil {
+					t.Errorf("arg[%d] Default: got %q, want nil", i, String(got.Default))
+				}
+			}
+		})
+	}
+}

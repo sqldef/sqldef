@@ -288,7 +288,7 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON JSONB ENUM
 %token <str> GEOMETRY POINT LINESTRING POLYGON GEOMETRYCOLLECTION MULTIPOINT MULTILINESTRING MULTIPOLYGON
 %token <str> VECTOR
-%token <str> VARIADIC ARRAY
+%token <str> VARIADIC ARRAY OUT INOUT
 %token <str> NOW GETDATE
 %token <str> BPCHAR
 
@@ -506,6 +506,8 @@ func setDDL(yylex any, ddl *DDL) {
 %type <domainConstraints> domain_constraints_opt domain_constraint
 %type <functionArgs> function_args_opt function_args
 %type <functionArg> function_arg
+%type <str> function_arg_mode_opt
+%type <expr> function_arg_default_opt
 %type <str> function_return_type function_option set_value_list set_value
 %type <strs> function_options_opt function_options
 %type <arrayConstructor> array_constructor
@@ -3825,18 +3827,64 @@ function_args:
   }
 
 function_arg:
-  sql_id column_type
+  function_arg_mode_opt sql_id column_type array_opt function_arg_default_opt
   {
+    typeStr := $3.Type
+    if bool($4) {
+      typeStr += "[]"
+    }
     $$ = FunctionArg{
-      Name: $1,
-      Type: $2.Type,
+      Mode:    $1,
+      Name:    $2,
+      Type:    typeStr,
+      Default: $5,
     }
   }
-| column_type
+| function_arg_mode_opt column_type array_opt function_arg_default_opt
   {
-    $$ = FunctionArg{
-      Type: $1.Type,
+    typeStr := $2.Type
+    if bool($3) {
+      typeStr += "[]"
     }
+    $$ = FunctionArg{
+      Mode:    $1,
+      Type:    typeStr,
+      Default: $4,
+    }
+  }
+
+function_arg_mode_opt:
+  {
+    $$ = ""
+  }
+| IN
+  {
+    $$ = "IN"
+  }
+| OUT
+  {
+    $$ = "OUT"
+  }
+| INOUT
+  {
+    $$ = "INOUT"
+  }
+| VARIADIC
+  {
+    $$ = "VARIADIC"
+  }
+
+function_arg_default_opt:
+  {
+    $$ = nil
+  }
+| DEFAULT expression
+  {
+    $$ = $2
+  }
+| '=' expression
+  {
+    $$ = $2
   }
 
 function_return_type:
