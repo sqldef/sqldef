@@ -187,3 +187,30 @@ FunctionBeforeTable_AlterAddColumnDefault:
   down: |
     ALTER TABLE "public"."items" DROP COLUMN "external_id";
     DROP FUNCTION "public"."generate_item_id";
+
+FunctionBeforeTable_ColumnCheck:
+  desired: |
+    CREATE FUNCTION is_valid_name(s text) RETURNS boolean AS $$ BEGIN RETURN length(s) > 0; END; $$ LANGUAGE plpgsql IMMUTABLE;
+    CREATE TABLE accounts (
+      id bigint NOT NULL PRIMARY KEY,
+      name text NOT NULL CHECK (is_valid_name(name))
+    );
+
+FunctionBeforeTable_GeneratedColumn:
+  desired: |
+    CREATE FUNCTION double_value(n integer) RETURNS integer AS $$ BEGIN RETURN n * 2; END; $$ LANGUAGE plpgsql IMMUTABLE;
+    CREATE TABLE metrics (
+      id bigint NOT NULL PRIMARY KEY,
+      base_value integer NOT NULL,
+      doubled integer GENERATED ALWAYS AS (double_value(base_value)) STORED
+    );
+
+TypeBeforeFunction_ArgType:
+  desired: |
+    CREATE TYPE priority AS ENUM ('low', 'medium', 'high');
+    CREATE FUNCTION classify_priority(p priority) RETURNS priority AS $$ BEGIN RETURN p; END; $$ LANGUAGE plpgsql IMMUTABLE;
+
+FunctionBeforeDomain_DomainCheck:
+  desired: |
+    CREATE FUNCTION is_email(s text) RETURNS boolean AS $$ BEGIN RETURN s LIKE '%@%'; END; $$ LANGUAGE plpgsql IMMUTABLE;
+    CREATE DOMAIN email AS text CHECK (is_email(VALUE));

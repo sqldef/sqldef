@@ -156,11 +156,19 @@ func topologicalSort[T any](items []T, dependencies map[string][]string, getID f
 	return sorted
 }
 
-// SortTablesByDependencies sorts CREATE TABLE DDLs by foreign key dependencies
-// and VIEW DDLs by view-to-view/view-to-table dependencies
-// to ensure objects are created in the correct order (dependencies before dependents)
-// Also ensures CREATE TYPE statements are placed before CREATE TABLE statements that use them
-// and CREATE SCHEMA statements are placed at the beginning
+// SortTablesByDependencies sorts CREATE TYPE/DOMAIN/FUNCTION/TABLE/VIEW DDLs
+// by a unified dependency graph, ensuring objects are created in the correct
+// order (dependencies before dependents). CREATE EXTENSION/SCHEMA stay at the
+// front (no inbound edges from sorted kinds) and other DDLs stay at the tail.
+//
+// Edges harvested:
+//   - Table -> Table (foreign keys)
+//   - Table -> Function (column DEFAULT / CHECK / generated expressions)
+//   - Table -> Type/Domain (column type references)
+//   - Domain -> Function (Domain CHECK expressions)
+//   - Domain -> Type/Domain (Domain underlying data type)
+//   - Function -> Type/Domain (argument and return types)
+//   - View -> Table/View (SELECT body)
 func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) []DDL {
 	// Extract DDLs by type: extensions, schemas, types, domains, functions, tables, views, and other DDLs
 	var createExtensions []*Extension
@@ -192,95 +200,190 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 		}
 	}
 
-	// Sort tables by foreign key dependencies
-	var sortedTables []*CreateTable
-	if len(createTables) > 1 {
-		// Build dependency graph using normalized names for consistent matching
-		tableDependencies := make(map[string][]string)
-		for _, ct := range createTables {
-			tableName := normalizeNameKey(ct.table.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
-			// Extract foreign key dependencies
-			deps := []string{}
-			for _, fk := range ct.table.foreignKeys {
-				// Skip self-referential FKs using quote-aware comparison
-				if qualifiedNamesEqual(ct.table.name, fk.referenceTableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
-					continue
-				}
-				refTableName := normalizeNameKey(fk.referenceTableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
-				if refTableName != "" {
-					deps = append(deps, refTableName)
-				}
-			}
-			tableDependencies[tableName] = deps
-		}
-
-		sorted := topologicalSort(createTables, tableDependencies, func(ct *CreateTable) string {
-			return normalizeNameKey(ct.table.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
-		})
-
-		// If circular dependency detected, keep original order
-		if len(sorted) == 0 {
-			sortedTables = createTables
-		} else {
-			sortedTables = sorted
-		}
-	} else {
-		sortedTables = createTables
+	// Build sets of known object names for edge resolution.
+	knownTypes := make(map[string]bool, len(createTypes))
+	for _, t := range createTypes {
+		knownTypes[normalizeNameKey(t.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)] = true
+	}
+	knownDomains := make(map[string]bool, len(createDomains))
+	for _, d := range createDomains {
+		knownDomains[normalizeNameKey(d.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)] = true
+	}
+	knownFunctions := make(map[string]bool, len(createFunctions))
+	for _, fn := range createFunctions {
+		knownFunctions[normalizeNameKey(fn.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)] = true
+	}
+	knownTables := make(map[string]bool, len(createTables))
+	for _, ct := range createTables {
+		knownTables[normalizeNameKey(ct.table.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)] = true
+	}
+	knownViews := make(map[string]bool, len(views))
+	for _, v := range views {
+		knownViews[normalizeNameKey(v.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)] = true
 	}
 
-	// Sort views by view-to-view and view-to-table dependencies
-	var sortedViews []*View
-	if len(views) > 1 {
-		// Build dependency graph for views using normalized names
-		viewDependencies := make(map[string][]string)
+	// Build unified dependency map keyed by normalized object name.
+	dependencies := make(map[string][]string)
 
-		// Create a set of all table and view names for quick lookup
-		allObjectNames := make(map[string]bool)
-		for _, ct := range createTables {
-			allObjectNames[normalizeNameKey(ct.table.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)] = true
+	for _, fn := range createFunctions {
+		fnKey := normalizeNameKey(fn.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+		deps := dependencies[fnKey]
+		for _, arg := range fn.args {
+			if depKey, ok := resolveTypeReference(arg.typ, knownTypes, knownDomains, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames); ok && depKey != fnKey {
+				deps = append(deps, depKey)
+			}
 		}
-		for _, view := range views {
-			allObjectNames[normalizeNameKey(view.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)] = true
+		if depKey, ok := resolveTypeReference(fn.returnType, knownTypes, knownDomains, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames); ok && depKey != fnKey {
+			deps = append(deps, depKey)
 		}
+		dependencies[fnKey] = deps
+	}
 
-		// Extract dependencies for each view
-		for _, view := range views {
-			// Use extractViewDependencies to get all dependencies from the view definition
-			deps := extractViewDependencies(view.definition, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
-
-			// Filter to only include dependencies that are in our current set of objects
-			var filteredDeps []string
-			for _, dep := range deps {
-				if allObjectNames[dep] {
-					filteredDeps = append(filteredDeps, dep)
+	for _, d := range createDomains {
+		domainKey := normalizeNameKey(d.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+		deps := dependencies[domainKey]
+		if depKey, ok := resolveTypeReference(d.dataType, knownTypes, knownDomains, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames); ok && depKey != domainKey {
+			deps = append(deps, depKey)
+		}
+		for _, c := range d.constraints {
+			for _, dep := range extractFunctionCallNames(c.expression, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
+				if dep != domainKey {
+					deps = append(deps, dep)
 				}
 			}
-			viewDependencies[normalizeNameKey(view.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)] = filteredDeps
+		}
+		dependencies[domainKey] = deps
+	}
+
+	for _, ct := range createTables {
+		tableKey := normalizeNameKey(ct.table.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+		deps := dependencies[tableKey]
+
+		// Foreign keys
+		for _, fk := range ct.table.foreignKeys {
+			if qualifiedNamesEqual(ct.table.name, fk.referenceTableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
+				continue
+			}
+			refKey := normalizeNameKey(fk.referenceTableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+			if refKey != "" {
+				deps = append(deps, refKey)
+			}
 		}
 
-		sorted := topologicalSort(views, viewDependencies, func(v *View) string {
+		// Column-level references
+		for _, col := range ct.table.columns {
+			if depKey, ok := resolveTypeReference(col.typeName, knownTypes, knownDomains, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames); ok && depKey != tableKey {
+				deps = append(deps, depKey)
+			}
+			if col.defaultDef != nil {
+				for _, dep := range extractFunctionCallNames(col.defaultDef.expression, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
+					if dep != tableKey {
+						deps = append(deps, dep)
+					}
+				}
+			}
+			if col.check != nil {
+				for _, dep := range extractFunctionCallNames(col.check.definition, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
+					if dep != tableKey {
+						deps = append(deps, dep)
+					}
+				}
+			}
+			if col.generated != nil && col.generated.exprAST != nil {
+				for _, dep := range extractFunctionCallNames(col.generated.exprAST, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
+					if dep != tableKey {
+						deps = append(deps, dep)
+					}
+				}
+			}
+		}
+
+		// Table-level CHECK constraints
+		for _, chk := range ct.table.checks {
+			for _, dep := range extractFunctionCallNames(chk.definition, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
+				if dep != tableKey {
+					deps = append(deps, dep)
+				}
+			}
+		}
+
+		// Partial index WHERE expressions
+		for _, idx := range ct.table.indexes {
+			if idx.where != nil {
+				for _, dep := range extractFunctionCallNames(idx.where, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
+					if dep != tableKey {
+						deps = append(deps, dep)
+					}
+				}
+			}
+		}
+
+		dependencies[tableKey] = deps
+	}
+
+	for _, view := range views {
+		viewKey := normalizeNameKey(view.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+		rawDeps := extractViewDependencies(view.definition, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+		deps := dependencies[viewKey]
+		for _, dep := range rawDeps {
+			if dep == viewKey {
+				continue
+			}
+			if knownTables[dep] || knownViews[dep] {
+				deps = append(deps, dep)
+			}
+		}
+		dependencies[viewKey] = deps
+	}
+
+	// Combine all sortable DDLs in fixed-bucket order (used as fallback and as the
+	// stable-sort seed when items are independent).
+	var sortItems []DDL
+	for _, t := range createTypes {
+		sortItems = append(sortItems, t)
+	}
+	for _, d := range createDomains {
+		sortItems = append(sortItems, d)
+	}
+	for _, fn := range createFunctions {
+		sortItems = append(sortItems, fn)
+	}
+	for _, ct := range createTables {
+		sortItems = append(sortItems, ct)
+	}
+	for _, view := range views {
+		sortItems = append(sortItems, view)
+	}
+
+	ddlKey := func(d DDL) string {
+		switch v := d.(type) {
+		case *Type:
 			return normalizeNameKey(v.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
-		})
-
-		// If circular dependency detected, keep original order
-		if len(sorted) == 0 {
-			sortedViews = views
-		} else {
-			sortedViews = sorted
+		case *Domain:
+			return normalizeNameKey(v.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+		case *Function:
+			return normalizeNameKey(v.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+		case *CreateTable:
+			return normalizeNameKey(v.table.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+		case *View:
+			return normalizeNameKey(v.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 		}
-	} else {
-		sortedViews = views
+		return ""
 	}
 
-	// Rebuild the DDL list in dependency order:
-	// 1. CREATE EXTENSIONs (must exist before functions/types that use them)
-	// 2. CREATE SCHEMAs (must exist before any objects in those schemas)
-	// 3. CREATE TYPEs (may be used by tables, domains, and functions)
-	// 4. CREATE DOMAINs (may be used by tables and functions)
-	// 5. CREATE FUNCTIONs (may be referenced by table column DEFAULT/CHECK/generated)
-	// 6. CREATE TABLEs (sorted by FK dependencies)
-	// 7. VIEWs (sorted by view dependencies)
-	// 8. Other DDLs (triggers, comments, indexes, foreign keys, etc.)
+	sorted := topologicalSort(sortItems, dependencies, ddlKey)
+	if len(sorted) == 0 {
+		// Circular dependency detected: fall back to fixed-bucket order
+		// (types -> domains -> functions -> tables -> views) which is what
+		// sortItems is already arranged as.
+		sorted = sortItems
+	}
+
+	// Rebuild the DDL list:
+	// 1. CREATE EXTENSIONs (no inbound edges from sorted kinds)
+	// 2. CREATE SCHEMAs (no inbound edges from sorted kinds)
+	// 3. Unified sort of TYPE/DOMAIN/FUNCTION/TABLE/VIEW by per-object edges
+	// 4. Other DDLs (triggers, comments, indexes, foreign keys, etc.)
 	var result []DDL
 	for _, ext := range createExtensions {
 		result = append(result, ext)
@@ -288,24 +391,124 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 	for _, schema := range createSchemas {
 		result = append(result, schema)
 	}
-	for _, typ := range createTypes {
-		result = append(result, typ)
-	}
-	for _, domain := range createDomains {
-		result = append(result, domain)
-	}
-	for _, fn := range createFunctions {
-		result = append(result, fn)
-	}
-	for _, ct := range sortedTables {
-		result = append(result, ct)
-	}
-	for _, view := range sortedViews {
-		result = append(result, view)
-	}
+	result = append(result, sorted...)
 	result = append(result, otherDDLs...)
 
 	return result
+}
+
+// resolveTypeReference resolves a type-name string (possibly schema-qualified)
+// to a normalized dependency-graph key, returning (key, true) only if the
+// reference matches an entry in knownTypes or knownDomains.
+func resolveTypeReference(typeName string, knownTypes, knownDomains map[string]bool, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) (string, bool) {
+	typeName = strings.TrimSpace(typeName)
+	if typeName == "" {
+		return "", false
+	}
+	// Strip trailing array brackets (e.g. "priority[]")
+	typeName = strings.TrimSuffix(typeName, "[]")
+	typeName = strings.TrimSpace(typeName)
+
+	schema := defaultSchema
+	name := typeName
+	if idx := strings.Index(typeName, "."); idx > 0 {
+		schema = strings.TrimSpace(typeName[:idx])
+		name = strings.TrimSpace(typeName[idx+1:])
+	}
+
+	// Without quote information from the string form, fold according to the
+	// generator mode using an unquoted Ident.
+	qn := QualifiedName{
+		Schema: Ident{Name: schema},
+		Name:   Ident{Name: name},
+	}
+	key := normalizeNameKey(qn, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+	if knownTypes[key] || knownDomains[key] {
+		return key, true
+	}
+	return "", false
+}
+
+// extractFunctionCallNames walks an expression and returns the normalized
+// names of every function call that matches an entry in knownFunctions.
+func extractFunctionCallNames(expr parser.Expr, knownFunctions map[string]bool, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) []string {
+	if expr == nil || len(knownFunctions) == 0 {
+		return nil
+	}
+	deps := make(map[string]bool)
+	walkExprForFunctionCalls(expr, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	var result []string
+	for dep := range util.CanonicalMapIter(deps) {
+		result = append(result, dep)
+	}
+	return result
+}
+
+func walkExprForFunctionCalls(expr parser.Expr, knownFunctions map[string]bool, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int, deps map[string]bool) {
+	if expr == nil {
+		return
+	}
+	switch e := expr.(type) {
+	case *parser.AndExpr:
+		walkExprForFunctionCalls(e.Left, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+		walkExprForFunctionCalls(e.Right, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	case *parser.OrExpr:
+		walkExprForFunctionCalls(e.Left, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+		walkExprForFunctionCalls(e.Right, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	case *parser.NotExpr:
+		walkExprForFunctionCalls(e.Expr, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	case *parser.ParenExpr:
+		walkExprForFunctionCalls(e.Expr, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	case *parser.ComparisonExpr:
+		walkExprForFunctionCalls(e.Left, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+		walkExprForFunctionCalls(e.Right, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	case *parser.RangeCond:
+		walkExprForFunctionCalls(e.Left, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+		walkExprForFunctionCalls(e.From, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+		walkExprForFunctionCalls(e.To, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	case *parser.IsExpr:
+		walkExprForFunctionCalls(e.Expr, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	case *parser.BinaryExpr:
+		walkExprForFunctionCalls(e.Left, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+		walkExprForFunctionCalls(e.Right, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	case *parser.UnaryExpr:
+		walkExprForFunctionCalls(e.Expr, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	case *parser.IntervalExpr:
+		walkExprForFunctionCalls(e.Expr, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	case *parser.TypedLiteral:
+		walkExprForFunctionCalls(e.Value, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	case *parser.CollateExpr:
+		walkExprForFunctionCalls(e.Expr, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	case *parser.CastExpr:
+		walkExprForFunctionCalls(e.Expr, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	case *parser.ConvertExpr:
+		walkExprForFunctionCalls(e.Expr, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	case *parser.CaseExpr:
+		walkExprForFunctionCalls(e.Expr, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+		for _, when := range e.Whens {
+			walkExprForFunctionCalls(when.Cond, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+			walkExprForFunctionCalls(when.Val, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+		}
+		walkExprForFunctionCalls(e.Else, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	case *parser.FuncExpr:
+		key := normalizeNameKey(QualifiedName{Schema: e.Qualifier, Name: e.Name}, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+		if knownFunctions[key] {
+			deps[key] = true
+		}
+		for _, arg := range e.Exprs {
+			if alias, ok := arg.(*parser.AliasedExpr); ok {
+				walkExprForFunctionCalls(alias.Expr, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+			}
+		}
+	case *parser.FuncCallExpr:
+		key := normalizeNameKey(QualifiedName{Name: e.Name}, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+		if knownFunctions[key] {
+			deps[key] = true
+		}
+		for _, arg := range e.Exprs {
+			walkExprForFunctionCalls(arg, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+		}
+	}
 }
 
 // extractViewDependencies extracts all table/view names that a view depends on
