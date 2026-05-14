@@ -170,7 +170,6 @@ func topologicalSort[T any](items []T, dependencies map[string][]string, getID f
 //   - Function -> Type/Domain (argument and return types)
 //   - View -> Table/View (SELECT body)
 func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) []DDL {
-	// Extract DDLs by type: extensions, schemas, types, domains, functions, tables, views, and other DDLs
 	var createExtensions []*Extension
 	var createSchemas []*Schema
 	var createTypes []*Type
@@ -200,190 +199,177 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 		}
 	}
 
-	// Build sets of known object names for edge resolution.
-	knownTypes := make(map[string]bool, len(createTypes))
-	for _, t := range createTypes {
-		knownTypes[normalizeNameKey(t.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)] = true
-	}
-	knownDomains := make(map[string]bool, len(createDomains))
-	for _, d := range createDomains {
-		knownDomains[normalizeNameKey(d.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)] = true
-	}
-	knownFunctions := make(map[string]bool, len(createFunctions))
-	for _, fn := range createFunctions {
-		knownFunctions[normalizeNameKey(fn.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)] = true
-	}
-	knownTables := make(map[string]bool, len(createTables))
-	for _, ct := range createTables {
-		knownTables[normalizeNameKey(ct.table.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)] = true
-	}
-	knownViews := make(map[string]bool, len(views))
-	for _, v := range views {
-		knownViews[normalizeNameKey(v.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)] = true
+	normalize := func(name QualifiedName) string {
+		return normalizeNameKey(name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 	}
 
-	// Build unified dependency map keyed by normalized object name.
+	typeKeys := make([]string, len(createTypes))
+	knownTypes := make(map[string]bool, len(createTypes))
+	for i, t := range createTypes {
+		typeKeys[i] = normalize(t.name)
+		knownTypes[typeKeys[i]] = true
+	}
+	domainKeys := make([]string, len(createDomains))
+	knownDomains := make(map[string]bool, len(createDomains))
+	for i, d := range createDomains {
+		domainKeys[i] = normalize(d.name)
+		knownDomains[domainKeys[i]] = true
+	}
+	functionKeys := make([]string, len(createFunctions))
+	knownFunctions := make(map[string]bool, len(createFunctions))
+	for i, fn := range createFunctions {
+		functionKeys[i] = normalize(fn.name)
+		knownFunctions[functionKeys[i]] = true
+	}
+	tableKeys := make([]string, len(createTables))
+	knownTables := make(map[string]bool, len(createTables))
+	for i, ct := range createTables {
+		tableKeys[i] = normalize(ct.table.name)
+		knownTables[tableKeys[i]] = true
+	}
+	viewKeys := make([]string, len(views))
+	knownViews := make(map[string]bool, len(views))
+	for i, v := range views {
+		viewKeys[i] = normalize(v.name)
+		knownViews[viewKeys[i]] = true
+	}
+
+	// resolvableObjects gates the expensive column/expression walks: when no
+	// types/domains/functions exist (typical for MySQL/SQLite and many plain
+	// PostgreSQL schemas), every edge harvested below would resolve to nothing.
+	hasResolvableTypes := len(knownTypes)+len(knownDomains) > 0
+	hasResolvableFunctions := len(knownFunctions) > 0
+
 	dependencies := make(map[string][]string)
 
-	for _, fn := range createFunctions {
-		fnKey := normalizeNameKey(fn.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
-		deps := dependencies[fnKey]
+	appendFunctionDeps := func(deps []string, expr parser.Expr, ownKey string) []string {
+		if !hasResolvableFunctions {
+			return deps
+		}
+		for _, dep := range extractFunctionCallNames(expr, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
+			if dep != ownKey {
+				deps = append(deps, dep)
+			}
+		}
+		return deps
+	}
+
+	appendTypeDep := func(deps []string, typeName, ownKey string) []string {
+		if !hasResolvableTypes {
+			return deps
+		}
+		if depKey, ok := resolveTypeReference(typeName, knownTypes, knownDomains, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames); ok && depKey != ownKey {
+			deps = append(deps, depKey)
+		}
+		return deps
+	}
+
+	for i, fn := range createFunctions {
+		key := functionKeys[i]
+		deps := dependencies[key]
 		for _, arg := range fn.args {
-			if depKey, ok := resolveTypeReference(arg.typ, knownTypes, knownDomains, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames); ok && depKey != fnKey {
-				deps = append(deps, depKey)
-			}
+			deps = appendTypeDep(deps, arg.typ, key)
 		}
-		if depKey, ok := resolveTypeReference(fn.returnType, knownTypes, knownDomains, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames); ok && depKey != fnKey {
-			deps = append(deps, depKey)
-		}
-		dependencies[fnKey] = deps
+		deps = appendTypeDep(deps, fn.returnType, key)
+		dependencies[key] = deps
 	}
 
-	for _, d := range createDomains {
-		domainKey := normalizeNameKey(d.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
-		deps := dependencies[domainKey]
-		if depKey, ok := resolveTypeReference(d.dataType, knownTypes, knownDomains, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames); ok && depKey != domainKey {
-			deps = append(deps, depKey)
-		}
+	for i, d := range createDomains {
+		key := domainKeys[i]
+		deps := dependencies[key]
+		deps = appendTypeDep(deps, d.dataType, key)
 		for _, c := range d.constraints {
-			for _, dep := range extractFunctionCallNames(c.expression, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
-				if dep != domainKey {
-					deps = append(deps, dep)
-				}
-			}
+			deps = appendFunctionDeps(deps, c.expression, key)
 		}
-		dependencies[domainKey] = deps
+		dependencies[key] = deps
 	}
 
-	for _, ct := range createTables {
-		tableKey := normalizeNameKey(ct.table.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
-		deps := dependencies[tableKey]
+	for i, ct := range createTables {
+		key := tableKeys[i]
+		deps := dependencies[key]
 
-		// Foreign keys
 		for _, fk := range ct.table.foreignKeys {
 			if qualifiedNamesEqual(ct.table.name, fk.referenceTableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
 				continue
 			}
-			refKey := normalizeNameKey(fk.referenceTableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+			refKey := normalize(fk.referenceTableName)
 			if refKey != "" {
 				deps = append(deps, refKey)
 			}
 		}
 
-		// Column-level references
-		for _, col := range ct.table.columns {
-			if depKey, ok := resolveTypeReference(col.typeName, knownTypes, knownDomains, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames); ok && depKey != tableKey {
-				deps = append(deps, depKey)
-			}
-			if col.defaultDef != nil {
-				for _, dep := range extractFunctionCallNames(col.defaultDef.expression, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
-					if dep != tableKey {
-						deps = append(deps, dep)
-					}
+		if hasResolvableTypes || hasResolvableFunctions {
+			for _, col := range ct.table.columns {
+				deps = appendTypeDep(deps, col.typeName, key)
+				if col.defaultDef != nil {
+					deps = appendFunctionDeps(deps, col.defaultDef.expression, key)
+				}
+				if col.check != nil {
+					deps = appendFunctionDeps(deps, col.check.definition, key)
+				}
+				if col.generated != nil {
+					deps = appendFunctionDeps(deps, col.generated.exprAST, key)
 				}
 			}
-			if col.check != nil {
-				for _, dep := range extractFunctionCallNames(col.check.definition, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
-					if dep != tableKey {
-						deps = append(deps, dep)
-					}
-				}
+			for _, chk := range ct.table.checks {
+				deps = appendFunctionDeps(deps, chk.definition, key)
 			}
-			if col.generated != nil && col.generated.exprAST != nil {
-				for _, dep := range extractFunctionCallNames(col.generated.exprAST, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
-					if dep != tableKey {
-						deps = append(deps, dep)
-					}
+			for _, idx := range ct.table.indexes {
+				if idx.where != nil {
+					deps = appendFunctionDeps(deps, idx.where, key)
 				}
 			}
 		}
 
-		// Table-level CHECK constraints
-		for _, chk := range ct.table.checks {
-			for _, dep := range extractFunctionCallNames(chk.definition, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
-				if dep != tableKey {
-					deps = append(deps, dep)
-				}
-			}
-		}
-
-		// Partial index WHERE expressions
-		for _, idx := range ct.table.indexes {
-			if idx.where != nil {
-				for _, dep := range extractFunctionCallNames(idx.where, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) {
-					if dep != tableKey {
-						deps = append(deps, dep)
-					}
-				}
-			}
-		}
-
-		dependencies[tableKey] = deps
+		dependencies[key] = deps
 	}
 
-	for _, view := range views {
-		viewKey := normalizeNameKey(view.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+	for i, view := range views {
+		key := viewKeys[i]
 		rawDeps := extractViewDependencies(view.definition, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
-		deps := dependencies[viewKey]
+		deps := dependencies[key]
 		for _, dep := range rawDeps {
-			if dep == viewKey {
+			if dep == key {
 				continue
 			}
 			if knownTables[dep] || knownViews[dep] {
 				deps = append(deps, dep)
 			}
 		}
-		dependencies[viewKey] = deps
+		dependencies[key] = deps
 	}
 
-	// Combine all sortable DDLs in fixed-bucket order (used as fallback and as the
-	// stable-sort seed when items are independent).
-	var sortItems []DDL
-	for _, t := range createTypes {
+	// sortItems is arranged in fixed-bucket order (types -> domains -> functions
+	// -> tables -> views) so the topological sort's stable tie-breaking falls
+	// back to that order for independent items, and so does the cycle fallback.
+	sortItems := make([]DDL, 0, len(createTypes)+len(createDomains)+len(createFunctions)+len(createTables)+len(views))
+	itemKeys := make(map[DDL]string, cap(sortItems))
+	for i, t := range createTypes {
 		sortItems = append(sortItems, t)
+		itemKeys[DDL(t)] = typeKeys[i]
 	}
-	for _, d := range createDomains {
+	for i, d := range createDomains {
 		sortItems = append(sortItems, d)
+		itemKeys[DDL(d)] = domainKeys[i]
 	}
-	for _, fn := range createFunctions {
+	for i, fn := range createFunctions {
 		sortItems = append(sortItems, fn)
+		itemKeys[DDL(fn)] = functionKeys[i]
 	}
-	for _, ct := range createTables {
+	for i, ct := range createTables {
 		sortItems = append(sortItems, ct)
+		itemKeys[DDL(ct)] = tableKeys[i]
 	}
-	for _, view := range views {
-		sortItems = append(sortItems, view)
-	}
-
-	ddlKey := func(d DDL) string {
-		switch v := d.(type) {
-		case *Type:
-			return normalizeNameKey(v.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
-		case *Domain:
-			return normalizeNameKey(v.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
-		case *Function:
-			return normalizeNameKey(v.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
-		case *CreateTable:
-			return normalizeNameKey(v.table.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
-		case *View:
-			return normalizeNameKey(v.name, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
-		}
-		return ""
+	for i, v := range views {
+		sortItems = append(sortItems, v)
+		itemKeys[DDL(v)] = viewKeys[i]
 	}
 
-	sorted := topologicalSort(sortItems, dependencies, ddlKey)
+	sorted := topologicalSort(sortItems, dependencies, func(d DDL) string { return itemKeys[d] })
 	if len(sorted) == 0 {
-		// Circular dependency detected: fall back to fixed-bucket order
-		// (types -> domains -> functions -> tables -> views) which is what
-		// sortItems is already arranged as.
 		sorted = sortItems
 	}
 
-	// Rebuild the DDL list:
-	// 1. CREATE EXTENSIONs (no inbound edges from sorted kinds)
-	// 2. CREATE SCHEMAs (no inbound edges from sorted kinds)
-	// 3. Unified sort of TYPE/DOMAIN/FUNCTION/TABLE/VIEW by per-object edges
-	// 4. Other DDLs (triggers, comments, indexes, foreign keys, etc.)
 	var result []DDL
 	for _, ext := range createExtensions {
 		result = append(result, ext)
@@ -399,30 +385,21 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 
 // resolveTypeReference resolves a type-name string (possibly schema-qualified)
 // to a normalized dependency-graph key, returning (key, true) only if the
-// reference matches an entry in knownTypes or knownDomains.
+// reference matches an entry in knownTypes or knownDomains. PostgreSQL only:
+// the other engines do not surface user-defined TYPE/DOMAIN.
 func resolveTypeReference(typeName string, knownTypes, knownDomains map[string]bool, defaultSchema string, mode GeneratorMode, legacyIgnoreQuotes bool, mysqlLowerCaseTableNames int) (string, bool) {
-	typeName = strings.TrimSpace(typeName)
+	if mode != GeneratorModePostgres {
+		return "", false
+	}
+	typeName = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(typeName), "[]"))
 	if typeName == "" {
 		return "", false
 	}
-	// Strip trailing array brackets (e.g. "priority[]")
-	typeName = strings.TrimSuffix(typeName, "[]")
-	typeName = strings.TrimSpace(typeName)
-
-	schema := defaultSchema
-	name := typeName
-	if idx := strings.Index(typeName, "."); idx > 0 {
-		schema = strings.TrimSpace(typeName[:idx])
-		name = strings.TrimSpace(typeName[idx+1:])
-	}
-
-	// Without quote information from the string form, fold according to the
-	// generator mode using an unquoted Ident.
-	qn := QualifiedName{
-		Schema: Ident{Name: schema},
-		Name:   Ident{Name: name},
-	}
-	key := normalizeNameKey(qn, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+	schema, name := splitTableName(typeName, defaultSchema)
+	key := normalizeNameKey(
+		QualifiedName{Schema: Ident{Name: schema}, Name: Ident{Name: name}},
+		defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames,
+	)
 	if knownTypes[key] || knownDomains[key] {
 		return key, true
 	}
