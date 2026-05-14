@@ -214,3 +214,34 @@ FunctionBeforeDomain_DomainCheck:
   desired: |
     CREATE FUNCTION is_email(s text) RETURNS boolean AS $$ BEGIN RETURN s LIKE '%@%'; END; $$ LANGUAGE plpgsql IMMUTABLE;
     CREATE DOMAIN email AS text CHECK (is_email(VALUE));
+
+FunctionBeforeTable_TableLevelCheck:
+  desired: |
+    CREATE FUNCTION is_positive(n integer) RETURNS boolean AS $$ BEGIN RETURN n > 0; END; $$ LANGUAGE plpgsql IMMUTABLE;
+    CREATE TABLE measurements (
+      id bigint NOT NULL PRIMARY KEY,
+      score integer NOT NULL,
+      CHECK (is_positive(score))
+    );
+
+FunctionBeforeTable_PartialIndexWhere:
+  desired: |
+    CREATE FUNCTION is_active(s text) RETURNS boolean AS $$ BEGIN RETURN s = 'active'; END; $$ LANGUAGE plpgsql IMMUTABLE;
+    CREATE TABLE subscriptions (
+      id bigint NOT NULL PRIMARY KEY,
+      status text NOT NULL
+    );
+    CREATE INDEX subscriptions_active_idx ON subscriptions (id) WHERE is_active(status);
+
+TypeBeforeTable_ColumnType:
+  desired: |
+    CREATE TYPE membership_tier AS ENUM ('bronze', 'silver', 'gold');
+    CREATE TABLE members (
+      id bigint NOT NULL PRIMARY KEY,
+      tier membership_tier NOT NULL
+    );
+
+TypeBeforeDomain_DomainType:
+  desired: |
+    CREATE TYPE color AS ENUM ('red', 'green', 'blue');
+    CREATE DOMAIN primary_color AS color;
