@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
@@ -17,6 +18,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/sqldef/sqldef/v3"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/database/mysql"
 	"github.com/sqldef/sqldef/v3/parser"
@@ -188,6 +190,44 @@ func TestMysqldefDryRun(t *testing.T) {
 		COMMIT;
 	`)
 	assert.Equal(t, expectedApply, apply)
+}
+
+func TestMysqldefCheck(t *testing.T) {
+	resetTestDatabase()
+	mustMysqlExec("mysqldef_test", "CREATE TABLE users (id bigint NOT NULL);")
+
+	// Case 1: schema in sync -> exit 0, "Nothing is modified"
+	tu.WriteFile("schema.sql", "CREATE TABLE users (\n  id bigint NOT NULL\n);")
+	noChange := mustExecuteMySQLDef(t, "mysqldef_test", "--check", "--file", "schema.sql")
+	assert.Equal(t, "-- Nothing is modified --\n", noChange)
+
+	// Case 2: schema differs -> exit 2, DDL printed under "-- dry run --" header,
+	// and the database is NOT modified.
+	tu.WriteFile("schema.sql", "CREATE TABLE users (\n  id bigint NOT NULL,\n  name varchar(40)\n);")
+	out, err := executeMySQLDef("mysqldef_test", "--check", "--file", "schema.sql")
+	exitErr, isExitErr := err.(*exec.ExitError)
+	if !isExitErr {
+		t.Fatalf("expected ExitError from --check when schema differs, got err=%v", err)
+	}
+	assert.Equal(t, sqldef.CheckExitCode, exitErr.ExitCode(),
+		"--check should exit with sqldef.CheckExitCode when DDL would be applied")
+	expected := tu.StripHeredoc(`
+		-- dry run --
+		BEGIN;
+		ALTER TABLE ` + "`users`" + ` ADD COLUMN ` + "`name`" + ` varchar(40) AFTER ` + "`id`" + `;
+		COMMIT;
+	`)
+	assert.Equal(t, expected, out)
+
+	// Re-running --check must still report the same diff, proving the database
+	// was not modified by the first --check invocation.
+	out2, err2 := executeMySQLDef("mysqldef_test", "--check", "--file", "schema.sql")
+	exitErr2, isExitErr2 := err2.(*exec.ExitError)
+	if !isExitErr2 {
+		t.Fatalf("expected ExitError from second --check, got err=%v", err2)
+	}
+	assert.Equal(t, sqldef.CheckExitCode, exitErr2.ExitCode())
+	assert.Equal(t, expected, out2, "second --check must report the same diff (DB unchanged)")
 }
 
 func TestMysqldefExport(t *testing.T) {

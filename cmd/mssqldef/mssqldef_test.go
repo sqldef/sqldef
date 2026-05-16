@@ -8,6 +8,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/sqldef/sqldef/v3"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/database/mssql"
 	"github.com/sqldef/sqldef/v3/schema"
@@ -1397,6 +1399,36 @@ func TestMssqldefDryRun(t *testing.T) {
 	dryRun := tu.MustExecute(t, "./mssqldef", mssqlCLIArgs("mssqldef_test", "--dry-run", "--file", "schema.sql")...)
 	apply := tu.MustExecute(t, "./mssqldef", mssqlCLIArgs("mssqldef_test", "--file", "schema.sql")...)
 	assert.Equal(t, strings.Replace(apply, "Apply", "dry run", 1), dryRun)
+}
+
+func TestMssqldefCheck(t *testing.T) {
+	resetTestDatabase()
+	mustMssqlExec("mssqldef_test", "CREATE TABLE users (id integer NOT NULL PRIMARY KEY);")
+
+	// Case 1: schema in sync -> exit 0
+	tu.WriteFile("schema.sql", "CREATE TABLE users (\n  id integer NOT NULL PRIMARY KEY\n);\nGO\n")
+	noChange := tu.MustExecute(t, "./mssqldef", mssqlCLIArgs("mssqldef_test", "--check", "--file", "schema.sql")...)
+	assert.Equal(t, nothingModified, noChange)
+
+	// Case 2: schema differs -> exit 2 with DDL printed
+	tu.WriteFile("schema.sql", "CREATE TABLE users (\n  id integer NOT NULL PRIMARY KEY,\n  age integer\n);\nGO\n")
+	out, err := tu.Execute("./mssqldef", mssqlCLIArgs("mssqldef_test", "--check", "--file", "schema.sql")...)
+	exitErr, isExitErr := err.(*exec.ExitError)
+	if !isExitErr {
+		t.Fatalf("expected ExitError from --check when schema differs, got err=%v", err)
+	}
+	assert.Equal(t, sqldef.CheckExitCode, exitErr.ExitCode())
+	assert.Contains(t, out, "-- dry run --")
+	assert.Contains(t, out, "age")
+
+	// Re-running --check must still report a diff (DB untouched).
+	out2, err2 := tu.Execute("./mssqldef", mssqlCLIArgs("mssqldef_test", "--check", "--file", "schema.sql")...)
+	exitErr2, isExitErr2 := err2.(*exec.ExitError)
+	if !isExitErr2 {
+		t.Fatalf("expected ExitError from second --check, got err=%v", err2)
+	}
+	assert.Equal(t, sqldef.CheckExitCode, exitErr2.ExitCode())
+	assert.Equal(t, out, out2, "second --check must produce the same output (DB unchanged)")
 }
 
 func TestMssqldefDropTable(t *testing.T) {

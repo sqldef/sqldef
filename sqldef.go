@@ -50,9 +50,15 @@ type Options struct {
 	CurrentFile string
 	DryRun      bool
 	Export      bool
+	Check       bool // Like --dry-run, but exit 2 when DDL would be applied (CI gate).
 	BeforeApply string
 	Config      database.GeneratorConfig
 }
+
+// CheckExitCode is the exit code returned by --check when the database schema
+// diverges from the desired schema (i.e. one or more DDL statements would have
+// been applied). Matches the convention of diff(1) and `terraform plan -detailed-exitcode`.
+const CheckExitCode = 2
 
 // Main function shared by all commands
 func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser database.Parser, options *Options) {
@@ -107,7 +113,7 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 		return
 	}
 
-	if options.DryRun || len(options.CurrentFile) > 0 {
+	if options.DryRun || options.Check || len(options.CurrentFile) > 0 {
 		dryRunDB, err := database.NewDryRunDatabase(db)
 		if err != nil {
 			log.Fatal(err)
@@ -119,6 +125,11 @@ func Run(generatorMode schema.GeneratorMode, db database.Database, sqlParser dat
 	err = database.RunDDLs(db, ddls, options.BeforeApply, ddlSuffix, database.StdoutLogger{})
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if options.Check {
+		// Schema is out of sync: signal to CI without erroring.
+		os.Exit(CheckExitCode)
 	}
 }
 
