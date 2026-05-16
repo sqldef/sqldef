@@ -1,3 +1,21 @@
+## [v3.11.2](https://github.com/sqldef/sqldef/compare/v3.11.1...v3.11.2) - 2026-05-16
+- Fix CHANGELOG.md by @yuku in https://github.com/sqldef/sqldef/pull/1188
+- Error by working with postgres and partitions. Cannot work with indexes or constrains on partitions. by @rtenshi in https://github.com/sqldef/sqldef/pull/1190
+- build(deps): bump actions/upload-artifact from 7.0.0 to 7.0.1 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1196
+- build(deps): bump modernc.org/sqlite from 1.47.0 to 1.50.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1197
+- build(deps): bump dependabot/fetch-metadata from 2.3.0 to 3.1.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1198
+- build(deps): bump github.com/lib/pq from 1.12.0 to 1.12.3 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1199
+- fix: allow KEY as column name in generic parser by @178inaba in https://github.com/sqldef/sqldef/pull/1202
+- build(deps): bump golang.org/x/term from 0.41.0 to 0.42.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1194
+- build(deps): bump lewagon/wait-on-check-action from 1.4.1 to 1.7.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1195
+- build(deps): bump docker/build-push-action from 6.19.2 to 7.1.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1200
+- [FIX] PG: Unflatten view export by @FinnLang-Kettner in https://github.com/sqldef/sqldef/pull/1191
+- build(deps): bump actions/create-github-app-token from 3.0.0 to 3.1.1 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1193
+- psqldef: order CREATE FUNCTION correctly relative to tables, types, and domains by @178inaba in https://github.com/sqldef/sqldef/pull/1209
+- psqldef: support DEFAULT and IN/OUT/INOUT/VARIADIC in CREATE FUNCTION by @178inaba in https://github.com/sqldef/sqldef/pull/1210
+- fix: mysql parser regression on USING HASH index_type after #1036 by @TiBata in https://github.com/sqldef/sqldef/pull/1211
+- fix: mysql treat MariaDB longtext+json_valid CHECK as equivalent to json by @TiBata in https://github.com/sqldef/sqldef/pull/1212
+
 ## [v3.11.1](https://github.com/sqldef/sqldef/compare/v3.11.0...v3.11.1) - 2026-04-20
 - chore: upgrade tagpr to v1.18.0 by @gfx in https://github.com/sqldef/sqldef/pull/1180
 - Fix partial index WHERE IN/NOT IN idempotency for unsorted values by @shiroemons in https://github.com/sqldef/sqldef/pull/1182
