@@ -161,3 +161,87 @@ ViewDependsOnView_UpdateBaseViewAffectingDependentViews:
     CREATE VIEW "public"."cheap_products" AS select id, name from products where price < 50;
     CREATE VIEW "public"."cheap_product_names" AS select name from cheap_products;
     ALTER TABLE "public"."products" DROP COLUMN "category";
+
+FunctionBeforeTable_ColumnDefault:
+  desired: |
+    CREATE FUNCTION generate_item_id() RETURNS text AS $$ BEGIN RETURN 'item_' || md5(random()::text); END; $$ LANGUAGE plpgsql VOLATILE;
+    CREATE TABLE items (
+      id text NOT NULL DEFAULT generate_item_id() PRIMARY KEY,
+      name text
+    );
+
+FunctionBeforeTable_AlterAddColumnDefault:
+  current: |
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY
+    );
+  desired: |
+    CREATE FUNCTION generate_item_id() RETURNS text AS $$ BEGIN RETURN 'item_' || md5(random()::text); END; $$ LANGUAGE plpgsql VOLATILE;
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY,
+      external_id text NOT NULL DEFAULT generate_item_id()
+    );
+  up: |
+    CREATE FUNCTION generate_item_id() RETURNS text AS $$ BEGIN RETURN 'item_' || md5(random()::text); END; $$ LANGUAGE plpgsql VOLATILE;
+    ALTER TABLE "public"."items" ADD COLUMN "external_id" text NOT NULL DEFAULT generate_item_id();
+  down: |
+    ALTER TABLE "public"."items" DROP COLUMN "external_id";
+    DROP FUNCTION "public"."generate_item_id";
+
+FunctionBeforeTable_ColumnCheck:
+  desired: |
+    CREATE FUNCTION is_valid_name(s text) RETURNS boolean AS $$ BEGIN RETURN length(s) > 0; END; $$ LANGUAGE plpgsql IMMUTABLE;
+    CREATE TABLE accounts (
+      id bigint NOT NULL PRIMARY KEY,
+      name text NOT NULL CHECK (is_valid_name(name))
+    );
+
+FunctionBeforeTable_GeneratedColumn:
+  desired: |
+    CREATE FUNCTION double_value(n integer) RETURNS integer AS $$ BEGIN RETURN n * 2; END; $$ LANGUAGE plpgsql IMMUTABLE;
+    CREATE TABLE metrics (
+      id bigint NOT NULL PRIMARY KEY,
+      base_value integer NOT NULL,
+      doubled integer GENERATED ALWAYS AS (double_value(base_value)) STORED
+    );
+
+TypeBeforeFunction_ArgType:
+  desired: |
+    CREATE TYPE priority AS ENUM ('low', 'medium', 'high');
+    CREATE FUNCTION classify_priority(p priority) RETURNS priority AS $$ BEGIN RETURN p; END; $$ LANGUAGE plpgsql IMMUTABLE;
+
+FunctionBeforeDomain_DomainCheck:
+  desired: |
+    CREATE FUNCTION is_email(s text) RETURNS boolean AS $$ BEGIN RETURN s LIKE '%@%'; END; $$ LANGUAGE plpgsql IMMUTABLE;
+    CREATE DOMAIN email AS text CHECK (is_email(VALUE));
+
+FunctionBeforeTable_TableLevelCheck:
+  desired: |
+    CREATE FUNCTION is_positive(n integer) RETURNS boolean AS $$ BEGIN RETURN n > 0; END; $$ LANGUAGE plpgsql IMMUTABLE;
+    CREATE TABLE measurements (
+      id bigint NOT NULL PRIMARY KEY,
+      score integer NOT NULL,
+      CHECK (is_positive(score))
+    );
+
+FunctionBeforeTable_PartialIndexWhere:
+  desired: |
+    CREATE FUNCTION is_active(s text) RETURNS boolean AS $$ BEGIN RETURN s = 'active'; END; $$ LANGUAGE plpgsql IMMUTABLE;
+    CREATE TABLE subscriptions (
+      id bigint NOT NULL PRIMARY KEY,
+      status text NOT NULL
+    );
+    CREATE INDEX subscriptions_active_idx ON subscriptions (id) WHERE is_active(status);
+
+TypeBeforeTable_ColumnType:
+  desired: |
+    CREATE TYPE membership_tier AS ENUM ('bronze', 'silver', 'gold');
+    CREATE TABLE members (
+      id bigint NOT NULL PRIMARY KEY,
+      tier membership_tier NOT NULL
+    );
+
+TypeBeforeDomain_DomainType:
+  desired: |
+    CREATE TYPE color AS ENUM ('red', 'green', 'blue');
+    CREATE DOMAIN primary_color AS color;
