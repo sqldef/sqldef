@@ -255,6 +255,177 @@ RenameEnumValueWithSchema:
   down: |
     ALTER TYPE "myschema"."status" ADD VALUE 'pending';
 
+ChangeColumnTypeFromTextToEnum:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE EXTENSION IF NOT EXISTS citext;
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY,
+      status_text text NOT NULL,
+      status_varchar varchar(20) NOT NULL,
+      status_citext citext NOT NULL,
+      status_name name NOT NULL
+    );
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS citext;
+    CREATE TYPE item_status AS ENUM ('active', 'inactive');
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY,
+      status_text item_status NOT NULL,
+      status_varchar item_status NOT NULL,
+      status_citext item_status NOT NULL,
+      status_name item_status NOT NULL
+    );
+  up: |
+    CREATE TYPE item_status AS ENUM ('active', 'inactive');
+    ALTER TABLE public.items ALTER COLUMN status_text TYPE item_status USING status_text::item_status;
+    ALTER TABLE public.items ALTER COLUMN status_varchar TYPE item_status USING status_varchar::item_status;
+    ALTER TABLE public.items ALTER COLUMN status_citext TYPE item_status USING status_citext::item_status;
+    ALTER TABLE public.items ALTER COLUMN status_name TYPE item_status USING status_name::item_status;
+  down: |
+    ALTER TABLE public.items ALTER COLUMN status_text TYPE text;
+    ALTER TABLE public.items ALTER COLUMN status_varchar TYPE varchar(20);
+    ALTER TABLE public.items ALTER COLUMN status_citext TYPE citext;
+    ALTER TABLE public.items ALTER COLUMN status_name TYPE name;
+    DROP TYPE public.item_status;
+
+ChangeColumnTypeFromTextWithDefaultToEnum:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY,
+      status text NOT NULL DEFAULT 'pending'
+    );
+  desired: |
+    CREATE TYPE item_status AS ENUM ('active', 'inactive', 'pending');
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY,
+      status item_status NOT NULL DEFAULT 'pending'
+    );
+  up: |
+    CREATE TYPE item_status AS ENUM ('active', 'inactive', 'pending');
+    ALTER TABLE public.items ALTER COLUMN status DROP DEFAULT;
+    ALTER TABLE public.items ALTER COLUMN status TYPE item_status USING status::item_status;
+    ALTER TABLE public.items ALTER COLUMN status SET DEFAULT 'pending';
+  down: |
+    ALTER TABLE public.items ALTER COLUMN status DROP DEFAULT;
+    ALTER TABLE public.items ALTER COLUMN status TYPE text;
+    ALTER TABLE public.items ALTER COLUMN status SET DEFAULT 'pending';
+    DROP TYPE public.item_status;
+
+ChangeColumnTypeFromTextToEnumAddingDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY,
+      status text NOT NULL
+    );
+  desired: |
+    CREATE TYPE item_status AS ENUM ('active', 'inactive', 'pending');
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY,
+      status item_status NOT NULL DEFAULT 'pending'
+    );
+  up: |
+    CREATE TYPE item_status AS ENUM ('active', 'inactive', 'pending');
+    ALTER TABLE public.items ALTER COLUMN status TYPE item_status USING status::item_status;
+    ALTER TABLE public.items ALTER COLUMN status SET DEFAULT 'pending';
+  down: |
+    ALTER TABLE public.items ALTER COLUMN status DROP DEFAULT;
+    ALTER TABLE public.items ALTER COLUMN status TYPE text;
+    DROP TYPE public.item_status;
+
+ChangeColumnTypeFromTextWithDefaultToEnumDroppingDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY,
+      status text NOT NULL DEFAULT 'pending'
+    );
+  desired: |
+    CREATE TYPE item_status AS ENUM ('active', 'inactive');
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY,
+      status item_status NOT NULL
+    );
+  up: |
+    CREATE TYPE item_status AS ENUM ('active', 'inactive');
+    ALTER TABLE public.items ALTER COLUMN status DROP DEFAULT;
+    ALTER TABLE public.items ALTER COLUMN status TYPE item_status USING status::item_status;
+  down: |
+    ALTER TABLE public.items ALTER COLUMN status TYPE text;
+    ALTER TABLE public.items ALTER COLUMN status SET DEFAULT 'pending';
+    DROP TYPE public.item_status;
+
+ChangeColumnTypeFromTextWithDefaultToEnumChangingDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY,
+      status text NOT NULL DEFAULT 'active'
+    );
+  desired: |
+    CREATE TYPE item_status AS ENUM ('active', 'inactive', 'pending');
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY,
+      status item_status NOT NULL DEFAULT 'pending'
+    );
+  up: |
+    CREATE TYPE item_status AS ENUM ('active', 'inactive', 'pending');
+    ALTER TABLE public.items ALTER COLUMN status DROP DEFAULT;
+    ALTER TABLE public.items ALTER COLUMN status TYPE item_status USING status::item_status;
+    ALTER TABLE public.items ALTER COLUMN status SET DEFAULT 'pending';
+  down: |
+    ALTER TABLE public.items ALTER COLUMN status DROP DEFAULT;
+    ALTER TABLE public.items ALTER COLUMN status TYPE text;
+    ALTER TABLE public.items ALTER COLUMN status SET DEFAULT 'active';
+    DROP TYPE public.item_status;
+
+ChangeColumnTypeFromEnumToDifferentEnum:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE old_status AS ENUM ('a', 'b');
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY,
+      status old_status NOT NULL
+    );
+  desired: |
+    CREATE TYPE new_status AS ENUM ('a', 'b');
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY,
+      status new_status NOT NULL
+    );
+  up: |
+    CREATE TYPE new_status AS ENUM ('a', 'b');
+    ALTER TABLE public.items ALTER COLUMN status TYPE new_status USING status::text::new_status;
+    DROP TYPE public.old_status;
+  down: |
+    CREATE TYPE old_status AS ENUM ('a', 'b');
+    ALTER TABLE public.items ALTER COLUMN status TYPE old_status USING status::text::old_status;
+    DROP TYPE public.new_status;
+
+ChangeColumnTypeFromEnumWithSchemaToText:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE SCHEMA myschema;
+    CREATE TYPE myschema.item_status AS ENUM ('active', 'inactive');
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY,
+      status myschema.item_status NOT NULL
+    );
+  desired: |
+    CREATE SCHEMA myschema;
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY,
+      status text NOT NULL
+    );
+  up: |
+    ALTER TABLE public.items ALTER COLUMN status TYPE text;
+    DROP TYPE myschema.item_status;
+  down: |
+    CREATE TYPE myschema.item_status AS ENUM ('active', 'inactive');
+    ALTER TABLE public.items ALTER COLUMN status TYPE myschema.item_status USING status::myschema.item_status;
+
 EnumTypeDefaultIdempotent:
   legacy_ignore_quotes: false
   current: |

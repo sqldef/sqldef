@@ -1052,6 +1052,10 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 					"currentTypeIdent", currentColumn.typeIdent,
 					"desiredTypeName", desiredColumn.typeName,
 					"desiredTypeIdent", desiredColumn.typeIdent)
+				// enumTypeChange is true when the type change involves an enum on
+				// either side. In that case the column default must be re-applied
+				// around the ALTER (see classifyEnumTypeChange's docstring).
+				var enumTypeChange bool
 				if !g.haveSameDataType(*currentColumn, desiredColumn) {
 					// Serial types require changing both column type and sequence type
 					if isPostgresSerialType(currentColumn.typeName) && isPostgresSerialType(desiredColumn.typeName) {
@@ -1062,8 +1066,17 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 						seqDDL := g.generateSerialSequenceAlterDDL(&desired.table, &desiredColumn, underlyingType)
 						ddls = append(ddls, seqDDL)
 					} else {
+						usingClause, enumInvolved := g.classifyEnumTypeChange(*currentColumn, desiredColumn)
+						enumTypeChange = enumInvolved
+						if enumTypeChange && currentColumn.defaultDef != nil {
+							ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT",
+								g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn)))
+						}
 						// Change type - use desiredColumn for escaping to match user's quote style
 						ddl := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn), g.generateDataType(desiredColumn))
+						if usingClause != "" {
+							ddl += " USING " + usingClause
+						}
 						ddls = append(ddls, ddl)
 					}
 				}
@@ -1111,7 +1124,17 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				}
 
 				// default
-				if !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef, desiredColumn.typeName) {
+				if enumTypeChange {
+					// The default was already dropped (if present) before the ALTER
+					// COLUMN TYPE above; re-apply the desired default in the new type.
+					if desiredColumn.defaultDef != nil {
+						definition, err := g.generateDefaultDefinition(*desiredColumn.defaultDef)
+						if err != nil {
+							return ddls, err
+						}
+						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET %s", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn), definition))
+					}
+				} else if !g.areSameDefaultValue(currentColumn.defaultDef, desiredColumn.defaultDef, desiredColumn.typeName) {
 					if desiredColumn.defaultDef == nil {
 						// drop - use desiredColumn for escaping to match user's quote style
 						ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT", g.escapeTableName(&desired.table), g.escapeColumnName(&desiredColumn)))
@@ -4392,6 +4415,93 @@ func (g *Generator) findType(types []*Type, desiredType *Type) *Type {
 		}
 	}
 	return nil
+}
+
+// isEnumCastableStringType reports whether typeName is a PostgreSQL string-like
+// type that can be safely cast to/from an enum via "USING col::enum" for both
+// empty and populated tables.
+//
+// Fixed-length character(N) / bpchar is intentionally excluded: its values are
+// space-padded on the right, so "USING col::enum" would compare e.g.
+// 'active  ' against enum labels and fail at runtime. Supporting it would
+// require emitting rtrim() inside USING, which silently corrupts enum labels
+// that legitimately end with whitespace.
+func isEnumCastableStringType(typeName string) bool {
+	switch normalizeTypeName(typeName, GeneratorModePostgres) {
+	case "text", "character varying", "citext", "name":
+		return true
+	}
+	return false
+}
+
+// classifyEnumTypeChange inspects an ALTER COLUMN ... TYPE change that may
+// involve a PostgreSQL enum.
+//
+// using is the body of a USING expression when the cast has no implicit form:
+//   - string -> enum:                "col::enum_t"
+//   - enum_a -> enum_b (different):  "col::text::enum_b" (no direct cast)
+//
+// PostgreSQL has an assignment cast from enum to string types (text, varchar,
+// citext, name), so enum -> string returns no USING.
+//
+// enumInvolved is true whenever either side resolves to an enum (regardless of
+// whether USING is needed). Callers use it to drop and re-apply the column
+// default around the ALTER, since the existing default still references the
+// old type after the cast and would otherwise block DROP TYPE.
+func (g *Generator) classifyEnumTypeChange(currentColumn, desiredColumn Column) (using string, enumInvolved bool) {
+	if g.mode != GeneratorModePostgres {
+		return "", false
+	}
+
+	currentEnum := g.findEnumTypeForColumn(currentColumn, g.currentTypes)
+	desiredEnum := g.findEnumTypeForColumn(desiredColumn, g.desiredTypes)
+	enumInvolved = currentEnum != nil || desiredEnum != nil
+
+	stringToEnum := desiredEnum != nil && currentEnum == nil && isEnumCastableStringType(currentColumn.typeName)
+	enumToEnum := currentEnum != nil && desiredEnum != nil && !g.qualifiedNamesEqual(currentEnum.name, desiredEnum.name)
+	if !stringToEnum && !enumToEnum {
+		return "", enumInvolved
+	}
+
+	column := g.escapeColumnName(&desiredColumn)
+	target := g.generateDataType(desiredColumn)
+	if enumToEnum {
+		return fmt.Sprintf("%s::text::%s", column, target), enumInvolved
+	}
+	return fmt.Sprintf("%s::%s", column, target), enumInvolved
+}
+
+// findEnumTypeForColumn looks up the enum type that the column refers to in the given
+// types list, or returns nil if the column does not refer to an enum type.
+func (g *Generator) findEnumTypeForColumn(column Column, types []*Type) *Type {
+	if g.mode != GeneratorModePostgres || column.typeName == "" {
+		return nil
+	}
+
+	// typeIdent carries the quote info and is set for user-defined types
+	// (domains, enums, ...). The generic parser leaves it empty when the
+	// source SQL writes a schema-qualified custom type like "myschema.item",
+	// because parseTable splits "myschema.item" into references="myschema."
+	// + typeName="item" before typeIdent gets populated. Fall back to
+	// typeName so quoted schemas still find their unquoted enum.
+	typeIdent := column.typeIdent
+	if typeIdent.IsEmpty() {
+		typeIdent = Ident{Name: column.typeName}
+	}
+
+	target := &Type{name: QualifiedName{
+		Schema: Ident{
+			Name:   strings.TrimSuffix(column.references.Name, "."),
+			Quoted: column.references.Quoted,
+		},
+		Name: typeIdent,
+	}}
+
+	found := g.findType(types, target)
+	if found == nil || len(found.enumValues) == 0 {
+		return nil
+	}
+	return found
 }
 
 // findDomainByName finds a domain using quote-aware comparison including schema
