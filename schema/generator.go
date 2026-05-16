@@ -4709,7 +4709,7 @@ func (g *Generator) haveSameDataType(current Column, desired Column) bool {
 		}
 	} else {
 		// Legacy behavior: case-insensitive normalized comparison
-		if normalizeTypeName(current.typeName, g.mode) != normalizeTypeName(desired.typeName, g.mode) {
+		if effectiveTypeName(current, desired, g.mode) != effectiveTypeName(desired, current, g.mode) {
 			return false
 		}
 	}

@@ -62,7 +62,6 @@ CreateTableGeneratedAlwaysAsAbbreviationChangeExpr80:
     ALTER TABLE `test_table` CHANGE COLUMN `test_expr` `test_expr` varchar(45) GENERATED ALWAYS AS (test_value / test_value) STORED NOT NULL;
   min_version: '8.0'
 ChangeGenerateColumnGemerayedAlwaysAs:
-  flavor: "!mariadb"
   desired: |
     CREATE TABLE test_table (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -73,7 +72,6 @@ ChangeGenerateColumnGemerayedAlwaysAs:
       PRIMARY KEY (id)
     );
 ChangeGenerateColumnJsonExpressionChange:
-  flavor: "!mariadb"
   current: |
     CREATE TABLE test_table (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -97,7 +95,7 @@ ChangeGenerateColumnJsonExpressionChange:
   down: |
     ALTER TABLE `test_table` CHANGE COLUMN `name` `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name1')) VIRTUAL;
 ChangeGenerateColumnVirtualToStored:
-  flavor: mysql
+  flavor: "!tidb"
   current: |
     CREATE TABLE test_table (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -127,7 +125,7 @@ ChangeGenerateColumnVirtualToStored:
     ALTER TABLE `test_table` DROP COLUMN `name`;
     ALTER TABLE `test_table` ADD COLUMN `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) VIRTUAL AFTER `data`;
 ChangeGenerateColumnStoredToVirtual:
-  flavor: mysql
+  flavor: "!tidb"
   current: |
     CREATE TABLE test_table (
       id int(11) NOT NULL AUTO_INCREMENT,
@@ -157,7 +155,6 @@ ChangeGenerateColumnStoredToVirtual:
     ALTER TABLE `test_table` DROP COLUMN `name`;
     ALTER TABLE `test_table` ADD COLUMN `name` varchar(20) GENERATED ALWAYS AS (json_extract(data, '$.name2')) STORED AFTER `data`;
 ChangeGenerateColumnSpacingIgnored:
-  flavor: "!mariadb"
   current: |
     CREATE TABLE test_table (
       id int(11) NOT NULL AUTO_INCREMENT,
