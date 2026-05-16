@@ -126,6 +126,30 @@ IndexOption:
     ALTER TABLE `users` ADD KEY `index_id` (`id`) using BTREE;
   down: |
     ALTER TABLE `users` DROP INDEX `index_id`;
+IndexOptionUsingHash:
+  # Regression coverage for #1036: HASH was promoted to a reserved %token
+  # for PARTITION BY HASH but the index_option rule still expected `USING ID`,
+  # so any inline `USING HASH` broke the parser. The realistic trigger is
+  # MariaDB's tinyblob unique key (where USING HASH is mandatory and is
+  # emitted verbatim by SHOW CREATE TABLE). MySQL/TiDB reject UNIQUE KEY
+  # on BLOB/TEXT columns without a key length prefix (ERROR 1170), so this
+  # test only round-trips on MariaDB.
+  flavor: mariadb
+  current: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      credential tinyblob NOT NULL
+    );
+  desired: |
+    CREATE TABLE users (
+      id int(11) NOT NULL,
+      credential tinyblob NOT NULL,
+      UNIQUE KEY credential (credential) USING HASH
+    );
+  up: |
+    ALTER TABLE `users` ADD UNIQUE KEY `credential` (`credential`) using HASH;
+  down: |
+    ALTER TABLE `users` DROP INDEX `credential`;
 IndexOptionCaseInsensitive:
   current: |
     CREATE TABLE users (
