@@ -26,7 +26,7 @@ BooleanValue:
   up: |
   down: |
 AddColumnWithDefaultExpression:
-  flavor: mysql
+  flavor: "!tidb"
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY);
   desired: |
@@ -40,7 +40,6 @@ AddColumnWithDefaultExpression:
     ALTER TABLE `users` DROP COLUMN `friend_ids`;
   min_version: '8.0'
 AddDefaultExpression:
-  flavor: "!mariadb"
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -57,7 +56,6 @@ AddDefaultExpression:
     ALTER TABLE `users` CHANGE COLUMN `friend_ids` `friend_ids` json;
   min_version: '8.0'
 RemoveDefaultExpression:
-  flavor: "!mariadb"
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -506,5 +504,55 @@ UUIDBinary:
   desired: |
     CREATE TABLE users (
       id BINARY(16) NOT NULL DEFAULT (UNHEX(REPLACE(UUID(), '-', ''))),
+      PRIMARY KEY (id)
+    );
+
+# MariaDB does not store JSON natively: `CREATE TABLE t (j JSON)` is rewritten
+# internally as `j longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin
+# CHECK (json_valid(j))`, and SHOW CREATE TABLE returns that verbatim. Without
+# normalization, the comparer sees `json` (desired) vs `longtext + utf8mb4_bin +
+# json_valid CHECK` (current) and emits a spurious `CHANGE COLUMN ... json` per
+# JSON column on every diff. These tests assert idempotency on both flavors —
+# trivial on MySQL (native json round-trips), exercising the normalization on
+# MariaDB.
+JsonColumnIdempotency:
+  current: |
+    CREATE TABLE t (
+      id int(11) NOT NULL,
+      metadata json DEFAULT NULL,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE t (
+      id int(11) NOT NULL,
+      metadata json DEFAULT NULL,
+      PRIMARY KEY (id)
+    );
+
+JsonColumnNotNullIdempotency:
+  current: |
+    CREATE TABLE t (
+      id int(11) NOT NULL,
+      payload json NOT NULL,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE t (
+      id int(11) NOT NULL,
+      payload json NOT NULL,
+      PRIMARY KEY (id)
+    );
+
+JsonColumnWithCommentIdempotency:
+  current: |
+    CREATE TABLE t (
+      id int(11) NOT NULL,
+      details json DEFAULT NULL COMMENT 'metadata blob',
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE t (
+      id int(11) NOT NULL,
+      details json DEFAULT NULL COMMENT 'metadata blob',
       PRIMARY KEY (id)
     );
