@@ -465,3 +465,43 @@ NumericDecimalExplicit:
       price1 decimal(12),
       price2 decimal(20, 6)
     );
+
+# Generated columns: trailing VIRTUAL/STORED keyword is optional in SQLite3 and defaults to VIRTUAL
+GeneratedColumnNoKeyword:
+  desired: |
+    CREATE TABLE t (
+      c integer,
+      g integer AS (c + 1)
+    );
+GeneratedColumnAlwaysNoKeyword:
+  desired: |
+    CREATE TABLE t (
+      c integer,
+      g integer GENERATED ALWAYS AS (c + 1)
+    );
+GeneratedColumnVirtualExplicit:
+  desired: |
+    CREATE TABLE t (
+      c integer,
+      g integer AS (c + 1) VIRTUAL
+    );
+GeneratedColumnStored:
+  desired: |
+    CREATE TABLE t (
+      c integer,
+      g integer AS (c + 1) STORED
+    );
+GeneratedColumnNoKeywordEquivalentToVirtual:
+  # g AS (c + 1) with no keyword and g AS (c + 1) VIRTUAL are equivalent
+  current: |
+    CREATE TABLE t (
+      c integer,
+      g integer AS (c + 1)
+    );
+  desired: |
+    CREATE TABLE t (
+      c integer,
+      g integer AS (c + 1) VIRTUAL
+    );
+  up: ""
+  down: ""
