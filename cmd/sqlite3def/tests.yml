@@ -1,5 +1,11 @@
 # yaml-language-server: $schema=../../testutil/testcase.schema.json
 
+CreateTableWithExtensionColumn:
+  desired: |
+    CREATE TABLE t (
+      extension ANY
+    );
+
 CreateTable:
   desired: |
     CREATE TABLE users (
