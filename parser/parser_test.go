@@ -836,6 +836,10 @@ func TestStringConcatOperator(t *testing.T) {
 		testCases := []struct {
 			name string
 			sql  string
+			// checkShape, when set, asserts AST shape after round-trip text
+			// checks. Used to lock down precedence/associativity beyond the
+			// emitter, which is the layer the text checks above cover.
+			checkShape func(t *testing.T, stmt Statement)
 		}{
 			{
 				name: "DEFAULT with two string literals",
@@ -852,6 +856,24 @@ func TestStringConcatOperator(t *testing.T) {
 			{
 				name: "chained concat is left-associative",
 				sql:  "CREATE TABLE t (s text NOT NULL DEFAULT ('a' || 'b' || 'c'))",
+				// Expected AST: ParenExpr(ConcatExpr{Left: ConcatExpr{'a','b'}, Right: 'c'}).
+				// Left-leaning tree confirms %left CONCAT is applied.
+				checkShape: func(t *testing.T, stmt Statement) {
+					t.Helper()
+					ddl := stmt.(*DDL)
+					expr := ddl.TableSpec.Columns[0].Type.Default.Expression.Expr
+					paren, ok := expr.(*ParenExpr)
+					if !ok {
+						t.Fatalf("expected outer *ParenExpr, got %T", expr)
+					}
+					outer, ok := paren.Expr.(*ConcatExpr)
+					if !ok {
+						t.Fatalf("expected *ConcatExpr inside parens, got %T", paren.Expr)
+					}
+					if _, ok := outer.Left.(*ConcatExpr); !ok {
+						t.Errorf("expected left-associative shape ConcatExpr{ConcatExpr,X}, got %T on Left", outer.Left)
+					}
+				},
 			},
 		}
 
@@ -868,11 +890,18 @@ func TestStringConcatOperator(t *testing.T) {
 				if strings.Contains(got, " or ") {
 					t.Errorf("expected no ' or ' substitution for ||, got:\n%s", got)
 				}
+				if tc.checkShape != nil {
+					tc.checkShape(t, stmt)
+				}
 			})
 		}
 	})
 
 	t.Run("postgres mode: concat coexists with explicit OR", func(t *testing.T) {
+		// Expected AST: OrExpr{Left: ComparisonExpr{Left: ConcatExpr{...}, ...},
+		// Right: IsExpr{s, "is null"}}. The shape assertion locks down both
+		// (a) || binds tighter than comparison, and (b) OR is at the outermost
+		// boolean level — independent of how the emitter formats the text.
 		sql := "CREATE TABLE t (s text CHECK ('a' || 'b' = 'ab' OR s IS NULL))"
 		stmt, err := ParseDDL(sql, ParserModePostgres)
 		if err != nil {
@@ -884,6 +913,20 @@ func TestStringConcatOperator(t *testing.T) {
 		}
 		if !strings.Contains(got, " or ") {
 			t.Errorf("expected explicit OR to round-trip as ' or ', got:\n%s", got)
+		}
+
+		ddl := stmt.(*DDL)
+		expr := ddl.TableSpec.Columns[0].Type.Check.Where.Expr
+		or, ok := expr.(*OrExpr)
+		if !ok {
+			t.Fatalf("expected *OrExpr at top, got %T", expr)
+		}
+		cmp, ok := or.Left.(*ComparisonExpr)
+		if !ok {
+			t.Fatalf("expected *ComparisonExpr on OR.Left, got %T", or.Left)
+		}
+		if _, ok := cmp.Left.(*ConcatExpr); !ok {
+			t.Errorf("expected *ConcatExpr on ComparisonExpr.Left, got %T", cmp.Left)
 		}
 	})
 
