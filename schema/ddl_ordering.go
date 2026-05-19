@@ -432,6 +432,9 @@ func walkExprForFunctionCalls(expr parser.Expr, knownFunctions map[string]bool, 
 	case *parser.OrExpr:
 		walkExprForFunctionCalls(e.Left, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
 		walkExprForFunctionCalls(e.Right, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	case *parser.ConcatExpr:
+		walkExprForFunctionCalls(e.Left, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+		walkExprForFunctionCalls(e.Right, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
 	case *parser.NotExpr:
 		walkExprForFunctionCalls(e.Expr, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
 	case *parser.ParenExpr:
