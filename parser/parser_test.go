@@ -832,7 +832,7 @@ func TestCreatePolicyPredicates(t *testing.T) {
 }
 
 func TestStringConcatOperator(t *testing.T) {
-	t.Run("postgres mode emits || in round-trip", func(t *testing.T) {
+	t.Run("postgres mode emits || without substituting or", func(t *testing.T) {
 		testCases := []struct {
 			name string
 			sql  string
@@ -853,10 +853,6 @@ func TestStringConcatOperator(t *testing.T) {
 				name: "chained concat is left-associative",
 				sql:  "CREATE TABLE t (s text NOT NULL DEFAULT ('a' || 'b' || 'c'))",
 			},
-			{
-				name: "concat binds tighter than comparison and OR",
-				sql:  "CREATE TABLE t (s text CHECK ('a' || 'b' = 'ab' OR s IS NULL))",
-			},
 		}
 
 		for _, tc := range testCases {
@@ -869,10 +865,25 @@ func TestStringConcatOperator(t *testing.T) {
 				if !strings.Contains(got, "||") {
 					t.Errorf("expected || in round-trip output, got:\n%s", got)
 				}
-				if strings.Contains(got, " or ") && !strings.Contains(tc.sql, " OR ") {
+				if strings.Contains(got, " or ") {
 					t.Errorf("expected no ' or ' substitution for ||, got:\n%s", got)
 				}
 			})
+		}
+	})
+
+	t.Run("postgres mode: concat coexists with explicit OR", func(t *testing.T) {
+		sql := "CREATE TABLE t (s text CHECK ('a' || 'b' = 'ab' OR s IS NULL))"
+		stmt, err := ParseDDL(sql, ParserModePostgres)
+		if err != nil {
+			t.Fatalf("ParseDDL failed: %v", err)
+		}
+		got := String(stmt)
+		if !strings.Contains(got, "||") {
+			t.Errorf("expected || in round-trip output, got:\n%s", got)
+		}
+		if !strings.Contains(got, " or ") {
+			t.Errorf("expected explicit OR to round-trip as ' or ', got:\n%s", got)
 		}
 	})
 

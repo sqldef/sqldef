@@ -192,11 +192,9 @@ func setDDL(yylex any, ddl *DDL) {
 %left <str> '|'
 %left <str> '&'
 %left <str> SHIFT_LEFT SHIFT_RIGHT
-// CONCAT (||) is the PostgreSQL string concatenation operator. Its precedence
-// sits between comparison operators and the additive level, matching the
-// PostgreSQL documented operator precedence ("any other operator"). In MySQL,
-// SQLite, and MSSQL modes the lexer continues to emit OR for ||, so this token
-// is only produced in PostgreSQL mode.
+// PostgreSQL || (string concatenation) binds tighter than comparison and looser
+// than additive, matching PostgreSQL's "any other operator" precedence tier.
+// Only the PG-mode lexer emits CONCAT; other modes keep lexing || as OR.
 %left <str> CONCAT
 %left <str> '+' '-'
 %left <str> CUSTOM_OP
