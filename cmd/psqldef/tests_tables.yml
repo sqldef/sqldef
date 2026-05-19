@@ -303,6 +303,12 @@ CreateTableWithStringConcatDefault:
     CREATE TABLE t (
       s varchar(64) NOT NULL DEFAULT ('a' || 'b')
     );
+  up: |
+    CREATE TABLE t (
+      s varchar(64) NOT NULL DEFAULT ('a' || 'b')
+    );
+  down: |
+    DROP TABLE public.t;
 
 CreateTableWithStringConcatCheck:
   legacy_ignore_quotes: false
@@ -311,6 +317,13 @@ CreateTableWithStringConcatCheck:
       s text NOT NULL,
       CONSTRAINT s_prefixed CHECK (length(s || '_suffix') > 7)
     );
+  up: |
+    CREATE TABLE t (
+      s text NOT NULL,
+      CONSTRAINT s_prefixed CHECK (length(s || '_suffix') > 7)
+    );
+  down: |
+    DROP TABLE public.t;
 
 CreateTableWithStringConcatQuotedColumn:
   legacy_ignore_quotes: false
@@ -319,5 +332,12 @@ CreateTableWithStringConcatQuotedColumn:
       "MyCol" text NOT NULL,
       CONSTRAINT mycol_non_empty CHECK (length("MyCol" || '_x') > 2)
     );
+  up: |
+    CREATE TABLE t (
+      "MyCol" text NOT NULL,
+      CONSTRAINT mycol_non_empty CHECK (length("MyCol" || '_x') > 2)
+    );
+  down: |
+    DROP TABLE public.t;
 
 # GiST index with tstzrange type
