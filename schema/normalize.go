@@ -335,6 +335,11 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Left:  left,
 			Right: right,
 		}
+	case *parser.ConcatExpr:
+		return &parser.ConcatExpr{
+			Left:  normalizeCheckExpr(e.Left, mode),
+			Right: normalizeCheckExpr(e.Right, mode),
+		}
 	case *parser.NotExpr:
 		return &parser.NotExpr{Expr: normalizeCheckExpr(e.Expr, mode)}
 	case *parser.ComparisonExpr:
@@ -834,6 +839,11 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Left:  normalizeExpr(e.Left, mode),
 			Right: normalizeExpr(e.Right, mode),
 		}
+	case *parser.ConcatExpr:
+		return &parser.ConcatExpr{
+			Left:  normalizeExpr(e.Left, mode),
+			Right: normalizeExpr(e.Right, mode),
+		}
 	case *parser.BinaryExpr:
 		return &parser.BinaryExpr{
 			Operator: e.Operator,
@@ -1096,6 +1106,11 @@ func normalizeExprPreservingQualifiers(expr parser.Expr, mode GeneratorMode) par
 		}
 	case *parser.OrExpr:
 		return &parser.OrExpr{
+			Left:  normalizeExprPreservingQualifiers(e.Left, mode),
+			Right: normalizeExprPreservingQualifiers(e.Right, mode),
+		}
+	case *parser.ConcatExpr:
+		return &parser.ConcatExpr{
 			Left:  normalizeExprPreservingQualifiers(e.Left, mode),
 			Right: normalizeExprPreservingQualifiers(e.Right, mode),
 		}
