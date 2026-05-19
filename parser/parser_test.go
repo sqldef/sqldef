@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -828,6 +829,89 @@ func TestCreatePolicyPredicates(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStringConcatOperator(t *testing.T) {
+	t.Run("postgres mode emits || in round-trip", func(t *testing.T) {
+		testCases := []struct {
+			name string
+			sql  string
+		}{
+			{
+				name: "DEFAULT with two string literals",
+				sql:  "CREATE TABLE t (s varchar(64) NOT NULL DEFAULT ('a' || 'b'))",
+			},
+			{
+				name: "DEFAULT with literal and function call",
+				sql:  "CREATE TABLE t (public_id varchar(64) NOT NULL DEFAULT ('usr_' || nanoid()))",
+			},
+			{
+				name: "column-level CHECK with concat and comparison",
+				sql:  "CREATE TABLE t (s text CHECK (s || 'x' <> ''))",
+			},
+			{
+				name: "chained concat is left-associative",
+				sql:  "CREATE TABLE t (s text NOT NULL DEFAULT ('a' || 'b' || 'c'))",
+			},
+			{
+				name: "concat binds tighter than comparison and OR",
+				sql:  "CREATE TABLE t (s text CHECK ('a' || 'b' = 'ab' OR s IS NULL))",
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				stmt, err := ParseDDL(tc.sql, ParserModePostgres)
+				if err != nil {
+					t.Fatalf("ParseDDL(%q) failed: %v", tc.sql, err)
+				}
+				got := String(stmt)
+				if !strings.Contains(got, "||") {
+					t.Errorf("expected || in round-trip output, got:\n%s", got)
+				}
+				if strings.Contains(got, " or ") && !strings.Contains(tc.sql, " OR ") {
+					t.Errorf("expected no ' or ' substitution for ||, got:\n%s", got)
+				}
+			})
+		}
+	})
+
+	t.Run("mysql mode still treats || as OR", func(t *testing.T) {
+		sql := "CREATE TABLE t (s varchar(64) DEFAULT ('a' || 'b'))"
+		stmt, err := ParseDDL(sql, ParserModeMysql)
+		if err != nil {
+			t.Fatalf("ParseDDL failed: %v", err)
+		}
+		got := String(stmt)
+		if !strings.Contains(got, " or ") {
+			t.Errorf("expected MySQL mode to emit ' or ' for ||, got:\n%s", got)
+		}
+		if strings.Contains(got, "||") {
+			t.Errorf("expected MySQL mode to not emit '||', got:\n%s", got)
+		}
+	})
+
+	t.Run("exclusion constraint with || operator preserves operator string", func(t *testing.T) {
+		sql := "CREATE TABLE t (a text, CONSTRAINT ex EXCLUDE USING gist (a WITH ||))"
+		stmt, err := ParseDDL(sql, ParserModePostgres)
+		if err != nil {
+			t.Fatalf("ParseDDL failed: %v", err)
+		}
+		ddl, ok := stmt.(*DDL)
+		if !ok {
+			t.Fatalf("expected *DDL, got %T", stmt)
+		}
+		if len(ddl.TableSpec.Exclusions) != 1 {
+			t.Fatalf("expected one exclusion, got %d", len(ddl.TableSpec.Exclusions))
+		}
+		ex := ddl.TableSpec.Exclusions[0]
+		if len(ex.Exclusions) != 1 {
+			t.Fatalf("expected one exclusion pair, got %d", len(ex.Exclusions))
+		}
+		if got := ex.Exclusions[0].Operator; got != "||" {
+			t.Errorf("expected Operator %q, got %q", "||", got)
+		}
+	})
 }
 
 func TestCreateFunctionArgDefaultsAndModes(t *testing.T) {
