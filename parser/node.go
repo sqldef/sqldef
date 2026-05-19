@@ -741,6 +741,15 @@ func (ts *TableSpec) Format(buf *nodeBuffer) {
 	for _, idx := range ts.Indexes {
 		buf.Printf(",\n\t%v", idx)
 	}
+	for _, ck := range ts.Checks {
+		buf.Printf(",\n\t%v", ck)
+	}
+	for _, fk := range ts.ForeignKeys {
+		buf.Printf(",\n\t%v", fk)
+	}
+	for _, ex := range ts.Exclusions {
+		buf.Printf(",\n\t%v", ex)
+	}
 
 	var kvOptions strings.Builder
 	var sqliteOpts []string
@@ -905,6 +914,20 @@ type CheckDefinition struct {
 	NoInherit         BoolVal
 }
 
+// Format formats the node.
+func (cd *CheckDefinition) Format(buf *nodeBuffer) {
+	if !cd.ConstraintName.IsEmpty() {
+		buf.Printf("constraint %v ", cd.ConstraintName)
+	}
+	buf.Printf("check (%v)", cd.Where.Expr)
+	if bool(cd.NoInherit) {
+		buf.Printf(" no inherit")
+	}
+	if cd.NotForReplication {
+		buf.Printf(" not for replication")
+	}
+}
+
 type ExclusionPair struct {
 	Expression Expr
 	Operator   string
@@ -915,6 +938,35 @@ type ExclusionDefinition struct {
 	IndexType      Ident
 	Exclusions     []ExclusionPair
 	Where          *Where
+}
+
+// Format formats the node.
+func (ed *ExclusionDefinition) Format(buf *nodeBuffer) {
+	if !ed.ConstraintName.IsEmpty() {
+		buf.Printf("constraint %v ", ed.ConstraintName)
+	}
+	buf.Printf("exclude")
+	if !ed.IndexType.IsEmpty() {
+		buf.Printf(" using %v", ed.IndexType)
+	}
+	buf.Printf(" (")
+	for i, ex := range ed.Exclusions {
+		if i > 0 {
+			buf.Printf(", ")
+		}
+		buf.Printf("%v with %s", ex.Expression, ex.Operator)
+	}
+	buf.Printf(")")
+	if ed.Where != nil && ed.Where.Expr != nil {
+		// The grammar captures WHERE expression rather than WHERE '(' expression ')',
+		// so an input like WHERE (a > 0) yields a ParenExpr. Unwrap one level
+		// before adding our own parens to keep the round-trip idempotent.
+		inner := ed.Where.Expr
+		if pe, ok := inner.(*ParenExpr); ok {
+			inner = pe.Expr
+		}
+		buf.Printf(" where (%v)", inner)
+	}
 }
 
 // Format returns a canonical string representation of the type and all relevant options
@@ -1138,6 +1190,56 @@ type ForeignKeyDefinition struct {
 	NotForReplication bool
 	ConstraintOptions *ConstraintOptions
 	Period            bool // For PostgreSQL 18+ temporal FOREIGN KEY constraints (PERIOD on last column)
+}
+
+// Format formats the node.
+func (fk *ForeignKeyDefinition) Format(buf *nodeBuffer) {
+	if !fk.ConstraintName.IsEmpty() {
+		buf.Printf("constraint %v ", fk.ConstraintName)
+	}
+	buf.Printf("foreign key")
+	if !fk.IndexName.IsEmpty() {
+		buf.Printf(" %v", fk.IndexName)
+	}
+	formatFKColumnList(buf, fk.IndexColumns, fk.Period)
+	buf.Printf(" references %v", fk.ReferenceName)
+	formatFKColumnList(buf, fk.ReferenceColumns, fk.Period)
+	// match_type_opt is not currently wired into ForeignKeyDefinition by the
+	// grammar, so Match is always empty in practice. Emit it defensively so
+	// the round-trip remains loss-free if/when that grammar gap is closed.
+	if !fk.Match.IsEmpty() {
+		buf.Printf(" %v", fk.Match)
+	}
+	if !fk.OnDelete.IsEmpty() {
+		buf.Printf(" on delete %v", fk.OnDelete)
+	}
+	if !fk.OnUpdate.IsEmpty() {
+		buf.Printf(" on update %v", fk.OnUpdate)
+	}
+	if fk.NotForReplication {
+		buf.Printf(" not for replication")
+	}
+	if fk.ConstraintOptions != nil && fk.ConstraintOptions.Deferrable {
+		buf.Printf(" deferrable")
+		if fk.ConstraintOptions.InitiallyDeferred {
+			buf.Printf(" initially deferred")
+		}
+	}
+}
+
+func formatFKColumnList(buf *nodeBuffer, cols []Ident, period bool) {
+	buf.Printf(" (")
+	for i, col := range cols {
+		if i > 0 {
+			buf.Printf(", ")
+		}
+		if period && i == len(cols)-1 {
+			buf.Printf("period %v", col)
+		} else {
+			buf.Printf("%v", col)
+		}
+	}
+	buf.Printf(")")
 }
 
 type Policy struct {

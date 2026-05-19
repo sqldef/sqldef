@@ -1149,3 +1149,86 @@ $$ LANGUAGE plpgsql VOLATILE`,
 		})
 	}
 }
+
+func TestTableSpecRoundTripConstraints(t *testing.T) {
+	cases := []struct {
+		name string
+		sql  string
+		mode ParserMode
+	}{
+		{
+			"unnamed table-level CHECK",
+			"CREATE TABLE t (s text, CHECK (s > 0))",
+			ParserModePostgres,
+		},
+		{
+			"named table-level CHECK",
+			"CREATE TABLE t (s text, CONSTRAINT c CHECK (s > 0))",
+			ParserModePostgres,
+		},
+		{
+			"CHECK NO INHERIT",
+			"CREATE TABLE t (s text, CONSTRAINT c CHECK (s > 0) NO INHERIT)",
+			ParserModePostgres,
+		},
+		{
+			"FK basic",
+			"CREATE TABLE t (a int, CONSTRAINT fk FOREIGN KEY (a) REFERENCES u (id))",
+			ParserModePostgres,
+		},
+		{
+			"FK with ON DELETE CASCADE",
+			"CREATE TABLE t (a int, CONSTRAINT fk FOREIGN KEY (a) REFERENCES u (id) ON DELETE CASCADE)",
+			ParserModePostgres,
+		},
+		{
+			"FK DEFERRABLE INITIALLY DEFERRED",
+			"CREATE TABLE t (a int, CONSTRAINT fk FOREIGN KEY (a) REFERENCES u (id) DEFERRABLE INITIALLY DEFERRED)",
+			ParserModePostgres,
+		},
+		{
+			"FK composite columns",
+			"CREATE TABLE t (a int, b int, CONSTRAINT fk FOREIGN KEY (a, b) REFERENCES u (x, y))",
+			ParserModePostgres,
+		},
+		{
+			"FK NOT FOR REPLICATION (MSSQL)",
+			"CREATE TABLE t (a int, CONSTRAINT fk FOREIGN KEY (a) REFERENCES u (id) NOT FOR REPLICATION)",
+			ParserModeMssql,
+		},
+		{
+			"EXCLUDE without USING",
+			"CREATE TABLE t (a text, CONSTRAINT ex EXCLUDE (a WITH =))",
+			ParserModePostgres,
+		},
+		{
+			"EXCLUDE USING gist with &&",
+			"CREATE TABLE t (a text, CONSTRAINT ex EXCLUDE USING gist (a WITH &&))",
+			ParserModePostgres,
+		},
+		{
+			"EXCLUDE with WHERE",
+			"CREATE TABLE t (a int, CONSTRAINT ex EXCLUDE (a WITH =) WHERE (a > 0))",
+			ParserModePostgres,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stmt1, err := ParseDDL(tc.sql, tc.mode)
+			if err != nil {
+				t.Fatalf("first parse failed: %v", err)
+			}
+			text1 := String(stmt1)
+
+			stmt2, err := ParseDDL(text1, tc.mode)
+			if err != nil {
+				t.Fatalf("re-parse failed for %q: %v", text1, err)
+			}
+			text2 := String(stmt2)
+
+			if text1 != text2 {
+				t.Errorf("round-trip not idempotent\nfirst:  %s\nsecond: %s", text1, text2)
+			}
+		})
+	}
+}
