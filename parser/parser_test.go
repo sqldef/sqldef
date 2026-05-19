@@ -902,6 +902,67 @@ func TestStringConcatOperator(t *testing.T) {
 		}
 	})
 
+	t.Run("|| binds tighter than comparison (precedence)", func(t *testing.T) {
+		// Per PostgreSQL spec, || is "any other operator" tier: tighter than
+		// comparison (=/<>/etc), looser than additive (+/-). So:
+		//   'a' || 'b' = 'ab'   parses as ('a' || 'b') = 'ab'
+		//   1 + 2 || 3          parses as (1 + 2) || 3
+		// Asserting AST shape (not text round-trip) since PG would re-parse
+		// the round-tripped text correctly even with the wrong AST.
+		cases := []struct {
+			name string
+			sql  string
+			// rootIsConcat=true means top-level expression is ConcatExpr.
+			// rootIsConcat=false means top-level is ComparisonExpr with ConcatExpr on the Left.
+			rootIsComparison bool
+			rootIsConcat     bool
+		}{
+			{
+				name:             "concat vs equal: equal is outer, concat is inner-left",
+				sql:              `CREATE TABLE t (s text, CHECK ('a' || 'b' = 'ab'))`,
+				rootIsComparison: true,
+			},
+			{
+				name:             "concat vs not-equal: not-equal is outer, concat is inner-left",
+				sql:              `CREATE TABLE t (s text, CHECK ('a' || 'b' <> 'ab'))`,
+				rootIsComparison: true,
+			},
+			{
+				name:         "concat vs additive: concat is outer, plus is inner-left",
+				sql:          `CREATE TABLE t (s text, CHECK (1 + 2 || 3))`,
+				rootIsConcat: true,
+			},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				stmt, err := ParseDDL(tc.sql, ParserModePostgres)
+				if err != nil {
+					t.Fatalf("ParseDDL failed: %v", err)
+				}
+				ddl := stmt.(*DDL)
+				expr := ddl.TableSpec.Checks[0].Where.Expr
+				if tc.rootIsComparison {
+					cmp, ok := expr.(*ComparisonExpr)
+					if !ok {
+						t.Fatalf("expected *ComparisonExpr at top, got %T (expr=%s)", expr, String(expr))
+					}
+					if _, ok := cmp.Left.(*ConcatExpr); !ok {
+						t.Errorf("expected *ConcatExpr on Left of comparison, got %T (expr=%s)", cmp.Left, String(expr))
+					}
+				}
+				if tc.rootIsConcat {
+					concat, ok := expr.(*ConcatExpr)
+					if !ok {
+						t.Fatalf("expected *ConcatExpr at top, got %T (expr=%s)", expr, String(expr))
+					}
+					if _, ok := concat.Left.(*BinaryExpr); !ok {
+						t.Errorf("expected *BinaryExpr on Left of concat, got %T (expr=%s)", concat.Left, String(expr))
+					}
+				}
+			})
+		}
+	})
+
 	t.Run("exclusion constraint with || operator preserves operator string", func(t *testing.T) {
 		sql := "CREATE TABLE t (a text, CONSTRAINT ex EXCLUDE USING gist (a WITH ||))"
 		stmt, err := ParseDDL(sql, ParserModePostgres)
