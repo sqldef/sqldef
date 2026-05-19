@@ -297,33 +297,34 @@ ColumnNamedKeyAddedAlongsideFunction:
   down: |
     DROP TABLE public.users;
 
-CreateTableWithStringConcatDefault:
+AddColumnWithStringConcatDefault:
   legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t ();
   desired: |
     CREATE TABLE t (
       s varchar(64) NOT NULL DEFAULT ('a' || 'b')
     );
   up: |
-    CREATE TABLE t (
-      s varchar(64) NOT NULL DEFAULT ('a' || 'b')
-    );
+    ALTER TABLE public.t ADD COLUMN s varchar(64) NOT NULL DEFAULT 'a' || 'b';
   down: |
-    DROP TABLE public.t;
+    ALTER TABLE public.t DROP COLUMN s;
 
-CreateTableWithStringConcatCheck:
+AddCheckConstraintWithStringConcat:
   legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      s text NOT NULL
+    );
   desired: |
     CREATE TABLE t (
       s text NOT NULL,
       CONSTRAINT s_prefixed CHECK (length(s || '_suffix') > 7)
     );
   up: |
-    CREATE TABLE t (
-      s text NOT NULL,
-      CONSTRAINT s_prefixed CHECK (length(s || '_suffix') > 7)
-    );
+    ALTER TABLE public.t ADD CONSTRAINT s_prefixed CHECK (length(s || '_suffix') > 7);
   down: |
-    DROP TABLE public.t;
+    ALTER TABLE public.t DROP CONSTRAINT s_prefixed;
 
 CreateTableWithStringConcatQuotedColumn:
   legacy_ignore_quotes: false
@@ -332,12 +333,5 @@ CreateTableWithStringConcatQuotedColumn:
       "MyCol" text NOT NULL,
       CONSTRAINT mycol_non_empty CHECK (length("MyCol" || '_x') > 2)
     );
-  up: |
-    CREATE TABLE t (
-      "MyCol" text NOT NULL,
-      CONSTRAINT mycol_non_empty CHECK (length("MyCol" || '_x') > 2)
-    );
-  down: |
-    DROP TABLE public.t;
 
 # GiST index with tstzrange type
