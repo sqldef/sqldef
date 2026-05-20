@@ -958,14 +958,7 @@ func (ed *ExclusionDefinition) Format(buf *nodeBuffer) {
 	}
 	buf.Printf(")")
 	if ed.Where != nil && ed.Where.Expr != nil {
-		// The grammar captures WHERE expression rather than WHERE '(' expression ')',
-		// so an input like WHERE (a > 0) yields a ParenExpr. Unwrap one level
-		// before adding our own parens to keep the round-trip idempotent.
-		inner := ed.Where.Expr
-		if pe, ok := inner.(*ParenExpr); ok {
-			inner = pe.Expr
-		}
-		buf.Printf(" where (%v)", inner)
+		buf.Printf(" where (%v)", ed.Where.Expr)
 	}
 }
 

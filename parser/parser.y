@@ -387,7 +387,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <objectName> object_name
 %type <aliasedTableName> aliased_table_name
 %type <indexHints> index_hint_list
-%type <expr> where_expression_opt
+%type <expr> where_expression_opt exclude_where_opt
 %type <expr> condition
 %type <boolVal> boolean_value
 %type <str> int_value
@@ -3090,7 +3090,7 @@ table_column_list:
   }
 
 exclude_definition:
-  CONSTRAINT sql_id EXCLUDE '(' exclude_element_list ')' where_expression_opt
+  CONSTRAINT sql_id EXCLUDE '(' exclude_element_list ')' exclude_where_opt
   {
     $$ = &ExclusionDefinition{
       ConstraintName: $2,
@@ -3099,7 +3099,7 @@ exclude_definition:
       Where: NewWhere(WhereStr, $7),
     }
   }
-| CONSTRAINT sql_id EXCLUDE USING reserved_sql_id '(' exclude_element_list ')' where_expression_opt
+| CONSTRAINT sql_id EXCLUDE USING reserved_sql_id '(' exclude_element_list ')' exclude_where_opt
   {
     $$ = &ExclusionDefinition{
       ConstraintName: $2,
@@ -3107,6 +3107,18 @@ exclude_definition:
       Exclusions: $7,
       Where: NewWhere(WhereStr, $9),
     }
+  }
+
+// PostgreSQL EXCLUDE syntax requires parens around the predicate:
+// EXCLUDE (...) WHERE ( predicate ). Consume the parens as syntax so the
+// predicate AST is the raw expression, not a ParenExpr wrapper.
+exclude_where_opt:
+  {
+    $$ = nil
+  }
+| WHERE '(' expression ')'
+  {
+    $$ = $3
   }
 
 exclude_element_list:

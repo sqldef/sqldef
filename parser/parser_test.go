@@ -1232,3 +1232,24 @@ func TestTableSpecRoundTripConstraints(t *testing.T) {
 		})
 	}
 }
+
+func TestExcludeWhereGrammar(t *testing.T) {
+	t.Run("WHERE (predicate) yields non-ParenExpr AST", func(t *testing.T) {
+		sql := "CREATE TABLE t (a int, CONSTRAINT ex EXCLUDE (a WITH =) WHERE (a > 0))"
+		stmt, err := ParseDDL(sql, ParserModePostgres)
+		if err != nil {
+			t.Fatalf("parse failed: %v", err)
+		}
+		ex := stmt.(*DDL).TableSpec.Exclusions[0]
+		if pe, ok := ex.Where.Expr.(*ParenExpr); ok {
+			t.Errorf("Where.Expr should be the raw predicate, got *ParenExpr wrapping %T", pe.Expr)
+		}
+	})
+
+	t.Run("WHERE without parens is rejected", func(t *testing.T) {
+		sql := "CREATE TABLE t (a int, CONSTRAINT ex EXCLUDE (a WITH =) WHERE a > 0)"
+		if _, err := ParseDDL(sql, ParserModePostgres); err == nil {
+			t.Errorf("expected parse error for WHERE without parens, got nil")
+		}
+	})
+}
