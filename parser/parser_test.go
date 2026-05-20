@@ -1157,12 +1157,12 @@ func TestTableSpecRoundTripConstraints(t *testing.T) {
 		mode ParserMode
 	}{
 		{
-			"unnamed table-level CHECK",
+			"CHECK unnamed",
 			"CREATE TABLE t (s text, CHECK (s > 0))",
 			ParserModePostgres,
 		},
 		{
-			"named table-level CHECK",
+			"CHECK named",
 			"CREATE TABLE t (s text, CONSTRAINT c CHECK (s > 0))",
 			ParserModePostgres,
 		},
