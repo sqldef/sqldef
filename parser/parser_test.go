@@ -1197,6 +1197,16 @@ func TestTableSpecRoundTripConstraints(t *testing.T) {
 			ParserModeMssql,
 		},
 		{
+			"FK MATCH FULL",
+			"CREATE TABLE t (a int, CONSTRAINT fk FOREIGN KEY (a) REFERENCES u (id) MATCH FULL)",
+			ParserModePostgres,
+		},
+		{
+			"FK MATCH SIMPLE with ON DELETE CASCADE",
+			"CREATE TABLE t (a int, CONSTRAINT fk FOREIGN KEY (a) REFERENCES u (id) MATCH SIMPLE ON DELETE CASCADE)",
+			ParserModePostgres,
+		},
+		{
 			"EXCLUDE without USING",
 			"CREATE TABLE t (a text, CONSTRAINT ex EXCLUDE (a WITH =))",
 			ParserModePostgres,
@@ -1250,6 +1260,35 @@ func TestExcludeWhereGrammar(t *testing.T) {
 		sql := "CREATE TABLE t (a int, CONSTRAINT ex EXCLUDE (a WITH =) WHERE a > 0)"
 		if _, err := ParseDDL(sql, ParserModePostgres); err == nil {
 			t.Errorf("expected parse error for WHERE without parens, got nil")
+		}
+	})
+}
+
+func TestForeignKeyMatchGrammar(t *testing.T) {
+	t.Run("MATCH FULL is captured into ForeignKeyDefinition.Match", func(t *testing.T) {
+		sql := "CREATE TABLE t (a int, CONSTRAINT fk FOREIGN KEY (a) REFERENCES u (id) MATCH FULL)"
+		stmt, err := ParseDDL(sql, ParserModePostgres)
+		if err != nil {
+			t.Fatalf("parse failed: %v", err)
+		}
+		fk := stmt.(*DDL).TableSpec.ForeignKeys[0]
+		if fk.Match.Name != "MATCH FULL" {
+			t.Errorf("expected Match = %q, got %q", "MATCH FULL", fk.Match.Name)
+		}
+	})
+
+	t.Run("MATCH SIMPLE combined with ON DELETE", func(t *testing.T) {
+		sql := "CREATE TABLE t (a int, CONSTRAINT fk FOREIGN KEY (a) REFERENCES u (id) MATCH SIMPLE ON DELETE CASCADE)"
+		stmt, err := ParseDDL(sql, ParserModePostgres)
+		if err != nil {
+			t.Fatalf("parse failed: %v", err)
+		}
+		fk := stmt.(*DDL).TableSpec.ForeignKeys[0]
+		if fk.Match.Name != "MATCH SIMPLE" {
+			t.Errorf("expected Match = %q, got %q", "MATCH SIMPLE", fk.Match.Name)
+		}
+		if fk.OnDelete.Name != "CASCADE" {
+			t.Errorf("expected OnDelete = %q, got %q", "CASCADE", fk.OnDelete.Name)
 		}
 	})
 }

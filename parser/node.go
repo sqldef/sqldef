@@ -1197,17 +1197,17 @@ func (fk *ForeignKeyDefinition) Format(buf *nodeBuffer) {
 	formatFKColumnList(buf, fk.IndexColumns, fk.Period)
 	buf.Printf(" references %v", fk.ReferenceName)
 	formatFKColumnList(buf, fk.ReferenceColumns, fk.Period)
-	// match_type_opt is not currently wired into ForeignKeyDefinition by the
-	// grammar, so Match is always empty in practice. Emit it defensively so
-	// the round-trip remains loss-free if/when that grammar gap is closed.
+	// Match / OnDelete / OnUpdate are fixed SQL keyword sequences (e.g.
+	// "MATCH FULL", "SET NULL"), not user identifiers, so emit Name directly
+	// to avoid Ident.Format quoting space-containing values.
 	if !fk.Match.IsEmpty() {
-		buf.Printf(" %v", fk.Match)
+		buf.Printf(" %s", fk.Match.Name)
 	}
 	if !fk.OnDelete.IsEmpty() {
-		buf.Printf(" on delete %v", fk.OnDelete)
+		buf.Printf(" on delete %s", fk.OnDelete.Name)
 	}
 	if !fk.OnUpdate.IsEmpty() {
-		buf.Printf(" on update %v", fk.OnUpdate)
+		buf.Printf(" on update %s", fk.OnUpdate.Name)
 	}
 	if fk.NotForReplication {
 		buf.Printf(" not for replication")

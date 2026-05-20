@@ -4911,7 +4911,7 @@ foreign_key_definition:
   }
 
 foreign_key_without_options:
-  CONSTRAINT sql_id_opt FOREIGN key_kw sql_id_opt '(' sql_id_list ')' REFERENCES table_name '(' sql_id_list ')'
+  CONSTRAINT sql_id_opt FOREIGN key_kw sql_id_opt '(' sql_id_list ')' REFERENCES table_name '(' sql_id_list ')' match_type_opt
   {
     $$ = &ForeignKeyDefinition{
       ConstraintName: $2,
@@ -4919,20 +4919,22 @@ foreign_key_without_options:
       IndexColumns: $7,
       ReferenceName: $10,
       ReferenceColumns: $12,
+      Match: $14,
     }
   }
 /* For SQLite3 // SQLite Syntax: table-constraint https://www.sqlite.org/syntax/table-constraint.html */
-| FOREIGN key_kw sql_id_opt '(' sql_id_list ')' REFERENCES table_name '(' sql_id_list ')'
+| FOREIGN key_kw sql_id_opt '(' sql_id_list ')' REFERENCES table_name '(' sql_id_list ')' match_type_opt
   {
     $$ = &ForeignKeyDefinition{
       IndexName: $3,
       IndexColumns: $5,
       ReferenceName: $8,
       ReferenceColumns: $10,
+      Match: $12,
     }
   }
 /* PostgreSQL 18+ temporal FK: FOREIGN KEY (col, PERIOD range_col) REFERENCES ... (col, PERIOD range_col) */
-| CONSTRAINT sql_id_opt FOREIGN key_kw sql_id_opt '(' sql_id_list ',' PERIOD reserved_sql_id ')' REFERENCES table_name '(' sql_id_list ',' PERIOD reserved_sql_id ')'
+| CONSTRAINT sql_id_opt FOREIGN key_kw sql_id_opt '(' sql_id_list ',' PERIOD reserved_sql_id ')' REFERENCES table_name '(' sql_id_list ',' PERIOD reserved_sql_id ')' match_type_opt
   {
     $$ = &ForeignKeyDefinition{
       ConstraintName: $2,
@@ -4941,9 +4943,10 @@ foreign_key_without_options:
       ReferenceName: $13,
       ReferenceColumns: append($15, $18),
       Period: true,
+      Match: $20,
     }
   }
-| FOREIGN key_kw sql_id_opt '(' sql_id_list ',' PERIOD reserved_sql_id ')' REFERENCES table_name '(' sql_id_list ',' PERIOD reserved_sql_id ')'
+| FOREIGN key_kw sql_id_opt '(' sql_id_list ',' PERIOD reserved_sql_id ')' REFERENCES table_name '(' sql_id_list ',' PERIOD reserved_sql_id ')' match_type_opt
   {
     $$ = &ForeignKeyDefinition{
       IndexName: $3,
@@ -4951,6 +4954,7 @@ foreign_key_without_options:
       ReferenceName: $11,
       ReferenceColumns: append($13, $16),
       Period: true,
+      Match: $18,
     }
   }
 
