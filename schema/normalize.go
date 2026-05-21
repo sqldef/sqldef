@@ -884,6 +884,15 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Operator: e.Operator,
 			Expr:     normalizeExpr(e.Expr, mode),
 		}
+	case *parser.Subquery:
+		// Recurse into subquery SELECT so that nested FROM clauses receive the
+		// same normalization as the outer SELECT (notably database-prefix
+		// stripping on MySQL — MariaDB's SHOW CREATE VIEW emits `db.table`
+		// everywhere including subquery FROM clauses, but user-written DDL
+		// rarely does, causing spurious view re-creations on every diff).
+		return &parser.Subquery{
+			Select: normalizeViewDefinition(e.Select, mode, nil),
+		}
 	case *parser.ConvertExpr:
 		// Normalize CAST(expr AS type) to expr::type (CastExpr) for consistency
 		// PostgreSQL represents both forms identically in its internal representation
@@ -1027,13 +1036,13 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode) parser.TableE
 			Condition: normalizeJoinCondition(e.Condition, mode),
 		}
 	case *parser.ParenTableExpr:
-		// PostgreSQL adds parentheses around JOINs when storing views
-		// Unwrap these to get a canonical form
-		if mode == GeneratorModePostgres && len(e.Exprs) == 1 {
+		// PostgreSQL and MariaDB add parentheses around JOINs when storing views.
+		// Unwrap these to get a canonical form.
+		if (mode == GeneratorModePostgres || mode == GeneratorModeMysql) && len(e.Exprs) == 1 {
 			// Single expression in parentheses - unwrap it
 			return normalizeTableExpr(e.Exprs[0], mode)
 		}
-		// Multiple expressions or non-Postgres mode - normalize but keep parens
+		// Multiple expressions - normalize but keep parens
 		normalized := make(parser.TableExprs, len(e.Exprs))
 		for i, expr := range e.Exprs {
 			normalized[i] = normalizeTableExpr(expr, mode)

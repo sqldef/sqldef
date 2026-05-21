@@ -104,7 +104,6 @@ CreateTriggerWithMultipleStatements:
   down: |
     DROP TABLE `test_trigger`;
 View:
-  flavor: "!tidb"
   desired: |
     CREATE TABLE users (
       id bigint(20) NOT NULL
@@ -116,7 +115,6 @@ View:
     );
     CREATE VIEW foo AS select u.id as id, p.id as post_id from  (mysqldef_test.users as u join mysqldef_test.posts as p on ((u.id = p.user_id)));
 ViewUpdate:
-  flavor: "!tidb"
   current: |
     CREATE TABLE users (
       id bigint(20) NOT NULL
@@ -142,7 +140,6 @@ ViewUpdate:
   down: |
     CREATE OR REPLACE VIEW `foo` AS select u.id as id, p.id as post_id from (mysqldef_test.users as u join mysqldef_test.posts as p on ((u.id = p.user_id)));
 ViewDropsWhenEmptyDesired:
-  flavor: "!tidb"
   current: |
     CREATE TABLE users (
       id bigint(20) NOT NULL
@@ -615,3 +612,97 @@ ViewSecurityType:
     CREATE OR REPLACE SQL SECURITY INVOKER VIEW `user_posts` AS select mysqldef_test.users.id as id, mysqldef_test.posts.id as post_id from (mysqldef_test.users join mysqldef_test.posts on (mysqldef_test.users.id = mysqldef_test.posts.user_id));
   down: |
     CREATE OR REPLACE SQL SECURITY DEFINER VIEW `user_posts` AS select mysqldef_test.users.id as id, mysqldef_test.posts.id as post_id from (mysqldef_test.users join mysqldef_test.posts on (mysqldef_test.users.id = mysqldef_test.posts.user_id));
+
+# When a view contains a correlated subquery, MariaDB's SHOW CREATE VIEW emits
+# database-qualified table references inside the subquery's FROM clause too.
+# Without recursing into Subquery during normalization, the outer FROM is
+# normalized but the inner FROM is not, producing a spurious view re-creation
+# on every diff.
+ViewWithSubqueryIdempotency:
+  # TiDB rewrites correlated subqueries inside views, so the round-trip
+  # comparison is not idempotent there even with this fix. The behavior
+  # being tested (Subquery recursion in normalizer) still benefits TiDB
+  # when the subquery shape matches, but this specific test exercises a
+  # MariaDB/MySQL shape.
+  flavor: "!tidb"
+  current: |
+    CREATE TABLE email_logs (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      invoice_id int(11) DEFAULT NULL,
+      brevo_message_id varchar(255) DEFAULT NULL,
+      type varchar(50) NOT NULL,
+      delivery_status varchar(50) DEFAULT NULL,
+      PRIMARY KEY (id)
+    );
+    CREATE OR REPLACE VIEW v_invoice_email_status AS
+      SELECT el1.invoice_id, el1.delivery_status
+      FROM email_logs el1
+      WHERE el1.brevo_message_id IS NOT NULL
+        AND el1.type = 'invoice'
+        AND el1.id = (
+          SELECT MAX(el2.id) FROM email_logs el2
+          WHERE el2.invoice_id = el1.invoice_id
+            AND el2.brevo_message_id IS NOT NULL
+            AND el2.type = 'invoice'
+        );
+  desired: |
+    CREATE TABLE email_logs (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      invoice_id int(11) DEFAULT NULL,
+      brevo_message_id varchar(255) DEFAULT NULL,
+      type varchar(50) NOT NULL,
+      delivery_status varchar(50) DEFAULT NULL,
+      PRIMARY KEY (id)
+    );
+    CREATE OR REPLACE VIEW v_invoice_email_status AS
+      SELECT el1.invoice_id, el1.delivery_status
+      FROM email_logs el1
+      WHERE el1.brevo_message_id IS NOT NULL
+        AND el1.type = 'invoice'
+        AND el1.id = (
+          SELECT MAX(el2.id) FROM email_logs el2
+          WHERE el2.invoice_id = el1.invoice_id
+            AND el2.brevo_message_id IS NOT NULL
+            AND el2.type = 'invoice'
+        );
+
+# MariaDB wraps JOIN clauses in parentheses inside views, e.g.
+# `from (a left join b on ...)`. PostgreSQL did the same and was already
+# unwrapped during normalization; this test asserts the same treatment for
+# MySQL/MariaDB so a user-written `from a left join b on ...` matches the
+# parenthesized readback.
+ViewWithJoinIdempotency:
+  current: |
+    CREATE TABLE purchase_orders (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      project_id int(11) DEFAULT NULL,
+      status varchar(50) DEFAULT NULL,
+      PRIMARY KEY (id)
+    );
+    CREATE TABLE projects (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      project_code varchar(50) DEFAULT NULL,
+      PRIMARY KEY (id)
+    );
+    CREATE OR REPLACE VIEW v_po_with_project AS
+      SELECT po.id AS purchase_order_id, sp.project_code, po.status
+      FROM purchase_orders po
+      LEFT JOIN projects sp ON sp.id = po.project_id
+      WHERE po.status IN ('ordered', 'received');
+  desired: |
+    CREATE TABLE purchase_orders (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      project_id int(11) DEFAULT NULL,
+      status varchar(50) DEFAULT NULL,
+      PRIMARY KEY (id)
+    );
+    CREATE TABLE projects (
+      id int(11) NOT NULL AUTO_INCREMENT,
+      project_code varchar(50) DEFAULT NULL,
+      PRIMARY KEY (id)
+    );
+    CREATE OR REPLACE VIEW v_po_with_project AS
+      SELECT po.id AS purchase_order_id, sp.project_code, po.status
+      FROM purchase_orders po
+      LEFT JOIN projects sp ON sp.id = po.project_id
+      WHERE po.status IN ('ordered', 'received');
