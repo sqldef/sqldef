@@ -38,6 +38,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		EnableCleartextPlugin bool     `long:"enable-cleartext-plugin" description:"Enable/disable the clear text authentication plugin"`
 		File                  []string `long:"file" description:"Read desired SQL from the file, rather than stdin" value-name:"FILENAME" default:"-"`
 		DryRun                bool     `long:"dry-run" description:"Don't run DDLs but just show them"`
+		Check                 bool     `long:"check" description:"Like --dry-run, but exit with code 2 when DDL would be applied (useful as a CI gate to detect schema drift)"`
 		Apply                 bool     `long:"apply" description:"Apply DDLs to the database (default, but will require this flag in future versions)"`
 		Export                bool     `long:"export" description:"Just dump the current schema to stdout"`
 		EnableDrop            bool     `long:"enable-drop" description:"Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE"`
@@ -100,6 +101,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	options := sqldef.Options{
 		DesiredDDLs: desiredDDLs,
 		DryRun:      opts.DryRun,
+		Check:       opts.Check,
 		Export:      opts.Export,
 		BeforeApply: opts.BeforeApply,
 		Config:      config,

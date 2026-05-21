@@ -17,6 +17,7 @@ Application Options:
       --password-prompt       Force PostgreSQL user password prompt
   -f, --file=FILENAME         Read desired SQL from the file, rather than stdin (default: -)
       --dry-run               Don't run DDLs but just show them
+      --check                 Like --dry-run, but exit with code 2 when DDL would be applied (useful as a CI gate to detect schema drift)
       --apply                 Apply DDLs to the database (default, but will require this flag in future versions)
       --export                Just dump the current schema to stdout
       --enable-drop           Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE

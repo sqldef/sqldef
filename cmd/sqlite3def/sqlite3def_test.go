@@ -8,11 +8,13 @@ package main
 import (
 	"log"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/sqldef/sqldef/v3"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/database/sqlite3"
 	"github.com/sqldef/sqldef/v3/parser"
@@ -79,6 +81,36 @@ func TestSQLite3defDryRun(t *testing.T) {
 	dryRun := tu.MustExecute(t, "./sqlite3def", "sqlite3def_test", "--dry-run", "--file", "schema.sql")
 	apply := tu.MustExecute(t, "./sqlite3def", "sqlite3def_test", "--file", "schema.sql")
 	assert.Equal(t, strings.Replace(apply, "Apply", "dry run", 1), dryRun)
+}
+
+func TestSQLite3defCheck(t *testing.T) {
+	resetTestDatabase()
+	mustSqlite3Exec("sqlite3def_test", "CREATE TABLE users (id integer NOT NULL PRIMARY KEY);")
+
+	// Case 1: schema in sync -> exit 0
+	tu.WriteFile("schema.sql", "CREATE TABLE users (\n    id integer NOT NULL PRIMARY KEY\n);")
+	noChange := tu.MustExecute(t, "./sqlite3def", "sqlite3def_test", "--check", "--file", "schema.sql")
+	assert.Equal(t, nothingModified, noChange)
+
+	// Case 2: schema differs -> exit 2 with DDL printed
+	tu.WriteFile("schema.sql", "CREATE TABLE users (\n    id integer NOT NULL PRIMARY KEY,\n    age integer\n);")
+	out, err := tu.Execute("./sqlite3def", "sqlite3def_test", "--check", "--file", "schema.sql")
+	exitErr, isExitErr := err.(*exec.ExitError)
+	if !isExitErr {
+		t.Fatalf("expected ExitError from --check when schema differs, got err=%v", err)
+	}
+	assert.Equal(t, sqldef.CheckExitCode, exitErr.ExitCode())
+	assert.Contains(t, out, "-- dry run --")
+	assert.Contains(t, out, "age")
+
+	// Re-running --check must still report a diff (DB untouched).
+	out2, err2 := tu.Execute("./sqlite3def", "sqlite3def_test", "--check", "--file", "schema.sql")
+	exitErr2, isExitErr2 := err2.(*exec.ExitError)
+	if !isExitErr2 {
+		t.Fatalf("expected ExitError from second --check, got err=%v", err2)
+	}
+	assert.Equal(t, sqldef.CheckExitCode, exitErr2.ExitCode())
+	assert.Equal(t, out, out2, "second --check must produce the same output (DB unchanged)")
 }
 
 func TestSQLite3defDropTable(t *testing.T) {
