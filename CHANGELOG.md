@@ -1,3 +1,9 @@
+## [v3.11.3](https://github.com/sqldef/sqldef/compare/v3.11.2...v3.11.3) - 2026-05-24
+- fix: mysql view normalization recurses into subqueries and unwraps JOIN parens by @TiBata in https://github.com/sqldef/sqldef/pull/1213
+- feat: add --check flag for CI gating of schema drift by @TiBata in https://github.com/sqldef/sqldef/pull/1214
+- psqldef: emit USING clause for ALTER COLUMN TYPE between string and enum types by @mihyaeru21 in https://github.com/sqldef/sqldef/pull/1215
+- fix: sqlite3def: tolerate generated column without VIRTUAL/STORED keyword by @infogulch in https://github.com/sqldef/sqldef/pull/1216
+
 ## [v3.11.2](https://github.com/sqldef/sqldef/compare/v3.11.1...v3.11.2) - 2026-05-16
 - Fix CHANGELOG.md by @yuku in https://github.com/sqldef/sqldef/pull/1188
 - Error by working with postgres and partitions. Cannot work with indexes or constrains on partitions. by @rtenshi in https://github.com/sqldef/sqldef/pull/1190
