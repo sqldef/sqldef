@@ -1,4 +1,12 @@
 # yaml-language-server: $schema=../../testutil/testcase.schema.json
+CreateTableWithExtensionColumn:
+  # EXTENSION is non-reserved in PostgreSQL, so it is valid as a column name.
+  # https://www.postgresql.org/docs/current/sql-keywords-appendix.html
+  desired: |
+    CREATE TABLE t (
+      extension text
+    );
+
 CreateTable:
   desired: |
     CREATE TABLE users (

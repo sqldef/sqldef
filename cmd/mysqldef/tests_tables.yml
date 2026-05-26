@@ -1,5 +1,13 @@
 # yaml-language-server: $schema=../../testutil/testcase.schema.json
 
+CreateTableWithExtensionColumn:
+  # EXTENSION is not a MySQL keyword, so it is valid as a column name.
+  desired: |
+    CREATE TABLE t (
+      extension text
+    );
+  legacy_ignore_quotes: false
+
 CreateTable:
   desired: |
     CREATE TABLE users (
