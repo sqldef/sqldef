@@ -66,6 +66,7 @@ func setDDL(yylex any, ddl *DDL) {
   exprs                    Exprs
   boolVal                  BoolVal
   boolVals                 []BoolVal
+  boolValPtr               *BoolVal
   colTuple                 ColTuple
   values                   Values
   valTuple                 ValTuple
@@ -505,7 +506,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <strs> table_hint_list table_hint_opt
 %type <str> table_hint
 %type <newQualifierColName> new_qualifier_column_name
-%type <boolVal> deferrable_opt initially_deferred_opt deferrable_clause initially_clause
+%type <boolValPtr> deferrable_opt initially_deferred_opt deferrable_clause initially_clause
 %type <boolVal> variadic_opt
 %type <str> with_data_opt
 %type <constraintOpts> deferrable_option
@@ -1860,8 +1861,8 @@ alter_statement:
         Primary: false,
         Constraint: true,
         ConstraintOptions: &ConstraintOptions{
-          Deferrable: bool($12),
-          InitiallyDeferred: bool($13),
+          Deferrable: $12 != nil && bool(*$12),
+          InitiallyDeferred: $13 != nil && bool(*$13),
         },
       },
       IndexCols: $10,
@@ -3361,8 +3362,8 @@ column_definition_type:
     $1.References           = $3
     $1.ReferenceNames       = $5
     $1.ReferenceMatch       = $7
-    $1.ReferenceDeferrable  = &$8
-    $1.ReferenceInitDeferred = &$9
+    $1.ReferenceDeferrable  = $8
+    $1.ReferenceInitDeferred = $9
     $$ = $1
   }
 | column_definition_type REFERENCES table_name '(' column_list ')' match_type_opt ON DELETE reference_option fk_defer_opts
@@ -5026,7 +5027,7 @@ unique_definition:
       Columns: $6,
       Options: $8,
       Partition: $9,
-      ConstraintOptions: &ConstraintOptions{Deferrable: bool($10), InitiallyDeferred: bool($11)},
+      ConstraintOptions: &ConstraintOptions{Deferrable: $10 != nil && bool(*$10), InitiallyDeferred: $11 != nil && bool(*$11)},
     }
   }
 /* For PostgreSQL and SQLite3 */
@@ -5037,7 +5038,7 @@ unique_definition:
       Columns: $4,
       Options: $6,
       Partition: $7,
-      ConstraintOptions: &ConstraintOptions{Deferrable: bool($8), InitiallyDeferred: bool($9)},
+      ConstraintOptions: &ConstraintOptions{Deferrable: $8 != nil && bool(*$8), InitiallyDeferred: $9 != nil && bool(*$9)},
     }
   }
 
@@ -5138,36 +5139,36 @@ not_for_replication_opt:
 deferrable_clause:
   DEFERRABLE
   {
-    $$ = BoolVal(true)
+    $$ = NewBoolVal(true)
   }
 | NOT DEFERRABLE
   {
-    $$ = BoolVal(false)
+    $$ = NewBoolVal(false)
   }
 
 initially_clause:
   INITIALLY IMMEDIATE
   {
-    $$ = BoolVal(false)
+    $$ = NewBoolVal(false)
   }
 | INITIALLY DEFERRED
   {
-    $$ = BoolVal(true)
+    $$ = NewBoolVal(true)
   }
 
 deferrable_option:
   deferrable_clause
   {
-    $$ = ConstraintOptions{Deferrable: bool($1), InitiallyDeferred: false}
+    $$ = ConstraintOptions{Deferrable: bool(*$1), InitiallyDeferred: false}
   }
 | deferrable_clause initially_clause
   {
-    $$ = ConstraintOptions{Deferrable: bool($1), InitiallyDeferred: bool($2)}
+    $$ = ConstraintOptions{Deferrable: bool(*$1), InitiallyDeferred: bool(*$2)}
   }
 | initially_clause
   {
     // Per PostgreSQL, INITIALLY DEFERRED implies DEFERRABLE, INITIALLY IMMEDIATE implies NOT DEFERRABLE
-    $$ = ConstraintOptions{Deferrable: bool($1), InitiallyDeferred: bool($1)}
+    $$ = ConstraintOptions{Deferrable: bool(*$1), InitiallyDeferred: bool(*$1)}
   }
 
 fk_defer_opts:
@@ -7464,7 +7465,7 @@ extension_name:
 deferrable_opt:
   /* empty */
   {
-    $$ = BoolVal(false)
+    $$ = nil
   }
 | deferrable_clause
   {
@@ -7474,7 +7475,7 @@ deferrable_opt:
 initially_deferred_opt:
   /* empty */
   {
-    $$ = BoolVal(false)
+    $$ = nil
   }
 | initially_clause
   {
