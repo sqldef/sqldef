@@ -235,3 +235,52 @@ CreateTableWithAutoIncrementPrimaryKeyAndAddMorePrimaryKeyMariaDB:
     ALTER TABLE `friends` CHANGE COLUMN `id` `id` bigint(20) NOT NULL AUTO_INCREMENT;
   flavor: mariadb
   min_version: '10.0'
+
+# CHECK constraint replacement on MariaDB.
+# MariaDB rejects `ALTER TABLE ... DROP CHECK <name>` (syntax error 1064); only
+# `ALTER TABLE ... DROP CONSTRAINT <name>` works. Repro from upstream report:
+# https://github.com/sqldef/sqldef/issues (DROP CHECK parasite on MariaDB).
+ModifyCheckConstraintMariaDB:
+  current: |
+    CREATE TABLE `quote_sections` (
+      `id` int PRIMARY KEY,
+      `service_period_start` date,
+      `service_period_end` date,
+      CONSTRAINT `chk_quote_sections_service_period` CHECK (`service_period_start` IS NULL AND `service_period_end` IS NULL OR `service_period_end` >= `service_period_start`)
+    );
+  desired: |
+    CREATE TABLE `quote_sections` (
+      `id` int PRIMARY KEY,
+      `service_period_start` date,
+      `service_period_end` date,
+      CONSTRAINT `chk_quote_sections_service_period` CHECK (`service_period_start` IS NULL OR `service_period_end` IS NULL OR `service_period_end` >= `service_period_start`)
+    );
+  up: |
+    ALTER TABLE `quote_sections` DROP CONSTRAINT `chk_quote_sections_service_period`;
+    ALTER TABLE `quote_sections` ADD CONSTRAINT `chk_quote_sections_service_period` CHECK (service_period_start is null or service_period_end is null or service_period_end >= service_period_start);
+  down: |
+    ALTER TABLE `quote_sections` DROP CONSTRAINT `chk_quote_sections_service_period`;
+    ALTER TABLE `quote_sections` ADD CONSTRAINT `chk_quote_sections_service_period` CHECK (service_period_start is null and service_period_end is null or service_period_end >= service_period_start);
+  flavor: mariadb
+  min_version: '10.2'
+
+DropCheckConstraintMariaDB:
+  current: |
+    CREATE TABLE `quote_sections` (
+      `id` int PRIMARY KEY,
+      `service_period_start` date,
+      `service_period_end` date,
+      CONSTRAINT `chk_quote_sections_service_period` CHECK (`service_period_end` >= `service_period_start`)
+    );
+  desired: |
+    CREATE TABLE `quote_sections` (
+      `id` int PRIMARY KEY,
+      `service_period_start` date,
+      `service_period_end` date
+    );
+  up: |
+    ALTER TABLE `quote_sections` DROP CONSTRAINT `chk_quote_sections_service_period`;
+  down: |
+    ALTER TABLE `quote_sections` ADD CONSTRAINT `chk_quote_sections_service_period` CHECK (service_period_end >= service_period_start);
+  flavor: mariadb
+  min_version: '10.2'

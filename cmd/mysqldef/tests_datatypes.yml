@@ -439,7 +439,6 @@ TypedLiteralsChangeDefault:
     ALTER TABLE `events` CHANGE COLUMN `event_time` `event_time` time DEFAULT '12:00:00';
     ALTER TABLE `events` CHANGE COLUMN `event_timestamp` `event_timestamp` timestamp DEFAULT '2024-01-01 12:00:00';
 TypedLiteralsInCheck:
-  flavor: "!mariadb"
   min_version: '8.0'
   current: |
     CREATE TABLE events (
@@ -459,7 +458,7 @@ TypedLiteralsInCheck:
     ALTER TABLE `events` ADD COLUMN `event_end_date` date AFTER `event_date`;
     ALTER TABLE `events` ADD CONSTRAINT `chk_date_range` CHECK (event_date >= date '2020-01-01' and event_end_date <= date '2030-12-31');
   down: |
-    ALTER TABLE `events` DROP CHECK `chk_date_range`;
+    ALTER TABLE `events` DROP CONSTRAINT `chk_date_range`;
     ALTER TABLE `events` DROP COLUMN `event_end_date`;
     ALTER TABLE `events` DROP COLUMN `event_date`;
 YearWithLength:
