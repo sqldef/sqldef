@@ -1019,6 +1019,35 @@ func (ct *ColumnType) Format(buf *nodeBuffer) {
 	if ct.Check != nil {
 		buf.Printf(" %s %s", keywordStrings[CHECK], String(&ct.Check.Where))
 	}
+	if !ct.References.Name.IsEmpty() {
+		buf.Printf(" references %v", ct.References)
+		if len(ct.ReferenceNames) > 0 {
+			formatFKColumnList(buf, ct.ReferenceNames, false)
+		}
+		if !ct.ReferenceMatch.IsEmpty() {
+			buf.Printf(" %s", ct.ReferenceMatch.Name)
+		}
+		if !ct.ReferenceOnDelete.IsEmpty() {
+			buf.Printf(" on delete %s", ct.ReferenceOnDelete.Name)
+		}
+		if !ct.ReferenceOnUpdate.IsEmpty() {
+			buf.Printf(" on update %s", ct.ReferenceOnUpdate.Name)
+		}
+		if ct.ReferenceDeferrable != nil {
+			if bool(*ct.ReferenceDeferrable) {
+				buf.Printf(" deferrable")
+			} else {
+				buf.Printf(" not deferrable")
+			}
+		}
+		if ct.ReferenceInitDeferred != nil {
+			if bool(*ct.ReferenceInitDeferred) {
+				buf.Printf(" initially deferred")
+			} else {
+				buf.Printf(" initially immediate")
+			}
+		}
+	}
 	if ct.KeyOpt == colKeyPrimary {
 		buf.Printf(" %s %s", keywordStrings[PRIMARY], keywordStrings[KEY])
 	}
