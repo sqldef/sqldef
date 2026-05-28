@@ -797,6 +797,9 @@ func (tkn *Tokenizer) Scan() (int, string) {
 		case '|':
 			if tkn.lastChar == '|' {
 				tkn.next()
+				if tkn.mode == ParserModePostgres {
+					return CONCAT, ""
+				}
 				return OR, ""
 			}
 			return int(ch), ""

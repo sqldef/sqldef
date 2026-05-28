@@ -297,4 +297,41 @@ ColumnNamedKeyAddedAlongsideFunction:
   down: |
     DROP TABLE public.users;
 
+AddColumnWithStringConcatDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t ();
+  desired: |
+    CREATE TABLE t (
+      s varchar(64) NOT NULL DEFAULT ('a' || 'b')
+    );
+  up: |
+    ALTER TABLE public.t ADD COLUMN s varchar(64) NOT NULL DEFAULT 'a' || 'b';
+  down: |
+    ALTER TABLE public.t DROP COLUMN s;
+
+AddCheckConstraintWithStringConcat:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t (
+      s text NOT NULL
+    );
+  desired: |
+    CREATE TABLE t (
+      s text NOT NULL,
+      CONSTRAINT s_prefixed CHECK (length(s || '_suffix') > 7)
+    );
+  up: |
+    ALTER TABLE public.t ADD CONSTRAINT s_prefixed CHECK (length(s || '_suffix') > 7);
+  down: |
+    ALTER TABLE public.t DROP CONSTRAINT s_prefixed;
+
+CreateTableWithStringConcatQuotedColumn:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      "MyCol" text NOT NULL,
+      CONSTRAINT mycol_non_empty CHECK (length("MyCol" || '_x') > 2)
+    );
+
 # GiST index with tstzrange type

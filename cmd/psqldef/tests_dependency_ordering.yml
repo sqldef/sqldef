@@ -188,6 +188,25 @@ FunctionBeforeTable_AlterAddColumnDefault:
     ALTER TABLE "public"."items" DROP COLUMN "external_id";
     DROP FUNCTION "public"."generate_item_id";
 
+FunctionBeforeTable_AlterAddColumnDefaultConcat:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE accounts (
+      id bigint NOT NULL PRIMARY KEY
+    );
+  desired: |
+    CREATE TABLE accounts (
+      id bigint NOT NULL PRIMARY KEY,
+      public_id text NOT NULL DEFAULT ('acc_' || new_id())
+    );
+    CREATE FUNCTION new_id() RETURNS text AS $$ BEGIN RETURN md5(random()::text); END; $$ LANGUAGE plpgsql VOLATILE;
+  up: |
+    CREATE FUNCTION new_id() RETURNS text AS $$ BEGIN RETURN md5(random()::text); END; $$ LANGUAGE plpgsql VOLATILE;
+    ALTER TABLE public.accounts ADD COLUMN public_id text NOT NULL DEFAULT 'acc_' || new_id();
+  down: |
+    ALTER TABLE public.accounts DROP COLUMN public_id;
+    DROP FUNCTION public.new_id;
+
 FunctionBeforeTable_ColumnCheck:
   desired: |
     CREATE FUNCTION is_valid_name(s text) RETURNS boolean AS $$ BEGIN RETURN length(s) > 0; END; $$ LANGUAGE plpgsql IMMUTABLE;

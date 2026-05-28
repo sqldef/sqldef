@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -828,6 +829,204 @@ func TestCreatePolicyPredicates(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStringConcatOperator(t *testing.T) {
+	t.Run("postgres mode emits || without substituting or", func(t *testing.T) {
+		testCases := []struct {
+			name string
+			sql  string
+			// checkShape, when set, asserts AST shape after round-trip text
+			// checks. Used to lock down precedence/associativity beyond the
+			// emitter, which is the layer the text checks above cover.
+			checkShape func(t *testing.T, stmt Statement)
+		}{
+			{
+				name: "DEFAULT with two string literals",
+				sql:  "CREATE TABLE t (s varchar(64) NOT NULL DEFAULT ('a' || 'b'))",
+			},
+			{
+				name: "DEFAULT with literal and function call",
+				sql:  "CREATE TABLE t (public_id varchar(64) NOT NULL DEFAULT ('usr_' || nanoid()))",
+			},
+			{
+				name: "column-level CHECK with concat and comparison",
+				sql:  "CREATE TABLE t (s text CHECK (s || 'x' <> ''))",
+			},
+			{
+				name: "chained concat is left-associative",
+				sql:  "CREATE TABLE t (s text NOT NULL DEFAULT ('a' || 'b' || 'c'))",
+				// Expected AST: ParenExpr(ConcatExpr{Left: ConcatExpr{'a','b'}, Right: 'c'}).
+				// Left-leaning tree confirms %left CONCAT is applied.
+				checkShape: func(t *testing.T, stmt Statement) {
+					t.Helper()
+					ddl := stmt.(*DDL)
+					expr := ddl.TableSpec.Columns[0].Type.Default.Expression.Expr
+					paren, ok := expr.(*ParenExpr)
+					if !ok {
+						t.Fatalf("expected outer *ParenExpr, got %T", expr)
+					}
+					outer, ok := paren.Expr.(*ConcatExpr)
+					if !ok {
+						t.Fatalf("expected *ConcatExpr inside parens, got %T", paren.Expr)
+					}
+					if _, ok := outer.Left.(*ConcatExpr); !ok {
+						t.Errorf("expected left-associative shape ConcatExpr{ConcatExpr,X}, got %T on Left", outer.Left)
+					}
+				},
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				stmt, err := ParseDDL(tc.sql, ParserModePostgres)
+				if err != nil {
+					t.Fatalf("ParseDDL(%q) failed: %v", tc.sql, err)
+				}
+				got := String(stmt)
+				if !strings.Contains(got, "||") {
+					t.Errorf("expected || in round-trip output, got:\n%s", got)
+				}
+				if strings.Contains(got, " or ") {
+					t.Errorf("expected no ' or ' substitution for ||, got:\n%s", got)
+				}
+				if tc.checkShape != nil {
+					tc.checkShape(t, stmt)
+				}
+			})
+		}
+	})
+
+	t.Run("postgres mode: concat coexists with explicit OR", func(t *testing.T) {
+		// Expected AST: OrExpr{Left: ComparisonExpr{Left: ConcatExpr{...}, ...},
+		// Right: IsExpr{s, "is null"}}. The shape assertion locks down both
+		// (a) || binds tighter than comparison, and (b) OR is at the outermost
+		// boolean level — independent of how the emitter formats the text.
+		sql := "CREATE TABLE t (s text CHECK ('a' || 'b' = 'ab' OR s IS NULL))"
+		stmt, err := ParseDDL(sql, ParserModePostgres)
+		if err != nil {
+			t.Fatalf("ParseDDL failed: %v", err)
+		}
+		got := String(stmt)
+		if !strings.Contains(got, "||") {
+			t.Errorf("expected || in round-trip output, got:\n%s", got)
+		}
+		if !strings.Contains(got, " or ") {
+			t.Errorf("expected explicit OR to round-trip as ' or ', got:\n%s", got)
+		}
+
+		ddl := stmt.(*DDL)
+		expr := ddl.TableSpec.Columns[0].Type.Check.Where.Expr
+		or, ok := expr.(*OrExpr)
+		if !ok {
+			t.Fatalf("expected *OrExpr at top, got %T", expr)
+		}
+		cmp, ok := or.Left.(*ComparisonExpr)
+		if !ok {
+			t.Fatalf("expected *ComparisonExpr on OR.Left, got %T", or.Left)
+		}
+		if _, ok := cmp.Left.(*ConcatExpr); !ok {
+			t.Errorf("expected *ConcatExpr on ComparisonExpr.Left, got %T", cmp.Left)
+		}
+	})
+
+	t.Run("mysql mode still treats || as OR", func(t *testing.T) {
+		sql := "CREATE TABLE t (s varchar(64) DEFAULT ('a' || 'b'))"
+		stmt, err := ParseDDL(sql, ParserModeMysql)
+		if err != nil {
+			t.Fatalf("ParseDDL failed: %v", err)
+		}
+		got := String(stmt)
+		if !strings.Contains(got, " or ") {
+			t.Errorf("expected MySQL mode to emit ' or ' for ||, got:\n%s", got)
+		}
+		if strings.Contains(got, "||") {
+			t.Errorf("expected MySQL mode to not emit '||', got:\n%s", got)
+		}
+	})
+
+	t.Run("|| binds tighter than comparison (precedence)", func(t *testing.T) {
+		// Per PostgreSQL spec, || is "any other operator" tier: tighter than
+		// comparison (=/<>/etc), looser than additive (+/-). So:
+		//   'a' || 'b' = 'ab'   parses as ('a' || 'b') = 'ab'
+		//   1 + 2 || 3          parses as (1 + 2) || 3
+		// Asserting AST shape (not text round-trip) since PG would re-parse
+		// the round-tripped text correctly even with the wrong AST.
+		cases := []struct {
+			name string
+			sql  string
+			// rootIsConcat=true means top-level expression is ConcatExpr.
+			// rootIsConcat=false means top-level is ComparisonExpr with ConcatExpr on the Left.
+			rootIsComparison bool
+			rootIsConcat     bool
+		}{
+			{
+				name:             "concat vs equal: equal is outer, concat is inner-left",
+				sql:              `CREATE TABLE t (s text, CHECK ('a' || 'b' = 'ab'))`,
+				rootIsComparison: true,
+			},
+			{
+				name:             "concat vs not-equal: not-equal is outer, concat is inner-left",
+				sql:              `CREATE TABLE t (s text, CHECK ('a' || 'b' <> 'ab'))`,
+				rootIsComparison: true,
+			},
+			{
+				name:         "concat vs additive: concat is outer, plus is inner-left",
+				sql:          `CREATE TABLE t (s text, CHECK (1 + 2 || 3))`,
+				rootIsConcat: true,
+			},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				stmt, err := ParseDDL(tc.sql, ParserModePostgres)
+				if err != nil {
+					t.Fatalf("ParseDDL failed: %v", err)
+				}
+				ddl := stmt.(*DDL)
+				expr := ddl.TableSpec.Checks[0].Where.Expr
+				if tc.rootIsComparison {
+					cmp, ok := expr.(*ComparisonExpr)
+					if !ok {
+						t.Fatalf("expected *ComparisonExpr at top, got %T (expr=%s)", expr, String(expr))
+					}
+					if _, ok := cmp.Left.(*ConcatExpr); !ok {
+						t.Errorf("expected *ConcatExpr on Left of comparison, got %T (expr=%s)", cmp.Left, String(expr))
+					}
+				}
+				if tc.rootIsConcat {
+					concat, ok := expr.(*ConcatExpr)
+					if !ok {
+						t.Fatalf("expected *ConcatExpr at top, got %T (expr=%s)", expr, String(expr))
+					}
+					if _, ok := concat.Left.(*BinaryExpr); !ok {
+						t.Errorf("expected *BinaryExpr on Left of concat, got %T (expr=%s)", concat.Left, String(expr))
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("exclusion constraint with || operator preserves operator string", func(t *testing.T) {
+		sql := "CREATE TABLE t (a text, CONSTRAINT ex EXCLUDE USING gist (a WITH ||))"
+		stmt, err := ParseDDL(sql, ParserModePostgres)
+		if err != nil {
+			t.Fatalf("ParseDDL failed: %v", err)
+		}
+		ddl, ok := stmt.(*DDL)
+		if !ok {
+			t.Fatalf("expected *DDL, got %T", stmt)
+		}
+		if len(ddl.TableSpec.Exclusions) != 1 {
+			t.Fatalf("expected one exclusion, got %d", len(ddl.TableSpec.Exclusions))
+		}
+		ex := ddl.TableSpec.Exclusions[0]
+		if len(ex.Exclusions) != 1 {
+			t.Fatalf("expected one exclusion pair, got %d", len(ex.Exclusions))
+		}
+		if got := ex.Exclusions[0].Operator; got != "||" {
+			t.Errorf("expected Operator %q, got %q", "||", got)
+		}
+	})
 }
 
 func TestCreateFunctionArgDefaultsAndModes(t *testing.T) {

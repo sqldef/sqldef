@@ -4985,6 +4985,8 @@ func (g *Generator) formatExprQuoteAware(expr parser.Expr) string {
 		return g.formatExprQuoteAware(e.Left) + " AND " + g.formatExprQuoteAware(e.Right)
 	case *parser.OrExpr:
 		return g.formatExprQuoteAware(e.Left) + " OR " + g.formatExprQuoteAware(e.Right)
+	case *parser.ConcatExpr:
+		return g.formatExprQuoteAware(e.Left) + " || " + g.formatExprQuoteAware(e.Right)
 	case *parser.NotExpr:
 		return "NOT " + g.formatExprQuoteAware(e.Expr)
 	case *parser.BinaryExpr:

@@ -1780,6 +1780,7 @@ type Expr interface {
 
 func (*AndExpr) iExpr()             {}
 func (*OrExpr) iExpr()              {}
+func (*ConcatExpr) iExpr()          {}
 func (*NotExpr) iExpr()             {}
 func (*ParenExpr) iExpr()           {}
 func (*ComparisonExpr) iExpr()      {}
@@ -1850,6 +1851,16 @@ type OrExpr struct {
 // Format formats the node.
 func (node *OrExpr) Format(buf *nodeBuffer) {
 	buf.Printf("%v or %v", node.Left, node.Right)
+}
+
+// ConcatExpr represents a PostgreSQL string concatenation: A || B.
+type ConcatExpr struct {
+	Left, Right Expr
+}
+
+// Format formats the node.
+func (node *ConcatExpr) Format(buf *nodeBuffer) {
+	buf.Printf("%v || %v", node.Left, node.Right)
 }
 
 // NotExpr represents a NOT expression.

@@ -192,6 +192,13 @@ func setDDL(yylex any, ddl *DDL) {
 %left <str> '|'
 %left <str> '&'
 %left <str> SHIFT_LEFT SHIFT_RIGHT
+// PostgreSQL || (string concatenation) binds tighter than comparison and looser
+// than additive, matching PostgreSQL's "any other operator" precedence tier.
+// The rule is declared at the value_expression level (not the expression level)
+// so that comparison operators — which are defined in condition rules over
+// value_expression — naturally take || as a sub-expression. Only the PG-mode
+// lexer emits CONCAT; other modes keep lexing || as OR.
+%left <str> CONCAT
 %left <str> '+' '-'
 %left <str> CUSTOM_OP
 %left <str> '*' '/' DIV '%' MOD
@@ -3128,9 +3135,8 @@ exclude_element:
       Operator: "&&",
     }
   }
-| expression WITH OR
+| expression WITH CONCAT
   {
-    // OR token represents || in the lexer
     $$ = ExclusionPair{
       Expression: $1,
       Operator: "||",
@@ -6159,6 +6165,10 @@ value_expression:
 | value_expression '+' value_expression
   {
     $$ = &BinaryExpr{Left: $1, Operator: PlusStr, Right: $3}
+  }
+| value_expression CONCAT value_expression
+  {
+    $$ = &ConcatExpr{Left: $1, Right: $3}
   }
 | value_expression '-' value_expression
   {
