@@ -59,6 +59,7 @@ type GeneratorConfig struct {
 	EnableDrop              bool     // Whether to enable DROP/REVOKE operations
 	CreateIndexConcurrently bool     // Whether to add CONCURRENTLY to CREATE INDEX statements
 	DisableDdlTransaction   bool     // Do not use a transaction for DDL statements
+	BulkAlter               bool     // Bundle multiple ALTER TABLE actions on the same table into a single statement (PostgreSQL/MySQL)
 	LegacyIgnoreQuotes      bool     // true = ignore quotes (legacy), false = preserve quotes
 
 	// MySQL-specific: value of lower_case_table_names server variable.
@@ -348,6 +349,9 @@ func MergeGeneratorConfig(base, override GeneratorConfig) GeneratorConfig {
 	if override.DisableDdlTransaction {
 		result.DisableDdlTransaction = override.DisableDdlTransaction
 	}
+	if override.BulkAlter {
+		result.BulkAlter = override.BulkAlter
+	}
 	// LegacyIgnoreQuotes: override always takes precedence (set by first config with database-specific default)
 	result.LegacyIgnoreQuotes = override.LegacyIgnoreQuotes
 
@@ -367,6 +371,7 @@ func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) Generat
 		EnableDrop              bool     `yaml:"enable_drop"`
 		CreateIndexConcurrently bool     `yaml:"create_index_concurrently"`
 		DisableDdlTransaction   bool     `yaml:"disable_ddl_transaction"`
+		BulkAlter               bool     `yaml:"bulk_alter"`
 		LegacyIgnoreQuotes      *bool    `yaml:"legacy_ignore_quotes"`
 	}
 
@@ -424,6 +429,7 @@ func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) Generat
 		EnableDrop:              config.EnableDrop,
 		CreateIndexConcurrently: config.CreateIndexConcurrently,
 		DisableDdlTransaction:   config.DisableDdlTransaction,
+		BulkAlter:               config.BulkAlter,
 		LegacyIgnoreQuotes:      legacyIgnoreQuotes,
 	}
 }

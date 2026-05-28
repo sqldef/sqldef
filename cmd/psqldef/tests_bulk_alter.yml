@@ -1,0 +1,217 @@
+# yaml-language-server: $schema=../../testutil/testcase.schema.json
+
+# bulk_alter merges multiple ALTER actions on the same table into a single
+# `ALTER TABLE t a1, a2, ...` statement, fusing the interDDLs (adds/changes)
+# phase with the cleanup (drops) phase per table to minimize DDL locks.
+
+BulkAlterAddDropColumns:
+  legacy_ignore_quotes: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      c int
+    );
+  desired: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      a int,
+      b int
+    );
+  up: |
+    ALTER TABLE public.patients ADD COLUMN a integer, ADD COLUMN b integer, DROP COLUMN c;
+  down: |
+    ALTER TABLE public.patients ADD COLUMN c integer, DROP COLUMN b, DROP COLUMN a;
+
+BulkAlterDisabledByDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      c int
+    );
+  desired: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      a int,
+      b int
+    );
+  up: |
+    ALTER TABLE public.patients ADD COLUMN a integer;
+    ALTER TABLE public.patients ADD COLUMN b integer;
+    ALTER TABLE public.patients DROP COLUMN c;
+  down: |
+    ALTER TABLE public.patients ADD COLUMN c integer;
+    ALTER TABLE public.patients DROP COLUMN b;
+    ALTER TABLE public.patients DROP COLUMN a;
+
+BulkAlterRenameSplitsBundle:
+  legacy_ignore_quotes: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      username varchar(100),
+      age integer
+    );
+  desired: |
+    CREATE TABLE users (
+      id bigint NOT NULL,
+      user_name text NOT NULL, -- @renamed from=username
+      age integer,
+      email text
+    );
+  up: |
+    ALTER TABLE public.users RENAME COLUMN username TO user_name;
+    ALTER TABLE public.users ALTER COLUMN user_name TYPE text, ALTER COLUMN user_name SET NOT NULL, ADD COLUMN email text;
+  down: |
+    ALTER TABLE public.users ADD COLUMN username varchar(100), DROP COLUMN email, DROP COLUMN user_name;
+
+BulkAlterAlterColumnTypeAndNotNull:
+  legacy_ignore_quotes: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE products (
+      id bigint NOT NULL,
+      price integer,
+      name text
+    );
+  desired: |
+    CREATE TABLE products (
+      id bigint NOT NULL,
+      price bigint NOT NULL,
+      name text NOT NULL
+    );
+  up: |
+    ALTER TABLE public.products ALTER COLUMN price TYPE bigint, ALTER COLUMN price SET NOT NULL, ALTER COLUMN name SET NOT NULL;
+  down: |
+    ALTER TABLE public.products ALTER COLUMN price TYPE integer, ALTER COLUMN price DROP NOT NULL, ALTER COLUMN name DROP NOT NULL;
+
+BulkAlterAddColumnAndDropColumnFusedAcrossPhases:
+  legacy_ignore_quotes: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE accounts (
+      id bigint NOT NULL,
+      balance integer,
+      legacy_flag boolean
+    );
+  desired: |
+    CREATE TABLE accounts (
+      id bigint NOT NULL,
+      balance integer,
+      tier text
+    );
+  up: |
+    ALTER TABLE public.accounts ADD COLUMN tier text, DROP COLUMN legacy_flag;
+  down: |
+    ALTER TABLE public.accounts ADD COLUMN legacy_flag boolean, DROP COLUMN tier;
+
+BulkAlterPerTableScope:
+  legacy_ignore_quotes: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE a (
+      id bigint NOT NULL
+    );
+    CREATE TABLE b (
+      id bigint NOT NULL
+    );
+  desired: |
+    CREATE TABLE a (
+      id bigint NOT NULL,
+      x int,
+      y int
+    );
+    CREATE TABLE b (
+      id bigint NOT NULL,
+      x int,
+      y int
+    );
+  up: |
+    ALTER TABLE public.a ADD COLUMN x integer, ADD COLUMN y integer;
+    ALTER TABLE public.b ADD COLUMN x integer, ADD COLUMN y integer;
+  down: |
+    ALTER TABLE public.a DROP COLUMN y, DROP COLUMN x;
+    ALTER TABLE public.b DROP COLUMN y, DROP COLUMN x;
+
+# DROP INDEX (non-ALTER cleanup) is spliced before the table's last interDDLs
+# ALTER, which leaves a non-ALTER between two same-table ALTERs and exercises
+# the single-action branch of mergeAdjacentAlterTable.
+BulkAlterDropIndexBetweenAdds:
+  legacy_ignore_quotes: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE items (
+      id bigint NOT NULL,
+      legacy_code text
+    );
+    CREATE INDEX idx_items_legacy_code ON items (legacy_code);
+  desired: |
+    CREATE TABLE items (
+      id bigint NOT NULL,
+      a int,
+      b int
+    );
+  up: |
+    ALTER TABLE public.items ADD COLUMN a integer;
+    DROP INDEX public.idx_items_legacy_code;
+    ALTER TABLE public.items ADD COLUMN b integer, DROP COLUMN legacy_code;
+  down: |
+    ALTER TABLE public.items ADD COLUMN legacy_code text, DROP COLUMN b, DROP COLUMN a;
+    CREATE INDEX idx_items_legacy_code ON public.items (legacy_code);
+
+# Verifies bulk_alter does not interfere with full-table drops happening in
+# parallel with another table's ALTER bundle.
+BulkAlterAlongsideTableDrop:
+  legacy_ignore_quotes: false
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE keep_me (
+      id bigint NOT NULL,
+      old_col int
+    );
+    CREATE TABLE drop_me (
+      id bigint NOT NULL
+    );
+  desired: |
+    CREATE TABLE keep_me (
+      id bigint NOT NULL,
+      new_col int
+    );
+  up: |
+    ALTER TABLE public.keep_me ADD COLUMN new_col integer, DROP COLUMN old_col;
+    DROP TABLE public.drop_me;
+  down: |
+    ALTER TABLE public.keep_me ADD COLUMN old_col integer, DROP COLUMN new_col;
+    CREATE TABLE drop_me (
+      id bigint NOT NULL
+    );
+
+# Exercises the quoted-identifier path of splitAlterTablePrefix using the
+# legacy_ignore_quotes default (true) which always emits "schema"."table".
+BulkAlterQuotedTableNames:
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      c int
+    );
+  desired: |
+    CREATE TABLE patients (
+      id bigint NOT NULL,
+      a int,
+      b int
+    );
+  up: |
+    ALTER TABLE "public"."patients" ADD COLUMN "a" integer, ADD COLUMN "b" integer, DROP COLUMN "c";
+  down: |
+    ALTER TABLE "public"."patients" ADD COLUMN "c" integer, DROP COLUMN "b", DROP COLUMN "a";

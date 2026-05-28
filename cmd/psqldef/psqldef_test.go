@@ -1079,6 +1079,18 @@ func TestParseOptionsDisableDdlTransactionFlagOverridesConfig(t *testing.T) {
 	assert.True(t, options.Config.DisableDdlTransaction)
 }
 
+func TestParseOptionsBulkAlterFlag(t *testing.T) {
+	_, options := parseOptions([]string{"testdb", "--export", "--bulk-alter"})
+
+	assert.True(t, options.Config.BulkAlter)
+}
+
+func TestParseOptionsBulkAlterFlagOverridesConfig(t *testing.T) {
+	_, options := parseOptions([]string{"testdb", "--export", "--config-inline", "bulk_alter: false", "--bulk-alter"})
+
+	assert.True(t, options.Config.BulkAlter)
+}
+
 func TestPsqldefTransactionBoundariesWithConcurrentIndex(t *testing.T) {
 	resetTestDatabase()
 

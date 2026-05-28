@@ -41,6 +41,7 @@ type TestCase struct {
 	Config             struct { // Optional config settings for the test
 		CreateIndexConcurrently bool `yaml:"create_index_concurrently"`
 		DisableDdlTransaction   bool `yaml:"disable_ddl_transaction"`
+		BulkAlter               bool `yaml:"bulk_alter"`
 	} `yaml:"config"`
 }
 
@@ -182,6 +183,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		EnableDrop:              *test.EnableDrop,
 		CreateIndexConcurrently: test.Config.CreateIndexConcurrently,
 		DisableDdlTransaction:   test.Config.DisableDdlTransaction,
+		BulkAlter:               test.Config.BulkAlter,
 		LegacyIgnoreQuotes:      legacyIgnoreQuotes,
 	}
 

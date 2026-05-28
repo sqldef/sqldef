@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=../../testutil/testcase.schema.json
+
+# bulk_alter has no effect for SQLite3 because the SQLite ALTER TABLE grammar
+# does not accept a comma-separated action list — each ALTER TABLE must
+# perform exactly one operation. The flag is a documented no-op for SQLite3.
+
+BulkAlterIgnoredOnSqlite:
+  config:
+    bulk_alter: true
+  current: |
+    CREATE TABLE patients (
+      id integer NOT NULL,
+      c integer
+    );
+  desired: |
+    CREATE TABLE patients (
+      id integer NOT NULL,
+      a integer,
+      b integer
+    );
+  up: |
+    ALTER TABLE "patients" ADD COLUMN "a" integer;
+    ALTER TABLE "patients" ADD COLUMN "b" integer;
+    ALTER TABLE "patients" DROP COLUMN "c";
+  down: |
+    ALTER TABLE "patients" ADD COLUMN "c" integer;
+    ALTER TABLE "patients" DROP COLUMN "b";
+    ALTER TABLE "patients" DROP COLUMN "a";
