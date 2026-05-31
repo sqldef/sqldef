@@ -144,6 +144,44 @@ func TestCreateFunctionWithPgquery(t *testing.T) {
 	}
 }
 
+func TestCreateFunctionAutoModeFallbackRetry(t *testing.T) {
+	// Force Auto mode regardless of an ambient PSQLDEF_PARSER (the dev/CI default
+	// is generic, which would skip pgquery entirely and never exercise this path).
+	t.Setenv("PSQLDEF_PARSER", "")
+	postgresParser := NewParserWithMode(PsqldefParserModeAuto)
+
+	// The table uses a storage parameter the generic parser rejects, forcing a
+	// whole-file fallback to pgquery. The CREATE FUNCTION must survive that
+	// fallback instead of being dropped as an Ignore, otherwise the diff engine
+	// emits a spurious DROP FUNCTION for a function that is in the desired schema.
+	statements, err := postgresParser.Parse(`
+    CREATE TABLE t (id int) WITH (fillfactor = 70);
+    CREATE FUNCTION increment(i integer) RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+      BEGIN
+        RETURN i + 1;
+      END;
+    $$;
+	`)
+	if err != nil {
+		t.Fatalf("failed to parse: %v", err)
+	}
+
+	var foundFunction bool
+	for _, stmt := range statements {
+		if _, ok := stmt.Statement.(*parser.Ignore); ok {
+			t.Errorf("statement was dropped as Ignore: %q", stmt.DDL)
+		}
+		if ddl, ok := stmt.Statement.(*parser.DDL); ok && ddl.Action == parser.CreateFunction {
+			foundFunction = true
+		}
+	}
+	if !foundFunction {
+		t.Error("CREATE FUNCTION was not preserved across pgquery fallback in Auto mode")
+	}
+}
+
 func TestCreatePolicyWithPgquery(t *testing.T) {
 	t.Setenv("PSQLDEF_PARSER", "pgquery")
 
