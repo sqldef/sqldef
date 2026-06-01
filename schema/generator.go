@@ -553,12 +553,11 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue
 			}
 
-			switch g.mode {
-			case GeneratorModePostgres, GeneratorModeMssql, GeneratorModeSQLite3:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
-			case GeneratorModeMysql:
-				ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
-			}
+			// DROP CONSTRAINT is supported across all targets that enforce CHECK:
+			// MySQL 8.0.16+, MariaDB 10.2+, TiDB, PostgreSQL, MSSQL, SQLite. MySQL
+			// 5.7 parses but does not enforce CHECK, so this branch never fires for
+			// it. MariaDB does not accept DROP CHECK <name>, only DROP CONSTRAINT.
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(check.constraintName)))
 		}
 
 		// Check columns.
@@ -1683,11 +1682,10 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 				currentNameIdent := currentCheck.constraintName
 				desiredNameIdent := desiredCheck.constraintName
 				switch g.mode {
-				case GeneratorModePostgres, GeneratorModeMssql:
+				case GeneratorModePostgres, GeneratorModeMssql, GeneratorModeMysql:
+					// DROP CONSTRAINT works on MySQL 8.0.16+, MariaDB 10.2+, TiDB,
+					// PostgreSQL, and MSSQL. MariaDB does not accept DROP CHECK.
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(&desired.table), g.escapeSQLIdent(currentNameIdent)))
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(&desired.table), g.escapeSQLIdent(desiredNameIdent), g.normalizeCheckExprString(desiredCheck.definition)))
-				case GeneratorModeMysql:
-					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CHECK %s", g.escapeTableName(&desired.table), g.escapeSQLIdent(currentNameIdent)))
 					ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s)", g.escapeTableName(&desired.table), g.escapeSQLIdent(desiredNameIdent), g.normalizeCheckExprString(desiredCheck.definition)))
 				case GeneratorModeSQLite3:
 					// SQLite does not support ALTER TABLE for CHECK constraints
