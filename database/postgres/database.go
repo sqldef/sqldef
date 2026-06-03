@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 	"github.com/sqldef/sqldef/v3/database"
 	schemaLib "github.com/sqldef/sqldef/v3/schema"
 	"github.com/sqldef/sqldef/v3/util"
@@ -129,11 +129,15 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 		return "", err
 	}
 
+	cache, err := d.buildTableDDLComponentsCache(tableNames)
+	if err != nil {
+		return "", err
+	}
 	tableDDLs, err := database.ConcurrentMapFuncWithError(
 		tableNames,
 		d.config.DumpConcurrency,
 		func(tableName string) (string, error) {
-			return d.exportTableDDL(tableName)
+			return d.exportTableDDL(tableName, cache)
 		})
 	if err != nil {
 		return "", err
@@ -726,17 +730,14 @@ type TableDDLComponents struct {
 	DefaultSchema     string
 }
 
-func (d *PostgresDatabase) exportTableDDL(table string) (string, error) {
+func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponentsCache) (string, error) {
 	components := TableDDLComponents{
 		TableName:     table,
 		DefaultSchema: d.GetDefaultSchema(),
 	}
 
+	components.Columns = cache.columns[table]
 	var err error
-	components.Columns, err = d.getColumns(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get columns for table %s: %w", table, err)
-	}
 	components.PrimaryKeyCols, err = d.getPrimaryKeyColumns(table)
 	if err != nil {
 		return "", fmt.Errorf("failed to get primary key columns for table %s: %w", table, err)
@@ -902,113 +903,6 @@ func (c *column) GetDataType() string {
 	default:
 		return c.formattedDataType
 	}
-}
-
-func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
-	const query = `WITH
-	  columns AS (
-	    SELECT
-	      s.column_name,
-	      s.column_default,
-	      s.is_nullable,
-	      CASE
-	      -- Domain types ('d') and enum types ('e'): return the type name with schema prefix
-	      WHEN t.typtype IN ('d', 'e') THEN
-	        CASE
-	          WHEN tn.nspname = 'public' THEN t.typname
-	          ELSE tn.nspname || '.' || t.typname
-	        END
-	      WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod)
-	      ELSE s.data_type
-	      END,
-	      -- formattedDataType: also return type name for domain and enum types
-	      CASE
-	      WHEN t.typtype IN ('d', 'e') THEN
-	        CASE
-	          WHEN tn.nspname = 'public' THEN t.typname
-	          ELSE tn.nspname || '.' || t.typname
-	        END
-	      ELSE format_type(f.atttypid, f.atttypmod)
-	      END,
-	      s.identity_generation
-	    FROM pg_attribute f
-	    JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
-	    LEFT JOIN pg_namespace tn ON tn.oid = t.typnamespace
-	    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
-	    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
-	    LEFT JOIN information_schema.columns s ON s.column_name = f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
-	    WHERE c.relkind in ('r', 'p')
-	    AND n.nspname = $1
-	    AND c.relname = $2
-	    AND f.attnum > 0
-	    ORDER BY f.attnum
-	  ),
-	  column_constraints AS (
-	    SELECT att.attname column_name, tmp.name, tmp.type , tmp.definition
-	    FROM (
-	      SELECT unnest(con.conkey) AS conkey,
-	             pg_get_constraintdef(con.oid, true) AS definition,
-	             cls.oid AS relid,
-	             con.conname AS name,
-	             con.contype AS type
-	      FROM   pg_constraint con
-	      JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
-	      JOIN   pg_class cls ON cls.oid = con.conrelid
-	      WHERE  nsp.nspname = $1
-	      AND    cls.relname = $2
-	      AND    array_length(con.conkey, 1) = 1
-	    ) tmp
-	    JOIN pg_attribute att ON tmp.conkey = att.attnum AND tmp.relid = att.attrelid
-	  ),
-	  check_constraints AS (
-	    SELECT column_name, name, definition
-	    FROM   column_constraints
-	    WHERE  type = 'c'
-	  )
-	SELECT    columns.*, checks.name, checks.definition
-	FROM      columns
-	LEFT JOIN check_constraints checks USING (column_name);`
-
-	schema, table := splitTableName(table, d.GetDefaultSchema())
-	rows, err := d.db.Query(query, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	cols := make([]column, 0)
-	for rows.Next() {
-		col := column{}
-		var colName, isNullable, dataType, formattedDataType string
-		var colDefault, idGen, checkName, checkDefinition *string
-		err = rows.Scan(&colName, &colDefault, &isNullable, &dataType, &formattedDataType, &idGen, &checkName, &checkDefinition)
-		if err != nil {
-			return nil, err
-		}
-		col.Name = strings.Trim(colName, `" `)
-		if colDefault != nil {
-			col.Default = *colDefault
-		}
-		if colDefault != nil && strings.HasPrefix(*colDefault, "nextval(") {
-			col.IsAutoIncrement = true
-		}
-		col.Nullable = isNullable == "YES"
-		col.dataType = dataType
-		col.formattedDataType = formattedDataType
-		if idGen != nil {
-			col.IdentityGeneration = *idGen
-		}
-		if checkName != nil && checkDefinition != nil {
-			// Normalize type casts for generic parser compatibility
-			normalizedDef := normalizePostgresTypeCasts(*checkDefinition)
-			col.Check = &columnConstraint{
-				definition: normalizedDef,
-				name:       NewIdentWithQuoteDetected(*checkName),
-			}
-		}
-		cols = append(cols, col)
-	}
-	return cols, nil
 }
 
 func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
@@ -1753,4 +1647,131 @@ func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
 	}
 
 	return privilegeDefs, nil
+}
+
+// TableDDLComponentsCache holds pre-fetched schema data for all tables in a single batch,
+// keyed by qualified table name (schema.table format).
+type TableDDLComponentsCache struct {
+	columns map[string][]column
+}
+
+func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*TableDDLComponentsCache, error) {
+	cache := &TableDDLComponentsCache{
+		columns: make(map[string][]column),
+	}
+	if len(tableNames) == 0 {
+		return cache, nil
+	}
+
+	var err error
+	cache.columns, err = d.getColumnsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	return cache, nil
+}
+
+func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string][]column, error) {
+	const query = `WITH
+	  columns AS (
+	    SELECT
+	      n.nspname || '.' || c.relname AS qualified_table_name,
+	      s.column_name,
+	      s.column_default,
+	      s.is_nullable,
+	      CASE
+	      -- Domain types ('d') and enum types ('e'): return the type name with schema prefix
+	      WHEN t.typtype IN ('d', 'e') THEN
+	        CASE
+	          WHEN tn.nspname = 'public' THEN t.typname
+	          ELSE tn.nspname || '.' || t.typname
+	        END
+	      WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod)
+	      ELSE s.data_type
+	      END,
+	      -- formattedDataType: also return type name for domain and enum types
+	      CASE
+	      WHEN t.typtype IN ('d', 'e') THEN
+	        CASE
+	          WHEN tn.nspname = 'public' THEN t.typname
+	          ELSE tn.nspname || '.' || t.typname
+	        END
+	      ELSE format_type(f.atttypid, f.atttypmod)
+	      END,
+	      s.identity_generation
+	    FROM pg_attribute f
+	    JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
+	    LEFT JOIN pg_namespace tn ON tn.oid = t.typnamespace
+	    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
+	    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
+	    LEFT JOIN information_schema.columns s ON s.column_name = f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
+	    WHERE c.relkind in ('r', 'p')
+	    AND n.nspname || '.' || c.relname = ANY($1::text[])
+	    AND f.attnum > 0
+	    ORDER BY n.nspname, c.relname, f.attnum
+	  ),
+	  column_constraints AS (
+	    SELECT att.attname column_name, tmp.qualified_table_name, tmp.name, tmp.type, tmp.definition
+	    FROM (
+	      SELECT unnest(con.conkey) AS conkey,
+	             pg_get_constraintdef(con.oid, true) AS definition,
+	             cls.oid AS relid,
+	             con.conname AS name,
+	             con.contype AS type,
+	             nsp.nspname || '.' || cls.relname AS qualified_table_name
+	      FROM   pg_constraint con
+	      JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+	      JOIN   pg_class cls ON cls.oid = con.conrelid
+	      WHERE  nsp.nspname || '.' || cls.relname = ANY($1::text[])
+	      AND    array_length(con.conkey, 1) = 1
+	    ) tmp
+	    JOIN pg_attribute att ON tmp.conkey = att.attnum AND tmp.relid = att.attrelid
+	  ),
+	  check_constraints AS (
+	    SELECT column_name, qualified_table_name, name, definition
+	    FROM   column_constraints
+	    WHERE  type = 'c'
+	  )
+	SELECT    columns.*, checks.name, checks.definition
+	FROM      columns
+	LEFT JOIN check_constraints checks USING (column_name, qualified_table_name);`
+
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]column, len(tableNames))
+	for rows.Next() {
+		col := column{}
+		var tableName, colName, isNullable, dataType, formattedDataType string
+		var colDefault, idGen, checkName, checkDefinition *string
+		err = rows.Scan(&tableName, &colName, &colDefault, &isNullable, &dataType, &formattedDataType, &idGen, &checkName, &checkDefinition)
+		if err != nil {
+			return nil, err
+		}
+		col.Name = strings.Trim(colName, `" `)
+		if colDefault != nil {
+			col.Default = *colDefault
+		}
+		if colDefault != nil && strings.HasPrefix(*colDefault, "nextval(") {
+			col.IsAutoIncrement = true
+		}
+		col.Nullable = isNullable == "YES"
+		col.dataType = dataType
+		col.formattedDataType = formattedDataType
+		if idGen != nil {
+			col.IdentityGeneration = *idGen
+		}
+		if checkName != nil && checkDefinition != nil {
+			normalizedDef := normalizePostgresTypeCasts(*checkDefinition)
+			col.Check = &columnConstraint{
+				definition: normalizedDef,
+				name:       NewIdentWithQuoteDetected(*checkName),
+			}
+		}
+		result[tableName] = append(result[tableName], col)
+	}
+	return result, nil
 }
