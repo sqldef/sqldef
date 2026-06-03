@@ -5,7 +5,7 @@ go 1.26
 toolchain go1.26.0 // must sync with Dockerfile
 
 require (
-	github.com/go-sql-driver/mysql v1.9.3
+	github.com/go-sql-driver/mysql v1.10.0
 	github.com/goccy/go-yaml v1.19.2
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/k0kubun/pp/v3 v3.5.1
@@ -20,7 +20,7 @@ require (
 )
 
 require (
-	filippo.io/edwards25519 v1.1.1 // indirect
+	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
