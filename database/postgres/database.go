@@ -755,11 +755,8 @@ func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponent
 	if components.UniqueConstraints == nil {
 		components.UniqueConstraints = make(map[string]string)
 	}
+	components.ExclusionDefs = cache.exclusionDefs[table]
 	var err error
-	components.ExclusionDefs, err = d.getExclusionDefs(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get exclusion definitions for table %s: %w", table, err)
-	}
 	components.Comments, err = d.getComments(table)
 	if err != nil {
 		return "", fmt.Errorf("failed to get comments for table %s: %w", table, err)
@@ -970,38 +967,6 @@ func normalizePostgresTypeCasts(sql string) string {
 	sql = re.ReplaceAllString(sql, "timestamp '$1'")
 
 	return sql
-}
-
-func (d *PostgresDatabase) getExclusionDefs(tableName string) ([]string, error) {
-	const query = `SELECT con.conname, pg_get_constraintdef(con.oid, true)
-	FROM   pg_constraint con
-	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
-	JOIN   pg_class cls ON cls.oid = con.conrelid
-	WHERE  con.contype = 'x'
-	AND    nsp.nspname = $1
-	AND    cls.relname = $2;`
-
-	result := []string{}
-	schema, table := splitTableName(tableName, d.GetDefaultSchema())
-	rows, err := d.db.Query(query, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var constraintName, constraintDef string
-		err = rows.Scan(&constraintName, &constraintDef)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s",
-			d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table),
-			d.quoteIdentifierIfNeeded(constraintName), constraintDef,
-		))
-	}
-
-	return result, nil
 }
 
 type primaryKeyInfo struct {
@@ -1337,6 +1302,7 @@ type TableDDLComponentsCache struct {
 	policyDefs        map[string][]string
 	checkConstraints  map[string][]CheckConstraint
 	uniqueConstraints map[string]map[string]string
+	exclusionDefs     map[string][]string
 }
 
 func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*TableDDLComponentsCache, error) {
@@ -1349,6 +1315,7 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 		policyDefs:        make(map[string][]string),
 		checkConstraints:  make(map[string][]CheckConstraint),
 		uniqueConstraints: make(map[string]map[string]string),
+		exclusionDefs:     make(map[string][]string),
 	}
 	if len(tableNames) == 0 {
 		return cache, nil
@@ -1384,6 +1351,10 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 		return nil, err
 	}
 	cache.uniqueConstraints, err = d.getUniqueConstraintsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.exclusionDefs, err = d.getExclusionDefsForTables(tableNames)
 	if err != nil {
 		return nil, err
 	}
@@ -1842,6 +1813,35 @@ func (d *PostgresDatabase) getUniqueConstraintsForTables(tableNames []string) (m
 			d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table),
 			d.quoteIdentifierIfNeeded(constraintName), constraintDef,
 		)
+	}
+	return result, nil
+}
+
+func (d *PostgresDatabase) getExclusionDefsForTables(tableNames []string) (map[string][]string, error) {
+	const query = `SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, nsp.nspname, cls.relname, con.conname, pg_get_constraintdef(con.oid, true)
+	FROM   pg_constraint con
+	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+	JOIN   pg_class cls ON cls.oid = con.conrelid
+	WHERE  con.contype = 'x'
+	AND    nsp.nspname || '.' || cls.relname = ANY($1::text[])`
+
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]string, len(tableNames))
+	for rows.Next() {
+		var tableName, schema, table, constraintName, constraintDef string
+		err = rows.Scan(&tableName, &schema, &table, &constraintName, &constraintDef)
+		if err != nil {
+			return nil, err
+		}
+		result[tableName] = append(result[tableName], fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s",
+			d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table),
+			d.quoteIdentifierIfNeeded(constraintName), constraintDef,
+		))
 	}
 	return result, nil
 }
