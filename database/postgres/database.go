@@ -738,12 +738,11 @@ func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponent
 
 	components.Columns = cache.columns[table]
 	components.PrimaryKeyCols = cache.primaryKeyCols[table]
-
 	// if pkey cols exist, retrieve the pkey name
 	if len(components.PrimaryKeyCols) > 0 {
-		pkInfo, err := d.getPrimaryKeyInfo(table)
-		if err != nil {
-			return "", fmt.Errorf("failed to get primary key name for table %s: %w", table, err)
+		pkInfo, ok := cache.primaryKeyInfos[table]
+		if !ok {
+			return "", fmt.Errorf("failed to get primary key name for table %s", table)
 		}
 		components.PrimaryKeyName = pkInfo.name
 		components.PrimaryKeyPeriod = pkInfo.period
@@ -1088,40 +1087,6 @@ func (d *PostgresDatabase) getExclusionDefs(tableName string) ([]string, error) 
 type primaryKeyInfo struct {
 	name   Ident
 	period bool
-}
-
-func (d *PostgresDatabase) getPrimaryKeyInfo(table string) (primaryKeyInfo, error) {
-	schema, table := splitTableName(table, d.GetDefaultSchema())
-	tableWithSchema := fmt.Sprintf("%s.%s", forceQuoteIdentifier(schema), forceQuoteIdentifier(table))
-
-	var selectCols string
-	if d.supportsConperiod() {
-		selectCols = "conname, conperiod"
-	} else {
-		selectCols = "conname, false"
-	}
-	query := fmt.Sprintf(`
-		SELECT %s
-		FROM pg_constraint
-		WHERE conrelid = '%s'::regclass AND contype = 'p'
-	`, selectCols, tableWithSchema)
-	rows, err := d.db.Query(query)
-	if err != nil {
-		return primaryKeyInfo{}, err
-	}
-	defer rows.Close()
-
-	var keyName string
-	var period bool
-	if rows.Next() {
-		err = rows.Scan(&keyName, &period)
-		if err != nil {
-			return primaryKeyInfo{}, err
-		}
-	} else {
-		return primaryKeyInfo{}, err
-	}
-	return primaryKeyInfo{name: NewIdentWithQuoteDetected(keyName), period: period}, nil
 }
 
 // refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d
@@ -1622,14 +1587,16 @@ func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
 // TableDDLComponentsCache holds pre-fetched schema data for all tables in a single batch,
 // keyed by qualified table name (schema.table format).
 type TableDDLComponentsCache struct {
-	columns        map[string][]column
-	primaryKeyCols map[string][]string
+	columns         map[string][]column
+	primaryKeyCols  map[string][]string
+	primaryKeyInfos map[string]primaryKeyInfo
 }
 
 func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*TableDDLComponentsCache, error) {
 	cache := &TableDDLComponentsCache{
-		columns:        make(map[string][]column),
-		primaryKeyCols: make(map[string][]string),
+		columns:         make(map[string][]column),
+		primaryKeyCols:  make(map[string][]string),
+		primaryKeyInfos: make(map[string]primaryKeyInfo),
 	}
 	if len(tableNames) == 0 {
 		return cache, nil
@@ -1641,6 +1608,10 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 		return nil, err
 	}
 	cache.primaryKeyCols, err = d.getPrimaryKeyColumnsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.primaryKeyInfos, err = d.getPrimaryKeyInfosForTables(tableNames)
 	if err != nil {
 		return nil, err
 	}
@@ -1778,6 +1749,44 @@ ORDER BY tc.table_schema, tc.table_name, kcu.ordinal_position`
 			return nil, err
 		}
 		result[tableName] = append(result[tableName], columnName)
+	}
+	return result, nil
+}
+
+func (d *PostgresDatabase) getPrimaryKeyInfosForTables(tableNames []string) (map[string]primaryKeyInfo, error) {
+	var selectCols string
+	if d.supportsConperiod() {
+		selectCols = "con.conname, con.conperiod"
+	} else {
+		selectCols = "con.conname, false"
+	}
+	query := fmt.Sprintf(`
+		SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, %s
+		FROM pg_constraint con
+		JOIN pg_class cls ON cls.oid = con.conrelid
+		JOIN pg_namespace nsp ON nsp.oid = cls.relnamespace
+		WHERE nsp.nspname || '.' || cls.relname = ANY($1::text[])
+		AND con.contype = 'p'
+	`, selectCols)
+
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]primaryKeyInfo, len(tableNames))
+	for rows.Next() {
+		var tableName, keyName string
+		var period bool
+		err = rows.Scan(&tableName, &keyName, &period)
+		if err != nil {
+			return nil, err
+		}
+		result[tableName] = primaryKeyInfo{
+			name:   NewIdentWithQuoteDetected(keyName),
+			period: period,
+		}
 	}
 	return result, nil
 }
