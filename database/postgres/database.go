@@ -737,11 +737,8 @@ func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponent
 	}
 
 	components.Columns = cache.columns[table]
-	var err error
-	components.PrimaryKeyCols, err = d.getPrimaryKeyColumns(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get primary key columns for table %s: %w", table, err)
-	}
+	components.PrimaryKeyCols = cache.primaryKeyCols[table]
+
 	// if pkey cols exist, retrieve the pkey name
 	if len(components.PrimaryKeyCols) > 0 {
 		pkInfo, err := d.getPrimaryKeyInfo(table)
@@ -751,6 +748,7 @@ func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponent
 		components.PrimaryKeyName = pkInfo.name
 		components.PrimaryKeyPeriod = pkInfo.period
 	}
+	var err error
 	components.IndexDefs, err = d.getIndexDefs(table)
 	if err != nil {
 		return "", fmt.Errorf("failed to get index definitions for table %s: %w", table, err)
@@ -1085,34 +1083,6 @@ func (d *PostgresDatabase) getExclusionDefs(tableName string) ([]string, error) 
 	}
 
 	return result, nil
-}
-
-func (d *PostgresDatabase) getPrimaryKeyColumns(table string) ([]string, error) {
-	const query = `SELECT
-	tc.table_schema, tc.constraint_name, tc.table_name, kcu.column_name
-FROM
-	information_schema.table_constraints AS tc
-	JOIN information_schema.key_column_usage AS kcu
-		USING (table_schema, table_name, constraint_name)
-WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$2 ORDER BY kcu.ordinal_position`
-	schema, table := splitTableName(table, d.GetDefaultSchema())
-	rows, err := d.db.Query(query, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	columnNames := make([]string, 0)
-	var tableSchema, constraintName, tableName string
-	for rows.Next() {
-		var columnName string
-		err = rows.Scan(&tableSchema, &constraintName, &tableName, &columnName)
-		if err != nil {
-			return nil, err
-		}
-		columnNames = append(columnNames, columnName)
-	}
-	return columnNames, nil
 }
 
 type primaryKeyInfo struct {
@@ -1652,12 +1622,14 @@ func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
 // TableDDLComponentsCache holds pre-fetched schema data for all tables in a single batch,
 // keyed by qualified table name (schema.table format).
 type TableDDLComponentsCache struct {
-	columns map[string][]column
+	columns        map[string][]column
+	primaryKeyCols map[string][]string
 }
 
 func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*TableDDLComponentsCache, error) {
 	cache := &TableDDLComponentsCache{
-		columns: make(map[string][]column),
+		columns:        make(map[string][]column),
+		primaryKeyCols: make(map[string][]string),
 	}
 	if len(tableNames) == 0 {
 		return cache, nil
@@ -1665,6 +1637,10 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 
 	var err error
 	cache.columns, err = d.getColumnsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.primaryKeyCols, err = d.getPrimaryKeyColumnsForTables(tableNames)
 	if err != nil {
 		return nil, err
 	}
@@ -1772,6 +1748,36 @@ func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string]
 			}
 		}
 		result[tableName] = append(result[tableName], col)
+	}
+	return result, nil
+}
+
+func (d *PostgresDatabase) getPrimaryKeyColumnsForTables(tableNames []string) (map[string][]string, error) {
+	const query = `SELECT
+	tc.table_schema || '.' || tc.table_name AS qualified_table_name,
+	kcu.column_name
+FROM
+	information_schema.table_constraints AS tc
+	JOIN information_schema.key_column_usage AS kcu
+		USING (table_schema, table_name, constraint_name)
+WHERE constraint_type = 'PRIMARY KEY'
+AND tc.table_schema || '.' || tc.table_name = ANY($1::text[])
+ORDER BY tc.table_schema, tc.table_name, kcu.ordinal_position`
+
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]string, len(tableNames))
+	for rows.Next() {
+		var tableName, columnName string
+		err = rows.Scan(&tableName, &columnName)
+		if err != nil {
+			return nil, err
+		}
+		result[tableName] = append(result[tableName], columnName)
 	}
 	return result, nil
 }
