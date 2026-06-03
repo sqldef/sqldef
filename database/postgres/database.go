@@ -751,11 +751,11 @@ func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponent
 	components.ForeignDefs = cache.foreignDefs[table]
 	components.PolicyDefs = cache.policyDefs[table]
 	components.CheckConstraints = cache.checkConstraints[table]
-	var err error
-	components.UniqueConstraints, err = d.getUniqueConstraints(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get unique constraints for table %s: %w", table, err)
+	components.UniqueConstraints = cache.uniqueConstraints[table]
+	if components.UniqueConstraints == nil {
+		components.UniqueConstraints = make(map[string]string)
 	}
+	var err error
 	components.ExclusionDefs, err = d.getExclusionDefs(table)
 	if err != nil {
 		return "", fmt.Errorf("failed to get exclusion definitions for table %s: %w", table, err)
@@ -970,39 +970,6 @@ func normalizePostgresTypeCasts(sql string) string {
 	sql = re.ReplaceAllString(sql, "timestamp '$1'")
 
 	return sql
-}
-
-func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]string, error) {
-	const query = `SELECT con.conname, pg_get_constraintdef(con.oid)
-	FROM   pg_constraint con
-	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
-	JOIN   pg_class cls ON cls.oid = con.conrelid
-	WHERE  con.contype = 'u'
-	AND    nsp.nspname = $1
-	AND    cls.relname = $2;`
-
-	result := map[string]string{}
-	schema, table := splitTableName(tableName, d.GetDefaultSchema())
-	rows, err := d.db.Query(query, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var constraintName, constraintDef string
-		err = rows.Scan(&constraintName, &constraintDef)
-		if err != nil {
-			return nil, err
-		}
-
-		result[constraintName] = fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s",
-			d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table),
-			d.quoteIdentifierIfNeeded(constraintName), constraintDef,
-		)
-	}
-
-	return result, nil
 }
 
 func (d *PostgresDatabase) getExclusionDefs(tableName string) ([]string, error) {
@@ -1362,24 +1329,26 @@ func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
 // TableDDLComponentsCache holds pre-fetched schema data for all tables in a single batch,
 // keyed by qualified table name (schema.table format).
 type TableDDLComponentsCache struct {
-	columns          map[string][]column
-	primaryKeyCols   map[string][]string
-	primaryKeyInfos  map[string]primaryKeyInfo
-	indexDefs        map[string][]string
-	foreignDefs      map[string][]string
-	policyDefs       map[string][]string
-	checkConstraints map[string][]CheckConstraint
+	columns           map[string][]column
+	primaryKeyCols    map[string][]string
+	primaryKeyInfos   map[string]primaryKeyInfo
+	indexDefs         map[string][]string
+	foreignDefs       map[string][]string
+	policyDefs        map[string][]string
+	checkConstraints  map[string][]CheckConstraint
+	uniqueConstraints map[string]map[string]string
 }
 
 func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*TableDDLComponentsCache, error) {
 	cache := &TableDDLComponentsCache{
-		columns:          make(map[string][]column),
-		primaryKeyCols:   make(map[string][]string),
-		primaryKeyInfos:  make(map[string]primaryKeyInfo),
-		indexDefs:        make(map[string][]string),
-		foreignDefs:      make(map[string][]string),
-		policyDefs:       make(map[string][]string),
-		checkConstraints: make(map[string][]CheckConstraint),
+		columns:           make(map[string][]column),
+		primaryKeyCols:    make(map[string][]string),
+		primaryKeyInfos:   make(map[string]primaryKeyInfo),
+		indexDefs:         make(map[string][]string),
+		foreignDefs:       make(map[string][]string),
+		policyDefs:        make(map[string][]string),
+		checkConstraints:  make(map[string][]CheckConstraint),
+		uniqueConstraints: make(map[string]map[string]string),
 	}
 	if len(tableNames) == 0 {
 		return cache, nil
@@ -1411,6 +1380,10 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 		return nil, err
 	}
 	cache.checkConstraints, err = d.getCheckConstraintsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.uniqueConstraints, err = d.getUniqueConstraintsForTables(tableNames)
 	if err != nil {
 		return nil, err
 	}
@@ -1837,6 +1810,38 @@ func (d *PostgresDatabase) getCheckConstraintsForTables(tableNames []string) (ma
 			Name:       NewIdentWithQuoteDetected(constraintName),
 			Definition: constraintDef,
 		})
+	}
+	return result, nil
+}
+
+func (d *PostgresDatabase) getUniqueConstraintsForTables(tableNames []string) (map[string]map[string]string, error) {
+	const query = `SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, nsp.nspname, cls.relname, con.conname, pg_get_constraintdef(con.oid)
+	FROM   pg_constraint con
+	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+	JOIN   pg_class cls ON cls.oid = con.conrelid
+	WHERE  con.contype = 'u'
+	AND    nsp.nspname || '.' || cls.relname = ANY($1::text[])`
+
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]map[string]string, len(tableNames))
+	for rows.Next() {
+		var tableName, schema, table, constraintName, constraintDef string
+		err = rows.Scan(&tableName, &schema, &table, &constraintName, &constraintDef)
+		if err != nil {
+			return nil, err
+		}
+		if result[tableName] == nil {
+			result[tableName] = make(map[string]string)
+		}
+		result[tableName][constraintName] = fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s",
+			d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table),
+			d.quoteIdentifierIfNeeded(constraintName), constraintDef,
+		)
 	}
 	return result, nil
 }
