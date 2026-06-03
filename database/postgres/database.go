@@ -749,11 +749,8 @@ func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponent
 	}
 	components.IndexDefs = cache.indexDefs[table]
 	components.ForeignDefs = cache.foreignDefs[table]
+	components.PolicyDefs = cache.policyDefs[table]
 	var err error
-	components.PolicyDefs, err = d.getPolicyDefs(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get policy definitions for table %s: %w", table, err)
-	}
 	components.CheckConstraints, err = d.getTableCheckConstraints(table)
 	if err != nil {
 		return "", fmt.Errorf("failed to get check constraints for table %s: %w", table, err)
@@ -1088,46 +1085,6 @@ var (
 	policyRolesSuffixRegex = regexp.MustCompile(`}$`)
 )
 
-func (d *PostgresDatabase) getPolicyDefs(table string) ([]string, error) {
-	const query = `
-		SELECT policyname, permissive, roles, cmd, qual, with_check
-		FROM pg_policies
-		WHERE schemaname = $1 AND tablename = $2
-	`
-	schema, table := splitTableName(table, d.GetDefaultSchema())
-	rows, err := d.db.Query(query, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	defs := make([]string, 0)
-	for rows.Next() {
-		var (
-			policyName, permissive, roles, cmd string
-			using, withCheck                   sql.NullString
-		)
-		err = rows.Scan(&policyName, &permissive, &roles, &cmd, &using, &withCheck)
-		if err != nil {
-			return nil, err
-		}
-		roles = policyRolesPrefixRegex.ReplaceAllString(roles, "")
-		roles = policyRolesSuffixRegex.ReplaceAllString(roles, "")
-		def := fmt.Sprintf(
-			"CREATE POLICY %s ON %s AS %s FOR %s TO %s",
-			policyName, table, permissive, cmd, roles,
-		)
-		if using.Valid {
-			def += fmt.Sprintf(" USING (%s)", using.String)
-		}
-		if withCheck.Valid {
-			def += fmt.Sprintf(" WITH CHECK %s", withCheck.String)
-		}
-		defs = append(defs, def+";")
-	}
-	return defs, nil
-}
-
 func (d *PostgresDatabase) getComments(table string) ([]string, error) {
 	schema, table := splitTableName(table, d.GetDefaultSchema())
 	var ddls []string
@@ -1448,6 +1405,7 @@ type TableDDLComponentsCache struct {
 	primaryKeyInfos map[string]primaryKeyInfo
 	indexDefs       map[string][]string
 	foreignDefs     map[string][]string
+	policyDefs      map[string][]string
 }
 
 func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*TableDDLComponentsCache, error) {
@@ -1457,6 +1415,7 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 		primaryKeyInfos: make(map[string]primaryKeyInfo),
 		indexDefs:       make(map[string][]string),
 		foreignDefs:     make(map[string][]string),
+		policyDefs:      make(map[string][]string),
 	}
 	if len(tableNames) == 0 {
 		return cache, nil
@@ -1480,6 +1439,10 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 		return nil, err
 	}
 	cache.foreignDefs, err = d.getForeignDefsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.policyDefs, err = d.getPolicyDefsForTables(tableNames)
 	if err != nil {
 		return nil, err
 	}
@@ -1834,6 +1797,45 @@ func (d *PostgresDatabase) getForeignDefsForTables(tableNames []string) (map[str
 		)
 		tableName := c.tableSchema + "." + c.tableName
 		result[tableName] = append(result[tableName], def)
+	}
+	return result, nil
+}
+
+func (d *PostgresDatabase) getPolicyDefsForTables(tableNames []string) (map[string][]string, error) {
+	const query = `
+		SELECT schemaname || '.' || tablename AS qualified_table_name, tablename, policyname, permissive, roles, cmd, qual, with_check
+		FROM pg_policies
+		WHERE schemaname || '.' || tablename = ANY($1::text[])
+	`
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]string, len(tableNames))
+	for rows.Next() {
+		var (
+			qualifiedTableName, tableName, policyName, permissive, roles, cmd string
+			using, withCheck                                                  sql.NullString
+		)
+		err = rows.Scan(&qualifiedTableName, &tableName, &policyName, &permissive, &roles, &cmd, &using, &withCheck)
+		if err != nil {
+			return nil, err
+		}
+		roles = policyRolesPrefixRegex.ReplaceAllString(roles, "")
+		roles = policyRolesSuffixRegex.ReplaceAllString(roles, "")
+		def := fmt.Sprintf(
+			"CREATE POLICY %s ON %s AS %s FOR %s TO %s",
+			policyName, tableName, permissive, cmd, roles,
+		)
+		if using.Valid {
+			def += fmt.Sprintf(" USING (%s)", using.String)
+		}
+		if withCheck.Valid {
+			def += fmt.Sprintf(" WITH CHECK %s", withCheck.String)
+		}
+		result[qualifiedTableName] = append(result[qualifiedTableName], def+";")
 	}
 	return result, nil
 }
