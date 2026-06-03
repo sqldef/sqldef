@@ -756,11 +756,8 @@ func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponent
 		components.UniqueConstraints = make(map[string]string)
 	}
 	components.ExclusionDefs = cache.exclusionDefs[table]
+	components.Comments = cache.comments[table]
 	var err error
-	components.Comments, err = d.getComments(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get comments for table %s: %w", table, err)
-	}
 	components.PrivilegeDefs, err = d.getPrivilegeDefs(table)
 	if err != nil {
 		return "", fmt.Errorf("failed to get privilege definitions for table %s: %w", table, err)
@@ -978,109 +975,6 @@ var (
 	policyRolesPrefixRegex = regexp.MustCompile(`^{`)
 	policyRolesSuffixRegex = regexp.MustCompile(`}$`)
 )
-
-func (d *PostgresDatabase) getComments(table string) ([]string, error) {
-	schema, table := splitTableName(table, d.GetDefaultSchema())
-	var ddls []string
-
-	// Table comments
-	tableRows, err := d.db.Query(`
-		SELECT obj_description(c.oid)
-		FROM pg_class c
-		JOIN pg_namespace n ON n.oid = c.relnamespace
-		WHERE c.relkind in ('r', 'p')
-		AND obj_description(c.oid) IS NOT NULL
-		AND n.nspname = $1
-		AND c.relname = $2
-	`, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer tableRows.Close()
-	for tableRows.Next() {
-		var comment string
-		if err := tableRows.Scan(&comment); err != nil {
-			return nil, err
-		}
-		ddls = append(ddls, fmt.Sprintf("COMMENT ON TABLE %s.%s IS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table), schemaLib.StringConstant(comment)))
-	}
-
-	// Column comments
-	columnRows, err := d.db.Query(`
-		SELECT
-			a.attname AS column_name,
-			col_description(a.attrelid, a.attnum) AS comment
-		FROM pg_catalog.pg_attribute a
-		JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
-		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-		WHERE c.relkind IN ('r', 'p')
-		  AND n.nspname = $1
-		  AND c.relname = $2
-		  AND a.attnum > 0
-		  AND NOT a.attisdropped
-		  AND col_description(a.attrelid, a.attnum) IS NOT NULL
-		ORDER BY a.attnum;
-	`, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer columnRows.Close()
-	for columnRows.Next() {
-		var columnName, comment string
-		if err := columnRows.Scan(&columnName, &comment); err != nil {
-			return nil, err
-		}
-		ddls = append(ddls, fmt.Sprintf("COMMENT ON COLUMN %s.%s.%s IS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table), d.quoteIdentifierIfNeeded(columnName), schemaLib.StringConstant(comment)))
-	}
-
-	// Index comments (for indexes on this table)
-	indexRows, err := d.db.Query(`
-		SELECT i.relname AS index_name, obj_description(i.oid, 'pg_class') AS comment
-		FROM pg_class t
-		JOIN pg_namespace n ON n.oid = t.relnamespace
-		JOIN pg_index ix ON t.oid = ix.indrelid
-		JOIN pg_class i ON i.oid = ix.indexrelid
-		WHERE t.relkind IN ('r', 'p')
-		  AND n.nspname = $1
-		  AND t.relname = $2
-		  AND obj_description(i.oid, 'pg_class') IS NOT NULL
-	`, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer indexRows.Close()
-	for indexRows.Next() {
-		var indexName, comment string
-		if err := indexRows.Scan(&indexName, &comment); err != nil {
-			return nil, err
-		}
-		ddls = append(ddls, fmt.Sprintf("COMMENT ON INDEX %s.%s IS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(indexName), schemaLib.StringConstant(comment)))
-	}
-
-	// Constraint comments
-	constraintRows, err := d.db.Query(`
-		SELECT con.conname AS constraint_name, obj_description(con.oid, 'pg_constraint') AS comment
-		FROM pg_constraint con
-		JOIN pg_class c ON c.oid = con.conrelid
-		JOIN pg_namespace n ON n.oid = c.relnamespace
-		WHERE n.nspname = $1
-		  AND c.relname = $2
-		  AND obj_description(con.oid, 'pg_constraint') IS NOT NULL
-	`, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer constraintRows.Close()
-	for constraintRows.Next() {
-		var constraintName, comment string
-		if err := constraintRows.Scan(&constraintName, &comment); err != nil {
-			return nil, err
-		}
-		ddls = append(ddls, fmt.Sprintf("COMMENT ON CONSTRAINT %s ON %s.%s IS %s;", d.quoteIdentifierIfNeeded(constraintName), d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table), schemaLib.StringConstant(comment)))
-	}
-
-	return ddls, nil
-}
 
 func (d *PostgresDatabase) DB() *sql.DB {
 	return d.db
@@ -1303,6 +1197,7 @@ type TableDDLComponentsCache struct {
 	checkConstraints  map[string][]CheckConstraint
 	uniqueConstraints map[string]map[string]string
 	exclusionDefs     map[string][]string
+	comments          map[string][]string
 }
 
 func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*TableDDLComponentsCache, error) {
@@ -1316,6 +1211,7 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 		checkConstraints:  make(map[string][]CheckConstraint),
 		uniqueConstraints: make(map[string]map[string]string),
 		exclusionDefs:     make(map[string][]string),
+		comments:          make(map[string][]string),
 	}
 	if len(tableNames) == 0 {
 		return cache, nil
@@ -1355,6 +1251,10 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 		return nil, err
 	}
 	cache.exclusionDefs, err = d.getExclusionDefsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.comments, err = d.getCommentsForTables(tableNames)
 	if err != nil {
 		return nil, err
 	}
@@ -1843,5 +1743,108 @@ func (d *PostgresDatabase) getExclusionDefsForTables(tableNames []string) (map[s
 			d.quoteIdentifierIfNeeded(constraintName), constraintDef,
 		))
 	}
+	return result, nil
+}
+
+func (d *PostgresDatabase) getCommentsForTables(tableNames []string) (map[string][]string, error) {
+	result := make(map[string][]string, len(tableNames))
+
+	// Table comments
+	tableRows, err := d.db.Query(`
+		SELECT n.nspname || '.' || c.relname AS qualified_table_name, obj_description(c.oid)
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind in ('r', 'p')
+		AND obj_description(c.oid) IS NOT NULL
+		AND n.nspname || '.' || c.relname = ANY($1::text[])
+	`, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer tableRows.Close()
+	for tableRows.Next() {
+		var tableName, comment string
+		if err := tableRows.Scan(&tableName, &comment); err != nil {
+			return nil, err
+		}
+		schema, table := splitTableName(tableName, d.GetDefaultSchema())
+		result[tableName] = append(result[tableName], fmt.Sprintf("COMMENT ON TABLE %s.%s IS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table), schemaLib.StringConstant(comment)))
+	}
+
+	// Column comments
+	columnRows, err := d.db.Query(`
+		SELECT
+			n.nspname || '.' || c.relname AS qualified_table_name,
+			a.attname AS column_name,
+			col_description(a.attrelid, a.attnum) AS comment
+		FROM pg_catalog.pg_attribute a
+		JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind IN ('r', 'p')
+		  AND n.nspname || '.' || c.relname = ANY($1::text[])
+		  AND a.attnum > 0
+		  AND NOT a.attisdropped
+		  AND col_description(a.attrelid, a.attnum) IS NOT NULL
+		ORDER BY n.nspname, c.relname, a.attnum;
+	`, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer columnRows.Close()
+	for columnRows.Next() {
+		var tableName, columnName, comment string
+		if err := columnRows.Scan(&tableName, &columnName, &comment); err != nil {
+			return nil, err
+		}
+		schema, table := splitTableName(tableName, d.GetDefaultSchema())
+		result[tableName] = append(result[tableName], fmt.Sprintf("COMMENT ON COLUMN %s.%s.%s IS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table), d.quoteIdentifierIfNeeded(columnName), schemaLib.StringConstant(comment)))
+	}
+
+	// Index comments (for indexes on this table)
+	indexRows, err := d.db.Query(`
+		SELECT n.nspname || '.' || t.relname AS qualified_table_name, i.relname AS index_name, obj_description(i.oid, 'pg_class') AS comment
+		FROM pg_class t
+		JOIN pg_namespace n ON n.oid = t.relnamespace
+		JOIN pg_index ix ON t.oid = ix.indrelid
+		JOIN pg_class i ON i.oid = ix.indexrelid
+		WHERE t.relkind IN ('r', 'p')
+		  AND n.nspname || '.' || t.relname = ANY($1::text[])
+		  AND obj_description(i.oid, 'pg_class') IS NOT NULL
+	`, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer indexRows.Close()
+	for indexRows.Next() {
+		var tableName, indexName, comment string
+		if err := indexRows.Scan(&tableName, &indexName, &comment); err != nil {
+			return nil, err
+		}
+		schema, _ := splitTableName(tableName, d.GetDefaultSchema())
+		result[tableName] = append(result[tableName], fmt.Sprintf("COMMENT ON INDEX %s.%s IS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(indexName), schemaLib.StringConstant(comment)))
+	}
+
+	// Constraint comments
+	constraintRows, err := d.db.Query(`
+		SELECT n.nspname || '.' || c.relname AS qualified_table_name, con.conname AS constraint_name, obj_description(con.oid, 'pg_constraint') AS comment
+		FROM pg_constraint con
+		JOIN pg_class c ON c.oid = con.conrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname || '.' || c.relname = ANY($1::text[])
+		  AND obj_description(con.oid, 'pg_constraint') IS NOT NULL
+	`, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer constraintRows.Close()
+	for constraintRows.Next() {
+		var tableName, constraintName, comment string
+		if err := constraintRows.Scan(&tableName, &constraintName, &comment); err != nil {
+			return nil, err
+		}
+		schema, table := splitTableName(tableName, d.GetDefaultSchema())
+		result[tableName] = append(result[tableName], fmt.Sprintf("COMMENT ON CONSTRAINT %s ON %s.%s IS %s;", d.quoteIdentifierIfNeeded(constraintName), d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table), schemaLib.StringConstant(comment)))
+	}
+
 	return result, nil
 }
