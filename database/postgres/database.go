@@ -747,11 +747,8 @@ func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponent
 		components.PrimaryKeyName = pkInfo.name
 		components.PrimaryKeyPeriod = pkInfo.period
 	}
+	components.IndexDefs = cache.indexDefs[table]
 	var err error
-	components.IndexDefs, err = d.getIndexDefs(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get index definitions for table %s: %w", table, err)
-	}
 	components.ForeignDefs, err = d.getForeignDefs(table)
 	if err != nil {
 		return "", fmt.Errorf("failed to get foreign key definitions for table %s: %w", table, err)
@@ -1590,6 +1587,7 @@ type TableDDLComponentsCache struct {
 	columns         map[string][]column
 	primaryKeyCols  map[string][]string
 	primaryKeyInfos map[string]primaryKeyInfo
+	indexDefs       map[string][]string
 }
 
 func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*TableDDLComponentsCache, error) {
@@ -1597,6 +1595,7 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 		columns:         make(map[string][]column),
 		primaryKeyCols:  make(map[string][]string),
 		primaryKeyInfos: make(map[string]primaryKeyInfo),
+		indexDefs:       make(map[string][]string),
 	}
 	if len(tableNames) == 0 {
 		return cache, nil
@@ -1612,6 +1611,10 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 		return nil, err
 	}
 	cache.primaryKeyInfos, err = d.getPrimaryKeyInfosForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.indexDefs, err = d.getIndexDefsForTables(tableNames)
 	if err != nil {
 		return nil, err
 	}
@@ -1787,6 +1790,46 @@ func (d *PostgresDatabase) getPrimaryKeyInfosForTables(tableNames []string) (map
 			name:   NewIdentWithQuoteDetected(keyName),
 			period: period,
 		}
+	}
+	return result, nil
+}
+
+func (d *PostgresDatabase) getIndexDefsForTables(tableNames []string) (map[string][]string, error) {
+	// Exclude indexes that are implicitly created for primary keys or unique constraints or exclusion constraints.
+	const query = `WITH
+	  exclude_constraints AS (
+	    SELECT con.conname AS name, nsp.nspname || '.' || cls.relname AS qualified_table_name
+	    FROM   pg_constraint con
+	    JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+	    JOIN   pg_class cls ON cls.oid = con.conrelid
+	    WHERE  con.contype IN ('p', 'u', 'x')
+	    AND    nsp.nspname || '.' || cls.relname = ANY($1::text[])
+	  )
+	SELECT schemaname || '.' || tablename AS qualified_table_name, indexName, indexdef
+	FROM   pg_indexes
+	WHERE  schemaname || '.' || tablename = ANY($1::text[])
+	AND    indexName NOT IN (
+	    SELECT name FROM exclude_constraints
+	    WHERE  qualified_table_name = schemaname || '.' || tablename
+	)
+	ORDER BY schemaname, tablename, indexdef
+	`
+
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]string, len(tableNames))
+	for rows.Next() {
+		var tableName, indexName, indexdef string
+		err = rows.Scan(&tableName, &indexName, &indexdef)
+		if err != nil {
+			return nil, err
+		}
+		indexName = strings.Trim(indexName, `" `)
+		result[tableName] = append(result[tableName], indexdef)
 	}
 	return result, nil
 }
