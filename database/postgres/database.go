@@ -757,11 +757,7 @@ func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponent
 	}
 	components.ExclusionDefs = cache.exclusionDefs[table]
 	components.Comments = cache.comments[table]
-	var err error
-	components.PrivilegeDefs, err = d.getPrivilegeDefs(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get privilege definitions for table %s: %w", table, err)
-	}
+	components.PrivilegeDefs = cache.privilegeDefs[table]
 	return d.buildExportTableDDL(components), nil
 }
 
@@ -1127,64 +1123,6 @@ func splitTableName(table string, defaultSchema string) (string, string) {
 	return schema, table
 }
 
-func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
-	// If no roles are specified to include, don't query privileges at all
-	if len(d.generatorConfig.ManagedRoles) == 0 {
-		return []string{}, nil
-	}
-
-	schema, tableName := splitTableName(table, d.GetDefaultSchema())
-
-	rolePlaceholders := make([]string, len(d.generatorConfig.ManagedRoles))
-	queryArgs := []any{schema, tableName}
-	for i, role := range d.generatorConfig.ManagedRoles {
-		rolePlaceholders[i] = fmt.Sprintf("$%d", i+3)
-		queryArgs = append(queryArgs, role)
-	}
-	roleFilter := strings.Join(rolePlaceholders, ", ")
-
-	query := fmt.Sprintf(`
-		SELECT
-			grantee,
-			string_agg(privilege_type, ', ' ORDER BY privilege_type) as privileges
-		FROM information_schema.table_privileges
-		WHERE table_schema = $1
-		AND table_name = $2
-		AND grantee IN (%s)
-		AND grantee != (
-			SELECT tableowner FROM pg_tables
-			WHERE schemaname = $1 AND tablename = $2
-		)
-		GROUP BY grantee
-		ORDER BY grantee
-	`, roleFilter)
-
-	rows, err := d.db.Query(query, queryArgs...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query privileges for table %s.%s: %w", schema, tableName, err)
-	}
-	defer rows.Close()
-
-	var privilegeDefs []string
-	for rows.Next() {
-		var grantee, privileges string
-		if err := rows.Scan(&grantee, &privileges); err != nil {
-			return nil, fmt.Errorf("failed to scan privilege row: %w", err)
-		}
-
-		escapedGrantee := grantee
-		if grantee != "PUBLIC" {
-			// PUBLIC is a special keyword and should not be quoted
-			escapedGrantee = d.quoteIdentifierIfNeeded(grantee)
-		}
-
-		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s", privileges, table, escapedGrantee)
-		privilegeDefs = append(privilegeDefs, grant)
-	}
-
-	return privilegeDefs, nil
-}
-
 // TableDDLComponentsCache holds pre-fetched schema data for all tables in a single batch,
 // keyed by qualified table name (schema.table format).
 type TableDDLComponentsCache struct {
@@ -1198,6 +1136,7 @@ type TableDDLComponentsCache struct {
 	uniqueConstraints map[string]map[string]string
 	exclusionDefs     map[string][]string
 	comments          map[string][]string
+	privilegeDefs     map[string][]string
 }
 
 func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*TableDDLComponentsCache, error) {
@@ -1212,6 +1151,7 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 		uniqueConstraints: make(map[string]map[string]string),
 		exclusionDefs:     make(map[string][]string),
 		comments:          make(map[string][]string),
+		privilegeDefs:     make(map[string][]string),
 	}
 	if len(tableNames) == 0 {
 		return cache, nil
@@ -1255,6 +1195,10 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 		return nil, err
 	}
 	cache.comments, err = d.getCommentsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.privilegeDefs, err = d.getPrivilegeDefsForTables(tableNames)
 	if err != nil {
 		return nil, err
 	}
@@ -1844,6 +1788,54 @@ func (d *PostgresDatabase) getCommentsForTables(tableNames []string) (map[string
 		}
 		schema, table := splitTableName(tableName, d.GetDefaultSchema())
 		result[tableName] = append(result[tableName], fmt.Sprintf("COMMENT ON CONSTRAINT %s ON %s.%s IS %s;", d.quoteIdentifierIfNeeded(constraintName), d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table), schemaLib.StringConstant(comment)))
+	}
+
+	return result, nil
+}
+
+func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[string][]string, error) {
+	// If no roles are specified to include, don't query privileges at all
+	if len(d.generatorConfig.ManagedRoles) == 0 {
+		return map[string][]string{}, nil
+	}
+
+	const query = `
+		SELECT
+			table_schema || '.' || table_name AS qualified_table_name,
+			grantee,
+			string_agg(privilege_type, ', ' ORDER BY privilege_type) as privileges
+		FROM information_schema.table_privileges
+		WHERE table_schema || '.' || table_name = ANY($1::text[])
+		AND grantee = ANY($2::text[])
+		AND grantee != (
+			SELECT tableowner FROM pg_tables
+			WHERE schemaname = table_schema AND tablename = table_name
+		)
+		GROUP BY table_schema, table_name, grantee
+		ORDER BY table_schema, table_name, grantee
+	`
+
+	rows, err := d.db.Query(query, pq.Array(tableNames), pq.Array(d.generatorConfig.ManagedRoles))
+	if err != nil {
+		return nil, fmt.Errorf("failed to query privileges: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string][]string, len(tableNames))
+	for rows.Next() {
+		var tableName, grantee, privileges string
+		if err := rows.Scan(&tableName, &grantee, &privileges); err != nil {
+			return nil, fmt.Errorf("failed to scan privilege row: %w", err)
+		}
+
+		escapedGrantee := grantee
+		if grantee != "PUBLIC" {
+			// PUBLIC is a special keyword and should not be quoted
+			escapedGrantee = d.quoteIdentifierIfNeeded(grantee)
+		}
+
+		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s", privileges, tableName, escapedGrantee)
+		result[tableName] = append(result[tableName], grant)
 	}
 
 	return result, nil
