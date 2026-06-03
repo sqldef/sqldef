@@ -748,11 +748,8 @@ func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponent
 		components.PrimaryKeyPeriod = pkInfo.period
 	}
 	components.IndexDefs = cache.indexDefs[table]
+	components.ForeignDefs = cache.foreignDefs[table]
 	var err error
-	components.ForeignDefs, err = d.getForeignDefs(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get foreign key definitions for table %s: %w", table, err)
-	}
 	components.PolicyDefs, err = d.getPolicyDefs(table)
 	if err != nil {
 		return "", fmt.Errorf("failed to get policy definitions for table %s: %w", table, err)
@@ -1084,144 +1081,6 @@ func (d *PostgresDatabase) getExclusionDefs(tableName string) ([]string, error) 
 type primaryKeyInfo struct {
 	name   Ident
 	period bool
-}
-
-// refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d
-func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
-	var periodCol string
-	if d.supportsConperiod() {
-		periodCol = "c.conperiod"
-	} else {
-		periodCol = "false"
-	}
-	query := fmt.Sprintf(`SELECT
-		nc.nspname AS constraint_schema,
-		n1.nspname AS table_schema,
-		c.conname  AS constraint_name,
-		r1.relname AS table_name,
-		a1.attname AS column_name,
-		n2.nspname AS foreign_table_schema,
-		r2.relname AS foreign_table_name,
-		a2.attname AS foreign_column_name,
-		CASE c.confupdtype
-			WHEN 'c' THEN 'CASCADE'
-			WHEN 'n' THEN 'SET NULL'
-			WHEN 'd' THEN 'SET DEFAULT'
-			WHEN 'r' THEN 'RESTRICT'
-			WHEN 'a' THEN 'NO ACTION'
-		END AS foreign_update_rule,
-		CASE c.confdeltype
-			WHEN 'c' THEN 'CASCADE'
-			WHEN 'n' THEN 'SET NULL'
-			WHEN 'd' THEN 'SET DEFAULT'
-			WHEN 'r' THEN 'RESTRICT'
-			WHEN 'a' THEN 'NO ACTION'
-		END AS foreign_delete_rule,
-		c.condeferrable AS deferrable,
-		c.condeferred AS initially_deferred,
-		%s AS period
-	FROM pg_constraint      AS c
-	INNER JOIN pg_namespace AS nc ON nc.oid = c.connamespace
-	INNER JOIN pg_class     AS r1 ON r1.oid = c.conrelid
-	INNER JOIN pg_class     AS r2 ON r2.oid = c.confrelid
-	INNER JOIN pg_namespace AS n1 ON n1.oid = r1.relnamespace
-	INNER JOIN pg_namespace AS n2 ON n2.oid = r2.relnamespace
-	CROSS JOIN UNNEST(c.conkey, c.confkey) with ordinality AS k(key1, key2, ordinality)
-	INNER JOIN pg_attribute AS a1
-		ON  a1.attrelid = c.conrelid
-		AND a1.attnum   = k.key1
-	INNER JOIN pg_attribute AS a2
-		ON  a2.attrelid = c.confrelid
-		AND a2.attnum   = k.key2
-	WHERE c.contype = 'f' AND n1.nspname = $1 AND r1.relname = $2
-	ORDER BY constraint_schema, constraint_name, k.ordinality
-	`, periodCol)
-	schema, table := splitTableName(table, d.GetDefaultSchema())
-	rows, err := d.db.Query(query, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	type identifier struct {
-		schema, name string
-	}
-	type constraint struct {
-		tableSchema, constraintName, tableName, foreignTableSchema, foreignTableName, foreignUpdateRule, foreignDeleteRule string
-		columns, foreignColumns                                                                                            []string
-		deferrable, initiallyDeferred, period                                                                              bool
-	}
-
-	constraints := make(map[identifier]constraint)
-
-	for rows.Next() {
-		var constraintSchema, tableSchema, constraintName, tableName, columnName, foreignTableSchema, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule string
-		var deferrable, initiallyDeferred, period bool
-		err = rows.Scan(&constraintSchema, &tableSchema, &constraintName, &tableName, &columnName, &foreignTableSchema, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule, &deferrable, &initiallyDeferred, &period)
-		if err != nil {
-			return nil, err
-		}
-		key := identifier{constraintSchema, constraintName}
-		if _, exist := constraints[key]; !exist {
-			constraints[key] = constraint{
-				tableSchema, constraintName, tableName, foreignTableSchema, foreignTableName, foreignUpdateRule, foreignDeleteRule,
-				[]string{}, []string{},
-				deferrable, initiallyDeferred, period,
-			}
-		}
-		c := constraints[key]
-		c.columns = append(c.columns, columnName)
-		c.foreignColumns = append(c.foreignColumns, foreignColumnName)
-		constraints[key] = c
-	}
-
-	var keys []identifier
-	for key := range constraints {
-		keys = append(keys, key)
-	}
-	slices.SortFunc(keys, func(a, b identifier) int {
-		if c := cmp.Compare(a.schema, b.schema); c != 0 {
-			return c
-		}
-		return cmp.Compare(a.name, b.name)
-	})
-
-	defs := make([]string, 0)
-	for _, key := range keys {
-		c := constraints[key]
-		var escapedColumns []string
-		for i := range c.columns {
-			escaped := d.quoteIdentifierIfNeeded(c.columns[i])
-			if c.period && i == len(c.columns)-1 {
-				escaped = "PERIOD " + escaped
-			}
-			escapedColumns = append(escapedColumns, escaped)
-		}
-		var escapedForeignColumns []string
-		for i := range c.foreignColumns {
-			escaped := d.quoteIdentifierIfNeeded(c.foreignColumns[i])
-			if c.period && i == len(c.foreignColumns)-1 {
-				escaped = "PERIOD " + escaped
-			}
-			escapedForeignColumns = append(escapedForeignColumns, escaped)
-		}
-		var constraintOptions string
-		if c.deferrable {
-			if c.initiallyDeferred {
-				constraintOptions = " DEFERRABLE INITIALLY DEFERRED"
-			} else {
-				constraintOptions = " DEFERRABLE INITIALLY IMMEDIATE"
-			}
-		}
-		def := fmt.Sprintf(
-			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s (%s) ON UPDATE %s ON DELETE %s%s",
-			d.quoteIdentifierIfNeeded(c.tableSchema), d.quoteIdentifierIfNeeded(c.tableName), d.quoteIdentifierIfNeeded(c.constraintName), strings.Join(escapedColumns, ", "),
-			d.quoteIdentifierIfNeeded(c.foreignTableSchema), d.quoteIdentifierIfNeeded(c.foreignTableName), strings.Join(escapedForeignColumns, ", "), c.foreignUpdateRule, c.foreignDeleteRule,
-			constraintOptions,
-		)
-		defs = append(defs, def)
-	}
-	return defs, nil
 }
 
 var (
@@ -1588,6 +1447,7 @@ type TableDDLComponentsCache struct {
 	primaryKeyCols  map[string][]string
 	primaryKeyInfos map[string]primaryKeyInfo
 	indexDefs       map[string][]string
+	foreignDefs     map[string][]string
 }
 
 func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*TableDDLComponentsCache, error) {
@@ -1596,6 +1456,7 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 		primaryKeyCols:  make(map[string][]string),
 		primaryKeyInfos: make(map[string]primaryKeyInfo),
 		indexDefs:       make(map[string][]string),
+		foreignDefs:     make(map[string][]string),
 	}
 	if len(tableNames) == 0 {
 		return cache, nil
@@ -1615,6 +1476,10 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 		return nil, err
 	}
 	cache.indexDefs, err = d.getIndexDefsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.foreignDefs, err = d.getForeignDefsForTables(tableNames)
 	if err != nil {
 		return nil, err
 	}
@@ -1830,6 +1695,145 @@ func (d *PostgresDatabase) getIndexDefsForTables(tableNames []string) (map[strin
 		}
 		indexName = strings.Trim(indexName, `" `)
 		result[tableName] = append(result[tableName], indexdef)
+	}
+	return result, nil
+}
+
+// refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d
+func (d *PostgresDatabase) getForeignDefsForTables(tableNames []string) (map[string][]string, error) {
+	var periodCol string
+	if d.supportsConperiod() {
+		periodCol = "c.conperiod"
+	} else {
+		periodCol = "false"
+	}
+	query := fmt.Sprintf(`SELECT
+		nc.nspname AS constraint_schema,
+		n1.nspname AS table_schema,
+		c.conname  AS constraint_name,
+		r1.relname AS table_name,
+		a1.attname AS column_name,
+		n2.nspname AS foreign_table_schema,
+		r2.relname AS foreign_table_name,
+		a2.attname AS foreign_column_name,
+		CASE c.confupdtype
+			WHEN 'c' THEN 'CASCADE'
+			WHEN 'n' THEN 'SET NULL'
+			WHEN 'd' THEN 'SET DEFAULT'
+			WHEN 'r' THEN 'RESTRICT'
+			WHEN 'a' THEN 'NO ACTION'
+		END AS foreign_update_rule,
+		CASE c.confdeltype
+			WHEN 'c' THEN 'CASCADE'
+			WHEN 'n' THEN 'SET NULL'
+			WHEN 'd' THEN 'SET DEFAULT'
+			WHEN 'r' THEN 'RESTRICT'
+			WHEN 'a' THEN 'NO ACTION'
+		END AS foreign_delete_rule,
+		c.condeferrable AS deferrable,
+		c.condeferred AS initially_deferred,
+		%s AS period
+	FROM pg_constraint      AS c
+	INNER JOIN pg_namespace AS nc ON nc.oid = c.connamespace
+	INNER JOIN pg_class     AS r1 ON r1.oid = c.conrelid
+	INNER JOIN pg_class     AS r2 ON r2.oid = c.confrelid
+	INNER JOIN pg_namespace AS n1 ON n1.oid = r1.relnamespace
+	INNER JOIN pg_namespace AS n2 ON n2.oid = r2.relnamespace
+	CROSS JOIN UNNEST(c.conkey, c.confkey) with ordinality AS k(key1, key2, ordinality)
+	INNER JOIN pg_attribute AS a1
+		ON  a1.attrelid = c.conrelid
+		AND a1.attnum   = k.key1
+	INNER JOIN pg_attribute AS a2
+		ON  a2.attrelid = c.confrelid
+		AND a2.attnum   = k.key2
+	WHERE c.contype = 'f' AND n1.nspname || '.' || r1.relname = ANY($1::text[])
+	ORDER BY constraint_schema, constraint_name, k.ordinality
+	`, periodCol)
+
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type identifier struct {
+		schema, name string
+	}
+	type constraint struct {
+		tableSchema, constraintName, tableName, foreignTableSchema, foreignTableName, foreignUpdateRule, foreignDeleteRule string
+		columns, foreignColumns                                                                                            []string
+		deferrable, initiallyDeferred, period                                                                              bool
+	}
+
+	constraints := make(map[identifier]constraint)
+
+	for rows.Next() {
+		var constraintSchema, tableSchema, constraintName, tableName, columnName, foreignTableSchema, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule string
+		var deferrable, initiallyDeferred, period bool
+		err = rows.Scan(&constraintSchema, &tableSchema, &constraintName, &tableName, &columnName, &foreignTableSchema, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule, &deferrable, &initiallyDeferred, &period)
+		if err != nil {
+			return nil, err
+		}
+		key := identifier{constraintSchema, constraintName}
+		if _, exist := constraints[key]; !exist {
+			constraints[key] = constraint{
+				tableSchema, constraintName, tableName, foreignTableSchema, foreignTableName, foreignUpdateRule, foreignDeleteRule,
+				[]string{}, []string{},
+				deferrable, initiallyDeferred, period,
+			}
+		}
+		c := constraints[key]
+		c.columns = append(c.columns, columnName)
+		c.foreignColumns = append(c.foreignColumns, foreignColumnName)
+		constraints[key] = c
+	}
+
+	var keys []identifier
+	for key := range constraints {
+		keys = append(keys, key)
+	}
+	slices.SortFunc(keys, func(a, b identifier) int {
+		if c := cmp.Compare(a.schema, b.schema); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.name, b.name)
+	})
+
+	result := make(map[string][]string, len(tableNames))
+	for _, key := range keys {
+		c := constraints[key]
+		var escapedColumns []string
+		for i := range c.columns {
+			escaped := d.quoteIdentifierIfNeeded(c.columns[i])
+			if c.period && i == len(c.columns)-1 {
+				escaped = "PERIOD " + escaped
+			}
+			escapedColumns = append(escapedColumns, escaped)
+		}
+		var escapedForeignColumns []string
+		for i := range c.foreignColumns {
+			escaped := d.quoteIdentifierIfNeeded(c.foreignColumns[i])
+			if c.period && i == len(c.foreignColumns)-1 {
+				escaped = "PERIOD " + escaped
+			}
+			escapedForeignColumns = append(escapedForeignColumns, escaped)
+		}
+		var constraintOptions string
+		if c.deferrable {
+			if c.initiallyDeferred {
+				constraintOptions = " DEFERRABLE INITIALLY DEFERRED"
+			} else {
+				constraintOptions = " DEFERRABLE INITIALLY IMMEDIATE"
+			}
+		}
+		def := fmt.Sprintf(
+			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s (%s) ON UPDATE %s ON DELETE %s%s",
+			d.quoteIdentifierIfNeeded(c.tableSchema), d.quoteIdentifierIfNeeded(c.tableName), d.quoteIdentifierIfNeeded(c.constraintName), strings.Join(escapedColumns, ", "),
+			d.quoteIdentifierIfNeeded(c.foreignTableSchema), d.quoteIdentifierIfNeeded(c.foreignTableName), strings.Join(escapedForeignColumns, ", "), c.foreignUpdateRule, c.foreignDeleteRule,
+			constraintOptions,
+		)
+		tableName := c.tableSchema + "." + c.tableName
+		result[tableName] = append(result[tableName], def)
 	}
 	return result, nil
 }
