@@ -750,11 +750,8 @@ func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponent
 	components.IndexDefs = cache.indexDefs[table]
 	components.ForeignDefs = cache.foreignDefs[table]
 	components.PolicyDefs = cache.policyDefs[table]
+	components.CheckConstraints = cache.checkConstraints[table]
 	var err error
-	components.CheckConstraints, err = d.getTableCheckConstraints(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get check constraints for table %s: %w", table, err)
-	}
 	components.UniqueConstraints, err = d.getUniqueConstraints(table)
 	if err != nil {
 		return "", fmt.Errorf("failed to get unique constraints for table %s: %w", table, err)
@@ -975,41 +972,6 @@ func normalizePostgresTypeCasts(sql string) string {
 	return sql
 }
 
-func (d *PostgresDatabase) getTableCheckConstraints(tableName string) ([]CheckConstraint, error) {
-	const query = `SELECT con.conname, pg_get_constraintdef(con.oid, true)
-	FROM   pg_constraint con
-	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
-	JOIN   pg_class cls ON cls.oid = con.conrelid
-	WHERE  con.contype = 'c'
-	AND    nsp.nspname = $1
-	AND    cls.relname = $2
-	AND    array_length(con.conkey, 1) > 1;`
-
-	var result []CheckConstraint
-	schema, table := splitTableName(tableName, d.GetDefaultSchema())
-	rows, err := d.db.Query(query, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var constraintName, constraintDef string
-		err = rows.Scan(&constraintName, &constraintDef)
-		if err != nil {
-			return nil, err
-		}
-		// Normalize type casts for generic parser compatibility
-		// PostgreSQL returns "::time without time zone" but the generic parser expects "::time"
-		constraintDef = normalizePostgresTypeCasts(constraintDef)
-		result = append(result, CheckConstraint{
-			Name:       NewIdentWithQuoteDetected(constraintName),
-			Definition: constraintDef,
-		})
-	}
-
-	return result, nil
-}
 func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]string, error) {
 	const query = `SELECT con.conname, pg_get_constraintdef(con.oid)
 	FROM   pg_constraint con
@@ -1400,22 +1362,24 @@ func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
 // TableDDLComponentsCache holds pre-fetched schema data for all tables in a single batch,
 // keyed by qualified table name (schema.table format).
 type TableDDLComponentsCache struct {
-	columns         map[string][]column
-	primaryKeyCols  map[string][]string
-	primaryKeyInfos map[string]primaryKeyInfo
-	indexDefs       map[string][]string
-	foreignDefs     map[string][]string
-	policyDefs      map[string][]string
+	columns          map[string][]column
+	primaryKeyCols   map[string][]string
+	primaryKeyInfos  map[string]primaryKeyInfo
+	indexDefs        map[string][]string
+	foreignDefs      map[string][]string
+	policyDefs       map[string][]string
+	checkConstraints map[string][]CheckConstraint
 }
 
 func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*TableDDLComponentsCache, error) {
 	cache := &TableDDLComponentsCache{
-		columns:         make(map[string][]column),
-		primaryKeyCols:  make(map[string][]string),
-		primaryKeyInfos: make(map[string]primaryKeyInfo),
-		indexDefs:       make(map[string][]string),
-		foreignDefs:     make(map[string][]string),
-		policyDefs:      make(map[string][]string),
+		columns:          make(map[string][]column),
+		primaryKeyCols:   make(map[string][]string),
+		primaryKeyInfos:  make(map[string]primaryKeyInfo),
+		indexDefs:        make(map[string][]string),
+		foreignDefs:      make(map[string][]string),
+		policyDefs:       make(map[string][]string),
+		checkConstraints: make(map[string][]CheckConstraint),
 	}
 	if len(tableNames) == 0 {
 		return cache, nil
@@ -1443,6 +1407,10 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 		return nil, err
 	}
 	cache.policyDefs, err = d.getPolicyDefsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.checkConstraints, err = d.getCheckConstraintsForTables(tableNames)
 	if err != nil {
 		return nil, err
 	}
@@ -1836,6 +1804,39 @@ func (d *PostgresDatabase) getPolicyDefsForTables(tableNames []string) (map[stri
 			def += fmt.Sprintf(" WITH CHECK %s", withCheck.String)
 		}
 		result[qualifiedTableName] = append(result[qualifiedTableName], def+";")
+	}
+	return result, nil
+}
+
+func (d *PostgresDatabase) getCheckConstraintsForTables(tableNames []string) (map[string][]CheckConstraint, error) {
+	const query = `SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, con.conname, pg_get_constraintdef(con.oid, true)
+	FROM   pg_constraint con
+	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+	JOIN   pg_class cls ON cls.oid = con.conrelid
+	WHERE  con.contype = 'c'
+	AND    nsp.nspname || '.' || cls.relname = ANY($1::text[])
+	AND    array_length(con.conkey, 1) > 1`
+
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]CheckConstraint, len(tableNames))
+	for rows.Next() {
+		var tableName, constraintName, constraintDef string
+		err = rows.Scan(&tableName, &constraintName, &constraintDef)
+		if err != nil {
+			return nil, err
+		}
+		// Normalize type casts for generic parser compatibility
+		// PostgreSQL returns "::time without time zone" but the generic parser expects "::time"
+		constraintDef = normalizePostgresTypeCasts(constraintDef)
+		result[tableName] = append(result[tableName], CheckConstraint{
+			Name:       NewIdentWithQuoteDetected(constraintName),
+			Definition: constraintDef,
+		})
 	}
 	return result, nil
 }
