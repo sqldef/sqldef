@@ -12,6 +12,7 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/sqldef/sqldef/v3/database"
+	"github.com/sqldef/sqldef/v3/schema"
 	"github.com/sqldef/sqldef/v3/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -138,6 +139,7 @@ func TestExtensionOIDCollisionByInjectedDependency(t *testing.T) {
 	db.SetGeneratorConfig(database.GeneratorConfig{
 		LegacyIgnoreQuotes: true,
 	})
+	db.SetMigrationScope(schema.FullScope())
 	exported, err := db.ExportDDLs()
 	require.NoError(t, err)
 
@@ -201,6 +203,7 @@ func TestExtensionOIDCollisionForViews(t *testing.T) {
 	db.SetGeneratorConfig(database.GeneratorConfig{
 		LegacyIgnoreQuotes: true,
 	})
+	db.SetMigrationScope(schema.FullScope())
 	exported, err := db.ExportDDLs()
 	require.NoError(t, err)
 
@@ -262,6 +265,7 @@ func TestExtensionOIDCollisionForFunctions(t *testing.T) {
 	db.SetGeneratorConfig(database.GeneratorConfig{
 		LegacyIgnoreQuotes: true,
 	})
+	db.SetMigrationScope(schema.FullScope())
 	exported, err := db.ExportDDLs()
 	require.NoError(t, err)
 

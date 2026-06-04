@@ -29,6 +29,7 @@ type MssqlDatabase struct {
 	defaultSchema   *string
 	info            databaseInfo
 	generatorConfig database.GeneratorConfig
+	migrationScope  database.MigrationScope
 }
 
 func NewDatabase(config database.Config) (database.Database, error) {
@@ -904,4 +905,12 @@ func (d *MssqlDatabase) GetTransactionQueries() database.TransactionQueries {
 
 func (d *MssqlDatabase) GetConfig() database.Config {
 	return d.config
+}
+
+func (d *MssqlDatabase) SetMigrationScope(scope database.MigrationScope) {
+	d.migrationScope = scope
+}
+
+func (d *MssqlDatabase) GetMigrationScope() database.MigrationScope {
+	return d.migrationScope
 }

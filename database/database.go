@@ -67,6 +67,18 @@ type GeneratorConfig struct {
 	MysqlLowerCaseTableNames int
 }
 
+type MigrationScope struct {
+	Domain    bool
+	Extension bool
+	Function  bool
+	Partition bool
+	Schema    bool
+	Table     bool
+	Trigger   bool
+	Type      bool
+	View      bool
+}
+
 type TransactionQueries struct {
 	Begin    string
 	Commit   string
@@ -180,6 +192,8 @@ type Database interface {
 	GetGeneratorConfig() GeneratorConfig
 	GetTransactionQueries() TransactionQueries
 	GetConfig() Config
+	SetMigrationScope(scope MigrationScope)
+	GetMigrationScope() MigrationScope
 }
 
 func isDryRun(d Database) bool {

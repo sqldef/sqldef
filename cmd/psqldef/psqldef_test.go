@@ -1657,6 +1657,7 @@ func TestPsqldefDomainWithTargetSchema(t *testing.T) {
 		}
 		db.SetGeneratorConfig(config)
 
+		db.SetMigrationScope(schema.FullScope())
 		exported, err := db.ExportDDLs()
 		if err != nil {
 			t.Fatal(err)
@@ -1687,6 +1688,7 @@ func TestPsqldefDomainWithTargetSchema(t *testing.T) {
 		}
 		db.SetGeneratorConfig(config)
 
+		db.SetMigrationScope(schema.FullScope())
 		exported, err := db.ExportDDLs()
 		if err != nil {
 			t.Fatal(err)
@@ -1717,6 +1719,7 @@ func TestPsqldefDomainWithTargetSchema(t *testing.T) {
 		}
 		db.SetGeneratorConfig(config)
 
+		db.SetMigrationScope(schema.FullScope())
 		exported, err := db.ExportDDLs()
 		if err != nil {
 			t.Fatal(err)
