@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 	"github.com/sqldef/sqldef/v3/database"
 	schemaLib "github.com/sqldef/sqldef/v3/schema"
 	"github.com/sqldef/sqldef/v3/util"
@@ -129,11 +129,15 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 		return "", err
 	}
 
+	cache, err := d.buildTableDDLComponentsCache(tableNames)
+	if err != nil {
+		return "", err
+	}
 	tableDDLs, err := database.ConcurrentMapFuncWithError(
 		tableNames,
 		d.config.DumpConcurrency,
 		func(tableName string) (string, error) {
-			return d.exportTableDDL(tableName)
+			return d.exportTableDDL(tableName, cache)
 		})
 	if err != nil {
 		return "", err
@@ -726,62 +730,34 @@ type TableDDLComponents struct {
 	DefaultSchema     string
 }
 
-func (d *PostgresDatabase) exportTableDDL(table string) (string, error) {
+func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponentsCache) (string, error) {
 	components := TableDDLComponents{
 		TableName:     table,
 		DefaultSchema: d.GetDefaultSchema(),
 	}
 
-	var err error
-	components.Columns, err = d.getColumns(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get columns for table %s: %w", table, err)
-	}
-	components.PrimaryKeyCols, err = d.getPrimaryKeyColumns(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get primary key columns for table %s: %w", table, err)
-	}
+	components.Columns = cache.columns[table]
+	components.PrimaryKeyCols = cache.primaryKeyCols[table]
 	// if pkey cols exist, retrieve the pkey name
 	if len(components.PrimaryKeyCols) > 0 {
-		pkInfo, err := d.getPrimaryKeyInfo(table)
-		if err != nil {
-			return "", fmt.Errorf("failed to get primary key name for table %s: %w", table, err)
+		pkInfo, ok := cache.primaryKeyInfos[table]
+		if !ok {
+			return "", fmt.Errorf("failed to get primary key name for table %s", table)
 		}
 		components.PrimaryKeyName = pkInfo.name
 		components.PrimaryKeyPeriod = pkInfo.period
 	}
-	components.IndexDefs, err = d.getIndexDefs(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get index definitions for table %s: %w", table, err)
+	components.IndexDefs = cache.indexDefs[table]
+	components.ForeignDefs = cache.foreignDefs[table]
+	components.PolicyDefs = cache.policyDefs[table]
+	components.CheckConstraints = cache.checkConstraints[table]
+	components.UniqueConstraints = cache.uniqueConstraints[table]
+	if components.UniqueConstraints == nil {
+		components.UniqueConstraints = make(map[string]string)
 	}
-	components.ForeignDefs, err = d.getForeignDefs(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get foreign key definitions for table %s: %w", table, err)
-	}
-	components.PolicyDefs, err = d.getPolicyDefs(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get policy definitions for table %s: %w", table, err)
-	}
-	components.CheckConstraints, err = d.getTableCheckConstraints(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get check constraints for table %s: %w", table, err)
-	}
-	components.UniqueConstraints, err = d.getUniqueConstraints(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get unique constraints for table %s: %w", table, err)
-	}
-	components.ExclusionDefs, err = d.getExclusionDefs(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get exclusion definitions for table %s: %w", table, err)
-	}
-	components.Comments, err = d.getComments(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get comments for table %s: %w", table, err)
-	}
-	components.PrivilegeDefs, err = d.getPrivilegeDefs(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to get privilege definitions for table %s: %w", table, err)
-	}
+	components.ExclusionDefs = cache.exclusionDefs[table]
+	components.Comments = cache.comments[table]
+	components.PrivilegeDefs = cache.privilegeDefs[table]
 	return d.buildExportTableDDL(components), nil
 }
 
@@ -904,113 +880,6 @@ func (c *column) GetDataType() string {
 	}
 }
 
-func (d *PostgresDatabase) getColumns(table string) ([]column, error) {
-	const query = `WITH
-	  columns AS (
-	    SELECT
-	      s.column_name,
-	      s.column_default,
-	      s.is_nullable,
-	      CASE
-	      -- Domain types ('d') and enum types ('e'): return the type name with schema prefix
-	      WHEN t.typtype IN ('d', 'e') THEN
-	        CASE
-	          WHEN tn.nspname = 'public' THEN t.typname
-	          ELSE tn.nspname || '.' || t.typname
-	        END
-	      WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod)
-	      ELSE s.data_type
-	      END,
-	      -- formattedDataType: also return type name for domain and enum types
-	      CASE
-	      WHEN t.typtype IN ('d', 'e') THEN
-	        CASE
-	          WHEN tn.nspname = 'public' THEN t.typname
-	          ELSE tn.nspname || '.' || t.typname
-	        END
-	      ELSE format_type(f.atttypid, f.atttypmod)
-	      END,
-	      s.identity_generation
-	    FROM pg_attribute f
-	    JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
-	    LEFT JOIN pg_namespace tn ON tn.oid = t.typnamespace
-	    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
-	    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
-	    LEFT JOIN information_schema.columns s ON s.column_name = f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
-	    WHERE c.relkind in ('r', 'p')
-	    AND n.nspname = $1
-	    AND c.relname = $2
-	    AND f.attnum > 0
-	    ORDER BY f.attnum
-	  ),
-	  column_constraints AS (
-	    SELECT att.attname column_name, tmp.name, tmp.type , tmp.definition
-	    FROM (
-	      SELECT unnest(con.conkey) AS conkey,
-	             pg_get_constraintdef(con.oid, true) AS definition,
-	             cls.oid AS relid,
-	             con.conname AS name,
-	             con.contype AS type
-	      FROM   pg_constraint con
-	      JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
-	      JOIN   pg_class cls ON cls.oid = con.conrelid
-	      WHERE  nsp.nspname = $1
-	      AND    cls.relname = $2
-	      AND    array_length(con.conkey, 1) = 1
-	    ) tmp
-	    JOIN pg_attribute att ON tmp.conkey = att.attnum AND tmp.relid = att.attrelid
-	  ),
-	  check_constraints AS (
-	    SELECT column_name, name, definition
-	    FROM   column_constraints
-	    WHERE  type = 'c'
-	  )
-	SELECT    columns.*, checks.name, checks.definition
-	FROM      columns
-	LEFT JOIN check_constraints checks USING (column_name);`
-
-	schema, table := splitTableName(table, d.GetDefaultSchema())
-	rows, err := d.db.Query(query, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	cols := make([]column, 0)
-	for rows.Next() {
-		col := column{}
-		var colName, isNullable, dataType, formattedDataType string
-		var colDefault, idGen, checkName, checkDefinition *string
-		err = rows.Scan(&colName, &colDefault, &isNullable, &dataType, &formattedDataType, &idGen, &checkName, &checkDefinition)
-		if err != nil {
-			return nil, err
-		}
-		col.Name = strings.Trim(colName, `" `)
-		if colDefault != nil {
-			col.Default = *colDefault
-		}
-		if colDefault != nil && strings.HasPrefix(*colDefault, "nextval(") {
-			col.IsAutoIncrement = true
-		}
-		col.Nullable = isNullable == "YES"
-		col.dataType = dataType
-		col.formattedDataType = formattedDataType
-		if idGen != nil {
-			col.IdentityGeneration = *idGen
-		}
-		if checkName != nil && checkDefinition != nil {
-			// Normalize type casts for generic parser compatibility
-			normalizedDef := normalizePostgresTypeCasts(*checkDefinition)
-			col.Check = &columnConstraint{
-				definition: normalizedDef,
-				name:       NewIdentWithQuoteDetected(*checkName),
-			}
-		}
-		cols = append(cols, col)
-	}
-	return cols, nil
-}
-
 func (d *PostgresDatabase) getIndexDefs(table string) ([]string, error) {
 	// Exclude indexes that are implicitly created for primary keys or unique constraints or exclusion constraints.
 	const query = `WITH
@@ -1093,458 +962,15 @@ func normalizePostgresTypeCasts(sql string) string {
 	return sql
 }
 
-func (d *PostgresDatabase) getTableCheckConstraints(tableName string) ([]CheckConstraint, error) {
-	const query = `SELECT con.conname, pg_get_constraintdef(con.oid, true)
-	FROM   pg_constraint con
-	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
-	JOIN   pg_class cls ON cls.oid = con.conrelid
-	WHERE  con.contype = 'c'
-	AND    nsp.nspname = $1
-	AND    cls.relname = $2
-	AND    array_length(con.conkey, 1) > 1;`
-
-	var result []CheckConstraint
-	schema, table := splitTableName(tableName, d.GetDefaultSchema())
-	rows, err := d.db.Query(query, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var constraintName, constraintDef string
-		err = rows.Scan(&constraintName, &constraintDef)
-		if err != nil {
-			return nil, err
-		}
-		// Normalize type casts for generic parser compatibility
-		// PostgreSQL returns "::time without time zone" but the generic parser expects "::time"
-		constraintDef = normalizePostgresTypeCasts(constraintDef)
-		result = append(result, CheckConstraint{
-			Name:       NewIdentWithQuoteDetected(constraintName),
-			Definition: constraintDef,
-		})
-	}
-
-	return result, nil
-}
-func (d *PostgresDatabase) getUniqueConstraints(tableName string) (map[string]string, error) {
-	const query = `SELECT con.conname, pg_get_constraintdef(con.oid)
-	FROM   pg_constraint con
-	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
-	JOIN   pg_class cls ON cls.oid = con.conrelid
-	WHERE  con.contype = 'u'
-	AND    nsp.nspname = $1
-	AND    cls.relname = $2;`
-
-	result := map[string]string{}
-	schema, table := splitTableName(tableName, d.GetDefaultSchema())
-	rows, err := d.db.Query(query, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var constraintName, constraintDef string
-		err = rows.Scan(&constraintName, &constraintDef)
-		if err != nil {
-			return nil, err
-		}
-
-		result[constraintName] = fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s",
-			d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table),
-			d.quoteIdentifierIfNeeded(constraintName), constraintDef,
-		)
-	}
-
-	return result, nil
-}
-
-func (d *PostgresDatabase) getExclusionDefs(tableName string) ([]string, error) {
-	const query = `SELECT con.conname, pg_get_constraintdef(con.oid, true)
-	FROM   pg_constraint con
-	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
-	JOIN   pg_class cls ON cls.oid = con.conrelid
-	WHERE  con.contype = 'x'
-	AND    nsp.nspname = $1
-	AND    cls.relname = $2;`
-
-	result := []string{}
-	schema, table := splitTableName(tableName, d.GetDefaultSchema())
-	rows, err := d.db.Query(query, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var constraintName, constraintDef string
-		err = rows.Scan(&constraintName, &constraintDef)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s",
-			d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table),
-			d.quoteIdentifierIfNeeded(constraintName), constraintDef,
-		))
-	}
-
-	return result, nil
-}
-
-func (d *PostgresDatabase) getPrimaryKeyColumns(table string) ([]string, error) {
-	const query = `SELECT
-	tc.table_schema, tc.constraint_name, tc.table_name, kcu.column_name
-FROM
-	information_schema.table_constraints AS tc
-	JOIN information_schema.key_column_usage AS kcu
-		USING (table_schema, table_name, constraint_name)
-WHERE constraint_type = 'PRIMARY KEY' AND tc.table_schema=$1 AND tc.table_name=$2 ORDER BY kcu.ordinal_position`
-	schema, table := splitTableName(table, d.GetDefaultSchema())
-	rows, err := d.db.Query(query, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	columnNames := make([]string, 0)
-	var tableSchema, constraintName, tableName string
-	for rows.Next() {
-		var columnName string
-		err = rows.Scan(&tableSchema, &constraintName, &tableName, &columnName)
-		if err != nil {
-			return nil, err
-		}
-		columnNames = append(columnNames, columnName)
-	}
-	return columnNames, nil
-}
-
 type primaryKeyInfo struct {
 	name   Ident
 	period bool
-}
-
-func (d *PostgresDatabase) getPrimaryKeyInfo(table string) (primaryKeyInfo, error) {
-	schema, table := splitTableName(table, d.GetDefaultSchema())
-	tableWithSchema := fmt.Sprintf("%s.%s", forceQuoteIdentifier(schema), forceQuoteIdentifier(table))
-
-	var selectCols string
-	if d.supportsConperiod() {
-		selectCols = "conname, conperiod"
-	} else {
-		selectCols = "conname, false"
-	}
-	query := fmt.Sprintf(`
-		SELECT %s
-		FROM pg_constraint
-		WHERE conrelid = '%s'::regclass AND contype = 'p'
-	`, selectCols, tableWithSchema)
-	rows, err := d.db.Query(query)
-	if err != nil {
-		return primaryKeyInfo{}, err
-	}
-	defer rows.Close()
-
-	var keyName string
-	var period bool
-	if rows.Next() {
-		err = rows.Scan(&keyName, &period)
-		if err != nil {
-			return primaryKeyInfo{}, err
-		}
-	} else {
-		return primaryKeyInfo{}, err
-	}
-	return primaryKeyInfo{name: NewIdentWithQuoteDetected(keyName), period: period}, nil
-}
-
-// refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d
-func (d *PostgresDatabase) getForeignDefs(table string) ([]string, error) {
-	var periodCol string
-	if d.supportsConperiod() {
-		periodCol = "c.conperiod"
-	} else {
-		periodCol = "false"
-	}
-	query := fmt.Sprintf(`SELECT
-		nc.nspname AS constraint_schema,
-		n1.nspname AS table_schema,
-		c.conname  AS constraint_name,
-		r1.relname AS table_name,
-		a1.attname AS column_name,
-		n2.nspname AS foreign_table_schema,
-		r2.relname AS foreign_table_name,
-		a2.attname AS foreign_column_name,
-		CASE c.confupdtype
-			WHEN 'c' THEN 'CASCADE'
-			WHEN 'n' THEN 'SET NULL'
-			WHEN 'd' THEN 'SET DEFAULT'
-			WHEN 'r' THEN 'RESTRICT'
-			WHEN 'a' THEN 'NO ACTION'
-		END AS foreign_update_rule,
-		CASE c.confdeltype
-			WHEN 'c' THEN 'CASCADE'
-			WHEN 'n' THEN 'SET NULL'
-			WHEN 'd' THEN 'SET DEFAULT'
-			WHEN 'r' THEN 'RESTRICT'
-			WHEN 'a' THEN 'NO ACTION'
-		END AS foreign_delete_rule,
-		c.condeferrable AS deferrable,
-		c.condeferred AS initially_deferred,
-		%s AS period
-	FROM pg_constraint      AS c
-	INNER JOIN pg_namespace AS nc ON nc.oid = c.connamespace
-	INNER JOIN pg_class     AS r1 ON r1.oid = c.conrelid
-	INNER JOIN pg_class     AS r2 ON r2.oid = c.confrelid
-	INNER JOIN pg_namespace AS n1 ON n1.oid = r1.relnamespace
-	INNER JOIN pg_namespace AS n2 ON n2.oid = r2.relnamespace
-	CROSS JOIN UNNEST(c.conkey, c.confkey) with ordinality AS k(key1, key2, ordinality)
-	INNER JOIN pg_attribute AS a1
-		ON  a1.attrelid = c.conrelid
-		AND a1.attnum   = k.key1
-	INNER JOIN pg_attribute AS a2
-		ON  a2.attrelid = c.confrelid
-		AND a2.attnum   = k.key2
-	WHERE c.contype = 'f' AND n1.nspname = $1 AND r1.relname = $2
-	ORDER BY constraint_schema, constraint_name, k.ordinality
-	`, periodCol)
-	schema, table := splitTableName(table, d.GetDefaultSchema())
-	rows, err := d.db.Query(query, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	type identifier struct {
-		schema, name string
-	}
-	type constraint struct {
-		tableSchema, constraintName, tableName, foreignTableSchema, foreignTableName, foreignUpdateRule, foreignDeleteRule string
-		columns, foreignColumns                                                                                            []string
-		deferrable, initiallyDeferred, period                                                                              bool
-	}
-
-	constraints := make(map[identifier]constraint)
-
-	for rows.Next() {
-		var constraintSchema, tableSchema, constraintName, tableName, columnName, foreignTableSchema, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule string
-		var deferrable, initiallyDeferred, period bool
-		err = rows.Scan(&constraintSchema, &tableSchema, &constraintName, &tableName, &columnName, &foreignTableSchema, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule, &deferrable, &initiallyDeferred, &period)
-		if err != nil {
-			return nil, err
-		}
-		key := identifier{constraintSchema, constraintName}
-		if _, exist := constraints[key]; !exist {
-			constraints[key] = constraint{
-				tableSchema, constraintName, tableName, foreignTableSchema, foreignTableName, foreignUpdateRule, foreignDeleteRule,
-				[]string{}, []string{},
-				deferrable, initiallyDeferred, period,
-			}
-		}
-		c := constraints[key]
-		c.columns = append(c.columns, columnName)
-		c.foreignColumns = append(c.foreignColumns, foreignColumnName)
-		constraints[key] = c
-	}
-
-	var keys []identifier
-	for key := range constraints {
-		keys = append(keys, key)
-	}
-	slices.SortFunc(keys, func(a, b identifier) int {
-		if c := cmp.Compare(a.schema, b.schema); c != 0 {
-			return c
-		}
-		return cmp.Compare(a.name, b.name)
-	})
-
-	defs := make([]string, 0)
-	for _, key := range keys {
-		c := constraints[key]
-		var escapedColumns []string
-		for i := range c.columns {
-			escaped := d.quoteIdentifierIfNeeded(c.columns[i])
-			if c.period && i == len(c.columns)-1 {
-				escaped = "PERIOD " + escaped
-			}
-			escapedColumns = append(escapedColumns, escaped)
-		}
-		var escapedForeignColumns []string
-		for i := range c.foreignColumns {
-			escaped := d.quoteIdentifierIfNeeded(c.foreignColumns[i])
-			if c.period && i == len(c.foreignColumns)-1 {
-				escaped = "PERIOD " + escaped
-			}
-			escapedForeignColumns = append(escapedForeignColumns, escaped)
-		}
-		var constraintOptions string
-		if c.deferrable {
-			if c.initiallyDeferred {
-				constraintOptions = " DEFERRABLE INITIALLY DEFERRED"
-			} else {
-				constraintOptions = " DEFERRABLE INITIALLY IMMEDIATE"
-			}
-		}
-		def := fmt.Sprintf(
-			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s (%s) ON UPDATE %s ON DELETE %s%s",
-			d.quoteIdentifierIfNeeded(c.tableSchema), d.quoteIdentifierIfNeeded(c.tableName), d.quoteIdentifierIfNeeded(c.constraintName), strings.Join(escapedColumns, ", "),
-			d.quoteIdentifierIfNeeded(c.foreignTableSchema), d.quoteIdentifierIfNeeded(c.foreignTableName), strings.Join(escapedForeignColumns, ", "), c.foreignUpdateRule, c.foreignDeleteRule,
-			constraintOptions,
-		)
-		defs = append(defs, def)
-	}
-	return defs, nil
 }
 
 var (
 	policyRolesPrefixRegex = regexp.MustCompile(`^{`)
 	policyRolesSuffixRegex = regexp.MustCompile(`}$`)
 )
-
-func (d *PostgresDatabase) getPolicyDefs(table string) ([]string, error) {
-	const query = `
-		SELECT policyname, permissive, roles, cmd, qual, with_check
-		FROM pg_policies
-		WHERE schemaname = $1 AND tablename = $2
-	`
-	schema, table := splitTableName(table, d.GetDefaultSchema())
-	rows, err := d.db.Query(query, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	defs := make([]string, 0)
-	for rows.Next() {
-		var (
-			policyName, permissive, roles, cmd string
-			using, withCheck                   sql.NullString
-		)
-		err = rows.Scan(&policyName, &permissive, &roles, &cmd, &using, &withCheck)
-		if err != nil {
-			return nil, err
-		}
-		roles = policyRolesPrefixRegex.ReplaceAllString(roles, "")
-		roles = policyRolesSuffixRegex.ReplaceAllString(roles, "")
-		def := fmt.Sprintf(
-			"CREATE POLICY %s ON %s AS %s FOR %s TO %s",
-			policyName, table, permissive, cmd, roles,
-		)
-		if using.Valid {
-			def += fmt.Sprintf(" USING (%s)", using.String)
-		}
-		if withCheck.Valid {
-			def += fmt.Sprintf(" WITH CHECK %s", withCheck.String)
-		}
-		defs = append(defs, def+";")
-	}
-	return defs, nil
-}
-
-func (d *PostgresDatabase) getComments(table string) ([]string, error) {
-	schema, table := splitTableName(table, d.GetDefaultSchema())
-	var ddls []string
-
-	// Table comments
-	tableRows, err := d.db.Query(`
-		SELECT obj_description(c.oid)
-		FROM pg_class c
-		JOIN pg_namespace n ON n.oid = c.relnamespace
-		WHERE c.relkind in ('r', 'p')
-		AND obj_description(c.oid) IS NOT NULL
-		AND n.nspname = $1
-		AND c.relname = $2
-	`, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer tableRows.Close()
-	for tableRows.Next() {
-		var comment string
-		if err := tableRows.Scan(&comment); err != nil {
-			return nil, err
-		}
-		ddls = append(ddls, fmt.Sprintf("COMMENT ON TABLE %s.%s IS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table), schemaLib.StringConstant(comment)))
-	}
-
-	// Column comments
-	columnRows, err := d.db.Query(`
-		SELECT
-			a.attname AS column_name,
-			col_description(a.attrelid, a.attnum) AS comment
-		FROM pg_catalog.pg_attribute a
-		JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
-		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-		WHERE c.relkind IN ('r', 'p')
-		  AND n.nspname = $1
-		  AND c.relname = $2
-		  AND a.attnum > 0
-		  AND NOT a.attisdropped
-		  AND col_description(a.attrelid, a.attnum) IS NOT NULL
-		ORDER BY a.attnum;
-	`, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer columnRows.Close()
-	for columnRows.Next() {
-		var columnName, comment string
-		if err := columnRows.Scan(&columnName, &comment); err != nil {
-			return nil, err
-		}
-		ddls = append(ddls, fmt.Sprintf("COMMENT ON COLUMN %s.%s.%s IS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table), d.quoteIdentifierIfNeeded(columnName), schemaLib.StringConstant(comment)))
-	}
-
-	// Index comments (for indexes on this table)
-	indexRows, err := d.db.Query(`
-		SELECT i.relname AS index_name, obj_description(i.oid, 'pg_class') AS comment
-		FROM pg_class t
-		JOIN pg_namespace n ON n.oid = t.relnamespace
-		JOIN pg_index ix ON t.oid = ix.indrelid
-		JOIN pg_class i ON i.oid = ix.indexrelid
-		WHERE t.relkind IN ('r', 'p')
-		  AND n.nspname = $1
-		  AND t.relname = $2
-		  AND obj_description(i.oid, 'pg_class') IS NOT NULL
-	`, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer indexRows.Close()
-	for indexRows.Next() {
-		var indexName, comment string
-		if err := indexRows.Scan(&indexName, &comment); err != nil {
-			return nil, err
-		}
-		ddls = append(ddls, fmt.Sprintf("COMMENT ON INDEX %s.%s IS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(indexName), schemaLib.StringConstant(comment)))
-	}
-
-	// Constraint comments
-	constraintRows, err := d.db.Query(`
-		SELECT con.conname AS constraint_name, obj_description(con.oid, 'pg_constraint') AS comment
-		FROM pg_constraint con
-		JOIN pg_class c ON c.oid = con.conrelid
-		JOIN pg_namespace n ON n.oid = c.relnamespace
-		WHERE n.nspname = $1
-		  AND c.relname = $2
-		  AND obj_description(con.oid, 'pg_constraint') IS NOT NULL
-	`, schema, table)
-	if err != nil {
-		return nil, err
-	}
-	defer constraintRows.Close()
-	for constraintRows.Next() {
-		var constraintName, comment string
-		if err := constraintRows.Scan(&constraintName, &comment); err != nil {
-			return nil, err
-		}
-		ddls = append(ddls, fmt.Sprintf("COMMENT ON CONSTRAINT %s ON %s.%s IS %s;", d.quoteIdentifierIfNeeded(constraintName), d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table), schemaLib.StringConstant(comment)))
-	}
-
-	return ddls, nil
-}
 
 func (d *PostgresDatabase) DB() *sql.DB {
 	return d.db
@@ -1697,48 +1123,708 @@ func splitTableName(table string, defaultSchema string) (string, string) {
 	return schema, table
 }
 
-func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
-	// If no roles are specified to include, don't query privileges at all
-	if len(d.generatorConfig.ManagedRoles) == 0 {
-		return []string{}, nil
+// TableDDLComponentsCache holds pre-fetched schema data for all tables in a single batch,
+// keyed by qualified table name (schema.table format).
+type TableDDLComponentsCache struct {
+	columns           map[string][]column
+	primaryKeyCols    map[string][]string
+	primaryKeyInfos   map[string]primaryKeyInfo
+	indexDefs         map[string][]string
+	foreignDefs       map[string][]string
+	policyDefs        map[string][]string
+	checkConstraints  map[string][]CheckConstraint
+	uniqueConstraints map[string]map[string]string
+	exclusionDefs     map[string][]string
+	comments          map[string][]string
+	privilegeDefs     map[string][]string
+}
+
+func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*TableDDLComponentsCache, error) {
+	cache := &TableDDLComponentsCache{
+		columns:           make(map[string][]column),
+		primaryKeyCols:    make(map[string][]string),
+		primaryKeyInfos:   make(map[string]primaryKeyInfo),
+		indexDefs:         make(map[string][]string),
+		foreignDefs:       make(map[string][]string),
+		policyDefs:        make(map[string][]string),
+		checkConstraints:  make(map[string][]CheckConstraint),
+		uniqueConstraints: make(map[string]map[string]string),
+		exclusionDefs:     make(map[string][]string),
+		comments:          make(map[string][]string),
+		privilegeDefs:     make(map[string][]string),
+	}
+	if len(tableNames) == 0 {
+		return cache, nil
 	}
 
-	schema, tableName := splitTableName(table, d.GetDefaultSchema())
-
-	rolePlaceholders := make([]string, len(d.generatorConfig.ManagedRoles))
-	queryArgs := []any{schema, tableName}
-	for i, role := range d.generatorConfig.ManagedRoles {
-		rolePlaceholders[i] = fmt.Sprintf("$%d", i+3)
-		queryArgs = append(queryArgs, role)
-	}
-	roleFilter := strings.Join(rolePlaceholders, ", ")
-
-	query := fmt.Sprintf(`
-		SELECT
-			grantee,
-			string_agg(privilege_type, ', ' ORDER BY privilege_type) as privileges
-		FROM information_schema.table_privileges
-		WHERE table_schema = $1
-		AND table_name = $2
-		AND grantee IN (%s)
-		AND grantee != (
-			SELECT tableowner FROM pg_tables
-			WHERE schemaname = $1 AND tablename = $2
-		)
-		GROUP BY grantee
-		ORDER BY grantee
-	`, roleFilter)
-
-	rows, err := d.db.Query(query, queryArgs...)
+	var err error
+	cache.columns, err = d.getColumnsForTables(tableNames)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query privileges for table %s.%s: %w", schema, tableName, err)
+		return nil, err
+	}
+	cache.primaryKeyCols, err = d.getPrimaryKeyColumnsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.primaryKeyInfos, err = d.getPrimaryKeyInfosForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.indexDefs, err = d.getIndexDefsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.foreignDefs, err = d.getForeignDefsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.policyDefs, err = d.getPolicyDefsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.checkConstraints, err = d.getCheckConstraintsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.uniqueConstraints, err = d.getUniqueConstraintsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.exclusionDefs, err = d.getExclusionDefsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.comments, err = d.getCommentsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.privilegeDefs, err = d.getPrivilegeDefsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	return cache, nil
+}
+
+func (d *PostgresDatabase) getColumnsForTables(tableNames []string) (map[string][]column, error) {
+	const query = `WITH
+	  columns AS (
+	    SELECT
+	      n.nspname || '.' || c.relname AS qualified_table_name,
+	      s.column_name,
+	      s.column_default,
+	      s.is_nullable,
+	      CASE
+	      -- Domain types ('d') and enum types ('e'): return the type name with schema prefix
+	      WHEN t.typtype IN ('d', 'e') THEN
+	        CASE
+	          WHEN tn.nspname = 'public' THEN t.typname
+	          ELSE tn.nspname || '.' || t.typname
+	        END
+	      WHEN s.data_type IN ('ARRAY', 'USER-DEFINED') THEN format_type(f.atttypid, f.atttypmod)
+	      ELSE s.data_type
+	      END,
+	      -- formattedDataType: also return type name for domain and enum types
+	      CASE
+	      WHEN t.typtype IN ('d', 'e') THEN
+	        CASE
+	          WHEN tn.nspname = 'public' THEN t.typname
+	          ELSE tn.nspname || '.' || t.typname
+	        END
+	      ELSE format_type(f.atttypid, f.atttypmod)
+	      END,
+	      s.identity_generation
+	    FROM pg_attribute f
+	    JOIN pg_class c ON c.oid = f.attrelid JOIN pg_type t ON t.oid = f.atttypid
+	    LEFT JOIN pg_namespace tn ON tn.oid = t.typnamespace
+	    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = f.attnum
+	    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
+	    LEFT JOIN information_schema.columns s ON s.column_name = f.attname AND s.table_name = c.relname AND s.table_schema = n.nspname
+	    WHERE c.relkind in ('r', 'p')
+	    AND n.nspname || '.' || c.relname = ANY($1::text[])
+	    AND f.attnum > 0
+	    ORDER BY n.nspname, c.relname, f.attnum
+	  ),
+	  column_constraints AS (
+	    SELECT att.attname column_name, tmp.qualified_table_name, tmp.name, tmp.type, tmp.definition
+	    FROM (
+	      SELECT unnest(con.conkey) AS conkey,
+	             pg_get_constraintdef(con.oid, true) AS definition,
+	             cls.oid AS relid,
+	             con.conname AS name,
+	             con.contype AS type,
+	             nsp.nspname || '.' || cls.relname AS qualified_table_name
+	      FROM   pg_constraint con
+	      JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+	      JOIN   pg_class cls ON cls.oid = con.conrelid
+	      WHERE  nsp.nspname || '.' || cls.relname = ANY($1::text[])
+	      AND    array_length(con.conkey, 1) = 1
+	    ) tmp
+	    JOIN pg_attribute att ON tmp.conkey = att.attnum AND tmp.relid = att.attrelid
+	  ),
+	  check_constraints AS (
+	    SELECT column_name, qualified_table_name, name, definition
+	    FROM   column_constraints
+	    WHERE  type = 'c'
+	  )
+	SELECT    columns.*, checks.name, checks.definition
+	FROM      columns
+	LEFT JOIN check_constraints checks USING (column_name, qualified_table_name);`
+
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
 	}
 	defer rows.Close()
 
-	var privilegeDefs []string
+	result := make(map[string][]column, len(tableNames))
 	for rows.Next() {
-		var grantee, privileges string
-		if err := rows.Scan(&grantee, &privileges); err != nil {
+		col := column{}
+		var tableName, colName, isNullable, dataType, formattedDataType string
+		var colDefault, idGen, checkName, checkDefinition *string
+		err = rows.Scan(&tableName, &colName, &colDefault, &isNullable, &dataType, &formattedDataType, &idGen, &checkName, &checkDefinition)
+		if err != nil {
+			return nil, err
+		}
+		col.Name = strings.Trim(colName, `" `)
+		if colDefault != nil {
+			col.Default = *colDefault
+		}
+		if colDefault != nil && strings.HasPrefix(*colDefault, "nextval(") {
+			col.IsAutoIncrement = true
+		}
+		col.Nullable = isNullable == "YES"
+		col.dataType = dataType
+		col.formattedDataType = formattedDataType
+		if idGen != nil {
+			col.IdentityGeneration = *idGen
+		}
+		if checkName != nil && checkDefinition != nil {
+			normalizedDef := normalizePostgresTypeCasts(*checkDefinition)
+			col.Check = &columnConstraint{
+				definition: normalizedDef,
+				name:       NewIdentWithQuoteDetected(*checkName),
+			}
+		}
+		result[tableName] = append(result[tableName], col)
+	}
+	return result, nil
+}
+
+func (d *PostgresDatabase) getPrimaryKeyColumnsForTables(tableNames []string) (map[string][]string, error) {
+	const query = `SELECT
+	tc.table_schema || '.' || tc.table_name AS qualified_table_name,
+	kcu.column_name
+FROM
+	information_schema.table_constraints AS tc
+	JOIN information_schema.key_column_usage AS kcu
+		USING (table_schema, table_name, constraint_name)
+WHERE constraint_type = 'PRIMARY KEY'
+AND tc.table_schema || '.' || tc.table_name = ANY($1::text[])
+ORDER BY tc.table_schema, tc.table_name, kcu.ordinal_position`
+
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]string, len(tableNames))
+	for rows.Next() {
+		var tableName, columnName string
+		err = rows.Scan(&tableName, &columnName)
+		if err != nil {
+			return nil, err
+		}
+		result[tableName] = append(result[tableName], columnName)
+	}
+	return result, nil
+}
+
+func (d *PostgresDatabase) getPrimaryKeyInfosForTables(tableNames []string) (map[string]primaryKeyInfo, error) {
+	var selectCols string
+	if d.supportsConperiod() {
+		selectCols = "con.conname, con.conperiod"
+	} else {
+		selectCols = "con.conname, false"
+	}
+	query := fmt.Sprintf(`
+		SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, %s
+		FROM pg_constraint con
+		JOIN pg_class cls ON cls.oid = con.conrelid
+		JOIN pg_namespace nsp ON nsp.oid = cls.relnamespace
+		WHERE nsp.nspname || '.' || cls.relname = ANY($1::text[])
+		AND con.contype = 'p'
+	`, selectCols)
+
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]primaryKeyInfo, len(tableNames))
+	for rows.Next() {
+		var tableName, keyName string
+		var period bool
+		err = rows.Scan(&tableName, &keyName, &period)
+		if err != nil {
+			return nil, err
+		}
+		result[tableName] = primaryKeyInfo{
+			name:   NewIdentWithQuoteDetected(keyName),
+			period: period,
+		}
+	}
+	return result, nil
+}
+
+func (d *PostgresDatabase) getIndexDefsForTables(tableNames []string) (map[string][]string, error) {
+	// Exclude indexes that are implicitly created for primary keys or unique constraints or exclusion constraints.
+	const query = `WITH
+	  exclude_constraints AS (
+	    SELECT con.conname AS name, nsp.nspname || '.' || cls.relname AS qualified_table_name
+	    FROM   pg_constraint con
+	    JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+	    JOIN   pg_class cls ON cls.oid = con.conrelid
+	    WHERE  con.contype IN ('p', 'u', 'x')
+	    AND    nsp.nspname || '.' || cls.relname = ANY($1::text[])
+	  )
+	SELECT schemaname || '.' || tablename AS qualified_table_name, indexName, indexdef
+	FROM   pg_indexes
+	WHERE  schemaname || '.' || tablename = ANY($1::text[])
+	AND    indexName NOT IN (
+	    SELECT name FROM exclude_constraints
+	    WHERE  qualified_table_name = schemaname || '.' || tablename
+	)
+	ORDER BY schemaname, tablename, indexdef
+	`
+
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]string, len(tableNames))
+	for rows.Next() {
+		var tableName, indexName, indexdef string
+		err = rows.Scan(&tableName, &indexName, &indexdef)
+		if err != nil {
+			return nil, err
+		}
+		indexName = strings.Trim(indexName, `" `)
+		result[tableName] = append(result[tableName], indexdef)
+	}
+	return result, nil
+}
+
+// refs: https://gist.github.com/PickledDragon/dd41f4e72b428175354d
+func (d *PostgresDatabase) getForeignDefsForTables(tableNames []string) (map[string][]string, error) {
+	var periodCol string
+	if d.supportsConperiod() {
+		periodCol = "c.conperiod"
+	} else {
+		periodCol = "false"
+	}
+	query := fmt.Sprintf(`SELECT
+		nc.nspname AS constraint_schema,
+		n1.nspname AS table_schema,
+		c.conname  AS constraint_name,
+		r1.relname AS table_name,
+		a1.attname AS column_name,
+		n2.nspname AS foreign_table_schema,
+		r2.relname AS foreign_table_name,
+		a2.attname AS foreign_column_name,
+		CASE c.confupdtype
+			WHEN 'c' THEN 'CASCADE'
+			WHEN 'n' THEN 'SET NULL'
+			WHEN 'd' THEN 'SET DEFAULT'
+			WHEN 'r' THEN 'RESTRICT'
+			WHEN 'a' THEN 'NO ACTION'
+		END AS foreign_update_rule,
+		CASE c.confdeltype
+			WHEN 'c' THEN 'CASCADE'
+			WHEN 'n' THEN 'SET NULL'
+			WHEN 'd' THEN 'SET DEFAULT'
+			WHEN 'r' THEN 'RESTRICT'
+			WHEN 'a' THEN 'NO ACTION'
+		END AS foreign_delete_rule,
+		c.condeferrable AS deferrable,
+		c.condeferred AS initially_deferred,
+		%s AS period
+	FROM pg_constraint      AS c
+	INNER JOIN pg_namespace AS nc ON nc.oid = c.connamespace
+	INNER JOIN pg_class     AS r1 ON r1.oid = c.conrelid
+	INNER JOIN pg_class     AS r2 ON r2.oid = c.confrelid
+	INNER JOIN pg_namespace AS n1 ON n1.oid = r1.relnamespace
+	INNER JOIN pg_namespace AS n2 ON n2.oid = r2.relnamespace
+	CROSS JOIN UNNEST(c.conkey, c.confkey) with ordinality AS k(key1, key2, ordinality)
+	INNER JOIN pg_attribute AS a1
+		ON  a1.attrelid = c.conrelid
+		AND a1.attnum   = k.key1
+	INNER JOIN pg_attribute AS a2
+		ON  a2.attrelid = c.confrelid
+		AND a2.attnum   = k.key2
+	WHERE c.contype = 'f' AND n1.nspname || '.' || r1.relname = ANY($1::text[])
+	ORDER BY constraint_schema, constraint_name, k.ordinality
+	`, periodCol)
+
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type identifier struct {
+		schema, name string
+	}
+	type constraint struct {
+		tableSchema, constraintName, tableName, foreignTableSchema, foreignTableName, foreignUpdateRule, foreignDeleteRule string
+		columns, foreignColumns                                                                                            []string
+		deferrable, initiallyDeferred, period                                                                              bool
+	}
+
+	constraints := make(map[identifier]constraint)
+
+	for rows.Next() {
+		var constraintSchema, tableSchema, constraintName, tableName, columnName, foreignTableSchema, foreignTableName, foreignColumnName, foreignUpdateRule, foreignDeleteRule string
+		var deferrable, initiallyDeferred, period bool
+		err = rows.Scan(&constraintSchema, &tableSchema, &constraintName, &tableName, &columnName, &foreignTableSchema, &foreignTableName, &foreignColumnName, &foreignUpdateRule, &foreignDeleteRule, &deferrable, &initiallyDeferred, &period)
+		if err != nil {
+			return nil, err
+		}
+		key := identifier{constraintSchema, constraintName}
+		if _, exist := constraints[key]; !exist {
+			constraints[key] = constraint{
+				tableSchema, constraintName, tableName, foreignTableSchema, foreignTableName, foreignUpdateRule, foreignDeleteRule,
+				[]string{}, []string{},
+				deferrable, initiallyDeferred, period,
+			}
+		}
+		c := constraints[key]
+		c.columns = append(c.columns, columnName)
+		c.foreignColumns = append(c.foreignColumns, foreignColumnName)
+		constraints[key] = c
+	}
+
+	var keys []identifier
+	for key := range constraints {
+		keys = append(keys, key)
+	}
+	slices.SortFunc(keys, func(a, b identifier) int {
+		if c := cmp.Compare(a.schema, b.schema); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.name, b.name)
+	})
+
+	result := make(map[string][]string, len(tableNames))
+	for _, key := range keys {
+		c := constraints[key]
+		var escapedColumns []string
+		for i := range c.columns {
+			escaped := d.quoteIdentifierIfNeeded(c.columns[i])
+			if c.period && i == len(c.columns)-1 {
+				escaped = "PERIOD " + escaped
+			}
+			escapedColumns = append(escapedColumns, escaped)
+		}
+		var escapedForeignColumns []string
+		for i := range c.foreignColumns {
+			escaped := d.quoteIdentifierIfNeeded(c.foreignColumns[i])
+			if c.period && i == len(c.foreignColumns)-1 {
+				escaped = "PERIOD " + escaped
+			}
+			escapedForeignColumns = append(escapedForeignColumns, escaped)
+		}
+		var constraintOptions string
+		if c.deferrable {
+			if c.initiallyDeferred {
+				constraintOptions = " DEFERRABLE INITIALLY DEFERRED"
+			} else {
+				constraintOptions = " DEFERRABLE INITIALLY IMMEDIATE"
+			}
+		}
+		def := fmt.Sprintf(
+			"ALTER TABLE ONLY %s.%s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s (%s) ON UPDATE %s ON DELETE %s%s",
+			d.quoteIdentifierIfNeeded(c.tableSchema), d.quoteIdentifierIfNeeded(c.tableName), d.quoteIdentifierIfNeeded(c.constraintName), strings.Join(escapedColumns, ", "),
+			d.quoteIdentifierIfNeeded(c.foreignTableSchema), d.quoteIdentifierIfNeeded(c.foreignTableName), strings.Join(escapedForeignColumns, ", "), c.foreignUpdateRule, c.foreignDeleteRule,
+			constraintOptions,
+		)
+		tableName := c.tableSchema + "." + c.tableName
+		result[tableName] = append(result[tableName], def)
+	}
+	return result, nil
+}
+
+func (d *PostgresDatabase) getPolicyDefsForTables(tableNames []string) (map[string][]string, error) {
+	const query = `
+		SELECT schemaname || '.' || tablename AS qualified_table_name, tablename, policyname, permissive, roles, cmd, qual, with_check
+		FROM pg_policies
+		WHERE schemaname || '.' || tablename = ANY($1::text[])
+	`
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]string, len(tableNames))
+	for rows.Next() {
+		var (
+			qualifiedTableName, tableName, policyName, permissive, roles, cmd string
+			using, withCheck                                                  sql.NullString
+		)
+		err = rows.Scan(&qualifiedTableName, &tableName, &policyName, &permissive, &roles, &cmd, &using, &withCheck)
+		if err != nil {
+			return nil, err
+		}
+		roles = policyRolesPrefixRegex.ReplaceAllString(roles, "")
+		roles = policyRolesSuffixRegex.ReplaceAllString(roles, "")
+		def := fmt.Sprintf(
+			"CREATE POLICY %s ON %s AS %s FOR %s TO %s",
+			policyName, tableName, permissive, cmd, roles,
+		)
+		if using.Valid {
+			def += fmt.Sprintf(" USING (%s)", using.String)
+		}
+		if withCheck.Valid {
+			def += fmt.Sprintf(" WITH CHECK %s", withCheck.String)
+		}
+		result[qualifiedTableName] = append(result[qualifiedTableName], def+";")
+	}
+	return result, nil
+}
+
+func (d *PostgresDatabase) getCheckConstraintsForTables(tableNames []string) (map[string][]CheckConstraint, error) {
+	const query = `SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, con.conname, pg_get_constraintdef(con.oid, true)
+	FROM   pg_constraint con
+	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+	JOIN   pg_class cls ON cls.oid = con.conrelid
+	WHERE  con.contype = 'c'
+	AND    nsp.nspname || '.' || cls.relname = ANY($1::text[])
+	AND    array_length(con.conkey, 1) > 1`
+
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]CheckConstraint, len(tableNames))
+	for rows.Next() {
+		var tableName, constraintName, constraintDef string
+		err = rows.Scan(&tableName, &constraintName, &constraintDef)
+		if err != nil {
+			return nil, err
+		}
+		// Normalize type casts for generic parser compatibility
+		// PostgreSQL returns "::time without time zone" but the generic parser expects "::time"
+		constraintDef = normalizePostgresTypeCasts(constraintDef)
+		result[tableName] = append(result[tableName], CheckConstraint{
+			Name:       NewIdentWithQuoteDetected(constraintName),
+			Definition: constraintDef,
+		})
+	}
+	return result, nil
+}
+
+func (d *PostgresDatabase) getUniqueConstraintsForTables(tableNames []string) (map[string]map[string]string, error) {
+	const query = `SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, nsp.nspname, cls.relname, con.conname, pg_get_constraintdef(con.oid)
+	FROM   pg_constraint con
+	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+	JOIN   pg_class cls ON cls.oid = con.conrelid
+	WHERE  con.contype = 'u'
+	AND    nsp.nspname || '.' || cls.relname = ANY($1::text[])`
+
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]map[string]string, len(tableNames))
+	for rows.Next() {
+		var tableName, schema, table, constraintName, constraintDef string
+		err = rows.Scan(&tableName, &schema, &table, &constraintName, &constraintDef)
+		if err != nil {
+			return nil, err
+		}
+		if result[tableName] == nil {
+			result[tableName] = make(map[string]string)
+		}
+		result[tableName][constraintName] = fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s",
+			d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table),
+			d.quoteIdentifierIfNeeded(constraintName), constraintDef,
+		)
+	}
+	return result, nil
+}
+
+func (d *PostgresDatabase) getExclusionDefsForTables(tableNames []string) (map[string][]string, error) {
+	const query = `SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, nsp.nspname, cls.relname, con.conname, pg_get_constraintdef(con.oid, true)
+	FROM   pg_constraint con
+	JOIN   pg_namespace nsp ON nsp.oid = con.connamespace
+	JOIN   pg_class cls ON cls.oid = con.conrelid
+	WHERE  con.contype = 'x'
+	AND    nsp.nspname || '.' || cls.relname = ANY($1::text[])`
+
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]string, len(tableNames))
+	for rows.Next() {
+		var tableName, schema, table, constraintName, constraintDef string
+		err = rows.Scan(&tableName, &schema, &table, &constraintName, &constraintDef)
+		if err != nil {
+			return nil, err
+		}
+		result[tableName] = append(result[tableName], fmt.Sprintf("ALTER TABLE %s.%s ADD CONSTRAINT %s %s",
+			d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table),
+			d.quoteIdentifierIfNeeded(constraintName), constraintDef,
+		))
+	}
+	return result, nil
+}
+
+func (d *PostgresDatabase) getCommentsForTables(tableNames []string) (map[string][]string, error) {
+	result := make(map[string][]string, len(tableNames))
+
+	// Table comments
+	tableRows, err := d.db.Query(`
+		SELECT n.nspname || '.' || c.relname AS qualified_table_name, obj_description(c.oid)
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind in ('r', 'p')
+		AND obj_description(c.oid) IS NOT NULL
+		AND n.nspname || '.' || c.relname = ANY($1::text[])
+	`, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer tableRows.Close()
+	for tableRows.Next() {
+		var tableName, comment string
+		if err := tableRows.Scan(&tableName, &comment); err != nil {
+			return nil, err
+		}
+		schema, table := splitTableName(tableName, d.GetDefaultSchema())
+		result[tableName] = append(result[tableName], fmt.Sprintf("COMMENT ON TABLE %s.%s IS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table), schemaLib.StringConstant(comment)))
+	}
+
+	// Column comments
+	columnRows, err := d.db.Query(`
+		SELECT
+			n.nspname || '.' || c.relname AS qualified_table_name,
+			a.attname AS column_name,
+			col_description(a.attrelid, a.attnum) AS comment
+		FROM pg_catalog.pg_attribute a
+		JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind IN ('r', 'p')
+		  AND n.nspname || '.' || c.relname = ANY($1::text[])
+		  AND a.attnum > 0
+		  AND NOT a.attisdropped
+		  AND col_description(a.attrelid, a.attnum) IS NOT NULL
+		ORDER BY n.nspname, c.relname, a.attnum;
+	`, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer columnRows.Close()
+	for columnRows.Next() {
+		var tableName, columnName, comment string
+		if err := columnRows.Scan(&tableName, &columnName, &comment); err != nil {
+			return nil, err
+		}
+		schema, table := splitTableName(tableName, d.GetDefaultSchema())
+		result[tableName] = append(result[tableName], fmt.Sprintf("COMMENT ON COLUMN %s.%s.%s IS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table), d.quoteIdentifierIfNeeded(columnName), schemaLib.StringConstant(comment)))
+	}
+
+	// Index comments (for indexes on this table)
+	indexRows, err := d.db.Query(`
+		SELECT n.nspname || '.' || t.relname AS qualified_table_name, i.relname AS index_name, obj_description(i.oid, 'pg_class') AS comment
+		FROM pg_class t
+		JOIN pg_namespace n ON n.oid = t.relnamespace
+		JOIN pg_index ix ON t.oid = ix.indrelid
+		JOIN pg_class i ON i.oid = ix.indexrelid
+		WHERE t.relkind IN ('r', 'p')
+		  AND n.nspname || '.' || t.relname = ANY($1::text[])
+		  AND obj_description(i.oid, 'pg_class') IS NOT NULL
+	`, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer indexRows.Close()
+	for indexRows.Next() {
+		var tableName, indexName, comment string
+		if err := indexRows.Scan(&tableName, &indexName, &comment); err != nil {
+			return nil, err
+		}
+		schema, _ := splitTableName(tableName, d.GetDefaultSchema())
+		result[tableName] = append(result[tableName], fmt.Sprintf("COMMENT ON INDEX %s.%s IS %s;", d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(indexName), schemaLib.StringConstant(comment)))
+	}
+
+	// Constraint comments
+	constraintRows, err := d.db.Query(`
+		SELECT n.nspname || '.' || c.relname AS qualified_table_name, con.conname AS constraint_name, obj_description(con.oid, 'pg_constraint') AS comment
+		FROM pg_constraint con
+		JOIN pg_class c ON c.oid = con.conrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname || '.' || c.relname = ANY($1::text[])
+		  AND obj_description(con.oid, 'pg_constraint') IS NOT NULL
+	`, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer constraintRows.Close()
+	for constraintRows.Next() {
+		var tableName, constraintName, comment string
+		if err := constraintRows.Scan(&tableName, &constraintName, &comment); err != nil {
+			return nil, err
+		}
+		schema, table := splitTableName(tableName, d.GetDefaultSchema())
+		result[tableName] = append(result[tableName], fmt.Sprintf("COMMENT ON CONSTRAINT %s ON %s.%s IS %s;", d.quoteIdentifierIfNeeded(constraintName), d.quoteIdentifierIfNeeded(schema), d.quoteIdentifierIfNeeded(table), schemaLib.StringConstant(comment)))
+	}
+
+	return result, nil
+}
+
+func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[string][]string, error) {
+	// If no roles are specified to include, don't query privileges at all
+	if len(d.generatorConfig.ManagedRoles) == 0 {
+		return map[string][]string{}, nil
+	}
+
+	const query = `
+		SELECT
+			table_schema || '.' || table_name AS qualified_table_name,
+			grantee,
+			string_agg(privilege_type, ', ' ORDER BY privilege_type) as privileges
+		FROM information_schema.table_privileges
+		WHERE table_schema || '.' || table_name = ANY($1::text[])
+		AND grantee = ANY($2::text[])
+		AND grantee != (
+			SELECT tableowner FROM pg_tables
+			WHERE schemaname = table_schema AND tablename = table_name
+		)
+		GROUP BY table_schema, table_name, grantee
+		ORDER BY table_schema, table_name, grantee
+	`
+
+	rows, err := d.db.Query(query, pq.Array(tableNames), pq.Array(d.generatorConfig.ManagedRoles))
+	if err != nil {
+		return nil, fmt.Errorf("failed to query privileges: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string][]string, len(tableNames))
+	for rows.Next() {
+		var tableName, grantee, privileges string
+		if err := rows.Scan(&tableName, &grantee, &privileges); err != nil {
 			return nil, fmt.Errorf("failed to scan privilege row: %w", err)
 		}
 
@@ -1748,9 +1834,9 @@ func (d *PostgresDatabase) getPrivilegeDefs(table string) ([]string, error) {
 			escapedGrantee = d.quoteIdentifierIfNeeded(grantee)
 		}
 
-		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s", privileges, table, escapedGrantee)
-		privilegeDefs = append(privilegeDefs, grant)
+		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s", privileges, tableName, escapedGrantee)
+		result[tableName] = append(result[tableName], grant)
 	}
 
-	return privilegeDefs, nil
+	return result, nil
 }
