@@ -92,7 +92,7 @@ test:
 .PHONY: test
 
 test-mysqldef:
-	MYSQL_FLAVOR=$${MYSQL_FLAVOR:-mysql} $(GOTEST) ./cmd/mysqldef
+	MYSQL_FLAVOR=$${MYSQL_FLAVOR:-mysql} $(GOTEST) ./cmd/mysqldef ./database/mysql
 .PHONY: test-mysqldef
 
 test-psqldef:
@@ -108,7 +108,7 @@ test-mssqldef:
 .PHONY: test-mssqldef
 
 test-core:
-	$(GOTEST) ./parser ./schema ./util
+	$(GOTEST) ./database ./parser ./schema ./util
 .PHONY: test-core
 
 test-example-offline:
