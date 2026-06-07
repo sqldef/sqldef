@@ -1149,3 +1149,350 @@ $$ LANGUAGE plpgsql VOLATILE`,
 		})
 	}
 }
+
+func TestTableSpecRoundTripConstraints(t *testing.T) {
+	cases := []struct {
+		name string
+		sql  string
+		mode ParserMode
+		// wantContains lists case-sensitive substrings that must appear in
+		// the first round-trip output. Required so that "Format silently
+		// drops the construct" is not masked by the idempotency check
+		// (which remains stable even when both sides emit nothing).
+		wantContains []string
+		// wantNotContains lists case-sensitive substrings that must NOT
+		// appear. Required so that grammar-level "collapse" bugs (e.g.
+		// 3-state DEFERRABLE flattened to 2-state, causing spurious
+		// "not deferrable initially immediate" emission on simple
+		// REFERENCES inputs) are caught — these too survive idempotency.
+		wantNotContains []string
+	}{
+		{
+			name:         "CHECK unnamed",
+			sql:          "CREATE TABLE t (s text, CHECK (s > 0))",
+			mode:         ParserModePostgres,
+			wantContains: []string{"check ("},
+		},
+		{
+			name:         "CHECK named",
+			sql:          "CREATE TABLE t (s text, CONSTRAINT c CHECK (s > 0))",
+			mode:         ParserModePostgres,
+			wantContains: []string{"constraint c", "check ("},
+		},
+		{
+			name:         "CHECK NO INHERIT",
+			sql:          "CREATE TABLE t (s text, CONSTRAINT c CHECK (s > 0) NO INHERIT)",
+			mode:         ParserModePostgres,
+			wantContains: []string{"check (", "no inherit"},
+		},
+		{
+			name:         "FK basic",
+			sql:          "CREATE TABLE t (a int, CONSTRAINT fk FOREIGN KEY (a) REFERENCES u (id))",
+			mode:         ParserModePostgres,
+			wantContains: []string{"foreign key", "references u"},
+		},
+		{
+			name:         "FK with ON DELETE CASCADE",
+			sql:          "CREATE TABLE t (a int, CONSTRAINT fk FOREIGN KEY (a) REFERENCES u (id) ON DELETE CASCADE)",
+			mode:         ParserModePostgres,
+			wantContains: []string{"foreign key", "on delete CASCADE"},
+		},
+		{
+			name:         "FK DEFERRABLE INITIALLY DEFERRED",
+			sql:          "CREATE TABLE t (a int, CONSTRAINT fk FOREIGN KEY (a) REFERENCES u (id) DEFERRABLE INITIALLY DEFERRED)",
+			mode:         ParserModePostgres,
+			wantContains: []string{"deferrable", "initially deferred"},
+		},
+		{
+			name:         "FK composite columns",
+			sql:          "CREATE TABLE t (a int, b int, CONSTRAINT fk FOREIGN KEY (a, b) REFERENCES u (x, y))",
+			mode:         ParserModePostgres,
+			wantContains: []string{"foreign key (a, b)", "references u (x, y)"},
+		},
+		{
+			name:         "FK NOT FOR REPLICATION (MSSQL)",
+			sql:          "CREATE TABLE t (a int, CONSTRAINT fk FOREIGN KEY (a) REFERENCES u (id) NOT FOR REPLICATION)",
+			mode:         ParserModeMssql,
+			wantContains: []string{"not for replication"},
+		},
+		{
+			name:         "FK MATCH FULL",
+			sql:          "CREATE TABLE t (a int, CONSTRAINT fk FOREIGN KEY (a) REFERENCES u (id) MATCH FULL)",
+			mode:         ParserModePostgres,
+			wantContains: []string{"MATCH FULL"},
+		},
+		{
+			name:         "FK MATCH SIMPLE with ON DELETE CASCADE",
+			sql:          "CREATE TABLE t (a int, CONSTRAINT fk FOREIGN KEY (a) REFERENCES u (id) MATCH SIMPLE ON DELETE CASCADE)",
+			mode:         ParserModePostgres,
+			wantContains: []string{"MATCH SIMPLE", "on delete CASCADE"},
+		},
+		{
+			name:         "EXCLUDE without USING",
+			sql:          "CREATE TABLE t (a text, CONSTRAINT ex EXCLUDE (a WITH =))",
+			mode:         ParserModePostgres,
+			wantContains: []string{"exclude (", "with ="},
+		},
+		{
+			name:         "EXCLUDE USING gist with &&",
+			sql:          "CREATE TABLE t (a text, CONSTRAINT ex EXCLUDE USING gist (a WITH &&))",
+			mode:         ParserModePostgres,
+			wantContains: []string{"exclude using gist", "with &&"},
+		},
+		{
+			name:         "EXCLUDE with WHERE",
+			sql:          "CREATE TABLE t (a int, CONSTRAINT ex EXCLUDE (a WITH =) WHERE (a > 0))",
+			mode:         ParserModePostgres,
+			wantContains: []string{"exclude (", "where ("},
+		},
+		{
+			name:         "inline REF no cols",
+			sql:          "CREATE TABLE t (a int REFERENCES u)",
+			mode:         ParserModePostgres,
+			wantContains: []string{"references u"},
+		},
+		{
+			name:            "inline REF single col",
+			sql:             "CREATE TABLE t (a int REFERENCES u (id))",
+			mode:            ParserModePostgres,
+			wantContains:    []string{"references u (id)"},
+			wantNotContains: []string{"deferrable", "initially"},
+		},
+		{
+			name:            "inline REF composite cols",
+			sql:             "CREATE TABLE t (a int, b int, c int REFERENCES u (x, y))",
+			mode:            ParserModePostgres,
+			wantContains:    []string{"references u (x, y)"},
+			wantNotContains: []string{"deferrable", "initially"},
+		},
+		{
+			name:            "inline REF MATCH FULL",
+			sql:             "CREATE TABLE t (a int REFERENCES u (id) MATCH FULL)",
+			mode:            ParserModePostgres,
+			wantContains:    []string{"references u (id)", "MATCH FULL"},
+			wantNotContains: []string{"deferrable", "initially"},
+		},
+		{
+			name:            "inline REF MATCH PARTIAL",
+			sql:             "CREATE TABLE t (a int REFERENCES u (id) MATCH PARTIAL)",
+			mode:            ParserModePostgres,
+			wantContains:    []string{"MATCH PARTIAL"},
+			wantNotContains: []string{"deferrable", "initially"},
+		},
+		{
+			name:            "inline REF MATCH SIMPLE",
+			sql:             "CREATE TABLE t (a int REFERENCES u (id) MATCH SIMPLE)",
+			mode:            ParserModePostgres,
+			wantContains:    []string{"MATCH SIMPLE"},
+			wantNotContains: []string{"deferrable", "initially"},
+		},
+		{
+			name:            "inline REF ON DELETE CASCADE",
+			sql:             "CREATE TABLE t (a int REFERENCES u (id) ON DELETE CASCADE)",
+			mode:            ParserModePostgres,
+			wantContains:    []string{"on delete CASCADE"},
+			wantNotContains: []string{"deferrable", "initially"},
+		},
+		{
+			name:            "inline REF ON DELETE SET NULL",
+			sql:             "CREATE TABLE t (a int REFERENCES u (id) ON DELETE SET NULL)",
+			mode:            ParserModePostgres,
+			wantContains:    []string{"on delete SET NULL"},
+			wantNotContains: []string{"deferrable", "initially"},
+		},
+		{
+			name:            "inline REF ON UPDATE RESTRICT",
+			sql:             "CREATE TABLE t (a int REFERENCES u (id) ON UPDATE RESTRICT)",
+			mode:            ParserModePostgres,
+			wantContains:    []string{"on update RESTRICT"},
+			wantNotContains: []string{"deferrable", "initially"},
+		},
+		{
+			name:            "inline REF ON DELETE + ON UPDATE",
+			sql:             "CREATE TABLE t (a int REFERENCES u (id) ON DELETE CASCADE ON UPDATE NO ACTION)",
+			mode:            ParserModePostgres,
+			wantContains:    []string{"on delete CASCADE", "on update NO ACTION"},
+			wantNotContains: []string{"deferrable", "initially"},
+		},
+		{
+			name:         "inline REF DEFERRABLE INITIALLY DEFERRED",
+			sql:          "CREATE TABLE t (a int REFERENCES u (id) DEFERRABLE INITIALLY DEFERRED)",
+			mode:         ParserModePostgres,
+			wantContains: []string{"deferrable", "initially deferred"},
+		},
+		{
+			name:            "inline REF NOT DEFERRABLE",
+			sql:             "CREATE TABLE t (a int REFERENCES u (id) NOT DEFERRABLE)",
+			mode:            ParserModePostgres,
+			wantContains:    []string{"not deferrable"},
+			wantNotContains: []string{"initially"},
+		},
+		{
+			name:            "inline REF INITIALLY IMMEDIATE",
+			sql:             "CREATE TABLE t (a int REFERENCES u (id) INITIALLY IMMEDIATE)",
+			mode:            ParserModePostgres,
+			wantContains:    []string{"initially immediate"},
+			wantNotContains: []string{"deferrable"},
+		},
+		{
+			name:         "inline REF full combo",
+			sql:          "CREATE TABLE t (a int REFERENCES u (id) MATCH FULL ON DELETE CASCADE ON UPDATE RESTRICT DEFERRABLE INITIALLY DEFERRED)",
+			mode:         ParserModePostgres,
+			wantContains: []string{"MATCH FULL", "on delete CASCADE", "on update RESTRICT", "deferrable", "initially deferred"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stmt1, err := ParseDDL(tc.sql, tc.mode)
+			if err != nil {
+				t.Fatalf("first parse failed: %v", err)
+			}
+			text1 := String(stmt1)
+
+			for _, frag := range tc.wantContains {
+				if !strings.Contains(text1, frag) {
+					t.Errorf("text1 missing required fragment %q\nfull text1: %s", frag, text1)
+				}
+			}
+			for _, frag := range tc.wantNotContains {
+				if strings.Contains(text1, frag) {
+					t.Errorf("text1 contains forbidden fragment %q\nfull text1: %s", frag, text1)
+				}
+			}
+
+			stmt2, err := ParseDDL(text1, tc.mode)
+			if err != nil {
+				t.Fatalf("re-parse failed for %q: %v", text1, err)
+			}
+			text2 := String(stmt2)
+
+			if text1 != text2 {
+				t.Errorf("round-trip not idempotent\nfirst:  %s\nsecond: %s", text1, text2)
+			}
+		})
+	}
+}
+
+func TestExcludeWhereGrammar(t *testing.T) {
+	t.Run("WHERE (predicate) yields non-ParenExpr AST", func(t *testing.T) {
+		sql := "CREATE TABLE t (a int, CONSTRAINT ex EXCLUDE (a WITH =) WHERE (a > 0))"
+		stmt, err := ParseDDL(sql, ParserModePostgres)
+		if err != nil {
+			t.Fatalf("parse failed: %v", err)
+		}
+		ex := stmt.(*DDL).TableSpec.Exclusions[0]
+		if pe, ok := ex.Where.Expr.(*ParenExpr); ok {
+			t.Errorf("Where.Expr should be the raw predicate, got *ParenExpr wrapping %T", pe.Expr)
+		}
+	})
+
+	t.Run("WHERE without parens is rejected", func(t *testing.T) {
+		sql := "CREATE TABLE t (a int, CONSTRAINT ex EXCLUDE (a WITH =) WHERE a > 0)"
+		if _, err := ParseDDL(sql, ParserModePostgres); err == nil {
+			t.Errorf("expected parse error for WHERE without parens, got nil")
+		}
+	})
+}
+
+func TestInlineReferencesDeferrableGrammar(t *testing.T) {
+	cases := []struct {
+		name             string
+		sql              string
+		wantDeferrable   *BoolVal
+		wantInitDeferred *BoolVal
+	}{
+		{
+			name:             "no clause leaves both nil",
+			sql:              "CREATE TABLE t (a int REFERENCES u (id))",
+			wantDeferrable:   nil,
+			wantInitDeferred: nil,
+		},
+		{
+			name:             "NOT DEFERRABLE pins Deferrable only",
+			sql:              "CREATE TABLE t (a int REFERENCES u (id) NOT DEFERRABLE)",
+			wantDeferrable:   NewBoolVal(false),
+			wantInitDeferred: nil,
+		},
+		{
+			name:             "DEFERRABLE pins Deferrable only",
+			sql:              "CREATE TABLE t (a int REFERENCES u (id) DEFERRABLE)",
+			wantDeferrable:   NewBoolVal(true),
+			wantInitDeferred: nil,
+		},
+		{
+			name:             "INITIALLY IMMEDIATE pins InitDeferred only",
+			sql:              "CREATE TABLE t (a int REFERENCES u (id) INITIALLY IMMEDIATE)",
+			wantDeferrable:   nil,
+			wantInitDeferred: NewBoolVal(false),
+		},
+		{
+			name:             "INITIALLY DEFERRED pins InitDeferred only",
+			sql:              "CREATE TABLE t (a int REFERENCES u (id) INITIALLY DEFERRED)",
+			wantDeferrable:   nil,
+			wantInitDeferred: NewBoolVal(true),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stmt, err := ParseDDL(tc.sql, ParserModePostgres)
+			if err != nil {
+				t.Fatalf("parse failed: %v", err)
+			}
+			col := stmt.(*DDL).TableSpec.Columns[0]
+			gotD := col.Type.ReferenceDeferrable
+			gotI := col.Type.ReferenceInitDeferred
+			if !boolValPtrEqual(gotD, tc.wantDeferrable) {
+				t.Errorf("ReferenceDeferrable: got %s, want %s", boolValPtrStr(gotD), boolValPtrStr(tc.wantDeferrable))
+			}
+			if !boolValPtrEqual(gotI, tc.wantInitDeferred) {
+				t.Errorf("ReferenceInitDeferred: got %s, want %s", boolValPtrStr(gotI), boolValPtrStr(tc.wantInitDeferred))
+			}
+		})
+	}
+}
+
+func boolValPtrEqual(a, b *BoolVal) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func boolValPtrStr(v *BoolVal) string {
+	if v == nil {
+		return "nil"
+	}
+	if bool(*v) {
+		return "*true"
+	}
+	return "*false"
+}
+
+func TestForeignKeyMatchGrammar(t *testing.T) {
+	t.Run("MATCH FULL is captured into ForeignKeyDefinition.Match", func(t *testing.T) {
+		sql := "CREATE TABLE t (a int, CONSTRAINT fk FOREIGN KEY (a) REFERENCES u (id) MATCH FULL)"
+		stmt, err := ParseDDL(sql, ParserModePostgres)
+		if err != nil {
+			t.Fatalf("parse failed: %v", err)
+		}
+		fk := stmt.(*DDL).TableSpec.ForeignKeys[0]
+		if fk.Match.Name != "MATCH FULL" {
+			t.Errorf("expected Match = %q, got %q", "MATCH FULL", fk.Match.Name)
+		}
+	})
+
+	t.Run("MATCH SIMPLE combined with ON DELETE", func(t *testing.T) {
+		sql := "CREATE TABLE t (a int, CONSTRAINT fk FOREIGN KEY (a) REFERENCES u (id) MATCH SIMPLE ON DELETE CASCADE)"
+		stmt, err := ParseDDL(sql, ParserModePostgres)
+		if err != nil {
+			t.Fatalf("parse failed: %v", err)
+		}
+		fk := stmt.(*DDL).TableSpec.ForeignKeys[0]
+		if fk.Match.Name != "MATCH SIMPLE" {
+			t.Errorf("expected Match = %q, got %q", "MATCH SIMPLE", fk.Match.Name)
+		}
+		if fk.OnDelete.Name != "CASCADE" {
+			t.Errorf("expected OnDelete = %q, got %q", "CASCADE", fk.OnDelete.Name)
+		}
+	})
+}

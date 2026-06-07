@@ -66,6 +66,7 @@ func setDDL(yylex any, ddl *DDL) {
   exprs                    Exprs
   boolVal                  BoolVal
   boolVals                 []BoolVal
+  boolValPtr               *BoolVal
   colTuple                 ColTuple
   values                   Values
   valTuple                 ValTuple
@@ -387,7 +388,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <objectName> object_name
 %type <aliasedTableName> aliased_table_name
 %type <indexHints> index_hint_list
-%type <expr> where_expression_opt
+%type <expr> where_expression_opt exclude_where_opt
 %type <expr> condition
 %type <boolVal> boolean_value
 %type <str> int_value
@@ -505,7 +506,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <strs> table_hint_list table_hint_opt
 %type <str> table_hint
 %type <newQualifierColName> new_qualifier_column_name
-%type <boolVal> deferrable_opt initially_deferred_opt deferrable_clause initially_clause
+%type <boolValPtr> deferrable_opt initially_deferred_opt deferrable_clause initially_clause
 %type <boolVal> variadic_opt
 %type <str> with_data_opt
 %type <constraintOpts> deferrable_option
@@ -1860,8 +1861,8 @@ alter_statement:
         Primary: false,
         Constraint: true,
         ConstraintOptions: &ConstraintOptions{
-          Deferrable: bool($12),
-          InitiallyDeferred: bool($13),
+          Deferrable: $12 != nil && bool(*$12),
+          InitiallyDeferred: $13 != nil && bool(*$13),
         },
       },
       IndexCols: $10,
@@ -3090,7 +3091,7 @@ table_column_list:
   }
 
 exclude_definition:
-  CONSTRAINT sql_id EXCLUDE '(' exclude_element_list ')' where_expression_opt
+  CONSTRAINT sql_id EXCLUDE '(' exclude_element_list ')' exclude_where_opt
   {
     $$ = &ExclusionDefinition{
       ConstraintName: $2,
@@ -3099,7 +3100,7 @@ exclude_definition:
       Where: NewWhere(WhereStr, $7),
     }
   }
-| CONSTRAINT sql_id EXCLUDE USING reserved_sql_id '(' exclude_element_list ')' where_expression_opt
+| CONSTRAINT sql_id EXCLUDE USING reserved_sql_id '(' exclude_element_list ')' exclude_where_opt
   {
     $$ = &ExclusionDefinition{
       ConstraintName: $2,
@@ -3107,6 +3108,18 @@ exclude_definition:
       Exclusions: $7,
       Where: NewWhere(WhereStr, $9),
     }
+  }
+
+// PostgreSQL EXCLUDE syntax requires parens around the predicate:
+// EXCLUDE (...) WHERE ( predicate ). Consume the parens as syntax so the
+// predicate AST is the raw expression, not a ParenExpr wrapper.
+exclude_where_opt:
+  {
+    $$ = nil
+  }
+| WHERE '(' expression ')'
+  {
+    $$ = $3
   }
 
 exclude_element_list:
@@ -3349,8 +3362,8 @@ column_definition_type:
     $1.References           = $3
     $1.ReferenceNames       = $5
     $1.ReferenceMatch       = $7
-    $1.ReferenceDeferrable  = &$8
-    $1.ReferenceInitDeferred = &$9
+    $1.ReferenceDeferrable  = $8
+    $1.ReferenceInitDeferred = $9
     $$ = $1
   }
 | column_definition_type REFERENCES table_name '(' column_list ')' match_type_opt ON DELETE reference_option fk_defer_opts
@@ -4899,7 +4912,7 @@ foreign_key_definition:
   }
 
 foreign_key_without_options:
-  CONSTRAINT sql_id_opt FOREIGN key_kw sql_id_opt '(' sql_id_list ')' REFERENCES table_name '(' sql_id_list ')'
+  CONSTRAINT sql_id_opt FOREIGN key_kw sql_id_opt '(' sql_id_list ')' REFERENCES table_name '(' sql_id_list ')' match_type_opt
   {
     $$ = &ForeignKeyDefinition{
       ConstraintName: $2,
@@ -4907,20 +4920,22 @@ foreign_key_without_options:
       IndexColumns: $7,
       ReferenceName: $10,
       ReferenceColumns: $12,
+      Match: $14,
     }
   }
 /* For SQLite3 // SQLite Syntax: table-constraint https://www.sqlite.org/syntax/table-constraint.html */
-| FOREIGN key_kw sql_id_opt '(' sql_id_list ')' REFERENCES table_name '(' sql_id_list ')'
+| FOREIGN key_kw sql_id_opt '(' sql_id_list ')' REFERENCES table_name '(' sql_id_list ')' match_type_opt
   {
     $$ = &ForeignKeyDefinition{
       IndexName: $3,
       IndexColumns: $5,
       ReferenceName: $8,
       ReferenceColumns: $10,
+      Match: $12,
     }
   }
 /* PostgreSQL 18+ temporal FK: FOREIGN KEY (col, PERIOD range_col) REFERENCES ... (col, PERIOD range_col) */
-| CONSTRAINT sql_id_opt FOREIGN key_kw sql_id_opt '(' sql_id_list ',' PERIOD reserved_sql_id ')' REFERENCES table_name '(' sql_id_list ',' PERIOD reserved_sql_id ')'
+| CONSTRAINT sql_id_opt FOREIGN key_kw sql_id_opt '(' sql_id_list ',' PERIOD reserved_sql_id ')' REFERENCES table_name '(' sql_id_list ',' PERIOD reserved_sql_id ')' match_type_opt
   {
     $$ = &ForeignKeyDefinition{
       ConstraintName: $2,
@@ -4929,9 +4944,10 @@ foreign_key_without_options:
       ReferenceName: $13,
       ReferenceColumns: append($15, $18),
       Period: true,
+      Match: $20,
     }
   }
-| FOREIGN key_kw sql_id_opt '(' sql_id_list ',' PERIOD reserved_sql_id ')' REFERENCES table_name '(' sql_id_list ',' PERIOD reserved_sql_id ')'
+| FOREIGN key_kw sql_id_opt '(' sql_id_list ',' PERIOD reserved_sql_id ')' REFERENCES table_name '(' sql_id_list ',' PERIOD reserved_sql_id ')' match_type_opt
   {
     $$ = &ForeignKeyDefinition{
       IndexName: $3,
@@ -4939,6 +4955,7 @@ foreign_key_without_options:
       ReferenceName: $11,
       ReferenceColumns: append($13, $16),
       Period: true,
+      Match: $18,
     }
   }
 
@@ -5010,7 +5027,7 @@ unique_definition:
       Columns: $6,
       Options: $8,
       Partition: $9,
-      ConstraintOptions: &ConstraintOptions{Deferrable: bool($10), InitiallyDeferred: bool($11)},
+      ConstraintOptions: &ConstraintOptions{Deferrable: $10 != nil && bool(*$10), InitiallyDeferred: $11 != nil && bool(*$11)},
     }
   }
 /* For PostgreSQL and SQLite3 */
@@ -5021,7 +5038,7 @@ unique_definition:
       Columns: $4,
       Options: $6,
       Partition: $7,
-      ConstraintOptions: &ConstraintOptions{Deferrable: bool($8), InitiallyDeferred: bool($9)},
+      ConstraintOptions: &ConstraintOptions{Deferrable: $8 != nil && bool(*$8), InitiallyDeferred: $9 != nil && bool(*$9)},
     }
   }
 
@@ -5122,36 +5139,36 @@ not_for_replication_opt:
 deferrable_clause:
   DEFERRABLE
   {
-    $$ = BoolVal(true)
+    $$ = NewBoolVal(true)
   }
 | NOT DEFERRABLE
   {
-    $$ = BoolVal(false)
+    $$ = NewBoolVal(false)
   }
 
 initially_clause:
   INITIALLY IMMEDIATE
   {
-    $$ = BoolVal(false)
+    $$ = NewBoolVal(false)
   }
 | INITIALLY DEFERRED
   {
-    $$ = BoolVal(true)
+    $$ = NewBoolVal(true)
   }
 
 deferrable_option:
   deferrable_clause
   {
-    $$ = ConstraintOptions{Deferrable: bool($1), InitiallyDeferred: false}
+    $$ = ConstraintOptions{Deferrable: bool(*$1), InitiallyDeferred: false}
   }
 | deferrable_clause initially_clause
   {
-    $$ = ConstraintOptions{Deferrable: bool($1), InitiallyDeferred: bool($2)}
+    $$ = ConstraintOptions{Deferrable: bool(*$1), InitiallyDeferred: bool(*$2)}
   }
 | initially_clause
   {
     // Per PostgreSQL, INITIALLY DEFERRED implies DEFERRABLE, INITIALLY IMMEDIATE implies NOT DEFERRABLE
-    $$ = ConstraintOptions{Deferrable: bool($1), InitiallyDeferred: bool($1)}
+    $$ = ConstraintOptions{Deferrable: bool(*$1), InitiallyDeferred: bool(*$1)}
   }
 
 fk_defer_opts:
@@ -7448,7 +7465,7 @@ extension_name:
 deferrable_opt:
   /* empty */
   {
-    $$ = BoolVal(false)
+    $$ = nil
   }
 | deferrable_clause
   {
@@ -7458,7 +7475,7 @@ deferrable_opt:
 initially_deferred_opt:
   /* empty */
   {
-    $$ = BoolVal(false)
+    $$ = nil
   }
 | initially_clause
   {

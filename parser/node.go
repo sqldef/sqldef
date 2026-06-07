@@ -741,6 +741,15 @@ func (ts *TableSpec) Format(buf *nodeBuffer) {
 	for _, idx := range ts.Indexes {
 		buf.Printf(",\n\t%v", idx)
 	}
+	for _, ck := range ts.Checks {
+		buf.Printf(",\n\t%v", ck)
+	}
+	for _, fk := range ts.ForeignKeys {
+		buf.Printf(",\n\t%v", fk)
+	}
+	for _, ex := range ts.Exclusions {
+		buf.Printf(",\n\t%v", ex)
+	}
 
 	var kvOptions strings.Builder
 	var sqliteOpts []string
@@ -905,6 +914,20 @@ type CheckDefinition struct {
 	NoInherit         BoolVal
 }
 
+// Format formats the node.
+func (cd *CheckDefinition) Format(buf *nodeBuffer) {
+	if !cd.ConstraintName.IsEmpty() {
+		buf.Printf("constraint %v ", cd.ConstraintName)
+	}
+	buf.Printf("check (%v)", cd.Where.Expr)
+	if bool(cd.NoInherit) {
+		buf.Printf(" no inherit")
+	}
+	if cd.NotForReplication {
+		buf.Printf(" not for replication")
+	}
+}
+
 type ExclusionPair struct {
 	Expression Expr
 	Operator   string
@@ -915,6 +938,28 @@ type ExclusionDefinition struct {
 	IndexType      Ident
 	Exclusions     []ExclusionPair
 	Where          *Where
+}
+
+// Format formats the node.
+func (ed *ExclusionDefinition) Format(buf *nodeBuffer) {
+	if !ed.ConstraintName.IsEmpty() {
+		buf.Printf("constraint %v ", ed.ConstraintName)
+	}
+	buf.Printf("exclude")
+	if !ed.IndexType.IsEmpty() {
+		buf.Printf(" using %v", ed.IndexType)
+	}
+	buf.Printf(" (")
+	for i, ex := range ed.Exclusions {
+		if i > 0 {
+			buf.Printf(", ")
+		}
+		buf.Printf("%v with %s", ex.Expression, ex.Operator)
+	}
+	buf.Printf(")")
+	if ed.Where != nil && ed.Where.Expr != nil {
+		buf.Printf(" where (%v)", ed.Where.Expr)
+	}
 }
 
 // Format returns a canonical string representation of the type and all relevant options
@@ -973,6 +1018,35 @@ func (ct *ColumnType) Format(buf *nodeBuffer) {
 	}
 	if ct.Check != nil {
 		buf.Printf(" %s %s", keywordStrings[CHECK], String(&ct.Check.Where))
+	}
+	if !ct.References.Name.IsEmpty() {
+		buf.Printf(" references %v", ct.References)
+		if len(ct.ReferenceNames) > 0 {
+			formatFKColumnList(buf, ct.ReferenceNames, false)
+		}
+		if !ct.ReferenceMatch.IsEmpty() {
+			buf.Printf(" %s", ct.ReferenceMatch.Name)
+		}
+		if !ct.ReferenceOnDelete.IsEmpty() {
+			buf.Printf(" on delete %s", ct.ReferenceOnDelete.Name)
+		}
+		if !ct.ReferenceOnUpdate.IsEmpty() {
+			buf.Printf(" on update %s", ct.ReferenceOnUpdate.Name)
+		}
+		if ct.ReferenceDeferrable != nil {
+			if bool(*ct.ReferenceDeferrable) {
+				buf.Printf(" deferrable")
+			} else {
+				buf.Printf(" not deferrable")
+			}
+		}
+		if ct.ReferenceInitDeferred != nil {
+			if bool(*ct.ReferenceInitDeferred) {
+				buf.Printf(" initially deferred")
+			} else {
+				buf.Printf(" initially immediate")
+			}
+		}
 	}
 	if ct.KeyOpt == colKeyPrimary {
 		buf.Printf(" %s %s", keywordStrings[PRIMARY], keywordStrings[KEY])
@@ -1138,6 +1212,56 @@ type ForeignKeyDefinition struct {
 	NotForReplication bool
 	ConstraintOptions *ConstraintOptions
 	Period            bool // For PostgreSQL 18+ temporal FOREIGN KEY constraints (PERIOD on last column)
+}
+
+// Format formats the node.
+func (fk *ForeignKeyDefinition) Format(buf *nodeBuffer) {
+	if !fk.ConstraintName.IsEmpty() {
+		buf.Printf("constraint %v ", fk.ConstraintName)
+	}
+	buf.Printf("foreign key")
+	if !fk.IndexName.IsEmpty() {
+		buf.Printf(" %v", fk.IndexName)
+	}
+	formatFKColumnList(buf, fk.IndexColumns, fk.Period)
+	buf.Printf(" references %v", fk.ReferenceName)
+	formatFKColumnList(buf, fk.ReferenceColumns, fk.Period)
+	// Match / OnDelete / OnUpdate are fixed SQL keyword sequences (e.g.
+	// "MATCH FULL", "SET NULL"), not user identifiers, so emit Name directly
+	// to avoid Ident.Format quoting space-containing values.
+	if !fk.Match.IsEmpty() {
+		buf.Printf(" %s", fk.Match.Name)
+	}
+	if !fk.OnDelete.IsEmpty() {
+		buf.Printf(" on delete %s", fk.OnDelete.Name)
+	}
+	if !fk.OnUpdate.IsEmpty() {
+		buf.Printf(" on update %s", fk.OnUpdate.Name)
+	}
+	if fk.NotForReplication {
+		buf.Printf(" not for replication")
+	}
+	if fk.ConstraintOptions != nil && fk.ConstraintOptions.Deferrable {
+		buf.Printf(" deferrable")
+		if fk.ConstraintOptions.InitiallyDeferred {
+			buf.Printf(" initially deferred")
+		}
+	}
+}
+
+func formatFKColumnList(buf *nodeBuffer, cols []Ident, period bool) {
+	buf.Printf(" (")
+	for i, col := range cols {
+		if i > 0 {
+			buf.Printf(", ")
+		}
+		if period && i == len(cols)-1 {
+			buf.Printf("period %v", col)
+		} else {
+			buf.Printf("%v", col)
+		}
+	}
+	buf.Printf(")")
 }
 
 type Policy struct {
