@@ -1,3 +1,20 @@
+## [v3.11.4](https://github.com/sqldef/sqldef/compare/v3.11.3...v3.11.4) - 2026-06-07
+- fix: extension is a non-reserved keyword by @infogulch in https://github.com/sqldef/sqldef/pull/1217
+- psqldef: parse || as string concatenation in PostgreSQL mode by @178inaba in https://github.com/sqldef/sqldef/pull/1219
+- fix: mysql emit DROP CONSTRAINT (not DROP CHECK) for MariaDB compatibility by @TiBata in https://github.com/sqldef/sqldef/pull/1223
+- psqldef: fix N+1 query issue in PostgreSQL exportTableDDL by @karamaru-alpha in https://github.com/sqldef/sqldef/pull/1237
+- build(deps): bump actions/attest-build-provenance from 3.2.0 to 4.1.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1236
+- build(deps): bump github.com/go-sql-driver/mysql from 1.9.3 to 1.10.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1233
+- build(deps): bump docker/build-push-action from 7.1.0 to 7.2.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1234
+- build(deps): bump actions/create-github-app-token from 3.1.1 to 3.2.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1235
+- build(deps): bump modernc.org/sqlite from 1.50.0 to 1.50.1 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1231
+- build(deps): bump docker/login-action from 4.0.0 to 4.2.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1230
+- ci: run all packages with tests in CI via a test-core job by @178inaba in https://github.com/sqldef/sqldef/pull/1225
+- build(deps): bump github.com/microsoft/go-mssqldb from 1.9.8 to 1.10.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1232
+- build(deps): bump docker/setup-buildx-action from 4.0.0 to 4.1.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1229
+- build(deps): bump golang from 1.26.0-alpine to 1.26.4-alpine by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1227
+- parser: fix Format silently dropping constraints in CREATE TABLE round-trip by @178inaba in https://github.com/sqldef/sqldef/pull/1224
+
 ## [v3.11.3](https://github.com/sqldef/sqldef/compare/v3.11.2...v3.11.3) - 2026-05-24
 - fix: mysql view normalization recurses into subqueries and unwraps JOIN parens by @TiBata in https://github.com/sqldef/sqldef/pull/1213
 - feat: add --check flag for CI gating of schema drift by @TiBata in https://github.com/sqldef/sqldef/pull/1214
