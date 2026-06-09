@@ -138,6 +138,21 @@ func (p PostgresParser) parsePgquery(sql string) ([]database.DDLStatement, error
 			continue
 		}
 
+		// In Auto mode, an Ignore means pgquery has no AST conversion for this node
+		// type (e.g. CREATE FUNCTION). The generic parser does support these, so retry
+		// the single statement before keeping the Ignore. Without this the desired
+		// schema silently loses the statement while the current schema (introspected
+		// from the DB) keeps it, producing a destructive diff such as a spurious
+		// DROP FUNCTION. Pgquery-only mode keeps the Ignore unchanged (PR #1116 intent).
+		if _, isIgnore := stmt.(*parser.Ignore); isIgnore && p.mode == PsqldefParserModeAuto {
+			stmts, retryErr := p.parser.Parse(ddl)
+			if retryErr == nil {
+				statements = append(statements, stmts...)
+				continue
+			}
+			slog.Debug("generic parser also failed for Ignore-d statement, keeping Ignore", "error", retryErr.Error())
+		}
+
 		statements = append(statements, database.DDLStatement{
 			DDL:       ddl,
 			Statement: stmt,
