@@ -204,6 +204,7 @@ func setDDL(yylex any, ddl *DDL) {
 %left <str> CUSTOM_OP
 %left <str> '*' '/' DIV '%' MOD
 %left <str> '^'
+%left <str> AT
 %right <str> '~' UNARY
 /* ---------------- Optional COLLATE Resolution ---------------------------------
  * LOWER_THAN_COLLATE is used to resolve shift/reduce conflicts in optional
@@ -6330,6 +6331,10 @@ value_expression:
 | value_expression TYPECAST TIME WITHOUT TIME ZONE
   {
     $$ = &CastExpr{Expr: $1, Type: &ConvertType{Type: "time without time zone"}}
+  }
+| value_expression AT TIME ZONE value_expression %prec AT
+  {
+    $$ = &AtTimeZoneExpr{Expr: $1, Zone: $5}
   }
 | subquery '.' col_alias '(' expression_list ')'
   {

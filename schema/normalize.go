@@ -446,6 +446,11 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Operator: e.Operator,
 			Expr:     normalizeCheckExpr(e.Expr, mode),
 		}
+	case *parser.AtTimeZoneExpr:
+		return &parser.AtTimeZoneExpr{
+			Expr: normalizeCheckExpr(e.Expr, mode),
+			Zone: normalizeCheckExpr(e.Zone, mode),
+		}
 	case *parser.FuncExpr:
 		normalizedExprs := util.TransformSlice(e.Exprs, func(arg parser.SelectExpr) parser.SelectExpr {
 			if aliased, ok := arg.(*parser.AliasedExpr); ok {
@@ -922,6 +927,12 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		return &parser.CollateExpr{
 			Expr:    normalizeExpr(e.Expr, mode),
 			Charset: strings.ToLower(e.Charset),
+		}
+	case *parser.AtTimeZoneExpr:
+		// Recurse so the ::text cast PostgreSQL adds to the zone is stripped.
+		return &parser.AtTimeZoneExpr{
+			Expr: normalizeExpr(e.Expr, mode),
+			Zone: normalizeExpr(e.Zone, mode),
 		}
 	case *parser.CaseExpr:
 		normalizedWhens := make([]*parser.When, len(e.Whens))

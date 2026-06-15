@@ -1128,4 +1128,78 @@ SerialToSmallserial:
     ALTER TABLE public.users ALTER COLUMN id TYPE integer;
     ALTER SEQUENCE public.users_id_seq AS integer;
 
+CreateTableWithAtTimeZoneDefault:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE events (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL DEFAULT (now() AT TIME ZONE 'utc')
+    );
+
+AddColumnWithAtTimeZoneDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      id bigint NOT NULL
+    );
+  desired: |
+    CREATE TABLE events (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL DEFAULT (now() AT TIME ZONE 'utc')
+    );
+  up: |
+    ALTER TABLE public.events ADD COLUMN created_at timestamp NOT NULL DEFAULT (now() at time zone 'utc');
+  down: |
+    ALTER TABLE public.events DROP COLUMN created_at;
+
+AddAtTimeZoneDefaultToColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL
+    );
+  desired: |
+    CREATE TABLE events (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL DEFAULT (now() AT TIME ZONE 'utc')
+    );
+  up: |
+    ALTER TABLE public.events ALTER COLUMN created_at SET DEFAULT (now() at time zone 'utc');
+  down: |
+    ALTER TABLE public.events ALTER COLUMN created_at DROP DEFAULT;
+
+ChangeAtTimeZoneDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL DEFAULT (now() AT TIME ZONE 'utc')
+    );
+  desired: |
+    CREATE TABLE events (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL DEFAULT (now() AT TIME ZONE 'Asia/Tokyo')
+    );
+  up: |
+    ALTER TABLE public.events ALTER COLUMN created_at SET DEFAULT (now() at time zone 'Asia/Tokyo');
+  down: |
+    ALTER TABLE public.events ALTER COLUMN created_at SET DEFAULT (now() at time zone 'utc');
+
+AddColumnWithCastedAtTimeZoneDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      id bigint NOT NULL
+    );
+  desired: |
+    CREATE TABLE events (
+      id bigint NOT NULL,
+      created_at_text text NOT NULL DEFAULT ((now() AT TIME ZONE 'utc')::text)
+    );
+  up: |
+    ALTER TABLE public.events ADD COLUMN created_at_text text NOT NULL DEFAULT (now() at time zone 'utc')::text;
+  down: |
+    ALTER TABLE public.events DROP COLUMN created_at_text;
+
 # Function returning TABLE

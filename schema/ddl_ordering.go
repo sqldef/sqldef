@@ -459,6 +459,9 @@ func walkExprForFunctionCalls(expr parser.Expr, knownFunctions map[string]bool, 
 		walkExprForFunctionCalls(e.Value, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
 	case *parser.CollateExpr:
 		walkExprForFunctionCalls(e.Expr, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+	case *parser.AtTimeZoneExpr:
+		walkExprForFunctionCalls(e.Expr, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
+		walkExprForFunctionCalls(e.Zone, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
 	case *parser.CastExpr:
 		walkExprForFunctionCalls(e.Expr, knownFunctions, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames, deps)
 	case *parser.ConvertExpr:

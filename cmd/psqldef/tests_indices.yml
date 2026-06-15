@@ -465,6 +465,24 @@ CreateIndexWithDateColumn:
     );
     CREATE INDEX idx_date ON test_table USING btree (date);
 
+CreateIndexWithAtTimeZoneExpression:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      id serial,
+      created_at timestamp
+    );
+  desired: |
+    CREATE TABLE events (
+      id serial,
+      created_at timestamp
+    );
+    CREATE INDEX idx_created_at_utc ON events ((created_at AT TIME ZONE 'utc'));
+  up: |
+    CREATE INDEX idx_created_at_utc ON public.events ((created_at at time zone 'utc'));
+  down: |
+    DROP INDEX public.idx_created_at_utc;
+
 # Test for CHECK constraint with type cast inside ARRAY elements
 # PostgreSQL exports CHECK constraints with explicit type casts like 'value'::varchar::text
 GistIndexWithTstzrange:
