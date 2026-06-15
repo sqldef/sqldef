@@ -1899,3 +1899,22 @@ ChangePrimaryKeyToWithoutOverlaps:
     ALTER TABLE public.reservations ADD CONSTRAINT reservations_pk PRIMARY KEY (id, valid_range);
 
 
+
+# PostgreSQL <14 renders an AT TIME ZONE check expression via pg_get_expr as the
+# underlying timezone(zone, expr) function call; both forms must be equivalent.
+AtTimeZoneCheckEquivalentToTimezoneFunction:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      id bigint NOT NULL,
+      created_at timestamp,
+      CONSTRAINT events_tz_check CHECK (timezone('utc', created_at) < now())
+    );
+  desired: |
+    CREATE TABLE events (
+      id bigint NOT NULL,
+      created_at timestamp,
+      CONSTRAINT events_tz_check CHECK ((created_at AT TIME ZONE 'utc') < now())
+    );
+  up: ""
+  down: ""

@@ -958,6 +958,16 @@ func (tkn *Tokenizer) scanIdentifier(firstChar rune, isDbSystemVariable bool) (i
 		tkn.next()
 	}
 	loweredStr := strings.ToLower(buffer.String())
+
+	// Emit AT only when followed by TIME ZONE, so "at" remains usable as an
+	// ordinary identifier (it is not a reserved keyword in any dialect).
+	if loweredStr == "at" && !tkn.peeking {
+		if id1, id2 := tkn.peekTwoTokens(); id1 == TIME && id2 == ZONE {
+			tkn.lastIdentifierQuoted = false
+			return AT, loweredStr
+		}
+	}
+
 	if keywordID, found := keywords[loweredStr]; found {
 		// Context-aware handling for "with" keyword
 		// Only peek if we're not already in a peek operation (prevents infinite recursion)
@@ -1405,6 +1415,26 @@ func (tkn *Tokenizer) peekToken() (int, string) {
 	// Set peeking flag to prevent infinite recursion
 	tkn.peeking = true
 	return tkn.Scan()
+}
+
+// peekTwoTokens returns the IDs of the next two tokens without consuming input.
+func (tkn *Tokenizer) peekTwoTokens() (int, int) {
+	savedLastChar := tkn.lastChar
+	savedPosition := tkn.Position
+	savedBufPos := tkn.bufPos
+	savedPeeking := tkn.peeking
+
+	defer func() {
+		tkn.peeking = savedPeeking
+		tkn.lastChar = savedLastChar
+		tkn.Position = savedPosition
+		tkn.bufPos = savedBufPos
+	}()
+
+	tkn.peeking = true
+	id1, _ := tkn.Scan()
+	id2, _ := tkn.Scan()
+	return id1, id2
 }
 
 // extractMysqlComment extracts the version and SQL from a comment-only query

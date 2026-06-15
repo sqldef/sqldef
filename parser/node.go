@@ -1924,6 +1924,7 @@ func (*UnaryExpr) iExpr()           {}
 func (*IntervalExpr) iExpr()        {}
 func (*TypedLiteral) iExpr()        {}
 func (*CollateExpr) iExpr()         {}
+func (*AtTimeZoneExpr) iExpr()      {}
 func (*FuncExpr) iExpr()            {}
 func (*CaseExpr) iExpr()            {}
 func (*ValuesFuncExpr) iExpr()      {}
@@ -2410,6 +2411,19 @@ type CollateExpr struct {
 // Format formats the node.
 func (node *CollateExpr) Format(buf *nodeBuffer) {
 	buf.Printf("%v collate \"%s\"", node.Expr, node.Charset)
+}
+
+// AtTimeZoneExpr represents the "expr AT TIME ZONE zone" operator.
+type AtTimeZoneExpr struct {
+	Expr Expr
+	Zone Expr
+}
+
+// Format formats the node. It self-parenthesizes because AT TIME ZONE is only
+// valid in an a_expr context, yet appears in b_expr contexts (column defaults)
+// and binds looser than a trailing cast; the parens keep it correct everywhere.
+func (node *AtTimeZoneExpr) Format(buf *nodeBuffer) {
+	buf.Printf("(%v at time zone %v)", node.Expr, node.Zone)
 }
 
 // FuncExpr represents a function call that takes SelectExprs.

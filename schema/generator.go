@@ -3010,6 +3010,18 @@ type AggregatedSchema struct {
 	Privileges   []*GrantPrivilege
 }
 
+// indexExprNeedsParens reports whether an index expression needs its own
+// parentheses. PostgreSQL parenthesizes general expressions (e.g. ((a + b))) but
+// leaves bare column references and function calls unparenthesized.
+func indexExprNeedsParens(expr parser.Expr) bool {
+	switch expr.(type) {
+	case *parser.ColName, *parser.FuncExpr, *parser.FuncCallExpr, *parser.ParenExpr, *parser.AtTimeZoneExpr:
+		return false
+	default:
+		return true
+	}
+}
+
 // generateCreateIndexStatement generates a CREATE INDEX statement from an Index struct.
 // This is used to regenerate CREATE INDEX statements with proper schema-qualified table names.
 func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Index) string {
@@ -3027,6 +3039,9 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 			} else {
 				// Legacy mode: use parser.String for backward compatibility
 				column = parser.String(indexColumn.columnExpr)
+			}
+			if indexExprNeedsParens(indexColumn.columnExpr) {
+				column = "(" + column + ")"
 			}
 		}
 		if indexColumn.length != nil {
@@ -4996,6 +5011,8 @@ func (g *Generator) formatExprQuoteAware(expr parser.Expr) string {
 		return g.formatExprQuoteAware(e.Expr) + " " + e.Operator
 	case *parser.CastExpr:
 		return g.formatExprQuoteAware(e.Expr) + "::" + parser.String(e.Type)
+	case *parser.AtTimeZoneExpr:
+		return "(" + g.formatExprQuoteAware(e.Expr) + " at time zone " + g.formatExprQuoteAware(e.Zone) + ")"
 	case *parser.FuncExpr:
 		// For function expressions, format arguments with quote awareness
 		// Normalize function name to lowercase (PostgreSQL convention)
@@ -5761,9 +5778,8 @@ func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinitio
 		// https://dev.mysql.com/doc/refman/8.0/en/data-type-defaults.html#data-type-defaults-explicit
 		// https://www.sqlite.org/syntax/column-constraint.html
 		return fmt.Sprintf("DEFAULT(%s)", exprStr), nil
-	} else {
-		return fmt.Sprintf("DEFAULT %s", exprStr), nil
 	}
+	return fmt.Sprintf("DEFAULT %s", exprStr), nil
 }
 
 func generateSridDefinition(sridVal Value) (string, error) {
