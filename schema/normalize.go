@@ -298,9 +298,10 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			return paren
 		}
 		// Unwrap parentheses around simple expressions (literals, column names, etc.)
-		// MSSQL/PostgreSQL may add unnecessary parens like (1) instead of 1 or (name) instead of name
+		// MSSQL/PostgreSQL may add unnecessary parens like (1) instead of 1 or (name) instead of name.
+		// AtTimeZoneExpr self-parenthesizes, so a wrapper around it is redundant too.
 		switch normalized.(type) {
-		case *parser.SQLVal, *parser.ColName:
+		case *parser.SQLVal, *parser.ColName, *parser.AtTimeZoneExpr:
 			return normalized
 		}
 		return &parser.ParenExpr{Expr: normalized}
