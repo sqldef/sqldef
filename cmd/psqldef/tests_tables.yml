@@ -7,6 +7,15 @@ CreateTableWithExtensionColumn:
       extension text
     );
 
+CreateTableWithModeColumn:
+  # MODE is non-reserved in PostgreSQL, so it is valid as a column name.
+  # https://www.postgresql.org/docs/current/sql-keywords-appendix.html
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t (
+      mode text
+    );
+
 CreateTable:
   desired: |
     CREATE TABLE users (

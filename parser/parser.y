@@ -7798,6 +7798,7 @@ non_reserved_keyword:
 | PARTITIONS
 | PARTITION %prec LOWER_THAN_BY
 | ENGINE
+| MODE
 
 // key_kw matches both KEY (default) and PG_KEY (PostgreSQL mode), so contexts
 // like PRIMARY KEY / FOREIGN KEY / VECTOR KEY work in both dialects while
