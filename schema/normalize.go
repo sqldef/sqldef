@@ -461,6 +461,9 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			}
 			return arg
 		})
+		if atz, ok := atTimeZoneFromTimezoneCall(mode, e.Qualifier, strings.ToLower(e.Name.Name), normalizedExprs); ok {
+			return atz
+		}
 		// Normalize function name to lowercase (PostgreSQL convention)
 		funcName := parser.NewIdent(strings.ToLower(e.Name.Name), false)
 		return &parser.FuncExpr{
@@ -538,6 +541,26 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 	}
 }
 
+// atTimeZoneFromTimezoneCall converts a PostgreSQL timezone(zone, ts) call into
+// an AtTimeZoneExpr. PostgreSQL <14 renders "ts AT TIME ZONE zone" via pg_get_expr
+// as this underlying function call, while >=14 renders the operator syntax, so
+// canonicalizing the function form keeps a schema comparing equal across server
+// versions. The argument expressions must already be normalized.
+func atTimeZoneFromTimezoneCall(mode GeneratorMode, qualifier parser.Ident, funcName string, exprs parser.SelectExprs) (*parser.AtTimeZoneExpr, bool) {
+	if mode != GeneratorModePostgres || funcName != "timezone" || len(exprs) != 2 {
+		return nil, false
+	}
+	if !qualifier.IsEmpty() && !strings.EqualFold(qualifier.Name, "pg_catalog") {
+		return nil, false
+	}
+	zone, zoneOk := exprs[0].(*parser.AliasedExpr)
+	ts, tsOk := exprs[1].(*parser.AliasedExpr)
+	if !zoneOk || !tsOk {
+		return nil, false
+	}
+	return &parser.AtTimeZoneExpr{Expr: ts.Expr, Zone: zone.Expr}, true
+}
+
 // normalizeExpr normalizes an expression.
 // This is similar to normalizeCheckExpr but tailored for other contexts.
 func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
@@ -605,6 +628,9 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			// Not an ARRAY, normalize normally
 			normalized := normalizeSelectExpr(arg, mode)
 			normalizedExprs = append(normalizedExprs, normalized)
+		}
+		if atz, ok := atTimeZoneFromTimezoneCall(mode, e.Qualifier, funcName, normalizedExprs); ok {
+			return atz
 		}
 		// Normalize function name to lowercase for PostgreSQL (PostgreSQL stores functions in lowercase)
 		// For MySQL, preserve the original case as MySQL preserves case for function names

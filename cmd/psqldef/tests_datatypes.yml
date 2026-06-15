@@ -1202,4 +1202,21 @@ AddColumnWithCastedAtTimeZoneDefault:
   down: |
     ALTER TABLE public.events DROP COLUMN created_at_text;
 
+# PostgreSQL <14 renders "AT TIME ZONE" via pg_get_expr as the underlying
+# timezone(zone, ts) function call; both forms must be treated as equivalent.
+AtTimeZoneDefaultEquivalentToTimezoneFunction:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL DEFAULT timezone('utc', now())
+    );
+  desired: |
+    CREATE TABLE events (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL DEFAULT (now() AT TIME ZONE 'utc')
+    );
+  up: ""
+  down: ""
+
 # Function returning TABLE
