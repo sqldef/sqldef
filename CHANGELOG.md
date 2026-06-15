@@ -1,3 +1,8 @@
+## [v3.11.5](https://github.com/sqldef/sqldef/compare/v3.11.4...v3.11.5) - 2026-06-15
+- Support the AT TIME ZONE operator in the generic parser by @gfx in https://github.com/sqldef/sqldef/pull/1238
+- parser: accept MODE as a non-reserved keyword identifier by @gfx in https://github.com/sqldef/sqldef/pull/1240
+- psqldef: retry generic parser for ignored statements in auto mode by @178inaba in https://github.com/sqldef/sqldef/pull/1226
+
 ## [v3.11.4](https://github.com/sqldef/sqldef/compare/v3.11.3...v3.11.4) - 2026-06-07
 - fix: extension is a non-reserved keyword by @infogulch in https://github.com/sqldef/sqldef/pull/1217
 - psqldef: parse || as string concatenation in PostgreSQL mode by @178inaba in https://github.com/sqldef/sqldef/pull/1219
