@@ -1202,6 +1202,71 @@ AddColumnWithCastedAtTimeZoneDefault:
   down: |
     ALTER TABLE public.events DROP COLUMN created_at_text;
 
+CreateTableWithBareAtTimeZoneDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      id bigint NOT NULL
+    );
+  desired: |
+    CREATE TABLE events (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL DEFAULT now() AT TIME ZONE 'utc'
+    );
+  up: |
+    ALTER TABLE public.events ADD COLUMN created_at timestamp NOT NULL DEFAULT (now() at time zone 'utc');
+  down: |
+    ALTER TABLE public.events DROP COLUMN created_at;
+
+CreateTableWithBareCurrentTimestampAtTimeZoneDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      id bigint NOT NULL
+    );
+  desired: |
+    CREATE TABLE events (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP AT TIME ZONE 'utc'
+    );
+  up: |
+    ALTER TABLE public.events ADD COLUMN created_at timestamp NOT NULL DEFAULT (current_timestamp at time zone 'utc');
+  down: |
+    ALTER TABLE public.events DROP COLUMN created_at;
+
+BareAtTimeZoneDefaultEquivalentToParenthesized:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL DEFAULT (now() AT TIME ZONE 'utc')
+    );
+  desired: |
+    CREATE TABLE events (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL DEFAULT now() AT TIME ZONE 'utc'
+    );
+  up: ""
+  down: ""
+
+# The trailing cast binds to the zone literal (not the whole expression) and is then
+# normalized away, so "'utc'::text" yields "(now() AT TIME ZONE 'utc')".
+CreateTableWithBareCastedAtTimeZoneDefault:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      id bigint NOT NULL
+    );
+  desired: |
+    CREATE TABLE events (
+      id bigint NOT NULL,
+      created_at timestamp NOT NULL DEFAULT now() AT TIME ZONE 'utc'::text
+    );
+  up: |
+    ALTER TABLE public.events ADD COLUMN created_at timestamp NOT NULL DEFAULT (now() at time zone 'utc');
+  down: |
+    ALTER TABLE public.events DROP COLUMN created_at;
+
 # PostgreSQL <14 renders "AT TIME ZONE" via pg_get_expr as the underlying
 # timezone(zone, ts) function call; both forms must be treated as equivalent.
 AtTimeZoneDefaultEquivalentToTimezoneFunction:
