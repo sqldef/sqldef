@@ -1,3 +1,6 @@
+## [v3.11.7](https://github.com/sqldef/sqldef/compare/v3.11.6...v3.11.7) - 2026-06-16
+- parser: accept interval typed-literal in DEFAULT position by @gfx in https://github.com/sqldef/sqldef/pull/1243
+
 ## [v3.11.6](https://github.com/sqldef/sqldef/compare/v3.11.5...v3.11.6) - 2026-06-16
 - parser: accept un-parenthesized AT TIME ZONE in DEFAULT and index expressions by @gfx in https://github.com/sqldef/sqldef/pull/1241
 
