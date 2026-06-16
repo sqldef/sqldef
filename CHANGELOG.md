@@ -1,3 +1,6 @@
+## [v3.11.6](https://github.com/sqldef/sqldef/compare/v3.11.5...v3.11.6) - 2026-06-16
+- parser: accept un-parenthesized AT TIME ZONE in DEFAULT and index expressions by @gfx in https://github.com/sqldef/sqldef/pull/1241
+
 ## [v3.11.5](https://github.com/sqldef/sqldef/compare/v3.11.4...v3.11.5) - 2026-06-15
 - Support the AT TIME ZONE operator in the generic parser by @gfx in https://github.com/sqldef/sqldef/pull/1238
 - parser: accept MODE as a non-reserved keyword identifier by @gfx in https://github.com/sqldef/sqldef/pull/1240
