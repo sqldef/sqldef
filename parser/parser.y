@@ -3642,6 +3642,10 @@ default_value_expression:
   {
     $$ = $2
   }
+| default_value_expression AT TIME ZONE default_value_expression %prec AT
+  {
+    $$ = &AtTimeZoneExpr{Expr: $1, Zone: $5}
+  }
 
 srid_definition:
   SRID srid_val
@@ -4835,6 +4839,10 @@ index_column:
 | function_call_generic asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Expression: $1, Direction: $2, NullsOrdering: $3}
+  }
+| sql_id AT TIME ZONE value_expression asc_desc_opt nulls_ordering_opt %prec AT
+  {
+    $$ = IndexColumn{Expression: &AtTimeZoneExpr{Expr: &ColName{Name: $1}, Zone: $5}, Direction: $6, NullsOrdering: $7}
   }
 | sql_id WITHOUT OVERLAPS
   {

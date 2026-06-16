@@ -483,6 +483,41 @@ CreateIndexWithAtTimeZoneExpression:
   down: |
     DROP INDEX public.idx_created_at_utc;
 
+CreateIndexWithBareAtTimeZoneExpression:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      id serial,
+      created_at timestamp
+    );
+  desired: |
+    CREATE TABLE events (
+      id serial,
+      created_at timestamp
+    );
+    CREATE INDEX idx_created_at_utc ON events (created_at AT TIME ZONE 'utc');
+  up: |
+    CREATE INDEX idx_created_at_utc ON public.events ((created_at at time zone 'utc'));
+  down: |
+    DROP INDEX public.idx_created_at_utc;
+
+BareAtTimeZoneIndexEquivalentToParenthesized:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      id serial,
+      created_at timestamp
+    );
+    CREATE INDEX idx_created_at_utc ON events ((created_at AT TIME ZONE 'utc'));
+  desired: |
+    CREATE TABLE events (
+      id serial,
+      created_at timestamp
+    );
+    CREATE INDEX idx_created_at_utc ON events (created_at AT TIME ZONE 'utc');
+  up: ""
+  down: ""
+
 # PostgreSQL <14 renders an AT TIME ZONE index expression via pg_get_expr as the
 # underlying timezone(zone, expr) function call; both forms must be equivalent.
 AtTimeZoneIndexEquivalentToTimezoneFunction:
