@@ -443,7 +443,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <convertType> convert_type simple_convert_type
 %type <columnType> column_type
 %type <columnType> bool_type numeric_type time_type char_type spatial_type
-%type <str> int_type_keyword float_type_keyword decimal_type_keyword money_type_keyword
+%type <str> int_type_keyword float_type_keyword decimal_type_keyword money_type_keyword numeric_bool_literal_type
 %type <columnType> int_type_spec float_type_spec decimal_type_spec money_type_spec double_type_spec
 %type <str> precision_opt varying_opt
 %type <optVal> length_opt max_length_opt current_timestamp
@@ -3585,6 +3585,10 @@ default_value_expression:
   {
     $$ = &IntervalExpr{Expr: NewStrVal($2)}
   }
+| numeric_bool_literal_type STRING
+  {
+    $$ = &TypedLiteral{Type: $1, Value: NewStrVal($2)}
+  }
 | variadic_opt array_constructor
   {
     $$ = $2
@@ -4137,6 +4141,20 @@ float_type_spec:
 decimal_type_keyword:
   DECIMAL
 | NUMERIC
+
+// Type names usable in the PostgreSQL typed-literal syntax `<type> '<value>'`
+// (e.g. numeric '1.5', int '1', boolean 'true'). Temporal types (date/time/
+// timestamp/interval) have their own dedicated rules.
+numeric_bool_literal_type:
+  int_type_keyword
+| float_type_keyword
+| decimal_type_keyword
+| DOUBLE PRECISION
+  {
+    $$ = $1 + " " + $2
+  }
+| BOOL
+| BOOLEAN
 
 decimal_type_spec:
   decimal_type_keyword decimal_length_opt
