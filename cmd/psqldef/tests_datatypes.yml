@@ -974,6 +974,45 @@ TypedLiteralsInCheckWithCast:
     ALTER TABLE "public"."events" DROP COLUMN "event_end_date";
     ALTER TABLE "public"."events" DROP COLUMN "event_time";
     ALTER TABLE "public"."events" DROP COLUMN "event_date";
+NumericBoolTypedLiterals:
+  current: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY
+    );
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      ratio numeric DEFAULT numeric '1.5',
+      count_i int DEFAULT int '1',
+      big_count bigint DEFAULT bigint '2',
+      active boolean DEFAULT boolean 'true'
+    );
+  up: |
+    ALTER TABLE public.events ADD COLUMN ratio numeric DEFAULT 1.5;
+    ALTER TABLE public.events ADD COLUMN count_i integer DEFAULT 1;
+    ALTER TABLE public.events ADD COLUMN big_count bigint DEFAULT 2;
+    ALTER TABLE public.events ADD COLUMN active boolean DEFAULT true;
+  down: |
+    ALTER TABLE public.events DROP COLUMN active;
+    ALTER TABLE public.events DROP COLUMN big_count;
+    ALTER TABLE public.events DROP COLUMN count_i;
+    ALTER TABLE public.events DROP COLUMN ratio;
+  legacy_ignore_quotes: false
+NumericBoolTypedLiteralsIdempotency:
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      ratio numeric DEFAULT numeric '1.5',
+      amount decimal DEFAULT decimal '2.5',
+      score real DEFAULT real '3.5',
+      count_i int DEFAULT int '1',
+      big_count bigint DEFAULT bigint '2',
+      small_count smallint DEFAULT smallint '3',
+      dbl double precision DEFAULT double precision '4.5',
+      active boolean DEFAULT boolean 'true',
+      inactive boolean DEFAULT boolean 'f'
+    );
+  legacy_ignore_quotes: false
 CheckWithTimeColumnBareLiteralIsIdempotent:
   desired: |
     CREATE TABLE samples (

@@ -130,6 +130,20 @@ func normalizeTypeName(typeName string, mode GeneratorMode) string {
 	return normalized
 }
 
+// parsePostgresBoolLiteral interprets a string the way PostgreSQL's boolean input
+// does (case-insensitive, surrounding whitespace ignored), e.g. the value carried by a
+// `boolean 'true'` typed literal or a `'t'::boolean` cast. The bool result is reported
+// alongside ok=false for unrecognized input so callers can leave such casts untouched.
+func parsePostgresBoolLiteral(s string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "t", "true", "y", "yes", "on", "1":
+		return true, true
+	case "f", "false", "n", "no", "off", "0":
+		return false, true
+	}
+	return false, false
+}
+
 // normalizeConvertType normalizes a ConvertType's type name.
 // This handles type aliases like int -> integer and properly handles array types like int[] -> integer[]
 func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *parser.ConvertType {
@@ -676,6 +690,12 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 							return parser.NewIntVal(sqlVal.Val)
 						case "numeric", "decimal", "real", "double precision":
 							return parser.NewFloatVal(sqlVal.Val)
+						case "boolean":
+							// PostgreSQL folds `boolean 'true'` / `'t'::boolean` into the bare
+							// constant `true`, so collapse the cast to a bool literal to match.
+							if b, ok := parsePostgresBoolLiteral(sqlVal.Val); ok {
+								return parser.NewBoolSQLVal(b)
+							}
 						case "text", "character varying":
 							// Strip redundant text casts on string literals
 							return normalizedExpr
@@ -986,12 +1006,22 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Else:  normalizedElse,
 		}
 	case *parser.TypedLiteral:
-		// PostgreSQL normalizes typed literals by removing the type prefix
-		// e.g., DATE '2024-01-01' -> '2024-01-01'
-		// e.g., TIME '12:00:00' -> '12:00:00'
-		// e.g., TIMESTAMP '2024-01-01 12:00:00' -> '2024-01-01 12:00:00'
-		// Only normalize for PostgreSQL mode
+		// PostgreSQL folds a typed literal into a plain catalog constant and reads it back
+		// without the type prefix. Temporal literals keep their value as a bare string
+		// (DATE '2024-01-01' -> '2024-01-01', TIME '12:00:00' -> '12:00:00'), while
+		// numeric/integer/boolean literals collapse further (numeric '1.5' -> 1.5,
+		// int '1' -> 1, boolean 'true' -> true). Route the latter group through the cast
+		// normalization that already canonicalizes the equivalent '1.5'::numeric read-back
+		// form so the typed-literal spelling round-trips against the read-back state.
 		if mode == GeneratorModePostgres {
+			normalizedType := normalizeTypeName(e.Type, mode)
+			switch normalizedType {
+			case "integer", "bigint", "smallint", "decimal", "real", "double precision", "boolean":
+				return normalizeExpr(&parser.CastExpr{
+					Expr: e.Value,
+					Type: &parser.ConvertType{Type: normalizedType},
+				}, mode)
+			}
 			return normalizeExpr(e.Value, mode)
 		}
 		return expr
