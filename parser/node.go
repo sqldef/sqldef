@@ -2388,6 +2388,10 @@ type IntervalExpr struct {
 
 // Format formats the node.
 func (node *IntervalExpr) Format(buf *nodeBuffer) {
+	if node.Unit == "" {
+		buf.Printf("interval %v", node.Expr)
+		return
+	}
 	buf.Printf("interval %v %s", node.Expr, node.Unit)
 }
 
