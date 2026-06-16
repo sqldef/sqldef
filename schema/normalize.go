@@ -995,6 +995,17 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			return normalizeExpr(e.Value, mode)
 		}
 		return expr
+	case *parser.IntervalExpr:
+		// PostgreSQL stores `interval '1 day'` in its canonical cast form `'1 day'::interval`,
+		// so normalize the typed-literal spelling to the cast form to compare them equal.
+		// An explicit unit (e.g. interval '1' day) can't be folded into a single cast, so leave it.
+		if mode == GeneratorModePostgres && e.Unit == "" {
+			return normalizeExpr(&parser.CastExpr{
+				Expr: e.Expr,
+				Type: &parser.ConvertType{Type: "interval"},
+			}, mode)
+		}
+		return expr
 	default:
 		// For literals and other types, return as-is
 		return expr

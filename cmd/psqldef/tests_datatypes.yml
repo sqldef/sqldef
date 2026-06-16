@@ -534,6 +534,34 @@ ChangeDefaultExpressionWithAddition:
     ALTER TABLE "public"."foo" ALTER COLUMN "expires_at" SET DEFAULT current_timestamp + '3 days'::interval;
   down: |
     ALTER TABLE "public"."foo" ALTER COLUMN "expires_at" SET DEFAULT current_timestamp + '1 day'::interval;
+ChangeDefaultIntervalTypedLiteral:
+  current: |
+    CREATE TABLE public.foo (
+      ttl interval DEFAULT interval '1 day'
+    );
+  desired: |
+    CREATE TABLE public.foo (
+      ttl interval DEFAULT interval '2 days'
+    );
+  up: |
+    ALTER TABLE public.foo ALTER COLUMN ttl SET DEFAULT '2 days'::interval;
+  down: |
+    ALTER TABLE public.foo ALTER COLUMN ttl SET DEFAULT '1 day'::interval;
+  legacy_ignore_quotes: false
+ChangeDefaultNowPlusIntervalTypedLiteral:
+  current: |
+    CREATE TABLE public.foo (
+      expires_at timestamp with time zone DEFAULT now() + interval '1 day'
+    );
+  desired: |
+    CREATE TABLE public.foo (
+      expires_at timestamp with time zone DEFAULT now() + interval '3 days'
+    );
+  up: |
+    ALTER TABLE public.foo ALTER COLUMN expires_at SET DEFAULT now() + '3 days'::interval;
+  down: |
+    ALTER TABLE public.foo ALTER COLUMN expires_at SET DEFAULT now() + '1 day'::interval;
+  legacy_ignore_quotes: false
 CaseWithoutArgument:
   desired: |
     CREATE TABLE permissions (

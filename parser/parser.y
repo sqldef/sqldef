@@ -3581,6 +3581,10 @@ default_value_expression:
   {
     $$ = &TypedLiteral{Type: "timestamp", Value: NewStrVal($2)}
   }
+| INTERVAL STRING
+  {
+    $$ = &IntervalExpr{Expr: NewStrVal($2)}
+  }
 | variadic_opt array_constructor
   {
     $$ = $2
