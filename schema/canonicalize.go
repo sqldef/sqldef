@@ -3,13 +3,16 @@ package schema
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 )
 
 // canonicalizeMoneyText normalizes a money literal to a plain fixed-point decimal so
-// `money '1.00'`, `'1.00'::money` and PG's read-back `'$1.00'::money` converge.
-// Assumes a two-decimal currency (lc_monetary like en_US); other precisions keep diffing.
+// `money '1.00'`, `'1.00'::money` and PG's read-back `'$1.00'::money` converge. The
+// value is rounded to two decimals half-away-from-zero, matching PostgreSQL's money
+// rounding. Assumes a two-decimal currency (lc_monetary like en_US). Returns false on
+// input that is not a valid decimal once the symbol/separators are stripped.
 func canonicalizeMoneyText(s string) (string, bool) {
 	s = strings.TrimSpace(s)
 	neg := false
@@ -18,42 +21,41 @@ func canonicalizeMoneyText(s string) (string, bool) {
 		neg = true
 		s = s[1 : len(s)-1]
 	}
-	var digits strings.Builder
-	sawDigit := false
+	// Strip currency symbol, thousands separators and spaces; keep digits and point.
+	var b strings.Builder
 	for _, r := range s {
 		switch {
-		case r >= '0' && r <= '9':
-			digits.WriteRune(r)
-			sawDigit = true
-		case r == '.':
-			digits.WriteRune(r)
+		case r >= '0' && r <= '9', r == '.':
+			b.WriteRune(r)
 		case r == '-':
 			neg = !neg
-		default:
-			// Skip currency symbol, thousands separator, spaces, etc.
 		}
 	}
-	if !sawDigit {
+	rat, ok := new(big.Rat).SetString(b.String())
+	if !ok {
 		return "", false
 	}
-	intPart, fracPart, _ := strings.Cut(digits.String(), ".")
-	if intPart == "" {
-		intPart = "0"
+	if neg {
+		rat.Neg(rat)
 	}
-	if len(fracPart) < 2 {
-		fracPart += strings.Repeat("0", 2-len(fracPart))
-	} else {
-		fracPart = fracPart[:2]
+	// Round to integer cents, half away from zero (PostgreSQL money semantics).
+	scaled := new(big.Rat).Mul(rat, big.NewRat(100, 1))
+	cents := new(big.Int)
+	rem := new(big.Int)
+	cents.QuoRem(scaled.Num(), scaled.Denom(), rem)
+	rem.Abs(rem).Lsh(rem, 1)
+	if rem.Cmp(scaled.Denom()) >= 0 {
+		cents.Add(cents, big.NewInt(int64(scaled.Sign())))
 	}
-	intPart = strings.TrimLeft(intPart, "0")
-	if intPart == "" {
-		intPart = "0"
+	sign := ""
+	if cents.Sign() < 0 {
+		sign = "-"
+		cents.Neg(cents)
 	}
-	out := intPart + "." + fracPart
-	if neg && out != "0.00" {
-		out = "-" + out
-	}
-	return out, true
+	dollars := new(big.Int)
+	cc := new(big.Int)
+	dollars.QuoRem(cents, big.NewInt(100), cc)
+	return fmt.Sprintf("%s%s.%02d", sign, dollars.String(), cc.Int64()), true
 }
 
 // intervalParts is PostgreSQL's interval model: months/days/micros are kept separate
@@ -175,7 +177,7 @@ func parseClockTime(f string) (int64, bool) {
 func addIntervalUnit(p *intervalParts, num, unit string) bool {
 	unit = depluralizeUnit(unit)
 	val, err := strconv.ParseFloat(num, 64)
-	if err != nil {
+	if err != nil || math.IsInf(val, 0) || math.IsNaN(val) {
 		return false
 	}
 	if mult, ok := intervalUnitToMonths[unit]; ok {
@@ -284,4 +286,16 @@ func canonicalizeIntervalText(s string) (string, bool) {
 		return "", false
 	}
 	return formatIntervalPG(p), true
+}
+
+// truncateNumericText truncates a plain numeric string toward zero, used for an
+// interval field qualifier where PostgreSQL drops sub-field precision
+// (interval '1.5' year == interval '1' year). Non-numeric or out-of-range input is
+// returned unchanged so the caller leaves the interval unfolded.
+func truncateNumericText(s string) string {
+	v, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil || math.IsInf(v, 0) || math.IsNaN(v) || math.Abs(v) >= math.MaxInt64 {
+		return s
+	}
+	return strconv.FormatInt(int64(math.Trunc(v)), 10)
 }

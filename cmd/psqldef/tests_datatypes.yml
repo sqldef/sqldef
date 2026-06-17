@@ -1463,6 +1463,21 @@ MoneyCastDefaultIsIdempotent:
       price money DEFAULT '1.00'::money
     );
   legacy_ignore_quotes: false
+MoneyDefaultRoundsToCents:
+  desired: |
+    CREATE TABLE m (
+      id integer,
+      price money DEFAULT money '1.999'
+    );
+  legacy_ignore_quotes: false
+IntervalFractionalFieldQualifierTruncates:
+  desired: |
+    CREATE TABLE m (
+      id integer,
+      y interval DEFAULT interval '1.5' year,
+      h interval DEFAULT interval '1.5' hour
+    );
+  legacy_ignore_quotes: false
 IntervalFieldQualifierDefault:
   current: |
     CREATE TABLE m (

@@ -42,6 +42,7 @@ func TestIntervalCanonicalization(t *testing.T) {
 }
 
 func TestMoneyCanonicalization(t *testing.T) {
+	// PG rounds money half away from zero (verified: '1.005'::money = $1.01).
 	cases := map[string]string{
 		"1.00":      "1.00",
 		"$1.00":     "1.00",
@@ -51,6 +52,12 @@ func TestMoneyCanonicalization(t *testing.T) {
 		"-$1.00":    "-1.00",
 		"($1.00)":   "-1.00",
 		"0":         "0.00",
+		"1.999":     "2.00",
+		"1.005":     "1.01",
+		"1.994":     "1.99",
+		"1.995":     "2.00",
+		"0.001":     "0.00",
+		"-1.005":    "-1.01",
 	}
 	for in, want := range cases {
 		got, ok := canonicalizeMoneyText(in)
@@ -60,6 +67,29 @@ func TestMoneyCanonicalization(t *testing.T) {
 		}
 		if got != want {
 			t.Errorf("money %q => %q, want %q", in, got, want)
+		}
+	}
+	// Malformed input must be declined, not silently repaired.
+	for _, in := range []string{"1.2.3", "", "$", "abc"} {
+		if got, ok := canonicalizeMoneyText(in); ok {
+			t.Errorf("money %q: expected not-parsed, got %q", in, got)
+		}
+	}
+}
+
+func TestIntervalCanonicalizationRejectsNonFinite(t *testing.T) {
+	for _, in := range []string{"infinity", "-infinity", "nan"} {
+		if got, ok := canonicalizeIntervalText(in); ok {
+			t.Errorf("interval %q: expected not-parsed, got %q", in, got)
+		}
+	}
+}
+
+func TestTruncateNumericText(t *testing.T) {
+	cases := map[string]string{"1.5": "1", "1": "1", "90": "90", "-1.5": "-1", "1.999": "1"}
+	for in, want := range cases {
+		if got := truncateNumericText(in); got != want {
+			t.Errorf("truncateNumericText(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
