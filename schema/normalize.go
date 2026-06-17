@@ -707,7 +707,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 						// PostgreSQL stores negative numbers as string literals with casts like '-20'::integer
 						// We convert these back to plain numeric literals
 						switch typeStr {
-						case "integer", "bigint", "smallint":
+						case "integer", "int", "bigint", "smallint":
 							// Convert numeric string to actual numeric literal
 							// This unwraps '-20'::integer -> -20
 							return parser.NewIntVal(sqlVal.Val)
@@ -742,7 +742,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 						// PostgreSQL adds redundant casts like 100::numeric or 3.14::double precision
 						// Strip these redundant casts when casting to numeric types
 						switch typeStr {
-						case "integer", "bigint", "smallint", "numeric", "decimal", "real", "double precision":
+						case "integer", "int", "bigint", "smallint", "numeric", "decimal", "real", "double precision":
 							// The value is already a numeric literal, no cast needed
 							return normalizedExpr
 						}
@@ -1065,7 +1065,8 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			if strVal, ok := e.Expr.(*parser.SQLVal); ok && strVal.Type == parser.StrVal {
 				text := strVal.Val
 				if e.Unit != "" {
-					text = text + " " + e.Unit
+					// A field qualifier truncates the value to that field's precision.
+					text = truncateNumericText(strVal.Val) + " " + e.Unit
 				}
 				if canon, ok := canonicalizeIntervalText(text); ok {
 					return &parser.CastExpr{
