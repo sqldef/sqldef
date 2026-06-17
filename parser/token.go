@@ -1009,10 +1009,33 @@ func (tkn *Tokenizer) scanHex() (int, string) {
 		return LEX_ERROR, buffer.String()
 	}
 	tkn.next()
+	if tkn.mode == ParserModePostgres {
+		// In PostgreSQL x'1F' is a bit-string literal (4 bits/digit), not a byte
+		// string, so emit a BIT_LITERAL to share the b'...' path.
+		return BIT_LITERAL, hexToBits(buffer.String())
+	}
 	if buffer.Len()%2 != 0 {
 		return LEX_ERROR, buffer.String()
 	}
 	return HEX, buffer.String()
+}
+
+// hexToBits expands hex digits to binary, 4 bits per digit ("1F" -> "00011111").
+// Input must be hex digits only (guaranteed by scanMantissa).
+func hexToBits(hex string) string {
+	var buffer strings.Builder
+	buffer.Grow(len(hex) * 4)
+	for i := 0; i < len(hex); i++ {
+		v := digitVal(rune(hex[i]))
+		for shift := 3; shift >= 0; shift-- {
+			if v&(1<<shift) != 0 {
+				buffer.WriteByte('1')
+			} else {
+				buffer.WriteByte('0')
+			}
+		}
+	}
+	return buffer.String()
 }
 
 func (tkn *Tokenizer) scanBitLiteral() (int, string) {

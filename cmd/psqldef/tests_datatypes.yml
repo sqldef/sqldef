@@ -1013,6 +1013,69 @@ NumericBoolTypedLiteralsIdempotency:
       inactive boolean DEFAULT boolean 'f'
     );
   legacy_ignore_quotes: false
+JsonUuidTypedLiterals:
+  current: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY
+    );
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      payload json DEFAULT json '{}',
+      payload_b jsonb DEFAULT jsonb '{}',
+      token uuid DEFAULT uuid '00000000-0000-0000-0000-000000000000'
+    );
+  up: |
+    ALTER TABLE public.events ADD COLUMN payload json DEFAULT '{}';
+    ALTER TABLE public.events ADD COLUMN payload_b jsonb DEFAULT '{}';
+    ALTER TABLE public.events ADD COLUMN token uuid DEFAULT '00000000-0000-0000-0000-000000000000';
+  down: |
+    ALTER TABLE public.events DROP COLUMN token;
+    ALTER TABLE public.events DROP COLUMN payload_b;
+    ALTER TABLE public.events DROP COLUMN payload;
+  legacy_ignore_quotes: false
+JsonUuidTypedLiteralsIdempotency:
+  desired: |
+    CREATE TABLE events (
+      id serial PRIMARY KEY,
+      payload json DEFAULT json '{}',
+      payload_b jsonb DEFAULT jsonb '{}',
+      token uuid DEFAULT uuid '00000000-0000-0000-0000-000000000000'
+    );
+  legacy_ignore_quotes: false
+HexBitTypedLiterals:
+  current: |
+    CREATE TABLE flags (
+      id serial PRIMARY KEY
+    );
+  desired: |
+    CREATE TABLE flags (
+      id serial PRIMARY KEY,
+      mask bit(8) DEFAULT x'1F',
+      nibble bit(4) DEFAULT x'A'
+    );
+  up: |
+    ALTER TABLE public.flags ADD COLUMN mask bit(8) DEFAULT b'00011111';
+    ALTER TABLE public.flags ADD COLUMN nibble bit(4) DEFAULT b'1010';
+  down: |
+    ALTER TABLE public.flags DROP COLUMN nibble;
+    ALTER TABLE public.flags DROP COLUMN mask;
+  legacy_ignore_quotes: false
+HexBitTypedLiteralsIdempotency:
+  desired: |
+    CREATE TABLE flags (
+      id serial PRIMARY KEY,
+      mask bit(8) DEFAULT x'1F',
+      nibble bit(4) DEFAULT x'A'
+    );
+  legacy_ignore_quotes: false
+MultiBitLiteralDefaultIsIdempotent:
+  desired: |
+    CREATE TABLE flags (
+      id serial PRIMARY KEY,
+      mask bit(8) DEFAULT b'00011111'
+    );
+  legacy_ignore_quotes: false
 CheckWithTimeColumnBareLiteralIsIdempotent:
   desired: |
     CREATE TABLE samples (
