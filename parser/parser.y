@@ -393,9 +393,9 @@ func setDDL(yylex any, ddl *DDL) {
 %type <expr> condition
 %type <boolVal> boolean_value
 %type <str> int_value
-%type <str> compare extract_field
+%type <str> compare extract_field interval_unit
 %type <ins> insert_data
-%type <expr> value value_expression
+%type <expr> value value_expression typed_literal
 %type <expr> function_call_keyword function_call_nonkeyword function_call_generic function_call_conflict
 %type <str> is_suffix
 %type <colTuple> col_tuple
@@ -3495,6 +3495,42 @@ default_definition:
     $$ = DefaultExpression{Expr: $2}
   }
 
+// Shared leaf so the supported <type> '<value>' forms can't drift between the
+// default/value/array contexts.
+typed_literal:
+  DATE STRING
+  {
+    $$ = &TypedLiteral{Type: "date", Value: NewStrVal($2)}
+  }
+| TIME STRING
+  {
+    $$ = &TypedLiteral{Type: "time", Value: NewStrVal($2)}
+  }
+| TIMESTAMP STRING
+  {
+    $$ = &TypedLiteral{Type: "timestamp", Value: NewStrVal($2)}
+  }
+| numeric_bool_literal_type STRING
+  {
+    $$ = &TypedLiteral{Type: $1, Value: NewStrVal($2)}
+  }
+| money_type_keyword STRING
+  {
+    $$ = &TypedLiteral{Type: $1, Value: NewStrVal($2)}
+  }
+| JSON STRING
+  {
+    $$ = &TypedLiteral{Type: "json", Value: NewStrVal($2)}
+  }
+| JSONB STRING
+  {
+    $$ = &TypedLiteral{Type: "jsonb", Value: NewStrVal($2)}
+  }
+| UUID STRING
+  {
+    $$ = &TypedLiteral{Type: "uuid", Value: NewStrVal($2)}
+  }
+
 default_value_expression:
   STRING character_cast_opt
   {
@@ -3569,37 +3605,17 @@ default_value_expression:
   {
     $$ = &FuncExpr{Name: NewIdent($1, false)}
   }
-| DATE STRING
+| typed_literal
   {
-    $$ = &TypedLiteral{Type: "date", Value: NewStrVal($2)}
-  }
-| TIME STRING
-  {
-    $$ = &TypedLiteral{Type: "time", Value: NewStrVal($2)}
-  }
-| TIMESTAMP STRING
-  {
-    $$ = &TypedLiteral{Type: "timestamp", Value: NewStrVal($2)}
+    $$ = $1
   }
 | INTERVAL STRING
   {
     $$ = &IntervalExpr{Expr: NewStrVal($2)}
   }
-| numeric_bool_literal_type STRING
+| INTERVAL STRING interval_unit
   {
-    $$ = &TypedLiteral{Type: $1, Value: NewStrVal($2)}
-  }
-| JSON STRING
-  {
-    $$ = &TypedLiteral{Type: "json", Value: NewStrVal($2)}
-  }
-| JSONB STRING
-  {
-    $$ = &TypedLiteral{Type: "jsonb", Value: NewStrVal($2)}
-  }
-| UUID STRING
-  {
-    $$ = &TypedLiteral{Type: "uuid", Value: NewStrVal($2)}
+    $$ = &IntervalExpr{Expr: NewStrVal($2), Unit: $3}
   }
 | variadic_opt array_constructor
   {
@@ -6326,25 +6342,17 @@ value_expression:
     // will be non-trivial because of grammar conflicts.
     $$ = &IntervalExpr{Expr: $2}
   }
-| INTERVAL value_expression sql_id
+| INTERVAL value_expression interval_unit
   {
     // This rule prevents the usage of INTERVAL
     // as a function. If support is needed for that,
     // we'll need to revisit this. The solution
     // will be non-trivial because of grammar conflicts.
-    $$ = &IntervalExpr{Expr: $2, Unit: $3.Name}
+    $$ = &IntervalExpr{Expr: $2, Unit: $3}
   }
-| DATE STRING
+| typed_literal
   {
-    $$ = &TypedLiteral{Type: "date", Value: NewStrVal($2)}
-  }
-| TIME STRING
-  {
-    $$ = &TypedLiteral{Type: "time", Value: NewStrVal($2)}
-  }
-| TIMESTAMP STRING
-  {
-    $$ = &TypedLiteral{Type: "timestamp", Value: NewStrVal($2)}
+    $$ = $1
   }
 | value_expression TYPECAST simple_convert_type array_opt
   {
@@ -6669,6 +6677,17 @@ function_call_conflict:
   }
 
 extract_field:
+  sql_id
+  {
+    $$ = $1.Name
+  }
+| YEAR
+  {
+    $$ = $1
+  }
+
+// YEAR is a reserved token; other units (day/hour/...) already lex as ID. Mirrors extract_field.
+interval_unit:
   sql_id
   {
     $$ = $1.Name
@@ -7020,9 +7039,13 @@ new_qualifier_column_name:
 value:
   STRING character_cast_opt
   {
-    // Don't create CastExpr in value context - only in default_value_expression
-    // This avoids affecting comparisons in non-default contexts
-    $$ = NewStrVal($1)
+    // Keep numeric/money/interval casts so normalize can fold them to match PG's
+    // read-back ('1'::numeric); drop the rest as before.
+    if isFoldableValueCast($2) {
+      $$ = &CastExpr{Expr: NewStrVal($1), Type: $2}
+    } else {
+      $$ = NewStrVal($1)
+    }
   }
 | UNICODE_STRING
   {
@@ -7565,9 +7588,16 @@ array_element_list:
 array_element:
   STRING character_cast_opt
   {
-    // Don't create CastExpr in array_element context - only in default_value_expression
-    // This avoids affecting array comparisons
-    $$ = NewStrVal($1)
+    // Preserve numeric/money/interval casts (see value:); drop the rest as before.
+    if isFoldableValueCast($2) {
+      $$ = &CastExpr{Expr: NewStrVal($1), Type: $2}
+    } else {
+      $$ = NewStrVal($1)
+    }
+  }
+| typed_literal
+  {
+    $$ = $1
   }
 | INTEGRAL
   {

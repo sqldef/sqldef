@@ -1414,4 +1414,75 @@ AtTimeZoneDefaultEquivalentToTimezoneFunction:
   up: ""
   down: ""
 
+NumericTypedLiteralInCheck:
+  desired: |
+    CREATE TABLE x (
+      a numeric CONSTRAINT c1 CHECK (a = numeric '1'),
+      b numeric CONSTRAINT c2 CHECK (b = numeric '1.5')
+    );
+  legacy_ignore_quotes: false
+NumericTypedLiteralInPartialIndex:
+  desired: |
+    CREATE TABLE x (
+      a numeric
+    );
+    CREATE INDEX idx_x_a ON x (a) WHERE (a = numeric '1');
+  legacy_ignore_quotes: false
+NumericTypedLiteralInArrayDefault:
+  desired: |
+    CREATE TABLE x (
+      a numeric[] DEFAULT ARRAY[numeric '1']
+    );
+  legacy_ignore_quotes: false
+UuidJsonTypedLiteralInCheck:
+  desired: |
+    CREATE TABLE x (
+      u uuid CONSTRAINT cu CHECK (u = uuid '00000000-0000-0000-0000-000000000000'),
+      j jsonb CONSTRAINT cj CHECK (j = jsonb '{}')
+    );
+  legacy_ignore_quotes: false
+MoneyTypedLiteralDefault:
+  current: |
+    CREATE TABLE m (
+      id integer
+    );
+  desired: |
+    CREATE TABLE m (
+      id integer,
+      price money DEFAULT money '1.00'
+    );
+  up: |
+    ALTER TABLE public.m ADD COLUMN price money DEFAULT '1.00'::money;
+  down: |
+    ALTER TABLE public.m DROP COLUMN price;
+  legacy_ignore_quotes: false
+MoneyCastDefaultIsIdempotent:
+  desired: |
+    CREATE TABLE m (
+      id integer,
+      price money DEFAULT '1.00'::money
+    );
+  legacy_ignore_quotes: false
+IntervalFieldQualifierDefault:
+  current: |
+    CREATE TABLE m (
+      id integer
+    );
+  desired: |
+    CREATE TABLE m (
+      id integer,
+      ttl_year interval DEFAULT interval '1' year,
+      ttl_day interval DEFAULT interval '1' day,
+      ttl_min interval DEFAULT interval '90' minute
+    );
+  up: |
+    ALTER TABLE public.m ADD COLUMN ttl_year interval DEFAULT '1 year'::interval;
+    ALTER TABLE public.m ADD COLUMN ttl_day interval DEFAULT '1 day'::interval;
+    ALTER TABLE public.m ADD COLUMN ttl_min interval DEFAULT '01:30:00'::interval;
+  down: |
+    ALTER TABLE public.m DROP COLUMN ttl_min;
+    ALTER TABLE public.m DROP COLUMN ttl_day;
+    ALTER TABLE public.m DROP COLUMN ttl_year;
+  legacy_ignore_quotes: false
+
 # Function returning TABLE

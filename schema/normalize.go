@@ -252,6 +252,18 @@ func buildMssqlForeignKeyNameIdent(tableName, columnName string) Ident {
 	return NewIdentWithQuoteDetected(name)
 }
 
+// isFoldableValueCastTypeName matches the scalar types whose typed-literal and
+// read-back cast spellings converge. Array ("numeric[]") and time types are excluded.
+func isFoldableValueCastTypeName(typeStr string) bool {
+	switch typeStr {
+	case "numeric", "decimal", "real", "double precision",
+		"integer", "int", "bigint", "smallint",
+		"money", "smallmoney", "interval":
+		return true
+	}
+	return false
+}
+
 // normalizeCheckExpr normalizes a CHECK constraint expression AST for comparison
 // mode parameter controls PostgreSQL-specific normalization (IN to ANY conversion)
 func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
@@ -260,7 +272,17 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 	}
 
 	switch e := expr.(type) {
+	case *parser.IntervalExpr:
+		if mode == GeneratorModePostgres {
+			return normalizeExpr(e, mode)
+		}
+		return expr
 	case *parser.CastExpr:
+		// Numeric/money/interval casts fold to a value-independent form, so reuse the
+		// value-context path; otherwise CHECK keeps its own cast simplification below.
+		if mode == GeneratorModePostgres && e.Type != nil && isFoldableValueCastTypeName(strings.ToLower(e.Type.Type)) {
+			return normalizeExpr(e, mode)
+		}
 		// Remove certain casts that PostgreSQL simplifies
 		// - text, character varying: Always removed
 		// - date, timestamp without time zone: Removed when cast from string literals
@@ -545,10 +567,11 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Qualifier: parser.TableName{Name: qualifier},
 		}
 	case *parser.TypedLiteral:
-		// Strip the type prefix for all temporal literals.
-		// PostgreSQL's pg_get_constraintdef emits typed literals for time/timestamp/date
-		// when comparing to typed columns, but user SQL often writes bare literals.
-		// Dropping the type prefix on both sides makes them compare equal.
+		if mode == GeneratorModePostgres && isFoldableValueCastTypeName(normalizeTypeName(e.Type, mode)) {
+			return normalizeExpr(e, mode)
+		}
+		// Strip the prefix for temporal/json/uuid: pg_get_constraintdef emits typed
+		// literals but user SQL writes bare ones; dropping it on both sides compares equal.
 		return normalizeCheckExpr(e.Value, mode)
 	default:
 		// For all other expression types (literals, etc.), return as-is
@@ -702,6 +725,15 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 						case "date", "time", "timestamp", "timestamp without time zone":
 							// Strip date/time casts on literals (PostgreSQL adds these for typed literals)
 							return normalizedExpr
+						case "money", "smallmoney":
+							// '1.00'::money and read-back '$1.00'::money must converge.
+							if canon, ok := canonicalizeMoneyText(sqlVal.Val); ok {
+								return &parser.CastExpr{Expr: parser.NewStrVal(canon), Type: &parser.ConvertType{Type: "money"}}
+							}
+						case "interval":
+							if canon, ok := canonicalizeIntervalText(sqlVal.Val); ok {
+								return &parser.CastExpr{Expr: parser.NewStrVal(canon), Type: &parser.ConvertType{Type: "interval"}}
+							}
 						default:
 							slog.Debug("unhandled cast type in normalizeCastExpr", "type", typeStr)
 						}
@@ -1016,7 +1048,8 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		if mode == GeneratorModePostgres {
 			normalizedType := normalizeTypeName(e.Type, mode)
 			switch normalizedType {
-			case "integer", "bigint", "smallint", "decimal", "real", "double precision", "boolean":
+			case "integer", "bigint", "smallint", "decimal", "real", "double precision", "boolean",
+				"money", "smallmoney":
 				return normalizeExpr(&parser.CastExpr{
 					Expr: e.Value,
 					Type: &parser.ConvertType{Type: normalizedType},
@@ -1026,14 +1059,21 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		}
 		return expr
 	case *parser.IntervalExpr:
-		// PostgreSQL stores `interval '1 day'` in its canonical cast form `'1 day'::interval`,
-		// so normalize the typed-literal spelling to the cast form to compare them equal.
-		// An explicit unit (e.g. interval '1' day) can't be folded into a single cast, so leave it.
-		if mode == GeneratorModePostgres && e.Unit == "" {
-			return normalizeExpr(&parser.CastExpr{
-				Expr: e.Expr,
-				Type: &parser.ConvertType{Type: "interval"},
-			}, mode)
+		// Fold to `'<interval_out>'::interval` so `interval '1' year`, `interval '1 day'`
+		// and PG's read-back all converge.
+		if mode == GeneratorModePostgres {
+			if strVal, ok := e.Expr.(*parser.SQLVal); ok && strVal.Type == parser.StrVal {
+				text := strVal.Val
+				if e.Unit != "" {
+					text = text + " " + e.Unit
+				}
+				if canon, ok := canonicalizeIntervalText(text); ok {
+					return &parser.CastExpr{
+						Expr: parser.NewStrVal(canon),
+						Type: &parser.ConvertType{Type: "interval"},
+					}
+				}
+			}
 		}
 		return expr
 	default:
