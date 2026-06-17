@@ -1,3 +1,6 @@
+## [v3.11.9](https://github.com/sqldef/sqldef/compare/v3.11.8...v3.11.9) - 2026-06-17
+- parser: accept json/jsonb/uuid and hex bit literals in DEFAULT position by @gfx in https://github.com/sqldef/sqldef/pull/1247
+
 ## [v3.11.8](https://github.com/sqldef/sqldef/compare/v3.11.7...v3.11.8) - 2026-06-16
 - parser: accept numeric/integer/boolean typed-literal in DEFAULT position by @gfx in https://github.com/sqldef/sqldef/pull/1245
 
