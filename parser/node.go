@@ -2155,6 +2155,22 @@ func NewStrVal(in string) *SQLVal {
 	return &SQLVal{Type: StrVal, Val: in}
 }
 
+// isFoldableValueCast reports whether a value-context string cast should be kept
+// (as a CastExpr) so normalize can fold it to match PostgreSQL's read-back. Only
+// numeric/money/interval need this; dropping the rest preserves historical behavior.
+func isFoldableValueCast(t *ConvertType) bool {
+	if t == nil {
+		return false
+	}
+	switch strings.ToLower(t.Type) {
+	case "numeric", "decimal", "real", "double precision",
+		"integer", "int", "bigint", "smallint",
+		"money", "smallmoney", "interval":
+		return true
+	}
+	return false
+}
+
 // NewIntVal builds a new IntVal.
 func NewIntVal(in string) *SQLVal {
 	return &SQLVal{Type: IntVal, Val: in}
