@@ -1,3 +1,6 @@
+## [v3.11.10](https://github.com/sqldef/sqldef/compare/v3.11.9...v3.11.10) - 2026-06-17
+- psqldef: support typed literals in CHECK/WHERE/ARRAY, money, and interval field qualifiers by @gfx in https://github.com/sqldef/sqldef/pull/1249
+
 ## [v3.11.9](https://github.com/sqldef/sqldef/compare/v3.11.8...v3.11.9) - 2026-06-17
 - parser: accept json/jsonb/uuid and hex bit literals in DEFAULT position by @gfx in https://github.com/sqldef/sqldef/pull/1247
 
