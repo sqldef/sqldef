@@ -3589,6 +3589,18 @@ default_value_expression:
   {
     $$ = &TypedLiteral{Type: $1, Value: NewStrVal($2)}
   }
+| JSON STRING
+  {
+    $$ = &TypedLiteral{Type: "json", Value: NewStrVal($2)}
+  }
+| JSONB STRING
+  {
+    $$ = &TypedLiteral{Type: "jsonb", Value: NewStrVal($2)}
+  }
+| UUID STRING
+  {
+    $$ = &TypedLiteral{Type: "uuid", Value: NewStrVal($2)}
+  }
 | variadic_opt array_constructor
   {
     $$ = $2

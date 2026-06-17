@@ -5757,11 +5757,9 @@ func (g *Generator) generateDefaultDefinition(defaultDefinition DefaultDefinitio
 		case ValueTypeFloat:
 			return fmt.Sprintf("DEFAULT %f", defaultVal.floatVal), nil
 		case ValueTypeBit:
-			if defaultVal.bitVal {
-				return "DEFAULT b'1'", nil
-			} else {
-				return "DEFAULT b'0'", nil
-			}
+			// Emit the full bit string; deriving a single bit from bitVal collapsed
+			// multi-bit literals like b'101' to b'0'.
+			return fmt.Sprintf("DEFAULT b'%s'", defaultVal.raw), nil
 		case ValueTypeValArg: // NULL, CURRENT_TIMESTAMP, ...
 			return fmt.Sprintf("DEFAULT %s", defaultVal.raw), nil
 		default:
