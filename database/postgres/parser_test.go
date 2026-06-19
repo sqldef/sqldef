@@ -182,6 +182,36 @@ func TestCreateFunctionAutoModeFallbackRetry(t *testing.T) {
 	}
 }
 
+func TestParseCheckConstraintMultiArgBoolExprWithPgquery(t *testing.T) {
+	t.Setenv("PSQLDEF_PARSER", "pgquery")
+	postgresParser := NewParserWithMode(PsqldefParserModePgquery)
+
+	statements, err := postgresParser.Parse(`
+CREATE TABLE test (
+  status text NOT NULL,
+  quantity integer,
+  price integer,
+  CONSTRAINT chk CHECK (
+    (status = 'active' AND quantity > 0 AND price IS NOT NULL) OR
+    (status = 'archived' AND quantity = 0 AND price IS NULL) OR
+    (status = 'deleted' AND quantity IS NULL AND price IS NULL)
+  )
+);
+`)
+	require.NoError(t, err)
+	require.Len(t, statements, 1)
+
+	ddl, ok := statements[0].Statement.(*parser.DDL)
+	require.True(t, ok)
+	require.Len(t, ddl.TableSpec.Checks, 1)
+
+	checkExpr := parser.String(ddl.TableSpec.Checks[0].Where.Expr)
+	expected := "status = 'active' and quantity > 0 and price is not null" +
+		" or status = 'archived' and quantity = 0 and price is null" +
+		" or status = 'deleted' and quantity is null and price is null"
+	assert.Equal(t, expected, checkExpr)
+}
+
 func TestCreatePolicyWithPgquery(t *testing.T) {
 	t.Setenv("PSQLDEF_PARSER", "pgquery")
 
