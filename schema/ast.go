@@ -328,7 +328,7 @@ type Exclusion struct {
 }
 
 type ExclusionPair struct {
-	expression string
+	expression parser.Expr
 	operator   string
 }
 

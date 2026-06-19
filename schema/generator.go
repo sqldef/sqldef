@@ -490,6 +490,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue // Exclusion constraint is expected to exist.
 			}
 
+			// Also match by definition: an unnamed desired exclusion is realized in
+			// the DB under a server-generated name, so it must not be dropped here.
+			if g.findExclusionByDefinition(desiredTable.exclusions, exclusion) != nil {
+				continue
+			}
+
 			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(exclusion.constraintName)))
 		}
 
@@ -1639,27 +1645,29 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	// Examine each exclusion
 	for _, desiredExclusion := range desired.table.exclusions {
-		if desiredExclusion.constraintName.IsEmpty() && g.mode != GeneratorModeSQLite3 {
-			return ddls, fmt.Errorf(
-				"Exclusion without constraint symbol was found in table '%s'. "+
-					"Specify the constraint symbol to identify the exclusion.",
-				desired.table.name.RawString(),
-			)
+		// Named exclusions match by name; unnamed ones match by definition because
+		// PostgreSQL auto-generates a name for them, so matching by the (empty) name
+		// would never find the server-named one and cause a perpetual drop/add.
+		var currentExclusion *Exclusion
+		if desiredExclusion.constraintName.IsEmpty() {
+			if g.mode == GeneratorModePostgres {
+				currentExclusion = g.findExclusionByDefinition(currentTable.exclusions, desiredExclusion)
+			}
+		} else {
+			currentExclusion = g.findExclusionByName(currentTable.exclusions, desiredExclusion.constraintName)
 		}
 
-		if currentExclusion := g.findExclusionByName(currentTable.exclusions, desiredExclusion.constraintName); currentExclusion != nil {
-			// Drop and add exclusion as needed.
+		if currentExclusion != nil {
+			// Drop and re-add when the definition differs. A differing name alone
+			// (e.g. server-generated) is not a change.
 			if !g.areSameExclusions(*currentExclusion, desiredExclusion) {
-				dropDDL := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(&desired.table), g.escapeSQLIdent(currentExclusion.constraintName))
-				if dropDDL != "" {
-					ddls = append(ddls, dropDDL, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(&desired.table), g.generateExclusionDefinition(desiredExclusion)))
-				}
+				ddls = append(ddls,
+					fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(&desired.table), g.escapeSQLIdent(currentExclusion.constraintName)),
+					fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(&desired.table), g.generateExclusionDefinition(desiredExclusion)))
 			}
 		} else {
 			// Exclusion not found, add exclusion.
-			definition := g.generateExclusionDefinition(desiredExclusion)
-			ddl := fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(&desired.table), definition)
-			ddls = append(ddls, ddl)
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s ADD %s", g.escapeTableName(&desired.table), g.generateExclusionDefinition(desiredExclusion)))
 		}
 	}
 
@@ -1992,6 +2000,11 @@ func (g *Generator) generateDDLsForAddExclusion(tableName QualifiedName, desired
 
 	currentTable := g.findTableByName(g.currentTables, tableName)
 	currentExclusion := g.findExclusionByName(currentTable.exclusions, desiredExclusion.constraintName)
+	// PostgreSQL auto-generates a name for an unnamed exclusion, so match the
+	// desired unnamed exclusion against the server-named one by definition.
+	if currentExclusion == nil && g.mode == GeneratorModePostgres && desiredExclusion.constraintName.IsEmpty() {
+		currentExclusion = g.findExclusionByDefinition(currentTable.exclusions, desiredExclusion)
+	}
 	if currentExclusion == nil {
 		// Exclusion not found, add exclusion
 		ddls = append(ddls, statement)
@@ -3381,14 +3394,16 @@ func (g *Generator) generateForeignKeyDefinition(foreignKey ForeignKey) string {
 func (g *Generator) generateExclusionDefinition(exclusion Exclusion) string {
 	var ex []string
 	for _, exclusionPair := range exclusion.exclusions {
-		ex = append(ex, fmt.Sprintf("%s WITH %s", exclusionPair.expression, exclusionPair.operator))
+		ex = append(ex, fmt.Sprintf("%s WITH %s", parser.String(exclusionPair.expression), exclusionPair.operator))
 	}
-	definition := fmt.Sprintf(
-		"CONSTRAINT %s EXCLUDE USING %s (%s)",
-		g.escapeSQLIdent(exclusion.constraintName),
-		exclusion.indexType,
-		strings.Join(ex, ", "),
-	)
+	// PostgreSQL auto-generates the constraint name when none is given, so emit
+	// the unnamed form rather than an empty CONSTRAINT clause.
+	var definition string
+	if exclusion.constraintName.IsEmpty() {
+		definition = fmt.Sprintf("EXCLUDE USING %s (%s)", exclusion.indexType, strings.Join(ex, ", "))
+	} else {
+		definition = fmt.Sprintf("CONSTRAINT %s EXCLUDE USING %s (%s)", g.escapeSQLIdent(exclusion.constraintName), exclusion.indexType, strings.Join(ex, ", "))
+	}
 	if exclusion.where != nil {
 		definition += fmt.Sprintf(" WHERE (%s)", parser.String(exclusion.where))
 	}
@@ -5589,11 +5604,24 @@ func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion
 	for i := range exclusionA.exclusions {
 		a := exclusionA.exclusions[i]
 		b := exclusionB.exclusions[i]
-		if a.expression != b.expression || a.operator != b.operator {
+		if a.operator != b.operator || !g.areSameExprs(a.expression, b.expression) {
 			return false
 		}
 	}
 	return true
+}
+
+// findExclusionByDefinition returns the first exclusion in the list whose
+// definition matches the target, ignoring the constraint name. PostgreSQL
+// auto-generates names for unnamed exclusions, so the desired (unnamed)
+// exclusion must be matched against the server-named one by content.
+func (g *Generator) findExclusionByDefinition(exclusions []Exclusion, target Exclusion) *Exclusion {
+	for i := range exclusions {
+		if g.areSameExclusions(exclusions[i], target) {
+			return &exclusions[i]
+		}
+	}
+	return nil
 }
 
 func (g *Generator) areSameExprs(exprA, exprB parser.Expr) bool {
