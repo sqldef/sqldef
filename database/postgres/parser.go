@@ -569,36 +569,40 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 			return nil, fmt.Errorf("unknown AConst val type in parseExpr: %#v", cNode)
 		}
 	case *pgquery.Node_BoolExpr:
-		arg1, err := p.parseExpr(node.BoolExpr.Args[0])
+		expr, err := p.parseExpr(node.BoolExpr.Args[0])
 		if err != nil {
 			return nil, err
 		}
 
 		if node.BoolExpr.Boolop == pgquery.BoolExprType_NOT_EXPR {
 			return &parser.NotExpr{
-				Expr: arg1,
+				Expr: expr,
 			}, nil
 		}
 
-		arg2, err := p.parseExpr(node.BoolExpr.Args[1])
-		if err != nil {
-			return nil, err
+		for _, arg := range node.BoolExpr.Args[1:] {
+			right, err := p.parseExpr(arg)
+			if err != nil {
+				return nil, err
+			}
+
+			switch node.BoolExpr.Boolop {
+			case pgquery.BoolExprType_AND_EXPR:
+				expr = &parser.AndExpr{
+					Left:  expr,
+					Right: right,
+				}
+			case pgquery.BoolExprType_OR_EXPR:
+				expr = &parser.OrExpr{
+					Left:  expr,
+					Right: right,
+				}
+			default:
+				return nil, fmt.Errorf("unexpected boolop: %d", node.BoolExpr.Boolop)
+			}
 		}
 
-		switch node.BoolExpr.Boolop {
-		case pgquery.BoolExprType_AND_EXPR:
-			return &parser.AndExpr{
-				Left:  arg1,
-				Right: arg2,
-			}, nil
-		case pgquery.BoolExprType_OR_EXPR:
-			return &parser.OrExpr{
-				Left:  arg1,
-				Right: arg2,
-			}, nil
-		default:
-			return nil, fmt.Errorf("unexpected boolop: %d", node.BoolExpr.Boolop)
-		}
+		return expr, nil
 	case *pgquery.Node_CaseExpr:
 		caseStmt := stmt.GetCaseExpr()
 
