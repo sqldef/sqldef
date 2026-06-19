@@ -979,7 +979,7 @@ func parseExclusion(exclusion *parser.ExclusionDefinition) Exclusion {
 	var exs []ExclusionPair
 	for _, exclusion := range exclusion.Exclusions {
 		exs = append(exs, ExclusionPair{
-			expression: parser.String(exclusion.Expression),
+			expression: exclusion.Expression,
 			operator:   exclusion.Operator,
 		})
 	}
