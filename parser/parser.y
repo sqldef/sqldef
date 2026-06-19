@@ -1914,6 +1914,14 @@ alter_statement:
       Exclusion: $6,
     }
   }
+| ALTER ignore_opt TABLE ONLY table_name ADD exclude_definition
+  {
+    $$ = &DDL{
+      Action: AddExclusion,
+      Table: $5,
+      Exclusion: $7,
+    }
+  }
 | ALTER ignore_opt TABLE table_name ADD foreign_key_definition
   {
     $$ = &DDL{
@@ -3108,6 +3116,22 @@ exclude_definition:
       IndexType: $5, // GIST, btree, hash, etc.
       Exclusions: $7,
       Where: NewWhere(WhereStr, $9),
+    }
+  }
+| EXCLUDE '(' exclude_element_list ')' exclude_where_opt
+  {
+    $$ = &ExclusionDefinition{
+      IndexType: NewIdent("", false), // Default index type
+      Exclusions: $3,
+      Where: NewWhere(WhereStr, $5),
+    }
+  }
+| EXCLUDE USING reserved_sql_id '(' exclude_element_list ')' exclude_where_opt
+  {
+    $$ = &ExclusionDefinition{
+      IndexType: $3, // GIST, btree, hash, etc.
+      Exclusions: $5,
+      Where: NewWhere(WhereStr, $7),
     }
   }
 

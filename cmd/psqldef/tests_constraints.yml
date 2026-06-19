@@ -694,6 +694,27 @@ ExcludeConstraintWithAlterTable:
     ALTER TABLE exclude_example ADD CONSTRAINT ex1 EXCLUDE (name WITH =);
     ALTER TABLE public.exclude_example DROP CONSTRAINT ex2;
 
+# Exclusion constraint added via the ALTER TABLE ONLY form that pg_dump emits
+ExcludeConstraintWithAlterTableOnly:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE exclude_example (
+      name varchar(255),
+      event_start tstzrange NOT NULL,
+      event_end tstzrange NOT NULL
+    );
+  desired: |
+    CREATE TABLE exclude_example (
+      name varchar(255),
+      event_start tstzrange NOT NULL,
+      event_end tstzrange NOT NULL
+    );
+    ALTER TABLE ONLY exclude_example ADD CONSTRAINT ex1 EXCLUDE USING gist (event_start WITH &&, event_end WITH &&);
+  up: |
+    ALTER TABLE ONLY exclude_example ADD CONSTRAINT ex1 EXCLUDE USING gist (event_start WITH &&, event_end WITH &&);
+  down: |
+    ALTER TABLE public.exclude_example DROP CONSTRAINT ex1;
+
 # Exclusion constraint with multiple constraints in CREATE TABLE
 ExcludeConstraintMultiple:
   legacy_ignore_quotes: false
