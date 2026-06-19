@@ -1246,6 +1246,32 @@ func TestTableSpecRoundTripConstraints(t *testing.T) {
 			wantContains: []string{"exclude (", "where ("},
 		},
 		{
+			name:            "unnamed EXCLUDE without USING",
+			sql:             "CREATE TABLE t (a text, EXCLUDE (a WITH =))",
+			mode:            ParserModePostgres,
+			wantContains:    []string{"exclude (", "with ="},
+			wantNotContains: []string{"constraint"},
+		},
+		{
+			name:            "unnamed EXCLUDE USING gist",
+			sql:             "CREATE TABLE t (a text, EXCLUDE USING gist (a WITH &&))",
+			mode:            ParserModePostgres,
+			wantContains:    []string{"exclude using gist", "with &&"},
+			wantNotContains: []string{"constraint"},
+		},
+		{
+			name:         "unnamed EXCLUDE multi-element",
+			sql:          "CREATE TABLE t (a int, b int, EXCLUDE USING gist (a WITH =, b WITH &&))",
+			mode:         ParserModePostgres,
+			wantContains: []string{"exclude using gist", "a with =", "b with &&"},
+		},
+		{
+			name:         "unnamed EXCLUDE with WHERE",
+			sql:          "CREATE TABLE t (a int, b bool, EXCLUDE USING gist (a WITH &&) WHERE (b))",
+			mode:         ParserModePostgres,
+			wantContains: []string{"exclude using gist", "where ("},
+		},
+		{
 			name:         "inline REF no cols",
 			sql:          "CREATE TABLE t (a int REFERENCES u)",
 			mode:         ParserModePostgres,
@@ -1392,6 +1418,47 @@ func TestExcludeWhereGrammar(t *testing.T) {
 			t.Errorf("expected parse error for WHERE without parens, got nil")
 		}
 	})
+}
+
+func TestAlterTableAddExclusionGrammar(t *testing.T) {
+	// ALTER TABLE [ONLY] ... ADD CONSTRAINT ... EXCLUDE is the form pg_dump emits.
+	cases := []struct {
+		name string
+		sql  string
+	}{
+		{
+			name: "ADD CONSTRAINT EXCLUDE",
+			sql:  "ALTER TABLE public.x ADD CONSTRAINT c EXCLUDE USING gist (a WITH &&)",
+		},
+		{
+			name: "ADD CONSTRAINT EXCLUDE on ONLY",
+			sql:  "ALTER TABLE ONLY public.x ADD CONSTRAINT c EXCLUDE USING gist (a WITH &&)",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stmt, err := ParseDDL(tc.sql, ParserModePostgres)
+			if err != nil {
+				t.Fatalf("parse failed: %v", err)
+			}
+			ddl := stmt.(*DDL)
+			if ddl.Action != AddExclusion {
+				t.Errorf("Action = %v, want AddExclusion", ddl.Action)
+			}
+			if ddl.Table.Name.Name != "x" {
+				t.Errorf("Table.Name = %q, want %q", ddl.Table.Name.Name, "x")
+			}
+			if ddl.Exclusion == nil {
+				t.Fatal("Exclusion is nil")
+			}
+			if ddl.Exclusion.ConstraintName.Name != "c" {
+				t.Errorf("ConstraintName = %q, want %q", ddl.Exclusion.ConstraintName.Name, "c")
+			}
+			if ddl.Exclusion.IndexType.Name != "gist" {
+				t.Errorf("IndexType = %q, want %q", ddl.Exclusion.IndexType.Name, "gist")
+			}
+		})
+	}
 }
 
 func TestInlineReferencesDeferrableGrammar(t *testing.T) {
