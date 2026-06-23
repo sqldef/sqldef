@@ -849,6 +849,59 @@ CreateTableWithFunctionalIndex:
     );
   down: |
     DROP TABLE `app_badge_tag`;
+AddFunctionalIndexIf:
+  # Regression: the ALTER path must wrap functional key parts in their own
+  # parentheses, just like the CREATE TABLE path does. Without the wrap,
+  # `ALTER TABLE ... ADD UNIQUE KEY (col, if(...))` is rejected by MySQL with
+  # error 1064 because a bare function expression is not a valid key part.
+  flavor: mysql  # TiDB blocks `if`/`case` in expression indexes without allow-expression-index; MariaDB has no functional indexes
+  min_version: '8.0'
+  current: |
+    CREATE TABLE `t1` (
+    `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+    `group_id` bigint unsigned NOT NULL,
+    `name` varchar(60) NOT NULL DEFAULT '',
+    `deleted` tinyint NOT NULL DEFAULT '0',
+    PRIMARY KEY (`id`)
+    );
+  desired: |
+    CREATE TABLE `t1` (
+    `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+    `group_id` bigint unsigned NOT NULL,
+    `name` varchar(60) NOT NULL DEFAULT '',
+    `deleted` tinyint NOT NULL DEFAULT '0',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uniq_active` (`group_id`,(if((`deleted` = 0),`name`,NULL)))
+    );
+  up: |
+    ALTER TABLE `t1` ADD UNIQUE KEY `uniq_active` (`group_id`, (if((deleted = 0), name, null)));
+  down: |
+    ALTER TABLE `t1` DROP INDEX `uniq_active`;
+AddFunctionalIndexCase:
+  # Same regression as AddFunctionalIndexIf, covering the CASE expression form.
+  flavor: "!mariadb"  # MariaDB has no functional indexes; TiDB allows CASE in expression indexes
+  min_version: '8.0'
+  current: |
+    CREATE TABLE `t1` (
+    `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+    `group_id` bigint unsigned NOT NULL,
+    `name` varchar(60) NOT NULL DEFAULT '',
+    `deleted` tinyint NOT NULL DEFAULT '0',
+    PRIMARY KEY (`id`)
+    );
+  desired: |
+    CREATE TABLE `t1` (
+    `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+    `group_id` bigint unsigned NOT NULL,
+    `name` varchar(60) NOT NULL DEFAULT '',
+    `deleted` tinyint NOT NULL DEFAULT '0',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uniq_active` (`group_id`,((case when (`deleted` = 0) then `name` else NULL end)))
+    );
+  up: |
+    ALTER TABLE `t1` ADD UNIQUE KEY `uniq_active` (`group_id`, (case when (deleted = 0) then name else null end));
+  down: |
+    ALTER TABLE `t1` DROP INDEX `uniq_active`;
 AlterColumnSetDefault:
   current: |
     CREATE TABLE users (
