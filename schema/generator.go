@@ -490,9 +490,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				continue // Exclusion constraint is expected to exist.
 			}
 
-			// Also match by definition: an unnamed desired exclusion is realized in
-			// the DB under a server-generated name, so it must not be dropped here.
-			if g.findExclusionByDefinition(desiredTable.exclusions, exclusion) != nil {
+			// An unnamed desired exclusion lives in the DB under a server-generated name; not obsolete.
+			if g.findUnnamedExclusionByDefinition(desiredTable.exclusions, exclusion) != nil {
 				continue
 			}
 
@@ -1645,9 +1644,7 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 
 	// Examine each exclusion
 	for _, desiredExclusion := range desired.table.exclusions {
-		// Named exclusions match by name; unnamed ones match by definition because
-		// PostgreSQL auto-generates a name for them, so matching by the (empty) name
-		// would never find the server-named one and cause a perpetual drop/add.
+		// Unnamed exclusions match by definition (PostgreSQL auto-names them); named ones by name.
 		var currentExclusion *Exclusion
 		if desiredExclusion.constraintName.IsEmpty() {
 			if g.mode == GeneratorModePostgres {
@@ -1658,8 +1655,6 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		}
 
 		if currentExclusion != nil {
-			// Drop and re-add when the definition differs. A differing name alone
-			// (e.g. server-generated) is not a change.
 			if !g.areSameExclusions(*currentExclusion, desiredExclusion) {
 				ddls = append(ddls,
 					fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(&desired.table), g.escapeSQLIdent(currentExclusion.constraintName)),
@@ -2000,8 +1995,7 @@ func (g *Generator) generateDDLsForAddExclusion(tableName QualifiedName, desired
 
 	currentTable := g.findTableByName(g.currentTables, tableName)
 	currentExclusion := g.findExclusionByName(currentTable.exclusions, desiredExclusion.constraintName)
-	// PostgreSQL auto-generates a name for an unnamed exclusion, so match the
-	// desired unnamed exclusion against the server-named one by definition.
+	// Unnamed exclusion: match the server-named one by definition.
 	if currentExclusion == nil && g.mode == GeneratorModePostgres && desiredExclusion.constraintName.IsEmpty() {
 		currentExclusion = g.findExclusionByDefinition(currentTable.exclusions, desiredExclusion)
 	}
@@ -3396,8 +3390,7 @@ func (g *Generator) generateExclusionDefinition(exclusion Exclusion) string {
 	for _, exclusionPair := range exclusion.exclusions {
 		ex = append(ex, fmt.Sprintf("%s WITH %s", parser.String(exclusionPair.expression), exclusionPair.operator))
 	}
-	// PostgreSQL auto-generates the constraint name when none is given, so emit
-	// the unnamed form rather than an empty CONSTRAINT clause.
+	// Unnamed: let PostgreSQL generate the name.
 	var definition string
 	if exclusion.constraintName.IsEmpty() {
 		definition = fmt.Sprintf("EXCLUDE USING %s (%s)", exclusion.indexType, strings.Join(ex, ", "))
@@ -5508,28 +5501,25 @@ func (g *Generator) formatIndexExprForComparison(expr parser.Expr) string {
 }
 
 func (g *Generator) areSameWhereClause(whereA, whereB parser.Expr) bool {
-	// Both nil
-	if whereA == nil && whereB == nil {
+	return g.sameNormalizedExpr(whereA, whereB)
+}
+
+// sameNormalizedExpr compares two expressions after normalization, case-sensitively and quote-aware.
+func (g *Generator) sameNormalizedExpr(a, b parser.Expr) bool {
+	if a == nil && b == nil {
 		return true
 	}
-	// One is nil and the other is not
-	if whereA == nil || whereB == nil {
+	if a == nil || b == nil {
 		return false
 	}
 
-	normalizedA := normalizeExpr(whereA, g.mode)
-	normalizedB := normalizeExpr(whereB, g.mode)
+	normalizedA := normalizeExpr(a, g.mode)
+	normalizedB := normalizeExpr(b, g.mode)
 
-	var strA, strB string
 	if !g.config.LegacyIgnoreQuotes {
-		strA = g.formatExprQuoteAware(normalizedA)
-		strB = g.formatExprQuoteAware(normalizedB)
-	} else {
-		strA = parser.String(normalizedA)
-		strB = parser.String(normalizedB)
+		return g.formatExprQuoteAware(normalizedA) == g.formatExprQuoteAware(normalizedB)
 	}
-
-	return strA == strB
+	return parser.String(normalizedA) == parser.String(normalizedB)
 }
 
 func (g *Generator) areSameForeignKeys(foreignKeyA ForeignKey, foreignKeyB ForeignKey) bool {
@@ -5604,20 +5594,27 @@ func (g *Generator) areSameExclusions(exclusionA Exclusion, exclusionB Exclusion
 	for i := range exclusionA.exclusions {
 		a := exclusionA.exclusions[i]
 		b := exclusionB.exclusions[i]
-		if a.operator != b.operator || !g.areSameExprs(a.expression, b.expression) {
+		if a.operator != b.operator || !g.sameNormalizedExpr(a.expression, b.expression) {
 			return false
 		}
 	}
 	return true
 }
 
-// findExclusionByDefinition returns the first exclusion in the list whose
-// definition matches the target, ignoring the constraint name. PostgreSQL
-// auto-generates names for unnamed exclusions, so the desired (unnamed)
-// exclusion must be matched against the server-named one by content.
+// findExclusionByDefinition returns the first exclusion matching the target by definition, ignoring its name.
 func (g *Generator) findExclusionByDefinition(exclusions []Exclusion, target Exclusion) *Exclusion {
 	for i := range exclusions {
 		if g.areSameExclusions(exclusions[i], target) {
+			return &exclusions[i]
+		}
+	}
+	return nil
+}
+
+// findUnnamedExclusionByDefinition is like findExclusionByDefinition but skips named exclusions, so a named rename still drops the old one.
+func (g *Generator) findUnnamedExclusionByDefinition(exclusions []Exclusion, target Exclusion) *Exclusion {
+	for i := range exclusions {
+		if exclusions[i].constraintName.IsEmpty() && g.areSameExclusions(exclusions[i], target) {
 			return &exclusions[i]
 		}
 	}

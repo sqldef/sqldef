@@ -727,9 +727,6 @@ ExcludeConstraintMultiple:
       CONSTRAINT ex2 EXCLUDE USING gist (event_start WITH &&, event_end WITH &&)
     );
 
-# Unnamed exclusion: PostgreSQL auto-generates the constraint name, so on
-# re-export it must be matched by definition rather than perpetually dropped and
-# re-added. Idempotency-only verifies there is no drift/churn.
 ExcludeConstraintUnnamedInline:
   legacy_ignore_quotes: false
   desired: |
@@ -749,6 +746,25 @@ ExcludeConstraintUnnamedViaAlter:
       event_end tstzrange NOT NULL
     );
     ALTER TABLE exclude_example ADD EXCLUDE USING gist (event_start WITH &&, event_end WITH &&);
+
+ExcludeConstraintRenameSameDefinition:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE exclude_example (
+      event_start tstzrange NOT NULL,
+      CONSTRAINT ex1 EXCLUDE USING gist (event_start WITH &&)
+    );
+  desired: |
+    CREATE TABLE exclude_example (
+      event_start tstzrange NOT NULL,
+      CONSTRAINT ex2 EXCLUDE USING gist (event_start WITH &&)
+    );
+  up: |
+    ALTER TABLE public.exclude_example ADD CONSTRAINT ex2 EXCLUDE USING gist (event_start WITH &&);
+    ALTER TABLE public.exclude_example DROP CONSTRAINT ex1;
+  down: |
+    ALTER TABLE public.exclude_example ADD CONSTRAINT ex1 EXCLUDE USING gist (event_start WITH &&);
+    ALTER TABLE public.exclude_example DROP CONSTRAINT ex2;
 
 ConstraintCheckInWithUniqueCreate:
   current: |
