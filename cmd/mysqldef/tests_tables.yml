@@ -879,7 +879,7 @@ AddFunctionalIndexIf:
     ALTER TABLE `t1` DROP INDEX `uniq_active`;
 AddFunctionalIndexCase:
   # Same regression as AddFunctionalIndexIf, covering the CASE expression form.
-  flavor: mysql  # TiDB blocks `if`/`case` in expression indexes without allow-expression-index; MariaDB has no functional indexes
+  flavor: "!mariadb"  # MariaDB has no functional indexes; TiDB allows CASE in expression indexes
   min_version: '8.0'
   current: |
     CREATE TABLE `t1` (
