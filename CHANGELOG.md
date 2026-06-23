@@ -1,3 +1,10 @@
+## [v3.11.12](https://github.com/sqldef/sqldef/compare/v3.11.11...v3.11.12) - 2026-06-23
+- psqldef: parse unnamed and ALTER TABLE ONLY EXCLUDE constraints in the generic parser by @gfx in https://github.com/sqldef/sqldef/pull/1254
+- Fix pgquery multi-arg bool expressions by @tsukuneA1 in https://github.com/sqldef/sqldef/pull/1253
+- psqldef: support unnamed EXCLUDE constraints end-to-end (match by definition) by @gfx in https://github.com/sqldef/sqldef/pull/1256
+- Add MySQL CREATE EVENT / ALTER EVENT / DROP EVENT support by @Schnouki in https://github.com/sqldef/sqldef/pull/1131
+- fix(mysqldef): wrap functional key parts in ADD/CREATE INDEX emit (1064) by @modasserbillah in https://github.com/sqldef/sqldef/pull/1258
+
 ## [v3.11.11](https://github.com/sqldef/sqldef/compare/v3.11.10...v3.11.11) - 2026-06-17
 - psqldef: fix money rounding and interval field-qualifier canonicalization by @gfx in https://github.com/sqldef/sqldef/pull/1251
 
