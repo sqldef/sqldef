@@ -3029,6 +3029,24 @@ func indexExprNeedsParens(expr parser.Expr) bool {
 	}
 }
 
+// indexKeyPartNeedsParens reports whether an index key-part expression needs
+// its own wrapping parentheses for the current generator mode. MySQL is
+// stricter than PostgreSQL: any functional key part (anything that isn't a
+// bare column reference, including `if(...)` / `case ... end`) MUST be
+// wrapped, otherwise MySQL rejects the DDL with error 1064
+// (https://dev.mysql.com/doc/refman/8.0/en/create-index.html). For the other
+// modes, fall back to the PostgreSQL-flavored helper.
+func (g *Generator) indexKeyPartNeedsParens(expr parser.Expr) bool {
+	if g.mode == GeneratorModeMysql {
+		if _, alreadyWrapped := expr.(*parser.ParenExpr); alreadyWrapped {
+			return false
+		}
+		_, isCol := expr.(*parser.ColName)
+		return !isCol
+	}
+	return indexExprNeedsParens(expr)
+}
+
 // generateCreateIndexStatement generates a CREATE INDEX statement from an Index struct.
 // This is used to regenerate CREATE INDEX statements with proper schema-qualified table names.
 func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Index) string {
@@ -3047,7 +3065,7 @@ func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Inde
 				// Legacy mode: use parser.String for backward compatibility
 				column = parser.String(indexColumn.columnExpr)
 			}
-			if indexExprNeedsParens(indexColumn.columnExpr) {
+			if g.indexKeyPartNeedsParens(indexColumn.columnExpr) {
 				column = "(" + column + ")"
 			}
 		}
@@ -3147,6 +3165,9 @@ func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 			} else {
 				// Legacy mode: use parser.String for backward compatibility
 				column = parser.String(indexColumn.columnExpr)
+			}
+			if g.indexKeyPartNeedsParens(indexColumn.columnExpr) {
+				column = "(" + column + ")"
 			}
 		}
 		if indexColumn.length != nil {
