@@ -854,7 +854,7 @@ AddFunctionalIndexIf:
   # parentheses, just like the CREATE TABLE path does. Without the wrap,
   # `ALTER TABLE ... ADD UNIQUE KEY (col, if(...))` is rejected by MySQL with
   # error 1064 because a bare function expression is not a valid key part.
-  flavor: "!mariadb"
+  flavor: mysql  # TiDB blocks `if`/`case` in expression indexes without allow-expression-index; MariaDB has no functional indexes
   min_version: '8.0'
   current: |
     CREATE TABLE `t1` (
@@ -879,7 +879,7 @@ AddFunctionalIndexIf:
     ALTER TABLE `t1` DROP INDEX `uniq_active`;
 AddFunctionalIndexCase:
   # Same regression as AddFunctionalIndexIf, covering the CASE expression form.
-  flavor: "!mariadb"
+  flavor: mysql  # TiDB blocks `if`/`case` in expression indexes without allow-expression-index; MariaDB has no functional indexes
   min_version: '8.0'
   current: |
     CREATE TABLE `t1` (
