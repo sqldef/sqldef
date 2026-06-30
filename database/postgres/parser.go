@@ -368,20 +368,54 @@ func (p PostgresParser) parseViewStmt(stmt *pgquery.ViewStmt) (parser.Statement,
 }
 
 func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.SelectStatement, error) {
-	unhandled := stmt.IntoClause != nil ||
-		stmt.WindowClause != nil ||
-		stmt.SortClause != nil ||
-		stmt.ValuesLists != nil ||
+	if stmt.SortClause != nil ||
 		stmt.LimitOffset != nil ||
 		stmt.LimitCount != nil ||
-		stmt.LimitOption != 1 ||
-		stmt.LockingClause != nil ||
+		stmt.LimitOption != pgquery.LimitOption_LIMIT_OPTION_DEFAULT ||
 		stmt.WithClause != nil ||
-		stmt.Op != 1 ||
-		stmt.All ||
-		stmt.Larg != nil ||
-		stmt.Rarg != nil
-	if unhandled {
+		stmt.LockingClause != nil {
+		return nil, fmt.Errorf("unhandled node in parseSelectStmt: %#v", stmt)
+	}
+
+	if stmt.Op != pgquery.SetOperation_SETOP_NONE {
+		left, err := p.parseSelectStmt(stmt.Larg)
+		if err != nil {
+			return nil, err
+		}
+		right, err := p.parseSelectStmt(stmt.Rarg)
+		if err != nil {
+			return nil, err
+		}
+
+		var opType string
+		switch stmt.Op {
+		case pgquery.SetOperation_SETOP_UNION:
+			if stmt.All {
+				opType = parser.UnionAllStr
+			} else {
+				opType = parser.UnionStr
+			}
+		case pgquery.SetOperation_SETOP_INTERSECT:
+			if stmt.All {
+				opType = parser.IntersectAllStr
+			} else {
+				opType = parser.IntersectStr
+			}
+		case pgquery.SetOperation_SETOP_EXCEPT:
+			if stmt.All {
+				opType = parser.ExceptAllStr
+			} else {
+				opType = parser.ExceptStr
+			}
+		default:
+			return nil, fmt.Errorf("unsupported set operation in parseSelectStmt: %d", stmt.Op)
+		}
+		return &parser.Union{Type: opType, Left: left, Right: right}, nil
+	}
+
+	if stmt.IntoClause != nil ||
+		stmt.WindowClause != nil ||
+		stmt.ValuesLists != nil {
 		return nil, fmt.Errorf("unhandled node in parseSelectStmt: %#v", stmt)
 	}
 
