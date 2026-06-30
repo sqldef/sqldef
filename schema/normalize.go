@@ -1155,6 +1155,7 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode) parser.TableE
 			Expr:       normalizedExpr,
 			Partitions: e.Partitions,
 			As:         e.As,
+			Columns:    e.Columns,
 			TableHints: e.TableHints,
 			IndexHints: e.IndexHints,
 		}

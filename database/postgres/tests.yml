@@ -106,6 +106,22 @@ CreateView:
   sql: |
     create view hoge_view as
     select amount from hoge;
+CreateViewWithUnionAll:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW set_view AS SELECT 1 AS id UNION ALL SELECT 2 AS id
+CreateViewWithUnion:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW set_view AS SELECT 1 AS id UNION SELECT 2 AS id
+CreateViewWithIntersect:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW set_view AS SELECT 1 AS id INTERSECT SELECT 2 AS id
+CreateViewWithExcept:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW set_view AS SELECT 1 AS id EXCEPT SELECT 2 AS id
 CreateViewWithCast:
   sql: |
     create view hoge_view as
