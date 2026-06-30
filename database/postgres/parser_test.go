@@ -219,12 +219,68 @@ CREATE VIEW set_view AS SELECT 1 AS id UNION ALL SELECT 2 AS id;
 	assert.Equal(t, "select 1 as id union all select 2 as id", parser.String(ddl.View.Definition))
 }
 
+func TestSetOperationVariantsWithPgquery(t *testing.T) {
+	tests := []struct {
+		name string
+		sql  string
+		want string
+	}{
+		{
+			name: "union",
+			sql:  "SELECT 1 AS id UNION SELECT 2 AS id",
+			want: "select 1 as id union select 2 as id",
+		},
+		{
+			name: "intersect all",
+			sql:  "SELECT 1 AS id INTERSECT ALL SELECT 1 AS id",
+			want: "select 1 as id intersect all select 1 as id",
+		},
+		{
+			name: "except all",
+			sql:  "SELECT 1 AS id EXCEPT ALL SELECT 2 AS id",
+			want: "select 1 as id except all select 2 as id",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("PSQLDEF_PARSER", "pgquery")
+			postgresParser := NewParserWithMode(PsqldefParserModePgquery)
+
+			statements, err := postgresParser.Parse("CREATE VIEW set_view AS " + tt.sql)
+			require.NoError(t, err)
+			require.Len(t, statements, 1)
+
+			ddl, ok := statements[0].Statement.(*parser.DDL)
+			require.True(t, ok, "expected DDL statement, got %T", statements[0].Statement)
+			require.NotNil(t, ddl.View)
+			assert.Equal(t, tt.want, parser.String(ddl.View.Definition))
+		})
+	}
+}
+
 func TestMultipleFromEntriesWithPgquery(t *testing.T) {
 	t.Setenv("PSQLDEF_PARSER", "pgquery")
 	postgresParser := NewParserWithMode(PsqldefParserModePgquery)
 
 	_, err := postgresParser.Parse(`CREATE VIEW v AS SELECT * FROM a, b;`)
 	require.ErrorContains(t, err, "unhandled multiple FROM entries in parseSelectStmt")
+}
+
+func TestUnsupportedLateralSubselectWithPgquery(t *testing.T) {
+	t.Setenv("PSQLDEF_PARSER", "pgquery")
+	postgresParser := NewParserWithMode(PsqldefParserModePgquery)
+
+	_, err := postgresParser.Parse(`CREATE VIEW v AS SELECT * FROM LATERAL (SELECT 1 AS id) AS s;`)
+	require.ErrorContains(t, err, "unhandled lateral subquery in parseSelectStmt")
+}
+
+func TestUnsupportedSubselectSortWithPgquery(t *testing.T) {
+	t.Setenv("PSQLDEF_PARSER", "pgquery")
+	postgresParser := NewParserWithMode(PsqldefParserModePgquery)
+
+	_, err := postgresParser.Parse(`CREATE VIEW v AS SELECT * FROM (SELECT 1 AS id ORDER BY id) AS s;`)
+	require.ErrorContains(t, err, "unhandled node in parseSelectStmt")
 }
 
 func TestAliasColumnNamesWithPgquery(t *testing.T) {
