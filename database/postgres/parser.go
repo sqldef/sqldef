@@ -433,26 +433,55 @@ func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.Select
 		}
 	}
 
-	var fromTable parser.TableName
-	var aliasName string
-	if len(stmt.FromClause) == 0 {
-		fromTable = parser.TableName{
-			Name:   parser.NewIdent("", false),
-			Schema: parser.NewIdent("", false),
-		}
-	} else {
-		var err error
+	var from parser.TableExprs
+	if len(stmt.FromClause) > 1 {
+		return nil, fmt.Errorf("unhandled multiple FROM entries in parseSelectStmt: %#v", stmt.FromClause)
+	}
+	if len(stmt.FromClause) == 1 {
+		var fromExpr parser.SimpleTableExpr
+		var aliasName string
+		var aliasCols parser.Columns
 		switch node := stmt.FromClause[0].Node.(type) {
 		case *pgquery.Node_RangeVar:
-			fromTable, err = p.parseTableName(node.RangeVar)
+			tableName, err := p.parseTableName(node.RangeVar)
 			if err != nil {
 				return nil, err
 			}
+			fromExpr = tableName
 			if node.RangeVar.Alias != nil {
 				aliasName = node.RangeVar.Alias.Aliasname
 			}
+		case *pgquery.Node_RangeSubselect:
+			if node.RangeSubselect.Lateral {
+				return nil, fmt.Errorf("unhandled lateral subquery in parseSelectStmt")
+			}
+			subNode, ok := node.RangeSubselect.Subquery.Node.(*pgquery.Node_SelectStmt)
+			if !ok {
+				return nil, fmt.Errorf("unknown subquery node in parseSelectStmt: %#v", node.RangeSubselect.Subquery.Node)
+			}
+			sub, err := p.parseSelectStmt(subNode.SelectStmt)
+			if err != nil {
+				return nil, err
+			}
+			fromExpr = &parser.Subquery{Select: sub}
+			if node.RangeSubselect.Alias != nil {
+				aliasName = node.RangeSubselect.Alias.Aliasname
+				for _, col := range node.RangeSubselect.Alias.Colnames {
+					if s, ok := col.Node.(*pgquery.Node_String_); ok {
+						aliasCols = append(aliasCols, parser.NewIdent(s.String_.Sval, false))
+					}
+				}
+			}
 		default:
 			return nil, fmt.Errorf("unknown node in parseSelectStmt: %#v", node)
+		}
+		from = parser.TableExprs{
+			&parser.AliasedTableExpr{
+				Expr:       fromExpr,
+				Columns:    aliasCols,
+				TableHints: []string{},
+				As:         parser.NewIdent(aliasName, false),
+			},
 		}
 	}
 
@@ -507,16 +536,10 @@ func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.Select
 	return &parser.Select{
 		SelectExprs: selectExprs,
 		Distinct:    distinct,
-		From: parser.TableExprs{
-			&parser.AliasedTableExpr{
-				Expr:       fromTable,
-				TableHints: []string{},
-				As:         parser.NewIdent(aliasName, false),
-			},
-		},
-		Where:   where,
-		GroupBy: groupBy,
-		Having:  having,
+		From:        from,
+		Where:       where,
+		GroupBy:     groupBy,
+		Having:      having,
 	}, nil
 }
 
