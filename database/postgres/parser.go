@@ -433,7 +433,7 @@ func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.Select
 		}
 	}
 
-	var from parser.TableExprs
+	from := parser.TableExprs{}
 	if len(stmt.FromClause) > 1 {
 		return nil, fmt.Errorf("unhandled multiple FROM entries in parseSelectStmt: %#v", stmt.FromClause)
 	}
