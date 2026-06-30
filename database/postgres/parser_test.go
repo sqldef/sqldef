@@ -182,6 +182,69 @@ func TestCreateFunctionAutoModeFallbackRetry(t *testing.T) {
 	}
 }
 
+func TestRangeSubselectWithPgquery(t *testing.T) {
+	t.Setenv("PSQLDEF_PARSER", "pgquery")
+	postgresParser := NewParserWithMode(PsqldefParserModePgquery)
+
+	statements, err := postgresParser.Parse(`
+CREATE VIEW set_view AS
+SELECT * FROM ((SELECT 1 AS id) UNION ALL (SELECT 2 AS id)) AS s;
+`)
+	require.NoError(t, err)
+	require.Len(t, statements, 1)
+
+	ddl, ok := statements[0].Statement.(*parser.DDL)
+	require.True(t, ok, "expected DDL statement, got %T", statements[0].Statement)
+	require.NotNil(t, ddl.View)
+
+	viewDefinition := parser.String(ddl.View.Definition)
+	assert.Equal(t, "select * from (select 1 as id union all select 2 as id) as s", viewDefinition)
+	assert.NotContains(t, viewDefinition, "from  ")
+}
+
+func TestSetOperationAutoFallback(t *testing.T) {
+	t.Setenv("PSQLDEF_PARSER", "")
+	postgresParser := NewParserWithMode(PsqldefParserModeAuto)
+
+	statements, err := postgresParser.Parse(`
+CREATE TABLE t (id int) WITH (fillfactor = 70);
+CREATE VIEW set_view AS SELECT 1 AS id UNION ALL SELECT 2 AS id;
+`)
+	require.NoError(t, err)
+	require.Len(t, statements, 2)
+
+	ddl, ok := statements[1].Statement.(*parser.DDL)
+	require.True(t, ok, "expected DDL statement, got %T", statements[1].Statement)
+	require.NotNil(t, ddl.View)
+	assert.Equal(t, "select 1 as id union all select 2 as id", parser.String(ddl.View.Definition))
+}
+
+func TestMultipleFromEntriesWithPgquery(t *testing.T) {
+	t.Setenv("PSQLDEF_PARSER", "pgquery")
+	postgresParser := NewParserWithMode(PsqldefParserModePgquery)
+
+	_, err := postgresParser.Parse(`CREATE VIEW v AS SELECT * FROM a, b;`)
+	require.ErrorContains(t, err, "unhandled multiple FROM entries in parseSelectStmt")
+}
+
+func TestAliasColumnNamesWithPgquery(t *testing.T) {
+	t.Setenv("PSQLDEF_PARSER", "pgquery")
+	postgresParser := NewParserWithMode(PsqldefParserModePgquery)
+
+	statements, err := postgresParser.Parse(`
+CREATE VIEW v AS
+SELECT * FROM (SELECT 1 AS id, 2 AS other) AS s(a, b);
+`)
+	require.NoError(t, err)
+	require.Len(t, statements, 1)
+
+	ddl, ok := statements[0].Statement.(*parser.DDL)
+	require.True(t, ok, "expected DDL statement, got %T", statements[0].Statement)
+	require.NotNil(t, ddl.View)
+
+	assert.Equal(t, "select * from (select 1 as id, 2 as other) as s(a, b)", parser.String(ddl.View.Definition))
+}
+
 func TestParseCheckConstraintMultiArgBoolExprWithPgquery(t *testing.T) {
 	t.Setenv("PSQLDEF_PARSER", "pgquery")
 	postgresParser := NewParserWithMode(PsqldefParserModePgquery)
