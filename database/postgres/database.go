@@ -1040,7 +1040,7 @@ func postgresBuildDSN(config database.Config) string {
 }
 
 func forceQuoteIdentifier(name string) string {
-	return fmt.Sprintf("\"%s\"", name)
+	return fmt.Sprintf("\"%s\"", strings.ReplaceAll(name, "\"", "\"\""))
 }
 
 // quoteIdent quotes a constraint name for DDL output.
