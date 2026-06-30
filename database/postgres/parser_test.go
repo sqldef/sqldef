@@ -68,8 +68,8 @@ func readTests(file string) (map[string]TestCase, error) {
 // This is a parse-only test since regular PostgreSQL doesn't support ASYNC (Aurora DSQL only).
 // The parser uses testing=false to allow fallback to the generic parser.
 func TestParseIndexAsync(t *testing.T) {
-	// Create parser with testing=false to enable generic parser fallback
-	sqlParser := NewParser()
+	t.Setenv("PSQLDEF_PARSER", "")
+	sqlParser := NewParserWithMode(PsqldefParserModeAuto)
 
 	// Test parsing CREATE INDEX ASYNC
 	sql := `CREATE TABLE users (
