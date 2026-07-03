@@ -1605,7 +1605,7 @@ func (d *PostgresDatabase) getRowLevelSecurityDefsForTables(tableNames []string)
 
 func (d *PostgresDatabase) getPolicyDefsForTables(tableNames []string) (map[string][]string, error) {
 	const query = `
-		SELECT schemaname || '.' || tablename AS qualified_table_name, tablename, policyname, permissive, roles, cmd, qual, with_check
+		SELECT schemaname || '.' || tablename AS qualified_table_name, schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check
 		FROM pg_policies
 		WHERE schemaname || '.' || tablename = ANY($1::text[])
 	`
@@ -1618,18 +1618,20 @@ func (d *PostgresDatabase) getPolicyDefsForTables(tableNames []string) (map[stri
 	result := make(map[string][]string, len(tableNames))
 	for rows.Next() {
 		var (
-			qualifiedTableName, tableName, policyName, permissive, roles, cmd string
-			using, withCheck                                                  sql.NullString
+			qualifiedTableName, schemaName, tableName, policyName, permissive, roles, cmd string
+			using, withCheck                                                              sql.NullString
 		)
-		err = rows.Scan(&qualifiedTableName, &tableName, &policyName, &permissive, &roles, &cmd, &using, &withCheck)
+		err = rows.Scan(&qualifiedTableName, &schemaName, &tableName, &policyName, &permissive, &roles, &cmd, &using, &withCheck)
 		if err != nil {
 			return nil, err
 		}
 		roles = policyRolesPrefixRegex.ReplaceAllString(roles, "")
 		roles = policyRolesSuffixRegex.ReplaceAllString(roles, "")
+		// Qualify the table name with its schema; otherwise policies on tables
+		// outside the default schema resolve to the wrong table when re-parsed
 		def := fmt.Sprintf(
-			"CREATE POLICY %s ON %s AS %s FOR %s TO %s",
-			policyName, tableName, permissive, cmd, roles,
+			"CREATE POLICY %s ON %s.%s AS %s FOR %s TO %s",
+			policyName, d.quoteIdentifierIfNeeded(schemaName), d.quoteIdentifierIfNeeded(tableName), permissive, cmd, roles,
 		)
 		if using.Valid {
 			def += fmt.Sprintf(" USING (%s)", using.String)
