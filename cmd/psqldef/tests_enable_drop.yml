@@ -32,6 +32,18 @@ DropPolicySkipped:
     -- Skipped: DROP POLICY "p_users" ON "public"."users";
   down: ""
 
+DisableRowLevelSecuritySkipped:
+  enable_drop: false
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id bigint);
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+  desired: |
+    CREATE TABLE users (id bigint);
+  up: |
+    -- Skipped: ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
+  down: ""
+
 DropTriggerSkipped:
   enable_drop: false
   legacy_ignore_quotes: false

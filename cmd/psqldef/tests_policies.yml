@@ -45,3 +45,78 @@ DropPolicy:
     DROP POLICY "p_users" ON "public"."users";
   down: |
     CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);
+EnableRowLevelSecurity:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+  up: |
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+  down: |
+    ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
+EnableAndForceRowLevelSecurity:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE users FORCE ROW LEVEL SECURITY;
+  up: |
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE users FORCE ROW LEVEL SECURITY;
+  down: |
+    ALTER TABLE public.users NO FORCE ROW LEVEL SECURITY;
+    ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
+ForceRowLevelSecurityOnEnabledTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE users FORCE ROW LEVEL SECURITY;
+  up: |
+    ALTER TABLE users FORCE ROW LEVEL SECURITY;
+  down: |
+    ALTER TABLE public.users NO FORCE ROW LEVEL SECURITY;
+DisableRowLevelSecurityByExplicitStatement:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+  up: |
+    ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+  down: |
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+CreatePolicyWithRowLevelSecurity:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer);
+  up: |
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer);
+  down: |
+    DROP POLICY p_users ON public.users;
+    ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
+EnableRowLevelSecurityWithOnly:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    ALTER TABLE ONLY users ENABLE ROW LEVEL SECURITY;
+  up: |
+    ALTER TABLE ONLY users ENABLE ROW LEVEL SECURITY;
+  down: |
+    ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;

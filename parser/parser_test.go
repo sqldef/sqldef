@@ -831,6 +831,43 @@ func TestCreatePolicyPredicates(t *testing.T) {
 	}
 }
 
+func TestAlterTableRowLevelSecurity(t *testing.T) {
+	testCases := []struct {
+		sql    string
+		action DDLAction
+	}{
+		{"ALTER TABLE t ENABLE ROW LEVEL SECURITY", EnableRowLevelSecurity},
+		{"ALTER TABLE ONLY t ENABLE ROW LEVEL SECURITY", EnableRowLevelSecurity},
+		{"ALTER TABLE public.t ENABLE ROW LEVEL SECURITY", EnableRowLevelSecurity},
+		{`ALTER TABLE "public"."t" ENABLE ROW LEVEL SECURITY`, EnableRowLevelSecurity},
+		{"ALTER TABLE t DISABLE ROW LEVEL SECURITY", DisableRowLevelSecurity},
+		{"ALTER TABLE ONLY t DISABLE ROW LEVEL SECURITY", DisableRowLevelSecurity},
+		{"ALTER TABLE t FORCE ROW LEVEL SECURITY", ForceRowLevelSecurity},
+		{"ALTER TABLE ONLY t FORCE ROW LEVEL SECURITY", ForceRowLevelSecurity},
+		{"ALTER TABLE t NO FORCE ROW LEVEL SECURITY", NoForceRowLevelSecurity},
+		{"ALTER TABLE ONLY t NO FORCE ROW LEVEL SECURITY", NoForceRowLevelSecurity},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.sql, func(t *testing.T) {
+			stmt, err := ParseDDL(tc.sql, ParserModePostgres)
+			if err != nil {
+				t.Fatalf("ParseDDL(%q) failed: %v", tc.sql, err)
+			}
+			ddl, ok := stmt.(*DDL)
+			if !ok {
+				t.Fatalf("ParseDDL(%q) returned %T, want *DDL", tc.sql, stmt)
+			}
+			if ddl.Action != tc.action {
+				t.Errorf("ParseDDL(%q) action = %v, want %v", tc.sql, ddl.Action, tc.action)
+			}
+			if ddl.Table.Name.Name != "t" {
+				t.Errorf("ParseDDL(%q) table = %q, want %q", tc.sql, ddl.Table.Name.Name, "t")
+			}
+		})
+	}
+}
+
 func TestStringConcatOperator(t *testing.T) {
 	t.Run("postgres mode emits || without substituting or", func(t *testing.T) {
 		testCases := []struct {

@@ -2006,6 +2006,63 @@ alter_statement:
       ForeignKey: $7,
     }
   }
+/* For PostgreSQL row level security */
+| ALTER ignore_opt TABLE table_name ENABLE ROW LEVEL SECURITY
+  {
+    $$ = &DDL{
+      Action: EnableRowLevelSecurity,
+      Table: $4,
+    }
+  }
+| ALTER ignore_opt TABLE ONLY table_name ENABLE ROW LEVEL SECURITY
+  {
+    $$ = &DDL{
+      Action: EnableRowLevelSecurity,
+      Table: $5,
+    }
+  }
+| ALTER ignore_opt TABLE table_name DISABLE ROW LEVEL SECURITY
+  {
+    $$ = &DDL{
+      Action: DisableRowLevelSecurity,
+      Table: $4,
+    }
+  }
+| ALTER ignore_opt TABLE ONLY table_name DISABLE ROW LEVEL SECURITY
+  {
+    $$ = &DDL{
+      Action: DisableRowLevelSecurity,
+      Table: $5,
+    }
+  }
+| ALTER ignore_opt TABLE table_name FORCE ROW LEVEL SECURITY
+  {
+    $$ = &DDL{
+      Action: ForceRowLevelSecurity,
+      Table: $4,
+    }
+  }
+| ALTER ignore_opt TABLE ONLY table_name FORCE ROW LEVEL SECURITY
+  {
+    $$ = &DDL{
+      Action: ForceRowLevelSecurity,
+      Table: $5,
+    }
+  }
+| ALTER ignore_opt TABLE table_name NO FORCE ROW LEVEL SECURITY
+  {
+    $$ = &DDL{
+      Action: NoForceRowLevelSecurity,
+      Table: $4,
+    }
+  }
+| ALTER ignore_opt TABLE ONLY table_name NO FORCE ROW LEVEL SECURITY
+  {
+    $$ = &DDL{
+      Action: NoForceRowLevelSecurity,
+      Table: $5,
+    }
+  }
 
 alter_object_type_index:
   INDEX
