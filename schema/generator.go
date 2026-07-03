@@ -5860,6 +5860,20 @@ func (g *Generator) areSameExprs(exprA, exprB parser.Expr) bool {
 	return strings.EqualFold(parser.String(normalizedA), parser.String(normalizedB))
 }
 
+// areSamePolicyExprs compares policy expressions. In addition to the generic
+// comparison, PostgreSQL drops no-op text casts on function call results
+// (e.g. current_setting(...)::text) while storing policy expressions, so
+// retry the comparison with such casts stripped from both sides.
+func (g *Generator) areSamePolicyExprs(exprA, exprB parser.Expr) bool {
+	if g.areSameExprs(exprA, exprB) {
+		return true
+	}
+	if g.mode != GeneratorModePostgres {
+		return false
+	}
+	return g.areSameExprs(stripFuncResultTextCasts(exprA), stripFuncResultTextCasts(exprB))
+}
+
 func (g *Generator) areSamePolicies(policyA, policyB Policy) bool {
 	if !strings.EqualFold(policyA.scope, policyB.scope) {
 		return false
@@ -5867,10 +5881,10 @@ func (g *Generator) areSamePolicies(policyA, policyB Policy) bool {
 	if !strings.EqualFold(policyA.permissive, policyB.permissive) {
 		return false
 	}
-	if !g.areSameExprs(policyA.using, policyB.using) {
+	if !g.areSamePolicyExprs(policyA.using, policyB.using) {
 		return false
 	}
-	if !g.areSameExprs(policyA.withCheck, policyB.withCheck) {
+	if !g.areSamePolicyExprs(policyA.withCheck, policyB.withCheck) {
 		return false
 	}
 	if len(policyA.roles) != len(policyB.roles) {

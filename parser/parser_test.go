@@ -868,6 +868,33 @@ func TestAlterTableRowLevelSecurity(t *testing.T) {
 	}
 }
 
+func TestCreatePolicyOptionalClauses(t *testing.T) {
+	// AS, FOR, and TO clauses are all optional in PostgreSQL
+	testCases := []string{
+		"CREATE POLICY p ON t",
+		"CREATE POLICY p ON t USING (true)",
+		"CREATE POLICY p ON t WITH CHECK (true)",
+		"CREATE POLICY p ON t USING (true) WITH CHECK (true)",
+		"CREATE POLICY p ON t AS RESTRICTIVE USING (true)",
+		"CREATE POLICY p ON t FOR SELECT USING (true)",
+		"CREATE POLICY p ON t TO public USING (true)",
+		"CREATE POLICY p ON s.t USING (tenant_id::text = current_setting('app.tenant_id', true)::text)",
+	}
+
+	for _, sql := range testCases {
+		t.Run(sql, func(t *testing.T) {
+			stmt, err := ParseDDL(sql, ParserModePostgres)
+			if err != nil {
+				t.Fatalf("ParseDDL(%q) failed: %v", sql, err)
+			}
+			ddl, ok := stmt.(*DDL)
+			if !ok || ddl.Action != CreatePolicy {
+				t.Fatalf("ParseDDL(%q) did not return a CREATE POLICY DDL: %#v", sql, stmt)
+			}
+		})
+	}
+}
+
 func TestStringConcatOperator(t *testing.T) {
 	t.Run("postgres mode emits || without substituting or", func(t *testing.T) {
 		testCases := []struct {

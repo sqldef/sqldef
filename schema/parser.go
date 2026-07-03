@@ -133,9 +133,22 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				exclusion: parseExclusion(stmt.Exclusion),
 			}, nil
 		} else if stmt.Action == parser.CreatePolicy {
-			scope := util.TransformSlice(stmt.Policy.To, func(to Ident) string {
+			roles := util.TransformSlice(stmt.Policy.To, func(to Ident) string {
 				return to.Name
 			})
+			// Complement PostgreSQL defaults for omitted clauses so that
+			// the policy compares equal to the one exported from the database
+			permissive := string(stmt.Policy.Permissive)
+			if permissive == "" {
+				permissive = "PERMISSIVE"
+			}
+			scope := string(stmt.Policy.Scope)
+			if scope == "" {
+				scope = "ALL"
+			}
+			if len(roles) == 0 {
+				roles = []string{"PUBLIC"}
+			}
 			var using, withCheck parser.Expr
 			if stmt.Policy.Using != nil {
 				using = stmt.Policy.Using.Expr
@@ -148,9 +161,9 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 				policy: Policy{
 					name:       stmt.Policy.Name,
-					permissive: string(stmt.Policy.Permissive),
-					scope:      string(stmt.Policy.Scope),
-					roles:      scope,
+					permissive: permissive,
+					scope:      scope,
+					roles:      roles,
 					using:      using,
 					withCheck:  withCheck,
 				},

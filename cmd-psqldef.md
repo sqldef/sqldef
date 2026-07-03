@@ -294,6 +294,8 @@ Remove the line to DROP CONSTRAINT.
 
 Remove the line to DROP POLICY.
 
+The `AS`, `FOR`, and `TO` clauses are optional; omitted clauses are treated as the PostgreSQL defaults (`AS PERMISSIVE FOR ALL TO PUBLIC`).
+
 ### ENABLE/FORCE ROW LEVEL SECURITY
 
 ```diff

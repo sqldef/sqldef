@@ -481,6 +481,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <indexOption> index_option
 %type <indexOptions> index_option_list mssql_index_option_list
 %type <str> policy_as_opt policy_for_opt
+%type <idents> policy_to_opt
 %type <convertType> character_cast_opt
 %type <expr> using_opt with_check_opt
 %left <str> TYPECAST CHECK
@@ -1124,7 +1125,7 @@ create_statement:
       },
     }
   }
-| CREATE POLICY sql_id ON table_name policy_as_opt policy_for_opt TO sql_id_list using_opt with_check_opt
+| CREATE POLICY sql_id ON table_name policy_as_opt policy_for_opt policy_to_opt using_opt with_check_opt
   {
     $$ = &DDL{
       Action: CreatePolicy,
@@ -1133,9 +1134,9 @@ create_statement:
         Name: $3,
         Permissive: Permissive($6),
         Scope: $7,
-        To: $9,
-        Using: NewWhere(WhereStr, $10),
-        WithCheck: NewWhere(WhereStr, $11),
+        To: $8,
+        Using: NewWhere(WhereStr, $9),
+        WithCheck: NewWhere(WhereStr, $10),
       },
     }
   }
@@ -2962,6 +2963,15 @@ return_statement:
   RETURN expression_opt
   {
     $$ = &Return{ Expr: $2 }
+  }
+
+policy_to_opt:
+  {
+    $$ = nil
+  }
+| TO sql_id_list
+  {
+    $$ = $2
   }
 
 policy_as_opt:

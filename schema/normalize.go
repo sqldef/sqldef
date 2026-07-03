@@ -599,6 +599,86 @@ func atTimeZoneFromTimezoneCall(mode GeneratorMode, qualifier parser.Ident, func
 	return &parser.AtTimeZoneExpr{Expr: ts.Expr, Zone: zone.Expr}, true
 }
 
+// stripFuncResultTextCasts removes text/character varying casts applied to
+// function call results, e.g. current_setting(...)::text -> current_setting(...).
+// PostgreSQL drops such casts when they are no-ops while storing policy
+// expressions, so they must be ignored when comparing policies. This is only
+// safe for comparison; do not use the result to generate DDLs because casts on
+// functions returning non-text types are semantically meaningful.
+func stripFuncResultTextCasts(expr parser.Expr) parser.Expr {
+	if expr == nil {
+		return nil
+	}
+
+	switch e := expr.(type) {
+	case *parser.CastExpr:
+		inner := e.Expr
+		if paren, ok := inner.(*parser.ParenExpr); ok {
+			inner = paren.Expr
+		}
+		if _, isFunc := inner.(*parser.FuncExpr); isFunc && e.Type != nil {
+			typeStr := strings.ToLower(e.Type.Type)
+			if typeStr == "text" || typeStr == "character varying" {
+				return stripFuncResultTextCasts(inner)
+			}
+		}
+		return &parser.CastExpr{Expr: stripFuncResultTextCasts(e.Expr), Type: e.Type}
+	case *parser.ParenExpr:
+		return &parser.ParenExpr{Expr: stripFuncResultTextCasts(e.Expr)}
+	case *parser.NotExpr:
+		return &parser.NotExpr{Expr: stripFuncResultTextCasts(e.Expr)}
+	case *parser.AndExpr:
+		return &parser.AndExpr{Left: stripFuncResultTextCasts(e.Left), Right: stripFuncResultTextCasts(e.Right)}
+	case *parser.OrExpr:
+		return &parser.OrExpr{Left: stripFuncResultTextCasts(e.Left), Right: stripFuncResultTextCasts(e.Right)}
+	case *parser.ComparisonExpr:
+		return &parser.ComparisonExpr{
+			Operator: e.Operator,
+			Left:     stripFuncResultTextCasts(e.Left),
+			Right:    stripFuncResultTextCasts(e.Right),
+			Escape:   stripFuncResultTextCasts(e.Escape),
+			All:      e.All,
+			Any:      e.Any,
+		}
+	case *parser.BinaryExpr:
+		return &parser.BinaryExpr{
+			Operator: e.Operator,
+			Left:     stripFuncResultTextCasts(e.Left),
+			Right:    stripFuncResultTextCasts(e.Right),
+		}
+	case *parser.RangeCond:
+		return &parser.RangeCond{
+			Operator: e.Operator,
+			Left:     stripFuncResultTextCasts(e.Left),
+			From:     stripFuncResultTextCasts(e.From),
+			To:       stripFuncResultTextCasts(e.To),
+		}
+	case *parser.IsExpr:
+		return &parser.IsExpr{Operator: e.Operator, Expr: stripFuncResultTextCasts(e.Expr)}
+	case *parser.FuncExpr:
+		exprs := make(parser.SelectExprs, len(e.Exprs))
+		for i, arg := range e.Exprs {
+			if aliased, ok := arg.(*parser.AliasedExpr); ok {
+				exprs[i] = &parser.AliasedExpr{Expr: stripFuncResultTextCasts(aliased.Expr), As: aliased.As}
+			} else {
+				exprs[i] = arg
+			}
+		}
+		return &parser.FuncExpr{
+			Qualifier:   e.Qualifier,
+			Name:        e.Name,
+			Distinct:    e.Distinct,
+			Exprs:       exprs,
+			WithinGroup: e.WithinGroup,
+			Over:        e.Over,
+		}
+	default:
+		// Other node types are returned as-is; casts nested inside them are
+		// simply not stripped, which only makes the comparison more conservative
+		return expr
+	}
+}
+
 // normalizeExpr normalizes an expression.
 // This is similar to normalizeCheckExpr but tailored for other contexts.
 func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
