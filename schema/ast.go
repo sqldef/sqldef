@@ -148,6 +148,15 @@ type AddPolicy struct {
 	policy    Policy
 }
 
+// SetRowLevelSecurity represents PostgreSQL
+// ALTER TABLE ... {ENABLE|DISABLE|FORCE|NO FORCE} ROW LEVEL SECURITY
+type SetRowLevelSecurity struct {
+	statement string
+	tableName QualifiedName
+	force     bool // true: FORCE/NO FORCE, false: ENABLE/DISABLE
+	value     bool
+}
+
 type GrantPrivilege struct {
 	statement  string
 	tableName  QualifiedName
@@ -194,6 +203,8 @@ type Table struct {
 	options     map[string]string
 	renamedFrom Ident           // Previous table name if renamed via @renamed annotation
 	partition   *TablePartition // Partition definition (MySQL/MariaDB)
+	rlsEnabled  bool            // PostgreSQL ROW LEVEL SECURITY enabled
+	rlsForced   bool            // PostgreSQL ROW LEVEL SECURITY forced
 }
 
 // TablePartition represents partition information for a table
@@ -564,6 +575,10 @@ func (a *AddExclusion) Statement() string {
 
 func (a *AddPolicy) Statement() string {
 	return a.statement
+}
+
+func (s *SetRowLevelSecurity) Statement() string {
+	return s.statement
 }
 
 func (g *GrantPrivilege) Statement() string {

@@ -155,6 +155,14 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 					withCheck:  withCheck,
 				},
 			}, nil
+		} else if stmt.Action == parser.EnableRowLevelSecurity || stmt.Action == parser.DisableRowLevelSecurity ||
+			stmt.Action == parser.ForceRowLevelSecurity || stmt.Action == parser.NoForceRowLevelSecurity {
+			return &SetRowLevelSecurity{
+				statement: ddl,
+				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
+				force:     stmt.Action == parser.ForceRowLevelSecurity || stmt.Action == parser.NoForceRowLevelSecurity,
+				value:     stmt.Action == parser.EnableRowLevelSecurity || stmt.Action == parser.ForceRowLevelSecurity,
+			}, nil
 		} else if stmt.Action == parser.CreateView {
 			columns := []string{}
 			if expr, ok := stmt.View.Definition.(*parser.Select); ok {

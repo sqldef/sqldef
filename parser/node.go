@@ -588,6 +588,10 @@ const (
 	DropIndex
 	DropExtension
 	DropPolicy
+	EnableRowLevelSecurity
+	DisableRowLevelSecurity
+	ForceRowLevelSecurity
+	NoForceRowLevelSecurity
 )
 
 // View types
