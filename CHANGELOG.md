@@ -1,3 +1,8 @@
+## [v3.11.13](https://github.com/sqldef/sqldef/compare/v3.11.12...v3.11.13) - 2026-07-03
+- psqldef: support ALTER TABLE ... ROW LEVEL SECURITY by @hokaccha in https://github.com/sqldef/sqldef/pull/1270
+- psqldef: fix CREATE POLICY handling (optional clauses, non-default schemas, no-op text casts) by @hokaccha in https://github.com/sqldef/sqldef/pull/1271
+- psqldef: handle || in policy expression cast stripping, add unit tests by @hokaccha in https://github.com/sqldef/sqldef/pull/1273
+
 ## [v3.11.12](https://github.com/sqldef/sqldef/compare/v3.11.11...v3.11.12) - 2026-06-23
 - psqldef: parse unnamed and ALTER TABLE ONLY EXCLUDE constraints in the generic parser by @gfx in https://github.com/sqldef/sqldef/pull/1254
 - Fix pgquery multi-arg bool expressions by @tsukuneA1 in https://github.com/sqldef/sqldef/pull/1253
