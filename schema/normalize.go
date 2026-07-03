@@ -631,6 +631,8 @@ func stripFuncResultTextCasts(expr parser.Expr) parser.Expr {
 		return &parser.AndExpr{Left: stripFuncResultTextCasts(e.Left), Right: stripFuncResultTextCasts(e.Right)}
 	case *parser.OrExpr:
 		return &parser.OrExpr{Left: stripFuncResultTextCasts(e.Left), Right: stripFuncResultTextCasts(e.Right)}
+	case *parser.ConcatExpr:
+		return &parser.ConcatExpr{Left: stripFuncResultTextCasts(e.Left), Right: stripFuncResultTextCasts(e.Right)}
 	case *parser.ComparisonExpr:
 		return &parser.ComparisonExpr{
 			Operator: e.Operator,
