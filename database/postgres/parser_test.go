@@ -236,9 +236,19 @@ func TestSetOperationVariantsWithPgquery(t *testing.T) {
 			want: "select 1 as id intersect all select 1 as id",
 		},
 		{
+			name: "intersect",
+			sql:  "SELECT 1 AS id INTERSECT SELECT 1 AS id",
+			want: "select 1 as id intersect select 1 as id",
+		},
+		{
 			name: "except all",
 			sql:  "SELECT 1 AS id EXCEPT ALL SELECT 2 AS id",
 			want: "select 1 as id except all select 2 as id",
+		},
+		{
+			name: "except",
+			sql:  "SELECT 1 AS id EXCEPT SELECT 2 AS id",
+			want: "select 1 as id except select 2 as id",
 		},
 	}
 
@@ -255,6 +265,54 @@ func TestSetOperationVariantsWithPgquery(t *testing.T) {
 			require.True(t, ok, "expected DDL statement, got %T", statements[0].Statement)
 			require.NotNil(t, ddl.View)
 			assert.Equal(t, tt.want, parser.String(ddl.View.Definition))
+		})
+	}
+}
+
+func TestSetOperationErrorsWithPgquery(t *testing.T) {
+	postgresParser := PostgresParser{}
+
+	tests := []struct {
+		name string
+		stmt *pgquery.SelectStmt
+		want string
+	}{
+		{
+			name: "left select",
+			stmt: &pgquery.SelectStmt{
+				LimitOption: pgquery.LimitOption_LIMIT_OPTION_DEFAULT,
+				Op:          pgquery.SetOperation_SETOP_UNION,
+				Larg:        unsupportedSortSelectStmt(),
+				Rarg:        selectOneStmt(),
+			},
+			want: "unhandled node in parseSelectStmt",
+		},
+		{
+			name: "right select",
+			stmt: &pgquery.SelectStmt{
+				LimitOption: pgquery.LimitOption_LIMIT_OPTION_DEFAULT,
+				Op:          pgquery.SetOperation_SETOP_UNION,
+				Larg:        selectOneStmt(),
+				Rarg:        unsupportedSortSelectStmt(),
+			},
+			want: "unhandled node in parseSelectStmt",
+		},
+		{
+			name: "operation",
+			stmt: &pgquery.SelectStmt{
+				LimitOption: pgquery.LimitOption_LIMIT_OPTION_DEFAULT,
+				Op:          pgquery.SetOperation_SET_OPERATION_UNDEFINED,
+				Larg:        selectOneStmt(),
+				Rarg:        selectOneStmt(),
+			},
+			want: "unsupported set operation in parseSelectStmt",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := postgresParser.parseSelectStmt(tt.stmt)
+			require.ErrorContains(t, err, tt.want)
 		})
 	}
 }
@@ -283,6 +341,35 @@ func TestUnsupportedSubselectSortWithPgquery(t *testing.T) {
 	require.ErrorContains(t, err, "unhandled node in parseSelectStmt")
 }
 
+func TestUnsupportedValuesListsWithPgquery(t *testing.T) {
+	postgresParser := PostgresParser{}
+
+	_, err := postgresParser.parseSelectStmt(&pgquery.SelectStmt{
+		LimitOption: pgquery.LimitOption_LIMIT_OPTION_DEFAULT,
+		Op:          pgquery.SetOperation_SETOP_NONE,
+		ValuesLists: []*pgquery.Node{{}},
+	})
+	require.ErrorContains(t, err, "unhandled node in parseSelectStmt")
+}
+
+func TestUnsupportedSubqueryNodeWithPgquery(t *testing.T) {
+	postgresParser := PostgresParser{}
+
+	stmt := selectOneStmt()
+	stmt.FromClause = []*pgquery.Node{
+		{
+			Node: &pgquery.Node_RangeSubselect{
+				RangeSubselect: &pgquery.RangeSubselect{
+					Subquery: intConstNode(1),
+				},
+			},
+		},
+	}
+
+	_, err := postgresParser.parseSelectStmt(stmt)
+	require.ErrorContains(t, err, "unknown subquery node in parseSelectStmt")
+}
+
 func TestAliasColumnNamesWithPgquery(t *testing.T) {
 	t.Setenv("PSQLDEF_PARSER", "pgquery")
 	postgresParser := NewParserWithMode(PsqldefParserModePgquery)
@@ -299,6 +386,41 @@ SELECT * FROM (SELECT 1 AS id, 2 AS other) AS s(a, b);
 	require.NotNil(t, ddl.View)
 
 	assert.Equal(t, "select * from (select 1 as id, 2 as other) as s(a, b)", parser.String(ddl.View.Definition))
+}
+
+func TestRangeVarWithPgquery(t *testing.T) {
+	t.Setenv("PSQLDEF_PARSER", "pgquery")
+	postgresParser := NewParserWithMode(PsqldefParserModePgquery)
+
+	statements, err := postgresParser.Parse(`CREATE VIEW v AS SELECT 1 AS id FROM public.users AS u;`)
+	require.NoError(t, err)
+	require.Len(t, statements, 1)
+
+	ddl, ok := statements[0].Statement.(*parser.DDL)
+	require.True(t, ok, "expected DDL statement, got %T", statements[0].Statement)
+	require.NotNil(t, ddl.View)
+
+	assert.Equal(t, "select 1 as id from public.users as u", parser.String(ddl.View.Definition))
+}
+
+func TestUnsupportedCatalogTableNameWithPgquery(t *testing.T) {
+	postgresParser := PostgresParser{}
+
+	stmt := selectOneStmt()
+	stmt.FromClause = []*pgquery.Node{
+		{
+			Node: &pgquery.Node_RangeVar{
+				RangeVar: &pgquery.RangeVar{
+					Catalogname: "db",
+					Schemaname:  "public",
+					Relname:     "users",
+				},
+			},
+		},
+	}
+
+	_, err := postgresParser.parseSelectStmt(stmt)
+	require.ErrorContains(t, err, "unhandled node in parseTableName")
 }
 
 func TestParseCheckConstraintMultiArgBoolExprWithPgquery(t *testing.T) {
@@ -456,4 +578,39 @@ func identNames(idents []parser.Ident) []string {
 		names = append(names, ident.Name)
 	}
 	return names
+}
+
+func selectOneStmt() *pgquery.SelectStmt {
+	return &pgquery.SelectStmt{
+		LimitOption: pgquery.LimitOption_LIMIT_OPTION_DEFAULT,
+		Op:          pgquery.SetOperation_SETOP_NONE,
+		TargetList: []*pgquery.Node{
+			{
+				Node: &pgquery.Node_ResTarget{
+					ResTarget: &pgquery.ResTarget{
+						Name: "id",
+						Val:  intConstNode(1),
+					},
+				},
+			},
+		},
+	}
+}
+
+func unsupportedSortSelectStmt() *pgquery.SelectStmt {
+	stmt := selectOneStmt()
+	stmt.SortClause = []*pgquery.Node{{}}
+	return stmt
+}
+
+func intConstNode(n int32) *pgquery.Node {
+	return &pgquery.Node{
+		Node: &pgquery.Node_AConst{
+			AConst: &pgquery.A_Const{
+				Val: &pgquery.A_Const_Ival{
+					Ival: &pgquery.Integer{Ival: n},
+				},
+			},
+		},
+	}
 }
