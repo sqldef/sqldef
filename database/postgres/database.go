@@ -722,6 +722,7 @@ type TableDDLComponents struct {
 	IndexDefs         []string
 	ForeignDefs       []string
 	ExclusionDefs     []string
+	RLSDefs           []string
 	PolicyDefs        []string
 	Comments          []string
 	CheckConstraints  []CheckConstraint
@@ -749,6 +750,7 @@ func (d *PostgresDatabase) exportTableDDL(table string, cache *TableDDLComponent
 	}
 	components.IndexDefs = cache.indexDefs[table]
 	components.ForeignDefs = cache.foreignDefs[table]
+	components.RLSDefs = cache.rlsDefs[table]
 	components.PolicyDefs = cache.policyDefs[table]
 	components.CheckConstraints = cache.checkConstraints[table]
 	components.UniqueConstraints = cache.uniqueConstraints[table]
@@ -815,6 +817,9 @@ func (d *PostgresDatabase) buildExportTableDDL(components TableDDLComponents) st
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
 	for _, v := range components.ExclusionDefs {
+		fmt.Fprintf(&queryBuilder, "%s;\n", v)
+	}
+	for _, v := range components.RLSDefs {
 		fmt.Fprintf(&queryBuilder, "%s;\n", v)
 	}
 	for _, v := range components.PolicyDefs {
@@ -1040,7 +1045,7 @@ func postgresBuildDSN(config database.Config) string {
 }
 
 func forceQuoteIdentifier(name string) string {
-	return fmt.Sprintf("\"%s\"", name)
+	return fmt.Sprintf("\"%s\"", strings.ReplaceAll(name, "\"", "\"\""))
 }
 
 // quoteIdent quotes a constraint name for DDL output.
@@ -1131,6 +1136,7 @@ type TableDDLComponentsCache struct {
 	primaryKeyInfos   map[string]primaryKeyInfo
 	indexDefs         map[string][]string
 	foreignDefs       map[string][]string
+	rlsDefs           map[string][]string
 	policyDefs        map[string][]string
 	checkConstraints  map[string][]CheckConstraint
 	uniqueConstraints map[string]map[string]string
@@ -1146,6 +1152,7 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 		primaryKeyInfos:   make(map[string]primaryKeyInfo),
 		indexDefs:         make(map[string][]string),
 		foreignDefs:       make(map[string][]string),
+		rlsDefs:           make(map[string][]string),
 		policyDefs:        make(map[string][]string),
 		checkConstraints:  make(map[string][]CheckConstraint),
 		uniqueConstraints: make(map[string]map[string]string),
@@ -1175,6 +1182,10 @@ func (d *PostgresDatabase) buildTableDDLComponentsCache(tableNames []string) (*T
 		return nil, err
 	}
 	cache.foreignDefs, err = d.getForeignDefsForTables(tableNames)
+	if err != nil {
+		return nil, err
+	}
+	cache.rlsDefs, err = d.getRowLevelSecurityDefsForTables(tableNames)
 	if err != nil {
 		return nil, err
 	}
@@ -1557,9 +1568,44 @@ func (d *PostgresDatabase) getForeignDefsForTables(tableNames []string) (map[str
 	return result, nil
 }
 
+func (d *PostgresDatabase) getRowLevelSecurityDefsForTables(tableNames []string) (map[string][]string, error) {
+	const query = `
+		SELECT nsp.nspname || '.' || cls.relname AS qualified_table_name, nsp.nspname, cls.relname, cls.relrowsecurity, cls.relforcerowsecurity
+		FROM pg_class cls
+		INNER JOIN pg_namespace nsp ON nsp.oid = cls.relnamespace
+		WHERE nsp.nspname || '.' || cls.relname = ANY($1::text[])
+		  AND (cls.relrowsecurity OR cls.relforcerowsecurity)
+	`
+	rows, err := d.db.Query(query, pq.Array(tableNames))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]string, len(tableNames))
+	for rows.Next() {
+		var qualifiedTableName, schemaName, tableName string
+		var rowSecurity, forceRowSecurity bool
+		if err := rows.Scan(&qualifiedTableName, &schemaName, &tableName, &rowSecurity, &forceRowSecurity); err != nil {
+			return nil, err
+		}
+		escapedTableName := fmt.Sprintf("%s.%s", d.quoteIdentifierIfNeeded(schemaName), d.quoteIdentifierIfNeeded(tableName))
+		if rowSecurity {
+			result[qualifiedTableName] = append(result[qualifiedTableName], fmt.Sprintf("ALTER TABLE %s ENABLE ROW LEVEL SECURITY;", escapedTableName))
+		}
+		if forceRowSecurity {
+			result[qualifiedTableName] = append(result[qualifiedTableName], fmt.Sprintf("ALTER TABLE %s FORCE ROW LEVEL SECURITY;", escapedTableName))
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func (d *PostgresDatabase) getPolicyDefsForTables(tableNames []string) (map[string][]string, error) {
 	const query = `
-		SELECT schemaname || '.' || tablename AS qualified_table_name, tablename, policyname, permissive, roles, cmd, qual, with_check
+		SELECT schemaname || '.' || tablename AS qualified_table_name, schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check
 		FROM pg_policies
 		WHERE schemaname || '.' || tablename = ANY($1::text[])
 	`
@@ -1572,18 +1618,20 @@ func (d *PostgresDatabase) getPolicyDefsForTables(tableNames []string) (map[stri
 	result := make(map[string][]string, len(tableNames))
 	for rows.Next() {
 		var (
-			qualifiedTableName, tableName, policyName, permissive, roles, cmd string
-			using, withCheck                                                  sql.NullString
+			qualifiedTableName, schemaName, tableName, policyName, permissive, roles, cmd string
+			using, withCheck                                                              sql.NullString
 		)
-		err = rows.Scan(&qualifiedTableName, &tableName, &policyName, &permissive, &roles, &cmd, &using, &withCheck)
+		err = rows.Scan(&qualifiedTableName, &schemaName, &tableName, &policyName, &permissive, &roles, &cmd, &using, &withCheck)
 		if err != nil {
 			return nil, err
 		}
 		roles = policyRolesPrefixRegex.ReplaceAllString(roles, "")
 		roles = policyRolesSuffixRegex.ReplaceAllString(roles, "")
+		// Qualify the table name with its schema; otherwise policies on tables
+		// outside the default schema resolve to the wrong table when re-parsed
 		def := fmt.Sprintf(
-			"CREATE POLICY %s ON %s AS %s FOR %s TO %s",
-			policyName, tableName, permissive, cmd, roles,
+			"CREATE POLICY %s ON %s.%s AS %s FOR %s TO %s",
+			policyName, d.quoteIdentifierIfNeeded(schemaName), d.quoteIdentifierIfNeeded(tableName), permissive, cmd, roles,
 		)
 		if using.Valid {
 			def += fmt.Sprintf(" USING (%s)", using.String)

@@ -294,6 +294,22 @@ Remove the line to DROP CONSTRAINT.
 
 Remove the line to DROP POLICY.
 
+The `AS`, `FOR`, and `TO` clauses are optional; omitted clauses are treated as the PostgreSQL defaults (`AS PERMISSIVE FOR ALL TO PUBLIC`).
+
+### ENABLE/FORCE ROW LEVEL SECURITY
+
+```diff
+ CREATE TABLE users (
+   id BIGINT PRIMARY KEY,
+   name VARCHAR(40)
+ );
+
++ALTER TABLE users ENABLE ROW LEVEL SECURITY;
++ALTER TABLE users FORCE ROW LEVEL SECURITY;
+```
+
+Remove the `ENABLE ROW LEVEL SECURITY` line to DISABLE ROW LEVEL SECURITY, and the `FORCE ROW LEVEL SECURITY` line to NO FORCE ROW LEVEL SECURITY.
+
 ### CREATE (OR REPLACE) VIEW
 
 ```diff

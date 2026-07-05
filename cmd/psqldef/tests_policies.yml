@@ -45,3 +45,110 @@ DropPolicy:
     DROP POLICY "p_users" ON "public"."users";
   down: |
     CREATE POLICY p_users ON users AS RESTRICTIVE FOR ALL TO postgres USING (true);
+EnableRowLevelSecurity:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+  up: |
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+  down: |
+    ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
+EnableAndForceRowLevelSecurity:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE users FORCE ROW LEVEL SECURITY;
+  up: |
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE users FORCE ROW LEVEL SECURITY;
+  down: |
+    ALTER TABLE public.users NO FORCE ROW LEVEL SECURITY;
+    ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
+ForceRowLevelSecurityOnEnabledTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE users FORCE ROW LEVEL SECURITY;
+  up: |
+    ALTER TABLE users FORCE ROW LEVEL SECURITY;
+  down: |
+    ALTER TABLE public.users NO FORCE ROW LEVEL SECURITY;
+DisableRowLevelSecurityByExplicitStatement:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+  up: |
+    ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+  down: |
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+CreatePolicyWithRowLevelSecurity:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer);
+  up: |
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY p_users ON users AS PERMISSIVE FOR ALL TO PUBLIC USING (id = (current_user)::integer);
+  down: |
+    DROP POLICY p_users ON public.users;
+    ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
+EnableRowLevelSecurityWithOnly:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, name character varying(100));
+    ALTER TABLE ONLY users ENABLE ROW LEVEL SECURITY;
+  up: |
+    ALTER TABLE ONLY users ENABLE ROW LEVEL SECURITY;
+  down: |
+    ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
+CreatePolicyWithoutOptionalClauses:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, tenant_id BIGINT);
+  desired: |
+    CREATE TABLE users (id BIGINT PRIMARY KEY, tenant_id BIGINT);
+    CREATE POLICY p_users ON users USING (tenant_id::text = current_setting('app.tenant_id', true)::text) WITH CHECK (tenant_id::text = current_setting('app.tenant_id', true)::text);
+  up: |
+    CREATE POLICY p_users ON users USING (tenant_id::text = current_setting('app.tenant_id', true)::text) WITH CHECK (tenant_id::text = current_setting('app.tenant_id', true)::text);
+  down: |
+    DROP POLICY p_users ON public.users;
+CreatePolicyOnNonDefaultSchemaTable:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE SCHEMA app;
+    CREATE TABLE app.users (id BIGINT PRIMARY KEY, tenant_id BIGINT);
+  desired: |
+    CREATE SCHEMA app;
+    CREATE TABLE app.users (id BIGINT PRIMARY KEY, tenant_id BIGINT);
+    CREATE POLICY p_users ON app.users AS PERMISSIVE FOR ALL TO PUBLIC USING (tenant_id = 1);
+  up: |
+    CREATE POLICY p_users ON app.users AS PERMISSIVE FOR ALL TO PUBLIC USING (tenant_id = 1);
+  down: |
+    DROP POLICY p_users ON app.users;
+CreatePolicyWithoutToClauseOnNonDefaultSchema:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE SCHEMA app;
+    CREATE TABLE app.accounts (id BIGINT PRIMARY KEY, tenant_id BIGINT);
+    CREATE POLICY p_accounts ON app.accounts
+    USING (tenant_id::text = current_setting('app.tenant_id', true)::text)
+    WITH CHECK (tenant_id::text = current_setting('app.tenant_id', true)::text);

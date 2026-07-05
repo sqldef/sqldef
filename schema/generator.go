@@ -311,6 +311,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return nil, err
 			}
 			interDDLs = append(interDDLs, policyDDLs...)
+		case *SetRowLevelSecurity:
+			rlsDDLs, err := g.generateDDLsForSetRowLevelSecurity(desired)
+			if err != nil {
+				return nil, err
+			}
+			interDDLs = append(interDDLs, rlsDDLs...)
 		case *View:
 			ddls, err := g.generateDDLsForCreateView(desired)
 			if err != nil {
@@ -618,6 +624,14 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			}
 			ddls = append(ddls, fmt.Sprintf("DROP POLICY %s ON %s", g.escapeSQLIdent(policy.name), g.escapeTableName(currentTable)))
 		}
+
+		// Check row level security.
+		if currentTable.rlsForced && !desiredTable.rlsForced {
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s NO FORCE ROW LEVEL SECURITY", g.escapeTableName(currentTable)))
+		}
+		if currentTable.rlsEnabled && !desiredTable.rlsEnabled {
+			ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DISABLE ROW LEVEL SECURITY", g.escapeTableName(currentTable)))
+		}
 	}
 
 	// Clean up obsoleted domains
@@ -788,6 +802,8 @@ func isDropStatement(ddl string) bool {
 		strings.Contains(ddl, "DROP EXTENSION") ||
 		strings.Contains(ddl, "DROP POLICY") ||
 		strings.Contains(ddl, "DROP PARTITION") ||
+		strings.Contains(ddl, "DISABLE ROW LEVEL SECURITY") ||
+		strings.Contains(ddl, "NO FORCE ROW LEVEL SECURITY") ||
 		strings.Contains(ddl, "REVOKE ")
 }
 
@@ -2069,6 +2085,35 @@ func (g *Generator) generateDDLsForCreatePolicy(tableName QualifiedName, desired
 	// Only add to desiredTable.policies if it doesn't already exist (it may have been pre-populated from aggregation)
 	if g.findPolicyByName(desiredTable.policies, desiredPolicy.name) == nil {
 		desiredTable.policies = append(desiredTable.policies, desiredPolicy)
+	}
+
+	return ddls, nil
+}
+
+func (g *Generator) generateDDLsForSetRowLevelSecurity(desired *SetRowLevelSecurity) ([]string, error) {
+	var ddls []string
+
+	currentTable := g.findTableByName(g.currentTables, desired.tableName)
+	if currentTable == nil {
+		return nil, fmt.Errorf("ALTER TABLE ... ROW LEVEL SECURITY is performed for inexistent table '%s': '%s'", desired.tableName.RawString(), desired.statement)
+	}
+	desiredTable := g.findTableByName(g.desiredTables, desired.tableName)
+	if desiredTable == nil {
+		return nil, fmt.Errorf("ALTER TABLE ... ROW LEVEL SECURITY is performed before create table '%s': '%s'", desired.tableName.RawString(), desired.statement)
+	}
+
+	if desired.force {
+		if currentTable.rlsForced != desired.value {
+			ddls = append(ddls, desired.statement)
+			currentTable.rlsForced = desired.value
+		}
+		desiredTable.rlsForced = desired.value
+	} else {
+		if currentTable.rlsEnabled != desired.value {
+			ddls = append(ddls, desired.statement)
+			currentTable.rlsEnabled = desired.value
+		}
+		desiredTable.rlsEnabled = desired.value
 	}
 
 	return ddls, nil
@@ -3866,6 +3911,17 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 			}
 
 			table.policies = append(table.policies, stmt.policy)
+		case *SetRowLevelSecurity:
+			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
+			if table == nil {
+				return nil, fmt.Errorf("ALTER TABLE ... ROW LEVEL SECURITY performed before CREATE TABLE: %s", ddl.Statement())
+			}
+
+			if stmt.force {
+				table.rlsForced = stmt.value
+			} else {
+				table.rlsEnabled = stmt.value
+			}
 		case *View:
 			aggregated.Views = append(aggregated.Views, stmt)
 		case *Trigger:
@@ -5804,6 +5860,20 @@ func (g *Generator) areSameExprs(exprA, exprB parser.Expr) bool {
 	return strings.EqualFold(parser.String(normalizedA), parser.String(normalizedB))
 }
 
+// areSamePolicyExprs compares policy expressions. In addition to the generic
+// comparison, PostgreSQL drops no-op text casts on function call results
+// (e.g. current_setting(...)::text) while storing policy expressions, so
+// retry the comparison with such casts stripped from both sides.
+func (g *Generator) areSamePolicyExprs(exprA, exprB parser.Expr) bool {
+	if g.areSameExprs(exprA, exprB) {
+		return true
+	}
+	if g.mode != GeneratorModePostgres {
+		return false
+	}
+	return g.areSameExprs(stripFuncResultTextCasts(exprA), stripFuncResultTextCasts(exprB))
+}
+
 func (g *Generator) areSamePolicies(policyA, policyB Policy) bool {
 	if !strings.EqualFold(policyA.scope, policyB.scope) {
 		return false
@@ -5811,10 +5881,10 @@ func (g *Generator) areSamePolicies(policyA, policyB Policy) bool {
 	if !strings.EqualFold(policyA.permissive, policyB.permissive) {
 		return false
 	}
-	if !g.areSameExprs(policyA.using, policyB.using) {
+	if !g.areSamePolicyExprs(policyA.using, policyB.using) {
 		return false
 	}
-	if !g.areSameExprs(policyA.withCheck, policyB.withCheck) {
+	if !g.areSamePolicyExprs(policyA.withCheck, policyB.withCheck) {
 		return false
 	}
 	if len(policyA.roles) != len(policyB.roles) {

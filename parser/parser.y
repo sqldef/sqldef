@@ -481,6 +481,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <indexOption> index_option
 %type <indexOptions> index_option_list mssql_index_option_list
 %type <str> policy_as_opt policy_for_opt
+%type <idents> policy_to_opt
 %type <convertType> character_cast_opt
 %type <expr> using_opt with_check_opt
 %left <str> TYPECAST CHECK
@@ -1124,7 +1125,7 @@ create_statement:
       },
     }
   }
-| CREATE POLICY sql_id ON table_name policy_as_opt policy_for_opt TO sql_id_list using_opt with_check_opt
+| CREATE POLICY sql_id ON table_name policy_as_opt policy_for_opt policy_to_opt using_opt with_check_opt
   {
     $$ = &DDL{
       Action: CreatePolicy,
@@ -1133,9 +1134,9 @@ create_statement:
         Name: $3,
         Permissive: Permissive($6),
         Scope: $7,
-        To: $9,
-        Using: NewWhere(WhereStr, $10),
-        WithCheck: NewWhere(WhereStr, $11),
+        To: $8,
+        Using: NewWhere(WhereStr, $9),
+        WithCheck: NewWhere(WhereStr, $10),
       },
     }
   }
@@ -2004,6 +2005,63 @@ alter_statement:
       Table: $5,
       NewName: $5,
       ForeignKey: $7,
+    }
+  }
+/* For PostgreSQL row level security */
+| ALTER ignore_opt TABLE table_name ENABLE ROW LEVEL SECURITY
+  {
+    $$ = &DDL{
+      Action: EnableRowLevelSecurity,
+      Table: $4,
+    }
+  }
+| ALTER ignore_opt TABLE ONLY table_name ENABLE ROW LEVEL SECURITY
+  {
+    $$ = &DDL{
+      Action: EnableRowLevelSecurity,
+      Table: $5,
+    }
+  }
+| ALTER ignore_opt TABLE table_name DISABLE ROW LEVEL SECURITY
+  {
+    $$ = &DDL{
+      Action: DisableRowLevelSecurity,
+      Table: $4,
+    }
+  }
+| ALTER ignore_opt TABLE ONLY table_name DISABLE ROW LEVEL SECURITY
+  {
+    $$ = &DDL{
+      Action: DisableRowLevelSecurity,
+      Table: $5,
+    }
+  }
+| ALTER ignore_opt TABLE table_name FORCE ROW LEVEL SECURITY
+  {
+    $$ = &DDL{
+      Action: ForceRowLevelSecurity,
+      Table: $4,
+    }
+  }
+| ALTER ignore_opt TABLE ONLY table_name FORCE ROW LEVEL SECURITY
+  {
+    $$ = &DDL{
+      Action: ForceRowLevelSecurity,
+      Table: $5,
+    }
+  }
+| ALTER ignore_opt TABLE table_name NO FORCE ROW LEVEL SECURITY
+  {
+    $$ = &DDL{
+      Action: NoForceRowLevelSecurity,
+      Table: $4,
+    }
+  }
+| ALTER ignore_opt TABLE ONLY table_name NO FORCE ROW LEVEL SECURITY
+  {
+    $$ = &DDL{
+      Action: NoForceRowLevelSecurity,
+      Table: $5,
     }
   }
 
@@ -2905,6 +2963,15 @@ return_statement:
   RETURN expression_opt
   {
     $$ = &Return{ Expr: $2 }
+  }
+
+policy_to_opt:
+  {
+    $$ = nil
+  }
+| TO sql_id_list
+  {
+    $$ = $2
   }
 
 policy_as_opt:
