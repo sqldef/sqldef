@@ -1675,7 +1675,7 @@ func (node *AliasedTableExpr) Format(buf *nodeBuffer) {
 	if !node.As.IsEmpty() {
 		buf.Printf(" as %v", node.As)
 		if len(node.Columns) > 0 {
-			buf.Printf("(%v)", node.Columns)
+			buf.Printf("%v", node.Columns)
 		}
 	}
 	if len(node.TableHints) != 0 {

@@ -184,6 +184,35 @@ func TestNormalizeViewDefinition(t *testing.T) {
 	}
 }
 
+func TestNormalizeViewDefinitionPreservesTableAliasColumns(t *testing.T) {
+	stmt := &parser.Select{
+		SelectExprs: parser.SelectExprs{&parser.StarExpr{}},
+		From: parser.TableExprs{
+			&parser.AliasedTableExpr{
+				Expr: &parser.Subquery{
+					Select: &parser.Select{
+						SelectExprs: parser.SelectExprs{
+							&parser.AliasedExpr{
+								Expr: parser.NewIntVal("1"),
+								As:   parser.NewIdent("id", false),
+							},
+						},
+					},
+				},
+				As: parser.NewIdent("s", false),
+				Columns: parser.Columns{
+					parser.NewIdent("a", false),
+					parser.NewIdent("b", false),
+				},
+			},
+		},
+	}
+
+	normalized := normalizeViewDefinition(stmt, GeneratorModePostgres, nil)
+
+	assert.Equal(t, "select * from (select 1 as id) as s(a, b)", parser.String(normalized))
+}
+
 func TestNormalizeCheckExpr(t *testing.T) {
 	tests := []struct {
 		name     string
