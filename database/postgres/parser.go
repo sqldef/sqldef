@@ -547,9 +547,85 @@ func (p PostgresParser) parseFromItem(node *pgquery.Node) (parser.TableExpr, err
 			TableHints: []string{},
 			As:         parser.NewIdent(aliasName, false),
 		}, nil
+	case *pgquery.Node_JoinExpr:
+		return p.parseJoinExpr(n.JoinExpr)
 	default:
 		return nil, fmt.Errorf("unknown node in parseFromItem: %#v", n)
 	}
+}
+
+func (p PostgresParser) parseJoinExpr(join *pgquery.JoinExpr) (parser.TableExpr, error) {
+	if join.JoinUsingAlias != nil {
+		return nil, fmt.Errorf("unhandled join using alias in parseJoinExpr: %#v", join.JoinUsingAlias)
+	}
+	if join.Alias != nil {
+		return nil, fmt.Errorf("unhandled join alias in parseJoinExpr: %#v", join.Alias)
+	}
+
+	var joinType string
+	switch join.Jointype {
+	case pgquery.JoinType_JOIN_INNER:
+		if join.IsNatural {
+			joinType = parser.NaturalJoinStr
+		} else if join.UsingClause == nil && join.Quals == nil {
+			// pgquery has no dedicated CROSS join type: CROSS JOIN is
+			// represented as JOIN_INNER without a join condition
+			joinType = parser.CrossJoinStr
+		} else {
+			joinType = parser.JoinStr
+		}
+	case pgquery.JoinType_JOIN_LEFT:
+		if join.IsNatural {
+			joinType = parser.NaturalLeftJoinStr
+		} else {
+			joinType = parser.LeftJoinStr
+		}
+	case pgquery.JoinType_JOIN_RIGHT:
+		if join.IsNatural {
+			joinType = parser.NaturalRightJoinStr
+		} else {
+			joinType = parser.RightJoinStr
+		}
+	default:
+		// The generic AST has no representation for FULL/SEMI/ANTI joins
+		return nil, fmt.Errorf("unsupported join type in parseJoinExpr: %s", join.Jointype)
+	}
+
+	left, err := p.parseFromItem(join.Larg)
+	if err != nil {
+		return nil, err
+	}
+	right, err := p.parseFromItem(join.Rarg)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := join.Rarg.Node.(*pgquery.Node_JoinExpr); ok {
+		// A JOIN on the right side must keep its parentheses; without them the
+		// formatted SQL would re-associate the join tree to the left
+		right = &parser.ParenTableExpr{Exprs: parser.TableExprs{right}}
+	}
+
+	var condition parser.JoinCondition
+	for _, using := range join.UsingClause {
+		s, ok := using.Node.(*pgquery.Node_String_)
+		if !ok {
+			return nil, fmt.Errorf("unknown using clause node in parseJoinExpr: %#v", using.Node)
+		}
+		condition.Using = append(condition.Using, parser.NewIdent(s.String_.Sval, false))
+	}
+	if join.Quals != nil {
+		condition.On, err = p.parseExpr(join.Quals)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &parser.JoinTableExpr{
+		LeftExpr:  left,
+		Join:      joinType,
+		RightExpr: right,
+		Condition: condition,
+	}, nil
 }
 
 func (p PostgresParser) parseResTarget(stmt *pgquery.ResTarget) (parser.SelectExpr, error) {

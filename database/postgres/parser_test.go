@@ -317,6 +317,208 @@ func TestSetOperationErrorsWithPgquery(t *testing.T) {
 	}
 }
 
+func TestJoinExprVariantsWithPgquery(t *testing.T) {
+	tests := []struct {
+		name string
+		sql  string
+		want string
+	}{
+		{
+			name: "join using",
+			sql:  "SELECT * FROM users JOIN posts USING (user_id)",
+			want: "select * from users join posts using (user_id)",
+		},
+		{
+			name: "join using multiple columns",
+			sql:  "SELECT * FROM users JOIN posts USING (user_id, tenant_id)",
+			want: "select * from users join posts using (user_id, tenant_id)",
+		},
+		{
+			name: "join on",
+			sql:  "SELECT * FROM users JOIN posts ON user_id = author_id",
+			want: "select * from users join posts on user_id = author_id",
+		},
+		{
+			name: "nested joins",
+			sql:  "SELECT * FROM users JOIN posts USING (user_id) JOIN comments USING (post_id)",
+			want: "select * from users join posts using (user_id) join comments using (post_id)",
+		},
+		{
+			name: "right nested join",
+			sql:  "SELECT * FROM users JOIN (posts JOIN comments USING (post_id)) USING (user_id)",
+			want: "select * from users join (posts join comments using (post_id)) using (user_id)",
+		},
+		{
+			name: "left join",
+			sql:  "SELECT * FROM users LEFT OUTER JOIN posts ON user_id = author_id",
+			want: "select * from users left join posts on user_id = author_id",
+		},
+		{
+			name: "right join",
+			sql:  "SELECT * FROM users RIGHT JOIN posts USING (user_id)",
+			want: "select * from users right join posts using (user_id)",
+		},
+		{
+			name: "natural join",
+			sql:  "SELECT * FROM users NATURAL JOIN posts",
+			want: "select * from users natural join posts",
+		},
+		{
+			name: "natural left join",
+			sql:  "SELECT * FROM users NATURAL LEFT JOIN posts",
+			want: "select * from users natural left join posts",
+		},
+		{
+			name: "natural right join",
+			sql:  "SELECT * FROM users NATURAL RIGHT JOIN posts",
+			want: "select * from users natural right join posts",
+		},
+		{
+			name: "cross join",
+			sql:  "SELECT * FROM users CROSS JOIN posts",
+			want: "select * from users cross join posts",
+		},
+		{
+			name: "union all of join using branches",
+			sql: "SELECT * FROM (" +
+				"(SELECT user_id, note FROM users JOIN posts USING (user_id))" +
+				" UNION ALL " +
+				"(SELECT user_id, note FROM users JOIN archived_posts USING (user_id))" +
+				") AS t",
+			want: "select * from (" +
+				"select user_id, note from users join posts using (user_id)" +
+				" union all " +
+				"select user_id, note from users join archived_posts using (user_id)" +
+				") as t",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("PSQLDEF_PARSER", "pgquery")
+			postgresParser := NewParserWithMode(PsqldefParserModePgquery)
+
+			statements, err := postgresParser.Parse("CREATE VIEW join_view AS " + tt.sql)
+			require.NoError(t, err)
+			require.Len(t, statements, 1)
+
+			ddl, ok := statements[0].Statement.(*parser.DDL)
+			require.True(t, ok, "expected DDL statement, got %T", statements[0].Statement)
+			require.NotNil(t, ddl.View)
+			assert.Equal(t, tt.want, parser.String(ddl.View.Definition))
+		})
+	}
+}
+
+func TestJoinExprErrorsWithPgquery(t *testing.T) {
+	tests := []struct {
+		name string
+		sql  string
+		want string
+	}{
+		{
+			name: "full join",
+			sql:  "CREATE VIEW v AS SELECT * FROM a FULL JOIN b USING (x);",
+			want: "unsupported join type in parseJoinExpr",
+		},
+		{
+			name: "full outer join",
+			sql:  "CREATE VIEW v AS SELECT * FROM a FULL OUTER JOIN b ON x = y;",
+			want: "unsupported join type in parseJoinExpr",
+		},
+		{
+			name: "join using alias",
+			sql:  "CREATE VIEW v AS SELECT * FROM a JOIN b USING (x) AS u;",
+			want: "unhandled join using alias in parseJoinExpr",
+		},
+		{
+			name: "join alias",
+			sql:  "CREATE VIEW v AS SELECT * FROM (a JOIN b USING (x)) AS j;",
+			want: "unhandled join alias in parseJoinExpr",
+		},
+		{
+			name: "lateral subquery in join",
+			sql:  "CREATE VIEW v AS SELECT * FROM a JOIN LATERAL (SELECT 1 AS n) AS s ON true;",
+			want: "unhandled lateral subquery in parseFromItem",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("PSQLDEF_PARSER", "pgquery")
+			postgresParser := NewParserWithMode(PsqldefParserModePgquery)
+
+			_, err := postgresParser.Parse(tt.sql)
+			require.ErrorContains(t, err, tt.want)
+		})
+	}
+}
+
+func TestJoinExprErrorsWithPgqueryNodes(t *testing.T) {
+	postgresParser := PostgresParser{}
+
+	tests := []struct {
+		name string
+		join *pgquery.JoinExpr
+		want string
+	}{
+		{
+			name: "semi join",
+			join: &pgquery.JoinExpr{
+				Jointype: pgquery.JoinType_JOIN_SEMI,
+				Larg:     rangeVarNode("a"),
+				Rarg:     rangeVarNode("b"),
+			},
+			want: "unsupported join type in parseJoinExpr",
+		},
+		{
+			name: "left from item",
+			join: &pgquery.JoinExpr{
+				Jointype: pgquery.JoinType_JOIN_INNER,
+				Larg:     intConstNode(1),
+				Rarg:     rangeVarNode("b"),
+			},
+			want: "unknown node in parseFromItem",
+		},
+		{
+			name: "right from item",
+			join: &pgquery.JoinExpr{
+				Jointype: pgquery.JoinType_JOIN_INNER,
+				Larg:     rangeVarNode("a"),
+				Rarg:     intConstNode(1),
+			},
+			want: "unknown node in parseFromItem",
+		},
+		{
+			name: "using clause node",
+			join: &pgquery.JoinExpr{
+				Jointype:    pgquery.JoinType_JOIN_INNER,
+				Larg:        rangeVarNode("a"),
+				Rarg:        rangeVarNode("b"),
+				UsingClause: []*pgquery.Node{intConstNode(1)},
+			},
+			want: "unknown using clause node in parseJoinExpr",
+		},
+		{
+			name: "on expression",
+			join: &pgquery.JoinExpr{
+				Jointype: pgquery.JoinType_JOIN_INNER,
+				Larg:     rangeVarNode("a"),
+				Rarg:     rangeVarNode("b"),
+				Quals:    &pgquery.Node{},
+			},
+			want: "unknown node in parseExpr",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := postgresParser.parseJoinExpr(tt.join)
+			require.ErrorContains(t, err, tt.want)
+		})
+	}
+}
+
 func TestMultipleFromEntriesWithPgquery(t *testing.T) {
 	t.Setenv("PSQLDEF_PARSER", "pgquery")
 	postgresParser := NewParserWithMode(PsqldefParserModePgquery)
@@ -601,6 +803,14 @@ func unsupportedSortSelectStmt() *pgquery.SelectStmt {
 	stmt := selectOneStmt()
 	stmt.SortClause = []*pgquery.Node{{}}
 	return stmt
+}
+
+func rangeVarNode(name string) *pgquery.Node {
+	return &pgquery.Node{
+		Node: &pgquery.Node_RangeVar{
+			RangeVar: &pgquery.RangeVar{Relname: name},
+		},
+	}
 }
 
 func intConstNode(n int32) *pgquery.Node {

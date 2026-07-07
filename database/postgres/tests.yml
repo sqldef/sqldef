@@ -122,6 +122,62 @@ CreateViewWithExcept:
   compare_with_generic_parser: true
   sql: |
     CREATE VIEW set_view AS SELECT 1 AS id EXCEPT SELECT 2 AS id
+CreateViewWithJoinUsing:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users JOIN posts USING (user_id)
+CreateViewWithJoinUsingMultipleColumns:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users JOIN posts USING (user_id, tenant_id)
+CreateViewWithJoinOn:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users JOIN posts ON user_id = author_id
+CreateViewWithInnerJoin:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users INNER JOIN posts USING (user_id)
+CreateViewWithNestedJoins:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users JOIN posts USING (user_id) JOIN comments USING (post_id)
+CreateViewWithRightNestedJoin:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users JOIN (posts JOIN comments USING (post_id)) USING (user_id)
+CreateViewWithJoinTableAlias:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT u.* FROM users AS u JOIN posts AS p USING (user_id)
+CreateViewWithLeftJoin:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users LEFT JOIN posts ON user_id = author_id
+CreateViewWithLeftOuterJoin:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users LEFT OUTER JOIN posts USING (user_id)
+CreateViewWithRightJoin:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users RIGHT JOIN posts USING (user_id)
+CreateViewWithNaturalJoin:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users NATURAL JOIN posts
+CreateViewWithNaturalLeftJoin:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users NATURAL LEFT JOIN posts
+CreateViewWithNaturalRightJoin:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users NATURAL RIGHT JOIN posts
+CreateViewWithCrossJoin:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users CROSS JOIN posts
 CreateViewWithCast:
   sql: |
     create view hoge_view as
