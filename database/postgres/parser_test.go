@@ -871,6 +871,62 @@ func TestTypeCastFallsBackWhenRawTypeNameIsEmpty(t *testing.T) {
 	assert.Equal(t, "", cast.Type.Type)
 }
 
+func TestParseExprDispatchVariantsWithPgqueryNodes(t *testing.T) {
+	postgresParser := PostgresParser{}
+
+	tests := []struct {
+		name string
+		node *pgquery.Node
+		want string
+	}{
+		{
+			name: "case without else",
+			node: caseExprNode(nil, []*pgquery.Node{
+				caseWhenNode(intConstNode(1), intConstNode(2)),
+			}, nil),
+			want: "case when 1 then 2 else null end",
+		},
+		{
+			name: "schema qualified function",
+			node: funcCallNode([]string{"public", "normalize"}, intConstNode(1)),
+			want: "public.normalize(1)",
+		},
+		{
+			name: "not expression",
+			node: boolExprNode(pgquery.BoolExprType_NOT_EXPR, intConstNode(1)),
+			want: "not 1",
+		},
+		{
+			name: "coalesce expression",
+			node: coalesceExprNode(strConstNode(""), columnRefNode(stringNode("name"))),
+			want: "coalesce('', name)",
+		},
+		{
+			name: "boolean test",
+			node: booleanTestNode(columnRefNode(stringNode("active")), pgquery.BoolTestType_IS_TRUE),
+			want: "active is true",
+		},
+		{
+			name: "deleted text type cast",
+			node: typeCastNode(strConstNode("x"), typeNameNode("text")),
+			want: "'x'",
+		},
+		{
+			name: "array type cast",
+			node: typeCastNode(intConstNode(1), arrayTypeNameNode("int4")),
+			want: "1::integer[]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			expr, err := postgresParser.parseExpr(tt.node)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, parser.String(expr))
+		})
+	}
+}
+
 func TestMultipleFromEntriesWithPgquery(t *testing.T) {
 	t.Setenv("PSQLDEF_PARSER", "pgquery")
 	postgresParser := NewParserWithMode(PsqldefParserModePgquery)
@@ -1209,11 +1265,85 @@ func caseWhenNode(expr *pgquery.Node, result *pgquery.Node) *pgquery.Node {
 	}
 }
 
+func caseExprNode(arg *pgquery.Node, args []*pgquery.Node, defresult *pgquery.Node) *pgquery.Node {
+	return &pgquery.Node{
+		Node: &pgquery.Node_CaseExpr{
+			CaseExpr: &pgquery.CaseExpr{
+				Arg:       arg,
+				Args:      args,
+				Defresult: defresult,
+			},
+		},
+	}
+}
+
+func funcCallNode(funcNames []string, args ...*pgquery.Node) *pgquery.Node {
+	funcNameNodes := make([]*pgquery.Node, 0, len(funcNames))
+	for _, name := range funcNames {
+		funcNameNodes = append(funcNameNodes, stringNode(name))
+	}
+	return &pgquery.Node{
+		Node: &pgquery.Node_FuncCall{
+			FuncCall: &pgquery.FuncCall{
+				Funcname: funcNameNodes,
+				Args:     args,
+			},
+		},
+	}
+}
+
+func boolExprNode(boolop pgquery.BoolExprType, args ...*pgquery.Node) *pgquery.Node {
+	return &pgquery.Node{
+		Node: &pgquery.Node_BoolExpr{
+			BoolExpr: &pgquery.BoolExpr{
+				Boolop: boolop,
+				Args:   args,
+			},
+		},
+	}
+}
+
+func coalesceExprNode(args ...*pgquery.Node) *pgquery.Node {
+	return &pgquery.Node{
+		Node: &pgquery.Node_CoalesceExpr{
+			CoalesceExpr: &pgquery.CoalesceExpr{Args: args},
+		},
+	}
+}
+
+func booleanTestNode(arg *pgquery.Node, booltesttype pgquery.BoolTestType) *pgquery.Node {
+	return &pgquery.Node{
+		Node: &pgquery.Node_BooleanTest{
+			BooleanTest: &pgquery.BooleanTest{
+				Arg:          arg,
+				Booltesttype: booltesttype,
+			},
+		},
+	}
+}
+
+func typeCastNode(arg *pgquery.Node, typeName *pgquery.TypeName) *pgquery.Node {
+	return &pgquery.Node{
+		Node: &pgquery.Node_TypeCast{
+			TypeCast: &pgquery.TypeCast{
+				Arg:      arg,
+				TypeName: typeName,
+			},
+		},
+	}
+}
+
 func typeNameNode(names ...string) *pgquery.TypeName {
 	typeName := &pgquery.TypeName{Typemod: -1}
 	for _, name := range names {
 		typeName.Names = append(typeName.Names, stringNode(name))
 	}
+	return typeName
+}
+
+func arrayTypeNameNode(names ...string) *pgquery.TypeName {
+	typeName := typeNameNode(names...)
+	typeName.ArrayBounds = []*pgquery.Node{intConstNode(-1)}
 	return typeName
 }
 
@@ -1223,6 +1353,18 @@ func intConstNode(n int32) *pgquery.Node {
 			AConst: &pgquery.A_Const{
 				Val: &pgquery.A_Const_Ival{
 					Ival: &pgquery.Integer{Ival: n},
+				},
+			},
+		},
+	}
+}
+
+func strConstNode(s string) *pgquery.Node {
+	return &pgquery.Node{
+		Node: &pgquery.Node_AConst{
+			AConst: &pgquery.A_Const{
+				Val: &pgquery.A_Const_Sval{
+					Sval: &pgquery.String{Sval: s},
 				},
 			},
 		},
