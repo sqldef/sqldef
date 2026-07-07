@@ -626,184 +626,24 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 			return nil, fmt.Errorf("unknown AConst val type in parseExpr: %#v", cNode)
 		}
 	case *pgquery.Node_BoolExpr:
-		expr, err := p.parseExpr(node.BoolExpr.Args[0])
-		if err != nil {
-			return nil, err
-		}
-
-		if node.BoolExpr.Boolop == pgquery.BoolExprType_NOT_EXPR {
-			return &parser.NotExpr{
-				Expr: expr,
-			}, nil
-		}
-
-		for _, arg := range node.BoolExpr.Args[1:] {
-			right, err := p.parseExpr(arg)
-			if err != nil {
-				return nil, err
-			}
-
-			switch node.BoolExpr.Boolop {
-			case pgquery.BoolExprType_AND_EXPR:
-				expr = &parser.AndExpr{
-					Left:  expr,
-					Right: right,
-				}
-			case pgquery.BoolExprType_OR_EXPR:
-				expr = &parser.OrExpr{
-					Left:  expr,
-					Right: right,
-				}
-			default:
-				return nil, fmt.Errorf("unexpected boolop: %d", node.BoolExpr.Boolop)
-			}
-		}
-
-		return expr, nil
+		return p.parseBoolExpr(node.BoolExpr, p.parseExpr)
 	case *pgquery.Node_CaseExpr:
-		caseStmt := stmt.GetCaseExpr()
-
-		var caseExpr parser.Expr
-		var err error
-		if caseStmt.Arg != nil {
-			caseExpr, err = p.parseExpr(caseStmt.Arg)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		var whenExprs []*parser.When
-		for _, arg := range caseStmt.Args {
-			caseWhen := arg.Node.(*pgquery.Node_CaseWhen).CaseWhen
-
-			cond, err := p.parseExpr(caseWhen.Expr)
-			if err != nil {
-				return nil, err
-			}
-
-			result, err := p.parseExpr(caseWhen.Result)
-			if err != nil {
-				return nil, err
-			}
-
-			whenExpr := &parser.When{
-				Cond: cond,
-				Val:  result,
-			}
-			whenExprs = append(whenExprs, whenExpr)
-		}
-
-		var elseExpr parser.Expr
-		if caseStmt.Defresult == nil {
-			elseExpr = &parser.NullVal{} // normalize
-		} else {
-			elseExpr, err = p.parseExpr(caseStmt.Defresult)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		return &parser.CaseExpr{
-			Expr:  caseExpr,
-			Whens: whenExprs,
-			Else:  elseExpr,
-		}, nil
+		return p.parseCaseExpr(node.CaseExpr, p.parseExpr)
 	case *pgquery.Node_ColumnRef:
 		field := node.ColumnRef.Fields[len(node.ColumnRef.Fields)-1] // Ignore table name for easy comparison
 		return &parser.ColName{
 			Name: parser.NewIdent(field.Node.(*pgquery.Node_String_).String_.Sval, false),
 		}, nil
 	case *pgquery.Node_FuncCall:
-		var exprs parser.SelectExprs
-
-		for _, arg := range stmt.GetFuncCall().Args {
-			expr, err := p.parseExpr(arg)
-			if err != nil {
-				return nil, err
-			}
-
-			exprs = append(exprs, &parser.AliasedExpr{
-				Expr: expr,
-			})
-		}
-		var tableName string
-		var funcName string
-		switch len(node.FuncCall.Funcname) {
-		case 1:
-			tableName = ""
-			funcName = node.FuncCall.Funcname[0].Node.(*pgquery.Node_String_).String_.Sval
-		case 2:
-			tableName = node.FuncCall.Funcname[0].Node.(*pgquery.Node_String_).String_.Sval
-			funcName = node.FuncCall.Funcname[1].Node.(*pgquery.Node_String_).String_.Sval
-		default:
-			return nil, fmt.Errorf("unexpected number of funcname: %#v", node.FuncCall.Funcname)
-		}
-
-		return &parser.FuncExpr{
-			Qualifier: parser.NewIdent(tableName, false),
-			Name:      parser.NewIdent(funcName, false),
-			Exprs:     exprs,
-		}, nil
+		return p.parseFuncCall(node.FuncCall, p.parseExpr)
 	case *pgquery.Node_Integer:
 		return parser.NewIntVal(fmt.Sprint(node.Integer.Ival)), nil
 	case *pgquery.Node_NullTest:
-		expr, err := p.parseExpr(node.NullTest.Arg)
-		if err != nil {
-			return nil, err
-		}
-
-		switch node.NullTest.Nulltesttype {
-		case pgquery.NullTestType_IS_NOT_NULL:
-			return &parser.IsExpr{
-				Operator: parser.IsNotNullStr,
-				Expr:     expr,
-			}, nil
-		case pgquery.NullTestType_IS_NULL:
-			return &parser.IsExpr{
-				Operator: parser.IsNullStr,
-				Expr:     expr,
-			}, nil
-		default:
-			return nil, fmt.Errorf("unexpected nulltesttype: %d", node.NullTest.Nulltesttype)
-		}
+		return p.parseNullTest(node.NullTest, p.parseExpr)
 	case *pgquery.Node_String_:
 		return parser.NewStrVal(node.String_.Sval), nil
 	case *pgquery.Node_TypeCast:
-		expr, err := p.parseExpr(node.TypeCast.Arg)
-		if err != nil {
-			return nil, err
-		}
-		columnType, err := p.parseTypeName(node.TypeCast.TypeName)
-		if err != nil {
-			return nil, err
-		}
-		if shouldDeleteTypeCast(node.TypeCast.Arg, columnType) {
-			return expr, nil
-		} else {
-			// For casts, use the raw type name from pgquery to preserve "bpchar" instead of "character"
-			// This matches what the generic parser produces from ::bpchar syntax
-			rawTypeName := p.getRawTypeName(node.TypeCast.TypeName)
-			typeName := rawTypeName
-			if typeName == "" {
-				// Fallback to normalized type if raw extraction fails
-				slog.Debug("Failed to extract raw type name from TypeCast, falling back to normalized type",
-					"normalized_type", columnType.Type,
-					"type_node", fmt.Sprintf("%#v", node.TypeCast.TypeName))
-				typeName = columnType.Type
-			}
-			if columnType.Array {
-				typeName += "[]"
-			}
-			return &parser.CastExpr{
-				Type: &parser.ConvertType{
-					Type:    typeName,
-					Length:  columnType.Length,
-					Scale:   columnType.Scale,
-					Charset: columnType.Charset,
-				},
-				Expr: expr,
-			}, nil
-		}
+		return p.parseTypeCast(node.TypeCast, p.parseExpr)
 	case *pgquery.Node_SqlvalueFunction:
 		switch node.SqlvalueFunction.Op {
 		case pgquery.SQLValueFunctionOp_SVFOP_CURRENT_TIMESTAMP:
@@ -825,115 +665,11 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 			return nil, fmt.Errorf("unexpected SqlvalueFunction: %#v", node)
 		}
 	case *pgquery.Node_AExpr:
-		opNode, ok := node.AExpr.GetName()[0].Node.(*pgquery.Node_String_)
-		if !ok {
-			return nil, fmt.Errorf("unexpected AExpr operation node: %#v", node)
-		}
-
-		// Convert lower case for compatibility with legacy parser
-		op := strings.ToLower(opNode.String_.Sval)
-
-		switch node.AExpr.Kind {
-		case pgquery.A_Expr_Kind_AEXPR_OP,
-			pgquery.A_Expr_Kind_AEXPR_LIKE,
-			pgquery.A_Expr_Kind_AEXPR_ILIKE,
-			pgquery.A_Expr_Kind_AEXPR_OP_ALL,
-			pgquery.A_Expr_Kind_AEXPR_OP_ANY,
-			pgquery.A_Expr_Kind_AEXPR_IN:
-			left, err := p.parseExpr(node.AExpr.GetLexpr())
-			if err != nil {
-				return nil, err
-			}
-			right, err := p.parseExpr(node.AExpr.GetRexpr())
-			if err != nil {
-				return nil, err
-			}
-			// IN operator is internally converted to = ANY (ARRAY[...]) in PostgreSQL
-			anyFlag := node.AExpr.Kind == pgquery.A_Expr_Kind_AEXPR_OP_ANY || node.AExpr.Kind == pgquery.A_Expr_Kind_AEXPR_IN
-
-			// For IN expressions, convert ValTuple to ArrayConstructor
-			if node.AExpr.Kind == pgquery.A_Expr_Kind_AEXPR_IN {
-				if valTuple, ok := right.(parser.ValTuple); ok {
-					// Convert ValTuple to ArrayConstructor
-					var elements parser.Exprs
-					for _, expr := range valTuple {
-						elem, err := p.parseArrayElement(expr)
-						if err != nil {
-							return nil, err
-						}
-						elements = append(elements, elem)
-					}
-					right = &parser.ArrayConstructor{
-						Elements: elements,
-					}
-				}
-			}
-
-			return &parser.ComparisonExpr{
-				Operator: op,
-				Left:     left,
-				Right:    right,
-				All:      node.AExpr.Kind == pgquery.A_Expr_Kind_AEXPR_OP_ALL,
-				Any:      anyFlag,
-			}, nil
-		default:
-			return nil, fmt.Errorf("unknown AExpr kind in parseExpr: %#v", node.AExpr)
-		}
+		return p.parseAExpr(node.AExpr, p.parseExpr)
 	case *pgquery.Node_CoalesceExpr:
-		var selectExprs parser.SelectExprs
-		for _, arg := range node.CoalesceExpr.Args {
-			expr, err := p.parseExpr(arg)
-			if err != nil {
-				return nil, err
-			}
-			selectExprs = append(selectExprs, &parser.AliasedExpr{
-				Expr: expr,
-			})
-		}
-		return &parser.FuncExpr{
-			Name:  parser.NewIdent("coalesce", false),
-			Exprs: selectExprs,
-		}, nil
+		return p.parseCoalesceExpr(node.CoalesceExpr, p.parseExpr)
 	case *pgquery.Node_BooleanTest:
-		expr, err := p.parseExpr(node.BooleanTest.Arg)
-		if err != nil {
-			return nil, err
-		}
-
-		switch node.BooleanTest.Booltesttype {
-		case pgquery.BoolTestType_IS_TRUE:
-			return &parser.IsExpr{
-				Expr:     expr,
-				Operator: parser.IsTrueStr,
-			}, nil
-		case pgquery.BoolTestType_IS_NOT_TRUE:
-			return &parser.IsExpr{
-				Expr:     expr,
-				Operator: parser.IsNotTrueStr,
-			}, nil
-		case pgquery.BoolTestType_IS_FALSE:
-			return &parser.IsExpr{
-				Expr:     expr,
-				Operator: parser.IsFalseStr,
-			}, nil
-		case pgquery.BoolTestType_IS_NOT_FALSE:
-			return &parser.IsExpr{
-				Expr:     expr,
-				Operator: parser.IsNotFalseStr,
-			}, nil
-		case pgquery.BoolTestType_IS_UNKNOWN:
-			return &parser.IsExpr{
-				Expr:     expr,
-				Operator: parser.IsUnknownStr,
-			}, nil
-		case pgquery.BoolTestType_IS_NOT_UNKNOWN:
-			return &parser.IsExpr{
-				Expr:     expr,
-				Operator: parser.IsNotUnknownStr,
-			}, nil
-		default:
-			return nil, fmt.Errorf("unexpected boolean test type: %d", node.BooleanTest.Booltesttype)
-		}
+		return p.parseBooleanTest(node.BooleanTest, p.parseExpr)
 	case *pgquery.Node_List:
 		// Handle list of values (used in IN expressions)
 		var exprs parser.Exprs
@@ -948,6 +684,295 @@ func (p PostgresParser) parseExpr(stmt *pgquery.Node) (parser.Expr, error) {
 	default:
 		return nil, fmt.Errorf("unknown node in parseExpr: %#v", node)
 	}
+}
+
+// parseBoolExpr converts a BoolExpr, delegating operand conversion to parseOperand
+// so that callers can control how column references are converted.
+func (p PostgresParser) parseBoolExpr(boolExpr *pgquery.BoolExpr, parseOperand func(*pgquery.Node) (parser.Expr, error)) (parser.Expr, error) {
+	expr, err := parseOperand(boolExpr.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	if boolExpr.Boolop == pgquery.BoolExprType_NOT_EXPR {
+		return &parser.NotExpr{
+			Expr: expr,
+		}, nil
+	}
+
+	for _, arg := range boolExpr.Args[1:] {
+		right, err := parseOperand(arg)
+		if err != nil {
+			return nil, err
+		}
+
+		switch boolExpr.Boolop {
+		case pgquery.BoolExprType_AND_EXPR:
+			expr = &parser.AndExpr{
+				Left:  expr,
+				Right: right,
+			}
+		case pgquery.BoolExprType_OR_EXPR:
+			expr = &parser.OrExpr{
+				Left:  expr,
+				Right: right,
+			}
+		default:
+			return nil, fmt.Errorf("unexpected boolop: %d", boolExpr.Boolop)
+		}
+	}
+
+	return expr, nil
+}
+
+// parseAExpr converts an A_Expr, delegating operand conversion to parseOperand
+// so that callers can control how column references are converted.
+func (p PostgresParser) parseAExpr(aExpr *pgquery.A_Expr, parseOperand func(*pgquery.Node) (parser.Expr, error)) (parser.Expr, error) {
+	opNode, ok := aExpr.GetName()[0].Node.(*pgquery.Node_String_)
+	if !ok {
+		return nil, fmt.Errorf("unexpected AExpr operation node: %#v", aExpr)
+	}
+
+	// Convert lower case for compatibility with legacy parser
+	op := strings.ToLower(opNode.String_.Sval)
+
+	switch aExpr.Kind {
+	case pgquery.A_Expr_Kind_AEXPR_OP,
+		pgquery.A_Expr_Kind_AEXPR_LIKE,
+		pgquery.A_Expr_Kind_AEXPR_ILIKE,
+		pgquery.A_Expr_Kind_AEXPR_OP_ALL,
+		pgquery.A_Expr_Kind_AEXPR_OP_ANY,
+		pgquery.A_Expr_Kind_AEXPR_IN:
+		left, err := parseOperand(aExpr.GetLexpr())
+		if err != nil {
+			return nil, err
+		}
+		right, err := parseOperand(aExpr.GetRexpr())
+		if err != nil {
+			return nil, err
+		}
+		// IN operator is internally converted to = ANY (ARRAY[...]) in PostgreSQL
+		anyFlag := aExpr.Kind == pgquery.A_Expr_Kind_AEXPR_OP_ANY || aExpr.Kind == pgquery.A_Expr_Kind_AEXPR_IN
+
+		// For IN expressions, convert ValTuple to ArrayConstructor
+		if aExpr.Kind == pgquery.A_Expr_Kind_AEXPR_IN {
+			if valTuple, ok := right.(parser.ValTuple); ok {
+				// Convert ValTuple to ArrayConstructor
+				var elements parser.Exprs
+				for _, expr := range valTuple {
+					elem, err := p.parseArrayElement(expr)
+					if err != nil {
+						return nil, err
+					}
+					elements = append(elements, elem)
+				}
+				right = &parser.ArrayConstructor{
+					Elements: elements,
+				}
+			}
+		}
+
+		return &parser.ComparisonExpr{
+			Operator: op,
+			Left:     left,
+			Right:    right,
+			All:      aExpr.Kind == pgquery.A_Expr_Kind_AEXPR_OP_ALL,
+			Any:      anyFlag,
+		}, nil
+	default:
+		return nil, fmt.Errorf("unknown AExpr kind in parseAExpr: %#v", aExpr)
+	}
+}
+
+func (p PostgresParser) parseFuncCall(funcCall *pgquery.FuncCall, parseOperand func(*pgquery.Node) (parser.Expr, error)) (parser.Expr, error) {
+	var exprs parser.SelectExprs
+	for _, arg := range funcCall.Args {
+		expr, err := parseOperand(arg)
+		if err != nil {
+			return nil, err
+		}
+		exprs = append(exprs, &parser.AliasedExpr{
+			Expr: expr,
+		})
+	}
+	var tableName string
+	var funcName string
+	switch len(funcCall.Funcname) {
+	case 1:
+		tableName = ""
+		funcName = funcCall.Funcname[0].Node.(*pgquery.Node_String_).String_.Sval
+	case 2:
+		tableName = funcCall.Funcname[0].Node.(*pgquery.Node_String_).String_.Sval
+		funcName = funcCall.Funcname[1].Node.(*pgquery.Node_String_).String_.Sval
+	default:
+		return nil, fmt.Errorf("unexpected number of funcname: %#v", funcCall.Funcname)
+	}
+	return &parser.FuncExpr{
+		Qualifier: parser.NewIdent(tableName, false),
+		Name:      parser.NewIdent(funcName, false),
+		Exprs:     exprs,
+	}, nil
+}
+
+func (p PostgresParser) parseNullTest(nullTest *pgquery.NullTest, parseOperand func(*pgquery.Node) (parser.Expr, error)) (parser.Expr, error) {
+	expr, err := parseOperand(nullTest.Arg)
+	if err != nil {
+		return nil, err
+	}
+	switch nullTest.Nulltesttype {
+	case pgquery.NullTestType_IS_NOT_NULL:
+		return &parser.IsExpr{
+			Operator: parser.IsNotNullStr,
+			Expr:     expr,
+		}, nil
+	case pgquery.NullTestType_IS_NULL:
+		return &parser.IsExpr{
+			Operator: parser.IsNullStr,
+			Expr:     expr,
+		}, nil
+	default:
+		return nil, fmt.Errorf("unexpected nulltesttype: %d", nullTest.Nulltesttype)
+	}
+}
+
+func (p PostgresParser) parseTypeCast(typeCast *pgquery.TypeCast, parseOperand func(*pgquery.Node) (parser.Expr, error)) (parser.Expr, error) {
+	expr, err := parseOperand(typeCast.Arg)
+	if err != nil {
+		return nil, err
+	}
+	columnType, err := p.parseTypeName(typeCast.TypeName)
+	if err != nil {
+		return nil, err
+	}
+	if shouldDeleteTypeCast(typeCast.Arg, columnType) {
+		return expr, nil
+	}
+	rawTypeName := p.getRawTypeName(typeCast.TypeName)
+	typeName := rawTypeName
+	if typeName == "" {
+		slog.Debug("Failed to extract raw type name from TypeCast, falling back to normalized type",
+			"normalized_type", columnType.Type,
+			"type_node", fmt.Sprintf("%#v", typeCast.TypeName))
+		typeName = columnType.Type
+	}
+	if columnType.Array {
+		typeName += "[]"
+	}
+	return &parser.CastExpr{
+		Type: &parser.ConvertType{
+			Type:    typeName,
+			Length:  columnType.Length,
+			Scale:   columnType.Scale,
+			Charset: columnType.Charset,
+		},
+		Expr: expr,
+	}, nil
+}
+
+func (p PostgresParser) parseBooleanTest(boolTest *pgquery.BooleanTest, parseOperand func(*pgquery.Node) (parser.Expr, error)) (parser.Expr, error) {
+	expr, err := parseOperand(boolTest.Arg)
+	if err != nil {
+		return nil, err
+	}
+	switch boolTest.Booltesttype {
+	case pgquery.BoolTestType_IS_TRUE:
+		return &parser.IsExpr{
+			Expr:     expr,
+			Operator: parser.IsTrueStr,
+		}, nil
+	case pgquery.BoolTestType_IS_NOT_TRUE:
+		return &parser.IsExpr{
+			Expr:     expr,
+			Operator: parser.IsNotTrueStr,
+		}, nil
+	case pgquery.BoolTestType_IS_FALSE:
+		return &parser.IsExpr{
+			Expr:     expr,
+			Operator: parser.IsFalseStr,
+		}, nil
+	case pgquery.BoolTestType_IS_NOT_FALSE:
+		return &parser.IsExpr{
+			Expr:     expr,
+			Operator: parser.IsNotFalseStr,
+		}, nil
+	case pgquery.BoolTestType_IS_UNKNOWN:
+		return &parser.IsExpr{
+			Expr:     expr,
+			Operator: parser.IsUnknownStr,
+		}, nil
+	case pgquery.BoolTestType_IS_NOT_UNKNOWN:
+		return &parser.IsExpr{
+			Expr:     expr,
+			Operator: parser.IsNotUnknownStr,
+		}, nil
+	default:
+		return nil, fmt.Errorf("unexpected boolean test type: %d", boolTest.Booltesttype)
+	}
+}
+
+func (p PostgresParser) parseCoalesceExpr(coalesceExpr *pgquery.CoalesceExpr, parseOperand func(*pgquery.Node) (parser.Expr, error)) (parser.Expr, error) {
+	var selectExprs parser.SelectExprs
+	for _, arg := range coalesceExpr.Args {
+		expr, err := parseOperand(arg)
+		if err != nil {
+			return nil, err
+		}
+		selectExprs = append(selectExprs, &parser.AliasedExpr{
+			Expr: expr,
+		})
+	}
+	return &parser.FuncExpr{
+		Name:  parser.NewIdent("coalesce", false),
+		Exprs: selectExprs,
+	}, nil
+}
+
+func (p PostgresParser) parseCaseExpr(caseExpr *pgquery.CaseExpr, parseOperand func(*pgquery.Node) (parser.Expr, error)) (parser.Expr, error) {
+	var caseExprVal parser.Expr
+	var err error
+	if caseExpr.Arg != nil {
+		caseExprVal, err = parseOperand(caseExpr.Arg)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var whenExprs []*parser.When
+	for _, arg := range caseExpr.Args {
+		caseWhen := arg.Node.(*pgquery.Node_CaseWhen).CaseWhen
+
+		cond, err := parseOperand(caseWhen.Expr)
+		if err != nil {
+			return nil, err
+		}
+
+		result, err := parseOperand(caseWhen.Result)
+		if err != nil {
+			return nil, err
+		}
+
+		whenExpr := &parser.When{
+			Cond: cond,
+			Val:  result,
+		}
+		whenExprs = append(whenExprs, whenExpr)
+	}
+
+	var elseExpr parser.Expr
+	if caseExpr.Defresult == nil {
+		elseExpr = &parser.NullVal{} // normalize
+	} else {
+		elseExpr, err = parseOperand(caseExpr.Defresult)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &parser.CaseExpr{
+		Expr:  caseExprVal,
+		Whens: whenExprs,
+		Else:  elseExpr,
+	}, nil
 }
 
 func (p PostgresParser) parseIndexColumn(stmt *pgquery.Node) (parser.IndexColumn, error) {
