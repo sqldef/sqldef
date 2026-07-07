@@ -330,7 +330,7 @@ func TestUnsupportedLateralSubselectWithPgquery(t *testing.T) {
 	postgresParser := NewParserWithMode(PsqldefParserModePgquery)
 
 	_, err := postgresParser.Parse(`CREATE VIEW v AS SELECT * FROM LATERAL (SELECT 1 AS id) AS s;`)
-	require.ErrorContains(t, err, "unhandled lateral subquery in parseSelectStmt")
+	require.ErrorContains(t, err, "unhandled lateral subquery in parseFromItem")
 }
 
 func TestUnsupportedSubselectSortWithPgquery(t *testing.T) {
@@ -367,7 +367,7 @@ func TestUnsupportedSubqueryNodeWithPgquery(t *testing.T) {
 	}
 
 	_, err := postgresParser.parseSelectStmt(stmt)
-	require.ErrorContains(t, err, "unknown subquery node in parseSelectStmt")
+	require.ErrorContains(t, err, "unknown subquery node in parseFromItem")
 }
 
 func TestAliasColumnNamesWithPgquery(t *testing.T) {

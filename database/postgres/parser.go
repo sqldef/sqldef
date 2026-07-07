@@ -438,51 +438,11 @@ func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.Select
 		return nil, fmt.Errorf("unhandled multiple FROM entries in parseSelectStmt: %#v", stmt.FromClause)
 	}
 	if len(stmt.FromClause) == 1 {
-		var fromExpr parser.SimpleTableExpr
-		var aliasName string
-		var aliasCols parser.Columns
-		switch node := stmt.FromClause[0].Node.(type) {
-		case *pgquery.Node_RangeVar:
-			tableName, err := p.parseTableName(node.RangeVar)
-			if err != nil {
-				return nil, err
-			}
-			fromExpr = tableName
-			if node.RangeVar.Alias != nil {
-				aliasName = node.RangeVar.Alias.Aliasname
-			}
-		case *pgquery.Node_RangeSubselect:
-			if node.RangeSubselect.Lateral {
-				return nil, fmt.Errorf("unhandled lateral subquery in parseSelectStmt")
-			}
-			subNode, ok := node.RangeSubselect.Subquery.Node.(*pgquery.Node_SelectStmt)
-			if !ok {
-				return nil, fmt.Errorf("unknown subquery node in parseSelectStmt: %#v", node.RangeSubselect.Subquery.Node)
-			}
-			sub, err := p.parseSelectStmt(subNode.SelectStmt)
-			if err != nil {
-				return nil, err
-			}
-			fromExpr = &parser.Subquery{Select: sub}
-			if node.RangeSubselect.Alias != nil {
-				aliasName = node.RangeSubselect.Alias.Aliasname
-				for _, col := range node.RangeSubselect.Alias.Colnames {
-					if s, ok := col.Node.(*pgquery.Node_String_); ok {
-						aliasCols = append(aliasCols, parser.NewIdent(s.String_.Sval, false))
-					}
-				}
-			}
-		default:
-			return nil, fmt.Errorf("unknown node in parseSelectStmt: %#v", node)
+		fromItem, err := p.parseFromItem(stmt.FromClause[0])
+		if err != nil {
+			return nil, err
 		}
-		from = parser.TableExprs{
-			&parser.AliasedTableExpr{
-				Expr:       fromExpr,
-				Columns:    aliasCols,
-				TableHints: []string{},
-				As:         parser.NewIdent(aliasName, false),
-			},
-		}
+		from = parser.TableExprs{fromItem}
 	}
 
 	var distinct *parser.DistinctClause
@@ -541,6 +501,55 @@ func (p PostgresParser) parseSelectStmt(stmt *pgquery.SelectStmt) (parser.Select
 		GroupBy:     groupBy,
 		Having:      having,
 	}, nil
+}
+
+func (p PostgresParser) parseFromItem(node *pgquery.Node) (parser.TableExpr, error) {
+	switch n := node.Node.(type) {
+	case *pgquery.Node_RangeVar:
+		tableName, err := p.parseTableName(n.RangeVar)
+		if err != nil {
+			return nil, err
+		}
+		var aliasName string
+		if n.RangeVar.Alias != nil {
+			aliasName = n.RangeVar.Alias.Aliasname
+		}
+		return &parser.AliasedTableExpr{
+			Expr:       tableName,
+			TableHints: []string{},
+			As:         parser.NewIdent(aliasName, false),
+		}, nil
+	case *pgquery.Node_RangeSubselect:
+		if n.RangeSubselect.Lateral {
+			return nil, fmt.Errorf("unhandled lateral subquery in parseFromItem")
+		}
+		subNode, ok := n.RangeSubselect.Subquery.Node.(*pgquery.Node_SelectStmt)
+		if !ok {
+			return nil, fmt.Errorf("unknown subquery node in parseFromItem: %#v", n.RangeSubselect.Subquery.Node)
+		}
+		sub, err := p.parseSelectStmt(subNode.SelectStmt)
+		if err != nil {
+			return nil, err
+		}
+		var aliasName string
+		var aliasCols parser.Columns
+		if n.RangeSubselect.Alias != nil {
+			aliasName = n.RangeSubselect.Alias.Aliasname
+			for _, col := range n.RangeSubselect.Alias.Colnames {
+				if s, ok := col.Node.(*pgquery.Node_String_); ok {
+					aliasCols = append(aliasCols, parser.NewIdent(s.String_.Sval, false))
+				}
+			}
+		}
+		return &parser.AliasedTableExpr{
+			Expr:       &parser.Subquery{Select: sub},
+			Columns:    aliasCols,
+			TableHints: []string{},
+			As:         parser.NewIdent(aliasName, false),
+		}, nil
+	default:
+		return nil, fmt.Errorf("unknown node in parseFromItem: %#v", n)
+	}
 }
 
 func (p PostgresParser) parseResTarget(stmt *pgquery.ResTarget) (parser.SelectExpr, error) {
