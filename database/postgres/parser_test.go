@@ -436,6 +436,33 @@ func TestJoinExprVariantsWithPgquery(t *testing.T) {
 			sql:  "SELECT * FROM users AS u JOIN posts AS p ON coalesce(u.email, '') = p.author_email",
 			want: "select * from users as u join posts as p on coalesce(u.email, '') = p.author_email",
 		},
+		{
+			name: "join on in list",
+			sql:  "SELECT * FROM users AS u JOIN posts AS p ON u.id IN (1, 2, 3)",
+			want: "select * from users as u join posts as p on u.id = ANY (ARRAY[1, 2, 3])",
+		},
+		{
+			name: "join on boolean test variants",
+			sql: "SELECT * FROM users AS u JOIN posts AS p ON " +
+				"p.active IS NOT TRUE OR " +
+				"p.archived IS FALSE OR " +
+				"p.deleted IS NOT FALSE OR " +
+				"p.flag IS UNKNOWN OR " +
+				"p.ready IS NOT UNKNOWN",
+			want: "select * from users as u join posts as p on " +
+				"p.active is not true or " +
+				"p.archived is false or " +
+				"p.deleted is not false or " +
+				"p.flag is unknown or " +
+				"p.ready is not unknown",
+		},
+		{
+			name: "join on case expression",
+			sql: "SELECT * FROM users AS u JOIN posts AS p ON " +
+				"CASE WHEN u.kind = p.kind THEN u.id ELSE 0 END = p.user_id",
+			want: "select * from users as u join posts as p on " +
+				"case when u.kind = p.kind then u.id else 0 end = p.user_id",
+		},
 	}
 
 	for _, tt := range tests {
@@ -585,6 +612,263 @@ func TestJoinExprErrorsWithPgqueryNodes(t *testing.T) {
 			require.ErrorContains(t, err, tt.want)
 		})
 	}
+}
+
+func TestExpressionParserHelperErrorsWithPgqueryNodes(t *testing.T) {
+	postgresParser := PostgresParser{}
+
+	tests := []struct {
+		name string
+		run  func() error
+		want string
+	}{
+		{
+			name: "bool expr first operand",
+			run: func() error {
+				_, err := postgresParser.parseBoolExpr(&pgquery.BoolExpr{
+					Boolop: pgquery.BoolExprType_AND_EXPR,
+					Args:   []*pgquery.Node{{}},
+				}, postgresParser.parseExpr)
+				return err
+			},
+			want: "unknown node in parseExpr",
+		},
+		{
+			name: "bool expr later operand",
+			run: func() error {
+				_, err := postgresParser.parseBoolExpr(&pgquery.BoolExpr{
+					Boolop: pgquery.BoolExprType_AND_EXPR,
+					Args:   []*pgquery.Node{intConstNode(1), {}},
+				}, postgresParser.parseExpr)
+				return err
+			},
+			want: "unknown node in parseExpr",
+		},
+		{
+			name: "bool expr operator",
+			run: func() error {
+				_, err := postgresParser.parseBoolExpr(&pgquery.BoolExpr{
+					Boolop: pgquery.BoolExprType_BOOL_EXPR_TYPE_UNDEFINED,
+					Args:   []*pgquery.Node{intConstNode(1), intConstNode(2)},
+				}, postgresParser.parseExpr)
+				return err
+			},
+			want: "unexpected boolop",
+		},
+		{
+			name: "a expr operation node",
+			run: func() error {
+				_, err := postgresParser.parseAExpr(&pgquery.A_Expr{
+					Kind:  pgquery.A_Expr_Kind_AEXPR_OP,
+					Name:  []*pgquery.Node{intConstNode(1)},
+					Lexpr: intConstNode(1),
+					Rexpr: intConstNode(2),
+				}, postgresParser.parseExpr)
+				return err
+			},
+			want: "unexpected AExpr operation node",
+		},
+		{
+			name: "a expr left operand",
+			run: func() error {
+				_, err := postgresParser.parseAExpr(aExprNode(pgquery.A_Expr_Kind_AEXPR_OP, "=", &pgquery.Node{}, intConstNode(2)), postgresParser.parseExpr)
+				return err
+			},
+			want: "unknown node in parseExpr",
+		},
+		{
+			name: "a expr right operand",
+			run: func() error {
+				_, err := postgresParser.parseAExpr(aExprNode(pgquery.A_Expr_Kind_AEXPR_OP, "=", intConstNode(1), &pgquery.Node{}), postgresParser.parseExpr)
+				return err
+			},
+			want: "unknown node in parseExpr",
+		},
+		{
+			name: "a expr kind",
+			run: func() error {
+				_, err := postgresParser.parseAExpr(aExprNode(pgquery.A_Expr_Kind_AEXPR_DISTINCT, "=", intConstNode(1), intConstNode(2)), postgresParser.parseExpr)
+				return err
+			},
+			want: "unknown AExpr kind in parseAExpr",
+		},
+		{
+			name: "a expr in array element",
+			run: func() error {
+				rightNode := &pgquery.Node{}
+				parseOperand := func(node *pgquery.Node) (parser.Expr, error) {
+					if node == rightNode {
+						return parser.ValTuple{&parser.Default{}}, nil
+					}
+					return postgresParser.parseExpr(node)
+				}
+				_, err := postgresParser.parseAExpr(
+					aExprNode(pgquery.A_Expr_Kind_AEXPR_IN, "=", intConstNode(1), rightNode),
+					parseOperand,
+				)
+				return err
+			},
+			want: "unknown expr in parseArrayElement",
+		},
+		{
+			name: "func call argument",
+			run: func() error {
+				_, err := postgresParser.parseFuncCall(&pgquery.FuncCall{
+					Funcname: []*pgquery.Node{stringNode("lower")},
+					Args:     []*pgquery.Node{{}},
+				}, postgresParser.parseExpr)
+				return err
+			},
+			want: "unknown node in parseExpr",
+		},
+		{
+			name: "func call name length",
+			run: func() error {
+				_, err := postgresParser.parseFuncCall(&pgquery.FuncCall{
+					Funcname: []*pgquery.Node{stringNode("pg_catalog"), stringNode("public"), stringNode("lower")},
+				}, postgresParser.parseExpr)
+				return err
+			},
+			want: "unexpected number of funcname",
+		},
+		{
+			name: "null test argument",
+			run: func() error {
+				_, err := postgresParser.parseNullTest(&pgquery.NullTest{
+					Arg:          &pgquery.Node{},
+					Nulltesttype: pgquery.NullTestType_IS_NULL,
+				}, postgresParser.parseExpr)
+				return err
+			},
+			want: "unknown node in parseExpr",
+		},
+		{
+			name: "null test type",
+			run: func() error {
+				_, err := postgresParser.parseNullTest(&pgquery.NullTest{
+					Arg:          intConstNode(1),
+					Nulltesttype: pgquery.NullTestType_NULL_TEST_TYPE_UNDEFINED,
+				}, postgresParser.parseExpr)
+				return err
+			},
+			want: "unexpected nulltesttype",
+		},
+		{
+			name: "type cast argument",
+			run: func() error {
+				_, err := postgresParser.parseTypeCast(&pgquery.TypeCast{
+					Arg:      &pgquery.Node{},
+					TypeName: typeNameNode("int4"),
+				}, postgresParser.parseExpr)
+				return err
+			},
+			want: "unknown node in parseExpr",
+		},
+		{
+			name: "type cast type name",
+			run: func() error {
+				_, err := postgresParser.parseTypeCast(&pgquery.TypeCast{
+					Arg:      intConstNode(1),
+					TypeName: &pgquery.TypeName{TypeOid: 1, Typemod: -1},
+				}, postgresParser.parseExpr)
+				return err
+			},
+			want: "unhandled node in parseTypeName",
+		},
+		{
+			name: "boolean test argument",
+			run: func() error {
+				_, err := postgresParser.parseBooleanTest(&pgquery.BooleanTest{
+					Arg:          &pgquery.Node{},
+					Booltesttype: pgquery.BoolTestType_IS_TRUE,
+				}, postgresParser.parseExpr)
+				return err
+			},
+			want: "unknown node in parseExpr",
+		},
+		{
+			name: "boolean test type",
+			run: func() error {
+				_, err := postgresParser.parseBooleanTest(&pgquery.BooleanTest{
+					Arg:          intConstNode(1),
+					Booltesttype: pgquery.BoolTestType_BOOL_TEST_TYPE_UNDEFINED,
+				}, postgresParser.parseExpr)
+				return err
+			},
+			want: "unexpected boolean test type",
+		},
+		{
+			name: "case expr argument",
+			run: func() error {
+				_, err := postgresParser.parseCaseExpr(&pgquery.CaseExpr{
+					Arg: &pgquery.Node{},
+				}, postgresParser.parseExpr)
+				return err
+			},
+			want: "unknown node in parseExpr",
+		},
+		{
+			name: "case expr when condition",
+			run: func() error {
+				_, err := postgresParser.parseCaseExpr(&pgquery.CaseExpr{
+					Args: []*pgquery.Node{caseWhenNode(&pgquery.Node{}, intConstNode(1))},
+				}, postgresParser.parseExpr)
+				return err
+			},
+			want: "unknown node in parseExpr",
+		},
+		{
+			name: "case expr when result",
+			run: func() error {
+				_, err := postgresParser.parseCaseExpr(&pgquery.CaseExpr{
+					Args: []*pgquery.Node{caseWhenNode(intConstNode(1), &pgquery.Node{})},
+				}, postgresParser.parseExpr)
+				return err
+			},
+			want: "unknown node in parseExpr",
+		},
+		{
+			name: "case expr else",
+			run: func() error {
+				_, err := postgresParser.parseCaseExpr(&pgquery.CaseExpr{
+					Args:      []*pgquery.Node{caseWhenNode(intConstNode(1), intConstNode(2))},
+					Defresult: &pgquery.Node{},
+				}, postgresParser.parseExpr)
+				return err
+			},
+			want: "unknown node in parseExpr",
+		},
+		{
+			name: "list item",
+			run: func() error {
+				_, err := postgresParser.parseExpr(listNode(&pgquery.Node{}))
+				return err
+			},
+			want: "unknown node in parseExpr",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.ErrorContains(t, tt.run(), tt.want)
+		})
+	}
+}
+
+func TestTypeCastFallsBackWhenRawTypeNameIsEmpty(t *testing.T) {
+	postgresParser := PostgresParser{}
+
+	// pgquery normally supplies a non-empty type name; this malformed node only
+	// exercises the fallback branch after parseTypeName succeeds.
+	expr, err := postgresParser.parseTypeCast(&pgquery.TypeCast{
+		Arg:      intConstNode(1),
+		TypeName: typeNameNode(""),
+	}, postgresParser.parseExpr)
+	require.NoError(t, err)
+
+	cast, ok := expr.(*parser.CastExpr)
+	require.True(t, ok, "expected CastExpr, got %T", expr)
+	assert.Equal(t, "", cast.Type.Type)
 }
 
 func TestMultipleFromEntriesWithPgquery(t *testing.T) {
@@ -895,6 +1179,42 @@ func columnRefNode(fields ...*pgquery.Node) *pgquery.Node {
 			ColumnRef: &pgquery.ColumnRef{Fields: fields},
 		},
 	}
+}
+
+func listNode(items ...*pgquery.Node) *pgquery.Node {
+	return &pgquery.Node{
+		Node: &pgquery.Node_List{
+			List: &pgquery.List{Items: items},
+		},
+	}
+}
+
+func aExprNode(kind pgquery.A_Expr_Kind, op string, left *pgquery.Node, right *pgquery.Node) *pgquery.A_Expr {
+	return &pgquery.A_Expr{
+		Kind:  kind,
+		Name:  []*pgquery.Node{stringNode(op)},
+		Lexpr: left,
+		Rexpr: right,
+	}
+}
+
+func caseWhenNode(expr *pgquery.Node, result *pgquery.Node) *pgquery.Node {
+	return &pgquery.Node{
+		Node: &pgquery.Node_CaseWhen{
+			CaseWhen: &pgquery.CaseWhen{
+				Expr:   expr,
+				Result: result,
+			},
+		},
+	}
+}
+
+func typeNameNode(names ...string) *pgquery.TypeName {
+	typeName := &pgquery.TypeName{Typemod: -1}
+	for _, name := range names {
+		typeName.Names = append(typeName.Names, stringNode(name))
+	}
+	return typeName
 }
 
 func intConstNode(n int32) *pgquery.Node {
