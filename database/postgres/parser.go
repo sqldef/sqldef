@@ -614,7 +614,7 @@ func (p PostgresParser) parseJoinExpr(join *pgquery.JoinExpr) (parser.TableExpr,
 		condition.Using = append(condition.Using, parser.NewIdent(s.String_.Sval, false))
 	}
 	if join.Quals != nil {
-		condition.On, err = p.parseExpr(join.Quals)
+		condition.On, err = p.parseJoinQuals(join.Quals)
 		if err != nil {
 			return nil, err
 		}
@@ -626,6 +626,67 @@ func (p PostgresParser) parseJoinExpr(join *pgquery.JoinExpr) (parser.TableExpr,
 		RightExpr: right,
 		Condition: condition,
 	}, nil
+}
+
+// parseJoinQuals converts a JOIN ON condition. Unlike parseExpr, it keeps table
+// qualifiers on column references: dropping them can make the condition ambiguous
+// (e.g. ON u.id = p.id), and the generic parser keeps them as well.
+func (p PostgresParser) parseJoinQuals(node *pgquery.Node) (parser.Expr, error) {
+	switch n := node.Node.(type) {
+	case *pgquery.Node_ColumnRef:
+		return p.parseQualifiedColumnRef(n.ColumnRef)
+	case *pgquery.Node_BoolExpr:
+		return p.parseBoolExpr(n.BoolExpr, p.parseJoinQuals)
+	case *pgquery.Node_AExpr:
+		return p.parseAExpr(n.AExpr, p.parseJoinQuals)
+	case *pgquery.Node_FuncCall:
+		return p.parseFuncCall(n.FuncCall, p.parseJoinQuals)
+	case *pgquery.Node_NullTest:
+		return p.parseNullTest(n.NullTest, p.parseJoinQuals)
+	case *pgquery.Node_TypeCast:
+		return p.parseTypeCast(n.TypeCast, p.parseJoinQuals)
+	case *pgquery.Node_BooleanTest:
+		return p.parseBooleanTest(n.BooleanTest, p.parseJoinQuals)
+	case *pgquery.Node_CoalesceExpr:
+		return p.parseCoalesceExpr(n.CoalesceExpr, p.parseJoinQuals)
+	case *pgquery.Node_CaseExpr:
+		return p.parseCaseExpr(n.CaseExpr, p.parseJoinQuals)
+	default:
+		return p.parseExpr(node)
+	}
+}
+
+func (p PostgresParser) parseQualifiedColumnRef(columnRef *pgquery.ColumnRef) (parser.Expr, error) {
+	var names []string
+	for _, field := range columnRef.Fields {
+		s, ok := field.Node.(*pgquery.Node_String_)
+		if !ok {
+			return nil, fmt.Errorf("unknown column reference field in parseQualifiedColumnRef: %#v", field.Node)
+		}
+		names = append(names, s.String_.Sval)
+	}
+
+	switch len(names) {
+	case 1:
+		return &parser.ColName{
+			Name: parser.NewIdent(names[0], false),
+		}, nil
+	case 2:
+		return &parser.ColName{
+			Qualifier: parser.TableName{Name: parser.NewIdent(names[0], false)},
+			Name:      parser.NewIdent(names[1], false),
+		}, nil
+	case 3:
+		return &parser.ColName{
+			Qualifier: parser.TableName{
+				Schema: parser.NewIdent(names[0], false),
+				Name:   parser.NewIdent(names[1], false),
+			},
+			Name: parser.NewIdent(names[2], false),
+		}, nil
+	default:
+		return nil, fmt.Errorf("unexpected number of column reference fields in parseQualifiedColumnRef: %#v", columnRef)
+	}
 }
 
 func (p PostgresParser) parseResTarget(stmt *pgquery.ResTarget) (parser.SelectExpr, error) {

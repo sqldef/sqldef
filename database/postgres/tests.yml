@@ -134,6 +134,14 @@ CreateViewWithJoinOn:
   compare_with_generic_parser: true
   sql: |
     CREATE VIEW join_view AS SELECT * FROM users JOIN posts ON user_id = author_id
+CreateViewWithJoinOnQualifiedColumns:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users AS u JOIN posts AS p ON u.id = p.user_id
+CreateViewWithJoinOnMultipleConditions:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users AS u JOIN posts AS p ON u.id = p.user_id AND u.tenant_id = p.tenant_id
 CreateViewWithInnerJoin:
   compare_with_generic_parser: true
   sql: |
@@ -178,6 +186,26 @@ CreateViewWithCrossJoin:
   compare_with_generic_parser: true
   sql: |
     CREATE VIEW join_view AS SELECT * FROM users CROSS JOIN posts
+CreateViewWithJoinOnFuncCall:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users AS u JOIN posts AS p ON lower(u.email) = lower(p.email)
+CreateViewWithJoinOnNullTest:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users AS u LEFT JOIN posts AS p ON u.id = p.user_id AND p.deleted_at IS NULL
+CreateViewWithJoinOnTypeCast:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users AS u JOIN posts AS p ON u.id::text = p.ref_id
+CreateViewWithJoinOnBooleanTest:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users AS u JOIN posts AS p ON u.id = p.user_id AND p.active IS TRUE
+CreateViewWithJoinOnCoalesce:
+  compare_with_generic_parser: true
+  sql: |
+    CREATE VIEW join_view AS SELECT * FROM users AS u JOIN posts AS p ON coalesce(u.email, '') = p.author_email
 CreateViewWithCast:
   sql: |
     create view hoge_view as

@@ -339,6 +339,21 @@ func TestJoinExprVariantsWithPgquery(t *testing.T) {
 			want: "select * from users join posts on user_id = author_id",
 		},
 		{
+			name: "join on qualified columns",
+			sql:  "SELECT * FROM users AS u JOIN posts AS p ON u.id = p.user_id",
+			want: "select * from users as u join posts as p on u.id = p.user_id",
+		},
+		{
+			name: "join on multiple conditions",
+			sql:  "SELECT * FROM users AS u JOIN posts AS p ON u.id = p.user_id AND u.tenant_id = p.tenant_id",
+			want: "select * from users as u join posts as p on u.id = p.user_id and u.tenant_id = p.tenant_id",
+		},
+		{
+			name: "join on schema qualified column",
+			sql:  "SELECT * FROM public.users JOIN posts AS p ON public.users.id = p.user_id",
+			want: "select * from public.users join posts as p on public.users.id = p.user_id",
+		},
+		{
 			name: "nested joins",
 			sql:  "SELECT * FROM users JOIN posts USING (user_id) JOIN comments USING (post_id)",
 			want: "select * from users join posts using (user_id) join comments using (post_id)",
@@ -390,6 +405,36 @@ func TestJoinExprVariantsWithPgquery(t *testing.T) {
 				" union all " +
 				"select user_id, note from users join archived_posts using (user_id)" +
 				") as t",
+		},
+		{
+			name: "join on function call with qualified columns",
+			sql:  "SELECT * FROM users AS u JOIN posts AS p ON lower(u.email) = lower(p.email)",
+			want: "select * from users as u join posts as p on lower(u.email) = lower(p.email)",
+		},
+		{
+			name: "join on null test",
+			sql:  "SELECT * FROM users AS u LEFT JOIN posts AS p ON u.id = p.user_id AND p.deleted_at IS NULL",
+			want: "select * from users as u left join posts as p on u.id = p.user_id and p.deleted_at is null",
+		},
+		{
+			name: "join on is not null",
+			sql:  "SELECT * FROM users AS u JOIN posts AS p ON u.id = p.user_id AND p.title IS NOT NULL",
+			want: "select * from users as u join posts as p on u.id = p.user_id and p.title is not null",
+		},
+		{
+			name: "join on type cast",
+			sql:  "SELECT * FROM users AS u JOIN posts AS p ON u.id::text = p.ref_id",
+			want: "select * from users as u join posts as p on u.id::text = p.ref_id",
+		},
+		{
+			name: "join on boolean test",
+			sql:  "SELECT * FROM users AS u JOIN posts AS p ON u.id = p.user_id AND p.active IS TRUE",
+			want: "select * from users as u join posts as p on u.id = p.user_id and p.active is true",
+		},
+		{
+			name: "join on coalesce",
+			sql:  "SELECT * FROM users AS u JOIN posts AS p ON coalesce(u.email, '') = p.author_email",
+			want: "select * from users as u join posts as p on coalesce(u.email, '') = p.author_email",
 		},
 	}
 
@@ -508,6 +553,29 @@ func TestJoinExprErrorsWithPgqueryNodes(t *testing.T) {
 				Quals:    &pgquery.Node{},
 			},
 			want: "unknown node in parseExpr",
+		},
+		{
+			name: "on qualified star column",
+			join: &pgquery.JoinExpr{
+				Jointype: pgquery.JoinType_JOIN_INNER,
+				Larg:     rangeVarNode("a"),
+				Rarg:     rangeVarNode("b"),
+				Quals: columnRefNode(
+					stringNode("u"),
+					&pgquery.Node{Node: &pgquery.Node_AStar{AStar: &pgquery.A_Star{}}},
+				),
+			},
+			want: "unknown column reference field in parseQualifiedColumnRef",
+		},
+		{
+			name: "on too many column reference fields",
+			join: &pgquery.JoinExpr{
+				Jointype: pgquery.JoinType_JOIN_INNER,
+				Larg:     rangeVarNode("a"),
+				Rarg:     rangeVarNode("b"),
+				Quals:    columnRefNode(stringNode("db"), stringNode("public"), stringNode("users"), stringNode("id")),
+			},
+			want: "unexpected number of column reference fields in parseQualifiedColumnRef",
 		},
 	}
 
@@ -809,6 +877,22 @@ func rangeVarNode(name string) *pgquery.Node {
 	return &pgquery.Node{
 		Node: &pgquery.Node_RangeVar{
 			RangeVar: &pgquery.RangeVar{Relname: name},
+		},
+	}
+}
+
+func stringNode(s string) *pgquery.Node {
+	return &pgquery.Node{
+		Node: &pgquery.Node_String_{
+			String_: &pgquery.String{Sval: s},
+		},
+	}
+}
+
+func columnRefNode(fields ...*pgquery.Node) *pgquery.Node {
+	return &pgquery.Node{
+		Node: &pgquery.Node_ColumnRef{
+			ColumnRef: &pgquery.ColumnRef{Fields: fields},
 		},
 	}
 }
