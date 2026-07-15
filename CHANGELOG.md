@@ -1,3 +1,18 @@
+## [v3.11.14](https://github.com/sqldef/sqldef/compare/v3.11.13...v3.11.14) - 2026-07-15
+
+- build(deps): bump actions/download-artifact from 4 to 8 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1269
+- build(deps): bump golang.org/x/term from 0.42.0 to 0.44.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1268
+- build(deps): bump Songmu/tagpr from 1.18.0 to 1.20.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1266
+- psqldef: escape embedded double quotes when quoting identifiers by @greymoth-jp in https://github.com/sqldef/sqldef/pull/1261
+- build(deps): bump actions/checkout from 6.0.1 to 7.0.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1262
+- build(deps): bump golang.org/x/sync from 0.20.0 to 0.21.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1267
+- build(deps): bump docker/metadata-action from 5.10.0 to 6.1.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1263
+- build(deps): bump actions/setup-go from 6.1.0 to 6.5.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1265
+- psqldef: convert set operations and RangeSubselect in pgquery fallback by @asfrgrtgd in https://github.com/sqldef/sqldef/pull/1260
+- build(deps): bump modernc.org/sqlite from 1.50.1 to 1.53.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1264
+- fix(psqldef): deterministic, dependency-safe view/matview order in --export by @gfx in https://github.com/sqldef/sqldef/pull/1277
+- build(deps): bump golang.org/x/crypto from 0.50.0 to 0.52.0 in the go_modules group across 1 directory by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1276
+
 ## [v3.11.13](https://github.com/sqldef/sqldef/compare/v3.11.12...v3.11.13) - 2026-07-03
 - psqldef: support ALTER TABLE ... ROW LEVEL SECURITY by @hokaccha in https://github.com/sqldef/sqldef/pull/1270
 - psqldef: fix CREATE POLICY handling (optional clauses, non-default schemas, no-op text casts) by @hokaccha in https://github.com/sqldef/sqldef/pull/1271
