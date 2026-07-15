@@ -818,6 +818,82 @@ func TestPsqldefExportConcurrency(t *testing.T) {
 	assert.Equal(t, outputDefault, outputConcurrencyNoLimit)
 }
 
+// TestPsqldefExportViewOrder guards --export ordering of enum types, views, and
+// materialized views. Without a stable ORDER BY the objects follow the unstable
+// pg_class scan order and a committed schema.sql churns on every dump. Views/matviews
+// are additionally ordered topologically (a dependent after the object it selects from)
+// so the dump is valid to load in order (e.g. psql -f), with a name tie-break within a
+// dependency level. Objects are created out of order (reverse-alphabetical, and a
+// dependent whose name sorts before its dependency) to catch both regressions.
+func TestPsqldefExportViewOrder(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, tu.StripHeredoc(`
+		CREATE TYPE z_enum AS ENUM ('x');
+		CREATE TYPE a_enum AS ENUM ('y');
+		CREATE TABLE items (id bigint NOT NULL);
+		CREATE VIEW v_charlie AS SELECT id FROM items;
+		CREATE VIEW v_bravo AS SELECT id FROM items;
+		CREATE VIEW v_alpha AS SELECT id FROM items;
+		CREATE VIEW zz_base AS SELECT id FROM items;
+		CREATE VIEW aa_derived AS SELECT id FROM zz_base;
+		CREATE MATERIALIZED VIEW mv_charlie AS SELECT id FROM items;
+		CREATE MATERIALIZED VIEW mv_bravo AS SELECT id FROM items;
+		CREATE MATERIALIZED VIEW mv_alpha AS SELECT id FROM items;
+		CREATE MATERIALIZED VIEW zz_mbase AS SELECT id FROM items;
+		CREATE MATERIALIZED VIEW aa_mderived AS SELECT id FROM zz_mbase;
+	`))
+
+	output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export")...)
+
+	// enum types sort by name
+	assertObjectsInOrder(t, output,
+		"CREATE TYPE public.a_enum",
+		"CREATE TYPE public.z_enum",
+	)
+	// independent views sort by name (determinism)
+	assertObjectsInOrder(t, output,
+		"CREATE VIEW public.v_alpha",
+		"CREATE VIEW public.v_bravo",
+		"CREATE VIEW public.v_charlie",
+	)
+	// a view is emitted after the view it depends on, even though its name sorts first
+	assertObjectsInOrder(t, output,
+		"CREATE VIEW public.zz_base",
+		"CREATE VIEW public.aa_derived",
+	)
+	assertObjectsInOrder(t, output,
+		"CREATE MATERIALIZED VIEW public.mv_alpha",
+		"CREATE MATERIALIZED VIEW public.mv_bravo",
+		"CREATE MATERIALIZED VIEW public.mv_charlie",
+	)
+	assertObjectsInOrder(t, output,
+		"CREATE MATERIALIZED VIEW public.zz_mbase",
+		"CREATE MATERIALIZED VIEW public.aa_mderived",
+	)
+}
+
+// assertObjectsInOrder asserts each needle is present in output and that they appear in
+// the given order. Quotes are stripped first so the assertion holds under both the
+// always-quote (legacy_ignore_quotes) and quote-aware identifier modes.
+func assertObjectsInOrder(t *testing.T, output string, needles ...string) {
+	t.Helper()
+	unquoted := strings.ReplaceAll(output, `"`, "")
+	prev := -1
+	for _, needle := range needles {
+		idx := strings.Index(unquoted, needle)
+		if idx < 0 {
+			t.Errorf("expected export to contain %q, got:\n%s", needle, output)
+			return
+		}
+		if idx < prev {
+			t.Errorf("expected %q to appear after the previous object; export is not name-sorted:\n%s", needle, output)
+			return
+		}
+		prev = idx
+	}
+}
+
 func TestPsqldefSkipView(t *testing.T) {
 	resetTestDatabase()
 
