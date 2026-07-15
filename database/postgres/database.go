@@ -286,13 +286,37 @@ func (d *PostgresDatabase) views() ([]string, error) {
 		return []string{}, nil
 	}
 
+	// Order views so a view is emitted after the views it selects from (topological
+	// order), with a name tie-break within each dependency level. This keeps the dump
+	// deterministic AND valid to load in order (e.g. psql -f), independent of the
+	// unstable pg_class scan order. depth = longest chain of view-on-view dependencies.
 	rows, err := d.db.Query(`
-		select n.nspname as table_schema, c.relname as table_name, pg_get_viewdef(c.oid) as definition,
-		       obj_description(c.oid, 'pg_class') as view_comment
-		from pg_catalog.pg_class c inner join pg_catalog.pg_namespace n on c.relnamespace = n.oid
-		where n.nspname not in ('information_schema', 'pg_catalog', 'sys')
-		and c.relkind = 'v'
-		and not exists (select 1 from pg_catalog.pg_depend d where c.oid = d.objid and d.classid = (select oid from pg_catalog.pg_class where relname = 'pg_class') and d.deptype = 'e')
+		with recursive
+		target as (
+			select c.oid, n.nspname, c.relname
+			from pg_catalog.pg_class c inner join pg_catalog.pg_namespace n on c.relnamespace = n.oid
+			where n.nspname not in ('information_schema', 'pg_catalog', 'sys')
+			and c.relkind = 'v'
+			and not exists (select 1 from pg_catalog.pg_depend d where c.oid = d.objid and d.classid = (select oid from pg_catalog.pg_class where relname = 'pg_class') and d.deptype = 'e')
+		),
+		view_edges as (
+			select distinct r.ev_class as dependent, d.refobjid as dependency
+			from pg_catalog.pg_depend d
+			inner join pg_catalog.pg_rewrite r on r.oid = d.objid
+			where d.classid = 'pg_rewrite'::regclass and d.refclassid = 'pg_class'::regclass
+			and d.deptype = 'n' and r.ev_class <> d.refobjid
+			and r.ev_class in (select oid from target) and d.refobjid in (select oid from target)
+		),
+		view_depth as (
+			select t.oid, 0 as depth from target t where not exists (select 1 from view_edges e where e.dependent = t.oid)
+			union all
+			select e.dependent, vd.depth + 1 from view_edges e inner join view_depth vd on e.dependency = vd.oid
+		),
+		view_rank as (select oid, max(depth) as depth from view_depth group by oid)
+		select t.nspname as table_schema, t.relname as table_name, pg_get_viewdef(t.oid) as definition,
+		       obj_description(t.oid, 'pg_class') as view_comment
+		from target t inner join view_rank vr on vr.oid = t.oid
+		order by vr.depth, t.nspname, t.relname
 	`)
 	if err != nil {
 		return nil, err
@@ -333,11 +357,34 @@ func (d *PostgresDatabase) materializedViews() ([]string, error) {
 		return []string{}, nil
 	}
 
+	// Order materialized views topologically (a matview after the matviews it selects
+	// from), name tie-break within a level. Deterministic and valid to load in order,
+	// independent of pg_class scan order. See views() for the same pattern.
 	rows, err := d.db.Query(`
-		select n.nspname as schemaname, c.relname as matviewname, pg_get_viewdef(c.oid) as definition
-		from pg_catalog.pg_class c inner join pg_catalog.pg_namespace n on c.relnamespace = n.oid
-		where c.relkind = 'm'
-		and not exists (select 1 from pg_catalog.pg_depend d where c.oid = d.objid and d.classid = (select oid from pg_catalog.pg_class where relname = 'pg_class') and d.deptype = 'e')
+		with recursive
+		target as (
+			select c.oid, n.nspname, c.relname
+			from pg_catalog.pg_class c inner join pg_catalog.pg_namespace n on c.relnamespace = n.oid
+			where c.relkind = 'm'
+			and not exists (select 1 from pg_catalog.pg_depend d where c.oid = d.objid and d.classid = (select oid from pg_catalog.pg_class where relname = 'pg_class') and d.deptype = 'e')
+		),
+		matview_edges as (
+			select distinct r.ev_class as dependent, d.refobjid as dependency
+			from pg_catalog.pg_depend d
+			inner join pg_catalog.pg_rewrite r on r.oid = d.objid
+			where d.classid = 'pg_rewrite'::regclass and d.refclassid = 'pg_class'::regclass
+			and d.deptype = 'n' and r.ev_class <> d.refobjid
+			and r.ev_class in (select oid from target) and d.refobjid in (select oid from target)
+		),
+		matview_depth as (
+			select t.oid, 0 as depth from target t where not exists (select 1 from matview_edges e where e.dependent = t.oid)
+			union all
+			select e.dependent, md.depth + 1 from matview_edges e inner join matview_depth md on e.dependency = md.oid
+		),
+		matview_rank as (select oid, max(depth) as depth from matview_depth group by oid)
+		select t.nspname as schemaname, t.relname as matviewname, pg_get_viewdef(t.oid) as definition
+		from target t inner join matview_rank mr on mr.oid = t.oid
+		order by mr.depth, t.nspname, t.relname
 	`)
 	if err != nil {
 		return nil, err
@@ -381,7 +428,8 @@ func (d *PostgresDatabase) schemas() ([]string, error) {
 		SELECT schema_name
 		FROM information_schema.schemata
 		WHERE schema_name NOT LIKE 'pg_%%'
-		AND schema_name not in ('information_schema', 'public', 'sys');
+		AND schema_name not in ('information_schema', 'public', 'sys')
+		ORDER BY schema_name;
 	`)
 	if err != nil {
 		return nil, err
@@ -410,7 +458,8 @@ func (d *PostgresDatabase) extensions() ([]string, error) {
 
 	rows, err := d.db.Query(`
 		SELECT extname FROM pg_extension
-		WHERE extname != 'plpgsql';
+		WHERE extname != 'plpgsql'
+		ORDER BY extname;
 	`)
 	if err != nil {
 		return nil, err
@@ -444,7 +493,8 @@ func (d *PostgresDatabase) types() ([]string, error) {
 		JOIN pg_type t ON e.enumtypid = t.oid
 		INNER JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
 		WHERE NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = t.oid AND d.classid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'pg_type') AND d.deptype = 'e')
-		GROUP BY n.nspname, t.typname, t.oid;
+		GROUP BY n.nspname, t.typname, t.oid
+		ORDER BY n.nspname, t.typname;
 	`)
 	if err != nil {
 		return nil, err
