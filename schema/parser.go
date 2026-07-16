@@ -292,20 +292,17 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				schema:    *stmt.Schema,
 			}, nil
 		} else if stmt.Action == parser.GrantPrivilege {
-			if stmt.Grant.WithGrantOption {
-				return nil, fmt.Errorf("WITH GRANT OPTION is not supported yet")
-			}
-
 			grantees := stmt.Grant.Grantees
 
 			if len(grantees) > 0 {
 				// Normalize privilege names to uppercase for consistency
 				normalizedPrivileges := util.TransformSlice(stmt.Grant.Privileges, strings.ToUpper)
 				return &GrantPrivilege{
-					statement:  ddl,
-					tableName:  normalizeQualifiedName(mode, stmt.Table, defaultSchema),
-					grantees:   grantees,
-					privileges: normalizedPrivileges,
+					statement:       ddl,
+					tableName:       normalizeQualifiedName(mode, stmt.Table, defaultSchema),
+					grantees:        grantees,
+					privileges:      normalizedPrivileges,
+					withGrantOption: stmt.Grant.WithGrantOption,
 				}, nil
 			}
 			return nil, fmt.Errorf("no grantees specified in GRANT statement")

@@ -1712,11 +1712,6 @@ func (p PostgresParser) parseGrantStmt(stmt *pgquery.GrantStmt) (parser.Statemen
 		return nil, fmt.Errorf("no objects specified in grant statement")
 	}
 
-	// Check for unsupported WITH GRANT OPTION
-	if stmt.GrantOption {
-		return nil, validationError{"WITH GRANT OPTION is not supported yet"}
-	}
-
 	// Check for unsupported CASCADE/RESTRICT (for REVOKE)
 	// Note: DROP_RESTRICT is the default behavior and is allowed
 	if !stmt.IsGrant && stmt.Behavior == pgquery.DropBehavior_DROP_CASCADE {
@@ -1777,7 +1772,7 @@ func (p PostgresParser) parseGrantStmt(stmt *pgquery.GrantStmt) (parser.Statemen
 			Privileges:      privileges,
 			TableName:       tableName,
 			Grantees:        grantees,
-			WithGrantOption: false, // Always false since we error on WITH GRANT OPTION above
+			WithGrantOption: stmt.GrantOption,
 			CascadeOption:   false, // Always false since we error on CASCADE/RESTRICT above
 		}
 
