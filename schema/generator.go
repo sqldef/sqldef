@@ -4028,6 +4028,9 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 
 	// Track REVOKE operations per grantee
 	revokesByGrantee := make(map[string][]string)
+	// Track REVOKE GRANT OPTION FOR operations per grantee (downgrade: keep the
+	// privilege but drop its grant option)
+	revokeGrantOptionByGrantee := make(map[string][]string)
 	// Track GRANT operations grouped by privileges to grant
 	type grantGroup struct {
 		privileges []string
@@ -4037,12 +4040,17 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 
 	for _, grantee := range desired.grantees {
 		existingPrivilegesMap := make(map[string]bool)
+		// Per-privilege grant option state in the current schema.
+		existingGrantableMap := make(map[string]bool)
 		for _, currentPriv := range g.currentPrivileges {
 			if g.qualifiedNamesEqual(currentPriv.tableName, desired.tableName) {
 				if slices.Contains(currentPriv.grantees, grantee) {
 					normalized := normalizePrivilegesForComparison(currentPriv.privileges)
 					for _, priv := range normalized {
 						existingPrivilegesMap[priv] = true
+						if currentPriv.withGrantOption {
+							existingGrantableMap[priv] = true
+						}
 					}
 				}
 			}
@@ -4056,7 +4064,17 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			sortPrivilegesByCanonicalOrder(existingNormalized)
 		}
 
-		if len(existingNormalized) > 0 && equalPrivileges(existingNormalized, desiredNormalized) {
+		// The grant option matches only when every desired privilege already has
+		// the desired grant option state in the current schema.
+		grantOptionMatches := true
+		for _, priv := range desiredNormalized {
+			if existingGrantableMap[priv] != desired.withGrantOption {
+				grantOptionMatches = false
+				break
+			}
+		}
+
+		if len(existingNormalized) > 0 && equalPrivileges(existingNormalized, desiredNormalized) && grantOptionMatches {
 			continue
 		}
 
@@ -4099,8 +4117,26 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 				existingMap[priv] = true
 			}
 			for _, priv := range desiredNormalized {
-				if !existingMap[priv] {
+				// Grant a privilege that is missing, or re-grant an existing one to
+				// add the grant option (upgrade). Re-granting WITH GRANT OPTION is
+				// idempotent in PostgreSQL.
+				if !existingMap[priv] || (desired.withGrantOption && !existingGrantableMap[priv]) {
 					privilegesToGrant = append(privilegesToGrant, priv)
+				}
+			}
+
+			// Downgrade: a privilege kept in the desired schema but without its
+			// current grant option needs REVOKE GRANT OPTION FOR.
+			if !desired.withGrantOption {
+				var toRevokeOption []string
+				for _, priv := range desiredNormalized {
+					if existingGrantableMap[priv] {
+						toRevokeOption = append(toRevokeOption, priv)
+					}
+				}
+				if len(toRevokeOption) > 0 {
+					sortPrivilegesByCanonicalOrder(toRevokeOption)
+					revokeGrantOptionByGrantee[grantee] = toRevokeOption
 				}
 			}
 		} else {
@@ -4130,6 +4166,18 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			return nil, err
 		}
 		revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
+			strings.Join(privileges, ", "),
+			g.escapeQualifiedName(desired.tableName),
+			escapedGrantee)
+		ddls = append(ddls, revoke)
+	}
+
+	for grantee, privileges := range util.CanonicalMapIter(revokeGrantOptionByGrantee) {
+		escapedGrantee, err := g.validateAndEscapeGrantee(grantee)
+		if err != nil {
+			return nil, err
+		}
+		revoke := fmt.Sprintf("REVOKE GRANT OPTION FOR %s ON TABLE %s FROM %s",
 			strings.Join(privileges, ", "),
 			g.escapeQualifiedName(desired.tableName),
 			escapedGrantee)
