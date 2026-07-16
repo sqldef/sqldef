@@ -3187,6 +3187,42 @@ func NewIdent(name string, quoted bool) Ident {
 	return Ident{Name: name, Quoted: quoted}
 }
 
+// FormatColumnPrivilege builds the canonical string form of a column-level
+// privilege, e.g. `SELECT (col_a, "Col-B")`. The privilege keyword is
+// uppercased and column names are sorted so that the same privilege always
+// compares equal regardless of declaration order.
+func FormatColumnPrivilege(priv string, cols []Ident) string {
+	names := make([]string, len(cols))
+	for i, col := range cols {
+		name := col.Name
+		// Quote only when necessary: a quoted simple lowercase identifier is
+		// semantically identical to its unquoted form in PostgreSQL, so both
+		// normalize to the unquoted spelling.
+		if !isSimpleLowerIdent(name) {
+			name = `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+		}
+		names[i] = name
+	}
+	sort.Strings(names)
+	return strings.ToUpper(priv) + " (" + strings.Join(names, ", ") + ")"
+}
+
+// isSimpleLowerIdent reports whether name can appear unquoted in DDL output.
+func isSimpleLowerIdent(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r == '_':
+		case i > 0 && (r >= '0' && r <= '9' || r == '$'):
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // IsEmpty returns true if the name is empty.
 func (n Ident) IsEmpty() bool {
 	return n.Name == ""
