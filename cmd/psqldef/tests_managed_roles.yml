@@ -313,6 +313,44 @@ ManagedRolesGrantOptionIdempotent:
     - readonly_user
   up: ""
   down: ""
+ManagedRolesGrantOptionUpgrade:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user WITH GRANT OPTION;
+  managed_roles:
+    - readonly_user
+  up: |
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user" WITH GRANT OPTION;
+  down: |
+    REVOKE GRANT OPTION FOR SELECT ON TABLE "public"."users" FROM "readonly_user";
+ManagedRolesGrantOptionDowngrade:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user WITH GRANT OPTION;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  managed_roles:
+    - readonly_user
+  up: |
+    REVOKE GRANT OPTION FOR SELECT ON TABLE "public"."users" FROM "readonly_user";
+  down: |
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user" WITH GRANT OPTION;
 
 ManagedRolesErrorCascade:
   current: |
