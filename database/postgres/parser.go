@@ -1063,7 +1063,17 @@ func (p PostgresParser) parseAlterTableStmt(stmt *pgquery.AlterTableStmt) (parse
 		return nil, fmt.Errorf("multiple actions are not supported in parseAlterTableStmt")
 	}
 
-	switch node := stmt.Cmds[0].Node.(*pgquery.Node_AlterTableCmd).AlterTableCmd.Def.Node.(type) {
+	cmd := stmt.Cmds[0].Node.(*pgquery.Node_AlterTableCmd).AlterTableCmd
+
+	// Many ALTER TABLE subtypes (e.g. OWNER TO, SET SCHEMA, SET TABLESPACE,
+	// DROP NOT NULL) carry their argument outside Def, leaving Def nil. Guard
+	// against it so unsupported subtypes surface as an error instead of
+	// dereferencing a nil node and crashing.
+	if cmd.Def == nil {
+		return nil, fmt.Errorf("unhandled alter table subtype in parseAlterTableStmt: %v", cmd.Subtype)
+	}
+
+	switch node := cmd.Def.Node.(type) {
 	case *pgquery.Node_Constraint:
 		return p.parseConstraint(node.Constraint, tableName)
 	default:

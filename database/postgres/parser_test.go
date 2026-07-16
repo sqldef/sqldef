@@ -115,6 +115,35 @@ CREATE INDEX ASYNC username on users (name);`
 	}
 }
 
+// TestParseAlterTableUnsupportedSubtypeDoesNotPanic guards against a regression
+// where ALTER TABLE subtypes whose argument lives outside AlterTableCmd.Def
+// (leaving Def nil) crashed parseAlterTableStmt with a nil pointer dereference
+// (SIGSEGV). These forms are not handled by the generic grammar, so they reach
+// the pgquery fallback; the parser must report them, not crash.
+func TestParseAlterTableUnsupportedSubtypeDoesNotPanic(t *testing.T) {
+	t.Setenv("PSQLDEF_PARSER", "pgquery")
+	postgresParser := NewParser()
+
+	unsupported := []string{
+		// Subtypes whose argument lives outside Def (Def is nil).
+		"ALTER TABLE users OWNER TO app_user;",
+		"ALTER TABLE users SET SCHEMA other;",
+		"ALTER TABLE users SET TABLESPACE fast_disk;",
+		"ALTER TABLE users ALTER COLUMN name DROP NOT NULL;",
+		// Subtype with a non-nil Def that isn't a constraint (reaches the switch).
+		"ALTER TABLE users ALTER COLUMN name SET DEFAULT 'x';",
+	}
+	for _, sql := range unsupported {
+		t.Run(sql, func(t *testing.T) {
+			// The bug was a panic; the fix turns it into a plain error return.
+			require.NotPanics(t, func() {
+				_, err := postgresParser.Parse(sql)
+				require.Error(t, err)
+			})
+		})
+	}
+}
+
 func TestCreateFunctionWithPgquery(t *testing.T) {
 	t.Setenv("PSQLDEF_PARSER", "pgquery")
 	postgresParser := NewParser()
