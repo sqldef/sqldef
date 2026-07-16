@@ -1581,8 +1581,17 @@ var postgresTablePrivilegeList = []string{
 	"UPDATE",
 }
 
-func normalizePrivilegesForComparison(privileges []string) []string {
+var postgresSequencePrivilegeList = []string{
+	"SELECT",
+	"UPDATE",
+	"USAGE",
+}
+
+func normalizePrivilegesForComparison(privileges []string, objectType string) []string {
 	if len(privileges) == 1 && (privileges[0] == "ALL" || privileges[0] == "ALL PRIVILEGES") {
+		if objectType == "SEQUENCE" {
+			return postgresSequencePrivilegeList
+		}
 		return postgresTablePrivilegeList
 	}
 	return privileges

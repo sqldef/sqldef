@@ -303,6 +303,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 					grantees:        grantees,
 					privileges:      normalizedPrivileges,
 					withGrantOption: stmt.Grant.WithGrantOption,
+					objectType:      normalizeGrantObjectType(stmt.Grant.ObjectType),
 				}, nil
 			}
 			return nil, fmt.Errorf("no grantees specified in GRANT statement")
@@ -323,6 +324,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 					grantees:      grantees,
 					privileges:    normalizedPrivileges,
 					cascadeOption: stmt.Grant.CascadeOption,
+					objectType:    normalizeGrantObjectType(stmt.Grant.ObjectType),
 				}, nil
 			}
 			return nil, fmt.Errorf("no grantees specified in REVOKE statement")
@@ -1639,4 +1641,13 @@ func extractIndexComments(rawDDL string, mode GeneratorMode) map[string]string {
 	}
 
 	return comments
+}
+
+// normalizeGrantObjectType maps the parser's Grant.ObjectType to the canonical
+// value used in schema comparison ("" means TABLE for backward compatibility).
+func normalizeGrantObjectType(objectType string) string {
+	if objectType == "" {
+		return "TABLE"
+	}
+	return objectType
 }

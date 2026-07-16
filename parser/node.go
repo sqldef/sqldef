@@ -1292,8 +1292,9 @@ type Grant struct {
 	Privileges      []string // e.g., ["SELECT", "INSERT", "UPDATE"]
 	TableName       TableName
 	Grantees        []string
-	WithGrantOption bool // true for GRANT ... WITH GRANT OPTION
-	CascadeOption   bool // true for REVOKE ... CASCADE (rejected downstream; not yet supported)
+	ObjectType      string // "" or "TABLE" for tables, "SEQUENCE" for sequences
+	WithGrantOption bool   // true for GRANT ... WITH GRANT OPTION
+	CascadeOption   bool   // true for REVOKE ... CASCADE (rejected downstream; not yet supported)
 }
 
 type Permissive string
