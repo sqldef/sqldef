@@ -512,3 +512,87 @@ ManagedRolesSequenceRevokeDrift:
     REVOKE SELECT, UPDATE ON SEQUENCE "public"."counters_n_seq" FROM "app_user";
   down: |
     GRANT SELECT, UPDATE ON SEQUENCE "public"."counters_n_seq" TO "app_user";
+
+ManagedRolesColumnGrant:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      f_secret VARCHAR(100),
+      f_public VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      f_secret VARCHAR(100),
+      f_public VARCHAR(100)
+    );
+    GRANT SELECT (f_public, id) ON TABLE users TO readonly_user;
+  managed_roles:
+    - readonly_user
+  up: |
+    GRANT SELECT (f_public, id) ON TABLE "public"."users" TO "readonly_user";
+  down: |
+    REVOKE SELECT (f_public, id) ON TABLE "public"."users" FROM "readonly_user";
+
+ManagedRolesColumnGrantIdempotent:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      f_secret VARCHAR(100)
+    );
+    GRANT SELECT (id) ON TABLE users TO readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      f_secret VARCHAR(100)
+    );
+    GRANT SELECT (id) ON TABLE users TO readonly_user;
+  managed_roles:
+    - readonly_user
+  up: ""
+  down: ""
+
+ManagedRolesColumnGrantMixedWithTable:
+  # 同一ロールにテーブル権限と列権限が同居しても正しく差分される
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      f_secret VARCHAR(100)
+    );
+    GRANT SELECT (id) ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      f_secret VARCHAR(100)
+    );
+    GRANT INSERT ON TABLE users TO app_user;
+    GRANT SELECT (id) ON TABLE users TO app_user;
+  managed_roles:
+    - app_user
+  up: |
+    GRANT INSERT ON TABLE "public"."users" TO "app_user";
+  down: |
+    REVOKE INSERT ON TABLE "public"."users" FROM "app_user";
+
+ManagedRolesColumnGrantDriftRevoke:
+  # DB にだけある列権限 (drift) が managed role について剥奪される
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      f_secret VARCHAR(100)
+    );
+    GRANT SELECT (id, f_secret) ON TABLE users TO readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      f_secret VARCHAR(100)
+    );
+    GRANT SELECT (id) ON TABLE users TO readonly_user;
+  managed_roles:
+    - readonly_user
+  up: |
+    REVOKE SELECT (f_secret, id) ON TABLE "public"."users" FROM "readonly_user";
+    GRANT SELECT (id) ON TABLE "public"."users" TO "readonly_user";
+  down: |
+    REVOKE SELECT (id) ON TABLE "public"."users" FROM "readonly_user";
+    GRANT SELECT (f_secret, id) ON TABLE "public"."users" TO "readonly_user";

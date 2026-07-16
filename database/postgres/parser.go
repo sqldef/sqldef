@@ -1748,6 +1748,15 @@ func (p PostgresParser) parseGrantStmt(stmt *pgquery.GrantStmt) (parser.Statemen
 				if accessPriv, ok := priv.Node.(*pgquery.Node_AccessPriv); ok {
 					if accessPriv.AccessPriv.Cols == nil {
 						privileges = append(privileges, strings.ToUpper(accessPriv.AccessPriv.PrivName))
+					} else {
+						// Column-level privilege: GRANT SELECT (col1, col2) ON ...
+						cols := make([]parser.Ident, 0, len(accessPriv.AccessPriv.Cols))
+						for _, colNode := range accessPriv.AccessPriv.Cols {
+							if str, ok := colNode.Node.(*pgquery.Node_String_); ok {
+								cols = append(cols, parser.NewIdent(str.String_.Sval, false))
+							}
+						}
+						privileges = append(privileges, parser.FormatColumnPrivilege(accessPriv.AccessPriv.PrivName, cols))
 					}
 				}
 			}

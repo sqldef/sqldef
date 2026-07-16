@@ -5651,6 +5651,11 @@ privilege:
   {
     $$ = NewIdent($1, false)
   }
+/* Column-level privilege: GRANT SELECT (col1, col2) ON TABLE ... */
+| reserved_sql_id '(' sql_id_list ')'
+  {
+    $$ = NewIdent(FormatColumnPrivilege($1.Name, $3), false)
+  }
 | ALL
   {
     $$ = NewIdent($1, false)
