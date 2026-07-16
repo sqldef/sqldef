@@ -601,6 +601,13 @@ PartialIndexWithWhereNotInUnsorted:
     CREATE INDEX idx_non_cancelled ON orders (id)
     WHERE status NOT IN ('deleted', 'cancelled');
 
+PartialIndexWithArrayCastAnyPgDumpStyle:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (id integer, status character varying(16));
+    CREATE UNIQUE INDEX uk_orders_status ON orders (id)
+    WHERE ((status)::text = ANY ((ARRAY['active'::character varying, 'pending'::character varying])::text[]));
+
 IndexWithNullsNotDistinct:
   legacy_ignore_quotes: false
   min_version: "15"

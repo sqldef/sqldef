@@ -58,6 +58,7 @@ func (p GenericParser) splitDDLs(str string) ([]string, error) {
 		// So we just attempt parsing until it succeeds. I'll let the parser do it in the future.
 		var ddl string
 		var err error
+		var firstErr error
 		i := 1
 		for {
 			ddl = strings.Join(ddls[0:i], ";")
@@ -67,6 +68,9 @@ func (p GenericParser) splitDDLs(str string) ([]string, error) {
 				break
 			}
 			_, err = parser.ParseDDL(ddl, p.mode)
+			if i == 1 {
+				firstErr = err
+			}
 			if err == nil || i == len(ddls) {
 				break
 			}
@@ -74,6 +78,11 @@ func (p GenericParser) splitDDLs(str string) ([]string, error) {
 		}
 
 		if err != nil {
+			// err is from the chunk joined all the way to EOF; firstErr keeps the
+			// error scoped to the offending statement instead of the whole rest of the file.
+			if firstErr != nil {
+				return result, firstErr
+			}
 			return result, err
 		}
 		if ddl != "" {
