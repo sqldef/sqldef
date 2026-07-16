@@ -169,7 +169,74 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 	}
 	ddls = append(ddls, matViewDDLs...)
 
+	seqPrivilegeDDLs, err := d.sequencePrivileges()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, seqPrivilegeDDLs...)
+
 	return strings.Join(ddls, "\n\n"), nil
+}
+
+// sequencePrivileges exports GRANT ... ON SEQUENCE statements for the managed
+// roles. Sequences are not managed as objects by psqldef, so their privileges
+// are emitted as standalone GRANTs rather than attached to an object's DDL.
+// Extension-owned sequences are excluded, mirroring how psqldef skips
+// extension-owned objects elsewhere.
+func (d *PostgresDatabase) sequencePrivileges() ([]string, error) {
+	if len(d.generatorConfig.ManagedRoles) == 0 {
+		return nil, nil
+	}
+
+	const query = `
+		SELECT
+			n.nspname || '.' || c.relname AS seq_name,
+			CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
+			acl.is_grantable,
+			string_agg(acl.privilege_type, ', ' ORDER BY acl.privilege_type) AS privileges
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		CROSS JOIN LATERAL aclexplode(c.relacl) AS acl
+		WHERE c.relkind = 'S'
+		AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+		AND acl.grantee <> c.relowner
+		AND (CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END) = ANY($1::text[])
+		AND NOT EXISTS (
+			SELECT 1 FROM pg_depend dep
+			WHERE dep.classid = 'pg_class'::regclass AND dep.objid = c.oid AND dep.deptype = 'e'
+		)
+		GROUP BY n.nspname, c.relname, acl.grantee, acl.is_grantable
+		ORDER BY seq_name, grantee, acl.is_grantable
+	`
+
+	rows, err := d.db.Query(query, pq.Array(d.generatorConfig.ManagedRoles))
+	if err != nil {
+		return nil, fmt.Errorf("failed to query sequence privileges: %w", err)
+	}
+	defer rows.Close()
+
+	var ddls []string
+	for rows.Next() {
+		var seqName, grantee, privileges string
+		var isGrantable bool
+		if err := rows.Scan(&seqName, &grantee, &isGrantable, &privileges); err != nil {
+			return nil, fmt.Errorf("failed to scan sequence privilege row: %w", err)
+		}
+
+		escapedGrantee := grantee
+		if grantee != "PUBLIC" {
+			// PUBLIC is a special keyword and should not be quoted
+			escapedGrantee = d.quoteIdentifierIfNeeded(grantee)
+		}
+
+		grant := fmt.Sprintf("GRANT %s ON SEQUENCE %s TO %s", privileges, seqName, escapedGrantee)
+		if isGrantable {
+			grant += " WITH GRANT OPTION"
+		}
+		ddls = append(ddls, grant+";")
+	}
+
+	return ddls, rows.Err()
 }
 
 func (d *PostgresDatabase) tableNames() ([]string, error) {

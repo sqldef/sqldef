@@ -163,6 +163,7 @@ type GrantPrivilege struct {
 	grantees        []string
 	privileges      []string
 	withGrantOption bool
+	objectType      string // "TABLE" or "SEQUENCE"
 }
 
 type RevokePrivilege struct {
@@ -170,7 +171,8 @@ type RevokePrivilege struct {
 	tableName     QualifiedName
 	grantees      []string
 	privileges    []string
-	cascadeOption bool // CASCADE option for REVOKE
+	cascadeOption bool   // CASCADE option for REVOKE
+	objectType    string // "TABLE" or "SEQUENCE"
 }
 
 // CreatePartitionOf represents a PostgreSQL CREATE TABLE ... PARTITION OF statement

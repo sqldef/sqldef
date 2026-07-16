@@ -1703,9 +1703,15 @@ func shouldDeleteTypeCast(sourceNode *pgquery.Node, targetType parser.ColumnType
 }
 
 func (p PostgresParser) parseGrantStmt(stmt *pgquery.GrantStmt) (parser.Statement, error) {
-	if stmt.Objtype != pgquery.ObjectType_OBJECT_TABLE {
-		// For now, only support table grants
-		return nil, fmt.Errorf("only table grants are supported")
+	var objectType string
+	switch stmt.Objtype {
+	case pgquery.ObjectType_OBJECT_TABLE:
+		objectType = "TABLE"
+	case pgquery.ObjectType_OBJECT_SEQUENCE:
+		objectType = "SEQUENCE"
+	default:
+		// For now, only support table and sequence grants
+		return nil, fmt.Errorf("only table and sequence grants are supported")
 	}
 
 	if len(stmt.Objects) == 0 {
@@ -1772,6 +1778,7 @@ func (p PostgresParser) parseGrantStmt(stmt *pgquery.GrantStmt) (parser.Statemen
 			Privileges:      privileges,
 			TableName:       tableName,
 			Grantees:        grantees,
+			ObjectType:      objectType,
 			WithGrantOption: stmt.GrantOption,
 			CascadeOption:   false, // Always false since we error on CASCADE/RESTRICT above
 		}

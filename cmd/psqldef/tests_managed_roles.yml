@@ -435,3 +435,80 @@ ManagedRolesMixedGrantRevoke:
   down: |
     REVOKE UPDATE ON TABLE "public"."users" FROM "app_user";
     GRANT INSERT, DELETE ON TABLE "public"."users" TO "app_user";
+
+ManagedRolesSequenceGrant:
+  current: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+  desired: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+    GRANT USAGE, SELECT ON SEQUENCE counters_n_seq TO readonly_user;
+  managed_roles:
+    - readonly_user
+  up: |
+    GRANT USAGE, SELECT ON SEQUENCE "public"."counters_n_seq" TO "readonly_user";
+  down: |
+    REVOKE SELECT, USAGE ON SEQUENCE "public"."counters_n_seq" FROM "readonly_user";
+
+ManagedRolesSequenceGrantWithGrantOption:
+  current: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+  desired: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+    GRANT UPDATE ON SEQUENCE counters_n_seq TO app_user WITH GRANT OPTION;
+  managed_roles:
+    - app_user
+  up: |
+    GRANT UPDATE ON SEQUENCE "public"."counters_n_seq" TO "app_user" WITH GRANT OPTION;
+  down: |
+    REVOKE UPDATE ON SEQUENCE "public"."counters_n_seq" FROM "app_user";
+
+ManagedRolesSequenceIdempotent:
+  current: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+    GRANT USAGE ON SEQUENCE counters_n_seq TO readonly_user;
+  desired: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+    GRANT USAGE ON SEQUENCE counters_n_seq TO readonly_user;
+  managed_roles:
+    - readonly_user
+  up: ""
+  down: ""
+
+ManagedRolesSequenceRevokeDrift:
+  # DB has an extra sequence grant not in SoT -> revoked for managed roles
+  current: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+    GRANT USAGE, SELECT, UPDATE ON SEQUENCE counters_n_seq TO app_user;
+  desired: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+    GRANT USAGE ON SEQUENCE counters_n_seq TO app_user;
+  managed_roles:
+    - app_user
+  up: |
+    REVOKE SELECT, UPDATE ON SEQUENCE "public"."counters_n_seq" FROM "app_user";
+  down: |
+    GRANT SELECT, UPDATE ON SEQUENCE "public"."counters_n_seq" TO "app_user";
