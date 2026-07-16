@@ -1901,6 +1901,7 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 		SELECT
 			table_schema || '.' || table_name AS qualified_table_name,
 			grantee,
+			is_grantable,
 			string_agg(privilege_type, ', ' ORDER BY privilege_type) as privileges
 		FROM information_schema.table_privileges
 		WHERE table_schema || '.' || table_name = ANY($1::text[])
@@ -1909,8 +1910,8 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 			SELECT tableowner FROM pg_tables
 			WHERE schemaname = table_schema AND tablename = table_name
 		)
-		GROUP BY table_schema, table_name, grantee
-		ORDER BY table_schema, table_name, grantee
+		GROUP BY table_schema, table_name, grantee, is_grantable
+		ORDER BY table_schema, table_name, grantee, is_grantable
 	`
 
 	rows, err := d.db.Query(query, pq.Array(tableNames), pq.Array(d.generatorConfig.ManagedRoles))
@@ -1921,8 +1922,8 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 
 	result := make(map[string][]string, len(tableNames))
 	for rows.Next() {
-		var tableName, grantee, privileges string
-		if err := rows.Scan(&tableName, &grantee, &privileges); err != nil {
+		var tableName, grantee, isGrantable, privileges string
+		if err := rows.Scan(&tableName, &grantee, &isGrantable, &privileges); err != nil {
 			return nil, fmt.Errorf("failed to scan privilege row: %w", err)
 		}
 
@@ -1933,6 +1934,9 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 		}
 
 		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s", privileges, tableName, escapedGrantee)
+		if isGrantable == "YES" {
+			grant += " WITH GRANT OPTION"
+		}
 		result[tableName] = append(result[tableName], grant)
 	}
 

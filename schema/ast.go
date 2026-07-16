@@ -158,10 +158,11 @@ type SetRowLevelSecurity struct {
 }
 
 type GrantPrivilege struct {
-	statement  string
-	tableName  QualifiedName
-	grantees   []string
-	privileges []string
+	statement       string
+	tableName       QualifiedName
+	grantees        []string
+	privileges      []string
+	withGrantOption bool
 }
 
 type RevokePrivilege struct {

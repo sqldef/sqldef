@@ -260,7 +260,7 @@ ManagedRolesMultipleTables:
   down: |
     REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."posts" FROM "app_user";
     REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "app_user";
-ManagedRolesErrorGrantOption:
+ManagedRolesGrantOptionBasic:
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -271,10 +271,48 @@ ManagedRolesErrorGrantOption:
       id BIGINT PRIMARY KEY,
       name VARCHAR(100)
     );
-    grant select on table users to readonly_user with grant option;
+    GRANT SELECT ON TABLE users TO readonly_user WITH GRANT OPTION;
   managed_roles:
     - readonly_user
-  error: "WITH GRANT OPTION is not supported yet"
+  up: |
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user" WITH GRANT OPTION;
+  down: |
+    REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
+ManagedRolesGrantOptionMultiplePrivileges:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE users TO app_user WITH GRANT OPTION;
+  managed_roles:
+    - app_user
+  up: |
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user" WITH GRANT OPTION;
+  down: |
+    REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "app_user";
+ManagedRolesGrantOptionIdempotent:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user WITH GRANT OPTION;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user WITH GRANT OPTION;
+  managed_roles:
+    - readonly_user
+  up: ""
+  down: ""
 
 ManagedRolesErrorCascade:
   current: |

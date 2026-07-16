@@ -3954,6 +3954,7 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 			merged := false
 			for i, existing := range aggregated.Privileges {
 				if qualifiedNamesEqual(existing.tableName, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) &&
+					existing.withGrantOption == stmt.withGrantOption &&
 					len(existing.grantees) == len(stmt.grantees) {
 					allMatch := true
 					for j, grantee := range existing.grantees {
@@ -4156,6 +4157,9 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			formatPrivilegesForGrant(group.privileges),
 			g.escapeQualifiedName(desired.tableName),
 			strings.Join(escapedGrantees, ", "))
+		if desired.withGrantOption {
+			grant += " WITH GRANT OPTION"
+		}
 		ddls = append(ddls, grant)
 	}
 
@@ -6168,9 +6172,10 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 			}
 
 			if len(includedGrantees) > 0 {
-				// Sort privileges for consistent key
+				// Sort privileges for consistent key. WITH GRANT OPTION is part of
+				// the key so grants that differ only by grant option are not merged.
 				sortedPrivs := util.SortedCopy(stmt.privileges)
-				key := fmt.Sprintf("%s:%s", stmt.tableName.RawString(), strings.Join(sortedPrivs, ","))
+				key := fmt.Sprintf("%s:%s:%t", stmt.tableName.RawString(), strings.Join(sortedPrivs, ","), stmt.withGrantOption)
 
 				if existing, ok := grantsByTableAndPrivs[key]; ok {
 					// Add grantees to existing grant with same table and privileges
@@ -6178,10 +6183,11 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 				} else {
 					// Create new grant with filtered grantees
 					grantsByTableAndPrivs[key] = &GrantPrivilege{
-						statement:  stmt.statement,
-						tableName:  stmt.tableName,
-						grantees:   includedGrantees,
-						privileges: stmt.privileges,
+						statement:       stmt.statement,
+						tableName:       stmt.tableName,
+						grantees:        includedGrantees,
+						privileges:      stmt.privileges,
+						withGrantOption: stmt.withGrantOption,
 					}
 					grantsOrder = append(grantsOrder, key)
 				}
