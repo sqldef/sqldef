@@ -1292,8 +1292,8 @@ type Grant struct {
 	Privileges      []string // e.g., ["SELECT", "INSERT", "UPDATE"]
 	TableName       TableName
 	Grantees        []string
-	WithGrantOption bool // Not supported - parser will error if WITH GRANT OPTION is used
-	CascadeOption   bool // Not supported - parser will error if CASCADE/RESTRICT is used
+	WithGrantOption bool // true for GRANT ... WITH GRANT OPTION
+	CascadeOption   bool // true for REVOKE ... CASCADE (rejected downstream; not yet supported)
 }
 
 type Permissive string
