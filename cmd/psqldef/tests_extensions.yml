@@ -72,3 +72,15 @@ ManageExtensionsMatchedRuleForbidsDrop:
   up: |
     -- Skipped: DROP EXTENSION pgcrypto;
   down: ""
+
+ManageExtensionsForbidsDropWithGlobalEnableDropFalse:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  manage_extensions:
+    - target: pgcrypto
+  current: |
+    CREATE EXTENSION pgcrypto;
+  desired: ""
+  up: |
+    -- Skipped: DROP EXTENSION pgcrypto;
+  down: ""

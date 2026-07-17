@@ -782,7 +782,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 func commentOutDropStatements(ddls []string) []string {
 	result := make([]string, len(ddls))
 	for i, ddl := range ddls {
-		if isDropStatement(ddl) {
+		if !strings.HasPrefix(ddl, "-- Skipped: ") && isDropStatement(ddl) {
 			result[i] = "-- Skipped: " + ddl
 		} else {
 			result[i] = ddl
@@ -6277,7 +6277,7 @@ func matchManageObjectRule(rules []database.ManageObjectRule, name string) (data
 		return database.ManageObjectRule{Drop: false}, true
 	}
 	for _, rule := range rules {
-		if rule.Target == "" || regexp.MustCompile("^"+rule.Target+"$").MatchString(name) {
+		if rule.Target == "" || regexp.MustCompile("^(?:"+rule.Target+")$").MatchString(name) {
 			return rule, true
 		}
 	}

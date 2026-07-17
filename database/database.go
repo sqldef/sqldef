@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"log"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/goccy/go-yaml"
@@ -460,6 +461,14 @@ func parseManageExtensions(manage map[string]yaml.RawMessage) *[]ManageObjectRul
 			dec := yaml.NewDecoder(bytes.NewReader(raw), yaml.DisallowUnknownField())
 			if err := dec.Decode(&rules); err != nil {
 				log.Fatal(err)
+			}
+		}
+		for _, rule := range rules {
+			if rule.Target == "" {
+				continue
+			}
+			if _, err := regexp.Compile("^(?:" + rule.Target + ")$"); err != nil {
+				log.Fatalf("manage.extension: invalid target regexp %q: %s", rule.Target, err)
 			}
 		}
 		result = &rules

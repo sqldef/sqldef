@@ -739,6 +739,18 @@ func TestPsqldefExport(t *testing.T) {
 	))
 }
 
+func TestPsqldefExportManageExtensions(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `CREATE EXTENSION pg_trgm; CREATE EXTENSION btree_gin;`)
+
+	actual := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export", "--config-inline", "manage: {extension: [{target: pg_trgm}]}")...)
+	assert.Equal(t, tu.StripHeredoc(`
+		CREATE EXTENSION "pg_trgm";
+		`,
+	), actual)
+}
+
 func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 	resetTestDatabase()
 
