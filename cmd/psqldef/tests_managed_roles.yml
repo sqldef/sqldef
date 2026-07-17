@@ -596,3 +596,23 @@ ManagedRolesColumnGrantDriftRevoke:
   down: |
     REVOKE SELECT (id) ON TABLE "public"."users" FROM "readonly_user";
     GRANT SELECT (f_secret, id) ON TABLE "public"."users" TO "readonly_user";
+
+ManagedRolesSequenceOrphanRevoke:
+  # desired に grantee が一切登場しない場合の orphan 剥奪経路 (SEQUENCE 版)
+  current: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+    GRANT USAGE ON SEQUENCE counters_n_seq TO app_user;
+  desired: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+  managed_roles:
+    - app_user
+  up: |
+    REVOKE USAGE ON SEQUENCE "public"."counters_n_seq" FROM "app_user";
+  down: |
+    GRANT USAGE ON SEQUENCE "public"."counters_n_seq" TO "app_user";
