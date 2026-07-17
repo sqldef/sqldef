@@ -33,12 +33,13 @@ type TestCase struct {
 	MinVersion         string  `yaml:"min_version"`
 	MaxVersion         string  `yaml:"max_version"`
 	User               string
-	Flavor             string   // database flavor (e.g., "mariadb", "mysql")
-	ManagedRoles       []string `yaml:"managed_roles"`        // Roles whose privileges are managed by sqldef (empty means no privileges are managed)
-	EnableDrop         *bool    `yaml:"enable_drop"`          // Whether to enable DROP/REVOKE operations
-	LegacyIgnoreQuotes *bool    `yaml:"legacy_ignore_quotes"` // nil or true = ignore quotes (legacy default), false = preserve quotes
-	Offline            bool     `yaml:"offline"`
-	Config             struct { // Optional config settings for the test
+	Flavor             string                       // database flavor (e.g., "mariadb", "mysql")
+	ManagedRoles       []string                     `yaml:"managed_roles"` // Roles whose privileges are managed by sqldef (empty means no privileges are managed)
+	ManageExtensions   *[]database.ManageObjectRule `yaml:"manage_extensions"`
+	EnableDrop         *bool                        `yaml:"enable_drop"`          // Whether to enable DROP/REVOKE operations
+	LegacyIgnoreQuotes *bool                        `yaml:"legacy_ignore_quotes"` // nil or true = ignore quotes (legacy default), false = preserve quotes
+	Offline            bool                         `yaml:"offline"`
+	Config             struct {                     // Optional config settings for the test
 		CreateIndexConcurrently bool `yaml:"create_index_concurrently"`
 		DisableDdlTransaction   bool `yaml:"disable_ddl_transaction"`
 	} `yaml:"config"`
@@ -179,6 +180,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 
 	config := database.GeneratorConfig{
 		ManagedRoles:            test.ManagedRoles,
+		ManageExtensions:        test.ManageExtensions,
 		EnableDrop:              *test.EnableDrop,
 		CreateIndexConcurrently: test.Config.CreateIndexConcurrently,
 		DisableDdlTransaction:   test.Config.DisableDdlTransaction,

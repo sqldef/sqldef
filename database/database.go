@@ -10,6 +10,7 @@ import (
 
 	"github.com/goccy/go-yaml"
 	"github.com/sqldef/sqldef/v3/parser"
+	"github.com/sqldef/sqldef/v3/util"
 )
 
 type Config struct {
@@ -61,10 +62,17 @@ type GeneratorConfig struct {
 	DisableDdlTransaction   bool     // Do not use a transaction for DDL statements
 	LegacyIgnoreQuotes      bool     // true = ignore quotes (legacy), false = preserve quotes
 
+	ManageExtensions *[]ManageObjectRule
+
 	// MySQL-specific: value of lower_case_table_names server variable.
 	// 0 = case-sensitive (Linux default), 1 or 2 = case-insensitive (Windows/macOS).
 	// Default is 0 (case-sensitive) for offline mode compatibility.
 	MysqlLowerCaseTableNames int
+}
+
+type ManageObjectRule struct {
+	Target string `yaml:"target"`
+	Drop   bool   `yaml:"drop"`
 }
 
 type TransactionQueries struct {
@@ -339,6 +347,9 @@ func MergeGeneratorConfig(base, override GeneratorConfig) GeneratorConfig {
 	if override.ManagedRoles != nil {
 		result.ManagedRoles = override.ManagedRoles
 	}
+	if override.ManageExtensions != nil {
+		result.ManageExtensions = override.ManageExtensions
+	}
 	if override.EnableDrop {
 		result.EnableDrop = override.EnableDrop
 	}
@@ -356,18 +367,19 @@ func MergeGeneratorConfig(base, override GeneratorConfig) GeneratorConfig {
 
 func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) GeneratorConfig {
 	var config struct {
-		TargetTables            string   `yaml:"target_tables"`
-		SkipTables              string   `yaml:"skip_tables"`
-		SkipViews               string   `yaml:"skip_views"`
-		TargetSchema            string   `yaml:"target_schema"`
-		Algorithm               string   `yaml:"algorithm"`
-		Lock                    string   `yaml:"lock"`
-		DumpConcurrency         int      `yaml:"dump_concurrency"`
-		ManagedRoles            []string `yaml:"managed_roles"`
-		EnableDrop              bool     `yaml:"enable_drop"`
-		CreateIndexConcurrently bool     `yaml:"create_index_concurrently"`
-		DisableDdlTransaction   bool     `yaml:"disable_ddl_transaction"`
-		LegacyIgnoreQuotes      *bool    `yaml:"legacy_ignore_quotes"`
+		TargetTables            string                     `yaml:"target_tables"`
+		SkipTables              string                     `yaml:"skip_tables"`
+		SkipViews               string                     `yaml:"skip_views"`
+		TargetSchema            string                     `yaml:"target_schema"`
+		Algorithm               string                     `yaml:"algorithm"`
+		Lock                    string                     `yaml:"lock"`
+		DumpConcurrency         int                        `yaml:"dump_concurrency"`
+		ManagedRoles            []string                   `yaml:"managed_roles"`
+		EnableDrop              bool                       `yaml:"enable_drop"`
+		CreateIndexConcurrently bool                       `yaml:"create_index_concurrently"`
+		DisableDdlTransaction   bool                       `yaml:"disable_ddl_transaction"`
+		LegacyIgnoreQuotes      *bool                      `yaml:"legacy_ignore_quotes"`
+		Manage                  map[string]yaml.RawMessage `yaml:"manage"`
 	}
 
 	dec := yaml.NewDecoder(bytes.NewReader(buf), yaml.DisallowUnknownField())
@@ -375,6 +387,8 @@ func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) Generat
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	manageExtensions := parseManageExtensions(config.Manage)
 
 	var targetTables []string
 	if config.TargetTables != "" {
@@ -425,5 +439,30 @@ func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) Generat
 		CreateIndexConcurrently: config.CreateIndexConcurrently,
 		DisableDdlTransaction:   config.DisableDdlTransaction,
 		LegacyIgnoreQuotes:      legacyIgnoreQuotes,
+		ManageExtensions:        manageExtensions,
 	}
+}
+
+func parseManageExtensions(manage map[string]yaml.RawMessage) *[]ManageObjectRule {
+	if manage == nil {
+		return nil
+	}
+
+	var result *[]ManageObjectRule
+	for key, raw := range util.CanonicalMapIter(manage) {
+		if key != "extension" {
+			log.Printf("WARN manage.%s is not yet supported and will be ignored; only manage.extension is currently implemented", key)
+			continue
+		}
+
+		rules := []ManageObjectRule{}
+		if len(bytes.TrimSpace(raw)) > 0 {
+			dec := yaml.NewDecoder(bytes.NewReader(raw), yaml.DisallowUnknownField())
+			if err := dec.Decode(&rules); err != nil {
+				log.Fatal(err)
+			}
+		}
+		result = &rules
+	}
+	return result
 }

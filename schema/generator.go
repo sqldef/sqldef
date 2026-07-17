@@ -117,6 +117,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	desiredDDLs = FilterTables(desiredDDLs, config)
 	desiredDDLs = FilterViews(desiredDDLs, config)
 	desiredDDLs = FilterPrivileges(desiredDDLs, config)
+	desiredDDLs = FilterExtensions(desiredDDLs, config)
 
 	desiredDDLs = SortTablesByDependencies(desiredDDLs, defaultSchema, mode, config.LegacyIgnoreQuotes, config.MysqlLowerCaseTableNames)
 
@@ -127,6 +128,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	currentDDLs = FilterTables(currentDDLs, config)
 	currentDDLs = FilterViews(currentDDLs, config)
 	currentDDLs = FilterPrivileges(currentDDLs, config)
+	currentDDLs = FilterExtensions(currentDDLs, config)
 
 	currentDDLs = SortTablesByDependencies(currentDDLs, defaultSchema, mode, config.LegacyIgnoreQuotes, config.MysqlLowerCaseTableNames)
 
@@ -647,7 +649,15 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		if g.findExtensionByName(g.desiredExtensions, currentExtension.extension.Name) != nil {
 			continue
 		}
-		ddls = append(ddls, fmt.Sprintf("DROP EXTENSION %s", g.escapeSQLIdent(currentExtension.extension.Name)))
+		dropDDL := fmt.Sprintf("DROP EXTENSION %s", g.escapeSQLIdent(currentExtension.extension.Name))
+		if g.config.ManageExtensions != nil {
+			rule, _ := matchManageObjectRule(*g.config.ManageExtensions, currentExtension.extension.Name.Name)
+			if !rule.Drop {
+				ddls = append(ddls, "-- Skipped: "+dropDDL)
+				continue
+			}
+		}
+		ddls = append(ddls, dropDDL)
 	}
 
 	// Clean up obsoleted functions
@@ -6243,6 +6253,35 @@ func containsRegexpString(strs []string, str string) bool {
 		}
 	}
 	return false
+}
+
+func FilterExtensions(ddls []DDL, config database.GeneratorConfig) []DDL {
+	if config.ManageExtensions == nil {
+		return ddls
+	}
+
+	filtered := []DDL{}
+	for _, ddl := range ddls {
+		if stmt, ok := ddl.(*Extension); ok {
+			if _, matched := matchManageObjectRule(*config.ManageExtensions, stmt.extension.Name.Name); !matched {
+				continue
+			}
+		}
+		filtered = append(filtered, ddl)
+	}
+	return filtered
+}
+
+func matchManageObjectRule(rules []database.ManageObjectRule, name string) (database.ManageObjectRule, bool) {
+	if len(rules) == 0 {
+		return database.ManageObjectRule{Drop: false}, true
+	}
+	for _, rule := range rules {
+		if rule.Target == "" || regexp.MustCompile("^"+rule.Target+"$").MatchString(name) {
+			return rule, true
+		}
+	}
+	return database.ManageObjectRule{}, false
 }
 
 // generateDropTableDDLsWithDependencies generates DROP TABLE statements in the correct order
