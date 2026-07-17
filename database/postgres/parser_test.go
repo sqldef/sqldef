@@ -614,3 +614,43 @@ func intConstNode(n int32) *pgquery.Node {
 		},
 	}
 }
+
+// TestParseGrantStmtWithPgquery covers the pgquery-side conversion of GRANT
+// statements (table/sequence objects, column lists, WITH GRANT OPTION), which
+// the generic parser normally handles first in CI.
+func TestParseGrantStmtWithPgquery(t *testing.T) {
+	t.Setenv("PSQLDEF_PARSER", "pgquery")
+	postgresParser := NewParser()
+
+	tests := []struct {
+		sql        string
+		objectType string
+		privileges []string
+		wgo        bool
+	}{
+		{"GRANT SELECT, INSERT ON TABLE users TO app_user;", "TABLE", []string{"SELECT", "INSERT"}, false},
+		{"GRANT USAGE ON SEQUENCE users_id_seq TO app_user;", "SEQUENCE", []string{"USAGE"}, false},
+		{"GRANT UPDATE ON SEQUENCE users_id_seq TO app_user WITH GRANT OPTION;", "SEQUENCE", []string{"UPDATE"}, true},
+		{"GRANT SELECT (secret, id) ON TABLE users TO app_user;", "TABLE", []string{"SELECT (id, secret)"}, false},
+		{"GRANT ALL ON TABLE users TO PUBLIC;", "TABLE", []string{"ALL"}, false},
+		{"REVOKE SELECT ON SEQUENCE users_id_seq FROM app_user;", "SEQUENCE", []string{"SELECT"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.sql, func(t *testing.T) {
+			statements, err := postgresParser.Parse(tt.sql)
+			require.NoError(t, err)
+			require.Len(t, statements, 1)
+
+			ddl, ok := statements[0].Statement.(*parser.DDL)
+			require.True(t, ok, "expected DDL, got %T", statements[0].Statement)
+			require.NotNil(t, ddl.Grant)
+			assert.Equal(t, tt.objectType, ddl.Grant.ObjectType)
+			assert.Equal(t, tt.privileges, ddl.Grant.Privileges)
+			assert.Equal(t, tt.wgo, ddl.Grant.WithGrantOption)
+		})
+	}
+
+	// Unsupported object types surface as an error, not a crash.
+	_, err := postgresParser.Parse("GRANT USAGE ON SCHEMA public TO app_user;")
+	require.Error(t, err)
+}
