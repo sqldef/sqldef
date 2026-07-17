@@ -7986,7 +7986,6 @@ reserved_keyword:
 | IGNORE
 | IN
 | INCLUDE
-| INDEX
 | INNER
 | INSERT
 | INTERVAL
@@ -8128,6 +8127,8 @@ non_reserved_keyword:
 | SLAVE
 | STARTS
 | ENDS
+| TRIGGER
+| INDEX
 
 // key_kw matches both KEY (default) and PG_KEY (PostgreSQL mode), so contexts
 // like PRIMARY KEY / FOREIGN KEY / VECTOR KEY work in both dialects while
