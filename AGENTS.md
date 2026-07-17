@@ -60,7 +60,7 @@ Usage notes:
   - `PSQLDEF_PARSER=pgquery` - Use only the pgquery parser (no fallback to generic)
   - Not set (default) - Use generic parser with fallback to pgquery
 - The generic parser builds ASTs that the generator uses for normalization and comparison. Do not parse SQL with regular expressions
-- The pgquery parser is obsolete and will be removed in the future; no maintenance is needed
+- pgquery is not maintained; any fallback to it is a bug. Fix the gap in the generic parser (`parser/parser.y`), never with regexes or workarounds. Auto mode routes the whole file to pgquery when the generic parser fails on any statement — detect it via the `WARN Generic parser failed ... using pgquery fallback` log line, and verify fixes with `PSQLDEF_PARSER=generic`
 - Map iteration order is non-deterministic. Use `util.CanonicalMapIter` to iterate maps in a deterministic order
 
 ## Local Development
