@@ -1,3 +1,8 @@
+## [v3.11.15](https://github.com/sqldef/sqldef/compare/v3.11.14...v3.11.15) - 2026-07-17
+
+- psqldef: scope generic-parser syntax errors to the offending statement by @gfx in https://github.com/sqldef/sqldef/pull/1280
+- psqldef: allow TRIGGER and INDEX as unquoted identifiers in the generic parser by @gfx in https://github.com/sqldef/sqldef/pull/1282
+
 ## [v3.11.14](https://github.com/sqldef/sqldef/compare/v3.11.13...v3.11.14) - 2026-07-15
 
 - build(deps): bump actions/download-artifact from 4 to 8 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1269
