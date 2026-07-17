@@ -695,3 +695,41 @@ CreateUniqueIndexIfNotExists:
     CREATE UNIQUE INDEX idx_users_email ON public.users (email);
   down: |
     DROP INDEX public.idx_users_email;
+
+CreateIndexOnColumnNamedTrigger:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE events (
+      user_id bigint NOT NULL,
+      trigger text NOT NULL
+    );
+  desired: |
+    CREATE TABLE events (
+      user_id bigint NOT NULL,
+      trigger text NOT NULL
+    );
+    CREATE INDEX idx_trigger ON events (user_id, trigger);
+  up: |
+    CREATE INDEX idx_trigger ON public.events (user_id, trigger);
+  down: |
+    DROP INDEX public.idx_trigger;
+
+CreateIndexOnColumnNamedIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE ai_statements (
+      user_id bigint NOT NULL,
+      reply_id bigint NOT NULL,
+      index integer NOT NULL
+    );
+  desired: |
+    CREATE TABLE ai_statements (
+      user_id bigint NOT NULL,
+      reply_id bigint NOT NULL,
+      index integer NOT NULL
+    );
+    CREATE INDEX idx_ai_statements_user_reply_index ON ai_statements (user_id, reply_id, index);
+  up: |
+    CREATE INDEX idx_ai_statements_user_reply_index ON public.ai_statements (user_id, reply_id, index);
+  down: |
+    DROP INDEX public.idx_ai_statements_user_reply_index;
