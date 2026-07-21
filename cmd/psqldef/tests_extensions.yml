@@ -39,8 +39,9 @@ CreateExtensionOrder:
 
 ManageExtensionsUnmatchedIsUntouched:
   legacy_ignore_quotes: false
-  manage_extensions:
-    - target: pgcrypto
+  manage:
+    extension:
+      - target: pgcrypto
   current: |
     CREATE EXTENSION pgcrypto;
     CREATE EXTENSION btree_gist;
@@ -51,9 +52,10 @@ ManageExtensionsUnmatchedIsUntouched:
 
 ManageExtensionsMatchedRuleAllowsDrop:
   legacy_ignore_quotes: false
-  manage_extensions:
-    - target: pgcrypto
-      drop: true
+  manage:
+    extension:
+      - target: pgcrypto
+        drop: true
   current: |
     CREATE EXTENSION pgcrypto;
   desired: ""
@@ -64,8 +66,9 @@ ManageExtensionsMatchedRuleAllowsDrop:
 
 ManageExtensionsMatchedRuleForbidsDrop:
   legacy_ignore_quotes: false
-  manage_extensions:
-    - target: pgcrypto
+  manage:
+    extension:
+      - target: pgcrypto
   current: |
     CREATE EXTENSION pgcrypto;
   desired: ""
@@ -76,8 +79,9 @@ ManageExtensionsMatchedRuleForbidsDrop:
 ManageExtensionsForbidsDropWithGlobalEnableDropFalse:
   legacy_ignore_quotes: false
   enable_drop: false
-  manage_extensions:
-    - target: pgcrypto
+  manage:
+    extension:
+      - target: pgcrypto
   current: |
     CREATE EXTENSION pgcrypto;
   desired: ""
