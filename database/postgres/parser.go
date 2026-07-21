@@ -1703,18 +1703,19 @@ func shouldDeleteTypeCast(sourceNode *pgquery.Node, targetType parser.ColumnType
 }
 
 func (p PostgresParser) parseGrantStmt(stmt *pgquery.GrantStmt) (parser.Statement, error) {
-	if stmt.Objtype != pgquery.ObjectType_OBJECT_TABLE {
-		// For now, only support table grants
-		return nil, fmt.Errorf("only table grants are supported")
+	var objectType string
+	switch stmt.Objtype {
+	case pgquery.ObjectType_OBJECT_TABLE:
+		objectType = "TABLE"
+	case pgquery.ObjectType_OBJECT_SEQUENCE:
+		objectType = "SEQUENCE"
+	default:
+		// For now, only support table and sequence grants
+		return nil, fmt.Errorf("only table and sequence grants are supported")
 	}
 
 	if len(stmt.Objects) == 0 {
 		return nil, fmt.Errorf("no objects specified in grant statement")
-	}
-
-	// Check for unsupported WITH GRANT OPTION
-	if stmt.GrantOption {
-		return nil, validationError{"WITH GRANT OPTION is not supported yet"}
 	}
 
 	// Check for unsupported CASCADE/RESTRICT (for REVOKE)
@@ -1747,6 +1748,15 @@ func (p PostgresParser) parseGrantStmt(stmt *pgquery.GrantStmt) (parser.Statemen
 				if accessPriv, ok := priv.Node.(*pgquery.Node_AccessPriv); ok {
 					if accessPriv.AccessPriv.Cols == nil {
 						privileges = append(privileges, strings.ToUpper(accessPriv.AccessPriv.PrivName))
+					} else {
+						// Column-level privilege: GRANT SELECT (col1, col2) ON ...
+						cols := make([]parser.Ident, 0, len(accessPriv.AccessPriv.Cols))
+						for _, colNode := range accessPriv.AccessPriv.Cols {
+							if str, ok := colNode.Node.(*pgquery.Node_String_); ok {
+								cols = append(cols, parser.NewIdent(str.String_.Sval, false))
+							}
+						}
+						privileges = append(privileges, parser.FormatColumnPrivilege(accessPriv.AccessPriv.PrivName, cols))
 					}
 				}
 			}
@@ -1777,7 +1787,8 @@ func (p PostgresParser) parseGrantStmt(stmt *pgquery.GrantStmt) (parser.Statemen
 			Privileges:      privileges,
 			TableName:       tableName,
 			Grantees:        grantees,
-			WithGrantOption: false, // Always false since we error on WITH GRANT OPTION above
+			ObjectType:      objectType,
+			WithGrantOption: stmt.GrantOption,
 			CascadeOption:   false, // Always false since we error on CASCADE/RESTRICT above
 		}
 

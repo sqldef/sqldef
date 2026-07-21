@@ -1641,6 +1641,125 @@ create_statement:
       $$ = &MultiStatement{Statements: stmts}
     }
   }
+| GRANT privilege_list ON SEQUENCE table_name_list TO grantee_list
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.Name
+    }
+    grantees := make([]string, len($7))
+    for i, g := range $7 {
+      grantees[i] = g.Name
+    }
+
+    if len($5) == 1 {
+      $$ = &DDL{
+        Action: GrantPrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: true,
+          Privileges: privs,
+          Grantees: grantees,
+          ObjectType: "SEQUENCE",
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($5))
+      for i, table := range $5 {
+        stmts[i] = &DDL{
+          Action: GrantPrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: true,
+            Privileges: privs,
+            Grantees: grantees,
+            ObjectType: "SEQUENCE",
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| GRANT privilege_list ON SEQUENCE table_name_list TO grantee_list WITH GRANT OPTION
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.Name
+    }
+    grantees := make([]string, len($7))
+    for i, g := range $7 {
+      grantees[i] = g.Name
+    }
+
+    if len($5) == 1 {
+      $$ = &DDL{
+        Action: GrantPrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: true,
+          Privileges: privs,
+          Grantees: grantees,
+          ObjectType: "SEQUENCE",
+          WithGrantOption: true,
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($5))
+      for i, table := range $5 {
+        stmts[i] = &DDL{
+          Action: GrantPrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: true,
+            Privileges: privs,
+            Grantees: grantees,
+            ObjectType: "SEQUENCE",
+            WithGrantOption: true,
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
+| REVOKE privilege_list ON SEQUENCE table_name_list FROM grantee_list
+  {
+    privs := make([]string, len($2))
+    for i, p := range $2 {
+      privs[i] = p.Name
+    }
+    grantees := make([]string, len($7))
+    for i, g := range $7 {
+      grantees[i] = g.Name
+    }
+
+    if len($5) == 1 {
+      $$ = &DDL{
+        Action: RevokePrivilege,
+        Table: $5[0],
+        Grant: &Grant{
+          IsGrant: false,
+          Privileges: privs,
+          Grantees: grantees,
+          ObjectType: "SEQUENCE",
+        },
+      }
+    } else {
+      stmts := make([]Statement, len($5))
+      for i, table := range $5 {
+        stmts[i] = &DDL{
+          Action: RevokePrivilege,
+          Table: table,
+          Grant: &Grant{
+            IsGrant: false,
+            Privileges: privs,
+            Grantees: grantees,
+            ObjectType: "SEQUENCE",
+          },
+        }
+      }
+      $$ = &MultiStatement{Statements: stmts}
+    }
+  }
 | REVOKE privilege_list ON TABLE table_name_list FROM grantee_list
   {
     privs := make([]string, len($2))
@@ -5527,6 +5646,16 @@ privilege:
   {
     $$ = $1
   }
+/* USAGE etc. map to UNUSED; accept them as privilege names (GRANT USAGE ON SEQUENCE) */
+| UNUSED
+  {
+    $$ = NewIdent($1, false)
+  }
+/* Column-level privilege: GRANT SELECT (col1, col2) ON TABLE ... */
+| reserved_sql_id '(' sql_id_list ')'
+  {
+    $$ = NewIdent(FormatColumnPrivilege($1.Name, $3), false)
+  }
 | ALL
   {
     $$ = NewIdent($1, false)
@@ -7753,6 +7882,12 @@ table_id:
   }
 /* For PostgreSQL. Allow UNUSED tokens as table-id https://www.postgresql.org/docs/current/sql-keywords-appendix.html */
 | UNUSED
+  {
+    $$ = NewIdent($1, false)
+  }
+/* SEQUENCE is a real token (GRANT ... ON SEQUENCE) but PostgreSQL treats it as
+   an unreserved keyword, so keep it usable as an identifier. */
+| SEQUENCE
   {
     $$ = NewIdent($1, false)
   }

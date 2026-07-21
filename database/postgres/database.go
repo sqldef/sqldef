@@ -169,7 +169,74 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 	}
 	ddls = append(ddls, matViewDDLs...)
 
+	seqPrivilegeDDLs, err := d.sequencePrivileges()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, seqPrivilegeDDLs...)
+
 	return strings.Join(ddls, "\n\n"), nil
+}
+
+// sequencePrivileges exports GRANT ... ON SEQUENCE statements for the managed
+// roles. Sequences are not managed as objects by psqldef, so their privileges
+// are emitted as standalone GRANTs rather than attached to an object's DDL.
+// Extension-owned sequences are excluded, mirroring how psqldef skips
+// extension-owned objects elsewhere.
+func (d *PostgresDatabase) sequencePrivileges() ([]string, error) {
+	if len(d.generatorConfig.ManagedRoles) == 0 {
+		return nil, nil
+	}
+
+	const query = `
+		SELECT
+			n.nspname || '.' || c.relname AS seq_name,
+			CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
+			acl.is_grantable,
+			string_agg(acl.privilege_type, ', ' ORDER BY acl.privilege_type) AS privileges
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		CROSS JOIN LATERAL aclexplode(c.relacl) AS acl
+		WHERE c.relkind = 'S'
+		AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+		AND acl.grantee <> c.relowner
+		AND (CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END) = ANY($1::text[])
+		AND NOT EXISTS (
+			SELECT 1 FROM pg_depend dep
+			WHERE dep.classid = 'pg_class'::regclass AND dep.objid = c.oid AND dep.deptype = 'e'
+		)
+		GROUP BY n.nspname, c.relname, acl.grantee, acl.is_grantable
+		ORDER BY seq_name, grantee, acl.is_grantable
+	`
+
+	rows, err := d.db.Query(query, pq.Array(d.generatorConfig.ManagedRoles))
+	if err != nil {
+		return nil, fmt.Errorf("failed to query sequence privileges: %w", err)
+	}
+	defer rows.Close()
+
+	var ddls []string
+	for rows.Next() {
+		var seqName, grantee, privileges string
+		var isGrantable bool
+		if err := rows.Scan(&seqName, &grantee, &isGrantable, &privileges); err != nil {
+			return nil, fmt.Errorf("failed to scan sequence privilege row: %w", err)
+		}
+
+		escapedGrantee := grantee
+		if grantee != "PUBLIC" {
+			// PUBLIC is a special keyword and should not be quoted
+			escapedGrantee = d.quoteIdentifierIfNeeded(grantee)
+		}
+
+		grant := fmt.Sprintf("GRANT %s ON SEQUENCE %s TO %s", privileges, seqName, escapedGrantee)
+		if isGrantable {
+			grant += " WITH GRANT OPTION"
+		}
+		ddls = append(ddls, grant+";")
+	}
+
+	return ddls, rows.Err()
 }
 
 func (d *PostgresDatabase) tableNames() ([]string, error) {
@@ -1901,6 +1968,7 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 		SELECT
 			table_schema || '.' || table_name AS qualified_table_name,
 			grantee,
+			is_grantable,
 			string_agg(privilege_type, ', ' ORDER BY privilege_type) as privileges
 		FROM information_schema.table_privileges
 		WHERE table_schema || '.' || table_name = ANY($1::text[])
@@ -1909,8 +1977,8 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 			SELECT tableowner FROM pg_tables
 			WHERE schemaname = table_schema AND tablename = table_name
 		)
-		GROUP BY table_schema, table_name, grantee
-		ORDER BY table_schema, table_name, grantee
+		GROUP BY table_schema, table_name, grantee, is_grantable
+		ORDER BY table_schema, table_name, grantee, is_grantable
 	`
 
 	rows, err := d.db.Query(query, pq.Array(tableNames), pq.Array(d.generatorConfig.ManagedRoles))
@@ -1921,8 +1989,8 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 
 	result := make(map[string][]string, len(tableNames))
 	for rows.Next() {
-		var tableName, grantee, privileges string
-		if err := rows.Scan(&tableName, &grantee, &privileges); err != nil {
+		var tableName, grantee, isGrantable, privileges string
+		if err := rows.Scan(&tableName, &grantee, &isGrantable, &privileges); err != nil {
 			return nil, fmt.Errorf("failed to scan privilege row: %w", err)
 		}
 
@@ -1933,8 +2001,67 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 		}
 
 		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s", privileges, tableName, escapedGrantee)
+		if isGrantable == "YES" {
+			grant += " WITH GRANT OPTION"
+		}
+		result[tableName] = append(result[tableName], grant)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Column-level privileges (pg_attribute.attacl). Unlike
+	// information_schema.column_privileges, attacl contains only explicit
+	// column grants, not ones implied by table-level grants.
+	const columnQuery = `
+		SELECT
+			n.nspname || '.' || c.relname AS qualified_table_name,
+			CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END AS grantee,
+			acl.is_grantable,
+			acl.privilege_type,
+			string_agg(at.attname, ', ' ORDER BY at.attname) AS columns
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		JOIN pg_attribute at ON at.attrelid = c.oid AND at.attacl IS NOT NULL,
+		LATERAL aclexplode(at.attacl) AS acl
+		WHERE n.nspname || '.' || c.relname = ANY($1::text[])
+		AND acl.grantee <> c.relowner
+		AND (CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END) = ANY($2::text[])
+		GROUP BY n.nspname, c.relname, acl.grantee, acl.is_grantable, acl.privilege_type
+		ORDER BY qualified_table_name, grantee, acl.privilege_type, acl.is_grantable
+	`
+
+	colRows, err := d.db.Query(columnQuery, pq.Array(tableNames), pq.Array(d.generatorConfig.ManagedRoles))
+	if err != nil {
+		return nil, fmt.Errorf("failed to query column privileges: %w", err)
+	}
+	defer colRows.Close()
+
+	for colRows.Next() {
+		var tableName, grantee, privilegeType, columns string
+		var isGrantable bool
+		if err := colRows.Scan(&tableName, &grantee, &isGrantable, &privilegeType, &columns); err != nil {
+			return nil, fmt.Errorf("failed to scan column privilege row: %w", err)
+		}
+
+		escapedGrantee := grantee
+		if grantee != "PUBLIC" {
+			escapedGrantee = d.quoteIdentifierIfNeeded(grantee)
+		}
+
+		colNames := strings.Split(columns, ", ")
+		escapedCols := make([]string, len(colNames))
+		for i, col := range colNames {
+			escapedCols[i] = d.quoteIdentifierIfNeeded(col)
+		}
+
+		grant := fmt.Sprintf("GRANT %s (%s) ON TABLE %s TO %s",
+			privilegeType, strings.Join(escapedCols, ", "), tableName, escapedGrantee)
+		if isGrantable {
+			grant += " WITH GRANT OPTION"
+		}
 		result[tableName] = append(result[tableName], grant)
 	}
 
-	return result, nil
+	return result, colRows.Err()
 }

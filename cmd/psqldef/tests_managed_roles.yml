@@ -260,7 +260,7 @@ ManagedRolesMultipleTables:
   down: |
     REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."posts" FROM "app_user";
     REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "app_user";
-ManagedRolesErrorGrantOption:
+ManagedRolesGrantOptionBasic:
   current: |
     CREATE TABLE users (
       id BIGINT PRIMARY KEY,
@@ -271,10 +271,86 @@ ManagedRolesErrorGrantOption:
       id BIGINT PRIMARY KEY,
       name VARCHAR(100)
     );
-    grant select on table users to readonly_user with grant option;
+    GRANT SELECT ON TABLE users TO readonly_user WITH GRANT OPTION;
   managed_roles:
     - readonly_user
-  error: "WITH GRANT OPTION is not supported yet"
+  up: |
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user" WITH GRANT OPTION;
+  down: |
+    REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
+ManagedRolesGrantOptionMultiplePrivileges:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT, UPDATE ON TABLE users TO app_user WITH GRANT OPTION;
+  managed_roles:
+    - app_user
+  up: |
+    GRANT SELECT, INSERT, UPDATE ON TABLE "public"."users" TO "app_user" WITH GRANT OPTION;
+  down: |
+    REVOKE INSERT, SELECT, UPDATE ON TABLE "public"."users" FROM "app_user";
+ManagedRolesGrantOptionIdempotent:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user WITH GRANT OPTION;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user WITH GRANT OPTION;
+  managed_roles:
+    - readonly_user
+  up: ""
+  down: ""
+ManagedRolesGrantOptionUpgrade:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user WITH GRANT OPTION;
+  managed_roles:
+    - readonly_user
+  up: |
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user" WITH GRANT OPTION;
+  down: |
+    REVOKE GRANT OPTION FOR SELECT ON TABLE "public"."users" FROM "readonly_user";
+ManagedRolesGrantOptionDowngrade:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user WITH GRANT OPTION;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  managed_roles:
+    - readonly_user
+  up: |
+    REVOKE GRANT OPTION FOR SELECT ON TABLE "public"."users" FROM "readonly_user";
+  down: |
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user" WITH GRANT OPTION;
 
 ManagedRolesErrorCascade:
   current: |
@@ -359,3 +435,184 @@ ManagedRolesMixedGrantRevoke:
   down: |
     REVOKE UPDATE ON TABLE "public"."users" FROM "app_user";
     GRANT INSERT, DELETE ON TABLE "public"."users" TO "app_user";
+
+ManagedRolesSequenceGrant:
+  current: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+  desired: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+    GRANT USAGE, SELECT ON SEQUENCE counters_n_seq TO readonly_user;
+  managed_roles:
+    - readonly_user
+  up: |
+    GRANT USAGE, SELECT ON SEQUENCE "public"."counters_n_seq" TO "readonly_user";
+  down: |
+    REVOKE SELECT, USAGE ON SEQUENCE "public"."counters_n_seq" FROM "readonly_user";
+
+ManagedRolesSequenceGrantWithGrantOption:
+  current: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+  desired: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+    GRANT UPDATE ON SEQUENCE counters_n_seq TO app_user WITH GRANT OPTION;
+  managed_roles:
+    - app_user
+  up: |
+    GRANT UPDATE ON SEQUENCE "public"."counters_n_seq" TO "app_user" WITH GRANT OPTION;
+  down: |
+    REVOKE UPDATE ON SEQUENCE "public"."counters_n_seq" FROM "app_user";
+
+ManagedRolesSequenceIdempotent:
+  current: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+    GRANT USAGE ON SEQUENCE counters_n_seq TO readonly_user;
+  desired: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+    GRANT USAGE ON SEQUENCE counters_n_seq TO readonly_user;
+  managed_roles:
+    - readonly_user
+  up: ""
+  down: ""
+
+ManagedRolesSequenceRevokeDrift:
+  # DB has an extra sequence grant not in SoT -> revoked for managed roles
+  current: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+    GRANT USAGE, SELECT, UPDATE ON SEQUENCE counters_n_seq TO app_user;
+  desired: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+    GRANT USAGE ON SEQUENCE counters_n_seq TO app_user;
+  managed_roles:
+    - app_user
+  up: |
+    REVOKE SELECT, UPDATE ON SEQUENCE "public"."counters_n_seq" FROM "app_user";
+  down: |
+    GRANT SELECT, UPDATE ON SEQUENCE "public"."counters_n_seq" TO "app_user";
+
+ManagedRolesColumnGrant:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      f_secret VARCHAR(100),
+      f_public VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      f_secret VARCHAR(100),
+      f_public VARCHAR(100)
+    );
+    GRANT SELECT (f_public, id) ON TABLE users TO readonly_user;
+  managed_roles:
+    - readonly_user
+  up: |
+    GRANT SELECT (f_public, id) ON TABLE "public"."users" TO "readonly_user";
+  down: |
+    REVOKE SELECT (f_public, id) ON TABLE "public"."users" FROM "readonly_user";
+
+ManagedRolesColumnGrantIdempotent:
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      f_secret VARCHAR(100)
+    );
+    GRANT SELECT (id) ON TABLE users TO readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      f_secret VARCHAR(100)
+    );
+    GRANT SELECT (id) ON TABLE users TO readonly_user;
+  managed_roles:
+    - readonly_user
+  up: ""
+  down: ""
+
+ManagedRolesColumnGrantMixedWithTable:
+  # 同一ロールにテーブル権限と列権限が同居しても正しく差分される
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      f_secret VARCHAR(100)
+    );
+    GRANT SELECT (id) ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      f_secret VARCHAR(100)
+    );
+    GRANT INSERT ON TABLE users TO app_user;
+    GRANT SELECT (id) ON TABLE users TO app_user;
+  managed_roles:
+    - app_user
+  up: |
+    GRANT INSERT ON TABLE "public"."users" TO "app_user";
+  down: |
+    REVOKE INSERT ON TABLE "public"."users" FROM "app_user";
+
+ManagedRolesColumnGrantDriftRevoke:
+  # DB にだけある列権限 (drift) が managed role について剥奪される
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      f_secret VARCHAR(100)
+    );
+    GRANT SELECT (id, f_secret) ON TABLE users TO readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      f_secret VARCHAR(100)
+    );
+    GRANT SELECT (id) ON TABLE users TO readonly_user;
+  managed_roles:
+    - readonly_user
+  up: |
+    REVOKE SELECT (f_secret, id) ON TABLE "public"."users" FROM "readonly_user";
+    GRANT SELECT (id) ON TABLE "public"."users" TO "readonly_user";
+  down: |
+    REVOKE SELECT (id) ON TABLE "public"."users" FROM "readonly_user";
+    GRANT SELECT (f_secret, id) ON TABLE "public"."users" TO "readonly_user";
+
+ManagedRolesSequenceOrphanRevoke:
+  # desired に grantee が一切登場しない場合の orphan 剥奪経路 (SEQUENCE 版)
+  current: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+    GRANT USAGE ON SEQUENCE counters_n_seq TO app_user;
+  desired: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL
+    );
+  managed_roles:
+    - app_user
+  up: |
+    REVOKE USAGE ON SEQUENCE "public"."counters_n_seq" FROM "app_user";
+  down: |
+    GRANT USAGE ON SEQUENCE "public"."counters_n_seq" TO "app_user";

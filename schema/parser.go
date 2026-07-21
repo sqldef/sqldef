@@ -292,20 +292,18 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 				schema:    *stmt.Schema,
 			}, nil
 		} else if stmt.Action == parser.GrantPrivilege {
-			if stmt.Grant.WithGrantOption {
-				return nil, fmt.Errorf("WITH GRANT OPTION is not supported yet")
-			}
-
 			grantees := stmt.Grant.Grantees
 
 			if len(grantees) > 0 {
 				// Normalize privilege names to uppercase for consistency
-				normalizedPrivileges := util.TransformSlice(stmt.Grant.Privileges, strings.ToUpper)
+				normalizedPrivileges := util.TransformSlice(stmt.Grant.Privileges, normalizePrivilegeCase)
 				return &GrantPrivilege{
-					statement:  ddl,
-					tableName:  normalizeQualifiedName(mode, stmt.Table, defaultSchema),
-					grantees:   grantees,
-					privileges: normalizedPrivileges,
+					statement:       ddl,
+					tableName:       normalizeQualifiedName(mode, stmt.Table, defaultSchema),
+					grantees:        grantees,
+					privileges:      normalizedPrivileges,
+					withGrantOption: stmt.Grant.WithGrantOption,
+					objectType:      normalizeGrantObjectType(stmt.Grant.ObjectType),
 				}, nil
 			}
 			return nil, fmt.Errorf("no grantees specified in GRANT statement")
@@ -319,13 +317,14 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			// For now, return the first grantee as a single statement
 			if len(grantees) > 0 {
 				// Normalize privilege names to uppercase for consistency
-				normalizedPrivileges := util.TransformSlice(stmt.Grant.Privileges, strings.ToUpper)
+				normalizedPrivileges := util.TransformSlice(stmt.Grant.Privileges, normalizePrivilegeCase)
 				return &RevokePrivilege{
 					statement:     ddl,
 					tableName:     normalizeQualifiedName(mode, stmt.Table, defaultSchema),
 					grantees:      grantees,
 					privileges:    normalizedPrivileges,
 					cascadeOption: stmt.Grant.CascadeOption,
+					objectType:    normalizeGrantObjectType(stmt.Grant.ObjectType),
 				}, nil
 			}
 			return nil, fmt.Errorf("no grantees specified in REVOKE statement")
@@ -1642,4 +1641,23 @@ func extractIndexComments(rawDDL string, mode GeneratorMode) map[string]string {
 	}
 
 	return comments
+}
+
+// normalizePrivilegeCase uppercases a privilege name while preserving the case
+// of any parenthesized column list (column names are case-sensitive):
+// "select (Col)" -> "SELECT (Col)".
+func normalizePrivilegeCase(priv string) string {
+	if i := strings.Index(priv, "("); i >= 0 {
+		return strings.ToUpper(strings.TrimRight(priv[:i], " ")) + " " + priv[i:]
+	}
+	return strings.ToUpper(priv)
+}
+
+// normalizeGrantObjectType maps the parser's Grant.ObjectType to the canonical
+// value used in schema comparison ("" means TABLE for backward compatibility).
+func normalizeGrantObjectType(objectType string) string {
+	if objectType == "" {
+		return "TABLE"
+	}
+	return objectType
 }

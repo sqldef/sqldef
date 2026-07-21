@@ -731,6 +731,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				found := false
 				for _, desiredPriv := range g.desiredPrivileges {
 					if g.qualifiedNamesEqual(currentPriv.tableName, desiredPriv.tableName) &&
+						currentPriv.objectType == desiredPriv.objectType &&
 						slices.Contains(desiredPriv.grantees, grantee) {
 						found = true
 						break
@@ -743,8 +744,9 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						return nil, err
 					}
 
-					revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
+					revoke := fmt.Sprintf("REVOKE %s ON %s %s FROM %s",
 						formatPrivilegesForGrant(currentPriv.privileges),
+						grantObjectKeyword(currentPriv.objectType),
 						g.escapeQualifiedName(currentPriv.tableName),
 						escapedGrantee)
 					ddls = append(ddls, revoke)
@@ -3954,6 +3956,8 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 			merged := false
 			for i, existing := range aggregated.Privileges {
 				if qualifiedNamesEqual(existing.tableName, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames) &&
+					existing.withGrantOption == stmt.withGrantOption &&
+					existing.objectType == stmt.objectType &&
 					len(existing.grantees) == len(stmt.grantees) {
 					allMatch := true
 					for j, grantee := range existing.grantees {
@@ -3995,6 +3999,15 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 	return aggregated, nil
 }
 
+// grantObjectKeyword returns the SQL object keyword used in GRANT/REVOKE
+// statements for the given privilege object type ("TABLE" by default).
+func grantObjectKeyword(objectType string) string {
+	if objectType == "SEQUENCE" {
+		return "SEQUENCE"
+	}
+	return "TABLE"
+}
+
 func formatPrivilegesForGrant(privileges []string) string {
 	if len(privileges) == 1 && privileges[0] == "ALL" {
 		return "ALL PRIVILEGES"
@@ -4023,10 +4036,13 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 	// If multiple grantees made it here, they all have the same privileges to grant
 
 	var ddls []string
-	desiredNormalized := normalizePrivilegesForComparison(desired.privileges)
+	desiredNormalized := normalizePrivilegesForComparison(desired.privileges, desired.objectType)
 
 	// Track REVOKE operations per grantee
 	revokesByGrantee := make(map[string][]string)
+	// Track REVOKE GRANT OPTION FOR operations per grantee (downgrade: keep the
+	// privilege but drop its grant option)
+	revokeGrantOptionByGrantee := make(map[string][]string)
 	// Track GRANT operations grouped by privileges to grant
 	type grantGroup struct {
 		privileges []string
@@ -4036,12 +4052,18 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 
 	for _, grantee := range desired.grantees {
 		existingPrivilegesMap := make(map[string]bool)
+		// Per-privilege grant option state in the current schema.
+		existingGrantableMap := make(map[string]bool)
 		for _, currentPriv := range g.currentPrivileges {
-			if g.qualifiedNamesEqual(currentPriv.tableName, desired.tableName) {
+			if g.qualifiedNamesEqual(currentPriv.tableName, desired.tableName) &&
+				currentPriv.objectType == desired.objectType {
 				if slices.Contains(currentPriv.grantees, grantee) {
-					normalized := normalizePrivilegesForComparison(currentPriv.privileges)
+					normalized := normalizePrivilegesForComparison(currentPriv.privileges, currentPriv.objectType)
 					for _, priv := range normalized {
 						existingPrivilegesMap[priv] = true
+						if currentPriv.withGrantOption {
+							existingGrantableMap[priv] = true
+						}
 					}
 				}
 			}
@@ -4055,7 +4077,17 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			sortPrivilegesByCanonicalOrder(existingNormalized)
 		}
 
-		if len(existingNormalized) > 0 && equalPrivileges(existingNormalized, desiredNormalized) {
+		// The grant option matches only when every desired privilege already has
+		// the desired grant option state in the current schema.
+		grantOptionMatches := true
+		for _, priv := range desiredNormalized {
+			if existingGrantableMap[priv] != desired.withGrantOption {
+				grantOptionMatches = false
+				break
+			}
+		}
+
+		if len(existingNormalized) > 0 && equalPrivileges(existingNormalized, desiredNormalized) && grantOptionMatches {
 			continue
 		}
 
@@ -4072,8 +4104,9 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 					grantedByOtherStatement := false
 					for _, otherDesired := range g.desiredPrivileges {
 						if g.qualifiedNamesEqual(otherDesired.tableName, desired.tableName) &&
+							otherDesired.objectType == desired.objectType &&
 							slices.Contains(otherDesired.grantees, grantee) {
-							otherNormalized := normalizePrivilegesForComparison(otherDesired.privileges)
+							otherNormalized := normalizePrivilegesForComparison(otherDesired.privileges, otherDesired.objectType)
 							if slices.Contains(otherNormalized, priv) {
 								grantedByOtherStatement = true
 								break
@@ -4098,8 +4131,26 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 				existingMap[priv] = true
 			}
 			for _, priv := range desiredNormalized {
-				if !existingMap[priv] {
+				// Grant a privilege that is missing, or re-grant an existing one to
+				// add the grant option (upgrade). Re-granting WITH GRANT OPTION is
+				// idempotent in PostgreSQL.
+				if !existingMap[priv] || (desired.withGrantOption && !existingGrantableMap[priv]) {
 					privilegesToGrant = append(privilegesToGrant, priv)
+				}
+			}
+
+			// Downgrade: a privilege kept in the desired schema but without its
+			// current grant option needs REVOKE GRANT OPTION FOR.
+			if !desired.withGrantOption {
+				var toRevokeOption []string
+				for _, priv := range desiredNormalized {
+					if existingGrantableMap[priv] {
+						toRevokeOption = append(toRevokeOption, priv)
+					}
+				}
+				if len(toRevokeOption) > 0 {
+					sortPrivilegesByCanonicalOrder(toRevokeOption)
+					revokeGrantOptionByGrantee[grantee] = toRevokeOption
 				}
 			}
 		} else {
@@ -4128,8 +4179,22 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 		if err != nil {
 			return nil, err
 		}
-		revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
+		revoke := fmt.Sprintf("REVOKE %s ON %s %s FROM %s",
 			strings.Join(privileges, ", "),
+			grantObjectKeyword(desired.objectType),
+			g.escapeQualifiedName(desired.tableName),
+			escapedGrantee)
+		ddls = append(ddls, revoke)
+	}
+
+	for grantee, privileges := range util.CanonicalMapIter(revokeGrantOptionByGrantee) {
+		escapedGrantee, err := g.validateAndEscapeGrantee(grantee)
+		if err != nil {
+			return nil, err
+		}
+		revoke := fmt.Sprintf("REVOKE GRANT OPTION FOR %s ON %s %s FROM %s",
+			strings.Join(privileges, ", "),
+			grantObjectKeyword(desired.objectType),
 			g.escapeQualifiedName(desired.tableName),
 			escapedGrantee)
 		ddls = append(ddls, revoke)
@@ -4152,10 +4217,14 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			escapedGrantees = append(escapedGrantees, escapedGrantee)
 		}
 		slices.Sort(escapedGrantees)
-		grant := fmt.Sprintf("GRANT %s ON TABLE %s TO %s",
+		grant := fmt.Sprintf("GRANT %s ON %s %s TO %s",
 			formatPrivilegesForGrant(group.privileges),
+			grantObjectKeyword(desired.objectType),
 			g.escapeQualifiedName(desired.tableName),
 			strings.Join(escapedGrantees, ", "))
+		if desired.withGrantOption {
+			grant += " WITH GRANT OPTION"
+		}
 		ddls = append(ddls, grant)
 	}
 
@@ -4184,8 +4253,9 @@ func (g *Generator) generateDDLsForRevokePrivilege(desired *RevokePrivilege) ([]
 		return nil, err
 	}
 
-	revoke := fmt.Sprintf("REVOKE %s ON TABLE %s FROM %s",
+	revoke := fmt.Sprintf("REVOKE %s ON %s %s FROM %s",
 		formatPrivilegesForGrant(desired.privileges),
+		grantObjectKeyword(desired.objectType),
 		g.escapeQualifiedName(desired.tableName),
 		escapedGrantee)
 
@@ -6168,9 +6238,10 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 			}
 
 			if len(includedGrantees) > 0 {
-				// Sort privileges for consistent key
+				// Sort privileges for consistent key. WITH GRANT OPTION is part of
+				// the key so grants that differ only by grant option are not merged.
 				sortedPrivs := util.SortedCopy(stmt.privileges)
-				key := fmt.Sprintf("%s:%s", stmt.tableName.RawString(), strings.Join(sortedPrivs, ","))
+				key := fmt.Sprintf("%s:%s:%s:%t", stmt.objectType, stmt.tableName.RawString(), strings.Join(sortedPrivs, ","), stmt.withGrantOption)
 
 				if existing, ok := grantsByTableAndPrivs[key]; ok {
 					// Add grantees to existing grant with same table and privileges
@@ -6178,10 +6249,12 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 				} else {
 					// Create new grant with filtered grantees
 					grantsByTableAndPrivs[key] = &GrantPrivilege{
-						statement:  stmt.statement,
-						tableName:  stmt.tableName,
-						grantees:   includedGrantees,
-						privileges: stmt.privileges,
+						statement:       stmt.statement,
+						tableName:       stmt.tableName,
+						grantees:        includedGrantees,
+						privileges:      stmt.privileges,
+						withGrantOption: stmt.withGrantOption,
+						objectType:      stmt.objectType,
 					}
 					grantsOrder = append(grantsOrder, key)
 				}
@@ -6190,7 +6263,7 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 			// Process each grantee separately and consolidate
 			for _, grantee := range stmt.grantees {
 				if slices.Contains(config.ManagedRoles, grantee) {
-					key := fmt.Sprintf("%s:%s", stmt.tableName.RawString(), grantee)
+					key := fmt.Sprintf("%s:%s:%s", stmt.objectType, stmt.tableName.RawString(), grantee)
 					if existing, ok := revokesByTableAndGrantee[key]; ok {
 						// Merge privileges
 						privMap := make(map[string]bool)
@@ -6214,6 +6287,7 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 							grantees:      []string{grantee},
 							privileges:    stmt.privileges,
 							cascadeOption: stmt.cascadeOption,
+							objectType:    stmt.objectType,
 						}
 						revokesOrder = append(revokesOrder, key)
 					}
