@@ -504,6 +504,26 @@ $ psqldef -U postgres dbname --apply \
 | `create_index_concurrently` | boolean | When true, adds CONCURRENTLY to all CREATE INDEX statements. Default is false. |
 | `disable_ddl_transaction` | boolean | When true, all DDL statements are executed outside of transactions. Required for Aurora DSQL which does not support transactional DDL. Default is false. |
 | `legacy_ignore_quotes` | boolean | Controls identifier quoting behavior. When `true` (default), all identifiers are quoted in output. When `false`, identifiers preserve their original quoting from the source SQL. Default is `true` but will change to `false` in the next major version. See [Identifier Quoting](#identifier-quoting) for details. |
+| `manage.extension` | array | List of `{target, drop}` rules for which extensions to manage; see [Managing Extensions](#managing-extensions). |
+
+### Managing Extensions
+
+By default, psqldef manages every extension in the database (equivalent to `--skip-extension` being off). Some managed PostgreSQL services (e.g. AlloyDB) auto-install extensions such as `google_columnar_engine` that should never be diffed or dropped, while `--skip-extension` would also stop managing extensions you do want tracked, like `vector` or `pg_trgm`.
+
+`manage.extension` restricts management to extensions matching a rule, leaving everything else untouched:
+
+```yaml
+manage:
+  extension:
+    - target: vector
+    - target: pg_trgm
+```
+
+Rules are evaluated in order; the first match wins. `target` is a regular expression anchored with `^...$` (empty matches all). `drop` (default `false`) controls whether `DROP EXTENSION` is emitted for that extension when it's missing from the desired schema; otherwise the drop is commented out as `-- Skipped: ...`, regardless of `enable_drop`. Extensions matching no rule are excluded from both the diff and `--export` output.
+
+If `manage.extension` is omitted, all extensions are managed as before. An empty `manage.extension:` section manages all extensions but disables drop for all of them by default.
+
+`manage.extension` is the first part of a broader `manage:` configuration block for controlling which objects psqldef manages across all object types (tables, views, indexes, ...); see [object-management.md](object-management.md) for the full design. Other `manage:` keys are not implemented yet and are ignored with a warning.
 
 ## Identifier Quoting
 

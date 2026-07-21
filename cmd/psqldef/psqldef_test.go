@@ -739,6 +739,34 @@ func TestPsqldefExport(t *testing.T) {
 	))
 }
 
+func TestPsqldefExportManageExtensions(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, `CREATE EXTENSION pg_trgm; CREATE EXTENSION btree_gin;`)
+
+	actual := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export", "--config-inline", "manage: {extension: [{target: pg_trgm}]}")...)
+	assert.Equal(t, tu.StripHeredoc(`
+		CREATE EXTENSION "pg_trgm";
+		`,
+	), actual)
+}
+
+func TestPsqldefManageUnknownKeyFails(t *testing.T) {
+	resetTestDatabase()
+
+	out, err := tu.Execute("./psqldef", psqldefArgs(testDatabaseName, "--export", "--config-inline", "manage: {extentions: [{target: pg_trgm}]}")...)
+	assert.Error(t, err)
+	assert.Contains(t, out, "manage.extentions is not a recognized manage: key")
+}
+
+func TestPsqldefManageKnownUnimplementedKeyWarnsOnly(t *testing.T) {
+	resetTestDatabase()
+
+	out, err := tu.Execute("./psqldef", psqldefArgs(testDatabaseName, "--export", "--config-inline", "manage: {table: [{target: foo}]}")...)
+	assert.NoError(t, err)
+	assert.Contains(t, out, "manage key is not yet supported")
+}
+
 func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 	resetTestDatabase()
 

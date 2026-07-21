@@ -36,3 +36,55 @@ CreateExtensionOrder:
   down: |
     DROP TABLE "public"."hoge";
     DROP EXTENSION "pgcrypto";
+
+ManageExtensionsUnmatchedIsUntouched:
+  legacy_ignore_quotes: false
+  manage:
+    extension:
+      - target: pgcrypto
+  current: |
+    CREATE EXTENSION pgcrypto;
+    CREATE EXTENSION btree_gist;
+  desired: |
+    CREATE EXTENSION pgcrypto;
+  up: ""
+  down: ""
+
+ManageExtensionsMatchedRuleAllowsDrop:
+  legacy_ignore_quotes: false
+  manage:
+    extension:
+      - target: pgcrypto
+        drop: true
+  current: |
+    CREATE EXTENSION pgcrypto;
+  desired: ""
+  up: |
+    DROP EXTENSION pgcrypto;
+  down: |
+    CREATE EXTENSION pgcrypto;
+
+ManageExtensionsMatchedRuleForbidsDrop:
+  legacy_ignore_quotes: false
+  manage:
+    extension:
+      - target: pgcrypto
+  current: |
+    CREATE EXTENSION pgcrypto;
+  desired: ""
+  up: |
+    -- Skipped: DROP EXTENSION pgcrypto;
+  down: ""
+
+ManageExtensionsForbidsDropWithGlobalEnableDropFalse:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  manage:
+    extension:
+      - target: pgcrypto
+  current: |
+    CREATE EXTENSION pgcrypto;
+  desired: ""
+  up: |
+    -- Skipped: DROP EXTENSION pgcrypto;
+  down: ""

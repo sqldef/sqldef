@@ -5,11 +5,14 @@ import (
 	"bytes"
 	"database/sql"
 	"log"
+	"log/slog"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/goccy/go-yaml"
 	"github.com/sqldef/sqldef/v3/parser"
+	"github.com/sqldef/sqldef/v3/util"
 )
 
 type Config struct {
@@ -61,10 +64,17 @@ type GeneratorConfig struct {
 	DisableDdlTransaction   bool     // Do not use a transaction for DDL statements
 	LegacyIgnoreQuotes      bool     // true = ignore quotes (legacy), false = preserve quotes
 
+	ManageExtensions *[]ManageObjectRule
+
 	// MySQL-specific: value of lower_case_table_names server variable.
 	// 0 = case-sensitive (Linux default), 1 or 2 = case-insensitive (Windows/macOS).
 	// Default is 0 (case-sensitive) for offline mode compatibility.
 	MysqlLowerCaseTableNames int
+}
+
+type ManageObjectRule struct {
+	Target string `yaml:"target"`
+	Drop   bool   `yaml:"drop"`
 }
 
 type TransactionQueries struct {
@@ -339,6 +349,9 @@ func MergeGeneratorConfig(base, override GeneratorConfig) GeneratorConfig {
 	if override.ManagedRoles != nil {
 		result.ManagedRoles = override.ManagedRoles
 	}
+	if override.ManageExtensions != nil {
+		result.ManageExtensions = override.ManageExtensions
+	}
 	if override.EnableDrop {
 		result.EnableDrop = override.EnableDrop
 	}
@@ -356,18 +369,19 @@ func MergeGeneratorConfig(base, override GeneratorConfig) GeneratorConfig {
 
 func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) GeneratorConfig {
 	var config struct {
-		TargetTables            string   `yaml:"target_tables"`
-		SkipTables              string   `yaml:"skip_tables"`
-		SkipViews               string   `yaml:"skip_views"`
-		TargetSchema            string   `yaml:"target_schema"`
-		Algorithm               string   `yaml:"algorithm"`
-		Lock                    string   `yaml:"lock"`
-		DumpConcurrency         int      `yaml:"dump_concurrency"`
-		ManagedRoles            []string `yaml:"managed_roles"`
-		EnableDrop              bool     `yaml:"enable_drop"`
-		CreateIndexConcurrently bool     `yaml:"create_index_concurrently"`
-		DisableDdlTransaction   bool     `yaml:"disable_ddl_transaction"`
-		LegacyIgnoreQuotes      *bool    `yaml:"legacy_ignore_quotes"`
+		TargetTables            string                     `yaml:"target_tables"`
+		SkipTables              string                     `yaml:"skip_tables"`
+		SkipViews               string                     `yaml:"skip_views"`
+		TargetSchema            string                     `yaml:"target_schema"`
+		Algorithm               string                     `yaml:"algorithm"`
+		Lock                    string                     `yaml:"lock"`
+		DumpConcurrency         int                        `yaml:"dump_concurrency"`
+		ManagedRoles            []string                   `yaml:"managed_roles"`
+		EnableDrop              bool                       `yaml:"enable_drop"`
+		CreateIndexConcurrently bool                       `yaml:"create_index_concurrently"`
+		DisableDdlTransaction   bool                       `yaml:"disable_ddl_transaction"`
+		LegacyIgnoreQuotes      *bool                      `yaml:"legacy_ignore_quotes"`
+		Manage                  map[string]yaml.RawMessage `yaml:"manage"`
 	}
 
 	dec := yaml.NewDecoder(bytes.NewReader(buf), yaml.DisallowUnknownField())
@@ -375,6 +389,8 @@ func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) Generat
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	manageExtensions := parseManageExtensions(config.Manage)
 
 	var targetTables []string
 	if config.TargetTables != "" {
@@ -425,5 +441,58 @@ func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) Generat
 		CreateIndexConcurrently: config.CreateIndexConcurrently,
 		DisableDdlTransaction:   config.DisableDdlTransaction,
 		LegacyIgnoreQuotes:      legacyIgnoreQuotes,
+		ManageExtensions:        manageExtensions,
 	}
+}
+
+// manageKnownKeys are the object-type keys defined by the manage: RFC (object-management.md).
+// Only "extension" is implemented; the rest are recognized-but-not-yet-implemented and get a
+// warning. Any other key is a typo, not a forward-compatibility case, and is a hard error.
+var manageKnownKeys = map[string]bool{
+	"schema": true, "table": true, "view": true, "materialized_view": true,
+	"index": true, "function": true, "procedure": true, "trigger": true,
+	"sequence": true, "type": true, "domain": true, "policy": true,
+	"extension": true, "privilege": true,
+}
+
+// CompileManageTarget compiles a manage: rule's target pattern into the anchored regexp
+// used to match object names, wrapped in a non-capturing group so alternation (a|b) anchors
+// correctly on both ends.
+func CompileManageTarget(target string) (*regexp.Regexp, error) {
+	return regexp.Compile("^(?:" + target + ")$")
+}
+
+func parseManageExtensions(manage map[string]yaml.RawMessage) *[]ManageObjectRule {
+	if manage == nil {
+		return nil
+	}
+
+	var result *[]ManageObjectRule
+	for key, raw := range util.CanonicalMapIter(manage) {
+		if key != "extension" {
+			if !manageKnownKeys[key] {
+				log.Fatalf("manage.%s is not a recognized manage: key (typo?)", key)
+			}
+			slog.Warn("manage key is not yet supported and will be ignored; only manage.extension is currently implemented", "key", key)
+			continue
+		}
+
+		rules := []ManageObjectRule{}
+		if len(bytes.TrimSpace(raw)) > 0 {
+			dec := yaml.NewDecoder(bytes.NewReader(raw), yaml.DisallowUnknownField())
+			if err := dec.Decode(&rules); err != nil {
+				log.Fatal(err)
+			}
+		}
+		for _, rule := range rules {
+			if rule.Target == "" {
+				continue
+			}
+			if _, err := CompileManageTarget(rule.Target); err != nil {
+				log.Fatalf("manage.extension: invalid target regexp %q: %s", rule.Target, err)
+			}
+		}
+		result = &rules
+	}
+	return result
 }

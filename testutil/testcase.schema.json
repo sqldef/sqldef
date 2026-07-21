@@ -63,6 +63,32 @@
           "description": "Whether to enable DROP/REVOKE operations. Defaults to true.",
           "default": true
         },
+        "manage": {
+          "type": "object",
+          "description": "manage: config block (see object-management.md). Only manage.extension is implemented.",
+          "properties": {
+            "extension": {
+              "type": "array",
+              "description": "Rules for which extensions to manage. Only extensions matching a rule's target are managed; unmatched extensions are left untouched. An empty array manages all extensions with drop disabled by default.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "description": "Regexp pattern matched against the extension name, anchored with ^...$. Empty matches all."
+                  },
+                  "drop": {
+                    "type": "boolean",
+                    "description": "Whether DROP EXTENSION is allowed for extensions matched by this rule.",
+                    "default": false
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        },
         "legacy_ignore_quotes": {
           "type": "boolean",
           "description": "Quote handling mode. true (default) = always quote identifiers, false = quote only when source is quoted"
