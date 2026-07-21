@@ -751,6 +751,22 @@ func TestPsqldefExportManageExtensions(t *testing.T) {
 	), actual)
 }
 
+func TestPsqldefManageUnknownKeyFails(t *testing.T) {
+	resetTestDatabase()
+
+	out, err := tu.Execute("./psqldef", psqldefArgs(testDatabaseName, "--export", "--config-inline", "manage: {extentions: [{target: pg_trgm}]}")...)
+	assert.Error(t, err)
+	assert.Contains(t, out, "manage.extentions is not a recognized manage: key")
+}
+
+func TestPsqldefManageKnownUnimplementedKeyWarnsOnly(t *testing.T) {
+	resetTestDatabase()
+
+	out, err := tu.Execute("./psqldef", psqldefArgs(testDatabaseName, "--export", "--config-inline", "manage: {table: [{target: foo}]}")...)
+	assert.NoError(t, err)
+	assert.Contains(t, out, "manage key is not yet supported")
+}
+
 func TestPsqldefExportCompositePrimaryKey(t *testing.T) {
 	resetTestDatabase()
 

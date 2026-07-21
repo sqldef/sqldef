@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"database/sql"
 	"log"
+	"log/slog"
 	"os"
 	"regexp"
 	"strings"
@@ -444,6 +445,23 @@ func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) Generat
 	}
 }
 
+// manageKnownKeys are the object-type keys defined by the manage: RFC (object-management.md).
+// Only "extension" is implemented; the rest are recognized-but-not-yet-implemented and get a
+// warning. Any other key is a typo, not a forward-compatibility case, and is a hard error.
+var manageKnownKeys = map[string]bool{
+	"schema": true, "table": true, "view": true, "materialized_view": true,
+	"index": true, "function": true, "procedure": true, "trigger": true,
+	"sequence": true, "type": true, "domain": true, "policy": true,
+	"extension": true, "privilege": true,
+}
+
+// CompileManageTarget compiles a manage: rule's target pattern into the anchored regexp
+// used to match object names, wrapped in a non-capturing group so alternation (a|b) anchors
+// correctly on both ends.
+func CompileManageTarget(target string) (*regexp.Regexp, error) {
+	return regexp.Compile("^(?:" + target + ")$")
+}
+
 func parseManageExtensions(manage map[string]yaml.RawMessage) *[]ManageObjectRule {
 	if manage == nil {
 		return nil
@@ -452,7 +470,10 @@ func parseManageExtensions(manage map[string]yaml.RawMessage) *[]ManageObjectRul
 	var result *[]ManageObjectRule
 	for key, raw := range util.CanonicalMapIter(manage) {
 		if key != "extension" {
-			log.Printf("WARN manage.%s is not yet supported and will be ignored; only manage.extension is currently implemented", key)
+			if !manageKnownKeys[key] {
+				log.Fatalf("manage.%s is not a recognized manage: key (typo?)", key)
+			}
+			slog.Warn("manage key is not yet supported and will be ignored; only manage.extension is currently implemented", "key", key)
 			continue
 		}
 
@@ -467,7 +488,7 @@ func parseManageExtensions(manage map[string]yaml.RawMessage) *[]ManageObjectRul
 			if rule.Target == "" {
 				continue
 			}
-			if _, err := regexp.Compile("^(?:" + rule.Target + ")$"); err != nil {
+			if _, err := CompileManageTarget(rule.Target); err != nil {
 				log.Fatalf("manage.extension: invalid target regexp %q: %s", rule.Target, err)
 			}
 		}

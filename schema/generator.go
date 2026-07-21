@@ -6263,7 +6263,9 @@ func FilterExtensions(ddls []DDL, config database.GeneratorConfig) []DDL {
 	filtered := []DDL{}
 	for _, ddl := range ddls {
 		if stmt, ok := ddl.(*Extension); ok {
-			if _, matched := matchManageObjectRule(*config.ManageExtensions, stmt.extension.Name.Name); !matched {
+			name := stmt.extension.Name.Name
+			if _, matched := matchManageObjectRule(*config.ManageExtensions, name); !matched {
+				slog.Debug("extension matches no manage.extension rule; excluding it from management", "extension", name)
 				continue
 			}
 		}
@@ -6277,7 +6279,11 @@ func matchManageObjectRule(rules []database.ManageObjectRule, name string) (data
 		return database.ManageObjectRule{Drop: false}, true
 	}
 	for _, rule := range rules {
-		if rule.Target == "" || regexp.MustCompile("^(?:"+rule.Target+")$").MatchString(name) {
+		if rule.Target == "" {
+			return rule, true
+		}
+		re, err := database.CompileManageTarget(rule.Target)
+		if err == nil && re.MatchString(name) {
 			return rule, true
 		}
 	}

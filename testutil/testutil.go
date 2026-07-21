@@ -180,6 +180,17 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		legacyIgnoreQuotes = *test.LegacyIgnoreQuotes
 	}
 
+	if test.Manage.Extension != nil {
+		for _, rule := range *test.Manage.Extension {
+			if rule.Target == "" {
+				continue
+			}
+			if _, err := database.CompileManageTarget(rule.Target); err != nil {
+				t.Fatalf("manage.extension: invalid target regexp %q: %s", rule.Target, err)
+			}
+		}
+	}
+
 	config := database.GeneratorConfig{
 		ManagedRoles:            test.ManagedRoles,
 		ManageExtensions:        test.Manage.Extension,
