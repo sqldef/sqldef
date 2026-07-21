@@ -1,3 +1,9 @@
+## [v3.11.16](https://github.com/sqldef/sqldef/compare/v3.11.15...v3.11.16) - 2026-07-21
+
+- [RFC] new feature for object management (`manage:` section in config) by @gfx in https://github.com/sqldef/sqldef/pull/1072
+- docs(agents): treat pgquery fallback as a bug, not a supported path by @gfx in https://github.com/sqldef/sqldef/pull/1278
+- psqldef: support manage.extension as a forward-compatible slice of the manage: RFC by @gfx in https://github.com/sqldef/sqldef/pull/1284
+
 ## [v3.11.15](https://github.com/sqldef/sqldef/compare/v3.11.14...v3.11.15) - 2026-07-17
 
 - psqldef: scope generic-parser syntax errors to the offending statement by @gfx in https://github.com/sqldef/sqldef/pull/1280
