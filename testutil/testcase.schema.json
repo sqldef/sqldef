@@ -65,7 +65,7 @@
         },
         "manage": {
           "type": "object",
-          "description": "manage: config block (see object-management.md). Only manage.extension is implemented.",
+          "description": "manage: config block (see object-management.md). Only manage.extension and manage.privilege are implemented.",
           "properties": {
             "extension": {
               "type": "array",
@@ -80,6 +80,25 @@
                   "drop": {
                     "type": "boolean",
                     "description": "Whether DROP EXTENSION is allowed for extensions matched by this rule.",
+                    "default": false
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "privilege": {
+              "type": "array",
+              "description": "Rules for which grantees' privileges to manage. Only grantees matching a rule's target are managed; unmatched grantees are left untouched. An empty array manages all grantees with REVOKE disabled by default.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "description": "Regexp pattern matched against the grantee (role) name, anchored with ^...$. Empty matches all."
+                  },
+                  "drop": {
+                    "type": "boolean",
+                    "description": "Whether REVOKE is allowed for grantees matched by this rule (independent of enable_drop).",
                     "default": false
                   }
                 },

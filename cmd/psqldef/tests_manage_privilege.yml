@@ -1,0 +1,196 @@
+# yaml-language-server: $schema=../../testutil/testcase.schema.json
+# Tests for manage.privilege (see object-management.md): which grantees'
+# privileges are managed, and whether REVOKE is allowed per rule.
+
+ManagePrivilegeBasicGrant:
+  manage:
+    privilege:
+      - target: readonly_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  up: |
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
+  down: |
+    REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
+
+ManagePrivilegeUnmatchedGranteeUntouched:
+  # app_user matches no rule: its desired grant is ignored and its existing
+  # drifted grant is left alone.
+  manage:
+    privilege:
+      - target: readonly_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT INSERT ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+    GRANT UPDATE ON TABLE users TO app_user;
+  up: |
+    GRANT SELECT ON TABLE "public"."users" TO "readonly_user";
+  down: |
+    REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
+
+ManagePrivilegeRevokeAllowedDespiteEnableDropFalse:
+  # The keystone: rule-level drop permits REVOKE even though the global
+  # enable_drop is false (which still blocks object drops).
+  enable_drop: false
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+  up: |
+    REVOKE INSERT ON TABLE "public"."users" FROM "app_user";
+  down: |
+    GRANT INSERT ON TABLE "public"."users" TO "app_user";
+
+ManagePrivilegeRevokeForbiddenByRule:
+  # drop defaults to false: the drifted grant stays, the revoke is skipped
+  # even though enable_drop is true.
+  manage:
+    privilege:
+      - target: readonly_user
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT, INSERT ON TABLE users TO readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  up: |
+    -- Skipped: REVOKE INSERT ON TABLE "public"."users" FROM "readonly_user";
+  down: ""
+
+ManagePrivilegeOrphanRevokeAllowed:
+  # Grantee absent from desired entirely: orphan path, revoke allowed by rule.
+  enable_drop: false
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  up: |
+    REVOKE SELECT ON TABLE "public"."users" FROM "app_user";
+  down: |
+    GRANT SELECT ON TABLE "public"."users" TO "app_user";
+
+ManagePrivilegeRegexpTargetFirstMatchWins:
+  # user\d matches user1..user4 with drop, catch-all forbids drop for others.
+  enable_drop: false
+  manage:
+    privilege:
+      - target: 'user\d'
+        drop: true
+      - target: '.*'
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO user1;
+    GRANT SELECT ON TABLE users TO readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  up: |
+    -- Skipped: REVOKE SELECT ON TABLE "public"."users" FROM "readonly_user";
+    REVOKE SELECT ON TABLE "public"."users" FROM "user1";
+  down: |
+    GRANT SELECT ON TABLE "public"."users" TO "user1";
+
+ManagePrivilegeSequenceAndColumn:
+  # Sequence and column grants work under manage.privilege, including revokes.
+  enable_drop: false
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL,
+      f_secret VARCHAR(100)
+    );
+    GRANT USAGE, SELECT ON SEQUENCE counters_n_seq TO app_user;
+    GRANT SELECT (id, f_secret) ON TABLE counters TO app_user;
+  desired: |
+    CREATE TABLE counters (
+      id BIGINT PRIMARY KEY,
+      n SERIAL,
+      f_secret VARCHAR(100)
+    );
+    GRANT USAGE ON SEQUENCE counters_n_seq TO app_user;
+    GRANT SELECT (id) ON TABLE counters TO app_user;
+  up: |
+    REVOKE SELECT ON SEQUENCE "public"."counters_n_seq" FROM "app_user";
+    REVOKE SELECT (f_secret, id) ON TABLE "public"."counters" FROM "app_user";
+    GRANT SELECT (id) ON TABLE "public"."counters" TO "app_user";
+  down: |
+    GRANT SELECT ON SEQUENCE "public"."counters_n_seq" TO "app_user";
+    REVOKE SELECT (id) ON TABLE "public"."counters" FROM "app_user";
+    GRANT SELECT (f_secret, id) ON TABLE "public"."counters" TO "app_user";
+
+ManagePrivilegeIdempotent:
+  manage:
+    privilege:
+      - target: readonly_user
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    GRANT SELECT ON TABLE users TO readonly_user;
+  up: ""
+  down: ""

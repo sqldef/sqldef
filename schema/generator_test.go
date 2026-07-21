@@ -551,17 +551,23 @@ func TestCommentOutDropStatements(t *testing.T) {
 	// Single-line drops keep the existing format.
 	assert.Equal(t,
 		[]string{`-- Skipped: DROP TABLE "public"."users"`},
-		commentOutDropStatements([]string{`DROP TABLE "public"."users"`}),
+		commentOutDropStatements([]string{`DROP TABLE "public"."users"`}, false),
 	)
 	// Non-drop statements pass through unchanged.
 	assert.Equal(t,
 		[]string{"CREATE TABLE users (id bigint)"},
-		commentOutDropStatements([]string{"CREATE TABLE users (id bigint)"}),
+		commentOutDropStatements([]string{"CREATE TABLE users (id bigint)"}, false),
+	)
+	// preserveRevokes keeps REVOKE statements executable (used when a
+	// manage.privilege rule allows dropping privileges for a role).
+	assert.Equal(t,
+		[]string{`REVOKE SELECT ON TABLE users FROM app_user`},
+		commentOutDropStatements([]string{`REVOKE SELECT ON TABLE users FROM app_user`}, true),
 	)
 	// Every line of a multi-line statement is commented out so no executable
 	// SQL can leak after the first line.
 	assert.Equal(t,
 		[]string{"-- Skipped: DROP TABLE users;\n-- DROP TABLE orders;"},
-		commentOutDropStatements([]string{"DROP TABLE users;\nDROP TABLE orders;"}),
+		commentOutDropStatements([]string{"DROP TABLE users;\nDROP TABLE orders;"}, false),
 	)
 }

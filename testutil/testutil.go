@@ -45,6 +45,7 @@ type TestCase struct {
 	} `yaml:"config"`
 	Manage struct {
 		Extension *[]database.ManageObjectRule `yaml:"extension"`
+		Privilege *[]database.ManageObjectRule `yaml:"privilege"`
 	} `yaml:"manage"`
 }
 
@@ -181,13 +182,19 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 		legacyIgnoreQuotes = *test.LegacyIgnoreQuotes
 	}
 
-	if test.Manage.Extension != nil {
-		for _, rule := range *test.Manage.Extension {
+	for name, rules := range map[string]*[]database.ManageObjectRule{
+		"extension": test.Manage.Extension,
+		"privilege": test.Manage.Privilege,
+	} {
+		if rules == nil {
+			continue
+		}
+		for _, rule := range *rules {
 			if rule.Target == "" {
 				continue
 			}
 			if _, err := database.CompileManageTarget(rule.Target); err != nil {
-				t.Fatalf("manage.extension: invalid target regexp %q: %s", rule.Target, err)
+				t.Fatalf("manage.%s: invalid target regexp %q: %s", name, rule.Target, err)
 			}
 		}
 	}
@@ -195,6 +202,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	config := database.GeneratorConfig{
 		ManagedRoles:            test.ManagedRoles,
 		ManageExtensions:        test.Manage.Extension,
+		ManagePrivileges:        test.Manage.Privilege,
 		EnableDrop:              *test.EnableDrop,
 		CreateIndexConcurrently: test.Config.CreateIndexConcurrently,
 		DisableDdlTransaction:   test.Config.DisableDdlTransaction,

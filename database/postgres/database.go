@@ -183,8 +183,30 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 // are emitted as standalone GRANTs rather than attached to an object's DDL.
 // Extension-owned sequences are excluded, mirroring how psqldef skips
 // extension-owned objects elsewhere.
+
+// managedGranteeArgs returns the SQL role-filter array for privilege export.
+// In legacy managed_roles mode it returns the role list (SQL-side filtering);
+// with manage.privilege it returns NULL so every grantee is fetched and
+// filtered in Go via the regexp rules (isExportedGrantee).
+func (d *PostgresDatabase) managedGranteeArgs() interface{} {
+	if d.generatorConfig.ManagePrivileges != nil {
+		return pq.Array([]string(nil))
+	}
+	return pq.Array(d.generatorConfig.ManagedRoles)
+}
+
+// isExportedGrantee reports whether a fetched grantee's privileges belong in
+// the export under manage.privilege; in legacy mode SQL already filtered.
+func (d *PostgresDatabase) isExportedGrantee(grantee string) bool {
+	if d.generatorConfig.ManagePrivileges == nil {
+		return true
+	}
+	_, matched := database.MatchManageObjectRule(*d.generatorConfig.ManagePrivileges, grantee)
+	return matched
+}
+
 func (d *PostgresDatabase) sequencePrivileges() ([]string, error) {
-	if len(d.generatorConfig.ManagedRoles) == 0 {
+	if d.generatorConfig.ManagePrivileges == nil && len(d.generatorConfig.ManagedRoles) == 0 {
 		return nil, nil
 	}
 
@@ -200,7 +222,7 @@ func (d *PostgresDatabase) sequencePrivileges() ([]string, error) {
 		WHERE c.relkind = 'S'
 		AND n.nspname NOT IN ('pg_catalog', 'information_schema')
 		AND acl.grantee <> c.relowner
-		AND (CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END) = ANY($1::text[])
+		AND ($1::text[] IS NULL OR (CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END) = ANY($1::text[]))
 		AND NOT EXISTS (
 			SELECT 1 FROM pg_depend dep
 			WHERE dep.classid = 'pg_class'::regclass AND dep.objid = c.oid AND dep.deptype = 'e'
@@ -209,7 +231,7 @@ func (d *PostgresDatabase) sequencePrivileges() ([]string, error) {
 		ORDER BY seq_name, grantee, acl.is_grantable
 	`
 
-	rows, err := d.db.Query(query, pq.Array(d.generatorConfig.ManagedRoles))
+	rows, err := d.db.Query(query, d.managedGranteeArgs())
 	if err != nil {
 		return nil, fmt.Errorf("failed to query sequence privileges: %w", err)
 	}
@@ -221,6 +243,9 @@ func (d *PostgresDatabase) sequencePrivileges() ([]string, error) {
 		var isGrantable bool
 		if err := rows.Scan(&seqName, &grantee, &isGrantable, &privileges); err != nil {
 			return nil, fmt.Errorf("failed to scan sequence privilege row: %w", err)
+		}
+		if !d.isExportedGrantee(grantee) {
+			continue
 		}
 
 		escapedGrantee := grantee
@@ -1960,7 +1985,7 @@ func (d *PostgresDatabase) getCommentsForTables(tableNames []string) (map[string
 
 func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[string][]string, error) {
 	// If no roles are specified to include, don't query privileges at all
-	if len(d.generatorConfig.ManagedRoles) == 0 {
+	if d.generatorConfig.ManagePrivileges == nil && len(d.generatorConfig.ManagedRoles) == 0 {
 		return map[string][]string{}, nil
 	}
 
@@ -1972,7 +1997,7 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 			string_agg(privilege_type, ', ' ORDER BY privilege_type) as privileges
 		FROM information_schema.table_privileges
 		WHERE table_schema || '.' || table_name = ANY($1::text[])
-		AND grantee = ANY($2::text[])
+		AND ($2::text[] IS NULL OR grantee = ANY($2::text[]))
 		AND grantee != (
 			SELECT tableowner FROM pg_tables
 			WHERE schemaname = table_schema AND tablename = table_name
@@ -1981,7 +2006,7 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 		ORDER BY table_schema, table_name, grantee, is_grantable
 	`
 
-	rows, err := d.db.Query(query, pq.Array(tableNames), pq.Array(d.generatorConfig.ManagedRoles))
+	rows, err := d.db.Query(query, pq.Array(tableNames), d.managedGranteeArgs())
 	if err != nil {
 		return nil, fmt.Errorf("failed to query privileges: %w", err)
 	}
@@ -1992,6 +2017,9 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 		var tableName, grantee, isGrantable, privileges string
 		if err := rows.Scan(&tableName, &grantee, &isGrantable, &privileges); err != nil {
 			return nil, fmt.Errorf("failed to scan privilege row: %w", err)
+		}
+		if !d.isExportedGrantee(grantee) {
+			continue
 		}
 
 		escapedGrantee := grantee
@@ -2026,12 +2054,12 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 		LATERAL aclexplode(at.attacl) AS acl
 		WHERE n.nspname || '.' || c.relname = ANY($1::text[])
 		AND acl.grantee <> c.relowner
-		AND (CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END) = ANY($2::text[])
+		AND ($2::text[] IS NULL OR (CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END) = ANY($2::text[]))
 		GROUP BY n.nspname, c.relname, acl.grantee, acl.is_grantable, acl.privilege_type
 		ORDER BY qualified_table_name, grantee, acl.privilege_type, acl.is_grantable
 	`
 
-	colRows, err := d.db.Query(columnQuery, pq.Array(tableNames), pq.Array(d.generatorConfig.ManagedRoles))
+	colRows, err := d.db.Query(columnQuery, pq.Array(tableNames), d.managedGranteeArgs())
 	if err != nil {
 		return nil, fmt.Errorf("failed to query column privileges: %w", err)
 	}
@@ -2042,6 +2070,9 @@ func (d *PostgresDatabase) getPrivilegeDefsForTables(tableNames []string) (map[s
 		var isGrantable bool
 		if err := colRows.Scan(&tableName, &grantee, &isGrantable, &privilegeType, &columns); err != nil {
 			return nil, fmt.Errorf("failed to scan column privilege row: %w", err)
+		}
+		if !d.isExportedGrantee(grantee) {
+			continue
 		}
 
 		escapedGrantee := grantee
