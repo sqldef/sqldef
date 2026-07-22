@@ -147,6 +147,90 @@ IndexWithUsing:
     );
     CREATE INDEX idx_trgm_name ON products USING gin (name gin_trgm_ops);
 
+IndexWithOperatorClassOnExpression:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+    CREATE TABLE products (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      notes JSONB
+    );
+    CREATE INDEX idx_trgm_notes_text ON products USING gin (((notes ->> 'text'::text)) gin_trgm_ops);
+    CREATE INDEX idx_trgm_lower_name ON products USING btree (lower(name) text_pattern_ops);
+
+IndexWithOperatorClassOnExpressionLegacyQuotes:
+  desired: |
+    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+    CREATE TABLE products (notes JSONB);
+    CREATE INDEX idx_trgm_notes ON products USING gin (((notes ->> 'text'::text)) gin_trgm_ops);
+
+UniqueIndexWithOperatorClassOnExpression:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (name TEXT);
+    CREATE UNIQUE INDEX idx_u_lower_name ON products USING btree (lower(name) text_pattern_ops);
+
+IndexWithOperatorClassOnBothColumnAndExpression:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (name TEXT, code TEXT);
+    CREATE INDEX idx_mixed ON products USING btree (code text_pattern_ops, (lower(name)) text_pattern_ops);
+
+IndexOnIdentifierNamedTextPatternOps:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE text_pattern_ops (text_pattern_ops TEXT);
+    CREATE INDEX idx_tpo ON text_pattern_ops USING btree (text_pattern_ops text_pattern_ops);
+
+AddOperatorClassToExistingIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (name TEXT);
+    CREATE INDEX idx_name ON products USING btree (name);
+  desired: |
+    CREATE TABLE products (name TEXT);
+    CREATE INDEX idx_name ON products USING btree (name text_pattern_ops);
+  up: |
+    DROP INDEX public.idx_name;
+    CREATE INDEX idx_name ON public.products USING btree (name text_pattern_ops);
+  down: |
+    DROP INDEX public.idx_name;
+    CREATE INDEX idx_name ON public.products USING btree (name);
+
+IndexWithExplicitDefaultOperatorClass:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (name TEXT);
+    CREATE INDEX idx_name ON products USING btree (name text_ops);
+
+IndexWithExplicitDefaultOperatorClassWithoutUsing:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (name TEXT);
+    CREATE INDEX idx_name ON products (name text_ops);
+
+IndexWithExplicitDefaultGinOperatorClass:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (tags TEXT[]);
+    CREATE INDEX idx_tags ON products USING gin (tags array_ops);
+
+AddNonDefaultOperatorClassOfSameAccessMethod:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (tags JSONB);
+    CREATE INDEX idx_tags ON products USING gin (tags jsonb_ops);
+  desired: |
+    CREATE TABLE products (tags JSONB);
+    CREATE INDEX idx_tags ON products USING gin (tags jsonb_path_ops);
+  up: |
+    DROP INDEX public.idx_tags;
+    CREATE INDEX idx_tags ON public.products USING gin (tags jsonb_path_ops);
+  down: |
+    DROP INDEX public.idx_tags;
+    CREATE INDEX idx_tags ON public.products USING gin (tags jsonb_ops);
+
 RenameIndex:
   current: |
     CREATE TABLE users (
