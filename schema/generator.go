@@ -3121,42 +3121,47 @@ func (g *Generator) indexKeyPartNeedsParens(expr parser.Expr) bool {
 	return indexExprNeedsParens(expr)
 }
 
+// generateIndexColumnDefinition generates one key part of an index column list, with proper quoting.
+// The clauses have to keep this order: PostgreSQL accepts an operator class only before ASC/DESC.
+func (g *Generator) generateIndexColumnDefinition(indexColumn IndexColumn) string {
+	var column string
+	// For simple column references (ColName), use escapeSQLIdent to preserve quoting
+	if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
+		column = g.escapeSQLIdent(colName.Name)
+	} else {
+		// For expressions (functional indexes), format with quote awareness
+		if !g.config.LegacyIgnoreQuotes {
+			column = g.formatExprQuoteAware(indexColumn.columnExpr)
+		} else {
+			// Legacy mode: use parser.String for backward compatibility
+			column = parser.String(indexColumn.columnExpr)
+		}
+		if g.indexKeyPartNeedsParens(indexColumn.columnExpr) {
+			column = "(" + column + ")"
+		}
+	}
+	if indexColumn.length != nil {
+		column += fmt.Sprintf("(%d)", *indexColumn.length)
+	}
+	if indexColumn.operatorClass != "" {
+		column += " " + indexColumn.operatorClass
+	}
+	if indexColumn.direction == DescScr {
+		column += fmt.Sprintf(" %s", indexColumn.direction)
+	}
+	if indexColumn.nullsOrdering != "" {
+		column += fmt.Sprintf(" NULLS %s", strings.ToUpper(indexColumn.nullsOrdering))
+	}
+	if indexColumn.withoutOverlaps {
+		column += " WITHOUT OVERLAPS"
+	}
+	return column
+}
+
 // generateCreateIndexStatement generates a CREATE INDEX statement from an Index struct.
 // This is used to regenerate CREATE INDEX statements with proper schema-qualified table names.
 func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Index) string {
-	// Build column list with proper quoting
-	columns := []string{}
-	for _, indexColumn := range index.columns {
-		var column string
-		// For simple column references (ColName), use escapeSQLIdent to preserve quoting
-		if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
-			column = g.escapeSQLIdent(colName.Name)
-		} else {
-			// For expressions (functional indexes), format with quote awareness
-			if !g.config.LegacyIgnoreQuotes {
-				column = g.formatExprQuoteAware(indexColumn.columnExpr)
-			} else {
-				// Legacy mode: use parser.String for backward compatibility
-				column = parser.String(indexColumn.columnExpr)
-			}
-			if g.indexKeyPartNeedsParens(indexColumn.columnExpr) {
-				column = "(" + column + ")"
-			}
-		}
-		if indexColumn.length != nil {
-			column += fmt.Sprintf("(%d)", *indexColumn.length)
-		}
-		if indexColumn.direction == DescScr {
-			column += fmt.Sprintf(" %s", indexColumn.direction)
-		}
-		if indexColumn.operatorClass != "" {
-			column += " " + indexColumn.operatorClass
-		}
-		if indexColumn.withoutOverlaps {
-			column += " WITHOUT OVERLAPS"
-		}
-		columns = append(columns, column)
-	}
+	columns := util.TransformSlice(index.columns, g.generateIndexColumnDefinition)
 
 	// Start building the statement
 	// PostgreSQL syntax: CREATE [UNIQUE] INDEX [CONCURRENTLY] name ON table
@@ -3226,38 +3231,7 @@ func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 		clusteredOption = " NONCLUSTERED"
 	}
 
-	columns := []string{}
-	for _, indexColumn := range index.columns {
-		var column string
-		// For simple column references (ColName), use escapeSQLIdent to preserve quoting
-		if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
-			column = g.escapeSQLIdent(colName.Name)
-		} else {
-			// For expressions (functional indexes), format with quote awareness
-			if !g.config.LegacyIgnoreQuotes {
-				column = g.formatExprQuoteAware(indexColumn.columnExpr)
-			} else {
-				// Legacy mode: use parser.String for backward compatibility
-				column = parser.String(indexColumn.columnExpr)
-			}
-			if g.indexKeyPartNeedsParens(indexColumn.columnExpr) {
-				column = "(" + column + ")"
-			}
-		}
-		if indexColumn.length != nil {
-			column += fmt.Sprintf("(%d)", *indexColumn.length)
-		}
-		if indexColumn.direction == DescScr {
-			column += fmt.Sprintf(" %s", indexColumn.direction)
-		}
-		if indexColumn.operatorClass != "" {
-			column += " " + indexColumn.operatorClass
-		}
-		if indexColumn.withoutOverlaps {
-			column += " WITHOUT OVERLAPS"
-		}
-		columns = append(columns, column)
-	}
+	columns := util.TransformSlice(index.columns, g.generateIndexColumnDefinition)
 
 	optionDefinition := g.generateIndexOptionDefinition(index.options)
 
@@ -5614,6 +5588,28 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 	return true
 }
 
+// areSameOperatorClasses reports whether two index columns use the same operator class.
+// Operator classes are unquoted identifiers, so they're compared case-insensitively. The database
+// omits the default operator class from the DDL it exports, so a default written explicitly in the
+// desired DDL has to compare equal to an omitted one.
+func (g *Generator) areSameOperatorClasses(indexA Index, indexB Index, columnIndex int) bool {
+	operatorClassA := indexA.columns[columnIndex].operatorClass
+	operatorClassB := indexB.columns[columnIndex].operatorClass
+	if strings.EqualFold(operatorClassA, operatorClassB) {
+		return true
+	}
+	if operatorClassA != "" && operatorClassB != "" {
+		return false
+	}
+	// Exactly one side specifies an operator class here. It matches the omitted one only if the
+	// access method defaults to it.
+	specified, index := operatorClassA, indexA
+	if specified == "" {
+		specified, index = operatorClassB, indexB
+	}
+	return g.config.PostgresDefaultOperatorClasses[index.AccessMethod()+"."+strings.ToLower(specified)]
+}
+
 func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 	if indexA.unique != indexB.unique {
 		return false
@@ -5643,6 +5639,12 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 			return false
 		}
 		if indexA.columns[i].withoutOverlaps != indexB.columns[i].withoutOverlaps {
+			return false
+		}
+		if !g.areSameOperatorClasses(indexA, indexB, i) {
+			return false
+		}
+		if indexAColumn.NullsOrdering() != indexB.columns[i].NullsOrdering() {
 			return false
 		}
 	}

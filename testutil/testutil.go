@@ -400,6 +400,7 @@ func (l *stringLogger) String() string {
 // This mimics the behavior of running psqldef/mysqldef/etc from the command line
 func ApplyWithOutput(db database.Database, mode schema.GeneratorMode, sqlParser database.Parser, desiredDDLs string, config database.GeneratorConfig) (string, error) {
 	db.SetGeneratorConfig(config)
+	config = db.GetGeneratorConfig()
 
 	currentDDLs, err := db.ExportDDLs()
 	if err != nil {
