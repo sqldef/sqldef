@@ -301,9 +301,6 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> NOW GETDATE
 %token <str> BPCHAR
 
-// Operator Class Tokens
-%right <str> TEXT_PATTERN_OPS
-
 // Type Modifiers
 %token <str> NULLX AUTO_INCREMENT AUTO_RANDOM APPROXNUM SIGNED UNSIGNED ZEROFILL ZONE AUTOINCREMENT
 
@@ -5131,9 +5128,17 @@ index_column:
   {
     $$ = IndexColumn{Expression: $2, Direction: $4, NullsOrdering: $5}
   }
+| '(' expression ')' operator_class asc_desc_opt nulls_ordering_opt
+  {
+    $$ = IndexColumn{Expression: $2, OperatorClass: $4, Direction: $5, NullsOrdering: $6}
+  }
 | function_call_generic asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Expression: $1, Direction: $2, NullsOrdering: $3}
+  }
+| function_call_generic operator_class asc_desc_opt nulls_ordering_opt
+  {
+    $$ = IndexColumn{Expression: $1, OperatorClass: $2, Direction: $3, NullsOrdering: $4}
   }
 | sql_id AT TIME ZONE value_expression asc_desc_opt nulls_ordering_opt %prec AT
   {
@@ -5166,11 +5171,7 @@ index_column:
 
 // https://www.postgresql.org/docs/9.5/brin-builtin-opclasses.html
 operator_class:
-  TEXT_PATTERN_OPS
-  {
-    $$ = $1
-  }
-| sql_id
+  sql_id
   {
     $$ = $1.Name
   }
