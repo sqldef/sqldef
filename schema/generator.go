@@ -3149,6 +3149,9 @@ func (g *Generator) generateIndexColumnDefinition(indexColumn IndexColumn) strin
 	if indexColumn.direction == DescScr {
 		column += fmt.Sprintf(" %s", indexColumn.direction)
 	}
+	if indexColumn.nullsOrdering != "" {
+		column += fmt.Sprintf(" NULLS %s", strings.ToUpper(indexColumn.nullsOrdering))
+	}
 	if indexColumn.withoutOverlaps {
 		column += " WITHOUT OVERLAPS"
 	}
@@ -5639,6 +5642,9 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 			return false
 		}
 		if !g.areSameOperatorClasses(indexA, indexB, i) {
+			return false
+		}
+		if indexAColumn.NullsOrdering() != indexB.columns[i].NullsOrdering() {
 			return false
 		}
 	}

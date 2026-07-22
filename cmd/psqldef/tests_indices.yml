@@ -258,6 +258,39 @@ AddOperatorClassToDescendingIndex:
     DROP INDEX public.idx_name;
     CREATE INDEX idx_name ON public.products USING btree (name desc);
 
+IndexWithOperatorClassAndNullsOrdering:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (name TEXT);
+    CREATE INDEX idx_name ON products USING btree (name text_pattern_ops NULLS FIRST);
+
+IndexWithExplicitDefaultNullsOrdering:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (a TEXT, b TEXT);
+    CREATE INDEX idx_ab ON products USING btree (a ASC NULLS LAST, b DESC NULLS FIRST);
+
+ChangeNullsOrderingOnIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (name TEXT);
+    CREATE INDEX idx_name ON products USING btree (name NULLS FIRST);
+  desired: |
+    CREATE TABLE products (name TEXT);
+    CREATE INDEX idx_name ON products USING btree (name NULLS LAST);
+  up: |
+    DROP INDEX public.idx_name;
+    CREATE INDEX idx_name ON public.products USING btree (name NULLS LAST);
+  down: |
+    DROP INDEX public.idx_name;
+    CREATE INDEX idx_name ON public.products USING btree (name NULLS FIRST);
+
+NullsOrderingOnExpressionIndex:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (name TEXT);
+    CREATE INDEX idx_lower_name ON products USING btree (lower(name) NULLS FIRST);
+
 RenameIndex:
   current: |
     CREATE TABLE users (

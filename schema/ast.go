@@ -292,9 +292,23 @@ type IndexColumn struct {
 	columnExpr    parser.Expr // never nil as it's always initialized in the parser
 	length        *int
 	direction     string
+	nullsOrdering string // parser.NullsFirst or parser.NullsLast, empty when not specified
 	operatorClass string
 
 	withoutOverlaps bool
+}
+
+// NullsOrdering returns where the column sorts NULLs, resolving an unspecified one to the default
+// of its direction. PostgreSQL sorts NULLs first when descending and last otherwise, and omits the
+// clause from the DDL it exports whenever it matches that default.
+func (ic IndexColumn) NullsOrdering() string {
+	if ic.nullsOrdering != "" {
+		return ic.nullsOrdering
+	}
+	if ic.direction == DescScr {
+		return parser.NullsFirst
+	}
+	return parser.NullsLast
 }
 
 // ColumnName returns the column name if this is a simple column reference.
