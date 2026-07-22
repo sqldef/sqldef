@@ -70,6 +70,15 @@ type GeneratorConfig struct {
 	// 0 = case-sensitive (Linux default), 1 or 2 = case-insensitive (Windows/macOS).
 	// Default is 0 (case-sensitive) for offline mode compatibility.
 	MysqlLowerCaseTableNames int
+
+	// PostgreSQL-specific: the default operator class of every access method, keyed by
+	// "<access method>.<operator class>" in lower case, e.g. "btree.text_ops".
+	// The database omits the default operator class from the DDL it exports, so one written
+	// explicitly in the desired DDL has to compare equal to an omitted one.
+	// Nil in offline mode, where an explicit operator class is compared as-is.
+	// Every copy of the config shares one map that ExportDDLs() refills, so read it only after
+	// exporting: the schema being applied may install an extension that registers operator classes.
+	PostgresDefaultOperatorClasses map[string]bool
 }
 
 type ManageObjectRule struct {

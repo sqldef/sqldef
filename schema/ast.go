@@ -276,6 +276,18 @@ type Index struct {
 	renamedFrom       Ident // Previous index name if renamed via @renamed annotation
 }
 
+// AccessMethod returns the index access method, e.g. "btree" or "gin". A DDL without a USING
+// clause leaves indexType holding the kind of the index instead, which means the default method.
+func (i Index) AccessMethod() string {
+	indexType := strings.ToLower(i.indexType)
+	switch indexType {
+	case "", "index", "key", "primary key", "unique":
+		return "btree"
+	default:
+		return indexType
+	}
+}
+
 type IndexColumn struct {
 	columnExpr    parser.Expr // never nil as it's always initialized in the parser
 	length        *int

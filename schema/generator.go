@@ -5614,6 +5614,28 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 	return true
 }
 
+// areSameOperatorClasses reports whether two index columns use the same operator class.
+// Operator classes are unquoted identifiers, so they're compared case-insensitively. The database
+// omits the default operator class from the DDL it exports, so a default written explicitly in the
+// desired DDL has to compare equal to an omitted one.
+func (g *Generator) areSameOperatorClasses(indexA Index, indexB Index, columnIndex int) bool {
+	operatorClassA := indexA.columns[columnIndex].operatorClass
+	operatorClassB := indexB.columns[columnIndex].operatorClass
+	if strings.EqualFold(operatorClassA, operatorClassB) {
+		return true
+	}
+	if operatorClassA != "" && operatorClassB != "" {
+		return false
+	}
+	// Exactly one side specifies an operator class here. It matches the omitted one only if the
+	// access method defaults to it.
+	specified, index := operatorClassA, indexA
+	if specified == "" {
+		specified, index = operatorClassB, indexB
+	}
+	return g.config.PostgresDefaultOperatorClasses[index.AccessMethod()+"."+strings.ToLower(specified)]
+}
+
 func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 	if indexA.unique != indexB.unique {
 		return false
@@ -5643,6 +5665,9 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 			return false
 		}
 		if indexA.columns[i].withoutOverlaps != indexB.columns[i].withoutOverlaps {
+			return false
+		}
+		if !g.areSameOperatorClasses(indexA, indexB, i) {
 			return false
 		}
 	}
