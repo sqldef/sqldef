@@ -3121,42 +3121,44 @@ func (g *Generator) indexKeyPartNeedsParens(expr parser.Expr) bool {
 	return indexExprNeedsParens(expr)
 }
 
+// generateIndexColumnDefinition generates one key part of an index column list, with proper quoting.
+// The clauses have to keep this order: PostgreSQL accepts an operator class only before ASC/DESC.
+func (g *Generator) generateIndexColumnDefinition(indexColumn IndexColumn) string {
+	var column string
+	// For simple column references (ColName), use escapeSQLIdent to preserve quoting
+	if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
+		column = g.escapeSQLIdent(colName.Name)
+	} else {
+		// For expressions (functional indexes), format with quote awareness
+		if !g.config.LegacyIgnoreQuotes {
+			column = g.formatExprQuoteAware(indexColumn.columnExpr)
+		} else {
+			// Legacy mode: use parser.String for backward compatibility
+			column = parser.String(indexColumn.columnExpr)
+		}
+		if g.indexKeyPartNeedsParens(indexColumn.columnExpr) {
+			column = "(" + column + ")"
+		}
+	}
+	if indexColumn.length != nil {
+		column += fmt.Sprintf("(%d)", *indexColumn.length)
+	}
+	if indexColumn.operatorClass != "" {
+		column += " " + indexColumn.operatorClass
+	}
+	if indexColumn.direction == DescScr {
+		column += fmt.Sprintf(" %s", indexColumn.direction)
+	}
+	if indexColumn.withoutOverlaps {
+		column += " WITHOUT OVERLAPS"
+	}
+	return column
+}
+
 // generateCreateIndexStatement generates a CREATE INDEX statement from an Index struct.
 // This is used to regenerate CREATE INDEX statements with proper schema-qualified table names.
 func (g *Generator) generateCreateIndexStatement(table QualifiedName, index Index) string {
-	// Build column list with proper quoting
-	columns := []string{}
-	for _, indexColumn := range index.columns {
-		var column string
-		// For simple column references (ColName), use escapeSQLIdent to preserve quoting
-		if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
-			column = g.escapeSQLIdent(colName.Name)
-		} else {
-			// For expressions (functional indexes), format with quote awareness
-			if !g.config.LegacyIgnoreQuotes {
-				column = g.formatExprQuoteAware(indexColumn.columnExpr)
-			} else {
-				// Legacy mode: use parser.String for backward compatibility
-				column = parser.String(indexColumn.columnExpr)
-			}
-			if g.indexKeyPartNeedsParens(indexColumn.columnExpr) {
-				column = "(" + column + ")"
-			}
-		}
-		if indexColumn.length != nil {
-			column += fmt.Sprintf("(%d)", *indexColumn.length)
-		}
-		if indexColumn.direction == DescScr {
-			column += fmt.Sprintf(" %s", indexColumn.direction)
-		}
-		if indexColumn.operatorClass != "" {
-			column += " " + indexColumn.operatorClass
-		}
-		if indexColumn.withoutOverlaps {
-			column += " WITHOUT OVERLAPS"
-		}
-		columns = append(columns, column)
-	}
+	columns := util.TransformSlice(index.columns, g.generateIndexColumnDefinition)
 
 	// Start building the statement
 	// PostgreSQL syntax: CREATE [UNIQUE] INDEX [CONCURRENTLY] name ON table
@@ -3226,38 +3228,7 @@ func (g *Generator) generateAddIndex(table QualifiedName, index Index) string {
 		clusteredOption = " NONCLUSTERED"
 	}
 
-	columns := []string{}
-	for _, indexColumn := range index.columns {
-		var column string
-		// For simple column references (ColName), use escapeSQLIdent to preserve quoting
-		if colName, ok := indexColumn.columnExpr.(*parser.ColName); ok {
-			column = g.escapeSQLIdent(colName.Name)
-		} else {
-			// For expressions (functional indexes), format with quote awareness
-			if !g.config.LegacyIgnoreQuotes {
-				column = g.formatExprQuoteAware(indexColumn.columnExpr)
-			} else {
-				// Legacy mode: use parser.String for backward compatibility
-				column = parser.String(indexColumn.columnExpr)
-			}
-			if g.indexKeyPartNeedsParens(indexColumn.columnExpr) {
-				column = "(" + column + ")"
-			}
-		}
-		if indexColumn.length != nil {
-			column += fmt.Sprintf("(%d)", *indexColumn.length)
-		}
-		if indexColumn.direction == DescScr {
-			column += fmt.Sprintf(" %s", indexColumn.direction)
-		}
-		if indexColumn.operatorClass != "" {
-			column += " " + indexColumn.operatorClass
-		}
-		if indexColumn.withoutOverlaps {
-			column += " WITHOUT OVERLAPS"
-		}
-		columns = append(columns, column)
-	}
+	columns := util.TransformSlice(index.columns, g.generateIndexColumnDefinition)
 
 	optionDefinition := g.generateIndexOptionDefinition(index.options)
 

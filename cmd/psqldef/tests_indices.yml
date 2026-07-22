@@ -231,6 +231,33 @@ AddNonDefaultOperatorClassOfSameAccessMethod:
     DROP INDEX public.idx_tags;
     CREATE INDEX idx_tags ON public.products USING gin (tags jsonb_ops);
 
+IndexWithOperatorClassAndDirection:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (a TEXT, b TEXT);
+    CREATE INDEX idx_ab ON products USING btree ((a || b) text_pattern_ops DESC);
+
+IndexWithOperatorClassAndDirectionOnColumn:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (name TEXT);
+    CREATE INDEX idx_name ON products USING btree (name text_pattern_ops DESC);
+
+AddOperatorClassToDescendingIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (name TEXT);
+    CREATE INDEX idx_name ON products USING btree (name DESC);
+  desired: |
+    CREATE TABLE products (name TEXT);
+    CREATE INDEX idx_name ON products USING btree (name text_pattern_ops DESC);
+  up: |
+    DROP INDEX public.idx_name;
+    CREATE INDEX idx_name ON public.products USING btree (name text_pattern_ops desc);
+  down: |
+    DROP INDEX public.idx_name;
+    CREATE INDEX idx_name ON public.products USING btree (name desc);
+
 RenameIndex:
   current: |
     CREATE TABLE users (
