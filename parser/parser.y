@@ -265,7 +265,7 @@ func setDDL(yylex any, ddl *DDL) {
 // DDL Tokens
 %token <str> CREATE ALTER DROP RENAME ANALYZE ADD GRANT REVOKE OPTION PRIVILEGES
 %token <str> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION EXCLUDE DOMAIN
-%right <str> UNIQUE KEY PG_KEY
+%right <str> UNIQUE KEY PG_KEY PG_COMMENT
 %token <str> SHOW DESCRIBE EXPLAIN DATE DATA ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE ENGINE
 %token <str> MAXVALUE PARTITION PARTITIONS REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN RETURNS FUNCTION RANGE LIST HASH LINEAR COLUMNS
 %token <str> STATUS VARIABLES
@@ -3423,6 +3423,10 @@ column_definition:
   {
     $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
   }
+| PG_COMMENT column_definition_type
+  {
+    $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
+  }
 /* For SQLite3 https://www.sqlite.org/lang_keywords.html */
 | STRING column_definition_type
   {
@@ -5087,6 +5091,10 @@ index_column:
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3, NullsOrdering: $4}
   }
+| PG_COMMENT length_opt asc_desc_opt nulls_ordering_opt
+  {
+    $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3, NullsOrdering: $4}
+  }
 | col_name_keyword length_opt asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3, NullsOrdering: $4}
@@ -5103,6 +5111,10 @@ index_column:
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
   }
+| PG_COMMENT COLLATE charset asc_desc_opt nulls_ordering_opt
+  {
+    $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
+  }
 | col_name_keyword COLLATE charset asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
@@ -5116,6 +5128,10 @@ index_column:
     $$ = IndexColumn{Column: $1, OperatorClass: $2, Direction: $3, NullsOrdering: $4}
   }
 | non_reserved_keyword operator_class asc_desc_opt nulls_ordering_opt
+  {
+    $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2, Direction: $3, NullsOrdering: $4}
+  }
+| PG_COMMENT operator_class asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2, Direction: $3, NullsOrdering: $4}
   }
@@ -7266,6 +7282,10 @@ column_name:
   {
     $$ = &ColName{Name: NewIdent("VALUE", false)}
   }
+| PG_COMMENT
+  {
+    $$ = &ColName{Name: NewIdent($1, false)}
+  }
 | table_id '.' reserved_sql_id
   {
     $$ = &ColName{Qualifier: TableName{Name: $1}, Name: $3}
@@ -7705,6 +7725,10 @@ reserved_sql_id:
     $$ = NewIdent($1, false)
   }
 | VALUE
+  {
+    $$ = NewIdent($1, false)
+  }
+| PG_COMMENT
   {
     $$ = NewIdent($1, false)
   }
