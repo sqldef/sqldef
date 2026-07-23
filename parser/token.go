@@ -1000,13 +1000,10 @@ func (tkn *Tokenizer) scanIdentifier(firstChar rune, isDbSystemVariable bool) (i
 			return PG_KEY, loweredStr
 		}
 
-		// PostgreSQL classifies `comment` as UNRESERVED_KEYWORD, so it is legal as
-		// an unquoted column name. In Postgres mode, surface a distinct PG_COMMENT
-		// token so the grammar can accept it as an identifier — except when
-		// followed by ON, which marks the start of a `COMMENT ON ...` statement
-		// that must keep the original COMMENT_KEYWORD lexing. Adding
-		// COMMENT_KEYWORD to non_reserved_keyword instead would explode the
-		// reduce/reduce conflict count (measured +204 in y.output).
+		// PostgreSQL treats `comment` as a non-reserved keyword usable as an
+		// unquoted column name. Surface a distinct PG_COMMENT token so the
+		// grammar can accept it as an identifier — except when followed by ON,
+		// which starts a `COMMENT ON ...` statement that needs COMMENT_KEYWORD.
 		if keywordID == COMMENT_KEYWORD && tkn.mode == ParserModePostgres && !tkn.peeking {
 			if id1, _ := tkn.peekToken(); id1 != ON {
 				return PG_COMMENT, loweredStr

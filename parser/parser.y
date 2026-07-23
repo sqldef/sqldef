@@ -5091,10 +5091,6 @@ index_column:
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3, NullsOrdering: $4}
   }
-| PG_COMMENT length_opt asc_desc_opt nulls_ordering_opt
-  {
-    $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3, NullsOrdering: $4}
-  }
 | col_name_keyword length_opt asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Length: $2, Direction: $3, NullsOrdering: $4}
@@ -5111,10 +5107,6 @@ index_column:
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
   }
-| PG_COMMENT COLLATE charset asc_desc_opt nulls_ordering_opt
-  {
-    $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
-  }
 | col_name_keyword COLLATE charset asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: NewIdent($1, false), Collation: $3, Direction: $4, NullsOrdering: $5}
@@ -5128,10 +5120,6 @@ index_column:
     $$ = IndexColumn{Column: $1, OperatorClass: $2, Direction: $3, NullsOrdering: $4}
   }
 | non_reserved_keyword operator_class asc_desc_opt nulls_ordering_opt
-  {
-    $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2, Direction: $3, NullsOrdering: $4}
-  }
-| PG_COMMENT operator_class asc_desc_opt nulls_ordering_opt
   {
     $$ = IndexColumn{Column: NewIdent($1, false), OperatorClass: $2, Direction: $3, NullsOrdering: $4}
   }
@@ -8174,6 +8162,7 @@ col_name_keyword:
   DATE
 | KEY
 | PG_KEY
+| PG_COMMENT
 | TIME
 | TIMESTAMP
 | VALUE
