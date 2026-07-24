@@ -265,7 +265,7 @@ func setDDL(yylex any, ddl *DDL) {
 // DDL Tokens
 %token <str> CREATE ALTER DROP RENAME ANALYZE ADD GRANT REVOKE OPTION PRIVILEGES
 %token <str> SCHEMA TABLE INDEX MATERIALIZED VIEW TO IGNORE PRIMARY COLUMN CONSTRAINT REFERENCES SPATIAL FULLTEXT FOREIGN KEY_BLOCK_SIZE POLICY WHILE EXTENSION EXCLUDE DOMAIN
-%right <str> UNIQUE KEY PG_KEY
+%right <str> UNIQUE KEY PG_KEY PG_COMMENT
 %token <str> SHOW DESCRIBE EXPLAIN DATE DATA ESCAPE REPAIR OPTIMIZE TRUNCATE EXEC EXECUTE ENGINE
 %token <str> MAXVALUE PARTITION PARTITIONS REORGANIZE LESS THAN PROCEDURE TRIGGER TYPE RETURN RETURNS FUNCTION RANGE LIST HASH LINEAR COLUMNS
 %token <str> STATUS VARIABLES
@@ -3420,6 +3420,10 @@ column_definition:
     $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
   }
 | PG_KEY column_definition_type
+  {
+    $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
+  }
+| PG_COMMENT column_definition_type
   {
     $$ = &ColumnDefinition{Name: NewIdent($1, false), Type: $2}
   }
@@ -7266,6 +7270,10 @@ column_name:
   {
     $$ = &ColName{Name: NewIdent("VALUE", false)}
   }
+| PG_COMMENT
+  {
+    $$ = &ColName{Name: NewIdent($1, false)}
+  }
 | table_id '.' reserved_sql_id
   {
     $$ = &ColName{Qualifier: TableName{Name: $1}, Name: $3}
@@ -7705,6 +7713,10 @@ reserved_sql_id:
     $$ = NewIdent($1, false)
   }
 | VALUE
+  {
+    $$ = NewIdent($1, false)
+  }
+| PG_COMMENT
   {
     $$ = NewIdent($1, false)
   }
@@ -8150,6 +8162,7 @@ col_name_keyword:
   DATE
 | KEY
 | PG_KEY
+| PG_COMMENT
 | TIME
 | TIMESTAMP
 | VALUE
