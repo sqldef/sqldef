@@ -356,6 +356,41 @@ ColumnNamedCommentInIndex:
   down: |
     DROP INDEX public.idx_posts_comment;
 
+ColumnNamedCommentInPrimaryKey:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE posts (
+      id bigint NOT NULL,
+      comment text NOT NULL,
+      PRIMARY KEY (id, comment)
+    );
+  desired: |
+    CREATE TABLE posts (
+      id bigint NOT NULL,
+      comment text NOT NULL,
+      PRIMARY KEY (id, comment)
+    );
+  up: ""
+  down: ""
+
+ColumnNamedCommentInPartialIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE posts (
+      id bigint NOT NULL,
+      comment text
+    );
+  desired: |
+    CREATE TABLE posts (
+      id bigint NOT NULL,
+      comment text
+    );
+    CREATE INDEX idx_posts_comment_present ON posts (id) WHERE comment IS NOT NULL;
+  up: |
+    CREATE INDEX idx_posts_comment_present ON public.posts (id) WHERE comment is not null;
+  down: |
+    DROP INDEX public.idx_posts_comment_present;
+
 AddColumnWithStringConcatDefault:
   legacy_ignore_quotes: false
   current: |
