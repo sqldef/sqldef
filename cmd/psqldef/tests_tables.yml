@@ -306,6 +306,91 @@ ColumnNamedKeyAddedAlongsideFunction:
   down: |
     DROP TABLE public.users;
 
+ColumnNamedCommentIdempotent:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE posts (
+      id bigint NOT NULL,
+      comment text,
+      PRIMARY KEY (id)
+    );
+  desired: |
+    CREATE TABLE posts (
+      id bigint NOT NULL,
+      comment text,
+      PRIMARY KEY (id)
+    );
+  up: ""
+  down: ""
+
+ColumnNamedCommentWithIdentityPrimaryKey:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE posts (
+      id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      comment text
+    );
+  desired: |
+    CREATE TABLE posts (
+      id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      comment text
+    );
+  up: ""
+  down: ""
+
+ColumnNamedCommentInIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE posts (
+      id bigint NOT NULL,
+      comment text NOT NULL
+    );
+  desired: |
+    CREATE TABLE posts (
+      id bigint NOT NULL,
+      comment text NOT NULL
+    );
+    CREATE INDEX idx_posts_comment ON posts (id, comment);
+  up: |
+    CREATE INDEX idx_posts_comment ON public.posts (id, comment);
+  down: |
+    DROP INDEX public.idx_posts_comment;
+
+ColumnNamedCommentInPrimaryKey:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE posts (
+      id bigint NOT NULL,
+      comment text NOT NULL,
+      PRIMARY KEY (id, comment)
+    );
+  desired: |
+    CREATE TABLE posts (
+      id bigint NOT NULL,
+      comment text NOT NULL,
+      PRIMARY KEY (id, comment)
+    );
+  up: ""
+  down: ""
+
+ColumnNamedCommentInPartialIndex:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE posts (
+      id bigint NOT NULL,
+      comment text
+    );
+  desired: |
+    CREATE TABLE posts (
+      id bigint NOT NULL,
+      comment text
+    );
+    CREATE INDEX idx_posts_comment_present ON posts (id) WHERE comment IS NOT NULL;
+  up: |
+    CREATE INDEX idx_posts_comment_present ON public.posts (id) WHERE comment is not null;
+  down: |
+    DROP INDEX public.idx_posts_comment_present;
+
 AddColumnWithStringConcatDefault:
   legacy_ignore_quotes: false
   current: |

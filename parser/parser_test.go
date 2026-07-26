@@ -492,6 +492,49 @@ LEFT JOIN event_counts ec ON rd.product_id = ec.product_id`,
 	}
 }
 
+// TestCommentKeywordPeekSkipsSQLComments guards the peek-for-ON lexer branch
+// that decides whether `comment` in Postgres mode should be lexed as
+// COMMENT_KEYWORD (statement leader) or PG_COMMENT (identifier). The peek must
+// skip SQL comments; otherwise `COMMENT /* c */ ON TABLE ...` misidentifies
+// the leader and the parse fails.
+func TestCommentKeywordPeekSkipsSQLComments(t *testing.T) {
+	testCases := []struct {
+		name        string
+		sql         string
+		shouldParse bool
+	}{
+		{
+			name:        "bare COMMENT ON statement",
+			sql:         "COMMENT ON TABLE t IS 'x'",
+			shouldParse: true,
+		},
+		{
+			name:        "COMMENT with C-style comment before ON",
+			sql:         "COMMENT /* note */ ON TABLE t IS 'x'",
+			shouldParse: true,
+		},
+		{
+			name:        "COMMENT with line comment before ON",
+			sql:         "COMMENT\n-- note\nON TABLE t IS 'x'",
+			shouldParse: true,
+		},
+		{
+			name:        "comment as bare column name",
+			sql:         "CREATE TABLE t (comment text)",
+			shouldParse: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseDDL(tc.sql, ParserModePostgres)
+			if tc.shouldParse && err != nil {
+				t.Errorf("expected parse to succeed but got error: %v\nSQL: %s", err, tc.sql)
+			}
+		})
+	}
+}
+
 func TestNowFunctionInDefaultExpression(t *testing.T) {
 	sql := "CREATE TABLE test (pk timestamp primary key default now())"
 
