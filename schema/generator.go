@@ -812,42 +812,29 @@ func commentOutDropStatements(ddls []string) []string {
 	return result
 }
 
-// isDropStatement checks if a DDL statement is a DROP or REVOKE statement.
-// Note: DROP CONSTRAINT and DROP CHECK are NOT included because they are
-// required for non-destructive schema changes (e.g., changing defaults).
+// isDropStatement checks if a DDL statement is a destructive DROP or REVOKE
+// statement. All DDLs passed here are synthesized by the generator itself, so
+// destructive ones can be recognized by their leading keyword (plus the
+// destructive clauses embedded in ALTER TABLE). Substring-matching the whole
+// text would misfire on additive statements whose payload merely mentions a
+// destructive word: a function body inspecting tg_tag (e.g. AWS DMS's
+// awsdms_intercept_ddl event trigger function), a comment text, or a string
+// literal in a CHECK/DEFAULT clause.
+// Note: ALTER TABLE ... DROP CONSTRAINT/CHECK/DEFAULT/FOREIGN KEY/PRIMARY KEY
+// are NOT treated as destructive because they are required for non-destructive
+// schema changes (e.g., changing defaults or recreating constraints).
 func isDropStatement(ddl string) bool {
-	// CREATE (including CREATE OR REPLACE) and COMMENT statements are additive,
-	// never destructive drops, even when their payload contains substrings like
-	// "DROP TABLE" or "REVOKE ": e.g. a function body inspecting tg_tag (such as
-	// AWS DMS's awsdms_intercept_ddl event trigger function), or a comment text
-	// mentioning those words. Without this guard they would be skipped as
-	// destructive: a single-line statement silently never applies, and a
-	// multi-line one leaks its remaining lines as raw SQL (see
-	// commentOutDropStatements), aborting the transaction.
-	head := strings.ToUpper(strings.TrimSpace(ddl))
-	if strings.HasPrefix(head, "CREATE ") || strings.HasPrefix(head, "COMMENT ") {
-		return false
+	if strings.HasPrefix(ddl, "DROP ") || strings.HasPrefix(ddl, "REVOKE ") {
+		return true
 	}
-	return strings.Contains(ddl, "DROP TABLE") ||
-		strings.Contains(ddl, "DROP SCHEMA") ||
-		strings.Contains(ddl, "DROP COLUMN") ||
-		strings.Contains(ddl, "DROP ROLE") ||
-		strings.Contains(ddl, "DROP USER") ||
-		strings.Contains(ddl, "DROP FUNCTION") ||
-		strings.Contains(ddl, "DROP PROCEDURE") ||
-		strings.Contains(ddl, "DROP TRIGGER") ||
-		strings.Contains(ddl, "DROP VIEW") ||
-		strings.Contains(ddl, "DROP MATERIALIZED VIEW") ||
-		strings.Contains(ddl, "DROP INDEX") ||
-		strings.Contains(ddl, "DROP SEQUENCE") ||
-		strings.Contains(ddl, "DROP TYPE") ||
-		strings.Contains(ddl, "DROP DOMAIN") ||
-		strings.Contains(ddl, "DROP EXTENSION") ||
-		strings.Contains(ddl, "DROP POLICY") ||
-		strings.Contains(ddl, "DROP PARTITION") ||
-		strings.Contains(ddl, "DISABLE ROW LEVEL SECURITY") ||
-		strings.Contains(ddl, "NO FORCE ROW LEVEL SECURITY") ||
-		strings.Contains(ddl, "REVOKE ")
+	if strings.HasPrefix(ddl, "ALTER ") {
+		return strings.Contains(ddl, " DROP COLUMN ") ||
+			strings.Contains(ddl, " DROP INDEX ") ||
+			strings.Contains(ddl, " DROP PARTITION ") ||
+			strings.Contains(ddl, " DISABLE ROW LEVEL SECURITY") ||
+			strings.Contains(ddl, " NO FORCE ROW LEVEL SECURITY")
+	}
+	return false
 }
 
 // alterTablePrefix returns "ALTER TABLE <escaped-table-name> ", the prefix the

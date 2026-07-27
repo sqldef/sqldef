@@ -250,11 +250,8 @@ GrantOverlappingRevokeSkipped:
     -- Skipped: REVOKE INSERT, SELECT ON TABLE "public"."users" FROM "user2";
     -- Skipped: REVOKE DELETE, UPDATE ON TABLE "public"."users" FROM "user3";
 
-# Regression test: a CREATE FUNCTION whose body contains destructive-sounding
-# substrings ("DROP TABLE", "REVOKE ") must not be misclassified as a drop
-# statement. Previously it was commented out on its first line only, leaking
-# the remaining lines as raw SQL and aborting the whole transaction on apply
-# (e.g. AWS DMS's awsdms_intercept_ddl event trigger function).
+# Regression: additive statements mentioning "DROP TABLE"/"REVOKE" in payloads
+# (function body, comment text, literals) must not be skipped as destructive.
 CreateFunctionBodyMentioningDropNotSkipped:
   enable_drop: false
   legacy_ignore_quotes: false
@@ -280,9 +277,6 @@ CreateFunctionBodyMentioningDropNotSkipped:
   down: |
     -- Skipped: DROP FUNCTION public.intercept_ddl;
 
-# Regression test: a COMMENT whose text contains destructive-sounding
-# substrings must not be misclassified as a drop statement. Previously it was
-# commented out and silently never applied.
 CommentMentioningDropNotSkipped:
   enable_drop: false
   legacy_ignore_quotes: false
@@ -295,3 +289,22 @@ CommentMentioningDropNotSkipped:
     COMMENT ON TABLE public.audit_log IS 'rows written when a DROP TABLE happens';
   down: |
     COMMENT ON TABLE public.audit_log IS NULL;
+
+CheckConstraintLiteralMentioningDropNotSkipped:
+  enable_drop: false
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE audit (
+      id bigint,
+      note text
+    );
+  desired: |
+    CREATE TABLE audit (
+      id bigint,
+      note text,
+      CONSTRAINT note_ck CHECK (note <> 'DROP TABLE')
+    );
+  up: |
+    ALTER TABLE public.audit ADD CONSTRAINT note_ck CHECK (note <> 'DROP TABLE');
+  down: |
+    ALTER TABLE public.audit DROP CONSTRAINT note_ck;
