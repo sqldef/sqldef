@@ -423,21 +423,19 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		if op == "in" || op == "not in" {
 			if tuple, ok := right.(parser.ValTuple); ok {
 				if mode == GeneratorModePostgres {
-					// PostgreSQL normalizes IN (values) to = ANY (ARRAY[values])
-
+					// PostgreSQL normalizes IN (values) to = ANY (ARRAY[values]) and NOT IN to <> ALL (ARRAY[values]).
 					elements := sortAndDeduplicateValues(tuple)
 					normalizedElements := util.TransformSlice(elements, func(elem parser.Expr) parser.Expr {
 						return normalizeCheckExpr(elem, mode)
 					})
 					right = &parser.ArrayConstructor{Elements: normalizedElements}
 
-					// Change operator and set ANY flag
 					if op == "in" {
 						op = "="
 						anyFlag = true
 					} else { // "not in"
-						op = "!="
-						anyFlag = true
+						op = "<>"
+						allFlag = true
 					}
 				} else {
 					// For other databases, keep IN but sort the tuple for consistent comparison

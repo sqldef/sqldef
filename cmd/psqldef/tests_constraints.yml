@@ -811,6 +811,14 @@ ConstraintCheckInUnsorted:
       status text CHECK (status IN ('pending', 'active'))
     );
 
+ConstraintCheckNotInUnsorted:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (status NOT IN ('deleted', 'cancelled'))
+    );
+
 ConstraintCheckInUnsortedModify:
   legacy_ignore_quotes: false
   current: |

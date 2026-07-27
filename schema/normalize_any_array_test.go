@@ -40,6 +40,34 @@ func TestNormalizeCheckExprSortsAnyAllArray(t *testing.T) {
 	}
 }
 
+func TestNormalizeCheckExprNormalizesNotInToAllComparison(t *testing.T) {
+	tests := []struct {
+		name     string
+		sql      string
+		expected string
+	}{
+		{
+			name:     "NOT IN",
+			sql:      `CREATE TABLE t (status text, CHECK (status NOT IN ('deleted', 'cancelled')))`,
+			expected: "status <> ALL (ARRAY['cancelled', 'deleted'])",
+		},
+		{
+			name:     "ALL as stored by PostgreSQL",
+			sql:      `CREATE TABLE t (status text, CHECK (status <> ALL (ARRAY['deleted'::text, 'cancelled'::text])))`,
+			expected: "status <> ALL (ARRAY['cancelled', 'deleted'])",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parser.String(normalizeCheckExpr(extractCheckExpr(t, tt.sql), GeneratorModePostgres))
+			if got != tt.expected {
+				t.Errorf("normalizeCheckExpr() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestNormalizeCheckExprStringQuoteAwareKeepsAnyAll(t *testing.T) {
 	tests := []struct {
 		name     string
