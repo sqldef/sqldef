@@ -1,3 +1,12 @@
+## [v3.11.17](https://github.com/sqldef/sqldef/compare/v3.11.16...v3.11.17) - 2026-07-27
+
+- psqldef: allow COMMENT as an unquoted column name in the generic parser by @178inaba in https://github.com/sqldef/sqldef/pull/1291
+- fix(psqldef): prevent SIGSEGV on ALTER TABLE with nil AlterTableCmd.Def by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1279
+- feat(MySQL): add --bulk-alter to fuse ALTER TABLE actions per table  by @exoego in https://github.com/sqldef/sqldef/pull/1201
+- feat(psqldef): extend managed_roles privilege coverage (WITH GRANT OPTION, sequences, columns) by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1285
+- psqldef: Fix unnamed composite unique names by @takaram in https://github.com/sqldef/sqldef/pull/1292
+- fix: don't misclassify CREATE/COMMENT statements as destructive DDLs by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1294
+
 ## [v3.11.16](https://github.com/sqldef/sqldef/compare/v3.11.15...v3.11.16) - 2026-07-21
 
 - [RFC] new feature for object management (`manage:` section in config) by @gfx in https://github.com/sqldef/sqldef/pull/1072
