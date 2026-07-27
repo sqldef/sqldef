@@ -450,17 +450,13 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			}
 		}
 
-		// For ANY/ALL expressions, normalize the array elements
-		if (anyFlag || allFlag) && !e.Any && !e.All {
-			// This means we just set the flag above from IN conversion
-			// Already handled
-		} else if anyFlag || allFlag {
-			// Normalize existing ANY/ALL expressions (strip casts, preserve order)
+		// For existing ANY/ALL expressions, normalize and sort the array elements.
+		if anyFlag || allFlag {
 			if arrayConst, ok := right.(*parser.ArrayConstructor); ok {
 				normalizedElements := util.TransformSlice(arrayConst.Elements, func(elem parser.Expr) parser.Expr {
 					return normalizeCheckExpr(elem, mode)
 				})
-				right = &parser.ArrayConstructor{Elements: normalizedElements}
+				right = &parser.ArrayConstructor{Elements: sortAndDeduplicateValues(normalizedElements)}
 			}
 		}
 

@@ -4,7 +4,41 @@ import (
 	"testing"
 
 	"github.com/sqldef/sqldef/v3/database"
+	"github.com/sqldef/sqldef/v3/parser"
 )
+
+func TestNormalizeCheckExprSortsAnyAllArray(t *testing.T) {
+	tests := []struct {
+		name     string
+		sql      string
+		expected string
+	}{
+		{
+			name:     "unsorted IN",
+			sql:      `CREATE TABLE t (status text, CHECK (status IN ('pending', 'active')))`,
+			expected: "status = ANY (ARRAY['active', 'pending'])",
+		},
+		{
+			name:     "unsorted ANY as stored by PostgreSQL",
+			sql:      `CREATE TABLE t (status text, CHECK (status = ANY (ARRAY['pending'::text, 'active'::text])))`,
+			expected: "status = ANY (ARRAY['active', 'pending'])",
+		},
+		{
+			name:     "unsorted ALL as stored by PostgreSQL",
+			sql:      `CREATE TABLE t (status text, CHECK (status <> ALL (ARRAY['deleted'::text, 'cancelled'::text])))`,
+			expected: "status <> ALL (ARRAY['cancelled', 'deleted'])",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parser.String(normalizeCheckExpr(extractCheckExpr(t, tt.sql), GeneratorModePostgres))
+			if got != tt.expected {
+				t.Errorf("normalizeCheckExpr() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
 
 func TestNormalizeCheckExprStringQuoteAwareKeepsAnyAll(t *testing.T) {
 	tests := []struct {
