@@ -803,6 +803,22 @@ ConstraintCheckInAdd:
     ALTER TABLE "public"."products" ADD CONSTRAINT "products_status_check" CHECK (status = ANY (ARRAY['active', 'inactive', 'pending']));
   down: |
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_status_check";
+ConstraintCheckInQuoteAware:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (
+      id serial,
+      status text
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (status IN ('active', 'inactive', 'pending'))
+    );
+  up: |
+    ALTER TABLE public.products ADD CONSTRAINT products_status_check CHECK (status = ANY (ARRAY['active', 'inactive', 'pending']));
+  down: |
+    ALTER TABLE public.products DROP CONSTRAINT products_status_check;
 ConstraintCheckInRemove:
   current: |
     CREATE TABLE products (
