@@ -858,17 +858,17 @@ ConstraintCheckInQuoteAware:
   current: |
     CREATE TABLE products (
       id serial,
-      status text
+      "Status" text
     );
   desired: |
     CREATE TABLE products (
       id serial,
-      status text CHECK (status IN ('active', 'inactive', 'pending'))
+      "Status" text CHECK ("Status" IN ('active', 'inactive', 'pending'))
     );
   up: |
-    ALTER TABLE public.products ADD CONSTRAINT products_status_check CHECK (status = ANY (ARRAY['active', 'inactive', 'pending']));
+    ALTER TABLE public.products ADD CONSTRAINT "products_Status_check" CHECK ("Status" = ANY (ARRAY['active', 'inactive', 'pending']));
   down: |
-    ALTER TABLE public.products DROP CONSTRAINT products_status_check;
+    ALTER TABLE public.products DROP CONSTRAINT "products_Status_check";
 ConstraintCheckInRemove:
   current: |
     CREATE TABLE products (

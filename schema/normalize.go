@@ -380,93 +380,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 	case *parser.NotExpr:
 		return &parser.NotExpr{Expr: normalizeCheckExpr(e.Expr, mode)}
 	case *parser.ComparisonExpr:
-		left := normalizeCheckExpr(e.Left, mode)
-		right := normalizeCheckExpr(e.Right, mode)
-		op := normalizeOperator(e.Operator, mode)
-		anyFlag := e.Any
-		allFlag := e.All
-
-		// The generic parser may parse "= ANY(ARRAY[...])" as a FuncExpr on the right side
-		// We need to normalize this to set the Any/All flags properly
-		if funcExpr, ok := right.(*parser.FuncExpr); ok {
-			funcName := strings.ToLower(funcExpr.Name.Name)
-			switch funcName {
-			case "any", "some":
-				// Convert "column = ANY(array)" to ComparisonExpr with Any=true
-				if len(funcExpr.Exprs) == 1 {
-					if aliased, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
-						right = normalizeCheckExpr(aliased.Expr, mode)
-						anyFlag = true
-					}
-				}
-			case "all":
-				// Convert "column = ALL(array)" to ComparisonExpr with All=true
-				if len(funcExpr.Exprs) == 1 {
-					if aliased, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
-						right = normalizeCheckExpr(aliased.Expr, mode)
-						allFlag = true
-					}
-				}
-			}
-		}
-
-		// Unwrap ParenExpr from right side for ANY/ALL to ensure consistent formatting
-		// The parser may create ParenExpr(ArrayConstructor) which formats as ANY(ARRAY
-		// We want to normalize to ArrayConstructor directly which formats as ANY (ARRAY
-		if anyFlag || allFlag {
-			if parenExpr, ok := right.(*parser.ParenExpr); ok {
-				right = parenExpr.Expr
-			}
-		}
-
-		// Handle IN clauses based on mode
-		if op == "in" || op == "not in" {
-			if tuple, ok := right.(parser.ValTuple); ok {
-				if mode == GeneratorModePostgres {
-					// PostgreSQL normalizes IN (values) to = ANY (ARRAY[values]) and NOT IN to <> ALL (ARRAY[values]).
-					elements := sortAndDeduplicateValues(tuple)
-					normalizedElements := util.TransformSlice(elements, func(elem parser.Expr) parser.Expr {
-						return normalizeCheckExpr(elem, mode)
-					})
-					right = &parser.ArrayConstructor{Elements: normalizedElements}
-
-					if op == "in" {
-						op = "="
-						anyFlag = true
-					} else { // "not in"
-						op = "<>"
-						allFlag = true
-					}
-				} else {
-					// For other databases, keep IN but sort the tuple for consistent comparison
-					sortedElements := sortAndDeduplicateValues(tuple)
-					normalizedElements := util.TransformSlice(sortedElements, func(elem parser.Expr) parser.Expr {
-						return normalizeCheckExpr(elem, mode)
-					})
-					right = parser.ValTuple(normalizedElements)
-				}
-			}
-		}
-
-		// For existing ANY/ALL expressions, normalize and sort the array elements.
-		if anyFlag || allFlag {
-			if arrayConst, ok := right.(*parser.ArrayConstructor); ok {
-				normalizedElements := util.TransformSlice(arrayConst.Elements, func(elem parser.Expr) parser.Expr {
-					return normalizeCheckExpr(elem, mode)
-				})
-				right = &parser.ArrayConstructor{Elements: sortAndDeduplicateValues(normalizedElements)}
-			}
-		}
-		right, anyFlag, allFlag = foldSingleElementArrayComparison(right, anyFlag, allFlag)
-
-		return &parser.ComparisonExpr{
-			Operator: op,
-			Left:     left,
-			Right:    right,
-			Escape:   normalizeCheckExpr(e.Escape, mode),
-			All:      allFlag,
-			Any:      anyFlag,
-		}
+		return normalizeComparisonExpr(e, mode, normalizeCheckExpr)
 	case *parser.BinaryExpr:
 		return &parser.BinaryExpr{
 			Operator: e.Operator,
@@ -908,89 +822,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Expr: normalizedInner,
 		}
 	case *parser.ComparisonExpr:
-		left := normalizeExpr(e.Left, mode)
-		right := normalizeExpr(e.Right, mode)
-		op := normalizeOperator(e.Operator, mode)
-		anyFlag := e.Any
-		allFlag := e.All
-
-		// The generic parser may parse "= ANY(ARRAY[...])" as a FuncExpr on the right side.
-		// Normalize this to set the Any/All flags properly.
-		if funcExpr, ok := right.(*parser.FuncExpr); ok {
-			funcName := strings.ToLower(funcExpr.Name.Name)
-			switch funcName {
-			case "any", "some":
-				if len(funcExpr.Exprs) == 1 {
-					if aliased, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
-						right = normalizeExpr(aliased.Expr, mode)
-						anyFlag = true
-					}
-				}
-			case "all":
-				if len(funcExpr.Exprs) == 1 {
-					if aliased, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
-						right = normalizeExpr(aliased.Expr, mode)
-						allFlag = true
-					}
-				}
-			}
-		}
-
-		// Unwrap ParenExpr from right side for ANY/ALL to ensure consistent formatting.
-		if anyFlag || allFlag {
-			if parenExpr, ok := right.(*parser.ParenExpr); ok {
-				right = parenExpr.Expr
-			}
-		}
-
-		// Handle IN clauses based on mode.
-		if op == "in" || op == "not in" {
-			if tuple, ok := right.(parser.ValTuple); ok {
-				if mode == GeneratorModePostgres {
-					// PostgreSQL normalizes IN (values) to = ANY (ARRAY[values]) and NOT IN to <> ALL (ARRAY[values]).
-					elements := sortAndDeduplicateValues(tuple)
-					normalizedElements := util.TransformSlice(elements, func(elem parser.Expr) parser.Expr {
-						return normalizeExpr(elem, mode)
-					})
-					right = &parser.ArrayConstructor{Elements: normalizedElements}
-					if op == "in" {
-						op = "="
-						anyFlag = true
-					} else {
-						// PostgreSQL normalizes NOT IN (values) to <> ALL (ARRAY[values]).
-						op = "<>"
-						allFlag = true
-					}
-				} else {
-					// For other databases, keep IN but sort the tuple for consistent comparison.
-					sortedElements := sortAndDeduplicateValues(tuple)
-					normalizedElements := util.TransformSlice(sortedElements, func(elem parser.Expr) parser.Expr {
-						return normalizeExpr(elem, mode)
-					})
-					right = parser.ValTuple(normalizedElements)
-				}
-			}
-		}
-
-		// For existing ANY/ALL expressions, normalize and sort the array elements.
-		if anyFlag || allFlag {
-			if arrayConst, ok := right.(*parser.ArrayConstructor); ok {
-				normalizedElements := util.TransformSlice(arrayConst.Elements, func(elem parser.Expr) parser.Expr {
-					return normalizeExpr(elem, mode)
-				})
-				right = &parser.ArrayConstructor{Elements: sortAndDeduplicateValues(normalizedElements)}
-			}
-		}
-		right, anyFlag, allFlag = foldSingleElementArrayComparison(right, anyFlag, allFlag)
-
-		return &parser.ComparisonExpr{
-			Operator: op,
-			Left:     left,
-			Right:    right,
-			Escape:   normalizeExpr(e.Escape, mode),
-			All:      allFlag,
-			Any:      anyFlag,
-		}
+		return normalizeComparisonExpr(e, mode, normalizeExpr)
 	case *parser.AndExpr:
 		return &parser.AndExpr{
 			Left:  normalizeExpr(e.Left, mode),
@@ -1616,19 +1448,105 @@ func sortPrivilegesByCanonicalOrder(privileges []string) {
 	})
 }
 
-// foldSingleElementArrayComparison rewrites "x <op> ANY/ALL (ARRAY[v])" into "x <op> v".
-// PostgreSQL folds a single-element IN into a scalar comparison (IN ('a') becomes = 'a')
-// but keeps the array for an explicitly written ANY/ALL, so both spellings have to be
-// folded to compare equal. A single element makes ANY and ALL collapse to the same
-// comparison whatever the operator is, so this holds beyond = and <>.
-func foldSingleElementArrayComparison(right parser.Expr, anyFlag, allFlag bool) (parser.Expr, bool, bool) {
-	if !anyFlag && !allFlag {
-		return right, anyFlag, allFlag
+// normalizeComparisonExpr normalizes a comparison towards the form PostgreSQL stores:
+// IN becomes = ANY (ARRAY[...]), NOT IN becomes <> ALL (ARRAY[...]), ANY/ALL array
+// elements are sorted and deduplicated, and a single-element array collapses to a
+// scalar comparison. Other modes keep IN but sort its values.
+//
+// recur is the caller's own normalizer: CHECK constraints and value expressions share
+// this comparison handling but normalize their operands differently. Keeping it in one
+// place is deliberate — the two used to carry copies of this logic, and fixes to one
+// repeatedly failed to reach the other (see #1182).
+func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur func(parser.Expr, GeneratorMode) parser.Expr) parser.Expr {
+	left := recur(e.Left, mode)
+	right := recur(e.Right, mode)
+	op := normalizeOperator(e.Operator, mode)
+	anyFlag := e.Any
+	allFlag := e.All
+
+	// The generic parser may parse "= ANY(ARRAY[...])" as a FuncExpr on the right side.
+	// Normalize this to set the Any/All flags properly.
+	if funcExpr, ok := right.(*parser.FuncExpr); ok {
+		funcName := strings.ToLower(funcExpr.Name.Name)
+		switch funcName {
+		case "any", "some":
+			if len(funcExpr.Exprs) == 1 {
+				if aliased, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
+					right = recur(aliased.Expr, mode)
+					anyFlag = true
+				}
+			}
+		case "all":
+			if len(funcExpr.Exprs) == 1 {
+				if aliased, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
+					right = recur(aliased.Expr, mode)
+					allFlag = true
+				}
+			}
+		}
 	}
-	if arrayConst, ok := right.(*parser.ArrayConstructor); ok && len(arrayConst.Elements) == 1 {
-		return arrayConst.Elements[0], false, false
+
+	// Unwrap ParenExpr from right side for ANY/ALL to ensure consistent formatting.
+	// The parser may create ParenExpr(ArrayConstructor), which formats as ANY(ARRAY
+	// instead of ANY (ARRAY.
+	if anyFlag || allFlag {
+		if parenExpr, ok := right.(*parser.ParenExpr); ok {
+			right = parenExpr.Expr
+		}
 	}
-	return right, anyFlag, allFlag
+
+	// Handle IN clauses based on mode.
+	if op == "in" || op == "not in" {
+		if tuple, ok := right.(parser.ValTuple); ok {
+			if mode == GeneratorModePostgres {
+				// Elements are normalized and sorted by the ANY/ALL block below.
+				right = &parser.ArrayConstructor{Elements: parser.Exprs(tuple)}
+				if op == "in" {
+					op = "="
+					anyFlag = true
+				} else { // "not in"
+					op = "<>"
+					allFlag = true
+				}
+			} else {
+				// For other databases, keep IN but sort the tuple for consistent comparison.
+				normalizedElements := util.TransformSlice(tuple, func(elem parser.Expr) parser.Expr {
+					return recur(elem, mode)
+				})
+				right = parser.ValTuple(sortAndDeduplicateValues(normalizedElements))
+			}
+		}
+	}
+
+	// Normalize and sort the array elements of ANY/ALL expressions, whether they were
+	// written as such or converted from IN above. Element order does not affect ANY/ALL.
+	if anyFlag || allFlag {
+		if arrayConst, ok := right.(*parser.ArrayConstructor); ok {
+			normalizedElements := util.TransformSlice(arrayConst.Elements, func(elem parser.Expr) parser.Expr {
+				return recur(elem, mode)
+			})
+			right = &parser.ArrayConstructor{Elements: sortAndDeduplicateValues(normalizedElements)}
+		}
+
+		// PostgreSQL folds a single-element IN into a scalar comparison (IN ('a') becomes
+		// = 'a') but keeps the array for an explicitly written ANY/ALL, so both spellings
+		// have to be folded to compare equal. A single element makes ANY and ALL collapse
+		// to the same comparison whatever the operator is, so this holds beyond = and <>.
+		if arrayConst, ok := right.(*parser.ArrayConstructor); ok && len(arrayConst.Elements) == 1 {
+			right = arrayConst.Elements[0]
+			anyFlag = false
+			allFlag = false
+		}
+	}
+
+	return &parser.ComparisonExpr{
+		Operator: op,
+		Left:     left,
+		Right:    right,
+		Escape:   recur(e.Escape, mode),
+		All:      allFlag,
+		Any:      anyFlag,
+	}
 }
 
 // sortAndDeduplicateValues sorts and deduplicates a slice of expressions based on their string representation.

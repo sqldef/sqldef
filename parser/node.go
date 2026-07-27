@@ -2064,6 +2064,16 @@ const (
 	OverlapsStr          = "overlaps"
 )
 
+// NeedsAnyAllParens reports whether the right operand of an ALL/ANY/SOME comparison has
+// to be wrapped in parentheses. ParenExpr and Subquery already print their own.
+func NeedsAnyAllParens(right Expr) bool {
+	switch right.(type) {
+	case *ParenExpr, *Subquery:
+		return false
+	}
+	return true
+}
+
 // Format formats the node.
 func (node *ComparisonExpr) Format(buf *nodeBuffer) {
 	buf.Printf("%v %s ", node.Left, node.Operator)
@@ -2073,17 +2083,8 @@ func (node *ComparisonExpr) Format(buf *nodeBuffer) {
 		buf.Printf("ANY ")
 	}
 
-	// For ALL/ANY/SOME, wrap the right expression in parentheses if it's not already a ParenExpr or Subquery
-	if node.All || node.Any {
-		if _, isParenExpr := node.Right.(*ParenExpr); !isParenExpr {
-			if _, isSubquery := node.Right.(*Subquery); !isSubquery {
-				buf.Printf("(%v)", node.Right)
-			} else {
-				buf.Printf("%v", node.Right)
-			}
-		} else {
-			buf.Printf("%v", node.Right)
-		}
+	if (node.All || node.Any) && NeedsAnyAllParens(node.Right) {
+		buf.Printf("(%v)", node.Right)
 	} else {
 		buf.Printf("%v", node.Right)
 	}

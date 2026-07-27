@@ -24,9 +24,10 @@ func TestNormalizeCheckExprSortsAnyAllArray(t *testing.T) {
 			expected: "status = ANY (ARRAY['active', 'pending'])",
 		},
 		{
-			name:     "unsorted ALL as stored by PostgreSQL",
-			sql:      `CREATE TABLE t (status text, CHECK (status <> ALL (ARRAY['deleted'::text, 'cancelled'::text])))`,
-			expected: "status <> ALL (ARRAY['cancelled', 'deleted'])",
+			// Element order is irrelevant for every ANY/ALL operator, not just = and <>.
+			name:     "unsorted ALL with a non-equality operator",
+			sql:      `CREATE TABLE t (priority int, CHECK (priority >= ALL (ARRAY[2, 1])))`,
+			expected: "priority >= ALL (ARRAY[1, 2])",
 		},
 	}
 
@@ -98,7 +99,7 @@ func TestNormalizeSingleElementArrayComparison(t *testing.T) {
 		},
 		{
 			name:     "multiple elements are left as an array",
-			sql:      `CREATE TABLE t (status text, CHECK (status IN ('pending', 'active')))`,
+			sql:      `CREATE TABLE t (status text, CHECK (status = ANY (ARRAY['active'::text, 'pending'::text])))`,
 			expected: "status = ANY (ARRAY['active', 'pending'])",
 		},
 	}

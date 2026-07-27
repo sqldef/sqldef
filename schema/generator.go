@@ -5284,21 +5284,15 @@ func (g *Generator) formatExprQuoteAware(expr parser.Expr) string {
 		return "(" + g.formatExprQuoteAware(e.Expr) + ")"
 	case *parser.ComparisonExpr:
 		result := g.formatExprQuoteAware(e.Left) + " " + e.Operator + " "
-		if !e.All && !e.Any {
-			return result + g.formatExprQuoteAware(e.Right)
-		}
-		// ANY/ALL requires its right operand to be parenthesized, and ParenExpr/Subquery
-		// already carry their own parentheses.
 		if e.All {
 			result += "ALL "
-		} else {
+		} else if e.Any {
 			result += "ANY "
 		}
-		switch e.Right.(type) {
-		case *parser.ParenExpr, *parser.Subquery:
-			return result + g.formatExprQuoteAware(e.Right)
+		if (e.All || e.Any) && parser.NeedsAnyAllParens(e.Right) {
+			return result + "(" + g.formatExprQuoteAware(e.Right) + ")"
 		}
-		return result + "(" + g.formatExprQuoteAware(e.Right) + ")"
+		return result + g.formatExprQuoteAware(e.Right)
 	case *parser.AndExpr:
 		return g.formatExprQuoteAware(e.Left) + " AND " + g.formatExprQuoteAware(e.Right)
 	case *parser.OrExpr:
