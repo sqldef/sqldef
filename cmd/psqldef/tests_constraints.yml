@@ -920,11 +920,24 @@ ConstraintCheckInMultipleColumnsWithUnique:
   up: |
     ALTER TABLE "public"."orders" ADD CONSTRAINT "orders_priority_check" CHECK (priority = ANY (ARRAY[1, 2, 3]));
     ALTER TABLE "public"."orders" ADD CONSTRAINT "orders_category_check" CHECK (category = ANY (ARRAY[10, 20, 30, 40]));
-    ALTER TABLE "public"."orders" ADD CONSTRAINT "priority" UNIQUE ("priority", "category");
+    ALTER TABLE "public"."orders" ADD CONSTRAINT "orders_priority_category_key" UNIQUE ("priority", "category");
   down: |
     ALTER TABLE "public"."orders" DROP CONSTRAINT "orders_priority_check";
     ALTER TABLE "public"."orders" DROP CONSTRAINT "orders_category_check";
-    ALTER TABLE "public"."orders" DROP CONSTRAINT "priority";
+    ALTER TABLE "public"."orders" DROP CONSTRAINT "orders_priority_category_key";
+UnnamedCompositeUniqueConstraints:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t2 (
+      a integer,
+      b integer,
+      UNIQUE (a, b)
+    );
+    CREATE TABLE t3 (
+      a integer,
+      c integer,
+      UNIQUE (a, c)
+    );
 CreateTableWithCheckConstraints:
   current: |
     CREATE TABLE "public"."domains" (

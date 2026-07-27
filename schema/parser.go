@@ -601,12 +601,13 @@ func parseTable(mode GeneratorMode, stmt *parser.DDL, defaultSchema string, rawD
 			if tableName == "" {
 				tableName = stmt.NewName.Name.Name
 			}
-			columnName := indexColumns[0].ColumnName()
-
-			if mode == GeneratorModePostgres && indexDef.Info.Unique && len(indexColumns) == 1 {
-				nameIdent = buildPostgresConstraintNameIdent(tableName, columnName, "key")
+			if mode == GeneratorModePostgres && indexDef.Info.Unique {
+				columnNames := util.TransformSlice(indexColumns, func(column IndexColumn) string {
+					return column.ColumnName()
+				})
+				nameIdent = buildPostgresConstraintNameIdent(tableName, strings.Join(columnNames, "_"), "key")
 			} else {
-				// For MySQL or multi-column constraints, use just the column name
+				columnName := indexColumns[0].ColumnName()
 				// Auto-generated names are unquoted
 				nameIdent.Name = columnName
 				nameIdent.Quoted = false
