@@ -1670,3 +1670,37 @@ func TestForeignKeyMatchGrammar(t *testing.T) {
 		}
 	})
 }
+
+func TestAnyAllOperandParens(t *testing.T) {
+	// An ANY/ALL operand gets parentheses of its own unless it already carries them,
+	// which is the case for both node types the parser can produce here. Without the
+	// exemption these would come out double-wrapped as ANY ((...)).
+	testCases := []struct {
+		name     string
+		sql      string
+		expected string
+	}{
+		{
+			name:     "array operand is not double-wrapped",
+			sql:      "CREATE TABLE t (status text CHECK (status = ANY (ARRAY['active', 'pending'])))",
+			expected: "status = ANY(ARRAY['active', 'pending'])",
+		},
+		{
+			name:     "subquery operand is not double-wrapped",
+			sql:      "CREATE VIEW v AS SELECT a FROM t WHERE a <> ALL (SELECT b FROM u)",
+			expected: "a != ALL (select b from u)",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			stmt, err := ParseDDL(tc.sql, ParserModePostgres)
+			if err != nil {
+				t.Fatalf("parse failed: %v", err)
+			}
+			if got := String(stmt); !strings.Contains(got, tc.expected) {
+				t.Errorf("String() = %q, want it to contain %q", got, tc.expected)
+			}
+		})
+	}
+}
