@@ -249,3 +249,49 @@ GrantOverlappingRevokeSkipped:
     -- Skipped: REVOKE DELETE, INSERT, UPDATE ON TABLE "public"."users" FROM "user1";
     -- Skipped: REVOKE INSERT, SELECT ON TABLE "public"."users" FROM "user2";
     -- Skipped: REVOKE DELETE, UPDATE ON TABLE "public"."users" FROM "user3";
+
+# Regression test: a CREATE FUNCTION whose body contains destructive-sounding
+# substrings ("DROP TABLE", "REVOKE ") must not be misclassified as a drop
+# statement. Previously it was commented out on its first line only, leaking
+# the remaining lines as raw SQL and aborting the whole transaction on apply
+# (e.g. AWS DMS's awsdms_intercept_ddl event trigger function).
+CreateFunctionBodyMentioningDropNotSkipped:
+  enable_drop: false
+  legacy_ignore_quotes: false
+  current: ""
+  desired: |
+    CREATE FUNCTION intercept_ddl() RETURNS event_trigger AS $$
+    BEGIN
+      -- REVOKE is also mentioned here on purpose
+      IF tg_tag = 'DROP TABLE' THEN
+        RAISE NOTICE 'table dropped';
+      END IF;
+    END;
+    $$ LANGUAGE plpgsql;
+  up: |
+    CREATE FUNCTION intercept_ddl() RETURNS event_trigger AS $$
+    BEGIN
+      -- REVOKE is also mentioned here on purpose
+      IF tg_tag = 'DROP TABLE' THEN
+        RAISE NOTICE 'table dropped';
+      END IF;
+    END;
+    $$ LANGUAGE plpgsql;
+  down: |
+    -- Skipped: DROP FUNCTION public.intercept_ddl;
+
+# Regression test: a COMMENT whose text contains destructive-sounding
+# substrings must not be misclassified as a drop statement. Previously it was
+# commented out and silently never applied.
+CommentMentioningDropNotSkipped:
+  enable_drop: false
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE audit_log (id bigint);
+  desired: |
+    CREATE TABLE audit_log (id bigint);
+    COMMENT ON TABLE audit_log IS 'rows written when a DROP TABLE happens';
+  up: |
+    COMMENT ON TABLE public.audit_log IS 'rows written when a DROP TABLE happens';
+  down: |
+    COMMENT ON TABLE public.audit_log IS NULL;

@@ -798,11 +798,13 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 // commentOutDropStatements converts DROP/REVOKE statements to SQL comments.
 // This makes the output testable and visible in --dry-run output.
+// Every line is commented out so that a multi-line statement can never leak
+// executable SQL after the first line.
 func commentOutDropStatements(ddls []string) []string {
 	result := make([]string, len(ddls))
 	for i, ddl := range ddls {
 		if !strings.HasPrefix(ddl, "-- Skipped: ") && isDropStatement(ddl) {
-			result[i] = "-- Skipped: " + ddl
+			result[i] = "-- Skipped: " + strings.ReplaceAll(ddl, "\n", "\n-- ")
 		} else {
 			result[i] = ddl
 		}
@@ -814,6 +816,18 @@ func commentOutDropStatements(ddls []string) []string {
 // Note: DROP CONSTRAINT and DROP CHECK are NOT included because they are
 // required for non-destructive schema changes (e.g., changing defaults).
 func isDropStatement(ddl string) bool {
+	// CREATE (including CREATE OR REPLACE) and COMMENT statements are additive,
+	// never destructive drops, even when their payload contains substrings like
+	// "DROP TABLE" or "REVOKE ": e.g. a function body inspecting tg_tag (such as
+	// AWS DMS's awsdms_intercept_ddl event trigger function), or a comment text
+	// mentioning those words. Without this guard they would be skipped as
+	// destructive: a single-line statement silently never applies, and a
+	// multi-line one leaks its remaining lines as raw SQL (see
+	// commentOutDropStatements), aborting the transaction.
+	head := strings.ToUpper(strings.TrimSpace(ddl))
+	if strings.HasPrefix(head, "CREATE ") || strings.HasPrefix(head, "COMMENT ") {
+		return false
+	}
 	return strings.Contains(ddl, "DROP TABLE") ||
 		strings.Contains(ddl, "DROP SCHEMA") ||
 		strings.Contains(ddl, "DROP COLUMN") ||
