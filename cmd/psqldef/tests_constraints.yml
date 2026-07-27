@@ -811,6 +811,22 @@ ConstraintCheckInUnsorted:
       status text CHECK (status IN ('pending', 'active'))
     );
 
+ConstraintCheckInSingleValue:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (status IN ('pending'))
+    );
+
+ConstraintCheckNotInSingleValue:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (status NOT IN ('pending'))
+    );
+
 ConstraintCheckNotInUnsorted:
   legacy_ignore_quotes: false
   desired: |
@@ -1497,10 +1513,10 @@ ModifyTableLevelCheckMultiColumnAllAny:
     );
   up: |
     ALTER TABLE "public"."multi_check_test" DROP CONSTRAINT "valid_state_priority";
-    ALTER TABLE "public"."multi_check_test" ADD CONSTRAINT "valid_state_priority" CHECK (state = ANY (ARRAY['active', 'pending', 'waiting']) and priority >= ALL (ARRAY[1, 2]) or state = ALL (ARRAY['inactive']) and priority = ANY (ARRAY[0]));
+    ALTER TABLE "public"."multi_check_test" ADD CONSTRAINT "valid_state_priority" CHECK (state = ANY (ARRAY['active', 'pending', 'waiting']) and priority >= ALL (ARRAY[1, 2]) or state = 'inactive' and priority = 0);
   down: |
     ALTER TABLE "public"."multi_check_test" DROP CONSTRAINT "valid_state_priority";
-    ALTER TABLE "public"."multi_check_test" ADD CONSTRAINT "valid_state_priority" CHECK (state = ANY (ARRAY['active', 'pending']) and priority >= ALL (ARRAY[1, 2]) or state = ALL (ARRAY['inactive']) and priority = ANY (ARRAY[0]));
+    ALTER TABLE "public"."multi_check_test" ADD CONSTRAINT "valid_state_priority" CHECK (state = ANY (ARRAY['active', 'pending']) and priority >= ALL (ARRAY[1, 2]) or state = 'inactive' and priority = 0);
 CheckConstraintWithTypeCastInArray:
   desired: |
     CREATE TABLE test_check_typecast (

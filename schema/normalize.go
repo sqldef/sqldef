@@ -457,6 +457,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				right = &parser.ArrayConstructor{Elements: sortAndDeduplicateValues(normalizedElements)}
 			}
 		}
+		right, anyFlag, allFlag = foldSingleElementArrayComparison(right, anyFlag, allFlag)
 
 		return &parser.ComparisonExpr{
 			Operator: op,
@@ -980,6 +981,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 				right = &parser.ArrayConstructor{Elements: sortAndDeduplicateValues(normalizedElements)}
 			}
 		}
+		right, anyFlag, allFlag = foldSingleElementArrayComparison(right, anyFlag, allFlag)
 
 		return &parser.ComparisonExpr{
 			Operator: op,
@@ -1612,6 +1614,21 @@ func sortPrivilegesByCanonicalOrder(privileges []string) {
 		}
 		return 1
 	})
+}
+
+// foldSingleElementArrayComparison rewrites "x <op> ANY/ALL (ARRAY[v])" into "x <op> v".
+// PostgreSQL folds a single-element IN into a scalar comparison (IN ('a') becomes = 'a')
+// but keeps the array for an explicitly written ANY/ALL, so both spellings have to be
+// folded to compare equal. A single element makes ANY and ALL collapse to the same
+// comparison whatever the operator is, so this holds beyond = and <>.
+func foldSingleElementArrayComparison(right parser.Expr, anyFlag, allFlag bool) (parser.Expr, bool, bool) {
+	if !anyFlag && !allFlag {
+		return right, anyFlag, allFlag
+	}
+	if arrayConst, ok := right.(*parser.ArrayConstructor); ok && len(arrayConst.Elements) == 1 {
+		return arrayConst.Elements[0], false, false
+	}
+	return right, anyFlag, allFlag
 }
 
 // sortAndDeduplicateValues sorts and deduplicates a slice of expressions based on their string representation.

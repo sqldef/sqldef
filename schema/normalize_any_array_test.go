@@ -68,6 +68,56 @@ func TestNormalizeCheckExprNormalizesNotInToAllComparison(t *testing.T) {
 	}
 }
 
+// PostgreSQL folds IN ('a') into = 'a' but keeps ARRAY[...] for an explicitly written
+// ANY/ALL, so both spellings must normalize to the same scalar comparison.
+func TestNormalizeSingleElementArrayComparison(t *testing.T) {
+	tests := []struct {
+		name     string
+		sql      string
+		expected string
+	}{
+		{
+			name:     "single element IN",
+			sql:      `CREATE TABLE t (status text, CHECK (status IN ('pending')))`,
+			expected: "status = 'pending'",
+		},
+		{
+			name:     "single element ANY",
+			sql:      `CREATE TABLE t (status text, CHECK (status = ANY (ARRAY['pending'::text])))`,
+			expected: "status = 'pending'",
+		},
+		{
+			name:     "single element NOT IN",
+			sql:      `CREATE TABLE t (status text, CHECK (status NOT IN ('pending')))`,
+			expected: "status <> 'pending'",
+		},
+		{
+			name:     "single element ALL",
+			sql:      `CREATE TABLE t (status text, CHECK (status <> ALL (ARRAY['pending'::text])))`,
+			expected: "status <> 'pending'",
+		},
+		{
+			name:     "multiple elements are left as an array",
+			sql:      `CREATE TABLE t (status text, CHECK (status IN ('pending', 'active')))`,
+			expected: "status = ANY (ARRAY['active', 'pending'])",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			expr := extractCheckExpr(t, tt.sql)
+
+			// normalizeCheckExpr covers CHECK constraints, normalizeExpr partial index WHERE clauses.
+			if got := parser.String(normalizeCheckExpr(expr, GeneratorModePostgres)); got != tt.expected {
+				t.Errorf("normalizeCheckExpr() = %q, want %q", got, tt.expected)
+			}
+			if got := parser.String(normalizeExpr(expr, GeneratorModePostgres)); got != tt.expected {
+				t.Errorf("normalizeExpr() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestNormalizeCheckExprStringQuoteAwareKeepsAnyAll(t *testing.T) {
 	tests := []struct {
 		name     string
