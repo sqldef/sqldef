@@ -145,6 +145,18 @@ func TestNormalizeCheckExprStringQuoteAwareKeepsAnyAll(t *testing.T) {
 			sql:      `CREATE TABLE t ("Status" text, CHECK ("Status" IN ('active', 'pending')))`,
 			expected: `"Status" = ANY (ARRAY['active', 'pending'])`,
 		},
+		{
+			// Generated DDL keeps the authored order even though comparison sorts it,
+			// so applying a change does not rewrite an order that carries meaning.
+			name:     "authored element order is kept",
+			sql:      `CREATE TABLE t (status text, CHECK (status IN ('pending', 'active')))`,
+			expected: "status = ANY (ARRAY['pending', 'active'])",
+		},
+		{
+			name:     "single element is not folded",
+			sql:      `CREATE TABLE t (status text, CHECK (status IN ('pending')))`,
+			expected: "status = ANY (ARRAY['pending'])",
+		},
 	}
 
 	g := &Generator{

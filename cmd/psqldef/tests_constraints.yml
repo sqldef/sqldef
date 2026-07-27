@@ -104,10 +104,10 @@ AllAnySomeCheckConstraintsModifySome:
     );
   up: |
     ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_some_text_check";
-    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_some_text_check" CHECK (some_text = ANY (ARRAY['changed', 'modified', 'updated']));
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_some_text_check" CHECK (some_text = ANY (ARRAY['updated', 'modified', 'changed']));
   down: |
     ALTER TABLE "public"."test_all_any" DROP CONSTRAINT "test_all_any_some_text_check";
-    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_some_text_check" CHECK (some_text = ANY (ARRAY['allowed', 'valid']));
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_some_text_check" CHECK (some_text = ANY (ARRAY['valid', 'allowed']));
 AllAnySomeCheckConstraintsRemove:
   current: |
     CREATE TABLE test_all_any (
@@ -133,7 +133,7 @@ AllAnySomeCheckConstraintsRemove:
   down: |
     ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_state_check" CHECK (state = ANY (ARRAY['active', 'pending']));
     ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_all_positive_check" CHECK (all_positive = ALL (ARRAY[2, 3, 4]));
-    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_some_text_check" CHECK (some_text = ANY (ARRAY['changed', 'modified', 'updated']));
+    ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_some_text_check" CHECK (some_text = ANY (ARRAY['updated', 'modified', 'changed']));
     ALTER TABLE "public"."test_all_any" ADD CONSTRAINT "test_all_any_score_check" CHECK (score > ALL (ARRAY[0, 10, 20]));
 SomeConstraintModificationsCreate:
   desired: |
@@ -157,12 +157,12 @@ SomeConstraintModificationsModify:
     );
   up: |
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_status_check";
-    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ANY (ARRAY['active', 'archived', 'completed']));
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ANY (ARRAY['active', 'completed', 'archived']));
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
     ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ANY (ARRAY['X', 'Y', 'Z']));
   down: |
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_status_check";
-    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ANY (ARRAY['active', 'draft', 'pending']));
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ANY (ARRAY['active', 'pending', 'draft']));
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
     ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ANY (ARRAY['A', 'B', 'C']));
 SomeConstraintModificationsSomeToAny:
@@ -193,12 +193,12 @@ SomeConstraintModificationsSomeToAll:
     );
   up: |
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_status_check";
-    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ALL (ARRAY['active', 'archived', 'completed']));
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ALL (ARRAY['active', 'completed', 'archived']));
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
     ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ALL (ARRAY['X', 'Y', 'Z']));
   down: |
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_status_check";
-    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ANY (ARRAY['active', 'archived', 'completed']));
+    ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_status_check" CHECK (status = ANY (ARRAY['active', 'completed', 'archived']));
     ALTER TABLE "public"."test_some_modify" DROP CONSTRAINT "test_some_modify_category_check";
     ALTER TABLE "public"."test_some_modify" ADD CONSTRAINT "test_some_modify_category_check" CHECK (category = ANY (ARRAY['X', 'Y', 'Z']));
 PosixRegexCheckConstraint:
@@ -849,10 +849,10 @@ ConstraintCheckInUnsortedModify:
     );
   up: |
     ALTER TABLE public.products DROP CONSTRAINT products_status_check;
-    ALTER TABLE public.products ADD CONSTRAINT products_status_check CHECK (status = ANY (ARRAY['active', 'pending', 'waiting']));
+    ALTER TABLE public.products ADD CONSTRAINT products_status_check CHECK (status = ANY (ARRAY['pending', 'active', 'waiting']));
   down: |
     ALTER TABLE public.products DROP CONSTRAINT products_status_check;
-    ALTER TABLE public.products ADD CONSTRAINT products_status_check CHECK (status = ANY (ARRAY['active', 'pending']));
+    ALTER TABLE public.products ADD CONSTRAINT products_status_check CHECK (status = ANY (ARRAY['pending', 'active']));
 ConstraintCheckInQuoteAware:
   legacy_ignore_quotes: false
   current: |
@@ -1513,10 +1513,10 @@ ModifyTableLevelCheckMultiColumnAllAny:
     );
   up: |
     ALTER TABLE "public"."multi_check_test" DROP CONSTRAINT "valid_state_priority";
-    ALTER TABLE "public"."multi_check_test" ADD CONSTRAINT "valid_state_priority" CHECK (state = ANY (ARRAY['active', 'pending', 'waiting']) and priority >= ALL (ARRAY[1, 2]) or state = 'inactive' and priority = 0);
+    ALTER TABLE "public"."multi_check_test" ADD CONSTRAINT "valid_state_priority" CHECK (state = ANY (ARRAY['active', 'pending', 'waiting']) and priority >= ALL (ARRAY[1, 2]) or state = ALL (ARRAY['inactive']) and priority = ANY (ARRAY[0]));
   down: |
     ALTER TABLE "public"."multi_check_test" DROP CONSTRAINT "valid_state_priority";
-    ALTER TABLE "public"."multi_check_test" ADD CONSTRAINT "valid_state_priority" CHECK (state = ANY (ARRAY['active', 'pending']) and priority >= ALL (ARRAY[1, 2]) or state = 'inactive' and priority = 0);
+    ALTER TABLE "public"."multi_check_test" ADD CONSTRAINT "valid_state_priority" CHECK (state = ANY (ARRAY['active', 'pending']) and priority >= ALL (ARRAY[1, 2]) or state = ALL (ARRAY['inactive']) and priority = ANY (ARRAY[0]));
 CheckConstraintWithTypeCastInArray:
   desired: |
     CREATE TABLE test_check_typecast (

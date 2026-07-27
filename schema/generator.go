@@ -5252,7 +5252,7 @@ func (g *Generator) buildForeignKeyDDL(tableName QualifiedName, fk *ForeignKey) 
 // For PostgreSQL, this converts IN (a,b,c) to = ANY (ARRAY[a,b,c])
 func (g *Generator) normalizeCheckExprString(expr parser.Expr) string {
 	if g.mode == GeneratorModePostgres {
-		normalized := normalizeCheckExpr(expr, g.mode)
+		normalized := normalizeCheckExprForOutput(expr, g.mode)
 		// Unwrap outermost parentheses for consistent output (comparison does this too)
 		normalized = unwrapOutermostParenExpr(normalized)
 		// In quote-aware mode, use formatExprQuoteAware to preserve quoting in column names
