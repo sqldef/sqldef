@@ -437,7 +437,7 @@ var keywords = map[string]int{
 	"select":                 SELECT,
 	"sensitive":              UNUSED,
 	"separator":              SEPARATOR,
-	"sequence":               UNUSED,
+	"sequence":               SEQUENCE,
 	"serial":                 SERIAL,
 	"serializable":           SERIALIZABLE,
 	"session":                SESSION,
