@@ -779,11 +779,13 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 
 // commentOutDropStatements converts DROP/REVOKE statements to SQL comments.
 // This makes the output testable and visible in --dry-run output.
+// Every line is commented out so that a multi-line statement can never leak
+// executable SQL after the first line.
 func commentOutDropStatements(ddls []string) []string {
 	result := make([]string, len(ddls))
 	for i, ddl := range ddls {
 		if !strings.HasPrefix(ddl, "-- Skipped: ") && isDropStatement(ddl) {
-			result[i] = "-- Skipped: " + ddl
+			result[i] = "-- Skipped: " + strings.ReplaceAll(ddl, "\n", "\n-- ")
 		} else {
 			result[i] = ddl
 		}
@@ -791,30 +793,29 @@ func commentOutDropStatements(ddls []string) []string {
 	return result
 }
 
-// isDropStatement checks if a DDL statement is a DROP or REVOKE statement.
-// Note: DROP CONSTRAINT and DROP CHECK are NOT included because they are
-// required for non-destructive schema changes (e.g., changing defaults).
+// isDropStatement checks if a DDL statement is a destructive DROP or REVOKE
+// statement. All DDLs passed here are synthesized by the generator itself, so
+// destructive ones can be recognized by their leading keyword (plus the
+// destructive clauses embedded in ALTER TABLE). Substring-matching the whole
+// text would misfire on additive statements whose payload merely mentions a
+// destructive word: a function body inspecting tg_tag (e.g. AWS DMS's
+// awsdms_intercept_ddl event trigger function), a comment text, or a string
+// literal in a CHECK/DEFAULT clause.
+// Note: ALTER TABLE ... DROP CONSTRAINT/CHECK/DEFAULT/FOREIGN KEY/PRIMARY KEY
+// are NOT treated as destructive because they are required for non-destructive
+// schema changes (e.g., changing defaults or recreating constraints).
 func isDropStatement(ddl string) bool {
-	return strings.Contains(ddl, "DROP TABLE") ||
-		strings.Contains(ddl, "DROP SCHEMA") ||
-		strings.Contains(ddl, "DROP COLUMN") ||
-		strings.Contains(ddl, "DROP ROLE") ||
-		strings.Contains(ddl, "DROP USER") ||
-		strings.Contains(ddl, "DROP FUNCTION") ||
-		strings.Contains(ddl, "DROP PROCEDURE") ||
-		strings.Contains(ddl, "DROP TRIGGER") ||
-		strings.Contains(ddl, "DROP VIEW") ||
-		strings.Contains(ddl, "DROP MATERIALIZED VIEW") ||
-		strings.Contains(ddl, "DROP INDEX") ||
-		strings.Contains(ddl, "DROP SEQUENCE") ||
-		strings.Contains(ddl, "DROP TYPE") ||
-		strings.Contains(ddl, "DROP DOMAIN") ||
-		strings.Contains(ddl, "DROP EXTENSION") ||
-		strings.Contains(ddl, "DROP POLICY") ||
-		strings.Contains(ddl, "DROP PARTITION") ||
-		strings.Contains(ddl, "DISABLE ROW LEVEL SECURITY") ||
-		strings.Contains(ddl, "NO FORCE ROW LEVEL SECURITY") ||
-		strings.Contains(ddl, "REVOKE ")
+	if strings.HasPrefix(ddl, "DROP ") || strings.HasPrefix(ddl, "REVOKE ") {
+		return true
+	}
+	if strings.HasPrefix(ddl, "ALTER ") {
+		return strings.Contains(ddl, " DROP COLUMN ") ||
+			strings.Contains(ddl, " DROP INDEX ") ||
+			strings.Contains(ddl, " DROP PARTITION ") ||
+			strings.Contains(ddl, " DISABLE ROW LEVEL SECURITY") ||
+			strings.Contains(ddl, " NO FORCE ROW LEVEL SECURITY")
+	}
+	return false
 }
 
 func (g *Generator) generateDDLsForAbsentColumn(currentTable *Table, desiredTable *Table, column *Column) []string {

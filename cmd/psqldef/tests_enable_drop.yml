@@ -249,3 +249,62 @@ GrantOverlappingRevokeSkipped:
     -- Skipped: REVOKE DELETE, INSERT, UPDATE ON TABLE "public"."users" FROM "user1";
     -- Skipped: REVOKE INSERT, SELECT ON TABLE "public"."users" FROM "user2";
     -- Skipped: REVOKE DELETE, UPDATE ON TABLE "public"."users" FROM "user3";
+
+# Regression: additive statements mentioning "DROP TABLE"/"REVOKE" in payloads
+# (function body, comment text, literals) must not be skipped as destructive.
+CreateFunctionBodyMentioningDropNotSkipped:
+  enable_drop: false
+  legacy_ignore_quotes: false
+  current: ""
+  desired: |
+    CREATE FUNCTION intercept_ddl() RETURNS event_trigger AS $$
+    BEGIN
+      -- REVOKE is also mentioned here on purpose
+      IF tg_tag = 'DROP TABLE' THEN
+        RAISE NOTICE 'table dropped';
+      END IF;
+    END;
+    $$ LANGUAGE plpgsql;
+  up: |
+    CREATE FUNCTION intercept_ddl() RETURNS event_trigger AS $$
+    BEGIN
+      -- REVOKE is also mentioned here on purpose
+      IF tg_tag = 'DROP TABLE' THEN
+        RAISE NOTICE 'table dropped';
+      END IF;
+    END;
+    $$ LANGUAGE plpgsql;
+  down: |
+    -- Skipped: DROP FUNCTION public.intercept_ddl;
+
+CommentMentioningDropNotSkipped:
+  enable_drop: false
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE audit_log (id bigint);
+  desired: |
+    CREATE TABLE audit_log (id bigint);
+    COMMENT ON TABLE audit_log IS 'rows written when a DROP TABLE happens';
+  up: |
+    COMMENT ON TABLE public.audit_log IS 'rows written when a DROP TABLE happens';
+  down: |
+    COMMENT ON TABLE public.audit_log IS NULL;
+
+CheckConstraintLiteralMentioningDropNotSkipped:
+  enable_drop: false
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE audit (
+      id bigint,
+      note text
+    );
+  desired: |
+    CREATE TABLE audit (
+      id bigint,
+      note text,
+      CONSTRAINT note_ck CHECK (note <> 'DROP TABLE')
+    );
+  up: |
+    ALTER TABLE public.audit ADD CONSTRAINT note_ck CHECK (note <> 'DROP TABLE');
+  down: |
+    ALTER TABLE public.audit DROP CONSTRAINT note_ck;

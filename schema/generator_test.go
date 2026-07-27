@@ -488,3 +488,54 @@ func TestCheckConstraintMSSQLInVsOrNormalization(t *testing.T) {
 	// They should be equal
 	assert.Equal(t, strUser, strDB, "CHECK constraints should normalize to the same format")
 }
+
+func TestIsDropStatement(t *testing.T) {
+	// Destructive statements are detected by their leading keyword.
+	assert.True(t, isDropStatement(`DROP TABLE "public"."users"`))
+	assert.True(t, isDropStatement("DROP FUNCTION public.add_one"))
+	assert.True(t, isDropStatement("DROP EVENT `cleanup`"))
+	assert.True(t, isDropStatement(`REVOKE SELECT ON TABLE users FROM app_user`))
+
+	// Destructive clauses embedded in ALTER TABLE are detected.
+	assert.True(t, isDropStatement(`ALTER TABLE "public"."users" DROP COLUMN "name"`))
+	assert.True(t, isDropStatement("ALTER TABLE `users` DROP INDEX `idx_name`"))
+	assert.True(t, isDropStatement("ALTER TABLE `logs` DROP PARTITION p2024"))
+	assert.True(t, isDropStatement(`ALTER TABLE public.users DISABLE ROW LEVEL SECURITY`))
+	assert.True(t, isDropStatement(`ALTER TABLE public.users NO FORCE ROW LEVEL SECURITY`))
+
+	// Non-destructive ALTER clauses stay allowed (needed for non-destructive
+	// schema changes).
+	assert.False(t, isDropStatement(`ALTER TABLE users DROP CONSTRAINT users_check`))
+	assert.False(t, isDropStatement(`ALTER TABLE users ALTER COLUMN c DROP DEFAULT`))
+	assert.False(t, isDropStatement("ALTER TABLE `users` DROP FOREIGN KEY `fk_users`"))
+
+	// Additive statements are never destructive, even when their payload
+	// mentions destructive keywords (function bodies, comment text, literals).
+	assert.False(t, isDropStatement("CREATE FUNCTION intercept_ddl() RETURNS event_trigger AS $$\nBEGIN\n  IF tg_tag = 'DROP TABLE' THEN RAISE NOTICE 'x'; END IF;\nEND;\n$$ LANGUAGE plpgsql;"))
+	assert.False(t, isDropStatement("CREATE OR REPLACE FUNCTION f() RETURNS void AS $$\n-- REVOKE and DROP TABLE only appear in this comment\nBEGIN END;\n$$ LANGUAGE plpgsql;"))
+	assert.False(t, isDropStatement(`COMMENT ON TABLE "public"."audit_log" IS 'rows written when a DROP TABLE happens'`))
+	assert.False(t, isDropStatement(`COMMENT ON COLUMN "public"."users"."flags" IS 'set after REVOKE runs'`))
+	assert.False(t, isDropStatement(`ALTER TABLE audit ADD CONSTRAINT note_ck CHECK (note <> 'DROP TABLE')`))
+	assert.False(t, isDropStatement(`ALTER TABLE users ALTER COLUMN c SET DEFAULT 'DROP TABLE'`))
+	assert.False(t, isDropStatement("ALTER EVENT `cleanup` ON SCHEDULE EVERY 1 DAY DO\nDELETE FROM logs WHERE note = 'DROP TABLE'"))
+	assert.False(t, isDropStatement("-- audit helper\nCREATE FUNCTION f() RETURNS void AS $$ SELECT 'DROP TABLE' $$ LANGUAGE sql;"))
+}
+
+func TestCommentOutDropStatements(t *testing.T) {
+	// Single-line drops keep the existing format.
+	assert.Equal(t,
+		[]string{`-- Skipped: DROP TABLE "public"."users"`},
+		commentOutDropStatements([]string{`DROP TABLE "public"."users"`}),
+	)
+	// Non-drop statements pass through unchanged.
+	assert.Equal(t,
+		[]string{"CREATE TABLE users (id bigint)"},
+		commentOutDropStatements([]string{"CREATE TABLE users (id bigint)"}),
+	)
+	// Every line of a multi-line statement is commented out so no executable
+	// SQL can leak after the first line.
+	assert.Equal(t,
+		[]string{"-- Skipped: DROP TABLE users;\n-- DROP TABLE orders;"},
+		commentOutDropStatements([]string{"DROP TABLE users;\nDROP TABLE orders;"}),
+	)
+}

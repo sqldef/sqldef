@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestIsSingleLineComment(t *testing.T) {
+func TestIsCommentedOut(t *testing.T) {
 	tests := []struct {
 		name     string
 		ddl      string
@@ -32,11 +32,21 @@ func TestIsSingleLineComment(t *testing.T) {
 			ddl:      "-- comment\nCREATE TABLE foo (id int)\n",
 			expected: false,
 		},
+		{
+			name:     "Fully commented multi-line statement",
+			ddl:      "-- Skipped: CREATE FUNCTION f() RETURNS event_trigger AS $$\n-- BEGIN\n-- END;\n-- $$ LANGUAGE plpgsql;",
+			expected: true,
+		},
+		{
+			name:     "Partially commented multi-line statement",
+			ddl:      "-- Skipped: CREATE FUNCTION f() RETURNS event_trigger AS $$\nBEGIN\nEND;\n$$ LANGUAGE plpgsql;",
+			expected: false,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, isSingleLineComment(tt.ddl), tt.expected)
+			assert.Equal(t, isCommentedOut(tt.ddl), tt.expected)
 		})
 	}
 }

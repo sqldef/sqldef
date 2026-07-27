@@ -197,8 +197,22 @@ func isDryRun(d Database) bool {
 	return isDryRun
 }
 
-func isSingleLineComment(s string) bool {
-	return strings.HasPrefix(s, "-- ") && !strings.Contains(strings.TrimSpace(s), "\n")
+// isCommentedOut reports whether a DDL consists only of "--" comment lines
+// (e.g. a statement commented out as "-- Skipped: ..."), and therefore must
+// not be executed. A multi-line statement counts only if every non-empty line
+// is a comment, so partially commented text is still executed (and fails)
+// rather than being silently ignored.
+func isCommentedOut(s string) bool {
+	if !strings.HasPrefix(s, "-- ") {
+		return false
+	}
+	for _, line := range strings.Split(s, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" && !strings.HasPrefix(trimmed, "--") {
+			return false
+		}
+	}
+	return true
 }
 
 func RunDDLs(d Database, ddls []string, beforeApply string, ddlSuffix string, logger Logger) error {
@@ -251,7 +265,7 @@ func RunDDLs(d Database, ddls []string, beforeApply string, ddlSuffix string, lo
 	for _, ddl := range ddlsInTx {
 		logger.Printf("%s;\n", ddl)
 
-		if isSingleLineComment(ddl) {
+		if isCommentedOut(ddl) {
 			// Skip commented DDLs (e.g., "-- Skipped: ...")
 			continue
 		}
@@ -277,7 +291,7 @@ func RunDDLs(d Database, ddls []string, beforeApply string, ddlSuffix string, lo
 	for _, ddl := range ddlsNotInTx {
 		logger.Printf("%s;\n", ddl)
 		// Skip ddlSuffix and execution for commented DDLs (e.g., "-- Skipped: ...")
-		if !isSingleLineComment(ddl) {
+		if !isCommentedOut(ddl) {
 			logger.Print(ddlSuffix)
 			_, err = d.DB().Exec(ddl)
 			if err != nil {
