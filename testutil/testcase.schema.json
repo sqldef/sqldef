@@ -111,6 +111,11 @@
               "type": "boolean",
               "description": "Disable DDL transaction wrapping",
               "default": false
+            },
+            "bulk_alter": {
+              "type": "boolean",
+              "description": "Bundle multiple ALTER TABLE actions on the same table into a single statement (MySQL only)",
+              "default": false
             }
           },
           "additionalProperties": false

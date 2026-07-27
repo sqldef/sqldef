@@ -452,6 +452,45 @@ func TestAreSameForeignKeysConstraintOptionsNilVsDefault(t *testing.T) {
 		"FK with default ConstraintOptions{false, false} and FK with nil ConstraintOptions should be considered the same")
 }
 
+func TestAlterBundler(t *testing.T) {
+	g := &Generator{mode: GeneratorModeMysql}
+	tableA := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
+	tableB := &Table{name: QualifiedName{Name: Ident{Name: "b"}}}
+
+	bundler := newAlterBundler(g, true)
+
+	slotA := bundler.emit(tableA, "ALTER TABLE a ADD COLUMN x int")
+	assert.NotEqual(t, "ALTER TABLE a ADD COLUMN x int", slotA, "first action should be replaced by a placeholder")
+
+	slotB := bundler.emit(tableB, "ALTER TABLE b ADD COLUMN z int")
+	assert.NotEqual(t, slotA, slotB, "each table gets its own placeholder")
+
+	folded := bundler.emit(tableA, "ALTER TABLE a DROP COLUMN y")
+	assert.Equal(t, "", folded, "subsequent same-table action should fold, not emit")
+
+	other := bundler.emit(tableA, "DROP INDEX idx ON a")
+	assert.Equal(t, "DROP INDEX idx ON a", other, "non-ALTER statement should pass through")
+
+	ddls := bundler.finalize([]string{slotA, slotB, "DROP INDEX idx ON a"})
+	assert.Equal(t, []string{
+		"ALTER TABLE a ADD COLUMN x int, DROP COLUMN y",
+		"ALTER TABLE b ADD COLUMN z int",
+		"DROP INDEX idx ON a",
+	}, ddls)
+}
+
+func TestAlterBundlerDisabledPassesThrough(t *testing.T) {
+	g := &Generator{mode: GeneratorModeMysql}
+	table := &Table{name: QualifiedName{Name: Ident{Name: "a"}}}
+	bundler := newAlterBundler(g, false)
+
+	stmt := bundler.emit(table, "ALTER TABLE a ADD COLUMN x int")
+	assert.Equal(t, "ALTER TABLE a ADD COLUMN x int", stmt)
+
+	ddls := bundler.finalize([]string{stmt})
+	assert.Equal(t, []string{"ALTER TABLE a ADD COLUMN x int"}, ddls)
+}
+
 func TestCheckConstraintMSSQLInVsOrNormalization(t *testing.T) {
 	// Test that MSSQL's OR chain is normalized to IN and matches user's IN clause
 
