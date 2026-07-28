@@ -6866,8 +6866,9 @@ function_call_keyword:
   {
     $$ = &ConvertExpr{Action: Type1stStr, Type: $3, Expr: $5, Style: $7}
    }
-| CAST '(' expression AS convert_type ')'
+| CAST '(' expression AS convert_type array_opt ')'
   {
+    $5.Array = $6
     $$ = &ConvertExpr{Action: CastStr, Expr: $3, Type: $5}
   }
 | TRY_CAST '(' expression AS convert_type ')'
