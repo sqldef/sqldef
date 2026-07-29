@@ -67,6 +67,7 @@ type GeneratorConfig struct {
 
 	ManageExtensions *[]ManageObjectRule
 	ManagePrivileges *[]ManageObjectRule // manage.privilege rules: which grantees' privileges are managed and whether REVOKE is allowed
+	ManageFunctions  *[]ManageObjectRule // manage.function rules: which functions are managed and whether DROP is allowed
 
 	// MySQL-specific: value of lower_case_table_names server variable.
 	// 0 = case-sensitive (Linux default), 1 or 2 = case-insensitive (Windows/macOS).
@@ -368,6 +369,9 @@ func MergeGeneratorConfig(base, override GeneratorConfig) GeneratorConfig {
 	if override.ManageExtensions != nil {
 		result.ManageExtensions = override.ManageExtensions
 	}
+	if override.ManageFunctions != nil {
+		result.ManageFunctions = override.ManageFunctions
+	}
 	if override.ManagePrivileges != nil {
 		result.ManagePrivileges = override.ManagePrivileges
 	}
@@ -414,6 +418,7 @@ func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) Generat
 	}
 
 	manageExtensions := parseManageRules(config.Manage, "extension")
+	manageFunctions := parseManageRules(config.Manage, "function")
 	managePrivileges := parseManageRules(config.Manage, "privilege")
 
 	var targetTables []string
@@ -467,6 +472,7 @@ func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) Generat
 		BulkAlter:               config.BulkAlter,
 		LegacyIgnoreQuotes:      legacyIgnoreQuotes,
 		ManageExtensions:        manageExtensions,
+		ManageFunctions:         manageFunctions,
 		ManagePrivileges:        managePrivileges,
 	}
 }
@@ -492,6 +498,7 @@ func CompileManageTarget(target string) (*regexp.Regexp, error) {
 // recognized keys are parsed permissively and ignored with a warning.
 var manageImplementedKeys = map[string]bool{
 	"extension": true,
+	"function":  true,
 	"privilege": true,
 }
 

@@ -113,3 +113,31 @@ func TestMatchManageObjectRule(t *testing.T) {
 	_, ok = MatchManageObjectRule(rules[:2], "unrelated")
 	assert.False(t, ok)
 }
+
+func TestParseGeneratorConfigManageFunction(t *testing.T) {
+	// No manage: section → nil (feature off).
+	config := ParseGeneratorConfigString("", GeneratorConfig{})
+	assert.Nil(t, config.ManageFunctions)
+
+	// Rules are parsed with target and drop; drop defaults to false.
+	config = ParseGeneratorConfigString("manage: {function: [{target: 'app_.*'}, {target: 'tmp_.*', drop: true}]}", GeneratorConfig{})
+	if assert.NotNil(t, config.ManageFunctions) {
+		rules := *config.ManageFunctions
+		assert.Equal(t, 2, len(rules))
+		assert.Equal(t, "app_.*", rules[0].Target)
+		assert.False(t, rules[0].Drop)
+		assert.Equal(t, "tmp_.*", rules[1].Target)
+		assert.True(t, rules[1].Drop)
+	}
+
+	// An empty function section manages all functions with drop disabled.
+	config = ParseGeneratorConfigString("manage: {function: []}", GeneratorConfig{})
+	if assert.NotNil(t, config.ManageFunctions) {
+		assert.Equal(t, 0, len(*config.ManageFunctions))
+	}
+
+	// manage.function and manage.privilege coexist independently.
+	config = ParseGeneratorConfigString("manage: {function: [{target: f}], privilege: [{target: p}]}", GeneratorConfig{})
+	assert.NotNil(t, config.ManageFunctions)
+	assert.NotNil(t, config.ManagePrivileges)
+}

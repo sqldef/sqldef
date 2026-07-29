@@ -505,6 +505,7 @@ $ psqldef -U postgres dbname --apply \
 | `disable_ddl_transaction` | boolean | When true, all DDL statements are executed outside of transactions. Required for Aurora DSQL which does not support transactional DDL. Default is false. |
 | `legacy_ignore_quotes` | boolean | Controls identifier quoting behavior. When `true` (default), all identifiers are quoted in output. When `false`, identifiers preserve their original quoting from the source SQL. Default is `true` but will change to `false` in the next major version. See [Identifier Quoting](#identifier-quoting) for details. |
 | `manage.extension` | array | List of `{target, drop}` rules for which extensions to manage; see [Managing Extensions](#managing-extensions). |
+| `manage.function` | array | List of `{target, drop}` rules for which functions to manage; see [Managing Functions](#managing-functions). |
 | `manage.privilege` | array | List of `{target, drop}` rules for which grantees' privileges to manage; see [Managing Privileges](#managing-privileges). |
 
 ### Managing Extensions
@@ -524,7 +525,25 @@ Rules are evaluated in order; the first match wins. `target` is a regular expres
 
 If `manage.extension` is omitted, all extensions are managed as before. An empty `manage.extension:` section manages all extensions but disables drop for all of them by default.
 
-`manage.extension` is part of a broader `manage:` configuration block for controlling which objects psqldef manages across all object types (tables, views, indexes, ...); see [object-management.md](object-management.md) for the full design. Besides `manage.extension` and `manage.privilege`, other `manage:` keys are not implemented yet and are ignored with a warning.
+`manage.extension` is part of a broader `manage:` configuration block for controlling which objects psqldef manages across all object types (tables, views, indexes, ...); see [object-management.md](object-management.md) for the full design. Besides `manage.extension`, `manage.function` and `manage.privilege`, other `manage:` keys are not implemented yet and are ignored with a warning.
+
+### Managing Functions
+
+`manage.function` restricts function management to those matching a rule, leaving everything else untouched. This is useful when some functions are maintained outside of psqldef (for example an `awsdms_intercept_ddl` event-trigger function installed by AWS DMS, or functions applied by a separate tool):
+
+```yaml
+manage:
+  function:
+    - target: 'app_.*'
+    - target: 'tmp_.*'
+      drop: true  # allows DROP FUNCTION for these functions
+```
+
+Rules are evaluated in order; the first match wins. `target` is a regular expression matched against the function name, anchored with `^...$` (empty matches all). `manage.function` is scoped to the default schema: functions in other schemas match no rule and are left untouched (schema-qualified rules are not implemented yet). Functions matching no rule are left completely untouched: their definitions in the desired schema are ignored, and their existing definitions are excluded from the diff and `--export`.
+
+`drop` (default `false`) controls whether `DROP FUNCTION` is emitted for a managed function that is missing from the desired schema. As with `manage.privilege`, the rule's `drop` decides alone, independent of the global `enable_drop`: a function matched by a `drop: true` rule can be dropped even when `enable_drop` is `false`, while otherwise the drop is commented out as `-- Skipped: ...`.
+
+If `manage.function` is omitted, all functions are managed as before. An empty `manage.function:` section manages all functions but disables drop for all of them by default.
 
 ### Managing Privileges
 
