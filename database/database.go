@@ -66,6 +66,7 @@ type GeneratorConfig struct {
 	LegacyIgnoreQuotes      bool     // true = ignore quotes (legacy), false = preserve quotes
 
 	ManageExtensions *[]ManageObjectRule
+	ManagePrivileges *[]ManageObjectRule // manage.privilege rules: which grantees' privileges are managed and whether REVOKE is allowed
 
 	// MySQL-specific: value of lower_case_table_names server variable.
 	// 0 = case-sensitive (Linux default), 1 or 2 = case-insensitive (Windows/macOS).
@@ -367,6 +368,9 @@ func MergeGeneratorConfig(base, override GeneratorConfig) GeneratorConfig {
 	if override.ManageExtensions != nil {
 		result.ManageExtensions = override.ManageExtensions
 	}
+	if override.ManagePrivileges != nil {
+		result.ManagePrivileges = override.ManagePrivileges
+	}
 	if override.EnableDrop {
 		result.EnableDrop = override.EnableDrop
 	}
@@ -409,7 +413,8 @@ func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) Generat
 		log.Fatal(err)
 	}
 
-	manageExtensions := parseManageExtensions(config.Manage)
+	manageExtensions := parseManageRules(config.Manage, "extension")
+	managePrivileges := parseManageRules(config.Manage, "privilege")
 
 	var targetTables []string
 	if config.TargetTables != "" {
@@ -462,6 +467,7 @@ func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) Generat
 		BulkAlter:               config.BulkAlter,
 		LegacyIgnoreQuotes:      legacyIgnoreQuotes,
 		ManageExtensions:        manageExtensions,
+		ManagePrivileges:        managePrivileges,
 	}
 }
 
@@ -482,18 +488,27 @@ func CompileManageTarget(target string) (*regexp.Regexp, error) {
 	return regexp.Compile("^(?:" + target + ")$")
 }
 
-func parseManageExtensions(manage map[string]yaml.RawMessage) *[]ManageObjectRule {
+// manageImplementedKeys are the manage: keys with a working implementation; the other
+// recognized keys are parsed permissively and ignored with a warning.
+var manageImplementedKeys = map[string]bool{
+	"extension": true,
+	"privilege": true,
+}
+
+func parseManageRules(manage map[string]yaml.RawMessage, want string) *[]ManageObjectRule {
 	if manage == nil {
 		return nil
 	}
 
 	var result *[]ManageObjectRule
 	for key, raw := range util.CanonicalMapIter(manage) {
-		if key != "extension" {
+		if key != want {
 			if !manageKnownKeys[key] {
 				log.Fatalf("manage.%s is not a recognized manage: key (typo?)", key)
 			}
-			slog.Warn("manage key is not yet supported and will be ignored; only manage.extension is currently implemented", "key", key)
+			if !manageImplementedKeys[key] && want == "extension" { // warn once, not per implemented key
+				slog.Warn("manage key is not yet supported and will be ignored; only manage.extension and manage.privilege are currently implemented", "key", key)
+			}
 			continue
 		}
 
@@ -509,10 +524,29 @@ func parseManageExtensions(manage map[string]yaml.RawMessage) *[]ManageObjectRul
 				continue
 			}
 			if _, err := CompileManageTarget(rule.Target); err != nil {
-				log.Fatalf("manage.extension: invalid target regexp %q: %s", rule.Target, err)
+				log.Fatalf("manage.%s: invalid target regexp %q: %s", want, rule.Target, err)
 			}
 		}
 		result = &rules
 	}
 	return result
+}
+
+// MatchManageObjectRule returns the first rule whose target matches name (first match
+// wins). An empty rules list matches everything with drop disabled; an empty target
+// matches everything. The second return reports whether any rule matched.
+func MatchManageObjectRule(rules []ManageObjectRule, name string) (ManageObjectRule, bool) {
+	if len(rules) == 0 {
+		return ManageObjectRule{Drop: false}, true
+	}
+	for _, rule := range rules {
+		if rule.Target == "" {
+			return rule, true
+		}
+		re, err := CompileManageTarget(rule.Target)
+		if err == nil && re.MatchString(name) {
+			return rule, true
+		}
+	}
+	return ManageObjectRule{}, false
 }

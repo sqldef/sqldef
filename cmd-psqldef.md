@@ -505,6 +505,7 @@ $ psqldef -U postgres dbname --apply \
 | `disable_ddl_transaction` | boolean | When true, all DDL statements are executed outside of transactions. Required for Aurora DSQL which does not support transactional DDL. Default is false. |
 | `legacy_ignore_quotes` | boolean | Controls identifier quoting behavior. When `true` (default), all identifiers are quoted in output. When `false`, identifiers preserve their original quoting from the source SQL. Default is `true` but will change to `false` in the next major version. See [Identifier Quoting](#identifier-quoting) for details. |
 | `manage.extension` | array | List of `{target, drop}` rules for which extensions to manage; see [Managing Extensions](#managing-extensions). |
+| `manage.privilege` | array | List of `{target, drop}` rules for which grantees' privileges to manage; see [Managing Privileges](#managing-privileges). |
 
 ### Managing Extensions
 
@@ -523,7 +524,25 @@ Rules are evaluated in order; the first match wins. `target` is a regular expres
 
 If `manage.extension` is omitted, all extensions are managed as before. An empty `manage.extension:` section manages all extensions but disables drop for all of them by default.
 
-`manage.extension` is the first part of a broader `manage:` configuration block for controlling which objects psqldef manages across all object types (tables, views, indexes, ...); see [object-management.md](object-management.md) for the full design. Other `manage:` keys are not implemented yet and are ignored with a warning.
+`manage.extension` is part of a broader `manage:` configuration block for controlling which objects psqldef manages across all object types (tables, views, indexes, ...); see [object-management.md](object-management.md) for the full design. Besides `manage.extension` and `manage.privilege`, other `manage:` keys are not implemented yet and are ignored with a warning.
+
+### Managing Privileges
+
+`manage.privilege` declares which grantees' (roles') privileges psqldef manages, replacing the deprecated `managed_roles` list, and controls REVOKE per rule:
+
+```yaml
+manage:
+  privilege:
+    - target: 'readonly_.*'
+    - target: 'app_.*'
+      drop: true  # allows REVOKE for these roles
+```
+
+Rules are evaluated in order; the first match wins. `target` is a regular expression matched against the grantee name, anchored with `^...$` (empty matches all). Grantees matching no rule are left completely untouched: their GRANTs in the desired schema are ignored, and their existing privileges are excluded from the diff and `--export`.
+
+`drop` (default `false`) controls whether REVOKE statements are emitted for that grantee — for privileges that drifted or were removed from the desired schema, and for `REVOKE GRANT OPTION FOR` downgrades. Unlike the legacy behavior where REVOKE was tied to the global `enable_drop`, the rule's `drop` decides alone: a role with `drop: true` converges even when `enable_drop` is `false` (destructive object drops stay blocked), and a role with `drop: false` only ever gains privileges, with skipped revokes shown as `-- Skipped: ...`.
+
+When `manage.privilege` is set, the deprecated `managed_roles` option is ignored (a warning is logged if both are present). An empty `manage.privilege:` section manages all grantees with REVOKE disabled by default.
 
 ## Identifier Quoting
 

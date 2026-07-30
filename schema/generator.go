@@ -739,8 +739,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		for _, currentPriv := range g.currentPrivileges {
 			// Check each grantee individually for orphaned privileges
 			for _, grantee := range currentPriv.grantees {
-				// Skip if managed roles is empty (means "manage no roles") or grantee is not in managed roles
-				if len(g.config.ManagedRoles) == 0 || !slices.Contains(g.config.ManagedRoles, grantee) {
+				// Skip grantees whose privileges are not managed (manage.privilege
+				// rules when present, else the legacy managed_roles list; an empty
+				// managed_roles means "manage no roles")
+				if !isManagedGrantee(g.config, grantee) {
 					continue
 				}
 
@@ -766,7 +768,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 						grantObjectKeyword(currentPriv.objectType),
 						g.escapeQualifiedName(currentPriv.tableName),
 						escapedGrantee)
-					ddls = append(ddls, revoke)
+					ddls = append(ddls, gateRevokeDDL(g.config, grantee, revoke))
 				}
 			}
 		}
@@ -788,9 +790,11 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		}
 	}
 
-	// Comment out DROP/REVOKE statements when enable_drop is false
+	// Comment out DROP/REVOKE statements when enable_drop is false. With
+	// manage.privilege, REVOKE gating is already decided per grantee at
+	// emission time, so REVOKE lines are left alone here.
 	if !g.config.EnableDrop {
-		ddls = commentOutDropStatements(ddls)
+		ddls = commentOutDropStatements(ddls, g.config.ManagePrivileges != nil)
 	}
 
 	return ddls, nil
@@ -800,9 +804,13 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 // This makes the output testable and visible in --dry-run output.
 // Every line is commented out so that a multi-line statement can never leak
 // executable SQL after the first line.
-func commentOutDropStatements(ddls []string) []string {
+func commentOutDropStatements(ddls []string, preserveRevokes bool) []string {
 	result := make([]string, len(ddls))
 	for i, ddl := range ddls {
+		if preserveRevokes && strings.HasPrefix(ddl, "REVOKE ") {
+			result[i] = ddl
+			continue
+		}
 		if !strings.HasPrefix(ddl, "-- Skipped: ") && isDropStatement(ddl) {
 			result[i] = "-- Skipped: " + strings.ReplaceAll(ddl, "\n", "\n-- ")
 		} else {
@@ -4287,7 +4295,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			grantObjectKeyword(desired.objectType),
 			g.escapeQualifiedName(desired.tableName),
 			escapedGrantee)
-		ddls = append(ddls, revoke)
+		ddls = append(ddls, gateRevokeDDL(g.config, grantee, revoke))
 	}
 
 	for grantee, privileges := range util.CanonicalMapIter(revokeGrantOptionByGrantee) {
@@ -4300,7 +4308,7 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 			grantObjectKeyword(desired.objectType),
 			g.escapeQualifiedName(desired.tableName),
 			escapedGrantee)
-		ddls = append(ddls, revoke)
+		ddls = append(ddls, gateRevokeDDL(g.config, grantee, revoke))
 	}
 
 	var privilegeKeys []string
@@ -4338,10 +4346,10 @@ func (g *Generator) generateDDLsForGrantPrivilege(desired *GrantPrivilege) ([]st
 }
 
 func (g *Generator) generateDDLsForRevokePrivilege(desired *RevokePrivilege) ([]string, error) {
-	if len(g.config.ManagedRoles) > 0 && len(desired.grantees) > 0 {
+	if (g.config.ManagePrivileges != nil || len(g.config.ManagedRoles) > 0) && len(desired.grantees) > 0 {
 		hasIncludedGrantee := false
 		for _, grantee := range desired.grantees {
-			if slices.Contains(g.config.ManagedRoles, grantee) {
+			if isManagedGrantee(g.config, grantee) {
 				hasIncludedGrantee = true
 				break
 			}
@@ -4356,11 +4364,11 @@ func (g *Generator) generateDDLsForRevokePrivilege(desired *RevokePrivilege) ([]
 		return nil, err
 	}
 
-	revoke := fmt.Sprintf("REVOKE %s ON %s %s FROM %s",
+	revoke := gateRevokeDDL(g.config, desired.grantees[0], fmt.Sprintf("REVOKE %s ON %s %s FROM %s",
 		formatPrivilegesForGrant(desired.privileges),
 		grantObjectKeyword(desired.objectType),
 		g.escapeQualifiedName(desired.tableName),
-		escapedGrantee)
+		escapedGrantee))
 
 	if desired.cascadeOption {
 		revoke += " CASCADE"
@@ -6315,8 +6323,12 @@ func FilterViews(ddls []DDL, config database.GeneratorConfig) []DDL {
 }
 
 func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
+	if config.ManagePrivileges != nil && len(config.ManagedRoles) > 0 {
+		slog.Warn("both manage.privilege and managed_roles are set; managed_roles is ignored (deprecated by the manage: RFC)")
+	}
+
 	// If no roles specified, exclude all privileges
-	if len(config.ManagedRoles) == 0 {
+	if config.ManagePrivileges == nil && len(config.ManagedRoles) == 0 {
 		filtered := []DDL{}
 		for _, ddl := range ddls {
 			switch ddl.(type) {
@@ -6344,7 +6356,7 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 			// Filter grantees to only include those in config
 			includedGrantees := []string{}
 			for _, grantee := range stmt.grantees {
-				if slices.Contains(config.ManagedRoles, grantee) {
+				if isManagedGrantee(config, grantee) {
 					includedGrantees = append(includedGrantees, grantee)
 				}
 			}
@@ -6374,7 +6386,7 @@ func FilterPrivileges(ddls []DDL, config database.GeneratorConfig) []DDL {
 		case *RevokePrivilege:
 			// Process each grantee separately and consolidate
 			for _, grantee := range stmt.grantees {
-				if slices.Contains(config.ManagedRoles, grantee) {
+				if isManagedGrantee(config, grantee) {
 					key := fmt.Sprintf("%s:%s:%s", stmt.objectType, stmt.tableName.RawString(), grantee)
 					if existing, ok := revokesByTableAndGrantee[key]; ok {
 						// Merge privileges
@@ -6461,19 +6473,36 @@ func FilterExtensions(ddls []DDL, config database.GeneratorConfig) []DDL {
 }
 
 func matchManageObjectRule(rules []database.ManageObjectRule, name string) (database.ManageObjectRule, bool) {
-	if len(rules) == 0 {
-		return database.ManageObjectRule{Drop: false}, true
+	return database.MatchManageObjectRule(rules, name)
+}
+
+// isManagedGrantee reports whether privileges for grantee are managed: by
+// manage.privilege rules when present, else by the legacy managed_roles list.
+func isManagedGrantee(config database.GeneratorConfig, grantee string) bool {
+	if config.ManagePrivileges != nil {
+		_, matched := database.MatchManageObjectRule(*config.ManagePrivileges, grantee)
+		return matched
 	}
-	for _, rule := range rules {
-		if rule.Target == "" {
-			return rule, true
-		}
-		re, err := database.CompileManageTarget(rule.Target)
-		if err == nil && re.MatchString(name) {
-			return rule, true
-		}
+	return slices.Contains(config.ManagedRoles, grantee)
+}
+
+// granteeRevokeAllowed reports whether REVOKE statements may be emitted for
+// grantee under manage.privilege. Only meaningful when ManagePrivileges is set;
+// the per-rule drop flag then decides, independent of the global enable_drop
+// (which the manage: RFC deprecates).
+func granteeRevokeAllowed(config database.GeneratorConfig, grantee string) bool {
+	rule, matched := database.MatchManageObjectRule(*config.ManagePrivileges, grantee)
+	return matched && rule.Drop
+}
+
+// gateRevokeDDL wraps a REVOKE statement in a skip comment when manage.privilege
+// forbids revokes for grantee; in legacy mode it returns the DDL unchanged (the
+// global enable_drop pass handles it).
+func gateRevokeDDL(config database.GeneratorConfig, grantee, ddl string) string {
+	if config.ManagePrivileges != nil && !granteeRevokeAllowed(config, grantee) {
+		return "-- Skipped: " + ddl
 	}
-	return database.ManageObjectRule{}, false
+	return ddl
 }
 
 // generateDropTableDDLsWithDependencies generates DROP TABLE statements in the correct order
