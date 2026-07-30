@@ -2562,14 +2562,31 @@ func (g *Generator) generateDDLsForCreateTrigger(triggerName QualifiedName, desi
 func (g *Generator) generateDDLsForCreateFunction(desired *Function) ([]string, error) {
 	var ddls []string
 
-	currentFunction := g.findFunctionByName(g.currentFunctions, desired.name)
+	currentFunction, unmatchedOverloads := g.findReplaceTargetFunction(desired)
 	if currentFunction == nil {
 		// Function does not exist, create it
 		ddls = append(ddls, desired.statement)
 	} else if !g.areSameFunctionDefinition(currentFunction, desired) {
-		// Function exists but is different, use CREATE OR REPLACE
-		// Modify the statement to include OR REPLACE if not already present
-		if desired.orReplace {
+		// PostgreSQL can update a function in place with CREATE OR REPLACE, but
+		// only while the signature (argument modes/names/types and return type)
+		// stays the same: changing the return type is an error, and changing
+		// argument types would create an overload instead of replacing. So:
+		// same signature -> CREATE OR REPLACE (no drop, dependent objects
+		// survive); changed signature -> DROP + CREATE, the only way PostgreSQL
+		// allows it. When overloads make the pairing ambiguous, or on other
+		// dialects, the previous behavior is kept.
+		if g.mode == GeneratorModePostgres && !unmatchedOverloads {
+			if replacement, ok := g.functionReplacementDDL(currentFunction, desired); ok {
+				ddls = append(ddls, replacement)
+			} else {
+				// Signature changed: PostgreSQL requires DROP + CREATE. Gate the
+				// DROP through manage.function so a drop:false rule still forbids
+				// it (the global enable_drop pass preserves bare DROP FUNCTION
+				// lines when manage.function is set).
+				ddls = append(ddls, gateFunctionDropDDL(g.config, currentFunction.name.Name.Name, g.dropFunctionDDL(currentFunction)))
+				ddls = append(ddls, desired.statement)
+			}
+		} else if desired.orReplace {
 			ddls = append(ddls, desired.statement)
 		} else {
 			dropDDL := "DROP FUNCTION " + g.escapeQualifiedName(currentFunction.name)
@@ -2593,6 +2610,169 @@ func (g *Generator) findFunctionByName(functions []*Function, name QualifiedName
 		}
 	}
 	return nil
+}
+
+// findReplaceTargetFunction picks the current function that desired should be
+// compared against. With PostgreSQL overloads (same name, different argument
+// types) it prefers the one matching the desired signature; when several
+// same-named functions exist and none matches, unmatchedOverloads is true and
+// the caller keeps the legacy behavior instead of guessing.
+func (g *Generator) findReplaceTargetFunction(desired *Function) (current *Function, unmatchedOverloads bool) {
+	var sameNamed []*Function
+	for _, f := range g.currentFunctions {
+		if qualifiedNamesEqual(f.name, desired.name, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames) {
+			sameNamed = append(sameNamed, f)
+		}
+	}
+	switch len(sameNamed) {
+	case 0:
+		return nil, false
+	case 1:
+		return sameNamed[0], false
+	}
+	for _, f := range sameNamed {
+		if g.areSameFunctionSignature(f, desired) {
+			return f, false
+		}
+	}
+	return sameNamed[0], true
+}
+
+// functionReplacementDDL returns the single in-place replacement statement for
+// a changed PostgreSQL function, or ok=false when the change needs DROP +
+// CREATE (signature changed, or the statement cannot be rewritten).
+func (g *Generator) functionReplacementDDL(current, desired *Function) (string, bool) {
+	if !g.areSameFunctionSignature(current, desired) {
+		return "", false
+	}
+	if desired.orReplace {
+		return desired.statement, true
+	}
+	return insertOrReplaceIntoCreateFunction(desired.statement)
+}
+
+// areSameFunctionSignature reports whether two functions share the identity
+// PostgreSQL requires for CREATE OR REPLACE: the same argument list (modes,
+// names, and types, in order) and the same return type. Types are compared
+// after normalizing common PostgreSQL aliases (int/integer, varchar/character
+// varying, ...) because the current side comes from pg_get_functiondef, which
+// always prints canonical names. Any remaining mismatch is conservative and
+// falls back to DROP + CREATE.
+func (g *Generator) areSameFunctionSignature(a, b *Function) bool {
+	// The grammar collapses RETURNS TABLE(...) to "TABLE", dropping the column
+	// list, so table-returning functions can never be proven replaceable.
+	if strings.EqualFold(a.returnType, "TABLE") || strings.EqualFold(b.returnType, "TABLE") {
+		return false
+	}
+	if normalizePGFunctionType(a.returnType) != normalizePGFunctionType(b.returnType) || len(a.args) != len(b.args) {
+		return false
+	}
+	for i := range a.args {
+		ca, da := a.args[i], b.args[i]
+		if functionArgMode(ca.mode) != functionArgMode(da.mode) {
+			return false
+		}
+		// Argument names fold like identifiers (unquoted ones lower-case).
+		// PostgreSQL allows adding a name to a previously unnamed parameter,
+		// but not renaming an existing one.
+		can, dan := foldedIdentName(ca.name), foldedIdentName(da.name)
+		if can != "" && can != dan {
+			return false
+		}
+		if normalizePGFunctionType(ca.typ) != normalizePGFunctionType(da.typ) {
+			return false
+		}
+	}
+	return true
+}
+
+func functionArgMode(mode string) string {
+	if mode == "" {
+		return "IN"
+	}
+	return strings.ToUpper(mode)
+}
+
+// foldedIdentName returns the identifier name as PostgreSQL resolves it:
+// quoted identifiers keep their exact case, unquoted ones fold to lower case.
+func foldedIdentName(id Ident) string {
+	if id.Quoted {
+		return id.Name
+	}
+	return strings.ToLower(id.Name)
+}
+
+// pgFunctionTypeAliases maps PostgreSQL type spellings to the canonical names
+// pg_get_functiondef prints. Only exact aliases are listed; timestamptz maps to
+// "timestamp with time zone" (the same type), never to plain timestamp.
+var pgFunctionTypeAliases = map[string]string{
+	"int":         "integer",
+	"int4":        "integer",
+	"int2":        "smallint",
+	"int8":        "bigint",
+	"bool":        "boolean",
+	"varchar":     "character varying",
+	"char":        "character",
+	"bpchar":      "character",
+	"float4":      "real",
+	"float8":      "double precision",
+	"decimal":     "numeric",
+	"timestamptz": "timestamp with time zone",
+	"timetz":      "time with time zone",
+}
+
+// normalizePGFunctionType canonicalizes a function argument/return type for
+// comparison: lower-cased, whitespace-collapsed, with common aliases mapped to
+// the names pg_get_functiondef prints. Array suffixes are preserved.
+func normalizePGFunctionType(typ string) string {
+	t := strings.ToLower(strings.TrimSpace(typ))
+	t = strings.Join(strings.Fields(t), " ")
+	suffix := ""
+	for strings.HasSuffix(t, "[]") {
+		t = strings.TrimSpace(strings.TrimSuffix(t, "[]"))
+		suffix += "[]"
+	}
+	if canonical, ok := pgFunctionTypeAliases[t]; ok {
+		t = canonical
+	}
+	return t + suffix
+}
+
+// dropFunctionDDL renders DROP FUNCTION for current. In PostgreSQL the
+// identity argument types are appended when known so the drop stays
+// unambiguous under overloads; OUT parameters are not part of the identity, so
+// the bare form is kept when any non-input argument is present.
+func (g *Generator) dropFunctionDDL(current *Function) string {
+	base := "DROP FUNCTION " + g.escapeQualifiedName(current.name)
+	argTypes := make([]string, 0, len(current.args))
+	for _, arg := range current.args {
+		switch functionArgMode(arg.mode) {
+		case "IN":
+			argTypes = append(argTypes, arg.typ)
+		case "VARIADIC":
+			argTypes = append(argTypes, "VARIADIC "+arg.typ)
+		default: // OUT/INOUT: play safe with the bare form
+			return base
+		}
+	}
+	return base + "(" + strings.Join(argTypes, ", ") + ")"
+}
+
+// insertOrReplaceIntoCreateFunction splices OR REPLACE after the leading
+// CREATE keyword. The decision that the statement lacks OR REPLACE comes from
+// the parser (desired.orReplace); this only performs the insertion. ok is
+// false when the statement doesn't begin with the CREATE keyword (e.g. an
+// attached leading comment); callers then fall back to DROP + CREATE.
+func insertOrReplaceIntoCreateFunction(stmt string) (string, bool) {
+	trimmed := strings.TrimLeft(stmt, " \t\r\n")
+	if len(trimmed) > 6 && strings.EqualFold(trimmed[:6], "CREATE") {
+		switch trimmed[6] {
+		case ' ', '\t', '\r', '\n':
+			lead := stmt[:len(stmt)-len(trimmed)]
+			return lead + trimmed[:6] + " OR REPLACE" + trimmed[6:], true
+		}
+	}
+	return stmt, false
 }
 
 func (g *Generator) areSameFunctionDefinition(a, b *Function) bool {

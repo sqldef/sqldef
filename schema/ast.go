@@ -442,6 +442,7 @@ type Function struct {
 // FunctionArg is the schema-level representation of a function argument.
 // Used by dependency analysis to detect Function -> Type/Domain edges.
 type FunctionArg struct {
+	mode string // "", "IN", "OUT", "INOUT", "VARIADIC" ("" means IN)
 	name Ident
 	typ  string
 }

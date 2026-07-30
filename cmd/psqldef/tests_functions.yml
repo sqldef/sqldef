@@ -397,3 +397,79 @@ CreateFunctionWithDefaultArgs:
     $$ LANGUAGE plpgsql VOLATILE;
   up: ""
   down: ""
+
+# Changing only the body of an existing function uses CREATE OR REPLACE, so it
+# converges without dropping (and works even with enable_drop: false).
+FunctionBodyChangeUsesCreateOrReplace:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  current: |
+    CREATE FUNCTION add_one(x integer) RETURNS integer AS $$ BEGIN RETURN x + 1; END; $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE FUNCTION add_one(x integer) RETURNS integer AS $$ BEGIN RETURN x + 2; END; $$ LANGUAGE plpgsql;
+  up: |
+    CREATE OR REPLACE FUNCTION add_one(x integer) RETURNS integer AS $$ BEGIN RETURN x + 2; END; $$ LANGUAGE plpgsql;
+  down: |
+    CREATE OR REPLACE FUNCTION add_one(x integer) RETURNS integer AS $$ BEGIN RETURN x + 1; END; $$ LANGUAGE plpgsql;
+
+# Changing the return type cannot go through CREATE OR REPLACE (PostgreSQL
+# rejects it), so the function is dropped and recreated.
+FunctionReturnTypeChangeDropsAndRecreates:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE FUNCTION get_val() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE FUNCTION get_val() RETURNS text AS $$ BEGIN RETURN 'x'; END; $$ LANGUAGE plpgsql;
+  up: |
+    DROP FUNCTION public.get_val();
+    CREATE FUNCTION get_val() RETURNS text AS $$ BEGIN RETURN 'x'; END; $$ LANGUAGE plpgsql;
+  down: |
+    DROP FUNCTION public.get_val();
+    CREATE FUNCTION get_val() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+
+# Changing an argument type cannot go through CREATE OR REPLACE (it would
+# create an overload instead of replacing), so drop and recreate.
+FunctionArgTypeChangeDropsAndRecreates:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE FUNCTION twice(x integer) RETURNS integer AS $$ BEGIN RETURN x * 2; END; $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE FUNCTION twice(x bigint) RETURNS bigint AS $$ BEGIN RETURN x * 2; END; $$ LANGUAGE plpgsql;
+  up: |
+    DROP FUNCTION public.twice(integer);
+    CREATE FUNCTION twice(x bigint) RETURNS bigint AS $$ BEGIN RETURN x * 2; END; $$ LANGUAGE plpgsql;
+  down: |
+    DROP FUNCTION public.twice(bigint);
+    CREATE FUNCTION twice(x integer) RETURNS integer AS $$ BEGIN RETURN x * 2; END; $$ LANGUAGE plpgsql;
+
+# Even when the desired statement already says OR REPLACE, a signature change
+# still needs DROP first; OR REPLACE alone would error (return type) or create
+# an overload (argument types).
+FunctionOrReplaceWithReturnTypeChangeDropsFirst:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE FUNCTION fmt_val() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE OR REPLACE FUNCTION fmt_val() RETURNS text AS $$ BEGIN RETURN 'v'; END; $$ LANGUAGE plpgsql;
+  up: |
+    DROP FUNCTION public.fmt_val();
+    CREATE OR REPLACE FUNCTION fmt_val() RETURNS text AS $$ BEGIN RETURN 'v'; END; $$ LANGUAGE plpgsql;
+  down: |
+    DROP FUNCTION public.fmt_val();
+    CREATE FUNCTION fmt_val() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+
+# RETURNS TABLE(...) loses its column list in parsing, so a change to a
+# table-returning function always drops and recreates (OR REPLACE could not be
+# proven safe, and PostgreSQL rejects it when the columns differ).
+FunctionReturnsTableChangeDropsAndRecreates:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE FUNCTION list_items() RETURNS TABLE(id integer) AS $$ SELECT 1 $$ LANGUAGE sql;
+  desired: |
+    CREATE FUNCTION list_items() RETURNS TABLE(id integer, label text) AS $$ SELECT 1, 'a'::text $$ LANGUAGE sql;
+  up: |
+    DROP FUNCTION public.list_items();
+    CREATE FUNCTION list_items() RETURNS TABLE(id integer, label text) AS $$ SELECT 1, 'a'::text $$ LANGUAGE sql;
+  down: |
+    DROP FUNCTION public.list_items();
+    CREATE FUNCTION list_items() RETURNS TABLE(id integer) AS $$ SELECT 1 $$ LANGUAGE sql;

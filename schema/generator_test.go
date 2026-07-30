@@ -840,3 +840,94 @@ func TestIsManagedFunction(t *testing.T) {
 	// Default schema but no rule matches → not managed.
 	assert.False(t, isManagedFunction(config, "public", "public", "other_fn"))
 }
+
+func TestInsertOrReplaceIntoCreateFunction(t *testing.T) {
+	// OR REPLACE is spliced after CREATE, preserving the original casing.
+	got, ok := insertOrReplaceIntoCreateFunction("CREATE FUNCTION f() RETURNS integer AS $$ SELECT 1 $$ LANGUAGE sql;")
+	assert.True(t, ok)
+	assert.Equal(t, "CREATE OR REPLACE FUNCTION f() RETURNS integer AS $$ SELECT 1 $$ LANGUAGE sql;", got)
+
+	got, ok = insertOrReplaceIntoCreateFunction("create function f() returns integer as $$ select 1 $$ language sql;")
+	assert.True(t, ok)
+	assert.Equal(t, "create OR REPLACE function f() returns integer as $$ select 1 $$ language sql;", got)
+
+	// A comment between CREATE and FUNCTION stays in place and the result is
+	// still valid SQL.
+	got, ok = insertOrReplaceIntoCreateFunction("CREATE /* c */ FUNCTION f() RETURNS integer AS $$ SELECT 1 $$ LANGUAGE sql;")
+	assert.True(t, ok)
+	assert.Equal(t, "CREATE OR REPLACE /* c */ FUNCTION f() RETURNS integer AS $$ SELECT 1 $$ LANGUAGE sql;", got)
+
+	_, ok = insertOrReplaceIntoCreateFunction("  CREATE FUNCTION f() RETURNS integer AS $$ SELECT 1 $$ LANGUAGE sql;")
+	assert.True(t, ok)
+
+	// A leading comment defeats the splice; callers fall back to DROP+CREATE.
+	_, ok = insertOrReplaceIntoCreateFunction("-- note\nCREATE FUNCTION f() RETURNS integer AS $$ SELECT 1 $$ LANGUAGE sql;")
+	assert.False(t, ok)
+}
+
+func TestAreSameFunctionSignature(t *testing.T) {
+	g := &Generator{mode: GeneratorModePostgres}
+	fn := func(returnType string, args ...FunctionArg) *Function {
+		return &Function{returnType: returnType, args: args}
+	}
+	arg := func(name, typ string) FunctionArg {
+		return FunctionArg{name: parser.NewIdent(name, false), typ: typ}
+	}
+
+	base := fn("integer", arg("x", "integer"), arg("y", "text"))
+	assert.True(t, g.areSameFunctionSignature(base, fn("integer", arg("x", "integer"), arg("y", "text"))))
+
+	// Common type aliases equal their canonical spelling (the current side
+	// always comes from pg_get_functiondef, which prints canonical names).
+	assert.True(t, g.areSameFunctionSignature(base, fn("int", arg("x", "int4"), arg("y", "text"))))
+	assert.True(t, g.areSameFunctionSignature(
+		fn("character varying", arg("v", "character varying")),
+		fn("varchar", arg("v", "varchar"))))
+	assert.True(t, g.areSameFunctionSignature(
+		fn("integer[]", arg("xs", "integer[]")),
+		fn("int[]", arg("xs", "int[]"))))
+
+	// Unquoted argument names fold to lower case; quoted ones keep their case.
+	assert.True(t, g.areSameFunctionSignature(base, fn("integer", arg("X", "integer"), arg("y", "text"))))
+	quoted := fn("integer", FunctionArg{name: parser.NewIdent("X", true), typ: "integer"}, arg("y", "text"))
+	assert.False(t, g.areSameFunctionSignature(quoted, base))
+
+	// Adding a name to an unnamed parameter is allowed; renaming is not.
+	unnamed := fn("integer", arg("", "integer"), arg("y", "text"))
+	assert.True(t, g.areSameFunctionSignature(unnamed, base))
+	assert.False(t, g.areSameFunctionSignature(base, fn("integer", arg("z", "integer"), arg("y", "text"))))
+
+	// Changed return type / arg type / arity are never replaceable.
+	assert.False(t, g.areSameFunctionSignature(base, fn("text", arg("x", "integer"), arg("y", "text"))))
+	assert.False(t, g.areSameFunctionSignature(base, fn("integer", arg("x", "bigint"), arg("y", "text"))))
+	assert.False(t, g.areSameFunctionSignature(base, fn("integer", arg("x", "integer"))))
+
+	// Argument modes are part of the identity ("" means IN).
+	outArg := fn("integer", FunctionArg{mode: "OUT", name: parser.NewIdent("x", false), typ: "integer"}, arg("y", "text"))
+	assert.False(t, g.areSameFunctionSignature(base, outArg))
+	inExplicit := fn("integer", FunctionArg{mode: "IN", name: parser.NewIdent("x", false), typ: "integer"}, arg("y", "text"))
+	assert.True(t, g.areSameFunctionSignature(base, inExplicit))
+
+	// RETURNS TABLE(...) loses its column list in parsing, so it is never
+	// considered replaceable.
+	assert.False(t, g.areSameFunctionSignature(fn("TABLE"), fn("TABLE")))
+}
+
+func TestDropFunctionDDL(t *testing.T) {
+	g := &Generator{mode: GeneratorModePostgres, defaultSchema: "public"}
+	name := database.QualifiedName{Schema: parser.NewIdent("public", false), Name: parser.NewIdent("f", false)}
+
+	// Identity argument types are appended so overloads stay unambiguous.
+	fn := &Function{name: name, args: []FunctionArg{
+		{name: parser.NewIdent("x", false), typ: "integer"},
+		{mode: "VARIADIC", name: parser.NewIdent("rest", false), typ: "text[]"},
+	}}
+	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name)+"(integer, VARIADIC text[])", g.dropFunctionDDL(fn))
+
+	// Zero arguments.
+	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name)+"()", g.dropFunctionDDL(&Function{name: name}))
+
+	// OUT parameters are not part of the identity: keep the bare form.
+	outFn := &Function{name: name, args: []FunctionArg{{mode: "OUT", name: parser.NewIdent("x", false), typ: "integer"}}}
+	assert.Equal(t, "DROP FUNCTION "+g.escapeQualifiedName(name), g.dropFunctionDDL(outFn))
+}
