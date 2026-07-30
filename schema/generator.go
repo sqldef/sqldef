@@ -5252,7 +5252,7 @@ func (g *Generator) buildForeignKeyDDL(tableName QualifiedName, fk *ForeignKey) 
 // For PostgreSQL, this converts IN (a,b,c) to = ANY (ARRAY[a,b,c])
 func (g *Generator) normalizeCheckExprString(expr parser.Expr) string {
 	if g.mode == GeneratorModePostgres {
-		normalized := normalizeCheckExpr(expr, g.mode)
+		normalized := normalizeCheckExprForOutput(expr, g.mode)
 		// Unwrap outermost parentheses for consistent output (comparison does this too)
 		normalized = unwrapOutermostParenExpr(normalized)
 		// In quote-aware mode, use formatExprQuoteAware to preserve quoting in column names
@@ -5283,7 +5283,16 @@ func (g *Generator) formatExprQuoteAware(expr parser.Expr) string {
 	case *parser.ParenExpr:
 		return "(" + g.formatExprQuoteAware(e.Expr) + ")"
 	case *parser.ComparisonExpr:
-		return g.formatExprQuoteAware(e.Left) + " " + e.Operator + " " + g.formatExprQuoteAware(e.Right)
+		result := g.formatExprQuoteAware(e.Left) + " " + e.Operator + " "
+		if e.All {
+			result += "ALL "
+		} else if e.Any {
+			result += "ANY "
+		}
+		if (e.All || e.Any) && parser.NeedsAnyAllParens(e.Right) {
+			return result + "(" + g.formatExprQuoteAware(e.Right) + ")"
+		}
+		return result + g.formatExprQuoteAware(e.Right)
 	case *parser.AndExpr:
 		return g.formatExprQuoteAware(e.Left) + " AND " + g.formatExprQuoteAware(e.Right)
 	case *parser.OrExpr:

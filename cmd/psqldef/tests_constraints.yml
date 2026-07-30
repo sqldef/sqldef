@@ -803,6 +803,88 @@ ConstraintCheckInAdd:
     ALTER TABLE "public"."products" ADD CONSTRAINT "products_status_check" CHECK (status = ANY (ARRAY['active', 'inactive', 'pending']));
   down: |
     ALTER TABLE "public"."products" DROP CONSTRAINT "products_status_check";
+ConstraintCheckInUnsorted:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (status IN ('pending', 'active'))
+    );
+
+ConstraintCheckNotInAdd:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (
+      id serial,
+      status text
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (status NOT IN ('deleted', 'cancelled'))
+    );
+  up: |
+    ALTER TABLE public.products ADD CONSTRAINT products_status_check CHECK (status <> ALL (ARRAY['deleted', 'cancelled']));
+  down: |
+    ALTER TABLE public.products DROP CONSTRAINT products_status_check;
+ConstraintCheckInSingleValue:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (status IN ('pending'))
+    );
+
+ConstraintCheckNotInSingleValue:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (status NOT IN ('pending'))
+    );
+
+ConstraintCheckNotInUnsorted:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (status NOT IN ('deleted', 'cancelled'))
+    );
+
+ConstraintCheckInUnsortedModify:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (status IN ('pending', 'active'))
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      status text CHECK (status IN ('pending', 'active', 'waiting'))
+    );
+  up: |
+    ALTER TABLE public.products DROP CONSTRAINT products_status_check;
+    ALTER TABLE public.products ADD CONSTRAINT products_status_check CHECK (status = ANY (ARRAY['pending', 'active', 'waiting']));
+  down: |
+    ALTER TABLE public.products DROP CONSTRAINT products_status_check;
+    ALTER TABLE public.products ADD CONSTRAINT products_status_check CHECK (status = ANY (ARRAY['pending', 'active']));
+ConstraintCheckInQuoteAware:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (
+      id serial,
+      "Status" text
+    );
+  desired: |
+    CREATE TABLE products (
+      id serial,
+      "Status" text CHECK ("Status" IN ('active', 'inactive', 'pending'))
+    );
+  up: |
+    ALTER TABLE public.products ADD CONSTRAINT "products_Status_check" CHECK ("Status" = ANY (ARRAY['active', 'inactive', 'pending']));
+  down: |
+    ALTER TABLE public.products DROP CONSTRAINT "products_Status_check";
 ConstraintCheckInRemove:
   current: |
     CREATE TABLE products (

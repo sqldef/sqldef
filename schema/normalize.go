@@ -264,9 +264,26 @@ func isFoldableValueCastTypeName(typeStr string) bool {
 	return false
 }
 
-// normalizeCheckExpr normalizes a CHECK constraint expression AST for comparison
-// mode parameter controls PostgreSQL-specific normalization (IN to ANY conversion)
+// normalizeCheckExpr normalizes a CHECK constraint expression AST for comparison.
+// mode parameter controls PostgreSQL-specific normalization (IN to ANY conversion).
 func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
+	return normalizeCheckExprWith(expr, mode, true)
+}
+
+// normalizeCheckExprForOutput normalizes a CHECK constraint expression for DDL generation.
+// Unlike normalizeCheckExpr it leaves ANY/ALL array elements in the order they were written:
+// comparison canonicalizes both sides anyway, so reordering here would only rewrite the
+// author's schema, discarding an order that often carries meaning (a status lifecycle, say).
+func normalizeCheckExprForOutput(expr parser.Expr, mode GeneratorMode) parser.Expr {
+	return normalizeCheckExprWith(expr, mode, false)
+}
+
+// canonicalizeArrays sorts and deduplicates ANY/ALL array elements, which is wanted when
+// comparing but not when generating DDL.
+func normalizeCheckExprWith(expr parser.Expr, mode GeneratorMode, canonicalizeArrays bool) parser.Expr {
+	recur := func(expr parser.Expr, mode GeneratorMode) parser.Expr {
+		return normalizeCheckExprWith(expr, mode, canonicalizeArrays)
+	}
 	if expr == nil {
 		return nil
 	}
@@ -292,7 +309,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 
 			// Always remove text casts
 			if typeStr == "text" || typeStr == "character varying" {
-				return normalizeCheckExpr(e.Expr, mode)
+				return recur(e.Expr, mode)
 			}
 
 			normalizedTypeStr := normalizeTypeName(typeStr, mode)
@@ -300,7 +317,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			// Remove date/timestamp casts from string literals
 			// PostgreSQL simplifies '2020-01-01'::date to '2020-01-01' in CHECK constraints
 			if normalizedTypeStr == "date" || normalizedTypeStr == "timestamp" {
-				return normalizeCheckExpr(e.Expr, mode)
+				return recur(e.Expr, mode)
 			}
 
 			// Remove redundant array typecasts on ARRAY constructors
@@ -310,7 +327,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			// e.g., ARRAY['a'::varchar]::text[] -> ARRAY['a'::varchar] (after stripping ::text[])
 			//       ARRAY['a'::varchar::text]   -> ARRAY['a'::varchar] (after stripping ::text on element)
 			// Empty arrays (ARRAY[]) need the typecast or PostgreSQL can't determine the type.
-			normalizedExpr := normalizeCheckExpr(e.Expr, mode)
+			normalizedExpr := recur(e.Expr, mode)
 			if arrayConstructor, isArrayConstructor := normalizedExpr.(*parser.ArrayConstructor); isArrayConstructor {
 				if strings.HasSuffix(typeStr, "[]") && len(arrayConstructor.Elements) > 0 {
 					// Non-empty array with array typecast: strip the redundant typecast
@@ -325,11 +342,11 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			}
 		}
 		return &parser.CastExpr{
-			Expr: normalizeCheckExpr(e.Expr, mode),
+			Expr: recur(e.Expr, mode),
 			Type: e.Type,
 		}
 	case *parser.ParenExpr:
-		normalized := normalizeCheckExpr(e.Expr, mode)
+		normalized := recur(e.Expr, mode)
 		if paren, ok := normalized.(*parser.ParenExpr); ok {
 			return paren
 		}
@@ -343,8 +360,8 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		return &parser.ParenExpr{Expr: normalized}
 	case *parser.AndExpr:
 		// Normalize operands and unwrap unnecessary parentheses around them
-		left := normalizeCheckExpr(e.Left, mode)
-		right := normalizeCheckExpr(e.Right, mode)
+		left := recur(e.Left, mode)
+		right := recur(e.Right, mode)
 		// MySQL adds parentheses around each operand in AND chains, so unwrap them
 		left = unwrapOutermostParenExpr(left)
 		right = unwrapOutermostParenExpr(right)
@@ -354,8 +371,8 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		}
 	case *parser.OrExpr:
 		// Normalize operands and unwrap unnecessary parentheses around them
-		left := normalizeCheckExpr(e.Left, mode)
-		right := normalizeCheckExpr(e.Right, mode)
+		left := recur(e.Left, mode)
+		right := recur(e.Right, mode)
 		// MySQL adds parentheses around each operand in OR chains, so unwrap them
 		// Always safe to unwrap in OR chains since OR has the lowest precedence
 		left = unwrapOutermostParenExpr(left)
@@ -374,125 +391,34 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		}
 	case *parser.ConcatExpr:
 		return &parser.ConcatExpr{
-			Left:  normalizeCheckExpr(e.Left, mode),
-			Right: normalizeCheckExpr(e.Right, mode),
+			Left:  recur(e.Left, mode),
+			Right: recur(e.Right, mode),
 		}
 	case *parser.NotExpr:
-		return &parser.NotExpr{Expr: normalizeCheckExpr(e.Expr, mode)}
+		return &parser.NotExpr{Expr: recur(e.Expr, mode)}
 	case *parser.ComparisonExpr:
-		left := normalizeCheckExpr(e.Left, mode)
-		right := normalizeCheckExpr(e.Right, mode)
-		op := normalizeOperator(e.Operator, mode)
-		anyFlag := e.Any
-		allFlag := e.All
-
-		// The generic parser may parse "= ANY(ARRAY[...])" as a FuncExpr on the right side
-		// We need to normalize this to set the Any/All flags properly
-		if funcExpr, ok := right.(*parser.FuncExpr); ok {
-			funcName := strings.ToLower(funcExpr.Name.Name)
-			switch funcName {
-			case "any", "some":
-				// Convert "column = ANY(array)" to ComparisonExpr with Any=true
-				if len(funcExpr.Exprs) == 1 {
-					if aliased, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
-						right = normalizeCheckExpr(aliased.Expr, mode)
-						anyFlag = true
-					}
-				}
-			case "all":
-				// Convert "column = ALL(array)" to ComparisonExpr with All=true
-				if len(funcExpr.Exprs) == 1 {
-					if aliased, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
-						right = normalizeCheckExpr(aliased.Expr, mode)
-						allFlag = true
-					}
-				}
-			}
-		}
-
-		// Unwrap ParenExpr from right side for ANY/ALL to ensure consistent formatting
-		// The parser may create ParenExpr(ArrayConstructor) which formats as ANY(ARRAY
-		// We want to normalize to ArrayConstructor directly which formats as ANY (ARRAY
-		if anyFlag || allFlag {
-			if parenExpr, ok := right.(*parser.ParenExpr); ok {
-				right = parenExpr.Expr
-			}
-		}
-
-		// Handle IN clauses based on mode
-		if op == "in" || op == "not in" {
-			if tuple, ok := right.(parser.ValTuple); ok {
-				if mode == GeneratorModePostgres {
-					// PostgreSQL normalizes IN (values) to = ANY (ARRAY[values])
-
-					elements := sortAndDeduplicateValues(tuple)
-					normalizedElements := util.TransformSlice(elements, func(elem parser.Expr) parser.Expr {
-						return normalizeCheckExpr(elem, mode)
-					})
-					right = &parser.ArrayConstructor{Elements: normalizedElements}
-
-					// Change operator and set ANY flag
-					if op == "in" {
-						op = "="
-						anyFlag = true
-					} else { // "not in"
-						op = "!="
-						anyFlag = true
-					}
-				} else {
-					// For other databases, keep IN but sort the tuple for consistent comparison
-					sortedElements := sortAndDeduplicateValues(tuple)
-					normalizedElements := util.TransformSlice(sortedElements, func(elem parser.Expr) parser.Expr {
-						return normalizeCheckExpr(elem, mode)
-					})
-					right = parser.ValTuple(normalizedElements)
-				}
-			}
-		}
-
-		// For ANY/ALL expressions, normalize the array elements
-		if (anyFlag || allFlag) && !e.Any && !e.All {
-			// This means we just set the flag above from IN conversion
-			// Already handled
-		} else if anyFlag || allFlag {
-			// Normalize existing ANY/ALL expressions (strip casts, preserve order)
-			if arrayConst, ok := right.(*parser.ArrayConstructor); ok {
-				normalizedElements := util.TransformSlice(arrayConst.Elements, func(elem parser.Expr) parser.Expr {
-					return normalizeCheckExpr(elem, mode)
-				})
-				right = &parser.ArrayConstructor{Elements: normalizedElements}
-			}
-		}
-
-		return &parser.ComparisonExpr{
-			Operator: op,
-			Left:     left,
-			Right:    right,
-			Escape:   normalizeCheckExpr(e.Escape, mode),
-			All:      allFlag,
-			Any:      anyFlag,
-		}
+		return normalizeComparisonExpr(e, mode, recur, canonicalizeArrays)
 	case *parser.BinaryExpr:
 		return &parser.BinaryExpr{
 			Operator: e.Operator,
-			Left:     normalizeCheckExpr(e.Left, mode),
-			Right:    normalizeCheckExpr(e.Right, mode),
+			Left:     recur(e.Left, mode),
+			Right:    recur(e.Right, mode),
 		}
 	case *parser.UnaryExpr:
 		return &parser.UnaryExpr{
 			Operator: e.Operator,
-			Expr:     normalizeCheckExpr(e.Expr, mode),
+			Expr:     recur(e.Expr, mode),
 		}
 	case *parser.AtTimeZoneExpr:
 		return &parser.AtTimeZoneExpr{
-			Expr: normalizeCheckExpr(e.Expr, mode),
-			Zone: normalizeCheckExpr(e.Zone, mode),
+			Expr: recur(e.Expr, mode),
+			Zone: recur(e.Zone, mode),
 		}
 	case *parser.FuncExpr:
 		normalizedExprs := util.TransformSlice(e.Exprs, func(arg parser.SelectExpr) parser.SelectExpr {
 			if aliased, ok := arg.(*parser.AliasedExpr); ok {
 				return &parser.AliasedExpr{
-					Expr: normalizeCheckExpr(aliased.Expr, mode),
+					Expr: recur(aliased.Expr, mode),
 					As:   aliased.As,
 				}
 			}
@@ -512,21 +438,21 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		}
 	case *parser.ArrayConstructor:
 		normalizedElements := util.TransformSlice(e.Elements, func(elem parser.Expr) parser.Expr {
-			return normalizeCheckExpr(elem, mode)
+			return recur(elem, mode)
 		})
 		return &parser.ArrayConstructor{Elements: normalizedElements}
 	case *parser.IsExpr:
 		return &parser.IsExpr{
 			Operator: e.Operator,
-			Expr:     normalizeCheckExpr(e.Expr, mode),
+			Expr:     recur(e.Expr, mode),
 		}
 	case *parser.RangeCond:
 		// PostgreSQL normalizes BETWEEN to >= AND <=
 		// e.g., "score BETWEEN 0 AND 100" becomes "score >= 0 AND score <= 100"
 		if mode == GeneratorModePostgres {
-			left := normalizeCheckExpr(e.Left, mode)
-			from := normalizeCheckExpr(e.From, mode)
-			to := normalizeCheckExpr(e.To, mode)
+			left := recur(e.Left, mode)
+			from := recur(e.From, mode)
+			to := recur(e.To, mode)
 
 			if e.Operator == parser.BetweenStr {
 				// x BETWEEN a AND b -> x >= a AND x <= b
@@ -544,13 +470,13 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		}
 		return &parser.RangeCond{
 			Operator: e.Operator,
-			Left:     normalizeCheckExpr(e.Left, mode),
-			From:     normalizeCheckExpr(e.From, mode),
-			To:       normalizeCheckExpr(e.To, mode),
+			Left:     recur(e.Left, mode),
+			From:     recur(e.From, mode),
+			To:       recur(e.To, mode),
 		}
 	case parser.ValTuple:
 		normalizedTuple := util.TransformSlice(e, func(elem parser.Expr) parser.Expr {
-			return normalizeCheckExpr(elem, mode)
+			return recur(elem, mode)
 		})
 		return parser.ValTuple(normalizedTuple)
 	case *parser.ColName:
@@ -572,7 +498,7 @@ func normalizeCheckExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 		}
 		// Strip the prefix for temporal/json/uuid: pg_get_constraintdef emits typed
 		// literals but user SQL writes bare ones; dropping it on both sides compares equal.
-		return normalizeCheckExpr(e.Value, mode)
+		return recur(e.Value, mode)
 	default:
 		// For all other expression types (literals, etc.), return as-is
 		return expr
@@ -913,88 +839,7 @@ func normalizeExpr(expr parser.Expr, mode GeneratorMode) parser.Expr {
 			Expr: normalizedInner,
 		}
 	case *parser.ComparisonExpr:
-		left := normalizeExpr(e.Left, mode)
-		right := normalizeExpr(e.Right, mode)
-		op := normalizeOperator(e.Operator, mode)
-		anyFlag := e.Any
-		allFlag := e.All
-
-		// The generic parser may parse "= ANY(ARRAY[...])" as a FuncExpr on the right side.
-		// Normalize this to set the Any/All flags properly.
-		if funcExpr, ok := right.(*parser.FuncExpr); ok {
-			funcName := strings.ToLower(funcExpr.Name.Name)
-			switch funcName {
-			case "any", "some":
-				if len(funcExpr.Exprs) == 1 {
-					if aliased, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
-						right = normalizeExpr(aliased.Expr, mode)
-						anyFlag = true
-					}
-				}
-			case "all":
-				if len(funcExpr.Exprs) == 1 {
-					if aliased, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
-						right = normalizeExpr(aliased.Expr, mode)
-						allFlag = true
-					}
-				}
-			}
-		}
-
-		// Unwrap ParenExpr from right side for ANY/ALL to ensure consistent formatting.
-		if anyFlag || allFlag {
-			if parenExpr, ok := right.(*parser.ParenExpr); ok {
-				right = parenExpr.Expr
-			}
-		}
-
-		// Handle IN clauses based on mode.
-		if op == "in" || op == "not in" {
-			if tuple, ok := right.(parser.ValTuple); ok {
-				if mode == GeneratorModePostgres {
-					// PostgreSQL normalizes IN (values) to = ANY (ARRAY[values]) and NOT IN to <> ALL (ARRAY[values]).
-					elements := sortAndDeduplicateValues(tuple)
-					normalizedElements := util.TransformSlice(elements, func(elem parser.Expr) parser.Expr {
-						return normalizeExpr(elem, mode)
-					})
-					right = &parser.ArrayConstructor{Elements: normalizedElements}
-					if op == "in" {
-						op = "="
-						anyFlag = true
-					} else {
-						// PostgreSQL normalizes NOT IN (values) to <> ALL (ARRAY[values]).
-						op = "<>"
-						allFlag = true
-					}
-				} else {
-					// For other databases, keep IN but sort the tuple for consistent comparison.
-					sortedElements := sortAndDeduplicateValues(tuple)
-					normalizedElements := util.TransformSlice(sortedElements, func(elem parser.Expr) parser.Expr {
-						return normalizeExpr(elem, mode)
-					})
-					right = parser.ValTuple(normalizedElements)
-				}
-			}
-		}
-
-		// For existing ANY/ALL expressions, normalize and sort the array elements.
-		if anyFlag || allFlag {
-			if arrayConst, ok := right.(*parser.ArrayConstructor); ok {
-				normalizedElements := util.TransformSlice(arrayConst.Elements, func(elem parser.Expr) parser.Expr {
-					return normalizeExpr(elem, mode)
-				})
-				right = &parser.ArrayConstructor{Elements: sortAndDeduplicateValues(normalizedElements)}
-			}
-		}
-
-		return &parser.ComparisonExpr{
-			Operator: op,
-			Left:     left,
-			Right:    right,
-			Escape:   normalizeExpr(e.Escape, mode),
-			All:      allFlag,
-			Any:      anyFlag,
-		}
+		return normalizeComparisonExpr(e, mode, normalizeExpr, true)
 	case *parser.AndExpr:
 		return &parser.AndExpr{
 			Left:  normalizeExpr(e.Left, mode),
@@ -1618,6 +1463,118 @@ func sortPrivilegesByCanonicalOrder(privileges []string) {
 		}
 		return 1
 	})
+}
+
+// normalizeComparisonExpr normalizes a comparison towards the form PostgreSQL stores:
+// IN becomes = ANY (ARRAY[...]) and NOT IN becomes <> ALL (ARRAY[...]).
+//
+// canonicalizeArrays additionally sorts and deduplicates ANY/ALL array elements and
+// collapses a single-element array to a scalar comparison. That is what makes the two
+// spellings PostgreSQL may store compare equal, so it is on when comparing and off when
+// generating DDL, where it would only rewrite the order the author wrote.
+//
+// recur is the caller's own normalizer: CHECK constraints and value expressions share
+// this comparison handling but normalize their operands differently. Keeping it in one
+// place is deliberate — the two used to carry copies of this logic, and fixes to one
+// repeatedly failed to reach the other (see #1182).
+func normalizeComparisonExpr(e *parser.ComparisonExpr, mode GeneratorMode, recur func(parser.Expr, GeneratorMode) parser.Expr, canonicalizeArrays bool) parser.Expr {
+	left := recur(e.Left, mode)
+	right := recur(e.Right, mode)
+	op := normalizeOperator(e.Operator, mode)
+	anyFlag := e.Any
+	allFlag := e.All
+
+	// The generic parser may parse "= ANY(ARRAY[...])" as a FuncExpr on the right side.
+	// Normalize this to set the Any/All flags properly.
+	if funcExpr, ok := right.(*parser.FuncExpr); ok {
+		funcName := strings.ToLower(funcExpr.Name.Name)
+		switch funcName {
+		case "any", "some":
+			if len(funcExpr.Exprs) == 1 {
+				if aliased, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
+					right = recur(aliased.Expr, mode)
+					anyFlag = true
+				}
+			}
+		case "all":
+			if len(funcExpr.Exprs) == 1 {
+				if aliased, ok := funcExpr.Exprs[0].(*parser.AliasedExpr); ok {
+					right = recur(aliased.Expr, mode)
+					allFlag = true
+				}
+			}
+		}
+	}
+
+	// Unwrap ParenExpr from right side for ANY/ALL to ensure consistent formatting.
+	// The parser may create ParenExpr(ArrayConstructor), which formats as ANY(ARRAY
+	// instead of ANY (ARRAY.
+	if anyFlag || allFlag {
+		if parenExpr, ok := right.(*parser.ParenExpr); ok {
+			right = parenExpr.Expr
+		}
+	}
+
+	// Handle IN clauses based on mode.
+	if op == "in" || op == "not in" {
+		if tuple, ok := right.(parser.ValTuple); ok {
+			if mode == GeneratorModePostgres {
+				// Elements are normalized by the ANY/ALL block below.
+				right = &parser.ArrayConstructor{Elements: parser.Exprs(tuple)}
+				if op == "in" {
+					op = "="
+					anyFlag = true
+				} else { // "not in"
+					op = "<>"
+					allFlag = true
+				}
+			} else {
+				// For other databases, keep IN.
+				normalizedElements := util.TransformSlice(tuple, func(elem parser.Expr) parser.Expr {
+					return recur(elem, mode)
+				})
+				if canonicalizeArrays {
+					normalizedElements = sortAndDeduplicateValues(normalizedElements)
+				}
+				right = parser.ValTuple(normalizedElements)
+			}
+		}
+	}
+
+	// Normalize the array elements of ANY/ALL expressions, whether they were written as
+	// such or converted from IN above.
+	if anyFlag || allFlag {
+		if arrayConst, ok := right.(*parser.ArrayConstructor); ok {
+			normalizedElements := util.TransformSlice(arrayConst.Elements, func(elem parser.Expr) parser.Expr {
+				return recur(elem, mode)
+			})
+			// Element order does not affect ANY/ALL, and PostgreSQL keeps whichever order
+			// was written, so sorting is what lets the two sides compare equal.
+			if canonicalizeArrays {
+				normalizedElements = sortAndDeduplicateValues(normalizedElements)
+			}
+			right = &parser.ArrayConstructor{Elements: normalizedElements}
+		}
+
+		// PostgreSQL folds a single-element IN into a scalar comparison (IN ('a') becomes
+		// = 'a') but keeps the array for an explicitly written ANY/ALL, so both spellings
+		// have to be folded to compare equal. A single element makes ANY and ALL collapse
+		// to the same comparison whatever the operator is, so this holds beyond = and <>.
+		if arrayConst, ok := right.(*parser.ArrayConstructor); ok && canonicalizeArrays && len(arrayConst.Elements) == 1 {
+			right = arrayConst.Elements[0]
+			anyFlag = false
+			allFlag = false
+		}
+	}
+
+	return &parser.ComparisonExpr{
+		Operator: op,
+		Left:     left,
+		Right:    right,
+		Escape:   recur(e.Escape, mode),
+		All:      allFlag,
+		Any:      anyFlag,
+	}
 }
 
 // sortAndDeduplicateValues sorts and deduplicates a slice of expressions based on their string representation.

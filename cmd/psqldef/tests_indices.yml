@@ -637,6 +637,20 @@ PartialIndexWithWhereNotInUnsorted:
     CREATE INDEX idx_non_cancelled ON orders (id)
     WHERE status NOT IN ('deleted', 'cancelled');
 
+PartialIndexWithWhereInSingleValue:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE INDEX idx_orders_pending ON orders (id)
+    WHERE status IN ('pending');
+
+PartialIndexWithWhereNotInSingleValue:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE orders (id integer, status text);
+    CREATE INDEX idx_orders_not_pending ON orders (id)
+    WHERE status NOT IN ('pending');
+
 PartialIndexWithArrayCastAnyPgDumpStyle:
   legacy_ignore_quotes: false
   desired: |
