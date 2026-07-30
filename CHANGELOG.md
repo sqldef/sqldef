@@ -1,3 +1,10 @@
+## [v3.11.18](https://github.com/sqldef/sqldef/compare/v3.11.17...v3.11.18) - 2026-07-30
+
+- psqldef: support operator classes on expression index columns by @moznion in https://github.com/sqldef/sqldef/pull/1286
+- psqldef: fix non-idempotent IN (...) in CHECK constraints and partial indexes by @178inaba in https://github.com/sqldef/sqldef/pull/1295
+- psqldef: support manage.privilege as the next slice of the manage: RFC by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1296
+- fix: classify destructive DDLs by leading keyword, not whole-text substrings by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1297
+
 ## [v3.11.17](https://github.com/sqldef/sqldef/compare/v3.11.16...v3.11.17) - 2026-07-27
 
 - psqldef: allow COMMENT as an unquoted column name in the generic parser by @178inaba in https://github.com/sqldef/sqldef/pull/1291
