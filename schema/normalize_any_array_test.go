@@ -162,15 +162,13 @@ func TestNormalizeCheckExprStringQuoteAwareKeepsAnyAll(t *testing.T) {
 			sql:      `CREATE TABLE t (status text, CHECK (status NOT IN ('deleted', 'cancelled')))`,
 			expected: "status <> ALL (ARRAY['deleted', 'cancelled'])",
 		},
-		// FIXME: the generic parser rejects a column reference inside ARRAY[...], which
-		// PostgreSQL accepts, so this cannot be exercised yet. Once it parses, this case
-		// fails: formatExprQuoteAware has no ArrayConstructor branch and falls back to
-		// parser.String, which drops the quotes and silently references another column.
-		// {
-		// 	name:     "quoted column name inside the array is preserved",
-		// 	sql:      `CREATE TABLE t ("Status" text, "Fallback" text, CHECK ("Status" = ANY (ARRAY["Fallback", 'pending'])))`,
-		// 	expected: `"Status" = ANY (ARRAY["Fallback", 'pending'])`,
-		// },
+		{
+			// Dropping the quotes here would silently reference another column, since
+			// PostgreSQL folds an unquoted identifier to lower case.
+			name:     "quoted column name inside the array is preserved",
+			sql:      `CREATE TABLE t ("Status" text, "Fallback" text, CHECK ("Status" = ANY (ARRAY["Fallback", 'pending'])))`,
+			expected: `"Status" = ANY (ARRAY["Fallback", 'pending'])`,
+		},
 	}
 
 	g := &Generator{
