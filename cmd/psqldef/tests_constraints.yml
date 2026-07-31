@@ -885,6 +885,23 @@ ConstraintCheckInQuoteAware:
     ALTER TABLE public.products ADD CONSTRAINT "products_Status_check" CHECK ("Status" = ANY (ARRAY['active', 'inactive', 'pending']));
   down: |
     ALTER TABLE public.products DROP CONSTRAINT "products_Status_check";
+ConstraintCheckArrayColumnReferenceQuoteAware:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE products (
+      "Status" text,
+      "Fallback" text
+    );
+  desired: |
+    CREATE TABLE products (
+      "Status" text,
+      "Fallback" text,
+      CONSTRAINT products_status_check CHECK ("Status" = ANY (ARRAY["Fallback", 'pending']))
+    );
+  up: |
+    ALTER TABLE public.products ADD CONSTRAINT products_status_check CHECK ("Status" = ANY (ARRAY["Fallback", 'pending']));
+  down: |
+    ALTER TABLE public.products DROP CONSTRAINT products_status_check;
 ConstraintCheckInRemove:
   current: |
     CREATE TABLE products (
