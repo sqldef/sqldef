@@ -386,6 +386,64 @@ CompositeForeignKeyConstraint:
     ALTER TABLE "public"."t2" ADD CONSTRAINT "fk" FOREIGN KEY ("id1","id2") REFERENCES "public"."t1" ("id1","id2");
   down: |
     ALTER TABLE "public"."t2" DROP CONSTRAINT "fk";
+SeparateTablesWithSameForeignKeyName:
+  current: |
+    CREATE TABLE accounts (
+      tenant_id integer NOT NULL,
+      id integer NOT NULL,
+      PRIMARY KEY (tenant_id, id),
+      UNIQUE (id)
+    );
+    CREATE TABLE payment_accounts (
+      id integer PRIMARY KEY
+    );
+    CREATE TABLE orders (
+      tenant_id integer,
+      account_id integer,
+      CONSTRAINT shared_fk
+        FOREIGN KEY (tenant_id, account_id)
+        REFERENCES accounts (tenant_id, id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+        DEFERRABLE INITIALLY DEFERRED
+    );
+    CREATE TABLE payments (
+      account_id integer,
+      CONSTRAINT shared_fk
+        FOREIGN KEY (account_id)
+        REFERENCES payment_accounts (id)
+        ON UPDATE RESTRICT
+        ON DELETE SET NULL
+    );
+  desired: |
+    CREATE TABLE accounts (
+      tenant_id integer NOT NULL,
+      id integer NOT NULL,
+      PRIMARY KEY (tenant_id, id),
+      UNIQUE (id)
+    );
+    CREATE TABLE payment_accounts (
+      id integer PRIMARY KEY
+    );
+    CREATE TABLE orders (
+      tenant_id integer,
+      account_id integer,
+      CONSTRAINT shared_fk
+        FOREIGN KEY (tenant_id, account_id)
+        REFERENCES accounts (tenant_id, id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+        DEFERRABLE INITIALLY DEFERRED
+    );
+    CREATE TABLE payments (
+      account_id integer,
+      CONSTRAINT shared_fk
+        FOREIGN KEY (account_id)
+        REFERENCES payment_accounts (id)
+        ON UPDATE RESTRICT
+        ON DELETE SET NULL
+    );
+  legacy_ignore_quotes: false
 AddForeignKeyWithAlter:
   current: |
     CREATE TABLE users (id BIGINT PRIMARY KEY);
