@@ -1667,6 +1667,9 @@ func (d *PostgresDatabase) getForeignDefsForTables(tableNames []string) (map[str
 		c.foreignColumns = append(c.foreignColumns, foreignColumnName)
 		constraints[key] = c
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	var keys []identifier
 	for key := range constraints {
