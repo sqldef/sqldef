@@ -473,3 +473,21 @@ FunctionReturnsTableChangeDropsAndRecreates:
   down: |
     DROP FUNCTION public.list_items();
     CREATE FUNCTION list_items() RETURNS TABLE(id integer) AS $$ SELECT 1 $$ LANGUAGE sql;
+
+# Overloaded functions (same name, different argument types) are matched and
+# replaced independently; neither is dropped or lost during dependency sorting.
+OverloadedFunctionsBothReplacedInPlace:
+  legacy_ignore_quotes: false
+  enable_drop: false
+  current: |
+    CREATE FUNCTION ovl(a integer) RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+    CREATE FUNCTION ovl(a text) RETURNS text AS $$ BEGIN RETURN 'a'; END; $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE FUNCTION ovl(a integer) RETURNS integer AS $$ BEGIN RETURN 2; END; $$ LANGUAGE plpgsql;
+    CREATE FUNCTION ovl(a text) RETURNS text AS $$ BEGIN RETURN 'b'; END; $$ LANGUAGE plpgsql;
+  up: |
+    CREATE OR REPLACE FUNCTION ovl(a integer) RETURNS integer AS $$ BEGIN RETURN 2; END; $$ LANGUAGE plpgsql;
+    CREATE OR REPLACE FUNCTION ovl(a text) RETURNS text AS $$ BEGIN RETURN 'b'; END; $$ LANGUAGE plpgsql;
+  down: |
+    CREATE OR REPLACE FUNCTION ovl(a integer) RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+    CREATE OR REPLACE FUNCTION ovl(a text) RETURNS text AS $$ BEGIN RETURN 'a'; END; $$ LANGUAGE plpgsql;
