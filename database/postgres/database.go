@@ -1673,16 +1673,12 @@ func (d *PostgresDatabase) getForeignDefsForTables(tableNames []string) (map[str
 		keys = append(keys, key)
 	}
 	slices.SortFunc(keys, func(a, b identifier) int {
-		if c := cmp.Compare(a.constraintSchema, b.constraintSchema); c != 0 {
-			return c
-		}
-		if c := cmp.Compare(a.tableSchema, b.tableSchema); c != 0 {
-			return c
-		}
-		if c := cmp.Compare(a.tableName, b.tableName); c != 0 {
-			return c
-		}
-		return cmp.Compare(a.constraintName, b.constraintName)
+		return cmp.Or(
+			cmp.Compare(a.constraintSchema, b.constraintSchema),
+			cmp.Compare(a.tableSchema, b.tableSchema),
+			cmp.Compare(a.tableName, b.tableName),
+			cmp.Compare(a.constraintName, b.constraintName),
+		)
 	})
 
 	result := make(map[string][]string, len(tableNames))
