@@ -1050,16 +1050,16 @@ func normalizeSelectExpr(expr parser.SelectExpr, mode GeneratorMode) parser.Sele
 }
 
 // normalizeTableExprs normalizes FROM clause table expressions
-func normalizeTableExprs(exprs parser.TableExprs, mode GeneratorMode) parser.TableExprs {
+func normalizeTableExprs(exprs parser.TableExprs, mode GeneratorMode, tableLookup TableLookupFunc) parser.TableExprs {
 	normalized := make(parser.TableExprs, len(exprs))
 	for i, expr := range exprs {
-		normalized[i] = normalizeTableExpr(expr, mode)
+		normalized[i] = normalizeTableExpr(expr, mode, tableLookup)
 	}
 	return normalized
 }
 
 // normalizeTableExpr normalizes a single TableExpr
-func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode) parser.TableExpr {
+func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode, tableLookup TableLookupFunc) parser.TableExpr {
 	if expr == nil {
 		return nil
 	}
@@ -1067,15 +1067,19 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode) parser.TableE
 	switch e := expr.(type) {
 	case *parser.AliasedTableExpr:
 		normalizedExpr := e.Expr
-		// For MySQL, normalize table names to remove database prefix
-		// MySQL stores views with database.table references, but we want just table names
-		if mode == GeneratorModeMysql {
-			if tableName, ok := e.Expr.(parser.TableName); ok {
+		switch tableExpr := e.Expr.(type) {
+		case parser.TableName:
+			// MySQL stores views with database.table references, but we want just table names.
+			if mode == GeneratorModeMysql {
 				// Remove the database/schema part, keep only the table name
 				normalizedExpr = parser.TableName{
 					Schema: Ident{}, // Remove schema/database
-					Name:   tableName.Name,
+					Name:   tableExpr.Name,
 				}
+			}
+		case *parser.Subquery:
+			normalizedExpr = &parser.Subquery{
+				Select: normalizeViewDefinition(tableExpr.Select, mode, tableLookup),
 			}
 		}
 		return &parser.AliasedTableExpr{
@@ -1088,9 +1092,9 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode) parser.TableE
 		}
 	case *parser.JoinTableExpr:
 		return &parser.JoinTableExpr{
-			LeftExpr:  normalizeTableExpr(e.LeftExpr, mode),
+			LeftExpr:  normalizeTableExpr(e.LeftExpr, mode, tableLookup),
 			Join:      e.Join,
-			RightExpr: normalizeTableExpr(e.RightExpr, mode),
+			RightExpr: normalizeTableExpr(e.RightExpr, mode, tableLookup),
 			Condition: normalizeJoinCondition(e.Condition, mode),
 		}
 	case *parser.ParenTableExpr:
@@ -1098,12 +1102,12 @@ func normalizeTableExpr(expr parser.TableExpr, mode GeneratorMode) parser.TableE
 		// Unwrap these to get a canonical form.
 		if (mode == GeneratorModePostgres || mode == GeneratorModeMysql) && len(e.Exprs) == 1 {
 			// Single expression in parentheses - unwrap it
-			return normalizeTableExpr(e.Exprs[0], mode)
+			return normalizeTableExpr(e.Exprs[0], mode, tableLookup)
 		}
 		// Multiple expressions - normalize but keep parens
 		normalized := make(parser.TableExprs, len(e.Exprs))
 		for i, expr := range e.Exprs {
-			normalized[i] = normalizeTableExpr(expr, mode)
+			normalized[i] = normalizeTableExpr(expr, mode, tableLookup)
 		}
 		return &parser.ParenTableExpr{Exprs: normalized}
 	default:
@@ -1250,6 +1254,7 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode, ta
 
 	switch s := stmt.(type) {
 	case *parser.Select:
+		normalizedFrom := normalizeTableExprs(s.From, mode, tableLookup)
 		selectExprs := s.SelectExprs
 		// Expand SELECT * if we have table lookup capability
 		if tableLookup != nil && hasStarExpr(selectExprs) {
@@ -1257,6 +1262,8 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode, ta
 				if table := tableLookup(tableName); table != nil {
 					selectExprs = expandStarExpr(selectExprs, table)
 				}
+			} else if columns := extractSubqueryColumnsFromFrom(normalizedFrom); len(columns) > 0 {
+				selectExprs = expandStarExprWithColumns(selectExprs, columns)
 			}
 		}
 		return &parser.Select{
@@ -1265,7 +1272,7 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode, ta
 			Distinct:    s.Distinct,
 			Hints:       s.Hints,
 			SelectExprs: normalizeSelectExprs(selectExprs, mode),
-			From:        normalizeTableExprs(s.From, mode),
+			From:        normalizedFrom,
 			Where:       normalizeWhere(s.Where, mode),
 			GroupBy:     normalizeGroupBy(s.GroupBy, mode),
 			Having:      normalizeWhere(s.Having, mode),
@@ -1284,6 +1291,12 @@ func normalizeViewDefinition(stmt parser.SelectStatement, mode GeneratorMode, ta
 			Lock:    s.Lock,
 			With:    normalizeWith(s.With, mode),
 		}
+	case *parser.ParenSelect:
+		normalized := normalizeViewDefinition(s.Select, mode, tableLookup)
+		if inner, ok := normalized.(*parser.Select); ok && len(inner.OrderBy) == 0 && inner.Limit == nil && inner.Lock == "" && inner.With == nil {
+			return inner
+		}
+		return &parser.ParenSelect{Select: normalized}
 	default:
 		return stmt
 	}
@@ -1319,6 +1332,54 @@ func extractTableNameFromFrom(from parser.TableExprs) QualifiedName {
 	return QualifiedName{}
 }
 
+func extractSubqueryColumnsFromFrom(from parser.TableExprs) parser.Columns {
+	if len(from) != 1 {
+		return nil
+	}
+
+	aliased, ok := from[0].(*parser.AliasedTableExpr)
+	if !ok {
+		return nil
+	}
+	subquery, ok := aliased.Expr.(*parser.Subquery)
+	if !ok {
+		return nil
+	}
+	if len(aliased.Columns) > 0 {
+		return aliased.Columns
+	}
+	return extractSelectOutputColumns(subquery.Select)
+}
+
+func extractSelectOutputColumns(stmt parser.SelectStatement) parser.Columns {
+	switch s := stmt.(type) {
+	case *parser.Select:
+		columns := make(parser.Columns, 0, len(s.SelectExprs))
+		for _, selectExpr := range s.SelectExprs {
+			aliased, ok := selectExpr.(*parser.AliasedExpr)
+			if !ok {
+				return nil
+			}
+			if !aliased.As.IsEmpty() {
+				columns = append(columns, aliased.As)
+				continue
+			}
+			column, ok := aliased.Expr.(*parser.ColName)
+			if !ok {
+				return nil
+			}
+			columns = append(columns, column.Name)
+		}
+		return columns
+	case *parser.Union:
+		return extractSelectOutputColumns(s.Left)
+	case *parser.ParenSelect:
+		return extractSelectOutputColumns(s.Select)
+	default:
+		return nil
+	}
+}
+
 // getSortedColumns converts a column map to a slice sorted by position.
 // This is necessary because Go maps have non-deterministic iteration order,
 // but column order matters for:
@@ -1337,23 +1398,25 @@ func getSortedColumns(columns map[string]*Column) []*Column {
 
 // expandStarExpr replaces StarExpr with explicit column references.
 func expandStarExpr(exprs parser.SelectExprs, table *Table) parser.SelectExprs {
-	var result parser.SelectExprs
+	columns := getSortedColumns(table.columns)
+	columnNames := make(parser.Columns, 0, len(columns))
+	for _, column := range columns {
+		columnNames = append(columnNames, column.name)
+	}
+	return expandStarExprWithColumns(exprs, columnNames)
+}
 
+func expandStarExprWithColumns(exprs parser.SelectExprs, columns parser.Columns) parser.SelectExprs {
+	var result parser.SelectExprs
 	for _, expr := range exprs {
-		switch expr.(type) {
-		case *parser.StarExpr:
-			// Get columns sorted by position to match PostgreSQL's expansion order
-			columns := getSortedColumns(table.columns)
-			for _, col := range columns {
-				colRef := &parser.AliasedExpr{
-					Expr: &parser.ColName{
-						Name: col.name,
-					},
-				}
-				result = append(result, colRef)
-			}
-		default:
+		if _, ok := expr.(*parser.StarExpr); !ok {
 			result = append(result, expr)
+			continue
+		}
+		for _, column := range columns {
+			result = append(result, &parser.AliasedExpr{
+				Expr: &parser.ColName{Name: column},
+			})
 		}
 	}
 

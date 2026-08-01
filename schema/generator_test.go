@@ -147,6 +147,24 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			input:    `select jsonb_extract_path_text(payload, VARIADIC ARRAY['data', 'user', 'name']) from events`,
 			expected: `select jsonb_extract_path_text(payload, 'data', 'user', 'name') from events`,
 		},
+		{
+			name:     "PostgreSQL: unwrap redundant set operand parentheses",
+			mode:     GeneratorModePostgres,
+			input:    `(SELECT 1 AS id) UNION ALL (SELECT 2 AS id)`,
+			expected: `select 1 as id union all select 2 as id`,
+		},
+		{
+			name:     "PostgreSQL: preserve ordered limited set operand parentheses",
+			mode:     GeneratorModePostgres,
+			input:    `(SELECT id FROM items ORDER BY id DESC LIMIT 1) UNION ALL SELECT id FROM items`,
+			expected: `(select id from items order by id desc limit 1) union all select id from items`,
+		},
+		{
+			name:     "PostgreSQL: preserve grouped set operation parentheses",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT 1 AS id EXCEPT ((SELECT 2 AS id) UNION SELECT 3 AS id)`,
+			expected: `select 1 as id except (select 2 as id union select 3 as id)`,
+		},
 		// MySQL should normalize column qualifiers (MySQL adds database.table.column when storing views)
 		{
 			name:     "MySQL: normalize table qualifiers in SELECT",
@@ -182,6 +200,34 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			assert.Equal(t, tt.expected, actual)
 		})
 	}
+}
+
+func TestNormalizeViewDefinitionInParenthesizedSetOperationSubquery(t *testing.T) {
+	parseDefinition := func(sql string) parser.SelectStatement {
+		t.Helper()
+		stmt, err := parser.ParseDDL("CREATE VIEW v AS "+sql, parser.ParserModePostgres)
+		assert.NoError(t, err)
+		return stmt.(*parser.DDL).View.Definition
+	}
+
+	desired := parseDefinition(`SELECT * FROM (
+  (SELECT a.id, a.name FROM a JOIN x USING (id))
+  UNION ALL
+  (SELECT b.id, b.name FROM b JOIN x USING (id))
+) t`)
+	current := parseDefinition(`SELECT t.id, t.name FROM (
+  SELECT a.id, a.name FROM a JOIN x USING (id)
+  UNION ALL
+  SELECT b.id, b.name FROM b JOIN x USING (id)
+) t`)
+	tableLookup := func(QualifiedName) *Table { return nil }
+
+	normalize := func(definition parser.SelectStatement) string {
+		normalized := normalizeViewDefinition(definition, GeneratorModePostgres, tableLookup)
+		return stripTableQualifiers(strings.ToLower(parser.String(normalized)))
+	}
+
+	assert.Equal(t, normalize(current), normalize(desired))
 }
 
 func TestNormalizeViewDefinitionPreservesTableAliasColumns(t *testing.T) {
