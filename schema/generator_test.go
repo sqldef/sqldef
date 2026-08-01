@@ -230,6 +230,166 @@ func TestNormalizeViewDefinitionInParenthesizedSetOperationSubquery(t *testing.T
 	assert.Equal(t, normalize(current), normalize(desired))
 }
 
+func TestNormalizeViewDefinitionExpandsStarFromTable(t *testing.T) {
+	stmt := &parser.Select{
+		SelectExprs: parser.SelectExprs{
+			&parser.StarExpr{},
+			&parser.AliasedExpr{Expr: parser.NewIntVal("3"), As: parser.NewIdent("marker", false)},
+		},
+		From: parser.TableExprs{
+			&parser.AliasedTableExpr{
+				Expr: parser.TableName{Name: parser.NewIdent("users", false)},
+			},
+		},
+	}
+	table := &Table{
+		columns: map[string]*Column{
+			"second": {name: parser.NewIdent("second", false), position: 2},
+			"first":  {name: parser.NewIdent("first", false), position: 1},
+		},
+	}
+
+	normalized := normalizeViewDefinition(stmt, GeneratorModePostgres, func(name QualifiedName) *Table {
+		assert.Equal(t, "users", name.Name.Name)
+		return table
+	})
+
+	assert.Equal(t, "select first, second, 3 as marker from users", parser.String(normalized))
+}
+
+func TestNormalizeTableExprParentheses(t *testing.T) {
+	tableExpr := func(name string) *parser.AliasedTableExpr {
+		return &parser.AliasedTableExpr{
+			Expr: parser.TableName{Name: parser.NewIdent(name, false)},
+		}
+	}
+
+	assert.Nil(t, normalizeTableExpr(nil, GeneratorModePostgres, nil))
+	assert.Equal(t, tableExpr("a"), normalizeTableExpr(
+		&parser.ParenTableExpr{Exprs: parser.TableExprs{tableExpr("a")}},
+		GeneratorModePostgres,
+		nil,
+	))
+
+	normalized := normalizeTableExpr(
+		&parser.ParenTableExpr{Exprs: parser.TableExprs{tableExpr("a"), tableExpr("b")}},
+		GeneratorModeSQLite3,
+		nil,
+	)
+	paren, ok := normalized.(*parser.ParenTableExpr)
+	assert.True(t, ok)
+	assert.Len(t, paren.Exprs, 2)
+}
+
+func TestExtractSubqueryColumnsFromFrom(t *testing.T) {
+	id := parser.NewIdent("id", false)
+	alias := parser.NewIdent("alias", false)
+	subquery := func(selectExprs parser.SelectExprs) *parser.AliasedTableExpr {
+		return &parser.AliasedTableExpr{
+			Expr: &parser.Subquery{
+				Select: &parser.Select{SelectExprs: selectExprs},
+			},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		from     parser.TableExprs
+		expected parser.Columns
+	}{
+		{name: "empty FROM"},
+		{
+			name: "multiple FROM expressions",
+			from: parser.TableExprs{subquery(nil), subquery(nil)},
+		},
+		{
+			name: "non-aliased expression",
+			from: parser.TableExprs{&parser.JoinTableExpr{}},
+		},
+		{
+			name: "aliased table",
+			from: parser.TableExprs{
+				&parser.AliasedTableExpr{Expr: parser.TableName{Name: parser.NewIdent("users", false)}},
+			},
+		},
+		{
+			name: "explicit alias columns",
+			from: parser.TableExprs{
+				&parser.AliasedTableExpr{
+					Expr:    &parser.Subquery{Select: &parser.Select{}},
+					Columns: parser.Columns{id, alias},
+				},
+			},
+			expected: parser.Columns{id, alias},
+		},
+		{
+			name: "inferred columns",
+			from: parser.TableExprs{subquery(parser.SelectExprs{
+				&parser.AliasedExpr{Expr: &parser.ColName{Name: id}},
+				&parser.AliasedExpr{Expr: parser.NewIntVal("1"), As: alias},
+			})},
+			expected: parser.Columns{id, alias},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, extractSubqueryColumnsFromFrom(tt.from))
+		})
+	}
+}
+
+func TestExtractSelectOutputColumns(t *testing.T) {
+	id := parser.NewIdent("id", false)
+	alias := parser.NewIdent("alias", false)
+	selectWithColumns := &parser.Select{SelectExprs: parser.SelectExprs{
+		&parser.AliasedExpr{Expr: &parser.ColName{Name: id}},
+		&parser.AliasedExpr{Expr: parser.NewIntVal("1"), As: alias},
+	}}
+
+	tests := []struct {
+		name     string
+		stmt     parser.SelectStatement
+		expected parser.Columns
+	}{
+		{name: "nil statement"},
+		{
+			name:     "select",
+			stmt:     selectWithColumns,
+			expected: parser.Columns{id, alias},
+		},
+		{
+			name: "non-aliased select expression",
+			stmt: &parser.Select{SelectExprs: parser.SelectExprs{&parser.StarExpr{}}},
+		},
+		{
+			name: "anonymous non-column expression",
+			stmt: &parser.Select{SelectExprs: parser.SelectExprs{
+				&parser.AliasedExpr{Expr: parser.NewIntVal("1")},
+			}},
+		},
+		{
+			name: "union uses left output",
+			stmt: &parser.Union{
+				Left:  selectWithColumns,
+				Right: &parser.Select{},
+			},
+			expected: parser.Columns{id, alias},
+		},
+		{
+			name:     "parenthesized select",
+			stmt:     &parser.ParenSelect{Select: selectWithColumns},
+			expected: parser.Columns{id, alias},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, extractSelectOutputColumns(tt.stmt))
+		})
+	}
+}
+
 func TestNormalizeViewDefinitionPreservesTableAliasColumns(t *testing.T) {
 	stmt := &parser.Select{
 		SelectExprs: parser.SelectExprs{&parser.StarExpr{}},
