@@ -821,6 +821,16 @@ func TestDefaultFunctionExpressions(t *testing.T) {
 			sql:  "CREATE TABLE t (created_at timestamp DEFAULT now())",
 			mode: ParserModePostgres,
 		},
+		{
+			name: "SQL Server NEWID default",
+			sql:  "CREATE TABLE t (id uniqueidentifier DEFAULT NEWID())",
+			mode: ParserModeMssql,
+		},
+		{
+			name: "SQL Server NEWSEQUENTIALID default",
+			sql:  "CREATE TABLE t (id uniqueidentifier DEFAULT NEWSEQUENTIALID())",
+			mode: ParserModeMssql,
+		},
 	}
 
 	for _, tc := range testCases {
