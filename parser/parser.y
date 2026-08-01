@@ -4065,14 +4065,6 @@ default_value_expression:
   {
     $$ = $1
   }
-| NEWID '(' ')'
-  {
-    $$ = &FuncExpr{Name: NewIdent($1, false)}
-  }
-| NEWSEQUENTIALID '(' ')'
-  {
-    $$ = &FuncExpr{Name: NewIdent($1, false)}
-  }
 | typed_literal
   {
     $$ = $1
