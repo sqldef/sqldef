@@ -1704,3 +1704,160 @@ func TestAnyAllOperandParens(t *testing.T) {
 		})
 	}
 }
+
+func TestParenthesizedSetOperationOperands(t *testing.T) {
+	testCases := []struct {
+		name         string
+		sql          string
+		setOperation string
+		leftParen    bool
+		rightParen   bool
+		fromSubquery bool
+	}{
+		{
+			name:         "left operand",
+			sql:          "CREATE VIEW v AS (SELECT 1 AS id) UNION ALL SELECT 2 AS id",
+			setOperation: UnionAllStr,
+			leftParen:    true,
+		},
+		{
+			name:         "both operands",
+			sql:          "CREATE VIEW v AS (SELECT 1 AS id) UNION ALL (SELECT 2 AS id)",
+			setOperation: UnionAllStr,
+			leftParen:    true,
+			rightParen:   true,
+		},
+		{
+			name:         "right operand",
+			sql:          "CREATE VIEW v AS SELECT 1 AS id UNION ALL (SELECT 2 AS id)",
+			setOperation: UnionAllStr,
+			rightParen:   true,
+		},
+		{
+			name:         "left operand in FROM subquery",
+			setOperation: UnionAllStr,
+			leftParen:    true,
+			fromSubquery: true,
+			sql: `CREATE VIEW v AS
+SELECT * FROM (
+  (SELECT a.id, a.name FROM a JOIN x USING (id))
+  UNION ALL
+  SELECT b.id, b.name FROM b JOIN x USING (id)
+) t`,
+		},
+		{
+			name:         "UNION",
+			sql:          "CREATE VIEW v AS (SELECT 1 AS id) UNION (SELECT 2 AS id)",
+			setOperation: UnionStr,
+			leftParen:    true,
+			rightParen:   true,
+		},
+		{
+			name:         "INTERSECT",
+			sql:          "CREATE VIEW v AS (SELECT 1 AS id) INTERSECT (SELECT 2 AS id)",
+			setOperation: IntersectStr,
+			leftParen:    true,
+			rightParen:   true,
+		},
+		{
+			name:         "EXCEPT",
+			sql:          "CREATE VIEW v AS (SELECT 1 AS id) EXCEPT (SELECT 2 AS id)",
+			setOperation: ExceptStr,
+			leftParen:    true,
+			rightParen:   true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			stmt, err := ParseDDL(tc.sql, ParserModePostgres)
+			if err != nil {
+				t.Fatalf("parse failed: %v", err)
+			}
+
+			definition := stmt.(*DDL).View.Definition
+			if tc.fromSubquery {
+				outer := definition.(*Select)
+				aliased := outer.From[0].(*AliasedTableExpr)
+				definition = aliased.Expr.(*Subquery).Select
+			}
+			union, ok := definition.(*Union)
+			if !ok {
+				t.Fatalf("definition = %T, want *Union", definition)
+			}
+			if union.Type != tc.setOperation {
+				t.Errorf("union.Type = %q, want %q", union.Type, tc.setOperation)
+			}
+			_, leftParen := union.Left.(*ParenSelect)
+			if leftParen != tc.leftParen {
+				t.Errorf("union.Left parenthesized = %t, want %t", leftParen, tc.leftParen)
+			}
+			_, rightParen := union.Right.(*ParenSelect)
+			if rightParen != tc.rightParen {
+				t.Errorf("union.Right parenthesized = %t, want %t", rightParen, tc.rightParen)
+			}
+		})
+	}
+}
+
+func TestParenthesizedSetOperationChain(t *testing.T) {
+	stmt, err := ParseDDL(`CREATE VIEW v AS
+(SELECT 1 AS id)
+UNION ALL
+(SELECT 2 AS id)
+UNION ALL
+(SELECT 3 AS id)`, ParserModePostgres)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+
+	definition := stmt.(*DDL).View.Definition
+	outer, ok := definition.(*Union)
+	if !ok {
+		t.Fatalf("definition = %T, want *Union", definition)
+	}
+	inner, ok := outer.Left.(*Union)
+	if !ok {
+		t.Errorf("outer.Left = %T, want *Union", outer.Left)
+		return
+	}
+	if _, ok := inner.Left.(*ParenSelect); !ok {
+		t.Errorf("inner.Left = %T, want *ParenSelect", inner.Left)
+	}
+	if _, ok := inner.Right.(*ParenSelect); !ok {
+		t.Errorf("inner.Right = %T, want *ParenSelect", inner.Right)
+	}
+	if _, ok := outer.Right.(*ParenSelect); !ok {
+		t.Errorf("outer.Right = %T, want *ParenSelect", outer.Right)
+	}
+}
+
+func TestParenthesizedSetOperandPreservesClauses(t *testing.T) {
+	stmt, err := ParseDDL(`CREATE VIEW v AS
+(SELECT id FROM items ORDER BY id DESC LIMIT 1)
+UNION ALL
+SELECT id FROM items`, ParserModePostgres)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+
+	definition := stmt.(*DDL).View.Definition
+	union, ok := definition.(*Union)
+	if !ok {
+		t.Fatalf("definition = %T, want *Union", definition)
+	}
+	left, ok := union.Left.(*ParenSelect)
+	if !ok {
+		t.Fatalf("union.Left = %T, want *ParenSelect", union.Left)
+	}
+	inner, ok := left.Select.(*Select)
+	if !ok {
+		t.Fatalf("left.Select = %T, want *Select", left.Select)
+	}
+	if len(inner.OrderBy) != 1 {
+		t.Errorf("len(inner.OrderBy) = %d, want 1", len(inner.OrderBy))
+	}
+	if inner.Limit == nil {
+		t.Error("inner.Limit is nil")
+	}
+}
