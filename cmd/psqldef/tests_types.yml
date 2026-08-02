@@ -444,3 +444,231 @@ EnumTypeDefaultIdempotent:
     );
   up: ""
   down: ""
+
+RenameEnumType:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+  desired: |
+    CREATE TYPE order_status /* @renamed from=order_state */ AS ENUM ('pending', 'shipped');
+  up: |
+    ALTER TYPE public.order_state RENAME TO order_status;
+  down: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+    DROP TYPE public.order_status;
+
+RenameEnumTypeLineComment:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+  desired: |
+    CREATE TYPE order_status -- @renamed from=order_state
+    AS ENUM ('pending', 'shipped');
+  up: |
+    ALTER TYPE public.order_state RENAME TO order_status;
+  down: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+    DROP TYPE public.order_status;
+
+RenameEnumTypeCommentAfterOpenParen:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+  desired: |
+    CREATE TYPE order_status AS ENUM ( /* @renamed from=order_state */ 'pending', 'shipped');
+  up: |
+    ALTER TYPE public.order_state RENAME TO order_status;
+  down: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+    DROP TYPE public.order_status;
+
+RenameEnumTypeLineCommentAfterOpenParen:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+  desired: |
+    CREATE TYPE order_status AS ENUM ( -- @renamed from=order_state
+      'pending',
+      'shipped'
+    );
+  up: |
+    ALTER TYPE public.order_state RENAME TO order_status;
+  down: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+    DROP TYPE public.order_status;
+
+RenameEnumTypeCommentOnOwnLine:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+  desired: |
+    CREATE TYPE order_status AS ENUM (
+      /* @renamed from=order_state */
+      'pending',
+      'shipped'
+    );
+  up: |
+    ALTER TYPE public.order_state RENAME TO order_status;
+  down: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+    DROP TYPE public.order_status;
+
+RenameEnumTypeToKeywordName:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+  desired: |
+    CREATE TYPE status /* @renamed from=order_state */ AS ENUM ('pending', 'shipped');
+  up: |
+    ALTER TYPE public.order_state RENAME TO status;
+  down: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+    DROP TYPE public."status";
+
+RenameEnumTypeWithValueRenameAndAddValue:
+  min_version: '12'
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipping');
+  desired: |
+    CREATE TYPE order_status /* @renamed from=order_state */ AS ENUM (
+      'pending',
+      'shipped' /* @renamed from=shipping */,
+      'delivered'
+    );
+  up: |
+    ALTER TYPE public.order_state RENAME TO order_status;
+    ALTER TYPE public.order_status RENAME VALUE 'shipping' TO 'shipped';
+    ALTER TYPE public.order_status ADD VALUE 'delivered';
+  down: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipping');
+    DROP TYPE public.order_status;
+
+RenameEnumTypeWithReferencingColumns:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+    CREATE TABLE orders (
+      id bigint NOT NULL PRIMARY KEY,
+      status order_state NOT NULL DEFAULT 'pending',
+      prev_status order_state
+    );
+    CREATE TABLE shipments (
+      id bigint NOT NULL PRIMARY KEY,
+      status order_state
+    );
+  desired: |
+    CREATE TYPE order_status /* @renamed from=order_state */ AS ENUM ('pending', 'shipped');
+    CREATE TABLE orders (
+      id bigint NOT NULL PRIMARY KEY,
+      status order_status NOT NULL DEFAULT 'pending',
+      prev_status order_status
+    );
+    CREATE TABLE shipments (
+      id bigint NOT NULL PRIMARY KEY,
+      status order_status
+    );
+  up: |
+    ALTER TYPE public.order_state RENAME TO order_status;
+  down: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+    ALTER TABLE public.orders ALTER COLUMN status DROP DEFAULT;
+    ALTER TABLE public.orders ALTER COLUMN status TYPE order_state USING status::text::order_state;
+    ALTER TABLE public.orders ALTER COLUMN status SET DEFAULT 'pending';
+    ALTER TABLE public.orders ALTER COLUMN prev_status TYPE order_state USING prev_status::text::order_state;
+    ALTER TABLE public.shipments ALTER COLUMN status TYPE order_state USING status::text::order_state;
+    DROP TYPE public.order_status;
+
+RenameEnumTypeWithSchema:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE SCHEMA myschema;
+    CREATE TYPE myschema.item_state AS ENUM ('active', 'inactive');
+  desired: |
+    CREATE SCHEMA myschema;
+    CREATE TYPE myschema.item_status /* @renamed from=item_state */ AS ENUM ('active', 'inactive');
+  up: |
+    ALTER TYPE myschema.item_state RENAME TO item_status;
+  down: |
+    CREATE TYPE myschema.item_state AS ENUM ('active', 'inactive');
+    DROP TYPE myschema.item_status;
+
+RenameEnumTypeOldTypeNotFound:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+  desired: |
+    CREATE TYPE order_status /* @renamed from=missing_state */ AS ENUM ('pending', 'shipped');
+  up: |
+    CREATE TYPE order_status /* @renamed from=missing_state */ AS ENUM ('pending', 'shipped');
+    DROP TYPE public.order_state;
+  down: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+    DROP TYPE public.order_status;
+
+RenameEnumTypeCommentBeforeTypeKeywordIgnored:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+  desired: |
+    CREATE /* @renamed from=order_state */ TYPE order_status AS ENUM ('pending', 'shipped');
+  up: |
+    CREATE /* @renamed from=order_state */ TYPE order_status AS ENUM ('pending', 'shipped');
+    DROP TYPE public.order_state;
+  down: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+    DROP TYPE public.order_status;
+
+RenameEnumTypeCommentBeforeTypeNameIgnored:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+  desired: |
+    CREATE TYPE /* @renamed from=order_state */ order_status AS ENUM ('pending', 'shipped');
+  up: |
+    CREATE TYPE /* @renamed from=order_state */ order_status AS ENUM ('pending', 'shipped');
+    DROP TYPE public.order_state;
+  down: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+    DROP TYPE public.order_status;
+
+RenameEnumTypeCommentAfterAsIgnored:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+  desired: |
+    CREATE TYPE order_status AS /* @renamed from=order_state */ ENUM ('pending', 'shipped');
+  up: |
+    CREATE TYPE order_status AS /* @renamed from=order_state */ ENUM ('pending', 'shipped');
+    DROP TYPE public.order_state;
+  down: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+    DROP TYPE public.order_status;
+
+RenameEnumTypeCommentAfterEnumIgnored:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+  desired: |
+    CREATE TYPE order_status AS ENUM /* @renamed from=order_state */ ('pending', 'shipped');
+  up: |
+    CREATE TYPE order_status AS ENUM /* @renamed from=order_state */ ('pending', 'shipped');
+    DROP TYPE public.order_state;
+  down: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+    DROP TYPE public.order_status;
+
+RenameEnumTypeFirstAcceptedCommentWins:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+  desired: |
+    CREATE TYPE order_status /* @renamed from=order_state */ AS ENUM ( /* @renamed from=other_state */
+      'pending',
+      'shipped'
+    );
+  up: |
+    ALTER TYPE public.order_state RENAME TO order_status;
+  down: |
+    CREATE TYPE order_state AS ENUM ('pending', 'shipped');
+    DROP TYPE public.order_status;

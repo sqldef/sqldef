@@ -233,7 +233,7 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 			} else {
 				// Table not found. Check if it's a rename from another table.
 				if !desired.table.renamedFrom.IsEmpty() {
-					oldTableName := g.normalizeOldTableName(desired.table.renamedFrom, desired.table.name)
+					oldTableName := g.normalizeOldObjectName(desired.table.renamedFrom, desired.table.name)
 					oldTable := g.findTableByName(g.currentTables, oldTableName)
 					if oldTable != nil {
 						// Found the old table, generate rename DDL
@@ -2638,7 +2638,26 @@ func normalizeFunctionOption(opt string) string {
 func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 	ddls := []string{}
 
-	if currentType := g.findType(g.currentTypes, desired); currentType != nil {
+	currentType := g.findType(g.currentTypes, desired)
+	if currentType == nil && !desired.renamedFrom.IsEmpty() {
+		// Looking the desired name up first is what keeps this idempotent: once the rename
+		// has been applied, the new name is found and this branch is never entered again.
+		oldName := g.normalizeOldObjectName(desired.renamedFrom, desired.name)
+		if oldType := g.findType(g.currentTypes, &Type{name: oldName}); oldType != nil {
+			slog.Debug("Renaming enum type", "from", oldName.RawString(), "to", desired.name.RawString())
+			ddls = append(ddls, fmt.Sprintf("ALTER TYPE %s RENAME TO %s",
+				g.escapeQualifiedName(oldName),       // must be qualified
+				g.escapeSQLIdent(desired.name.Name))) // must not be qualified
+			// Must run before oldType is renamed, as it matches columns against the old name.
+			g.renameEnumTypeInCurrentColumns(oldType, desired.name)
+			// g.currentTypes holds pointers, and the obsolete-type cleanup only compares
+			// names against desiredTypes. Without this the run drops the type it just renamed.
+			oldType.name = desired.name
+			currentType = oldType
+		}
+	}
+
+	if currentType != nil {
 		typeName := g.escapeTypeName(currentType)
 
 		// Handle RENAME VALUE for values with @renamed annotation in desired
@@ -3848,12 +3867,12 @@ func (g *Generator) validateAndEscapeGrantee(grantee string) (string, error) {
 	return g.forceEscapeSQLName(grantee), nil
 }
 
-// normalizeOldTableName creates a QualifiedName from a renamedFrom Ident,
-// using the schema from the new table name if not specified.
-func (g *Generator) normalizeOldTableName(oldName Ident, newTable QualifiedName) QualifiedName {
-	// Use the schema from the new table name
+// normalizeOldObjectName creates a QualifiedName from a renamedFrom Ident,
+// using the schema from the new object name if not specified.
+func (g *Generator) normalizeOldObjectName(oldName Ident, newObject QualifiedName) QualifiedName {
+	// Use the schema from the new object name
 	return QualifiedName{
-		Schema: newTable.Schema,
+		Schema: newObject.Schema,
 		Name:   oldName,
 	}
 }
@@ -4800,6 +4819,26 @@ func (g *Generator) findEnumTypeForColumn(column Column, types []*Type) *Type {
 		return nil
 	}
 	return found
+}
+
+// renameEnumTypeInCurrentColumns rewrites the enum type name recorded on the current-state
+// columns that refer to oldType. Column types are compared by name, so leaving the old name
+// behind would make the generator emit "ALTER COLUMN ... TYPE ... USING", the full-table
+// rewrite that renaming the type exists to avoid.
+func (g *Generator) renameEnumTypeInCurrentColumns(oldType *Type, newName QualifiedName) {
+	for _, table := range g.currentTables {
+		for _, column := range getSortedColumns(table.columns) {
+			if g.findEnumTypeForColumn(*column, g.currentTypes) != oldType {
+				continue
+			}
+			// typeIdent is empty when the source SQL wrote the type schema-qualified; keep it
+			// that way so the column keeps rendering its schema prefix from references.
+			if !column.typeIdent.IsEmpty() {
+				column.typeIdent = newName.Name
+			}
+			column.typeName = newName.Name.Name
+		}
+	}
 }
 
 // findDomainByName finds a domain using quote-aware comparison including schema
