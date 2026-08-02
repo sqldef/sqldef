@@ -1336,8 +1336,6 @@ func extractTypeComment(rawDDL string, mode GeneratorMode) string {
 		case typeCommentStateCreate:
 			if tok == parser.TYPE {
 				state = typeCommentStateName
-			} else {
-				state = typeCommentStateInit
 			}
 		case typeCommentStateName:
 			if tok == parser.AS {
