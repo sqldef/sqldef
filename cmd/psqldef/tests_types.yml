@@ -672,3 +672,30 @@ RenameEnumTypeFirstAcceptedCommentWins:
   down: |
     CREATE TYPE order_state AS ENUM ('pending', 'shipped');
     DROP TYPE public.order_status;
+
+RenameEnumTypeKeepingComment:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE order_state /* @renamed from=order_status */ AS ENUM ('pending', 'shipped');
+    COMMENT ON TYPE order_state IS 'order lifecycle';
+  desired: |
+    CREATE TYPE order_status /* @renamed from=order_state */ AS ENUM ('pending', 'shipped');
+    COMMENT ON TYPE order_status IS 'order lifecycle';
+  up: |
+    ALTER TYPE public.order_state RENAME TO order_status;
+  down: |
+    ALTER TYPE public.order_status RENAME TO order_state;
+
+RenameEnumTypeDroppingComment:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TYPE order_state /* @renamed from=order_status */ AS ENUM ('pending', 'shipped');
+    COMMENT ON TYPE order_state IS 'order lifecycle';
+  desired: |
+    CREATE TYPE order_status /* @renamed from=order_state */ AS ENUM ('pending', 'shipped');
+  up: |
+    ALTER TYPE public.order_state RENAME TO order_status;
+    COMMENT ON TYPE public.order_status IS NULL;
+  down: |
+    ALTER TYPE public.order_status RENAME TO order_state;
+    COMMENT ON TYPE public.order_state IS 'order lifecycle';

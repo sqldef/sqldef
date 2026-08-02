@@ -2648,8 +2648,9 @@ func (g *Generator) generateDDLsForCreateType(desired *Type) ([]string, error) {
 			ddls = append(ddls, fmt.Sprintf("ALTER TYPE %s RENAME TO %s",
 				g.escapeQualifiedName(oldName),       // must be qualified
 				g.escapeSQLIdent(desired.name.Name))) // must not be qualified
-			// Must run before oldType is renamed, as it matches columns against the old name.
+			// Must run before oldType is renamed, as they match against the old name.
 			g.renameEnumTypeInCurrentColumns(oldType, desired.name)
+			g.renameTypeInCurrentComments(oldName, desired.name)
 			// g.currentTypes holds pointers, and the obsolete-type cleanup only compares
 			// names against desiredTypes. Without this the run drops the type it just renamed.
 			oldType.name = desired.name
@@ -4838,6 +4839,17 @@ func (g *Generator) renameEnumTypeInCurrentColumns(oldType *Type, newName Qualif
 			}
 			column.typeName = newName.Name.Name
 		}
+	}
+}
+
+// renameTypeInCurrentComments retargets the current-state COMMENT ON TYPE of oldName at newName.
+// PostgreSQL carries the comment over on ALTER TYPE ... RENAME TO, so a comment left pointing at
+// the old name would make the obsolete-comment cleanup emit COMMENT ON TYPE <old> IS NULL against
+// a type that no longer exists, failing the whole run.
+func (g *Generator) renameTypeInCurrentComments(oldName, newName QualifiedName) {
+	target := &parser.Comment{ObjectType: "OBJECT_TYPE", Object: []Ident{oldName.Schema, oldName.Name}}
+	if comment := g.findCommentByObject(g.currentComments, target); comment != nil {
+		comment.comment.Object = []Ident{newName.Schema, newName.Name}
 	}
 }
 
