@@ -462,6 +462,40 @@ CREATE TYPE level AS ENUM (
 );
 ```
 
+### Enum Type Renaming
+
+psqldef supports renaming an enum type itself using the `-- @renamed from=old_name` or `/* @renamed from=old_name */` annotation:
+
+```sql
+CREATE TYPE order_status /* @renamed from=order_state */ AS ENUM ('pending', 'shipped');
+```
+
+This generates:
+```sql
+ALTER TYPE order_state RENAME TO order_status;
+```
+
+The annotation can also be placed right after the parenthesis that opens the enum body:
+
+```sql
+CREATE TYPE order_status AS ENUM ( -- @renamed from=order_state
+  'pending',
+  'shipped'
+);
+```
+
+Without the annotation, psqldef cannot tell a rename from a new type, so it creates the new type, rewrites every referencing column with `ALTER COLUMN ... TYPE ... USING`, and drops the old one. Each of those rewrites takes an `ACCESS EXCLUSIVE` lock and rewrites the whole table, while `ALTER TYPE ... RENAME TO` is a single catalog update.
+
+Renaming the type can be combined with renaming and adding values in the same migration:
+
+```sql
+CREATE TYPE order_status /* @renamed from=order_state */ AS ENUM (
+  'pending',
+  'shipped' /* @renamed from=shipping */,
+  'delivered'
+);
+```
+
 Note: After the migration is complete, you can remove the `@renamed` annotation from your schema file. The annotation is only needed during the migration process.
 
 ## Configuration
