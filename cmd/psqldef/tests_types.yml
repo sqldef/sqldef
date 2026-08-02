@@ -699,3 +699,26 @@ RenameEnumTypeDroppingComment:
   down: |
     ALTER TYPE public.order_status RENAME TO order_state;
     COMMENT ON TYPE public.order_state IS 'order lifecycle';
+
+RenameEnumTypeWithSchemaQualifiedColumn:
+  legacy_ignore_quotes: false
+  current: |
+    CREATE SCHEMA myschema;
+    CREATE TYPE myschema.item_state AS ENUM ('active', 'inactive');
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY,
+      status myschema.item_state
+    );
+  desired: |
+    CREATE SCHEMA myschema;
+    CREATE TYPE myschema.item_status /* @renamed from=item_state */ AS ENUM ('active', 'inactive');
+    CREATE TABLE items (
+      id bigint NOT NULL PRIMARY KEY,
+      status myschema.item_status
+    );
+  up: |
+    ALTER TYPE myschema.item_state RENAME TO item_status;
+  down: |
+    CREATE TYPE myschema.item_state AS ENUM ('active', 'inactive');
+    ALTER TABLE public.items ALTER COLUMN status TYPE myschema.item_state USING status::text::myschema.item_state;
+    DROP TYPE myschema.item_status;
