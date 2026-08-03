@@ -45,6 +45,7 @@ type TestCase struct {
 	} `yaml:"config"`
 	Manage struct {
 		Extension *[]database.ManageObjectRule `yaml:"extension"`
+		Function  *[]database.ManageObjectRule `yaml:"function"`
 		Privilege *[]database.ManageObjectRule `yaml:"privilege"`
 	} `yaml:"manage"`
 }
@@ -184,6 +185,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 
 	for name, rules := range map[string]*[]database.ManageObjectRule{
 		"extension": test.Manage.Extension,
+		"function":  test.Manage.Function,
 		"privilege": test.Manage.Privilege,
 	} {
 		if rules == nil {
@@ -202,6 +204,7 @@ func RunTest(t *testing.T, db database.Database, test TestCase, mode schema.Gene
 	config := database.GeneratorConfig{
 		ManagedRoles:            test.ManagedRoles,
 		ManageExtensions:        test.Manage.Extension,
+		ManageFunctions:         test.Manage.Function,
 		ManagePrivileges:        test.Manage.Privilege,
 		EnableDrop:              *test.EnableDrop,
 		CreateIndexConcurrently: test.Config.CreateIndexConcurrently,

@@ -1,0 +1,75 @@
+# yaml-language-server: $schema=../../testutil/testcase.schema.json
+# Tests for manage.function (see object-management.md): which functions are
+# managed, and whether DROP FUNCTION is allowed per rule.
+
+ManageFunctionCreatesMatched:
+  manage:
+    function:
+      - target: app_.*
+  current: ""
+  desired: |
+    CREATE FUNCTION app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+  up: |
+    CREATE FUNCTION app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+  down: |
+    -- Skipped: DROP FUNCTION "public"."app_touch";
+
+ManageFunctionUnmatchedFunctionUntouched:
+  # external_fn matches no rule: it is absent from the desired schema yet must
+  # not be dropped, and it is excluded from the diff entirely.
+  manage:
+    function:
+      - target: app_.*
+  current: |
+    CREATE FUNCTION app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+    CREATE FUNCTION external_fn() RETURNS integer AS $$ BEGIN RETURN 2; END; $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE FUNCTION app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+
+ManageFunctionObsoleteDropForbidden:
+  # A managed function absent from desired is a drop candidate; with drop:false
+  # (default) the DROP is skipped rather than executed, so the reverse migration
+  # produces nothing (the function was never removed).
+  manage:
+    function:
+      - target: app_.*
+  current: |
+    CREATE FUNCTION app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+    CREATE FUNCTION app_stale() RETURNS integer AS $$ BEGIN RETURN 9; END; $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE FUNCTION app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+  up: |
+    -- Skipped: DROP FUNCTION "public"."app_stale";
+  down: ""
+
+ManageFunctionObsoleteDropAllowed:
+  # With drop:true the DROP executes even though enable_drop is false.
+  manage:
+    function:
+      - target: app_.*
+        drop: true
+  current: |
+    CREATE FUNCTION app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+    CREATE FUNCTION app_stale() RETURNS integer AS $$ BEGIN RETURN 9; END; $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE FUNCTION app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+  up: |
+    DROP FUNCTION "public"."app_stale";
+  down: |
+    CREATE FUNCTION app_stale() RETURNS integer AS $$ BEGIN RETURN 9; END; $$ LANGUAGE plpgsql;
+
+ManageFunctionOtherSchemaUntouched:
+  # manage.function is scoped to the default schema: a same-named function in
+  # another schema (s2.app_stale) matches no rule and must not be dropped, even
+  # with drop:true.
+  manage:
+    function:
+      - target: app_.*
+        drop: true
+  current: |
+    CREATE SCHEMA s2;
+    CREATE FUNCTION app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
+    CREATE FUNCTION s2.app_stale() RETURNS integer AS $$ BEGIN RETURN 9; END; $$ LANGUAGE plpgsql;
+  desired: |
+    CREATE SCHEMA s2;
+    CREATE FUNCTION app_touch() RETURNS integer AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;
