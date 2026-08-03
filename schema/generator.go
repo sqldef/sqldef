@@ -5292,6 +5292,9 @@ func (g *Generator) formatExprQuoteAware(expr parser.Expr) string {
 		return result
 	case *parser.ParenExpr:
 		return "(" + g.formatExprQuoteAware(e.Expr) + ")"
+	case *parser.ArrayConstructor:
+		elements := util.TransformSlice(e.Elements, g.formatExprQuoteAware)
+		return "ARRAY[" + strings.Join(elements, ", ") + "]"
 	case *parser.ComparisonExpr:
 		result := g.formatExprQuoteAware(e.Left) + " " + e.Operator + " "
 		if e.All {
