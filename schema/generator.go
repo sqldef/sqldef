@@ -118,6 +118,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	desiredDDLs = FilterViews(desiredDDLs, config)
 	desiredDDLs = FilterPrivileges(desiredDDLs, config)
 	desiredDDLs = FilterExtensions(desiredDDLs, config)
+	desiredDDLs = FilterFunctions(desiredDDLs, config, defaultSchema)
 
 	desiredDDLs = SortTablesByDependencies(desiredDDLs, defaultSchema, mode, config.LegacyIgnoreQuotes, config.MysqlLowerCaseTableNames)
 
@@ -129,6 +130,7 @@ func GenerateIdempotentDDLs(mode GeneratorMode, sqlParser database.Parser, desir
 	currentDDLs = FilterViews(currentDDLs, config)
 	currentDDLs = FilterPrivileges(currentDDLs, config)
 	currentDDLs = FilterExtensions(currentDDLs, config)
+	currentDDLs = FilterFunctions(currentDDLs, config, defaultSchema)
 
 	currentDDLs = SortTablesByDependencies(currentDDLs, defaultSchema, mode, config.LegacyIgnoreQuotes, config.MysqlLowerCaseTableNames)
 
@@ -682,7 +684,8 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 		if g.findFunctionByName(g.desiredFunctions, currentFunction.name) != nil {
 			continue
 		}
-		ddls = append(ddls, fmt.Sprintf("DROP FUNCTION %s", g.escapeQualifiedName(currentFunction.name)))
+		dropDDL := fmt.Sprintf("DROP FUNCTION %s", g.escapeQualifiedName(currentFunction.name))
+		ddls = append(ddls, gateFunctionDropDDL(g.config, currentFunction.name.Name.Name, dropDDL))
 	}
 
 	// Clean up obsoleted types
@@ -791,10 +794,10 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 	}
 
 	// Comment out DROP/REVOKE statements when enable_drop is false. With
-	// manage.privilege, REVOKE gating is already decided per grantee at
-	// emission time, so REVOKE lines are left alone here.
+	// manage.privilege / manage.function, per-object gating is already decided
+	// at emission time, so those statements are left alone here.
 	if !g.config.EnableDrop {
-		ddls = commentOutDropStatements(ddls, g.config.ManagePrivileges != nil)
+		ddls = commentOutDropStatements(ddls, g.config)
 	}
 
 	return ddls, nil
@@ -804,10 +807,21 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 // This makes the output testable and visible in --dry-run output.
 // Every line is commented out so that a multi-line statement can never leak
 // executable SQL after the first line.
-func commentOutDropStatements(ddls []string, preserveRevokes bool) []string {
+//
+// manage.privilege (REVOKE) and manage.function (DROP FUNCTION) decide per
+// object whether the destructive statement is allowed at emission time —
+// forbidden ones already carry the "-- Skipped: " prefix — so those statement
+// kinds are preserved here rather than being re-gated by the global enable_drop.
+func commentOutDropStatements(ddls []string, config database.GeneratorConfig) []string {
+	preserveRevokes := config.ManagePrivileges != nil
+	preserveFunctionDrops := config.ManageFunctions != nil
 	result := make([]string, len(ddls))
 	for i, ddl := range ddls {
 		if preserveRevokes && strings.HasPrefix(ddl, "REVOKE ") {
+			result[i] = ddl
+			continue
+		}
+		if preserveFunctionDrops && strings.HasPrefix(ddl, "DROP FUNCTION ") {
 			result[i] = ddl
 			continue
 		}
@@ -2515,7 +2529,8 @@ func (g *Generator) generateDDLsForCreateFunction(desired *Function) ([]string, 
 		if desired.orReplace {
 			ddls = append(ddls, desired.statement)
 		} else {
-			ddls = append(ddls, "DROP FUNCTION "+g.escapeQualifiedName(currentFunction.name))
+			dropDDL := "DROP FUNCTION " + g.escapeQualifiedName(currentFunction.name)
+			ddls = append(ddls, gateFunctionDropDDL(g.config, currentFunction.name.Name.Name, dropDDL))
 			ddls = append(ddls, desired.statement)
 		}
 	}
@@ -5791,6 +5806,28 @@ func (g *Generator) areSamePrimaryKeyColumns(indexA Index, indexB Index) bool {
 	return true
 }
 
+// areSameOperatorClasses reports whether two index columns use the same operator class.
+// Operator classes are unquoted identifiers, so they're compared case-insensitively. The database
+// omits the default operator class from the DDL it exports, so a default written explicitly in the
+// desired DDL has to compare equal to an omitted one.
+func (g *Generator) areSameOperatorClasses(indexA Index, indexB Index, columnIndex int) bool {
+	operatorClassA := indexA.columns[columnIndex].operatorClass
+	operatorClassB := indexB.columns[columnIndex].operatorClass
+	if strings.EqualFold(operatorClassA, operatorClassB) {
+		return true
+	}
+	if operatorClassA != "" && operatorClassB != "" {
+		return false
+	}
+	// Exactly one side specifies an operator class here. It matches the omitted one only if the
+	// access method defaults to it.
+	specified, index := operatorClassA, indexA
+	if specified == "" {
+		specified, index = operatorClassB, indexB
+	}
+	return g.config.PostgresDefaultOperatorClasses[index.AccessMethod()+"."+strings.ToLower(specified)]
+}
+
 func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 	if indexA.unique != indexB.unique {
 		return false
@@ -5820,6 +5857,9 @@ func (g *Generator) areSameIndexes(indexA Index, indexB Index) bool {
 			return false
 		}
 		if indexA.columns[i].withoutOverlaps != indexB.columns[i].withoutOverlaps {
+			return false
+		}
+		if !g.areSameOperatorClasses(indexA, indexB, i) {
 			return false
 		}
 	}
@@ -6463,6 +6503,56 @@ func matchManageObjectRule(rules []database.ManageObjectRule, name string) (data
 	return database.MatchManageObjectRule(rules, name)
 }
 
+// FilterFunctions drops CREATE/COMMENT FUNCTION DDLs whose function is not
+// managed by manage.function, so unmanaged functions are excluded from the diff
+// on both the desired and current sides (allow-list model). When manage.function
+// is unset, all functions are managed (unchanged behavior).
+//
+// A rule's target matches against the function name only; manage.function is
+// scoped to the default schema (matching the manage: RFC, where a rule with no
+// schema field defaults to the default schema). Functions in other schemas are
+// left untouched. Schema-qualified rules are not implemented yet.
+func FilterFunctions(ddls []DDL, config database.GeneratorConfig, defaultSchema string) []DDL {
+	if config.ManageFunctions == nil {
+		return ddls
+	}
+
+	filtered := []DDL{}
+	for _, ddl := range ddls {
+		switch stmt := ddl.(type) {
+		case *Function:
+			if !isManagedFunction(config, defaultSchema, stmt.name.Schema.Name, stmt.name.Name.Name) {
+				slog.Debug("function is not managed by any manage.function rule; excluding it", "schema", stmt.name.Schema.Name, "function", stmt.name.Name.Name)
+				continue
+			}
+		case *Comment:
+			if strings.EqualFold(stmt.comment.ObjectType, "FUNCTION") && len(stmt.comment.Object) > 0 {
+				schema := ""
+				if len(stmt.comment.Object) >= 2 {
+					schema = stmt.comment.Object[len(stmt.comment.Object)-2].Name
+				}
+				name := stmt.comment.Object[len(stmt.comment.Object)-1].Name
+				if !isManagedFunction(config, defaultSchema, schema, name) {
+					continue
+				}
+			}
+		}
+		filtered = append(filtered, ddl)
+	}
+	return filtered
+}
+
+// isManagedFunction reports whether a function is managed by manage.function: it
+// must live in the default schema (an empty schema means the default) and its
+// name must match a rule.
+func isManagedFunction(config database.GeneratorConfig, defaultSchema, schema, name string) bool {
+	if schema != "" && schema != defaultSchema {
+		return false
+	}
+	_, matched := matchManageObjectRule(*config.ManageFunctions, name)
+	return matched
+}
+
 // isManagedGrantee reports whether privileges for grantee are managed: by
 // manage.privilege rules when present, else by the legacy managed_roles list.
 func isManagedGrantee(config database.GeneratorConfig, grantee string) bool {
@@ -6487,6 +6577,22 @@ func granteeRevokeAllowed(config database.GeneratorConfig, grantee string) bool 
 // global enable_drop pass handles it).
 func gateRevokeDDL(config database.GeneratorConfig, grantee, ddl string) string {
 	if config.ManagePrivileges != nil && !granteeRevokeAllowed(config, grantee) {
+		return "-- Skipped: " + ddl
+	}
+	return ddl
+}
+
+// gateFunctionDropDDL wraps a DROP FUNCTION statement in a skip comment when
+// manage.function forbids dropping funcName (the matched rule's drop is false,
+// or no rule matches). When manage.function is set the per-rule decision is
+// authoritative — the global enable_drop pass then preserves the remaining bare
+// DROP FUNCTION lines. In legacy mode the DDL is returned unchanged.
+func gateFunctionDropDDL(config database.GeneratorConfig, funcName, ddl string) string {
+	if config.ManageFunctions == nil {
+		return ddl
+	}
+	rule, matched := matchManageObjectRule(*config.ManageFunctions, funcName)
+	if !matched || !rule.Drop {
 		return "-- Skipped: " + ddl
 	}
 	return ddl

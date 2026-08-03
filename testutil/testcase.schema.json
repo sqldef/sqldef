@@ -65,7 +65,7 @@
         },
         "manage": {
           "type": "object",
-          "description": "manage: config block (see object-management.md). Only manage.extension and manage.privilege are implemented.",
+          "description": "manage: config block (see object-management.md). Only manage.extension, manage.function and manage.privilege are implemented.",
           "properties": {
             "extension": {
               "type": "array",
@@ -80,6 +80,25 @@
                   "drop": {
                     "type": "boolean",
                     "description": "Whether DROP EXTENSION is allowed for extensions matched by this rule.",
+                    "default": false
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "function": {
+              "type": "array",
+              "description": "Rules for which functions to manage. Only functions matching a rule's target are managed; unmatched functions are left untouched. An empty array manages all functions with drop disabled by default.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "description": "Regexp pattern matched against the function name, anchored with ^...$. Empty matches all."
+                  },
+                  "drop": {
+                    "type": "boolean",
+                    "description": "Whether DROP FUNCTION is allowed for functions matched by this rule (independent of enable_drop).",
                     "default": false
                   }
                 },

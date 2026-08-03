@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/parser"
 	"github.com/stretchr/testify/assert"
 )
@@ -767,26 +768,75 @@ func TestIsDropStatement(t *testing.T) {
 }
 
 func TestCommentOutDropStatements(t *testing.T) {
+	none := database.GeneratorConfig{}
+	withPrivileges := database.GeneratorConfig{ManagePrivileges: &[]database.ManageObjectRule{}}
+	withFunctions := database.GeneratorConfig{ManageFunctions: &[]database.ManageObjectRule{}}
+
 	// Single-line drops keep the existing format.
 	assert.Equal(t,
 		[]string{`-- Skipped: DROP TABLE "public"."users"`},
-		commentOutDropStatements([]string{`DROP TABLE "public"."users"`}, false),
+		commentOutDropStatements([]string{`DROP TABLE "public"."users"`}, none),
 	)
 	// Non-drop statements pass through unchanged.
 	assert.Equal(t,
 		[]string{"CREATE TABLE users (id bigint)"},
-		commentOutDropStatements([]string{"CREATE TABLE users (id bigint)"}, false),
+		commentOutDropStatements([]string{"CREATE TABLE users (id bigint)"}, none),
 	)
-	// preserveRevokes keeps REVOKE statements executable (used when a
-	// manage.privilege rule allows dropping privileges for a role).
+	// manage.privilege keeps REVOKE statements executable (revoke gating is
+	// already decided per grantee at emission time).
 	assert.Equal(t,
 		[]string{`REVOKE SELECT ON TABLE users FROM app_user`},
-		commentOutDropStatements([]string{`REVOKE SELECT ON TABLE users FROM app_user`}, true),
+		commentOutDropStatements([]string{`REVOKE SELECT ON TABLE users FROM app_user`}, withPrivileges),
+	)
+	// manage.function keeps DROP FUNCTION executable (drop gating is already
+	// decided per function; a forbidden one already carries "-- Skipped: ").
+	assert.Equal(t,
+		[]string{`DROP FUNCTION "public"."managed_fn"`},
+		commentOutDropStatements([]string{`DROP FUNCTION "public"."managed_fn"`}, withFunctions),
+	)
+	// Without manage.function, DROP FUNCTION is still gated by enable_drop.
+	assert.Equal(t,
+		[]string{`-- Skipped: DROP FUNCTION "public"."f"`},
+		commentOutDropStatements([]string{`DROP FUNCTION "public"."f"`}, none),
 	)
 	// Every line of a multi-line statement is commented out so no executable
 	// SQL can leak after the first line.
 	assert.Equal(t,
 		[]string{"-- Skipped: DROP TABLE users;\n-- DROP TABLE orders;"},
-		commentOutDropStatements([]string{"DROP TABLE users;\nDROP TABLE orders;"}, false),
+		commentOutDropStatements([]string{"DROP TABLE users;\nDROP TABLE orders;"}, none),
 	)
+}
+
+func TestGateFunctionDropDDL(t *testing.T) {
+	drop := `DROP FUNCTION "public"."f"`
+
+	// Legacy mode (manage.function unset): unchanged; the global enable_drop
+	// pass handles it.
+	assert.Equal(t, drop, gateFunctionDropDDL(database.GeneratorConfig{}, "f", drop))
+
+	// Matched rule with drop:true → allowed (bare DDL).
+	allow := database.GeneratorConfig{ManageFunctions: &[]database.ManageObjectRule{{Target: "f", Drop: true}}}
+	assert.Equal(t, drop, gateFunctionDropDDL(allow, "f", drop))
+
+	// Matched rule with drop:false → skipped.
+	forbid := database.GeneratorConfig{ManageFunctions: &[]database.ManageObjectRule{{Target: "f"}}}
+	assert.Equal(t, "-- Skipped: "+drop, gateFunctionDropDDL(forbid, "f", drop))
+
+	// No rule matches → skipped (unmanaged functions are never dropped).
+	other := database.GeneratorConfig{ManageFunctions: &[]database.ManageObjectRule{{Target: "other", Drop: true}}}
+	assert.Equal(t, "-- Skipped: "+drop, gateFunctionDropDDL(other, "f", drop))
+}
+
+func TestIsManagedFunction(t *testing.T) {
+	config := database.GeneratorConfig{ManageFunctions: &[]database.ManageObjectRule{{Target: "app_.*"}}}
+
+	// Default schema (empty or explicit "public") + matching name → managed.
+	assert.True(t, isManagedFunction(config, "public", "", "app_touch"))
+	assert.True(t, isManagedFunction(config, "public", "public", "app_touch"))
+
+	// Matching name but a non-default schema → not managed (scoped to default).
+	assert.False(t, isManagedFunction(config, "public", "s2", "app_touch"))
+
+	// Default schema but no rule matches → not managed.
+	assert.False(t, isManagedFunction(config, "public", "public", "other_fn"))
 }

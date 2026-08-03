@@ -739,6 +739,49 @@ func TestPsqldefExport(t *testing.T) {
 	))
 }
 
+func TestPsqldefExportForeignKeysWithSameName(t *testing.T) {
+	resetTestDatabase()
+
+	mustPgExec(testDatabaseName, tu.StripHeredoc(`
+		CREATE TABLE accounts (
+		    tenant_id integer NOT NULL,
+		    id integer NOT NULL,
+		    PRIMARY KEY (tenant_id, id),
+		    UNIQUE (id)
+		);
+		CREATE TABLE payment_accounts (
+		    id integer PRIMARY KEY
+		);
+		CREATE TABLE orders (
+		    tenant_id integer,
+		    account_id integer,
+		    CONSTRAINT shared_fk
+		        FOREIGN KEY (tenant_id, account_id)
+		        REFERENCES accounts (tenant_id, id)
+		        ON UPDATE CASCADE
+		        ON DELETE RESTRICT
+		        DEFERRABLE INITIALLY DEFERRED
+		);
+		CREATE TABLE payments (
+		    account_id integer,
+		    CONSTRAINT shared_fk
+		        FOREIGN KEY (account_id)
+		        REFERENCES payment_accounts (id)
+		        ON UPDATE RESTRICT
+		        ON DELETE SET NULL
+		);`,
+	))
+
+	output := tu.MustExecute(t, "./psqldef", psqldefArgs(testDatabaseName, "--export")...)
+	ordersForeignKey := `ALTER TABLE ONLY "public"."orders" ADD CONSTRAINT "shared_fk" FOREIGN KEY ("tenant_id", "account_id") REFERENCES "public"."accounts" ("tenant_id", "id") ON UPDATE CASCADE ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED;`
+	paymentsForeignKey := `ALTER TABLE ONLY "public"."payments" ADD CONSTRAINT "shared_fk" FOREIGN KEY ("account_id") REFERENCES "public"."payment_accounts" ("id") ON UPDATE RESTRICT ON DELETE SET NULL;`
+
+	assert.Contains(t, output, ordersForeignKey)
+	assert.Contains(t, output, paymentsForeignKey)
+	assert.Equal(t, 2, strings.Count(output, `ADD CONSTRAINT "shared_fk"`))
+	assert.Less(t, strings.Index(output, ordersForeignKey), strings.Index(output, paymentsForeignKey))
+}
+
 func TestPsqldefExportManageExtensions(t *testing.T) {
 	resetTestDatabase()
 

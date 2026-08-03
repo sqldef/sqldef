@@ -67,11 +67,21 @@ type GeneratorConfig struct {
 
 	ManageExtensions *[]ManageObjectRule
 	ManagePrivileges *[]ManageObjectRule // manage.privilege rules: which grantees' privileges are managed and whether REVOKE is allowed
+	ManageFunctions  *[]ManageObjectRule // manage.function rules: which functions are managed and whether DROP is allowed
 
 	// MySQL-specific: value of lower_case_table_names server variable.
 	// 0 = case-sensitive (Linux default), 1 or 2 = case-insensitive (Windows/macOS).
 	// Default is 0 (case-sensitive) for offline mode compatibility.
 	MysqlLowerCaseTableNames int
+
+	// PostgreSQL-specific: the default operator class of every access method, keyed by
+	// "<access method>.<operator class>" in lower case, e.g. "btree.text_ops".
+	// The database omits the default operator class from the DDL it exports, so one written
+	// explicitly in the desired DDL has to compare equal to an omitted one.
+	// Nil in offline mode, where an explicit operator class is compared as-is.
+	// Every copy of the config shares one map that ExportDDLs() refills, so read it only after
+	// exporting: the schema being applied may install an extension that registers operator classes.
+	PostgresDefaultOperatorClasses map[string]bool
 }
 
 type ManageObjectRule struct {
@@ -368,6 +378,9 @@ func MergeGeneratorConfig(base, override GeneratorConfig) GeneratorConfig {
 	if override.ManageExtensions != nil {
 		result.ManageExtensions = override.ManageExtensions
 	}
+	if override.ManageFunctions != nil {
+		result.ManageFunctions = override.ManageFunctions
+	}
 	if override.ManagePrivileges != nil {
 		result.ManagePrivileges = override.ManagePrivileges
 	}
@@ -414,6 +427,7 @@ func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) Generat
 	}
 
 	manageExtensions := parseManageRules(config.Manage, "extension")
+	manageFunctions := parseManageRules(config.Manage, "function")
 	managePrivileges := parseManageRules(config.Manage, "privilege")
 
 	var targetTables []string
@@ -467,6 +481,7 @@ func parseGeneratorConfigFromBytes(buf []byte, defaults GeneratorConfig) Generat
 		BulkAlter:               config.BulkAlter,
 		LegacyIgnoreQuotes:      legacyIgnoreQuotes,
 		ManageExtensions:        manageExtensions,
+		ManageFunctions:         manageFunctions,
 		ManagePrivileges:        managePrivileges,
 	}
 }
@@ -492,6 +507,7 @@ func CompileManageTarget(target string) (*regexp.Regexp, error) {
 // recognized keys are parsed permissively and ignored with a warning.
 var manageImplementedKeys = map[string]bool{
 	"extension": true,
+	"function":  true,
 	"privilege": true,
 }
 

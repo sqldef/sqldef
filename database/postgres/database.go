@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"database/sql"
 	"fmt"
+	"log/slog"
+	"maps"
 	"net/url"
 	"os"
 	"regexp"
@@ -28,11 +30,12 @@ var (
 const indent = "    "
 
 type PostgresDatabase struct {
-	config          database.Config
-	generatorConfig database.GeneratorConfig
-	db              *sql.DB
-	defaultSchema   *string
-	hasConperiod    *bool // cached: whether pg_constraint has conperiod column (PG18+)
+	config           database.Config
+	generatorConfig  database.GeneratorConfig
+	db               *sql.DB
+	defaultSchema    *string
+	hasConperiod     *bool           // cached: whether pg_constraint has conperiod column (PG18+)
+	defaultOpclasses map[string]bool // cached: see defaultOperatorClasses()
 }
 
 func NewDatabase(config database.Config) (database.Database, error) {
@@ -49,10 +52,50 @@ func NewDatabase(config database.Config) (database.Database, error) {
 }
 
 func (d *PostgresDatabase) SetGeneratorConfig(config database.GeneratorConfig) {
+	if d.defaultOpclasses == nil {
+		d.defaultOpclasses = map[string]bool{}
+	}
+	config.PostgresDefaultOperatorClasses = d.defaultOpclasses
 	d.generatorConfig = config
 	// Sync TargetSchema to d.config for backward compatibility
 	// (other methods read from d.config.TargetSchema)
 	d.config.TargetSchema = config.TargetSchema
+}
+
+// refreshDefaultOperatorClasses reloads the default operator class of every access method, keyed by
+// "<access method>.<operator class>". pg_get_indexdef() omits an operator class from its output when
+// it's the default one, so the generator needs this to tell an omitted operator class apart from a
+// removed one.
+//
+// The map is the very one handed out to every GeneratorConfig copy, so it's refilled in place:
+// an extension that the schema itself installs (pgvector, say) registers operator classes that
+// weren't in the catalog when the config was built.
+func (d *PostgresDatabase) refreshDefaultOperatorClasses() {
+	if d.defaultOpclasses == nil {
+		return
+	}
+	rows, err := d.db.Query(`
+		SELECT am.amname, opc.opcname
+		FROM pg_opclass opc
+		JOIN pg_am am ON am.oid = opc.opcmethod
+		WHERE opc.opcdefault
+	`)
+	if err != nil {
+		slog.Debug("Failed to get default operator classes", "error", err)
+		return
+	}
+	defer rows.Close()
+	opclasses := map[string]bool{}
+	for rows.Next() {
+		var accessMethod, opclass string
+		if err := rows.Scan(&accessMethod, &opclass); err != nil {
+			slog.Debug("Failed to scan default operator classes", "error", err)
+			return
+		}
+		opclasses[strings.ToLower(accessMethod)+"."+strings.ToLower(opclass)] = true
+	}
+	clear(d.defaultOpclasses)
+	maps.Copy(d.defaultOpclasses, opclasses)
 }
 
 func (d *PostgresDatabase) GetGeneratorConfig() database.GeneratorConfig {
@@ -92,6 +135,10 @@ func (d *PostgresDatabase) GetConfig() database.Config {
 }
 
 func (d *PostgresDatabase) ExportDDLs() (string, error) {
+	// The generator compares the exported DDLs right after this, so the catalog is read here to
+	// pick up operator classes registered since the generator config was built.
+	d.refreshDefaultOperatorClasses()
+
 	var ddls []string
 
 	schemaDDLs, err := d.schemas()
@@ -1619,7 +1666,7 @@ func (d *PostgresDatabase) getForeignDefsForTables(tableNames []string) (map[str
 		ON  a2.attrelid = c.confrelid
 		AND a2.attnum   = k.key2
 	WHERE c.contype = 'f' AND n1.nspname || '.' || r1.relname = ANY($1::text[])
-	ORDER BY constraint_schema, constraint_name, k.ordinality
+	ORDER BY constraint_schema, table_schema, table_name, constraint_name, k.ordinality
 	`, periodCol)
 
 	rows, err := d.db.Query(query, pq.Array(tableNames))
@@ -1629,7 +1676,10 @@ func (d *PostgresDatabase) getForeignDefsForTables(tableNames []string) (map[str
 	defer rows.Close()
 
 	type identifier struct {
-		schema, name string
+		constraintSchema string
+		tableSchema      string
+		tableName        string
+		constraintName   string
 	}
 	type constraint struct {
 		tableSchema, constraintName, tableName, foreignTableSchema, foreignTableName, foreignUpdateRule, foreignDeleteRule string
@@ -1646,7 +1696,12 @@ func (d *PostgresDatabase) getForeignDefsForTables(tableNames []string) (map[str
 		if err != nil {
 			return nil, err
 		}
-		key := identifier{constraintSchema, constraintName}
+		key := identifier{
+			constraintSchema: constraintSchema,
+			tableSchema:      tableSchema,
+			tableName:        tableName,
+			constraintName:   constraintName,
+		}
 		if _, exist := constraints[key]; !exist {
 			constraints[key] = constraint{
 				tableSchema, constraintName, tableName, foreignTableSchema, foreignTableName, foreignUpdateRule, foreignDeleteRule,
@@ -1659,16 +1714,21 @@ func (d *PostgresDatabase) getForeignDefsForTables(tableNames []string) (map[str
 		c.foreignColumns = append(c.foreignColumns, foreignColumnName)
 		constraints[key] = c
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	var keys []identifier
 	for key := range constraints {
 		keys = append(keys, key)
 	}
 	slices.SortFunc(keys, func(a, b identifier) int {
-		if c := cmp.Compare(a.schema, b.schema); c != 0 {
-			return c
-		}
-		return cmp.Compare(a.name, b.name)
+		return cmp.Or(
+			cmp.Compare(a.constraintSchema, b.constraintSchema),
+			cmp.Compare(a.tableSchema, b.tableSchema),
+			cmp.Compare(a.tableName, b.tableName),
+			cmp.Compare(a.constraintName, b.constraintName),
+		)
 	})
 
 	result := make(map[string][]string, len(tableNames))
