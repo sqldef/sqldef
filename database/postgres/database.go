@@ -1666,7 +1666,7 @@ func (d *PostgresDatabase) getForeignDefsForTables(tableNames []string) (map[str
 		ON  a2.attrelid = c.confrelid
 		AND a2.attnum   = k.key2
 	WHERE c.contype = 'f' AND n1.nspname || '.' || r1.relname = ANY($1::text[])
-	ORDER BY constraint_schema, constraint_name, k.ordinality
+	ORDER BY constraint_schema, table_schema, table_name, constraint_name, k.ordinality
 	`, periodCol)
 
 	rows, err := d.db.Query(query, pq.Array(tableNames))
@@ -1676,7 +1676,10 @@ func (d *PostgresDatabase) getForeignDefsForTables(tableNames []string) (map[str
 	defer rows.Close()
 
 	type identifier struct {
-		schema, name string
+		constraintSchema string
+		tableSchema      string
+		tableName        string
+		constraintName   string
 	}
 	type constraint struct {
 		tableSchema, constraintName, tableName, foreignTableSchema, foreignTableName, foreignUpdateRule, foreignDeleteRule string
@@ -1693,7 +1696,12 @@ func (d *PostgresDatabase) getForeignDefsForTables(tableNames []string) (map[str
 		if err != nil {
 			return nil, err
 		}
-		key := identifier{constraintSchema, constraintName}
+		key := identifier{
+			constraintSchema: constraintSchema,
+			tableSchema:      tableSchema,
+			tableName:        tableName,
+			constraintName:   constraintName,
+		}
 		if _, exist := constraints[key]; !exist {
 			constraints[key] = constraint{
 				tableSchema, constraintName, tableName, foreignTableSchema, foreignTableName, foreignUpdateRule, foreignDeleteRule,
@@ -1706,16 +1714,21 @@ func (d *PostgresDatabase) getForeignDefsForTables(tableNames []string) (map[str
 		c.foreignColumns = append(c.foreignColumns, foreignColumnName)
 		constraints[key] = c
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	var keys []identifier
 	for key := range constraints {
 		keys = append(keys, key)
 	}
 	slices.SortFunc(keys, func(a, b identifier) int {
-		if c := cmp.Compare(a.schema, b.schema); c != 0 {
-			return c
-		}
-		return cmp.Compare(a.name, b.name)
+		return cmp.Or(
+			cmp.Compare(a.constraintSchema, b.constraintSchema),
+			cmp.Compare(a.tableSchema, b.tableSchema),
+			cmp.Compare(a.tableName, b.tableName),
+			cmp.Compare(a.constraintName, b.constraintName),
+		)
 	})
 
 	result := make(map[string][]string, len(tableNames))
