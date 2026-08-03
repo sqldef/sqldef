@@ -44,6 +44,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		EnableDrop            bool     `long:"enable-drop" description:"Enable destructive changes such as DROP for TABLE, SCHEMA, ROLE, USER, FUNCTION, PROCEDURE, TRIGGER, VIEW, INDEX, SEQUENCE, TYPE"`
 		SkipView              bool     `long:"skip-view" description:"Skip managing views (temporary feature, to be removed later)"`
 		BulkAlter             bool     `long:"bulk-alter" description:"Bundle multiple ALTER TABLE actions on the same table into a single statement"`
+		DisableDdlTransaction bool     `long:"disable-ddl-transaction" description:"Execute DDL statements outside a transaction block"`
 		BeforeApply           string   `long:"before-apply" description:"Execute the given string before applying the regular DDLs" value-name:"SQL"`
 
 		// Custom handlers for config flags to preserve order
@@ -100,6 +101,9 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 	}
 	if opts.BulkAlter {
 		config.BulkAlter = true
+	}
+	if opts.DisableDdlTransaction {
+		config.DisableDdlTransaction = true
 	}
 
 	options := sqldef.Options{
@@ -169,6 +173,7 @@ func parseOptions(args []string) (database.Config, *sqldef.Options) {
 		SslMode:                    opts.SslMode,
 		SslCa:                      opts.SslCa,
 		DumpConcurrency:            options.Config.DumpConcurrency,
+		DisableDdlTransaction:      options.Config.DisableDdlTransaction,
 	}
 	return dbConfig, &options
 }
