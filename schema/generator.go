@@ -318,6 +318,12 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 				return nil, err
 			}
 			interDDLs = append(interDDLs, policyDDLs...)
+		case *SetTableOwner:
+			ownerDDLs, err := g.generateDDLsForSetTableOwner(desired)
+			if err != nil {
+				return nil, err
+			}
+			interDDLs = append(interDDLs, ownerDDLs...)
 		case *SetRowLevelSecurity:
 			rlsDDLs, err := g.generateDDLsForSetRowLevelSecurity(desired)
 			if err != nil {
@@ -2243,6 +2249,43 @@ func (g *Generator) generateDDLsForSetRowLevelSecurity(desired *SetRowLevelSecur
 	return ddls, nil
 }
 
+// generateDDLsForSetTableOwner converges the owner of a table or view when the
+// desired schema declares one (declare-to-manage: undeclared objects are left
+// untouched). Owner management requires privilege management to be configured
+// (manage.privilege or managed_roles), because --export only emits current
+// owners in that mode; without it the declaration is ignored with a warning.
+func (g *Generator) generateDDLsForSetTableOwner(desired *SetTableOwner) ([]string, error) {
+	if g.config.ManagePrivileges == nil && len(g.config.ManagedRoles) == 0 {
+		slog.Warn("ALTER TABLE ... OWNER TO is ignored without manage.privilege or managed_roles; owner cannot be diffed against the database", "table", desired.tableName.RawString())
+		return nil, nil
+	}
+
+	var ddls []string
+	if currentTable := g.findTableByName(g.currentTables, desired.tableName); currentTable != nil {
+		desiredTable := g.findTableByName(g.desiredTables, desired.tableName)
+		if desiredTable == nil {
+			return nil, fmt.Errorf("ALTER TABLE ... OWNER TO is performed before create table '%s': '%s'", desired.tableName.RawString(), desired.statement)
+		}
+		if currentTable.owner != desired.owner {
+			ddls = append(ddls, desired.statement)
+			currentTable.owner = desired.owner
+		}
+		desiredTable.owner = desired.owner
+		return ddls, nil
+	}
+	if currentView := findViewQuoteAware(g.currentViews, desired.tableName, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames); currentView != nil {
+		if currentView.owner != desired.owner {
+			ddls = append(ddls, desired.statement)
+			currentView.owner = desired.owner
+		}
+		if desiredView := findViewQuoteAware(g.desiredViews, desired.tableName, g.defaultSchema, g.mode, g.config.LegacyIgnoreQuotes, g.config.MysqlLowerCaseTableNames); desiredView != nil {
+			desiredView.owner = desired.owner
+		}
+		return ddls, nil
+	}
+	return nil, fmt.Errorf("ALTER TABLE ... OWNER TO is performed for inexistent table '%s': '%s'", desired.tableName.RawString(), desired.statement)
+}
+
 func (g *Generator) shouldDropAndCreateView(currentView *View, desiredView *View) bool {
 	if g.mode == GeneratorModeSQLite3 || g.mode == GeneratorModeMssql {
 		return true
@@ -4036,6 +4079,14 @@ func aggregateDDLsToSchema(ddls []DDL, mode GeneratorMode, defaultSchema string,
 			}
 
 			table.policies = append(table.policies, stmt.policy)
+		case *SetTableOwner:
+			if table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames); table != nil {
+				table.owner = stmt.owner
+			} else if view := findViewQuoteAware(aggregated.Views, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames); view != nil {
+				view.owner = stmt.owner
+			} else {
+				return nil, fmt.Errorf("ALTER TABLE ... OWNER TO performed before CREATE TABLE: %s", ddl.Statement())
+			}
 		case *SetRowLevelSecurity:
 			table := findTableQuoteAware(aggregated.Tables, stmt.tableName, defaultSchema, mode, legacyIgnoreQuotes, mysqlLowerCaseTableNames)
 			if table == nil {

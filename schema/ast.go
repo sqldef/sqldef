@@ -157,6 +157,14 @@ type SetRowLevelSecurity struct {
 	value     bool
 }
 
+// SetTableOwner represents PostgreSQL ALTER TABLE ... OWNER TO (tables and,
+// via the same syntax, views/materialized views).
+type SetTableOwner struct {
+	statement string
+	tableName QualifiedName
+	owner     string
+}
+
 type GrantPrivilege struct {
 	statement       string
 	tableName       QualifiedName
@@ -208,6 +216,7 @@ type Table struct {
 	partition   *TablePartition // Partition definition (MySQL/MariaDB)
 	rlsEnabled  bool            // PostgreSQL ROW LEVEL SECURITY enabled
 	rlsForced   bool            // PostgreSQL ROW LEVEL SECURITY forced
+	owner       string          // PostgreSQL owner role ("" = not tracked/declared)
 }
 
 // TablePartition represents partition information for a table
@@ -383,8 +392,9 @@ type View struct {
 	definition   parser.SelectStatement // never nil
 	indexes      []Index
 	columns      []string
-	withData     bool // true for "WITH DATA"
-	withNoData   bool // true for "WITH NO DATA"
+	withData     bool   // true for "WITH DATA"
+	withNoData   bool   // true for "WITH NO DATA"
+	owner        string // PostgreSQL owner role ("" = not tracked/declared)
 }
 
 // TriggerEvent represents a single trigger event (INSERT, UPDATE, DELETE, or UPDATE OF columns)
@@ -590,6 +600,10 @@ func (a *AddExclusion) Statement() string {
 
 func (a *AddPolicy) Statement() string {
 	return a.statement
+}
+
+func (s *SetTableOwner) Statement() string {
+	return s.statement
 }
 
 func (s *SetRowLevelSecurity) Statement() string {

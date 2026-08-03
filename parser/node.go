@@ -544,6 +544,7 @@ type DDL struct {
 	Extension     *Extension
 	Schema        *Schema
 	Grant         *Grant
+	OwnerRole     Ident // for SetTableOwner (ALTER TABLE ... OWNER TO)
 }
 
 // PartitionOfSpec represents PostgreSQL CREATE TABLE ... PARTITION OF syntax
@@ -592,6 +593,7 @@ const (
 	DisableRowLevelSecurity
 	ForceRowLevelSecurity
 	NoForceRowLevelSecurity
+	SetTableOwner
 )
 
 // View types
