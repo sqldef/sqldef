@@ -362,8 +362,8 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> EVENT SCHEDULE EVERY COMPLETION PRESERVE ENABLE DISABLE REPLICA SLAVE STARTS ENDS DO
 
 %type <statement> statement
-%type <selStmt> select_statement select_statement_core base_select union_rhs
-%type <withClause> with_clause_opt with_clause
+%type <selStmt> select_statement select_statement_no_with select_statement_core base_select parenthesized_select union_rhs
+%type <withClause> with_clause
 %type <commonTableExprs> common_table_expr_list
 %type <commonTableExpr> common_table_expr
 %type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement use_statement
@@ -2201,15 +2201,6 @@ alter_object_type_index:
   INDEX
 | KEY
 
-with_clause_opt:
-  {
-    $$ = nil
-  }
-| with_clause
-  {
-    $$ = $1
-  }
-
 with_clause:
   WITH common_table_expr_list
   {
@@ -2237,26 +2228,40 @@ common_table_expr:
   }
 
 select_statement:
-  with_clause_opt select_statement_core order_by_opt limit_opt lock_opt
+  select_statement_no_with
   {
-    switch core := $2.(type) {
+    $$ = $1
+  }
+| with_clause select_statement_no_with
+  {
+    switch stmt := $2.(type) {
     case *Select:
-      core.OrderBy = $3
-      core.Limit = $4
-      core.Lock = $5
-      core.With = $1
+      stmt.With = $1
+      $$ = stmt
+    case *Union:
+      stmt.With = $1
+      $$ = stmt
+    default:
+      panic("unreachable")
+    }
+  }
+
+select_statement_no_with:
+  select_statement_core order_by_opt limit_opt lock_opt
+  {
+    switch core := $1.(type) {
+    case *Select:
+      core.OrderBy = $2
+      core.Limit = $3
+      core.Lock = $4
       $$ = core
     case *Union:
-      core.OrderBy = $3
-      core.Limit = $4
-      core.Lock = $5
-      core.With = $1
-      $$ = core
-    case *ParenSelect:
-      // ParenSelect should not have OrderBy/Limit/Lock at this level
+      core.OrderBy = $2
+      core.Limit = $3
+      core.Lock = $4
       $$ = core
     default:
-      $$ = $2
+      panic("unreachable")
     }
   }
 
@@ -2265,6 +2270,10 @@ select_statement_core:
   base_select
   {
     $$ = $1
+  }
+| parenthesized_select union_op union_rhs
+  {
+    $$ = &Union{Type: $2, Left: $1, Right: $3}
   }
 | select_statement_core union_op union_rhs
   {
@@ -2298,24 +2307,15 @@ union_rhs:
   {
     $$ = $1
   }
-| '(' with_clause_opt select_statement_core order_by_opt limit_opt lock_opt ')'
+| parenthesized_select
   {
-    switch core := $3.(type) {
-    case *Select:
-      core.OrderBy = $4
-      core.Limit = $5
-      core.Lock = $6
-      core.With = $2
-      $$ = &ParenSelect{Select: core}
-    case *Union:
-      core.OrderBy = $4
-      core.Limit = $5
-      core.Lock = $6
-      core.With = $2
-      $$ = &ParenSelect{Select: core}
-    default:
-      $$ = &ParenSelect{Select: core}
-    }
+    $$ = $1
+  }
+
+parenthesized_select:
+  '(' select_statement ')'
+  {
+    $$ = &ParenSelect{Select: $2}
   }
 
 
