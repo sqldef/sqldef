@@ -222,7 +222,56 @@ func (d *PostgresDatabase) ExportDDLs() (string, error) {
 	}
 	ddls = append(ddls, seqPrivilegeDDLs...)
 
+	ownerDDLs, err := d.objectOwners()
+	if err != nil {
+		return "", err
+	}
+	ddls = append(ddls, ownerDDLs...)
+
 	return strings.Join(ddls, "\n\n"), nil
+}
+
+// objectOwners exports ALTER TABLE ... OWNER TO statements for tables, views,
+// and materialized views so that owners declared in the desired schema can be
+// diffed. Emitted only when privilege management is configured
+// (manage.privilege or managed_roles), to keep --export output unchanged for
+// users who don't manage privileges. Extension-owned objects are excluded.
+func (d *PostgresDatabase) objectOwners() ([]string, error) {
+	if d.generatorConfig.ManagePrivileges == nil && len(d.generatorConfig.ManagedRoles) == 0 {
+		return nil, nil
+	}
+
+	const query = `
+		SELECT
+			n.nspname || '.' || c.relname AS obj_name,
+			pg_get_userbyid(c.relowner) AS owner
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind IN ('r', 'p', 'v', 'm')
+		AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+		AND NOT EXISTS (
+			SELECT 1 FROM pg_depend dep
+			WHERE dep.classid = 'pg_class'::regclass AND dep.objid = c.oid AND dep.deptype = 'e'
+		)
+		ORDER BY obj_name
+	`
+
+	rows, err := d.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query object owners: %w", err)
+	}
+	defer rows.Close()
+
+	var ddls []string
+	for rows.Next() {
+		var objName, owner string
+		if err := rows.Scan(&objName, &owner); err != nil {
+			return nil, fmt.Errorf("failed to scan object owner row: %w", err)
+		}
+		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s OWNER TO %s;", objName, d.quoteIdentifierIfNeeded(owner)))
+	}
+
+	return ddls, rows.Err()
 }
 
 // sequencePrivileges exports GRANT ... ON SEQUENCE statements for the managed

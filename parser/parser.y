@@ -341,7 +341,7 @@ func setDDL(yylex any, ddl *DDL) {
 // PostgreSQL GENERATED AS IDENTITY
 %token <str> GENERATED ALWAYS IDENTITY
 // sequence
-%token <str> SEQUENCE INCREMENT MINVALUE CACHE CYCLE OWNED NONE
+%token <str> SEQUENCE INCREMENT MINVALUE CACHE CYCLE OWNED OWNER NONE
 
 // SQL Server PRIMARY KEY CLUSTERED
 %token <str> CLUSTERED NONCLUSTERED
@@ -2124,6 +2124,22 @@ alter_statement:
     }
   }
 /* For PostgreSQL row level security */
+| ALTER ignore_opt TABLE table_name OWNER TO grantee
+  {
+    $$ = &DDL{
+      Action: SetTableOwner,
+      Table: $4,
+      OwnerRole: $7,
+    }
+  }
+| ALTER ignore_opt TABLE ONLY table_name OWNER TO grantee
+  {
+    $$ = &DDL{
+      Action: SetTableOwner,
+      Table: $5,
+      OwnerRole: $8,
+    }
+  }
 | ALTER ignore_opt TABLE table_name ENABLE ROW LEVEL SECURITY
   {
     $$ = &DDL{
@@ -8225,6 +8241,7 @@ non_reserved_keyword:
 | DISTANCE
 | DOMAIN
 | EXTENSION
+| OWNER
 | GEOMETRY
 | GEOMETRYCOLLECTION
 | INVOKER

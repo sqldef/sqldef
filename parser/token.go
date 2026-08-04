@@ -375,6 +375,7 @@ var keywords = map[string]int{
 	"over":                   OVER,
 	"overlaps":               OVERLAPS,
 	"owned":                  OWNED,
+	"owner":                  OWNER,
 	"paglock":                PAGLOCK,
 	"parallel":               PARALLEL,
 	"parser":                 PARSER,

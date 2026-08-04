@@ -168,6 +168,12 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 					withCheck:  withCheck,
 				},
 			}, nil
+		} else if stmt.Action == parser.SetTableOwner {
+			return &SetTableOwner{
+				statement: ddl,
+				tableName: normalizeQualifiedName(mode, stmt.Table, defaultSchema),
+				owner:     stmt.OwnerRole.Name,
+			}, nil
 		} else if stmt.Action == parser.EnableRowLevelSecurity || stmt.Action == parser.DisableRowLevelSecurity ||
 			stmt.Action == parser.ForceRowLevelSecurity || stmt.Action == parser.NoForceRowLevelSecurity {
 			return &SetRowLevelSecurity{

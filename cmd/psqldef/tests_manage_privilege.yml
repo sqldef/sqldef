@@ -194,3 +194,85 @@ ManagePrivilegeIdempotent:
     GRANT SELECT ON TABLE users TO readonly_user;
   up: ""
   down: ""
+
+ManagePrivilegeOwnerConverge:
+  # 宣言された owner が current と違えば ALTER OWNER が出る
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    ALTER TABLE users OWNER TO app_user;
+  up: |
+    ALTER TABLE users OWNER TO app_user;
+  down: ""
+
+ManagePrivilegeOwnerIdempotent:
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    ALTER TABLE users OWNER TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    ALTER TABLE users OWNER TO app_user;
+  up: ""
+  down: ""
+
+ManagePrivilegeOwnerUndeclaredUntouched:
+  # desired に owner 宣言が無ければ、DB の所有者が誰でも触らない
+  manage:
+    privilege:
+      - target: app_user
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    ALTER TABLE users OWNER TO app_user;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+  up: ""
+  down: ""
+
+ManagePrivilegeViewOwner:
+  manage:
+    privilege:
+      - target: app_user
+        drop: true
+  current: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id FROM users;
+  desired: |
+    CREATE TABLE users (
+      id BIGINT PRIMARY KEY,
+      name VARCHAR(100)
+    );
+    CREATE VIEW v_users AS SELECT id FROM users;
+    ALTER TABLE v_users OWNER TO app_user;
+  up: |
+    ALTER TABLE v_users OWNER TO app_user;
+  down: ""
