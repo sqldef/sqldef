@@ -92,6 +92,106 @@ func TestAreSamePrimaryKeyColumnsWithDifferentDirections(t *testing.T) {
 	assert.Equal(t, originalBDirection1, indexB.columns[1].direction, "indexB.columns[1].direction should not be mutated")
 }
 
+func TestPostgresCheckConstraintMatching(t *testing.T) {
+	tests := []struct {
+		name     string
+		current  string
+		desired  string
+		expected []string
+	}{
+		{
+			name: "one current check is not reused",
+			current: `CREATE TABLE pair_values (
+				a integer,
+				b integer,
+				CONSTRAINT one_pair_positive CHECK (a > 0 AND b > 0) NO INHERIT
+			);`,
+			desired: `CREATE TABLE pair_values (
+				a integer,
+				b integer,
+				CHECK (a > 0 AND b > 0) NO INHERIT,
+				CHECK (a > 0 AND b > 0) NO INHERIT
+			);`,
+			expected: []string{
+				"ALTER TABLE public.pair_values ADD CHECK (a > 0 AND b > 0) NO INHERIT",
+			},
+		},
+		{
+			name: "one desired check is not reused",
+			current: `CREATE TABLE pair_values (
+				a integer,
+				b integer,
+				CONSTRAINT first_pair_positive CHECK (a > 0 AND b > 0),
+				CONSTRAINT second_pair_positive CHECK (a > 0 AND b > 0)
+			);`,
+			desired: `CREATE TABLE pair_values (
+				a integer,
+				b integer,
+				CHECK (a > 0 AND b > 0)
+			);`,
+			expected: []string{
+				"ALTER TABLE public.pair_values DROP CONSTRAINT second_pair_positive",
+			},
+		},
+		{
+			name: "named checks match before unnamed checks",
+			current: `CREATE TABLE pair_values (
+				a integer,
+				b integer,
+				CONSTRAINT first_pair_positive CHECK (a > 0 AND b > 0),
+				CONSTRAINT second_pair_positive CHECK (a > 0 AND b > 0)
+			);`,
+			desired: `CREATE TABLE pair_values (
+				a integer,
+				b integer,
+				CHECK (a > 0 AND b > 0),
+				CONSTRAINT first_pair_positive CHECK (a > 0 AND b > 0)
+			);`,
+			expected: []string{},
+		},
+		{
+			name: "matched check is not duplicated on a new column",
+			current: `CREATE TABLE moved_check (
+				a integer CONSTRAINT moved_check_a_check CHECK (a > 0)
+			);`,
+			desired: `CREATE TABLE moved_check (
+				a integer,
+				b integer CHECK (a > 0)
+			);`,
+			expected: []string{
+				"ALTER TABLE public.moved_check ADD COLUMN b integer",
+			},
+		},
+		{
+			name:    "named check on a new column keeps its name",
+			current: `CREATE TABLE named_new_column (a integer);`,
+			desired: `CREATE TABLE named_new_column (
+				a integer,
+				b integer CONSTRAINT b_positive CHECK (b > 0)
+			);`,
+			expected: []string{
+				"ALTER TABLE public.named_new_column ADD COLUMN b integer",
+				"ALTER TABLE public.named_new_column ADD CONSTRAINT b_positive CHECK (b > 0)",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ddls, err := GenerateIdempotentDDLs(
+				GeneratorModePostgres,
+				database.NewParser(parser.ParserModePostgres),
+				tt.desired,
+				tt.current,
+				database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
+				"public",
+			)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, ddls)
+		})
+	}
+}
+
 func TestNormalizeViewDefinition(t *testing.T) {
 	tests := []struct {
 		name     string
