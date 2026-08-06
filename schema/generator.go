@@ -620,10 +620,11 @@ func (g *Generator) generateDDLs(desiredDDLs []DDL) ([]string, error) {
 					if !g.postgresCheckNeedsDrop(plan, currentIndex) {
 						continue
 					}
-					if current.check.constraintName.IsEmpty() {
-						panic("PostgreSQL current CHECK constraint has no name")
+					dropDDL, err := g.generatePostgresCheckDropDDL(currentTable, current.check)
+					if err != nil {
+						return nil, err
 					}
-					appendDDL(fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(currentTable), g.escapeSQLIdent(current.check.constraintName)))
+					appendDDL(dropDDL)
 				}
 			}
 		} else {
@@ -1458,7 +1459,11 @@ func (g *Generator) generateDDLsForCreateTable(currentTable Table, desired Creat
 		}
 	}
 	if g.mode == GeneratorModePostgres {
-		ddls = append(ddls, g.generatePostgresCheckDDLs(&currentTable, &desired.table)...)
+		checkDDLs, err := g.generatePostgresCheckDDLs(&currentTable, &desired.table)
+		if err != nil {
+			return nil, err
+		}
+		ddls = append(ddls, checkDDLs...)
 	}
 
 	currentPrimaryKey := currentTable.PrimaryKey()
@@ -4628,17 +4633,25 @@ func (g *Generator) generatePostgresCheckAddDDL(table *Table, check *CheckDefini
 	return ddl
 }
 
-func (g *Generator) generatePostgresCheckDDLs(currentTable, desiredTable *Table) []string {
+func (g *Generator) generatePostgresCheckDropDDL(table *Table, check *CheckDefinition) (string, error) {
+	if check.constraintName.IsEmpty() {
+		return "", fmt.Errorf("cannot drop unnamed PostgreSQL CHECK constraint on table %s: the current schema does not contain the constraint name required by DROP CONSTRAINT; export the current schema from a live database or specify the constraint name explicitly", g.escapeTableName(table))
+	}
+	return fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(table), g.escapeSQLIdent(check.constraintName)), nil
+}
+
+func (g *Generator) generatePostgresCheckDDLs(currentTable, desiredTable *Table) ([]string, error) {
 	plan := g.postgresCheckMatchPlan(currentTable, desiredTable)
 	ddls := []string{}
 	for currentIndex, current := range plan.current {
 		if !g.postgresCheckNeedsDrop(plan, currentIndex) {
 			continue
 		}
-		if current.check.constraintName.IsEmpty() {
-			panic("PostgreSQL current CHECK constraint has no name")
+		dropDDL, err := g.generatePostgresCheckDropDDL(desiredTable, current.check)
+		if err != nil {
+			return nil, err
 		}
-		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", g.escapeTableName(desiredTable), g.escapeSQLIdent(current.check.constraintName)))
+		ddls = append(ddls, dropDDL)
 	}
 	for desiredIndex, desired := range plan.desired {
 		if !g.postgresCheckNeedsAdd(plan, desiredIndex) {
@@ -4657,7 +4670,7 @@ func (g *Generator) generatePostgresCheckDDLs(currentTable, desiredTable *Table)
 		ddls = append(ddls, g.generatePostgresCheckAddDDL(desiredTable, desired.check))
 	}
 	plan.generated = true
-	return ddls
+	return ddls, nil
 }
 
 // findCheckConstraintByName finds a CHECK constraint in a list by name

@@ -175,6 +175,16 @@ func TestPostgresCheckConstraintMatching(t *testing.T) {
 				"ALTER TABLE public.named_new_column ADD CONSTRAINT b_positive CHECK (b > 0)",
 			},
 		},
+		{
+			name: "matching unnamed check does not require a name",
+			current: `CREATE TABLE measurements (
+				amount integer CHECK (amount > 0)
+			);`,
+			desired: `CREATE TABLE measurements (
+				amount integer CHECK (amount > 0)
+			);`,
+			expected: []string{},
+		},
 	}
 
 	for _, tt := range tests {
@@ -191,6 +201,71 @@ func TestPostgresCheckConstraintMatching(t *testing.T) {
 			assert.Equal(t, tt.expected, ddls)
 		})
 	}
+}
+
+func TestPostgresUnnamedCurrentCheckDropError(t *testing.T) {
+	const expectedError = "cannot drop unnamed PostgreSQL CHECK constraint on table public.measurements: the current schema does not contain the constraint name required by DROP CONSTRAINT; export the current schema from a live database or specify the constraint name explicitly"
+
+	tests := []struct {
+		name    string
+		current string
+		desired string
+	}{
+		{
+			name: "remove column check",
+			current: `CREATE TABLE measurements (
+				amount integer CHECK (amount > 0)
+			);`,
+			desired: `CREATE TABLE measurements (
+				amount integer
+			);`,
+		},
+		{
+			name: "replace table check",
+			current: `CREATE TABLE measurements (
+				amount integer,
+				CHECK (amount > 0)
+			);`,
+			desired: `CREATE TABLE measurements (
+				amount integer,
+				CHECK (amount > 1)
+			);`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ddls, err := GenerateIdempotentDDLs(
+				GeneratorModePostgres,
+				database.NewParser(parser.ParserModePostgres),
+				tt.desired,
+				tt.current,
+				database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
+				"public",
+			)
+
+			require.EqualError(t, err, expectedError)
+			assert.Nil(t, ddls)
+		})
+	}
+}
+
+func TestPostgresUnnamedCurrentCheckDoesNotBlockTableDrop(t *testing.T) {
+	current := `CREATE TABLE measurements (
+		amount integer CHECK (amount > 0)
+	);`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModePostgres,
+		database.NewParser(parser.ParserModePostgres),
+		"",
+		current,
+		database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
+		"public",
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"DROP TABLE public.measurements"}, ddls)
 }
 
 func newPostgresCheckGenerator(currentTable, desiredTable *Table) *Generator {
@@ -228,9 +303,10 @@ func TestPostgresCheckConstraintCleanup(t *testing.T) {
 		desiredTable := &Table{name: tableName}
 		generator := newPostgresCheckGenerator(currentTable, desiredTable)
 
-		assert.PanicsWithValue(t, "PostgreSQL current CHECK constraint has no name", func() {
-			_, _ = generator.generateDDLs(nil)
-		})
+		ddls, err := generator.generateDDLs(nil)
+
+		require.EqualError(t, err, "cannot drop unnamed PostgreSQL CHECK constraint on table public.measurements: the current schema does not contain the constraint name required by DROP CONSTRAINT; export the current schema from a live database or specify the constraint name explicitly")
+		assert.Nil(t, ddls)
 	})
 }
 
@@ -239,17 +315,6 @@ func TestPostgresCheckConstraintInvariantPanics(t *testing.T) {
 		generator := &Generator{mode: GeneratorModePostgres}
 		assert.PanicsWithValue(t, "PostgreSQL desired column CHECK constraint not found", func() {
 			generator.postgresColumnCheckCanBeAddedInline(&postgresCheckMatchPlan{}, parser.NewIdent("amount", false))
-		})
-	})
-
-	t.Run("unnamed current check", func(t *testing.T) {
-		tableName := QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "measurements"}}
-		currentTable := &Table{name: tableName, checks: []CheckDefinition{{}}}
-		desiredTable := &Table{name: tableName}
-		generator := newPostgresCheckGenerator(currentTable, desiredTable)
-
-		assert.PanicsWithValue(t, "PostgreSQL current CHECK constraint has no name", func() {
-			generator.generatePostgresCheckDDLs(currentTable, desiredTable)
 		})
 	})
 
@@ -269,7 +334,7 @@ func TestPostgresCheckConstraintInvariantPanics(t *testing.T) {
 		plan.desiredToCurrent = []int{-1}
 
 		assert.PanicsWithValue(t, "PostgreSQL desired CHECK constraint column not found", func() {
-			generator.generatePostgresCheckDDLs(currentTable, desiredTable)
+			_, _ = generator.generatePostgresCheckDDLs(currentTable, desiredTable)
 		})
 	})
 }
