@@ -8,6 +8,7 @@ import (
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/parser"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStringConstantSimple(t *testing.T) {
@@ -190,6 +191,110 @@ func TestPostgresCheckConstraintMatching(t *testing.T) {
 			assert.Equal(t, tt.expected, ddls)
 		})
 	}
+}
+
+func newPostgresCheckGenerator(currentTable, desiredTable *Table) *Generator {
+	return &Generator{
+		mode:               GeneratorModePostgres,
+		currentTables:      []*Table{currentTable},
+		desiredTables:      []*Table{desiredTable},
+		defaultSchema:      "public",
+		config:             database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
+		postgresCheckPlans: make(map[string]*postgresCheckMatchPlan),
+	}
+}
+
+func TestPostgresCheckConstraintCleanup(t *testing.T) {
+	tableName := QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "measurements"}}
+
+	t.Run("drop named check", func(t *testing.T) {
+		currentTable := &Table{
+			name:   tableName,
+			checks: []CheckDefinition{{constraintName: Ident{Name: "amount_positive"}}},
+		}
+		desiredTable := &Table{name: tableName}
+		generator := newPostgresCheckGenerator(currentTable, desiredTable)
+
+		ddls, err := generator.generateDDLs(nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, []string{
+			"ALTER TABLE public.measurements DROP CONSTRAINT amount_positive",
+		}, ddls)
+	})
+
+	t.Run("reject unnamed current check", func(t *testing.T) {
+		currentTable := &Table{name: tableName, checks: []CheckDefinition{{}}}
+		desiredTable := &Table{name: tableName}
+		generator := newPostgresCheckGenerator(currentTable, desiredTable)
+
+		assert.PanicsWithValue(t, "PostgreSQL current CHECK constraint has no name", func() {
+			_, _ = generator.generateDDLs(nil)
+		})
+	})
+}
+
+func TestPostgresCheckConstraintInvariantPanics(t *testing.T) {
+	t.Run("missing desired check", func(t *testing.T) {
+		generator := &Generator{mode: GeneratorModePostgres}
+		assert.PanicsWithValue(t, "PostgreSQL desired column CHECK constraint not found", func() {
+			generator.postgresColumnCheckCanBeAddedInline(&postgresCheckMatchPlan{}, parser.NewIdent("amount", false))
+		})
+	})
+
+	t.Run("unnamed current check", func(t *testing.T) {
+		tableName := QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "measurements"}}
+		currentTable := &Table{name: tableName, checks: []CheckDefinition{{}}}
+		desiredTable := &Table{name: tableName}
+		generator := newPostgresCheckGenerator(currentTable, desiredTable)
+
+		assert.PanicsWithValue(t, "PostgreSQL current CHECK constraint has no name", func() {
+			generator.generatePostgresCheckDDLs(currentTable, desiredTable)
+		})
+	})
+
+	t.Run("missing desired column", func(t *testing.T) {
+		tableName := QualifiedName{Schema: Ident{Name: "public"}, Name: Ident{Name: "measurements"}}
+		currentTable := &Table{name: tableName}
+		desiredTable := &Table{name: tableName}
+		generator := newPostgresCheckGenerator(currentTable, desiredTable)
+		plan := generator.postgresCheckMatchPlan(currentTable, desiredTable)
+		plan.desired = []postgresCheckEntry{{
+			check: new(CheckDefinition),
+			location: postgresCheckLocation{
+				columnName: Ident{Name: "missing"},
+				isColumn:   true,
+			},
+		}}
+		plan.desiredToCurrent = []int{-1}
+
+		assert.PanicsWithValue(t, "PostgreSQL desired CHECK constraint column not found", func() {
+			generator.generatePostgresCheckDDLs(currentTable, desiredTable)
+		})
+	})
+}
+
+func TestSQLiteCheckConstraintModification(t *testing.T) {
+	current := `CREATE TABLE measurements (
+		amount integer,
+		CONSTRAINT amount_positive CHECK (amount > 0)
+	);`
+	desired := `CREATE TABLE measurements (
+		amount integer,
+		CONSTRAINT amount_positive CHECK (amount > 1)
+	);`
+
+	ddls, err := GenerateIdempotentDDLs(
+		GeneratorModeSQLite3,
+		database.NewParser(parser.ParserModeSQLite3),
+		desired,
+		current,
+		database.GeneratorConfig{EnableDrop: true, LegacyIgnoreQuotes: false},
+		"",
+	)
+
+	require.NoError(t, err)
+	assert.Empty(t, ddls)
 }
 
 func TestNormalizeViewDefinition(t *testing.T) {
