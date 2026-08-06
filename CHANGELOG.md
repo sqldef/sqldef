@@ -1,3 +1,24 @@
+## [v3.11.19](https://github.com/sqldef/sqldef/compare/v3.11.18...v3.11.19) - 2026-08-06
+
+- build(deps): bump actions/checkout from 7.0.0 to 7.0.1 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1318
+- build(deps): bump docker/build-push-action from 7.2.0 to 7.3.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1317
+- build(deps): bump docker/login-action from 4.2.0 to 4.5.1 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1314
+- build(deps): bump actions/attest-build-provenance from 4.1.0 to 4.1.1 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1316
+- build(deps): bump github.com/k0kubun/pp/v3 from 3.5.1 to 3.5.2 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1312
+- build(deps): bump docker/setup-buildx-action from 4.1.0 to 4.2.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1311
+- build(deps): bump golang.org/x/sync from 0.21.0 to 0.22.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1315
+- psqldef: detect operator class changes on index columns by @moznion in https://github.com/sqldef/sqldef/pull/1287
+- psqldef: support manage.function as the next slice of the manage: RFC by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1300
+- psqldef: fix same-named foreign keys on different tables being merged in export by @asfrgrtgd in https://github.com/sqldef/sqldef/pull/1303
+- build(deps): bump golang from 1.26.4-alpine to 1.26.5-alpine by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1309
+- build(deps): bump modernc.org/sqlite from 1.53.0 to 1.55.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1310
+- psqldef: manage table/view ownership declaratively (ALTER TABLE ... OWNER TO) by @dip-daiki-ogikubo in https://github.com/sqldef/sqldef/pull/1301
+- build(deps): bump golang.org/x/term from 0.44.0 to 0.45.0 by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1313
+- build: remove the redundant parser-v make target by @178inaba in https://github.com/sqldef/sqldef/pull/1306
+- psqldef: accept parenthesized leading operands in set operations in the generic parser by @asfrgrtgd in https://github.com/sqldef/sqldef/pull/1307
+- build(deps): group Dependabot updates per ecosystem by @gfx in https://github.com/sqldef/sqldef/pull/1322
+- build(deps): bump the github-actions group with 7 updates by @dependabot[bot] in https://github.com/sqldef/sqldef/pull/1323
+
 ## [v3.11.18](https://github.com/sqldef/sqldef/compare/v3.11.17...v3.11.18) - 2026-07-30
 
 - psqldef: support operator classes on expression index columns by @moznion in https://github.com/sqldef/sqldef/pull/1286
