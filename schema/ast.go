@@ -526,9 +526,10 @@ type EnumValue struct {
 
 // TODO: include type information
 type Type struct {
-	name       QualifiedName
-	statement  string
-	enumValues []EnumValue
+	name        QualifiedName
+	statement   string
+	enumValues  []EnumValue
+	renamedFrom Ident // Previous type name if renamed via @renamed annotation
 }
 
 type Domain struct {

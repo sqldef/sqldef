@@ -259,9 +259,10 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 		} else if stmt.Action == parser.CreateType {
 			enumValues := parseEnumValuesWithRename(ddl, stmt.Type.Type.EnumValues, mode)
 			return &Type{
-				name:       normalizeQualifiedObjectName(mode, stmt.Type.Name, defaultSchema),
-				statement:  ddl,
-				enumValues: enumValues,
+				name:        normalizeQualifiedObjectName(mode, stmt.Type.Name, defaultSchema),
+				statement:   ddl,
+				enumValues:  enumValues,
+				renamedFrom: extractRenameFrom(extractTypeComment(ddl, mode)),
 			}, nil
 		} else if stmt.Action == parser.CreateDomain {
 			var constraints []DomainConstraint
@@ -1280,6 +1281,81 @@ func extractEnumValueComments(rawDDL string, mode GeneratorMode) map[string]stri
 	}
 
 	return comments
+}
+
+// Scanner states of extractTypeComment, in the order a CREATE TYPE statement walks through them.
+const (
+	typeCommentStateInit     = iota // before CREATE
+	typeCommentStateCreate          // CREATE seen
+	typeCommentStateName            // CREATE TYPE seen, scanning the (optionally qualified) type name
+	typeCommentStateAfterAs         // AS seen, waiting for the parenthesis that opens the enum body
+	typeCommentStateEnumBody        // inside the enum body
+)
+
+// extractTypeComment extracts the type-level inline comment from a CREATE TYPE ... AS ENUM
+// statement, i.e. the one carrying a @renamed annotation for the type itself.
+//
+// A comment belongs to the type only when the token right before it is the last token of the
+// type name or the parenthesis that opens the enum body:
+//
+//	CREATE TYPE t /* c */ AS ENUM ('a')
+//	CREATE TYPE t AS ENUM ( /* c */ 'a')
+//
+// Everywhere else the comment is ignored: before TYPE or the name it would read as annotating
+// the keyword rather than the new name, and once the first value is scanned the comment belongs
+// to that value (extractEnumValueComments owns it). The rule is expressed purely in terms of the
+// preceding token because none of the sibling extractors look at line positions, so reformatting
+// a statement must not change what an annotation means.
+func extractTypeComment(rawDDL string, mode GeneratorMode) string {
+	tokenizer := parser.NewTokenizer(rawDDL, generatorModeToParserMode(mode))
+	tokenizer.AllowComments = true
+
+	state := typeCommentStateInit
+	prevTok := 0
+
+	for {
+		tok, val := tokenizer.Scan()
+		if tok == 0 {
+			break // EOF
+		}
+
+		// Comments neither advance the state nor become prevTok, so a comment in an ignored
+		// position does not hide a later annotation in an accepted one.
+		if tok == parser.COMMENT {
+			// In the name state prevTok is the last token of the name, except right after
+			// TYPE (no name yet) and right after the dot of a qualified name. The name is
+			// matched positionally rather than by parser.ID because a type name may be a
+			// keyword (e.g. CREATE TYPE status AS ENUM (...) scans as parser.STATUS).
+			nameAdjacent := state == typeCommentStateName && prevTok != parser.TYPE && prevTok != '.'
+			enumOpenAdjacent := state == typeCommentStateEnumBody && prevTok == '('
+			if nameAdjacent || enumOpenAdjacent {
+				return strings.TrimSpace(string(val))
+			}
+			continue
+		}
+
+		switch state {
+		case typeCommentStateInit:
+			if tok == parser.CREATE {
+				state = typeCommentStateCreate
+			}
+		case typeCommentStateCreate:
+			if tok == parser.TYPE {
+				state = typeCommentStateName
+			}
+		case typeCommentStateName:
+			if tok == parser.AS {
+				state = typeCommentStateAfterAs
+			}
+		case typeCommentStateAfterAs:
+			if tok == '(' {
+				state = typeCommentStateEnumBody
+			}
+		}
+		prevTok = tok
+	}
+
+	return ""
 }
 
 // generatorModeToParserMode converts GeneratorMode to ParserMode
