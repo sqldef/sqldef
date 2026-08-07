@@ -1878,3 +1878,60 @@ func TestPsqldefDomainWithTargetSchema(t *testing.T) {
 		assert.Contains(t, exported, `CREATE DOMAIN "test_schema_b"."status"`)
 	})
 }
+
+// TestPsqldefOwnerWithTargetSchema tests that object-owner export (objectOwners)
+// honors TargetSchema. Without the filter, owners of objects in schemas outside
+// TargetSchema leak into the export and the generator aborts with
+// "ALTER TABLE ... OWNER TO performed before CREATE TABLE" because there is no
+// matching CREATE in the desired DDL (regression from the OWNER management PR).
+func TestPsqldefOwnerWithTargetSchema(t *testing.T) {
+	resetTestDatabase()
+
+	// Two schemas, each with a table. Object-owner export is only active when
+	// privilege/role management is enabled, so a table in a non-target schema
+	// must not produce an ALTER ... OWNER TO once TargetSchema is set.
+	mustPgExec(testDatabaseName, `
+		CREATE SCHEMA test_owner_a;
+		CREATE SCHEMA test_owner_b;
+		CREATE TABLE test_owner_a.widgets (id bigint PRIMARY KEY);
+		CREATE TABLE test_owner_b.gadgets (id bigint PRIMARY KEY);
+	`)
+
+	export := func(t *testing.T, targetSchema []string) string {
+		db, err := connectDatabase(dbConfig{DbName: testDatabaseName})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+
+		db.SetGeneratorConfig(database.GeneratorConfig{
+			TargetSchema:       targetSchema,
+			ManagedRoles:       []string{"postgres"}, // activate object-owner export
+			LegacyIgnoreQuotes: true,
+		})
+
+		exported, err := db.ExportDDLs()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return exported
+	}
+
+	t.Run("filter to test_owner_a only", func(t *testing.T) {
+		exported := export(t, []string{"test_owner_a"})
+		assert.Contains(t, exported, "ALTER TABLE test_owner_a.widgets OWNER TO")
+		assert.NotContains(t, exported, "ALTER TABLE test_owner_b.gadgets OWNER TO")
+	})
+
+	t.Run("filter to test_owner_b only", func(t *testing.T) {
+		exported := export(t, []string{"test_owner_b"})
+		assert.Contains(t, exported, "ALTER TABLE test_owner_b.gadgets OWNER TO")
+		assert.NotContains(t, exported, "ALTER TABLE test_owner_a.widgets OWNER TO")
+	})
+
+	t.Run("filter to both schemas", func(t *testing.T) {
+		exported := export(t, []string{"test_owner_a", "test_owner_b"})
+		assert.Contains(t, exported, "ALTER TABLE test_owner_a.widgets OWNER TO")
+		assert.Contains(t, exported, "ALTER TABLE test_owner_b.gadgets OWNER TO")
+	})
+}
