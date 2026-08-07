@@ -902,6 +902,61 @@ AddFunctionalIndexCase:
     ALTER TABLE `t1` ADD UNIQUE KEY `uniq_active` (`group_id`, (case when (deleted = 0) then name else null end));
   down: |
     ALTER TABLE `t1` DROP INDEX `uniq_active`;
+CreateTableWithMultiValuedIndex:
+  flavor: "!mariadb"  # MariaDB has no functional indexes; TiDB supports multi-valued indexes
+  min_version: '8.0.17'
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t1 (
+      a json NOT NULL,
+      KEY idx ((CAST(json_extract(a, '$') AS unsigned ARRAY)))
+    );
+AddMultiValuedIndex:
+  flavor: "!mariadb"  # MariaDB has no functional indexes; TiDB supports multi-valued indexes
+  min_version: '8.0.17'
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t1 (
+      a json NOT NULL
+    );
+  desired: |
+    CREATE TABLE t1 (
+      a json NOT NULL,
+      KEY idx ((CAST(json_extract(a, '$') AS unsigned ARRAY)))
+    );
+  up: |
+    ALTER TABLE t1 ADD KEY idx ((cast(json_extract(a, '$') as unsigned array)));
+  down: |
+    ALTER TABLE `t1` DROP INDEX `idx`;
+ChangeIndexFromPlainCastToArrayCast:
+  flavor: "!mariadb"  # MariaDB has no functional indexes; TiDB supports multi-valued indexes
+  min_version: '8.0.17'
+  legacy_ignore_quotes: false
+  current: |
+    CREATE TABLE t1 (
+      a json NOT NULL,
+      KEY idx ((CAST(json_extract(a, '$') AS unsigned)))
+    );
+  desired: |
+    CREATE TABLE t1 (
+      a json NOT NULL,
+      KEY idx ((CAST(json_extract(a, '$') AS unsigned ARRAY)))
+    );
+  up: |
+    ALTER TABLE t1 DROP INDEX idx;
+    ALTER TABLE t1 ADD KEY idx ((cast(json_extract(a, '$') as unsigned array)));
+  down: |
+    ALTER TABLE t1 DROP INDEX idx;
+    ALTER TABLE t1 ADD KEY idx ((cast(json_extract(a, '$') as unsigned)));
+CreateTableWithMultiValuedIndexCharType:
+  flavor: "!mariadb"  # MariaDB has no functional indexes; TiDB supports multi-valued indexes
+  min_version: '8.0.17'
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE t1 (
+      a json NOT NULL,
+      KEY idx ((CAST(json_extract(a, '$') AS char(10) ARRAY)))
+    );
 AlterColumnSetDefault:
   current: |
     CREATE TABLE users (

@@ -170,6 +170,7 @@ func normalizeConvertType(convertType *parser.ConvertType, mode GeneratorMode) *
 		Scale:    convertType.Scale,
 		Operator: convertType.Operator,
 		Charset:  convertType.Charset,
+		Array:    convertType.Array,
 	}
 }
 
