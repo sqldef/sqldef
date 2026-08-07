@@ -971,6 +971,9 @@ TypedLiteralsInCheckWithCast:
     ALTER TABLE "public"."events" ADD COLUMN "event_time" time CHECK (event_time >= '09:00:00');
     ALTER TABLE "public"."events" ADD COLUMN "event_end_date" date CHECK (event_end_date <= '2030-12-31');
   down: |
+    ALTER TABLE "public"."events" DROP CONSTRAINT "events_event_date_check";
+    ALTER TABLE "public"."events" DROP CONSTRAINT "events_event_time_check";
+    ALTER TABLE "public"."events" DROP CONSTRAINT "events_event_end_date_check";
     ALTER TABLE "public"."events" DROP COLUMN "event_end_date";
     ALTER TABLE "public"."events" DROP COLUMN "event_time";
     ALTER TABLE "public"."events" DROP COLUMN "event_date";
