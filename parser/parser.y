@@ -448,7 +448,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <str> precision_opt varying_opt
 %type <optVal> length_opt max_length_opt current_timestamp
 %type <str> charset_opt collate_opt
-%type <boolVal> unsigned_opt zero_fill_opt array_opt time_zone_opt
+%type <boolVal> unsigned_opt zero_fill_opt array_opt cast_array_opt time_zone_opt
 %type <empty> array_brackets
 %type <LengthScaleOption> float_length_opt decimal_length_opt
 %type <strs> enum_values
@@ -4930,6 +4930,23 @@ array_opt:
     $$ = BoolVal(true)
   }
 
+/*
+ * Unlike array_opt, this only accepts the ARRAY keyword, not array_brackets.
+ * CAST(expr AS type ARRAY) is MySQL's multi-valued index syntax; CAST(expr
+ * AS type[]) is a distinct PostgreSQL array cast that must keep going
+ * through convert_type's existing `Type + "[]"` representation (see the
+ * simple_convert_type/TYPECAST rules) instead of being folded into this
+ * flag, or it would round-trip as "... ARRAY" and lose the "[]" spelling.
+ */
+cast_array_opt:
+  {
+    $$ = BoolVal(false)
+  }
+| ARRAY
+  {
+    $$ = BoolVal(true)
+  }
+
 /* Handles [], [][], [][][], etc. - PostgreSQL treats all as equivalent */
 array_brackets:
   '[' ']'
@@ -6866,8 +6883,9 @@ function_call_keyword:
   {
     $$ = &ConvertExpr{Action: Type1stStr, Type: $3, Expr: $5, Style: $7}
    }
-| CAST '(' expression AS convert_type ')'
+| CAST '(' expression AS convert_type cast_array_opt ')'
   {
+    $5.Array = $6
     $$ = &ConvertExpr{Action: CastStr, Expr: $3, Type: $5}
   }
 | TRY_CAST '(' expression AS convert_type ')'
