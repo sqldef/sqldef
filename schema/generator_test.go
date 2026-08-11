@@ -148,6 +148,24 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			input:    `select jsonb_extract_path_text(payload, VARIADIC ARRAY['data', 'user', 'name']) from events`,
 			expected: `select jsonb_extract_path_text(payload, 'data', 'user', 'name') from events`,
 		},
+		{
+			name:     "PostgreSQL: unwrap redundant set operand parentheses",
+			mode:     GeneratorModePostgres,
+			input:    `(SELECT 1 AS id) UNION ALL (SELECT 2 AS id)`,
+			expected: `select 1 as id union all select 2 as id`,
+		},
+		{
+			name:     "PostgreSQL: preserve ordered limited set operand parentheses",
+			mode:     GeneratorModePostgres,
+			input:    `(SELECT id FROM items ORDER BY id DESC LIMIT 1) UNION ALL SELECT id FROM items`,
+			expected: `(select id from items order by id desc limit 1) union all select id from items`,
+		},
+		{
+			name:     "PostgreSQL: preserve grouped set operation parentheses",
+			mode:     GeneratorModePostgres,
+			input:    `SELECT 1 AS id EXCEPT ((SELECT 2 AS id) UNION SELECT 3 AS id)`,
+			expected: `select 1 as id except (select 2 as id union select 3 as id)`,
+		},
 		// MySQL should normalize column qualifiers (MySQL adds database.table.column when storing views)
 		{
 			name:     "MySQL: normalize table qualifiers in SELECT",
@@ -181,6 +199,194 @@ func TestNormalizeViewDefinition(t *testing.T) {
 			actual := strings.ToLower(parser.String(normalized))
 
 			assert.Equal(t, tt.expected, actual)
+		})
+	}
+}
+
+func TestNormalizeViewDefinitionInParenthesizedSetOperationSubquery(t *testing.T) {
+	parseDefinition := func(sql string) parser.SelectStatement {
+		t.Helper()
+		stmt, err := parser.ParseDDL("CREATE VIEW v AS "+sql, parser.ParserModePostgres)
+		assert.NoError(t, err)
+		return stmt.(*parser.DDL).View.Definition
+	}
+
+	desired := parseDefinition(`SELECT * FROM (
+  (SELECT a.id, a.name FROM a JOIN x USING (id))
+  UNION ALL
+  (SELECT b.id, b.name FROM b JOIN x USING (id))
+) t`)
+	current := parseDefinition(`SELECT t.id, t.name FROM (
+  SELECT a.id, a.name FROM a JOIN x USING (id)
+  UNION ALL
+  SELECT b.id, b.name FROM b JOIN x USING (id)
+) t`)
+	tableLookup := func(QualifiedName) *Table { return nil }
+
+	normalize := func(definition parser.SelectStatement) string {
+		normalized := normalizeViewDefinition(definition, GeneratorModePostgres, tableLookup)
+		return stripTableQualifiers(strings.ToLower(parser.String(normalized)))
+	}
+
+	assert.Equal(t, normalize(current), normalize(desired))
+}
+
+func TestNormalizeViewDefinitionExpandsStarFromTable(t *testing.T) {
+	stmt := &parser.Select{
+		SelectExprs: parser.SelectExprs{
+			&parser.StarExpr{},
+			&parser.AliasedExpr{Expr: parser.NewIntVal("3"), As: parser.NewIdent("marker", false)},
+		},
+		From: parser.TableExprs{
+			&parser.AliasedTableExpr{
+				Expr: parser.TableName{Name: parser.NewIdent("users", false)},
+			},
+		},
+	}
+	table := &Table{
+		columns: map[string]*Column{
+			"second": {name: parser.NewIdent("second", false), position: 2},
+			"first":  {name: parser.NewIdent("first", false), position: 1},
+		},
+	}
+
+	normalized := normalizeViewDefinition(stmt, GeneratorModePostgres, func(name QualifiedName) *Table {
+		assert.Equal(t, "users", name.Name.Name)
+		return table
+	})
+
+	assert.Equal(t, "select first, second, 3 as marker from users", parser.String(normalized))
+}
+
+func TestNormalizeTableExprParentheses(t *testing.T) {
+	tableExpr := func(name string) *parser.AliasedTableExpr {
+		return &parser.AliasedTableExpr{
+			Expr: parser.TableName{Name: parser.NewIdent(name, false)},
+		}
+	}
+
+	assert.Nil(t, normalizeTableExpr(nil, GeneratorModePostgres, nil))
+	assert.Equal(t, tableExpr("a"), normalizeTableExpr(
+		&parser.ParenTableExpr{Exprs: parser.TableExprs{tableExpr("a")}},
+		GeneratorModePostgres,
+		nil,
+	))
+
+	normalized := normalizeTableExpr(
+		&parser.ParenTableExpr{Exprs: parser.TableExprs{tableExpr("a"), tableExpr("b")}},
+		GeneratorModeSQLite3,
+		nil,
+	)
+	paren, ok := normalized.(*parser.ParenTableExpr)
+	assert.True(t, ok)
+	assert.Len(t, paren.Exprs, 2)
+}
+
+func TestExtractSubqueryColumnsFromFrom(t *testing.T) {
+	id := parser.NewIdent("id", false)
+	alias := parser.NewIdent("alias", false)
+	subquery := func(selectExprs parser.SelectExprs) *parser.AliasedTableExpr {
+		return &parser.AliasedTableExpr{
+			Expr: &parser.Subquery{
+				Select: &parser.Select{SelectExprs: selectExprs},
+			},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		from     parser.TableExprs
+		expected parser.Columns
+	}{
+		{name: "empty FROM"},
+		{
+			name: "multiple FROM expressions",
+			from: parser.TableExprs{subquery(nil), subquery(nil)},
+		},
+		{
+			name: "non-aliased expression",
+			from: parser.TableExprs{&parser.JoinTableExpr{}},
+		},
+		{
+			name: "aliased table",
+			from: parser.TableExprs{
+				&parser.AliasedTableExpr{Expr: parser.TableName{Name: parser.NewIdent("users", false)}},
+			},
+		},
+		{
+			name: "explicit alias columns",
+			from: parser.TableExprs{
+				&parser.AliasedTableExpr{
+					Expr:    &parser.Subquery{Select: &parser.Select{}},
+					Columns: parser.Columns{id, alias},
+				},
+			},
+			expected: parser.Columns{id, alias},
+		},
+		{
+			name: "inferred columns",
+			from: parser.TableExprs{subquery(parser.SelectExprs{
+				&parser.AliasedExpr{Expr: &parser.ColName{Name: id}},
+				&parser.AliasedExpr{Expr: parser.NewIntVal("1"), As: alias},
+			})},
+			expected: parser.Columns{id, alias},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, extractSubqueryColumnsFromFrom(tt.from))
+		})
+	}
+}
+
+func TestExtractSelectOutputColumns(t *testing.T) {
+	id := parser.NewIdent("id", false)
+	alias := parser.NewIdent("alias", false)
+	selectWithColumns := &parser.Select{SelectExprs: parser.SelectExprs{
+		&parser.AliasedExpr{Expr: &parser.ColName{Name: id}},
+		&parser.AliasedExpr{Expr: parser.NewIntVal("1"), As: alias},
+	}}
+
+	tests := []struct {
+		name     string
+		stmt     parser.SelectStatement
+		expected parser.Columns
+	}{
+		{name: "nil statement"},
+		{
+			name:     "select",
+			stmt:     selectWithColumns,
+			expected: parser.Columns{id, alias},
+		},
+		{
+			name: "non-aliased select expression",
+			stmt: &parser.Select{SelectExprs: parser.SelectExprs{&parser.StarExpr{}}},
+		},
+		{
+			name: "anonymous non-column expression",
+			stmt: &parser.Select{SelectExprs: parser.SelectExprs{
+				&parser.AliasedExpr{Expr: parser.NewIntVal("1")},
+			}},
+		},
+		{
+			name: "union uses left output",
+			stmt: &parser.Union{
+				Left:  selectWithColumns,
+				Right: &parser.Select{},
+			},
+			expected: parser.Columns{id, alias},
+		},
+		{
+			name:     "parenthesized select",
+			stmt:     &parser.ParenSelect{Select: selectWithColumns},
+			expected: parser.Columns{id, alias},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, extractSelectOutputColumns(tt.stmt))
 		})
 	}
 }

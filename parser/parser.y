@@ -362,8 +362,8 @@ func setDDL(yylex any, ddl *DDL) {
 %token <str> EVENT SCHEDULE EVERY COMPLETION PRESERVE ENABLE DISABLE REPLICA SLAVE STARTS ENDS DO
 
 %type <statement> statement
-%type <selStmt> select_statement select_statement_core base_select union_rhs
-%type <withClause> with_clause_opt with_clause
+%type <selStmt> select_statement select_statement_no_with select_statement_core base_select parenthesized_select union_rhs
+%type <withClause> with_clause
 %type <commonTableExprs> common_table_expr_list
 %type <commonTableExpr> common_table_expr
 %type <statement> insert_statement update_statement delete_statement set_statement declare_statement cursor_statement while_statement exec_statement return_statement use_statement
@@ -448,7 +448,7 @@ func setDDL(yylex any, ddl *DDL) {
 %type <str> precision_opt varying_opt
 %type <optVal> length_opt max_length_opt current_timestamp
 %type <str> charset_opt collate_opt
-%type <boolVal> unsigned_opt zero_fill_opt array_opt time_zone_opt
+%type <boolVal> unsigned_opt zero_fill_opt array_opt cast_array_opt time_zone_opt
 %type <empty> array_brackets
 %type <LengthScaleOption> float_length_opt decimal_length_opt
 %type <strs> enum_values
@@ -2201,15 +2201,6 @@ alter_object_type_index:
   INDEX
 | KEY
 
-with_clause_opt:
-  {
-    $$ = nil
-  }
-| with_clause
-  {
-    $$ = $1
-  }
-
 with_clause:
   WITH common_table_expr_list
   {
@@ -2237,26 +2228,40 @@ common_table_expr:
   }
 
 select_statement:
-  with_clause_opt select_statement_core order_by_opt limit_opt lock_opt
+  select_statement_no_with
   {
-    switch core := $2.(type) {
+    $$ = $1
+  }
+| with_clause select_statement_no_with
+  {
+    switch stmt := $2.(type) {
     case *Select:
-      core.OrderBy = $3
-      core.Limit = $4
-      core.Lock = $5
-      core.With = $1
+      stmt.With = $1
+      $$ = stmt
+    case *Union:
+      stmt.With = $1
+      $$ = stmt
+    default:
+      panic("unreachable")
+    }
+  }
+
+select_statement_no_with:
+  select_statement_core order_by_opt limit_opt lock_opt
+  {
+    switch core := $1.(type) {
+    case *Select:
+      core.OrderBy = $2
+      core.Limit = $3
+      core.Lock = $4
       $$ = core
     case *Union:
-      core.OrderBy = $3
-      core.Limit = $4
-      core.Lock = $5
-      core.With = $1
-      $$ = core
-    case *ParenSelect:
-      // ParenSelect should not have OrderBy/Limit/Lock at this level
+      core.OrderBy = $2
+      core.Limit = $3
+      core.Lock = $4
       $$ = core
     default:
-      $$ = $2
+      panic("unreachable")
     }
   }
 
@@ -2265,6 +2270,10 @@ select_statement_core:
   base_select
   {
     $$ = $1
+  }
+| parenthesized_select union_op union_rhs
+  {
+    $$ = &Union{Type: $2, Left: $1, Right: $3}
   }
 | select_statement_core union_op union_rhs
   {
@@ -2298,24 +2307,15 @@ union_rhs:
   {
     $$ = $1
   }
-| '(' with_clause_opt select_statement_core order_by_opt limit_opt lock_opt ')'
+| parenthesized_select
   {
-    switch core := $3.(type) {
-    case *Select:
-      core.OrderBy = $4
-      core.Limit = $5
-      core.Lock = $6
-      core.With = $2
-      $$ = &ParenSelect{Select: core}
-    case *Union:
-      core.OrderBy = $4
-      core.Limit = $5
-      core.Lock = $6
-      core.With = $2
-      $$ = &ParenSelect{Select: core}
-    default:
-      $$ = &ParenSelect{Select: core}
-    }
+    $$ = $1
+  }
+
+parenthesized_select:
+  '(' select_statement ')'
+  {
+    $$ = &ParenSelect{Select: $2}
   }
 
 
@@ -4930,6 +4930,23 @@ array_opt:
     $$ = BoolVal(true)
   }
 
+/*
+ * Unlike array_opt, this only accepts the ARRAY keyword, not array_brackets.
+ * CAST(expr AS type ARRAY) is MySQL's multi-valued index syntax; CAST(expr
+ * AS type[]) is a distinct PostgreSQL array cast that must keep going
+ * through convert_type's existing `Type + "[]"` representation (see the
+ * simple_convert_type/TYPECAST rules) instead of being folded into this
+ * flag, or it would round-trip as "... ARRAY" and lose the "[]" spelling.
+ */
+cast_array_opt:
+  {
+    $$ = BoolVal(false)
+  }
+| ARRAY
+  {
+    $$ = BoolVal(true)
+  }
+
 /* Handles [], [][], [][][], etc. - PostgreSQL treats all as equivalent */
 array_brackets:
   '[' ']'
@@ -6866,8 +6883,9 @@ function_call_keyword:
   {
     $$ = &ConvertExpr{Action: Type1stStr, Type: $3, Expr: $5, Style: $7}
    }
-| CAST '(' expression AS convert_type ')'
+| CAST '(' expression AS convert_type cast_array_opt ')'
   {
+    $5.Array = $6
     $$ = &ConvertExpr{Action: CastStr, Expr: $3, Type: $5}
   }
 | TRY_CAST '(' expression AS convert_type ')'

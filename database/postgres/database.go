@@ -243,6 +243,7 @@ func (d *PostgresDatabase) objectOwners() ([]string, error) {
 
 	const query = `
 		SELECT
+			n.nspname AS schema_name,
 			n.nspname || '.' || c.relname AS obj_name,
 			pg_get_userbyid(c.relowner) AS owner
 		FROM pg_class c
@@ -264,9 +265,17 @@ func (d *PostgresDatabase) objectOwners() ([]string, error) {
 
 	var ddls []string
 	for rows.Next() {
-		var objName, owner string
-		if err := rows.Scan(&objName, &owner); err != nil {
+		var schemaName, objName, owner string
+		if err := rows.Scan(&schemaName, &objName, &owner); err != nil {
 			return nil, fmt.Errorf("failed to scan object owner row: %w", err)
+		}
+		// Apply the same TargetSchema filter as the other export helpers
+		// (tables, sequences, types, domains, ...). Without this, owners of
+		// objects in schemas outside TargetSchema leak into the export and the
+		// generator aborts with "ALTER TABLE ... OWNER TO performed before
+		// CREATE TABLE" because there is no matching CREATE in the desired DDL.
+		if d.config.TargetSchema != nil && !slices.Contains(d.config.TargetSchema, schemaName) {
+			continue
 		}
 		ddls = append(ddls, fmt.Sprintf("ALTER TABLE %s OWNER TO %s;", objName, d.quoteIdentifierIfNeeded(owner)))
 	}

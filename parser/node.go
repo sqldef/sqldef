@@ -2681,6 +2681,7 @@ type ConvertType struct {
 	Scale    *SQLVal
 	Operator string
 	Charset  string
+	Array    BoolVal
 }
 
 // this string is "character set" and this comment is required
@@ -2700,6 +2701,9 @@ func (node *ConvertType) Format(buf *nodeBuffer) {
 	}
 	if node.Charset != "" {
 		buf.Printf("%s %s", node.Operator, node.Charset)
+	}
+	if node.Array {
+		buf.Printf(" %s", "array")
 	}
 }
 

@@ -196,6 +196,39 @@ CreateViewWithIntersect:
 CreateViewWithExcept:
   desired: |
     CREATE VIEW test_view AS SELECT 1 AS id EXCEPT SELECT 2 AS id;
+ViewWithParenthesizedSetOperationAndJoins:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE a (id bigint, name text);
+    CREATE TABLE b (id bigint, name text);
+    CREATE TABLE x (id bigint);
+    CREATE VIEW v AS SELECT * FROM (
+      (SELECT a.id, a.name FROM a JOIN x USING (id))
+      UNION ALL
+      (SELECT b.id, b.name FROM b JOIN x USING (id))
+    ) t;
+CreateViewWithParenthesizedUnionOperands:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE VIEW v AS
+      (SELECT 1 AS id)
+      UNION ALL
+      (SELECT 2 AS id);
+  up: |
+    CREATE VIEW v AS
+      (SELECT 1 AS id)
+      UNION ALL
+      (SELECT 2 AS id);
+  down: |
+    DROP VIEW public.v;
+ViewWithParenthesizedOrderedLimitedSetOperand:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE items (id bigint);
+    CREATE VIEW v AS
+      (SELECT id FROM items ORDER BY id DESC LIMIT 1)
+      UNION ALL
+      SELECT id FROM items;
 CreateMaterializedViewWithUnion:
   desired: |
     CREATE MATERIALIZED VIEW test_view AS SELECT 1 AS id UNION SELECT 2 AS id;

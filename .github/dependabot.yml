@@ -11,6 +11,9 @@ updates:
     cooldown:
       default-days: 7
     labels: []
+    groups:
+      gomod:
+        patterns: ["*"]
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
@@ -18,6 +21,9 @@ updates:
     cooldown:
       default-days: 7
     labels: []
+    groups:
+      docker:
+        patterns: ["*"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -25,3 +31,6 @@ updates:
     cooldown:
       default-days: 7
     labels: []
+    groups:
+      github-actions:
+        patterns: ["*"]

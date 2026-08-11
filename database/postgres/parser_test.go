@@ -231,6 +231,23 @@ SELECT * FROM ((SELECT 1 AS id) UNION ALL (SELECT 2 AS id)) AS s;
 	assert.NotContains(t, viewDefinition, "from  ")
 }
 
+func TestParenthesizedSetOperationWithJoinsInAutoMode(t *testing.T) {
+	t.Setenv("PSQLDEF_PARSER", "")
+	postgresParser := NewParserWithMode(PsqldefParserModeAuto)
+
+	statements, err := postgresParser.Parse(`CREATE VIEW v AS SELECT * FROM (
+  (SELECT a.id, a.name FROM a JOIN x USING (id))
+  UNION ALL
+  (SELECT b.id, b.name FROM b JOIN x USING (id))
+) t;`)
+	require.NoError(t, err)
+	require.Len(t, statements, 1)
+
+	ddl, ok := statements[0].Statement.(*parser.DDL)
+	require.True(t, ok, "expected DDL statement, got %T", statements[0].Statement)
+	require.NotNil(t, ddl.View)
+}
+
 func TestSetOperationAutoFallback(t *testing.T) {
 	t.Setenv("PSQLDEF_PARSER", "")
 	postgresParser := NewParserWithMode(PsqldefParserModeAuto)

@@ -82,11 +82,6 @@ parser:
 	gofmt -w ./parser/parser.go
 .PHONY: parser
 
-parser-v:
-	go run golang.org/x/tools/cmd/goyacc@$(GOYACC_VERSION) -v y.output -o parser/parser.go parser/parser.y
-	gofmt -w ./parser/parser.go
-.PHONY: parser-v
-
 test:
 	$(GOTEST) $(GOTESTFLAGS) ./...
 .PHONY: test
