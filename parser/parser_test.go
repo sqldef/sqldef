@@ -1861,3 +1861,50 @@ SELECT id FROM items`, ParserModePostgres)
 		t.Error("inner.Limit is nil")
 	}
 }
+
+func TestParenthesizedComparisonAsComparisonOperand(t *testing.T) {
+	// PostgreSQL renders an "if and only if" invariant between two columns in
+	// this shape, and pg_get_constraintdef() returns it verbatim, so it comes
+	// back through --export.
+	cases := []struct {
+		name string
+		sql  string
+	}{
+		{
+			name: "both operands parenthesized",
+			sql:  "CREATE TABLE t (a text, b int, CONSTRAINT c CHECK ((a = 'x'::text) = (b IS NOT NULL)))",
+		},
+		{
+			name: "left operand parenthesized",
+			sql:  "CREATE TABLE t (a text, flag bool, CONSTRAINT c CHECK ((a = 'x'::text) = flag))",
+		},
+		{
+			name: "right operand parenthesized",
+			sql:  "CREATE TABLE t (a text, flag bool, CONSTRAINT c CHECK (flag = (a = 'x'::text)))",
+		},
+		{
+			name: "both operands parenthesized inequalities",
+			sql:  "CREATE TABLE t (b int, CONSTRAINT c CHECK ((b > 1) = (b < 5)))",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := ParseDDL(tc.sql, ParserModePostgres); err != nil {
+				t.Fatalf("parse failed: %v", err)
+			}
+		})
+	}
+
+	t.Run("a parenthesized condition is still a ParenExpr", func(t *testing.T) {
+		sql := "CREATE TABLE t (a text, CONSTRAINT c CHECK ((a = 'x'::text)))"
+		stmt, err := ParseDDL(sql, ParserModePostgres)
+		if err != nil {
+			t.Fatalf("parse failed: %v", err)
+		}
+		check := stmt.(*DDL).TableSpec.Checks[0]
+		if _, ok := check.Where.Expr.(*ParenExpr); !ok {
+			t.Errorf("expected *ParenExpr, got %T", check.Where.Expr)
+		}
+	})
+}

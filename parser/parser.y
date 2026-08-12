@@ -240,7 +240,7 @@ func setDDL(yylex any, ddl *DDL) {
  * shifting ')' over reducing productions marked with %prec LOWER_THAN_RPAREN.
  * This resolves conflicts in:
  * - value: INTEGRAL (vs length_opt: '(' INTEGRAL ')')
- * - expression: condition (vs condition: '(' condition ')')
+ * - expression: condition (vs row_tuple: '(' expression_list ')')
  * - select_expression_list reduction (vs function call completion)            */
 %nonassoc LOWER_THAN_RPAREN
 %left ')'
@@ -6480,10 +6480,6 @@ condition:
 | COLUMNS_UPDATED '(' ')'
   {
     $$ = &UpdateFuncExpr{Name: nil}
-  }
-| '(' condition ')'
-  {
-    $$ = &ParenExpr{Expr: $2}
   }
 
 is_suffix:
