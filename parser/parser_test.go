@@ -1876,3 +1876,180 @@ SELECT id FROM items`, ParserModePostgres)
 		t.Error("inner.Limit is nil")
 	}
 }
+
+// TestKeyKeywordAsColumnReference tests that `key`, an unreserved keyword in
+// PostgreSQL, works as an unquoted column name in column *reference* positions
+// (expressions and qualified names), not just in column declarations and index
+// column lists. It also pins that MySQL's inline `KEY idx (col)` still parses,
+// since both share the KEY token and only the lexer mode separates them.
+func TestKeyKeywordAsColumnReference(t *testing.T) {
+	testCases := []struct {
+		name        string
+		sql         string
+		mode        ParserMode
+		shouldParse bool
+		description string
+	}{
+		// Column references reached through reserved_sql_id.
+		{
+			name:        "COMMENT ON COLUMN with table-qualified key",
+			sql:         "COMMENT ON COLUMN t.key IS 'a key'",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+			description: "key should be usable as the column part of a qualified name",
+		},
+		{
+			name:        "COMMENT ON COLUMN with schema-qualified key",
+			sql:         "COMMENT ON COLUMN public.t.key IS 'a key'",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+			description: "key should be usable after a schema-qualified table name",
+		},
+		{
+			name:        "qualified key in a view select list",
+			sql:         "CREATE VIEW v AS SELECT t.key FROM t",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+			description: "key should be usable as a qualified column reference in an expression",
+		},
+		{
+			name:        "key in a REFERENCES column list",
+			sql:         "CREATE TABLE t2 (id int REFERENCES t (key))",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+			description: "key should be usable in the referenced column list of a foreign key",
+		},
+		{
+			name:        "key in a trigger UPDATE OF column list",
+			sql:         "CREATE TRIGGER tr AFTER UPDATE OF key ON t FOR EACH ROW EXECUTE FUNCTION f()",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+			description: "key should be usable in a trigger's UPDATE OF column list",
+		},
+		{
+			name:        "key in a column-level GRANT",
+			sql:         "GRANT SELECT (key) ON t TO r",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+			description: "key should be usable in a column-level privilege list",
+		},
+		{
+			name:        "NEW.key in a trigger WHEN condition",
+			sql:         "CREATE TRIGGER tr AFTER UPDATE ON t FOR EACH ROW WHEN (NEW.key IS NOT NULL) EXECUTE FUNCTION f()",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+			description: "key should be usable after the NEW qualifier in a trigger condition",
+		},
+
+		// Column references reached through column_name.
+		{
+			name:        "bare key in a view select list",
+			sql:         "CREATE VIEW v AS SELECT key FROM t",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+			description: "key should be usable as a bare column reference in an expression",
+		},
+		{
+			name:        "key in a view WHERE clause",
+			sql:         "CREATE VIEW v AS SELECT id FROM t WHERE key = 'a'",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+			description: "key should be usable in a WHERE expression",
+		},
+		{
+			name:        "key in a partial index predicate",
+			sql:         "CREATE INDEX i ON t (key) WHERE key IS NOT NULL",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+			description: "key should be usable in a partial index WHERE expression",
+		},
+		{
+			name:        "key in a CHECK constraint",
+			sql:         "CREATE TABLE t (key int, CHECK (key > 0))",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+			description: "key should be usable in a CHECK expression",
+		},
+		{
+			name:        "key in GROUP BY",
+			sql:         "CREATE VIEW v AS SELECT key FROM t GROUP BY key",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+			description: "key should be usable in a GROUP BY expression",
+		},
+		{
+			name:        "key in ORDER BY",
+			sql:         "CREATE VIEW v AS SELECT key FROM t ORDER BY key",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+			description: "key should be usable in an ORDER BY expression",
+		},
+
+		// Column declarations and index column lists, already accepted before
+		// this change; kept to catch regressions.
+		{
+			name:        "key as a column declaration",
+			sql:         "CREATE TABLE t (key text NOT NULL)",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+			description: "key should remain usable as a declared column name",
+		},
+		{
+			name:        "key as an inline primary key column",
+			sql:         "CREATE TABLE t (key text PRIMARY KEY)",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+			description: "key should remain usable as a column declared PRIMARY KEY",
+		},
+		{
+			name:        "key in an index column list",
+			sql:         "CREATE INDEX i ON t (key)",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+			description: "key should remain usable in an index column list",
+		},
+		{
+			name:        "key in a table-level UNIQUE constraint",
+			sql:         "CREATE TABLE t (id int, key text, UNIQUE (key))",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+			description: "key should remain usable in a table-level UNIQUE column list",
+		},
+		{
+			name:        "key in an added UNIQUE constraint",
+			sql:         "ALTER TABLE t ADD CONSTRAINT c UNIQUE (key)",
+			mode:        ParserModePostgres,
+			shouldParse: true,
+			description: "key should remain usable in ALTER TABLE ADD CONSTRAINT",
+		},
+
+		// MySQL keeps KEY as an index keyword, so the Postgres-only lexer split
+		// must not leak into MySQL mode.
+		{
+			name:        "MySQL inline KEY index",
+			sql:         "CREATE TABLE t (id int, KEY idx_name (id))",
+			mode:        ParserModeMysql,
+			shouldParse: true,
+			description: "MySQL's inline KEY index definition should keep parsing",
+		},
+		{
+			name:        "MySQL inline UNIQUE KEY index",
+			sql:         "CREATE TABLE t (id int, UNIQUE KEY idx_name (id))",
+			mode:        ParserModeMysql,
+			shouldParse: true,
+			description: "MySQL's inline UNIQUE KEY index definition should keep parsing",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseDDL(tc.sql, tc.mode)
+
+			if tc.shouldParse && err != nil {
+				t.Errorf("%s\nSQL: %s\nError: %v", tc.description, tc.sql, err)
+			} else if !tc.shouldParse && err == nil {
+				t.Errorf("Expected parse error but got none.\n%s\nSQL: %s", tc.description, tc.sql)
+			}
+		})
+	}
+}
