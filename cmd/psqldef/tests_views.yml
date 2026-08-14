@@ -726,3 +726,9 @@ ViewWithDistinctOnMultipleColumns:
     FROM orders;
   down: |
     DROP VIEW public.latest_orders;
+
+ViewReferencingColumnNamedKey:
+  legacy_ignore_quotes: false
+  desired: |
+    CREATE TABLE users (id bigint, key text, name text);
+    CREATE VIEW users_view AS SELECT key, name FROM users;
