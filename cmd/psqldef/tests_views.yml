@@ -730,5 +730,5 @@ ViewWithDistinctOnMultipleColumns:
 ViewReferencingColumnNamedKey:
   legacy_ignore_quotes: false
   desired: |
-    CREATE TABLE users (id bigint, key text, name text);
+    CREATE TABLE users (key text, name text);
     CREATE VIEW users_view AS SELECT key, name FROM users;
