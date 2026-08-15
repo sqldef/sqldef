@@ -959,6 +959,21 @@ func TestStringConcatOperator(t *testing.T) {
 			{
 				name: "column-level CHECK with concat and comparison",
 				sql:  "CREATE TABLE t (s text CHECK (s || 'x' <> ''))",
+				// Expected AST: ComparisonExpr{Left: ConcatExpr{s, 'x'}, ...}.
+				// Column-level CHECK stores the expression on ColumnType.Check,
+				// a separate grammar production from table-level TableSpec.Checks.
+				checkShape: func(t *testing.T, stmt Statement) {
+					t.Helper()
+					ddl := stmt.(*DDL)
+					expr := ddl.TableSpec.Columns[0].Type.Check.Where.Expr
+					cmp, ok := expr.(*ComparisonExpr)
+					if !ok {
+						t.Fatalf("expected *ComparisonExpr at top, got %T", expr)
+					}
+					if _, ok := cmp.Left.(*ConcatExpr); !ok {
+						t.Errorf("expected *ConcatExpr on ComparisonExpr.Left, got %T", cmp.Left)
+					}
+				},
 			},
 			{
 				name: "chained concat is left-associative",
