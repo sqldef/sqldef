@@ -365,9 +365,29 @@ func SortTablesByDependencies(ddls []DDL, defaultSchema string, mode GeneratorMo
 		itemKeys[DDL(v)] = viewKeys[i]
 	}
 
-	sorted := topologicalSort(sortItems, dependencies, func(d DDL) string { return itemKeys[d] })
-	if len(sorted) == 0 {
-		sorted = sortItems
+	// Multiple items can share a dependency key: overloaded PostgreSQL functions
+	// have the same name but different argument types. topologicalSort keys nodes
+	// by id, so passing duplicates would collapse them (one representative wins
+	// and gets replayed, the others dropped). Sort one representative per key,
+	// then expand each back to all its items in their original order.
+	reps := make([]DDL, 0, len(sortItems))
+	groups := make(map[string][]DDL, len(sortItems))
+	for _, item := range sortItems {
+		key := itemKeys[item]
+		if _, seen := groups[key]; !seen {
+			reps = append(reps, item)
+		}
+		groups[key] = append(groups[key], item)
+	}
+
+	sortedReps := topologicalSort(reps, dependencies, func(d DDL) string { return itemKeys[d] })
+	if len(sortedReps) == 0 {
+		sortedReps = reps
+	}
+
+	sorted := make([]DDL, 0, len(sortItems))
+	for _, rep := range sortedReps {
+		sorted = append(sorted, groups[itemKeys[rep]]...)
 	}
 
 	var result []DDL

@@ -9794,7 +9794,7 @@ yydefault:
 		yyDollar = yyS[yypt-2 : yypt+1]
 //line parser/parser.y:3187
 		{
-			yyVAL.str = ""
+			yyVAL.str = "or replace"
 		}
 	case 337:
 		yyDollar = yyS[yypt-3 : yypt+1]

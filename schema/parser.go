@@ -242,6 +242,7 @@ func parseDDL(mode GeneratorMode, ddl string, stmt parser.Statement, defaultSche
 			var args []FunctionArg
 			for _, arg := range stmt.Function.Args {
 				args = append(args, FunctionArg{
+					mode: arg.Mode,
 					name: arg.Name,
 					typ:  arg.Type,
 				})
